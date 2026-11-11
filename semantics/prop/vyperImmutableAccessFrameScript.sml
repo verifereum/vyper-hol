@@ -257,6 +257,27 @@ val im_target = ``\cx t. !A R st res st'.
   ^safe_accesses A R (accesses_target t) (int_calls_target t) /\
   eval_target_place cx t st = (res,st') ==> ^immutable_frame cx A st st'``;
 
+val im_stmt = ``\cx s. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_stmt s) (int_calls_stmt s) /\
+  eval_stmt cx s st = (res,st') ==> ^immutable_frame cx A st st'``;
+val im_iterator = ``\cx it. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_iterator it) (int_calls_iterator it) /\
+  eval_iterator cx it st = (res,st') ==> ^immutable_frame cx A st st'``;
+val im_for = ``\cx tyv id body vs. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_stmts body) (int_calls_stmts body) /\
+  eval_for cx tyv id body vs st = (res,st') ==> ^immutable_frame cx A st st'``;
+val im_atarget = ``\cx g v. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_atarget g) (int_calls_atarget g) /\
+  assign_tuple_targets cx g v st = (res,st') ==> ^immutable_frame cx A st st'``;
+val im_atargets = ``\cx gs vs. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_atargets gs) (int_calls_atargets gs) /\
+  assign_tuple_target_list cx gs vs st = (res,st') ==> ^immutable_frame cx A st st'``;
+
 (* Exact constructor premises, with the shared frame predicates substituted. *)
 val immutable_ind_cases = let
   val (_,core) = strip_forall (concl evaluate_ind)
@@ -581,6 +602,242 @@ Proof
       first_assum ACCEPT_TAC) >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
        ignore_bind_def, raise_def]
+QED
+
+val immutable_stmt_ind_cases = map (fn t =>
+  subst (List.mapPartial (fn (n,p) =>
+    Option.map (fn v => v |-> p)
+      (List.find (fn v => fst (dest_var v) = n) (free_vars t)))
+    [("P0",im_stmt),("P2",im_iterator),("P3",im_for),
+     ("P8",im_atarget),("P9",im_atargets)]) t) immutable_ind_cases;
+fun immutable_stmt_case name = valOf (List.find (fn t =>
+  can (find_term (fn u => is_const u andalso fst (dest_const u) = name))
+    (snd (strip_imp (snd (strip_forall t))))) immutable_stmt_ind_cases);
+
+fun immutable_stmt_cases name = List.filter (fn t =>
+  can (find_term (fn u => is_const u andalso fst (dest_const u) = name))
+    (snd (strip_imp (snd (strip_forall t))))) immutable_stmt_ind_cases;
+
+Theorem evaluate_immutable_return_none_case[local]:
+  ^(immutable_stmt_case "Return")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, raise_def]
+QED
+
+Theorem evaluate_immutable_return_some_case[local]:
+  ^(List.nth (immutable_stmt_cases "Return",1))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, raise_def, AllCaseEqs(),
+      accesses_stmt_def, accesses_expr_def, int_calls_stmt_def,
+      int_calls_expr_def] >>
+  imp_res_tac read_result_state >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_raise_bare_case[local]:
+  ^(immutable_stmt_case "RaiseBare")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, raise_def]
+QED
+
+Theorem evaluate_immutable_raise_unreachable_case[local]:
+  ^(immutable_stmt_case "RaiseUnreachable")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, raise_def]
+QED
+
+Theorem evaluate_immutable_raise_reason_case[local]:
+  ^(immutable_stmt_case "RaiseReason")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, raise_def, lift_option_type_def,
+      return_def, vyperMiscTheory.option_CASE_rator, AllCaseEqs(),
+      accesses_stmt_def, accesses_raise_reason_def, int_calls_stmt_def,
+      int_calls_raise_reason_def] >>
+  imp_res_tac read_result_state >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_pass_case[local]:
+  ^(immutable_stmt_case "Pass")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, return_def]
+QED
+
+Theorem evaluate_immutable_break_case[local]:
+  ^(immutable_stmt_case "Break")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, raise_def]
+QED
+
+Theorem evaluate_immutable_continue_case[local]:
+  ^(immutable_stmt_case "Continue")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, raise_def]
+QED
+
+Theorem evaluate_immutable_exprstmt_case[local]:
+  ^(immutable_stmt_case "Expr")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+      assert_def, return_def, raise_def, AllCaseEqs(),
+      accesses_stmt_def, int_calls_stmt_def] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_log_case[local]:
+  ^(immutable_stmt_case "Log")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, lift_option_def,
+      vyperMiscTheory.option_CASE_rator, check_not_static_def, check_def,
+      assert_def, return_def, raise_def, push_log_def, AllCaseEqs(),
+      accesses_stmt_def, int_calls_stmt_def] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_annassign_case[local]:
+  ^(immutable_stmt_case "AnnAssign")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, lift_option_type_def,
+      vyperMiscTheory.option_CASE_rator, return_def, raise_def, AllCaseEqs(),
+      accesses_stmt_def, int_calls_stmt_def] >>
+  imp_res_tac read_result_state >> imp_res_tac new_variable_immutables >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_array_iterator_case[local]:
+  ^(immutable_stmt_case "Array")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, lift_option_type_def,
+      vyperMiscTheory.option_CASE_rator, return_def, raise_def, AllCaseEqs(),
+      accesses_iterator_def, int_calls_iterator_def] >>
+  imp_res_tac read_result_state >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_range_iterator_case[local]:
+  ^(immutable_stmt_case "Range")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs(),
+      accesses_iterator_def, int_calls_iterator_def] >>
+  imp_res_tac read_result_state >> imp_res_tac lift_sum_state >>
+  gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  metis_tac[]
+QED
+
+Theorem evaluate_immutable_append_case[local]:
+  ^(immutable_stmt_case "Append")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_stmt_def, int_calls_stmt_def] >>
+  qpat_x_assum `eval_stmt _ (Append _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (qpat_x_assum `!a b c. eval_target_place _ _ _ = _ ==> _`
+    drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  `!p s m. eval_target_place cx t s = (INL p,m) ==>
+     !path. p <> ImmutablePlace src id path` by
+    metis_tac[eval_target_place_immutable_access] >>
+  imp_res_tac append_place_key_frame >> metis_tac[]
+QED
+
+Theorem evaluate_immutable_assign_base_case[local]:
+  ^(immutable_stmt_case "Assign")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_stmt_def, accesses_atarget_def, int_calls_stmt_def,
+      int_calls_atarget_def] >>
+  qpat_x_assum `eval_stmt _ (Assign _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  `!p s m. eval_target_place cx t s = (INL p,m) ==>
+     !path. p <> ImmutablePlace src id path` by
+    metis_tac[eval_target_place_immutable_access] >>
+  imp_res_tac write_place_key_frame >> metis_tac[]
+QED
+
+Theorem evaluate_immutable_augassign_case[local]:
+  ^(immutable_stmt_case "AugAssign")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_stmt_def, int_calls_stmt_def] >>
+  qpat_x_assum `eval_stmt _ (AugAssign _ _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac read_place_state >>
+  imp_res_tac place_type_value_state >> imp_res_tac lift_sum_state >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (qpat_x_assum `!a b c d e f g h i. _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  `!p s m. eval_target_place cx t s = (INL p,m) ==>
+     !path. p <> ImmutablePlace src id path` by
+    metis_tac[eval_target_place_immutable_access] >>
+  imp_res_tac write_place_key_frame >> metis_tac[]
+QED
+
+fun immutable_stmt_predicate_cases name = List.filter (fn t =>
+  let val c = snd (strip_imp (snd (strip_forall t)))
+  in is_abs (fst (strip_comb c)) andalso
+    aconv (fst (strip_comb c)) name end) immutable_stmt_ind_cases;
+
+Theorem evaluate_immutable_stmts_nil_case[local]:
+  ^(hd (immutable_stmt_predicate_cases im_stmts))
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, return_def]
+QED
+
+Theorem evaluate_immutable_stmts_cons_case[local]:
+  ^(List.nth (immutable_stmt_predicate_cases im_stmts,1))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_stmt_def, int_calls_stmt_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+  qpat_x_assum `eval_stmts _ (_::_) _ = _` mp_tac >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  rpt (qpat_x_assum `!a b. eval_stmt _ _ _ = _ ==> _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  metis_tac[]
+QED
+
+Theorem evaluate_immutable_assign_tuple_case[local]:
+  ^(List.nth (immutable_stmt_cases "Assign",1))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_stmt_def, int_calls_stmt_def] >>
+  qpat_x_assum `eval_stmt _ (Assign _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  metis_tac[]
 QED
 
 (* Fix analysis parameters before consuming a guarded recursive IH. *)
