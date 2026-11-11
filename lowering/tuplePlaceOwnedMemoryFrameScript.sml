@@ -13,6 +13,7 @@ Ancestors
   loweringHalt abiTupleProps rich_list fragExec
   placeStoreMemory placeMemoryStateRebuild placeStore abiValueEncoding
   valueEncodingProps exprLowering
+  memoryLayoutDefs memoryLayoutSource memoryLayoutRel memoryValueEncoding
 
 Theorem tuple_place_nonword_size_effect[local]:
   ~is_word_type dty /\ ~is_word_type sty /\
@@ -45,6 +46,8 @@ Proof
   >- suspend "same" >>
   Cases_on `is_bytestring_type dty`
   >- suspend "bytes" >>
+  Cases_on `tuple_memory_layout_eq dty sty`
+  >- suspend "layout" >>
   `compile_store_memory_typed cenv dp dty sp sty a = ((),b)` by
     gvs[compile_store_memory_def] >>
   `w2n sw + type_memory_size stv <= w2n dw \/
@@ -68,6 +71,30 @@ Resume tuple_place_nonword_size_effect[same]:
   qpat_x_assum `(t with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = u`
     (mp_tac o Q.AP_TERM `\z. z.vs_allocas`) >> simp[] >>
   rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+(* Tuples with equal layouts are copied in bulk; the source bytes, read at
+   the destination type, already hold the value. *)
+Resume tuple_place_nonword_size_effect[layout]:
+  `compile_copy_memory dp sp (type_memory_size dtv) a = ((),b)` by
+    gvs[compile_store_memory_def] >>
+  `memory_layout_key dty = memory_layout_key sty` by
+    (Cases_on `dty` >> Cases_on `sty` >>
+     gvs[tuple_memory_layout_eq_def, memory_layout_key_tuple]) >>
+  `memory_layout_rel dtv stv` by metis_tac[memory_layout_key_evaluated] >>
+  `val_in_memory dtv v (w2n sw) u.vs_memory` by
+    (irule memory_value_rel_val_in_memory >> simp[] >>
+     irule memory_layout_rel_value >> qexists_tac `stv` >> simp[] >>
+     irule val_in_memory_memory_value_rel >> simp[]) >>
+  `type_memory_size dtv < dimword (:256)` by decide_tac >>
+  drule_all compile_copy_memory_forward >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> simp[typed_copy_effect_def] >> conj_tac
+  >- (`w2n sw + type_memory_size stv <= w2n dw \/
+       w2n dw + type_memory_size dtv <= w2n sw` by metis_tac[] >>
+      irule valueEncodingPropsTheory.val_in_memory_relocate >> simp[] >>
+      qexistsl_tac [`u.vs_memory`, `type_memory_size dtv`, `w2n sw`] >> simp[]) >>
+  rpt strip_tac >> gvs[]
 QED
 
 Resume tuple_place_nonword_size_effect[bytes]:
