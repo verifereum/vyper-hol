@@ -2304,7 +2304,7 @@ Proof
   rpt strip_tac >>
   `MEM inst (fn_insts fn)` by metis_tac[MEM_fn_insts] >>
   `MEM ao (operand_vars inst.inst_operands)` by
-    metis_tac[MEM_Var_operand_vars] >>
+    metis_tac[mem_var_operand_vars] >>
   `MEM inst (dfg_get_uses (dfg_build_function fn) ao)` by
     metis_tac[dfg_build_function_uses_complete_proof] >>
   drule m2v_promo_list_can_promote >>
