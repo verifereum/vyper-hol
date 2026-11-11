@@ -2,6 +2,7 @@
 Theory abiEncoderWindowRunMem
 Ancestors
   abiEncoderWindowLeavesMem abiEncoderWindowArrayMem abiEncoderWindowComplexMem
+  abiEncoderWindowPrimitiveFrameMem
   abiEncoderWindowContract abiEncoderAdmissible abiEncoder compileEnv
   memContinuation list pair
 

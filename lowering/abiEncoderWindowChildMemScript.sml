@@ -2,6 +2,7 @@
 Theory abiEncoderWindowChildMem
 Ancestors
   abiEncoderWindowChild windowPhaseMem memContinuation abiEncoderWindowPhase
+  abiEncoderWindowPhaseFrameMem abiEncoderWindowMemFrame
   abiEncoderWindowContract abiEncoderRegisteredEffect abiEncoderChildCode abiEncoderProps
   abiEncoderChildContext abiEncoderAppend abiEncoderWindowArrayBodyMem
   windowTransitionMem instMemFrontier allocaFootprint venomMemDefs
@@ -90,7 +91,8 @@ Theorem window_child_prefix_run_mem:
     eval_operand (SND (SND ops)) t = SOME (n2w (d+off)) /\
     (!x. FST ops = Var x \/ FST (SND ops) = Var x \/
          SND (SND ops) = Var x ==> not_fresh_at en x) /\
-    t.vs_labels = s.vs_labels /\ mem_cont_sim ctx func s t
+    t.vs_labels = s.vs_labels /\ mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   strip_tac >> drule_all window_child_prefix_context >> strip_tac >> gvs[] >>
   `a.cs_next_var = st.cs_next_var+1 /\ b.cs_next_var = a.cs_next_var+1 /\
@@ -116,9 +118,10 @@ Resume window_child_prefix_run_mem[prepare]:
   `?t1. window_phase ctx func st a {} [] s t1 /\
      eval_operand head t1 = SOME (n2w (d+ho)) /\
      (!x. head = Var x ==> not_fresh_at a x) /\ t1.vs_labels = s.vs_labels /\
-     mem_cont_sim ctx func s t1` by
+     mem_cont_sim ctx func s t1 /\
+     (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t1)` by
     (`eval_operand (Lit (n2w ho)) s = SOME (n2w ho)` by simp[eval_operand_def] >>
-     drule_all window_emit_add_phase_mem >> simp[word_add_n2w]) >>
+     drule_all window_emit_add_phase_mem_conditional_frame >> simp[word_add_n2w]) >>
   `eval_operand dp t1 = SOME (n2w slot) /\
    eval_operand dst t1 = SOME (n2w d)` by
     (conj_tac >> irule window_phase_eval >>
@@ -145,8 +148,9 @@ Resume window_child_prefix_run_mem[load]:
   `?t2. window_phase ctx func a b {} [] t1 t2 /\
      eval_operand offset t2 = SOME (n2w off) /\
      (!x. offset = Var x ==> not_fresh_at b x) /\ t2.vs_labels = t1.vs_labels /\
-     mem_cont_sim ctx func t1 t2` by
-    (drule_all window_cursor_load_phase_mem >> asm_rewrite_tac[]) >>
+     mem_cont_sim ctx func t1 t2 /\
+     (fn_inst_ids_distinct func ==> window_mem_frame ctx func t1 t2)` by
+    (drule_all window_cursor_load_phase_mem_conditional_frame >> asm_rewrite_tac[]) >>
   `eval_operand dst t2 = SOME (n2w d)` by
     (irule window_phase_eval >>
      qexistsl_tac [`ctx`, `b`, `func`, `{}`, `[]`, `t1`, `a`] >>
@@ -158,8 +162,9 @@ Resume window_child_prefix_run_mem[load]:
   `?t3. window_phase ctx func b en {} [] t2 t3 /\
      eval_operand child t3 = SOME (n2w (d+off)) /\
      (!x. child = Var x ==> not_fresh_at en x) /\ t3.vs_labels = t2.vs_labels /\
-     mem_cont_sim ctx func t2 t3` by
-    (drule_all window_emit_add_phase_mem >> simp[word_add_n2w]) >>
+     mem_cont_sim ctx func t2 t3 /\
+     (fn_inst_ids_distinct func ==> window_mem_frame ctx func t2 t3)` by
+    (drule_all window_emit_add_phase_mem_conditional_frame >> simp[word_add_n2w]) >>
   `window_phase ctx func a en {} [] t1 t3` by
     (irule window_phase_chain >> qexistsl_tac [`{}`, `[]`, `b`, `{}`, `[]`, `t2`] >> simp[]) >>
   `eval_operand head t3 = SOME (n2w (d+ho))` by
@@ -169,6 +174,8 @@ Resume window_child_prefix_run_mem[load]:
     (irule window_phase_eval >>
      qexistsl_tac [`ctx`, `en`, `func`, `{}`, `[]`, `t2`, `b`] >> simp[]) >>
   `mem_cont_sim ctx func s t3` by metis_tac[mem_cont_sim_trans] >>
+  `fn_inst_ids_distinct func ==> window_mem_frame ctx func s t3` by
+    metis_tac[window_mem_frame_trans] >>
   qexists_tac `t3` >> asm_rewrite_tac[] >>
   (conj_tac >- (irule window_phase_chain >>
     qexistsl_tac [`{}`, `[]`, `a`, `{}`, `[]`, `t1`] >> simp[])) >>

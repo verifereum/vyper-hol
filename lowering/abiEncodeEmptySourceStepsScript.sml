@@ -151,7 +151,8 @@ Proof
     decide_tac >>
   `!x. SND (SND ops) = Var x ==> not_fresh_at prepared x` by metis_tac[] >>
   drule_all empty_source_child_pre >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!dst src st out st' ctx func s at av sb d. _`
+    drule_all >> strip_tac >>
   suspend "compose"
 QED
 
