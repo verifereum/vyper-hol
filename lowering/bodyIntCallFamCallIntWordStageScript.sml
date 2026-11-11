@@ -163,7 +163,8 @@ Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sa` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_joint_res_def,
+       bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `sa.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sb.cs_next_var` by
     (mp_tac (Q.SPECL [`ce`, `vv`, `sa`] ci_mono_unwrap_value) >>
      simp[ci_mono_def]) >>
