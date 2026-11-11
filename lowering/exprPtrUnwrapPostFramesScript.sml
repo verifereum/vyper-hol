@@ -26,7 +26,6 @@ Theorem copy_ghost_kept_transport:
     off <= i /\ i < off+sz /\ i IN tm.t_mem ==> i IN tn.t_mem) /\
   (!n b sz i.
     local_region cenv es.scopes s0 n b sz /\ b <= i /\ i < b+sz /\
-    (!k. dynarray_len_at cenv n k ==> i < b+k \/ b+k+32 <= i) /\
     i IN tm.t_mem ==> i IN tn.t_mem) ==>
   ghost_kept cenv es sa G0 tn0 s0 H tm
 Proof

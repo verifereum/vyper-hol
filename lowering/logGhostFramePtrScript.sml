@@ -23,10 +23,20 @@ Proof
   simp[ghost_kept_def] >> rpt strip_tac
   >- ( `not_fresh_at sm x` by (gvs[not_fresh_at_def] >> decide_tac) >> metis_tac[])
   >- ( `not_fresh_at sm x` by (gvs[not_fresh_at_def] >> decide_tac) >> metis_tac[])
-  >- (`i IN tn1.t_mem` suffices_by metis_tac[] >>
+  >- (`i IN tn1.t_mem` suffices_by
+        (strip_tac >>
+         qpat_x_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
+           (qspecl_then [`aid`,`off`,`sz`,`i`] mp_tac) >>
+         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         disch_then ACCEPT_TAC) >>
       qpat_x_assum `!aid off sz i. FLOOKUP s1.vs_allocas aid = _ /\ _ ==> _` irule >>
       conj_tac >- (qexistsl_tac [`aid`,`off`,`sz`] >> simp[] >> metis_tac[]) >> simp[])
-  >> `i IN tn1.t_mem` suffices_by metis_tac[] >>
+  >> `i IN tn1.t_mem` suffices_by
+       (strip_tac >>
+        qpat_x_assum `!n b sz i. local_region cenv es.scopes s0 n b sz /\ _ ==> _`
+          (qspecl_then [`n`,`b`,`sz`,`i`] mp_tac) >>
+        impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+        disch_then ACCEPT_TAC) >>
   qpat_x_assum `!n b sz i. local_region cenv es1.scopes s1 n b sz /\ _ ==> _` irule >>
   conj_tac >- simp[] >> qexistsl_tac [`b`,`n`,`sz`] >> simp[] >> metis_tac[]
 QED
