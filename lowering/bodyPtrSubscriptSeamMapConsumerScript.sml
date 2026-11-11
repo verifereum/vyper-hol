@@ -3,6 +3,7 @@ Ancestors
   bodyPtrSubscriptSeamMapTail bodyPtrSubscriptSeamMapPost
   bodyPtrSubscriptSeamMapCompose bodyPtrSubscriptMarkedCompose
   bodyPtrSubscriptMapDefs bodyPtrPreds gasSummaryComposePtr
+  exprSimSubscriptArraySource
   vyperHashMapStorage vyperStoragePlaceProvenance list exprLoweringProps
 
 Theorem mapping_leaf_summary_ptr:
@@ -281,7 +282,7 @@ Proof
   rewrite_tac[expr_map_sim_ptr_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  rewrite_tac[exprSimSubscriptMapTheory.eval_subscript_bind] >>
+  rewrite_tac[eval_expr_subscript_bind] >>
   disch_then (mp_then Any irule gas_outcome_result_cases_ptr) >>
   reverse conj_tac
   >- (conj_tac
