@@ -139,7 +139,7 @@ Proof
        (SPEC_ALL copy_buffer_local_region_frame)) >> simp[]) >> metis_tac[]
 QED
 
-Theorem protected_storage_value_window_forcing:
+Theorem protected_storage_value_window_forcing_footprint:
   unwrap_value ce (LocatedValue ty p) sa = (op,sb) /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   vv_holds ce cx ty (Value v) (LocatedValue ty p) es s /\
@@ -172,6 +172,11 @@ Theorem protected_storage_value_window_forcing:
     (!name b sz. local_region ce es.scopes s name b sz ==>
       regions_disjoint (w2n w) (type_memory_size tv) b sz) /\
     locals_kept ce es es s u /\
+    (!a k. regions_disjoint a k (w2n w) (type_memory_size tv) ==>
+      mem_bytes_at a k u.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    (?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id = sa.cs_next_id /\
+      FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n w,type_memory_size tv)) /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -211,7 +216,13 @@ Proof
      `regions_disjoint b sz (w2n w) (type_memory_size tv)` by
        (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
         simp[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
-  qexistsl_tac [`u`, `w`] >> simp[expr_val_rel_def] >> gvs[]
+  drule_all buffer_alloc_code >> strip_tac >>
+  `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+     inst.inst_id = sa.cs_next_id /\
+     FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n w,type_memory_size tv)` by
+    (qexists_tac `mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size tv))]
+       [STRING #"%" (toString sa.cs_next_var)]` >> simp[mk_inst_def]) >>
+  qexistsl_tac [`u`, `w`] >> simp[expr_val_rel_def] >> gvs[] >> metis_tac[]
 QED
 
 Theorem protected_word_value_frame_forcing:
@@ -245,4 +256,47 @@ Proof
     (qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `locals_kept ce es es s u` by (irule locals_kept_mem >> simp[]) >>
   qexists_tac `u` >> simp[]
+QED
+
+Theorem protected_storage_value_window_forcing:
+  unwrap_value ce (LocatedValue ty p) sa = (op,sb) /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  vv_holds ce cx ty (Value v) (LocatedValue ty p) es s /\
+  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  type_memory_bytes ce ty = type_memory_size tv /\ type_memory_size tv < 2**64 /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  allocas_above lo s /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sa x) /\
+  (!q x. reserved q /\ q = Var x ==> not_fresh_at sa x) /\
+  (!p k. P p k ==> p+k <= lo) /\
+  (!p k. Win p k ==> ?aid b len. aid < sa.cs_next_id /\
+    FLOOKUP s.vs_allocas aid = SOME (b,len) /\ b <= p /\ p+k <= b+len) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u w. gas_marked_path F ctx func s 0 (OK u) /\
+    expr_val_rel cx ty v op u /\ stmt_state_rel ctx func ce cx es u /\
+    eval_operand op u = SOME w /\ val_wf tv v /\
+    val_in_memory tv v (w2n w) u.vs_memory /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size tv) /\
+    lo <= w2n w /\ w2n w + type_memory_size tv < dimword (:256) /\
+    allocas_above lo u /\ s.vs_alloca_next <= u.vs_alloca_next /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!p k. P p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (!p k. Win p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    (!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz) /\
+    (!name b sz. local_region ce es.scopes s name b sz ==>
+      regions_disjoint (w2n w) (type_memory_size tv) b sz) /\
+    locals_kept ce es es s u /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (Q.INST [`scopes` |-> `scopes`]
+    (SPEC_ALL protected_storage_value_window_forcing_footprint)) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`u`, `w`] >> simp[] >> metis_tac[]
 QED
