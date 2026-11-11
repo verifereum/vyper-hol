@@ -108,11 +108,13 @@ Proof
   `wb_frame ce es em a s t` by metis_tac[intcall_expr_cont_frame] >>
   `wb_frame ce em ee b t u` by metis_tac[intcall_expr_cont_frame] >>
   `wb_frame ce es ee a s u` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     conj_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
-     conj_tac >- (qexistsl [`em`, `b`, `t`] >> simp[]) >>
-     qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >>
-     fs[intcall_joint_res_def, intcall_expr_res_def]) >>
+    (`stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
+      local_ptrs_reserved ce a` by
+       fs[intcall_joint_res_def, intcall_expr_res_def] >>
+     mp_tac (Q.SPECL [`fp.jc_func`, `ce`, `fp.jc_cx`, `es`, `s`, `a`, `em`,
+                      `ee`, `b`, `t`, `u`, `fp.jc_ctx`]
+               exprSimWordArgsTheory.wb_frame_trans) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   fs[intcall_expr_cont_def, loweringPostsTheory.wb_frame_def] >>
   first_assum ACCEPT_TAC
 QED

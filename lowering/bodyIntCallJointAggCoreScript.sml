@@ -10,6 +10,7 @@ Ancestors
   placeMemoryPrimitiveForward instIdxIndep exprSimProps exprSimUnwrap
   exprSimAggregateChildren bodyIntCallAggregateStoreFrame
   bodyIntCallCompletedModes intCallStep exprSimSend
+  memoryLayoutDefs memoryLayoutSource memoryLayoutRel memoryValueEncoding
   bodyIntCallWidenedChildStore typedMemoryCopy exprSimSubscriptMap
   memoryLocalRhsProps
 
@@ -763,6 +764,28 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `val_wf dtv v /\ val_wf stv v` by
     metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  Cases_on `tuple_memory_layout_eq dty sty`
+  >- ((* equal layouts are copied in bulk, as the same type is *)
+      `compile_store_memory ce src dst dty dty sa = ((),sb)` by
+        (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+         simp[compile_store_memory_def]) >>
+      `memory_layout_key dty = memory_layout_key sty` by
+        (Cases_on `dty` >> Cases_on `sty` >>
+         gvs[tuple_memory_layout_eq_def, memory_layout_key_tuple]) >>
+      `memory_layout_rel dtv stv` by metis_tac[memory_layout_key_evaluated] >>
+      `val_in_memory stv v (w2n w) s.vs_memory` by fs[] >>
+      `val_in_memory dtv v (w2n w) s.vs_memory` by
+        (irule memory_value_rel_val_in_memory >> simp[] >>
+         irule memory_layout_rel_value >> qexists_tac `stv` >> simp[] >>
+         irule val_in_memory_memory_value_rel >> simp[]) >>
+      `!name a n. local_region ce es.scopes s name a n ==>
+         regions_disjoint a n (w2n dw) (type_memory_size dtv)` by
+        (fs[regions_disjoint_def] >> metis_tac[]) >>
+      mp_tac (Q.INST [`sty` |-> `dty`, `stv` |-> `dtv`, `sw` |-> `w`,
+                      `tenv` |-> `get_tenv fp.jc_cx`, `ctx` |-> `fp.jc_ctx`,
+                      `func` |-> `fp.jc_func`, `cx` |-> `fp.jc_cx`]
+                intcall_compatible_store_effect) >>
+      impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
   `compile_store_memory_typed ce dst dty src sty sa = ((),sb)` by
     fs[compile_store_memory_def] >>
   `acyclic_struct_metadata ce.ce_struct_fields /\

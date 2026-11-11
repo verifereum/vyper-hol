@@ -73,7 +73,10 @@ Resume intcall_args_frame_accumulated[tail]:
     (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[vv_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame ce es es sm s t` by
-    (`locals_kept ce es es s t <=>
+    (`mid.scopes = es.scopes` by
+       (qpat_assum `(_ with gas_obs := []) = _`
+          (mp_tac o Q.AP_TERM `\z. z.scopes`) >> simp[]) >>
+     `locals_kept ce es es s t <=>
       locals_kept ce es (mid with gas_obs := []) s t` by
        simp[locals_kept_def, popped_kept_def] >>
      pop_assum (fn lk => rewrite_tac[wb_frame_def, lk]) >>
