@@ -1,15 +1,17 @@
-(* Source typing used by the retained checked counterexample frame. *)
+(* Non-vacuity witness: membership over an array of a prim word type
+   typechecks.  (String elements no longer do: the checker requires
+   is_prim_word_type for In over an array.) *)
 Theory bodyPtrBopInEvidenceTyping
 Ancestors exprLoweringProps exprLowering vyperTypeSystem vyperValueOperation
   venomExecSemantics venomState venomInst venomMemProps compileEnv context emitHelper words
 
-Theorem string_membership_expression_typing_probe:
+Theorem word_membership_expression_typing_probe:
   well_typed_expr env
      (Builtin (BaseT BoolT) (Bop In)
-       [Literal (BaseT (StringT 1)) (StringL "a");
-        Builtin (ArrayT (BaseT (StringT 1)) (Fixed 1))
-          (MakeArray (SOME (BaseT (StringT 1))) (Fixed 1))
-          [Literal (BaseT (StringT 1)) (StringL "a")]])
+       [Literal (BaseT (UintT 256)) (IntL 1);
+        Builtin (ArrayT (BaseT (UintT 256)) (Fixed 1))
+          (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1))
+          [Literal (BaseT (UintT 256)) (IntL 1)]])
 Proof
   simp[well_typed_expr_def, well_typed_builtin_app_def,
        well_typed_binop_def] >>
