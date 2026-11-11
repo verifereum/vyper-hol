@@ -14257,11 +14257,11 @@ Proof
 QED
 
 Theorem mm_local_nop_capture_suc[local]:
-  (EL n is).inst_opcode = NOP ==>
+  ((EL n is).inst_opcode = NOP \/ (EL n is).inst_opcode = MLOAD) ==>
   mm_local_write_capture is H (SUC n) = mm_local_write_capture is H n
 Proof
   strip_tac >> rewrite_tac[FUN_EQ_THM] >> qx_gen_tac `j` >>
-  Cases_on `j = n` >- simp[mm_local_write_capture_def] >>
+  (Cases_on `j = n` >- simp[mm_local_write_capture_def]) >>
   `j < SUC n <=> j < n` by decide_tac >> simp[mm_local_write_capture_def]
 QED
 
@@ -14271,7 +14271,7 @@ Theorem mm_local_nop_pending_suc[local]:
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
   gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
-  n < LENGTH is /\ (EL n is).inst_opcode = NOP ==>
+  n < LENGTH is /\ ((EL n is).inst_opcode = NOP \/ (EL n is).inst_opcode = MLOAD) ==>
   mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n
 Proof
   strip_tac >>
@@ -14289,13 +14289,15 @@ QED
 
 Theorem mm_local_cut_nop_stutter[local]:
   mm_local_cut is gs H n excluded pc t /\
-  (EL n is).inst_opcode = NOP /\
+  ((EL n is).inst_opcode = NOP \/ (EL n is).inst_opcode = MLOAD) /\
   mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n /\
-  H (SUC n) = H n with vs_inst_idx := SUC (H n).vs_inst_idx ==>
+  (H (SUC n)).vs_memory = (H n).vs_memory /\
+  mm_local_nonmemory_frame (H (SUC n)) = mm_local_nonmemory_frame (H n) /\
+  (!v. v NOTIN excluded ==> lookup_var v (H (SUC n)) = lookup_var v (H n)) ==>
   mm_local_cut is gs H (SUC n) excluded (SUC pc)
     (t with vs_inst_idx := SUC pc)
 Proof
-  strip_tac >>
+  strip_tac >> (
   `mm_local_write_capture is H (SUC n) = mm_local_write_capture is H n` by
     metis_tac[mm_local_nop_capture_suc] >>
   `mm_local_epoch_start is gs n <= n` by
@@ -14311,7 +14313,7 @@ Proof
     decide_tac >>
   simp[mm_local_epoch_start_suc, rich_listTheory.COUNT_LIST_SNOC,
     rich_listTheory.SNOC_APPEND, MAP_APPEND, FOLDL_APPEND,
-    mm_local_write_capture_future]
+    mm_local_write_capture_future])
 QED
 
 Theorem mm_local_cut_nop_transition[local]:
@@ -14336,7 +14338,7 @@ Proof
     (irule mm_local_nop_pending_suc >> metis_tac[]) >>
   qexists `t` >> conj_tac
   >- simp[venomInstPropsTheory.step_nop_identity] >>
-  irule mm_local_cut_nop_stutter >> metis_tac[]
+  irule mm_local_cut_nop_stutter >> simp[venomStateTheory.lookup_var_def]
 QED
 
 Theorem mm_local_erased_write_pending_suc[local]:
@@ -14488,6 +14490,60 @@ Proof
      simp[] >> metis_tac[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
   irule mm_local_cut_erased_write_stutter >>
   gvs[venomStateTheory.lookup_var_def] >> metis_tac[]
+QED
+
+Theorem mm_local_load_runtime_frame[local]:
+  i.inst_opcode = MLOAD /\ step_inst fuel ctx i s = OK t ==>
+  t.vs_memory = s.vs_memory /\ mm_local_nonmemory_frame t = mm_local_nonmemory_frame s
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_read1_def] >>
+  gvs[AllCaseEqs()] >> strip_tac >>
+  gvs[mm_local_nonmemory_frame_def, stateFrameTheory.state_frame_def,
+    venomStateTheory.update_var_def]
+QED
+
+Theorem mm_local_cut_erased_load_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  excluded = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  phi_prefix_length is <= n /\ n < LENGTH is /\
+  MEM (EL n is).inst_id ns /\ (EL n is).inst_opcode = MLOAD /\
+  mm_local_cut is gs H n excluded pc t /\
+  step_inst fuel ctx (EL n is) (H n) = OK s /\
+  H (SUC n) = s with vs_inst_idx := SUC (H n).vs_inst_idx ==>
+  apply_groups_inst_supply Mem2Mem ns rs es (EL n is) = ([mk_nop_from (EL n is)],es) /\
+  step_inst fuel ctx (mk_nop_from (EL n is)) t = OK t /\
+  mm_local_cut is gs H (SUC n) excluded (SUC pc)
+    (t with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >>
+  conj_tac >- simp[apply_groups_inst_supply_def] >>
+  conj_tac
+  >- simp[venomInstPropsTheory.step_nop_identity, mk_nop_from_def] >>
+  `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n` by
+    (irule mm_local_nop_pending_suc >> metis_tac[]) >>
+  `s.vs_memory = (H n).vs_memory /\
+    mm_local_nonmemory_frame s = mm_local_nonmemory_frame (H n)` by
+    (irule mm_local_load_runtime_frame >> metis_tac[]) >>
+  `!v. v NOTIN excluded ==> lookup_var v s = lookup_var v (H n)` by
+    (rpt strip_tac >>
+     `~MEM v (EL n is).inst_outputs` by
+       (strip_tac >> `MEM (EL n is) is` by metis_tac[EL_MEM] >>
+        qpat_x_assum `v NOTIN excluded` mp_tac >> simp[] >> metis_tac[]) >>
+     irule venomInstPropsTheory.step_preserves_non_output_vars >>
+     qexistsl [`ctx`,`fuel`,`EL n is`] >> simp[venomInstTheory.is_terminator_def]) >>
+  irule mm_local_cut_nop_stutter >>
+  gvs[venomStateTheory.lookup_var_def]
 QED
 
 Theorem mm_local_cut_init[local]:
