@@ -1657,5 +1657,13 @@ Theorem eval_expr_unwritten_immutable:
                NONE => FEMPTY
              | SOME imms => get_source_immutables src imms) id
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all callable_closed_initial >> strip_tac >>
+  drule safe_accesses_expr_initial >> strip_tac >>
+  qspecl_then [`cx`,`e`] (mp_tac o BETA_RULE)
+    (cj 5 evaluate_immutable_frame_untyped) >>
+  disch_then (qspecl_then [`expr_accesses mods e`,
+    `reached_functions mods e`,`st`,`res`,`st'`] mp_tac) >>
+  gvs[] >> disch_then drule >>
+  disch_then (qspecl_then [`src`,`id`] mp_tac) >> simp[]
 QED
