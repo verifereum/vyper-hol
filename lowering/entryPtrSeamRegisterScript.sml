@@ -1617,6 +1617,60 @@ Proof
   simp[]
 QED
 
+(* The indexed owner invariant advances independently of the decoder's
+   implementation.  The frame premise is the singleton's old-local frame. *)
+Theorem registration_owned_prefix_update:
+  ALL_DISTINCT names /\ i < LENGTH names /\
+  ce' = ce with ce_vars updated_by
+    (\m. m |+ (EL i names,PtrVar (Var q) (type_memory_size (EL i tvs)))) /\
+  (!j. j < i ==> ?aid q p n.
+    aid < st.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP ce.ce_vars (EL j names) = SOME (PtrVar (Var q) n) /\
+    lookup_var q s = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+    ptr_covers G tn q s n /\ val_wf (EL j tvs) (EL j vals) /\
+    val_footprint (EL j tvs) (EL j vals) <= n /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j vals) p mem)) /\
+  (!old q0 p0 n0 tv0 v0.
+    old < st.cs_next_id /\ FLOOKUP s.vs_allocas old = SOME (p0,n0) /\
+    lookup_var q0 s = SOME (n2w p0) /\ ptr_covers G tn q0 s n0 /\
+    val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory tv0 v0 p0 mem) ==>
+    old < last.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (p0,n0) /\
+    lookup_var q0 t = SOME (n2w p0) /\ ptr_covers H u q0 t n0 /\
+    val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+    (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv0 v0 p0 mem)) /\
+  st.cs_next_id < last.cs_next_id /\
+  FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,type_memory_size (EL i tvs)) /\
+  lookup_var q t = SOME (n2w p) /\
+  ptr_covers H u q t (type_memory_size (EL i tvs)) /\
+  val_wf (EL i tvs) (EL i vals) /\
+  val_footprint (EL i tvs) (EL i vals) <= type_memory_size (EL i tvs) /\
+  (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+    val_in_memory (EL i tvs) (EL i vals) p mem) ==>
+  !j. j < SUC i ==> ?aid q p n.
+    aid < last.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP ce'.ce_vars (EL j names) = SOME (PtrVar (Var q) n) /\
+    lookup_var q t = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+    ptr_covers H u q t n /\ val_wf (EL j tvs) (EL j vals) /\
+    val_footprint (EL j tvs) (EL j vals) <= n /\
+    (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j vals) p mem)
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  Cases_on `j = i`
+  >- (gvs[] >> qexistsl_tac [`st.cs_next_id`, `q`, `p`] >>
+      simp[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `j < i` by decide_tac >>
+  `EL j names <> EL i names` by gvs[EL_ALL_DISTINCT_EL_EQ] >>
+  qpat_x_assum `!j. j < i ==> _` drule >> strip_tac >>
+  qpat_x_assum `!old q0 p0 n0 tv0 v0. _` drule_all >> strip_tac >>
+  qexistsl_tac [`aid`, `q'`, `p'`, `n`] >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
