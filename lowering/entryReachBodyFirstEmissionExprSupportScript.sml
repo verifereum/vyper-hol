@@ -241,7 +241,7 @@ Proof
       >- metis_tac[first_emission_alloc_buffer] >>
       gen_tac >> simp[LET_THM, GSYM cs_appends_def] >>
       CONV_TAC (DEPTH_CONV ETA_CONV) >>
-      irule cs_appends_bind >> conj_tac
+      irule cs_appends_bind >> reverse conj_tac
       >- (rw[cs_appends_def] >>
           qspecl_then [`ce`, `vv`, `st`] mp_tac (cj 1 unwrap_value_labels) >>
           simp[]) >>
