@@ -1,7 +1,7 @@
 (* Allocation charge available at an internal-call boundary. *)
 Theory bodyPtrIntCallMargin
 Ancestors exprLoweringProps relation finite_map pred_set list arithmetic words
-  bodySim exprSimHyps compileEnv compileVyper loweringShapeProps
+  bodySim exprSimHyps compileEnv compileVyper loweringShapeProps bodyIntCallSeams
 
 Theorem alloca_room_call_margin:
   !ctx func s finish margin callee.
@@ -64,3 +64,69 @@ Proof
   drule type_memory_bytes_frame >> strip_tac >>
   gvs[] >> fs[dimword_def]
 QED
+
+(* Actual INVOKE arguments identify the entry's memory-return buffer.
+   Capacity is the semantic return size, not the larger ALLOCA size. *)
+Theorem intcall_entry_return_bounds:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
+    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+  cenv.ce_func_info (nsid_to_string (NONE,name)) = (0,rbs,pvs) /\
+  0 < rbs /\
+  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME inst /\
+  decode_invoke inst = SOME (lbl,arg_ops) /\
+  eval_operands arg_ops t = SOME argv ==>
+  w2n (HD argv) + type_memory_size rtv < dimword (:256) /\
+  type_memory_size rtv + 64 < dimword (:256)
+Proof
+  rpt strip_tac >>
+  fs[intcall_entry_def] >>
+  `type_memory_size rtv + 64 < dimword (:256)` by
+    metis_tac[body_inv_internal_return_size] >>
+  `t.vs_alloca_next < dimword (:256)` by
+    metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
+  gvs[] >> decide_tac
+QED
+
+(* Boundary producer inventory for the pointer-call composition:
+
+   - In the has-return-buffer branch use
+       SOME (HD argv, type_memory_size rtv)
+     for d.  Its capacity equality is reflexive; intcall_entry_return_bounds
+     supplies the two independent strict inequalities.  The has_rb test
+     and the association of argv with the actual INVOKE are supplied by
+     intcall_entry_def.  No equality with rbuf.buf_size is required.
+
+   - No-DALLOCA is already a caller premise of expr_sim_ptr_def and
+     expr_vv_sim_ptr_def, and is a property of the unchanged ctx, not a
+     property to infer from intret_ptr_q.
+
+   - bodySimEntry's body_inv_build_internal_env transfers the caller's
+     body_inv to the rebuilt internal environment;
+     compile_internal_prologue_body_inv transfers it through parameter
+     materialization.  The callee context's stack update leaves body_inv
+     unchanged (its cx observations are get_module_code NONE, in_deploy,
+     and get_tenv).  The actual-entry proof must also produce expr_sim_inv,
+     typing, and ghost_inv; these are not consequences of the size lemma.
+
+   - internal_args_rel_def supplies pairwise separation of memory
+     parameters and their ends below the caller frontier.  It does NOT
+     supply their separation from caller locals/old sites, or their ghost
+     provenance.  Those are concrete staging obligations: the F branch of
+     compile_stage_intcall_args_def always copies to compile_alloc_buffer
+     (MAX 32 mem_size).  alloca_step_live_local_separated_ptr and
+     emit_alloca_endpoint_ptr (assignTuplePtrAllocEndpoint) provide the
+     local-separation interface, including reused sites.  intcall_entry_def
+     also identifies the fresh return-buffer site and its ALLOCA id.
+     The staging proof must retain the fresh site witnesses and old-site
+     separation for the confinement proof; S1's intcall_entry alone is
+     not a pointer-entry contract.
+
+   - The confinement proof must preserve BOTH memory and t_mem membership
+     on protected caller bytes.  Neither internal_args_rel nor RetQ
+     promises that frame; intret_ptr_q only gives the return's semantic
+     and storage-taint facts.  Concrete staging and confinement therefore
+     remain separate obligations, not assumptions discharged here.
+*)
