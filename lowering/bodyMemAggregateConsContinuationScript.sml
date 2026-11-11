@@ -285,9 +285,9 @@ Proof
      (impl_tac >- (qpat_assum `w2n (n2w (b+off):bytes32) = _`
                      (fn th => rewrite_tac[th]) >> rpt conj_tac >>
                    TRY (first_assum ACCEPT_TAC) >> decide_tac)) >>
-     strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-     rpt strip_tac >> first_x_assum irule >> conj_tac >- first_assum ACCEPT_TAC >>
-     simp[]) >>
+     disch_then (fn th => conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
+       rpt gen_tac >> strip_tac >> irule (CONJUNCT2 th) >>
+       conj_tac >- decide_tac >> first_assum ACCEPT_TAC)) >>
   qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ /\ _ ==> _` (fn pth =>
     qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >>
   simp[] >>

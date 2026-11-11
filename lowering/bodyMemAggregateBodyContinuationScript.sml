@@ -7,6 +7,40 @@ Ancestors
   exprLoweringProps loweringPosts compileEnv context venomState externalNormalizePremises
   vyperInterpreter vyperState fragGasPathMem
 
+(* A layout-equal tuple is stored by a bulk copy of its whole window. *)
+Theorem aggregate_layout_copy_path_mem[local]:
+  compile_copy_memory dst src (type_memory_size tv) sa = ((),sb) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  type_memory_size tv < dimword (:256) /\
+  w2n p + type_memory_size tv <= s.vs_alloca_next /\
+  w2n d + type_memory_size tv <= s.vs_alloca_next /\
+  val_in_memory tv v (w2n p) s.vs_memory /\ val_wf tv v /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q. gas_path_mem ctx fn s 0 (OK (q with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    val_in_memory tv v (w2n d) q.vs_memory /\
+    (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. lookup_var x q = lookup_var x s)
+Proof
+  strip_tac >>
+  Cases_on `type_memory_size tv = 0`
+  >- (mp_tac (INST [``d:num`` |-> ``w2n (d:bytes32)``,
+                    ``p:num`` |-> ``w2n (p:bytes32)``]
+                typedCopyPrimitivePathMemTheory.normalize_empty_window_path_mem) >>
+      gvs[] >> strip_tac >> qexists `s` >>
+      simp[venom_state_component_equality]) >>
+  `emit_void MCOPY [dst; src; Lit (n2w (type_memory_size tv))] sa = ((),sb)` by
+    (Cases_on `type_memory_size tv` >> gvs[compile_copy_memory_def]) >>
+  `val_footprint tv v <= type_memory_size tv` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  mp_tac (INST [``n:num`` |-> ``type_memory_size tv``]
+            typedCopyPrimitivePathMemTheory.normalize_bulk_window_path_mem) >>
+  simp[]
+QED
+
 Theorem aggregate_body_physical_store_path_mem:
   acyclic_struct_metadata ce.ce_struct_fields /\
   sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
@@ -79,9 +113,59 @@ Proof
   `did < (sa with cs_next_var := sm.cs_next_var).cs_next_id` by simp[] >>
   drule_all aggregate_physical_source_slot_bounds >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `w2n sw + type_memory_size stv <= s.vs_alloca_next` by metis_tac[] >>
+  Cases_on `tuple_memory_layout_eq (expr_type e) (lowered_value_type ce e)`
+  >- (`compile_copy_memory dst op (type_memory_bytes ce (expr_type e)) su =
+        ((),sb)` by
+        (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+         simp[compile_store_memory_def]) >>
+      `type_memory_bytes ce (expr_type e) = type_memory_size dtv` by
+        (irule typedMemoryCopyTheory.typed_copy_memory_size >>
+         qexists `get_tenv cx` >> simp[] >> metis_tac[]) >>
+      `type_memory_bytes ce (lowered_value_type ce e) = type_memory_size stv` by
+        (irule typedMemoryCopyTheory.typed_copy_memory_size >>
+         qexists `get_tenv cx` >> fs[] >> metis_tac[]) >>
+      `type_memory_size stv = type_memory_size dtv` by
+        metis_tac[memoryLayoutDefsTheory.tuple_memory_layout_eq_bytes] >>
+      `tuple_memory_layout_eq (expr_type e) (post_value_type ce e)` by fs[] >>
+      drule_all aggregate_child_tuple_layout_val_rel >> strip_tac >>
+      `val_in_memory dtv v (w2n sw) s.vs_memory` by
+        (qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+         simp[expr_val_rel_def]) >>
+      `w2n sw + type_memory_size dtv <= s.vs_alloca_next /\
+       type_memory_size dtv < dimword (:256)` by fs[] >>
+      `compile_copy_memory dst op (type_memory_size dtv) su = ((),sb)` by fs[] >>
+      drule_all aggregate_layout_copy_path_mem >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      qabbrev_tac `t = q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+      `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+        metis_tac[fragGasPathFrameMemTheory.gas_path_mem_memory_length] >>
+      `(t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+        vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+        vs_inst_idx := s.vs_inst_idx|>) = s` by
+        (simp[Abbr `t`, venom_state_component_equality] >>
+         fs[venom_state_component_equality]) >>
+      `!z. not_fresh_at su z ==> lookup_var z t = lookup_var z s` by
+        simp[Abbr `t`, lookup_var_def] >>
+      `!a len. a+len <= w2n dw \/ w2n dw+type_memory_size dtv <= a ==>
+        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
+        (simp[Abbr `t`] >> gvs[]) >>
+      drule_all exprSimAggregateChildrenTheory.aggregate_store_rebased_control_frame >>
+      strip_tac >>
+      `alloca_inv s` by
+        (qpat_x_assum `stmt_state_rel ctx func ce cx es' s` mp_tac >>
+         simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
+      `alloca_history func t` by
+        (irule fragGasPathFrameMemTheory.gas_path_mem_zero_history >> simp[] >>
+         metis_tac[bodyMemAggregatePathTheory.aggregate_mem_path_alloca_inv]) >>
+      `compile_store_memory ce op dst (expr_type e) (expr_type e) su = ((),sb)` by
+        simp[compile_store_memory_def] >>
+      drule exprSimBufferStoreTheory.buffer_store_memory_shape >> strip_tac >>
+      qexists `t` >> simp[] >>
+      gvs[Abbr `t`, venom_state_component_equality, arithmeticTheory.ADD_COMM,
+          exprLoweringPropsTheory.same_blocks_def]) >>
   `compile_store_memory_typed ce dst (expr_type e) op
      (post_value_type ce e) su = ((),sb)` by
     gvs[compile_store_memory_def] >>
-  `w2n sw + type_memory_size stv <= s.vs_alloca_next` by metis_tac[] >>
   drule_all aggregate_typed_store_path_mem >> simp[]
 QED
