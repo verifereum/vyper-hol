@@ -197,8 +197,11 @@ Resume fixed_array_represented_summary_ptr[endpoint]:
     (qpat_x_assum `compile_array_subscript p.ptr_operand _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[exprLoweringTheory.compile_array_subscript_def]) >>
   `sc.cs_next_id <= sd.cs_next_id` by
-    (drule array_subscript_grows >>
-     simp[ci_mono_compile_ptr_load]) >>
+    (`ci_mono sc sd` suffices_by simp[exprLoweringPropsTheory.ci_mono_def] >>
+     qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ sc = _`
+       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
+     irule exprLoweringPropsTheory.ci_mono_compile_array_subscript >>
+     simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
   `eval_operand p.ptr_operand sf = SOME w` by
     metis_tac[venomStateTheory.eval_operand_def] >>
   `!name b sz. local_region cenv ee.scopes q name b sz <=>

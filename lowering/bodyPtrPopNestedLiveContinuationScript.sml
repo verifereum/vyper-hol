@@ -236,6 +236,22 @@ Proof
      read_popped entry.type path entry.popped = NONE` by
     metis_tac[local_target_live_no_popped_fallback] >>
   drule gas_marked_exec_ptr_exec >> strip_tac >>
+  `!path entry err. p = MemoryPlace id path /\
+     lookup_scopes id tend.scopes = SOME entry /\
+     evaluate_subscripts entry.type entry.value path = INR err ==>
+     read_popped entry.type path entry.popped = NONE` by
+    (rpt strip_tac >>
+     `eval_target_place cx bt
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+        (INL p,tend with gas_obs := [])` by
+       (qpat_x_assum `gas_marked_exec F _ _ _ _ _ _ _` mp_tac >>
+        rewrite_tac[gasSummaryTheory.gas_marked_exec_def] >>
+        disch_then (qspec_then `[]` mp_tac o CONJUNCT1) >> simp[]) >>
+     gvs[] >>
+     qpat_x_assum `!s path t entry err. _`
+       (qspecl_then [`es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+                     `path`, `tend with gas_obs := []`, `entry`, `err`] mp_tac) >>
+     simp[]) >>
   drule_all pop_counted_source_handoff >> strip_tac >> gvs[] >>
   `lookup_scopes id (tend with gas_obs := []).scopes = SOME entry` by simp[] >>
   drule_all memory_target_encoding_handoff >> strip_tac >>
