@@ -6,6 +6,7 @@ Ancestors
   emitHelper emitHelperProps compileEnv context valueEncoding
   vyperState vyperTyping venomExecSemantics venomInst venomState
   list rich_list
+  loweringStateRelDefs
 
 Theorem internal_return_copy_frag[local]:
   !ctx func cenv cx es ty tv v src dst rpc sa sb bw R.

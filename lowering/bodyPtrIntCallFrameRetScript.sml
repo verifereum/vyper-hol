@@ -24,6 +24,7 @@ Ancestors
   bodyAppendStorageFacts annAssignPtrMemorySource annAssignPtrMemoryWindow
   bodyPtrStructLitLayoutTransfer reasonCopySourcePtr
   bodyPtrTypeBuiltinsMemoryBounds bodyPtrMakeArrayZeroWidth
+  loweringShapeDefs loweringStateRelDefs valueEncodingDefs
 
 (* The return an internal frame hands back: d is the caller's return
    buffer (its address and capacity) when the value comes back in memory. *)
@@ -126,14 +127,14 @@ Proof
       qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `G0`, `tn0`,
         `IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s0`] >>
       simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, intret_ptr_q_def,
-           intret_q_def, compileEnvTheory.result_rel_def] >>
+           intret_q_def, loweringStateRelDefsTheory.result_rel_def] >>
       gen_tac >> disj2_tac >>
-      simp[compileEnvTheory.intret_vals_match_def] >>
+      simp[loweringStateRelDefsTheory.intret_vals_match_def] >>
       conj_tac
-      >- (simp[compileEnvTheory.state_rel_gas_obs] >>
+      >- (simp[loweringStateRelDefsTheory.state_rel_gas_obs] >>
           irule constructor_exit_state_rel >>
           qexists_tac `cenv'` >> fs[exprLoweringPropsTheory.stmt_state_rel_def,
-            compileEnvTheory.state_rel_gas_obs]) >>
+            loweringStateRelDefsTheory.state_rel_gas_obs]) >>
       metis_tac[ghost_inv_def]) >>
   gns[] >>
   `cenv'.ce_return_pc = SOME (PtrVar (Var rpc) rsz)` by
@@ -240,15 +241,15 @@ Proof
       `state_rel func cenv cx (ee0 with scopes := []) t` by
         (irule constructor_exit_state_rel >> qexists_tac `cenv''` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
-      simp[intret_ptr_q_def, intret_q_def, compileEnvTheory.result_rel_def] >>
+      simp[intret_ptr_q_def, intret_q_def, loweringStateRelDefsTheory.result_rel_def] >>
       reverse conj_tac >- fs[stor_taint_ok_def] >>
       conj_tac
       >- (qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
-          simp[compileEnvTheory.state_rel_gas_obs, compileEnvTheory.state_rel_def,
-            compileEnvTheory.local_ptrs_rel_def, compileEnvTheory.storage_rel_def,
-            compileEnvTheory.transient_rel_def, compileEnvTheory.accounts_rel_def,
-            compileEnvTheory.immutables_rel_def, compileEnvTheory.logs_rel_def,
-            vyperStateTheory.lookup_scopes_def, compileEnvTheory.local_region_def,
+          simp[loweringStateRelDefsTheory.state_rel_gas_obs, loweringStateRelDefsTheory.state_rel_def,
+            loweringStateRelDefsTheory.local_ptrs_rel_def, loweringStateRelDefsTheory.storage_rel_def,
+            loweringStateRelDefsTheory.transient_rel_def, loweringStateRelDefsTheory.accounts_rel_def,
+            loweringStateRelDefsTheory.immutables_rel_def, loweringStateRelDefsTheory.logs_rel_def,
+            vyperStateTheory.lookup_scopes_def, loweringStateRelDefsTheory.local_region_def,
             venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def] >>
           metis_tac[]) >>
       `expr_type x = ret_ty` by
@@ -383,20 +384,20 @@ Proof
       qpat_x_assum `d = SOME (bw,cap)` mp_tac >>
       rpt (pop_assum kall_tac) >> rpt disch_tac >>
       simp[intret_ptr_q_def, intret_mem_q_def, intret_q_def,
-        compileEnvTheory.result_rel_def] >>
+        loweringStateRelDefsTheory.result_rel_def] >>
       reverse conj_tac
       >- metis_tac[mem_agree_outside_def] >>
-      simp[compileEnvTheory.intret_vals_match_def] >>
+      simp[loweringStateRelDefsTheory.intret_vals_match_def] >>
       qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
       qpat_x_assum `typed_copy_state_frame _ _ _ t u` mp_tac >>
       simp[typedMemoryCopyTheory.typed_copy_state_frame_def,
         venomStateTheory.venom_state_component_equality] >>
       strip_tac >>
-      simp[compileEnvTheory.state_rel_gas_obs, compileEnvTheory.state_rel_def,
-        compileEnvTheory.local_ptrs_rel_def, compileEnvTheory.storage_rel_def,
-        compileEnvTheory.transient_rel_def, compileEnvTheory.accounts_rel_def,
-        compileEnvTheory.immutables_rel_def, compileEnvTheory.logs_rel_def,
-        vyperStateTheory.lookup_scopes_def, compileEnvTheory.local_region_def,
+      simp[loweringStateRelDefsTheory.state_rel_gas_obs, loweringStateRelDefsTheory.state_rel_def,
+        loweringStateRelDefsTheory.local_ptrs_rel_def, loweringStateRelDefsTheory.storage_rel_def,
+        loweringStateRelDefsTheory.transient_rel_def, loweringStateRelDefsTheory.accounts_rel_def,
+        loweringStateRelDefsTheory.immutables_rel_def, loweringStateRelDefsTheory.logs_rel_def,
+        vyperStateTheory.lookup_scopes_def, loweringStateRelDefsTheory.local_region_def,
         venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def] >>
       metis_tac[]) >>
       `~is_bytestring_type (expr_type x)` by
@@ -431,7 +432,7 @@ Proof
          rpt (pop_assum kall_tac) >> rpt strip_tac >>
          irule valueEncodingPropsTheory.val_in_memory_relocate >>
          simp[] >> qexistsl_tac [`m`, `0`, `w2n a`] >>
-         simp[valueEncodingTheory.mem_bytes_at_def]) >>
+         simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
       `state_rel func cenv cx (ee0 with scopes := []) t` by
         (irule constructor_exit_state_rel >> qexists_tac `cenv''` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
@@ -452,14 +453,14 @@ Proof
       simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def] >>
       gen_tac >> disj2_tac >>
       simp[intret_ptr_q_def, intret_mem_q_def, intret_q_def,
-        compileEnvTheory.result_rel_def, compileEnvTheory.intret_vals_match_def,
-        compileEnvTheory.state_rel_gas_obs] >>
+        loweringStateRelDefsTheory.result_rel_def, loweringStateRelDefsTheory.intret_vals_match_def,
+        loweringStateRelDefsTheory.state_rel_gas_obs] >>
       `val_in_memory ret_tv v (w2n bw) t.vs_memory` by
         (first_x_assum irule >> simp[mem_agree_outside_def]) >>
       qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
-      simp[compileEnvTheory.state_rel_def, compileEnvTheory.storage_rel_def,
-        compileEnvTheory.transient_rel_def, compileEnvTheory.accounts_rel_def,
-        compileEnvTheory.immutables_rel_def, compileEnvTheory.logs_rel_def] >>
+      simp[loweringStateRelDefsTheory.state_rel_def, loweringStateRelDefsTheory.storage_rel_def,
+        loweringStateRelDefsTheory.transient_rel_def, loweringStateRelDefsTheory.accounts_rel_def,
+        loweringStateRelDefsTheory.immutables_rel_def, loweringStateRelDefsTheory.logs_rel_def] >>
       metis_tac[])) >>
   `?ets. ets = (case ret_ty of TupleT ts => ts | StructT ns =>
        MAP (FST o SND) (get_struct_fields cenv''.ce_struct_fields (nsid_to_string ns))
@@ -587,17 +588,17 @@ Proof
   `state_rel func cenv cx (ee0 with scopes := []) t` by
     (irule constructor_exit_state_rel >> qexists_tac `cenv''` >>
      fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
-  simp[intret_ptr_q_def, intret_q_def, compileEnvTheory.result_rel_def] >>
+  simp[intret_ptr_q_def, intret_q_def, loweringStateRelDefsTheory.result_rel_def] >>
   reverse conj_tac >- fs[stor_taint_ok_def] >>
   conj_tac
   >- (qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
       qpat_x_assum `state_frame u = _` mp_tac >>
       rpt (pop_assum kall_tac) >> strip_tac >>
-      simp[compileEnvTheory.state_rel_gas_obs, compileEnvTheory.state_rel_def,
-        compileEnvTheory.local_ptrs_rel_def, compileEnvTheory.storage_rel_def,
-        compileEnvTheory.transient_rel_def, compileEnvTheory.accounts_rel_def,
-        compileEnvTheory.immutables_rel_def, compileEnvTheory.logs_rel_def,
-        vyperStateTheory.lookup_scopes_def, compileEnvTheory.local_region_def,
+      simp[loweringStateRelDefsTheory.state_rel_gas_obs, loweringStateRelDefsTheory.state_rel_def,
+        loweringStateRelDefsTheory.local_ptrs_rel_def, loweringStateRelDefsTheory.storage_rel_def,
+        loweringStateRelDefsTheory.transient_rel_def, loweringStateRelDefsTheory.accounts_rel_def,
+        loweringStateRelDefsTheory.immutables_rel_def, loweringStateRelDefsTheory.logs_rel_def,
+        vyperStateTheory.lookup_scopes_def, loweringStateRelDefsTheory.local_region_def,
         venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def] >>
       gvs[stateFrameTheory.state_frame_def, venomStateTheory.venom_state_component_equality] >>
       metis_tac[]) >>

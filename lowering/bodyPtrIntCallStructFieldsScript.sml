@@ -3,6 +3,7 @@ Theory bodyPtrIntCallStructFields
 Ancestors bodyPtrIntCallTupleFields typedNormalizeFields valueEncodingProofs
   vyperTyping context compileEnv fragGasPathPtr venomState words finite_map
   arithmetic list
+  valueEncodingDefs
 
 Theorem intcall_struct_fields_conditional:
   !D ctx fn PG ce dst src fs table tvs vals sa sz G tn s b a.
@@ -90,7 +91,7 @@ Proof
     simp[loweringPostsTheory.val_footprint_def] >>
   `!base m. val_in_memory (StructTV tvs) (StructV vals) base m =
             tuple_in_memory (MAP SND vals) (MAP SND tvs) base m` by
-    simp[valueEncodingTheory.val_in_memory_def, fields_in_memory_tuple] >>
+    simp[valueEncodingDefsTheory.val_in_memory_def, fields_in_memory_tuple] >>
   qpat_x_assum `type_memory_size (StructTV tvs) = _`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> rewrite_tac[th]) >>
   qpat_x_assum `val_footprint (StructTV tvs) (StructV vals) = _`

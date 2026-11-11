@@ -6,6 +6,7 @@ Ancestors bodyPtrBopInHeaderControl bodyPtrBopInMemoryContents bodyPtrBopInEleme
   venomExecSemantics venomState ptrDiscipline fragGasPathPtr
   words finite_map pred_set arithmetic freshWrites bodyPtrMakeArrayWordStore
   loweringPosts exprSimProps emitHelperProps valueEncodingTyping
+  loweringShapeDefs loweringStateRelDefs valueEncodingDefs
 
 Theorem intcall_dynamic_checked_length[local]:
   !D ctx fn PG G tn s bb id src hdr flag valid stv dtv scap dcap vs a.
@@ -37,7 +38,7 @@ Proof
   `mload (w2n a) s = n2w (LENGTH vs)` by
     (drule dynarray_in_memory_robust_length >>
      disch_then (qspec_then `s.vs_memory` mp_tac) >>
-     simp[mem_agree_outside_def, mload_def, valueEncodingTheory.mem_word_at_def]) >>
+     simp[mem_agree_outside_def, mload_def, valueEncodingDefsTheory.mem_word_at_def]) >>
   `LENGTH vs <= dcap` by fs[value_has_type_def] >>
   drule_all membership_positioned_mload_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -90,7 +91,7 @@ Proof
   `x <> STRING #"%" (toString sa.cs_next_var) /\
    x <> STRING #"%" (toString (sa.cs_next_var+1)) /\
    x <> STRING #"%" (toString (sa.cs_next_var+2))` by
-    (fs[compileEnvTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LE_ADD]) >>
+    (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LE_ADD]) >>
   simp[]
 QED
 
@@ -213,7 +214,7 @@ Proof
     (drule (SRULE [] (GEN_ALL bodyPtrBopInHeaderCodeTheory.membership_runtime_header_layout)) >> simp[]) >>
   `not_fresh_at sc ("%" ++ toString sa.cs_next_var)` by
     (drule (SRULE [] (GEN_ALL bodyPtrBopInHeaderCodeTheory.membership_runtime_header_layout)) >>
-     drule emitted_insts_emit_void >> simp[compileEnvTheory.not_fresh_at_def]) >>
+     drule emitted_insts_emit_void >> simp[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   `not_fresh_at sd ("%" ++ toString sa.cs_next_var)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   qexistsl_tac [`H3`, `t3`, `z3`, `p`, `p'`] >> simp[] >>

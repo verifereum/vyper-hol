@@ -87,7 +87,7 @@ Proof
     metis_tac[body_inv_internal_return_size] >>
   `t.vs_alloca_next < dimword (:256)` by
     metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
-  gvs[] >> decide_tac
+  conj_tac >> decide_tac
 QED
 
 (* Boundary producer inventory for the pointer-call composition:

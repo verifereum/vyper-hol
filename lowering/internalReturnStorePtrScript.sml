@@ -4,6 +4,7 @@ Ancestors assignBasePtrCopyPath assignBasePtrBytesPost typedMemoryCopy
   bodyPtrDefs fragExecPtr fragGasPathPtr gasPathPtrExec context emitHelper emitHelperProps
   venomState venomExecSemantics venomInst ptrDiscipline words list
   valueEncoding finite_map exprLoweringProps valueCopy compileEnv
+  valueEncodingDefs
 
 Theorem internal_return_store_path_ptr:
   !ce src dst ty sty sa sb fn s a d len n G tn D ctx PG tv v.

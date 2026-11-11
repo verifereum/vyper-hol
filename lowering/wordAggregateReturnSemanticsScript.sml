@@ -3,6 +3,7 @@ Theory wordAggregateReturnSemantics
 Ancestors stmtSimReturn assignTuplePtrLoadStep exprSimHypsDefs exprSimHyps
   valueEncodingProofs valueEncodingTyping tupleTypedLoad tupleMemoryLayout
   vyperTyping vyperTypeABI compileEnv valueEncoding vyperValue list bodyPtrDefs
+  loweringStateRelDefs valueEncodingDefs
 
 Theorem word_aggregate_normalize[local]:
   expr_sim_inv ce cx env es /\

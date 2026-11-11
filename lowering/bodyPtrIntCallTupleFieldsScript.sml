@@ -6,6 +6,7 @@ Ancestors bodyPtrIntCallFieldOffset bodyPtrIntCallStoreFields
   typedCopyLayoutPtr typedCopyTuplePtr exprSimPtrTopLevelStorageFrame
   context compileEnv fragExec fragGasPathPtr venomState words finite_map arithmetic
   bodyPtrSubscriptMemoryRebuild vyperTypeDefaults
+  loweringShapeDefs
 
 Theorem intcall_field_offsets_counted:
   !dst src doff soff sa dop sm sop sb G tn s d a dtot stot dn sn fn ctx D PG.

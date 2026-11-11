@@ -2,6 +2,7 @@ Theory bodyPtrIntCallEntryContracts
 Ancestors
   bodyPtrDefs intCallCallee ptrDiscipline finite_map words list
   valueEncoding compileEnv venomState
+  loweringStateRelDefs
 
 (* Values waiting to be materialized are not yet locals of ghost_inv.
    Robustness concerns the represented value, not padding in its allocation. *)

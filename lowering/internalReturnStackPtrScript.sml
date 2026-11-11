@@ -6,6 +6,7 @@ Ancestors
   emitHelper emitHelperProps finite_map list rich_list memLocDefs contextCodegenRel codegenRel
   assignTuplePtrLoadStep logAbiPrefixPtr fragGasPathPtr stateFrame
   stmtLowering exprLoweringProps freshWrites words arithmetic compileEnv
+  loweringShapeDefs loweringStateRelDefs valueEncodingDefs
 
 Theorem ret_values_frag_ptr:
   !cx ctx PG sa sb id ops rpc vals pc P Q R.
@@ -155,7 +156,7 @@ Proof
   fs[state_frame_def, venom_state_component_equality] >>
   conj_tac >-
     (simp[eval_operands_def, eval_operand_def, tuple_words_def,
-          mload_def, valueEncodingTheory.mem_word_at_def]) >>
+          mload_def, valueEncodingDefsTheory.mem_word_at_def]) >>
   `sh.cs_next_var <= sf.cs_next_var` by
     (drule compile_load_tuple_elements_run >>
      disch_then (qspecl_then [`u`, `w`] mp_tac) >>

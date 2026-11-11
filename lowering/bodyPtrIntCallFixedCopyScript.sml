@@ -6,6 +6,7 @@ Ancestors
   compileEnv venomState venomInst venomMemProofs pred_set
   valueEncoding fragGasPathPtr fragGasSeqAbort rich_list list arithmetic
   ptrDiscipline venomMemDefs venomExecSemantics
+  valueEncodingDefs
 
 Theorem compile_copy_memory_robust_counted:
   !D ctx fn PG sa sb src dst n G tn s a b tv v bb.

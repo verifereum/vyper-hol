@@ -27,8 +27,7 @@ Definition intcall_protected_def:
                  off + sz <= b \/ b + sz' <= off) /\
       off <= i /\ i < off + sz) \/
     (?n b sz. local_region cenv es.scopes s0 n b sz /\
-      b <= i /\ i < b + sz /\
-      (!k. dynarray_len_at cenv n k ==> i < b + k \/ b + k + 32 <= i))}
+      b <= i /\ i < b + sz)}
 End
 
 Theorem intcall_mem_frame_refl:

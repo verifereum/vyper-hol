@@ -6,6 +6,7 @@ Ancestors
   bodyPtrIntCallConfinement allocationPtr loweringPosts
   bodyPtrDefs compileEnv finite_map pred_set words list
   exprSimPtrTopLevelStorageFrame
+  loweringStateRelDefs
 
 Theorem intcall_located_footprint_separation:
   vv_at ce cx ty sa sb es raw (LocatedValue ann p) s /\

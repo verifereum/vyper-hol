@@ -7,6 +7,7 @@ Ancestors
   context emitHelper compileEnv valueEncodingProps venomMemDefs
   venomExecSemantics finite_map pred_set words fragGasPathPtr
   annAssignPtrCopy robustCopyTransportPtr venomState ptrDiscipline
+  valueEncodingDefs
 
 Theorem intcall_static_array_fast_counted:
   !D ctx fn PG ce sa sb src dst st dt tenv stv dtv cnt v G tn s a b.
@@ -62,7 +63,7 @@ Proof
        rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
        conj_tac >- simp[] >>
        qexistsl_tac [`s.vs_memory`, `s.vs_memory`, `0`, `w2n a`, `tn.t_mem`, `tn.t_mem`] >>
-       simp[valueEncodingTheory.mem_bytes_at_def])) >>
+       simp[valueEncodingDefsTheory.mem_bytes_at_def])) >>
   drule_all copy_memory_emitted_instruction >> strip_tac >>
   qabbrev_tac `sc = mcopy (w2n b) (w2n a) n s` >>
   qabbrev_tac `inst = mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w n)] []` >>
