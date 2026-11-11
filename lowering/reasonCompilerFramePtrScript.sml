@@ -61,15 +61,17 @@ QED
 (* Compiler freshness is name separation, not absence from runtime maps. *)
 Theorem reason_tuple_copy_names:
   emit_op MLOAD [Var src] sa = (Var v1,c1) /\
-  emit_op ADD [Var v1;Lit 31w] c1 = (Var v2,c2) /\
-  emit_op AND [Var v2;Lit (i2w (-32))] c2 = (Var v3,c3) /\
-  emit_op ADD [Lit 32w;Var v3] c3 = (Var v4,c4) /\
+  emit_op NOT [Lit 31w] c1 = (Var vm,cm) /\
+  emit_op ADD [Var v1;Lit 31w] cm = (Var v2,c2) /\
+  emit_op AND [Var v2;Var vm] c2 = (Var v3,c3) /\
+  emit_op ADD [Var v3;Lit 32w] c3 = (Var v4,c4) /\
   emit_void MCOPY [Var dst;Var src;Var v4] c4 = ((),sb) ==>
-  (!p. not_fresh_at sa p ==> p <> v1 /\ p <> v2 /\ p <> v3 /\ p <> v4) /\
+  (!p. not_fresh_at sa p ==> p <> v1 /\ p <> vm /\ p <> v2 /\ p <> v3 /\ p <> v4) /\
   sa.cs_next_var <= sb.cs_next_var /\
-  (!p. MEM p [v1;v2;v3;v4] ==> not_fresh_at sb p) /\
-  (!p. MEM p [v1;v2;v3;v4] ==>
-    ?n. p = STRING #"%" (toString n) /\ sa.cs_next_var <= n)
+  (!p. MEM p [v1;vm;v2;v3;v4] ==> not_fresh_at sb p) /\
+  (!p. MEM p [v1;vm;v2;v3;v4] ==>
+    ?n. p = STRING #"%" (toString n) /\ sa.cs_next_var <= n) /\
+  v1 <> vm /\ v2 <> vm
 Proof
   strip_tac >> imp_res_tac emitted_insts_emit_op >>
   drule emitted_insts_emit_void >> strip_tac >>
@@ -79,12 +81,13 @@ QED
 
 Theorem reason_tuple_copy_nonlocal:
   emit_op MLOAD [Var src] sa = (Var v1,c1) /\
-  emit_op ADD [Var v1;Lit 31w] c1 = (Var v2,c2) /\
-  emit_op AND [Var v2;Lit (i2w (-32))] c2 = (Var v3,c3) /\
-  emit_op ADD [Lit 32w;Var v3] c3 = (Var v4,c4) /\
+  emit_op NOT [Lit 31w] c1 = (Var vm,cm) /\
+  emit_op ADD [Var v1;Lit 31w] cm = (Var v2,c2) /\
+  emit_op AND [Var v2;Var vm] c2 = (Var v3,c3) /\
+  emit_op ADD [Var v3;Lit 32w] c3 = (Var v4,c4) /\
   emit_void MCOPY [Var dst;Var src;Var v4] c4 = ((),sb) /\
   local_ptrs_reserved cenv sa ==>
-  !p. MEM p [v1;v2;v3;v4] ==> not_local_ptr cenv scopes p
+  !p. MEM p [v1;vm;v2;v3;v4] ==> not_local_ptr cenv scopes p
 Proof
   strip_tac >> drule_all reason_tuple_copy_names >> strip_tac >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >>
@@ -93,15 +96,16 @@ QED
 
 Theorem reason_tuple_copy_fresh_names:
   emit_op MLOAD [Var src] sa = (Var v1,c1) /\
-  emit_op ADD [Var v1;Lit 31w] c1 = (Var v2,c2) /\
-  emit_op AND [Var v2;Lit (i2w (-32))] c2 = (Var v3,c3) /\
-  emit_op ADD [Lit 32w;Var v3] c3 = (Var v4,c4) /\
+  emit_op NOT [Lit 31w] c1 = (Var vm,cm) /\
+  emit_op ADD [Var v1;Lit 31w] cm = (Var v2,c2) /\
+  emit_op AND [Var v2;Var vm] c2 = (Var v3,c3) /\
+  emit_op ADD [Var v3;Lit 32w] c3 = (Var v4,c4) /\
   emit_void MCOPY [Var dst;Var src;Var v4] c4 = ((),sb) /\
   fresh_vars_wrt sa s /\ not_fresh_at sa src /\ not_fresh_at sa dst ==>
-  (!p. p = src \/ p = dst ==> p <> v1 /\ p <> v2 /\ p <> v3 /\ p <> v4) /\
-  (!p. MEM p [v1;v2;v3;v4] ==> lookup_var p s = NONE) /\
+  (!p. p = src \/ p = dst ==> p <> v1 /\ p <> vm /\ p <> v2 /\ p <> v3 /\ p <> v4) /\
+  (!p. MEM p [v1;vm;v2;v3;v4] ==> lookup_var p s = NONE) /\
   sa.cs_next_var <= sb.cs_next_var /\
-  (!p. MEM p [v1;v2;v3;v4] ==> not_fresh_at sb p)
+  (!p. MEM p [v1;vm;v2;v3;v4] ==> not_fresh_at sb p)
 Proof
   strip_tac >> drule_all reason_tuple_copy_names >> strip_tac >>
   rpt conj_tac

@@ -461,14 +461,16 @@ Proof
 QED
 
 Theorem reason_encoder_item_length_ptr:
-  emit_inst ADD [Var len;Lit 31w] [tmp] sa = ((),c1) /\
-  emit_inst AND [Var tmp;Lit (i2w (-32))] [rounded] c1 = ((),c2) /\
-  emit_inst ADD [Lit 32w;Var rounded] [item] c2 = ((),sb) /\
-  fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+  emit_inst NOT [Lit 31w] [mask] sa = ((),c0) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp] c0 = ((),c1) /\
+  emit_inst AND [Var tmp;Var mask] [rounded] c1 = ((),c2) /\
+  emit_inst ADD [Var rounded;Lit 32w] [item] c2 = ((),sb) /\
+  fn_has_code sa c0 func /\ fn_has_code c0 c1 func /\ fn_has_code c1 c2 func /\
   fn_has_code c2 sb func /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  lookup_var len s = SOME n /\ op_taint tn (Var len) = {} ==>
+  lookup_var len s = SOME n /\ op_taint tn (Var len) = {} /\
+  len <> mask /\ tmp <> mask ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
@@ -476,12 +478,12 @@ Theorem reason_encoder_item_length_ptr:
     lookup_var item sf = SOME (32w + ((n + 31w) && i2w (-32))) /\
     op_taint tnf (Var item) = {} /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
-    (!p. p <> tmp /\ p <> rounded /\ p <> item ==>
+    (!p. p <> mask /\ p <> tmp /\ p <> rounded /\ p <> item ==>
       lookup_var p sf = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  strip_tac >> drule_all reason_round_scalar_ptr >>
+  strip_tac >> drule_all reason_round_mask_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] (qx_choose_then `G1`
     (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `eval_operand (Var rounded) s1 = SOME ((n + 31w) && i2w (-32)) /\
@@ -491,6 +493,8 @@ Proof
     reason_copy_binop_resources_ptr)) >>
   disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  `lookup_var item s2 = SOME (32w + ((n + 31w) && i2w (-32)))` by
+    metis_tac[WORD_ADD_COMM] >>
   qexistsl_tac [`G2`, `tn2`, `s2`] >> conj_tac
   >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES] >>
   simp[] >> rpt strip_tac >> metis_tac[]
@@ -614,14 +618,15 @@ Proof
 QED
 
 Theorem reason_encoder_size_suffix_ptr:
-  emit_inst ADD [Var len;Lit 31w] [tmp] sa = ((),c1) /\
-  emit_inst AND [Var tmp;Lit (i2w (-32))] [rounded] c1 = ((),c2) /\
-  emit_inst ADD [Lit 32w;Var rounded] [item] c2 = ((),c3) /\
+  emit_inst NOT [Lit 31w] [mask] sa = ((),c0) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp] c0 = ((),c1) /\
+  emit_inst AND [Var tmp;Var mask] [rounded] c1 = ((),c2) /\
+  emit_inst ADD [Var rounded;Lit 32w] [item] c2 = ((),c3) /\
   emit_void MSTORE [Var head;Var off] c3 = ((),c4) /\
   emit_inst ADD [Var off;Var item] [size_out] c4 = ((),c5) /\
   emit_void MSTORE [Var slot;Var size_out] c5 = ((),c6) /\
   emit_inst MLOAD [Var slot] [encoded] c6 = ((),sb) /\
-  fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+  fn_has_code sa c0 func /\ fn_has_code c0 c1 func /\ fn_has_code c1 c2 func /\
   fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
   fn_has_code c4 c5 func /\ fn_has_code c5 c6 func /\
   fn_has_code c6 sb func /\ ~ctx_has_dalloca ctx /\
@@ -631,15 +636,15 @@ Theorem reason_encoder_size_suffix_ptr:
   lookup_var head s = SOME h /\ ptr_covers G tn head s 32 /\
   lookup_var slot s = SOME a /\ ptr_covers G tn slot s 32 /\
   lookup_var off s = SOME d /\ op_taint tn (Var off) = {} /\
-  (!p. MEM p [head;slot;off] ==> ~MEM p [tmp;rounded;item]) /\
-  slot <> size_out ==>
+  (!p. MEM p [head;slot;off] ==> ~MEM p [mask;tmp;rounded;item]) /\
+  len <> mask /\ tmp <> mask /\ slot <> size_out ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var encoded sf = SOME (d + (32w + ((n + 31w) && i2w (-32)))) /\
     op_taint tnf (Var encoded) = {} /\
-    (!p. ~MEM p [tmp;rounded;item;size_out;encoded] ==>
+    (!p. ~MEM p [mask;tmp;rounded;item;size_out;encoded] ==>
       lookup_var p sf = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
@@ -670,9 +675,10 @@ Theorem reason_encoder_payload_tail_ptr:
   emit_void MSTORE [Var last;Lit 0w] c4 = ((),c5) /\
   emit_inst ADD [Lit 32w;Var len] [cnt] c5 = ((),c6) /\
   emit_void MCOPY [Var tail;Var src;Var cnt] c6 = ((),c7) /\
-  emit_inst ADD [Var len;Lit 31w] [tmp1] c7 = ((),c8) /\
-  emit_inst AND [Var tmp1;Lit (i2w (-32))] [rounded1] c8 = ((),c9) /\
-  emit_inst ADD [Lit 32w;Var rounded1] [item] c9 = ((),c10) /\
+  emit_inst NOT [Lit 31w] [mask1] c7 = ((),c7m) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp1] c7m = ((),c8) /\
+  emit_inst AND [Var tmp1;Var mask1] [rounded1] c8 = ((),c9) /\
+  emit_inst ADD [Var rounded1;Lit 32w] [item] c9 = ((),c10) /\
   emit_void MSTORE [Var head;Var off] c10 = ((),c11) /\
   emit_inst ADD [Var off;Var item] [size_out] c11 = ((),c12) /\
   emit_void MSTORE [Var slot;Var size_out] c12 = ((),c13) /\
@@ -680,7 +686,7 @@ Theorem reason_encoder_payload_tail_ptr:
   fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
   fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
   fn_has_code c4 c5 func /\ fn_has_code c5 c6 func /\
-  fn_has_code c6 c7 func /\ fn_has_code c7 c8 func /\
+  fn_has_code c6 c7 func /\ fn_has_code c7 c7m func /\ fn_has_code c7m c8 func /\
   fn_has_code c8 c9 func /\ fn_has_code c9 c10 func /\
   fn_has_code c10 c11 func /\ fn_has_code c11 c12 func /\
   fn_has_code c12 c13 func /\ fn_has_code c13 sb func /\
@@ -699,16 +705,16 @@ Theorem reason_encoder_payload_tail_ptr:
   lookup_var slot s = SOME addr /\ ptr_covers G tn slot s 32 /\
   lookup_var off s = SOME d /\ op_taint tn (Var off) = {} /\
   (!p. MEM p [src;tail;head;slot;off] ==>
-    ~MEM p [len;tmp0;rounded0;last;cnt;tmp1;rounded1;item]) /\
+    ~MEM p [len;tmp0;rounded0;last;cnt;mask1;tmp1;rounded1;item]) /\
   len <> tmp0 /\ len <> rounded0 /\ len <> last /\ len <> cnt /\
-  slot <> size_out ==>
+  len <> mask1 /\ tmp1 <> mask1 /\ slot <> size_out ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     lookup_var encoded sf = SOME (d + (32w + ((n + 31w) && i2w (-32)))) /\
     op_taint tnf (Var encoded) = {} /\
-    (!p. ~MEM p [len;tmp0;rounded0;last;cnt;tmp1;rounded1;item;size_out;encoded] ==>
+    (!p. ~MEM p [len;tmp0;rounded0;last;cnt;mask1;tmp1;rounded1;item;size_out;encoded] ==>
       lookup_var p sf = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
@@ -723,7 +729,7 @@ Proof
    lookup_var slot s1 = SOME addr /\ ptr_covers G1 tn1 slot s1 32 /\
    lookup_var off s1 = SOME d /\ op_taint tn1 (Var off) = {}` by
     (gvs[ptr_covers_def] >> fs[] >> metis_tac[]) >>
-  `!p. MEM p [head;slot;off] ==> ~MEM p [tmp1;rounded1;item]` by
+  `!p. MEM p [head;slot;off] ==> ~MEM p [mask1;tmp1;rounded1;item]` by
     (fs[] >> metis_tac[]) >>
   drule_all reason_encoder_size_suffix_ptr >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
@@ -806,9 +812,10 @@ Theorem reason_encoder_payload_ptr:
   emit_void MSTORE [Var last;Lit 0w] c4 = ((),c5) /\
   emit_inst ADD [Lit 32w;Var len] [cnt] c5 = ((),c6) /\
   emit_void MCOPY [Var tail;Var src;Var cnt] c6 = ((),c7) /\
-  emit_inst ADD [Var len;Lit 31w] [tmp1] c7 = ((),c8) /\
-  emit_inst AND [Var tmp1;Lit (i2w (-32))] [rounded1] c8 = ((),c9) /\
-  emit_inst ADD [Lit 32w;Var rounded1] [item] c9 = ((),c10) /\
+  emit_inst NOT [Lit 31w] [mask1] c7 = ((),c7m) /\
+  emit_inst ADD [Var len;Lit 31w] [tmp1] c7m = ((),c8) /\
+  emit_inst AND [Var tmp1;Var mask1] [rounded1] c8 = ((),c9) /\
+  emit_inst ADD [Var rounded1;Lit 32w] [item] c9 = ((),c10) /\
   emit_void MSTORE [Var head;Var off] c10 = ((),c11) /\
   emit_inst ADD [Var off;Var item] [size_out] c11 = ((),c12) /\
   emit_void MSTORE [Var slot;Var size_out] c12 = ((),c13) /\
@@ -818,7 +825,7 @@ Theorem reason_encoder_payload_ptr:
   fn_has_code sm c1 func /\ fn_has_code c1 c2 func /\
   fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\
   fn_has_code c4 c5 func /\ fn_has_code c5 c6 func /\
-  fn_has_code c6 c7 func /\ fn_has_code c7 c8 func /\
+  fn_has_code c6 c7 func /\ fn_has_code c7 c7m func /\ fn_has_code c7m c8 func /\
   fn_has_code c8 c9 func /\ fn_has_code c9 c10 func /\
   fn_has_code c10 c11 func /\ fn_has_code c11 c12 func /\
   fn_has_code c12 c13 func /\ fn_has_code c13 sb func /\
@@ -841,9 +848,9 @@ Theorem reason_encoder_payload_ptr:
   slot <> tail /\ src <> head /\ src <> off /\ src <> tail /\
   head <> off /\ head <> tail /\ off <> tail /\
   (!p. MEM p [src;tail;head;slot;off] ==>
-    ~MEM p [len;tmp0;rounded0;last;cnt;tmp1;rounded1;item]) /\
+    ~MEM p [len;tmp0;rounded0;last;cnt;mask1;tmp1;rounded1;item]) /\
   len <> tmp0 /\ len <> rounded0 /\ len <> last /\ len <> cnt /\
-  slot <> size_out ==>
+  len <> mask1 /\ tmp1 <> mask1 /\ slot <> size_out ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
@@ -851,7 +858,7 @@ Theorem reason_encoder_payload_ptr:
     lookup_var encoded sf = SOME (32w + (32w + ((n + 31w) && i2w (-32)))) /\
     op_taint tnf (Var encoded) = {} /\
     (!p. ~MEM p [src;head;off;tail;len;tmp0;rounded0;last;cnt;
-                 tmp1;rounded1;item;size_out;encoded] ==>
+                 mask1;tmp1;rounded1;item;size_out;encoded] ==>
       lookup_var p sf = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
@@ -871,7 +878,7 @@ Proof
        arithmeticTheory.SUB_LESS_EQ]) >>
   qpat_assum `emit_inst MLOAD [Var src] [len] sm = _`
     (mp_then Any mp_tac reason_encoder_payload_tail_ptr) >>
-  ntac 13 (disch_then drule) >>
+  ntac 14 (disch_then drule) >>
   disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G2`
     (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>

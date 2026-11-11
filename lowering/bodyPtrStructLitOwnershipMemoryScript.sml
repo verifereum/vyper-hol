@@ -110,6 +110,8 @@ Proof
   gen_tac >> irule alloc_run_bind >> qexists `\v st. fresh_outputs st` >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
   gen_tac >> irule alloc_run_bind >> qexists `\v st. fresh_outputs st` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+  gen_tac >> irule alloc_run_bind >> qexists `\v st. fresh_outputs st` >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh]
 QED
 
