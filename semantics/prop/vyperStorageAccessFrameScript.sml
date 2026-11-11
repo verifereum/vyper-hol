@@ -2049,7 +2049,12 @@ Resume evaluate_finite_frame[intcall]:
     (strip_assume_tac o SRULE [lift_option_type_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]) >>
   qpat_assum `lift_option_type (lookup_callable_function cx.in_deploy fn _) _ _ = _`
     (strip_assume_tac o SRULE [lift_option_type_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]) >>
-  PairCases_on `x''` >>
+  qmatch_asmsub_rename_tac `get_module_code cx src_id_opt = SOME mod_ts` >>
+  qmatch_asmsub_rename_tac
+    `lookup_callable_function cx.in_deploy fn mod_ts = SOME fdecl` >>
+  PairCases_on `fdecl` >>
+  qmatch_asmsub_rename_tac `lookup_callable_function cx.in_deploy fn mod_ts =
+    SOME (fmut,fnr,fparams,fdflts,fret,fbody)` >>
   RULE_ASSUM_TAC (BETA_RULE o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss) []) >>
   `IS_SOME (FLOOKUP env.fn_sigs (src_id_opt,fn))` by simp[] >>
   drule_all callable_body_typing_from_env_consistent >>
@@ -2079,10 +2084,10 @@ Resume evaluate_finite_frame[intcall]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[state_well_typed_def, scope_well_typed_def]) >>
   `well_typed_exprs (defaults_env env_body)
-      (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3)` by
+      (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts)` by
     (irule well_typed_exprs_DROP >> simp[]) >>
   `call_evaluation_safe (cx with stk updated_by CONS (src_id_opt,fn))
-      (int_calls_exprs (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3))` by
+      (int_calls_exprs (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts))` by
     (irule call_evaluation_safe_push_needed_defaults >>
      asm_x "body_ih" kall_tac >> asm_x "defaults_frame" kall_tac >>
      asm_x "closure" kall_tac >> asm_x "args_prefix" kall_tac >>
@@ -2092,8 +2097,8 @@ Resume evaluate_finite_frame[intcall]:
   disch_then drule >> disch_then drule >>
   disch_then (mk_asm "callee_accesses") >>
   `^safe_accesses A R
-      (accesses_exprs (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3))
-      (int_calls_exprs (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3))` by
+      (accesses_exprs (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts))
+      (int_calls_exprs (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts))` by
     (asm "callee_accesses" mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      qsuff_tac `!n ds. (^safe_accesses A R (accesses_exprs ds)
@@ -2103,7 +2108,7 @@ Resume evaluate_finite_frame[intcall]:
      Induct >> Cases_on `ds` >>
      simp[accesses_expr_def, int_calls_expr_def, MEM_APPEND] >> metis_tac[]) >>
   Cases_on `eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
-      (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3)
+      (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts)
       (args_st with scopes := [FEMPTY])` >>
   rename1 `eval_exprs _ _ (args_st with scopes := [FEMPTY]) = (dres,dst)` >>
   `^frame cx A (args_st with scopes := [FEMPTY]) dst` by
@@ -2150,6 +2155,7 @@ Resume evaluate_finite_frame[intcall]:
   qpat_assum `lift_option_type (bind_arguments _ _ _) _ _ = _`
     (strip_assume_tac o SRULE [lift_option_type_def, option_CASE_rator,
       AllCaseEqs(), return_def, raise_def]) >>
+  qmatch_asmsub_rename_tac `bind_arguments _ _ (arg_vals ++ dflt_vals)` >>
   `scope_well_typed call_env` by
     (drule vyperTypeBindArgumentsTheory.bind_arguments_scope_well_typed_from_success >>
      simp[]) >>
@@ -2159,9 +2165,9 @@ Resume evaluate_finite_frame[intcall]:
       (cx with stk updated_by CONS (env_body.current_src,fn))
       (dst with scopes := [call_env])` by
     (irule vyperTypeBindArgumentsTheory.bind_arguments_env_scopes_consistent >>
-     qexistsl_tac [`x''2`,`get_tenv cx`,`x'' ++ x`] >>
+     qexistsl_tac [`fparams`,`get_tenv cx`,`arg_vals ++ dflt_vals`] >>
      simp[get_tenv_def] >> rpt strip_tac >>
-     qpat_x_assum `!id typ. MEM (id,typ) x''2 ==> _`
+     qpat_x_assum `!id typ. MEM (id,typ) fparams ==> _`
        (drule_then strip_assume_tac) >> simp[]) >>
   `env_immutables_consistent env_body
       (cx with stk updated_by CONS (env_body.current_src,fn))
@@ -2198,11 +2204,11 @@ Resume evaluate_finite_frame[intcall]:
   drule_all intcall_live_pushed_body_preconditions >> strip_tac >>
   simp_tac (srw_ss()) [push_function_def, return_def] >>
   `lift_option_type (get_module_code cx env_body.current_src)
-     "IntCall get_module_code" r = (INL x',r)` by
+     "IntCall get_module_code" r = (INL mod_ts,r)` by
     simp[lift_option_type_def, return_def] >>
-  `lift_option_type (lookup_callable_function cx.in_deploy fn x')
+  `lift_option_type (lookup_callable_function cx.in_deploy fn mod_ts)
      "IntCall lookup_function" r =
-       (INL (x''0,x''1,x''2,x''3,x''4,x''5),r)` by
+       (INL (fmut,fnr,fparams,fdflts,fret,fbody),r)` by
     simp[lift_option_type_def, return_def] >>
   asm_x "body_ih" (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
@@ -2213,14 +2219,14 @@ Resume evaluate_finite_frame[intcall]:
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   `finally (ignore_bind (set_scopes [FEMPTY])
       (eval_exprs (cx with stk updated_by CONS (env_body.current_src,fn))
-        (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3)))
+        (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts)))
       (set_scopes args_st.scopes) args_st =
-      (INL x,dst with scopes := args_st.scopes)` by
+      (INL dflt_vals,dst with scopes := args_st.scopes)` by
     simp[finally_def, ignore_bind_def, bind_def, set_scopes_def, return_def] >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
-  `lift_option_type (evaluate_type (get_tenv cx) x''4)
+  `lift_option_type (evaluate_type (get_tenv cx) fret)
       "IntCall eval ret" r = (INL ret_tv,r)` by
     simp[lift_option_type_def, return_def] >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
@@ -2233,16 +2239,16 @@ Resume evaluate_finite_frame[intcall]:
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (mk_asm "body_frame" o REWRITE_RULE [AND_IMP_INTRO] o BETA_RULE) >>
   `call_evaluation_safe (cx with stk updated_by CONS (env_body.current_src,fn))
-      (int_calls_stmts x''5)` by
+      (int_calls_stmts fbody)` by
     (irule call_evaluation_safe_push_body >>
      asm_x "body_frame" kall_tac >> asm_x "closure" kall_tac >>
      asm_x "callee_accesses" kall_tac >> asm_x "args_prefix" kall_tac >>
      metis_tac[]) >>
   Cases_on `eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn))
-      x''5 (lock_st with scopes := [call_env])` >>
-  rename1 `eval_stmts _ x''5 _ = (body_res,body_st)` >>
+      fbody (lock_st with scopes := [call_env])` >>
+  rename1 `eval_stmts _ fbody _ = (body_res,body_st)` >>
   `^frame cx A (lock_st with scopes := [call_env]) body_st` by
-    (asm "body_frame" (qspecl_then [`A`,`R`,`env_body`,`x''4`]
+    (asm "body_frame" (qspecl_then [`A`,`R`,`env_body`,`fret`]
        (qspecl_then [`env_after`,`lock_st with scopes := [call_env]`,
                     `body_res`,`body_st`] mp_tac)) >>
      (impl_tac >-
@@ -2274,7 +2280,7 @@ Resume evaluate_finite_frame[intcall]:
   `^frame cx A r (body_st with scopes := args_st.scopes)` by
     (asm "body_prefix" (mp_tac o BETA_RULE) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[oneline get_storage_def]) >>
-  Cases_on `finally_unless_halt fin_act (unlock_if_nr cx x''1 (is_view_mut x''0))
+  Cases_on `finally_unless_halt fin_act (unlock_if_nr cx fnr (is_view_mut fmut))
       call_st` >>
   rename1 `_ = (call_res,call_out)` >>
   drule_all finally_unless_halt_unlock_frame >> disch_then assume_tac >>
