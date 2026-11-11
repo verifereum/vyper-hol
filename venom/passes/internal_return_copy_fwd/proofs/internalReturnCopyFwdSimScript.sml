@@ -26,7 +26,7 @@ Ancestors
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
   rangeAnalysisProofs stepWriteFootprintBase o1LowerDloadOccurrence occurrenceGeometry
   venomExecProps fnRunFields ptrTaintClean internalReturnCopyFwdAbort
-  o1LowerDloadForwardInversion
+  o1LowerDloadForwardInversion reachableNonhalted
 
 (* The transformed block, before NOPs are cleared *)
 Definition ircf_tbb_def:
@@ -3047,6 +3047,37 @@ Proof
   gvs[dead_result_rel_def] >>
   once_rewrite_tac[exec_block_def] >>
   simp[block_step_rel_def, fn_run_rel_def, dead_result_rel_def]
+QED
+
+Theorem ircf_runner_halted_ok:
+  !D lo vs C fn_meta rma k stk PG G tn fn s t bb inst u.
+    o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+    EVERY ircf_no_dst_write_alias C.ctx_functions /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
+    ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
+    fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
+      (ircf_R D fn_meta rma C)
+      (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\
+    MEM fn C.ctx_functions /\
+    frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    s.vs_current_bb = t.vs_current_bb /\ s.vs_inst_idx = t.vs_inst_idx /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+    ircf_cross tn (ircf_gam_cur fn_meta rma C fn s UNION
+      ircf_gam_stk fn_meta rma C stk) s t /\
+    terminates (step_inst k C inst s) /\
+    (!u. step_inst k C inst s = OK u ==> is_terminator inst.inst_opcode) /\
+    step_inst k C inst s = OK u /\ u.vs_halted ==>
+    ?m. block_step_rel D vs C (ircf_R D fn_meta rma C)
+      (ircf_R_ret_reachable vs D fn_meta rma C) stk PG fn
+      (exec_block k C bb s)
+      (exec_block m (ircf_transform_ctx fn_meta rma C)
+        (ircf_tbb fn_meta rma C fn bb) t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~s.vs_halted` by metis_tac[frame_reachable_not_halted] >>
+  drule venomStepPropsTheory.step_inst_ok_halted >> simp[]
 QED
 
 Theorem ircf_block_sim:
