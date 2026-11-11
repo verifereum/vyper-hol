@@ -1606,11 +1606,14 @@ Proof
   (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem noninvoke_segment_mask[local]:
+Theorem noninvoke_segment_mask_shape[local]:
   i.inst_opcode <> INVOKE /\ inst_wf i /\
   terminates (step_inst fuel C' i s) /\
   LENGTH (gas_events_step fuel C' s.vs_current_bb i s) <= LENGTH s.vs_gas_readings ==>
   ?m es unused.
+    (if i.inst_opcode = GAS then
+       ?w. m = [SOME w] /\ es = [(s.vs_current_bb,i.inst_id)]
+     else m = [] /\ es = []) /\
     LENGTH m = LENGTH es /\
     PERM (MAP THE (FILTER IS_SOME m) ++ unused) s.vs_gas_readings /\
     (!u. (step_inst fuel C' i s = OK u \/
@@ -1655,6 +1658,38 @@ Proof
   Cases_on `step_inst fuel C i (s with vs_gas_readings := tail)` >>
   simp[stateEquivTheory.lift_result_def] >> strip_tac >> gvs[] >>
   simp[restore_result_def, dftRunRelTheory.dft_res_rel_def]
+QED
+
+Theorem noninvoke_segment_mask[local]:
+  i.inst_opcode <> INVOKE /\ inst_wf i /\
+  terminates (step_inst fuel C' i s) /\
+  LENGTH (gas_events_step fuel C' s.vs_current_bb i s) <= LENGTH s.vs_gas_readings ==>
+  ?m es unused.
+    LENGTH m = LENGTH es /\
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) s.vs_gas_readings /\
+    (!u. (step_inst fuel C' i s = OK u \/
+          (?ir. step_inst fuel C' i s = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C s.vs_current_bb i
+         (s with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?j. terminates (step_inst j C i (s with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C i (s with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C i (s with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' i s)) /\
+        (((?u. step_inst fuel C' i s = OK u) \/
+          (?ir u. step_inst fuel C' i s = IntRet ir u)) ==>
+          gas_events_step fuel C s.vs_current_bb i
+            (s with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' i s)
+            (step_inst fuel C i (s with vs_gas_readings := gs ++ tail))))
+Proof
+  strip_tac >> drule_all noninvoke_segment_mask_shape >>
+  disch_then (qspec_then `C` mp_tac) >>
+  disch_then (qx_choose_then `m` (qx_choose_then `es`
+    (qx_choose_then `unused` strip_assume_tac))) >>
+  qexistsl_tac [`m`, `es`, `unused`] >> simp[] >> metis_tac[]
 QED
 
 Theorem identity_mask_cons[local]:
