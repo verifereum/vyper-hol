@@ -714,7 +714,7 @@ Proof
   simp[supported_stmt_expr_exists_def]
 QED
 
-Theorem body_for_range_lit[local]:
+Theorem body_for_range_lit:
   !cx id typ a1 n1 a2 n2 n stmts tops bindings ctx func cenv env env'
    ret_ty lctx RetQ es res es'.
     body_stmt_safe tops

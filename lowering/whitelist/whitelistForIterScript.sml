@@ -69,6 +69,8 @@ Ancestors
 Libs
   monadsyntax
 
+val _ = Parse.hide "body";
+
 Theorem eval_iterator_dynamic_name[local]:
   !cx ty c name es entry elem_tv vs.
     lookup_scopes name es.scopes = SOME entry /\
@@ -413,19 +415,23 @@ Proof
     (irule post_value_type_declared_return >> qexists_tac `tops` >>
      simp[] >> rpt strip_tac >>
      gvs[supported_iterator_def]) >>
-  Cases_on `e` >>
-  gvs[supported_iterator_def, expr_type_def, place_access_root]
-  >~ [`Name (ArrayT _ bd) arr`]
-  >- (Cases_on `bd` >> gvs[]
-      >- (irule body_for_array >> simp[] >> metis_tac[]) >>
-      irule body_for_dynarray_name >> simp[] >> metis_tac[])
-  >~ [`TopLevelName (ArrayT _ bd) nid`]
-  >- (PairCases_on `nid` >> gvs[optionTheory.IS_SOME_EXISTS] >>
+  Cases_on `(?t v. e = Name t v) \/ (?t nid. e = TopLevelName t nid)`
+  >- (pop_assum strip_assume_tac >>
+      gvs[supported_iterator_def, expr_type_def, place_access_root]
+      >~ [`Name (ArrayT _ bd) arr`]
+      >- (Cases_on `bd` >> gvs[]
+          >- (irule body_for_array >> simp[] >> metis_tac[]) >>
+          irule body_for_dynarray_name >> simp[] >> metis_tac[]) >>
+      rename1 `TopLevelName (ArrayT _ bd) nid` >>
+      PairCases_on `nid` >> gvs[optionTheory.IS_SOME_EXISTS] >>
       drule_all supported_immutable_type_find_NONE >> strip_tac >> gvs[] >>
       `FLOOKUP env.bare_globals (NONE,nid1) = SOME (ArrayT typ bd)` by
         (irule toplevel_find_NONE_bare_global >>
          fs[expr_sim_inv_def] >> metis_tac[]) >>
       irule body_for_immutable_array >> simp[] >> metis_tac[]) >>
+  `~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+   !tgt nid. expr_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid` by
+    (Cases_on `e` >> gvs[supported_iterator_def, place_access_root]) >>
   irule body_for_memory_iterable >> simp[] >> metis_tac[]
 QED
 
