@@ -320,6 +320,10 @@ Resume sym_entry_body_inv[entry_body_fields]:
 QED
 
 Resume sym_entry_body_inv[entry_body_static]:
+  `!xs L. ?prefixL prefixD core.
+     xs = prefixL ++ core /\ xs = prefixD ++ core /\
+     (!v. MEM v L ==> ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` by
+    (rpt gen_tac >> qexistsl_tac [`[]`, `[]`, `xs`] >> simp[]) >>
   rpt conj_tac >> metis_tac[entry_step_phi_bound,
     revert_forward_pair_past_params, fnPlanLineageTheory.lineage_state_rules,
     venomWfTheory.fn_reachable_def, relationTheory.RTC_REFL]
