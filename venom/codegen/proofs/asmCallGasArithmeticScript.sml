@@ -35,3 +35,31 @@ Proof
     (mp_tac (Q.INST [`n` |-> `64`, `q` |-> `100`, `m` |-> `x`] DIV_SUB) >> simp[]) >>
   decide_tac
 QED
+
+(* Expansion charges depend on rounded words, not the old allocation. *)
+Theorem memory_cost_word_mono:
+  word_size a <= word_size b ==> memory_cost a <= memory_cost b
+Proof
+  strip_tac >>
+  `word_size a * word_size a <= word_size b * word_size b` by
+    (irule LESS_MONO_MULT2 >> simp[]) >>
+  `word_size a * word_size a DIV 512 <= word_size b * word_size b DIV 512` by
+    (irule DIV_LE_MONOTONE >> simp[]) >>
+  gvs[memory_cost_def, vfmConstantsTheory.memory_cost_per_word_def]
+QED
+
+Theorem memory_expansion_cost_bound:
+  endpoint <= H ==>
+  memory_expansion_cost old (word_size endpoint * 32) <= memory_cost H
+Proof
+  strip_tac >>
+  Cases_on `word_size endpoint * 32 <= old`
+  >- simp[memory_expansion_cost_def, MAX_DEF] >>
+  `word_size endpoint <= word_size H` by
+    (simp[vfmConstantsTheory.word_size_def] >> irule DIV_LE_MONOTONE >> simp[]) >>
+  `word_size (word_size endpoint * 32) = word_size endpoint` by
+    simp[vfmConstantsTheory.word_size_def, ADD_DIV_ADD_DIV] >>
+  `memory_cost (word_size endpoint * 32) <= memory_cost H` by
+    (irule memory_cost_word_mono >> simp[]) >>
+  simp[memory_expansion_cost_def, MAX_DEF] >> decide_tac
+QED

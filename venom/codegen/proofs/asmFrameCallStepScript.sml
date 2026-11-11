@@ -16,7 +16,7 @@ Ancestors
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
   vfmPreserves vfmAccountDeletion vfmStaticCalls vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
 Libs
-  wordsLib
+  wordsLib asmCallViewLib
 
 Theorem asm_precompile_sha256_success:
   s.contexts = (c,rb)::rest /\
@@ -788,7 +788,16 @@ Theorem asm_call_prepare_success_view:
                        if 0 < SND range then word_size (FST range + SND range) * 32 else 0)
                      - buffer_length c.memory) c.memory |>,rb)::rest;
       rollback := s.rollback with accesses := acc;
-      msdomain := Collect d' |>
+      msdomain := Collect d' |> /\
+    ?mc oc requested dg.
+      call_gas value requested (c.msgParams.gasLimit - c.gasUsed) mc oc =
+        (dg,stipend) /\
+      charge = static_gas op + dg + mc /\ oc <= 39200 /\
+      mc = memory_expansion_cost (buffer_length c.memory)
+        (if 0 < SND (max_expansion_range (ao,az) (ro,rs))
+         then word_size (FST (max_expansion_range (ao,az) (ro,rs)) +
+                         SND (max_expansion_range (ao,az) (ro,rs))) * 32
+         else 0)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_success_stack >> disch_tac >>
@@ -859,7 +868,31 @@ Resume asm_call_prepare_success_view[project]:
   simp_tac (srw_ss()) [] >>
   qmatch_goalsub_abbrev_tac `Collect domain0` >>
   qmatch_goalsub_abbrev_tac `s.rollback with accesses := access0` >>
-  qexistsl_tac [`access0`,`domain0`] >> simp_tac (srw_ss()) []
+  qexistsl_tac [`access0`,`domain0`] >> simp_tac (srw_ss()) [] >>
+  qexistsl_tac [`ac + vc + cc + resolved1`, `gas`, `FST cg`] >>
+  qpat_assum `mxCost = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `cg = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `charge = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  `ac <= 2600` by
+    (qpat_x_assum `ac = _` SUBST1_TAC >>
+     rewrite_tac[vfmConstantsTheory.warm_access_cost_def,
+                 vfmConstantsTheory.cold_access_cost_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `vc <= 9000` by
+    (qpat_x_assum `vc = _` SUBST1_TAC >>
+     rewrite_tac[vfmConstantsTheory.call_value_cost_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `cc <= 25000` by
+    (qpat_x_assum `cc = _` SUBST1_TAC >>
+     rewrite_tac[vfmConstantsTheory.new_account_cost_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `resolved1 <= 2600` by
+    (qpat_x_assum `resolved1 = _` SUBST1_TAC >>
+     simp_tac (srw_ss()) [vfmConstantsTheory.warm_access_cost_def,
+                         vfmConstantsTheory.cold_access_cost_def] >>
+     rpt IF_CASES_TAC >> simp[]) >>
+  decide_tac
 QED
 
 Finalise asm_call_prepare_success_view
@@ -874,7 +907,8 @@ Theorem asm_call_prepare_contexts_wf:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_success_view >>
-  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   gvs[wf_context_def, LENGTH_DROP] >> decide_tac
 QED
 
@@ -888,7 +922,8 @@ Theorem asm_call_prepare_stack_room:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_success_view >>
-  simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   gvs[wf_context_def, LENGTH_DROP] >> decide_tac
 QED
 
@@ -902,7 +937,8 @@ Theorem asm_call_prepare_stipend_paid:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_success_view >>
-  simp_tac (srw_ss()) [LET_THM] >> strip_tac >> gvs[]
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> gvs[]
 QED
 
 Theorem asm_pop_and_incorporate_context_state:
@@ -1082,7 +1118,7 @@ Proof
     (drule_all asm_call_prepare_contexts_wf >> simp[]) >>
   `u.contexts <> []` by
     (drule_all asm_call_prepare_success_view >>
-     simp_tac (srw_ss()) [LET_THM] >> strip_tac >> gvs[]) >>
+     disch_then asm_call_legacy_view >> gvs[]) >>
   drule_all asm_proceed_call_child_gas >> simp[]
 QED
 
@@ -1621,7 +1657,8 @@ Theorem asm_call_prepare_abort_state:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qmatch_asmsub_abbrev_tac `buffer_extend expansion c.memory` >>
   qexistsl_tac [`charge`,`acc`,`d'`] >>
   qpat_assum `stipend <= charge` (fn th => pure_rewrite_tac[th]) >>
@@ -1633,7 +1670,8 @@ Proof
   `u.contexts = (prepared,rb)::rest` by simp[Abbr `prepared`] >>
   `LENGTH prepared.stack < stack_limit` by
     (fs[Abbr `prepared`, vfmConstantsTheory.stack_limit_def] >> decide_tac) >>
-  `stipend <= prepared.gasUsed` by (simp[Abbr `prepared`] >> decide_tac) >>
+  `stipend <= prepared.gasUsed` by
+    (simp_tac (srw_ss()) [Abbr `prepared`] >> decide_tac) >>
   `asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u =
     (INL (), u with contexts :=
       (prepared with <| stack := 0w :: prepared.stack; returnData := [];
@@ -1752,7 +1790,8 @@ Resume asm_frame_call_abort_step[restore]:
   drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
   disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qpat_x_assum `u = _` kall_tac >>
   `c.stack = a.as_stack /\ ~a.as_call_ctx.cc_static` by gvs[asm_evm_rel_def] >>
   `a.as_outcomes = failed_outcome (request_of s) :: MAP SND (call_trace t)` by
@@ -1890,7 +1929,8 @@ Proof
   drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
   disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qpat_x_assum `u = _` kall_tac >>
   `c.stack = a.as_stack /\ ~a.as_call_ctx.cc_static` by gvs[asm_evm_rel_def] >>
   `6 <= LENGTH a.as_stack` by
@@ -2048,7 +2088,8 @@ Theorem asm_call_prepared_input:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qpat_assum `u = _` (fn th => rewrite_tac[th]) >>
   simp_tac (srw_ss()) [] >>
   Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
@@ -2073,7 +2114,8 @@ Theorem asm_call_prepared_request:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   Cases_on `op = Call` >> gvs[call_has_value_def, request_of_def, EL_TAKE]
 QED
 
@@ -2091,7 +2133,8 @@ Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepared_request >> strip_tac >>
   drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
     rollback := _; msdomain := _ |>` >>
   `u.contexts = (parent,rb)::rest` by simp[] >>
@@ -2103,6 +2146,7 @@ Proof
   qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ p` >> disch_tac >>
   `p.contexts <> []` by simp[Abbr `p`] >>
   drule_all vfmRunCallTheory.proceed_call_inl_nonprecompile >>
+
   gvs[computed_precompile_addresses, vfmContextTheory.precompile_addresses_def,
       finite_setTheory.fIN_fset_ABS]
 QED
@@ -2171,7 +2215,8 @@ Proof
   (Q.SUBGOAL_THEN `address = 1w \/ address = 2w \/ address = 6w \/ address = 7w`
     assume_tac >- fs[computed_precompile_addresses]) >>
   drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
     rollback := _; msdomain := _ |>` >>
   `u.contexts = (parent,rb)::rest` by simp[] >>
@@ -2304,7 +2349,8 @@ Theorem asm_call_prepared_terminal_kind:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
     rollback := _; msdomain := _ |>` >>
   `u.contexts = (parent,rb)::rest` by simp[] >>
@@ -2435,7 +2481,8 @@ Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `EVERY (wf_context o FST) s.contexts` by fs[wf_state_def] >>
   drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
     rollback := _; msdomain := _ |>` >>
   `u.contexts = (parent,rb)::rest` by simp[] >>
@@ -2530,7 +2577,7 @@ Proof
   drule_all asm_message_prepared_terminal_exception_view >> strip_tac >>
   `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack` by
     (drule_all asm_call_prepare_success_view >>
-     pure_rewrite_tac[LET_THM] >> BETA_TAC >> simp[]) >>
+     disch_then asm_call_legacy_view >> simp[]) >>
   `LENGTH t.contexts = LENGTH s.contexts` by (asm_rewrite_tac[] >> simp[]) >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
@@ -2632,7 +2679,8 @@ Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `EVERY (wf_context o FST) s.contexts` by fs[wf_state_def] >>
   drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
     rollback := _; msdomain := _ |>` >>
   `u.contexts = (parent,rb)::rest` by simp[] >>
@@ -3071,8 +3119,8 @@ Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_stipend_paid >> disch_tac >>
   `u.contexts <> []` by
-    (drule_all asm_call_prepare_success_view >> simp[LET_THM] >>
-     rpt strip_tac >> gvs[]) >>
+    (drule_all asm_call_prepare_success_view >>
+     disch_then asm_call_legacy_view >> gvs[]) >>
   Cases_on `u.contexts` >> gvs[] >> PairCases_on `h` >> gvs[] >>
   drule_all asm_call_finish_credit_safe >> simp[]
 QED
@@ -6785,7 +6833,8 @@ Theorem asm_call_prepared_enter_view:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_success_view >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  disch_then asm_call_legacy_view >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qmatch_asmsub_abbrev_tac `u = s with <| contexts := (parent,rb)::rest;
     rollback := _; msdomain := _ |>` >>
   `u.contexts = (parent,rb)::rest` by simp[] >>
