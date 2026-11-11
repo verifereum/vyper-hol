@@ -2,7 +2,7 @@
 Theory bodyIntCallFamCallIntEntryLookup
 Ancestors
   moduleLowering compileEnv vyperCompiler intCallLookup ctorDeployShape ctorDeployLoweringCode intCallCallee
-  bodyIntCallFamCallIntEntryPackage bodyIntCallFamCallIntEntrySelectedSegment
+  bodyIntCallFamCallIntEntryPackage bodyIntCallFamCallIntEntrySelectedSegment bodyIntCallFamCallIntEntrySegmentCode
 
 
 Theorem intcall_extracted_internal_lookup:
