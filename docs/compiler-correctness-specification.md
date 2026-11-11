@@ -128,8 +128,8 @@ head rollback snapshot); transient storage agrees and source input logs are empt
 The exact singleton main source must already be installed at `tx.target`, with
 no exports and declared layout slots. Runtime typing readiness likewise requires
 installed sources and ready immutables; it is not readiness for an uninstalled
-source target. No separate equality of target account code to runtime bytes is
-required beyond the executing frame's code equation. `valid_vyper_call` selects
+source target. The live target account's code must equal the executing frame's
+code. `valid_vyper_call` selects
 the exact External declaration, nonreentrant flag F, no defaults, no
 `__default__`, exact argument count, successful bounded binding and encoded
 calldata for the declared argument types; `ret` is the looked-up return type.
@@ -217,7 +217,8 @@ gas oracle**, source `msg.gas` guarantee or `gas=` keyword guarantee. The old
 Deployment is separate: the real `e2e_deploy_correctness` is **ADMITTED**,
 Milestone6 item7, off this call path. It has Call-free constructor/canonical ABI,
 pre-constant deployment typing/storage and fresh single-frame creation with an
-uninstalled source target; it returns/installs runtime bytes and compares other
+uninstalled source target and an empty target account in `es.originalAccounts`;
+it returns/installs runtime bytes and compares other
 accounts and target modulo code, transient storage and logs. It is not the old
 proved `==> T` placeholder. `gen_fn_simulation` is separately ADMITTED,
 Milestone4.2, also off path. The

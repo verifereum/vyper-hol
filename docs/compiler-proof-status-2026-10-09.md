@@ -121,9 +121,8 @@ and block hashes agree. Block number is nonzero and `< 2 ** 255`, with
 
 The target **must already have the exact singleton main source installed**,
 no exports, and declared layout slots, via `source_deployment_rel`. This is not
-an uninstalled-target call theorem. Bytecode is tied to the frame's code;
-there is no separate equation requiring the target account's code to equal
-`runtime_bc`. Deployment has a different uninstalled-source boundary below.
+an uninstalled-target call theorem. The live target account's code must equal
+the frame's code. Deployment has a different uninstalled-source boundary below.
 
 `valid_vyper_call` uses the source's exact `External` function lookup, with
 nonreentrant flag `F`, **no defaults**, exact declared argument count,
@@ -265,7 +264,8 @@ Source owners: [e2eProducers](../lowering/e2e/e2eProducersScript.sml),
   supported syntax, `constructor_call_free`, deployment typing/storage,
   canonical constructor arguments and fresh **single-frame** creation, no
   installed source at the target, code `deploy_bc ++ args_bytes`, memory empty,
-  live entry transfer, and runtime not starting with `0xEF`. Deployment readiness
+  live entry transfer, an empty target account in `es.originalAccounts`, and
+  runtime not starting with `0xEF`. Deployment readiness
   is pre-constant setup, not runtime readiness for an uninstalled target.
   Success requires returned/installed runtime bytes, exact other accounts and
   target equality modulo code, transient storage and ordered logs; failures and

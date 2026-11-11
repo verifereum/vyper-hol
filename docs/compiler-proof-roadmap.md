@@ -218,7 +218,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D13 | Literal endpoint range checks + allocation-budget compiler check | `stmtLowering` tests both literal endpoints; five fixture bounds corrected historically. `vyperCompiler.lowering_context_ok` checks `unit_alloca_budget < dimword(:256)`. This is not a proof that every raw access is valid. | 5 / 6 |
 | D14 | STOP clears data, empty setup_callee accepted, CALL/STATICCALL outcomes | `venomExecSemantics` implemented; DELEGATECALL takes its outcome from the oracle too, but DELEGATECALL/CREATE/CREATE2 stay excluded by `unit_shape_ok`, not oracle-certified. | 2.1 / 4 |
 | D15 | Exclude static entry, not change write effects | `call_state_rel`/`initial_ctx_rel` nonstatic; outgoing STATICCALL is allowed. No static-entry correctness claim. | 7 generalization |
-| D16 | Exclude runtime immutables | Whitelist excludes them; fresh frame code is exactly runtime bytes. **Precision:** no separate target-account-code equality is in `call_state_rel`; source installation is exact. Deployment/immutables generalization deferred. | 6 item7 |
+| D16 | Exclude runtime immutables | Whitelist excludes them; fresh frame code is exactly runtime bytes. `call_state_rel` requires the live target account's code to equal the frame code; source installation is exact. Deployment/immutables generalization deferred. | 6 item7 |
 | D17 | Forward success/weak abort transport, not observable_equiv for aborts | `unitTransformDefs.unit_result_rel`: Halt observables; Abort requires only REVERT stays REVERT. Failure returndata/kind/requests may differ. S4 ADMITTED. | 3 |
 | D18 | S6 output shape, not new compiler final-hook check | S6 ADMITTED; existing literal O1 hooks unchanged. Raw-only restrictions not required of output. | 3 |
 | D19 | Syntax memory restrictions + raw memory contract | Internal local/nested-call/loop-call/name/fallback-argument exclusions in whitelist; `raw_unit_memory_ok` below frontier at actual sites. S3/S5 ADMITTED; empty memory is not a producer. | 5 |
@@ -230,7 +230,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. Fallback invocation remains deferred. | 7 |
 | D26 | Initial and successful-outcome storage validity | `source_storage_ok` + `call_outcomes_ok` use actual context/storage invariants. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements; meaningful deployment is a new admission, not a proof upgrade of old T. | every proof owner |
-| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness/uninstalled source target. The precompile builtins are excluded, since the constructor runs without the oracle. | 6 item7 |
+| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness, uninstalled source target, and empty target account in `es.originalAccounts`. The precompile builtins are excluded, since the constructor runs without the oracle. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
 | D30 | Fresh output labels proved; unused false local claims retired | `fresh_label_output_inj` / output-state `fresh_label_produces_external` proved. Assign/zero-pad/generate-runtime correctness claims retired with provenance, not rewritten under the same names; Assign belongs to statement induction, runtime to S1. | 6 |
 | D31 | Do not claim call_state_rel satisfiable in Milestone1 | No general producer or satisfiability theorem; focused checks are not a compiled-program witness. Top-level transaction construction is explicitly future work. | 7 |
@@ -644,7 +644,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
 
    Inputs are canonical tuple ABI argument bytes (no selector), actual checked
    deployment/runtime artifacts and **pre-constant deployment readiness**, an
-   uninstalled source target, and exactly one fresh nonstatic Code frame with
+   uninstalled source target, an empty target account in `es.originalAccounts`,
+   and exactly one fresh nonstatic Code frame with
    `deploy_bc ++ args_bytes`, empty calldata/memory, live transfer and no0xEF
    runtime prefix. Prove constructor CODECOPY/ABI/body, epilogue, runtime embedding
    and creation completion: returned **and installed** runtime code, other
