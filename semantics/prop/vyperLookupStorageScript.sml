@@ -14,6 +14,19 @@ Definition lookup_toplevel_name_def:
   | _ => NONE
 End
 
+Theorem lookup_toplevel_name_storage_trace[simp]:
+  lookup_toplevel_name cx (st with storage_trace := observations) mid n =
+    lookup_toplevel_name cx st mid n
+Proof
+  simp[lookup_toplevel_name_def, lookup_global_def, bind_def, ignore_bind_def,
+       record_storage_event_def, get_immutables_def, get_address_immutables_def,
+       lift_option_type_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[bind_def, ignore_bind_def, record_storage_event_def,
+           get_immutables_def, get_address_immutables_def,
+           lift_option_type_def, return_def, raise_def])
+QED
+
 Definition update_toplevel_name_def:
   update_toplevel_name cx st mid n v =
   SND (set_global cx mid n v st)
@@ -187,6 +200,13 @@ Definition well_formed_storage_def:
   well_formed_storage cx st ⇔
     ∀mid n. storage_var_in_range cx st mid n
 End
+
+Theorem well_formed_storage_storage_trace[simp]:
+  well_formed_storage cx (st with storage_trace := observations) <=>
+  well_formed_storage cx st
+Proof
+  simp[well_formed_storage_def, storage_var_in_range_def, get_storage_backend_eq]
+QED
 
 (* =================== Global Storage ============================= *)
 
@@ -1243,7 +1263,7 @@ Proof
     by metis_tac[CONJUNCT1 decode_value_storable] >>
   (* Resolution captures the storage location; loading is explicit. *)
   qexistsl_tac [`PlaceR (StoragePlace b (n2w offset) tv)`, `v`] >>
-  simp[lookup_toplevel_name_def, Once lookup_global_def,
+  simp[lookup_toplevel_name_def, Once lookup_global_def, ignore_bind_def, record_storage_event_def,
        read_result_def, read_place_def, bind_def,
        return_def, LET_THM, lift_option_type_def, lift_option_def,
        read_storage_slot_def]
@@ -1289,7 +1309,7 @@ Proof
   MAP_EVERY qexists_tac [`PlaceR (StoragePlace b (n2w offset) (ArrayTV elem_tv bd))`, `v`] >>
   simp[] >>
   conj_tac >- (
-    simp[lookup_toplevel_name_def, Once lookup_global_def, bind_def,
+    simp[lookup_toplevel_name_def, Once lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def,
          return_def, LET_THM, lift_option_type_def]
   ) >>
   simp[read_result_def, read_place_def, read_storage_slot_def, bind_def, return_def,
@@ -1313,7 +1333,7 @@ Proof
   qpat_x_assum `lookup_toplevel_name _ _ _ _ = _` mp_tac >>
   simp[lookup_toplevel_name_def, AllCaseEqs()] >> strip_tac >>
   qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-  simp[Once lookup_global_def, bind_def, return_def, LET_THM,
+  simp[Once lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, return_def, LET_THM,
        lift_option_type_def, read_storage_slot_def, lift_option_def,
        raise_def, AllCaseEqs()] >>
   `∃is_t off. storage_var_info cx mid n = SOME (is_t, off, tv)`
@@ -1333,14 +1353,18 @@ Proof
     metis_tac[decode_value_storable])
 QED
 
-(* A static frame's update leaves the state unchanged. *)
+(* A static frame's update preserves physical state; resolving its root is
+   still recorded before the write is rejected. *)
 Theorem update_toplevel_name_static:
   ∀cx st mid n v.
-    cx.txn.is_static ⇒ update_toplevel_name cx st mid n v = st
+    cx.txn.is_static ⇒
+    update_toplevel_name cx st mid n v =
+      st with storage_trace := (update_toplevel_name cx st mid n v).storage_trace
 Proof
   rpt strip_tac >> simp[update_toplevel_name_def] >>
   Cases_on `set_global cx mid n v st` >> simp[] >>
-  gvs[set_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+  gvs[set_global_def, bind_def, ignore_bind_def, record_storage_event_def,
+      lift_option_type_def, return_def, raise_def,
       write_storage_slot_eq, LET_THM, option_CASE_rator, prod_CASE_rator,
       var_decl_info_CASE_rator, AllCaseEqs()]
 QED
@@ -1366,20 +1390,23 @@ Proof
   fs[var_in_storage_def, storage_type_of_def, storage_var_info_def, AllCaseEqs()] >>
   Cases_on `encode_value tv v` >> gvs[] >>
   simp[lookup_toplevel_name_def, update_toplevel_name_def] >>
-  simp[Once set_global_def, write_storage_slot_def,
-       bind_def, ignore_bind_def, lift_option_type_def, lift_option_def,
+  simp[Once set_global_def, ignore_bind_def, record_storage_event_def, write_storage_slot_def,
+       bind_def, lift_option_type_def, lift_option_def,
        return_def, LET_THM, raise_def] >>
-  `∃storage0. get_storage_backend cx b st = (INL storage0, st)` by
+  `∃storage0. get_storage_backend cx b
+      (st with storage_trace := st.storage_trace ++ [StorageRoot b off tv]) =
+    (INL storage0,
+     st with storage_trace := st.storage_trace ++ [StorageRoot b off tv])` by
     metis_tac[get_storage_backend_INL] >>
-  simp[Once lookup_global_def, bind_def, lift_option_type_def,
+  simp[Once lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, LET_THM, raise_def] >>
   Cases_on `tv` >>
   gvs[read_storage_slot_def, lift_option_def, bind_def,
       get_after_set_storage_backend, return_def, raise_def,
       encode_decode_roundtrip_ok_def, read_result_def, read_place_def] >>
   (* ArrayTV case: unfold set_global in read_result side *)
-  simp[Once set_global_def, write_storage_slot_def,
-       bind_def, ignore_bind_def, lift_option_type_def, lift_option_def,
+  simp[Once set_global_def, ignore_bind_def, record_storage_event_def, write_storage_slot_def,
+       bind_def, lift_option_type_def, lift_option_def,
        return_def, LET_THM, raise_def,
        get_after_set_storage_backend] >>
   Cases_on `v` >> gvs[value_has_type_def]
@@ -1446,7 +1473,10 @@ Theorem lookup_toplevel_name_preserved_after_update:
     lookup_toplevel_name cx st mid2 n2
 Proof
   rpt gen_tac \\ strip_tac
-  \\ Cases_on `cx.txn.is_static` >- simp[update_toplevel_name_static]
+  \\ Cases_on `cx.txn.is_static`
+  >- (mp_tac (Q.SPECL [`cx`, `st`, `mid1`, `n1`, `v`]
+        update_toplevel_name_static) >> asm_rewrite_tac [] >>
+      disch_then (fn th => once_rewrite_tac [th]) >> simp[])
   \\ `∃b1 off1 tv1. storage_var_info cx mid1 n1 = SOME (b1, off1, tv1) ∧
     well_formed_type_value tv1` by metis_tac[var_in_storage_storage_var_info]
   \\ `∃b2 off2 tv2. storage_var_info cx mid2 n2 = SOME (b2, off2, tv2) ∧
@@ -1465,8 +1495,8 @@ Proof
     simp[storage_type_of_def])
   \\ gvs[storage_var_info_def, AllCaseEqs()]
   \\ simp[update_toplevel_name_def]
-  \\ simp[Once set_global_def, write_storage_slot_def,
-       bind_def, ignore_bind_def, lift_option_type_def, lift_option_def,
+  \\ simp[Once set_global_def, ignore_bind_def, record_storage_event_def, write_storage_slot_def,
+       bind_def, lift_option_type_def, lift_option_def,
        return_def, LET_THM, raise_def]
   \\ `∃storage0. get_storage_backend cx b1 st = (INL storage0, st)` by
     metis_tac[get_storage_backend_INL]
@@ -1474,7 +1504,7 @@ Proof
     (fn th => simp[th] >> assume_tac th)
   \\ Cases_on `encode_value tv1 v` \\ simp[raise_def, return_def]
   \\ rename1 `encode_value tv1 v = SOME writes`
-  \\ simp[lookup_toplevel_name_def, lookup_global_def, bind_def,
+  \\ simp[lookup_toplevel_name_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def,
        lift_option_type_def, lift_option_def, return_def, LET_THM, raise_def]
 QED
 
@@ -1486,7 +1516,10 @@ Theorem update_toplevel_name_preserves_well_formed_storage:
   well_formed_storage cx (update_toplevel_name cx st mid n v)
 Proof
   strip_tac >>
-  Cases_on `cx.txn.is_static` >- simp[update_toplevel_name_static] >>
+  Cases_on `cx.txn.is_static`
+  >- (mp_tac (Q.SPECL [`cx`, `st`, `mid`, `n`, `v`]
+        update_toplevel_name_static) >> asm_rewrite_tac [] >>
+      disch_then (fn th => once_rewrite_tac [th]) >> simp[]) >>
   `∃b1 off1 tv1.
      storage_var_info cx mid n = SOME (b1, off1, tv1) ∧
      well_formed_type_value tv1`
@@ -1503,11 +1536,12 @@ Proof
     metis_tac[get_storage_backend_INL] >>
   `update_toplevel_name cx st mid n v =
      SND (set_storage_backend cx b1
-       (apply_writes (n2w off1) writes storage0) st)` by (
+       (apply_writes (n2w off1) writes storage0) st) with
+       storage_trace := st.storage_trace ++ [StorageRoot b1 off1 tv1]` by (
     qpat_x_assum `storage_var_info cx mid n = _` mp_tac >>
     simp[storage_var_info_def, AllCaseEqs()] >> strip_tac >>
-    simp[update_toplevel_name_def, Once set_global_def,
-         write_storage_slot_def, bind_def, ignore_bind_def, lift_option_type_def,
+    simp[update_toplevel_name_def, Once set_global_def, ignore_bind_def, record_storage_event_def,
+         write_storage_slot_def, bind_def, lift_option_type_def,
          lift_option_def, return_def, LET_THM, raise_def] >>
     qpat_x_assum `get_storage_backend cx b1 st = _` (fn th => simp[th])) >>
   simp[well_formed_storage_def] >>
@@ -1517,7 +1551,7 @@ Proof
   Cases_on `b1 = is_transient`
   >- (
     pop_assum SUBST_ALL_TAC >>
-    qpat_x_assum `get_storage_backend cx is_transient (SND _) = _` mp_tac >>
+    qpat_x_assum `FST (get_storage_backend cx is_transient (SND _)) = _` mp_tac >>
     simp[get_after_set_storage_backend] >> strip_tac >> gvs[] >>
     Cases_on `(mid,n) = (mid2,n2)`
     >- (
@@ -1703,7 +1737,7 @@ Theorem lookup_global_stk:
     lookup_global cx mid id st
 Proof
   rpt gen_tac >>
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, ignore_bind_def,
        get_module_code_stk, get_tenv_stk,
        lookup_var_slot_from_layout_stk, get_immutables_stk_fun,
@@ -1730,19 +1764,21 @@ QED
 Theorem lookup_toplevel_name_lookup_global:
   ∀cx st src_id_opt n href0.
     lookup_toplevel_name cx st src_id_opt n = SOME href0 ⇒
-    lookup_global cx src_id_opt n st = (INL href0, st)
+    ?observations. lookup_global cx src_id_opt n st =
+      (INL href0, st with storage_trace := observations)
 Proof
   rw[lookup_toplevel_name_def] >>
   Cases_on `lookup_global cx src_id_opt n st` >>
   Cases_on `q` >> gvs[] >>
-  drule lookup_global_state >> simp[]
+  drule lookup_global_state >> strip_tac >>
+  qexists_tac `r.storage_trace` >> gvs[]
 QED
 
 Theorem lookup_global_get_module_code:
-  ∀cx src_id_opt n st href0.
-    lookup_global cx src_id_opt n st = (INL href0, st) ⇒
+  ∀cx src_id_opt n st href0 st'.
+    lookup_global cx src_id_opt n st = (INL href0, st') ⇒
     ∃code. get_module_code cx src_id_opt = SOME code
 Proof
-  rw[lookup_global_def, bind_def, lift_option_type_def, raise_def] >>
+  rw[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def, raise_def] >>
   Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def]
 QED

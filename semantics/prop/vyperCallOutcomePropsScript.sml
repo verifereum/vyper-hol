@@ -36,7 +36,8 @@ Theorem take_call_outcome_SOME:
      then INR (Error (RuntimeError "call outcome accounts"))
      else INL (rq, outcome),
      st with <|outcomes := SOME rest;
-               requests := record_request rq st.requests|>)
+               requests := record_request rq st.requests;
+               storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
   rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def] >> rw[] >> gvs[]
 QED
@@ -50,7 +51,8 @@ Theorem take_call_outcome_ordinary:
         ~accounts_runtime_well_typed outcome.co_accounts
      then INR (Error (RuntimeError "call outcome accounts"))
      else INL (rq, outcome),
-     st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>)
+     st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
+               storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
   rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def] >>
   rw[] >> gvs[]
@@ -62,7 +64,8 @@ Theorem take_call_outcome_exhausted:
   ~computed_precompile rq ==>
   take_call_outcome target calldata value_opt st =
     (INL (rq, failed_outcome rq),
-     st with <|outcomes := SOME []; requests := st.requests ++ [rq]|>)
+     st with <|outcomes := SOME []; requests := st.requests ++ [rq];
+               storage_trace := st.storage_trace ++ [StorageOutcome rq (failed_outcome rq)]|>)
 Proof
   rpt strip_tac >> gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def]
 QED
@@ -78,7 +81,12 @@ Theorem take_call_outcome_computed_valid:
      then INR (Error (RuntimeError "call outcome accounts"))
      else INL (rq, failed_outcome rq with
                        <|co_success := T; co_returnData := bs|>),
-     st with outcomes := SOME rest)
+     st with <|outcomes := SOME rest;
+       storage_trace := st.storage_trace ++
+         [StorageOutcome rq
+           (if outcome.co_success then
+              failed_outcome rq with <|co_success := T; co_returnData := bs|>
+            else failed_outcome rq)]|>)
 Proof
   rpt strip_tac >>
   gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def,
@@ -91,7 +99,9 @@ Theorem take_call_outcome_computed_invalid:
   rq = call_outcome_request target calldata value_opt st /\
   rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
   take_call_outcome target calldata value_opt st =
-    (INL (rq, failed_outcome rq), st with outcomes := SOME (DROP 1 os))
+    (INL (rq, failed_outcome rq),
+     st with <|outcomes := SOME (DROP 1 os);
+       storage_trace := st.storage_trace ++ [StorageOutcome rq (failed_outcome rq)]|>)
 Proof
   rpt strip_tac >> Cases_on `os` >>
   gvs[take_call_outcome_def, take_request_outcome_def, take_outcome_def, record_request_def,
@@ -119,7 +129,8 @@ Theorem take_call_outcome_guard_rejected:
   take_call_outcome target calldata value_opt st =
     (INR (Error (RuntimeError "call outcome accounts")),
      st with <|outcomes := SOME rest;
-               requests := record_request rq st.requests|>)
+               requests := record_request rq st.requests;
+               storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
   rpt strip_tac >> drule_all take_call_outcome_SOME >> simp[]
 QED
@@ -161,7 +172,8 @@ Theorem take_request_outcome_success:
     rq = rq0 /\
     take_outcome rq os = (outcome,rest) /\
     st' = st with <|outcomes := SOME rest;
-                   requests := record_request rq st.requests|> /\
+                   requests := record_request rq st.requests;
+                   storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|> /\
     (outcome.co_success /\ ~rq.cr_static ==>
        accounts_runtime_well_typed outcome.co_accounts)
 Proof
@@ -176,7 +188,8 @@ Theorem take_call_outcome_success:
     rq = call_outcome_request target calldata value_opt st /\
     take_outcome rq os = (outcome,rest) /\
     st' = st with <|outcomes := SOME rest;
-                   requests := record_request rq st.requests|> /\
+                   requests := record_request rq st.requests;
+               storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|> /\
     (outcome.co_success /\ ~rq.cr_static ==>
        accounts_runtime_well_typed outcome.co_accounts)
 Proof
@@ -274,7 +287,8 @@ Theorem take_delegate_outcome_success:
     rq = delegate_outcome_request target calldata value_opt st /\
     take_outcome rq os = (outcome,rest) /\
     st' = st with <|outcomes := SOME rest;
-                   requests := record_request rq st.requests|> /\
+                   requests := record_request rq st.requests;
+                   storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|> /\
     (outcome.co_success /\ ~rq.cr_static ==>
        accounts_runtime_well_typed outcome.co_accounts)
 Proof

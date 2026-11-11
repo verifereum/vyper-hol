@@ -117,12 +117,12 @@ Proof
 QED
 
 Theorem lookup_global_state:
-  !cx src n st res st'. lookup_global cx src n st = (res, st') ==> st' = st
+  !cx src n st res st'. lookup_global cx src n st = (res, st') ==> st' = st with storage_trace := st'.storage_trace
 Proof
-  rpt strip_tac >> gvs[lookup_global_def, bind_def, lift_option_type_def,
+  rpt strip_tac >> gvs[lookup_global_def, bind_def, ignore_bind_def, record_storage_event_def, lift_option_type_def,
        get_immutables_def, get_address_immutables_def, return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, get_immutables_def, get_address_immutables_def,
+       gvs[bind_def, ignore_bind_def, record_storage_event_def, get_immutables_def, get_address_immutables_def,
            lift_option_type_def, return_def, raise_def])
 QED
 
@@ -262,7 +262,7 @@ Theorem acquire_nonreentrant_lock_immutables:
     acquire_nonreentrant_lock addr slot is_view st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def, record_storage_event_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
@@ -273,7 +273,7 @@ Theorem release_nonreentrant_lock_immutables:
     release_nonreentrant_lock addr slot st = (res, st') ==>
     st'.immutables = st.immutables
 Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def, record_storage_event_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
