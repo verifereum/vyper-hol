@@ -162,7 +162,8 @@ producers remain Milestone 7 work.
 `e2eDeployCorrectness.e2e_deploy_correctness` is a meaningful **ADMITTED** single-frame
 creation statement (Milestone 6 item7), not the old proved `T` placeholder.
 It requires Call-free constructor bodies, canonical arguments, actual deployment
-typing/storage/pre-constant readiness and an uninstalled source target; success
+typing/storage/pre-constant readiness, an uninstalled source target and an empty
+target account in `es.originalAccounts`; success
 compares installed runtime bytes/accounts modulo target code/transient/logs.
 `venomToAsmProps.gen_fn_simulation` is separately **ADMITTED**, Milestone 4.2,
 with internal-return/frame relations. Both are **off the runtime call path**.
