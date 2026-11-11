@@ -21,7 +21,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem body_assign_local_rhs_pre[local]:
+Theorem body_assign_local_rhs_pre:
   !cx id e tops bindings ctx cenv env env' ret_ty es ty.
     body_inv tops ctx cenv cx /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -59,7 +59,7 @@ Proof
   qexists_tac `[]` >> simp[]
 QED
 
-Theorem assign_local_memory_bytes_pos[local]:
+Theorem assign_local_memory_bytes_pos:
   !cenv cx env es ret_ty id e env' ty.
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
