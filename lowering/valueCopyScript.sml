@@ -16,7 +16,6 @@
  *   mcopy_val_in_memory    — MCOPY of at least the footprint does that
  *   mem_bytes_at_mcopy_disjoint — and leaves the bytes outside its
  *                            destination alone
- *   word_tv_memory_size    — a word type's value takes 32 bytes
  *   compile_store_memory_run_size_bound — compile_store_memory at one type puts the
  *                            value at the destination and changes memory
  *                            only there
@@ -26,8 +25,9 @@
 
 Theory valueCopy
 Ancestors
+  exprSimProps
   list rich_list arithmetic
-  valueEncoding valueEncodingProps valueEncodingProofs exprSim valueCopyBytes
+  valueEncoding valueEncodingProps valueEncodingProofs  valueCopyBytes
   compileEnv context exprLoweringProps emitHelper emitHelperProps
   entryDecodeProps vyperValue vyperTyping vfmConstants immutableMemoryFrame
   venomInst venomState venomExecSemantics venomMemProps
@@ -146,19 +146,6 @@ QED
 
 (* ===== Storing a value into memory ===== *)
 
-Theorem word_tv_memory_size:
-  !tenv t tv.
-    is_word_type t /\ evaluate_type tenv t = SOME tv ==>
-    type_memory_size tv = 32
-Proof
-  Cases_on `t` >> simp[is_word_type_def]
-  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
-      TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
-      simp[evaluate_type_def, type_memory_size_def]) >>
-  simp[evaluate_type_def, AllCaseEqs()] >> rw[] >>
-  simp[type_memory_size_def]
-QED
-
 Theorem eval_operand_update_not_fresh[local]:
   !op sa n w s.
     (!x. op = Var x ==> not_fresh_at sa x) /\ sa.cs_next_var <= n ==>
@@ -172,12 +159,16 @@ QED
 
 (* The copy length compile_bytestring_copy_len computes from the length
    word: the length word and the data rounded up to whole words. *)
-Theorem bytestring_copy_len_word[local]:
-  !L. L + 64 < dimword (:256) ==>
+Theorem bytestring_copy_len_word_exact:
+  !L. 32 + 32 * word_size L < dimword (:256) ==>
       w2n (((n2w L + 31w) && ~31w) + 32w : bytes32) =
       32 + 32 * word_size L
 Proof
   rpt strip_tac >>
+  `L <= 32 * word_size L` by
+    (rewrite_tac[word_size_def] >> qspec_then `32` mp_tac DIVISION >> simp[] >>
+     disch_then (qspec_then `L + 31` strip_assume_tac) >>
+     `(L + 31) MOD 32 < 32` by simp[] >> decide_tac) >>
   `(~31w : bytes32) = -32w` by blastLib.BBLAST_TAC >>
   `!w:bytes32. w && -32w = (w >>> 5) << 5` by blastLib.BBLAST_TAC >>
   `(L + 31) DIV 32 * 32 <= L + 31` by
@@ -192,8 +183,22 @@ Proof
   `(n2w L + 31w : bytes32) = n2w (L + 31)` by
     simp[wordsTheory.word_add_n2w] >>
   asm_rewrite_tac[] >>
-  `(L + 31) DIV 32 * 32 + 32 < dimword (:256)` by decide_tac >>
+  `(L + 31) DIV 32 * 32 + 32 < dimword (:256)` by
+    gvs[word_size_def] >>
   fs[wordsTheory.word_add_n2w, word_size_def, LESS_MOD]
+QED
+
+Theorem bytestring_copy_len_word[local]:
+  !L. L + 64 < dimword (:256) ==>
+      w2n (((n2w L + 31w) && ~31w) + 32w : bytes32) =
+      32 + 32 * word_size L
+Proof
+  rpt strip_tac >> irule bytestring_copy_len_word_exact >>
+  `(L + 31) DIV 32 * 32 <= L + 31` by
+    (qspec_then `32` mp_tac DIVISION >> simp[] >>
+     disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
+  qpat_x_assum `_ DIV _ * _ <= _` mp_tac >>
+  simp_tac pure_ss [word_size_def, MULT_COMM] >> decide_tac
 QED
 
 (* The steps of the copy, as rewrites: the operands' values are THE of
@@ -254,13 +259,14 @@ Proof
   simp[stepInstBaseLib.simp_opcode_clause ``MCOPY``, venomInstTheory.mk_inst_def]
 QED
 
-Theorem store_bytestring_run[local]:
+Theorem store_bytestring_run_exact:
   !val_op dst_op sa sb s src dst L.
     compile_store_bytestring val_op dst_op sa = ((),sb) /\
     (!x. val_op = Var x ==> not_fresh_at sa x) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\
     eval_operand val_op s = SOME src /\ eval_operand dst_op s = SOME dst /\
-    mem_word_at (w2n src) s.vs_memory = n2w L /\ L + 64 < dimword (:256) ==>
+    mem_word_at (w2n src) s.vs_memory = n2w L /\
+    32 + 32 * word_size L < dimword (:256) ==>
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
     same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
     sa.cs_next_id <= sb.cs_next_id /\
@@ -273,7 +279,7 @@ Theorem store_bytestring_run[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_then assume_tac bytestring_copy_len_word >>
+  drule_then assume_tac bytestring_copy_len_word_exact >>
   `!n w s'. sa.cs_next_var <= n ==>
      eval_operand dst_op (update_var (STRING #"%" (toString n)) w s') =
        eval_operand dst_op s' /\
@@ -297,7 +303,35 @@ Proof
   rw[] >> gvs[]
 QED
 
-Theorem emit_mstore_run[local]:
+Theorem store_bytestring_run:
+  !val_op dst_op sa sb s src dst L.
+    compile_store_bytestring val_op dst_op sa = ((),sb) /\
+    (!x. val_op = Var x ==> not_fresh_at sa x) /\
+    (!x. dst_op = Var x ==> not_fresh_at sa x) /\
+    eval_operand val_op s = SOME src /\ eval_operand dst_op s = SOME dst /\
+    mem_word_at (w2n src) s.vs_memory = n2w L /\ L + 64 < dimword (:256) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      t.vs_memory =
+        (mcopy (w2n dst) (w2n src) (32 + 32 * word_size L) s).vs_memory /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `32 + 32 * word_size L < dimword (:256)` by
+    (`(L + 31) DIV 32 * 32 <= L + 31` by
+       (qspec_then `32` mp_tac DIVISION >> simp[] >>
+        disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
+     qpat_x_assum `_ DIV _ * _ <= _` mp_tac >>
+     simp_tac pure_ss [word_size_def, MULT_COMM] >> decide_tac) >>
+  drule_all store_bytestring_run_exact >> simp[]
+QED
+
+Theorem emit_mstore_run:
   !sa sb dst src s d w.
     emit_void MSTORE [dst; src] sa = ((),sb) /\
     eval_operand dst s = SOME d /\ eval_operand src s = SOME w ==>

@@ -29,7 +29,7 @@ Theorem subscript_pop_not_label:
   (compile_mapping_subscript bop kop sa = (op,sb) ==> !l. op <> Label l) /\
   (compile_array_subscript bop idx dyn cnt ws sz signed load sa = (op,sb) ==>
      !l. op <> Label l) /\
-  (compile_dynarray_pop bop ws sz lopc sopc sa = (op,sb) ==>
+  (compile_dynarray_pop bop ws sz is_ctor imm loc sa = (op,sb) ==>
      !l. op <> Label l)
 Proof
   rpt conj_tac >>
@@ -437,8 +437,8 @@ Proof
 QED
 
 Theorem compile_external_call_zero_safe_operand:
-  compile_external_call_kwargs cenv addr vals tys memsz abisz mid 0 minsz retsz
-    static value gas skip default dop rt dt einfo dinfo sa = (r,sb) ==>
+  compile_external_call_kwargs cenv addr vals tys memsz abisz mid retsz minsz
+    outsz static value gas skip default dop NoneT dt einfo dinfo sa = (r,sb) ==>
   safe_operand sb r
 Proof
   simp[compile_external_call_kwargs_def, LET_THM,
@@ -543,7 +543,43 @@ val word_raw_call_tac =
   Cases_on `t` >> simp[compile_call_def, LET_THM] >> strip_tac >>
   rpt (pairarg_tac >> gvs[]) >>
   Cases_on `r.rcf_max_outsize = 0` >> gvs[word_result_ok_def] >>
-  metis_tac[compile_raw_call_finish_zero_safe_operand]
+  metis_tac[compile_raw_call_finish_zero_safe_operand,
+            safe_operand_mono, ci_mono_emit_void, ci_mono_def, pairTheory.SND]
+
+Theorem compile_call_steps_next_var[local]:
+  (compile_stage_intcall_args cenv vals flags tys sa = (r1,sb) ==>
+   sa.cs_next_var <= sb.cs_next_var) /\
+  (emit_multi_op opc ops n sa = (r2,sb) ==>
+   sa.cs_next_var <= sb.cs_next_var) /\
+  (store_multi_results buf_op results offset sa = (r3,sb) ==>
+   sa.cs_next_var <= sb.cs_next_var) /\
+  (emit_void opc ops sa = (r4,sb) ==> sa.cs_next_var <= sb.cs_next_var)
+Proof
+  rpt conj_tac >> strip_tac
+  >- (qspecl_then [`cenv`, `vals`, `flags`, `tys`, `sa`] mp_tac
+        ci_mono_compile_stage_intcall_args >> simp[ci_mono_def])
+  >- (qspecl_then [`opc`, `ops`, `n`, `sa`] mp_tac ci_mono_emit_multi_op >>
+      simp[ci_mono_def])
+  >- (qspecl_then [`buf_op`, `results`, `offset`, `sa`] mp_tac
+        ci_mono_store_multi_results >> simp[ci_mono_def]) >>
+  qspecl_then [`opc`, `ops`, `sa`] mp_tac ci_mono_emit_void >>
+  simp[ci_mono_def]
+QED
+
+(* Closes safe_operand sb op from an assumption safe_operand st op and the
+   cs_next_var chain from st to sb among the assumptions. *)
+val safe_buf_mono_tac : tactic = fn (g as (asl, w)) =>
+  let
+    val opnd = rand w
+    fun is_safe_of a =
+      (case strip_comb a of
+         (f, [_, x]) => same_const f ``safe_operand`` andalso aconv x opnd
+       | _ => false)
+    val st = hd (snd (strip_comb (valOf (List.find is_safe_of asl))))
+  in
+    (irule safe_operand_mono >> exists_tac st >>
+     conj_tac >- decide_tac >> first_assum ACCEPT_TAC) g
+  end
 
 Theorem compile_call_word_result_ok:
   is_word_type rt /\ compile_call cfn cenv rt ty target args default_ret sa = (vv,sb) ==>
@@ -568,8 +604,12 @@ QED
 
 Resume compile_call_word_result_ok[internal]:
   Cases_on `returns_count > 0` >> Cases_on `return_buf` >>
-  gvs[word_result_ok_def] >> rpt (pairarg_tac >> gvs[word_result_ok_def]) >>
-  metis_tac[emit_op_safe_operand]
+  gvs[word_result_ok_def, contextTheory.base_ptr_def] >>
+  rpt (pairarg_tac >> gvs[word_result_ok_def, contextTheory.base_ptr_def]) >>
+  imp_res_tac compile_call_steps_next_var >>
+  imp_res_tac alloc_buffer_safe_operand >>
+  disj2_tac >> Cases_on `return_buf_size > 0` >> gvs[] >>
+  safe_buf_mono_tac
 QED
 
 Resume compile_call_word_result_ok[external]:
@@ -705,7 +745,7 @@ Proof
   simp[compile_external_call_kwargs_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `rsz = 0` >> simp[comp_return_def] >>
+  Cases_on `rt = NoneT` >> simp[comp_return_def] >>
   Cases_on `hasdef` >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>

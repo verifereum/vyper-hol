@@ -721,16 +721,6 @@ QED
 (*  Part 9b: Block-level exact equality for SCCP substitution        *)
 (* ================================================================= *)
 
-Theorem sccp_inst_is_terminator:
-  !st inst. is_terminator (sccp_inst st inst).inst_opcode =
-            is_terminator inst.inst_opcode
-Proof
-  rpt gen_tac >> simp[sccp_inst_def, LET_THM] >>
-  IF_CASES_TAC >> simp[] >>
-  BasicProvers.every_case_tac >> simp[] >>
-  gvs[is_terminator_def, mk_nop_inst_def]
-QED
-
 (* non_terminator_not_last: now in venomExecPropsTheory *)
 
 (* Helper: derive cond_const_sound from nophi conditions + phi_bottom tracker

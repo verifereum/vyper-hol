@@ -5,7 +5,7 @@ Ancestors
   abiEncoderLeafGlobals
   abiDecoderReentryAddress abiDecoderContract abiDecoderDynamicLoopSetup venomState venomExecSemantics
   compileEnv emitHelper emitHelperProps venomInst venomMemDefs exprLoweringProps
-  abiEncoderChildCode abiEncoderChildSuffix words list rich_list
+  abiEncoderChildCode abiEncoderChildSuffix abiEncoderLeafGlobals words list rich_list
 
 Theorem abi_encoder_member_binary_registered:
   emit_op opc [lhs;rhs] st = (out,final) /\ (opc = ADD \/ opc = MUL) /\
@@ -47,8 +47,8 @@ Theorem abi_encoder_member_step_globals:
     s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,s.vs_outcomes,s.vs_pending_deletions)
 Proof
   strip_tac >>
-  drule_at (Pos last) abi_encoder_leaf_step_globals >>
-  impl_tac >- simp[] >> simp[]
+  `i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT}` by simp[] >>
+  drule_all abi_encoder_leaf_step_globals >> strip_tac >> simp[]
 QED
 
 Theorem abi_encoder_member_phase_globals:

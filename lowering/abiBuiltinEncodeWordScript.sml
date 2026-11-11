@@ -1,5 +1,6 @@
 Theory abiBuiltinEncodeWord
 Ancestors
+  abiDecoderRange
   abiBuiltinEncodeCode abiEncoderAppend abiEncoderCounters abiDecoderAppend fragExec compileEnv
   words list arithmetic abiBuiltinDispatchCorrect exprLowering builtinAbi context
   abiBuiltinEncodeSource abiBuiltinEncodeInput abiBuiltinEncodeEffect abiDecoderContract
@@ -75,7 +76,7 @@ QED
 
 Theorem compile_abi_encode_tuple_trace:
   ~(LENGTH args = 1 /\ ~ensure) /\
-  compile_multi_exprs cfn ce args origin = (ops,arg_st) /\
+  compile_abi_encode_args cfn ce args origin = (ops,arg_st) /\
   compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode ensure method_id) ret_ty args origin =
     (vv,final) ==>
   ?buf allocated staged out.

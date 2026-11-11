@@ -46,22 +46,13 @@ Proof
   irule immutable_word_store_representation >> simp[]
 QED
 
-Theorem immutable_memory_bytes_full:
-  off + n <= LENGTH mem ==>
-  mem_bytes_at off n mem = TAKE n (DROP off mem)
-Proof
-  strip_tac >>
-  `n <= LENGTH (DROP off mem)` by (simp[LENGTH_DROP] >> decide_tac) >>
-  simp[mem_bytes_at_def, TAKE_APPEND1]
-QED
-
 Theorem immutable_write_memory_readback:
   mem_bytes_at at (LENGTH bs)
     (write_memory_with_expansion at bs s).vs_memory = bs
 Proof
   `at + LENGTH bs <= LENGTH (write_memory_with_expansion at bs s).vs_memory` by
     (simp[immutable_write_memory_capacity, MAX_DEF] >> rw[] >> decide_tac) >>
-  simp[immutable_memory_bytes_full, immutable_write_memory_slice]
+  simp[mem_bytes_at_bounded, immutable_write_memory_slice]
 QED
 
 Theorem immutable_copy_memory_readback:
@@ -119,7 +110,7 @@ Proof
       (DROP off (write_memory_with_expansion dst_addr bs s).vs_memory) =
    TAKE (type_memory_size tv) (DROP off s.vs_memory)` by
     (irule immutable_write_memory_disjoint >> simp[]) >>
-  fs[immutable_memory_bytes_full]
+  fs[mem_bytes_at_bounded]
 QED
 
 Theorem immutable_copy_memory_preserves_value:
@@ -142,7 +133,7 @@ Proof
   `mem_bytes_at off (type_memory_size tv) s.vs_memory =
    mem_bytes_at off (type_memory_size tv)
      (write_memory_with_expansion dst_addr bs s).vs_memory` by
-    simp[immutable_memory_bytes_full] >>
+    simp[mem_bytes_at_bounded] >>
   drule_all val_in_memory_transport >> simp[]
 QED
 

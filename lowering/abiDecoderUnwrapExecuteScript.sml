@@ -14,16 +14,17 @@ Theorem abi_decoder_unwrap_execute:
   let wrapped_ty = if wrapped then TupleT [ty] else ty in
   let wrapped_tv = if wrapped then TupleTV [tv] else tv in
   let wrapped_v = if wrapped then ArrayV (TupleV [v]) else v in
-  compile_abi_decode_to_buf dst src opc hi (type_to_abi_dec_info sf ce wrapped_ty)
+  compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce wrapped_ty)
     start = ((),end_st) /\ fn_has_code start end_st func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_decoder_recursive_pre ce (get_tenv cx) sf wrapped_ty wrapped_tv
     (type_to_abi_dec_info sf ce wrapped_ty) av wrapped_v
-    start last src dst opc hi sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
+    start last src dst opc base_op hi src_base sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   evaluate_abi_decode (get_tenv cx) wrapped_ty bs = INL wrapped_v /\
-  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>

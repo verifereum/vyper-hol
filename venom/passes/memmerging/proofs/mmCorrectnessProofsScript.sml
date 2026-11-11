@@ -3,7 +3,6 @@
  *
  * Definitions (invariants, fresh sets, block wf predicates) and
  * proof infrastructure for the memmerging correctness argument.
- * Re-exported by mmCorrectnessScript.sml.
  *)
 
 Theory mmCorrectnessProofs
@@ -199,7 +198,7 @@ Theorem step_inst_nop:
   !fuel ctx inst s.
     step_inst fuel ctx (mk_nop_from inst) s = OK s
 Proof
-  simp[step_inst_non_invoke, step_inst_base_def, mk_nop_from_def]
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_nop_from_def]
 QED
 
 (* NOP is not a terminator *)
@@ -669,7 +668,7 @@ Proof
   Cases_on `h` >> fs[operand_lit_val_def] >>
   Cases_on `h'` >> fs[operand_lit_val_def] >>
   gvs[n2w_w2n] >>
-  simp[step_inst_non_invoke, step_inst_base_def, is_terminator_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, is_terminator_def,
        exec_write2_def]
 QED
 
@@ -1031,7 +1030,7 @@ Proof
     (Cases_on `inst.inst_operands` >> fs[] >> Cases_on `t` >> fs[]) >>
   (* Expand s1's MSTORE step to get concrete operand values *)
   qpat_x_assum `step_inst _ _ _ s1 = OK s1'` mp_tac >>
-  simp[step_inst_non_invoke, is_terminator_def, step_inst_base_def, exec_write2_def] >>
+  simp[step_inst_non_invoke, is_terminator_def, step_inst_base_opcode_eqs, exec_write2_def] >>
   Cases_on `eval_operand a s1` >> simp[] >>
   Cases_on `eval_operand b s1` >> simp[] >>
   strip_tac >>
@@ -1046,7 +1045,7 @@ Proof
         simp[] >> metis_tac[]) >> fs[]) >>
   (* s2 steps to mstore (w2n x) x' s2 *)
   qexists_tac `mstore (w2n x) x' s2` >>
-  simp[step_inst_non_invoke, is_terminator_def, step_inst_base_def, exec_write2_def] >>
+  simp[step_inst_non_invoke, is_terminator_def, step_inst_base_opcode_eqs, exec_write2_def] >>
   (* memzero_inv: mstore only changes memory *)
   gvs[memzero_inv_def, mstore_def, LET_THM, lookup_var_def]
 QED
@@ -1181,7 +1180,7 @@ Proof
   rpt strip_tac >>
   Cases_on `mode` >> gvs[] >>
   simp[mk_load_inst_def, mode_load_opcode_def,
-       step_inst_non_invoke, step_inst_base_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs,
        is_terminator_def, eval_operand_def,
        exec_read1_def, update_var_def] >>
   metis_tac[]
@@ -1197,7 +1196,7 @@ Proof
   rpt strip_tac >>
   Cases_on `FLOOKUP s.vs_vars load_var` >> gvs[] >>
   simp[mk_mstore_from_load_def,
-       step_inst_non_invoke, step_inst_base_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs,
        is_terminator_def, exec_write2_def, eval_operand_def,
        lookup_var_def, mstore_def, LET_THM] >>
   simp[wmexp_only_changes_memory, venom_state_component_equality]
@@ -1339,11 +1338,9 @@ Proof
   (impl_tac >- fs[]) >> simp[]
 QED
 
-(* mode_run_insts_lift_result and mm_block_simulates_mode are after
-   flat_map_same_start_block_bridge and bb_wf_decompose below. *)
-
-(* mm_block_simulates_mode: proved in mmBlockSimScript as
-   mm_block_simulates_mode_proof. No forward declaration needed. *)
+(* mode_run_insts_lift_result is after flat_map_same_start_block_bridge
+   and bb_wf_decompose below; mm_block_simulates_mode_proof is in
+   mmBlockSimProofs. *)
 
 (* Generalized run_insts simulation for memzero transform.
    Starts from memzero_inv-related states (needed for within-group induction).
@@ -1455,7 +1452,7 @@ Resume memzero_inst_step_sim[rep_gt32]:
   (sg `step_inst fuel ctx (mk_calldatasize_inst inst.inst_id) s2 =
     OK (update_var cds_var (n2w (LENGTH s2.vs_call_ctx.cc_calldata)) s2)`
    >- (simp[mk_calldatasize_inst_def, step_inst_non_invoke, is_terminator_def,
-           step_inst_base_def, exec_read0_def, Abbr `cds_var`])) >>
+           step_inst_base_opcode_eqs, exec_read0_def, Abbr `cds_var`])) >>
   simp[] >>
   qabbrev_tac `s2_a = update_var cds_var
     (n2w (LENGTH s2.vs_call_ctx.cc_calldata)) s2` >>
@@ -1464,7 +1461,7 @@ Resume memzero_inst_step_sim[rep_gt32]:
    >- (simp[eval_operand_def, Abbr `s2_a`, update_var_def, lookup_var_def,
            FLOOKUP_UPDATE])) >>
   simp[mk_memzero_calldatacopy_def, step_inst_non_invoke, is_terminator_def,
-       step_inst_base_def, eval_operand_def] >>
+       step_inst_base_opcode_eqs, eval_operand_def] >>
   simp[memzero_inv_def, write_memory_with_expansion_def, LET_THM,
        Abbr `s2_a`, update_var_def] >>
   fs[memzero_inv_def] >> rpt strip_tac >>
@@ -1533,7 +1530,7 @@ Proof
   Cases_on `t'` >> fs[] >>
   Cases_on `h` >> fs[operand_lit_val_def] >>
   Cases_on `h'` >> fs[operand_lit_val_def] >>
-  gvs[step_inst_non_invoke, step_inst_base_def, is_terminator_def,
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, is_terminator_def,
       exec_write2_def, eval_operand_def, n2w_w2n]
 QED
 
@@ -1880,7 +1877,7 @@ Proof
     `step_inst fuel ctx (mk_calldatasize_inst inst.inst_id) s =
      OK (update_var cds_var (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s)` by
       simp[mk_calldatasize_inst_def, step_inst_non_invoke, is_terminator_def,
-           step_inst_base_def, exec_read0_def, Abbr `cds_var`] >>
+           step_inst_base_opcode_eqs, exec_read0_def, Abbr `cds_var`] >>
     fs[] >>
     qabbrev_tac `s_a = update_var cds_var
       (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s` >>
@@ -1892,7 +1889,7 @@ Proof
       simp[eval_operand_def, Abbr `s_a`, update_var_def, lookup_var_def,
            FLOOKUP_UPDATE] >>
     fs[mk_memzero_calldatacopy_def, step_inst_non_invoke, is_terminator_def,
-       step_inst_base_def, eval_operand_def] >>
+       step_inst_base_opcode_eqs, eval_operand_def] >>
     (* Eliminate MOD dimword (all values < dimword) *)
     `LENGTH s.vs_call_ctx.cc_calldata MOD dimword (:256) =
      LENGTH s.vs_call_ctx.cc_calldata` by simp[] >>
@@ -2281,21 +2278,16 @@ Proof
   >> strip_tac
   >> `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality]
   >> fs[]
-  (* Chain: bb ← orig → trans → bb'. *)
-  >> irule (REWRITE_RULE [AND_IMP_INTRO] lift_result_trans)
-  >> rpt conj_tac
-  >- metis_tac[state_equiv_trans]
-  >- metis_tac[execution_equiv_trans]
-  >> qexists_tac `run_insts fuel ctx non_terms s`
-  >> conj_tac
-  >- (irule lift_result_sym >> simp[state_equiv_sym, execution_equiv_sym] >>
-      first_assum ACCEPT_TAC)
-  >> irule (REWRITE_RULE [AND_IMP_INTRO] lift_result_trans)
-  >> rpt conj_tac
-  >- metis_tac[state_equiv_trans]
-  >- metis_tac[execution_equiv_trans]
-  >> qexists_tac `run_insts fuel ctx (FLAT (MAP f non_terms)) s`
-  >> simp[]
+  (* Chain: bb ← orig → trans → bb'.
+     All three are non-OK, so case-split on result constructors *)
+  >> Cases_on `run_insts fuel ctx non_terms s`
+  >> fs[lift_result_def]
+  >> Cases_on `exec_block fuel ctx bb s`
+  >> fs[lift_result_def]
+  >> Cases_on `run_insts fuel ctx (FLAT (MAP f non_terms)) s`
+  >> fs[lift_result_def]
+  >> Cases_on `exec_block fuel ctx bb' s` >> fs[lift_result_def]
+  >> metis_tac[execution_equiv_sym, execution_equiv_trans]
 QED
 
 Theorem flat_map_same_start_block_bridge:
@@ -2350,7 +2342,7 @@ Proof
   Cases_on `t'` >> fs[] >>
   Cases_on `h` >> fs[operand_lit_val_def] >>
   Cases_on `h'` >> fs[operand_lit_val_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, is_terminator_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, is_terminator_def,
        exec_write2_def, eval_operand_def]
 QED
 
@@ -2640,7 +2632,7 @@ local
   ) non_abort_ops;
   val exec_helper_defs = [
     exec_pure1_def, exec_pure2_def, exec_pure3_def,
-    exec_read0_def, exec_read1_def, exec_write2_def,
+    exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
     exec_alloca_def, exec_ext_call_def, exec_create_def,
     exec_delegatecall_def, LET_THM, AllCaseEqs()];
   val direct_clause_pairs = ListPair.zip(non_abort_ops, base_clauses);
@@ -2669,6 +2661,7 @@ Theorem step_inst_base_non_volatile_no_abort[local]:
     inst.inst_opcode <> ASSERT /\
     inst.inst_opcode <> ASSERT_UNREACHABLE /\
     ~is_volatile_memory inst /\
+    Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode ==>
     step_inst_base inst s <> Abort a s'
@@ -2707,7 +2700,8 @@ QED
 
 
 (* Non-terminator, non-INVOKE, non-ASSERT, non-ASSERT_UNREACHABLE,
-   non-volatile-memory, non-alloca, non-ext_call: step_inst cannot Abort. *)
+   non-volatile-memory, non-memory-reading (so not LOG, which aborts in a
+   static frame), non-alloca, non-ext_call: step_inst cannot Abort. *)
 Theorem step_inst_non_volatile_no_abort[local]:
   !fuel ctx inst s a s'.
     ~is_terminator inst.inst_opcode /\
@@ -2715,6 +2709,7 @@ Theorem step_inst_non_volatile_no_abort[local]:
     inst.inst_opcode <> ASSERT /\
     inst.inst_opcode <> ASSERT_UNREACHABLE /\
     ~is_volatile_memory inst /\
+    Eff_MEMORY NOTIN read_effects inst.inst_opcode /\
     ~is_alloca_op inst.inst_opcode /\
     ~is_ext_call_op inst.inst_opcode ==>
     step_inst fuel ctx inst s <> Abort a s'
@@ -2776,7 +2771,7 @@ Proof
   Cases_on `MEM inst.inst_id nop_set`
   >- ( (* NOP: mk_nop_from always succeeds *)
     simp[run_insts_def, mk_nop_from_def, step_inst_non_invoke,
-         step_inst_base_def, is_terminator_def, exec_read0_def])
+         step_inst_base_opcode_eqs, is_terminator_def, exec_read0_def])
   >> Cases_on `ALOOKUP rep_map inst.inst_id`
   >- ( (* Unchanged: same instruction → OK or Error by memzero_inst_ok *)
     fs[] >>
@@ -2792,7 +2787,7 @@ Proof
       simp[run_insts_def] >>
       `is_zero_store inst /\ inst_wf inst` by fs[] >>
       drule_all zero_store_always_ok >> strip_tac >>
-      simp[mk_zero_store_inst_def, step_inst_non_invoke, step_inst_base_def,
+      simp[mk_zero_store_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
            is_terminator_def, exec_write2_def, eval_operand_def,
            is_zero_store_def, operand_lit_val_def] >>
       Cases_on `inst.inst_operands` >> fs[is_zero_store_def, operand_lit_val_def] >>
@@ -2802,9 +2797,9 @@ Proof
     >> ( (* >32B: calldatasize + calldatacopy *)
       fs[] >>
       simp[run_insts_def, LET_THM] >>
-      simp[mk_calldatasize_inst_def, step_inst_non_invoke, step_inst_base_def,
+      simp[mk_calldatasize_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
            is_terminator_def, exec_read0_def, eval_operand_def, update_var_def] >>
-      simp[mk_memzero_calldatacopy_def, step_inst_non_invoke, step_inst_base_def,
+      simp[mk_memzero_calldatacopy_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
            is_terminator_def, exec_write2_def, eval_operand_def,
            lookup_var_def, FLOOKUP_UPDATE]))
 QED
@@ -2942,7 +2937,7 @@ Proof
   Cases_on `t` >> fs[EVERY_DEF] >>
   Cases_on `inst.inst_outputs` >> fs[] >>
   Cases_on `t` >> gvs[] >>
-  simp[step_inst_base_def, exec_read1_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def]
 QED
 
 Theorem nop_calldataload_always_ok[local]:
@@ -2958,7 +2953,7 @@ Proof
   Cases_on `t` >> fs[EVERY_DEF] >>
   Cases_on `inst.inst_outputs` >> fs[] >>
   Cases_on `t` >> gvs[] >>
-  simp[step_inst_base_def, exec_read1_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def]
 QED
 
 Theorem nop_dload_always_ok[local]:
@@ -2974,7 +2969,7 @@ Proof
   Cases_on `t` >> fs[EVERY_DEF] >>
   Cases_on `inst.inst_outputs` >> fs[] >>
   Cases_on `t` >> gvs[] >>
-  simp[step_inst_base_def, exec_read1_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def]
 QED
 
 Theorem nop_mstore_always_ok[local]:
@@ -2990,7 +2985,7 @@ Proof
   Cases_on `t` >> fs[EVERY_DEF] >>
   Cases_on `t'` >> fs[EVERY_DEF] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
-  simp[step_inst_base_def, exec_write2_def, eval_operand_def, mstore_def]
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, mstore_def]
 QED
 
 Theorem nop_mcopy_always_ok[local]:
@@ -3007,7 +3002,7 @@ Proof
   Cases_on `t'` >> fs[EVERY_DEF] >>
   Cases_on `t` >> fs[EVERY_DEF] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
-  simp[step_inst_base_def, exec_write2_def, eval_operand_def, mcopy_def, LET_THM]
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, mcopy_def, LET_THM]
 QED
 
 Theorem nop_calldatacopy_always_ok[local]:
@@ -3024,7 +3019,7 @@ Proof
   Cases_on `t'` >> fs[EVERY_DEF] >>
   Cases_on `t` >> fs[EVERY_DEF] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
-  simp[step_inst_base_def, eval_operand_def, LET_THM]
+  simp[step_inst_base_opcode_eqs, eval_operand_def, LET_THM]
 QED
 
 
@@ -3042,7 +3037,7 @@ Proof
   Cases_on `t'` >> fs[EVERY_DEF] >>
   Cases_on `t` >> fs[EVERY_DEF] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
-  simp[step_inst_base_def, eval_operand_def, LET_THM]
+  simp[step_inst_base_opcode_eqs, eval_operand_def, LET_THM]
 QED
 (* NOP'd instructions with literal operands always succeed (return OK).
    Key: eval_operand (Lit v) s = SOME v for any s. *)
@@ -3109,7 +3104,7 @@ QED
 Resume mode_inst_ok_only_ok_or_error[nop_load]:
   fs[] >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
   fs[step_inst_non_invoke, inst_wf_def] >>
-  stepInstBaseLib.with_opcode_clause (fn ths => simp (ths @ [exec_read1_def])) >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def] >>
   BasicProvers.every_case_tac
 QED
 

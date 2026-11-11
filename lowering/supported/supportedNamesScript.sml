@@ -59,13 +59,16 @@ Definition supported_selectors_distinct_def:
       (build_selectors (type_env tops) (FST (classify_functions tops))))
 End
 
-(* External names, selectors and fallback arguments are checked by
-   check_contract, including every ABI prefix and public getter. Binding
-   checks with locals/loops still apply in addition to this predicate. *)
+(* check_contract also checks names and selectors, including every ABI
+   prefix and public getter. The whitelist keeps distinct function names,
+   event names and selectors until its removal lands. Binding checks with
+   locals/loops still apply in addition to this predicate. *)
 Definition supported_declaration_names_def:
   supported_declaration_names tops <=>
+    ALL_DISTINCT (supported_function_names tops) /\
     ALL_DISTINCT (supported_event_names tops) /\
-    EVERY (supported_function_header_names tops) tops
+    EVERY (supported_function_header_names tops) tops /\
+    supported_selectors_distinct tops
 End
 
 (* ===== Consumer contracts ===== *)
@@ -86,7 +89,9 @@ QED
 
 Theorem supported_declaration_names_unique:
   supported_declaration_names tops ==>
-    ALL_DISTINCT (supported_event_names tops)
+    ALL_DISTINCT (supported_function_names tops) /\
+    ALL_DISTINCT (supported_event_names tops) /\
+    supported_selectors_distinct tops
 Proof
   simp[supported_declaration_names_def]
 QED

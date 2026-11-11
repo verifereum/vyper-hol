@@ -24,6 +24,12 @@ Definition no_control_exc_def:
     (∃str. exc = AssertException str) ∨ exc = HaltException
 End
 
+Theorem no_control_exc_Error:
+  no_control_exc (Error e)
+Proof
+  simp[no_control_exc_def]
+QED
+
 (* Useful rewrite set for pushing case expressions through application *)
 val case_rator_ss = [option_CASE_rator, sum_CASE_rator, prod_CASE_rator, COND_RATOR]
 
@@ -260,13 +266,14 @@ Theorem write_storage_slot_no_control:
 Proof
   rpt gen_tac >> strip_tac >> pop_assum mp_tac
   >> PURE_REWRITE_TAC[write_storage_slot_def]
-  >> simp[bind_def, return_def, prod_CASE_rator, sum_CASE_rator, LET_THM,
+  >> simp[bind_def, ignore_bind_def, return_def, prod_CASE_rator, sum_CASE_rator, LET_THM,
     get_storage_backend_def, set_storage_backend_def,
     get_accounts_def, get_transient_storage_def,
     update_accounts_def, update_transient_def]
   >> strip_tac
   >> Cases_on `is_t`
-  >> gvs[AllCaseEqs(), get_storage_backend_def, set_storage_backend_def,
+  >> gvs[AllCaseEqs(), no_control_exc_Error, get_storage_backend_def,
+         set_storage_backend_def,
          get_accounts_def, get_transient_storage_def,
          update_accounts_def, update_transient_def,
          bind_def, return_def, prod_CASE_rator, sum_CASE_rator]
@@ -385,21 +392,40 @@ Proof
   gvs[COND_RATOR, AllCaseEqs(), raise_def, no_control_exc_def] >> metis_tac[]
 QED
 
+Theorem array_length_backend_no_failure[local]:
+  !cx tr s exc s'. get_storage_backend cx tr s <> (INR exc, s')
+Proof
+  Cases_on `tr` >>
+  simp[get_storage_backend_def, bind_def, get_transient_storage_def,
+       get_accounts_def, return_def]
+QED
+
+Theorem array_length_value_no_control[local]:
+  !v s exc s'.
+  (case v of
+   | ArrayV (DynArrayV vs) => return (LENGTH vs)
+   | ArrayV (SArrayV vs) => return (LENGTH vs)
+   | ArrayV (TupleV vs) => return (LENGTH vs)
+   | BytesV bs => return (LENGTH bs)
+   | StringV bs => return (LENGTH bs)
+   | _ => raise (Error (TypeError "result_array_length"))) s = (INR exc, s') ==>
+  no_control_exc exc
+Proof
+  Cases_on `v` >>
+  simp[return_def, raise_def, no_control_exc_def] >>
+  rename1 `array_value_CASE av` >> Cases_on `av` >> simp[return_def]
+QED
+
 Theorem result_array_length_no_control:
   ∀cx tv s exc s'.
   result_array_length cx tv s = (INR exc, s') ⇒ no_control_exc exc
 Proof
   ho_match_mp_tac result_array_length_ind >> rpt gen_tac >>
-  simp[result_array_length_def, bind_def, return_def,
-    prod_CASE_rator, sum_CASE_rator, vyperValueTheory.value_CASE_rator,
-    vyperValueTheory.array_value_CASE_rator, get_storage_backend_def,
-    get_transient_storage_def, get_accounts_def, COND_RATOR] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def] >>
-  FIRST [
-    qpat_x_assum `get_storage_backend _ tr _ = _` mp_tac >>
-      Cases_on `tr` >> simp[get_storage_backend_def, bind_def,
-        get_transient_storage_def, get_accounts_def, return_def],
-    metis_tac[read_result_no_control, no_control_exc_def]]
+  simp[result_array_length_def, return_def] >>
+  rpt strip_tac >> drule bind_no_control >> disch_then irule >>
+  simp[array_length_backend_no_failure, return_def] >>
+  (conj_tac >- metis_tac[read_result_no_control]) >>
+  rpt strip_tac >> drule array_length_value_no_control >> simp[]
 QED
 
 Theorem place_type_value_no_control:
@@ -544,8 +570,15 @@ Proof
   rw[return_def, raise_def, no_control_exc_def]
 QED
 
+Theorem precompile_call_success_no_control:
+  precompile_call_success bt s = (INR exc, s') ==> no_control_exc exc
+Proof
+  strip_tac >> drule vyperStatePreservationTheory.precompile_call_success_exception >>
+  rw[] >> simp[no_control_exc_def]
+QED
+
 val helpers = [eval_create_no_control, check_create_blueprint_no_control,
-               next_gas_reading_no_control,
+               next_gas_reading_no_control, precompile_call_success_no_control,
                check_no_control, type_check_no_control,
                lift_option_no_control, lift_option_type_no_control,
                lift_sum_no_control, lift_sum_runtime_no_control,
@@ -699,20 +732,45 @@ Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  `no_control_monad (eval_ext_call cx static skip_check sig opts vs)` suffices_by
-    metis_tac[no_control_monad_def] >>
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >>
-  NO_CONTROL_MONAD_TAC
+  PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, raise_def, no_control_exc_def]
+  >> simp[eval_ext_call_def, LET_THM] >> strip_tac
+  >> ibind_step_tac
+  >- (drule type_check_no_control >> simp[])
+  >> bind_step_tac
+  >- (drule lift_option_type_no_control >> simp[])
+  >> bind_step_tac
+  >- (gvs[AllCaseEqs(), COND_RATOR, option_CASE_rator, return_def] >>
+      bind_step_tac >> drule lift_option_type_no_control >> simp[])
+  >> bind_step_tac
+  >- (drule lift_option_type_no_control >> simp[])
+  >> gvs[bind_def, get_accounts_def, return_def]
+  >> ibind_step_tac
+  >- (drule check_no_control >> simp[])
+  >> bind_step_tac
+  >- gvs[frame_call_value_def, COND_RATOR, check_def, assert_def, bind_def,
+         ignore_bind_def, return_def, raise_def, AllCaseEqs(),
+         no_control_exc_def]
+  >> bind_step_tac
+  >- (drule eval_ext_call_effects_no_control >> simp[])
+  >> gvs[option_CASE_rator, AllCaseEqs()]
+  >- (bind_step_tac >> drule lift_sum_runtime_no_control >> simp[])
+  >> gvs[bind_def, get_accounts_def, return_def]
+  >> ibind_step_tac >> drule check_no_control >> simp[]
 QED
 
 Theorem eval_send_no_control:
   eval_send cx has_gas vs st = (INR exc, st') ==> no_control_exc exc
 Proof
-  `no_control_monad (eval_send cx has_gas vs)` suffices_by
-    metis_tac[no_control_monad_def] >>
-  Cases_on `vs` >> TRY (Cases_on `t`) >>
-  simp_tac bool_ss [eval_send_def, LET_THM] >> NO_CONTROL_MONAD_TAC
+  Cases_on `vs` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+       return_def, raise_def, get_accounts_def, get_transient_storage_def,
+       lift_option_def, lift_option_type_def, check_def, update_accounts_def,
+       update_transient_def, append_logs_def, update_pending_deletions_def,
+       take_call_outcome_def, adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
 QED
 
 (* ===== Case 19: IntCall ===== *)
@@ -747,7 +805,11 @@ Theorem int_call_tail_no_control[local]:
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             (is_view ∨ cx.txn.is_static);
+           if is_view then return () else check_not_static cx
+         od
      else return ());
     cxf <- push_function (src_id_opt, fn) env cx;
     rv <- finally_unless_halt
@@ -770,9 +832,8 @@ Proof
     gvs[no_control_exc_def, return_def, raise_def,
         get_scopes_def, push_function_def] >> NO_TAC,
     Cases_on `nr` >> gvs[return_def, raise_def, option_CASE_rator,
-      AllCaseEqs(), no_control_exc_def] >>
-    TRY (imp_res_tac acquire_nonreentrant_lock_no_control >>
-         gvs[no_control_exc_def]) >> NO_TAC,
+      ignore_bind_def, bind_def, COND_RATOR, AllCaseEqs(), no_control_exc_def]
+    >> metis_tac[acquire_nonreentrant_lock_no_control, no_control_exc_def],
     drule finally_unless_halt_no_control >> disch_then irule >>
     rpt strip_tac >> FIRST [
       drule finally_no_control >> disch_then irule >> rpt strip_tac
@@ -851,7 +912,8 @@ Theorem eval_raw_call_no_control:
   eval_raw_call cx flags target_addr calldata amount gas st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, check_def,
+       bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def, update_pending_deletions_def,
@@ -988,11 +1050,14 @@ Resume canonical_eval_no_control_with_results[Builtin]:
   rpt strip_tac >>
   imp_res_tac result_array_length_no_control >>
   imp_res_tac next_gas_reading_no_control >>
+  imp_res_tac precompile_call_success_no_control >>
   imp_res_tac lift_option_type_no_control >>
   imp_res_tac lift_sum_no_control >>
   gvs[type_check_def, assert_def, return_def] >>
+  imp_res_tac lift_sum_no_control >>
   FIRST [
     simp[no_control_exc_def] >> NO_TAC,
+    gvs[no_control_exc_def] >> metis_tac[],
     first_x_assum drule >> simp[],
     drule lift_option_type_no_control >> simp[]]
 QED
@@ -1043,7 +1108,7 @@ QED
 Resume canonical_eval_no_control_with_results[RawLog]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-    AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+    AllCaseEqs()] >> rpt strip_tac >> gvs[no_control_exc_Error] >>
   imp_res_tac type_check_no_control >>
   imp_res_tac lift_option_type_no_control >>
   imp_res_tac push_log_no_control >> res_tac
@@ -1062,7 +1127,7 @@ Resume canonical_eval_no_control_with_results[SelfDestruct]:
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     get_accounts_def, update_accounts_def, update_pending_deletions_def,
     raise_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[no_control_exc_def, COND_RATOR, AllCaseEqs(),
+  gvs[no_control_exc_def, no_control_exc_Error, COND_RATOR, AllCaseEqs(),
     update_accounts_def, update_pending_deletions_def, bind_def, return_def] >>
   imp_res_tac type_check_no_control >>
   imp_res_tac lift_option_type_no_control >>

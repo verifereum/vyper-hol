@@ -20,14 +20,15 @@ QED
 
 (* TOP-LEVEL: actual execution, with no recursive correctness hypothesis. *)
 Theorem abi_decoder_decode:
-  compile_abi_decode_to_buf dst src opc hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+  compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
   fn_has_code start end_st func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v
-    start last src dst opc hi sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
-  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
+    start last src dst opc base_op hi src_base sb d b cap (abi_decoder_prune_vars start.cs_next_var initial) /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>

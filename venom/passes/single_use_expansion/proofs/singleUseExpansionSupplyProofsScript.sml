@@ -1053,24 +1053,6 @@ Proof
   rpt strip_tac >>
   gvs[sue_alloc_assign_supply_def, sue_operand_label_def]
 QED
-Theorem sue_get_invoke_targets_cons:
-  MAP FST (get_invoke_targets (inst::insts)) =
-  MAP FST (get_invoke_targets [inst]) ++
-  MAP FST (get_invoke_targets insts)
-Proof
-  Cases_on `inst.inst_opcode = INVOKE` >> simp[get_invoke_targets_def] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  rename1 `inst.inst_operands = op::ops` >> Cases_on `op` >> simp[]
-QED
-
-Theorem sue_get_invoke_targets_append:
-  MAP FST (get_invoke_targets (xs ++ ys)) =
-  MAP FST (get_invoke_targets xs) ++ MAP FST (get_invoke_targets ys)
-Proof
-  Induct_on `xs` >- simp[get_invoke_targets_def] >>
-  rpt gen_tac >> pure_once_rewrite_tac[listTheory.APPEND] >>
-  once_rewrite_tac[sue_get_invoke_targets_cons] >> simp[]
-QED
 
 Theorem sue_expand_ops_supply_operand_labels:
   !dfg inst s ops k assigns new_ops s'.
@@ -1148,7 +1130,7 @@ Proof
   `MAP sue_operand_label new_ops =
    MAP sue_operand_label inst.inst_operands` by
     metis_tac[sue_expand_ops_supply_operand_labels] >>
-  rewrite_tac[sue_get_invoke_targets_append] >> simp[] >>
+  rewrite_tac[cfg_invoke_labels_append] >> simp[] >>
   (* Only the label map matters here: do not case-split supply equations. *)
   qpat_x_assum `MAP sue_operand_label new_ops = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> strip_tac >>
@@ -1180,8 +1162,8 @@ Proof
     metis_tac[sue_expand_inst_supply_invoke_labels] >>
   `MAP FST (get_invoke_targets tail_out) =
    MAP FST (get_invoke_targets insts)` by metis_tac[] >>
-  once_rewrite_tac[sue_get_invoke_targets_append] >>
-  once_rewrite_tac[sue_get_invoke_targets_cons] >> simp[]
+  once_rewrite_tac[cfg_invoke_labels_append] >>
+  once_rewrite_tac[cfg_invoke_labels_cons] >> simp[]
 QED
 
 Theorem sue_expand_block_supply_invoke_labels:
@@ -1413,4 +1395,228 @@ Proof
     metis_tac[sue_expand_blocks_supply_no_raw] >>
   gvs[sue_expand_function_supply_def, no_raw_fmp_ops_def,
       fn_insts_def, GSYM sue_blocks_no_raw_iff]
+QED
+
+(* ===== The traversal ignores irs_used_inst_ids =====
+   Fresh instruction ids come from irs_next_inst alone, so running from a
+   supply with a different used-id list gives the same output and a final
+   supply that differs only in that list. *)
+
+Theorem sue_alloc_assign_supply_used_inst_ids:
+  sue_alloc_assign_supply s op = (a,newop,s') ==>
+  sue_alloc_assign_supply (s with irs_used_inst_ids := ids) op =
+    (a,newop,s' with irs_used_inst_ids := s.irs_next_inst :: ids)
+Proof
+  simp[sue_alloc_assign_supply_def, fresh_ir_var_def, fresh_inst_id_def] >>
+  Cases_on `seek_fresh_name "formal_var_" s.irs_used_vars s.irs_next_var
+              (LENGTH s.irs_used_vars)` >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem sue_expand_ops_supply_used_inst_ids:
+  !ops op_idx s ids assigns new_ops s'.
+    sue_expand_ops_supply dfg inst s ops op_idx = (assigns,new_ops,s') ==>
+    ?ids'.
+      sue_expand_ops_supply dfg inst (s with irs_used_inst_ids := ids) ops
+        op_idx = (assigns,new_ops,s' with irs_used_inst_ids := ids')
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[sue_expand_ops_supply_def] >> strip_tac >> gvs[] >>
+      qexists_tac `ids` >> simp[]) >>
+  simp[sue_expand_ops_supply_def] >>
+  Cases_on `sue_expand_ops_supply dfg inst s ops (op_idx + 1)` >>
+  PairCases_on `r` >>
+  rename1 `_ = (more_assigns,more_ops,s1)` >>
+  first_x_assum (drule_then (qspec_then `ids` strip_assume_tac)) >>
+  simp[] >>
+  Cases_on `sue_needs_assign dfg inst op_idx` >> simp[]
+  >- (Cases_on `h` >> simp[]
+      >- (rename1 `Lit w` >>
+          Cases_on `sue_alloc_assign_supply s1 (Lit w)` >>
+          PairCases_on `r` >>
+          drule sue_alloc_assign_supply_used_inst_ids >>
+          disch_then (qspec_then `ids'` assume_tac) >>
+          simp[] >> strip_tac >> gvs[] >>
+          qexists_tac `s1.irs_next_inst :: ids'` >> simp[])
+      >- (rename1 `Var vn` >> IF_CASES_TAC >> simp[]
+          >- (strip_tac >> gvs[] >> qexists_tac `ids'` >> simp[]) >>
+          Cases_on `sue_alloc_assign_supply s1 (Var vn)` >>
+          PairCases_on `r` >>
+          drule sue_alloc_assign_supply_used_inst_ids >>
+          disch_then (qspec_then `ids'` assume_tac) >>
+          simp[] >> strip_tac >> gvs[] >>
+          qexists_tac `s1.irs_next_inst :: ids'` >> simp[]) >>
+      strip_tac >> gvs[] >> qexists_tac `ids'` >> simp[]) >>
+  strip_tac >> gvs[] >> qexists_tac `ids'` >> simp[]
+QED
+
+Theorem sue_expand_inst_supply_used_inst_ids:
+  sue_expand_inst_supply dfg s inst = (out,s') ==>
+  ?ids'.
+    sue_expand_inst_supply dfg (s with irs_used_inst_ids := ids) inst =
+      (out,s' with irs_used_inst_ids := ids')
+Proof
+  Cases_on `sue_should_skip inst.inst_opcode` >>
+  simp[sue_expand_inst_supply_def]
+  >- (strip_tac >> gvs[] >> qexists_tac `ids` >> simp[]) >>
+  Cases_on `sue_expand_ops_supply dfg inst s inst.inst_operands 0` >>
+  PairCases_on `r` >>
+  drule sue_expand_ops_supply_used_inst_ids >>
+  disch_then (qspec_then `ids` strip_assume_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  qexists_tac `ids'` >> simp[]
+QED
+
+Theorem sue_expand_insts_supply_used_inst_ids:
+  !insts s ids out s'.
+    sue_expand_insts_supply dfg s insts = (out,s') ==>
+    ?ids'.
+      sue_expand_insts_supply dfg (s with irs_used_inst_ids := ids) insts =
+        (out,s' with irs_used_inst_ids := ids')
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[sue_expand_insts_supply_def] >> strip_tac >> gvs[] >>
+      qexists_tac `ids` >> simp[]) >>
+  simp[sue_expand_insts_supply_def] >>
+  Cases_on `sue_expand_inst_supply dfg s h` >>
+  rename1 `sue_expand_inst_supply dfg s h = (out1,s1)` >>
+  Cases_on `sue_expand_insts_supply dfg s1 insts` >>
+  rename1 `sue_expand_insts_supply dfg s1 insts = (outs,s2)` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule sue_expand_inst_supply_used_inst_ids >>
+  disch_then (qspec_then `ids` strip_assume_tac) >>
+  first_x_assum (drule_then (qspec_then `ids'` strip_assume_tac)) >>
+  simp[] >> qexists_tac `ids''` >> simp[]
+QED
+
+Theorem sue_expand_block_supply_used_inst_ids:
+  sue_expand_block_supply dfg s bb = (bb',s') ==>
+  ?ids'.
+    sue_expand_block_supply dfg (s with irs_used_inst_ids := ids) bb =
+      (bb',s' with irs_used_inst_ids := ids')
+Proof
+  simp[sue_expand_block_supply_def] >>
+  Cases_on `sue_expand_insts_supply dfg s bb.bb_instructions` >>
+  drule sue_expand_insts_supply_used_inst_ids >>
+  disch_then (qspec_then `ids` strip_assume_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  qexists_tac `ids'` >> simp[]
+QED
+
+Theorem sue_expand_blocks_supply_used_inst_ids:
+  !bbs s ids bbs' s'.
+    sue_expand_blocks_supply dfg s bbs = (bbs',s') ==>
+    ?ids'.
+      sue_expand_blocks_supply dfg (s with irs_used_inst_ids := ids) bbs =
+        (bbs',s' with irs_used_inst_ids := ids')
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[sue_expand_blocks_supply_def] >> strip_tac >> gvs[] >>
+      qexists_tac `ids` >> simp[]) >>
+  simp[sue_expand_blocks_supply_def] >>
+  Cases_on `sue_expand_block_supply dfg s h` >>
+  rename1 `sue_expand_block_supply dfg s h = (bb1,s1)` >>
+  Cases_on `sue_expand_blocks_supply dfg s1 bbs` >>
+  rename1 `sue_expand_blocks_supply dfg s1 bbs = (bbs1,s2)` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule sue_expand_block_supply_used_inst_ids >>
+  disch_then (qspec_then `ids` strip_assume_tac) >>
+  first_x_assum (drule_then (qspec_then `ids'` strip_assume_tac)) >>
+  simp[] >> qexists_tac `ids''` >> simp[]
+QED
+
+(* Positional syntax provenance: every changed operand has a corresponding
+   copy in the prefix, and no label operand is ever copied. *)
+Theorem sue_alloc_assign_supply_copy:
+  sue_alloc_assign_supply s op = (a,newop,s') ==>
+  ?v. a.inst_opcode = ASSIGN /\ a.inst_operands = [op] /\
+      a.inst_outputs = [v] /\ newop = Var v
+Proof
+  Cases_on `fresh_ir_var s` >> Cases_on `fresh_inst_id r` >>
+  simp[sue_alloc_assign_supply_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem sue_expand_ops_supply_provenance:
+  !dfg inst s ops k assigns new_ops s'.
+    sue_expand_ops_supply dfg inst s ops k = (assigns,new_ops,s') ==>
+    LIST_REL (\op newop. newop = op \/
+      ?a v. MEM a assigns /\ a.inst_opcode = ASSIGN /\
+            a.inst_operands = [op] /\ a.inst_outputs = [v] /\
+            newop = Var v /\
+            ((?w. op = Var w) \/ (?w. op = Lit w))) ops new_ops
+Proof
+  Induct_on `ops`
+  >- (rpt strip_tac >> gvs[sue_expand_ops_supply_def]) >>
+  rpt strip_tac >>
+  Cases_on `sue_expand_ops_supply dfg inst s ops (k + 1)` >>
+  PairCases_on `r` >>
+  rename1 `sue_expand_ops_supply dfg inst s ops (k + 1) =
+           (more_assigns,more_ops,s1)` >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `~sue_needs_assign dfg inst k`
+  >- gvs[sue_expand_ops_supply_def] >>
+  Cases_on `h`
+  >- (Cases_on `sue_alloc_assign_supply s1 (Lit c)` >>
+      PairCases_on `r` >>
+      drule sue_alloc_assign_supply_copy >> strip_tac >>
+      gvs[sue_expand_ops_supply_def] >>
+      conj_tac >- metis_tac[] >>
+      irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[]) 
+  >- (Cases_on `LENGTH (dfg_get_uses dfg s'') = 1 /\
+                 sue_count_remaining (Var s'') ops = 0`
+      >- gvs[sue_expand_ops_supply_def] >>
+      Cases_on `sue_alloc_assign_supply s1 (Var s'')` >>
+      PairCases_on `r` >>
+      drule sue_alloc_assign_supply_copy >> strip_tac >>
+      gvs[sue_expand_ops_supply_def] >>
+      conj_tac >- metis_tac[] >>
+      irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[]) >>
+  gvs[sue_expand_ops_supply_def]
+QED
+
+Theorem sue_expand_ops_supply_length:
+  sue_expand_ops_supply dfg inst s ops k = (assigns,new_ops,s') ==>
+  LENGTH new_ops = LENGTH ops
+Proof
+  metis_tac[sue_expand_ops_supply_operand_labels, listTheory.LENGTH_MAP]
+QED
+
+Theorem sue_expand_ops_supply_copies:
+  !dfg inst s ops k assigns new_ops s'.
+    sue_expand_ops_supply dfg inst s ops k = (assigns,new_ops,s') ==>
+    EVERY (\a. ?op v. MEM op ops /\
+      ((?w. op = Var w) \/ (?w. op = Lit w)) /\
+      a.inst_opcode = ASSIGN /\ a.inst_operands = [op] /\
+      a.inst_outputs = [v]) assigns
+Proof
+  Induct_on `ops`
+  >- (rpt strip_tac >> gvs[sue_expand_ops_supply_def]) >>
+  rpt strip_tac >>
+  Cases_on `sue_expand_ops_supply dfg inst s ops (k + 1)` >>
+  PairCases_on `r` >>
+  rename1 `sue_expand_ops_supply dfg inst s ops (k + 1) =
+           (more_assigns,more_ops,s1)` >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `~sue_needs_assign dfg inst k`
+  >- (gvs[sue_expand_ops_supply_def, listTheory.EVERY_MEM] >>
+      metis_tac[]) >>
+  Cases_on `h`
+  >- (Cases_on `sue_alloc_assign_supply s1 (Lit c)` >>
+      PairCases_on `r` >>
+      drule sue_alloc_assign_supply_copy >> strip_tac >>
+      gvs[sue_expand_ops_supply_def, listTheory.EVERY_MEM] >>
+      metis_tac[])
+  >- (Cases_on `LENGTH (dfg_get_uses dfg s'') = 1 /\
+                 sue_count_remaining (Var s'') ops = 0`
+      >- (gvs[sue_expand_ops_supply_def, listTheory.EVERY_MEM] >>
+          metis_tac[]) >>
+      Cases_on `sue_alloc_assign_supply s1 (Var s'')` >>
+      PairCases_on `r` >>
+      drule sue_alloc_assign_supply_copy >> strip_tac >>
+      gvs[sue_expand_ops_supply_def, listTheory.EVERY_MEM] >>
+      metis_tac[]) >>
+  gvs[sue_expand_ops_supply_def, listTheory.EVERY_MEM] >>
+  metis_tac[]
 QED

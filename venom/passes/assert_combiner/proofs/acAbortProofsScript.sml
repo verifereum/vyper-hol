@@ -6,6 +6,7 @@
 
 Theory acAbortProofs
 Ancestors
+  acAbortRelProofs
   acSimPrecondProofs acChainProofs acBaseProofs assertCombinerDefs
   passSimulationDefs passSimulationProps
   stateEquiv stateEquivProps execEquivParamProps venomInstProps venomExecProps
@@ -72,6 +73,7 @@ val passthrough_abort_tac =
   qpat_assum `step_inst _ _ _ s_t = _`
     (fn ab => REWRITE_TAC[ab]) >>
   simp_tac (srw_ss()) [] >>
+  irule execution_equiv_ac_abort_equiv >>
   irule revert_returndata_exec_equiv_UNIV >>
   metis_tac[state_equiv_exec_equiv_UNIV];
 
@@ -161,12 +163,12 @@ Triviality abort_case_diff_nofid[local]:
       Abort Revert_abort (revert_state (set_returndata [] s_t)) /\
     state_equiv V s_o s_t /\
     ac_sim_precond cands mp dfg (h::insts) s_t V ==>
-    let (mp', contrib) = ac_apply_merge_step cands (mp, []) h in
+    let (mp', contrib) = ac_apply_merge_step id_base cands (mp, []) h in
     ?sa'.
       run_insts fuel ctx
-        (contrib ++ SND (FOLDL (ac_apply_merge_step cands) (mp', []) insts)) s_t =
+        (contrib ++ SND (FOLDL (ac_apply_merge_step id_base cands) (mp', []) insts)) s_t =
         Abort Revert_abort sa' /\
-      execution_equiv UNIV
+      ac_abort_equiv
         (revert_state (set_returndata [] s_o)) sa'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -201,13 +203,13 @@ Proof
     simp[Abbr`afp`, optionTheory.IS_SOME_EXISTS]) >>
   `or_v <> iz_v` by simp[Abbr`or_v`, Abbr`iz_v`, ac_or_iz_distinct] >>
   (* Merge step equation — establish BEFORE rename *)
-  qabbrev_tac `or_inst = <| inst_id := h.inst_id; inst_opcode := OR;
+  qabbrev_tac `or_inst = <| inst_id := ac_or_id id_base h.inst_id; inst_opcode := OR;
       inst_operands := [afp; mc.mc_second_pred];
       inst_outputs := [or_v] |>` >>
-  qabbrev_tac `iz_inst = <| inst_id := h.inst_id + 1; inst_opcode := ISZERO;
+  qabbrev_tac `iz_inst = <| inst_id := ac_or_id id_base h.inst_id + 1; inst_opcode := ISZERO;
       inst_operands := [Var or_v]; inst_outputs := [iz_v] |>` >>
   qabbrev_tac `h' = h with inst_operands := [Var iz_v]` >>
-  `ac_apply_merge_step cands (mp,[]) h =
+  `ac_apply_merge_step id_base cands (mp,[]) h =
      ((mc.mc_second_id, Var or_v)::mp, [or_inst; iz_inst; h'])` by (
     mp_tac (SIMP_RULE (srw_ss()) [LET_THM] ac_step_diff_nofid) >>
     disch_then (qspecl_then [`cands`, `mp`, `h`, `mc`] mp_tac) >>
@@ -216,7 +218,7 @@ Proof
          Abbr`or_inst`, Abbr`iz_inst`, Abbr`h'`]) >>
   (* OR/IZ step: run [or_inst; iz_inst] s_t = OK s_iz *)
   qspecl_then [`fuel`, `ctx`, `s_t`, `afp`, `mc.mc_second_pred`,
-               `or_v`, `iz_v`, `h.inst_id`, `afp_val`, `pred_val`]
+               `or_v`, `iz_v`, `ac_or_id id_base h.inst_id`, `afp_val`, `pred_val`]
     mp_tac ac_or_iz_step >>
   simp[] >> simp[LET_THM] >> strip_tac >>
   (* Substitute Abbrevs into the or/iz run_insts assumption *)
@@ -243,7 +245,8 @@ Proof
   qexists_tac `revert_state (set_returndata [] s_iz)` >> conj_tac
   >- (ONCE_REWRITE_TAC[cons_three_append] >>
       irule run_insts_prefix_abort >> first_assum ACCEPT_TAC)
-  >- (irule revert_returndata_exec_equiv_UNIV >>
+  >- (irule execution_equiv_ac_abort_equiv >>
+      irule revert_returndata_exec_equiv_UNIV >>
       irule execution_equiv_trans >> qexists_tac `s_t` >> conj_tac
       >- metis_tac[state_equiv_exec_equiv_UNIV]
       >- first_assum ACCEPT_TAC)
@@ -355,12 +358,12 @@ Triviality abort_case_fid_none[local]:
     (!i x. MEM i insts /\ MEM x i.inst_outputs ==>
        ~IS_SOME (lookup_var x s_t)) /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) ==>
-    let (mp', contrib) = ac_apply_merge_step cands (mp, []) h in
+    let (mp', contrib) = ac_apply_merge_step id_base cands (mp, []) h in
     ?sa'.
       run_insts fuel ctx
-        (contrib ++ SND (FOLDL (ac_apply_merge_step cands) (mp', []) insts)) s_t =
+        (contrib ++ SND (FOLDL (ac_apply_merge_step id_base cands) (mp', []) insts)) s_t =
         Abort Revert_abort sa' /\
-      execution_equiv UNIV
+      ac_abort_equiv
         (revert_state (set_returndata [] s_o)) sa'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -384,7 +387,7 @@ Proof
     qexistsl_tac [`dfg`, `cond_v`] >> simp[] >>
     metis_tac[ac_sim_precond_dfg_inv]) >>
   (* Merge step *)
-  `ac_apply_merge_step cands (mp,[]) h = (mp,
+  `ac_apply_merge_step id_base cands (mp,[]) h = (mp,
      [h with <|inst_opcode := NOP; inst_operands := []; inst_outputs := []|>])` by
     metis_tac[ac_step_fid_none] >>
   (* Witness in insts *)
@@ -416,20 +419,20 @@ Proof
     qexistsl_tac [`inst_s`, `mc_fid`] >>
     simp[])) >>
   drule ac_deferred_chain_abort_w >>
-  disch_then (qspecl_then [`fuel`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`id_base`, `fuel`, `ctx`] mp_tac) >>
   (impl_tac >- (
     conj_tac >- first_assum ACCEPT_TAC >>
     first_assum ACCEPT_TAC)) >>
   strip_tac >>
   simp[LET_THM, run_insts_append, Once run_insts_def, step_nop_identity,
        Once run_insts_def] >>
-  irule execution_equiv_trans >>
+  irule ac_abort_equiv_trans >>
   qexists_tac `revert_state (set_returndata [] s_t)` >>
-  conj_tac >| [
-    irule revert_returndata_exec_equiv_UNIV >>
-    metis_tac[state_equiv_exec_equiv_UNIV],
-    first_assum ACCEPT_TAC
-  ]
+  conj_tac
+  >- (irule execution_equiv_ac_abort_equiv >>
+      irule revert_returndata_exec_equiv_UNIV >>
+      metis_tac[state_equiv_exec_equiv_UNIV]) >>
+  first_assum ACCEPT_TAC
 QED
 
 (* Extend chain_inv_w mp: when all insts have inst_id <> key, and the new
@@ -469,12 +472,12 @@ Triviality abort_case_same_fid[local]:
     (!i x. MEM i insts /\ MEM x i.inst_outputs ==>
        ~IS_SOME (lookup_var x s_t)) /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) ==>
-    let (mp', contrib) = ac_apply_merge_step cands (mp, []) h in
+    let (mp', contrib) = ac_apply_merge_step id_base cands (mp, []) h in
     ?sa'.
       run_insts fuel ctx
-        (contrib ++ SND (FOLDL (ac_apply_merge_step cands) (mp', []) insts)) s_t =
+        (contrib ++ SND (FOLDL (ac_apply_merge_step id_base cands) (mp', []) insts)) s_t =
         Abort Revert_abort sa' /\
-      execution_equiv UNIV
+      ac_abort_equiv
         (revert_state (set_returndata [] s_o)) sa'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -502,7 +505,7 @@ Proof
     qexistsl_tac [`dfg`, `cond_v`] >> simp[] >>
     metis_tac[ac_sim_precond_dfg_inv]) >>
   (* Merge step *)
-  `ac_apply_merge_step cands (mp,[]) h =
+  `ac_apply_merge_step id_base cands (mp,[]) h =
      ((mc.mc_second_id, afp)::mp,
       [h with <|inst_opcode := NOP; inst_operands := []; inst_outputs := []|>])` by (
     mp_tac (SIMP_RULE (srw_ss()) [LET_THM] ac_step_same_fid) >>
@@ -558,20 +561,20 @@ Proof
   strip_tac >>
   (* Apply deferred chain abort *)
   drule ac_deferred_chain_abort_w >>
-  disch_then (qspecl_then [`fuel`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`id_base`, `fuel`, `ctx`] mp_tac) >>
   (impl_tac >- (
     conj_tac >- (rpt strip_tac >> res_tac >>
       gvs[optionTheory.NOT_IS_SOME_EQ_NONE]) >>
     first_assum ACCEPT_TAC)) >>
   strip_tac >>
   simp[Once run_insts_def, step_nop_identity] >>
-  irule execution_equiv_trans >>
+  irule ac_abort_equiv_trans >>
   qexists_tac `revert_state (set_returndata [] s_t)` >>
-  conj_tac >| [
-    irule revert_returndata_exec_equiv_UNIV >>
-    metis_tac[state_equiv_exec_equiv_UNIV],
-    first_assum ACCEPT_TAC
-  ]
+  conj_tac
+  >- (irule execution_equiv_ac_abort_equiv >>
+      irule revert_returndata_exec_equiv_UNIV >>
+      metis_tac[state_equiv_exec_equiv_UNIV]) >>
+  first_assum ACCEPT_TAC
 QED
 
 (* Transfer ac_sim_precond to ac_chain_inv after OR/IZ step.
@@ -745,12 +748,12 @@ Triviality abort_case_diff_fid[local]:
       Abort Revert_abort (revert_state (set_returndata [] s_t)) /\
     state_equiv V s_o s_t /\
     ac_sim_precond cands mp dfg (h::insts) s_t V ==>
-    let (mp', contrib) = ac_apply_merge_step cands (mp, []) h in
+    let (mp', contrib) = ac_apply_merge_step id_base cands (mp, []) h in
     ?sa'.
       run_insts fuel ctx
-        (contrib ++ SND (FOLDL (ac_apply_merge_step cands) (mp', []) insts)) s_t =
+        (contrib ++ SND (FOLDL (ac_apply_merge_step id_base cands) (mp', []) insts)) s_t =
         Abort Revert_abort sa' /\
-      execution_equiv UNIV
+      ac_abort_equiv
         (revert_state (set_returndata [] s_o)) sa'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -785,14 +788,14 @@ Proof
     simp[Abbr`afp`, optionTheory.IS_SOME_EXISTS]) >>
   `or_v <> iz_v` by simp[Abbr`or_v`, Abbr`iz_v`, ac_or_iz_distinct] >>
   (* Merge step equation *)
-  qabbrev_tac `or_inst = <| inst_id := h.inst_id; inst_opcode := OR;
+  qabbrev_tac `or_inst = <| inst_id := ac_or_id id_base h.inst_id; inst_opcode := OR;
       inst_operands := [afp; mc.mc_second_pred];
       inst_outputs := [or_v] |>` >>
-  qabbrev_tac `iz_inst = <| inst_id := h.inst_id + 1; inst_opcode := ISZERO;
+  qabbrev_tac `iz_inst = <| inst_id := ac_or_id id_base h.inst_id + 1; inst_opcode := ISZERO;
       inst_operands := [Var or_v]; inst_outputs := [iz_v] |>` >>
   qabbrev_tac `nop_inst = h with <| inst_opcode := NOP;
       inst_operands := []; inst_outputs := [] |>` >>
-  `ac_apply_merge_step cands (mp,[]) h =
+  `ac_apply_merge_step id_base cands (mp,[]) h =
      ((mc.mc_second_id, Var or_v)::mp, [or_inst; iz_inst; nop_inst])` by (
     mp_tac (SIMP_RULE (srw_ss()) [LET_THM] ac_step_diff_fid) >>
     disch_then (qspecl_then [`cands`, `mp`, `h`, `mc`] mp_tac) >>
@@ -801,7 +804,7 @@ Proof
          Abbr`or_inst`, Abbr`iz_inst`, Abbr`nop_inst`]) >>
   (* OR/IZ step: run [or_inst; iz_inst] s_t = OK s_iz *)
   qspecl_then [`fuel`, `ctx`, `s_t`, `afp`, `mc.mc_second_pred`,
-               `or_v`, `iz_v`, `h.inst_id`, `afp_val`, `pred_val`]
+               `or_v`, `iz_v`, `ac_or_id id_base h.inst_id`, `afp_val`, `pred_val`]
     mp_tac ac_or_iz_step >>
   simp[] >> simp[LET_THM] >> strip_tac >>
   (* Substitute Abbrevs *)
@@ -856,10 +859,10 @@ Proof
     metis_tac[]) >>
   (* Apply ac_deferred_chain_abort *)
   `?sa_rest. run_insts fuel ctx
-     (SND (FOLDL (ac_apply_merge_step cands)
+     (SND (FOLDL (ac_apply_merge_step id_base cands)
        ((h.inst_id, Var or_v)::mp, []) insts)) s_iz =
      Abort Revert_abort sa_rest /\
-     execution_equiv UNIV (revert_state (set_returndata [] s_iz)) sa_rest` by
+     ac_abort_equiv (revert_state (set_returndata [] s_iz)) sa_rest` by
     metis_tac[ac_deferred_chain_abort] >>
   (* Compose: [or;iz;nop] ++ rest aborts *)
   simp[LET_THM] >>
@@ -868,9 +871,10 @@ Proof
       simp[run_insts_append] >>
       first_assum (fn ok => REWRITE_TAC[ok]) >>
       simp[])
-  >- (irule execution_equiv_trans >>
+  >- (irule ac_abort_equiv_trans >>
       qexists_tac `revert_state (set_returndata [] s_iz)` >> conj_tac
-      >- (irule revert_returndata_exec_equiv_UNIV >>
+      >- (irule execution_equiv_ac_abort_equiv >>
+      irule revert_returndata_exec_equiv_UNIV >>
           irule execution_equiv_trans >> qexists_tac `s_t` >> conj_tac
           >- metis_tac[state_equiv_exec_equiv_UNIV]
           >- first_assum ACCEPT_TAC)
@@ -887,12 +891,12 @@ Theorem ac_sim_step_abort:
     (!i x. MEM i (h::insts) /\ MEM x i.inst_outputs ==>
        ~IS_SOME (lookup_var x s_t)) /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (h::insts))) ==>
-    let (mp', contrib) = ac_apply_merge_step cands (mp, []) h in
+    let (mp', contrib) = ac_apply_merge_step id_base cands (mp, []) h in
     ?sa'.
       run_insts fuel ctx
-        (contrib ++ SND (FOLDL (ac_apply_merge_step cands) (mp', []) insts)) s_t =
+        (contrib ++ SND (FOLDL (ac_apply_merge_step id_base cands) (mp', []) insts)) s_t =
         Abort Revert_abort sa' /\
-      execution_equiv UNIV sa sa'
+      ac_abort_equiv sa sa'
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all abort_head_is_assert >> strip_tac >>
@@ -927,11 +931,11 @@ Proof
   Cases_on `FIND (\mc. mc.mc_second_id = h.inst_id) cands`
   >- (
     Cases_on `EXISTS (\mc. mc.mc_first_id = h.inst_id) cands`
-    >- (drule_all abort_case_fid_none >> simp[LET_THM] >>
+    >- (drule_all abort_case_fid_none >> disch_then (qspec_then `id_base` mp_tac) >> simp[LET_THM] >>
         qpat_assum `sa = _` SUBST_ALL_TAC >> simp[])
     >- (
       (* Case 2: passthrough — contrib = [h], h aborts on s_t *)
-      `ac_apply_merge_step cands (mp,[]) h = (mp, [h])` by
+      `ac_apply_merge_step id_base cands (mp,[]) h = (mp, [h])` by
         metis_tac[ac_step_passthrough] >>
       passthrough_abort_tac
     )
@@ -942,11 +946,11 @@ Proof
     >- (
       Cases_on `(case ALOOKUP mp mc.mc_first_id of
                    SOME p => p | NONE => mc.mc_first_pred) = mc.mc_second_pred`
-      >- (drule_all abort_case_same_fid >> simp[LET_THM] >>
+      >- (drule_all abort_case_same_fid >> disch_then (qspec_then `id_base` mp_tac) >> simp[LET_THM] >>
           qpat_assum `sa = _` SUBST_ALL_TAC >> simp[])
       >- (
         (* Case 5: diff preds, fid — use abort_case_diff_fid *)
-        drule_all abort_case_diff_fid >> simp[LET_THM] >>
+        drule_all abort_case_diff_fid >> disch_then (qspec_then `id_base` mp_tac) >> simp[LET_THM] >>
         qpat_assum `sa = _` SUBST_ALL_TAC >> simp[]
       )
     )
@@ -955,7 +959,7 @@ Proof
                    SOME p => p | NONE => mc.mc_first_pred) = mc.mc_second_pred`
       >- (
         (* Case 4: same preds passthrough — contrib = [h], h aborts on s_t *)
-        `ac_apply_merge_step cands (mp,[]) h =
+        `ac_apply_merge_step id_base cands (mp,[]) h =
            ((mc.mc_second_id,
              case ALOOKUP mp mc.mc_first_id of
                SOME p => p | NONE => mc.mc_first_pred)::mp, [h])` by
@@ -964,7 +968,7 @@ Proof
       )
       >- (
         (* Case 6: diff preds, nofid — use extracted triviality *)
-        drule_all abort_case_diff_nofid >> simp[LET_THM] >>
+        drule_all abort_case_diff_nofid >> disch_then (qspec_then `id_base` mp_tac) >> simp[LET_THM] >>
         qpat_assum `sa = _` SUBST_ALL_TAC >> simp[]
       )
     )
@@ -982,9 +986,9 @@ Theorem ac_run_insts_sim_abort:
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) ==>
     ?sa'.
       run_insts fuel ctx
-        (SND (FOLDL (ac_apply_merge_step cands) (mp, []) insts)) s_t =
+        (SND (FOLDL (ac_apply_merge_step id_base cands) (mp, []) insts)) s_t =
         Abort Revert_abort sa' /\
-      execution_equiv UNIV sa sa'
+      ac_abort_equiv sa sa'
 Proof
   Induct >- simp[run_insts_def] >>
   rpt gen_tac >> strip_tac >>
@@ -1006,8 +1010,8 @@ Proof
         >- metis_tac[ac_sim_precond_outputs_notin_V]
         >- metis_tac[state_equiv_sym])) >>
       simp[])) >>
-    drule_all ac_sim_step_ok >> simp[LET_THM] >>
-    Cases_on `ac_apply_merge_step cands (mp,[]) h` >>
+    drule_all ac_sim_step_ok >> disch_then (qspec_then `id_base` mp_tac) >> simp[LET_THM] >>
+    Cases_on `ac_apply_merge_step id_base cands (mp,[]) h` >>
     rename1 `_ = (mp', contrib)` >> simp[] >> strip_tac >>
     qspecl_then [`h`, `insts`, `cands`, `mp`] mp_tac ac_foldl_cons >>
     simp[LET_THM] >> strip_tac >>
@@ -1039,8 +1043,8 @@ Proof
   >- (
     (* step_inst h = Abort, abort at head *)
     strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-    drule_all ac_sim_step_abort >> simp[LET_THM] >>
-    Cases_on `ac_apply_merge_step cands (mp,[]) h` >>
+    drule_all ac_sim_step_abort >> disch_then (qspec_then `id_base` mp_tac) >> simp[LET_THM] >>
+    Cases_on `ac_apply_merge_step id_base cands (mp,[]) h` >>
     rename1 `_ = (mp', contrib)` >> simp[] >> strip_tac >>
     qspecl_then [`h`, `insts`, `cands`, `mp`] mp_tac ac_foldl_cons >>
     simp[LET_THM] >> strip_tac >>

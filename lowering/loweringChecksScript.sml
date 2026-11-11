@@ -58,3 +58,6 @@ Ancestors
   (* admission audits: listed theorems use only the oracle tags each allows *)
   createLoweringAudit createOracleClosureAudit conversionProofAudit
   eventEndpointAudit
+  (* ABI encode/decode edge cases, creation completion and size boundaries *)
+  abiEncodeSnapshotTest abiDecodeBoundsTest abiDecodeAliasTest
+  abiDecoderBytesEdges createCompletionProbe createSizeBoundaryTest

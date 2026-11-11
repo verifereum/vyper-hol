@@ -2,7 +2,7 @@ Theory fmpLowerInvokeProps
 Ancestors
   venomFnInstsProofs fmpLowerDefs
   fmpLowerProps
-  fcgBridge
+  fcgBridge venomInst
 
 Theorem fmp_lower_insts_invokes:
   fmp_lower_insts infos ctx runner s insts = SOME (out,s') /\

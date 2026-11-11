@@ -127,13 +127,19 @@ Theorem e02_eval_stmt_log:
     [EventDecl "E" [(("a",BaseT (BytesT (Fixed 20))),T)]])])] /\
   eval_exprs cx es st = (INL [BytesV (1w :: REPLICATE 19 0w)], st') ==>
   eval_stmt cx (Log (NONE,"E") es) st =
-    push_log <| logger := cx.txn.target;
-      topics := [n2w (event_hash (get_tenv cx) "E" [BaseT (BytesT (Fixed 20))]);
-                 1w << 248]; data := [] |> st'
+    if cx.txn.is_static then
+      (INR (Error (RuntimeError "write in static context")), st')
+    else
+      push_log <| logger := cx.txn.target;
+        topics := [n2w (event_hash (get_tenv cx) "E" [BaseT (BytesT (Fixed 20))]);
+                   1w << 248]; data := [] |> st'
 Proof
-  strip_tac >> simp[Once evaluate_def, e02_source_event_topics,
+  strip_tac >> Cases_on `cx.txn.is_static` >>
+  simp[Once evaluate_def, e02_source_event_topics,
     vyperStateTheory.bind_def, vyperStateTheory.lift_option_def,
-    vyperStateTheory.return_def]
+    vyperStateTheory.return_def, vyperStateTheory.ignore_bind_def,
+    vyperStateTheory.check_def, vyperStateTheory.assert_def,
+    vyperStateTheory.raise_def]
 QED
 
 val () = regression "e12_literal_uint8" true
@@ -172,12 +178,15 @@ Theorem e02_eval_stmt_name:
     [EventDecl "E" [(("a",BaseT (BytesT (Fixed 20))),T)]])])] ==>
   eval_stmt cx (Log (NONE,"E") [Name (BaseT (BytesT (Fixed 20))) "x"])
     (e02_name_state entry st) =
+  if cx.txn.is_static then
+    (INR (Error (RuntimeError "write in static context")), e02_name_state entry st)
+  else
   (INL (), (e02_name_state entry st) with logs := st.logs ++
     [<|logger := cx.txn.target;
        topics := [n2w (event_hash (get_tenv cx) "E" [BaseT (BytesT (Fixed 20))]);
                   1w << 248]; data := []|>])
 Proof
-  strip_tac >>
+  strip_tac >> Cases_on `cx.txn.is_static` >>
   mp_tac (e02_eval_stmt_log |> Q.INST
     [`es` |-> `[Name (BaseT (BytesT (Fixed 20))) "x"]`,
      `st` |-> `e02_name_state entry st`, `st'` |-> `e02_name_state entry st`]) >>

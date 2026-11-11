@@ -41,6 +41,21 @@ Proof
   entry_stage "function_selector" >> EVAL_TAC
 QED
 val () = computeLib.upd_compset (computeLib.add_thms [multi_address_selector])
+(* Close the cleanup-growth equation and lift it at separate timed boundaries. *)
+fun dflt_cleanup_close g = let
+  val equation = valOf (!base_cleanup_equation)
+  val checked = TRANS equation
+    (computeLib.WEAK_CBV_CONV base_cleanup_cs (rhs (concl equation)))
+  val result = rhs (concl checked)
+  val () = if optionSyntax.is_some result orelse optionSyntax.is_none result then ()
+    else raise Fail "cleanup growth remained symbolic"
+in base_cleanup_equation := SOME checked; ALL_TAC g end
+fun dflt_cleanup_lift g = let
+  val checked = valOf (!base_cleanup_equation)
+  val target = lhs (concl checked)
+  val lifted = CONV_TAC (LAND_CONV
+    (base_first_conv (aconv target) (K checked))) g
+in base_cleanup_equation := NONE; lifted end
 Definition dflt_multi_program_def:
   dflt_multi_program = ^(checked_entry_fixture "dflt_multi")
 End
@@ -57,7 +72,16 @@ Theorem dflt_multi_matches_python_oracle:
 Proof
   simp_tac pure_ss [compile_vyper_def, compile_vyper_with_def] >> entry_stage "resolve_o1_policy" >> simp_tac pure_ss [optionTheory.option_case_def] >>
   entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
-  entry_chunk 50 >> entry_chunk 50 >> entry_choose_grouped_path >> entry_guard "EVERY" >> entry_admin >> entry_stage "package_external_group" >> entry_stage "run_grouped_lowering" >>
+  entry_chunk 50 >> entry_chunk 50 >> entry_choose_grouped_path >> entry_guard "EVERY" >> entry_immutables_guard >> entry_admin >> entry_stage "package_external_group" >>
+  entry_eval_stage (computeLib.RESTR_EVAL_CONV [``lowering_context_ok``])
+    "run_grouped_lowering" >>
+  entry_eval_stage (computeLib.RESTR_EVAL_CONV
+    [``ptr_ok_check``, ``fn_defs_reach_uses_check``]) "lowering_context_ok" >>
+  entry_eval_stage (computeLib.RESTR_EVAL_CONV
+    [``fn_ptr_ok_check``, ``fn_reachable_blocks``]) "ptr_ok_check" >>
+  entry_stage "fn_reachable_blocks" >>
+  entry_compute_once "fn_ptr_ok_check" >>
+  entry_guard "fn_defs_reach_uses_check" >> entry_admin >>
   entry_open_pipeline >> entry_stage "pipeline_spec_wf" >> entry_stage "unit_wf" >> entry_stage "raw_static_inputs_wf" >> simp_tac pure_ss [NOT_CLAUSES,
   COND_CLAUSES, combinTheory.K_THM] >> entry_stage "init_ir_supply" >> simp[venomPassScheduleTheory.o1_pipeline_spec_def] >> entry_begin_mapped_stage >>
   entry_pass_begin >> entry_execute_pass >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
@@ -2007,8 +2031,8 @@ Proof
   entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk
   >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >>
   entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk
-  >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_finish >> entry_guard "cfg_is_normalized" >>
-  entry_guard "EVERY" >> entry_admin >> entry_open_codegen >> entry_guard "target_capabilities_wf" >> entry_guard "context_target_safe" >> entry_admin >>
+  >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_finish >> entry_guard "cfg_is_normalized" >> entry_codegen_ready_guards >>
+  entry_guard "EVERY" >> entry_immutables_guard >> entry_admin >> entry_open_codegen >> entry_guard "target_capabilities_wf" >> entry_guard "context_target_safe" >> entry_admin >>
   simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def, LET_THM,
     stackPlanGenTheory.generate_context_plan_with_def] >>
   entry_stage "fcg_analyze" >>
@@ -2023,7 +2047,7 @@ Proof
   entry_compute_once "cfg_analyze" >>
   base_cleanup_begin >> base_cleanup_part "cleanup_cyclic" >>
   base_cleanup_part "cleanup_reach" >> base_cleanup_part "OPT_MMAP" >>
-  base_cleanup_finish >>
+  dflt_cleanup_close >> dflt_cleanup_lift >>
   entry_stage "max_live_eom" >> entry_plan_admin >>
   simp_tac pure_ss [Once stackPlanGenTheory.generate_context_regions_def,
     stackPlanGenTheory.generate_fn_plan_def,

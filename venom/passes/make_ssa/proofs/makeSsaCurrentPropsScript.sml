@@ -2,7 +2,7 @@
 Theory makeSsaCurrentProps
 Ancestors
   makeSsaCurrentDefs makeSsaCurrentInduct makeSsaHelper
-  cfgTransformProps fcgDefs irSupply list alist
+  cfgTransformProps fcgDefs irSupply list alist cfgTransform venomInst
 
 val _ = Parse.hide "preds";
 
@@ -115,13 +115,6 @@ Theorem fresh_ir_var_extends:
 Proof
   strip_tac >> drule fresh_ir_var_contract >>
   simp[ssa_supply_extends_def] >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
-QED
-
-Theorem fresh_ir_var_inst_ok:
-  ir_supply_inst_ok s /\ fresh_ir_var s = (v,s') ==> ir_supply_inst_ok s'
-Proof
-  rpt strip_tac >> drule fresh_ir_var_contract >> strip_tac >>
-  gvs[ir_supply_inst_ok_def]
 QED
 
 Theorem fresh_inst_id_supply_ok:
@@ -1093,14 +1086,6 @@ Proof
       gvs[rename_current_operands_def])
 QED
 
-Theorem invoke_target_labels_cons:
-  MAP FST (get_invoke_targets (inst::insts)) =
-  MAP FST (get_invoke_targets [inst]) ++
-  MAP FST (get_invoke_targets insts)
-Proof
-  simp[get_invoke_targets_def] >> rpt CASE_TAC >> gvs[]
-QED
-
 Theorem rename_current_block_insts_invoke_targets:
   !insts s rs rs' s' insts'.
     rename_current_block_insts s rs insts = (rs',s',insts') ==>
@@ -1113,7 +1098,7 @@ Proof
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
   drule rename_current_inst_invoke_target >> strip_tac >>
   asm "ih" drule >> strip_tac >> gvs[] >>
-  once_rewrite_tac[invoke_target_labels_cons] >> simp[]
+  once_rewrite_tac[cfg_invoke_labels_cons] >> simp[]
 QED
 
 Definition block_invoke_labels_def:
@@ -1311,16 +1296,6 @@ Proof
   simp[]
 QED
 
-Theorem invoke_target_labels_append:
-  !xs ys.
-    MAP FST (get_invoke_targets (xs ++ ys)) =
-    MAP FST (get_invoke_targets xs) ++ MAP FST (get_invoke_targets ys)
-Proof
-  Induct >- simp[get_invoke_targets_def] >> rpt gen_tac >>
-  pure_once_rewrite_tac[APPEND] >>
-  once_rewrite_tac[invoke_target_labels_cons] >> simp[]
-QED
-
 Theorem fn_insts_blocks_invoke_labels:
   !bbs.
     MAP FST (get_invoke_targets (fn_insts_blocks bbs)) =
@@ -1328,7 +1303,7 @@ Theorem fn_insts_blocks_invoke_labels:
 Proof
   Induct >>
   simp[venomInstTheory.fn_insts_blocks_def, block_invoke_labels_def,
-       invoke_target_labels_append, get_invoke_targets_def]
+       cfg_invoke_labels_append, get_invoke_targets_def]
 QED
 
 Theorem fcg_scan_function_invoke_labels:
@@ -1358,31 +1333,10 @@ Proof
   simp[invoke_blocks_subset_def,listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem MEM_FLAT_MAP_replace_block_subset[local]:
-  !bbs lbl new_bb C x.
-    MEM x (FLAT (MAP C (replace_block lbl new_bb bbs))) ==>
-    MEM x (C new_bb) \/ MEM x (FLAT (MAP C bbs))
-Proof
-  Induct_on `bbs` >>
-  simp[cfgTransformTheory.replace_block_def,listTheory.MEM_APPEND] >>
-  rpt strip_tac >> Cases_on `h.bb_label = lbl` >>
-  gvs[cfgTransformTheory.replace_block_def,listTheory.MEM_APPEND] >>
-  metis_tac[]
-QED
-
 Theorem MEM_FLAT_MAP_component[local]:
   MEM e es /\ MEM x (C e) ==> MEM x (FLAT (MAP C es))
 Proof
   simp[listTheory.MEM_FLAT,listTheory.MEM_MAP] >> metis_tac[]
-QED
-
-Theorem lookup_block_MEM_subset[local]:
-  !bbs lbl bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
-Proof
-  Induct >> simp[venomInstTheory.lookup_block_def,listTheory.FIND_thm] >>
-  rpt strip_tac >> Cases_on `h.bb_label = lbl` >> gvs[] >>
-  disj2_tac >> first_x_assum irule >> qexists `lbl` >>
-  gvs[venomInstTheory.lookup_block_def]
 QED
 
 Theorem replace_block_invoke_labels_subset[local]:
@@ -1392,7 +1346,7 @@ Theorem replace_block_invoke_labels_subset[local]:
 Proof
   simp[invoke_blocks_subset_def,listTheory.EVERY_MEM] >> rpt strip_tac >>
   drule MEM_FLAT_MAP_replace_block_subset >> strip_tac
-  >- (`MEM bb bbs` by metis_tac[lookup_block_MEM_subset] >>
+  >- (`MEM bb bbs` by metis_tac[selected_block_mem] >>
       metis_tac[MEM_FLAT_MAP_component])
   >> simp[]
 QED
@@ -1467,7 +1421,7 @@ Theorem update_current_phi_insts_invoke_labels:
 Proof
   Induct >- simp[get_invoke_targets_def] >> rpt gen_tac >>
   pure_once_rewrite_tac[MAP] >>
-  once_rewrite_tac[invoke_target_labels_cons] >> simp[] >>
+  once_rewrite_tac[cfg_invoke_labels_cons] >> simp[] >>
   Cases_on `h.inst_opcode = PHI` >> gvs[get_invoke_targets_def]
 QED
 
@@ -2541,7 +2495,7 @@ Theorem ssa_blocks_no_raw_lookup[local]:
   EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode) bb.bb_instructions
 Proof
   simp[ssa_blocks_no_raw_def, listTheory.EVERY_MEM] >>
-  metis_tac[lookup_block_MEM_subset]
+  metis_tac[selected_block_mem]
 QED
 
 Theorem ssa_blocks_no_raw_replace[local]:

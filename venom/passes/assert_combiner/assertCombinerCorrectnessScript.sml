@@ -1,6 +1,6 @@
 Theory assertCombinerCorrectness
 Ancestors
-  assertCombinerProofs venomWf
+  assertCombinerProofs acWfPreserveProofs acSsaPreserveProofs venomWf
 
 (* The assert combiner transformation preserves semantic equivalence: running the
    transformed function yields an equivalent result to the original, modulo fresh
@@ -45,7 +45,9 @@ Theorem ac_transform_function_correct:
           MEM x inst.inst_outputs ==> ~IS_SOME (lookup_var x s0'))) /\
     s.vs_inst_idx = 0 ==>
     lift_result (state_equiv (ac_fresh_vars_fn fn))
-               (execution_equiv UNIV) (execution_equiv UNIV)
+               (execution_equiv UNIV)
+               (\s1 s2. ?gs. execution_equiv UNIV s1
+                 (s2 with vs_gas_readings := gs))
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx fn' s)
 Proof
@@ -55,15 +57,23 @@ QED
 (* ===== Obligations ===== *)
 
 (* The assert combiner transformation preserves SSA form. *)
+(* Needs wf_function (distinct inst ids key distinct fresh names) and the
+   freshness premise of ac_transform_function_correct: ssa_form alone is
+   false, since the fresh names ac_or_<id>/ac_iz_<id> may already be used. *)
 Theorem ac_preserves_ssa_form:
-  ∀fn. ssa_form fn ⇒ ssa_form (ac_transform_function fn)
+  ∀fn.
+    wf_function fn ∧ ssa_form fn ∧
+    (∀bb inst x.
+       MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions ∧
+       MEM x inst.inst_outputs ⇒ x ∉ ac_fresh_vars_fn fn) ⇒
+    ssa_form (ac_transform_function fn)
 Proof
-  cheat
+  ACCEPT_TAC ac_preserves_ssa_form_proof
 QED
 
 (* The assert combiner transformation preserves well-formedness. *)
 Theorem ac_preserves_wf_function:
   ∀fn. wf_function fn ⇒ wf_function (ac_transform_function fn)
 Proof
-  cheat
+  ACCEPT_TAC ac_preserves_wf_function_proof
 QED

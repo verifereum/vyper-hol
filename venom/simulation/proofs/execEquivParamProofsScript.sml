@@ -5,6 +5,8 @@
  *   step_inst_preserves_R_proof                          — master theorem
  *   exec_block_preserves_R_proof                          — mutual: exec_block + run_blocks
  *   state_equiv_execution_equiv_valid_state_rel_proof    — instantiation
+ *   exec_block_same_preserves_RQ                          — exec_block preserves R with auxiliary invariant Q
+ *   valid_state_rel_mixed                                 — state_equiv vars / execution_equiv vars' valid when vars ⊆ vars'
  *)
 
 Theory execEquivParamProofs
@@ -143,6 +145,7 @@ Proof
     irule vsr_step_inst_pure1 >> simp[] >> metis_tac[],
     irule vsr_step_inst_pure3 >> simp[] >> metis_tac[],
     irule vsr_step_inst_read0 >> simp[] >> metis_tac[],
+    irule vsr_step_inst_gas >> simp[] >> metis_tac[],
     irule vsr_step_inst_read1 >> simp[] >> metis_tac[],
     irule vsr_step_inst_extcodehash >> simp[] >> metis_tac[],
     irule vsr_step_inst_write2 >> simp[] >> metis_tac[],
@@ -195,7 +198,7 @@ QED
    Q tracks additional agreement (e.g., fresh variable agreement) that R_ok
    alone doesn't capture. Operand agreement uses R_ok AND Q; Q is preserved
    by non-terminator steps. *)
-Theorem exec_block_same_preserves_RQ_proof:
+Theorem exec_block_same_preserves_RQ:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (Q : venom_state -> venom_state -> bool)
@@ -523,7 +526,7 @@ Proof
 QED
 
 (* Generalized: R_ok vars can differ from R_term vars' when vars SUBSET vars' *)
-Theorem valid_state_rel_mixed_proof:
+Theorem valid_state_rel_mixed:
   !vars vars'. vars SUBSET vars' ==>
     valid_state_rel (state_equiv vars) (execution_equiv vars')
 Proof

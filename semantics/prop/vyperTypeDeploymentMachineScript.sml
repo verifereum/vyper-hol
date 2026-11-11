@@ -418,8 +418,7 @@ Theorem checked_constructor_prefix_body_components:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot ((mut = View \/ mut = Pure) \/ cx.txn.is_static); if (mut = View \/ mut = Pure) then return () else check_not_static cx od
    else return ()) (send_st with scopes := [scope]) = (INL (),body_st) /\
   eval_stmts cx body body_st = (res,body_st') ==>
   state_well_typed body_st' /\ accounts_well_typed body_st'.accounts
@@ -481,8 +480,11 @@ Theorem checked_constructor_prefix_run_preserves_machine_well_typed:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+         acquire_nonreentrant_lock cx.txn.target slot
+           ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+         if mut = View \/ mut = Pure then return () else check_not_static cx
+       od
    else return ()) (send_st with scopes := [scope]) = (INL (),body_st) /\
   eval_stmts cx body body_st = (res,body_st') /\
   (if nr /\ ~(mut = View \/ mut = Pure) then
@@ -528,10 +530,11 @@ Proof
   qmatch_asmsub_abbrev_tac `ignore_bind lock (eval_stmts _ body) entry_st = _` >>
   `!exc rt. lock entry_st = (INR exc,rt) ==> no_control_exc exc` by
     (unabbrev_all_tac >> rpt strip_tac >>
-     qpat_assum `(initial_evaluation_context _ _ _ _).txn.target = _`
-       (fn th => qpat_x_assum `(if nr then _ else _) _ = (INR _,_)`
-         (mp_tac o REWRITE_RULE [GSYM th])) >>
-     strip_tac >> drule call_lock_action_no_control_c53 >> simp[]) >>
+     Cases_on `nr` >> gvs[return_def, raise_def, no_control_exc_def] >>
+     Cases_on `(initial_evaluation_context sources layouts tx NONE).nonreentrant_slot` >>
+     gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), raise_def,
+         return_def, no_control_exc_def] >>
+     drule acquire_nonreentrant_lock_no_control >> simp[no_control_exc_def]) >>
   `?body_st res. lock entry_st = (INL (),body_st) /\
     eval_stmts (initial_evaluation_context sources layouts tx NONE with in_deploy := T)
       body body_st = (res,st_body)` by
@@ -553,14 +556,20 @@ Theorem constructor_lock_body_halt[local]:
     (if nr then
        case slot_opt of
          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock tgt slot is_view
+       | SOME slot => do
+           acquire_nonreentrant_lock tgt slot (is_view \/ stc);
+           if is_view then return () else check_not_static ccx
+         od
      else return ())
     (eval_stmts cx body) st = (INR HaltException,st') ==>
   ?body_st.
     (if nr then
        case slot_opt of
          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock tgt slot is_view
+       | SOME slot => do
+           acquire_nonreentrant_lock tgt slot (is_view \/ stc);
+           if is_view then return () else check_not_static ccx
+         od
      else return ()) st = (INL (),body_st) /\
     eval_stmts cx body body_st = (INR HaltException,st')
 Proof
@@ -571,7 +580,8 @@ Proof
   qpat_x_assum `lock st = _` mp_tac >> simp[Abbr `lock`] >>
   Cases_on `nr` >> simp[return_def] >>
   Cases_on `slot_opt` >> simp[raise_def] >>
-  rw[acquire_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+  rw[acquire_nonreentrant_lock_def, check_not_static_def, check_def,
+     assert_def, ignore_bind_def, bind_def, get_transient_storage_def,
      update_transient_def, return_def, raise_def] >> gvs[AllCaseEqs()]
 QED
 

@@ -113,7 +113,9 @@ Theorem checked_compile_saved_log_data:
     (TupleTV (select_log_args F flags ftvs)) (w2n root_addr) capacity ss /\
   log_source_regions cs lo [(w2n (memory_snapshot_addr packed_cut.cs_next_id ss),capacity)]
     cenv es.scopes ss /\
-  ss.vs_current_bb = cs.cs_current_bb /\ ss.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~ss.vs_halted ==>
+  ss.vs_current_bb = cs.cs_current_bb /\ ss.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~ss.vs_halted/\
+  (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
+  ~ss.vs_call_ctx.cc_static ==>
   ?out ev.
     encode_source_event (get_tenv cx) cx.sources cx.txn.target event_id values = SOME ev /\
     out.vs_logs = ss.vs_logs ++ [ev] /\

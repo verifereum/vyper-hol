@@ -876,7 +876,8 @@ Theorem m2v_step_nonpromoted:
      s1.vs_logs = s2.vs_logs) /\
     (!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2) /\
-    (~is_effect_free_op inst.inst_opcode ==> inst.inst_outputs = []) /\
+    (~is_effect_free_op inst.inst_opcode /\ inst.inst_opcode <> GAS ==>
+     inst.inst_outputs = []) /\
     (!v. MEM v inst.inst_outputs ==> v NOTIN m2v_fresh_vars fn) /\
     (!ao pvar sz. MEM (ao,pvar,sz) (m2v_promo_list fn) ==>
       ~MEM ao inst.inst_outputs) /\
@@ -919,7 +920,8 @@ Theorem m2v_inv_noix_step_nonpromoted:
      s1.vs_logs = s2.vs_logs) /\
     (!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2) /\
-    (~is_effect_free_op inst.inst_opcode ==> inst.inst_outputs = []) /\
+    (~is_effect_free_op inst.inst_opcode /\ inst.inst_opcode <> GAS ==>
+     inst.inst_outputs = []) /\
     (!v. MEM v inst.inst_outputs ==> v NOTIN m2v_fresh_vars fn) /\
     (!ao pvar sz. MEM (ao,pvar,sz) (m2v_promo_list fn) ==>
       ~MEM ao inst.inst_outputs) /\
@@ -952,6 +954,18 @@ Proof
    inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   imp_res_tac step_inst_base_oracle >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    (qpat_x_assum `m2v_inv_noix _ _ _` mp_tac >>
+     simp[m2v_inv_noix_def] >> strip_tac >>
+     qpat_x_assum `m2v_frame _ = m2v_frame _`
+       (mp_tac o Q.AP_TERM `venom_state_vs_gas_readings`) >>
+     simp[m2v_frame_def]) >>
+  `v1.vs_gas_readings = v2.vs_gas_readings /\
+   (inst.inst_opcode = GAS ==>
+    !x. MEM x inst.inst_outputs ==> lookup_var x v1 = lookup_var x v2)` by
+    (Cases_on `inst.inst_opcode = GAS`
+     >- (drule_all step_inst_base_gas_agree >> simp[]) >>
+     imp_res_tac step_inst_base_gas_readings >> simp[]) >>
   imp_res_tac step_inst_preserves_alloca_state >>
   imp_res_tac step_inst_preserves_all >>
   imp_res_tac no_mem_write_excludes_others >>
@@ -992,7 +1006,7 @@ Resume m2v_inv_noix_step_nonpromoted[g1]:
           >- (qpat_x_assum `step_inst_base inst s1 = OK v1` mp_tac >>
               simp[step_inst_base_phi_error]) >>
           metis_tac[])
-      >> gvs[])
+      >> Cases_on `inst.inst_opcode = GAS` >> gvs[])
   >> metis_tac[]
 QED
 
@@ -3005,7 +3019,8 @@ Proof
 QED
 
 val m2v_ext_call_tac =
-  strip_tac >> gvs[] >>
+  strip_tac >> drule m2v_inv_noix_call_ctx >> strip_tac >> gvs[] >>
+  gvs[eval_operands_def] >>
   FIRST [match_mp_tac exec_ext_call_m2v_inv,
          match_mp_tac exec_delegatecall_m2v_inv,
          match_mp_tac exec_create_m2v_inv] >>
@@ -3595,6 +3610,7 @@ Theorem m2v_step_nonpromoted_log:
     ?v2. step_inst fuel ctx inst s2 = OK v2 /\ m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >> gvs[step_inst_non_invoke] >>
+  `~s1.vs_call_ctx.cc_static` by metis_tac[log_ok_not_static] >>
   with_step_inst_base_opcode (fn eqs => gvs (AllCaseEqs() :: eqs)) >>
   (* Operand agreement for rest elements *)
   `!op. MEM op rest ==> eval_operand op s1 = eval_operand op s2`
@@ -4599,7 +4615,8 @@ Theorem step_inst_base_abort_input_equiv:
     (!x. MEM (Var x) inst.inst_operands ==>
          lookup_var x s1 = lookup_var x s2) /\
     s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_labels = s2.vs_labels ==>
+    s1.vs_labels = s2.vs_labels /\
+    s1.vs_call_ctx.cc_static = s2.vs_call_ctx.cc_static ==>
     ?s2'. step_inst_base inst s2 = Abort a s2'
 Proof
   ACCEPT_TAC passSharedFrameTheory.step_inst_base_abort_input_equiv
@@ -4617,7 +4634,7 @@ Proof
   gvs[is_terminator_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   with_step_inst_base_opcode PURE_ONCE_REWRITE_TAC >>
-  ASM_REWRITE_TAC[] >> rw[] >> gvs[AllCaseEqs()]
+  ASM_REWRITE_TAC[] >> rw[] >> gvs[AllCaseEqs(), exec_create_abort_iff]
 QED
 
 (* m2v_non32_ok preserved under halt/revert state transform *)
@@ -4934,7 +4951,8 @@ Resume m2v_nonterminal_abort_sim[body]:
   (* Get s2 abort *)
   SUBGOAL_THEN ``?s2'. step_inst_base inst s2 = Abort a s2'``
     strip_assume_tac
-  >- (mp_tac (Q.SPECL [`inst`,`s1`,`s2`,`a`,`s1'`]
+  >- (drule m2v_inv_noix_call_ctx >> strip_tac >>
+      mp_tac (Q.SPECL [`inst`,`s1`,`s2`,`a`,`s1'`]
         step_inst_base_abort_input_equiv) >>
       simp[] >> gvs[m2v_inv_noix_def])
   >>

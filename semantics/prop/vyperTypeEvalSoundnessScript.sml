@@ -21,7 +21,7 @@ Ancestors
   vyperTypeArgFits vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness vyperTypeAssignContext vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
   vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
-  vyperTypeCallGraph vyperTypeCallStackSoundness vyperPlaceResultTyping vyperPlaceTyping
+  vyperTypeCallGraph vyperTypeCallStackSoundness vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperPlaceTyping
   vyperPlaceWriteSoundness vyperTargetPlaceWrite vyperPlaceMutationSoundness
   vyperAugAssignWriteSoundness vyperSystemControl
 Libs
@@ -1175,7 +1175,11 @@ Theorem intcall_lock_state_preserves_frame[local]:
     (if nr then
        case cx.nonreentrant_slot of
          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               (is_view \/ cx.txn.is_static);
+             if is_view then return () else check_not_static cx
+           od
      else return ()) st = (INL (),lock_st) ==>
     lock_st.scopes = st.scopes /\
     lock_st.immutables = st.immutables /\
@@ -1183,7 +1187,9 @@ Theorem intcall_lock_state_preserves_frame[local]:
 Proof
   rpt strip_tac >>
   Cases_on `nr` >> gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  gvs[raise_def, ignore_bind_def, bind_def, return_def, COND_RATOR,
+      AllCaseEqs()] >>
   imp_res_tac acquire_nonreentrant_lock_scopes >>
   imp_res_tac acquire_nonreentrant_lock_immutables >>
   imp_res_tac acquire_nonreentrant_lock_accounts >>
@@ -1201,7 +1207,11 @@ Theorem intcall_pushed_body_preconditions_from_lock[local]:
     (if nr then
        case cx.nonreentrant_slot of
          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               (is_view \/ cx.txn.is_static);
+             if is_view then return () else check_not_static cx
+           od
      else return ()) dflt_st = (INL (),lock_st) ==>
     env_consistent env_body pushed_cx (lock_st with scopes := [call_env]) /\
     state_well_typed (lock_st with scopes := [call_env]) /\
@@ -1229,7 +1239,11 @@ Theorem intcall_pushed_body_preconditions_for_defaults_from_lock[local]:
     (if nr then
        case cx.nonreentrant_slot of
          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               (is_view \/ cx.txn.is_static);
+             if is_view then return () else check_not_static cx
+           od
      else return ()) dflt_st = (INL (),lock_st) ==>
     env_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
       (lock_st with scopes := [call_env]) /\
@@ -1265,7 +1279,11 @@ Theorem intcall_pushed_body_preconditions_live_from_defaults[local]:
     (if nr then
        case cx.nonreentrant_slot of
          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               (is_view \/ cx.txn.is_static);
+             if is_view then return () else check_not_static cx
+           od
      else return ()) dflt_st = (INL (),lock_st) ==>
     env_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
       (lock_st with scopes := [call_env]) /\
@@ -1304,7 +1322,11 @@ Theorem intcall_live_pushed_body_preconditions:
     (if nr then
        case cx.nonreentrant_slot of
          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               (is_view \/ cx.txn.is_static);
+             if is_view then return () else check_not_static cx
+           od
      else return ()) dflt_st = (INL (),lock_st) ==>
     env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
       (lock_st with scopes := [call_env]) /\
@@ -3239,7 +3261,8 @@ Resume eval_scc_type_sound_results_mutual[Log]:
   >- (
     strip_tac >> gvs[state_well_typed_def, accounts_well_typed_def] >>
     Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id x` >>
-    gvs[lift_option_def, return_def, raise_def] >>
+    gvs[lift_option_def, return_def, raise_def, ignore_bind_def, bind_def,
+        check_def, assert_def, push_log_def, AllCaseEqs()] >>
     drule_all env_consistent_logs_append >>
     simp[return_exception_typed_def]) >>
   strip_tac >> gvs[] >>
@@ -3985,7 +4008,7 @@ Resume eval_scc_type_sound_results_mutual[For_cons]:
       qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)` >>
       qexists_tac `body'` >> qexists_tac `st` >> simp[Abbr`stp`]) >>
     `accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts` by
-      simp[evaluation_state_component_equality] >>
+      (simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
     `env_consistent env cx (st_body with scopes := TL st_body.scopes)` by (
       `env_consistent env_after cx st_body` by (
         qpat_x_assum `case (INL x : unit + vyperState$exception) of INL u => _ | INR exn => _` mp_tac >>
@@ -5311,29 +5334,32 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
         strip_tac >> gvs[no_type_error_result_def, expr_type_def,
                          eval_result_typed_def, value_result_typed_Value,
                          evaluate_type_def, value_has_type_def]) >>
-    simp[bind_def, ignore_bind_def, get_accounts_def, return_def] >>
-    Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
-    rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = builtin_res` >>
-    Cases_on `builtin_res` >>
-    FIRST [
-      rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = INL builtin_v` >>
-      strip_tac >>
-      gvs[nested_return_value_case, no_type_error_result_def] >>
-      gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-          value_result_typed_Value] >>
-      mp_tac (Q.INST [`blt` |-> `bt`, `ts` |-> `MAP expr_type es`,
-                       `acc` |-> `(args_st:evaluation_state).accounts`,
-                       `tv` |-> `ret_tv`, `v` |-> `builtin_v`,
-                       `cx` |-> `cx`, `tvs` |-> `tvs`, `vs` |-> `vs`,
-                       `ty` |-> `ty`]
-                well_typed_builtin_app_success_type) >>
-      simp[],
-      strip_tac >>
-      gvs[nested_raise_error_case, no_type_error_result_def] >>
-      strip_tac >> spose_not_then assume_tac >> gvs[] >>
-      `!item. bt = Env item ==> item <> MsgGas` by (rpt strip_tac >> gvs[]) >>
-      drule_all well_typed_builtin_app_no_type_error >>
-      disch_then (qspec_then `msg` mp_tac) >> gvs[]]) >>
+    qpat_assum `~(bt = Bop In \/ bt = Bop NotIn)`
+      (fn th => simp_tac bool_ss [th]) >>
+    Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs`
+    >- (rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = INL builtin_v` >>
+        `value_has_type ret_tv builtin_v` by
+          (drule_all well_typed_builtin_app_success_type >> simp[]) >>
+        asm_rewrite_tac[] >> simp_tac(srw_ss())[return_def] >>
+        Cases_on `precompile_call_success bt args_st` >>
+        rename1 `precompile_call_success bt args_st = (pc_res,pc_st)` >>
+        drule precompile_call_success_state >> strip_tac >>
+        Cases_on `pc_res`
+        >- (asm_simp_tac (srw_ss()) [bind_def, get_accounts_def, return_def] >>
+            strip_tac >>
+            gvs[no_type_error_result_def, expr_result_typed_def,
+                expr_runtime_typed_def, expr_type_def,
+                value_result_typed_Value]) >>
+        drule precompile_call_success_exception >> strip_tac >>
+        asm_simp_tac (srw_ss()) [bind_def, get_accounts_def, return_def] >>
+        strip_tac >> gvs[no_type_error_result_def]) >>
+    asm_simp_tac (srw_ss()) [bind_def, get_accounts_def, return_def, raise_def] >>
+    strip_tac >>
+    gvs[no_type_error_result_def] >>
+    strip_tac >> spose_not_then assume_tac >> gvs[] >>
+    `!item. bt = Env item ==> item <> MsgGas` by (rpt strip_tac >> gvs[]) >>
+    drule_all well_typed_builtin_app_no_type_error >>
+    disch_then (qspec_then `msg` mp_tac) >> gvs[]) >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
   simp[bind_def] >> strip_tac >>
   gvs[no_type_error_result_def]
@@ -6435,7 +6461,11 @@ Theorem intcall_default_success_post_push_no_type_error[local]:
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               ((fm = View \/ fm = Pure) \/ cx.txn.is_static);
+             if (fm = View \/ fm = Pure) then return () else check_not_static cx
+           od
      else return ()) dflt_st = (INL (),lock_st) /\
     (do
        rv <- finally_unless_halt
@@ -6533,7 +6563,11 @@ Theorem intcall_default_success_post_push_sound[local]:
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               ((fm = View \/ fm = Pure) \/ cx.txn.is_static);
+             if (fm = View \/ fm = Pure) then return () else check_not_static cx
+           od
      else return ()) dflt_st = (INL (),lock_st) /\
     (do
        rv <- finally_unless_halt
@@ -6759,7 +6793,11 @@ Theorem intcall_lock_no_type_error_result[local]:
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               (is_view \/ cx.txn.is_static);
+             if is_view then return () else check_not_static cx
+           od
      else return ()) st = (res,st') ==>
     no_type_error_result res
 Proof
@@ -6771,7 +6809,7 @@ Proof
       return_def, raise_def] >>
   Cases_on `lookup_storage (n2w x) (lookup_transient_storage cx.txn.target st.tStorage) = 1w` >>
   gvs[raise_def, return_def, update_transient_def, no_type_error_result_def] >>
-  Cases_on `is_view` >>
+  Cases_on `is_view` >> Cases_on `cx.txn.is_static` >>
   gvs[raise_def, return_def, update_transient_def, no_type_error_result_def]
 QED
 
@@ -6783,7 +6821,11 @@ Theorem intcall_lock_attempt_sound_frame[local]:
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               (is_view \/ cx.txn.is_static);
+             if is_view then return () else check_not_static cx
+           od
      else return ()) dflt_st = (lock_res,lock_st) ==>
     state_well_typed lock_st /\ accounts_well_typed lock_st.accounts /\
     no_type_error_result lock_res /\
@@ -6805,7 +6847,7 @@ Proof
       no_type_error_result_def] >>
   Cases_on `lookup_storage (n2w x) (lookup_transient_storage cx.txn.target dflt_st.tStorage) = 1w` >>
   gvs[raise_def, return_def, update_transient_def, state_well_typed_def] >>
-  Cases_on `is_view` >>
+  Cases_on `is_view` >> Cases_on `cx.txn.is_static` >>
   gvs[raise_def, return_def, update_transient_def, state_well_typed_def]
 QED
 
@@ -6867,7 +6909,11 @@ Theorem intcall_successful_defaults_lock_success_sound_from_body_ih[local]:
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               ((fm = View \/ fm = Pure) \/ cx.txn.is_static);
+             if (fm = View \/ fm = Pure) then return () else check_not_static cx
+           od
      else return ()) dflt_st = (INL (),lock_st) /\
     (do rv <- finally_unless_halt
           (finally (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn_name)) body;
@@ -6971,7 +7017,11 @@ Theorem intcall_post_read_continuation_sound[local]:
   (nr ==> cx.nonreentrant_slot <> NONE) /\
   (if nr then case cx.nonreentrant_slot of
      NONE => raise (Error (TypeError "nonreentrant slot missing"))
-   | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+   | SOME slot => do
+         acquire_nonreentrant_lock cx.txn.target slot
+           ((fm = View \/ fm = Pure) \/ cx.txn.is_static);
+         if (fm = View \/ fm = Pure) then return () else check_not_static cx
+       od
    else return ()) dflt_st = (lock_res,lock_st) /\
   (case lock_res of
    | INL _ =>
@@ -7371,7 +7421,9 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawCallTarget]:
     (Cases_on `args_res`
     >- (gvs[no_type_error_result_def] >>
       rename1 `exprs_runtime_typed env es vs` >>
-      mp_tac raw_call_args_runtime_typed_dest >>
+      rename1 `EL 1 (MAP expr_type es) = BaseT (BytesT (Dynamic data_bound))` >>
+      mp_tac (Q.INST [`bd` |-> `Dynamic data_bound`]
+        raw_call_args_runtime_typed_dest) >>
       impl_tac >- simp[] >>
       strip_tac >> gvs[] >>
       drule_then (qspec_then `2` assume_tac) exprs_runtime_typed_DROP >>
@@ -7469,6 +7521,11 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawLog]:
       strip_tac >>
       qpat_x_assum `LENGTH (case topics of _ => _) <= 4` $
         mk_asm "topics_bound" >>
+      Cases_on `cx.txn.is_static`
+      >- (asm "topics_bound" (fn th =>
+            fs[th, type_check_def, bind_def, ignore_bind_def, assert_def,
+               return_def]) >>
+          gvs[no_type_error_result_def]) >>
       asm "topics_bound" (fn th =>
         fs[th, type_check_def, bind_def, ignore_bind_def, assert_def,
            return_def]) >>
@@ -7540,9 +7597,17 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_SelfDestructTarget]:
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
       strip_tac >>
-      qpat_assum `_ = (res,st')`
-        (assume_tac o SRULE [bind_def, ignore_bind_def, type_check_def, assert_def,
-          return_def, raise_def, lift_option_type_def, get_accounts_def]) >>
+      Cases_on `cx.txn.is_static`
+      >- (drule_all selfdestruct_args_runtime_typed_dest >> strip_tac >>
+          gvs[type_check_def, assert_def, lift_option_type_def, return_def,
+              bind_def, ignore_bind_def, raise_def,
+              no_type_error_result_def]) >>
+      (* Not static: check_not_static passes, leaving the shared tail. *)
+      qpat_assum `~cx.txn.is_static` (fn not_static =>
+        qpat_assum `_ = (res,st')`
+          (assume_tac o SRULE [not_static, bind_def, ignore_bind_def,
+            type_check_def, assert_def, return_def, raise_def,
+            lift_option_type_def, get_accounts_def])) >>
       qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `res`, `st'`]
         mp_tac (SRULE [bind_def, ignore_bind_def, type_check_def, assert_def,
           return_def, raise_def, lift_option_type_def, get_accounts_def]
@@ -7716,6 +7781,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def, get_accounts_def, update_accounts_def] >>
+    simp_tac (srw_ss()) [] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
@@ -8431,7 +8497,11 @@ Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
   asm_rewrite_tac[] >>
   qpat_x_assum `get_accounts _ = _` mp_tac >>
   simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
-  rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC
+  rpt BasicProvers.VAR_EQ_TAC >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  imp_res_tac precompile_call_success_state >>
+  gvs[typed_scope_transition_def] >>
+  qexists_tac `events` >> simp[]
 QED
 Resume eval_scc_type_sound_results_mutual[Trace_Expr_Attribute]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Attribute"
@@ -8502,7 +8572,10 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
   gvs[push_function_def, return_def, AllCaseEqs()] >>
   Cases_on `FST (SND tup)` >> gvs[return_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
-  drule acquire_nonreentrant_lock_scopes >> simp[]
+  gvs[bind_def, AllCaseEqs()] >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >>
+  Cases_on `FST tup = View \/ FST tup = Pure` >>
+  gvs[return_def, AllCaseEqs()]
 QED
 
 (* External calls evaluate every operand before the shared call helper. *)
@@ -9407,7 +9480,7 @@ Theorem eval_ext_call_success_value[local]:
   ?v. pv = Value v
 Proof
   PairCases_on `sigt` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_apply, ignore_bind_apply,
+  simp[eval_ext_call_def, frame_call_value_def, COND_RATOR, bind_apply, ignore_bind_apply,
        lift_option_type_def, type_check_def, check_def, assert_def,
        return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
@@ -9464,7 +9537,7 @@ Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
   Cases_on `dest_AddressV h` >> Cases_on `dest_NumV h'` >>
-  simp[eval_send_def, bind_apply, ignore_bind_apply, type_check_def,
+  simp[eval_send_def, frame_call_value_def, COND_RATOR, bind_apply, ignore_bind_apply, type_check_def,
        check_def, assert_def, return_def, raise_def, lift_option_type_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
@@ -9473,6 +9546,13 @@ Proof
       get_accounts_def, get_transient_storage_def, lift_option_def,
       bind_def, ignore_bind_def, check_def, assert_def] >>
   rpt strip_tac >> gvs[] >>
+  (* static frame: the outcomes case is on the post-check state *)
+  TRY (qpat_x_assum `option_CASE _ _ _ _ = _` mp_tac >> CASE_TAC >>
+       simp[bind_apply, ignore_bind_apply, return_def, raise_def,
+            AllCaseEqs(), get_accounts_def, get_transient_storage_def,
+            lift_option_def, bind_def, ignore_bind_def, check_def,
+            assert_def] >>
+       rpt strip_tac >> gvs[]) >>
   pairarg_tac >> gvs[bind_def, ignore_bind_def, check_def, assert_def,
                        return_def, raise_def, AllCaseEqs()]
 QED
@@ -9492,14 +9572,10 @@ Theorem eval_raw_call_success_value[local]:
   eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
-       check_def, assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, update_accounts_def,
-       update_transient_def, append_logs_def, update_pending_deletions_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()]
+  (* Only the final return builds pv: keep the call steps folded. *)
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, return_def, raise_def,
+       COND_RATOR, AllCaseEqs(), UNCURRY, LET_THM] >>
+  rw[] >> gvs[]
 QED
 
 Resume eval_scc_type_sound_results_mutual[Live_RawCall_Returned_Result]:

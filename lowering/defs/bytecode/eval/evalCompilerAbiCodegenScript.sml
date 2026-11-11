@@ -1,5 +1,6 @@
 (* Checker acceptance and supported_program for the required issue #551
-   fixtures, and exact pinned-Python parity for those whose bytes still match. *)
+   fixtures, exact pinned-Python parity for those whose bytes still match, and
+   explicit bounded-memory-decoder divergences. *)
 Theory evalCompilerAbiCodegen
 Ancestors
   compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
@@ -34,13 +35,29 @@ fun check_parity name tops = let
   val _ = save_thm (name ^ "_matches_python_oracle", parity)
 in () end
 
+(* The bounded memory decoder (vyperlang/vyper#5333) deliberately differs from
+   the pinned compiler: these fixtures are checked to be supported, to compile,
+   and to differ from the pinned bytes. *)
+fun check_divergence name = let
+  val root = "../abi-codegen/oracle"
+  val tops = memoryStoreWitnessLib.program root name
+  val () = print ("ABI_CODEGEN_CHECKER_ACCEPT " ^ name ^ " deployment runtime\n")
+  val term = memoryStoreWitnessLib.compile_term tops
+  val evaluation = EVAL term
+in
+  memoryStoreWitnessLib.check_decoder_divergence root name
+    {term = term, evaluation = evaluation}
+end
+
 (* These fixtures' Python bytecode changed at the v0.5.0b1 pin
    (vyperlang/vyper#5127); their exact-bytes comparison returns with the ports
    listed in ../pending-5127-port.md. *)
 val () = List.app (ignore o check_supported)
   ["arr_string_arg", "st_string_field_arg", "arr_dyn_of_fixed",
    "arr_struct_noclamp", "arr_string_ret", "enc_multi", "enc_ensT_bytes",
-   "dec_bytes_unwrapT", "dec_uint_unwrapT", "flag256_array_arg"]
+   "flag256_array_arg"]
+
+val () = List.app check_divergence ["dec_bytes_unwrapT", "dec_uint_unwrapT"]
 
 val () = List.app (fn name => check_parity name (check_supported name))
   ["flag256_arg"]

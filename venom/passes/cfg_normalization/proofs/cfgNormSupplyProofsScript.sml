@@ -899,8 +899,13 @@ Proof
      (subst_label_terminator target_bb.bb_label split_bb.bb_label pred_bb)` by
     (irule cfg_supply_covers_block_subst_label_terminator >>
      gvs[cfg_supply_covers_block_insts]) >>
+  qabbrev_tac `tb = if pred_bb.bb_label = target_bb.bb_label then
+                      subst_label_terminator target_bb.bb_label
+                        split_bb.bb_label pred_bb
+                    else target_bb` >>
+  `cfg_supply_covers_block s' tb` by rw[Abbr`tb`] >>
   `cfg_supply_covers_block s'
-     (update_phis_for_split pred_bb.bb_label split_bb.bb_label repls target_bb)` by
+     (update_phis_for_split pred_bb.bb_label split_bb.bb_label repls tb)` by
     (irule cfg_supply_covers_block_update_phis_for_split >>
      gvs[cfg_supply_covers_block_insts]) >>
   gvs[cfg_supply_covers_fn_blocks] >>
@@ -1191,15 +1196,18 @@ Proof
   qabbrev_tac `pred' = subst_label_terminator
     target_bb.bb_label split_bb.bb_label pred_bb` >>
   qabbrev_tac `target' = update_phis_for_split
-    pred_bb.bb_label split_bb.bb_label repls target_bb` >>
+    pred_bb.bb_label split_bb.bb_label repls
+    (if pred_bb.bb_label = target_bb.bb_label then pred' else target_bb)` >>
   `block_ir_inst_ids pred' = block_ir_inst_ids pred_bb` by
     simp[Abbr `pred'`] >>
-  `block_ir_inst_ids target' = block_ir_inst_ids target_bb` by
-    simp[Abbr `target'`] >>
   `pred'.bb_label = pred_bb.bb_label` by
     simp[Abbr `pred'`,subst_label_terminator_def] >>
+  `block_ir_inst_ids target' = block_ir_inst_ids target_bb` by
+    (simp[Abbr `target'`] >> rw[] >>
+     metis_tac[all_distinct_map_mem_inj_cfg,
+               venomInstTheory.fn_labels_def]) >>
   `target'.bb_label = target_bb.bb_label` by
-    simp[Abbr `target'`,update_phis_for_split_def] >>
+    (simp[Abbr `target'`,update_phis_for_split_def] >> rw[]) >>
   `FLAT (MAP block_ir_inst_ids
       (replace_block pred_bb.bb_label pred' fn.fn_blocks)) =
    FLAT (MAP block_ir_inst_ids fn.fn_blocks)` by
@@ -1245,6 +1253,7 @@ Proof
   rpt strip_tac >>
   Cases_on `build_split_block_supply s pred_bb target_bb` >>
   PairCases_on `r` >>
+  Cases_on `pred_bb.bb_label = target_bb.bb_label` >>
   gvs[insert_split_supply_def,venomInstTheory.fn_labels_def,
       subst_label_terminator_def,update_phis_for_split_def]
 QED
@@ -1505,15 +1514,18 @@ Proof
   qabbrev_tac `pred1 = subst_label_terminator
     target_bb.bb_label split_bb.bb_label pred_bb` >>
   qabbrev_tac `target1 = update_phis_for_split
-    pred_bb.bb_label split_bb.bb_label repls target_bb` >>
+    pred_bb.bb_label split_bb.bb_label repls
+    (if pred_bb.bb_label = target_bb.bb_label then pred1 else target_bb)` >>
   `cfg_block_decl_vars pred1 = cfg_block_decl_vars pred_bb` by
     simp[Abbr `pred1`] >>
-  `cfg_block_decl_vars target1 = cfg_block_decl_vars target_bb` by
-    simp[Abbr `target1`] >>
   `pred1.bb_label = pred_bb.bb_label` by
     simp[Abbr `pred1`,subst_label_terminator_def] >>
+  `cfg_block_decl_vars target1 = cfg_block_decl_vars target_bb` by
+    (simp[Abbr `target1`] >> rw[] >>
+     metis_tac[all_distinct_map_mem_inj_cfg,
+               venomInstTheory.fn_labels_def]) >>
   `target1.bb_label = target_bb.bb_label` by
-    simp[Abbr `target1`,update_phis_for_split_def] >>
+    (simp[Abbr `target1`,update_phis_for_split_def] >> rw[]) >>
   `FLAT (MAP cfg_block_decl_vars
       (replace_block pred_bb.bb_label pred1 fn.fn_blocks)) =
    FLAT (MAP cfg_block_decl_vars fn.fn_blocks)` by
@@ -2388,24 +2400,6 @@ Definition cfg_block_invoke_labels_def:
     MAP FST (get_invoke_targets bb.bb_instructions)
 End
 
-Theorem cfg_invoke_labels_cons:
-  MAP FST (get_invoke_targets (inst::insts)) =
-  MAP FST (get_invoke_targets [inst]) ++
-  MAP FST (get_invoke_targets insts)
-Proof
-  simp[get_invoke_targets_def] >> rpt CASE_TAC >> gvs[]
-QED
-
-Theorem cfg_invoke_labels_append:
-  !xs ys.
-    MAP FST (get_invoke_targets (xs ++ ys)) =
-    MAP FST (get_invoke_targets xs) ++ MAP FST (get_invoke_targets ys)
-Proof
-  Induct >- simp[get_invoke_targets_def] >> rpt gen_tac >>
-  pure_once_rewrite_tac[listTheory.APPEND] >>
-  once_rewrite_tac[cfg_invoke_labels_cons] >> simp[]
-QED
-
 Theorem cfg_fn_insts_blocks_invoke_labels:
   !bbs.
     MAP FST (get_invoke_targets (fn_insts_blocks bbs)) =
@@ -2521,19 +2515,6 @@ QED
 
 
 
-Theorem MEM_FLAT_MAP_replace_block_subset:
-  !bbs lbl new_bb C x.
-    MEM x (FLAT (MAP C (replace_block lbl new_bb bbs))) ==>
-    MEM x (C new_bb) \/ MEM x (FLAT (MAP C bbs))
-Proof
-  Induct_on `bbs`
-  >> simp[replace_block_def, listTheory.MEM_APPEND]
-  >> rpt strip_tac
-  >> Cases_on `h.bb_label = lbl`
-  >> gvs[replace_block_def, listTheory.MEM_APPEND]
-  >> metis_tac[]
-QED
-
 Theorem insert_split_supply_invoke_labels_subset:
   MEM pred_bb fn.fn_blocks /\ MEM target_bb fn.fn_blocks /\
   insert_split_supply s fn pred_bb target_bb = (fn',s') ==>
@@ -2549,11 +2530,14 @@ Proof
   qabbrev_tac `pred' = subst_label_terminator
     target_bb.bb_label split_bb.bb_label pred_bb` >>
   qabbrev_tac `target' = update_phis_for_split
-    pred_bb.bb_label split_bb.bb_label repls target_bb` >>
+    pred_bb.bb_label split_bb.bb_label repls
+    (if pred_bb.bb_label = target_bb.bb_label then pred' else target_bb)` >>
   `cfg_block_invoke_labels pred' = cfg_block_invoke_labels pred_bb` by
     simp[Abbr `pred'`,subst_label_terminator_invoke_labels] >>
-  `cfg_block_invoke_labels target' = cfg_block_invoke_labels target_bb` by
-    simp[Abbr `target'`,update_phis_for_split_invoke_labels] >>
+  `cfg_block_invoke_labels target' =
+   cfg_block_invoke_labels
+     (if pred_bb.bb_label = target_bb.bb_label then pred_bb else target_bb)` by
+    (simp[Abbr `target'`,update_phis_for_split_invoke_labels] >> rw[]) >>
   `cfg_block_invoke_labels split_bb = []` by
     metis_tac[build_split_block_supply_no_invoke] >>
   simp[cfg_fcg_scan_function_invoke_labels,listTheory.EVERY_MEM,
@@ -2575,15 +2559,18 @@ Proof
   qabbrev_tac `pred' = subst_label_terminator
     target_bb.bb_label split_bb.bb_label pred_bb` >>
   qabbrev_tac `target' = update_phis_for_split
-    pred_bb.bb_label split_bb.bb_label repls target_bb` >>
+    pred_bb.bb_label split_bb.bb_label repls
+    (if pred_bb.bb_label = target_bb.bb_label then pred' else target_bb)` >>
   `cfg_block_invoke_labels pred' = cfg_block_invoke_labels pred_bb` by
     simp[Abbr `pred'`,subst_label_terminator_invoke_labels] >>
-  `cfg_block_invoke_labels target' = cfg_block_invoke_labels target_bb` by
-    simp[Abbr `target'`,update_phis_for_split_invoke_labels] >>
+  `cfg_block_invoke_labels target' =
+   cfg_block_invoke_labels
+     (if pred_bb.bb_label = target_bb.bb_label then pred_bb else target_bb)` by
+    (simp[Abbr `target'`,update_phis_for_split_invoke_labels] >> rw[]) >>
   `pred'.bb_label = pred_bb.bb_label` by
     simp[Abbr `pred'`,subst_label_terminator_def] >>
   `target'.bb_label = target_bb.bb_label` by
-    simp[Abbr `target'`,update_phis_for_split_def] >>
+    (simp[Abbr `target'`,update_phis_for_split_def] >> rw[]) >>
   `cfg_block_invoke_labels split_bb = []` by
     metis_tac[build_split_block_supply_no_invoke] >>
   `FLAT (MAP cfg_block_invoke_labels
@@ -3032,13 +3019,19 @@ Proof
      (replace_block pred_bb.bb_label
        (subst_label_terminator target_bb.bb_label split_bb.bb_label pred_bb)
        fn.fn_blocks)` by metis_tac[replace_block_no_raw] >>
+  qabbrev_tac `tb = if pred_bb.bb_label = target_bb.bb_label then
+                      subst_label_terminator target_bb.bb_label
+                        split_bb.bb_label pred_bb
+                    else target_bb` >>
+  `EVERY (\i. ~is_raw_fmp_opcode i.inst_opcode) tb.bb_instructions` by
+    rw[Abbr `tb`] >>
   `EVERY (\i. ~is_raw_fmp_opcode i.inst_opcode)
          (update_phis_for_split pred_bb.bb_label split_bb.bb_label repls
-            target_bb).bb_instructions` by
+            tb).bb_instructions` by
     metis_tac[update_phis_for_split_no_raw] >>
   `cfg_blocks_no_raw
      (replace_block target_bb.bb_label
-       (update_phis_for_split pred_bb.bb_label split_bb.bb_label repls target_bb)
+       (update_phis_for_split pred_bb.bb_label split_bb.bb_label repls tb)
        (replace_block pred_bb.bb_label
          (subst_label_terminator target_bb.bb_label split_bb.bb_label pred_bb)
          fn.fn_blocks))` by metis_tac[replace_block_no_raw] >>

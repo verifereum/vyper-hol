@@ -312,8 +312,7 @@ End
    (concretize_mem_loc sets it). step_mem_safe is a precondition
    on the input program / initial state.
 
-   Running oracle outcomes and recorded requests agree.  Assembly GAS
-   readings have no Venom counterpart and are deliberately unconstrained.
+   Running oracle outcomes, GAS readings and recorded requests agree.
    NOTE: MEMTOP correspondence is excluded — asm memory may be longer
    than Venom memory due to spill slots. See memory_rel comment. *)
 Definition venom_asm_rel_def:
@@ -327,6 +326,7 @@ Definition venom_asm_rel_def:
     as.as_returndata = vs.vs_returndata ∧
     as.as_logs = vs.vs_logs ∧
     as.as_outcomes = vs.vs_outcomes ∧
+    as.as_gas_readings = vs.vs_gas_readings ∧
     as.as_requests = vs.vs_requests ∧
     as.as_pending_deletions = vs.vs_pending_deletions ∧
     (* Shared environment *)
@@ -339,8 +339,8 @@ End
 
 (* Terminal state: observable effects match at halt/revert.
    No plan_state, no stack layout, no memory details.
-   Recorded requests are observable; leftover outcomes and assembly GAS
-   readings are not constrained at this terminal boundary. *)
+   Recorded requests are observable; leftover outcomes and GAS readings
+   are not constrained at this terminal boundary. *)
 Definition venom_asm_terminal_rel_def:
   venom_asm_terminal_rel vs as ⇔
     as.as_accounts = vs.vs_accounts ∧

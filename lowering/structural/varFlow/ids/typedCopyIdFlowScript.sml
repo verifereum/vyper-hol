@@ -12,12 +12,18 @@ val typed_id_rules =
    compiler_id_flow_copy_memory, compiler_id_flow_copy_memory_dynamic,
    compiler_id_flow_with_byte_offset, compiler_id_flow_store_bytestring];
 
-fun typed_id_step goal = FIRST
-  [CHANGED_TAC (asm_simp_tac (srw_ss()) typed_id_rules), gen_tac,
-   irule compiler_id_flow_bind >> conj_tac,
-   irule compiler_id_flow_ignore_bind >> conj_tac,
-   IF_CASES_TAC, BasicProvers.TOP_CASE_TAC,
-   first_assum (fn ih => irule (SRULE [ADD_COMM] ih) >> fs[ADD_COMM] >> NO_TAC)] goal;
+(* A goal on a type case is split before simplification: simplifying the
+   whole case under the induction hypotheses is slow. *)
+fun typed_id_step (goal as (_, concl)) = let
+  val split_first = can (TypeBase.dest_case o rand) concl
+in FIRST
+  ((if split_first then [BasicProvers.TOP_CASE_TAC] else []) @
+   [CHANGED_TAC (asm_simp_tac (srw_ss()) typed_id_rules), gen_tac,
+    irule compiler_id_flow_bind >> conj_tac,
+    irule compiler_id_flow_ignore_bind >> conj_tac,
+    IF_CASES_TAC, BasicProvers.TOP_CASE_TAC,
+    first_assum (fn ih => irule (SRULE [ADD_COMM] ih) >> fs[ADD_COMM] >> NO_TAC)]) goal
+end;
 
 Theorem compiler_id_flow_typed_copy:
   (!cenv dst dst_ty src src_ty.
@@ -33,7 +39,10 @@ Theorem compiler_id_flow_typed_copy:
 Proof
   ho_match_mp_tac compile_store_memory_typed_ind >> rpt conj_tac >> rpt strip_tac >>
   simp_tac bool_ss [Once compile_store_memory_typed_def, LET_THM] >>
-  NTAC 4 (TRY typed_id_step) >> NTAC 4 (TRY typed_id_step) >> rpt typed_id_step
+  (* FIRST [...] makes holbuild time each block once per goal. *)
+  FIRST [NTAC 2 (TRY typed_id_step)] >> FIRST [NTAC 2 (TRY typed_id_step)] >>
+  FIRST [NTAC 2 (TRY typed_id_step)] >> FIRST [NTAC 2 (TRY typed_id_step)] >>
+  FIRST [rpt typed_id_step]
 QED
 
 Theorem compile_store_memory_typed_next_id:

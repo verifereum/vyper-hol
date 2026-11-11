@@ -26,30 +26,34 @@ Theorem abi_builtin_wrapped_array_ready:
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) initial prepared /\
   eval_operand (FST ops) prepared = SOME (n2w d) /\
   eval_operand (FST (SND ops)) prepared = SOME (n2w (p + 32)) /\
-  eval_operand (SND (SND ops)) prepared = SOME (n2w (p + 32 + LENGTH bs)) ==>
-  first <= ready.cs_next_id /\ abi_decoder_budget first last b cap prepared /\
+  eval_operand (SND (SND ops)) prepared = SOME (n2w (LENGTH bs)) ==>
+  first <= abi_decoder_entry_floor ready /\ abi_decoder_budget first last b cap prepared /\
   abi_valid_singleton_prefix_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) bs
     (dec (Array NONE (vyper_to_abi_type env ty)) (DROP (abi_head_word bs) bs)) v
-    ready (FST (SND ops)) (FST ops) MLOAD (SND (SND ops)) (p + 32) d b cap prepared
+    ready (Lit 0w) (FST ops) MLOAD (FST (SND ops)) (SND (SND ops)) (p + 32) 0 d b cap prepared
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_decode_setup_live >> strip_tac >>
   drule abi_builtin_decode_setup_shape >> strip_tac >>
-  `first <= ready.cs_next_id` by fs[abi_builtin_decode_resources_def] >>
+  `first <= abi_decoder_entry_floor ready` by fs[abi_builtin_decode_resources_def, abi_decoder_entry_floor_def] >>
   `abi_decoder_budget first last b cap prepared` by
     (mp_tac (Q.INST [`next` |-> `st.cs_next_var`,
        `site` |-> `abi_builtin_decode_output_site st min_size max_size`,
        `outsz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`,
        `s` |-> `initial:venom_state`, `t` |-> `prepared:venom_state`]
        abi_builtin_allocation_frame_budget) >> fs[abi_builtin_decode_resources_def]) >>
-  `abi_decoder_ranges MLOAD (SND (SND ops)) (FST (SND ops)) (FST ops)
-     (p + 32) (LENGTH bs) d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap prepared` by
+  `abi_decoder_ranges MLOAD (FST (SND ops)) (SND (SND ops)) (Lit 0w) (FST ops)
+     (p + 32) 0 (LENGTH bs) d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap prepared` by
     (drule_all (SIMP_RULE (srw_ss()) []
       (Q.INST [`prefix_len` |-> `LENGTH (bs:word8 list)`,
         `cnt` |-> `LENGTH (bs:word8 list)`] abi_builtin_prefix_ranges)) >> simp[]) >>
   `mem_bytes_at (p + 32) (LENGTH bs) (abi_decode_source MLOAD prepared) = bs` by
     fs[val_in_memory_def, abi_builtin_allocation_frame_def, abi_decode_source_def] >>
-  drule_all abi_valid_wrapped_array_prefix_pre >> simp[]
+  `abi_decoder_operand_live ready.cs_next_var (Lit 0w)` by
+    simp[abi_decoder_operand_live_def] >>
+  asm_simp_tac bool_ss [] >>
+  irule abi_valid_wrapped_array_prefix_pre >>
+  asm_simp_tac (srw_ss()) [] >> metis_tac[]
 QED
 
 (* ===== Array Decode ===== *)
@@ -96,18 +100,20 @@ Proof
   impl_tac >- asm_simp_tac (srw_ss()) [w2n_n2w] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial prepared` >>
   `eval_operand (FST (SND ops)) prepared = SOME (n2w (src_base + 32)) /\
-   eval_operand (SND (SND ops)) prepared = SOME (n2w (src_base + 32 + LENGTH bs))` by
+   eval_operand (SND (SND ops)) prepared = SOME (n2w (LENGTH bs))` by
     asm_simp_tac (srw_ss()) [word_add_n2w] >>
   drule_all abi_builtin_wrapped_array_ready >> strip_tac >>
   `is_dynamic (vyper_to_abi_type env (ArrayT ty (Dynamic maxn)))` by simp[vyper_to_abi_type_def] >>
   drule_all abi_decoder_singleton_info >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   SUBGOAL_THEN ``ready.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0`` assume_tac
   >- asm_simp_tac bool_ss [] >>
-  drule_all abi_valid_singleton_prefix_decode >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_at (Pat `abi_valid_singleton_prefix_pre`) abi_valid_singleton_prefix_decode >>
+  disch_then (drule_all o SIMP_RULE bool_ss []) >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `val_in_memory (ArrayTV tv (Dynamic maxn)) v d actual.vs_memory` >>
   `eval_operand (FST ops) actual = SOME (n2w d)` by fs[abi_decoder_effect_def] >>
   drule_all abi_builtin_decode_effect_compose >> strip_tac >>

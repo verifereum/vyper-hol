@@ -540,7 +540,11 @@ Proof
       simp[asm_step_op_create, asm_exec_create_def, asm_op_mem_writes_def,
            mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
            finite_mapTheory.DRESTRICT_UNIV] >>
-      irule related_create_completion >> simp[]) >>
+      (* an oversized initcode faults before the create on both sides *)
+      IF_CASES_TAC
+      >- (gvs[asm_sym_rel_def] >>
+          simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
+      rewrite_tac[COND_CLAUSES] >> irule related_create_completion >> simp[]) >>
   rename1 `cs.as_stack = value :: off :: sz :: tail0` >>
   Cases_on `tail0` >- gvs[] >> gvs[] >>
   rename1 `cs.as_stack = value :: off :: sz :: salt :: tail` >>
@@ -552,7 +556,11 @@ Proof
   simp[asm_step_op_create, asm_exec_create2_def, asm_op_mem_writes_def,
        mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
-  irule related_create_completion >> simp[]
+  (* an oversized initcode faults before the create on both sides *)
+  IF_CASES_TAC
+  >- (gvs[asm_sym_rel_def] >>
+      simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
+  rewrite_tac[COND_CLAUSES] >> irule related_create_completion >> simp[]
 QED
 
 Theorem asm_step_op_call[local]:
@@ -1363,7 +1371,10 @@ Proof
   >- (irule sym_step_create_sim >> simp[]) >>
   Cases_on `MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"; "SELFDESTRUCT";
     "GAS"; "MLOAD"; "SHA3"; "CALLDATACOPY"; "EXTCODECOPY"; "MCOPY"; "RETURNDATACOPY"]`
-  >- (gvs[MEM] >> simp[sym_step_call_sim, sym_step_staticcall_sim,
+  >- (qpat_x_assum `MEM name _` mp_tac >>
+      qpat_x_assum `asm_sym_rel _ _ _ _` mp_tac >>
+      rpt (pop_assum kall_tac) >> rpt strip_tac >>
+      gvs[MEM] >> simp[sym_step_call_sim, sym_step_staticcall_sim,
         sym_step_delegatecall_sim, sym_step_selfdestruct_sim, sym_step_gas_sim,
         sym_step_mload_sim, sym_step_sha3_sim, sym_step_calldatacopy_sim,
         sym_step_extcodecopy_sim, sym_step_mcopy_sim, sym_step_returndatacopy_sim]) >>

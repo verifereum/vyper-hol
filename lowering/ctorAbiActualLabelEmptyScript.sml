@@ -6,7 +6,7 @@ Ancestors
   abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv
   abiEncoderRegisteredEffect venomState venomExecSemantics venomInst words list arithmetic
 
-Theorem ctor_actual_complex_guard_labels_fragment[local]:
+Theorem ctor_actual_complex_guard_labels_fragment:
   abi_decode_complex_head_guard src hi head_sz st = ((),st') /\
   eval_operand src initial = SOME (n2w sb) /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem ctor_actual_empty_complex_labels_reach:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dynamic []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dynamic []) st = ((),st') /\
   fn_has_code st st' func /\ eval_operand src initial = SOME (n2w sb) /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     sb <= hb /\ hb < dimword (:256)) /\

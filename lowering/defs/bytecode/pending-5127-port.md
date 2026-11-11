@@ -191,3 +191,7 @@ fixtures.
 ## P2 (calldata argument guard) + P4 (direct ABI encoder) + P8 (`raw_create` bytecode type) + P9 (constructor argument snapshot)
 
 - `constructor-alias/ctor_alias`
+
+## Not yet attributed
+
+- `memory-stores/w01_return_intcall_dynarray_bytes_widen`

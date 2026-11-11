@@ -9,12 +9,12 @@ Ancestors
   abiEncoder abiDecoderClamp emitHelper venomState words arithmetic
 
 Theorem abi_decoder_primitive_memory_counters:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') ==>
   st.cs_next_var <= st'.cs_next_var
 Proof
-  Cases_on `clamp` >>
+  Cases_on `base_op = Lit 0w` >> Cases_on `clamp` >>
   FIRST [rename1 `IntClamp bits signed` >> Cases_on `signed`, all_tac] >>
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def, compile_abi_dec_addr_def,
        compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
        compile_abi_bytes_clamp_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
@@ -23,13 +23,14 @@ Proof
 QED
 
 Theorem abi_decoder_primitive_memory_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
-  eval_operand dst s = SOME (n2w d) /\ sb < dimword (:256) /\ d < dimword (:256) /\
-  mem_bytes_at sb 32 (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av /\
+  eval_operand base_op s = SOME (n2w B) /\
+  eval_operand dst s = SOME (n2w d) /\ B + sb < dimword (:256) /\ d < dimword (:256) /\
+  mem_bytes_at (B + sb) 32 (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av /\
   fresh_vars_wrt st s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     val_in_memory tv v d t.vs_memory /\ abi_decode_frame d 32 s t /\
@@ -50,14 +51,16 @@ Proof
 QED
 
 Theorem abi_decoder_primitive_memory_reentry:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\
   abi_decode_source_opcode opc /\ eval_operand src initial = SOME (n2w sb) /\
-  eval_operand dst initial = SOME (n2w d) /\ sb < dimword (:256) /\ d < dimword (:256) /\
-  mem_bytes_at sb 32 (abi_decode_source opc initial) = enc (vyper_to_abi_type env ty) av /\
+  eval_operand base_op initial = SOME (n2w B) /\
+  eval_operand dst initial = SOME (n2w d) /\ B + sb < dimword (:256) /\ d < dimword (:256) /\
+  mem_bytes_at (B + sb) 32 (abi_decode_source opc initial) = enc (vyper_to_abi_type env ty) av /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. run_inst_seq (emitted_insts st st') initial = OK actual /\
     val_in_memory tv v d actual.vs_memory /\ fresh_vars_wrt limit_st actual /\
@@ -70,9 +73,10 @@ Theorem abi_decoder_primitive_memory_reentry:
 Proof
   strip_tac >>
   `eval_operand src (abi_decoder_prune_vars st.cs_next_var initial) = SOME (n2w sb) /\
-   eval_operand dst (abi_decoder_prune_vars st.cs_next_var initial) = SOME (n2w d)`
+   eval_operand dst (abi_decoder_prune_vars st.cs_next_var initial) = SOME (n2w d) /\
+   eval_operand base_op (abi_decoder_prune_vars st.cs_next_var initial) = SOME (n2w B)`
     by asm_simp_tac bool_ss [abi_decoder_prune_eval] >>
-  `mem_bytes_at sb 32 (abi_decode_source opc (abi_decoder_prune_vars st.cs_next_var initial)) =
+  `mem_bytes_at (B + sb) 32 (abi_decode_source opc (abi_decoder_prune_vars st.cs_next_var initial)) =
     enc (vyper_to_abi_type env ty) av` by simp[] >>
   `fresh_vars_wrt st (abi_decoder_prune_vars st.cs_next_var initial)`
     by irule abi_decoder_prune_fresh >>

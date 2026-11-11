@@ -330,7 +330,7 @@ Definition compile_decode_args_def:
                      [Lit (n2w base_adj); Lit (n2w (offset - base_adj))];
                    offset_val <- emit_op load_opc [static_src];
                    actual_src <- emit_op ADD [Lit (n2w base_adj); offset_val];
-                   compile_abi_decode_to_buf dst actual_src load_opc
+                   compile_abi_decode_to_buf dst actual_src load_opc (Lit 0w)
                      (if load_opc = CALLDATALOAD then Lit 0w else hi_op)
                      dec_info;
                    compile_decode_args cenv rest (offset + abi_size)
@@ -351,7 +351,7 @@ Definition compile_decode_args_def:
                 do src <- emit_op ADD
                           [Lit (n2w base_adj);
                            Lit (n2w (offset - base_adj))];
-                   compile_abi_decode_to_buf dst src load_opc
+                   compile_abi_decode_to_buf dst src load_opc (Lit 0w)
                      (if load_opc = CALLDATALOAD then Lit 0w else hi_op)
                      dec_info;
                    compile_decode_args cenv rest (offset + abi_size)
@@ -488,7 +488,8 @@ Definition compile_init_kwargs_def:
                       emit_op ADD [Lit 4w; relative]
                    od
                   else return head);
-         compile_abi_decode_to_buf alloca_ptr src CALLDATALOAD (Lit 0w) dec_info;
+         compile_abi_decode_to_buf alloca_ptr src CALLDATALOAD (Lit 0w) (Lit 0w)
+           dec_info;
          compile_init_kwargs cenv rest (calldata_offset + abi_sz)
                              (kwargs_from_calldata - 1) hi_op
       od

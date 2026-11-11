@@ -708,6 +708,7 @@ Definition asm_exec_create_def:
       value :: offset :: sz :: stk =>
         let off = w2n offset in
         let size = w2n sz in
+        if size > 2 * max_code_size then AsmFault (s with as_returndata := []) else
         let rq = asm_create_request s value off size NONE in
         asm_consume_create_outcome rq stk
           (s with as_memory := asm_call_memory off size 0 0 s.as_memory)
@@ -721,6 +722,7 @@ Definition asm_exec_create2_def:
       value :: offset :: sz :: salt :: stk =>
         let off = w2n offset in
         let size = w2n sz in
+        if size > 2 * max_code_size then AsmFault (s with as_returndata := []) else
         let rq = asm_create_request s value off size (SOME salt) in
         asm_consume_create_outcome rq stk
           (s with as_memory := asm_call_memory off size 0 0 s.as_memory)

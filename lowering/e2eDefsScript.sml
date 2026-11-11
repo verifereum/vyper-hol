@@ -1,6 +1,7 @@
 (* PLAN 5.5 boundary, not a compiler correctness certificate.
  * TOP-LEVEL: layouts_agree, source_deployment_rel, source_typing_ok,
- * source_storage_ok, call_outcomes_ok, tx_env_ok, tx_block_fields_rel,
+ * source_storage_ok, call_outcomes_ok, tx_block_fields_rel,
+ * tx_env_ok (defined in compileEnv, as part of call_ctx_rel),
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
@@ -69,6 +70,20 @@ Definition source_deployment_rel_def:
     layouts_agree tops am tx
 End
 
+Theorem source_deployment_context:
+  source_deployment_rel tops am tx ==>
+  get_tenv (initial_evaluation_context am.sources am.layouts tx NONE) =
+    type_env tops /\
+  get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)
+    NONE = SOME tops
+Proof
+  simp[source_deployment_rel_def, initial_evaluation_context_def,
+       vyperContextTheory.get_tenv_def, vyperContextTheory.get_module_code_def,
+       vyperContextTheory.type_env_all_modules_def,
+       vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2] >>
+  rpt strip_tac >> simp[]
+QED
+
 Definition source_typing_ok_def:
   source_typing_ok tops am tx <=>
     ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
@@ -84,7 +99,7 @@ Definition source_storage_ok_def:
 End
 
 Definition call_outcomes_ok_def:
-  call_outcomes_ok (tops : toplevel list) am tx os <=>
+  call_outcomes_ok am tx os <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       EVERY (\outcome.
                LENGTH outcome.co_returnData < dimword(:256) /\
@@ -97,12 +112,7 @@ End
 
 (* ===== Transaction environment and entry transfer ===== *)
 
-Definition tx_env_ok_def:
-  tx_env_ok tx <=>
-    tx.block_number <> 0 /\ tx.block_number < 2 ** 255 /\
-    MIN 256 tx.block_number <= LENGTH tx.block_hashes /\
-    LENGTH tx.block_hashes <= 256
-End
+(* tx_env_ok is compileEnv's, part of call_ctx_rel. *)
 
 Definition tx_block_fields_rel_def:
   tx_block_fields_rel tx txp <=>
@@ -148,7 +158,7 @@ Definition call_state_rel_def:
     ?ctxt rb rest.
       es.contexts = (ctxt, rb) :: rest /\
       wf_state es /\ (?d. es.msdomain = Collect d) /\
-      ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
+      ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\ ~tx.is_static /\
       (?mr. ctxt.msgParams.outputTo = Memory mr) /\
       installed_code_rel tops runtime_bc (account_immutables am tx.target)
         ctxt.msgParams.code /\
@@ -179,11 +189,42 @@ Theorem call_external_transaction_pending_deletions:
     am'.pending_deletions = []
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
-  >- gvs[call_external_def, AllCaseEqs(), finalize_pending_deletions_def] >>
+  >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
+      simp[call_external_def] >>
+      Cases_on `ALOOKUP (clear_machine_logs am).sources tx.target` >> simp[] >>
+      qmatch_goalsub_abbrev_tac `get_self_code cx` >>
+      Cases_on `(case find_function_module (clear_machine_logs am) tx.target tx.function_name of
+                   NONE => get_self_code cx
+                 | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
+      Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
+      rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
+      qmatch_goalsub_abbrev_tac
+        `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
+      Cases_on `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
+      rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
+      TRY (rename1 `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_,_)` >>
+           Cases_on `exc` >> simp[]) >>
+      rw[] >> simp[finalize_pending_deletions_metadata]) >>
   rename1 `call_external orc gobs (clear_machine_logs am) tx = (INR exn, am', rqs)` >>
   reverse (Cases_on `exn = HaltException`)
   >- (drule call_external_error_rollback >> simp[clear_machine_logs_def]) >>
-  gvs[call_external_def, AllCaseEqs(), finalize_pending_deletions_def]
+  qpat_x_assum `exn = HaltException` SUBST_ALL_TAC >>
+  qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
+  simp[call_external_def] >>
+  Cases_on `ALOOKUP (clear_machine_logs am).sources tx.target` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `get_self_code cx` >>
+  Cases_on `(case find_function_module (clear_machine_logs am) tx.target tx.function_name of
+               NONE => get_self_code cx
+             | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
+  Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
+  rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
+  qmatch_goalsub_abbrev_tac
+        `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
+      Cases_on `call_external_function orc gobs am0 cx nr0 mut0 ts0 mods0 args0 dflts0 vals0 body0 ret0` >>
+  rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
+  rename1 `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_,_)` >>
+  Cases_on `exc` >> simp[] >>
+  rw[] >> simp[finalize_pending_deletions_metadata]
 QED
 
 Theorem load_contract_pending_deletions:
@@ -435,10 +476,10 @@ End
    source's: equal except at storage bytes the source leaves dead
    (accounts_agree, compileEnv). *)
 
-Definition call_result_rel_def:
-  call_result_rel tops ret am tx es r es' <=>
+Definition call_result_rel_at_def:
+  call_result_rel_at gobs tops ret am tx es r es' <=>
     let trace = call_trace es in
-    case call_external (SOME (MAP SND trace)) [] am tx of
+    case call_external (SOME (MAP SND trace)) gobs am tx of
       (INL v, am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?out lgs.
@@ -449,7 +490,7 @@ Definition call_result_rel_def:
           transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\
-          LIST_REL (request_agree cx) rqs (MAP FST trace)
+          LIST_REL (request_agree cx) rqs (call_requests es)
     | (INR HaltException, am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?lgs.
@@ -459,7 +500,7 @@ Definition call_result_rel_def:
           transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\
-          LIST_REL (request_agree cx) rqs (MAP FST trace)
+          LIST_REL (request_agree cx) rqs (call_requests es)
     | (INR (AssertException s), _, _) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")
@@ -470,3 +511,20 @@ Definition call_result_rel_def:
     | (INR ContinueException, _, _) => F
     | (INR (ReturnException _), _, _) => F
 End
+
+(* OPEN ITEM, must land before main: the top-level gas observations gobs
+   are not yet tied to the EVM's gas readings (gas_readings es).
+   run_venom_pipeline_correct only gives ?vs_in. gas_variant vs_in vs, so
+   the source-side readings are unconstrained here; tying them needs the
+   O1 contract to relate vs_in's readings to vs's. *)
+Definition call_result_rel_def:
+  call_result_rel tops ret am tx es r es' <=>
+    ?gobs. call_result_rel_at gobs tops ret am tx es r es'
+End
+
+Theorem call_result_rel_at_imp:
+  call_result_rel_at gobs tops ret am tx es r es' ==>
+  call_result_rel tops ret am tx es r es'
+Proof
+  metis_tac[call_result_rel_def]
+QED

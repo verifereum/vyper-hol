@@ -82,9 +82,9 @@ Definition abi_decl_signatures_def:
   abi_decl_signatures (FunctionDecl External mut nr rr name args dflts ret body) =
     (if name = "__default__" then []
      else abi_function_signatures name args dflts) /\
-  abi_decl_signatures (VariableDecl Public mut name ty slot) =
+  abi_decl_signatures (VariableDecl (Public nr) mut name ty slot) =
     [(name, abi_array_getter_args ty)] /\
-  abi_decl_signatures (HashMapDecl Public trans name kt vt slot) =
+  abi_decl_signatures (HashMapDecl (Public nr) trans name kt vt slot) =
     [(name, kt :: abi_getter_args vt)] /\
   abi_decl_signatures _ = []
 End
@@ -133,10 +133,10 @@ QED
 
 Theorem abi_getter_signature_examples:
   abi_decl_signatures
-    (VariableDecl Public Storage "x" (BaseT (UintT 256)) NONE) =
+    (VariableDecl (Public nr) Storage "x" (BaseT (UintT 256)) NONE) =
       [("x",[])] /\
   abi_decl_signatures
-    (HashMapDecl Public F "m" (BaseT AddressT)
+    (HashMapDecl (Public nr) F "m" (BaseT AddressT)
       (Type (ArrayT (BaseT BoolT) (Fixed 3))) NONE) =
       [("m",[BaseT AddressT; BaseT (UintT 256)])]
 Proof

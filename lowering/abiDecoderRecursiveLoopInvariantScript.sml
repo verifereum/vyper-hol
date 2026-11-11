@@ -28,50 +28,53 @@ Proof
 QED
 
 Theorem abi_decoder_recursive_loop_header:
-  abi_decoder_recursive_loop_inv opc aty avs tv vs sb d outsz slot site
+  abi_decoder_recursive_loop_inv opc aty avs tv vs (B+sb) d outsz slot site
     first last lo hi next limit_st b cap initial hdr j s /\
-  abi_decode_loop_cfg fn hdr body_lbl exit_lbl hid ip src opc
-    (STRING #"%" (toString first_var)) (STRING #"%" (toString (first_var+1)))
-    (STRING #"%" (toString (first_var+2))) (STRING #"%" (toString (first_var+3))) /\
+  abi_decode_position_loop_cfg fn hdr body_lbl exit_lbl hid ip src opc base_op first_var /\
   LENGTH avs = LENGTH vs /\ LENGTH vs < dimword (:256) /\ slot < dimword (:256) /\
-  sb + LENGTH (enc (Array NONE aty) (ListV avs)) < dimword (:256) /\
-  abi_decode_source_opcode opc /\ next <= first_var /\ first_var + 4 <= limit_st.cs_next_var /\
+  B+sb + LENGTH (enc (Array NONE aty) (ListV avs)) < dimword (:256) /\
+  abi_decode_source_opcode opc /\ next <= first_var /\
+  first_var + 4 + abi_decode_position_header_delta base_op <= limit_st.cs_next_var /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next ip /\
+  abi_decoder_operand_live next base_op /\ eval_operand base_op initial = SOME (n2w B) /\
   eval_operand ip initial = SOME (n2w slot) /\ eval_operand src initial = SOME (n2w sb) ==>
-  ?h. abi_decoder_recursive_loop_inv opc aty avs tv vs sb d outsz slot site
+  ?h. abi_decoder_recursive_loop_inv opc aty avs tv vs (B+sb) d outsz slot site
     first last lo hi next limit_st b cap initial
     (if j < LENGTH vs then body_lbl else exit_lbl) j h /\ abi_decode_sim ctx fn s h
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_decoder_recursive_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_decoder_recursive_loop_inv`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_inv_def]) >>
   `fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s`
     by fs[abi_decoder_effect_def, Excl "enc_def"] >>
-  `eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb)` by
+  `eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb) /\
+   eval_operand base_op s = SOME (n2w B)` by
     (fs[abi_decoder_effect_def, Excl "enc_def"] >> metis_tac[]) >>
   drule_all abi_decoder_array_memory_count >> strip_tac >>
-  `abi_decode_loop_ready hdr ip src opc (n2w slot) (n2w sb) (LENGTH vs) j s` by
-    fs[abi_decode_loop_ready_def, abi_decoder_array_memory_def, w2n_n2w, Excl "enc_def"] >>
-  `abi_decoder_operand_live first_var src` by
-    (irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
-  `src <> Var (STRING #"%" (toString first_var))` by
-    (mp_tac (Q.INST [`first` |-> `first_var:num`, `next` |-> `first_var:num`, `op` |-> `src:operand`]
-      abi_decoder_live_excludes_output) >> simp[]) >>
-  `STRING #"%" (toString (first_var:num)) <> STRING #"%" (toString (first_var+1))` by simp[] >>
+  `abi_decode_position_loop_ready hdr ip src opc base_op B sb (n2w slot) (LENGTH vs) j s` by
+    fs[abi_decode_position_loop_ready_def, abi_decoder_array_memory_def, w2n_n2w, Excl "enc_def"] >>
+  `src <> Var (STRING #"%" (toString first_var)) /\
+   base_op <> Var (STRING #"%" (toString first_var))` by
+    (conj_tac >> irule abi_decoder_live_excludes_output >> qexists_tac `next` >> simp[]) >>
   qabbrev_tac `h = jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
-    (abi_decode_header_state (STRING #"%" (toString first_var))
-      (STRING #"%" (toString (first_var+1))) (STRING #"%" (toString (first_var+2)))
-      (STRING #"%" (toString (first_var+3))) j (LENGTH vs) s)` >>
+    (abi_decode_position_header_state base_op first_var B sb j (LENGTH vs) s)` >>
   `abi_decode_sim ctx fn s h` by
-    (drule_all abi_decode_ready_header_sim >> simp[Abbr`h`]) >>
+    (drule_all abi_decode_position_ready_header_sim >> simp[Abbr`h`]) >>
+  drule_all abi_decoder_position_header_registers >> strip_tac >>
+  `abi_decoder_address_frame first_var s h` by
+    (asm_simp_tac bool_ss [abi_decoder_address_frame_def, Abbr`h`, abi_decoder_operand_jump] >>
+     Cases_on `base_op = Lit 0w` >>
+     simp[jump_to_def, abi_decode_position_header_state_def, update_var_def]) >>
   `abi_decoder_effect first last lo hi next limit_st d outsz b cap s h` by
-    (simp_tac bool_ss [Abbr`h`] >> irule abi_decoder_header_effect >> simp[]) >>
+    (irule abi_decoder_address_effect >> asm_simp_tac bool_ss [] >>
+     conj_tac >- simp[Abbr`h`] >>
+     qexists_tac `first_var` >> simp[]) >>
   `abi_decoder_effect first last lo hi next limit_st d outsz b cap initial h` by
     (drule_all abi_decoder_effect_trans >> simp[]) >>
-  qexists_tac `h` >>
+  qexists_tac `h` >> Cases_on `base_op = Lit 0w` >>
   asm_simp_tac (srw_ss()) [abi_decoder_recursive_loop_inv_def, Abbr`h`,
-    abi_decode_mload_jump, abi_decode_header_state_def, abi_decode_load_update, Excl "enc_def"] >>
-  simp[jump_to_def, update_var_def]
+    abi_decode_mload_jump, abi_decode_position_header_state_def, abi_decode_load_update, Excl "enc_def"] >>
+  simp[jump_to_def, update_var_def] >> gvs[mload_def]
 QED
 
 Theorem abi_decoder_recursive_child_advance:

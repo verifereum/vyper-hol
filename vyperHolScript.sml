@@ -37,3 +37,14 @@ Ancestors
   builtinBytesMemory concatMemory exprSimConvertFromBytes
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
+  (* lowering: gas-origin and raw gas shadows, calldata registration, constructor
+     arguments, widened returns, body memory closures, place typing *)
+  msgGasOriginPost generatedGasOrigin gasShadowRawRuntime gasShadowRawDeploy
+  ctorRegisterArgs stmtSimReturnWiden
+  bodyMemory bodyDeclMemory bodyStmtClosureMemory
+  placeTypingE2EProps
+  (* passes: memory merging block/supply proofs, remaining-oracle and pass-oracle
+     simulations, jump independence *)
+  mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
+  remainingOracleSim remainingOracleTransport remainingOracleUpdates
+  passOracleSim jumpIndep

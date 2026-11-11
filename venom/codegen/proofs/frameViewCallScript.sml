@@ -24,6 +24,16 @@ Proof
   simp[venom_call_request_def, read_memory_def, frame_view_def]
 QED
 
+Theorem venom_create_request_frame_view:
+  read_memory (w2n off) (w2n sz) (s with vs_memory := m) =
+    read_memory (w2n off) (w2n sz) s ==>
+  venom_create_request (frame_view fn ra s with vs_memory := m)
+    value off sz salt =
+  venom_create_request s value off sz salt
+Proof
+  simp[venom_create_request_def, read_memory_def, frame_view_def]
+QED
+
 Theorem make_venom_delegatecall_state_frame_view:
   make_venom_delegatecall_state (frame_view fn ra s with vs_memory := m)
     target gas calldata code is_static =
@@ -211,10 +221,9 @@ Theorem exec_create_frame_view:
   t.vs_memory = s.vs_memory
 Proof
   strip_tac >>
-  `venom_create_request (frame_view fn ra s with vs_memory := m)
-     value off sz salt = venom_create_request s value off sz salt` by
-    fs[venom_create_request_def, read_memory_def, frame_view_def] >>
+  drule venom_create_request_frame_view >> strip_tac >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = OK t` mp_tac >>
+  Cases_on `w2n sz > 2 * max_code_size` >- simp[exec_create_def] >>
   simp[exec_create_def] >> strip_tac >> gvs[] >>
   simp[frame_view_def, update_var_def, finite_mapTheory.FMAP_MAP2_FUPDATE]
 QED
@@ -240,7 +249,7 @@ Proof
   qpat_x_assum `MEM inst.inst_opcode _` mp_tac >> simp[] >> strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
   simp[Once (opcode_equation ``CREATE``), Once (opcode_equation ``CREATE2``),
-       AllCaseEqs()] >> strip_tac >> gvs[] >>
+       AllCaseEqs()] >> strip_tac >> gvs[eval_operands_def] >>
   rename1 `exec_create inst s _ argOff argSize _ = OK s'` >>
   `?out. inst.inst_outputs = [out]` by
     (qpat_x_assum `exec_create _ _ _ _ _ _ = OK s'` mp_tac >>
@@ -256,6 +265,7 @@ Proof
   drule_all exec_create_frame_view >>
   disch_then (qspec_then `ra` strip_assume_tac) >>
   qexists_tac `m` >>
+  `(frame_view fn ra s).vs_call_ctx = s.vs_call_ctx` by simp[frame_view_def] >>
   simp[opcode_equation ``CREATE``, opcode_equation ``CREATE2``]
 QED
 

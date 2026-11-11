@@ -168,7 +168,7 @@ Theorem entry_trace_two_step_call:
        (LENGTH es.rollback.toDelete))]
 Proof
   rpt strip_tac >>
-  simp[call_trace_def, full_call_trace_def, frame_obs_def] >>
+  simp[call_trace_def, frame_obs_def] >>
   simp[Once frame_obs_tr_def, observe_def, observable_call_def] >>
   simp[Once frame_obs_tr_def, observe_def]
 QED

@@ -29,6 +29,29 @@ and no bytecode metadata. The generator requires a clean Vyper checkout, clones
 only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
 
+Before installing, the generator applies `vyper-pin.patch` to the pinned
+revision. It backports three upstream fixes that the HOL lowering follows
+(the pin already contains vyperlang/vyper#5127 and #5322):
+
+- vyperlang/vyper#5239: a storage, transient or immutable variable is read at
+  its own declared type, not at a wider expected type (such as an external
+  call's parameter type), whose layout differs for nested bounded types.
+- vyperlang/vyper#5336: DFT keeps aborting instructions (an `assert`, an
+  internal call) in their order, scheduling each after the previous run of
+  aborting instructions.
+- vyperlang/vyper#5349: an instruction with no outputs and no effects (an
+  `assert`) stays a scheduling root even when a later abort depends on it,
+  so nothing is hoisted above it.
+
+A last, local hunk (marked `not upstream` in the patch) makes Python's DFT
+schedule as the HOL pass does where it deliberately departs from upstream:
+`create`/`create2` count as aborts.
+
+Only fixtures with external calls that take arguments, the signed `Bytes`
+conversions `bys32_to_i8` and `bys16_to_dec`, and five fixtures whose code
+around internal calls and asserts DFT schedules differently change. The
+provenance's `vyper_commit` names the unpatched base revision.
+
 HOL's EVM semantics (Verifereum) model Osaka, while the oracle is compiled with
 `evm_version="prague"` (`ORACLE_EVM_VERSION`), the newest version the pinned
 Vyper accepts. HOL's compile target is fork-neutral (`all_capabilities`: PUSH0,
@@ -61,11 +84,14 @@ oracle. It is a fast regression check, not a kernel-checked proof; its README
 says what a `PASS` trusts. This is finite fixture evidence, not a universal
 compiler-equivalence theorem.
 
-No build root reaches two regression theories, the range-folding and
-allocation-budget checks. Build them with:
+`abi_static`, `abi_dynamic` and `interface_calls` decode ABI data with the
+bounded decoder (vyperlang/vyper#5333), which deliberately differs from the
+pinned compiler, so their HOL bytes differ from this oracle.
+
+No build root reaches the allocation-budget regression theory. Build it with:
 
 ```sh
-holbuild build evalCompilerRangeTheory evalCompilerAllocationBudgetTheory
+holbuild build evalCompilerAllocationBudgetTheory
 ```
 
 ## Supported-subset boundary
@@ -103,6 +129,12 @@ Run this command from this directory. To inspect a fixture's runtime IR:
 vyper --experimental-codegen --optimize none --evm-version prague \
   -f ir_runtime external-entries/sources/dflt_one_lit.vy
 ```
+
+`nr_internal_return` follows the DFT abort-ordering fix in
+[vyperlang/vyper#5336](https://github.com/vyperlang/vyper/pull/5336), which the
+pinned oracle predates. Its kernel check proves exact bytes from pinned Python
+with that fix, compilation success, and inequality to the retained `.hex`
+oracle for unpatched pinned Python.
 
 ## Fixture format
 

@@ -31,7 +31,7 @@
 Theory exprSimStorageCopy
 Ancestors
   list rich_list finite_map pred_set valueEncodingProps
-  fragExec localPtrsProps exprSim loweringSlice
+  fragExec localPtrsProps  loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv moduleLoweringProps
   venomExecSemantics venomInst venomState
@@ -98,7 +98,7 @@ Proof
 QED
 
 (* Expose compiler boundaries without expanding compile_state records. *)
-Theorem storage_copy_bind_eq[local]:
+Theorem storage_copy_bind_eq:
   comp_bind m f s = (u,t) <=>
   ?v s1. m s = (v,s1) /\ f v s1 = (u,t)
 Proof
@@ -173,7 +173,7 @@ Proof
   rw[not_fresh_at_def] >> first_x_assum irule >> simp[]
 QED
 
-Theorem storage_copy_header_layout[local]:
+Theorem storage_copy_header_layout:
   !cv n sth test stj.
     emit_op EQ [Var cv; Lit (n2w n)] sth = (test,stj) ==>
     ?tv. test = Var tv /\
@@ -191,7 +191,7 @@ Proof
   rw[not_fresh_at_def] >> first_x_assum irule >> simp[]
 QED
 
-Theorem storage_copy_init_layout[local]:
+Theorem storage_copy_init_layout:
   !sa hdr body exit cv tv s1 s2 s3 s4 s0 sj sth stj n old.
     fresh_label "wcopy_cond" sa = (hdr,s1) /\
     fresh_label "wcopy_body" s1 = (body,s2) /\
@@ -218,7 +218,7 @@ Proof
   rw[not_fresh_at_def, fresh_var_distinct] >> decide_tac
 QED
 
-Theorem storage_copy_prefix_freshness[local]:
+Theorem storage_copy_prefix_freshness:
   !sa hdr body exit cv tv s1 s2 s3 s4 s0 sj sth stj st2 stb n old0 oldh.
     fresh_label "wcopy_cond" sa = (hdr,s1) /\
     fresh_label "wcopy_body" s1 = (body,s2) /\
@@ -243,7 +243,7 @@ Proof
   rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 
-Theorem compile_storage_copy_certificate[local]:
+Theorem compile_storage_copy_certificate:
   !loc src dst n sa u sb.
     (loc = LocStorage \/ loc = LocTransient) /\
     compile_word_copy_loop src dst n loc LocMemory F sa = (u,sb) ==>
@@ -338,11 +338,13 @@ Proof
   simp[copy_static_def]
 QED
 
-Theorem copy_static_mstore[local,simp]:
+Theorem copy_static_mstore:
   copy_static (mstore b w s) = copy_static s
 Proof
   simp[copy_static_def, mstore_def, write_memory_with_expansion_def]
 QED
+
+val _ = augment_srw_ss [rewrites [copy_static_mstore]];
 
 Theorem copy_static_fields:
   copy_static s = copy_static t ==>
@@ -358,7 +360,7 @@ Proof
   simp[copy_static_def, venom_state_component_equality]
 QED
 
-Theorem copy_runtime_word_static[local]:
+Theorem copy_runtime_word_static:
   copy_static s = copy_static t ==>
   copy_runtime_word loc s a = copy_runtime_word loc t a
 Proof
@@ -377,13 +379,13 @@ Definition copy_prefix_def:
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len sbase.vs_memory)
 End
 
-Theorem copy_prefix_zero[local]:
+Theorem copy_prefix_zero:
   copy_prefix loc a b n s 0 s
 Proof
   simp[copy_prefix_def]
 QED
 
-Theorem copy_prefix_transfer[local]:
+Theorem copy_prefix_transfer:
   copy_prefix loc a b n sbase k s /\
   copy_static t = copy_static s /\ t.vs_memory = s.vs_memory ==>
   copy_prefix loc a b n sbase k t
@@ -391,26 +393,32 @@ Proof
   rw[copy_prefix_def] >> metis_tac[]
 QED
 
-Theorem copy_prefix_update_var[local,simp]:
+Theorem copy_prefix_update_var:
   copy_prefix loc a b n sbase k (update_var x w s) =
   copy_prefix loc a b n sbase k s
 Proof
   simp[copy_prefix_def, update_var_def]
 QED
 
-Theorem copy_prefix_jump[local,simp]:
+val _ = augment_srw_ss [rewrites [copy_prefix_update_var]];
+
+Theorem copy_prefix_jump:
   copy_prefix loc a b n sbase k (jump_to l s) =
   copy_prefix loc a b n sbase k s
 Proof
   simp[copy_prefix_def, jump_to_def]
 QED
 
-Theorem copy_prefix_idx[local,simp]:
+val _ = augment_srw_ss [rewrites [copy_prefix_jump]];
+
+Theorem copy_prefix_idx:
   copy_prefix loc a b n sbase k (s with vs_inst_idx := i) =
   copy_prefix loc a b n sbase k s
 Proof
   simp[copy_prefix_def]
 QED
+
+val _ = augment_srw_ss [rewrites [copy_prefix_idx]];
 
 Theorem copy_prefix_word:
   copy_prefix loc a b n sbase n s /\ i < n ==>
@@ -427,7 +435,7 @@ Proof
   rw[copy_prefix_def] >> metis_tac[]
 QED
 
-Theorem copy_prefix_extend[local]:
+Theorem copy_prefix_extend:
   copy_prefix loc a b n sbase k s /\ k < n ==>
   copy_prefix loc a b n sbase (k+1)
     (mstore (b+32*k) (copy_runtime_word loc sbase (a+n2w k)) s)
@@ -489,7 +497,7 @@ Proof
 QED
 
 (* An operand depends only on its register (if any) and the label map. *)
-Theorem storage_copy_operand_frame[local]:
+Theorem storage_copy_operand_frame:
   !op ds s t w.
     eval_operand op s = SOME w /\
     (!x. op = Var x ==> ~MEM x ds) /\
@@ -507,13 +515,13 @@ Definition storage_copy_frame_def:
     s.vs_labels = sbase.vs_labels
 End
 
-Theorem storage_copy_frame_jump[local,simp]:
+Theorem storage_copy_frame_jump[simp]:
   storage_copy_frame ds sbase (jump_to l s) = storage_copy_frame ds sbase s
 Proof
   simp[storage_copy_frame_def, jump_to_def, lookup_var_def]
 QED
 
-Theorem storage_copy_frame_idx[local,simp]:
+Theorem storage_copy_frame_idx[simp]:
   storage_copy_frame ds sbase (s with vs_inst_idx := i) =
   storage_copy_frame ds sbase s
 Proof
@@ -643,7 +651,7 @@ Proof
 QED
 
 (* Exact sequence equations complement the register-frame run boundaries. *)
-Theorem storage_copy_source_run_effect[local]:
+Theorem storage_copy_source_run_effect:
   (loc = LocStorage \/ loc = LocTransient) /\
   eval_operand src s = SOME a /\ eval_operand (Var cv) s = SOME k /\
   (!x. src = Var x ==> x <> sv) ==>
@@ -702,7 +710,7 @@ Proof
   qexistsl [`[sv; vv]`, `s`] >> simp[] >> metis_tac[]
 QED
 
-Theorem storage_copy_destination_run_effect[local]:
+Theorem storage_copy_destination_run_effect:
   eval_operand dst s = SOME b /\ eval_operand (Var cv) s = SOME k /\
   eval_operand (Var vv) s = SOME v /\
   vv <> mv /\ vv <> dv /\
@@ -778,7 +786,7 @@ Proof
   qexists_tac `t` >> simp[run_inst_seq_def] >> metis_tac[]
 QED
 
-Theorem storage_copy_increment_run_effect[local]:
+Theorem storage_copy_increment_run_effect:
   eval_operand (Var cv) s = SOME k ==>
   run_inst_seq
     [mk_inst id ADD [Var cv; Lit 1w] [nv];
@@ -820,7 +828,7 @@ Proof
   qexists_tac `s2` >> simp[run_inst_seq_def] >> metis_tac[]
 QED
 
-Theorem storage_copy_body_run[local]:
+Theorem storage_copy_body_run:
   !opc src dst a b cv sv vv mv dv nv id s k.
     (opc = SLOAD \/ opc = TLOAD) /\
     eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
@@ -882,7 +890,7 @@ Proof
 QED
 
 (* Exact observations complement the register-frame existence theorem. *)
-Theorem storage_copy_body_run_effect[local]:
+Theorem storage_copy_body_run_effect:
   (loc = LocStorage \/ loc = LocTransient) /\
   eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
   eval_operand (Var cv) s = SOME k /\
@@ -937,7 +945,7 @@ Proof
       mstore_def, write_memory_with_expansion_def, update_var_def]
 QED
 
-Theorem storage_copy_body_prefix[local]:
+Theorem storage_copy_body_prefix:
   (loc = LocStorage \/ loc = LocTransient) /\
   eval_operand src s = SOME a /\ eval_operand dst s = SOME (n2w b) /\
   eval_operand (Var cv) s = SOME (n2w k) /\
@@ -1419,7 +1427,7 @@ Proof
       eval_operand_def] >> metis_tac[]
 QED
 
-Theorem storage_copy_word_layout[local]:
+Theorem storage_copy_word_layout:
   !opc src dst sa u sb.
     do v <- emit_op opc [src]; emit_void MSTORE [dst; v] od sa = (u,sb) ==>
     same_blocks sa sb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts /\

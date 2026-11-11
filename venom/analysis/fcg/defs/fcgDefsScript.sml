@@ -25,11 +25,15 @@
  *   filter_visited_mono    - adding to visited can only shrink FILTER
  *   filter_visited_shrink  - adding unvisited name strictly shrinks FILTER
  *   filter_neq_redundant   - name not in list => neq conjunct redundant
+ *
+ * Lemmas:
+ *   cfg_invoke_labels_cons   - INVOKE target labels of a cons
+ *   cfg_invoke_labels_append - INVOKE target labels of an append
  *)
 
 Theory fcgDefs
 Ancestors
-  venomInst relation cfgDefs
+  venomInst relation cfgDefs alist list
 
 (* ==========================================================================
    Result type
@@ -286,3 +290,21 @@ End
 Definition fcg_path_def:
   fcg_path ctx = RTC (fn_directly_calls ctx)
 End
+
+Theorem cfg_invoke_labels_cons:
+  MAP FST (get_invoke_targets (inst::insts)) =
+  MAP FST (get_invoke_targets [inst]) ++
+  MAP FST (get_invoke_targets insts)
+Proof
+  simp[get_invoke_targets_def] >> rpt CASE_TAC >> gvs[]
+QED
+
+Theorem cfg_invoke_labels_append:
+  !xs ys.
+    MAP FST (get_invoke_targets (xs ++ ys)) =
+    MAP FST (get_invoke_targets xs) ++ MAP FST (get_invoke_targets ys)
+Proof
+  Induct >- simp[get_invoke_targets_def] >> rpt gen_tac >>
+  pure_once_rewrite_tac[APPEND] >>
+  once_rewrite_tac[cfg_invoke_labels_cons] >> simp[]
+QED

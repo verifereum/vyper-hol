@@ -26,3 +26,7 @@ Theorem p06_local_append_struct_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation p06_local_append_struct))) >> EVAL_TAC
 QED
+
+val dec_from_memory2 = memoryStoreWitnessLib.evaluate fixture_root "dec_from_memory2"
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "dec_from_memory2" dec_from_memory2

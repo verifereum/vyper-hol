@@ -28,6 +28,9 @@ Datatype:
   ; gas_price: num
   ; chain_id: num
   ; is_creation: bool
+  (* The frame is static: entered by STATICCALL, or nested in a static frame.
+     Its own writes fail, and every call it makes is static. *)
+  ; is_static: bool
   (* EIP-6780: the executing account was created in this transaction. *)
   ; created_in_tx: bool
   (* Block context fields *)
@@ -56,6 +59,7 @@ Definition empty_call_txn_def:
     gas_price := 0;
     chain_id := 0;
     is_creation := F;
+    is_static := F;
     created_in_tx := F;
     coinbase := 0w;
     gas_limit := 0;

@@ -161,6 +161,25 @@ Proof
   disch_then (qspecl_then [`fuel`, `run_from fuel ctx func out`] mp_tac) >> simp[]
 QED
 
+Theorem fragment_step_call_ctx:
+  !ctx func ss out. fragment_step ctx func ss out ==> out.vs_call_ctx = ss.vs_call_ctx
+Proof
+  rpt gen_tac >> simp_tac bool_ss [fragment_step_def, fragment_jump_def, fragment_prefix_def] >>
+  strip_tac
+  >- (drule exec_block_preserves_call_ctx >> simp[]) >>
+  qspecl_then [`\st. st.vs_call_ctx`, `insts`, `ss`, `result`] mp_tac run_inst_seq_preserves_field >>
+  impl_tac >- (simp[] >> rpt strip_tac >> drule step_inst_base_preserves_call_ctx >> simp[]) >>
+  gvs[]
+QED
+
+Theorem fragment_path_call_ctx:
+  !ctx func ss out. fragment_path ctx func ss out ==> out.vs_call_ctx = ss.vs_call_ctx
+Proof
+  gen_tac >> gen_tac >> REWRITE_TAC [fragment_path_def] >>
+  ho_match_mp_tac RTC_INDUCT >> conj_tac >- simp[] >>
+  rpt strip_tac >> drule fragment_step_call_ctx >> fs[]
+QED
+
 Theorem fragment_path_refl[simp]:
   !ctx func ss. fragment_path ctx func ss ss
 Proof

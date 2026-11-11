@@ -73,3 +73,17 @@ Proof
   first_x_assum drule >>
   simp_tac bool_ss [abi_encoder_window_result_def]
 QED
+
+(* Preserve the stronger actual-site and label endpoint for builtin callers. *)
+Theorem compile_abi_encode_to_buf_window_strong_run:
+  compile_abi_encode_to_buf dst src ei st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d initial ==>
+  ?actual. window_strong_result ctx func st st' out at av d initial actual
+Proof
+  strip_tac >>
+  `abi_encoder_admissible ei` by
+    gvs[abi_encoder_window_pre_def] >>
+  `window_strong_contract ei` by
+    metis_tac[cj 1 window_strong_admissible_mutual] >>
+  fs[window_strong_contract_def] >> metis_tac[]
+QED

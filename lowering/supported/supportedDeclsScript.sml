@@ -32,7 +32,7 @@ Definition supported_declaration_header_def:
   supported_declaration_header tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret body =>
-        (vis <> External ==> NULL defaults) /\
+        NULL defaults /\
         EVERY (supported_function_argument tops vis o SND) args /\
         supported_function_return tops vis ret
     | VariableDecl Private Storage name ty (SOME slot) =>
@@ -120,7 +120,7 @@ End
 Theorem supported_function_header_contract:
   supported_declaration_header tops
     (FunctionDecl vis mut nr rr name args defaults ret body) <=>
-  (vis <> External ==> NULL defaults) /\
+  NULL defaults /\
   EVERY (supported_function_argument tops vis o SND) args /\
   supported_function_return tops vis ret
 Proof
@@ -170,7 +170,7 @@ Proof
 QED
 
 Theorem supported_public_variables_rejected:
-  ~supported_declaration_header tops (VariableDecl Public mut name ty slot)
+  ~supported_declaration_header tops (VariableDecl (Public nr) mut name ty slot)
 Proof
   Cases_on `mut` >> Cases_on `slot` >>
   simp[supported_declaration_header_def]

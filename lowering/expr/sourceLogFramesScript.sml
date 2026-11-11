@@ -99,11 +99,13 @@ QED
 
 Theorem eval_log_arguments:
   !cx event_id exprs es values es1 ev.
+    ~cx.txn.is_static /\
     eval_exprs cx exprs es = (INL values,es1) /\
     encode_source_event (get_tenv cx) cx.sources cx.txn.target event_id values = SOME ev ==>
     eval_stmt cx (Log event_id exprs) es = (INL (),es1 with logs := es1.logs ++ [ev])
 Proof
-  simp[Once evaluate_def, bind_def, lift_option_def, push_log_def, return_def]
+  simp[Once evaluate_def, bind_def, ignore_bind_def, lift_option_def, push_log_def,
+       return_def]
 QED
 
 Theorem eval_log_arguments_exception:
@@ -115,6 +117,7 @@ QED
 
 Theorem log_statement_execution:
   !cx cenv ctx func event_id exprs es es1 values ev before middle after.
+    ~cx.txn.is_static /\
     eval_exprs cx exprs es = (INL values,es1) /\
     encode_source_event (get_tenv cx) cx.sources cx.txn.target event_id values = SOME ev /\
     fragment_path ctx func before middle /\ fragment_path ctx func middle after /\

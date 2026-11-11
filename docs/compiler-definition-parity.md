@@ -155,9 +155,17 @@ are described in [abi-encoder-contracts.md](abi-encoder-contracts.md).
 |---|---|---|---|
 | `lowering/defs/bytecode/eval/evalCompilerScript.sml` and `evalCompilerSubset*` | checked compiler fixture programs | reviewed for the frozen 101-fixture supported-subset corpus | Program definitions correspond to the tracked Vyper sources; the original 23 fixtures remain the first milestone. |
 | `lowering/defs/bytecode/native/` | HOL-to-Python bytecode parity check | exact for the 89 retained fixtures | Runs `compile_vyper` exported to ML by EmitML; a fast trusted check, not a kernel-checked theorem. |
-| `lowering/defs/bytecode/eval/` parity theories (`evalCompilerAbiCodegen`, `evalCompilerBytecode{Default,Nonreentrant,ScalarConvert}*`, `evalCompilerBytecodeExternalEntries`, `evalCompilerBytecodePragmaPure`, `evalCompilerBytecodeAsmOpt`) | kernel-checked bytecode parity for the ABI-codegen, external-entry and scalar-conversion fixtures, and for the assembly-optimized oracle | built by CI | Each saves `*_matches_python_oracle` (or `*_matches_python_asm_opt_oracle`) theorems against the pinned-Python oracle files of its fixture directory. |
+| `lowering/defs/bytecode/eval/` parity theories (`evalCompilerAbiCodegen`, `evalCompilerBytecode{Default,Nonreentrant,ScalarConvert}*`, `evalCompilerBytecodeExternalEntries`, `evalCompilerBytecodePragmaPure`, `evalCompilerBytecodeAsmOpt`) | kernel-checked bytecode parity for the ABI-codegen, external-entry and scalar-conversion fixtures, and for the assembly-optimized oracle | built by CI | Checks save `*_matches_python_oracle` (or `*_matches_python_asm_opt_oracle`) against pinned-Python oracle files, except for the DFT fixture documented below. |
 | `lowering/defs/bytecode/python-o1-bytecode-fixtures`, `python_o1_bytecode_oracle.py`, and `python-o1-no-asm-opt*/` | independently generated pinned-Python O1 bytecode oracle and its reproduction check | reproducible from pin | The generator verifies a clean checkout against `VYPER_PIN` and uses pinned `PASSES_O1`, `evm_version="prague"`, disabled metadata, and disabled final assembly optimization. |
 | `tests/vyper-test-exports` and generators | language-test AST/metadata export | uses repository pin by policy | Keep aligned with `VYPER_PIN`. |
+
+The external-entry fixture `nr_internal_return` checks exact bytes with
+DFTPass abort-run ordering from
+[vyperlang/vyper#5336](https://github.com/vyperlang/vyper/pull/5336). Its pinned
+Python oracle predates this fix. The
+`nr_internal_return_matches_upstream_dft` theorem checks the fixed output;
+separate theorems assert successful compilation and divergence from the pinned
+oracle.
 
 ### Finite supported-subset acceptance
 

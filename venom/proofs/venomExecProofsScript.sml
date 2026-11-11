@@ -264,7 +264,7 @@ Triviality step_inst_ok_terminator_jump_fields[local]:
     v.vs_inst_idx = 0 /\ v.vs_prev_bb = SOME s.vs_current_bb /\
     v.vs_halted = s.vs_halted /\
     (!x. lookup_var x v = lookup_var x s) /\
-    v.vs_labels = s.vs_labels
+    v.vs_labels = s.vs_labels /\ v.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
@@ -334,12 +334,6 @@ Proof
   Induct >> simp[] >> Cases >> simp[update_var_def]
 QED
 
-Triviality bind_outputs_prev_bb:
-  bind_outputs outs vals s = SOME s' ==> s'.vs_prev_bb = s.vs_prev_bb
-Proof
-  rw[bind_outputs_def, AllCaseEqs()] >> simp[foldl_update_var_prev_bb]
-QED
-
 (* step_inst_base returns Error for INVOKE *)
 Theorem step_inst_base_OK_not_INVOKE:
   step_inst_base inst s = OK s' ==> inst.inst_opcode <> INVOKE
@@ -388,15 +382,6 @@ Theorem step_inst_IntRet_not_INVOKE:
   step_inst_base inst s = IntRet vals v ==> inst.inst_opcode <> INVOKE
 Proof
   ACCEPT_TAC step_inst_base_IntRet_not_INVOKE
-QED
-
-(* extract_venom_result preserves vs_halted *)
-Triviality extract_venom_result_preserves_halted:
-  extract_venom_result s ov ro rs rr = SOME (out, s') ==>
-  s'.vs_halted = s.vs_halted
-Proof
-  simp[extract_venom_result_def, AllCaseEqs()] >> rw[] >> gvs[] >>
-  pairarg_tac >> gvs[]
 QED
 
 Theorem is_terminator_not_invoke:
@@ -601,6 +586,34 @@ Proof
       step_inst_ok_terminator_jump_fields >>
     impl_tac >- gvs[] >> rw[])
   >- metis_tac[step_preserves_labels]
+QED
+
+Theorem step_inst_ok_preserves_call_ctx:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==> s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
+        step_inst_ok_terminator_jump_fields >>
+      impl_tac >- gvs[] >> rw[])
+  >- (drule_all step_preserves_call_ctx >> simp[])
+QED
+
+Theorem exec_block_preserves_call_ctx:
+  !fuel ctx bb s s'.
+    exec_block fuel ctx bb s = OK s' ==> s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  ho_match_mp_tac (cj 2 run_defs_ind) >>
+  qexists_tac `\fuel ctx inst s. T` >>
+  qexists_tac `\fuel ctx fn s. T` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  imp_res_tac step_inst_ok_preserves_call_ctx >>
+  rw[] >> gvs[]
 QED
 
 (* MEM + ALL_DISTINCT labels ==> lookup_block finds the block *)
@@ -1197,12 +1210,36 @@ Proof
   metis_tac[cj 2 fuel_mono]
 QED
 
-
 (* ==========================================================================
    Operand FDOM Properties
    ========================================================================== *)
 
+(* An operand list evaluates exactly when each operand does. *)
+Theorem eval_operands_IS_SOME_EVERY:
+  !ops s. IS_SOME (eval_operands ops s) <=>
+          EVERY (\op. IS_SOME (eval_operand op s)) ops
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  first_x_assum (qspec_then `s` mp_tac) >>
+  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
+QED
 
+(* LOG reads its offset, size and topics off the reversed operand list, so
+   when they all evaluate, the whole list does. *)
+Theorem log_operands_defined:
+  !rest s off sz topics.
+    eval_operand (HD (REVERSE rest)) s = SOME off /\
+    eval_operand (EL 1 (REVERSE rest)) s = SOME sz /\
+    eval_operands (DROP 2 (REVERSE rest)) s = SOME topics ==>
+    IS_SOME (eval_operands rest s)
+Proof
+  rpt strip_tac >>
+  `?r. rest = REVERSE r` by (qexists_tac `REVERSE rest` >> simp[]) >>
+  gvs[eval_operands_IS_SOME_EVERY, rich_listTheory.EVERY_REVERSE] >>
+  Cases_on `r` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  `IS_SOME (eval_operands t' s)` by simp[] >>
+  fs[eval_operands_IS_SOME_EVERY]
+QED
 
 (* For non-excluded opcodes with inst_wf:
    if a Var operand is not in FDOM (eval returns NONE), step_inst_base returns Error.
@@ -1218,8 +1255,6 @@ Proof
   BasicProvers.TOP_CASE_TAC >> simp[] >>
   metis_tac[optionTheory.NOT_NONE_SOME]
 QED
-
-
 
 Triviality eval_operands_none_mem[local]:
   !ops s. eval_operands ops s = NONE ==>
@@ -1566,7 +1601,7 @@ fun prove_fdom_group opcode_list = prove(
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   step_inst_base_opcode_tac >>
   simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
+      exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
       exec_alloca_def,
       istore_def, mstore_def, mstore8_def, sstore_def, tstore_def] >>
   BasicProvers.every_case_tac >> rpt strip_tac >>
@@ -1776,7 +1811,6 @@ Proof
   >> `lookup_var v s' = lookup_var v s` by metis_tac[step_preserves_non_output_vars] >>
      gvs[]
 QED
-
 
 (* IS_SOME(lookup_var v s) is monotone across exec_block OK.
    Proof by strong induction on remaining instructions,
@@ -2008,7 +2042,7 @@ Proof
   rw[run_blocks_unfold]
 QED
 
-Theorem run_blocks_two_blocks_proof:
+Theorem run_blocks_two_blocks:
   ∀ fuel ctx fn bb_A ss ss_mid result.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb_A ∧
     run_block fuel ctx bb_A ss = OK ss_mid ∧
@@ -2020,7 +2054,7 @@ Proof
   rw[run_blocks_unfold]
 QED
 
-Theorem run_blocks_halt_proof:
+Theorem run_blocks_halt:
   ∀ fuel ctx fn bb ss ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
     run_block fuel ctx bb ss = OK ss' ∧
@@ -2031,7 +2065,7 @@ Proof
   rw[run_blocks_unfold]
 QED
 
-Theorem run_blocks_abort_proof:
+Theorem run_blocks_abort:
   ∀ fuel ctx fn bb ss a ss'.
     lookup_block ss.vs_current_bb fn.fn_blocks = SOME bb ∧
     run_block fuel ctx bb ss = Abort a ss'
@@ -2272,7 +2306,6 @@ Proof
   gen_tac >> gvs[run_blocks_unfold]
 QED
 
-
 Theorem eval_phis_map_congruent:
   !s insts f.
     (!inst. MEM inst insts ==> (f inst).inst_opcode = inst.inst_opcode) /\
@@ -2289,7 +2322,6 @@ Theorem phi_prefix_length_map_congruent:
 Proof
   Induct >> simp[phi_prefix_length_def]
 QED
-
 
 (* Re-export passSimulationDefs$block_map_transform for convenience.
    The local definition was removed to avoid constant shadowing that broke
@@ -2350,7 +2382,6 @@ Proof
   simp[run_block_def, passSimulationDefsTheory.block_map_transform_def]
 QED
 
-
 Theorem eval_phis_same_phi_prefix:
   !s insts1 insts2.
     phi_prefix_length insts1 = phi_prefix_length insts2 /\
@@ -2370,7 +2401,6 @@ Proof
   >> first_x_assum (qspecl_then [`s`,`t`] mp_tac) >>
   simp[]
 QED
-
 
 (* Boundary lemmas for run_block: lift exec_block properties through eval_phis wrapper *)
 
@@ -2909,7 +2939,6 @@ Proof
   simp[]
 QED
 
-
 Theorem bind_outputs_idx:
   !outs vals st j.
     bind_outputs outs vals (st with vs_inst_idx := j) =
@@ -2917,7 +2946,6 @@ Theorem bind_outputs_idx:
 Proof
   rw[bind_outputs_def, foldl_update_var_idx]
 QED
-
 
 Theorem adopt_return_fmp_idx:
   !ir st j.
@@ -2928,7 +2956,6 @@ Proof
   Cases_on `ir.iret_adopt_fmp` >>
   simp[adopt_return_fmp_def]
 QED
-
 
 (* run_function from the entry block at index 0 is run_blocks. *)
 Theorem run_function_is_run_blocks:

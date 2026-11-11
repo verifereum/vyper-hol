@@ -88,7 +88,7 @@ Proof
   gvs[expr_type_def, eval_pure_expr_def, evaluate_literal_def,
       read_result_def, return_def, evaluate_type_builtin_def,
       type_builtin_args_length_ok_def] >>
-  `b <> Len /\ b <> Bop In /\ b <> Bop NotIn` by
+  `b <> Len /\ b <> Bop In /\ b <> Bop NotIn /\ ~precompile_builtin b` by
     (Cases_on `b` >> gvs[closed_builtin_def]) >>
   gvs[] >>
   drule_all evaluate_builtin_closed >> simp[]

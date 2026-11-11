@@ -7,7 +7,7 @@ Ancestors
   e2eDeployDefs e2eDefs supportedStmtTraverse supportedExprTraverse
   vyperInterpreter vyperABI vyperCreate vyperState vyperTypeEntryReadiness
   vyperTypeContractSoundness vyperTypeInitialState vyperTypeInvariants
-  vyperStorageLayoutSafety
+  vyperStorageLayoutSafety compileEnv
   vfmExecution frameOutcome list
 
 val _ = Parse.hide "body";
@@ -41,7 +41,7 @@ Proof
   qexistsl_tac [`mut`,`args`,`body`] >> simp[encode_create_ctor_args_def]
 QED
 
-(* The guard is Call-specific, not a ban on Pop or computed precompiles.
+(* The guard is a ban on Calls and the precompile builtins, not on Pop.
    Inspect nested expressions/reasons/branches as well as direct statement
    roots. The function lookup does not need already-deployed source code. *)
 Theorem constructor_call_exclusion:
@@ -69,10 +69,15 @@ Proof
        dest_Deploy_Fn_def]
 QED
 
-Theorem constructor_computed_builtin_not_call:
-  constructor_call_free
+(* A precompile builtin is excluded like a Call; another builtin is not. *)
+Theorem constructor_precompile_builtin_excluded:
+  ~constructor_call_free
     [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
       [Expr (Builtin (BaseT (BytesT (Fixed 32))) Sha256
+         [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])])]] /\
+  constructor_call_free
+    [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
+      [Expr (Builtin (BaseT (BytesT (Fixed 32))) Keccak256
          [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])])]]
 Proof
   EVAL_TAC >> simp[] >> EVAL_TAC
@@ -172,6 +177,7 @@ QED
 
 Theorem deploy_success_observables:
   deploy_result_rel tops runtime_bc tx es r es' (INL (am',rqs)) <=>
+  let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
   ?section lgs.
     immutables_section_rel tops (account_immutables am' tx.target) section /\
     frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
@@ -179,8 +185,14 @@ Theorem deploy_success_observables:
     (!a. a <> tx.target ==>
       lookup_account a es'.rollback.accounts = lookup_account a am'.accounts) /\
     (lookup_account tx.target es'.rollback.accounts) with code := [] =
-    (lookup_account tx.target am'.accounts) with code := [] /\
-    es'.rollback.tStorage = am'.tStorage /\
+    (lookup_account tx.target am'.accounts) with
+      <| code := [];
+         storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
+    storage_agree
+      (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+      (lookup_account tx.target am'.accounts).storage
+      (lookup_account tx.target es'.rollback.accounts).storage /\
+    transient_agree cx am'.tStorage es'.rollback.tStorage /\
     logs_correspond (compiled_event_info tops) (type_env tops)
       tx.target am'.logs lgs
 Proof

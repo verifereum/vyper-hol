@@ -305,7 +305,8 @@ QED
 Theorem compile_abi_clamp_basetype_footprint:
   !cl op st st'.
     compile_abi_clamp_basetype op cl st = ((), st') ==>
-    EVERY (\i. !s. inst_mem_below_frontier i s) (emitted_insts st st')
+    EVERY (\i. !s. inst_mem_below_frontier i s /\ inst_dload_in_section i s)
+      (emitted_insts st st')
 Proof
   Cases >> rpt gen_tac >>
   simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
@@ -317,7 +318,8 @@ Proof
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   simp[emitted_insts_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[] >> rpt strip_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]
+  simp[] >> rpt strip_tac >> TRY (irule below_frontier_no_ranges) >>
+  simp[mk_inst_def]
 QED
 
 Theorem compile_abi_clamp_basetype_mem_ok:
@@ -394,7 +396,7 @@ QED
 Theorem decode_static_buf_mem_ok:
   (!info n. static_dec info n ==>
      !dst src st st' s p a.
-       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st = ((), st') /\
+       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info st = ((), st') /\
        eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
        fresh_vars_wrt st s /\
        w2n p + n < dimword (:256) /\ w2n a + n < dimword (:256) /\
@@ -402,7 +404,7 @@ Theorem decode_static_buf_mem_ok:
        run_inst_seq_mem_ok (emitted_insts st st') s) /\
   (!elems n. static_decs elems n ==>
      !dst src k st st' s p a.
-       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
          elems k k st = ((), st') /\
        eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
        fresh_vars_wrt st s /\
@@ -411,11 +413,13 @@ Theorem decode_static_buf_mem_ok:
        run_inst_seq_mem_ok (emitted_insts st st') s)
 Proof
   ho_match_mp_tac static_dec_strongind >> rpt conj_tac
-  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def] >>
+  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+         comp_bind_def, comp_return_def] >>
       irule compile_abi_decode_static_mem_ok >>
       simp[] >> qexistsl [`c`, `dst`, `p`, `src`] >> simp[])
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-      fs[compile_abi_decode_to_buf_def] >> first_x_assum irule >>
+      fs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+         comp_bind_def, comp_return_def] >> first_x_assum irule >>
       simp[] >> qexistsl [`a`, `dst`, `0`, `p`, `src`] >> simp[])
   >- (rpt strip_tac >>
       gvs[compile_abi_decode_to_buf_def, comp_return_def,
@@ -467,7 +471,8 @@ Resume decode_static_buf_mem_ok[pointers]:
     (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
   qpat_x_assum `emit_op ADD [dst; _] st1 = _`
     (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
-  simp[] >> rpt strip_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]
+  simp[] >> rpt strip_tac >> TRY (irule below_frontier_no_ranges) >>
+  simp[mk_inst_def]
 QED
 Resume decode_static_buf_mem_ok[child]:
   qpat_x_assum `!dst src k st st' s p a. _` kall_tac >>
@@ -475,7 +480,7 @@ Resume decode_static_buf_mem_ok[child]:
   qexistsl [`a + n2w k`, `ed`, `p + n2w k`, `es`] >> simp[] >> decide_tac
 QED
 Resume decode_static_buf_mem_ok[tail]:
-  qpat_x_assum `!dst src st st' s p a. compile_abi_decode_to_buf _ _ _ _ _ _ = _ /\ _ ==> _`
+  qpat_x_assum `!dst src st st' s p a. compile_abi_decode_to_buf _ _ _ _ _ _ _ = _ /\ _ ==> _`
     kall_tac >>
   drule (CONJUNCT1 decode_static_buf_run) >> disch_then drule >>
   disch_then (qspecl_then [`t2`, `p + n2w k`, `a + n2w k`] mp_tac) >>

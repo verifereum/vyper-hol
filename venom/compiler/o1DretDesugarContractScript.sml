@@ -57,7 +57,7 @@ Proof
   Induct >> Cases_on `l'` >> rw[] >> metis_tac[]
 QED
 
-Theorem dret_desugar_stage_identity[local]:
+Theorem dret_desugar_stage_identity:
   ctx_pass_stage rpolicy (CFP_Simple VP_DretDesugar) view C C' /\
   o1_ctx_shape C ==> C' = C
 Proof

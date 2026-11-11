@@ -3,8 +3,8 @@
  *
  * Key theorem: nop_output_not_used_as_operand
  *   Under wf_ssa + ssa_form, NOP'd variables are never used
- *   as operands. This discharges the extern in
- *   remove_unused_single_pass_correct_proof.
+ *   as operands. This supplies the fixed erased-variable invariant for
+ *   backward GAS-oracle reconstruction.
  *
  * Strategy:
  *   Same block: live_vars_at_uses + live_vars_at_propagate_range gives
@@ -29,30 +29,6 @@ Ancestors
   worklistDefs list rich_list combin
 
 (* ===== Fixpoint bridge: edge_transfer ⊆ live_exit ===== *)
-
-
-Theorem edge_transfer_subset_live_exit[local]:
-  !fn pred_lbl pred_bb succ_lbl v.
-    wf_function fn ==>
-    let lr = liveness_analyze fn in
-    let cfg = cfg_analyze fn in
-      MEM pred_lbl cfg.cfg_dfs_pre /\
-      lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
-      MEM succ_lbl (cfg_succs_of cfg pred_lbl) /\
-      MEM v (liveness_edge_transfer fn.fn_blocks succ_lbl pred_lbl
-               (df_boundary [] lr succ_lbl)) ==>
-      MEM v (live_vars_at lr pred_lbl (LENGTH pred_bb.bb_instructions))
-Proof
-  rpt gen_tac >> simp_tac std_ss [LET_THM] >>
-  strip_tac >> strip_tac >>
-  `cfg_reachable_of (cfg_analyze fn) pred_lbl` by
-    (drule cfg_analyze_reachable_sets >>
-     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
-  drule_all livenessConvergenceProofsTheory.liveness_recompute_edge_subset >>
-  gvs[liveness_analyze_def, livenessBlockProofsTheory.liveness_instrs_def, live_vars_at_def,
-      livenessLocalProofsTheory.liveness_recompute_boundary_entry,
-      pred_setTheory.SUBSET_DEF] >> metis_tac[]
-QED
 
 (* ===== NOP output liveness helpers ===== *)
 
@@ -98,27 +74,6 @@ Proof
   gvs[]
 QED
 
-(* v not live at idx+1 (directly from NOP condition) *)
-Theorem nop_output_not_live_after_def[local]:
-  !fn lr cfg lbl bb idx inst v.
-    wf_function fn /\ ssa_form fn /\
-    lr = liveness_analyze fn /\
-    cfg = cfg_analyze fn /\
-    MEM lbl cfg.cfg_dfs_pre /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    idx < LENGTH bb.bb_instructions /\
-    EL idx bb.bb_instructions = inst /\
-    remove_unused_inst
-      (live_after_at lr lbl idx (LENGTH bb.bb_instructions))
-      inst = mk_nop_inst inst /\
-    MEM v inst.inst_outputs ==>
-    ~MEM v (live_vars_at lr lbl (SUC idx))
-Proof
-  rpt strip_tac >>
-  drule remove_unused_inst_nop_outputs_not_live >> strip_tac >>
-  gvs[listTheory.EVERY_MEM, live_after_at_suc]
-QED
-
 (* ===== Main theorem: NOP'd variables not used as operands ===== *)
 
 (* fn_insts_blocks = FLAT (MAP bb_instructions ...) *)
@@ -133,7 +88,7 @@ Theorem all_distinct_flat_map_member =
   venomFnInstsProofsTheory.all_distinct_flat_map_member
 
 (* Strongest SSA uniqueness: same output var ⇒ same instruction AND same block *)
-Theorem ssa_unique_output_block[local]:
+Theorem ssa_unique_output_block:
   !fn bb1 inst1 bb2 inst2 v.
     ssa_form fn /\
     MEM bb1 fn.fn_blocks /\ MEM inst1 bb1.bb_instructions /\
@@ -172,7 +127,8 @@ QED
 
 (* ===== Boilerplate: reachability / lookup helpers ===== *)
 
-Theorem fn_reachable_in_cfg_dfs_pre[local]:
+Theorem fn_reachable_in_cfg_dfs_pre:
+
   !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
     MEM lbl (cfg_analyze fn).cfg_dfs_pre
 Proof
@@ -198,24 +154,12 @@ Proof
   irule bb_succs_in_cfg_succs >> gvs[wf_function_def]
 QED
 
-(* fn_dominates predecessor: if d dominates n, d ≠ n, and p → n is CFG edge,
-   and p is reachable, then d dominates p *)
-
 (* phi_pairs produces only vars present in the operand list *)
 Theorem phi_pairs_mem_var[local]:
   !ops l v. MEM (l, v) (phi_pairs ops) ==> MEM (Var v) ops
 Proof
   ho_match_mp_tac phi_pairs_ind >> rw[phi_pairs_def] >> gvs[] >>
   qpat_x_assum `!l v. _` (drule_then assume_tac) >> simp[]
-QED
-
-Theorem phi_well_formed_var_pair[local]:
-  !ops v.
-    phi_well_formed ops /\ MEM (Var v) ops ==>
-    ?lbl. MEM (lbl,v) (phi_pairs ops)
-Proof
-  ho_match_mp_tac phi_pairs_ind >>
-  rw[phi_pairs_def, phi_well_formed_def] >> gvs[] >> metis_tac[]
 QED
 
 (* Helper: fn_cfg_edge target has a block *)
@@ -262,7 +206,7 @@ Proof
 QED
 
 (* Helper: reachable node along path from reachable start *)
-Theorem is_fn_path_all_reachable[local]:
+Theorem is_fn_path_all_reachable:
   !fn path lbl. is_fn_path fn path /\ path <> [] /\
     fn_reachable fn (HD path) /\ MEM lbl path ==>
     fn_reachable fn lbl
@@ -274,7 +218,7 @@ Proof
 QED
 
 (* Helper: reachable implies has a block (via wf_function) *)
-Theorem fn_reachable_has_block[local]:
+Theorem fn_reachable_has_block:
   !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
     ?bb. lookup_block lbl fn.fn_blocks = SOME bb
 Proof
@@ -647,25 +591,5 @@ Proof
     metis_tac[])
 QED
 
-(* ===== Compose with existing single-pass proof ===== *)
-
-Theorem remove_unused_single_pass_correct_ssa:
-  !fuel ctx fn s.
-    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn /\
-    wf_ssa fn /\ ssa_form fn /\
-    alloca_pointer_confined fn /\
-    s.vs_inst_idx = 0 /\
-    fn_entry_label fn = SOME s.vs_current_bb ==>
-    let elim = single_pass_nop_outputs fn in
-    (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (remove_unused_single_pass fn) s)
-Proof
-  rpt strip_tac >> simp_tac std_ss [LET_THM] >>
-  irule (SIMP_RULE std_ss [LET_THM] remove_unused_single_pass_correct_proof) >>
-  simp[] >> rpt strip_tac >>
-  CCONTR_TAC >> fs[] >>
-  metis_tac[nop_output_not_used_as_operand]
-QED
-
+(* Same-state single-pass correctness removed: reconstruction uses the
+   unchanged global operand-exclusion theorem above. *)

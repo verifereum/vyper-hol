@@ -9,7 +9,7 @@ Ancestors
 
 Theorem compile_log_save_arg_profile_request:
   !tops cenv ty src suffix cs saved cut profile_start final_cut tv.
-    ~is_word_type ty /\ ~EVERY pure_expr suffix /\
+    ~is_word_type ty /\ exprs_can_mutate cenv suffix /\
     compile_log_save_arg cenv ty src suffix cs = (saved,cut) /\
     compiler_id_history cs /\ cs_extends profile_start cs /\ cs_extends cut final_cut /\
     struct_args_unique tops /\ cenv.ce_struct_fields = make_struct_fields_map tops /\

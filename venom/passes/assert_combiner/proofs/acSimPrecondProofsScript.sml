@@ -324,31 +324,6 @@ Proof
    ac_extend_mp_lookup_tac (), ac_extend_mp_lookup_tac ()]
 QED
 
-(* Head-drop + mp extension: compose transfer_same + extend_mp *)
-Triviality ac_sim_precond_transfer_ext[local]:
-  !h insts cands mp id pred dfg s_t V.
-    ac_sim_precond cands mp dfg (h::insts) s_t V ==>
-    (!i. MEM i insts ==> i.inst_id <> id) /\
-    eval_operand pred s_t = SOME 0w /\
-    (!i x. MEM i insts /\ MEM x i.inst_outputs /\ pred = Var x ==> F) /\
-    (!mc x. MEM mc cands /\ pred = Var x /\
-       (?i. MEM i insts /\ i.inst_id = mc.mc_second_id) ==>
-       x <> ac_or_var mc.mc_second_id /\ x <> ac_iz_var mc.mc_second_id) /\
-    (!mc. MEM mc cands /\ mc.mc_first_id = h.inst_id /\
-       ALOOKUP mp mc.mc_first_id = NONE ==>
-       eval_operand mc.mc_first_pred s_t = SOME 0w) ==>
-    ac_sim_precond cands ((id,pred)::mp) dfg insts s_t V
-Proof
-  rpt strip_tac >>
-  `ac_sim_precond cands mp dfg insts s_t V` by (
-    qpat_x_assum `ac_sim_precond _ _ _ (h::_) _ _`
-      (mp_tac o MATCH_MP ac_sim_precond_transfer_same) >>
-    disch_then match_mp_tac >> simp[]) >>
-  irule ac_sim_precond_extend_mp >> simp[] >>
-  qpat_x_assum `ac_sim_precond _ _ _ insts _ _` mp_tac >>
-  simp[ac_sim_precond_def] >> metis_tac[]
-QED
-
 (* Extract all head-instruction facts from ac_sim_precond.
    Avoids repeated simp[ac_sim_precond_def, EVERY_DEF] in case bodies. *)
 Theorem ac_sim_precond_head_facts:
@@ -671,7 +646,7 @@ Theorem ac_sim_step_ok:
     (!i x. MEM i (h::insts) /\ MEM x i.inst_outputs ==>
        ~IS_SOME (lookup_var x s_o)) /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (h::insts))) ==>
-    let (mp', contrib) = ac_apply_merge_step cands (mp, []) h in
+    let (mp', contrib) = ac_apply_merge_step id_base cands (mp, []) h in
     ?s_c.
       run_insts fuel ctx contrib s_t = OK s_c /\
       state_equiv V s1_o s_c /\
@@ -700,7 +675,7 @@ Proof
     Cases_on `FIND (\mc. mc.mc_second_id = h.inst_id) cands`
     >- (
       (* FIND = NONE: NOP or passthrough, mp unchanged *)
-      `ac_apply_merge_step cands (mp,[]) h =
+      `ac_apply_merge_step id_base cands (mp,[]) h =
          if EXISTS (\mc. mc.mc_first_id = h.inst_id) cands then
            (mp, [h with <| inst_opcode := NOP;
                             inst_operands := [];
@@ -727,7 +702,7 @@ Proof
       Cases_on `afp = mc.mc_second_pred`
       >- (
         (* same preds *)
-        `ac_apply_merge_step cands (mp,[]) h =
+        `ac_apply_merge_step id_base cands (mp,[]) h =
            if EXISTS (\mc'. mc'.mc_first_id = h.inst_id) cands then
              ((mc.mc_second_id, afp)::mp,
               [h with <| inst_opcode := NOP;
@@ -748,13 +723,13 @@ Proof
         (* diff preds: OR + ISZERO *)
         qabbrev_tac `or_v = ac_or_var h.inst_id` >>
         qabbrev_tac `iz_v = ac_iz_var h.inst_id` >>
-        `ac_apply_merge_step cands (mp,[]) h =
+        `ac_apply_merge_step id_base cands (mp,[]) h =
            if EXISTS (\mc'. mc'.mc_first_id = h.inst_id) cands then
              ((mc.mc_second_id, Var or_v)::mp,
-              [<| inst_id := h.inst_id; inst_opcode := OR;
+              [<| inst_id := ac_or_id id_base h.inst_id; inst_opcode := OR;
                   inst_operands := [afp; mc.mc_second_pred];
                   inst_outputs := [or_v] |>;
-               <| inst_id := h.inst_id + 1; inst_opcode := ISZERO;
+               <| inst_id := ac_or_id id_base h.inst_id + 1; inst_opcode := ISZERO;
                   inst_operands := [Var or_v];
                   inst_outputs := [iz_v] |>;
                h with <| inst_opcode := NOP;
@@ -762,10 +737,10 @@ Proof
                           inst_outputs := [] |>])
            else
              ((mc.mc_second_id, Var or_v)::mp,
-              [<| inst_id := h.inst_id; inst_opcode := OR;
+              [<| inst_id := ac_or_id id_base h.inst_id; inst_opcode := OR;
                   inst_operands := [afp; mc.mc_second_pred];
                   inst_outputs := [or_v] |>;
-               <| inst_id := h.inst_id + 1; inst_opcode := ISZERO;
+               <| inst_id := ac_or_id id_base h.inst_id + 1; inst_opcode := ISZERO;
                   inst_operands := [Var or_v];
                   inst_outputs := [iz_v] |>;
                h with inst_operands := [Var iz_v]])` by
@@ -787,7 +762,7 @@ Triviality ac_sim_precond_passthrough[local]:
   !cands mp dfg h insts s_t V.
     ac_sim_precond cands mp dfg (h::insts) s_t V /\
     h.inst_opcode <> ASSERT ==>
-    ac_apply_merge_step cands (mp, []) h = (mp, [h])
+    ac_apply_merge_step id_base cands (mp, []) h = (mp, [h])
 Proof
   rpt strip_tac >>
   `FIND (\mc. mc.mc_second_id = h.inst_id) cands = NONE` by (
@@ -796,24 +771,6 @@ Proof
   `~EXISTS (\mc. mc.mc_first_id = h.inst_id) cands` by
     metis_tac[ac_sim_precond_head_facts] >>
   metis_tac[ac_step_passthrough]
-QED
-
-(* Helper: ASSERT on equiv state also succeeds *)
-Triviality ac_assert_ok_on_equiv[local]:
-  !fuel ctx h s_o s_t V.
-    step_inst fuel ctx h s_o = OK s_o /\
-    h.inst_opcode = ASSERT /\ h.inst_opcode <> INVOKE /\
-    state_equiv V s_o s_t /\
-    (!x. MEM (Var x) h.inst_operands ==> x NOTIN V) ==>
-    step_inst fuel ctx h s_t = OK s_t
-Proof
-  rpt strip_tac >>
-  `result_equiv V (step_inst fuel ctx h s_o) (step_inst fuel ctx h s_t)` by (
-    irule execEquivPropsTheory.step_inst_result_equiv >> simp[] >>
-    metis_tac[]) >>
-  fs[] >>
-  Cases_on `step_inst fuel ctx h s_t` >> gvs[result_equiv_def] >>
-  imp_res_tac step_assert_identity
 QED
 
 (* Combined forward-reasoning helper: transfer ac_sim_precond through a
@@ -1017,10 +974,10 @@ Triviality ac_diff_preds_or_iz[local]:
                     NONE => mc.mc_first_pred | SOME p => p) /\
     Abbrev (or_v = ac_or_var h.inst_id) /\
     Abbrev (iz_v = ac_iz_var h.inst_id) ==>
-    let or_inst = <| inst_id := h.inst_id; inst_opcode := OR;
+    let or_inst = <| inst_id := ac_or_id id_base h.inst_id; inst_opcode := OR;
                      inst_operands := [afp; mc.mc_second_pred];
                      inst_outputs := [or_v] |> in
-    let iz_inst = <| inst_id := h.inst_id + 1; inst_opcode := ISZERO;
+    let iz_inst = <| inst_id := ac_or_id id_base h.inst_id + 1; inst_opcode := ISZERO;
                      inst_operands := [Var or_v];
                      inst_outputs := [iz_v] |> in
     ?s_iz.
@@ -1055,7 +1012,7 @@ Proof
                         (update_var or_v (word_or 0w 0w) s_t)` >>
   qexists_tac `s_iz` >>
   qspecl_then [`fuel`, `ctx`, `s_t`, `afp`, `mc.mc_second_pred`,
-               `or_v`, `iz_v`, `h.inst_id`, `0w`, `0w`]
+               `or_v`, `iz_v`, `ac_or_id id_base h.inst_id`, `0w`, `0w`]
     mp_tac ac_or_iz_step >>
   (impl_tac >- simp[]) >>
   simp_tac (srw_ss()) [LET_THM, wordsTheory.WORD_OR_CLAUSES,
@@ -1162,9 +1119,9 @@ QED
 Resume ac_sim_step_ok[diff_preds_fid]:
   `?s_iz.
      run_insts fuel ctx
-       [<| inst_id := h.inst_id; inst_opcode := OR;
+       [<| inst_id := ac_or_id id_base h.inst_id; inst_opcode := OR;
            inst_operands := [afp; mc.mc_second_pred]; inst_outputs := [or_v] |>;
-        <| inst_id := h.inst_id + 1; inst_opcode := ISZERO;
+        <| inst_id := ac_or_id id_base h.inst_id + 1; inst_opcode := ISZERO;
            inst_operands := [Var or_v]; inst_outputs := [iz_v] |>] s_t = OK s_iz /\
      eval_operand (Var or_v) s_iz = SOME 0w /\
      eval_operand (Var iz_v) s_iz = SOME 1w /\
@@ -1176,9 +1133,9 @@ Resume ac_sim_step_ok[diff_preds_fid]:
     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `s_iz` >>
   `run_insts fuel ctx
-     [<| inst_id := h.inst_id; inst_opcode := OR;
+     [<| inst_id := ac_or_id id_base h.inst_id; inst_opcode := OR;
          inst_operands := [afp; mc.mc_second_pred]; inst_outputs := [or_v] |>;
-      <| inst_id := h.inst_id + 1; inst_opcode := ISZERO;
+      <| inst_id := ac_or_id id_base h.inst_id + 1; inst_opcode := ISZERO;
          inst_operands := [Var or_v]; inst_outputs := [iz_v] |>;
       h with <| inst_opcode := NOP; inst_operands := []; inst_outputs := [] |>]
      s_t = OK s_iz` by (
@@ -1196,9 +1153,9 @@ Resume ac_sim_step_ok[diff_preds_nofid]:
   (* Execute OR+ISZERO via ac_diff_preds_or_iz *)
   `?s_iz.
      run_insts fuel ctx
-       [<| inst_id := h.inst_id; inst_opcode := OR;
+       [<| inst_id := ac_or_id id_base h.inst_id; inst_opcode := OR;
            inst_operands := [afp; mc.mc_second_pred]; inst_outputs := [or_v] |>;
-        <| inst_id := h.inst_id + 1; inst_opcode := ISZERO;
+        <| inst_id := ac_or_id id_base h.inst_id + 1; inst_opcode := ISZERO;
            inst_operands := [Var or_v]; inst_outputs := [iz_v] |>] s_t = OK s_iz /\
      eval_operand (Var or_v) s_iz = SOME 0w /\
      eval_operand (Var iz_v) s_iz = SOME 1w /\
@@ -1235,7 +1192,7 @@ Proof
 QED
 
 Resume ac_sim_step_ok[safe_between]:
-  `ac_apply_merge_step cands (mp,[]) h = (mp, [h])` by
+  `ac_apply_merge_step id_base cands (mp,[]) h = (mp, [h])` by
     metis_tac[ac_sim_precond_passthrough] >>
   pop_assum (fn eq => PURE_REWRITE_TAC[eq]) >>
   PURE_REWRITE_TAC[LET_THM] >> BETA_TAC >>
@@ -1319,7 +1276,7 @@ Theorem ac_run_insts_sim_ok:
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) ==>
     ?s_trans.
       run_insts fuel ctx
-        (SND (FOLDL (ac_apply_merge_step cands) (mp, []) insts)) s_t =
+        (SND (FOLDL (ac_apply_merge_step id_base cands) (mp, []) insts)) s_t =
         OK s_trans /\
       state_equiv V s_orig s_trans
 Proof
@@ -1331,8 +1288,8 @@ Proof
   Cases_on `step_inst fuel ctx h s_o` >> simp[] >>
   rename1 `step_inst fuel ctx h s_o = OK s1_o` >> strip_tac >>
   (* Apply one-step transfer *)
-  drule_all ac_sim_step_ok >> simp[LET_THM] >>
-  Cases_on `ac_apply_merge_step cands (mp,[]) h` >>
+  drule_all ac_sim_step_ok >> disch_then (qspec_then `id_base` mp_tac) >> simp[LET_THM] >>
+  Cases_on `ac_apply_merge_step id_base cands (mp,[]) h` >>
   rename1 `_ = (mp', contrib)` >> simp[] >>
   strip_tac >>
   (* Decompose FOLDL and use run_insts_append *)

@@ -4,12 +4,13 @@ Ancestors
 
 Theorem venom_selfdestruct_clears_old_return_data:
   !s.
+    ~s.vs_call_ctx.cc_static ==>
     ?t.
       step_inst_base (mk_inst 0 SELFDESTRUCT [Lit 0w] [])
         (s with vs_returndata := [1w]) = Halt t /\
       t.vs_returndata = []
 Proof
-  gen_tac >>
+  rpt strip_tac >>
   simp[Once step_inst_base_def, mk_inst_def, eval_operand_def,
        halt_state_def, set_returndata_def]
 QED

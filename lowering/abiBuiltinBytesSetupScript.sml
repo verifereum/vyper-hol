@@ -13,7 +13,7 @@ Theorem abi_builtin_bytes_setup_resources:
   ?prepared. run_inst_seq (emitted_insts st ready) s = OK prepared /\
     eval_operand (FST ops) prepared = SOME (n2w d) /\
     eval_operand (FST (SND ops)) prepared = SOME (n2w (p + 32)) /\
-    eval_operand (SND (SND ops)) prepared = SOME (n2w (p + 32 + LENGTH bs)) /\
+    eval_operand (SND (SND ops)) prepared = SOME (n2w (LENGTH bs)) /\
     mem_bytes_at (p + 32) (LENGTH bs) (abi_decode_source MLOAD prepared) = bs /\
     fresh_vars_wrt ready prepared /\
     abi_builtin_allocation_frame st.cs_next_var

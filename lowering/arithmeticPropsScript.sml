@@ -342,7 +342,9 @@ Proof
   rpt strip_tac >>
   `2 ** bits ≤ 2 ** 255` by simp[bitTheory.TWOEXP_MONO2] >>
   irule integer_wordTheory.w2i_i2w_pos >>
-  simp[wordsTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def]
+  `words$INT_MAX (:256) = 2 ** 255 - 1` by EVAL_TAC >>
+  qpat_x_assum `words$INT_MAX _ = _` SUBST1_TAC >>
+  decide_tac
 QED
 
 Theorem unsigned_in_range_not_gt_hi[local]:
@@ -1455,6 +1457,38 @@ Proof
     metis_tac[integer_wordTheory.i2w_w2i, word_i2w_sub] >>
   pop_assum (fn th => rewrite_tac[th]) >>
   irule integer_wordTheory.w2i_i2w >> simp[]
+QED
+
+Theorem w2i_blockhash_lower_bound:
+  0 < B /\ B < 2 ** 255 ==>
+  w2i ((n2w B : bytes32) - 256w) = &B - 256
+Proof
+  strip_tac >>
+  `w2i (n2w B : bytes32) = &B` by
+    (irule integer_wordTheory.w2i_n2w_pos >>
+     fs[wordsTheory.INT_MIN_def]) >>
+  `w2i (256w : bytes32) = 256` by EVAL_TAC >>
+  `w2i ((n2w B : bytes32) - 256w) =
+   w2i (n2w B : bytes32) - w2i (256w : bytes32)` by
+    (irule w2i_sub_no_overflow >>
+     fs[wordsTheory.INT_MIN_def, wordsTheory.INT_MAX_def] >>
+     intLib.ARITH_TAC) >>
+  simp[]
+QED
+
+Theorem blockhash_signed_window:
+  0 < B /\ B < 2 ** 255 /\ n < 2 ** 256 ==>
+  (~word_lt (n2w n : bytes32) (n2w B - 256w) /\ n < B <=>
+   B - 256 <= n /\ n < B)
+Proof
+  strip_tac >> Cases_on `n < B` >> asm_rewrite_tac[] >>
+  `w2i (n2w n : bytes32) = &n` by
+    (irule integer_wordTheory.w2i_n2w_pos >>
+     fs[wordsTheory.INT_MIN_def] >> decide_tac) >>
+  `w2i ((n2w B : bytes32) - 256w) = &B - 256` by
+    (irule w2i_blockhash_lower_bound >> simp[]) >>
+  rewrite_tac[integer_wordTheory.WORD_LTi] >>
+  asm_rewrite_tac[] >> intLib.ARITH_TAC
 QED
 
 (* w2i preserves multiplication when result fits in signed range *)
@@ -3376,7 +3410,8 @@ Proof
            ≠ a ∨
          (is_signed_type ty ∧ type_bits ty = 256 ∧ a = n2w (2 ** 255) ∧
           b = n2w (2 ** 256 − 1))` by
-          (Cases_on `is_signed_type ty` >> fs[] >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
+          (Cases_on `is_signed_type ty` >> fs[]
+           >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
                simp[int_min_256, int_max_256])
            >- (strip_tac >> qspecl_then [`a`, `b`, `ty`] mp_tac mul_sdiv_mismatch >>
                simp[int_min_256, int_max_256]) >>
@@ -3445,7 +3480,6 @@ Proof
          integerTheory.INT_QUOT_1] >>
     strip_tac >> `A = -&X` by intLib.ARITH_TAC >> fs[]
 QED
-
 
 (* compile_safe_div_ok: a division by a non-zero word, but for the signed
    minimum by -1, runs through and gives the word quotient.  The success

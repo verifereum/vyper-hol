@@ -118,8 +118,8 @@ Definition collect_consts_and_immutables_def:
   collect_consts_and_immutables [] = [] ∧
   collect_consts_and_immutables (t :: rest) =
     (case t of
-       JTL_VariableDecl name _ _ _ T _ _ => name :: collect_consts_and_immutables rest
-     | JTL_VariableDecl name _ _ _ _ _ (SOME _) => name :: collect_consts_and_immutables rest
+       JTL_VariableDecl name _ _ _ T _ _ _ => name :: collect_consts_and_immutables rest
+     | JTL_VariableDecl name _ _ _ _ _ _ (SOME _) => name :: collect_consts_and_immutables rest
      | _ => collect_consts_and_immutables rest)
 End
 
@@ -220,8 +220,8 @@ End
 
 (* Get name of a public variable or hashmap (generates an external getter) *)
 Definition get_public_var_name_def:
-  get_public_var_name (JTL_VariableDecl name _ _ T _ _ _) = SOME name ∧
-  get_public_var_name (JTL_HashMapDecl name _ _ T _) = SOME name ∧
+  get_public_var_name (JTL_VariableDecl name _ _ T _ _ _ _) = SOME name ∧
+  get_public_var_name (JTL_HashMapDecl name _ _ T _ _) = SOME name ∧
   get_public_var_name _ = NONE
 End
 
@@ -568,7 +568,7 @@ End
    top-level name for the semantics to evaluate. *)
 Definition module_constants_def:
   module_constants ctx [] = expr_constants ctx ∧
-  module_constants ctx (JTL_VariableDecl name _ _ _ _ _ (SOME init) :: rest) =
+  module_constants ctx (JTL_VariableDecl name _ _ _ _ _ _ (SOME init) :: rest) =
     (if IS_SOME (ALOOKUP (expr_constants ctx) (expr_current_nsid ctx, name))
      then module_constants ctx rest else
      let e = translate_expr ctx init in
@@ -670,7 +670,7 @@ Definition toplevel_decl_types_valid_def:
        ret_ty) ∧
      stmt_decl_types_valid nominal_index all_import_maps ctx body)) ∧
   (toplevel_decl_types_valid nominal_index all_import_maps ctx
-      (JTL_VariableDecl _ inferred ann _ _ _ _) =
+      (JTL_VariableDecl _ inferred ann _ _ _ _ _) =
     declaration_type_valid nominal_index all_import_maps ctx inferred ann) ∧
   (toplevel_decl_types_valid nominal_index all_import_maps ctx
       (JTL_EventDef _ fields) =
@@ -716,7 +716,7 @@ End
 Definition collect_toplevel_types_def:
   collect_toplevel_types nominal_index all_import_maps ctx [] = [] ∧
   collect_toplevel_types nominal_index all_import_maps ctx
-      (JTL_VariableDecl name inferred ann _ _ _ _ :: rest) =
+      (JTL_VariableDecl name inferred ann _ _ _ _ _ :: rest) =
     (((expr_current_nsid ctx, name),
        canonical_decl_type nominal_index all_import_maps ctx inferred ann) ::
      collect_toplevel_types nominal_index all_import_maps ctx rest) ∧

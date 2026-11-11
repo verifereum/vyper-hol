@@ -1,8 +1,8 @@
 (* Independent checked-frontend bytecode witnesses for the keyword operands
    of extcall/staticcall (value=, gas=, default_return_value=,
    skip_contract_check=) and for send with and without gas=.
-   Half 1 of evalCompilerExternalCallKwargs: s02_send_gas,
-   e29_default_ret_skip. *)
+   Half 1 of evalCompilerExternalCallKwargs: e40_extcall_gas,
+   e43_extcall_all_kwargs, s02_send_gas, e29_default_ret_skip. *)
 Theory evalCompilerExternalCallKwargs1
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
@@ -15,6 +15,14 @@ val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos, byteTheory.set_byte_bit_field_insert])
 val fixture_root = "../external-calls/oracle"
 
+val e40_extcall_gas = memoryStoreWitnessLib.evaluate fixture_root "e40_extcall_gas"
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e40_extcall_gas" e40_extcall_gas
+
+val e43_extcall_all_kwargs = memoryStoreWitnessLib.evaluate fixture_root "e43_extcall_all_kwargs"
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e43_extcall_all_kwargs" e43_extcall_all_kwargs
+
 val s02_send_gas = memoryStoreWitnessLib.evaluate fixture_root "s02_send_gas"
 Theorem s02_send_gas_matches_python_oracle:
   ^(#term s02_send_gas) =
@@ -24,9 +32,5 @@ Proof
 QED
 
 val e29_default_ret_skip = memoryStoreWitnessLib.evaluate fixture_root "e29_default_ret_skip"
-Theorem e29_default_ret_skip_matches_python_oracle:
-  ^(#term e29_default_ret_skip) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e29_default_ret_skip")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation e29_default_ret_skip))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e29_default_ret_skip" e29_default_ret_skip

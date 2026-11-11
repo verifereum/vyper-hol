@@ -47,8 +47,8 @@ Definition supported_default_expression_def:
     ~supported_expr_exists expr_nonmain_type_root e
 End
 
-(* Only internal names need this source-shape restriction. External/internal
-   sharing and repeated Deploy names remain admissible. *)
+(* The source-shape restriction on internal names. supported_declaration_names
+   also keeps every function name distinct for now. *)
 Definition supported_internal_function_names_def:
   supported_internal_function_names [] = [] /\
   supported_internal_function_names (top::rest) =

@@ -81,7 +81,8 @@ Theorem vsr_R_ok_fields:
     s1.vs_code = s2.vs_code /\
     s1.vs_prev_hashes = s2.vs_prev_hashes /\
     s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_alloca_next = s2.vs_alloca_next
+    s1.vs_alloca_next = s2.vs_alloca_next /\
+    s1.vs_gas_readings = s2.vs_gas_readings
 Proof
   rpt strip_tac >> drule_all vsr_R_ok_frame >>
   simp[vsr_frame_def, venom_state_component_equality]
@@ -238,6 +239,14 @@ Theorem vsr_immutables_R_ok:
   !R_ok R_term im s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
     R_ok (s1 with vs_immutables := im) (s2 with vs_immutables := im)
+Proof
+  vsr_field_update_proof ()
+QED
+
+Theorem vsr_gas_readings_R_ok:
+  !R_ok R_term gs s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
+    R_ok (s1 with vs_gas_readings := gs) (s2 with vs_gas_readings := gs)
 Proof
   vsr_field_update_proof ()
 QED
@@ -456,6 +465,20 @@ Proof
   vsr_irule vsr_update_var_R_ok >> simp[]
 QED
 
+Theorem vsr_exec_gas:
+  !R_ok R_term inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
+    lift_result R_ok R_term R_term (exec_gas inst s1) (exec_gas inst s2)
+Proof
+  rpt strip_tac >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    (imp_res_tac vsr_R_ok_fields >> simp[]) >>
+  rw[exec_gas_def] >>
+  rpt (CASE_TAC >> gvs[lift_result_def]) >>
+  vsr_irule vsr_update_var_R_ok >> simp[] >>
+  vsr_irule vsr_gas_readings_R_ok >> simp[]
+QED
+
 Theorem vsr_exec_read1:
   !R_ok R_term f inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
@@ -597,9 +620,13 @@ Proof
   Cases_on `inst.inst_outputs` >> simp[exec_create_def, lift_result_def] >>
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> simp[exec_create_def, lift_result_def] >>
+  Cases_on `w2n sz > 2 * max_code_size`
+  >- (simp[lift_result_def, halt_state_def] >>
+      irule vsr_halted_R_term >>
+      metis_tac[vsr_set_returndata_R_term]) >>
   Cases_on `(FST (take_outcome
     (venom_create_request s2 value offset sz salt_opt) s2.vs_outcomes)).co_success` >>
-  simp[] >> ext_call_result_tac ()
+  simp[lift_result_def] >> ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_alloca:
@@ -764,4 +791,16 @@ Proof
   Cases_on `eval_one_phi s1 h` >> fs[] >>
   PairCases_on `x` >> fs[] >>
   Cases_on `eval_phis s1 insts` >> fs[]
+QED
+
+(* A static frame's write aborts on both sides alike *)
+Theorem vsr_static_abort:
+  !R_ok R_term a s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
+    lift_result R_ok R_term R_term
+      (Abort a (halt_state (set_returndata [] s1)))
+      (Abort a (halt_state (set_returndata [] s2)))
+Proof
+  rpt strip_tac >> simp[lift_result_def, halt_state_def, set_returndata_def] >>
+  vsr_terminal_tac ()
 QED

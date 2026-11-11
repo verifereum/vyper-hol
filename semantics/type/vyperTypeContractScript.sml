@@ -175,9 +175,9 @@ End
 Definition external_name_keys_toplevel_def:
   external_name_keys_toplevel src
     (FunctionDecl External _ _ _ name _ _ _ _) = [(src,name)] /\
-  external_name_keys_toplevel src (VariableDecl Public _ name _ _) =
+  external_name_keys_toplevel src (VariableDecl (Public nr) _ name _ _) =
     [(src,name)] /\
-  external_name_keys_toplevel src (HashMapDecl Public _ name _ _ _) =
+  external_name_keys_toplevel src (HashMapDecl (Public nr) _ name _ _ _) =
     [(src,name)] /\
   external_name_keys_toplevel _ _ = []
 End
@@ -989,11 +989,11 @@ Definition check_toplevel_decl_def:
         assignable_type tenv typ
     | VariableDecl _ Transient id typ _ =>
         assignable_type tenv typ
-    | VariableDecl _ Immutable id typ _ =>
-        assignable_type tenv typ
-    | VariableDecl _ (Constant e) id typ _ =>
-        assignable_type tenv typ /\ well_typed_expr env e /\ expr_type e = typ /\
-        constant_expr mods e
+    | VariableDecl vis Immutable id typ _ =>
+        vis <> Public T /\ assignable_type tenv typ
+    | VariableDecl vis (Constant e) id typ _ =>
+        vis <> Public T /\ assignable_type tenv typ /\
+        well_typed_expr env e /\ expr_type e = typ /\ constant_expr mods e
     | HashMapDecl _ is_transient id kt vt _ =>
         well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt
     | StructDecl id fields =>
@@ -1050,6 +1050,12 @@ Definition check_toplevel_body_def:
          check_function_body layouts addr mods
            (art with cta_bare_global_assignable := FEMPTY)
            src vis mut nr args dflts ret body)
+    | VariableDecl (Public nr) _ fn _ _ =>
+        function_live layouts addr mods live (src,fn) ==>
+        (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0)
+    | HashMapDecl (Public nr) _ fn _ _ _ =>
+        function_live layouts addr mods live (src,fn) ==>
+        (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0)
     | _ => T
 End
 

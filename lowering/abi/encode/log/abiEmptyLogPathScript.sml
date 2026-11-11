@@ -15,7 +15,8 @@ Theorem compile_log_empty_data_path:
     compile_stmt cenv lctx ty (Log event_id args) cs = ((),cs') /\
     fn_has_code topic_cut cs' func /\ LENGTH (Lit (n2w sig_hash)::topic_ops) < dimword(:256) /\
     eval_operands (Lit (n2w sig_hash)::topic_ops) ss = SOME topics /\
-    ss.vs_current_bb = topic_cut.cs_current_bb /\ ss.vs_inst_idx = LENGTH topic_cut.cs_current_insts /\ ~ss.vs_halted ==>
+    ss.vs_current_bb = topic_cut.cs_current_bb /\ ss.vs_inst_idx = LENGTH topic_cut.cs_current_insts /\ ~ss.vs_halted /\
+    ~ss.vs_call_ctx.cc_static ==>
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
       out.vs_logs = ss.vs_logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics; data := []|>] /\

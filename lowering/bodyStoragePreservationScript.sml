@@ -20,6 +20,7 @@
 
 Theory bodyStoragePreservation
 Ancestors
+  vyperCall
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeExprSoundness vyperTypeCallStackSoundness vyperTypeInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation
@@ -136,7 +137,12 @@ Theorem body_oracle_storage_mutual:
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >> rpt gen_tac
+  (* simp over all 63 induction goals is one timed step; split it in
+     three, rightmost first so the earlier goal indices stay put. *)
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac
+  >>> SPLIT_LT 42 (ALL_LT, ALLGOALS (simp[]))
+  >>> SPLIT_LT 21 (ALL_LT, SPLIT_LT 21 (ALLGOALS (simp[]), ALL_LT))
+  >>> SPLIT_LT 21 (ALLGOALS (simp[]), ALL_LT) >> rpt gen_tac
   >~ [`Call ty (IntCall (src_id_opt,fn)) es kw`] >- suspend "intcall_start"
   >~ [`eval_iterator cx (Array e)`] >-
     (strip_tac >> match_mp_tac body_array_iterator_consumer >>
@@ -712,12 +718,15 @@ Resume body_oracle_storage_mutual[intcall_start]:
   gvs[int_calls_expr_def, EVERY_APPEND, expr_has_evm_run_def,
       supported_expr_exists_def] >>
   Cases_on `MEM (NONE,fn) cx.stk`
-  >- (gvs[Once evaluate_def, type_check_def, assert_def, raise_def,
-          ignore_bind_apply] >> metis_tac[runtime_storage_consistent_storage]) >>
+  >- (asm_x "intcall_ih1" kall_tac >> asm_x "intcall_ih2" kall_tac >>
+      gvs[Once evaluate_def, type_check_def, assert_def, raise_def,
+          ignore_bind_apply] >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
   Cases_on `lookup_callable_function cx.in_deploy fn tops`
-  >- (gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
+  >- (asm_x "intcall_ih1" kall_tac >> asm_x "intcall_ih2" kall_tac >>
+      gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
           return_def, raise_def, ignore_bind_apply, bind_apply] >>
-      metis_tac[runtime_storage_consistent_storage]) >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
   rename1 `lookup_callable_function cx.in_deploy fn tops = SOME tup` >>
   PairCases_on `tup` >>
   rename1 `lookup_callable_function cx.in_deploy fn tops =
@@ -737,8 +746,8 @@ Resume body_oracle_storage_mutual[intcall_live]:
   asm_x "intcall_ih1" mp_tac >> simp[] >> disch_then assume_tac >>
   asm_x "intcall_ih2" mp_tac >> simp[] >> disch_then assume_tac >>
   rule_assum_tac (SRULE [type_check_def, assert_def, return_def,
-                        body_empty_defaults_finally, get_scopes_def]) >>
-  drule_all body_eval_intcall_empty_defaults >>
+                        eval_empty_defaults_finally, get_scopes_def]) >>
+  drule_all eval_expr_intcall_empty_defaults >>
   disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _` (mp_tac o REWRITE_RULE [th])) >>
   simp_tac bool_ss [bind_def, ignore_bind_def] >>
   Cases_on `eval_expr_results cx es st` >>

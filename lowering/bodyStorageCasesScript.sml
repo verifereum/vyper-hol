@@ -10,6 +10,7 @@
 
 Theory bodyStorageCases
 Ancestors
+  vyperCall
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeExprSoundness vyperTypeCallStackSoundness vyperTypeInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation
@@ -637,7 +638,14 @@ Proof
   gvs[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def]
   >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
       Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
-      gvs[return_def, raise_def] >> rpt strip_tac >> gvs[]) >>
+      gvs[return_def, raise_def] >>
+      Cases_on `precompile_call_success bt args_st` >>
+      imp_res_tac precompile_call_success_state >> gvs[] >>
+      rename1 `precompile_call_success bt args_st = (pres,_)` >>
+      Cases_on `pres` >> gvs[return_def, raise_def] >> rpt strip_tac >>
+      gvs[] >> irule contract_storage_well_formed_storage_frame >>
+      qexists_tac `args_st` >> simp[] >>
+      Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -704,6 +712,9 @@ Proof
       >- (Cases_on `dest_AddressV (HD vs)` >> gvs[return_def, raise_def]
           >- (rpt strip_tac >> gvs[]) >>
           rename1 `dest_AddressV (HD vs) = SOME addr` >>
+          (* A static frame fails check_not_static before any effect. *)
+          Cases_on `cx.txn.is_static` >> simp[]
+          >- (rpt strip_tac >> gvs[]) >>
           strip_tac >>
           drule_all (REWRITE_RULE [ignore_bind_def]
             selfdestruct_tail_preserves_contract_storage) >> simp[]) >>
@@ -1094,8 +1105,9 @@ Proof
   Cases_on `args_res` >> gvs[]
   >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
       Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs` >>
-      gvs[lift_option_def, bind_def, return_def, raise_def, push_log_def] >>
-      rpt strip_tac >> gvs[] >>
+      gvs[lift_option_def, bind_def, ignore_bind_def, return_def, raise_def,
+          push_log_def] >>
+      Cases_on `cx.txn.is_static` >> rpt strip_tac >> gvs[] >>
       irule contract_storage_well_formed_backends_frame >>
       qexists_tac `args_st` >> simp[]) >>
   rpt strip_tac >> gvs[]
@@ -1526,13 +1538,6 @@ Proof
   >> rpt strip_tac >> gvs[]
 QED
 
-Theorem body_empty_defaults_finally:
-  finally (do set_scopes scopes; eval_exprs cx [] od)
-    (set_scopes st.scopes) st = (INL [],st)
-Proof
-  simp[Once evaluate_def, finally_def, ignore_bind_apply, set_scopes_def,
-       return_def]
-QED
 
 Theorem body_try_handle_function_predicate:
   (!r s. f st = (r,s) ==> P s) /\
@@ -1659,8 +1664,9 @@ Theorem body_intcall_lock_storage:
 Proof
   strip_tac >> Cases_on `nr` >> gvs[lock_if_nr_def, return_def]
   >- (Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
+      gvs[ignore_bind_def, bind_def, AllCaseEqs()] >>
       drule_all acquire_nonreentrant_lock_preserves_contract_storage_well_formed >>
-      simp[])
+      Cases_on `is_view` >> gvs[return_def])
 QED
 
 Theorem body_intcall_lock_oracle_entry:
@@ -1677,35 +1683,12 @@ Proof
     (Cases_on `nr` >>
      gvs[lock_if_nr_def, return_def] >>
      Cases_on `cx.nonreentrant_slot` >>
-     gvs[raise_def, acquire_nonreentrant_lock_eq, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[]) >>
+     gvs[raise_def, ignore_bind_def, bind_def, acquire_nonreentrant_lock_eq,
+         AllCaseEqs()] >>
+     gvs[return_def, COND_RATOR, AllCaseEqs()]) >>
   gvs[oracle_storage_ok_payload]
 QED
 
-Theorem body_eval_intcall_empty_defaults:
-  ~MEM (NONE,fn) cx.stk /\ get_module_code cx NONE = SOME tops /\
-  lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
-  LENGTH es = LENGTH args ==>
-  eval_expr cx (Call ty (IntCall (NONE,fn)) es kw) =
-  (do results <- eval_expr_results cx es;
-      prev <- get_scopes;
-      vs <- read_results cx results;
-      call_env <- lift_option_type (bind_arguments (get_tenv cx) args vs)
-        "IntCall bind_arguments";
-      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
-      lock_if_nr cx nr (is_view_mut mut);
-      cxf <- push_function (NONE,fn) call_env cx;
-      rv <- finally_unless_halt
-        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-          (pop_function prev))
-        (unlock_if_nr cx nr (is_view_mut mut));
-      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
-      return (Value crv) od)
-Proof
-  strip_tac >> simp[Once evaluate_def, type_check_def, assert_def,
-    lift_option_type_def, bind_apply, ignore_bind_apply, return_def, FUN_EQ_THM,
-    get_scopes_def, body_empty_defaults_finally]
-QED
 
 Theorem body_assign_base_consumer:
   (!s0 pv s1. eval_expr cx e s0 = (INL pv,s1) ==>
@@ -3173,5 +3156,5 @@ Proof
   goal_assum $ drule_at Any >>
   qexistsl_tac [`args_st`, `args_st`, `[]`, `args_st`, `args_st`, `args_st`,
                `args_st`, `rtv`, `args_st`] >>
-  simp[body_empty_defaults_finally, lift_option_type_def, return_def]
+  simp[eval_empty_defaults_finally, lift_option_type_def, return_def]
 QED

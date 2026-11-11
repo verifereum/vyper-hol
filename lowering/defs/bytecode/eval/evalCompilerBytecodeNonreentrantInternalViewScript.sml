@@ -30,7 +30,7 @@ Proof
   simp_tac pure_ss [compile_vyper_def, compile_vyper_with_def] >> entry_stage "resolve_o1_policy" >>
   simp_tac pure_ss [optionTheory.option_case_def] >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
   entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
-  entry_choose_grouped_path >> entry_stage "package_external_fn" >> entry_guard "EVERY" >> entry_admin >> entry_stage "run_lowering" >>
+  entry_choose_grouped_path >> entry_stage "package_external_fn" >> entry_guard "EVERY" >> entry_immutables_guard >> entry_admin >> entry_stage "run_lowering" >>
   simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES,
     optionTheory.option_case_def, checked_unit_pipeline_def] >>
   simp_tac pure_ss [venomPipelineDriverTheory.run_venom_pipeline_def] >> entry_stage "pipeline_spec_wf" >>

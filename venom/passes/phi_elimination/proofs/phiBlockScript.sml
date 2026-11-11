@@ -223,7 +223,7 @@ QED
    Guarded by vs_prev_bb <> NONE (satisfied for all reachable non-entry blocks).
    ========================================================================== *)
 
-Triviality ssa_form_block_outputs_distinct:
+Theorem ssa_form_block_outputs_distinct:
   !fn bb. ssa_form fn /\ MEM bb fn.fn_blocks ==>
     ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
 Proof

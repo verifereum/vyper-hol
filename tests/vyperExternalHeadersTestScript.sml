@@ -129,7 +129,7 @@ val () = both "nm_dup_local_types" true
      Return (SOME ^zero)]``] base_dom1);
 
 (* Public getter/function name collision, with the getter declared first. *)
-val public_x = subst [stored |-> ``VariableDecl Public Storage "x"
+val public_x = subst [stored |-> ``VariableDecl (Public F) Storage "x"
   ^uint256 (SOME 0)``] base_dom1;
 val () = both "public_x_function_collision" false
   (subst [burn |-> header 4 ``"x"`` burn] public_x);
@@ -137,7 +137,7 @@ val () = both "public_x_baseline" true public_x;
 
 (* A selector collision against a mapping getter must be checked together with
    explicit functions. Both variants have valid storage layouts. *)
-val mapping = ``HashMapDecl Public F "cmap" (BaseT (BytesT (Fixed 16)))
+val mapping = ``HashMapDecl (Public F) F "cmap" (BaseT (BytesT (Fixed 16)))
   (Type ^uint256) (SOME 1)``;
 val mapping_layouts = ``[(0w : address,
   ([((NONE,"x"),0);((NONE,"cmap"),1);
@@ -146,7 +146,7 @@ val mapping_layouts = ``[(0w : address,
 val () = List.app
   (check_with_layouts mapping_layouts "mapping_getter_baseline" true
     ``^mapping :: ^base_dom1``) [false,true];
-val collision_mapping = ``HashMapDecl Public F "collate_propagate_storage"
+val collision_mapping = ``HashMapDecl (Public F) F "collate_propagate_storage"
   (BaseT (BytesT (Fixed 16))) (Type ^uint256) (SOME 1)``;
 val () = List.app
   (check_with_layouts mapping_layouts "mapping_getter_selector_collision" false

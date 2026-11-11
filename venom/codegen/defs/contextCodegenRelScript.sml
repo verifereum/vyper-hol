@@ -8,7 +8,7 @@
 
 Theory contextCodegenRel
 Ancestors
-  codegenRel venomExecSemantics venomWf fcgDefs
+  codegenRel venomExecSemantics venomWf fcgDefs fmpWfDefs
 
 (* A byte in any function's half-open spill interval. *)
 Definition context_spill_byte_def:
@@ -26,7 +26,7 @@ Definition context_memory_rel_def:
 End
 (* Context-facing Venom/assembly relation.  Unlike venom_asm_rel, its memory
    mask covers every spill region in the complete context plan.  Its running
-   oracle/request clauses match venom_asm_rel; GAS readings remain free. *)
+   oracle, GAS-reading and request clauses match venom_asm_rel. *)
 Definition context_venom_asm_rel_def:
   context_venom_asm_rel cp label_offsets ps vs as <=>
     plan_stack_rel label_offsets vs ps.ps_stack as.as_stack /\
@@ -37,6 +37,7 @@ Definition context_venom_asm_rel_def:
     as.as_returndata = vs.vs_returndata /\
     as.as_logs = vs.vs_logs /\
     as.as_outcomes = vs.vs_outcomes /\
+    as.as_gas_readings = vs.vs_gas_readings /\
     as.as_requests = vs.vs_requests /\
     as.as_pending_deletions = vs.vs_pending_deletions /\
     as.as_call_ctx = vs.vs_call_ctx /\
@@ -282,8 +283,10 @@ End
 
 (* An operand resolved backwards through a block's ASSIGN copies: the
    instructions are given latest first (REVERSE (TAKE k bb.bb_instructions)
-   for the operand of the instruction at index k).  A variable defined by
-   anything but a one-operand ASSIGN resolves to itself. *)
+   for the operand of the instruction at index k, or the instructions
+   strictly between two indices when those are all ASSIGNs, as in
+   revert_forward_pair).  A variable defined by anything but a one-operand
+   ASSIGN resolves to itself. *)
 Definition resolve_block_assigns_def:
   resolve_block_assigns [] op = op /\
   resolve_block_assigns (inst :: rest) op =
@@ -298,10 +301,43 @@ Definition resolve_block_assigns_def:
     | _ => op
 End
 
+(* One step back over inst for an operand read after inst: a variable a
+   one-operand ASSIGN wrote steps to its source, any other write of it
+   clobbers it (NONE), and anything else is unchanged. *)
+Definition step_back_assign_def:
+  step_back_assign inst op =
+    case op of
+      Var v =>
+        if MEM v inst.inst_outputs then
+          if inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [v] /\
+             LENGTH inst.inst_operands = 1
+          then SOME (HD inst.inst_operands)
+          else NONE
+        else SOME op
+    | _ => SOME op
+End
+
+(* Two operands read after the instructions insts (latest first) hold the
+   same value: they are equal, or become equal stepping back through
+   ASSIGN copies before either is clobbered. *)
+Definition same_after_assigns_def:
+  same_after_assigns [] op1 op2 = (op1 = op2) /\
+  same_after_assigns (inst :: rest) op1 op2 =
+    if op1 = op2 then T
+    else
+      case (step_back_assign inst op1, step_back_assign inst op2) of
+        (SOME op1', SOME op2') => same_after_assigns rest op1' op2'
+      | _ => F
+End
+
 (* Revert forwarding: RETURNDATACOPY [p; 0; rds] at i, later followed by
    REVERT [p; rds] at j, with only ASSIGNs in between and the operands
-   equal up to the block's ASSIGN copies (SingleUseExpansion wraps them in
-   fresh ASSIGNs).  After a failed call, the lowering copies the callee's
+   equal up to ASSIGN copies (SingleUseExpansion wraps them in fresh
+   ASSIGNs, before i and between i and j).  REVERT's operands are
+   resolved through the ASSIGNs between i and j, then compared with
+   RETURNDATACOPY's through the ASSIGNs before i, stopping as soon as they
+   agree, so instructions put in front of the block (block merging) keep
+   a pair a pair.  After a failed call, the lowering copies the callee's
    revert data to p (a zero-size ALLOCA or address 0) and reverts with it
    (extcall_fail, raw_call's call_failed, create_fail), as Python does.
    Both instructions touch [p, p + rds), past the frontier when rds > 0;
@@ -319,12 +355,13 @@ Definition revert_forward_pair_def:
       inst1.inst_operands = [p; src; rds] /\
       inst2.inst_opcode = REVERT /\
       inst2.inst_operands = [p'; rds'] /\
-      resolve_block_assigns (REVERSE (TAKE i bb.bb_instructions)) src =
-        Lit 0w /\
-      resolve_block_assigns (REVERSE (TAKE i bb.bb_instructions)) p =
-        resolve_block_assigns (REVERSE (TAKE j bb.bb_instructions)) p' /\
-      resolve_block_assigns (REVERSE (TAKE i bb.bb_instructions)) rds =
-        resolve_block_assigns (REVERSE (TAKE j bb.bb_instructions)) rds'
+      same_after_assigns (REVERSE (TAKE i bb.bb_instructions)) src (Lit 0w) /\
+      same_after_assigns (REVERSE (TAKE i bb.bb_instructions)) p
+        (resolve_block_assigns
+           (REVERSE (TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions))) p') /\
+      same_after_assigns (REVERSE (TAKE i bb.bb_instructions)) rds
+        (resolve_block_assigns
+           (REVERSE (TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions))) rds')
 End
 
 (* Index k is one of the two instructions of a revert forwarding. *)
@@ -378,7 +415,7 @@ Definition codegen_context_obligations_def:
   codegen_context_obligations Inv ctx cp <=>
     generate_context_plan ctx = SOME cp /\
     context_plan_layout_wf cp /\
-    codegen_ready ctx /\ ctx_wf ctx /\
+    codegen_ready ctx /\ ctx_wf ctx /\ fmp_lowered_context_wf ctx /\
     reachable_call_graph_acyclic ctx /\
     (!name efn. ctx.ctx_entry = SOME name /\
        lookup_function name ctx.ctx_functions = SOME efn ==>

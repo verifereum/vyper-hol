@@ -169,7 +169,7 @@ local
   val head_rules = map (REWR_CONV o CONV_RULE (DEPTH_CONV ETA_CONV))
     (List.concat (map (CONJUNCTS o SPEC_ALL)
     [eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
-     get_accounts_def, check_def, assert_def, return_def, raise_def,
+     get_accounts_def, check_def, check_not_static_def, assert_def, return_def, raise_def,
      update_accounts_def, get_transient_storage_def,
      get_pending_deletions_def, create_soft_failure_def,
      pairTheory.pair_case_thm, sumTheory.sum_case_def,

@@ -3,10 +3,10 @@
  *
  * TOP-LEVEL:
  *   analysis_inst_sim_block_sim_proof       — inst sim ⟹ block sim (at idx=0)
- *   df_analysis_pass_correct_sound_proof    — with soundness threading
- *   df_analysis_pass_correct_widen_sound_proof — widening variant
- *   df_analysis_pass_correct_prepend_proof  — prepend-aware variant
- *   analysis_function_transform_compare_proof — compare two transforms
+ *   df_analysis_pass_correct_sound    — with soundness threading
+ *   df_analysis_pass_correct_widen_sound — widening variant
+ *   df_analysis_pass_correct_prepend  — prepend-aware variant
+ *   analysis_function_transform_compare — compare two transforms
  *   analysis_inst_simulates_from_1_proof    — 1:1 as special case of 1:N
  *
  * Helper:
@@ -213,13 +213,6 @@ Theorem abt_label:
     (analysis_block_transform bottom result f bb).bb_label = bb.bb_label
 Proof
   simp[analysis_block_transform_def]
-QED
-
-Triviality abt_widen_label:
-  !bottom result (f:'a -> instruction -> instruction list) bb.
-    (analysis_block_transform_widen bottom result f bb).bb_label = bb.bb_label
-Proof
-  simp[analysis_block_transform_widen_def]
 QED
 
 (* run_insts preserves vs_inst_idx on OK results *)
@@ -551,7 +544,6 @@ Proof
   simp[merge_callee_state_def, venom_state_component_equality]
 QED
 
-
 (* For INVOKE, only the OK case shifts idx; Halt/Abort/Error are identical *)
 Theorem invoke_step_inst_idx_OK_only:
   !fuel ctx inst s j.
@@ -597,49 +589,6 @@ Proof
   Cases_on `step_inst fuel ctx inst2 s` >>
   gvs[lift_result_def] >>
   metis_tac[R_ok_idx_change]
-QED
-
-(* For two DIFFERENT INVOKE instructions with simulation between them,
-   relates exec_block continuations on both sides with different idx offsets.
-   Generalizes invoke_exec_block_step_lift to different instructions. *)
-Triviality invoke_exec_block_step_lift_sim:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool).
-  valid_state_rel R_ok R_term ==>
-  !fuel ctx inst1 inst2 s i j bb bb'.
-    inst1.inst_opcode = INVOKE /\ inst2.inst_opcode = INVOKE /\
-    lift_result R_ok R_term R_term
-      (step_inst fuel ctx inst1 s) (step_inst fuel ctx inst2 s) /\
-    (!v1 v2. step_inst fuel ctx inst1 s = OK v1 /\
-             step_inst fuel ctx inst2 s = OK v2 /\ R_ok v1 v2 ==>
-       lift_result R_ok R_term R_term
-         (exec_block fuel ctx bb (v1 with vs_inst_idx := SUC i))
-         (exec_block fuel ctx bb' (v2 with vs_inst_idx := SUC j)))
-  ==>
-    lift_result R_ok R_term R_term
-      (case step_inst fuel ctx inst1 s of
-         OK s'' => exec_block fuel ctx bb (s'' with vs_inst_idx := SUC i)
-       | Halt s' => Halt s'
-       | Abort a s' => Abort a s'
-       | IntRet rv ss => IntRet rv ss
-       | Error e => Error e)
-      (case step_inst fuel ctx inst2 (s with vs_inst_idx := j) of
-         OK s'' => exec_block fuel ctx bb' (s'' with vs_inst_idx := SUC j)
-       | Halt s' => Halt s'
-       | Abort a s' => Abort a s'
-       | IntRet rv ss => IntRet rv ss
-       | Error e => Error e)
-Proof
-  rpt strip_tac >>
-  `step_inst fuel ctx inst2 (s with vs_inst_idx := j) =
-    case step_inst fuel ctx inst2 s of
-      OK s'' => OK (s'' with vs_inst_idx := j)
-    | x => x` by simp[invoke_step_inst_idx_OK_only] >>
-  pop_assum SUBST1_TAC >>
-  Cases_on `step_inst fuel ctx inst1 s` >>
-  Cases_on `step_inst fuel ctx inst2 s` >>
-  gvs[lift_result_def] >>
-  first_x_assum irule >> gvs[]
 QED
 
 (* Executing the same instruction suffix at different block offsets
@@ -919,7 +868,7 @@ QED
 
 (* step_inst Error is idx-independent: if step_inst errors at idx=0,
    it errors at any idx. *)
-Triviality step_inst_error_idx_indep:
+Theorem step_inst_error_idx_indep[local]:
   !fuel ctx inst s e.
     step_inst fuel ctx inst (s with vs_inst_idx := 0) = Error e ==>
     !n. step_inst fuel ctx inst (s with vs_inst_idx := n) = Error e
@@ -928,8 +877,15 @@ Proof
   Cases_on `inst.inst_opcode = INVOKE` >> fs[step_inst_non_invoke]
   >- (
     fs[step_inst_def, eval_ops_inst_idx, setup_callee_def] >>
-    rpt BasicProvers.FULL_CASE_TAC >> fs[] >>
-    gvs[bind_outputs_def]
+    Cases_on `decode_invoke inst` >> gvs[] >>
+    PairCases_on `x` >> gvs[] >>
+    Cases_on `lookup_function x0 ctx.ctx_functions` >> gvs[] >>
+    rename1 `lookup_function _ _ = SOME callee` >>
+    Cases_on `eval_operands x1 s` >> gvs[] >>
+    Cases_on `NULL callee.fn_blocks` >> gvs[] >>
+    qmatch_asmsub_abbrev_tac `run_blocks fuel ctx callee cs` >>
+    Cases_on `run_blocks fuel ctx callee cs` >> gvs[bind_outputs_def] >>
+    IF_CASES_TAC >> gvs[]
   ) >>
   (* non-INVOKE: step_inst = step_inst_base *)
   Cases_on `is_terminator inst.inst_opcode`
@@ -1310,7 +1266,7 @@ Proof
     (* PHI gives Error in step_inst_base, so exec_block errors out.
        The conclusion (?e. exec_block ... = Error e) \/ ... is satisfied
        by the first disjunct. *)
-    DISJ1_TAC >> simp[step_inst_phi_error]
+    DISJ1_TAC >> simp[venomExecProofsTheory.step_inst_phi_error]
   ) >>
   (* === Non-term non-INVOKE non-PHI case === *)
   `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
@@ -1743,7 +1699,7 @@ Proof
     (* PHI gives Error in step_inst_base, so exec_block errors out.
        The conclusion (?e. exec_block ... = Error e) \/ ... is satisfied
        by the first disjunct. *)
-    DISJ1_TAC >> simp[step_inst_phi_error]
+    DISJ1_TAC >> simp[venomExecProofsTheory.step_inst_phi_error]
   ) >>
   (* === Non-term non-INVOKE non-PHI case === *)
   `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
@@ -2158,7 +2114,6 @@ Proof
   simp[Abbr `sound'`]
 QED
 
-
 (* Variant of analysis_block_sim_inv with block-restricted transfer soundness.
    The transfer_sound hypothesis only needs to hold for instructions that are
    in the block's bb_instructions (and from a block in fn.fn_blocks).
@@ -2240,7 +2195,6 @@ Proof
        (Cases_on `s` \\ gvs[venom_state_fn_updates])
   \\ gvs[]
 QED
-
 
 (* Generalized variant of analysis_block_sim_inv_block: works at arbitrary
    vs_inst_idx <= LENGTH rather than idx=0. Wraps analysis_block_sim_from_wf
@@ -2535,7 +2489,7 @@ Proof
     (* PHI gives Error in step_inst_base, so exec_block errors out.
        The conclusion (?e. exec_block ... = Error e) \/ ... is satisfied
        by the first disjunct. *)
-    DISJ1_TAC >> simp[step_inst_phi_error]
+    DISJ1_TAC >> simp[venomExecProofsTheory.step_inst_phi_error]
   ) >>
   (* === Non-term non-INVOKE non-PHI case === *)
   `EVERY (\i'. ~is_terminator i'.inst_opcode /\ i'.inst_opcode <> INVOKE)
@@ -2704,7 +2658,6 @@ Proof
       fs[venomWfTheory.fn_inst_wf_def] >> res_tac) >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >> simp[]
 QED
-
 
 (* ===== With soundness threading ===== *)
 
@@ -3027,9 +2980,9 @@ Proof
     simp[] >>
   rpt strip_tac >>
   `h.inst_opcode = PHI` by fs[] >>
-  simp[step_inst_phi_error] >>
+  simp[venomExecProofsTheory.step_inst_phi_error] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
-  simp[step_inst_phi_error]
+  simp[venomExecProofsTheory.step_inst_phi_error]
 QED
 
 (* Extract conditions from inst_transform_structural for use in

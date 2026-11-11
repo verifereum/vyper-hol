@@ -44,9 +44,9 @@
       "source_sha256": "bc1558a1eeba9256865104c16c9598b4c5e46611e1700e57d82565525aafa333"
     },
     "g19_aug_rhs_modifies_target": {
-      "deploy_sha256": "d2d2b795a3912c58b7e740ac2eda5275325fbf0b0cab8de8fb7f42447079f284",
+      "deploy_sha256": "0ab2a3867a9094b754c78315ebbaa9e84b06da79e44a5a0c2f59d21f87da0509",
       "frontend_sha256": "85ba705b50e09b9ff8c13eff387a40ceb952f4cb6eed813d875790df37290bb2",
-      "runtime_sha256": "dfa44e3fec3c68b8974992c83f5d9ae7951f15bef4fea8e667e53802ddfd0d58",
+      "runtime_sha256": "ded823f81a650f9621015585ae64b4d598069aa2085918350e84bb6ab484c139",
       "source": "sources/g19_aug_rhs_modifies_target.vy",
       "source_sha256": "28fc550b7ded2bf3a8f0ff08e292272c3778d86308f04ca05e2f2e78c2e9f740"
     },

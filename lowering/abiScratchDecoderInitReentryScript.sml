@@ -7,7 +7,7 @@ Ancestors
   abiDecoderArrayHeader abiDecoderGuards abiDecoderFrameCompose exprLoweringProps
   emitHelperProps valueEncoding abiDecoderArrayInitReentry abiDecoderDynarrayBound
   abiDecoderGuard abiDecoderReentryPointer abiDecoderVarSequence abiDecoderVarExtend emitHelper
-  context fragExec venomInst finite_map rich_list
+  context fragExec venomInst finite_map rich_list abiDecoderRange
 
 (* ===== Effect ===== *)
 
@@ -99,13 +99,14 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_init_sequence:
-  abi_decode_array_loop_init dst src opc hi maxn abi_sz st = (setup,loop_st) /\
+  abi_decode_array_loop_init dst src opc base_op hi maxn abi_sz st = (setup,loop_st) /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
-  abi_decode_load opc (n2w sb:bytes32) s = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load opc (n2w (B + sb):bytes32) s = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
     sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
-  abi_decoder_budget first last b cap s /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap s /\ first <= abi_decoder_entry_floor st /\ loop_st.cs_next_id <= last /\
   abi_footprint_disjoint d 32
     (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
   fresh_vars_wrt st s ==>
@@ -121,8 +122,9 @@ Theorem abi_scratch_decoder_init_sequence:
     t.vs_halted = s.vs_halted /\ inst_extends st loop_st
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_decode_array_loop_init_allocation_floor >> strip_tac >>
   drule abi_decode_array_loop_init_trace >> strip_tac >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   drule_all abi_decode_array_prepare_sequence >> strip_tac >>
@@ -167,17 +169,19 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_init_reentry:
-  abi_decode_array_loop_init dst src opc hi maxn abi_sz st = (setup,loop_st) /\
+  abi_decode_array_loop_init dst src opc base_op hi maxn abi_sz st = (setup,loop_st) /\
   abi_decode_source_opcode opc /\ eval_operand src initial = SOME (n2w sb) /\
   eval_operand dst initial = SOME (n2w d) /\ d < dimword (:256) /\
-  abi_decode_load opc (n2w sb:bytes32) initial = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
+  eval_operand base_op initial = SOME (n2w B) /\
+  abi_decode_load opc (n2w (B + sb):bytes32) initial = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
     sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ loop_st.cs_next_id <= last /\
   abi_footprint_disjoint d 32
     (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual slot. run_inst_seq (emitted_insts st loop_st) initial = OK actual /\
     eval_operand (FST setup) actual = SOME (n2w slot) /\
@@ -223,17 +227,19 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_init_from_state:
-  abi_decode_array_loop_init dst src opc hi maxn abi_sz st = (setup,loop_st) /\
+  abi_decode_array_loop_init dst src opc base_op hi maxn abi_sz st = (setup,loop_st) /\
   abi_decode_source_opcode opc /\ eval_operand src initial = SOME (n2w sb) /\
   eval_operand dst initial = SOME (n2w d) /\ d < dimword (:256) /\
-  abi_decode_load opc (n2w sb:bytes32) initial = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
+  eval_operand base_op initial = SOME (n2w B) /\
+  abi_decode_load opc (n2w (B + sb):bytes32) initial = n2w n /\ n <= maxn /\ maxn < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
     sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ loop_st.cs_next_id <= last /\
   abi_footprint_disjoint d 32
     (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   frag_exec ctx st loop_st (\s. s = initial)
     (\actual. abi_decoder_array_init_post setup st.cs_next_var limit_st (loop_st.cs_next_id - 2)
@@ -244,6 +250,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decode_array_loop_init_shape >> strip_tac >>
   drule_all abi_decode_array_loop_init_site_bounds >> strip_tac >>
+  drule_all abi_decode_array_loop_init_allocation_floor >> strip_tac >>
   irule frag_exec_run_inst_seq >> simp[] >>
   drule_all abi_scratch_decoder_init_reentry >> strip_tac >>
   `abi_decoder_array_init_post setup st.cs_next_var limit_st (loop_st.cs_next_id - 2)

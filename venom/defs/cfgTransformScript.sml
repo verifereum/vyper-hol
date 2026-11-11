@@ -19,6 +19,9 @@
  *   block_preds           — predecessor blocks of a label
  *   num_preds             — number of predecessors
  *   num_succs             — number of successors
+ *
+ * Lemmas:
+ *   MEM_FLAT_MAP_replace_block_subset — members after replace_block come from the new block or the old ones
  *)
 
 Theory cfgTransform
@@ -277,3 +280,16 @@ Definition renumber_fn_inst_ids_def:
       (0n, []) func.fn_blocks in
     func with fn_blocks := bbs'
 End
+
+Theorem MEM_FLAT_MAP_replace_block_subset:
+  !bbs lbl new_bb C x.
+    MEM x (FLAT (MAP C (replace_block lbl new_bb bbs))) ==>
+    MEM x (C new_bb) \/ MEM x (FLAT (MAP C bbs))
+Proof
+  Induct_on `bbs`
+  >> simp[replace_block_def, listTheory.MEM_APPEND]
+  >> rpt strip_tac
+  >> Cases_on `h.bb_label = lbl`
+  >> gvs[replace_block_def, listTheory.MEM_APPEND]
+  >> metis_tac[]
+QED

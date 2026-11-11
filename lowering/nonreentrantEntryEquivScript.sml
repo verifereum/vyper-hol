@@ -116,6 +116,7 @@ Proof
   strip_tac >>
   `function_header_ok vis mut T rr name args dflts ret` by
     metis_tac[source_typing_function_header] >>
+  `~ss.vs_call_ctx.cc_static` by fs[state_rel_def] >>
   drule_all nonreentrant_entry_lock_source_correct >> strip_tac >>
   drule_all compile_nonreentrant_lock_transient_frame >> strip_tac >>
   gvs[] >> metis_tac[]

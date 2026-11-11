@@ -13,6 +13,7 @@ Ancestors
   venomPipelineRunner venomPassDispatcher venomFnScheduleRunner
   fcgBridge fcgDefs fcgPostorder fcgAnalysisProps venomPipelineDriver
   venomPassSchedule irSupply dretDesugarDefs pred_set list rich_list
+  o1FnScheduleDecompHelpers
 
 Theorem o1_ctx_shape_wf:
   o1_ctx_shape C ==> ctx_wf C /\ wf_invoke_targets C
@@ -36,8 +37,8 @@ Proof
 QED
 
 Theorem namespace_filter_distinct:
-  !fns. ALL_DISTINCT (FLAT (MAP fn_labels fns)) ==>
-        ALL_DISTINCT (FLAT (MAP fn_labels (FILTER P fns)))
+  !fns. ALL_DISTINCT (FLAT (MAP names fns)) ==>
+        ALL_DISTINCT (FLAT (MAP names (FILTER P fns)))
 Proof
   Induct >> simp[] >> gen_tac >> strip_tac >>
   Cases_on `P h` >> gvs[ALL_DISTINCT_APPEND] >>
@@ -197,7 +198,7 @@ QED
 
 Theorem chain_facts_zero:
   LENGTH chains = LENGTH u.cu_context.ctx_functions /\
-  (!i. i < LENGTH chains ==> chain_facts rp passes u names chains i) ==>
+  (!i. i < LENGTH chains ==> chain_facts R rp passes u names chains i) ==>
   stage_ctx u.cu_context chains 0 = u.cu_context
 Proof
   strip_tac >> irule stage_ctx_zero >> conj_tac
@@ -208,8 +209,11 @@ Proof
   simp[]
 QED
 
+(* The schedule's stage contexts, for a row family R (rows_step_contract)
+   that every input function is at row 0 of. *)
 Theorem o1_schedule_stages:
-  o1_step_contracts_from rp 0 passes /\
+  rows_step_contracts_from R rp 0 passes /\
+  EVERY (R 0) u.cu_context.ctx_functions /\
   run_named_fn_schedules execute_configured_fn_pass rp passes names u s =
     SOME (u',s') /\
   o1_ctx_shape u.cu_context /\
@@ -224,7 +228,7 @@ Theorem o1_schedule_stages:
       (stage k).ctx_entry = u.cu_context.ctx_entry /\
       (stage k).ctx_global_reserved = u.cu_context.ctx_global_reserved /\
       ctx_fn_names (stage k) = ctx_fn_names u.cu_context /\
-      EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+      EVERY (R k) (stage k).ctx_functions) /\
     (!k. k < LENGTH passes ==>
       ctx_pass_stage rp (EL k passes) any_view (stage k) (stage (SUC k)) /\
       (callee_first names u.cu_context.ctx_functions ==>
@@ -241,7 +245,7 @@ Proof
   conj_tac >- (irule chain_facts_zero >> metis_tac[]) >>
   conj_tac >- simp[] >> conj_tac
   >- (qx_gen_tac `k` >> disch_tac >>
-      `EVERY (o1_fn_row k) (stage_ctx u.cu_context chains k).ctx_functions` by
+      `EVERY (R k) (stage_ctx u.cu_context chains k).ctx_functions` by
         (irule stage_ctx_rows >> metis_tac[]) >>
       drule_all chain_facts_stage_shape >> strip_tac >>
       fs[stage_ctx_def]) >>
@@ -263,10 +267,10 @@ Proof
   `ALL_DISTINCT (ctx_fn_names u.cu_context)` by
     (drule o1_ctx_shape_wf >> simp[ctx_wf_def, ctx_distinct_fn_names_def]) >>
   fs[run_mapped_functions_def] >>
-  `o1_step_contracts_from rp 0 [pass]` by
-    simp[o1_step_contracts_from_def, o1_step_contract_at_plain] >>
-  drule_at (Pos (el 2)) o1_schedule_stages >> simp[] >>
-  strip_tac >> gvs[] >>
+  `rows_step_contracts_from (\k fn. T) rp 0 [pass]` by
+    metis_tac[o1_step_contract_rows_plain] >>
+  drule_at (Pos (el 3)) (Q.INST [`R` |-> `\k fn. T`] o1_schedule_stages) >>
+  simp[] >> strip_tac >> gvs[] >>
   first_x_assum (qspec_then `1` mp_tac) >> simp[]
 QED
 

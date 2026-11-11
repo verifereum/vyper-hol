@@ -6,6 +6,11 @@ Libs
 
 fun same_term a b = Term.aconv a b;
 
+val public_tm = vyperASTSyntax.mk_Public boolSyntax.T;
+val _ = if vyperASTSyntax.is_Public public_tm andalso
+           same_term (vyperASTSyntax.dest_Public public_tm) boolSyntax.T
+        then () else raise Fail "Public constructor roundtrip";
+
 val u256 =
   vyperASTSyntax.mk_BaseT_tm
     (vyperASTSyntax.mk_UintT_tm (numSyntax.term_of_int 256));

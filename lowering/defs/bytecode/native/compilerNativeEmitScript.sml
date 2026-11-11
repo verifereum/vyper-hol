@@ -286,6 +286,13 @@ val code_rewrites = [
   prove (``set l SUBSET s <=> EVERY (\x. x IN s) l``,
     rw[pred_setTheory.SUBSET_DEF, listTheory.EVERY_MEM]),
   GSYM listTheory.EXISTS_MEM, GSYM listTheory.EVERY_MEM,
+  (* alloc_limits_expr's Slice test and entry_instructions' no-effects test. *)
+  prove (``(?n. bi = Slice n) <=> (case bi of Slice _ => T | _ => F)``,
+    Cases_on `bi` >> simp[]),
+  prove (``(s:effects) = empty_effects <=> effects_to_list s = []``,
+    rw[dftDefsTheory.effects_to_list_def, venomEffectsTheory.empty_effects_def,
+       pred_setTheory.EXTENSION, listTheory.FILTER_EQ_NIL, EQ_IMP_THM] >>
+    Cases_on `x` >> fs[]),
   (* to_word is width-polymorphic; inlined, its n2w gets each caller's width.
      The applied form comes first so applied occurrences leave no redex. *)
   cv_typeTheory.to_word_def,

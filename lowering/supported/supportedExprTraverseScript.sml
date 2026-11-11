@@ -90,21 +90,45 @@ Definition target_has_internal_call_def:
     supported_target_exists expr_internal_call_root target
 End
 
-(* The calls the lowering proofs exclude: the ones the source runs on the
-   EVM even when it takes external calls from the outcome oracle, a delegate
-   raw_call (eval_raw_call's run_raw_call) and the creates (eval_create's
-   run_create_evm), and a raw_call without revert_on_failure.  The last is
-   excluded because take_outcome answers a computed precompile without the
-   oracle, as a success, while the EVM call can fail for lack of gas and an
-   unchecked raw_call returns that failure as a value. *)
+(* The calls the source runs on the EVM even when it takes external calls
+   from the outcome oracle: a delegate raw_call (eval_raw_call's
+   run_raw_call) and the creates (eval_create's run_create_evm).  Also
+   selfdestruct, which the expression simulation holds out until the
+   source's selfdestruct halts (supported_program excludes it). *)
 Definition expr_evm_run_root_def:
   expr_evm_run_root (Call ty (RawCallTarget flags) es default) =
-    (flags.rcf_is_delegate \/ ~flags.rcf_revert_on_failure) /\
+    flags.rcf_is_delegate /\
   expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) =
-    (flags.rcf_is_delegate \/ ~flags.rcf_revert_on_failure) /\
+    flags.rcf_is_delegate /\
   expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
+  expr_evm_run_root (Call ty SelfDestructTarget es default) = T /\
   expr_evm_run_root _ = F
 End
+
+Definition call_operands_effect_root_def:
+  call_operands_effect_root (Call ty (ExtCall s k sig opts) args d) =
+    EXISTS expr_has_effect (DROP 1 args) /\
+  call_operands_effect_root (Call ty (IntCall id) args d) =
+    EXISTS expr_has_effect args /\
+  call_operands_effect_root _ = F
+End
+
+(* Only a call is a root. *)
+Theorem call_operands_effect_root_non_call[simp]:
+  ~call_operands_effect_root (Name t id) /\
+  ~call_operands_effect_root (TopLevelName t nsid) /\
+  ~call_operands_effect_root (FlagMember t nsid fid) /\
+  ~call_operands_effect_root (IfExp t c x y) /\
+  ~call_operands_effect_root (Literal t lit) /\
+  ~call_operands_effect_root (StructLit t nsid kes) /\
+  ~call_operands_effect_root (Subscript t x y) /\
+  ~call_operands_effect_root (Attribute t x fid) /\
+  ~call_operands_effect_root (Builtin t bi es) /\
+  ~call_operands_effect_root (TypeBuiltin t tb ty es) /\
+  ~call_operands_effect_root (Pop t tgt)
+Proof
+  simp[call_operands_effect_root_def]
+QED
 
 Definition expr_has_evm_run_def:
   expr_has_evm_run e <=> supported_expr_exists expr_evm_run_root e
@@ -146,6 +170,28 @@ Theorem supported_exprs_exists_every:
   supported_exprs_exists p es <=> EXISTS (supported_expr_exists p) es
 Proof
   Induct_on `es` >> simp[supported_expr_exists_def]
+QED
+
+Theorem call_operands_effect_extcall_tail:
+  ~supported_expr_exists call_operands_effect_root
+    (Call ty (ExtCall s k sig opts) args d) ==>
+  EVERY (\e. ~expr_has_effect e) (DROP 1 args)
+Proof
+  strip_tac >>
+  `~call_operands_effect_root (Call ty (ExtCall s k sig opts) args d)` by
+    metis_tac[supported_expr_exists_root] >>
+  qpat_x_assum `~call_operands_effect_root _` mp_tac >>
+  pure_rewrite_tac[call_operands_effect_root_def] >>
+  simp[EVERY_MEM, EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem supported_expr_exists_call_operands:
+  ~supported_expr_exists p (Call ty ct args d) ==>
+  EVERY (\e. ~supported_expr_exists p e) args /\
+  ~supported_opt_exists p d
+Proof
+  pure_rewrite_tac[supported_expr_exists_def] >>
+  simp[supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
 QED
 
 Theorem supported_fields_exists_every:
@@ -261,8 +307,8 @@ Proof
     supported_effect_expr_has_effect]
 QED
 
-(* The supported subset has no raw_call or create, so none of the calls the
-   source runs on the EVM even with the outcome oracle. *)
+(* The supported subset has no raw_call or create, the calls the source
+   runs on the EVM even with the outcome oracle. *)
 Theorem supported_pure_no_evm_run[local]:
   (!tops e. supported_pure_expr tops e ==>
       ~supported_expr_exists expr_evm_run_root e) /\
