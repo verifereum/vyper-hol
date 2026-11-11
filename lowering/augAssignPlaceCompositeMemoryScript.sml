@@ -10,7 +10,7 @@ Ancestors
   augAssignPlaceLoadedStorage augAssignPlaceEndpointStorage
   vyperInterpreter exprSimDefs bodySim exprSimHyps
 
-Theorem aug_place_memory_post[local]:
+Theorem aug_place_memory_post:
   res = INL () /\
   stmt_post ctx func cx lctx cenv cenv sa sb s0 res ee t /\
   return_buf_frame d cenv sa s0 /\
