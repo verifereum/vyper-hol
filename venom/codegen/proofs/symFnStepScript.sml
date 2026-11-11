@@ -335,7 +335,7 @@ Theorem sym_nonentry_body_inv:
   !rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
    spill_base lbl_ctr fn_ops ps_end bb pred ps_l h promised ps_dfs
    block_ops ps_dfs_after ps_after prefix_ops rest_ops ps pc0 vs s_phi as
-   Inv ra pc_ret rest mem0.
+   Inv ra pc_ret rest mem0 prefixL prefixD core.
     ctx = unit.cu_context /\ lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\ generate_context_plan ctx = SOME cp /\
     codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
@@ -376,6 +376,10 @@ Theorem sym_nonentry_body_inv:
       SOME (block_ops, ps_after) /\
     ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
     ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+    ps_after.ps_stack = prefixL ++ core /\
+    ps_dfs_after.ps_stack = prefixD ++ core /\
+    (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
+       ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD) /\
     block_plan_state liveness dfg cfg fn bb
       (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
       (phi_prefix_length bb.bb_instructions) ps /\
@@ -491,6 +495,11 @@ Theorem sym_block_prefix_prepare:
     generate_block_plan liveness dfg cfg fn bb ps_dfs = SOME (block_ops, ps_dfs_after)
     ==>
     ?h promised ps_after clean_ops ps2 inst_ops.
+      (?prefixL prefixD core.
+         ps_after.ps_stack = prefixL ++ core /\
+         ps_dfs_after.ps_stack = prefixD ++ core /\
+         (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
+            ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
       codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
       non_param_insts bb = bb.bb_instructions /\ get_params bb.bb_instructions = [] /\
       lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
@@ -590,6 +599,7 @@ QED
 
 Resume sym_block_prefix_prepare[prepare_finish]:
   qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops`, `ps2`, `inst_ops`] >>
+  conj_tac >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> gvs[]) >>
   simp[] >> suspend "prepare_finish_bounds"
 QED
 
@@ -647,6 +657,11 @@ Theorem sym_block_step_prefix:
     MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\ label_flow_ok ctx /\ asm_static_wf prog /\
     sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
     ?h promised ps_after prefix_ops rest_ops ps1 n as1 ss1.
+      (?prefixL prefixD core.
+         ps_after.ps_stack = prefixL ++ core /\
+         ps_dfs_after.ps_stack = prefixD ++ core /\
+         (!v. MEM v (live_vars_at liveness bb.bb_label (LENGTH bb.bb_instructions)) ==>
+            ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
       non_param_insts bb = bb.bb_instructions /\
       generate_block_plan liveness dfg cfg fn bb
         (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
@@ -728,6 +743,7 @@ QED
 Resume sym_block_step_prefix[full_witness]:
   qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops ++ phi_ops`,
                 `body_ops`, `ps1`, `1 + n`, `as'`, `ss'`] >>
+  conj_tac >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> gvs[]) >>
   simp[execute_plan_label_length, Once sym_steps_add] >>
   suspend "full_plan_state"
 QED
