@@ -542,6 +542,8 @@ Proof
        (rpt strip_tac >> simp[stackModelTheory.stack_peek_def, EL_REVERSE] >>
         AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
      simp[EL]) >>
+  pop_assum (qspecl_then [`k`, `ps.ps_stack`] mp_tac) >>
+  impl_tac >- simp[] >> disch_then SUBST1_TAC >>
   simp[lupdate_append, EL_APPEND_EQN] >>
   gvs[asmSymBridgeTheory.LIST_REL_swap]
 QED
