@@ -154,5 +154,6 @@ Proof
   simp[exprLoweringTheory.compile_stage_intcall_args_def,
        compileEnvTheory.comp_return_def, fragGasModeTheory.gas_marked_path_def,
        intcall_expr_cont_def, exprSimPropsTheory.locals_kept_refl] >>
+  rpt strip_tac >> fs[intcall_joint_res_def] >>
   metis_tac[fragGasPathTheory.gas_path_rules]
 QED
