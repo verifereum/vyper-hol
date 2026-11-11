@@ -108,7 +108,10 @@ Proof
      conj_tac >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def,
                     bodyIntCallJointContractTheory.intcall_expr_res_def] >>
      qexistsl_tac [`es`, `s`, `sa`] >> simp[] >>
-     fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >> metis_tac[]) >>
+     fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+     `!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sa x` by
+       fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
+     metis_tac[]) >>
   simp[bodyIntCallJointContractTheory.intcall_expr_cont_def]
 QED
 

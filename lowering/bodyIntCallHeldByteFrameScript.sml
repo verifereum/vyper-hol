@@ -107,7 +107,8 @@ Proof
   >- (rpt strip_tac >> first_x_assum irule >>
       gvs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
           venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
-  simp[locals_kept_def] >> rpt strip_tac >> first_x_assum irule >>
+  irule exprSimPropsTheory.locals_kept_regions >> rpt strip_tac >>
+  qpat_x_assum `!off len. off + len <= s.vs_alloca_next ==> _` irule >>
   res_tac >> decide_tac
 QED
 
