@@ -12236,6 +12236,93 @@ Proof
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
+Theorem mm_local_capture_fold[local]:
+  !xs s. FOLDL (\st j. case cap j of NONE => st
+      | SOME (d,bs) => write_memory_with_expansion d bs st) s xs =
+    FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s
+      (MAP (THE o cap) (FILTER (\j. IS_SOME (cap j)) xs))
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `cap h` >> simp[] >> rename1 `cap h = SOME w` >>
+  PairCases_on `w` >> simp[]
+QED
+
+Theorem mm_local_capture_fold_emit[local]:
+  SORTED $< (xs:num list) /\
+  (!j l d bs e cs. MEM j xs /\ MEM l xs /\ j < l /\ P j /\ ~P l /\
+    cap j = SOME (d,bs) /\ cap l = SOME (e,cs) ==>
+    mm_local_write_compatible d bs e cs) /\
+  u.vs_memory = (FOLDL (\st j. case cap j of NONE => st
+      | SOME (d,bs) => write_memory_with_expansion d bs st)
+    mem0 (FILTER (\j. ~P j) xs)).vs_memory /\
+  cap r = SOME last /\
+  (!v. write_memory_with_expansion dst payload v =
+    FOLDL (\st j. case cap j of NONE => st
+      | SOME (d,bs) => write_memory_with_expansion d bs st) v (FILTER P xs ++ [r])) /\
+  u'.vs_memory = (write_memory_with_expansion dst payload u).vs_memory ==>
+  u'.vs_memory = (FOLDL (\st j. case cap j of NONE => st
+      | SOME (d,bs) => write_memory_with_expansion d bs st) mem0 (xs ++ [r])).vs_memory
+Proof
+  strip_tac >>
+  `SORTED $< (FILTER (\j. IS_SOME (cap j)) xs)` by
+    (irule sortingTheory.SORTED_FILTER >> simp[relationTheory.transitive_def] >> decide_tac) >>
+  `!pre j mid l post. FILTER (\j. IS_SOME (cap j)) xs =
+      pre ++ [j] ++ mid ++ [l] ++ post /\ P j /\ ~P l ==>
+    mm_local_write_compatible (FST ((THE o cap) j)) (SND ((THE o cap) j))
+      (FST ((THE o cap) l)) (SND ((THE o cap) l))` by
+    (rpt strip_tac >>
+     `j < l` by
+       (qpat_x_assum `SORTED $< (FILTER _ xs)` mp_tac >>
+        simp[sortingTheory.SORTED_APPEND, relationTheory.transitive_def] >>
+        metis_tac[MEM_APPEND, MEM]) >>
+     `MEM j (FILTER (\j. IS_SOME (cap j)) xs) /\
+      MEM l (FILTER (\j. IS_SOME (cap j)) xs)` by simp[] >>
+     `MEM j xs /\ IS_SOME (cap j) /\ MEM l xs /\ IS_SOME (cap l)` by
+       fs[MEM_FILTER] >>
+     Cases_on `cap j` >> Cases_on `cap l` >> gvs[] >>
+     rename1 `cap j = SOME wj` >> rename1 `cap l = SOME wl` >>
+     PairCases_on `wj` >> PairCases_on `wl` >> gvs[] >> metis_tac[]) >>
+  `u.vs_memory = (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) mem0
+    (MAP (THE o cap) (FILTER (\j. ~P j) (FILTER (\j. IS_SOME (cap j)) xs)))).vs_memory` by
+    (qpat_x_assum `u.vs_memory = _` mp_tac >>
+     rewrite_tac[GSYM rich_listTheory.FOLDL_FILTER, mm_local_capture_fold, FILTER_FILTER] >>
+     simp[CONJ_COMM]) >>
+  `!v. (write_memory_with_expansion dst payload v).vs_memory =
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v
+      (MAP (THE o cap) (FILTER P (FILTER (\j. IS_SOME (cap j)) xs)) ++ [last])).vs_memory` by
+    (gen_tac >> first_x_assum (qspec_then `v` mp_tac) >>
+     simp[mm_local_capture_fold, FILTER_APPEND, MAP_APPEND, FILTER_FILTER, CONJ_COMM]) >>
+  drule_all mm_local_retained_log_emit >>
+  simp[mm_local_capture_fold, FILTER_APPEND, MAP_APPEND]
+QED
+
+Theorem mm_local_epoch_pending_slice[local]:
+  a = mm_local_epoch_start is gs r ==>
+  FILTER (\j. MEM j (mm_local_pending_indices is gs r))
+    (MAP (\q. a+q) (COUNT_LIST (r-a))) = mm_local_pending_indices is gs r
+Proof
+  strip_tac >>
+  `SORTED $< (MAP (\q. a+q) (COUNT_LIST (r-a)))` by
+    (pure_rewrite_tac[rich_listTheory.MAP_COUNT_LIST] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >>
+     MATCH_ACCEPT_TAC sortingTheory.SORTED_GENLIST_PLUS) >>
+  `SORTED $< (FILTER (\j. MEM j (mm_local_pending_indices is gs r))
+      (MAP (\q. a+q) (COUNT_LIST (r-a))))` by
+    (irule sortingTheory.SORTED_FILTER >> simp[relationTheory.transitive_def] >> decide_tac) >>
+  irule (Q.ISPEC `$< : num -> num -> bool` sortingTheory.SORTED_ALL_DISTINCT_LIST_TO_SET_EQ) >>
+  simp[relationTheory.transitive_def, relationTheory.antisymmetric_def] >>
+  `SORTED $< (mm_local_pending_indices is gs r)` by
+    metis_tac[mm_local_pending_indices_order] >>
+  `!xs:num list. SORTED $< xs ==> ALL_DISTINCT xs` by
+    (mp_tac (Q.ISPEC `$< : num -> num -> bool` (GEN_ALL sortingTheory.SORTED_ALL_DISTINCT)) >>
+     simp[relationTheory.irreflexive_def, arithmeticTheory.transitive_LESS]) >>
+  gvs[] >> simp[pred_setTheory.EXTENSION, MEM_FILTER, MEM_MAP, MEM_COUNT_LIST] >>
+  gen_tac >> eq_tac >- metis_tac[] >> strip_tac >> simp[] >>
+  `mm_local_epoch_start is gs r <= x /\ x < r` by
+    metis_tac[mm_local_epoch_start_pending_bound, mm_local_pending_indices_mem] >>
+  qexists `x-mm_local_epoch_start is gs r` >> simp[]
+QED
+
 Theorem mm_local_canonical_pending_discharge[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -12311,6 +12398,211 @@ Proof
       irule EVERY2_refl >> pure_rewrite_tac[MEM_FILTER] >>
       rpt strip_tac >> gvs[]) >>
   first_assum ACCEPT_TAC
+QED
+
+Theorem mm_local_canonical_retained_emit[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  a = mm_local_epoch_start is gs r /\
+  (!j v src. a <= j /\ j <= r /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (read_memory g.cg_src g.cg_length t) t).vs_memory ==>
+  t'.vs_memory = (FOLDL (\st q.
+    if MEM q (FILTER (\j. mm_local_rep_index is gs j <> r) js) then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (SUC r-a)))).vs_memory
+Proof
+  strip_tac >>
+  qabbrev_tac `due = FILTER (\j. mm_local_rep_index is gs j = r) js` >>
+  qabbrev_tac `rest = FILTER (\j. mm_local_rep_index is gs j <> r) js` >>
+  qabbrev_tac `epoch_js = MAP (\q. a+q) (COUNT_LIST (r-a))` >>
+  `a <= r` by metis_tac[mm_local_epoch_start_bound] >>
+  `FILTER (\j. MEM j js) epoch_js = js` by
+    (drule mm_local_epoch_pending_slice >> simp[Abbr `epoch_js`]) >>
+  `!j. MEM j (due ++ [r]) ==> a <= j /\ j <= r` by
+    (gen_tac >> disch_tac >> Cases_on `j = r` >- gvs[] >>
+     `MEM j js` by fs[Abbr `due`, MEM_FILTER] >>
+     conj_tac
+     >- (irule mm_local_epoch_start_pending_bound >> metis_tac[]) >>
+     qpat_x_assum `MEM j js` mp_tac >>
+     simp[mm_local_pending_indices_mem] >> rpt strip_tac >> decide_tac) >>
+  `!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs)` by
+    (rpt strip_tac >>
+     `a <= j /\ j <= r` by metis_tac[] >>
+     mp_tac (Q.INST [`s0` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+       empty_scan_state (TAKE j is)`] (SPEC_ALL mm_local_canonical_due_index_payload)) >>
+     simp[Abbr `due`, Abbr `epoch_js`] >> metis_tac[]) >>
+  `!v. FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v
+      (MAP (THE o cap) (due ++ [r])) =
+    write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) v` by
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
+       (cj 2 mm_local_canonical_due_log_payload) >>
+     disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+     simp[Abbr `due`, Abbr `epoch_js`] >>
+     disch_then irule >>
+     reverse conj_tac >- gvs[arithmeticTheory.ADD_COMM] >>
+     rpt strip_tac >> first_x_assum irule >>
+     gvs[] >> metis_tac[MEM_APPEND, MEM]) >>
+  `!j. MEM j due ==> MEM (EL j is).inst_id g.cg_inst_ids /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    (`due = FILTER (\j. j < r /\
+        (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+        MEM (EL j is).inst_id g.cg_inst_ids) (COUNT_LIST r)` by
+       (irule mm_local_canonical_due_group >> simp[Abbr `due`] >> metis_tac[]) >>
+     simp[MEM_FILTER]) >>
+  `!j l d bs e cs. MEM j epoch_js /\ MEM l epoch_js /\ j < l /\
+    MEM j due /\ ~MEM l due /\ cap j = SOME (d,bs) /\ cap l = SOME (e,cs) ==>
+    mm_local_write_compatible d bs e cs` by
+    (rpt strip_tac >>
+     `a <= j /\ j < r /\ a <= l /\ l < r` by
+       (fs[Abbr `epoch_js`, MEM_MAP, MEM_COUNT_LIST] >> gvs[]) >>
+     drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_retained_captures_compatible >>
+     disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+     simp[] >> disch_then irule >>
+     conj_tac >- gvs[] >> qexistsl [`H`, `SUC r`, `j`, `l`] >>
+     gvs[] >> rpt conj_tac >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+  qabbrev_tac `kept = FILTER (\j. ~MEM j rest) epoch_js` >>
+  `FILTER (\j. MEM j due) kept = due` by
+    (simp[NoAsms, Abbr `kept`, Abbr `due`, Abbr `rest`, FILTER_FILTER] >>
+     qpat_x_assum `FILTER _ epoch_js = js` (fn th =>
+       GEN_REWRITE_TAC (RHS_CONV o RAND_CONV) empty_rewrites [GSYM th]) >>
+     simp[NoAsms, FILTER_FILTER] >>
+     AP_THM_TAC >> AP_TERM_TAC >>
+     simp[NoAsms, FUN_EQ_THM, MEM_FILTER] >> metis_tac[]) >>
+  `FILTER (\j. ~MEM j due) kept = FILTER (\j. ~MEM j js) epoch_js` by
+    (simp[Abbr `kept`, Abbr `due`, Abbr `rest`, FILTER_FILTER] >>
+     AP_THM_TAC >> AP_TERM_TAC >> simp[NoAsms, FUN_EQ_THM, MEM_FILTER] >>
+     gen_tac >> Cases_on `mm_local_rep_index is gs j = r` >> gvs[]) >>
+  `SORTED $< kept` by
+    (simp[NoAsms, Abbr `kept`] >> irule sortingTheory.SORTED_FILTER >>
+     simp[relationTheory.transitive_def] >>
+     simp[NoAsms, Abbr `epoch_js`] >>
+     pure_rewrite_tac[rich_listTheory.MAP_COUNT_LIST] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >>
+     MATCH_ACCEPT_TAC sortingTheory.SORTED_GENLIST_PLUS) >>
+  `t'.vs_memory = (FOLDL (\st j. case cap j of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st) (H a) (kept ++ [r])).vs_memory` by
+    (irule (Q.INST [`P` |-> `\j. MEM j due`] mm_local_capture_fold_emit) >>
+     reverse conj_tac >- metis_tac[MEM_APPEND, MEM] >>
+     qexistsl [`g.cg_dst`, `due`, `read_memory g.cg_src g.cg_length t`, `t`] >>
+     simp[NoAsms] >> rpt conj_tac
+     >- (fs[Abbr `kept`, MEM_FILTER] >> metis_tac[])
+     >- (`FILTER (\j. IS_SOME (cap j)) (due ++ [r]) = due ++ [r]` by
+           (pure_rewrite_tac[FILTER_EQ_ID, EVERY_MEM] >> qx_gen_tac `j` >> disch_tac >>
+            `?d bs. cap j = SOME (d,bs)` by metis_tac[] >> simp[]) >>
+         simp[NoAsms] >> gen_tac >> rewrite_tac[mm_local_capture_fold] >>
+         gvs[])
+     >- (simp[] >> qpat_x_assum `t.vs_memory = _` mp_tac >>
+         qpat_x_assum `u = _` SUBST1_TAC >>
+         rewrite_tac[rich_listTheory.FOLDL_FILTER] >> disch_tac >>
+         AP_TERM_TAC >> AP_THM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
+         simp[NoAsms, FUN_EQ_THM] >> rpt gen_tac >> IF_CASES_TAC >> simp[])
+     >- first_assum ACCEPT_TAC) >>
+  `MAP (\q. a+q) (COUNT_LIST (SUC r-a)) = epoch_js ++ [r]` by
+    (`SUC r-a = SUC (r-a)` by decide_tac >>
+     qpat_x_assum `SUC r-a = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms, Abbr `epoch_js`, rich_listTheory.COUNT_LIST_SNOC,
+       MAP_SNOC, SNOC_APPEND] >> `a + (r-a) = r` by decide_tac >> simp[]) >>
+  `~MEM r rest` by
+    (simp[Abbr `rest`, MEM_FILTER, mm_local_pending_indices_def, MEM_COUNT_LIST]) >>
+  `kept ++ [r] = FILTER (\j. ~MEM j rest) (epoch_js ++ [r])` by
+    (simp[NoAsms, Abbr `kept`, FILTER_APPEND] >> simp[]) >>
+  qpat_x_assum `MAP _ (COUNT_LIST (SUC r-a)) = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_x_assum `t'.vs_memory = (FOLDL _ _ _) .vs_memory` mp_tac >>
+  qpat_x_assum `kept ++ [r] = _` (fn th => pure_rewrite_tac[th]) >>
+  rewrite_tac[rich_listTheory.FOLDL_FILTER] >>
+  `!st q. (if ~MEM q rest then
+      (case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+      else st) = (if MEM q rest then st else
+      case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)` by
+    (rpt gen_tac >> Cases_on `MEM q rest` >> simp[]) >>
+  gvs[]
+QED
+
+Theorem mm_local_canonical_retained_renew[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  a = mm_local_epoch_start is gs r /\
+  (!j v src. a <= j /\ j <= r /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\ mm_local_pending cap js (H r) t /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (read_memory g.cg_src g.cg_length t) t).vs_memory /\
+  a' = mm_local_epoch_start is gs (SUC r) ==>
+  t'.vs_memory = (FOLDL (\st q.
+    if MEM q (mm_local_pending_indices is gs (SUC r)) then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a') (MAP (\q. a'+q) (COUNT_LIST (SUC r-a')))).vs_memory
+Proof
+  strip_tac >>
+  `~MEM r (mm_local_pending_indices is gs (SUC r))` by
+    (strip_tac >>
+     `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+     qpat_x_assum `MEM r (mm_local_pending_indices _ _ _)`
+       (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+     rename1 `rep_of_group is h = SOME ((EL R is).inst_id,h)` >>
+     `r = R` by metis_tac[mm_local_write_rep_unique] >> decide_tac) >>
+  `FILTER (\j. mm_local_rep_index is gs j <> r) js =
+    mm_local_pending_indices is gs (SUC r)` by
+    (`FILTER (\j. j < r) (mm_local_pending_indices is gs (SUC r)) =
+        mm_local_pending_indices is gs (SUC r)` by
+       (pure_rewrite_tac[FILTER_EQ_ID, EVERY_MEM] >> qx_gen_tac `j` >> strip_tac >>
+        `j <> r` by metis_tac[] >>
+        qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)` mp_tac >>
+        rewrite_tac[mm_local_pending_indices_mem] >> rpt strip_tac >> simp[]) >>
+     drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_pending_partition >>
+     simp[] >> disch_then (qspecl_then [`r`, `SUC r`, `H`] mp_tac) >>
+     gvs[]) >>
+  `?d bs. cap r = SOME (d,bs) /\
+    (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory` by
+    (drule_all mm_local_canonical_rep_capture >> simp[]) >>
+  `mm_local_pending cap (mm_local_pending_indices is gs (SUC r)) (H (SUC r)) t'` by
+    (qpat_x_assum `FILTER _ js = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+     drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_pending_discharge >>
+     disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+     disch_then irule >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     qexistsl [`H`, `a`, `d`, `bs`, `H r`, `t`, `u`] >>
+     simp[] >> rpt strip_tac >>
+     `a <= j` by
+       (gvs[MEM_APPEND] >>
+        metis_tac[mm_local_epoch_start_pending_bound, mm_local_epoch_start_bound]) >>
+     `j <= r` by
+       (gvs[MEM_APPEND, mm_local_pending_indices_def, MEM_FILTER, MEM_COUNT_LIST]) >>
+     metis_tac[]) >>
+  Cases_on `mm_local_pending_indices is gs (SUC r) = []`
+  >- (gvs[mm_local_epoch_start_suc, mm_local_pending_empty,
+       rich_listTheory.COUNT_LIST_def]) >>
+  `a' = a` by gvs[mm_local_epoch_start_suc] >>
+  drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_retained_emit >>
+  disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
+  metis_tac[]
 QED
 
 Theorem mm_local_stage_correct:
