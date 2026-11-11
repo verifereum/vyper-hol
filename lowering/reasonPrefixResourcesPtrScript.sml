@@ -105,7 +105,11 @@ Proof
       qpat_x_assum `!x w. not_fresh_at cc x /\ _ ==> _` irule >>
       simp[] >>
       qpat_x_assum `!x w. not_fresh_at sa x /\ _ ==> _` irule >> simp[]) >>
-  metis_tac[]
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >>
+     qpat_x_assum `~expr_has_effect e ==> _` drule >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem reason_encoder_alloc_buffer_post:
@@ -197,6 +201,34 @@ Proof
      qpat_x_assum `!name off len. _` drule >>
      simp[regions_disjoint_def] >> decide_tac) >>
   `locals_kept cenv es es' s0 (mstore a w s)` by suspend "locals" >>
+  `!name off len. local_region cenv es.scopes s0 name off len ==>
+     regions_disjoint b sz off len` by
+    (rpt strip_tac >>
+     `local_region cenv es'.scopes s name off len` by
+       (drule_all reason_encoder_original_local_region >> simp[]) >> metis_tac[]) >>
+  `sa.cs_next_id <= inst.inst_id` by
+    (spose_not_then assume_tac >>
+     `inst.inst_id < cc.cs_next_id` by decide_tac >>
+     `regions_disjoint b sz b sz` by
+       (qpat_x_assum `!aid off len. aid < cc.cs_next_id /\ _ ==> _` irule >>
+        qexists_tac `inst.inst_id` >> asm_rewrite_tac[]) >>
+     gvs[regions_disjoint_def]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 (mstore a w s)` by
+    (strip_tac >>
+     `pure_frame cenv func es sa s0 s` by gvs[expr_post_def] >>
+     `!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
+        FLOOKUP (mstore a w s).vs_allocas aid = SOME ent` by simp[mstore_def] >>
+     `FLOOKUP (mstore a w s).vs_allocas inst.inst_id = SOME (b,sz)` by
+       (simp[mstore_def] >> first_assum ACCEPT_TAC) >>
+     `!off len. regions_disjoint off len b sz ==>
+        mem_bytes_at off len (mstore a w s).vs_memory =
+        mem_bytes_at off len s.vs_memory` by
+       (rpt strip_tac >> irule mstore_region_frame >> qexistsl_tac [`b`, `sz`] >>
+        qpat_x_assum `regions_disjoint off len b sz` mp_tac >>
+        simp[regions_disjoint_def] >> decide_tac) >>
+     irule pure_frame_buffer_tail >>
+     qexistsl_tac [`b`, `sz`, `inst`, `s`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   gvs[expr_post_def, reason_encoder_store_value_location] >>
   rpt strip_tac >>
   `regions_disjoint b sz off sz'` by
