@@ -218,6 +218,49 @@ Proof
   simp[] >> decide_tac
 QED
 
+Theorem registration_calldata_index_ready:
+  calldata_encodes env fname tys vs s.vs_call_ctx.cc_calldata /\
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  LIST_REL value_has_type tvs vs /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\ i < LENGTH tys /\
+  h = SUM (MAP abi_member_head_size (TAKE i (MAP (vyper_to_abi_type env) tys))) ==>
+  ?av delta srcpos.
+    vyper_to_abi env (EL i tys) (EL i vs) = SOME av /\
+    value_has_type (EL i tvs) (EL i vs) /\
+    abi_decoder_coherent ce env sf (EL i tys) (EL i tvs) /\
+    mem_bytes_at srcpos (LENGTH (enc (vyper_to_abi_type env (EL i tys)) av))
+      s.vs_call_ctx.cc_calldata = enc (vyper_to_abi_type env (EL i tys)) av /\
+    srcpos + LENGTH (enc (vyper_to_abi_type env (EL i tys)) av) < dimword (:256) /\
+    srcpos = 4 + (if is_dynamic (vyper_to_abi_type env (EL i tys)) then delta else h) /\
+    (is_dynamic (vyper_to_abi_type env (EL i tys)) ==>
+      abi_decode_load CALLDATALOAD (n2w (4+h) : bytes32) s = n2w delta /\
+      4+delta < dimword (:256))
+Proof
+  strip_tac >> drule_all registration_calldata_argument >> strip_tac >>
+  qexistsl_tac [`EL i avs`, `abi_tuple_child_offset (MAP (vyper_to_abi_type env) tys) avs i`,
+    `4 + abi_tuple_child_offset (MAP (vyper_to_abi_type env) tys) avs i`] >>
+  asm_rewrite_tac [] >>
+  reverse conj_tac
+  >- suspend "dynamic_load" >>
+  simp[abiDecoderMemberSliceTheory.abi_tuple_child_offset_def, EL_MAP]
+QED
+
+Resume registration_calldata_index_ready[dynamic_load]:
+  strip_tac >>
+  `LENGTH tys = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  `TAKE (LENGTH vs) tys = tys` by metis_tac[TAKE_LENGTH_ID] >>
+  fs[calldata_encodes_def, abiDecoderMembersTheory.vyper_to_abi_types_MAP,
+    Excl "enc_def", Excl "TAKE_LENGTH_ID_rwt2"] >>
+  drule_all coherent_source_list_head_lengths >> strip_tac >>
+  once_rewrite_tac [arithmeticTheory.ADD_COMM] >>
+  irule canonicalMemberTraversalPtrTheory.structural_tuple_indexed_offset_load >>
+  simp[abiDecoderContractTheory.abi_decode_source_def, EL_MAP, Excl "enc_def"] >>
+  gvs[mem_bytes_at_def, function_selector_length, DROP_APPEND2,
+    TAKE_LENGTH_APPEND, Excl "enc_def"]
+QED
+
+Finalise registration_calldata_index_ready
+
 (* Exact preparation instructions: dynamic offsets are tuple-relative. *)
 Theorem registration_aggregate_prepare_phases:
   compile_register_positional_args ce [(name,F,dyn,sz,di)] off st = (ce',last) /\
