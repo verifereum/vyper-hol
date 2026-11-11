@@ -598,6 +598,29 @@ Proof
      simp[] >> rpt strip_tac >> metis_tac[MEM_APPEND]) >> simp[]
 QED
 
+Theorem finally_unless_halt_unlock_frame[local]:
+  finally_unless_halt f (unlock_if_nr cx nr is_view) s0 = (res,s') /\
+  f s0 = (r1,s1) /\ ^frame cx A r s1 ==> ^frame cx A r s'
+Proof
+  strip_tac >> BETA_TAC >> irule (BETA_RULE finite_frame_trans) >>
+  qexists_tac `s1` >> conj_tac >- first_assum (ACCEPT_TAC o BETA_RULE) >>
+  Cases_on `unlock_if_nr cx nr is_view s1` >>
+  rename1 `unlock_if_nr cx nr is_view s1 = (ur,us)` >>
+  `^frame cx A s1 us` by
+    (BETA_TAC >> qexists_tac `[]` >> simp[] >>
+     rpt strip_tac >> drule_then irule unlock_if_nr_word_frame >>
+     first_assum ACCEPT_TAC) >>
+  pop_assum (assume_tac o BETA_RULE) >>
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  qabbrev_tac `g = unlock_if_nr cx nr is_view` >>
+  simp[finally_unless_halt_def] >>
+  Cases_on `r1` >> TRY (rename1 `INR ex` >> Cases_on `ex`) >>
+  simp[ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `ur` >> simp[] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem finite_frame_stk:
   ^frame (cx with stk := stk') A s0 s1 <=> ^frame cx A s0 s1
 Proof
@@ -1557,7 +1580,7 @@ Resume evaluate_finite_frame[iterator_array]:
   gvs[vyperTypeSystemTheory.well_typed_iterator_def, accesses_iterator_def,
       int_calls_iterator_def, Once evaluate_def, bind_def, lift_option_type_def,
       raise_def, return_def, AllCaseEqs()] >>
-  imp_res_tac read_result_state >> gvs[] >>
+  imp_res_tac array_iterator_results_state >> gvs[] >>
   gvs[option_CASE_rator, AllCaseEqs(), raise_def, return_def] >>
   first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
   (conj_tac >- (qexists_tac `R` >> conj_tac
@@ -1780,9 +1803,10 @@ QED
 Resume evaluate_finite_frame[raise_reason]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[vyperTypeSystemTheory.type_stmt_def, accesses_stmt_def, int_calls_stmt_def,
-      accesses_raise_reason_def, int_calls_raise_reason_def,
-      Once evaluate_def, bind_def, raise_def, lift_option_type_def,
-      return_def, AllCaseEqs()] >>
+      accesses_raise_reason_def, int_calls_raise_reason_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, raise_def, lift_option_type_def,
+       return_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >>
   gvs[option_CASE_rator, AllCaseEqs(), raise_def, return_def] >>
   first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
@@ -1890,6 +1914,7 @@ Resume evaluate_finite_frame[rawrevert]:
   gvs[Once vyperTypeSystemTheory.well_typed_expr_def,
       accesses_expr_def, risky_call_target_def, int_calls_expr_def] >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+      lift_option_type_def, option_CASE_rator,
       return_def, raise_def, AllCaseEqs()] >>
   asm "args_ih" (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
   (conj_tac >- (qexists_tac `R` >> conj_tac
@@ -1952,7 +1977,8 @@ Resume evaluate_finite_frame[selfdestruct]:
   rpt strip_tac >> gvs[assert_def, return_def, raise_def, AllCaseEqs()] >>
   qexists_tac `ws` >> simp[] >>
   gvs[transfer_value_def, COND_RATOR, bind_def, ignore_bind_def, get_accounts_def,
-      check_def, assert_def, update_accounts_def, return_def, raise_def,
+      check_def, assert_def, update_accounts_def, update_pending_deletions_def,
+      return_def, raise_def,
       AllCaseEqs()] >>
   gvs[oneline get_storage_def, vfmStateTheory.update_account_def,
       vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM] >>
@@ -2234,32 +2260,27 @@ Resume evaluate_finite_frame[intcall]:
          POP_ASSUM_LIST (K ALL_TAC) >> simp[oneline get_storage_def]) >>
      first_assum (ACCEPT_TAC o BETA_RULE)) >>
   qpat_x_assum `^frame cx A r body_st` (mk_asm "body_prefix") >>
-  simp[try_def, ignore_bind_def, bind_def] >>
-  Cases_on `body_res` >> simp[return_def] >>
-  TRY (rename1 `handle_function ex body_st` >> Cases_on `ex`) >>
-  simp[handle_function_def, return_def, raise_def, pop_function_def,
-       set_scopes_def] >>
   once_rewrite_tac [GSYM DE_MORGAN_THM] >>
   once_rewrite_tac [GSYM is_view_mut_def] >>
   once_rewrite_tac [GSYM unlock_if_nr_def] >>
-  Cases_on `unlock_if_nr cx x''1 (is_view_mut x''0)
-      (body_st with scopes := args_st.scopes)` >>
-  rename1 `unlock_if_nr cx _ _ _ = (unlock_res,unlock_st)` >>
-  `^frame cx A (body_st with scopes := args_st.scopes) unlock_st` by
-    (BETA_TAC >> qexists_tac `[]` >> simp[] >> rpt strip_tac >>
-     qpat_assum `unlock_if_nr cx _ _ _ = (unlock_res,unlock_st)`
-       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] unlock_if_nr_word_frame)) >>
-     simp[]) >>
-  `^frame cx A r unlock_st` by
-    (BETA_TAC >> irule (BETA_RULE finite_frame_trans) >>
-     qexists_tac `body_st with scopes := args_st.scopes` >> conj_tac
-     >- (asm "body_prefix" (mp_tac o BETA_RULE) >>
-         POP_ASSUM_LIST (K ALL_TAC) >> simp[oneline get_storage_def]) >>
-     first_assum (ACCEPT_TAC o BETA_RULE)) >>
-  simp[] >>
-  qpat_assum `^frame cx A r unlock_st`
+  qmatch_goalsub_abbrev_tac `finally_unless_halt fin_act _ call_st` >>
+  `?fin_res. fin_act call_st = (fin_res,body_st with scopes := args_st.scopes)` by
+    (simp[Abbr `fin_act`, Abbr `call_st`, finally_def, try_def, bind_def,
+          ignore_bind_def] >>
+     Cases_on `body_res` >> simp[return_def] >>
+     TRY (rename1 `handle_function ex body_st` >> Cases_on `ex`) >>
+     simp[handle_function_def, return_def, raise_def, set_scopes_def,
+          pop_function_def, ignore_bind_def, bind_def]) >>
+  `^frame cx A r (body_st with scopes := args_st.scopes)` by
+    (asm "body_prefix" (mp_tac o BETA_RULE) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[oneline get_storage_def]) >>
+  Cases_on `finally_unless_halt fin_act (unlock_if_nr cx x''1 (is_view_mut x''0))
+      call_st` >>
+  rename1 `_ = (call_res,call_out)` >>
+  drule_all finally_unless_halt_unlock_frame >> disch_then assume_tac >>
+  qpat_assum `^frame cx A r call_out`
     (fn th => POP_ASSUM_LIST (K ALL_TAC) >> assume_tac (BETA_RULE th)) >>
-  Cases_on `unlock_res` >> simp[] >>
+  Cases_on `call_res` >> simp[] >>
   simp[lift_option_type_def, option_CASE_rator, return_def, raise_def,
        AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   qexists_tac `ws` >> simp[] >> gvs[]
