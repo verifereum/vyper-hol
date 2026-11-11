@@ -121,8 +121,8 @@ Proof
     `\raw ee t. vv_post ctx func cenv cx e es sa sm s0 ee raw vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts`, `e`,
-    `\raw. do p <- eval_target_place cx (TopLevelNameTarget (NONE,nsid1));
-       v <- read_result cx raw; write_place cx p v od`] >>
+    `\raw. do v <- read_result cx raw;
+       p <- eval_target_place cx (TopLevelNameTarget (NONE,nsid1)); write_place cx p v od`] >>
   reverse conj_tac
   >- (conj_tac >- simp[Once evaluate_def] >>
       qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
@@ -138,8 +138,8 @@ Proof
    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nsid1) = SOME (ImmutableLoc off) /\
    cenv.ce_module_var_type (cenv.ce_module,nsid1) = SOME ity` by simp[] >>
   `?fin q.
-    (!tail. (do p <- eval_target_place cx (TopLevelNameTarget (cenv.ce_module,nsid1));
-                v <- read_result cx tv; write_place cx p v od)
+    (!tail. (do v <- read_result cx tv;
+                p <- eval_target_place cx (TopLevelNameTarget (cenv.ce_module,nsid1)); write_place cx p v od)
        (ee with gas_obs := tail) = (INL (),fin with gas_obs := tail)) /\
     gas_marked_path F ctx func t 0 (OK q) /\
     stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin q` by
