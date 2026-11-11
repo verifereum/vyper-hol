@@ -10,15 +10,16 @@ array retains its location: the target's pop shortens that array before the
 assignment copies it. Copying at conditional selection instead would return 2.
 `nested_retained_pop` returns 5 after an index expression pops the enclosing
 array: the previously captured inner location still contains the array to pop.
-`call_storage_read` and `call_memory_pop` differ between the two runs. The
-source interpreter captures every internal-call argument before reading it, so
-`call_storage_read` returns 10 (the later argument changes the storage scalar
-first) and `call_memory_pop` returns 1 (the later argument pops the memory array
-before the call copies it). The pinned Vyper reads each argument as it is
-evaluated (vyperlang/vyper#5127), so its bytecode returns 0 and 2; the
-interpreter follows once it reads call arguments eagerly too.
+`call_storage_read` returns 0 and `call_memory_pop` returns 2 because a call
+reads each argument as it is evaluated, before the later argument changes the
+storage scalar or pops the memory array.
 `builtin_eager_read` returns 0: `min` reads its first storage argument before
 evaluating the second argument, which changes that storage slot.
+`subscript_base_copy` returns 5: the base `self.a[0]` is read before the index
+call writes `self.a[0][1]`, since the index writes a variable the base reads.
+`subscript_base_live` returns 7: the index `0` cannot change the base, so
+`self.d[0][0]` stays a live location, and the assignment reads it after the
+target's internal call has written 7 there.
 
 `vyperLoadTimingTestTheory` translates the annotated AST and layout in `oracle/`,
 binds the entry's declared parameters, and executes the source interpreter.

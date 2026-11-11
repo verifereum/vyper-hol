@@ -485,6 +485,9 @@ Datatype:
        (internal_fn_label).
        Mirrors Python: func_t._function_id in expr.py lower_Call *)
     ce_func_ids : string -> num;
+    (* The contract's modules, for the subscript overlap check
+       (vyperSubscriptOverlap). *)
+    ce_modules : (num option # toplevel list) list;
     (* Nonreentrant lock info for explicit return statements:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.
