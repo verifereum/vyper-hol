@@ -43,6 +43,7 @@ Proof
   simp[expr_post_def, hash_returndata_state_rel,
        expr_val_rel_def, expr_val_at_def, expr_val_own_def,
        locals_kept_def, popped_kept_def, local_region_def,
+       loweringPostsTheory.pure_frame_def,
        venomStateTheory.lookup_var_def, venomStateTheory.eval_operand_def]
 QED
 
@@ -1077,6 +1078,7 @@ QED
 Theorem materialize_copy_endpoint_owned_post:
   stmt_state_rel ctx func ce cx es u /\ local_ptrs_reserved ce mid /\
   wb_frame ce es es sa r u /\ sa.cs_next_var <= mid.cs_next_var /\
+  (~expr_has_effect e ==> pure_frame ce func es sa r u) /\
   copy_static z = copy_static u /\
   (!x. not_fresh_at mid x ==> lookup_var x z = lookup_var x u) /\
   LENGTH u.vs_memory <= LENGTH z.vs_memory /\
@@ -1125,6 +1127,13 @@ Proof
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `expr_val_at ce cx (post_value_type ce e) sa sb es v op z` by
     (gvs[expr_val_own_def, expr_val_at_def] >> metis_tac[]) >>
+  `~expr_has_effect e ==> pure_frame ce func es sa r z` by
+    (strip_tac >>
+     match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `sa`, `r`, `u`, `z`, `inst`,
+                            `w2n (w:bytes32)`, `sz`]
+                     exprSimPropsTheory.pure_frame_buffer_tail) >>
+     gvs[regions_disjoint_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `~expr_has_effect e ==> pure_frame ce func es sa r u` kall_tac >>
   gvs[expr_post_def, wb_frame_def] >> metis_tac[]
 QED
 
@@ -1336,6 +1345,13 @@ Proof
   `mid.cs_next_id <= su.cs_next_id` by
     (drule_at (Pos last) exprSimCopyTheory.storage_copy_suffix_ci_mono >>
      simp[exprLoweringPropsTheory.ci_mono_def]) >>
+  `~expr_has_effect e ==>
+   pure_frame ce func es' (sa with cs_next_var := sm.cs_next_var) r t` by
+    (strip_tac >>
+     match_mp_tac (Q.SPECL [`ce`, `func`, `es'`,
+                            `sa with cs_next_var := sm.cs_next_var`, `r`,
+                            `r`, `t`] exprSimPropsTheory.pure_frame_mem_tail) >>
+     simp[]) >>
   `expr_post ctx func ce cx e es'
      (sa with cs_next_var := sm.cs_next_var) su r es' v op z /\
    (!x a. not_fresh_at (sa with cs_next_var := sm.cs_next_var) x /\

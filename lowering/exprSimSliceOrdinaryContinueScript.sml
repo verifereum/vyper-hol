@@ -14,6 +14,7 @@ Theorem slice_two_operand_post_rebase:
   sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
   expr_post ctx func cenv cx start ec sc sd u e1 v1 op1 t /\
   expr_post ctx func cenv cx len e1 sd se t e2 v2 op2 r /\
+  (~expr_has_effect result ==> ~expr_has_effect start /\ ~expr_has_effect len) /\
   vv_post ctx func cenv cx result e2 se sf r ef tv vv z ==>
   vv_post ctx func cenv cx result ec sc sf u ef tv vv z
 Proof
@@ -24,6 +25,26 @@ Proof
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
   `wb_frame cenv ec e2 sc u r` by
     (drule_all wb_frame_trans >> simp[]) >>
+  `~expr_has_effect result ==> pure_frame cenv func ec sc u r` by
+    (strip_tac >>
+     qpat_x_assum `~expr_has_effect result ==> _` drule >> strip_tac >>
+     `pure_frame cenv func ec sc u t` by
+       (qpat_assum `expr_post _ _ _ _ start _ _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
+        qpat_x_assum `~expr_has_effect start ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
+     `pure_frame cenv func e1 sd t r` by
+       (qpat_assum `expr_post _ _ _ _ len _ _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
+        qpat_x_assum `~expr_has_effect len ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
+     match_mp_tac (Q.SPECL [`cenv`, `func`, `ec`, `e1`, `sc`, `sd`, `u`, `t`, `r`]
+                     exprSimPropsTheory.pure_frame_trans) >>
+     qpat_assum `wb_frame cenv ec e1 sc u t`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     qpat_assum `wb_frame cenv e1 e2 sd t r`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule vv_post_prefix_frame >>
   simp[] >> qexistsl_tac [`e2`, `se`, `r`] >> simp[]
 QED
@@ -221,6 +242,7 @@ Theorem slice_bytes_continue:
     expr_post ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
     mem_bytes_at src_base (LENGTH bs) r2.vs_memory = bs) /\
   32+n <= sz /\ sz < dimword (:256) /\
+  (~expr_has_effect result ==> ~expr_has_effect start /\ ~expr_has_effect len) /\
   expr_type result = BaseT (BytesT (Dynamic n)) /\
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH bs <= bytelike_type_bound (expr_type src) ==>
@@ -319,6 +341,7 @@ Theorem slice_string_continue:
     expr_post ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
     mem_bytes_at src_base (LENGTH text) r2.vs_memory = MAP (n2w o ORD) text) /\
   32+n <= sz /\ sz < dimword (:256) /\
+  (~expr_has_effect result ==> ~expr_has_effect start /\ ~expr_has_effect len) /\
   expr_type result = BaseT (StringT n) /\
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH text <= bytelike_type_bound (expr_type src) ==>
@@ -495,6 +518,7 @@ Theorem slice_bytes_continue_seq:
     expr_post ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
     mem_bytes_at src_base (LENGTH bs) r2.vs_memory = bs) /\
   32+n <= sz /\ sz < dimword (:256) /\
+  (~expr_has_effect result ==> ~expr_has_effect start /\ ~expr_has_effect len) /\
   expr_type result = BaseT (BytesT (Dynamic n)) /\
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH bs <= bytelike_type_bound (expr_type src) ==>
@@ -583,6 +607,7 @@ Theorem slice_string_continue_seq:
     expr_post ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
     mem_bytes_at src_base (LENGTH text) r2.vs_memory = MAP (n2w o ORD) text) /\
   32+n <= sz /\ sz < dimword (:256) /\
+  (~expr_has_effect result ==> ~expr_has_effect start /\ ~expr_has_effect len) /\
   expr_type result = BaseT (StringT n) /\
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH text <= bytelike_type_bound (expr_type src) ==>
