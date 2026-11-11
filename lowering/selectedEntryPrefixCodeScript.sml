@@ -15,7 +15,7 @@ Theorem source_selected_entry_prefix_code:
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   fn_entry_label efn = SOME elbl /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,lookup_raw_return_or_F (NONE:num option) name External tops,
        name,args,([] : expr list),ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) ==>
@@ -106,11 +106,17 @@ Theorem lowered_runtime_function_inst_ids_distinct:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   MEM fn unit.cu_context.ctx_functions ==> fn_inst_ids_distinct fn
 Proof
-  strip_tac >> drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >>
-  disch_then (mp_tac o MATCH_MP lowering_context_ok_static_integrity) >>
+  strip_tac >>
+  `lowering_context_ok unit.cu_context` by
+    (qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+     simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
+     Cases_on `classify_functions tops` >> PairCases_on `r` >>
+     simp[] >> every_case_tac >> rpt strip_tac >>
+     metis_tac[run_grouped_lowering_context, run_lowering_context_ok]) >>
+  pop_assum (mp_tac o MATCH_MP lowering_context_ok_static_integrity) >>
   strip_tac >> drule_all ctx_inst_ids_distinct_fn >>
-  simp[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_inst_ids]
+  simp[fn_inst_ids_distinct_def, fn_insts_def,
+    venomFnInstsProofsTheory.fn_insts_blocks_map_id]
 QED
 
 Theorem source_selected_entry_prefix_structure:
@@ -121,7 +127,7 @@ Theorem source_selected_entry_prefix_structure:
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   fn_entry_label efn = SOME elbl /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,lookup_raw_return_or_F (NONE:num option) name External tops,
        name,args,([] : expr list),ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) ==>
