@@ -211,7 +211,7 @@ Proof
   simp[eval_operand_def, lookup_var_def]
 QED
 
-Theorem step_internal_word_return[local]:
+Theorem step_internal_word_return:
   !id op rpc s.
     step_inst_base (mk_inst id RET [op;rpc] []) s =
       case eval_operand op s of
@@ -224,7 +224,7 @@ Proof
   Cases_on `eval_operand op s` >> Cases_on `eval_operand rpc s` >> simp[]
 QED
 
-Theorem step_persistent_return_unlock[local]:
+Theorem step_persistent_return_unlock:
   !id key s.
     ~s.vs_call_ctx.cc_static ==>
     step_inst_base (mk_inst id SSTORE [Lit key; Lit 3w] []) s =
