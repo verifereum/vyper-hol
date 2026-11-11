@@ -1,0 +1,72 @@
+(* Primitive counted typed-copy paths for widened local assignment. *)
+Theory widenedAssignPtrCopyPrimitive
+Ancestors
+  typedCopyPtr typedMemoryCopy bodyPtrBytestringBuiltinsConcatSuffix reasonMemoryEncoderPtr
+  assignTuplePtrLoadStep calldataReconstruction representationCleanPtr
+  assignBasePtrBytesPost assignBasePtrTypedBytesField annAssignPtrStage
+  compileEnv emitHelper emitHelperProps bodyPtrDefs ptrDiscipline
+  venomState venomExecSemantics valueEncoding valueEncodingProps
+  fragGasPathPtr fragExec typedCopyAgreement finite_map pred_set words list arithmetic
+
+Theorem widened_assign_typed_word_counted:
+  !ctx PG D fn cenv dst src dty sty sa sb G tn s dw sw tenv tv v.
+    compile_store_memory_typed cenv (Var dst) dty (Var src) sty sa = ((),sb) /\
+    is_word_type dty /\ evaluate_type tenv dty = SOME tv /\
+    value_has_type tv v /\ not_fresh_at sa dst /\
+    ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32 /\
+    lookup_var src s = SOME sw /\ lookup_var dst s = SOME dw /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory tv v (w2n sw) m) /\
+    fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?Gf tf t.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t) /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+      typed_copy_state_frame sa (w2n dw) 32 s t /\
+      (!m. mem_agree_outside tf.t_mem t.vs_memory m ==>
+        val_in_memory tv v (w2n dw) m) /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tf (Var p) = op_taint tn (Var p)) /\
+      tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+      (!i. ~(w2n dw <= i /\ i < w2n dw+32) ==>
+        (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `(!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      mem_word_at (w2n sw) m = typed_val_to_w256 tv v) /\
+   (!i. w2n sw <= i /\ i < w2n sw+32 ==> i NOTIN tn.t_mem)` by
+    (drule_all robust_typed_word_clean >> simp[]) >>
+  `?fo sm. emit_op MLOAD [Var src] sa = (fo,sm) /\
+    emit_void MSTORE [Var dst;fo] sm = ((),sb)` by
+    (qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+     simp[compile_store_memory_typed_word, comp_bind_def] >>
+     Cases_on `emit_op MLOAD [Var src] sa` >> simp[]) >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    metis_tac[reason_emit_op_cs_extends, reason_emit_void_cs_extends] >>
+  `fn_has_code sa sm fn /\ fn_has_code sm sb fn` by
+    metis_tac[fn_has_code_split] >>
+  `32 <= (32:num)` by simp[] >>
+  drule_all concat_suffix_path_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`un`,`t`] >> simp[] >>
+  conj_tac
+  >- (simp[typed_copy_state_frame_def] >> conj_tac
+      >- (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+          simp[mstore_def, venom_state_component_equality]) >>
+      conj_tac
+      >- metis_tac[] >>
+      simp[typed_copy_frame_def] >> conj_tac
+      >- (rpt strip_tac >> simp[mstore_mem_bytes_at_disjoint]) >>
+      simp[immutableMemoryFrameTheory.immutable_mstore_capacity, MAX_DEF]) >>
+  rpt strip_tac >> irule calldata_word_representation >>
+  reverse conj_tac >- metis_tac[] >>
+  `mem_word_at (w2n dw) (mstore (w2n dw) (mload (w2n sw) s) u).vs_memory =
+    mem_word_at (w2n dw) m` by
+    (irule bodyPtrPrecompileBuiltinsArithmeticValueTheory.clean_word_mem_agree >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  gvs[mstore_mem_word_at_same, GSYM mem_word_at_eq_mload,
+      mem_agree_outside_def]
+QED
