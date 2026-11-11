@@ -3,7 +3,8 @@ Ancestors
   popNestedLocalPoppedPath targetPlaceSim targetPlaceSimCasesBase allocLimits
   vyperTypeSystem vyperAST exprSimHypsDefs loweringStateRelDefs
   finite_map alist rich_list compileEnv vyperTypeInvariants vyperState
-  vyperTypeEvalSoundness vyperTypeExprSoundness
+  vyperTypeEvalSoundness vyperTypeExprSoundness vyperInterpreter
+  vyperTypeEvalStoragePreservation vyperTypeCallStackSoundness
 
 Theorem local_target_type_only[local]:
   !bt env id vt.
@@ -103,4 +104,185 @@ Proof
        lift_option_type_def, return_def, raise_def, assert_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   Cases_on `subscripts_type entry.type path` >> gvs[return_def, raise_def]
+QED
+
+Theorem fixed_shape_step_from_type[local]:
+  !tv sb etv.
+    ((?et n. tv = ArrayTV et (Fixed n)) \/ (?fs. tv = StructTV fs)) /\
+    subscript_type tv sb = SOME etv ==> fixed_shape_path tv [sb]
+Proof
+  rpt strip_tac >> gvs[] >> Cases_on `sb` >>
+  gvs[subscript_type_def, fixed_shape_path_def, AllCaseEqs()] >>
+  Cases_on `v` >> gvs[subscript_type_def, fixed_shape_path_def, AllCaseEqs()]
+QED
+
+Theorem local_target_root_var_type[local]:
+  !bt env id vt.
+    target_root bt = NameTarget id /\ type_place_target env bt = SOME vt ==>
+    ?ty. FLOOKUP env.var_types id = SOME ty
+Proof
+  Induct using base_assignment_target_induct >>
+  simp[target_root_def, well_typed_expr_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem local_root_entry_type[local]:
+  runtime_consistent env cx s /\ runtime_consistent env cx t /\
+  FLOOKUP env.var_types id = SOME ty /\
+  lookup_scopes id s.scopes = SOME e1 /\
+  lookup_scopes id t.scopes = SOME e2 ==> e1.type = e2.type
+Proof
+  simp[runtime_consistent_def] >> rpt strip_tac >>
+  qpat_assum `env_consistent _ _ s`
+    (mp_then Any mp_tac vyperTypeEnvTheory.env_consistent_lookup_var_type) >>
+  disch_then drule_all >> strip_tac >>
+  qpat_assum `env_consistent _ _ t`
+    (mp_then Any mp_tac vyperTypeEnvTheory.env_consistent_lookup_var_type) >>
+  disch_then drule_all >> strip_tac >> gvs[]
+QED
+
+Theorem extend_place_memory_path[local]:
+  extend_place cx pv sb s = (INL (PlaceR (MemoryPlace id path)),t) ==>
+  ?p. pv = PlaceR (MemoryPlace id p) /\ path = p ++ [sb] /\ t = s
+Proof
+  strip_tac >>
+  `t = s` by metis_tac[vyperPlaceFramesTheory.extend_place_state] >>
+  Cases_on `pv`
+  >- gvs[extend_place_def, raise_def]
+  >- (drule (exprSimPropsTheory.select_result_memory_place |>
+             Q.SPECL [`cx`,`ty`,`PlaceR p`] |> SRULE [select_result_def]) >>
+      disch_then (qspecl_then [`id`,`path`] mp_tac) >> simp[] >> metis_tac[]) >>
+  Cases_on `sb` >> gvs[extend_place_def, bind_def, return_def,
+    raise_def, lift_option_type_def, AllCaseEqs()] >>
+  Cases_on `v` >> gvs[return_def, raise_def, bind_def,
+    lift_option_type_def, AllCaseEqs()]
+QED
+
+Theorem runtime_root_entry[local]:
+  runtime_consistent env cx s /\ FLOOKUP env.var_types id = SOME ty ==>
+  ?entry. lookup_scopes id s.scopes = SOME entry
+Proof
+  simp[runtime_consistent_def, env_consistent_def,
+       env_scopes_consistent_def] >> metis_tac[optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem local_base_fixed_shape_general[local]:
+  !bt cenv cx env es0 s ty id path t entry.
+    expr_sim_inv cenv cx env es0 /\ runtime_consistent env cx s /\
+    functions_well_typed cx /\
+    type_place_target env bt = SOME (Type ty) /\
+    target_root bt = NameTarget id /\
+    call_evaluation_safe cx (int_calls_target bt) /\
+    ~target_through_dynarray cenv bt /\
+    eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),t) /\
+    lookup_scopes id t.scopes = SOME entry ==>
+    fixed_shape_path entry.type path
+Proof
+  Induct using base_assignment_target_induct
+  >- (simp[Once evaluate_def, bind_def, get_scopes_def, type_check_def,
+           assert_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[fixed_shape_path_def])
+  >- simp[target_root_def]
+  >- suspend "subscript"
+  >> suspend "attribute"
+QED
+
+Resume local_base_fixed_shape_general[subscript]:
+      rpt strip_tac >>
+      gvs[target_root_def, target_through_dynarray_def] >>
+      drule_all local_subscript_type >> strip_tac >>
+      qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      drule extend_place_memory_path >> strip_tac >> gvs[] >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      rename1 `eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id p)),sbase)` >>
+      rename1 `eval_expr cx e sbase = (INL tv,sidx)` >>
+      rename1 `read_result cx tv sidx = (INL idx,sidx)` >>
+      `call_evaluation_safe cx (int_calls_target bt) /\
+       call_evaluation_safe cx (int_calls_expr e)` by
+        (conj_tac >> irule call_evaluation_safe_mono >>
+         goal_assum (drule_at Any) >> simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+      `runtime_consistent env cx sbase` by
+        (metis_tac[eval_base_place_preserves_runtime_consistent]) >>
+      `runtime_consistent env cx sidx` by
+        (metis_tac[eval_expr_preserves_runtime_consistent]) >>
+      drule_all local_target_root_var_type >> strip_tac >>
+      `?base_entry. lookup_scopes id sbase.scopes = SOME base_entry` by
+        (metis_tac[runtime_root_entry]) >>
+      `base_entry.type = entry.type` by
+        (metis_tac[local_root_entry_type]) >>
+      `fixed_shape_path entry.type p` by
+        (first_x_assum drule_all >> simp[]) >>
+      drule_all local_target_compile_type >> strip_tac >>
+      Cases_on `bd` >> gvs[] >>
+      `?ptv. evaluate_type env.type_defs (ArrayT ty (Fixed n)) = SOME ptv /\
+             subscripts_type entry.type p = SOME ptv` by
+        (drule_all local_base_runtime_path_type >> strip_tac >> gvs[] >> metis_tac[]) >>
+      drule vyperTypeValuesTheory.evaluate_type_ArrayT_cases >> strip_tac >> gvs[] >>
+      `?ftv. evaluate_type env.type_defs ty = SOME ftv /\
+             subscripts_type entry.type (p ++ [ValueSubscript idx]) = SOME ftv` by
+        (irule local_base_runtime_path_type >>
+         qexistsl [`SubscriptTarget bt e`,`cx`,`id`,`s`,`sidx`] >>
+         simp[Once evaluate_def, bind_def] >> metis_tac[]) >>
+      irule fixed_shape_path_append >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> irule fixed_shape_step_from_type >>
+      qpat_x_assum `subscripts_type _ (_ ++ _) = _` mp_tac >>
+      drule vyperPlaceResultTypingTheory.subscripts_type_append >>
+      disch_then (qspec_then `[ValueSubscript idx]` mp_tac) >>
+      simp[subscripts_type_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Resume local_base_fixed_shape_general[attribute]:
+  rpt strip_tac >>
+  gvs[target_root_def, target_through_dynarray_def] >>
+  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  drule extend_place_memory_path >> strip_tac >> gvs[] >>
+  gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  qpat_x_assum `type_place_target _ (AttributeTarget _ _) = _` mp_tac >>
+  simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
+  drule_all local_target_type_only >> strip_tac >> gvs[] >>
+  Cases_on `tgt_ty` >> gvs[attribute_type_def, AllCaseEqs()] >>
+  `fixed_shape_path entry.type p` by
+    (first_x_assum drule_all >> simp[]) >>
+  drule_all local_base_runtime_path_type >> strip_tac >>
+  rename1 `eval_base_place cx bt st0 = (INL (PlaceR (MemoryPlace id p)),st1)` >>
+  `?ftv. evaluate_type env.type_defs ty = SOME ftv /\
+         subscripts_type entry.type (p ++ [AttrSubscript s]) = SOME ftv` by
+    (irule local_base_runtime_path_type >>
+     qexistsl [`AttributeTarget bt s`,`cx`,`id`,`st0`,`st1`] >>
+     simp[Once well_typed_expr_def, attribute_type_def,
+          Once evaluate_def, bind_def, vyperTypeCallGraphTheory.int_calls_expr_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `evaluate_type _ (StructT _) = _` mp_tac >>
+  simp[Once vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  irule fixed_shape_path_append >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> irule fixed_shape_step_from_type >>
+  qpat_x_assum `subscripts_type _ (_ ++ _) = _` mp_tac >>
+  drule vyperPlaceResultTypingTheory.subscripts_type_append >>
+  disch_then (qspec_then `[AttrSubscript s]` mp_tac) >>
+  simp[subscripts_type_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Finalise local_base_fixed_shape_general
+
+Theorem local_target_fixed_shape:
+  !cenv cx env s bt ty id path t entry.
+    expr_sim_inv cenv cx env s /\
+    type_place_target env bt = SOME (Type ty) /\
+    target_root bt = NameTarget id /\
+    call_evaluation_safe cx (int_calls_target bt) /\
+    ~target_through_dynarray cenv bt /\
+    eval_target_place cx bt s = (INL (MemoryPlace id path),t) /\
+    lookup_scopes id t.scopes = SOME entry ==>
+    fixed_shape_path entry.type path
+Proof
+  rpt strip_tac >>
+  `runtime_consistent env cx s /\ functions_well_typed cx` by
+    gvs[expr_sim_inv_def, runtime_consistent_def] >>
+  qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_place_def, AllCaseEqs()] >>
+  strip_tac >> Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  irule local_base_fixed_shape_general >>
+  metis_tac[]
 QED
