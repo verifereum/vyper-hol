@@ -339,10 +339,13 @@ Theorem compile_log_ready_stmt_frag_mem_widen:
   LIST_REL event_arg_compatible tys (MAP expr_type args) /\
   LENGTH flags = LENGTH tys /\
   LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+  ~exprs_can_mutate cenv args /\
+  EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+             is_bytestring_type (expr_type e)) args /\
   SUM (MAP (type_memory_bytes cenv)
-    (log_non_indexed_types flags (MAP expr_type args))) < dimword (:256) /\
+    (log_non_indexed_types flags tys)) < dimword (:256) /\
   abi_size_bound cenv.ce_struct_fields
-    (TupleT (log_non_indexed_types flags (MAP expr_type args))) < dimword (:256) ==>
+    (TupleT (log_non_indexed_types flags tys)) < dimword (:256) ==>
   stmt_frag_mem d ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty (Log id args)) (eval_stmt cx (Log id args)) es
 Proof

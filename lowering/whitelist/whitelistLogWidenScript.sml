@@ -1,60 +1,8 @@
-(*
- * Whitelist removal: log arguments that widen to the event field type.
- *
- * supported_log_exact classifies arguments whose types equal their event
- * fields (MAP expr_type es = MAP (SND o FST) fields); supported_log and
- * the type checker use event_arg_compatible (a String[5] argument for a String[10] field,
- * a shorter Bytes[...]).  The lowering never reads the field types: its
- * Log case types the topics and the data tuple by the arguments
- * (data_types = MAP SND data_ops, compile_log_eval_all_types), and
- * log_alloc_ok bounds the buffers at the argument types too.  The source
- * encodes by the field types (encode_source_event via
- * lookup_event_metadata).  For the scalar fields a supported event has,
- * event_arg_compatible leaves only a bytestring's bound free, and neither
- * the ABI type (vyper_base_to_abi_type), the ABI value (vyper_to_abi_base)
- * nor a topic (encode_event_topic hashes any bytestring) looks at the
- * bound, so the source event is the one the argument types give.
- *
- * Survey: lemmas of the log family whose statement or proof uses the
- * exact-type equation.
- *   stmtSimLogCompose:122 compile_log_ready_stmt_frag — premise
- *     MAP expr_type args = tys.  It is used only to instantiate
- *     log_source_event_encoded (stmtSimLogSource:116) at the argument
- *     types, whose lookup_event_metadata premise then names them.  Needs:
- *     LIST_REL event_arg_compatible tys (MAP expr_type args), with the
- *     buffer bounds at the argument types
- *       -> compile_log_ready_stmt_frag_widen, by
- *          log_source_event_encoded_widen.
- *     Its [local] log_compile_structure (:44) states ce_event_info at the
- *     argument types, though its proof (log_success_suffix_code) takes any
- *       -> log_compile_structure_widen.
- *   stmtSimLog:76 compile_log_stmt_frag — passes the equation on
- *       -> compile_log_stmt_frag_widen.
- *   bodySimLog:178 body_log_case — reads the equation out of supported_log
- *       -> body_log_widen_case, under the type checker's
- *          LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e))
- *          es fields (type_stmt's Log clause) for the event's fields.
- *   The S3 memory twin is compile_log_ready_stmt_frag_mem_widen
- *     (stmtLogMemory), used by body_log_widen_mem_case (bodyMemLog).
- *     bodyPtrLogCases:20 body_log_case_ptr is admitted at the branch head.
- *
- * Already general (argument types only, no field types):
- *   compile_log_eval_all_gas, compile_log_eval_all_types and the rest of
- *   stmtSimLogArgs*/stmtLogArgsMemory; log_success_suffix_code,
- *   log_success_suffix_actual_run, compile_log_data_trace,
- *   compile_log_empty_trace (any tys in ce_event_info); stmtSimLogSource's
- *   log_scalar_* lemmas; body_log_metadata, body_log_args_ready.
- *
- * TOP-LEVEL:
- *   scalar_event_arg_compatible  — a compatible argument type of a scalar
- *                                  field is scalar and encodes like it
- *   log_source_event_encoded_widen
- *                                — the source event, from the field types'
- *                                  metadata, is the argument types' one
- *   compile_log_ready_stmt_frag_widen, compile_log_stmt_frag_widen,
- *   body_log_widen_case          — the log simulation with compatible
- *                                  argument types
- *)
+(* Log arguments may have smaller scalar bounds than their declared fields.
+   Argument evaluation retains its physical operand types. The suffix uses
+   a log_eval_view at the declared field types, whose non-indexed layouts
+   determine both allocation limits. Scalar compatibility preserves topic
+   encoding, ABI encoding and each value's occupied memory footprint. *)
 Theory whitelistLogWiden
 Ancestors
   allocLimits allocLimitsProps
@@ -304,10 +252,13 @@ Theorem compile_log_ready_stmt_frag_widen:
   LIST_REL event_arg_compatible tys (MAP expr_type args) /\
   LENGTH flags = LENGTH tys /\
   LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+  ~exprs_can_mutate cenv args /\
+  EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+             is_bytestring_type (expr_type e)) args /\
   SUM (MAP (type_memory_bytes cenv)
-         (log_non_indexed_types flags (MAP expr_type args))) < dimword (:256) /\
+         (log_non_indexed_types flags tys)) < dimword (:256) /\
   abi_size_bound cenv.ce_struct_fields
-    (TupleT (log_non_indexed_types flags (MAP expr_type args))) < dimword (:256) ==>
+    (TupleT (log_non_indexed_types flags tys)) < dimword (:256) ==>
   stmt_frag ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty (Log id args)) (eval_stmt cx (Log id args)) es
 Proof
@@ -468,11 +419,14 @@ Theorem compile_log_stmt_frag_widen:
     LIST_REL event_arg_compatible tys (MAP expr_type args) /\
     LENGTH flags = LENGTH tys /\
     LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+    ~exprs_can_mutate cenv args /\
+    EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+               is_bytestring_type (expr_type e)) args /\
     SUM (MAP (type_memory_bytes cenv)
-           (log_non_indexed_types flags (MAP expr_type args))) <
+           (log_non_indexed_types flags tys)) <
       dimword (:256) /\
     abi_size_bound cenv.ce_struct_fields
-      (TupleT (log_non_indexed_types flags (MAP expr_type args))) <
+      (TupleT (log_non_indexed_types flags tys)) <
       dimword (:256) /\
     log_args_ready ctx func cenv cx Inv args /\ Inv es /\
     (!s gs. Inv s ==> Inv (s with gas_obs := gs)) /\
