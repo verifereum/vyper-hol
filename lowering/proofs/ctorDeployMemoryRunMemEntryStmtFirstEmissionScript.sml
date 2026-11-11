@@ -93,6 +93,20 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem ctor_return_unlock_first_emission[local]:
+  !ce a x b. compile_return_unlock ce a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  gen_tac >> simp_tac bool_ss [compile_return_unlock_def] >>
+  Cases_on `ce.ce_nonreentrant` >> rename1 `(en, rest)` >> PairCases_on `rest` >>
+  simp_tac (bool_ss ++ pairSimps.PAIR_ss) [LET_THM] >>
+  Cases_on `en` >> simp_tac bool_ss [] >>
+  metis_tac[ctor_unlock_first_emission, first_emission_return]
+QED
+
 Theorem ctor_emit_inst_weak_first_emission[local]:
   !opc ops outs. opc <> PHI ==>
   !a x b. emit_inst opc ops outs a = (x,b) ==>
@@ -136,7 +150,9 @@ Proof
       rpt gen_tac >> strip_tac >>
       drule_at (Pos last) ctor_emit_inst_weak_first_emission >> simp[]) >>
   Cases_on `x` >> simp_tac (bool_ss ++ pairSimps.PAIR_ss ++ optionSimps.OPTION_ss) [var_location_case_def]
-  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+      >- metis_tac[ctor_return_unlock_first_emission] >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
       >- (mp_tac (cj 3 first_emission_emit_helpers |> Q.SPEC `MLOAD`) >>
           simp[] >> metis_tac[]) >>
       mp_tac (ctor_emit_inst_weak_first_emission |> Q.SPEC `RET`) >>
@@ -153,6 +169,8 @@ Proof
       >- ACCEPT_TAC (Q.SPEC `ce.ce_nonreentrant` ctor_external_void_return_first_emission) >>
       rpt gen_tac >> strip_tac >>
       drule_at (Pos last) ctor_emit_inst_weak_first_emission >> simp[]) >>
+  ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+  >- metis_tac[ctor_return_unlock_first_emission] >>
   rpt gen_tac >> strip_tac >>
   drule_at (Pos last) ctor_emit_inst_weak_first_emission >> simp[]
 QED
@@ -268,6 +286,10 @@ Proof
   >- metis_tac[first_emission_return] >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[ctor_lower_expr_value_first_emission] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (rpt gen_tac >> simp_tac bool_ss [compile_log_save_arg_def] >>
+      IF_CASES_TAC >- metis_tac[first_emission_return] >>
+      metis_tac[ctor_materialize_vv_first_emission]) >>
   gen_tac >> ho_match_mp_tac first_emission_bind >>
   metis_tac[first_emission_return]
 QED
@@ -442,9 +464,7 @@ Proof
       ho_match_mp_tac first_emission_strong_bind >> conj_tac
       >- (mp_tac (cj 3 first_emission_emit_helpers |> Q.SPEC `MLOAD`) >> simp[] >> metis_tac[]) >>
       gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
-      ho_match_mp_tac cs_appends_bind >> conj_tac
-      >- simp[cs_appends_emit_helpers] >>
-      gen_tac >> ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]) >>
+      rpt (ho_match_mp_tac cs_appends_bind >> rw[cs_appends_emit_helpers])) >>
   mp_tac (cj 2 first_emission_emit_helpers |> Q.SPEC `MCOPY`) >> simp[] >> metis_tac[]
 QED
 
@@ -704,6 +724,8 @@ Theorem ctor_internal_return_env_first_emission:
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   ntac 5 gen_tac >> simp_tac bool_ss [compile_internal_return_from_env_def, ctor_bind_return_eq] >>
+  ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+  >- metis_tac[ctor_return_unlock_first_emission] >>
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- (Cases_on `ce.ce_return_buf` >> simp_tac bool_ss [optionTheory.option_case_def]
       >- metis_tac[first_emission_return] >>
@@ -715,25 +737,11 @@ Proof
   gen_tac >> metis_tac[ctor_internal_return_first_emission]
 QED
 
-Theorem ctor_normalized_external_return_first_emission[local]:
-  !ce ty sty v a x b.
-    (do ret_op <- (if ~is_word_type ty /\
-              ~(is_bytestring_type ty /\ is_bytestring_type sty) /\ sty <> ty then
-         do norm_buf <- compile_alloc_buffer (type_memory_bytes ce ty);
-            compile_store_memory_typed ce norm_buf.buf_operand ty v sty;
-            return norm_buf.buf_operand od
-       else return v);
-       compile_external_return (SOME ret_op) (is_word_type ty) ce.ce_raw_return
-         ce.ce_ret_enc_info ce.ce_max_return_size
-         (FST ce.ce_nonreentrant) (FST (SND ce.ce_nonreentrant))
-         (FST (SND (SND ce.ce_nonreentrant))) (SND (SND (SND ce.ce_nonreentrant)))
-     od) a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  ntac 4 gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+(* An external return: normalize the value if needed, then either a raw
+   return (unlock, copy into a fresh typed buffer, RETURN) or the encoded
+   return, which unlocks itself. *)
+val ctor_external_return_tac =
+  ho_match_mp_tac first_emission_bind >> conj_tac
   >- (IF_CASES_TAC
       >- (ho_match_mp_tac first_emission_strong >>
           ho_match_mp_tac first_emission_strong_bind >> conj_tac
@@ -743,8 +751,17 @@ Proof
           >- (irule ctor_ci_mono_appends >> simp[ci_mono_typed_memory_family]) >>
           simp[cs_appends_def, comp_return_def, cs_extends_refl]) >>
       metis_tac[first_emission_return]) >>
-  gen_tac >> metis_tac[ctor_external_return_first_emission]
-QED
+  gen_tac >> IF_CASES_TAC
+  >- (ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+      >- (IF_CASES_TAC >> metis_tac[ctor_unlock_first_emission, first_emission_return]) >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- metis_tac[ctor_alloc_buffer_first_emission] >>
+      gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+      ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
+      >- (irule ctor_ci_mono_appends >> simp[ci_mono_typed_memory_family]) >>
+      simp[cs_appends_def] >> metis_tac[ctor_external_return_first_emission]) >>
+  metis_tac[ctor_external_return_first_emission];
 
 Theorem ctor_return_some_stmt_first_emission:
   !ce lc ty e a x b. compile_stmt ce lc ty (Return (SOME e)) a = (x,b) ==>
@@ -758,11 +775,11 @@ Proof
   >- metis_tac[ctor_lower_expr_value_first_emission] >>
   gen_tac >> Cases_on `ce.ce_return_pc` >>
   simp_tac bool_ss [optionTheory.option_case_def, LET_THM, ctor_bind_return_eq]
-  >- metis_tac[ctor_normalized_external_return_first_emission] >>
+  >- ctor_external_return_tac >>
   Cases_on `x` >>
   simp_tac bool_ss [compileEnvTheory.var_location_case_def, LET_THM, ctor_bind_return_eq] >>
   FIRST [metis_tac[ctor_internal_return_env_first_emission],
-         metis_tac[ctor_normalized_external_return_first_emission],
+         (ctor_external_return_tac >> NO_TAC),
          ho_match_mp_tac first_emission_bind >> conj_tac
          >- (mp_tac (cj 3 first_emission_emit_helpers |> Q.SPEC `MLOAD`) >> simp[] >> metis_tac[]) >>
          gen_tac >> metis_tac[ctor_internal_return_env_first_emission]]
