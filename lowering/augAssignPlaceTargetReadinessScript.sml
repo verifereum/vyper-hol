@@ -30,7 +30,8 @@ Proof
   `target_post ctx func cenv cx (es with gas_obs := gs) sa sp s0 mid
      (PlaceR (MemoryPlace id path)) (Type ty) r t` by
     (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[target_post_def, locals_kept_def] >> metis_tac[]) >>
+     simp[target_post_def, locals_kept_def, popped_kept_def] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `target_post _ _ _ _ (_ with gas_obs := _) _ _ _ _ _ _ _ _`
     (mp_then (Pat `target_post`) mp_tac aug_place_memory_source_ready) >>
   disch_then (drule_at (Pat `supported_stmt`)) >>

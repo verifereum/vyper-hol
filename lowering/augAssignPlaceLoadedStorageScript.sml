@@ -50,7 +50,10 @@ Proof
      metis_tac[]) >>
   `target_post ctx func cenv cx (es with gas_obs := gs) sa sp s0 mid
     (PlaceR (StoragePlace tr slot tv)) (Type ty) r t` by
-    (fs[target_post_def, locals_kept_def] >> metis_tac[]) >>
+    (qpat_assum `target_post _ _ _ _ es _ _ _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[target_post_def, locals_kept_def, popped_kept_def] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_at (Pat `target_post`) aug_place_storage_read_path >>
   disch_then (drule_at (Pat `eval_target_place`)) >>
   disch_then (drule_at (Pat `emit_op`)) >> simp[] >>
