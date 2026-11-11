@@ -105,10 +105,10 @@ Resume intcall_for_body_entry_frame[declare]:
      reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
      qexistsl_tac [`w2n w`, `func`, `ainst`, `sz`] >>
      fs[stmt_state_rel_def, state_rel_def]) >>
-  `val_in_memory tyv (IntV (n1 + &k)) (w2n w)
+  `memory_value_rel tyv (IntV (n1 + &k)) (w2n w)
      (mstore (w2n w) (i2w (n1 + &k)) s1).vs_memory` by
     (rewrite_tac[GSYM val_to_w256_def] >>
-     irule word_value_in_memory >> simp[word_value_def]) >>
+     irule word_value_memory_rel >> simp[word_value_def]) >>
   `!n b sz'. n <> id /\ local_region bc (FEMPTY :: esk.scopes) s1 n b sz' ==>
      mem_bytes_at b sz' s1.vs_memory =
      mem_bytes_at b sz' (mstore (w2n w) (i2w (n1 + &k)) s1).vs_memory` by
@@ -126,7 +126,7 @@ Resume intcall_for_body_entry_frame[declare]:
   conj_tac >- metis_tac[word_value_wf, word_value_def] >>
   qexistsl_tac [`ainst`, `s1`, `w`] >>
   simp[lookup_scopes_def] >>
-  fs[mstore_def, lookup_var_def] >> metis_tac[]
+  fs[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
 QED
 
 Resume intcall_for_body_entry_frame[store]:
