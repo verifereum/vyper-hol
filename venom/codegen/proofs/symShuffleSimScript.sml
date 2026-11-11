@@ -526,16 +526,16 @@ Proof
   qexists_tac `LUPDATE (HD top) k (LUPDATE (EL k top) 0 top)` >>
   `0 < LENGTH top /\ k < LENGTH top` by simp[] >>
   `HD (top ++ srest) = HD top` by (Cases_on `top` >> gvs[]) >>
-  `!k l. 0 < k /\ k < LENGTH l ==>
-     REVERSE (stack_swap k l) =
-     LUPDATE (HD (REVERSE l)) k
-       (LUPDATE (EL k (REVERSE l)) 0 (REVERSE l))` by
+  `!i l. 0 < i /\ i < LENGTH l ==>
+     REVERSE (stack_swap i l) =
+     LUPDATE (HD (REVERSE l)) i
+       (LUPDATE (EL i (REVERSE l)) 0 (REVERSE l))` by
     (rpt strip_tac >>
-     `stack_swap k l =
-      stack_poke k (stack_peek 0 l) (stack_poke 0 (stack_peek k l) l)` by
+     `stack_swap i l =
+      stack_poke i (stack_peek 0 l) (stack_poke 0 (stack_peek i l) l)` by
        simp[stackModelTheory.stack_swap_def, stackModelTheory.stack_poke_def,
             stackModelTheory.stack_peek_def, LET_THM] >>
-     `LENGTH (stack_poke 0 (stack_peek k l) l) = LENGTH l` by
+     `LENGTH (stack_poke 0 (stack_peek i l) l) = LENGTH l` by
        simp[stackModelTheory.stack_poke_def] >>
      simp[reorderSimTheory.reverse_stack_poke] >>
      `!j. j < LENGTH l ==> stack_peek j l = EL j (REVERSE l)` by
