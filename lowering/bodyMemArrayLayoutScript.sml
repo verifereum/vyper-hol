@@ -49,5 +49,5 @@ Proof
   Cases_on `n`
   >- (simp[vyperValueTheory.compatible_bound_def] >>
       metis_tac[fixed_array_from_dense]) >>
-  simp[vyperValueTheory.make_array_value_def, val_in_memory_def]
+  simp[vyperValueTheory.make_array_value_def, valueEncodingDefsTheory.val_in_memory_def]
 QED

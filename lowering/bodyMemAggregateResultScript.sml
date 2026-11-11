@@ -68,7 +68,7 @@ Proof
       conj_tac >- first_assum ACCEPT_TAC >>
       rpt strip_tac >>
       qpat_x_assum `!a n. (?aid. _) /\ _ ==> _` irule >>
-      simp[regions_disjoint_def] >> metis_tac[]) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   irule aggregate_allocated_result_store_bound_mem >> simp[] >>
   conj_tac >- fs[stmt_state_rel_def] >>
   reverse conj_tac >- metis_tac[] >>
