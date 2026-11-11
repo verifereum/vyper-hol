@@ -30,8 +30,8 @@ fractional products truncate toward zero, not mathematical floor.
   `decimal_mul_signed_result`, `decimal_mul_boundaries_eval`,
   `decimal_mul_boundaries_cv`, fixture runtime/deployment checks.
 - [Lowering](../../lowering/defs/exprLoweringScript.sml): `compile_safe_mul`.
-- Unchanged [scalar_arith_decimal_mul source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/scalar_arith_decimal_mul.vy),
-  [HOL scalar fixtures](../../lowering/defs/bytecode/eval/evalCompilerSubsetScalarsScript.sml).
+- Unchanged [scalar_arith_decimal_mul source](../../bytecode/python-o1-no-asm-opt-sources/scalar_arith_decimal_mul.vy),
+  [HOL scalar fixtures](../../bytecode/eval/evalCompilerSubsetScalarsScript.sml).
 
 Pinned `vyper/codegen/arithmetic.py`, `safe_mul`217–279: checks256-bit product
 wrap, divides decimal result with SDIV, then `clamp_basetype`. Pinned

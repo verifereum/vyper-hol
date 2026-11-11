@@ -1,7 +1,7 @@
 (* Apply the Log suffix to the actual endpoint, hiding its arbitrary limit. *)
 Theory stmtSimLogSuffixActual
 Ancestors
-  stmtSimLogSuffixFrame compileEnv context venomState finite_map pred_set
+  stmtSimLogSuffixFrame compileEnv loweringStateRelDefs context venomState finite_map pred_set
   ASCIInumbers list
 
 Theorem log_finite_name_bound[local]:
@@ -29,8 +29,8 @@ Proof
 QED
 
 Theorem log_success_suffix_actual_run:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\

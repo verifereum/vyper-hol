@@ -1,60 +1,48 @@
 (*
- * Common Subexpression Elimination — Proofs
+ * Common Subexpression Elimination — Single-Pass Correctness Proof
  *
- * Correctness: CSE with canon map + operand identity is sound.
- *
- * The available expression analysis with root-only effect removal is an
- * overapproximation (keeps expressions with invalidated sub-expressions).
- * The canon map + operand_ids_match check ensures that CSE only replaces
- * instructions whose operands provably evaluate to the same values as
- * the source instruction's operands (via SSA + ASSIGN chain equivalence).
- *
- * Proof sketch (out of scope, all cheated):
- *   1. operand_ids_match → same canonical producers → same var values (SSA)
- *   2. same var values → same operand evaluation (eval_operand determinism)
- *   3. same opcode + same operand values → same step_inst output
- *   4. source was executed → output var holds result (SSA: written once)
- *   5. therefore ASSIGN from source output is correct
+ * Proves cse_single_pass_correct via prefix execution simulation
+ * (cse_prefix_simulation_entry in cseHistoryPropsTheory):
+ *   1. Each replaced instruction in a reachable block has an available source
+ *      birth in the execution prefix (cse_prefix_source_interval) with
+ *      root-effect-free suffix survival.
+ *   2. Transitive compute_canon equivalence + cse_reachable_wf_ssa align
+ *      operand evaluation between source input state u and consumer input
+ *      state s (across arbitrary loops and ASSIGN chains), and for commutative
+ *      binary opcodes align operands up to transposition.
+ *   3. 1-output replacements (mk_assign_inst) copy the preserved source output
+ *      binding; 0-output idempotent replacements (mk_nop_inst) leave the state
+ *      unchanged because their effects were already established by the source.
  *)
 
 Theory cseProofs
 Ancestors
-  cseDefs analysisSimProps passSimulationProps
+  cseDefs cseCanonProps cseHistoryProps cseBlockSimulationProps
+  availExprDefs availExprProofs
+  passSharedDefs passSharedProps passSimulationProps
+  venomInstProps venomWf venomWfProps
 
-(* CSE soundness: for every ae entry where operand_ids_match holds,
-   the source variable holds the same value that re-executing the
-   instruction would produce. This is weaker than full ae soundness —
-   it only applies when the canon map confirms operand identity. *)
-Definition cse_sound_def:
-  cse_sound (canon : canon_map) (dfg : dfg_analysis)
-            (av_opt : avail_exprs option) (s : venom_state) <=>
-    case av_opt of
-      NONE => T
-    | SOME av =>
-        !expr srcs src_inst src_var.
-          FLOOKUP av expr = SOME srcs /\
-          MEM src_inst srcs /\
-          src_inst.inst_outputs = [src_var] ==>
-          (* Source variable is defined *)
-          (?w. FLOOKUP s.vs_vars src_var = SOME w) /\
-          (* For instructions with matching operand identity,
-             source's output matches what inst would compute *)
-          (!inst fuel ctx s'.
-             mk_expr dfg inst = expr /\
-             operand_ids_match canon dfg inst src_inst /\
-             inst.inst_outputs <> [] /\
-             step_inst fuel ctx inst s = OK s' ==>
-             FLOOKUP s.vs_vars src_var =
-             FLOOKUP s'.vs_vars (HD inst.inst_outputs))
-End
-
-Theorem cse_function_correct_proof:
+Theorem cse_single_pass_correct:
   !fuel ctx fn s.
-    fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
+    wf_function fn /\ cse_reachable_wf_ssa fn /\ fn_inst_wf fn /\
+    EVERY (\i. ~is_alloca_op i.inst_opcode) (fn_insts fn) /\
+    s.vs_inst_idx = 0 /\ fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (cse_function fn) s)
+      (run_blocks fuel ctx (cse_single_pass fn) s)
 Proof
-  cheat
+  rpt strip_tac >> simp[cse_single_pass_def] >>
+  irule cse_prefix_simulation_entry >>
+  simp[stateEquivPropsTheory.state_equiv_refl] >>
+  qexists_tac `cse_block_transform
+    (compute_canon (dfg_build_function fn) (avail_analyze fn) fn)
+    (dfg_build_function fn) (avail_analyze fn)` >>
+  simp[cse_block_lookup, cse_block_phi, stateEquivPropsTheory.state_equiv_refl] >>
+  rpt conj_tac
+  >- metis_tac[cse_block_instruction]
+  >- (rpt strip_tac >> irule cse_prefix_block_replacement >> metis_tac[]) >>
+  rpt strip_tac >>
+  imp_res_tac stateEquivPropsTheory.state_equiv_empty_eq >>
+  gvs[cse_block_phi] >> metis_tac[stateEquivPropsTheory.state_equiv_refl]
 QED

@@ -74,7 +74,9 @@ Theorem aug_place_typing:
     word_value_type ty /\ word_value_type (expr_type e) /\ env' = env
 Proof
   rpt gen_tac >> simp[type_stmt_def, well_typed_target_def] >>
-  strip_tac >> gvs[] >> metis_tac[well_typed_binop_augassign_word]
+  strip_tac >> gvs[] >>
+  imp_res_tac stmtSimAugAssignTheory.augassign_operand_ok_operands >>
+  metis_tac[well_typed_binop_augassign_word]
 QED
 
 Theorem aug_place_code_parts:
@@ -160,7 +162,8 @@ Proof
 QED
 
 Theorem aug_place_eval_bop:
-  bop <> In /\ bop <> NotIn ==>
+  bop <> In /\ bop <> NotIn /\
+  ((bop = Eq \/ bop = NotEq) ==> !bs. cur <> BytesV bs) ==>
   (case evaluate_binop
      (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
      ptv bop cur rhs of
@@ -175,7 +178,7 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
      ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> metis_tac[]) >>
   simp[] >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
@@ -215,11 +218,11 @@ Theorem aug_place_bop_res_ok:
   expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty;expr_type e] cur rhs st =
-   case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st) <=>
+   expr_res_ok (case evaluate_binop
      (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-     ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+     ptv bop cur rhs of INL v => INL v | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
     ptv bop cur rhs` >> gvs[expr_res_ok_def, stmt_res_ok_def]

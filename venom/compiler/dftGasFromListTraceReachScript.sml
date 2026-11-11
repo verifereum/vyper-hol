@@ -2,7 +2,7 @@ Theory dftGasFromListTraceReach
 Ancestors
   dftGasFromListCalleeSeed dftGasFromListReachBoundary dftGasFromListReplay dftGasFromListReplayBoundary
   dftGasFromListRestore dftGasFromListTraceDefs gasOracleReplay
-  dftGasOracleDefs contextCodegenRel venomExecSemantics venomInst venomState list
+  dftGasOracleDefs contextCodegenRel contextCodegenRelProps venomExecSemantics venomInst venomState list
 
 Theorem trace_visits_reachable:
   (!p d fuel ctx fn inst s. !orc vs0 gs.

@@ -16,7 +16,7 @@ Theory intCallArgs
 Ancestors
   list rich_list arithmetic finite_map
   fragExec loweringHalt valueCopy freshWrites context
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
   valueEncoding vyperTyping vyperValue venomExecSemantics venomState
 
 (* One memory-passed argument of compile_stage_intcall_args, after its

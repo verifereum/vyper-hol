@@ -1,6 +1,6 @@
 Theory simplifyCfgPhiSemantics
 Ancestors
-  simplifyCfgDefs simplifyCfgAvailability venomExecProofs venomWf
+  simplifyCfgDefs simplifyCfgAvailability venomExecProofs venomWf venomWfProps
   cfgTransform venomExecSemantics venomInst o1FnScheduleDecompHelpers
   analysisSimProofsBase dftCommutation simplifyCfgFragments instIdxIndep list relation
   simplifyCfgRepairDataflow simplifyCfgPhiRepair
@@ -34,16 +34,6 @@ Proof
   `pre ++ [b] <> []` by simp[] >>
   drule_all is_fn_path_rtc >> simp[] >> strip_tac >>
   simp[fn_reachable_def] >> metis_tac[]
-QED
-
-Theorem scfg_resolve_phi_pair:
-  !p ops v. resolve_phi p ops = SOME (Var v) ==>
-    MEM (p,v) (phi_pairs ops)
-Proof
-  recInduct resolve_phi_ind >>
-  rw[resolve_phi_def, phi_pairs_def]
-  >- (Cases_on `val_op` >> gvs[phi_pairs_def] >> metis_tac[]) >>
-  Cases_on `v2` >> gvs[phi_pairs_def] >> metis_tac[]
 QED
 
 Theorem scfg_instruction_block_unique:
@@ -115,7 +105,7 @@ Proof
     metis_tac[scfg_phi_not_entry] >>
   drule_all scfg_single_pred_avoiding_path >> strip_tac >>
   `MEM (p,v) (phi_pairs i.inst_operands)` by
-    metis_tac[scfg_resolve_phi_pair] >>
+    metis_tac[resolve_phi_pair] >>
   `?pb. MEM pb fn.fn_blocks /\ pb.bb_label = p /\
       fn_cfg_edge fn p bb.bb_label` by
     (qpat_x_assum `pred_labels fn bb.bb_label = [p]` mp_tac >>

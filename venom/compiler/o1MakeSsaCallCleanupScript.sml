@@ -1,6 +1,6 @@
 Theory o1MakeSsaCallCleanup
 Ancestors
-  o1MakeSsaCallPaths o1MakeSsaFormats unitShapeDefs makeSsaCurrentDefs list
+  o1MakeSsaCallPaths o1MakeSsaFormats unitShapeDefs makeSsaDefs list
   fmpStepList simplifyCfgCallChecks
 
 Theorem simplify_current_phi_prefix_parts_suffix:

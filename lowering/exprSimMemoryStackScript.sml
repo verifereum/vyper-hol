@@ -36,7 +36,7 @@ Proof
           >- (gen_tac >> drule eval_expr_force_value >>
               disch_then (qspec_then `es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >> simp[]) >>
           gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-              read_result_def, return_def] >>
+              read_result_def, return_def, vv_own_def] >>
           conj_tac >- first_assum ACCEPT_TAC >>
           irule vv_store_bound_stack_value >> conj_tac >>
           first_assum ACCEPT_TAC) >>

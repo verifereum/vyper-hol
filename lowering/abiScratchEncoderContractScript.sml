@@ -7,7 +7,7 @@ Theory abiScratchEncoderContract
 Ancestors
   abiScratchFootprint abiDecoderFootprint abiDecoderAllocation abiDecoderFrame
   abiDecoderReentry abiDecoderLoop abiDecoderContract abiEncoderInput abiEncoder
-  compileEnv valueEncoding contractABI instIdxIndep venomState finite_map words list arithmetic
+  compileEnv loweringStateRelDefs valueEncoding contractABI instIdxIndep venomState finite_map words list arithmetic
 
 Definition abi_scratch_input_def:
   abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap s <=>

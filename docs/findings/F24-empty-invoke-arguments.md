@@ -6,7 +6,7 @@ interfaces. **Disposition: FIXED here**, TASK024, landed `82a9c4b4`.
 
 ## Minimal counterexample and exact behavior
 
-Original [internal_call source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/internal_call.vy):
+Original [internal_call source](../../bytecode/python-o1-no-asm-opt-sources/internal_call.vy):
 `foo()` calls no-argument `bar()` returning7. Source succeeds with7;
 lowering emits **INVOKE [Label bar]**, no extra argument operand, with a stack
 return. Old `setup_callee` rejected `NULL args`, so raw Venom returned
@@ -38,9 +38,8 @@ inherited memory/account/oracle/frame field, not merely successful lookup.
 - [Exact regressions](../../venom/proofs/invokeEmptyArgsScript.sml):
   `setup_zero_args_preserves_frame`, `setup_empty_function_rejected`,
   `invoke_zero_args_returns_seven`, `invoke_empty_function_rejected`.
-- [Original HOL fixture](../../lowering/defs/bytecode/eval/evalCompilerScript.sml),
-  `internal_call_program`; [byte endpoints](../../lowering/defs/bytecode/eval/evalCompilerBytecodeControlScript.sml),
-  `internal_call_matches_python_oracle` and `internal_call_arg_matches_python_oracle`.
+- [Original HOL fixture](../../bytecode/eval/evalCompilerScript.sml),
+  `internal_call_program`; [native byte parity](../../bytecode/native/compilerNativeEmitScript.sml).
 - [Lowering](../../lowering/defs/exprLoweringScript.sml): internal-call args;
   [function generation](../../lowering/defs/moduleLoweringScript.sml): RETPC_PARAM.
 

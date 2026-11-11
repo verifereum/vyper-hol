@@ -1,30 +1,22 @@
 Theory vyperPureExpr
 Ancestors
-  vyperMisc vyperContext vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperStatePreservation vyperPlaceFrames
+  vyperExprEffects vyperMisc vyperContext vyperState vyperStorageBackend
+  vyperInterpreter vyperLookup vyperStatePreservation vyperPlaceFrames
 
 (* Pure expressions: expressions that do not modify state.  msg.gas is not
    pure: it consumes a gas reading; nor are the precompile builtins, which
-   consume a call outcome. *)
-Definition pure_expr_def:
-  pure_expr (Name _ _) = T ∧
-  pure_expr (TopLevelName _ _) = T ∧
-  pure_expr (FlagMember _ _ _) = T ∧
-  pure_expr (Literal _ _) = T ∧
-  pure_expr (IfExp _ e1 e2 e3) = (pure_expr e1 ∧ pure_expr e2 ∧ pure_expr e3) ∧
-  pure_expr (StructLit _ _ kes) = EVERY pure_expr (MAP SND kes) ∧
-  pure_expr (Subscript _ e1 e2) = (pure_expr e1 ∧ pure_expr e2) ∧
-  pure_expr (Attribute _ e _) = pure_expr e ∧
-  pure_expr (Builtin _ bt es) =
-    (bt ≠ Env MsgGas ∧ ¬precompile_builtin bt ∧ EVERY pure_expr es) ∧
-  pure_expr (TypeBuiltin _ _ _ es) = EVERY pure_expr es ∧
-  pure_expr _ = F
-Termination
-  WF_REL_TAC `measure expr_size` >>
-  rw[] >>
-  Induct_on `kes` >> rw[] >>
-  PairCases_on `h` >> rw[] >>
-  res_tac >> simp[]
-End
+   consume a call outcome.  The shared syntax definition spells the
+   precompiles out; restate that through precompile_builtin. *)
+Theorem precompile_builtin_exclusion[local]:
+  !bt P. bt <> Sha256 /\ bt <> ECRecover /\ bt <> ECAdd /\ bt <> ECMul /\ P <=>
+         ~precompile_builtin bt /\ P
+Proof
+  Cases >> simp[]
+QED
+
+Theorem pure_expr_def =
+  REWRITE_RULE [precompile_builtin_exclusion]
+    vyperExprEffectsTheory.pure_expr_def;
 
 (* Specialize the canonical evaluator induction theorem. Only expression
    and expression-list evaluation carry whole-state preservation obligations. *)
@@ -32,7 +24,7 @@ local
   val p0 = ``\(cx:evaluation_context) (s:stmt). T``
   val p1 = ``\(cx:evaluation_context) (ss:stmt list). T``
   val p2 = ``\(cx:evaluation_context) (it:iterator). T``
-  val p3 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
+  val p3 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T``
   val p4 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st = st'``
   val p5 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st = st'``
   val p6 = ``\(cx:evaluation_context) (t:base_assignment_target). T``
@@ -209,7 +201,17 @@ Proof
       get_accounts_def, lift_sum_def, precompile_call_success_def,
       AllCaseEqs()] >>
   gvs[get_accounts_def, ETA_THM, return_def, raise_def,
-      sum_CASE_rator, AllCaseEqs()] >> metis_tac[]
+      sum_CASE_rator, AllCaseEqs()] >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+      lift_option_type_def, lift_option_def, get_accounts_def,
+      AllCaseEqs()] >>
+  gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+  gvs[return_def, raise_def, sum_CASE_rator, AllCaseEqs()] >>
+  qpat_x_assum `sum_CASE _ _ _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `sum_CASE ans` >>
+  Cases_on `ans` >> gvs[return_def, raise_def] >> metis_tac[]
 QED
 
 Theorem case_Pop[local]:
@@ -329,7 +331,7 @@ Proof
             | "StructLit" => metis_tac[case_StructLit]
             | "Subscript" => ACCEPT_TAC case_Subscript
             | "Attribute" => ACCEPT_TAC case_Attribute
-            | "Builtin" => ACCEPT_TAC case_Builtin
+            | "Builtin" => suspend "builtin"
             | "TypeBuiltin" => ACCEPT_TAC case_TypeBuiltin
             | "Pop" => metis_tac[case_Pop]
             | "Call" =>
@@ -344,6 +346,15 @@ Proof
     (impl_tac >- (rpt conj_tac >> dispatch)) >> simp[]
   end
 QED
+
+Resume expr_state_mutual[builtin]:
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`cx`, `ty`, `bt`, `es`] mp_tac case_Builtin >>
+  (impl_tac >- (Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >> metis_tac[])) >>
+  simp[]
+QED
+
+Finalise expr_state_mutual
 
 (* ------------------------------------------------------------------------
    Main Theorems

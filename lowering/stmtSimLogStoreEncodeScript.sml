@@ -3,7 +3,7 @@ Theory stmtSimLogStoreEncode
 Ancestors
   stmtSimLogStoreFresh stmtSimLogAllocate stmtSimLogEncodeFrame
   abiDecoderFrame abiBuiltinAllocation abiEncoderInput abiEncoderProps abiEncoderCounters
-  localPtrsProps exprLoweringProps context compileEnv emitHelper emitHelperProps abiDecoderReentry
+  localPtrsProps exprLoweringProps context compileEnv loweringStateRelDefs emitHelper emitHelperProps abiDecoderReentry
   venomExecSemantics venomState venomInst finite_map words list arithmetic
 
 Theorem log_buffer_local_footprint[local]:

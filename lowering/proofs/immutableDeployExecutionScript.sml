@@ -44,7 +44,7 @@ Theorem immutable_deploy_mcopy_step:
   step_inst_base (mk_inst id MCOPY [dst;src;szop] []) s =
     OK (mcopy (w2n d) (w2n a) (w2n n) s)
 Proof
-  simp[mk_inst_def, step_inst_base_def]
+  simp[mk_inst_def, step_inst_base_opcode_eqs]
 QED
 
 Theorem immutable_deploy_codecopy_step:
@@ -54,7 +54,7 @@ Theorem immutable_deploy_codecopy_step:
     OK (write_memory_with_expansion (w2n d)
       (TAKE (w2n n) (DROP (w2n a) s.vs_code ++ REPLICATE (w2n n) 0w)) s)
 Proof
-  simp[mk_inst_def, step_inst_base_def]
+  simp[mk_inst_def, step_inst_base_opcode_eqs]
 QED
 
 Theorem immutable_deploy_return_step:
@@ -63,7 +63,7 @@ Theorem immutable_deploy_return_step:
     Halt (halt_state (set_returndata
       (TAKE (w2n n) (DROP (w2n d) s.vs_memory ++ REPLICATE (w2n n) 0w)) s))
 Proof
-  simp[mk_inst_def, step_inst_base_def]
+  simp[mk_inst_def, step_inst_base_opcode_eqs]
 QED
 
 Theorem immutable_deploy_write_frame:
@@ -110,7 +110,7 @@ Proof
   `LENGTH bytes <= LENGTH (DROP pos s.vs_memory)` by
     (`LENGTH (TAKE (LENGTH bytes) (DROP pos s.vs_memory)) = LENGTH bytes` by simp[] >>
      fs[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
-  simp[run_inst_seq_def, mk_inst_def, step_inst_base_def,
+  simp[run_inst_seq_def, mk_inst_def, step_inst_base_opcode_eqs,
        immutable_deploy_eval_literal, wordsTheory.w2n_n2w,
        listTheory.TAKE_APPEND1, halt_state_def, set_returndata_def]
 QED
@@ -149,7 +149,7 @@ Proof
    pos + LENGTH runtime < dimword (:256)` by decide_tac >>
   qabbrev_tac `s1 = update_var tmp (n2w (pos + LENGTH runtime)) s` >>
   `step_inst_base (mk_inst id ADD [Var buf; Lit (n2w (LENGTH runtime))] [tmp]) s = OK s1` by
-    simp[Abbr `s1`, mk_inst_def, step_inst_base_def, exec_pure2_def,
+    simp[Abbr `s1`, mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
          eval_operand_def, wordsTheory.word_add_n2w] >>
   `s1.vs_memory = s.vs_memory /\ s1.vs_code = s.vs_code /\
    s1.vs_labels = s.vs_labels /\
@@ -161,7 +161,7 @@ Proof
   qabbrev_tac `s2 = write_memory_with_expansion (pos + LENGTH runtime) section s1` >>
   `step_inst_base (mk_inst (id + 1) MCOPY
       [Var tmp; imm; Lit (n2w (LENGTH section))] []) s1 = OK s2` by
-    (simp[mk_inst_def, step_inst_base_def, immutable_deploy_eval_literal,
+    (simp[mk_inst_def, step_inst_base_opcode_eqs, immutable_deploy_eval_literal,
           wordsTheory.w2n_n2w, mcopy_def, Abbr `s2`]) >>
   `eval_operand (Var buf) s2 = SOME (n2w pos) /\
    eval_operand (Label "runtime_begin") s2 = SOME (n2w codepos) /\
@@ -170,7 +170,7 @@ Proof
   qabbrev_tac `s3 = write_memory_with_expansion pos runtime s2` >>
   `step_inst_base (mk_inst (id + 2) CODECOPY
       [Var buf; Label "runtime_begin"; Lit (n2w (LENGTH runtime))] []) s2 = OK s3` by
-    simp[mk_inst_def, step_inst_base_def, immutable_deploy_eval_literal,
+    simp[mk_inst_def, step_inst_base_opcode_eqs, immutable_deploy_eval_literal,
          wordsTheory.w2n_n2w, Abbr `s3`] >>
   `eval_operand (Var buf) s3 = SOME (n2w pos)` by
     simp[Abbr `s3`, immutable_deploy_write_frame] >>
@@ -182,7 +182,7 @@ Proof
      fs[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
   simp[Once run_inst_seq_def] >> simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def] >> simp[Once run_inst_seq_def] >>
-  simp[mk_inst_def, step_inst_base_def, immutable_deploy_eval_literal,
+  simp[mk_inst_def, step_inst_base_opcode_eqs, immutable_deploy_eval_literal,
        wordsTheory.w2n_n2w, listTheory.TAKE_APPEND1, halt_state_def, set_returndata_def] >>
   simp[Abbr `s3`, Abbr `s2`, Abbr `s1`, immutable_deploy_write_frame, update_var_def]
 QED
@@ -241,7 +241,7 @@ Proof
       [Lit (n2w (LENGTH runtime + LENGTH section))]
       ["%" ++ toString st.cs_next_var]) s =
      OK (update_var ("%" ++ toString st.cs_next_var) (n2w pos) s)` by
-    simp[mk_inst_def, step_inst_base_def, exec_alloca_def, eval_operand_def] >>
+    simp[mk_inst_def, step_inst_base_opcode_eqs, exec_alloca_def, eval_operand_def] >>
   gvs[] >>
   `st.cs_next_id + 2 = (st.cs_next_id + 1) + 1 /\
    st.cs_next_id + 3 = (st.cs_next_id + 1) + 2 /\
@@ -284,7 +284,7 @@ Proof
   strip_tac >> qabbrev_tac `s1 = write_memory_with_expansion pos runtime s` >>
   `step_inst_base (mk_inst id CODECOPY
     [Var buf; Label "runtime_begin"; Lit (n2w (LENGTH runtime))] []) s = OK s1` by
-    simp[mk_inst_def, step_inst_base_def, immutable_deploy_eval_literal,
+    simp[mk_inst_def, step_inst_base_opcode_eqs, immutable_deploy_eval_literal,
          immutable_deploy_eval_label, wordsTheory.w2n_n2w, Abbr `s1`] >>
   `eval_operand (Var buf) s1 = SOME (n2w pos) /\
    TAKE (LENGTH runtime) (DROP pos s1.vs_memory) = runtime` by
@@ -330,7 +330,7 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w (LENGTH runtime))]
       ["%" ++ toString st.cs_next_var]) s =
      OK (update_var ("%" ++ toString st.cs_next_var) (n2w pos) s)` by
-    simp[mk_inst_def, step_inst_base_def, exec_alloca_def, eval_operand_def] >>
+    simp[mk_inst_def, step_inst_base_opcode_eqs, exec_alloca_def, eval_operand_def] >>
   gvs[] >>
   `st.cs_next_id + 2 = (st.cs_next_id + 1) + 1` by decide_tac >>
   asm_rewrite_tac[] >>
@@ -363,7 +363,7 @@ Theorem immutable_deploy_return_index:
   exec_result_map (\s'. s' with vs_inst_idx := n)
     (step_inst_base (mk_inst id RETURN [dst;szop] []) s)
 Proof
-  simp[mk_inst_def, step_inst_base_def, eval_op_inst_idx] >>
+  simp[mk_inst_def, step_inst_base_opcode_eqs, eval_op_inst_idx] >>
   Cases_on `eval_operand dst s` >> simp[exec_result_map_def] >>
   Cases_on `eval_operand szop s` >>
   simp[exec_result_map_def, halt_state_def, set_returndata_def]
@@ -434,7 +434,7 @@ Proof
     simp[Abbr `shifted`, immutable_deploy_return_index, exec_result_map_def] >>
   `final.vs_halted` by
     (qpat_x_assum `step_inst_base _ mid = Halt final` mp_tac >>
-     simp[mk_inst_def, step_inst_base_def] >>
+     simp[mk_inst_def, step_inst_base_opcode_eqs] >>
      Cases_on `eval_operand dst mid` >> simp[] >>
      Cases_on `eval_operand szop mid` >>
      simp[halt_state_def, set_returndata_def] >>
@@ -454,7 +454,7 @@ Theorem immutable_deploy_prefix_opcodes:
 Proof
   simp[] >> strip_tac >> gvs[] >>
   simp[is_terminator_def] >> rpt gen_tac >>
-  once_rewrite_tac[step_inst_base_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
   qpat_assum `i.inst_opcode = _` (fn th => rewrite_tac[th]) >> simp[] >>
   simp[exec_pure2_def, exec_alloca_def, AllCaseEqs()]
 QED
@@ -580,7 +580,7 @@ Proof
   `?codepos. FLOOKUP s.vs_labels "runtime_begin" = SOME codepos` by
     fs[immutable_base_zero_alt, optionTheory.IS_SOME_EXISTS] >>
   qexistsl_tac [`t`, `b`, `codepos`] >>
-  simp[Abbr `inst`, mk_inst_def, step_inst_base_def, eval_operand_def] >>
+  simp[Abbr `inst`, mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def] >>
   qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
   simp[exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
@@ -589,7 +589,7 @@ Proof
   gvs[] >> Cases_on `imm` >>
   gvs[immutable_base_zero_alt, eval_operand_def, lookup_var_def,
       update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
-      compileEnvTheory.not_fresh_at_def] >>
+      loweringStateRelDefsTheory.not_fresh_at_def] >>
   metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LE_ADD,
             stringTheory.STRCAT_def, listTheory.APPEND]
 QED
@@ -685,7 +685,7 @@ Theorem immutable_deploy_early_stop:
   run_inst_seq (mk_inst id STOP [] [] :: later) s =
     Halt (halt_state (s with vs_returndata := []))
 Proof
-  simp[run_inst_seq_def, mk_inst_def, step_inst_base_def]
+  simp[run_inst_seq_def, mk_inst_def, step_inst_base_opcode_eqs]
 QED
 
 (* Checked executions include the fresh bump-allocation path. They test

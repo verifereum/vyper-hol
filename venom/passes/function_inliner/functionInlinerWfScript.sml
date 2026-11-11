@@ -211,7 +211,7 @@ Proof
   Induct_on `bbs` >- simp[rewrite_inline_blocks_def] >>
   rpt gen_tac >> simp[Once rewrite_inline_blocks_def] >>
   pairarg_tac >>
-  Cases_on `rewrite_inline_blocks ops outs r bbs pi'` >>
+  Cases_on `rewrite_inline_blocks ops outs r bbs q` >>
   simp[] >> strip_tac >> gvs[] >>
   first_x_assum drule >> simp[] >>
   gvs[rewrite_inline_block_def] >>
@@ -311,7 +311,7 @@ Proof
   Induct_on `bbs` >- simp[rewrite_inline_blocks_def] >>
   rpt gen_tac >> simp[Once rewrite_inline_blocks_def] >>
   pairarg_tac >>
-  Cases_on `rewrite_inline_blocks ops outs r bbs pi'` >>
+  Cases_on `rewrite_inline_blocks ops outs r bbs q` >>
   simp[] >> strip_tac >> gvs[] >>
   first_x_assum drule >> simp[] >> strip_tac >>
   drule_all rewrite_inline_block_well_formed >> simp[]
@@ -379,7 +379,7 @@ Proof
   Induct_on `bbs` >- simp[rewrite_inline_blocks_def] >>
   rpt gen_tac >> simp[Once rewrite_inline_blocks_def] >>
   pairarg_tac >>
-  Cases_on `rewrite_inline_blocks ops outs r bbs pi'` >>
+  Cases_on `rewrite_inline_blocks ops outs r bbs q` >>
   simp[] >> strip_tac >> gvs[]
   >- (drule_all rewrite_inline_block_successors >> metis_tac[]) >>
   first_x_assum drule >> metis_tac[]

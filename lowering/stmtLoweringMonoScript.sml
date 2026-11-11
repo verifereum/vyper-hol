@@ -47,7 +47,7 @@ fun ci_mono_chain_tac rws =
 val ci_mono_grows_rws = [
   ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst, ci_mono_fresh_var,
   ci_mono_fresh_label, ci_mono_new_block, ci_mono_compile_alloc_buffer,
-  ci_mono_unwrap_value, ci_mono_compile_store_memory,
+  ci_mono_unwrap_value, ci_mono_compile_snapshot_vv, ci_mono_compile_store_memory,
   ci_mono_compile_copy_memory, ci_mono_compile_word_copy_loop,
   ci_mono_compile_store_bytestring, ci_mono_compile_keccak256_key,
   ci_mono_compile_mapping_subscript, ci_mono_compile_array_subscript,
@@ -108,7 +108,7 @@ QED
 
 val ci_mono_stmt_rws =
   ci_mono_grows_rws @
-  [ci_mono_compile_expr_sa, ci_mono_context_helpers,
+  [ci_mono_store_immutable_bytestring, ci_mono_compile_expr_sa, ci_mono_context_helpers,
    ci_mono_compile_dynarray_append, ci_mono_comp_get,
    ci_mono_compile_ptr_load, ci_mono_compile_imm_store_word,
    ci_mono_compile_imm_store_words, ci_mono_compile_imm_copy_to_memory];
@@ -137,10 +137,20 @@ Theorem ci_mono_stmt_helpers:
   (!l sa. ci_mono sa (SND (emit_jmp_if_not_terminated l sa)))
 Proof
   rpt conj_tac >> rpt gen_tac
-  >- (simp[compile_assign_value_def] >> Cases_on `l` >> simp[] >|
-      [ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
-       ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
-       ci_mono_chain_tac ci_mono_stmt_rws])
+  >- (simp[compile_assign_value_def] >> Cases_on `l` >> simp[]
+      >- ci_mono_chain_tac ci_mono_stmt_rws
+      >- (irule ci_mono_bind >> reverse conj_tac
+          >- (rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >> simp[ci_mono_comp_return] >>
+              ci_mono_chain_tac ci_mono_grows_rws) >>
+          rpt gen_tac >> Cases_on `p` >> simp[ci_mono_emit_void] >>
+          Cases_on `da` >> simp[]
+          >- (IF_CASES_TAC >>
+              ci_mono_chain_tac [ci_mono_emit_op, ci_mono_emit_void,
+                ci_mono_context_helpers]) >>
+          BasicProvers.TOP_CASE_TAC >> simp[ci_mono_context_helpers])
+      >- ci_mono_chain_tac ci_mono_stmt_rws
+      >- ci_mono_chain_tac ci_mono_stmt_rws >>
+      ci_mono_chain_tac ci_mono_stmt_rws)
   >- (Cases_on `l` >> TRY (rename1 `SOME loc` >> Cases_on `loc`) >>
       simp[compile_store_at_loc_def, ci_mono_emit_void,
            ci_mono_compile_imm_store_word])
@@ -168,8 +178,8 @@ QED
 Theorem ci_mono_list_helpers:
   (!cenv es sa. ci_mono sa (SND (compile_log_eval_all cenv es sa))) /\
   (!xs sa. ci_mono sa (SND (compile_log_topic_ops xs sa))) /\
-  (!cenv xs b off sa.
-     ci_mono sa (SND (compile_log_store_data cenv xs b off sa))) /\
+  (!cenv xs tys b off sa.
+     ci_mono sa (SND (compile_log_store_data cenv xs tys b off sa))) /\
   (!cenv s tys off sa.
      ci_mono sa (SND (compile_tuple_load_all cenv s tys off sa))) /\
   (!cenv tys ts vs sa.
@@ -178,11 +188,12 @@ Theorem ci_mono_list_helpers:
      ci_mono sa (SND (compile_load_tuple_elements cenv b tys off sa)))
 Proof
   rpt conj_tac
-  >- (gen_tac >> Induct >> simp[compile_log_eval_all_def] >>
-      ci_mono_chain_tac ci_mono_stmt_rws)
+  >- (gen_tac >> Induct >>
+      simp[compile_log_eval_all_def, compile_log_save_arg_def] >>
+      ci_mono_chain_tac (ci_mono_compile_materialize_vv :: ci_mono_stmt_rws))
   >- (Induct >> simp[compile_log_topic_ops_def] >>
       ci_mono_chain_tac ci_mono_stmt_rws)
-  >- (gen_tac >> Induct >> simp[compile_log_store_data_def] >>
+  >- (gen_tac >> Induct >> Cases_on `tys` >> simp[compile_log_store_data_def] >>
       ci_mono_chain_tac ci_mono_stmt_rws)
   >- (gen_tac >> gen_tac >> Induct >> simp[compile_tuple_load_all_def] >>
       ci_mono_chain_tac (ci_mono_context_helpers :: ci_mono_stmt_rws))
@@ -211,6 +222,13 @@ Proof
   simp[ci_mono_compile_store_memory, ci_mono_emit_inst]
 QED
 
+Theorem ci_mono_compile_return_unlock:
+  !cenv sa. ci_mono sa (SND (compile_return_unlock cenv sa))
+Proof
+  rpt gen_tac >> simp[compile_return_unlock_def] >>
+  pairarg_tac >> rw[ci_mono_context_helpers, ci_mono_comp_return]
+QED
+
 Theorem ci_mono_return_helpers:
   (!cenv v pc n rt st ets rb sa.
      ci_mono sa (SND (compile_internal_return cenv v pc n rt st ets rb sa))) /\
@@ -224,6 +242,8 @@ Proof
   rpt conj_tac
   >- simp[ci_mono_internal_return]
   >- (rpt gen_tac >> simp[compile_internal_return_from_env_def] >>
+      irule ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_compile_return_unlock] >>
+      gen_tac >>
       match_mp_tac ci_mono_bind >> conj_tac
       >- (Cases_on `cenv.ce_return_buf` >> simp[ci_mono_comp_return] >>
           Cases_on `x` >> simp[ci_mono_comp_return] >>
@@ -266,7 +286,8 @@ QED
 val stmt_ci_tac =
   let val chain =
         ci_mono_chain_tac
-          (ci_mono_return_helpers :: ci_mono_list_helpers ::
+          (ci_mono_compile_return_unlock :: ci_mono_return_helpers ::
+           ci_mono_list_helpers ::
            ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
            ci_mono_stmt_rws)
   in
@@ -281,8 +302,12 @@ val range_ci_step =
   let val rws = ci_mono_return_helpers :: ci_mono_list_helpers ::
                 ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
                 ci_mono_stmt_rws
-      val close = FIRST (map MATCH_ACCEPT_TAC
-        (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws))))
+      (* index the closing facts by conclusion, so each goal tries only the
+         facts whose conclusion can match it *)
+      val net = List.foldl (fn (th, n) => Net.insert (concl (SPEC_ALL th), th) n)
+        Net.empty (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws)))
+      fun close (asl, w) =
+        FIRST (map MATCH_ACCEPT_TAC (Net.match w net)) (asl, w)
   in
     FIRST [close, FIRST_ASSUM MATCH_ACCEPT_TAC,
            MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,

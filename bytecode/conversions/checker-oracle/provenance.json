@@ -1,0 +1,19 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1+commit.577d2534",
+  "outputs": [
+    "annotated_ast",
+    "layout"
+  ],
+  "sources": {
+    "lit_300_to_u8.vy": "34f280c90a201bfeafc16425affe776aad15bb8f6ff961d7e048c8280faffc65",
+    "lit_bys_narrow.vy": "2d64fe07a4b708a83614fe1f0bbc33bab7869227bea3c9384581517c83d471d6",
+    "lit_neg_to_u256.vy": "2936c6f19f33f77274593e6ff6b1be4a771e3aa14616fcd20d3e5d1f489dde59"
+  },
+  "inputs": {
+    "lit_300_to_u8.json": "f126caf1f8caec82bdc34c097f1e4a6e7cb912cb3c84d8220348fe6c2c3d5fab",
+    "lit_bys_narrow.json": "8fc23fe9062f98d27fedd64bbb2b8bf4086ec19cb43deb0443ec209c6e496b26",
+    "lit_neg_to_u256.json": "c1455a17970c771eb3bf73b1ff37cb0d869daf2630ddbbeb8e343c26ef1850f4"
+  }
+}

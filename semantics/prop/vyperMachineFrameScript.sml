@@ -86,8 +86,26 @@ Proof
   first_x_assum irule >> goal_assum drule >> simp[]
 QED
 
+(* IntCall's cleanup is skipped when the body halts. *)
+Theorem state_rel_frame_finally_unless_halt:
+  (!s t u. R s t /\ R t u ==> R s u) /\
+  state_rel_frame R f /\ state_rel_frame R g ==>
+  state_rel_frame R (finally_unless_halt f g)
+Proof
+  simp[state_rel_frame_def] >> rpt strip_tac >>
+  simp[finally_unless_halt_def] >>
+  Cases_on `f st` >> rename1 `f st = (q, r)` >>
+  `R st r` by
+    (qpat_x_assum `!st. R st (SND (f st))` (qspec_then `st` mp_tac) >>
+     simp[]) >>
+  `R r (SND (g r))` by simp[] >>
+  Cases_on `q` >> TRY (Cases_on `y`) >>
+  simp[ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `g r` >> Cases_on `q` >> gvs[] >> metis_tac[]
+QED
+
 Theorem machine_frame_primitives:
-  state_rel_frame machine_frame (vyperState$return v) /\
+  state_rel_frame machine_frame (vyperState$return x) /\
   state_rel_frame machine_frame (vyperState$raise e) /\
   state_rel_frame machine_frame (assert b ex) /\
   state_rel_frame machine_frame (check b msg) /\
@@ -184,6 +202,13 @@ Proof
   drule read_result_state >> simp[]
 QED
 
+Theorem machine_frame_array_iterator_results:
+  state_rel_frame machine_frame (array_iterator_results cx ty r)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  drule array_iterator_results_state >> simp[]
+QED
+
 Theorem machine_frame_read_results:
   state_rel_frame machine_frame (read_results cx rs)
 Proof
@@ -196,6 +221,39 @@ Theorem machine_frame_lookup_global:
 Proof
   simp[state_rel_frame_result] >> rpt strip_tac >>
   drule lookup_global_state >> simp[]
+QED
+
+Theorem machine_frame_push_function:
+  state_rel_frame machine_frame (push_function src_fn sc cx)
+Proof
+  simp[state_rel_frame_def, push_function_def, return_def]
+QED
+
+Theorem machine_frame_pop_function:
+  state_rel_frame machine_frame (pop_function prev)
+Proof
+  simp[pop_function_def, machine_frame_primitives]
+QED
+
+Theorem machine_frame_reads:
+  state_rel_frame machine_frame (lookup_global cx src id) /\
+  state_rel_frame machine_frame (lookup_flag_mem cx nsid mid) /\
+  state_rel_frame machine_frame (read_storage_slot cx tr slot ty) /\
+  state_rel_frame machine_frame (result_array_length cx r)
+Proof
+  simp[state_rel_frame_result] >> metis_tac[lookup_global_state,
+    lookup_flag_mem_state, read_storage_slot_state,
+    result_array_length_state, machine_frame_refl]
+QED
+
+Theorem machine_frame_unchanged_reads:
+  state_rel_frame machine_frame (conditional_result cx r) /\
+  state_rel_frame machine_frame (check_not_static cx) /\
+  state_rel_frame machine_frame (check_create_blueprint has_salt vs)
+Proof
+  simp[state_rel_frame_result] >>
+  metis_tac[conditional_result_state, vyperCreateTheory.check_create_blueprint_state,
+    check_not_static_eq, pairTheory.PAIR_EQ, pairTheory.SND, machine_frame_refl]
 QED
 
 Theorem machine_frame_get_place:

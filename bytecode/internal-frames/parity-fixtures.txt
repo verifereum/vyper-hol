@@ -1,0 +1,12 @@
+p01_int_local_word
+p03_int_local_array
+p04_int_local_struct
+p06_int_for_range
+p09_int_chain
+p10_int_diamond
+p21_for_body_call
+p39_int_local_clobber
+p40_int_for_clobber
+p41_int_local_and_call
+p76_int_assert_raise
+p92_int_revert_branch

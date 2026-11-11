@@ -1,5 +1,6 @@
 Theory stmtSimLogScalarPrefix
 Ancestors
+  abiDecoderRange
   stmtSimLogAllocResource stmtSimLogEncodeLayout abiEncoderComplexPrefix abiBuiltinAllocation
   abiEncoderComplexCode abiDecoderIndexInit abiDecoderReentryAddress
   abiDecoderAllocation abiDecoderReentry abiDecoderGuards abiDecoderFrame

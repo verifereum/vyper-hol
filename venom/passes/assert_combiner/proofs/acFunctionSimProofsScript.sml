@@ -3,6 +3,7 @@ Theory acFunctionSimProofs
 Ancestors
   passSimulationDefs execEquivParamBase venomExecProofs
   venomExecSemantics venomState venomInst execEquivParamDefs stateEquiv list
+  passTransform
 
 Theorem ac_lookup_block_map[local]:
   !lbl bbs bt.

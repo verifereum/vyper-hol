@@ -2,9 +2,9 @@
    payloads even when a child's actual suffix exceeds its own size bound. *)
 Theory abiDecoderValidBytesInput
 Ancestors
-  abiDecoderValidContract abiDecoderValidBytes abiDecoderBytes abiDecoderBytesTyped
+  abiValidBytes abiDecoderFrame abiDecoderValidContract abiDecoderValidBytes abiDecoderBytes abiDecoderBytesTyped
   abiDecoderString abiDecoderTypedContract abiDecoderContract abiDecoderCoherence
-  abiDecoderReentry abiDecoderArrayInitReentry abiValidBytesUnwrap
+  abiDecoderReentry abiDecoderBytesShape
   compileEnv valueEncoding vyperABI vyperValue contractABI
   venomState words list arithmetic
 
@@ -33,8 +33,9 @@ QED
 
 Theorem abi_decoder_valid_bytes_input:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst opc hi sb d b cap initial ==>
-  ?at payload. abi_decoder_valid_bytes_pre n at bs payload st src dst opc hi sb d
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst opc base_op hi B sb d b cap initial ==>
+  ?at payload. abi_decoder_valid_bytes_pre n at bs payload st src dst opc base_op hi B sb d
       (abi_decoder_prune_vars st.cs_next_var initial) /\
     type_to_abi_dec_info sf ce ty = DecBytestring n /\
     type_memory_bytes ce ty = abi_decode_bytes_copy_size n /\
@@ -45,20 +46,32 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac (INST_TYPE [alpha |-> ``:string``, beta |-> ``:num``] abi_valid_bytes_lowering) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_decoder_valid_pre`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   drule_all abi_decoder_valid_bytes_metadata >>
   disch_then (qx_choose_then `at` (qx_choose_then `payload`
     (MAP_EVERY assume_tac o CONJUNCTS))) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_decoder_ranges`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   mp_tac (cj 3 abi_decoder_bytes_copy_size) >> strip_tac >>
-  `n < dimword (:256)` by gvs[] >>
-  `abi_decoder_valid_bytes_pre n at bs payload st src dst opc hi sb d
+  `n < dimword (:256)` by
+    (qpat_assum `d + type_memory_bytes ce ty < _` mp_tac >>
+     asm_simp_tac bool_ss [] >> decide_tac) >>
+  `vyper_decode_valid_enc at bs` by metis_tac[] >>
+  drule_all abi_valid_bytes_decode >> strip_tac >>
+  `base_op <> Lit 0w ==>
+    B + sb + 32 + LENGTH payload <= d \/ d + abi_decode_bytes_copy_size n <= B + sb` by
+    (strip_tac >> `opc = MLOAD` by metis_tac[] >>
+     qpat_x_assum `opc = MLOAD ==> _` drule >>
+     simp_tac bool_ss [abi_footprint_disjoint_def, listTheory.EVERY_DEF, pairTheory.FST,
+       pairTheory.SND] >> asm_simp_tac bool_ss [] >>
+     disch_then (qspecl_then [`d`, `abi_decode_bytes_copy_size n`] mp_tac) >>
+     simp[] >> decide_tac) >>
+  `abi_decoder_valid_bytes_pre n at bs payload st src dst opc base_op hi B sb d
      (abi_decoder_prune_vars st.cs_next_var initial)` by
     (asm_simp_tac bool_ss [abi_decoder_valid_bytes_pre_def, abi_decoder_prune_fresh,
       abi_decoder_prune_eval, abi_decoder_prune_source] >>
-     gvs[Excl "valid_enc_def", Excl "dec_def", Excl "enc_def"]) >>
+     metis_tac[]) >>
   qexistsl_tac [`at`, `payload`] >> asm_simp_tac bool_ss [] >>
   rpt strip_tac >> first_x_assum irule >> asm_simp_tac bool_ss []
 QED

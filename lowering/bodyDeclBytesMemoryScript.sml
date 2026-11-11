@@ -12,7 +12,7 @@ Ancestors
   gasSummary gasOutcome loweringPosts exprSimDefs stmtSimDefs stmtSimProps
   loweringSlice exprLoweringProps exprOperandVar localPtrsProps freshWrites
   valueTypingMemoryProps valueCopyBytes bodySim exprSimHypsDefs emitHelper emitHelperProps fragExec
-  venomInst venomState exprLowering stmtLowering context compileEnv
+  venomInst venomState exprLowering stmtLowering context compileEnv loweringStateRelDefs
   vyperInterpreter vyperState list rich_list finite_map
 Libs
   monadsyntax

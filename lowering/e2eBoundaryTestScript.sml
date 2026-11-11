@@ -71,7 +71,14 @@ Theorem block_environment_bounds:
   LENGTH tx.block_hashes <= 256 /\
   tp.prevRandao = n2w tx.prev_randao /\ tp.prevHashes = tx.block_hashes
 Proof
-  simp[tx_block_fields_rel_def, compileEnvTheory.tx_env_ok_def]
+  simp[tx_block_fields_rel_def, loweringStateRelDefsTheory.tx_env_ok_def]
+QED
+
+Theorem boundary_pending_deletions:
+  call_state_rel tops code am tx es ==>
+  es.rollback.toDelete = am.pending_deletions
+Proof
+  simp[call_state_rel_def] >> metis_tac[]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
@@ -81,7 +88,7 @@ Theorem no_genesis_or_unbounded_hash_environment:
   (MIN 256 tx.block_number > LENGTH hashes ==>
     ~tx_env_ok (tx with block_hashes := hashes))
 Proof
-  simp[compileEnvTheory.tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
+  simp[loweringStateRelDefsTheory.tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
 QED
 
 (* ===== Exact source module/layout and independent hypotheses ===== *)
@@ -268,8 +275,7 @@ End
 
 Theorem decoding_exemption_exact:
   (unspecified_behaviour_exempt dynamic_decode_program e <=>
-    e = RuntimeError "abi_decode invalid" \/
-    e = RuntimeError "convert empty bytes to signed") /\
+    e = RuntimeError "abi_decode invalid") /\
   ~unspecified_behaviour_exempt [] (RuntimeError "abi_decode invalid") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (TypeError "abi_decode invalid")
@@ -302,6 +308,7 @@ Theorem source_exemption_triple:
   ~source_exempt tops (INR (AssertException s),am,rqs) /\
   ~source_exempt tops (INR BreakException,am,rqs) /\
   ~source_exempt tops (INR ContinueException,am,rqs) /\
+  ~source_exempt tops (INR HaltException,am,rqs) /\
   ~source_exempt tops (INR (ReturnException v),am,rqs)
 Proof
   simp[source_exempt_def]
@@ -315,6 +322,21 @@ Theorem success_requires_requests_and_effects:
   (call_result_rel_at [] tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       tx_return_bytes tops ret tx v out /\
+      accounts_agree cx am'.accounts
+        (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+      transient_agree cx am'.tStorage es'.rollback.tStorage /\
+      logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
+      LIST_REL (request_agree cx) rqs (call_requests es))
+Proof
+  simp[call_result_rel_at_def]
+QED
+
+Theorem halt_requires_empty_success_and_effects:
+  call_external (SOME (MAP SND (call_trace es))) [] am tx =
+    (INR HaltException,am',rqs) /\
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
+  (call_result_rel_at [] tops ret am tx es r es' <=>
+    ?lgs. frame_outcome es r es' NONE [] lgs /\
       accounts_agree cx am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
       transient_agree cx am'.tStorage es'.rollback.tStorage /\
@@ -341,23 +363,6 @@ Theorem error_result_only_exact_exemption_or_failure:
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
 Proof
   simp[call_result_rel_at_def]
-QED
-
-Theorem empty_signed_conversion_accepts_any_outcome:
-  call_external (SOME (MAP SND (call_trace es))) [] am tx =
-    (INR (Error (RuntimeError "convert empty bytes to signed")),am',rqs) ==>
-  call_result_rel_at [] tops ret am tx es r es'
-Proof
-  simp[call_result_rel_at_def, unspecified_behaviour_exempt_def]
-QED
-
-Theorem empty_signed_conversion_exemption_exact:
-  unspecified_behaviour_exempt [] (RuntimeError "convert empty bytes to signed") /\
-  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV int bound") /\
-  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV decimal bound") /\
-  ~unspecified_behaviour_exempt [] (TypeError "convert empty bytes to signed")
-Proof
-  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def]
 QED
 
 Theorem escaped_control_is_not_related:

@@ -2,7 +2,7 @@
 Theory stmtAppendStoragePathPtr
 Ancestors
   appendStorageStageTransportPtr stmtSimAppendStorageCompose fragGasSeqPtr
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
   fragExec stateFrame venomExecSemantics venomInst venomState
   list rich_list arithmetic fragGasSeqAbort venomInstProofs instIdxIndep
   fragGasPath stmtSimAppendStorage emittedSeqComposePtr ptrDiscipline

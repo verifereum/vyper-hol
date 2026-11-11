@@ -11,27 +11,29 @@ Ancestors
 
 (* Actual dynamic-array address setup followed by source-valid child execution. *)
 Theorem abi_decoder_valid_array_body:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
   abi_decoder_valid_correct ce env sf ty tv /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     di (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
   is_dynamic (vyper_to_abi_type env ty) /\
   (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  abi_decoder_ranges opc hi src dst sb
+  abi_decoder_ranges opc base_op hi src dst B sb
     (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) =
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) =
     bs /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var ip /\
   abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
   st.cs_next_id <= middle.cs_next_id /\ end_st.cs_next_id <= last /\
@@ -51,24 +53,23 @@ Proof
   drule_all abi_decoder_array_body_code >> strip_tac >>
   `first <= middle.cs_next_id /\ middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   drule_all abi_decoder_valid_array_setup_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
-  qpat_assum `abi_decoder_valid_array_entry ce env sf ty tv bs vs j middle ops opc hi sb d b cap
+  qpat_assum `abi_decoder_valid_array_entry ce env sf ty tv bs vs j middle ops opc base_op hi B sb d b cap
       st.cs_next_var limit_st initial prepared`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_decoder_valid_array_entry_def, LET_THM]) >>
   qpat_assum `abi_decoder_address_frame _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
   `abi_decoder_budget first last b cap prepared` by
     (drule_all abi_decoder_budget_transport >> simp[]) >>
-  mp_tac (Q.INST [`start` |-> `middle`, `end_st` |-> `end_st`,
-    `initial` |-> `prepared:venom_state`, `dst` |-> `SND (SND (ops:operand # operand # operand))`,
-    `src` |-> `FST (SND (ops:operand # operand # operand))`,
-    `bs` |-> `abi_decode_member_bytes (vyper_to_abi_type env ty) (DROP 32 bs)
-      (DROP (j * abi_member_head_size (vyper_to_abi_type env ty)) (DROP 32 bs))`,
-    `v` |-> `EL j (vs:vyperValue$value list)`,
-    `sb` |-> `sb + (32 + abi_decode_member_offset (vyper_to_abi_type env ty) (DROP 32 bs)
-      (j * abi_member_head_size (vyper_to_abi_type env ty)))`,
-    `d` |-> `d + 32 + j * type_memory_bytes ce ty`] abi_decoder_valid_correct_run) >>
-  impl_tac >- asm_simp_tac bool_ss [] >>
-  disch_then (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `first <= abi_decoder_entry_floor middle` by
+    (irule LESS_EQ_TRANS >> qexists_tac `middle.cs_next_id` >>
+     simp[abi_decoder_entry_floor_def]) >>
+  drule abi_decoder_valid_correct_run >>
+  disch_then drule >>
+  asm_simp_tac bool_ss [] >>
+  disch_then (drule_at (Pat `abi_decoder_valid_pre`)) >>
+  disch_then (qspecl_then [`limit_st`, `last`, `func`, `first`] mp_tac) >>
+  asm_simp_tac bool_ss [] >>
+  disch_then (qspec_then `ctx` (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS))) >>
   `abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
       (d + 32 + j * type_memory_bytes ce ty) (type_memory_bytes ce ty) b cap initial actual` by
     (mp_tac (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
@@ -86,19 +87,21 @@ QED
 
 (* Actual recursive array body execution extends the initialized typed prefix. *)
 Theorem abi_decoder_valid_body_inputs:
-  abi_decoder_valid_loop_inv opc bs tv vs sb d outsz slot site
+  abi_decoder_valid_loop_inv opc bs tv vs (B + sb) d outsz slot site
     first last lo hi next limit_st b cap initial body_lbl j s /\
-  abi_decoder_ranges opc hi_op src dst sb (LENGTH bs)
+  abi_decoder_ranges opc base_op hi_op src dst B sb (LENGTH bs)
     d outsz b cap initial /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
+  abi_decoder_operand_live next base_op /\
   abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next ip /\
   eval_operand ip initial = SOME (n2w slot) /\ slot < dimword (:256) /\ next <= body_next ==>
-  abi_decoder_valid_array_memory opc bs tv vs sb d j s /\
-  abi_decoder_ranges opc hi_op src dst sb (LENGTH bs)
+  abi_decoder_valid_array_memory opc bs tv vs (B + sb) d j s /\
+  abi_decoder_ranges opc base_op hi_op src dst B sb (LENGTH bs)
     d outsz b cap s /\
   fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s /\
   eval_operand ip s = SOME (n2w slot) /\ mload (w2n (n2w slot:bytes32)) s = n2w j /\
   abi_decoder_operand_live body_next src /\ abi_decoder_operand_live body_next dst /\
+  abi_decoder_operand_live body_next base_op /\
   abi_decoder_operand_live body_next hi_op /\ abi_decoder_operand_live body_next ip /\
   s.vs_current_bb = body_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted
 Proof
@@ -116,34 +119,36 @@ QED
 (* TOP-LEVEL: the generated body extends the initialized prefix even when its
    recursive child allocates scratch and changes the current basic block. *)
 Theorem abi_decoder_valid_array_iteration:
-  abi_decode_array_element_setup ip src dst opc hi_op (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi_op (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi_op
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi_op
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ st.cs_current_insts = [] /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
   abi_decoder_valid_correct ce env sf ty tv /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     di (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
   is_dynamic (vyper_to_abi_type env ty) /\
   (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  abi_decoder_valid_loop_inv opc bs tv vs sb d
+  abi_decoder_valid_loop_inv opc bs tv vs (B + sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial st.cs_current_bb j s /\ j < LENGTH vs /\
-  abi_decoder_ranges opc hi_op src dst sb
+  abi_decoder_ranges opc base_op hi_op src dst B sb
     (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
+  abi_decoder_operand_live next base_op /\
   abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next ip /\
   eval_operand ip initial = SOME (n2w slot) /\ slot < dimword (:256) /\
   first <= lo /\ lo <= st.cs_next_id /\ st.cs_next_id <= middle.cs_next_id /\
   end_st.cs_next_id <= hi /\ hi <= last /\ next <= st.cs_next_var /\
   first <= site /\ site < last /\ (site < st.cs_next_id \/ end_st.cs_next_id <= site) /\
   end_st.cs_next_var <= limit_st.cs_next_var ==>
-  ?actual. abi_decoder_valid_array_memory opc bs tv vs sb d (SUC j) actual /\
+  ?actual. abi_decoder_valid_array_memory opc bs tv vs (B + sb) d (SUC j) actual /\
     abi_decoder_effect first last lo hi next limit_st
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual /\
     FLOOKUP actual.vs_allocas site = SOME (slot,32) /\ mload slot actual = n2w j /\
@@ -160,7 +165,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `first <= st.cs_next_id /\ end_st.cs_next_id <= last` by decide_tac >>
   `s.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
-  `mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs` by
+  `mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc s) = bs` by
     fs[abi_decoder_valid_array_memory_def] >>
   drule_all (Q.INST [`initial` |-> `s:venom_state`, `p` |-> `n2w slot:bytes32`]
     abi_decoder_valid_array_body) >> disch_then (qspec_then `ctx` strip_assume_tac) >>
@@ -177,13 +182,13 @@ Proof
     by (qpat_x_assum `j * type_memory_size tv + type_memory_size tv <= _` mp_tac >>
         simp_tac bool_ss [Once type_memory_bytes_def] >>
         asm_simp_tac bool_ss [] >> decide_tac) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   qpat_assum `type_memory_size tv = _`
     (fn size => mp_tac (PURE_REWRITE_RULE [size]
       (Q.INST [`child_lo` |-> `st.cs_next_id`, `child_hi` |-> `end_st.cs_next_id`,
         `child_next` |-> `st.cs_next_var`, `body_lbl` |-> `st.cs_current_bb`,
-        `t` |-> `actual:venom_state`,
+        `t` |-> `actual:venom_state`, `sb` |-> `B + sb`,
         `outsz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`]
         abi_decoder_valid_child_advance))) >>
   impl_tac >- asm_simp_tac bool_ss [] >>

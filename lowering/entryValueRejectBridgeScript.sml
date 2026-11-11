@@ -1,7 +1,7 @@
 Theory entryValueRejectBridge
 Ancestors
   entrySourcePackages entryRejectCode entryDispatchRejectMem
-  entryValueRejectFacts entryDispatchProps vyperLoweringCorrect compileEnv finite_map
+  entryValueRejectFacts entryDispatchProps vyperLoweringCorrect compileEnv loweringStateRelDefs finite_map
 
 Theorem source_entry_value_reject_mem_safe:
   lower_vyper_runtime_unit tops rp = SOME u /\

@@ -1,8 +1,9 @@
 Theory abiDecoderBulk
 Ancestors
+  abiDecoderRange abiDecoderBytesBound abiDecoderDynarrayBound abiDecoderArrayLoopInit
   abiDecoderDynarrayBound abiDecoderBytesBound abiDecoderCopy abiDecoderComposition
   abiDecoderContract abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper
-  valueEncoding venomExecSemantics venomState words abiDecoderArrayHeader abiDecoderFrameCompose
+  valueEncoding valueEncodingDefs venomExecSemantics venomState words abiDecoderArrayHeader abiDecoderFrameCompose
   arithmetic abiDecoderDynarrayPrefix abiDecoderGuard abiEncoder venomMemProps
   abiStaticDynarrayLayout abiCanonicalHeadSize abiStaticAggregateProps abiStaticLayoutProps
   abiStaticAggregateProps vyperABI vyperTyping contractABI byte list rich_list
@@ -15,33 +16,36 @@ Ancestors
 (* The actual static-element dynamic-array payload-copy block. *)
 
 Definition abi_decode_bulk_payload_def:
-  abi_decode_bulk_payload dst src cnt mem_sz opc =
+  abi_decode_bulk_payload dst src cnt mem_sz opc base_op =
     do copy_sz <- emit_op MUL [cnt; Lit (n2w mem_sz)];
        src_data <- emit_op ADD [src; Lit 32w];
+       src_addr <- compile_abi_dec_addr base_op src_data;
        dst_data <- emit_op ADD [dst; Lit 32w];
-       emit_void (abi_decode_copy_opcode opc) [dst_data;src_data;copy_sz]
+       emit_void (abi_decode_copy_opcode opc) [dst_data;src_addr;copy_sz]
     od
 End
 
 Theorem abi_decode_bulk_payload_sequence:
-  abi_decode_bulk_payload dst src cnt mem_sz opc st = ((),st') /\
+  abi_decode_bulk_payload dst src cnt mem_sz opc base_op st = ((),st') /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w src_base) /\
   eval_operand dst s = SOME (n2w d) /\ eval_operand cnt s = SOME (n2w n) /\
-  sb + 32 < dimword (:256) /\ d + 32 < dimword (:256) /\
+  src_base + sb + 32 < dimword (:256) /\ d + 32 < dimword (:256) /\
   n * mem_sz < dimword (:256) /\ fresh_vars_wrt st s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     mem_bytes_at (d + 32) (n * mem_sz) t.vs_memory =
-      mem_bytes_at (sb + 32) (n * mem_sz) (abi_decode_source opc s) /\
+      mem_bytes_at (src_base + sb + 32) (n * mem_sz) (abi_decode_source opc s) /\
     abi_decode_frame (d + 32) (n * mem_sz) s t /\ fresh_vars_wrt st' t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     inst_extends st st'
 Proof
   simp[abi_decode_bulk_payload_def, comp_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] st = (sz_op,c1)` >>
   rename1 `emit_op ADD [src; Lit 32w] c1 = (src_data,c2)` >>
-  rename1 `emit_op ADD [dst; Lit 32w] c2 = (dst_data,c3)` >>
+  rename1 `compile_abi_dec_addr base_op src_data c2 = (src_addr,c3)` >>
+  rename1 `emit_op ADD [dst; Lit 32w] c3 = (dst_data,c4)` >>
   `eval_operand (Lit (n2w mem_sz)) s = SOME (n2w mem_sz)` by simp[eval_operand_def] >>
   drule_all abi_decode_mul_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >> gvs[word_mul_n2w] >>
@@ -49,18 +53,28 @@ Proof
   `eval_operand (Lit 32w) s1 = SOME 32w` by simp[eval_operand_def] >>
   drule_all abi_decode_add_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` >>
-  `eval_operand dst s2 = SOME (n2w d)` by metis_tac[] >>
-  qspecl_then [`dst`, `Lit 32w`, `n2w d`, `32w`, `c2`, `dst_data`, `c3`, `s2`]
-    mp_tac abi_decode_add_sequence >>
-  impl_tac >- simp[eval_operand_def] >> strip_tac >>
+  `eval_operand base_op s2 = SOME (n2w src_base)` by metis_tac[] >>
+  `eval_operand src_data s2 = SOME (n2w (sb + 32))` by simp[word_add_n2w] >>
+  drule_all compile_abi_dec_addr_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c2 c3) s2 = OK s3` >>
-  `eval_operand sz_op s3 = SOME (n2w (n * mem_sz)) /\
-   eval_operand src_data s3 = SOME ((n2w sb : bytes32) + 32w)` by
-    (ONCE_REWRITE_TAC [arithmeticTheory.MULT_COMM] >> metis_tac[]) >>
+  `eval_operand dst s3 = SOME (n2w d)` by metis_tac[] >>
+  `eval_operand (Lit 32w) s3 = SOME 32w` by simp[eval_operand_def] >>
+  drule_all abi_decode_add_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c3 c4) s3 = OK s4` >>
+  `eval_operand sz_op s4 = SOME (n2w (n * mem_sz)) /\
+   eval_operand src_addr s4 = SOME (n2w (src_base + sb + 32))` by
+    (pure_rewrite_tac[GSYM ADD_ASSOC] >> metis_tac[MULT_COMM, ADD_ASSOC]) >>
+  `src_base + sb + 32 < dimword (:256) /\ d + 32 < dimword (:256)` by simp[] >>
   drule_all abi_decode_copy_sequence >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts c3 st') s3 = OK t` >>
+  rename1 `run_inst_seq (emitted_insts c4 st') s4 = OK t` >>
   `fresh_vars_wrt st' t` by (drule_all abi_decode_copy_fresh >> simp[]) >>
   drule inst_extends_emit_void >> strip_tac >>
+  `inst_extends c2 c3` by
+    (Cases_on `base_op = Lit 0w` >>
+     gvs[compile_abi_dec_addr_def, comp_return_def, inst_extends_refl] >>
+     metis_tac[inst_extends_emit_op]) >>
+  `run_inst_seq (emitted_insts c3 st') s3 = OK t /\ inst_extends c3 st'` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`s4`, `c4`] >> simp[]) >>
   `run_inst_seq (emitted_insts c2 st') s2 = OK t /\ inst_extends c2 st'` by
     (irule abi_decode_sequence_chain >> qexistsl_tac [`s3`, `c3`] >> simp[]) >>
   `run_inst_seq (emitted_insts c1 st') s1 = OK t /\ inst_extends c1 st'` by
@@ -68,7 +82,12 @@ Proof
   `run_inst_seq (emitted_insts st st') s = OK t /\ inst_extends st st'` by
     (irule abi_decode_sequence_chain >> qexistsl_tac [`s1`, `c1`] >> simp[]) >>
   qexists_tac `t` >> gvs[word_add_n2w, w2n_n2w, abi_decode_copy_bytes_def,
-    mem_bytes_at_def, abi_decode_source_def, abi_decode_frame_def] >> metis_tac[]
+    mem_bytes_at_def, abi_decode_source_def, abi_decode_frame_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >>
+  `eval_operand op s1 = SOME w` by metis_tac[] >>
+  `eval_operand op s2 = SOME w` by metis_tac[] >>
+  `eval_operand op s3 = SOME w` by metis_tac[] >>
+  `eval_operand op s4 = SOME w` by metis_tac[] >> metis_tac[]
 QED
 
 (* ===== Body ===== *)
@@ -76,45 +95,48 @@ QED
 (* Count/header and payload writes in the static-element dynamic-array path. *)
 
 Definition abi_decode_bulk_body_def:
-  abi_decode_bulk_body dst src opc mem_sz =
-    do cnt <- abi_decode_array_header dst src opc;
-       abi_decode_bulk_payload dst src cnt mem_sz opc
+  abi_decode_bulk_body dst src addr opc base_op mem_sz =
+    do cnt <- abi_decode_array_header dst addr opc;
+       abi_decode_bulk_payload dst src cnt mem_sz opc base_op
     od
 End
 
 Theorem abi_decode_bulk_body_sequence:
-  abi_decode_bulk_body dst src opc mem_sz st = ((),st') /\
+  abi_decode_bulk_body dst src addr opc base_op mem_sz st = ((),st') /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w src_base) /\
+  eval_operand addr s = SOME (n2w (src_base + sb)) /\
   eval_operand dst s = SOME (n2w d) /\
-  abi_decode_load opc (n2w sb : bytes32) s = n2w n /\
-  sb + 32 < dimword (:256) /\ d + 32 < dimword (:256) /\
+  abi_decode_load opc (n2w (src_base + sb) : bytes32) s = n2w n /\
+  src_base + sb + 32 < dimword (:256) /\ d + 32 < dimword (:256) /\
   n * mem_sz < dimword (:256) /\
-  (opc = MLOAD ==> sb + 32 + n * mem_sz <= d \/ d + 32 <= sb + 32) /\
+  (opc = MLOAD ==> src_base + sb + 32 + n * mem_sz <= d \/ d + 32 <= src_base + sb + 32) /\
   fresh_vars_wrt st s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     mem_word_at d t.vs_memory = n2w n /\
     mem_bytes_at (d + 32) (n * mem_sz) t.vs_memory =
-      mem_bytes_at (sb + 32) (n * mem_sz) (abi_decode_source opc s) /\
+      mem_bytes_at (src_base + sb + 32) (n * mem_sz) (abi_decode_source opc s) /\
     abi_decode_frame d (32 + n * mem_sz) s t /\ fresh_vars_wrt st' t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     inst_extends st st'
 Proof
   simp_tac bool_ss [abi_decode_bulk_body_def, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
-  rename1 `abi_decode_array_header dst src opc st = (cnt,c1)` >>
+  rename1 `abi_decode_array_header dst addr opc st = (cnt,c1)` >>
   `d < dimword (:256)` by decide_tac >>
   drule_all abi_decode_array_header_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
   `eval_operand src s1 = SOME (n2w sb) /\
+   eval_operand base_op s1 = SOME (n2w src_base) /\
    eval_operand dst s1 = SOME (n2w d)` by metis_tac[] >>
   mp_tac (Q.INST [`st` |-> `c1`, `s` |-> `s1`]
-    abi_decode_bulk_payload_sequence) >> impl_tac >- simp[] >> strip_tac >>
+    abi_decode_bulk_payload_sequence) >> (impl_tac >- simp[]) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c1 st') s1 = OK t` >>
   `mem_word_at d t.vs_memory = mem_word_at d s1.vs_memory` by
     (irule abi_decode_frame_mem_word >>
      qexistsl_tac [`d + 32`, `n * mem_sz`] >> simp[]) >>
-  `mem_bytes_at (sb + 32) (n * mem_sz) (abi_decode_source opc s1) =
-   mem_bytes_at (sb + 32) (n * mem_sz) (abi_decode_source opc s)` by
+  `mem_bytes_at (src_base + sb + 32) (n * mem_sz) (abi_decode_source opc s1) =
+   mem_bytes_at (src_base + sb + 32) (n * mem_sz) (abi_decode_source opc s)` by
     (irule abi_decode_frame_source_window >> conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`d`, `32`] >> simp[]) >>
   `abi_decode_frame d (32 + n * mem_sz) s t` by
@@ -129,15 +151,16 @@ QED
 
 Theorem abi_decode_bulk_phases:
   abi_decode_source_opcode opc /\ ~dec_info_needs_clamp ei ==>
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecDynArray ei abi_sz mem_sz F maxn) =
-    do abi_decode_dynarray_prefix src opc hi maxn abi_sz;
-       abi_decode_bulk_body dst src opc mem_sz
+    do addr <- abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz;
+       abi_decode_bulk_body dst src addr opc base_op mem_sz
     od
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
   simp[FUN_EQ_THM, compile_abi_decode_to_buf_def,
-       abi_decode_dynarray_prefix_def, abi_decode_count_guard_def,
+       abi_decode_dynarray_position_prefix_def, abi_decode_count_guard_def,
+       abi_decode_bytes_head_def, abi_decode_dynarray_payload_guard_def,
        abi_decode_dynarray_end_guard_def, abi_decode_dynarray_end_def,
        abi_decode_le_guard_def, abi_decode_bulk_body_def,
        abi_decode_array_header_def, abi_decode_bulk_payload_def,
@@ -146,44 +169,45 @@ Proof
 QED
 
 Theorem abi_decode_bulk_sequence:
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ abi_decode_source_opcode opc /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
-  abi_decode_load opc (n2w sb : bytes32) s = n2w n /\
+  eval_operand base_op s = SOME (n2w src_base) /\
+  abi_decode_load opc (n2w (src_base + sb) : bytes32) s = n2w n /\
   n <= maxn /\ maxn < dimword (:256) /\
-  sb + 32 < dimword (:256) /\ d + 32 < dimword (:256) /\
+  src_base + sb + 32 < dimword (:256) /\ d + 32 < dimword (:256) /\
   n * mem_sz < dimword (:256) /\
-  (opc = MLOAD ==> sb + 32 + n * mem_sz <= d \/ d + 32 <= sb + 32) /\
+  (opc = MLOAD ==> src_base + sb + 32 + n * mem_sz <= d \/ d + 32 <= src_base + sb + 32) /\
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
                      sb + 32 + n * abi_sz <= h /\ h < dimword (:256)) /\
   fresh_vars_wrt st s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     mem_word_at d t.vs_memory = n2w n /\
     mem_bytes_at (d + 32) (n * mem_sz) t.vs_memory =
-      mem_bytes_at (sb + 32) (n * mem_sz) (abi_decode_source opc s) /\
+      mem_bytes_at (src_base + sb + 32) (n * mem_sz) (abi_decode_source opc s) /\
     abi_decode_frame d (32 + n * mem_sz) s t /\ fresh_vars_wrt st' t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     inst_extends st st'
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases, comp_ignore_bind_def,
                        comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >>
-  rename1 `abi_decode_dynarray_prefix src opc hi maxn abi_sz st = (prefix_result,c1)` >>
-  Cases_on `prefix_result` >>
-  mp_tac (Q.INST [`st'` |-> `c1`] abi_decode_dynarray_prefix_sequence) >>
-  impl_tac >- simp[] >> strip_tac >>
+  rename1 `abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz st = (addr,c1)` >>
+  drule_all abi_decode_dynarray_position_prefix_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
   `eval_operand src s1 = SOME (n2w sb) /\
+   eval_operand base_op s1 = SOME (n2w src_base) /\
    eval_operand dst s1 = SOME (n2w d)` by metis_tac[] >>
-  `abi_decode_load opc (n2w sb : bytes32) s1 = n2w n` by
+  `abi_decode_load opc (n2w (src_base + sb) : bytes32) s1 = n2w n` by
     gvs[abi_decode_load_def, abi_decode_source_def, mload_def] >>
-  `abi_decode_bulk_body dst src opc mem_sz c1 = ((),st')` by
+  `abi_decode_bulk_body dst src addr opc base_op mem_sz c1 = ((),st')` by
     (qpat_x_assum `_ = ((),st')` mp_tac >>
      asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF]) >>
-  drule_all abi_decode_bulk_body_sequence >> strip_tac >>
+  mp_tac (Q.INST [`st` |-> `c1`, `s` |-> `s1`] abi_decode_bulk_body_sequence) >>
+  (impl_tac >- simp[]) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c1 st') s1 = OK t` >>
   drule_all abi_decode_sequence_chain >> strip_tac >> qexists_tac `t` >>
   gvs[abi_decode_frame_def, abi_decode_source_def] >> metis_tac[]
@@ -282,21 +306,23 @@ Theorem abi_decoder_bulk_pre_facts:
   ~dec_info_needs_clamp ei /\
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
     (ArrayTV tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)
-    (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc hi sb d b cap s ==>
+    (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc base_op hi src_base sb d b cap s ==>
   static_layout_compatible ce env ty tv /\ all_have_type tv vs /\
   vyper_to_abi_same env ty vs = SOME avs /\
   abi_sz = mem_sz /\ mem_sz = type_memory_size tv /\
   LENGTH vs <= maxn /\ maxn < dimword (:256) /\
   abi_decode_source_opcode opc /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+  eval_operand base_op s = SOME (n2w src_base) /\
   fresh_vars_wrt st s /\
-  abi_decode_load opc (n2w sb : bytes32) s = n2w (LENGTH vs) /\
-  sb + 32 < dimword (:256) /\ d + 32 < dimword (:256) /\
+  abi_decode_load opc (n2w (src_base + sb) : bytes32) s = n2w (LENGTH vs) /\
+  src_base + sb + 32 < dimword (:256) /\ d + 32 < dimword (:256) /\
   LENGTH vs * mem_sz < dimword (:256) /\
-  (opc = MLOAD ==> sb + 32 + LENGTH vs * mem_sz <= d \/ d + 32 <= sb + 32) /\
+  (opc = MLOAD ==> src_base + sb + 32 + LENGTH vs * mem_sz <= d \/
+     d + 32 <= src_base + sb + 32) /\
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
                      sb + 32 + LENGTH vs * abi_sz <= h /\ h < dimword (:256)) /\
-  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+  mem_bytes_at (src_base + sb) (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     (abi_decode_source opc s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   32 + LENGTH vs * mem_sz <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))
 Proof
@@ -313,35 +339,18 @@ Proof
   `LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) =
    32 + LENGTH vs * type_memory_size tv` by
     simp[static_dynarray_encoding, LENGTH_word_to_bytes, Excl "enc_def"] >>
-  `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+  `mem_bytes_at (src_base + sb) (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
      (abi_decode_source opc s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
     fs[vyper_to_abi_type_def] >>
-  `abi_decode_load opc (n2w sb : bytes32) s = n2w (LENGTH avs)` by
+  `abi_decode_load opc (n2w (src_base + sb) : bytes32) s = n2w (LENGTH avs)` by
     (irule canonical_dynamic_array_count_load >>
      qexists_tac `vyper_to_abi_type env ty` >> fs[vyper_to_abi_type_def]) >>
   `LENGTH vs * mem_sz <= maxn * mem_sz` by simp[LE_MULT_RCANCEL] >>
-  `sb + 32 + LENGTH vs * mem_sz < dimword (:256)` by
-    (qpat_x_assum `sb + LENGTH _ < _` mp_tac >>
-     simp[vyper_to_abi_type_def, Excl "enc_def"]) >>
-  `d + (32 + maxn * mem_sz) < dimword (:256)` by
-    (qpat_x_assum `d + type_memory_bytes _ _ < _` mp_tac >>
-     asm_rewrite_tac[] >> decide_tac) >>
-  `opc = MLOAD ==> sb + 32 + LENGTH vs * mem_sz <= d \/
-                    d + (32 + maxn * mem_sz) <= sb` by
-    (qpat_x_assum `opc = MLOAD ==> _` mp_tac >>
-     simp[abi_footprint_disjoint_def, vyper_to_abi_type_def,
-          Excl "enc_def"] >> metis_tac[]) >>
-  `hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
-      sb + 32 + LENGTH vs * abi_sz <= h /\ h < dimword (:256)` by
-    (Cases_on `hi = Lit 0w` >- simp[] >>
-     gvs[Excl "enc_def"] >>
-     rename1 `eval_operand hi s = SOME (n2w hb)` >>
-     qexists_tac `hb` >> simp[Excl "enc_def"]) >>
-  gvs[Excl "enc_def"] >> rpt conj_tac >> rpt strip_tac >>
-  gvs[Excl "enc_def"]
-  >>~- ([`hi = Lit 0w \/ _`],
-        disj2_tac >> rename1 `eval_operand hi s = SOME (n2w hb)` >>
-        qexists_tac `hb` >> simp[Excl "enc_def"]) >> decide_tac
+  gvs[vyper_to_abi_type_def, abi_footprint_disjoint_def, type_memory_bytes_def,
+      DISJ_IMP_THM, FORALL_AND_THM, Excl "enc_def"] >>
+  rpt strip_tac >> gvs[Excl "enc_def"] >>
+  disj2_tac >> rename1 `eval_operand hi s = SOME (n2w hb)` >>
+  qexists_tac `hb` >> simp[]
 QED
 
 (* ===== Fragment ===== *)
@@ -349,12 +358,12 @@ QED
 (* Typed execution and straight-line fragments for bulk dynamic-array decoding. *)
 
 Theorem abi_decoder_typed_bulk_sequence:
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
     (ArrayTV tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)
-    (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc hi sb d b cap s ==>
+    (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc base_op hi src_base sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_post (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs))
       st' d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s t
@@ -367,6 +376,7 @@ Proof
     (qpat_assum `mem_sz = type_memory_size tv`
        (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
      mp_tac (Q.INST [`n` |-> `maxn`, `mem` |-> `t.vs_memory`,
+       `sb` |-> `src_base + sb`,
        `source` |-> `abi_decode_source opc s`] static_dynarray_copied_layout) >>
      asm_simp_tac bool_ss []) >>
   qexists_tac `t` >> simp[abi_decoder_post_def] >>
@@ -374,8 +384,26 @@ Proof
   qexistsl_tac [`d`, `32 + LENGTH vs * mem_sz`] >> simp[]
 QED
 
+Theorem abi_decode_bulk_body_shape:
+  abi_decode_bulk_body dst src addr opc base_op mem_sz st = ((),st') /\
+  abi_decode_source_opcode opc ==>
+  inst_extends st st' /\ st'.cs_blocks = st.cs_blocks /\
+  st'.cs_current_bb = st.cs_current_bb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')
+Proof
+  strip_tac >> Cases_on `base_op = Lit 0w` >> gvs[abi_decode_source_opcode_def] >>
+  gvs[compile_abi_dec_addr_def, abi_decode_bulk_body_def, abi_decode_array_header_def,
+      abi_decode_bulk_payload_def, abi_decode_copy_opcode_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+      inst_extends_def, emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
+
 Theorem abi_decoder_bulk_shape:
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   abi_decode_source_opcode opc /\ ~dec_info_needs_clamp ei ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -383,26 +411,37 @@ Theorem abi_decoder_bulk_shape:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st st')
 Proof
-  strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
-  gvs[compile_abi_decode_to_buf_def] >>
-  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
-      emit_op_def, emit_void_def, fresh_var_def,
-      fresh_id_def, emit_def, emitted_insts_def, IS_PREFIX_APPEND] >>
-  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+  strip_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bulk_phases, comp_ignore_bind_def, comp_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  rename1 `abi_decode_dynarray_position_prefix src opc base_op hi maxn abi_sz st = (addr,c1)` >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+  drule_all abi_decode_bulk_body_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st c1)` by
+    (irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>
+  `st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st st') /\ inst_extends st st'` by
+    metis_tac[abi_decode_fragment_shape_trans] >>
+  simp[] >> qpat_x_assum `inst_extends st st'` mp_tac >>
+  simp_tac (srw_ss()) [inst_extends_def] >> strip_tac >>
+  qpat_x_assum `st'.cs_current_insts = _` (fn th => once_rewrite_tac[th]) >>
+  simp[IS_PREFIX_APPEND]
 QED
 
 Theorem abi_decoder_typed_bulk_fragment:
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei ==>
   frag_exec ctx st st'
     (abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
        (ArrayTV tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)
-       (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc hi sb d b cap)
+       (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc base_op hi src_base sb d b cap)
     (\t. ?s. abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
        (ArrayTV tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)
-       (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc hi sb d b cap s /\
+       (ListV avs) (ArrayV (DynArrayV vs)) st last src dst opc base_op hi src_base sb d b cap s /\
        abi_decoder_post (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs))
          st' d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s t)
     (K F)

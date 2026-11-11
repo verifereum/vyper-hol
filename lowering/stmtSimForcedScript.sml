@@ -12,7 +12,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem ignore_bind_bind_value[local]:
+Theorem ignore_bind_bind_value:
   !(a : evaluation_state -> value evaluation_result) k.
     ignore_bind (bind a k) (return ()) =
     bind a (\v. ignore_bind (k v) (return ()))

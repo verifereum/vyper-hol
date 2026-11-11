@@ -13,7 +13,7 @@ Ancestors
   exprSimHyps exprSimHypsDefs exprSimSource exprSimProps exprSimDefs
   loweringPosts gasOutcome gasSummary gasSummaryCompose gasContext
   fragGasMode fragGasPath fragGasSeq fragExec
-  exprLowering exprLoweringProps compileEnv valueEncoding
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState
 
 (* The buffer's ALLOCA, counted: one instruction that reads no gas. *)

@@ -6,7 +6,7 @@
 Theory o1ContractMakeSsaPtrRows
 Ancestors
   o1FrameLockstep ptrDiscipline contextCodegenRel codegenRel
-  makeSsaCurrentDefs makeSsaCurrentOrigin o1PassContract venomWf
+  makeSsaDefs makeSsaCurrentOrigin o1PassContract venomWf
 
 Theorem lockstep_taint_operands[local]:
   inst_pair sg inst inst' /\ state_rel sg s s' /\

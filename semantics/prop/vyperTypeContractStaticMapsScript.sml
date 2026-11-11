@@ -905,7 +905,8 @@ Proof
 QED
 
 
-(* The deployment flag only changes function signatures. *)
+(* Apart from function signatures, the deployment flag changes only which
+   immutables are assignable. *)
 Theorem add_toplevel_static_maps_nonsig_mode_rel[local]:
   art1.cta_bare_globals = art2.cta_bare_globals /\
   art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\

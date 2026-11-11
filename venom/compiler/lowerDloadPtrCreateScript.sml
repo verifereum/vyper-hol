@@ -259,7 +259,10 @@ Proof
     assume_tac >- metis_tac[] >>
   drule_all dload_create_boundary >> strip_tac >>
   qexists `s1` >> simp[] >>
-  metis_tac[dload_exec_create_footprint]
+  qpat_x_assum `exec_create i s _ _ _ _ = OK s1`
+    (strip_assume_tac o MATCH_MP dload_exec_create_footprint) >>
+  qpat_x_assum `exec_create i t _ _ _ _ = OK t1`
+    (strip_assume_tac o MATCH_MP dload_exec_create_footprint) >> simp[]
 QED
 
 Theorem dload_boundary_core_create:

@@ -23,7 +23,7 @@
 
 Theory loadElimDefs
 Ancestors
-  analysisSimDefs dfAnalyzeDefs dfgDefs passSharedDefs venomEffects
+  passTransform dfAnalyzeDefs dfgDefs passSharedDefs venomEffects
   memAliasDefs memLocDefs cfgDefs
 
 (* ===== Analysis configuration ===== *)

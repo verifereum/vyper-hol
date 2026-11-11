@@ -3,7 +3,7 @@ Theory tupleAssignPrefix
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   tupleStageProps tupleTypedLoad  exprOperandVar exprLoweringProps
-   localPtrsProps compileEnv loweringSlice fragExec valueEncoding
+   localPtrsProps compileEnv loweringStateRelDefs loweringSlice fragExec valueEncoding valueEncodingDefs
   vyperValue vyperTyping vyperInterpreter freshWrites list rich_list finite_map
   exprLowering vyperTypeABI stmtSimAssignTuple stmtSimReturn
   stmtSimDeclPath exprSimBufferStore fragGasMode fragGasSeq fragGasPath venomMemDefs

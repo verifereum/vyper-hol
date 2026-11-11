@@ -1,6 +1,6 @@
 Theory o1MakeSsaActualMaps
 Ancestors
-  makeSsaCurrentDefs cfgAnalysisProps dominatorDefs cfgDefs venomWf
+  makeSsaDefs cfgAnalysisProps dominatorDefs cfgDefs venomWf
   venomInst list alist finite_map dominatorQueryProofs
 
 (* Adapted from the admitted-free reference TraceCertificate boundary;

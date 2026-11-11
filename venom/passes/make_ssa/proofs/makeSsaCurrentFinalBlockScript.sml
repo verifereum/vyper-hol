@@ -1,8 +1,9 @@
 Theory makeSsaCurrentFinalBlock
 Ancestors
   makeSsaCurrentTreeTrace makeSsaCurrentTreePaths makeSsaCurrentEdgeTrace
-  makeSsaCurrentInduct makeSsaCurrentDefs makeSsaHelper cfgTransformProps
-  makeSsaDefs list pair
+  makeSsaCurrentInduct makeSsaDefs cfgTransformProps
+   list pair
+  venomExecProofs
 
 Definition current_block_edge_fold_def:
   current_block_edge_fold rs p succs bb =

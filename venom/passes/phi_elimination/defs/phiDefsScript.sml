@@ -11,7 +11,7 @@
 
 Theory phiDefs
 Ancestors
-  dfgDefs dfgAnalysisProps pred_set list finite_map
+  dfgDefs pred_set list finite_map
   venomState venomInst venomWf venomExecSemantics
 
 (* ==========================================================================
@@ -43,17 +43,6 @@ Theorem dfg_lookup_single_output:
     dfg_lookup dfg v = SOME inst ==> inst.inst_outputs = [v]
 Proof
   metis_tac[dfg_lookup_implies_get_def]
-QED
-
-Theorem dfg_build_function_lookup_correct:
-  !fn v inst.
-    dfg_lookup (dfg_build_function fn) v = SOME inst
-    ==>
-    inst.inst_outputs = [v] /\ MEM inst (fn_insts fn)
-Proof
-  rpt strip_tac >>
-  drule dfg_lookup_implies_get_def >> strip_tac >>
-  drule dfg_build_function_correct >> simp[]
 QED
 
 (* ssa_form and is_phi_inst are now in venomWfTheory *)

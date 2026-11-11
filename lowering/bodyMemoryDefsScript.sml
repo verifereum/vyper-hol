@@ -6,7 +6,7 @@ Ancestors
   instMemFrontier
   exprSimMemDefs stmtSimDefs
   loweringPosts
-  bodySim stmtSimDefs exprSimDefs exprSimHypsDefs fragExecMem memSafeRun allocaHistory compileEnv
+  bodySim stmtSimDefs exprSimDefs exprSimHypsDefs fragExecMem memSafeRun allocaHistory compileEnv loweringStateRelDefs
   exprLowering exprLoweringProps context venomState venomExecSemantics
   vyperInterpreter vyperTypeSystem vyperTypeCallGraph list finite_map words
 

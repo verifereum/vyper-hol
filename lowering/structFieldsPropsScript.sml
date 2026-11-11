@@ -12,7 +12,7 @@
 
 Theory structFieldsProps
 Ancestors
-  compileVyper compileEnv typedCopyMetadata typedCopyProducer
+  compileVyper compileEnv loweringStateRelDefs typedCopyMetadata typedCopyProducer
   vyperTypeContract vyperTypeExprSoundness vyperContext vyperValue
   valueEncoding vfmConstants vyperTypeSystem
   finite_map list pair combin
@@ -160,6 +160,32 @@ Proof
   strip_tac >> irule make_struct_fields_map_memory_size >>
   simp[build_compile_env_ce_struct_fields] >>
   metis_tac[distinct_type_keys_struct_args_unique]
+QED
+
+Theorem type_mem_bytes_type_memory_bytes:
+  !cenv ty.
+    type_mem_bytes (get_struct_fields cenv.ce_struct_fields) ty =
+    type_memory_bytes cenv ty
+Proof
+  ho_match_mp_tac type_memory_bytes_ind >>
+  rw[type_mem_bytes_def, type_memory_bytes_def] >>
+  AP_TERM_TAC >> irule MAP_CONG >> simp[]
+QED
+
+(* An evaluated type's memory size is the byte count compute_immutables_len
+   sums for it. *)
+Theorem evaluated_type_mem_bytes:
+  ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+  evaluate_type (type_env tops) ty = SOME tv ==>
+  type_memory_size tv =
+    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty
+Proof
+  strip_tac >>
+  `type_memory_bytes
+     (build_compile_env tops Deploy Payable "__init__" [] NoneT [] F) ty =
+     type_memory_size tv` by
+    (irule build_compile_env_type_memory_bytes >> simp[]) >>
+  gvs[GSYM type_mem_bytes_type_memory_bytes, build_compile_env_ce_struct_fields]
 QED
 
 Theorem struct_literal_decl_types:

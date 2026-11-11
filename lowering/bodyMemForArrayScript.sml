@@ -9,7 +9,7 @@ Ancestors
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs
   vyperTypeStoragePreservation list finite_map bodySim bodySimStmtCases
   allocLimits exprSimHyps exprLoweringProps stmtLowering stmtLoweringMono
-  stmtSimForParts vyperTyping fragExec compileEnv valueEncoding
+  stmtSimForParts vyperTyping fragExec compileEnv loweringStateRelDefs valueEncoding
   supportedStmts supportedStmtTraverse supportedExprs vyperAST
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeInvariants vyperTypeCallGraph gasContext stmtSimReturn
@@ -47,7 +47,7 @@ Theorem array_for_source_ready_mem[local]:
     0 < n /\ n < dimword (:256) /\ entry.value = ArrayV (SArrayV al) /\
     vs = array_elements (ArrayTV tv (Fixed n)) (SArrayV al) /\ LENGTH vs = n /\
     (!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
-            (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
     body_stmts_mem_ok cx stmts /\
     FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
@@ -65,20 +65,20 @@ Proof
         env_scopes_consistent_def] >> metis_tac[]) >>
   `!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
           (es with gas_obs := gs) =
-        (INL (array_elements (ArrayTV tv (Fixed n)) (SArrayV al)),
+        (INL (MAP Value (array_elements (ArrayTV tv (Fixed n)) (SArrayV al))),
          es with gas_obs := gs)` by
     (gen_tac >> irule eval_iterator_fixed_name >> simp[]) >>
   drule_all eval_iterator_fixed_name >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `INL vs` >>
+  qmatch_asmsub_abbrev_tac `INL (MAP Value vs)` >>
   `LENGTH vs = n` by simp[Abbr `vs`, fixed_array_elements_length] >>
-  `body_for_mem_ok cx tv id stmts vs` by
+  `body_for_mem_ok cx tv id stmts (MAP Value vs)` by
     (qpat_x_assum `!s tyv t s3 vs t3 s4 t4. _` mp_tac >>
      simp[lift_option_type_def, return_def, check_def, assert_def,
           compatible_bound_def] >> disch_then irule >> simp[] >>
      qexistsl_tac [`es`, `es`] >> simp[]) >>
   `body_stmts_mem_ok cx stmts` by
     (fs[body_for_mem_ok_def] >> `vs <> []` by (strip_tac >> gvs[]) >>
-     metis_tac[]) >>
+     Cases_on `vs` >> gvs[read_result_def, return_def]) >>
   `FLOOKUP cenv.ce_vars id = NONE` by
     (irule declared_name_unbound >> metis_tac[]) >>
   `lookup_scopes id es.scopes = NONE` by
@@ -126,7 +126,7 @@ Theorem array_body_fragment_callback_mem[local]:
     id NOTIN FDOM env.var_types /\
     evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
     type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
-    EVERY (stmt_exprs_ok cenv) stmts /\
+    stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) stmts /\
     type_memory_bytes cenv typ < 2 ** 64 /\
     call_evaluation_safe cx (int_calls_stmts stmts) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
@@ -149,7 +149,7 @@ Proof
   qpat_x_assum `body_stmts_mem_ok _ _`
     (irule o REWRITE_RULE [body_stmts_mem_ok_def]) >>
   simp[] >> rpt conj_tac
-  >- metis_tac[stmt_exprs_ok_same_frame]
+  >- metis_tac[for_declare_stmts_exprs_ok]
   >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
   >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
       `bc.ce_struct_fields = cenv.ce_struct_fields` by
@@ -205,9 +205,10 @@ Proof
     fs[well_typed_expr_def, expr_type_def] >>
   `cenv.ce_alloca_locals /\ supported_program tops /\
    get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-  `EVERY (stmt_exprs_ok cenv) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by
+  `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) stmts /\
+   type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
+       stmts_exprs_ok_thm, alloc_limits_stmt_def, stmt_valued_return_def] >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   rename1 `FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ap) az)` >>

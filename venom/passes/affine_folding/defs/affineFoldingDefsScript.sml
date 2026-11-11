@@ -16,7 +16,7 @@
 
 Theory affineFoldingDefs
 Ancestors
-  passSimulationDefs passSharedDefs dfgDefs dfgAnalysisProps
+  passTransform passSharedDefs dfgDefs
   venomExecSemantics venomInst
 Libs
   pred_setTheory

@@ -3,7 +3,7 @@
 Theory stmtAppendStorageGuardPtr
 Ancestors stmtAppendStorageRunPtr instSeqComposePtr stmtSimAppendStorage
   exprLoweringProps emitHelperProps fragGasSeqPtr contextCodegenRel freshWrites
-  stateFrame venomInst venomState ptrDiscipline finite_map list arithmetic compileEnv
+  stateFrame venomInst venomState ptrDiscipline finite_map list arithmetic compileEnv loweringStateRelDefs
   emittedSeqComposePtr abiDecoderArrayInit
 
 Theorem emit_append_lt_uniform_ptr:

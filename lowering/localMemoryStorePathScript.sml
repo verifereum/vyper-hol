@@ -7,9 +7,10 @@ Ancestors
   stmtSimDeclStore stmtSimDecl stmtSimDeclMem stmtSimAssignStore stmtSimAssign
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
+  compileEnv loweringStateRelDefs valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
   vyperExprNoControl venomExecSemantics venomExecProofs venomInst venomState
   fragGasSeq fragGasMode context exprSimBufferStore stmtSimDeclPath
+  memoryValueEncoding
 Libs
   monadsyntax
 
@@ -39,7 +40,7 @@ Theorem bytestring_copy_len_no_gas[local]:
   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
 Proof
   simp_tac bool_ss [compile_bytestring_copy_len_def, comp_bind_def, LET_THM] >>
-  ntac 3 (pairarg_tac >> gvs[]) >>
+  ntac 4 (pairarg_tac >> gvs[]) >>
   strip_tac >>
   imp_res_tac emitted_insts_emit_op >>
   gvs[emitted_insts_def, DROP_APPEND1, mk_inst_def]
@@ -142,6 +143,8 @@ Proof
      qexists_tac `type_memory_size entry.type` >> simp[] >>
      rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
      decide_tac) >>
+  `memory_value_rel entry.type v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   `stmt_state_rel ctx func cenv cx es1 t` by
     (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
@@ -203,7 +206,7 @@ Proof
      (OK (mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx))` by
     (irule emit_inst_zero_marked_path >> simp[] >>
      qexistsl_tac [`[Var p; src; Lit (n2w sz)]`, `MCOPY`, `[]`, `sm`, `sb`] >>
-     gvs[emit_void_def, emit_inst_def, step_inst_base_def, mk_inst_def, eval_operand_def,
+     gvs[emit_void_def, emit_inst_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
          is_terminator_def, wordsTheory.w2n_n2w]) >>
   `sb.cs_current_bb = sm.cs_current_bb /\
    LENGTH sb.cs_current_insts = SUC (LENGTH sm.cs_current_insts)` by

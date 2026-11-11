@@ -56,8 +56,19 @@ End
 Definition deploy_evaluation_context_def:
   deploy_evaluation_context tops am tx =
     initial_evaluation_context ((tx.target, [(NONE, tops)]) :: am.sources)
-      am.layouts tx NONE with in_deploy := T
+      am.layouts (tx with created_in_tx := T) NONE with in_deploy := T
 End
+
+(* The constructor runs with created_in_tx set; the value transfer reads none
+   of it. *)
+Theorem value_transfer_created_in_tx:
+  (value_transfer_ok (tx with created_in_tx := c) accs <=>
+   value_transfer_ok tx accs) /\
+  accounts_after_transfer (tx with created_in_tx := c) accs =
+  accounts_after_transfer tx accs
+Proof
+  simp[value_transfer_ok_def, accounts_after_transfer_def]
+QED
 
 (* Runtime readiness must NOT be required of the uninstalled source target.
  * Use the source's pre-constant deployment readiness on precisely the machine
@@ -93,6 +104,7 @@ Definition deploy_state_rel_def:
     ?ctxt rb args_bytes.
       es.contexts = [(ctxt, rb)] /\
       wf_state es /\ (?d. es.msdomain = Collect d) /\
+      account_empty (lookup_account tx.target es.originalAccounts) /\
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
       ctxt.msgParams.outputTo = Code tx.target /\
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\

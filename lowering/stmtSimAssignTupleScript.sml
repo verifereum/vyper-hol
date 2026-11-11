@@ -25,13 +25,13 @@
 
 Theory stmtSimAssignTuple
 Ancestors
-  stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts tupleAssignCode
+  stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts exprSimTypedAlloc tupleAssignCode
   list rich_list finite_map pred_set tupleLocalStoreProps tupleLocalStoreRun
   tupleLoadProps fragGasSeq fragGasMode stmtSimDeclPath gasContext stmtSimForced
   fragExec localPtrsProps  loweringSlice  stmtSimDeclMem
   stmtSimAssignStore stmtSimAssign stmtSimReturn exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs
   vyperInterpreter vyperState vyperValue vyperLookup vyperTyping
   vyperExprNoControl venomInst venomState
 Libs
@@ -659,6 +659,8 @@ Resume assign_tuple_locals_suffix[value]:
 QED
 
 Resume assign_tuple_locals_suffix[memory]:
+  `post_value_type cenv e = TupleT tys` by
+    metis_tac[post_value_type_lowered] >>
   fs[] >>
   `w2n w + val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) < dimword (:256)` by
     (metis_tac[expr_val_at_bound]) >>

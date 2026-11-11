@@ -1,0 +1,41 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5282
+Status: merged 2026-10-16 (08c2841623c5c0cc2850cc49dbeb79f13d77f940)
+
+Backport the `lower_Assign` hunk only: an assignment whose target indices can
+modify memory or storage freezes the right-hand side before lowering the
+target, so the store sees the value from before those effects, as legacy
+codegen does.
+
+Adapted to this pin: the pin already has `eval_order.py` (with
+`expression_can_mutate_memory_or_storage`) and
+`snapshot_value_for_delayed_use` in `context.py`, so those hunks are dropped
+and only the import and the snapshot in `lower_Assign` are kept. Upstream's
+other snapshot conditions there (a source read through an unbounded struct
+member's payload, or containing an unbounded sequence) belong to the PR's
+unbounded struct member feature and are left out, as is the rest of the PR.
+
+diff --git a/vyper/codegen_venom/stmt.py b/vyper/codegen_venom/stmt.py
+--- a/vyper/codegen_venom/stmt.py
++++ b/vyper/codegen_venom/stmt.py
+@@ -46,7 +46,10 @@
+ from .builtins.simple import get_empty_type
+ from .calling_convention import returns_dynamic_count, returns_stack_count
+ from .context import Constancy, LocalVariable, VenomCodegenContext
+-from .eval_order import later_expressions_can_mutate_memory_or_storage
++from .eval_order import (
++    expression_can_mutate_memory_or_storage,
++    later_expressions_can_mutate_memory_or_storage,
++)
+ from .expr import Expr, get_referenced_variables
+ from .value import VyperValue
+ 
+@@ -178,6 +181,9 @@
+         # This matches legacy codegen and ensures proper semantics for cases
+         # like `c[0] = c.pop()` where RHS modifies array length.
+         src = Expr(node.value, self.ctx).lower()
++        if expression_can_mutate_memory_or_storage(target):
++            # Preserve the source before target evaluation can mutate it.
++            src = self.ctx.snapshot_value_for_delayed_use(src, copy_composites=True)
+         dst_ptr = self._get_target_ptr(target)
+         self._assign_value(dst_ptr, src, target_typ, src_node=node.value)
+ 

@@ -1,7 +1,7 @@
 Theory makeSsaCurrentFrontier
 Ancestors
   makeSsaCurrentAnalysis unitShapeDefs dfAnalyzeProofs finite_map
-  dominatorDefs cfgDefs cfgHelpers list makeSsaCurrentDefs venomInst venomWf cfgWf
+  dominatorDefs cfgDefs cfgHelpers list makeSsaDefs venomInst venomWf cfgWf
 
 Theorem walk_to_idom_target_support:
   !fuel idom target runner df n y.

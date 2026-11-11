@@ -37,7 +37,7 @@ Ancestors
   fragGasSeq fragGasPath fragGasMode
   valueCopy valueCopyBytes intCallResult exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv valueEncoding valueTypingMemoryProps exprSimBufferStore
+  context compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueTypingMemoryProps exprSimBufferStore memoryValueEncoding
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
@@ -468,7 +468,7 @@ Theorem stmt_state_rel_declare_store_frame[local]:
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size tyv <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-    type_memory_size tyv <= sz /\ val_wf tyv v /\
+    type_memory_size tyv <= sz /\ val_wf tyv v /\ value_has_type tyv v /\
     val_in_memory tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
@@ -505,6 +505,8 @@ Proof
        (fs[regions_disjoint_def] >> decide_tac) >>
      qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _`
        (qspecl_then [`off`, `type_memory_size tv`] mp_tac) >> simp[]) >>
+  `memory_value_rel tyv v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   irule stmt_state_rel_declare_memory >> simp[] >>
   qexistsl_tac [`inst`, `s`, `w`] >> gs[] >>
   qpat_x_assum `t with <|vs_memory := _; vs_vars := _|> = s` mp_tac >>
@@ -760,6 +762,7 @@ Theorem annassign_memory_store_post_path[local]:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv vtyp sty
    sc rest a loc info bytes.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    post_value_type cenv e = expr_type e /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
     cs_extends sa sb /\ local_ptrs_reserved cenv sa /\
     ~is_word_type vtyp /\
@@ -800,10 +803,10 @@ Proof
   drule_then (drule_then assume_tac) compile_lower_value_var >>
   qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
   `val_wf tyv v` by simp[value_has_type_memory_wf] >>
   `~is_word_type (expr_type e)` by
-    (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac >>
-     gvs[is_bytestring_word_type]) >>
+    metis_tac[is_bytestring_word_type] >>
   `?sw. eval_operand op s = SOME sw /\
         val_in_memory etv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -975,6 +978,10 @@ Proof
    0 < type_memory_bytes c (lowered_value_type c e) /\
    type_memory_bytes c (lowered_value_type c e) < dimword (:256)` by
     (simp[] >> metis_tac[]) >>
+  `post_value_type c e = expr_type e` by
+    (qpat_x_assum `lowered_value_type c e = expr_type e \/ _` strip_assume_tac
+     >- (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+     irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
   drule_all annassign_memory_store_post_path >>
   disch_then (qspec_then `T` strip_assume_tac) >>
   qexistsl_tac [`ee with <|gas_obs := []; scopes :=

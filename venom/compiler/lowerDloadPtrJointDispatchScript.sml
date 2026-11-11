@@ -172,7 +172,12 @@ Proof
       rpt (first_assum (irule_at Any)) >> simp[] >>
       qexists_tac `fuel` >> simp[] >>
       conj_tac >- metis_tac[] >>
-      disj1_tac >> rpt (first_assum (irule_at Any)) >> gvs[Abbr `old`])
+      disj1_tac >> rpt (first_assum (irule_at Any)) >> simp[Abbr `old`] >> conj_tac
+      >- (qpat_x_assum
+            `(_ : instruction -> num -> instruction list -> bool) i n emitted`
+            mp_tac >> simp[]) >>
+      qpat_x_assum `!k. k < LENGTH cs ==> _`
+        (mp_tac o SIMP_RULE (srw_ss()) [LET_THM]) >> simp[])
   >- normal_row (SRULE [] dload_joint_tracked_shift_next)
   >> disj2_tac >> irule dload_terminal_mode_next >>
   simp[] >> rpt (first_assum (irule_at Any)) >> simp[]
@@ -268,7 +273,12 @@ Proof
       qexists_tac `fuel` >> simp[] >>
       conj_tac >- metis_tac[] >>
       disj1_tac >> rpt (first_assum (irule_at Any)) >>
-      gvs[Abbr `old`])
+      simp[Abbr `old`] >> conj_tac
+      >- (qpat_x_assum
+            `(_ : instruction -> num -> instruction list -> bool) i n emitted`
+            mp_tac >> simp[]) >>
+      qpat_x_assum `!k. k < LENGTH cs ==> _`
+        (mp_tac o SIMP_RULE (srw_ss()) [LET_THM]) >> simp[])
   >- normal_row (SRULE [] dload_joint_tracked_environment_read_next)
   >- normal_row (SRULE [] dload_joint_tracked_gas_next)
   >- normal_row (SRULE [] dload_joint_tracked_identity_next)

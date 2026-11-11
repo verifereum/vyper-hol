@@ -1,7 +1,7 @@
 Theory makeSsaCurrentCertificate
 Ancestors
   makeSsaCurrentRenameTrace makeSsaCurrentPlacementCut makeSsaCurrentTokens
-  makeSsaCurrentDefs makeSsaDefs makeSsaCurrentPlacement makeSsaCurrentProps
+  makeSsaDefs makeSsaCurrentPlacement makeSsaCurrentProps
   venomInst list rich_list combin
 
 (* Original indices are counted in the source suffix, never in the inserted

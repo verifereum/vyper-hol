@@ -2,7 +2,7 @@ Theory lowerDloadPtrReachableStatic
 Ancestors
   lowerDloadPtrStatic o1ContractLowerDload unitShapeDefs lowerDloadDefs
   irSupply list venomFnScheduleRunner venomFnScheduleRunnerProps
-  ptrDiscipline pointerConfinedDefs pred_set venomInst passSharedDefs
+  ptrDiscipline pointerConfinedDefs pointerConfinedProps pred_set venomInst passSharedDefs
   lowerDloadPtrClosure mem2varBlockSimHelpers o1PassContract
 
 Theorem lower_dload_blocks_supply_location_covered:

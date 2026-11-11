@@ -314,9 +314,8 @@ Proof
        (cj 1 compiler_compile_var) >>
      gvs[vv_operand_def]) >>
   gvs[vv_post_def, vv_holds_def] >>
-  irule (INST_TYPE [alpha |-> ``:type``] compile_revert_storage_reason_path) >> simp[] >>
-  qexistsl_tac [`w`, `cenv`, `type_memory_bytes cenv (expr_type r)`,
-                `expr_type r`, `p`, `sm`, `sb`, `expr_type r`] >>
+  irule (INST_TYPE [alpha |-> ``:type``] compile_revert_storage_reason_path) >>
+  qpat_x_assum `compile_revert_with_reason _ _ _ _ _ = _` (irule_at Any) >>
   simp[]
 QED
 

@@ -3,7 +3,7 @@ Ancestors
   lowerDloadPtrExpansionNext lowerDloadPtrBackward lowerDloadPtrBytesTransport
   lowerDloadPtrJointNext lowerDloadPtrPhase lowerDloadPtrRel
   ptrDiscipline lowerDloadDefs venomInst venomExecSemantics venomState
-  instIdxIndep list words finite_map pred_set arithmetic
+  instIdxIndep venomInstProofs list words finite_map pred_set arithmetic
 
 Theorem dloadbytes_supply_definedness_control:
   lower_dload_inst_supply supply i = (xs,next) /\
@@ -34,25 +34,24 @@ Proof
 QED
 
 Resume dloadbytes_supply_definedness_control[control]:
-  qpat_x_assum `step_inst _ _ i _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
+  `s1.vs_current_bb = s.vs_current_bb /\
+   s1.vs_inst_idx = s.vs_inst_idx /\ s1.vs_prev_bb = s.vs_prev_bb` by
+    (drule_at (Pat `step_inst _ _ i _ = _`) step_preserves_control_flow >>
+     simp[is_terminator_def]) >>
+  `!v. v IN U ==>
+    (lookup_var v (s1 with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
+     lookup_var v t2 = NONE)` by
+    (rpt strip_tac >> `v <> cv` by metis_tac[] >>
+     `lookup_var v s1 = lookup_var v s /\
+      lookup_var v t2 = lookup_var v t` by metis_tac[] >>
+     fs[lookup_var_def]) >>
+  simp[] >>
   qpat_x_assum `dload_prefix_match _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   `2 = SUC (SUC 0)` by decide_tac >>
   pop_assum (fn th => pure_rewrite_tac[th]) >>
   simp[dload_prefix_match_def] >> rpt strip_tac >> gvs[] >>
-  simp[write_memory_with_expansion_def] >>
-  qpat_x_assum `step_inst _ _ _ (_ with vs_inst_idx := _) = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  fs[write_memory_with_expansion_def, lookup_var_def] >>
-  qpat_x_assum `step_inst _ _ _ t = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def] >>
-  simp[exec_pure2_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  simp[write_memory_with_expansion_def, update_var_def] >>
-  rpt strip_tac >> rename1 `w IN U` >>
-  `w <> cv` by metis_tac[] >> simp[FLOOKUP_UPDATE]
+  imp_res_tac step_preserves_control_flow >> gvs[is_terminator_def]
+
 QED
 
 Finalise dloadbytes_supply_definedness_control

@@ -4,7 +4,7 @@ Ancestors
   abiScratchFrameCompose abiScratchEncoderContract abiScratchFootprint abiEncoderStatic
   abiEncoderAddressReach abiEncoderChildFrames abiDecoderDynamicLoopSetup abiDecoderAllocation
   abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop
-  compileEnv valueEncoding contractABI venomState pred_set words list arithmetic
+  compileEnv valueEncoding valueEncodingDefs contractABI venomState pred_set words list arithmetic
   abiScratchEncoderLeaves abiScratchEffect abiEncoderAdmissible abiEncoderLeafCode
   abiDecoderCorrectLeaves abiEncoderArrayFrame abiEncoderArrayBodyCode abiEncoderArrayPrefix
   abiEncoderArrayBodyCode abiEncoderTuple abiEncoderMemory abiCanonicalWindows valueEncodingProps

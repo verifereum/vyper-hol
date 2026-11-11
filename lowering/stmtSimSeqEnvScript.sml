@@ -2,7 +2,7 @@
 Theory stmtSimSeqEnv
 Ancestors
   stmtSimDefs stmtSimProps loweringPosts gasOutcome gasSummary gasSummaryCompose
-  gasContext gasExemptCert fragExec fragGasMode fragGasPath compileEnv loweringSlice
+  gasContext gasExemptCert fragExec fragGasMode fragGasPath compileEnv loweringStateRelDefs loweringSlice
   stmtLowering exprLoweringProps localPtrsProps vyperInterpreter vyperState
   vyperEvalPreservesScopes list finite_map
 

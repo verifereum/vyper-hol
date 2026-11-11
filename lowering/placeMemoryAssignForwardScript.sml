@@ -1,9 +1,9 @@
 Theory placeMemoryAssignForward
 Ancestors
-  placeMemoryStaging placeMemoryLiveRegion placeMemoryTypedForward
+  valueEncodingDefs placeMemoryStaging placeMemoryLiveRegion placeMemoryTypedForward
   placeMemoryTypeInterfaces exprSimHyps valueEncodingTyping vyperTypeArgFits
   stmtLowering loweringPosts stmtSimDefs fragGasMode exprLoweringProps
-  context placeMemoryPrimitiveForward venomState compileEnv vyperTypeSystem
+  context placeMemoryPrimitiveForward venomState compileEnv loweringStateRelDefs vyperTypeSystem
   memoryLocalRhsProps placeMemoryTypedPrimitive placeMemoryChildForward
   placeMemoryCopyEffect exprSimHypsDefs exprSimAlloc
   loweringHalt abiTupleProps rich_list fragExec
@@ -21,7 +21,7 @@ Proof
   strip_tac >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
   simp[immutable_alloca_sep_def] >>
-  disch_then (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac) >>
+  disch_then (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac o CONJUNCT2) >>
   simp[] >> strip_tac >>
   qpat_x_assum `!id b sz. local_region _ _ _ _ _ _ ==> _` drule >>
   simp[regions_disjoint_def] >> decide_tac

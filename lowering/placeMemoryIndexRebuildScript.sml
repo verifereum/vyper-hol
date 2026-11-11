@@ -1,6 +1,6 @@
 Theory placeMemoryIndexRebuild
 Ancestors
-  exprSimAggregateEncoding exprSimPop valueEncodingProps valueEncoding vyperTyping
+  exprSimAggregateEncoding exprSimPop valueEncodingProps valueEncoding valueEncodingDefs vyperTyping
   vyperValueOperation loweringPosts list rich_list arithmetic
   valueEncodingTyping vyperTypeDefaults placeMemoryTypedBase vyperArray
   vyperAssignPreservesType

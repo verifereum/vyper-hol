@@ -13,7 +13,7 @@
  *)
 Theory makeSsaCurrentRevertForward
 Ancestors
-  makeSsaCurrentDefs contextCodegenRel venomWf cfgWf venomInst irSupply
+  makeSsaDefs contextCodegenRel venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract makeSsaRfPipeline makeSsaRfTransport
 
 Theorem make_ssa_current_fn_revert_forward_at:
