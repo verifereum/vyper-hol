@@ -7,6 +7,8 @@
  * No compiler hook or final-unit check is changed to obtain output shape.
  * S4 supplies the lowered output invariant at its chosen input oracle;
  * S5 consumes that same output invariant for codegen.
+ * run_venom_pipeline_run_bounded (S6b, a planned admission) is the output's
+ * resource bound, which codegen's gas proof consumes.
  *)
 Theory o1PipelineCorrect
 Ancestors
@@ -14,6 +16,7 @@ Ancestors
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
   ptrDiscipline contextPlanLayoutProps stepWriteFootprint
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
+  venomRunBounded
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
  * Naming it does not change compile_vyper or its literal pipeline hooks. *)
@@ -156,6 +159,45 @@ Proof
   gvs[w2n_n2w, arithmeticTheory.LESS_MOD] >>
   qexists_tac `raw_reachable vs` >>
   metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
+QED
+
+(* ===== S6b: resource bound of the output (sufficient gas) ===== *)
+
+(* PLANNED ADMISSION S6b.  A fuel bound on the source unit that holds for
+ * every entry state gives the output a fuel bound and a memory bound that
+ * hold for every entry state, so neither depends on the external-call
+ * outcomes or the GAS readings.  Takes S4's premises, with the input-side
+ * facts and the source's termination at every input state S4 may pick (a
+ * gas_variant of the output state); the plan cp locates the spill slots
+ * (below cp_initial_fmp) and the DRET packing area (above it).  Proof
+ * idea: a variant of ctx_sim whose output fuel is a function of the
+ * input fuel alone, composed once over the pipeline (most passes keep the
+ * fuel; CFGNormalization at most doubles it), and S5's eom with the
+ * dynamic area's growth bounded by the fuel. *)
+Theorem run_venom_pipeline_run_bounded:
+  !lo rpolicy unit out cp fuel.
+    o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp
+    ==>
+    ?fuel' M. !D vs.
+      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+      unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+      o1_run_state_ok vs /\
+      reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+      EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+      fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+      vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
+      (!vs_in. gas_variant vs_in vs ==>
+         raw_unit_memory_ok unit.cu_context vs_in /\
+         ptr_discipline lo unit.cu_context vs_in /\
+         taint_within D unit.cu_context vs_in /\
+         mem_inv dload_offset_ok unit.cu_context vs_in /\
+         mem_inv dload_headroom_ok unit.cu_context vs_in /\
+         terminates (run_context fuel unit.cu_context vs_in))
+      ==>
+      venom_run_bounded fuel' M out.po_unit.cu_context vs
+Proof
+  cheat
 QED
 
 (* ===== S6: output shape without new compiler checks ===== *)
