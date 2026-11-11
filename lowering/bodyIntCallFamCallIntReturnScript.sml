@@ -13,6 +13,7 @@ Ancestors
   bodyIntCallFamCallIntReturnFrame bodyIntCallFamCallIntReturnResources
   vyperPlaceWriteSoundness vyperImmutableMetadataFrame
   exprLoweringProps stmtSimProps bodyMemoryDefs freshWrites
+  bodyIntCallJointCallCore exprOperandVar exprSimSubscriptMap
 Libs
   monadsyntax
 
@@ -335,6 +336,53 @@ QED
 
 Finalise intcall_nested_return_enriched
 
+(* An allocated result supplies a complete write window above the frame. *)
+Theorem intcall_return_allocated_window:
+  allocas_above lo out /\
+  eval_operand buf.buf_operand out = SOME (n2w off) /\
+  FLOOKUP out.vs_allocas aid = SOME (off,buf.buf_size) /\
+  type_memory_size tv <= buf.buf_size /\
+  off + buf.buf_size < dimword (:256) ==>
+  ?w a k. eval_operand (vv_operand (LocatedValue cty (base_ptr buf))) out = SOME w /\
+    a <= w2n w /\ w2n w + type_memory_size tv <= a + k /\
+    a + k < dimword (:256) /\ lo <= a
+Proof
+  strip_tac >>
+  `off < dimword (:256)` by decide_tac >>
+  `lo <= off` by metis_tac[intCallFrameTheory.allocas_above_def] >>
+  qexistsl [`n2w off`, `off`, `buf.buf_size`] >>
+  gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def, wordsTheory.w2n_n2w]
+QED
+
+Theorem intcall_return_post_window:
+  intcall_expr_res fp ce env ee sb out /\
+  evaluate_type (get_tenv fp.jc_cx)
+    (ce.ce_func_return_type (nsid_to_string (NONE,name))) = SOME rtv /\
+  vv = LocatedValue cty (base_ptr buf) /\
+  eval_operand buf.buf_operand out = SOME (n2w off) /\
+  FLOOKUP out.vs_allocas aid = SOME (off,buf.buf_size) /\
+  type_memory_size rtv <= buf.buf_size /\
+  off + buf.buf_size < dimword (:256) ==>
+  ~is_word_type (post_value_type ce (Call ann (IntCall (NONE,name)) es dflt)) /\
+   ~is_bytestring_type (post_value_type ce (Call ann (IntCall (NONE,name)) es dflt)) ==>
+   !tv'. evaluate_type (get_tenv fp.jc_cx)
+      (post_value_type ce (Call ann (IntCall (NONE,name)) es dflt)) = SOME tv' ==>
+   ?w a k. eval_operand (vv_operand vv) out = SOME w /\
+     a <= w2n w /\ type_memory_size tv' + w2n w <= a + k /\
+     a + k < dimword (:256) /\
+     (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)
+Proof
+  strip_tac >>
+  Cases_on `is_word_type ann \/ is_bytestring_type ann`
+  >- (gvs[post_value_type_def] >> metis_tac[]) >>
+  simp[post_value_type_def, exprLoweringTheory.lowered_value_type_def] >>
+  rpt strip_tac >> gvs[] >>
+  `allocas_above fp.jc_lo out` by fs[intcall_expr_res_def] >>
+  drule_all intcall_return_allocated_window >>
+  disch_then (qspec_then `cty` strip_assume_tac) >>
+  qexistsl [`w`, `a`, `k`] >> simp[arithmeticTheory.ADD_COMM]
+QED
+
 Theorem intcall_nested_return:
   !fp ce env ann name es dflt ty sa sb vv s0 es0 mut args ret ss rr
    prev penv rtv es1 t rc rbs pvs.
@@ -399,5 +447,31 @@ Theorem intcall_nested_return:
          intcall_expr_cont fp ce env es0 sa s0 ee sb u)
       (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sb x` by
+    (`local_ptrs_reserved ce sa` by fs[intcall_expr_res_def] >>
+     drule (CONJUNCT1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
+  `ce.ce_func_return_type (nsid_to_string (NONE,name)) = ret` by
+    (drule_all bodyIntCallAssemblyTheory.body_internal_decl_return_type >> simp[]) >>
+  `evaluate_type (get_tenv fp.jc_cx) ret = SOME rtv` by
+    (drule intcall_entry_source >> simp[]) >>
+  drule_all intcall_nested_return_enriched >>
+  strip_tac >>
+  irule exprSimSubscriptMapTheory.gas_outcome_conseq >>
+  goal_assum (drule_at Any) >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `intcall_expr_res fp ce env ee sb out` >>
+  qexists `tv` >> simp[] >>
+  `intcall_expr_cont fp ce env es0 sa s0 ee sb out` by
+    (irule intcall_expr_cont_vv_post >>
+     metis_tac[]) >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [vv_post_def]) >>
+  fs[post_value_type_def] >> rpt strip_tac >>
+  qpat_x_assum `_ ==> ?buf aid off. _` mp_tac >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  irule intcall_return_post_window >>
+  goal_assum (drule_at (Pat `intcall_expr_res _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >>
+  simp[post_value_type_def] >> metis_tac[]
 QED
