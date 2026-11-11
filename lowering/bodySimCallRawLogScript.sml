@@ -286,6 +286,7 @@ Proof
     (fs[EVERY_MEM] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `LENGTH ops <= 4 /\ LENGTH vs <= 4 /\ sa.cs_next_var <= sn.cs_next_var` by decide_tac >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `expr_has_effect call` by simp[Abbr `call`, loweringPostsTheory.expr_has_effect_thm] >>
   `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   qpat_assum `LENGTH ops = LENGTH topics`
@@ -490,6 +491,7 @@ Proof
      rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `LENGTH ops <= 4 /\ LENGTH vs <= 4` by decide_tac >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `expr_has_effect call` by simp[Abbr `call`, loweringPostsTheory.expr_has_effect_thm] >>
   `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   `LENGTH bs = 32` by fs[vyperTypingTheory.value_has_type_def] >>
