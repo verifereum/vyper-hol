@@ -158,3 +158,64 @@ Proof
     simp[vyperTypeSystemTheory.attribute_type_def] >>
   drule_all attribute_type_struct_field >> strip_tac >> simp[]
 QED
+
+(* Storage result types depend on the declared path, not on index effects. *)
+Theorem eval_base_storage_type_alignment:
+  !bt vt env cx st pv em.
+    env_consistent env cx st /\ type_place_target env bt = SOME vt /\
+    eval_base_place cx bt st = (INL pv,em) ==>
+    case pv of
+    | PlaceR (StoragePlace tr slot tv) =>
+        ?ty. vt = Type ty /\ evaluate_type env.type_defs ty = SOME tv
+    | HashMapRef tr slot kt leaf => vt = HashMapT kt leaf
+    | _ => T
+Proof
+  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
+  rpt gen_tac >>
+  simp[type_place_target_NameTarget, type_place_target_TopLevelNameTarget,
+       type_place_target_AttributeTarget, type_place_target_SubscriptTarget,
+       Once evaluate_def, bind_def, AllCaseEqs(), get_scopes_def,
+       type_check_def, assert_def, ignore_bind_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
+  >~ [`TopLevelNameTarget p`]
+  >- (PairCases_on `p` >>
+      gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      drule_all vyperPlaceResultTypingTheory.lookup_global_target_success_typed >>
+      strip_tac >> Cases_on `vt` >> Cases_on `pv` >>
+      gvs[vyperTypeInvariantsTheory.eval_result_typed_def] >>
+      Cases_on `p` >>
+      gvs[vyperTypeInvariantsTheory.runtime_place_typed_def,
+          place_type_value_def, return_def]) >>
+  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >> simp[] >>
+  disch_then drule >> disch_then drule >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  Cases_on `pv'` >>
+  gvs[extend_place_def, raise_def]
+  >~ [`HashMapT t v`]
+  >- (Cases_on `v` >>
+      gvs[vyperTypeSystemTheory.subscript_vtype_def, bind_def,
+          lift_option_type_def, return_def, raise_def, AllCaseEqs(),
+          vyperMiscTheory.option_CASE_rator]) >>
+  Cases_on `p` >>
+  gvs[extend_place_def, extend_memory_place_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs()]
+  >~ [`subscript_vtype (Type ty) _ = SOME vt`]
+  >- (Cases_on `ty` >>
+      gvs[vyperTypeSystemTheory.subscript_vtype_def, vyperValueTheory.evaluate_type_def,
+          AllCaseEqs()] >>
+      rename1 `extend_storage_place _ _ _ _ (ValueSubscript key) _ = _` >>
+      Cases_on `key` >>
+      gvs[extend_storage_place_def, resolve_array_element_def, bind_def,
+          ignore_bind_def, lift_option_type_def, check_def, assert_def,
+          return_def, raise_def, resolve_array_element_empty,
+          vyperMiscTheory.prod_CASE_rator, AllCaseEqs()]) >>
+  drule_all vyperPlaceResultTypingTheory.attribute_type_runtime_step >> strip_tac >>
+  Cases_on `t` >>
+  gvs[extend_storage_place_def, subscript_type_def, bind_def,
+      lift_option_type_def, ignore_bind_def, return_def, raise_def,
+      vyperMiscTheory.prod_CASE_rator, AllCaseEqs()] >>
+  drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
+  gvs[return_def, raise_def]
+QED
