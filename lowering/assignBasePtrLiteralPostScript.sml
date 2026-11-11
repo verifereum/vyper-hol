@@ -387,6 +387,38 @@ Proof
   simp[regions_disjoint_def] >> decide_tac
 QED
 
+(* The literal writes only inside its own fresh 64-byte allocation. *)
+Theorem assign_base_ptr_one_byte_run_pure[local]:
+  !func cenv cx es sa buf sb s t ctx.
+    compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
+    pure_frame cenv func es sa s t
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all assign_base_ptr_one_byte_run_frame >> strip_tac >>
+  drule_all assign_base_ptr_one_byte_alloc_endpoint >> strip_tac >>
+  drule assign_base_ptr_one_byte_init_frame >> strip_tac >>
+  drule_all assign_base_ptr_one_byte_init_memory >> strip_tac >>
+  match_mp_tac (exprSimPropsTheory.pure_frame_fresh_alloca
+    |> Q.SPECL [`cenv`, `func`, `es`, `sa`, `s`, `t`, `sa.cs_next_id`,
+                `[Lit 64w]`, `[STRING #"%" (toString sa.cs_next_var)]`,
+                `w2n (a:bytes32)`, `64`]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[] >>
+  conj_tac >-
+    (qpat_x_assum `t.vs_allocas = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  qpat_x_assum `u.vs_memory = s.vs_memory` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `!b len. _ ==> mem_bytes_at _ _ t.vs_memory = _` irule >>
+  qpat_x_assum `regions_disjoint _ _ _ _` mp_tac >>
+  simp[regions_disjoint_def]
+QED
+
 Theorem assign_base_ptr_one_byte_run_post:
   !func cenv cx es sa buf sb s t ctx.
     compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
@@ -405,5 +437,6 @@ Proof
   drule_all assign_base_ptr_one_byte_run_value >> strip_tac >>
   `locals_kept cenv es es s t` by
     (irule exprSimPropsTheory.locals_kept_regions >> first_assum ACCEPT_TAC) >>
+  drule_all assign_base_ptr_one_byte_run_pure >> strip_tac >>
   simp[loweringPostsTheory.expr_post_def, vyperASTTheory.expr_type_def] >> metis_tac[]
 QED

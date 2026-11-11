@@ -17,6 +17,7 @@ Theorem mapping_leaf_summary_ptr:
   ghost_inv d cenv cx (ee with gas_obs := []) G tn u /\
   p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand u = SOME slot /\
   op_taint tn p.ptr_operand = {} /\ wb_frame cenv es (ee with gas_obs := []) sa s0 u /\
+  (~expr_has_effect (Subscript ann obj idx) ==> pure_frame cenv fn es sa s0 u) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
@@ -107,6 +108,7 @@ Theorem mapping_selection_summary_ptr:
     (mid with gas_obs := [],t,G1,tn1) right (INL kv) fin Gi tni (OK it) /\
   storage_mapping_region cx tr base_slot (HashMapT kt vt) /\
   wb_frame cenv es (mid with gas_obs := []) sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
+  (~expr_has_effect obj ==> pure_frame cenv fn es sa s0 t) /\
   stmt_state_rel ctx fn cenv cx es s0 /\
   stmt_state_rel ctx fn cenv cx (mid with gas_obs := []) t /\
   expr_post ctx fn cenv cx idx (mid with gas_obs := []) sm sn t
@@ -185,6 +187,22 @@ Proof
   `storage_mapping_region cx tr
      (hashmap_slot base_slot (encode_hashmap_key (expr_type idx) kv)) (Type ann)` by
     metis_tac[storage_mapping_region_step] >>
+  `~expr_has_effect (Subscript ann obj idx) ==> pure_frame cenv fn es sa s0 u` by
+    (rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+     strip_tac >>
+     `pure_frame cenv fn es sa s0 t` by
+       (qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >> simp[]) >>
+     `pure_frame cenv fn (mid with gas_obs := []) sm t it` by
+       (qpat_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _`
+          (mp_then Any mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
+        disch_then irule >> first_assum ACCEPT_TAC) >>
+     `pure_frame cenv fn (mid with gas_obs := []) sm t u` by
+       (match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+        qexistsl_tac [`fin with gas_obs := []`, `sn`, `it`] >>
+        fs[loweringPostsTheory.wb_frame_def]) >>
+     match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+     qexistsl_tac [`mid with gas_obs := []`, `sm`, `t`] >>
+     fs[loweringPostsTheory.wb_frame_def]) >>
   irule (SRULE [] mapping_leaf_summary_ptr) >> goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`Gu`, `tnu`, `u`] >> gvs[]
 QED
