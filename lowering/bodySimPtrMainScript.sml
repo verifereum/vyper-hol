@@ -81,7 +81,7 @@ Proof
     (* 24 *) simp[body_iterator_ptr_ok_def],
     (* 25 *) rw[body_iterator_ptr_ok_def] >> metis_tac[],
     (* 26 *) simp[body_for_ptr_ok_def],
-    (* 27 *) rw[body_for_ptr_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def],
+    (* 27 *) rw[body_for_ptr_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def] >> metis_tac[],
     (* 28 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],
     (* 29 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],
     (* 30 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],

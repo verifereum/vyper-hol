@@ -322,33 +322,6 @@ Proof
   rpt strip_tac >> simp[build_preds_def, foldl_preds_mem, init_preds_nil]
 QED
 
-(* FOLDR only grows FDOM *)
-Theorem foldr_fdom_mono[local]:
-  !succs_list (lbl:string) (m:(string,string list) fmap).
-    FDOM m ⊆ FDOM (FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert lbl (fmap_lookup_list m2 succ))) m succs_list)
-Proof
-  Induct >> simp[SUBSET_DEF, FDOM_FUPDATE] >> rpt strip_tac >>
-  disj2_tac >> first_x_assum (qspecl_then [`lbl`, `m`] mp_tac) >>
-  simp[SUBSET_DEF]
-QED
-
-(* FOLDL for build_preds only grows FDOM *)
-Theorem foldl_preds_fdom_mono[local]:
-  !(bbs : basic_block list) (succs : (string, string list) fmap)
-   (acc : (string, string list) fmap).
-    FDOM acc ⊆ FDOM (FOLDL (λm bb. FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert bb.bb_label (fmap_lookup_list m2 succ)))
-                                          m (fmap_lookup_list succs bb.bb_label))
-                            acc bbs)
-Proof
-  Induct >> simp[SUBSET_DEF] >> rpt strip_tac >>
-  first_x_assum (qspecl_then [`succs`,
-    `FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert h.bb_label (fmap_lookup_list m2 succ)))
-           acc (fmap_lookup_list succs h.bb_label)`] mp_tac) >>
-  simp[SUBSET_DEF] >> disch_then irule >>
-  mp_tac (Q.SPECL [`fmap_lookup_list succs h.bb_label`, `h.bb_label`, `acc`] foldr_fdom_mono) >>
-  simp[SUBSET_DEF]
-QED
-
 
 (* ==========================================================================
    DFS mutual induction combinator
@@ -1784,7 +1757,7 @@ Proof
 QED
 
 (* Helper: INDEX_OF returning SOME implies MEM *)
-Triviality INDEX_OF_SOME_MEM:
+Theorem INDEX_OF_SOME_MEM:
   !x l i. INDEX_OF x l = SOME i ==> MEM x l
 Proof
   rpt strip_tac >> CCONTR_TAC >> fs[GSYM INDEX_OF_eq_NONE]
@@ -1913,4 +1886,31 @@ Proof
     irule cfg_succs_of_build_succs >>
     fs[venomInstTheory.fn_labels_def]) >>
   fs[]
+QED
+
+(* Successors of cfg_dfs_pre labels are in cfg_dfs_pre.
+   Follows from dfs_pre_walk_closure + dfs_pre_walk_visited_eq. *)
+Theorem cfg_dfs_pre_succs_closed:
+  !fn lbl.
+    MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
+    EVERY (\t. MEM t (cfg_analyze fn).cfg_dfs_pre)
+          (cfg_succs_of (cfg_analyze fn) lbl)
+Proof
+  rw[cfg_analyze_def, cfg_succs_of_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  Cases_on `entry_block fn` >> gvs[] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  qabbrev_tac `succs = build_succs fn.fn_blocks` >>
+  qabbrev_tac `entry = x.bb_label` >>
+  `MEM lbl (SND (dfs_pre_walk succs [] entry))` by gvs[] >>
+  `MEM t (FST (dfs_pre_walk succs [] entry))` by
+    metis_tac[cj 1 dfs_pre_walk_closure] >>
+  `set _0 = set pre` by (
+    `set (FST (dfs_pre_walk succs [] entry)) =
+     set [] UNION set (SND (dfs_pre_walk succs [] entry))` by
+      metis_tac[cj 1 dfs_pre_walk_visited_eq] >>
+    gvs[]) >>
+  `MEM t _0` by gvs[] >>
+  metis_tac[]
 QED

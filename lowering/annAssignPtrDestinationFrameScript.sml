@@ -35,14 +35,12 @@ Proof
  qexists `s` >> simp[lookup_var_def] >>
  reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
  rpt gen_tac >> strip_tac >>
- irule val_in_memory_footprint_agree >> simp[] >>
- qexists `s.vs_memory` >> simp[] >>
+ irule memoryValueFrameTheory.memory_value_rel_mem_agree_region >> simp[] >>
+ qexistsl [`type_memory_size entry.type`, `s.vs_memory`] >> simp[] >>
  irule LIST_EQ >> simp[] >> rpt strip_tac >>
- rename1 `j < val_footprint entry.type entry.value` >>
+ rename1 `j < type_memory_size entry.type` >>
  `local_region cenv scopes s name (w2n w) sz` by
    (simp[local_region_def, lookup_var_def] >> metis_tac[]) >>
- `val_footprint entry.type entry.value <= sz` by
-   (drule val_footprint_le >> decide_tac) >>
  `w2n w+j NOTIN writes` by
    (qpat_x_assum `!name b sz i. _` irule >>
     qexistsl [`w2n w`,`name`,`sz`] >> simp[] >> decide_tac) >>

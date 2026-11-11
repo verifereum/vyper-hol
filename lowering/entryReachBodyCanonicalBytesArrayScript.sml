@@ -859,8 +859,22 @@ Proof
 QED
 
 Resume entry_bytes_array_iteration[adjust]:
-  fs[Abbr `u`, Abbr `h`, entry_bytes_array_inv_def, entry_loop_prefix_def,
-    entry_loop_fields_def, jump_to_def, abi_decode_header_state_def, update_var_def,
+  `h.vs_allocas = s.vs_allocas /\ h.vs_alloca_next = s.vs_alloca_next` by
+    simp[Abbr `h`, jump_to_def, abi_decode_header_state_def, update_var_def] >>
+  `entry_loop_fields s t` by
+    (qpat_x_assum `entry_loop_fields s h` mp_tac >>
+     qpat_x_assum `entry_loop_fields h t` mp_tac >>
+     simp_tac std_ss [entry_loop_fields_def, pairTheory.PAIR_EQ] >> metis_tac[]) >>
+  qunabbrev_tac `u` >>
+  qpat_x_assum `entry_bytes_array_inv _ _ _ _ _ _ _ t` mp_tac >>
+  qpat_x_assum `entry_loop_prefix _ _ _ (SUC j) t` mp_tac >>
+  qpat_x_assum `entry_loop_fields s t` mp_tac >>
+  qpat_x_assum `t.vs_allocas = h.vs_allocas` mp_tac >>
+  qpat_x_assum `t.vs_alloca_next = h.vs_alloca_next` mp_tac >>
+  qpat_x_assum `h.vs_allocas = s.vs_allocas` mp_tac >>
+  qpat_x_assum `h.vs_alloca_next = s.vs_alloca_next` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[entry_bytes_array_inv_def, entry_loop_prefix_def, entry_loop_fields_def,
     eval_operand_def, lookup_var_def, fresh_vars_wrt_def, abi_decode_footprint_frame_def]
 QED
 

@@ -857,18 +857,18 @@ val () = List.app (fn mods =>
   end) event_decl_rejections;
 
 Theorem event_arg_recursive_widening_eval:
-  event_arg_compatible (BaseT (StringT 10)) (BaseT (StringT 5)) /\
-  event_arg_compatible (ArrayT (BaseT (UintT 256)) (Dynamic 5))
-    (ArrayT (BaseT (UintT 256)) (Dynamic 3)) /\
-  event_arg_compatible (ArrayT (BaseT (StringT 5)) (Dynamic 2))
-    (ArrayT (BaseT (StringT 3)) (Dynamic 2)) /\
-  event_arg_compatible (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 5))])
-    (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 3))]) /\
-  event_arg_compatible (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 2))
-    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (Fixed 2)) /\
-  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (UintT 8)) /\
-  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (BytesT (Dynamic 40))) /\
-  ~event_arg_compatible (BaseT (StringT 3)) (BaseT (StringT 5))
+  arg_type_fits (BaseT (StringT 5)) (BaseT (StringT 10)) /\
+  arg_type_fits (ArrayT (BaseT (UintT 256)) (Dynamic 3))
+    (ArrayT (BaseT (UintT 256)) (Dynamic 5)) /\
+  arg_type_fits (ArrayT (BaseT (StringT 3)) (Dynamic 2))
+    (ArrayT (BaseT (StringT 5)) (Dynamic 2)) /\
+  arg_type_fits (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 3))])
+    (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 5))]) /\
+  arg_type_fits (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (Fixed 2))
+    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 2)) /\
+  ~arg_type_fits (BaseT (UintT 8)) (BaseT (UintT 256)) /\
+  ~arg_type_fits (BaseT (BytesT (Dynamic 40))) (BaseT (UintT 256)) /\
+  ~arg_type_fits (BaseT (StringT 5)) (BaseT (StringT 3))
 Proof
   EVAL_TAC
 QED
@@ -891,7 +891,7 @@ Theorem log_type_mismatch_rejected_eval:
     [(("a",BaseT (UintT 256)),T)])) ret
     (Log (NONE,"E") [Literal (BaseT (UintT 8)) (IntL 1)]) = NONE
 Proof
-  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def]
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, arg_type_fits_def]
 QED
 
 Theorem log_literal_accepted_eval:
@@ -901,7 +901,7 @@ Theorem log_literal_accepted_eval:
   SOME (env with event_fields := FEMPTY |+ ((NONE,"E"),
     [(("a",BaseT (UintT 256)),T)]))
 Proof
-  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def,
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, arg_type_fits_def,
        well_typed_expr_def, well_typed_literal_def] >> EVAL_TAC
 QED
 
@@ -909,7 +909,7 @@ Theorem log_variable_compatibility_probe:
   FLOOKUP env.event_fields id = SOME [(("a",fty),idx)] /\
   FLOOKUP env.var_types "x" = SOME aty ==>
   (type_stmt env ret (Log id [Name aty "x"]) = SOME env <=>
-   event_arg_compatible fty aty)
+   arg_type_fits aty fty)
 Proof
   simp[type_stmt_def, well_typed_expr_def, vyperASTTheory.expr_type_def]
 QED
@@ -1727,6 +1727,7 @@ fun neg_function ty =
 val () = List.app assert_none
   [binop_function u256 u256 ``vyperAST$Exp`` (op_name u256 "y"),
    binop_function u8 u8 ``vyperAST$Exp`` (op_name u8 "y"),
+   binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 300),
    binop_function i256 i256 ``vyperAST$Exp`` (op_lit i256 ~2),
    aug_function u256 u256 ``vyperAST$Exp`` (op_name u256 "y"),
    aug_function i256 i256 ``vyperAST$Exp`` (op_lit i256 ~2),
@@ -1748,12 +1749,11 @@ val pow_literal_base_function =
     ``[Return (SOME (Builtin ^u256 (Bop vyperAST$Exp)
                        [^(op_lit u256 2); ^(op_name u256 "y")]))]``
 
-(* An over-large literal exponent stays accepted: compile_safe_pow checks the
-   base against it. >> of a narrow unsigned value and the bitwise augmented
-   assignments on bool compute what the semantics does. *)
+(* A dynamic base requires a literal exponent within its value-bit bound.
+   >> of a narrow unsigned value and bitwise augmented assignments on bool
+   compute what the semantics does. *)
 val () = List.app assert_some
-  [binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 300),
-   binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 0),
+  [binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 0),
    pow_literal_base_function,
    aug_function u256 u256 ``vyperAST$Exp`` (op_lit u256 2),
    neg_function i256,
@@ -1949,6 +1949,114 @@ val () = check_rejects empty_layouts (iterated_write_function
 val () = check_accepts "loop without iterated array write" false empty_layouts
   (iterated_write_function ``[] : stmt list``)
 
+(* Nor may it call a function that writes the iterated array, directly or
+   through further internal calls: Vyper's test_modify_iterator_function_call
+   and test_modify_iterator_recursive_function_call
+   (tests/unit/semantics/analysis/test_for_loop.py).
+     a: uint256[3]
+     b: uint256[3]
+     d: DynArray[uint256, 3]
+     @internal
+     def foo():
+         self.a[0] = 1     # accepted with self.b[0] = 1
+     @internal
+     def bar():
+         self.foo()
+     @internal
+     def baz():
+         for i: uint256 in self.a:
+             self.foo()    # or self.bar()
+   The loop may also sit inside an if or another loop.  A call evaluates
+   the callee's omitted default arguments, so a default that pops the
+   iterated array counts too (Vyper rejects such a default as not
+   constant).  A callee's own locals are not the caller's: a loop over a
+   local xs may call a function that writes its own local xs. *)
+val arr3 = ``ArrayT (BaseT (UintT 256)) (Fixed 3)``
+val dyn3 = ``ArrayT (BaseT (UintT 256)) (Dynamic 3)``
+val zeros3 = ``Builtin ^arr3 (MakeArray (SOME ^u256) (Fixed 3))
+                 [^(op_lit u256 0); ^(op_lit u256 0); ^(op_lit u256 0)]``
+val loop_call_layouts =
+  ``([((0w : address),
+       ([((NONE, "a"), 0); ((NONE, "b"), 3); ((NONE, "d"), 6)]
+          : storage_layout,
+        [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+fun element_write tgt =
+  ``Assign (BaseTarget (SubscriptTarget ^tgt ^(op_lit u256 0)))
+      ^(op_lit u256 1)``
+fun internal_fn name args dflts body =
+  ``FunctionDecl Internal Nonpayable F F ^(stringSyntax.fromMLstring name)
+      ^args ^dflts NoneT ^body``
+fun plain_fn name body =
+  internal_fn name ``[] : (string # type) list`` ``[] : expr list`` body
+fun loop_call_modules foo baz_body =
+  ``[(NONE,
+      [VariableDecl Private Storage "a" ^arr3 (SOME 0);
+       VariableDecl Private Storage "b" ^arr3 (SOME 3);
+       VariableDecl Private Storage "d" ^dyn3 (SOME 6);
+       ^foo;
+       ^(plain_fn "bar"
+           ``[Expr (Call NoneT (IntCall (NONE, "foo")) [] NONE)]``);
+       ^(plain_fn "baz" baz_body)])]
+    : (num option # toplevel list) list``
+fun state_var var = ``(NONE : num option, ^(stringSyntax.fromMLstring var))``
+fun loop_calling ty var callee =
+  ``For "i" ^u256 (Array (TopLevelName ^ty ^(state_var var))) 3
+      [Expr (Call NoneT (IntCall (NONE, ^(stringSyntax.fromMLstring callee)))
+         [] NONE)]``
+fun writing_foo var =
+  plain_fn "foo" ``[^(element_write ``TopLevelNameTarget ^(state_var var)``)]``
+(* def foo(x: uint256 = self.d.pop()): pass *)
+val popping_default_foo =
+  internal_fn "foo" ``[("x", ^u256)]``
+    ``[Pop ^u256 (TopLevelNameTarget (NONE, "d"))]`` ``[Pass]``
+fun in_if s = ``[If (Literal (BaseT BoolT) (BoolL T)) [^s] []]``
+fun in_loop s =
+  ``[For "j" ^u256 (Array (TopLevelName ^arr3 (NONE, "b"))) 3 [^s]]``
+val () = List.app (fn callee =>
+  (check_rejects loop_call_layouts
+     (loop_call_modules (writing_foo "a")
+        ``[^(loop_calling arr3 "a" callee)]``);
+   check_accepts ("loop calling " ^ callee ^ " without iterated array write")
+     false loop_call_layouts
+     (loop_call_modules (writing_foo "b")
+        ``[^(loop_calling arr3 "a" callee)]``)))
+  ["foo", "bar"]
+val () = List.app (fn wrap =>
+  check_rejects loop_call_layouts
+    (loop_call_modules (writing_foo "a") (wrap (loop_calling arr3 "a" "foo"))))
+  [in_if, in_loop]
+val () = check_rejects loop_call_layouts
+  (loop_call_modules popping_default_foo ``[^(loop_calling dyn3 "d" "foo")]``)
+val () = check_accepts "loop calling a default that pops another array" false
+  loop_call_layouts
+  (loop_call_modules popping_default_foo ``[^(loop_calling arr3 "a" "foo")]``)
+val () = check_accepts "loop over a local calling a local write" false
+  loop_call_layouts
+  (loop_call_modules
+     (plain_fn "foo"
+        ``[AnnAssign "xs" ^arr3 ^zeros3; ^(element_write ``NameTarget "xs"``)]``)
+     ``[AnnAssign "xs" ^arr3 ^zeros3;
+        For "i" ^u256 (Array (Name ^arr3 "xs")) 3
+          [Expr (Call NoneT (IntCall (NONE, "foo")) [] NONE)]]``)
+
+(* A computed range bound must be positive and fit the loop variable's type. *)
+Theorem range_computed_bound_typing:
+  type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
+    (For "i" (BaseT (UintT 256))
+      (Range (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
+             (Literal (BaseT (UintT 256)) (IntL 2))) (2 ** 256) [Pass]) = NONE /\
+  IS_SOME (type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
+    (For "i" (BaseT (UintT 256))
+      (Range (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
+             (Literal (BaseT (UintT 256)) (IntL 2))) 1 [Pass])) /\
+  IS_SOME (type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
+    (For "i" (BaseT (IntT 8))
+      (Range (Literal (BaseT (IntT 8)) (IntL (-128)))
+             (Literal (BaseT (IntT 8)) (IntL 127))) 255 [Pass]))
+Proof
+  EVAL_TAC
+QED
 (* Nested assignment targets reach a codegen panic in both pinned Python
    backends, for both abi_decode and internal-call RHSs. Complex values in
    flat targets remain valid; the restriction concerns targets, not types. *)

@@ -323,16 +323,38 @@ Proof
                     venomEffectsTheory.is_nonidempotent_def]) >>
  `src.inst_opcode <> INVOKE` by metis_tac[] >>
  gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
- Cases_on `inst.inst_opcode` >>
- gvs[venomInstTheory.is_pseudo_def, venomInstTheory.is_terminator_def,
-     availExprDefsTheory.avail_nonidempotent_def,
-     venomEffectsTheory.is_nonidempotent_def,
-     venomEffectsTheory.has_conflicting_effects_def, venomInstTheory.is_alloca_op_def] >>
- qpat_x_assum `inst_wf inst` mp_tac >>
- pure_rewrite_tac[venomWfTheory.inst_wf_def] >> simp[] >> rpt strip_tac >>
- Cases_on `step_inst_base inst s` >> gvs[] >> cseReplayLib.selected_base_tac >>
- gvs[venomExecSemanticsTheory.exec_write2_def, AllCaseEqs()] >>
- gvs[venomStateTheory.eval_operands_def]
+ (* One result constructor at a time keeps each opcode split small. *)
+ Cases_on `step_inst_base inst s` >> gvs[]
+ >- (Cases_on `inst.inst_opcode` >>
+     gvs[venomInstTheory.is_pseudo_def, venomInstTheory.is_terminator_def,
+         availExprDefsTheory.avail_nonidempotent_def,
+         venomEffectsTheory.is_nonidempotent_def,
+         venomEffectsTheory.has_conflicting_effects_def, venomInstTheory.is_alloca_op_def] >>
+     qpat_x_assum `inst_wf inst` mp_tac >>
+     pure_rewrite_tac[venomWfTheory.inst_wf_def] >> simp[] >> rpt strip_tac >>
+     gvs[] >> cseReplayLib.selected_base_tac >>
+     gvs[venomExecSemanticsTheory.exec_write2_def, AllCaseEqs()] >>
+     gvs[venomStateTheory.eval_operands_def])
+ >- (Cases_on `inst.inst_opcode` >>
+     gvs[venomInstTheory.is_pseudo_def, venomInstTheory.is_terminator_def,
+         availExprDefsTheory.avail_nonidempotent_def,
+         venomEffectsTheory.is_nonidempotent_def,
+         venomEffectsTheory.has_conflicting_effects_def, venomInstTheory.is_alloca_op_def] >>
+     qpat_x_assum `inst_wf inst` mp_tac >>
+     pure_rewrite_tac[venomWfTheory.inst_wf_def] >> simp[] >> rpt strip_tac >>
+     gvs[] >> cseReplayLib.selected_base_tac >>
+     gvs[venomExecSemanticsTheory.exec_write2_def, AllCaseEqs()] >>
+     gvs[venomStateTheory.eval_operands_def]) >>
+ (Cases_on `inst.inst_opcode` >>
+     gvs[venomInstTheory.is_pseudo_def, venomInstTheory.is_terminator_def,
+         availExprDefsTheory.avail_nonidempotent_def,
+         venomEffectsTheory.is_nonidempotent_def,
+         venomEffectsTheory.has_conflicting_effects_def, venomInstTheory.is_alloca_op_def] >>
+     qpat_x_assum `inst_wf inst` mp_tac >>
+     pure_rewrite_tac[venomWfTheory.inst_wf_def] >> simp[] >> rpt strip_tac >>
+     gvs[] >> cseReplayLib.selected_base_tac >>
+     gvs[venomExecSemanticsTheory.exec_write2_def, AllCaseEqs()] >>
+     gvs[venomStateTheory.eval_operands_def])
 QED
 
 Theorem cse_available_zero_replay:

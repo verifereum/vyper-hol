@@ -242,7 +242,9 @@ QED
 Resume evaluate_read_only[expr_rawrevert]:
   rpt strip_tac >> gvs[Once expr_mutability_ok_def] >> simp[Once evaluate_def] >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
-  >- (rpt strip_tac >> irule machine_frame_sequence >> simp[machine_frame_primitives]) >>
+  >- (rpt strip_tac >> irule machine_frame_sequence >>
+      simp[machine_frame_primitives] >>
+      irule machine_frame_bind >> simp[machine_frame_primitives]) >>
   metis_tac[]
 QED
 
@@ -323,11 +325,7 @@ Resume evaluate_read_only[iterator_array]:
 QED
 
 Resume evaluate_read_only[iterator_array_value]:
-  rpt strip_tac >> irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_read_result] >> rpt strip_tac >>
-  irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_primitives] >>
-  rpt strip_tac >> irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_primitives]
+  rpt strip_tac >> simp[machine_frame_array_iterator_results]
 QED
 
 Resume evaluate_read_only[annassign]:
@@ -616,11 +614,11 @@ Resume evaluate_read_only[intcall_after_lock]:
   conj_tac
   >- (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
       simp[machine_frame_def, machine_frame_primitives]) >>
+  simp[finally_unless_halt_return] >>
   irule state_rel_frame_finally >> simp[machine_frame_def] >> conj_tac
   >- (irule state_rel_frame_try >> simp[machine_frame_def, machine_frame_handlers] >>
       irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_primitives]) >>
-  irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_pop_function, machine_frame_primitives]
+  simp[machine_frame_pop_function]
 QED
 
 Resume evaluate_read_only[assign_tuple]:

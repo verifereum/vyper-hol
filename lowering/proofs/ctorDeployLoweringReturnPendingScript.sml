@@ -36,12 +36,14 @@ Theorem pending_frame_reads:
   state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions)
     (extend_place cx r i) /\
   state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions)
-    (select_result cx ty pv sb)
+    (select_result cx ty pv sb) /\
+  state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions)
+    (array_iterator_results cx ty res)
 Proof
   rpt conj_tac >> irule pending_frame_state_preserving >>
   metis_tac[read_place_state, read_result_state, read_results_state,
     place_type_value_state, lookup_global_state, get_place_state,
-    extend_place_state, select_result_state]
+    extend_place_state, select_result_state, array_iterator_results_state]
 QED
 
 Theorem pending_frame_primitives:
@@ -587,6 +589,9 @@ Proof
       BETA_TAC >> rewrite_tac[state_rel_frame_result] >> metis_tac[])
   >~ [`push_scope_with_var`]
   >- (match_mp_tac pending_frame_bind_guarded >> conj_tac
+      >- simp[pending_frame_reads] >>
+      rpt strip_tac >> BETA_TAC >>
+      match_mp_tac pending_frame_bind_guarded >> conj_tac
       >- simp[pending_frame_scope_handlers] >>
       rpt strip_tac >> rename1 `push_scope_with_var _ _ _ _ = (INL u,_)` >>
       Cases_on `u` >> BETA_TAC >>

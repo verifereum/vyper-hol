@@ -134,10 +134,8 @@ Proof
     (Cases_on `eval_operand v s` >> simp[] >>
      rpt strip_tac >> gvs[] >> simp[mem_write_ops_def] >> metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> gvs[]) >>
-  simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
-  simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
+       eval_operand_def, AllCaseEqs(), mstore_def] >>
   rpt strip_tac >> gvs[]
 QED
 

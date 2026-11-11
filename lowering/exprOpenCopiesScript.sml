@@ -201,6 +201,8 @@ Proof
       drule emit_void_terminated >> simp[is_terminator_def]) >>
   Cases_on `dty = sty`
   >- (simp[] >> metis_tac[compile_copy_memory_open]) >>
+  Cases_on `tuple_memory_layout_eq dty sty`
+  >- (simp[] >> metis_tac[compile_copy_memory_open]) >>
   simp[] >> metis_tac[compile_store_memory_typed_open]
 QED
 

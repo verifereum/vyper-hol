@@ -93,11 +93,26 @@ When proof-tool use is authorized, prefer a holbuild-centered workflow:
 
 ### File Conventions (repo-specific)
 
-Local test/scratch files use **dot prefixes** (gitignored):
+Local test/scratch files use **dot prefixes** (gitignored), except buildable
+scratch theories, which use ordinary `<name>Script.sml` names because holbuild
+ignores dot-prefixed sources. Remove scratch theories and other probes before
+publication.
+
 - `.hol_init.sml` - auto-loaded on session start
 - `.hol_test.sml` - temporary test scripts
 
 Try to keep theory files under 500 LOC (soft limit).
+
+A hand-written theory is built by default, and by CI, only if a build root in
+`holproject.toml` imports or refers to it, directly or through other theories.
+(Generated replay theories and the coverage report have their own CI job.) The
+roots are a few rollups, one per purpose. When you add a theory, import it from
+the theory that uses it, or add it to the rollup that fits, under the matching
+comment: the results go in `vyperHol` or its sub-rollups (`vyperSemanticsHol`,
+`venomAnalysisHol`, `venomPassesHol`, `vyperLoweringHol`), language tests in `tests/vyperTestsHol`, lowering and
+compiler checks in `lowering/loweringChecks`, and Venom checks in
+`venom/venomChecks`. Pinned-Python witnesses go in
+`lowering/evalCompilerWitnesses`.
 
 ### Naming conventions
 

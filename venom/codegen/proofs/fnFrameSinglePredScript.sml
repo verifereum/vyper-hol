@@ -19,7 +19,7 @@ Ancestors
   stackModel list fnPlanPrefix fnFrameSteps genFrameSim fnPlanLineage frameRel
   contextCodegenRel codegenRel unitShapeDefs genBlockSim stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  livenessDefs dfgDefs cfgDefs
+  livenessDefs dfgDefs cfgDefs cfgCorrectnessProof
 
 (* The first phi_prefix_length instructions of a block survive the
    parameter filter as a prefix, and are PHIs. *)
