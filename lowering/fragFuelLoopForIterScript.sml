@@ -24,7 +24,7 @@ Ancestors
   fragFuel fragFuelContextBase fragFuelContext fragFuelStmtBase
   stmtLowering exprLowering compileEnv emitHelper context venomInst
 Libs
-  fragFuelLib
+  fragFuelLib monadsyntax
 
 (* Restrict writes to pre-loop variables and, when present, the newly
    allocated local pointer.  Later compiler temporaries remain protected. *)
@@ -143,6 +143,109 @@ Proof
   >- simp[] >>
   disj2_tac >> asm_rewrite_tac[] >>
   metis_tac[iter_distance_decreases]
+QED
+
+Theorem iter_cond_outcome[local]:
+  (do d <- emit_op EQ [Var idx; lenop];
+      emit_inst JNZ [d; Label ex; Label bl] [] od) a = ((),b) /\
+  fn_has_code a b fn /\ no_phi_fn fn /\ callees_stable G ctx fn /\
+  at_point a s /\ lookup_var idx s = SOME i /\
+  eval_operand lenop s = SOME l /\ N <= a.cs_next_var ==>
+  ?j. j <= 1 /\ fuel_outcome G ctx fn s j
+    (\t. vars_kept N {} s t /\
+         t.vs_current_bb = (if i = l then ex else bl) /\
+         t.vs_inst_idx = 0)
+Proof
+  simp[emit_op_def, emit_inst_def, comp_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_ignore_bind_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule fragExecTheory.fn_has_code_same_block >> simp[GSYM listTheory.APPEND_ASSOC] >>
+  strip_tac >>
+  `get_instruction bb (LENGTH a.cs_current_insts) =
+     SOME (mk_inst a.cs_next_id EQ [Var idx; lenop]
+        [STRING #"%" (toString a.cs_next_var)])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `get_instruction bb (LENGTH a.cs_current_insts + 1) =
+     SOME (mk_inst (a.cs_next_id + 1) JNZ
+        [Var (STRING #"%" (toString a.cs_next_var)); Label ex; Label bl] [])` by
+    (first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
+  gvs[at_point_def] >>
+  qspecl_then [`G`, `ctx`, `fn`, `s`, `bb`,
+    `mk_inst a.cs_next_id EQ [Var idx; lenop]
+       [STRING #"%" (toString a.cs_next_var)]`] mp_tac
+    run_from_nonterm_stable >>
+  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  reverse strip_tac
+  >- (qexists_tac `0` >> simp[fuel_outcome_def]) >>
+  gvs[venomExecSemanticsTheory.step_inst_non_invoke,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+      venomExecSemanticsTheory.exec_pure2_def,
+      venomStateTheory.eval_operand_def] >>
+  qmatch_asmsub_abbrev_tac `update_var v w s with vs_inst_idx := k` >>
+  qabbrev_tac `u = update_var v w s with vs_inst_idx := k` >>
+  `fuel_outcome G ctx fn u 1
+    (\t. vars_kept N {} s t /\
+         t.vs_current_bb = (if i = l then ex else bl) /\
+         t.vs_inst_idx = 0)` suffices_by
+    (strip_tac >> qexists_tac `1` >> gvs[fuel_outcome_def] >>
+     metis_tac[]) >>
+  irule fuel_outcome_jump >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`bb`,
+    `mk_inst (a.cs_next_id + 1) JNZ [Var v; Label ex; Label bl] []`,
+    `if i = l then ex else bl`] >>
+  simp[Abbr `u`, venomInstTheory.mk_inst_def,
+       venomInstTheory.is_terminator_def,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomStateTheory.eval_operand_def, venomStateTheory.update_var_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.jump_to_def] >>
+  simp[Abbr `k`, Abbr `w`, finite_mapTheory.FLOOKUP_UPDATE,
+       arithmeticPropsTheory.bool_to_word_neq_0w, GSYM venomInstTheory.mk_inst_def] >>
+  Cases_on `i = l` >> simp[vars_kept_def, venomStateTheory.lookup_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  (conj_tac >- metis_tac[arithmeticTheory.ADD1]) >>
+  rw[] >> `x <> v` by (gvs[Abbr `v`, var_below_def] >> metis_tac[]) >>
+  simp[EQ_SYM_EQ]
+QED
+
+Theorem iter_cond_missing[local]:
+  (do d <- emit_op EQ [Var idx; lenop];
+      emit_inst JNZ [d; Label ex; Label bl] [] od) a = ((),b) /\
+  fn_has_code a b fn /\ at_point a s /\
+  (lookup_var idx s = NONE \/ eval_operand lenop s = NONE) ==>
+  ?j. j <= 1 /\ fuel_outcome G ctx fn s j (\t. F)
+Proof
+  simp[emit_op_def, emit_inst_def, comp_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_ignore_bind_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule fragExecTheory.fn_has_code_same_block >>
+  simp[GSYM listTheory.APPEND_ASSOC] >> strip_tac >>
+  `get_instruction bb (LENGTH a.cs_current_insts) =
+     SOME (mk_inst a.cs_next_id EQ [Var idx; lenop]
+        [STRING #"%" (toString a.cs_next_var)])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  gvs[at_point_def] >>
+  qexists_tac `0` >> simp[fuel_outcome_def] >> rpt strip_tac >>
+  simp[fragExecTheory.run_from_def,
+       Once venomExecSemanticsTheory.exec_block_def,
+       venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def, venomInstTheory.mk_inst_def,
+       at_point_def] >>
+  simp[Once venomExecSemanticsTheory.exec_block_def,
+       venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def, venomInstTheory.mk_inst_def,
+       AllCaseEqs()] >>
+  once_rewrite_tac[venomExecSemanticsTheory.exec_block_def] >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def, venomInstTheory.mk_inst_def,
+       AllCaseEqs()] >>
+  Cases_on `lookup_var idx s` >> simp[]
 QED
 
 Theorem fuel_okS_compile_for_iter:
