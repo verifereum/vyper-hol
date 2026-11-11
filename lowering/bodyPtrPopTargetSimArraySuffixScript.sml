@@ -86,11 +86,13 @@ Resume target_array_normal_suffix_ptr[common]:
        fs[stmt_state_rel_def, state_rel_def] >>
      `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
        fs[ci_mono_def] >>
-     mp_tac (Q.INST [`es1` |-> `em with gas_obs := []`, `sb` |-> `sm`, `G1` |-> `G`,
-                     `tn1` |-> `tn`, `s1` |-> `t`, `G2` |-> `H`, `tn2` |-> `un`,
-                     `es'` |-> `em with gas_obs := []`]
-               wordOperandsPtrTheory.ghost_kept_trans) >>
-     disch_then irule >> fs[]) >>
+     `MAP FDOM es.scopes = MAP FDOM (em with gas_obs := []).scopes` by fs[] >>
+     qpat_assum `ghost_kept cenv (em with gas_obs := []) sm G tn t H un`
+       (mp_then (Pos (el 2)) mp_tac wordOperandsPtrTheory.ghost_kept_trans) >>
+     disch_then irule >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
+     fs[]) >>
   suspend "typed"
 QED
 
