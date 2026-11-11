@@ -1,6 +1,7 @@
 Theory stmtSimLogStoreCompose
 Ancestors
   stmtSimLogStoreEncode stmtSimLogStoreContinue stmtSimLogStoreFresh
+  abiCallerAllocation abiDecoderFrame
   stmtSimLogEncodeLayout stmtSimLogDataInput vyperTypeABI vyperABI compileEnv loweringStateRelDefs supportedTypes contractABI list stmtSimLogAllocate abiDecoderReentry exprLoweringProps vyperTyping abiEncoderCounters stmtSimLogTrace emitHelperProps stmtSimLogDataRun arithmetic words
 
 val _ = if null (hyp stmtSimLogStoreContinueTheory.log_store_data_stmt)
@@ -104,7 +105,9 @@ Theorem log_store_encode_continue_bounded:
     (!op w. abi_decoder_operand_live start.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
     db < dimword (:256) /\
-    LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)) < dimword (:256)
+    LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)) < dimword (:256) /\
+    (!aid a k. aid < source_st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k actual.vs_memory = mem_bytes_at a k initial.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `!x. src = Var x ==> not_fresh_at start x` by
@@ -175,14 +178,30 @@ Resume log_store_encode_continue_bounded[finish]:
     (irule inst_extends_trans >> qexists_tac `stored_st` >> simp[]) >>
   `LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)) < dimword (:256)` by decide_tac >>
   qexistsl_tac [`avs`,`actual`,`db`] >> asm_simp_tac bool_ss [] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `!x. op = Var x ==> not_fresh_at start x` by
+        (rpt strip_tac >> gvs[abi_decoder_operand_live_def,
+          abi_decoder_older_vars_def, not_fresh_at_def] >> metis_tac[]) >>
+      `eval_operand op stored = SOME w` by metis_tac[] >>
+      `abi_decoder_operand_live stored_st.cs_next_var op` by
+        (irule abi_decoder_operand_live_mono >> qexists_tac `start.cs_next_var` >> simp[]) >>
+      first_x_assum drule_all >> simp[]) >>
   rpt strip_tac >>
-  `!x. op = Var x ==> not_fresh_at start x` by
-    (rpt strip_tac >> gvs[abi_decoder_operand_live_def,
-      abi_decoder_older_vars_def, not_fresh_at_def] >> metis_tac[]) >>
-  `eval_operand op stored = SOME w` by metis_tac[] >>
-  `abi_decoder_operand_live stored_st.cs_next_var op` by
-    (irule abi_decoder_operand_live_mono >> qexists_tac `start.cs_next_var` >> simp[]) >>
-  first_x_assum drule_all >> simp[]
+  `aid < stored_st.cs_next_id` by decide_tac >>
+  `FLOOKUP stored.vs_allocas aid = SOME (a,k)` by simp[] >>
+  `mem_bytes_at a k actual.vs_memory = mem_bytes_at a k stored.vs_memory` by
+    (first_x_assum drule_all >> simp[]) >>
+  `alloca_inv initial` by fs[stmt_state_rel_def] >>
+  `aid <> source_st.cs_next_id` by decide_tac >>
+  `a+k <= b \/ b+srccap <= a` by
+    (drule_all abi_caller_allocation_separate >> simp[]) >>
+  `abi_footprint_disjoint a k [(b,cap)]` by
+    (simp[abi_footprint_disjoint_def] >> decide_tac) >>
+  qpat_x_assum `abi_decode_footprint_frame _ _ _` mp_tac >>
+  simp[ADD_0] >>
+  qpat_assum `cap = _` (fn th => rewrite_tac[GSYM th]) >> strip_tac >>
+  drule_all abi_decode_footprint_frame_slice >> simp[]
 QED
 
 Finalise log_store_encode_continue_bounded
@@ -220,11 +239,14 @@ Theorem log_store_encode_continue:
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)))) /\
     stmt_state_rel ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live start.cs_next_var op /\
-      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)
+      eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
+    (!aid a k. aid < source_st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k actual.vs_memory = mem_bytes_at a k initial.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all log_store_encode_continue_bounded >> strip_tac >>
-  qexistsl_tac [`avs`,`actual`,`db`] >> asm_simp_tac bool_ss []
+  qexistsl_tac [`avs`,`actual`,`db`] >> asm_simp_tac bool_ss [] >>
+  first_assum ACCEPT_TAC
 QED
 
 val _ = app (fn (name,th) => if null (hyp th) then ()
