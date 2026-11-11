@@ -13,8 +13,13 @@ Theorem membership_typed_result_action:
 Proof
   strip_tac >> simp[FUN_EQ_THM, bop_result_def, evaluate_builtin_def,
     type_to_int_bound_def, lift_sum_def, return_def, raise_def] >>
+  `bop = In \/ bop = NotIn ==>
+   evaluate_membership tv (bop = NotIn) v1 v2 =
+   evaluate_binop (Unsigned 0) tv bop v1 v2` by
+    (strip_tac >> gvs[] >> Cases_on `v2` >>
+     simp[evaluate_membership_def, evaluate_binop_def, binop_negate_def]) >>
   Cases_on `evaluate_binop (Unsigned 0) tv bop v1 v2` >>
-  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  rw[] >> gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 
 Theorem membership_typed_read_continuation:
