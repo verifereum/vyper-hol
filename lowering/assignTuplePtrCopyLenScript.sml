@@ -1,6 +1,7 @@
 (* Counted bytestring copy-length computation and its ghost frames. *)
 Theory assignTuplePtrCopyLen
 Ancestors
+  fragGasSeqPtr typedCopyPtr loweringStateRelDefs
   assignTuplePtrLocalBytesCopy bodyPtrDefs emitHelperProps exprLoweringProps
   emitHelper compileEnv context venomState venomExecSemantics venomInst
   ptrDiscipline finite_map list arithmetic words freshWrites
@@ -42,7 +43,7 @@ Proof
   disch_then drule_all >> strip_tac >> simp[APPEND_ASSOC]
 QED
 
-Theorem copy_len_not_seq_ptr[local]:
+Theorem copy_len_not_seq_ptr:
   !D ctx fn PG G tn s id x out a.
     ~ctx_has_dalloca ctx /\ eval_operand x s = SOME a /\ op_taint tn x = {} ==>
     ?G' tn' t.

@@ -322,7 +322,7 @@ Proof
   ho_match_mp_tac assign_base_bytes_binop_cons >>
   simp[eval_operands_def, eval_operand_update_var, eval_operand_lit] >>
   rpt strip_tac >>
-  simp[inst_seq_ptr_def] >> metis_tac[]
+  simp[inst_seq_ptr_def] >> fs[op_prov_def]
 QED
 
 Theorem assign_base_bytes_prefix_counted:

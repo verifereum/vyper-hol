@@ -72,16 +72,6 @@ Proof
   irule (cj 5 copy_len_binop_ghost_frame) >> simp[])
 QED
 
-Theorem for_copy_len_not_step:
-  eval_operand x s = SOME a ==>
-  step_inst_base (mk_inst id NOT [x] [tmp]) s = OK (update_var tmp (~a) s)
-Proof
-  strip_tac >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
-                   combinTheory.K_THM, opcode_case_def] >>
-  simp[exec_pure1_def]
-QED
-
 Theorem for_copy_len_not_endpoint:
   eval_operand x s = SOME a /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx ==>
   ?u g t.
@@ -100,7 +90,7 @@ Proof
   qabbrev_tac `g = step_prov PG G (mk_inst id NOT [x] [tmp]) u` >>
   qabbrev_tac `t = step_taint (mk_inst id NOT [x] [tmp]) s u tn` >>
   `step_inst_base (mk_inst id NOT [x] [tmp]) s = OK u` by
-    (simp[Abbr `u`] >> irule for_copy_len_not_step >> simp[]) >>
+    (simp[Abbr `u`] >> irule emitHelperPropsTheory.step_NOT >> simp[]) >>
   `~is_terminator (mk_inst id NOT [x] [tmp]).inst_opcode` by
     simp[mk_inst_def, is_terminator_def] >>
   qexistsl [`u`, `g`, `t`] >> conj_tac
