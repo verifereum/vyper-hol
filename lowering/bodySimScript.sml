@@ -50,8 +50,6 @@ Ancestors
 Definition cenv_module_pins_def:
   cenv_module_pins tops cenv <=>
     cenv.ce_module = NONE /\
-    cenv.ce_modules = [(NONE, tops)] /\
-    cenv.ce_func_mutability = build_func_mutability tops /\
     cenv.ce_module_var_type = build_var_type_map tops /\
     cenv.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))

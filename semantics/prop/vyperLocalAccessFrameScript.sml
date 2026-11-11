@@ -129,18 +129,17 @@ Proof
 QED
 
 Theorem call_cleanup_scopes:
-  finally source (ignore_bind (pop_function prev) (unlock_if_nr cx nr is_view))
-    st = (res,st') ==> st'.scopes = prev
+  finally_unless_halt (finally source (pop_function prev))
+    (unlock_if_nr cx nr is_view) st = (res,st') ==> st'.scopes = prev
 Proof
-  strip_tac >> drule finally_pop_function_then_scopes >>
-  impl_tac >- metis_tac[unlock_if_nr_scopes] >> simp[]
+  metis_tac[finally_unless_halt_pop_function_scopes, unlock_if_nr_scopes]
 QED
 
 Theorem evaluate_unwritten_local[local]:
   (!cx:evaluation_context. !s:stmt. T) /\
   (!cx:evaluation_context. !ss:stmt list. T) /\
   (!cx:evaluation_context. !it:iterator. T) /\
-  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:value list. T) /\
+  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:eval_result list. T) /\
   (!cx e st res st' id.
     eval_expr cx e st = (res,st') /\
     ~MEM (WriteAcc (LocalRef id)) (accesses_expr e) ==>
@@ -305,7 +304,7 @@ Resume evaluate_unwritten_local[intcall]:
   imp_res_tac finally_set_scopes >>
   imp_res_tac (call_cleanup_scopes |>
     Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |>
-    SRULE [unlock_if_nr_def, ignore_bind_def]) >>
+    SRULE [unlock_if_nr_def]) >>
   imp_res_tac read_results_state >>
   gvs[get_scopes_def] >>
   rpt (qpat_x_assum `!a b c d. _` drule_all >> strip_tac) >>
@@ -343,8 +342,9 @@ QED
 Resume evaluate_unwritten_local[rawrevert]:
   rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
-       raise_def, check_def, type_check_def, assert_def] >>
-  strip_tac >> metis_tac[]
+       raise_def, check_def, type_check_def, assert_def,
+       lift_option_type_def, option_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >> metis_tac[]
 QED
 Resume evaluate_unwritten_local[selfdestruct]:
   rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -352,7 +352,10 @@ Resume evaluate_unwritten_local[selfdestruct]:
        raise_def, check_def, type_check_def, assert_def, lift_option_def,
        lift_option_type_def, get_accounts_def, option_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac transfer_value_scopes >> gvs[] >> metis_tac[]
+  imp_res_tac transfer_value_scopes >>
+  Cases_on `cx.txn.created_in_tx` >>
+  gvs[update_accounts_def, update_pending_deletions_def, bind_def,
+      ignore_bind_def, return_def, AllCaseEqs()] >> metis_tac[]
 QED
 Resume evaluate_unwritten_local[create]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
