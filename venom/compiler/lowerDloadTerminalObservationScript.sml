@@ -233,6 +233,7 @@ Proof
   rpt gen_tac >> rpt IF_CASES_TAC >> simp[] >>
   simp[vfmExecutionTheory.transfer_value_def, vfmStateTheory.update_account_def,
        vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM] >>
+  rpt IF_CASES_TAC >> simp[combinTheory.APPLY_UPDATE_THM] >>
   rpt IF_CASES_TAC >> simp[]
 QED
 
