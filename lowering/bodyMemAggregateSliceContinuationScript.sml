@@ -294,6 +294,11 @@ Proof
         qexistsl_tac [`es'`, `sa with cs_next_var := sm.cs_next_var`, `r`] >>
         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
      qx_genl_tac [`bb`, `bsz`] >> strip_tac >>
+     `!a k. a + k <= w2n w \/ w2n w + type_memory_size tv <= a ==>
+        mem_bytes_at a k q.vs_memory = mem_bytes_at a k u.vs_memory` by
+       (rpt strip_tac >>
+        qpat_x_assum `!a len. _ ==> mem_bytes_at a len q.vs_memory = _` irule >>
+        decide_tac) >>
      qspecl_then [`ce`, `func`, `es`, `sa`, `s0`, `u`, `q`, `bb`, `bsz`, `w2n w`,
                   `type_memory_size tv`] mp_tac aggregate_pure_frame_store >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
