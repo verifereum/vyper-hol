@@ -248,6 +248,82 @@ Proof
   Cases_on `lookup_var idx s` >> simp[]
 QED
 
+Theorem iter_incr_outcome[local]:
+  (do d <- emit_op ADD [Var idx; Lit 1w];
+      emit_inst ASSIGN [d] [idx];
+      emit_inst JMP [Label cond] [] od) a = ((),b) /\
+  fn_has_code a b fn /\ no_phi_fn fn /\ callees_stable G ctx fn /\
+  at_point a s /\ lookup_var idx s = SOME i /\
+  var_below a.cs_next_var idx /\ N <= a.cs_next_var ==>
+  ?j. j <= 1 /\ fuel_outcome G ctx fn s j
+    (\t. vars_kept N {idx} s t /\ lookup_var idx t = SOME (i + 1w) /\
+         t.vs_current_bb = cond /\ t.vs_inst_idx = 0)
+Proof
+  simp[emit_op_def, emit_inst_def, comp_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_ignore_bind_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule fragExecTheory.fn_has_code_same_block >>
+  simp[GSYM listTheory.APPEND_ASSOC] >> strip_tac >>
+  `get_instruction bb (LENGTH a.cs_current_insts) =
+     SOME (mk_inst a.cs_next_id ADD [Var idx; Lit 1w]
+        [STRING #"%" (toString a.cs_next_var)])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `get_instruction bb (LENGTH a.cs_current_insts + 1) =
+     SOME (mk_inst (a.cs_next_id + 1) ASSIGN
+       [Var (STRING #"%" (toString a.cs_next_var))] [idx])` by
+    (first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
+  `get_instruction bb (LENGTH a.cs_current_insts + 2) =
+     SOME (mk_inst (a.cs_next_id + 2) JMP [Label cond] [])` by
+    (first_x_assum (qspec_then `2` mp_tac) >> simp[]) >>
+  gvs[at_point_def] >>
+  qspecl_then [`G`, `ctx`, `fn`, `s`, `bb`,
+    `mk_inst a.cs_next_id ADD [Var idx; Lit 1w]
+       [STRING #"%" (toString a.cs_next_var)]`] mp_tac
+    run_from_nonterm_stable >>
+  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  reverse strip_tac
+  >- (qexists_tac `0` >> simp[fuel_outcome_def]) >>
+  gvs[venomExecSemanticsTheory.step_inst_non_invoke,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+      venomExecSemanticsTheory.exec_pure2_def,
+      venomStateTheory.eval_operand_def] >>
+  qmatch_asmsub_abbrev_tac `update_var v w s with vs_inst_idx := k` >>
+  qabbrev_tac `u = update_var v w s with vs_inst_idx := k` >>
+  `fuel_outcome G ctx fn u 1
+    (\t. vars_kept N {idx} s t /\ lookup_var idx t = SOME (i + 1w) /\
+         t.vs_current_bb = cond /\ t.vs_inst_idx = 0)` suffices_by
+    (strip_tac >> qexists_tac `1` >> gvs[fuel_outcome_def] >> metis_tac[]) >>
+  qspecl_then [`G`, `ctx`, `fn`, `u`, `bb`,
+    `mk_inst (a.cs_next_id + 1) ASSIGN [Var v] [idx]`] mp_tac
+    run_from_nonterm_stable >>
+  simp[Abbr `u`, Abbr `k`, venomStateTheory.update_var_def,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
+       arithmeticTheory.ADD1] >>
+  reverse strip_tac
+  >- simp[fuel_outcome_def] >>
+  gvs[venomExecSemanticsTheory.step_inst_non_invoke,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+      venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE] >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn z 1` >>
+  `fuel_outcome G ctx fn
+     (update_var idx w z with vs_inst_idx := LENGTH a.cs_current_insts + 2) 1
+     (\t. vars_kept N {idx} s t /\
+          finite_map$FLOOKUP t.vs_vars idx = SOME w /\
+          t.vs_current_bb = cond /\ t.vs_inst_idx = 0)` suffices_by
+    (strip_tac >> gvs[fuel_outcome_def] >> metis_tac[]) >>
+  irule fuel_outcome_jump >> conj_tac >- simp[] >>
+  qexistsl_tac [`bb`, `mk_inst (a.cs_next_id + 2) JMP [Label cond] []`, `cond`] >>
+  simp[Abbr `z`, venomStateTheory.update_var_def,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomStateTheory.jump_to_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rw[vars_kept_def, venomStateTheory.lookup_var_def,
+     finite_mapTheory.FLOOKUP_UPDATE] >>
+  `x <> v` by (gvs[Abbr `v`, var_below_def] >> metis_tac[]) >>
+  simp[EQ_SYM_EQ]
+QED
+
 Theorem fuel_okS_compile_for_iter:
   !cenv lctx ty id fty arr_e bound body Wv E.
     (!c t e Wv' E'. fuel_ok Wv' {} E' (compile_expr c t e)) /\
