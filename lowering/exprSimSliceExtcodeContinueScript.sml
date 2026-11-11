@@ -345,12 +345,32 @@ Theorem slice_extcode_entry_post_rebase:
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   expr_post ctx func cenv cx a es sb sc u ee av aop t /\
+  (~expr_has_effect result ==> ~expr_has_effect a) /\
+  (~expr_has_effect result ==> pure_frame cenv func es sa s u) /\
   vv_post ctx func cenv cx result ee sa sd t ef tv vv z ==>
   vv_post ctx func cenv cx result es sa sd s ef tv vv z
 Proof
   strip_tac >>
   `wb_frame cenv es ee sb u t` by
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
+  `~expr_has_effect result ==> pure_frame cenv func es sa s t` by
+    (strip_tac >>
+     qpat_x_assum `~expr_has_effect result ==> ~expr_has_effect a` drule >>
+     strip_tac >>
+     `pure_frame cenv func es sb u t` by
+       (qpat_assum `expr_post _ _ _ _ a _ _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
+        qpat_x_assum `~expr_has_effect a ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
+     qpat_x_assum `~expr_has_effect result ==> pure_frame _ _ _ _ _ _` drule >>
+     strip_tac >>
+     match_mp_tac (Q.SPECL [`cenv`, `func`, `es`, `es`, `sa`, `sb`, `s`, `u`, `t`]
+                     exprSimPropsTheory.pure_frame_trans) >>
+     qpat_assum `wb_frame cenv es es sa s u`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     qpat_assum `wb_frame cenv es ee sb u t`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   `wb_frame cenv es ee sa s t` by
     (match_mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sa`, `es`, `ee`,
                             `sb`, `u`, `t`, `ctx`] wb_frame_trans) >>
@@ -397,6 +417,7 @@ Theorem slice_extcode_continue_entry_seq:
   (!x. aop = Var x ==> not_fresh_at sc x) /\
   i < dimword (:256) /\ k < dimword (:256) /\ k <= n /\
   32+n <= sz /\ sz < dimword (:256) /\
+  (~expr_has_effect result ==> ~expr_has_effect a) /\
   expr_type result = BaseT (BytesT (Dynamic n)) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (do av <- bind (eval_expr cx a) (read_result cx);
@@ -494,6 +515,10 @@ QED
 
 Resume slice_extcode_continue_entry_seq[rebase]:
   BETA_TAC >> rpt strip_tac >> gvs[] >>
+  `pure_frame cenv func es sa s u` by
+    (match_mp_tac (Q.SPECL [`cenv`, `func`, `es`, `sa`, `s`, `s`, `u`]
+                     exprSimPropsTheory.pure_frame_mem_tail) >>
+     fs[loweringPostsTheory.wb_frame_def]) >>
   irule slice_extcode_entry_post_rebase >> simp[] >>
   qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>

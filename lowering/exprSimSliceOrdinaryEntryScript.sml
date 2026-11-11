@@ -136,6 +136,20 @@ Proof
   simp[wb_frame_def, lookup_var_def, locals_kept_mem]
 QED
 
+Theorem slice_bytestring_capture_pure_frame:
+  compile_bytestring_src src sb = ((sl,data),sc) /\
+  eval_operand src t = SOME p /\
+  (!x. src = Var x ==> not_fresh_at sb x) /\
+  run_inst_seq (emitted_insts sb sc) t = OK u ==>
+  pure_frame cenv func ec sb t u
+Proof
+  strip_tac >> drule_all slice_bytestring_src_run >> strip_tac >>
+  gvs[] >>
+  `t'.vs_memory = t.vs_memory /\ t'.vs_allocas = t.vs_allocas` by
+    (qpat_x_assum `t' = t with vs_vars := _` SUBST1_TAC >> simp[]) >>
+  simp[loweringPostsTheory.pure_frame_def]
+QED
+
 Theorem slice_fixed_capture_frame:
   compile_alloc_buffer 32 sb = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand; val_op] sm = ((),sc) /\
@@ -167,12 +181,32 @@ Theorem slice_source_capture_post_rebase:
   sa.cs_next_id <= sb.cs_next_id /\ sb.cs_next_id <= sc.cs_next_id /\
   expr_post ctx func cenv cx src es sa sb s0 ec v op t /\
   wb_frame cenv ec ec sb t u /\
+  (~expr_has_effect result ==> ~expr_has_effect src) /\
+  (~expr_has_effect result ==> pure_frame cenv func ec sb t u) /\
   vv_post ctx func cenv cx result ec sc sf u ef tv vv z ==>
   vv_post ctx func cenv cx result es sa sf s0 ef tv vv z
 Proof
   strip_tac >>
   `wb_frame cenv es ec sa s0 t` by
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
+  `~expr_has_effect result ==> pure_frame cenv func es sa s0 u` by
+    (strip_tac >>
+     qpat_x_assum `~expr_has_effect result ==> ~expr_has_effect src` drule >>
+     strip_tac >>
+     `pure_frame cenv func es sa s0 t` by
+       (qpat_assum `expr_post _ _ _ _ src _ _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
+        qpat_x_assum `~expr_has_effect src ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
+     qpat_x_assum `~expr_has_effect result ==> pure_frame _ _ _ _ _ _` drule >>
+     strip_tac >>
+     match_mp_tac (Q.SPECL [`cenv`, `func`, `es`, `ec`, `sa`, `sb`, `s0`, `t`, `u`]
+                     exprSimPropsTheory.pure_frame_trans) >>
+     qpat_assum `wb_frame cenv es ec sa s0 t`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     qpat_assum `wb_frame cenv ec ec sb t u`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es ec sa s0 u` by
     (drule_all wb_frame_trans >> simp[]) >>
   irule vv_post_prefix_frame >>
@@ -189,6 +223,7 @@ Theorem slice_bytestring_source_post_rebase:
   eval_operand op t = SOME p /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   run_inst_seq (emitted_insts sb sc) t = OK u /\
+  (~expr_has_effect result ==> ~expr_has_effect src) /\
   vv_post ctx func cenv cx result ec sc sf
     (u with vs_inst_idx := LENGTH sc.cs_current_insts) ef tv vv z ==>
   vv_post ctx func cenv cx result es sa sf s0 ef tv vv z
@@ -196,11 +231,14 @@ Proof
   strip_tac >>
   drule_all slice_bytestring_capture_frame >>
   disch_then (qspec_then `LENGTH sc.cs_current_insts` assume_tac) >>
+  `pure_frame cenv func ec sb t u` by
+    (irule slice_bytestring_capture_pure_frame >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
   irule slice_source_capture_post_rebase >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any)
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem slice_fixed_source_post_rebase:
@@ -217,6 +255,7 @@ Theorem slice_fixed_source_post_rebase:
   MEM (mk_inst sb.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func) /\
   run_inst_seq (emitted_insts sb sc) t = OK u /\
+  (~expr_has_effect result ==> ~expr_has_effect src) /\
   vv_post ctx func cenv cx result ec sc sf
     (u with vs_inst_idx := LENGTH sc.cs_current_insts) ef tv vv z ==>
   vv_post ctx func cenv cx result es sa sf s0 ef tv vv z
@@ -224,11 +263,14 @@ Proof
   strip_tac >>
   drule_all slice_fixed_capture_frame >>
   disch_then (qspec_then `LENGTH sc.cs_current_insts` assume_tac) >>
+  `pure_frame cenv func ec sb t u` by
+    (drule_all hash_alloc_mstore_frame >> strip_tac >> gvs[]) >>
   irule slice_source_capture_post_rebase >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any)
+  goal_assum (drule_at Any) >> simp[] >>
+  qpat_assum `expr_post _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any)
 QED
 
 (* Sequential normalized entry points; compiler type indices remain general. *)
