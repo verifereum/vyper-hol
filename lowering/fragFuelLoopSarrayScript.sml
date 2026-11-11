@@ -8,8 +8,265 @@
 Theory fragFuelLoopSarray
 Ancestors
   fragFuel fragFuelContextBase compileEnv emitHelper context venomInst
+  venomExecSemantics venomExecProps venomExecProofs venomInstProps
+  venomState words finite_map arithmetic
+  typedCopyLoopLayoutPtr
 Libs
   fragFuelLib
+
+(* Condition trace: LT / ISZERO / JNZ. *)
+Theorem sa_condition[local]:
+  !G ctx fn N lc le lb c vlt vdone n k s bb ilt idone ij.
+    no_phi_fn fn /\ callees_stable G ctx fn /\
+    lookup_block lc fn.fn_blocks = SOME bb /\
+    get_instruction bb 0 = SOME ilt /\
+    ilt.inst_opcode = LT /\
+    ilt.inst_operands = [Var c; Lit (n2w n)] /\
+    ilt.inst_outputs = [vlt] /\
+    get_instruction bb 1 = SOME idone /\
+    idone.inst_opcode = ISZERO /\
+    idone.inst_operands = [Var vlt] /\
+    idone.inst_outputs = [vdone] /\
+    get_instruction bb 2 = SOME ij /\
+    ij.inst_opcode = JNZ /\
+    ij.inst_operands = [Var vdone; Label le; Label lb] /\
+    ij.inst_outputs = [] /\
+    vlt <> c /\ vdone <> c /\ vlt <> vdone /\
+    ~var_below N vlt /\ ~var_below N vdone /\
+    s.vs_current_bb = lc /\ s.vs_inst_idx = 0 /\
+    lookup_var c s = SOME (n2w k) /\ k <= w2n (n2w n : 256 word) ==>
+    fuel_outcome G ctx fn s 1
+      (\t. vars_kept N {} s t /\ lookup_var c t = SOME (n2w k) /\
+           ((k = w2n (n2w n : 256 word) /\
+             t.vs_current_bb = le /\ t.vs_inst_idx = 0) \/
+            (k < w2n (n2w n : 256 word) /\
+             t.vs_current_bb = lb /\ t.vs_inst_idx = 0)))
+Proof
+  rpt strip_tac >>
+  `k < dimword (:256)` by
+    (mp_tac (Q.ISPEC `n2w n : 256 word` wordsTheory.w2n_lt) >> decide_tac) >>
+  `w2n (n2w k : 256 word) = k` by simp[wordsTheory.w2n_n2w] >>
+  qabbrev_tac `w = bool_to_word (k < w2n (n2w n : 256 word))` >>
+  qabbrev_tac `s1 = (update_var vlt w s) with vs_inst_idx := 1` >>
+  qabbrev_tac `s2 = (update_var vdone (bool_to_word (w = 0w)) s1)
+                      with vs_inst_idx := 2` >>
+  `!f. run_from f ctx fn s = run_from f ctx fn s1` by
+    (gen_tac >> simp[Abbr `s1`] >>
+     `1 = SUC s.vs_inst_idx` by simp[] >> pop_assum SUBST1_TAC >>
+     irule fragExecTheory.run_from_step >>
+     qexistsl_tac [`bb`, `ilt`] >>
+     simp[is_terminator_def, step_inst_base_opcode_eqs,
+          exec_pure2_def, eval_operand_def, Abbr `w`]) >>
+  `!f. run_from f ctx fn s1 = run_from f ctx fn s2` by
+    (gen_tac >> simp[Abbr `s2`] >>
+     `2 = SUC s1.vs_inst_idx` by simp[Abbr `s1`] >> pop_assum SUBST1_TAC >>
+     irule fragExecTheory.run_from_step >>
+     qexistsl_tac [`bb`, `idone`] >>
+     simp[is_terminator_def, step_inst_base_opcode_eqs,
+          exec_pure1_def, eval_operand_def, Abbr `s1`,
+          update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `fuel_outcome G ctx fn s2 1
+      (\t. vars_kept N {} s t /\ lookup_var c t = SOME (n2w k) /\
+           ((k = w2n (n2w n : 256 word) /\
+             t.vs_current_bb = le /\ t.vs_inst_idx = 0) \/
+            (k < w2n (n2w n : 256 word) /\
+             t.vs_current_bb = lb /\ t.vs_inst_idx = 0)))` by
+    (irule fuel_outcome_jump >> simp[] >>
+     qexistsl_tac [`bb`, `ij`, `if w = 0w then le else lb`] >>
+     simp[is_terminator_def, step_inst_base_opcode_eqs,
+          eval_operand_def, Abbr `s2`, Abbr `s1`,
+          update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `k < w2n (n2w n : 256 word)` >>
+     gvs[Abbr `w`, bool_to_word_def, jump_to_def, vars_kept_def,
+         lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     rpt strip_tac >> gvs[] >>
+     `x <> vdone /\ x <> vlt` by metis_tac[] >> simp[]) >>
+  gvs[fuel_outcome_def] >> metis_tac[]
+QED
+
+(* Initialization and the counter back edge. *)
+Theorem sa_initialize[local]:
+  no_phi_fn fn /\ ~var_below N c /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME ai /\
+  ai.inst_opcode = ASSIGN /\ ai.inst_operands = [Lit 0w] /\
+  ai.inst_outputs = [c] /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME ji /\
+  ji.inst_opcode = JMP /\ ji.inst_operands = [Label lc] ==>
+  fuel_outcome G ctx fn s 1
+    (\t. t.vs_current_bb = lc /\ t.vs_inst_idx = 0 /\
+         vars_kept N {} s t /\ lookup_var c t = SOME 0w)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `u = (update_var c 0w s) with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `!f. run_from f ctx fn s = run_from f ctx fn u` by
+    (gen_tac >> `~is_terminator ai.inst_opcode` by simp[is_terminator_def] >>
+     drule_all run_from_nonterm >>
+     simp[is_terminator_def, step_inst_non_invoke,
+          step_inst_base_opcode_eqs, eval_operand_def, Abbr `u`]) >>
+  `fuel_outcome G ctx fn u 1
+    (\t. t.vs_current_bb = lc /\ t.vs_inst_idx = 0 /\
+         vars_kept N {} s t /\ lookup_var c t = SOME 0w)` by
+    (irule fuel_outcome_jump >>
+     conj_tac >- simp[] >> qexistsl_tac [`bb`, `ji`, `lc`] >>
+     simp[Abbr `u`, update_var_def, is_terminator_def,
+          step_inst_base_opcode_eqs, jump_to_def, vars_kept_def,
+          lookup_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+     Cases_on `x = c` >> gvs[]) >>
+  gvs[fuel_outcome_def] >> metis_tac[]
+QED
+
+Theorem sa_increment[local]:
+  no_phi_fn fn /\ ~var_below N c /\ ~var_below N vnext /\ c <> vnext /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME ai /\
+  ai.inst_opcode = ADD /\ ai.inst_operands = [Var c; Lit 1w] /\
+  ai.inst_outputs = [vnext] /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME ci /\
+  ci.inst_opcode = ASSIGN /\ ci.inst_operands = [Var vnext] /\
+  ci.inst_outputs = [c] /\
+  get_instruction bb (SUC (SUC s.vs_inst_idx)) = SOME ji /\
+  ji.inst_opcode = JMP /\ ji.inst_operands = [Label lc] /\
+  lookup_var c s = SOME (n2w k) ==>
+  fuel_outcome G ctx fn s 1
+    (\t. t.vs_current_bb = lc /\ t.vs_inst_idx = 0 /\
+         vars_kept N {} s t /\ lookup_var c t = SOME (n2w (k+1)))
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `u = (update_var vnext (n2w (k+1)) s)
+                    with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `v = (update_var c (n2w (k+1)) u)
+                    with vs_inst_idx := SUC u.vs_inst_idx` >>
+  `!f. run_from f ctx fn s = run_from f ctx fn u` by
+    (gen_tac >> `~is_terminator ai.inst_opcode` by simp[is_terminator_def] >>
+     drule_all run_from_nonterm >>
+     simp[is_terminator_def, step_inst_non_invoke,
+          step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
+          GSYM word_add_n2w, Abbr `u`]) >>
+  `!f. run_from f ctx fn u = run_from f ctx fn v` by
+    (gen_tac >>
+     `lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb u.vs_inst_idx = SOME ci /\
+      ~is_terminator ci.inst_opcode` by
+       simp[Abbr `u`, update_var_def, is_terminator_def] >>
+     drule_all run_from_nonterm >>
+     simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+          eval_operand_def, Abbr `v`, Abbr `u`, update_var_def,
+          lookup_var_def, FLOOKUP_UPDATE]) >>
+  `fuel_outcome G ctx fn v 1
+    (\t. t.vs_current_bb = lc /\ t.vs_inst_idx = 0 /\
+         vars_kept N {} s t /\ lookup_var c t = SOME (n2w (k+1)))` by
+    (irule fuel_outcome_jump >> conj_tac >- simp[] >>
+     qexistsl_tac [`bb`, `ji`, `lc`] >>
+     simp[Abbr `v`, Abbr `u`, update_var_def, is_terminator_def,
+          step_inst_base_opcode_eqs, jump_to_def, vars_kept_def,
+          lookup_var_def, FLOOKUP_UPDATE] >>
+     rpt strip_tac >> Cases_on `x = c` >> Cases_on `x = vnext` >> gvs[]) >>
+  gvs[fuel_outcome_def] >> metis_tac[]
+QED
+
+Theorem sa_increment_bound[local]:
+  k < w2n (n2w n : 256 word) ==>
+  k+1 <= w2n (n2w n : 256 word) /\
+  w2n (n2w (k+1) : 256 word) = k+1 /\
+  w2n (n2w n : 256 word) - (k+1) < w2n (n2w n : 256 word) - k
+Proof
+  strip_tac >>
+  `w2n (n2w n : 256 word) < dimword (:256)` by simp[w2n_lt] >>
+  `k+1 < dimword (:256)` by decide_tac >>
+  gvs[w2n_n2w, LESS_MOD]
+QED
+
+(* The layout theorem is purely symbolic: its only non-definitional premise
+   is the slow-branch guard.  It uses compile_copy_sarray_typed_slow, whose
+   proof is one unfolding of compile_store_memory_typed_def. *)
+Theorem sarray_slow_structure[local]:
+  (!d s Wv E. fuel_ok Wv {} E
+      (compile_store_memory_typed ce d dt s st)) /\
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
+    ~is_abi_dynamic ce.ce_struct_fields dt) /\
+  compile_copy_sarray_typed ce dst dt src st n sa = ((),sz) ==>
+  cs_extends sa sz /\ sa.cs_next_var <= sz.cs_next_var /\
+  (cs_no_phi sa ==> cs_no_phi sz)
+Proof
+  strip_tac >>
+  drule_all compile_copy_sarray_typed_loop_layout >> strip_tac >>
+  `cs_extends si se /\ si.cs_next_var <= se.cs_next_var /\
+   (cs_no_phi si ==> cs_no_phi se)` by
+    (qpat_x_assum `!d s Wv E. _` (qspecl_then [`Var dp`, `Var sp`, `{}`, `{}`] mp_tac) >>
+     pure_rewrite_tac[fuel_ok_def] >> disch_then drule >> metis_tac[]) >>
+  (* These frontier facts also apply to the witnesses reused by the runtime
+     proof: the counter is below both ends of the recursive child. *)
+  `si.cs_next_var = sa.cs_next_var + 7 /\
+   sa.cs_next_var < si.cs_next_var /\ sa.cs_next_var < se.cs_next_var` by
+    (gvs[] >> decide_tac) >>
+  `cs_extends sa si` by
+    (simp[cs_extends_def] >>
+     qexists_tac `TAKE 2 si.cs_blocks` >> simp[]) >>
+  `cs_extends se sz` by
+    (simp[cs_extends_def] >> qexists_tac `[HD sz.cs_blocks]` >> simp[]) >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  conj_tac >- gvs[] >>
+  strip_tac >>
+  `cs_no_phi si` by
+    (simp[cs_no_phi_def, venomInstTheory.mk_inst_def] >>
+     gvs[cs_no_phi_def]) >>
+  `cs_no_phi se` by metis_tac[] >>
+  simp[cs_no_phi_def, venomInstTheory.mk_inst_def] >>
+  gvs[cs_no_phi_def]
+QED
+
+(* Body pointer prefix: its values may fail to evaluate, but no instruction
+   writes the loop counter or a variable from before the loop. *)
+Theorem sa_body_prefix[local]:
+  !G ctx fn N c lb vs vd ps pd ss ds src dst bb m0 m1 a0 a1 s.
+    callees_stable G ctx fn /\
+    lookup_block lb fn.fn_blocks = SOME bb /\
+    get_instruction bb 0 = SOME m0 /\
+    get_instruction bb 1 = SOME m1 /\
+    get_instruction bb 2 = SOME a0 /\
+    get_instruction bb 3 = SOME a1 /\
+    m0.inst_opcode = MUL /\ m0.inst_operands = [Var c; Lit ss] /\
+    m0.inst_outputs = [vs] /\
+    m1.inst_opcode = MUL /\ m1.inst_operands = [Var c; Lit ds] /\
+    m1.inst_outputs = [vd] /\
+    a0.inst_opcode = ADD /\ a0.inst_operands = [src; Var vs] /\
+    a0.inst_outputs = [ps] /\
+    a1.inst_opcode = ADD /\ a1.inst_operands = [dst; Var vd] /\
+    a1.inst_outputs = [pd] /\
+    ~MEM c [vs;vd;ps;pd] /\
+    EVERY (\x. ~var_below N x) [vs;vd;ps;pd] /\
+    s.vs_current_bb = lb /\ s.vs_inst_idx = 0 ==>
+    fuel_outcome G ctx fn s 0
+      (\t. t.vs_current_bb = lb /\ t.vs_inst_idx = 4 /\
+           vars_kept N {} s t /\ lookup_var c t = lookup_var c s)
+Proof
+  rpt strip_tac >>
+  drule_then (qspecl_then [`s`, `bb`, `m0`] mp_tac)
+    run_from_nonterm_stable >> simp[is_terminator_def] >>
+  disch_then (DISJ_CASES_THEN2
+    (qx_choose_then `t1` strip_assume_tac) assume_tac)
+  >- (drule_then (qspecl_then [`t1 with vs_inst_idx := 1`, `bb`, `m1`] mp_tac)
+        run_from_nonterm_stable >> simp[is_terminator_def] >>
+      disch_then (DISJ_CASES_THEN2
+        (qx_choose_then `t2` strip_assume_tac) assume_tac)
+      >- (drule_then (qspecl_then [`t2 with vs_inst_idx := 2`, `bb`, `a0`] mp_tac)
+            run_from_nonterm_stable >> simp[is_terminator_def] >>
+          disch_then (DISJ_CASES_THEN2
+            (qx_choose_then `t3` strip_assume_tac) assume_tac)
+          >- (drule_then (qspecl_then [`t3 with vs_inst_idx := 3`, `bb`, `a1`] mp_tac)
+                run_from_nonterm_stable >> simp[is_terminator_def] >>
+              disch_then (DISJ_CASES_THEN2
+                (qx_choose_then `t4` strip_assume_tac) assume_tac)
+              >- (simp[fuel_outcome_def] >> disj1_tac >>
+                  qexists_tac `t4 with vs_inst_idx := 4` >>
+                  gvs[vars_kept_def, venomStateTheory.lookup_var_def] >>
+                  metis_tac[]) >>
+              simp[fuel_outcome_def]) >>
+          simp[fuel_outcome_def]) >>
+      simp[fuel_outcome_def]) >>
+  simp[fuel_outcome_def]
+QED
 
 (* Given a bound for the element copy (the recursive call), the copy of a
    static array of n elements is bounded.  The slow path counts a fresh
