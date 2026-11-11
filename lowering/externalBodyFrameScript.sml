@@ -1363,6 +1363,8 @@ Proof
         drule >> simp[]) >>
   simp[bare_globals_layout_def] >> rpt conj_tac
   >~ [`ALOOKUP cenv.ce_modules`] >- metis_tac[body_inv_modules_aligned]
+  >~ [`ALL_DISTINCT (MAP FST cenv.ce_modules)`]
+  >- metis_tac[body_inv_modules_aligned]
   >~ [`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel _) _))`]
   >- metis_tac[body_inv_modules_aligned]
   >- (rpt strip_tac >>
