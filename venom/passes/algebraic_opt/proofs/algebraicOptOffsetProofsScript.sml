@@ -1,7 +1,7 @@
 Theory algebraicOptOffsetProofs
 Ancestors
   algebraicOptMainShapeProofs algebraicOptShapeProofs algebraicOptDefs venomWf venomInst
-  venomExecProps venomExecSemantics list
+  venomExecProps venomExecSemantics irSupplyFreshProps list
 
 Theorem ao_offset_cfg_edge:
   !fn a b.
@@ -243,7 +243,7 @@ Proof
      metis_tac[wf_function_def, fn_succs_closed_def]) >>
   drule ao_offset_function_ids_outputs >> strip_tac >>
   fs[wf_function_def, fn_inst_ids_distinct_def, fn_insts_def,
-     rtaSupplyProofsTheory.fn_insts_blocks_inst_ids, lambdify irSupplyTheory.block_ir_inst_ids_def]
+     irSupplyFreshPropsTheory.fn_insts_blocks_inst_ids, lambdify irSupplyTheory.block_ir_inst_ids_def]
 QED
 
 Theorem ao_offset_function_coverage:
@@ -259,7 +259,7 @@ Proof
   drule ao_offset_function_ids_outputs >> strip_tac >>
   gvs[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
       irSupplyTheory.fn_ir_inst_ids_def,
-      GSYM rtaSupplyProofsTheory.fn_insts_blocks_inst_ids, GSYM fn_insts_def] >>
+      GSYM irSupplyFreshPropsTheory.fn_insts_blocks_inst_ids, GSYM fn_insts_def] >>
   simp[irSupplyTheory.fn_ir_vars_def, irSupplyTheory.block_ir_vars_def,
        venomFnScheduleRunnerTheory.list_subset_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
   rpt strip_tac >>

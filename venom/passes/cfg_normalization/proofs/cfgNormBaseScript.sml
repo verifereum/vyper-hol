@@ -1553,50 +1553,6 @@ Proof
   Cases_on `inst.inst_opcode = PHI` >> simp[update_phis_for_split_def]
 QED
 
-Theorem phi_prefix_length_all_phi[local]:
-  !insts i. i < phi_prefix_length insts ==> (EL i insts).inst_opcode = PHI
-Proof
-  Induct_on `insts` >> simp[phi_prefix_length_def] >>
-  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  Cases_on `i` >> simp[]
-QED
-
-Theorem phi_prefix_length_at_nonphi[local]:
-  !insts. phi_prefix_length insts < LENGTH insts ==>
-    (EL (phi_prefix_length insts) insts).inst_opcode <> PHI
-Proof
-  Induct_on `insts` >> simp[phi_prefix_length_def] >>
-  rpt gen_tac >>
-  Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def]
-QED
-
-(* bb_well_formed implies phi_prefix_length < LENGTH: the last instruction
-   is always a terminator (not PHI), so PHI prefix must be shorter. *)
-Theorem bb_well_formed_phi_prefix_length_lt[local]:
-  !bb. bb_well_formed bb ==>
-    phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
-Proof
-  rpt strip_tac >>
-  CCONTR_TAC >>
-  `LENGTH bb.bb_instructions <= phi_prefix_length bb.bb_instructions`
-    by simp[arithmeticTheory.NOT_LT] >>
-  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions`
-    by simp[phi_prefix_length_le] >>
-  `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions`
-    by decide_tac >>
-  fs[bb_well_formed_def] >>
-  `~is_terminator PHI` by simp[is_terminator_def] >>
-  `is_terminator
-    (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode`
-    by metis_tac[listTheory.LAST_EL] >>
-  `LENGTH bb.bb_instructions <> 0` by
-    (Cases_on `bb.bb_instructions` >> simp[]) >>
-  `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions`
-    by simp[] >>
-  `bb.bb_instructions❲PRE (LENGTH bb.bb_instructions)❳.inst_opcode = PHI`
-    by metis_tac[phi_prefix_length_all_phi] >>
-  metis_tac[]
-QED
 
 (* Boundary lemma: run_block on update_phis_for_split bb = run_block on original bb
    when vs_prev_bb doesn't match the relabeled labels. *)
@@ -2249,17 +2205,6 @@ Proof
 QED
 (* If a non-PHI instruction is at position i in a well-formed block,
    all instructions from i onward are non-PHI (PHIs form a prefix) *)
-Theorem bb_non_phi_suffix[local]:
-  !bb i. bb_well_formed bb /\ i < LENGTH bb.bb_instructions /\
-    (EL i bb.bb_instructions).inst_opcode <> PHI ==>
-    !k. i <= k /\ k < LENGTH bb.bb_instructions ==>
-      (EL k bb.bb_instructions).inst_opcode <> PHI
-Proof
-  rw[bb_well_formed_def] >>
-  CCONTR_TAC >> gvs[] >>
-  `i < k \/ i = k` by simp[] >> gvs[] >>
-  metis_tac[]
-QED
 
 (* Once we reach a non-PHI instruction, update_phis_for_split doesn't change
    the remaining block, so exec_block gives the same result *)
@@ -5466,15 +5411,6 @@ Proof
   simp[phi_prefix_length_update_phis_for_split_eq]
 QED
 
-Theorem phi_prefix_length_non_phi_suffix[local]:
-  !bb. bb_well_formed bb ==>
-    !k. phi_prefix_length bb.bb_instructions <= k /\
-        k < LENGTH bb.bb_instructions ==>
-        (EL k bb.bb_instructions).inst_opcode <> PHI
-Proof
-  metis_tac[bb_non_phi_suffix, bb_well_formed_phi_prefix_length_lt,
-            phi_prefix_length_at_nonphi]
-QED
 
 Theorem execution_equiv_inst_idx_update[local]:
   !vars s1 s2 k.

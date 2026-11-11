@@ -14,5 +14,6 @@ Ancestors
   (* passes: effect and abort order in DFT, FMP aliasing, DSE checks *)
   dftEffectOrderTest dftAbortOrderTest fmpAliasProbe dsePassChecks
   mem2varWitness functionInlinerReturnPcWitness phiElimNonVacuity
+  assertCombinerNonVacuity
   (* execution of INVOKE with no arguments and of STOP after a call *)
   invokeEmptyArgs stopReturndata

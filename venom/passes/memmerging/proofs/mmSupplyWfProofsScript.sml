@@ -6,6 +6,7 @@
 Theory mmSupplyWfProofs
 Ancestors
   mmWfProofs mmTransform mmTransformSupply irSupply venomFnScheduleRunner venomWf venomInst
+  venomInstIdsProps
   mmScan list rich_list arithmetic
 
 (* Every input instruction becomes a list holding exactly one instruction
