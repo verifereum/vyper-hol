@@ -54,14 +54,19 @@ Theorem expr_can_mutate_not_pure[local]:
      !tops. ~supported_pure_fields tops kes)
 Proof
   ho_match_mp_tac exprLoweringTheory.expr_can_mutate_ind >>
-  rw[exprLoweringTheory.expr_can_mutate_def, supported_pure_expr_def]
+  rw[exprLoweringTheory.expr_can_mutate_def, supported_pure_expr_def] >>
+  metis_tac[]
 QED
 
 Theorem supported_target_pure_not_mutate:
   !tops bt cenv.
     supported_target_pure tops bt ==> ~expr_can_mutate cenv (target_to_expr bt)
 Proof
-  gen_tac >> Induct >>
+  gen_tac >>
+  `(!e:expr. T) /\
+   !bt cenv. supported_target_pure tops bt ==>
+             ~expr_can_mutate cenv (target_to_expr bt)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
   rw[supported_target_pure_def, stmtLoweringTheory.target_to_expr_def,
      exprLoweringTheory.expr_can_mutate_def] >>
   metis_tac[expr_can_mutate_not_pure]
