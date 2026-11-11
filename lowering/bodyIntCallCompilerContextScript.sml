@@ -61,7 +61,8 @@ Theorem intcall_interval_word_copy_loop:
 Proof
   strip_tac >> Cases_on `word_scale ll = 1` >>
   Cases_on `word_scale sl = 1` >>
-  simp[compile_word_copy_loop_def, comp_ignore_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def,
+       compile_word_copy_loop_base_def, comp_ignore_bind_def] >>
   rpt (rpt strip_tac >> irule intcall_interval_bind_floor >>
        simp[intcall_interval_fresh_label, intcall_interval_fresh_var,
             intcall_interval_new_block, intcall_interval_emit_inst,
