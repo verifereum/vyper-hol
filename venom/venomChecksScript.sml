@@ -16,3 +16,5 @@ Ancestors
   (* execution of INVOKE with no arguments, and return data after STOP and
      SELFDESTRUCT *)
   invokeEmptyArgs stopReturndata selfdestructReturnDataTest
+  (* the FMP capture and escape queries on concrete instructions *)
+  fmpAliasProbe

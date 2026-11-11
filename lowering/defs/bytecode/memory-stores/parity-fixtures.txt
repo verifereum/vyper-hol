@@ -3,6 +3,7 @@ c07_annassign_str_same_len
 c12_annassign_empty_bytes_ret
 a01_str_local_reassign
 a02_bytes_local_from_arg
+a11_local_string_from_intcall
 c03_annassign_empty_dynarray
 c04_annassign_empty_bytes
 a12_local_dynarray_from_arg
@@ -18,6 +19,7 @@ r07_assert_storage_string_reason
 p06_local_append_struct
 p15_local_append_bytes
 p16_return_tuple_bytes_widen
+p64_string_annassign_call
 e70_noData_live_mem2
 dec_from_memory2
 a09_local_array_from_storage

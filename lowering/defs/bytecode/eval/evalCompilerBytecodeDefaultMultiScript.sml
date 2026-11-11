@@ -174,7 +174,7 @@ Proof
   base_ml_resume >> base_ml_part "ml_ordered_pass" >> base_ml_resume >>
   base_ml_begin >> base_ml_part "ml_one_pass_liveat" >> base_ml_part "ml_one_pass_used" >>
   base_ml_resume >> base_ml_part "ml_ordered_pass" >> base_ml_resume >>
-  base_ml_finish >> entry_closed_pair_let >>
+  base_ml_finish >> entry_closed_pair_let >> entry_compute_once "ml_escaped_allocas" >>
   base_ml_keys_tick >> base_ml_keys_tick >> base_ml_keys_tick >> base_ml_keys_tick >> base_ml_keys_tick >>
   base_ml_keys_tick >> base_ml_keys_tick >> base_ml_keys_tick >> base_ml_keys_tick >> base_ml_keys_tick >>
   base_ml_keys_tick >> base_ml_keys_tick >> base_ml_keys_tick >> base_ml_keys_tick >> base_ml_keys_tick >>

@@ -116,6 +116,7 @@ val fixtures = [
   ("task090_external_dynamic_program", "external_dynamic.hex"),
   ("task090_external_scalars_program", "external_scalars.hex"),
   ("task090_external_struct_program", "external_struct.hex"),
+  ("task090_internal_bytes_call_program", "internal_bytes_call.hex"),
   ("task090_internal_struct_call_program", "internal_struct_call.hex"),
   ("task090_internal_tuple_call_program", "internal_tuple_call.hex"),
   ("task090_send_value_program", "send_value.hex"),

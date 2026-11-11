@@ -3,10 +3,10 @@
 ## Overview
 
 This runner checks that `compile_vyper` produces exactly the deployment and
-runtime bytes of the pinned Python compiler for each of the 94 retained
+runtime bytes of the pinned Python compiler for each of the 95 retained
 fixtures in `../python-o1-no-asm-opt/`. The equations `EVAL` uses for
 `compile_vyper` are printed by EmitML and compiled, so the result is trusted
-rather than kernel-checked (see Trust below). It runs all 94 fixtures in
+rather than kernel-checked (see Trust below). It runs all 95 fixtures in
 about half a second.
 
 ## Files

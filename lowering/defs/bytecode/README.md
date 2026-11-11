@@ -1,7 +1,7 @@
 # O1 bytecode parity fixtures
 
 This directory contains the independent Python oracle for the frozen 101-fixture
-HOL-supported-subset corpus (7 of them not parity-checked; see [`pending-5127-port.md`](pending-5127-port.md)). It includes the original 23-fixture milestone and
+HOL-supported-subset corpus (6 of them not parity-checked; see [`pending-5127-port.md`](pending-5127-port.md)). It includes the original 23-fixture milestone and
 78 subset/interaction fixtures.
 
 - `python-o1-no-asm-opt-sources/` contains Vyper source counterparts to the HOL

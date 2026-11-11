@@ -35,6 +35,13 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation p15_local_append_bytes))) >> EVAL_TAC
 QED
 
+val p64_string_annassign_call = memoryStoreWitnessLib.evaluate fixture_root "p64_string_annassign_call"
+Theorem p64_string_annassign_call_matches_python_oracle:
+  ^(#term p64_string_annassign_call) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "p64_string_annassign_call")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation p64_string_annassign_call))) >> EVAL_TAC
+QED
 
 val e70_noData_live_mem2 = memoryStoreWitnessLib.evaluate fixture_root "e70_noData_live_mem2"
 Theorem e70_noData_live_mem2_matches_python_oracle:
@@ -43,7 +50,6 @@ Theorem e70_noData_live_mem2_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation e70_noData_live_mem2))) >> EVAL_TAC
 QED
-
 
 val dec_from_memory2 = memoryStoreWitnessLib.evaluate fixture_root "dec_from_memory2"
 Theorem dec_from_memory2_matches_python_oracle:

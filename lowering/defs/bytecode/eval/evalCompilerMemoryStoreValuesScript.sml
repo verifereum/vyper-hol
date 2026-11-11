@@ -27,6 +27,13 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation a02_bytes_local_from_arg))) >> EVAL_TAC
 QED
 
+val a11_local_string_from_intcall = memoryStoreWitnessLib.evaluate fixture_root "a11_local_string_from_intcall"
+Theorem a11_local_string_from_intcall_matches_python_oracle:
+  ^(#term a11_local_string_from_intcall) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "a11_local_string_from_intcall")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation a11_local_string_from_intcall))) >> EVAL_TAC
+QED
 
 val c03_annassign_empty_dynarray = memoryStoreWitnessLib.evaluate fixture_root "c03_annassign_empty_dynarray"
 Theorem c03_annassign_empty_dynarray_matches_python_oracle:

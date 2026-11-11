@@ -328,6 +328,8 @@ fun base_ml_keys_tick g = let
   fun selected tm = base_ml_keys_fold tm andalso List.null (free_vars tm)
   fun advance tm =
     if listSyntax.is_nil (rand tm) then REWR_CONV (cj 1 listTheory.FOLDL) tm
+    else if not (listSyntax.is_cons (rand tm)) then
+      RAND_CONV computeLib.EVAL_CONV tm
     else (REWR_CONV (cj 2 listTheory.FOLDL) THENC
       RATOR_CONV (RAND_CONV computeLib.EVAL_CONV)) tm
 in if can (find_term selected) (lhs (snd g)) then

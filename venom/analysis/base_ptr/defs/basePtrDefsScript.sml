@@ -33,7 +33,7 @@
 
 Theory basePtrDefs
 Ancestors
-  memLocDefs cfgDefs dfIterateDefs venomEffects venomState
+  memLocDefs cfgDefs dfIterateDefs venomEffects venomState callLayoutDefs
 
 (* ===== Pointer Type ===== *)
 
@@ -539,4 +539,51 @@ Definition bp_get_read_location_def:
            | _ => ml_empty)
         else ml_empty
     | AddrSp_Immutables => ml_empty  (* ILOAD reads via Memory case *)
+End
+
+(* ===== Escaping operands =====
+   Python base_ptr_analysis.escaping_operands: the variable operands whose
+   pointer value leaves SSA tracking, so it can re-enter through memory where
+   this analysis cannot see it.  Shared by FMP reclaim (dynamic allocations)
+   and memory liveness (static allocations). *)
+
+Definition fmp_transparent_opcode_def:
+  fmp_transparent_opcode op <=>
+    op = ASSIGN \/ op = ADD \/ op = SUB \/ op = PHI
+End
+
+Definition fmp_access_operands_def:
+  fmp_access_operands NONE = [] /\
+  fmp_access_operands (SOME a) =
+    [a.iao_ofst] ++ OPTION_TO_LIST a.iao_size ++
+    (if a.iao_max_size = a.iao_size then []
+     else OPTION_TO_LIST a.iao_max_size)
+End
+
+Definition fmp_safe_operands_def:
+  fmp_safe_operands inst =
+    fmp_access_operands (mem_read_ops inst) ++
+    fmp_access_operands (mem_write_ops inst)
+End
+
+Definition fmp_pointer_propagation_def:
+  fmp_pointer_propagation op <=>
+    fmp_transparent_opcode op \/ MEM op [BUMP; DALLOCA; ALLOCA]
+End
+
+(* A comparison yields a boolean, not a value derived from its operands, so a
+ * pointer compared (e.g. in an ABI-decode bounds check) does not escape. *)
+Definition fmp_comparison_opcode_def:
+  fmp_comparison_opcode op <=> MEM op [LT; GT; SLT; SGT; EQ; ISZERO]
+End
+
+(* Return occurrences, not a set: a safe address occurrence does not excuse
+ * another occurrence used as a stored value. *)
+Definition fmp_escaping_operands_def:
+  fmp_escaping_operands inst =
+    if fmp_pointer_propagation inst.inst_opcode \/
+       fmp_comparison_opcode inst.inst_opcode then [] else
+    FILTER (\v.
+      LENGTH (FILTER ($= (Var v)) (fmp_safe_operands inst)) <
+      LENGTH (FILTER ($= v) (inst_uses inst))) (inst_uses inst)
 End
