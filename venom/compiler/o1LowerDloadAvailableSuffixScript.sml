@@ -297,3 +297,39 @@ Proof
   qexistsl_tac [`seq`, `V`, `d`, `len'`, `len'`, `off'`, `off'`, `ri'`] >>
   simp[]
 QED
+
+Theorem ld_assign_prefix_abort_reason:
+  !d s bb ri fuel C reason s1.
+  (!j ii. j < d /\ get_instruction bb (s.vs_inst_idx + j) = SOME ii ==>
+           ii.inst_opcode = ASSIGN) /\
+  get_instruction bb (s.vs_inst_idx + d) = SOME ri /\
+  ri.inst_opcode = REVERT /\
+  exec_block fuel C bb s = Abort reason s1 ==>
+  reason = Revert_abort
+Proof
+  Induct_on `d`
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      qpat_x_assum `exec_block fuel C bb s = _` mp_tac >>
+      simp[Once exec_block_def, step_inst_non_invoke] >>
+      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+      simp[AllCaseEqs()] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- (qpat_x_assum `exec_block fuel C bb s = _` mp_tac >>
+      simp[Once exec_block_def]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME cur` >>
+  `cur.inst_opcode = ASSIGN` by
+    (qpat_x_assum `!j ii. _` (qspec_then `0` mp_tac) >>
+     simp[NoAsms] >> metis_tac[]) >>
+  qpat_x_assum `exec_block fuel C bb s = _` mp_tac >>
+  simp[Once exec_block_def, step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[AllCaseEqs(), is_terminator_def] >> strip_tac >>
+  first_x_assum (drule_at (Pat `exec_block _ _ _ _ = _`)) >>
+  disch_then (qspec_then `ri` mp_tac) >>
+  impl_tac
+  >- (gvs[arithmeticTheory.ADD_CLAUSES] >> rpt strip_tac >>
+      qpat_x_assum `!j ii. _` (qspec_then `SUC j` mp_tac) >>
+      simp[arithmeticTheory.ADD_CLAUSES]) >>
+  simp[]
+QED
