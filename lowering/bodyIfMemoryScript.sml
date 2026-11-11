@@ -58,7 +58,7 @@ Theorem body_if_mem_case:
        body_stmts_mem_ok cx ss2) /\ body_expr_mem_ok cx e ==>
     body_stmt_mem_ok cx (If e ss1 ss2)
 Proof
-  rpt gen_tac >> strip_tac >> simp[Once body_stmt_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >> simp[Once body_stmt_mem_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   rpt gen_tac >> strip_tac >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       stmt_exprs_ok_def, supported_stmt_expr_exists_def, optionTheory.IS_SOME_EXISTS] >>
@@ -93,11 +93,11 @@ Proof
     (drule_all expr_body_pre_eval >> simp[]) >>
   drule expr_sim_inv_push_scope >> strip_tac >>
   rpt (qpat_x_assum `body_stmts_mem_ok _ _`
-         (strip_assume_tac o REWRITE_RULE [body_stmts_mem_ok_def])) >>
+         (strip_assume_tac o REWRITE_RULE [body_stmts_mem_ok_def, body_stmt_safe_def, body_stmts_safe_iff])) >>
   Cases_on `b` >> fs[] >> first_x_assum irule >>
   gvs[stmts_exprs_ok_EVERY, stmt_exprs_ok_def,
       allocLimitsTheory.alloc_limits_stmt_def,
-      compileVyperTheory.stmt_valued_return_def] >>
+      compileVyperTheory.stmt_valued_return_def, GSYM optionTheory.IS_SOME_EXISTS] >>
   metis_tac[call_evaluation_safe_append_left, call_evaluation_safe_append_right]
 QED
 

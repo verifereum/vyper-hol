@@ -3,7 +3,7 @@ Theory bodyMemoryPreds
 Ancestors
   stmtSimZero stmtSimPass stmtSimJumpMem gasContext
   bodyMemoryDefs bodyExprMemory stmtSimDefs
-  bodySim exprSimHypsDefs supportedExprTraverse supportedStmtTraverse
+  bodySim bodyExprPreFacts exprSimHypsDefs supportedExprTraverse supportedStmtTraverse
   supportedStmts vyperTypeCallGraph
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
@@ -21,6 +21,7 @@ Definition body_stmt_mem_ok_def:
   body_stmt_mem_ok cx s <=>
     !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+      body_stmt_safe tops s /\
       (!target. supported_stmt_expr_exists
          (expr_abi_decode_target_root target) s ==>
          occurs_abi_decode_target target tops) /\
@@ -37,6 +38,7 @@ Definition body_stmts_mem_ok_def:
   body_stmts_mem_ok cx ss <=>
     !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+      body_stmts_safe tops ss /\
       (!target. supported_stmts_expr_exists
          (expr_abi_decode_target_root target) ss ==>
          occurs_abi_decode_target target tops) /\
@@ -131,7 +133,7 @@ Theorem body_stmts_mem_projection:
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
 Proof
-  rw[body_stmts_mem_ok_def] >> metis_tac[]
+  rw[body_stmts_mem_ok_def] >> metis_tac[supported_stmts_body_safe]
 QED
 
 Theorem body_pass_mem_ok:

@@ -146,6 +146,8 @@ Proof
   `same_frame cenv bc` by
     (drule_then irule declare_local_same_frame >> simp[]) >>
   `body_inv tops ctx bc cx` by metis_tac[body_inv_same_frame] >>
+  `body_stmts_safe tops stmts` by
+    metis_tac[supported_stmts_body_safe] >>
   qpat_x_assum `body_stmts_mem_ok _ _`
     (irule o REWRITE_RULE [body_stmts_mem_ok_def]) >>
   simp[] >> rpt conj_tac

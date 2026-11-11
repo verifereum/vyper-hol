@@ -108,6 +108,8 @@ Proof
         (drule_then irule declare_local_same_frame >> simp[]) >>
       `value_has_type tyv (IntV (n1 + &j))` by
         (irule range_value_has_type >> simp[] >> qexists_tac `n2` >> simp[]) >>
+      `body_stmts_safe tops stmts` by
+        metis_tac[supported_stmts_body_safe] >>
       qpat_x_assum `body_stmts_mem_ok _ _`
         (irule o REWRITE_RULE [body_stmts_mem_ok_def]) >>
       simp[] >> rpt conj_tac

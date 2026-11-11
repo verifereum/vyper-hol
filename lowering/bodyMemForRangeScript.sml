@@ -189,6 +189,8 @@ Resume body_for_range_mem[body]:
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target)
               stmts ==> occurs_abi_decode_target target tops` by
     fs[supported_stmt_expr_exists_def] >>
+  `body_stmts_safe tops stmts` by
+    metis_tac[supported_stmts_body_safe] >>
   qpat_x_assum `body_stmts_mem_ok _ _`
     (irule o REWRITE_RULE [body_stmts_mem_ok_def]) >>
   simp[] >> rpt conj_tac
