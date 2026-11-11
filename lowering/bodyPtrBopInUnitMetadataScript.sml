@@ -1,7 +1,20 @@
 Theory bodyPtrBopInUnitMetadata
 Ancestors
-  bodyPtrBopInLocalSuffix bodyPtrBopInSourceFrame supportedProgram
-  compileVyper vyperCompiler
+  exprLowering bodyPtrBopInCompareBoundary finite_map
+  bodyPtrBopInSourceFrame supportedProgram compileVyper vyperCompiler
+
+Definition equality_fixture_def:
+  equality_fixture = Builtin (BaseT BoolT) (Bop Eq)
+    [Literal (BaseT (UintT 256)) (StringL "a");
+     Literal (BaseT (UintT 256)) (StringL "b")]
+End
+
+Definition empty_compile_fixture_def:
+  empty_compile_fixture =
+    <| cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+       cs_current_bb := "entry"; cs_current_insts := [];
+       cs_blocks := []; cs_data_sections := [] |>
+End
 
 (* Closed source/package fixtures cache finite metadata, not runtime semantics. *)
 Definition equality_tops_def:

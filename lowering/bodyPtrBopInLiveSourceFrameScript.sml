@@ -40,7 +40,7 @@ Theorem live_membership_body_pre:
   expr_body_pre probe_cenv probe_live_cx probe_env probe_expr probe_es
 Proof
   simp[exprSimHypsDefsTheory.expr_body_pre_def, live_source_invariant,
-       probe_expr_def, string_membership_expression_typing_probe] >>
+       probe_expr_def, word_membership_expression_typing_probe] >>
   EVAL_TAC >> simp[dimword_def, venomMemPropsTheory.dimindex_256] >>
   qexists `[]` >>
   simp[vyperInterpreterTheory.lookup_function_def,
@@ -62,5 +62,8 @@ Proof
        vyperValueTheory.compatible_bound_def,
        vyperValueOperationTheory.evaluate_literal_def,
        vyperStateTheory.lift_sum_def, vyperASTTheory.expr_type_def,
-       probe_make_array_builtin, probe_in_builtin]
+       probe_make_array_builtin, probe_membership_type,
+       vyperStateTheory.lift_option_type_def,
+       vyperValueOperationTheory.evaluate_membership_def,
+       vyperValueOperationTheory.evaluate_in_array_def]
 QED

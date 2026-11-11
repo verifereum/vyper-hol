@@ -6,6 +6,7 @@ Ancestors bodyPtrBopInRuntimeContinuation bodyPtrBopInSourceTyping
   bodyPtrBopInRuntimeCompiler bodyPtrBopInHeaderCode exprSimBopRestWordBasics
   exprSimSource exprLoweringProps fragExec freshWrites exprBopSimProps
   bodyPtrBopInMixed bodyPtrBopInMixedAdapter bodyPtrBopInSourceOrigin
+  externalEntryShape
   gasExemptCert bodyPtrDefs vyperState fragGasPathPtr gasSummaryComposePtr vyperAST
 Libs pairLib
 
@@ -59,8 +60,12 @@ Proof
   conj_tac
   >- (qspecl_then [`fn`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `es2`, `sc`, `s1`, `s2`,
                    `ctx`] mp_tac wb_frame_trans >> simp[]) >>
-  mp_tac (Q.INST [`func` |-> `fn`, `es0` |-> `es`, `es'` |-> `es1`, `sb` |-> `sc`]
-            ghost_kept_wb_trans) >> simp[]
+  qpat_assum `ghost_kept cenv es1 sc G1 tn1 s1 G2 tn2`
+    (mp_then (Pos last) mp_tac wordArgsPtrTheory.ghost_kept_wb_trans) >>
+  disch_then irule >>
+  first_assum (irule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  fs[]
 QED
 
 Theorem membership_nonliteral_tail_extends:
@@ -68,18 +73,10 @@ Theorem membership_nonliteral_tail_extends:
   compile_var_array_membership cenv needle vv (ArrayT et bd) isin sa = (op,sb) ==>
   cs_extends sa sb
 Proof
-  Cases_on `bd` >> strip_tac
-  >- (gvs[rest_word_fixed_dispatch] >>
-      drule membership_runtime_loop_extends >> simp[]) >>
-  qpat_x_assum `compile_var_array_membership _ _ _ _ _ _ = _` mp_tac >>
-  rewrite_tac[membership_dynamic_compile_split] >>
-  pure_once_rewrite_tac[comp_bind_def] >> rewrite_tac[LET_THM] >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  rename1 `compile_array_membership_loop _ _ _ _ _ _ _ _ mid = _` >>
-  `cs_extends sa mid` by
-    (irule membership_runtime_header_extends >> goal_assum (drule_at Any)) >>
-  drule membership_runtime_loop_extends >>
-  metis_tac[cs_extends_trans]
+  strip_tac >>
+  qspecl_then [`cenv`, `needle`, `vv`, `ArrayT et bd`, `isin`, `sa`] mp_tac
+    externalEntryShapeTheory.compile_var_array_membership_labels >>
+  simp[]
 QED
 
 
