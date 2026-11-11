@@ -312,7 +312,7 @@ Proof
     (irule return_allocated_wb_frame >>
      qpat_assum `wb_frame ce es ee sa s0 u` (irule_at Any) >>
      qpat_assum `abi_malformed_destination _ _ _ _ _ _ u` (irule_at Any) >>
-     qexistsl_tac [`ctx`, `cx`, `abi_malformed_scratch_sites st en func`, `st`] >>
+     qexistsl_tac [`st`, `abi_malformed_scratch_sites st en func`, `cx`, `ctx`] >>
      fs[stmt_state_rel_def, state_rel_def, ci_mono_def,
        abi_malformed_scratch_sites_def] >> metis_tac[LESS_EQ_TRANS]) >>
   `d < dimword (:256)` by fs[abi_malformed_entry_def] >>
