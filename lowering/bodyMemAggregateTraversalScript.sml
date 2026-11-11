@@ -206,6 +206,13 @@ Proof
   qexistsl_tac [`v`, `q`] >> asm_rewrite_tac[]
 QED
 
+(* Closes one side condition of a window frame: the window disjunction by
+   arithmetic, the alloca-disjointness premise from the matching hypothesis. *)
+fun window_side_tac (asl, w) =
+  (if is_disj w then decide_tac
+   else rpt strip_tac >> first_x_assum irule >> rpt conj_tac >>
+     first_assum ACCEPT_TAC) (asl, w)
+
 Theorem aggregate_tuple_tail_outcome_mem[local]:
   gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1) [] (INL v) es1 (OK q) /\
   es1.gas_obs = [] /\
@@ -341,13 +348,9 @@ Proof
   qspecl_then [`ce`, `func`, `es`, `es1`, `sa`, `ss`, `s0`, `q`, `r`, `b`, `asz`]
     mp_tac aggregate_pure_frame_trans >>
   (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     rpt strip_tac >>
-     (first_x_assum irule >- decide_tac >>
-      rpt strip_tac >> first_x_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC))) >>
+     rpt strip_tac >> first_x_assum irule >> rpt conj_tac >> window_side_tac)) >>
   disch_then (fn th => conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
-    rpt strip_tac >>
-    (irule (CONJUNCT2 th) >- decide_tac >>
-     rpt strip_tac >> first_x_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC))
+    rpt strip_tac >> irule (CONJUNCT2 th) >> rpt conj_tac >> window_side_tac)
 QED
 
 Theorem aggregate_tuple_success_continuation_mem[local]:
