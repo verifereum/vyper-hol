@@ -58,6 +58,25 @@ Proof
   conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
   rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
   rpt (qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac) >>
+  `~EXISTS expr_has_effect es ==> pure_frame cenv func st sa s0 t'` by
+    (strip_tac >>
+     qpat_x_assum `_ ==> (!n lb lsz. local_region _ _ _ _ _ _ ==> _) /\ _` mp_tac >>
+     (impl_tac >- (qpat_x_assum `~EXISTS _ _` mp_tac >>
+        simp_tac (srw_ss()) [listTheory.EVERY_MAP, listTheory.NOT_EXISTS,
+                             combinTheory.o_DEF])) >>
+     strip_tac >>
+     qpat_assum `FLOOKUP t.vs_allocas _ = SOME (b,_)` (fn th =>
+       qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> _` (fn th2 =>
+         assume_tac (MATCH_MP th2 th))) >>
+     irule (Q.SPECL [`cenv`, `func`, `st`, `sa`, `sm`, `s0`, `t`, `t'`]
+       aggregate_pure_frame_buffer) >>
+     qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+     qpat_assum `FLOOKUP t'.vs_allocas sa.cs_next_id = SOME (b,_)` (irule_at Any) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!p n. _ /\ (!i c sz. _) ==> _` irule >>
+     pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+     strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   drule_at (Pat `expr_body_pre _ _ _ _ _`) aggregate_completed_buffer_result >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
   disch_then match_mp_tac >>
@@ -114,6 +133,25 @@ Proof
   `val_in_memory (ArrayTV tv n) (ArrayV (make_array_value tv n vs)) b t'.vs_memory` by
     (irule array_from_dense_memory >> simp[] >> Cases_on `n` >> gvs[]) >>
   rpt (qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac) >>
+  `~EXISTS expr_has_effect es ==> pure_frame cenv func st sa s0 t'` by
+    (strip_tac >>
+     qpat_x_assum `_ ==> (!n lb lsz. local_region _ _ _ _ _ _ ==> _) /\ _` mp_tac >>
+     (impl_tac >- (qpat_x_assum `~EXISTS _ _` mp_tac >>
+        simp_tac (srw_ss()) [listTheory.EVERY_MAP, listTheory.NOT_EXISTS,
+                             combinTheory.o_DEF])) >>
+     strip_tac >>
+     qpat_assum `FLOOKUP t.vs_allocas _ = SOME (b,_)` (fn th =>
+       qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> _` (fn th2 =>
+         assume_tac (MATCH_MP th2 th))) >>
+     irule (Q.SPECL [`cenv`, `func`, `st`, `sa`, `sm`, `s0`, `t`, `t'`]
+       aggregate_pure_frame_buffer) >>
+     qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+     qpat_assum `FLOOKUP t'.vs_allocas sa.cs_next_id = SOME (b,_)` (irule_at Any) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!p n. _ /\ (!i c sz. _) ==> _` irule >>
+     pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+     strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   drule_at (Pat `expr_body_pre _ _ _ _ _`) aggregate_completed_buffer_result >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
   disch_then match_mp_tac >>

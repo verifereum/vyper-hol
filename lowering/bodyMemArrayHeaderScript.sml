@@ -66,7 +66,7 @@ Theorem array_header_mem_entry:
     regions_disjoint io (type_memory_size tv) b 32) /\
   sh = (mstore b (n2w len) s0 with vs_inst_idx := SUC s0.vs_inst_idx) ==>
   gas_marked_path T ctx func s0 0 (OK sh) /\ alloca_history func sh /\
-  stmt_state_rel ctx func ce cx es sh /\ locals_kept ce es s0 sh /\
+  stmt_state_rel ctx func ce cx es sh /\ locals_kept ce es es s0 sh /\
   ~sh.vs_halted /\ sh.vs_current_bb = sm.cs_current_bb /\
   sh.vs_inst_idx = LENGTH sm.cs_current_insts /\
   lookup_var x sh = SOME (n2w b) /\

@@ -130,7 +130,18 @@ Theorem aggregate_tuple_head_tail_mem[local]:
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es1 tv vv t1 /\
   t1.vs_current_bb = sm.cs_current_bb /\
   t1.vs_inst_idx = LENGTH sm.cs_current_insts /\ alloca_history func t1 ==>
-  ?v q. gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1) [] (INL v) es1 (OK q) /\
+  ?v q. (~expr_has_effect e /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        b + asz <= lb \/ lb + lsz <= b) ==>
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+     !p n. (p + n <= b \/ b + asz <= p) /\
+       (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+       mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1) [] (INL v) es1 (OK q) /\
     val_in_memory htv v (b+off) q.vs_memory /\
     stmt_state_rel ctx func ce cx es1 q /\
     (!z a. not_fresh_at sm z /\ lookup_var z t1 = SOME a ==> lookup_var z q = SOME a) /\
@@ -213,7 +224,16 @@ Theorem aggregate_tuple_tail_outcome_mem[local]:
         aid < ss.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es1.scopes q name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) /\
-      locals_kept ce es1 es2 q r /\ alloca_history func r /\ q.vs_alloca_next <= r.vs_alloca_next)
+      locals_kept ce es1 es2 q r /\ alloca_history func r /\ q.vs_alloca_next <= r.vs_alloca_next /\
+      (~EXISTS expr_has_effect args ==>
+        (!n lb lsz. local_region ce es1.scopes q n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz q.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             ss.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit) /\
   vv_post ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
   ci_mono sa sm /\ ci_mono sa ss /\
@@ -237,7 +257,16 @@ Theorem aggregate_tuple_tail_outcome_mem[local]:
   t1.vs_alloca_next <= q.vs_alloca_next /\
   fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
   (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
-  expr_sim_inv ce cx env es1 /\ lookup_var x t1 = SOME (n2w b) ==>
+  expr_sim_inv ce cx env es1 /\ lookup_var x t1 = SOME (n2w b) /\
+  (~expr_has_effect e ==>
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+     !p n. (p + n <= b \/ b + asz <= p) /\
+       (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+       mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (read_result cx tv) (\v. bind (eval_exprs cx args) (\vs. return (v::vs)))) (es1,t1)
     (\res es2 r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
@@ -253,7 +282,16 @@ Theorem aggregate_tuple_tail_outcome_mem[local]:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es es2 s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
+      locals_kept ce es es2 s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
+      (~EXISTS expr_has_effect (e::args) ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
   strip_tac >>
@@ -280,11 +318,26 @@ Proof
   disch_then (qspec_then `ss` mp_tac) >>
   disch_then (qspecl_then [`sb`, `ee`, `env`, `asz`, `inst.inst_id`] mp_tac) >>
   (impl_tac >- (fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >> asm_rewrite_tac[])) >>
-  strip_tac >> fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
-  conj_tac
-  >- (rpt strip_tac >> qpat_x_assum `!p n. _ ==> mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` irule >> simp[]) >>
-  rpt strip_tac >> qpat_x_assum `!i p n. _ ==> mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` irule >>
-  asm_rewrite_tac[] >> qexists_tac `aid` >> simp[]
+  strip_tac >> pure_rewrite_tac[CONJ_ASSOC] >> conj_tac
+  >- (fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+      conj_tac
+      >- (rpt strip_tac >> qpat_x_assum `!p n. _ ==> mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` irule >> simp[]) >>
+      rpt strip_tac >> qpat_x_assum `!i p n. _ ==> mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` irule >>
+      asm_rewrite_tac[] >> qexists_tac `aid` >> simp[]) >>
+  rewrite_tac[listTheory.EXISTS_DEF, DE_MORGAN_THM] >> strip_tac >>
+  qpat_x_assum `~expr_has_effect e ==> _` (drule_then strip_assume_tac) >>
+  qpat_x_assum `~EXISTS expr_has_effect args ==> _` (drule_then strip_assume_tac) >>
+  `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z q = SOME w` by
+    (`!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t1 = SOME w` by
+       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+        rewrite_tac[loweringPostsTheory.vv_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `!z a. not_fresh_at sm z /\ lookup_var z t1 = SOME a ==> _` irule >>
+     conj_tac >- (irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> fs[ci_mono_def]) >>
+     metis_tac[]) >>
+  `sa.cs_next_id <= ss.cs_next_id` by fs[ci_mono_def] >>
+  irule aggregate_pure_frame_trans >> qexistsl_tac [`es1`, `ss`, `q`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem aggregate_tuple_success_continuation_mem[local]:
@@ -323,7 +376,16 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
           aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
           (!name lo sz. local_region ce es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-        locals_kept ce es es' s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
+        locals_kept ce es es' s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
+        (~EXISTS expr_has_effect args ==>
+          (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+            mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+          !p n. (p + n <= b \/ b + asz <= p) /\
+            (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+               sa.cs_next_id <= i.inst_id /\
+               FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+               regions_disjoint p n c sz) ==>
+            mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
       (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)) /\
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
   expr_body_pre ce cx env h es /\ body_exprs_mem_ok cx (h::args) /\
@@ -371,7 +433,16 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es es2 s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
+      locals_kept ce es es2 s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
+      (~EXISTS expr_has_effect (h::args) ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
   strip_tac >>
@@ -388,6 +459,29 @@ Proof
   disch_then (drule_at (Pat `FLOOKUP s0.vs_allocas _ = _`)) >>
   disch_then (qspec_then `t` mp_tac) >>
   (impl_tac >- (simp[] >> asm_rewrite_tac[])) >> strip_tac >>
+  `!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+    b+asz <= lo \/ lo+sz <= b` by
+    (rpt strip_tac >>
+     `not_local_ptr ce es.scopes x` by metis_tac[] >>
+     qpat_assum `stmt_state_rel ctx func ce cx es s0`
+       (mp_then (Pat `stmt_state_rel _ _ _ _ _ _`) mp_tac
+         (SRULE [] (Q.INST [`off` |-> `0`, `n` |-> `asz`] aggregate_alloca_slice_excludes_local))) >>
+     disch_then (drule_at (Pat `FLOOKUP s0.vs_allocas _ = _`)) >>
+     disch_then (drule_at (Pat `inst.inst_outputs = _`)) >>
+     disch_then (drule_at (Pat `local_region _ _ _ _ _ _`)) >> simp[]) >>
+  `~expr_has_effect h ==>
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+         mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+      !p n. (p + n <= b \/ b + asz <= p) /\
+        (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+           sa.cs_next_id <= inst.inst_id /\
+           FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+           regions_disjoint p n c sz) ==>
+        mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory` by
+    (strip_tac >>
+     qpat_x_assum `~expr_has_effect h /\ MAP FDOM _ = _ /\ _ ==> _` mp_tac >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
     metis_tac[expr_sim_inv_memory_size] >>
   fs[] >>
@@ -446,7 +540,17 @@ Theorem aggregate_make_tuple_body_sim_mem:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es es' s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
+      locals_kept ce es es' s0 r /\
+      alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
+      (~EXISTS expr_has_effect args ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
   Induct_on `args`
