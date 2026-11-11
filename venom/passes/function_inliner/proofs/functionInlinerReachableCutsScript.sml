@@ -211,6 +211,19 @@ Proof
   pairarg_tac >> simp[]
 QED
 
+Theorem inline_cell_prefix_counter:
+  !e bb cb j. j <= LENGTH cb.bb_instructions ==>
+    SND (inline_cell_prefix e bb cb j) =
+      MIN (LENGTH (FILTER (\i. is_param_opcode i.inst_opcode)
+        (TAKE j cb.bb_instructions)))
+        (LENGTH (rotate_invoke_ops
+          (EL e.ise_index bb.bb_instructions).inst_operands))
+Proof
+  simp[inline_cell_prefix_def,
+       functionInlinerSiteSimulationTheory.inline_rewrite_prefix_counter,
+       arithmeticTheory.MIN_DEF]
+QED
+
 Definition inline_cell_location_def:
   inline_cell_location c counter =
     <|il_block := c.ic_block; il_phase := InlineAtInstruction c.ic_index;
