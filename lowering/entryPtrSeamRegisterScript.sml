@@ -251,6 +251,59 @@ Proof
   metis_tac[]
 QED
 
+Theorem registration_aggregate_phases:
+  compile_register_positional_args ce [(name,F,dyn,sz,di)] (4+h) st = (ce',last) /\
+  FLOOKUP ce.ce_vars name = SOME loc /\
+  var_location_memory_size loc = SOME n ==>
+  ?buf a src first.
+    compile_alloc_buffer n st = (buf,a) /\
+    ce' = ce with ce_vars updated_by
+      (\m. m |+ (name,PtrVar buf.buf_operand n)) /\
+    compile_getelemptr_abi (Lit 4w) dyn h CALLDATALOAD (Lit 0w) (Lit 0w)
+      a = (src,first) /\
+    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD
+      (Lit 0w) (Lit 0w) di first = ((),last)
+Proof
+  strip_tac >> drule_all registration_aggregate_prepare_phases >>
+  strip_tac >> qexistsl_tac [`buf`, `a`, `src`, `first`] >> simp[] >>
+  Cases_on `dyn` >>
+  gvs[abiEncoderTheory.compile_getelemptr_abi_def,
+      abiEncoderTheory.compile_abi_dec_addr_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def]
+QED
+
+Theorem registration_primitive_phases:
+  compile_register_positional_args ce [(name,T,F,sz,DecPrimWord clamp)] (4+h) st =
+    (ce',last) /\
+  FLOOKUP ce.ce_vars name = SOME loc /\
+  var_location_memory_size loc = SOME n ==>
+  ?buf a src first.
+    compile_alloc_buffer n st = (buf,a) /\
+    ce' = ce with ce_vars updated_by
+      (\m. m |+ (name,PtrVar buf.buf_operand n)) /\
+    compile_getelemptr_abi (Lit 4w) F h CALLDATALOAD (Lit 0w) (Lit 0w)
+      a = (src,first) /\
+    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD
+      (Lit 0w) (Lit 0w) (DecPrimWord clamp) first = ((),last)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_register_positional_args _ _ _ _ = _` mp_tac >>
+  simp[compile_register_positional_args_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
+  qpat_x_assum `compile_decode_args _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_decode_args_def, finite_mapTheory.FLOOKUP_UPDATE,
+       var_location_decode_operand_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
+  simp[abiEncoderTheory.compile_getelemptr_abi_def,
+       abiEncoderTheory.compile_abi_decode_to_buf_def,
+       abiEncoderTheory.compile_abi_dec_addr_def,
+       abiEncoderTheory.compile_abi_decode_static_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  metis_tac[]
+QED
+
 (* Supplied physical success for an owner buffer of arbitrary size. *)
 Theorem registration_owner_alloca_ptr:
   emit_op ALLOCA [Lit (n2w n)] sa = (ip,sb) /\
@@ -566,7 +619,7 @@ Proof
 QED
 
 (* One owner's allocation followed by static or dynamic calldata navigation. *)
-Theorem registration_argument_prepare_ptr:
+Theorem registration_argument_prepare_forward_ptr:
   compile_alloc_buffer n st = (buf,a) /\
   compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
     a = (src,first) /\
@@ -598,6 +651,8 @@ Theorem registration_argument_prepare_ptr:
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
       FLOOKUP t.vs_allocas id = SOME entry) /\
+    (!id. id <> st.cs_next_id ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op t = eval_operand op s) /\
     (!p k. ptr_covers G tn p s k ==> ptr_covers H u p t k) /\
@@ -728,6 +783,88 @@ Proof
   gvs[lookup_var_def, fresh_vars_wrt_def, allocas_from_def] >>
   simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def] >>
   gvs[]
+QED
+
+Theorem registration_argument_prepare_ptr:
+  compile_alloc_buffer n st = (buf,a) /\
+  compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
+    a = (src,first) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (4+off) : bytes32) s = n2w delta /\
+    4+delta < dimword (:256)) /\
+  fn_has_code st a fn /\ fn_has_code a first fn /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  n < dimword (:256) /\ unit_alloca_budget ctx < dimword (:256) /\
+  (!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
+    ?p. entry = (p,n) /\ p+n < dimword (:256)) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u q p.
+    buf.buf_operand = Var q /\ lookup_var q t = SOME (n2w p) /\
+    ptr_covers H u q t n /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
+    p+n < dimword (:256) /\ alloca_inv t /\
+    alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = first.cs_current_bb /\
+    t.vs_inst_idx = LENGTH first.cs_current_insts /\ fresh_vars_wrt first t /\
+    eval_operand src t = SOME (n2w (4 + if dyn then delta else off)) /\
+    op_taint u src = {} /\ op_prov H src = NONE /\
+    abi_decoder_operand_live first.cs_next_var src /\
+    abi_decoder_operand_live first.cs_next_var (Var q) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!p k. ptr_covers G tn p s k ==> ptr_covers H u p t k) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all registration_argument_prepare_forward_ptr >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `H`, `u`, `q`, `p`] >> simp[]
+QED
+
+Theorem registration_preparation_forward_slots:
+  compile_alloc_buffer n st = (buf,a) /\
+  compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
+    a = (src,first) /\
+  (!id. id <> st.cs_next_id ==>
+    FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+  (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> id < st.cs_next_id) ==>
+  (!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < first.cs_next_id) /\
+  (!id. first.cs_next_id <= id ==> FLOOKUP t.vs_allocas id = NONE)
+Proof
+  strip_tac >>
+  `emit_op ALLOCA [Lit (n2w n)] st = (buf.buf_operand,a)` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+     pairarg_tac >> simp[] >> strip_tac >> gvs[]) >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  `dyn ==> abi_decode_source_opcode CALLDATALOAD` by
+    simp[abiDecoderContractTheory.abi_decode_source_opcode_def] >>
+  drule_all abiDecoderReservationTheory.abi_decode_member_pointer_allocation_shape >>
+  strip_tac >>
+  `st.cs_next_id < first.cs_next_id` by decide_tac >>
+  `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> id < first.cs_next_id` by
+    (rpt strip_tac >> Cases_on `id = st.cs_next_id` >- simp[] >>
+     `FLOOKUP s.vs_allocas id = SOME entry` by metis_tac[] >>
+     qpat_x_assum `!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> _`
+       drule >> decide_tac) >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> Cases_on `FLOOKUP t.vs_allocas id` >- simp[] >>
+  qpat_x_assum `!id entry. FLOOKUP t.vs_allocas id = SOME entry ==> _`
+    drule >> simp[]
 QED
 
 (* Decoder writes are separated from each earlier installed local slot. *)
