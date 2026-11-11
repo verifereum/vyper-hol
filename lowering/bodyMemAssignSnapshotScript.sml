@@ -13,6 +13,16 @@ Ancestors
 Theorem snapshot_vv_counted_mem:
   !ctx func cenv cx e es sa sm sb s0 ee tv v vv saved s.
     post_value_type cenv e = expr_type e /\
+    (* The lowered annotation is a word iff e's type is.  Only an IntCall's
+       can differ (lowered_value_type_def: cenv.ce_func_return_type).  The
+       Assign caller discharges this from well_typed_expr's
+       type_widens_to env.type_defs sig.ret_ty (expr_type e),
+       memoryLocalRhsProps.supported_internal_signature_return
+       (body_inv: ce_func_return_type = sig.ret_ty), and widening keeping
+       word-ness both ways (compileEnv.type_widens_to_word,
+       typedMemoryCopy.return_source_word_widens_eq); every other case is
+       expr_type e or a bytestring of a bytestring-typed e. *)
+    (is_word_type (lowered_value_type cenv e) <=> is_word_type (expr_type e)) /\
     compile_snapshot_vv cenv T (vv_with_type (lowered_value_type cenv e) vv) sm =
       (saved, sb) /\
     read_result cx tv ee = (INL v, ee) /\
