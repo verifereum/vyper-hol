@@ -4,7 +4,7 @@ Ancestors bodyPtrBopInLoopLayout bodyPtrBopInLoopLookups
 
 Theorem membership_compiled_loop_exit:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) ==>
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) ==>
   sb.cs_current_bb = fresh_label_output "in_exit" (sa.cs_next_label+5) /\
   LENGTH sb.cs_current_insts = (if is_in then 0 else 1) /\
   op = Var ("%" ++ toString
@@ -17,7 +17,7 @@ QED
 
 Theorem membership_compiled_loop_init:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -52,7 +52,7 @@ QED
    In's open exit is deliberately absent from this statement. *)
 Theorem membership_compiled_loop_closed_nonphi:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\
   (lbl = fresh_label_output "in_entry" sa.cs_next_label \/
    lbl = fresh_label_output "in_cond" (sa.cs_next_label+1) \/
@@ -70,7 +70,7 @@ QED
 
 Theorem membership_compiled_notin_exit_ghost:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) F sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE F sa = (op,sb) /\
   fn_has_code sa sb fn /\ s.vs_current_bb = sb.cs_current_bb ==>
   entry_prov fn s G = G /\ entry_taint_vars fn s tn = tn
 Proof
@@ -83,7 +83,7 @@ QED
 
 Theorem membership_compiled_condition_lookup:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn ==>
   ?bb. lookup_block (fresh_label_output "in_cond" (sa.cs_next_label+1))
          fn.fn_blocks = SOME bb /\
@@ -103,7 +103,7 @@ QED
 
 Theorem membership_compiled_compare_lookup:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\
   delta = (if 0 < skip then 1 else 0) /\
   width = (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) ==>
@@ -127,7 +127,7 @@ QED
 
 Theorem membership_compiled_increment_lookup:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\
   delta = (if 0 < skip then 1 else 0) /\
   width = (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) ==>
@@ -150,7 +150,7 @@ QED
 
 Theorem membership_compiled_notin_exit_lookup:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) F sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE F sa = (op,sb) /\
   fn_has_code sa sb fn /\
   delta = (if 0 < skip then 1 else 0) /\
   width = (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) ==>
@@ -167,7 +167,7 @@ QED
 
 Theorem membership_compiled_found_lookup:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\
   delta = (if 0 < skip then 1 else 0) /\
   width = (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) ==>

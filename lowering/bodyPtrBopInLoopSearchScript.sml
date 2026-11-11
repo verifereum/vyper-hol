@@ -58,7 +58,7 @@ QED
 
 Theorem membership_condition_frame:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
   s.vs_inst_idx = 0 /\
@@ -344,7 +344,7 @@ QED
 
 Theorem membership_compared_control:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   delta = (if 0 < skip then 1 else 0) /\
@@ -382,7 +382,7 @@ QED
 
 Theorem membership_condition_control:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1) /\
   s.vs_inst_idx = 0 /\
@@ -405,7 +405,7 @@ QED
 
 Theorem membership_found_control:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_found" (sa.cs_next_label+3) /\
   s.vs_inst_idx = 0 /\
@@ -438,7 +438,7 @@ QED
 
 Theorem membership_increment_control:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_incr" (sa.cs_next_label+4) /\
   s.vs_inst_idx = 0 /\
@@ -536,7 +536,7 @@ QED
 
 Theorem membership_notin_control:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) F sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE F sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = 0 /\
   delta = (if 0 < skip then 1 else 0) /\
@@ -578,7 +578,7 @@ QED
 Theorem membership_compared_control_forward:
   !needle arr len stride skip is_ctor imm loc is_in sa op sb.
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) ==>
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) ==>
   !fn ctx s G0 tn0 s0 G tn i r a w D PG.
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
@@ -606,14 +606,14 @@ Theorem membership_compared_control_forward:
       fresh_label_output "in_incr" (sa.cs_next_label+4))
 Proof
   rpt strip_tac >> irule membership_compared_control >> simp[] >>
-  goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`)) >>
   gvs[]
 QED
 
 Theorem membership_increment_control_forward:
   !needle arr len stride skip is_ctor imm loc is_in sa op sb.
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) ==>
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) ==>
   !fn ctx s G0 tn0 s0 G tn i r D PG.
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = fresh_label_output "in_incr" (sa.cs_next_label+4) /\
@@ -627,14 +627,14 @@ Theorem membership_increment_control_forward:
     t.vs_current_bb = fresh_label_output "in_cond" (sa.cs_next_label+1)
 Proof
   rpt strip_tac >> irule membership_increment_control >> simp[] >>
-  goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`)) >>
   gvs[]
 QED
 
 (* Exercises the normalized boundary at the actual callback endpoint. *)
 Theorem membership_load_compare_control:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   membership_load_contract D ctx fn PG sa skip is_ctor imm loc ws G0 tn0 s0 /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
@@ -667,7 +667,7 @@ QED
 Theorem membership_search_suffix:
   !i G tn s.
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   membership_load_contract D ctx fn PG sa skip is_ctor imm loc ws G0 tn0 s0 /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
@@ -731,7 +731,7 @@ Finalise membership_search_suffix
 
 Theorem membership_search_initialized:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   membership_load_contract D ctx fn PG sa skip is_ctor imm loc ws G tn s /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
@@ -758,7 +758,7 @@ QED
 
 Theorem membership_finish_control:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i (bool_to_word b) G tn s /\ ~s.vs_halted /\
@@ -783,14 +783,14 @@ Proof
     op_prov G' op = NONE /\ op_taint tn' op = {} /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = 1` by
     (irule membership_notin_control >> simp[] >> conj_tac
-     >- (goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`)) >> simp[]) >>
+     >- (goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`)) >> simp[]) >>
      qexists_tac `i` >> simp[]) >>
   qexistsl_tac [`G'`, `tn'`, `t`] >> simp[] >> Cases_on `b` >> gvs[bool_to_word_def]
 QED
 
 Theorem membership_loop_conditional:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   membership_load_contract D ctx fn PG sa skip is_ctor imm loc ws G tn s /\
   (!x. needle = Var x ==> not_fresh_at sa x) /\
@@ -811,4 +811,56 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] mp_tac) >> strip_tac >>
   dxrule_all gas_path_ptr_then >> simp[] >> strip_tac >>
   goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]
+QED
+
+(* OPEN LEAF for alan (proved with cheat): the DynArray twin of
+   membership_loop_conditional, for compile_array_membership_loop at
+   bound_opt = SOME cap.  Trunk moved the capacity check into the loop's entry
+   block, which now runs GT [len; Lit (n2w cap)]; ISZERO; ASSERT before
+   JMP cond.  That adds three instructions and two variables before the loop,
+   so the loaded element register is %(sa.cs_next_var+6+delta+width) rather
+   than membership_load_contract's +4: the load contract is stated inline
+   with that shift.  LENGTH ws <= cap /\ cap < dimword (:256) makes the
+   ASSERT pass. *)
+Theorem membership_loop_conditional_dynamic:
+  compile_array_membership_loop needle arr len stride skip
+    (compile_ptr_load is_ctor imm loc) (SOME cap) is_in sa = (op,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
+  (!i G1 tn1 s1. i < LENGTH ws /\
+    membership_loop_frame sa G tn s G1 tn1 s1 /\
+    membership_loop_registers sa i 0w G1 tn1 s1 /\
+    s1.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+    s1.vs_inst_idx = 0 /\ ~s1.vs_halted ==>
+    ?G2 tn2 t. gas_path_ptr D 0 ctx fn PG G1 tn1 s1 0 G2 tn2 (OK t) /\
+      membership_loop_frame sa G tn s G2 tn2 t /\
+      membership_loop_registers sa i 0w G2 tn2 t /\
+      t.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
+      t.vs_inst_idx = 2 + (if 0 < skip then 1 else 0) +
+        (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1) /\
+      ~t.vs_halted /\
+      eval_operand (Var ("%" ++ toString (sa.cs_next_var+6+
+        (if 0 < skip then 1 else 0) +
+        (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1)))) t =
+        SOME (EL i ws) /\
+      op_prov G2 (Var ("%" ++ toString (sa.cs_next_var+6+
+        (if 0 < skip then 1 else 0) +
+        (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1)))) = NONE /\
+      op_taint tn2 (Var ("%" ++ toString (sa.cs_next_var+6+
+        (if 0 < skip then 1 else 0) +
+        (if is_ctor /\ loc = LocCode /\ IS_SOME imm then 2 else 1)))) = {}) /\
+  (!x. needle = Var x ==> not_fresh_at sa x) /\
+  (!x. len = Var x ==> not_fresh_at sa x) /\
+  eval_operand needle s = SOME w /\ op_prov G needle = NONE /\ op_taint tn needle = {} /\
+  eval_operand len s = SOME (n2w (LENGTH ws)) /\
+  op_prov G len = NONE /\ op_taint tn len = {} /\ LENGTH ws < dimword (:256) /\
+  LENGTH ws <= cap /\ cap < dimword (:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    membership_loop_frame sa G tn s G' tn' t /\
+    eval_operand op t = SOME (bool_to_word (if is_in then MEM w ws else ~MEM w ws)) /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  cheat
 QED
