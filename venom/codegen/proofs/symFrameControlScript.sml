@@ -24,7 +24,7 @@ Ancestors
   fnFrameDeepAbort fnFrameDeepGas fnFrameStepsRevertForwardDeep asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs symPlannerSim symShuffleSim asmSymPc
+  dfgDefs symPlannerSim symShuffleSim asmSymPc codegenEncodingWf
 
 (* Pointwise kind equivalence transports a typed symbolic stack. *)
 Theorem list_rel_op_kind_transport:
@@ -3299,6 +3299,121 @@ Theorem reorder_plan_read_only_kind_replay:
 Proof
   rewrite_tac[reorderSimTheory.reorder_plan_eq_plan_steps] >>
   MATCH_ACCEPT_TAC reorder_steps_read_only_kind_replay
+QED
+
+Theorem sym_frame_inv_kind_transport:
+  !p env ctx cp fn ret srest labs0 ps cs ss qs.
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    ps.ps_stack qs.ps_stack /\ ps.ps_spilled = qs.ps_spilled ==>
+  sym_frame_inv p env ctx cp fn ret srest labs0 qs cs ss
+Proof
+  rpt gen_tac >> simp[sym_frame_inv_def, sym_kinds_ok_def] >> strip_tac >>
+  qexists `top` >> simp[] >> irule list_rel_op_kind_transport >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem selected_prefix_read_only_kind_replay:
+  !opc inputs nl ps iops ps1 dfg rops ps2 fn ret fmp lo.
+  emit_input_plan opc inputs nl ps = (iops,ps1) /\
+  reorder_plan dfg inputs ps1 = (rops,ps2) /\ opc <> INVOKE /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. ~MEM (SOSpill off) (iops ++ rops)) /\
+  (!off. MEM (SORestore off) (iops ++ rops) ==> off < dimword(:256)) ==>
+  prefix_spill_wf fmp lo (iops ++ rops) ps /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo (iops ++ rops) ps).ps_stack ps2.ps_stack /\
+  (apply_prefix_ops fmp lo (iops ++ rops) ps).ps_spilled = ps2.ps_spilled
+Proof
+  rpt gen_tac >>
+  simp[listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
+  `prefix_spill_wf fmp lo iops ps /\
+   (apply_prefix_ops fmp lo iops ps).ps_stack = ps1.ps_stack /\
+   (apply_prefix_ops fmp lo iops ps).ps_spilled = ps1.ps_spilled` by
+    (irule emit_input_plan_read_only_replay >> simp[] >> metis_tac[]) >>
+  `!op1 off1 op2 off2.
+    FLOOKUP ps1.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps1.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1` by
+    (drule_at Any doSwapSimTheory.safe_prefix_spilled_separated >>
+     simp[] >> disch_then assume_tac >> rpt strip_tac >>
+     first_x_assum irule >> simp[] >> metis_tac[]) >>
+  simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
+  irule reorder_plan_read_only_kind_replay >> simp[] >>
+  qexistsl [`inputs`, `ps1`] >> simp[listTheory.LIST_REL_EL_EQN] >> metis_tac[]
+QED
+
+Theorem sym_read_only_selected_prefix_frame_sim:
+  !opc inputs nl ps iops ps1 dfg rops ps2 fn ret fmp p env ctx cp srest labs0 cs ss.
+  emit_input_plan opc inputs nl ps = (iops,ps1) /\
+  reorder_plan dfg inputs ps1 = (rops,ps2) /\ opc <> INVOKE /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. ~MEM (SOSpill off) (iops ++ rops)) /\
+  (!off. MEM (SORestore off) (iops ++ rops) ==> off < dimword(:256)) /\
+  prefix_wf (SND (compute_label_offsets p)) (LENGTH ps.ps_stack) (iops ++ rops) /\
+  EVERY is_prefix_op (iops ++ rops) /\
+  EVERY (\op. !l d. op <> SOPushOfst l d) (iops ++ rops) /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\ asm_block_at p cs.as_pc (execute_plan fmp (iops ++ rops)) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan fmp (iops ++ rops))) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan fmp (iops ++ rops))) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 ps2 cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan fmp (iops ++ rops)) /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all selected_prefix_read_only_kind_replay >>
+  disch_then (qspecl_then [`ret`, `fmp`, `SND (compute_label_offsets p)`] strip_assume_tac) >>
+  drule_all sym_spill_free_prefix_frame_sim >> strip_tac >>
+  qexistsl [`cs'`, `ss'`] >> simp[] >>
+  irule sym_frame_inv_kind_transport >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem sym_ret_prepare_frame_sim:
+  !inputs nl ps iops prepared dfg rops arranged fn ret fmp p env ctx cp srest labs0 cs ss base.
+  emit_input_plan RET inputs nl ps = (iops,prepared) /\
+  reorder_plan dfg inputs prepared = (rops,arranged) /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  generated_plan_state_wf_marked base ps /\ LENGTH inputs <= 16 /\
+  (!op. MEM op inputs /\ is_var_operand op ==>
+     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  (!l. MEM (Label l) inputs ==> IS_SOME (FLOOKUP (SND (compute_label_offsets p)) l)) /\
+  (!off. ~MEM (SOSpill off) (iops ++ rops)) /\
+  (!off. MEM (SORestore off) (iops ++ rops) ==> off < dimword(:256)) /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\ asm_block_at p cs.as_pc (execute_plan fmp (iops ++ rops)) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan fmp (iops ++ rops))) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan fmp (iops ++ rops))) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 arranged cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan fmp (iops ++ rops)) /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `prefix_wf (SND (compute_label_offsets p)) (LENGTH ps.ps_stack) (iops ++ rops)` by
+    (irule fnFrameStepsRevertForwardTheory.available_preparation_prefix_wf >>
+     qexistsl [`dfg`, `inputs`, `nl`, `RET`, `prepared`, `arranged`] >> simp[]) >>
+  `EVERY is_prefix_op (iops ++ rops)` by
+    metis_tac[planWfTheory.prefix_wf_every_prefix_op] >>
+  `EVERY (\op. !l d. op <> SOPushOfst l d) (iops ++ rops)` by
+    (simp[listTheory.EVERY_MEM, listTheory.MEM_APPEND] >>
+     metis_tac[codegenEncodingWfTheory.emit_input_plan_no_push_ofst,
+               codegenEncodingWfTheory.reorder_plan_no_push_ofst]) >>
+  irule sym_read_only_selected_prefix_frame_sim >> simp[] >>
+  qexistsl [`inputs`, `nl`, `RET`, `ps`, `prepared`] >> simp[] >>
+  fs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
+  metis_tac[doSwapSimTheory.spill_alloc_layout_wf_spilled_separated]
 QED
 
 Theorem reorder_one_spill_free_placement:
