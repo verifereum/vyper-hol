@@ -164,3 +164,90 @@ Proof
   POP_ASSUM_LIST (K all_tac) >>
   MATCH_ACCEPT_TAC immutableCopyExecutionTheory.immutable_mstore_memory_cong
 QED
+
+Theorem encoder_dynamic_three_store_frame:
+  mem_agree_outside
+    ({i | h <= i /\ i < h+32} UNION {i | c <= i /\ i < c+32} UNION
+     {i | p <= i /\ i < p+32})
+    (mstore p z (mstore c y (mstore h x s))).vs_memory s.vs_memory
+Proof
+  irule encoder_memory_frame_union >>
+  qexists_tac `(mstore c y (mstore h x s)).vs_memory` >>
+  conj_tac >-
+    (irule encoder_memory_frame_union >>
+     qexists_tac `(mstore h x s).vs_memory` >>
+     simp[wordLoadStorePtrTheory.mstore_memory_frame]) >>
+  simp[wordLoadStorePtrTheory.mstore_memory_frame]
+QED
+
+Theorem encoder_dynamic_finish_exterior:
+  sf.vs_memory = (mstore p z (mstore c y (mstore h x s))).vs_memory /\
+  tnf.t_mem = ((tn.t_mem DIFF {i | h <= i /\ i < h+32}) DIFF
+    {i | c <= i /\ i < c+32}) DIFF {i | p <= i /\ i < p+32} /\
+  {i | h <= i /\ i < h+32} SUBSET writes /\
+  {i | c <= i /\ i < c+32} SUBSET writes /\
+  {i | p <= i /\ i < p+32} SUBSET writes ==>
+  mem_agree_outside writes sf.vs_memory s.vs_memory /\
+  (!i. i NOTIN writes ==> (i IN tnf.t_mem <=> i IN tn.t_mem))
+Proof
+  strip_tac >> conj_tac >-
+    (irule encoder_memory_frame_mono >>
+     asm_rewrite_tac [] >>
+     irule_at Any encoder_dynamic_three_store_frame >>
+     fs[SUBSET_DEF] >> metis_tac[]) >>
+  fs[SUBSET_DEF, IN_DIFF] >> metis_tac[]
+QED
+
+(* Finish transport is independent of the recursive implementation. The child
+   has already cleaned its new tail; the concrete suffix cleans the new head. *)
+Theorem encoder_dynamic_finish_invariant:
+  encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns j G tn s /\
+  j < LENGTH ns /\ val_wf tv v /\
+  regions_disjoint (p,32) (c,32) /\
+  (!i. a <= i /\ i < a+val_footprint tv v ==>
+    i NOTIN ({i | b+32+32*j <= i /\ i < b+32+32*j+32} UNION
+      {i | c <= i /\ i < c+32} UNION {i | p <= i /\ i < p+32})) /\
+  (!i. b+32+32*N <= i /\
+    i < b+32+(32*N+SUM (TAKE j ns)+EL j ns) ==> i NOTIN tn.t_mem) /\
+  ~sf.vs_halted /\
+  sf.vs_memory = (mstore p (n2w (j+1))
+    (mstore c (n2w (32*N+SUM (TAKE j ns)+EL j ns))
+      (mstore (b+32+32*j) (n2w (32*N+SUM (TAKE j ns))) s))).vs_memory /\
+  tnf.t_mem = ((tn.t_mem DIFF
+    {i | b+32+32*j <= i /\ i < b+32+32*j+32}) DIFF
+    {i | c <= i /\ i < c+32}) DIFF {i | p <= i /\ i < p+32} /\
+  sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+  sf.vs_fmp = s.vs_fmp /\
+  (!x. x = ip \/ x = cursor \/ x = src \/ x = dst \/ x = cv ==>
+    lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tnf (Var x) = op_taint tn (Var x)) ==>
+  encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns (j+1) Gf tnf sf
+Proof
+  strip_tac >>
+  `encoder_resource ctx fn sites a scap protected sf` by
+    (irule encoder_resource_fields >> metis_tac[encoder_dynamic_loop_inv_def]) >>
+  `32*N+SUM (TAKE (j+1) ns) = 32*N+SUM (TAKE j ns)+EL j ns` by
+    metis_tac[TAKE_SUC_BY_TAKE, GSYM ADD1, SUM_SNOC, ADD_ASSOC] >>
+  `!mem. mem_agree_outside tnf.t_mem sf.vs_memory mem ==>
+    val_in_memory tv v a mem` by
+    (gen_tac >> strip_tac >> irule robust_val_in_memory_exterior_frame >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`s.vs_memory`, `sf.vs_memory`, `tn.t_mem`, `tnf.t_mem`] >>
+     qexists_tac `({i | b+32+32*j <= i /\ i < b+32+32*j+32} UNION
+       {i | c <= i /\ i < c+32} UNION {i | p <= i /\ i < p+32})` >>
+     simp[] >> conj_tac >- metis_tac[encoder_dynamic_loop_inv_def] >>
+     `mem_agree_outside
+       ({i | b+32+32*j <= i /\ i < b+32+32*j+32} UNION
+        {i | c <= i /\ i < c+32} UNION {i | p <= i /\ i < p+32})
+       sf.vs_memory s.vs_memory` by
+       (asm_rewrite_tac [] >> irule encoder_dynamic_three_store_frame) >>
+     gvs[mem_agree_outside_def] >> metis_tac[]) >>
+  gvs[encoder_dynamic_loop_inv_def, ptr_covers_def, op_prov_def] >>
+  conj_tac >- metis_tac[mload_def, mload_mstore_same] >>
+  conj_tac >- metis_tac[mload_def, mload_mstore_same, mload_mstore_disjoint,
+                       regions_disjoint_def] >>
+  rpt conj_tac >> rpt strip_tac >>
+  Cases_on `i < b+32+32*j` >- (gvs[] >> metis_tac[]) >> decide_tac
+QED
