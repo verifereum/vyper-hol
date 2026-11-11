@@ -51,7 +51,8 @@ Proof
     (irule body_inv_build_internal_env >> goal_assum drule) >>
   irule body_inv_internal_prologue >> goal_assum drule >>
   gvs[package_internal_fn_def, set_internal_package_target_def,
-      update_cenv_nonreentrant_def, body_inv_def] >> metis_tac[]
+      update_cenv_nonreentrant_def, body_inv_def,
+      bodySimTheory.cenv_module_pins_def] >> metis_tac[]
 QED
 
 Theorem bind_arguments_pushed_env_consistent:
