@@ -14,13 +14,6 @@
  *   compile_extcall_case — extcall's expr_sim_case and expr_vv_case from
  *     its operands' judgments
  *
- * ADMITTED:
- *   vv_post_pure_memory_frame — an effect-free operand's fragment keeps
- *     the live locals' bytes and writes memory only inside its own
- *     allocations.  It lets a positional memory
- *     or immutable operand, read only after the later operands, keep its
- *     value.  Held for the posts-interface round.
- *
  * Why it holds: the call request agrees with the source's.  The selector is
  * cenv.ce_method_id, which expr_sim_inv pins to function_selector of the
  * declared ABI types; the calldata is the selector followed by the arguments
@@ -62,12 +55,8 @@ Proof
   rpt strip_tac >> gvs[vv_post_def] >> metis_tac[]
 QED
 
-(* An effect-free operand's fragment pops no scope and writes memory only
-   inside allocations its own ALLOCA instructions make (func's ALLOCAs with
-   ids from sa.cs_next_id): the live locals keep their bytes, and so does
-   any region clear of those allocations, the constructor's immutable
-   staging included.  A positional operand captured in memory, read only
-   after the later operands, keeps its value. *)
+(* An effect-free expression's fragment keeps every live local whole and
+   every window clear of its own allocations. *)
 Theorem vv_post_pure_memory_frame:
   !ctx func cenv cx e es sa sb s0 es' tv vv s.
     vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
@@ -82,9 +71,9 @@ Theorem vv_post_pure_memory_frame:
           loweringStateRelDefs$regions_disjoint off len b sz) ==>
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory)
 Proof
-  (* Held for the posts-interface round: follows from vv_post_def once it
-     frames an effect-free operand's memory writes to its own allocations. *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `pure_frame cenv func es sa s0 s` by gvs[vv_post_def] >>
+  pop_assum mp_tac >> rewrite_tac[pure_frame_def]
 QED
 
 (* Source boundary: positional locations are read only after kwargs. *)

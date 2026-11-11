@@ -469,7 +469,7 @@ Proof
       metis_tac[])
   >~ [`storage_read_live`]
   >- (strip_tac >>
-      qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >>
+      qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
       asm_rewrite_tac[] >> strip_tac >>
       drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
       drule_all exprSimFieldLayoutTheory.struct_field_offset_slots_eq >>
@@ -485,8 +485,8 @@ Proof
           contextTheory.vv_operand_def, attr_offset_def] >>
       rpt strip_tac >> gvs[] >>
       irule accountsRelPropsTheory.storage_read_live_field >>
-      metis_tac[]) >>
-  first_assum ACCEPT_TAC
+      metis_tac[])
+  >> first_assum ACCEPT_TAC
 QED
 
 (* ===== The simulation ===== *)

@@ -494,7 +494,8 @@ Theorem literal_bytelike_run:
       (!name b len. local_region cenv es.scopes s name b len ==>
          mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
       (!name b len. local_region cenv es.scopes t name b len ==>
-         regions_disjoint (w2n w) (32 + 32 * word_size (LENGTH bs)) b len)
+         regions_disjoint (w2n w) (32 + 32 * word_size (LENGTH bs)) b len) /\
+      pure_frame cenv func es sa s t
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_bytelike_literal _ _ _ = _` mp_tac >>
@@ -634,6 +635,27 @@ Resume literal_bytelike_run[finish]:
         qexistsl [`sa`, `es.scopes`, `final`] >> simp[] >> metis_tac[]) >>
      qpat_x_assum `!name b len. local_region _ _ t _ _ _ ==> regions_disjoint _ _ _ _`
        drule >> pure_rewrite_tac[regions_disjoint_def] >> decide_tac) >>
+  `!nm lb llen. local_region cenv es.scopes s nm lb llen ==>
+     mem_bytes_at lb llen final.vs_memory = mem_bytes_at lb llen s.vs_memory` by
+    (rpt strip_tac >>
+     `local_region cenv es.scopes t nm lb llen` by
+       (irule exprSimPropsTheory.local_region_frame_fwd >>
+        qexistsl [`s`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
+     metis_tac[]) >>
+  `!off len. regions_disjoint off len (w2n w) (32 + 32 * word_size (LENGTH bs)) ==>
+     mem_bytes_at off len final.vs_memory = mem_bytes_at off len s.vs_memory` by
+    (rpt strip_tac >>
+     `mem_bytes_at off len final.vs_memory = mem_bytes_at off len t.vs_memory` by
+       (qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ final.vs_memory = _` irule >>
+        gvs[regions_disjoint_def] >> decide_tac) >>
+     simp[]) >>
+  `pure_frame cenv func es sa s final` by
+    (match_mp_tac pure_frame_fresh_alloca >>
+     qexistsl_tac [`sa.cs_next_id`,
+       `[Lit (n2w (32 + 32 * word_size (LENGTH bs)))]`,
+       `[STRING #"%" (toString sa.cs_next_var)]`,
+       `w2n w`, `32 + 32 * word_size (LENGTH bs)`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   qexistsl_tac [`final`, `w`] >>
   simp[] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
@@ -642,16 +664,10 @@ Resume literal_bytelike_run[finish]:
          qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule_all >>
          simp[regions_disjoint_def] >> decide_tac) >>
       simp[]) >>
-  reverse conj_tac
-  >- (qpat_x_assum `!name b len. local_region _ _ final _ _ _ ==> regions_disjoint _ _ _ _`
-        mp_tac >> pure_rewrite_tac[regions_disjoint_def] >>
-      rpt strip_tac >> first_x_assum drule >> decide_tac) >>
-  (* the locals' regions: the buffer's ALLOCA leaves their pointers *)
-  map_every qx_gen_tac [`nm`, `lb`, `llen`] >> strip_tac >>
-  `local_region cenv es.scopes t nm lb llen` by
-    (irule exprSimPropsTheory.local_region_frame_fwd >>
-     qexistsl [`s`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
-  metis_tac[]
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `!name b len. local_region _ _ final _ _ _ ==> regions_disjoint _ _ _ _`
+    mp_tac >> pure_rewrite_tac[regions_disjoint_def] >>
+  rpt strip_tac >> first_x_assum drule >> decide_tac
 QED
 
 Finalise literal_bytelike_run
@@ -896,7 +912,8 @@ Theorem literal_memory_vv_post:
        FLOOKUP s0.vs_allocas aid = SOME (b,len) ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     (!name b len. local_region cenv es.scopes s0 name b len ==>
-       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
+    pure_frame cenv func es sa s0 t ==>
     vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)
@@ -975,8 +992,7 @@ Resume compile_literal_other_vv_sim[bytes]:
   qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
   disch_then (qspec_then `n + 31` strip_assume_tac) >>
   `(n + 31) MOD 32 < 32` by simp[] >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
-  conj_tac >- (first_assum ACCEPT_TAC) >> decide_tac
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac
 QED
 
 Resume compile_literal_other_vv_sim[string]:
@@ -1024,8 +1040,7 @@ Resume compile_literal_other_vv_sim[string]:
   qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
   disch_then (qspec_then `n + 31` strip_assume_tac) >>
   `(n + 31) MOD 32 < 32` by simp[] >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
-  conj_tac >- (first_assum ACCEPT_TAC) >> decide_tac
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac
 QED
 
 Finalise compile_literal_other_vv_sim
