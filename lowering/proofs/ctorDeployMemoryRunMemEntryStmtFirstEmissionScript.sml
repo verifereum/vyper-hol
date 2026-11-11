@@ -1035,6 +1035,25 @@ Proof
      mp_tac (cj 2 first_emission_emit_helpers |> Q.SPEC `INVALID`) >> simp[] >> metis_tac[])]
 QED
 
+Theorem ctor_snapshot_vv_first_emission[local]:
+  !ce copy vv a x b. compile_snapshot_vv ce copy vv a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\ a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  rpt IF_CASES_TAC
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- metis_tac[ctor_unwrap_value_first_emission] >>
+      metis_tac[first_emission_return])
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- metis_tac[ctor_materialize_vv_first_emission] >>
+      metis_tac[first_emission_return]) >>
+  metis_tac[first_emission_return]
+QED
+
 Theorem ctor_baseassign_stmt_first_emission:
   !ce lc ty bt e a x b. compile_stmt ce lc ty (Assign (BaseTarget bt) e) a = (x,b) ==>
     cs_extends a b /\
@@ -1049,6 +1068,8 @@ Proof
       metis_tac[ctor_store_at_loc_first_emission]) >>
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[ctor_compile_expr_first_emission] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (IF_CASES_TAC >> metis_tac[first_emission_return, ctor_snapshot_vv_first_emission]) >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[ctor_compile_target_first_emission] >>
   gen_tac >> simp_tac bool_ss [ctor_bind_return_eq] >>
