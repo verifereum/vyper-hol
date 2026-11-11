@@ -693,3 +693,27 @@ Proof
   imp_res_tac run_block_preserves_labels >> gvs[] >>
   first_x_assum drule >> simp[]
 QED
+
+(* Shared PHI structure; implementations live in venomExecProofs. *)
+Theorem phi_prefix_length_prepend:
+  !pre xs. EVERY (\i. i.inst_opcode = PHI) pre ==>
+    phi_prefix_length (pre ++ xs) = LENGTH pre + phi_prefix_length xs
+Proof
+  ACCEPT_TAC venomExecProofsTheory.phi_prefix_length_prepend
+QED
+
+Theorem bb_well_formed_phi_prefix_length_lt:
+  !bb. bb_well_formed bb ==>
+    phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
+Proof
+  ACCEPT_TAC venomExecProofsTheory.bb_well_formed_phi_prefix_length_lt
+QED
+
+Theorem phi_prefix_length_non_phi_suffix:
+  !bb. bb_well_formed bb ==>
+    !k. phi_prefix_length bb.bb_instructions <= k /\
+        k < LENGTH bb.bb_instructions ==>
+        (EL k bb.bb_instructions).inst_opcode <> PHI
+Proof
+  ACCEPT_TAC venomExecProofsTheory.phi_prefix_length_non_phi_suffix
+QED
