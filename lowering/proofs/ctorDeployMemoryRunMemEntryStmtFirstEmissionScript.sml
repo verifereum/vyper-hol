@@ -1,6 +1,7 @@
 Theory ctorDeployMemoryRunMemEntryStmtFirstEmission
 Ancestors
   ctorDeployMemoryRunMemEntryFirstEmission stmtLoweringMono
+  entryReachBodyFirstEmissionStmt
   compilerFirstEmission stmtLowering compileEnv context exprLowering fragExec exprLoweringProps
 
 Theorem ctor_compile_target_first_emission:
@@ -1249,25 +1250,7 @@ Theorem ctor_assert_stmt_first_emission:
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  ntac 4 gen_tac >> reverse (Cases_on `why`) >> simp_tac bool_ss [compile_stmt_def]
-  >- (ho_match_mp_tac first_emission_strong >>
-      ho_match_mp_tac first_emission_strong_ignore_bind >> conj_tac
-      >- (mp_tac (cj 1 first_emission_emit_helpers |> Q.SPEC `INVALID`) >> simp[] >> metis_tac[]) >>
-      simp[comp_return_def, cs_extends_refl]) >>
-  (ho_match_mp_tac first_emission_bind >> conj_tac
-  >- metis_tac[ctor_lower_expr_value_first_emission] >>
-  gen_tac >> ntac 2 (ho_match_mp_tac first_emission_bind >> conj_tac
-     >- metis_tac[first_emission_fresh, ctor_fresh_label_code] >> gen_tac) >>
-  ho_match_mp_tac first_emission_strong >>
-  ho_match_mp_tac first_emission_strong_ignore_bind >> conj_tac
-  >- (mp_tac (cj 1 first_emission_emit_helpers |> Q.SPEC `JNZ`) >> simp[] >> metis_tac[]) >>
-  rewrite_tac[GSYM cs_appends_def] >>
-  rpt (FIRST [ho_match_mp_tac cs_appends_bind,
-              ho_match_mp_tac cs_appends_ignore_bind] >> conj_tac
-       >- (FIRST [simp[cs_appends_prims, cs_appends_emit_helpers, cs_appends_return] >> NO_TAC,
-                   irule ctor_ci_mono_appends >> simp[ci_mono_stmt_helpers]]) >>
-       rpt gen_tac >> simp_tac bool_ss [ctor_bind_return_eq]) >>
-  simp[cs_appends_prims, cs_appends_return])
+  MATCH_ACCEPT_TAC (cj 1 entryReachBodyFirstEmissionStmtTheory.first_emission_compile_stmt)
 QED
 
 
