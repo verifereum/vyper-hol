@@ -72,7 +72,7 @@ Theorem u2s_result_vv_post:
   u2s_layout a op ba.buf_operand n sb /\ out = Var (u2s_var a 2) /\
   inst.inst_id = sa.cs_next_id /\
   u2s_safe ctx fn cenv cx es a ba.buf_operand b (sz+n) inst sr t /\
-  wb_frame cenv es es sa s t /\
+  wb_frame cenv es es sa s t /\ pure_frame cenv fn es sa s t /\
   post_value_type cenv e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\

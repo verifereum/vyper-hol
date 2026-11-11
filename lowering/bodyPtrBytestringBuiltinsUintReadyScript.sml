@@ -137,7 +137,8 @@ Theorem u2s_alloc_ready_ptr:
         bb_instructions := a.cs_current_insts ++ u2s_setup a op (Var p)|> /\
     (!out. u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr out ==>
       stmt_state_rel ctx fn cenv cx es out /\ wb_frame cenv es es sa s out /\
-      FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz))
+      FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz) /\
+      pure_frame cenv fn es sa s out)
 Proof
   strip_tac >> drule_all u2s_alloc_concrete_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -165,7 +166,8 @@ Resume u2s_alloc_ready_ptr[ready]:
   `op_prov G1 op = NONE /\ op_taint tn1 op = {}` by
     (qpat_x_assum `inst = _` SUBST_ALL_TAC >>
      metis_tac[alloca_step_old_operand_ghost]) >>
-  `sr.vs_current_bb = s.vs_current_bb /\ sr.vs_halted = s.vs_halted` by
+  `sr.vs_current_bb = s.vs_current_bb /\ sr.vs_halted = s.vs_halted /\
+   sr.vs_memory = s.vs_memory` by
     (qpat_x_assum `inst = _` SUBST_ALL_TAC >>
      drule_all alloca_step_state_fields >> simp[]) >>
   `not_local_ptr cenv es.scopes p` by
@@ -194,7 +196,14 @@ QED
 
 Resume u2s_alloc_ready_ptr[tail]:
   qpat_x_assum `p = _` SUBST_ALL_TAC >> gvs[lookup_var_def, mk_inst_def] >>
-  gen_tac >> disch_tac >> irule u2s_safe_wb_tail >>
+  gen_tac >> disch_tac >>
+  `pure_frame cenv fn es sa s out` by
+    (irule u2s_safe_pure_tail >>
+     first_assum (irule_at (Pat `u2s_safe _ _ _ _ _ _ _ _ _ _ _ out`)) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >>
+     rpt strip_tac >> res_tac >> decide_tac) >>
+  qpat_x_assum `pure_frame _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
+  irule u2s_safe_wb_tail >>
   simp[] >> (conj_tac >- first_assum ACCEPT_TAC) >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt strip_tac >> first_x_assum drule >> decide_tac
