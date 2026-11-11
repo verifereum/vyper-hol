@@ -8,6 +8,70 @@ Ancestors
   venomExecProps simplifyCfgDefs unitLabelMapIdentity
   venomExecSemantics venomState list rich_list sorting option
 
+(* U identifies unreachable GAS occurrences; site retains their original owner/id.
+   Legacy packets are not changed, so their exact TAKE witnesses remain usable. *)
+Theorem occurrence_packet_padding[local]:
+  LENGTH ms = n /\ LENGTH ess = n /\
+  LIST_REL (\m es. LENGTH m = LENGTH es) ms ess /\
+  (!j. j < n /\ U j ==> EL j ms = [] /\ EL j ess = []) ==>
+  let pm = GENLIST (\j. if U j then [NONE] else EL j ms) n;
+      pe = GENLIST (\j. if U j then [site j] else EL j ess) n
+  in
+    LENGTH pm = n /\ LENGTH pe = n /\
+    (!j. j < n ==>
+      EL j pm = (if U j then [NONE] else EL j ms) /\
+      EL j pe = (if U j then [site j] else EL j ess)) /\
+    LIST_REL (\m es. LENGTH m = LENGTH es) pm pe /\
+    MAP THE (FILTER IS_SOME (FLAT pm)) =
+      MAP THE (FILTER IS_SOME (FLAT ms)) /\
+    ((!j. j < n ==> ~U j) ==> pm = ms /\ pe = ess) /\
+    (!packet_order. PERM packet_order (COUNT_LIST n) ==>
+      PERM (FLAT (MAP (\j. EL j pm) packet_order)) (FLAT pm) /\
+      PERM (FLAT (MAP (\j. EL j pe) packet_order)) (FLAT pe) /\
+      !unused readings.
+        PERM (MAP THE (FILTER IS_SOME (FLAT ms)) ++ unused) readings ==>
+        PERM (MAP THE (FILTER IS_SOME
+          (FLAT (MAP (\j. EL j pm) packet_order))) ++ unused) readings)
+Proof
+  rpt strip_tac >> simp[LET_THM] >>
+  qabbrev_tac `pm = GENLIST (\j. if U j then [NONE] else EL j ms) n` >>
+  qabbrev_tac `pe = GENLIST (\j. if U j then [site j] else EL j ess) n` >>
+  `LENGTH pm = n /\ LENGTH pe = n` by simp[Abbr `pm`, Abbr `pe`] >>
+  `!j. j < n ==>
+    EL j pm = (if U j then [NONE] else EL j ms) /\
+    EL j pe = (if U j then [site j] else EL j ess)`
+    by simp[Abbr `pm`, Abbr `pe`, EL_GENLIST] >>
+  `LIST_REL (\m es. LENGTH m = LENGTH es) pm pe` by
+    (fs[LIST_REL_EL_EQN] >> rw[] >> Cases_on `U n'` >> simp[]) >>
+  `FILTER IS_SOME (FLAT pm) = FILTER IS_SOME (FLAT ms)` by
+    (simp[FILTER_FLAT] >> AP_TERM_TAC >>
+     simp[LIST_EQ_REWRITE] >> rpt strip_tac >>
+     simp[EL_MAP] >> Cases_on `U x` >> simp[] >>
+     `EL x ms = []` by metis_tac[] >> simp[]) >>
+  simp[] >> conj_tac
+  >- (strip_tac >> conj_tac >> simp[LIST_EQ_REWRITE] >>
+      rpt strip_tac >> simp[]) >>
+  rpt strip_tac >>
+  `GENLIST (\j. EL j pm) n = pm /\
+   GENLIST (\j. EL j pe) n = pe` by
+    (conj_tac >> simp[LIST_EQ_REWRITE, EL_GENLIST]) >>
+  `PERM (FLAT (MAP (\j. EL j pm) packet_order)) (FLAT pm)` by
+    metis_tac[MAP_COUNT_LIST, PERM_FLAT, PERM_MAP] >>
+  `PERM (FLAT (MAP (\j. EL j pe) packet_order)) (FLAT pe)` by
+    metis_tac[MAP_COUNT_LIST, PERM_FLAT, PERM_MAP] >>
+  simp[] >> rpt strip_tac >>
+  `PERM (FILTER IS_SOME (FLAT (MAP (\j. EL j pm) packet_order)))
+        (FILTER IS_SOME (FLAT ms))` by metis_tac[PERM_FILTER] >>
+  `PERM (MAP THE (FILTER IS_SOME
+          (FLAT (MAP (\j. EL j pm) packet_order))))
+        (MAP THE (FILTER IS_SOME (FLAT ms)))` by metis_tac[PERM_MAP] >>
+  `PERM (MAP THE (FILTER IS_SOME
+          (FLAT (MAP (\j. EL j pm) packet_order))) ++ unused)
+        (MAP THE (FILTER IS_SOME (FLAT ms)) ++ unused)`
+    by simp[PERM_APPEND_IFF] >>
+  metis_tac[PERM_TRANS]
+QED
+
 Theorem gas_events_invoke_update_var[local]:
   i.inst_opcode = INVOKE /\
   (!v. MEM (Var v) i.inst_operands ==> out <> v) ==>
@@ -1822,11 +1886,11 @@ Theorem mask_segments_compose[local]:
       E = (\xs st. gas_events_block fuel C owner
         <|bb_label := owner; bb_instructions :=
           REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st);
-      Seg = (\xs st m es unused.
+      Seg = (\xs dst st m es unused.
         LENGTH m = LENGTH es /\
         PERM (MAP THE (FILTER IS_SOME m) ++ unused) st.vs_gas_readings /\
-        (!v. (R fuel C' xs st = OK v \/
-              (?ir. R fuel C' xs st = IntRet ir v)) ==>
+        (!v. (R fuel C' dst st = OK v \/
+              (?ir. R fuel C' dst st = IntRet ir v)) ==>
           EVERY IS_SOME m /\ unused = v.vs_gas_readings) /\
         !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
           (?extra. es = E xs (st with vs_gas_readings := gs ++ tail) ++ extra) /\
@@ -1834,22 +1898,26 @@ Theorem mask_segments_compose[local]:
             terminates (R fuel C xs (st with vs_gas_readings := gs ++ tail)) /\
             dft_res_rel
               (restore_result [] (R fuel C xs (st with vs_gas_readings := gs ++ tail)))
-              (restore_result [] (R fuel C' xs st)) /\
-            (((?v. R fuel C' xs st = OK v) \/
-              (?ir v. R fuel C' xs st = IntRet ir v)) ==>
+              (restore_result [] (R fuel C' dst st)) /\
+            (((?v. R fuel C' dst st = OK v) \/
+              (?ir v. R fuel C' dst st = IntRet ir v)) ==>
               E xs (st with vs_gas_readings := gs ++ tail) = es /\
-              residual_result tail (R fuel C' xs st)
+              residual_result tail (R fuel C' dst st)
                 (R fuel C xs (st with vs_gas_readings := gs ++ tail)))))
   in
     EVERY (\i. ~is_terminator i.inst_opcode) pre /\
-    R fuel C' pre s = OK u /\
-    Seg pre s m1 e1 unused1 /\ Seg post u m2 e2 unused2 ==>
-    Seg (pre ++ post) s (m1 ++ m2) (e1 ++ e2) unused2
+    EVERY (\i. ~is_terminator i.inst_opcode) dstpre /\
+    R fuel C' dstpre s = OK u /\
+    Seg pre dstpre s m1 e1 unused1 /\ Seg post dstpost u m2 e2 unused2 ==>
+    Seg (pre ++ post) (dstpre ++ dstpost) s (m1 ++ m2) (e1 ++ e2) unused2
 Proof
   rpt BasicProvers.LET_ELIM_TAC >>
   `!n D st. R n D (pre ++ post) st =
     case R n D pre st of OK v => R n D post v | other => other` by
     simp[Abbr `R`, FOLDR_APPEND, Once dftRunRelTheory.dft_exec_prefix_continue] >>
+  `R fuel C' (dstpre ++ dstpost) s = R fuel C' dstpost u` by
+    (simp[Abbr `R`, FOLDR_APPEND, Once dftRunRelTheory.dft_exec_prefix_continue] >>
+     gvs[]) >>
   fs[Abbr `Seg`] >>
   `EVERY IS_SOME m1 /\ unused1 = u.vs_gas_readings` by metis_tac[] >>
   conj_tac
@@ -2091,7 +2159,8 @@ Proof
     (qunabbrev_tac `Q` >> qunabbrev_tac `Seg` >> qunabbrev_tac `R` >>
      CONV_TAC (REDEPTH_CONV BETA_CONV) >>
      match_mp_tac (Q.INST
-       [`u` |-> `u with vs_inst_idx := SUC s.vs_inst_idx`, `unused1` |-> `unused`]
+       [`u` |-> `u with vs_inst_idx := SUC s.vs_inst_idx`, `unused1` |-> `unused`,
+        `dstpre` |-> `[h]`, `dstpost` |-> `xs`]
        (PURE_REWRITE_RULE [venomStateTheory.venom_state_accfupds]
          (CONV_RULE (REDEPTH_CONV BETA_CONV)
            (PURE_REWRITE_RULE [LET_THM] mask_segments_compose)))) >>
@@ -5051,10 +5120,10 @@ Theorem stopped_prefix_suffix[local]:
   (~?u. FOLDR (dft_exec_cons fuel C) OK pre s = OK u) ==>
   FOLDR (dft_exec_cons fuel C) OK (pre ++ post) s =
     FOLDR (dft_exec_cons fuel C) OK pre s /\
-  gas_events_block fuel C s.vs_current_bb
+  gas_events_block fuel C owner
     <|bb_label := s.vs_current_bb; bb_instructions :=
       REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ post)|> s =
-  gas_events_block fuel C s.vs_current_bb
+  gas_events_block fuel C owner
     <|bb_label := s.vs_current_bb; bb_instructions :=
       REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|> s
 Proof
@@ -5064,7 +5133,7 @@ Proof
   qspecl_then [`pre`, `s`,
     `<|bb_label := s.vs_current_bb; bb_instructions :=
       REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ post)|>`,
-    `post`] mp_tac (Q.INST [`owner` |-> `s.vs_current_bb`] prefix_events_stopped) >>
+    `post`] mp_tac prefix_events_stopped >>
   `s.vs_inst_idx - (LENGTH pre + s.vs_inst_idx) = 0` by decide_tac >>
   simp[DROP_APPEND] >> gvs[]
 QED
@@ -5086,7 +5155,7 @@ Proof
   >- (`pre = []` by (Cases_on `pre` >> gvs[dft_gas_swap_pair_def]) >>
       qpat_x_assum `pre = []` SUBST_ALL_TAC >>
       pure_rewrite_tac[APPEND] >> irule stopped_singleton_suffix >> gvs[]) >>
-  mp_tac (Q.INST [`pre` |-> `pre ++ [y]`] stopped_prefix_suffix) >>
+  mp_tac (Q.INST [`pre` |-> `pre ++ [y]`, `owner` |-> `s.vs_current_bb`] stopped_prefix_suffix) >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[] >> gvs[]
 QED
 
@@ -5488,7 +5557,9 @@ Theorem invoke_gas_crossing_success[local]:
           (restore_result [] (R fuel C' [y;x] (s with vs_gas_readings := w::rs))) /\
         E [x;y] (s with vs_gas_readings := gs ++ w::tail) = es ++ [(owner,y.inst_id)] /\
         residual_result tail (R fuel C' [y;x] (s with vs_gas_readings := w::rs))
-          (R fuel C [x;y] (s with vs_gas_readings := gs ++ w::tail))) /\
+          (R fuel C [x;y] (s with vs_gas_readings := gs ++ w::tail)) /\
+        R fuel C [x;y] (s with vs_gas_readings := gs ++ w::tail) =
+          OK ((u with vs_inst_idx := SUC t.vs_inst_idx) with vs_gas_readings := tail)) /\
       (!v. R fuel C [x] (s with vs_gas_readings := gs ++ w::tail) = OK v ==>
         E [x] (s with vs_gas_readings := gs ++ w::tail) = es /\
         v.vs_gas_readings = w::tail)
