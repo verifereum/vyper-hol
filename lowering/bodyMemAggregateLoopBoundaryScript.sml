@@ -133,6 +133,28 @@ Proof
   metis_tac[]
 QED
 
+(* Preserve the source typing independently of the declared destination type. *)
+Theorem aggregate_tuple_marked_child_declared_source_any:
+  expr_body_pre ce cx env e es /\
+  gas_marked_exec memory (ctx,func) (eval_expr cx e) (es,s0)
+    marks (INL tv) mid (OK t) /\
+  arg_type_fits (expr_type e) dty /\
+  evaluate_type (get_tenv cx) dty = SOME dtv ==>
+  expr_sim_inv ce cx env (mid with gas_obs := []) /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes /\
+  immutable_metadata_frame es (mid with gas_obs := []) /\
+  ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    eval_result_typed (env,cx,mid with gas_obs := []) tv (Type (expr_type e)) /\
+    (!v. read_result cx tv (mid with gas_obs := []) =
+           (INL v,mid with gas_obs := []) ==>
+      value_has_type tvt v /\ value_has_type dtv v /\ val_wf dtv v)
+Proof
+  strip_tac >> drule_all aggregate_tuple_marked_child_source_any >> strip_tac >>
+  simp[] >> rpt strip_tac >>
+  metis_tac[CONJUNCT1 vyperTypeArgFitsTheory.arg_type_fits_value_has_type,
+            CONJUNCT1 valueEncodingTypingTheory.value_has_type_val_wf]
+QED
+
 Theorem aggregate_tuple_marked_footprint_any:
   expr_body_pre ce cx env e es /\
   gas_marked_exec memory (ctx,func) (eval_expr cx e) (es,s0)
@@ -223,9 +245,7 @@ Theorem aggregate_mem_tuple_cons_compile:
     compile_make_tuple compile_expr ce args (MAP expr_type args) buf
       (off + type_memory_bytes ce (expr_type e)) st = (out,sb)
 Proof
-  simp[Once compile_make_tuple_def, comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  simp[exprSimAggregateLoopsTheory.compile_make_tuple_cons]
 QED
 
 Theorem aggregate_mem_tuple_local_region_backward:

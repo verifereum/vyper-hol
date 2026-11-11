@@ -406,7 +406,7 @@ Proof
 QED
 
 (* Split a tuple-literal iteration at its declared member type. *)
-Theorem compile_make_tuple_cons[local]:
+Theorem compile_make_tuple_cons:
   compile_make_tuple cfn ce (e::args) (mty::tys) buf off sa = (out,sb) ==>
   ?vv sm dst sn op su st.
     cfn ce (expr_type e) e sa = (vv,sm) /\
