@@ -14,7 +14,7 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeInvariants vyperTypeCallGraph gasContext stmtSimReturn
   vyperTypeCallStackSoundness vyperTypeValues compileVyper targetPlaceSim exprSimTopLevelProps
-  bodyStorageMetadata
+  bodyStorageMetadata bodyDynArraySource
 Libs
   monadsyntax
 
