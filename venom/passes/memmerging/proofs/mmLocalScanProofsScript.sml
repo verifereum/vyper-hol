@@ -14955,6 +14955,180 @@ Proof
   gvs[mm_local_exec_prefix_single] >> fs[mm_local_cut_def]
 QED
 
+Theorem mm_local_nonwrite_successor[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n < LENGTH is /\
+  (EL n is).inst_opcode NOTIN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} ==>
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n /\
+  mm_local_write_capture is H (SUC n) = mm_local_write_capture is H n
+Proof
+  strip_tac >>
+  `(EL n is).inst_opcode <> MSTORE /\ (EL n is).inst_opcode <> MCOPY /\
+   (EL n is).inst_opcode <> CALLDATACOPY /\ (EL n is).inst_opcode <> DLOADBYTES` by fs[] >>
+  conj_tac
+  >- (`!g. MEM g gs ==> rep_of_group is g <> SOME ((EL n is).inst_id,g)` by
+        (rpt strip_tac >> drule_all mm_local_canonical_rep_write >> fs[]) >>
+      simp[NoAsms, mm_local_pending_indices_def, rich_listTheory.COUNT_LIST_SNOC,
+        rich_listTheory.SNOC_APPEND, FILTER_APPEND] >>
+      simp[] >> rewrite_tac[rich_listTheory.FILTER_EQ] >>
+      qx_gen_tac `j` >> simp[MEM_COUNT_LIST] >> strip_tac >>
+      eq_tac >> strip_tac >> gvs[]
+      >- (qexistsl [`g`,`r`] >> simp[] >> decide_tac) >>
+      `r <> n` by metis_tac[] >> qexistsl [`g`,`r`] >> simp[] >> decide_tac) >>
+  rewrite_tac[FUN_EQ_THM] >> qx_gen_tac `j` >>
+  (Cases_on `j = n` >- gvs[mm_local_write_capture_def]) >>
+  `j < SUC n <=> j < n` by decide_tac >> simp[mm_local_write_capture_def]
+QED
+
+Theorem mm_local_cut_memory_preserving_renew[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n /\
+  mm_local_write_capture is H (SUC n) = mm_local_write_capture is H n /\
+  (H (SUC n)).vs_memory = (H n).vs_memory /\
+  v.vs_memory = t.vs_memory /\
+  state_equiv excluded
+    ((H (SUC n)) with <|vs_memory := v.vs_memory; vs_inst_idx := SUC pc|>) v ==>
+  mm_local_cut is gs H (SUC n) excluded (SUC pc) v
+Proof
+  strip_tac >>
+  `v.vs_inst_idx = SUC pc /\
+   mm_local_nonmemory_frame (H (SUC n)) = mm_local_nonmemory_frame v /\
+   (!x. x NOTIN excluded ==> lookup_var x (H (SUC n)) = lookup_var x v)` by
+    gvs[state_equiv_frame, mm_local_nonmemory_frame_def,
+      stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+      venomStateTheory.venom_state_component_equality] >>
+  `mm_local_epoch_start is gs n <= n` by
+    (irule mm_local_epoch_start_bound >> qexistsl [`gs`,`is`] >> simp[]) >>
+  gvs[mm_local_cut_def] >> conj_tac
+  >- (gvs[mm_local_pending_def] >> qexists `ws` >> simp[] >>
+      irule mm_local_write_log_memory_cong >> simp[]) >>
+  Cases_on `mm_local_pending_indices is gs n = []`
+  >- gvs[mm_local_epoch_start_suc, mm_local_pending_empty,
+       rich_listTheory.COUNT_LIST_def] >>
+  `SUC n - mm_local_epoch_start is gs n = SUC (n - mm_local_epoch_start is gs n)` by
+    decide_tac >>
+  simp[mm_local_epoch_start_suc, rich_listTheory.COUNT_LIST_SNOC,
+    rich_listTheory.SNOC_APPEND, MAP_APPEND, FOLDL_APPEND,
+    mm_local_write_capture_future]
+QED
+
+Theorem mm_local_alloca_memory_frame[local]:
+  i.inst_opcode = ALLOCA /\ step_inst fuel ctx i s = OK u ==>
+  step_inst fuel ctx i (s with vs_memory := mem) = OK (u with vs_memory := mem)
+Proof
+  strip_tac >>
+  gvs[venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()] >>
+  gvs[venomStateTheory.update_var_def]
+QED
+
+Theorem mm_local_cut_nonmemory_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (EL n is).inst_opcode NOTIN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  (!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator (EL n is).inst_opcode /\
+  ~is_ext_call_op (EL n is).inst_opcode /\ (EL n is).inst_opcode <> INVOKE /\
+  Eff_MEMORY NOTIN read_effects (EL n is).inst_opcode /\
+  Eff_MEMORY NOTIN write_effects (EL n is).inst_opcode /\
+  mm_local_cut is gs H n excluded pc t /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n ==>
+  ?t'. mm_local_exec_prefix fuel ctx [EL n is] t t' /\
+    mm_local_cut is gs H (SUC n) excluded (SUC pc) t'
+Proof
+  strip_tac >>
+  `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n /\
+   mm_local_write_capture is H (SUC n) = mm_local_write_capture is H n` by
+    metis_tac[mm_local_nonwrite_successor] >>
+  `?v. step_inst fuel ctx (EL n is) t = OK v /\
+    state_equiv excluded
+      (u with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) v` by
+    (Cases_on `(EL n is).inst_opcode = ALLOCA`
+     >- (`state_equiv excluded
+           ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+           metis_tac[mm_local_cut_memory_state_equiv] >>
+         `step_inst fuel ctx (EL n is)
+           ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) =
+           OK (u with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>)` by
+           (irule mm_local_alloca_memory_frame >>
+            simp[analysisSimProofsBaseTheory.step_inst_idx_indep,
+              instIdxIndepTheory.exec_result_map_def]) >>
+         drule_all removeUnusedProofsTheory.step_inst_result_equiv_full >>
+         disch_then (qspecl_then [`fuel`,`ctx`] mp_tac) >>
+         Cases_on `step_inst fuel ctx (EL n is) t` >> simp[result_equiv_def]) >>
+     `~is_alloca_op (EL n is).inst_opcode` by
+       (Cases_on `(EL n is).inst_opcode` >> fs[venomInstTheory.is_alloca_op_def]) >>
+     metis_tac[mm_local_cut_memory_independent_step]) >>
+  `u.vs_memory = (H n).vs_memory /\ v.vs_memory = t.vs_memory` by
+    (Cases_on `(EL n is).inst_opcode = ALLOCA`
+     >- metis_tac[venomMemPropsTheory.step_inst_alloca_preserves_memory,
+          venomInstTheory.is_alloca_op_def] >>
+     `~is_alloca_op (EL n is).inst_opcode` by
+       (Cases_on `(EL n is).inst_opcode` >> fs[venomInstTheory.is_alloca_op_def]) >>
+     metis_tac[passSharedFieldTheory.step_inst_preserves_all]) >>
+  `mm_local_cut is gs H (SUC n) excluded (SUC pc)
+    (v with vs_inst_idx := SUC pc)` by
+    (irule mm_local_cut_memory_preserving_renew >>
+     simp[] >> reverse conj_tac
+     >- (qexists `t` >> gvs[]) >>
+     drule execEquivProofsTheory.state_equiv_inst_idx >>
+     disch_then (qspec_then `SUC pc` mp_tac) >> simp[]) >>
+  qexists `v with vs_inst_idx := SUC pc` >> simp[] >>
+  gvs[mm_local_exec_prefix_single] >> fs[mm_local_cut_def]
+QED
+
+Theorem mm_local_cut_literal_load_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (EL n is).inst_opcode = MLOAD /\ (EL n is).inst_operands = [Lit w] /\
+  (EL n is).inst_outputs = [out] /\
+  mm_local_cut is gs H n excluded pc t /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n ==>
+  ?t'. mm_local_exec_prefix fuel ctx [EL n is] t t' /\
+    mm_local_cut is gs H (SUC n) excluded (SUC pc) t'
+Proof
+  strip_tac >>
+  `read_memory (w2n w) 32 (H n) = read_memory (w2n w) 32 t` by
+    metis_tac[mm_local_cut_literal_load_read] >>
+  `mload (w2n w) (H n) = mload (w2n w) t` by
+    gvs[venomStateTheory.mload_def, venomStateTheory.read_memory_def] >>
+  `u = update_var out (mload (w2n w) t) (H n) /\
+   step_inst fuel ctx (EL n is) t = OK (update_var out (mload (w2n w) t) t)` by
+    gvs[venomExecSemanticsTheory.step_inst_non_invoke,
+      venomExecSemanticsTheory.step_inst_base_def, venomExecSemanticsTheory.exec_read1_def,
+      venomStateTheory.eval_operand_def] >>
+  `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n /\
+   mm_local_write_capture is H (SUC n) = mm_local_write_capture is H n` by
+    (irule mm_local_nonwrite_successor >> simp[] >> metis_tac[]) >>
+  `state_equiv excluded
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+    metis_tac[mm_local_cut_memory_state_equiv] >>
+  drule removeUnusedProofsTheory.foldl_update_var_state_equiv >>
+  disch_then (qspec_then `[(out,mload (w2n w) t)]` assume_tac) >>
+  qexists `update_var out (mload (w2n w) t) t with vs_inst_idx := SUC pc` >>
+  conj_tac
+  >- (gvs[mm_local_exec_prefix_single, venomInstTheory.is_terminator_def] >>
+      fs[mm_local_cut_def]) >>
+  irule mm_local_cut_memory_preserving_renew >> simp[] >>
+  reverse conj_tac >- (qexists `t` >> gvs[]) >>
+  gvs[state_equiv_frame, venomStateTheory.update_var_def,
+    venomStateTheory.lookup_var_def, stateFrameTheory.state_frame_def,
+    venomStateTheory.venom_state_component_equality]
+QED
+
 Theorem mm_local_cut_init[local]:
   h = phi_prefix_length is ==>
   mm_local_cut is gs H h excluded pc (H h with vs_inst_idx := pc)
