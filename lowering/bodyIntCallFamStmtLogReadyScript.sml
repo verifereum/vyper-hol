@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtLogReady
 Ancestors
   exprSimHypsDefs bodyExprPreFacts bodySim supportedExprTraverse
-  supportedStmtTraverse supportedStmts vyperTypeSystem list
+  supportedStmtTraverse supportedStmts vyperTypeSystem allocLimitsProps list
 
 Theorem expr_body_pre_state_transport:
   expr_body_pre ce cx env e es /\ expr_sim_inv ce cx env ee ==>
@@ -25,6 +25,9 @@ Proof
   `cx_tops cx = tops` by metis_tac[gasContextTheory.cx_tops_module] >>
   `well_typed_exprs env args` by
     fs[type_stmt_def, AllCaseEqs()] >>
+  `~supported_stmt_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr ce e)
+     (Log id args)` by
+    (irule alloc_limits_stmt_exists >> fs[stmt_exprs_ok_def]) >>
   fs[supported_log_def, supportedExprsTheory.supported_pure_exprs_every,
      stmt_exprs_ok_def,
      supported_stmt_expr_exists_def, supported_exprs_exists_every, EVERY_MEM] >>
@@ -33,6 +36,14 @@ Proof
     metis_tac[supportedExprsTheory.supported_expr_def] >>
   drule supported_expr_body_calls >> strip_tac >>
   `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
+  `~supported_expr_exists
+     (\e'. ~is_extcode e' /\ (~byte_widths_expr e' \/ ~alloc_limits_expr ce e')) e` by
+    (`(\e'. ~is_extcode e' /\ (~byte_widths_expr e' \/ ~alloc_limits_expr ce e')) =
+      (\e'. (\x. ~is_extcode x /\ ~byte_widths_expr x) e' \/
+             (\x. ~is_extcode x /\ ~alloc_limits_expr ce x) e')` by
+       (simp[FUN_EQ_THM] >> metis_tac[]) >>
+     pop_assum SUBST1_TAC >>
+     rewrite_tac[supported_expr_exists_disj] >> fs[]) >>
   irule stmt_expr_body_pre >>
   simp[] >> rpt conj_tac
   >- (fs[body_inv_def])
