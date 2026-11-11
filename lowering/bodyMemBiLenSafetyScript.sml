@@ -23,7 +23,7 @@ Proof
 QED
 
 Theorem len_vv_memory_header_bound:
-  vv_holds cenv cx t tv vv es s /\ vv_store_bound cx t lt es tv vv s /\
+  vv_holds cenv cx pt tv vv es s /\ vv_store_bound cx t lt es tv vv s /\
   is_sized_type t /\ evaluate_type (get_tenv cx) t = SOME vt /\
   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) ==>
   ?w. eval_operand (vv_operand vv) s = SOME w /\
@@ -44,14 +44,19 @@ Theorem len_load_mem_ok:
   vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
   vv_store_bound cx (expr_type e) lt es' tv vv s /\
   is_sized_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME vt ==>
+  evaluate_type (get_tenv cx) (expr_type e) = SOME vt /\
+  type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME pvt ==>
   run_inst_seq_mem_ok (emitted_insts sm sb) s
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx es' s /\
-   vv_holds cenv cx (expr_type e) tv vv es' s` by fs[vv_post_def] >>
+   vv_holds cenv cx (post_value_type cenv e) tv vv es' s` by fs[vv_post_def] >>
   `32 <= type_memory_size vt /\ ~is_word_type (expr_type e)` by
     metis_tac[len_sized_store_header] >>
+  `is_sized_type (post_value_type cenv e)` by
+    metis_tac[exprSimLenTheory.sized_type_widens_source] >>
+  `32 <= type_memory_size pvt` by metis_tac[len_sized_store_header] >>
   `(vv_location vv = NONE \/ vv_location vv = SOME LocMemory) ==>
     ?w. eval_operand (vv_operand vv) s = SOME w /\
         w2n w + 32 <= s.vs_alloca_next` by

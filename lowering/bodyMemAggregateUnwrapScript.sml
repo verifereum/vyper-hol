@@ -8,6 +8,7 @@ Ancestors
 
 Theorem aggregate_unwrap_value_path_mem_capacity:
   !ctx func cenv cx e es sa sm sb s0 es' v vv op s.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv vv sm = (op, sb) /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -45,16 +46,21 @@ Proof
       metis_tac[]) >>
   rename1 `LocatedValue t p` >>
   RULE_ASSUM_TAC (REWRITE_RULE [vv_operand_def]) >>
-  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   Cases_on `p.ptr_location = LocCalldata`
   >- gvs[vv_post_calldata] >>
   Cases_on `p.ptr_location = LocMemory`
-  >- (gvs[unwrap_value_def, comp_return_def] >>
+  >- (`is_word_type t ==> t = expr_type e` by
+        (gvs[vv_post_def, vv_holds_def] >>
+         metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
+      `~is_word_type t` by metis_tac[] >>
+      gvs[unwrap_value_def, comp_return_def] >>
       qexists_tac `s` >> simp[cj 1 gas_path_mem_rules] >>
       conj_tac >- metis_tac[expr_post_of_vv_post_memory] >>
       qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
       simp[vv_store_bound_def, expr_store_bound_def, read_result_def, return_def] >>
       metis_tac[]) >>
+  `t = expr_type e` by
+    (Cases_on `p.ptr_location` >> gvs[vv_post_def, vv_holds_def]) >>
   `?u w tv. gas_path_mem ctx func s 0 (OK u) /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
       evaluate_type (get_tenv cx) t = SOME tv /\
@@ -78,6 +84,7 @@ QED
 
 Theorem aggregate_unwrap_value_marked_read_mem_capacity:
   !ctx func cenv cx e es sa sm sb s0 ee tv vv op s.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv vv sm = (op, sb) /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ sa.cs_next_var <= sm.cs_next_var /\

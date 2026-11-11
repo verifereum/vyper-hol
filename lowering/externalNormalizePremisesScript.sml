@@ -93,7 +93,7 @@ Theorem normalize_return_source_kinds:
   ~is_word_type sty /\ ~is_bytestring_type sty /\ ~is_bytestring_type dty
 Proof
   strip_tac >>
-  `~is_word_type sty` by metis_tac[return_source_word_widens_eq] >>
+  `~is_word_type sty` by metis_tac[typedMemoryCopyTheory.return_source_word_widens_eq] >>
   `~is_bytestring_type dty` by metis_tac[typedMemoryCopyTheory.typed_copy_bytestring_source] >>
   simp[] >> strip_tac >>
   Cases_on `sty` >> gvs[is_bytestring_type_def] >>

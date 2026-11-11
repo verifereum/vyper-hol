@@ -289,7 +289,7 @@ Proof
   gvs[vyperTypeSystemTheory.arg_type_fits_def, compileEnvTheory.is_word_type_def]
 QED
 
-Theorem rest_word_widened_array_shape[local]:
+Theorem rest_word_widened_array_shape:
   !tenv pt u bd.
     type_widens_to tenv pt (ArrayT u bd) /\ is_word_type u ==>
     ?pbd. pt = ArrayT u pbd /\

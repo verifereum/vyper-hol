@@ -25,6 +25,8 @@ Theorem slice_calldata_vv_capacity:
     (LocatedValue (expr_type e) p) t
 Proof
   strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   Cases_on `evaluate_type (get_tenv cx) (expr_type e)`
   >- simp[vv_store_bound_def] >>
   drule vv_store_bound_capacity >> simp[] >> disch_then irule >>

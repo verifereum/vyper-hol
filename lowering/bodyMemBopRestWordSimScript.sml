@@ -140,8 +140,19 @@ Resume compile_rest_word_membership_sim_mem[typed_tail]:
   `expr_body_pre cenv cx env e2
      (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by gvs[] >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >>
-  `vv_holds cenv cx (expr_type e2) tv arr_vv (fin with gas_obs := []) u` by
-    fs[loweringPostsTheory.vv_post_def] >>
+  `?pbd. post_value_type cenv e2 = ArrayT (expr_type e1) pbd /\
+         case bd of Fixed n => pbd = Fixed n | Dynamic n => ?m. pbd = Dynamic m` by
+    (irule rest_word_widened_array_shape >> simp[] >>
+     qexists `env.type_defs` >>
+     qpat_assum `expr_type e2 = _` (SUBST1_TAC o SYM) >>
+     irule exprSimHypsTheory.post_value_type_widens >>
+     conj_tac
+     >- (qpat_x_assum `expr_body_pre _ _ _ e2 (mid with gas_obs := [])`
+           (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def])) >>
+     qexistsl [`cx`, `mid with gas_obs := []`] >> first_assum ACCEPT_TAC) >>
+  `vv_holds cenv cx (ArrayT (expr_type e1) pbd) tv arr_vv (fin with gas_obs := []) u` by
+    (qpat_x_assum `post_value_type cenv e2 = _` (assume_tac o SYM) >>
+     fs[loweringPostsTheory.vv_post_def]) >>
   drule rest_word_vv_read_suffix >>
   simp[] >> disch_then (qx_choose_then `v2` assume_tac) >>
   `value_has_type tvt v2` by metis_tac[] >>
@@ -150,6 +161,11 @@ Resume compile_rest_word_membership_sim_mem[typed_tail]:
     (qpat_x_assum `evaluate_type _ (expr_type e2) = _` mp_tac >>
      simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
   gnvs[] >>
+  `evaluate_type (get_tenv cx) (post_value_type cenv e2) = SOME (ArrayTV et pbd)` by
+    (qpat_assum `expr_body_pre _ _ _ e2 _`
+       (strip_assume_tac o MATCH_MP exprSimHypsTheory.post_type_evaluates) >>
+     pop_assum mp_tac >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
   `?av. v2 = ArrayV av` by
     (Cases_on `v2` >> fs[vyperTypingTheory.value_has_type_def]) >>
   gnvs[] >>
@@ -215,6 +231,7 @@ Resume compile_rest_word_membership_sim_mem[safe_tail]:
            rest_word_fixed_tail_mem) >>
          simp[] >> disch_then drule >> simp[] >> disch_then drule >>
          simp[] >> disch_then drule >> simp[] >> metis_tac[]) >>
+     qpat_x_assum `?m. pbd = Dynamic m` (qx_choose_then `pcap` SUBST_ALL_TAC) >>
      drule (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`]
        rest_word_dynamic_tail_mem) >>
      simp[] >> disch_then drule >> simp[] >> disch_then drule >>
