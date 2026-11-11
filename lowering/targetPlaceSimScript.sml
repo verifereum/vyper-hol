@@ -232,7 +232,7 @@ QED
 
 (* The compile environment holds a storage, transient or mapping variable
    at the layout's slot (storage_vars_rel, transient_vars_rel). *)
-Theorem toplevel_decl_ce_vars[local]:
+Theorem toplevel_decl_ce_vars:
   !cenv cx src id ts d id_str tr slot.
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     get_module_code cx src = SOME ts /\
@@ -250,7 +250,7 @@ QED
    declared type, or a mapping of its declared key and value types.
    bare_global_assignable and bare_globals name immutables, which have no
    storage declaration. *)
-Theorem toplevel_target_decl[local]:
+Theorem toplevel_target_decl:
   !env cx st src id vt.
     type_place_target env (TopLevelNameTarget (src,id)) = SOME vt /\
     env_consistent env cx st /\
