@@ -845,10 +845,19 @@ Resume evaluate_finite_frame[assign_base]:
   >- (strip_tac >>
       qspecl_then [`cx`,`e`] (drule_all o CONJUNCT1)
         (cj 5 eval_scc_type_sound_results_mutual) >> strip_tac >> gvs[] >>
+      Cases_on `read_result cx x value_st` >>
+      rename1 `read_result cx x value_st = (loaded,read_st)` >>
+      drule read_result_state >> strip_tac >> pop_assum SUBST_ALL_TAC >>
+      reverse (Cases_on `loaded`)
+      >- (gvs[] >> asm "prefix" (ACCEPT_TAC o BETA_RULE)) >>
+      rename1 `read_result cx x value_st = (INL loaded_v,value_st)` >>
+      gvs[] >>
       drule_all vyperTypeArgFitsTheory.atarget_accepts_well_typed_atarget >>
       strip_tac >> gvs[vyperTypeSystemTheory.well_typed_atarget_def] >>
-      asm_x "target_ih" drule >>
-      disch_then (mk_asm "target_frame") >>
+      qpat_assum `read_result cx x value_st = _` (fn read_eq =>
+        asm_x "target_ih" drule >>
+        disch_then (mk_asm "target_frame" o
+          SIMP_RULE bool_ss [read_eq] o Q.SPECL [`value_st`,`loaded_v`,`value_st`])) >>
       Cases_on `eval_target_place cx bt value_st` >>
       rename1 `eval_target_place cx bt value_st = (target_res,target_st)` >>
       `^frame cx A value_st target_st` by
@@ -866,20 +875,11 @@ Resume evaluate_finite_frame[assign_base]:
       gvs[bind_def] >>
       qspecl_then [`cx`,`bt`] (drule_all o CONJUNCT1)
         (cj 8 eval_scc_type_sound_results_mutual) >> strip_tac >>
-      Cases_on `read_result cx x target_st` >>
-      rename1 `read_result cx x target_st = (loaded,read_st)` >>
-      drule read_result_state >> strip_tac >> gvs[] >>
-      reverse (Cases_on `loaded`)
-      >- (gvs[] >> irule (BETA_RULE finite_frame_trans) >>
-          qexists_tac `value_st` >> conj_tac
-          >- asm "prefix" (ACCEPT_TAC o BETA_RULE) >>
-          asm "target_prefix" (ACCEPT_TAC o BETA_RULE)) >>
-      gvs[] >>
       qspecl_then [`cx`,`bt`] (drule_all o cj 2)
         (cj 8 eval_scc_type_sound_results_mutual) >> strip_tac >>
       drule (cj 8 vyperImmutableMetadataFrameTheory.eval_metadata_frame_mutual) >>
       strip_tac >>
-      `eval_result_typed (env,cx,read_st) x (Type (expr_type e))` by
+      `eval_result_typed (env,cx,target_st) x (Type (expr_type e))` by
         (irule eval_result_typed_transport >> qexists_tac `value_st` >> simp[]) >>
       `runtime_consistent env cx st` by simp[vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
       drule_all vyperTypeEvalStoragePreservationTheory.eval_expr_success_storage_facts >>
@@ -887,13 +887,13 @@ Resume evaluate_finite_frame[assign_base]:
       gvs[] >> drule_all live_result_transport >> strip_tac >>
       drule_all typed_result_read_sound >> strip_tac >>
       gvs[] >>
-      `value_has_type tv x''` by
+      `value_has_type tv loaded_v` by
         (fs[vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
          drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >>
          strip_tac >> gvs[]) >>
       irule (BETA_RULE finite_frame_trans) >> qexists_tac `value_st` >>
       (conj_tac >- asm "prefix" (ACCEPT_TAC o BETA_RULE)) >>
-      irule (BETA_RULE finite_frame_trans) >> qexists_tac `read_st` >>
+      irule (BETA_RULE finite_frame_trans) >> qexists_tac `target_st` >>
       (conj_tac >- asm "target_prefix" (ACCEPT_TAC o BETA_RULE)) >>
       Cases_on `x'`
       >- (gvs[runtime_place_typed_def, place_type_value_def, return_def] >>
@@ -2502,7 +2502,9 @@ QED
 Resume evaluate_finite_frame[expr_builtin]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `^callable_closed cx A R` (mk_asm "closure") >>
-  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ _ ==> _` (mk_asm "args_ih") >>
+  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==> _`
+    (mk_asm "mem_ih") >>
+  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ _ /\ bt <> Env MsgGas ==> _` (mk_asm "args_ih") >>
   qpat_x_assum `!s'' x t. _ /\ bt = Len ==> _` (mk_asm "len_ih") >>
   gvs[vyperTypeSystemTheory.well_typed_expr_def, accesses_expr_def, int_calls_expr_def] >>
   Cases_on `builtin_args_length_ok bt (LENGTH es)`
@@ -2514,6 +2516,14 @@ Resume evaluate_finite_frame[expr_builtin]:
       rename1 `eval_exprs cx es st = (r1,s1)` >>
       `^frame cx A st s1` by
         (BETA_TAC >>
+         Cases_on `bt = Bop In \/ bt = Bop NotIn`
+         >- (asm "mem_ih" (qspecl_then [`st`,`()`,`st`] mp_tac) >>
+             simp[type_check_def, assert_def, return_def] >>
+             disch_then (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
+             (conj_tac >- (qexists_tac `R` >> simp[] >>
+               asm "closure" (ACCEPT_TAC o SRULE []))) >>
+             qexists_tac `env` >> simp[]) >>
+         `bt <> Bop In /\ bt <> Bop NotIn` by fs[] >>
          asm "args_ih" (qspecl_then [`st`,`()`,`st`] mp_tac) >>
          simp[type_check_def, assert_def, return_def] >>
          disch_then (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
@@ -2521,9 +2531,12 @@ Resume evaluate_finite_frame[expr_builtin]:
            asm "closure" (ACCEPT_TAC o SRULE []))) >>
          qexists_tac `env` >> simp[]) >>
       qpat_x_assum `^frame cx A st s1` (mk_asm "prefix") >>
-      asm_x "args_ih" kall_tac >> asm_x "len_ih" kall_tac >>
+      asm_x "args_ih" kall_tac >> asm_x "mem_ih" kall_tac >> asm_x "len_ih" kall_tac >>
+      Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
       gvs[Once evaluate_def, type_check_def, assert_def, return_def,
-          ignore_bind_def, bind_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+          ignore_bind_def, bind_def, raise_def, get_accounts_def,
+          lift_option_type_def, AllCaseEqs()] >>
       imp_res_tac precompile_call_success_state >>
       imp_res_tac lift_sum_state >>
       gvs[return_def, raise_def, bind_def, oneline get_storage_def] >>
@@ -2533,7 +2546,7 @@ Resume evaluate_finite_frame[expr_builtin]:
 QED
 
 Resume evaluate_finite_frame[builtin_len]:
-  asm_x "args_ih" kall_tac >>
+  asm_x "args_ih" kall_tac >> asm_x "mem_ih" kall_tac >>
   Cases_on `es` >>
   gvs[vyperTypeSystemTheory.well_typed_builtin_app_def,
       vyperTypeSystemTheory.well_typed_expr_def,
@@ -2558,7 +2571,7 @@ Resume evaluate_finite_frame[builtin_len]:
 QED
 
 Resume evaluate_finite_frame[builtin_gas]:
-  asm_x "args_ih" kall_tac >> asm_x "len_ih" kall_tac >>
+  asm_x "args_ih" kall_tac >> asm_x "mem_ih" kall_tac >> asm_x "len_ih" kall_tac >>
   gvs[Once evaluate_def, type_check_def, assert_def, return_def,
       ignore_bind_def, bind_def, raise_def, AllCaseEqs()] >>
   imp_res_tac next_gas_reading_state >>
