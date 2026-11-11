@@ -8,14 +8,13 @@
  * lifts the topics' and data operand's pointer simulations through
  * compile_raw_log's fixed and dynamic LOG tails.
  *
- * extcall is false here twice over.  The lowering sends the arguments'
- * bound-sized encoding (abi_size_bound) where the source sends the exact
- * one, so the oracle requests differ; the port of the exact-length
- * lowering is on the S1 branch.  And the return decoder forms
- * src + offset from the returndata and compares it with src before its
- * bounds ASSERT, while access_ok's comparison clause wants both compared
- * pointers inside src's site, which a returned offset past the buffer
- * breaks.
+ * extcall is the open leaf.  The lowering sends the arguments' exact
+ * encoding (the encoder's returned length), and the position-form return
+ * decoder compares provenance-free positions (src_op = Lit 0w, the buffer
+ * is base_op), so access_ok's comparison clause doesn't apply to its
+ * range checks.  It rests on S1's compile_extcall_case and, through it,
+ * exprSimExtCallCase's admitted extcall_request_setup, extcall_call_step
+ * and extcall_return_values.
  *
  * TOP-LEVEL:
  *   raw_log_case_ptr_residual
@@ -56,9 +55,10 @@ Proof
   metis_tac[raw_revert_sim_ptr, raw_revert_vv_sim_ptr]
 QED
 
-(* RESIDUAL: false while extcall's calldata is bound-sized and the return
-   decoder's offset compare can leave the buffer's site; waits on the S1
-   lowering port and a decision on access_ok's comparison clause. *)
+(* ADMITTED (leaf): the ExtCall case.  The return value is decoded from
+   the call's return data into a fresh result buffer by the position-form
+   decoder (compile_abi_decode_to_buf result_op (Lit 0w) MLOAD buf_op
+   hi_op); every buffer read is range-checked first. *)
 Theorem extcall_case_ptr_residual:
   !cx v14 is_static skip_check sig opts es v15.
     (!s'' target t nargs s'3' results t'.
