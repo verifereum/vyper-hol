@@ -167,7 +167,8 @@ Proof
   `env_context_consistent env cx` by
     fs[expr_sim_inv_def, env_consistent_def] >>
   `bare_globals_layout cenv.ce_is_ctor cenv.ce_module_var_type
-     cenv.ce_module_vars cx env.bare_globals env.bare_global_assignable` by
+     cenv.ce_module_vars cenv.ce_modules cx env.bare_globals
+     env.bare_global_assignable` by
     fs[expr_sim_inv_def] >>
   `!ty0. FLOOKUP env.bare_global_assignable (src,id) = SOME ty0 ==>
          FLOOKUP env.bare_globals (src,id) = SOME ty0` by
