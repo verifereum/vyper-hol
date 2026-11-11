@@ -1964,6 +1964,226 @@ QED
 
 (* ===== One block, and the pass ===== *)
 
+Theorem ircf_redirect_ordinary_ok:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ fn_inst_ids_distinct fn /\
+  ircf_no_dst_write_alias fn /\ ircf_alias_boundary fn s G /\ active_inst fn inst s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  ti = EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  ti <> inst /\ ~is_terminator inst.inst_opcode /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  frame_reachable vs C stk PG G tn fn inst s /\ MEM fn C.ctx_functions /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ptr_discipline lo C vs /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C fn s) s t /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base ti t = OK t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s' stk)
+      (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `ssa_form fn` by fs[wf_ssa_def] >>
+  `MEM bb fn.fn_blocks /\ ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    metis_tac[ircf_tbb_def, ircf_transform_block_plan,
+      venomExecPropsTheory.lookup_block_MEM] >>
+  `MEM inst.inst_opcode [MLOAD; SHA3; LOG; CREATE; CREATE2; RETURN; REVERT]` by
+    metis_tac[ircf_block_plan_changed_opcode] >>
+  `inst.inst_opcode <> ASSIGN /\ inst_wf inst` by
+    (fs[fn_inst_wf_def] >> metis_tac[EL_MEM]) >>
+  `?pos v. pos < LENGTH inst.inst_operands /\ EL pos inst.inst_operands = Var v /\
+    ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v <> v` by
+    metis_tac[ircf_block_plan_changed_operand] >>
+  `is_mem_addr_position inst.inst_opcode pos` by
+    (irule ircf_redirect_changed_position >> metis_tac[]) >>
+  fs[MEM, is_terminator_def] >> fs[is_terminator_def]
+  >- suspend "mload"
+  >- suspend "hash"
+  >- suspend "log"
+  >- suspend "create"
+  >> suspend "create2"
+QED
+
+Resume ircf_redirect_ordinary_ok[mload]:
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def] >>
+  `?w. lookup_var v s = SOME w` by
+    (gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs(), eval_operand_def]) >>
+  irule ircf_redirect_mload_ok >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+Resume ircf_redirect_ordinary_ok[hash]:
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def] >>
+  `?w nw. lookup_var v s = SOME w /\ eval_operand h' s = SOME nw` by
+    (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def, eval_operand_def]) >>
+  irule ircf_redirect_hash_ok >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+Resume ircf_redirect_ordinary_ok[log]:
+  `?tc rest. inst.inst_operands = Lit tc :: rest /\
+    LENGTH rest = w2n tc + 2 /\ inst.inst_outputs = []` by
+    gvs[inst_wf_def] >>
+  `?off len tops. REVERSE rest = off :: len :: tops` by
+    (Cases_on `REVERSE rest` >> fs[] >>
+     Cases_on `t'` >> fs[] >> metis_tac[LENGTH_REVERSE]) >>
+  `inst.inst_operands = Lit tc :: REVERSE (off :: len :: tops) /\
+   LENGTH tops = w2n tc` by
+    (conj_tac >- metis_tac[REVERSE_REVERSE] >>
+     qpat_x_assum `REVERSE rest = _` (mp_tac o AP_TERM ``LENGTH:operand list->num``) >> simp[]) >>
+  `?P. fn_ptr_ok P fn` by (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  `MEM inst (fn_insts fn)` by
+    (simp[venomInstTheory.fn_insts_def] >>
+     irule unitShapeDefsTheory.MEM_fn_insts_blocks >>
+     qexists_tac `bb` >> simp[] >> metis_tac[EL_MEM]) >>
+  `ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb) len = len /\
+   MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) tops = tops` by
+    (irule ircf_redirect_log_scalars >> metis_tac[]) >>
+  `ti = inst with inst_operands :=
+    MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) inst.inst_operands` by
+    (fs[ircf_block_plan_def] >> gvs[]) >>
+  `ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb) off <> off` by
+    (strip_tac >>
+     `MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) inst.inst_operands =
+        inst.inst_operands` by simp[MAP_REVERSE, ircf_redirect_op_def] >>
+     fs[]) >>
+  Cases_on `off` >> fs[ircf_redirect_op_def] >>
+  rename1 `REVERSE rest = Var cv :: len :: tops` >>
+  `?w nw topics. lookup_var cv s = SOME w /\ eval_operand len s = SOME nw /\
+     eval_operands tops s = SOME topics` by
+    (gvs[step_inst_base_opcode_eqs, REVERSE_REVERSE, AllCaseEqs(), eval_operand_def]) >>
+  irule ircf_redirect_log_ok >> simp[] >> metis_tac[]
+QED
+Resume ircf_redirect_ordinary_ok[create]:
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def] >>
+  `?w nw vw. lookup_var v s = SOME w /\ eval_operand h'' s = SOME nw /\
+    eval_operand h s = SOME vw` by
+    (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def, eval_operand_def]) >>
+  irule ircf_redirect_create_ok >> simp[] >> metis_tac[]
+QED
+Resume ircf_redirect_ordinary_ok[create2]:
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
+      invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def] >>
+  `?w nw vw sw. lookup_var v s = SOME w /\ eval_operand h'' s = SOME nw /\
+    eval_operand h s = SOME vw /\ eval_operand h''' s = SOME sw` by
+    (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def, eval_operand_def]) >>
+  irule ircf_redirect_create2_ok >> simp[] >> metis_tac[]
+QED
+Finalise ircf_redirect_ordinary_ok
+
+Theorem ircf_ordinary_nonassign_abort:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  active_inst fn inst s /\ o1_ctx_shape C /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  EVERY wf_function C.ctx_functions /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\ MEM fn C.ctx_functions /\
+  EVERY (\f. MEM f.cf_fn C.ctx_functions) stk /\ ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  ti = EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ptr_discipline lo C vs /\ taint_within D C vs /\ dead_wf D /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  step_inst_base inst s = Abort reason s' ==>
+  ?t'. step_inst_base ti t = Abort reason t'
+Proof
+  strip_tac >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[occ_frame_reachable_projection] >>
+  Cases_on `ti = inst`
+  >- (gvs[] >>
+      `terminates (Abort reason s')` by simp[passSimulationDefsTheory.terminates_def] >>
+      metis_tac[ircf_unchanged_nonassign_step]) >>
+  `wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+   fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\ EVERY ssa_form C.ctx_functions` by
+    (fs[EVERY_MEM, wf_ssa_def] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks /\ ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    metis_tac[ircf_tbb_def, ircf_transform_block_plan, venomExecPropsTheory.lookup_block_MEM] >>
+  `MEM inst.inst_opcode [MLOAD; SHA3; LOG; CREATE; CREATE2]` by
+    (`ssa_form fn` by fs[wf_ssa_def] >>
+     `MEM inst.inst_opcode [MLOAD; SHA3; LOG; CREATE; CREATE2; RETURN; REVERT]` by
+       metis_tac[ircf_block_plan_changed_opcode] >>
+     gvs[MEM, is_terminator_def]) >>
+  `ti = inst with inst_operands :=
+     MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) inst.inst_operands` by
+    (fs[ircf_block_plan_def] >> metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode [MLOAD; SHA3; LOG]`
+  >- (drule_all ircf_redirect_observation_abort >> metis_tac[]) >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `MEM inst.inst_opcode [CREATE; CREATE2]` by fs[MEM] >>
+  drule_all ircf_redirect_create_abort >> metis_tac[]
+QED
+
+Theorem ircf_ordinary_nonassign_step:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  active_inst fn inst s /\ o1_ctx_shape C /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  EVERY wf_function C.ctx_functions /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\ MEM fn C.ctx_functions /\
+  EVERY (\f. MEM f.cf_fn C.ctx_functions) stk /\ ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  ti = EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ptr_discipline lo C vs /\ taint_within D C vs /\ dead_wf D /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C fn s) s t /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  step_inst_base inst s = r /\ terminates r ==>
+  (!s'. r = OK s' ==> ?t'. step_inst_base ti t = OK t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s' stk)
+      (step_taint inst s s' tn) s' t') /\
+  (!v s'. r = IntRet v s' ==> ?t'. step_inst_base ti t = IntRet v t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s' t') /\
+  (!s'. r = Halt s' ==> ?t'. step_inst_base ti t = Halt t' /\
+    dead_result_rel D (Halt s') (Halt t')) /\
+  (!reason s'. r = Abort reason s' ==> ?t'. step_inst_base ti t = Abort reason t')
+Proof
+  strip_tac >>
+  Cases_on `ti = inst`
+  >- (qpat_x_assum `ti = inst` SUBST_ALL_TAC >>
+      `EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions = inst` by metis_tac[] >>
+      drule_all ircf_unchanged_nonassign_step >> simp[]) >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[occ_frame_reachable_projection] >>
+  `wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+   fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule ircf_redirect_ordinary_ok >> metis_tac[]) >>
+  `ssa_form fn` by fs[wf_ssa_def] >>
+  `MEM bb fn.fn_blocks /\ ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    metis_tac[ircf_tbb_def, ircf_transform_block_plan, venomExecPropsTheory.lookup_block_MEM] >>
+  `MEM inst.inst_opcode [MLOAD; SHA3; LOG; CREATE; CREATE2; RETURN; REVERT]` by
+    metis_tac[ircf_block_plan_changed_opcode] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      gvs[MEM, is_terminator_def, step_inst_base_opcode_eqs, exec_read1_def,
+          AllCaseEqs()] >> gvs[is_terminator_def, step_inst_base_opcode_eqs,
+          exec_read1_def, exec_create_not_IntRet, AllCaseEqs()]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      gvs[MEM, is_terminator_def, step_inst_base_opcode_eqs, exec_read1_def,
+          AllCaseEqs()] >> gvs[is_terminator_def, step_inst_base_opcode_eqs,
+          exec_read1_def, exec_create_not_Halt, AllCaseEqs()]) >>
+  rpt strip_tac >> irule ircf_ordinary_nonassign_abort >> metis_tac[]
+QED
+
 Theorem ircf_invoke_arguments:
   taint_agree D X tn s t /\ taint_ok fn tn inst s /\
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) ==>
