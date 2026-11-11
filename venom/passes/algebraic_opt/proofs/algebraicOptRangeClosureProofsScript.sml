@@ -4,6 +4,7 @@ Ancestors
   rangeAnalysisDefs rangeAnalysisProofs sccpCorrectnessProofs sccpProofsBase
   algebraicOptReachabilityProofs algebraicOptTraceProofs cfgAnalysisProps list
   algebraicOptRangeProofs venomState venomExecSemantics unitShapeDefs
+  rangePassProofs cfgCorrectnessProof
 
 Theorem ao_range_exit_boundary_sound:
   !fn bb s.
