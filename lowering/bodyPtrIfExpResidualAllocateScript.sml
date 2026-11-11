@@ -32,6 +32,7 @@ Theorem ifexp_residual_allocating_arm_ptr:
   ?Gf tnf q.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK q) /\
     expr_post ctx fn ce cx (IfExp ty cond a b) es sa sd s0 ee v op q /\
+    (~expr_has_effect arm ==> pure_frame ce fn es sa s0 q) /\
     ghost_inv d ce cx ee Gf tnf q /\ ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
     ptr_val_ok cx ty v op Gf tnf q /\ ptr_buf_ok ce (IfExp ty cond a b) op Gf q /\
     q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts /\

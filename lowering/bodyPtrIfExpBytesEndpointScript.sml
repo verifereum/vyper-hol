@@ -29,7 +29,8 @@ Theorem ifexp_bytes_destination_expr_post:
   val_footprint dtv v <= capacity /\
   eval_operand (Var out) sf = SOME w /\
   val_in_memory dtv v (w2n w) sf.vs_memory ==>
-  expr_post ctx fn ce cx result es sa sd s0 ee v (Var out) sf
+  expr_post ctx fn ce cx result es sa sd s0 ee v (Var out) sf /\
+  (~expr_has_effect arm ==> pure_frame ce fn es sa s0 sf)
 Proof
   strip_tac >>
   `stmt_state_rel ctx fn ce cx ee t` by gvs[vv_post_def] >>
@@ -51,10 +52,8 @@ Proof
         qexistsl_tac [`sa`, `ee.scopes`, `sf`] >> simp[]) >>
      qpat_x_assum `!name p sz. local_region ce es.scopes s0 name p sz ==> _` drule >>
      simp[arithmeticTheory.ADD_COMM]) >>
-  `~expr_has_effect result ==> pure_frame ce fn es sa s0 sf` by
+  `~expr_has_effect arm ==> pure_frame ce fn es sa s0 sf` by
     (strip_tac >>
-     `~expr_has_effect arm` by
-       (qpat_x_assum `_ ==> ~expr_has_effect arm` irule >> first_assum ACCEPT_TAC) >>
      `pure_frame ce fn es sa s0 t` by
        (qpat_assum `vv_post _ _ _ _ arm _ _ _ _ _ _ _ _`
           (mp_tac o REWRITE_RULE [vv_post_def]) >>
@@ -77,7 +76,11 @@ Proof
      rpt gen_tac >> rewrite_tac[regions_disjoint_def] >> strip_tac >>
      qpat_assum `!off len. _ ==> mem_bytes_at off len sf.vs_memory = _` irule >>
      decide_tac) >>
-  simp[expr_post_def, expr_val_rel_def] >> metis_tac[]
+  `~expr_has_effect result ==> pure_frame ce fn es sa s0 sf` by
+    (strip_tac >> qpat_x_assum `~expr_has_effect arm ==> _` irule >>
+     qpat_x_assum `_ ==> ~expr_has_effect arm` irule >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (simp[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem ifexp_bytes_destination_ptr_post:
