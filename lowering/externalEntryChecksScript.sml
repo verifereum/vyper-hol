@@ -19,17 +19,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem supported_entry_no_getters:
-  supported_program tops ==>
-  (!nr mut ty x name. ~MEM (VariableDecl (Public nr) mut name ty x) tops) /\
-  (!nr b kt vt x name. ~MEM (HashMapDecl (Public nr) b name kt vt x) tops)
-Proof
-  simp[supported_program_def, supported_declaration_headers_def,
-       EVERY_MEM] >> rpt strip_tac >>
-  qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e`
-    drule >> simp[supported_declaration_header_def]
-QED
-
 Theorem selected_external_dispatch:
   supported_program tops /\ valid_vyper_call tops tx cd ret /\
   lookup_function NONE tx.function_name External tops =
@@ -42,10 +31,9 @@ Theorem selected_external_dispatch:
     "fn_" ++ tx.function_name)
 Proof
   strip_tac >>
-  drule supported_entry_no_getters >> strip_tac >>
   gvs[valid_vyper_call_def] >> conj_tac
-  >- (irule lookup_function_external_mem >> simp[] >>
-      qexists_tac `NONE` >> simp[]) >>
+  >- (irule supported_headers_external_member >>
+      gvs[supported_program_def]) >>
   gen_tac >>
   `ALL_DISTINCT (MAP FST (build_selectors (type_env tops)
      (FST (classify_functions tops))))` by

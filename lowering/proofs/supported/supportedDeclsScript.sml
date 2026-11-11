@@ -5,7 +5,7 @@
    its body checks; TASK_020 consumes the lookups. Typing is separate. *)
 Theory supportedDecls
 Ancestors
-  supportedTypes vyperAST list alist
+  supportedTypes vyperAST constSubst list alist
 
 (* ===== Body-independent declarations ===== *)
 
@@ -199,6 +199,21 @@ Theorem supported_constants_rejected:
 Proof
   Cases_on `vis` >> Cases_on `slot` >>
   simp[supported_declaration_header_def]
+QED
+
+Theorem supported_headers_module_consts_env:
+  !ts tops acc.
+    EVERY (supported_declaration_header tops) ts ==>
+    module_consts_env ts acc = acc
+Proof
+  Induct_on `ts` >- simp[module_consts_env_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[module_consts_env_def]
+  >~ [`VariableDecl vis mut name ty slot`]
+  >- (Cases_on `mut` >>
+      simp[supported_declaration_header_def, module_consts_env_def] >>
+      metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem supported_hashmap_location_independent:

@@ -1,6 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
+  supportedGetterProps
   externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
@@ -998,17 +999,8 @@ Theorem external_selected_args_distinct:
   ALL_DISTINCT (MAP FST args)
 Proof
   strip_tac >>
-  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
-    (irule lookup_function_external_decl >> simp[] >>
-     qexists `tops` >> gvs[supported_program_def, supported_declaration_headers_def]) >>
-  gvs[source_typing_ok_def] >>
-  `module_allocated am.layouts tx.target NONE tops` by
-    (drule check_contract_main_module_allocated >> simp[]) >>
-  `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
-     External mut F args [] ret fbody` by
-    (irule check_contract_runtime_function_body_MEM >> simp[] >>
-     qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
-  gvs[check_function_body_def, params_ok_def]
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
+  drule_all source_typing_ok_params_ok >> simp[params_ok_def]
 QED
 
 Theorem external_package_body_inv:
@@ -1372,23 +1364,16 @@ Proof
   disch_then (drule_at (Pat `set_external_package_target _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
   simp[] >> strip_tac >>
-  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
-    (irule lookup_function_external_decl >> simp[] >> qexists `tops` >>
-     gvs[supported_program_def, supported_declaration_headers_def]) >>
   `supported_function_body tops External args fbody` by
-    (drule_all supported_program_function >> simp[]) >>
+    metis_tac[supported_selected_external_body] >>
   `ALL_DISTINCT (MAP FST args)` by
     (drule_all external_selected_args_distinct >> simp[]) >>
   `EVERY (\(n,ty). assignable_type env_t.type_defs ty) args` by
-    (`module_allocated am.layouts tx.target NONE tops` by
-       (drule check_contract_main_module_allocated >> simp[]) >>
-     `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
-        External mut F args [] ret fbody` by
-       (irule check_contract_runtime_function_body_MEM >> simp[] >>
-        qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
-     gvs[check_function_body_def, params_ok_def, get_tenv_def,
-         checked_contract_runtime_ready_def,
-         initial_evaluation_context_def, type_env_all_modules_def]) >>
+    (`supported_declaration_headers tops` by fs[supported_program_def] >>
+     drule_all source_typing_ok_params_ok >>
+     gvs[params_ok_def, get_tenv_def, checked_contract_runtime_ready_def,
+         initial_evaluation_context_def, type_env_all_modules_def,
+         type_env_def]) >>
   `cenv.ce_struct_fields = make_struct_fields_map tops /\
    cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE)` by
     gvs[body_inv_def] >>

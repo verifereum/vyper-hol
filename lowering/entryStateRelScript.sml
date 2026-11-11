@@ -24,6 +24,7 @@ Ancestors
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
   structFieldsProps
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
+  vyperTypeContractGetter
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults
   venomState
 Libs
@@ -158,6 +159,15 @@ Theorem source_typing_ok_vtype_keys_distinct:
 Proof
   rw[source_typing_ok_def, check_contract_def] >>
   drule contract_namespaces_ok_module_toplevel_vtype_keys >> simp[]
+QED
+
+Theorem source_typing_ok_external_names_distinct:
+  source_typing_ok tops am tx ==>
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops))
+Proof
+  rw[source_typing_ok_def] >>
+  drule check_contract_namespaces_ok >>
+  simp[contract_namespaces_ok_def, contract_keys_def]
 QED
 
 (* The layout's slots as lookup_var_slot_from_layout reads them. *)
@@ -523,41 +533,27 @@ Proof
   simp[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]
 QED
 
-(* With no public variables, an external function lookup_function selects
-   is a declared function, not a getter. *)
-Theorem lookup_function_external_decl:
-  !tops tops0 name mut nr args dflts ret fbody.
-    EVERY (supported_declaration_header tops0) tops /\
-    lookup_function NONE name External tops =
-      SOME (mut, nr, args, dflts, ret, fbody) ==>
-    ?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops
-Proof
-  Induct >- simp[lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
-  BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
-  metis_tac[]
-QED
-
 (* The source typing check gives the parameters distinct names and
    assignable types. *)
-Theorem source_typing_ok_params_ok[local]:
+Theorem source_typing_ok_params_ok:
   !tops am tx mut nr fargs ret fbody.
     supported_declaration_headers tops /\ source_typing_ok tops am tx /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, fargs, [], ret, fbody) ==>
     params_ok (type_env tops) fargs
 Proof
-  rpt strip_tac >>
-  drule_at (Pos last) lookup_function_external_decl >>
-  disch_then (qspec_then `tops` mp_tac) >>
-  impl_tac >- fs[supported_declaration_headers_def] >> strip_tac >>
+  rpt strip_tac >> drule lookup_function_External_cases >> strip_tac
+  >- (fs[source_typing_ok_def] >>
+      drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
+      drule check_contract_runtime_function_body_MEM >>
+      disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `nr`,
+        `mut`, `tx.function_name`, `[]`, `fbody`, `fargs`] mp_tac) >>
+      simp[check_function_body_def, type_env_all_modules_one]) >>
   fs[source_typing_ok_def] >>
-  drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
-  drule check_contract_runtime_function_body_MEM >>
-  disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `nr`,
-    `mut`, `tx.function_name`, `[]`, `fbody`, `fargs`] mp_tac) >>
-  simp[check_function_body_def, type_env_all_modules_one]
+  `module_allocated am.layouts tx.target NONE tops` by
+    (drule check_contract_main_module_allocated >> simp[]) >>
+  `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
+  drule_all checked_public_getter_params_ok >> simp[type_env_all_modules_one]
 QED
 
 Theorem build_positional_args_names:

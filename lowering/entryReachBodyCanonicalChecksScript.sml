@@ -4,7 +4,7 @@ Ancestors
   externalEntryChecks moduleLoweringProps vyperCompiler venomInst
   loweringShapeDefs compileEnv selectedBodyCode venomWf moduleLowering
   loweringShapeProps compileVyper vyperLoweringCorrect entryDispatchProps
-  venomState venomExecSemantics entryChecksProps entryRegistrationOpen list pair
+  venomState venomExecSemantics entryChecksProps entryRegistrationOpen entryStateRel list pair
 Libs
   monadsyntax
 
@@ -149,6 +149,7 @@ QED
 Theorem entry_source_canonical_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   valid_vyper_call tops tx cd ret /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
     SOME (mut,F,args,[],ret,fbody) ==>
   ?lbl ce pos mincd pay key ut iv rt
@@ -182,7 +183,7 @@ Proof
   strip_tac >>
   `tx.function_name <> "__default__"` by
     fs[e2eDefsTheory.valid_vyper_call_def] >>
-  drule supported_entry_no_getters >> strip_tac >>
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
   `MEM (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
         tx.function_name,args,[],ret,fbody) (FST (classify_functions tops))` by
     (irule external_lookup_raw_package_member >> simp[]) >>
@@ -228,7 +229,10 @@ Theorem entry_canonical_checks_reached:
     (!fuel r. run_from fuel unit.cu_context func s = r /\ (!e. r <> Error e) ==>
       ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
-  strip_tac >> drule_all entry_source_canonical_code >> strip_tac >>
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule_all entry_source_canonical_code >> strip_tac >>
   `~block_is_terminated checks` by simp[block_is_terminated_def] >>
   drule_all entry_checks_preserve_open >> strip_tac >>
   `lbl = "fn_" ++ tx.function_name` by

@@ -185,19 +185,15 @@ Proof
        vyperValueOperationTheory.safe_cast_def]
 QED
 
-(* Closed ambiguity check: PLAN's source lookup includes getters, but the
-   independent supported whitelist rejects public variables. Do not silently
-   strengthen the exact PLAN predicate with an extra MEM FunctionDecl guard. *)
-Theorem source_lookup_getter_outside_supported:
+(* The compiler packages the same getter that source lookup selects. *)
+Theorem source_lookup_getter_supported:
   let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
-    ~supported_program tops
+    supported_program tops
 Proof
-  simp[vyperInterpreterTheory.lookup_function_def,
-       supported_program_def, supported_declaration_headers_def,
-       supported_public_variables_rejected]
+  EVAL_TAC
 QED
 
 (* ===== Canonical external ABI wrapping ===== *)
