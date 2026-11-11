@@ -12924,13 +12924,16 @@ Proof
   qexists `x-mm_local_epoch_start is gs r` >> simp[]
 QED
 
-Theorem mm_local_canonical_pending_discharge[local]:
+Theorem mm_local_canonical_pending_discharge_interval[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
   gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
-  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  r < LENGTH is /\ MEM g gs /\
+  (!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
   rep_of_group is g = SOME ((EL r is).inst_id,g) /\
   cap = mm_local_write_capture is H (SUC r) /\
   js = mm_local_pending_indices is gs r /\
@@ -12957,8 +12960,14 @@ Proof
     mm_local_write_compatible a p b bs) /\
    (!j a p b bs. MEM j js /\ cap j = SOME (a,p) /\ cap r = SOME (b,bs) ==>
     mm_local_write_compatible a p b bs)` by
-    (irule mm_local_canonical_pending_crossings >>
-     goal_assum (drule_at Any) >> metis_tac[]) >>
+    (irule mm_local_canonical_pending_crossings_interval >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `rep_of_group _ _ = _`)) >>
+     `!j. MEM j js ==> a <= j` by metis_tac[mm_local_epoch_start_pending_bound] >>
+     gvs[] >> rpt strip_tac >>
+     first_x_assum irule >> simp[] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   `!j. MEM j js ==> cap j = SOME (THE (cap j))` by
     (qpat_x_assum `mm_local_pending cap js s t` mp_tac >>
      pure_rewrite_tac[mm_local_pending_def] >> strip_tac >> rpt strip_tac >>
@@ -12967,10 +12976,11 @@ Proof
     (MAP (THE o cap) ((FILTER (\j. mm_local_rep_index is gs j = r) js) ++ [r])) =
     write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) v` by
     (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
-       (cj 2 mm_local_canonical_due_log_payload) >>
+       (cj 2 mm_local_canonical_due_log_payload_interval) >>
      disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
      disch_then irule >>
      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl [`H`, `a`, `cap`,
        `FILTER (\j. mm_local_rep_index is gs j = r) js`, `gs`, `u`] >>
      gvs[MEM_FILTER] >> metis_tac[]) >>
@@ -13001,13 +13011,54 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem mm_local_canonical_retained_emit[local]:
+Theorem mm_local_canonical_pending_discharge[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
   gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
   r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  (!j v src. MEM j (js ++ [r]) /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  a = mm_local_epoch_start is gs r /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\ mm_local_pending cap js s t /\
+  cap r = SOME (d,payload) /\
+  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (read_memory g.cg_src g.cg_length t) t).vs_memory ==>
+  mm_local_pending cap (FILTER (\j. mm_local_rep_index is gs j <> r) js) s' t'
+Proof
+  strip_tac >>
+  `!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))` by
+    metis_tac[mm_local_epoch_start_nonempty] >>
+  `a <= r` by metis_tac[mm_local_epoch_start_bound] >>
+  `!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    (mp_tac (Q.INST [`a` |-> `a`, `r` |-> `r`, `N` |-> `SUC r`]
+       (SPEC_ALL mm_local_fixed_cut_capture_recurrence)) >> simp[]) >>
+  mp_tac (SPEC_ALL mm_local_canonical_pending_discharge_interval) >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_canonical_retained_emit_interval[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  (!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
   rep_of_group is g = SOME ((EL r is).inst_id,g) /\
   cap = mm_local_write_capture is H (SUC r) /\
   js = mm_local_pending_indices is gs r /\
@@ -13045,13 +13096,13 @@ Proof
     (rpt strip_tac >>
      `a <= j /\ j <= r` by metis_tac[] >>
      mp_tac (Q.INST [`s0` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
-       empty_scan_state (TAKE j is)`] (SPEC_ALL mm_local_canonical_due_index_payload)) >>
+       empty_scan_state (TAKE j is)`] (SPEC_ALL mm_local_canonical_due_index_payload_interval)) >>
      simp[Abbr `due`, Abbr `epoch_js`] >> metis_tac[]) >>
   `!v. FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v
       (MAP (THE o cap) (due ++ [r])) =
     write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) v` by
     (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
-       (cj 2 mm_local_canonical_due_log_payload) >>
+       (cj 2 mm_local_canonical_due_log_payload_interval) >>
      disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
      simp[Abbr `due`, Abbr `epoch_js`] >>
      disch_then irule >>
@@ -13071,11 +13122,13 @@ Proof
     (rpt strip_tac >>
      `a <= j /\ j < r /\ a <= l /\ l < r` by
        (fs[Abbr `epoch_js`, MEM_MAP, MEM_COUNT_LIST] >> gvs[]) >>
-     drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_retained_captures_compatible >>
+     drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_retained_captures_compatible_interval >>
      disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
      simp[] >> disch_then irule >>
      conj_tac >- gvs[] >> qexistsl [`H`, `SUC r`, `j`, `l`] >>
-     gvs[] >> rpt conj_tac >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+     gvs[] >> rpt conj_tac >> rpt strip_tac >>
+     metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ,
+       arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_TRANS]) >>
   qabbrev_tac `kept = FILTER (\j. ~MEM j rest) epoch_js` >>
   `FILTER (\j. MEM j due) kept = due` by
     (simp[NoAsms, Abbr `kept`, Abbr `due`, Abbr `rest`, FILTER_FILTER] >>
@@ -13134,13 +13187,56 @@ Proof
   gvs[]
 QED
 
-Theorem mm_local_canonical_retained_renew[local]:
+Theorem mm_local_canonical_retained_emit[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
   gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
   r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  a = mm_local_epoch_start is gs r /\
+  (!j v src. a <= j /\ j <= r /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (read_memory g.cg_src g.cg_length t) t).vs_memory ==>
+  t'.vs_memory = (FOLDL (\st q.
+    if MEM q (FILTER (\j. mm_local_rep_index is gs j <> r) js) then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (SUC r-a)))).vs_memory
+Proof
+  strip_tac >>
+  `!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))` by
+    metis_tac[mm_local_epoch_start_nonempty] >>
+  `a <= r` by metis_tac[mm_local_epoch_start_bound] >>
+  `!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    (mp_tac (Q.INST [`a` |-> `a`, `r` |-> `r`, `N` |-> `SUC r`]
+       (SPEC_ALL mm_local_fixed_cut_capture_recurrence)) >> simp[]) >>
+  mp_tac (SPEC_ALL mm_local_canonical_retained_emit_interval) >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_canonical_retained_renew_interval[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  (!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
+  (?d bs. cap r = SOME (d,bs) /\
+    (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory) /\
   rep_of_group is g = SOME ((EL r is).inst_id,g) /\
   cap = mm_local_write_capture is H (SUC r) /\
   js = mm_local_pending_indices is gs r /\
@@ -13177,15 +13273,27 @@ Proof
         `j <> r` by metis_tac[] >>
         qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)` mp_tac >>
         rewrite_tac[mm_local_pending_indices_mem] >> rpt strip_tac >> simp[]) >>
-     drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_pending_partition >>
-     simp[] >> disch_then (qspecl_then [`r`, `SUC r`, `H`] mp_tac) >>
-     gvs[]) >>
-  `?d bs. cap r = SOME (d,bs) /\
-    (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory` by
-    (drule_all mm_local_canonical_rep_capture >> simp[]) >>
+     `!j. MEM j js ==> r <= mm_local_rep_index is gs j` by
+       (qx_gen_tac `j` >> strip_tac >>
+        qpat_x_assum `js = _` SUBST_ALL_TAC >>
+        qpat_x_assum `MEM j _` mp_tac >>
+        rewrite_tac[mm_local_pending_indices_mem] >> strip_tac >>
+        `j < LENGTH is` by decide_tac >>
+        rename1 `rep_of_group is gj = SOME ((EL R is).inst_id,gj)` >>
+        `mm_local_rep_index is gs j = R` by
+          (qpat_x_assum `is = _` SUBST_ALL_TAC >>
+           qpat_x_assum `gs = _` SUBST_ALL_TAC >>
+           metis_tac[mm_local_rep_index_eq, pred_setTheory.IN_INSERT,
+             pred_setTheory.NOT_IN_EMPTY]) >> simp[]) >>
+     drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_pending_keep >>
+     disch_then (qspec_then `r` mp_tac) >> simp[] >> strip_tac >>
+     `FILTER (\j. mm_local_rep_index is gs j <> r) js =
+       FILTER (\j. SUC r <= mm_local_rep_index is gs j) js` by
+       (rewrite_tac[rich_listTheory.FILTER_EQ] >> rpt strip_tac >>
+        first_x_assum drule >> simp[]) >> gvs[]) >>
   `mm_local_pending cap (mm_local_pending_indices is gs (SUC r)) (H (SUC r)) t'` by
     (qpat_x_assum `FILTER _ js = _` (fn th => pure_rewrite_tac[GSYM th]) >>
-     drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_pending_discharge >>
+     drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_pending_discharge_interval >>
      disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
      disch_then irule >>
      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -13201,9 +13309,51 @@ Proof
   >- (gvs[mm_local_epoch_start_suc, mm_local_pending_empty,
        rich_listTheory.COUNT_LIST_def]) >>
   `a' = a` by gvs[mm_local_epoch_start_suc] >>
-  drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_retained_emit >>
+  drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_retained_emit_interval >>
   disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
   metis_tac[]
+QED
+
+Theorem mm_local_canonical_retained_renew[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  a = mm_local_epoch_start is gs r /\
+  (!j v src. a <= j /\ j <= r /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\ mm_local_pending cap js (H r) t /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (read_memory g.cg_src g.cg_length t) t).vs_memory /\
+  a' = mm_local_epoch_start is gs (SUC r) ==>
+  t'.vs_memory = (FOLDL (\st q.
+    if MEM q (mm_local_pending_indices is gs (SUC r)) then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a') (MAP (\q. a'+q) (COUNT_LIST (SUC r-a')))).vs_memory
+Proof
+  strip_tac >>
+  `!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))` by
+    metis_tac[mm_local_epoch_start_nonempty] >>
+  `a <= r` by metis_tac[mm_local_epoch_start_bound] >>
+  `!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    (mp_tac (Q.INST [`a` |-> `a`, `r` |-> `r`, `N` |-> `SUC r`]
+       (SPEC_ALL mm_local_fixed_cut_capture_recurrence)) >> simp[]) >>
+  `?d bs. cap r = SOME (d,bs) /\
+    (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory` by
+    (drule_all mm_local_canonical_rep_capture >> simp[]) >>
+  mp_tac (SPEC_ALL mm_local_canonical_retained_renew_interval) >> simp[] >> metis_tac[]
 QED
 
 Theorem mm_local_mem2mem_word_emission[local]:
