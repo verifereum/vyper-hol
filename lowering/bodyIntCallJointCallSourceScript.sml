@@ -67,6 +67,10 @@ Resume intcall_pure_immutables_mutual[attribute]:
 QED
 Resume intcall_pure_immutables_mutual[builtin]:
   rpt strip_tac >>
+  `code_slice_source blt es = NONE` by
+    (Cases_on `code_slice_source blt es` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[code_slice_source_SOME, supportedExprFormsTheory.supported_builtin_form_def]) >>
   Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
   Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,

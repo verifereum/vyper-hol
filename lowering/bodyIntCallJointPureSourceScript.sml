@@ -145,6 +145,34 @@ Resume effect_free_eval_expr_frame[builtin]:
      simp[expr_size_def] >> disch_then irule >>
      gvs[expr_has_effect_def, supported_exprs_exists_every, EXISTS_MEM] >>
      metis_tac[]) >>  drule eval_exprs_normalized_frame >> strip_tac >>
+  Cases_on `?ct addr. code_slice_source bt args = SOME (ct,addr)`
+  >- (gvs[code_slice_source_SOME] >>
+      `!st res st'. eval_exprs cx [addr] st = (res,st') ==>
+         (st' with <|gas_obs := []; outcomes := NONE|>) =
+         (st with <|gas_obs := []; outcomes := NONE|>)` by
+        (rpt strip_tac >> drule_at (Pos last) eval_exprs_normalized_frame >>
+         disch_then irule >> simp[] >> rpt strip_tac >>
+         qpat_x_assum `!y. expr_size y < _ ==> _` (qspec_then `addr` mp_tac) >>
+         simp[expr_size_def] >> disch_then irule >>
+         gvs[expr_has_effect_def, supported_expr_exists_def] >> metis_tac[]) >>
+      `!st res st'. eval_exprs cx [start; len] st = (res,st') ==>
+         (st' with <|gas_obs := []; outcomes := NONE|>) =
+         (st with <|gas_obs := []; outcomes := NONE|>)` by
+        (rpt strip_tac >> drule_at (Pos last) eval_exprs_normalized_frame >>
+         disch_then irule >> simp[DISJ_IMP_THM, FORALL_AND_THM] >>
+         metis_tac[]) >>
+      qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
+      qpat_x_assum `!e. _ ==> _` kall_tac >>
+      qpat_x_assum `!st res st'. eval_exprs cx (_::_::_::_) _ = _ ==> _` kall_tac >>
+      qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
+           builtin_args_length_ok_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]) >>
+  `code_slice_source bt args = NONE` by
+    (Cases_on `code_slice_source bt args` >> gvs[] >>
+     rename1 `SOME p` >> PairCases_on `p` >> gvs[]) >>
   qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
   Cases_on `bt = Len`
   >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,

@@ -85,6 +85,49 @@ Proof
   strip_tac >> gvs[evaluation_state_component_equality]
 QED
 
+Theorem outcomes_frame_exprs[local]:
+  !es cx s r t.
+    (!e. MEM e es ==> !cx s r t. eval_expr cx e s = (r,t) ==>
+       t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
+    eval_exprs cx es s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>
+Proof
+  Induct >- (rpt strip_tac >> gvs[Once evaluate_def, return_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `!s r t. eval_expr cx h s = (r,t) ==>
+     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>` by
+    (rpt strip_tac >> first_x_assum (qspec_then `h` mp_tac) >> simp[] >>
+     disch_then drule >> simp[]) >>
+  `!s r t. eval_exprs cx es s = (r,t) ==>
+     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>` by
+    metis_tac[listTheory.MEM] >>
+  qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> imp_res_tac read_result_state >> gvs[] >>
+  res_tac >> metis_tac[outcomes_frame_trans]
+QED
+
+(* The x.code address of slice(x.code, ...) is evaluated as the operand of
+   the inner Builtin (Acc Code) [x], whose frame bounds it. *)
+Theorem outcomes_frame_code_addr[local]:
+  (!s r t. eval_expr cx (Builtin ct (Acc Code) [addr]) s = (r,t) ==>
+     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
+  eval_exprs cx [addr] s = (r,t) ==>
+  t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>
+Proof
+  strip_tac >>
+  Cases_on `eval_expr cx (Builtin ct (Acc Code) [addr]) s` >>
+  first_x_assum drule >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       builtin_args_length_ok_def] >>
+  Cases_on `r` >> gvs[] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  imp_res_tac lift_sum_state >> imp_res_tac precompile_call_success_state >>
+  gvs[evaluation_state_component_equality]
+QED
+
 Theorem outcomes_frame_builtin[local]:
   (!cx s r t. eval_exprs cx es s = (r,t) ==>
     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
@@ -110,10 +153,28 @@ Proof
       Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
       gvs[raise_def, return_def] >>
       imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]) >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+  Cases_on `code_slice_source bt es`
+  >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+      imp_res_tac lift_sum_state >> gvs[] >>
+      imp_res_tac outcomes_frame_precompile >> metis_tac[outcomes_frame_trans]) >>
+  rename1 `_ = SOME p` >> PairCases_on `p` >> gvs[code_slice_source_SOME] >>
+  `!cx s r t. eval_exprs cx [start; len] s = (r,t) ==>
+     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>` by
+    (rpt strip_tac >> drule_at (Pos last) outcomes_frame_exprs >>
+     disch_then irule >> simp[DISJ_IMP_THM, FORALL_AND_THM] >> metis_tac[]) >>
+  `!s r t. eval_exprs cx [p1] s = (r,t) ==>
+     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>` by
+    (rpt strip_tac >> drule_at (Pos last) outcomes_frame_code_addr >>
+     disch_then irule >> qexists_tac `p0` >> metis_tac[]) >>
+  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       builtin_args_length_ok_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
   imp_res_tac lift_sum_state >> gvs[] >>
-  imp_res_tac outcomes_frame_precompile >> metis_tac[outcomes_frame_trans]
+  imp_res_tac outcomes_frame_precompile >> res_tac >>
+  metis_tac[outcomes_frame_trans]
 QED
 
 Theorem effect_free_eval_frame[local]:
@@ -162,7 +223,7 @@ Proof
   >>~- ([`eval_expr _ (IfExp _ _ _ _) _ = _`],
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def, raise_def] >>
     imp_res_tac read_result_state >> imp_res_tac conditional_result_state >>
-    gvs[] >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[raise_def]) >>
+    gvs[COND_RATOR, AllCaseEqs(), raise_def] >>
     metis_tac[outcomes_frame_trans])
   >>~- ([`eval_exprs _ (_::_) _ = _`],
     gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>

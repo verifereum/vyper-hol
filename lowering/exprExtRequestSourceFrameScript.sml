@@ -227,7 +227,24 @@ Resume extrequest_evaluate_read_frame[builtin]:
       simp[extrequest_read_frame_def, extrequest_read_lift_option_type] >>
       rpt strip_tac >> simp[extrequest_read_pure_frames]) >>
   irule state_rel_frame_bind_guarded >> simp[extrequest_read_frame_def] >>
-  reverse conj_tac >- metis_tac[] >>
+  reverse conj_tac
+  >- (Cases_on `code_slice_source bt es` >> simp[] >- metis_tac[] >>
+      rename1 `_ = SOME p` >> PairCases_on `p` >> simp[] >>
+      `~supported_exprs_exists expr_effect_root (TL es) /\
+       ~supported_expr_exists expr_effect_root p1` by
+        (qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+         qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         rw[code_slice_source_SOME] >> gvs[supported_expr_exists_def]) >>
+      irule state_rel_frame_bind_guarded >> simp[extrequest_read_frame_def] >>
+      reverse conj_tac >- metis_tac[] >>
+      rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+      simp[extrequest_read_frame_def] >>
+      reverse conj_tac >- metis_tac[] >>
+      rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+      simp[extrequest_read_frame_def, extrequest_read_pure_frames] >>
+      rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+      simp[extrequest_read_frame_def, extrequest_read_pure_frames]) >>
   rpt strip_tac >> irule state_rel_frame_bind_guarded >>
   simp[extrequest_read_frame_def, extrequest_read_pure_frames] >>
   rpt strip_tac >> irule state_rel_frame_bind_guarded >>
