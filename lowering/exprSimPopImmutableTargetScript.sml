@@ -224,7 +224,7 @@ Proof
   fs[expr_post_def]
 QED
 
-Theorem imm_target_root_assignable[local]:
+Theorem imm_target_root_assignable:
   !env cx es cenv src id ty.
     expr_sim_inv cenv cx env es /\
     type_place_target env (TopLevelNameTarget (src,id)) = SOME (Type ty) /\
@@ -245,7 +245,7 @@ Proof
   gvs[well_typed_expr_def]
 QED
 
-Theorem imm_target_root_layout[local]:
+Theorem imm_target_root_layout:
   !env cx es cenv src id ty.
     expr_sim_inv cenv cx env es /\
     FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>

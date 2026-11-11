@@ -7,7 +7,7 @@ Theory bodyMemImmutableDeploy
 Ancestors
   bodyMemoryPreds targetPlaceSim immutableWordReadMemory immutablePathReplace
   immutableWriteReplay immutableWordStoreFrame immutableWordStoreMemory
-  immutableAugAssignContinuation
+  immutableAugAssignContinuation bodyAugPlaceTarget immutableAugAssignRootEntry
 
 (* RESIDUAL (held): as its S1 twin immutable_deploy_assign_case, which is
    admitted on this base. *)
@@ -89,5 +89,9 @@ Theorem body_augassign_immutable_deploy_mem:
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e))
       (eval_stmt cx (AugAssign ty t bop e)) es
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `t`
+  >- gvs[]
+  >- cheat
+  >> metis_tac[aug_place_supported_stmt_target_info,
+               aug_place_supported_root_not_immutable]
 QED
