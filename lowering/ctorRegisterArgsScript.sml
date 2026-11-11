@@ -811,10 +811,9 @@ Proof
       pairarg_tac >> simp[] >> pairarg_tac >> simp[]) >>
   Cases_on `is_abi_dynamic ce.ce_struct_fields ty` >>
   simp[build_positional_arg_def, compile_decode_args_def,
-    var_location_decode_operand_def, FUN_EQ_THM,
+    var_location_decode_operand_def, FUN_EQ_THM, compile_abi_arg_ptr_guard_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[]
+  rpt gen_tac >> rpt (pairarg_tac >> simp[])
 QED
 
 Theorem ctor_singleton_decode_phases:
