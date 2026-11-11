@@ -8,7 +8,8 @@ Theory ctorDeployFrame
 Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness e2eDeployFrame
   frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs
-  frameGas venomRunBounded
+  frameGas venomRunBounded ctorDeployCallFree o1OpcodeAbsence
+  codegenAsmProgOk frameRunRaises
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)

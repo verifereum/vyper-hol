@@ -3,6 +3,7 @@
  *
  * TOP-LEVEL:
  *   codegen_assembly_frame_prog_ok
+ *   codegen_assembly_no_returndatacopy
  *)
 
 Theory codegenAsmProgOk
@@ -71,4 +72,19 @@ Proof
   gvs[context_plan_ops_def, execute_plan_def, MAP_APPEND, FLAT_APPEND,
       revert_postamble_def, exec_stack_op_def] >>
   simp[assemble_def, pairTheory.UNCURRY, MAP_APPEND, FLAT_APPEND, encode_inst_def]
+QED
+
+(* Codegen emits AsmOp "RETURNDATACOPY" only for a Venom RETURNDATACOPY:
+   the other ops it emits are stack, jump and fixed helper opcodes.
+   Admitted until proved (used by deploy_frame_gas_sufficient). *)
+Theorem codegen_assembly_no_returndatacopy:
+  !rpolicy unit prog.
+    codegen_assembly rpolicy unit = SOME prog /\
+    (!fn inst. MEM fn unit.cu_context.ctx_functions /\
+               MEM inst (fn_insts fn) ==>
+               inst.inst_opcode <> RETURNDATACOPY)
+    ==>
+    ~MEM (AsmOp "RETURNDATACOPY") prog
+Proof
+  cheat
 QED
