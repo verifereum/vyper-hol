@@ -132,12 +132,7 @@ Proof
   metis_tac[subst_consts_expr_shape]
 QED
 
-Theorem supported_exprs_exists_map_snd:
-  supported_exprs_exists p (MAP SND fs) <=> supported_fields_exists p fs
-Proof
-  simp[supported_exprs_exists_every, supported_fields_exists_every, EXISTS_MAP,
-       combinTheory.o_DEF]
-QED
+
 
 Theorem subst_consts_error_shape:
   (!id r. ALOOKUP env id = SOME r ==> ~supported_expr_exists expr_shape_root r) /\
@@ -147,8 +142,12 @@ Theorem subst_consts_error_shape:
 Proof
   Cases_on `err` >>
   pure_rewrite_tac[subst_consts_error_def, custom_error_exprs_def, EXISTS_APPEND] >>
-  pure_rewrite_tac[GSYM supported_exprs_exists_every, supported_exprs_exists_map_snd] >>
-  rpt strip_tac >> imp_res_tac subst_consts_expr_shape >> metis_tac[]
+  pure_rewrite_tac[EXISTS_MAP, combinTheory.o_DEF] >>
+  rpt strip_tac >>
+  imp_res_tac (SIMP_RULE std_ss
+    [supported_exprs_exists_every, supported_fields_exists_every,
+     EXISTS_MAP, combinTheory.o_DEF] subst_consts_expr_shape) >>
+  metis_tac[]
 QED
 
 Theorem subst_consts_stmt_shape:

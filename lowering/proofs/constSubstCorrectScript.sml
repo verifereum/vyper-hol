@@ -4766,12 +4766,7 @@ QED
 
 
 
-Theorem eval_bind_assoc:
-  bind (bind f g) h = bind f (\x. bind (g x) h)
-Proof
-  simp[FUN_EQ_THM, bind_def] >> gen_tac >>
-  Cases_on `f x` >> Cases_on `q` >> simp[bind_def]
-QED
+
 
 Theorem const_computations_related_ifexp_eval:
   const_computations_related (const_results_related roots cx ct) c c' st /\
@@ -4786,7 +4781,7 @@ Theorem const_computations_related_ifexp_eval:
     (bind c' (\v. bind (switch_BoolV cx v f' g') (conditional_result cx))) st
 Proof
   MATCH_ACCEPT_TAC (BETA_RULE
-    (PURE_REWRITE_RULE [eval_bind_assoc] const_computations_related_ifexp))
+    (PURE_REWRITE_RULE [vyperStateTheory.bind_assoc] const_computations_related_ifexp))
 QED
 
 (* Instantiate the five mutual predicates from the typed goal. *)
@@ -4946,7 +4941,7 @@ Proof
         >- gvs[const_subst_btarget_ok_def, const_computations_related_eq] >>
         rpt strip_tac >> BETA_TAC >>
         `const_cells_agree roots s` by metis_tac[const_subst_context_base_frame] >>
-        simp_tac bool_ss [GSYM eval_bind_assoc] >>
+        simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
         irule const_computations_related_prefix >> reverse conj_tac
         >- (simp[const_computations_related_eq] >>
             metis_tac[const_subst_expr_observe]) >>
@@ -5016,7 +5011,7 @@ Proof
       gvs[] >> Cases_on `bi = Len`
       >- (gvs[] >> Cases_on `es` >>
           gvs[well_typed_builtin_app_def, well_typed_expr_def] >>
-          simp_tac bool_ss [GSYM eval_bind_assoc] >>
+          simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
           irule const_computations_related_prefix >> reverse conj_tac
           >- (irule const_computations_related_prefix >> reverse conj_tac
               >- (simp_tac bool_ss [SF ETA_ss] >>
@@ -5036,7 +5031,7 @@ Proof
             (qpat_x_assum `MAP expr_type _ = MAP expr_type es` mp_tac >>
              simp[LIST_EQ_REWRITE, subst_consts_exprs_map, EL_MAP] >>
              disch_then (qspec_then `1` mp_tac) >> simp[]) >>
-          simp[] >> simp_tac bool_ss [GSYM eval_bind_assoc] >>
+          simp[] >> simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
           irule const_computations_related_prefix >> reverse conj_tac
           >- (drule_all const_subst_exprs_from_elements >>
               simp[const_subst_exprs_ok_def, const_computations_related_eq,
@@ -5046,7 +5041,7 @@ Proof
           simp[const_results_related_def]) >>
       Cases_on `bi = Env MsgGas` >> simp[]
       >- (irule const_computations_related_refl >> simp[const_results_related_def]) >>
-      simp_tac bool_ss [GSYM eval_bind_assoc] >>
+      simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
       irule const_computations_related_prefix >> reverse conj_tac
       >- (irule const_computations_related_prefix >> reverse conj_tac
           >- (drule_all const_subst_exprs_from_elements >>
@@ -5183,7 +5178,7 @@ Resume const_subst_structural[create]:
       simp[const_results_related_def])
   >- (simp_tac bool_ss [] >>
       rewrite_tac[MAP_TAKE, MAP_DROP] >>
-      ho_match_mp_tac (GEN_ALL (BETA_RULE (PURE_REWRITE_RULE [eval_bind_assoc]
+      ho_match_mp_tac (GEN_ALL (BETA_RULE (PURE_REWRITE_RULE [vyperStateTheory.bind_assoc]
         const_computations_related_create_blueprint))) >>
       qexists `MAP expr_type (DROP (if b then 4 else 3) es)` >>
       simp[GSYM MAP_TAKE, GSYM MAP_DROP, GSYM subst_consts_exprs_map,
@@ -5208,7 +5203,7 @@ Resume const_subst_structural[create]:
       qpat_x_assum `!xs s res t. _ /\ _ /\ eval_expr_results cx xs s = _ ==> _`
         irule >> goal_assum (drule_at Any) >> simp[]) >>
   simp_tac bool_ss [] >>
-  ho_match_mp_tac (GEN_ALL (BETA_RULE (PURE_REWRITE_RULE [eval_bind_assoc]
+  ho_match_mp_tac (GEN_ALL (BETA_RULE (PURE_REWRITE_RULE [vyperStateTheory.bind_assoc]
     const_computations_related_raw_create))) >>
   qmatch_goalsub_abbrev_tac `TAKE n (DROP 2 es)` >>
   qexists `MAP expr_type (TAKE n (DROP 2 es))` >>
