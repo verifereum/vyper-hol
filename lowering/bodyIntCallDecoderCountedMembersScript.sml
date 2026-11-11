@@ -6,7 +6,7 @@ Ancestors
   abiDecoderMembersCode abiScratchDecoderMemberFrames abiDecoderValidMemberCursor abiDecoderMemberFrames
   abiScratchDecoderContract abiScratchFootprint abiEncoderArrayFrame abiDecoderMembers
   abiDecoderCoherence abiDecoderTypedContract abiDecoderEffect abiDecoderReentry
-  abiDecoderContract abiDecodeRanges abiValidMembers compileEnv valueEncoding
+  abiDecoderContract abiDecodeRanges abiValidMembers compileEnv valueEncoding valueEncodingDefs
   vyperABI vyperValue vyperTyping fragGasPath venomState venomExecSemantics words list arithmetic
 
 val counted_cursor_rewrites = [MAP_APPEND, MAP, SUM_APPEND, SUM,

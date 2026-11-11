@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallProducerInterface bodyIntCallSourceFrame
   bodyIntCallArgOwnedFrame bodyIntCallArgLocalFrame bodyIntCallStorageFrame
   exprSimSubscriptArrayFrame exprSimProps loweringPosts exprLoweringProps
-  compileEnv context bodyMemAssignTopCopySem
+  compileEnv loweringStateRelDefs context bodyMemAssignTopCopySem
 
 Theorem intcall_vv_provenance_outcomes[simp]:
   intcall_vv_provenance ce cx ty sa sb
@@ -40,7 +40,7 @@ QED
 Theorem intcall_vv_provenance_frame:
   intcall_vv_provenance ce cx ty sa sm es raw vv s /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
-  wb_frame ce es sm s t /\ local_ptrs_reserved ce sm /\
+  wb_frame ce es es sm s t /\ local_ptrs_reserved ce sm /\
   local_ptrs_rel func ce es.scopes s /\
   sm.cs_next_id <= sn.cs_next_id ==>
   intcall_vv_provenance ce cx ty sa sn es raw vv t
@@ -97,14 +97,14 @@ Proof
       metis_tac[])
   >- (irule vv_post_old_buffer_value >> metis_tac[])
   >- (irule val_in_memory_footprint_agree >> simp[] >> qexists_tac `s.vs_memory` >>
-      simp[valueEncodingTheory.mem_bytes_at_def])
+      simp[valueEncodingDefsTheory.mem_bytes_at_def])
   >- (irule val_in_memory_footprint_agree >> simp[] >> qexists_tac `s.vs_memory` >>
-      simp[valueEncodingTheory.mem_bytes_at_def])
-  >- (`locals_kept ce es s t` by gvs[vv_post_def] >>
+      simp[valueEncodingDefsTheory.mem_bytes_at_def])
+  >- (`locals_kept ce es es s t` by gvs[vv_post_def] >>
       drule_all locals_kept_dynarray_free_value >> strip_tac >>
       irule val_in_memory_footprint_agree >> simp[] >>
       qexists_tac `s.vs_memory` >> simp[])
-  >- (`locals_kept ce es s t` by gvs[vv_post_def] >>
+  >- (`locals_kept ce es es s t` by gvs[vv_post_def] >>
       drule_all locals_kept_dynarray_free_value >> strip_tac >>
       irule val_in_memory_footprint_agree >> simp[] >>
       qexists_tac `s.vs_memory` >> simp[]) >>
@@ -219,7 +219,7 @@ Theorem intcall_held_storage_endpoint:
   (!tr. storage_agree (storage_dead cx tr (get_storage cx es tr))
       (get_storage cx es tr)
       (if tr then contract_transient t else contract_storage t)) /\
-  wb_frame ce es sm s t /\ sm.cs_next_id <= sn.cs_next_id ==>
+  wb_frame ce es es sm s t /\ sm.cs_next_id <= sn.cs_next_id ==>
   vv_holds ce cx ty raw vv es t /\ vv_at ce cx ty sa sn es raw vv t /\
   intcall_vv_provenance ce cx ty sa sn es raw vv t /\
   vv_storage_live cx vv es t
@@ -245,7 +245,7 @@ Theorem intcall_held_endpoint:
   vv_post ctx func ce cx e es sm sn s ee r ev t /\
   ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
   local_ptrs_reserved ce sm /\ local_ptrs_rel func ce es.scopes s /\
-  stmt_state_rel ctx func ce cx es t /\ wb_frame ce es sm s t /\
+  stmt_state_rel ctx func ce cx es t /\ wb_frame ce es es sm s t /\
   sm.cs_next_id <= sn.cs_next_id ==>
   vv_holds ce cx ty raw vv es t /\ vv_at ce cx ty sa sn es raw vv t /\
   intcall_vv_provenance ce cx ty sa sn es raw vv t /\
@@ -266,7 +266,7 @@ Theorem intcall_held_endpoint_outcomes:
   vv_post ctx func ce cx e es sm sn s ee r ev t /\
   ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
   local_ptrs_reserved ce sm /\ local_ptrs_rel func ce es.scopes s /\
-  stmt_state_rel ctx func ce cx es t /\ wb_frame ce es sm s t /\
+  stmt_state_rel ctx func ce cx es t /\ wb_frame ce es es sm s t /\
   sm.cs_next_id <= sn.cs_next_id ==>
   vv_holds ce cx ty raw vv (es with <|outcomes := os; gas_obs := gs|>) t /\
   vv_at ce cx ty sa sn (es with <|outcomes := os; gas_obs := gs|>) raw vv t /\
@@ -291,7 +291,7 @@ Theorem intcall_held_updated_endpoint_outcomes:
   ee = es with <|outcomes := ee.outcomes; gas_obs := ee.gas_obs|> /\
   ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
   local_ptrs_reserved ce sm /\ local_ptrs_rel func ce es.scopes s /\
-  stmt_state_rel ctx func ce cx ee t /\ wb_frame ce es sm s t /\
+  stmt_state_rel ctx func ce cx ee t /\ wb_frame ce es es sm s t /\
   sm.cs_next_id <= sn.cs_next_id ==>
   vv_holds ce cx ty raw vv (es with <|outcomes := os; gas_obs := gs|>) t /\
   vv_at ce cx ty sa sn (es with <|outcomes := os; gas_obs := gs|>) raw vv t /\

@@ -118,7 +118,7 @@ Proof
   rename1 `StorageVarDecl tr typ` >>
   drule_all exprSimTopLevelPropsTheory.admissible_toplevel_storage_lookup >> strip_tac >>
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   drule_all exprSimTopLevelPropsTheory.toplevel_storage_ce_vars >> strip_tac >>
   irule compile_toplevel_storage_provenance >> simp[] >> metis_tac[]
 QED

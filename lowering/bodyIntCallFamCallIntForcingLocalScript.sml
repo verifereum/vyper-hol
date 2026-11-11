@@ -35,7 +35,7 @@ Theorem intcall_value_forcing_frames:
     (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
            lookup_var x u = SOME w) /\
-    locals_kept ce es s u /\
+    locals_kept ce es es s u /\
     (!sv. sv.cs_next_id <= sa.cs_next_id /\ vv_at ce cx ty sv sa es r vv s ==>
           expr_val_at ce cx ty sv sb es v op u) /\
     (!sv. sv.cs_next_id <= sa.cs_next_id /\ vv_own ce cx ty sv sa es r vv s ==>

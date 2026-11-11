@@ -3,7 +3,7 @@ Theory bodyIntCallLocalArrayProducer
 Ancestors
   bodyIntCallArraySuffix bodyIntCallProducerRoots exprSimNameValue
   bodyIntCallIndexArithmetic
-  exprLowering compileEnv context vyperAST venomState vyperInterpreter vyperState
+  exprLowering compileEnv loweringStateRelDefs context vyperAST venomState vyperInterpreter vyperState
   gasSummary gasSummaryCompose gasOutcome bodyIntCallProducerInterface
   bodyIntCallPathLayout loweringPosts exprSimProps exprLoweringProps
   vyperTypeSystem valueEncoding finite_map exprSimHypsDefs allocLimits

@@ -3,7 +3,7 @@ Theory bodyIntCallFamAggSubscriptScratchStages
 Ancestors
   bodyIntCallFamAggSubscriptScratch bodyIntCallFamAggSubscriptStore
   bodyIntCallJointAggCore bodyIntCallJointContract exprSimAlloc exprSimMapKey
-  exprSimProps exprSimCopy fragGasMode fragExec compileEnv context
+  exprSimProps exprSimCopy fragGasMode fragExec compileEnv loweringStateRelDefs context
   emitHelperProps exprLoweringProps venomState venomInst intCallFrame
   emitHelper stmtSimAugAssignPlaceMemory
 

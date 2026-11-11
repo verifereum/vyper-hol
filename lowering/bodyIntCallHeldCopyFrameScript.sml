@@ -7,7 +7,7 @@ Ancestors
 
 Theorem intcall_held_args_holds_frame:
   intcall_held_args ce cx a sm es s H /\
-  wb_frame ce es sm s t /\ local_ptrs_reserved ce sm /\
+  wb_frame ce es es sm s t /\ local_ptrs_reserved ce sm /\
   local_ptrs_rel func ce es.scopes s /\ t.vs_labels = s.vs_labels /\
   contract_storage t = contract_storage s /\
   contract_transient t = contract_transient s /\

@@ -45,7 +45,7 @@ Proof
   `mem_bytes_at (w2n w) len u.vs_memory =
    mem_bytes_at (w2n w) len s.vs_memory` by
     (irule typed_copy_effect_bytes >>
-     metis_tac[compileEnvTheory.regions_disjoint_def]) >>
+     metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   conj_tac
   >- (irule val_in_memory_mem_agree >> simp[] >> qexistsl_tac [`len`, `s.vs_memory`] >> simp[]) >>
   drule typed_copy_effect_allocas >> strip_tac >>

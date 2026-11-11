@@ -33,7 +33,7 @@ Proof
   strip_tac >>
   `alloca_inv s /\ local_ptrs_rel func ce es.scopes s` by
     gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-        compileEnvTheory.state_rel_def] >>
+        loweringStateRelDefsTheory.state_rel_def] >>
   drule_all actual_alloc_buffer_site >> strip_tac >>
   drule compile_alloc_buffer_parts >> strip_tac >> rpt strip_tac >>
   irule local_ptrs_rel_alloca_disjoint >>
@@ -67,7 +67,7 @@ Theorem intcall_stage_memory_owned:
     eval_operand buf.buf_operand t = SOME w /\ w2n w = lb /\
     val_in_memory tv v lb t.vs_memory /\
     stmt_state_rel ctx func ce cx es t /\
-    intcall_held_args ce cx a sn es t H /\ wb_frame ce es sa s t /\
+    intcall_held_args ce cx a sn es t H /\ wb_frame ce es es sa s t /\
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
     t.vs_inst_idx = LENGTH sn.cs_current_insts /\
     local_ptrs_reserved ce sn /\
@@ -119,7 +119,7 @@ Theorem intcall_stage_word_owned:
     staged_arg ce func es sa sn z (ty,tv,v,T,op) /\
     value_has_type tv v /\ val_wf tv v /\ w = typed_val_to_w256 tv v /\
     stmt_state_rel ctx func ce cx es z /\ local_ptrs_reserved ce sn /\
-    intcall_held_args ce cx a sn es z H /\ wb_frame ce es sa s z /\
+    intcall_held_args ce cx a sn es z H /\ wb_frame ce es es sa s z /\
     ~z.vs_halted /\ z.vs_current_bb = sn.cs_current_bb /\
     z.vs_inst_idx = LENGTH sn.cs_current_insts /\
     (!x q. not_fresh_at sa x /\ lookup_var x s = SOME q ==> lookup_var x z = SOME q) /\

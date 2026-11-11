@@ -6,7 +6,7 @@ Ancestors
   abiDecoderPrimitiveLoopInvariant abiDecoderPrimitiveLoopFrames
   abiDecoderArrayIteration abiDecoderArrayInvariant abiDecoderPrimitiveLoopFragment
   abiDecoderLoop abiDecoderReentry abiDecoderExecution abiDecoderContract abiDecoderFrame
-  fragGasSeq fragGasPath fragExec exprLoweringProps emitHelperProps compileEnv
+  fragGasSeq fragGasPath fragExec exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs
   venomState venomInst instIdxIndep words list rich_list arithmetic entrySinkExtraction
 
 Theorem intcall_same_block_seq_path:

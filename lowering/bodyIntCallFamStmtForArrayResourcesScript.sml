@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtForArrayResources
 Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtForArrayFrame
   bodyIntCallFamStmtForResources bodyIntCallFamStmtForFrontier
-  stmtSimForArrayLoop stmtSimProps compileEnv venomState venomExecSemantics
+  stmtSimForArrayLoop stmtSimProps compileEnv loweringStateRelDefs venomState venomExecSemantics
   venomInst finite_map list rich_list intCallFrame
   bodyIntCallFamStmtForTransport bodyIntCallJointStmtJump
   bodyIntCallFamStmtForSetupGeneral exprLoweringProps fragGasMode

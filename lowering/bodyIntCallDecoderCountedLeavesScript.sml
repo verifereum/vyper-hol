@@ -8,7 +8,7 @@ Ancestors
   abiDecoderValidBytesInput abiValidBytesReentry abiDecoderValidBytes abiDecoderBytesTyped
   abiScratchDecoderRanges
   abiDecoderFrame abiDecoderAllocation abiScratchEncoderContract
-  abiEncoder exprLowering compileEnv fragExec fragGasPath
+  abiEncoder exprLowering compileEnv loweringStateRelDefs fragExec fragGasPath
   entrySinkExtraction instIdxIndep venomState venomExecSemantics
   vyperAST valueEncoding list
 

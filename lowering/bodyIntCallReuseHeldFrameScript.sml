@@ -22,7 +22,7 @@ Theorem held_footprint_outside_write:
   mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
 Proof
   disch_tac >> Cases_on `val_footprint tv v = 0`
-  >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  >- simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   pop_assum mp_tac >> pop_assum strip_assume_tac >> disch_tac >>
   `w2n w + val_footprint tv v <= b \/ b+nb <= w2n w` by
     (Cases_on `vv` >>
@@ -41,7 +41,7 @@ Theorem outside_write_wb_frame:
      lb+sz <= b \/ b+nb <= lb) /\
   (!off len. off+len <= b \/ b+nb <= off ==>
      mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) ==>
-  wb_frame ce es sm s z
+  wb_frame ce es es sm s z
 Proof
   strip_tac >> simp[wb_frame_def] >> conj_tac
   >- (rpt strip_tac >> qpat_x_assum `!off len. _ ==> _` irule >>
@@ -96,10 +96,10 @@ Theorem intcall_held_outside_write_frame:
   (!off len. off+len <= b \/ b+nb <= off ==>
      mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) /\
   sm.cs_next_id <= sn.cs_next_id /\ sm.cs_next_var <= sn.cs_next_var ==>
-  wb_frame ce es sm s z /\ intcall_held_args ce cx sa sn es z H
+  wb_frame ce es es sm s z /\ intcall_held_args ce cx sa sn es z H
 Proof
   strip_tac >>
-  `wb_frame ce es sm s z` by
+  `wb_frame ce es es sm s z` by
     (irule outside_write_wb_frame >> simp[] >> qexistsl_tac [`b`, `nb`] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   simp[] >> irule intcall_held_args_holds_frame >>
   reverse conj_tac >- (qexistsl_tac [`func`, `s`, `sm`] >> simp[]) >>

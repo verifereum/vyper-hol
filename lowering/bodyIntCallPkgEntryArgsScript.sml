@@ -140,5 +140,5 @@ Proof
        SOME (tv,iv)` by metis_tac[] >>
   drule_all initialized_immutable_regions >> strip_tac >>
   qpat_x_assum `!inst b sz. _` (qspec_then `inst` mp_tac) >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED

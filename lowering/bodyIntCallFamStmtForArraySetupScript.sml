@@ -7,7 +7,7 @@ Ancestors
   bodyIntCallFamStmtForArrayResources bodyIntCallJointContract
   stmtSimForArrayLoop venomState venomExecSemantics venomInst exprSimDefs
   exprSimMemDefs exprSimWordArgs stmtSimForArrayFrag stmtSimProps
-  compileEnv exprLoweringProps loweringPosts rich_list abiDecoderLoopCode
+  compileEnv loweringStateRelDefs exprLoweringProps loweringPosts rich_list abiDecoderLoopCode
 
 Theorem intcall_array_source_inputs:
   supported_stmt tops bindings (For id fty (Array arr) bound stmts) /\

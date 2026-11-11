@@ -134,5 +134,5 @@ Proof
   qexistsl_tac [`iop`,`iw`,`sc`] >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!x. p.ptr_operand = Var x ==> _` drule >>
-  simp[compileEnvTheory.not_fresh_at_def]
+  simp[loweringStateRelDefsTheory.not_fresh_at_def]
 QED

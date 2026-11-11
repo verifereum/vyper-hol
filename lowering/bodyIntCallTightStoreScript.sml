@@ -3,7 +3,7 @@ Theory bodyIntCallTightStore
 Ancestors
   bodyIntCallSmallStore placeMemoryTypedPrimitive placeMemoryPrimitiveForward
   exprSimBufferStore exprSimProps valueCopy context compileEnv venomState
-  venomExecSemantics valueEncoding valueEncodingProps venomMemProps
+  venomExecSemantics valueEncoding valueEncodingDefs valueEncodingProps venomMemProps
   stmtSimDeclStore valueCopyBytes fragExec exprLoweringProps
 
 Theorem intcall_bytes_store_sequence:

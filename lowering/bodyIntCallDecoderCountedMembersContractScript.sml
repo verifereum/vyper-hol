@@ -6,7 +6,7 @@ Ancestors
   abiScratchLeafEffect abiDecoderFrame abiDecoderMemberInfos abiDecoderMembers abiValidMembers
   abiDecoderValidContract abiDecoderEffect abiDecoderReentry abiDecoderLoop
   abiDecoderTypedContract abiDecoderContract abiDecodeRanges abiEncoder compileEnv
-  valueEncoding vyperABI fragGasPath fragExec venomState venomExecSemantics words list arithmetic
+  valueEncoding valueEncodingDefs vyperABI fragGasPath fragExec venomState venomExecSemantics words list arithmetic
 
 Definition intcall_scratch_decoder_members_counted_def:
   intcall_scratch_decoder_members_counted ce env sf tys tvs <=>

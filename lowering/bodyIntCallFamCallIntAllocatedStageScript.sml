@@ -72,7 +72,7 @@ Theorem intcall_target_cont:
     FLOOKUP u.vs_allocas aid = SOME entry) /\
   (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
     mem_bytes_at b len u.vs_memory = mem_bytes_at b len s.vs_memory) /\
-  locals_kept ce es s u /\
+  locals_kept ce es es s u /\
   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   intcall_expr_cont fp ce env es sa s es sb u
@@ -307,9 +307,9 @@ Proof
   `!off sz. regions_disjoint off sz dst len ==>
     mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz t.vs_memory` by
     (rpt strip_tac >>
-     drule_all (REWRITE_RULE [GSYM compileEnvTheory.regions_disjoint_def]
+     drule_all (REWRITE_RULE [GSYM loweringStateRelDefsTheory.regions_disjoint_def]
        placeMemoryCopyEffectTheory.typed_copy_effect_bytes) >> simp[]) >>
-  `locals_kept ce es t u` by
+  `locals_kept ce es es t u` by
     (irule exprSimPropsTheory.locals_kept_regions >> metis_tac[]) >>
   `!op. fp.jc_reserved op ==> eval_operand op u = eval_operand op t` by
     (rpt strip_tac >>
@@ -366,7 +366,7 @@ Proof
   >~ [`mem_bytes_at _ _ u.vs_memory = _`]
   >- (rpt strip_tac >> rename1 `FLOOKUP t.vs_allocas aid = SOME (off,sz)` >>
       `regions_disjoint off sz dst len` by metis_tac[] >>
-      drule_all (REWRITE_RULE [GSYM compileEnvTheory.regions_disjoint_def]
+      drule_all (REWRITE_RULE [GSYM loweringStateRelDefsTheory.regions_disjoint_def]
         placeMemoryCopyEffectTheory.typed_copy_effect_bytes) >> simp[]) >>
   gvs[] >> metis_tac[]
 QED
@@ -555,12 +555,12 @@ Proof
     (rpt strip_tac >>
      `off + sz <= fp.jc_lo` by
        fs[bodyIntCallJointContractTheory.intcall_frame_ok_def] >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `!name off sz. local_region ce es.scopes t name off sz ==>
     regions_disjoint off sz (w2n w) (type_memory_size tv)` by
     (rpt strip_tac >>
      qpat_x_assum `!name lb len. _ ==> regions_disjoint _ _ _ _` drule >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `!aid off sz. aid < a.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (off,sz) ==>
     regions_disjoint off sz (w2n w) (type_memory_size tv)` by
     (rpt strip_tac >>
@@ -568,7 +568,7 @@ Proof
        (irule intcall_stage_allocation_old_window >>
         qexistsl_tac [`fp.jc_cx`, `ce`, `fp.jc_ctx`, `es`, `fp.jc_func`,
           `aid`, `off`, `sz`, `s`, `t`, `a.cs_next_id`] >> simp[]) >>
-     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   (* open: the remaining store geometry is unproved *)
   cheat
 QED

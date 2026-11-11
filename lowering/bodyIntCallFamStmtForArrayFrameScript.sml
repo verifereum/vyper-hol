@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtForArrayFrame
 Ancestors
   stmtSimForArray stmtSimForArrayLoop exprLoweringProps emitHelperProps
-  compileEnv venomState venomExecSemantics venomInst finite_map words
+  compileEnv loweringStateRelDefs venomState venomExecSemantics venomInst finite_map words
   valueEncoding vyperValue stmtSimProps fragGasSeq fragGasMode fragGasPath
   list rich_list
 

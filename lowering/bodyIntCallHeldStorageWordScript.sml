@@ -2,7 +2,7 @@
 Theory bodyIntCallHeldStorageWord
 Ancestors
   bodyIntCallHeldRead stmtSimDeclPath exprSimUnwrap exprSimAggregateSource
-  context venomExecSemantics venomInst finite_map venomState compileEnv
+  context venomExecSemantics venomInst finite_map venomState compileEnv loweringStateRelDefs
   emitHelper
 
 Theorem held_storage_word_load_path:

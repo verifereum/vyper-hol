@@ -3,7 +3,7 @@ Theory bodyIntCallHeldCopyValue
 Ancestors
   bodyIntCallHeldArgs bodyIntCallHeldCopyFrame bodyIntCallProducerInterface
   exprSimProps loweringPosts valueEncodingProps context venomState
-  exprLoweringProps abiCallerLocalScratch exprSimStorageCopy compileEnv
+  exprLoweringProps abiCallerLocalScratch exprSimStorageCopy compileEnv loweringStateRelDefs
   bodyIntCallStorageTyped
 
 Theorem held_memory_footprint_frame:
@@ -48,7 +48,7 @@ Theorem held_footprint_outside_copy:
   mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
 Proof
   disch_tac >> Cases_on `val_footprint tv v = 0`
-  >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  >- simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   pop_assum mp_tac >> pop_assum strip_assume_tac >> disch_tac >>
   `w2n w + val_footprint tv v <= b \/ b+32*n <= w2n w` by
     (Cases_on `vv` >>
@@ -107,7 +107,7 @@ QED
 Theorem intcall_held_fresh_copy_holds:
   intcall_held_args ce cx sa sm es s H /\
   stmt_state_rel ctx func ce cx es s /\
-  wb_frame ce es sm s z /\ z.vs_labels = s.vs_labels /\
+  wb_frame ce es es sm s z /\ z.vs_labels = s.vs_labels /\
   contract_storage z = contract_storage s /\
   contract_transient z = contract_transient s /\
   u.vs_memory = s.vs_memory /\
@@ -136,7 +136,7 @@ QED
 Theorem intcall_held_fresh_copy_frame:
   intcall_held_args ce cx sa sm es s H /\
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
-  wb_frame ce es sm s z /\ z.vs_labels = s.vs_labels /\
+  wb_frame ce es es sm s z /\ z.vs_labels = s.vs_labels /\
   contract_storage z = contract_storage s /\
   contract_transient z = contract_transient s /\
   sm.cs_next_id <= sn.cs_next_id /\ sm.cs_next_var <= sn.cs_next_var /\
@@ -161,7 +161,7 @@ Theorem fresh_allocation_copy_wb_frame:
   sm.cs_next_var <= si.cs_next_var /\
   (!x. not_fresh_at si x ==> lookup_var x z = lookup_var x u) /\
   copy_prefix loc src s.vs_alloca_next n u k z ==>
-  wb_frame ce es sm s z
+  wb_frame ce es es sm s z
 Proof
   strip_tac >>
   `z.vs_allocas = u.vs_allocas` by
@@ -213,7 +213,7 @@ Proof
     (`copy_static z = copy_static u` by metis_tac[copy_prefix_def] >>
      drule copy_static_fields >> strip_tac >>
      gvs[contract_storage_def, contract_transient_def]) >>
-  `wb_frame ce es sm s z` by
+  `wb_frame ce es es sm s z` by
     (irule fresh_allocation_copy_wb_frame >> metis_tac[]) >>
   irule intcall_held_fresh_copy_frame >>
   goal_assum (drule_at (Pat `intcall_held_args _ _ _ _ _ _ _`)) >>

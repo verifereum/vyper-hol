@@ -31,7 +31,7 @@ Theorem intcall_stage_return_distinct_endpoint:
       ty' = ty /\ flag' = flag /\
       evaluate_type (get_tenv cx) ty = SOME tv /\
       read_result cx raw es = (INL v,es)) (ZIP(H,flags)) D /\
-    stmt_state_rel ctx func ce cx es t /\ wb_frame ce es sm s t /\
+    stmt_state_rel ctx func ce cx es t /\ wb_frame ce es es sm s t /\
     local_ptrs_reserved ce sn /\
     (!aid. sn.cs_next_id <= aid ==> aid NOTIN FDOM t.vs_allocas) /\
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
@@ -68,12 +68,12 @@ Proof
   `eval_operand buf.buf_operand t = SOME (n2w s.vs_alloca_next) /\
    FLOOKUP t.vs_allocas sm.cs_next_id = SOME (s.vs_alloca_next,nb) /\
    s.vs_alloca_next + rsz <= t.vs_alloca_next` by
-    (qpat_assum `wb_frame ce es si u t`
+    (qpat_assum `wb_frame ce es es si u t`
        (mp_then Any mp_tac staged_return_frame) >>
      disch_then (drule_at (Pat `FLOOKUP _ _ = _`)) >>
      disch_then (qspecl_then [`x`,`n2w s.vs_alloca_next`,`rsz`] mp_tac) >>
      gvs[]) >>
-  `wb_frame ce es sm s t` by
+  `wb_frame ce es es sm s t` by
     (irule convert_wb_frame_trans >> simp[] >>
      conj_tac >- (qexistsl_tac [`es`,`u`,`si`] >> simp[]) >>
      qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>

@@ -3,7 +3,7 @@ Theory bodyIntCallHeldImmutableCopy
 Ancestors
   bodyIntCallHeldByteFrame bodyIntCallStorageAllocate bodyIntCallStorageTyped loweringPosts
   exprSimCopy exprSimStorageCopy exprSimMemUnwrap entrySinkExtraction fragGasSeq fragGasPath fragGasMode fragExec exprLoweringProps
-  venomState venomExecSemantics venomInst compileEnv context list rich_list finite_map words
+  venomState venomExecSemantics venomInst compileEnv loweringStateRelDefs context list rich_list finite_map words
 
 Theorem immutable_copy_run_marked:
   copy_runtime_frame sa s sb z /\ fn_has_code sa sb func /\
@@ -313,7 +313,7 @@ Theorem immutable_unwrap_held_tail:
     FLOOKUP z.vs_allocas sa.cs_next_id = SOME (b,type_memory_bytes ce sty) /\
     val_wf tv v /\ val_in_memory tv v b z.vs_memory /\
     val_footprint tv v <= type_memory_size tv /\ b = s.vs_alloca_next /\
-    wb_frame ce es sa s z /\ intcall_held_args ce cx start sb es z H
+    wb_frame ce es es sa s z /\ intcall_held_args ce cx start sb es z H
 Proof
   strip_tac >> drule_all immutable_typed_unwrap_path >> strip_tac >>
   `ci_mono sa sm /\ ci_mono sa sb` by
@@ -329,7 +329,7 @@ Proof
   `type_memory_size tv = type_memory_bytes ce sty` by
     (`p.ptr_location <> LocMemory` by simp[] >>
      drule_all held_nonmemory_layout >> simp[]) >>
-  `wb_frame ce es sa s z /\ intcall_held_args ce cx start sb es z H` by
+  `wb_frame ce es es sa s z /\ intcall_held_args ce cx start sb es z H` by
     (irule intcall_held_allocation_bytes_frame >>
      goal_assum (drule_at (Pat `intcall_held_args _ _ _ _ _ _ _`)) >>
      simp[] >> conj_tac >- gvs[ci_mono_def] >>

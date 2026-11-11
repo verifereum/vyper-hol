@@ -6,7 +6,7 @@ Ancestors
   abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderContract
   abiDecoderTypedContract abiDecoderCoherence abiDecoderLoop abiValidMember abiValidMembers
   abiDecodeRanges abiEncoder fragGasPath fragExec exprLoweringProps emitHelperProps
-  compileEnv venomState venomInst venomExecSemantics instIdxIndep entrySinkExtraction
+  compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics instIdxIndep entrySinkExtraction
   words list rich_list arithmetic
 
 Theorem intcall_decoder_complex_head_guard_path:

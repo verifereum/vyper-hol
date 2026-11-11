@@ -3,7 +3,7 @@
 Theory bodyIntCallMcopyFrame
 Ancestors
   bodyIntCallWriteFrame bodyIntCallValueWindow exprSimBufferStore fragExec
-  exprLoweringProps compileEnv
+  exprLoweringProps compileEnv loweringStateRelDefs
 
 Theorem mcopy_alloca_local_framed_frag:
   !ctx func cenv cx es sa sb s inst p dw sw src sz alloc_sz tv v.

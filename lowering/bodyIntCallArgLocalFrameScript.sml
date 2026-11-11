@@ -2,7 +2,7 @@
    The final local relation restores dynamic headers as well as payloads. *)
 Theory bodyIntCallArgLocalFrame
 Ancestors
-  bodyIntCallLocalFrame exprLoweringProps loweringPosts compileEnv
+  bodyIntCallLocalFrame exprLoweringProps loweringPosts compileEnv loweringStateRelDefs
 
 Theorem vv_post_local_sub_layout_value:
   vv_post ctx func cenv cx e es sm sn s0 ee raw vv s /\

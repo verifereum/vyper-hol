@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallHeldFrame bodyIntCallSourceFrame bodyIntCallProducerInterface
   bodyIntCallArgType exprOperandVar exprSimSource loweringPosts pair
   exprSimCalldataSlice valueEncodingTyping list vyperState venomState
-  compileEnv exprLoweringProps exprSimHypsDefs freshWrites context
+  compileEnv loweringStateRelDefs exprLoweringProps exprSimHypsDefs freshWrites context
 
 Definition intcall_held_args_def:
   intcall_held_args ce cx a sm es s H <=>
@@ -143,7 +143,7 @@ Theorem intcall_held_args_transport:
   local_ptrs_rel func ce es.scopes s /\
   vv_post ctx func ce cx e es sm sn s ee r ev t /\
   ee = es with <|outcomes := ee.outcomes; gas_obs := ee.gas_obs|> /\
-  ee.scopes = es.scopes /\ wb_frame ce es sm s t /\
+  ee.scopes = es.scopes /\ wb_frame ce es es sm s t /\
   sm.cs_next_id <= sn.cs_next_id /\ sm.cs_next_var <= sn.cs_next_var /\
   t.vs_labels = s.vs_labels ==>
   intcall_held_args ce cx a sn ee t H
@@ -185,7 +185,7 @@ Proof
       `expr_sim_inv ce cx env es` by gvs[expr_body_pre_def] >>
       `local_ptrs_rel func ce es.scopes s` by
         gvs[stmt_state_rel_def, state_rel_def] >>
-      `wb_frame ce es sm s t` by
+      `wb_frame ce es es sm s t` by
         (gvs[wb_frame_def, vv_post_def] >> metis_tac[]) >>
       drule (CONJUNCT1 compile_expr_grows) >> strip_tac >>
       irule intcall_held_args_transport >> metis_tac[]) >>

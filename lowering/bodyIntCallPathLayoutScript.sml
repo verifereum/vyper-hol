@@ -2,7 +2,7 @@
 Theory bodyIntCallPathLayout
 Ancestors
   loweringPosts exprSimProps exprSimAggregateEncoding tupleMemoryLayout
-  valueEncoding valueEncodingProofs vyperTypeSystem vyperTyping vyperState vyperArray
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperTypeSystem vyperTyping vyperState vyperArray
   vyperValue vyperValueOperation list arithmetic alist
   vyperAssignPreservesType vyperTypeDefaults vyperPlaceStatePreservation
 

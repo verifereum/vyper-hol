@@ -29,7 +29,7 @@ Theorem storage_unwrap_held_tail:
     FLOOKUP z.vs_allocas sa.cs_next_id = SOME (b,type_memory_bytes ce sty) /\
     val_wf tv v /\ val_in_memory tv v b z.vs_memory /\
     val_footprint tv v <= type_memory_size tv /\ b = s.vs_alloca_next /\
-    wb_frame ce es sa s z /\ intcall_held_args ce cx start sb es z H
+    wb_frame ce es es sa s z /\ intcall_held_args ce cx start sb es z H
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all storage_typed_unwrap_path >> strip_tac >>
@@ -39,7 +39,7 @@ Proof
     (qpat_x_assum `u with <|vs_vars := _; vs_allocas := _;
        vs_alloca_next := _; vs_inst_idx := _|> = s` (mp_tac o GSYM) >>
      simp[venom_state_component_equality]) >>
-  `wb_frame ce es sa s z` by
+  `wb_frame ce es es sa s z` by
     (irule fresh_allocation_copy_wb_frame >>
      conj_tac >- metis_tac[] >>
      qexistsl_tac [`sa.cs_next_id`, `type_slot_size tv`, `p.ptr_location`,

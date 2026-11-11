@@ -3,7 +3,7 @@ Theory bodyIntCallFamAggSubscriptArrayRun
 Ancestors
   bodyIntCallFamAggSubscriptReadOnly exprSimSubscriptArrayFramed
   bodyIntCallJointContract emitHelperProps context venomState venomInst
-  compileEnv exprLoweringProps fragGasFresh varsExt exprSimArrayIndex freshWrites
+  compileEnv loweringStateRelDefs exprLoweringProps fragGasFresh varsExt exprSimArrayIndex freshWrites
   exprSimUnopProps fragExec fragGasMode
 
 Theorem intcall_runtime_load_landing:

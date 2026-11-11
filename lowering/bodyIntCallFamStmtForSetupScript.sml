@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtForSetup
 Ancestors
   bodyIntCallFamStmtForStart bodyIntCallFamStmtForTransport bodyIntCallJointStmtJump
   stmtForRangeMemoryParts fragGasMode venomState venomExecSemantics finite_map
-  bodyIntCallJointContract list exprSimProps exprSimCopy compileEnv
+  bodyIntCallJointContract list exprSimProps exprSimCopy compileEnv loweringStateRelDefs
   intCallFrame bodyMemoryDefs stmtSimProps stmtForRangeChecksMemory
   stmtSimForRange gasOutcome gasSummary vyperInterpreter vyperState
   vyperValue vyperValueOperation integer_word fragExec exprSimDefs

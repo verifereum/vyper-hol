@@ -87,7 +87,7 @@ Theorem intcall_unwrap_copy_frame:
   (!off len. off+len <= s.vs_alloca_next \/ s.vs_alloca_next+nb <= off ==>
     mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory) ==>
   stmt_state_rel ctx func ce cx es z /\
-  intcall_held_args ce cx a sn es z H /\ wb_frame ce es sa s z /\
+  intcall_held_args ce cx a sn es z H /\ wb_frame ce es es sa s z /\
   (!x q. not_fresh_at sa x /\ lookup_var x s = SOME q ==> lookup_var x z = SOME q) /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
     FLOOKUP z.vs_allocas aid = SOME entry) /\
@@ -103,7 +103,7 @@ Proof
    contract_transient z = contract_transient s` by
     (drule exprSimStorageCopyTheory.copy_static_fields >> strip_tac >>
      gvs[venom_state_component_equality,contract_storage_def,contract_transient_def]) >>
-  `wb_frame ce es sa s z /\ intcall_held_args ce cx a sn es z H` by
+  `wb_frame ce es es sa s z /\ intcall_held_args ce cx a sn es z H` by
     (irule bodyIntCallHeldByteFrameTheory.intcall_held_allocation_bytes_frame >>
      goal_assum (drule_at (Pat `intcall_held_args _ _ _ _ _ _ _`)) >>
      simp[] >> reverse conj_tac >- metis_tac[] >>
@@ -133,7 +133,7 @@ Theorem intcall_stage_unwrap_storage:
     (if is_word_type ty then w = typed_val_to_w256 tv v
      else val_in_memory tv v (w2n w) z.vs_memory) /\
     stmt_state_rel ctx func ce cx es z /\
-    intcall_held_args ce cx a sn es z H /\ wb_frame ce es sa s z /\
+    intcall_held_args ce cx a sn es z H /\ wb_frame ce es es sa s z /\
     ~z.vs_halted /\ z.vs_current_bb = sn.cs_current_bb /\
     z.vs_inst_idx = LENGTH sn.cs_current_insts /\
     (!x q. not_fresh_at sa x /\ lookup_var x s = SOME q ==> lookup_var x z = SOME q) /\
@@ -162,7 +162,7 @@ Proof
   `sa.cs_next_id < sn.cs_next_id /\ sa.cs_next_var <= sn.cs_next_var` by
     suspend "mono" >>
   `stmt_state_rel ctx func ce cx es z /\ intcall_held_args ce cx a sn es z H /\
-   wb_frame ce es sa s z /\
+   wb_frame ce es es sa s z /\
    (!x q. not_fresh_at sa x /\ lookup_var x s = SOME q ==> lookup_var x z = SOME q) /\
    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP z.vs_allocas aid = SOME entry) /\
    (!aid. sn.cs_next_id <= aid /\ aid NOTIN FDOM s.vs_allocas ==> aid NOTIN FDOM z.vs_allocas)` by
@@ -213,7 +213,7 @@ Theorem intcall_stage_unwrap_code:
     (if is_word_type ty then w = typed_val_to_w256 tv v
      else val_in_memory tv v (w2n w) z.vs_memory) /\
     stmt_state_rel ctx func ce cx es z /\
-    intcall_held_args ce cx a sn es z H /\ wb_frame ce es sa s z /\
+    intcall_held_args ce cx a sn es z H /\ wb_frame ce es es sa s z /\
     ~z.vs_halted /\ z.vs_current_bb = sn.cs_current_bb /\
     z.vs_inst_idx = LENGTH sn.cs_current_insts /\
     (!x q. not_fresh_at sa x /\ lookup_var x s = SOME q ==> lookup_var x z = SOME q) /\
@@ -234,7 +234,7 @@ Proof
   `sa.cs_next_id < sn.cs_next_id /\ sa.cs_next_var <= sn.cs_next_var` by
     suspend "mono" >>
   `stmt_state_rel ctx func ce cx es z /\ intcall_held_args ce cx a sn es z H /\
-   wb_frame ce es sa s z /\
+   wb_frame ce es es sa s z /\
    (!x q. not_fresh_at sa x /\ lookup_var x s = SOME q ==> lookup_var x z = SOME q) /\
    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP z.vs_allocas aid = SOME entry) /\
    (!aid. sn.cs_next_id <= aid /\ aid NOTIN FDOM s.vs_allocas ==> aid NOTIN FDOM z.vs_allocas)` by

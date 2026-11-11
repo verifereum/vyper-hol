@@ -2,7 +2,7 @@
 Theory bodyIntCallFamCallIntReturnRun
 Ancestors
   bodyIntCallFamCallIntReturnFrame bodyIntCallWidenedStore
-  intCallResult compileEnv exprLoweringProps venomState
+  intCallResult compileEnv loweringStateRelDefs exprLoweringProps venomState
   finite_map list rich_list loweringPosts exprSimDefs intCallFrame
 
 Theorem intcall_stack_buffer_run_resources:
@@ -15,7 +15,7 @@ Theorem intcall_stack_buffer_run_resources:
   0 < returns_stack_count
     (\name. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields name)) cty /\
   intret_vals_match tv v ws /\ ws <> [] /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 es' sa s0 s /\
   sa.cs_next_var <= si.cs_next_var /\
   eval_operand buf.buf_operand s = SOME w /\
   MAP (\op. eval_operand op s) results = MAP SOME ws /\
@@ -38,7 +38,7 @@ Theorem intcall_stack_buffer_run_resources:
   (!a k. P a k ==> a + k <= w2n w \/ w2n w + 32 * LENGTH results <= a) ==>
   ?u. run_inst_seq (emitted_insts si sb) s = OK u /\
     (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-    stmt_state_rel ctx func ce cx es' u /\ wb_frame ce es0 sa s0 u /\
+    stmt_state_rel ctx func ce cx es' u /\ wb_frame ce es0 es' sa s0 u /\
     eval_operand buf.buf_operand u = SOME w /\
     val_in_memory tv v (w2n w) u.vs_memory /\
     FLOOKUP u.vs_allocas aid = SOME (w2n w,32 * LENGTH results) /\
@@ -71,7 +71,7 @@ Theorem intcall_store_run_counted_resources:
   s.vs_inst_idx = LENGTH si.cs_current_insts /\
   run_inst_seq (emitted_insts si sb) s = OK u /\
   (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-  stmt_state_rel ctx func ce cx es' u /\ wb_frame ce es0 sa s0 u /\
+  stmt_state_rel ctx func ce cx es' u /\ wb_frame ce es0 es' sa s0 u /\
   eval_operand buf u = SOME w /\ val_in_memory tv v (w2n w) u.vs_memory /\
   FLOOKUP u.vs_allocas aid = SOME (w2n w,32 * LENGTH ops) /\
   (!n lb lsz. local_region ce es'.scopes u n lb lsz ==>
@@ -85,7 +85,7 @@ Theorem intcall_store_run_counted_resources:
     (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
   u.vs_current_bb = sb.cs_current_bb /\
   stmt_state_rel ctx func ce cx es' (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-  wb_frame ce es0 sa s0 (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  wb_frame ce es0 es' sa s0 (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   eval_operand buf (u with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w /\
   val_in_memory tv v (w2n w) (u with vs_inst_idx := LENGTH sb.cs_current_insts).vs_memory /\
   FLOOKUP (u with vs_inst_idx := LENGTH sb.cs_current_insts).vs_allocas aid =

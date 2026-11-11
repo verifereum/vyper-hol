@@ -15,7 +15,7 @@ Proof
   `aid <> aid'` by decide_tac >>
   gvs[venomMemDefsTheory.alloca_inv_def,
       venomMemDefsTheory.allocas_non_overlapping_def,
-      compileEnvTheory.regions_disjoint_def] >>
+      loweringStateRelDefsTheory.regions_disjoint_def] >>
   qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _`
     (qspecl_then [`inst.inst_id`,`inst'.inst_id`] mp_tac) >>
   simp[] >> decide_tac

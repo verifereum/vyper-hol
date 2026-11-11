@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallEncoderCountedPhases bodyIntCallEncoderCountedComplex
   abiScratchEffect abiScratchFootprint abiDecoderAllocation abiDecoderFrame
   abiDecoderFrameCompose abiDecoderFootprint abiDecoderProtectedScratch abiDecoderContract abiDecoderLoop
-  abiEncoderArrayParent compileEnv valueEncoding venomState words arithmetic
+  abiEncoderArrayParent compileEnv loweringStateRelDefs valueEncoding venomState words arithmetic
   finite_map fragGasPath bodyIntCallEncoderCountedPrefix abiScratchInput
   abiScratchOwnedPrefix abiScratchPrefix abiEncoderComplexPrefix abiEncoderMembersDefs
   abiScratchArrayEntry abiScratchLeafEffect abiEncoderArrayPrefix abiEncoderArrayHeaderMemory

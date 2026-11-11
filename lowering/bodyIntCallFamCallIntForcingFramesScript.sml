@@ -7,7 +7,7 @@ Ancestors
   immutableConstructorRelation valueEncodingProps valueEncoding valueCopy
   venomExecSemantics context intCallFrame fragGasMode entrySinkExtraction
   abiDecoderArrayInitExec stmtReasonMemory finite_map list rich_list words
-  placeMemoryStaging venomState compileEnv fragExec emitHelperProps
+  placeMemoryStaging venomState compileEnv loweringStateRelDefs fragExec emitHelperProps
   exprLoweringProps venomInst instIdxIndep placeMemoryPrimitiveForward
   vyperInterpreter vyperState loweringHalt exprSimAlloc bodyIntCallLiteralLanding
   exprSimProps loweringPosts exprLowering exprSimFieldLayout
@@ -43,7 +43,7 @@ Theorem intcall_code_forcing_frames:
     (!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz) /\
     (!name b sz. local_region ce es.scopes s name b sz ==>
       regions_disjoint (w2n w) (type_memory_size tv) b sz) /\
-    locals_kept ce es s u /\
+    locals_kept ce es es s u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!p k. regions_disjoint p k (w2n w) (type_memory_size tv) ==>
@@ -82,7 +82,7 @@ Proof
      `regions_disjoint b sz (w2n w) (type_memory_size tv)` by
        (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _` drule >>
         simp[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
-  `locals_kept ce es s u` by
+  `locals_kept ce es es s u` by
     (rw[locals_kept_def] >>
      `regions_disjoint off len (w2n w) (type_memory_size tv)` by
        (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _` drule >>
@@ -122,7 +122,7 @@ Theorem intcall_storage_forcing_frames:
     (!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz) /\
     (!name b sz. local_region ce es.scopes s name b sz ==>
       regions_disjoint (w2n w) (type_memory_size tv) b sz) /\
-    locals_kept ce es s u /\
+    locals_kept ce es es s u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!p k. regions_disjoint p k (w2n w) (type_memory_size tv) ==>
@@ -167,7 +167,7 @@ Proof
      `regions_disjoint b sz (w2n w) (type_memory_size tv)` by
        (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _` drule >>
         simp[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
-  `locals_kept ce es s u` by
+  `locals_kept ce es es s u` by
     (rw[locals_kept_def] >>
      `regions_disjoint off len (w2n w) (type_memory_size tv)` by
        (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _` drule >>

@@ -3,7 +3,7 @@ Theory bodyIntCallStorageTyped
 Ancestors
   bodyIntCallStorageRead bodyIntCallStorageAllocate bodyIntCallStorageWord
   bodyIntCallStorageLoop exprSimHyps exprSimFieldLayout valueEncodingProps
-  fragGasMode loweringPosts compileEnv exprSimStorageCopy exprLoweringProps
+  fragGasMode loweringPosts compileEnv loweringStateRelDefs exprSimStorageCopy exprLoweringProps
   venomState venomExecSemantics words finite_map
 Libs
   monadsyntax

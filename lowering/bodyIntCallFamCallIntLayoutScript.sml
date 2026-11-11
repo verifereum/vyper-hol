@@ -65,5 +65,5 @@ Proof
   `aid <> site` by decide_tac >>
   `regions_disjoint src_base src_cap dst sz` by
     (irule exprSimPrecompilesTheory.state_allocations_disjoint >> metis_tac[]) >>
-  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED

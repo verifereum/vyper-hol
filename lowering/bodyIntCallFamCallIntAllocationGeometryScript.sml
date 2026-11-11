@@ -43,8 +43,8 @@ Proof
   strip_tac >> drule_all intcall_vv_at_footprint_location >> strip_tac
   >- (irule intcall_stage_allocation_old_window >> metis_tac[])
   >- (first_x_assum drule >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)
-  >> simp[compileEnvTheory.regions_disjoint_def]
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
+  >> simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 (* A zero-sized value need not have an ordered address with respect to the

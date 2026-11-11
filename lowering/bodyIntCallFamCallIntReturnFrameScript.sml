@@ -1,7 +1,7 @@
 (* Spatial boundaries for the nested internal call's return. *)
 Theory bodyIntCallFamCallIntReturnFrame
 Ancestors
-  bodyIntCallSeamDefs intCallFrame exprSimDefs compileEnv intCallResult
+  bodyIntCallSeamDefs intCallFrame exprSimDefs compileEnv loweringStateRelDefs intCallResult
   exprLowering venomExecSemantics vyperImmutableMetadataFrame
   vyperInterpreter vyperState gasSummary bodyIntCallAssemblyFrame
 
@@ -124,7 +124,7 @@ Theorem intcall_return_restored_frame:
     res ee (IntRet ir cs) /\
   stmt_state_rel ctx func ce cx (es with scopes := prev) t /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 (es with scopes := prev) sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce prev t id b sz) /\
   (!id b sz aid off asz.
@@ -137,7 +137,7 @@ Theorem intcall_return_restored_frame:
     (adopt_return_fmp ir (merge_callee_state t cs)) = SOME u ==>
   stmt_state_rel ctx func ce cx (ee with scopes := prev)
     (u with vs_inst_idx := idx) /\
-  wb_frame ce es0 sa s0 (u with vs_inst_idx := idx) /\
+  wb_frame ce es0 (ee with scopes := prev) sa s0 (u with vs_inst_idx := idx) /\
   (!id b sz. local_region ce prev (u with vs_inst_idx := idx) id b sz <=>
     local_region ce prev t id b sz)
 Proof

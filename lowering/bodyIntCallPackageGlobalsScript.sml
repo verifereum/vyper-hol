@@ -2,7 +2,7 @@
    Module-pin equalities are parameters here to avoid a seam-theory cycle. *)
 Theory bodyIntCallPackageGlobals
 Ancestors
-  compileVyper compileEnv exprLoweringProps stmtSimReturn
+  compileVyper compileEnv loweringStateRelDefs exprLoweringProps stmtSimReturn
   immutableLocationProps bodyIntCallImmutableBoundary intCallCallee
   list pair finite_map
 

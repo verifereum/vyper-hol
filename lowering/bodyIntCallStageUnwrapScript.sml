@@ -20,7 +20,7 @@ Theorem intcall_stage_unwrap:
     (if is_word_type ty then w = typed_val_to_w256 tv v
      else val_in_memory tv v (w2n w) z.vs_memory) /\
     stmt_state_rel ctx func ce cx es z /\
-    intcall_held_args ce cx a sn es z H /\ wb_frame ce es sa s z /\
+    intcall_held_args ce cx a sn es z H /\ wb_frame ce es es sa s z /\
     ~z.vs_halted /\ z.vs_current_bb = sn.cs_current_bb /\
     z.vs_inst_idx = LENGTH sn.cs_current_insts /\
     (!x q. not_fresh_at sa x /\ lookup_var x s = SOME q ==> lookup_var x z = SOME q) /\
@@ -84,7 +84,7 @@ Theorem intcall_stage_memory_head:
     eval_operand buf.buf_operand t = SOME w /\ w2n w = lb /\
     val_in_memory tv v lb t.vs_memory /\
     stmt_state_rel ctx func ce cx es t /\
-    intcall_held_args ce cx a sn es t H /\ wb_frame ce es sa s t /\
+    intcall_held_args ce cx a sn es t H /\ wb_frame ce es es sa s t /\
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
     t.vs_inst_idx = LENGTH sn.cs_current_insts /\
     local_ptrs_reserved ce sn /\
@@ -121,7 +121,7 @@ Proof
     (mp_tac (Q.SPECL [`ce`,`op`,`buf.buf_operand`,`ty`,`ty`,`si`]
       exprLoweringPropsTheory.ci_mono_compile_store_memory) >>
      simp[exprLoweringPropsTheory.ci_mono_def]) >>
-  `wb_frame ce es sa s t` by suspend "frame" >>
+  `wb_frame ce es es sa s t` by suspend "frame" >>
   `z.vs_alloca_next < dimword(:256)` by
     (gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
      metis_tac[exprLoweringPropsTheory.alloca_room_next_lt]) >>

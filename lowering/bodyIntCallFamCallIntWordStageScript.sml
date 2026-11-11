@@ -23,7 +23,7 @@ Theorem intcall_word_forcing_readonly:
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     (!name b sz. local_region ce scopes u name b sz <=>
                  local_region ce scopes s name b sz) /\
-    locals_kept ce es s u /\
+    locals_kept ce es es s u /\
     (!x. op = Var x ==> not_fresh_at sb x) /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
@@ -93,7 +93,7 @@ Theorem intcall_readonly_cont:
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
   (!name b sz. local_region ce es.scopes u name b sz <=>
                local_region ce es.scopes s name b sz) /\
-  locals_kept ce es s u /\
+  locals_kept ce es es s u /\
   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   intcall_expr_cont fp ce env es sa s es sb u

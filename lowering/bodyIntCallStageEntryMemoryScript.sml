@@ -2,7 +2,7 @@
 Theory bodyIntCallStageEntryMemory
 Ancestors
   bodyIntCallStagePackage bodyIntCallStageReturn bodyIntCallStageOwned
-  venomExecProofs tupleLoadProps compileEnv list pair finite_map
+  venomExecProofs tupleLoadProps compileEnv loweringStateRelDefs list pair finite_map
   bodyIntCallImmutableBoundary
 
 Theorem staged_memory_parameter:

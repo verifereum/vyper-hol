@@ -24,7 +24,7 @@ Proof
   Cases_on `EL i D` >> rename1 `(ty',rest)` >>
   PairCases_on `rest` >> simp[] >> rpt strip_tac >> gvs[] >>
   drule_all staged_arg_intervals_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def] >> metis_tac[]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
 QED
 
 Theorem intcall_stage_args_distinct_endpoint:
@@ -52,7 +52,7 @@ Theorem intcall_stage_args_distinct_endpoint:
       ty' = ty /\ flag' = flag /\
       evaluate_type (get_tenv cx) ty = SOME tv /\
       read_result cx raw es = (INL v,es)) (ZIP(H,flags)) D /\
-    stmt_state_rel ctx func ce cx es t /\ wb_frame ce es sm s t /\
+    stmt_state_rel ctx func ce cx es t /\ wb_frame ce es es sm s t /\
     local_ptrs_reserved ce sn /\
     (!aid. sn.cs_next_id <= aid ==> aid NOTIN FDOM t.vs_allocas) /\
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
@@ -98,7 +98,7 @@ Resume intcall_stage_args_distinct_endpoint[word]:
   `EVERY (staged_arg ce func es sm sn t) D` by
     (irule staged_args_lower_frontier >> goal_assum (drule_at Any) >>
      gvs[ci_mono_def]) >>
-  `wb_frame ce es sm s t` by
+  `wb_frame ce es es sm s t` by
     (irule exprSimConvertBytesTheory.convert_wb_frame_trans >>
      simp[] >> conj_tac
      >- (qexistsl_tac [`es`,`z`,`sm'`] >> gvs[ci_mono_def]) >>
@@ -140,7 +140,7 @@ Resume intcall_stage_args_distinct_endpoint[memory]:
   disch_then (qspecl_then [`sn`,`D`] mp_tac) >> simp[] >> strip_tac >>
   `EVERY (staged_arg ce func es sm sn t) D` by
     (irule staged_args_lower_frontier >> goal_assum (drule_at Any) >> simp[]) >>
-  `wb_frame ce es sm s t` by
+  `wb_frame ce es es sm s t` by
     (irule exprSimConvertBytesTheory.convert_wb_frame_trans >>
      simp[] >> conj_tac
      >- (qexistsl_tac [`es`,`z`,`sj`] >> gvs[ci_mono_def] >> decide_tac) >>

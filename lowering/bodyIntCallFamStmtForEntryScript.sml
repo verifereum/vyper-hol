@@ -4,7 +4,7 @@ Ancestors
   stmtSimForLoop stmtForRangeMemoryParts stmtSimDeclStore
   loweringSlice localPtrsProps valueEncodingProps stmtSimProps stmtSimForParts
   venomState venomExecSemantics venomExecProofs finite_map vyperState valueEncoding
-  stmtSimDefs compileEnv vyperValue exprLoweringProps emitHelperProps
+  stmtSimDefs compileEnv loweringStateRelDefs vyperValue exprLoweringProps emitHelperProps
   fragGasPathMem fragGasPath fragGasMode gasCount venomInst integer_word
 
 Theorem intcall_for_body_entry_frame:

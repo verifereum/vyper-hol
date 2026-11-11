@@ -19,6 +19,6 @@ Theorem allocated_write_local_bytes:
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   drule_all local_ptrs_rel_alloca_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
   qpat_x_assum `!a k. _` irule >> decide_tac
 QED

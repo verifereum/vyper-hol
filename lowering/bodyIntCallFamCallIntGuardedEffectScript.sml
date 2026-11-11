@@ -72,9 +72,9 @@ Proof
       Cases_on `EL i vs` >> simp[] >> rpt strip_tac >>
       qmatch_goalsub_rename_tac `val_footprint tv v` >>
       (Cases_on `val_footprint tv v = 0`
-       >- simp[valueEncodingTheory.mem_bytes_at_def]) >>
+       >- simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
       irule typed_copy_effect_bytes >>
-      metis_tac[compileEnvTheory.regions_disjoint_def]) >>
+      metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   rpt strip_tac >> irule typed_copy_effect_bytes >>
-  metis_tac[compileEnvTheory.regions_disjoint_def]
+  metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]
 QED

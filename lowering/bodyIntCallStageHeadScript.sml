@@ -26,7 +26,7 @@ Theorem intcall_stage_alloc_store_map:
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
     t.vs_inst_idx = LENGTH sn.cs_current_insts /\
     stmt_state_rel ctx func ce cx es t /\
-    intcall_held_args ce cx a sn es t H /\ wb_frame ce es sm s t /\
+    intcall_held_args ce cx a sn es t H /\ wb_frame ce es es sm s t /\
     eval_operand buf.buf_operand t = SOME (n2w s.vs_alloca_next) /\
     val_in_memory tv v s.vs_alloca_next t.vs_memory /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -64,7 +64,7 @@ Proof
   `t.vs_allocas = u.vs_allocas /\ t.vs_labels = s.vs_labels /\
    contract_storage t = contract_storage s /\
    contract_transient t = contract_transient s` by suspend "fields" >>
-  `wb_frame ce es sm s t /\ intcall_held_args ce cx a sn es t H` by
+  `wb_frame ce es es sm s t /\ intcall_held_args ce cx a sn es t H` by
     suspend "held" >>
   `stmt_state_rel ctx func ce cx es t` by suspend "state" >>
   qexistsl_tac [`t`,`inst`] >> simp[] >>
@@ -149,7 +149,7 @@ Theorem intcall_stage_alloc_store:
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
     t.vs_inst_idx = LENGTH sn.cs_current_insts /\
     stmt_state_rel ctx func ce cx es t /\
-    intcall_held_args ce cx a sn es t H /\ wb_frame ce es sm s t /\
+    intcall_held_args ce cx a sn es t H /\ wb_frame ce es es sm s t /\
     eval_operand buf.buf_operand t = SOME (n2w s.vs_alloca_next) /\
     val_in_memory tv v s.vs_alloca_next t.vs_memory /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\

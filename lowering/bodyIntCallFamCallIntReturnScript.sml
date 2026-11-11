@@ -114,7 +114,7 @@ Proof
     (drule_all body_internal_decl_return_count >> simp[]) >>
   `sfields_tenv_consistent ce.ce_struct_fields (get_tenv fp.jc_cx)` by
     fs[expr_body_pre_def, expr_sim_inv_def] >>
-  `wb_frame ce es0 sa s0 t` by
+  `wb_frame ce es0 (es1 with scopes := prev) sa s0 t` by
     (qpat_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[intcall_entry_def] >> strip_tac >>
      rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -183,7 +183,7 @@ Resume intcall_nested_return_enriched[dispatch]:
   disch_then (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `state_rel _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `LENGTH _ = _`)) >>
   disch_then (drule_at (Pat `value_has_type _ _`)) >>
   disch_then (qspecl_then [`HD argv`,`vv`,`ret`,`rbs`,`lbl`,`fp`] mp_tac) >>
@@ -264,7 +264,7 @@ Resume intcall_nested_return_enriched[voidpost]:
      qpat_x_assum `ret = NoneT` SUBST_ALL_TAC >>
      simp[NoAsms]) >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ out` mp_tac >>
-  qpat_x_assum `wb_frame _ _ _ _ out` mp_tac >>
+  qpat_x_assum `wb_frame _ _ _ _ _ out` mp_tac >>
   qpat_x_assum `ce.ce_func_return_type _ = ret` mp_tac >>
   qpat_x_assum `vv = _` mp_tac >>
   qpat_x_assum `v = NoneV` mp_tac >>
@@ -279,7 +279,7 @@ Resume intcall_nested_return_enriched[voidpost]:
     vyperStateTheory.read_result_def, vyperStateTheory.return_def,
     expr_val_rel_def, expr_val_at_def, venomStateTheory.eval_operand_def,
     vyperValueTheory.evaluate_type_def, is_word_type_def,
-    valueEncodingTheory.val_in_memory_def, valueEncodingTheory.val_wf_def,
+    valueEncodingDefsTheory.val_in_memory_def, valueEncodingDefsTheory.val_wf_def,
     val_footprint_def, valueEncodingTheory.type_memory_size_def]
 QED
 
@@ -287,7 +287,7 @@ Resume intcall_nested_return_enriched[bufferpost]:
   reverse conj_tac
   >- (strip_tac >> qexistsl [`buf`, `aid`, `off`] >> asm_rewrite_tac[] >> metis_tac[]) >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ out` mp_tac >>
-  qpat_x_assum `wb_frame _ _ _ _ out` mp_tac >>
+  qpat_x_assum `wb_frame _ _ _ _ _ out` mp_tac >>
   qpat_x_assum `ce.ce_func_return_type _ = ret` mp_tac >>
   qpat_x_assum `type_widens_to _ ret ann` mp_tac >>
   qpat_x_assum `evaluate_type _ ret = _` mp_tac >>
@@ -316,7 +316,7 @@ Resume intcall_nested_return_enriched[wordbuffer]:
     |> Q.INST [`e` |-> `Call (ce.ce_func_return_type (nsid_to_string (NONE,name))) (IntCall (NONE,name)) call_args dflt`]
     |> SIMP_RULE (srw_ss()) [vyperASTTheory.expr_type_def]) >>
   goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   simp[] >>
   qexistsl [`aid`, `off`, `buf.buf_size`] >>
   simp[wordsTheory.w2n_n2w] >> metis_tac[]
@@ -329,7 +329,7 @@ Resume intcall_nested_return_enriched[widebuffer]:
      metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]) >>
   irule bodyIntCallWidenedPostTheory.widened_allocated_buffer_post >>
   goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   simp[] >>
   qexistsl [`aid`, `off`, `buf.buf_size`] >> simp[] >> metis_tac[]
 QED

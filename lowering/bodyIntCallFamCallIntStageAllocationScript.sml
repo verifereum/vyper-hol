@@ -159,7 +159,7 @@ Proof
   `aid <> site` by decide_tac >>
   `regions_disjoint lb len dst sz` by
     (irule exprSimPrecompilesTheory.state_allocations_disjoint >> metis_tac[]) >>
-  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem intcall_stage_allocation_protected_window:
@@ -167,7 +167,7 @@ Theorem intcall_stage_allocation_protected_window:
   p+k <= lo ==> regions_disjoint p k dst sz
 Proof
   simp[intCallFrameTheory.allocas_above_def,
-       compileEnvTheory.regions_disjoint_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+       loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem intcall_stage_allocation_immutable_window:
@@ -183,5 +183,5 @@ Proof
   drule exprSimPrecompilesTheory.precompile_alloca_immutable_disjoint >>
   disch_then drule >> simp[venomInstTheory.mk_inst_def] >>
   disch_then drule >> simp[] >>
-  metis_tac[compileEnvTheory.regions_disjoint_def]
+  metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]
 QED

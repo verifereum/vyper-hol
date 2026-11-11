@@ -3,7 +3,7 @@ Theory bodyIntCallProducerRoots
 Ancestors
   bodyIntCallProducerInterface exprSimNameValue exprSimHypsDefs
   exprSimProps exprSimDefs loweringPosts localPtrsProps
-  compileEnv exprLowering exprLoweringProps vyperTypeEnv vyperTypeInvariants
+  compileEnv loweringStateRelDefs exprLowering exprLoweringProps vyperTypeEnv vyperTypeInvariants
   vyperTypeSystem vyperInterpreter vyperState venomState context
   valueEncoding valueEncodingProofs finite_map gasOutcome gasSummary
 

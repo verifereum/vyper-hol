@@ -3,7 +3,7 @@
 Theory bodyIntCallStagingBuffer
 Ancestors
   intCallArgs loweringHalt actualAllocExec context freshWrites
-  compileEnv venomState venomInst finite_map words arithmetic
+  compileEnv loweringStateRelDefs venomState venomInst finite_map words arithmetic
 Libs
   monadsyntax
 

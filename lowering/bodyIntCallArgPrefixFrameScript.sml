@@ -20,7 +20,7 @@ Theorem intcall_args_frame_accumulated:
   a.cs_next_id <= sm.cs_next_id /\ a.cs_next_var <= sm.cs_next_var /\
   intcall_held_args ce cx a sm es s H /\
   stmt_state_rel ctx func ce cx initial_es sinitial_es /\ local_ptrs_reserved ce a /\
-  es.scopes = initial_es.scopes /\ wb_frame ce initial_es a sinitial_es s /\
+  es.scopes = initial_es.scopes /\ wb_frame ce initial_es initial_es a sinitial_es s /\
   gas_admissible (bind (eval_expr_results cx args) k) expr_vv_res_ok es /\
   (!res ee r. expr_exit res r ==> R res ee r) /\
   (!raws ee t. LENGTH raws = LENGTH args /\ LENGTH vals = LENGTH args /\
@@ -29,7 +29,7 @@ Theorem intcall_args_frame_accumulated:
         (ZIP (args,ZIP (raws,vals)))) /\
     expr_sim_inv ce cx env ee /\ stmt_state_rel ctx func ce cx ee t /\
     ee = es with <|outcomes := ee.outcomes; gas_obs := ee.gas_obs|> /\
-    wb_frame ce initial_es a sinitial_es t /\
+    wb_frame ce initial_es initial_es a sinitial_es t /\
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
     t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx,func) (k raws) (ee,t) Q R) ==>
@@ -72,7 +72,7 @@ Resume intcall_args_frame_accumulated[tail]:
   `stmt_state_rel ctx func ce cx (mid with gas_obs := []) t` by
     (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[vv_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
-  `wb_frame ce es sm s t` by
+  `wb_frame ce es es sm s t` by
     (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[vv_post_def, wb_frame_def] >> strip_tac >>
      asm_rewrite_tac[]) >>
@@ -82,7 +82,7 @@ Resume intcall_args_frame_accumulated[tail]:
      drule stmtSimAugAssignPlaceMemoryTheory.aug_place_marked_path_not_halted >>
      simp[]) >>
   `local_ptrs_reserved ce sh` by metis_tac[local_ptrs_reserved_next_var] >>
-  `wb_frame ce initial_es a sinitial_es t` by
+  `wb_frame ce initial_es initial_es a sinitial_es t` by
     (irule wb_frame_trans >>
      simp[] >> conj_tac
      >- (qexistsl_tac [`es`,`sm`,`s`] >> asm_rewrite_tac[]) >>
@@ -138,7 +138,7 @@ Theorem intcall_args_frame_then_outcome:
         (ZIP (args,ZIP (raws,vals)))) /\
     expr_sim_inv ce cx env ee /\ stmt_state_rel ctx func ce cx ee t /\
     ee = es with <|outcomes := ee.outcomes; gas_obs := ee.gas_obs|> /\
-    wb_frame ce es sm s t /\
+    wb_frame ce es es sm s t /\
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
     t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx,func) (k raws) (ee,t) Q R) ==>

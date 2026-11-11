@@ -3,7 +3,7 @@ Theory bodyIntCallHeldImmutableWord
 Ancestors
   bodyIntCallHeldRead bodyIntCallHeldArgs exprSimCopy exprSimAttribute exprSimUnwrap
   exprSimBopRestWordTail exprSimBopRestWordLoadPath exprSimStorageCopy
-  context venomState compileEnv loweringPosts exprLoweringProps immutableCopyExecution
+  context venomState compileEnv loweringStateRelDefs loweringPosts exprLoweringProps immutableCopyExecution
 
 Theorem held_immutable_word_read:
   immutable_holds ce cx ty raw w es s /\ is_word_type ty /\

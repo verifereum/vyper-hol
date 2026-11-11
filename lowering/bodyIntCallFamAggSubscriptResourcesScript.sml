@@ -2,7 +2,7 @@
 Theory bodyIntCallFamAggSubscriptResources
 Ancestors
   bodyIntCallJointAggCore bodyIntCallJointContract exprSimMapKey
-  exprSimCopy intCallFrame freshWrites venomState compileEnv
+  exprSimCopy intCallFrame freshWrites venomState compileEnv loweringStateRelDefs
   exprLoweringProps exprBopSimProps
 
 (* A fixed-source suffix changing only variables and framed memory. *)
@@ -56,7 +56,7 @@ Theorem intcall_joint_res_readonly:
 Proof
   rpt strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es u` by
-    (irule exprSimHashTheory.hash_readonly_state_rel >>
+    (irule exprSimHashBoundaryTheory.hash_readonly_state_rel >>
      qexistsl_tac [`s`, `sa`] >> fs[intcall_expr_res_def]) >>
   irule intcall_joint_res_memory_frame >> simp[] >>
   qexistsl_tac [`s`, `sa`] >>

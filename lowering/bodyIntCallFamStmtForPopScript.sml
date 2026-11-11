@@ -1,7 +1,7 @@
 (* Resource transport when an iteration scope is popped. *)
 Theory bodyIntCallFamStmtForPop
 Ancestors
-  bodyIntCallJointContract bodySim compileEnv stmtSimProps exprLoweringProps
+  bodyIntCallJointContract bodySim compileEnv loweringStateRelDefs stmtSimProps exprLoweringProps
   loweringPosts intCallFrame bodyMemoryDefs venomState venomExecSemantics finite_map
 
 (* The source typing invariant is supplied by the source scope boundary. *)

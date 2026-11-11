@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallFamAggSubscriptWordRun bodyIntCallFamAggSubscriptTailRun
   bodyIntCallFamAggSubscriptRunCuts bodyIntCallFamAggSubscriptCuts bodyIntCallJointContract
   exprSimMapKey exprSimAlloc exprLoweringProps loweringHalt emitHelperProps
-  stmtReasonMemory fragExec context compileEnv venomState venomInst
+  stmtReasonMemory fragExec context compileEnv loweringStateRelDefs venomState venomInst
 
 Theorem intcall_mapping_scratch_run_cont:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\

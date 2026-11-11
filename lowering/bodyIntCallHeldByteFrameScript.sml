@@ -3,7 +3,7 @@ Theory bodyIntCallHeldByteFrame
 Ancestors
   bodyIntCallHeldCopyValue bodyIntCallHeldCopyFrame bodyIntCallHeldArgs
   loweringPosts context venomState exprLoweringProps abiCallerLocalScratch
-  valueEncodingProps compileEnv finite_map
+  valueEncodingProps compileEnv loweringStateRelDefs finite_map
 
 Theorem held_footprint_below_frontier:
   vv_at ce cx ty sa sm es raw vv s /\
@@ -21,7 +21,7 @@ Theorem held_footprint_below_frontier:
   mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
 Proof
   disch_tac >> Cases_on `val_footprint tv v = 0`
-  >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  >- simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   pop_assum mp_tac >> pop_assum strip_assume_tac >> disch_tac >>
   `w2n w + val_footprint tv v <= b` by
     (Cases_on `vv` >>
@@ -61,7 +61,7 @@ QED
 Theorem intcall_held_frontier_bytes_holds:
   intcall_held_args ce cx sa sm es s H /\
   stmt_state_rel ctx func ce cx es s /\
-  wb_frame ce es sm s z /\ z.vs_labels = s.vs_labels /\
+  wb_frame ce es es sm s z /\ z.vs_labels = s.vs_labels /\
   contract_storage z = contract_storage s /\
   contract_transient z = contract_transient s /\
   (!off len. off+len <= s.vs_alloca_next ==>
@@ -94,7 +94,7 @@ Theorem fresh_allocation_bytes_wb_frame:
   (!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x s) /\
   (!off len. off+len <= s.vs_alloca_next ==>
      mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) ==>
-  wb_frame ce es sm s z
+  wb_frame ce es es sm s z
 Proof
   strip_tac >>
   `!name lb sz. local_region ce es.scopes s name lb sz ==>
@@ -114,7 +114,7 @@ QED
 Theorem intcall_held_frontier_bytes_frame:
   intcall_held_args ce cx sa sm es s H /\
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
-  wb_frame ce es sm s z /\ z.vs_labels = s.vs_labels /\
+  wb_frame ce es es sm s z /\ z.vs_labels = s.vs_labels /\
   contract_storage z = contract_storage s /\
   contract_transient z = contract_transient s /\
   sm.cs_next_id <= sn.cs_next_id /\ sm.cs_next_var <= sn.cs_next_var /\
@@ -143,7 +143,7 @@ Theorem intcall_held_allocation_bytes_frame:
   (!off len. off+len <= s.vs_alloca_next \/ s.vs_alloca_next+nb <= off ==>
      mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory) /\
   sm.cs_next_id <= sn.cs_next_id /\ sm.cs_next_var <= sn.cs_next_var ==>
-  wb_frame ce es sm s z /\ intcall_held_args ce cx sa sn es z H
+  wb_frame ce es es sm s z /\ intcall_held_args ce cx sa sn es z H
 Proof
   strip_tac >>
   `!x. not_fresh_at sm x ==> lookup_var x z = lookup_var x s` by
@@ -151,7 +151,7 @@ Proof
   `!off len. off+len <= s.vs_alloca_next ==>
      mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory` by
     metis_tac[] >>
-  `wb_frame ce es sm s z` by
+  `wb_frame ce es es sm s z` by
     (irule fresh_allocation_bytes_wb_frame >> metis_tac[]) >>
   simp[] >> irule intcall_held_frontier_bytes_frame >>
   goal_assum (drule_at (Pat `intcall_held_args _ _ _ _ _ _ _`)) >> metis_tac[]

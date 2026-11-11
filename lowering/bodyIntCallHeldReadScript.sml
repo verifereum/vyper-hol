@@ -69,7 +69,7 @@ QED
 
 Theorem intcall_held_args_read_frame:
   intcall_held_args ce cx a sm es s H /\
-  wb_frame ce es sm s t /\ local_ptrs_reserved ce sm /\
+  wb_frame ce es es sm s t /\ local_ptrs_reserved ce sm /\
   local_ptrs_rel func ce es.scopes s /\
   t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
   contract_storage t = contract_storage s /\
@@ -113,7 +113,7 @@ Proof
    contract_transient t = contract_transient s` by
     (qpat_x_assum `_ with <|vs_vars := _; vs_inst_idx := _|> = s`
        (SUBST1_TAC o SYM) >> simp[contract_storage_def, contract_transient_def]) >>
-  `wb_frame ce es sm s t` by
+  `wb_frame ce es es sm s t` by
     (simp[wb_frame_def, locals_kept_mem] >> metis_tac[]) >>
   irule intcall_held_args_read_frame >> metis_tac[]
 QED

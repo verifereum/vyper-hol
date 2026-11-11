@@ -2,7 +2,7 @@
 Theory bodyIntCallFamAggSubscriptAllocRun
 Ancestors
   bodyIntCallJointAggCore bodyIntCallJointContract exprSimAlloc exprSimProps
-  exprSimDefs exprSimCopy context compileEnv venomState instIdxIndep
+  exprSimDefs exprSimCopy context compileEnv loweringStateRelDefs venomState instIdxIndep
   intCallFrame loweringPosts
 
 Theorem intcall_alloc_run_cont:

@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallStorageAllocate exprSimAlloc storageCopyGasPath
   exprSimStorageCopy exprSimAggregateChildren stmtReasonLitFragMemory
   loweringHalt exprLoweringProps venomState venomExecSemantics
-  venomInst compileEnv context finite_map words rich_list venomMemDefs
+  venomInst compileEnv loweringStateRelDefs context finite_map words rich_list venomMemDefs
 
 Theorem intcall_reuse_allocation:
   compile_alloc_buffer nb sm = (buf,si) /\ fn_has_code sm si func /\

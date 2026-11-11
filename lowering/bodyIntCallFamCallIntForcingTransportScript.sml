@@ -88,7 +88,7 @@ val material_post = ``\fp ce ty v op sa sb es s reserved u w.
     local_region ce es.scopes s name b sz) /\
   (!name b sz. local_region ce es.scopes s name b sz ==>
     regions_disjoint (w2n w) (type_memory_size tv) b sz) /\
-  locals_kept ce es s u /\
+  locals_kept ce es es s u /\
   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts /\
   (!p k. regions_disjoint p k (w2n w) (type_memory_size tv) ==>
@@ -211,7 +211,7 @@ val forcing_post = ``\fp ce ty r v op sa sb es s reserved Win u.
   (!p k. Win p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
   (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
   (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> lookup_var x u = SOME w) /\
-  locals_kept ce es s u /\
+  locals_kept ce es es s u /\
   (!sv. sv.cs_next_id <= sa.cs_next_id /\ vv_at ce fp.jc_cx ty sv sa es r vv s ==>
     expr_val_at ce fp.jc_cx ty sv sb es v op u) /\
   (!sv. sv.cs_next_id <= sa.cs_next_id /\ vv_own ce fp.jc_cx ty sv sa es r vv s ==>

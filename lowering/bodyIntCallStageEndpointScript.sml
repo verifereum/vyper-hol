@@ -30,7 +30,7 @@ Theorem intcall_stage_args_endpoint:
       ty' = ty /\ flag' = flag /\
       evaluate_type (get_tenv cx) ty = SOME tv /\
       read_result cx raw es = (INL v,es)) (ZIP(H,flags)) D /\
-    stmt_state_rel ctx func ce cx es t /\ wb_frame ce es sm s t /\
+    stmt_state_rel ctx func ce cx es t /\ wb_frame ce es es sm s t /\
     local_ptrs_reserved ce sn /\
     (!aid. sn.cs_next_id <= aid ==> aid NOTIN FDOM t.vs_allocas) /\
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
@@ -70,7 +70,7 @@ Resume intcall_stage_args_endpoint[word]:
   `EVERY (staged_arg ce func es sm sn t) D` by
     (irule staged_args_lower_frontier >> goal_assum (drule_at Any) >>
      gvs[ci_mono_def]) >>
-  `wb_frame ce es sm s t` by
+  `wb_frame ce es es sm s t` by
     (irule exprSimConvertBytesTheory.convert_wb_frame_trans >>
      simp[] >> conj_tac
      >- (qexistsl_tac [`es`,`z`,`sm'`] >> gvs[ci_mono_def]) >>
@@ -100,7 +100,7 @@ Resume intcall_stage_args_endpoint[memory]:
      gvs[ci_mono_def] >> qexistsl_tac [`ctx`,`cx`,`F`,`0`] >> simp[]) >>
   `EVERY (staged_arg ce func es sm sn t) D` by
     (irule staged_args_lower_frontier >> goal_assum (drule_at Any) >> simp[]) >>
-  `wb_frame ce es sm s t` by
+  `wb_frame ce es es sm s t` by
     (irule exprSimConvertBytesTheory.convert_wb_frame_trans >>
      simp[] >> conj_tac
      >- (qexistsl_tac [`es`,`z`,`sj`] >> gvs[ci_mono_def] >> decide_tac) >>

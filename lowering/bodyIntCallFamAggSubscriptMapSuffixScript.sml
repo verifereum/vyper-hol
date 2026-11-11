@@ -2,7 +2,7 @@
 Theory bodyIntCallFamAggSubscriptMapSuffix
 Ancestors
   bodyIntCallFamAggSubscriptResources bodyIntCallJointContract
-  bodyIntCallJointAggCore exprSimAlloc intCallFrame compileEnv
+  bodyIntCallJointAggCore exprSimAlloc intCallFrame compileEnv loweringStateRelDefs
   exprLoweringProps venomState venomInst
 
 (* A store contained in an allocated scratch region preserves the resources.

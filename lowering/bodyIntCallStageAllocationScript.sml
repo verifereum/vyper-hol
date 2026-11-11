@@ -30,7 +30,7 @@ Theorem intcall_stage_allocation:
     FLOOKUP u.vs_allocas sm.cs_next_id = SOME (s.vs_alloca_next,nb) /\
     u.vs_alloca_next = s.vs_alloca_next + nb /\
     stmt_state_rel ctx func ce cx es u /\
-    intcall_held_args ce cx a si es u H /\ wb_frame ce es sm s u /\
+    intcall_held_args ce cx a si es u H /\ wb_frame ce es es sm s u /\
     u.vs_memory = s.vs_memory /\
     (!y. not_fresh_at sm y ==> lookup_var y u = lookup_var y s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -47,12 +47,12 @@ Proof
   `!y. not_fresh_at sm y ==> lookup_var y u = lookup_var y s` by
     (rpt strip_tac >> simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
      metis_tac[]) >>
-  `wb_frame ce es sm s u /\ intcall_held_args ce cx a si es u H` by
+  `wb_frame ce es es sm s u /\ intcall_held_args ce cx a si es u H` by
     suspend "held" >>
   `!aid lb sz. FLOOKUP s.vs_allocas aid = SOME (lb,sz) ==>
      compileEnv$regions_disjoint s.vs_alloca_next nb lb sz` by
     (gvs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def,
-         compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+         loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   drule_all actual_alloc_buffer_site >> disch_tac >>
   drule compile_alloc_buffer_parts >> strip_tac >>
   qexistsl_tac [`u`, `x`,

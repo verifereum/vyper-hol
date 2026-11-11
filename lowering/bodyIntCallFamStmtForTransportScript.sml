@@ -1,7 +1,7 @@
 (* Resource transport along loop-control instructions. *)
 Theory bodyIntCallFamStmtForTransport
 Ancestors
-  bodyIntCallJointContract bodyIntCallJointStmtJump bodySim compileEnv
+  bodyIntCallJointContract bodyIntCallJointStmtJump bodySim compileEnv loweringStateRelDefs
   stmtSimProps exprLoweringProps loweringPosts intCallFrame bodyMemoryDefs
   venomState venomExecSemantics finite_map
 

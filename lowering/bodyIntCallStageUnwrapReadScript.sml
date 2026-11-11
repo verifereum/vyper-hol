@@ -75,7 +75,7 @@ Theorem intcall_stage_unwrap_readonly:
     (if is_word_type ty then w = typed_val_to_w256 tv v
      else val_in_memory tv v (w2n w) t.vs_memory) /\
     stmt_state_rel ctx func ce cx es t /\
-    intcall_held_args ce cx a sn es t H /\ wb_frame ce es sm s t /\
+    intcall_held_args ce cx a sn es t H /\ wb_frame ce es es sm s t /\
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
     t.vs_inst_idx = LENGTH sn.cs_current_insts /\
     (!x q. not_fresh_at sm x /\ lookup_var x s = SOME q ==>
@@ -93,7 +93,7 @@ Proof
     (mp_tac (Q.SPECL [`ce`, `vv`, `sm`] ci_mono_unwrap_value) >>
      simp[ci_mono_def]) >>
   `local_ptrs_rel func ce es.scopes s` by
-    gvs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    gvs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `intcall_held_args ce cx a sn es t H` by
     (irule intcall_held_args_readonly_tail >>
      qexistsl_tac [`func`, `s`, `sm`] >>
@@ -103,7 +103,7 @@ Proof
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `_ with <|vs_vars := _; vs_inst_idx := _|> = s`
        (SUBST1_TAC o SYM) >> simp[]) >>
-  `wb_frame ce es sm s t` by
+  `wb_frame ce es es sm s t` by
     simp[loweringPostsTheory.wb_frame_def, exprSimPropsTheory.locals_kept_mem] >>
   `read_result cx raw es = (INL v,es)` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>

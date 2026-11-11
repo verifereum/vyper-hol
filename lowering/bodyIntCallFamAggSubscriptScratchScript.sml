@@ -3,7 +3,7 @@ Theory bodyIntCallFamAggSubscriptScratch
 Ancestors
   bodyIntCallFamAggSubscriptStore bodyIntCallFamAggSubscriptReadOnly
   bodyIntCallJointAggCore bodyIntCallJointContract exprSimMapKey
-  emitHelperProps emitHelper context compileEnv exprLoweringProps
+  emitHelperProps emitHelper context compileEnv loweringStateRelDefs exprLoweringProps
   venomState venomInst freshWrites
 
 Theorem intcall_emit_add_cont:

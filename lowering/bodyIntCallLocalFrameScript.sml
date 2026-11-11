@@ -1,7 +1,7 @@
 (* Semantic live-local subvalues, including their dynamic headers. *)
 Theory bodyIntCallLocalFrame
 Ancestors
-  compileEnv loweringPosts
+  compileEnv loweringStateRelDefs loweringPosts
 
 Theorem local_ptrs_rel_sub_layout:
   local_ptrs_rel func cenv scopes s /\

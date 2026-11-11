@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallSeamDefs bodyIntCallCompilerBoundary
   bodyIntCallCompletedModes bodyIntCallAssemblyModes bodyIntCallAssemblyFrame
   bodyIntCallEmitBoundary valueTypingMemoryProps valueEncodingProofs exprSimProps
-  emitHelperProps emitHelper exprLoweringProps compileEnv venomState
+  emitHelperProps emitHelper exprLoweringProps compileEnv loweringStateRelDefs venomState
   venomExecSemantics loweringPosts exprSimDefs intCallFrame list finite_map
 
 Theorem intcall_stack_return_prepare:
@@ -165,7 +165,7 @@ Theorem intcall_zero_return_prepare:
     res ee (IntRet ir cs) /\
   stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 (es1 with scopes := prev) sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce prev t id b sz) /\
   (!id b sz aid off asz. local_region ce prev t id b sz /\
@@ -176,7 +176,7 @@ Theorem intcall_zero_return_prepare:
     gas_path ctx func t nsteps (OK s) /\
     s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
     stmt_state_rel ctx func ce cx (ee with scopes := prev) s /\
-    wb_frame ce es0 sa s0 s /\
+    wb_frame ce es0 (ee with scopes := prev) sa s0 s /\
     (!id b sz. local_region ce prev s id b sz <=> local_region ce prev t id b sz) /\
     allocas_above lo s /\ s.vs_allocas = t.vs_allocas /\
     t.vs_alloca_next <= s.vs_alloca_next /\
@@ -239,7 +239,7 @@ Theorem intcall_physical_return_resources:
   stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
   state_rel other ce cx (ee with <|scopes := []; gas_obs := []|>) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 (es1 with scopes := prev) sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce prev t id b sz) /\
   (!id b sz aid off asz.
@@ -254,7 +254,7 @@ Theorem intcall_physical_return_resources:
     out.vs_current_bb = sb.cs_current_bb /\
     out.vs_inst_idx = LENGTH sb.cs_current_insts /\
     stmt_state_rel ctx func ce cx (ee with <|scopes := prev; gas_obs := []|>) out /\
-    wb_frame ce es0 sa s0 out /\
+    wb_frame ce es0 (ee with <|scopes := prev; gas_obs := []|>) sa s0 out /\
     allocas_above lo out /\ out.vs_allocas = t.vs_allocas /\
     t.vs_alloca_next <= out.vs_alloca_next /\
     (!x. not_fresh_at sa x ==> lookup_var x out = lookup_var x t) /\

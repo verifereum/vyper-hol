@@ -42,5 +42,5 @@ Proof
   >>~- ([`local_region ce es.scopes s name lb sz`],
       irule intcall_contained_bytes_frame >>
       qexistsl [`lb`, `sz`] >> simp[] >> metis_tac[])
-  >> simp[valueEncodingTheory.mem_bytes_at_def]
+  >> simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED

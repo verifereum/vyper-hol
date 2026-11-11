@@ -7,7 +7,7 @@ Ancestors
   abiDecoderLoop abiScratchDecoderContract abiScratchDecoderInitReentry abiDecoderArrayInit
   abiDecoderArrayInitExec abiDecoderArrayInitReentry abiDecoderAllocation abiScratchFootprint
   abiScratchEffect abiScratchDecoderTransport abiDecoderValidArrayMemory
-  entrySinkExtraction instIdxIndep exprLoweringProps compileEnv venomState
+  entrySinkExtraction instIdxIndep exprLoweringProps compileEnv loweringStateRelDefs venomState
   valueEncoding vyperABI abiDecoderCorrectPrimitiveArray exprLowering words list arithmetic
 
 Theorem intcall_decoder_bulk_sequence_path:

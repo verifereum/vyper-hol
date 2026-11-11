@@ -1,7 +1,7 @@
 (* Resource transport at the declaration of an iteration variable. *)
 Theory bodyIntCallFamStmtForResources
 Ancestors
-  bodyIntCallJointContract bodySim compileEnv bodySimDeclCases bodyExprPreFacts
+  bodyIntCallJointContract bodySim compileEnv loweringStateRelDefs bodySimDeclCases bodyExprPreFacts
   bodyIntCallDeclarationRegions bodyMemoryDefs stmtSimProps freshWrites
   venomExecSemantics venomState loweringPosts intCallFrame vyperState finite_map
 

@@ -1,7 +1,7 @@
 Theory bodyIntCallCompilerSeparation
 Ancestors
   bodyIntCallCompilerClosure bodyIntCallCompilerInterval localPtrsProps
-  compileEnv venomState venomExecSemantics venomMemDefs
+  compileEnv loweringStateRelDefs venomState venomExecSemantics venomMemDefs
 
 (* A live local's backing ALLOCA cannot belong to a fresh compiler interval. *)
 Theorem intcall_interval_local_backing_id:
@@ -43,6 +43,6 @@ Proof
       fs[alloca_inv_def, allocas_non_overlapping_def] >>
       qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _`
         (qspecl_then [`aid`, `inst.inst_id`] mp_tac) >>
-      simp[compileEnvTheory.regions_disjoint_def]) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   metis_tac[]
 QED

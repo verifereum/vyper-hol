@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallFamAggSubscriptAllocRun bodyIntCallFamAggSubscriptStoreRun
   bodyIntCallFamAggSubscriptRunCuts bodyIntCallJointContract
   exprSimAlloc exprSimProps exprSimCopy exprSimLiteralBuffer exprLoweringProps
-  loweringHalt emitHelperProps compileEnv context venomState venomInst
+  loweringHalt emitHelperProps compileEnv loweringStateRelDefs context venomState venomInst
   intCallFrame
 
 Theorem intcall_alloc_word_run_cont:

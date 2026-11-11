@@ -3,7 +3,7 @@ Theory bodyIntCallFamAggSubscriptTupleSuffix
 Ancestors
   bodyIntCallFamAggSubscriptTupleSource bodyIntCallFamAggSubscriptScratch
   exprSimVVFrame exprSimProps exprLoweringProps venomState
-  emitHelperProps bodyIntCallJointContract compileEnv exprSimTuple
+  emitHelperProps bodyIntCallJointContract compileEnv loweringStateRelDefs exprSimTuple
   bodyIntCallFamAggSubscriptTuple exprSimAttributeFields loweringPosts context vyperAST
 
 Theorem intcall_vv_post_readonly_cursor:

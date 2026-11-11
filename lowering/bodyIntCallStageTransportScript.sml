@@ -5,7 +5,7 @@ Ancestors
   stmtSimAugAssignPlaceMemory
 
 Theorem wb_frame_owned_value:
-  wb_frame ce es sm s t /\
+  wb_frame ce es es sm s t /\
   FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < sm.cs_next_id /\
   (!n b lsz. local_region ce es.scopes s n b lsz ==>
     regions_disjoint off sz b lsz) /\
@@ -15,7 +15,7 @@ Theorem wb_frame_owned_value:
 Proof
   strip_tac >>
   `mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory` by
-    (gvs[loweringPostsTheory.wb_frame_def, compileEnvTheory.regions_disjoint_def] >>
+    (gvs[loweringPostsTheory.wb_frame_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
      metis_tac[]) >>
   irule val_in_memory_window_agree >>
   conj_tac >- simp[] >>
@@ -26,7 +26,7 @@ QED
 Theorem staged_arg_path_transport:
   staged_arg ce func es a sm s d /\
   gas_marked_path memory ctx func s n (OK t) /\
-  wb_frame ce es sm s t /\ local_ptrs_reserved ce sm /\
+  wb_frame ce es es sm s t /\ local_ptrs_reserved ce sm /\
   stmt_state_rel ctx func ce cx es s /\
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id ==>
   staged_arg ce func es a sn t d
@@ -51,7 +51,7 @@ Proof
      irule local_region_frame >> conj_tac
      >- (qexists_tac `func` >>
          gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-             compileEnvTheory.state_rel_def]) >>
+             loweringStateRelDefsTheory.state_rel_def]) >>
      qexistsl_tac [`sm`,`es.scopes`,`t`] >> simp[]) >>
   simp[] >> qexistsl_tac [`inst.inst_id`,`off`,`sz`] >>
   gvs[loweringPostsTheory.wb_frame_def] >> metis_tac[]
@@ -60,7 +60,7 @@ QED
 Theorem staged_args_path_transport:
   EVERY (staged_arg ce func es a sm s) ds /\
   gas_marked_path memory ctx func s n (OK t) /\
-  wb_frame ce es sm s t /\ local_ptrs_reserved ce sm /\
+  wb_frame ce es es sm s t /\ local_ptrs_reserved ce sm /\
   stmt_state_rel ctx func ce cx es s /\
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id ==>
   EVERY (staged_arg ce func es a sn t) ds

@@ -3,7 +3,7 @@ Theory bodyIntCallFamAggSubscriptScratchTail
 Ancestors
   bodyIntCallFamAggSubscriptScratchStages bodyIntCallFamAggSubscriptStore
   bodyIntCallFamAggSubscriptScratch bodyIntCallJointContract
-  exprSimProps exprSimDefs exprSimCopy exprLoweringProps intCallFrame context compileEnv
+  exprSimProps exprSimDefs exprSimCopy exprLoweringProps intCallFrame context compileEnv loweringStateRelDefs
   venomState venomInst
 
 Theorem intcall_scratch_store_cont:

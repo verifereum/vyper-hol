@@ -3,7 +3,7 @@ Theory bodyIntCallEncoderActualCopy
 Ancestors
   bodyIntCallDecoderCountedPrimitive abiEncoderReentryLeaves abiEncoderLeafCode
   abiEncoderAdmissible abiDecoderContract abiDecoderFrame abiDecoderLoop
-  exprLoweringProps emitHelperProps compileEnv fragGasPath venomState
+  exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs fragGasPath venomState
   venomExecSemantics venomInst instIdxIndep valueEncoding contractABI
   words list rich_list entrySinkExtraction
 

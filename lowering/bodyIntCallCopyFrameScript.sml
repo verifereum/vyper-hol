@@ -4,14 +4,14 @@ Ancestors
   bodyIntCallStorePost exprSimStorageCopy
 
 Theorem copy_prefix_owned_wb_frame:
-  wb_frame ce es0 sa s0 u /\ alloca_inv u /\
+  wb_frame ce es0 es0 sa s0 u /\ alloca_inv u /\
   FLOOKUP u.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid /\
   sa.cs_next_var <= si.cs_next_var /\
   (!x. not_fresh_at si x ==> lookup_var x z = lookup_var x u) /\
   copy_prefix loc a b n u k z /\ 32*n <= sz /\
   (!name lb lsz. local_region ce es0.scopes s0 name lb lsz ==>
     lb+lsz <= b \/ b+sz <= lb) ==>
-  wb_frame ce es0 sa s0 z
+  wb_frame ce es0 es0 sa s0 z
 Proof
   strip_tac >>
   `z.vs_allocas = u.vs_allocas` by

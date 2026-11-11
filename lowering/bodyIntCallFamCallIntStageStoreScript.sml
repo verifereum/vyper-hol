@@ -53,7 +53,7 @@ Proof
         (SPEC_ALL protected_compatible_store_state_landing)) >>
       (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >> qexists `u` >>
       simp[placeMemoryCopyEffectTheory.typed_copy_effect_def,
-           compileEnvTheory.regions_disjoint_def]) >>
+           loweringStateRelDefsTheory.regions_disjoint_def]) >>
   qpat_x_assum `~_ ==> _` (mp_tac) >> asm_rewrite_tac[] >> strip_tac >>
   `~is_word_type dty` by
     metis_tac[compileEnvTheory.type_widens_to_word] >>
@@ -64,7 +64,7 @@ Proof
     fs[contextTheory.compile_store_memory_def] >>
   `!name b sz. local_region ce es.scopes s name b sz ==>
     b + sz <= w2n dw \/ w2n dw + type_memory_size dtv <= b` by
-    metis_tac[compileEnvTheory.regions_disjoint_def] >>
+    metis_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
   `type_memory_bytes ce sty = type_memory_size stv` by metis_tac[] >>
   drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)
     intcall_widened_child_store_frame >>

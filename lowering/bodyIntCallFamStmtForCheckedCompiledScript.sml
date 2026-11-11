@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallFamStmtForCheckedTail bodyIntCallFamStmtForCheckedStatic
   stmtSimForRange stmtSimForParts stmtSimProps stmtLoweringMono
   exprLoweringProps bodyExprPreFacts stmtSimReturn
-  ASCIInumbers finite_map bodySim compileEnv bodyIntCallJointContract
+  ASCIInumbers finite_map bodySim compileEnv loweringStateRelDefs bodyIntCallJointContract
 Libs
   monadsyntax
 

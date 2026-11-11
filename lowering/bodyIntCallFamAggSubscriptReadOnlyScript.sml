@@ -1,7 +1,7 @@
 (* Counted landings for straight, non-writing subscript suffixes. *)
 Theory bodyIntCallFamAggSubscriptReadOnly
 Ancestors
-  bodyIntCallJointAggCore bodyIntCallJointContract exprSimHash
+  bodyIntCallJointAggCore bodyIntCallJointContract exprSimHash exprSimHashBoundary
   fragGasMode fragExec compileEnv exprLoweringProps venomState venomInst
   freshWrites placeMemoryPrimitiveForward
 

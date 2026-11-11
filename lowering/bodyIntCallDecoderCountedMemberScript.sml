@@ -3,7 +3,7 @@ Theory bodyIntCallDecoderCountedMember
 Ancestors
   bodyIntCallDecoderCountedPrimitive abiDecoderMemberCode abiDecoderMemberSetup
   abiDecoderDynamicLoopSetup abiDecoderContract abiDecoderReentry
-  fragGasPath fragExec exprLoweringProps emitHelperProps compileEnv
+  fragGasPath fragExec exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs
   venomState venomInst instIdxIndep entrySinkExtraction words list rich_list arithmetic
 
 Theorem intcall_decoder_member_setup_path:

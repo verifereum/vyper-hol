@@ -32,7 +32,7 @@ Theorem intcall_reuse_copy_frame:
     lb+sz <= b \/ b+nb <= lb) /\
   sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id ==>
-  stmt_state_rel ctx func ce cx es z /\ wb_frame ce es sa s z /\
+  stmt_state_rel ctx func ce cx es z /\ wb_frame ce es es sa s z /\
   intcall_held_args ce cx a sn es z H
 Proof
   strip_tac >> conj_tac
