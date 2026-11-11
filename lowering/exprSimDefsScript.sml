@@ -125,7 +125,8 @@ Theorem halt_rel_state_fields[simp]:
     halt_rel cx (vs with scopes := x) ss = halt_rel cx vs ss /\
     halt_rel cx (vs with gas_obs := y) ss = halt_rel cx vs ss
 Proof
-  simp[halt_rel_def, accounts_rel_def]
+  simp[loweringStateRelDefsTheory.halt_rel_def,
+       loweringStateRelDefsTheory.accounts_rel_def]
 QED
 
 Theorem halt_rel_cx_cong:
@@ -135,5 +136,6 @@ Theorem halt_rel_cx_cong:
     halt_rel cx' = halt_rel cx
 Proof
   rpt strip_tac >> drule accountsRelPropsTheory.agree_cx_cong >>
-  simp[FUN_EQ_THM, halt_rel_def, accounts_rel_def]
+  simp[FUN_EQ_THM, loweringStateRelDefsTheory.halt_rel_def,
+       loweringStateRelDefsTheory.accounts_rel_def]
 QED
