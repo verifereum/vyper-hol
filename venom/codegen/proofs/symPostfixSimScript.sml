@@ -2015,6 +2015,31 @@ Proof
     strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_swap_def]
 QED
 
+Theorem bump_popmany_nonhalting_prefix:
+  inst.inst_outputs = [ptr;next] /\ ptr <> next /\
+  ps.ps_stack = residual ++ [Var ptr;Var next] /\
+  popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps = (ops,qs) ==>
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  prefix_spill_wf initial_fmp lo ops ps /\
+  EVERY is_prefix_op ops /\ EVERY (\op. !l d. op <> SOPushOfst l d) ops /\
+  apply_prefix_ops initial_fmp lo ops ps = qs /\
+  (!off. ~MEM (SOSpill off) ops) /\ qs.ps_alloc = ps.ps_alloc /\
+  qs.ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >>
+  `popmany_plan (if ~MEM ptr nl then Var ptr ::
+      (if ~MEM next nl then [Var next] else [])
+    else if ~MEM next nl then [Var next] else []) ps = (ops,qs)` by
+    (Cases_on `MEM ptr nl` >> Cases_on `MEM next nl` >> gvs[]) >>
+  `Var ptr <> Var next` by simp[] >>
+  drule_all popmany_top_two_prefix >> strip_tac >> simp[] >>
+  Cases_on `MEM ptr nl` >> Cases_on `MEM next nl` >>
+  gvs[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
+    stack_get_depth_def, stack_find_def, do_swap_def,
+    REVERSE_APPEND, stack_pop_def, TAKE_APPEND1, TAKE_APPEND2,
+    sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF, sortingTheory.PART_DEF]
+QED
+
 Theorem bump_popmany_prefix:
   inst.inst_outputs = [ptr;next] /\ ptr <> next /\
   ps.ps_stack = residual ++ [Var ptr;Var next] /\
@@ -2031,17 +2056,9 @@ Proof
   strip_tac >> Cases_on `halt`
   >- gvs[prefix_wf_def, mixedPrefixSimTheory.prefix_spill_wf_def,
       mixedPrefixSimTheory.apply_prefix_ops_def] >>
-  `popmany_plan (if ~MEM ptr nl then Var ptr ::
-      (if ~MEM next nl then [Var next] else [])
-    else if ~MEM next nl then [Var next] else []) ps = (ops,qs)` by
-    (Cases_on `MEM ptr nl` >> Cases_on `MEM next nl` >> gvs[]) >>
-  `Var ptr <> Var next` by simp[] >>
-  drule_all popmany_top_two_prefix >> strip_tac >> simp[] >>
-  Cases_on `MEM ptr nl` >> Cases_on `MEM next nl` >>
-  gvs[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
-    stack_get_depth_def, stack_find_def, do_swap_def,
-    REVERSE_APPEND, stack_pop_def, TAKE_APPEND1, TAKE_APPEND2,
-    sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF, sortingTheory.PART_DEF]
+  `popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps = (ops,qs)`
+    by metis_tac[listTheory.NOT_CONS_NIL] >>
+  drule_all bump_popmany_nonhalting_prefix >> simp[]
 QED
 
 Theorem sym_bump_popmany_sim:
@@ -2063,6 +2080,32 @@ Proof
     R b /\ context_spill_byte cplan b` by simp[] >>
   drule_all sym_prefix_ops_sim >> disch_then (qspec_then `env` strip_assume_tac) >>
   qexists `ss'` >> gvs[]
+QED
+
+Theorem sym_postfix_optimistic_compose_marked:
+  optimistic_swap_plan dfg inst nl next_term ps8 = (opt_ops,ps9) /\
+  spill_alloc_layout_wf ps8.ps_alloc ps8.ps_spilled /\
+  (!off. MEM (SOSpill off) opt_ops ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) opt_ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  sym_steps p env (LENGTH (execute_plan initial_fmp pop_ops)) ss = SymOK mid /\
+  sym_kinds_ok cplan fn ret srest ps8 mid /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp pop_ops) /\
+  (!b. ~R b ==> FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp opt_ops) /\
+  qs = release_dead_spills nl ps9 ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp (pop_ops ++ opt_ops))) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest qs ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (pop_ops ++ opt_ops)) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all sym_optimistic_swap_plan_postfix_sim_marked >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  `sym_steps p env (LENGTH (execute_plan initial_fmp pop_ops) +
+    LENGTH (execute_plan initial_fmp opt_ops)) ss = SymOK ss'` by
+    (once_rewrite_tac[sym_steps_add] >> simp[]) >>
+  qexists `ss'` >> gvs[stackOpSimTheory.execute_plan_append,
+    sym_kinds_ok_release_dead_spills] >> metis_tac[]
 QED
 
 Theorem sym_bump_generated_postfix_sim_marked:
@@ -2101,11 +2144,5 @@ Proof
   >- (gvs[stackOpSimTheory.execute_plan_append, execute_plan_def, sym_kinds_ok_release_dead_spills] >>
       metis_tac[]) >>
   `optimistic_swap_plan dfg inst nl next_term ps8 = (opt_ops,ps9)` by gvs[] >>
-  drule_all sym_optimistic_swap_plan_postfix_sim_marked >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  `sym_steps p env (LENGTH (execute_plan initial_fmp pop_ops) +
-    LENGTH (execute_plan initial_fmp opt_ops)) ss = SymOK ss'` by
-    (once_rewrite_tac[sym_steps_add] >> simp[]) >>
-  qexists `ss'` >> gvs[stackOpSimTheory.execute_plan_append,
-    sym_kinds_ok_release_dead_spills] >> metis_tac[]
+  drule_all sym_postfix_optimistic_compose_marked >> simp[]
 QED
