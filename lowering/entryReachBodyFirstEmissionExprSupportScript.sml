@@ -259,7 +259,9 @@ Proof
             (assume_tac o GSYM o Q.AP_TERM `SND`) >>
           fs[compile_store_memory_labels]) >>
       irule cs_appends_bind >> simp[cs_appends_return] >>
-      rw[cs_appends_def] >> metis_tac[]) >>
+      rw[cs_appends_def] >>
+      qpat_x_assum `!mem_size is_bs buf buf_alloc. _` mp_tac >> simp[] >>
+      disch_then drule >> simp[]) >>
   ho_match_mp_tac first_emission_bind >>
   (conj_tac >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
   ho_match_mp_tac first_emission_bind >>
