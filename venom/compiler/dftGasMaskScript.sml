@@ -4041,6 +4041,33 @@ QED
 
 Finalise prefix_extract_mask[local]
 
+(* Source-cut design probe: the middle block can be a singleton GAS
+   slot or a complete INVOKE mask.  This is only allocation transport;
+   it deliberately makes no claim about dynamic execution endpoints. *)
+Theorem source_cut_filling_transport[local]:
+  !ml mh mr gs.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+      (ml ++ mh ++ mr) gs ==>
+    ?gl gh gr.
+      gs = gl ++ gh ++ gr /\
+      LENGTH gl = LENGTH ml /\ LENGTH gh = LENGTH mh /\
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+        (ml ++ mr) (gl ++ gr) /\
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) mh gh
+Proof
+  rpt gen_tac >>
+  once_rewrite_tac[LIST_REL_SPLIT1] >>
+  disch_then (qx_choose_then `left` (qx_choose_then `gr` strip_assume_tac)) >>
+  qpat_x_assum `LIST_REL _ (ml ++ mh) left` mp_tac >>
+  once_rewrite_tac[LIST_REL_SPLIT1] >>
+  disch_then (qx_choose_then `gl` (qx_choose_then `gh` strip_assume_tac)) >>
+  qexistsl_tac [`gl`, `gh`, `gr`] >>
+  simp[] >>
+  `LENGTH gl = LENGTH ml /\ LENGTH gh = LENGTH mh` by
+    metis_tac[LIST_REL_LENGTH] >>
+  simp[] >> qexistsl_tac [`gl`, `gr`] >> simp[]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
