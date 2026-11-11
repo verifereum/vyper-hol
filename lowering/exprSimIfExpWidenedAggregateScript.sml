@@ -103,14 +103,14 @@ QED
 
 Finalise changed_aggregate_post_frag
 
-Theorem punnable_non_aggregate[local]:
+Theorem punnable_non_aggregate:
   (!b u. punnable ce u (BaseT b)) /\ (!n u. punnable ce u (StructT n)) /\
   (!n u. punnable ce u (FlagT n)) /\ (!u. punnable ce u NoneT)
 Proof
   rpt strip_tac >> Cases_on `u` >> simp[punnable_def]
 QED
 
-Theorem memory_layout_key_punnable[local]:
+Theorem memory_layout_key_punnable:
   (!t u. memory_layout_key u = memory_layout_key t ==> punnable ce u t) /\
   (!ts us. MAP memory_layout_key us = MAP memory_layout_key ts ==>
      punnable_list ce us ts)
@@ -125,7 +125,7 @@ QED
 
 (* An equal-layout tuple pair is already same_memory_layout, so the
    changed-layout arm never takes compile_store_memory's bulk-copy branch. *)
-Theorem tuple_memory_layout_eq_same_layout[local]:
+Theorem tuple_memory_layout_eq_same_layout:
   tuple_memory_layout_eq dst src ==> same_memory_layout ce src dst
 Proof
   strip_tac >> simp[same_memory_layout_def] >>
