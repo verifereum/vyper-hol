@@ -45,9 +45,10 @@ QED
 Theorem entry_code_getelemptr_abi:
   load_opc <> DALLOCA ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_getelemptr_abi src is_dyn abi_offset load_opc (Lit 0w) hi)
+    (compile_getelemptr_abi src is_dyn abi_offset load_opc base_op hi)
 Proof
   strip_tac >> Cases_on `is_dyn` >> Cases_on `hi = Lit 0w` >>
+  Cases_on `base_op = Lit 0w` >>
   simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def,
        compileEnvTheory.comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >>
@@ -58,9 +59,9 @@ QED
 Theorem entry_code_decode_dyn_elem_ptr:
   load_opc <> DALLOCA ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_abi_decode_dyn_elem_ptr load_opc (Lit 0w) elem_src src_data hi elem_abi_sz)
+    (compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src src_data hi elem_abi_sz)
 Proof
-  strip_tac >> Cases_on `hi = Lit 0w` >>
+  strip_tac >> Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >>
   simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
        compile_abi_decode_range_check_def,
        compileEnvTheory.comp_ignore_bind_def] >>

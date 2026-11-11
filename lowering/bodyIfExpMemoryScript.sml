@@ -888,6 +888,7 @@ Theorem compile_ifexp_vv_sim_mem:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
        type_memory_bytes cenv t = type_memory_size tvt /\
        type_memory_size tvt < 2 ** 64) /\
+    (!e. (e = a \/ e = b) ==> post_value_type cenv e = expr_type e) /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) /\
