@@ -345,12 +345,12 @@ Proof
   disch_then (qspec_then `sh` mp_tac) >>
   (impl_tac >-
     (simp[Abbr `sh`] >> rpt strip_tac >> first_x_assum drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)) >> strip_tac >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >> strip_tac >>
   mp_tac (Q.INST [`header` |-> `T`, `idx` |-> `0`, `off` |-> `32`,
      `sa` |-> `sm`, `s0` |-> `sh`] (SPEC_ALL aggregate_make_array_elems_body_sim_mem)) >>
   (impl_tac >-
     (simp[] >> rpt strip_tac >> first_x_assum drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >>
   strip_tac >> conj_tac >- simp[] >>
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `sh` >> conj_tac >- fs[gas_marked_path_def] >>
