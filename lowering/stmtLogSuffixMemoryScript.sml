@@ -21,7 +21,7 @@ Ancestors
 Theorem log_data_prepare_run_mem_direct[local]:
   compile_alloc_buffer (MAX 32 (SUM (MAP (type_memory_bytes ce) (MAP SND xs)))) source_st = (srcbuf,start) /\
   fn_has_code source_st start func /\
-  compile_log_store_data ce xs srcbuf.buf_operand 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) srcbuf.buf_operand 0 start = ((),stored_st) /\
   compile_alloc_buffer (MAX 32 (abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs)))) stored_st = (dst,prepared) /\
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand

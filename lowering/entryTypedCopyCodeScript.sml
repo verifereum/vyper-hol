@@ -7,7 +7,7 @@ Theorem entry_code_bytestring_copy_len:
     (compile_bytestring_copy_len src)
 Proof
   simp[compile_bytestring_copy_len_def] >>
-  ntac 3 (irule entry_code_bind >> reverse conj_tac
+  ntac 4 (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_emit_op] >> rpt gen_tac >> BETA_TAC) >>
   simp[entry_code_emit_op]
 QED
@@ -189,9 +189,7 @@ Theorem entry_code_store_memory:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_store_memory ce src dst dt st)
 Proof
-  simp[compile_store_memory_def] >>
-  Cases_on `is_word_type dt` >- simp[entry_code_emit_void] >>
-  Cases_on `is_bytestring_type dt` >- simp[entry_code_store_bytestring] >>
-  Cases_on `dt = st` >>
-  simp[entry_code_copy_memory, entry_code_store_memory_typed]
+  rw[compile_store_memory_def, entry_code_emit_void,
+     entry_code_store_bytestring, entry_code_copy_memory,
+     entry_code_store_memory_typed]
 QED
