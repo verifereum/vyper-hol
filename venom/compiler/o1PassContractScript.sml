@@ -190,6 +190,14 @@ Proof
   qpat_x_assum `s2 = _` SUBST1_TAC >> simp[]
 QED
 
+(* The raw input of FmpLowering runs with its free-memory pointer, and its
+   initial one, at fmp; the real state the lowered code runs from has its
+   own, and otherwise the two differ only in their GAS-reading oracle. *)
+Definition raw_variant_def:
+  raw_variant (fmp : bytes32) (s : venom_state) s' <=>
+    gas_variant s (s' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>)
+End
+
 (* ===== One pass run ===== *)
 
 (* What run_configured_fn_pass_fold does for one pass on one function:
@@ -479,6 +487,19 @@ Proof
   Cases_on `fn_pass_tag pass` >> gvs[fn_pass_abi_effect_def]
 QED
 
+(* Before FmpLowering no instruction reads or writes the FMP state other
+   than through DALLOCA, and none is one of FmpLowering's own (INITIAL_FMP
+   reads vs_initial_fmp, which the lowering moves).  The source has none
+   of these (raw_opcode_ok) and the earlier passes add none. *)
+Definition pre_fmp_opcode_def:
+  pre_fmp_opcode op <=>
+    ~MEM op [DRET; GETFMP; SETFMP; RETFMP; INITIAL_FMP; BUMP; FMP_PARAM]
+End
+
+Definition pre_fmp_ops_def:
+  pre_fmp_ops fn <=> EVERY (\inst. pre_fmp_opcode inst.inst_opcode) (fn_insts fn)
+End
+
 (* The per-function stage rows: what a run may assume of the function it
    is given and must establish of the one it returns, where the stage
    table o1_inv below cannot reach, since the walk runs each pass on one
@@ -499,7 +520,8 @@ QED
    CFGNormalization needs none of these of it.  Row 6 also has every block reachable,
    as stage row 6 does: SingleUseExpansion keeps SSA only then.  Up to
    row 4 (MakeSSA's second run) the function is a valid MakeSSA input,
-   and up to row 3 (FmpLowering) it has no raw FMP operation; with
+   and up to row 3 (FmpLowering) it has no raw FMP operation and no
+   FmpLowering output opcode (pre_fmp_ops); with
    fmp_sig_no_param of every function, at every row, FmpLowering's run
    leaves the blocks as they are, so it keeps make_ssa_input_ok. *)
 Definition o1_fn_row_def:
@@ -511,7 +533,7 @@ Definition o1_fn_row_def:
     (5 <= k /\ k <= 7 ==> wf_ssa fn) /\
     (k = 6 ==> all_reachable fn) /\
     (k <= 4 ==> make_ssa_input_ok fn) /\
-    (k <= 3 ==> no_raw_fmp_ops fn) /\
+    (k <= 3 ==> no_raw_fmp_ops fn /\ pre_fmp_ops fn) /\
     fmp_sig_no_param fn
 End
 
@@ -595,16 +617,33 @@ Definition o1_stage_contract_def:
       ctx_sim D C C' vs vs /\ I' C' vs
 End
 
+(* How a stage run's input state may differ from its output state: in the
+   GAS-reading oracle (NONE), and for FmpLowering (SOME fmp) also in the
+   free-memory pointers, which are fmp before the lowering.  The lowered
+   code's pointer is then above every static access and at most fmp. *)
+Definition fmp_variant_def:
+  fmp_variant NONE s s' = gas_variant s s' /\
+  fmp_variant (SOME fmp) s s' = raw_variant fmp s s'
+End
+
+Definition fmp_variant_room_def:
+  fmp_variant_room NONE (C : venom_context) (s : venom_state) = T /\
+  fmp_variant_room (SOME fmp) C s =
+    ((!eom. max_live_eom C = SOME eom ==> eom <= w2n s.vs_initial_fmp) /\
+     w2n s.vs_initial_fmp <= w2n (fmp : bytes32))
+End
+
 (* Choose the input oracle before testing its invariant. Reachability-based
    memory invariants can depend on GAS values. At the lowering boundary the
    source producer supplies the invariant for the chosen input. *)
 Definition o1_stage_contract_gas_def:
-  o1_stage_contract_gas rpolicy D pass view pre I I' <=>
+  o1_stage_contract_gas rpolicy D fo pass view pre I I' <=>
     !C C' vs'.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs' ==>
-      ?vs. gas_variant vs vs' /\
-           (I C vs ==> ctx_sim D C C' vs vs' /\ I' C' vs')
+      ?vs. fmp_variant fo vs vs' /\
+           (I C vs /\ fmp_variant_room fo C' vs' ==>
+            ctx_sim D C C' vs vs' /\ I' C' vs')
 End
 
 Theorem gas_variant_run_state_ok:
@@ -619,9 +658,10 @@ QED
 
 Theorem o1_stage_contract_imp_gas:
   o1_stage_contract rp D pass view pre Inv Inv' ==>
-  o1_stage_contract_gas rp D pass view pre Inv Inv'
+  o1_stage_contract_gas rp D NONE pass view pre Inv Inv'
 Proof
-  rw[o1_stage_contract_def, o1_stage_contract_gas_def] >>
+  rw[o1_stage_contract_def, o1_stage_contract_gas_def, fmp_variant_def,
+     fmp_variant_room_def] >>
   qexists_tac `vs'` >> simp[gas_variant_refl] >> metis_tac[]
 QED
 
@@ -774,8 +814,11 @@ Definition o1_run_contract_def:
       (o1_pre k) (o1_inv D k) (o1_inv D (SUC k))
 End
 
+(* The k-th run's contract with its input state chosen from its output
+   state: FmpLowering's raw input runs at the free-memory pointer fmp. *)
 Definition o1_run_contract_gas_def:
-  o1_run_contract_gas rpolicy D k <=>
-    o1_stage_contract_gas rpolicy D (EL k o1_fn_passes)
+  o1_run_contract_gas rpolicy D fmp k <=>
+    o1_stage_contract_gas rpolicy D (if k = 3 then SOME fmp else NONE)
+      (EL k o1_fn_passes)
       (o1_walk_view rpolicy k) (o1_pre k) (o1_inv D k) (o1_inv D (SUC k))
 End

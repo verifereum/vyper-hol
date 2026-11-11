@@ -778,7 +778,7 @@ Proof
   `eval_operands inst.inst_operands a = eval_operands inst.inst_operands b` by
     (irule supply_eval_operands_cong >> simp[]) >>
   Cases_on `inst.inst_opcode` >>
-  gvs[codegenRelTheory.source_memory_write_ranges_def] >>
+  simp[codegenRelTheory.source_memory_write_ranges_def] >>
   simp[codegenRelTheory.fixed_source_write_range_def,
        codegenRelTheory.sized_source_write_range_def] >>
   namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[] >>

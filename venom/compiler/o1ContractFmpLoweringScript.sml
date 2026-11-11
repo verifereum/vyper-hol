@@ -32,7 +32,8 @@ Ancestors
   fmpAnalysisDefs venomPassDispatcher venomFnScheduleRunner
   venomPassSchedule unitMemInv fcgDefs venomInst list ctxLookupAgreeHelpers
   unitShapeDefs venomWf contextCodegenRel irSupply venomFnScheduleRunnerProps
-  o1DretDesugarContract fmpStepContract o1ComposeSupport
+  o1DretDesugarContract fmpStepContract o1ComposeSupport ctxFmpShift ctxFmpMembershipHelpers
+  contextCodegenRel codegenRel venomState venomExecSemantics ptrDiscipline
 
 Theorem fmp_resolve_targets_some[local]:
   !targets t. fmp_resolve_targets ctx targets /\ MEM t targets ==>
@@ -273,9 +274,121 @@ Proof
   strip_tac >> qexists_tac `eom` >> simp[]
 QED
 
+(* ===== The raw input at another free-memory pointer ===== *)
+
+Theorem fmp_shift_eq[local]:
+  fmp_shift s s' <=>
+  ?a b c. s' = s with <| vs_fmp := a; vs_initial_fmp := b;
+                         vs_call_entry_fmp := c |>
+Proof
+  rw[fmp_shift_def, EQ_IMP_THM] >- metis_tac[] >> simp[]
+QED
+
+Theorem dead_result_rel_fmp_shift[local]:
+  dead_result_rel D r r' /\ fmp_shift_result r' r'' ==>
+  dead_result_rel D r r''
+Proof
+  Cases_on `r` >> Cases_on `r'` >>
+  simp[dead_result_rel_def, fmp_shift_result_def] >> rw[] >>
+  gvs[fmp_shift_eq]
+QED
+
+(* Only DRET's write ranges read the FMP state (vs_call_entry_fmp). *)
+Theorem inst_mem_ranges_fmp_shift[local]:
+  fmp_shift s s' /\ inst.inst_opcode <> DRET ==>
+  inst_mem_ranges inst s' = inst_mem_ranges inst s
+Proof
+  rw[fmp_shift_eq] >>
+  qmatch_goalsub_abbrev_tac `inst_mem_ranges inst s'` >>
+  `!op. eval_operand op s' = eval_operand op s`
+    by (Cases >> simp[Abbr `s'`, eval_operand_def, lookup_var_def]) >>
+  `!ops. eval_operands ops s' = eval_operands ops s`
+    by (Induct >> simp[eval_operands_def]) >>
+  `s'.vs_memory = s.vs_memory /\ s'.vs_returndata = s.vs_returndata`
+    by simp[Abbr `s'`] >>
+  qpat_x_assum `Abbrev _` kall_tac >>
+  `source_memory_read_ranges inst s' = source_memory_read_ranges inst s`
+    by (Cases_on `inst.inst_opcode` >> fs[] >>
+        simp[source_memory_read_ranges_def, memory_range_of_operands_def]) >>
+  `source_memory_write_ranges inst s' = source_memory_write_ranges inst s`
+    by (Cases_on `inst.inst_opcode` >> fs[] >>
+        simp[source_memory_write_ranges_def, fixed_source_write_range_def,
+             sized_source_write_range_def]) >>
+  simp[inst_mem_ranges_def]
+QED
+
+Theorem static_mem_inv_fmp_shift[local]:
+  fmp_blind_ctx C /\ fmp_shift vs vs' /\ mem_inv (static_mem_ok eom) C vs ==>
+  mem_inv (static_mem_ok eom) C vs'
+Proof
+  rw[mem_inv_raw_reachable] >>
+  rename1 `raw_reachable vs' C g inst t` >>
+  drule_all raw_reachable_fmp_shift >> strip_tac >>
+  rename1 `raw_reachable vs C g inst t0` >>
+  `fmp_blind_inst inst` by (drule_then (qspec_then `fmp_blind_inst` mp_tac) EVERY_raw_reachable >>
+        fs[fmp_blind_ctx_def, ETA_THM]) >>
+  `inst.inst_opcode <> DRET`
+    by (fs[fmp_blind_inst_def] >> strip_tac >> fs[is_raw_fmp_opcode_def]) >>
+  `static_mem_ok eom C g inst t0` by metis_tac[] >>
+  drule_all inst_mem_ranges_fmp_shift >>
+  gvs[static_mem_ok_def, fmp_shift_eq, in_revert_forward_def]
+QED
+
+Theorem row3_fmp_blind[local]:
+  EVERY (o1_fn_row 3) C.ctx_functions ==> fmp_blind_ctx C
+Proof
+  rw[fmp_blind_ctx_def, EVERY_MEM, fmp_blind_inst_def, o1_fn_row_def,
+     no_raw_fmp_ops_def, pre_fmp_ops_def] >>
+  res_tac >> fs[EVERY_MEM] >> res_tac >> fs[pre_fmp_opcode_def]
+QED
+
+(* Why: the stage only seals, so the output runs as the input does from
+   the same state; the input runs alike from the raw state, which differs
+   only in its FMP fields, since row 3 bans every instruction that reads
+   them (ctxFmpShift); and the static memory phase holds at the shifted
+   state and is a lowered one. *)
+Theorem fmp_lowering_run_contract_gas:
+  o1_run_contract_gas rpolicy D fmp 3
+Proof
+  `EL 3 o1_fn_passes = CFP_Simple VP_FmpLowering` by EVAL_TAC >>
+  simp[o1_run_contract_gas_def, o1_stage_contract_gas_def, fmp_variant_def,
+       o1_inv_def, o1_pre_def, o1_static_inv_def, o1_lowered_inv_def,
+       fmp_free_ctx_def] >>
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `vs = vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>` >>
+  qexists_tac `vs` >>
+  conj_tac
+  >- simp[Abbr `vs`, raw_variant_def, gas_variant_def,
+          venom_state_component_equality] >>
+  strip_tac >>
+  `fmp_shift vs vs'`
+    by simp[Abbr `vs`, fmp_shift_def, venom_state_component_equality] >>
+  `fmp_blind_ctx C` by metis_tac[row3_fmp_blind] >>
+  `mem_inv (static_mem_ok eom) C vs'` by metis_tac[static_mem_inv_fmp_shift] >>
+  drule_all fmp_lowering_stage_seal_only >> strip_tac >>
+  drule_all fmp_lowering_stage_sealed >> strip_tac >>
+  conj_tac
+  >- (rw[ctx_sim_def] >>
+      `ctx_sim D C C vs vs`
+        by (irule ctx_sim_refl >> metis_tac[o1_ctx_shape_entry_no_return]) >>
+      fs[ctx_sim_def] >> first_x_assum drule >> strip_tac >>
+      qexists_tac `fuel'` >> simp[] >>
+      irule dead_result_rel_fmp_shift >> first_x_assum (irule_at Any) >>
+      irule run_context_fmp_shift >> simp[]) >>
+  `EVERY make_ssa_input_ok C'.ctx_functions` by
+    (qpat_x_assum `LIST_REL _ C.ctx_functions C'.ctx_functions` mp_tac >>
+     qpat_x_assum `EVERY make_ssa_input_ok C.ctx_functions` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[LIST_REL_EL_EQN, EVERY_EL] >> rpt strip_tac >>
+     metis_tac[make_ssa_input_ok_fmp_signature]) >>
+  drule ctx_pass_stage_max_live_eom >>
+  simp[fn_pass_tag_def, fn_pass_static_layout_effect_def] >>
+  strip_tac >> qexists_tac `eom` >> simp[]
+QED
+
 Theorem o1_contract_fmp_lowering:
   o1_step_contract_at 3 rpolicy (CFP_Simple VP_FmpLowering) /\
-  o1_run_contract rpolicy D 3
+  o1_run_contract_gas rpolicy D fmp 3
 Proof
-  simp[fmp_step_contract_at, fmp_lowering_run_contract]
+  simp[fmp_step_contract_at, fmp_lowering_run_contract_gas]
 QED

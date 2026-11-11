@@ -2,7 +2,7 @@
  * MakeSSA's o1 function rows.  The walk runs MakeSSA at positions 0 and 4,
  * and the step from row k to row SUC k there needs, besides
  * fmp_sig_no_param (every pass but FmpLowering keeps it):
- *   k = 0: make_ssa_input_ok and no_raw_fmp_ops of the output;
+ *   k = 0: make_ssa_input_ok, no_raw_fmp_ops and pre_fmp_ops of the output;
  *   k = 4: no ALLOCA, pseudos as a block prefix, no PARAM-family opcode
  *          outside the first block, and SSA form.
  * MakeSSA inserts PHIs only at non-entry frontier blocks, the rename keeps
@@ -200,6 +200,18 @@ Proof
       `no_raw_fmp_ops fn` by gvs[o1_fn_row_def] >>
       `no_raw_fmp_ops out.fpo_function` by
         metis_tac[make_ssa_current_fn_no_raw_fmp_ops, pairTheory.FST] >>
+      `pre_fmp_ops fn` by gvs[o1_fn_row_def] >>
+      `pre_fmp_ops out.fpo_function` by
+        (drule make_ssa_current_fn_opcodes >>
+         disch_then (qspec_then `\lbl op. pre_fmp_opcode op` mp_tac) >>
+         simp[pre_fmp_opcode_def] >> impl_tac
+         >- (qpat_x_assum `pre_fmp_ops fn` mp_tac >>
+             rpt (pop_assum kall_tac) >>
+             simp[pre_fmp_ops_def, pre_fmp_opcode_def, EVERY_MEM, fn_insts_def,
+                  MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+         rpt (pop_assum kall_tac) >>
+         simp[pre_fmp_ops_def, pre_fmp_opcode_def, EVERY_MEM, fn_insts_def,
+              MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
       rewrite_tac[make_ssa_input_ok_def] >> asm_rewrite_tac[]) >>
   (* k = 4 *)
   `EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn) /\ fn_pseudos_prefix fn /\

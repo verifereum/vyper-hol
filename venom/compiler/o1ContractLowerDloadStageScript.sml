@@ -160,17 +160,29 @@ Proof
   rw[lower_dload_inst_supply_def] >> gvs[]
 QED
 
+(* The expansion adds only ALLOCA, ADD, CODECOPY and MLOAD. *)
+Theorem lower_dload_inst_supply_opcodes[local]:
+  lower_dload_inst_supply s i = (xs,t) /\ P i.inst_opcode /\
+  P ALLOCA /\ P ADD /\ P CODECOPY /\ P MLOAD ==>
+  EVERY (\j. P j.inst_opcode) xs
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
+      gvs[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
+      gvs[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
 Theorem lower_dload_inst_supply_no_raw_fmp[local]:
   lower_dload_inst_supply s i = (xs,t) /\ ~is_raw_fmp_opcode i.inst_opcode ==>
   EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) xs
 Proof
-  Cases_on `i.inst_opcode = DLOAD`
-  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
-      gvs[is_raw_fmp_opcode_def]) >>
-  Cases_on `i.inst_opcode = DLOADBYTES`
-  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
-      gvs[is_raw_fmp_opcode_def]) >>
-  rw[lower_dload_inst_supply_def] >> gvs[]
+  strip_tac >>
+  drule (Q.INST [`P` |-> `\op. ~is_raw_fmp_opcode op`]
+           lower_dload_inst_supply_opcodes) >>
+  simp[is_raw_fmp_opcode_def]
 QED
 
 (* The expansion keeps an unset layout end and adds no DALLOCA. *)
@@ -326,6 +338,14 @@ Proof
       drule_all lower_dload_function_supply_member >> strip_tac >>
       `EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) ys` by
         metis_tac[lower_dload_inst_supply_no_raw_fmp] >>
+      fs[EVERY_MEM] >> metis_tac[])
+  >- (drule lower_dload_step_supply >> strip_tac >>
+      fs[pre_fmp_ops_def, EVERY_MEM] >> rpt strip_tac >>
+      drule_all lower_dload_function_supply_member >> strip_tac >>
+      `EVERY (\j. pre_fmp_opcode j.inst_opcode) ys` by
+        (drule lower_dload_inst_supply_opcodes >> disch_then irule >>
+         rpt conj_tac >> TRY (simp[pre_fmp_opcode_def] >> NO_TAC) >>
+         metis_tac[]) >>
       fs[EVERY_MEM] >> metis_tac[]) >>
   drule fn_pass_step_fmp_sig_no_param >> simp[fn_pass_tag_def]
 QED
