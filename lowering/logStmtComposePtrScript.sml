@@ -122,7 +122,9 @@ Resume compile_log_ready_stmt_frag_ptr[path]:
    abi_size_bound cenv.ce_struct_fields (TupleT (log_non_indexed_types flags (MAP SND xs))) < dimword(:256) /\
    vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags (MAP SND xs))
       (log_non_indexed_values flags vs) = SOME avs` by asm_rewrite_tac[] >>
-  `LENGTH flags = LENGTH xs` by simp[] >>
+  `LENGTH flags = LENGTH xs` by
+    (qpat_assum `MAP SND xs = MAP expr_type args`
+       (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
   `EVERY (supported_scalar_type o SND) xs` by
     fs[EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"] >>
   `cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags)` by

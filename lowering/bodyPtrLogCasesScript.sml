@@ -45,6 +45,8 @@ Proof
               is_bytestring_type (expr_type e)) es` by
     metis_tac[supported_pure_exprs_bytestring_iff] >>
   irule compile_log_ready_stmt_frag_ptr >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
   >- (qexistsl_tac [`MAP SND fields`,`h`,`MAP (SND o FST) fields`] >> simp[] >>
       qpat_x_assum `MAP expr_type _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
