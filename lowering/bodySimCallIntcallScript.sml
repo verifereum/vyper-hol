@@ -8,7 +8,7 @@ Ancestors
   exprSimUnwrap exprSimMemoryRead
   exprSimMemorySource exprSimProps exprLoweringProps gasOutcome gasSummary
   gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
-  venomState compileEnv exprSimUnwrapProps
+  venomState compileEnv exprSimUnwrapProps externalReturnIntcallProducer
 
 (* The IHs at a supported callee (body_intcall_source_selection): not
    nonreentrant, no defaults, as many arguments as parameters. *)
@@ -90,19 +90,6 @@ Proof
   simp[return_def]
 QED
 
-Theorem compile_expr_intcall_location[local]:
-  !cenv ty ann src name args dflt sa vv sb.
-    compile_expr cenv ty (Call ann (IntCall (src,name)) args dflt) sa =
-      (vv,sb) ==>
-    ((?t op. vv = StackValue t op) \/
-     (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory))
-Proof
-  rpt gen_tac >> simp[compile_expr_call, compile_call_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  gvs[AllCaseEqs(), base_ptr_def] >>
-  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
-QED
-
 Theorem expr_sim_of_vv_sim_stack_memory[local]:
   !ctx func cenv cx ty e es.
     expr_vv_sim ctx func cenv cx ty e es /\
@@ -174,7 +161,7 @@ Theorem intcall_sim_case_widened:
 Proof
   pure_rewrite_tac[expr_sim_case_def, expr_vv_case_def] >>
   rpt strip_tac >> irule expr_sim_of_vv_sim_stack_memory >>
-  conj_tac >- metis_tac[compile_expr_intcall_location] >>
+  conj_tac >- metis_tac[return_compile_intcall_output] >>
   metis_tac[]
 QED
 
