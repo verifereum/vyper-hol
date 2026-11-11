@@ -5503,8 +5503,8 @@ Proof
       venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]
 QED
 
-Theorem mm_local_write_capture_copy[local]:
-  j < n /\ mm_local_history is H n /\
+Theorem mm_local_write_capture_copy_bounds[local]:
+  j < n /\ j < LENGTH is /\
   (EL j is).inst_opcode = MCOPY /\
   (EL j is).inst_operands = [Lit dst; Lit src; Lit len] ==>
   mm_local_write_capture is H n j =
@@ -5516,8 +5516,20 @@ Proof
   rpt strip_tac >> simp[]
 QED
 
-Theorem mm_local_write_capture_store[local]:
+Theorem mm_local_write_capture_copy[local]:
   j < n /\ mm_local_history is H n /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] ==>
+  mm_local_write_capture is H n j =
+    SOME (w2n dst,read_memory (w2n src) (w2n len) (H j)) /\
+  LENGTH (read_memory (w2n src) (w2n len) (H j)) = w2n len
+Proof
+  strip_tac >> irule mm_local_write_capture_copy_bounds >>
+  gvs[mm_local_history_def]
+QED
+
+Theorem mm_local_write_capture_store_bounds[local]:
+  j < n /\ j < LENGTH is /\
   (EL j is).inst_opcode = MSTORE /\
   (EL j is).inst_operands = [Lit dst; Var v] /\ lookup_var v (H j) = SOME value ==>
   mm_local_write_capture is H n j = SOME (w2n dst,word_to_bytes value T) /\
@@ -5525,6 +5537,17 @@ Theorem mm_local_write_capture_store[local]:
 Proof
   simp[mm_local_history_def, mm_local_write_capture_def,
        venomStateTheory.eval_operand_def] >> rpt strip_tac >> simp[]
+QED
+
+Theorem mm_local_write_capture_store[local]:
+  j < n /\ mm_local_history is H n /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\ lookup_var v (H j) = SOME value ==>
+  mm_local_write_capture is H n j = SOME (w2n dst,word_to_bytes value T) /\
+  LENGTH (word_to_bytes value T) = 32
+Proof
+  strip_tac >> irule mm_local_write_capture_store_bounds >>
+  gvs[mm_local_history_def]
 QED
 
 Theorem mm_local_write_capture_expansion[local]:
@@ -10997,6 +11020,23 @@ Proof
   drule_all mm_local_write_capture_store >> simp[mm_local_mload_bytes]
 QED
 
+Theorem mm_local_selected_write_capture_bounds[local]:
+  j < N /\ j < LENGTH is /\
+  (((?d s n. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit d; Lit s; Lit n] /\
+      c.cg_dst = w2n d /\ c.cg_src = w2n s /\ c.cg_length = w2n n)) \/
+   (?d v src. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit d; Var v] /\
+      lookup_var v (H j) = SOME (mload src (H j)) /\
+      c.cg_dst = w2n d /\ c.cg_src = src /\ c.cg_length = 32)) ==>
+  mm_local_write_capture is H N j =
+    SOME (c.cg_dst,read_memory c.cg_src c.cg_length (H j))
+Proof
+  strip_tac
+  >- metis_tac[mm_local_write_capture_copy_bounds] >>
+  metis_tac[mm_local_write_capture_store_bounds, mm_local_mload_bytes]
+QED
+
 Theorem mm_local_selected_write_capture[local]:
   j < N /\ mm_local_history is H N /\
   (((?d s n. (EL j is).inst_opcode = MCOPY /\
@@ -11009,9 +11049,9 @@ Theorem mm_local_selected_write_capture[local]:
   mm_local_write_capture is H N j =
     SOME (c.cg_dst,read_memory c.cg_src c.cg_length (H j))
 Proof
-  strip_tac
-  >- metis_tac[mm_local_write_capture_copy] >>
-  drule_all mm_local_write_capture_store >> simp[mm_local_mload_bytes]
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  irule mm_local_selected_write_capture_bounds >>
+  gvs[mm_local_history_def]
 QED
 
 Theorem mm_local_indexed_selected_captures_compatible[local]:
@@ -11759,6 +11799,58 @@ Proof
   qexists `c` >> gvs[mm_local_copy_ancestor_def] >> decide_tac
 QED
 
+Theorem mm_local_epoch_source_read_interval[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ a <= j /\ j <= r /\ r < LENGTH is /\ r < N /\
+  (!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H N q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  a = mm_local_epoch_start is gs r /\
+  ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+      c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+             cg_inst_ids := [(EL j is).inst_id]|>) \/
+   (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dj; Var vj] /\
+      FLOOKUP s0.ss_loads vj = SOME srcj /\
+      c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+             cg_inst_ids := [(EL j is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vj of
+                  NONE => [] | SOME li => [li.inst_id])|>)) /\
+  (j = r \/ (?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g))) /\
+  u = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H N q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory ==>
+  read_memory c.cg_src c.cg_length t = read_memory c.cg_src c.cg_length (H j) /\
+  ((!v src. FLOOKUP s0.ss_loads v = SOME src ==>
+      lookup_var v (H j) = SOME (mload src (H j))) ==>
+    mm_local_write_capture is H N j =
+      SOME (c.cg_dst,read_memory c.cg_src c.cg_length t))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))` by
+    metis_tac[mm_local_epoch_start_nonempty] >>
+  `read_memory c.cg_src c.cg_length u = read_memory c.cg_src c.cg_length (H j)` by
+    (mp_tac (Q.INST [`t` |-> `u`] (SPEC_ALL mm_local_fixed_cut_source_replay_interval)) >> simp[]) >>
+  `read_memory c.cg_src c.cg_length t = read_memory c.cg_src c.cg_length (H j)` by
+    gvs[venomStateTheory.read_memory_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `j < N` by decide_tac >>
+  `mm_local_write_capture is H N j =
+    SOME (c.cg_dst,read_memory c.cg_src c.cg_length (H j))` by
+    (irule mm_local_selected_write_capture_bounds >> simp[] >>
+     qpat_x_assum `(?dj sj lj. (EL j is).inst_opcode = MCOPY /\ _) \/ _` strip_assume_tac >>
+     gvs[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem mm_local_epoch_source_read[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -11795,18 +11887,13 @@ Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))` by
     metis_tac[mm_local_epoch_start_nonempty] >>
-  `read_memory c.cg_src c.cg_length u = read_memory c.cg_src c.cg_length (H j)` by
-    (mp_tac (Q.INST [`t` |-> `u`] (SPEC_ALL mm_local_fixed_cut_source_replay)) >> simp[]) >>
-  `read_memory c.cg_src c.cg_length t = read_memory c.cg_src c.cg_length (H j)` by
-    gvs[venomStateTheory.read_memory_def] >>
-  conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-  `j < N` by decide_tac >>
-  `mm_local_write_capture is H N j =
-    SOME (c.cg_dst,read_memory c.cg_src c.cg_length (H j))` by
-    (irule mm_local_selected_write_capture >> simp[] >>
-     qpat_x_assum `(?dj sj lj. (EL j is).inst_opcode = MCOPY /\ _) \/ _` strip_assume_tac >>
-     gvs[] >> metis_tac[]) >>
-  metis_tac[]
+  `a <= r` by decide_tac >>
+  `!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H N q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    (mp_tac (Q.INST [`a` |-> `a`, `r` |-> `r`]
+       (SPEC_ALL mm_local_fixed_cut_capture_recurrence)) >> simp[]) >>
+  mp_tac (SPEC_ALL mm_local_epoch_source_read_interval) >> simp[]
 QED
 
 Theorem mm_local_canonical_due_index_payload[local]:
