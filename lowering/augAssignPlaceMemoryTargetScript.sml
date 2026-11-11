@@ -77,7 +77,7 @@ Proof
 QED
 
 (* Storage and transient loads have no linear-memory footprint. *)
-Theorem aug_place_storage_access_path[local]:
+Theorem aug_place_storage_access_path:
   emit_op (if tr then TLOAD else SLOAD) [arg] sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
