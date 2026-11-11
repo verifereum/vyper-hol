@@ -105,25 +105,37 @@ Theorem ld_exec_delegatecall_backward_extract:
   read_memory (w2n offS) (w2n sz) s =
     read_memory (w2n offT) (w2n sz) t /\
   exec_delegatecall i t gas addr offT sz roT rs = OK t' ==>
-  ?out w rS rT v (rr:((unit + exception option) # execution_state) option).
+  ?out w rS rT.
     i.inst_outputs = [out] /\ t' = update_var out w rT /\
     exec_delegatecall i s gas addr offS sz (roS:bytes32) rs = OK (update_var out w rS) /\
-    extract_venom_result s v (w2n roS) (w2n rs) rr = SOME (w,rS) /\
-    extract_venom_result t v (w2n roT) (w2n rs) rr = SOME (w,rT) /\
+    consume_call_outcome (venom_call_request s addr 0w offS sz F with
+      cr_kind := DelegateMessageCall) (w2n roS) (w2n rs) s = (w,rS) /\
+    consume_call_outcome (venom_call_request t addr 0w offT sz F with
+      cr_kind := DelegateMessageCall) (w2n roT) (w2n rs) t = (w,rT) /\
     rS.vs_returndata = rT.vs_returndata /\
     rS.vs_memory = (write_memory_with_expansion (w2n roS)
       (TAKE (w2n rs) rT.vs_returndata) s).vs_memory /\
     rT.vs_memory = (write_memory_with_expansion (w2n roT)
       (TAKE (w2n rs) rT.vs_returndata) t).vs_memory
 Proof
-  strip_tac >> drule_all ld_delegatecall_run_shared >>
-  disch_then (qspecl_then [`w2w addr`, `w2n gas`] assume_tac) >>
-  gvs[exec_delegatecall_def, AllCaseEqs()] >>
-  drule ld_extract_result_backward >>
-  disch_then (qspecl_then [`s`, `w2n roS`] strip_assume_tac) >>
-  qexistsl [`output`, `rS`, `s''`] >> simp[] >>
-  qmatch_asmsub_abbrev_tac `extract_venom_result t 1w (w2n roT) (w2n rs) rr` >>
-  qexistsl_tac [`1w`,`rr`] >> simp[]
+  strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[lowerDloadSharedStateTheory.ld_shared_state_def] >>
+  qabbrev_tac `rqS = venom_call_request s addr 0w offS sz F with
+    cr_kind := DelegateMessageCall` >>
+  qabbrev_tac `rqT = venom_call_request t addr 0w offT sz F with
+    cr_kind := DelegateMessageCall` >>
+  `rqS.cr_kind = rqT.cr_kind /\ rqS.cr_value = rqT.cr_value /\
+   rqS.cr_target = rqT.cr_target /\ rqS.cr_data = rqT.cr_data` by
+    fs[Abbr `rqS`, Abbr `rqT`, venom_call_request_def] >>
+  drule ld_take_outcome_success_cong >>
+  disch_then (qspec_then `t.vs_outcomes` assume_tac) >>
+  drule ld_take_outcome_returndata_cong >>
+  disch_then (qspec_then `t.vs_outcomes` assume_tac) >>
+  Cases_on `consume_call_outcome rqS (w2n roS) (w2n rs) s` >>
+  Cases_on `consume_call_outcome rqT (w2n roT) (w2n rs) t` >>
+  gvs[exec_delegatecall_def, Abbr `rqS`, Abbr `rqT`,
+      Excl "consume_call_outcome_eq", AllCaseEqs()] >>
+  gvs[consume_call_outcome_eq]
 QED
 
 Theorem ld_exec_delegatecall_backward:
@@ -229,11 +241,13 @@ Theorem ld_delegatecall_step_backward_extract:
   ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n offS) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
   step_inst fuel CT i t = OK t' ==>
-  ?out w rS rT v (rr:((unit + exception option) # execution_state) option).
+  ?out w rS rT.
     i.inst_outputs = [out] /\ t' = update_var out w rT /\
     step_inst fuel CS i s = OK (update_var out w rS) /\
-    extract_venom_result s v (w2n roS) (w2n rs) rr = SOME (w,rS) /\
-    extract_venom_result t v (w2n roT) (w2n rs) rr = SOME (w,rT) /\
+    consume_call_outcome (venom_call_request s addr 0w offS sz F with
+      cr_kind := DelegateMessageCall) (w2n roS) (w2n rs) s = (w,rS) /\
+    consume_call_outcome (venom_call_request t addr 0w offT sz F with
+      cr_kind := DelegateMessageCall) (w2n roT) (w2n rs) t = (w,rT) /\
     rS.vs_returndata = rT.vs_returndata /\
     rS.vs_memory = (write_memory_with_expansion (w2n roS)
       (TAKE (w2n rs) rT.vs_returndata) s).vs_memory /\
@@ -242,10 +256,11 @@ Theorem ld_delegatecall_step_backward_extract:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >> strip_tac >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+       Excl "consume_call_outcome_eq"] >> strip_tac >>
   drule_all ld_exec_delegatecall_backward_extract >>
   disch_then (qspec_then `roS` strip_assume_tac) >>
-  qexistsl [`out`, `w`, `rS`, `rT`,`v`,`rr`] >> simp[]
+  qexistsl [`out`, `w`, `rS`, `rT`] >> simp[Excl "consume_call_outcome_eq"]
 QED
 
 Theorem ld_delegatecall_step_backward:

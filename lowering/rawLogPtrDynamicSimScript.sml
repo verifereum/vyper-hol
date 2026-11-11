@@ -246,6 +246,7 @@ Resume raw_log_dynamic_frag_ptr[tail_ready]:
     `ee.logs ++ [encode_raw_event_values cx.txn.target vs bs]`] strip_assume_tac) >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
   `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
+  `expr_has_effect call` by simp[Abbr `call`, expr_has_effect_thm] >>
   `sa.cs_next_var <= sn.cs_next_var` by decide_tac >>
   `!x. Var p = Var x ==> not_fresh_at sn x` by simp[] >>
   drule_all (SRULE [APPEND] raw_log_dynamic_counted_post_ptr) >>

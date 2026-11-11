@@ -82,6 +82,7 @@ Theorem oracle_adoption_locals:
 Proof
   Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
   Cases_on `rq.cr_kind = MessageCall` >>
+  Cases_on `rq.cr_kind = DelegateMessageCall` >>
   simp[vyperCallOutcomeTheory.adopt_call_outcome_equation]
 QED
 

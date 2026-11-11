@@ -68,7 +68,8 @@ Theorem take_call_outcome_returnData_length:
   LENGTH outcome.co_returnData < dimword(:256)
 Proof
   Cases_on `es.outcomes` >>
-  simp[vyperCallOutcomeTheory.take_call_outcome_def] >>
+  simp[vyperCallOutcomeTheory.take_call_outcome_def,
+    vyperCallOutcomeTheory.take_request_outcome_def] >>
   pairarg_tac >> rpt strip_tac >> gvs[AllCaseEqs()] >>
   irule (SRULE [wordsTheory.dimword_def] take_outcome_returnData_length) >>
   goal_assum (drule_at Any) >>
