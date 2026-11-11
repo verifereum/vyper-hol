@@ -4303,6 +4303,16 @@ Proof
       stmt_labels_chain stmt_labels_rws)
 QED
 
+Theorem compile_abi_arg_ptr_guard_labels:
+  !opc src base s.
+    cs_extends s (SND (compile_abi_arg_ptr_guard opc src base s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_abi_arg_ptr_guard opc src base s)))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_abi_arg_ptr_guard_def] >>
+  IF_CASES_TAC >> stmt_labels_chain stmt_labels_rws
+QED
+
 Theorem compile_decode_args_labels:
   !cenv args off opc hi adj s.
     cs_extends s (SND (compile_decode_args cenv args off opc hi adj s)) /\
@@ -4313,10 +4323,13 @@ Proof
   >- simp[compile_decode_args_def, comp_return_labels] >>
   PairCases_on `h` >> once_rewrite_tac[compile_decode_args_def] >>
   IF_CASES_TAC
-  >- stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels :: stmt_labels_rws) >>
+  >- stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels ::
+                     compile_abi_arg_ptr_guard_labels :: stmt_labels_rws) >>
   IF_CASES_TAC
-  >- stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels :: stmt_labels_rws) >>
-  stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels :: stmt_labels_rws)
+  >- stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels ::
+                     compile_abi_arg_ptr_guard_labels :: stmt_labels_rws) >>
+  stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels ::
+                     compile_abi_arg_ptr_guard_labels :: stmt_labels_rws)
 QED
 
 Theorem compile_register_positional_args_labels:

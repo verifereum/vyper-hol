@@ -377,7 +377,13 @@ Proof
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   Cases_on `var_location_decode_operand x` >> simp[] >>
   rpt (ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
-        >- simp[abi_decoder_phi_emit_op] >> rpt gen_tac) >>
+        >- simp[abi_decoder_phi_emit_op] >> rpt gen_tac)
+  (* the dynamic case starts with the calldata pointer guard, a no-op for DLOAD *)
+  >~ [`compile_abi_arg_ptr_guard`]
+  >- (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
+      >- simp[compile_abi_arg_ptr_guard_def, abi_decoder_phi_return] >>
+      (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
+   >- simp[cj 1 abi_decoder_phi_mutual] >> simp[])) >>
   (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
    >- simp[cj 1 abi_decoder_phi_mutual] >> simp[])
 QED
