@@ -199,7 +199,7 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem window_child_emit_counter[local]:
+Theorem window_child_emit_counter:
   emit_op opc operands st = (out,en) ==>
   en.cs_next_var = st.cs_next_var+1
 Proof
@@ -408,7 +408,7 @@ Proof
     `[(d+off,LENGTH (enc at av))]`, `prep`] >> simp[]
 QED
 
-Theorem window_child_void_shape[local]:
+Theorem window_child_void_shape:
   emit_void opc operands st = ((),en) ==>
   cs_extends st en /\ en.cs_next_var = st.cs_next_var
 Proof
