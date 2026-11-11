@@ -780,3 +780,161 @@ Proof
   >- (simp[ricf_indexed_boundary_def] >> metis_tac[]) >>
   metis_tac[ricf_indexed_call_return]
 QED
+
+(* Copy certificates are independent of the maps that translate locals.
+   Both suspended indices are fixed throughout a recursive function run. *)
+Definition ricf_cert_crosses_def:
+  ricf_cert_crosses tn curs stk s t <=>
+    LENGTH curs = LENGTH stk /\ EVERY (\gam. ircf_cross tn gam s t) curs
+End
+
+Definition ricf_cert_core_def:
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t <=>
+    ricf_live_boundary_core D ids stk PG G tn fn
+      sites maps targets G0 tn0 s t /\
+    ircf_cross tn0 cur s t /\ ricf_cert_crosses tn0 curs stk s t
+End
+
+Definition ricf_cert_boundary_def:
+  ricf_cert_boundary D ids maps curs stk PG G tn fn s t <=>
+    ?sites targets G0 tn0 cur.
+      ricf_cert_core D ids stk PG G tn fn
+        sites maps targets G0 tn0 cur curs s t
+End
+
+Definition ricf_cert_return_core_def:
+  ricf_cert_return_core D ids stk maps targets curs tn s t <=>
+    ricf_live_return_core D ids stk maps targets tn s t /\
+    ricf_cert_crosses tn curs stk s t
+End
+
+Definition ricf_cert_return_def:
+  ricf_cert_return D ids maps curs stk (PG:(num # num) option list)
+      (G:(string,num # num) fmap) tn (fn:ir_function) (ret:internal_return) s t <=>
+    ?targets. ricf_cert_return_core D ids stk maps targets curs tn s t
+End
+
+Definition ricf_cert_sim_below_def:
+  ricf_cert_sim_below D ids vs C C' n <=>
+    !maps curs. fn_sim_below D vs C C'
+      (ricf_cert_boundary D ids maps curs) (ricf_cert_return D ids maps curs) n
+End
+
+Theorem ricf_cert_crosses_cons:
+  ricf_cert_crosses tn (cur::curs) (cf::stk) s t <=>
+  ircf_cross tn cur s t /\ ricf_cert_crosses tn curs stk s t
+Proof
+  simp[ricf_cert_crosses_def] >> metis_tac[]
+QED
+
+Theorem ricf_cert_core_live:
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t ==>
+  ricf_live_boundary_core D ids stk PG G tn fn
+    sites maps targets G0 tn0 s t
+Proof
+  simp[ricf_cert_core_def]
+QED
+
+Theorem ricf_cert_core_current_cross:
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t ==>
+  ircf_cross tn0 cur s t
+Proof
+  simp[ricf_cert_core_def]
+QED
+
+Theorem ricf_cert_core_suspended_cross:
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t ==>
+  ricf_cert_crosses tn0 curs stk s t
+Proof
+  simp[ricf_cert_core_def]
+QED
+
+Theorem ricf_cert_boundary_live:
+  ricf_cert_boundary D ids maps curs stk PG G tn fn s t ==>
+  ricf_indexed_boundary D ids maps stk PG G tn fn s t
+Proof
+  simp[ricf_cert_boundary_def, ricf_cert_core_def, ricf_indexed_boundary_def] >>
+  metis_tac[]
+QED
+
+Theorem ricf_cert_core_intro:
+  ricf_live_boundary_core D ids stk PG G tn fn sites maps targets G0 tn0 s t /\
+  ircf_cross tn0 cur s t /\ ricf_cert_crosses tn0 curs stk s t ==>
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t
+Proof
+  simp[ricf_cert_core_def]
+QED
+
+Theorem ricf_cert_initial:
+  s.vs_prev_bb = NONE /\ taint_agree D (ircf_dead ids s []) tn s s ==>
+  ricf_cert_boundary D ids [] [] [] [] FEMPTY tn fn s s
+Proof
+  strip_tac >>
+  simp[ricf_cert_boundary_def, ricf_cert_core_def, ricf_cert_crosses_def,
+       ricf_live_boundary_core_def] >>
+  qexistsl [`FEMPTY`, `[]`, `{}`] >>
+  simp[ricf_frame_agree_completed_identity, ricf_live_stack_agree_def,
+       ircf_cross_def]
+QED
+
+Theorem ricf_cert_saved_locals:
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t ==>
+  LENGTH targets = LENGTH stk /\
+  (!j. j < LENGTH stk ==>
+    ricf_live_local_agree (EL j maps)
+      (ricf_complete_params (EL j stk).cf_params (EL j stk).cf_state.vs_params)
+      (EL j stk).cf_prov (EL j stk).cf_tvar
+      (EL j stk).cf_state (EL j targets))
+Proof
+  metis_tac[ricf_cert_core_live, ricf_indexed_saved_locals]
+QED
+
+Theorem ricf_cert_return_reanchor:
+  ricf_cert_return_core D ids stk maps targets curs tn s t /\
+  LENGTH actual = LENGTH stk /\
+  (!j. j < LENGTH stk ==>
+    ricf_live_local_agree (EL j maps)
+      (ricf_complete_params (EL j stk).cf_params (EL j stk).cf_state.vs_params)
+      (EL j stk).cf_prov (EL j stk).cf_tvar
+      (EL j stk).cf_state (EL j actual)) ==>
+  ricf_cert_return_core D ids stk maps actual curs tn s t
+Proof
+  simp[ricf_cert_return_core_def] >> metis_tac[ricf_live_return_reanchor]
+QED
+
+Theorem ricf_cert_call_return:
+  ricf_cert_core D ids stk PG G tn fn sites maps actual G0 tn0 cur curs s t /\
+  ricf_cert_return D ids maps curs stk PG' G' un fn' ret u v ==>
+  ricf_cert_return_core D ids stk maps actual curs un u v
+Proof
+  simp[ricf_cert_return_def] >> rpt strip_tac >>
+  drule ricf_cert_saved_locals >> strip_tac >>
+  metis_tac[ricf_cert_return_reanchor]
+QED
+
+(* Byte/taint framing is demanded on LIVE states for every suspended
+   certificate; historical caller memory is deliberately absent. *)
+Theorem ricf_cert_crosses_refresh:
+  ricf_cert_crosses tn curs stk s t /\
+  (!gam db sb sz k. MEM gam curs /\ (db,sb,sz) IN gam /\ k < sz ==>
+    (db+k IN un.t_mem <=> db+k IN tn.t_mem) /\
+    (sb+k IN un.t_mem <=> sb+k IN tn.t_mem) /\
+    read_byte (db+k) u.vs_memory = read_byte (db+k) s.vs_memory /\
+    read_byte (sb+k) v.vs_memory = read_byte (sb+k) t.vs_memory) ==>
+  ricf_cert_crosses un curs stk u v
+Proof
+  simp[ricf_cert_crosses_def, EVERY_MEM, ircf_cross_def] >> metis_tac[]
+QED
+
+Theorem ricf_cert_sim_below_elim:
+  ricf_cert_sim_below D ids vs C C' n /\ k < n /\
+  MEM fn C.ctx_functions /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  ricf_cert_boundary D ids maps curs stk PG G tn fn s t /\
+  block_reach vs C stk PG G tn fn s /\
+  terminates (run_blocks k C fn s) ==>
+  ?m. fn_run_rel D (ricf_cert_return D ids maps curs) stk PG fn
+    (run_blocks k C fn s) (run_blocks m C' fn' t)
+Proof
+  simp[ricf_cert_sim_below_def, fn_sim_below_def] >> metis_tac[]
+QED
