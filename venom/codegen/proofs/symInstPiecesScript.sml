@@ -1789,3 +1789,51 @@ Proof
   qexists `full` >> gvs[stackOpSimTheory.execute_plan_append,
     planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def]
 QED
+
+(* Prepared BUMP is a local two-step emission; caller framing is separate. *)
+Theorem sym_bump_prepared_local_emit:
+  inst.inst_opcode = BUMP /\ inst.inst_operands = [base_op; size_op] /\
+  inst.inst_outputs = [ptr; next] /\ ptr <> next /\
+  ssa_form fn /\ opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret [] ps ss /\
+  venom_asm_rel (SND (compute_label_offsets p)) ps vs cs /\
+  ps.ps_stack = residual ++ [base_op; size_op] /\
+  base_op <> dead_stack_marker /\ size_op <> dead_stack_marker /\
+  operand_val vs (SND (compute_label_offsets p)) base_op = SOME base_val /\
+  operand_val vs (SND (compute_label_offsets p)) size_op = SOME sz /\
+  EVERY (\op. case op of Var x => x <> ptr /\ x <> next | _ => T) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+    case op of Var x => x <> ptr /\ x <> next | _ => T) /\
+  qs = ps with ps_stack := stack_push (Var next)
+    (stack_push (Var ptr) (stack_pop 2 ps.ps_stack)) /\
+  asm_block_at p ss.sym_base.as_pc [AsmOp "DUP2"; AsmOp "ADD"] ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p 2 cs = AsmOK cs' /\
+    venom_asm_rel (SND (compute_label_offsets p)) qs
+      (update_var next (base_val + sz) (update_var ptr base_val vs)) cs' /\
+    cs'.as_pc = cs.as_pc + 2 /\
+    sym_steps p env 2 ss = SymOK ss' /\ asm_sym_rel p env cs' ss' /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret [] qs ss' /\
+    qs.ps_stack = residual ++ [Var ptr; Var next]
+Proof
+  strip_tac >>
+  `asm_block_at p cs.as_pc (execute_plan 0 bump_emit_ops)` by
+    (gvs[asmSymBridgeTheory.asm_sym_rel_def, stackPlanGenTheory.bump_emit_ops_def,
+      planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def,
+      planExecTheory.dup_name_def]) >>
+  drule_at (Pat `venom_asm_rel _ _ _ _`) emitSimTheory.bump_emit_sim >>
+  disch_then (drule_at (Pat `asm_block_at _ _ _`)) >>
+  simp[] >> disch_then (qspecl_then [`build_offset_to_pc p`, `ptr`, `next`] mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  drule_at (Pat `asm_steps _ _ _ _ _ = _`) sym_bump_source_emit >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `MEM inst (fn_insts fn)`)) >>
+  simp[] >> disch_then (qspec_then `ctx` mp_tac) >>
+  simp[] >> strip_tac >> goal_assum (drule_at Any) >>
+  simp[stackModelTheory.stack_push_def, stackModelTheory.stack_pop_def,
+    listTheory.SNOC_APPEND, rich_listTheory.BUTLASTN_APPEND2, listTheory.TAKE_APPEND1]
+QED
