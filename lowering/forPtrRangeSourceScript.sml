@@ -6,18 +6,18 @@ Ancestors forPtrRangePrepare forPtrRounds stmtSimForParts gasContext
 Libs monadsyntax
 
 Theorem for_body_admissible:
-  gas_admissible (eval_for cx tyv id stmts (v::vs))
+  gas_admissible (eval_for cx tyv id stmts (Value v::vs))
     (stmt_res_ok lctx) es /\ lookup_scopes id es.scopes = NONE ==>
   gas_admissible (eval_stmts cx stmts)
     (stmt_res_ok (InLoop exit_lbl incr_lbl))
     (es with <| scopes :=
-      (FEMPTY |+ (id, (<| assignable := F; type := tyv;
-                         value := v; popped := [] |> : scope_entry))) :: es.scopes;
+      (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                         value := v; popped := [] |>)) :: es.scopes;
                 gas_obs := [] |>)
 Proof
   strip_tac >> simp[gas_admissible_def] >> rpt gen_tac >> strip_tac >>
   rename1 `eval_stmts cx stmts _ = (res, ee)` >>
-  Cases_on `eval_for cx tyv id stmts (v::vs) (es with gas_obs := gs)` >>
+  Cases_on `eval_for cx tyv id stmts (Value v::vs) (es with gas_obs := gs)` >>
   rename1 `_ = (lr, le)` >>
   `stmt_res_ok lctx lr` by
     (gvs[gas_admissible_def] >> metis_tac[]) >>
@@ -27,19 +27,19 @@ QED
 
 Theorem for_range_body_admissible:
   k < LENGTH vs /\
-  gas_admissible (eval_for cx tyv id stmts (DROP k vs))
+  gas_admissible (eval_for cx tyv id stmts (MAP Value (DROP k vs)))
     (stmt_res_ok lctx) es /\ lookup_scopes id es.scopes = NONE ==>
   gas_admissible (eval_stmts cx stmts)
     (stmt_res_ok (InLoop exit_lbl incr_lbl))
     (es with <| scopes :=
-      (FEMPTY |+ (id, (<| assignable := F; type := tyv;
-                         value := EL k vs; popped := [] |> : scope_entry))) :: es.scopes;
+      (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                         value := EL k vs; popped := [] |>)) :: es.scopes;
                 gas_obs := [] |>)
 Proof
   strip_tac >> irule for_body_admissible >>
   drule rich_listTheory.DROP_CONS_EL >> disch_tac >>
   conj_tac >- simp[] >>
-  qexistsl_tac [`lctx`, `DROP (SUC k) vs`] >> gvs[]
+  qexistsl_tac [`lctx`, `MAP Value (DROP (SUC k) vs)`] >> gvs[]
 QED
 
 Theorem for_push_scope_marked_ptr:
@@ -47,8 +47,8 @@ Theorem for_push_scope_marked_ptr:
   gas_marked_exec_ptr D (ctx,func) PG (push_scope_with_var id tyv v)
     (es,s,G,tn) [] (INL ())
     (es with scopes :=
-      (FEMPTY |+ (id, (<|assignable := F; type := tyv;
-                        value := v; popped := []|> : scope_entry)))::es.scopes) gf tf (OK t)
+      (FEMPTY |+ (id, <|assignable := F; type := tyv;
+                        value := v; popped := []|>))::es.scopes) gf tf (OK t)
 Proof
   simp[gas_marked_exec_ptr_def, push_scope_with_var_def, return_def,
        evaluation_state_component_equality, combinTheory.o_DEF]
@@ -70,16 +70,16 @@ Theorem for_body_outer_preserves:
     P ei /\ lookup_scopes id ei.scopes = NONE /\ k < N /\
     eval_stmts cx stmts
       (ei with <| scopes :=
-        (FEMPTY |+ (id, (<|assignable := F; type := tyv;
-          value := IntV (n1 + &k); popped := []|> : scope_entry))) :: ei.scopes;
+        (FEMPTY |+ (id, <|assignable := F; type := tyv;
+          value := IntV (n1 + &k); popped := []|>)) :: ei.scopes;
         gas_obs := obs |>) = (r,ee) /\
     (r = INL () \/ r = INR ContinueException) /\
     ee.scopes = sc :: rest ==> P (ee with scopes := rest)) /\
   P es /\ lookup_scopes id es.scopes = NONE /\ k < N /\
   eval_stmts cx stmts
     (es with <| scopes :=
-      (FEMPTY |+ (id, (<|assignable := F; type := tyv;
-        value := IntV (n1 + &k); popped := []|> : scope_entry))) :: es.scopes;
+      (FEMPTY |+ (id, <|assignable := F; type := tyv;
+        value := IntV (n1 + &k); popped := []|>)) :: es.scopes;
       gas_obs := obs |>) = (r,ee) /\
   (r = INL () \/ r = INR ContinueException) /\ ee.scopes = sc :: rest ==>
   P (ee with scopes := rest) /\ lookup_scopes id rest = NONE

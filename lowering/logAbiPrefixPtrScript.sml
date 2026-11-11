@@ -405,6 +405,7 @@ Proof
   `ptr_covers H2 tm2 dst u2 (w2n rw + 32) /\
    lookup_var dst u2 = SOME b /\ eval_operand rounded u2 = SOME (n2w (w2n rw))` by
     suspend "add_inputs" >>
+  `w2n b + w2n rw < dimword(:256)` by simp[] >>
   drule_all emit_addr_add_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `t3` strip_assume_tac)))) >>
