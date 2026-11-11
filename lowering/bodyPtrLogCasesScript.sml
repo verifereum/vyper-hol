@@ -24,19 +24,6 @@ Proof
 QED
 
 (* ADMITTED: a piece of the body induction. *)
-Theorem body_append_storage_narrow_ptr:
-  !cx nid e tops ctx cenv vis mut elem dn slot.
-    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
-                body_expr_ptr_ok cx e) /\
-    body_inv tops ctx cenv cx /\
-    supported_variable_decl tops nid =
-      SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
-    (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem ==>
-    body_stmt_ptr_ok cx (Append (TopLevelNameTarget nid) e)
-Proof
-  cheat
-QED
-
 Theorem body_append_case_ptr:
   !cx t e.
     (!s'' p t'.

@@ -486,19 +486,6 @@ Proof
   metis_tac[]
 QED
 
-(* An append to a storage or transient DynArray, the only target
-   supported_append_target admits.  The helper adapter relates both writes. *)
-Theorem body_append_storage_other:
-  !cx nid e.
-    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
-                body_expr_ok cx e) ==>
-    body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
-Proof
-  rpt gen_tac >> strip_tac >> Cases_on `nid` >>
-  rw[body_stmt_ok_def, supported_stmt_def, supported_append_target_def] >>
-  irule body_append_storage_fragment >> metis_tac[supported_expr_def]
-QED
-
 Theorem body_append_storage_narrow:
   !cx nid e tops ctx cenv vis mut elem dn slot.
     (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
@@ -510,6 +497,18 @@ Theorem body_append_storage_narrow:
     body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
   cheat
+QED
+
+(* The storage/transient root adapter relates the element and length writes. *)
+Theorem body_append_storage_other:
+  !cx nid e.
+    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
+                body_expr_ok cx e) ==>
+    body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `nid` >>
+  rw[body_stmt_ok_def, supported_stmt_def, supported_append_target_def] >>
+  irule body_append_storage_fragment >> metis_tac[supported_expr_def]
 QED
 
 (* supported_append_target admits no local, subscript or attribute target
