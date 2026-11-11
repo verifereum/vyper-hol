@@ -7,15 +7,6 @@ Ancestors
   instMemFrontier fragExecMem memSafeRun venomMemDefs venomInst venomState
   venomExecSemantics list rich_list
 
-Theorem append_toplevel_place_any:
-  eval_target_place cx (TopLevelNameTarget nid) es =
-    (INL (StoragePlace tr slot tv), es) ==>
-  !st. eval_target_place cx (TopLevelNameTarget nid) st =
-         (INL (StoragePlace tr slot tv), st)
-Proof
-  metis_tac[stmtSimAppendStorageComposeTheory.append_toplevel_place_any]
-QED
-
 Theorem eval_append_storage_bind:
   (!st. eval_target_place cx (TopLevelNameTarget nid) st = (INL p, st)) ==>
   eval_stmt cx (Append (TopLevelNameTarget nid) e) =

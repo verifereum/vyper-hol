@@ -15,7 +15,7 @@ Ancestors concretizePtrProtectedLivesets concretizePtrTokenInterval
   concretizePtrRuntimeGeneration concretizePtrProductionCoverage
   concretizeAnalysisBoundary concretizeAnalysisScanCoverage
   concretizeAnalysisWriteSafety basePtrDefs
-  concretizeMemLocProofs concretizeMemLocDefs
+  concretizeMemLocTransitionProofs concretizeMemLocDefs
   staticLayoutAllocatorProofs o1PassContract venomPassDispatcher
   contextCodegenRel o1ScheduleDecompHelpers venomWf venomInst option pair
   list rich_list finite_map arithmetic

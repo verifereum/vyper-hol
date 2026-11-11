@@ -667,6 +667,7 @@ Definition build_compile_env_def:
        ce_func_return_type := build_func_return_type tops;
        ce_func_mutability := build_func_mutability tops;
        ce_func_ids := build_func_ids 0 tops;
+       ce_modules := [(NONE, tops)];
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
        ce_raw_return := F;
@@ -688,6 +689,16 @@ Theorem build_compile_env_ce_struct_fields:
   !tops vis mut func_name args ret_type (body : stmt list) use_trans.
     (build_compile_env tops vis mut func_name args ret_type body use_trans).
       ce_struct_fields = make_struct_fields_map tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_ce_modules:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_modules = [(NONE, tops)]
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]

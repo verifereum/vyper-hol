@@ -172,14 +172,15 @@ Proof
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
   Cases_on `r1` >> simp[] >>
   rename1 `eval_expr cx e es = (INL pv, es1)` >>
+  Cases_on `read_result cx pv es1` >>
+  rename1 `read_result cx pv es1 = (r3, es3)` >>
+  imp_res_tac read_result_state >> gvs[] >>
+  Cases_on `r3` >> simp[] >>
   Cases_on `eval_target_place cx (AttributeTarget (NameTarget id) fld) es1` >>
   rename1 `_ = (r2, es2)` >>
   drule eval_target_place_attr_local >> strip_tac >>
   Cases_on `r2` >> simp[]
-  >- (gvs[] >> Cases_on `read_result cx pv es1` >>
-      rename1 `read_result cx pv es1 = (r3, es3)` >>
-      imp_res_tac read_result_state >> gvs[] >>
-      Cases_on `r3` >> simp[] >> metis_tac[]) >>
+  >- (gvs[] >> metis_tac[]) >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
 
@@ -311,13 +312,14 @@ Proof
   `ignore_bind
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
     (return ()) =
-   vyperState$bind (eval_expr cx e)
-     (\pv. ignore_bind
+   vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+     (\v. ignore_bind
        (vyperState$bind (eval_target_place cx (AttributeTarget (NameTarget id) fld))
-         (\p. vyperState$bind (read_result cx pv) (write_place cx p)))
+         (\p. write_place cx p v))
        (return ()))` by
     simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
   pop_assum SUBST1_TAC >>
+  irule gas_exempt_cert_error_value >> simp[ignore_bind_def, bind_assoc] >>
   irule gas_exempt_cert_error_result >> simp[]
 QED
 
@@ -468,7 +470,8 @@ Proof
   rename1 `FLOOKUP cenv.ce_vars id` >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss())
-    [compile_stmt_def, compile_get_target_ptr_def, compile_assign_value_def,
+    [compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, compile_get_target_ptr_def, compile_assign_value_def,
      comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv, sm)` >> simp[] >>

@@ -170,6 +170,7 @@ Proof
 QED
 
 Theorem send_tail_path_mem:
+  expr_has_effect e /\
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\ fn_has_code sm sb func /\
@@ -392,7 +393,7 @@ Resume send_args_summary_mem[normal]:
               alloca_history func t' /\
               t.vs_alloca_next <= t'.vs_alloca_next) \/
         (exit_result r /\ expr_exit res r))` by
-    (irule send_tail_path_mem >> simp[expr_type_def] >>
+    (irule send_tail_path_mem >> simp[expr_type_def, loweringPostsTheory.expr_has_effect_thm] >>
      qpat_assum `bind (eval_send _ _ _) _ _ = _` (irule_at Any) >>
      qpat_assum `emit_op _ _ _ = _` (irule_at Any) >>
      qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>

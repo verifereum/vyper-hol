@@ -1,15 +1,13 @@
 # Load timing witnesses
 
 These contracts make assignment and call load timing observable through a return value.
-`pop_refill` returns 9 because the target's internal call refills the popped
-storage slot before assignment reads it. `conditional_snapshot` returns 5 for
-either flag because selecting a storage aggregate copies it before the target's
-internal call changes the source.
-`conditional_memory_view` returns 1 for either flag because selecting a memory
-array retains its location: the target's pop shortens that array before the
-assignment copies it. Copying at conditional selection instead would return 2.
-`nested_retained_pop` returns 5 after an index expression pops the enclosing
-array: the previously captured inner location still contains the array to pop.
+`pop_refill` returns 5 because assignment reads the popped value before the
+target's internal call refills the storage slot. `conditional_snapshot` returns
+5 for either flag because selecting a storage aggregate copies it before the
+target's internal call changes the source.
+`conditional_memory_view` returns 2 for either flag because assignment copies
+the selected memory array before the target's pop shortens it. Reading it after
+the target's effects instead would return 1.
 `call_storage_read` returns 10 because internal calls capture every argument
 before reading the storage scalar changed by the later argument.
 `call_memory_pop` returns 1 because the later argument pops the memory array

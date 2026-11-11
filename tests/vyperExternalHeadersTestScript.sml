@@ -17,6 +17,7 @@ val () = cv_auto_trans external_header_test_context_def;
 Theorem external_header_checks:
   function_header_ok Deploy Nonpayable F F "__init__"
     [("a",BaseT (UintT 8))] [] NoneT /\
+  ~function_header_ok Deploy Nonpayable T F "__init__" [] [] NoneT /\
   ~function_header_ok Deploy Nonpayable F F "__init__"
     [("a",BaseT (UintT 8))] [Literal (BaseT (UintT 8)) (IntL 5)] NoneT /\
   ~function_header_ok Deploy Nonpayable F F "__init__" [] []

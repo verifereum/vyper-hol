@@ -789,7 +789,7 @@ Proof
    (INL (LAST vs),
     es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest)` by
     (irule read_result_pop_name >> fs[lookup_scopes_update] >> metis_tac[]) >>
-  simp[vv_post_def, expr_type_def, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
+  simp[vv_post_def, expr_type_def, expr_has_effect_thm, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
   rpt conj_tac
   >- (irule pop_stmt_state_rel_scopes >>
       qpat_assum `immutable_base_zero cenv _` (irule_at Any) >>
@@ -831,6 +831,10 @@ Proof
         (irule local_path_at_val_at >> simp[local_path_at_def] >>
          qexists_tac `[ValueSubscript (IntV &(LENGTH vs - 1))]` >>
          simp[mem_path_offset_def, mem_step_offset_def]) >>
+      `local_place_at cenv cx id
+         (32 + (LENGTH vs - 1) * type_memory_size etv) etv
+         (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))` by
+        simp[local_place_at_def, mem_path_offset_def, mem_step_offset_def] >>
       simp[] >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[] >>
       TRY (fs[local_region_def, lookup_var_inst_idx] >> metis_tac[]))

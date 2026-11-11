@@ -102,18 +102,20 @@ Proof
             is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     fs[body_inv_def] >>
   `expr_body_pre cenv cx env e1 es` by
-    (irule stmt_expr_body_pre >>
+    (irule stmt_expr_body_pre_alloc >>
      qpat_assum `supported_expr tops e1`
        (strip_assume_tac o MATCH_MP supported_expr_body_calls) >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-         supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def] >>
+         supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
+         allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts stmts` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
-    (rpt strip_tac >> irule stmt_expr_body_pre >>
+    (rpt strip_tac >> irule stmt_expr_body_pre_alloc >>
      qpat_assum `supported_expr tops e2`
        (strip_assume_tac o MATCH_MP supported_expr_body_calls) >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-         supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def] >>
+         supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
+         allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
      qexists_tac `int_calls_stmts stmts` >>
      metis_tac[call_evaluation_safe_append_right, listTheory.APPEND_ASSOC]) >>
   `expr_sim_mem ctx func cenv cx typ e1 es` by
@@ -183,7 +185,7 @@ Resume body_for_range_mem[body]:
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def, int_calls_iterator_def] >>
      metis_tac[call_evaluation_safe_append_right]) >>
-  `EVERY (stmt_exprs_ok cenv) stmts` by
+  `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) stmts` by
     metis_tac[body_for_exprs_ok] >>
   `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target)
@@ -192,7 +194,7 @@ Resume body_for_range_mem[body]:
   qpat_x_assum `body_stmts_mem_ok _ _`
     (irule o REWRITE_RULE [body_stmts_mem_ok_def]) >>
   simp[] >> rpt conj_tac
-  >- metis_tac[stmt_exprs_ok_same_frame]
+  >- metis_tac[for_declare_stmts_exprs_ok]
   >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
   >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
       conj_tac

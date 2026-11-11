@@ -321,6 +321,27 @@ Proof
     mp_tac (cj 1 compile_store_memory_labels) >> simp[]
 QED
 
+Theorem first_emission_snapshot_vv:
+  !ce copy vv a x b. compile_snapshot_vv ce copy vv a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  rpt IF_CASES_TAC
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- metis_tac[first_emission_unwrap_value] >>
+      metis_tac[first_emission_return])
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- metis_tac[first_emission_materialize_vv] >>
+      metis_tac[first_emission_return]) >>
+  metis_tac[first_emission_return]
+QED
+
 Theorem first_emission_ext_call_kwarg:
   (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
@@ -1746,24 +1767,35 @@ Theorem first_emission_builtin_hash:
      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  let
-    val finish = rpt IF_CASES_TAC >>
-      map_every qid_spec_tac [`b`, `x`, `a`] >>
-      ho_match_mp_tac first_emission_pair_let >>
-      (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
-      ho_match_mp_tac first_emission_as_stack_val >>
-      ho_match_mp_tac first_emission_strong >>
-      ho_match_mp_tac first_emission_hash >> simp[SF ETA_ss] >> metis_tac[]
-  in
-    strip_tac >> rpt gen_tac >>
-    disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >>
-    gvs[compile_builtin_dispatch_body_def, LET_THM] >>
-    Cases_on `expr_type (HD args)` >> simp[] >>
-    (all_tac >>~- ([`expr_type (HD args) = BaseT bt`],
-      Cases_on `bt` >> simp[] >>
-      (all_tac >>~- ([`expr_type (HD args) = BaseT (BytesT bd)`],
-        Cases_on `bd` >> simp[] >> finish)) >> finish)) >> finish
-  end
+  strip_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >>
+  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+  Cases_on `expr_type (HD args)` >> simp[] >>
+  (all_tac >>~- ([`expr_type (HD args) = BaseT bt`],
+    Cases_on `bt` >> simp[] >>
+    (all_tac >>~- ([`expr_type (HD args) = BaseT (BytesT bd)`],
+      Cases_on `bd` >> simp[] >>
+      (rpt IF_CASES_TAC >>
+          map_every qid_spec_tac [`b`, `x`, `a`] >>
+          ho_match_mp_tac first_emission_pair_let >>
+          (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+          ho_match_mp_tac first_emission_as_stack_val >>
+          ho_match_mp_tac first_emission_strong >>
+          ho_match_mp_tac first_emission_hash >> simp[SF ETA_ss] >> metis_tac[]))) >>
+    (rpt IF_CASES_TAC >>
+          map_every qid_spec_tac [`b`, `x`, `a`] >>
+          ho_match_mp_tac first_emission_pair_let >>
+          (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+          ho_match_mp_tac first_emission_as_stack_val >>
+          ho_match_mp_tac first_emission_strong >>
+          ho_match_mp_tac first_emission_hash >> simp[SF ETA_ss] >> metis_tac[]))) >>
+  (rpt IF_CASES_TAC >>
+          map_every qid_spec_tac [`b`, `x`, `a`] >>
+          ho_match_mp_tac first_emission_pair_let >>
+          (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+          ho_match_mp_tac first_emission_as_stack_val >>
+          ho_match_mp_tac first_emission_strong >>
+          ho_match_mp_tac first_emission_hash >> simp[SF ETA_ss] >> metis_tac[])
 QED
 
 Theorem first_emission_ec[local]:

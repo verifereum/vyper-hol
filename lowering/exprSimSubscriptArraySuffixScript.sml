@@ -124,7 +124,8 @@ Theorem framed_array_element_summary:
   read_result cx r ee = (INL (ArrayV av),ee) /\
   array_index (ArrayTV etv bd) av i = SOME v /\
   val_wf (ArrayTV etv bd) (ArrayV av) /\ val_wf etv v /\ value_has_type etv v /\
-  vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue ann p) q /\
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+    (LocatedValue ann p) q /\
   (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) /\
   (p.ptr_location = LocMemory ==> ?n. bd = Fixed n) /\
   eval_operand p.ptr_operand q = SOME w /\
@@ -143,6 +144,8 @@ Theorem framed_array_element_summary:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all framed_array_select_read >> strip_tac >>
+  qpat_assum `select_result _ _ _ _ _ = (INL _, _)`
+    (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
   drule_all vv_post_array_element >> strip_tac >>
   irule select_result_counted_summary >> simp[] >>
   qexists_tac `OK q` >> simp[] >>
@@ -156,7 +159,8 @@ Theorem framed_array_post_view:
   eval_expr cx obj es = (INL r,t) /\ expr_type obj = ArrayT et bd /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\
-  vv_post ctx func cenv cx obj es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) q /\
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
+    (LocatedValue (ArrayT et bd) p) q /\
   (p.ptr_location = LocMemory \/ (~cenv.ce_is_ctor /\ p.ptr_location = LocCode)) ==>
   ?etv av w.
     evaluate_type (get_tenv cx) et = SOME etv /\
@@ -174,7 +178,8 @@ Proof
   `?v w. read_result cx r ee = (INL v,ee) /\
            eval_operand p.ptr_operand q = SOME w` by
     (fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
-        loweringPostsTheory.immutable_holds_def] >> metis_tac[]) >>
+        loweringPostsTheory.immutable_holds_def, vyperASTTheory.expr_type_def] >>
+     metis_tac[]) >>
   `FST (read_result cx r ee) = FST (read_result cx r t)` by
     (irule read_result_nonstorage_frame >> simp[]) >>
   `read_result cx r t = (INL v,t)` by
@@ -315,7 +320,8 @@ Theorem framed_array_represented_suffix_summary:
   fn_has_code sc sd func /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
   stmt_state_rel ctx func cenv cx ee s /\
-  vv_post ctx func cenv cx obj es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s /\
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
+    (LocatedValue (ArrayT et bd) p) s /\
   evaluate_type (get_tenv cx) et = SOME etv /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
   read_result cx r ee = (INL (ArrayV av),ee) /\
@@ -328,7 +334,8 @@ Theorem framed_array_represented_suffix_summary:
   (!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
        (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
        q.vs_memory = s.vs_memory /\ stmt_state_rel ctx func cenv cx ee q ==>
-       vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue (ArrayT et bd) p) q) ==>
+       vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+         (LocatedValue (ArrayT et bd) p) q) ==>
   gas_summary_at F (ctx,func) []
     (select_result cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s)
     (\res ee' q. ?child. res = INL child /\
@@ -356,7 +363,8 @@ Proof
   fs[Excl "valid_index_def"] >>
   `immutable_holds cenv cx (ArrayT et (Dynamic n)) r w ee s` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def]) >>
+     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
+          vyperASTTheory.expr_type_def]) >>
   drule_all_then assume_tac framed_array_code_length_view >>
   `compile_ptr_load F cenv.ce_imm_alloca LocCode = compile_imm_load_word F cenv.ce_imm_alloca` by
     simp[FUN_EQ_THM, contextTheory.compile_ptr_load_def] >>
@@ -413,7 +421,8 @@ Resume framed_array_represented_suffix_summary[fixed_valid]:
      gvs[vyperTypingTheory.value_has_type_def, vyperValueOperationTheory.array_length_def]) >>
   fs[Excl "valid_index_def"] >>
   drule_all fixed_array_subscript_counted_ok >> strip_tac >>
-  `vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue (ArrayT et (Fixed n)) p) t'` by
+  `vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sd s0 ee r
+     (LocatedValue (ArrayT et (Fixed n)) p) t'` by
     (first_x_assum irule >> simp[]) >>
   `eval_operand p.ptr_operand t' = SOME w` by
     (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >>
@@ -426,7 +435,8 @@ Resume framed_array_represented_suffix_summary[fixed_valid]:
     (strip_tac >> irule fixed_array_element_nonwrapping >>
      goal_assum (drule_at Any) >> simp[] >>
      irule (SIMP_RULE (srw_ss()) [] vv_post_memory_footprint_bound) >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[vyperASTTheory.expr_type_def]) >>
   qpat_assum `p.ptr_location = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   irule framed_array_element_summary >> simp[] >>
   (conj_tac >- (qexists_tac `env` >> simp[]) >>
@@ -437,7 +447,8 @@ Resume framed_array_represented_suffix_summary[dynamic_valid]:
   fs[Excl "valid_index_def"] >>
   `immutable_holds cenv cx (ArrayT et (Dynamic n)) r w ee s` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def]) >>
+     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
+          vyperASTTheory.expr_type_def]) >>
   drule_all_then assume_tac framed_array_code_length_view >>
   `compile_ptr_load F cenv.ce_imm_alloca LocCode = compile_imm_load_word F cenv.ce_imm_alloca` by
     simp[FUN_EQ_THM, contextTheory.compile_ptr_load_def] >>
@@ -446,7 +457,8 @@ Resume framed_array_represented_suffix_summary[dynamic_valid]:
      (word_of_bytes T (0w:bytes32)
        (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)))` by simp[] >>
   drule_all runtime_array_subscript_counted_ok >> strip_tac >>
-  `vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue (ArrayT ann (Dynamic n)) p) t'` by
+  `vv_post ctx func cenv cx (Subscript (ArrayT ann (Dynamic n)) obj idx) es sa sd s0 ee r
+     (LocatedValue (ArrayT ann (Dynamic n)) p) t'` by
     (first_x_assum irule >> simp[]) >>
   `eval_operand p.ptr_operand t' = SOME w` by
     (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >>
@@ -523,7 +535,8 @@ Proof
                           compileEnvTheory.is_word_type_def]) >>
   `stmt_state_rel ctx func cenv cx ee s` by
     fs[loweringPostsTheory.expr_post_def] >>
-  `vv_post ctx func cenv cx obj es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s` by
+  `vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
+     (LocatedValue (ArrayT et bd) p) s` by
     (irule framed_array_base_endpoint >> simp[] >>
      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
@@ -546,7 +559,8 @@ Proof
   `!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
        (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
        q.vs_memory = s.vs_memory /\ stmt_state_rel ctx func cenv cx ee q ==>
-       vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue (ArrayT et bd) p) q` by
+       vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+         (LocatedValue (ArrayT et bd) p) q` by
     (rpt strip_tac >>
      qpat_x_assum `vv_post _ _ _ _ _ _ sa sc _ _ _ _ _` kall_tac >>
      irule framed_array_base_endpoint >> simp[] >>

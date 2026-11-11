@@ -1808,7 +1808,7 @@ Proof
 QED
 
 (* Reusable helper: instruction output is in fn_all_vars *)
-Theorem inst_output_in_fn_all_vars[local]:
+Theorem inst_output_in_fn_all_vars:
   !func bb inst out.
     MEM bb func.fn_blocks /\ MEM inst bb.bb_instructions /\
     MEM out inst.inst_outputs ==>

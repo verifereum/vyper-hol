@@ -21,7 +21,6 @@
  *   update_phis_for_split — update PHIs in target to reference split block
  *   insert_split          — perform one split
  *   cfg_norm_fn           — iterated to convergence
- *   cfg_norm_ctx          — transform all functions in context
  *
  * Source: vyper/venom/passes/cfg_normalization.py
  *)
@@ -209,13 +208,6 @@ Definition cfg_norm_fn_def:
     cfg_norm_iter (2 * n) func 0
 End
 
-(* Transform all functions in context. *)
-Definition cfg_norm_ctx_def:
-  cfg_norm_ctx ctx =
-    ctx with ctx_functions := MAP cfg_norm_fn ctx.ctx_functions
-End
-
-
 (* ===== Supply-aware configured transform ===== *)
 
 (* The legacy arithmetic/name-based normalizer above remains available for its
@@ -325,8 +317,4 @@ End
 Definition cfg_norm_configured_with_supply_def:
   cfg_norm_configured_with_supply unit =
     cfg_norm_unit_supply (init_ir_supply unit) unit
-End
-
-Definition cfg_norm_configured_def:
-  cfg_norm_configured unit = FST (cfg_norm_configured_with_supply unit)
 End

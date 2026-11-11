@@ -74,12 +74,15 @@ Proof
   simp[Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
   Cases_on `r1` >> simp[]
-  >- (simp[Once evaluate_def, bind_def] >>
-      simp[Once evaluate_def, lookup_global_def, bind_def,
-           lift_option_type_def, return_def, LET_THM, get_place_def] >>
-      Cases_on `read_result cx x es1` >>
+  >- (Cases_on `read_result cx x es1` >>
       rename1 `read_result cx x es1 = (r2, es2)` >>
-      Cases_on `r2` >> simp[write_place_def] >> strip_tac >> gvs[] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      Cases_on `r2` >> simp[]
+      >- (simp[Once evaluate_def, bind_def] >>
+          simp[Once evaluate_def, lookup_global_def, bind_def,
+               lift_option_type_def, return_def, LET_THM, get_place_def] >>
+          simp[write_place_def] >> strip_tac >> gvs[]) >>
+      strip_tac >> gvs[] >>
       drule read_result_no_control >> simp[]) >>
   strip_tac >> gvs[] >>
   imp_res_tac (cj 1 eval_expr_no_control) >> simp[]
@@ -220,7 +223,8 @@ Proof
      qpat_x_assum `c = cenv` SUBST_ALL_TAC >>
      qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
      asm_simp_tac (srw_ss())
-       [compile_stmt_def, compile_assign_value_def, comp_bind_def,
+       [compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, compile_assign_value_def, comp_bind_def,
         comp_ignore_bind_def, comp_return_def, LET_THM] >>
      Cases_on `compile_expr cenv (expr_type e) e sa` >>
      rename1 `compile_expr _ _ _ _ = (src_vv, st2)` >>
@@ -284,12 +288,13 @@ Proof
   simp[Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e x` >> rename1 `eval_expr cx e x = (r1, es1)` >>
   Cases_on `r1` >> simp[] >>
-  simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, lookup_global_def, bind_def,
-       lift_option_type_def, return_def, LET_THM, get_place_def] >>
   Cases_on `read_result cx x' es1` >>
   rename1 `read_result cx _ es1 = (r2, es2)` >>
-  Cases_on `r2` >> simp[write_place_def]
+  Cases_on `r2` >> simp[] >>
+  simp[Once evaluate_def, bind_def] >>
+  simp[Once evaluate_def, lookup_global_def, bind_def,
+       lift_option_type_def, return_def, LET_THM, get_place_def,
+       write_place_def]
 QED
 
 (* A storage write reads no gas. *)
