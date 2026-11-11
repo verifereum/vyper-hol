@@ -17,7 +17,10 @@
  *)
 Theory entryPtrSeamRegister
 Ancestors
-  entryPtrSeamDecoder entryStateRel entryArgPtrs entryLocals
+  sourceOwnedCoherentPtr sourceOwnedComplexPtr sourceOwnedArrayConstructorPtr decoderArrayInitPtr entryPtrSeamDecoder entryDecoderBudgetBoundary actualDecoderAllocationPtr actualAllocaReplayPtr
+  actualAllocSitesCredit acceptedContextPhi sourceWordDecoderPtr sourceBytesRepresentation
+  sourceEncodingWindows sourceEncodingLayout sourcePrimitiveMemberPtr sourcePrimitiveReentryPtr canonicalMemberTraversalPtr sourcePrimitiveComplexPtr sourceRecursiveComplexPtr
+  entryStateRel entryArgPtrs entryLocals
   entryDecodePlanProps entryDecodeProps bodySimEntry actualRegistrationCode
   vyperCompiler moduleLoweringProps exprLoweringProps vyperInterpreter
   vyperContext venomExecSemantics venomState compileEnv supportedProgram
@@ -89,6 +92,7 @@ Theorem register_positional_args_ptr:
         G0 tn0 s0 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      s0.vs_gas_readings = s1.vs_gas_readings /\
       !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
           !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
 Proof

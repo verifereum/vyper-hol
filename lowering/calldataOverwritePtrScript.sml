@@ -6,7 +6,7 @@ Ancestors ptrSafetyTransport valueEncodingProps calldataClampPtr calldataDecodeP
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep
 
-Theorem clean_mstore_overwrite_prefix:
+Theorem clean_mstore_overwrite_prefix_uniform:
   emit_void MSTORE [Var p;v] sa = ((),sb) /\
   eval_operand (Var p) s = SOME dw /\ eval_operand v s = SOME w /\
   ptr_covers G tn p s 32 /\ op_taint tn v = {} /\
@@ -24,7 +24,7 @@ Theorem clean_mstore_overwrite_prefix:
     u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     (!x. FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
@@ -32,7 +32,7 @@ Proof
   qabbrev_tac `inst = mk_inst sa.cs_next_id MSTORE [Var p;v] []` >>
   qabbrev_tac `t = mstore (w2n dw) w s` >>
   `step_inst_base inst s = OK t` by
-    simp[Abbr `inst`, Abbr `t`, step_inst_base_opcode_eqs, exec_write2_def] >>
+    (simp[Abbr `inst`, Abbr `t`] >> irule step_MSTORE >> simp[]) >>
   `emitted_insts sa sb = [inst]` by simp[Abbr `inst`] >>
   `run_inst_seq (emitted_insts sa sb) s = OK t` by
     simp[run_inst_seq_def] >>
@@ -61,7 +61,7 @@ Proof
   suspend "endpoint"
 QED
 
-Resume clean_mstore_overwrite_prefix[endpoint]:
+Resume clean_mstore_overwrite_prefix_uniform[endpoint]:
   `t.vs_inst_idx = s.vs_inst_idx /\ ~t.vs_halted /\
    t.vs_current_bb = s.vs_current_bb /\ t.vs_allocas = s.vs_allocas /\
    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_vars = s.vs_vars /\
@@ -69,7 +69,7 @@ Resume clean_mstore_overwrite_prefix[endpoint]:
     simp[Abbr `t`, mstore_def] >>
   `mem_word_at (w2n dw) t.vs_memory = w` by
     simp[Abbr `t`, mstore_mem_word_at_same] >>
-  `((!fuel. ptr_safe_run D lo fuel ctx fn PG H u
+  `(!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)` by
     suspend "continuation" >>
@@ -83,8 +83,8 @@ Resume clean_mstore_overwrite_prefix[endpoint]:
   Cases_on `a` >> simp[eval_operand_def, lookup_var_def]
 QED
 
-Resume clean_mstore_overwrite_prefix[continuation]:
-  strip_tac >>
+Resume clean_mstore_overwrite_prefix_uniform[continuation]:
+  gen_tac >> strip_tac >>
   `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
     !k. k < LENGTH [inst] ==> get_instruction bb (LENGTH sa.cs_current_insts + k) =
       SOME (EL k [inst])` by
@@ -109,9 +109,9 @@ Resume clean_mstore_overwrite_prefix[continuation]:
   fs[eval_operand_def, lookup_var_def]
 QED
 
-Finalise clean_mstore_overwrite_prefix
+Finalise clean_mstore_overwrite_prefix_uniform
 
-Theorem calldata_load_overwrite_prefix:
+Theorem calldata_load_overwrite_prefix_uniform:
   emit_op CALLDATALOAD [src] sa = (v,sb) /\
   eval_operand src s = SOME sw /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -133,7 +133,7 @@ Theorem calldata_load_overwrite_prefix:
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
       op_taint u (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
@@ -176,11 +176,11 @@ Proof
   suspend "load_endpoint"
 QED
 
-Resume calldata_load_overwrite_prefix[load_endpoint]:
+Resume calldata_load_overwrite_prefix_uniform[load_endpoint]:
   `t.vs_inst_idx = s.vs_inst_idx` by simp[Abbr `t`, update_var_def] >>
   `t with vs_inst_idx := s.vs_inst_idx = t` by
     simp[venom_state_component_equality] >>
-  `((!fuel. ptr_safe_run D lo fuel ctx fn PG H u
+  `(!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)` by
     suspend "load_continuation" >>
@@ -195,8 +195,8 @@ Resume calldata_load_overwrite_prefix[load_endpoint]:
   gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Resume calldata_load_overwrite_prefix[load_continuation]:
-  strip_tac >>
+Resume calldata_load_overwrite_prefix_uniform[load_continuation]:
+  gen_tac >> strip_tac >>
   `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
     !k. k < LENGTH [inst] ==> get_instruction bb (LENGTH sa.cs_current_insts + k) =
       SOME (EL k [inst])` by
@@ -224,4 +224,61 @@ Resume calldata_load_overwrite_prefix[load_continuation]:
   simp[mk_inst_def]
 QED
 
-Finalise calldata_load_overwrite_prefix
+Finalise calldata_load_overwrite_prefix_uniform
+
+(* Compatibility consumers of the witness-first boundaries. *)
+Theorem clean_mstore_overwrite_prefix:
+  emit_void MSTORE [Var p;v] sa = ((),sb) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand v s = SOME w /\
+  ptr_covers G tn p s 32 /\ op_taint tn v = {} /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ allocas_from lo s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t H u.
+    run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!a z. eval_operand a s = SOME z ==> eval_operand a t = SOME z) /\
+    ptr_covers H u p t 32 /\ mem_word_at (w2n dw) t.vs_memory = w /\
+    (!i. w2n dw <= i /\ i < w2n dw + 32 ==> i NOTIN u.t_mem) /\
+    u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all clean_mstore_overwrite_prefix_uniform >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`t`, `H`, `u`] >> simp[]
+QED
+
+Theorem calldata_load_overwrite_prefix:
+  emit_op CALLDATALOAD [src] sa = (v,sb) /\
+  eval_operand src s = SOME sw /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  op_taint tn src = {} /\ fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t H u.
+    run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand v t = SOME (abi_decode_load CALLDATALOAD sw s) /\
+    op_taint u v = {} /\ op_prov H v = NONE /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
+      eval_operand a s = SOME w ==> eval_operand a t = SOME w) /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint u (Var x) = op_taint tn (Var x)) /\
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all calldata_load_overwrite_prefix_uniform >>
+  disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `H`, `u`] >> simp[]
+QED

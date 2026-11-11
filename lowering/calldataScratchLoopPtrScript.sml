@@ -181,7 +181,9 @@ Proof
     (qpat_assum `h = _` (fn th => pure_rewrite_tac [th]) >>
      simp[jump_to_def, abi_decode_header_state_def, update_var_def]) >>
   drule calldata_scratch_array_body_guarded_ptr >>
-  disch_then (drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (fn th =>
+    qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`
+      (mp_then (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _`) mp_tac th)) >>
   disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ h`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ root h _`)) >>

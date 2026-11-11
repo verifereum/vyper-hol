@@ -139,7 +139,7 @@ Proof
   mp_tac (Q.INST [`R` |-> `{}:num set`] step_taint_memory_bound) >> simp[]
 QED
 
-Theorem calldata_bytestring_overwrite_endpoint_core[local]:
+Theorem calldata_bytestring_overwrite_endpoint_core_uniform:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
@@ -168,7 +168,7 @@ Theorem calldata_bytestring_overwrite_endpoint_core[local]:
       FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x)) /\
     tn'.t_mem SUBSET tn.t_mem /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >>
@@ -380,7 +380,7 @@ Proof
   simp[lookup_var_def] >>
   conj_tac
   >- metis_tac[] >>
-  disch_tac >>
+  gen_tac >> disch_tac >>
   `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
      !k. k < LENGTH [i0;i1;i2;i3;i4] ==> get_instruction bb (LENGTH sa.cs_current_insts + k) =
        SOME (EL k [i0;i1;i2;i3;i4])` by
@@ -532,11 +532,76 @@ Theorem calldata_bytestring_overwrite_prefix:
         (actual with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_bytestring_overwrite_endpoint_core >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  strip_tac >> drule_all calldata_bytestring_overwrite_endpoint_core_uniform >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
   `s' = actual with vs_inst_idx := LENGTH sb.cs_current_insts` by
     (gvs[] >> simp[venom_state_component_equality]) >>
   qexistsl_tac [`G'`, `tn'`] >> gvs[]
+QED
+
+Theorem calldata_bytestring_decoder_prefix_framed_uniform:
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (DecBytestring m) sa = ((),sb) /\
+  C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
+  m < dimword (:256) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  abi_decode_load CALLDATALOAD sw s = n2w len /\ len <= m /\
+  fresh_vars_wrt sa s /\ ptr_covers G tn p s C /\
+  op_taint tn src = {} /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s' G' tn'.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (s' with vs_inst_idx := s.vs_inst_idx) /\
+    ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
+    s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand (Var p) s' = SOME dw /\ eval_operand src s' = SOME sw /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    ptr_covers G' tn' p s' C /\
+    (!i. w2n dw <= i /\ i < w2n dw + C ==> i NOTIN tn'.t_mem) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem SUBSET tn.t_mem /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  `not_fresh_at sa p /\ (!q. src = Var q ==> not_fresh_at sa q)` by
+    (Cases_on `src` >>
+     gvs[not_fresh_at_def, fresh_vars_wrt_def, eval_operand_def, lookup_var_def,
+       arithmeticTheory.GREATER_EQ] >>
+     metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]) >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  Cases_on `abi_decode_count_guard CALLDATALOAD src m sa` >>
+  rename1 `abi_decode_count_guard CALLDATALOAD src m sa = (count_op,sg)` >>
+  drule_all abi_decode_count_guard_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sg) s = OK guarded` >>
+  `eval_operand (Var p) guarded = SOME dw /\ eval_operand src guarded = SOME sw` by metis_tac[] >>
+  `?actual. run_inst_seq (emitted_insts sa sb) s = OK actual` by
+    (drule calldata_bytestring_decoder_instructions >> strip_tac >>
+     drule abi_decode_count_guard_shape >> strip_tac >>
+     `emitted_insts sa sb = emitted_insts sa sg ++
+       [mk_inst (sa.cs_next_id + 4) CALLDATACOPY [Var p;src;Lit (n2w C)] []]` by
+       (qpat_x_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
+        simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
+          fresh_var_def, fresh_id_def, emit_def, APPEND_ASSOC] >>
+        strip_tac >> gvs[emitted_insts_def, DROP_PREFIX, APPEND_ASSOC]) >>
+     qpat_assum `run_inst_seq (emitted_insts sa sg) s = _`
+       (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then
+       `[mk_inst (sa.cs_next_id + 4) CALLDATACOPY [Var p;src;Lit (n2w C)] []]` mp_tac) >>
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
+     metis_tac[]) >>
+  irule calldata_bytestring_overwrite_endpoint_core_uniform >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`len`,`m`] >> simp[] >>
+  `len < dimword(:256)` by decide_tac >> simp[]
 QED
 
 Theorem calldata_bytestring_decoder_prefix_framed:
@@ -570,38 +635,9 @@ Theorem calldata_bytestring_decoder_prefix_framed:
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >>
-  `not_fresh_at sa p /\ (!q. src = Var q ==> not_fresh_at sa q)` by
-    (Cases_on `src` >>
-     gvs[not_fresh_at_def, fresh_vars_wrt_def, eval_operand_def, lookup_var_def,
-       arithmeticTheory.GREATER_EQ] >>
-     metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]) >>
-  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  Cases_on `abi_decode_count_guard CALLDATALOAD src m sa` >>
-  rename1 `abi_decode_count_guard CALLDATALOAD src m sa = (count_op,sg)` >>
-  drule_all abi_decode_count_guard_sequence >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sa sg) s = OK guarded` >>
-  `eval_operand (Var p) guarded = SOME dw /\ eval_operand src guarded = SOME sw` by metis_tac[] >>
-  `?actual. run_inst_seq (emitted_insts sa sb) s = OK actual` by
-    (drule calldata_bytestring_decoder_instructions >> strip_tac >>
-     drule abi_decode_count_guard_shape >> strip_tac >>
-     `emitted_insts sa sb = emitted_insts sa sg ++
-       [mk_inst (sa.cs_next_id + 4) CALLDATACOPY [Var p;src;Lit (n2w C)] []]` by
-       (qpat_x_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
-        simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
-          comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
-          fresh_var_def, fresh_id_def, emit_def, APPEND_ASSOC] >>
-        strip_tac >> gvs[emitted_insts_def, DROP_PREFIX, APPEND_ASSOC]) >>
-     qpat_assum `run_inst_seq (emitted_insts sa sg) s = _`
-       (mp_then Any mp_tac run_inst_seq_append) >>
-     disch_then (qspec_then
-       `[mk_inst (sa.cs_next_id + 4) CALLDATACOPY [Var p;src;Lit (n2w C)] []]` mp_tac) >>
-     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
-     metis_tac[]) >>
-  irule calldata_bytestring_overwrite_endpoint_core >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`len`,`m`] >> simp[] >>
-  `len < dimword(:256)` by decide_tac >> simp[]
+  strip_tac >> drule_all calldata_bytestring_decoder_prefix_framed_uniform >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
 
 Theorem calldata_bytestring_decoder_prefix:
