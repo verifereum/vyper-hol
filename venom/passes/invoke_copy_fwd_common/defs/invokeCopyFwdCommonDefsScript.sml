@@ -524,6 +524,18 @@ Proof
   simp[EXISTS_PROD] >> metis_tac[]
 QED
 
+(* Result blocks of the per-block FOLDL that ircf and ricf use. *)
+Theorem FOLDL_block_pass_SND:
+  !f bbs c0 acc0.
+    SND (FOLDL (\(changed, acc) bb.
+      let (bb_changed, new_bb) = f bb in
+      (changed \/ bb_changed, acc ++ [new_bb])) (c0, acc0) bbs) =
+    acc0 ++ MAP (\bb. SND (f bb)) bbs
+Proof
+  gen_tac >> Induct_on `bbs` >> fs[] >> rpt gen_tac >>
+  Cases_on `f h` >> fs[]
+QED
+
 Theorem INDEX_FIND_EL_le:
   !l n P k.
     k < LENGTH l /\ P (EL k l) ==>

@@ -1959,17 +1959,6 @@ QED
    5. Evaluation Helpers for Concrete Copy-Forwarding Witnesses
    ========================================================================== *)
 
-Theorem FOLDL_block_pass_SND:
-  !f bbs c0 acc0.
-    SND (FOLDL (\(changed, acc) bb.
-      let (bb_changed, new_bb) = f bb in
-      (changed \/ bb_changed, acc ++ [new_bb])) (c0, acc0) bbs) =
-    acc0 ++ MAP (\bb. SND (f bb)) bbs
-Proof
-  gen_tac >> Induct_on `bbs` >> fs[] >> rpt gen_tac >>
-  Cases_on `f h` >> fs[]
-QED
-
 Theorem unique_mcopy_7_at_3:
   !i0 i1 i2 i3 i4 i5 i6.
     i0.inst_opcode <> MCOPY /\

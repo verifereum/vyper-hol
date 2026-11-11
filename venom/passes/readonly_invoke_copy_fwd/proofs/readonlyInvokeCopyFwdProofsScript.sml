@@ -239,8 +239,8 @@ Proof
   fs[ricf_function_step_def] >>
   pairarg_tac >> gvs[] >>
   `new_blocks = MAP (\bb. SND (ricf_pass_block ctx bb)) cur_fn.fn_blocks` by
-    (mp_tac (Q.SPECL [`ricf_pass_block ctx`, `cur_fn.fn_blocks`, `F`, `[]`]
-               FOLDL_block_pass_SND) >>
+    (qspec_then `ricf_pass_block ctx` mp_tac FOLDL_block_pass_SND >>
+     disch_then (qspecl_then [`cur_fn.fn_blocks`, `F`, `[]`] mp_tac) >>
      simp[]) >>
   gvs[] >>
   conj_tac
@@ -376,9 +376,8 @@ Theorem ricf_pass_correct:
     ctx_sim D ctx (ricf_transform_ctx fn_meta rma ctx) vs vs
 Proof
   rpt strip_tac >>
-  irule icf_ctx_sim_from_fn_compat >> simp[] >>
-  qexistsl_tac [`lo`, `fn_meta`, `rma`] >>
-  simp[ricf_transform_ctx_fn_compat]
+  irule icf_ctx_sim_from_fn_compat >>
+  gvs[ricf_transform_ctx_fn_compat] >> metis_tac[]
 QED
 
 (* ==========================================================================

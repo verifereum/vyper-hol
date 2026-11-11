@@ -16,12 +16,13 @@
  * TOP-LEVEL:
  *   ircf_R, ircf_R_ret  — the relations handed to reachable_fn_sim_ctx_sim
  *   ircf_block_sim      — one block from a reachable boundary
- *   ircf_ctx_sim        — the pass as a context simulation
+ *   ircf_pass_correct   — the pass as a context simulation
  *)
 
 Theory internalReturnCopyFwdSim
 Ancestors
-  internalReturnCopyFwdPlan internalReturnCopyFwdDefs internalReturnCopyFwdAlias reachableFnSim
+  internalReturnCopyFwdPlan internalReturnCopyFwdDefs invokeCopyFwdCommonDefs
+  internalReturnCopyFwdAlias reachableFnSim
   taintAgree o1LowerDloadShared o1PassContract ptrDiscipline passSharedDefs
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
   rangeAnalysisProofs stepWriteFootprintBase o1LowerDloadOccurrence occurrenceGeometry
@@ -172,17 +173,6 @@ Proof
 QED
 
 (* ===== The transformed context, structurally ===== *)
-
-Theorem FOLDL_block_pass_SND:
-  !f bbs c0 acc0.
-    SND (FOLDL (\(changed, acc) bb.
-      let (bb_changed, new_bb) = f bb in
-      (changed \/ bb_changed, acc ++ [new_bb])) (c0, acc0) bbs) =
-    acc0 ++ MAP (\bb. SND (f bb)) bbs
-Proof
-  gen_tac >> Induct_on `bbs` >> fs[] >> rpt gen_tac >>
-  Cases_on `f h` >> fs[]
-QED
 
 Theorem ircf_transform_block_label[simp]:
   !ctx bb. (SND (ircf_transform_block ctx bb)).bb_label = bb.bb_label
@@ -3800,7 +3790,7 @@ Proof
   simp[]
 QED
 
-Theorem ircf_ctx_sim:
+Theorem ircf_pass_correct:
   !D lo vs C fn_meta rma.
     o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
     EVERY ircf_no_dst_write_alias C.ctx_functions /\
