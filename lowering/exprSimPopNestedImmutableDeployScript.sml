@@ -124,7 +124,7 @@ Proof
 QED
 
 (* Updating one source immutable needs new bytes only for that root. *)
-Theorem immutables_rel_ctor_update[local]:
+Theorem immutables_rel_ctor_update:
   !cenv addr src es s t imms id tv updated off es'.
     immutables_rel cenv addr src T es s /\
     ALOOKUP es.immutables addr = SOME imms /\
@@ -160,7 +160,7 @@ Proof
   qexistsl [`type_memory_size tv'`, `s.vs_memory`] >> simp[]
 QED
 
-Theorem immutable_store_other_bytes[local]:
+Theorem immutable_store_other_bytes:
   !cenv cx env es imms src id off tv a k word s.
     expr_sim_inv cenv cx env es /\
     ALOOKUP es.immutables cx.txn.target = SOME imms /\
@@ -200,7 +200,7 @@ Proof
   gvs[regions_disjoint_def] >> decide_tac
 QED
 
-Theorem immutable_store_frame_bytes[local]:
+Theorem immutable_store_frame_bytes:
   !ctx func cenv cx env es s imms id off tv a k word.
     expr_sim_inv cenv cx env es /\
     stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
@@ -239,7 +239,7 @@ Proof
   gvs[regions_disjoint_def] >> decide_tac
 QED
 
-Theorem immutable_store_wb_frame[local]:
+Theorem immutable_store_wb_frame:
   !ctx func cenv cx env es s imms id off tv a k word sm.
     expr_sim_inv cenv cx env es /\
     stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
@@ -266,7 +266,7 @@ Proof
   irule locals_kept_regions >> rpt strip_tac >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem immutable_replace_mstore_stmt_frame[local]:
+Theorem immutable_replace_mstore_stmt_frame:
   !ctx func cenv cx es s imms id tv a updated es' p word.
     stmt_state_rel ctx func cenv cx es s /\
     ALOOKUP es.immutables cx.txn.target = SOME imms /\
