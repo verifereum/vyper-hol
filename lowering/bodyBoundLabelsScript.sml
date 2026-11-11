@@ -1053,8 +1053,12 @@ Proof
       >- (simp[] >> rpt strip_tac >> irule bound_labels_bind >>
           simp[comp_return_def] >> first_x_assum irule >> simp[] >>
           metis_tac[]) >>
-      rpt strip_tac >> irule bound_labels_snapshot_vv >> gvs[]) >>
-  rpt strip_tac >> first_x_assum irule >> simp[]
+      rpt strip_tac >~ [`compile_snapshot_vv`]
+      >- (irule bound_labels_snapshot_vv >> gvs[]) >>
+      first_assum ACCEPT_TAC) >>
+  rpt strip_tac >~ [`cfn`]
+  >- (first_x_assum irule >> gvs[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem bound_labels_call_external[local]:

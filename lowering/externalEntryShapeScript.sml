@@ -2448,6 +2448,21 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+Theorem compile_ext_call_args_labels:
+  !cfn cenv kw_es tys es s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_ext_call_args cfn cenv kw_es tys es s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_ext_call_args cfn cenv kw_es tys es s)))
+Proof
+  Induct_on `es` >> rpt gen_tac >> Cases_on `tys` >>
+  simp[compile_ext_call_args_def, comp_return_labels] >> disch_tac >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, compile_snapshot_vv_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem compile_make_tuple_labels:
   !cfn cenv es buf off s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -2895,7 +2910,8 @@ Proof
   >- (ho_match_mp_tac pair_case_labels >> simp[emit_inst_labels,
         cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
   rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
-       simp[lower_value_labels, compile_multi_vvs_labels]) >>
+       simp[lower_value_labels, compile_multi_vvs_labels,
+            compile_ext_call_args_labels]) >>
   ho_match_mp_tac application_labels >> conj_tac
   >- (irule compile_ext_call_kwargs_labels >> simp[]) >>
   map_every qx_gen_tac [`x`, `u`] >> PairCases_on `x` >> simp[] >>
