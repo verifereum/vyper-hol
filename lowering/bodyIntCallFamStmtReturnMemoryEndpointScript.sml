@@ -1,6 +1,7 @@
 (* Memory-mode terminal boundary for a forced return value. *)
 Theory bodyIntCallFamStmtReturnMemoryEndpoint
 Ancestors
+  bodyIntCallReturnInactive
   bodyIntCallFamStmtReturnMemorySuffix bodyIntCallFamStmtReturnTypes
   bodyIntCallFamStmtReturnEndpointTypes bodyIntCallJointStmtBoundary
   bodyIntCallJointContract exprSimHyps exprSimHypsDefs exprSimDefs
@@ -26,7 +27,7 @@ Proof
 QED
 
 Theorem intcall_memory_store_endpoint:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
   body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   expr_body_pre ce fp.jc_cx env e es0 /\
   type_widens_to env.type_defs (expr_type e) fp.jc_ret_ty /\
@@ -104,7 +105,7 @@ Proof
 QED
 
 Theorem intcall_memory_return_endpoint:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
   body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   expr_body_pre ce fp.jc_cx env e es0 /\
   type_widens_to env.type_defs (expr_type e) fp.jc_ret_ty /\
@@ -144,9 +145,14 @@ Proof
   `?x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) /\
     eval_operand (Var x) s = SOME bw /\ not_fresh_at sa x` by
     fs[intcall_joint_res_def, intcall_expr_res_def, return_buf_frame_def, venomStateTheory.eval_operand_def] >>
+  `~FST ce.ce_nonreentrant` by
+    fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def,
+       bodySimTheory.same_frame_def, compile_env_component_equality] >>
   qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_internal_return_from_env_def, compile_internal_return_def,
-       comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  qpat_assum `~FST ce.ce_nonreentrant` (fn nr =>
+    simp[MATCH_MP compile_return_unlock_inactive nr,
+       compile_internal_return_from_env_def, compile_internal_return_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def]) >>
   Cases_on `compile_store_memory ce op (Var x) fp.jc_ret_ty
     (lowered_value_type ce e) sa` >>
   rename1 `_ = (unit,sm)` >> Cases_on `unit` >> simp[] >> strip_tac >>
@@ -155,7 +161,8 @@ Proof
      metis_tac[pairTheory.SND]) >>
   `fn_has_code sa sm fp.jc_func /\ fn_has_code sm sb fp.jc_func` by
     (irule fn_has_code_split >> fs[ci_mono_def] >> goal_assum (drule_at Any)) >>
-  irule intcall_memory_store_endpoint >> simp[] >>
+  qpat_assum `~FST _` (fn nr => irule (MATCH_MP
+    (CONV_RULE (STRIP_QUANT_CONV (REWR_CONV (GSYM AND_IMP_INTRO))) intcall_memory_store_endpoint) nr)) >> simp[] >>
   goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >> simp[] >>
   qexists_tac `es0` >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]

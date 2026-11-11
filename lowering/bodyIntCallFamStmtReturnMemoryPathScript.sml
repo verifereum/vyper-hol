@@ -1,12 +1,13 @@
 (* Attach the terminal RET without losing the memory-copy frame. *)
 Theory bodyIntCallFamStmtReturnMemoryPath
 Ancestors
+  bodyIntCallReturnInactive
   bodyIntCallFamStmtReturnMemoryExit bodyIntCallSharpReturn
   bodyIntCallJointContract placeMemoryCopyEffect exprSimStorageCopy
   compileEnv loweringPosts venomState venomExecSemantics
 
 Theorem intcall_copy_return_exit:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
   fp.jc_rb = SOME (bw,cap) /\ fp.jc_root_ce.ce_returns_count = 0 /\
   typed_copy_effect fp.jc_ctx fp.jc_func sa sm s t (w2n bw) cap /\
   val_in_memory fp.jc_ret_tv v (w2n bw) t.vs_memory /\
@@ -27,7 +28,8 @@ Proof
     (SPEC_ALL typed_copy_effect_ret_path)) >>
   disch_then (qspecl_then [`sb`, `fp.jc_rpc`, `fp`] mp_tac) >>
   simp[] >> strip_tac >> simp[] >>
-  irule intcall_memory_exit_frame >> simp[] >>
+  qpat_assum `~FST _` (fn nr => irule (MATCH_MP
+    (CONV_RULE (STRIP_QUANT_CONV (REWR_CONV (GSYM AND_IMP_INTRO))) intcall_memory_exit_frame) nr)) >> simp[] >>
   qexistsl_tac [`ce`, `env`, `s`, `sa`] >> simp[] >>
   fs[typed_copy_effect_def, exprSimStorageCopyTheory.copy_static_def,
      venom_state_component_equality, arithmeticTheory.ADD_COMM] >>

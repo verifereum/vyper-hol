@@ -7,7 +7,7 @@ Libs
   monadsyntax
 
 Theorem gas_outcome_internal_body:
-  intcall_frame_ok fp /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\
   (fp.jc_ret_ty = NoneT \/ stmts_no_fallthrough ss) /\
   (if block_is_terminated sb then ((),sb)
    else if fp.jc_ret_ty = NoneT then emit_inst RET [fp.jc_rpc] [] sb

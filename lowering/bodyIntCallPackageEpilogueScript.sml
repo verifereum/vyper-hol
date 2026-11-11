@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallJointContract compileEnv vyperTypeEvalSoundness gasSummary loweringPosts
 
 Theorem intcall_void_epilogue:
-  intcall_frame_ok fp /\ fp.jc_ret_ty = NoneT /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\ fp.jc_ret_ty = NoneT /\
   intcall_joint_res fp ce env ee sb u /\
   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem intcall_normal_epilogue:
-  intcall_frame_ok fp /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\
   (fp.jc_ret_ty = NoneT \/ stmts_no_fallthrough ss) /\
   gas_marked_exec F (fp.jc_ctx,fp.jc_func) (eval_stmts fp.jc_cx ss)
     (es,s0) marks res mid (OK u) /\

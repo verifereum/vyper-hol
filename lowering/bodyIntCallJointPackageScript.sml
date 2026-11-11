@@ -13,9 +13,21 @@
 
 Theory bodyIntCallJointPackage
 Ancestors
+  bodyIntCallPkgEntryMetadata bodyIntCallActualEntryFields
   list venomExecProps venomWf bodyIntCallPackageRootReady bodyIntCallPackageProducerOutcome bodyIntCallPackageExitFields bodyIntCallPackageBodyOutcome bodyIntCallPackagePrefix bodyIntCallPackageBodyControl bodyIntCallPackageEpilogue bodyIntCallPackageHandler bodyIntCallPackageProducerEntry bodyIntCallPackageProducerExit bodyIntCallPackageStateTransport bodyIntCallPackageRoot bodyIntCallPackageRootSemantic bodyIntCallPackageGeometry bodyIntCallPackageRun bodyIntCallPackageBounds bodyIntCallPackageSemantic bodyIntCallProducerBounds bodyIntCallProducerSemantic bodyIntCallInvokedCode bodyIntCallPackageInputs bodyIntCallEntryInputs bodyIntCallSelectedCode bodyIntCallDeployCode bodyIntCallExtractCode bodyIntCallInvokeEntry bodyIntCallSeamDefs bodyIntCallJointContract bodyIntCallActualJointInit bodyIntCallActualEntryProtection bodyIntCallActualEntryLanding bodyIntCallActualEntryWitness bodyIntCallActualRootFrame
 Libs
   monadsyntax
+
+Theorem internal_package_nr_flag[local]:
+  set_internal_package_target target
+    (package_internal_fn tops trans keys ctor imm
+      (mut,nr,rr,name,args,dflts,ret,bd)) =
+    (lbl,ce,params,has_rb,is_nr,key,use_tr,view,is_ctor,imm_len,ss,rt) ==>
+  FST ce.ce_nonreentrant = nr
+Proof
+  simp[package_internal_fn_def, set_internal_package_target_def,
+       update_cenv_nonreentrant_def] >> strip_tac >> gvs[]
+QED
 
 Theorem intcall_callee_packaging:
   !E tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut args ret ss rr
@@ -66,6 +78,12 @@ Proof
       (fn th => map_every assume_tac (CONJUNCTS th)))))))) >>
   `~block_is_terminated body_start` by
     (drule internal_entry_body_open >> simp[]) >>
+  `~FST fp.jc_root_ce.ce_nonreentrant` by
+    (qpat_x_assum `compile_internal_function_entry _ _ _ _ _ _ _ = _`
+       (strip_assume_tac o MATCH_MP compile_internal_entry_fields) >>
+     qpat_x_assum `set_internal_package_target _ _ = _`
+       (strip_assume_tac o MATCH_MP internal_package_nr_flag) >>
+     gvs[compile_env_component_equality]) >>
   drule internal_package_return_option >> strip_tac >>
   `intcall_stmts_producer fp ss` by (first_x_assum irule >> simp[]) >>
   `stmts_env fp.jc_root_ce NoLoop
@@ -82,7 +100,9 @@ Proof
   qpat_assum `fp.jc_ctx = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   qpat_assum `fp.jc_func = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   qpat_assum `fp.jc_cx = _` (fn th => pure_rewrite_tac[GSYM th]) >>
-  irule intcall_producer_callee_outcome >>
+  qpat_assum `~FST _` (fn nr => irule (MATCH_MP
+    (CONV_RULE (STRIP_QUANT_CONV (REWR_CONV (GSYM AND_IMP_INTRO)))
+       intcall_producer_callee_outcome) nr)) >>
   goal_assum (drule_at Any) >>
   conj_tac >-
     (qpat_assum `fp.jc_prot = _` (fn th => pure_rewrite_tac[th]) >>

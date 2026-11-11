@@ -7,7 +7,7 @@ Libs
   monadsyntax
 
 Theorem intcall_producer_callee_outcome:
-  intcall_stmts_producer fp ss /\ intcall_frame_ok fp /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_stmts_producer fp ss /\ intcall_frame_ok fp /\
   body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   supported_stmts fp.jc_tops bindings ss /\
   (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) ss ==>
@@ -53,7 +53,7 @@ Proof
   disch_then (qspecl_then [`sf`, `sb`,
     `intcall_callee_exit func cenv cx rtv nret rb n m t`] mp_tac) >>
   impl_tac >-
-    (simp[] >> conj_tac
+    (qpat_assum `~FST _` (fn nr => simp[nr]) >> conj_tac
      >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
      conj_tac >- (rpt strip_tac >> irule intcall_stmt_return_callee_exit >>
        goal_assum (drule_at Any) >> qexists `owner` >> simp[]) >>
