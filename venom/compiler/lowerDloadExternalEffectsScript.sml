@@ -237,6 +237,29 @@ Proof
        store_taint_def, imm_taint_def]
 QED
 
+(* An oracle DELEGATECALL keeps the masks: neither adoption reset nor any
+   store taint applies to it. *)
+Theorem ld_delegate_consume_tainted_shared:
+  i.inst_opcode = DELEGATECALL /\ ld_shared_state tn un s t /\
+  rq.cr_kind = rt.cr_kind /\ rq.cr_value = rt.cr_value /\
+  rq.cr_target = rt.cr_target /\ rq.cr_data = rt.cr_data /\
+  rq.cr_static = rt.cr_static /\
+  rq.cr_accounts = s.vs_accounts /\ rq.cr_tStorage = s.vs_transient /\
+  rt.cr_accounts = t.vs_accounts /\ rt.cr_tStorage = t.vs_transient /\
+  consume_call_outcome rq roS rs s = (wS,s') /\
+  consume_call_outcome rt roT rs t = (wT,t') ==>
+  ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  strip_tac >>
+  `ld_shared_state tn un s' t'` by
+    (drule_all ld_call_consume_shared >> simp[Excl "consume_call_outcome_eq"]) >>
+  qpat_x_assum `ld_shared_state tn un s' t'` mp_tac >>
+  qpat_x_assum `i.inst_opcode = DELEGATECALL` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[ld_shared_state_def, step_taint_def, adopt_reset_def,
+       store_taint_def, imm_taint_def]
+QED
+
 Theorem ld_external_clean_output:
   MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] ==>
   out_taint tn i s = {} /\

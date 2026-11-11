@@ -25,6 +25,7 @@ Proof
 QED
 
 Theorem raw_call_stack_value_view_post:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx ee t /\
   expr_val_rel cx (expr_type e) v op t /\
@@ -38,6 +39,7 @@ Proof
 QED
 
 Theorem raw_call_memory_value_view_post:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\ expr_type e = lowty /\ ~is_word_type (expr_type e) /\
   stmt_state_rel ctx func cenv cx ee t /\
   expr_val_rel cx (expr_type e) v op t /\
@@ -129,7 +131,8 @@ Resume raw_call_vv_sim_ptr[scalar]:
     compileEnvTheory.is_word_type_def, bodyPtrDefsTheory.ptr_vv_ok_def,
     vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
   irule raw_call_stack_value_view_post >>
-  simp[vyperASTTheory.expr_type_def, vyperTypeSystemTheory.raw_call_return_type_def]
+  simp[vyperASTTheory.expr_type_def, vyperTypeSystemTheory.raw_call_return_type_def,
+    loweringPostsTheory.expr_has_effect_thm]
 QED
 
 Resume raw_call_vv_sim_ptr[zero_reverting]:
@@ -146,7 +149,8 @@ Resume raw_call_vv_sim_ptr[zero_reverting]:
     bodyPtrDefsTheory.ptr_vv_ok_def, vyperStateTheory.read_result_def,
     vyperStateTheory.return_def] >>
   irule raw_call_stack_value_view_post >>
-  simp[vyperASTTheory.expr_type_def, vyperTypeSystemTheory.raw_call_return_type_def]
+  simp[vyperASTTheory.expr_type_def, vyperTypeSystemTheory.raw_call_return_type_def,
+    loweringPostsTheory.expr_has_effect_thm]
 QED
 
 Resume raw_call_vv_sim_ptr[bytes]:
@@ -168,7 +172,7 @@ Resume raw_call_vv_sim_ptr[bytes]:
          vyperTypeSystemTheory.raw_call_return_type_def] >>
   rewrite_tac[GSYM contextTheory.mk_ptr_def] >>
   irule raw_call_memory_value_view_post >> simp[vyperASTTheory.expr_type_def,
-    compileEnvTheory.is_word_type_def]
+    compileEnvTheory.is_word_type_def, loweringPostsTheory.expr_has_effect_thm]
 QED
 
 Resume raw_call_vv_sim_ptr[tuple]:
@@ -190,7 +194,7 @@ Resume raw_call_vv_sim_ptr[tuple]:
          vyperTypeSystemTheory.raw_call_return_type_def] >>
   rewrite_tac[GSYM contextTheory.mk_ptr_def] >>
   irule raw_call_memory_value_view_post >> simp[vyperASTTheory.expr_type_def,
-    compileEnvTheory.is_word_type_def]
+    compileEnvTheory.is_word_type_def, loweringPostsTheory.expr_has_effect_thm]
 QED
 
 Finalise raw_call_vv_sim_ptr

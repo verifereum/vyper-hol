@@ -99,6 +99,7 @@ QED
 
 (* Consumers pass the concrete endpoint returned by the pointer tail. *)
 Theorem raw_log_dynamic_counted_post_ptr:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   emit_op MLOAD [data_op] sm = (len_op,s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op,s2) /\
@@ -159,6 +160,7 @@ Proof
      simp[mk_inst_def] >>
      disch_then irule >> simp[]) >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
+  qpat_x_assum `expr_has_effect e` mp_tac >>
   qpat_x_assum `wb_frame cenv es0 _ sa s0 t` mp_tac >>
   rpt (pop_assum kall_tac) >>
   simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
@@ -166,6 +168,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_counted_post_ptr:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u,s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) [] s1 = (u',sb) /\
@@ -230,6 +233,7 @@ Proof
      simp[mk_inst_def, eval_operand_def] >>
      disch_then irule >> simp[]) >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
+  qpat_x_assum `expr_has_effect e` mp_tac >>
   qpat_x_assum `wb_frame cenv es0 _ sa s0 t` mp_tac >>
   rpt (pop_assum kall_tac) >>
   simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
