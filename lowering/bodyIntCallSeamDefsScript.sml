@@ -40,7 +40,7 @@ Theorem ignore_bind_return_unit[local]:
   ignore_bind f (return ()) = f
 Proof
   simp[FUN_EQ_THM, ignore_bind_def, bind_def, return_def] >> gen_tac >>
-  Cases_on `f x` >> rename1 `(r,_)` >> Cases_on `r` >> simp[oneTheory.one]
+  Cases_on `f x` >> Cases_on `q` >> simp[oneTheory.one]
 QED
 
 (* Without the lock, the cleanup is the frame's pop alone. *)

@@ -49,6 +49,8 @@ Theorem intcall_log_suffix_run:
       allocas_above lo t /\ s.vs_alloca_next <= t.vs_alloca_next
 Proof
   rpt strip_tac >>
+  `log_eval_view ce args sa xs sm` by
+    simp[log_eval_view_def, listTheory.LIST_REL_EL_EQN] >>
   drule_all log_success_suffix_actual_run >> strip_tac >>
   `EVERY (supported_scalar_type o SND) xs` by
     (gvs[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >> rpt strip_tac >>
