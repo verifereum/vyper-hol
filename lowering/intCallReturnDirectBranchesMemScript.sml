@@ -81,7 +81,7 @@ Proof
   `w2n sw + type_memory_size tv <= s.vs_alloca_next` by metis_tac[] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem compile_internal_return_equal_mem[local]:
+Theorem compile_internal_return_equal_mem:
   !ctx func cenv cx es ty tv v val_op rpc elem_types buf_op sa sb bw.
     compile_internal_return cenv (SOME val_op) rpc 0 ty ty elem_types
       (SOME buf_op) sa = ((),sb) /\
@@ -185,7 +185,7 @@ QED
 
 Finalise compile_internal_return_equal_mem
 
-Theorem return_bytestring_store_bound[local]:
+Theorem return_bytestring_store_bound:
   type_widens_to (get_tenv cx) sty ty /\ is_bytestring_type ty /\
   evaluate_type (get_tenv cx) sty = SOME stv /\
   evaluate_type (get_tenv cx) ty = SOME dtv /\
