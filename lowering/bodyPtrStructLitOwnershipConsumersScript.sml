@@ -10,7 +10,7 @@ Theorem alloc_run_compile_store_memory:
     (\u s. fresh_outputs s)
 Proof
   Cases_on `is_word_type dt` >> Cases_on `is_bytestring_type dt` >>
-  Cases_on `dt = st` >>
+  Cases_on `dt = st` >> Cases_on `tuple_memory_layout_eq dt st` >>
   simp[compile_store_memory_def, alloc_run_emit_void_fresh,
     alloc_run_compile_store_bytestring, alloc_run_compile_store_memory_typed,
     alloc_run_compile_copy_memory]
