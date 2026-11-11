@@ -267,6 +267,41 @@ Proof
   fs[regions_disjoint_def] >> decide_tac
 QED
 
+Theorem encoder_dynamic_inv_exterior_frame[local]:
+  encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns j G tn s /\
+  val_wf tv v /\
+  mem_agree_outside writes sf.vs_memory s.vs_memory /\
+  (!i. i NOTIN writes ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+  (!i. p <= i /\ i < p+32 ==> i NOTIN writes) /\
+  (!i. c <= i /\ i < c+32 ==> i NOTIN writes) /\
+  (!i. a <= i /\ i < a+val_footprint tv v ==> i NOTIN writes) /\
+  (!i. b+32 <= i /\ i < b+32+32*j ==> i NOTIN writes) /\
+  (!i. b+32+32*N <= i /\ i < b+32+(32*N+SUM (TAKE j ns)) ==> i NOTIN writes) /\
+  ~sf.vs_halted /\ encoder_resource ctx fn sites a scap protected sf /\
+  (!x. x = ip \/ x = cursor \/ x = src \/ x = dst \/ x = cv ==>
+    lookup_var x sf = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+    op_taint tnf (Var x) = op_taint tn (Var x)) ==>
+  encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns j Gf tnf sf
+Proof
+  strip_tac >>
+  `(!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem) /\
+   (!i. c <= i /\ i < c+32 ==> i NOTIN tn.t_mem) /\
+   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v a mem)` by
+    gvs[encoder_dynamic_loop_inv_def] >>
+  `mload p sf = mload p s /\ (!i. p <= i /\ i < p+32 ==> i NOTIN tnf.t_mem)` by
+    (irule encoder_frame_clean_word >> qexistsl_tac [`tn`,`writes`] >> simp[]) >>
+  `mload c sf = mload c s /\ (!i. c <= i /\ i < c+32 ==> i NOTIN tnf.t_mem)` by
+    (irule encoder_frame_clean_word >> qexistsl_tac [`tn`,`writes`] >> simp[]) >>
+  `!mem. mem_agree_outside tnf.t_mem sf.vs_memory mem ==> val_in_memory tv v a mem` by
+    (gen_tac >> strip_tac >> irule robust_val_in_memory_exterior_frame >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`s.vs_memory`,`sf.vs_memory`,`tn.t_mem`,`tnf.t_mem`,`writes`] >>
+     gvs[mem_agree_outside_def]) >>
+  gvs[encoder_dynamic_loop_inv_def, ptr_covers_def, op_prov_def] >> metis_tac[]
+QED
+
 Theorem encoder_dynamic_body_backedge_counted_ptr:
   abi_encode_array_addresses (Var ip) (Var src) (Var dst) 32 msz sa =
     (((Var idx,Var child_src),(Var data,Var head)),sx) /\
@@ -381,7 +416,144 @@ Proof
      first_assum (qspecl_then [`pid`,`p`,`32`] mp_tac) >> simp[]) >>
   `!i. p <= i /\ i < p+32 ==>
     i NOTIN encoder_write_envelope children sm (b+32+k) capj` by
-    (match_mp_tac encoder_dynamic_subregion_exterior >> qexistsl_tac [`32`,`ctx`,`fn`,`p`] >>
-     simp[] >> fs[regions_disjoint_def] >> decide_tac) >>
-  cheat
+    (match_mp_tac (encoder_dynamic_subregion_exterior |> Q.INST [`q` |-> `p`, `cap` |-> `32`]) >>
+     simp[] >>
+     qpat_assum `regions_disjoint (p,32) (b,dcap)` mp_tac >>
+     qpat_assum `32+k+capj <= dcap` mp_tac >>
+     qpat_assum `k = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
+  `!i. c <= i /\ i < c+32 ==>
+    i NOTIN encoder_write_envelope children sm (b+32+k) capj` by
+    (match_mp_tac (encoder_dynamic_subregion_exterior |> Q.INST [`q` |-> `c`, `cap` |-> `32`]) >>
+     simp[] >>
+     qpat_assum `regions_disjoint (c,32) (b,dcap)` mp_tac >>
+     qpat_assum `32+k+capj <= dcap` mp_tac >> qpat_assum `k = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
+  `!i. a <= i /\ i < a+scap ==>
+    i NOTIN encoder_write_envelope children sm (b+32+k) capj` by
+    (match_mp_tac (encoder_dynamic_subregion_exterior |> Q.INST [`q` |-> `a`, `cap` |-> `scap`]) >>
+     simp[] >>
+     qpat_assum `regions_disjoint (a,scap) (b,dcap)` mp_tac >>
+     qpat_assum `32+k+capj <= dcap` mp_tac >> qpat_assum `k = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
+  `!i. b+32 <= i /\ i < b+32+32*j ==>
+    i NOTIN encoder_write_envelope children sm (b+32+k) capj` by
+    (match_mp_tac (encoder_dynamic_subregion_exterior |>
+       Q.INST [`q` |-> `dbase`, `cap` |-> `dsize`]) >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  `!i. b+32 <= i /\ i < b+32+k ==>
+    i NOTIN encoder_write_envelope children sm (b+32+k) capj` by
+    (match_mp_tac (encoder_dynamic_subregion_exterior |>
+       Q.INST [`q` |-> `dbase`, `cap` |-> `dsize`]) >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  `encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns j Gp tnp sp` by
+    (irule encoder_dynamic_loop_inv_memory_frame >>
+     conj_tac >- simp[] >> qexistsl_tac [`G`,`s`,`sa`,`tn`] >> simp[]) >>
+  `encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns j Gm tnm sm` by
+    (irule encoder_dynamic_inv_exterior_frame >>
+     conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+     qexistsl_tac [`Gp`,`sp`,`tnp`,`encoder_write_envelope children sm (b+32+k) capj`] >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     qpat_assum `sp.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  `lookup_var head sm = SOME (n2w (b+32+32*j)) /\
+   ptr_covers Gm tnm head sm 32 /\
+   lookup_var off sm = SOME (n2w k) /\ op_taint tnm (Var off) = {} /\
+   lookup_var idx sm = SOME (n2w j) /\ op_taint tnm (Var idx) = {}` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `lookup_var cursor sm = SOME (n2w c) /\ ptr_covers Gm tnm cursor sm 32 /\
+   lookup_var ip sm = SOME (n2w p) /\ ptr_covers Gm tnm ip sm 32` by
+    gvs[encoder_dynamic_loop_inv_def] >>
+  `not_fresh_at se head /\ not_fresh_at se cursor /\
+   not_fresh_at se ip /\ not_fresh_at se idx /\
+   b+32+32*j < dimword(:256) /\
+   eval_operand len sm = SOME (n2w n)` by (simp[] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  drule_all encoder_dynamic_finish_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`]
+    (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `sf` strip_assume_tac)))) >>
+  `!i. b+32+32*N <= i /\ i < b+32+(32*N+SUM (TAKE j ns)+EL j ns) ==>
+    i NOTIN tnm.t_mem` by
+    (gen_tac >> strip_tac >> Cases_on `i < b+32+k`
+     >- (qpat_assum `encoder_dynamic_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Gm tnm sm` mp_tac >>
+         qpat_assum `i < b+32+k` mp_tac >>
+         qpat_assum `b+32+32*N <= i` mp_tac >>
+         qpat_assum `k = _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[encoder_dynamic_loop_inv_def] >> rpt strip_tac >>
+         qpat_assum `!i. 32*N+(b+32) <= i /\ _ ==> i NOTIN tnm.t_mem` irule >>
+         decide_tac) >>
+     qpat_assum `!i. _ <= i /\ i < _ + EL j ns ==> i NOTIN tnm.t_mem` irule >>
+     simp[] >> decide_tac) >>
+  `!i. a <= i /\ i < a+val_footprint tv v ==>
+    i NOTIN ({i | b+32+32*j <= i /\ i < b+32+32*j+32} UNION
+      {i | c <= i /\ i < c+32} UNION {i | p <= i /\ i < p+32})` by
+    (qpat_assum `regions_disjoint (a,scap) (p,32)` mp_tac >>
+     qpat_assum `regions_disjoint (a,scap) (c,32)` mp_tac >>
+     qpat_assum `regions_disjoint (a,scap) (b,dcap)` mp_tac >>
+     qpat_assum `val_footprint tv v <= scap` mp_tac >>
+     qpat_assum `32+j*32+32 <= dcap` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
+  `encoder_dynamic_loop_inv ctx fn sites protected
+    ip cursor src dst cv p c a b scap dcap tv v N ns (j+1) Gf tnf sf` by
+    (irule encoder_dynamic_finish_invariant >>
+     simp[] >> qexistsl_tac [`Gm`,`sm`,`tnm`] >> simp[] >>
+     rpt strip_tac >> metis_tac[]) >>
+  `encoder_write_envelope children sm (b+32+k) capj SUBSET
+    encoder_write_envelope sites sf b dcap` by
+    (qpat_assum `sf.vs_allocas = sm.vs_allocas` mp_tac >>
+     qpat_assum `children SUBSET sites` mp_tac >>
+     qpat_assum `32+k+capj <= dcap` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >> strip_tac >> strip_tac >>
+     simp[encoder_write_envelope_def, encoder_scratch_span_def, SUBSET_DEF] >>
+     rpt strip_tac >> gvs[] >> metis_tac[SUBSET_DEF]) >>
+  `FLOOKUP sf.vs_allocas pid = SOME (p,32) /\
+   FLOOKUP sf.vs_allocas cid = SOME (c,32)` by metis_tac[] >>
+  `{i | b+32+32*j <= i /\ i < b+32+32*j+32} SUBSET
+    encoder_write_envelope sites sf b dcap` by
+    (simp[encoder_write_envelope_def, SUBSET_DEF] >> rpt strip_tac >>
+     disj1_tac >> decide_tac) >>
+  `{i | p <= i /\ i < p+32} SUBSET encoder_write_envelope sites sf b dcap /\
+   {i | c <= i /\ i < c+32} SUBSET encoder_write_envelope sites sf b dcap` by
+    (simp[encoder_write_envelope_def, encoder_scratch_span_def, SUBSET_DEF] >>
+     conj_tac >> rpt strip_tac >> disj2_tac >> metis_tac[]) >>
+  `mem_agree_outside (encoder_write_envelope sites sf b dcap)
+     sf.vs_memory sm.vs_memory /\
+   (!i. i NOTIN encoder_write_envelope sites sf b dcap ==>
+      (i IN tnf.t_mem <=> i IN tnm.t_mem))` by
+    (drule encoder_dynamic_finish_exterior >>
+     disch_then (qspecl_then [`encoder_write_envelope sites sf b dcap`,`tnf`,`tnm`] mp_tac) >>
+     simp[]) >>
+  qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[] >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gm`,`sm`,`tnm`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gp`,`sp`,`tnp`] >> simp[]) >>
+  pure_rewrite_tac[encoder_dynamic_effect_def] >>
+  conj_tac >-
+    (qpat_assum `mem_agree_outside (encoder_write_envelope children _ _ _) _ _` mp_tac >>
+     qpat_assum `mem_agree_outside (encoder_write_envelope sites _ _ _) _ _` mp_tac >>
+     qpat_assum `encoder_write_envelope children _ _ _ SUBSET _` mp_tac >>
+     qpat_assum `sp.vs_memory = s.vs_memory` mp_tac >>
+     qpat_assum `k = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[mem_agree_outside_def, SUBSET_DEF] >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_assum `!i. i NOTIN encoder_write_envelope children _ _ _ ==> _` mp_tac >>
+     qpat_assum `!i. i NOTIN encoder_write_envelope sites _ _ _ ==> _` mp_tac >>
+     qpat_assum `encoder_write_envelope children _ _ _ SUBSET _` mp_tac >>
+     qpat_assum `tnp.t_mem = tn.t_mem` mp_tac >>
+     qpat_assum `k = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[SUBSET_DEF] >> metis_tac[]) >>
+  conj_tac >- (gvs[] >> decide_tac) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (fs[SUBSET_DEF] >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_assum `!v. not_fresh_at sa v ==> _` mp_tac >>
+     qpat_assum `!v. not_fresh_at sb v ==> _` mp_tac >>
+     qpat_assum `!x. not_fresh_at se x ==> _` mp_tac >>
+     qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at sb x` mp_tac >>
+     qpat_assum `!x. not_fresh_at sb x ==> not_fresh_at se x` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  gvs[encoder_ambient_frame_def]
 QED
