@@ -184,12 +184,6 @@ Proof
     w2n sw + type_memory_size (EL i tvs) <= s.vs_alloca_next` by
     (rpt strip_tac >> `i <= i` by simp[] >>
      drule_all tuple_place_head_pointer_operands >> simp[] >> metis_tac[]) >>
-  Cases_on `?et n. EL i tys = ArrayT et (Dynamic n)`
-  >- (irule tuple_place_equal_dyn_run_memory >>
-      qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-      qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
-      qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
-      simp[] >> qexists `EL i vs` >> gvs[]) >>
   irule tuple_place_equal_storage_run_memory >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>

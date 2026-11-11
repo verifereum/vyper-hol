@@ -2,7 +2,7 @@
 Theory tuplePlaceValueFrame
 Ancestors
   tuplePlaceFramedStore tuplePlaceMemoryFrame tuplePlaceValueStorageFrame
-  tuplePlaceDynFrame placeStoreMemory placeMemoryStoreEffect vyperTypeArgFits
+  placeStoreMemory placeMemoryStoreEffect vyperTypeArgFits
   placeMemoryStateRebuild placeStore tuplePlaceStore exprSimProps
   abiValueEncoding valueEncodingProps exprLoweringProps
   stmtLowering exprLowering compileEnv loweringPosts stmtSimDefs venomState
@@ -64,10 +64,6 @@ Proof
       rename1 `slot_loc tr` >> Cases_on `tr` >> gvs[slot_loc_def]) >>
   `dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
    type_alloc_ok cenv dty` by metis_tac[] >>
-  Cases_on `?et n. dty = ArrayT et (Dynamic n)`
-  >- (drule_all tuple_place_value_dyn_run_frame >> strip_tac >>
-      qexists_tac `t` >> simp[] >> metis_tac[]) >>
-  `!et n. dty <> ArrayT et (Dynamic n)` by metis_tac[] >>
   drule_all tuple_place_value_storage_run_frame >> strip_tac >>
   qexists_tac `t` >> simp[] >> metis_tac[]
 QED
