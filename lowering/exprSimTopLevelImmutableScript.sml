@@ -100,6 +100,10 @@ Proof
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[]) >>
+  `vv_place_ptr cenv cx es s0 (PlaceR (ImmutablePlace src id []))
+     (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode))` by
+    gvs[vv_place_ptr_def, contextTheory.mk_ptr_def, eval_operand_def,
+        mem_path_offset_def] >>
   simp[vv_post_def, vv_holds_def, vv_at_def, immutable_holds_def,
        contextTheory.mk_ptr_def, eval_operand_def, locals_kept_mem,
        vyperASTTheory.expr_type_def] >>

@@ -719,6 +719,19 @@ Proof
   Cases_on `vv` >> simp[vv_place_ptr_def, lookup_var_def]
 QED
 
+(* vv_place_ptr reads s only through the located value's operand and
+   locals' pointer variables. *)
+Theorem vv_place_ptr_vars_frame:
+  vv_place_ptr cenv cx es s tv vv /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  (!id q sz w. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz) /\
+               lookup_var q s = SOME w ==> lookup_var q t = SOME w) ==>
+  vv_place_ptr cenv cx es t tv vv
+Proof
+  Cases_on `vv` >> simp[vv_place_ptr_def, contextTheory.vv_operand_def] >>
+  BasicProvers.every_case_tac >> rw[] >> gvs[] >> metis_tac[]
+QED
+
 (* expr_post with a value_vv in place of an operand. *)
 Definition vv_post_def:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>

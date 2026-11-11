@@ -55,6 +55,10 @@ Proof
        val_in_memory entry.type entry.value (w2n w) s0.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> metis_tac[]) >>
+  `vv_place_ptr cenv cx es s0 (PlaceR (MemoryPlace id []))
+     (LocatedValue ann (mk_ptr (Var p) LocMemory))` by
+    simp[vv_place_ptr_def, mk_ptr_def, eval_operand_def, mem_path_offset_def,
+         wordsTheory.WORD_ADD_0] >>
   simp[vv_post_def, vv_holds_def, vv_at_def, mk_ptr_def,
        vyperASTTheory.expr_type_def, eval_operand_def, locals_kept_mem] >>
   conj_tac >- metis_tac[val_in_memory_word_type] >>
