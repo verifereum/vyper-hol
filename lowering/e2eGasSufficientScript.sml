@@ -34,11 +34,7 @@
  * S7g-d (deploy_frame_gas_sufficient).
  *
  * The call theorem, S1b and S6b rely on the lowering's bounded ABI decoder
- * checking an offset before it loads through it.  With the upstream order
- * (load first), a callee that reads GAS can return an offset that grows
- * with the gas it is given, so the decoder's load runs out of gas for every
- * amount of extra gas; the RETURNDATACOPY exemption, and the memory bound in
- * venom_run_bounded, would then have to admit that load too.
+ * checking each range before it loads from it, as it does today.
  *)
 Theory e2eGasSufficient
 Ancestors
