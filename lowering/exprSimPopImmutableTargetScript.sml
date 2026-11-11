@@ -439,7 +439,7 @@ Proof
   rewrite_tac[arithmeticTheory.ADD_ASSOC]
 QED
 
-Theorem imm_readable_path_memory[local]:
+Theorem imm_readable_path_memory:
   !ctx func cenv cx env es s src id itv iv off path k tv v.
     cenv.ce_is_ctor /\ src = cenv.ce_module /\
     expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
