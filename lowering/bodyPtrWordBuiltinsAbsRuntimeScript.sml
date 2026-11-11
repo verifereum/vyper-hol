@@ -78,7 +78,11 @@ Theorem word_abs_runtime_cenv_eval:
     ce_is_ctor := F; ce_imm_alloca := NONE; ce_func_info := K (0,0,[]);
     ce_func_param_types := K []; ce_func_return_type := K NoneT;
     ce_func_mutability := K Nonpayable;
-    ce_func_ids := K 0; ce_nonreentrant := (F,0,F,F);
+    ce_func_ids := K 0;
+    ce_modules :=
+      [(NONE, [FunctionDecl External Nonpayable F F "foo" [("x",BaseT (IntT 256))] [] NoneT
+         [Expr (Builtin (BaseT (IntT 256)) Abs [Name (BaseT (IntT 256)) "x"])]])];
+    ce_nonreentrant := (F,0,F,F);
     ce_raw_return := F; ce_alloca_locals := T|>
 Proof
   CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV

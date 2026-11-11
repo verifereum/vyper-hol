@@ -72,7 +72,10 @@ Theorem computed_load_suffix_framed_path:
       (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
     wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
     ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
-    ghost_kept cenv es sf G tn s G' tn'
+    ghost_kept cenv es sf G tn s G' tn' /\
+    t.vs_allocas = s.vs_allocas /\
+    (!off len. regions_disjoint off len (w2n wo) 32 ==>
+       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory)
 Proof
   strip_tac >>
   Q.SUBGOAL_THEN `?co rest. s.vs_outcomes = co::rest /\ co.co_success` assume_tac
@@ -94,6 +97,17 @@ Resume computed_load_suffix_framed_path[load_frame]:
   drule_all fresh_read_ghost_frame >> strip_tac >>
   drule_all fresh_read_taint_fields >> strip_tac >>
   drule_all ghost_kept_same_memory_trans >> strip_tac >>
+  qpat_assum `_ sm = (Var dst,sl)` (mp_then Any mp_tac computed_suffix_output) >>
+  disch_then (drule_all_then strip_assume_tac o SRULE [wordsTheory.dimword_def]) >>
+  `t.vs_allocas = s.vs_allocas /\
+   (!off len. regions_disjoint off len (w2n wo) 32 ==>
+      mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory)` by
+    (qpat_assum `t = update_var _ _ _` (fn th => rewrite_tac[th]) >>
+     simp[NoAsms, venomStateTheory.update_var_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >> qpat_assum `q.vs_memory = _` (fn th => rewrite_tac[th]) >>
+     irule exprSimPrecompilesTheory.write_memory_take_exterior >>
+     first_assum ACCEPT_TAC) >>
   suspend "pack"
 QED
 

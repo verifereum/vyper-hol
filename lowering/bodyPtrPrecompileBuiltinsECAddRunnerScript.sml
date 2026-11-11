@@ -218,7 +218,7 @@ Resume ecadd_expr_vv_sim_ptr[entry_rebase]:
   qpat_assum `vv_post _ _ _ _ _ ee' sm _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_post _ _ _ _ b _ s1 sm _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_post _ _ _ _ a _ sa s1 _ _ _ _ _` (irule_at Any) >>
-  simp[] >> metis_tac[]
+  simp[loweringPostsTheory.expr_has_effect_thm] >> metis_tac[]
 QED
 
 Finalise ecadd_expr_vv_sim_ptr

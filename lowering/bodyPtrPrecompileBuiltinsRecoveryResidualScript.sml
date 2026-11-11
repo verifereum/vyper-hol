@@ -140,7 +140,10 @@ Theorem recovery_framed_input:
        FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
          | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
-       regions_disjoint (w2n c) 32 off (type_memory_size tv))
+       regions_disjoint (w2n c) 32 off (type_memory_size tv)) /\
+    pure_frame cenv fn es sf s t /\
+    ?aid ops outs. MEM (mk_inst aid ALLOCA ops outs) (fn_insts fn) /\
+      sf.cs_next_id <= aid /\ FLOOKUP t.vs_allocas aid = SOME (w2n c,32)
 Proof
   strip_tac >> drule recovery_compiler_stages >> strip_tac >>
   `sa.cs_next_var <= sp.cs_next_var` by simp[] >>
@@ -213,7 +216,13 @@ Resume recovery_framed_input[pack]:
       POP_ASSUM_LIST (K all_tac) >>
       pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
       simp[]) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexistsl [`sa.cs_next_id + 7`, `[Lit 32w]`,
+            `[STRING #"%" (toString (sa.cs_next_var + 3))]`] >>
+  rpt conj_tac
+  >- (qpat_x_assum `!i. _ ==> MEM i (fn_insts fn)` irule >> simp[])
+  >- decide_tac >>
+  first_assum ACCEPT_TAC
 QED
 
 Finalise recovery_framed_input
@@ -289,6 +298,45 @@ Proof
        local_region_def, lookup_var_def]
 QED
 
+(* The output write stays inside the fresh output ALLOCA. *)
+Theorem recovery_output_pure_frame[local]:
+  !cenv fn es sf s q t u aid ops outs c.
+    pure_frame cenv fn es sf s t /\ wb_frame cenv es es sf s t /\
+    local_ptrs_reserved cenv sf /\
+    MEM (mk_inst aid ALLOCA ops outs) (fn_insts fn) /\ sf.cs_next_id <= aid /\
+    FLOOKUP t.vs_allocas aid = SOME (w2n (c:bytes32),32) /\
+    q.vs_allocas = u.vs_allocas /\ u.vs_allocas = t.vs_allocas /\
+    u.vs_memory = t.vs_memory /\
+    (!name lo len. local_region cenv es.scopes t name lo len ==>
+       regions_disjoint (w2n c) 32 lo len) /\
+    (!off len. regions_disjoint off len (w2n c) 32 ==>
+       mem_bytes_at off len q.vs_memory = mem_bytes_at off len u.vs_memory) ==>
+    pure_frame cenv fn es sf s q
+Proof
+  rpt strip_tac >>
+  `!off len. regions_disjoint off len (w2n c) 32 ==>
+     mem_bytes_at off len q.vs_memory = mem_bytes_at off len t.vs_memory` by
+    (rpt strip_tac >>
+     qpat_x_assum `u.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >>
+     qpat_x_assum `!off len. _ ==> mem_bytes_at off len q.vs_memory = _` irule >>
+     first_assum ACCEPT_TAC) >>
+  `!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+     regions_disjoint (w2n c) 32 lb lsz` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name lo len. local_region _ _ t _ _ _ ==> _` irule >>
+     qexists `n` >>
+     match_mp_tac (Q.SPECL [`cenv`, `es.scopes`, `sf`, `es.scopes`, `s`, `t`,
+                     `n`, `lb`, `lsz`] exprSimPropsTheory.local_region_frame_fwd) >>
+     qpat_x_assum `wb_frame _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     simp[]) >>
+  match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `sf`, `s`, `t`, `q`,
+                  `mk_inst aid ALLOCA ops outs`, `w2n (c:bytes32)`, `32`]
+           exprSimPropsTheory.pure_frame_buffer_tail) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp[venomInstTheory.mk_inst_def]
+QED
+
 Theorem recovery_residual_success:
   compile_ecrecover h v r q sf = (res,sb) /\
   stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
@@ -321,7 +369,8 @@ Theorem recovery_residual_success:
       (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
     wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
     ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
-    ghost_kept cenv es sf G tn s G' tn'
+    ghost_kept cenv es sf G tn s G' tn' /\
+    pure_frame cenv fn es sf s t
 Proof
   strip_tac >>
   drule_all recovery_framed_input >>
@@ -409,6 +458,11 @@ Resume recovery_residual_success[finish]:
    MAP FDOM es.scopes = MAP FDOM es.scopes` by simp[] >>
   drule_all ghost_kept_wb_trans >> strip_tac >>
   drule_all wb_frame_trans >> strip_tac >>
+  `u.vs_allocas = t.vs_allocas /\ u.vs_memory = t.vs_memory` by simp[Abbr `u`] >>
+  `pure_frame cenv fn es sf s t'` by
+    (match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `sf`, `s`, `t'`, `t`, `u`, `aid`, `ops`,
+                    `outs`, `c:bytes32`] recovery_output_pure_frame) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "pack_success"
 QED
 

@@ -122,7 +122,8 @@ Theorem ecmul_prefix_runtime:
        FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
          | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
-       regions_disjoint (w2n c) 64 off (type_memory_size tv))
+       regions_disjoint (w2n c) 64 off (type_memory_size tv)) /\
+    pure_frame cenv fn es sf s0 s3
 Proof
   strip_tac >>
   `96 < dimword(:256)` by simp[dimword_def] >>
@@ -148,7 +149,9 @@ Proof
     s2.vs_allocas = s1.vs_allocas /\ eval_operand ib.buf_operand s2 = SOME b /\
     mem_bytes_at (w2n b) 96 s2.vs_memory =
       word_to_bytes (mload (w2n p) s1) T ++
-      word_to_bytes (mload (w2n p+32) s1) T ++ word_to_bytes w T` by
+      word_to_bytes (mload (w2n p+32) s1) T ++ word_to_bytes w T /\
+    (!a len. regions_disjoint (w2n b) 96 a len ==>
+       mem_bytes_at a len s2.vs_memory = mem_bytes_at a len s1.vs_memory)` by
     (irule mul_payload_callback >> simp[] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- first_assum ACCEPT_TAC >> conj_tac
@@ -167,6 +170,7 @@ Resume ecmul_prefix_runtime[finish]:
   `sa.cs_next_var <= sp.cs_next_var /\ sa.cs_next_id <= sp.cs_next_id` by
     (qpat_x_assum `(do src <- _; value <- _; dst <- _; _ od) sa = _` mp_tac >>
      qpat_x_assum `(do dst <- _; _ od) smid = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
      simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
           comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
      rpt strip_tac >> gvs[]) >>
@@ -182,6 +186,11 @@ Resume ecmul_prefix_runtime[finish]:
     (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s2`,`s3`,`ctx`]
        mp_tac exprSimWordArgsTheory.wb_frame_trans >>
      impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `pure_frame cenv fn es sf s0 s3` by
+    (match_mp_tac (Q.SPECL [`fn`, `cenv`, `es`, `sf`, `s0`, `s3`, `s1`, `s2`,
+       `sf.cs_next_id`, `[Lit 96w]`, `[STRING #"%" (toString sf.cs_next_var)]`,
+       `w2n (b:256 word)`, `96`] scratch_prefix_pure_frame) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[NoAsms]) >>
   `mload (w2n p) s1 = mload (w2n p) s0 /\
    mload (w2n p+32) s1 = mload (w2n p+32) s0` by
     simp[GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
@@ -253,7 +262,8 @@ Theorem ecadd_prefix_runtime:
        FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
          | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
-       regions_disjoint (w2n c) 64 off (type_memory_size tv))
+       regions_disjoint (w2n c) 64 off (type_memory_size tv)) /\
+    pure_frame cenv fn es sf s0 s3
 Proof
   strip_tac >>
   `128 < dimword(:256)` by simp[dimword_def] >>
@@ -287,7 +297,9 @@ Resume ecadd_prefix_runtime[payload]:
     s2.vs_allocas = s1.vs_allocas /\ eval_operand ib.buf_operand s2 = SOME b /\
     mem_bytes_at (w2n b) 128 s2.vs_memory =
       word_to_bytes (mload (w2n p) s1) T ++ word_to_bytes (mload (w2n p+32) s1) T ++
-      word_to_bytes (mload (w2n q) s1) T ++ word_to_bytes (mload (w2n q+32) s1) T` by
+      word_to_bytes (mload (w2n q) s1) T ++ word_to_bytes (mload (w2n q+32) s1) T /\
+    (!a len. regions_disjoint (w2n b) 128 a len ==>
+       mem_bytes_at a len s2.vs_memory = mem_bytes_at a len s1.vs_memory)` by
     (irule add_payload_callback >> simp[] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- first_assum ACCEPT_TAC >> conj_tac
@@ -320,6 +332,11 @@ Resume ecadd_prefix_runtime[finish]:
     (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s2`,`s3`,`ctx`]
        mp_tac exprSimWordArgsTheory.wb_frame_trans >>
      impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `pure_frame cenv fn es sf s0 s3` by
+    (match_mp_tac (Q.SPECL [`fn`, `cenv`, `es`, `sf`, `s0`, `s3`, `s1`, `s2`,
+       `sf.cs_next_id`, `[Lit 128w]`, `[STRING #"%" (toString sf.cs_next_var)]`,
+       `w2n (b:256 word)`, `128`] scratch_prefix_pure_frame) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[NoAsms]) >>
   `!a. mload a s1 = mload a s0` by
     simp[GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   qexistsl [`s1`,`s2`,`s3`,`b`,`c`] >> simp[] >>

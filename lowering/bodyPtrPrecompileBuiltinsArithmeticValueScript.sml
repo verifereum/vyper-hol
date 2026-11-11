@@ -193,7 +193,8 @@ Theorem ec_result_pointer_post:
   FLOOKUP t.vs_allocas aid = SOME (w2n w,64) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   (!name b sz. local_region cenv es'.scopes t name b sz ==>
-     regions_disjoint (w2n w) 64 b sz) ==>
+     regions_disjoint (w2n w) 64 b sz) /\
+  pure_frame cenv fn es sa s0 t ==>
   vv_post ctx fn cenv cx e es sa sb s0 es' (Value (mk_ec_result (x,y)))
     (FST (as_ptr_val (expr_type e) LocMemory (pop,sb))) t
 Proof
@@ -276,7 +277,8 @@ Theorem ec_builtin_result_posts:
   FLOOKUP t.vs_allocas aid = SOME (w2n w,64) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   (!name b sz. local_region cenv es'.scopes t name b sz ==>
-    regions_disjoint (w2n w) 64 b sz) ==>
+    regions_disjoint (w2n w) 64 b sz) /\
+  pure_frame cenv fn es sa s0 t ==>
   ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2))
     (mk_ec_result (x,y)) (Var dst) G tn t /\
   ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args) (Var dst) G t /\
@@ -299,6 +301,6 @@ Proof
         [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args`]
         ec_result_pointer_post)) >>
       conj_tac >- (qexistsl [`aid`,`w`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      conj_tac >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule ec_result_pointer_vv_ok >> first_assum ACCEPT_TAC
 QED
