@@ -53,6 +53,74 @@ Proof
   irule var_below_fresh >> simp[]
 QED
 
+(* A failed call-free prefix fixes the result before any block transition. *)
+Theorem uint2str_prefix_failure[local]:
+  !is s ctx fn bb.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX is (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is /\
+    (!t. run_inst_seq is s <> OK t) ==>
+    !f. run_from f ctx fn s = run_from 0 ctx fn s
+Proof
+  Induct >> simp[exprLoweringPropsTheory.run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >> fs[] >>
+  `?rest. DROP s.vs_inst_idx bb.bb_instructions = h :: rest /\
+          isPREFIX is rest` by
+    (Cases_on `DROP s.vs_inst_idx bb.bb_instructions` >> gvs[]) >>
+  drule fragExecTheory.DROP_EQ_CONS >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME h` by
+    simp[get_instruction_def] >>
+  `!f. run_from f ctx fn s =
+    case step_inst_base h s of
+      OK s1 => run_from f ctx fn (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+    | IntRet v s1 => IntRet v s1
+    | Halt s1 => Halt s1
+    | Abort a s1 => Abort a s1
+    | Error e => Error e` by
+    (gen_tac >> drule_all run_from_nonterm >>
+     simp[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  rename1 `step_inst_base h s = OK s1` >>
+  `s1.vs_current_bb = s.vs_current_bb /\ s1.vs_inst_idx = s.vs_inst_idx` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow, venomExecSemanticsTheory.step_inst_non_invoke] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) is` by fs[listTheory.EVERY_MEM] >>
+  first_x_assum irule >> simp[] >>
+  simp[fragExecTheory.run_inst_seq_inst_idx] >>
+  Cases_on `run_inst_seq is s1` >> gvs[instIdxIndepTheory.exec_result_map_def]
+QED
+
+Theorem uint2str_prefix_outcome[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX is (DROP s.vs_inst_idx bb.bb_instructions) /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is ==>
+  ((?t. run_inst_seq is s = OK t /\
+        t.vs_current_bb = s.vs_current_bb /\
+        t.vs_inst_idx = s.vs_inst_idx /\
+        (!x. EVERY (\i. ~MEM x i.inst_outputs) is ==>
+             lookup_var x t = lookup_var x s) /\
+        (!f. run_from f ctx fn s =
+             run_from f ctx fn (t with vs_inst_idx := s.vs_inst_idx + LENGTH is))) \/
+   (!f. run_from f ctx fn s = run_from 0 ctx fn s))
+Proof
+  strip_tac >> Cases_on `?t. run_inst_seq is s = OK t`
+  >- (pop_assum strip_assume_tac >> disj1_tac >> qexists_tac `t` >> simp[] >>
+      rpt conj_tac
+      >- (drule_all fragExecTheory.exec_block_run_inst_seq >> metis_tac[]) 
+      >- (irule exprLoweringPropsTheory.run_inst_seq_preserves_field >>
+          qexists_tac `is` >> simp[] >> rpt strip_tac >>
+          fs[listTheory.EVERY_MEM] >>
+          metis_tac[venomInstPropsTheory.step_preserves_control_flow,
+                    venomExecSemanticsTheory.step_inst_non_invoke])
+      >- (rpt strip_tac >>
+          irule exprLoweringPropsTheory.run_inst_seq_preserves_field >>
+          qexists_tac `is` >> simp[] >> rpt strip_tac >>
+          fs[listTheory.EVERY_MEM] >>
+          metis_tac[venomInstPropsTheory.step_preserves_non_output_vars,
+                    venomExecSemanticsTheory.step_inst_non_invoke]) >>
+      gen_tac >> drule_all u2s_run_from_prefix >> simp[arithmeticTheory.ADD_COMM]) >>
+  disj2_tac >> irule uint2str_prefix_failure >> metis_tac[]
+QED
+
 (* The loop works on a fresh copy val_var of val_op, made before the loop
    (so no precondition on val_op is needed), and on a fresh counter i_var
    from 0.  Each round (cond -> body -> cond) runs straight-line code, sets
