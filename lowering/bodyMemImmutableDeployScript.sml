@@ -7,6 +7,7 @@ Theory bodyMemImmutableDeploy
 Ancestors
   bodyMemoryPreds targetPlaceSim immutableWordReadMemory immutablePathReplace
   immutableWriteReplay immutableWordStoreFrame immutableWordStoreMemory
+  immutableAugAssignContinuation
 
 (* RESIDUAL (held): as its S1 twin immutable_deploy_assign_case, which is
    admitted on this base. *)
