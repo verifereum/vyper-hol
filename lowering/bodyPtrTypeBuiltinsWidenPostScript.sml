@@ -39,5 +39,7 @@ Proof
      first_x_assum irule >> simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
   simp[bodyFieldMemoryPropsTheory.body_field_expr_post_inst_idx,
        extract32_expr_post_end_gas_obs] >>
+  `~expr_has_effect (TypeBuiltin target Convert target [e]) ==>
+   ~expr_has_effect e` by simp[] >>
   irule convert_expr_post_compose >> metis_tac[]
 QED
