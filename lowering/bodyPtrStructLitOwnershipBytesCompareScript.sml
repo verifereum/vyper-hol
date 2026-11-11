@@ -119,7 +119,7 @@ Proof
   simp[SF ETA_ss] >>
   `MEM (HD args) args /\ MEM (HD (TL args)) args` by
     (Cases_on `args` >> gvs[] >> Cases_on `t` >> gvs[]) >>
-  ho_match_mp_tac alloc_run_uncurry >>
+  (ho_match_mp_tac alloc_run_uncurry >>
   qexists `\v s. shape_state s /\ cenv_shape_ok s ce /\ plain_operand s v` >>
   conj_tac
   >- (irule alloc_run_conseq >>
@@ -133,7 +133,7 @@ Proof
   >- (irule alloc_run_conseq >>
       irule_at Any (Q.INST [`R` |-> `\s. plain_operand s h1`]
         alloc_run_lower_bytestring_hash) >>
-      qexists_tac `internal` >>
+      qexistsl_tac [`internal`, `h1`] >>
       simp[SRULE [] (Q.SPEC `[h1]` shape_stable_plain_operands)]) >>
   qx_gen_tac `h2` >> simp[] >> irule alloc_run_conseq >>
   qexistsl [`fresh_outputs`, `\v s. fresh_outputs s`] >>
@@ -143,5 +143,5 @@ Proof
       SRULE [SF ETA_ss] alloc_run_emit_op_fresh]) >> gen_tac >> simp[]) >>
   simp[alloc_run_def, oneline as_stack_val_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  drule_all (SRULE [alloc_run_def] alloc_run_emit_op_fresh) >> simp[]
+  drule_all (SRULE [alloc_run_def] alloc_run_emit_op_fresh) >> simp[])
 QED
