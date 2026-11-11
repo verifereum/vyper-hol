@@ -48,6 +48,9 @@ Theorem FOLDL_ricf_site_accum_every[local]:
     EVERY (\(inst, pos).
       inst.inst_opcode = INVOKE /\ icf_is_readonly_op rma inst pos) sites
 Proof
+  `!ups rma copy_id.
+     FOLDL (ricf_site_accum_step rma copy_id) NONE ups = NONE` by
+    (Induct >> simp[pairTheory.FORALL_PROD, ricf_site_accum_step_def]) >>
   Induct >- (Cases_on `acc` >> simp[]) >>
   simp[pairTheory.FORALL_PROD, ricf_site_accum_step_def] >>
   rpt gen_tac >> Cases_on `acc` >> simp[] >>
@@ -238,6 +241,7 @@ Proof
   ntac 8 gen_tac >> strip_tac >>
   fs[ricf_function_step_def] >>
   pairarg_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `ricf_pass_block ctx` >>
   `new_blocks = MAP (\bb. SND (ricf_pass_block ctx bb)) cur_fn.fn_blocks` by
     (qspec_then `ricf_pass_block ctx` mp_tac FOLDL_block_pass_SND >>
      disch_then (qspecl_then [`cur_fn.fn_blocks`, `F`, `[]`] mp_tac) >>
@@ -301,7 +305,7 @@ Proof
           fs[Abbr `step_fn`, ricf_loop_inv_def] >>
           Cases_on `ricf_function_step x1 x2` >> simp[] >>
           drule_all ricf_function_step_blocks_compat >> strip_tac >>
-          rw[] >> gvs[])) >>
+          Cases_on `q` >> gvs[])) >>
   disch_then (qspec_then `(res0, res1, res2)` mp_tac) >>
   simp[ricf_loop_inv_def] >> strip_tac >>
   simp[icf_fn_compat_def] >> disj2_tac >>
@@ -324,7 +328,9 @@ Proof
   impl_tac
   >- (simp[] >> rpt strip_tac >> PairCases_on `x` >>
       fs[Abbr `step_fn`, ricf_function_step_def] >>
-      pairarg_tac >> gvs[] >> rw[] >> gvs[]) >>
+      qmatch_goalsub_abbrev_tac `FOLDL f init bbs` >>
+      Cases_on `FOLDL f init bbs` >> simp[] >>
+      Cases_on `q` >> gvs[]) >>
   disch_then (qspec_then `(x0, x1, x2)` mp_tac) >>
   simp[clear_nops_function_def] >> rw[]
 QED
@@ -479,11 +485,12 @@ Proof
        mk_inst_def, entry_block_def, entry_param_outputs_def,
        collect_param_info_def, has_ret_instruction_def, build_param_index_def,
        rma_init_state_def, FLOOKUP_UPDATE] >>
-  ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >>
-  simp[rma_fixpoint_step_def, FLOOKUP_UPDATE, rma_analyze_fn_def,
-       mem_write_ops_def] >>
-  ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >>
-  simp[]
+  qmatch_goalsub_abbrev_tac `OWHILE G step_fn initial0` >>
+  `step_fn initial0 = (F, SND initial0)` by
+    simp[Abbr `step_fn`, Abbr `initial0`, rma_fixpoint_step_def,
+         FLOOKUP_UPDATE, rma_analyze_fn_def, mem_write_ops_def] >>
+  once_rewrite_tac[OWHILE_THM] >> simp[Abbr `G`] >>
+  once_rewrite_tac[OWHILE_THM] >> simp[Abbr `initial0`]
 QED
 
 Theorem ricf_witness_callee_run_blocks:
@@ -585,7 +592,7 @@ Proof
    (EL 3 ricf_witness_bb0.bb_instructions).inst_opcode = MCOPY /\
    (!j. j < LENGTH ricf_witness_bb0.bb_instructions /\ j <> 3 ==>
         (EL j ricf_witness_bb0.bb_instructions).inst_opcode <> MCOPY)` by
-    (simp[ricf_witness_bb0_def] >> irule unique_mcopy_7_at_3 >> simp[]) >>
+    (simp[ricf_witness_bb0_def, unique_mcopy_7_at_3]) >>
   `bb1 = ricf_witness_bb0 /\ copy_idx = 3` by
     metis_tac[icf_mcopy_noped_unique_mcopy] >>
   gvs[] >>
@@ -594,8 +601,8 @@ Proof
   >- gvs[ircf_try_forward_def, icf_build_ctx_def, ircf_is_ret_buf_source_def,
          icf_is_assign_output_use_def, ricf_witness_bb0_def]
   >- (`icf_mcopy_noped ricf_witness_bb0 b` by
-        (qpat_x_assum `icf_mcopy_noped _ b` mp_tac >>
-         simp[GSYM ricf_witness_bb0_def]) >>
+        (Cases_on `cur_bbs` >>
+         gvs[ricf_witness_main_blocks, GSYM ricf_witness_bb0_def]) >>
       `3 < LENGTH b.bb_instructions /\
        (EL 3 b.bb_instructions).inst_opcode = MCOPY` by
         (irule icf_mcopy_noped_mcopy_back >>
@@ -603,6 +610,10 @@ Proof
       `b = ricf_witness_bb0` by
         metis_tac[icf_mcopy_noped_unique_mcopy] >>
       qpat_x_assum `b = ricf_witness_bb0` SUBST_ALL_TAC >>
+      `cur_bbs = [ricf_witness_bb0]` by
+        (Cases_on `cur_bbs` >>
+         gvs[ricf_witness_main_blocks, GSYM ricf_witness_bb0_def]) >>
+      gvs[] >>
       `ricf_witness_main with fn_blocks := [ricf_witness_bb0] =
        ricf_witness_main` by
         simp[ricf_witness_main_def, mk_raw_function_def,
@@ -620,6 +631,7 @@ Proof
         simp[icf_build_ctx_def, icf_ctx_component_equality] >>
       pop_assum SUBST_ALL_TAC >>
       gvs[ricf_witness_rma, ricf_witness_bb0_def, ricf_witness_bb1_def,
+          ricf_witness_try_forward_3,
           LET_THM, ricf_apply_forward_def, mk_nop_inst_def])
 QED
 
@@ -664,12 +676,15 @@ Proof
              simp[GSYM ricf_witness_bb0_def]) >>
           qpat_x_assum `icf_fwd_step _ _ _ _ _ _ _` mp_tac >>
           simp[GSYM ricf_witness_ctx_def] >> strip_tac >>
-          drule_all ricf_witness_main_fwd_step_eq >> strip_tac >> gvs[] >>
+          drule ricf_witness_main_fwd_step_eq >>
+          disch_then (qspecl_then [`copy_idx`, `bb2`] mp_tac) >>
+          (impl_tac >- gvs[ricf_witness_ctx_def]) >>
+          strip_tac >> gvs[] >>
           `s_phi = s /\ phi_prefix_length ricf_witness_bb0.bb_instructions = 0` by
             gvs[ricf_witness_bb0_def, eval_phis_def, phi_prefix_length_def,
                 mk_inst_def] >>
           gvs[] >>
-          drule prefix_steps_3_from_0 >>
+          drule_at Any prefix_steps_3_from_0 >>
           simp[ricf_witness_bb0_def, get_instruction_def] >> strip_tac >>
           qpat_x_assum `step_inst _ _ (mk_inst 1 ALLOCA _ _) _ = OK s1`
             (strip_assume_tac o MATCH_MP step_inst_alloca_ok) >>
@@ -685,12 +700,12 @@ Proof
              first_x_assum (qspec_then `"%src"` mp_tac) >>
              fs[lookup_var_def]) >>
           qexistsl_tac [`v'`, `v`] >>
-          simp[ricf_witness_bb0_def, eval_operand_def, lookup_var_def] >>
+          gvs[ricf_witness_bb0_def, eval_operand_def, lookup_var_def] >>
           conj_tac
           >- (rpt strip_tac >>
               `j = 4 \/ j = 5 \/ j = 6` by decide_tac >> gvs[])
           >- (rpt strip_tac >>
-              `j = 4 \/ j = 5 \/ j = 6` by decide_tac >> gvs[]
+              `t1.vs_inst_idx = 4 \/ t1.vs_inst_idx = 5 \/ t1.vs_inst_idx = 6` by decide_tac >> gvs[]
               >- (simp[ricf_witness_bb0_def, ricf_witness_bb1_def,
                        icf_suffix_inst_rel_def, is_terminator_def,
                        icf_invoke_step_rel_def, decode_invoke_def, mk_inst_def,
@@ -708,9 +723,9 @@ Proof
               >- simp[ricf_witness_bb0_def, ricf_witness_bb1_def,
                       icf_suffix_inst_rel_def, is_terminator_def,
                       step_inst_base_sstore_copy_fwd_state_rel]
-              >- simp[ricf_witness_bb0_def, ricf_witness_bb1_def,
-                      icf_suffix_inst_rel_def, is_terminator_def,
-                      step_inst_base_stop_copy_fwd_state_rel])))
+              >- (simp[ricf_witness_bb0_def, ricf_witness_bb1_def,
+                       icf_suffix_inst_rel_def, is_terminator_def] >>
+                  metis_tac[step_inst_base_stop_copy_fwd_state_rel]))))
 QED
 
 Theorem ricf_witness_wf:
