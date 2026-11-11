@@ -598,6 +598,29 @@ Proof
      simp[] >> rpt strip_tac >> metis_tac[MEM_APPEND]) >> simp[]
 QED
 
+Theorem finally_unless_halt_unlock_frame[local]:
+  finally_unless_halt f (unlock_if_nr cx nr is_view) s0 = (res,s') /\
+  f s0 = (r1,s1) /\ ^frame cx A r s1 ==> ^frame cx A r s'
+Proof
+  strip_tac >> BETA_TAC >> irule (BETA_RULE finite_frame_trans) >>
+  qexists_tac `s1` >> conj_tac >- first_assum (ACCEPT_TAC o BETA_RULE) >>
+  Cases_on `unlock_if_nr cx nr is_view s1` >>
+  rename1 `unlock_if_nr cx nr is_view s1 = (ur,us)` >>
+  `^frame cx A s1 us` by
+    (BETA_TAC >> qexists_tac `[]` >> simp[] >>
+     rpt strip_tac >> drule_then irule unlock_if_nr_word_frame >>
+     first_assum ACCEPT_TAC) >>
+  pop_assum (assume_tac o BETA_RULE) >>
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  qabbrev_tac `g = unlock_if_nr cx nr is_view` >>
+  simp[finally_unless_halt_def] >>
+  Cases_on `r1` >> TRY (rename1 `INR ex` >> Cases_on `ex`) >>
+  simp[ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `ur` >> simp[] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem finite_frame_stk:
   ^frame (cx with stk := stk') A s0 s1 <=> ^frame cx A s0 s1
 Proof
@@ -661,7 +684,7 @@ Theorem evaluate_finite_frame:
     ^safe_accesses A R (accesses_iterator it) (int_calls_iterator it) /\
     eval_iterator cx it st = (res,st') ==> ^frame cx A st st') /\
   (!cx tyv id body vs. !A R env ret_ty ty env_after st res st'.
-    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
+    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (iterator_result_typed tyv) vs /\
     id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
     ^typed_state env cx st /\ call_evaluation_safe cx (int_calls_stmts body) /\
@@ -1557,7 +1580,7 @@ Resume evaluate_finite_frame[iterator_array]:
   gvs[vyperTypeSystemTheory.well_typed_iterator_def, accesses_iterator_def,
       int_calls_iterator_def, Once evaluate_def, bind_def, lift_option_type_def,
       raise_def, return_def, AllCaseEqs()] >>
-  imp_res_tac read_result_state >> gvs[] >>
+  imp_res_tac array_iterator_results_state >> gvs[] >>
   gvs[option_CASE_rator, AllCaseEqs(), raise_def, return_def] >>
   first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
   (conj_tac >- (qexists_tac `R` >> conj_tac
@@ -1618,6 +1641,23 @@ Resume evaluate_finite_frame[for_nil]:
 QED
 Resume evaluate_finite_frame[for_cons]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `eval_for _ _ _ _ (r::vs) _ = _` >>
+  `iterator_result_typed tyv r /\ EVERY (iterator_result_typed tyv) vs` by fs[] >>
+  Cases_on `read_result cx r st` >>
+  rename1 `read_result cx r st = (rd_res,st_rd)` >>
+  drule_all iterator_result_read_typed >> strip_tac >>
+  qpat_x_assum `st_rd = st` SUBST_ALL_TAC >>
+  Cases_on `rd_res`
+  >~ [`read_result cx r st = (INR exn,st)`]
+  >- (qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def] >> strip_tac >> gvs[] >>
+      qexists_tac `[]` >> simp[]) >>
+  rename1 `read_result cx r st = (INL v,st)` >>
+  `value_has_type tyv v` by fs[] >>
+  qpat_x_assum `read_result cx r st = (INL v,st)` (fn rd =>
+    rpt (last_x_assum (fn ih => assume_tac (REWRITE_RULE [rd]
+      (SPECL [``st:evaluation_state``, ``v:value``, ``st:evaluation_state``] ih)))) >>
+    assume_tac rd) >>
   qpat_x_assum `^callable_closed cx A R` (mk_asm "closure") >>
   qpat_x_assum `!s'' x t. push_scope_with_var _ _ _ s'' = _ ==> _`
     (mk_asm "body_ih") >>
@@ -1629,6 +1669,8 @@ Resume evaluate_finite_frame[for_cons]:
   qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
   simp_tac (srw_ss()) [Once evaluate_def, bind_def, ignore_bind_def,
                        push_scope_with_var_def, return_def] >>
+  qpat_assum `read_result cx r st = _` (fn th => rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
   qmatch_goalsub_abbrev_tac `finally loop_body pop_scope stp` >>
   Cases_on `eval_stmts cx loop_stmts stp` >>
   rename1 `eval_stmts cx loop_stmts stp = (rb,sb)` >>
@@ -1761,9 +1803,10 @@ QED
 Resume evaluate_finite_frame[raise_reason]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[vyperTypeSystemTheory.type_stmt_def, accesses_stmt_def, int_calls_stmt_def,
-      accesses_raise_reason_def, int_calls_raise_reason_def,
-      Once evaluate_def, bind_def, raise_def, lift_option_type_def,
-      return_def, AllCaseEqs()] >>
+      accesses_raise_reason_def, int_calls_raise_reason_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, raise_def, lift_option_type_def,
+       return_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >>
   gvs[option_CASE_rator, AllCaseEqs(), raise_def, return_def] >>
   first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
@@ -1871,6 +1914,7 @@ Resume evaluate_finite_frame[rawrevert]:
   gvs[Once vyperTypeSystemTheory.well_typed_expr_def,
       accesses_expr_def, risky_call_target_def, int_calls_expr_def] >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+      lift_option_type_def, option_CASE_rator,
       return_def, raise_def, AllCaseEqs()] >>
   asm "args_ih" (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
   (conj_tac >- (qexists_tac `R` >> conj_tac
@@ -1933,7 +1977,8 @@ Resume evaluate_finite_frame[selfdestruct]:
   rpt strip_tac >> gvs[assert_def, return_def, raise_def, AllCaseEqs()] >>
   qexists_tac `ws` >> simp[] >>
   gvs[transfer_value_def, COND_RATOR, bind_def, ignore_bind_def, get_accounts_def,
-      check_def, assert_def, update_accounts_def, return_def, raise_def,
+      check_def, assert_def, update_accounts_def, update_pending_deletions_def,
+      return_def, raise_def,
       AllCaseEqs()] >>
   gvs[oneline get_storage_def, vfmStateTheory.update_account_def,
       vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM] >>
@@ -2004,7 +2049,12 @@ Resume evaluate_finite_frame[intcall]:
     (strip_assume_tac o SRULE [lift_option_type_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]) >>
   qpat_assum `lift_option_type (lookup_callable_function cx.in_deploy fn _) _ _ = _`
     (strip_assume_tac o SRULE [lift_option_type_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]) >>
-  PairCases_on `x''` >>
+  qmatch_asmsub_rename_tac `get_module_code cx src_id_opt = SOME mod_ts` >>
+  qmatch_asmsub_rename_tac
+    `lookup_callable_function cx.in_deploy fn mod_ts = SOME fdecl` >>
+  PairCases_on `fdecl` >>
+  qmatch_asmsub_rename_tac `lookup_callable_function cx.in_deploy fn mod_ts =
+    SOME (fmut,fnr,fparams,fdflts,fret,fbody)` >>
   RULE_ASSUM_TAC (BETA_RULE o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss) []) >>
   `IS_SOME (FLOOKUP env.fn_sigs (src_id_opt,fn))` by simp[] >>
   drule_all callable_body_typing_from_env_consistent >>
@@ -2034,10 +2084,10 @@ Resume evaluate_finite_frame[intcall]:
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[state_well_typed_def, scope_well_typed_def]) >>
   `well_typed_exprs (defaults_env env_body)
-      (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3)` by
+      (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts)` by
     (irule well_typed_exprs_DROP >> simp[]) >>
   `call_evaluation_safe (cx with stk updated_by CONS (src_id_opt,fn))
-      (int_calls_exprs (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3))` by
+      (int_calls_exprs (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts))` by
     (irule call_evaluation_safe_push_needed_defaults >>
      asm_x "body_ih" kall_tac >> asm_x "defaults_frame" kall_tac >>
      asm_x "closure" kall_tac >> asm_x "args_prefix" kall_tac >>
@@ -2047,8 +2097,8 @@ Resume evaluate_finite_frame[intcall]:
   disch_then drule >> disch_then drule >>
   disch_then (mk_asm "callee_accesses") >>
   `^safe_accesses A R
-      (accesses_exprs (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3))
-      (int_calls_exprs (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3))` by
+      (accesses_exprs (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts))
+      (int_calls_exprs (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts))` by
     (asm "callee_accesses" mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      qsuff_tac `!n ds. (^safe_accesses A R (accesses_exprs ds)
@@ -2058,7 +2108,7 @@ Resume evaluate_finite_frame[intcall]:
      Induct >> Cases_on `ds` >>
      simp[accesses_expr_def, int_calls_expr_def, MEM_APPEND] >> metis_tac[]) >>
   Cases_on `eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
-      (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3)
+      (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts)
       (args_st with scopes := [FEMPTY])` >>
   rename1 `eval_exprs _ _ (args_st with scopes := [FEMPTY]) = (dres,dst)` >>
   `^frame cx A (args_st with scopes := [FEMPTY]) dst` by
@@ -2105,6 +2155,7 @@ Resume evaluate_finite_frame[intcall]:
   qpat_assum `lift_option_type (bind_arguments _ _ _) _ _ = _`
     (strip_assume_tac o SRULE [lift_option_type_def, option_CASE_rator,
       AllCaseEqs(), return_def, raise_def]) >>
+  qmatch_asmsub_rename_tac `bind_arguments _ _ (arg_vals ++ dflt_vals)` >>
   `scope_well_typed call_env` by
     (drule vyperTypeBindArgumentsTheory.bind_arguments_scope_well_typed_from_success >>
      simp[]) >>
@@ -2114,9 +2165,9 @@ Resume evaluate_finite_frame[intcall]:
       (cx with stk updated_by CONS (env_body.current_src,fn))
       (dst with scopes := [call_env])` by
     (irule vyperTypeBindArgumentsTheory.bind_arguments_env_scopes_consistent >>
-     qexistsl_tac [`x''2`,`get_tenv cx`,`x'' ++ x`] >>
+     qexistsl_tac [`fparams`,`get_tenv cx`,`arg_vals ++ dflt_vals`] >>
      simp[get_tenv_def] >> rpt strip_tac >>
-     qpat_x_assum `!id typ. MEM (id,typ) x''2 ==> _`
+     qpat_x_assum `!id typ. MEM (id,typ) fparams ==> _`
        (drule_then strip_assume_tac) >> simp[]) >>
   `env_immutables_consistent env_body
       (cx with stk updated_by CONS (env_body.current_src,fn))
@@ -2153,11 +2204,11 @@ Resume evaluate_finite_frame[intcall]:
   drule_all intcall_live_pushed_body_preconditions >> strip_tac >>
   simp_tac (srw_ss()) [push_function_def, return_def] >>
   `lift_option_type (get_module_code cx env_body.current_src)
-     "IntCall get_module_code" r = (INL x',r)` by
+     "IntCall get_module_code" r = (INL mod_ts,r)` by
     simp[lift_option_type_def, return_def] >>
-  `lift_option_type (lookup_callable_function cx.in_deploy fn x')
+  `lift_option_type (lookup_callable_function cx.in_deploy fn mod_ts)
      "IntCall lookup_function" r =
-       (INL (x''0,x''1,x''2,x''3,x''4,x''5),r)` by
+       (INL (fmut,fnr,fparams,fdflts,fret,fbody),r)` by
     simp[lift_option_type_def, return_def] >>
   asm_x "body_ih" (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
@@ -2168,14 +2219,14 @@ Resume evaluate_finite_frame[intcall]:
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   `finally (ignore_bind (set_scopes [FEMPTY])
       (eval_exprs (cx with stk updated_by CONS (env_body.current_src,fn))
-        (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3)))
+        (DROP (LENGTH fdflts - (LENGTH fparams - LENGTH es)) fdflts)))
       (set_scopes args_st.scopes) args_st =
-      (INL x,dst with scopes := args_st.scopes)` by
+      (INL dflt_vals,dst with scopes := args_st.scopes)` by
     simp[finally_def, ignore_bind_def, bind_def, set_scopes_def, return_def] >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
-  `lift_option_type (evaluate_type (get_tenv cx) x''4)
+  `lift_option_type (evaluate_type (get_tenv cx) fret)
       "IntCall eval ret" r = (INL ret_tv,r)` by
     simp[lift_option_type_def, return_def] >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
@@ -2188,16 +2239,16 @@ Resume evaluate_finite_frame[intcall]:
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (mk_asm "body_frame" o REWRITE_RULE [AND_IMP_INTRO] o BETA_RULE) >>
   `call_evaluation_safe (cx with stk updated_by CONS (env_body.current_src,fn))
-      (int_calls_stmts x''5)` by
+      (int_calls_stmts fbody)` by
     (irule call_evaluation_safe_push_body >>
      asm_x "body_frame" kall_tac >> asm_x "closure" kall_tac >>
      asm_x "callee_accesses" kall_tac >> asm_x "args_prefix" kall_tac >>
      metis_tac[]) >>
   Cases_on `eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn))
-      x''5 (lock_st with scopes := [call_env])` >>
-  rename1 `eval_stmts _ x''5 _ = (body_res,body_st)` >>
+      fbody (lock_st with scopes := [call_env])` >>
+  rename1 `eval_stmts _ fbody _ = (body_res,body_st)` >>
   `^frame cx A (lock_st with scopes := [call_env]) body_st` by
-    (asm "body_frame" (qspecl_then [`A`,`R`,`env_body`,`x''4`]
+    (asm "body_frame" (qspecl_then [`A`,`R`,`env_body`,`fret`]
        (qspecl_then [`env_after`,`lock_st with scopes := [call_env]`,
                     `body_res`,`body_st`] mp_tac)) >>
      (impl_tac >-
@@ -2215,32 +2266,27 @@ Resume evaluate_finite_frame[intcall]:
          POP_ASSUM_LIST (K ALL_TAC) >> simp[oneline get_storage_def]) >>
      first_assum (ACCEPT_TAC o BETA_RULE)) >>
   qpat_x_assum `^frame cx A r body_st` (mk_asm "body_prefix") >>
-  simp[try_def, ignore_bind_def, bind_def] >>
-  Cases_on `body_res` >> simp[return_def] >>
-  TRY (rename1 `handle_function ex body_st` >> Cases_on `ex`) >>
-  simp[handle_function_def, return_def, raise_def, pop_function_def,
-       set_scopes_def] >>
   once_rewrite_tac [GSYM DE_MORGAN_THM] >>
   once_rewrite_tac [GSYM is_view_mut_def] >>
   once_rewrite_tac [GSYM unlock_if_nr_def] >>
-  Cases_on `unlock_if_nr cx x''1 (is_view_mut x''0)
-      (body_st with scopes := args_st.scopes)` >>
-  rename1 `unlock_if_nr cx _ _ _ = (unlock_res,unlock_st)` >>
-  `^frame cx A (body_st with scopes := args_st.scopes) unlock_st` by
-    (BETA_TAC >> qexists_tac `[]` >> simp[] >> rpt strip_tac >>
-     qpat_assum `unlock_if_nr cx _ _ _ = (unlock_res,unlock_st)`
-       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] unlock_if_nr_word_frame)) >>
-     simp[]) >>
-  `^frame cx A r unlock_st` by
-    (BETA_TAC >> irule (BETA_RULE finite_frame_trans) >>
-     qexists_tac `body_st with scopes := args_st.scopes` >> conj_tac
-     >- (asm "body_prefix" (mp_tac o BETA_RULE) >>
-         POP_ASSUM_LIST (K ALL_TAC) >> simp[oneline get_storage_def]) >>
-     first_assum (ACCEPT_TAC o BETA_RULE)) >>
-  simp[] >>
-  qpat_assum `^frame cx A r unlock_st`
+  qmatch_goalsub_abbrev_tac `finally_unless_halt fin_act _ call_st` >>
+  `?fin_res. fin_act call_st = (fin_res,body_st with scopes := args_st.scopes)` by
+    (simp[Abbr `fin_act`, Abbr `call_st`, finally_def, try_def, bind_def,
+          ignore_bind_def] >>
+     Cases_on `body_res` >> simp[return_def] >>
+     TRY (rename1 `handle_function ex body_st` >> Cases_on `ex`) >>
+     simp[handle_function_def, return_def, raise_def, set_scopes_def,
+          pop_function_def, ignore_bind_def, bind_def]) >>
+  `^frame cx A r (body_st with scopes := args_st.scopes)` by
+    (asm "body_prefix" (mp_tac o BETA_RULE) >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[oneline get_storage_def]) >>
+  Cases_on `finally_unless_halt fin_act (unlock_if_nr cx fnr (is_view_mut fmut))
+      call_st` >>
+  rename1 `_ = (call_res,call_out)` >>
+  drule_all finally_unless_halt_unlock_frame >> disch_then assume_tac >>
+  qpat_assum `^frame cx A r call_out`
     (fn th => POP_ASSUM_LIST (K ALL_TAC) >> assume_tac (BETA_RULE th)) >>
-  Cases_on `unlock_res` >> simp[] >>
+  Cases_on `call_res` >> simp[] >>
   simp[lift_option_type_def, option_CASE_rator, return_def, raise_def,
        AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   qexists_tac `ws` >> simp[] >> gvs[]
