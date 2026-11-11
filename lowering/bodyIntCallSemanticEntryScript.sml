@@ -250,12 +250,11 @@ Proof
   TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   TRY (rpt strip_tac >>
        qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
-         drule >> simp[] >> NO_TAC)
-  >~ [`bare_globals_layout`]
-  >- (qpat_x_assum `bare_globals_layout _ _ _ _ _ _` mp_tac >>
-      fs[bare_globals_layout_def]) >>
-  irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
-  qexistsl [`caller`, `env`] >> simp[]
+         drule >> simp[] >> NO_TAC) >>
+  TRY (irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
+       qexistsl [`caller`, `env`] >> simp[] >> NO_TAC) >>
+  qpat_x_assum `bare_globals_layout _ _ _ _ _ _` mp_tac >>
+  fs[bare_globals_layout_def]
 QED
 
 Theorem internal_prologue_locals_declared:
