@@ -268,3 +268,98 @@ Proof
      simp[NoAsms, IN_DIFF] >> metis_tac[]) >>
   asm_simp_tac bool_ss [encoder_static_loop_inv_def]
 QED
+
+Theorem encoder_evaluated_static_loop_counted_ptr:
+  !r j G tn s.
+  abi_encode_array_header (Var ip) (Var cv) sh = ((hdr,body_lbl,exit_lbl),sb) /\
+  abi_encode_array_static_body (Var ip) (Var src) (Var dst) ei k k sb = (idx,st) /\
+  abi_decode_loop_suffix (Var ip) idx hdr exit_lbl st = ((),se) /\
+  fn_has_code sh se fn /\
+  not_fresh_at sh ip /\ not_fresh_at sh src /\
+  not_fresh_at sh dst /\ not_fresh_at sh cv /\ ~ctx_has_dalloca ctx /\
+  encoder_static_loop_inv ctx fn sites q len protected
+    ip src dst cv p a b scap dcap tv maxn vs k j G tn s /\
+  s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ LENGTH vs = r+j /\
+  evaluate_type env ty = SOME tv /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  k = type_memory_size tv /\
+  ((ei = AbiPrimWord /\ k = 32) \/ ei = AbiCopy k) /\
+  type_memory_size (ArrayTV tv (Dynamic maxn)) <= scap /\
+  value_has_type (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) /\
+  LENGTH vs < dimword(:256) /\ 32+LENGTH vs*k <= dcap /\
+  w2n a+scap < dimword(:256) /\ w2n b+dcap < dimword(:256) /\
+  w2n p+32 < dimword(:256) /\
+  (w2n a+scap <= w2n b \/ w2n b+dcap <= w2n a) /\
+  (w2n a+scap <= w2n p \/ w2n p+32 <= w2n a) /\
+  (w2n p+32 <= w2n b \/ w2n b+dcap <= w2n p) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = exit_lbl /\ sf.vs_inst_idx = 0 /\
+    encoder_static_loop_inv ctx fn sites q len protected
+      ip src dst cv p a b scap dcap tv maxn vs k (LENGTH vs) Gf tnf sf /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
+    mem_agree_outside
+      ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+       {i | w2n p <= i /\ i < w2n p+32}) sf.vs_memory s.vs_memory /\
+    (!i. i NOTIN ({i | w2n b <= i /\ i < w2n b+dcap} UNION
+       {i | w2n p <= i /\ i < w2n p+32}) ==>
+       (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    (!v. not_fresh_at sh v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v))
+Proof
+  Induct >> rpt gen_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac)
+  >- (
+    `j = LENGTH vs` by decide_tac >>
+    drule_all abi_array_static_loop_phase_code >> strip_tac >>
+    qhdtm_assum `encoder_static_loop_inv` mp_tac >>
+    pure_rewrite_tac[encoder_static_loop_inv_def] >>
+    disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+    `j <= LENGTH vs` by decide_tac >>
+    drule_all encoder_static_loop_header_ambient_counted_ptr >>
+    disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+    `encoder_static_loop_inv ctx fn sites q len protected
+      ip src dst cv p a b scap dcap tv maxn vs k j Gf tnf sf` by
+      (irule encoder_static_loop_inv_memory_frame >>
+       conj_tac >- simp[] >> qexistsl_tac [`G`,`s`,`sh`,`tn`] >> simp[]) >>
+    qexistsl_tac [`Gf`,`tnf`,`sf`] >>
+    qpat_x_assum `LENGTH vs = 0+j` kall_tac >>
+    asm_simp_tac bool_ss [mem_agree_outside_def] >>
+    gvs[encoder_static_loop_inv_def]) >>
+  drule_all abi_array_static_loop_phase_code >> strip_tac >>
+  qhdtm_assum `encoder_static_loop_inv` mp_tac >>
+  pure_rewrite_tac[encoder_static_loop_inv_def] >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `j < LENGTH vs /\ j <= LENGTH vs` by decide_tac >>
+  drule_all encoder_static_loop_header_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `encoder_static_loop_inv ctx fn sites q len protected
+    ip src dst cv p a b scap dcap tv maxn vs k j Gf tnf sf` by
+    (irule encoder_static_loop_inv_memory_frame >>
+     conj_tac >- simp[] >> qexistsl_tac [`G`,`s`,`sh`,`tn`] >> simp[]) >>
+  `sf.vs_current_bb = body_lbl` by simp[] >>
+  drule_all encoder_evaluated_static_loop_step >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  rename1 `LENGTH vs = SUC remaining+j` >>
+  `LENGTH vs = remaining+(j+1)` by decide_tac >>
+  qpat_x_assum `!j G tn s. _` (qspecl_then [`j+1`,`Gf'`,`tnf'`,`sf'`] mp_tac) >>
+  (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
+  qexistsl_tac [`Gf''`,`tnf''`,`sf''`] >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`,`sf`,`tnf`] >> simp[] >>
+     irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf'`,`sf'`,`tnf'`] >> simp[]) >>
+  qpat_assum `encoder_static_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Gf'' tnf'' sf''` mp_tac >>
+  pure_rewrite_tac[encoder_static_loop_inv_def] >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  asm_simp_tac bool_ss [] >-
+    (qpat_x_assum `mem_agree_outside _ sf''.vs_memory _` mp_tac >>
+     qpat_x_assum `mem_agree_outside _ sf'.vs_memory _` mp_tac >>
+     simp_tac bool_ss [mem_agree_outside_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
