@@ -326,7 +326,7 @@ Proof
       asm_rewrite_tac[] >> qexists_tac `aid` >> simp[]) >>
   rewrite_tac[listTheory.EXISTS_DEF, DE_MORGAN_THM] >> strip_tac >>
   qpat_x_assum `~expr_has_effect e ==> _` (drule_then strip_assume_tac) >>
-  qpat_x_assum `~EXISTS expr_has_effect args ==> _` (drule_then strip_assume_tac) >>
+  qpat_x_assum `EVERY _ args ==> _` (drule_then strip_assume_tac) >>
   `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z q = SOME w` by
     (`!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t1 = SOME w` by
        (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -336,8 +336,13 @@ Proof
      conj_tac >- (irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> fs[ci_mono_def]) >>
      metis_tac[]) >>
   `sa.cs_next_id <= ss.cs_next_id` by fs[ci_mono_def] >>
-  irule aggregate_pure_frame_trans >> qexistsl_tac [`es1`, `ss`, `q`] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  qspecl_then [`ce`, `func`, `es`, `es1`, `sa`, `ss`, `s0`, `q`, `r`, `b`, `asz`]
+    mp_tac aggregate_pure_frame_trans >>
+  RULE_ASSUM_TAC (REWRITE_RULE [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM,
+                                GSYM CONJ_ASSOC]) >>
+  rewrite_tac [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM, GSYM CONJ_ASSOC] >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem aggregate_tuple_success_continuation_mem[local]:
