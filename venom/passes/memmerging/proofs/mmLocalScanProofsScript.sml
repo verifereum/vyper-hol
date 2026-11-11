@@ -10414,6 +10414,49 @@ Proof
   qexistsl [`y0`,`y1`] >> gvs[]
 QED
 
+Theorem mm_local_canonical_due_log_footprint_captures[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  (!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs)) /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
+  ws = MAP (THE o cap) (due ++ [r]) ==>
+  !d l. (?bs. MEM (d,bs) ws /\ LENGTH bs = l) <=>
+    ?j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      mm_local_write_footprint (EL j is) = SOME (d,l)
+Proof
+  strip_tac >>
+  `!j. MEM j (due ++ [r]) <=> j < LENGTH is /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\
+    ?d l. mm_local_write_footprint (EL j is) = SOME (d,l)` by
+    metis_tac[mm_local_canonical_due_footprint_indices] >>
+  `!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs) /\
+      mm_local_write_footprint (EL j is) = SOME (d,LENGTH bs)` by
+    (rpt strip_tac >>
+     `?d bs. cap j = SOME (d,bs)` by metis_tac[] >>
+     `?a l. mm_local_write_footprint (EL j is) = SOME (a,l)` by metis_tac[] >>
+     `d = a /\ LENGTH bs = l` by metis_tac[mm_local_write_capture_footprint] >>
+     metis_tac[]) >>
+  rpt gen_tac >> eq_tac
+  >- (strip_tac >>
+      `?j. MEM j (due ++ [r]) /\ (d,bs) = (THE o cap) j` by
+        (gvs[MEM_MAP] >> metis_tac[]) >>
+      `?a cs. cap j = SOME (a,cs) /\
+        mm_local_write_footprint (EL j is) = SOME (a,LENGTH cs)` by metis_tac[] >>
+      qexists `j` >> gvs[] >> metis_tac[pairTheory.PAIR_EQ]) >>
+  strip_tac >> `MEM j (due ++ [r])` by metis_tac[] >>
+  `?a cs. cap j = SOME (a,cs) /\
+    mm_local_write_footprint (EL j is) = SOME (a,LENGTH cs)` by metis_tac[] >>
+  qexists `cs` >> reverse conj_tac >- gvs[] >>
+  qpat_x_assum `ws = _` SUBST1_TAC >> pure_rewrite_tac[MEM_MAP] >>
+  qexists `j` >> simp[] >> gvs[]
+QED
+
 Theorem mm_local_canonical_due_log_footprint[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -10430,35 +10473,19 @@ Theorem mm_local_canonical_due_log_footprint[local]:
       mm_local_write_footprint (EL j is) = SOME (d,l)
 Proof
   strip_tac >>
-  `!j. MEM j (due ++ [r]) <=> j < LENGTH is /\
-    MEM (EL j is).inst_id g.cg_inst_ids /\
-    ?d l. mm_local_write_footprint (EL j is) = SOME (d,l)` by
-    metis_tac[mm_local_canonical_due_footprint_indices] >>
-  `!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs) /\
-      mm_local_write_footprint (EL j is) = SOME (d,LENGTH bs)` by
+  `!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs)` by
     metis_tac[mm_local_canonical_due_footprint_records] >>
-  rpt gen_tac >> eq_tac
-  >- (strip_tac >>
-      `?j. MEM j (due ++ [r]) /\ (d,bs) = (THE o cap) j` by
-        (gvs[MEM_MAP] >> metis_tac[]) >>
-      `?a cs. cap j = SOME (a,cs) /\
-        mm_local_write_footprint (EL j is) = SOME (a,LENGTH cs)` by metis_tac[] >>
-      qexists `j` >> gvs[] >> metis_tac[pairTheory.PAIR_EQ]) >>
-  strip_tac >> `MEM j (due ++ [r])` by metis_tac[] >>
-  `?a cs. cap j = SOME (a,cs) /\
-    mm_local_write_footprint (EL j is) = SOME (a,LENGTH cs)` by metis_tac[] >>
-  qexists `cs` >> reverse conj_tac >- gvs[] >>
-  qpat_x_assum `ws = _` SUBST1_TAC >> pure_rewrite_tac[MEM_MAP] >>
-  qexists `j` >> simp[] >> gvs[]
+  mp_tac (SPEC_ALL mm_local_canonical_due_log_footprint_captures) >> simp[]
 QED
 
-Theorem mm_local_canonical_due_log_coverage_endpoint[local]:
+Theorem mm_local_canonical_due_log_coverage_endpoint_captures[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
   gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
-  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  r < LENGTH is /\ MEM g gs /\
+  (!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs)) /\
   rep_of_group is g = SOME ((EL r is).inst_id,g) /\
   cap = mm_local_write_capture is H (SUC r) /\
   due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
@@ -10472,7 +10499,7 @@ Proof
   `!d l. (?bs. MEM (d,bs) ws /\ LENGTH bs = l) <=>
     ?j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
       mm_local_write_footprint (EL j is) = SOME (d,l)` by
-    metis_tac[mm_local_canonical_due_log_footprint] >>
+    metis_tac[mm_local_canonical_due_log_footprint_captures] >>
   qabbrev_tac `fp = (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
                       (mm_local_write_footprint (EL p is)))` >>
   `mm_local_group_coverage is (LENGTH is) fp g /\
@@ -10494,6 +10521,29 @@ Proof
   irule mm_local_write_log_endpoint >> simp[] >> metis_tac[]
 QED
 
+
+Theorem mm_local_canonical_due_log_coverage_endpoint[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
+  ws = MAP (THE o cap) (due ++ [r]) ==>
+  (!a. (g.cg_dst <= a /\ a < g.cg_dst + g.cg_length) <=>
+    ?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs) /\
+  (!d bs. MEM (d,bs) ws ==> d + LENGTH bs <= g.cg_dst + g.cg_length) /\
+  MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = g.cg_dst + g.cg_length
+Proof
+  strip_tac >>
+  `!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs)` by
+    metis_tac[mm_local_canonical_due_footprint_records] >>
+  mp_tac (SPEC_ALL mm_local_canonical_due_log_coverage_endpoint_captures) >> simp[] >>
+  metis_tac[]
+QED
 
 Theorem mm_local_footprint_store_lower[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
@@ -11896,13 +11946,16 @@ Proof
   mp_tac (SPEC_ALL mm_local_epoch_source_read_interval) >> simp[]
 QED
 
-Theorem mm_local_canonical_due_index_payload[local]:
+Theorem mm_local_canonical_due_index_payload_interval[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
   gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
-  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  r < LENGTH is /\ MEM g gs /\
+  (!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
   rep_of_group is g = SOME ((EL r is).inst_id,g) /\
   cap = mm_local_write_capture is H (SUC r) /\
   due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
@@ -11929,10 +11982,104 @@ Proof
       (REPEAT_TCL CONJUNCTS_THEN assume_tac)))) >>
   `mm_local_write_capture is H (SUC r) j =
     SOME (c.cg_dst, read_memory c.cg_src c.cg_length t)` by
-    (mp_tac (Q.INST [`N` |-> `SUC r`] (SPEC_ALL mm_local_epoch_source_read)) >>
+    (mp_tac (Q.INST [`N` |-> `SUC r`] (SPEC_ALL mm_local_epoch_source_read_interval)) >>
      simp[] >> metis_tac[]) >>
   qexistsl [`c.cg_dst`, `read_memory c.cg_src c.cg_length t`] >>
   gvs[mm_local_read_memory_bytes, mm_local_bytes_length]
+QED
+
+Theorem mm_local_canonical_due_index_payload[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ mm_local_history is H (SUC r) /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
+  MEM j (due ++ [r]) /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  (!v src. FLOOKUP s0.ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  a = mm_local_epoch_start is gs r /\
+  u = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H (SUC r) q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory ==>
+  ?d bs. cap j = SOME (d,bs) /\
+    g.cg_dst <= d /\ d + LENGTH bs <= g.cg_dst + g.cg_length /\
+    bs = read_memory (g.cg_src + (d-g.cg_dst)) (LENGTH bs) t
+Proof
+  strip_tac >>
+  `!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))` by
+    metis_tac[mm_local_epoch_start_nonempty] >>
+  `a <= r` by metis_tac[mm_local_epoch_start_bound] >>
+  `!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    (mp_tac (Q.INST [`a` |-> `a`, `r` |-> `r`, `N` |-> `SUC r`]
+       (SPEC_ALL mm_local_fixed_cut_capture_recurrence)) >> simp[]) >>
+  mp_tac (SPEC_ALL mm_local_canonical_due_index_payload_interval) >> simp[]
+QED
+
+Theorem mm_local_canonical_due_log_payload_interval[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  (!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r) (mm_local_pending_indices is gs r) /\
+  ws = MAP (THE o cap) (due ++ [r]) /\
+  (!j v src. MEM j (due ++ [r]) /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (mload src (H j))) /\
+  a = mm_local_epoch_start is gs r /\
+  u = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H (SUC r) q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory ==>
+  (!d bs. MEM (d,bs) ws ==> g.cg_dst <= d /\
+    d + LENGTH bs <= g.cg_dst + g.cg_length /\
+    bs = read_memory (g.cg_src + (d-g.cg_dst)) (LENGTH bs) t) /\
+  (!v. FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws =
+    write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) v)
+Proof
+  strip_tac >>
+  `!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs) /\
+    g.cg_dst <= d /\ d + LENGTH bs <= g.cg_dst + g.cg_length /\
+    bs = read_memory (g.cg_src + (d-g.cg_dst)) (LENGTH bs) t` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`s0` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+       empty_scan_state (TAKE j is)`] (SPEC_ALL mm_local_canonical_due_index_payload_interval)) >>
+     simp[] >> metis_tac[]) >>
+  conj_asm1_tac
+  >- (rpt gen_tac >> disch_tac >>
+      `?j. MEM j (due ++ [r]) /\ (d,bs) = (THE o cap) j` by
+        (qpat_x_assum `MEM (d,bs) ws` mp_tac >>
+         qpat_x_assum `ws = _` SUBST1_TAC >> rewrite_tac[MEM_MAP] >> metis_tac[]) >>
+      qpat_x_assum `!j. MEM j (due ++ [r]) ==> _` (qspec_then `j` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      disch_then (qx_choose_then `d0` (qx_choose_then `bs0` strip_assume_tac)) >>
+      qpat_x_assum `cap j = SOME _` (fn th => fs[th]) >> gvs[]) >>
+  `(!a. (g.cg_dst <= a /\ a < g.cg_dst + g.cg_length) <=>
+      ?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs) /\
+    (!d bs. MEM (d,bs) ws ==> d + LENGTH bs <= g.cg_dst + g.cg_length) /\
+    MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = g.cg_dst + g.cg_length` by
+    (irule mm_local_canonical_due_log_coverage_endpoint_captures >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  gen_tac >> pure_rewrite_tac[mm_local_read_memory_bytes] >>
+  irule mm_local_write_log_realize >> simp[] >>
+  gvs[mm_local_read_memory_bytes]
 QED
 
 Theorem mm_local_canonical_due_log_payload[local]:
@@ -11963,31 +12110,15 @@ Theorem mm_local_canonical_due_log_payload[local]:
     write_memory_with_expansion g.cg_dst (read_memory g.cg_src g.cg_length t) v)
 Proof
   strip_tac >>
-  `!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs) /\
-    g.cg_dst <= d /\ d + LENGTH bs <= g.cg_dst + g.cg_length /\
-    bs = read_memory (g.cg_src + (d-g.cg_dst)) (LENGTH bs) t` by
-    (rpt strip_tac >>
-     mp_tac (Q.INST [`s0` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
-       empty_scan_state (TAKE j is)`] (SPEC_ALL mm_local_canonical_due_index_payload)) >>
-     simp[] >> metis_tac[]) >>
-  conj_asm1_tac
-  >- (rpt gen_tac >> disch_tac >>
-      `?j. MEM j (due ++ [r]) /\ (d,bs) = (THE o cap) j` by
-        (qpat_x_assum `MEM (d,bs) ws` mp_tac >>
-         qpat_x_assum `ws = _` SUBST1_TAC >> rewrite_tac[MEM_MAP] >> metis_tac[]) >>
-      qpat_x_assum `!j. MEM j (due ++ [r]) ==> _` (qspec_then `j` mp_tac) >>
-      (impl_tac >- first_assum ACCEPT_TAC) >>
-      disch_then (qx_choose_then `d0` (qx_choose_then `bs0` strip_assume_tac)) >>
-      qpat_x_assum `cap j = SOME _` (fn th => fs[th]) >> gvs[]) >>
-  `(!a. (g.cg_dst <= a /\ a < g.cg_dst + g.cg_length) <=>
-      ?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs) /\
-    (!d bs. MEM (d,bs) ws ==> d + LENGTH bs <= g.cg_dst + g.cg_length) /\
-    MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = g.cg_dst + g.cg_length` by
-    (irule mm_local_canonical_due_log_coverage_endpoint >>
-     goal_assum (drule_at Any) >> metis_tac[]) >>
-  gen_tac >> pure_rewrite_tac[mm_local_read_memory_bytes] >>
-  irule mm_local_write_log_realize >> simp[] >>
-  gvs[mm_local_read_memory_bytes]
+  `!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))` by
+    metis_tac[mm_local_epoch_start_nonempty] >>
+  `a <= r` by metis_tac[mm_local_epoch_start_bound] >>
+  `!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H (SUC r) q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    (mp_tac (Q.INST [`a` |-> `a`, `r` |-> `r`, `N` |-> `SUC r`]
+       (SPEC_ALL mm_local_fixed_cut_capture_recurrence)) >> simp[]) >>
+  mp_tac (SPEC_ALL mm_local_canonical_due_log_payload_interval) >> simp[] >> metis_tac[]
 QED
 
 Theorem mm_local_pending_copy_capture_replay[local]:
