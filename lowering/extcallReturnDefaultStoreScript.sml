@@ -1,7 +1,7 @@
 (* Typed default payload execution into a caller-owned return allocation. *)
 Theory extcallReturnDefaultStore
 Ancestors
-  valueCopySource extcallReturnDefaultPath extCallSeamPrecheck bodyIntCallStoreRun
+  valueCopySource extcallReturnDefaultPath extCallSeamPrecheck bodyIntCallStoreRun exprSimWordArgs
   placeMemoryPrimitiveForward storageCopyGasPath exprSimProps
   loweringPosts context compileEnv loweringStateRelDefs venomState venomInst exprLoweringProps
   emitHelper emitHelperProps list rich_list finite_map arithmetic

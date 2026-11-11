@@ -1,7 +1,7 @@
 (* Resource transport across the fresh-variable default-return control shell. *)
 Theory extcallReturnDefaultResources
 Ancestors
-  instIdxIndep
+  instIdxIndep exprSimProps
   exprSimAlloc loweringHalt placeMemoryPrimitiveForward fragGasMode
   extcallReturnDefaultRouting extcallReturnEntryBridge abiReturnPrefixTransport
   abiMalformedRecursiveInterface abiDecoderReentry exprLoweringProps

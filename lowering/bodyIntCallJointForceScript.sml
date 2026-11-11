@@ -1,7 +1,7 @@
 (* Seam 2 joint induction step: the forced-value producer from the value producer. *)
 Theory bodyIntCallJointForce
 Ancestors
-  bodyIntCallJointContract bodyIntCallWindowForcing bodyIntCallAssembly
+  bodyIntCallJointContract bodyIntCallWindowForcing bodyIntCallAssembly exprBopSimProps
   exprLoweringProps exprSimProps freshWrites stmtSimProps bodyMemoryDefs
   loweringPosts exprOperandVar exprSimUnwrap exprSimMemorySource fragExec
   gasOutcome gasSummaryCompose exprSimHyps exprSimHypsDefs abiBuiltinEncodeWord exprSimBopRestWordBasics
