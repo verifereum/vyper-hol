@@ -218,7 +218,7 @@ Theorem typed_bytes_array_body_copy[local]:
    dest_addr + 96 * LENGTH bss <= source_addr) /\
   typed_bytes_array_prefix bss source_addr 64 1 (LENGTH bss) s.vs_memory /\
   typed_bytes_array_prefix bss dest_addr 96 33 i s.vs_memory ==>
-  ?v. mem_cont_sim ctx fn s v /\ v.vs_inst_idx = 9 /\
+  ?v. mem_cont_sim ctx fn s v /\ v.vs_inst_idx = 10 /\
     v.vs_current_bb = s.vs_current_bb /\
     typed_bytes_array_prefix bss dest_addr 96 33 (SUC i) v.vs_memory /\
     mem_bytes_at source_addr (64 * LENGTH bss) v.vs_memory =
@@ -254,7 +254,7 @@ Proof
      irule typed_bytes_array_prefix_preserved >>
      conj_tac >- decide_tac >> conj_tac >- simp[] >>
      qexists_tac `s.vs_memory` >> simp[]) >>
-  qexists_tac `q with vs_inst_idx := 9` >> simp[] >>
+  qexists_tac `q with vs_inst_idx := 10` >> simp[] >>
   conj_tac >- (irule mem_cont_sim_trans >> qexists_tac `u` >> simp[]) >>
   conj_tac >-
     (qpat_x_assum `q with <|vs_memory := _; vs_vars := _|> = u` mp_tac >>
@@ -273,20 +273,20 @@ QED
 Theorem typed_bytes_array_backedge_cont[local]:
   compile_copy_sarray_typed ce dst (BaseT (BytesT (Dynamic 33)))
     src (BaseT (BytesT (Dynamic 1))) ncount sa = ((),sb) /\
-  fn_has_code sa sb fn /\ ~s.vs_halted /\ s.vs_inst_idx = 9 /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\ s.vs_inst_idx = 10 /\
   s.vs_current_bb = fresh_label_output "typed_sa_body" (sa.cs_next_label+1) /\
   eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME (n2w i) /\
   i < ncount /\ ncount < dimword(:256) ==>
   mem_cont_sim ctx fn s
     (jump_to (fresh_label_output "typed_sa_cond" sa.cs_next_label)
       (typed_sa_backedge_state ("%" ++ toString sa.cs_next_var)
-        ("%" ++ toString (sa.cs_next_var+11)) i s))
+        ("%" ++ toString (sa.cs_next_var+12)) i s))
 Proof
   strip_tac >> drule_all typed_bytes_array_loop_code >> simp[] >> strip_tac >>
   gvs[] >> irule typed_sa_backedge_sim >> simp[] >>
   conj_tac >- (qexists_tac `ncount` >> simp[]) >>
   simp[typed_sa_header_insts_def, phi_prefix_length_def, mk_inst_def] >>
-  qexistsl_tac [`sa.cs_next_id+14`, `TAKE 9 body_bb.bb_instructions`] >>
+  qexistsl_tac [`sa.cs_next_id+15`, `TAKE 10 body_bb.bb_instructions`] >>
   simp[] >> metis_tac[TAKE_DROP]
 QED
 
@@ -374,7 +374,7 @@ Proof
   disch_then (qspec_then `ctx` assume_tac) >>
   qexists_tac `jump_to (fresh_label_output "typed_sa_cond" sa.cs_next_label)
     (typed_sa_backedge_state ("%" ++ toString sa.cs_next_var)
-      ("%" ++ toString (sa.cs_next_var+11)) i v)` >>
+      ("%" ++ toString (sa.cs_next_var+12)) i v)` >>
   conj_tac >- (irule mem_cont_sim_trans >> qexists_tac `u` >> simp[] >>
     irule mem_cont_sim_trans >> qexists_tac `v` >> gvs[]) >>
   simp[typed_bytes_array_loop_inv_def, jump_to_def, typed_sa_backedge_state_def,
@@ -386,9 +386,9 @@ Proof
        vs_inst_idx := _; vs_prev_bb := _|> = initial` mp_tac >>
      simp[venom_state_component_equality]) >>
   rpt strip_tac >>
-  `x <> "%" ++ toString sa.cs_next_var /\ x <> "%" ++ toString (sa.cs_next_var+11)` by
+  `x <> "%" ++ toString sa.cs_next_var /\ x <> "%" ++ toString (sa.cs_next_var+12)` by
     (gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
-     metis_tac[DECIDE ``n <= n /\ n <= n+11``]) >>
+     metis_tac[DECIDE ``n <= n /\ n <= n+12``]) >>
   gvs[lookup_var_def] >> metis_tac[]
 QED
 

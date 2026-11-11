@@ -2047,10 +2047,8 @@ Proof
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
-  `FLOOKUP env.var_types id = SOME ty /\
-   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-   (bop = Exp ==> nonneg_int_literal e) /\
-   (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
+  `FLOOKUP env.var_types id = SOME ty /\ augassign_operand_ok ty bop e /\
+   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn` by
     (gvs[type_stmt_def, well_typed_target_def, well_typed_expr_def,
          DISJ_IMP_THM, AllCaseEqs()] >>
      Cases_on `FLOOKUP env.var_types id` >>
@@ -2061,9 +2059,8 @@ Proof
   `body_expr_ok cx e` by
     (first_x_assum irule >> metis_tac[eval_target_place_local]) >>
   `expr_sim_case F ctx func cenv cx e` by metis_tac[body_expr_ok_case] >>
-  irule compile_augassign_local_case >> simp[DISJ_IMP_THM] >>
-  conj_tac >- (qexists_tac `env` >> simp[]) >>
-  qexists_tac `F` >> simp[]
+  drule augassign_operand_ok_operands >> strip_tac >>
+  irule (Q.SPEC `F` compile_augassign_local_case) >> simp[] >> metis_tac[]
 QED
 
 (* x.f op= e on a field of a local struct: stmtSimAugAssignAttr's
@@ -2111,6 +2108,7 @@ Proof
      qexists_tac `[]` >> simp[]) >>
   `?sid. FLOOKUP env.var_types id = SOME (StructT sid) /\
          attribute_type env.type_defs (StructT sid) fld = SOME ty /\
+         augassign_operand_ok ty bop e /\
          well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\
          bop <> NotIn` by
     (gvs[type_stmt_def, well_typed_target_def,
@@ -2129,7 +2127,7 @@ Proof
   `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
   `(bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL \/ bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_expr_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    metis_tac[augassign_operand_ok_operands] >>
   irule compile_augassign_attr_local_case >> simp[] >> metis_tac[]
 QED
 
@@ -2176,10 +2174,9 @@ Proof
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
   `type_place_target env (TopLevelNameTarget (NONE, id)) = SOME (Type ty) /\
    well_typed_expr env e /\ assignable_type env.type_defs ty /\
-   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-   (bop = Exp ==> nonneg_int_literal e) /\
-   (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+   augassign_operand_ok ty bop e /\
+   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn` by
+    gvs[type_stmt_def, well_typed_target_def, AllCaseEqs()] >>
   gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
   >- (drule_all env_assignable_find_NONE >> strip_tac >> gvs[]) >>
   drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
@@ -2272,6 +2269,7 @@ Proof
   `?tgt_ty. type_place_target env (TopLevelNameTarget (NONE, id)) =
               SOME (Type tgt_ty) /\
             attribute_type env.type_defs tgt_ty fld = SOME ty /\
+            augassign_operand_ok ty bop e /\
             well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\
             bop <> NotIn` by
     gvs[type_stmt_def, well_typed_target_def,
@@ -2295,7 +2293,7 @@ Proof
   `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
   `(bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL \/ bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_expr_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    metis_tac[augassign_operand_ok_operands] >>
   irule compile_augassign_attr_storage_case >> simp[] >> metis_tac[]
 QED
 

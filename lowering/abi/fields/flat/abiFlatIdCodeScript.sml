@@ -32,7 +32,7 @@ QED
 Theorem compile_abi_child_bytes_ids:
   !dst src cap head_offset dyn_ptr cs op cs'.
     compile_abi_encode_child dst src (AbiBytestring cap) T head_offset dyn_ptr cs = (op,cs') ==>
-    cs'.cs_next_id = cs.cs_next_id + 16
+    cs'.cs_next_id = cs.cs_next_id + 17
 Proof
   rpt gen_tac >>
   simp_tac (srw_ss()) [compile_abi_child_dynamic_split, compile_abi_child_prefix_result, compile_abi_child_suffix_result] >>

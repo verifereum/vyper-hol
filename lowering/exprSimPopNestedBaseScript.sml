@@ -101,7 +101,7 @@ Theorem nested_pop_step_load:
                        else sload (THE (eval_operand hdr s)) s) s)
 Proof
   Cases_on `tr` >> Cases_on `eval_operand hdr s` >>
-  simp[step_inst_base_def, exec_read1_def, mk_inst_def]
+  FIRST [simp[step_inst_base_def, exec_read1_def, mk_inst_def]]
 QED
 
 Theorem nested_pop_step_store:

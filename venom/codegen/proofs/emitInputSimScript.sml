@@ -60,8 +60,7 @@ Theorem emit_input_plan_three:
     (ops1 ++ ops2 ++ ops3, ps3)
 Proof
   rpt gen_tac >>
-  simp[emit_input_plan_def, venomInstTheory.operand_vars_def,
-       dfgDefsTheory.operand_vars_def] >>
+  simp[emit_input_plan_def, operand_vars_def] >>
   rpt (pairarg_tac >> gvs[APPEND_ASSOC])
 QED
 

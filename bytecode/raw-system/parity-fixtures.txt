@@ -11,3 +11,7 @@ rl06_storage_data
 rr01_literal
 sd03_terminus_ret
 ctor01_rawlog
+rr_bytes
+rr_default_fn
+rr_storage
+xa_bytes_lit_return

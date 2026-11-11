@@ -15,6 +15,7 @@ Ancestors
   codegenRel asmSem planExec planWf
   indexedLists list rich_list finite_map arithmetic
   operandInventory inputInventory inputMaterialised reduceDepthSim reorderStages
+  venomInst
 
 
 (* Value-sensitive equality for planner stacks.  Reorder may replace an
@@ -1171,7 +1172,7 @@ Proof
        mp_tac emit_one_input_inventory_inc >> simp[] >>
      disch_then irule >> Cases_on `h` >>
      gvs[is_var_operand_def, venomInstTheory.operand_vars_def,
-         venomInstTheory.operand_var_def, input_mem_operand_vars] >>
+         venomInstTheory.operand_var_def, MEM_operand_vars_eq_Var] >>
      Cases_on `Var s IN FDOM ps.ps_spilled` >> gvs[] >>
      rewrite_tac[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
   Cases_on `x IN FDOM ps.ps_spilled` >>

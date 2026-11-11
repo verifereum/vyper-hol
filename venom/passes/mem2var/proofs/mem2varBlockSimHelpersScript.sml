@@ -2138,15 +2138,6 @@ Finalise m2v_step_promoted_mload
    (proved here instead of mem2varProofsScript to use helpers)
    ================================================================ *)
 
-(* MEM (Var v) ops ==> MEM v (operand_vars ops), for dfgDefs' operand_vars *)
-Theorem MEM_Var_operand_vars:
-  !v ops. MEM (Var v) ops ==> MEM v (operand_vars ops)
-Proof
-  Induct_on `ops` >> rw[operand_vars_def] >>
-  Cases_on `operand_var h` >> gvs[operand_vars_def] >>
-  Cases_on `h` >> gvs[operand_var_def]
-QED
-
 (* Helper: if FIND returns SOME (ao,pvar,sz) from promo_list, the inst
    uses ao and therefore m2v_can_promote_alloca constrains its opcode *)
 Theorem promo_find_inst_opcode:
@@ -2160,7 +2151,7 @@ Proof
   rpt strip_tac >>
   imp_res_tac FIND_MEM >>
   imp_res_tac FIND_P >> gvs[] >>
-  drule MEM_Var_operand_vars >> strip_tac >>
+  drule mem_var_operand_vars >> strip_tac >>
   drule_all dfg_build_function_uses_complete_proof >> strip_tac >>
   drule m2v_promo_list_can_promote >>
   simp[m2v_can_promote_alloca_def, EVERY_MEM] >>
@@ -2257,7 +2248,7 @@ Proof
   (* inst uses Var ao AND is_pointer_preserving_op → contradiction *)
   CCONTR_TAC >> gvs[] >>
   `MEM ao (operand_vars inst.inst_operands)` by
-    (irule MEM_Var_operand_vars >>
+    (irule mem_var_operand_vars >>
      gvs[EXISTS_MEM] >> rename1 `MEM op inst.inst_operands` >>
      Cases_on `op` >> gvs[]) >>
   `MEM inst (fn_insts fn)` by metis_tac[MEM_fn_insts] >>

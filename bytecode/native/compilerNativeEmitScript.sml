@@ -47,6 +47,7 @@ val fixtures = [
   ("account_items_program", "account_items.hex"),
   ("add_arg_program", "add_arg.hex"),
   ("assert_bare_program", "assert_bare.hex"),
+  ("assert_reason_program", "assert_reason.hex"),
   ("deploy_storage_program", "deploy_storage.hex"),
   ("ec_builtins_program", "ec_builtins.hex"),
   ("env_block_program", "env_block.hex"),
@@ -69,6 +70,7 @@ val fixtures = [
   ("loops_program", "loops.hex"),
   ("noop_program", "noop.hex"),
   ("raise_bare_program", "raise_bare.hex"),
+  ("raise_reason_program", "raise_reason.hex"),
   ("return_arg_program", "return_arg.hex"),
   ("return_uint_program", "return_uint.hex"),
   ("scalar_arith_decimal_div_program", "scalar_arith_decimal_div.hex"),
@@ -419,6 +421,11 @@ val code_rewrites = [
   prove (``(?n. bi = Slice n) <=> (case bi of Slice _ => T | _ => F)``,
     Cases_on `bi` >> rw[]),
   GSYM listTheory.EXISTS_MEM, GSYM listTheory.EVERY_MEM,
+  (* entry_instructions' no-effects test. *)
+  prove (``(s:effects) = empty_effects <=> effects_to_list s = []``,
+    rw[dftDefsTheory.effects_to_list_def, venomEffectsTheory.empty_effects_def,
+       pred_setTheory.EXTENSION, listTheory.FILTER_EQ_NIL, EQ_IMP_THM] >>
+    Cases_on `x` >> fs[]),
   (* to_word is width-polymorphic; inlined, its n2w gets each caller's width.
      The applied form comes first so applied occurrences leave no redex. *)
   cv_typeTheory.to_word_def,

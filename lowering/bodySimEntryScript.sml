@@ -73,7 +73,8 @@ Proof
   Induct >- simp[materialize_internal_params_def, comp_return_def] >>
   PairCases >> rpt gen_tac >> simp[Once materialize_internal_params_def] >>
   Cases_on `h1` >> simp[LET_THM] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
+  TRY (rename1 `SOME loc` >> Cases_on `loc` >> simp[]) >>
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   first_x_assum irule >>
