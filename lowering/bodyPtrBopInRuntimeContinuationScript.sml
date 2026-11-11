@@ -43,7 +43,10 @@ Theorem membership_array_continuation_summary_ptr:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
-  wb_frame cenv es ee sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\ ee.gas_obs = [] ==>
+  wb_frame cenv es ee sa s0 s /\
+  (~expr_has_effect (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) ==>
+   pure_frame cenv fn es sa s0 s) /\
+  sa.cs_next_var <= sm.cs_next_var /\ ee.gas_obs = [] ==>
   gas_summary_ptr_at D (ctx,fn) PG []
     (bind (read_result cx tvv) (\a. lift_sum (evaluate_binop u (ArrayTV tv bd) bop v a)))
     (ee,s,G,tn)
@@ -87,6 +90,16 @@ Proof
      >- fs[bodyPtrBopInLoopContractTheory.membership_loop_frame_def] >>
      qexists_tac `sm` >>
      fs[bodyPtrBopInLoopContractTheory.membership_loop_frame_def]) >>
+  `~expr_has_effect (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) ==>
+   pure_frame cenv fn es sa s0 t` by
+    (strip_tac >>
+     `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
+       (qpat_assum `membership_loop_frame _ _ _ _ _ _ t`
+          (strip_assume_tac o
+           REWRITE_RULE [bodyPtrBopInLoopContractTheory.membership_loop_frame_def]) >>
+        qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+     irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `s` >> simp[] >>
+     qpat_x_assum `_ ==> pure_frame _ _ _ _ _ s` irule >> first_assum ACCEPT_TAC) >>
   drule_all literal_bool_post >> disch_tac >>
   qpat_x_assum `Abbrev _` kall_tac >>
   qpat_x_assum `ws = _` kall_tac >>

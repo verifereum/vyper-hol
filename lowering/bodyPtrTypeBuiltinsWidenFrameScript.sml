@@ -86,6 +86,39 @@ Proof
     (irule buffer_mcopy_exterior >> decide_tac) >> simp[]
 QED
 
+(* The widen copy writes only inside its own fresh allocation. *)
+Theorem widen_copy_run_pure_frame[local]:
+  compile_bytestring_widen_copy capacity x n sa = (op,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  fn_has_code sa sb fn /\ 0 < n /\ n <= capacity /\ capacity < dimword(:256) /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  fn_inst_ids_distinct fn /\ (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME a ==>
+  pure_frame cenv fn es sa s t
+Proof
+  strip_tac >> drule_all widen_copy_run_frame_split >> strip_tac >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  match_mp_tac exprSimPropsTheory.pure_frame_buffer_tail >>
+  qexistsl_tac [`u`, `inst`, `w2n w`, `capacity`] >>
+  rpt conj_tac
+  >- (irule pure_frame_mem_eq >> first_assum ACCEPT_TAC)
+  >- simp[mcopy_def, write_memory_with_expansion_def]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- fs[]
+  >- fs[mcopy_def, write_memory_with_expansion_def]
+  >- (rpt strip_tac >> rename1 `local_region cenv es.scopes s nm lb lsz` >>
+      `local_region cenv es.scopes u nm lb lsz` by
+        (irule exprSimPropsTheory.local_region_frame_fwd >>
+         qexistsl_tac [`s`,`sa`,`es.scopes`] >> simp[] >>
+         rpt strip_tac >> metis_tac[]) >>
+      qpat_x_assum `!name b len. local_region _ _ u _ _ _ ==> _` drule >>
+      simp[]) >>
+  rpt gen_tac >> simp[regions_disjoint_def] >> strip_tac >>
+  qpat_x_assum `u.vs_memory = s.vs_memory` (SUBST1_TAC o SYM) >>
+  irule buffer_mcopy_exterior >> decide_tac
+QED
+
 Theorem widen_copy_run_allocation_frame:
   compile_bytestring_widen_copy capacity x n sa = (op,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -129,6 +162,8 @@ Theorem widen_copy_run_parent_post:
 Proof
   strip_tac >> drule_all widen_copy_run_allocation_frame >> strip_tac >>
   `wb_frame cenv es es sa s t` by (irule widen_copy_run_wb_frame >> metis_tac[]) >>
+  `pure_frame cenv fn es sa s t` by
+    (irule widen_copy_run_pure_frame >> metis_tac[]) >>
   irule convert_buffer_expr_post >> simp[] >>
   gvs[]
 QED

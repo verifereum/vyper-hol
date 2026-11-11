@@ -86,6 +86,14 @@ Resume literal_expr_sim_ptr[normal]:
     (metis_tac[not_fresh_at_mono]) >>
   `EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) (needle::xs)` by simp[] >>
   `stmt_state_rel ctx fn cenv cx (es_end with gas_obs := []) t` by simp[] >>
+  `~expr_has_effect (Builtin (BaseT BoolT) (Bop bop)
+      [e1; Builtin (ArrayT (expr_type e1) n) (MakeArray (SOME (expr_type e1)) n) elems]) ==>
+   pure_frame cenv fn es sa s0 t` by
+    (rewrite_tac[loweringPostsTheory.expr_has_effect_thm, listTheory.EXISTS_DEF,
+                 DE_MORGAN_THM] >>
+     strip_tac >> qpat_x_assum `_ ==> pure_frame _ _ _ _ _ t` irule >>
+     qpat_x_assum `~EXISTS _ elems`
+       (assume_tac o REWRITE_RULE [listTheory.NOT_EXISTS]) >> simp[]) >>
   drule_all literal_typed_continuation_summary_ptr >> disch_tac >>
   qexists_tac `marks ++ []` >> disj1_tac >>
   asm_rewrite_tac[] >> irule gas_summary_ptr_at_bind_normal >>
@@ -95,8 +103,8 @@ Resume literal_expr_sim_ptr[normal]:
   simp[] >> irule gas_summary_ptr_at_conseq >>
   first_assum (irule_at (Pos last)) >>
   simp[expr_type_def, is_word_type_def] >>
-  qexistsl_tac [`n`, `elems`, `e1`, `SOME (expr_type e1)`, `ArrayT (expr_type e1) n`] >>
-  metis_tac[]
+  rpt gen_tac >> disch_then (qx_choose_then `ww` strip_assume_tac) >>
+  qexists_tac `ww` >> asm_rewrite_tac[]
 QED
 Resume literal_expr_sim_ptr[exit]:
   gnvs[] >> Cases_on `res` >- gvs[wb_args_exit_def] >>

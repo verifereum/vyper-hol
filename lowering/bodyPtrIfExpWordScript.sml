@@ -57,8 +57,7 @@ Proof
   strip_tac >> gvs[] >> conj_tac
   >- (irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
   irule expr_post_of_vv_post_stack >>
-  drule vv_post_read_result >> disch_then (fn th => fs[th]) >>
-  goal_assum drule
+  qexists_tac `ty` >> irule vv_post_read_result >> metis_tac[]
 QED
 
 Theorem ifexp_word_arm_compile:
