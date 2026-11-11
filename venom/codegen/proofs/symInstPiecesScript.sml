@@ -1972,3 +1972,144 @@ Proof
   qexists `full` >> gvs[stackOpSimTheory.execute_plan_append,
     planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >> metis_tac[]
 QED
+
+Theorem initial_fmp_plan_decompose:
+  inst.inst_opcode = INITIAL_FMP /\ inst.inst_operands = [] /\
+  inst.inst_outputs = [x] /\
+  generate_inst_plan liveness dfg cfg fn inst nl halt term bb ps = SOME (ops,qs) ==>
+  ?pops ps8 opts ps9.
+    (if halt then ([],ps with ps_stack := stack_push (Var x) ps.ps_stack)
+     else popmany_plan (if MEM x nl then [] else [Var x])
+       (ps with ps_stack := stack_push (Var x) ps.ps_stack)) = (pops,ps8) /\
+    (if MEM x nl then optimistic_swap_plan dfg inst nl term ps8 else ([],ps8)) = (opts,ps9) /\
+    ops = [SOInitialFmp] ++ (pops ++ opts) /\ qs = release_dead_spills nl ps9
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, venomInstTheory.is_param_opcode_def, generate_regular_inst_plan_def,
+    compute_operands_def, venomInstTheory.python_stack_operands_def, venomInstTheory.ir_specific_operand_order_def,
+    venomEffectsTheory.is_commutative_def, emit_input_plan_def, reorder_plan_def, generate_emit_ops_def,
+    stack_pop_def] >>
+  rpt (pairarg_tac >> gvs[]) >> Cases_on `MEM x nl` >>
+  Cases_on `halt` >> gvs[popmany_plan_def] >> metis_tac[]
+QED
+
+Theorem sym_initial_fmp_generated_cleanup:
+  inst.inst_opcode = INITIAL_FMP /\ inst.inst_outputs = [x] /\
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  emitted = ps with ps_stack := stack_push (Var x) ps.ps_stack /\
+  spill_alloc_layout_wf emitted.ps_alloc emitted.ps_spilled /\
+  (if halt then ([],emitted)
+   else popmany_plan (if MEM x nl then [] else [Var x]) emitted) = (pops,ps8) /\
+  (if MEM x nl then optimistic_swap_plan dfg inst nl term ps8 else ([],ps8)) = (opts,ps9) /\
+  qs = release_dead_spills nl ps9 /\
+  (!off. MEM (SOSpill off) (pops ++ opts) ==> off < dimword (:256)) /\
+  (!off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp ([SOInitialFmp] ++ (pops ++ opts))) ==>
+  ?final. sym_steps p env
+      (LENGTH (execute_plan initial_fmp ([SOInitialFmp] ++ (pops ++ opts)))) ss = SymOK final /\
+    sym_kinds_ok cplan fn ret srest qs final /\
+    (!b. ~R b ==> FLOOKUP final.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  `execute_plan initial_fmp [SOInitialFmp] = [AsmPush (encode_num_bytes initial_fmp)]` by
+    simp[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >>
+  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+  pure_rewrite_tac[Once stackOpSimTheory.execute_plan_append] >>
+  asm_rewrite_tac[stackOpSimTheory.asm_block_at_append, listTheory.LENGTH] >> strip_tac >>
+  drule sym_initial_fmp_run >> disch_then (qspec_then `env` assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  drule_all sym_initial_fmp_source_emit >> strip_tac >>
+  rename1 `sym_steps p env 1 ss = SymOK mid` >>
+  `mid.sym_base.as_pc = ss.sym_base.as_pc + 1` by
+    gvs[asmSemTheory.asm_next_def] >>
+  `(!out. inst.inst_outputs = [out] ==> stack_get_depth (Var out) emitted.ps_stack = SOME 0) /\
+    LENGTH inst.inst_outputs <= 1` by
+    simp[stack_get_depth_def, stack_push_def, listTheory.REVERSE_SNOC, stack_find_def] >>
+  `(if inst.inst_outputs = [] \/ halt then ([],emitted)
+    else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) emitted) = (pops,ps8) /\
+   (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
+    else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9)` by
+    (Cases_on `MEM x nl` >> gvs[]) >>
+  drule_at (Pat `sym_kinds_ok _ _ _ _ emitted mid`) sym_regular_generated_postfix_sim_marked >>
+  disch_then (drule_at (Pat `_ = (pops,ps8)`)) >>
+  disch_then (drule_at (Pat `_ = (opts,ps9)`)) >>
+  disch_then (drule_at (Pat `qs = release_dead_spills _ _`)) >>
+  disch_then (qspecl_then [`p`, `initial_fmp`, `env`, `R`] mp_tac) >> simp[] >>
+  (impl_tac >- metis_tac[listTheory.MEM_APPEND, arithmeticTheory.ONE]) >> strip_tac >>
+  rename1 `sym_steps p env (LENGTH (execute_plan initial_fmp (pops ++ opts))) mid = SymOK final` >>
+  qexists `final` >> conj_tac
+  >- (`sym_steps p env (1 + LENGTH (execute_plan initial_fmp (pops ++ opts))) ss = SymOK final`
+        suffices_by
+        simp[stackOpSimTheory.execute_plan_append, planExecTheory.execute_plan_def,
+          planExecTheory.exec_stack_op_def, arithmeticTheory.ADD1] >>
+      once_rewrite_tac[sym_steps_add] >>
+      qpat_x_assum `sym_steps p env 1 ss = SymOK mid` (fn th => rewrite_tac[th]) >>
+      simp[]) >> simp[]
+QED
+
+Theorem sym_initial_fmp_inst_symbolic_run:
+  inst.inst_opcode = INITIAL_FMP /\ inst.inst_operands = [] /\ inst.inst_outputs = [x] /\
+  generated_plan_state_wf_marked sb ps /\ codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  EVERY (\op. EVERY (\out. case op of Var v => v <> out | _ => T)
+    inst.inst_outputs) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+    EVERY (\out. case op of Var v => v <> out | _ => T) inst.inst_outputs) /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\ qs.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  generate_inst_plan liveness dfg cfg fn inst nl halt term bb ps = SOME (ops,qs) /\
+  asm_static_wf prog /\ asm_block_at prog cs.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  sym_frame_inv prog env ctx cplan fn ret srest labs0 ps cs ss ==>
+  ?final. sym_steps prog env (LENGTH (execute_plan cplan.cp_initial_fmp ops)) ss = SymOK final /\
+    sym_kinds_ok cplan fn ret srest qs final /\
+    (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
+      FLOOKUP final.sym_mem_labels b = FLOOKUP labs0 b)
+Proof
+  strip_tac >> drule_all initial_fmp_plan_decompose >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `popmany_plan _ emitted` >>
+  `deepResidualBudget$plan_state_residual_wf_marked sb [] 0 ps` by
+    (drule deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil >>
+     simp[deepResidualBudgetTheory.plan_state_residual_wf_marked_def,
+       deepResidualBudgetTheory.residual_budget_wf_marked_def]) >>
+  `generated_plan_state_wf_marked sb emitted` by
+    (irule deepResidualSimTheory.materialised_emit_resources_marked >>
+     qexistsl [`0`, `inst.inst_outputs`, `ps`, `[]`] >>
+     simp[Abbr `emitted`, stack_pop_def]) >>
+  `(if inst.inst_outputs = [] \/ halt then ([],emitted)
+    else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) emitted) = (pops,ps8) /\
+   (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
+    else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9)` by
+    (Cases_on `MEM x nl` >> gvs[]) >>
+  drule_at (Pat `generated_plan_state_wf_marked sb emitted`) sym_regular_postfix_applicability >>
+  disch_then (drule_at (Pat `_ = (pops,ps8)`)) >>
+  disch_then (drule_at (Pat `_ = (opts,ps9)`)) >>
+  disch_then (drule_at (Pat `qs = release_dead_spills _ _`)) >>
+  disch_then (drule_at (Pat `MEM r cplan.cp_regions`)) >>
+  disch_then (qspecl_then [`fn.fn_name`, `ctx`] mp_tac) >> simp[] >> strip_tac >>
+  `!off. MEM (SOSpill off) (pops ++ opts) ==> off < dimword (:256)` by
+    (qpat_x_assum `EVERY _ ops` mp_tac >> simp[listTheory.EVERY_MEM] >>
+     rpt strip_tac >> qpat_x_assum `!s. _` (qspec_then `SOSpill off` mp_tac) >> simp[]) >>
+  `ssa_form fn /\ asm_sym_rel prog env cs ss /\ sym_kinds_ok cplan fn ret srest ps ss /\
+   asm_block_at prog ss.sym_base.as_pc (execute_plan cplan.cp_initial_fmp ops)` by
+    (reverse (rpt conj_tac)
+     >- (qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp[sym_frame_inv_def, asmSymBridgeTheory.asm_sym_rel_def] >> rpt strip_tac >> gvs[]) >>
+     fs[codegen_ready_fn_def, sym_frame_inv_def]) >>
+  drule_at (Pat `sym_kinds_ok _ _ _ _ ps ss`) sym_initial_fmp_generated_cleanup >>
+  disch_then (drule_at (Pat `_ = (pops,ps8)`)) >>
+  disch_then (drule_at (Pat `_ = (opts,ps9)`)) >>
+  disch_then (drule_at (Pat `qs = release_dead_spills _ _`)) >>
+  disch_then (qspecl_then [`prog`, `cplan.cp_initial_fmp`, `env`, `cs`,
+    `closure_spill_byte ctx cplan fn.fn_name`] mp_tac) >> simp[Abbr `emitted`] >>
+  (impl_tac >- metis_tac[listTheory.APPEND, listTheory.MEM_APPEND]) >>
+  strip_tac >> rename1 `sym_steps prog env _ ss = SymOK final` >>
+  qexists `final` >> simp[] >>
+  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[NoAsms, sym_frame_inv_def] >> metis_tac[]
+QED
