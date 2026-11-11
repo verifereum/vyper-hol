@@ -318,5 +318,9 @@ Theorem fuel_okS_compile_word_copy_loop_base:
       (compile_word_copy_loop_base src_op dst_op count_op load_loc store_loc
          is_ctor imm)
 Proof
-  cheat
+  rpt gen_tac >> pure_rewrite_tac [fuel_okS_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule word_copy_loop_structure >> strip_tac >> simp[] >>
+  drule word_copy_loop_cut_points >> strip_tac >>
+  FAIL_TAC "assembled compiler cut points; runtime round interface required"
 QED
