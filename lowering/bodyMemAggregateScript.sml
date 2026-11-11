@@ -294,7 +294,7 @@ Resume body_make_array_nowiden_mem[tuple_final_post]:
        contextTheory.base_ptr_def] >>
   conj_tac >- fs[stmt_state_rel_def] >>
   reverse conj_tac >-
-    (qexistsl [`cenv`, `ctx`, `func`, `n`, `s0`, `sa`, `sb`, `st`] >>
+    (qexistsl [`cenv`, `ctx`, `es`, `func`, `n`, `s0`, `sa`, `sb`, `st`] >>
      gvs[expr_type_def, contextTheory.base_ptr_def]) >>
   qexistsl [`sa.cs_next_id`, `b`, `type_memory_size_list tvs`] >>
   simp[type_memory_size_def, contextTheory.mk_ptr_def,
