@@ -705,7 +705,9 @@ Proof
      metis_tac[]) >>
   pure_rewrite_tac [fnPlanLineageTheory.lineage_entry_def] >>
   qexistsl_tac [`ps_l`, `bb`, `ps_dfs`, `block_ops`, `ps_dfs_after`, `h`,
-               `promised`, `ps_after`, `ps_tdfs`] >> simp[]
+               `promised`, `ps_after`, `ps_tdfs`] >> simp[] >>
+  qexistsl_tac [`prefixL`, `prefixD`, `core`] >> simp[] >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Theorem body_jump_entry_frame:
