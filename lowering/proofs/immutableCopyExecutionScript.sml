@@ -1163,7 +1163,7 @@ Proof
   simp[store_copy_normalize_def, immutable_loop_prefix_shared]
 QED
 
-Theorem immutable_loop_frame_operand[local]:
+Theorem immutable_loop_frame_operand:
   immutable_loop_frame sa sb s a b i t /\
   (!x. p = Var x ==> not_fresh_at sa x) ==>
   eval_operand p t = eval_operand p s

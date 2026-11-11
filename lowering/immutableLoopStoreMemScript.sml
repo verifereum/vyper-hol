@@ -177,3 +177,143 @@ Proof
     (assume_tac o REWRITE_RULE [eval_operand_def, lookup_var_def]) >>
   simp[jump_to_def, eval_operand_def, lookup_var_def]
 QED
+
+Theorem immutable_transfers_allocation_frame[local]:
+  !n off s. (immutable_transfers T T a b n off s).vs_allocas = s.vs_allocas /\
+    (immutable_transfers T T a b n off s).vs_alloca_next = s.vs_alloca_next
+Proof
+  Induct >> simp[immutable_transfers_def, immutable_word_transfer_def,
+                istore_def, mstore_def]
+QED
+
+Theorem immutable_loop_allocation_frame[local]:
+  immutable_loop_frame sa sb s a b i q ==>
+  q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[immutable_loop_frame_def] >> strip_tac >>
+  qpat_x_assum `store_copy_normalize _ _ = _`
+    (mp_tac o Q.AP_TERM `\t. (t.vs_allocas,t.vs_alloca_next)`) >>
+  simp[stmtSimStoreCopyTheory.store_copy_normalize_def,
+       immutable_transfers_allocation_frame]
+QED
+
+Theorem immutable_loop_jump_mem_path[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label target] []) ==>
+  gas_path_mem ctx func s 0 (OK (jump_to target s))
+Proof
+  strip_tac >> irule for_range_jump_at_zero_path_mem >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`bb`, `mk_inst id JMP [Label target] []`] >>
+  simp[mk_inst_def, is_terminator_def, below_frontier_no_ranges,
+       inst_dload_in_section_def, step_inst_base_opcode_eqs]
+QED
+
+Theorem immutable_loop_iterate_mem:
+  lookup_block hdr func.fn_blocks = SOME bbh /\
+  isPREFIX [mk_inst idh EQ [Var cv; cnt] [tv];
+    mk_inst (idh+1) JNZ [Var tv; Label exit; Label body_lbl] []]
+    bbh.bb_instructions /\
+  lookup_block body_lbl func.fn_blocks = SOME bbb /\
+  isPREFIX
+    [mk_inst idb MUL [Var cv; Lit 32w] [mv];
+     mk_inst (idb+1) ADD [src; Var mv] [sv];
+     mk_inst (idb+2) MLOAD [Var sv] [vv];
+     mk_inst (idb+3) MUL [Var cv; Lit 32w] [dm];
+     mk_inst (idb+4) ADD [dst; Var dm] [dv];
+     mk_inst (idb+5) ADD [region; Var dv] [av];
+     mk_inst (idb+6) ISTORE [Var av; Var vv] [];
+     mk_inst (idb+7) ADD [Var cv; Lit 1w] [nv];
+     mk_inst (idb+8) ASSIGN [Var nv] [cv];
+     mk_inst (idb+9) JMP [Label hdr] []] bbb.bb_instructions /\
+  ALL_DISTINCT [cv;tv;mv;sv;vv;dm;dv;av;nv] /\
+  (!x. MEM x [cv;tv;mv;sv;vv;dm;dv;av;nv] ==> not_fresh_at sb x) /\
+  (!x. not_fresh_at sa x ==> ~MEM x [cv;tv;mv;sv;vv;dm;dv;av;nv]) /\
+  (!x. src = Var x \/ dst = Var x \/ cnt = Var x \/ region = Var x ==>
+       not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
+  eval_operand cnt s = SOME (n2w n) /\ eval_operand region s = SOME 0w /\
+  (!j. j < n ==> w2n (a+n2w (32*j)) + 32 <= s.vs_alloca_next /\
+                  w2n (b+n2w (32*j)) + 32 <= s.vs_alloca_next) /\
+  n < dimword (:256) /\ k <= n /\
+  immutable_loop_frame sa sb s a b k r /\
+  eval_operand (Var cv) r = SOME (n2w k) /\
+  ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0 ==>
+  ?t. gas_path_mem ctx func r 0 (OK t) /\
+      immutable_loop_frame sa sb s a b n t /\
+      eval_operand (Var cv) t = SOME (n2w n) /\
+      ~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0
+Proof
+  strip_tac >>
+  qabbrev_tac `Inv = \j q. immutable_loop_frame sa sb s a b j q /\
+    eval_operand (Var cv) q = SOME (n2w j)` >>
+  `?t. gas_marked_path T ctx func r 0 (OK t) /\ Inv n t /\
+       ~t.vs_halted /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0`
+    suffices_by (simp[fragGasModeTheory.gas_marked_path_def, Abbr `Inv`] >> metis_tac[]) >>
+  irule place_copy_iterate_path >> simp[] >>
+  reverse conj_tac
+  >- (qexistsl_tac [`k`, `n-k`] >> simp[Abbr `Inv`]) >>
+  qexists_tac `body_lbl` >> simp[] >>
+  conj_tac >- suspend "body" >> suspend "header"
+QED
+
+Resume immutable_loop_iterate_mem[body]:
+  qunabbrev_tac `Inv` >> BETA_TAC >> rpt gen_tac >> strip_tac >>
+  `eval_operand src q = SOME a /\ eval_operand dst q = SOME b /\
+   eval_operand region q = SOME 0w` by
+    (conj_tac >- (drule_at (Pat `immutable_loop_frame _ _ _ _ _ j q`)
+        immutable_loop_frame_operand >>
+       disch_then (qspec_then `src` mp_tac) >> simp[] >> metis_tac[]) >>
+     conj_tac >- (drule_at (Pat `immutable_loop_frame _ _ _ _ _ j q`)
+        immutable_loop_frame_operand >>
+       disch_then (qspec_then `dst` mp_tac) >> simp[] >> metis_tac[]) >>
+     drule_at (Pat `immutable_loop_frame _ _ _ _ _ j q`)
+        immutable_loop_frame_operand >>
+     disch_then (qspec_then `region` mp_tac) >> simp[] >> metis_tac[]) >>
+  qpat_assum `isPREFIX (_::_::_::_::_::_::_::_::_::_::[]) _`
+    (strip_assume_tac o REWRITE_RULE [IS_PREFIX_APPEND]) >>
+  qmatch_asmsub_abbrev_tac `isPREFIX code bbb.bb_instructions` >>
+  `isPREFIX (TAKE 9 code) (DROP q.vs_inst_idx bbb.bb_instructions)` by
+    simp[Abbr `code`] >>
+  `ALL_DISTINCT [cv;mv;sv;vv;dm;dv;av;nv] /\
+   (!x. MEM x [cv;mv;sv;vv;dm;dv;av;nv] ==>
+     src <> Var x /\ dst <> Var x /\ region <> Var x /\ not_fresh_at sb x) /\
+   (!x. not_fresh_at sa x ==> ~MEM x [cv;mv;sv;vv;dm;dv;av;nv])` by
+    (fs[ALL_DISTINCT, MEM] >> metis_tac[]) >>
+  `lookup_block q.vs_current_bb func.fn_blocks = SOME bbb` by simp[] >>
+  `w2n (a+n2w (32*j)) + 32 <= q.vs_alloca_next /\
+   w2n (b+n2w (32*j)) + 32 <= q.vs_alloca_next` by
+    (drule immutable_loop_allocation_frame >> metis_tac[]) >>
+  qunabbrev_tac `code` >>
+  qpat_x_assum `isPREFIX (TAKE 9 _) _`
+    (assume_tac o SIMP_RULE (srw_ss()) [TAKE_def, Excl "isPREFIX"]) >>
+  drule_all immutable_loop_body_mem_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `gas_path_mem ctx func t 0 (OK (jump_to hdr t))` by
+    (irule immutable_loop_jump_mem_path >> simp[] >>
+     qexists_tac `idb+9` >> simp[get_instruction_def, EL_APPEND_EQN]) >>
+  qexists_tac `jump_to hdr t` >>
+  conj_tac >- (simp[fragGasModeTheory.gas_marked_path_def] >>
+               drule_all gas_path_mem_then >> simp[]) >>
+  qpat_x_assum `eval_operand (Var cv) t = _`
+    (assume_tac o REWRITE_RULE [eval_operand_def, lookup_var_def]) >>
+  simp[immutable_loop_frame_control, jump_to_def, eval_operand_def,
+       lookup_var_def, GSYM ADD1]
+QED
+
+Resume immutable_loop_iterate_mem[header]:
+  qunabbrev_tac `Inv` >> BETA_TAC >> rpt gen_tac >> strip_tac >>
+  `eval_operand cnt q = SOME (n2w n)` by
+    (drule immutable_loop_frame_operand >>
+     disch_then (qspec_then `cnt` mp_tac) >> simp[] >> metis_tac[]) >>
+  `cv <> tv /\ (!x. not_fresh_at sa x ==> x <> tv) /\
+   not_fresh_at sb tv` by
+    (fs[ALL_DISTINCT] >> metis_tac[MEM]) >>
+  `lookup_block q.vs_current_bb func.fn_blocks = SOME bbh` by simp[] >>
+  drule_all immutable_loop_header_mem_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `r'` >> simp[fragGasModeTheory.gas_marked_path_def]
+QED
+
+Finalise immutable_loop_iterate_mem
