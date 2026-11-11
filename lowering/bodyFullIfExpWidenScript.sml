@@ -38,7 +38,7 @@ Theorem ifexp_widen_arm_step_full:
      ptr_buf_ok cenv e op0 G s) /\
      (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
      ptr_buf_ok cenv e p.ptr_operand G s) /\
-     (cenv.ce_is_ctor /\ vv_loc vv = SOME LocCode ==>
+     (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
      ?val. read_result cx tv ee = (INL val, ee) /\
      !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
      eval_operand (vv_operand vv) s = SOME w ==>
@@ -68,7 +68,9 @@ Theorem ifexp_widen_arm_step_full:
      ghost_kept_at lo cenv es sa Gi ti s0 H tf /\
      (!x. not_fresh_at sb x ==>
           lookup_var x z = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
-          op_taint tf (Var x) = op_taint tn (Var x))) /\
+          op_taint tf (Var x) = op_taint tn (Var x)) /\
+     wb_frame cenv ee sb s z /\
+     ghost_kept_at lo cenv ee sb G tn s H tf) /\
   ~is_word_type t /\
   ~same_memory_layout cenv (lowered_value_type cenv e) t /\
   compile_expr cenv ty e sa = (vv,sm) /\
@@ -106,7 +108,7 @@ Theorem ifexp_widen_arm_step_full:
      ptr_buf_ok cenv e op0 G z) /\
   (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
      ptr_buf_ok cenv e p.ptr_operand G z) /\
-  (cenv.ce_is_ctor /\ vv_loc vv = SOME LocCode ==>
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
    ?val. read_result cx tva ee = (INL val,ee) /\
          !rt w. evaluate_type (get_tenv cx) t = SOME rt /\
                 eval_operand (vv_operand vv) z = SOME w ==>
