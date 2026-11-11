@@ -426,7 +426,7 @@ Proof
   qexistsl_tac [`C`, `fuel`, `y`] >> simp[venomInstTheory.is_terminator_def] >> metis_tac[]
 QED
 
-Theorem invoke_partner_prefix_portable[local]:
+Theorem invoke_partner_prefix_replay[local]:
   !pre s t pg rs rt u.
     y.inst_opcode = INVOKE /\
     EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\
@@ -434,13 +434,26 @@ Theorem invoke_partner_prefix_portable[local]:
     LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
     FOLDR (dft_exec_cons fuel C) OK pre
       (s with vs_gas_readings := pg ++ rs) = OK u ==>
-    ?us. EVERY (\q. MEM (FST q) (FLAT (MAP (\x. x.inst_outputs) pre)) /\
-      ~MEM (Var (FST q)) y.inst_operands /\ ~MEM (FST q) y.inst_outputs) us /\
+    ?uss. LENGTH uss = LENGTH pre /\
+    LIST_REL (\x us. EVERY (\q. MEM (FST q) x.inst_outputs) us) pre uss /\
+    EVERY (\q. MEM (FST q) (FLAT (MAP (\x. x.inst_outputs) pre)) /\
+      ~MEM (Var (FST q)) y.inst_operands /\ ~MEM (FST q) y.inst_outputs) (FLAT uss) /\
     u = FOLDL (\st q. update_var (FST q) (SND q) st)
-      (s with <|vs_gas_readings := rs; vs_inst_idx := s.vs_inst_idx + LENGTH pre|>) us /\
+      (s with <|vs_gas_readings := rs; vs_inst_idx := s.vs_inst_idx + LENGTH pre|>) (FLAT uss) /\
     FOLDR (dft_exec_cons fuel D) OK pre (t with vs_gas_readings := pg ++ rt) =
       OK (FOLDL (\st q. update_var (FST q) (SND q) st)
-        (t with <|vs_gas_readings := rt; vs_inst_idx := t.vs_inst_idx + LENGTH pre|>) us)
+        (t with <|vs_gas_readings := rt; vs_inst_idx := t.vs_inst_idx + LENGTH pre|>) (FLAT uss)) /\
+    (!n. n <= LENGTH pre ==>
+      FOLDR (dft_exec_cons fuel C) OK (TAKE n pre)
+        (s with vs_gas_readings := pg ++ rs) =
+      OK (FOLDL (\st q. update_var (FST q) (SND q) st)
+        (s with <|vs_gas_readings := DROP (LENGTH (FILTER (\x. x.inst_opcode = GAS) (TAKE n pre))) pg ++ rs;
+                  vs_inst_idx := s.vs_inst_idx + n|>) (FLAT (TAKE n uss))) /\
+      FOLDR (dft_exec_cons fuel D) OK (TAKE n pre)
+        (t with vs_gas_readings := pg ++ rt) =
+      OK (FOLDL (\st q. update_var (FST q) (SND q) st)
+        (t with <|vs_gas_readings := DROP (LENGTH (FILTER (\x. x.inst_opcode = GAS) (TAKE n pre))) pg ++ rt;
+                  vs_inst_idx := t.vs_inst_idx + n|>) (FLAT (TAKE n uss))))
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- gvs[venom_state_component_equality] >>
@@ -490,18 +503,64 @@ Proof
        GSYM gasOracleReplayTheory.gas_fold_updates]) >>
   first_x_assum (qspecl_then [`ss`, `tt`, `pg'`, `rs`, `rt`, `u`] mp_tac) >>
   simp[NoAsms] >> (impl_tac >- metis_tac[]) >>
-  disch_then (qx_choose_then `ts` strip_assume_tac) >>
-  qexists_tac `hs ++ ts` >>
+  disch_then (qx_choose_then `uss` strip_assume_tac) >>
+  qexists_tac `hs::uss` >>
+  simp[NoAsms] >>
+  `EVERY (\q. MEM (FST q) h.inst_outputs) hs` by
+    (simp[EVERY_MEM] >> metis_tac[MEM_MAP]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
   conj_tac
   >- (`!q. MEM q hs ==> MEM (FST q) h.inst_outputs` by
         metis_tac[MEM_MAP] >>
       qpat_assum `dft_gas_swap_pair h y`
         (mp_tac o MATCH_MP dftRunRelTheory.dft_swap_output_frame) >>
       strip_tac >> fs[EVERY_APPEND, EVERY_MEM] >> metis_tac[]) >>
-  gvs[Abbr `ss`, Abbr `tt`, FOLDL_APPEND,
-      pairTheory.LAMBDA_PROD, GSYM foldl_update_var_idx,
-      GSYM gasOracleReplayTheory.gas_fold_updates,
-      foldl_update_var_inst_idx, arithmeticTheory.ADD_CLAUSES]
+  conj_tac
+  >- gvs[Abbr `ss`, FOLDL_APPEND, pairTheory.LAMBDA_PROD,
+         GSYM foldl_update_var_idx, GSYM gasOracleReplayTheory.gas_fold_updates,
+         foldl_update_var_inst_idx, arithmeticTheory.ADD_CLAUSES] >>
+  conj_tac
+  >- gvs[Abbr `tt`, FOLDL_APPEND, pairTheory.LAMBDA_PROD,
+         GSYM foldl_update_var_idx, GSYM gasOracleReplayTheory.gas_fold_updates,
+         foldl_update_var_inst_idx, arithmeticTheory.ADD_CLAUSES] >>
+  qx_gen_tac `n` >> disch_tac >> namedCases_on `n` ["", "m"]
+  >- simp[venom_state_component_equality] >>
+  `m <= LENGTH pre` by fs[] >>
+  first_x_assum (qspec_then `m` mp_tac) >>
+  simp[NoAsms] >> (impl_tac >- simp[]) >> strip_tac >>
+  pure_rewrite_tac[dftIndexedExecTheory.dft_exec_cons_def] >>
+  qpat_x_assum `pg = _` SUBST_ALL_TAC >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[] >>
+  fs[Abbr `ss`, Abbr `tt`, updates_readings_cursor,
+     FOLDL_APPEND, pairTheory.LAMBDA_PROD,
+     GSYM foldl_update_var_idx, GSYM gasOracleReplayTheory.gas_fold_updates,
+     foldl_update_var_inst_idx, arithmeticTheory.ADD_CLAUSES] >>
+  Cases_on `h.inst_opcode = GAS` >> fs[DROP_APPEND] >>
+  `DROP (SUC (LENGTH (FILTER (\x. x.inst_opcode = GAS) (TAKE m pre)))) lead = []` by
+    (irule DROP_LENGTH_TOO_LONG >> simp[]) >> simp[]
+QED
+
+Theorem invoke_partner_prefix_portable[local]:
+  !pre s t pg rs rt u.
+    y.inst_opcode = INVOKE /\
+    EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\
+      dftGasInvCallPartner$inv_partner_inputs x s t) pre /\
+    LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := pg ++ rs) = OK u ==>
+    ?us. EVERY (\q. MEM (FST q) (FLAT (MAP (\x. x.inst_outputs) pre)) /\
+      ~MEM (Var (FST q)) y.inst_operands /\ ~MEM (FST q) y.inst_outputs) us /\
+    u = FOLDL (\st q. update_var (FST q) (SND q) st)
+      (s with <|vs_gas_readings := rs; vs_inst_idx := s.vs_inst_idx + LENGTH pre|>) us /\
+    FOLDR (dft_exec_cons fuel D) OK pre (t with vs_gas_readings := pg ++ rt) =
+      OK (FOLDL (\st q. update_var (FST q) (SND q) st)
+        (t with <|vs_gas_readings := rt; vs_inst_idx := t.vs_inst_idx + LENGTH pre|>) us)
+Proof
+  rpt strip_tac >> drule_all invoke_partner_prefix_replay >>
+  disch_then (qspecl_then [`D`, `rt`] strip_assume_tac) >>
+  qexists_tac `FLAT uss` >> simp[]
 QED
 
 Theorem noninvoke_prefix_events_exact_at[local]:
@@ -585,6 +644,48 @@ Proof
   simp[NoAsms] >> disch_then irule >>
   `v with vs_gas_readings := pg' ++ rest = v` by
     simp[venom_state_component_equality] >> gvs[]
+QED
+
+(* Observations at an actual cut of the shared INVOKE-partner replay.
+   Apply separately at the two entry labels; no endpoint identification. *)
+Theorem invoke_partner_cut_observations[local]:
+  !pre n s pg rs u.
+    y.inst_opcode = INVOKE /\
+    EVERY (\x. dft_gas_swap_pair x y) pre /\
+    n <= LENGTH pre /\
+    LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+    FOLDR (dft_exec_cons fuel C) OK (TAKE n pre)
+      (s with vs_gas_readings := pg ++ rs) = OK u ==>
+    u.vs_gas_readings =
+      DROP (LENGTH (FILTER (\x. x.inst_opcode = GAS) (TAKE n pre))) pg ++ rs /\
+    gas_events_block fuel C s.vs_current_bb
+      <|bb_label := s.vs_current_bb; bb_instructions :=
+        REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ TAKE n pre|>
+      (s with vs_gas_readings := pg ++ rs) =
+    MAP (\i. (s.vs_current_bb,i.inst_id))
+      (FILTER (\i. i.inst_opcode = GAS) (TAKE n pre))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (TAKE n pre)` by
+    (irule EVERY_TAKE >> fs[EVERY_MEM] >> rpt strip_tac >>
+     metis_tac[dft_gas_swap_pair_sym,
+               dftGasInvCallPartnerTheory.inv_call_partner_class]) >>
+  conj_tac
+  >- (irule noninvoke_prefix_readings_exact >>
+      qexistsl_tac [`C`, `fuel`,
+        `TAKE (LENGTH (FILTER (\x. x.inst_opcode = GAS) (TAKE n pre))) pg`,
+        `TAKE n pre`, `s`] >> simp[TAKE_DROP] >>
+      `LENGTH (FILTER (\x. x.inst_opcode = GAS) (TAKE n pre)) <= LENGTH pg` by
+        (qpat_x_assum `LENGTH pg = _` SUBST1_TAC >>
+         metis_tac[FILTER_APPEND, LENGTH_APPEND, TAKE_DROP, arithmeticTheory.LE_ADD]) >>
+      simp[]) >>
+  `gas_events_block fuel C s.vs_current_bb
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE u.vs_inst_idx (mk_inst 0 STOP [] [])|> u = []` by
+    simp[Once gas_events_block_def, venomInstTheory.get_instruction_def] >>
+  drule_all noninvoke_prefix_events_exact >>
+  disch_then (qspecl_then [`s.vs_current_bb`, `[]`] mp_tac) >> simp[]
 QED
 
 (* The crossed spine in a head extraction need not be call-free. *)
