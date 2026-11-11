@@ -972,12 +972,26 @@ Definition callee_writes_ok_def:
           | _ => T) tls) mods
 End
 
+(* The place an iterated array names: a variable, possibly under subscripts
+   and attributes.  Vyper registers no place for any other iterator (such as
+   an IfExp), so callee writes are checked only against this one. *)
+Definition loop_iterator_place_def:
+  loop_iterator_place (Name _ id) = SOME (NameTarget id) /\
+  loop_iterator_place (TopLevelName _ n) = SOME (TopLevelNameTarget n) /\
+  loop_iterator_place (Subscript _ e i) =
+    OPTION_MAP (\tgt. SubscriptTarget tgt i) (loop_iterator_place e) /\
+  loop_iterator_place (Attribute _ e a) =
+    OPTION_MAP (\tgt. AttributeTarget tgt a) (loop_iterator_place e) /\
+  loop_iterator_place _ = NONE
+End
+
 Definition stmt_loop_calls_ok_def:
   stmt_loop_calls_ok mods (For _ _ it _ body) =
     ((case it of
       | Array e =>
-          EVERY (\p. EVERY (callee_writes_ok mods p) (int_calls_stmts body))
-            (expr_places e)
+          (case loop_iterator_place e of
+           | SOME p => EVERY (callee_writes_ok mods p) (int_calls_stmts body)
+           | NONE => T)
       | Range _ _ => T) /\
      stmts_loop_calls_ok mods body) /\
   stmt_loop_calls_ok mods (If _ yes no) =
