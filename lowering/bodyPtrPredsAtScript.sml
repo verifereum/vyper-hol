@@ -111,7 +111,9 @@ End
 
 Definition body_for_ptr_ok_def:
   body_for_ptr_ok_at cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
-  <=> vs <> [] ==> body_stmts_ptr_ok_at cx body
+  <=>
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_ptr_ok_at cx body
 End
 
 Definition body_base_target_ptr_ok_def:
