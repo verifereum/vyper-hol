@@ -8,10 +8,11 @@ Ancestors
   bodyIntCallRuntimeChargePackaging
   bodyIntCallFunctionCharge compileVyper vyperCompiler moduleLowering
   exprLoweringProps loweringShapeDefs compileEnv venomInst list
-  bodyIntCallDeployChargePackaging
+  bodyIntCallDeployChargePackaging loweringShapeProps
 
 Theorem runtime_unit_alloca_charge:
   !tops policy unit exts ints fb ctor st.
+    supported_program tops /\
     lower_vyper_runtime_unit tops policy = SOME unit /\
     classify_functions tops = (exts,ints,fb,ctor) /\
     compile_generate_runtime
@@ -32,6 +33,8 @@ Theorem runtime_unit_alloca_charge:
     unit_alloca_frame unit.cu_context
 Proof
   rpt strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (drule supported_program_no_external_defaults >> simp[]) >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>

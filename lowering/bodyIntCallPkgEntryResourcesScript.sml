@@ -128,6 +128,7 @@ Proof
 QED
 
 Theorem runtime_internal_charge_witness:
+  supported_program tops /\
   lower_vyper_runtime_unit tops policy = SOME unit /\
   classify_functions tops = (exts,ints,fb,ctor) ==>
   ?se sf.
