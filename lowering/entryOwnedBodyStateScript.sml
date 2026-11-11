@@ -17,7 +17,8 @@ Theorem owned_runtime_stmt_resources[local]:
   stmt_state_rel ctx fn ce cx es out
 Proof
   strip_tac >>
-  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_base_zero_def] >>
+  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
+       immutable_base_zero_def] >>
   rpt strip_tac >> drule_all abi_alloca_history_function_size >> simp[]
 QED
 
