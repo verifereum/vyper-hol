@@ -20,6 +20,46 @@ Proof
        eval_operand_def, lookup_var_def]
 QED
 
+(* The STATICCALL writes only its fresh output ALLOCA, so the input stage's
+   pure frame extends to the call's result state. *)
+Theorem ec_output_pure_frame[local]:
+  !cenv fn es sf s q t u aid ops outs c data.
+    pure_frame cenv fn es sf s t /\ wb_frame cenv es es sf s t /\
+    local_ptrs_reserved cenv sf /\
+    MEM (mk_inst aid ALLOCA ops outs) (fn_insts fn) /\ sf.cs_next_id <= aid /\
+    FLOOKUP t.vs_allocas aid = SOME (w2n (c:bytes32),64) /\ q.vs_allocas = t.vs_allocas /\
+    (!name lo len. local_region cenv es.scopes t name lo len ==>
+       regions_disjoint (w2n c) 64 lo len) /\
+    u.vs_memory = t.vs_memory /\
+    q.vs_memory =
+      (write_memory_with_expansion (w2n c) (TAKE (w2n (64w:bytes32)) data) u).vs_memory ==>
+    pure_frame cenv fn es sf s q
+Proof
+  rpt strip_tac >>
+  `!off len. regions_disjoint off len (w2n c) 64 ==>
+     mem_bytes_at off len q.vs_memory = mem_bytes_at off len t.vs_memory` by
+    (rpt strip_tac >>
+     qpat_x_assum `q.vs_memory = _` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `u.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >>
+     irule exprSimPrecompilesTheory.write_memory_take_exterior >>
+     simp[NoAsms, wordsTheory.dimword_def] >> first_assum ACCEPT_TAC) >>
+  `!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+     regions_disjoint (w2n c) 64 lb lsz` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name lo len. local_region _ _ t _ _ _ ==> _` irule >>
+     qexists `n` >>
+     match_mp_tac (Q.SPECL [`cenv`, `es.scopes`, `sf`, `es.scopes`, `s`, `t`,
+                     `n`, `lb`, `lsz`] exprSimPropsTheory.local_region_frame_fwd) >>
+     qpat_x_assum `wb_frame _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     simp[]) >>
+  match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `sf`, `s`, `t`, `q`,
+                  `mk_inst aid ALLOCA ops outs`, `w2n (c:bytes32)`, `64`]
+           exprSimPropsTheory.pure_frame_buffer_tail) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp[venomInstTheory.mk_inst_def]
+QED
+
 Theorem ecmul_residual_success:
   compile_ecmul_point point scalar sf = (res,sb) /\
   stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
@@ -143,6 +183,13 @@ Resume ecmul_residual_success[result]:
     (simp[NoAsms] >> qpat_assum `!name b sz. local_region _ _ q _ _ _ ==> _`
       (ACCEPT_TAC o SRULE [wordsTheory.dimword_def])) >>
   `!c. ECMul <> Concat c` by simp[] >>
+  `u.vs_memory = t.vs_memory` by
+    (qpat_assum `u = _` (fn th => rewrite_tac[th]) >> simp[NoAsms]) >>
+  `pure_frame cenv fn es sf s q` by
+    (match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `sf`, `s`, `q`, `t`, `u`, `aid`, `ops`,
+       `outs`, `c:bytes32`, `word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T`]
+       ec_output_pure_frame) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all ec_builtin_result_posts >>
   disch_then (qspec_then `args` strip_assume_tac) >>
   qexistsl [`q`,`G2`,`tn2`,`c`,`aid`] >>
@@ -278,6 +325,13 @@ Resume ecadd_residual_success[result]:
     (simp[NoAsms] >> qpat_assum `!name b sz. local_region _ _ q _ _ _ ==> _`
       (ACCEPT_TAC o SRULE [wordsTheory.dimword_def])) >>
   `!c. ECAdd <> Concat c` by simp[] >>
+  `u.vs_memory = t.vs_memory` by
+    (qpat_assum `u = _` (fn th => rewrite_tac[th]) >> simp[NoAsms]) >>
+  `pure_frame cenv fn es sf s q` by
+    (match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `sf`, `s`, `q`, `t`, `u`, `aid`, `ops`,
+       `outs`, `c:bytes32`, `word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T`]
+       ec_output_pure_frame) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all ec_builtin_result_posts >>
   disch_then (qspec_then `args` strip_assume_tac) >>
   qexistsl [`q`,`G2`,`tn2`,`c`,`aid`] >>

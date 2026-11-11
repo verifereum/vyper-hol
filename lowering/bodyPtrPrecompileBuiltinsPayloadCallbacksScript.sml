@@ -276,7 +276,9 @@ Theorem mul_payload_callback:
     t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME b /\
     mem_bytes_at (w2n b) 96 t.vs_memory =
       word_to_bytes (mload (w2n p) s) T ++
-      word_to_bytes (mload (w2n p+32) s) T ++ word_to_bytes w T
+      word_to_bytes (mload (w2n p+32) s) T ++ word_to_bytes w T /\
+    (!a len. regions_disjoint (w2n b) 96 a len ==>
+       mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
 Proof
   strip_tac >>
   `regions_disjoint (w2n b) 96 (w2n p) 64` by
@@ -418,7 +420,9 @@ Theorem add_payload_callback:
     t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME b /\
     mem_bytes_at (w2n b) 128 t.vs_memory =
       word_to_bytes (mload (w2n p) s) T ++ word_to_bytes (mload (w2n p+32) s) T ++
-      word_to_bytes (mload (w2n q) s) T ++ word_to_bytes (mload (w2n q+32) s) T
+      word_to_bytes (mload (w2n q) s) T ++ word_to_bytes (mload (w2n q+32) s) T /\
+    (!a len. regions_disjoint (w2n b) 128 a len ==>
+       mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
 Proof
   strip_tac >>
   `regions_disjoint (w2n b) 128 (w2n p) 64` by

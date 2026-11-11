@@ -72,7 +72,9 @@ Theorem ecmul_framed_input:
        FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
          | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
-       regions_disjoint (w2n c) 64 off (type_memory_size tv))
+       regions_disjoint (w2n c) 64 off (type_memory_size tv)) /\
+    pure_frame cenv fn es sf s t /\
+    (?ops outs. MEM (mk_inst aid ALLOCA ops outs) (fn_insts fn))
 Proof
   strip_tac >> drule_all ec_point_read_ready >> strip_tac >> gvs[] >>
   drule ecmul_compiler_stages >> strip_tac >>
@@ -138,7 +140,8 @@ Resume ecmul_framed_input[pack]:
   `sp.cs_next_id < sb.cs_next_id` by decide_tac >>
   qexistsl [`sm`,`x`,`x'`,`s3`,`Gf`,`tnf`,`b`,`c`,`sp.cs_next_id`] >>
   gvs[venomStateTheory.eval_operand_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_assum `MEM (mk_inst _ ALLOCA [Lit 64w] _) (fn_insts fn)` (irule_at Any)
 QED
 Finalise ecmul_framed_input
 
@@ -192,7 +195,9 @@ Theorem ecadd_framed_input:
        FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
        FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
          | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
-       regions_disjoint (w2n c) 64 off (type_memory_size tv))
+       regions_disjoint (w2n c) 64 off (type_memory_size tv)) /\
+    pure_frame cenv fn es sf s t /\
+    (?ops outs. MEM (mk_inst aid ALLOCA ops outs) (fn_insts fn))
 Proof
   strip_tac >>
   qpat_assum `ptr_val_ok _ _ vp _ _ _ _`
@@ -275,6 +280,7 @@ Resume ecadd_framed_input[pack]:
   `sp.cs_next_id < sb.cs_next_id` by decide_tac >>
   qexistsl [`sm`,`x`,`x'`,`s3'`,`Gf`,`tnf`,`b`,`c`,`sp.cs_next_id`] >>
   gvs[venomStateTheory.eval_operand_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_assum `MEM (mk_inst _ ALLOCA [Lit 64w] _) (fn_insts fn)` (irule_at Any)
 QED
 Finalise ecadd_framed_input
