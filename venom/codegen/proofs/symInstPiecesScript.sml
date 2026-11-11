@@ -745,6 +745,17 @@ Proof
   irule sym_kinds_ok_localize_stack >> simp[]
 QED
 
+Theorem prepared_suffix_concrete_height[local]:
+  venom_asm_rel lo ps vs cs /\ ps.ps_stack = residual ++ selected ==>
+  LENGTH selected <= LENGTH cs.as_stack
+Proof
+  simp[codegenRelTheory.venom_asm_rel_def, codegenRelTheory.plan_stack_rel_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `ps.ps_stack = _ ++ _`
+    (mp_tac o AP_TERM ``LENGTH:operand list -> num``) >>
+  simp[NoAsms, listTheory.LENGTH_APPEND] >> decide_tac
+QED
+
 Theorem sym_named_inst_symbolic_run:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
@@ -940,17 +951,8 @@ Proof
   drule_all named_suffix_dispatch_names >> strip_tac >>
   drule_all named_suffix_emission_arity >> strip_tac >>
   `asm_op_arity name <= LENGTH top'` by
-    (qpat_x_assum `venom_asm_rel _ arranged _ mid` mp_tac >>
-     qpat_x_assum `arranged.ps_stack = _ ++ selected` mp_tac >>
-     qpat_x_assum `LENGTH selected = _` mp_tac >>
-     qpat_x_assum `LENGTH top' = _` mp_tac >>
-     qpat_x_assum `asm_op_arity name = _` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     simp[codegenRelTheory.venom_asm_rel_def, codegenRelTheory.plan_stack_rel_def] >>
-     rpt strip_tac >>
-     qpat_x_assum `arranged.ps_stack = _ ++ _`
-       (mp_tac o AP_TERM ``LENGTH:operand list -> num``) >>
-     simp[NoAsms, listTheory.LENGTH_APPEND] >> decide_tac) >>
+    (drule_all prepared_suffix_concrete_height >>
+     metis_tac[]) >>
   drule_at (Pat `sym_steps _ _ 1 _ = _`) sym_named_emit_restore_stack >>
   disch_then (drule_at (Pat `asm_sym_rel _ _ after_emit _`)) >>
   disch_then (drule_at (Pat `sym_kinds_ok _ _ _ [] emitted _`)) >>
@@ -1017,4 +1019,89 @@ Proof
   qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[NoAsms, sym_frame_inv_def] >> metis_tac[])
 
+QED
+
+(* Paired preparation keeps the exact-height concrete stack local. *)
+Theorem sym_selected_prefix_paired:
+  opc <> INVOKE /\
+  (!l. MEM (Label l) operands ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,prepared) /\
+  reorder_plan dfg selected prepared = (rops,arranged) /\
+  PERM operands selected /\ LENGTH operands <= 16 /\
+  LENGTH operands <= LENGTH prepared.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  plan_slots_bounded sb ps /\ residual_budget_wf_marked sb [] ps /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) operands /\
+  (!op at. MEM op operands /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at operands) /\
+    operand_equiv dfg op at ==> operand_val vs lo op = operand_val vs lo at) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+  lo = SND (compute_label_offsets p) /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  cs.as_stack = top ++ rest /\
+  venom_asm_rel lo ps vs (cs with as_stack := top) /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (iops ++ rops)) ==>
+  ?mid ready localtop.
+    plan_state_residual_wf_marked sb selected (LENGTH selected) arranged /\
+    arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected /\
+    asm_steps lo (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (iops ++ rops)))
+      (cs with as_stack := top) = AsmOK mid /\
+    venom_asm_rel lo arranged vs mid /\
+    mid.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops)) /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp (iops ++ rops))) ss = SymOK ready /\
+    sym_kinds_ok cplan fn ret srest arranged ready /\
+    ready.sym_base.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops)) /\
+    (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+      FLOOKUP ready.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    ready.sym_stack = localtop ++ srest /\
+    asm_sym_rel p env mid (ready with sym_stack := localtop) /\
+    sym_kinds_ok cplan fn ret [] arranged (ready with sym_stack := localtop) /\
+    LIST_REL (\sv w. sval_conc lo sv = SOME w) srest rest /\
+    LENGTH localtop = LENGTH mid.as_stack
+Proof
+  strip_tac >>
+  `asm_block_at p (cs with as_stack := top).as_pc
+    (execute_plan initial_fmp (iops ++ rops))` by simp[] >>
+  drule_all deepResidualSimTheory.selected_prefix_prepared_sim_marked >>
+  disch_then (qspec_then `build_offset_to_pc p` mp_tac) >>
+  simp[] >> strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by
+    gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (iops ++ rops))` by
+    metis_tac[] >>
+  drule_all sym_selected_prefix_sim_marked >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all sym_prepared_prefix_endpoint >> strip_tac >>
+  drule_all sym_prepared_emit_localize >> strip_tac >>
+  rename1 `sym_steps p env _ ss = SymOK ready` >>
+  rename1 `asm_steps _ _ _ _ _ = AsmOK mid` >>
+  rename1 `ready.sym_stack = localtop ++ srest` >>
+  qexistsl [`mid`, `ready`, `localtop`] >> simp[] >>
+  metis_tac[symInstKindsTheory.spill_region_labels_outside_closure]
+QED
+
+Theorem sym_frame_suffix_compose:
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  sym_steps p env n ss = SymOK mid /\ sym_steps p env m mid = SymOK final /\
+  (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    FLOOKUP final.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b) ==>
+  sym_steps p env (n + m) ss = SymOK final /\
+  (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    FLOOKUP final.sym_mem_labels b = FLOOKUP labs0 b)
+Proof
+  strip_tac >> conj_tac >- simp[sym_steps_add] >>
+  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[NoAsms, sym_frame_inv_def] >> metis_tac[]
 QED
