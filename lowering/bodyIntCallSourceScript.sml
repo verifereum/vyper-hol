@@ -22,27 +22,6 @@ Proof
   goal_assum (drule_at Any)
 QED
 
-(* The supported declaration rules out the synthetic deployment fallback. *)
-Theorem supported_internal_lookup:
-  !tops name mut nr rr args dflts ret ss.
-    supported_function_decl tops (NONE,name) Internal =
-      SOME (mut,nr,rr,args,dflts,ret,ss) ==>
-    lookup_function NONE name Internal tops =
-      SOME (mut,nr,args,dflts,ret,ss)
-Proof
-  Induct_on `tops` >- simp[supported_function_decl_def] >>
-  Cases_on `h` >>
-  simp[supported_function_decl_def, lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()]
-  >~ [`lookup_function _ _ _ (VariableDecl _ _ _ _ _ :: _)`]
-    >- (rename1 `VariableDecl vis _ _ _ _` >> Cases_on `vis` >>
-        simp[lookup_function_def] >> metis_tac[])
-  >~ [`lookup_function _ _ _ (HashMapDecl _ _ _ _ _ _ :: _)`]
-    >- (rename1 `HashMapDecl vis _ _ _ _ _` >> Cases_on `vis` >>
-        simp[lookup_function_def] >> metis_tac[]) >>
-  metis_tac[]
-QED
-
 Theorem supported_internal_callable:
   supported_program tops /\
   IS_SOME (supported_function_decl tops (NONE,name) Internal) /\

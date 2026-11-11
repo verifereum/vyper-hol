@@ -35,6 +35,7 @@ Definition supported_function_body_def:
     in ALL_DISTINCT (MAP FST args) /\
        EVERY (\n. ~MEM n (MAP FST args)) (MAP FST locals ++ MAP FST loops) /\
        supported_stmts tops bindings body /\
+       body_stmts_safe tops body /\
        (vis = Internal ==>
          ~supported_stmts_expr_exists expr_internal_call_root body)
 End
@@ -132,6 +133,27 @@ Theorem supported_program_deploy_function:
 Proof
   simp[supported_program_deploy_def, EVERY_MEM] >> strip_tac >>
   first_x_assum drule >> simp[supported_deploy_declaration_def, EVERY_MEM]
+QED
+
+(* The supported declaration rules out the synthetic deployment fallback. *)
+Theorem supported_internal_lookup:
+  !tops name mut nr rr args dflts ret ss.
+    supported_function_decl tops (NONE,name) Internal =
+      SOME (mut,nr,rr,args,dflts,ret,ss) ==>
+    lookup_function NONE name Internal tops =
+      SOME (mut,nr,args,dflts,ret,ss)
+Proof
+  Induct_on `tops` >- simp[supported_function_decl_def] >>
+  Cases_on `h` >>
+  simp[supported_function_decl_def, vyperInterpreterTheory.lookup_function_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()]
+  >~ [`lookup_function _ _ _ (VariableDecl _ _ _ _ _ :: _)`]
+    >- (rename1 `VariableDecl vis _ _ _ _` >> Cases_on `vis` >>
+        simp[vyperInterpreterTheory.lookup_function_def] >> metis_tac[])
+  >~ [`lookup_function _ _ _ (HashMapDecl _ _ _ _ _ _ :: _)`]
+    >- (rename1 `HashMapDecl vis _ _ _ _ _` >> Cases_on `vis` >>
+        simp[vyperInterpreterTheory.lookup_function_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem supported_internal_body_contract:
