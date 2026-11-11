@@ -139,8 +139,11 @@ Proof
       >> irule code_action_bind >> simp[code_action_emit_op, enc_safe_opcode_def] >> gen_tac
       >> irule code_action_ignore_bind >> simp[code_action_emit_void, enc_safe_opcode_def]
       >> irule code_action_bind >> simp[code_action_emit_op, enc_safe_opcode_def] >> gen_tac
-      >> simp[code_action_bind, code_action_ignore_bind,
-              code_action_emit_op, code_action_emit_void, enc_safe_opcode_def])
+      >> irule code_action_ignore_bind >> simp[code_action_emit_void, enc_safe_opcode_def]
+      >> irule code_action_bind >> simp[code_action_emit_op, enc_safe_opcode_def] >> gen_tac
+      >> irule code_action_bind >> simp[code_action_emit_op, enc_safe_opcode_def] >> gen_tac
+      >> irule code_action_bind >> simp[code_action_emit_op, enc_safe_opcode_def] >> gen_tac
+      >> simp[code_action_emit_op, enc_safe_opcode_def])
   >- simp[code_action_ignore_bind, code_action_emit_void, code_action_return,
           enc_safe_opcode_def]
   >- (Cases_on `elem_is_dyn` >> gvs[]
