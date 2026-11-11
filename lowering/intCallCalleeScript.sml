@@ -290,7 +290,7 @@ End
 
 (* ===== The prologue's code ===== *)
 
-Theorem compile_internal_param_decls_shape[local]:
+Theorem compile_internal_param_decls_shape:
   !ps idx st r st'.
     compile_internal_param_decls ps idx st = (r, st') ==>
     SND r = idx + LENGTH ps /\
