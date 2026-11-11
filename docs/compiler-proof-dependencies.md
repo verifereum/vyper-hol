@@ -106,8 +106,9 @@ admissions. Generic composition and each L1–L13 have none. See [source owners 
 Pipeline result transport is success-observable preserving, forward and
 terminating; failed-run return bytes/general abort kind/requests may differ.
 Generated plan layout does not prove spill safety. Empty entry memory does not
-prove raw memory validity. Opaque GAS use/labels are supplied by output shape,
-not arbitrary label or caller-read gas oracles.
+prove raw memory validity. Return-address uses and labels are constrained by
+output shape. Source gas observations in the result relation
+remain existential and are not tied to EVM readings.
 
 ## Clean producers and composition
 
@@ -143,8 +144,9 @@ computed value-zero precompiles 1/2/6/7 consume the next outcome and use its
 success flag when the computed input is valid. No callee source correctness is
 presumed or proved.
 
-Success relates canonical returns/accounts/transient/logs and full request
-sequence. Requests are success-only; leftover outcomes are not final
+Success relates `tx_return_bytes`, accounts after EVM pending deletions,
+transient storage modulo dead target storage, logs and the filtered request
+sequence via `request_agree`. Requests are success-only; leftover outcomes are not final
 observations. Non-exempt source failure requires target failure, without
 revert-data/reason/general-kind equality. The sole exemption is exact
 `RuntimeError "abi_decode invalid"` with a dynamic target occurring in a function
@@ -152,10 +154,11 @@ body (including a return rejection producing that same message); not arbitrary
 `ReturnReject`, static-only decoding or conversion failure.
 
 The resource alternative is frame OutOfGas/StackOverflow, not an existential gas
-threshold. Entry `cc_gas=0`; Venom GAS stays unchanged
-and opaque, CALL/STATICCALL oracle semantics ignore evaluated gas operands.
+threshold. Entry `cc_gas=0`; Venom GAS consumes the frame's gas readings,
+returning zero on exhaustion.
 There is no static-entry/immutables/msg.gas/gas=/fallback guarantee or caller-read
-gas oracle. Combined environmental satisfiability and transaction/callee
+gas-reading correspondence; the result relation existentially chooses source
+gas observations without tying them to EVM readings. Combined environmental satisfiability and transaction/callee
 producers remain Milestone 7 work.
 
 ## Deployment, function simulation and retired contracts
@@ -165,7 +168,9 @@ creation statement (Milestone 6 item7), not the old proved `T` placeholder.
 It requires Call-free constructor bodies, canonical arguments, actual deployment
 typing/storage/pre-constant readiness, an uninstalled source target and an empty
 target account in `es.originalAccounts`; success
-compares installed runtime bytes/accounts modulo target code/transient/logs.
+compares returned/installed `runtime_bc ++ section` satisfying `immutables_section_rel`,
+accounts modulo target code and dead storage, transient storage modulo dead
+target storage, and logs.
 `venomToAsmProps.gen_fn_simulation` is separately **ADMITTED**, Milestone 4.2,
 with internal-return/frame relations. Both are **off the runtime call path**.
 

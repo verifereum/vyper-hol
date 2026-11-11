@@ -131,24 +131,24 @@ the frame's code. Deployment has a different uninstalled-source boundary below.
 nonreentrant flag `F`, **no defaults**, exact declared argument count,
 successful `bind_arguments (type_env tops)`, and `calldata_encodes` for the same
 name/types/values. `__default__` is excluded. Return type `ret` is the looked-up
-type. `return_bytes` is empty for `NoneT`, otherwise the ABI encoding with the
-source's `needs_external_call_wrap` singleton-tuple rule, not always an
-unwrapped value. These are bounds/binding and encoding obligations, not a
+type. `tx_return_bytes` uses raw bytes for raw-return functions; otherwise
+`return_bytes` is empty for `NoneT` or uses the ABI encoding with the source's
+`needs_external_call_wrap` singleton-tuple rule. These are bounds/binding and encoding obligations, not a
 claim that all external inputs are valid.
 
 [`call_trace`](../venom/codegen/frame/callTraceScript.sml) records our frame's
 ordered `(request,outcome)` pairs. Requests contain target, value, calldata,
 static flag and live pre-call accounts/transient storage; outcomes contain
 success, return bytes, post-call accounts/transient storage and logs. The source
-runs `call_external (SOME (MAP SND (call_trace es))) am tx`; Venom/assembly take
+runs `call_external (SOME (MAP SND (call_trace es))) gobs am tx` for some
+source gas observations `gobs`; Venom/assembly take
 outcomes instead of executing callees. Successful nonstatic outcomes adopt
 account/code/storage/transient/log payloads; static or failed outcomes do not.
-`NONE` source mode still executes concrete calls; the two-argument
-`initial_state am scs` still starts with NONE and empty requests.
+`NONE` source mode still executes concrete calls.
 
-Value-zero calls to computed precompiles 1/2/6/7 are computed by the shared
-oracle helper and omitted from `call_trace`; they consume no oracle outcome
-and record no request. Nonzero-value calls and other precompiles remain in the
+Value-zero calls to computed precompiles 1/2/6/7 consume the next outcome's
+success flag and compute return data on success. They remain in `call_trace`,
+but `call_requests` filters them out. Nonzero-value calls and other precompiles remain in the
 ordinary trace. Callee/reentrant execution is absorbed into an outcome, not
 certified as source-equivalent by this runtime theorem. Even arbitrary source
 `SOME` lists use the same top-level source evaluator, not a second evaluator.
@@ -157,16 +157,18 @@ certified as source-equivalent by this runtime theorem. Even arbitrary source
 fresh state from the live EVM environment: empty memories/variables/allocations,
 concrete labels from `compute_label_offsets prog`, exact assembled code, three
 FMP fields set to `n2w cp.cp_initial_fmp`, trace outcomes and empty requests.
-It sets **`cc_gas = 0`**. Venom `GAS` is untouched; opaque GAS values may only
-feed CALL/STATICCALL gas operands, whose values oracle calls ignore. Assembly
-has frame-local EVM gas readings; **there is no caller-read gas oracle and no
-`msg.gas` guarantee**.
+It sets **`cc_gas = 0`** and `vs_gas_readings = gas_readings es`. Venom `GAS`
+consumes those readings, returning zero on exhaustion; assembly also has
+frame-local EVM gas readings. The result relation existentially chooses
+source gas observations; they are not yet tied to EVM readings. There is no
+`msg.gas` guarantee.
 
 ### Result clauses and deliberate limits
 
-- Source success requires successful `frame_outcome`, canonical ABI return
-  bytes, exact live accounts/transient storage, ordered concrete event logs,
-  and **the entire request sequence** equal to `MAP FST (call_trace es)`.
+- Source success requires successful `frame_outcome`, `tx_return_bytes`,
+  account agreement after EVM pending deletions and transient-storage agreement
+  (both modulo dead target storage), ordered concrete event logs, and
+  `LIST_REL (request_agree cx)` against `call_requests es`.
   Requests are compared **only on success**. Terminal leftover outcome lists
   are **not** observations required equal by this relation.
 - Ordinary assertion/raise requires EVM failure with `Reverted`;
@@ -185,9 +187,7 @@ has frame-local EVM gas readings; **there is no caller-read gas oracle and no
   rejection can also be exempt in such a program. Static-only decode and
   `"abi_decode conversion"` are not exempt. An exempt run has no result/effect
   correspondence obligation, but the theorem still supplies an actual EVM run.
-- Resource escape is a genuine frame `OutOfGas` or `StackOverflow`, or an
-  observed failed value-zero computed precompile with valid pure input
-  (`precompile_call_starved`); invalid ecadd/ecmul input is not starvation.
+- Resource escape is a genuine frame `OutOfGas` or `StackOverflow`.
   There is no existential “sufficient gas” loophole or guaranteed gas bound.
 - No static **entry**, runtime immutables, `msg.gas`, `gas=` keyword, fallback
   invocation, arbitrary source program, closed-world callee or whole-transaction
@@ -210,7 +210,7 @@ proof-owner memo, not a proved stage.
 | S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` | raw memory validity on non-exempt executions; Milestone 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` | exact O1 forward semantic simulation; Milestone 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` | existential invariant, output memory and reachability package; Milestone 5 |
-| S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` | output unit shape/opaque GAS/label facts; Milestone 3 |
+| S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` | output unit shape/return-address use/label facts; Milestone 3 |
 | S7 | `codegenCorrectness.codegen_correct` | frame-aware generated-code simulation with resource disjunction; Milestones 2.1 and 4 |
 
 Owners: [lowering](../lowering/vyperLoweringCorrectScript.sml),
@@ -273,8 +273,10 @@ Source owners: [e2eProducers](../lowering/e2e/e2eProducersScript.sml),
   `deploy_state_rel` also requires empty pending deletions matching
   `es.rollback.toDelete`, `call_outcomes_ok` for the trace, and storage
   validity for every trace outcome in the deployment evaluation context.
-  Success requires returned/installed runtime bytes, exact other accounts and
-  target equality modulo code, transient storage and ordered logs; failures and
+  Success requires returned/installed `runtime_bc ++ section`, with the section
+  satisfying `immutables_section_rel`, exact other accounts and
+  target equality modulo code and dead storage, transient storage modulo dead
+  target storage, and ordered logs; failures and
   resource/exemption cases are explicit. This is **stated, not proved**.
   See [deployment definitions](../lowering/e2eDeployDefsScript.sml).
 
