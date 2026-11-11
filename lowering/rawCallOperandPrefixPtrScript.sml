@@ -283,12 +283,13 @@ Resume raw_call_addr_data_sim_ptr[posts]:
   rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
   `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
-    (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+    (`wb_frame cenv es ee sa s0 t` by
+       (irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
+     irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
      >- (qexists_tac `func` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     fs[exprLoweringPropsTheory.ci_mono_def] >>
-     irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
+     qexistsl_tac [`G`, `ee`, `ee`, `t`, `s1`, `tn`] >>
+     fs[exprLoweringPropsTheory.ci_mono_def]) >>
   qpat_x_assum `value_has_type (BaseTV (BytesT _)) _` mp_tac >>
   Cases_on `v'` >> simp[vyperTypingTheory.value_has_type_def] >>
   strip_tac >> gvs[] >> qexistsl_tac [`ee`, `t`] >>
@@ -319,7 +320,7 @@ QED
 (* Saved word operands need the later stage's entry frontier, not the
    frontier before the operand was produced. *)
 Theorem saved_word_operand_ptr_frame:
-  wb_frame cenv es sa s t /\ ghost_kept cenv es sa G tn s H un /\
+  wb_frame cenv es es' sa s t /\ ghost_kept cenv es sa G tn s H un /\
   (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l) /\
   is_word_type ty /\ expr_val_rel cx ty v op s /\ op_taint tn op = {} ==>
   expr_val_rel cx ty v op t /\ op_taint un op = {}
@@ -363,10 +364,10 @@ Theorem raw_call_addr_data_header_sim_ptr:
       ea.gas_obs = [] /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
       expr_post ctx func cenv cx d ea s1 s2 ta ee (BytesV bs) data tb /\
-      wb_frame cenv ee s2 tb t /\
+      wb_frame cenv ee ee s2 tb t /\
       expr_val_at cenv cx (expr_type d) s1 sm ee (BytesV bs) data t /\
       expr_sim_inv cenv cx env ee /\ body_exprs_ptr_ok cx kws /\
-      stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+      stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
       ghost_inv dep cenv cx ee G tn t /\
@@ -491,7 +492,7 @@ Resume raw_call_addr_data_header_sim_ptr[header]:
   `(!z. addr = Var z ==> not_fresh_at s1 z) /\ (!l. addr <> Label l)` by
     (drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >>
      simp[compileEnvTheory.is_word_type_def]) >>
-  `wb_frame cenv ee s1 t t'` by
+  `wb_frame cenv ee ee' s1 t t'` by
     (irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
   `expr_val_rel cx (BaseT AddressT) v addr t /\ op_taint tn addr = {}` by
     (conj_tac
@@ -563,7 +564,7 @@ QED
 Resume raw_call_addr_data_header_sim_ptr[header_posts]:
   `expr_val_at cenv cx (expr_type d) s1 sm ee' (BytesV bs) (Var x) u` by
     (irule log_frame_placement >>
-     simp[] >> qexistsl_tac [`ctx`, `ee'`, `func`, `t'`, `s2`] >> simp[] >>
+     simp[] >> qexistsl_tac [`ctx`, `ee'`, `ee'`, `func`, `t'`, `s2`] >> simp[] >>
      fs[exprLoweringPropsTheory.ci_mono_def] >>
      qpat_x_assum `expr_post _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def]) >>
@@ -572,36 +573,33 @@ Resume raw_call_addr_data_header_sim_ptr[header_posts]:
      metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
   `expr_val_rel cx (BaseT AddressT) v addr u /\ op_taint un addr = {}` by
     (drule_all saved_word_operand_ptr_frame >> simp[]) >>
-  `wb_frame cenv es sa s0 t'` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     `wb_frame cenv es sa s0 t` by
-       (irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
-     goal_assum (drule_at Any) >> simp[] >> conj_tac
-     >- (qexistsl_tac [`ee`, `s1`, `t`] >>
-         fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
-     goal_assum (drule_at Any)) >>
+  `wb_frame cenv es ee sa s0 t` by
+    (irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
+  `wb_frame cenv es ee' sa s0 t'` by
+    (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `ee`, `ee'`, `s1`, `t`, `t'`,
+       `ctx`] exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >>
+     fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
   suspend "header_frame_posts"
 QED
 
 Resume raw_call_addr_data_header_sim_ptr[header_frame_posts]:
-  `wb_frame cenv es sa s0 u` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     goal_assum (drule_at Any) >> simp[] >> conj_tac
-     >- (qexistsl_tac [`ee'`, `s2`, `t'`] >>
-         fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
-     goal_assum (drule_at Any)) >>
+  `wb_frame cenv es ee' sa s0 u` by
+    (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `ee'`, `ee'`, `s2`, `t'`, `u`,
+       `ctx`] exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >>
+     fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
   `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
-    (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+    (irule wordOperandsPtrTheory.ghost_kept_trans >>
+     simp[] >> conj_tac
      >- (qexists_tac `func` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
-     qexistsl_tac [`G`, `ee`, `t`, `s1`, `tn`] >> simp[] >>
-     fs[exprLoweringPropsTheory.ci_mono_def] >>
-     irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
+     qexistsl_tac [`G`, `ee`, `ee`, `t`, `s1`, `tn`] >>
+     fs[exprLoweringPropsTheory.ci_mono_def]) >>
   `ghost_kept cenv es sa G0 tn0 s0 H un` by
-    (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+    (irule wordOperandsPtrTheory.ghost_kept_trans >>
+     simp[] >> conj_tac
      >- (qexists_tac `func` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
-     qexistsl_tac [`G'`, `ee'`, `t'`, `s2`, `tn'`] >>
+     qexistsl_tac [`G'`, `ee'`, `ee'`, `t'`, `s2`, `tn'`] >>
      fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
   suspend "header_return"
 QED

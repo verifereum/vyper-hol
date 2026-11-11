@@ -37,14 +37,14 @@ QED
 
 Theorem raw_call_finish_local_separation:
   stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
-  wb_frame cenv es sa s u /\
+  wb_frame cenv es es' sa s u /\
   (!name a len. local_region cenv es.scopes s name a len ==>
     regions_disjoint dst capacity a len) ==>
   (!name a len. local_region cenv es.scopes u name a len ==>
     regions_disjoint dst capacity a len)
 Proof
-  strip_tac >> drule wb_frame_local_regions >>
-  disch_then (qspecl_then [`sa`,`u`,`es`] mp_tac) >> simp[] >> metis_tac[]
+  strip_tac >> `MAP FDOM es.scopes = MAP FDOM es.scopes` by simp[] >>
+  drule_all wb_frame_local_regions >> metis_tac[]
 QED
 
 Theorem raw_call_finish_alloca_separation:
@@ -130,7 +130,7 @@ Proof
 QED
 
 Theorem raw_call_finish_operand_transport:
-  wb_frame cenv es sa s u /\ ghost_kept cenv es sa G tn s H un /\
+  wb_frame cenv es es' sa s u /\ ghost_kept cenv es sa G tn s H un /\
   (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) /\
   eval_operand arg s = SOME w ==>
   eval_operand arg u = SOME w /\

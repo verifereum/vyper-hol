@@ -97,7 +97,7 @@ Proof
     (strip_tac >> gvs[expr_post_def, expr_val_own_def] >> rpt strip_tac >>
      qpat_x_assum `!tv. _ ==> _` drule_all >> strip_tac >>
      qexists_tac `w` >> simp[] >> metis_tac[]) >>
-  gvs[expr_post_def, expr_val_rel_def, locals_kept_def] >>
+  gvs[expr_post_def, expr_val_rel_def, locals_kept_def, popped_kept_def] >>
   conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at cc x` by
@@ -196,7 +196,7 @@ Proof
      simp[] >> rpt strip_tac >>
      qpat_x_assum `!name off len. _` drule >>
      simp[regions_disjoint_def] >> decide_tac) >>
-  `locals_kept cenv es s0 (mstore a w s)` by suspend "locals" >>
+  `locals_kept cenv es es' s0 (mstore a w s)` by suspend "locals" >>
   gvs[expr_post_def, reason_encoder_store_value_location] >>
   rpt strip_tac >>
   `regions_disjoint b sz off sz'` by

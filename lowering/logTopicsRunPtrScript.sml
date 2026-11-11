@@ -210,7 +210,7 @@ Theorem compile_split_log_topics_seq_ptr:
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
     LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) Gf tnf t)
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
-    wb_frame cenv es sm s t /\
+    wb_frame cenv es es sm s t /\
     EVERY (\op. (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) ops
 Proof
   strip_tac >>

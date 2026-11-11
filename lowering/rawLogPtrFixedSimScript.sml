@@ -150,7 +150,7 @@ Resume raw_log_fixed32_body_frag_ptr[allocation]:
   drule_all raw_log_topics_marked_post_ptr >> strip_tac >>
   drule_all raw_log_marked_data_ready_ptr >> strip_tac >>
   `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
-   wb_frame cenv es sa s0 t` by fs[wb_args_post_def] >>
+   wb_frame cenv es (mid with gas_obs := []) sa s0 t` by fs[wb_args_post_def] >>
   `~t.vs_halted` by
     (drule gas_marked_exec_ptr_exec >> strip_tac >>
      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -203,9 +203,9 @@ Resume raw_log_fixed32_body_frag_ptr[allocation_path]:
 QED
 
 Resume raw_log_fixed32_body_frag_ptr[allocated_post]:
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es (mid with gas_obs := []) sa s0 t'` by
     (irule wb_frame_readonly_tail >> qexistsl_tac [`sm`, `t`] >> simp[]) >>
-  `wb_frame cenv (mid with gas_obs := []) sm t t'` by
+  `wb_frame cenv (mid with gas_obs := []) (mid with gas_obs := []) sm t t'` by
     (simp[wb_frame_def] >>
      irule exprSimPropsTheory.locals_kept_mem_tail >>
      qexists_tac `t` >> simp[]) >>
@@ -276,7 +276,7 @@ Resume raw_log_fixed32_body_frag_ptr[tail]:
     (qpat_assum `wb_args_post _ _ _ _ _ _ _ _ _ _ t'` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[wb_args_post_def, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
-       wb_frame_def, locals_kept_def, lookup_var_def] >> metis_tac[]) >>
+       wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >> metis_tac[]) >>
   `EVERY (\op. (!x. op = Var x ==> not_fresh_at sk x) /\
        (!l. op <> Label l)) ops` by
     (fs[EVERY_MEM] >> rpt strip_tac >>
@@ -288,7 +288,7 @@ Resume raw_log_fixed32_body_frag_ptr[tail]:
 QED
 
 Resume raw_log_fixed32_body_frag_ptr[fixed_frame]:
-  `wb_frame cenv (mid with gas_obs := []) sk
+  `wb_frame cenv (mid with gas_obs := []) ee sk
      (t' with vs_inst_idx := SUC (LENGTH sm.cs_current_insts)) t''` by
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `MAP FDOM (mid with gas_obs := []).scopes = MAP FDOM ee.scopes` by
@@ -325,7 +325,7 @@ Resume raw_log_fixed32_body_frag_ptr[coverage]:
      rpt (pop_assum kall_tac) >> simp[ptr_covers_def, lookup_var_def]) >>
   `ptr_covers G' tn' pv t'' 32` by
     (irule ptr_covers_evaluation_frame >>
-     qpat_assum `wb_frame _ _ sk _ t''` (irule_at Any) >>
+     qpat_assum `wb_frame _ _ _ sk _ t''` (irule_at Any) >>
      simp[Abbr `pv`, Abbr `Ga`, Abbr `ta`] >>
      first_assum (irule_at Any) >> simp[]) >>
   `expr_body_pre cenv cx env data (mid with gas_obs := gs)` by fs[] >>

@@ -136,7 +136,8 @@ Theorem oracle_call_checked_full:
     ghost_inv d cenv cx (SND (adopt_call_outcome rq outcome es1)) H un
       (t with vs_inst_idx := SUC s.vs_inst_idx) /\
     ghost_kept cenv es sa G tn s H un /\
-    wb_frame cenv es sa s (t with vs_inst_idx := SUC s.vs_inst_idx) /\
+    wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) sa s
+      (t with vs_inst_idx := SUC s.vs_inst_idx) /\
     op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE /\
     t.vs_allocas = s.vs_allocas /\
     t.vs_vars = s.vs_vars |+ (out,if outcome.co_success then 1w else 0w) /\

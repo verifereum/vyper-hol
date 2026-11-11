@@ -22,7 +22,8 @@ Proof
   `cs_extends sc sb` by
     (qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` mp_tac >>
      Cases_on `loc = LocStorage` >> gvs[] >>
-     simp[compile_word_copy_loop_def, word_scale_def, compile_ptr_load_def,
+     simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def,
+       compile_word_copy_loop_base_def, word_scale_def, compile_ptr_load_def,
        compile_ptr_store_def, emit_op_def, emit_void_def, emit_inst_def,
        fresh_label_def, fresh_var_def, fresh_id_def, emit_def, new_block_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>

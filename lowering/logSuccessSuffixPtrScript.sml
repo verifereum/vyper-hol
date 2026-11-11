@@ -141,8 +141,8 @@ Resume log_success_suffix_path_ptr[post]:
   `t.vs_allocas = s.vs_allocas` by
     (qpat_assum `t with <|vs_vars := _; vs_inst_idx := _|> = s`
       (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
-  `wb_frame ce es sm s t` by
-    (simp[wb_frame_def, locals_kept_def] >> metis_tac[]) >>
+  `wb_frame ce es es sm s t` by
+    (simp[wb_frame_def, exprSimPropsTheory.locals_kept_mem] >> metis_tac[]) >>
   `ghost_kept ce es sm G tn s H tm` by
     (drule_all (SIMP_RULE bool_ss [] (Q.INST [`es1` |-> `es`] ghost_kept_wb_trans)) >>
      simp[]) >>

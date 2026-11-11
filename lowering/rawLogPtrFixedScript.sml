@@ -10,7 +10,7 @@ Ancestors
 (* Applies to any older covered pointer, including a just-allocated buffer. *)
 Theorem ptr_covers_evaluation_frame:
   ptr_covers G tn p s n /\ not_fresh_at sa p /\
-  wb_frame cenv es sa s t /\ ghost_kept cenv es sa G tn s G' tn' ==>
+  wb_frame cenv es es' sa s t /\ ghost_kept cenv es sa G tn s G' tn' ==>
   ptr_covers G' tn' p t n
 Proof
   strip_tac >> irule ptr_covers_lookup_frame >>
@@ -190,7 +190,7 @@ Theorem raw_log_fixed_data_frame:
   !ctx fn cenv cx es es' sa s t G tn G' tn' p a d id value w logs vlogs k.
     stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-    wb_frame cenv es sa s t /\ ghost_kept cenv es sa G tn s G' tn' /\
+    wb_frame cenv es es' sa s t /\ ghost_kept cenv es sa G tn s G' tn' /\
     ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\ not_fresh_at sa p /\
     (!n b z. local_region cenv es.scopes s n b z ==>
       regions_disjoint (w2n a) 32 b z) /\

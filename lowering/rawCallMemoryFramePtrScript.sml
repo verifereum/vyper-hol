@@ -196,14 +196,14 @@ Theorem wb_frame_clean_write:
     regions_disjoint dst (LENGTH bytes) a len) /\
   (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
     regions_disjoint dst (LENGTH bytes) a len) ==>
-  wb_frame cenv es sa s u
+  wb_frame cenv es es sa s u
 Proof
   strip_tac >> simp[loweringPostsTheory.wb_frame_def] >> conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!aid a len. _ /\ FLOOKUP _ _ = SOME _ ==> _` drule_all >>
       simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
       irule write_memory_mem_bytes_at_disjoint >> simp[]) >>
-  simp[loweringPostsTheory.locals_kept_def] >> rpt strip_tac >>
+  irule locals_kept_regions >> rpt strip_tac >>
   qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _` drule >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
   irule write_memory_mem_bytes_at_disjoint >> decide_tac
@@ -246,7 +246,7 @@ Theorem oracle_call_ghost_frame:
   stor_taint_ok cx un t ==>
   ghost_inv d cenv cx ee H un (t with vs_inst_idx := pc) /\
   ghost_kept cenv es sa G tn s H un /\
-  wb_frame cenv es sa s (t with vs_inst_idx := pc)
+  wb_frame cenv es ee sa s (t with vs_inst_idx := pc)
 Proof
   strip_tac >> (
   `!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
@@ -274,6 +274,10 @@ Proof
       fs[bodyPtrDefsTheory.stor_taint_ok_def] >> metis_tac[]) >>
   conj_tac
   >- (irule ghost_kept_old_transport >> simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  `wb_frame cenv es es sa s (t with vs_inst_idx := pc)` suffices_by
+    (qpat_x_assum `ee.scopes = _` (fn th => rewrite_tac[th,
+       loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+       loweringPostsTheory.popped_kept_def])) >>
   irule wb_frame_clean_write >>
   simp[venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   qexistsl_tac [`TAKE cap t.vs_returndata`, `dst`] >> simp[] >> metis_tac[])

@@ -43,7 +43,8 @@ Theorem raw_call_emit_checked_full:
     gas_path_ptr_edge (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK u) /\
     stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
     ghost_inv d cenv cx (SND (adopt_call_outcome rq outcome es1)) H un u /\
-    ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s u /\
+    ghost_kept cenv es protected G tn s H un /\
+    wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s u /\
     op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE /\
     u.vs_allocas = s.vs_allocas /\
     u.vs_vars = s.vs_vars |+ (out,if outcome.co_success then 1w else 0w) /\
@@ -149,7 +150,8 @@ Theorem raw_call_extracted_checked_full:
     gas_path_ptr_edge (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK u) /\
     stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
     ghost_inv d cenv cx (SND (adopt_call_outcome rq outcome es1)) H un u /\
-    ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s u /\
+    ghost_kept cenv es protected G tn s H un /\
+    wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s u /\
     op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE /\
     u.vs_allocas = s.vs_allocas /\
     u.vs_vars = s.vs_vars |+ (out,if outcome.co_success then 1w else 0w) /\
@@ -195,7 +197,7 @@ Theorem raw_call_allocated_suffix_ready:
   t.vs_returndata = rd /\ H = step_prov PG G inst t /\
   un = step_taint inst s t tn /\ u = t with vs_inst_idx := LENGTH sc.cs_current_insts /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
-  wb_frame cenv es protected s u /\ ee.scopes = es.scopes /\
+  wb_frame cenv es es' protected s u /\ ee.scopes = es.scopes /\
   (!name a len. local_region cenv es.scopes s name a len ==>
     regions_disjoint ob capacity a len) /\
   (!id a len. id < protected.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (a,len) ==>
