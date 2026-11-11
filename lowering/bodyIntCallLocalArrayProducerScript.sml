@@ -5,6 +5,7 @@ Ancestors
   bodyIntCallIndexArithmetic
   exprLowering compileEnv loweringStateRelDefs context vyperAST venomState vyperInterpreter vyperState
   gasSummary gasSummaryCompose gasOutcome bodyIntCallProducerInterface
+  memoryValueEncoding
   bodyIntCallPathLayout loweringPosts exprSimProps exprLoweringProps
   vyperTypeSystem valueEncoding finite_map exprSimHypsDefs allocLimits
   supportedExprTraverse vyperTypeCallGraph vyperTypeCallStackSoundness
@@ -306,6 +307,7 @@ Theorem local_fixed_array_address:
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var root_var) sz) /\
   entry.type = ArrayTV etv (Fixed cnt) /\
+  value_has_type entry.type entry.value /\
   stmt_state_rel ctx func cenv cx es s ==>
   ?b. lookup_var root_var s = SOME b /\
       val_wf entry.type entry.value /\
@@ -319,7 +321,8 @@ Proof
        val_wf entry.type entry.value /\
        val_in_memory entry.type entry.value (w2n b) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     first_x_assum drule_all >> metis_tac[]) >>
+     first_x_assum drule_all >> strip_tac >> qexists_tac `w` >>
+     simp[] >> irule memory_value_rel_val_in_memory >> simp[]) >>
   qexists_tac `b` >> simp[] >> rpt strip_tac >>
   `s.vs_alloca_next < dimword (:256)` by
     (fs[stmt_state_rel_def, alloca_room_def] >> decide_tac) >>
@@ -484,7 +487,8 @@ Proof
   `type_memory_size entry.type <= sz /\
    val_in_memory entry.type entry.value (w2n b) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[] >>
+     irule memory_value_rel_val_in_memory >> simp[]) >>
   `sub_layout entry.type entry.value k tvt selected` by
     (irule mem_path_selection_sub_layout >> simp[] >>
      qexists_tac `path` >> simp[]) >>
