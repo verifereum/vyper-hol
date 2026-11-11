@@ -203,7 +203,9 @@ Theorem tuple_child_post:
   read_result cx tv es1 = (INL (ArrayV (TupleV vs)),es1) /\
   values_have_types tvs vs /\ read_result cx tv' es1 = (INL (EL k vs),es1) /\
   post_value_type cenv e = EL k tys /\ post_value_type cenv e = expr_type e /\
-  (~expr_has_effect e ==> ~expr_has_effect obj) ==>
+  (~expr_has_effect e ==> ~expr_has_effect obj) /\
+  (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+     ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
   vv_post ctx func cenv cx e es sa sn s0 es1 tv'
     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -216,7 +218,11 @@ Proof
     (irule tuple_child_holds >> metis_tac[]) >>
   `vv_at cenv cx (EL k tys) sa sn es1 tv'
     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q` by
-    (irule tuple_child_placement >> metis_tac[]) >>
+    (irule tuple_child_placement >>
+     conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+     qexistsl [`k`, `tuple_offset cenv tys (vv_loc bvv) k`, `tv`, `tvs`, `tys`,
+               `vs`, `w`] >>
+     gvs[]) >>
   gvs[vv_post_def] >>
   reverse conj_tac >- (first_assum ACCEPT_TAC) >> rpt strip_tac >>
   `~expr_has_effect obj` by metis_tac[] >>

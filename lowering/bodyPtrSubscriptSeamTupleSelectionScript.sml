@@ -24,6 +24,8 @@ Proof
   strip_tac >> drule tuple_selected_source >>
   simp[vv_post_initial_gas] >> disch_then drule >> strip_tac >> gvs[] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  qpat_assum `select_result _ _ _ _ _ = _`
+    (assume_tac o MATCH_MP select_result_memory_place) >>
   irule tuple_child_post >> simp[post_value_type_def, expr_type_def] >> metis_tac[]
 QED
 

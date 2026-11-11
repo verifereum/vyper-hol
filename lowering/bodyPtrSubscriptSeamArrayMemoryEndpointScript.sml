@@ -77,7 +77,7 @@ Proof
 QED
 
 Theorem fixed_array_child_endpoint:
-  vv_post ctx func cenv cx obj es sa sb s0 ee r
+  vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sb s0 ee r
     (LocatedValue ann p) sf /\
   ptr_vv_ok cx (ArrayT et (Fixed n)) r (LocatedValue ann p) ee G tn s /\
   expr_type obj = ArrayT et (Fixed n) /\ post_value_type cenv obj = expr_type obj /\
@@ -89,6 +89,8 @@ Theorem fixed_array_child_endpoint:
   value_has_type (ArrayTV etv (Fixed n)) (ArrayV av) /\
   array_index (ArrayTV etv (Fixed n)) av i = SOME v /\ val_wf etv v /\
   value_has_type etv v /\ read_result cx child ee = (INL v,ee) /\
+  (!id path'. child = PlaceR (MemoryPlace id path') <=>
+     ?path. path' = path ++ [ValueSubscript (IntV i)] /\ r = PlaceR (MemoryPlace id path)) /\
   eval_operand p.ptr_operand s = SOME w /\ eval_operand p.ptr_operand sf = SOME w /\
   eval_operand (Var out) sf = SOME (w + n2w (Num i * type_memory_size etv)) /\
   w2n (w + n2w (Num i * type_memory_size etv)) =
@@ -105,8 +107,9 @@ Theorem fixed_array_child_endpoint:
   ptr_buf_ok cenv (Subscript et obj idx) (Var out) Gf sf
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac
-  >- (drule vv_post_array_element >> simp[] >>
-      disch_then irule >> simp[] >> qexists_tac `i` >> simp[]) >>
+  >- (qpat_assum `p.ptr_location = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+      irule vv_post_array_element >> simp[] >>
+      qexistsl [`ann`, `av`, `i`, `r`] >> simp[] >> metis_tac[]) >>
   conj_tac
   >- (irule ptr_vv_ok_array_child >> goal_assum (drule_at Any) >> metis_tac[]) >>
   irule ptr_covers_buf_ok >> goal_assum (drule_at Any) >> simp[] >>

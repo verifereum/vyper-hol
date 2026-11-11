@@ -16,7 +16,12 @@ Theorem membership_stack_memory_at:
   vv_at cenv cx ty sa sb es tv (StackValue ann op) s ==>
   vv_at cenv cx ty sa sb es tv (LocatedValue ty (mk_ptr op LocMemory)) s
 Proof
-  simp[vv_at_def, mk_ptr_def, expr_val_at_def] >> metis_tac[]
+  strip_tac >>
+  `!n k ptv. local_place_at cenv cx n k ptv tv` by
+    (rw[local_place_at_def] >> gvs[vv_at_def]) >>
+  gvs[vv_at_def, mk_ptr_def, expr_val_at_def] >> rpt strip_tac >>
+  first_x_assum drule >> disch_then drule >> strip_tac >> simp[] >>
+  qexists_tac `w` >> simp[] >> metis_tac[]
 QED
 
 Theorem membership_stack_memory_ptr:

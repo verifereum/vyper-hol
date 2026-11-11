@@ -32,7 +32,8 @@ Theorem code_array_element_ptr_summary:
   read_result cx r ee = (INL (ArrayV av),ee) /\
   array_index (ArrayTV etv bd) av i = SOME v /\
   val_wf (ArrayTV etv bd) (ArrayV av) /\ val_wf etv v /\ value_has_type etv v /\
-  vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue ann p) q /\
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+    (LocatedValue ann p) q /\
   p.ptr_location = LocCode /\ eval_operand p.ptr_operand q = SOME w /\
   j = (case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv /\
   eval_operand dst q = SOME (w + n2w j) /\
@@ -56,9 +57,12 @@ Proof
   `?child. select_result cx (ArrayT et bd) r (ValueSubscript (IntV i)) ee =
       (INL child,ee) /\ read_result cx child ee = (INL v,ee)` by
     (irule framed_array_select_read >> simp[] >> metis_tac[]) >>
+  qpat_assum `select_result _ _ _ _ _ = _`
+    (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
   `vv_post ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee child
      (LocatedValue et (mk_ptr dst p.ptr_location)) q` by
-    (irule vv_post_array_element >> simp[] >> metis_tac[]) >>
+    (irule vv_post_array_element >> simp[] >>
+     qexistsl [`ann`, `av`, `i`, `r`] >> simp[] >> metis_tac[]) >>
   irule select_result_ptr_counted_summary >> simp[] >>
   qexistsl [`G`,`OK q`,`tn`] >> simp[] >>
   `ee with gas_obs := [] = ee` by

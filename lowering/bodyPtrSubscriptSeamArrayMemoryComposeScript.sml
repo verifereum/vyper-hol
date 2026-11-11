@@ -27,7 +27,8 @@ Theorem fixed_array_element_summary_ptr:
   expr_type obj = ArrayT et (Fixed n) /\ post_value_type cenv obj = expr_type obj /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
-  vv_post ctx func cenv cx obj es sa sd s0 ee r (LocatedValue ann p) sf /\
+  vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sd s0 ee r
+    (LocatedValue ann p) sf /\
   ptr_vv_ok cx (ArrayT et (Fixed n)) r (LocatedValue ann p) ee G tn s /\
   p.ptr_location = LocMemory /\
   evaluate_type (get_tenv cx) (ArrayT et (Fixed n)) = SOME (ArrayTV etv (Fixed n)) /\
@@ -65,6 +66,8 @@ Proof
   `?child. select_result cx (ArrayT et (Fixed n)) r (ValueSubscript (IntV i)) ee =
      (INL child,ee) /\ read_result cx child ee = (INL v,ee)` by
     (irule framed_array_select_read >> simp[] >> metis_tac[]) >>
+  qpat_assum `select_result _ _ _ _ _ = _`
+    (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
   drule_all fixed_array_child_endpoint >> strip_tac >>
   irule select_result_counted_summary_ptr >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>

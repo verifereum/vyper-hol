@@ -34,7 +34,11 @@ Proof
   `vv_at cenv cx (expr_type e) sa sd ee r (LocatedValue ann p) z` by
     (irule vv_at_vars_frame >> qexistsl_tac [`s`,`sc`] >>
      gvs[vv_post_def, vv_operand_def]) >>
-  irule vv_post_frame_intro >> simp[vv_storage_live_def]
+  irule vv_post_frame_intro >> simp[vv_storage_live_def] >> strip_tac >>
+  `pure_frame cenv func es sa s0 s` by fs[vv_post_def] >>
+  `pure_frame cenv func es sa s0 z <=> pure_frame cenv func es sa s0 s` by
+    (irule pure_frame_state_cong >> fs[]) >>
+  fs[]
 QED
 
 Theorem nonnegative_index_word:
@@ -77,7 +81,7 @@ Theorem fixed_array_represented_summary_ptr:
   eval_expr cx obj es = (INL r,t) /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
-  vv_post ctx func cenv cx obj es sa sc s0 ee r
+  vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sc s0 ee r
     (LocatedValue (ArrayT et (Fixed n)) p) q /\
   ptr_vv_ok cx (ArrayT et (Fixed n)) r (LocatedValue (ArrayT et (Fixed n)) p) ee G tn q /\
   ptr_buf_ok cenv obj p.ptr_operand G q /\ p.ptr_location = LocMemory /\
@@ -141,7 +145,8 @@ Resume fixed_array_represented_summary_ptr[valid]:
     metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
   `w2n w + val_footprint (ArrayTV etv (Fixed n)) (ArrayV av) < dimword (:256)` by
     (irule vv_post_memory_footprint_bound >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[vyperASTTheory.expr_type_def]) >>
   drule_all fixed_array_child_bounds >> strip_tac >>
   `0 < type_memory_size (ArrayTV etv (Fixed n))` by
     (irule (cj 1 valueEncodingPropsTheory.type_memory_size_pos) >>
@@ -208,7 +213,7 @@ Resume fixed_array_represented_summary_ptr[endpoint]:
                local_region cenv ee.scopes sf name b sz` by
     (rpt gen_tac >> irule (GSYM copy_buffer_local_region_frame) >>
      qexists_tac `sc` >> simp[] >> metis_tac[]) >>
-  `vv_post ctx func cenv cx obj es sa sd s0 ee r
+  `vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sd s0 ee r
      (LocatedValue (ArrayT et (Fixed n)) p) sf` by
     (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) memory_vv_post_readonly_tail >>
      disch_then (qspecl_then [`sf`,`sd`] mp_tac) >>

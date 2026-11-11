@@ -244,8 +244,8 @@ QED
 
 Resume subscript_array_framed_code_ptr[suffix_endpoint]:
   `stmt_state_rel ctx func cenv cx (raw with gas_obs := []) u` by fs[expr_post_def] >>
-  `vv_post ctx func cenv cx e1 es sa st2 s0 (raw with gas_obs := []) tv
-    (LocatedValue (ArrayT ann bd) p) u` by
+  `vv_post ctx func cenv cx (Subscript (ArrayT ann bd) e1 e2) es sa st2 s0
+    (raw with gas_obs := []) tv (LocatedValue (ArrayT ann bd) p) u` by
     (irule framed_array_base_endpoint >> simp[] >>
      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
@@ -276,7 +276,8 @@ Resume subscript_array_framed_code_ptr[suffix_ghost]:
      conj_tac
      >- (qexists `func` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
-     qexistsl [`G`,`es_end with gas_obs := []`,`t`,`sm`,`tn`] >> simp[] >>
+     qexistsl [`G`,`es_end with gas_obs := []`,`es_end with gas_obs := []`,`t`,`sm`,`tn`] >>
+     simp[] >>
      fs[vv_post_def, loweringPostsTheory.wb_frame_def] >> metis_tac[]) >>
   suspend "suffix_finish"
 QED
@@ -291,8 +292,8 @@ Resume subscript_array_framed_code_ptr[suffix_finish]:
   `!q. (!x. not_fresh_at st2 x ==> lookup_var x q = lookup_var x u) /\
     q.vs_allocas = u.vs_allocas /\ q.vs_memory = u.vs_memory /\
     stmt_state_rel ctx func cenv cx (raw with gas_obs := []) q ==>
-    vv_post ctx func cenv cx e1 es sa sb s0 (raw with gas_obs := []) tv
-      (LocatedValue (ArrayT ann bd) p) q` by
+    vv_post ctx func cenv cx (Subscript (ArrayT ann bd) e1 e2) es sa sb s0
+      (raw with gas_obs := []) tv (LocatedValue (ArrayT ann bd) p) q` by
     (rpt strip_tac >>
      qpat_x_assum `vv_post _ _ _ _ _ _ sa st2 _ _ _ _ _` kall_tac >>
      irule framed_array_base_endpoint >> simp[] >>
