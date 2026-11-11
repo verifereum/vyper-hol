@@ -131,12 +131,32 @@ Proof
     (gvs[encoder_dynamic_effect_def] >> metis_tac[]) >>
   `shead.vs_current_bb = sa.cs_current_bb /\
    shead.vs_inst_idx = LENGTH sa.cs_current_insts` by simp[] >>
-  qpat_assum `!i Gp tnp sp. _` (qspec_then `j` mp_tac) >>
-  simp only [ASSUME ``j < N`` , T_AND] >> disch_tac >>
-  drule_all (encoder_dynamic_body_backedge_counted_ptr |>
+  qpat_assum `j < N` (fn bound =>
+    qpat_assum `!i Gp tnp sp. _`
+      (qspec_then `j` (assume_tac o REWRITE_RULE [bound]))) >>
+  drule_at (Pat `encoder_dynamic_loop_inv ctx fn sites protected ip cursor src dst cv p c a b scap dcap tv v N ns j Gh tnh shead`)
+    (encoder_dynamic_body_backedge_counted_ptr |>
     Q.INST [`capj` |-> `cap j`, `k` |-> `32*N+SUM (TAKE j ns)`,
             `n` |-> `EL j ns`, `cost` |-> `EL j costs`]) >>
-  disch_then (qspecl_then [`PG`,`D`]
-    (qx_choose_then `Gb` (qx_choose_then `tnb` (qx_choose_then `sbody` strip_assume_tac)))) >>
-  cheat
+  disch_then (drule_all o REWRITE_RULE []) >>
+  disch_then (qx_choose_then `Gb` (qx_choose_then `tnb` (qx_choose_then `sbody` strip_assume_tac))) >>
+  asm "ih" (qspecl_then [`j+1`,`Gb`,`tnb`,`sbody`] mp_tac) >>
+  (impl_tac >-
+    (asm_simp_tac bool_ss [] >> conj_tac >- decide_tac >>
+     gvs[encoder_dynamic_effect_def] >> metis_tac[])) >>
+  disch_then (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `sf` strip_assume_tac))) >>
+  `encoder_dynamic_effect sh sites b dcap Gh tnh shead Gb tnb sbody` by
+    (fs[encoder_dynamic_effect_def] >> metis_tac[]) >>
+  `encoder_dynamic_effect sh sites b dcap G tn s Gb tnb sbody` by
+    (irule encoder_dynamic_effect_then >> metis_tac[]) >>
+  `encoder_dynamic_effect sh sites b dcap G tn s Gf tnf sf` by
+    (irule encoder_dynamic_effect_then >> metis_tac[]) >>
+  `j < LENGTH costs` by decide_tac >>
+  `SUM (DROP j costs) = EL j costs + SUM (DROP (j+1) costs)` by
+    (qpat_assum `j < LENGTH costs` (mp_tac o MATCH_MP DROP_CONS_EL) >>
+     disch_then (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+     simp[SUM, ADD1]) >>
+  qexistsl_tac [`Gf`,`tnf`,`sf`] >> asm_simp_tac bool_ss [] >>
+  irule gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[] >>
+  irule gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[]
 QED
