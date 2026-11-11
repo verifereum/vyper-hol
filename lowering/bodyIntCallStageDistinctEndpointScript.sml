@@ -2,7 +2,7 @@
 Theory bodyIntCallStageDistinctEndpoint
 Ancestors
   bodyIntCallStageSeparated bodyIntCallStageEndpoint bodyIntCallStageList
-  bodyIntCallStageOwned bodyIntCallStageTransport bodyIntCallHeldArgs
+  bodyIntCallReuseStageExec bodyIntCallStageOwned bodyIntCallStageTransport bodyIntCallHeldArgs
   exprSimWordArgs exprLoweringProps fragGasFocus context exprLowering compileEnv
   venomMemDefs
 
@@ -42,7 +42,6 @@ Theorem intcall_stage_args_distinct_endpoint:
   fn_has_code sm sn func /\ local_ptrs_reserved ce sm /\
   expr_sim_inv ce cx env es /\ fn_directly_calls ctx func.fn_name name /\
   MEM func ctx.ctx_functions /\
-  (!aid. sm.cs_next_id <= aid ==> aid NOTIN FDOM s.vs_allocas) /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t D. gas_marked_path F ctx func s 0 (OK t) /\
@@ -54,7 +53,6 @@ Theorem intcall_stage_args_distinct_endpoint:
       read_result cx raw es = (INL v,es)) (ZIP(H,flags)) D /\
     stmt_state_rel ctx func ce cx es t /\ wb_frame ce es sm s t /\
     local_ptrs_reserved ce sn /\
-    (!aid. sn.cs_next_id <= aid ==> aid NOTIN FDOM t.vs_allocas) /\
     ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
     t.vs_inst_idx = LENGTH sn.cs_current_insts /\
     (!i j. i < LENGTH D /\ j < LENGTH D /\ i <> j ==>
@@ -82,11 +80,8 @@ QED
 Resume intcall_stage_args_distinct_endpoint[word]:
   drule intcall_stage_word_parts >> strip_tac >>
   drule_all intcall_stage_word_code >> strip_tac >>
-  `sm.cs_next_id NOTIN FDOM s.vs_allocas` by simp[] >>
-  drule (SRULE [] intcall_stage_word_owned) >>
+  drule (SRULE [] intcall_reuse_word_owned) >>
   simp[] >> disch_then drule_all >> strip_tac >>
-  `!aid. sm'.cs_next_id <= aid ==> aid NOTIN FDOM z.vs_allocas` by
-    (gvs[ci_mono_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   qpat_x_assum `!flags' sm' sn' ops' a' s''. _`
     (qspecl_then [`flags`,`sm'`,`sn`,`rest`,`a`,`z`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -113,14 +108,12 @@ QED
 Resume intcall_stage_args_distinct_endpoint[memory]:
   drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`) intcall_stage_memory_parts >> simp[] >> strip_tac >>
   drule_all intcall_stage_memory_code >> strip_tac >>
-  drule (SRULE [] intcall_stage_memory_owned) >> simp[] >>
+  drule (SRULE [] intcall_reuse_memory_owned) >> simp[] >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
   simp[] >> disch_then drule_all >> strip_tac >>
   rename1 `gas_marked_path F ctx func s 0 (OK z)` >>
   `sm.cs_next_id <= sj.cs_next_id` by
     (gvs[ci_mono_def] >> decide_tac) >>
-  `!aid. sj.cs_next_id <= aid ==> aid NOTIN FDOM z.vs_allocas` by
-    metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
   qpat_x_assum `!flags' sm' sn' ops' a' s''. _`
     (qspecl_then [`flags`,`sj`,`sn`,`rest`,`a`,`z`] mp_tac) >>
   simp[] >> strip_tac >>
