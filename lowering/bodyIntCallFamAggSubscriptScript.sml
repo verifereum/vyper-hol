@@ -18,7 +18,8 @@ Ancestors
   bodyIntCallFamAggSubscriptArraySetup bodyIntCallFamAggSubscriptGas
   bodyIntCallFamAggSubscriptArrayProducer bodyIntCallFamAggSubscriptArrayDispatch
   bodyIntCallFamAggSubscriptBaseOutcome bodyIntCallFamAggSubscriptPosts
-  bodyIntCallFamAggSubscriptMapValue
+  bodyIntCallFamAggSubscriptMapValue bodyIntCallFamAggSubscriptTupleSource
+  bodyIntCallFamAggSubscriptTupleSuffix
 
 Theorem intcall_subscript_step:
   (!e'. expr_size e' < expr_size e ==>
