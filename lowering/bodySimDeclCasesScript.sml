@@ -882,7 +882,8 @@ Proof
        Range (Literal _ (IntL n1)) (Literal _ (IntL n2)) =>
          n1 < n2 /\ bound = Num (n2 - n1)
      | Range _ _ => 0 < bound /\ well_typed_literal typ (IntL (&bound))
-     | Array _ => T) =
+     | Array e => expr_type e = ArrayT typ (Fixed bound) \/
+                  expr_type e = ArrayT typ (Dynamic bound)) =
     (0 < bound /\ well_typed_literal typ (IntL (&bound))))` by
     (Cases_on `e1` >> gvs[] >>
      rename1 `Literal a lit` >> Cases_on `lit` >> gvs[] >>

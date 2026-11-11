@@ -1342,7 +1342,8 @@ Definition type_stmt_def:
            Range (Literal _ (IntL start)) (Literal _ (IntL finish)) =>
              start < finish /\ n = Num (finish - start)
          | Range _ _ => 0 < n /\ well_typed_literal typ (IntL (&n))
-         | Array _ => T) /\
+         | Array e => expr_type e = ArrayT typ (Fixed n) \/
+                      expr_type e = ArrayT typ (Dynamic n)) /\
         id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
         IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\
@@ -1360,6 +1361,14 @@ Theorem type_stmt_for_range_literal_bounds:
     (For id typ (Range (Literal start_ty (IntL start))
                       (Literal end_ty (IntL finish))) n body) = SOME env' ==>
   start < finish /\ n = Num (finish - start)
+Proof
+  rw[type_stmt_def, AllCaseEqs()]
+QED
+
+Theorem type_stmt_for_array_bound:
+  type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' ==>
+  expr_type e = ArrayT typ (Fixed n) \/
+  expr_type e = ArrayT typ (Dynamic n)
 Proof
   rw[type_stmt_def, AllCaseEqs()]
 QED
