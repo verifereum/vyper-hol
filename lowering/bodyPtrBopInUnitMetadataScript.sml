@@ -53,7 +53,7 @@ Proof
 QED
 
 Definition equality_external_package_def:
-  equality_external_package = package_external_fn equality_tops F (K 0)
+  equality_external_package = package_external_fn equality_tops T (K 0)
     (View,F,F,"probe",[],([]:expr list),BaseT BoolT,[Return (SOME equality_fixture)])
 End
 
@@ -61,7 +61,7 @@ Theorem equality_external_package_fields:
   (case equality_external_package of
    (lbl,ce,argv,min_cds,pay,nr,nkey,trans,isview,stmts,rty) =>
    lbl = "fn_probe" /\ argv = [] /\ min_cds = 4 /\
-   pay = F /\ nr = F /\ nkey = 0 /\ trans = F /\ isview = T /\
+   pay = F /\ nr = F /\ nkey = 0 /\ trans = T /\ isview = T /\
    stmts = [Return (SOME equality_fixture)] /\ rty = SOME (BaseT BoolT))
 Proof
   simp[equality_external_package_def, package_external_fn_def,
