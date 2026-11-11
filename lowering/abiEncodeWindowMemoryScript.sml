@@ -60,3 +60,47 @@ Proof
   `mload p (mstore p w s) = w` by simp[mload_mstore_same] >>
   gvs[mload_def, WORD_ADD_0]
 QED
+
+Theorem abi_encode_method_id_window_mem:
+  abi_builtin_encode_method_id mid buf st = ((),en) /\
+  fn_has_code st en func /\ eval_operand buf s = SOME (n2w p) /\
+  (!x. buf = Var x ==> not_fresh_at st x) /\
+  p+32 < dimword (:256) /\ p+64 <= s.vs_alloca_next /\
+  alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. window_phase ctx func st en {} (case mid of NONE => [] | SOME _ => [(p+32,32)]) s t /\
+    mem_cont_sim ctx func s t /\ eval_operand buf t = SOME (n2w p)
+Proof
+  Cases_on `mid`
+  >- (simp[abi_builtin_encode_method_id_def, comp_return_def] >>
+      strip_tac >> gvs[] >> qexists_tac `s` >>
+      simp[window_phase_refl, mem_cont_sim_refl]) >>
+  simp_tac (srw_ss()) [abi_builtin_encode_method_id_def, comp_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  rename1 `emit_op ADD [buf;Lit 32w] st = (prefix_op,add_st)` >>
+  `fn_has_code st add_st func /\ fn_has_code add_st en func /\
+   st.cs_next_var <= add_st.cs_next_var` by
+    (drule abi_encoder_emit_address_shape >> strip_tac >>
+     drule window_child_void_shape >> strip_tac >>
+     drule window_child_emit_counter >> strip_tac >>
+     drule_all fn_has_code_split >> simp[]) >>
+  `eval_operand (Lit 32w) s = SOME 32w` by simp[eval_operand_def] >>
+  drule_all window_emit_add_phase_mem >> strip_tac >>
+  rename1 `window_phase ctx func st add_st {} [] s prepared` >>
+  `alloca_inv prepared /\ alloca_room ctx func prepared /\
+   ~prepared.vs_halted /\ prepared.vs_current_bb = add_st.cs_current_bb /\
+   prepared.vs_inst_idx = LENGTH add_st.cs_current_insts /\
+   p+32+32 <= prepared.vs_alloca_next` by
+    (fs[window_phase_def, window_alloca_growth_def] >> decide_tac) >>
+  `eval_operand prefix_op prepared = SOME (n2w (p+32))` by simp[word_add_n2w] >>
+  `eval_operand (Lit (x << 224)) prepared = SOME (x << 224)` by simp[eval_operand_def] >>
+  drule_all window_output_store_phase_mem >> strip_tac >>
+  qexists_tac `(mstore (p+32) (x << 224) prepared) with vs_inst_idx := LENGTH en.cs_current_insts` >>
+  conj_tac
+  >- (irule window_phase_chain >> qexistsl_tac [`{}`, `[]`, `add_st`,
+        `{}`, `[(p+32,32)]`, `prepared`] >> simp[]) >>
+  conj_tac >- metis_tac[mem_cont_sim_trans] >>
+  simp[eval_operand_mstore, eval_op_inst_idx] >>
+  metis_tac[window_phase_operand]
+QED
