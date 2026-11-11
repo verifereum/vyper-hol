@@ -8,9 +8,35 @@
 Theory fragFuelLoopAbiDecDyn
 Ancestors
   fragFuel fragFuelContextBase abiEncoder compileEnv emitHelper context
-  venomInst
+  venomInst venomMemProps venomInstProps venomExecSemantics venomEffects venomState
 Libs
   fragFuelLib
+
+(* A successful one-input header instruction preserves byte memory.
+   Memory-writing non-call opcodes have incompatible arity; DLOAD is a
+   conservative effect annotation but its semantics is a read. *)
+Theorem abi_dyn_single_input_memory[local]:
+  !fuel ctx opc id op out s t.
+    ~is_terminator opc /\ opc <> PHI /\ opc <> INVOKE /\
+    step_inst fuel ctx (mk_inst id opc [op] [out]) s = OK t ==>
+    t.vs_memory = s.vs_memory
+Proof
+  rpt strip_tac >>
+  Cases_on `is_alloca_op opc`
+  >- (irule step_inst_alloca_preserves_memory >>
+      qexistsl_tac [`ctx`, `fuel`, `mk_inst id opc [op] [out]`] >>
+      simp[mk_inst_def]) >>
+  Cases_on `Eff_MEMORY IN write_effects opc`
+  >- (Cases_on `opc` >>
+      gvs[write_effects_def, empty_effects_def, all_effects_def,
+          is_terminator_def] >>
+      gvs[step_inst_non_invoke, mk_inst_def] >>
+      gvs[step_inst_base_opcode_eqs, exec_write2_def, exec_read1_def,
+          AllCaseEqs(), update_var_def]) >>
+  irule write_effects_sound_memory >>
+  qexistsl_tac [`ctx`, `fuel`, `mk_inst id opc [op] [out]`] >>
+  simp[mk_inst_def]
+QED
 
 (* Straight-line segment boundaries.  The exit sets name the loop's
    control-flow edges; no composition across the back edge is used here. *)
@@ -71,7 +97,7 @@ QED
    is reloaded at every header and need not stay fixed. *)
 Theorem fuel_okS_compile_abi_decode_dyn_loop:
   !dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt.
-    ~is_terminator load_opc /\ load_opc <> PHI /\
+    ~is_terminator load_opc /\ load_opc <> PHI /\ load_opc <> INVOKE /\
     (!d s Wv E.
        fuel_ok Wv {} E
          (compile_abi_decode_to_buf d s load_opc base_op hi_op elem_info)) ==>
