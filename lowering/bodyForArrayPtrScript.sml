@@ -57,9 +57,10 @@ Resume body_for_array_ptr[fragment]:
      simp[supported_stmt_expr_exists_def]) >>
   `FLOOKUP env.var_types name = SOME (ArrayT typ (Fixed n))` by
     fs[well_typed_expr_def, expr_type_def] >>
-  `EVERY (stmt_exprs_ok cenv) body /\ type_memory_bytes cenv typ < 2 ** 64` by
+  `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) body /\
+   type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
+       stmts_exprs_ok_thm, alloc_limits_stmt_def, stmt_valued_return_def] >>
   `call_evaluation_safe cx (int_calls_stmts body)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   `type_memory_bytes cenv typ = type_memory_size tv` by
