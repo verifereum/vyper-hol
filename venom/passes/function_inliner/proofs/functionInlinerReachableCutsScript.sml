@@ -1232,3 +1232,154 @@ Proof
     functionInlinerEnvelopesTheory.inline_annotated_origin_exists,
     functionInlinerOccurrencesTheory.inline_annotated_edit_fetch_facts]
 QED
+
+Theorem inline_edit_keep_phi_prefix_fields:
+  inline_site_edit_valid e /\ ALL_DISTINCT (fn_labels e.ise_caller) /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  lookup_block l e.ise_caller.fn_blocks = SOME bb /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) ==>
+  ?tb. lookup_block l e.ise_final.fn_blocks = SOME tb /\
+    MAP inline_inst_fields
+      (TAKE (phi_prefix_length tb.bb_instructions) tb.bb_instructions) =
+    MAP (\inst. inline_inst_fields (inline_edit_repair e source_bb l inst))
+      (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+Proof
+  strip_tac >>
+  `e.ise_index < LENGTH source_bb.bb_instructions /\
+   (EL e.ise_index source_bb.bb_instructions).inst_opcode = INVOKE` by
+    (gvs[inline_site_edit_valid_def] >>
+     drule_all functionInlinerWfTheory.find_invoke_site_lookup >> simp[]) >>
+  `e.ise_final = renumber_fn_inst_ids
+    (fix_inline_phis e.ise_block e.ise_return
+      <|bb_label := e.ise_return;
+        bb_instructions := DROP (e.ise_index+1) source_bb.bb_instructions|>
+      (inline_call_site e.ise_prefix e.ise_return e.ise_caller e.ise_callee
+        e.ise_block e.ise_index))` by
+    (gvs[inline_site_edit_valid_def] >>
+     metis_tac[functionInlinerSimulationTheory.inline_one_site_final_assembly]) >>
+  drule_all functionInlinerPhiTransportTheory.inline_caller_produced_phi_prefix_fields >>
+  disch_then (qspecl_then [`e.ise_return`,
+    `<|bb_label := e.ise_return;
+       bb_instructions := DROP (e.ise_index+1) source_bb.bb_instructions|>`,
+    `e.ise_prefix`, `e.ise_callee`] strip_assume_tac) >>
+  qexists `tb` >> simp[] >>
+  `bb.bb_label = l` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  Cases_on `MEM l (bb_succs <|bb_label := e.ise_return;
+       bb_instructions := DROP (e.ise_index+1) source_bb.bb_instructions|>)` >>
+  gvs[MAP_MAP_o] >> irule MAP_CONG >> simp[inline_edit_repair_def] >>
+  qspec_then `bb.bb_instructions` mp_tac
+    analysisSimProofsBaseTheory.phi_prefix_all_phi >>
+  simp[EVERY_MEM]
+QED
+
+Theorem inline_edit_enter_phi_prefix_fields:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  lookup_block l e.ise_callee.fn_blocks = SOME bb /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  ~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+  STRCAT e.ise_prefix l <> e.ise_return /\
+  (!q. MEM q (bb_succs <|bb_label := e.ise_return;
+        bb_instructions := DROP (e.ise_index+1) source_bb.bb_instructions|>) ==>
+       MEM q (fn_labels e.ise_caller)) /\
+  inliner_phi_labels_closed e.ise_callee ==>
+  ?tb. lookup_block (STRCAT e.ise_prefix l) e.ise_final.fn_blocks = SOME tb /\
+    MAP inline_inst_fields
+      (TAKE (phi_prefix_length tb.bb_instructions) tb.bb_instructions) =
+    MAP (\inst. inline_inst_fields
+      (inline_rename_inst (STRCAT e.ise_prefix) (STRCAT e.ise_prefix) inst))
+      (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+Proof
+  strip_tac >>
+  `e.ise_final = renumber_fn_inst_ids
+    (fix_inline_phis e.ise_block e.ise_return
+      <|bb_label := e.ise_return;
+        bb_instructions := DROP (e.ise_index+1) source_bb.bb_instructions|>
+      (inline_call_site e.ise_prefix e.ise_return e.ise_caller e.ise_callee
+        e.ise_block e.ise_index))` by
+    (gvs[inline_site_edit_valid_def] >>
+     metis_tac[functionInlinerSimulationTheory.inline_one_site_final_assembly]) >>
+  drule_all functionInlinerSimulationTheory.inline_clone_produced_phi_prefix_fields >>
+  disch_then (qspec_then `e.ise_index` strip_assume_tac) >>
+  qexists `tb` >> simp[MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+Theorem inline_phi_rename_shape[local]:
+  !ops. phi_well_formed ops ==>
+    phi_well_formed (MAP (inline_rename_operand vr lr) ops)
+Proof
+  recInduct venomWfTheory.phi_well_formed_ind >>
+  simp[venomWfTheory.phi_well_formed_def, inline_rename_operand_def]
+QED
+
+Theorem inline_edit_repair_phi_shape:
+  phi_well_formed inst.inst_operands ==>
+  phi_well_formed (inline_edit_repair e source_bb l inst).inst_operands
+Proof
+  strip_tac >> simp[inline_edit_repair_def] >> IF_CASES_TAC >> simp[] >>
+  simp[cfgTransformTheory.subst_label_inst_def] >>
+  `subst_label_op e.ise_block e.ise_return =
+    inline_rename_operand I (\q. if q = e.ise_block then e.ise_return else q)` by
+    (simp[FUN_EQ_THM] >> Cases >>
+     simp[cfgTransformTheory.subst_label_op_def, inline_rename_operand_def,
+       COND_RAND]) >>
+  simp[inline_phi_rename_shape]
+QED
+
+Theorem inline_phi_prefix_fields_at[local]:
+  MAP inline_inst_fields (TAKE (phi_prefix_length ys) ys) =
+    MAP (\inst. inline_inst_fields (f inst)) (TAKE (phi_prefix_length xs) xs) /\
+  k < phi_prefix_length xs ==>
+  k < phi_prefix_length ys /\
+  inline_inst_fields (EL k ys) = inline_inst_fields (f (EL k xs))
+Proof
+  strip_tac >>
+  `phi_prefix_length xs <= LENGTH xs /\ phi_prefix_length ys <= LENGTH ys` by
+    simp[venomExecProofsTheory.phi_prefix_length_le] >>
+  `LENGTH (TAKE (phi_prefix_length ys) ys) =
+   LENGTH (TAKE (phi_prefix_length xs) xs)` by metis_tac[LENGTH_MAP] >>
+  gvs[LENGTH_TAKE] >>
+  gvs[LIST_EQ_REWRITE, EL_MAP, EL_TAKE] >>
+  first_x_assum (qspec_then `k` mp_tac) >> simp[]
+QED
+
+Theorem inline_edit_keep_phi_at:
+  inline_site_edit_valid e /\ ALL_DISTINCT (fn_labels e.ise_caller) /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  lookup_block l e.ise_caller.fn_blocks = SOME bb /\
+  lookup_block l e.ise_final.fn_blocks = SOME tb /\
+  inliner_phi_labels_closed e.ise_caller /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  MEM prev (fn_labels e.ise_caller) /\
+  k < phi_prefix_length bb.bb_instructions /\
+  phi_well_formed (EL k bb.bb_instructions).inst_operands ==>
+  k < phi_prefix_length tb.bb_instructions /\
+  (EL k tb.bb_instructions).inst_opcode = PHI /\
+  phi_well_formed (EL k tb.bb_instructions).inst_operands /\
+  (EL k tb.bb_instructions).inst_outputs = (EL k bb.bb_instructions).inst_outputs /\
+  ?q. SND (inline_phi_entry_step (InlineKeep e) (l,SOME prev)) = SOME q /\
+    resolve_phi q (EL k tb.bb_instructions).inst_operands =
+      resolve_phi prev (EL k bb.bb_instructions).inst_operands
+Proof
+  strip_tac >> drule_all inline_edit_keep_phi_prefix_fields >> strip_tac >>
+  gvs[] >> drule_all inline_phi_prefix_fields_at >> strip_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = PHI /\
+   k < LENGTH bb.bb_instructions` by
+    (qspec_then `bb.bb_instructions` assume_tac
+       venomExecProofsTheory.phi_prefix_length_le >>
+     qspec_then `bb.bb_instructions` mp_tac
+       analysisSimProofsBaseTheory.phi_prefix_all_phi >>
+     simp[EVERY_EL, LENGTH_TAKE, EL_TAKE] >>
+     disch_then (qspec_then `k` mp_tac) >> simp[]) >>
+  `EVERY (\op. !q. op = Label q ==> MEM q (fn_labels e.ise_caller))
+    (EL k bb.bb_instructions).inst_operands` by
+    (gvs[functionInlinerOriginTheory.inliner_phi_labels_closed_def, EVERY_MEM] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+       unitShapeDefsTheory.MEM_fn_insts_blocks_iff, venomInstTheory.fn_insts_def, MEM_EL]) >>
+  drule_all inline_phi_entry_keep_selection >> strip_tac >>
+  drule inline_edit_repair_phi_shape >>
+  disch_then (qspecl_then [`source_bb`, `l`, `e`] assume_tac) >>
+  gvs[inline_inst_fields_def, inline_edit_repair_def,
+    cfgTransformTheory.subst_label_inst_def] >>
+  IF_CASES_TAC >> simp[]
+QED
