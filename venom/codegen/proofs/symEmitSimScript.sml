@@ -432,7 +432,7 @@ Proof
   strip_tac >>
   `!ops ws. LIST_REL (\op w. eval_operand op vs = SOME w) ops ws ==>
      eval_operands ops vs = SOME ws` by
-    (Induct >> Cases_on `ws` >> simp[eval_operands_def] >> rpt strip_tac >>
+    (Induct >> Cases_on `ws` >> simp[venomStateTheory.eval_operands_def] >> rpt strip_tac >>
      first_x_assum drule >> simp[]) >>
   pop_assum irule >>
   gvs[plan_stack_rel_def, LIST_REL_EL_EQN, EVERY_MEM] >>
