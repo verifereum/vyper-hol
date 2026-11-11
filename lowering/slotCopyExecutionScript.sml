@@ -430,10 +430,10 @@ Proof
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_def, exec_pure2_def,
-       eval_operand_def] >>
+       mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs,
+       exec_pure2_def, eval_operand_def] >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_def,
+       mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs,
        eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def,
        slot_copy_cond_result_def, jump_to_def, bool_to_word_def] >>
