@@ -18,10 +18,10 @@ Definition reason_encode_finish_def:
        emit_void MSTORE [tail_end; Lit 0w];
        copy_len <- emit_op ADD [Lit 32w; msg_len];
        emit_void MCOPY [tail_ptr; src_ptr; copy_len];
+       mask <- emit_op NOT [Lit 31w];
        rounded1 <- emit_op ADD [msg_len; Lit 31w];
-       rounded2 <- emit_op AND [rounded1;
-         Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)];
-       encoded_item_len <- emit_op ADD [Lit 32w; rounded2];
+       rounded2 <- emit_op AND [rounded1; mask];
+       encoded_item_len <- emit_op ADD [rounded2; Lit 32w];
        emit_void MSTORE [head_ptr; dynamic_offset];
        new_size <- emit_op ADD [dynamic_offset; encoded_item_len];
        emit_void MSTORE [slot; new_size];
@@ -40,10 +40,10 @@ Theorem compile_revert_reason_finish_eq:
        tuple <- compile_alloc_buffer ms;
        msg <- unwrap_value cenv vv;
        len <- emit_op MLOAD [msg];
+       msg_copy_mask <- emit_op NOT [Lit 31w];
        rounded0 <- emit_op ADD [len; Lit 31w];
-       rounded <- emit_op AND [rounded0;
-         Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)];
-       cnt <- emit_op ADD [Lit 32w; rounded];
+       rounded <- emit_op AND [rounded0; msg_copy_mask];
+       cnt <- emit_op ADD [rounded; Lit 32w];
        emit_void MCOPY [tuple.buf_operand; msg; cnt];
        slot <- compile_alloc_buffer 32;
        emit_void MSTORE [slot.buf_operand; Lit 32w];
@@ -55,19 +55,18 @@ QED
 
 Theorem compile_revert_reason_finish_split:
   compile_revert_with_reason cenv vv mt ms sa = ((),sb) ==>
-  ?buf payload tuple msg len rounded0 rounded cnt slot
-    c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12.
+  ?buf payload tuple msg len mask rounded0 rounded cnt slot
+    c1 c2 c3 c4 c5 c6 c6a c7 c8 c9 c10 c11 c12.
     compile_alloc_buffer (64 + ms) sa = (buf,c1) /\
     emit_void MSTORE [buf.buf_operand;Lit 0x08c379a0w] c1 = ((),c2) /\
     emit_op ADD [buf.buf_operand;Lit 32w] c2 = (payload,c3) /\
     compile_alloc_buffer ms c3 = (tuple,c4) /\
     unwrap_value cenv vv c4 = (msg,c5) /\
     emit_op MLOAD [msg] c5 = (len,c6) /\
-    emit_op ADD [len;Lit 31w] c6 = (rounded0,c7) /\
-    emit_op AND [rounded0;
-      Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)]
-      c7 = (rounded,c8) /\
-    emit_op ADD [Lit 32w;rounded] c8 = (cnt,c9) /\
+    emit_op NOT [Lit 31w] c6 = (mask,c6a) /\
+    emit_op ADD [len;Lit 31w] c6a = (rounded0,c7) /\
+    emit_op AND [rounded0;mask] c7 = (rounded,c8) /\
+    emit_op ADD [rounded;Lit 32w] c8 = (cnt,c9) /\
     emit_void MCOPY [tuple.buf_operand;msg;cnt] c9 = ((),c10) /\
     compile_alloc_buffer 32 c10 = (slot,c11) /\
     emit_void MSTORE [slot.buf_operand;Lit 32w] c11 = ((),c12) /\
