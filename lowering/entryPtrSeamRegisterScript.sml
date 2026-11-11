@@ -565,6 +565,171 @@ Proof
   gvs[function_selector_length, Excl "enc_def"]
 QED
 
+(* One owner's allocation followed by static or dynamic calldata navigation. *)
+Theorem registration_argument_prepare_ptr:
+  compile_alloc_buffer n st = (buf,a) /\
+  compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
+    a = (src,first) /\
+  (dyn ==> abi_decode_load CALLDATALOAD (n2w (4+off) : bytes32) s = n2w delta /\
+    4+delta < dimword (:256)) /\
+  fn_has_code st a fn /\ fn_has_code a first fn /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  n < dimword (:256) /\ unit_alloca_budget ctx < dimword (:256) /\
+  (!entry. FLOOKUP s.vs_allocas st.cs_next_id = SOME entry ==>
+    ?p. entry = (p,n) /\ p+n < dimword (:256)) /\
+  fresh_vars_wrt st s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t H u q p.
+    buf.buf_operand = Var q /\ lookup_var q t = SOME (n2w p) /\
+    ptr_covers H u q t n /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
+    p+n < dimword (:256) /\ alloca_inv t /\
+    alloca_frontier_inv ctx fn site t /\ allocas_from lo t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = first.cs_current_bb /\
+    t.vs_inst_idx = LENGTH first.cs_current_insts /\ fresh_vars_wrt first t /\
+    eval_operand src t = SOME (n2w (4 + if dyn then delta else off)) /\
+    op_taint u src = {} /\ op_prov H src = NONE /\
+    abi_decoder_operand_live first.cs_next_var src /\
+    abi_decoder_operand_live first.cs_next_var (Var q) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    (!p k. ptr_covers G tn p s k ==> ptr_covers H u p t k) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_gas_readings = s.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all registration_alloc_buffer_ptr >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
+  rename1 `lookup_var q allocated = SOME (n2w p)` >>
+  `emit_op ALLOCA [Lit (n2w n)] st = (buf.buf_operand,a)` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+     pairarg_tac >> simp[] >> strip_tac >> gvs[]) >>
+  qpat_assum `emit_op ALLOCA _ _ = _`
+    (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+  `q = STRCAT "%" (toString st.cs_next_var)` by gvs[] >>
+  `!v w. lookup_var v s = SOME w ==> v <> q` by
+    (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+     qpat_x_assum `fresh_vars_wrt st s` mp_tac >>
+     rewrite_tac[fresh_vars_wrt_def] >>
+     disch_then (qspec_then `st.cs_next_var` mp_tac) >>
+     gvs[lookup_var_def, finite_mapTheory.FLOOKUP_DEF]) >>
+  `!v k. ptr_covers G tn v s k ==> ptr_covers H u v allocated k` by
+    (rpt strip_tac >>
+     `v <> q` by
+       (qpat_x_assum `ptr_covers G tn v s k` mp_tac >>
+        simp[ptr_covers_def] >> strip_tac >>
+        first_x_assum drule >> simp[]) >>
+     qpat_x_assum `!p sz. p <> q /\ _ ==> _` irule >> simp[]) >>
+  `fresh_vars_wrt a allocated` by simp[] >>
+  `abi_decode_source_opcode CALLDATALOAD /\
+   eval_operand (Lit 4w) allocated = SOME (n2w 4) /\
+   (dyn ==> eval_operand (Lit 0w) allocated = SOME (n2w 0) /\
+     abi_decode_load CALLDATALOAD (n2w (0+(4+off)) : bytes32) allocated = n2w delta /\
+     4+delta < dimword (:256))` by
+    gvs[abiDecoderContractTheory.abi_decode_source_opcode_def, eval_operand_def,
+        abiDecoderContractTheory.abi_decode_load_def,
+        abiDecoderContractTheory.abi_decode_source_def] >>
+  drule_all abiDecoderReentryPointerTheory.abi_decoder_member_pointer_sequence >>
+  strip_tac >> rename1 `run_inst_seq (emitted_insts a first) allocated = OK ready` >>
+  `(!q. Lit 4w = Var q ==> not_fresh_at a q) /\
+   op_taint u (Lit 4w) = {} /\ op_prov H (Lit 4w) = NONE` by
+    simp[op_taint_def, op_prov_def] >>
+  `a.cs_current_bb = st.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  `allocas_from lo allocated` by
+    (qpat_assum `emit_op ALLOCA _ _ = _`
+       (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [q]) s
+        (n2w n : bytes32) = OK allocated` by
+       gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs()] >>
+     drule_all decoderAllocationBoundsPtrTheory.exec_alloca_preserves_allocas_from >>
+     simp[]) >>
+  `allocated.vs_current_bb = a.cs_current_bb` by simp[] >>
+  drule_all decoderMemberPrefixPtrTheory.member_navigation_source_endpoint_uniform >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `dyn ==> abi_decode_source_opcode CALLDATALOAD` by simp[] >>
+  drule_all abiDecoderReservationTheory.abi_decode_member_pointer_allocation_shape >>
+  strip_tac >>
+  drule_all abiDecoderReservationTheory.abi_decode_sequence_allocation_frame >> strip_tac >>
+  drule_all abiDecoderReentryPointerTheory.abi_decoder_member_pointer_code >> strip_tac >>
+  drule_all decoderWorldFramePtrTheory.decoder_run_world_frame >> strip_tac >>
+  `ready.vs_labels = allocated.vs_labels` by
+    (drule_all ctorAbiActualObservationsTheory.ctor_actual_sequence_labels >> simp[]) >>
+  `ready.vs_halted = allocated.vs_halted` by
+    (qpat_assum `run_inst_seq (emitted_insts a first) _ = _`
+       (mp_then Any mp_tac abiDecoderReentryPointerTheory.abi_decoder_sequence_halted) >>
+     simp[]) >>
+  `first.cs_current_bb = a.cs_current_bb` by
+    (qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
+     Cases_on `dyn` >>
+     simp[abiEncoderTheory.compile_getelemptr_abi_def,
+          abiEncoderTheory.compile_abi_dec_addr_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
+     metis_tac[emit_op_same_blocks, same_blocks_def]) >>
+  `!v k. ptr_covers H u v allocated k ==> ptr_covers H' u' v ready k` by
+    (rpt gen_tac >> simp[ptr_covers_def] >> strip_tac >>
+     `eval_operand (Var v) allocated = SOME w` by simp[eval_operand_def] >>
+     `not_fresh_at a v` by
+       (drule_at (Pat `eval_operand`) calldataClampPtrTheory.evaluated_operand_not_fresh >>
+        simp[]) >>
+     qpat_x_assum `!q. not_fresh_at a q ==> _` drule >> simp[] >>
+     metis_tac[]) >>
+  `lookup_var q ready = SOME (n2w p)` by
+    (qpat_x_assum `!op w. eval_operand op allocated = SOME w ==> _`
+       (qspec_then `Var q` mp_tac) >> simp[eval_operand_def]) >>
+  drule abiDecoderReentryPointerTheory.abi_decoder_member_pointer_counters >> strip_tac >>
+  `abi_decoder_operand_live first.cs_next_var (Var q)` by
+    (simp[calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
+     `eval_operand (Var q) ready = SOME (n2w p)` by simp[eval_operand_def] >>
+     drule_at (Pat `eval_operand`) calldataClampPtrTheory.evaluated_operand_not_fresh >>
+     simp[]) >>
+  qpat_assum `emit_op ALLOCA _ _ = _`
+    (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+     eval_operand op ready = eval_operand op s` by
+    (rpt strip_tac >>
+     `abi_decoder_operand_live a.cs_next_var op` by
+       (irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+        qexists_tac `st.cs_next_var` >> simp[]) >>
+     `eval_operand op ready = eval_operand op allocated` by
+       (Cases_on `op` >> gvs[eval_operand_def,
+          calldataDynOwnedTheory.calldata_operand_live_not_fresh] >>
+        qpat_x_assum `!q. not_fresh_at a q ==> _` drule >> simp[]) >>
+     simp[]) >>
+  `!v k. ptr_covers G tn v s k ==> ptr_covers H' u' v ready k` by
+    (rpt strip_tac >>
+     qpat_x_assum `!v k. ptr_covers H u v allocated k ==> _` irule >>
+     qpat_x_assum `!v k. ptr_covers G tn v s k ==> _` irule >> simp[]) >>
+  qexistsl_tac [`ready with vs_inst_idx := LENGTH first.cs_current_insts`,
+                `H'`, `u'`, `q`, `p`] >>
+  simp[instIdxIndepTheory.eval_op_inst_idx, lookup_var_def] >>
+  `alloca_inv ready /\ alloca_frontier_inv ctx fn site ready` by
+    (drule_all decoderCalldataShellTheory.calldata_alloca_invariants_fields >>
+     simp[]) >>
+  `u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm` by
+    simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def] >>
+  qpat_x_assum `H = step_prov _ _ _ _` kall_tac >>
+  qpat_x_assum `u = step_taint _ _ _ _` kall_tac >>
+  gvs[lookup_var_def, fresh_vars_wrt_def, allocas_from_def] >>
+  simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def] >>
+  gvs[]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
