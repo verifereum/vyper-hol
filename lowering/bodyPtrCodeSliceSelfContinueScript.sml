@@ -12,6 +12,7 @@ Ancestors
   exprSimWordArgs loweringPosts finite_map pred_set
   exprSimHash valueEncodingDefs valueEncoding vyperValue context pair
   exprSimSliceExtcodeEntry exprSimSliceExtcodeContinue
+  ghostPcTransportPtr bodyPtrHashBuiltinsGhostFrame
 
 Theorem self_code_size_bounds_run:
   emit_op CODESIZE [] sa = (limit,sb) /\
@@ -620,6 +621,39 @@ Resume self_code_tail_success_ptr[result]:
   qpat_x_assum `ptr_covers G tn out v sz` mp_tac >>
   simp[NoAsms, ptr_covers_def, mstore_def,
        write_memory_with_expansion_def, lookup_var_def]
+QED
+
+(* The checked suffix can start at the cursor required by concatenation;
+   its taint endpoint is independent of that cursor. *)
+Theorem self_code_copy_store_uniform_ptr:
+  emit_void CODECOPY [Var dst;src;len] sa = ((),sb) /\
+  emit_void MSTORE [Var out;len] sb = ((),sc) /\
+  ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn out s 32 /\
+  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
+  lookup_var out s = SOME p /\ lookup_var dst s = SOME (p+32w) /\
+  w2n p+32 < dimword (:256) /\ w2n a+w2n n <= LENGTH s.vs_code /\
+  op_taint tn src = {} /\ op_taint tn len = {} /\ ~ctx_has_dalloca ctx /\
+  ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!name off sz. local_region cenv es.scopes s name off sz ==>
+    off+sz <= w2n p \/ w2n p+32+w2n n <= off) ==>
+  !k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sc)
+    (s with vs_inst_idx := k) G
+    (tn with t_mem := (tn.t_mem DIFF
+      {j | w2n p+32 <= j /\ j < w2n p+32+w2n n}) DIFF
+      {j | w2n p <= j /\ j < w2n p+32})
+Proof
+  strip_tac >> gen_tac >>
+  mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := k`]
+    self_code_copy_store_emitted_ptr) >>
+  impl_tac
+  >- (fs[lookup_var_def] >>
+      simp[hash_ghost_inv_inst_idx, stmt_state_rel_inst_idx, lookup_var_def] >>
+      rpt strip_tac >> first_x_assum irule >>
+      fs[local_region_def, eval_operand_def, lookup_var_def] >> metis_tac[]) >>
+  strip_tac >> gvs[]
 QED
 
 Finalise self_code_tail_success_ptr
