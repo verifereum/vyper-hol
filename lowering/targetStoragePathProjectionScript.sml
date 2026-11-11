@@ -4,6 +4,7 @@ Ancestors
   vyperStorageLayoutSafety loweringStateRelDefs targetPlaceLive
   vyperStoragePlaceProvenance vyperInterpreter vyperState exprSimPopNestedBase
   allocLimits targetPlaceSim vyperTypeEnv stmtSimAssignAttr exprLowering
+  targetEffectfulStorageHeader
 
 Theorem storage_read_live_declared_relative_projection:
   !cx mid name keys tr root rtv slot tv st.
@@ -218,4 +219,85 @@ Proof
       vyperMiscTheory.prod_CASE_rator, AllCaseEqs()] >>
   drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
   gvs[return_def, raise_def]
+QED
+
+Theorem target_pre_storage_type_alignment:
+  !cenv cx env bt st vt tr slot tv em.
+    target_pre cenv cx env bt st /\
+    type_place_target env bt = SOME vt /\
+    eval_base_place cx bt st = (INL (PlaceR (StoragePlace tr slot tv)),em) ==>
+    ?ty. vt = Type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+      target_place_type cenv bt = SOME (ValPT ty)
+Proof
+  rpt strip_tac >>
+  fs[target_pre_def] >>
+  `env_consistent env cx st` by fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+  drule_all eval_base_storage_type_alignment >> simp[] >> strip_tac >>
+  drule_all typed_target_place_type >>
+  gvs[value_type_place_def, vyperTypeInvariantsTheory.env_consistent_def,
+      vyperTypeInvariantsTheory.env_context_consistent_def]
+QED
+
+Theorem target_no_dynamic_storage_projection:
+  !bt tops ctx cenv cx env st vt tr slot tv em now.
+    body_inv tops ctx cenv cx /\ target_pre cenv cx env bt st /\
+    type_place_target env bt = SOME vt /\ ~target_through_dynarray cenv bt /\
+    eval_base_place cx bt st = (INL (PlaceR (StoragePlace tr slot tv)),em) /\
+    expr_sim_inv cenv cx env now ==>
+    storage_read_live cx tr (get_storage cx now tr) slot tv /\
+    slots_in_range (get_storage cx now tr) (w2n slot) tv
+Proof
+  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
+  rpt gen_tac >>
+  simp[type_place_target_NameTarget, type_place_target_TopLevelNameTarget,
+       type_place_target_AttributeTarget, type_place_target_SubscriptTarget,
+       target_through_dynarray_def, Once evaluate_def, bind_def, AllCaseEqs(),
+       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
+       return_def, raise_def] >>
+  rpt gen_tac >> strip_tac >> gvs[]
+  >~ [`TopLevelNameTarget p`]
+  >- (PairCases_on `p` >>
+      gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      drule lookup_global_storage_region >> strip_tac >>
+      conj_tac
+      >- (irule accountsRelPropsTheory.declared_storage_region_read_live >>
+          goal_assum (drule_at Any)) >>
+      irule declared_region_post_index_slots >> conj_tac
+      >- (goal_assum (drule_at Any)) >>
+      fs[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
+  `target_pre cenv cx env b st` by metis_tac[target_pre_sub] >>
+  Cases_on `pv` >> gvs[extend_place_def, raise_def]
+  >~ [`HashMapRef b' c t v`]
+  >- (drule eval_base_place_region >>
+      simp[storage_result_region_def, storage_mapping_region_def] >> strip_tac >>
+      Cases_on `v` >>
+      gvs[extend_place_def, bind_def, lift_option_type_def, return_def,
+          raise_def, AllCaseEqs(), vyperMiscTheory.option_CASE_rator] >>
+      rename1 `hashmap_slot c (encode_hashmap_key t key)` >>
+      qpat_x_assum `!subs leaf_slot leaf_tv.
+        resolve_hashmap_leaf _ _ _ subs = SOME (leaf_slot,leaf_tv) ==> _`
+        (qspec_then `[ValueSubscript key]` mp_tac) >>
+      simp[resolve_hashmap_leaf_def, subscript_to_value_def] >> strip_tac >>
+      conj_tac
+      >- (irule accountsRelPropsTheory.declared_storage_region_read_live >>
+          goal_assum (drule_at Any)) >>
+      irule declared_region_post_index_slots >> conj_tac
+      >- (goal_assum (drule_at Any)) >>
+      fs[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
+  Cases_on `p` >>
+  gvs[extend_memory_place_def, extend_place_def, bind_def, return_def,
+      raise_def, ignore_bind_def, AllCaseEqs()] >>
+  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >> simp[] >>
+  disch_then drule_all >> strip_tac >>
+  drule_all target_pre_storage_type_alignment >> strip_tac >>
+  rename1 `evaluate_type (get_tenv cx) ann = SOME t` >>
+  `!et n. t <> ArrayTV et (Dynamic n)` by
+    (Cases_on `ann` >>
+     gvs[vyperTypeSystemTheory.subscript_vtype_def,
+         vyperTypeSystemTheory.attribute_type_def,
+         vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+     rename1 `~(case bd of Fixed _ => F | Dynamic _ => T)` >>
+     Cases_on `bd` >> gvs[]) >>
+  drule_all storage_fixed_extension_read_live >> strip_tac >> gvs[] >>
+  drule_all storage_fixed_extension_slots_in_range >> simp[]
 QED
