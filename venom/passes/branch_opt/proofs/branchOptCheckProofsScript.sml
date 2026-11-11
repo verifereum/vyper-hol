@@ -16,6 +16,38 @@ Ancestors
   execEquivParamBase execEquivProofs venomExecProofs venomExecSemantics venomState venomInst venomInstProps
   venomWfProps irSupply list rich_list pred_set finite_map
 
+(* ===== State-update facts ===== *)
+
+Theorem bool_to_word_neq_0w[local]:
+  !b. (bool_to_word b <> 0w) <=> b
+Proof
+  Cases >> simp[bool_to_word_def]
+QED
+
+Theorem lookup_var_set_inst_idx[local]:
+  !x u i. lookup_var x (u with vs_inst_idx := i) = lookup_var x u
+Proof
+  simp[lookup_var_def]
+QED
+
+Theorem lookup_var_update_var_same[local]:
+  !x w u. lookup_var x (update_var x w u) = SOME w
+Proof
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem lookup_var_update_var_other[local]:
+  !x y w u. x <> y ==> lookup_var x (update_var y w u) = lookup_var x u
+Proof
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem jump_to_set_inst_idx[local]:
+  !l u i. jump_to l (u with vs_inst_idx := i) = jump_to l u
+Proof
+  simp[jump_to_def]
+QED
+
 (* ===== The instructions of the rewrites ===== *)
 
 val step_inst_base_for = let
@@ -279,7 +311,7 @@ Proof
   map_every assume_tac
     [lookup_var_set_inst_idx, lookup_var_update_var_same,
      lookup_var_update_var_other, jump_to_set_inst_idx,
-     GEN_ALL bool_to_word_neq_0w] >>
+     bool_to_word_neq_0w] >>
   `!y. x = Var y ==> y NOTIN N`
     by (rw[] >> first_x_assum irule >> qexists_tac `EL k pre` >>
         simp[EL_MEM]) >>
@@ -360,7 +392,7 @@ Proof
   map_every assume_tac
     [lookup_var_set_inst_idx, lookup_var_update_var_same,
      lookup_var_update_var_other, jump_to_set_inst_idx,
-     GEN_ALL bool_to_word_neq_0w] >>
+     bool_to_word_neq_0w] >>
   `!inst y. MEM inst pre /\ MEM (Var y) inst.inst_operands ==> y NOTIN N`
     by metis_tac[MEM_APPEND] >>
   MATCH_MP_TAC (Q.SPECL [`N`, `\i s. T`, `pre`, `[t]`,
