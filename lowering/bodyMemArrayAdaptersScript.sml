@@ -97,7 +97,7 @@ Proof
       conj_tac
       >- (irule (iffLR exprSimAggregateEncodingTheory.tuple_in_memory_replicate_elems) >>
           metis_tac[]) >>
-      conj_tac >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   metis_tac[]
 QED
 
@@ -216,8 +216,8 @@ Proof
     metis_tac[abiStaticAggregatePropsTheory.mem_word_at_bytes] >>
   `!name lo sz. local_region ce es.scopes sh name lo sz <=>
                 local_region ce es.scopes s0 name lo sz` by
-    (rpt gen_tac >> irule local_region_lookup_cong >>
-     simp[lookup_var_def, mstore_def]) >>
+    (rpt gen_tac >> simp[loweringStateRelDefsTheory.local_region_def] >>
+     gvs[lookup_var_def, mstore_def]) >>
   `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
      lookup_var z sh = SOME w` by
     simp[mstore_def, lookup_var_def] >>
