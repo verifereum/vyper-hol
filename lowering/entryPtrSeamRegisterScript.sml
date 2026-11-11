@@ -2587,6 +2587,23 @@ QED
 
 Finalise registration_owned_locals_endpoint
 
+Theorem registration_charge_margin:
+  !total pending reserve budget:num.
+    total + pending + reserve <= budget /\
+    budget + 2 ** 65 < dimword (:256) ==>
+    total + pending + reserve + 2 ** 65 < dimword (:256)
+Proof
+  rpt strip_tac >> decide_tac
+QED
+
+(* This numerical obstruction is not an accepted-program counterexample. *)
+Theorem registration_budget_margin_probe[local]:
+  dimword (:256) - 32 + 32 * 0 < dimword (:256) /\
+  ~(dimword (:256) - 32 + 2 ** 65 < dimword (:256))
+Proof
+  simp[wordsTheory.dimword_def]
+QED
+
 Theorem registration_indexed_locals_ghost:
   bind_arguments tenv args vals = SOME env /\
   ALL_DISTINCT (MAP FST args) /\
