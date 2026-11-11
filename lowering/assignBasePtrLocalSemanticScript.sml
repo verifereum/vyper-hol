@@ -15,7 +15,8 @@ Theorem assign_base_local_write_state_post:
     n <= sz /\ n <= type_memory_size entry.type /\
     typed_copy_state_frame sa (w2n dst) n s t /\
     t.vs_current_bb = s.vs_current_bb /\ t.vs_prev_bb = s.vs_prev_bb /\
-    val_wf entry.type v /\ val_in_memory entry.type v (w2n dst) t.vs_memory ==>
+    val_wf entry.type v /\ value_has_type entry.type v /\
+    val_in_memory entry.type v (w2n dst) t.vs_memory ==>
     stmt_state_rel ctx fn cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) t
 Proof
@@ -36,6 +37,7 @@ Proof
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >> qexists_tac `n` >>
      fs[Abbr `u`, typed_copy_state_frame_def, typed_copy_frame_def,
         venom_state_component_equality] >> metis_tac[]) >>
-  `val_in_memory entry.type v (w2n dst) u.vs_memory` by simp[Abbr `u`] >>
+  `memory_value_rel entry.type v (w2n dst) u.vs_memory` by
+    (irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >> simp[Abbr `u`]) >>
   drule_all stmt_state_rel_write_local >> simp[Abbr `u`, stmt_state_rel_inst_idx]
 QED
