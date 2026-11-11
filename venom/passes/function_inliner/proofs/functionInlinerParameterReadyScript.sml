@@ -8,6 +8,8 @@ Ancestors
   functionInlinerActivation functionInlinerReachableCuts functionInlinerLocation
   functionInlinerSiteLayout functionInlinerRoutedProvenance functionInlinerNamespace
   functionInlinerSelectedParameterDescriptors functionInlinerPairedSelection
+  functionInlinerParameterPropagation functionInlinerSelectedParameterReads
+  functionInlinerParameterLineage
   functionInlinerOperational venomExecProofs callLayoutDefs unitShapeDefs
   cfgTransformProps venomExecSemantics venomState venomInst words list pred_set
 
@@ -132,13 +134,54 @@ Proof
   metis_tac[inline_routed_leaf_rules]
 QED
 
+Theorem inline_entry_parameter_tail_coordinates[local]:
+  inline_annotated_origin C n intermediate b /\
+  (inline_entry_function b).fn_blocks = entry::rest /\
+  entry.bb_instructions = params ++ tail /\ param_insts_from 0 params /\
+  k < LENGTH params /\
+  inline_annotated_choice_path C path intermediate root /\
+  inline_parameter_boundary_path path intermediate entry.bb_label 0 root ml mj /\
+  inline_cell_zipper
+    (inline_make_cell intermediate entry.bb_label k (inline_inst_fields (EL k params)))
+    frames out /\ MAP (\(tag,next). inline_cell_choice tag) frames = path ==>
+  out.ic_function = root /\ out.ic_block = ml /\ out.ic_index = mj+k
+Proof
+  strip_tac >> drule inline_annotated_entry_parameter_prefix >>
+  disch_then (qspecl_then [`entry`,`rest`,`params`,`tail`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `inline_parameter_interval intermediate entry.bb_label 0 (LENGTH params)` by
+    (simp[inline_parameter_interval_def] >>
+     rpt strip_tac >> disj1_tac >>
+     qspecl_then [`ps`,`0`,`k'`] mp_tac param_insts_from_el >>
+     simp[param_inst_at_def, EL_APPEND_EQN]) >>
+  drule_all inline_parameter_interval_transport >> simp[] >> strip_tac >>
+  `ml' = ml /\ mj' = mj` by
+    metis_tac[inline_parameter_boundary_path_functional] >>
+  `inline_fetched_fields intermediate entry.bb_label k (inline_inst_fields (EL k params))` by
+    (drule_all inline_parameter_prefix_fetch >>
+     simp[inline_fetched_fields_def, get_instruction_def, EL_APPEND_EQN] >>
+     metis_tac[EL_MAP]) >>
+  qpat_x_assum `!k fields. _ ==> ?frames d. _` drule_all >>
+  strip_tac >>
+  `out.ic_function = d.ic_function /\ out.ic_block = d.ic_block /\
+   out.ic_index = d.ic_index` by
+    (irule inline_parameter_zipper_unique >>
+     qpat_assum `inline_cell_zipper _ frames out` (irule_at Any) >>
+     qpat_assum `inline_cell_zipper _ frames' d` (irule_at Any) >>
+     simp[inline_make_cell_def] >>
+     qpat_assum `inline_parameter_interval intermediate _ 0 _` (irule_at Any) >>
+     qexistsl [`root`,`k`,`C`] >> simp[]) >> simp[]
+QED
+
 Theorem inline_selected_entry_token_transport[local]:
   inline_annotated_origin C n root cert /\
   inline_call_incidence cert root p fn l j orig (InlineSelected u q e zipper) /\
   inline_namespace_leaf_at cert q sigma child /\
   child.fn_blocks = entry::rest /\ entry.bb_instructions = params ++ tail /\
   param_insts_from 0 params /\ k < LENGTH params /\
-  (EL k params).inst_opcode = RETPC_PARAM ==>
+  (EL k params).inst_opcode = RETPC_PARAM /\
+  inline_parameter_boundary_path (InlineEnter e::zipper)
+    e.ise_callee entry.bb_label 0 root ml mj ==>
   ?frames out.
     inline_cell_zipper
       (inline_make_cell child entry.bb_label k (inline_inst_fields (EL k params)))
@@ -146,7 +189,8 @@ Theorem inline_selected_entry_token_transport[local]:
     inline_routed_leaf cert root q child
       (MAP (\(tag,next). inline_cell_choice tag) frames) /\
     EVERY (\(tag,next). !edit. tag <> SelectedJump edit) frames /\
-    out.ic_function = root /\ inline_cell_at out
+    out.ic_function = root /\ inline_cell_at out /\
+    out.ic_block = ml /\ out.ic_index = mj+k
 Proof
   strip_tac >> drule inline_selected_entry_route_lift >> simp[] >>
   disch_then drule >> strip_tac >>
@@ -175,8 +219,150 @@ Proof
        `inline_make_cell e.ise_callee entry.bb_label k (inline_inst_fields (EL k params))`
        mp_tac) >>
      simp[inline_make_cell_def, inline_inst_fields_def] >> metis_tac[]) >>
+  `inline_annotated_choice_path C (InlineEnter e::zipper) e.ise_callee root` by
+    (drule inline_selected_paired_separation >> simp[] >> disch_then drule >>
+     strip_tac >> simp[inline_annotated_choice_path_def] >>
+     metis_tac[inline_selected_annotated_choice_path]) >>
+  `out.ic_function = root /\ out.ic_block = ml /\ out.ic_index = mj+k` by
+    (irule inline_entry_parameter_tail_coordinates >>
+     qpat_assum `inline_cell_zipper _ suffix out` (irule_at Any) >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
   qexistsl [`frames ++ suffix`,`out`] >>
   simp[inline_cell_zipper_append, MAP_APPEND, EVERY_APPEND] >>
   conj_tac >- metis_tac[] >>
   metis_tac[APPEND_ASSOC, APPEND]
+QED
+
+Theorem inline_selected_entry_token_storage[local]:
+  inliner_input_ok C /\ inline_annotated_origin C n root cert /\
+  inline_call_incidence cert root p fn l j orig (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert q sigma child /\
+  child.fn_blocks = entry::rest /\ entry.bb_instructions = params ++ tail /\
+  param_insts_from 0 params /\ k < LENGTH params /\
+  (EL k params).inst_opcode = RETPC_PARAM /\
+  (EL k params).inst_operands = [Lit idx] /\
+  (EL k params).inst_outputs = [x] /\ ca.ia_function = child /\
+  inline_parameter_boundary_path (InlineEnter e::zipper)
+    e.ise_callee entry.bb_label 0 root ml mj /\
+  inline_parameter_ancestry C cert root
+    (inline_parameter_owners ((q,ca,route,snap)::entries)) /\
+  inline_parameter_saved_reads ((q,ca,route,snap)::entries) /\
+  inline_owner_storage cert ((q,ca,route,snap)::entries) frame /\
+  MEM x (cfgTransform$fn_all_vars child) /\ retpc_var child x ==>
+  ?bb inst t.
+    lookup_block ml root.fn_blocks = SOME bb /\
+    get_instruction bb (mj+k) = SOME inst /\
+    step_inst tfuel Tctx inst frame.ipf_state = OK t /\
+    inline_owner_storage cert
+      ((q,ca,route,snap with <|ils_state := update_var x
+          snap.ils_state.vs_return_pc_token snap.ils_state;
+        ils_defined := x INSERT snap.ils_defined|>)::entries)
+      (frame with ipf_state := t) /\
+    inline_parameter_saved_reads
+      ((q,ca,route,snap with <|ils_state := update_var x
+          snap.ils_state.vs_return_pc_token snap.ils_state;
+        ils_defined := x INSERT snap.ils_defined|>)::entries)
+Proof
+  strip_tac >> drule_all inline_selected_entry_token_transport >> strip_tac >>
+  `inline_namespace_leaf_at cert q route.ir_rename child` by
+    (drule inline_owner_storage_member >> simp[] >> metis_tac[MEM]) >>
+  `inline_path_rename (MAP (\(tag,next). inline_cell_choice tag) frames) =
+    route.ir_rename` by
+    (drule inline_routed_leaf_namespace >>
+     simp[inline_namespace_leaf_at_def] >> strip_tac >>
+     gvs[inline_namespace_leaf_at_def] >>
+     metis_tac[inline_namespace_node_rename_unique]) >>
+  `INJ route.ir_rename (x INSERT snap.ils_defined) UNIV` by
+    (gvs[inline_namespace_leaf_at_def] >>
+     drule inline_namespace_node_injective >>
+     simp[INJ_DEF] >> metis_tac[]) >>
+  `inline_cell_at (inline_make_cell child entry.bb_label k
+    (inline_inst_fields (EL k params)))` by
+    (simp[inline_cell_at_def, inline_make_cell_def, inline_fetched_fields_def] >>
+     qexistsl [`entry`,`EL k params`] >>
+     simp[lookup_block_def, FIND_thm, get_instruction_def, EL_APPEND_EQN]) >>
+  `inline_cell_var_action frames x = route.ir_rename x` by
+    simp[inline_cell_var_action_path] >>
+  `(inline_make_cell child entry.bb_label k
+    (inline_inst_fields (EL k params))).ic_fields = (RETPC_PARAM,[Lit idx],[x])` by
+    simp[inline_make_cell_def, inline_inst_fields_def] >>
+  gvs[] >>
+  qpat_assum `inline_cell_zipper _ frames out`
+    (mp_then (Pat `inline_cell_zipper c frames out`) mp_tac
+      inline_token_fetched_storage) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem inline_entry_parameter_metadata[local]:
+  inliner_input_ok C /\ MEM child C.ctx_functions /\
+  child.fn_blocks = entry::rest /\ entry.bb_instructions = params ++ tail /\
+  param_insts_from 0 params /\ k < LENGTH params /\
+  (EL k params).inst_outputs = [x] ==>
+  k < dimword (:256) /\ MEM x (cfgTransform$fn_all_vars child) /\
+  (retpc_var child x <=> (EL k params).inst_opcode = RETPC_PARAM)
+Proof
+  strip_tac >>
+  `LENGTH (fn_entry_insts child) < dimword (:256) /\ retpc_shape_ok child` by
+    (fs[inliner_input_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  `MEM (EL k params) (fn_insts child)` by
+    (simp[fn_insts_def, fn_insts_blocks_def] >> metis_tac[MEM_EL]) >>
+  `is_param_opcode (EL k params).inst_opcode` by
+    (drule_all param_insts_from_el >> simp[param_inst_at_def]) >>
+  conj_tac >- (gvs[fn_entry_insts_def, entry_block_def] >> decide_tac) >>
+  conj_tac
+  >- (simp[cfgTransformTheory.fn_all_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+      disj1_tac >> disj1_tac >> qexists `EL k params` >> simp[] >>
+      metis_tac[MEM_EL]) >>
+  eq_tac
+  >- (strip_tac >> fs[retpc_shape_ok_def] >>
+      qpat_x_assum `!inst x. MEM inst (fn_insts child) /\ MEM x inst.inst_outputs /\ _ ==> _`
+        (qspecl_then [`EL k params`,`x`] mp_tac) >>
+      gvs[is_param_opcode_iff]) >>
+  strip_tac >> simp[retpc_var_def] >>
+  irule copy_phi_var_seed >> qexists `EL k params` >> simp[]
+QED
+
+Theorem inline_selected_entry_ordinary_storage[local]:
+  inline_annotated_origin C n root cert /\
+  inline_call_incidence cert root p fn l j orig (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert q sigma child /\
+  child.fn_blocks = entry::rest /\ entry.bb_instructions = params ++ tail /\
+  param_insts_from 0 params /\ k < LENGTH params /\
+  inline_parameter_boundary_path (InlineEnter e::zipper)
+    e.ise_callee entry.bb_label 0 root ml mj /\
+  inline_owner_storage cert ((q,ca,route,snap)::entries) frame /\
+  ca.ia_function = child /\ MEM (p,pa,proute,psnap) entries /\
+  pa.ia_function = fn /\ orig.inst_operands = Label nm::ops /\
+  eval_operands ops psnap.ils_state = SOME vals /\
+  setup_callee child vals psnap.ils_state = SOME cs /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars fn) /\ ~retpc_var fn v) ops /\
+  k < LENGTH ops /\ snap.ils_state.vs_params = cs.vs_params /\
+  MEM (EL k params).inst_opcode [PARAM; FMP_PARAM] /\
+  (EL k params).inst_operands = [Lit idx] /\ w2n idx = k /\
+  (EL k params).inst_outputs = [x] /\
+  step_inst fuel C (EL k params) snap.ils_state = OK s' /\
+  MEM x (cfgTransform$fn_all_vars child) /\ ~retpc_var child x /\
+  INJ route.ir_rename (x INSERT snap.ils_defined) UNIV ==>
+  ?bb inst t.
+    lookup_block ml root.fn_blocks = SOME bb /\
+    get_instruction bb (mj+k) = SOME inst /\ inst.inst_opcode = ASSIGN /\
+    step_inst tfuel Tctx inst frame.ipf_state = OK t /\
+    inline_owner_storage cert
+      ((q,ca,route,snap with <|ils_state := s';
+        ils_defined := x INSERT snap.ils_defined|>)::entries)
+      (frame with ipf_state := t)
+Proof
+  strip_tac >>
+  `k < LENGTH (rotate_invoke_ops orig.inst_operands)` by
+    simp[functionInlinerDefsTheory.rotate_invoke_ops_def] >>
+  drule_all inline_selected_parameter_descriptor_exists >> strip_tac >>
+  `d.ic_block = ml /\ d.ic_index = mj+k` by
+    (drule_all inline_selected_parameter_interval >> strip_tac >>
+     `ml' = ml /\ mj' = mj` by
+       metis_tac[inline_parameter_boundary_path_functional] >>
+     metis_tac[]) >>
+  drule inline_selected_parameter_descriptor_fetch >> strip_tac >>
+  drule inline_selected_parameter_fetched_step >>
+  simp[] >> disch_then drule_all >> strip_tac >> gvs[]
 QED
