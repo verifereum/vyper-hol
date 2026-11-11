@@ -250,3 +250,169 @@ Theorem ricf_apply_forward_repeated_positions:
 Proof
   EVAL_TAC
 QED
+
+(* Moved unchanged from readonlyInvokeCopyFwdProofs for use below Sim. *)
+Definition ricf_block_step_def:
+  ricf_block_step (ctx : icf_ctx) (changed : bool, cur_bb : basic_block)
+                  (i : num) =
+    if i >= LENGTH cur_bb.bb_instructions then (changed, cur_bb)
+    else
+      let inst = EL i cur_bb.bb_instructions in
+      if inst.inst_opcode <> MCOPY then (changed, cur_bb)
+      else
+        case ricf_try_forward ctx cur_bb i of
+          NONE => (changed, cur_bb)
+        | SOME (src_var_opt, rewrite_sites) =>
+            let src_op =
+              case src_var_opt of
+                SOME sv => Var sv
+              | NONE =>
+                  EL 1 (EL i cur_bb.bb_instructions).inst_operands in
+            let new_insts = ricf_apply_forward
+              cur_bb.bb_instructions i src_op rewrite_sites in
+            (T, cur_bb with bb_instructions := new_insts)
+End
+
+Theorem ricf_pass_block_eq_foldl:
+  !ctx bb.
+    ricf_pass_block ctx bb =
+    FOLDL (ricf_block_step ctx) (F, bb)
+      (COUNT_LIST (LENGTH bb.bb_instructions))
+Proof
+  rw[ricf_pass_block_def, ricf_block_step_def] >>
+  AP_THM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
+  simp[FUN_EQ_THM, pairTheory.FORALL_PROD, ricf_block_step_def]
+QED
+
+Theorem ricf_block_step_certificate:
+  !ctx c bb i. ?es.
+    ricf_block_trace bb es (SND (ricf_block_step ctx (c,bb) i)) /\
+    EVERY (\e. e.rfe_ctx = ctx) es
+Proof
+  rpt gen_tac >> rw[ricf_block_step_def] >>
+  TRY (qexists_tac `[]` >> simp[ricf_block_trace_nil] >> NO_TAC) >>
+  Cases_on `ricf_try_forward ctx bb i` >> simp[]
+  >- (qexists_tac `[]` >> simp[ricf_block_trace_nil]) >>
+  PairCases_on `x` >> simp[] >>
+  qexists_tac `[<| rfe_ctx := ctx; rfe_index := i;
+                  rfe_source := x0; rfe_sites := x1 |>]` >>
+  drule ricf_one_forward_certificate >>
+  simp[ricf_event_apply_def, ricf_event_source_def]
+QED
+
+Theorem ricf_block_fold_certificate:
+  !is c bb. ?es.
+    ricf_block_trace bb es (SND (FOLDL (ricf_block_step ctx) (c,bb) is)) /\
+    EVERY (\e. e.rfe_ctx = ctx) es
+Proof
+  Induct >> simp[]
+  >- (rpt gen_tac >> qexists_tac `[]` >> simp[ricf_block_trace_nil]) >>
+  rpt gen_tac >>
+  qspecl_then [`ctx`,`c`,`bb`,`h`] strip_assume_tac
+    ricf_block_step_certificate >>
+  Cases_on `ricf_block_step ctx (c,bb) h` >> gvs[] >>
+  first_x_assum (qspecl_then [`q`,`r`] strip_assume_tac) >>
+  qexists_tac `es ++ es'` >> simp[] >>
+  metis_tac[ricf_block_trace_append]
+QED
+
+Theorem ricf_pass_block_certificate:
+  !ctx bb. ?es.
+    ricf_block_trace bb es (SND (ricf_pass_block ctx bb)) /\
+    EVERY (\e. e.rfe_ctx = ctx) es
+Proof
+  simp[ricf_pass_block_eq_foldl, ricf_block_fold_certificate]
+QED
+
+Theorem ricf_function_step_certificate:
+  !ctx fn. ricf_round_certificate ctx fn (SND (ricf_function_step ctx fn))
+Proof
+  rpt gen_tac >>
+  simp[ricf_function_step_def, ricf_round_certificate_def] >>
+  pairarg_tac >> simp[] >>
+  qexists_tac `new_blocks` >> simp[] >>
+  `new_blocks = MAP (\bb. SND (ricf_pass_block ctx bb)) fn.fn_blocks` by
+    (mp_tac (Q.ISPECL [`ricf_pass_block ctx`, `fn.fn_blocks`, `F`, `[]:basic_block list`]
+       invokeCopyFwdCommonDefsTheory.FOLDL_block_pass_SND) >> simp[]) >>
+  simp[LIST_REL_MAP2] >> irule LIST_REL_refl >>
+  simp[ricf_pass_block_certificate]
+QED
+
+Theorem ricf_transform_function_certificate:
+  !fn_meta ctx_fns rma fn.
+    ricf_full_alloca_copies fn /\
+    ricf_no_derived_mutable_sibling fn /\ ricf_src_alloca fn ==>
+    ricf_function_plan (icf_build_ctx fn_meta ctx_fns rma fn) fn
+      (ricf_transform_function fn_meta ctx_fns rma fn)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[ricf_transform_function_def] >>
+  qmatch_goalsub_abbrev_tac `OWHILE G step_fn (T,ctx0,fn)` >>
+  Cases_on `OWHILE G step_fn (T,ctx0,fn)`
+  >- simp[ricf_function_plan_identity] >>
+  PairCases_on `x` >> simp[] >>
+  `ricf_function_trace ctx0 fn x2` by
+    (mp_tac (WhileTheory.OWHILE_INV_IND
+       |> INST_TYPE [alpha |-> ``:bool # icf_ctx # ir_function``]
+       |> Q.INST [`P` |-> `\(c,ctx,cur). ctx = (ctx0 with icf_dfg := dfg_build_function cur) /\ ricf_function_trace ctx0 fn cur`]
+       |> Q.SPECL [`G`,`step_fn`,`(T,ctx0,fn)`]) >>
+     impl_tac
+     >- (conj_tac
+         >- simp[Abbr `ctx0`, invokeCopyFwdCommonDefsTheory.icf_build_ctx_def,
+                 ricf_function_trace_nil] >>
+         rpt gen_tac >> PairCases_on `x` >>
+         simp[Abbr `G`, Abbr `step_fn`] >> strip_tac >>
+         gvs[] >>
+         Cases_on `ricf_function_step (ctx0 with icf_dfg := dfg_build_function x2') x2'` >>
+         rename1 `ricf_function_step _ _ = (changed,new_fn)` >>
+         Cases_on `changed` >> gvs[] >>
+         irule ricf_function_trace_trans >> goal_assum drule >>
+         irule ricf_function_trace_cons >>
+         qexists_tac `new_fn` >> simp[ricf_function_trace_nil] >>
+         qspecl_then [`ctx0 with icf_dfg := dfg_build_function x2'`, `x2'`]
+           mp_tac ricf_function_step_certificate >> simp[]) >>
+     disch_then (qspec_then `(x0,x1,x2)` mp_tac) >> simp[]) >>
+  simp[ricf_function_plan_def] >> qexists_tac `x2` >> simp[]
+QED
+
+Theorem ricf_sites_fold_readonly[local]:
+  !uses acc sites.
+    (!xs ri p. acc = SOME xs /\ MEM (ri,p) xs ==>
+       ri.inst_opcode = INVOKE /\ icf_is_readonly_op rma ri p) /\
+    FOLDL (\acc (v,inst,pos).
+      case acc of NONE => NONE | SOME xs =>
+        if icf_is_assign_output_use inst pos then SOME xs
+        else if inst.inst_opcode = MCOPY /\ pos = 0 then
+          if inst.inst_id = copy_id then SOME xs else NONE
+        else if inst.inst_opcode = INVOKE /\ icf_is_readonly_op rma inst pos
+          then SOME ((inst,pos)::xs) else NONE) acc uses = SOME sites ==>
+    !ri p. MEM (ri,p) sites ==>
+       ri.inst_opcode = INVOKE /\ icf_is_readonly_op rma ri p
+Proof
+  Induct >> pure_rewrite_tac[FOLDL]
+  >- metis_tac[] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `FOLDL f next uses = SOME sites` >>
+  qpat_x_assum `!acc sites. _` (qspecl_then [`next`,`sites`] mp_tac) >>
+  impl_tac
+  >- (conj_tac >- (Cases_on `acc` >>
+         gvs[Abbr `next`, Abbr `f`, AllCaseEqs()] >>
+         rpt strip_tac >> gvs[] >> metis_tac[]) >>
+       gvs[Abbr `f`]) >> simp[]
+QED
+
+Theorem ricf_event_sites_readonly:
+  ricf_event_ok e bb /\ MEM (ri,p) e.rfe_sites ==>
+  ri.inst_opcode = INVOKE /\ icf_is_readonly_op e.rfe_ctx.icf_rma ri p
+Proof
+  simp[ricf_event_ok_def, ricf_try_forward_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  irule (INST_TYPE [alpha |-> ``:string``] ricf_sites_fold_readonly) >>
+  goal_assum (drule_at Any) >>
+  qexists_tac `SOME []` >> simp[] >>
+  qexists_tac `(EL e.rfe_index bb.bb_instructions).inst_id` >>
+  qexists_tac `icf_alias_use_positions e.rfe_ctx.icf_dfg
+    (icf_collect_aliases e.rfe_ctx.icf_dfg
+       (icf_assign_root e.rfe_ctx.icf_dfg {} dst))` >> simp[]
+QED

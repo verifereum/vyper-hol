@@ -10,7 +10,7 @@
 
 Theory readonlyInvokeCopyFwdProofs
 Ancestors
-  readonlyInvokeCopyFwdSim readonlyInvokeCopyFwdDefs internalReturnCopyFwdDefs invokeCopyFwdCommonDefs
+  readonlyInvokeCopyFwdPlan readonlyInvokeCopyFwdSim readonlyInvokeCopyFwdDefs internalReturnCopyFwdDefs invokeCopyFwdCommonDefs
   readonlyMemoryArgsProps readonlyMemoryArgsDefs callLayoutDefs dfgDefs
   memLocDefs o1PassContract ptrDiscipline unitTransformDefs copyFwdEquiv
   passSharedDefs venomWf venomInst venomInstProps venomExecSemantics
@@ -21,37 +21,6 @@ Ancestors
    1. The Block Pass as a Fold, and Function Names
    ========================================================================== *)
 
-Definition ricf_block_step_def:
-  ricf_block_step (ctx : icf_ctx) (changed : bool, cur_bb : basic_block)
-                  (i : num) =
-    if i >= LENGTH cur_bb.bb_instructions then (changed, cur_bb)
-    else
-      let inst = EL i cur_bb.bb_instructions in
-      if inst.inst_opcode <> MCOPY then (changed, cur_bb)
-      else
-        case ricf_try_forward ctx cur_bb i of
-          NONE => (changed, cur_bb)
-        | SOME (src_var_opt, rewrite_sites) =>
-            let src_op =
-              case src_var_opt of
-                SOME sv => Var sv
-              | NONE =>
-                  EL 1 (EL i cur_bb.bb_instructions).inst_operands in
-            let new_insts = ricf_apply_forward
-              cur_bb.bb_instructions i src_op rewrite_sites in
-            (T, cur_bb with bb_instructions := new_insts)
-End
-
-Theorem ricf_pass_block_eq_foldl:
-  !ctx bb.
-    ricf_pass_block ctx bb =
-    FOLDL (ricf_block_step ctx) (F, bb)
-      (COUNT_LIST (LENGTH bb.bb_instructions))
-Proof
-  rw[ricf_pass_block_def, ricf_block_step_def] >>
-  AP_THM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
-  simp[FUN_EQ_THM, pairTheory.FORALL_PROD, ricf_block_step_def]
-QED
 
 Theorem ricf_transform_function_fn_name:
   !fn_meta ctx_fns rma fn.
