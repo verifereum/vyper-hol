@@ -4068,6 +4068,34 @@ Proof
   simp[] >> qexistsl_tac [`gl`, `gr`] >> simp[]
 QED
 
+(* Full-state diagnostic for a cut before the extracted GAS. *)
+Theorem source_cut_two_gas[local]:
+  !x y p q wx wy tail s.
+    x.inst_opcode = GAS /\ x.inst_outputs = [p] /\
+    y.inst_opcode = GAS /\ y.inst_outputs = [q] /\ p <> q ==>
+    ?a b.
+      FOLDR (dft_exec_cons fuel C) OK [y]
+        (s with vs_gas_readings := wy::wx::tail) = OK a /\
+      FOLDR (dft_exec_cons fuel C) OK [x]
+        (s with vs_gas_readings := wx::wy::tail) = OK b /\
+      FOLDR (dft_exec_cons fuel C) OK [x] a =
+        OK ((update_var q wy b) with
+          <|vs_gas_readings := tail; vs_inst_idx := SUC b.vs_inst_idx|>)
+Proof
+  rpt strip_tac >>
+  `!st. step_inst fuel C x st = OK (update_var p
+    (case st.vs_gas_readings of [] => 0w | h::tl => h)
+    (st with vs_gas_readings := DROP 1 st.vs_gas_readings))` by
+    (gen_tac >> irule dftBlockSimTheory.step_inst_gas_single >> simp[]) >>
+  `!st. step_inst fuel C y st = OK (update_var q
+    (case st.vs_gas_readings of [] => 0w | h::tl => h)
+    (st with vs_gas_readings := DROP 1 st.vs_gas_readings))` by
+    (gen_tac >> irule dftBlockSimTheory.step_inst_gas_single >> simp[]) >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+    venomInstTheory.is_terminator_def] >>
+  simp[update_var_def, finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
