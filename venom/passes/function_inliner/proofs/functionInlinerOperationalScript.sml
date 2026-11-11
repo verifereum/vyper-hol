@@ -948,19 +948,15 @@ Theorem inline_delegatecall_success:
     inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
 Proof
   rpt strip_tac >>
-  `inline_shared_frame s = inline_shared_frame t` by
-    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def] >>
-  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_accounts = t.vs_accounts /\
-    read_memory (w2n ao) (w2n az) s = read_memory (w2n ao) (w2n az) t` by
-    (gvs[inline_shared_frame_def, stateFrameTheory.execution_frame_def,
-      venom_state_component_equality, read_memory_def]) >>
-  `!target gas data code static.
-    make_venom_delegatecall_state s target gas data code static =
-      make_venom_delegatecall_state t target gas data code static` by
-    metis_tac[inline_shared_frame_delegate_state] >>
-  gvs[exec_delegatecall_def, AllCaseEqs()] >>
-  drule_all inline_extract_result_transport >> strip_tac >>
-  simp[exec_delegatecall_def] >>
+  `venom_call_request s addr 0w ao az F =
+    venom_call_request t addr 0w ao az F` by
+    metis_tac[inline_shared_frame_requests, inline_opaque_frame_rel_def,
+      inline_frame_rel_def] >>
+  drule inline_opaque_frame_consume_call >>
+  disch_then (qspecl_then [`w2n rz`,
+    `venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall`,
+    `w2n ro`] strip_assume_tac) >>
+  gvs[exec_delegatecall_def] >>
   irule inline_opaque_frame_write_establish >> simp[]
 QED
 
