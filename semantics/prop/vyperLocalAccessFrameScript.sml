@@ -12,7 +12,7 @@
 
 Theory vyperLocalAccessFrame
 Ancestors
-  vyperSubscriptOverlap vyperInterpreter vyperState vyperScopePreservation
+  vyperSubscriptOverlap vyperInterpreter vyperState vyperScopePreservation vyperCallOutcomeFrame
   pair list rich_list vyperAST vyperContext vyperMisc vyperLookup
   vyperEvalExprPreservesScopesDom vyperStatePreservation vyperCallFrame
   vyperCreateFrame vyperPlaceFrames vyperStoragePlaceProvenance
@@ -235,8 +235,10 @@ Resume evaluate_unwritten_local[builtin]:
   Cases_on `builtin_args_length_ok bt (LENGTH es)`
   >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
       Cases_on `bt = Env MsgGas` >>
+      Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-          assert_def, return_def, raise_def, AllCaseEqs()] >>
+          assert_def, return_def, raise_def, lift_option_type_def, AllCaseEqs()] >>
       imp_res_tac result_array_length_state >>
       imp_res_tac next_gas_reading_state >>
       imp_res_tac precompile_call_success_state >>
