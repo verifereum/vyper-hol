@@ -173,6 +173,8 @@ Proof
     qexistsl [`sz`,`inst`] >>
     simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
  `type_memory_bytes ce' ty = type_memory_bytes ce ty` by simp[] >>
+ `value_has_type entry.type entry.value` by
+   first_assum (fn th => ACCEPT_TAC (el 2 (CONJUNCTS (REWRITE_RULE [abiDecoderTypedContractTheory.abi_decoder_metadata_def] th)))) >>
  drule compile_alloc_buffer_parts >> strip_tac >>
  `st.cs_next_id <= sa.cs_next_id /\ st.cs_next_var <= sa.cs_next_var` by decide_tac >>
  `sa.cs_next_id <= st'.cs_next_id` by

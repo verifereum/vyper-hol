@@ -57,5 +57,6 @@ Proof
   qpat_x_assum `_ = vs.vs_call_ctx` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `_ = vs.vs_tx_ctx` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `_ = vs.vs_block_ctx` (SUBST_ALL_TAC o SYM) >>
-  simp[]
+  simp[] >>
+  qpat_x_assum `tx_env_ok tx` mp_tac >> simp[tx_env_ok_def]
 QED

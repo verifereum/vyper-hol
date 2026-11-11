@@ -431,6 +431,10 @@ Resume prefix_paired_members_cons_floor[effects]:
      qpat_assum `t.vs_logs = _` mp_tac >>
      qpat_assum `t.vs_requests = _` mp_tac >>
      qpat_assum `t.vs_pending_deletions = _` mp_tac >>
+     qpat_assum `t.vs_tx_ctx = _` mp_tac >>
+     qpat_assum `t.vs_block_ctx = _` mp_tac >>
+     qpat_assum `t.vs_immutables = _` mp_tac >>
+     qpat_assum `t.vs_outcomes = _` mp_tac >>
      simp_tac bool_ss [Abbr `prepared`] >> POP_ASSUM_LIST (K ALL_TAC) >>
      simp[abi_decoder_address_frame_def, abi_encoder_registered_effect_def] >>
      rpt strip_tac >> simp[]) >>

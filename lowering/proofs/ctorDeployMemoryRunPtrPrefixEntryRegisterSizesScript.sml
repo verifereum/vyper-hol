@@ -318,6 +318,8 @@ Proof
    abi_decoder_metadata ce' env ty entry.type
      (type_to_abi_dec_info ce'.ce_struct_fields ce' ty) (EL i avs) entry.value /\
    type_memory_bytes ce' ty = type_memory_bytes ce ty` by simp[] >>
+  `value_has_type entry.type entry.value` by
+    first_assum (fn th => ACCEPT_TAC (el 2 (CONJUNCTS (REWRITE_RULE [abiDecoderTypedContractTheory.abi_decoder_metadata_def] th)))) >>
   `compile_decode_args ce' [build_positional_arg ce' (name,ty)] off
      DLOAD (Lit 0w) 0 sa = ((),last)` by gvs[] >>
   `FLOOKUP ce'.ce_vars name = SOME (PtrVar
