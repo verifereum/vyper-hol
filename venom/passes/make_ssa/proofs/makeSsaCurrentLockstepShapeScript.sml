@@ -17,12 +17,6 @@ Ancestors
   makeSsaCurrentCleanupBoundary o1MakeSsaFormats
 
 (* List-level shape boundaries. *)
-Theorem phi_prefix_length_prepend:
-  !pre xs. EVERY (\i. i.inst_opcode = PHI) pre ==>
-    phi_prefix_length (pre ++ xs) = LENGTH pre + phi_prefix_length xs
-Proof
-  Induct >> simp[phi_prefix_length_def] >> rpt strip_tac >> simp[]
-QED
 
 Theorem instruction_signatures_length:
   MAP (\i. (i.inst_opcode,i.inst_id,LENGTH i.inst_outputs)) xs =
