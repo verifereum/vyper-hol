@@ -4,6 +4,7 @@
 Theory extcallDecoderAtomicMemory
 Ancestors
   abiDecoderContract abiDecoderBytesRuntime abiDecoderBytesPrefix
+  abiDecoderBytesPhases compileEnv emitHelper rich_list
     exprLoweringProps fragExecMem allocaFootprint
   fragGasSeqMem fragGasSeqAbort fragGasMode fragGasPathMem
   allocaHistory instMemFrontier emitHelperProps stmtReasonMemory
@@ -199,6 +200,121 @@ Proof
   drule_all extcall_decoder_bytes_copy_sequence_mem_ok >> strip_tac >>
   drule_all abi_decode_bytes_runtime_copy_sequence >> strip_tac >>
   drule_all extcall_decoder_bytes_copy_code >> strip_tac >>
+  drule_all run_inst_seq_gas_path_mem >> simp[] >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem extcall_decoder_bytes_pointer_code[local]:
+  emit_op ADD [cnt;Lit 31w] st = (up,c1) /\
+  emit_op NOT [Lit 31w] c1 = (mask,c2) /\
+  emit_op AND [up;mask] c2 = (rounded,c3) /\
+  emit_op ADD [dst;rounded] c3 = (lastptr,c4) ==>
+  EVERY (\i. MEM i.inst_opcode [ADD;NOT;AND]) (emitted_insts st c4)
+Proof
+  strip_tac >> imp_res_tac emitted_insts_emit_op >>
+  `!n k. n - (n+k) = 0` by decide_tac >>
+  asm_simp_tac bool_ss [emitted_insts_def, APPEND_ASSOC, DROP_APPEND,
+    LENGTH_APPEND, LENGTH, DROP_LENGTH_NIL, APPEND, mk_inst_def] >>
+  simp[]
+QED
+
+Theorem extcall_decoder_bytes_runtime_tail_mem_ok[local]:
+  abi_decode_bytes_runtime_tail dst addr cnt st = ((),st') /\
+  eval_operand dst s = SOME (n2w d) /\ eval_operand addr s = SOME (n2w a) /\
+  eval_operand cnt s = SOME (n2w c) /\ c+31 < dimword (:256) /\
+  d+32*((c+31) DIV 32) < dimword (:256) /\
+  d < dimword (:256) /\ a < dimword (:256) /\ 32+c < dimword (:256) /\
+  d+32*((c+31) DIV 32)+32 <= s.vs_alloca_next /\
+  d+32+c <= s.vs_alloca_next /\ a+32+c <= s.vs_alloca_next /\
+  fresh_vars_wrt st s ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_bytes_runtime_tail _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [abi_decode_bytes_runtime_tail_def, comp_bind_def,
+    comp_ignore_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+  `c+31 < dimword (:256) /\ d < dimword (:256)` by decide_tac >>
+  drule_all abi_decode_bytes_runtime_pointer_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st ready) s = OK prepared` >>
+  drule_all extcall_decoder_bytes_pointer_code >> strip_tac >>
+  `prepared.vs_alloca_next = s.vs_alloca_next` by
+    (irule (cj 2 abi_decode_nonallocating_sequence_frame) >>
+     goal_assum (drule_at Any) >>
+     qpat_x_assum `EVERY _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[EVERY_MEM] >>
+     rpt strip_tac >> first_x_assum drule >>
+     strip_tac >> gvs[is_terminator_def, is_alloca_op_def]) >>
+  `eval_operand dst prepared = SOME (n2w d) /\
+   eval_operand addr prepared = SOME (n2w a) /\
+   eval_operand cnt prepared = SOME (n2w c)` by metis_tac[] >>
+  `run_inst_seq_mem_ok (emitted_insts ready st') prepared` by
+    (`32+c < dimword (:256) /\
+      d+32*((c+31) DIV 32)+32 <= prepared.vs_alloca_next /\
+      d+32+c <= prepared.vs_alloca_next /\
+      a+32+c <= prepared.vs_alloca_next` by decide_tac >>
+     drule_all extcall_decoder_bytes_copy_sequence_mem_ok >> simp[]) >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  `inst_extends st ready /\ inst_extends ready st'` by
+    metis_tac[inst_extends_trans] >>
+  `emitted_insts st st' = emitted_insts st ready ++ emitted_insts ready st'` by
+    (irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  qpat_x_assum `emitted_insts st st' = _` SUBST1_TAC >>
+  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
+  >- (irule run_inst_seq_mem_ok_every >>
+      gvs[EVERY_MEM] >> rpt strip_tac >>
+      first_x_assum drule >>
+      strip_tac >> simp[inst_dload_in_section_def] >>
+      irule below_frontier_no_ranges >> simp[]) >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem extcall_decoder_bytes_runtime_tail_no_gas[local]:
+  abi_decode_bytes_runtime_tail dst addr cnt st = ((),st') ==>
+  LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st')) = 0
+Proof
+  simp[abi_decode_bytes_runtime_tail_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+       emit_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def]
+QED
+
+Theorem extcall_decoder_bytes_runtime_tail_path:
+  abi_decode_bytes_runtime_tail dst addr cnt st = ((),st') /\
+  eval_operand dst s = SOME (n2w d) /\ eval_operand addr s = SOME (n2w a) /\
+  eval_operand cnt s = SOME (n2w c) /\ c <= n /\
+  c+31 < dimword (:256) /\ a < dimword (:256) /\
+  d+(32+32*((n+31) DIV 32)) < dimword (:256) /\
+  a+32+c <= s.vs_alloca_next /\
+  d+(32+32*((n+31) DIV 32)) <= s.vs_alloca_next /\
+  fresh_vars_wrt st s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+    gas_path_mem ctx func s 0
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st st'))) /\
+    fresh_vars_wrt st' t /\
+    t.vs_memory = (mcopy d a (32+c)
+      (mstore (d+32*((c+31) DIV 32)) 0w s)).vs_memory /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w)
+Proof
+  strip_tac >>
+  qspec_then `c` strip_assume_tac (GEN_ALL abi_decode_bytes_round_bounds) >>
+  qpat_assum `c <= n` (mp_then Any mp_tac abi_decode_bytes_round_capacity) >>
+  strip_tac >>
+  `d+32*((c+31) DIV 32) < dimword (:256) /\
+   d < dimword (:256) /\ 32+c < dimword (:256) /\
+   d+32*((c+31) DIV 32)+32 <= s.vs_alloca_next /\
+   d+32+c <= s.vs_alloca_next` by decide_tac >>
+  drule_all extcall_decoder_bytes_runtime_tail_mem_ok >> strip_tac >>
+  drule_all abi_decode_bytes_runtime_tail_sequence >> strip_tac >>
+  drule_all abi_decode_bytes_runtime_tail_shape >> strip_tac >>
+  drule_all extcall_decoder_bytes_runtime_tail_no_gas >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
   drule_all run_inst_seq_gas_path_mem >> simp[] >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
