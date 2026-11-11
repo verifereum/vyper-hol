@@ -2,7 +2,7 @@
    its containing caller allocation (which could also contain the buffer). *)
 Theory bodyIntCallRootFrame
 Ancestors
-  bodyIntCallJointContract bodyIntCallPrologueInit bodyIntCallParameterGeometry
+  bodyIntCallJointContract bodySim bodyIntCallPrologueInit bodyIntCallParameterGeometry
   bodyIntCallSemanticEntry bodyIntCallResourceSpans
 
 Theorem internal_parameter_windows_protected:

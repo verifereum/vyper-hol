@@ -1,7 +1,7 @@
 (* Helpers for the seam 2 joint induction call step and its family leaves. *)
 Theory bodyIntCallJointCallCore
 Ancestors
-  bodyIntCallJointContract supportedExprs bodyIntCallSemanticEntry
+  bodyIntCallJointContract bodySim supportedExprs bodyIntCallSemanticEntry
   bodySimAugPlaceScopes stmtSimAugAssignPlaceStorage bodyIntCallJointCallSource
   exprSimExtCallCase stmtSimAugAssignPlaceMemory abiStaticAggregateProps
   gasSummary gasSummaryCompose gasExemptCert vyperState

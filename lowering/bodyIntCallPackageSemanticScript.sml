@@ -3,7 +3,7 @@ Theory bodyIntCallPackageSemantic
 Ancestors
   bodyIntCallProducerSemantic bodyIntCallEntryInputs bodyIntCallSeamDefs
   bodyIntCallHandler bodyIntCallBodyTyping vyperInterpreter vyperState
-  bodyIntCallJointContract exprSimHypsDefs
+  bodyIntCallJointContract bodySim exprSimHypsDefs
 Libs
   monadsyntax
 

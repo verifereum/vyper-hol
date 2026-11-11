@@ -178,5 +178,5 @@ Theorem internal_entry_module_pins:
 Proof
   strip_tac >> drule compile_internal_entry_fields >>
   simp[compile_env_component_equality] >> strip_tac >>
-  fs[bodyIntCallJointContractTheory.cenv_module_pins_def]
+  fs[bodySimTheory.cenv_module_pins_def]
 QED

@@ -7,7 +7,7 @@ Ancestors
   bodyIntCallActualEntryFields bodyIntCallActualEntryWitness
   compileEnv loweringStateRelDefs vyperContext vyperState accountsRelProps compileVyper moduleLowering
   bodyIntCallActualEntryReservation bodyIntCallSemanticEntry intCallCallee list pair
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodySimEntry bodySim
 
 Theorem state_rel_call_stack:
   state_rel func ce (cx with stk updated_by f) es s =
