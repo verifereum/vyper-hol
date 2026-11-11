@@ -8,7 +8,7 @@
 Theory fragFuelLoopAbiEncDyn
 Ancestors
   fragFuel fragFuelContextBase abiEncoder compileEnv emitHelper context
-  venomInst
+  venomInst venomExecSemantics venomState
 Libs
   fragFuelLib monadsyntax
 
@@ -376,6 +376,127 @@ QED
    - Setup, header and prefix allocate 3 + 3 + 9 variables.  The saved-vars
      lemma lists ip, dp, i2, hp and off, all below the child's entry counter.
      The phase fuel lemmas supply the non-recursive fragment bounds. *)
+
+(* header_semantics: the header observes memory without modifying it. *)
+Theorem abi_encode_dyn_header_semantics[local]:
+  !id ip x y z len_op exit body G ctx fn s bb N.
+  let code = [mk_inst id MLOAD [ip] [x];
+              mk_inst (id+1) LT [Var x; len_op] [y];
+              mk_inst (id+2) ISZERO [Var y] [z];
+              mk_inst (id+3) JNZ [Var z; Label exit; Label body] []]
+  in
+  no_phi_fn fn /\ callees_stable G ctx fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (EL 0 code) /\
+  get_instruction bb (s.vs_inst_idx+1) = SOME (EL 1 code) /\
+  get_instruction bb (s.vs_inst_idx+2) = SOME (EL 2 code) /\
+  get_instruction bb (s.vs_inst_idx+3) = SOME (EL 3 code) /\
+  ALL_DISTINCT [x;y;z] /\
+  EVERY (\v. ~var_below N v /\ ip <> Var v /\ len_op <> Var v) [x;y;z]
+  ==>
+  fuel_outcome G ctx fn s 1
+    (\t. vars_kept N {} s t /\
+      ((t.vs_current_bb = exit /\ t.vs_inst_idx = 0) \/
+       (t.vs_current_bb = body /\ t.vs_inst_idx = 0 /\
+        ?a b. eval_operand ip s = SOME a /\
+              eval_operand len_op s = SOME b /\
+              eval_operand ip t = SOME a /\
+              mload (w2n a) t = mload (w2n a) s /\
+              w2n (mload (w2n a) s) < w2n b)))
+Proof
+  rpt gen_tac >>
+  simp_tac std_ss [LET_THM, listTheory.EVERY_DEF,
+                    listTheory.ALL_DISTINCT, listTheory.EL,
+                    listTheory.HD, listTheory.TL] >> strip_tac >>
+  rename1 `[Var z; Label exit; Label body_lbl]` >>
+  `~is_terminator (mk_inst id MLOAD [ip] [x]).inst_opcode`
+    by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_from_nonterm_stable >> reverse strip_tac
+  >- (simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+      `G <= f+1 /\ G <= G+1` by decide_tac >> metis_tac[]) >>
+  gvs[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+      exec_read1_def, AllCaseEqs()] >>
+  rename1 `eval_operand ip s = SOME a` >>
+  qabbrev_tac `u = update_var x (mload (w2n a) s) s with
+                   vs_inst_idx := SUC s.vs_inst_idx` >>
+  `lookup_block u.vs_current_bb fn.fn_blocks = SOME bb`
+    by simp[Abbr `u`, update_var_def] >>
+  `get_instruction bb u.vs_inst_idx =
+     SOME (mk_inst (id+1) LT [Var x; len_op] [y])`
+    by simp[Abbr `u`, mk_inst_def, arithmeticTheory.ADD1] >>
+  qpat_x_assum `get_instruction bb s.vs_inst_idx = _` kall_tac >>
+  `~is_terminator (mk_inst (id+1) LT [Var x; len_op] [y]).inst_opcode`
+    by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_from_nonterm_stable >> reverse strip_tac
+  >- (simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+      `G <= f+1 /\ G <= G+1` by decide_tac >> metis_tac[]) >>
+  gvs[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+      exec_pure2_def, AllCaseEqs()] >>
+  `eval_operand (Var x) u = SOME (mload (w2n a) s)`
+    by gvs[Abbr `u`, eval_operand_def, update_var_def, lookup_var_def,
+             finite_mapTheory.FLOOKUP_UPDATE] >>
+  `eval_operand len_op u = eval_operand len_op s`
+    by (Cases_on `len_op` >>
+        gvs[Abbr `u`, eval_operand_def, update_var_def, lookup_var_def,
+             finite_mapTheory.FLOOKUP_UPDATE]) >>
+  gvs[] >>
+  rename1 `eval_operand len_op s = SOME b` >>
+  qabbrev_tac `v = update_var y
+    (bool_to_word (w2n (mload (w2n a) s) < w2n b)) u
+    with vs_inst_idx := SUC u.vs_inst_idx` >>
+  `lookup_block v.vs_current_bb fn.fn_blocks = SOME bb`
+    by simp[Abbr `v`, update_var_def] >>
+  `get_instruction bb v.vs_inst_idx =
+    SOME (mk_inst (id+2) ISZERO [Var y] [z])`
+    by simp[Abbr `v`, Abbr `u`, mk_inst_def, arithmeticTheory.ADD1] >>
+  qpat_x_assum `get_instruction bb u.vs_inst_idx = _` kall_tac >>
+  `~is_terminator (mk_inst (id+2) ISZERO [Var y] [z]).inst_opcode`
+    by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_from_nonterm_stable >> reverse strip_tac
+  >- (simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+      `G <= f+1 /\ G <= G+1` by decide_tac >> metis_tac[]) >>
+  gvs[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+      exec_pure1_def, AllCaseEqs()] >>
+  `eval_operand (Var y) v = SOME
+     (bool_to_word (w2n (mload (w2n a) s) < w2n b))`
+    by gvs[Abbr `v`, eval_operand_def, update_var_def, lookup_var_def,
+           finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[] >>
+  qabbrev_tac `w = update_var z
+    (bool_to_word (bool_to_word (w2n (mload (w2n a) s) < w2n b) = 0w)) v
+    with vs_inst_idx := SUC v.vs_inst_idx` >>
+  `lookup_block w.vs_current_bb fn.fn_blocks = SOME bb`
+    by simp[Abbr `w`, update_var_def] >>
+  `get_instruction bb w.vs_inst_idx =
+    SOME (mk_inst (id+3) JNZ [Var z; Label exit; Label body_lbl] [])`
+    by simp[Abbr `w`, Abbr `v`, Abbr `u`, mk_inst_def,
+            arithmeticTheory.ADD1] >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn s 1 post` >>
+  `fuel_outcome G ctx fn w 1 post` suffices_by
+    (simp[fuel_outcome_def] >>
+     `!f. G <= f ==> run_from (f+1) ctx fn s = run_from (f+1) ctx fn w`
+       by (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+     metis_tac[]) >>
+  irule fuel_outcome_jump >> conj_tac >- simp[] >>
+  qexistsl_tac [`bb`, `mk_inst (id+3) JNZ [Var z; Label exit; Label body_lbl] []`,
+    `if w2n (mload (w2n a) s) < w2n b then body_lbl else exit`] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  conj_tac
+  >- (Cases_on `w2n (mload (w2n a) s) < w2n b` >>
+      simp[step_inst_base_opcode_eqs, Abbr `w`, eval_operand_def,
+           update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+           bool_to_word_def]) >>
+  strip_tac >> simp[Abbr `post`, jump_to_def] >>
+  conj_tac
+  >- (simp[vars_kept_def, Abbr `w`, Abbr `v`, Abbr `u`,
+           update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+      rpt strip_tac >> metis_tac[]) >>
+  Cases_on `w2n (mload (w2n a) s) < w2n b` >>
+  simp[Abbr `w`, Abbr `v`, Abbr `u`, update_var_def, mload_def] >>
+  Cases_on `ip` >>
+  gvs[eval_operand_def, update_var_def, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]
+QED
 
 (* The body saves the counter in i2 before the recursive encoder.  Its last
    memory write restores i2+1, even if the child overwrites the counter's
