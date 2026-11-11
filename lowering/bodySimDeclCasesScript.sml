@@ -1308,7 +1308,7 @@ Proof
   `FLOOKUP (extend_local env id typ F).var_types name =
      SOME (ArrayT elem bound)` by simp[extend_local_def, FLOOKUP_UPDATE] >>
   `stmts_writes_ok (\w. ~place_contains w (NameTarget name)) stmts` by
-    gvs[iterator_unmodified_def, expr_place_def] >>
+    gvs[iterator_unmodified_def, expr_places_def] >>
   drule_at (Pat `eval_stmts`) typed_stmts_projection_frame >>
   simp[] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
