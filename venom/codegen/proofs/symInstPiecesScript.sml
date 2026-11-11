@@ -1267,7 +1267,7 @@ Proof
        is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
        venomInstTheory.is_raw_fmp_opcode_def,
        venomInstTheory.is_fmp_param_opcode_def,
-       venomExecSemanticsTheory.is_param_opcode_def] >>
+       venomInstTheory.is_param_opcode_def] >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
        venomEffectsTheory.is_commutative_def, LET_THM] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
