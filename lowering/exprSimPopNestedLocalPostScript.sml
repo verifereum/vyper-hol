@@ -58,11 +58,22 @@ Theorem local_memory_vv_post:
   local_region cenv es'.scopes u id locbase sz /\
   locbase <= w2n w /\ w2n w + val_footprint tv v <= locbase + sz /\
   local_val_at cenv cx id (w2n w - locbase) tv v /\
-  local_place_at cenv cx id (w2n w - locbase) tv result ==>
+  local_place_at cenv cx id (w2n w - locbase) tv result /\
+  (?pth. result = PlaceR (MemoryPlace id pth)) ==>
   vv_post ctx func cenv cx e es sa sb s0 es' result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u
 Proof
-  strip_tac >> simp[vv_post_def] >>
+  strip_tac >>
+  qpat_x_assum `result = PlaceR _` (assume_tac o GSYM) >>
+  `vv_place_ptr cenv cx es' u result
+     (LocatedValue (expr_type e) (mk_ptr op LocMemory))` by
+    (gvs[local_place_at_def, local_region_def] >>
+     rename1 `lookup_var pv u = SOME bw` >>
+     `bw + n2w (w2n w - w2n bw) = w` by
+       (qpat_x_assum `w2n bw <= w2n w` mp_tac >>
+        Cases_on `w` >> Cases_on `bw` >> simp[wordsTheory.word_add_n2w]) >>
+     simp[vv_place_ptr_def, contextTheory.mk_ptr_def] >> metis_tac[]) >>
+  simp[vv_post_def] >>
   qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
   conj_tac
   >- (simp[vv_holds_def, contextTheory.mk_ptr_def] >>
@@ -74,7 +85,7 @@ Proof
   qpat_x_assum `wb_frame _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  simp[contextTheory.mk_ptr_def]
+  fs[contextTheory.mk_ptr_def]
 QED
 
 Theorem pop_path_result_bounds:
@@ -223,11 +234,13 @@ Theorem pop_path_vv_post:
   eval_operand op u = SOME w /\
   w2n w = locbase + k + 32 + (LENGTH vs - 1) * type_memory_size etv /\
   local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
-    etv result ==>
+    etv result /\
+  result = PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])) ==>
   vv_post ctx func cenv cx e es sa sb s0 es' result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u
 Proof
   strip_tac >>
+  qpat_x_assum `result = PlaceR _` (assume_tac o GSYM) >>
   `value_has_type etv (LAST vs) /\ val_wf etv (LAST vs) /\
    k + 32 + (LENGTH vs - 1) * type_memory_size etv +
      val_footprint etv (LAST vs) <= sz` by

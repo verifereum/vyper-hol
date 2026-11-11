@@ -2286,12 +2286,91 @@ Theorem vv_post_frame_intro:
   stmt_state_rel ctx func cenv cx es' t /\
   vv_holds cenv cx (expr_type e) tv vv es' t /\
   vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
+  vv_place_ptr cenv cx es' t tv vv /\
   (~expr_has_effect e ==> vv_storage_live cx vv es' t) /\
   wb_frame cenv es es' sa s0 t /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv t
 Proof
   simp[vv_post_def, wb_frame_def] >> metis_tac[]
+QED
+
+(* A selection step from a non-storage place keeps the pin: the child
+   place sits at the base's pinned address plus the step's offset, where
+   the base's runtime type (eval_result_typed) is the path's type in the
+   local's declared type (expr_sim_inv) or in the immutable's stored type. *)
+Theorem vv_place_ptr_select_step:
+  !cenv cx env t r ty ptv p sb j etv ee child ee' q ann w dst ann'.
+    expr_sim_inv cenv cx env t /\
+    eval_result_typed (env,cx,t) r (Type ty) /\
+    evaluate_type (get_tenv cx) ty = SOME ptv /\
+    ((p.ptr_location = LocMemory \/ p.ptr_location = LocCode) ==>
+     mem_step_offset ptv sb = SOME (j,etv)) /\
+    ee.scopes = t.scopes /\ ee.immutables = t.immutables /\
+    (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
+    select_result cx ty r sb ee = (INL child,ee') /\
+    vv_place_ptr cenv cx ee q r (LocatedValue ann p) /\
+    eval_operand p.ptr_operand q = SOME w /\
+    eval_operand dst q = SOME (w + n2w j) ==>
+    vv_place_ptr cenv cx ee q child (LocatedValue ann' (mk_ptr dst p.ptr_location))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def,
+       env_context_consistent_def] >>
+  Cases_on `r` >> gvs[eval_result_typed_def]
+  >- gvs[select_result_def, bind_def, return_def, lift_option_type_def,
+         lift_sum_def, raise_def, AllCaseEqs()] >>
+  rename1 `PlaceR pl` >> Cases_on `pl`
+  >- metis_tac[]
+  >- (rename1 `MemoryPlace id path` >>
+      `child = PlaceR (MemoryPlace id (path ++ [sb]))` by
+        gvs[select_result_def, extend_place_def, bind_def, return_def,
+            lift_sum_def, raise_def, ignore_bind_def, AllCaseEqs(),
+            extend_memory_place_def] >>
+      qpat_x_assum `runtime_place_typed _ _ _ _` mp_tac >>
+      simp[runtime_place_typed_def, place_type_value_def,
+           get_scopes_def, bind_def, lift_option_type_def, return_def, raise_def,
+           AllCaseEqs()] >> strip_tac >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+      rename1 `lookup_scopes id _ = SOME entry` >>
+      qpat_x_assum `vv_place_ptr _ _ _ _ (PlaceR _) _` mp_tac >>
+      simp[vv_place_ptr_def] >> strip_tac >>
+      rename1 `cenv.ce_var_type id = SOME t0` >>
+      `evaluate_type (get_tenv cx) t0 = SOME entry.type` by
+        (fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def,
+            env_scopes_consistent_def] >>
+         metis_tac[optionTheory.IS_SOME_EXISTS, optionTheory.SOME_11]) >>
+      gvs[] >>
+      drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >> gvs[] >>
+      drule_all exprSimPropsTheory.mem_path_offset_snoc >> strip_tac >>
+      qpat_x_assum `mem_path_offset _ (_ ++ _) = _` mp_tac >>
+      qpat_x_assum `eval_operand dst _ = _` mp_tac >>
+      simp[GSYM wordsTheory.WORD_ADD_ASSOC, wordsTheory.word_add_n2w] >>
+      rpt strip_tac >>
+      simp[vv_place_ptr_def, contextTheory.mk_ptr_def] >>
+      metis_tac[]) >>
+  rename1 `ImmutablePlace src id path` >>
+  `child = PlaceR (ImmutablePlace src id (path ++ [sb]))` by
+    gvs[select_result_def, extend_place_def, bind_def, return_def,
+        lift_sum_def, raise_def, ignore_bind_def, AllCaseEqs(),
+        extend_memory_place_def] >>
+  qpat_x_assum `runtime_place_typed _ _ _ _` mp_tac >>
+  simp[runtime_place_typed_def, place_type_value_def,
+       get_immutables_def, get_address_immutables_def, bind_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  qpat_x_assum `vv_place_ptr _ _ _ _ (PlaceR _) _` mp_tac >>
+  simp[vv_place_ptr_def] >> strip_tac >>
+  gvs[] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >> gvs[] >>
+  drule_all exprSimPropsTheory.mem_path_offset_snoc >> strip_tac >>
+  qpat_x_assum `mem_path_offset _ (_ ++ _) = _` mp_tac >>
+  qpat_x_assum `eval_operand dst _ = _` mp_tac >>
+  simp[wordsTheory.word_add_n2w, GSYM arithmeticTheory.ADD_ASSOC] >>
+  rpt strip_tac >>
+  simp[vv_place_ptr_def, contextTheory.mk_ptr_def] >>
+  metis_tac[]
 QED
 
 Theorem vv_post_word_intro:
@@ -3691,7 +3770,7 @@ Proof
   strip_tac >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
-                  vv_storage_live_def]
+                  vv_storage_live_def, vv_place_ptr_def]
 QED
 
 Theorem compile_method_id_runtime_typed_vv_sim:

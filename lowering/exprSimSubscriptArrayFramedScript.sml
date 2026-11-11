@@ -666,7 +666,8 @@ Theorem vv_post_array_element:
   eval_operand dst s = SOME (w + n2w j) /\
   (!id path'. child = PlaceR (MemoryPlace id path') <=>
      ?path. path' = path ++ [ValueSubscript (IntV i)] /\ r = PlaceR (MemoryPlace id path)) /\
-  (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) ==>
+  (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) /\
+  vv_place_ptr cenv cx es' s child (LocatedValue et (mk_ptr dst p.ptr_location)) ==>
   vv_post ctx func cenv cx (Subscript et obj idx) es sa sb s0 es' child
     (LocatedValue et (mk_ptr dst p.ptr_location)) s
 Proof
