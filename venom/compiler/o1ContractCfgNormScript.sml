@@ -1170,6 +1170,127 @@ Proof
   metis_tac[supply_iter_semantics]
 QED
 
+(* ===== Fuel bounds (gas sufficiency S6b) ===== *)
+
+(* One split at most doubles the fuel a frame of fn needs. *)
+Theorem insert_split_supply_fn_fuel:
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred (block_preds fn target.bb_label) /\ MEM target fn.fn_blocks /\
+  1 < num_succs pred /\ insert_split_supply s fn pred target = (fn',s') /\
+  fn_entry_state fn u /\ terminates (run_blocks n ctx fn u) ==>
+  frame_result_rel (run_blocks n ctx fn u) (run_blocks (2 * n) ctx fn' u)
+Proof
+  strip_tac >>
+  `MEM pred fn.fn_blocks` by
+    gvs[cfgTransformTheory.block_preds_def, listTheory.MEM_FILTER] >>
+  `fn.fn_blocks <> []` by gvs[wf_function_def, fn_has_entry_def] >>
+  Cases_on `build_split_block_supply s pred target` >> PairCases_on `r` >>
+  rename1 `build_split_block_supply s pred target = (split,repls,rest)` >>
+  `rest = s'` by gvs[insert_split_supply_def] >> gvs[] >>
+  `supply_ready fn pred target split repls u u` by
+    (irule supply_ready_entry >> simp[]) >>
+  drule_all supply_run_blocks_forward_fuel >>
+  disch_then (qspec_then `u` mp_tac) >> simp[]
+QED
+
+Theorem supply_round_fuel:
+  supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
+  cfg_norm_round_supply s fn = (fn',changed,s') ==>
+  (~changed ==> fn' = fn) /\
+  (changed ==>
+     LENGTH fn'.fn_blocks = SUC (LENGTH fn.fn_blocks) /\
+     !ctx u n. fn_entry_state fn u /\ terminates (run_blocks n ctx fn u) ==>
+       frame_result_rel (run_blocks n ctx fn u)
+         (run_blocks (2 * n) ctx fn' u))
+Proof
+  strip_tac >>
+  `wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
+   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    gvs[supply_norm_inv_def] >>
+  drule cfg_norm_round_supply_cases >> strip_tac >> gvs[] >>
+  `MEM pred (block_preds fn target.bb_label)` by
+    gvs[cfgTransformTheory.block_preds_def, listTheory.MEM_FILTER] >>
+  conj_tac >- metis_tac[insert_split_supply_block_count] >>
+  rpt strip_tac >> irule insert_split_supply_fn_fuel >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem supply_iter_fuel:
+  !k s fn fn' s'.
+  supply_norm_inv s fn /\ EVERY label_positions_ok (fn_insts fn) /\
+  cfg_norm_iter_supply k s fn = (fn',s') ==>
+  LENGTH fn.fn_blocks <= LENGTH fn'.fn_blocks /\
+  !ctx u n. fn_entry_state fn u /\ terminates (run_blocks n ctx fn u) ==>
+    frame_result_rel (run_blocks n ctx fn u)
+      (run_blocks (2 ** (LENGTH fn'.fn_blocks - LENGTH fn.fn_blocks) * n)
+         ctx fn' u)
+Proof
+  Induct_on `k` >> rpt gen_tac
+  >- (strip_tac >> gvs[cfg_norm_iter_supply_def] >>
+      metis_tac[supply_run_blocks_frame_refl]) >>
+  strip_tac >>
+  Cases_on `cfg_norm_round_supply s fn` >> PairCases_on `r` >>
+  rename1 `cfg_norm_round_supply s fn = (mid,changed,s1)` >>
+  drule_all supply_round_fuel >> strip_tac >>
+  Cases_on `changed` >> gvs[cfg_norm_iter_supply_def]
+  >- suspend "changed" >>
+  metis_tac[supply_run_blocks_frame_refl]
+QED
+
+Resume supply_iter_fuel[changed]:
+  `supply_norm_inv s1 mid /\ EVERY label_positions_ok (fn_insts mid) /\
+   fn_entry_label mid = fn_entry_label fn` by
+    metis_tac[supply_round_semantics] >>
+  last_x_assum drule_all >> strip_tac >> simp[] >>
+  rpt strip_tac >>
+  `fn_entry_state mid u` by gvs[fn_entry_state_def] >>
+  `frame_result_rel (run_blocks n ctx fn u) (run_blocks (2 * n) ctx mid u)` by
+    metis_tac[] >>
+  `terminates (run_blocks (2 * n) ctx mid u)` by
+    metis_tac[frame_result_rel_terminates] >>
+  `frame_result_rel (run_blocks (2 * n) ctx mid u)
+     (run_blocks (2 * n * 2 ** (LENGTH fn'.fn_blocks - LENGTH mid.fn_blocks))
+        ctx fn' u)` by metis_tac[] >>
+  qmatch_goalsub_abbrev_tac `run_blocks N ctx fn' u` >>
+  `N = 2 * n * 2 ** (LENGTH fn'.fn_blocks - LENGTH mid.fn_blocks)` by
+    (qunabbrev_tac `N` >>
+     `LENGTH fn'.fn_blocks - LENGTH fn.fn_blocks =
+      SUC (LENGTH fn'.fn_blocks - LENGTH mid.fn_blocks)` by simp[] >>
+     pop_assum SUBST1_TAC >>
+     qabbrev_tac `d = LENGTH fn'.fn_blocks - LENGTH mid.fn_blocks` >>
+     REWRITE_TAC[arithmeticTheory.EXP] >>
+     CONV_TAC (AC_CONV (arithmeticTheory.MULT_ASSOC,
+                        arithmeticTheory.MULT_COMM))) >>
+  metis_tac[frame_result_rel_trans]
+QED
+
+Finalise supply_iter_fuel
+
+(* A normalized function needs at most 2 ** b times the fuel, for any b
+   bounding its block count. *)
+Theorem cfg_norm_function_supply_fuel:
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  cfg_norm_function_supply s fn = (fn',s') /\ LENGTH fn'.fn_blocks <= b /\
+  fn_entry_state fn u /\ terminates (run_blocks n ctx fn u) ==>
+  frame_result_rel (run_blocks n ctx fn u) (run_blocks (2 ** b * n) ctx fn' u)
+Proof
+  rewrite_tac[cfg_norm_function_supply_def] >> strip_tac >>
+  `supply_norm_inv s fn` by simp[supply_norm_inv_def] >>
+  drule_all supply_iter_fuel >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  `2 ** (LENGTH fn'.fn_blocks - LENGTH fn.fn_blocks) * n <= 2 ** b * n` by
+    (irule arithmeticTheory.LESS_MONO_MULT >>
+     simp[arithmeticTheory.EXP_BASE_LE_MONO]) >>
+  `run_blocks (2 ** b * n) ctx fn' u =
+   run_blocks (2 ** (LENGTH fn'.fn_blocks - LENGTH fn.fn_blocks) * n) ctx fn' u` by
+    metis_tac[run_blocks_terminates_mono, frame_result_rel_terminates] >>
+  pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC
+QED
+
 (* A split block's ASSIGNs and JMP touch no memory; every other
    instruction keeps its operands up to the renaming of PHI values. *)
 Theorem cfg_norm_function_supply_frame_sim:
@@ -1404,6 +1525,336 @@ Proof
   drule_all cfg_norm_stage_fn_ok >> strip_tac >>
   metis_tac[cfg_norm_function_supply_frame_sim,
             cfg_norm_function_supply_frame_sim_rf]
+QED
+
+(* ===== Fuel-carrying function simulation (to move to o1PassLift) ===== *)
+
+(* Fuel through calls: a callee runs on the fuel of its caller's block, so
+   a per-function bound f is applied once per call level. *)
+Definition lift_fuel_def:
+  lift_fuel f 0 = 0 /\
+  lift_fuel f (SUC n) = f (SUC (lift_fuel f n))
+End
+
+(* fn_bisim's forward half with the target fuel a function of the source
+   fuel. *)
+Definition fn_bisim_fuel_def:
+  fn_bisim_fuel f fn fn' <=>
+    fn'.fn_name = fn.fn_name /\ fn_entry_label fn' = fn_entry_label fn /\
+    !ctx s fuel.
+      fn_entry_state fn s /\ terminates (run_blocks fuel ctx fn s) ==>
+      frame_result_rel (run_blocks fuel ctx fn s)
+                       (run_blocks (f fuel) ctx fn' s)
+End
+
+(* bounded_call_agree with the callee fuel in B a function g of A's. *)
+Definition bounded_call_agree_fuel_def:
+  bounded_call_agree_fuel g n A B <=>
+    !name f s k.
+      k < n /\ lookup_function name A.ctx_functions = SOME f /\
+      fn_entry_state f s /\ terminates (run_blocks k A f s) ==>
+      ?h. lookup_function name B.ctx_functions = SOME h /\
+          fn_entry_label h = fn_entry_label f /\
+          frame_result_rel (run_blocks k A f s) (run_blocks (g k) B h s)
+End
+
+Theorem bounded_call_agree_fuel_mono:
+  bounded_call_agree_fuel g n A B /\ m <= n ==> bounded_call_agree_fuel g m A B
+Proof
+  rw[bounded_call_agree_fuel_def] >> first_x_assum irule >> simp[]
+QED
+
+Theorem bounded_call_agree_fuel_step_inst:
+  bounded_call_agree_fuel g n A B /\ k < n /\ g k <= j /\ k <= j /\
+  terminates (step_inst k A inst s) ==>
+  step_result_rel (step_inst k A inst s) (step_inst j B inst s)
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = INVOKE`
+  >- (qpat_x_assum `terminates _` mp_tac >>
+      simp[Once step_inst_def] >>
+      Cases_on `decode_invoke inst` >> simp[passSimulationDefsTheory.terminates_def] >>
+      PairCases_on `x` >>
+      Cases_on `lookup_function x0 A.ctx_functions` >> simp[passSimulationDefsTheory.terminates_def] >>
+      Cases_on `eval_operands x1 s` >> simp[passSimulationDefsTheory.terminates_def] >>
+      rename1 `lookup_function x0 A.ctx_functions = SOME f` >>
+      rename1 `eval_operands x1 s = SOME args` >>
+      Cases_on `setup_callee f args s` >> simp[passSimulationDefsTheory.terminates_def] >>
+      rename1 `setup_callee f args s = SOME cs` >>
+      pure_rewrite_tac[GSYM invoke_result_def] >>
+      pure_rewrite_tac[GSYM passSimulationDefsTheory.terminates_def] >> strip_tac >>
+      `terminates (run_blocks k A f cs)` by
+        (Cases_on `run_blocks k A f cs` >>
+         gvs[invoke_result_def, passSimulationDefsTheory.terminates_def]) >>
+      `fn_entry_state f cs` by metis_tac[setup_callee_fn_entry_state] >>
+      qpat_x_assum `bounded_call_agree_fuel _ _ _ _` mp_tac >>
+      pure_rewrite_tac[bounded_call_agree_fuel_def] >>
+      disch_then (qspecl_then [`x0`, `f`, `cs`, `k`] mp_tac) >>
+      asm_rewrite_tac[] >> strip_tac >>
+      `setup_callee h args s = SOME cs` by
+        metis_tac[setup_callee_entry_label] >>
+      `run_blocks j B h cs = run_blocks (g k) B h cs` by
+        (irule run_blocks_terminates_mono >> simp[] >>
+         metis_tac[frame_result_rel_terminates]) >>
+      asm_simp_tac pure_ss [step_inst_def] >>
+      pure_rewrite_tac[GSYM invoke_result_def] >>
+      simp[] >>
+      irule frame_result_rel_invoke >> asm_rewrite_tac[]) >>
+  gvs[step_inst_non_invoke] >>
+  Cases_on `step_inst_base inst s` >>
+  gvs[passSimulationDefsTheory.terminates_def, step_result_rel_def, frame_result_rel_def]
+QED
+
+Theorem bounded_call_agree_fuel_exec_block:
+  bounded_call_agree_fuel g n A B /\ k < n /\ g k <= j /\ k <= j /\
+  terminates (exec_block k A bb s) ==>
+  step_result_rel (exec_block k A bb s) (exec_block j B bb s)
+Proof
+  qid_spec_tac `s` >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `terminates _` mp_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[passSimulationDefsTheory.terminates_def] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  strip_tac >>
+  `terminates (step_inst k A inst s)` by
+    (Cases_on `step_inst k A inst s` >> gvs[passSimulationDefsTheory.terminates_def]) >>
+  drule_all bounded_call_agree_fuel_step_inst >> strip_tac >>
+  Cases_on `step_inst k A inst s` >>
+  Cases_on `step_inst j B inst s` >>
+  qpat_x_assum `step_result_rel _ _`
+    (mp_tac o PURE_REWRITE_RULE [step_result_rel_def, frame_result_rel_def,
+      pairTheory.pair_case_def, exec_result_case_def]) >>
+  strip_tac >> gvs[]
+  >- suspend "continuing_step" >>
+  CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[step_result_rel_def, frame_result_rel_def]
+QED
+
+Resume bounded_call_agree_fuel_exec_block[continuing_step]:
+  rename1 `step_inst k A inst s = OK v` >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+      simp[step_result_rel_def, frame_result_rel_def] >>
+      Cases_on `v.vs_halted` >> simp[step_result_rel_def, frame_result_rel_def]) >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `terminates (exec_block k A bb (v with vs_inst_idx := SUC s.vs_inst_idx))`
+    by gvs[passSimulationDefsTheory.terminates_def] >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then (qspec_then `v with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> strip_tac >>
+  CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[]
+QED
+
+Finalise bounded_call_agree_fuel_exec_block
+
+(* With g strictly increasing, a frame's run in A on n needs any fuel above
+   g of every call level below n in B. *)
+Theorem bounded_call_agree_fuel_run_blocks:
+  !n f s j. bounded_call_agree_fuel g n A B /\
+    (!i i'. i < i' ==> g i < g i') /\ n <= j /\ (!k. k < n ==> g k < j) /\
+    terminates (run_blocks n A f s) ==>
+    frame_result_rel (run_blocks n A f s) (run_blocks j B f s)
+Proof
+  Induct_on `n` >- simp[Once run_blocks_def, passSimulationDefsTheory.terminates_def] >>
+  rpt gen_tac >> strip_tac >>
+  `?j'. j = SUC j'` by (Cases_on `j` >> gvs[]) >> gvs[] >>
+  `g n < SUC j'` by simp[] >>
+  `n < SUC n /\ g n <= j' /\ n <= j'` by simp[] >>
+  qpat_x_assum `terminates _` mp_tac >>
+  simp[run_blocks_unfold] >>
+  Cases_on `lookup_block s.vs_current_bb f.fn_blocks` >> simp[passSimulationDefsTheory.terminates_def] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac >> simp[run_block_def, passSimulationDefsTheory.terminates_def] >>
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `exec_block n A bb ps` >>
+  `terminates (exec_block n A bb ps)` by
+    (Cases_on `exec_block n A bb ps` >> gvs[passSimulationDefsTheory.terminates_def]) >>
+  drule_all bounded_call_agree_fuel_exec_block >> strip_tac >>
+  Cases_on `exec_block n A bb ps` >>
+  Cases_on `exec_block j' B bb ps` >>
+  qpat_x_assum `step_result_rel _ _`
+    (mp_tac o PURE_REWRITE_RULE [step_result_rel_def, frame_result_rel_def,
+      pairTheory.pair_case_def, exec_result_case_def]) >>
+  strip_tac >> gvs[]
+  >- suspend "run_continuation" >>
+  gvs[run_blocks_unfold, run_block_def, Abbr `ps`, frame_result_rel_def]
+QED
+
+Resume bounded_call_agree_fuel_run_blocks[run_continuation]:
+  rename1 `exec_block n A bb ps = OK v` >>
+  Cases_on `v.vs_halted`
+  >- gvs[run_blocks_unfold, run_block_def, Abbr `ps`, frame_result_rel_def] >>
+  `bounded_call_agree_fuel g n A B` by
+    (irule bounded_call_agree_fuel_mono >> qexists_tac `SUC n` >> simp[]) >>
+  `terminates (run_blocks n A f v)` by gvs[passSimulationDefsTheory.terminates_def] >>
+  `!k. k < n ==> g k < j'` by
+    (rpt strip_tac >> `g k < g n` by simp[] >> simp[]) >>
+  first_x_assum (qspecl_then [`f`, `v`, `j'`] mp_tac) >> simp[] >>
+  strip_tac >>
+  gvs[run_blocks_unfold, run_block_def, Abbr `ps`]
+QED
+
+Finalise bounded_call_agree_fuel_run_blocks
+
+Theorem lift_fuel_ge:
+  (!n. n <= f n) ==> !n. n <= lift_fuel f n
+Proof
+  strip_tac >> Induct >> simp[lift_fuel_def] >>
+  first_x_assum (qspec_then `SUC (lift_fuel f n)` mp_tac) >> simp[]
+QED
+
+Theorem lift_fuel_strict_mono:
+  (!n. n <= f n) ==> !i j. i < j ==> lift_fuel f i < lift_fuel f j
+Proof
+  strip_tac >> Induct_on `j` >> simp[] >> rpt strip_tac >>
+  `lift_fuel f j < lift_fuel f (SUC j)` by
+    (simp[lift_fuel_def] >>
+     irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+     qexists_tac `SUC (lift_fuel f j)` >> simp[]) >>
+  Cases_on `i = j` >> gvs[] >>
+  `i < j` by simp[] >> res_tac >> simp[]
+QED
+
+Theorem fn_bisim_fuel_bounded_call_agree:
+  LIST_REL (fn_bisim_fuel fm) A.ctx_functions B.ctx_functions /\
+  (!n. n <= fm n) ==>
+  !n. bounded_call_agree_fuel (lift_fuel fm) n A B
+Proof
+  strip_tac >>
+  `!i j. i < j ==> lift_fuel fm i < lift_fuel fm j` by
+    metis_tac[lift_fuel_strict_mono] >>
+  `!n. n <= lift_fuel fm n` by metis_tac[lift_fuel_ge] >>
+  Induct >- simp[bounded_call_agree_fuel_def] >>
+  simp[bounded_call_agree_fuel_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `k < n`
+  >- (qpat_x_assum `bounded_call_agree_fuel _ _ _ _` mp_tac >>
+      simp[bounded_call_agree_fuel_def] >> disch_then irule >> simp[]) >>
+  `k = n` by simp[] >> gvs[] >>
+  Cases_on `k` >- gvs[Once run_blocks_def, passSimulationDefsTheory.terminates_def] >>
+  rename1 `run_blocks (SUC m) A f s` >>
+  `!i. i < SUC m ==> lift_fuel fm i < SUC (lift_fuel fm m)` by
+    (rpt strip_tac >> Cases_on `i = m` >> simp[] >>
+     `lift_fuel fm i < lift_fuel fm m` by simp[] >> simp[]) >>
+  `m <= lift_fuel fm m` by simp[] >>
+  `frame_result_rel (run_blocks (SUC m) A f s)
+     (run_blocks (SUC (lift_fuel fm m)) B f s)` by
+    (irule bounded_call_agree_fuel_run_blocks >> simp[] >>
+     qexists_tac `lift_fuel fm` >> simp[]) >>
+  `OPTREL (fn_bisim_fuel fm) (lookup_function name A.ctx_functions)
+                             (lookup_function name B.ctx_functions)` by
+    (irule list_rel_lookup_function >> simp[fn_bisim_fuel_def]) >>
+  Cases_on `lookup_function name B.ctx_functions` >> gvs[] >>
+  rename1 `fn_bisim_fuel fm f h` >>
+  qpat_x_assum `fn_bisim_fuel fm f h` mp_tac >>
+  simp[fn_bisim_fuel_def] >> strip_tac >>
+  `terminates (run_blocks (SUC (lift_fuel fm m)) B f s)` by
+    metis_tac[frame_result_rel_terminates] >>
+  first_x_assum (qspecl_then [`B`, `s`, `SUC (lift_fuel fm m)`] mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[lift_fuel_def] >> metis_tac[frame_result_rel_trans]
+QED
+
+(* The context-level fuel bound: run_context on lift_fuel fm fuel. *)
+Theorem fn_bisim_fuel_run_context:
+  LIST_REL (fn_bisim_fuel fm) C.ctx_functions C'.ctx_functions /\
+  (!n. n <= fm n) /\ C'.ctx_entry = C.ctx_entry /\
+  (!fuel v t. run_context fuel C vs <> IntRet v t) /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  terminates (run_context fuel C vs) ==>
+  dead_result_rel D (run_context fuel C vs)
+    (run_context (lift_fuel fm fuel) C' vs)
+Proof
+  strip_tac >>
+  `bounded_call_agree_fuel (lift_fuel fm) (SUC fuel) C C'` by
+    metis_tac[fn_bisim_fuel_bounded_call_agree] >>
+  Cases_on `C.ctx_entry` >> gvs[run_context_def, passSimulationDefsTheory.terminates_def] >>
+  Cases_on `lookup_function x C.ctx_functions` >> gvs[passSimulationDefsTheory.terminates_def] >>
+  rename1 `lookup_function x C.ctx_functions = SOME fn` >>
+  Cases_on `fn_entry_label fn` >> gvs[run_function_def, passSimulationDefsTheory.terminates_def] >>
+  rename1 `fn_entry_label fn = SOME lbl` >>
+  `fn_entry_state fn
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)` by
+    (irule context_fn_entry_state >> simp[]) >>
+  qpat_x_assum `bounded_call_agree_fuel _ _ _ _` mp_tac >>
+  simp[bounded_call_agree_fuel_def] >>
+  disch_then (qspecl_then [`x`, `fn`,
+    `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
+    `fuel`] mp_tac) >>
+  simp[passSimulationDefsTheory.terminates_def] >> strip_tac >>
+  simp[run_function_def] >>
+  irule unit_result_rel_dead_result_rel >>
+  irule frame_result_rel_unit >> simp[]
+QED
+
+(* ===== CFGNormalization's fuel bound ===== *)
+
+Theorem le_exp2_mult[local]:
+  (n:num) <= 2 ** m * n
+Proof
+  `0 < (2:num) ** m` by simp[] >>
+  Cases_on `(2:num) ** m` >> gvs[arithmeticTheory.MULT_CLAUSES]
+QED
+
+(* The fuel the normalized context needs: the per-function bound
+   2 ** (most blocks of any output function), lifted through calls. *)
+Definition cfg_norm_fuel_def:
+  cfg_norm_fuel C' =
+    lift_fuel
+      (\n. 2 ** MAX_LIST (MAP (\fn. LENGTH fn.fn_blocks) C'.ctx_functions) * n)
+End
+
+Theorem cfg_norm_stage_fn_bisim_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions ==>
+  LIST_REL
+    (fn_bisim_fuel
+       (\n. 2 ** MAX_LIST (MAP (\fn. LENGTH fn.fn_blocks) C'.ctx_functions) * n))
+    C.ctx_functions C'.ctx_functions
+Proof
+  strip_tac >> drule cfg_norm_stage_functions >> strip_tac >>
+  gvs[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `MEM (EL n C.ctx_functions) C.ctx_functions` by simp[listTheory.EL_MEM] >>
+  drule_all cfg_norm_stage_fn_ok >> strip_tac >>
+  `fn_bisim (EL n C.ctx_functions) (EL n C'.ctx_functions)` by
+    (irule cfg_norm_function_supply_fn_bisim >> metis_tac[]) >>
+  `LENGTH (EL n C'.ctx_functions).fn_blocks <=
+   MAX_LIST (MAP (\fn. LENGTH fn.fn_blocks) C'.ctx_functions)` by
+    (irule rich_listTheory.MAX_LIST_PROPERTY >>
+     simp[listTheory.MEM_MAP] >> metis_tac[listTheory.EL_MEM]) >>
+  gvs[fn_bisim_def, fn_bisim_fuel_def] >> rpt strip_tac >>
+  once_rewrite_tac[arithmeticTheory.MULT_COMM] >>
+  irule cfg_norm_function_supply_fuel >> simp[] >> metis_tac[]
+QED
+
+(* CFGNormalization's run on fuel lets the output run on cfg_norm_fuel C'
+   fuel. *)
+Theorem cfg_norm_stage_run_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  terminates (run_context fuel C vs) ==>
+  dead_result_rel D (run_context fuel C vs)
+    (run_context (cfg_norm_fuel C' fuel) C' vs)
+Proof
+  strip_tac >>
+  drule_all cfg_norm_stage_fn_bisim_fuel >> strip_tac >>
+  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
+  `!fuel v t. run_context fuel C vs <> IntRet v t` by
+    (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
+     `MEM fn C.ctx_functions /\ fn.fn_name = name` by
+       metis_tac[venomInstTheory.lookup_function_MEM,
+                 ctxLookupAgreeHelpersTheory.lookup_function_selected_name] >>
+     gvs[o1_ctx_shape_def, o1_fn_shape_def, listTheory.EVERY_MEM,
+         entry_fn_no_return_def] >> metis_tac[]) >>
+  simp[cfg_norm_fuel_def] >>
+  irule fn_bisim_fuel_run_context >> simp[le_exp2_mult] >>
+  once_rewrite_tac[arithmeticTheory.MULT_COMM] >> first_assum ACCEPT_TAC
 QED
 
 (* Row 8 (o1_lowered_inv and wf_ssa) to row 9 (o1_lowered_inv). *)
