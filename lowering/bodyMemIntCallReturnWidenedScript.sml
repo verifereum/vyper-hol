@@ -6,6 +6,7 @@ Theory bodyMemIntCallReturnWidened
 Ancestors
   bodyMemoryDefs intCallReturnMem intCallReturnWidenMem
   internalReturnValueEndpointMem internalReturnBytestringMem
+  internalReturnCompoundEndpointMem
   intCallReturnDirectBranchesMem stmtSimReturn compileEnv valueEncoding
   compileVyper
 
