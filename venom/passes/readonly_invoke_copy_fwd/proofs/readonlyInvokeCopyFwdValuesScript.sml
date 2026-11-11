@@ -114,3 +114,54 @@ Proof
   disch_then (fn th => gvs[th]) >>
   metis_tac[lower_dload_translate_comparisons]
 QED
+
+Theorem ricf_frame_agree_update_var:
+  ricf_frame_agree D X sites PG G tn s t /\
+  ricf_value_agree sites p m x y ==>
+  ricf_frame_agree D X sites PG (set_prov G [out] p)
+    (tn with t_var := set_var_taint tn.t_var [out] m)
+    (update_var out x s) (update_var out y t)
+Proof
+  simp[ricf_frame_agree_def, taint_agree_def, update_var_def,
+       set_var_taint_def, ld_shared_agree_def, op_taint_def,
+       ircf_cross_def, set_prov_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> simp[] >>
+  TRY (gvs[venom_state_component_equality] >> NO_TAC) >>
+  Cases_on `v = out` >> gvs[FAPPLY_FUPDATE_THM] >>
+  Cases_on `p` >> gvs[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+                       word_agree_except_def] >> metis_tac[]
+QED
+
+Theorem ricf_frame_agree_eval_phis:
+  !ins s t s1 tn G.
+    ricf_frame_agree D X sites PG G tn s t /\ eval_phis s ins = OK s1 ==>
+    ?t1. eval_phis t ins = OK t1 /\
+      ricf_frame_agree D X sites PG (phis_prov s.vs_prev_bb G ins)
+        (tn with t_var := phis_taint s.vs_prev_bb tn ins) s1 t1
+Proof
+  Induct_on `ins`
+  >- (simp[eval_phis_def, phis_taint_def, phis_prov_def] >>
+      simp[ricf_frame_agree_def, taint_agree_def, op_taint_def,
+           ld_shared_agree_def, ircf_cross_def]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (qpat_x_assum `eval_phis s (h::ins) = _` mp_tac >>
+      simp[Once eval_phis_def, AllCaseEqs()] >> strip_tac >>
+      gvs[eval_one_phi_def, AllCaseEqs()] >>
+      `?v'. eval_operand val_op t = SOME v' /\
+            ricf_value_agree sites (op_prov G val_op)
+              (op_taint tn val_op) v v'` by
+        (drule_all ricf_frame_agree_operand >> simp[]) >>
+      `s.vs_prev_bb = t.vs_prev_bb` by
+        (drule ricf_frame_agree_normalized >>
+         disch_then (mp_tac o MATCH_MP taint_agree_frame) >>
+         disch_then (mp_tac o Q.AP_TERM `\u. u.vs_prev_bb`) >> simp[]) >>
+      first_x_assum drule_all >> strip_tac >>
+      qexists_tac `update_var out v' t1` >>
+      simp[Once eval_phis_def, eval_one_phi_def] >>
+      simp[phis_taint_def, phi_taint_def, phis_prov_def, phi_prov_def] >>
+      drule_all ricf_frame_agree_update_var >> gvs[]) >>
+  gvs[eval_phis_def, phis_taint_def, phis_prov_def] >>
+  simp[ricf_frame_agree_def, taint_agree_def, op_taint_def,
+       ld_shared_agree_def, ircf_cross_def]
+QED
