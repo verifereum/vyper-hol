@@ -68,5 +68,6 @@ Proof
           goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
       rpt strip_tac >> gvs[] >> metis_tac[]) >>
   Cases_on `d` >> fs[return_buf_ptr_def] >> PairCases_on `x` >>
-  gvs[return_buf_ptr_def] >> metis_tac[ptr_covers_old_transport]
+  gvs[return_buf_ptr_def] >>
+  drule_all ptr_covers_old_transport >> simp[]
 QED

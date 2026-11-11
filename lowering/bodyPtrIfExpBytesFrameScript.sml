@@ -100,14 +100,14 @@ QED
 
 Theorem bytes_writer_step_ambient:
   (i.inst_opcode = MLOAD \/ i.inst_opcode = ADD \/
-   i.inst_opcode = AND \/ i.inst_opcode = MCOPY) /\
+   i.inst_opcode = AND \/ i.inst_opcode = NOT \/ i.inst_opcode = MCOPY) /\
   step_inst_base i s = OK u ==>
   u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
   u.vs_transient = s.vs_transient
 Proof
   strip_tac >> qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   simp[step_inst_base_opcode_eqs] >>
-  gvs[exec_read1_def, exec_pure2_def, AllCaseEqs(), update_var_def,
+  gvs[exec_read1_def, exec_pure1_def, exec_pure2_def, AllCaseEqs(), update_var_def,
       mcopy_def, write_memory_with_expansion_def, write_memory_def, expand_memory_def] >>
   strip_tac >> gvs[]
 QED
@@ -115,7 +115,7 @@ QED
 Theorem bytes_writer_seq_ambient:
   !insts s sf.
   EVERY (\i. i.inst_opcode = MLOAD \/ i.inst_opcode = ADD \/
-    i.inst_opcode = AND \/ i.inst_opcode = MCOPY) insts /\
+    i.inst_opcode = AND \/ i.inst_opcode = NOT \/ i.inst_opcode = MCOPY) insts /\
   run_inst_seq insts s = OK sf ==>
   sf.vs_call_ctx = s.vs_call_ctx /\ sf.vs_accounts = s.vs_accounts /\
   sf.vs_transient = s.vs_transient
@@ -135,7 +135,7 @@ Theorem bytes_writer_ambient_effects:
 Proof
   strip_tac >>
   `EVERY (\i. i.inst_opcode = MLOAD \/ i.inst_opcode = ADD \/
-     i.inst_opcode = AND \/ i.inst_opcode = MCOPY) (emitted_insts sa sb)` by
+     i.inst_opcode = AND \/ i.inst_opcode = NOT \/ i.inst_opcode = MCOPY) (emitted_insts sa sb)` by
     (qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
      simp[compile_store_bytestring_def, compile_bytestring_copy_len_def,
           comp_bind_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>

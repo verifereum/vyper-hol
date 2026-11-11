@@ -49,7 +49,7 @@ Theorem for_endpoint_iterator_source:
   do v1 <- (do raw <- eval_expr cx e1; read_result cx raw od);
      v2 <- (do raw <- eval_expr cx e2; read_result cx raw od);
      rl <- lift_sum (get_range_limits v1 v2);
-     return (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od
+     return (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od
 Proof
   rpt gen_tac >> simp[Once evaluate_def, FUN_EQ_THM, bind_def] >>
   qx_gen_tac `es` >> Cases_on `eval_expr cx e1 es` >>
@@ -61,7 +61,7 @@ Proof
   Cases_on `raw2` >> simp[] >>
   rename1 `read_result cx tv2 es3` >>
   Cases_on `read_result cx tv2 es3` >> rename1 `_ = (r2, es4)` >>
-  Cases_on `r2` >> simp[]
+  Cases_on `r2` >> simp[listTheory.MAP_GENLIST, combinTheory.o_DEF]
 QED
 
 Theorem for_endpoint_stmt_source:
@@ -73,7 +73,7 @@ Theorem for_endpoint_stmt_source:
      rl <- lift_sum (get_range_limits v1 v2);
      check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
      eval_for cx tyv id body
-       (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od
+       (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od
 Proof
   rpt gen_tac >> strip_tac >> pure_once_rewrite_tac[Once evaluate_def] >>
   simp[LET_THM, lift_option_type_def, for_endpoint_iterator_source,

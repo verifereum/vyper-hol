@@ -11,8 +11,8 @@ Theorem for_body_admissible:
   gas_admissible (eval_stmts cx stmts)
     (stmt_res_ok (InLoop exit_lbl incr_lbl))
     (es with <| scopes :=
-      (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                         value := v; popped := [] |>)) :: es.scopes;
+      (FEMPTY |+ (id, (<| assignable := F; type := tyv;
+                         value := v; popped := [] |> : scope_entry))) :: es.scopes;
                 gas_obs := [] |>)
 Proof
   strip_tac >> simp[gas_admissible_def] >> rpt gen_tac >> strip_tac >>
@@ -32,8 +32,8 @@ Theorem for_range_body_admissible:
   gas_admissible (eval_stmts cx stmts)
     (stmt_res_ok (InLoop exit_lbl incr_lbl))
     (es with <| scopes :=
-      (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                         value := EL k vs; popped := [] |>)) :: es.scopes;
+      (FEMPTY |+ (id, (<| assignable := F; type := tyv;
+                         value := EL k vs; popped := [] |> : scope_entry))) :: es.scopes;
                 gas_obs := [] |>)
 Proof
   strip_tac >> irule for_body_admissible >>
@@ -47,8 +47,8 @@ Theorem for_push_scope_marked_ptr:
   gas_marked_exec_ptr D (ctx,func) PG (push_scope_with_var id tyv v)
     (es,s,G,tn) [] (INL ())
     (es with scopes :=
-      (FEMPTY |+ (id, <|assignable := F; type := tyv;
-                        value := v; popped := []|>))::es.scopes) gf tf (OK t)
+      (FEMPTY |+ (id, (<|assignable := F; type := tyv;
+                        value := v; popped := []|> : scope_entry)))::es.scopes) gf tf (OK t)
 Proof
   simp[gas_marked_exec_ptr_def, push_scope_with_var_def, return_def,
        evaluation_state_component_equality, combinTheory.o_DEF]
@@ -70,16 +70,16 @@ Theorem for_body_outer_preserves:
     P ei /\ lookup_scopes id ei.scopes = NONE /\ k < N /\
     eval_stmts cx stmts
       (ei with <| scopes :=
-        (FEMPTY |+ (id, <|assignable := F; type := tyv;
-          value := IntV (n1 + &k); popped := []|>)) :: ei.scopes;
+        (FEMPTY |+ (id, (<|assignable := F; type := tyv;
+          value := IntV (n1 + &k); popped := []|> : scope_entry))) :: ei.scopes;
         gas_obs := obs |>) = (r,ee) /\
     (r = INL () \/ r = INR ContinueException) /\
     ee.scopes = sc :: rest ==> P (ee with scopes := rest)) /\
   P es /\ lookup_scopes id es.scopes = NONE /\ k < N /\
   eval_stmts cx stmts
     (es with <| scopes :=
-      (FEMPTY |+ (id, <|assignable := F; type := tyv;
-        value := IntV (n1 + &k); popped := []|>)) :: es.scopes;
+      (FEMPTY |+ (id, (<|assignable := F; type := tyv;
+        value := IntV (n1 + &k); popped := []|> : scope_entry))) :: es.scopes;
       gas_obs := obs |>) = (r,ee) /\
   (r = INL () \/ r = INR ContinueException) /\ ee.scopes = sc :: rest ==>
   P (ee with scopes := rest) /\ lookup_scopes id rest = NONE
