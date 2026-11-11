@@ -407,7 +407,7 @@ Proof
 QED
 
 Theorem immutable_ctor_pointer_post[local]:
-  post_value_type cenv e = expr_type e /\
+  expr_has_effect e /\ post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' u /\
   wb_frame cenv initial es' sa s0 u /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\

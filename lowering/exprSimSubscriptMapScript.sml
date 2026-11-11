@@ -713,6 +713,8 @@ Theorem compile_mapping_subscript_outcome:
        eval_operand p.ptr_operand t =
          SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
        stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
+       (~expr_has_effect (Subscript ann obj idx) ==>
+          pure_frame cenv func es sa s0 t) /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r)
@@ -864,6 +866,8 @@ Proof
      eval_operand slot out = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
      stmt_state_rel ctx func cenv cx (fin with gas_obs := []) out /\
      wb_frame cenv (mid with gas_obs := []) (fin with gas_obs := []) sm t out /\
+     (~expr_has_effect idx ==>
+        pure_frame cenv func (mid with gas_obs := []) sm t out) /\
      out.vs_current_bb = sb.cs_current_bb /\
      out.vs_inst_idx = LENGTH sb.cs_current_insts` by
     (drule compile_mapping_index_success_tail >>
@@ -875,6 +879,25 @@ Proof
      qpat_assum `wb_frame cenv (mid with gas_obs := []) _ sm t out`
        (irule_at Any) >>
      qpat_assum `stmt_state_rel _ _ _ _ es s0` (irule_at Any) >> simp[]) >>
+  `~expr_has_effect (Subscript ann obj idx) ==> pure_frame cenv func es sa s0 out` by
+    (rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+     strip_tac >>
+     `pure_frame cenv func es sa s0 t` by
+       (qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >> simp[]) >>
+     `pure_frame cenv func (mid with gas_obs := []) sm t out` by
+       (qpat_x_assum `~expr_has_effect idx ==> _` mp_tac >> simp[]) >>
+     `!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+              FLOOKUP out.vs_allocas aid = SOME b` by
+       (qpat_assum `wb_frame cenv _ _ sm t out` mp_tac >>
+        pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
+        strip_tac >> first_assum ACCEPT_TAC) >>
+     `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+            lookup_var x t = SOME w` by
+       (qpat_assum `wb_frame cenv es _ sa s0 t` mp_tac >>
+        pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
+        strip_tac >> first_assum ACCEPT_TAC) >>
+     match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+     qexistsl_tac [`mid with gas_obs := []`, `sm`, `t`] >> simp[]) >>
   `storage_mapping_region cx tr base_slot (HashMapT kt vt)` by
     (qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >> simp[]) >>
   qexistsl_tac [`INL selected`, `fin with gas_obs := []`, `OK out`] >>
