@@ -41,22 +41,8 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem extract_zero_or_one[local]:
-  extract_asm_result s 1w ro rs rr = SOME (w,t) ==>
-  w = 0w \/ w = 1w
-Proof
-  simp[extract_asm_result_def] >>
-  namedCases_on `rr` ["", "r"] >> simp[] >>
-  PairCases_on `r` >> simp[] >>
-  Cases_on `r1.contexts` >> simp[] >>
-  rename1 `h :: tl` >> Cases_on `tl` >> simp[] >>
-  PairCases_on `h` >> simp[] >>
-  namedCases_on `r0` ["err", "res"] >> simp[] >>
-  Cases_on `res` >> simp[]
-QED
-
 Theorem call_zero_or_one[local]:
-  MEM name ["CALL"; "STATICCALL"] /\
+  MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"] /\
   asm_step_op FEMPTY name s = AsmOK t ==>
   ?w stk. t.as_stack = w :: stk /\ (w = 0w \/ w = 1w)
 Proof
@@ -64,21 +50,9 @@ Proof
   gvs[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
       asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def,
       asm_step_extcall_def] >>
-  gvs[asm_exec_call_def, asm_exec_staticcall_def, AllCaseEqs()] >>
+  gvs[asm_exec_call_def, asm_exec_staticcall_def, asm_exec_delegatecall_def,
+      AllCaseEqs()] >>
   drule consume_zero_or_one >> simp[]
-QED
-
-Theorem delegatecall_zero_or_one[local]:
-  asm_step_op FEMPTY "DELEGATECALL" s = AsmOK t ==>
-  ?w stk. t.as_stack = w :: stk /\ (w = 0w \/ w = 1w)
-Proof
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
-       asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def,
-       asm_step_extcall_def] >>
-  simp[asm_exec_delegatecall_def] >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  drule extract_zero_or_one >> strip_tac >>
-  gvs[asm_next_def]
 QED
 
 Theorem callcode_not_ok[local]:
@@ -114,7 +88,7 @@ Proof
   irule concrete_zero_or_one_lift >>
   goal_assum (drule_at Any) >> rpt strip_tac >>
   metis_tac[compare_zero_or_one, call_zero_or_one,
-            delegatecall_zero_or_one, callcode_not_ok, MEM]
+            callcode_not_ok, MEM]
 QED
 
 Theorem one_ne_zero_bytes32[local]:
