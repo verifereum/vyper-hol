@@ -130,6 +130,26 @@ Proof
   TRY (gvs[comp_bind_def] >> rpt (pairarg_tac >> gvs[])) >> metis_tac[emit_op_var]
 QED
 
+Theorem emit_op_not_label:
+  !opc ops st x st'. emit_op opc ops st = (x, st') ==> !l. x <> Label l
+Proof
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem compile_ptr_load_not_label:
+  !c i loc op st x st'.
+    compile_ptr_load c i loc op st = (x, st') ==> !l. x <> Label l
+Proof
+  Cases_on `loc` >>
+  simp_tac (srw_ss()) [compile_ptr_load_def, compile_imm_load_word_def] >>
+  rpt gen_tac >> TRY (Cases_on `c`) >> TRY (Cases_on `i`) >>
+  simp_tac (srw_ss()) [] >> rpt strip_tac >>
+  TRY (gvs[comp_bind_def] >> rpt (pairarg_tac >> gvs[])) >>
+  metis_tac[emit_op_not_label]
+QED
+
 Theorem fuel_ok_membership:
   (!needle elems Wv E. fuel_ok Wv {} E (emit_membership_eqs needle elems)) /\
   (!acc cs Wv E. fuel_ok Wv {} E (fold_membership_or acc cs)) /\
@@ -323,7 +343,8 @@ Theorem fuel_ok_bind_array_membership_loop:
     !m needle arr_op sz ob bo ii Wv E.
       fuel_ok Wv {} E m /\
       (!st x st'. m st = (x, st') ==>
-                  !y. x = Var y ==> var_below st'.cs_next_var y) ==>
+                  (!y. x = Var y ==> var_below st'.cs_next_var y) /\
+                  !l. x <> Label l) ==>
       fuel_ok Wv {} E
         (comp_bind m (\len_op.
            compile_array_membership_loop needle arr_op len_op sz ob loader
@@ -335,7 +356,8 @@ Proof
         compile_array_membership_loop needle arr_op len_op sz ob loader bo ii))`
     suffices_by simp[] >>
   match_mp_tac fuel_okS_bind >>
-  qexistsl_tac [`\c st. !x. c = Var x ==> var_below st.cs_next_var x`,
+  qexistsl_tac [`\c st. (!x. c = Var x ==> var_below st.cs_next_var x) /\
+                         !l. c <> Label l`,
                 `E`, `E`] >>
   simp[pred_setTheory.SUBSET_DEF] >> rpt conj_tac
   >- simp[fuel_okS_of_ok]
@@ -355,5 +377,5 @@ Proof
   match_mp_tac (MP_CANON fuel_ok_bind_array_membership_loop) >>
   simp[fuel_ok_compile_ptr_load, fuel_ok_return, comp_return_def,
        compile_ptr_load_var] >>
-  metis_tac[compile_ptr_load_var]
+  metis_tac[compile_ptr_load_var, compile_ptr_load_not_label]
 QED
