@@ -18,15 +18,10 @@ Theorem no_ctor_lookup:
     vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
       SOME (Payable, F, [], [], NoneT, [])
 Proof
-  Induct_on `tops` >- simp[classify_functions_def, lookup_function_def] >>
-  qabbrev_tac `acc = classify_functions tops` >>
-  PairCases_on `acc` >>
-  Cases_on `h` >>
-  fs[classify_functions_def, classify_function_def, lookup_function_def] >>
   rpt gen_tac >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  simp[Once (oneline lookup_function_def)] >>
-  Cases_on `v` >> simp[]
+  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
+    ctorDeployDefsTheory.classify_functions_ctor_lookup >>
+  simp[]
 QED
 
 Theorem no_ctor_args:
