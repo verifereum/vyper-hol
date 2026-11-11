@@ -248,6 +248,341 @@ val im_expr = ``\cx e. !A R st res st'.
   ^safe_accesses A R (accesses_expr e) (int_calls_expr e) /\
   eval_expr cx e st = (res,st') ==> ^immutable_frame cx A st st'``;
 
+val im_base = ``\cx t. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_target t) (int_calls_target t) /\
+  eval_base_place cx t st = (res,st') ==> ^immutable_frame cx A st st'``;
+val im_target = ``\cx t. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_target t) (int_calls_target t) /\
+  eval_target_place cx t st = (res,st') ==> ^immutable_frame cx A st st'``;
+
+(* Exact constructor premises, with the shared frame predicates substituted. *)
+val immutable_ind_cases = let
+  val (_,core) = strip_forall (concl evaluate_ind)
+  val cs = strip_conj (fst (dest_imp core))
+  val preds = [("P1",im_stmts),("P4",im_expr),("P5",im_exprs),
+    ("P6",im_base),("P7",im_target),("P10",im_results)]
+  fun inst t = subst (List.mapPartial (fn (n,p) =>
+    Option.map (fn v => v |-> p)
+      (List.find (fn v => fst (dest_var v) = n) (free_vars t))) preds) t
+in map inst cs end;
+fun immutable_constructor_case name = valOf (List.find (fn t =>
+  can (find_term (fn u => is_const u andalso fst (dest_const u) = name))
+    (snd (strip_imp (snd (strip_forall t))))) immutable_ind_cases);
+
+fun immutable_predicate_cases name = let
+  val (_,core) = strip_forall (concl evaluate_ind)
+  val raw = strip_conj (fst (dest_imp core))
+  fun matches t = let
+    val c = snd (strip_imp (snd (strip_forall t)))
+  in fst (dest_var (fst (strip_comb c))) = name end
+in map #2 (List.filter (matches o #1) (ListPair.zip (raw,immutable_ind_cases))) end;
+
+Theorem evaluate_immutable_name_case[local]:
+  ^(immutable_constructor_case "Name")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+      type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem evaluate_immutable_global_case[local]:
+  ^(immutable_constructor_case "TopLevelName")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def] >>
+  imp_res_tac lookup_global_state >> gvs[]
+QED
+
+Theorem evaluate_immutable_flag_case[local]:
+  ^(immutable_constructor_case "FlagMember")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def] >>
+  imp_res_tac lookup_flag_mem_state >> gvs[]
+QED
+
+Theorem evaluate_immutable_literal_case[local]:
+  ^(immutable_constructor_case "Literal")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, return_def]
+QED
+
+Theorem evaluate_immutable_basename_case[local]:
+  ^(immutable_constructor_case "NameTarget")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+      type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem evaluate_immutable_baseglobal_case[local]:
+  ^(immutable_constructor_case "TopLevelNameTarget")
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def] >>
+  imp_res_tac lookup_global_state >> gvs[]
+QED
+
+Theorem evaluate_immutable_attribute_case[local]:
+  ^(immutable_constructor_case "Attribute")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
+      int_calls_expr_def] >>
+  imp_res_tac select_result_state >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_subscript_case[local]:
+  ^(immutable_constructor_case "Subscript")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
+      int_calls_expr_def] >>
+  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  metis_tac[]
+QED
+
+Theorem evaluate_immutable_baseattribute_case[local]:
+  ^(immutable_constructor_case "AttributeTarget")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
+      int_calls_expr_def] >>
+  imp_res_tac extend_place_state >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_basesubscript_case[local]:
+  ^(immutable_constructor_case "SubscriptTarget")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
+      int_calls_expr_def] >>
+  imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
+  gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (qpat_x_assum `!s r t. eval_base_place _ _ _ = _ ==> _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  metis_tac[]
+QED
+
+Theorem evaluate_immutable_target_case[local]:
+  ^(hd (immutable_predicate_cases "P7"))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac get_place_state >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_exprs_nil_case[local]:
+  ^(hd (immutable_predicate_cases "P5"))
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, return_def]
+QED
+
+Theorem evaluate_immutable_exprs_cons_case[local]:
+  ^(List.nth (immutable_predicate_cases "P5",1))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def,
+      accesses_expr_def, int_calls_expr_def] >>
+  imp_res_tac read_result_state >> gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  metis_tac[]
+QED
+
+Theorem evaluate_immutable_results_nil_case[local]:
+  ^(hd (immutable_predicate_cases "P10"))
+Proof
+  BETA_TAC >> rpt strip_tac >> gvs[Once evaluate_def, return_def]
+QED
+
+Theorem evaluate_immutable_results_cons_case[local]:
+  ^(List.nth (immutable_predicate_cases "P10",1))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def,
+      accesses_expr_def, int_calls_expr_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt (qpat_x_assum `!a b c. eval_expr _ _ _ = _ ==> _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  metis_tac[]
+QED
+
+Theorem evaluate_immutable_risky_cases[local]:
+  ^(list_mk_conj (map immutable_constructor_case
+    ["Send","ExtCall","RawCallTarget","RawCallCalldataTarget","CreateTarget"]))
+Proof
+  rpt conj_tac >> BETA_TAC >> rpt strip_tac >>
+  qpat_x_assum `~MEM RiskyAcc (accesses_expr _)` mp_tac >>
+  simp[accesses_expr_def, risky_call_target_def]
+QED
+
+Theorem evaluate_immutable_struct_case[local]:
+  ^(immutable_constructor_case "StructLit")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def,
+      accesses_expr_def, int_calls_expr_def, accesses_named_exprs_map,
+      vyperTypeEvalSoundnessTheory.int_calls_exprs_MAP_SND] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_typebuiltin_case[local]:
+  ^(immutable_constructor_case "TypeBuiltin")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs(),
+      accesses_expr_def, int_calls_expr_def] >>
+  imp_res_tac lift_sum_state >> gvs[] >>
+  rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac) >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_ifexp_case[local]:
+  ^(immutable_constructor_case "IfExp")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(),
+       return_def, raise_def] >> strip_tac >>
+  fs[accesses_expr_def, int_calls_expr_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+  imp_res_tac read_result_state >> imp_res_tac conditional_result_state >>
+  rpt (qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` (mk_asm "closed") >>
+  gvs[COND_RATOR, AllCaseEqs(), raise_def] >>
+  asm_x "closed" assume_tac >>
+  rpt (qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+    simp[] >> disch_then drule_all >> strip_tac) >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  rpt (qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` kall_tac) >>
+  metis_tac[]
+QED
+
+Theorem evaluate_immutable_pop_case[local]:
+  ^(immutable_constructor_case "Pop")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_expr_def, int_calls_expr_def] >>
+  qpat_x_assum `eval_expr _ (Pop _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> reverse strip_tac
+  >- (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+      simp[] >> disch_then drule_all >> simp[]) >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` kall_tac >>
+  rename1 `pop_place cx p mid = _` >>
+  `!path. p <> ImmutablePlace src id path` by
+    metis_tac[eval_target_place_immutable_access] >>
+  drule_all pop_place_key_frame >> metis_tac[]
+QED
+
+Theorem evaluate_immutable_rawrevert_case[local]:
+  ^(immutable_constructor_case "RawRevert")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs(),
+      accesses_expr_def, risky_call_target_def, int_calls_expr_def] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_rawlog_case[local]:
+  ^(immutable_constructor_case "RawLog")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs(),
+      accesses_expr_def, risky_call_target_def, int_calls_expr_def,
+      lift_option_type_def, vyperMiscTheory.option_CASE_rator,
+      check_not_static_def, check_def, push_log_def] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_selfdestruct_case[local]:
+  ^(immutable_constructor_case "SelfDestructTarget")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs(),
+      accesses_expr_def, risky_call_target_def, int_calls_expr_def,
+      lift_option_type_def, vyperMiscTheory.option_CASE_rator,
+      check_not_static_def, check_def, get_accounts_def] >>
+  imp_res_tac transfer_value_immutables >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
+
+Theorem evaluate_immutable_builtin_case[local]:
+  ^(immutable_constructor_case "Builtin")
+Proof
+  simp[NoAsms, type_check_def, assert_def, return_def, raise_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `builtin_args_length_ok bt (LENGTH es)`
+  >- (Cases_on `bt = Len`
+      >- (gvs[accesses_expr_def, int_calls_expr_def] >>
+          Cases_on `es` >> gvs[builtin_args_length_ok_def, accesses_expr_def,
+            int_calls_expr_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+          qpat_x_assum `!A R st res st'. _`
+            (qspecl_then [`A`,`R`] mp_tac) >> simp[] >>
+          disch_tac >>
+          qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+          simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+            assert_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >>
+          imp_res_tac result_array_length_state >> gvs[] >>
+          rpt strip_tac >> first_x_assum irule >> simp[] >>
+          first_assum ACCEPT_TAC) >>
+      Cases_on `bt = Bop In \/ bt = Bop NotIn`
+      >- (gvs[accesses_expr_def, int_calls_expr_def] >>
+          qpat_x_assum `!A R st res st'. _`
+            (qspecl_then [`A`,`R`] mp_tac) >> simp[] >> disch_tac >>
+          qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+          simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+            assert_def, return_def, raise_def, lift_option_type_def,
+            vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >> strip_tac >>
+          imp_res_tac lift_sum_state >> gvs[] >>
+          rpt strip_tac >> first_x_assum irule >> simp[] >>
+          first_assum ACCEPT_TAC) >>
+      Cases_on `bt = Env MsgGas`
+      >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+            assert_def, return_def, raise_def, AllCaseEqs()] >>
+          imp_res_tac next_gas_reading_state >> gvs[]) >>
+      gvs[accesses_expr_def, int_calls_expr_def] >>
+      qpat_x_assum `!A R st res st'. _`
+        (qspecl_then [`A`,`R`] mp_tac) >> simp[] >> disch_tac >>
+      qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+        assert_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
+      imp_res_tac precompile_call_success_state >> gvs[] >>
+      rpt strip_tac >> first_x_assum irule >> simp[] >>
+      first_assum ACCEPT_TAC) >>
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+       ignore_bind_def, raise_def]
+QED
+
 (* Fix analysis parameters before consuming a guarded recursive IH. *)
 Theorem immutable_exprs_frame_rule[local]:
   ^im_exprs cx es /\ ^callable_closed cx A R /\
@@ -576,7 +911,7 @@ Proof
         lift_option_type_def, ignore_bind_def, bind_def, return_def, raise_def,
         Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
       strip_tac >> qpat_x_assum `sa = st'` SUBST_ALL_TAC >>
-      BETA_TAC >> rpt strip_tac >> asm "args_run" irule >> simp[] >> gvs[]) >>
+      rpt strip_tac >> asm "args_run" irule >> simp[] >> gvs[]) >>
   gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
       ignore_bind_def, bind_def, return_def, raise_def]
 QED
