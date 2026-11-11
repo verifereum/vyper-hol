@@ -81,3 +81,38 @@ Proof
   gvs[AllCaseEqs(), as_stack_val_pair, vv_type_def] >>
   drule as_ptr_val_result >> strip_tac >> gvs[vv_type_def]
 QED
+
+Theorem literal_vv_result_tag:
+  compile_literal_vv ann lit sa = (vv,sb) ==> vv_type vv = ann
+Proof
+  Cases_on `lit` >>
+  gvs[AllCaseEqs()] >>
+  simp[compile_literal_vv_def, comp_bind_def, comp_return_def] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), vv_type_def] >>
+  rpt (pairarg_tac >> gvs[comp_return_def, vv_type_def])
+  >~ [`BoolL b`] >- (Cases_on `b` >> gvs[compile_literal_vv_def, comp_return_def, vv_type_def]) >>
+  Cases_on `ann` >> gvs[comp_return_def, vv_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> gvs[comp_return_def, vv_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[comp_bind_def, comp_return_def, vv_type_def] >>
+  pairarg_tac >> gvs[vv_type_def]
+QED
+
+Theorem builtin_body_result_tag:
+  compile_builtin_dispatch_body cfn ce ann ty bi args sa = (vv,sb) ==>
+  vv_type vv = ann
+Proof
+  Cases_on `bi` >>
+  simp[compile_builtin_dispatch_body_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  rpt IF_CASES_TAC >>
+  gvs[as_stack_val_pair, vv_type_def] >>
+  rpt (pairarg_tac >> gvs[as_stack_val_pair, vv_type_def]) >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs(), as_stack_val_pair, vv_type_def]
+  >>~- ([`as_ptr_val _ _ _ = _`],
+    drule as_ptr_val_result >> strip_tac >> gvs[vv_type_def]) >>
+  rpt (pairarg_tac >> gvs[vv_type_def]) >>
+  drule literal_vv_result_tag >> simp[]
+QED
