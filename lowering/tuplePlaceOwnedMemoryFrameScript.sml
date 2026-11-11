@@ -489,7 +489,9 @@ Resume tuple_place_owned_memory_run_frame[word]:
                     `typed_val_to_w256 stv v`] >> simp[]) >>
   qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[stmt_state_rel_inst_idx, lookup_var_def] >>
-  rpt strip_tac >> gvs[] >> simp[Abbr `u`] >>
+  rpt strip_tac >> gvs[] >> simp[Abbr `u`]
+  >~ [`FLOOKUP (mstore _ _ _).vs_vars _`]
+  >- simp[venomStateTheory.mstore_def] >>
   irule mstore_mem_bytes_at_disjoint >>
   drule_all abi_word_type_size >> simp[]
 QED
