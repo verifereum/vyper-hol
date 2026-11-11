@@ -970,3 +970,47 @@ Proof
   simp[inline_cell_at_def, inline_fetched_fields_def, inline_inst_fields_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
+
+Theorem inline_selected_jump_residual_fetch:
+  inline_cell_frame (SelectedJump e) c mid /\
+  entry = (case (clone_function e.ise_prefix e.ise_callee).fn_blocks of
+             [] => "" | eb::_ => eb.bb_label) /\
+  inline_cell_zipper mid frames d /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames ==>
+  ?tb dst.
+    lookup_block d.ic_block d.ic_function.fn_blocks = SOME tb /\
+    get_instruction tb d.ic_index = SOME dst /\
+    dst.inst_opcode = JMP /\
+    dst.inst_operands = [Label (inline_cell_label_action frames entry)] /\
+    dst.inst_outputs = []
+Proof
+  strip_tac >>
+  `mid.ic_fields = inline_inst_fields
+     <|inst_opcode := JMP; inst_operands := [Label entry]; inst_outputs := []|>` by
+    gvs[inline_cell_frame_def, inline_make_cell_def, inline_inst_fields_def] >>
+  `inline_cell_at mid` by metis_tac[inline_cell_frame_sound] >>
+  drule_at (Pos hd) inline_cell_zipper_mapped_fields >>
+  disch_then (drule_at (Pos hd)) >>
+  simp[] >> strip_tac >>
+  drule_all inline_cell_zipper_sound >>
+  simp[inline_cell_at_def, inline_fetched_fields_def, inline_inst_fields_def,
+    inline_rename_operand_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem inline_selected_jump_residual_entry_label:
+  inline_cell_frame (SelectedJump e) c mid /\
+  (clone_function e.ise_prefix e.ise_callee).fn_blocks = eb::blocks /\
+  inline_cell_zipper mid frames d ==>
+  MEM (inline_cell_label_action frames eb.bb_label) (fn_labels d.ic_function)
+Proof
+  strip_tac >>
+  `inline_site_edit_valid e /\ mid.ic_function = e.ise_final` by
+    gvs[inline_cell_frame_def, inline_make_cell_def] >>
+  `MEM eb.bb_label (fn_labels (clone_function e.ise_prefix e.ise_callee))` by
+    simp[fn_labels_def] >>
+  `MEM eb.bb_label (fn_labels mid.ic_function)` by
+    (drule inline_valid_edit_label_set >>
+     gvs[functionInlinerWfTheory.clone_function_labels]) >>
+  drule_all inline_cell_zipper_entry_label >> simp[]
+QED
