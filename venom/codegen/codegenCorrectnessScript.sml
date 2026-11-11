@@ -70,7 +70,7 @@ Ancestors
   stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
   frameOutcome callTrace unitShapeDefs vfmExecutionProp unitMemInv
   frameGas venomRunBounded frameStep codegenEntryBounded asmFrameNext
-  asmFrameGas
+  asmFrameGas asmFrameSurplus
 Libs
   BasicProvers
 
@@ -312,12 +312,11 @@ QED
    RETURNDATACOPY of it (whose size the callee sets) comes at or before
    doesn't run out of gas at our depth and leaves at least D.  The generated code runs
    RETURNDATACOPY only to forward a failed callee's revert data, followed
-   by the REVERT's operands and the REVERT.  Proof idea: each Venom block
-   runs a bounded number of assembly steps (codegen_entry_asm_bounded),
-   each with a bounded cost under the memory bound (asm_frame_gas_step)
-   along our frame's own states (asm_frame_step_next), and each call
-   forwards at most all but 1/64 of the remaining gas, so g grows by a
-   factor of 64 per call the steps allow. *)
+   by the REVERT's operands and the REVERT.  Proof idea: an instance of
+   the program-generic asm_frame_gas_surplus (asmFrameSurplus) at the N
+   and H of codegen_entry_asm_bounded (whose memory premise comes from
+   venom_run_bounded's mem_inv, conjoined with Inv), from the entry
+   relation asm_frame_rel_entry as codegen_asm_run_call sets it up. *)
 Theorem codegen_gas_surplus:
   !rpolicy unit cp prog fuel M D.
     generate_context_plan unit.cu_context = SOME cp /\
