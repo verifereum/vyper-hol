@@ -3158,7 +3158,7 @@ Proof
   EVAL_TAC
 QED
 
-Theorem immutable_fields_admissible_update[local]:
+Theorem immutable_fields_admissible_update:
   !fs vals id ct child.
     immutable_fields_admissible fs vals /\ ALOOKUP fs id = SOME ct /\
     immutable_value_admissible ct child ==>
@@ -3185,7 +3185,7 @@ Proof
   rpt (IF_CASES_TAC >> gvs[])
 QED
 
-Theorem immutable_sparse_admissible_insert[local]:
+Theorem immutable_sparse_admissible_insert:
   !al i child ct n.
     SORTED $< (MAP FST al) /\
     immutable_value_admissible (ArrayTV ct (Fixed n)) (ArrayV (SArrayV al)) /\
@@ -3200,7 +3200,7 @@ Proof
   gvs[immutable_value_admissible_def] >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem immutable_sparse_admissible_delete[local]:
+Theorem immutable_sparse_admissible_delete:
   !al i ct n.
     SORTED $< (MAP FST al) /\
     immutable_value_admissible (ArrayTV ct (Fixed n)) (ArrayV (SArrayV al)) ==>
@@ -3215,7 +3215,7 @@ Proof
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
 
-Theorem immutable_fields_admissible_lookup[local]:
+Theorem immutable_fields_admissible_lookup:
   !fs vals id ct v.
     immutable_fields_admissible fs vals /\ ALOOKUP fs id = SOME ct /\
     ALOOKUP vals id = SOME v ==> immutable_value_admissible ct v
