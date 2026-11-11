@@ -6855,6 +6855,21 @@ Proof
   asm_rewrite_tac[sym_steps_add] >> simp[])
 QED
 
+Theorem sym_abort_terminal_counts_join:
+  ((a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out) \/
+   (a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out)) /\
+  venom_asm_terminal_rel vs out /\
+  sym_terminal (sym_steps prog env m ss) ==>
+  ?k fin.
+    ((a = Revert_abort /\ asm_steps lo o2pc prog k st = AsmRevert fin) \/
+     (a = ExHalt_abort /\ asm_steps lo o2pc prog k st = AsmFault fin)) /\
+    venom_asm_terminal_rel vs fin /\ sym_terminal (sym_steps prog env k ss)
+Proof
+  strip_tac >> qexistsl_tac [`n + m`, `out`] >>
+  simp[stackOpSimTheory.asm_steps_add] >>
+  metis_tac[sym_steps_terminal_extend, arithmeticTheory.ADD_COMM]
+QED
+
 Theorem sym_abort_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
@@ -6931,7 +6946,16 @@ Theorem sym_abort_frame_sim_deep:
         venom_asm_terminal_rel vs' as' /\
         sym_terminal (sym_steps prog env n ss)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `?m. sym_terminal (sym_steps prog env m ss)` by
+    (Cases_on `inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE`
+     >- (drule_all sym_abort_conditional_terminal_exists >> simp[]) >>
+     `MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY]` by
+       (drule opcodeClassTheory.step_inst_abort_opcodes >> simp[] >> metis_tac[]) >>
+     drule_all sym_abort_regular_terminal_exists >> simp[]) >>
+  drule_all gen_inst_abort_frame_sim_deep >>
+  disch_then (qx_choose_then `n` (qx_choose_then `out` assume_tac)) >>
+  irule sym_abort_terminal_counts_join >> metis_tac[]
 QED
 
 Theorem sym_gas_frame_sim_deep:
