@@ -28,7 +28,9 @@ Proof
   >- (fs[vv_post_def] >> metis_tac[not_fresh_at_mono])
   >~ [`FLOOKUP s.vs_allocas`] >- (fs[vv_post_def] >> metis_tac[])
   >~ [`locals_kept`]
-  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail]) >>
+  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail])
+  >~ [`pure_frame`]
+  >- (fs[vv_post_def] >> irule pure_frame_mem_tail >> qexists_tac `s1` >> simp[]) >>
   fs[vv_post_def] >> metis_tac[]
 QED
 
