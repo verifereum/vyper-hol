@@ -103,7 +103,7 @@ Proof
   qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-  first_x_assum irule >> first_assum ACCEPT_TAC
+  first_x_assum irule >> fs[]
 QED
 
 Theorem forced_then_outcome:

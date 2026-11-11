@@ -98,7 +98,7 @@ Proof
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gen_tac >> fs[stmt_exit_def] >>
+      disj2_tac >> fs[stmt_exit_def] >> rpt strip_tac >>
       metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>

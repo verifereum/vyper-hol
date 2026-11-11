@@ -1252,7 +1252,7 @@ Resume compile_augassign_attr_local_case[rhs_error]:
       rewrite_tac[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> irule augassign_attr_rhs_exception >>
       simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  disj2_tac >> gen_tac >> fs[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def] >> rpt strip_tac >>
   metis_tac[expr_exit_INR_type]
 QED
 

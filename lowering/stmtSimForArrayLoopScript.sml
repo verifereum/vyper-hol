@@ -1698,7 +1698,7 @@ Proof
   qabbrev_tac `Done = \ei s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
     ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ei s /\
     array_caller_frame caller old s` >>
-  qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
+  qabbrev_tac `R = \ex ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\ halt_exit cx ee (INR ex : unit + exception) r` >>
   `(!j ei s. j < LENGTH vs /\ Inv j ei s /\
       gas_admissible (eval_for cx tv id stmts (MAP Value (DROP j vs))) (stmt_res_ok lctx) ei ==>
       gas_outcome F (cx_tops cx) (ctx,func)

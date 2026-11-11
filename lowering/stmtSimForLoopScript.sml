@@ -1161,7 +1161,7 @@ Proof
     stmt_state_rel ctx func cenv cx ee t /\
     (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> lookup_var x t = SOME v) /\
     (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)` >>
-  qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
+  qabbrev_tac `R = \ex ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\ halt_exit cx ee (INR ex : unit + exception) r` >>
   `(!j es s.
       j < LENGTH (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m) /\ Inv j es s /\
       gas_admissible (eval_for cx tyv id stmts

@@ -87,7 +87,7 @@ Theorem unop_continuation_summary:
       expr_post ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 fin v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res fin r. expr_exit res r)
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\

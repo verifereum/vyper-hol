@@ -71,7 +71,7 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gen_tac >> fs[stmt_exit_def] >>
+      disj2_tac >> fs[stmt_exit_def] >> rpt strip_tac >>
       metis_tac[expr_exit_INR_type]) >>
   qexists `marks` >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>

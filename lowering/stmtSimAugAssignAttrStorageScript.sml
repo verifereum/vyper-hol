@@ -641,7 +641,7 @@ Resume compile_augassign_attr_storage_case[rhs_summary]:
         `es_end with gas_obs := tail`]
         mp_tac augassign_storage_place_rhs_exception >>
       impl_tac >- simp[] >> simp[]) >>
-  disj2_tac >> gen_tac >> fs[stmt_exit_def] >>
+  disj2_tac >> fs[stmt_exit_def] >> rpt strip_tac >>
   metis_tac[expr_exit_INR_type]
 QED
 

@@ -407,7 +407,7 @@ QED
 Theorem bop_result_halt_exit[simp]:
   halt_exit cx' ee (bop_result cx ann bop ts v1 v2 es) r
 Proof
-  simp[bop_result_def] >> every_case_tac >> simp[]
+  simp[bop_result_def] >> BasicProvers.every_case_tac >> simp[]
 QED
 
 Theorem bop_result_gas_obs[simp]:

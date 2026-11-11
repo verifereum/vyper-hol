@@ -483,7 +483,7 @@ Resume for_loop_mem[step]:
   qmatch_asmsub_abbrev_tac `gas_outcome T tops cf round start Step StepExit` >>
   qabbrev_tac `Done = (\ee t. Final (INL ()) ee t)` >>
   qabbrev_tac `Next = (\ee t. Step (INL F) ee t)` >>
-  qabbrev_tac `R = (\ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)` >>
+  qabbrev_tac `R = (\ex ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\ halt_exit cx ee (INR ex : unit + exception) r)` >>
   `gas_outcome T tops cf source start
      (\res ee t. res = INL () /\ Done ee t)
      (\res ee r. ?ex. res = INR ex /\ R ex ee r)` suffices_by
