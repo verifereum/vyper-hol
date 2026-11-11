@@ -4,7 +4,7 @@ Ancestors
   readonlyInvokeCopyFwdRel reachableFnSim taintAgree
   o1LowerDloadJointRestore o1LowerDloadShared internalReturnCopyFwdSim
   o1LowerDloadRelocationKernel venomExecSemantics venomState ptrDiscipline
-  finite_map list pred_set
+  finite_map list pred_set passSimulationDefs
 
 Theorem ricf_frame_adopt_return:
   ricf_frame_agree D X sites PG G tn s t ==>
@@ -153,4 +153,63 @@ Theorem ricf_indexed_resume_next:
 Proof
   strip_tac >> drule_all ricf_indexed_call_return >> strip_tac >>
   drule_all ricf_live_resume_next >> simp[]
+QED
+
+(* Semantic outcome kernel.  Operand evaluation and the entry core are
+   supplied by the readonly/certificate call preparation: the two argument
+   lists need not be equal.  The suspended maps remain indexed throughout
+   recursion, including when the callee itself makes nested calls. *)
+Theorem ricf_indexed_invoke_outcomes:
+  i.inst_opcode = INVOKE /\ j.inst_opcode = INVOKE /\
+  j.inst_outputs = i.inst_outputs /\
+  decode_invoke i = SOME (nm,ops) /\
+  decode_invoke j = SOME (nm',ops') /\
+  lookup_function nm C.ctx_functions = SOME fn /\
+  lookup_function nm' C'.ctx_functions = SOME fn' /\
+  eval_operands ops cf.cf_state = SOME args /\
+  eval_operands ops' caller = SOME args' /\
+  setup_callee fn args cf.cf_state = SOME cs /\
+  setup_callee fn' args' caller = SOME ct /\
+  ricf_live_boundary_core D ids (cf::stk) PG FEMPTY etn fn current
+    (sites::maps) (caller::targets) G0 tn0 cs ct /\
+  ricf_indexed_sim_below D ids vs C C' n /\ k < n /\
+  MEM fn C.ctx_functions /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  block_reach vs C (cf::stk) PG FEMPTY etn fn cs /\
+  terminates (step_inst k C i cf.cf_state) ==>
+  ?m. case step_inst k C i cf.cf_state of
+    OK s' => ?t' tn.
+      step_inst m C' j caller = OK t' /\
+      ricf_frame_agree D (ircf_dead ids cf.cf_state stk) sites
+        (ricf_complete_params cf.cf_params cf.cf_state.vs_params)
+        (DRESTRICT cf.cf_prov (COMPL (set i.inst_outputs)))
+        (tn with t_var := DRESTRICT cf.cf_tvar (COMPL (set i.inst_outputs)))
+        (s' with vs_inst_idx := SUC cf.cf_state.vs_inst_idx)
+        (t' with vs_inst_idx := SUC cf.cf_state.vs_inst_idx) /\
+      ricf_live_stack_agree D ids tn maps stk targets
+        (case run_blocks k C fn cs of IntRet ret se => se | _ => cs)
+        (case run_blocks m C' fn' ct of IntRet ret te => te | _ => ct)
+  | _ => dead_result_rel D (step_inst k C i cf.cf_state)
+           (step_inst m C' j caller)
+Proof
+  strip_tac >>
+  `terminates (run_blocks k C fn cs)` by
+    (qpat_x_assum `terminates (step_inst _ _ _ _)` mp_tac >>
+     simp[step_inst_def] >> Cases_on `run_blocks k C fn cs` >>
+     simp[terminates_def, AllCaseEqs()]) >>
+  `ricf_indexed_boundary D ids (sites::maps) (cf::stk) PG FEMPTY
+     etn fn cs ct` by
+    (simp[ricf_indexed_boundary_def] >> metis_tac[]) >>
+  drule_all ricf_indexed_sim_below_elim >> strip_tac >>
+  qexists_tac `m` >>
+  Cases_on `run_blocks k C fn cs` >>
+  Cases_on `run_blocks m C' fn' ct` >>
+  gvs[fn_run_rel_def] >>
+  fs[step_inst_def] >>
+  gvs[terminates_def, AllCaseEqs()] >>
+  rename1 `ricf_indexed_return _ _ _ _ _ _ _ _ ret se te` >>
+  Cases_on `bind_outputs i.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state cf.cf_state se))` >>
+  gvs[] >>
+  drule_all ricf_indexed_resume_next >> strip_tac >> metis_tac[]
 QED
