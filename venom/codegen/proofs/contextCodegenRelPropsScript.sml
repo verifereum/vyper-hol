@@ -33,7 +33,7 @@ Theorem source_memory_access_ranges:
     (mem_write_ops inst = SOME ops ==>
        MEM (w2n off,w2n len) (source_memory_write_ranges inst s))
 Proof
-  rpt strip_tac >> Cases_on `inst.inst_opcode` >>
+  rpt strip_tac >>
   gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
   gvs[source_memory_read_ranges_def, source_memory_write_ranges_def,
       memory_range_of_operands_def, fixed_source_write_range_def,

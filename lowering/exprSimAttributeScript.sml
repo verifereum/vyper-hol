@@ -466,7 +466,10 @@ Proof
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
-      metis_tac[])
+      (conj_tac
+      >- (qexistsl_tac [`ctx`, `func`] >> first_assum ACCEPT_TAC) >>
+      qexistsl_tac [`fld`, `fs`, `sid`, `tv`, `vals`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]))
   >~ [`storage_read_live`]
   >- (strip_tac >>
       qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
@@ -485,7 +488,8 @@ Proof
           contextTheory.vv_operand_def, attr_offset_def] >>
       rpt strip_tac >> gvs[] >>
       irule accountsRelPropsTheory.storage_read_live_field >>
-      metis_tac[])
+      (qexistsl_tac [`fs`, `fld`] >> conj_tac >>
+        first_assum MATCH_ACCEPT_TAC))
   >> first_assum ACCEPT_TAC
 QED
 
