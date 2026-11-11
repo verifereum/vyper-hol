@@ -725,9 +725,11 @@ Theorem bound_labels_subscript:
 Proof
   strip_tac >> simp[compile_subscript_def] >> irule bound_labels_bind >>
   simp[] >> rpt strip_tac >>
-  irule bound_labels_bind >> reverse conj_tac
+  irule bound_labels_bind >> rpt conj_tac
+  >~ [`copies_subscript_base`]
   >- (rpt strip_tac >> IF_CASES_TAC >> gvs[comp_return_def] >>
       irule bound_labels_snapshot_vv >> gvs[]) >>
+  rpt (first_assum ACCEPT_TAC) >>
   qx_gen_tac `bvv` >> rpt strip_tac >>
   qabbrev_tac `loc = case vv_location bvv of NONE => LocMemory | SOME l => l` >>
   Cases_on `place_type ce base_e` >> simp[] >>

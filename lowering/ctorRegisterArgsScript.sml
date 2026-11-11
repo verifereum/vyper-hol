@@ -196,10 +196,12 @@ Proof
           simp[abi_decoder_vars_mono_return, abi_decoder_vars_mono_prims]) >> simp[]) >>
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   Cases_on `var_location_decode_operand x` >> simp[] >>
-  rpt (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
-        >- simp[abi_decoder_vars_mono_prims] >> gen_tac) >>
-  (ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
-   >- simp[cj 1 abi_decoder_vars_mono_mutual] >> simp[])
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+      cj 1 abi_decoder_vars_mono_mutual, compile_abi_arg_ptr_guard_def,
+      abi_decoder_vars_mono_return]), gen_tac,
+    ho_match_mp_tac abi_decoder_vars_mono_bind,
+    ho_match_mp_tac abi_decoder_vars_mono_ignore_bind, conj_tac])
 QED
 
 Theorem ctor_registration_vars_mono:

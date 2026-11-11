@@ -1056,7 +1056,12 @@ Proof
   `t = t with vs_inst_idx := t.vs_inst_idx` by
     simp[venom_state_component_equality] >>
   pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
-  irule slice_calldata_vv_post >> simp[] >> metis_tac[]) >>
+  irule slice_calldata_vv_post >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `sa.cs_next_id + 7` >> rpt conj_tac
+  >- simp[] >- simp[]
+  >- first_assum ACCEPT_TAC >>
+  first_assum ACCEPT_TAC) >>
   gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 

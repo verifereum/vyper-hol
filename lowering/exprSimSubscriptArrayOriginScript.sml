@@ -132,7 +132,12 @@ Proof
   rw[comp_return_def] >> imp_res_tac snapshot_vv_location >> gvs[] >>
   gvs[vv_location_def, mk_ptr_def] >>
   Cases_on `t` >> simp[comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[vv_location_def, mk_ptr_def]
+  rpt (pairarg_tac >> gvs[]) >> gvs[vv_location_def, mk_ptr_def] >>
+  (* snapshot cases: the base sits in memory (or is a stack value), so the
+     element pointer is in memory, contradicting the LocCode result *)
+  qpat_x_assum `vv_location (FST _) = SOME LocCode` mp_tac >>
+  simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[vv_location_def, mk_ptr_def]
 QED
 
 Theorem compile_attribute_code_origin:
