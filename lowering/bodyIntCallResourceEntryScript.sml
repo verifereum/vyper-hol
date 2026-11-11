@@ -30,7 +30,7 @@ Theorem body_inv_internal_prologue:
   body_inv tops ctx (ce with ce_alloca_locals := T) cx
 Proof
   strip_tac >> drule_all compile_internal_prologue_body_inv >>
-  strip_tac >> fs[body_inv_def] >> metis_tac[]
+  strip_tac >> fs[body_inv_def, bodySimTheory.cenv_module_pins_def] >> metis_tac[]
 QED
 
 Theorem body_inv_packaged_internal_entry:
