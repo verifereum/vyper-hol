@@ -262,7 +262,7 @@ Theorem return_actual_counted_success:
   abi_decoder_coherent ce env sf
     (if needs_external_call_wrap ty then TupleT [ty] else ty)
     (if needs_external_call_wrap ty then TupleTV [actual_tv] else actual_tv) ==>
-  ?z d. gas_marked_path F ctx func s 0 (OK z) /\
+  ?z d. gas_marked_path F ctx func s 0 (OK z) /\ d < dimword (:256) /\
     stmt_state_rel ctx func ce cx ee z /\ wb_frame ce es sa s0 z /\
     eval_operand buf.buf_operand z = SOME (n2w d) /\
     val_in_memory actual_tv v d z.vs_memory /\
@@ -314,6 +314,7 @@ Proof
      qexistsl_tac [`ctx`, `cx`, `abi_malformed_scratch_sites st en func`, `st`] >>
      fs[stmt_state_rel_def, state_rel_def, ci_mono_def,
        abi_malformed_scratch_sites_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `d < dimword (:256)` by fs[abi_malformed_entry_def] >>
   qexistsl_tac [`z`, `d`] >> simp[] >> rpt conj_tac
   >- fs[abi_malformed_resource_post_def]
   >- (fs[abi_malformed_resource_post_def] >> metis_tac[])
