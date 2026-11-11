@@ -163,7 +163,7 @@ Theorem fuel_ok_compile_return_unlock:
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_return_unlock_def] >>
   Cases_on `cenv.ce_nonreentrant` >> rename1 `(a, rest)` >>
-  PairCases_on `rest` >> simp_tac (srw_ss()) [] >>
+  PairCases_on `rest` >> PURE_REWRITE_TAC [LET_THM] >> CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
   fuel_auto [fuel_ok_context_storage]
 QED
 
@@ -216,7 +216,7 @@ Proof
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any, fuel_ok_emit_inst_any,
              fuel_ok_compile_alloc_buffer, fuel_ok_compile_copy_memory,
              fuel_ok_compile_store_memory, fuel_ok_typed_memory_family,
-             fuel_ok_compile_store_memory_typed,
+             CONJUNCT1 fuel_ok_typed_memory_family,
              fuel_ok_compile_dynarray_to_storage,
              fuel_ok_compile_imm_store_word,
              fuel_ok_compile_store_immutable_bytestring,

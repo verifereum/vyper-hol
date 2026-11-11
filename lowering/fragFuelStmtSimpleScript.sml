@@ -59,11 +59,12 @@ Proof
   match_mp_tac fuel_ok_if >> conj_tac >> strip_tac
   >- fuel_auto [fuel_ok_compile_get_target_ptr_ce,
                 fuel_ok_compile_store_at_loc] >>
-  Cases_on `dst_loc_opt` >> simp_tac (srw_ss()) [] >>
   fuel_auto [fuel_ok_compile_expr_cb, fuel_ok_compile_snapshot_vv,
              fuel_ok_compile_get_target_ptr_ce, fuel_ok_unwrap_value,
              fuel_ok_compile_assign_value, fuel_ok_emit_void_any] >>
-  simp[is_terminator_def]
+  BasicProvers.TOP_CASE_TAC
+  >- (irule fuel_ok_emit_void_any >> simp[]) >>
+  fuel_auto [fuel_ok_compile_assign_value]
 QED
 
 Theorem fuel_ok_stmt_assign_tuple[local]:
@@ -75,16 +76,23 @@ Proof
              fuel_ok_compile_tuple_unpack]
 QED
 
+Theorem comp_bind_return_l[local]:
+  !x f. comp_bind (comp_return x) f = f x
+Proof
+  rw[FUN_EQ_THM, comp_bind_def, comp_return_def]
+QED
+
 Theorem fuel_ok_stmt_augassign[local]:
   !cenv lctx ty tty bt bop e Wv E.
     fuel_ok Wv {} E (compile_stmt cenv lctx ty (AugAssign tty bt bop e))
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_stmt_def] >>
   fuel_auto [fuel_ok_compile_get_target_ptr_ce] >>
-  Cases_on `FST (SND tgt_result)` >> simp_tac (srw_ss()) [] >>
+  BasicProvers.TOP_CASE_TAC
+  >- (irule fuel_ok_emit_void_any >> simp[]) >>
+  BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) [comp_bind_return_l] >>
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any,
              fuel_ok_lower_value_compile_expr, fuel_ok_compile_binop] >>
-  simp[is_terminator_def] >> Cases_on `x` >>
   simp[is_terminator_def]
 QED
 
@@ -93,8 +101,8 @@ Theorem fuel_ok_stmt_assert[local]:
     fuel_ok Wv {} E (compile_stmt cenv lctx ty (Assert c r))
 Proof
   rpt gen_tac >> Cases_on `r` >> simp_tac std_ss [compile_stmt_def] >>
-  fuel_auto [fuel_ok_lower_value_compile_expr, fuel_ok_emit_inst_any,
-             fuel_ok_emit_inst_jnz, fuel_ok_compile_reason_message,
+  fuel_auto [fuel_ok_lower_value_compile_expr, fuel_ok_emit_inst_jnz,
+             fuel_ok_emit_inst_any, fuel_ok_compile_reason_message,
              fuel_ok_compile_revert_with_reason] >>
   simp[is_terminator_def]
 QED
@@ -113,10 +121,10 @@ Theorem fuel_ok_stmt_log[local]:
   !cenv lctx ty ev args Wv E.
     fuel_ok Wv {} E (compile_stmt cenv lctx ty (Log ev args))
 Proof
-  rpt gen_tac >> simp_tac std_ss [compile_stmt_def] >>
-  Cases_on `cenv.ce_event_info (nsid_to_string ev)` >>
-  TRY (rename1 `SOME x` >> PairCases_on `x`) >>
-  simp_tac (srw_ss()) [] >>
+  rpt gen_tac >> simp_tac std_ss [compile_stmt_def, LET_THM] >>
+  Cases_on `cenv.ce_event_info (nsid_to_string ev)`
+  >- (simp_tac (srw_ss()) [] >> irule fuel_ok_emit_inst_any >> simp[]) >>
+  rename1 `SOME x` >> PairCases_on `x` >> simp_tac (srw_ss()) [] >>
   fuel_auto [fuel_ok_emit_inst_any, fuel_ok_emit_op,
              fuel_ok_compile_log_eval_all, fuel_ok_compile_log_topic_ops,
              fuel_ok_compile_log_store_data, fuel_ok_compile_alloc_buffer,
@@ -130,24 +138,17 @@ Theorem fuel_ok_stmt_return_none[local]:
     fuel_ok Wv {} E (compile_stmt cenv lctx ty (Return NONE))
 Proof
   rpt gen_tac >> strip_tac >> simp_tac std_ss [compile_stmt_def] >>
+  Cases_on `cenv.ce_nonreentrant` >> rename1 `(a, rest)` >>
+  PairCases_on `rest` >>
+  PURE_REWRITE_TAC [LET_THM] >> CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
+  Cases_on `cenv.ce_ctor_exit_label` >>
   Cases_on `cenv.ce_return_pc` >>
-  TRY (rename1 `SOME x` >> Cases_on `x`) >>
-  simp_tac (srw_ss()) []
-  >- (Cases_on `cenv.ce_ctor_exit_label` >> simp_tac (srw_ss()) []
-      >- (Cases_on `cenv.ce_nonreentrant` >> rename1 `(a, rest)` >>
-          PairCases_on `rest` >> simp_tac (srw_ss()) [] >>
-          fuel_auto [fuel_ok_context_storage, fuel_ok_emit_inst_any] >>
-          simp[])
-      >- (irule fuel_ok_emit_inst_jmp >> fs[stmt_exits_in_def]))
-  >- (fuel_auto [fuel_ok_compile_return_unlock, fuel_ok_emit_op,
-                 fuel_ok_emit_inst_any] >> simp[])
-  >- (Cases_on `cenv.ce_ctor_exit_label` >> simp_tac (srw_ss()) []
-      >- (Cases_on `cenv.ce_nonreentrant` >> rename1 `(a, rest)` >>
-          PairCases_on `rest` >> simp_tac (srw_ss()) [] >>
-          fuel_auto [fuel_ok_context_storage, fuel_ok_emit_inst_any] >>
-          simp[])
-      >- (irule fuel_ok_emit_inst_jmp >> fs[stmt_exits_in_def])) >>
-  fuel_auto [fuel_ok_compile_return_unlock, fuel_ok_emit_inst_any] >> simp[]
+  simp_tac (srw_ss()) [] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) [] >>
+  FIRST [irule fuel_ok_emit_inst_jmp >> fs[stmt_exits_in_def],
+         fuel_auto [fuel_ok_compile_return_unlock, fuel_ok_emit_op,
+                    fuel_ok_context_storage, fuel_ok_emit_inst_any] >>
+         simp[is_terminator_def]]
 QED
 
 Theorem fuel_ok_stmt_return_some[local]:
@@ -158,24 +159,11 @@ Proof
   match_mp_tac fuel_ok_bind0 >> conj_tac
   >- simp[fuel_ok_lower_value_compile_expr] >>
   gen_tac >> BETA_TAC >>
-  Cases_on `cenv.ce_return_pc` >>
-  TRY (rename1 `SOME x` >> Cases_on `x`) >>
-  simp_tac (srw_ss()) []
-  >- (fuel_auto [fuel_ok_compile_alloc_buffer,
-                 fuel_ok_compile_store_memory_typed,
-                 fuel_ok_compile_store_memory,
-                 fuel_ok_context_storage, fuel_ok_compile_external_return] >>
-      simp[is_terminator_def])
-  >- (fuel_auto [fuel_ok_emit_op, fuel_ok_compile_internal_return_from_env] >>
-      simp[is_terminator_def])
-  >- (fuel_auto [fuel_ok_compile_internal_return_from_env])
-  >- (fuel_auto [fuel_ok_compile_alloc_buffer,
-                 fuel_ok_compile_store_memory_typed,
-                 fuel_ok_compile_store_memory,
-                 fuel_ok_context_storage, fuel_ok_compile_external_return] >>
-      simp[is_terminator_def]) >>
-  fuel_auto [fuel_ok_compile_alloc_buffer,
-             fuel_ok_compile_store_memory_typed,
+  Cases_on `cenv.ce_return_pc` >> simp_tac (srw_ss()) [] >>
+  TRY BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) [] >>
+  fuel_auto [fuel_ok_emit_op, fuel_ok_compile_internal_return_from_env,
+             fuel_ok_compile_alloc_buffer,
+             CONJUNCT1 fuel_ok_typed_memory_family,
              fuel_ok_context_storage, fuel_ok_compile_external_return] >>
   simp[is_terminator_def]
 QED
@@ -199,13 +187,14 @@ Theorem fuel_ok_compile_stmt_simple:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `s`
   >- simp[compile_stmt_def, fuel_ok_return]
-  >- (Cases_on `lctx` >> fs[stmt_exits_in_def] >>
-      simp[compile_stmt_def, fuel_ok_emit_inst_any, is_terminator_def] >>
-      (* Continue: a jump to the loop's continue label, in E *)
-      irule fuel_ok_emit_inst_jmp >> simp[])
-  >- (Cases_on `lctx` >> fs[stmt_exits_in_def] >>
-      simp[compile_stmt_def, fuel_ok_emit_inst_any, is_terminator_def] >>
-      irule fuel_ok_emit_inst_jmp >> simp[])
+  >- (Cases_on `lctx` >> fs[stmt_exits_in_def]
+      >- (simp[compile_stmt_def] >> fuel_auto [fuel_ok_emit_inst_any] >>
+          simp[is_terminator_def])
+      >- (simp[compile_stmt_def] >> irule fuel_ok_emit_inst_jmp >> simp[]))
+  >- (Cases_on `lctx` >> fs[stmt_exits_in_def]
+      >- (simp[compile_stmt_def] >> fuel_auto [fuel_ok_emit_inst_any] >>
+          simp[is_terminator_def])
+      >- (simp[compile_stmt_def] >> irule fuel_ok_emit_inst_jmp >> simp[]))
   >- (simp[compile_stmt_def] >> fuel_auto [fuel_ok_compile_expr_cb])
   >- fs[]
   >- fs[]
