@@ -1,5 +1,5 @@
 Theory appendDynamicHeaderStorePtr
-Ancestors typedCopyPtr exprSimPtrTopLevelImmutableCopy abiDecodeStaticProps
+Ancestors appendDynamicMemoryStepPtr typedCopyPtr exprSimPtrTopLevelImmutableCopy abiDecodeStaticProps
   valueEncodingProps bodyPtrDefs loweringStateRelDefs
   ptrDiscipline venomInst venomState venomExecSemantics compileEnv
   context emitHelper codegenRel contextCodegenRel finite_map words
@@ -37,8 +37,9 @@ Proof
   qexistsl_tac [`tnf`, `mstore (w2n a) w s with vs_inst_idx := SUC s.vs_inst_idx`] >>
   conj_tac >-
     (irule mstore_frag_ptr >> simp[] >>
-     drule_all toplevel_immutable_mstore_ghost_frame >>
-     simp[Abbr `tnf`] >> metis_tac[]) >>
+     drule_all dynamic_mstore_clean_step_ptr >>
+     disch_then (qspecl_then [`PG`, `sa.cs_next_id`] strip_assume_tac) >>
+     gvs[Abbr `tnf`] >> metis_tac[]) >>
   conj_tac >-
     (rpt strip_tac >>
      `mem_bytes_at (w2n a) 32 (mstore (w2n a) w s).vs_memory =

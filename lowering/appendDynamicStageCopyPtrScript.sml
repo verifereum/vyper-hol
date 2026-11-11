@@ -1,6 +1,6 @@
 (* Same-element Dynamic capacity widening: finite prefix and live MCOPY. *)
 Theory appendDynamicStageCopyPtr
-Ancestors appendDynamicPrefixPtr appendDynamicTransportPtr typedCopyLayoutPtr
+Ancestors appendDynamicMemoryStepPtr appendDynamicPrefixPtr appendDynamicTransportPtr typedCopyLayoutPtr
   annAssignPtrCopy typedCopyPtr valueTypingMemoryProps contextCodegenRel
   compileEnv context emitHelper venomState venomInst words finite_map
   valueEncodingProps representationCleanPtr bodyPtrDefs vyperTyping loweringShapeRules
@@ -88,12 +88,14 @@ Proof
     (mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []) sp u tp` >>
   `step_prov PG Gp (mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []) u = Gp /\
    tf.t_var = tp.t_var /\ tf.t_stor = tp.t_stor /\ tf.t_trans = tp.t_trans /\
+   tf.t_imm = tp.t_imm /\
    tf.t_mem = (tp.t_mem DIFF {i | w2n b+32 <= i /\ i < w2n b+32+n}) UNION
      {w2n b+32+i | i < n /\ w2n a+32+i IN tp.t_mem}` by
-    (mp_tac mcopy_operand_ghost_frame >>
-     disch_then (qspecl_then [`PG`, `Gp`, `tp`, `sp`, `last.cs_next_id`,
-       `Var dd`, `Var sd`, `Var cnt`] mp_tac) >>
-     simp[eval_operand_def, Abbr `n`, Abbr `u`, Abbr `tf`] ) >>
+    (mp_tac dynamic_mcopy_covered_step_ptr >>
+     disch_then (qspecl_then [`PG`, `Gp`, `tp`, `sp`] mp_tac) >>
+     disch_then (qspecl_then [`last.cs_next_id`, `dd`, `sd`, `Var cnt`] mp_tac) >>
+     simp[eval_operand_def, Abbr `n`] >> strip_tac >>
+     gvs[Abbr `tf`, Abbr `u`, Abbr `n`]) >>
   `frag_exec_ptr cx ctx PG last sb
     (\g t v. g = Gp /\ t = tp /\ v = sp)
     (\g t v. g = Gp /\ t = tf /\ v = (u with vs_inst_idx := SUC sp.vs_inst_idx)) R` by
@@ -144,12 +146,6 @@ Proof
        (simp[Abbr `u`, mcopy_mem_bytes_at_disjoint]) >>
      `!j. j < n ==> i <> j+(w2n b+32)` by decide_tac >>
      simp[] >> metis_tac[]) >>
-  `tf.t_imm = tp.t_imm` by
-    (mp_tac annassign_mcopy_taint_restore_ptr >>
-     disch_then (qspecl_then [`last.cs_next_id`, `Var dd`, `Var sd`, `Var cnt`,
-       `sp`, `u`, `tp`] mp_tac) >>
-     simp[GSYM markerTheory.Abbrev_def, Abbr `tf`] >>
-     disch_then (mp_tac o Q.AP_TERM `\t. t.t_imm`) >> simp[]) >>
   simp[] >>
   conj_tac >- metis_tac[compileEnvTheory.cs_extends_trans] >>
   simp[Abbr `u`, venomExecSemanticsTheory.mcopy_def,

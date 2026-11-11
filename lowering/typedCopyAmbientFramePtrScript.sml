@@ -1,6 +1,7 @@
 (* Complete ambient projections on the concrete copy-prefix witnesses. *)
 Theory typedCopyAmbientFramePtr
-Ancestors typedCopyPtr typedCopyLoopHeaderPtr
+Ancestors appendDynamicMemoryStepPtr typedCopyPtr typedCopyLoopHeaderPtr
+  emitHelper context compileEnv loweringStateRelDefs venomInst ptrDiscipline venomState
 
 Theorem emit_copy_len_binop_ambient_frag_ptr:
   !opc f G cx ctx PG R sa sb left right out tn s a b.
@@ -45,7 +46,25 @@ Theorem emit_mload_clean_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.emit_mload (mload_frag_ptr, mload_ghost_clean)
+  rpt gen_tac >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id MLOAD [Var src] [out]] /\
+   (!p. not_fresh_at sa p ==> p <> out)` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  drule_all dynamic_mload_clean_step_ptr >>
+  disch_then (qspecl_then [`PG`, `sa.cs_next_id`, `out`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tf`, `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac >-
+    (irule mload_frag_ptr >> simp[mk_inst_def] >> gvs[mk_inst_def]) >>
+  `tf.t_imm = tn.t_imm` by
+    gvs[step_taint_def, set_var_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def] >>
+  simp[lookup_var_def] >>
+  gvs[update_var_def] >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >> rpt strip_tac >>
+  `p <> out` by metis_tac[] >> simp[]
 QED
 
 Theorem compile_bytestring_copy_len_ambient_frag_ptr:
