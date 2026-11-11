@@ -1903,7 +1903,7 @@ Resume identity_suffix_mask[terminator_head]:
   simp[restore_result_def, dftRunRelTheory.dft_res_rel_def,
        residual_result_cases, passSimulationDefsTheory.terminates_def]
 QED
-Finalise identity_suffix_mask
+Finalise identity_suffix_mask[local]
 
 Theorem remaining_prefix_ok_cut[local]:
   !xs s u.
@@ -2929,7 +2929,7 @@ Resume callfree_prefix_replay[gas]:
   simp[Abbr `u`, residual_result_def]
 QED
 
-Finalise callfree_prefix_replay
+Finalise callfree_prefix_replay[local]
 
 Theorem prefix_extract_mask[local]:
   !fuel C C'.
@@ -4059,7 +4059,7 @@ Resume prefix_extract_mask[callfree_nongas]:
   gvs[prefix_nonterminator_no_intret, EVERY_DEF]
 QED
 
-Finalise prefix_extract_mask
+Finalise prefix_extract_mask[local]
 
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
