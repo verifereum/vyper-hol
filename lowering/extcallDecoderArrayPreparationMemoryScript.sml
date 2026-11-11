@@ -132,7 +132,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem extcall_decoder_bytes_head_fresh[local]:
+Theorem extcall_decoder_bytes_head_fresh:
   straight_fresh (abi_decode_bytes_head src hi)
 Proof
   Cases_on `hi = Lit 0w` >>
