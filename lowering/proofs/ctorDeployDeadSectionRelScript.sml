@@ -1,6 +1,7 @@
 (* immutables_section_rel ignores the immutables section's dead bytes. *)
 Theory ctorDeployDeadSectionRel
 Ancestors
+  immSectionDead
   ctorDeployDeadSection ctorDeployDefs immutableSectionRel immutableValue
   immutableEncoding valueEncoding compileVyper structFieldsProps entryStateRel
   list rich_list vyperValue words arithmetic vyperTyping alist valueEncodingProofs

@@ -2,6 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringFrame
 Ancestors
+  immSectionDead
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
   ctorDeployLoweringFramePayload ctorDeployDefs e2eDeployDefs e2eEntry
   vyperTypeStoragePreservation list supportedDecls supportedProgram
@@ -1492,5 +1493,10 @@ Proof
   `cenv_module_pins tops cenv /\
    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
     fs[body_inv_def] >>
-  gvs[] >> irule cenv_module_pins_immutables_disjoint >> metis_tac[]
+  gvs[] >>
+  irule (cenv_module_pins_immutables_disjoint |>
+    Q.SPECL [`tops`, `cenv`, `deploy_evaluation_context tops am tx`,
+             `id1`, `id2`, `ty1`, `ty2`]) >>
+  qexistsl [`am`, `cenv`, `id1`, `id2`, `tops`, `tx`, `ty1`, `ty2`] >>
+  asm_rewrite_tac[]
 QED

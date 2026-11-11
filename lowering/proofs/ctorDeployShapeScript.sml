@@ -11,6 +11,7 @@
  *)
 Theory ctorDeployShape
 Ancestors
+  immSectionDead
   list ctorDeployDefs o1PassContract unitShapeDefs staticLayoutDefs
   ctorUnitShape deployUnitProducers loweringShapeProps loweringShapeSource
   supportedProgram supportedNames compileVyper vyperCompiler

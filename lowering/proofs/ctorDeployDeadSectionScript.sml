@@ -3,6 +3,7 @@
  *)
 Theory ctorDeployDeadSection
 Ancestors
+  immSectionDead
   ctorDeployDefs immutableSectionRel immutableValue valueEncoding
   structFieldsProps entryStateRel list rich_list
 

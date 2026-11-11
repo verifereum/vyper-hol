@@ -5,6 +5,7 @@
  *)
 Theory ctorDeployMemoryRunMemNoCtor
 Ancestors
+  immSectionDead
   ctorDeployDefs gasSummary memSafeRun venomInst
   moduleLowering context vyperCompiler emitHelper compileEnv compileVyper
   venomExecSemantics venomState unitTransformDefs contextCodegenRel codegenRel

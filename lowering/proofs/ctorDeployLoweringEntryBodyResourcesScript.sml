@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryBodyResources
 Ancestors
+  immSectionDead
  ctorDeployLoweringEntryLocalBounds ctorDeployLoweringEntryCoordinatedDeployment
  ctorDeployLoweringEntryInputs ctorDeployLoweringEntryPrefix
  ctorDeployLoweringEntryRegisterRun ctorDeployLoweringEntryTransport
@@ -113,7 +114,7 @@ Proof
  drule (deploy_ctor_entry_before_register_gas_path |> SPEC_ALL |>
    Q.INST [`cap` |-> `imm_len tops`, `is_payable` |-> `mut = Payable`] |> GEN_ALL |> SRULE []) >>
  disch_then drule_all >> strip_tac >>
- drule (deploy_ctor_decoder_inputs |> INST_TYPE [``:'a`` |-> ``:expr``] |> SPEC_ALL |>
+ drule (ctorDeployLoweringEntryInputsTheory.deploy_ctor_decoder_inputs |> INST_TYPE [``:'a`` |-> ``:expr``] |> SPEC_ALL |>
    Q.INST [`ce0` |-> `ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`,
            `imm_opt` |-> `if imm_len tops > 0 then SOME imm else NONE`] |>
    GEN_ALL |> SRULE []) >>

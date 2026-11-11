@@ -10,6 +10,7 @@
  *)
 Theory ctorDeployImmBudget
 Ancestors
+  immSectionDead
   ctorDeployDefs vyperCompiler lowerDloadDefs
 
 Theorem run_deploy_lowering_imm_budget[local]:

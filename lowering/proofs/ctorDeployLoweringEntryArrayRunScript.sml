@@ -851,7 +851,7 @@ Proof
  fs[abi_decoder_recursive_loop_data_def, Excl "enc_def"]
 QED
 
-Theorem deploy_ctor_array_scratch_enlarge[local]:
+Theorem deploy_ctor_array_scratch_enlarge:
  small SUBSET ids /\ ctor_actual_scratch func small D N final /\
  abi_encoder_registered_effect (ctor_actual_sites func small) regions initial final /\
  ctor_actual_scratch func ids D N initial ==>

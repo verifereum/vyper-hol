@@ -1,6 +1,7 @@
 (* Constructor code containment for deploy_unit_execution_correct. *)
 Theory ctorDeployLoweringCode
 Ancestors
+  immSectionDead
   ctorDeployLoweringDefs ctorDeployDefs compileVyper vyperCompiler
   moduleLowering compileEnv context emitHelper loweringShapeProps
   loweringShapeDefs supportedProgram loweringShapeSource

@@ -25,7 +25,7 @@ Ancestors
   localPtrsProps
   immutableStagingBridge
   immutableCodeLayout
-  e2eDeployFrame
+  e2eDeployFrame ctorDeployLoweringEntry
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
   immutableLocationProps
   loweringShapeDefs
