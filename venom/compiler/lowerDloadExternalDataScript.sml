@@ -194,9 +194,8 @@ QED
 Resume ld_normal_external_backward[delegate_shared]:
        `ld_shared_state (step_taint i s rS tn) (step_taint i t rT un) rS rT` by
          (irule ld_delegate_consume_tainted_shared >>
-          goal_assum (drule_at Any) >>
-          goal_assum (drule_at Any) >>
-          goal_assum (drule_at Any) >>
+          qpat_assum `consume_call_outcome _ _ _ s = _` (irule_at Any) >>
+          qpat_assum `consume_call_outcome _ _ _ t = _` (irule_at Any) >>
           simp[MEM, venom_call_request_def, Excl "consume_call_outcome_eq"] >>
           qpat_x_assum `read_memory _ _ s = _` mp_tac >>
           asm_rewrite_tac[]) >>
