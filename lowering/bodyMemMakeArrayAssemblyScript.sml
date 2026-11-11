@@ -130,3 +130,23 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+Theorem body_make_array_sim_mem:
+  !cx ty t n es tops ctx func cenv env ty' st.
+    (builtin_args_length_ok (MakeArray t n) (LENGTH es) ==>
+     body_exprs_mem_ok cx es) /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Builtin ty (MakeArray t n) es) st ==>
+    expr_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st /\
+    expr_vv_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st
+Proof
+  rpt gen_tac >> strip_tac >> conj_asm2_tac
+  >- (irule body_expr_sim_mem_of_vv_sim_mem >>
+      first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>
+      rpt strip_tac >> Cases_on `t`
+      >- (drule compile_tuple_literal_inv >> simp[]) >>
+      drule compile_array_literal_inv >> simp[]) >>
+  Cases_on `t`
+  >- metis_tac[make_tuple_body_vv_mem] >>
+  metis_tac[make_array_body_vv_mem]
+QED

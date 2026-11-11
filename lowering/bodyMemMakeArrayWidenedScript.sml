@@ -1,12 +1,8 @@
-(* Memory case of the body induction, array literal (bodyMemMakeArray's
-   dispatch): an element that is an internal call whose return type the
-   call's type widens.  HELD with S1's body_make_array_widened_call_elem
-   (bodySimMakeArrayWidened), which waits for the posts interface to
-   describe a widened call's value at its lowered type. *)
+(* Memory-safe MakeArray with physically widened internal-call elements.
+   The shared assembly stores each child at its physical post-value type. *)
 Theory bodyMemMakeArrayWidened
 Ancestors
-  bodyMemAggregateResult
-  bodyMemAggregatePostJoin bodyMemAggregateHeadContinuation bodyMemAggregateLoopFrames bodyMemAggregateBodyCons bodyMemAggregateConsContinuation bodyMemAggregateSliceContinuation bodyMemAggregateBodyContinuation bodyMemAggregatePhysicalRead bodyMemAggregateTypedStore fragGasPathFrameMem bodyMemAggregateOwnership bodyMemoryPreds typedCopyControlPathMem typedCopyPrimitivePathMem typedCopyArrayEntryPathMem typedCopySarrayPathMem typedCopyDynarrayPathMem typedCopyArraySemanticPathMem typedCopyFieldStepMem typedCopyFieldsSemanticPathMem typedCopyRankPathMem
+  bodyMemMakeArrayAssembly
 
 Theorem body_make_array_widened_call_elem_mem:
   !cx ty t n es.
@@ -20,5 +16,5 @@ Theorem body_make_array_widened_call_elem_mem:
       expr_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st /\
       expr_vv_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st
 Proof
-  cheat
+  metis_tac[body_make_array_sim_mem]
 QED
