@@ -1317,41 +1317,46 @@ Termination
   \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
-(* Stage internal call arguments based on pass_via_stack classification.
+(* Lower and stage internal call arguments, one at a time, based on the
+   pass_via_stack classification.
    arg_types: parallel list of argument types (for computing alloca size).
-   For stack-passed word args: use value directly.
-   For memory-passed: allocate type-sized buffer, copy value, pass pointer.
-   Mirrors Python: expr.py _lower_internal_call arg staging loop *)
+   Each argument is staged right after it is lowered, before the next one is,
+   so later arguments can't change what it reads: a stack-passed word
+   argument's value is read at once; a memory-passed one is copied into a
+   type-sized buffer allocated for it.
+   Mirrors Python: expr.py _lower_internal_call argument loop
+   (snapshot_value_for_delayed_use; new_temporary_value, store_vyper_value) *)
 Definition compile_stage_intcall_args_def:
-  compile_stage_intcall_args cenv [] _ _ = return ([] : operand list) ∧
-  compile_stage_intcall_args cenv (vv :: vals) (T :: flags) (_ :: tys) =
-    (* Python preserves VyperValues while evaluating every argument, then
-       unwraps each one only when staging it. *)
-    do val_op <- unwrap_value cenv vv;
-       rest <- compile_stage_intcall_args cenv vals flags tys;
+  compile_stage_intcall_args cfn cenv [] _ _ = return ([] : operand list) ∧
+  compile_stage_intcall_args cfn cenv (e :: es) (T :: flags) (_ :: tys) =
+    do vv <- cfn cenv (expr_type e) e;
+       val_op <- unwrap_value cenv vv;
+       rest <- compile_stage_intcall_args cfn cenv es flags tys;
        return (val_op :: rest)
     od ∧
-  compile_stage_intcall_args cenv (vv :: vals) (F :: flags) (ty :: tys) =
+  compile_stage_intcall_args cfn cenv (e :: es) (F :: flags) (ty :: tys) =
     (let mem_size = type_memory_bytes cenv ty in
      let is_bs = (case ty of
          BaseT (BytesT (Dynamic _)) => T
        | BaseT (StringT _) => T
        | _ => F) in
-     do val_op <- unwrap_value cenv vv;
+     do vv <- cfn cenv (expr_type e) e;
         buf_alloc <- compile_alloc_buffer (MAX 32 mem_size);
         let buf = buf_alloc.buf_operand in
-        do (if is_word_type ty then emit_void MSTORE [buf; val_op]
+        do val_op <- unwrap_value cenv vv;
+           (if is_word_type ty then emit_void MSTORE [buf; val_op]
             else if is_bs then
               do compile_store_bytestring val_op buf; return () od
             else emit_void MCOPY [buf; val_op; Lit (n2w mem_size)]);
-           rest <- compile_stage_intcall_args cenv vals flags tys;
+           rest <- compile_stage_intcall_args cfn cenv es flags tys;
            return (buf :: rest)
         od
      od) ∧
   (* Fallback: extra args without flags/types default to stack *)
-  compile_stage_intcall_args cenv (vv :: vals) _ _ =
-    do val_op <- unwrap_value cenv vv;
-       rest <- compile_stage_intcall_args cenv vals [] [];
+  compile_stage_intcall_args cfn cenv (e :: es) _ _ =
+    do vv <- cfn cenv (expr_type e) e;
+       val_op <- unwrap_value cenv vv;
+       rest <- compile_stage_intcall_args cfn cenv es [] [];
        return (val_op :: rest)
     od
 End
@@ -2434,6 +2439,96 @@ Definition compile_materialize_vv_def:
     od
 End
 
+(* Whether a call target can modify memory or storage by itself.
+   Mirrors Python: eval_order.py _call_can_mutate *)
+Definition call_target_can_mutate_def:
+  call_target_can_mutate cenv (IntCall fn) =
+    cenv.ce_func_modifying (nsid_to_string fn) ∧
+  call_target_can_mutate cenv (ExtCall is_static _ _ _) = ¬is_static ∧
+  call_target_can_mutate cenv (Send _) = T ∧
+  call_target_can_mutate cenv (RawCallTarget rcf) = ¬rcf.rcf_is_static ∧
+  call_target_can_mutate cenv (RawCallCalldataTarget rcf) = ¬rcf.rcf_is_static ∧
+  call_target_can_mutate cenv SelfDestructTarget = T ∧
+  call_target_can_mutate cenv (CreateTarget _ _ _ _) = T ∧
+  call_target_can_mutate cenv _ = F
+End
+
+(* Whether evaluating an expression can modify memory or storage: it pops a
+   dynamic array, or calls something that can (extcall, a state-modifying
+   internal function, send, a non-static raw_call, selfdestruct, a create).
+   Mirrors Python: eval_order.py expression_can_mutate_memory_or_storage *)
+Definition expr_can_mutate_def:
+  expr_can_mutate cenv (IfExp _ c x y) =
+    (expr_can_mutate cenv c ∨ expr_can_mutate cenv x ∨
+     expr_can_mutate cenv y) ∧
+  expr_can_mutate cenv (StructLit _ _ kes) = named_exprs_can_mutate cenv kes ∧
+  expr_can_mutate cenv (Subscript _ x y) =
+    (expr_can_mutate cenv x ∨ expr_can_mutate cenv y) ∧
+  expr_can_mutate cenv (Attribute _ x _) = expr_can_mutate cenv x ∧
+  expr_can_mutate cenv (Builtin _ _ es) = exprs_can_mutate cenv es ∧
+  expr_can_mutate cenv (TypeBuiltin _ _ _ es) = exprs_can_mutate cenv es ∧
+  expr_can_mutate cenv (Pop _ _) = T ∧
+  expr_can_mutate cenv (Call _ target es default_ret) =
+    (call_target_can_mutate cenv target ∨ exprs_can_mutate cenv es ∨
+     opt_expr_can_mutate cenv default_ret) ∧
+  expr_can_mutate cenv _ = F ∧
+
+  exprs_can_mutate cenv [] = F ∧
+  exprs_can_mutate cenv (e::es) =
+    (expr_can_mutate cenv e ∨ exprs_can_mutate cenv es) ∧
+
+  opt_expr_can_mutate cenv NONE = F ∧
+  opt_expr_can_mutate cenv (SOME e) = expr_can_mutate cenv e ∧
+
+  named_exprs_can_mutate cenv [] = F ∧
+  named_exprs_can_mutate cenv ((_,e)::kes) =
+    (expr_can_mutate cenv e ∨ named_exprs_can_mutate cenv kes)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_, e) => expr_size e
+    | INR (INL (_, es)) => list_size expr_size es
+    | INR (INR (INL (_, opt))) => option_size expr_size opt
+    | INR (INR (INR (_, kes))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
+End
+
+(* Freeze a call argument's value before later operands are lowered: a word
+   value is read at once; a composite one is copied into a fresh temporary
+   when copy is set (a later operand can modify memory or storage), and left
+   where it is otherwise.
+   Mirrors Python: context.py snapshot_value_for_delayed_use *)
+Definition compile_snapshot_vv_def:
+  compile_snapshot_vv cenv copy vv =
+    if is_word_type (vv_type vv) then
+      do op <- unwrap_value cenv vv;
+         return (StackValue (vv_type vv) op)
+      od
+    else if copy then
+      do op <- compile_materialize_vv cenv (vv_type vv) vv;
+         return (LocatedValue (vv_type vv) (mk_ptr op LocMemory))
+      od
+    else return vv
+End
+
+(* Lower the positional arguments of extcall/staticcall, freezing each one
+   at its call-site type (ext_call_arg_types) before the next argument and the
+   keyword operands kw_es are lowered.
+   Mirrors Python: expr.py _lower_external_call argument loop *)
+Definition compile_ext_call_args_def:
+  compile_ext_call_args cfn cenv kw_es (ty::tys) (e::es) =
+    do vv <- cfn cenv (expr_type e) e;
+       vv <- compile_snapshot_vv cenv (exprs_can_mutate cenv (es ++ kw_es))
+               (ext_call_arg_value ty vv);
+       rest <- compile_ext_call_args cfn cenv kw_es tys es;
+       comp_return (vv::rest)
+    od ∧
+  compile_ext_call_args cfn cenv kw_es _ _ = comp_return ([] : vyper_value list)
+End
+
 (* Lower one keyword operand of extcall/staticcall: value= and gas= are
    uint256 words; default_return_value= is a word of the return type, or,
    for any other type, a value Python materializes where it is lowered
@@ -2635,17 +2730,17 @@ Definition compile_call_def:
                   (cenv.ce_func_param_types name) cenv.ce_is_ctor in
     let (returns_count, return_buf_size, pass_via_stack) = cenv.ce_func_info name in
     let arg_types = MAP expr_type args in
-    let (arg_vals, st1) = compile_multi_vvs cfn cenv args st in
+    (* Python allocates the return buffer before lowering the arguments. *)
     let (return_buf, st2) =
       (if returns_count > 0 then
-         let (rbuf, st_b) = compile_alloc_buffer (32 * returns_count) st1 in
+         let (rbuf, st_b) = compile_alloc_buffer (32 * returns_count) st in
          (SOME rbuf, st_b)
        else if return_buf_size > 0 then
-         let (rbuf, st_b) = compile_alloc_buffer return_buf_size st1 in
+         let (rbuf, st_b) = compile_alloc_buffer return_buf_size st in
          (SOME rbuf, st_b)
-       else (NONE, st1)) in
+       else (NONE, st)) in
     let (invoke_args, st3) =
-      compile_stage_intcall_args cenv arg_vals pass_via_stack arg_types st2 in
+      compile_stage_intcall_args cfn cenv args pass_via_stack arg_types st2 in
     let buf_prefix = (case return_buf of
         SOME rbuf => if returns_count = 0 then [rbuf.buf_operand] else []
       | NONE => []) in
@@ -2676,17 +2771,18 @@ Definition compile_call_def:
        let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
        let func_args = TAKE (LENGTH arg_types) rest_after_addr in
        let kw_es = DROP (LENGTH arg_types) rest_after_addr in
-       (* Python evaluates all positional arguments before call kwargs and
-          allocates their memory-layout tuple only after the call buffer. *)
-       let (arg_vals, st2) = compile_multi_vvs cfn cenv func_args st1 in
-       let ((value_opt, gas_opt, default_opt), st3) =
-         compile_ext_call_kwargs cfn cenv return_type opts kw_es st2 in
-       let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
        (* Python lays the argument buffer out with the types of the lowered
           argument values (_lower_external_call: TupleT(v.typ for v in
           arg_vals)), not the declared parameter types. The selector is the
           same under both, since bounds don't appear in it. *)
        let call_arg_types = ext_call_arg_types cenv arg_types func_args in
+       (* Python evaluates all positional arguments before call kwargs and
+          allocates their memory-layout tuple only after the call buffer. *)
+       let (arg_vals, st2) =
+         compile_ext_call_args cfn cenv kw_es call_arg_types func_args st1 in
+       let ((value_opt, gas_opt, default_opt), st3) =
+         compile_ext_call_kwargs cfn cenv return_type opts kw_es st2 in
+       let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
        let args_mem_size = SUM (MAP (type_memory_bytes cenv) call_arg_types) in
        let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT call_arg_types) in
        let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT call_arg_types) in
@@ -2706,7 +2802,7 @@ Definition compile_call_def:
        let ret_dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped_return in
        let (result_op, st6) =
          compile_external_call_kwargs cenv addr_op
-                                    (MAP2 ext_call_arg_value call_arg_types arg_vals)
+                                    arg_vals
                                     call_arg_types
                                     args_mem_size args_abi_size method_id_val
                                     return_abi_size min_return_size ret_mem_bytes

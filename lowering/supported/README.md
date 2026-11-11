@@ -150,10 +150,9 @@ cheat delta is zero.
   positional arguments in source order, each kind at most once, and no
   `value=` on a staticcall. They are pure like every other operand, and both
   the lowering and the semantics evaluate them before the call.
-  The interpreter captures internal argument results before reading them after
-  defaults; external positional arguments are read after keyword evaluation.
-  This deferred-read behavior does not remove the whitelist's pure-operand
-  restriction. Builtin and log arguments remain eager.
+  The interpreter and the lowering read each internal- and external-call
+  argument as soon as it is evaluated, before the next argument, the defaults
+  and the keyword operands. Builtin and log arguments are eager too.
 - `supported_expr tops e`: P or E, for later statement expression positions.
   No statement or whole-program placeholder is provided.
 - Symbolic contracts: pure Call/Pop rejection, external-call inversion,

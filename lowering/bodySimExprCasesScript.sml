@@ -360,15 +360,18 @@ Proof
 QED
 
 (* GAP (#638 the call step): the INVOKE of an internal call.  The IHs
-   give the arguments' judgments (body_results_ok), the defaults' at the
+   give the arguments' judgments (body_exprs_ok), the defaults' at the
    callee's stack (body_exprs_ok), and the callee body's (body_stmts_ok
    at cxf, the callee's context after push_function).  The step:
    - compile_call: intCallStep's compile_call_intcall_shape, the INVOKE
      label by intCallLookup's compile_call_intcall_label (body_inv gives
      its premises), and the callee's code in ctx by
      lower_vyper_runtime_unit_internal_lookup;
-   - the arguments: the IH, then intCallArgs' stage_mem_arg_frag for
-     the staged memory arguments;
+   - the arguments: compile_stage_intcall_args lowers each argument (the
+     IH), then allocates its buffer, unwraps and stores it.
+     intCallArgs' stage_mem_arg_frag predates this order (it stores
+     right after the allocation), so this step splits it into the
+     allocation and a store after the unwrap;
    - the callee's entry: intCallCallee's compile_internal_prologue_entry
      gives stmt_state_rel at the callee's start, at
      vs with scopes := [env];
