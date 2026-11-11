@@ -99,7 +99,7 @@ Theorem intcall_readonly_cont:
   intcall_expr_cont fp ce env es sa s es sb u
 Proof
   strip_tac >>
-  `intcall_joint_res fp ce env es sb u` by
+  `intcall_expr_res fp ce env es sb u` by
     (irule intcall_joint_res_frame >> simp[] >>
      conj_tac
      >- (gvs[bodyIntCallJointContractTheory.intcall_joint_res_def,
