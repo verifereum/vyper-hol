@@ -98,7 +98,7 @@ Theorem scalar_suffix_expr_post:
   expr_post ctx func cenv cx eout es sa sb s0 ee v op s
 Proof
   simp[expr_post_def] >> strip_tac >>
-  `locals_kept cenv es s0 s` by
+  `locals_kept cenv es ee s0 s` by
     (irule locals_kept_mem_tail >> qexists_tac `t0` >> asm_rewrite_tac[]) >>
   simp[expr_val_rel_def, expr_val_at_def] >> conj_tac
   >- (rpt strip_tac >> rename1 `lookup_var z s0 = SOME w` >>

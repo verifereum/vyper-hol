@@ -230,7 +230,9 @@ Proof
   simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   simp[halt_state_def, set_returndata_def, lookup_account_def,
        step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
-  rpt gen_tac >> rpt IF_CASES_TAC >> simp[]
+  rpt gen_tac >> rpt IF_CASES_TAC >> simp[] >>
+  rw[vfmStateTheory.update_account_def, vfmExecutionTheory.transfer_value_def,
+     combinTheory.APPLY_UPDATE_THM, lookup_account_def]
 QED
 
 Theorem ld_normal_halt_observation:

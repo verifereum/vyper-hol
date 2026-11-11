@@ -62,7 +62,7 @@ Theorem widen_copy_run_wb_frame:
   stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME a ==>
-  wb_frame cenv es sa s t
+  wb_frame cenv es es sa s t
 Proof
   strip_tac >> drule_all widen_copy_run_frame_split >> strip_tac >>
   simp[wb_frame_def] >> rpt conj_tac
@@ -128,7 +128,7 @@ Theorem widen_copy_run_parent_post:
   expr_post ctx fn cenv cx e es sa sb s es v op t
 Proof
   strip_tac >> drule_all widen_copy_run_allocation_frame >> strip_tac >>
-  `wb_frame cenv es sa s t` by (irule widen_copy_run_wb_frame >> metis_tac[]) >>
+  `wb_frame cenv es es sa s t` by (irule widen_copy_run_wb_frame >> metis_tac[]) >>
   irule convert_buffer_expr_post >> simp[] >>
   gvs[]
 QED

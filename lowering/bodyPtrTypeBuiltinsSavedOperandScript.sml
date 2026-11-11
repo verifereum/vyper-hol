@@ -36,8 +36,8 @@ Proof
       conj_tac
       >- (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
           simp[expr_post_def] >> strip_tac >>
-          qpat_x_assum `locals_kept _ _ _ _` mp_tac >>
-          simp[locals_kept_def] >> strip_tac >>
+          qpat_x_assum `locals_kept _ _ _ _ _`
+            (assume_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
           first_x_assum irule >> qexistsl_tac [`b`, `n`, `sz`] >> simp[] >>
           rpt strip_tac >> first_x_assum drule >> decide_tac) >>
       rpt strip_tac >>

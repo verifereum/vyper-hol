@@ -50,7 +50,9 @@ Proof
   `vv_at cenv cx (expr_type e) sa sc es' raw vv q` by
     (irule vv_at_alloc_map_frame >> simp[] >>
      qexistsl_tac [`s`, `sb`] >> gvs[vv_post_def]) >>
-  gvs[vv_post_def, locals_kept_def] >>
+  `locals_kept cenv es es' s0 q` by
+    (irule locals_kept_mem_tail >> qexists_tac `s` >> gvs[vv_post_def]) >>
+  gvs[vv_post_def] >>
   conj_tac
   >- (Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]) >>
   rpt strip_tac >> metis_tac[]

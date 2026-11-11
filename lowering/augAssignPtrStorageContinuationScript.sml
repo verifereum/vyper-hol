@@ -163,7 +163,9 @@ Resume augassign_storage_clean_continuation_ptr[normal]:
      case evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        tv bop v v' of INL z => INL z | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> simp[] >>
+     `word_value v` by metis_tac[word_value_type_typed] >>
+     metis_tac[stmtSimAugAssignTheory.word_value_not_bytes]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      tv bop v v' = INL result` by
@@ -213,7 +215,9 @@ Resume augassign_storage_clean_continuation_ptr[abort]:
      case evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        tv bop v v' of INL z => INL z | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> simp[] >>
+     `word_value v` by metis_tac[word_value_type_typed] >>
+     metis_tac[stmtSimAugAssignTheory.word_value_not_bytes]) >>
   `evaluate_binop
       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
       tv bop v v' = INR (RuntimeError msg)` by

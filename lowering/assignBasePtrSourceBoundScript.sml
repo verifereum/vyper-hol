@@ -14,7 +14,7 @@ Theorem assign_base_ptr_identity_post:
     expr_val_at cenv cx (expr_type e) sa sb es v op s ==>
     expr_post ctx func cenv cx e es sa sb s es v op s
 Proof
-  simp[expr_post_def, locals_kept_def]
+  simp[expr_post_def]
 QED
 
 Theorem assign_base_ptr_empty_bytes_placement:
@@ -218,7 +218,7 @@ Proof
   `alloca_room ctx func s /\ fmp_room ctx func s` by
     (irule assign_base_ptr_empty_room >> simp[dimword_def]) >>
   simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_base_zero_def,
-       fn_insts_def, fn_insts_blocks_def] >>
+       immutable_decl_sep_def, fn_insts_def, fn_insts_blocks_def] >>
   simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
        FLOOKUP_UPDATE, dimword_def] >> rpt strip_tac >> gvs[]
 QED

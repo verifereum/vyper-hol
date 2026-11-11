@@ -64,11 +64,12 @@ Proof
         simp[ci_mono_def] >> decide_tac) >>
      `MAP FDOM esi.scopes = MAP FDOM es'.scopes` by
        metis_tac[eval_expr_preserves_scopes_dom] >>
-     `wb_frame ce esi si s0 z` by
+     `wb_frame ce esi es' si s0 z` by
        (qpat_x_assum `vv_post _ _ _ _ _ _ _ sn _ _ _ _ _` mp_tac >>
         simp[vv_post_def, wb_frame_def] >> metis_tac[]) >>
-     irule ghost_kept_wb_trans >> simp[] >> conj_tac >- metis_tac[] >>
-     qexistsl [`H`, `es'`, `z`, `sn`, `tm`] >> simp[]) >>
+     irule (Q.INST [`es1` |-> `es'`, `s1` |-> `z`, `sb` |-> `sn`, `G1` |-> `H`,
+                    `tn1` |-> `tm`] wordArgsPtrTheory.ghost_kept_wb_trans) >>
+     simp[] >> metis_tac[]) >>
   qexistsl [`z'`, `H'`, `tm'`] >> simp[] >>
   metis_tac[gas_path_ptr_then, arithmeticTheory.ADD]
 QED

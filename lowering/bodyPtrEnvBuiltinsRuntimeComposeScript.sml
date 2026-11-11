@@ -102,7 +102,7 @@ Theorem method_id_selector_append_counted:
   ~s.vs_halted /\ fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   stmt_state_rel ctx fn cenv cx es0 sf0 /\ local_ptrs_reserved cenv sf /\
-  MAP FDOM es0.scopes = MAP FDOM es.scopes /\ wb_frame cenv es0 sf sf0 s /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\ wb_frame cenv es0 es' sf sf0 s /\
   sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
   ghost_kept cenv es0 sf Gf tnf sf0 G tn ==>
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G0 tn0 s0 0 G' tn'
@@ -149,7 +149,7 @@ Theorem method_id_typed_mask_counted:
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 4))) result op G' tn' t /\
     ghost_inv d cenv cx es' G' tn' t /\ ghost_kept cenv es' sm G tn s G' tn' /\
-    stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es' sm s t /\
+    stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es' es' sm s t /\
     run_inst_seq (emitted_insts sm sb) s = OK t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\ LENGTH bs = 4 /\
     eval_operand op t = SOME

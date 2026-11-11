@@ -201,11 +201,10 @@ Resume compile_for_range_checked_frag_active_ptr[operands]:
     (qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`
        (mp_then Any mp_tac expr_post_word_operand) >>
      simp[word_value_def, val_to_w256_def]) >>
-  `wb_frame cenv (mid with gas_obs := []) s1 t t'` by
-    (qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`
-       (mp_then Any mp_tac expr_post_frame) >> simp[]) >>
+  qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`
+    (assume_tac o MATCH_MP expr_post_frame) >>
   `eval_operand op1 t' = SOME (i2w n1) /\ op_taint tn' op1 = op_taint tn op1` by
-    (qpat_assum `wb_frame cenv _ s1 t t'` mp_tac >>
+    (qpat_assum `wb_frame cenv _ _ s1 t t'` mp_tac >>
      qpat_assum `ghost_kept cenv _ s1 G tn t G' tn'` mp_tac >>
      qpat_assum `!x. op1 = Var x ==> _` mp_tac >>
      qpat_assum `!l. op1 <> Label l` mp_tac >>
@@ -233,9 +232,8 @@ Resume compile_for_range_checked_frag_active_ptr[tail_entry]:
      simp[]) >>
   `lookup_scopes id mid'.scopes = NONE` by
     metis_tac[vyperEvalPreservesScopesTheory.lookup_scopes_none_map_fdom] >>
-  `wb_frame cenv es sa s0 t` by
-    (qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
-       (mp_then Any mp_tac expr_post_frame) >> simp[]) >>
+  qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
+    (assume_tac o MATCH_MP expr_post_frame) >>
   `ret_pc_ok cenv s1 t` by
     (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`,`s0`,`sa`] >>
      simp[] >> metis_tac[wb_frame_vars]) >>
@@ -314,7 +312,7 @@ Resume compile_for_range_checked_frag_active_ptr[post_frame]:
       lookup_var x t'' = SOME w) /\
    (!x. not_fresh_at s1 x ==> FLOOKUP G'' x = FLOOKUP G x /\
       op_taint tn'' (Var x) = op_taint tn (Var x))` by
-    (qpat_assum `wb_frame cenv _ s1 t t'` mp_tac >>
+    (qpat_assum `wb_frame cenv _ _ s1 t t'` mp_tac >>
      qpat_assum `ghost_kept cenv _ s1 G tn t G' tn'` mp_tac >>
      qpat_assum `s1.cs_next_var <= s2.cs_next_var` mp_tac >>
      qpat_assum `!x w. not_fresh_at s2 x /\ _ ==> _` mp_tac >>
@@ -323,7 +321,7 @@ Resume compile_for_range_checked_frag_active_ptr[post_frame]:
      irule for_endpoint_prefix_frame >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      qexists_tac `s2` >> simp[]) >>
-  qpat_assum `wb_frame cenv es sa s0 t` mp_tac >>
+  qpat_assum `wb_frame cenv es _ sa s0 t` mp_tac >>
   qpat_assum `ghost_kept cenv es sa G0 tn0 s0 G tn` mp_tac >>
   qpat_assum `sa.cs_next_var <= s1.cs_next_var` mp_tac >>
   qpat_assum `!x w. not_fresh_at s1 x /\ _ ==> _` mp_tac >>

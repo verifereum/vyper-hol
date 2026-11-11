@@ -19,7 +19,7 @@ QED
    its old-variable frame, not the stronger memory clauses of ghost_kept. *)
 Theorem for_endpoint_prefix_frame:
   sa.cs_next_var <= sb.cs_next_var /\
-  wb_frame cenv es sa s0 s1 /\
+  wb_frame cenv es es' sa s0 s1 /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   (!x w. not_fresh_at sb x /\ lookup_var x s1 = SOME w ==>
     lookup_var x s2 = SOME w) /\

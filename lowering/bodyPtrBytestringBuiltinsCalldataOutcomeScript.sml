@@ -215,7 +215,7 @@ Theorem compile_slice_calldata_shared_success:
     (!name b len. local_region cenv es.scopes zf name b len ==>
       regions_disjoint (w2n w) N b len) /\
     zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ~zf.vs_halted /\ locals_kept cenv es s zf /\
+    ~zf.vs_halted /\ locals_kept cenv es es s zf /\
     (!x val. not_fresh_at sa x /\ lookup_var x s = SOME val ==>
       lookup_var x zf = SOME val) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -387,7 +387,7 @@ Proof
   disch_then (qspecl_then [`bound`,`PG`,`D`] strip_assume_tac) >>
   `sa.cs_next_id < sb.cs_next_id` by
     (drule compile_slice_calldata_id_range >> simp[]) >>
-  `wb_frame cenv es sa s zf` by
+  `wb_frame cenv es es sa s zf` by
     (simp[wb_frame_def] >> metis_tac[]) >>
   `LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) <= n` by simp[] >>
   qpat_x_assum `out = Var root` SUBST_ALL_TAC >>
@@ -486,7 +486,7 @@ Theorem memory_vv_post_end_gas_obs[local]:
     (LocatedValue ty <|ptr_operand := op; ptr_location := LocMemory|>) s
 Proof
   simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, read_result_def,
-    vyperStateTheory.return_def]
+    vyperStateTheory.return_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem memory_ptr_vv_end_gas_obs[local]:

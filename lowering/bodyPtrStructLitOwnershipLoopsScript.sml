@@ -61,12 +61,13 @@ Proof
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh]
 QED
 
-Theorem alloc_run_compile_word_copy_loop:
+Theorem alloc_run_compile_word_copy_loop_base:
   alloc_run fresh_outputs
-    (compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor)
+    (compile_word_copy_loop_base src_op dst_op count_op load_loc store_loc
+       is_ctor imm)
     (\u st. fresh_outputs st)
 Proof
-  simp[compile_word_copy_loop_def, comp_ignore_bind_def] >>
+  simp[compile_word_copy_loop_base_def, comp_ignore_bind_def] >>
   ntac 3 (irule alloc_run_bind >> qexists `\v st. fresh_outputs st` >>
     reverse conj_tac >- simp[SF ETA_ss,
       SRULE [SF ETA_ss] alloc_run_fresh_label_fresh] >>
@@ -90,6 +91,15 @@ Proof
     gen_tac >> simp[comp_ignore_bind_def]) >>
   irule alloc_run_conseq >>
   irule_at Any alloc_run_new_block_fresh >> simp[]
+QED
+
+Theorem alloc_run_compile_word_copy_loop:
+  alloc_run fresh_outputs
+    (compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor)
+    (\u st. fresh_outputs st)
+Proof
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def,
+       alloc_run_compile_word_copy_loop_base]
 QED
 
 Theorem alloc_run_compile_storage_to_memory:

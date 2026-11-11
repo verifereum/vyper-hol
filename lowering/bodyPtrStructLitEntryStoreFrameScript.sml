@@ -41,13 +41,10 @@ Theorem structlit_entry_store_locals_frame:
   sf.vs_memory = (mstore a w s).vs_memory /\
   (!name lo sz. local_region ce es.scopes t name lo sz ==>
     lo+sz <= a \/ a+32 <= lo) ==>
-  locals_kept ce es t sf
+  locals_kept ce es ee t sf
 Proof
-  strip_tac >> `locals_kept ce es t s` by fs[vv_post_def] >>
-  simp[locals_kept_def] >> rpt strip_tac >>
-  `off+len <= a \/ a+32 <= off` by
-    (first_x_assum drule >> decide_tac) >>
-  `mem_bytes_at off len (mstore a w s).vs_memory =
-   mem_bytes_at off len s.vs_memory` by simp[mstore_mem_bytes_at_disjoint] >>
-  fs[locals_kept_def] >> metis_tac[]
+  strip_tac >> `locals_kept ce es ee t s` by fs[vv_post_def] >>
+  irule exprSimPropsTheory.locals_kept_regions_tail >>
+  qexists_tac `s` >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[mstore_mem_bytes_at_disjoint]
 QED

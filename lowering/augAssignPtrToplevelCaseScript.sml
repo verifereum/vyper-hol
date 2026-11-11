@@ -244,7 +244,8 @@ Resume compile_augassign_toplevel_case_ptr[operator_normal]:
      case evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        tvt bop v v' of INL z => INL z | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> simp[] >>
+     metis_tac[stmtSimAugAssignTheory.word_value_not_bytes]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      tvt bop v v' = INL result` by
@@ -393,7 +394,8 @@ Resume compile_augassign_toplevel_case_ptr[operator_abort]:
     (case evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       tvt bop v v' of INL z => INL z | INR err => INR (Error err))` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >> simp[] >>
+     metis_tac[stmtSimAugAssignTheory.word_value_not_bytes]) >>
   `evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       tvt bop v v' = INR (RuntimeError msg)` by
