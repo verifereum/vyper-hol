@@ -3,7 +3,7 @@
  *
  * TOP-LEVEL:
  *   compile_dispatch_*_open, compile_type_dispatch_*_open — the
- *     supported builtin and type-builtin forms, one lemma per group
+ *     builtin and type-builtin forms, one lemma per group
  *   compile_builtin_body_open, compile_pop_body_open — the bodies
  *     compile_expr gives them
  *)
@@ -14,6 +14,7 @@ Ancestors
   exprOpenCopies supportedExprForms supportedTypes exprLowering compileEnv context
   builtinSimple builtinMath builtinMisc builtinBytes builtinStrings venomInst
   list pair
+  exprLoweringProps
 
 Theorem compile_dispatch_not_open:
   !cfn cenv rty ty args sa vv sb.
@@ -27,18 +28,143 @@ Proof
   drule compile_invert_open >> simp[]
 QED
 
+Theorem emit_membership_eqs_open:
+  !elems needle sa cs sb.
+    (elems = [] ==> ~block_is_terminated sa) /\
+    emit_membership_eqs needle elems sa = (cs,sb) ==>
+    ~block_is_terminated sb
+Proof
+  Induct >> rpt gen_tac >>
+  simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule emit_op_nonterminator_open >> simp[is_terminator_def] >>
+  metis_tac[]
+QED
+
+Theorem fold_membership_or_open:
+  !elems acc sa v sb.
+    ~block_is_terminated sa /\
+    fold_membership_or acc elems sa = (v,sb) ==>
+    ~block_is_terminated sb
+Proof
+  Induct >> rpt gen_tac >>
+  simp[fold_membership_or_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule emit_op_nonterminator_open >> simp[is_terminator_def] >>
+  metis_tac[]
+QED
+
+Theorem fold_membership_and_open:
+  !elems acc sa v sb.
+    ~block_is_terminated sa /\
+    fold_membership_and acc elems sa = (v,sb) ==>
+    ~block_is_terminated sb
+Proof
+  Induct >> rpt gen_tac >>
+  simp[fold_membership_and_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  drule (Q.SPEC `AND` emit_op_nonterminator_open) >>
+  simp[is_terminator_def] >> metis_tac[]
+QED
+
+Theorem compile_list_membership_in_open:
+  !needle elems sa v sb.
+    (elems = [] ==> ~block_is_terminated sa) /\
+    compile_list_membership_in needle elems sa = (v,sb) ==>
+    ~block_is_terminated sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_list_membership_in _ _ _ = _` mp_tac >>
+  simp[compile_list_membership_in_def, comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  qmatch_asmsub_rename_tac `emit_membership_eqs needle elems sa = (cs,st)` >>
+  drule_all emit_membership_eqs_open >> strip_tac >>
+  Cases_on `cs` >> gvs[comp_return_def] >>
+  metis_tac[fold_membership_or_open]
+QED
+
+Theorem compile_list_membership_notin_open:
+  !needle elems sa v sb.
+    (elems = [] ==> ~block_is_terminated sa) /\
+    compile_list_membership_notin needle elems sa = (v,sb) ==>
+    ~block_is_terminated sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_list_membership_notin _ _ _ = _` mp_tac >>
+  simp[compile_list_membership_notin_def, comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  qmatch_asmsub_rename_tac `emit_membership_eqs needle elems sa = (cs,st)` >>
+  drule_all emit_membership_eqs_open >> strip_tac >>
+  Cases_on `cs` >> gvs[comp_return_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule emit_op_nonterminator_open >> simp[is_terminator_def] >>
+  metis_tac[fold_membership_and_open]
+QED
+
+Theorem compile_array_membership_loop_open:
+  !needle arr len size offset loader bound is_in sa v sb.
+    compile_array_membership_loop needle arr len size offset loader bound is_in sa =
+      (v,sb) ==> ~block_is_terminated sb
+Proof
+  rpt gen_tac >>
+  simp[compile_array_membership_loop_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> IF_CASES_TAC >>
+  simp[comp_return_def] >> strip_tac >> gvs[]
+  >- (drule new_block_open >> simp[]) >>
+  drule emit_op_nonterminator_open >> simp[is_terminator_def]
+QED
+
+Theorem compile_multi_exprs_nil_state:
+  !cfn cenv es sa sb.
+    compile_multi_exprs cfn cenv es sa = ([],sb) ==> sb = sa
+Proof
+  rpt strip_tac >>
+  qspecl_then [`es`, `cfn`, `cenv`, `sa`] mp_tac compile_multi_exprs_length >> simp[] >>
+  strip_tac >> gvs[compile_multi_exprs_def, comp_return_def]
+QED
+
+Theorem compile_var_array_membership_open:
+  !cenv needle arr ty is_in sa v sb.
+    compile_var_array_membership cenv needle arr ty is_in sa = (v,sb) ==>
+    ~block_is_terminated sb
+Proof
+  rpt gen_tac >> simp[compile_var_array_membership_def, comp_bind_def,
+                         comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  drule compile_array_membership_loop_open >> simp[]
+QED
+
 Theorem compile_dispatch_bop_open:
-  !cfn tops cenv rty ty op a b sa vv sb.
-    supported_binop op (expr_type a) (expr_type b)
-      (supported_integer_literal a) (supported_nonnegative_literal b) /\
+  !cfn cenv rty ty op a b sa vv sb.
+    op <> ExpMod /\
+    ((op = In \/ op = NotIn) ==>
+      !v st. lower_value cfn cenv (expr_type a) a sa = (v,st) ==>
+        ~block_is_terminated st) /\
     compile_builtin_dispatch_body cfn cenv rty ty (Bop op) [a;b] sa = (vv,sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> strip_tac >>
-  `op <> In /\ op <> NotIn /\ op <> ExpMod` by
-    (Cases_on `op` >> gvs[supported_binop_def]) >>
   qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_builtin_dispatch_body_def] >> IF_CASES_TAC
+  >- (rpt (pairarg_tac >> simp[]) >>
+      Cases_on `b` >>
+      TRY (rename1 `Builtin ann bi elems` >> Cases_on `bi`) >>
+      simp[oneline as_stack_val_def, AllCaseEqs()] >>
+      rpt (pairarg_tac >> simp[]) >>
+      rpt IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
+      strip_tac >> gvs[AllCaseEqs()] >>
+      FIRST [
+        drule compile_var_array_membership_open >> simp[],
+        drule_at (Pat `compile_list_membership_in _ _ _ = _`)
+          compile_list_membership_in_open >>
+        impl_tac >- (strip_tac >> gvs[] >>
+          drule compile_multi_exprs_nil_state >> strip_tac >> gvs[]) >> simp[],
+        drule_at (Pat `compile_list_membership_notin _ _ _ = _`)
+          compile_list_membership_notin_open >>
+        impl_tac >- (strip_tac >> gvs[] >>
+          drule compile_multi_exprs_nil_state >> strip_tac >> gvs[]) >> simp[]]) >>
+  IF_CASES_TAC
   >- (simp[pairTheory.UNCURRY] >> IF_CASES_TAC >>
       simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
       drule emit_op_nonterminator_open >> simp[is_terminator_def]) >>
@@ -77,10 +203,10 @@ Proof
 QED
 
 Theorem compile_dispatch_make_array_open:
-  !cfn tops cenv rty ty elem bnd args sa vv sb.
+  !cfn cenv rty ty elem bnd args sa vv sb.
     acyclic_struct_metadata cenv.ce_struct_fields /\
     (case elem of NONE => T | SOME et =>
-       supported_literal_elements tops (ArrayT et bnd) args) /\
+       EVERY (\e. is_word_type et \/ is_bytestring_type et \/ et = expr_type e) args) /\
     compile_builtin_dispatch_body cfn cenv rty ty (MakeArray elem bnd) args sa = (vv,sb) ==>
     ~block_is_terminated sb
 Proof
@@ -92,8 +218,7 @@ Proof
   >- (drule_all compile_make_tuple_open >> simp[]) >>
   irule compile_make_array_open >>
   goal_assum (drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`)) >>
-  gvs[supported_literal_elements_def, EVERY_MEM] >>
-  metis_tac[supported_copy_types_store_path]
+  simp[]
 QED
 
 Theorem compile_as_wei_value_decimal_open:

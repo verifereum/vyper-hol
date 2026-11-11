@@ -1,5 +1,6 @@
 Theory whitelistS2Shape
 Ancestors
+  whitelistS2RawBaseShape
   list loweringShapeProps loweringShapeRules loweringShapeDefs
   builtinSystem context compileEnv emitHelper unitShapeDefs venomInst
   exprLowering supportedExprTraverse vyperAST
@@ -219,46 +220,24 @@ Theorem compile_raw_call_finish_shape[local]:
     (\st. EVERY (plain_operand st)
       [to_op; data_ptr; data_len; gas_op; value_op; out_val; out_ptr])
     (compile_raw_call_finish to_op data_ptr data_len gas_op value_op
-      call_ty max_outsize T out_val out_ptr)
+      call_ty max_outsize rof out_val out_ptr)
     (\v st. plain_operand st v)
 Proof
-  qmatch_goalsub_abbrev_tac `shape_step _ _ Pre m Post` >>
-  `shape_base_step internal compiler_label Pre m Post` by
-    (simp[Abbr `Pre`, Abbr `m`, Abbr `Post`] >>
-     irule (SRULE [] compile_raw_call_finish_base_shape)) >>
-  fs[shape_base_step_def, shape_step_def, shape_state_def] >>
-  rpt gen_tac >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >> simp[] >>
-  qpat_x_assum `shape_extends _ _ _ _` kall_tac >>
-  qpat_x_assum `shape_base_state st'` kall_tac >>
-  qpat_x_assum `Post _ _` kall_tac >>
-  qpat_x_assum `Pre _` kall_tac >>
-  fs[Abbr `m`] >>
-  qpat_x_assum `shape_base_state _` kall_tac >>
-  qpat_x_assum `Abbrev (Pre = _)` kall_tac >>
-  qpat_x_assum `Abbrev (Post = _)` kall_tac >>
-  Cases_on `call_ty` >> Cases_on `0 < max_outsize` >>
-  gvs[compile_raw_call_finish_def, compile_alloc_buffer_def,
-      builtinSimpleTheory.compile_select_def, emit_op_def,
-      emit_void_def, emit_inst_def, emit_def, new_block_def,
-      fresh_var_def, fresh_id_def, fresh_label_def,
-      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  fs[raw_checked_state_def, all_blocks_def] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
-  drule raw_checked_blocks_splice_branch >>
-  simp[Excl "APPEND_ASSOC"] >> disch_then irule >>
-  simp[mk_inst_def, compiler_label_def,
-       emitHelperPropsTheory.fresh_label_output_in_future]
+  Cases_on `rof`
+  >- (mp_tac compile_raw_call_finish_base_shape >>
+      simp_tac bool_ss [shape_base_step_def, shape_step_def, shape_state_def]) >>
+  qspecl_then [`to_op`, `data_ptr`, `data_len`, `gas_op`, `value_op`,
+    `call_ty`, `max_outsize`, `out_val`, `out_ptr`, `internal`] mp_tac
+    compile_raw_call_finish_base_shape_widen >>
+  simp_tac bool_ss [shape_base_step_def, shape_step_def, shape_state_def]
 QED
 
-(* Non-reverting raw calls require the separate call-check invariant widening.
-   Output capacity here is unrestricted: the buffer uses fixed ALLOCA. *)
+(* Both failure modes use a fixed ALLOCA output buffer of unrestricted capacity. *)
 Theorem compile_call_raw_shape_widen:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) /\
-  ~supported_exprs_exists expr_shape_root args /\
-  rcf.rcf_revert_on_failure ==>
+  ~supported_exprs_exists expr_shape_root args ==>
   shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
     (compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args default_ret)
     (\v st. value_shape_ok st v)

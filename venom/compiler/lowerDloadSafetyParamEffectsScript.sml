@@ -145,6 +145,6 @@ Proof
   conj_tac >- (irule ld_param_write >> simp[] >> qexists_tac `inst` >> simp[]) >>
   conj_tac >- (irule ld_memory_update_var >> simp[]) >>
   conj_tac >- (irule ld_nonghost_update_var >> simp[]) >>
-  simp[ld_erase_set_prov, step_prov_def, out_prov_def, EL_MAP] >>
+  simp[ld_erase_set_prov, step_prov_def, out_prov_def, EL_MAP, update_var_def] >>
   Cases_on `w2n idx < LENGTH f.lf_Q` >> simp[]
 QED

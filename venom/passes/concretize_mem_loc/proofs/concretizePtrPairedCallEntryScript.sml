@@ -8,7 +8,7 @@ Ancestors passTransform
   concretizePtrChronologicalHistory concretizePtrSourceOwnership
   concretizePtrOpaqueRetpc concretizePtrSharedFields concretizePtrValueTransport
   concretizePtrRequestHistory
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape concretizeStepContract
   contextCodegenRel unitLabelMapIdentity venomInst o1PassContract
   ptrDiscipline venomExecSemantics venomExecProofs venomWf venomState list finite_map

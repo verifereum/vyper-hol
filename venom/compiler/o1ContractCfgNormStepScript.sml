@@ -599,25 +599,6 @@ Proof
   metis_tac[listTheory.MEM]
 QED
 
-Theorem supply_calls_flagged_map:
-  (!i. MEM i insts ==>
-     (f i).inst_opcode = i.inst_opcode /\
-     (f i).inst_outputs = i.inst_outputs /\
-     (i.inst_opcode = ASSIGN ==> (f i).inst_operands = i.inst_operands) /\
-     (!vs. flag_fails bbs vs i ==> flag_fails bbs' vs (f i))) /\
-  calls_flagged bbs insts ==> calls_flagged bbs' (MAP f insts)
-Proof
-  Induct_on `insts` >- simp[calls_flagged_def] >>
-  gen_tac >> strip_tac >>
-  ` (f h).inst_opcode = h.inst_opcode /\
-    (f h).inst_outputs = h.inst_outputs` by metis_tac[listTheory.MEM] >>
-  `calls_flagged bbs' (MAP f insts)` by
-    (first_x_assum irule >> gvs[calls_flagged_def] >> metis_tac[listTheory.MEM]) >>
-  `!vs. flag_path bbs vs insts ==> flag_path bbs' vs (MAP f insts)` by
-    (match_mp_tac supply_flag_path_map >> metis_tac[listTheory.MEM]) >>
-  gvs[calls_flagged_def] >>
-  Cases_on `h.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[] >> metis_tac[]
-QED
 
 Theorem supply_subst_flag_fails:
   (!l. revert_path bbs (LENGTH bbs) l ==>
@@ -640,102 +621,6 @@ Proof
   Cases_on `s' = old` >> Cases_on `s'' = old` >> gvs[] >> metis_tac[]
 QED
 
-Theorem supply_subst_calls_flagged:
-  (!l. revert_path bbs (LENGTH bbs) l ==>
-       revert_path bbs' (LENGTH bbs') (if l = old then new else l)) /\
-  calls_flagged bbs bb.bb_instructions ==>
-  calls_flagged bbs' (subst_label_terminator old new bb).bb_instructions
-Proof
-  strip_tac >> simp[subst_label_terminator_def] >>
-  irule supply_calls_flagged_map >> qexists `bbs` >> simp[] >> rpt strip_tac
-  >- (Cases_on `is_terminator i.inst_opcode` >> simp[subst_label_inst_def])
-  >- (Cases_on `is_terminator i.inst_opcode` >> simp[subst_label_inst_def])
-  >- gvs[is_terminator_def] >>
-  drule supply_subst_flag_fails >> disch_then irule >> simp[]
-QED
-
-Theorem supply_update_phis_calls_flagged:
-  calls_flagged bbs bb.bb_instructions ==>
-  calls_flagged bbs (update_phis_for_split old new repls bb).bb_instructions
-Proof
-  strip_tac >> simp[update_phis_for_split_def] >>
-  irule supply_calls_flagged_map >> qexists `bbs` >> simp[] >> rpt strip_tac >>
-  Cases_on `i.inst_opcode = PHI` >> gvs[flag_fails_def]
-QED
-
-Theorem supply_calls_flagged_environment:
-  (!l. revert_path bbs (LENGTH bbs) l ==>
-       revert_path bbs' (LENGTH bbs') l) /\
-  calls_flagged bbs insts ==> calls_flagged bbs' insts
-Proof
-  strip_tac >>
-  `calls_flagged bbs' (MAP I insts)` suffices_by simp[] >>
-  irule supply_calls_flagged_map >> qexists `bbs` >> simp[] >> rpt strip_tac >>
-  Cases_on `i.inst_opcode` >> gvs[flag_fails_def] >>
-  Cases_on `i.inst_operands` >> gvs[] >>
-  rename1 `i.inst_operands = a::ops` >> Cases_on `a` >> gvs[] >>
-  Cases_on `ops` >> gvs[] >>
-  rename1 `i.inst_operands = _::a::ops` >> Cases_on `a` >> gvs[] >>
-  Cases_on `ops` >> gvs[] >>
-  rename1 `i.inst_operands = _::_::a::ops` >> Cases_on `a` >> gvs[] >>
-  Cases_on `ops` >> gvs[] >> metis_tac[]
-QED
-
-Theorem supply_block_image_calls_flagged:
-  (!l. revert_path bbs (LENGTH bbs) l ==>
-       revert_path bbs' (LENGTH bbs') l) /\
-  (!l. revert_path bbs (LENGTH bbs) l ==>
-       revert_path bbs' (LENGTH bbs')
-         (if l = target.bb_label then split.bb_label else l)) /\
-  calls_flagged bbs bb.bb_instructions ==>
-  calls_flagged bbs'
-    (supply_block_image pred target split repls bb).bb_instructions
-Proof
-  strip_tac >> Cases_on `bb.bb_label = target.bb_label`
-  >- (simp[supply_block_image_def] >>
-      irule supply_update_phis_calls_flagged >>
-      Cases_on `target.bb_label = pred.bb_label` >> gvs[]
-      >- (irule supply_subst_calls_flagged >> qexists `bbs` >> simp[]) >>
-      irule supply_calls_flagged_environment >> qexists `bbs` >> simp[]) >>
-  simp[supply_block_image_def] >>
-  Cases_on `bb.bb_label = pred.bb_label` >> simp[]
-  >- (irule supply_subst_calls_flagged >> qexists `bbs` >> simp[]) >>
-  irule supply_calls_flagged_environment >> qexists `bbs` >> simp[]
-QED
-
-Theorem insert_split_supply_call_checks_ok:
-  wf_function fn /\ fn_inst_wf fn /\
-  EVERY label_positions_ok (fn_insts fn) /\
-  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
-  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
-  1 < num_succs pred /\ call_checks_ok fn /\
-  insert_split_supply s fn pred target = (fn',s') ==>
-  call_checks_ok fn'
-Proof
-  strip_tac >>
-  Cases_on `build_split_block_supply s pred target` >> PairCases_on `r` >>
-  rename1 `build_split_block_supply s pred target = (split,repls,s1)` >>
-  `s1 = s'` by gvs[insert_split_supply_def] >> gvs[] >>
-  `!l. revert_path fn.fn_blocks (LENGTH fn.fn_blocks) l ==>
-       revert_path fn'.fn_blocks (LENGTH fn'.fn_blocks) l` by
-    (rpt strip_tac >> irule insert_split_supply_revert_destination >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
-  `!l. revert_path fn.fn_blocks (LENGTH fn.fn_blocks) l ==>
-       revert_path fn'.fn_blocks (LENGTH fn'.fn_blocks)
-         (if l = target.bb_label then split.bb_label else l)` by
-    (gen_tac >> strip_tac >> Cases_on `l = target.bb_label` >> gvs[] >>
-     irule insert_split_supply_revert_split_destination >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
-  simp[call_checks_ok_def, listTheory.EVERY_MEM] >> rpt strip_tac >>
-  drule_all insert_split_supply_block_cases >> strip_tac
-  >- (gvs[] >> irule calls_flagged_no_calls >>
-      drule supply_split_opcodes >> simp[listTheory.EVERY_MEM] >>
-      rpt strip_tac >> rename1 `MEM i _` >>
-      first_x_assum (qspec_then `i` mp_tac) >> simp[]) >>
-  gvs[] >> irule supply_block_image_calls_flagged >>
-  qexists `fn.fn_blocks` >> simp[] >>
-  gvs[call_checks_ok_def, listTheory.EVERY_MEM]
-QED
 
 (* Arity well-formedness alone does not bound a REVERT's syntactic successors. *)
 Theorem supply_revert_multisucc_probe[local]:
@@ -1042,8 +927,7 @@ Proof
   gvs[fn_shape_ok_def] >> rpt conj_tac
   >- metis_tac[insert_split_supply_opaque_use_ok]
   >- metis_tac[insert_split_supply_no_reserved]
-  >- metis_tac[insert_split_supply_inst_shape] >>
-  metis_tac[insert_split_supply_call_checks_ok]
+  >> metis_tac[insert_split_supply_inst_shape]
 QED
 
 Theorem insert_split_supply_o1_fn_shape:
