@@ -100,3 +100,27 @@ Proof
           inst_uses_def, MEM_operand_vars_eq_Var] >> metis_tac[]) >>
   metis_tac[ac_fresh_vars_original_var]
 QED
+
+(* Total lookup correspondence, including absent labels. The block map uses
+   the transformed lookup so that it respects the actual threaded supply. *)
+Theorem ac_transform_function_lookup_map:
+  !su fn l.
+  lookup_block l (FST (ac_transform_function su fn)).fn_blocks =
+    OPTION_MAP (\bb. THE (lookup_block bb.bb_label
+      (FST (ac_transform_function su fn)).fn_blocks))
+      (lookup_block l fn.fn_blocks)
+Proof
+  rpt gen_tac >>
+  `MAP (\bb. bb.bb_label) (FST (ac_transform_function su fn)).fn_blocks =
+   MAP (\bb. bb.bb_label) fn.fn_blocks` by
+    (Cases_on `ac_transform_blocks (dfg_build_function fn) su fn.fn_blocks` >>
+     simp[ac_transform_function_def] >>
+     irule ac_list_rel_labels >> metis_tac[ac_transform_blocks_rel]) >>
+  drule venomExecProofsTheory.lookup_block_labels_agree >> strip_tac >>
+  Cases_on `lookup_block l fn.fn_blocks` >> simp[]
+  >- (first_x_assum (qspec_then `l` mp_tac) >>
+      Cases_on `lookup_block l (FST (ac_transform_function su fn)).fn_blocks` >>
+      simp[]) >>
+  drule ac_transform_function_lookup >> disch_then (qspec_then `su` strip_assume_tac) >>
+  drule venomExecProofsTheory.lookup_block_label >> simp[]
+QED

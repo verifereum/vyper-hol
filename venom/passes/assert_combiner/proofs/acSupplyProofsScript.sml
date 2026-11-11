@@ -301,7 +301,7 @@ Proof
   simp[MAP_APPEND] >> irule ir_fresh_ext_append >> metis_tac[]
 QED
 
-Theorem ac_list_rel_labels[local]:
+Theorem ac_list_rel_labels:
   !xs ys.
     LIST_REL (\bb bb'. ?s1 s2. ac_transform_block dfg s1 bb = (bb',s2)) xs ys ==>
     MAP (\bb. bb.bb_label) ys = MAP (\bb. bb.bb_label) xs
