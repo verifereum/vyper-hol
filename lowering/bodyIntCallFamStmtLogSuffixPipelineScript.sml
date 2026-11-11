@@ -12,7 +12,7 @@ Ancestors
 Theorem intcall_log_data_pipeline_footprint:
   compile_alloc_buffer cap source_st = (buf,start) /\
   cap = MAX 32 (SUM (MAP (type_memory_bytes ce) (MAP SND xs))) /\
-  compile_log_store_data ce xs buf.buf_operand 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) buf.buf_operand 0 start = ((),stored_st) /\
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   outcap = MAX 32 (abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs))) /\
   ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs)) /\
@@ -69,7 +69,7 @@ Resume intcall_log_data_pipeline_footprint[allocate]:
        (mp_tac o MATCH_MP compile_alloc_buffer_parts) >> simp[]) >>
   `EVERY supported_scalar_type (MAP SND xs)` by gvs[EVERY_MAP, combinTheory.o_DEF] >>
   gvs[] >>
-  drule_at (Pat `compile_log_store_data _ _ _ _ _ = _`)
+  drule_at (Pat `compile_log_store_data _ _ _ _ _ _ = _`)
     intcall_log_store_encode_footprint >>
   simp[] >> disch_then drule_all >> strip_tac >>
   suspend "compose"
