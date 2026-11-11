@@ -178,7 +178,9 @@ Proof
   `!X. locals_kept cenv es0 (set_storage cx es tr X) s0 u` by
     (gen_tac >> irule exprSimPropsTheory.locals_kept_mem_tail >> qexists_tac `s` >> conj_tac
      >- (qpat_x_assum `locals_kept cenv es0 es s0 s` mp_tac >>
-         simp[locals_kept_def, popped_kept_def]) >>
+         rewrite_tac[locals_kept_def, popped_kept_def,
+                     vyperStorageBackendTheory.set_storage_scopes] >>
+         simp[]) >>
      fs[]) >>
   Cases_on `tr` >>
   (fs[target_post_def, vv_post_def, vv_holds_def, vv_at_def,
