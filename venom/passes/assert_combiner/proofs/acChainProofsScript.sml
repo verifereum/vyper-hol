@@ -1108,3 +1108,96 @@ Proof
   simp[EL_APPEND_EQN, ADD1] >> rpt strip_tac >>
   fs[EVERY_EL] >> first_x_assum irule >> decide_tac
 QED
+
+Theorem ac_scan_indexed_edge_at:
+  ALL_DISTINCT (MAP (\a. a.inst_id) xs) /\
+  MEM mc (ac_scan_block dfg xs NONE) /\
+  i < LENGTH xs /\ j < LENGTH xs /\
+  (EL i xs).inst_id = mc.mc_first_id /\
+  (EL j xs).inst_id = mc.mc_second_id ==>
+  i < j /\ (EL i xs).inst_opcode = ASSERT /\
+  (EL j xs).inst_opcode = ASSERT /\
+  (!k. i < k /\ k < j ==> ac_is_safe_between (EL k xs))
+Proof
+  rpt strip_tac >> drule ac_scan_indexed_edge >> strip_tac >>
+  `i = i' /\ j = j'` by
+    (drule ALL_DISTINCT_EL_IMP >>
+     simp[LENGTH_MAP, EL_MAP] >>
+     disch_then (fn th => metis_tac[th, LESS_TRANS])) >>
+  gvs[]
+QED
+
+Theorem ac_scan_cut_unique:
+  ALL_DISTINCT (MAP (\a. a.inst_id) xs) /\
+  MEM mc (ac_scan_block dfg xs NONE) /\
+  MEM mc' (ac_scan_block dfg xs NONE) /\
+  i < n /\ n <= j /\ j < LENGTH xs /\
+  i' < n /\ n <= j' /\ j' < LENGTH xs /\
+  (EL i xs).inst_id = mc.mc_first_id /\
+  (EL j xs).inst_id = mc.mc_second_id /\
+  (EL i' xs).inst_id = mc'.mc_first_id /\
+  (EL j' xs).inst_id = mc'.mc_second_id ==>
+  mc = mc'
+Proof
+  strip_tac >>
+  `i < LENGTH xs /\ i' < LENGTH xs` by decide_tac >>
+  `i < j /\ (EL i xs).inst_opcode = ASSERT /\
+   (EL j xs).inst_opcode = ASSERT /\
+   (!k. i < k /\ k < j ==> ac_is_safe_between (EL k xs))` by
+    (irule ac_scan_indexed_edge_at >> metis_tac[]) >>
+  `i' < j' /\ (EL i' xs).inst_opcode = ASSERT /\
+   (EL j' xs).inst_opcode = ASSERT /\
+   (!k. i' < k /\ k < j' ==> ac_is_safe_between (EL k xs))` by
+    (irule ac_scan_indexed_edge_at >> metis_tac[]) >>
+  `i = i'` by
+    (Cases_on `i < i'`
+     >- (`ac_is_safe_between (EL i' xs)` by
+           (qpat_x_assum `!k. i < k /\ k < j ==> _`
+              (qspec_then `i'` mp_tac) >> simp[]) >>
+         gvs[ac_is_safe_between_def, ac_is_volatile_def]) >>
+     Cases_on `i' < i`
+     >- (`ac_is_safe_between (EL i xs)` by metis_tac[LESS_LESS_EQ_TRANS] >>
+         gvs[ac_is_safe_between_def, ac_is_volatile_def]) >> decide_tac) >>
+  `mc.mc_first_id = mc'.mc_first_id` by metis_tac[] >>
+  drule ac_scan_unique_first_id >>
+  disch_then (qspec_then `dfg` mp_tac) >>
+  qpat_x_assum `MEM mc _` mp_tac >>
+  qpat_x_assum `MEM mc' _` mp_tac >>
+  simp[MEM_EL] >> rpt strip_tac >> gvs[] >>
+  drule ALL_DISTINCT_EL_IMP >> simp[LENGTH_MAP, EL_MAP] >>
+  metis_tac[]
+QED
+
+(* At an assertion, an incoming edge ends here and an outgoing edge
+   starts here; a safe instruction is strictly interior to either edge. *)
+Theorem ac_scan_cut_assert_endpoint:
+  ALL_DISTINCT (MAP (\a. a.inst_id) xs) /\
+  MEM mc (ac_scan_block dfg xs NONE) /\
+  i < LENGTH xs /\ j < LENGTH xs /\ n < LENGTH xs /\
+  (EL i xs).inst_id = mc.mc_first_id /\
+  (EL j xs).inst_id = mc.mc_second_id /\
+  (EL n xs).inst_opcode = ASSERT ==>
+  (i < n /\ n <= j ==> j = n) /\
+  (i < SUC n /\ SUC n <= j ==> i = n)
+Proof
+  strip_tac >> drule_all ac_scan_indexed_edge_at >> strip_tac >>
+  `~(i < n /\ n < j)` by
+    (strip_tac >> first_x_assum drule >> simp[] >>
+     gvs[ac_is_safe_between_def, ac_is_volatile_def]) >>
+  decide_tac
+QED
+
+Theorem ac_scan_cut_safe_step:
+  ALL_DISTINCT (MAP (\a. a.inst_id) xs) /\
+  MEM mc (ac_scan_block dfg xs NONE) /\
+  i < LENGTH xs /\ j < LENGTH xs /\ n < LENGTH xs /\
+  (EL i xs).inst_id = mc.mc_first_id /\
+  (EL j xs).inst_id = mc.mc_second_id /\
+  ac_is_safe_between (EL n xs) ==>
+  ((i < n /\ n <= j) <=> (i < SUC n /\ SUC n <= j))
+Proof
+  strip_tac >> drule_all ac_scan_indexed_edge_at >> strip_tac >>
+  `n <> i /\ n <> j` by
+    (gvs[ac_is_safe_between_def, ac_is_volatile_def] >> metis_tac[]) >>
+  decide_tac
+QED
