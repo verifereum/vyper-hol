@@ -46,3 +46,32 @@ Proof
   simp[exec_pure1_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
+
+Theorem slice_bounds_scalar_ghost:
+  !PG G tn s id opc ops out w.
+    (opc = ADD \/ opc = LT \/ opc = GT \/ opc = OR \/ opc = ISZERO) /\
+    EVERY (\op. op_prov G op = NONE) ops ==>
+    step_prov PG G (mk_inst id opc ops [out]) (update_var out w s) =
+      DRESTRICT G (COMPL {out}) /\
+    step_taint (mk_inst id opc ops [out]) s (update_var out w s) tn =
+      (tn with t_var := tn.t_var |+ (out,{}))
+Proof
+  rpt gen_tac >> disch_tac >>
+  `out_prov PG G (mk_inst id opc ops [out]) (update_var out w s) = NONE` by
+    (Cases_on `opc = ADD`
+     >- (irule out_prov_arith_none >> simp[mk_inst_def]) >>
+     irule out_prov_other_none >> gvs[mk_inst_def]) >>
+  `new_site_bytes s (update_var out w s) = {}` by
+    simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF,
+         EXTENSION, SF CONJ_ss] >>
+  conj_tac >- simp[step_prov_def, set_prov_def, mk_inst_def] >>
+  gvs[] >>
+  simp[step_taint_def, set_var_taint_def, mk_inst_def,
+       mem_taint_def, step_writes_def, source_memory_write_ranges_def,
+       written_taint_def, store_taint_def, adopt_reset_def,
+       imm_taint_def, range_bytes_def, taint_component_equality] >>
+  (Cases_on `ops` >- simp[out_taint_def] >>
+   Cases_on `t` >- (simp[out_taint_def] >> CASE_TAC >> simp[]) >>
+   Cases_on `t'` >- (simp[out_taint_def] >> CASE_TAC >> simp[]) >>
+   Cases_on `t` >> simp[out_taint_def])
+QED
