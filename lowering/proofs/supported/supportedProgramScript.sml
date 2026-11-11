@@ -32,29 +32,48 @@ Definition supported_function_body_def:
     let locals = supported_stmts_bindings T body;
         loops = supported_stmts_bindings F body;
         bindings = args ++ locals ++ loops
-    in supported_function_bindings tops args (MAP FST locals) (MAP FST loops) /\
+    in ALL_DISTINCT (MAP FST args) /\
+       EVERY (\n. ~MEM n (MAP FST args)) (MAP FST locals ++ MAP FST loops) /\
        supported_stmts tops bindings body /\
-       ~supported_stmts_expr_exists expr_nonmain_type_root body /\
        (vis = Internal ==>
          ~supported_stmts_expr_exists expr_internal_call_root body)
 End
 
 Definition supported_declaration_body_def:
   supported_declaration_body tops (FunctionDecl vis mut nr rr name args defaults ret body) =
-    (supported_function_body tops vis args body /\
-     supported_return_layouts ret body) /\
+    (vis <> Deploy ==>
+       supported_function_body tops vis args body /\
+       supported_return_layouts ret body) /\
   supported_declaration_body tops (VariableDecl vis mut name ty slot) = T /\
   supported_declaration_body tops (HashMapDecl vis trans name kt vt slot) = T /\
   supported_declaration_body tops (StructDecl name fields) = T /\
   supported_declaration_body tops (EventDecl name fields) = T /\
   supported_declaration_body tops (InterfaceDecl name methods) = T /\
-  supported_declaration_body tops (FlagDecl name members) = F
+  supported_declaration_body tops (FlagDecl name members) = T /\
+  supported_declaration_body tops (ErrorDecl name args) = T
 End
 
 Definition supported_program_def:
   supported_program tops <=>
     supported_declaration_headers tops /\ supported_declaration_names tops /\
     EVERY (supported_declaration_body tops) tops
+End
+
+(* The constructor runs only at deployment; the runtime gate above says
+   nothing of its body.  Deployment theorems take this as well. *)
+Definition supported_deploy_declaration_def:
+  supported_deploy_declaration tops top <=>
+    case top of
+      FunctionDecl Deploy mut nr rr name args defaults ret stmts =>
+        EVERY (supported_value_type tops o SND) args /\
+        supported_function_body tops Deploy args stmts /\
+        supported_return_layouts ret stmts
+    | _ => T
+End
+
+Definition supported_program_deploy_def:
+  supported_program_deploy tops <=>
+    EVERY (supported_deploy_declaration tops) tops
 End
 
 (* Exact target-type occurrence (not just a dynamic boolean): needed by the
@@ -96,11 +115,23 @@ QED
 
 Theorem supported_program_function:
   supported_program tops /\
-  MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops ==>
+  MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops /\
+  vis <> Deploy ==>
     supported_function_body tops vis args stmts
 Proof
   strip_tac >> drule_all supported_program_declaration >>
   simp[supported_declaration_body_def]
+QED
+
+Theorem supported_program_deploy_function:
+  supported_program_deploy tops /\
+  MEM (FunctionDecl Deploy mut nr rr name args defaults ret stmts) tops ==>
+    EVERY (supported_value_type tops o SND) args /\
+    supported_function_body tops Deploy args stmts /\
+    supported_return_layouts ret stmts
+Proof
+  simp[supported_program_deploy_def, EVERY_MEM] >> strip_tac >>
+  first_x_assum drule >> simp[supported_deploy_declaration_def, EVERY_MEM]
 QED
 
 Theorem supported_internal_body_contract:
@@ -112,9 +143,10 @@ QED
 
 Theorem supported_function_body_binding_contract:
   supported_function_body tops vis args stmts ==>
-    supported_function_bindings tops args
-      (MAP FST (supported_stmts_bindings T stmts))
-      (MAP FST (supported_stmts_bindings F stmts))
+    ALL_DISTINCT (MAP FST args) /\
+    EVERY (\n. ~MEM n (MAP FST args))
+      (MAP FST (supported_stmts_bindings T stmts) ++
+       MAP FST (supported_stmts_bindings F stmts))
 Proof
   simp[supported_function_body_def]
 QED

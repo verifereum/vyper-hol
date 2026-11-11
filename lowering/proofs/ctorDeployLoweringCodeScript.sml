@@ -62,8 +62,8 @@ Proof
   rpt gen_tac >> strip_tac >> PairCases_on `cf` >>
   `MEM (FunctionDecl Deploy cf0 cf1 cf2 cf3 cf4 cf5 cf6 cf7) tops` by
     (irule deploy_classify_constructor_mem >> simp[]) >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
-  drule_all supported_program_function >> strip_tac >>
+  `supported_program_deploy tops` by fs[deploy_source_ok_def] >>
+  drule_all supported_program_deploy_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `F`]
     (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>

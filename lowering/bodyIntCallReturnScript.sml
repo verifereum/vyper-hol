@@ -19,7 +19,8 @@ QED
 
 Theorem supported_program_function_return_layouts:
   supported_program tops /\
-  MEM (FunctionDecl vis mut nr rr name args defaults ret ss) tops ==>
+  MEM (FunctionDecl vis mut nr rr name args defaults ret ss) tops /\
+  vis <> Deploy ==>
   supported_return_layouts ret ss
 Proof
   strip_tac >> drule_all supported_program_declaration >>

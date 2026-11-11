@@ -564,14 +564,14 @@ QED
 
 Theorem deploy_frame_supported_body:
   !tops fname mut nr args dflts ret stmts.
-    supported_program tops /\
+    supported_program_deploy tops /\
     lookup_function NONE fname Deploy tops = SOME (mut,nr,args,dflts,ret,stmts) ==>
     ?bindings. supported_stmts tops bindings stmts
 Proof
   rpt gen_tac >> strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
   >- simp[supportedStmtsTheory.supported_stmt_def] >>
-  drule_all supported_program_function >>
+  drule_all supported_program_deploy_function >>
   simp[supported_function_body_def] >> metis_tac[]
 QED
 
@@ -655,7 +655,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_frame_source_start_setup >> strip_tac >>
   drule_all deploy_frame_start_storage >> strip_tac >>
-  `supported_program tops` by gvs[deploy_source_ok_def] >>
+  `supported_program_deploy tops` by gvs[deploy_source_ok_def] >>
   drule_all deploy_frame_supported_body >> strip_tac >>
   `vs.vs_outcomes = MAP SND (call_trace es)` by
     (qpat_x_assum `gas_variant _ _` mp_tac >>
@@ -1033,8 +1033,8 @@ Proof
   `ALL_DISTINCT (MAP FST args) /\
    ~MEM id (MAP FST (supported_stmts_bindings T stmts)) /\
    ~MEM id (MAP FST (supported_stmts_bindings F stmts))` by
-    (fs[supported_function_body_def, supportedNamesTheory.supported_function_bindings_def,
-        ALL_DISTINCT_APPEND, EVERY_MEM] >> metis_tac[]) >>
+    (drule supported_function_body_binding_contract >>
+     simp[EVERY_MEM] >> metis_tac[]) >>
   `ALOOKUP (REVERSE (collect_locals stmts)) id = NONE` by
     simp[alistTheory.ALOOKUP_NONE, MAP_REVERSE, deploy_frame_collect_locals_names] >>
   simp[REVERSE_APPEND, alistTheory.ALOOKUP_APPEND] >>
@@ -1072,6 +1072,7 @@ Theorem deploy_ctor_formal_var_types:
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
        st_epilogue,st_final,func) /\ supported_program tops /\
+    supported_program_deploy tops /\
     lookup_function NONE "__init__" Deploy tops =
       SOME (mut,nr,args,[],NoneT,stmts) ==>
     !id ty. MEM (id,ty) args ==> cenv.ce_var_type id = SOME ty
@@ -1086,7 +1087,7 @@ Proof
     deploy_frame_classified_constructor_lookup) >> simp[] >> strip_tac >> gvs[] >>
   rpt gen_tac >> strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
-  drule_all supported_program_function >> strip_tac >>
+  drule_all supported_program_deploy_function >> strip_tac >>
   irule deploy_frame_formal_type_lookup >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any)
 QED
@@ -1452,7 +1453,8 @@ Proof
   >- metis_tac[deploy_ctor_immutable_epilogue] >>
   drule_all deploy_frame_semantic_setup >> strip_tac >>
   `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_source_ok_def] >>
   `imm_len tops < dimword(:256)` by decide_tac >>
   `lookup_function NONE "__init__" Deploy tops = SOME (mut,nr,args,[],NoneT,body')` by
     metis_tac[] >>

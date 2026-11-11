@@ -103,9 +103,7 @@ Theorem supported_function_arg_not_collect_locals:
   ~MEM id (MAP FST (collect_locals ss))
 Proof
   strip_tac >> drule supported_function_body_binding_contract >>
-  simp[supported_function_bindings_def, ALL_DISTINCT_APPEND,
-       collect_locals_supported_bindings_mem] >>
-  strip_tac >>
+  simp[EVERY_MEM, collect_locals_supported_bindings_mem] >> strip_tac >>
   `MEM id (MAP FST args)` by (simp[MEM_MAP] >> qexists `(id,ty)` >> simp[]) >>
   metis_tac[]
 QED
@@ -803,8 +801,7 @@ Proof
   `~MEM id (MAP FST (collect_locals fbody))` by
     metis_tac[supported_function_arg_not_collect_locals] >>
   `ALL_DISTINCT (MAP FST fargs)` by
-    (drule supported_function_body_binding_contract >>
-     simp[supported_function_bindings_def, ALL_DISTINCT_APPEND]) >>
+    (drule supported_function_body_binding_contract >> simp[]) >>
   `ALOOKUP (REVERSE fargs) id = SOME ty` by
     (irule ALOOKUP_ALL_DISTINCT_MEM >>
      simp[MAP_REVERSE, ALL_DISTINCT_REVERSE]) >>
@@ -928,7 +925,9 @@ Proof
       qpat_x_assum `EVERY (\(_,ty). type_memory_bytes cenv ty < _) args` mp_tac >>
       simp[EVERY_MEM] >>
       disch_then (qspec_then `(id,ty)` mp_tac) >> simp[]) >>
-  simp[] >> drule_all supported_program_function >>
+  simp[] >>
+  drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)
+    supported_program_function >>
   simp[supported_function_body_def] >> metis_tac[]
 QED
 
@@ -1376,7 +1375,8 @@ Proof
     (irule lookup_function_external_decl >> simp[] >> qexists `tops` >>
      gvs[supported_program_def, supported_declaration_headers_def]) >>
   `supported_function_body tops External args fbody` by
-    (drule_all supported_program_function >> simp[]) >>
+    (drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)
+       supported_program_function >> simp[]) >>
   `ALL_DISTINCT (MAP FST args)` by
     (drule_all external_selected_args_distinct >> simp[]) >>
   `EVERY (\(n,ty). assignable_type env_t.type_defs ty) args` by

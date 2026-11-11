@@ -17,10 +17,8 @@ Proof
   strip_tac >> drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
   drule_all supported_program_declaration >>
   simp[supported_function_header_contract, supported_declaration_body_def,
-       supported_function_argument_def, supported_function_return_def,
-       listTheory.NULL_EQ] >>
+       supported_function_return_def, listTheory.NULL_EQ] >>
   strip_tac >> gvs[] >>
-  gvs[EVERY_MEM, supported_function_argument_def] >>
   goal_assum (drule_at Any)
 QED
 

@@ -57,7 +57,7 @@ Proof
   rw[]
 QED
 
-Theorem check_contract_single_decl[local]:
+Theorem check_contract_single_decl:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\ MEM tl tops ==>
   check_toplevel_decl [(NONE, tops)] art NONE tl
 Proof

@@ -60,7 +60,7 @@ QED
 
 Theorem package_constructor_shape_ok[local]:
   !tops use_trans nkey_map target cf cenv args pay nr nkey trans body ret.
-    supported_program tops /\
+    supported_program_deploy tops /\
     SND (SND (SND (classify_functions tops))) = SOME cf /\
     set_constructor_package_target target
       (package_constructor tops use_trans nkey_map cf) =
@@ -70,7 +70,7 @@ Theorem package_constructor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
+  drule_all supported_program_deploy_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, build_compile_env_non_internal_no_return_pc] >>
@@ -88,6 +88,7 @@ Theorem package_internal_fn_ctor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   drule (iffLR MEM_classify_internal) >> strip_tac >>
+  `Internal <> Deploy` by simp[] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   simp[package_internal_fn_def, set_internal_package_target_def,
@@ -156,7 +157,7 @@ QED
 Theorem lower_vyper_deploy_unit_run[local]:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     ?has_constructor imm args ctor_internal_fns cenv body pay nr nkey trans.
       run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
         ctor_internal_fns cenv body pay nr nkey trans "__deploy" = SOME unit /\
@@ -192,7 +193,7 @@ QED
 Theorem lower_vyper_deploy_unit_source_unit_ok:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     o1_source_unit_ok unit
 Proof
   rpt strip_tac >> drule_all lower_vyper_deploy_unit_run >> strip_tac >>
@@ -232,7 +233,7 @@ QED
 Theorem lower_vyper_deploy_unit_o1_shape_extras:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     unit_entry_no_params unit /\ unit_fmp_unsealed unit
 Proof
   rpt gen_tac >> strip_tac >>

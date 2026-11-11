@@ -44,7 +44,7 @@ Definition supported_function_header_names_def:
   supported_function_header_names tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret stmts =>
-        (name = "__default__" ==> NULL args) /\
+        (vis = External /\ name = "__default__" ==> NULL args) /\
         supported_function_bindings tops args [] []
     | _ => T
 End
@@ -78,7 +78,7 @@ QED
 
 Theorem supported_fallback_no_arguments:
   supported_function_header_names tops
-    (FunctionDecl vis mut nr rr "__default__" args defaults ret stmts) ==>
+    (FunctionDecl External mut nr rr "__default__" args defaults ret stmts) ==>
   args = []
 Proof
   simp[supported_function_header_names_def, NULL_EQ]

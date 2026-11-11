@@ -167,7 +167,7 @@ QED
 
 Theorem package_constructor_shape_ok[local]:
   !tops use_trans nkey_map target cf cenv args pay nr nkey trans fbody ret.
-    supported_program tops /\
+    supported_program_deploy tops /\
     SND (SND (SND (classify_functions tops))) = SOME cf /\
     set_constructor_package_target target
       (package_constructor tops use_trans nkey_map cf) =
@@ -177,7 +177,7 @@ Theorem package_constructor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
+  drule_all supported_program_deploy_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `use_trans`]
     (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
@@ -197,6 +197,7 @@ Theorem package_internal_fn_ctor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   drule (iffLR MEM_classify_internal) >> strip_tac >>
+  `Internal <> Deploy` by simp[] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
@@ -210,7 +211,7 @@ QED
 Theorem ctor_prefix_lowering_run[local]:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     ?has_constructor imm args ctor_internal_fns cenv fbody pay nr nkey trans.
       run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
         ctor_internal_fns cenv fbody pay nr nkey trans "__deploy" = SOME unit /\
@@ -303,7 +304,7 @@ QED
 
 Theorem ctor_prefix_lowered_entry_label:
   lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-  supported_program tops /\
+  supported_program tops /\ supported_program_deploy tops /\
   lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn ==>
   fn_entry_label fn = SOME "__deploy"
 Proof
@@ -320,6 +321,7 @@ Theorem ctor_prefix_task_entry_label:
 Proof
   rpt strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-   supported_program tops` by fs[deploy_phases_def, deploy_source_ok_def] >>
+   supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_phases_def, deploy_source_ok_def] >>
   drule_all ctor_prefix_lowered_entry_label >> simp[]
 QED
