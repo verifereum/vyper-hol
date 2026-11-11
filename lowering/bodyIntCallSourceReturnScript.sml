@@ -7,6 +7,7 @@ Ancestors
    the final source state is restored explicitly, not a matching parameter. *)
 Theorem source_return_dispatch:
   !nret.
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
   compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\

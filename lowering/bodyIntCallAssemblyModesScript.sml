@@ -6,6 +6,7 @@ Ancestors
   localPtrsProps emitHelper emitHelperProps intCallFrame words loweringStateRelDefs
 
 Theorem void_return_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -47,6 +48,7 @@ Proof
 QED
 
 Theorem memory_return_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -117,6 +119,7 @@ Proof
 QED
 
 Theorem stack_return_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_multi_op INVOKE ops nret si = (results,sj) /\
   store_multi_results buf.buf_operand results 0 sj = ((),sb) /\

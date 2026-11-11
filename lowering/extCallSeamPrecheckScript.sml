@@ -163,7 +163,8 @@ Theorem extcall_take_outcome_obs[local]:
 Proof
   Cases_on `es.outcomes` >>
   simp[vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.call_outcome_request_def] >>
+       vyperCallOutcomeTheory.call_outcome_request_def,
+       vyperCallOutcomeTheory.take_request_outcome_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
   IF_CASES_TAC >> gvs[]
 QED

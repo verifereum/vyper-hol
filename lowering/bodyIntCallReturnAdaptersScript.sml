@@ -3,6 +3,7 @@ Ancestors
   bodyIntCallAssemblyModes bodyIntCallCompilerBoundary vyperValue exprLoweringProps venomMemDefs
 
 Theorem compiled_void_return:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
   ci_mono s1 s2 /\
@@ -56,6 +57,7 @@ Proof
 QED
 
 Theorem compiled_memory_return:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
   ci_mono s1 s2 /\
@@ -107,6 +109,7 @@ Proof
 QED
 
 Theorem compiled_stack_return:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
   ci_mono s1 s2 /\
@@ -168,6 +171,7 @@ QED
 
 Theorem compiled_return_dispatch:
   !nret.
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
   compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\

@@ -21,6 +21,7 @@ Proof
 QED
 
 Theorem allocated_buffer_vv_post:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\
@@ -50,6 +51,7 @@ QED
 (* A void INVOKE has no result-store suffix: its successor is the call's
    endpoint.  This consumer uses the restored caller frame. *)
 Theorem void_invoke_return_post:
+  expr_has_effect e /\
   emit_void INVOKE ops si = ((),sb) /\
   post_value_type ce e = expr_type e /\
   expr_type e = NoneT /\ value_has_type NoneTV v /\
@@ -78,6 +80,7 @@ QED
 (* Memory returns keep the caller's buffer pointer and allocation map.
    The callee has already filled the buffer; no caller stores follow. *)
 Theorem memory_invoke_return_post:
+  expr_has_effect e /\
   emit_void INVOKE ops si = ((),sb) /\
   post_value_type ce e = expr_type e /\
   t.vs_current_bb = si.cs_current_bb /\

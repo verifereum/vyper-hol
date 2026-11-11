@@ -40,6 +40,7 @@ Proof
 QED
 
 Theorem void_completed_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -67,6 +68,7 @@ Proof
 QED
 
 Theorem memory_completed_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -144,6 +146,7 @@ QED
 (* Composition keeps the actual store endpoint.  It does not infer a path
    from an existential fragment postcondition. *)
 Theorem invoke_store_completed_endpoint:
+  expr_has_effect e /\
   gas_invoke_entry (ctx,func) t callee entered /\
   gas_path ctx callee entered n (IntRet ir cs) /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
@@ -252,6 +255,7 @@ QED
    bound-output state.  Buffer geometry and immutable separation are derived
    from its owned ALLOCA, not from a bound on constructor memory. *)
 Theorem stack_completed_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   gas_invoke_entry (ctx,func) t callee entered /\
   gas_path ctx callee entered n (IntRet ir cs) /\

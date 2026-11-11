@@ -42,6 +42,7 @@ Proof
 QED
 
 Theorem stack_buffer_run_post:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   store_multi_results buf.buf_operand results 0 si = ((),sb) /\
   local_ptrs_reserved ce si /\

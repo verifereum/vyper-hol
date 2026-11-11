@@ -36,6 +36,7 @@ Proof
 QED
 
 Theorem owned_buffer_result_post:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\
@@ -79,6 +80,7 @@ QED
 (* The result stores upgrade their representation post to an owned value
    post, retaining the frame from before the whole expression. *)
 Theorem stack_buffer_suffix_post:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   store_multi_results buf.buf_operand results 0 si = ((),sb) /\
   local_ptrs_reserved ce si /\

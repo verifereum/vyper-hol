@@ -5,6 +5,7 @@ Ancestors
   valueTypingMemoryProps
 
 Theorem widened_allocated_buffer_post:
+  expr_has_effect e /\
   ce.ce_func_return_type (nsid_to_string (NONE,name)) = cty /\
   type_widens_to (get_tenv cx) cty ann /\ ~is_word_type ann /\
   (is_bytestring_type ann ==> is_bytestring_type cty) /\
