@@ -3,6 +3,7 @@ Ancestors
   bodyPtrDefs wordArgsPtr typedWordArgsSimPtr compileEnv ptrDiscipline
   loweringPosts exprSimSliceOrdinaryContinue gasSummaryComposePtr
   gasOutcomeMarkedPtr typedWordArgsReadyPtr exprSimPrecompiles exprSimCalldataSlice
+  exprSimSource fragExec exprLoweringProps exprSimWordArgs
 
 (* Preserve all three observations needed by a later checked copy. *)
 Theorem code_slice_word_operand_frame:
@@ -135,4 +136,114 @@ Proof
   strip_tac >> conj_tac
   >- metis_tac[vv_post_prefix_frame] >>
   metis_tac[ghost_kept_wb_trans]
+QED
+
+Theorem code_slice_two_uint_outcome_ptr:
+  typed_args_ready ctx func cenv cx arg_ty Inv [start;len] /\
+  ptr_args_ready d ctx PG func cenv cx arg_ty Inv [start;len] /\ Inv es /\
+  (!ee gs. Inv ee ==> Inv (ee with gas_obs := gs)) /\
+  expr_body_pre cenv cx env start es /\
+  (!ee. Inv ee ==> expr_body_pre cenv cx env len ee) /\
+  expr_type start = BaseT (UintT 256) /\ expr_type len = BaseT (UintT 256) /\
+  lower_value compile_expr cenv (arg_ty start) start sa = (sop,sm) /\
+  lower_value compile_expr cenv (arg_ty len) len sm = (lop,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!marks err ee leaf fstate.
+    gas_exempt_cert F (cx_tops cx) (ctx,func)
+      (ignore_bind (bind (eval_expr cx start) (read_result cx)) (return ()))
+      (es,s0) marks (err,ee) (leaf,fstate) ==>
+    gas_exempt_cert F (cx_tops cx) (ctx,func)
+      (bind (bind (eval_expr cx start) (read_result cx)) (\v.
+        ignore_bind (bind (bind (eval_expr cx len) (read_result cx)) (next v)) (return ())))
+      (es,s0) marks (err,ee) (leaf,fstate)) /\
+  (!left v mid t right err ee leaf fstate.
+    gas_marked_exec F (ctx,func) (bind (eval_expr cx start) (read_result cx))
+      (es,s0) left (INL v) mid (OK t) /\
+    gas_exempt_cert F (cx_tops cx) (ctx,func)
+      (ignore_bind (bind (bind (eval_expr cx len) (read_result cx)) (next v)) (return ()))
+      (mid with gas_obs := [],t) right (err,ee) (leaf,fstate) ==>
+    gas_exempt_cert F (cx_tops cx) (ctx,func)
+      (bind (bind (eval_expr cx start) (read_result cx)) (\v.
+        ignore_bind (bind (bind (eval_expr cx len) (read_result cx)) (next v)) (return ())))
+      (es,s0) (left ++ right) (err,ee) (leaf,fstate)) /\
+  (!v es1 t marks err ee leaf fstate.
+    gas_exempt_cert F (cx_tops cx) (ctx,func)
+      (ignore_bind (bind (eval_expr cx len) (read_result cx)) (return ()))
+      (es1,t) marks (err,ee) (leaf,fstate) ==>
+    gas_exempt_cert F (cx_tops cx) (ctx,func)
+      (bind (bind (eval_expr cx len) (read_result cx)) (\w. ignore_bind (next v w) (return ())))
+      (es1,t) marks (err,ee) (leaf,fstate)) /\
+  (!v es1 t left w mid u right err ee leaf fstate.
+    gas_marked_exec F (ctx,func) (bind (eval_expr cx len) (read_result cx))
+      (es1,t) left (INL w) mid (OK u) /\
+    gas_exempt_cert F (cx_tops cx) (ctx,func) (ignore_bind (next v w) (return ()))
+      (mid with gas_obs := [],u) right (err,ee) (leaf,fstate) ==>
+    gas_exempt_cert F (cx_tops cx) (ctx,func)
+      (bind (bind (eval_expr cx len) (read_result cx)) (\w. ignore_bind (next v w) (return ())))
+      (es1,t) (left ++ right) (err,ee) (leaf,fstate)) /\
+  (!res ee gt r. expr_exit (res : value + exception) r ==>
+     ?exc. res = INR exc /\ R (INR exc) ee gt r) /\
+  (!i k ee G tn t.
+    i < dimword (:256) /\ k < dimword (:256) /\
+    eval_operand sop t = SOME (n2w i) /\ eval_operand lop t = SOME (n2w k) /\
+    op_taint tn sop = {} /\ op_taint tn lop = {} /\
+    op_prov G sop = NONE /\ op_prov G lop = NONE /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    stmt_state_rel ctx func cenv cx ee t /\ ghost_inv d cenv cx ee G tn t /\
+    expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+    wb_frame cenv es ee sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+      (next (IntV (&i)) (IntV (&k))) (ee,t,G,tn) Q R) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (bind (bind (eval_expr cx start) (read_result cx)) (\v.
+       bind (bind (eval_expr cx len) (read_result cx)) (next v)))
+    (es,s0,G0,tn0) Q R
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env len es` by metis_tac[] >>
+  `is_word_type (expr_type start) /\ is_word_type (expr_type len)` by
+    simp[is_word_type_def] >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
+   sa.cs_next_id <= sm.cs_next_id /\
+   (!z. sop = Var z ==> not_fresh_at sm z) /\ (!l. sop <> Label l)` by
+    metis_tac[expr_body_pre_lower_value_word_shape] >>
+  `cs_extends sm sb` by metis_tac[expr_body_pre_lower_value_word_shape] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all code_slice_uint_head_outcome_ptr >> disch_tac >>
+  irule gas_outcome_ptr_bind >> BETA_TAC >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+  reverse conj_tac >- (BETA_TAC >> metis_tac[]) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >> gvs[] >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
+    metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >>
+  `expr_body_pre cenv cx env len ee` by metis_tac[] >>
+  `stmt_state_rel ctx func cenv cx ee t` by metis_tac[expr_post_def] >>
+  drule_all code_slice_uint_head_outcome_ptr >> disch_tac >>
+  irule gas_outcome_ptr_bind >> BETA_TAC >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+  reverse conj_tac >- (BETA_TAC >> metis_tac[]) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >> gvs[] >>
+  `wb_frame cenv ee ee' sm t t'` by metis_tac[expr_post_frame] >>
+  `eval_operand sop t' = SOME (n2w i) /\ op_taint tn' sop = {} /\
+   op_prov G' sop = NONE` by
+    metis_tac[code_slice_word_operand_frame] >>
+  `wb_frame cenv es ee' sa s0 t'` by
+    metis_tac[expr_post_frame, wb_frame_trans] >>
+  `wb_frame cenv es ee sa s0 t` by metis_tac[expr_post_frame] >>
+  `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
+    metis_tac[ghost_kept_wb_trans] >>
+  `stmt_state_rel ctx func cenv cx ee' t'` by metis_tac[expr_post_def] >>
+  first_x_assum irule >> simp[]
 QED
