@@ -5694,6 +5694,212 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem sym_jnz_arranged_word:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  fn_shape_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = JNZ /\
+  inst.inst_operands = [cond; Label ln; Label lz] /\
+  ~is_label_operand cond /\ cond <> dead_stack_marker /\
+  venom_asm_rel lo ps v mid /\ ps.ps_stack = tail ++ [cond] /\
+  operand_val v lo cond = SOME w /\
+  asm_sym_rel p env (mid with as_stack := mid.as_stack ++ rest) ss /\
+  sym_kinds_ok cplan fn ret srest ps ss ==>
+  ?stk. ss.sym_stack = Val w :: stk
+Proof
+  strip_tac >>
+  `mid.as_stack = [w] ++ DROP 1 mid.as_stack` by
+    (fs[venom_asm_rel_def, plan_stack_rel_def] >>
+     first_x_assum (qspec_then `0` mp_tac) >>
+     Cases_on `mid.as_stack` >> gvs[listTheory.REVERSE_APPEND]) >>
+  `!op sv. MEM op [cond] /\ op_kind_ok fn ret op sv ==> ?u. sv = Val u` by
+    (simp[] >> rpt strip_tac >> drule_all sym_jnz_condition_kind >> simp[]) >>
+  `?suffix. ss.sym_stack = MAP Val [w] ++ suffix` by
+    (irule word_prepared_symbolic_stack >>
+     conj_tac
+     >- (qexistsl [`mid with as_stack := mid.as_stack ++ rest`, `env`, `p`,
+          `DROP 1 mid.as_stack ++ rest`] >> gvs[]) >>
+     qexistsl [`cplan`, `fn`, `[cond]`, `ps`, `ret`, `srest`, `tail`] >>
+     gvs[]) >> gvs[]
+QED
+
+Theorem sym_jnz_suffix_steps:
+  asm_block_at p ss.sym_base.as_pc
+    [AsmPushLabel ln; AsmOp "JUMPI"; AsmPushLabel lz; AsmOp "JUMP"] /\
+  ss.sym_stack = Val w :: stk /\
+  sym_jump_dest p (Lab ln 0) = SOME pn /\
+  sym_jump_dest p (Lab lz 0) = SOME pz ==>
+  sym_steps p env (if w = 0w then 4 else 2) ss =
+    SymOK (ss with <|sym_base := ss.sym_base with as_pc :=
+      (if w = 0w then pz else pn); sym_stack := stk|>)
+Proof
+  strip_tac >>
+  `asm_block_at p ss.sym_base.as_pc [AsmPushLabel ln; AsmOp "JUMPI"]` by
+    fs[stackOpSimTheory.asm_block_at_cons] >>
+  Cases_on `w = 0w` >- metis_tac[sym_jnz_suffix_zero] >>
+  simp[] >> drule_all sym_jnz_suffix_nonzero >> simp[]
+QED
+
+Theorem sym_jnz_suffix_frame_sim:
+  !p env ctx cp fn ret srest labs0 ps cs ss tail cond w stk ln lz pn pz.
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  ps.ps_stack = tail ++ [cond] /\ ss.sym_stack = Val w :: stk /\
+  asm_block_at p cs.as_pc
+    [AsmPushLabel ln; AsmOp "JUMPI"; AsmPushLabel lz; AsmOp "JUMP"] /\
+  sym_jump_dest p (Lab ln 0) = SOME pn /\
+  sym_jump_dest p (Lab lz 0) = SOME pz ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (if w = 0w then 4 else 2) cs = AsmOK cs' /\
+    sym_steps p env (if w = 0w then 4 else 2) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0
+      (ps with ps_stack := tail) cs' ss' /\
+    cs'.as_pc = (if w = 0w then pz else pn)
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss` >>
+  `ss.sym_base.as_pc = cs.as_pc` by
+    metis_tac[sym_frame_inv_def, asm_sym_rel_pc] >>
+  `sym_steps p env (if w = 0w then 4 else 2) ss =
+    SymOK (ss with <|sym_base := ss.sym_base with as_pc :=
+      (if w = 0w then pz else pn); sym_stack := stk|>)` by
+    (irule sym_jnz_suffix_steps >> metis_tac[]) >>
+  drule_all_then strip_assume_tac (cj 1 (iffLR sym_frame_inv_def)) >>
+  drule_all_then strip_assume_tac asm_sym_steps_lockstep >>
+  `sym_kinds_ok cplan fn ret srest (ps with ps_stack := tail)
+    (ss with <|sym_base := ss.sym_base with as_pc :=
+      (if w = 0w then pz else pn); sym_stack := stk|>)` by
+    (fs[sym_frame_inv_def, sym_kinds_ok_def, listTheory.REVERSE_APPEND,
+        listTheory.LIST_REL_CONS1] >> gvs[]) >>
+  qexistsl [`cs'`, `ss with <|sym_base := ss.sym_base with as_pc :=
+    (if w = 0w then pz else pn); sym_stack := stk|>`] >>
+  gvs[sym_frame_inv_def] >> drule_then mp_tac asm_sym_rel_pc >> simp[]
+QED
+
+Theorem sym_jnz_prepare_frame_sim:
+  !base.
+  generated_plan_state_wf_marked base ps /\
+  emit_input_plan JNZ [cond] nl ps = (iops, prepared) /\
+  reorder_plan dfg [cond] prepared = (rops, arranged) /\
+  ops = iops ++ rops ++ suffix /\
+  (is_var_operand cond ==> IS_SOME (stack_get_depth cond ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled cond)) /\
+  1 <= LENGTH prepared.ps_stack /\
+  cond <> dead_stack_marker /\
+  (!at. operand_equiv dfg cond at ==> at <> dead_stack_marker) /\
+  (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    operand_equiv dfg cond at ==>
+    operand_val (frame_view fn ra vs) lo cond =
+    operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  lo = SND (compute_label_offsets p) /\ o2pc = build_offset_to_pc p /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs cs /\
+  asm_block_at p cs.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  fn_shape_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = JNZ /\
+  inst.inst_operands = [cond; Label ln; Label lz] /\ ~is_label_operand cond /\
+  operand_val (frame_view fn ra vs) lo cond = SOME w /\
+  asm_static_wf p /\ sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss ==>
+  arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ [cond] /\
+  ?mid sy stk.
+    asm_steps lo o2pc p (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) cs = AsmOK mid /\
+    sym_steps p env (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) ss = SymOK sy /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 arranged mid sy /\
+    mid.as_pc = cs.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) /\
+    sy.sym_stack = Val w :: stk
+Proof
+  gen_tac >> strip_tac >>
+  `!l. MEM (Label l) [cond] ==> IS_SOME (FLOOKUP lo l)` by
+    (Cases_on `cond` >> gvs[is_label_operand_def]) >>
+  `!op at. MEM op [cond] /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at [cond]) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val (frame_view fn ra vs) lo at` by (simp[] >> metis_tac[]) >>
+  `PERM [cond] [cond] /\ LENGTH [cond] <= 16 /\
+    LENGTH [cond] <= LENGTH prepared.ps_stack /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker) [cond]` by (simp[] >> metis_tac[]) >>
+  `arranged.ps_alloc.sa_spill_base = arranged.ps_alloc.sa_spill_base /\
+   arranged.ps_alloc.sa_next_offset <= arranged.ps_alloc.sa_next_offset` by simp[] >>
+  `JNZ <> INVOKE /\
+   (!op. MEM op [cond] /\ is_var_operand op ==>
+     IS_SOME (stack_get_depth op ps.ps_stack) \/ IS_SOME (FLOOKUP ps.ps_spilled op))` by simp[] >>
+  drule_all_then strip_assume_tac sym_frame_entry_selected_prefix_sim_marked >>
+  rename1 `venom_asm_rel lo arranged _ mid` >>
+  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 arranged _ ss_mid` >>
+  `operand_val (frame_view fn ra vs with vs_memory := cs.as_memory) lo cond = SOME w` by
+    simp[genFrameSimTheory.operand_val_memory_update] >>
+  `asm_sym_rel p env (mid with as_stack := mid.as_stack ++ rest) ss_mid /\
+   sym_kinds_ok cplan fn ret srest arranged ss_mid` by fs[sym_frame_inv_def] >>
+  drule_all_then strip_assume_tac sym_jnz_arranged_word >> gvs[]
+QED
+
+Theorem sym_jnz_plan_frame_sim:
+  !base.
+  generated_plan_state_wf_marked base ps /\
+  emit_input_plan JNZ [cond] nl ps = (iops, prepared) /\
+  reorder_plan dfg [cond] prepared = (rops, arranged) /\
+  ops = iops ++ rops ++ [SOPushLabel ln; SOEmit "JUMPI"; SOPushLabel lz; SOEmit "JUMP"] /\
+  final = release_dead_spills nl (arranged with ps_stack := stack_pop 1 arranged.ps_stack) /\
+  (is_var_operand cond ==> IS_SOME (stack_get_depth cond ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled cond)) /\
+  1 <= LENGTH prepared.ps_stack /\ cond <> dead_stack_marker /\
+  (!at. operand_equiv dfg cond at ==> at <> dead_stack_marker) /\
+  (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    operand_equiv dfg cond at ==>
+    operand_val (frame_view fn ra vs) lo cond =
+    operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  lo = SND (compute_label_offsets p) /\ o2pc = build_offset_to_pc p /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs cs /\
+  asm_block_at p cs.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  fn_shape_ok fn /\ label_flow_ok ctx /\ inst.inst_opcode = JNZ /\
+  inst.inst_operands = [cond; Label ln; Label lz] /\ ~is_label_operand cond /\
+  operand_val (frame_view fn ra vs) lo cond = SOME w /\
+  MEM (AsmLabel ln) p /\ MEM (AsmLabel lz) p /\
+  FLOOKUP lo ln = SOME offn /\ FLOOKUP o2pc offn = SOME pn /\
+  FLOOKUP lo lz = SOME offz /\ FLOOKUP o2pc offz = SOME pz /\
+  asm_static_wf p /\ sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss ==>
+  ?ac sy.
+    asm_steps lo o2pc p
+      (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) +
+        (if w = 0w then 4 else 2)) cs = AsmOK ac /\
+    sym_steps p env
+      (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) +
+        (if w = 0w then 4 else 2)) ss = SymOK sy /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 final ac sy /\
+    ac.as_pc = (if w = 0w then pz else pn)
+Proof
+  gen_tac >> strip_tac >>
+  `r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+   arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    gvs[allocMonoTheory.release_dead_spills_spill_base,
+        allocMonoTheory.release_dead_spills_next_offset] >>
+  drule_all_then strip_assume_tac sym_jnz_prepare_frame_sim >>
+  `sym_jump_dest p (Lab ln 0) = SOME pn /\
+   sym_jump_dest p (Lab lz 0) = SOME pz` by
+    (conj_tac >> irule sym_code_label_dest >> metis_tac[]) >>
+  `asm_block_at p mid.as_pc
+    [AsmPushLabel ln; AsmOp "JUMPI"; AsmPushLabel lz; AsmOp "JUMP"]` by
+    (qpat_x_assum `asm_block_at p cs.as_pc _` mp_tac >>
+     simp[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
+          execute_plan_def, exec_stack_op_def]) >>
+  drule_all_then strip_assume_tac sym_jnz_suffix_frame_sim >>
+  drule_then assume_tac sym_frame_inv_release_dead_spills >>
+  qexistsl [`cs'`, `ss'`] >>
+  gvs[] >> pure_once_rewrite_tac[stackOpSimTheory.asm_steps_add, sym_steps_add] >> simp[]
+QED
+
 Theorem sym_jnz_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
@@ -5750,7 +5956,16 @@ Theorem sym_jnz_frame_sim_deep:
         sym_steps prog env n ss = SymOK ss' /\
         sym_frame_inv prog env ctx cp fn ret srest labs0 ps' as' ss'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac gen_jnz_frame_sim_deep_exact >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `1 <= LENGTH ps1.ps_stack` by gvs[] >>
+  `operand_val (frame_view fn ra vs) lo cond_op = SOME w` by metis_tac[] >>
+  drule_all_then strip_assume_tac sym_jnz_plan_frame_sim >>
+  rename1 `MEM r cplan.cp_regions` >>
+  qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) +
+    (if w = 0w then 4 else 2)`, `as'`, `sy`] >>
+  gvs[]
 QED
 
 Theorem sym_ret_frame_sim_deep:

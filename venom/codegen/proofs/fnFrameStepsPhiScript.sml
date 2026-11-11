@@ -604,7 +604,7 @@ Proof
   metis_tac[phi_uses_disjoint_el]
 QED
 
-Theorem phi_prefix_is_collect_phis[local]:
+Theorem phi_prefix_is_collect_phis:
   !phis body.
     LENGTH phis = phi_prefix_length (phis ++ body) ==>
     phis = collect_phis (phis ++ body)

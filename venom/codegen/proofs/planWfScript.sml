@@ -900,7 +900,7 @@ Proof
 QED
 
 (* LUPDATE at different indices commutes *)
-Theorem lupdate_commutes[local]:
+Theorem lupdate_commutes:
   !i j (a:'a) b xs.
     i <> j ==>
     LUPDATE a i (LUPDATE b j xs) = LUPDATE b j (LUPDATE a i xs)
@@ -911,7 +911,7 @@ Proof
 QED
 
 (* REVERSE of stack_swap expressed purely in REVERSE stk terms *)
-Theorem reverse_stack_swap[local]:
+Theorem reverse_stack_swap:
   !cand stk. cand < LENGTH stk /\ 0 < LENGTH stk ==>
     REVERSE (stack_swap cand stk) =
     LUPDATE (EL cand (REVERSE stk)) 0

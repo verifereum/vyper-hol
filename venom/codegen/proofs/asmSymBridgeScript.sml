@@ -1381,8 +1381,8 @@ Proof
   >- (irule sym_step_create_sim >> simp[]) >>
   Cases_on `MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"; "SELFDESTRUCT";
     "GAS"; "MLOAD"; "SHA3"; "CALLDATACOPY"; "EXTCODECOPY"; "MCOPY"; "RETURNDATACOPY"]`
-  >- (qpat_x_assum `MEM name ("CALL" :: _)`
-        (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  >- (qpat_x_assum `MEM name _`
+        (REPEAT_TCL DISJ_CASES_THEN SUBST_ALL_TAC o REWRITE_RULE [MEM]) >>
       simp[sym_step_call_sim, sym_step_staticcall_sim,
         sym_step_delegatecall_sim, sym_step_selfdestruct_sim, sym_step_gas_sim,
         sym_step_mload_sim, sym_step_sha3_sim, sym_step_calldatacopy_sim,
@@ -1995,7 +1995,7 @@ Proof
   irule asm_sym_rel_next >> simp[]
 QED
 
-Theorem LIST_REL_swap[local]:
+Theorem LIST_REL_swap:
   LIST_REL R l1 l2 ∧ n < LENGTH l1 ∧ 0 < n ⇒
   LIST_REL R (LUPDATE (HD l1) n (LUPDATE (EL n l1) 0 l1))
              (LUPDATE (HD l2) n (LUPDATE (EL n l2) 0 l2))
@@ -2118,7 +2118,7 @@ QED
 
 (* ===== Runs ===== *)
 
-Theorem asm_sym_rel_init[local]:
+Theorem asm_sym_rel_init:
   s.as_pc = 0 ∧ asm_data_env_ok p env s.as_code ⇒
   asm_sym_rel p env s (sym_init s)
 Proof

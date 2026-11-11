@@ -6048,7 +6048,7 @@ Proof
   Cases_on `src = 0` >> simp[do_swap_def]
 QED
 
-Theorem reverse_stack_poke[local]:
+Theorem reverse_stack_poke:
   !d x stk. d < LENGTH stk ==>
     REVERSE (stack_poke d x stk) = LUPDATE x d (REVERSE stk)
 Proof
@@ -6279,7 +6279,7 @@ Proof
   gvs[MAP_MAP_o, combinTheory.o_DEF, REVERSE_APPEND, MAP_APPEND, SNOC_APPEND]
 QED
 
-Theorem reduce_depth_plan_layout_wf[local]:
+Theorem reduce_depth_plan_layout_wf:
   !fuel target_ops target_op f target_len ps.
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
     spill_alloc_layout_wf

@@ -4,7 +4,7 @@ Ancestors reorderSim doSwapSim planWf prefixSpillReplay stackPlanGen stackPlanOp
           stackPlanTypes stackModel finite_map list rich_list pred_set arithmetic
 Libs BasicProvers
 
-Theorem alloc_spill_slot_keep_layout[local]:
+Theorem alloc_spill_slot_keep_layout:
   !al fm off al'.
     spill_alloc_layout_wf al fm /\ alloc_spill_slot al = (off,al') ==>
     spill_alloc_layout_wf al' fm /\
