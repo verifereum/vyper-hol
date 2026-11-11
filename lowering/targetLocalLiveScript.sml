@@ -20,7 +20,9 @@
 
 Theory targetLocalLive
 Ancestors
-  vyperFixedShapePath targetOverlapAccess targetPlaceSim targetPlaceSimCasesBase
+  vyperFixedShapePath allocLimits stmtSimAssignAttr targetOverlapAccess
+  targetPlaceSim
+  targetPlaceSimCasesBase
   targetSubscriptMemory exprSimSource exprSimHypsDefs
   vyperSubscriptOverlap vyperLocalAccessFrame
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperTypeStatePreservation
@@ -41,6 +43,33 @@ Proof
   first_x_assum drule >> strip_tac >> gvs[] >>
   Cases_on `ty` >> gvs[subscript_vtype_def] >>
   Cases_on `is_int_type (expr_type e)` >> gvs[]
+QED
+
+(* A local-rooted target's typing agrees with the lowering's place type. *)
+Theorem local_target_place_type[local]:
+  !bt cenv cx env s id bvt.
+    expr_sim_inv cenv cx env s /\ target_root bt = NameTarget id /\
+    type_place_target env bt = SOME bvt ==>
+    ?ty. bvt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac
+  >- (rpt gen_tac >>
+      simp[target_root_def, Once well_typed_expr_def, target_place_type_def,
+           AllCaseEqs()] >>
+      rpt strip_tac >> gvs[expr_sim_inv_def] >> metis_tac[])
+  >- simp[target_root_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[target_root_def, Once well_typed_expr_def, AllCaseEqs()] >>
+  first_x_assum drule_all >> strip_tac >> gvs[]
+  >- (Cases_on `ty` >> gvs[subscript_vtype_def] >>
+      simp[target_place_type_def]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  Cases_on `tgt_ty` >> gvs[attribute_type_def] >>
+  `attribute_type (get_tenv cx) (StructT p) s = SOME ty` by
+    simp[attribute_type_def] >>
+  drule_all stmtSimAssignAttrTheory.attribute_type_struct_field >>
+  strip_tac >> simp[target_place_type_def]
 QED
 
 (* The local keeps its type across states meeting expr_sim_inv. *)
@@ -140,7 +169,8 @@ Proof
         fs[target_root_def, target_through_dynarray_def] >>
       `?bvt. type_place_target env bt = SOME bvt` by
         fs[Once well_typed_expr_def, AllCaseEqs()] >>
-      drule_all local_target_type_only >> strip_tac >> gvs[] >>
+      `expr_sim_inv cenv cx env s` by fs[target_pre_def] >>
+      drule_all local_target_place_type >> strip_tac >> gvs[] >>
       rename1 `type_place_target env bt = SOME (Type bty)` >>
       `?oldentry. lookup_scopes id bs.scopes = SOME oldentry /\
                   oldentry.type = entry.type` by
@@ -155,7 +185,8 @@ Proof
       gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
       drule subscript_type_value_int_shape >> strip_tac >> gvs[] >>
       gvs[subscript_type_def] >>
-      simp[fixed_shape_path_append, subscripts_type_append,
+      simp[fixed_shape_path_append,
+           vyperPlaceStatePreservationTheory.subscripts_type_append,
            fixed_shape_path_def, subscripts_type_def, subscript_type_def,
            vyperASTTheory.bound_length_def]) >>
   qx_gen_tac `bt` >> qx_gen_tac `attr` >> strip_tac >>
@@ -180,7 +211,8 @@ Proof
   drule_all attribute_type_runtime_step >> strip_tac >>
   Cases_on `ty'` >> gvs[attribute_type_def] >>
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  simp[fixed_shape_path_append, subscripts_type_append,
+  simp[fixed_shape_path_append,
+       vyperPlaceStatePreservationTheory.subscripts_type_append,
        fixed_shape_path_def, subscripts_type_def]
 QED
 
@@ -262,7 +294,7 @@ Proof
            return_def, raise_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[] >>
       Cases_on `lookup_scopes id t.scopes` >>
-      gvs[evaluate_subscripts_def])
+      gvs[evaluate_subscripts_def, optionTheory.IS_SOME_EXISTS])
   >- simp[target_root_def]
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       `target_pre cenv cx env bt s` by metis_tac[target_pre_sub] >>
@@ -316,7 +348,7 @@ Theorem local_target_live:
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   drule_all local_base_place_live >> strip_tac >>
   gvs[get_place_def, return_def, raise_def]
 QED
