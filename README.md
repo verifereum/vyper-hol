@@ -62,6 +62,14 @@ shape, scalar, fixed-bytes padding, and applicable Vyper bounds remain checked.
 Returndata is still capped at the expected type's ABI size bound before decoding.
 Canonical ABI encoding is unchanged.
 
+`==` and `!=` on `String` and dynamic `Bytes[N]` values compare their
+Keccak-256 digests, as compiled Vyper does; fixed-size `bytesM` values compare
+directly. Hashmap slots are Keccak-derived too. So two distinct values whose
+digests collide compare equal, or share a slot. The semantics does not assume
+that no such collision happens: a proof about a contract that relies on
+distinct bytestrings comparing unequal, or on distinct hashmap keys being
+separate, must establish that no collision occurs for the values in that run.
+
 The interpreter is written in a state-exception monad. Exceptions are used for semantic errors (e.g., looking up a variable that was not bound), legitimate runtime exceptions (e.g., failed assertions), and control flow for internal function calls and loops (`return`, `break`, `continue`).
 
 Termination is proved for the interpreter, validating Vyper's design as a total language (this does not rely on gas consumption, which is invisible at the Vyper source level). The termination argument uses the facts that internal function calls cannot recurse (even indirectly) and that all loops have an explicit (syntactic) bound.

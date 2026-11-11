@@ -365,6 +365,7 @@ Definition evaluate_binop_def:
            INL (BoolV (i1 = i2)) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
            INL (BoolV (n1 = n2)) | _ => INR (TypeError "binop"))
+       (* String and dynamic Bytes compare by Keccak-256 digest; see README.md. *)
        | StringV s1 => (case v2 of StringV s2 =>
            INL (BoolV (Keccak_256_w64 (MAP n2w_o_ORD s1) =
                        Keccak_256_w64 (MAP n2w_o_ORD s2)))
