@@ -481,8 +481,33 @@ in
   |> computeLib.seal
 end
 
-fun check_contract_conv tm =
-  computeLib.CBV_CONV check_contract_compset tm
+(* Plain call-by-value evaluation with the shared compset. *)
+val plain_conv = computeLib.CBV_CONV check_contract_compset
+
+(* check_contract_def binds the live functions and the restricted artifact with
+   lets. CBV_CONV reduces a let argument only to weak head normal form, so the
+   artifact's DRESTRICT maps reach every lookup in the body still unreduced and
+   are restricted again at each one. For a full application the staged
+   conversion unfolds check_contract_def and evaluates both lets to normal
+   form before the body, so each lookup finds the maps already restricted.
+   Every step is the checker's own conversion, so the result is the same
+   check_contract_def equation, reached with fewer reductions. *)
+local
+  val check_contract_const = prim_mk_const
+    {Thy = "vyperTypeContract", Name = "check_contract"}
+  val let_conv = REWR_CONV LET_THM THENC BETA_CONV
+in
+  fun check_contract_conv tm = let
+    val (head, arguments) = strip_comb tm
+  in
+    if same_const head check_contract_const andalso length arguments = 4
+    then (REWR_CONV check_contract_def THENC
+          RAND_CONV plain_conv THENC let_conv THENC
+          RAND_CONV plain_conv THENC let_conv THENC
+          plain_conv) tm
+    else plain_conv tm
+  end
+end
 
 fun mk_check_contract {in_deploy, layouts, address, modules} =
   let

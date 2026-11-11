@@ -63,7 +63,8 @@ val checked = vyperCheckContractLib.check_contract
 The lower-level operations are:
 
 - `mk_check_contract`: construct and validate the closed application term;
-- `check_contract_conv`: compute an application, including a result of `NONE`;
+- `check_contract_conv`: compute an application, including a result of `NONE`
+  (staged for a full `check_contract` application, see below);
 - `check_contract_with`: use a caller-supplied conversion while retaining all
   success-result validation;
 - `check_contract`: use the standard static checker conversion.
@@ -96,6 +97,26 @@ val checked = vyperCheckContractLib.check_contract_with extended_conv input;
 Rules added this way must be trusted kernel theorems. A local extension is
 preferable to changing the shared compset for contract-specific definitions;
 the shared compset should contain only dependencies of the general checker.
+
+## Staged evaluation
+
+`check_contract_conv` evaluates a `check_contract` application with all four
+arguments in stages; every other term is evaluated with the plain
+call-by-value conversion over `check_contract_compset`. `check_contract_def`
+binds the live functions and the restricted artifact with `let`, and
+call-by-value reduces a `let` argument only to weak head normal form. The
+artifact's `DRESTRICT` maps would then reach every lookup in the checked
+bodies unreduced and be restricted again at each one. The staged conversion
+instead:
+
+1. unfolds `check_contract_def`;
+2. evaluates the `live` and `art` arguments to normal form with the plain
+   conversion, substituting each into the body;
+3. evaluates the body with the plain conversion.
+
+Every step is the checker's own evaluation, so the result is the same
+`check_contract_def` equation, reached with fewer reductions. A caller that
+supplies its own conversion to `check_contract_with` bypasses staging.
 
 ## Constant initializers
 
