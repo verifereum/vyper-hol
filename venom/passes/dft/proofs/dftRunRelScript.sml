@@ -8,7 +8,7 @@ Theory dftRunRel
 Ancestors
   dftScheduleOrder dftStructural dftPermSim dftDefs passSharedDefs venomExecSemantics venomWf
   venomInst venomState venomEffects venomExecProps list finite_map sorting rich_list dftCorrectness
-  dftAvailability dftWf dftIndexedExec
+  dftAvailability dftWf dftIndexedExec dftSsaPreserve
   unitLabelMapIdentity sccpCorrectnessProofs gasOracleReplay stateEquiv opcodeClass
 Libs
   stepInstBaseLib
@@ -935,6 +935,53 @@ Proof
   irule dft_remaining_inv_initial >> simp[] >>
   fs[sccpCorrectnessProofsTheory.strict_dom_vars_defined_def,
      pred_setTheory.SUBSET_DEF, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem dft_block_rel_strict_dom_vars_defined:
+  wf_function fn /\ LIST_REL dft_block_rel fn.fn_blocks bbs ==>
+  (strict_dom_vars_defined (fn with fn_blocks := bbs) s <=>
+   strict_dom_vars_defined fn s)
+Proof
+  strip_tac >>
+  `!bb. MEM bb fn.fn_blocks ==>
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[bb_inst_ids_distinct, wf_function_def] >>
+  simp[strict_dom_vars_defined_def, dft_block_rel_dominates] >>
+  eq_tac >> strip_tac >> rpt gen_tac >> strip_tac
+  >- (drule_all dft_blocks_member_left >> strip_tac >>
+      drule dft_block_rel_outputs_perm >>
+      (impl_tac >- metis_tac[]) >>
+      disch_then (mp_tac o MATCH_MP PERM_MEM_EQ) >>
+      simp[MEM_MAP] >> metis_tac[dft_block_rel_label,
+        bb_inst_ids_distinct, wf_function_def]) >>
+  drule_all dft_blocks_member_right >> strip_tac >>
+  drule dft_block_rel_outputs_perm >>
+      (impl_tac >- metis_tac[]) >>
+  disch_then (mp_tac o MATCH_MP PERM_MEM_EQ) >>
+  simp[MEM_MAP] >> metis_tac[dft_block_rel_label,
+    bb_inst_ids_distinct, wf_function_def]
+QED
+
+Theorem dft_fn_strict_dom_vars_defined:
+  dft_fn_rel fn (dft_fn fn) ==>
+  (strict_dom_vars_defined (dft_fn fn) s <=> strict_dom_vars_defined fn s)
+Proof
+  strip_tac >>
+  `dft_fn fn = fn with fn_blocks := (dft_fn fn).fn_blocks` by
+    (simp[dft_fn_def] >> pairarg_tac >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  irule dft_block_rel_strict_dom_vars_defined >> gvs[dft_fn_rel_def]
+QED
+
+Theorem dft_fn_reachable:
+  dft_fn_rel fn (dft_fn fn) ==>
+  (fn_reachable (dft_fn fn) lbl <=> fn_reachable fn lbl)
+Proof
+  strip_tac >>
+  `dft_fn fn = fn with fn_blocks := (dft_fn fn).fn_blocks` by
+    (simp[dft_fn_def] >> pairarg_tac >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  irule dft_block_rel_reachable >> gvs[dft_fn_rel_def]
 QED
 
 Theorem dft_fn_rel_setup_callee:
