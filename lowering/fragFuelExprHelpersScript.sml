@@ -1,7 +1,25 @@
 (*
  * Fuel bounds (fuel_ok) for the expression-lowering helpers.
  *
- * TOP-LEVEL: (filled in at the end)
+ * TOP-LEVEL:
+ *   fuel_ok_compile_clamp, fuel_ok_clamp_and_return,
+ *   fuel_ok_compile_clamp_basetype, fuel_ok_arith_basic (safe_add/sub/mul/
+ *   div/mod/decimal_div, mul_overflow_check, wrap_truncate),
+ *   fuel_ok_compile_compare, fuel_ok_compile_safe_pow,
+ *   fuel_ok_membership, fuel_ok_compile_list_membership, fuel_ok_misc_emit,
+ *   fuel_ok_load_bytestring_as_word (opcode must be a non-terminator),
+ *   fuel_ok_store_multi_results, fuel_ok_compile_name_vv,
+ *   fuel_ok_compile_type_convert, fuel_ok_compile_store_byte_chunks,
+ *   fuel_ok_compile_bytelike_literal, fuel_ok_compile_literal_vv,
+ *   fuel_ok_unwrap_value, fuel_ok_compile_multi_vvs (callback hypothesis),
+ *   fuel_ok_compile_extcall_store_values, fuel_ok_compile_stage_intcall_args,
+ *   fuel_ok_compile_array_subscript (loader hypothesis),
+ *   fuel_ok_compile_dynarray_pop, fuel_ok_compile_dynarray_append
+ *   (opcodes must be non-terminators), fuel_ok_compile_var_array_membership
+ *
+ * Skipped: compile_binop, compile_return_value_decode (compile_select, in
+ * builtinSimple); compile_default_return_path and
+ * compile_external_call_kwargs (compile_abi_* from abiEncoder).
  *)
 
 Theory fragFuelExprHelpers
@@ -264,4 +282,78 @@ Proof
   simp_tac (srw_ss()) [Once compile_stage_intcall_args_def, LET_THM] >>
   ft [fuel_ok_unwrap_value, fuel_ok_compile_alloc_buffer,
       fuel_ok_context_storage, fuel_ok_compile_store_memory]
+QED
+
+(* ===== Array and dynarray helpers ===== *)
+
+Theorem fuel_ok_compile_array_subscript:
+  !loader.
+    (!a Wv E. fuel_ok Wv {} E (loader a)) ==>
+    !base idx dyn cnt ws es sgn Wv E.
+      fuel_ok Wv {} E
+        (compile_array_subscript base idx dyn cnt ws es sgn loader)
+Proof
+  rpt strip_tac >> simp_tac std_ss [compile_array_subscript_def, LET_THM] >>
+  ft []
+QED
+
+Theorem fuel_ok_compile_dynarray_pop:
+  !base ws es c i loc Wv E.
+    fuel_ok Wv {} E (compile_dynarray_pop base ws es c i loc)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_dynarray_pop_def, LET_THM] >>
+  ft [fuel_ok_compile_ptr_load, fuel_ok_compile_ptr_store]
+QED
+
+(* The opcodes are arbitrary, so they must be ordinary non-terminators. *)
+Theorem fuel_ok_compile_dynarray_append:
+  !cenv base v ws es dt st cap prim lo so Wv E.
+    ~is_terminator lo /\ lo <> PHI /\ ~is_terminator so /\ so <> PHI ==>
+    fuel_ok Wv {} E
+      (compile_dynarray_append cenv base v ws es dt st cap prim lo so)
+Proof
+  rpt strip_tac >> simp_tac std_ss [compile_dynarray_append_def, LET_THM] >>
+  ft [fuel_ok_compile_store_memory, CONJUNCT2 fuel_ok_compile_word_copy_loop]
+QED
+
+(* The loop leaf needs the length operand allocated before it. *)
+Theorem fuel_ok_bind_array_membership_loop:
+  !loader.
+    (!a Wv E. fuel_ok Wv {} E (loader a)) ==>
+    !m needle arr_op sz ob bo ii Wv E.
+      fuel_ok Wv {} E m /\
+      (!st x st'. m st = (x, st') ==>
+                  !y. x = Var y ==> var_below st'.cs_next_var y) ==>
+      fuel_ok Wv {} E
+        (comp_bind m (\len_op.
+           compile_array_membership_loop needle arr_op len_op sz ob loader
+             bo ii))
+Proof
+  rpt strip_tac >> irule fuel_ok_of_okS >> qexists_tac `\st. T` >> simp[] >>
+  `fuel_okS (\st. T) Wv ({} UNION {}) E
+     (comp_bind m (\len_op.
+        compile_array_membership_loop needle arr_op len_op sz ob loader bo ii))`
+    suffices_by simp[] >>
+  match_mp_tac fuel_okS_bind >>
+  qexistsl_tac [`\c st. !x. c = Var x ==> var_below st.cs_next_var x`,
+                `E`, `E`] >>
+  simp[pred_setTheory.SUBSET_DEF] >> rpt conj_tac
+  >- simp[fuel_okS_of_ok]
+  >- metis_tac[] >>
+  gen_tac >> BETA_TAC >>
+  irule fuel_okS_compile_array_membership_loop >> first_assum ACCEPT_TAC
+QED
+
+Theorem fuel_ok_compile_var_array_membership:
+  !cenv needle arr_vv rhs_ty is_in Wv E.
+    fuel_ok Wv {} E
+      (compile_var_array_membership cenv needle arr_vv rhs_ty is_in)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_var_array_membership_def, LET_THM] >>
+  Cases_on `rhs_ty` >> TRY (rename1 `ArrayT _ b` >> Cases_on `b`) >>
+  simp_tac (srw_ss()) [] >>
+  match_mp_tac (MP_CANON fuel_ok_bind_array_membership_loop) >>
+  simp[fuel_ok_compile_ptr_load, fuel_ok_return, comp_return_def,
+       compile_ptr_load_var] >>
+  metis_tac[compile_ptr_load_var]
 QED
