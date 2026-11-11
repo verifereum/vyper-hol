@@ -286,8 +286,10 @@ Proof
                      (fn th => rewrite_tac[th]) >> rpt conj_tac >>
                    TRY (first_assum ACCEPT_TAC) >> decide_tac)) >>
      disch_then (fn th => conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
-       rpt gen_tac >> strip_tac >> irule (CONJUNCT2 th) >-
-       decide_tac >> first_assum ACCEPT_TAC)) >>
+       qx_genl_tac [`pp`, `nn`] >> strip_tac >>
+       mp_tac (Q.SPECL [`pp`, `nn`] (CONJUNCT2 th)) >>
+       impl_tac >- (conj_tac >- simp[] >> first_assum ACCEPT_TAC) >>
+       disch_then ACCEPT_TAC)) >>
   qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ /\ _ ==> _` (fn pth =>
     qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >>
   simp[] >>

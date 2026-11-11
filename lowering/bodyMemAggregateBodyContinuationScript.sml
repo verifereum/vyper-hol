@@ -163,7 +163,8 @@ Proof
       drule exprSimBufferStoreTheory.buffer_store_memory_shape >> strip_tac >>
       qexists `t` >> simp[] >>
       gvs[Abbr `t`, venom_state_component_equality, arithmeticTheory.ADD_COMM,
-          exprLoweringPropsTheory.same_blocks_def]) >>
+          exprLoweringPropsTheory.same_blocks_def] >>
+      first_assum ACCEPT_TAC) >>
   `compile_store_memory_typed ce dst (expr_type e) op
      (post_value_type ce e) su = ((),sb)` by
     gvs[compile_store_memory_def] >>
