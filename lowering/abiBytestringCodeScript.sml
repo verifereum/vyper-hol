@@ -1,5 +1,5 @@
-(* TOP-LEVEL: the bytestring ABI encoder emits this exact ten-instruction
-   program, with eight distinct generated names. These are descriptions of
+(* TOP-LEVEL: the bytestring ABI encoder emits this exact eleven-instruction
+   program, with nine distinct generated names. These are descriptions of
    the existing compiler's output, not a replacement lowering algorithm. *)
 Theory abiBytestringCode
 Ancestors
@@ -50,11 +50,10 @@ Definition bytestring_encoder_insts_def:
      mk_inst (id + 4) MSTORE [Var (EL 3 names); Lit 0w] [];
      mk_inst (id + 5) ADD [Lit 32w; Var (EL 0 names)] [EL 4 names];
      mk_inst (id + 6) MCOPY [dst; src; Var (EL 4 names)] [];
-     mk_inst (id + 7) ADD [Lit 31w; Var (EL 0 names)] [EL 5 names];
-     mk_inst (id + 8) AND
-       [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
-        Var (EL 5 names)] [EL 6 names];
-     mk_inst (id + 9) ADD [Lit 32w; Var (EL 6 names)] [EL 7 names]]
+     mk_inst (id + 7) NOT [Lit 31w] [EL 5 names];
+     mk_inst (id + 8) ADD [Var (EL 0 names); Lit 31w] [EL 6 names];
+     mk_inst (id + 9) AND [Var (EL 6 names); Var (EL 5 names)] [EL 7 names];
+     mk_inst (id + 10) ADD [Var (EL 7 names); Lit 32w] [EL 8 names]]
 End
 
 Theorem bytestring_encoder_straight:
@@ -69,11 +68,11 @@ Theorem compile_abi_bytestring_code:
   !dst src cap cs op cs'.
     compile_abi_encode_to_buf dst src (AbiBytestring cap) cs = (op,cs') ==>
     emitted_insts cs cs' = bytestring_encoder_insts cs.cs_next_id
-      (compiler_var_names cs.cs_next_var 8) dst src /\
-    op = Var (EL 7 (compiler_var_names cs.cs_next_var 8)) /\
+      (compiler_var_names cs.cs_next_var 9) dst src /\
+    op = Var (EL 8 (compiler_var_names cs.cs_next_var 9)) /\
     same_blocks cs cs' /\
     cs'.cs_current_insts = cs.cs_current_insts ++ emitted_insts cs cs' /\
-    cs'.cs_next_var = cs.cs_next_var + 8 /\ cs'.cs_next_id = cs.cs_next_id + 10
+    cs'.cs_next_var = cs.cs_next_var + 9 /\ cs'.cs_next_id = cs.cs_next_id + 11
 Proof
   rw[Once compile_abi_encode_child_def, emit_op_def, emit_void_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def,

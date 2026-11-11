@@ -406,18 +406,7 @@ QED
    then y produces the same result constructor on sx as on s.
    Specifically: if y aborts on s, y also aborts on sx with the same type;
    if y doesn't error on s, y doesn't error on sx. *)
-(* Helper: MEM (Var v) ops ==> MEM v (operand_vars ops) *)
-Theorem MEM_operand_vars_iff:
-  !ops v. MEM v (operand_vars ops) <=> MEM (Var v) ops
-Proof
-  Induct >> simp[operand_vars_def] >>
-  rpt gen_tac >> Cases_on `operand_var h` >> simp[operand_var_def] >>
-  Cases_on `h` >> gvs[operand_var_def]
-QED
-
-val MEM_Var_operand_vars =
-  MEM_operand_vars_iff |> SPEC_ALL |> EQ_IMP_RULE |> snd
-    |> GENL [``ops : operand list``, ``v : string``];
+Theorem MEM_operand_vars_iff = venomInstTheory.MEM_operand_vars_eq_Var
 
 (* ML pre-computation: non-aborting opcodes can't produce Abort *)
 local
@@ -490,7 +479,7 @@ Proof
         metis_tac[step_preserves_non_output_vars] >>
       first_x_assum irule >>
       `MEM s' (inst_uses y)` by
-        (simp[inst_uses_def] >> irule MEM_Var_operand_vars >> simp[]) >>
+        (simp[inst_uses_def] >> irule mem_var_operand_vars >> simp[]) >>
       spose_not_then assume_tac >>
       `MEM s' (inst_defs x)` by fs[inst_defs_def] >>
       qpat_x_assum `DISJOINT (set (inst_defs x)) (set (inst_uses y))` mp_tac >>
@@ -2922,7 +2911,7 @@ Resume block_body_topo_sorted[case1]:
   simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
   spose_not_then strip_assume_tac >> rename1 `MEM v _` >>
   `MEM (Var v) (EL i bd).inst_operands` by
-    gvs[inst_uses_def, MEM_operand_vars_iff] >>
+    gvs[inst_uses_def, MEM_operand_vars_eq_Var] >>
   `bd = block_body bb` by fs[markerTheory.Abbrev_def] >>
   metis_tac[block_body_defs_before_uses]
 QED
@@ -2960,7 +2949,7 @@ Proof
   Cases_on `t` >> simp[] >>
   Cases_on `t'` >> simp[] >>
   IF_CASES_TAC >> simp[] >>
-  simp[MEM_operand_vars_iff] >> metis_tac[]
+  simp[MEM_operand_vars_eq_Var] >> metis_tac[]
 QED
 
 (* from_block source: unique original with inst_id, inst_outputs, ¬is_pseudo *)
@@ -3164,7 +3153,7 @@ QED
 Resume schedule_topo_sorted_full_dep[uses_defs_case]:
   fs[pred_setTheory.IN_DISJOINT, inst_uses_def, inst_defs_def] >>
   rename1 `MEM v (operand_vars _)` >>
-  `MEM (Var v) (EL i output).inst_operands` by metis_tac[MEM_operand_vars_iff] >>
+  `MEM (Var v) (EL i output).inst_operands` by metis_tac[MEM_operand_vars_eq_Var] >>
   `MEM (EL j output) output` by (simp[MEM_EL] >> metis_tac[]) >>
   (* Get j_orig ∈ bi: inst_id, inst_outputs, ¬is_pseudo — no case split *)
   `from_block bi (EL j output)` by metis_tac[] >>
@@ -3512,7 +3501,7 @@ Proof
   simp[ef_commutes_def] >>
   fs[data_dep_body_def, MEM_FILTER] >>
   simp[DISJOINT_DEF, EXTENSION, inst_uses_def, inst_defs_def,
-       MEM_operand_vars_iff] >>
+       MEM_operand_vars_eq_Var] >>
   `in_np_body bi x` by (simp[in_np_body_def, MEM_FILTER, MEM_MAP] >> qexists `x` >> simp[]) >> `in_np_body bi y` by (simp[in_np_body_def, MEM_FILTER, MEM_MAP] >> qexists `y` >> simp[]) >> metis_tac[]
 QED
 
@@ -5327,7 +5316,7 @@ Proof
   simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
   spose_not_then strip_assume_tac >> rename1 `MEM v _` >>
   `MEM (Var v) (EL i bi).inst_operands` by
-    gvs[inst_uses_def, MEM_operand_vars_iff] >>
+    gvs[inst_uses_def, MEM_operand_vars_eq_Var] >>
   `MEM v (EL j bi).inst_outputs` by fs[inst_defs_def] >>
   (* EL i and EL j are distinct *)
   `ALL_DISTINCT (MAP (\i. i.inst_id) bi)` by
@@ -6719,7 +6708,7 @@ Triviality frame_conds_from_disjoint:
       ~MEM out h.inst_outputs
 Proof
   rw[inst_defs_def, inst_uses_def] >>
-  fs[DISJOINT_DEF, EXTENSION, MEM_operand_vars_iff] >>
+  fs[DISJOINT_DEF, EXTENSION, MEM_operand_vars_eq_Var] >>
   metis_tac[]
 QED
 
@@ -7498,7 +7487,7 @@ Proof
   >- (simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
       spose_not_then strip_assume_tac >> rename1 `MEM v _` >>
       `MEM (Var v) (EL i bd).inst_operands` by
-        gvs[inst_uses_def, MEM_operand_vars_iff] >>
+        gvs[inst_uses_def, MEM_operand_vars_eq_Var] >>
       `bd = block_body bb` by fs[markerTheory.Abbrev_def] >>
       metis_tac[block_body_defs_before_uses_gen])
   >> (simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
@@ -8771,7 +8760,7 @@ Triviality data_dep_body_imp_full_dep_local[local]:
 Proof
   rpt strip_tac >> fs[full_dep_def] >> disj2_tac >> disj1_tac >>
   fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
-  qexists `v` >> fs[MEM_operand_vars_iff]
+  qexists `v` >> fs[MEM_operand_vars_eq_Var]
 QED
 
 (* Bridge: from_barrier_dep → eda_dep → full_dep *)
@@ -9470,7 +9459,7 @@ Proof
   (* data_dep_body: structural via uses/defs overlap *)
   (irule TC_SUBSET >> simp[full_dep_def] >> disj2_tac >> disj1_tac >>
    fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
-   qexists `v` >> fs[MEM_operand_vars_iff]) >-
+   qexists `v` >> fs[MEM_operand_vars_eq_Var]) >-
   (* from_barrier_dep: eda_dep from lemma, then lift to full_dep, then TC *)
   (`eda_dep (build_full_eda cur_bi) x y` by metis_tac[from_barrier_dep_tc_case_local] >>
    irule TC_SUBSET >> metis_tac[eda_dep_imp_full_dep_local]) >>
@@ -9909,7 +9898,7 @@ Triviality data_dep_body_imp_full_dep_any_eda[local]:
 Proof
   rpt strip_tac >> simp[full_dep_def] >> disj2_tac >> disj1_tac >>
   fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
-  qexists `v` >> fs[MEM_operand_vars_iff]
+  qexists `v` >> fs[MEM_operand_vars_eq_Var]
 QED
 
 (* If MAP inst_id of FILTER ~pseudo bi = pfx++[xid]++sfx with ALL_DISTINCT, and MEM yid pfx, then xid <> yid *)
@@ -10500,7 +10489,7 @@ Proof
   (* Case 1: data_dep_body -- order-independent *)
   >- (simp[full_dep_def] >> disj2_tac >> disj1_tac >>
       fs[data_dep_body_def, inst_uses_def, inst_defs_def, IN_DISJOINT] >>
-      qexists `v` >> fs[MEM_operand_vars_iff])
+      qexists `v` >> fs[MEM_operand_vars_eq_Var])
   (* Case 2: from_barrier_dep -- extracted helper *)
   >- metis_tac[from_barrier_dep_imp_full_dep_current]
   (* Case 3: on_barrier_dep -- extracted helper *)

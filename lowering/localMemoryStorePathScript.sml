@@ -40,7 +40,7 @@ Theorem bytestring_copy_len_no_gas[local]:
   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
 Proof
   simp_tac bool_ss [compile_bytestring_copy_len_def, comp_bind_def, LET_THM] >>
-  ntac 3 (pairarg_tac >> gvs[]) >>
+  ntac 4 (pairarg_tac >> gvs[]) >>
   strip_tac >>
   imp_res_tac emitted_insts_emit_op >>
   gvs[emitted_insts_def, DROP_APPEND1, mk_inst_def]

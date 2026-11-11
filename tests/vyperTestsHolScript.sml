@@ -14,6 +14,8 @@ Ancestors
   vyperCalldataSliceTest
   vyperCheckContractFrontendLibTest
   vyperCheckContractLibTest
+  vyperPowerDomainTest
+  vyperImmutableMutationTest
   rawReturnDeclarationTest
   vyperCheckContractTraceLibTest
   vyperCreateSelfdestruct

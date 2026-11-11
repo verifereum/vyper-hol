@@ -13,7 +13,7 @@ Theorem compile_materialize_bytes_execution:
     compile_materialize_vv cenv ty (StackValue ty src) cs = (op,cs') /\
     type_memory_bytes cenv ty < dimword(:256) /\
     eval_operand src ss = SOME src_addr /\
-    EVERY (\name. src <> Var name) (compiler_var_names cs.cs_next_var 5) ==>
+    EVERY (\name. src <> Var name) (compiler_var_names cs.cs_next_var 6) ==>
     run_inst_seq (emitted_insts cs cs') ss =
       OK (bytes_snapshot_result cs.cs_next_id cs.cs_next_var
         (type_memory_bytes cenv ty) src_addr ss)
@@ -28,7 +28,7 @@ Theorem compile_materialize_bytes_path:
     compile_materialize_vv cenv ty (StackValue ty src) cs = (op,cs') /\
     type_memory_bytes cenv ty < dimword(:256) /\ type_memory_size tv < dimword(:256) /\
     lowered_value_rel ty tv v src ss /\ eval_operand src ss = SOME src_addr /\
-    EVERY (\name. src <> Var name) (compiler_var_names cs.cs_next_var 5) /\
+    EVERY (\name. src <> Var name) (compiler_var_names cs.cs_next_var 6) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
     ?out. out = (bytes_snapshot_result cs.cs_next_id cs.cs_next_var
@@ -37,7 +37,7 @@ Theorem compile_materialize_bytes_path:
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ lowered_value_rel ty tv v op out /\
       eval_operand op out = SOME (memory_snapshot_addr cs.cs_next_id ss) /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 5) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 6) ==>
         eval_operand arg_op out = eval_operand arg_op ss)
 Proof
   rpt strip_tac >> drule_all compile_materialize_bytes_execution >> strip_tac >>

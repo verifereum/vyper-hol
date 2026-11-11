@@ -535,7 +535,7 @@ Proof
   simp[scan_store_def, hard_barrier_has_id] >>
   namedCases_on `rest` ["", "value tail"] >> simp[hard_barrier_has_id] >>
   Cases_on `tail` >> simp[hard_barrier_has_id] >>
-  namedCases_on `operand_var_name value` ["", "var"] >> simp[hard_barrier_has_id] >>
+  namedCases_on `operand_var value` ["", "var"] >> simp[hard_barrier_has_id] >>
   Cases_on `operand_lit_val dst` >> simp[hard_barrier_has_id] >>
   Cases_on `FLOOKUP ss.ss_loads var` >> simp[hard_barrier_has_id] >>
   Cases_on `dfg_get_def dfg var` >> simp[] >>
@@ -651,7 +651,7 @@ Proof
   simp[scan_store_def, hard_barrier_def] >>
   namedCases_on `rest` ["", "value tail"] >> simp[hard_barrier_def] >>
   Cases_on `tail` >> simp[hard_barrier_def] >>
-  namedCases_on `operand_var_name value` ["", "vname"] >> simp[hard_barrier_def] >>
+  namedCases_on `operand_var value` ["", "vname"] >> simp[hard_barrier_def] >>
   Cases_on `operand_lit_val dst` >> simp[hard_barrier_def] >>
   Cases_on `FLOOKUP ss.ss_loads vname` >> simp[hard_barrier_def] >>
   rpt (IF_CASES_TAC >> simp[]) >>
@@ -1415,7 +1415,7 @@ Proof
   simp[scan_store_def, hard_barrier_has_id] >>
   namedCases_on `rest` ["", "value tail"] >> simp[hard_barrier_has_id] >>
   Cases_on `tail` >> simp[hard_barrier_has_id] >>
-  namedCases_on `operand_var_name value` ["", "vname"] >> simp[hard_barrier_has_id] >>
+  namedCases_on `operand_var value` ["", "vname"] >> simp[hard_barrier_has_id] >>
   Cases_on `operand_lit_val dst` >> simp[hard_barrier_has_id] >>
   Cases_on `FLOOKUP ss.ss_loads vname` >> simp[hard_barrier_has_id] >>
   Cases_on `dfg_get_def dfg vname` >> simp[] >>

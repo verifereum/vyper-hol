@@ -47,7 +47,7 @@ Theorem abi_encoder_member_step_globals:
     s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,s.vs_outcomes,s.vs_pending_deletions)
 Proof
   strip_tac >>
-  `i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}` by simp[] >>
+  `i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT}` by simp[] >>
   drule_all abi_encoder_leaf_step_globals >> strip_tac >> simp[]
 QED
 

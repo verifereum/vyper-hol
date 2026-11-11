@@ -1,7 +1,10 @@
 c03_iface_address_attr
+e04_ret_string
+e05_ret_bytes
 e21_default_ret
 e22_static_default
 e30_default_ret_tuple
+e37_default_ret_string
 e38_default_ret_local_array
 e45_default_ret_ifexp
 s01_send

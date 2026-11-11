@@ -93,7 +93,11 @@ When proof-tool use is authorized, prefer a holbuild-centered workflow:
 
 ### File Conventions (repo-specific)
 
-Local test/scratch files use **dot prefixes** (gitignored):
+Local test/scratch files use **dot prefixes** (gitignored), except buildable
+scratch theories, which use ordinary `<name>Script.sml` names because holbuild
+ignores dot-prefixed sources. Remove scratch theories and other probes before
+publication.
+
 - `.hol_init.sml` - auto-loaded on session start
 - `.hol_test.sml` - temporary test scripts
 

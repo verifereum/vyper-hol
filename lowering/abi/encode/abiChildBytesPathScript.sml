@@ -15,7 +15,7 @@ Theorem compile_abi_child_bytes_path:
     eval_operand dst ss = SOME dst_addr /\ eval_operand src ss = SOME src_addr /\
     eval_operand dyn_ptr ss = SOME dyn_addr /\
     EVERY (\name. src <> Var name /\ dst <> Var name /\ dyn_ptr <> Var name)
-      (compiler_var_names cs.cs_next_var 12) /\
+      (compiler_var_names cs.cs_next_var 13) /\
     bytestring_abi_pre (dst_addr + mload (w2n dyn_addr) ss) src_addr bs ss /\
     regions_disjoint (w2n (dst_addr + n2w head_offset)) 32 (w2n dyn_addr) 32 /\
     regions_disjoint (w2n (dst_addr + mload (w2n dyn_addr) ss))
@@ -33,7 +33,7 @@ Theorem compile_abi_child_bytes_path:
       abi_memory_frame
         [(w2n (dst_addr + mload (w2n dyn_addr) ss), LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)));
          (w2n (dst_addr + n2w head_offset),32);(w2n dyn_addr,32)] ss out /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 12) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 13) ==>
         eval_operand arg_op out = eval_operand arg_op ss) /\
       read_memory (w2n (dst_addr + mload (w2n dyn_addr) ss))
         (LENGTH (enc (Bytes NONE) (contractABI$BytesV bs))) out = enc (Bytes NONE) (contractABI$BytesV bs) /\
@@ -44,7 +44,7 @@ Proof
     (mp_tac o REWRITE_RULE [compile_abi_child_dynamic_cuts]) >>
   disch_then (qx_choose_then `mid` strip_assume_tac) >>
   qpat_x_assum `cs' = abi_child_suffix_cut _ _ _ _ _` SUBST_ALL_TAC >>
-  qpat_assum `EVERY _ (compiler_var_names _ 12)`
+  qpat_assum `EVERY _ (compiler_var_names _ 13)`
     (strip_assume_tac o SIMP_RULE bool_ss [EVERY_CONJ]) >>
   mp_tac (Q.SPECL [`dst`, `cs.cs_next_var`] abi_child_bytes_input_names) >>
   impl_tac >- first_assum MATCH_ACCEPT_TAC >> strip_tac >>
@@ -65,7 +65,7 @@ Proof
   disch_then (qx_choose_then `out` strip_assume_tac) >>
   `eval_operand op out = SOME (n2w (LENGTH (enc (Bytes NONE) (contractABI$BytesV bs))))` by
     (qpat_x_assum `!arg_op. arg_op <> Var _ ==> _` (qspec_then `op` mp_tac) >> simp[]) >>
-  `!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 12) ==>
+  `!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 13) ==>
     eval_operand arg_op out = eval_operand arg_op ss` by
     (qx_gen_tac `arg_op` >> DISCH_TAC >>
      mp_tac (Q.SPECL [`arg_op`, `cs.cs_next_var`] abi_child_bytes_input_names) >>

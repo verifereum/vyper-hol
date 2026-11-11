@@ -7,7 +7,7 @@ Ancestors
 
 Definition abi_field_id_cost_def:
   abi_field_id_cost (AbiFieldFlat row) = abi_flat_id_cost row /\
-  abi_field_id_cost (AbiFieldDynBytes ty tv capacity vs bss) = 53
+  abi_field_id_cost (AbiFieldDynBytes ty tv capacity vs bss) = 54
 End
 
 Definition abi_field_requests_def:
@@ -15,7 +15,7 @@ Definition abi_field_requests_def:
   abi_field_requests next_id (AbiFieldFlat row::rest) =
     abi_field_requests (next_id + abi_flat_id_cost row) rest /\
   abi_field_requests next_id (AbiFieldDynBytes ty tv capacity vs bss::rest) =
-    [(next_id + 4,32);(next_id + 8,32);(next_id + 10,32)] ++ abi_field_requests (next_id + 53) rest
+    [(next_id + 4,32);(next_id + 8,32);(next_id + 10,32)] ++ abi_field_requests (next_id + 54) rest
 End
 
 Theorem abi_field_requests_sizes:

@@ -22,8 +22,8 @@ Theorem compile_store_memory_typed_bytes_code:
   !cenv dst fty src aty cs ret cs'.
     is_bytestring_type fty /\ is_bytestring_type aty /\
     compile_store_memory_typed cenv dst fty src aty cs = (ret,cs') ==>
-    ret = () /\ same_blocks cs cs' /\ cs'.cs_next_var = cs.cs_next_var + 4 /\
-    emitted_insts cs cs' = bytes_copy_insts cs.cs_next_id (compiler_var_names cs.cs_next_var 4) dst src /\
+    ret = () /\ same_blocks cs cs' /\ cs'.cs_next_var = cs.cs_next_var + 5 /\
+    emitted_insts cs cs' = bytes_copy_insts cs.cs_next_id (compiler_var_names cs.cs_next_var 5) dst src /\
     cs'.cs_current_insts = cs.cs_current_insts ++ emitted_insts cs cs'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -40,14 +40,14 @@ Theorem compile_store_memory_typed_bytes_path:
     lowered_value_rel aty atv v src ss /\
     eval_operand dst ss = SOME dst_addr /\ eval_operand src ss = SOME src_addr /\
     type_memory_size atv < dimword(:256) /\
-    EVERY (\name. dst <> Var name /\ src <> Var name) (compiler_var_names cs.cs_next_var 4) /\
+    EVERY (\name. dst <> Var name /\ src <> Var name) (compiler_var_names cs.cs_next_var 5) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ copy_state_frame ss out /\ lowered_value_rel fty ftv v dst out /\
       value_has_type ftv v /\ memory_value_rel ftv v (w2n dst_addr) out.vs_memory /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 4) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 5) ==>
         eval_operand arg_op out = eval_operand arg_op ss) /\
       (!other_tv other_v offset.
         memory_value_rel other_tv other_v offset ss.vs_memory /\ val_wf other_tv other_v /\

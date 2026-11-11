@@ -1,8 +1,10 @@
 # Slice buffer witnesses (#561, a07-06)
 
-Sources for `slice`. Their exact bytecode comparisons (formerly in
-`evalCompilerSliceBuffersScript.sml`) left the checks at the v0.5.0b1 pin,
-where the Python bytes changed, and return when the change is ported. The lowering sizes slice output buffers as Python's
+Exact bytecode comparison for `slice` of a storage `Bytes` source, checked in
+`eval/evalCompilerSliceBuffersScript.sml` (part of the default lowering
+rollup). The comparisons of the other sources left the checks at the v0.5.0b1
+pin, where the Python bytes changed, and return when the change is ported
+([`pending-5127-port.md`](../pending-5127-port.md)). The lowering sizes slice output buffers as Python's
 `new_temporary_value(out_t)` (`32 + ceil32(maxlen)`) and allocates the
 `msg.data`/`.code` output buffer before the size opcode and bounds check.
 

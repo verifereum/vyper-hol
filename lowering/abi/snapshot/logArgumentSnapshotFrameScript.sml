@@ -90,7 +90,7 @@ Proof
   qpat_x_assum `compile_log_save_arg _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [compile_log_save_arg_def] >> strip_tac >>
   `EVERY (\name. src <> Var name)
-    (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1))` by
+    (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1))` by
     (irule abi_operand_before_names >> qexists_tac `cs.cs_next_var` >> simp[]) >>
   mp_tac (Q.SPECL [`type_env tops`, `ctx`, `func`, `cenv`, `ty`, `tv`, `v`, `src`,
     `cs`, `op`, `cs'`, `ss`, `src_addr`] compile_materialize_value_path) >>
@@ -103,15 +103,15 @@ Proof
        materialized_state_fresh) >> impl_tac >- simp[] >> simp[fresh_vars_wrt_def]) >>
   drule_all materialized_allocation_resources >> strip_tac >>
   drule_all allocation_growth_snapshot_fields >> DISCH_TAC >>
-  `log_args_avoid args (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1))` by
+  `log_args_avoid args (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1))` by
     (irule log_args_before_names >> qexists_tac `cs.cs_next_var` >> simp[]) >>
   mp_tac (Q.SPECL [`args`, `atvs`, `values`, `ss`, `out`, `tv`, `1`,
     `w2n (memory_snapshot_addr cs.cs_next_id ss)`,
-    `compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1)`] log_args_frame) >>
+    `compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 6 else 1)`] log_args_frame) >>
   impl_tac >- simp[] >> strip_tac >>
   `!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op out = eval_operand arg_op ss` by
     (mp_tac (Q.SPECL [`cs.cs_next_var`, `cs.cs_next_var`,
-       `if is_bytestring_type ty then 5 else 1`, `ss`, `out`] abi_operand_before_frame) >>
+       `if is_bytestring_type ty then 6 else 1`, `ss`, `out`] abi_operand_before_frame) >>
      impl_tac >- simp[] >> simp[]) >>
   qexists_tac `out` >> asm_simp_tac bool_ss [] >> decide_tac
 QED

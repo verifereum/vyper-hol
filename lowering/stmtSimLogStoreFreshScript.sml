@@ -8,7 +8,7 @@ Ancestors
 Theorem log_store_scalar_outputs[local]:
   supported_scalar_type ty /\ compile_store_memory ce src dst ty ty sa = ((),sb) /\
   sb.cs_next_var <= nv ==>
-  EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY] /\
+  EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY; NOT] /\
     EVERY (\x. ?n. x = STRING #"%" (toString n) /\ n < nv)
     i.inst_outputs) (emitted_insts sa sb)
 Proof
@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem log_store_step_var[local]:
-  MEM inst.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY] /\
+  MEM inst.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY; NOT] /\
   step_inst_base inst s = OK t /\ ~MEM x inst.inst_outputs ==>
   FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x
 Proof
@@ -37,13 +37,16 @@ Proof
   >>~- ([`exec_pure2 _ _ _ = OK _`],
     drule (cj 2 exec_pure_ok_update) >> strip_tac >>
     gvs[update_var_def, FLOOKUP_UPDATE])
+  >>~- ([`exec_pure1 _ _ _ = OK _`],
+    drule (cj 1 exec_pure_ok_update) >> strip_tac >>
+    gvs[update_var_def, FLOOKUP_UPDATE])
   >> gvs[exec_read0_def, exec_read1_def, exec_write2_def, AllCaseEqs(),
          update_var_def, FLOOKUP_UPDATE, mstore_def, mcopy_def,
          write_memory_with_expansion_def]
 QED
 
 Theorem log_store_code_var[local]:
-  !code s t x. EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY] /\
+  !code s t x. EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY; NOT] /\
     ~MEM x i.inst_outputs) code /\ run_inst_seq code s = OK t ==>
   FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x
 Proof
@@ -55,7 +58,7 @@ Proof
 QED
 
 Theorem log_store_code_fresh[local]:
-  EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY] /\
+  EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY; NOT] /\
     EVERY (\x. ?n. x = STRING #"%" (toString n) /\ n < nv) i.inst_outputs) code /\
   run_inst_seq code s = OK t /\ nv <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st s ==> fresh_vars_wrt limit_st t
@@ -76,7 +79,7 @@ QED
 Theorem log_store_data_outputs[local]:
   !xs buf off sa sb nv. EVERY (supported_scalar_type o SND) xs /\
     compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) /\ sb.cs_next_var <= nv ==>
-    EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY] /\
+    EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY; NOT] /\
       EVERY (\x. ?n. x = STRING #"%" (toString n) /\ n < nv)
         i.inst_outputs) (emitted_insts sa sb)
 Proof
@@ -110,7 +113,7 @@ Theorem log_store_data_fresh:
   fresh_vars_wrt limit_st t
 Proof
   strip_tac >>
-  `EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY] /\
+  `EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY; NOT] /\
     EVERY (\x. ?n. x = STRING #"%" (toString n) /\ n < sb.cs_next_var)
       i.inst_outputs) (emitted_insts sa sb)` by
     (irule log_store_data_outputs >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>

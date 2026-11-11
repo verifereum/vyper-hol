@@ -137,7 +137,12 @@ Theorem body_oracle_storage_mutual:
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >> rpt gen_tac
+  (* simp over all 63 induction goals is one timed step; split it in
+     three, rightmost first so the earlier goal indices stay put. *)
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac
+  >>> SPLIT_LT 42 (ALL_LT, ALLGOALS (simp[]))
+  >>> SPLIT_LT 21 (ALL_LT, SPLIT_LT 21 (ALLGOALS (simp[]), ALL_LT))
+  >>> SPLIT_LT 21 (ALLGOALS (simp[]), ALL_LT) >> rpt gen_tac
   >~ [`Call ty (IntCall (src_id_opt,fn)) es kw`] >- suspend "intcall_start"
   >~ [`eval_iterator cx (Array e)`] >-
     (strip_tac >> match_mp_tac body_array_iterator_consumer >>

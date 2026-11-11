@@ -9,6 +9,7 @@ ternary is a memory pointer value (a10-04).
 
 | Source | Checks |
 |---|---|
+| `uint2str_arg` | `uint2str(x)`: the digit buffer is reached only through the result PHI |
 | `ifexp_sarray` | static-array ternary assigned to a local, copied through a temporary |
 | `ifexp_struct` | struct ternary assigned to a local, copied through a temporary |
 | `ifexp_bytes20`, `ifexp_flag`, `ifexp_decimal` | control: word ternaries stay stack values |

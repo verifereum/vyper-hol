@@ -7,7 +7,7 @@ data in statement and expression position, `max_outsize`, `is_static_call`,
 (the bool and the `(bool, Bytes)` results), data from a function argument,
 from storage and from `msg.data`, and the keyword operands `value=` and `gas=`
 in source order.
-`parity-fixtures.txt` selects 7 exact bytecode comparisons, checked by the native
+`parity-fixtures.txt` selects 10 exact bytecode comparisons, checked by the native
 runner (`../native/README.md`); the other sources are related witnesses kept for
 diagnostic comparison. Of those, `rc09` and `rc23`, `rc27`, `rc28` match too;
 `rc08` and `rc26` differ at runtime byte 54, like the other `concat` witnesses

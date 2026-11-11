@@ -17,7 +17,7 @@ Theorem compile_abi_bytes_field_step:
     eval_operand dst ss = SOME dst_addr /\ eval_operand src ss = SOME root_addr /\
     eval_operand dyn_ptr ss = SOME dyn_addr /\
     EVERY (\name. src <> Var name /\ dst <> Var name /\ dyn_ptr <> Var name)
-      (compiler_var_names cs.cs_next_var 13) /\
+      (compiler_var_names cs.cs_next_var 14) /\
     abi_bytes_field_pre fields tail_offset dst_addr dyn_addr (root_addr + n2w source_offset) bs ss ==>
     ?mid out.
       compile_abi_encode_complex_elems dst src rest (source_offset + mem_size)
@@ -29,7 +29,7 @@ Theorem compile_abi_bytes_field_step:
       mload (w2n dyn_addr) out = n2w (tail_offset + abi_field_tail_size fields) +
         n2w (LENGTH (enc (Bytes NONE) (contractABI$BytesV bs))) /\
       abi_fields_layout (fields ++ [(T,enc (Bytes NONE) (contractABI$BytesV bs))]) (w2n dst_addr) 0 tail_offset out /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 13) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 14) ==>
         eval_operand arg_op out = eval_operand arg_op ss) /\
       abi_memory_frame
         [(w2n (dst_addr + mload (w2n dyn_addr) ss), LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)));
@@ -42,7 +42,7 @@ Proof
   drule_all abi_fields_cons_contains >> strip_tac >>
   `cs.cs_next_var + 1 <= mid.cs_next_var` by
     (drule_all compile_abi_child_next_var >> simp[abi_complex_field_cut_def]) >>
-  mp_tac (Q.SPECL [`dst`, `dyn_ptr`, `cs`, `source_offset`, `root_addr`, `ss`, `dst_addr`, `dyn_addr`, `12`]
+  mp_tac (Q.SPECL [`dst`, `dyn_ptr`, `cs`, `source_offset`, `root_addr`, `ss`, `dst_addr`, `dyn_addr`, `13`]
     abi_field_address_inputs) >> impl_tac >- fs[EVERY_CONJ] >>
   disch_then (strip_assume_tac o SIMP_RULE bool_ss [LET_THM, EVERY_CONJ]) >>
   mp_tac (Q.SPECL [`ctx`, `func`, `src`, `source_offset`, `cs`, `ss`, `root_addr`] abi_field_address_path) >>
@@ -59,10 +59,10 @@ Proof
   disch_then (qx_choose_then `out` strip_assume_tac) >>
   `abi_state_frame ss out` by
     (irule abi_state_frame_trans >> qexists_tac `addressed` >> simp[Abbr`addressed`, abi_state_frame_def]) >>
-  `!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 13) ==>
+  `!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 14) ==>
       eval_operand arg_op out = eval_operand arg_op ss` by
     (qx_gen_tac `arg_op` >> DISCH_TAC >>
-     mp_tac (Q.SPECL [`arg_op`, `cs.cs_next_var`, `12`] abi_field_input_names) >>
+     mp_tac (Q.SPECL [`arg_op`, `cs.cs_next_var`, `13`] abi_field_input_names) >>
      impl_tac >- simp[] >> strip_tac >>
      qpat_x_assum `!arg_op. EVERY _ _ ==> _` (qspec_then `arg_op` mp_tac) >>
      fs[Abbr`addressed`, abi_complex_field_cut_def, abi_field_address_state_operand]) >>

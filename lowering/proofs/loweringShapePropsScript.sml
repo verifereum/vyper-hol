@@ -1324,7 +1324,8 @@ val stmt_plain_emit =
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`, `pre`,
                `\x st. pre st /\ plain_operand st x`] >>
-  simp[] >> ho_match_mp_tac stmt_shape_emit_op >>
+  simp[] >> rpt conj_tac >> TRY (simp[Abbr `pre`] >> NO_TAC) >>
+  ho_match_mp_tac stmt_shape_emit_op >>
   conj_tac
   >- (simp[Abbr `pre`, stmt_shape_stable_plain, shape_stable_conj] >>
       rpt (ho_match_mp_tac shape_stable_conj >> conj_tac) >>
@@ -1344,11 +1345,16 @@ Proof
   rpt gen_tac >> simp[compile_bytestring_copy_len_def] >>
   irule shape_step_bind >> qexists_tac `\op st. plain_operand st op` >>
   conj_tac
-  >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
-      qexists_tac `\op st. plain_operand st op` >> conj_tac
-      >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
-          qexists_tac `\op st. plain_operand st op` >> conj_tac
-          >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >>
+  >- (qx_gen_tac `len` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\m st. plain_operand st len /\ plain_operand st m` >>
+      conj_tac
+      >- (qx_gen_tac `mask` >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\p st. plain_operand st mask /\ plain_operand st p` >>
+          conj_tac
+          >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
+              qexists_tac `\op st. plain_operand st op` >> conj_tac
+              >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >>
+              stmt_plain_emit) >>
           stmt_plain_emit) >>
       stmt_plain_emit) >>
   stmt_plain_emit
@@ -2853,10 +2859,14 @@ Resume compile_abi_encode_shape[bytes_copy]:
   qexists_tac `\v st. plain_operand st v /\ (plain_operand st len_op /\ plain_operand st dst /\ plain_operand st src)` >> conj_tac
   >- (gen_tac >> BETA_TAC >>
       stmt_sequence `\u st. plain_operand st len_op` stmt_plain_void_drop >>
-      irule shape_step_bind >> qexists_tac `\v st. plain_operand st v` >> conj_tac
-      >- (gen_tac >> BETA_TAC >>
-          irule shape_step_bind >> qexists_tac `\v st. plain_operand st v` >> conj_tac
-          >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_emit) >>
+      irule shape_step_bind >>
+      qexists_tac `\m st. plain_operand st len_op /\ plain_operand st m` >> conj_tac
+      >- (qx_gen_tac `mask` >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\v st. plain_operand st mask /\ plain_operand st v` >> conj_tac
+          >- (gen_tac >> BETA_TAC >>
+              irule shape_step_bind >> qexists_tac `\v st. plain_operand st v` >> conj_tac
+              >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_emit) >>
+          stmt_plain_emit) >>
       stmt_plain_emit) >>
   stmt_frame_emit `\st. plain_operand st len_op`
 QED
@@ -9460,12 +9470,15 @@ Resume compile_revert_with_reason_shape[copy_message]:
   stmt_bind `\n st. plain_operand st n /\ (plain_operand st msg_op /\
     plain_operand st tuple.buf_operand /\ plain_operand st payload /\ plain_operand st buf.buf_operand)` `n`
     (stmt_frame_emit `\st. plain_operand st msg_op`) >>
-  stmt_bind `\r st. plain_operand st r /\ (plain_operand st msg_op /\
+  stmt_bind `\mask st. plain_operand st mask /\ (plain_operand st n /\ plain_operand st msg_op /\
+    plain_operand st tuple.buf_operand /\ plain_operand st payload /\ plain_operand st buf.buf_operand)` `mask`
+    (stmt_frame_emit `\st. plain_operand st n`) >>
+  stmt_bind `\r st. plain_operand st r /\ (plain_operand st mask /\ plain_operand st msg_op /\
     plain_operand st tuple.buf_operand /\ plain_operand st payload /\ plain_operand st buf.buf_operand)` `r`
     (stmt_frame_emit `\st. plain_operand st n`) >>
   stmt_bind `\r1 st. plain_operand st r1 /\ (plain_operand st msg_op /\
     plain_operand st tuple.buf_operand /\ plain_operand st payload /\ plain_operand st buf.buf_operand)` `r1`
-    (stmt_frame_emit `\st. plain_operand st r`) >>
+    (stmt_frame_emit `\st. plain_operand st r /\ plain_operand st mask`) >>
   stmt_bind `\sz st. plain_operand st sz /\ (plain_operand st msg_op /\
     plain_operand st tuple.buf_operand /\ plain_operand st payload /\ plain_operand st buf.buf_operand)` `sz`
     (stmt_frame_emit `\st. plain_operand st r1`) >>
@@ -9528,12 +9541,15 @@ Resume compile_revert_with_reason_shape[finish_encoding]:
   stmt_sequence `\u st. plain_operand st msg_len /\ plain_operand st off /\
     plain_operand st head_op /\ plain_operand st size_buf.buf_operand /\ plain_operand st buf.buf_operand`
     stmt_revert_void_drop >>
-  stmt_bind `\r2 st. plain_operand st r2 /\ (plain_operand st off /\
+  stmt_bind `\mask st. plain_operand st mask /\ (plain_operand st msg_len /\ plain_operand st off /\
+    plain_operand st head_op /\ plain_operand st size_buf.buf_operand /\ plain_operand st buf.buf_operand)` `mask`
+    (stmt_revert_emit `\st. plain_operand st msg_len`) >>
+  stmt_bind `\r2 st. plain_operand st r2 /\ (plain_operand st mask /\ plain_operand st off /\
     plain_operand st head_op /\ plain_operand st size_buf.buf_operand /\ plain_operand st buf.buf_operand)` `r2`
     (stmt_revert_emit `\st. plain_operand st msg_len`) >>
   stmt_bind `\r3 st. plain_operand st r3 /\ (plain_operand st off /\
     plain_operand st head_op /\ plain_operand st size_buf.buf_operand /\ plain_operand st buf.buf_operand)` `r3`
-    (stmt_revert_emit `\st. plain_operand st r2`) >>
+    (stmt_revert_emit `\st. plain_operand st r2 /\ plain_operand st mask`) >>
   stmt_bind `\item_len st. plain_operand st item_len /\ (plain_operand st off /\
     plain_operand st head_op /\ plain_operand st size_buf.buf_operand /\ plain_operand st buf.buf_operand)` `item_len`
     (stmt_revert_emit `\st. plain_operand st r3`) >>

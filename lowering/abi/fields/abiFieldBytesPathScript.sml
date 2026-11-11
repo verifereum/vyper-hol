@@ -24,7 +24,7 @@ Theorem compile_abi_bytes_field_extend:
     eval_operand dst ss = SOME dst_addr /\ eval_operand src ss = SOME src_addr /\
     eval_operand dyn_ptr ss = SOME dyn_addr /\
     EVERY (\name. src <> Var name /\ dst <> Var name /\ dyn_ptr <> Var name)
-      (compiler_var_names cs.cs_next_var 12) /\
+      (compiler_var_names cs.cs_next_var 13) /\
     bytestring_abi_pre (dst_addr + mload (w2n dyn_addr) ss) src_addr bs ss /\
     regions_disjoint (w2n (dst_addr + n2w (abi_field_head_size fields))) 32 (w2n dyn_addr) 32 /\
     regions_disjoint (w2n (dst_addr + mload (w2n dyn_addr) ss))
@@ -49,7 +49,7 @@ Theorem compile_abi_bytes_field_extend:
       mload (w2n dyn_addr) out = n2w (tail_offset + abi_field_tail_size fields) +
         n2w (LENGTH (enc (Bytes NONE) (contractABI$BytesV bs))) /\
       abi_fields_layout (fields ++ [(T,enc (Bytes NONE) (contractABI$BytesV bs))]) (w2n dst_addr) 0 tail_offset out /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 12) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 13) ==>
         eval_operand arg_op out = eval_operand arg_op ss) /\
       abi_memory_frame
         [(w2n (dst_addr + mload (w2n dyn_addr) ss), LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)));

@@ -91,7 +91,7 @@ Theorem compile_abi_bytestring_correct:
   !dst src cap cs op cs' ss dst_addr src_addr bs.
     compile_abi_encode_to_buf dst src (AbiBytestring cap) cs = (op,cs') /\
     EVERY (\name. src <> Var name /\ dst <> Var name)
-      (compiler_var_names cs.cs_next_var 8) /\
+      (compiler_var_names cs.cs_next_var 9) /\
     eval_operand src ss = SOME src_addr /\ eval_operand dst ss = SOME dst_addr /\
     bytestring_abi_pre dst_addr src_addr bs ss ==>
     ?out.
@@ -106,7 +106,7 @@ Theorem compile_abi_bytestring_correct:
       same_blocks cs cs' /\
       cs'.cs_current_insts = cs.cs_current_insts ++ emitted_insts cs cs' /\
       (!arg_op. EVERY (\name. arg_op <> Var name)
-        (compiler_var_names cs.cs_next_var 8) ==>
+        (compiler_var_names cs.cs_next_var 9) ==>
         eval_operand arg_op out = eval_operand arg_op ss) /\
       (!offset read_len.
         offset + read_len <= w2n dst_addr \/
@@ -132,7 +132,7 @@ Theorem compile_abi_bytestring_correct_path:
   !ctx func dst src cap cs op cs' ss dst_addr src_addr bs.
     compile_abi_encode_to_buf dst src (AbiBytestring cap) cs = (op,cs') /\
     EVERY (\name. src <> Var name /\ dst <> Var name)
-      (compiler_var_names cs.cs_next_var 8) /\
+      (compiler_var_names cs.cs_next_var 9) /\
     eval_operand src ss = SOME src_addr /\ eval_operand dst ss = SOME dst_addr /\
     bytestring_abi_pre dst_addr src_addr bs ss /\ fn_has_code cs cs' func /\
     ss.vs_current_bb = cs.cs_current_bb /\
@@ -150,7 +150,7 @@ Theorem compile_abi_bytestring_correct_path:
       LENGTH ss.vs_memory <= LENGTH out.vs_memory /\
       (fresh_vars_wrt cs' out <=> fresh_vars_wrt cs' ss) /\
       (!arg_op. EVERY (\name. arg_op <> Var name)
-        (compiler_var_names cs.cs_next_var 8) ==>
+        (compiler_var_names cs.cs_next_var 9) ==>
         eval_operand arg_op out = eval_operand arg_op ss) /\
       (!offset read_len.
         offset + read_len <= w2n dst_addr \/
@@ -176,7 +176,7 @@ Theorem compile_abi_bytestring_frag:
   !ctx dst src cap cs op cs' dst_addr src_addr bs R.
     compile_abi_encode_to_buf dst src (AbiBytestring cap) cs = (op,cs') /\
     EVERY (\name. src <> Var name /\ dst <> Var name)
-      (compiler_var_names cs.cs_next_var 8) ==>
+      (compiler_var_names cs.cs_next_var 9) ==>
     frag_exec ctx cs cs'
       (\ss. eval_operand src ss = SOME src_addr /\
         eval_operand dst ss = SOME dst_addr /\
@@ -189,7 +189,7 @@ Theorem compile_abi_bytestring_frag:
       R
 Proof
   rpt gen_tac >> strip_tac >>
-  `EVERY (\name. dst <> Var name) (compiler_var_names cs.cs_next_var 8)` by
+  `EVERY (\name. dst <> Var name) (compiler_var_names cs.cs_next_var 9)` by
     fs[EVERY_CONJ] >>
   irule frag_exec_fragment_path >> MAP_EVERY qx_gen_tac [`func`, `ss`] >>
   simp_tac bool_ss [] >> strip_tac >>

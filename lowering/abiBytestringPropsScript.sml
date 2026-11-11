@@ -11,7 +11,7 @@ Theorem compile_abi_bytestring_execution:
   !dst src cap cs op cs' ss dst_addr src_addr.
     compile_abi_encode_to_buf dst src (AbiBytestring cap) cs = (op,cs') /\
     EVERY (\name. src <> Var name /\ dst <> Var name)
-      (compiler_var_names cs.cs_next_var 8) /\
+      (compiler_var_names cs.cs_next_var 9) /\
     eval_operand src ss = SOME src_addr /\ eval_operand dst ss = SOME dst_addr ==>
     ?out.
       run_inst_seq (emitted_insts cs cs') ss = OK out /\
@@ -21,11 +21,11 @@ Theorem compile_abi_bytestring_execution:
       same_blocks cs cs' /\
       cs'.cs_current_insts = cs.cs_current_insts ++ emitted_insts cs cs' /\
       (!arg_op. EVERY (\name. arg_op <> Var name)
-         (compiler_var_names cs.cs_next_var 8) ==>
+         (compiler_var_names cs.cs_next_var 9) ==>
          eval_operand arg_op out = eval_operand arg_op ss)
 Proof
   rpt gen_tac >> strip_tac >> drule compile_abi_bytestring_code >> strip_tac >>
-  mp_tac (Q.SPECL [`cs.cs_next_id`, `compiler_var_names cs.cs_next_var 8`,
+  mp_tac (Q.SPECL [`cs.cs_next_id`, `compiler_var_names cs.cs_next_var 9`,
     `dst`, `src`, `ss`, `dst_addr`, `src_addr`] bytestring_encoder_execution) >>
   simp[compiler_var_names_distinct]
 QED
@@ -34,7 +34,7 @@ Theorem compile_abi_bytestring_path:
   !ctx func dst src cap cs op cs' ss dst_addr src_addr.
     compile_abi_encode_to_buf dst src (AbiBytestring cap) cs = (op,cs') /\
     EVERY (\name. src <> Var name /\ dst <> Var name)
-      (compiler_var_names cs.cs_next_var 8) /\
+      (compiler_var_names cs.cs_next_var 9) /\
     eval_operand src ss = SOME src_addr /\ eval_operand dst ss = SOME dst_addr /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
     ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
@@ -47,7 +47,7 @@ Theorem compile_abi_bytestring_path:
         (bytestring_copy_state dst_addr src_addr ss)
           with vs_inst_idx := LENGTH cs'.cs_current_insts /\
       (!arg_op. EVERY (\name. arg_op <> Var name)
-         (compiler_var_names cs.cs_next_var 8) ==>
+         (compiler_var_names cs.cs_next_var 9) ==>
          eval_operand arg_op out = eval_operand arg_op ss)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -88,7 +88,7 @@ Theorem fresh_bytestring_input_names:
     fresh_vars_wrt cs ss /\ eval_operand src ss = SOME src_addr /\
     eval_operand dst ss = SOME dst_addr ==>
     EVERY (\name. src <> Var name /\ dst <> Var name)
-      (compiler_var_names cs.cs_next_var 8)
+      (compiler_var_names cs.cs_next_var 9)
 Proof
   rpt gen_tac >> strip_tac >> simp[EVERY_CONJ] >> conj_tac >>
   irule compiler_var_names_avoid_operand >> goal_assum drule >> simp[]
@@ -119,12 +119,12 @@ Theorem compile_abi_bytestring_fresh:
   !dst src cap cs op cs' ss out.
     compile_abi_encode_to_buf dst src (AbiBytestring cap) cs = (op,cs') /\
     (!arg_op. EVERY (\name. arg_op <> Var name)
-      (compiler_var_names cs.cs_next_var 8) ==>
+      (compiler_var_names cs.cs_next_var 9) ==>
       eval_operand arg_op out = eval_operand arg_op ss) ==>
     (fresh_vars_wrt cs' out <=> fresh_vars_wrt cs' ss)
 Proof
   rpt gen_tac >> strip_tac >>
   drule compile_abi_bytestring_code >> strip_tac >>
-  mp_tac (Q.SPECL [`cs'`, `cs.cs_next_var`, `8`, `ss`, `out`]
+  mp_tac (Q.SPECL [`cs'`, `cs.cs_next_var`, `9`, `ss`, `out`]
     fresh_vars_wrt_operand_frame) >> simp[]
 QED

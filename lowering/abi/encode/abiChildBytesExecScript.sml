@@ -24,7 +24,7 @@ Theorem abi_child_bytes_execution:
     fn_has_code (abi_child_prefix_cut dst dyn_ptr head_offset cs) mid func /\
     ss.vs_current_bb = cs.cs_current_bb /\ ~ss.vs_halted /\
     eval_operand src ss = SOME src_addr /\ eval_operand dyn_ptr ss = SOME dyn_addr /\
-    EVERY (\name. src <> Var name /\ dyn_ptr <> Var name) (compiler_var_names cs.cs_next_var 12) /\
+    EVERY (\name. src <> Var name /\ dyn_ptr <> Var name) (compiler_var_names cs.cs_next_var 13) /\
     bytestring_abi_pre (dst_addr + mload (w2n dyn_addr) ss) src_addr bs ss ==>
     ?out.
       fragment_path ctx func
@@ -37,10 +37,10 @@ Theorem abi_child_bytes_execution:
       eval_operand child_len out = SOME (n2w (LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)))) /\
       read_memory (w2n (dst_addr + mload (w2n dyn_addr) ss))
         (LENGTH (enc (Bytes NONE) (contractABI$BytesV bs))) out = enc (Bytes NONE) (contractABI$BytesV bs) /\
-      mid.cs_next_var = cs.cs_next_var + 11 /\ dyn_ptr <> Var (compiler_var_name mid.cs_next_var 0) /\
+      mid.cs_next_var = cs.cs_next_var + 12 /\ dyn_ptr <> Var (compiler_var_name mid.cs_next_var 0) /\
       abi_memory_frame [(w2n (dst_addr + mload (w2n dyn_addr) ss),
         LENGTH (enc (Bytes NONE) (contractABI$BytesV bs)))] ss out /\
-      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 12) ==>
+      (!arg_op. EVERY (\name. arg_op <> Var name) (compiler_var_names cs.cs_next_var 13) ==>
         eval_operand arg_op out = eval_operand arg_op ss) /\ abi_state_frame ss out /\ abi_allocator_state out = abi_allocator_state ss
 Proof
   rpt gen_tac >> strip_tac >>
@@ -48,7 +48,7 @@ Proof
     abi_child_bytes_start_ready) >> impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) [LET_THM, EVERY_CONJ]) >>
   drule compile_abi_bytestring_code >> strip_tac >>
-  `mid.cs_next_var = cs.cs_next_var + 11` by fs[abi_child_prefix_cut_def] >>
+  `mid.cs_next_var = cs.cs_next_var + 12` by fs[abi_child_prefix_cut_def] >>
   qabbrev_tac `addressed = (abi_child_prefix_state cs.cs_next_var head_offset dst_addr dyn_addr ss) with
     vs_inst_idx := LENGTH (abi_child_prefix_cut dst dyn_ptr head_offset cs).cs_current_insts` >>
   mp_tac (Q.SPECL [`ctx`, `func`, `Var (compiler_var_name cs.cs_next_var 2)`, `src`, `cap`,

@@ -18,6 +18,9 @@ brings each back.
 |---|---|
 | `ceil_dec` | `ceil(x)`: `slt(x, 0)` selects `x` or `x + 10**10 - 1` |
 | `floor_dec` | control: `floor(x)` |
+| `slice_bytes32` | `slice` of a `bytes32`: a 32-byte scratch and the literal length 32 |
+| `uint2str_local` | `concat("n=", uint2str(x))` |
+| `p102_rbuf_bytes_ret_word_arg` | `concat` of two `bytes32` in the callee |
 
 `supported_builtin_form` does not yet admit `Concat`, `Slice`, `Ceil` or
 `Acc Code`, nor `supported_type_builtin_form` `Extract32`, so these programs

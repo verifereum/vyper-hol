@@ -69,8 +69,8 @@ Proof
   drule genBlockSimTheory.bump_emit_one_input_spilled_shape >> strip_tac >>
   Cases_on `x IN FDOM ps.ps_spilled` >>
   Cases_on `h` >> Cases_on `x` >>
-  gvs[venomInstTheory.operand_vars_def, dfgDefsTheory.operand_vars_def,
-      venomInstTheory.operand_var_def, dfgDefsTheory.operand_var_def,
+  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def, venomInstTheory.operand_var_def,
       is_var_operand_def, elem_count_append, MAP_APPEND,
       LIST_ELEM_COUNT_DEF, MEM_MAP, finite_mapTheory.FDOM_DOMSUB] >>
   rpt IF_CASES_TAC >> gvs[] >>
@@ -99,7 +99,7 @@ Theorem emit_input_plan_stack_upper_acc[local]:
       LIST_ELEM_COUNT x (done ++ rest) + (if MEM x (MAP Var nl) then 1 else 0)
 Proof
   Induct_on `rest`
-  >- simp[venomInstTheory.operand_vars_def, dfgDefsTheory.operand_vars_def] >>
+  >- simp[venomInstTheory.operand_vars_def, venomInstTheory.operand_vars_def] >>
   rpt gen_tac >> strip_tac >>
   drule emit_one_input_stack_upper_acc >>
   disch_then (qspec_then `opc` assume_tac) >>

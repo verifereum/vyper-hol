@@ -242,10 +242,10 @@ QED
 
 Theorem sue_alloc_assign_supply_covered:
   ir_supply_inst_ok s /\
-  EVERY (\v. MEM v s.irs_used_vars) (venomInst$operand_vars [op]) /\
+  EVERY (\v. MEM v s.irs_used_vars) (operand_vars [op]) /\
   sue_alloc_assign_supply s op = (a,newop,s') ==>
   EVERY (\v. MEM v s'.irs_used_vars)
-    (inst_ir_vars a ++ venomInst$operand_vars [newop]) /\
+    (inst_ir_vars a ++ operand_vars [newop]) /\
   MEM a.inst_id s'.irs_used_inst_ids
 Proof
   rpt strip_tac >>
@@ -253,31 +253,31 @@ Proof
   gvs[sue_alloc_assign_supply_def, AllCaseEqs(), inst_ir_vars_def,
       inst_uses_def, operand_vars_def] >>
   Cases_on `op` >>
-  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]
+  gvs[operand_vars_def, operand_var_def]
 QED
 
 
 Theorem sue_expand_ops_supply_covered:
   !dfg inst s ops op_idx assigns new_ops s'.
     ir_supply_inst_ok s /\
-    EVERY (\v. MEM v s.irs_used_vars) (venomInst$operand_vars ops) /\
+    EVERY (\v. MEM v s.irs_used_vars) (operand_vars ops) /\
     sue_expand_ops_supply dfg inst s ops op_idx = (assigns,new_ops,s') ==>
     EVERY (\v. MEM v s'.irs_used_vars)
-      (FLAT (MAP inst_ir_vars assigns) ++ venomInst$operand_vars new_ops) /\
+      (FLAT (MAP inst_ir_vars assigns) ++ operand_vars new_ops) /\
     EVERY (\i. MEM i.inst_id s'.irs_used_inst_ids) assigns
 Proof
   Induct_on `ops`
-  >- simp[sue_expand_ops_supply_def, venomInstTheory.operand_vars_def] >>
+  >- simp[sue_expand_ops_supply_def, operand_vars_def] >>
   rpt gen_tac >> strip_tac >>
   Cases_on `sue_expand_ops_supply dfg inst s ops (op_idx + 1)` >>
   PairCases_on `r` >>
   rename1 `sue_expand_ops_supply dfg inst s ops (op_idx + 1) =
            (more_assigns,more_ops,s1)` >>
-  `EVERY (\v. MEM v s.irs_used_vars) (venomInst$operand_vars [h]) /\
-   EVERY (\v. MEM v s.irs_used_vars) (venomInst$operand_vars ops)` by
-    (qpat_x_assum `EVERY _ (venomInst$operand_vars (h::ops))` mp_tac >>
-     Cases_on `venomInst$operand_var h` >>
-     simp[venomInstTheory.operand_vars_def]) >>
+  `EVERY (\v. MEM v s.irs_used_vars) (operand_vars [h]) /\
+   EVERY (\v. MEM v s.irs_used_vars) (operand_vars ops)` by
+    (qpat_x_assum `EVERY _ (operand_vars (h::ops))` mp_tac >>
+     Cases_on `operand_var h` >>
+     simp[operand_vars_def]) >>
   (* Consume the guarded IH before any context simplification. *)
   qpat_x_assum `!dfg inst s op_idx assigns new_ops s'. _`
     (qspecl_then [`dfg`,`inst`,`s`,`op_idx + 1`,
@@ -287,32 +287,32 @@ Proof
     metis_tac[sue_expand_ops_supply_extends] >>
   `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
   `EVERY (\v. MEM v s1.irs_used_vars)
-     (venomInst$operand_vars [h])` by
-    (qpat_assum `EVERY _ (venomInst$operand_vars [h])` mp_tac >>
+     (operand_vars [h])` by
+    (qpat_assum `EVERY _ (operand_vars [h])` mp_tac >>
      drule sue_supply_extends_members >>
      POP_ASSUM_LIST (K all_tac) >>
      simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\v. MEM v s1.irs_used_vars)
       (FLAT (MAP inst_ir_vars more_assigns) ++
-       venomInst$operand_vars (h::more_ops)) /\
+       operand_vars (h::more_ops)) /\
    EVERY (\i. MEM i.inst_id s1.irs_used_inst_ids) more_assigns` by
-    (Cases_on `venomInst$operand_var h` >>
-     fs[venomInstTheory.operand_vars_def]) >>
+    (Cases_on `operand_var h` >>
+     fs[operand_vars_def]) >>
   Cases_on `sue_alloc_assign_supply s1 h` >>
   PairCases_on `r` >>
   rename1 `sue_alloc_assign_supply s1 h = (a,newop,s2)` >>
   `sue_supply_extends s1 s2` by
     metis_tac[sue_alloc_assign_supply_extends] >>
   `EVERY (\v. MEM v s2.irs_used_vars)
-     (inst_ir_vars a ++ venomInst$operand_vars [newop]) /\
+     (inst_ir_vars a ++ operand_vars [newop]) /\
    MEM a.inst_id s2.irs_used_inst_ids` by
     metis_tac[sue_alloc_assign_supply_covered] >>
   `EVERY (\v. MEM v s2.irs_used_vars)
       (FLAT (MAP inst_ir_vars more_assigns) ++
-       venomInst$operand_vars more_ops) /\
+       operand_vars more_ops) /\
    EVERY (\i. MEM i.inst_id s2.irs_used_inst_ids) more_assigns` by
     (qpat_assum `EVERY _ (FLAT (MAP inst_ir_vars more_assigns) ++
-                          venomInst$operand_vars more_ops)` mp_tac >>
+                          operand_vars more_ops)` mp_tac >>
      qpat_assum `EVERY _ more_assigns` mp_tac >>
      qpat_assum `sue_supply_extends s1 s2`
        (mp_tac o MATCH_MP sue_supply_extends_members) >>
@@ -320,10 +320,10 @@ Proof
      simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\v. MEM v s2.irs_used_vars)
       (FLAT (MAP inst_ir_vars (a::more_assigns)) ++
-       venomInst$operand_vars (newop::more_ops)) /\
+       operand_vars (newop::more_ops)) /\
    EVERY (\i. MEM i.inst_id s2.irs_used_inst_ids) (a::more_assigns)` by
-    (Cases_on `venomInst$operand_var newop` >>
-     fs[venomInstTheory.operand_vars_def]) >>
+    (Cases_on `operand_var newop` >>
+     fs[operand_vars_def]) >>
   (* Keep only the two possible output contracts and the evaluation equations. *)
   qpat_x_assum `sue_expand_ops_supply dfg inst s (h::ops) op_idx = _`
     mp_tac >>
@@ -334,7 +334,7 @@ Proof
     mp_tac >>
   qpat_assum `EVERY _ (a::more_assigns)` mp_tac >>
   qpat_assum `EVERY _ (FLAT (MAP inst_ir_vars more_assigns) ++
-                       venomInst$operand_vars (h::more_ops))` mp_tac >>
+                       operand_vars (h::more_ops))` mp_tac >>
   qpat_assum `EVERY (\i. MEM i.inst_id s1.irs_used_inst_ids) more_assigns`
     mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
@@ -368,11 +368,11 @@ Proof
   `sue_supply_extends s s'` by
     metis_tac[sue_expand_ops_supply_extends] >>
   `EVERY (\v. MEM v s.irs_used_vars)
-     (venomInst$operand_vars inst.inst_operands)` by
+     (operand_vars inst.inst_operands)` by
     gvs[inst_ir_vars_def, inst_uses_def, listTheory.EVERY_APPEND] >>
   `EVERY (\v. MEM v s'.irs_used_vars)
       (FLAT (MAP inst_ir_vars assigns) ++
-       venomInst$operand_vars new_ops) /\
+       operand_vars new_ops) /\
    EVERY (\i. MEM i.inst_id s'.irs_used_inst_ids) assigns` by
     metis_tac[sue_expand_ops_supply_covered] >>
   `(!v. MEM v s.irs_used_vars ==> MEM v s'.irs_used_vars) /\

@@ -202,7 +202,7 @@ Proof
       (step_inst fuel ctx inst s) (step_inst fuel ctx inst t)` by
     (irule ao_cmp_step >> simp[] >>
      gvs[DISJOINT_ALT, inst_ir_vars_def, inst_uses_def,
-       ao_cmp_operand_vars_eq, passSharedDefsTheory.MEM_operand_vars_eq_Var,
+       passSharedDefsTheory.MEM_operand_vars_eq_Var,
        EVERY_MEM] >> metis_tac[]) 
   >- metis_tac[] >>
   Cases_on `is_terminator inst.inst_opcode` >- (gvs[] >> metis_tac[]) >>

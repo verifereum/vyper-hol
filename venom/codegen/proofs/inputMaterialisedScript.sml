@@ -43,7 +43,7 @@ Theorem emit_input_plan_not_spilled:
 Proof
   Induct >- simp[emit_input_plan_def] >> rpt gen_tac >>
   disch_then (CONJUNCTS_THEN ASSUME_TAC) >>
-  Cases_on `emit_one_input opc (dfgDefs$operand_vars operands ++ nl) h ps` >>
+  Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >>
   rename1 `emit_one_input _ _ _ _ = (step_ops,mid)` >>
   Cases_on `emit_input_plan opc operands nl mid` >>
   rename1 `emit_input_plan opc operands nl mid = (rest_ops,last)` >>
@@ -54,11 +54,11 @@ Proof
   `x NOTIN FDOM mid.ps_spilled \/ (MEM x operands /\ is_var_operand x)` by
     (Cases_on `x NOTIN FDOM ps.ps_spilled \/ (x = h /\ is_var_operand h)`
      >- (disj1_tac >> Cases_on `x NOTIN FDOM ps.ps_spilled`
-         >- (mp_tac (Q.SPECL [`opc`,`dfgDefs$operand_vars operands ++ nl`,
+         >- (mp_tac (Q.SPECL [`opc`,`operand_vars operands ++ nl`,
                `h`,`ps`,`x`] emit_one_input_preserves_not_spilled) >>
              asm_simp_tac (srw_ss()) []) >>
          `x = h /\ is_var_operand h` by fs[] >> gvs[] >>
-         mp_tac (Q.SPECL [`opc`,`dfgDefs$operand_vars operands ++ nl`,`h`,`ps`]
+         mp_tac (Q.SPECL [`opc`,`operand_vars operands ++ nl`,`h`,`ps`]
            emit_one_input_var_not_spilled) >> asm_simp_tac (srw_ss()) []) >>
      gvs[]) >>
   first_x_assum (qspecl_then [`opc`,`nl`,`mid`,`rest_ops`,`last`,`x`] mp_tac) >>
@@ -73,7 +73,7 @@ Theorem emit_input_plan_nonvar_counts:
 Proof
   Induct >- simp[emit_input_plan_def, LIST_ELEM_COUNT_THM] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `emit_one_input opc (dfgDefs$operand_vars operands ++ nl) h ps` >>
+  Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >>
   rename1 `emit_one_input _ _ _ _ = (step_ops,mid)` >>
   Cases_on `emit_input_plan opc operands nl mid` >>
   rename1 `emit_input_plan opc operands nl mid = (rest_ops,last)` >>
@@ -83,11 +83,11 @@ Proof
   first_x_assum (qspecl_then [`opc`,`nl`,`mid`,`rest_ops`,`last`,`x`] mp_tac) >>
   (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
-  >- (mp_tac (Q.SPECL [`opc`,`dfgDefs$operand_vars operands ++ nl`,`h`,
+  >- (mp_tac (Q.SPECL [`opc`,`operand_vars operands ++ nl`,`h`,
         `ps`,`step_ops`,`mid`] emit_operand_nonvar_stack_inc) >>
       (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
       strip_tac >> decide_tac) >>
-  mp_tac (Q.SPECL [`opc`,`dfgDefs$operand_vars operands ++ nl`,`h`,`ps`,
+  mp_tac (Q.SPECL [`opc`,`operand_vars operands ++ nl`,`h`,`ps`,
     `step_ops`,`mid`,`x`] emit_operand_stack_count_mono) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> decide_tac
 QED
