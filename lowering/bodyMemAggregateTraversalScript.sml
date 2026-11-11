@@ -210,8 +210,9 @@ QED
    arithmetic, the alloca-disjointness premise from the matching hypothesis. *)
 fun window_side_tac (asl, w) =
   (if is_disj w then decide_tac
-   else rpt strip_tac >> first_x_assum irule >> rpt conj_tac >>
-     first_assum ACCEPT_TAC) (asl, w)
+   else first_assum ACCEPT_TAC ORELSE
+     (rpt strip_tac >> first_x_assum irule >> rpt conj_tac >>
+      first_assum ACCEPT_TAC)) (asl, w)
 
 Theorem aggregate_tuple_tail_outcome_mem[local]:
   gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1) [] (INL v) es1 (OK q) /\
