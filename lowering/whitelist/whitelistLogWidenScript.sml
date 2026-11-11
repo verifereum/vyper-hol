@@ -541,7 +541,7 @@ Proof
    abi_size_bound cenv.ce_struct_fields
      (TupleT (log_non_indexed_types (MAP SND fields) (MAP expr_type args))) <
      dimword (:256)` by
-    (gvs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
+    (gvs[stmt_exprs_ok_flat, allocLimitsTheory.alloc_limits_stmt_def,
          allocLimitsTheory.log_alloc_ok_def] >>
      conj_tac >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
      qexists_tac `2 ** 64` >> gvs[wordsTheory.dimword_def]) >>
@@ -556,7 +556,7 @@ Proof
   impl_tac >- (
     simp[] >>
     irule body_log_args_ready >>
-    gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+    gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         int_calls_stmt_def, AllCaseEqs()] >>
     metis_tac[]) >>
   simp[]

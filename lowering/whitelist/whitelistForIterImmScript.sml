@@ -192,9 +192,9 @@ Proof
   `body_stmts_ok cx stmts` by fs[body_for_ok_def] >>
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts ==>
     occurs_abi_decode_target target tops` by fs[supported_stmt_expr_exists_def] >>
-  `EVERY (stmt_exprs_ok cenv) stmts` by
+  `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) stmts` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
+       stmts_exprs_ok_thm, alloc_limits_stmt_def, stmt_valued_return_def] >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   irule array_body_fragment_callback >> metis_tac[]

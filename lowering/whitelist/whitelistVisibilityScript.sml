@@ -678,8 +678,8 @@ QED
 (* The compile env of any function ignores an ErrorDecl entry. *)
 Theorem build_compile_env_error_decl:
   !pre suf fvis fmut fname args ret body ut.
-    build_compile_env (pre ++ ErrorDecl eid ps :: suf)
-      fvis fmut fname args ret body ut =
+    (build_compile_env (pre ++ ErrorDecl eid ps :: suf)
+      fvis fmut fname args ret body ut with ce_modules := [(NONE,pre ++ suf)]) =
     build_compile_env (pre ++ suf) fvis fmut fname args ret body ut
 Proof
   rpt gen_tac >>
@@ -695,7 +695,8 @@ Proof
        add_immutable_locations_inert_decl, add_module_var_locations_inert_decl,
        collect_module_vars_inert_decl, build_func_info_inert_decl,
        build_func_param_types_inert_decl, build_func_return_type_inert_decl,
-       build_func_ids_inert_decl, build_func_mutability_inert_decl]
+       build_func_ids_inert_decl, build_func_mutability_inert_decl] >>
+  rpt (pairarg_tac >> simp[])
 QED
 
 (* A FlagDecl entry: the compile env's module-variable bindings and

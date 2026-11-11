@@ -1011,7 +1011,7 @@ Theorem immutable_array_body_observation:
 Proof
   rpt strip_tac >>
   drule_all coherent_immutable_array_target_type >> strip_tac >>
-  fs[iterator_unmodified_def, expr_place_def] >>
+  fs[iterator_unmodified_def, expr_places_def] >>
   metis_tac[typed_stmts_immutable_frame]
 QED
 
