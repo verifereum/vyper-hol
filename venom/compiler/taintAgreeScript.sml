@@ -2251,6 +2251,24 @@ Proof
   simp[] >> irule taint_agree_update_var >> simp[]
 QED
 
+Theorem step_taint_jump:
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\ inst.inst_outputs = [] /\
+  step_inst_base inst s = OK s' ==>
+  step_taint inst s s' tn = tn /\ s'.vs_prev_bb <> NONE
+Proof
+  strip_tac >> gvs[MEM] >>
+  qpat_x_assum `step_inst_base _ s = OK s'` mp_tac >>
+  simp[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  simp[step_taint_def, mem_taint_def, store_taint_def, jump_to_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def,
+       step_writes_def, source_memory_write_ranges_def, written_taint_def,
+       range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, set_var_taint_def,
+       DRESTRICT_UNIV, taint_component_equality] >>
+  gvs[jump_to_def, venom_state_component_equality] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[])
+QED
+
 Theorem taint_agree_jump:
   taint_agree D X tn s t /\ taint_ok fn tn inst s /\
   inst.inst_outputs = [] /\ MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
@@ -2259,20 +2277,14 @@ Theorem taint_agree_jump:
        taint_agree D X (step_taint inst s s' tn) s' t'
 Proof
   strip_tac >>
+  `step_taint inst s s' tn = tn` by metis_tac[step_taint_jump] >>
+  simp[] >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> irule taint_agree_operand_clean >>
      gvs[taint_ok_def, MEM] >> metis_tac[]) >>
   fs[MEM] >> qpat_x_assum `step_inst_base inst s = _` mp_tac >>
   simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  qmatch_goalsub_abbrev_tac `jump_to label s` >>
-  `step_taint inst s (jump_to label s) tn = tn` by
-    (simp[step_taint_def, mem_taint_def, store_taint_def, jump_to_def,
-          imm_taint_def, adopt_reset_def, new_site_bytes_def,
-          step_writes_def, source_memory_write_ranges_def, written_taint_def,
-          range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, set_var_taint_def,
-          DRESTRICT_UNIV, taint_component_equality] >>
-     rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
-  simp[step_inst_base_opcode_eqs, Abbr `label`] >>
+  simp[step_inst_base_opcode_eqs] >>
   metis_tac[MEM, taint_agree_jump_to]
 QED
 
