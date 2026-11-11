@@ -4,6 +4,7 @@ Ancestors
   assignRelayoutSource annassignRelayoutBounds localMemoryStorePath
   stmtSimAssignStore placeMemoryCopyEffect exprLoweringProps
   localPtrsProps compileEnv loweringStateRelDefs venomState venomMemDefs vyperLookup
+  memoryValueEncoding
 
 Theorem stmt_state_rel_control[local]:
   stmt_state_rel ctx func cenv cx es
@@ -29,7 +30,8 @@ Theorem stmt_state_rel_write_local_copy_effect:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
     lookup_var p s = SOME dw /\ local_ptrs_reserved cenv sa /\
     typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size entry.type) /\
-    val_wf entry.type v /\ val_in_memory entry.type v (w2n dw) t.vs_memory ==>
+    val_wf entry.type v /\ value_has_type entry.type v /\
+    val_in_memory entry.type v (w2n dw) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes := pre ++
         (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t
@@ -58,6 +60,8 @@ Proof
     vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>` >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u` by
     (gvs[Abbr `u`, immutables_rel_def] >> first_assum ACCEPT_TAC) >>
+  `memory_value_rel entry.type v (w2n dw) t.vs_memory` by
+    metis_tac[val_in_memory_memory_value_rel] >>
   `stmt_state_rel ctx func cenv cx
       (es with scopes := pre ++
         (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) u` by
