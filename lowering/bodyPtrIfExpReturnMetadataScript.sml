@@ -1,5 +1,5 @@
 Theory bodyPtrIfExpReturnMetadata
-Ancestors bodyPtrIfExpEndpointTyping entryStateRel compileVyper compileEnv loweringStateRelDefs supportedNames vyperInterpreter vyperTypeContractStaticMaps stmtSimReturn exprSimHyps vyperValue vyperTyping valueEncoding
+Ancestors bodyPtrIfExpEndpointTyping entryStateRel structFieldsProps compileVyper compileEnv loweringStateRelDefs supportedNames vyperInterpreter vyperTypeContractStaticMaps stmtSimReturn exprSimHyps vyperValue vyperTyping valueEncoding
 
 (* Local calling-convention algebra, before lookup in the framed program. *)
 Theorem ifexp_compute_func_info_buffer_size:

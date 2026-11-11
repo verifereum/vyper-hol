@@ -1,7 +1,7 @@
 (* Typed operands provide the exact read range used by memory hashing. *)
 Theory bodyPtrEnvBuiltinsMemoryHashTyped
 Ancestors bodyPtrEnvBuiltinsMemoryHashCompile bodyPtrEnvBuiltinsHashInput
-  exprSimHash bodyPtrDefs exprSimProps loweringPosts valueEncoding valueEncodingDefs
+  exprSimHash exprSimHashBoundary bodyPtrDefs exprSimProps loweringPosts valueEncoding valueEncodingDefs
   vyperAST vyperValue compileEnv venomState words finite_map list builtinHashing
 
 Theorem memory_hash_bytes_input:

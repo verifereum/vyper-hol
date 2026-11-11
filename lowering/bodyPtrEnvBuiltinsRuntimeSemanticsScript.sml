@@ -1,6 +1,6 @@
 (* Ordinary semantic adapters for the runtime pointer certificate. *)
 Theory bodyPtrEnvBuiltinsRuntimeSemantics
-Ancestors exprSimHash bodyPtrEnvBuiltinsSelectorSuffix bodyPtrEnvBuiltinsSelectorBytes
+Ancestors exprSimHash exprSimHashBoundary bodyPtrEnvBuiltinsSelectorSuffix bodyPtrEnvBuiltinsSelectorBytes
   vyperValue vyperTypeBytesCrypto byte venomMemProps rich_list
   loweringPosts exprLoweringProps compileEnv venomState venomInst builtinHashing vyperTyping
   valueEncoding valueEncodingProofs vyperValue vyperTypeSystem words list exprSimProps

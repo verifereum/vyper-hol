@@ -1,6 +1,6 @@
 Theory bodyPtrTypeBuiltinsBytesWordInputs
 Ancestors bodyPtrTypeBuiltinsBytesWordActual bodyPtrSignedConvertSourceTyping
-  exprSimHash bodyPtrDefs loweringPosts exprLoweringProps
+  exprSimHash exprSimHashBoundary bodyPtrDefs loweringPosts exprLoweringProps
   vyperValue valueEncoding venomState
 
 Theorem bytes_word_child_memory_inputs:

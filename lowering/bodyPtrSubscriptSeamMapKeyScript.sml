@@ -6,7 +6,7 @@ Ancestors
   bodyPtrHashBuiltinsKeccakBytesRun exprSimMapKey fragGasSeqPtr
   typedCopyPtr typedCopyLoopHeaderPtr ptrDiscipline venomExecSemantics
   venomState venomInst finite_map words pred_set list arithmetic
-  bodyPtrDefs valueEncodingProps bodyPtrHashBuiltinsKeccak exprSimHash
+  bodyPtrDefs valueEncodingProps bodyPtrHashBuiltinsKeccak exprSimHash exprSimHashBoundary
   exprLowering emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps
   ASCIInumbers rich_list bodyPtrHashBuiltinsGhostFrame exprSimVVFrame
   bodyPtrHashBuiltinsCases vyperValue vyperTyping vyperStorage byte

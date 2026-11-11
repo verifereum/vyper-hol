@@ -801,7 +801,7 @@ Proof
   strip_tac >> conj_tac
   >- (`stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := s.vs_inst_idx)`
         suffices_by simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
-      irule exprSimHashTheory.hash_readonly_state_rel >>
+      irule exprSimHashBoundaryTheory.hash_readonly_state_rel >>
       goal_assum (drule_at Any) >>
       qexists_tac `s` >> simp[venomStateTheory.lookup_var_def] >>
       qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>

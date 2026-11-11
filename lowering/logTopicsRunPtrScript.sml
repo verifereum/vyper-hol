@@ -5,7 +5,7 @@ Ancestors
   bodyPtrDefs stmtLowering context compileEnv loweringStateRelDefs contextCodegenRel contextCodegenRelProps
   emitHelper emitHelperProps exprLoweringProps venomInst venomState venomExecSemantics
   ptrDiscipline finite_map words list rich_list arithmetic valueEncoding stmtSimLogTopicFresh
-  stmtSimLogArgs loweringPosts ghostPcTransportPtr codegenRel fragGasSeqPtr vyperEvent exprSimHash stmtFragPtr
+  stmtSimLogArgs loweringPosts ghostPcTransportPtr codegenRel fragGasSeqPtr vyperEvent exprSimHash exprSimHashBoundary stmtFragPtr
 
 Theorem log_topic_opcode_shape:
   compile_encode_log_topic x flag sa = (op,sb) ==>

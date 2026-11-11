@@ -9,7 +9,7 @@ Ancestors bodyPtrBopHashSuffix
   list rich_list compileEnv loweringStateRelDefs pred_set exprLowering bodyPtrSignedConvertClamp
   exprSimConvertFromBytes exprSimHyps exprSimHypsDefs loweringPosts
   memoryLocalRhsProps vyperAST bodyPtrSignedConvertConvertEntry
-  bodyPtrSignedConvertUnsignedValue exprSimHash valueEncoding
+  bodyPtrSignedConvertUnsignedValue exprSimHash exprSimHashBoundary valueEncoding
   bodyPtrSignedConvertUintContinue gasSummaryComposePtr gasOutcome
   fragGasPathPtr fragGasMode stmtAppendStoragePathPtr bodyPtrHashBuiltinsShaAlloc
   exprSimExtract32Post varsExt appendStorageStageTransportPtr

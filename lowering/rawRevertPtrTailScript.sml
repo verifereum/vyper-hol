@@ -5,7 +5,7 @@ Ancestors
   typedCopyPtr typedCopyLoopHeaderPtr bodyPtrDefs fragGasSeqPtr fragGasPathPtr
   ptrDiscipline ptrSafeRun venomState venomInst venomExecSemantics
   words finite_map pred_set contextCodegenRel codegenRel valueEncodingProps
-  exprSimHash list arithmetic exprSimRawRevertCore exprLoweringProps
+  exprSimHash exprSimHashBoundary list arithmetic exprSimRawRevertCore exprLoweringProps
   emitHelperProps emitHelper compileEnv loweringStateRelDefs ASCIInumbers fragExec exprOperandVar
   bodyPtrHashBuiltinsCases vyperTypeSystem loweringPosts
 

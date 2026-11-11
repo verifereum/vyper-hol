@@ -1,7 +1,7 @@
 Theory bodyPtrBopHashSuffix
 Ancestors
   bodyPtrBopHashFrame bodyPtrBopHashCompile bodyPtrBopHashSequence
-  exprSimHash exprLoweringProps venomExecSemantics venomInst
+  exprSimHash exprSimHashBoundary exprLoweringProps venomExecSemantics venomInst
   venomState finite_map exprLowering emitHelper compileEnv loweringStateRelDefs emitHelperProps
   rich_list fragExec codegenRel instIdxIndep fragGasPathPtr arithmetic ptrDiscipline
 

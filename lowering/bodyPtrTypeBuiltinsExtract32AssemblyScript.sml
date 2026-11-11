@@ -7,7 +7,7 @@ Ancestors
   exprSimExtract32Run exprSimExtract32Value varsExt builtinBytes list
   augAssignPtrScalarCertificate pred_set rawCallBufferPtr
   storageCopyGasPath gasSummaryComposePtr fragGasPathPtr vyperState vyperContext
-  exprSimDefs fragGasMode rich_list exprLoweringProps fragExec exprSimHash
+  exprSimDefs fragGasMode rich_list exprLoweringProps fragExec exprSimHash exprSimHashBoundary
 
 Theorem extract32_offset_scalar_view:
   expr_post ctx func cenv cx off es sa sb s0 ee (IntV i) op s /\

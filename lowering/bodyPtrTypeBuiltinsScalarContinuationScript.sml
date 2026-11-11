@@ -3,7 +3,7 @@ Ancestors
   bodyPtrTypeBuiltinsScalarRawOutcome bodyPtrTypeBuiltinsScalarCountedDispatch
   bodyPtrSignedConvertSourceFrame bodyPtrDefs fragGasPathPtr
   exprLowering compileEnv loweringStateRelDefs venomState venomExecSemantics loweringPosts
-  gasSummary exprSimDefs fragExec exprSimConvert exprSimHash exprLoweringProps
+  gasSummary exprSimDefs fragExec exprSimConvert exprSimHash exprSimHashBoundary exprLoweringProps
   stmtFragPtr exprSimExtract32Post
 
 Theorem scalar_convert_counted_ghost_frame:

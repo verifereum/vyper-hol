@@ -2,7 +2,7 @@
 Theory rawCallDataHeaderPtr
 Ancestors wordLoadStorePtr rawCallHeaderFramePtr rawCallShapePtr typedOperandsPtr rawCallBufferPtr
   gasContext exprSimWordArgs exprSimDefs gasSummaryComposePtr vyperState
-  vyperInterpreter exprSimHash wordOperandsPtr
+  vyperInterpreter exprSimHash exprSimHashBoundary wordOperandsPtr
 
 Theorem raw_call_mload_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\

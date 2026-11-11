@@ -1,6 +1,6 @@
 Theory bodyPtrTypeBuiltinsCastPost
 Ancestors
-  exprSimConvertBytes exprSimHash exprSimExtract32Post exprLoweringProps
+  exprSimConvertBytes exprSimHash exprSimHashBoundary exprSimExtract32Post exprLoweringProps
   loweringPosts exprLowering compileEnv venomState vyperAST
   bodyFieldMemoryProps
 

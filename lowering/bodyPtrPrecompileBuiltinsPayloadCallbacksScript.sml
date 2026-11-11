@@ -4,7 +4,7 @@ Ancestors bodyPtrPrecompileBuiltinsPayloadRuns bodyPtrPrecompileBuiltinsPayloadC
           emitHelper context compileEnv loweringStateRelDefs venomState exprLoweringProps
           exprSimWordBuiltins exprSimPrecompiles emitHelperProps
           immutableMemoryFrame valueEncodingProps moduleLoweringProps
-          venomMemProps immutableCopyExecution exprSimHash
+          venomMemProps immutableCopyExecution exprSimHash exprSimHashBoundary
           loweringPosts vyperValue vyperTyping valueEncoding
 
 Theorem recovery_payload_run:

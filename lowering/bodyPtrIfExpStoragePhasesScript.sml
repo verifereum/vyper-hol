@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpStoragePhases
 Ancestors
   bodyPtrIfExpStorageLoop bodyPtrIfExpMaterializeWord bodyPtrIfExpScalarLoad
-  slotCopyExecution stmtAppendStorageRunPtr fragGasSeqPtr exprLoweringProps
+  slotCopyExecution emitHelperProps stmtAppendStorageRunPtr fragGasSeqPtr exprLoweringProps
   venomExecSemantics venomState venomInst ptrDiscipline finite_map
   typedCopyLoopHeaderPtr bodyPtrDefs bodyPtrIfExpAssignFrame
   instSeqComposePtr ghostPcTransportPtr instIdxIndep fragExec
