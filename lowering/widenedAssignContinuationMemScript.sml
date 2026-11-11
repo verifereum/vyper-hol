@@ -1,9 +1,10 @@
 (* Counted updates of existing memory locals after a widened physical copy. *)
 Theory widenedAssignContinuationMem
 Ancestors
+  vyperTypeInvariants exprOperandVar typeWideningComposition
   widenedAssignmentPreparationMem widenedLocalContinuationMem
   widenedLocalEndpointMem widenedDeclareContinuationMem stmtSimAssignSource
-  gasSummary fragGasMode vyperState finite_map exprLoweringProps exprSimSource venomState compileEnv
+  gasSummary fragGasMode vyperState finite_map exprLoweringProps exprSimSource venomState compileEnv bodyMemoryDefs
 Libs monadsyntax
 
 Theorem typed_copy_assign_marked_mem[local]:
@@ -137,4 +138,110 @@ Proof
      qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
      fs[gas_marked_exec_def, vyperStateTheory.bind_def]) >>
   qexistsl_tac [`pre`, `scope`, `entry`, `rest`] >> gvs[]
+QED
+
+Theorem retained_assignment_runtime_frame[local]:
+  vv_post ctx fn ce cx e es sa sb s0 ee raw vv t /\
+  compile_expr ce (expr_type e) e sa = (vv,sb) /\
+  local_ptrs_reserved ce sa /\ not_fresh_at sa p /\
+  gas_marked_exec T (ctx,fn) action (es,s0) marks (INL (v:value)) marked (OK t) /\
+  return_buf_frame d ce sa s0 /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
+  local_ptrs_reserved ce sb /\ not_fresh_at sb p /\
+  return_buf_frame d ce sb t /\ stmt_state_rel ctx fn ce cx ee t /\ ~t.vs_halted
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx fn ce cx ee t /\
+   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)` by
+    fs[loweringPostsTheory.vv_post_def] >>
+  `sa.cs_next_var <= sb.cs_next_var` by metis_tac[cj 1 compile_expr_grows] >>
+  conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
+  conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  conj_tac >- (irule return_buf_frame_frame >> metis_tac[]) >>
+  conj_tac >- simp[] >>
+  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+  simp[gas_marked_exec_def, gas_marked_path_def] >>
+  strip_tac >> drule fragGasPathMemTheory.gas_path_mem_exec >>
+  simp[fragExecTheory.exit_result_def]
+QED
+
+Theorem widened_assign_retained_continuation_mem:
+  body_inv tops ctx ce cx /\
+  supported_expr tops (Call ann (IntCall fid) args drv) /\
+  expr_body_pre ce cx env (Call ann (IntCall fid) args drv) es /\
+  type_widens_to env.type_defs ann ty /\
+  ~is_word_type ann /\ ~is_bytestring_type ann /\
+  ~is_word_type ty /\ ~is_bytestring_type ty /\
+  lowered_value_type ce (Call ann (IntCall fid) args drv) <> ann /\
+  lowered_value_type ce (Call ann (IntCall fid) args drv) <> ty /\
+  compile_expr ce ann (Call ann (IntCall fid) args drv) sa = (vv,sm) /\
+  unwrap_value ce vv sm = (op,sb) /\
+  compile_assign_value ce (Var p) LocMemory op F (vv_location vv) ty
+    (lowered_value_type ce (Call ann (IntCall fid) args drv)) info bytes sb = ((),sf) /\
+  fn_has_code sb sf fn /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved ce sa /\ not_fresh_at sa p /\
+  FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  FLOOKUP env.var_types id = SOME ty /\ return_buf_frame d ce sa s0 /\
+  gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id))
+    (Call ann (IntCall fid) args drv))) (stmt_res_ok lctx) es /\
+  gas_marked_exec T (ctx,fn)
+    (vyperState$bind (eval_expr cx (Call ann (IntCall fid) args drv)) (read_result cx))
+    (es,s0) marks (INL v) ee (OK t) /\
+  vv_post ctx fn ce cx (Call ann (IntCall fid) args drv) es sa sm s0
+    (ee with gas_obs := []) raw vv t /\
+  vv_store_bound cx ann (lowered_value_type ce (Call ann (IntCall fid) args drv))
+    (ee with gas_obs := []) raw vv t /\
+  read_result cx raw (ee with gas_obs := []) = (INL v,ee with gas_obs := []) /\
+  t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  alloca_history fn t /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
+  ?right ff u.
+    gas_marked_exec T (ctx,fn) (write_place cx (MemoryPlace id []) v)
+      (ee with gas_obs := [],t) right (INL ()) ff (OK u) /\
+    stmt_state_rel ctx fn ce cx (ff with gas_obs := []) u /\
+    ~u.vs_halted /\ u.vs_current_bb = sf.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sf.cs_current_insts /\ return_buf_frame d ce sf u /\
+    alloca_history fn u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x u = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b)
+Proof
+  strip_tac >>
+  drule_all widened_internal_call_retained_layout >> strip_tac >> gvs[] >>
+  drule_all exprSimHypsTheory.ifexp_intcall_copy_source >> strip_tac >>
+  `~is_word_type (lowered_value_type ce (Call ann (IntCall fid) args drv))` by
+    metis_tac[vyperTypeSystemTheory.type_widens_to_def,
+      exprSimLayoutTransportTheory.compatible_word_type] >>
+  gvs[exprSimMemoryPathTheory.unwrap_memory_compile, comp_return_def] >>
+  drule_all retained_assignment_source_ready >> strip_tac >>
+  `local_ptrs_reserved ce sb /\ not_fresh_at sb p /\
+   return_buf_frame d ce sb t /\
+   stmt_state_rel ctx fn ce cx (ee with gas_obs := []) t /\ ~t.vs_halted` by
+    (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`) retained_assignment_runtime_frame >>
+     disch_then irule >> simp[vyperASTTheory.expr_type_def] >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[vyperASTTheory.expr_type_def]) >>
+  drule_all widened_assignment_live_destination >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[exprSimHypsDefsTheory.expr_body_pre_def, exprSimHypsDefsTheory.expr_sim_inv_def,
+        env_consistent_def, env_context_consistent_def] >>
+  `type_widens_to (get_tenv cx)
+     (lowered_value_type ce (Call ann (IntCall fid) args drv)) ty` by
+    metis_tac[type_widens_to_trans] >>
+  `!x. p'.ptr_operand = Var x ==> not_fresh_at sb x` by
+    (drule (CONJUNCT1 compiler_compile_var) >> simp[contextTheory.vv_operand_def]) >>
+  `type_memory_size stv < dimword(:256)` by
+    (`t.vs_alloca_next < dimword(:256)` by
+       metis_tac[alloca_room_next_lt, stmt_state_rel_def] >> decide_tac) >>
+  drule_all retained_copy_type_metadata >> strip_tac >>
+  `compile_assign_value ce (Var p) LocMemory p'.ptr_operand F (SOME LocMemory) ty
+     (lowered_value_type ce (Call ann (IntCall fid) args drv)) info bytes sb = ((),sf)` by
+    fs[contextTheory.vv_location_def] >>
+  `ty <> lowered_value_type ce (Call ann (IntCall fid) args drv) /\
+   w2n w + type_memory_size stv <= t.vs_alloca_next` by simp[] >>
+  `local_region ce (ee with gas_obs := []).scopes t id (w2n dw) sz` by simp[] >>
+  drule_all widened_assign_copy_continuation_mem >> strip_tac >>
+  qexistsl_tac [`marks'`, `ff`, `t'`] >> simp[] >>
+  `sa.cs_next_var <= sb.cs_next_var` by metis_tac[cj 1 compile_expr_grows] >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[loweringPostsTheory.vv_post_def] >> strip_tac >> gvs[] >>
+  metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED

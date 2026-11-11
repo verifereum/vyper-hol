@@ -226,7 +226,7 @@ Proof
   simp[fragExecTheory.exit_result_def]
 QED
 
-Theorem retained_copy_type_metadata[local]:
+Theorem retained_copy_type_metadata:
   body_inv tops ctx ce cx /\ expr_body_pre ce cx env e es ==>
   acyclic_struct_metadata ce.ce_struct_fields /\
   sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
