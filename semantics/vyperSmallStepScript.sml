@@ -28,7 +28,6 @@ Datatype:
   | AppendK1 place eval_continuation
   | AnnAssignK identifier type_value eval_continuation
   | AssignK base_assignment_target eval_continuation
-  | AssignK1 eval_result eval_continuation
   | TupleAssignK (assignment_target list) eval_continuation
   | TupleStoreK value eval_continuation
   | TupleStoresK (assignment_target list) (value list) eval_continuation
@@ -412,7 +411,6 @@ Definition apply_exc_def:
   apply_exc cx ex st (AppendK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AnnAssignK _ _ k) = AK cx (ApplyExc ex) st k ∧  (* id, tyv unused *)
   apply_exc cx ex st (AssignK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AssignK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AugAssignK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AugAssignK1 _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TupleAssignK _ k) = AK cx (ApplyExc ex) st k /\
@@ -497,10 +495,6 @@ Definition apply_place_def:
     eval_expr_cps cx e st (AppendK1 p k) /\
   apply_place cx p st (PopK k) =
     liftk cx ApplyTv (pop_place cx p st) k /\
-  apply_place cx p st (AssignK1 pv k) =
-    liftk cx (K Apply) (do
-      v <- read_result cx pv;
-      write_place cx p v od st) k /\
   apply_place cx p st (TupleStoreK v k) =
     liftk cx (K Apply) (write_place cx p v st) k /\
   apply_place cx p st (AugAssignK ty bop e k) =
@@ -522,7 +516,7 @@ Definition apply_tv_def:
   apply_tv cx tv st (ExprResultsK es k) =
     eval_expr_results_cps cx es st (ExprResultsK1 tv k) /\
   apply_tv cx tv st (AssignK t k) =
-    eval_target_place_cps cx t st (AssignK1 tv k) /\
+    liftk cx ApplyVal (read_result cx tv st) (AssignK t k) /\
   apply_tv cx tv st (BasePlaceSubscriptK e k) =
     eval_expr_cps cx e st (BasePlaceSubscriptK1 tv k) /\
   apply_tv cx tv st (BasePlaceAttributeK id k) =
@@ -636,6 +630,8 @@ Definition apply_val_def:
      | _ => apply_exc cx (Error (TypeError "not StringV")) st k) ∧
   apply_val cx v st (AnnAssignK id tyv k) =
     liftk cx (K Apply) (new_variable id tyv v st) k ∧
+  apply_val cx v st (AssignK t k) =
+    eval_target_place_cps cx t st (TupleStoreK v k) /\
   apply_val cx v st (TupleAssignK gs k) =
     assign_tuple_targets_cps cx (TupleTarget gs) v st k /\
   apply_val cx v st (BasePlaceSubscriptK1 pv k) =
@@ -1763,9 +1759,12 @@ Resume eval_cps_mutual[AssignPlace]:
   >> rw[bind_def]
   >> CASE_TAC >> reverse CASE_TAC
   >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def]
+  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+  >> CASE_TAC >> reverse CASE_TAC
+  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+  >> rw[Once OWHILE_THM, stepk_def, apply_val_def]
   >> gvs[cont_def]
-  >> first_x_assum drule >> rw[]
+  >> first_x_assum (drule_all_then assume_tac) >> rw[]
   >> CASE_TAC >> reverse CASE_TAC
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[Once OWHILE_THM, stepk_def, apply_place_def, liftk1, bind_def]
