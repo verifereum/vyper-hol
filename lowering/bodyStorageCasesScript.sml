@@ -612,6 +612,25 @@ Proof
       rpt strip_tac >> gvs[] >>
       irule contract_storage_well_formed_backends_frame >>
       qexists_tac `st` >> simp[]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- (simp[] >>
+      qpat_x_assum `bt = Bop In \/ bt = Bop NotIn` kall_tac >>
+      Cases_on `eval_exprs cx es st` >>
+      rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+      `contract_storage_well_formed cx args_st` by metis_tac[] >>
+      Cases_on `args_res` >>
+      gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def]
+      >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+          Cases_on `LENGTH vs = 2` >>
+          gvs[bind_def, return_def, raise_def] >>
+          Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+          gvs[lift_option_type_def, bind_def, return_def, raise_def] >>
+          rpt strip_tac >> gvs[] >>
+          qmatch_asmsub_abbrev_tac `lift_sum membership_result` >>
+          Cases_on `membership_result` >>
+          gvs[lift_sum_def, return_def, raise_def] >>
+          rpt strip_tac >> gvs[]) >>
+      rpt strip_tac >> gvs[]) >>
   gvs[] >> Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
   `contract_storage_well_formed cx args_st` by metis_tac[] >>
@@ -1338,56 +1357,30 @@ QED
 Theorem body_assign_base_write_storage:
   well_typed_target env bt tty /\ runtime_storage_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
-  eval_result_typed (env,cx,st) pv (Type ty) /\ live_memory_result st pv /\
-  type_widens_to env.type_defs ty tty /\
+  value_runtime_typed env ty v /\ type_widens_to env.type_defs ty tty /\
   eval_target_place cx bt st = (INL p,target_st) /\
   contract_storage_well_formed cx target_st /\
-  (do v <- read_result cx pv; write_place cx p v od) target_st = (res,st') ==>
+  write_place cx p v target_st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
   strip_tac >>
   `runtime_consistent env cx st` by
     metis_tac[runtime_storage_consistent_runtime] >>
   drule_all eval_target_place_success_storage_type >> strip_tac >>
-  `typed_scope_transition st target_st` by
-    (fs[runtime_consistent_def] >>
-     drule_all (cj 2 (SPEC_ALL (cj 8
-       vyperTypeEvalSoundnessTheory.eval_scc_type_sound_mutual))) >> simp[]) >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame st target_st` by
-    (drule (cj 8 vyperImmutableMetadataFrameTheory.eval_metadata_frame_mutual) >> simp[]) >>
-  `eval_result_typed (env,cx,target_st) pv (Type ty)` by
-    (Cases_on `pv` >> gvs[eval_result_typed_def] >>
-     metis_tac[vyperTypeEvalSoundnessTheory.runtime_place_typed_transport]) >>
-  `live_memory_result target_st pv` by
-    (irule vyperTypeEvalSoundnessTheory.live_result_transport >> qexists_tac `st` >> simp[]) >>
-  `runtime_consistent env cx target_st` by
-    (fs[runtime_consistent_def] >>
-     metis_tac[cj 1 (SPEC_ALL (cj 8
-       vyperTypeEvalSoundnessTheory.eval_scc_type_sound_mutual))]) >>
-  qpat_x_assum `do _ od _ = _` mp_tac >> simp[bind_def] >>
-  Cases_on `read_result cx pv target_st` >>
-  rename1 `read_result cx pv target_st = (read_res,read_st)` >>
-  imp_res_tac read_result_state >> gvs[] >>
-  Cases_on `read_res` >> gvs[]
-  >- (rename1 `read_result cx pv target_st = (INL v,target_st)` >>
-      `value_runtime_typed env ty v` by
-        (fs[runtime_consistent_def] >>
-         drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >> simp[]) >>
-      `value_runtime_typed env tty v` by
-        (fs[value_runtime_typed_def] >>
-         drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >> simp[]) >>
-      drule eval_target_place_region >> strip_tac >>
-      strip_tac >>
-      `storage_layout_safe cx` by
-        metis_tac[runtime_storage_consistent_layout] >>
-      gvs[eval_result_typed_def, value_runtime_typed_def] >>
-      drule_all write_place_preserves_contract_storage >> simp[]) >>
-  rpt strip_tac >> gvs[]
+  `value_runtime_typed env tty v` by
+    (fs[value_runtime_typed_def] >>
+     drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >> simp[]) >>
+  drule eval_target_place_region >> strip_tac >>
+  `storage_layout_safe cx` by
+    metis_tac[runtime_storage_consistent_layout] >>
+  gvs[eval_result_typed_def, value_runtime_typed_def] >>
+  drule_all write_place_preserves_contract_storage >> simp[]
 QED
 
 Theorem body_eval_assign_base_storage:
   (!r s. eval_expr cx e st = (r,s) ==> contract_storage_well_formed cx s) /\
-  (!pv s r s'. eval_expr cx e st = (INL pv,s) /\
+  (!pv s v r s'. eval_expr cx e st = (INL pv,s) /\
+    read_result cx pv s = (INL v,s) /\
     runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_target_place cx bt s = (r,s') ==>
     contract_storage_well_formed cx s') /\
@@ -1414,14 +1407,25 @@ Proof
   drule_all body_oracle_storage_entry_transfer >> strip_tac >>
   Cases_on `rhs_res` >> gvs[]
   >- (drule_all eval_expr_success_storage_facts >> strip_tac >>
-      Cases_on `eval_target_place cx bt rhs_st` >>
-      rename1 `eval_target_place cx bt rhs_st = (target_res,target_st)` >>
-      `contract_storage_well_formed cx target_st` by metis_tac[] >>
-      Cases_on `target_res` >> gvs[]
-      >- (strip_tac >>
-          qpat_assum `do _ od _ = _`
-            (mp_then Any mp_tac body_assign_base_write_storage) >> simp[] >>
-          simp[bind_def] >> disch_then drule_all >> simp[]) >>
+      rename1 `eval_expr cx e st = (INL pv,rhs_st)` >>
+      Cases_on `read_result cx pv rhs_st` >>
+      rename1 `read_result cx pv rhs_st = (read_res,read_st)` >>
+      imp_res_tac read_result_state >> gvs[] >>
+      Cases_on `read_res` >> gvs[]
+      >- (rename1 `read_result cx pv rhs_st = (INL v,rhs_st)` >>
+          `value_runtime_typed env (expr_type e) v` by
+            (fs[runtime_consistent_def] >>
+             drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >>
+             simp[]) >>
+          Cases_on `eval_target_place cx bt rhs_st` >>
+          rename1 `eval_target_place cx bt rhs_st = (target_res,target_st)` >>
+          `contract_storage_well_formed cx target_st` by metis_tac[] >>
+          Cases_on `target_res` >> gvs[]
+          >- (strip_tac >>
+              qpat_assum `write_place _ _ _ _ = _`
+                (mp_then Any mp_tac body_assign_base_write_storage) >> simp[] >>
+              disch_then drule_all >> simp[]) >>
+          rpt strip_tac >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
@@ -1636,7 +1640,8 @@ QED
 
 
 Theorem body_assign_base_consumer:
-  (!s0 pv s1. eval_expr cx e s0 = (INL pv,s1) ==>
+  (!s0 pv s1 sread v s2.
+    eval_expr cx e s0 = (INL pv,s1) /\ read_result cx pv sread = (INL v,s2) ==>
     !tops env ty st res st'.
       well_typed_target env bt ty /\ supported_program tops /\
       get_module_code cx NONE = SOME tops /\
@@ -1684,7 +1689,7 @@ Proof
   rename1 `type_place_target env bt = SOME (Type tty)` >>
   qexistsl_tac [`env`, `tty`] >> simp[well_typed_target_def] >>
   rpt strip_tac >>
-  qpat_x_assum `!s0 pv s1. eval_expr _ _ _ = _ ==> _` drule >>
+  first_x_assum (qspecl_then [`st`, `pv`, `s`, `s`, `v`, `s`] mp_tac) >> simp[] >>
   disch_then irule >> simp[] >>
   qexistsl_tac [`env`, `r`, `s`, `tty`] >> simp[well_typed_target_def]
 QED

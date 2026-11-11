@@ -174,11 +174,11 @@ Theorem augassign_toplevel_binop_admissible_mem_src[local]:
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] v0 v ee =
-   case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee) <=>
+   expr_res_ok (case evaluate_binop
      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-     tvt bop v0 v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+     tvt bop v0 v of INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
@@ -627,7 +627,8 @@ Resume compile_augassign_toplevel_mem[operator_normal]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        tvt bop v0 v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      tvt bop v0 v = INL result` by gvs[AllCaseEqs()] >>
@@ -729,7 +730,8 @@ Resume compile_augassign_toplevel_mem[operator_exit]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        tvt bop v0 v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        tvt bop v0 v`
@@ -822,7 +824,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>

@@ -1,7 +1,7 @@
 Theory concretizeAnalysisExclusiveWriters
 Ancestors venomWfProps
   concretizeAnalysisExclusiveSources concretizeAnalysisRoots pointerClosure
-  allocaRemapSSA removeUnusedSsaProofs phiWellFormed execEquivParamBase venomWf ptrDiscipline pointerConfinedDefs venomInst pred_set list
+  allocaRemapSSA removeUnusedSsaProofs execEquivParamBase venomWf ptrDiscipline pointerConfinedDefs venomInst pred_set list
 
 Definition allocation_exclusive_def:
   allocation_exclusive P fn v <=>

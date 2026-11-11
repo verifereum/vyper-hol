@@ -35,7 +35,18 @@ Theorem aggregate_tuple_cons_continuation_mem_cursor:
     FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size tv)) ==>
-  ?v q. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
+  ?v q. (~expr_has_effect e /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        b + asz <= lb \/ lb + lsz <= b) ==>
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+     !p n. (p + n <= b \/ b + asz <= p) /\
+       (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+       mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (b+off) q.vs_memory /\
     stmt_state_rel ctx func ce cx es' q /\
@@ -49,7 +60,7 @@ Theorem aggregate_tuple_cons_continuation_mem_cursor:
       lo <= a /\ a + k <= lo + sz /\
       (a + k <= b+off \/ b+off + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
@@ -130,7 +141,27 @@ Resume aggregate_tuple_cons_continuation_mem_cursor[join]:
      qexists_tac `sm` >> fs[ci_mono_def]) >>
   `tadd.vs_gas_readings = r.vs_gas_readings` by
     (drule gas_marked_path_ok_suffix >> simp[]) >>
-  qexistsl_tac [`v`, `q`] >> simp[] >>
+  `~expr_has_effect e /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+   (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+      b + asz <= lb \/ lb + lsz <= b) ==>
+   (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+      mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+   !p n. (p + n <= b \/ b + asz <= p) /\
+     (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        sa.cs_next_id <= inst.inst_id /\
+        FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+        regions_disjoint p n c sz) ==>
+     mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory` by
+    (strip_tac >>
+     qpat_x_assum `~expr_has_effect e /\ local_ptrs_reserved _ _ /\ _ ==> _` mp_tac >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (qspecl_then [`b`, `asz`] mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                   simp[] >> decide_tac)) >>
+     disch_then ACCEPT_TAC) >>
+  qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ /\ _ ==> _` (fn pth =>
+    qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >>
+  simp[] >>
   conj_tac
   >- (qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >>
@@ -148,8 +179,10 @@ Resume aggregate_tuple_cons_continuation_mem_cursor[join]:
      local_region ce es'.scopes tadd n lo k` by
     (rpt strip_tac >> irule local_region_frame_fwd >>
      qexistsl_tac [`r`, `sm`, `es'.scopes`] >> simp[]) >>
-  qpat_x_assum `locals_kept ce es' tadd q` mp_tac >>
-  simp[locals_kept_def] >> metis_tac[]
+  `locals_kept ce es' es' r q` by
+    (irule exprBopSimPropsTheory.locals_kept_trans >>
+     qexistsl_tac [`es'`, `sm`, `tadd`] >> simp[locals_kept_mem]) >>
+  simp[] >> metis_tac[]
 QED
 
 Finalise aggregate_tuple_cons_continuation_mem_cursor
@@ -196,12 +229,13 @@ Theorem aggregate_tuple_cons_continuation_mem:
       lo <= a /\ a + k <= lo + sz /\
       (a + k <= b+off \/ b+off + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
     lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz)
 Proof
   disch_tac >> mp_tac aggregate_tuple_cons_continuation_mem_cursor >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
-  strip_tac >> qexistsl_tac [`v`, `q`] >> fs[] >> first_assum ACCEPT_TAC
+  strip_tac >> qpat_x_assum `~expr_has_effect e /\ _ ==> _` kall_tac >>
+  qexistsl_tac [`v`, `q`] >> fs[] >> first_assum ACCEPT_TAC
 QED

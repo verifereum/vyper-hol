@@ -169,7 +169,11 @@ Theorem aggregate_store_rebased_slice_mem_cursor:
   alloca_history func s /\ alloca_inv s /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
   s.vs_inst_idx = LENGTH su.cs_current_insts ==>
-  ?q. gas_path_mem ctx func s 0 (OK q) /\
+  ?q. (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+      FLOOKUP q.vs_allocas aid = SOME b) /\
+    (!a k. a + k <= w2n w \/ w2n w + type_memory_size tv <= a ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    gas_path_mem ctx func s 0 (OK q) /\
     val_in_memory tv v (w2n w) q.vs_memory /\
     stmt_state_rel ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
@@ -183,7 +187,7 @@ Theorem aggregate_store_rebased_slice_mem_cursor:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ q.vs_alloca_next = s.vs_alloca_next
@@ -195,7 +199,12 @@ Proof
     (drule_at (Pos hd) expr_post_rebased_lookup >> simp[eval_operand_def]) >>
   `!z. op = Var z \/ Var x = Var z ==> not_fresh_at su z` by
     (rpt strip_tac >> gvs[] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `post_value_type ce e = expr_type e` by
+    metis_tac[exprSimHypsTheory.post_value_type_no_calls,
+              loweringPostsTheory.post_value_type_lowered] >>
   drule_all aggregate_store_rebased_slice_run >> strip_tac >>
+  qpat_x_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> _` (fn alloc =>
+  qpat_x_assum `!a k. _ ==> mem_bytes_at a k q.vs_memory = _` (fn ext =>
   `expr_val_rel cx (expr_type e) v op s` by gvs[expr_post_def] >>
   `gas_path_mem ctx func s 0
      (OK (q with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
@@ -215,9 +224,11 @@ Proof
      simp[venom_state_component_equality] >> strip_tac >>
      fs[same_blocks_def]) >>
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  fs[stmt_state_rel_inst_idx, lookup_var_def, locals_kept_def,
+  conj_tac >- (simp_tac (srw_ss()) [] >> ACCEPT_TAC alloc) >>
+  conj_tac >- (simp_tac (srw_ss()) [] >> ACCEPT_TAC ext) >>
+  fs[stmt_state_rel_inst_idx, lookup_var_def,
      arithmeticTheory.ADD_COMM] >>
-  conj_tac >> first_assum ACCEPT_TAC)
+  first_assum ACCEPT_TAC)))
 QED
 
 (* Compatibility interface: callers not needing the block may forget it. *)
@@ -266,11 +277,14 @@ Theorem aggregate_store_rebased_slice_mem:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ q.vs_alloca_next = s.vs_alloca_next
 Proof
   disch_tac >> mp_tac aggregate_store_rebased_slice_mem_cursor >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
-  strip_tac >> qexists_tac `q` >> fs[] >> first_assum ACCEPT_TAC
+  strip_tac >>
+  qpat_x_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> _` kall_tac >>
+  qpat_x_assum `!a k. _ ==> mem_bytes_at a k q.vs_memory = _` kall_tac >>
+  qexists_tac `q` >> fs[] >> first_assum ACCEPT_TAC
 QED

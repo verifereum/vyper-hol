@@ -31,6 +31,7 @@ Ancestors
 
 Theorem buffer_memory_vv_post_general:
   !func cenv cx e es sa sb s0 es' t v tvt p w sz ctx.
+    post_value_type cenv e = expr_type e /\
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
@@ -49,7 +50,8 @@ Theorem buffer_memory_vv_post_general:
       (!n b k. local_region cenv es.scopes s0 n b k ==>
         off+len <= b \/ b+k <= off) ==>
       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory) /\
-    locals_kept cenv es s0 t ==>
+    locals_kept cenv es es' s0 t /\
+    (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
@@ -61,11 +63,12 @@ Proof
       rpt strip_tac >>
       qpat_x_assum `!n lb lsz. local_region _ es'.scopes _ _ _ _ ==> _`
         drule >> decide_tac) >>
-  metis_tac[]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem buffer_memory_vv_post:
   !func cenv cx e es sa sb s0 t v tvt p w sz ctx.
+    post_value_type cenv e = expr_type e /\
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
@@ -82,12 +85,13 @@ Theorem buffer_memory_vv_post:
        FLOOKUP s0.vs_allocas aid = SOME (b,len) ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     (!name b len. local_region cenv es.scopes s0 name b len ==>
-       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
+    pure_frame cenv func es sa s0 t ==>
     vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 t` by
+  `locals_kept cenv es es s0 t` by
     (irule locals_kept_regions >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` kall_tac >>
   irule buffer_memory_vv_post_general >>

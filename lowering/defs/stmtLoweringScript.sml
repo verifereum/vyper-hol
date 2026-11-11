@@ -906,7 +906,10 @@ Definition compile_stmt_def:
 
   (* Assign: store to target (memory, storage, transient, code).
      Evaluate RHS to a value/location, then the target pointer, then unwrap
-     the RHS (so an lvalue-shaped RHS is read after target side effects).
+     the RHS. When the target's indices can modify memory or storage, the
+     RHS value is frozen first (a word read at once, a composite copied to
+     a fresh temporary) so the store sees the value from before those
+     effects, as the source semantics reads it (vyperlang/vyper#5282).
      dst_ty from compile_get_target_ptr (target's declared type),
      src_ty from expr_type e (expression's type). These may differ
      for subtype assignments (e.g., DynArray[Bytes[540]] → DynArray[Bytes[704]]).
@@ -918,7 +921,10 @@ Definition compile_stmt_def:
        od
      else
      let src_ty = lowered_value_type cenv e in
-     do src_vv <- compile_expr cenv (expr_type e) e;
+     do src_vv0 <- compile_expr cenv (expr_type e) e;
+        src_vv <- (if expr_can_mutate cenv (target_to_expr bt) then
+                     compile_snapshot_vv cenv T (vv_with_type src_ty src_vv0)
+                   else return src_vv0);
         tgt_result <- compile_get_target_ptr compile_expr cenv bt;
         dst_op <- return (FST tgt_result);
         dst_loc_opt <- return (FST (SND tgt_result));

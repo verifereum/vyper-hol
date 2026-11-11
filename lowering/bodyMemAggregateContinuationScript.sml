@@ -7,6 +7,7 @@ Ancestors
   gasOutcome fragGasMode list
 
 Theorem aggregate_rebased_marked_read_mem_capacity:
+  post_value_type ce e = expr_type e /\
   unwrap_value ce vv sm = (op,su) /\
   local_ptrs_reserved ce sm /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
@@ -85,7 +86,20 @@ Theorem aggregate_unwrap_store_slice_mem_cursor:
   (!u. gas_path_mem ctx func r 0 (OK u) ==> alloca_inv u) /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?v q. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
+  ?v q. (~expr_has_effect e /\ local_ptrs_reserved ce sa /\
+     MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
+     !b asz. b <= w2n w /\ w2n w + type_memory_size tv <= b + asz /\
+       (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          b + asz <= lb \/ lb + lsz <= b) ==>
+       (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+       !p n. (p + n <= b \/ b + asz <= p) /\
+         (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+            sa.cs_next_id <= inst.inst_id /\
+            FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+            regions_disjoint p n c sz) ==>
+         mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+    gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (w2n w) q.vs_memory /\
     stmt_state_rel ctx func ce cx es' q /\
@@ -100,12 +114,15 @@ Theorem aggregate_unwrap_store_slice_mem_cursor:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next
 Proof
   strip_tac >> (
+  `post_value_type ce e = expr_type e` by
+    metis_tac[exprSimHypsTheory.post_value_type_no_calls,
+              loweringPostsTheory.post_value_type_lowered] >>
   drule_at (Pat `unwrap_value _ _ _ = _`) aggregate_rebased_marked_read_mem_capacity >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
@@ -121,7 +138,51 @@ Proof
   disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`w`, `tv`, `env`] mp_tac) >>
   impl_tac >- (fs[wordsTheory.dimword_def] >> rpt conj_tac >> metis_tac[]) >>
-  strip_tac >> qexistsl_tac [`v`, `q`] >> simp[] >>
+  strip_tac >>
+  `~expr_has_effect e /\ local_ptrs_reserved ce sa /\
+   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
+   !b asz. b <= w2n w /\ w2n w + type_memory_size tv <= b + asz /\
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        b + asz <= lb \/ lb + lsz <= b) ==>
+     (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+     !p n. (p + n <= b \/ b + asz <= p) /\
+       (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
+          regions_disjoint p n c sz) ==>
+       mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory` by
+    (strip_tac >>
+     `pure_frame ce func es sa s0 r /\
+      (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==>
+         lookup_var z r = SOME a)` by
+       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+        rewrite_tac[vv_post_def] >> strip_tac >> conj_tac
+        >- (qpat_x_assum `~expr_has_effect e ==> _` irule >>
+            first_assum ACCEPT_TAC) >>
+        first_assum ACCEPT_TAC) >>
+     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ u`
+       (mp_then (Pos hd) mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     `!aid a. FLOOKUP r.vs_allocas aid = SOME a ==>
+        FLOOKUP u.vs_allocas aid = SOME a` by
+       (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ u` mp_tac >>
+        rewrite_tac[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+     `pure_frame ce func es sa s0 u` by
+       (match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+        qexistsl_tac [`es'`, `sa with cs_next_var := sm.cs_next_var`, `r`] >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+     rpt gen_tac >> strip_tac >>
+     qspecl_then [`ce`, `func`, `es`, `sa`, `s0`, `u`, `q`, `b`, `asz`, `w2n w`,
+                  `type_memory_size tv`] mp_tac aggregate_pure_frame_store >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
+  qpat_x_assum `!aid b. FLOOKUP u.vs_allocas aid = SOME b ==> _` kall_tac >>
+  qpat_x_assum `!a k. _ ==> mem_bytes_at a k q.vs_memory = mem_bytes_at a k u.vs_memory`
+    kall_tac >>
+  qpat_x_assum `~expr_has_effect e /\ _ ==> _` (fn pth =>
+    qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >>
+  simp[] >>
   conj_tac
   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def, gas_marked_path_def] >>
@@ -176,11 +237,12 @@ Theorem aggregate_unwrap_store_slice_mem:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next
 Proof
   disch_tac >> mp_tac aggregate_unwrap_store_slice_mem_cursor >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
-  strip_tac >> qexistsl_tac [`v`, `q`] >> fs[] >> first_assum ACCEPT_TAC
+  strip_tac >> qpat_x_assum `~expr_has_effect e /\ _ ==> _` kall_tac >>
+  qexistsl_tac [`v`, `q`] >> fs[] >> first_assum ACCEPT_TAC
 QED

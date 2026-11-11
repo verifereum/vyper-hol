@@ -18,6 +18,7 @@
  *)
 Theory exprSimAggregateLoops
 Ancestors
+  exprSimHashBoundary
   exprBopSimProps
   exprSimSource
   exprSimProps
@@ -249,7 +250,7 @@ Proof
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   drule exprLoweringPropsTheory.emit_op_same_blocks >>
   simp[exprLoweringPropsTheory.same_blocks_def] >> strip_tac >>
-  drule_at (Pat `run_inst_seq _ _ = OK _`) exprSimHashTheory.hash_run_path >>
+  drule_at (Pat `run_inst_seq _ _ = OK _`) exprSimHashBoundaryTheory.hash_run_path >>
   disch_then (qspecl_then [`sn`, `sm`, `func`, `ctx`] mp_tac) >>
   (impl_tac >- simp[venomInstTheory.mk_inst_def,
                       venomInstTheory.is_terminator_def]) >>
@@ -263,6 +264,7 @@ Proof
 QED
 
 Theorem aggregate_tuple_store_marked[local]:
+  post_value_type ce e = expr_type e /\
   compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb) /\
   expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
@@ -285,7 +287,11 @@ Theorem aggregate_tuple_store_marked[local]:
   fn_has_code su sb func /\ ~s.vs_halted /\
   s.vs_current_bb = su.cs_current_bb /\
   s.vs_inst_idx = LENGTH su.cs_current_insts ==>
-  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+  ?q. (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+      FLOOKUP q.vs_allocas aid = SOME b) /\
+    (!a k. a + k <= w2n w \/ w2n w + type_memory_size tv <= a ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    gas_marked_path F ctx func s 0 (OK q) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     val_in_memory tv v (w2n w) q.vs_memory /\
@@ -301,18 +307,34 @@ Theorem aggregate_tuple_store_marked[local]:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q
+    locals_kept ce es' es' r q
 Proof
   strip_tac >>
   drule_all aggregate_store_rebased_slice_run >> strip_tac >>
+  qpat_x_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> _`
+    (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  qpat_x_assum `!a k. _ ==> mem_bytes_at a k q.vs_memory = _`
+    (assume_tac o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
   drule exprSimBufferStoreTheory.buffer_store_memory_shape >>
   simp[same_blocks_def] >> strip_tac >>
   drule aggregate_store_memory_straight >> strip_tac >>
   drule aggregate_tuple_store_no_gas >> strip_tac >>
-  drule_at (Pat `run_inst_seq _ _ = OK _`) exprSimHashTheory.hash_run_path >>
+  drule_at (Pat `run_inst_seq _ _ = OK _`) exprSimHashBoundaryTheory.hash_run_path >>
   disch_then (qspecl_then [`sb`, `su`, `func`, `ctx`] mp_tac) >>
   (impl_tac >- simp[]) >> simp[] >> strip_tac >>
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  conj_tac
+  >- (qpat_x_assum `Abbrev (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> _)`
+        (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+      simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (qpat_x_assum `Abbrev (!a k. _ ==> mem_bytes_at a k q.vs_memory = _)`
+        (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+      simp_tac (srw_ss()) [] >> rpt strip_tac >>
+      qpat_x_assum `!a k. _ ==> mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory`
+        irule >> decide_tac) >>
+  qpat_x_assum `Abbrev (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> _)` kall_tac >>
+  qpat_x_assum `Abbrev (!a k. _ ==> mem_bytes_at a k q.vs_memory = _)` kall_tac >>
   gvs[stmt_state_rel_inst_idx, venomStateTheory.lookup_var_def,
       arithmeticTheory.ADD_COMM] >>
   first_assum MATCH_ACCEPT_TAC
@@ -504,7 +526,16 @@ Theorem aggregate_make_tuple_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r /\
+      (~EXISTS expr_has_effect args ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -519,6 +550,10 @@ Proof
   `expr_body_pre ce cx env h es /\ (nocalls ==> int_calls_expr h = [])` by
     metis_tac[listTheory.MEM] >>
   `well_typed_expr env h` by metis_tac[expr_body_pre_def] >>
+  `post_value_type ce h = expr_type h` by
+    (`lowered_value_type ce h = expr_type h \/ is_bytestring_type (expr_type h)` by
+       (irule aggregate_elem_lowered_type >> metis_tac[listTheory.MEM]) >>
+     metis_tac[post_value_type_lowered, post_value_type_bytestring]) >>
   drule aggregate_tuple_cons_compile >>
   (impl_tac >- (irule aggregate_elem_lowered_type >> metis_tac[listTheory.MEM])) >>
   strip_tac >>
@@ -728,7 +763,8 @@ Resume aggregate_make_tuple_sim[tuple_join]:
   >- suspend "allocas_join"
   >- suspend "slice_join"
   >- suspend "exterior_join"
-  >> suspend "locals_join"
+  >- suspend "locals_join"
+  >> suspend "pure_join"
 QED
 
 Resume aggregate_make_tuple_sim[head_encoding]:
@@ -862,11 +898,85 @@ Resume aggregate_make_tuple_sim[exterior_join]:
 QED
 
 Resume aggregate_make_tuple_sim[locals_join]:
-  `locals_kept ce es1 q s` by
+  `locals_kept ce es1 es' q s` by
     (irule locals_kept_trans >> qexistsl_tac [`es1`, `sn`, `t'`] >>
      asm_rewrite_tac[]) >>
   irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `q`] >>
   gvs[vv_post_def]
+QED
+
+Resume aggregate_make_tuple_sim[pure_join]:
+  strip_tac >>
+  `~expr_has_effect h /\ ~EXISTS expr_has_effect args` by
+    (rpt (qpat_x_assum `~EXISTS _ _` mp_tac) >>
+     rpt (qpat_x_assum `EVERY _ args` mp_tac) >>
+     rpt (qpat_x_assum `~expr_has_effect _` mp_tac) >>
+     simp_tac (srw_ss()) []) >>
+  `pure_frame ce func es sa s0 q /\
+   (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+      lookup_var z q = SOME w)` by
+    (qpat_x_assum `vv_post ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
+     rewrite_tac[vv_post_def] >> strip_tac >> conj_tac
+     >- (qpat_x_assum `~expr_has_effect h ==> _` irule >>
+         first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `expr_post _ _ _ _ h _ _ _ _ _ _ _ u`
+    (mp_then (Pos hd) mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `!aid a. FLOOKUP q.vs_allocas aid = SOME a ==>
+     FLOOKUP u.vs_allocas aid = SOME a` by
+    (qpat_x_assum `expr_post _ _ _ _ h _ _ _ _ _ _ _ u` mp_tac >>
+     rewrite_tac[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `pure_frame ce func es sa s0 u` by
+    (match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es1`, `sa with cs_next_var := sn.cs_next_var`, `q`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  `!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+      b + asz <= lo \/ lo + sz <= b` by
+    (`not_local_ptr ce es.scopes x` by simp[] >>
+     `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
+       (qpat_assum `stmt_state_rel ctx func ce cx es s0` mp_tac >>
+        simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
+        strip_tac >> asm_rewrite_tac[]) >>
+     rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
+     simp[regions_disjoint_def]) >>
+  `!a k. a + k <= b + off \/ b + off + type_memory_size h' <= a ==>
+     mem_bytes_at a k t'.vs_memory = mem_bytes_at a k u.vs_memory` by
+    (rpt strip_tac >>
+     qpat_x_assum `!a k. _ ==> mem_bytes_at a k t'.vs_memory = mem_bytes_at a k u.vs_memory`
+       irule >> simp[]) >>
+  qspecl_then [`ce`, `func`, `es`, `sa`, `s0`, `u`, `t'`, `b`, `asz`, `b + off`,
+               `type_memory_size h'`] mp_tac aggregate_pure_frame_store >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (simp[] >> NO_TAC) >> decide_tac)) >>
+  strip_tac >>
+  `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+     lookup_var z t' = SOME w` by
+    (rpt strip_tac >>
+     `not_fresh_at sn z` by
+       (irule freshWritesTheory.not_fresh_at_mono >>
+        qexists_tac `sa` >> fs[ci_mono_def] >> decide_tac) >>
+     `lookup_var z q = SOME w` by
+       (qpat_x_assum `!z w. not_fresh_at sa z /\ _ ==> lookup_var z q = _`
+          irule >> conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `!z a. not_fresh_at sn z /\ _ ==> lookup_var z t' = _`
+       irule >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `sa.cs_next_id <= ss.cs_next_id` by (fs[ci_mono_def] >> decide_tac) >>
+  qpat_x_assum `EVERY _ args ==> _` mp_tac >>
+  (impl_tac >- (qpat_x_assum `~EXISTS expr_has_effect args` mp_tac >>
+                simp_tac (srw_ss()) [])) >> strip_tac >>
+  qspecl_then [`ce`, `func`, `es`, `es1`, `sa`, `ss`, `s0`, `t'`, `s`, `b`, `asz`]
+    mp_tac aggregate_pure_frame_trans >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      rpt strip_tac >>
+      qpat_x_assum `!p n. (n + p <= b \/ _) /\ _ ==> mem_bytes_at p n s.vs_memory = _`
+        irule >>
+      conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (qpat_x_assum `p + n <= b` mp_tac) >>
+      TRY (qpat_x_assum `b + asz <= p` mp_tac) >>
+      rpt (pop_assum kall_tac) >> decide_tac) >>
+  simp[]
 QED
 
 Finalise aggregate_make_tuple_sim
@@ -943,7 +1053,16 @@ Theorem aggregate_struct_fields_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r /\
+      (~EXISTS expr_has_effect (MAP SND fields) ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -965,7 +1084,7 @@ Proof
   goal_assum (drule_at Any) >>
   BETA_TAC >> rpt strip_tac >> qexists_tac `vs` >> gvs[] >> simp[] >>
   conj_tac >- (irule struct_tuple_memory_post >> simp[]) >>
-  conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem compile_make_array_elems_as_tuple:
@@ -1034,7 +1153,7 @@ Theorem array_header_store_boundary:
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint io (type_memory_size tv) b 32) ==>
   stmt_state_rel ctx func ce cx es (mstore b w s) /\
-  locals_kept ce es s (mstore b w s) /\
+  locals_kept ce es es s (mstore b w s) /\
   mem_word_at b (mstore b w s).vs_memory = w /\
   (!p n. p+n <= b \/ b+32 <= p ==>
     mem_bytes_at p n (mstore b w s).vs_memory = mem_bytes_at p n s.vs_memory)
@@ -1047,7 +1166,7 @@ Proof
        aggregate_alloca_slice_excludes_local)) >> simp[]) >>
   conj_tac >- (irule array_header_store_state_rel >> metis_tac[]) >>
   conj_tac
-  >- (simp[locals_kept_def] >> rpt strip_tac >>
+  >- (irule locals_kept_regions >> rpt strip_tac >>
       irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
       first_x_assum drule >> strip_tac >> decide_tac) >>
   conj_tac >- simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
@@ -1107,7 +1226,16 @@ Theorem aggregate_make_array_elems_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r /\
+      (~EXISTS expr_has_effect args ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -1199,7 +1327,16 @@ Theorem aggregate_make_array_start_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r /\
+      (~EXISTS expr_has_effect args ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -1280,7 +1417,16 @@ Theorem aggregate_make_array_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r /\
+      (~EXISTS expr_has_effect args ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -1312,7 +1458,7 @@ Proof
      disch_then (qspecl_then [`n2w (LENGTH args)`, `n2w b`, `s0`, `func`, `ctx`] mp_tac) >>
      simp[eval_operand_def, Abbr `sh`]) >>
   `stmt_state_rel ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
-   locals_kept ce es s0 (mstore b (n2w (LENGTH args)) s0) /\
+   locals_kept ce es es s0 (mstore b (n2w (LENGTH args)) s0) /\
    mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args) /\
    (!p n. p+n <= b \/ b+32 <= p ==>
      mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
@@ -1381,7 +1527,8 @@ Resume aggregate_make_array_sim[array_post_transport]:
   conj_tac >- suspend "allocas" >>
   conj_tac >- suspend "inner_frame" >>
   conj_tac >- suspend "outer_frame" >>
-  suspend "locals"
+  conj_tac >- suspend "locals" >>
+  suspend "pure"
 QED
 
 Resume aggregate_make_array_sim[header_word]:
@@ -1430,6 +1577,50 @@ QED
 Resume aggregate_make_array_sim[locals]:
   irule locals_kept_trans >> qexistsl_tac [`es`, `sa`, `sh`] >>
   simp[Abbr `sh`, locals_kept_def, mstore_def, lookup_var_def]
+QED
+
+Resume aggregate_make_array_sim[pure]:
+  strip_tac >>
+  `!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+      b + asz <= lo \/ lo + sz <= b` by
+    (rpt strip_tac >>
+     `not_local_ptr ce es.scopes x` by simp[] >>
+     drule_all (SRULE [] (Q.INST [`off` |-> `0`, `n` |-> `asz`, `r` |-> `s0`]
+       aggregate_alloca_slice_excludes_local)) >> decide_tac) >>
+  qspecl_then [`ce`, `func`, `es`, `sa`, `s0`, `s0`, `sh`, `b`, `asz`, `b`, `32`]
+    mp_tac aggregate_pure_frame_store >>
+  (impl_tac >-
+    (conj_tac >- simp[] >>
+     conj_tac >- simp[Abbr `sh`, mstore_def] >>
+     conj_tac >- simp[] >>
+     conj_tac >- decide_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >> simp[Abbr `sh`] >>
+     qpat_x_assum `!p n. _ \/ _ ==> _` irule >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
+  qpat_x_assum `EVERY _ args ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+     lookup_var z sh = SOME w` by
+    simp[Abbr `sh`, mstore_def, lookup_var_def] >>
+  `sa.cs_next_id <= sm.cs_next_id` by
+    (qpat_x_assum `sm.cs_next_id = _` mp_tac >> rpt (pop_assum kall_tac) >>
+     decide_tac) >>
+  qpat_x_assum `sm.cs_next_id = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
+  qspecl_then [`ce`, `func`, `es`, `es`, `sa`, `sm`, `s0`, `sh`, `t`, `b`, `asz`]
+    mp_tac aggregate_pure_frame_trans >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (rewrite_tac[] >> NO_TAC) >>
+      rpt strip_tac >>
+      qpat_x_assum `!p n. (n + p <= b \/ _) /\ _ ==> mem_bytes_at p n t.vs_memory = _`
+        irule >>
+      conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (qpat_x_assum `p + n <= b` mp_tac) >>
+      TRY (qpat_x_assum `b + asz <= p` mp_tac) >>
+      rpt (pop_assum kall_tac) >> decide_tac) >>
+  simp[]
 QED
 
 Finalise aggregate_make_array_sim

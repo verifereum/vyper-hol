@@ -148,7 +148,9 @@ Proof
     (* 33 *) MATCH_ACCEPT_TAC body_structlit_mem_case,
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_mem_case,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_mem_ok,
-    (* 36 *) MATCH_ACCEPT_TAC body_builtin_mem_ok,
+    (* 36 *) rpt strip_tac >> irule body_builtin_mem_ok >> conj_tac
+               >- (rpt strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+                   metis_tac[]) >> metis_tac[],
     (* 37 *) MATCH_ACCEPT_TAC body_pop_mem_ok,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_mem_case,
     (* 39 *) MATCH_ACCEPT_TAC body_send_mem_case,
@@ -190,7 +192,7 @@ Theorem body_stmts_sim_mem:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
-    EVERY (stmt_exprs_ok cenv) ss /\
+    stmts_exprs_ok cenv ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv

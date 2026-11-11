@@ -962,6 +962,8 @@ Resume first_emission_compile_stmt[assign]:
   ho_match_mp_tac first_emission_bind >> conj_tac
   >- metis_tac[first_emission_compile_expr] >>
   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (IF_CASES_TAC >> metis_tac[first_emission_return, first_emission_snapshot_vv]) >>
+  gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (match_mp_tac first_emission_get_target_ptr >> metis_tac[first_emission_compile_expr]) >>
   gen_tac >> BETA_TAC >>
   ntac 3 (ho_match_mp_tac first_emission_bind >> conj_tac

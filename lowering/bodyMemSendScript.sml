@@ -33,7 +33,7 @@ Theorem take_call_outcome_gas_obs[local]:
        SND (take_call_outcome target cd vo st) with gas_obs := g) /\
     (SND (take_call_outcome target cd vo st)).gas_obs = st.gas_obs
 Proof
-  rpt gen_tac >> simp[take_call_outcome_def, call_outcome_request_def] >>
+  rpt gen_tac >> simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
   Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >> rw[]
 QED
 
@@ -170,13 +170,14 @@ Proof
 QED
 
 Theorem send_tail_path_mem:
+  expr_has_effect e /\
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   stmt_state_rel ctx func cenv cx es1 t /\ alloca_history func t /\
-  wb_frame cenv es sa s0 t /\
+  wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\
@@ -187,7 +188,7 @@ Theorem send_tail_path_mem:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es1 = (res, es') /\
-  expr_type e = NoneT ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   ?r. gas_marked_path T ctx func t 0 r /\
       ((?t'. r = OK t' /\
              (?v. res = INL v /\
@@ -255,7 +256,7 @@ Proof
       simp[] >>
       conj_tac
       >- (irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-          reverse conj_tac
+          conj_tac
           >- (irule stmt_state_rel_update_var >> conj_tac
               >- (irule fresh_not_local_ptr >> qexists_tac `sm` >>
                   metis_tac[]) >>
@@ -275,9 +276,18 @@ Proof
               qexistsl_tac [`es1`, `t`] >> simp[] >>
               qpat_x_assum `s' = _`
                 (fn th => once_rewrite_tac[th]) >> simp[]) >>
+          `wb_frame cenv es es' sa s0 t` by
+            (`es'.scopes = es1.scopes` by
+               (drule eval_send_read >> strip_tac >>
+                drule eval_send_preserves_non_accounts >> simp[]) >>
+             qpat_x_assum `wb_frame cenv es es1 sa s0 t` mp_tac >>
+             pure_rewrite_tac[wb_frame_def, locals_kept_def, popped_kept_def] >>
+             qpat_x_assum `es'.scopes = es1.scopes`
+               (fn th => pure_rewrite_tac[th]) >>
+             disch_then ACCEPT_TAC) >>
           irule wb_frame_readonly_tail >>
           qexists_tac `sm` >>
-          qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+          qpat_assum `wb_frame cenv es es' sa s0 t` (irule_at Any) >>
           simp[update_var_def, lookup_var_def,
                finite_mapTheory.FLOOKUP_UPDATE] >>
           rw[] >> gvs[not_fresh_at_def] >> metis_tac[]) >>
@@ -383,7 +393,7 @@ Resume send_args_summary_mem[normal]:
               alloca_history func t' /\
               t.vs_alloca_next <= t'.vs_alloca_next) \/
         (exit_result r /\ expr_exit res r))` by
-    (irule send_tail_path_mem >> simp[expr_type_def] >>
+    (irule send_tail_path_mem >> simp[expr_type_def, loweringPostsTheory.expr_has_effect_thm] >>
      qpat_assum `bind (eval_send _ _ _) _ _ = _` (irule_at Any) >>
      qpat_assum `emit_op _ _ _ = _` (irule_at Any) >>
      qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>

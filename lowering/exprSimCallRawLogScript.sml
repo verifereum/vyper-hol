@@ -5,6 +5,7 @@
 
 Theory exprSimCallRawLog
 Ancestors
+  exprSimHashBoundary
   list exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource exprSimHyps exprSimSend vyperAST vyperTypeSystem
   vyperTypeCallGraph allocLimits supportedExprTraverse exprLowering
   vyperInterpreter vyperContext vyperValue vyperState exprCallbackContracts exprCallBounds
@@ -315,7 +316,7 @@ Theorem raw_log_post_vv[local]:
     (StackValue NoneT (Lit 0w)) s
 Proof
   simp[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-       read_result_def, return_def] >> metis_tac[]
+       vv_own_def, read_result_def, return_def] >> metis_tac[]
 QED
 
 Theorem compile_multi_exprs_lower_word_args[local]:
@@ -394,15 +395,11 @@ Theorem raw_log_post_rebase[local]:
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
-  wb_frame cenv es sa s0 t ==>
-  expr_post ctx func cenv cx e es sa sb s0 es2 v op u
+  wb_frame cenv es es1 sa s0 t ==>
+  wb_frame cenv es es2 sa s0 u
 Proof
-  strip_tac >>
-  `wb_frame cenv es sa s0 u` by
-    (irule wb_frame_trans >> goal_assum (drule_at Any) >>
-     metis_tac[expr_post_frame]) >>
-  gvs[expr_post_def, wb_frame_def] >>
-  metis_tac[exprSimPropsTheory.expr_val_at_start_mono]
+  strip_tac >> irule wb_frame_trans >> goal_assum (drule_at Any) >>
+  metis_tac[expr_post_frame]
 QED
 
 Theorem raw_log_post_operands[local]:
@@ -442,7 +439,9 @@ Proof
 QED
 
 Theorem raw_log_dynamic_tail_summary[local]:
-  expr_post ctx func cenv cx data es sa sd s0 es2 (BytesV bs) ptr_op s /\
+  expr_has_effect e /\
+  expr_post ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) ptr_op s /\
+  wb_frame cenv es es2 sa s0 s /\
   expr_type data = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type data) =
     SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -455,7 +454,7 @@ Theorem raw_log_dynamic_tail_summary[local]:
               (!l. op <> Label l)) ops /\
   eval_operands ops s = SOME (MAP event_value_to_word vs) /\
   LENGTH ops < dimword (:256) /\ local_ptrs_reserved cenv sd /\
-  sa.cs_next_var <= sd.cs_next_var /\ expr_type e = NoneT /\
+  sa.cs_next_var <= sd.cs_next_var /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sd sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sd.cs_current_bb /\
   s.vs_inst_idx = LENGTH sd.cs_current_insts /\ LENGTH vs <= 4 ==>
@@ -470,8 +469,7 @@ Theorem raw_log_dynamic_tail_summary[local]:
       t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
 Proof
   strip_tac >> drule_all raw_log_dynamic_data_view >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es2 s /\ wb_frame cenv es sa s0 s` by
-    metis_tac[expr_post_state, expr_post_frame] >>
+  `stmt_state_rel ctx func cenv cx es2 s` by metis_tac[expr_post_state] >>
   `EVERY (\op. !p. op = Var p ==> not_fresh_at sd p) ops` by
     gvs[EVERY_CONJ] >>
   drule_all raw_log_dynamic_prepare_frame >> strip_tac >>
@@ -479,7 +477,7 @@ Proof
   `?t'. step_inst_base (mk_inst sm.cs_next_id LOG logops []) t = OK t' /\
     stmt_state_rel ctx func cenv cx
       (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) t' /\
-    wb_frame cenv es sa s0 t'` by
+    wb_frame cenv es (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) sa s0 t'` by
     (irule raw_log_core_frame >> simp[mk_inst_def, Abbr `logops`] >>
      qexistsl_tac [`ops`, `len_op`, `data_op`,
                   `n2w (b + 32)`, `n2w (LENGTH bs)`] >>
@@ -504,19 +502,23 @@ Proof
     `OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[dest_BytesV_def, lift_option_type_def, lift_option_def, type_check_def,
        assert_def, push_log_def, bind_def, ignore_bind_def, return_def] >>
+  `!n. wb_frame cenv es (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) sa s0
+     (t' with vs_inst_idx := n)` by
+    (gen_tac >> irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t'`] >>
+     simp[lookup_var_def]) >>
   irule expr_post_none_intro >>
-  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs] >>
-  gvs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >- metis_tac[] >>
+  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs, wb_frame_gas_obs] >>
   qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) t'` mp_tac >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx ee t'` >>
   `es2 with <|logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs];
               gas_obs := []|> = ee with gas_obs := []` by simp[Abbr `ee`] >>
-  asm_rewrite_tac[] >> simp[]
+  asm_rewrite_tac[] >> simp[wb_frame_gas_obs, Abbr `ee`]
 QED
 
 Theorem raw_log_fixed_tail_summary[local]:
-  expr_post ctx func cenv cx data es sa sd s0 es2 (BytesV bs) val_op s /\
+  expr_has_effect e /\
+  expr_post ctx func cenv cx data es1 s1 sd t0 es2 (BytesV bs) val_op s /\
+  wb_frame cenv es es2 sa s0 s /\
   expr_type data = BaseT (BytesT (Fixed 32)) /\
   value_has_type (BaseTV (BytesT (Fixed 32))) (BytesV bs) /\
   emit_void MSTORE [ptr_op;val_op] sd = ((),sm) /\
@@ -530,7 +532,7 @@ Theorem raw_log_fixed_tail_summary[local]:
     b + 32 <= lb \/ lb + len <= b) /\
   MAP FDOM es.scopes = MAP FDOM es2.scopes /\ local_ptrs_reserved cenv sa /\
   eval_operands ops s = SOME (MAP event_value_to_word vs) /\
-  LENGTH ops < dimword (:256) /\ expr_type e = NoneT /\
+  LENGTH ops < dimword (:256) /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sd sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sd.cs_current_bb /\
   s.vs_inst_idx = LENGTH sd.cs_current_insts /\ LENGTH vs <= 4 ==>
@@ -545,8 +547,7 @@ Theorem raw_log_fixed_tail_summary[local]:
       t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
 Proof
   strip_tac >> drule hash_fixed_post_view >> simp[] >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es2 s /\ wb_frame cenv es sa s0 s` by
-    metis_tac[expr_post_state, expr_post_frame] >>
+  `stmt_state_rel ctx func cenv cx es2 s` by metis_tac[expr_post_state] >>
   `b + 32 < dimword (:256)` by
     (irule hash_live_footprint_bound >>
      qpat_assum `stmt_state_rel _ _ _ _ _ s` (irule_at Any) >>
@@ -565,7 +566,7 @@ Proof
   `run_inst_seq (emitted_insts sd sm) s = OK (mstore (w2n (n2w b : bytes32)) w s) /\
    TAKE 32 (DROP (w2n (n2w b : bytes32)) (mstore (w2n (n2w b : bytes32)) w s).vs_memory ++ REPLICATE 32 0w) = bs /\
    stmt_state_rel ctx func cenv cx es2 (mstore (w2n (n2w b : bytes32)) w s) /\
-   wb_frame cenv es sa s0 (mstore (w2n (n2w b : bytes32)) w s)` by
+   wb_frame cenv es es2 sa s0 (mstore (w2n (n2w b : bytes32)) w s)` by
     (irule raw_log_fixed_store_frame >> simp[] >>
      metis_tac[]) >>
   `eval_operand ptr_op (mstore b w s) = SOME (n2w b) /\
@@ -580,7 +581,7 @@ Proof
   `?t. step_inst_base (mk_inst sm.cs_next_id LOG logops []) (mstore b w s) = OK t /\
     stmt_state_rel ctx func cenv cx
       (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) t /\
-    wb_frame cenv es sa s0 t` by
+    wb_frame cenv es (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) sa s0 t` by
     (irule raw_log_core_frame >> simp[mk_inst_def, Abbr `logops`] >>
      simp[eval_operand_def, wordsTheory.dimword_def] >> metis_tac[]) >>
   `sb.cs_current_bb = sd.cs_current_bb /\
@@ -605,16 +606,19 @@ Proof
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[dest_BytesV_def, lift_option_type_def, lift_option_def, type_check_def,
        assert_def, push_log_def, bind_def, ignore_bind_def, return_def] >>
+  `!n. wb_frame cenv es (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) sa s0
+     (t with vs_inst_idx := n)` by
+    (gen_tac >> irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t`] >>
+     simp[lookup_var_def]) >>
   irule expr_post_none_intro >>
-  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs] >>
-  gvs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >- metis_tac[] >>
+  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs, wb_frame_gas_obs] >>
+  gvs[lookup_var_def] >>
   qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) t` mp_tac >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx ee t` >>
   `es2 with <|logs := es2.logs ++
      [encode_raw_event_values cx.txn.target vs (TAKE 32 (word_to_bytes_be w))];
               gas_obs := []|> = ee with gas_obs := []` by simp[Abbr `ee`] >>
-  asm_rewrite_tac[] >> simp[]
+  asm_rewrite_tac[] >> simp[wb_frame_gas_obs, Abbr `ee`]
 QED
 
 Theorem raw_log_alloc_path[local]:
@@ -755,10 +759,10 @@ Resume raw_log_dynamic_sim[data]:
          vyperValueTheory.evaluate_type_def] >>
      Cases_on `v'` >> gvs[vyperTypingTheory.value_has_type_def]) >>
   gvs[] >>
-  `expr_post ctx func cenv cx data es sa st2 s0 ee (BytesV bs) v t'` by
-    (irule raw_log_post_rebase >> simp[] >>
-     qexistsl [`mid with gas_obs := []`, `st1`, `t`] >>
-     simp[] >> gvs[typed_args_post_def]) >>
+  `wb_frame cenv es ee sa s0 t'` by
+    (qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ t'`
+       (mp_then Any mp_tac raw_log_post_rebase) >>
+     disch_then irule >> simp[] >> gvs[typed_args_post_def]) >>
   `eval_operands topic_ops t = SOME (MAP event_value_to_word vs)` by
     metis_tac[raw_log_topics_post_words] >>
   `eval_operands topic_ops t' = SOME (MAP event_value_to_word vs)` by
@@ -767,8 +771,8 @@ Resume raw_log_dynamic_sim[data]:
   `LENGTH vs <= 4` by gvs[typed_args_post_def] >>
   qexists `[]` >>
   irule (CONV_RULE (DEPTH_CONV ETA_CONV) raw_log_dynamic_tail_summary) >>
-  simp[expr_type_def] >>
-  qpat_assum `expr_post _ _ _ _ _ es sa _ s0 _ _ _ _` (irule_at Any) >>
+  simp[expr_type_def, loweringPostsTheory.expr_has_effect_thm] >>
+  qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ t'` (irule_at Any) >>
   qpat_assum `emit_op MLOAD _ _ = _` (irule_at Any) >>
   qpat_assum `emit_op ADD _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operands topic_ops t' = _` (irule_at Any) >>
@@ -907,13 +911,14 @@ Resume raw_log_fixed_sim[tail]:
     (drule emitted_insts_emit_op_local >> simp[]) >>
   `local_ptrs_reserved cenv st2` by
     metis_tac[local_ptrs_reserved_next_var] >>
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es (mid with gas_obs := []) sa s0 t'` by
     (irule wb_frame_allocating_tail >> simp[] >>
      qexistsl [`t`, `mid.scopes`, `st1`] >>
      gvs[typed_args_post_def]) >>
-  `expr_post ctx func cenv cx data es sa st3 s0 ee (BytesV bs) v t''` by
-    (irule raw_log_post_rebase >> simp[] >>
-     qexistsl [`mid with gas_obs := []`, `st2`, `t'`] >> simp[] >> decide_tac) >>
+  `wb_frame cenv es ee sa s0 t''` by
+    (qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ t''`
+       (mp_then Any mp_tac raw_log_post_rebase) >>
+     disch_then irule >> simp[] >> decide_tac) >>
   `FLOOKUP t''.vs_allocas st1.cs_next_id = SOME (w2n w,32) /\
    lookup_var p t'' = SOME (n2w (w2n w)) /\
    (!name lb len. local_region cenv ee.scopes t'' name lb len ==>
@@ -944,10 +949,11 @@ Resume raw_log_fixed_sim[tail]:
      drule emitted_insts_emit_op_local >> simp[]) >>
   qexists `[]` >>
   irule (CONV_RULE (DEPTH_CONV ETA_CONV) raw_log_fixed_tail_summary) >>
-  qpat_assum `expr_post _ _ _ _ _ es sa _ s0 _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ t''` (irule_at Any) >>
+  qpat_assum `wb_frame cenv es _ sa s0 t''` (irule_at Any) >>
   qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operands topic_ops t'' = _` (irule_at Any) >>
-  simp[expr_type_def] >>
+  simp[expr_type_def, loweringPostsTheory.expr_has_effect_thm] >>
   qexistsl [`mk_inst st1.cs_next_id ALLOCA [Lit 32w]
       [STRING #"%" (toString st1.cs_next_var)]`, `w2n w`] >>
   simp[mk_inst_def, eval_operand_def] >>

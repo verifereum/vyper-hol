@@ -152,19 +152,27 @@ Definition locals_alloc_ok_def:
             type_memory_bytes cenv ty < 2 ** 64
 End
 
-(* expr_sim_pre's byte_widths_expr and alloc_limits_expr for every
-   expression of a statement, targets' keys included, but a slice's .code
-   source (is_extcode), which alloc_limits_expr checks through its address,
-   and alloc_limits_stmt, which also bounds the type of each local the
-   statement declares and rules out a bare .code. *)
+(* expr_sim_pre's byte_widths_expr for every expression of a statement,
+   targets' keys included, but a slice's .code source (is_extcode), and
+   alloc_limits_stmt, which checks alloc_limits_expr of each expression
+   under the local types compile_stmt sees there (decl_var_type), bounds
+   the type of each local the statement declares and rules out a bare
+   .code. *)
 Definition stmt_exprs_ok_def:
   stmt_exprs_ok cenv s <=>
     ~supported_stmt_expr_exists
-       (\e. ~is_extcode e /\
-             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
+       (\e. ~is_extcode e /\ ~byte_widths_expr e) s /\
     alloc_limits_stmt cenv s /\
     (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
        return_buffer_ok cenv)
+End
+
+(* stmt_exprs_ok of each statement of a block, under the local types
+   compile_stmts threads to it. *)
+Definition stmts_exprs_ok_def[simp]:
+  stmts_exprs_ok cenv [] = T /\
+  stmts_exprs_ok cenv (s::ss) =
+    (stmt_exprs_ok cenv s /\ stmts_exprs_ok (decl_var_type cenv s) ss)
 End
 
 (* The compile envs of one function's body: cenv' is cenv but for the
@@ -219,18 +227,47 @@ End
 (* ===== The predicates of the induction ===== *)
 
 (* An expression of a frame of the lowered program, internal calls
-   allowed, simulates as a value and as compile_expr's value_vv, and, if
-   it names a mapping, as the mapping's slot (expr_map_sim), which the
-   subscript of a mapping takes of its base. *)
+   allowed, simulates as a value and value_vv, and as a mapping slot
+   when appropriate. Literal arrays also carry their element simulations. *)
 Definition body_expr_ok_def:
-  body_expr_ok cx e <=>
+  (body_expr_ok cx e <=>
     (!tops ctx func cenv env ty es.
-       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
-       expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es) /\
+      body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
+      expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es) /\
     (!tops ctx func cenv env ty es.
        body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
-       expr_map_sim ctx func cenv cx ty e es)
+       expr_map_sim ctx func cenv cx ty e es) /\
+    (!a t n elems.
+      e = Builtin a (MakeArray t n) elems /\
+      builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+      body_exprs_ok cx elems)) /\
+  body_exprs_ok cx [] = T /\
+  body_exprs_ok cx (e::es) =
+    (body_expr_ok cx e /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      body_exprs_ok cx es))
+Termination
+  WF_REL_TAC `measure (\x. case x of
+      INL (_, e) => expr_size e
+    | INR (_, es) => list_size expr_size es)` >>
+  simp[expr_size_def]
 End
+
+Theorem body_exprs_ok_def = CONJUNCT2 body_expr_ok_def;
+
+(* The elements of an array literal simulate, by the literal's clause. *)
+Theorem body_make_array_children_ok:
+  !cx a t n elems.
+    body_expr_ok cx (Builtin a (MakeArray t n) elems) /\
+    builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
+    body_exprs_ok cx elems
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `body_expr_ok _ _`
+    (mp_tac o CONJUNCT2 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[]
+QED
 
 (* Only a top-level name and a subscript name a mapping. *)
 Theorem expr_map_pre_shape:
@@ -280,22 +317,11 @@ Definition body_stmts_ok_def:
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
-      EVERY (stmt_exprs_ok cenv) ss /\
+      stmts_exprs_ok cenv ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
       frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
       stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
         (eval_stmts cx ss) es
-End
-
-(* The operands of an expression, evaluated and read in order: each
-   simulates if the ones before it can evaluate. *)
-Definition body_exprs_ok_def:
-  body_exprs_ok cx [] = T /\
-  body_exprs_ok cx (e::es) =
-    (body_expr_ok cx e /\
-     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
-                        read_result cx tv s1 = (INL v, t1)) ==>
-      body_exprs_ok cx es))
 End
 
 (* The same, evaluated without reading (eval_expr_results). *)

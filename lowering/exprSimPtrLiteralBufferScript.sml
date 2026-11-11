@@ -323,7 +323,7 @@ Theorem literal_bytelike_ptr_run:
     (!name a len. local_region cenv es.scopes u name a len ==>
       regions_disjoint b (32+32*word_size (LENGTH bs)) a len) /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
-    u.vs_labels = s.vs_labels /\ wb_frame cenv es sa s u /\
+    u.vs_labels = s.vs_labels /\ wb_frame cenv es es sa s u /\
     (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
     LENGTH u.vs_memory <= LENGTH t.vs_memory /\
     (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
@@ -462,7 +462,7 @@ QED
 (* Public counterpart of S1's local post constructor. *)
 Theorem literal_ptr_memory_vv_post:
   !func cenv cx e es sa sb s0 t v tvt buf w sz ctx.
-    ~is_word_type (expr_type e) /\
+    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
     stmt_state_rel ctx func cenv cx es t /\
@@ -478,19 +478,21 @@ Theorem literal_ptr_memory_vv_post:
        FLOOKUP s0.vs_allocas aid = SOME (b,len) ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     (!name b len. local_region cenv es.scopes s0 name b len ==>
-       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
+    pure_frame cenv func es sa s0 t ==>
     vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 t` by
+  `locals_kept cenv es es s0 t` by
     (irule locals_kept_regions >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` kall_tac >>
   simp[loweringPostsTheory.vv_post_def, stmt_state_rel_inst_idx,
        loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def, base_ptr_def,
        vyperStateTheory.read_result_def, vyperStateTheory.return_def,
        eval_operand_def, lookup_var_def] >>
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
   `eval_operand buf.buf_operand (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
     (Cases_on `buf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
   conj_tac
@@ -500,7 +502,8 @@ Proof
         gvs[local_region_def, lookup_var_def] >>
       qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _`
         drule >> simp[regions_disjoint_def] >> decide_tac) >>
-  rpt strip_tac >> first_x_assum irule >> metis_tac[]
+  rpt strip_tac >- (first_x_assum irule >> metis_tac[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem literal_ptr_local_footprint_exterior:
@@ -617,7 +620,7 @@ Proof
 QED
 
 Theorem literal_ptr_memory_vv_frame_post:
-  ~is_word_type (expr_type e) /\
+  ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) t.vs_memory /\
   val_footprint tv v <= n /\
@@ -658,6 +661,30 @@ Proof
   `!name a len. local_region cenv es.scopes s name a len <=>
     local_region cenv es.scopes u name a len` by
     (irule literal_ptr_local_region_frame >> simp[] >> metis_tac[]) >>
+  `t.vs_allocas = u.vs_allocas` by
+    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = u` mp_tac >>
+     disch_then (SUBST1_TAC o SYM) >> simp[]) >>
+  `pure_frame cenv func es sa s t` by
+    (match_mp_tac exprSimPropsTheory.pure_frame_fresh_alloca >>
+     qpat_assum `MEM (mk_inst _ ALLOCA _ _) _` (irule_at Any) >>
+     qexistsl_tac [`n`, `w2n w`] >>
+     rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+     TRY (qpat_assum `t.vs_allocas = _` (fn th => rewrite_tac[th]) >>
+          first_assum ACCEPT_TAC >> NO_TAC)
+     >- (qx_genl_tac [`nm`, `lb`, `lsz`] >> strip_tac >>
+         `local_region cenv es.scopes u nm lb lsz` by
+           (qpat_assum `!name a len. local_region cenv es.scopes s name a len <=> _`
+              (fn th => full_simp_tac std_ss [th])) >>
+         qpat_assum `!name a len. local_region _ _ u name a len ==> _` drule >>
+         rewrite_tac[regions_disjoint_def] >> strip_tac >>
+         qpat_x_assum `u.vs_memory = s.vs_memory` (SUBST1_TAC o SYM) >>
+         qpat_x_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
+         decide_tac) >>
+     qx_genl_tac [`off`, `len`] >> rewrite_tac[regions_disjoint_def] >>
+     strip_tac >>
+     qpat_x_assum `u.vs_memory = s.vs_memory` (SUBST1_TAC o SYM) >>
+     qpat_x_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
+     decide_tac) >>
   irule literal_ptr_memory_vv_post >> goal_assum (drule_at Any) >> simp[] >>
   conj_tac
   >- (rpt strip_tac >>
@@ -671,10 +698,7 @@ Proof
       simp[] >> disch_then irule >>
       qpat_x_assum `!aid a len. _ ==> regions_disjoint _ _ a len` drule_all >>
       simp[regions_disjoint_def] >> decide_tac) >>
-  `t.vs_allocas = u.vs_allocas` by
-    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = u` mp_tac >>
-     disch_then (SUBST1_TAC o SYM) >> simp[]) >>
-  simp[] >> first_assum ACCEPT_TAC
+  simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem literal_ptr_value_posts:

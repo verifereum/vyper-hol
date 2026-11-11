@@ -244,7 +244,8 @@ Theorem base_vv_at_struct[local]:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es.scopes s n b sz /\
                b <= w2n w /\ w2n w + val_footprint stv v <= b + sz /\
-               local_path_at cenv cx n (w2n w - b) stv) \/
+               local_path_at cenv cx n (w2n w - b) stv /\
+               local_place_at cenv cx n (w2n w - b) stv tv) \/
      val_footprint stv v = 0)
 Proof
   rpt gen_tac >> Cases_on `vv` >>
@@ -255,7 +256,7 @@ Proof
   TRY (qpat_x_assum `evaluate_type _ (StructT _) = SOME (BaseTV _)` mp_tac >>
        simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(), LET_THM] >>
        NO_TAC) >>
-  metis_tac[]
+  gvs[local_place_at_def] >> metis_tac[]
 QED
 
 (* A field's pointer does not wrap: the struct's bytes end below 2 ** 256,
@@ -276,12 +277,20 @@ Theorem attr_vv_at_field[local]:
     fields_layout
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
     struct_has_type fs vals /\ ALOOKUP vals fld = SOME fv /\
-    ALOOKUP fs fld = SOME ftv /\ evaluate_type (get_tenv cx) ann = SOME ftv ==>
+    ALOOKUP fs fld = SOME ftv /\ evaluate_type (get_tenv cx) ann = SOME ftv /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_at cenv cx ann sa sn es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[vv_at_def, mk_ptr_def] >> strip_tac >> gvs[attr_offset_def] >>
+  simp[vv_at_def, mk_ptr_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `?p0. tv = PlaceR (MemoryPlace id p0)` by metis_tac[] >>
+      qpat_x_assum `vv_at _ _ (StructT _) _ _ _ _ _ _` mp_tac >>
+      Cases_on `bvv` >>
+      gvs[vv_at_def, vv_loc_def, vv_location_def, is_word_type_def]) >>
+  strip_tac >> gvs[attr_offset_def] >>
   qabbrev_tac `fields =
     get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)` >>
   `struct_field_offset fields fld + type_memory_size ftv <=
@@ -311,10 +320,13 @@ Proof
       `mem_step_offset (StructTV fs) (AttrSubscript fld) =
        SOME (struct_field_offset fields fld, ftv)` by
         simp[mem_step_offset_def, mem_field_offset_layout] >>
-      drule_all local_path_at_step >>
       `w2n w - b + struct_field_offset fields fld =
        w2n w + struct_field_offset fields fld - b` by decide_tac >>
-      simp[local_path_at_val_at] >> decide_tac) >>
+      `local_place_at cenv cx n (w2n w - b + struct_field_offset fields fld)
+         ftv tv'` by
+        (irule local_place_at_step >> metis_tac[]) >>
+      drule_all exprSimPropsTheory.local_path_at_step >>
+      gvs[local_path_at_val_at] >> decide_tac) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
@@ -363,10 +375,29 @@ Proof
   simp[]
 QED
 
+Theorem type_widens_to_struct[local]:
+  type_widens_to tenv t (StructT sid) ==> t = StructT sid
+Proof
+  Cases_on `t` >> simp[type_widens_to_def, arg_type_fits_def] >>
+  metis_tac[]
+QED
+
+Theorem attr_post_value_type:
+  expr_body_pre cenv cx env obj es /\ expr_type obj = StructT sid ==>
+  post_value_type cenv obj = expr_type obj
+Proof
+  strip_tac >>
+  `expr_sim_inv cenv cx env es /\ well_typed_expr env obj` by
+    fs[expr_body_pre_def] >>
+  drule_all post_value_type_widens >>
+  simp[] >> metis_tac[type_widens_to_struct]
+QED
+
 (* The field's value_vv after the ADD, from the base's. *)
 Theorem attr_vv_post:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    post_value_type cenv obj = expr_type obj /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
@@ -379,7 +410,9 @@ Theorem attr_vv_post:
          value_has_type (StructTV fs) v) /\
     (!vals. read_result cx tv es1 = (INL (StructV vals), es1) ==>
        ?fv. ALOOKUP vals fld = SOME fv /\
-            read_result cx tv' es1 = (INL fv, es1)) ==>
+            read_result cx tv' es1 = (INL fv, es1)) /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -394,7 +427,7 @@ Proof
   `value_has_type ftv fv` by
     (drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >>
      strip_tac >> gvs[]) >>
-  rewrite_tac[vv_post_def] >> rpt conj_tac
+  rewrite_tac[vv_post_def] >> simp[] >> rpt conj_tac
   >~ [`vv_holds _ _ _ _ (LocatedValue _ _) _ _`]
   >- (simp[vv_holds_def, mk_ptr_def, expr_type_def] >>
       gvs[attr_offset_def] >>
@@ -433,8 +466,27 @@ Proof
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
-      metis_tac[]) >>
-  first_assum ACCEPT_TAC
+      metis_tac[])
+  >~ [`storage_read_live`]
+  >- (strip_tac >>
+      qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
+      asm_rewrite_tac[] >> strip_tac >>
+      drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
+      drule_all exprSimFieldLayoutTheory.struct_field_offset_slots_eq >>
+      strip_tac >>
+      Cases_on `bvv` >>
+      simp[mk_ptr_def, vv_loc_def, contextTheory.vv_location_def] >>
+      rename1 `LocatedValue t p` >>
+      `t = StructT sid` by
+        (qpat_x_assum `vv_holds _ _ _ _ (LocatedValue _ _) _ _` mp_tac >>
+         simp[vv_holds_def, is_bytestring_type_def] >> rpt strip_tac >>
+         simp[]) >>
+      gvs[vv_loc_def, contextTheory.vv_location_def,
+          contextTheory.vv_operand_def, attr_offset_def] >>
+      rpt strip_tac >> gvs[] >>
+      irule accountsRelPropsTheory.storage_read_live_field >>
+      metis_tac[])
+  >> first_assum ACCEPT_TAC
 QED
 
 (* ===== The simulation ===== *)
@@ -621,6 +673,8 @@ Theorem attr_summary_ok[local]:
          t.vs_inst_idx = LENGTH sb.cs_current_insts) R
 Proof
   rpt strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    metis_tac[attr_post_value_type] >>
   `eval_expr cx obj (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL btv, fe with gas_obs := [])` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
@@ -655,6 +709,7 @@ Proof
                |> REWRITE_RULE [APPEND_NIL]) >>
       qexistsl_tac [`fe`,`t`,`btv`] >> simp[] >>
       simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def]) >>
+  drule select_result_memory_place >> strip_tac >>
   disj1_tac >> irule attr_vv_post >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt strip_tac >> gvs[]
@@ -703,6 +758,8 @@ Proof
   rpt gen_tac >> strip_tac >> simp[Once expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
   drule attr_pre_base >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule_all attr_post_value_type >> simp[]) >>
   `expr_vv_sim ctx func cenv cx ty obj es` by
     (irule (iffLR expr_vv_case_def) >>
      gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >> metis_tac[]) >>
@@ -715,7 +772,10 @@ Theorem compile_attribute_case:
     expr_sim_case nocalls ctx func cenv cx (Attribute ann obj fld) /\
     expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)
 Proof
-  metis_tac[compile_attribute_vv_case, expr_sim_case_of_vv]
+  rpt strip_tac >>
+  `expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)` by
+    metis_tac[compile_attribute_vv_case] >>
+  simp[] >> irule expr_sim_case_of_vv >> simp[]
 QED
 
 Theorem compile_attribute_vv_sim:

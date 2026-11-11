@@ -53,7 +53,7 @@ Proof
       is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     gvs[body_inv_def] >>
   irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>
   qexists_tac `[]` >> simp[]
@@ -146,6 +146,7 @@ QED
 
 Theorem assign_local_rhs_located_mem[local]:
   !tops ctx func c cx env e es ltv etv.
+    post_value_type c e = expr_type e /\
     body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
     body_expr_mem_ok cx e /\ ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (lowered_value_type c e) = SOME ltv /\
@@ -178,7 +179,8 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by
     metis_tac[body_expr_mem_ok_def] >>
-  drule expr_sim_mem_room >>
+  drule_at (Pat `expr_vv_sim_mem _ _ _ _ _ _ _`) expr_sim_mem_room >>
+  simp[] >>
   disch_then (qspecl_then [`sa`, `sm`, `sb`, `vv`, `op`, `s0`] mp_tac) >>
   impl_tac >- (rpt strip_tac >> gvs[]) >> strip_tac >>
   irule gas_outcome_post_mono >>
@@ -591,6 +593,13 @@ Theorem assign_local_memory_post_path_mem[local]:
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv e = expr_type e` by
+    (qpat_assum `(_ /\ _) \/ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac
+     >- (Cases_on `e` >> gvs[post_value_type_def] >>
+         rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+         gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
+     simp[post_value_type_bytestring]) >>
   `!x. op = Var x ==> not_fresh_at sb x` by
     (rpt strip_tac >> drule_all (GEN_ALL compile_lower_value_var) >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -677,6 +686,8 @@ Proof
     gas_marked_exec T (ctx,func)
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0) m res ee r` by
     (drule assign_local_admissible_run >> rpt strip_tac >> fs[gas_marked_exec_def]) >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
   drule_all assign_local_rhs_located_mem >>
   qpat_x_assum `body_inv _ _ _ _` kall_tac >>
   qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>

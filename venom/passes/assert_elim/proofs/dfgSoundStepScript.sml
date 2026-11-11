@@ -24,6 +24,7 @@ Ancestors
   venomExecProps
   venomExecSemantics
   venomInst
+  venomInstIdsProps
   venomInstProps
   venomState
   venomWf
@@ -1526,42 +1527,6 @@ Proof
   Cases_on `inst.inst_outputs` >> gvs[LENGTH_NIL]
 QED
 
-(* MAP inst_id over fn_insts_blocks = FLAT of per-block ID maps *)
-Theorem fn_insts_blocks_map_id[local]:
-  !bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
-    FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)
-Proof
-  Induct >> rw[fn_insts_blocks_def, MAP_APPEND]
-QED
-
-(* fn_inst_ids_distinct implies ALL_DISTINCT on the inst_id map of fn_insts *)
-Theorem fn_inst_ids_distinct_all_distinct[local]:
-  !fn. fn_inst_ids_distinct fn ==>
-    ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))
-Proof
-  rw[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_map_id]
-QED
-
-(* Global ID uniqueness: same inst_id in fn_insts => same instruction *)
-Theorem fn_insts_id_unique[local]:
-  !fn i1 i2. fn_inst_ids_distinct fn /\
-    MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-    i1.inst_id = i2.inst_id ==> (i1 = i2)
-Proof
-  rpt strip_tac >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
-    metis_tac[fn_inst_ids_distinct_all_distinct] >>
-  `?n1. n1 < LENGTH (fn_insts fn) /\ (EL n1 (fn_insts fn) = i1)` by
-    metis_tac[MEM_EL] >>
-  `?n2. n2 < LENGTH (fn_insts fn) /\ (EL n2 (fn_insts fn) = i2)` by
-    metis_tac[MEM_EL] >>
-  `EL n1 (MAP (\i. i.inst_id) (fn_insts fn)) =
-   EL n2 (MAP (\i. i.inst_id) (fn_insts fn))` by
-    simp[EL_MAP] >>
-  `n1 = n2` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >>
-  gvs[]
-QED
-
 (* If dinst not in bb, then inst_u (operand's defining inst) not in bb either.
    Uses dfg_block_local (same block) + fn_inst_ids_distinct (unique IDs). *)
 Theorem operand_not_in_block[local]:
@@ -1594,7 +1559,7 @@ Proof
     metis_tac[MEM_MAP] >>
   (* dinst' and dinst have same ID in fn_insts => equal => contradiction *)
   `MEM dinst' (fn_insts fn)` by metis_tac[mem_bb_fn_insts] >>
-  `dinst' = dinst` by metis_tac[fn_insts_id_unique] >>
+  `dinst' = dinst` by metis_tac[fn_inst_ids_distinct_inj] >>
   metis_tac[]
 QED
 

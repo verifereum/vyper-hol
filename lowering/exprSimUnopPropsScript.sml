@@ -46,6 +46,8 @@ Theorem eval_expr_unop_cases:
          res = unop_result cx ann bi [expr_type e1] v1 es'
 Proof
   rpt gen_tac >> strip_tac >>
+  `bi <> Bop In /\ bi <> Bop NotIn` by
+    (rpt strip_tac >> gvs[builtin_args_length_ok_def]) >>
   `bi <> Env MsgGas` by (strip_tac >> gvs[builtin_args_length_ok_def]) >>
   qpat_x_assum `bind _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
@@ -94,8 +96,14 @@ Theorem expr_post_unop:
     expr_post ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 es' v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
-  `locals_kept cenv es s0 ss` by
+  `locals_kept cenv es es' s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `t0` >> asm_rewrite_tac[]) >>
+  `~expr_has_effect (Builtin ann bi [e1]) ==> pure_frame cenv func es sa s0 ss` by
+    (simp[expr_has_effect_thm] >> strip_tac >>
+     `pure_frame cenv func es sa s0 t0` by
+       (qpat_x_assum `_ ==> pure_frame _ _ _ _ _ t0` irule >>
+        first_assum ACCEPT_TAC) >>
+     drule_all pure_frame_mem_tail >> disch_then ACCEPT_TAC) >>
   simp[expr_val_at_def, vyperASTTheory.expr_type_def] >>
   conj_tac
   >- (rpt strip_tac >> rename1 `lookup_var z s0 = SOME w` >>

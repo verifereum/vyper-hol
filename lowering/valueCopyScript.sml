@@ -29,7 +29,7 @@ Ancestors
   list rich_list arithmetic
   valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs  valueCopyBytes
   compileEnv loweringStateRelDefs context exprLoweringProps emitHelper emitHelperProps
-  entryDecodeProps vyperValue vyperTyping vfmConstants immutableMemoryFrame
+  vyperValue vyperTyping vfmConstants immutableMemoryFrame
   venomInst venomState venomExecSemantics venomMemProps
 Libs
   blastLib

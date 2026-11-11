@@ -762,10 +762,13 @@ End
    Returns SOME (success, returnData, accounts', tStorage', emitted_logs),
    or NONE on a model/domain failure. Failed calls (a value the caller can't
    pay, REVERT or another exceptional halt) give success = F, the original
-   accounts and transient storage, and an empty emitted-log list. *)
+   accounts and transient storage, and an empty emitted-log list.
+   Calldata of 2 ** 256 bytes or more is a model failure: the EVM's CALL
+   takes the input size as a stack word, so no real call carries it. *)
 Definition run_ext_call_def:
   run_ext_call caller callee calldata value_opt gas
                accounts tStorage txParams =
+    if 2 ** 256 <= LENGTH calldata then NONE else
     if ext_call_value_transfer_ok caller callee value_opt accounts then
       let code = (lookup_account callee accounts).code in
       let s0 = make_ext_call_state caller callee code calldata value_opt gas
@@ -834,8 +837,11 @@ End
 
 val () = cv_auto_trans make_delegate_call_state_def;
 
+(* As in run_ext_call, calldata of 2 ** 256 bytes or more is a model
+   failure. *)
 Definition run_delegate_call_def:
   run_delegate_call cx target_addr calldata gas accounts tStorage =
+    if 2 ** 256 <= LENGTH calldata then NONE else
     let s0 = make_delegate_call_state cx target_addr calldata gas accounts tStorage in
     let outcome =
       if fIN target_addr precompile_addresses then
@@ -861,6 +867,58 @@ Definition run_raw_call_def:
 End
 
 val () = cv_auto_trans run_raw_call_def;
+
+(* Every frame the interpreter starts for an external call has calldata
+   shorter than 2 ** 256 bytes, the bound call_tx_well_typed asks of a
+   transaction: run_ext_call and run_delegate_call build their frame
+   (make_ext_call_state, make_delegate_call_state) only past the guard on
+   LENGTH calldata, and that frame's message data is the calldata. The
+   *_calldata_bound theorems give the bound from a completed call. *)
+Theorem make_ext_call_state_calldata:
+  ?ctxt rb.
+    (make_ext_call_state caller callee code calldata value_opt gas accounts
+       tStorage txParams).contexts = [(ctxt,rb)] /\
+    buffer_to_list ctxt.msgParams.data = calldata
+Proof
+  simp[make_ext_call_state_def, initial_context_def, initial_msg_params_def,
+       make_evm_tx_def]
+QED
+
+Theorem make_delegate_call_state_calldata:
+  ?ctxt rb.
+    (make_delegate_call_state cx target_addr calldata gas accounts
+       tStorage).contexts = [(ctxt,rb)] /\
+    buffer_to_list ctxt.msgParams.data = calldata
+Proof
+  simp[make_delegate_call_state_def] >> pairarg_tac >>
+  simp[initial_context_def, initial_msg_params_def, make_evm_tx_def]
+QED
+
+Theorem run_ext_call_calldata_bound:
+  run_ext_call caller callee calldata value_opt gas accounts tStorage
+    txParams = SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  simp[run_ext_call_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem run_delegate_call_calldata_bound:
+  run_delegate_call cx target_addr calldata gas accounts tStorage =
+    SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  simp[run_delegate_call_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem run_raw_call_calldata_bound:
+  run_raw_call cx flags target_addr calldata amount gas accounts tStorage =
+    SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  Cases_on `flags.rcf_is_delegate` >> simp[run_raw_call_def] >> strip_tac
+  >- (drule run_delegate_call_calldata_bound >> simp[])
+  >- (drule run_ext_call_calldata_bound >> simp[])
+QED
 
 (* Vyper's EXTCODESIZE check (vyper/codegen/external_call.py): before the
    call only when no return data is expected; calls with a return type rely
@@ -907,9 +965,9 @@ QED
 
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects.
-   A call or staticcall takes its outcome from the external-call oracle when
-   st.outcomes is SOME, as extcall does (eval_ext_call_effects); a delegate
-   call, and any call without the oracle, runs the callee. *)
+   Every raw call, delegate or not, takes its outcome from the external-call
+   oracle when st.outcomes is SOME, as extcall does (eval_ext_call_effects);
+   without the oracle it runs the callee. *)
 Definition eval_raw_call_def:
   eval_raw_call cx flags target_addr calldata amount gas = do
     type_check
@@ -920,9 +978,11 @@ Definition eval_raw_call_def:
       (if flags.rcf_is_static then NONE else SOME amount);
     outcomes <- (λst. return st.outcomes st);
     (success, returnData) <-
-      if IS_SOME outcomes ∧ ¬flags.rcf_is_delegate then do
-        (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata
-          value_opt;
+      if IS_SOME outcomes then do
+        (rq, outcome) <-
+          if flags.rcf_is_delegate then
+            vyperCallOutcome$take_delegate_outcome target_addr calldata value_opt
+          else vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
         vyperCallOutcome$adopt_call_outcome rq outcome;
         return (call_outcome_success outcome, call_outcome_return_data outcome)
       od else do
@@ -970,7 +1030,8 @@ Proof
        option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac frame_call_value_state >>
-  imp_res_tac take_call_outcome_frame >> imp_res_tac adopt_call_outcome_frame >>
+  imp_res_tac take_call_outcome_frame >> imp_res_tac take_delegate_outcome_frame >>
+  imp_res_tac adopt_call_outcome_frame >>
   gvs[evaluation_state_component_equality]
 QED
 
@@ -1397,8 +1458,8 @@ Definition evaluate_def:
   od ∧
   eval_stmt cx (Assign (BaseTarget t) e) = do
     pv <- eval_expr cx e;
-    p <- eval_target_place cx t;
     v <- read_result cx pv;
+    p <- eval_target_place cx t;
     write_place cx p v
   od ∧
   eval_stmt cx (Assign (TupleTarget gs) e) = do
@@ -1502,6 +1563,12 @@ Definition evaluate_def:
       tv <- eval_expr cx (HD es);
       len <- result_array_length cx tv;
       return $ IntV (&len)
+    od else if bt = Bop In ∨ bt = Bop NotIn then do
+      vs <- eval_exprs cx es;
+      type_check (LENGTH vs = 2) "Membership args";
+      tv <- lift_option_type
+        (evaluate_type (get_tenv cx) (expr_type (EL 1 es))) "Membership type";
+      lift_sum $ evaluate_membership tv (bt = Bop NotIn) (EL 0 vs) (EL 1 vs)
     od else if bt = Env MsgGas then next_gas_reading
     else do
       vs <- eval_exprs cx es;

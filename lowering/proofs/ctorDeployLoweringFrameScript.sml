@@ -684,8 +684,10 @@ Theorem deploy_frame_register_static_fields:
     cenv'.ce_module_var_type = cenv.ce_module_var_type /\
     cenv'.ce_module_vars = cenv.ce_module_vars /\
     cenv'.ce_func_return_type = cenv.ce_func_return_type /\
+    cenv'.ce_func_mutability = cenv.ce_func_mutability /\
     cenv'.ce_method_id = cenv.ce_method_id /\
     cenv'.ce_module = cenv.ce_module /\
+    cenv'.ce_modules = cenv.ce_modules /\
     cenv'.ce_event_info = cenv.ce_event_info /\
     cenv'.ce_error_info = cenv.ce_error_info /\
     cenv'.ce_is_external = cenv.ce_is_external
@@ -750,6 +752,24 @@ Proof
   gvs[set_constructor_package_target_def, package_constructor_def,
       alloc_env_agree_def] >>
   rw[update_cenv_nonreentrant_def] >>
+  simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
+QED
+
+(* The constructor's env records the declared return types
+   build_compile_env gives, as expr_sim_inv asks of each checked signature. *)
+Theorem deploy_ctor_func_return_type:
+  !tops rpolicy runtime_bc dunit body cenv nr nkey ut imm exit_lbl
+   sa sb sj st_exit st_epilogue st_final func.
+    deploy_ctor_code tops rpolicy runtime_bc dunit
+      (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
+       st_epilogue,st_final,func) ==>
+    cenv.ce_func_return_type = build_func_return_type tops
+Proof
+  rpt gen_tac >> simp[deploy_ctor_code_def] >> strip_tac >>
+  drule deploy_frame_register_static_fields >> strip_tac >>
+  PairCases_on `cf` >>
+  gvs[set_constructor_package_target_def, package_constructor_def,
+      update_cenv_nonreentrant_def] >>
   simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
 QED
 
@@ -1110,9 +1130,7 @@ Theorem deploy_ctor_allocation_bounds:
     lookup_function NONE "__init__" Deploy tops =
       SOME (mut,nr,args,[],NoneT,stmts) ==>
     EVERY (\a. type_memory_bytes cenv (SND a) < 2 ** 64) args /\
-    alloc_limits_stmts cenv stmts /\
-    ~supported_stmts_expr_exists
-      (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) stmts
+    alloc_limits_stmts cenv stmts
 Proof
   rpt gen_tac >> strip_tac >>
   drule deploy_ctor_static_tables >> strip_tac >>
@@ -1264,22 +1282,17 @@ Theorem deploy_frame_typed_allocated_stmts_exprs_ok:
   (!id vt. FLOOKUP env.toplevel_vtypes id = SOME vt ==>
      well_formed_vtype env.type_defs vt) /\
   type_stmts env ret ss = SOME env' /\
-  ~supported_stmts_expr_exists (\e. ~alloc_limits_expr cenv e) ss /\
   alloc_limits_stmts cenv ss /\ ~cenv.ce_is_external ==>
-  EVERY (stmt_exprs_ok cenv) ss
+  stmts_exprs_ok cenv ss
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all deploy_frame_typed_stmts_no_bad_widths >> strip_tac >>
-  `~supported_stmts_expr_exists
-     (\e. ~byte_widths_expr e \/ ~alloc_limits_expr cenv e) ss` by
-    fs[deploy_frame_stmt_exists_disj] >>
-  `(\e. ~byte_widths_expr e \/ ~alloc_limits_expr cenv e) =
-   (\e. (~is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)) \/
-        (is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)))` by
+  drule_all deploy_frame_typed_stmts_no_bad_widths >>
+  simp[bodyExprPreFactsTheory.stmts_exprs_ok_thm] >>
+  `(\e. ~byte_widths_expr e) =
+   (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
+        (is_extcode e /\ ~byte_widths_expr e))` by
     (simp[FUN_EQ_THM] >> metis_tac[]) >>
-  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  fs[deploy_frame_stmt_exists_disj] >>
-  fs[stmts_exprs_ok_EVERY, DE_MORGAN_THM]
+  pop_assum SUBST1_TAC >> simp[deploy_frame_stmt_exists_disj]
 QED
 
 Theorem deploy_ctor_typed_allocation_frame:
@@ -1298,13 +1311,11 @@ Theorem deploy_ctor_typed_allocation_frame:
   (!n ty. FLOOKUP env.var_types n = SOME ty ==>
      ?id. MEM (id,ty) args /\ n = id) /\
   type_stmts env NoneT stmts = SOME env' ==>
-  EVERY (stmt_exprs_ok cenv) stmts /\ locals_alloc_ok cenv env
+  stmts_exprs_ok cenv stmts /\ locals_alloc_ok cenv env
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_ctor_allocation_bounds >> strip_tac >>
   drule deploy_ctor_static_tables >> strip_tac >>
-  drule deploy_frame_supported_stmts_no_extcode >> strip_tac >>
-  drule_all deploy_frame_remove_extcode_guard >> strip_tac >>
   conj_tac >- (irule deploy_frame_typed_allocated_stmts_exprs_ok >>
     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   irule deploy_frame_formal_locals_alloc_ok >> goal_assum (drule_at Any) >> simp[]
@@ -1379,6 +1390,47 @@ Proof
   simp[EVERY_MEM] >> disch_then drule >> simp[]
 QED
 
+(* With no internal declaration of the name, a Deploy lookup agrees with
+   build_func_return_type. *)
+Theorem lookup_deploy_return_type[local]:
+  !ts fn fm nr args dflts ret body.
+    lookup_function NONE fn Internal ts = NONE /\
+    lookup_function NONE fn Deploy ts = SOME (fm,nr,args,dflts,ret,body) ==>
+    build_func_return_type ts fn = ret
+Proof
+  Induct >- simp[lookup_function_def, build_func_return_type_def] >>
+  rpt strip_tac >> Cases_on `h` >>
+  TRY (rename1 `FunctionDecl f _ _ _ _ _ _ _ _` >> Cases_on `f`) >>
+  TRY (rename1 `VariableDecl v _ _ _ _` >> Cases_on `v`) >>
+  TRY (rename1 `HashMapDecl v _ _ _ _ _` >> Cases_on `v`) >>
+  gvs[lookup_function_def, build_func_return_type_def] >>
+  rw[] >> gvs[] >> metis_tac[]
+QED
+
+(* The constructor's env records the return type the checked signature of
+   every function the deploy context knows, as expr_sim_inv asks. *)
+Theorem deploy_ctor_signature_return[local]:
+  supported_program tops /\
+  fn_sigs_consistent fs (deploy_evaluation_context tops am tx) /\
+  cenv.ce_func_return_type = build_func_return_type tops /\
+  FLOOKUP fs fid = SOME sig ==>
+  cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty
+Proof
+  strip_tac >> PairCases_on `fid` >>
+  fs[fn_sigs_consistent_def] >>
+  first_x_assum drule >> strip_tac >>
+  gvs[deploy_evaluation_context_def, initial_evaluation_context_def,
+      get_module_code_def, lookup_callable_function_def] >>
+  simp[nsid_to_string_def] >>
+  `ALL_DISTINCT (supported_function_names tops)` by
+    metis_tac[supported_program_names, supportedNamesTheory.supported_declaration_names_unique] >>
+  Cases_on `lookup_function NONE fid1 Internal tops` >> gvs[]
+  >- (irule lookup_deploy_return_type >> simp[] >> metis_tac[]) >>
+  drule lookup_function_Internal_SOME_MEM >> strip_tac >>
+  irule memoryLocalRhsPropsTheory.build_func_return_type_distinct >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem deploy_ctor_body_frame:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut am_c es0.
@@ -1406,7 +1458,7 @@ Theorem deploy_ctor_body_frame:
         (es0 with outcomes := SOME vs.vs_outcomes) /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t NoneT body = SOME env' /\
-      EVERY (stmt_exprs_ok cenv) body /\
+      stmts_exprs_ok cenv body /\
       call_evaluation_safe (deploy_evaluation_context tops am tx) (int_calls_stmts body)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1448,6 +1500,14 @@ Proof
   drule_all deploy_ctor_defined_map_agreement >> strip_tac >>
   drule deploy_ctor_static_tables >> strip_tac >>
   drule deploy_frame_storage_var_types >> strip_tac >>
+  `cenv.ce_func_return_type = build_func_return_type tops` by
+    metis_tac[deploy_ctor_func_return_type] >>
+  `fn_sigs_consistent env_t.fn_sigs (deploy_evaluation_context tops am tx)` by
+    fs[env_consistent_def, env_context_consistent_def] >>
+  `!fid sig. FLOOKUP env_t.fn_sigs fid = SOME sig ==>
+     cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty` by
+    (rpt strip_tac >> irule deploy_ctor_signature_return >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   simp[exprSimHypsDefsTheory.expr_sim_inv_def] >>
   conj_tac >- metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
   conj_tac >- metis_tac[] >>
@@ -1494,5 +1554,7 @@ Proof
   `cenv_module_pins tops cenv /\
    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
     fs[body_inv_def] >>
-  gvs[] >> irule cenv_module_pins_immutables_disjoint >> metis_tac[]
+  gvs[] >> irule cenv_module_pins_immutables_disjoint >>
+  qexistsl_tac [`cenv`, `deploy_evaluation_context tops am tx`, `id1`, `id2`,
+                `tops`, `ty1`, `ty2`] >> fs[]
 QED

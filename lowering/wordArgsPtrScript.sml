@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem word_operand_frame:
-  wb_frame cenv es sa s0 s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  wb_frame cenv es es' sa s0 s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l) /\
   eval_operand op s0 = SOME w ==>
   eval_operand op s = SOME w /\ op_taint tn op = op_taint tn0 op
@@ -32,7 +32,7 @@ Proof
 QED
 
 Theorem word_operands_frame:
-  wb_frame cenv es sa s0 s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  wb_frame cenv es es' sa s0 s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l)) ops /\
   eval_operands ops s0 = SOME ws /\
   EVERY (\op. op_taint tn0 op = {}) ops ==>
@@ -73,7 +73,7 @@ QED
 Theorem wb_frame_local_regions:
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  wb_frame cenv es sa s0 s1 ==>
+  wb_frame cenv es es' sa s0 s1 ==>
   (!n b sz. local_region cenv es.scopes s0 n b sz <=>
             local_region cenv es1.scopes s1 n b sz)
 Proof
@@ -88,7 +88,7 @@ QED
 Theorem ghost_kept_wb_trans:
   stmt_state_rel ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es1.scopes /\
-  wb_frame cenv es0 sa s0 s1 /\
+  wb_frame cenv es0 es' sa s0 s1 /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   ghost_kept cenv es0 sa G0 tn0 s0 G1 tn1 /\
   ghost_kept cenv es1 sb G1 tn1 s1 G2 tn2 ==>

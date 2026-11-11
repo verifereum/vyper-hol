@@ -47,7 +47,7 @@ fun ci_mono_chain_tac rws =
 val ci_mono_grows_rws = [
   ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst, ci_mono_fresh_var,
   ci_mono_fresh_label, ci_mono_new_block, ci_mono_compile_alloc_buffer,
-  ci_mono_unwrap_value, ci_mono_compile_store_memory,
+  ci_mono_unwrap_value, ci_mono_compile_snapshot_vv, ci_mono_compile_store_memory,
   ci_mono_compile_copy_memory, ci_mono_compile_word_copy_loop,
   ci_mono_compile_store_bytestring, ci_mono_compile_keccak256_key,
   ci_mono_compile_mapping_subscript, ci_mono_compile_array_subscript,
@@ -137,10 +137,20 @@ Theorem ci_mono_stmt_helpers:
   (!l sa. ci_mono sa (SND (emit_jmp_if_not_terminated l sa)))
 Proof
   rpt conj_tac >> rpt gen_tac
-  >- (simp[compile_assign_value_def] >> Cases_on `l` >> simp[] >|
-      [ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
-       ci_mono_chain_tac ci_mono_stmt_rws, ci_mono_chain_tac ci_mono_stmt_rws,
-       ci_mono_chain_tac ci_mono_stmt_rws])
+  >- (simp[compile_assign_value_def] >> Cases_on `l` >> simp[]
+      >- ci_mono_chain_tac ci_mono_stmt_rws
+      >- (irule ci_mono_bind >> reverse conj_tac
+          >- (rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >> simp[ci_mono_comp_return] >>
+              ci_mono_chain_tac ci_mono_grows_rws) >>
+          rpt gen_tac >> Cases_on `p` >> simp[ci_mono_emit_void] >>
+          Cases_on `da` >> simp[]
+          >- (IF_CASES_TAC >>
+              ci_mono_chain_tac [ci_mono_emit_op, ci_mono_emit_void,
+                ci_mono_context_helpers]) >>
+          BasicProvers.TOP_CASE_TAC >> simp[ci_mono_context_helpers])
+      >- ci_mono_chain_tac ci_mono_stmt_rws
+      >- ci_mono_chain_tac ci_mono_stmt_rws >>
+      ci_mono_chain_tac ci_mono_stmt_rws)
   >- (Cases_on `l` >> TRY (rename1 `SOME loc` >> Cases_on `loc`) >>
       simp[compile_store_at_loc_def, ci_mono_emit_void,
            ci_mono_compile_imm_store_word])

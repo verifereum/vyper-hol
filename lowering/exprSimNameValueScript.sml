@@ -63,7 +63,8 @@ Proof
   asm_simp_tac (srw_ss()) [local_region_def] >>
   drule val_footprint_le >> strip_tac >>
   conj_tac >- decide_tac >>
-  irule local_path_at_val_at >> irule local_path_at_root >> simp[]
+  conj_tac >- (irule local_path_at_val_at >> irule local_path_at_root >> simp[]) >>
+  irule local_place_at_root >> simp[]
 QED
 
 Theorem compile_name_vv_sim:

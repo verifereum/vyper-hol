@@ -19,12 +19,12 @@ Theorem raw_log_step_frame:
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\
   TAKE (w2n len) (DROP (w2n off) s.vs_memory ++
     REPLICATE (w2n len) 0w) = bytes /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s ==>
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s ==>
   ?t. step_inst_base inst s = OK t /\
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bytes]) t /\
-    wb_frame cenv es0 sa s0 t
+    wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bytes]) sa s0 t
 Proof
   strip_tac >>
   `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
@@ -34,11 +34,12 @@ Proof
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   simp[encode_raw_event_values_def, encode_raw_event_def] >>
   conj_tac >- (irule raw_log_state_rel >> simp[]) >>
-  irule raw_log_wb_frame >> simp[]
+  irule raw_log_wb_frame >> simp[] >> qexists_tac `es` >> simp[]
 QED
 
 
 Theorem raw_log_dynamic_tail_frag:
+  expr_has_effect e /\
   emit_op MLOAD [data_op] sm = (len_op, s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op, s2) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) ::
@@ -53,8 +54,8 @@ Theorem raw_log_dynamic_tail_frag:
     REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
-  expr_type e = NoneT ==>
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
+  expr_type e = NoneT /\ post_value_type cenv e = expr_type e ==>
   frag_exec ctx sm sb ($= s)
     (expr_post ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++
@@ -70,13 +71,14 @@ QED
 
 
 Theorem raw_log_fixed_tail_frag:
+  expr_has_effect e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u, s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) ::
     (REVERSE ops ++ [Lit 32w; ptr_op])) [] s1 = (u', sb) /\
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\ LENGTH ops <= 4 /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -85,7 +87,8 @@ Theorem raw_log_fixed_tail_frag:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
-     regions_disjoint (w2n p) 32 b sz) /\ expr_type e = NoneT ==>
+     regions_disjoint (w2n p) 32 b sz) /\ expr_type e = NoneT /\
+  post_value_type cenv e = expr_type e ==>
   frag_exec ctx sm sb ($= s)
     (expr_post ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++

@@ -14,16 +14,6 @@
  *   compile_extcall_case — extcall's expr_sim_case and expr_vv_case from
  *     its operands' judgments
  *
- * ADMITTED:
- *   vv_post_storage_live — what the conjunct
- *     (~expr_has_effect e ==> vv_storage_live cx vv es' s) that vv_post_def
- *     is to gain gives, written out: an effect-free operand's storage or
- *     transient pointer reads live slots at es'.  It lets a storage or
- *     transient positional operand, read only after the later operands,
- *     still read live slots.  Held for the posts-interface round after the
- *     branch merge, which adds the conjunct to vv_post_def; then it
- *     follows from vv_post_def.
- *
  * Why it holds: the call request agrees with the source's.  The selector is
  * cenv.ce_method_id, which expr_sim_inv pins to function_selector of the
  * declared ABI types; the calldata is the selector followed by the arguments
@@ -59,9 +49,28 @@ Theorem vv_post_storage_live:
     (p.ptr_location = LocTransient ==>
      storage_read_live cx T (get_storage cx es' T) w tvt)
 Proof
-  (* Held for the posts-interface round: follows from vv_post_def once it
-     has the vv_storage_live conjunct. *)
-  cheat
+  rpt strip_tac >> gvs[vv_post_def] >> metis_tac[]
+QED
+
+(* An effect-free expression's fragment keeps every live local whole and
+   every window clear of its own allocations. *)
+Theorem vv_post_pure_memory_frame:
+  !ctx func cenv cx e es sa sb s0 es' tv vv s.
+    vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
+    ~expr_has_effect e ==>
+    (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+    (!off len.
+       (!inst b sz.
+          MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+          loweringStateRelDefs$regions_disjoint off len b sz) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `pure_frame cenv func es sa s0 s` by gvs[vv_post_def] >>
+  pop_assum mp_tac >> rewrite_tac[pure_frame_def]
 QED
 
 (* Source boundary: positional locations are read only after kwargs. *)
@@ -116,7 +125,7 @@ Definition extcall_request_ready_def:
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t <=>
-    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ee.gas_obs = [] /\
     outcomes_accounts_typed ee.outcomes /\
@@ -168,7 +177,7 @@ End
 Definition extcall_returned_def:
   extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t <=>
-    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\

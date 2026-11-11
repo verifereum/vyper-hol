@@ -1040,7 +1040,7 @@ Theorem range_expr_post_int_operand[local]:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
   eval_operand op s = SOME (i2w n)
 Proof
-  rw[expr_post_def] >> drule_all range_expr_val_rel_int_operand >> simp[]
+  rw[expr_post_def] >> gvs[] >> drule_all range_expr_val_rel_int_operand >> simp[]
 QED
 
 Theorem forced_endpoint_bind_outcome[local]:

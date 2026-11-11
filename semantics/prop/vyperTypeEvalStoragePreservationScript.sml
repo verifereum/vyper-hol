@@ -1588,8 +1588,13 @@ Proof
    irule run_raw_call_storage_frame >> simp[] >> metis_tac[]) >>~-
   ([`adopt_call_outcome _ _ _ = (INR _,_)`],
    imp_res_tac vyperCallOutcomeTheory.adopt_call_outcome_frame >> gvs[]) >>~-
+  ([`take_delegate_outcome _ _ _ _ = (INL _,_)`,
+    `adopt_call_outcome _ _ _ = (INL (),_)`],
+   drule_all take_adopt_delegate_outcome_storage_suffix >> simp[]) >>~-
   ([`adopt_call_outcome _ _ _ = (INL (),_)`],
-   drule_all take_adopt_call_outcome_storage_suffix >> simp[]) >>
+   drule_all take_adopt_call_outcome_storage_suffix >> simp[]) >>~-
+  ([`take_delegate_outcome _ _ _ _ = _`],
+   drule_all take_delegate_outcome_storage_suffix >> simp[]) >>
   drule_all take_call_outcome_storage_suffix >> simp[]
 QED
 
@@ -1733,8 +1738,18 @@ Resume eval_scc_storage_preservation_results_mutual[Assign_Base]:
     metis_tac[runtime_storage_consistent_intro, runtime_storage_consistent_layout] >>
   reverse (Cases_on `rhs_res`) >- (simp[] >> strip_tac >> gvs[]) >>
   drule_all eval_expr_success_storage_facts >> strip_tac >>
-  qpat_x_assum `!s pv t. eval_expr _ _ _ = _ ==> _`
-    (drule_then strip_assume_tac) >>
+  rename1 `eval_expr cx e st = (INL pv,rhs_st)` >>
+  simp_tac(srw_ss())[] >>
+  Cases_on `read_result cx pv rhs_st` >>
+  rename1 `read_result cx pv rhs_st = (read_res,read_st)` >>
+  imp_res_tac read_result_state >> gvs[] >>
+  reverse (Cases_on `read_res`) >- (simp[] >> strip_tac >> gvs[]) >>
+  rename1 `read_result cx pv rhs_st = (INL v,rhs_st)` >>
+  first_x_assum (qspecl_then [`st`, `pv`, `rhs_st`, `rhs_st`, `v`, `rhs_st`] mp_tac) >>
+  simp[] >> disch_then strip_assume_tac >>
+  `value_runtime_typed env (expr_type e) v` by
+    (fs[runtime_consistent_def] >>
+     drule_all read_live_result_success_type >> simp[]) >>
   simp_tac(srw_ss())[] >>
   Cases_on `eval_target_place cx bt rhs_st` >>
   rename1 `eval_target_place cx bt rhs_st = (target_res,target_st)` >>
@@ -1747,27 +1762,10 @@ Resume eval_scc_storage_preservation_results_mutual[Assign_Base_write]:
   RESUME_TAC >> strip_tac >>
   POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
   RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
-  qmatch_assum_rename_tac `eval_expr cx e st = (INL pv,rhs_st)` >>
+  qmatch_assum_rename_tac `read_result cx pv rhs_st = (INL v,rhs_st)` >>
   qmatch_assum_rename_tac `eval_target_place cx bt rhs_st = (INL p,target_st)` >>
   drule_all eval_target_place_success_storage_type >> strip_tac >>
   drule_all eval_target_place_storage_trace >> strip_tac >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame rhs_st target_st` by
-    (drule (cj 8 eval_metadata_frame_mutual) >> simp[]) >>
-  `eval_result_typed (env,cx,target_st) pv (Type (expr_type e))` by
-    (Cases_on `pv` >> gvs[eval_result_typed_def] >>
-     metis_tac[runtime_place_typed_transport]) >>
-  `live_memory_result target_st pv` by
-    (irule live_result_transport >> qexists_tac `rhs_st` >> simp[]) >>
-  `runtime_consistent env cx target_st` by
-    (drule_all eval_target_place_preserves_runtime_consistent >> simp[]) >>
-  `state_well_typed target_st` by gvs[runtime_consistent_def] >>
-  Cases_on `read_result cx pv target_st` >>
-  rename1 `read_result cx pv target_st = (read_res,read_st)` >>
-  imp_res_tac read_result_state >> gvs[] >>
-  Cases_on `read_res` >> gvs[] >>
-  qmatch_assum_rename_tac `read_result cx pv target_st = (INL v,target_st)` >>
-  `value_runtime_typed env (expr_type e) v` by
-    (drule_all read_live_result_success_type >> simp[]) >>
   `value_runtime_typed env tty v` by
     (fs[value_runtime_typed_def] >>
      drule_all type_widens_to_value_has_type >> strip_tac >> gvs[]) >>
@@ -2329,26 +2327,24 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
       irule contract_storage_well_formed_backends_frame >>
       qexists_tac `st` >> gvs[runtime_storage_consistent_def]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `∀s'' x t. _ ∧ bt ≠ Len ∧ bt ≠ Env MsgGas ⇒ _`
-    (qspecl_then [`st`, `()`, `st`] mp_tac) >>
+  qpat_x_assum `!s'' t. type_check _ _ _ = _ ==> _`
+    (qspecl_then [`st`, `st`] mp_tac) >>
   (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >>
   strip_tac >> first_x_assum drule_all >> strip_tac >>
-  Cases_on `args_res` >> gvs[bind_def, return_def, raise_def,
-    get_accounts_def, lift_sum_def]
-  >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) x` >>
-      gvs[return_def, raise_def] >>
-      Cases_on `precompile_call_success bt args_st` >>
-      imp_res_tac precompile_call_success_state >> gvs[] >>
-      rename1 `precompile_call_success bt args_st = (pres,_)` >>
-      Cases_on `pres` >> gvs[return_def, raise_def] >> rpt strip_tac >>
-      gvs[] >> irule contract_storage_well_formed_backends_frame >>
-      qexists_tac `args_st` >> simp[]) >>
-  rpt strip_tac >> gvs[]
+  Cases_on `args_res` >>
+  gvs[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def,
+      lift_option_type_def, vyperMiscTheory.option_CASE_rator,
+      vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac precompile_call_success_state >> gvs[] >>
+  irule contract_storage_well_formed_backends_frame >>
+  qexists_tac `args_st` >> simp[]
 QED
 
 Theorem transfer_value_storage_frame[local]:
