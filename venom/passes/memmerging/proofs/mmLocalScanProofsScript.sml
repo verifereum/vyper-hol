@@ -5,7 +5,7 @@ Ancestors
   venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
   simplifyCfgPhiSemantics basePtrProofs mmTraceProofs frameViewMemory dftCommutation
-  regularMemorySim rangeAnalysisProofs dftIndexedExec
+  regularMemorySim rangeAnalysisProofs dftIndexedExec removeUnusedProofs analysisSimProofsBase
 Libs
   wordsLib finite_mapLib stepInstBaseLib
 
@@ -14746,6 +14746,31 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_hard_barrier_pending_next_empty[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE n is) /\
+  n < LENGTH is /\
+  scan_inst (dfg_build_function fn0) Mem2Mem ss (EL n is) = hard_barrier ss ==>
+  mm_local_pending_indices is gs (SUC n) = []
+Proof
+  strip_tac >>
+  Cases_on `mm_local_pending_indices is gs (SUC n)` >- simp[] >>
+  rename1 `mm_local_pending_indices is gs (SUC n) = j::js` >>
+  `MEM j (mm_local_pending_indices is gs (SUC n))` by simp[] >>
+  `?A. MEM A (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE (SUC n) is)).ss_copies /\
+    MEM (EL j is).inst_id A.cg_inst_ids` by
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_pending_copy_owner >>
+     disch_then irule >> simp[] >> qexists `SUC n` >> gvs[]) >>
+  gvs[rich_listTheory.TAKE_SUC_BY_TAKE, rich_listTheory.SNOC_APPEND,
+    FOLDL_APPEND, hard_barrier_def]
+QED
+
 Theorem mm_local_cut_literal_load_read[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -14795,6 +14820,139 @@ Proof
     (irule (cj 3 mm_local_retained_operand_protected) >>
      simp[] >> metis_tac[EL_MEM, venomWfPropsTheory.operand_var_in_inst_uses]) >>
   fs[mm_local_cut_def]
+QED
+
+Theorem mm_local_cut_memory_state_equiv[local]:
+  mm_local_cut is gs H n excluded pc t ==>
+  state_equiv excluded ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t
+Proof
+  strip_tac >>
+  gvs[mm_local_cut_def, state_equiv_frame, mm_local_nonmemory_frame_def,
+    stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_cut_memory_independent_step[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
+  ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+  Eff_MEMORY NOTIN read_effects i.inst_opcode /\
+  Eff_MEMORY NOTIN write_effects i.inst_opcode /\
+  step_inst fuel ctx i (H n) = OK u ==>
+  ?v. step_inst fuel ctx i t = OK v /\
+    state_equiv excluded
+      (u with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) v
+Proof
+  strip_tac >>
+  `state_equiv excluded
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+    metis_tac[mm_local_cut_memory_state_equiv] >>
+  `step_inst fuel ctx i ((H n) with vs_memory := t.vs_memory) =
+    OK (u with vs_memory := t.vs_memory)` by
+    metis_tac[passSharedFieldTheory.step_inst_mem_frame] >>
+  `step_inst fuel ctx i
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) =
+    OK (u with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>)` by
+    (irule passSharedFieldTheory.step_inst_mem_frame >>
+     simp[analysisSimProofsBaseTheory.step_inst_idx_indep,
+       instIdxIndepTheory.exec_result_map_def]) >>
+  drule_all removeUnusedProofsTheory.step_inst_result_equiv_full >>
+  disch_then (qspecl_then [`fuel`,`ctx`] mp_tac) >>
+  Cases_on `step_inst fuel ctx i t` >> simp[result_equiv_def]
+QED
+
+Theorem mm_local_cut_empty_state_equiv[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] ==>
+  state_equiv excluded ((H n) with vs_inst_idx := pc) t
+Proof
+  strip_tac >>
+  gvs[mm_local_cut_def, mm_local_pending_empty] >>
+  gvs[state_equiv_frame, mm_local_nonmemory_frame_def,
+    stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_cut_empty_step[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\
+  step_inst fuel ctx i (H n) = OK u ==>
+  ?v. step_inst fuel ctx i t = OK v /\
+    state_equiv excluded (u with vs_inst_idx := pc) v
+Proof
+  strip_tac >>
+  `state_equiv excluded ((H n) with vs_inst_idx := pc) t` by
+    metis_tac[mm_local_cut_empty_state_equiv] >>
+  `step_inst fuel ctx i ((H n) with vs_inst_idx := pc) =
+    OK (u with vs_inst_idx := pc)` by
+    (Cases_on `i.inst_opcode = INVOKE`
+     >- simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+     simp[analysisSimProofsBaseTheory.step_inst_idx_indep,
+       instIdxIndepTheory.exec_result_map_def]) >>
+  drule_all removeUnusedProofsTheory.step_inst_result_equiv_full >>
+  disch_then (qspecl_then [`fuel`,`ctx`] mp_tac) >>
+  Cases_on `step_inst fuel ctx i t` >> simp[result_equiv_def]
+QED
+
+Theorem mm_local_cut_empty_transition[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] /\
+  mm_local_pending_indices is gs (SUC n) = [] /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\
+  step_inst fuel ctx i (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n ==>
+  ?v. step_inst fuel ctx i t = OK v /\
+    mm_local_cut is gs H (SUC n) excluded (SUC pc)
+      (v with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >>
+  drule_all mm_local_cut_empty_step >> strip_tac >>
+  qexists `v` >> simp[] >>
+  `mm_local_epoch_start is gs (SUC n) = SUC n` by
+    simp[mm_local_epoch_start_suc] >>
+  gvs[mm_local_cut_def, mm_local_pending_empty, state_equiv_frame,
+    rich_listTheory.COUNT_LIST_def,
+    mm_local_nonmemory_frame_def, stateFrameTheory.state_frame_def,
+    venomStateTheory.lookup_var_def, venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_cut_barrier_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE n is) /\
+  scan_inst (dfg_build_function fn0) Mem2Mem ss (EL n is) = hard_barrier ss /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  apply_groups_inst_supply Mem2Mem ns rs es (EL n is) = ([EL n is],es') /\
+  mm_local_cut is gs H n excluded pc t /\
+  ~is_terminator (EL n is).inst_opcode /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n ==>
+  ?t'. mm_local_exec_prefix fuel ctx [EL n is] t t' /\
+    mm_local_cut is gs H (SUC n) excluded (SUC pc) t'
+Proof
+  strip_tac >>
+  `mm_local_pending_indices is gs n = []` by
+    metis_tac[mm_local_hard_barrier_pending_empty] >>
+  `mm_local_pending_indices is gs (SUC n) = []` by
+    metis_tac[mm_local_hard_barrier_pending_next_empty] >>
+  `!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded` by
+    (qx_gen_tac `v` >> disch_tac >>
+     irule (cj 3 mm_local_retained_operand_protected) >>
+     simp[] >> metis_tac[EL_MEM, venomWfPropsTheory.operand_var_in_inst_uses]) >>
+  drule_all mm_local_cut_empty_transition >> strip_tac >>
+  qexists `v with vs_inst_idx := SUC pc` >> simp[] >>
+  gvs[mm_local_exec_prefix_single] >> fs[mm_local_cut_def]
 QED
 
 Theorem mm_local_cut_init[local]:
