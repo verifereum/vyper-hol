@@ -80,6 +80,7 @@ Theorem intcall_vv_post_intro:
   (post_value_type ce e <> expr_type e ==>
    vv_own ce fp.jc_cx (post_value_type ce e) sa sb ee tv vv u) /\
   (~expr_has_effect e ==> vv_storage_live fp.jc_cx vv ee u) /\
+  (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
   intcall_expr_cont fp ce env es sa s ee sb u ==>
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee tv vv u
 Proof
