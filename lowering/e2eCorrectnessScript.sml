@@ -16,7 +16,7 @@ Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
-  loweringCalldataCorrect
+  loweringCalldataCorrect callPremiseDispatch
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
   codegenCorrectness immutableCodeLayout
@@ -987,23 +987,6 @@ Theorem vyper_call_reverts:
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
        ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
-Proof
-  cheat
-QED
-
-(* The call premises read only tx's environment, not which function it
-   calls or with what. *)
-Theorem call_premises_dispatch_invariant:
-  !tops runtime_bc am tx es os f vals.
-    (source_typing_ok tops am (tx with <| function_name := f; args := vals |>)
-       <=> source_typing_ok tops am tx) /\
-    (source_storage_ok tops am (tx with <| function_name := f; args := vals |>)
-       <=> source_storage_ok tops am tx) /\
-    (call_state_rel tops runtime_bc am
-       (tx with <| function_name := f; args := vals |>) es
-       <=> call_state_rel tops runtime_bc am tx es) /\
-    (call_outcomes_ok am (tx with <| function_name := f; args := vals |>) os
-       <=> call_outcomes_ok am tx os)
 Proof
   cheat
 QED
