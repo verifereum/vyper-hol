@@ -130,7 +130,7 @@ Resume body_struct_lit_widened_call_elem_mem[buffer_post]:
   conj_asm1_tac
   >- (irule buffer_loop_memory_vv_post >>
       simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
-        venomStateTheory.eval_operand_def, val_in_memory_def] >>
+        venomStateTheory.eval_operand_def, valueEncodingDefsTheory.val_in_memory_def] >>
       qexistsl [`b`,`sm`,`type_memory_size_list tvs`,`t`] >>
       simp[wordsTheory.dimword_def] >>
       conj_tac >- first_assum ACCEPT_TAC >>

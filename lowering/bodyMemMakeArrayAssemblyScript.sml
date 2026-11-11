@@ -82,7 +82,7 @@ Proof
   disch_then match_mp_tac >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def, is_word_type_def,
        contextTheory.mk_ptr_def, venomStateTheory.eval_operand_def,
-       val_in_memory_def, type_memory_size_def] >>
+       valueEncodingDefsTheory.val_in_memory_def, type_memory_size_def] >>
   qexistsl_tac [`t`, `type_memory_size_list tvs`, `sm`, `gs`, `b`] >>
   simp[aggregate_tuple_action_mem, bind_def, return_def] >>
   conj_tac >- (rpt strip_tac >>
@@ -111,7 +111,7 @@ Proof
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`env`,`st`,`ctx`,`tops`] mp_tac) >> simp[] >>
-  (impl_tac >- (rpt strip_tac >> simp[regions_disjoint_def] >>
+  (impl_tac >- (rpt strip_tac >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
     irule aggregate_alloca_immutable_prefix_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>

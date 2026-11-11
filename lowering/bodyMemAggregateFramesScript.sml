@@ -14,7 +14,7 @@ Theorem aggregate_exterior_frame_transport:
 Proof
   rpt strip_tac >>
   qpat_x_assum `!aid p n. FLOOKUP _ _ = _ /\ _ ==> _` irule >>
-  gvs[regions_disjoint_def, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
   (conj_tac >- (rpt strip_tac >>
     metis_tac[arithmeticTheory.ADD_COMM]) >>
    qexists_tac `aid` >> simp[])
@@ -33,5 +33,5 @@ Theorem aggregate_alloca_immutable_prefix_sep:
 Proof
   rpt strip_tac >>
   drule_all aggregate_alloca_immutable_sep >>
-  simp[regions_disjoint_def] >> strip_tac >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >> decide_tac
 QED

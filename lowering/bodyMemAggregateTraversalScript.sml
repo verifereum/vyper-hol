@@ -97,7 +97,7 @@ Proof
   gvs[type_memory_size_def] >>
   rpt strip_tac >>
   qpat_x_assum `!name itv iv io. _ ==> regions_disjoint _ _ _ _` drule_all >>
-  simp[regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem aggregate_tuple_head_tail_mem[local]:
@@ -180,7 +180,7 @@ Proof
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size htv)` by
     (rpt strip_tac >> qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >>
      simp[] >> disch_then drule_all >>
-     simp[regions_disjoint_def, type_memory_size_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, type_memory_size_def] >> decide_tac) >>
   drule_at (Pat `compile_expr _ _ _ _ = _`) aggregate_body_head_continuation_mem >>
   disch_then (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
@@ -555,7 +555,7 @@ Theorem aggregate_make_tuple_body_sim_mem:
 Proof
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >> gvs[compile_make_tuple_def, comp_return_def] >>
-      irule aggregate_tuple_nil_outcome_mem >> simp[val_in_memory_def, stmt_state_rel_gas_obs]) >>
+      irule aggregate_tuple_nil_outcome_mem >> simp[valueEncodingDefsTheory.val_in_memory_def, stmt_state_rel_gas_obs]) >>
   rpt gen_tac >> strip_tac >>
   `out = Var x` by metis_tac[compiler_make_tuple_result] >> gvs[] >>
   `expr_body_pre ce cx env h es` by metis_tac[listTheory.MEM] >>

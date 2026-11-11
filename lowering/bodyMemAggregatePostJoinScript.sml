@@ -15,7 +15,7 @@ Theorem aggregate_cons_tuple_encoding_mem[local]:
     mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) ==>
   tuple_in_memory (v::vs) (htv::tvs) (b+off) r.vs_memory
 Proof
-  strip_tac >> pure_once_rewrite_tac[val_in_memory_def] >>
+  strip_tac >> pure_once_rewrite_tac[valueEncodingDefsTheory.val_in_memory_def] >>
   simp_tac std_ss [listTheory.list_case_def, LET_THM] >> conj_tac
   >- (irule (cj 1 val_in_memory_mem_agree_proof) >> simp[] >>
       conj_tac >- metis_tac[cj 1 value_has_type_val_wf] >>

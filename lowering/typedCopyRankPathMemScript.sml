@@ -118,7 +118,7 @@ Resume typed_store_rank_path_mem[empty]:
   gvs[Once compile_store_memory_typed_def, is_word_type_def,
     is_bytestring_type_def, type_memory_bytes_def, compile_copy_memory_def,
     comp_return_def, evaluate_type_def, value_has_type_def] >>
-  qexists_tac `s` >> simp[val_in_memory_def, venom_state_component_equality] >>
+  qexists_tac `s` >> simp[valueEncodingDefsTheory.val_in_memory_def, venom_state_component_equality] >>
   irule (cj 1 gas_path_mem_rules) >> simp[]
 QED
 Resume typed_store_rank_path_mem[array]:
@@ -349,7 +349,7 @@ Resume typed_store_rank_path_mem[dynamic_equal]:
    LENGTH l * type_memory_size tv <= cap * type_memory_size tv` by
     simp[LE_MULT_RCANCEL] >>
   `mload (w2n sw) s = n2w (LENGTH l)` by
-    fs[val_in_memory_def, GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
+    fs[valueEncodingDefsTheory.val_in_memory_def, GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   `w2n (sw+32w) = w2n sw+32 /\ w2n (dw+32w) = w2n dw+32 /\
    LENGTH l * type_memory_bytes ce elem < dimword(:256) /\
    w2n sw + 32 <= s.vs_alloca_next /\ w2n dw + 32 <= s.vs_alloca_next /\
@@ -446,10 +446,10 @@ Resume typed_store_rank_path_mem[tuple_metadata]:
   suspend "tuple_adapter"
 QED
 Resume typed_store_rank_path_mem[tuple_adapter]:
-  pure_rewrite_tac[val_in_memory_def, type_value_case_def, type_memory_size_def] >>
+  pure_rewrite_tac[valueEncodingDefsTheory.val_in_memory_def, type_value_case_def, type_memory_size_def] >>
   BETA_TAC >>
   qpat_assum `val_in_memory (TupleTV _) _ _ _`
-    (assume_tac o SRULE [val_in_memory_def]) >>
+    (assume_tac o SRULE [valueEncodingDefsTheory.val_in_memory_def]) >>
   mp_tac (Q.INST [`DT` |-> `tys`, `ST` |-> `stys`,
     `dtvs` |-> `tvs'`, `stvs` |-> `tvs`, `vs` |-> `l`,
     `a` |-> `w2n (sw : 256 word)`, `b` |-> `w2n (dw : 256 word)`,
@@ -568,11 +568,11 @@ Resume typed_store_rank_path_mem[struct]:
   qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _`
     (mp_tac o SRULE [Once compile_store_memory_typed_def, is_word_type_def,
       is_bytestring_type_def, get_struct_fields_def]) >> simp[] >> strip_tac >>
-  pure_rewrite_tac[val_in_memory_def, type_value_case_def] >>
+  pure_rewrite_tac[valueEncodingDefsTheory.val_in_memory_def, type_value_case_def] >>
   qpat_assum `type_memory_size (StructTV _) = _`
     (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
   qpat_assum `val_in_memory (StructTV _) _ _ _`
-    (assume_tac o SRULE [val_in_memory_def]) >>
+    (assume_tac o SRULE [valueEncodingDefsTheory.val_in_memory_def]) >>
   qpat_x_assum `type_memory_size (StructTV _) = _` SUBST_ALL_TAC >>
   mp_tac (Q.INST [`DT` |-> `MAP (FST o SND) fields`,
     `names` |-> `MAP FST fields`, `tvs` |-> `tvs`, `vs` |-> `vs`,
