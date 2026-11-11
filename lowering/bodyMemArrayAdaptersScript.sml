@@ -370,5 +370,5 @@ Proof
       gvs[Abbr `sh`, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
       metis_tac[]) >>
   gvs[Abbr `sh`, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
-  metis_tac[]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
