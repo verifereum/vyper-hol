@@ -437,7 +437,7 @@ Theorem body_annassign_case:
        body_expr_ok cx e) ==>
     body_stmt_ok cx (AnnAssign id typ e)
 Proof
-  rw[body_stmt_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   Cases_on `is_word_type typ`
   >- (irule body_annassign_word >> metis_tac[]) >>
@@ -779,10 +779,13 @@ Proof
       `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
       drule for_body_abi_targets >> strip_tac >>
       qpat_x_assum `body_stmts_ok _ _`
-        (irule o REWRITE_RULE [body_stmts_ok_def]) >>
+        (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
       simp[] >> rpt conj_tac
+      >- metis_tac[supported_stmts_body_safe, body_stmts_safe_iff]
+      >- metis_tac[supported_stmts_body_safe, body_stmts_safe_iff]
       >- metis_tac[stmt_exprs_ok_same_frame]
-      >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
+      >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
+          metis_tac[supported_stmts_body_safe, body_stmts_safe_iff])
       >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
           `c.ce_struct_fields = cenv.ce_struct_fields` by
             metis_tac[same_frame_struct_fields] >>
@@ -1059,10 +1062,13 @@ Resume body_for_range[body]:
   `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
   drule for_body_abi_targets >> strip_tac >>
   qpat_x_assum `body_stmts_ok _ _`
-    (irule o REWRITE_RULE [body_stmts_ok_def]) >>
+    (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
   simp[] >> rpt conj_tac
+  >- metis_tac[supported_stmts_body_safe, body_stmts_safe_iff]
+  >- metis_tac[supported_stmts_body_safe, body_stmts_safe_iff]
   >- metis_tac[stmt_exprs_ok_same_frame]
-  >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
+  >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
+          metis_tac[supported_stmts_body_safe, body_stmts_safe_iff])
   >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
       conj_tac
       >- (irule ce_locals_declared_declare_local >> metis_tac[]) >>
@@ -1222,10 +1228,13 @@ Proof
     (drule_then irule declare_local_same_frame >> simp[]) >>
   `body_inv tops ctx bc cx` by metis_tac[body_inv_same_frame] >>
   qpat_x_assum `body_stmts_ok _ _`
-    (irule o REWRITE_RULE [body_stmts_ok_def]) >>
+    (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
   simp[] >> rpt conj_tac
+  >- metis_tac[supported_stmts_body_safe, body_stmts_safe_iff]
+  >- metis_tac[supported_stmts_body_safe, body_stmts_safe_iff]
   >- metis_tac[stmt_exprs_ok_same_frame]
-  >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
+  >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
+          metis_tac[supported_stmts_body_safe, body_stmts_safe_iff])
   >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
       `bc.ce_struct_fields = cenv.ce_struct_fields` by
         metis_tac[same_frame_struct_fields] >>
@@ -1478,7 +1487,7 @@ Theorem body_for_case:
        body_iterator_ok cx it) ==>
     body_stmt_ok cx (For id typ it n body)
 Proof
-  rpt gen_tac >> strip_tac >> REWRITE_TAC [body_stmt_ok_def] >>
+  rpt gen_tac >> strip_tac >> REWRITE_TAC [body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   rpt strip_tac >>
   Cases_on `?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))`
   >- (qpat_x_assum `?a1 n1 a2 n2. _`

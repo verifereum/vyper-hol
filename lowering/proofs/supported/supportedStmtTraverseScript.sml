@@ -8,7 +8,8 @@
    supported_type_namespace, supported_types_namespace, expr_nonmain_type_root. *)
 Theory supportedStmtTraverse
 Ancestors
-  supportedExprTraverse supportedTypes vyperAST list pair
+  supportedExprTraverse supportedTypes supportedDecls vyperTypeCallGraph
+  vyperAST list pair
 
 (* The global main-module rule also covers identifiers in type annotations.
    This is ONLY a namespace traversal, not value/storage type admission. *)
@@ -104,6 +105,34 @@ Termination
     INL (_,s) => stmt_size s | INR (_,ss) => list_size stmt_size ss)` >>
   simp[stmt_size_def, list_size_def]
 End
+
+(* Safety facts used by the body simulations independently of the gate. *)
+Definition body_stmt_safe_def:
+  body_stmt_safe tops s <=>
+    ~supported_stmt_expr_exists expr_evm_run_root s /\
+    ~supported_stmt_expr_exists call_operands_effect_root s /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_stmt s)
+End
+
+Definition body_stmts_safe_def:
+  body_stmts_safe tops ss <=> EVERY (body_stmt_safe tops) ss
+End
+
+Theorem body_stmts_safe_iff:
+  body_stmts_safe tops ss <=>
+    ~supported_stmts_expr_exists expr_evm_run_root ss /\
+    ~supported_stmts_expr_exists call_operands_effect_root ss /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_stmts ss)
+Proof
+  Induct_on `ss` >>
+  gvs[body_stmts_safe_def, body_stmt_safe_def,
+      supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  metis_tac[]
+QED
 
 (* keep duplicates, all branches and nesting, and their declared types;
    locals=T collects AnnAssign, locals=F collects For. *)
