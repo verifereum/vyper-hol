@@ -7,7 +7,7 @@ Ancestors
   abiEncoderArrayCode emitHelper exprLoweringProps compileEnv emitHelperProps
   venomState venomMemDefs venomExecSemantics venomInst instIdxIndep list rich_list words arithmetic
 
-Theorem abi_encoder_array_address_opcodes[local]:
+Theorem abi_encoder_array_address_opcodes:
   abi_encode_array_addresses ip src dst asz msz st = (coords,final) ==>
   EVERY (\i. i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD)
     (emitted_insts st final)

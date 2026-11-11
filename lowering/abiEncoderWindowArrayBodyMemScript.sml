@@ -10,6 +10,9 @@ Ancestors
   abiEncoderWindowChild abiEncoderWindowArrayInvariant abiEncoderRegisteredEffect
   valueEncoding valueEncodingProps venomMemDefs windowTransitionMem memContinuation
   abiEncoderWindowContract abiEncoderInputFrame
+  abiEncoderWindowMemFrame abiEncoderWindowSequenceFrameMem
+  abiEncoderWindowPhaseFrameMem abiDecoderVarSequence
+  abiEncoderSharedArrayAddress abiEncoderSharedArrayTail
 
 Theorem window_array_tail_seq_mem[local]:
   abi_encode_array_tail data_op dp st = (ops,en) /\
@@ -43,9 +46,16 @@ Theorem window_array_tail_phase_mem:
     eval_operand (FST ops) t = SOME (n2w off) /\
     eval_operand (SND ops) t = SOME (n2w (d+off)) /\
     (!x. FST ops = Var x \/ SND ops = Var x ==> not_fresh_at en x) /\
-    mem_cont_sim ctx func s t
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   strip_tac >> drule_all window_array_tail_pure >> strip_tac >>
+  `fn_inst_ids_distinct func ==>
+   window_mem_frame ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (strip_tac >> `window_seq st en s t` by fs[window_pure_seq_def] >>
+     drule abi_encoder_array_spine_tail_opcodes >> strip_tac >>
+     irule window_seq_mem_frame >> simp[] >> qexists `st` >> simp[] >>
+     fs[EVERY_MEM, abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
     (drule_all window_array_tail_seq_mem >> simp[]) >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
@@ -104,9 +114,16 @@ Theorem window_array_addresses_phase_mem:
     eval_operand (SND (SND coords)) t = SOME (n2w (d+32+j*asz)) /\
     (!x. FST (FST coords) = Var x \/ SND (FST coords) = Var x \/
          FST (SND coords) = Var x \/ SND (SND coords) = Var x ==> not_fresh_at en x) /\
-    mem_cont_sim ctx func s t
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   strip_tac >> drule_all window_array_addresses_pure >> strip_tac >>
+  `fn_inst_ids_distinct func ==>
+   window_mem_frame ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (strip_tac >> `window_seq st en s t` by fs[window_pure_seq_def] >>
+     drule abi_encoder_array_address_opcodes >> strip_tac >>
+     irule window_seq_mem_frame >> simp[] >> qexists `st` >> simp[] >>
+     fs[EVERY_MEM, abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
     (drule_all window_array_addresses_seq_mem >> simp[]) >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
@@ -129,7 +146,8 @@ Theorem window_array_suffix_prefix_mem[local]:
   ?t. window_phase ctx func st b {} [(h,32)] s t /\ mem_cont_sim ctx func s t /\
     eval_operand next t = SOME (n2w (off+n)) /\
     eval_operand dp t = SOME (n2w slot) /\ eval_operand len t = SOME (n2w n) /\
-    mem_word_at h t.vs_memory = n2w off
+    mem_word_at h t.vs_memory = n2w off /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   strip_tac >>
   drule_all window_output_store_phase_mem >> strip_tac >>
@@ -142,7 +160,10 @@ Proof
   `alloca_inv u /\ alloca_room ctx func u /\ ~u.vs_halted /\
    u.vs_current_bb = a.cs_current_bb /\ u.vs_inst_idx = LENGTH a.cs_current_insts` by
     metis_tac[window_phase_resources, window_phase_control] >>
-  drule_all window_emit_add_phase_mem >> strip_tac >>
+  `fn_inst_ids_distinct func ==> window_mem_frame ctx func s u` by
+    (strip_tac >> simp[Abbr `u`] >>
+     drule_all window_output_store_phase_mem_frame >> metis_tac[]) >>
+  drule_all window_emit_add_phase_mem_conditional_frame >> strip_tac >>
   `eval_operand dp t = SOME (n2w slot) /\ eval_operand len t = SOME (n2w n)` by
     (conj_tac >> irule window_phase_eval >>
      goal_assum (drule_at Any) >> simp[] >> fs[not_fresh_at_def] >> metis_tac[]) >>
@@ -152,6 +173,8 @@ Proof
         simp[] >> metis_tac[window_phase_effect]) >>
      drule abiEncoderInputFrameTheory.abi_encoder_window_word >>
      disch_then (qspec_then `0` mp_tac) >> simp[Abbr `u`, mstore_mem_word_at_same]) >>
+  `fn_inst_ids_distinct func ==> window_mem_frame ctx func s t` by
+    metis_tac[window_mem_frame_trans] >>
   qexists_tac `t` >> simp[GSYM word_add_n2w] >> irule window_phase_chain_mem >>
   qexistsl_tac [`{}`, `[(h,32)]`, `a`, `{}`, `[]`, `u`] >> simp[]
 QED
@@ -174,7 +197,8 @@ Theorem window_array_suffix_run_mem:
     FLOOKUP t.vs_allocas site = SOME (slot,32) /\
     eval_operand out t = SOME (n2w n) /\
     t.vs_current_bb = en.cs_current_bb /\
-    t.vs_inst_idx = LENGTH en.cs_current_insts /\ mem_cont_sim ctx func s t
+    t.vs_inst_idx = LENGTH en.cs_current_insts /\ mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all window_child_suffix_context >> strip_tac >>
@@ -197,6 +221,11 @@ Proof
   `FLOOKUP u.vs_allocas site = SOME (slot,32)` by
     simp[Abbr `u`, mstore_def, write_memory_with_expansion_def] >>
   `window_sizes32 {site} u` by simp[window_sizes32_def] >>
+  `fn_inst_ids_distinct func ==> window_mem_frame ctx func s u` by
+    (strip_tac >> `window_mem_frame ctx func s t` by metis_tac[] >>
+     `window_mem_frame ctx func t u` by
+       (simp[Abbr `u`] >> drule_all window_cursor_store_phase_mem_frame >>
+        simp[]) >> metis_tac[window_mem_frame_trans]) >>
   qexists_tac `u` >> asm_rewrite_tac[] >> rpt conj_tac
   >- metis_tac[window_array_phase_sizes_transition]
   >- (simp[Abbr `u`] >> metis_tac[mstore_mem_word_at_disjoint])
