@@ -304,7 +304,17 @@ Proof
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
   qpat_x_assum `~expr_has_effect e /\ _ ==> _` (fn pth =>
-    qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >>
+    qexistsl_tac [`v`, `q`] >> conj_tac
+    >- (strip_tac >> qx_genl_tac [`bb`, `bsz`] >> strip_tac >>
+        mp_tac pth >> (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+        disch_then (qspecl_then [`bb`, `bsz`] mp_tac) >>
+        (impl_tac >- (rpt conj_tac >- first_assum ACCEPT_TAC >- decide_tac >>
+           rpt strip_tac >> first_x_assum drule >> decide_tac)) >>
+        disch_then (fn th => conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
+          qx_genl_tac [`pp`, `nn`] >> strip_tac >>
+          mp_tac (Q.SPECL [`pp`, `nn`] (CONJUNCT2 th)) >>
+          (impl_tac >- (conj_tac >- decide_tac >> first_assum ACCEPT_TAC)) >>
+          disch_then ACCEPT_TAC))) >>
   simp[] >>
   conj_tac
   >- (qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
