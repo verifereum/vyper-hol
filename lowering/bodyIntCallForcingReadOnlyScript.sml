@@ -97,3 +97,19 @@ Proof
       read_result_def, return_def, expr_val_rel_def] >>
   simp[gas_marked_path_def, fragGasPathTheory.gas_path_rules]
 QED
+
+Theorem vv_holds_materialise:
+  read_result cx tv es = (INL v,es) /\
+  vv_holds cenv cx t tv vv es s ==>
+  vv_holds cenv cx t (Value v) vv es s
+Proof
+  Cases_on `vv`
+  >- (simp[vv_holds_def] >> rpt strip_tac >>
+      gvs[read_result_def, return_def]) >>
+  rename1 `LocatedValue t' p` >>
+  Cases_on `p.ptr_location` >>
+  simp[vv_holds_def, storage_holds_def, immutable_holds_def,
+       read_result_def, return_def] >>
+  rpt strip_tac >> gvs[read_result_def, return_def] >>
+  qexistsl [`name`, `off`, `itv`, `iv`, `k`] >> simp[]
+QED

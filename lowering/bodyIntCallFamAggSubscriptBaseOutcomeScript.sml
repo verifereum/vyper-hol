@@ -6,6 +6,15 @@ Ancestors
   exprSimHyps exprSimMapDefs vyperTypeInvariants gasSummary
   loweringPosts context compileEnv
 
+Theorem eval_subscript_bind[local]:
+  eval_expr cx (Subscript ann obj idx) =
+    bind (eval_expr cx obj) (\tv.
+      bind (bind (eval_expr cx idx) (read_result cx)) (\v.
+        select_result cx (expr_type obj) tv (ValueSubscript v)))
+Proof
+  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_assoc]
+QED
+
 Theorem intcall_mapping_base_outcome:
   intcall_map_producer fp obj /\ intcall_forced_producer fp idx /\
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
