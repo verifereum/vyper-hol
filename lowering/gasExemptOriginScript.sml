@@ -9,7 +9,8 @@ Ancestors
 Definition gas_exempt_origin_def:
   gas_exempt_origin memory tops (ctx, func) source (es, s0)
     marks (err, ee) t <=>
-    ?H cenv cx out_ty ann tb ty e sa sb sc vv op v.
+    ?(H : (bool # bytes32 # type_value) list # num list)
+      cenv cx out_ty ann tb ty e sa sb sc vv op v.
       source = ignore_bind (eval_expr cx (TypeBuiltin ann tb ty [e]))
                            (return ()) /\
       compile_expr cenv out_ty (TypeBuiltin ann tb ty [e]) sa = (vv, sb) /\
