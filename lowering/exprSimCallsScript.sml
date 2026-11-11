@@ -20,24 +20,16 @@
  *     compile_call lowers RawLog and SelfDestructTarget to
  *     INVALID, where
  *     the source can succeed.
- *   - compile_raw_call_sim and compile_raw_call_calldata_sim with
- *     is_delegate_call: both sides run the EVM, but differently: the source
- *     (run_delegate_call) dispatches a precompile address to
- *     dispatch_precompiles and fails unless ext_call_success_accounts_ok,
- *     while Venom's DELEGATECALL (exec_delegatecall) runs the target's
- *     account code with neither, so a delegate call to a precompile
- *     returns the precompile's output in the source and empty success in
- *     Venom.
  *   - compile_raw_call_calldata_sim, and the create lowerings: they allocate with DALLOCA, at vs_fmp, which
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
  *
- * A call or staticcall raw_call takes its outcome from the oracle, as the
- * lowered CALL/STATICCALL does.  expr_sim_pre excludes delegate raw_calls
- * and the creates (~expr_has_evm_run e), since the source runs them on the
- * EVM even with the outcome oracle, and selfdestruct, until the source's
- * selfdestruct halts; so those cases hold vacuously.
+ * A call, staticcall or delegate raw_call takes its outcome from the
+ * oracle, as the lowered CALL/STATICCALL/DELEGATECALL does.  expr_sim_pre
+ * still excludes delegate raw_calls and the creates (~expr_has_evm_run e),
+ * and selfdestruct, until the source's selfdestruct halts; so those cases
+ * hold vacuously.
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.

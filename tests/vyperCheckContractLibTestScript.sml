@@ -812,22 +812,22 @@ in assert_some (check p03_constructor_modules);
    assert_none (check p15x_constructor_modules)
 end) [false,true];
 
-(* Event declaration regressions: indexed aggregates and duplicate event names
-   are rejected; field-name duplication and four indexed fields remain legal. *)
+(* Event declaration regressions: indexed aggregates, duplicate event names,
+   duplicate field names and more than three indexed fields are rejected. *)
 Theorem event_declaration_regressions:
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])] = NONE /\
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F)];
             EventDecl "E" [(("b",BaseT (UintT 256)),T)]])] = NONE /\
-  IS_SOME (check_contract F [] 0w
+  check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
                           (("b",BaseT (UintT 256)),T);
                           (("c",BaseT (UintT 256)),T);
-                          (("d",BaseT (UintT 256)),T)]])]) /\
-  IS_SOME (check_contract F [] 0w
+                          (("d",BaseT (UintT 256)),T)]])] = NONE /\
+  check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
-                          (("a",BaseT BoolT),F)]])]) /\
+                          (("a",BaseT BoolT),F)]])] = NONE /\
   IS_SOME (check_contract F [] 0w
     [(NONE,[FlagDecl "F" ["A";"B"];
             EventDecl "E" [(("a",FlagT (NONE,"F")),T);
@@ -840,6 +840,14 @@ val event_decl_rejections =
   [``([(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])]
       : (num option # toplevel list) list)``,
    ``([(NONE,[EventDecl "E" []; EventDecl "E" []])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
+                            (("b",BaseT (UintT 256)),T);
+                            (("c",BaseT (UintT 256)),T);
+                            (("d",BaseT (UintT 256)),T)]])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
+                            (("a",BaseT BoolT),F)]])]
       : (num option # toplevel list) list)``];
 val () = List.app (fn mods =>
   let val th = vyperCheckContractLib.check_contract_conv
@@ -1543,6 +1551,86 @@ Theorem exports_ok_uninitialized_module:
      ^(uninit_modules lib_double lib_double) [("set_x", 1)] /\
   exports_ok ^empty_layouts ^zero_address
      ^(uninit_modules lib_double lib_double) [("quad", 2)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+(* burn(uint256) and collate_propagate_storage(bytes16) share 0x42966c68. *)
+fun selector_main name =
+  ``FunctionDecl External Pure F F ^(stringSyntax.fromMLstring name)
+      [("a", BaseT (UintT 256))] [] NoneT []``
+val selector_collate =
+  ``FunctionDecl External Pure F F "collate_propagate_storage"
+      [("a", BaseT (BytesT (Fixed 16)))] [] NoneT []``
+fun selector_modules name lib =
+  ``[(NONE, [^(selector_main name)]); (SOME 1, ^lib)]
+    : (num option # toplevel list) list``
+val selector_exports = ``[("collate_propagate_storage", 1n)]``
+val selector_collision_modules = selector_modules "burn" ``[^selector_collate]``
+
+Theorem exports_ok_function_selector_collision:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_collision_modules) /\
+  ~exports_ok ^empty_layouts ^zero_address ^selector_collision_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_renamed_modules = selector_modules "burn_safe" ``[^selector_collate]``
+Theorem exports_ok_renamed_selector_accepted:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_renamed_modules) /\
+  exports_ok ^empty_layouts ^zero_address ^selector_renamed_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_default_modules = selector_modules "burn"
+  ``[FunctionDecl External Pure F F "collate_propagate_storage"
+       [("a", BaseT (BytesT (Fixed 16))); ("b", BaseT (UintT 256))]
+       [Literal (BaseT (UintT 256)) (IntL 0)] NoneT []]``
+Theorem exports_ok_default_prefix_selector_collision:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_default_modules) /\
+  ~exports_ok ^empty_layouts ^zero_address ^selector_default_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_getter_modules = selector_modules "burn"
+  ``[HashMapDecl (Public F) F "collate_propagate_storage"
+       (BaseT (BytesT (Fixed 16))) (Type (BaseT (UintT 256))) NONE]``
+val selector_getter_layouts =
+  ``([((0w : address),
+       ([((SOME 1, "collate_propagate_storage"), 0)] : storage_layout,
+        [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+Theorem exports_ok_getter_selector_collision:
+  IS_SOME (check_contract F ^selector_getter_layouts ^zero_address
+             ^selector_getter_modules) /\
+  ~exports_ok ^selector_getter_layouts ^zero_address ^selector_getter_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_unexported_modules = selector_modules "burn"
+  ``[^selector_collate; FunctionDecl External Pure F F "safe" [] [] NoneT []]``
+Theorem exports_ok_unexported_selector_accepted:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_unexported_modules) /\
+  exports_ok ^empty_layouts ^zero_address ^selector_unexported_modules
+     [("safe", 1)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+Theorem check_contract_main_selector_collision:
+  check_contract F ^empty_layouts ^zero_address
+    [(NONE, [^(selector_main "burn"); ^selector_collate])] = NONE
 Proof
   CONV_TAC vyperCheckContractLib.check_contract_conv
 QED
