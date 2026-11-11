@@ -14662,6 +14662,28 @@ Proof
   simp[]
 QED
 
+Theorem mm_local_cut_literal_load_read[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n < LENGTH is /\ (EL n is).inst_opcode = MLOAD /\
+  (EL n is).inst_operands = [Lit w] /\ (EL n is).inst_outputs = [out] /\
+  mm_local_cut is gs H n excluded pc t ==>
+  read_memory (w2n w) 32 (H n) = read_memory (w2n w) 32 t
+Proof
+  strip_tac >>
+  `mm_local_pending (mm_local_write_capture is H n)
+    (mm_local_pending_indices is gs n) (H n) t` by fs[mm_local_cut_def] >>
+  qpat_x_assum `mm_local_pending _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_def]) >>
+  irule mm_local_read_write_log_memory >> qexists `ws` >> simp[] >>
+  simp[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>
+  drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
+  irule mm_local_pending_literal_load_disjoint >> metis_tac[]
+QED
+
 Theorem mm_local_cut_representative_protected_operands[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
