@@ -28,7 +28,8 @@ Proof
   strip_tac >>
   `es.outcomes = SOME s.vs_outcomes` by fs[stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
-  simp[vyperCallOutcomeTheory.take_call_outcome_def] >>
+  simp[vyperCallOutcomeTheory.take_call_outcome_def,
+    vyperCallOutcomeTheory.take_request_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[AllCaseEqs()]
 QED
 

@@ -689,6 +689,11 @@ Resume raw_call_prefix_sim_ptr[transport]:
 QED
 
 Resume raw_call_prefix_sim_ptr[typed_post]:
+  `~EXISTS expr_has_effect kws ==> pure_frame cenv func ed sm th t'` by
+    (strip_tac >> irule exprSimPropsTheory.pure_frame_mem_tail >>
+     qexists_tac `t` >> fs[exprSimPrecompilesTheory.typed_args_post_def] >>
+     qpat_x_assum `wb_frame cenv es_end es_end s5 t t'` mp_tac >>
+     simp[loweringPostsTheory.wb_frame_def]) >>
   `wb_frame cenv ed (es_end with gas_obs := []) sm th t'` by
     (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
      qexistsl_tac [`s5`, `t`] >>
@@ -696,6 +701,7 @@ Resume raw_call_prefix_sim_ptr[typed_post]:
      qpat_x_assum `wb_frame cenv es_end es_end s5 t t'` mp_tac >>
      simp[loweringPostsTheory.wb_frame_def]) >>
   pop_assum mp_tac >>
+  qpat_x_assum `~EXISTS expr_has_effect kws ==> _` mp_tac >>
   qpat_x_assum `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[exprSimPrecompilesTheory.typed_args_post_def] >> rpt strip_tac >>
   qpat_x_assum `EVERY (\op. !v. op = Var v ==> not_fresh_at s5 v) xs'` mp_tac >>
