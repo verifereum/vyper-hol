@@ -10,6 +10,7 @@ Ancestors
   vyperPlaceInvariants vyperInterpreter vyperState vyperMisc
   vyperTypeDeploymentMachine vyperTypeBindArguments vyperTypeInvariants
   vyperTypeContract vyperContext vyperTypeInitialState vyperTypeContractFunction
+  entryDecodePlanProps
   vyperTypeDeploymentSoundness vyperTypeContractSoundness
   vyperTypeContractStaticMaps vyperTypeEvalStoragePreservation
   typedCopyProducer typedCopyMetadata vyperTypeContractContext
@@ -1476,8 +1477,8 @@ Proof
   `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
     (drule check_contract_namespaces_ok >>
      simp[contract_namespaces_ok_def, contract_keys_def]) >>
-  `cenv_module_pins tops cenv` by fs[body_inv_def] >>
-  drule_all deploy_frame_flag_compatibility >> strip_tac >>
+  qspecl_then [`tops`,`am`,`tx`,`cenv`] mp_tac deploy_frame_flag_compatibility >>
+  impl_tac >- fs[body_inv_def] >> strip_tac >>
   drule_all deploy_ctor_struct_compatibility >> strip_tac >>
   drule_all deploy_ctor_defined_map_agreement >> strip_tac >>
   drule deploy_ctor_static_tables >> strip_tac >>
@@ -1492,8 +1493,6 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   simp[exprSimHypsDefsTheory.expr_sim_inv_def] >>
   conj_tac >- metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (drule deploy_ctor_method_id >> simp[]) >>
   conj_tac >- metis_tac[] >>
