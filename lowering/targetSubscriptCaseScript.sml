@@ -28,8 +28,8 @@ Libs
 
 (* An element of an array or a mapping, by the target's root and its
    indices (targetSubscriptSplit): only a local root with a pop in an
-   index is residual.  Pure and effectful storage indices share the
-   capacity-based target_subscript_shared_case path.  A target's root
+   index is residual.  Every other target takes the capacity-based
+   target_subscript_shared_case path.  A target's root
    is a name, local or module. *)
 Theorem target_subscript_case:
   !nocalls ctx func cenv cx bt e.
@@ -48,8 +48,8 @@ Proof
   >- (Cases_on `supported_target_exists (\x. ?ty t. x = Pop ty t)
                   (SubscriptTarget bt e)`
       >- (irule target_subscript_local_pop_case >> metis_tac[]) >>
-      irule target_subscript_main_case >> gvs[] >> metis_tac[]) >>
-  Cases_on `EVERY pure_expr (target_indices (SubscriptTarget bt e))`
-  >- (irule target_subscript_main_case >> gvs[] >> metis_tac[]) >>
-  irule target_subscript_storage_effectful_case >> metis_tac[]
+      irule target_subscript_shared_case >> rpt conj_tac >>
+      TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
+  irule target_subscript_shared_case >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC) >> gvs[]
 QED

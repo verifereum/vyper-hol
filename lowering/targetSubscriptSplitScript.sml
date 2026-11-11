@@ -3,12 +3,14 @@
  * target's root and its indices.
  *
  * TOP-LEVEL:
- *   target_subscript_shared_case — shared capacity-based storage and local
- *                          no-Pop path; the next two exports are wrappers
- *   target_subscript_main_case — a local root whose indices pop nothing,
- *                          or a storage root whose indices are all pure
- *   target_subscript_storage_effectful_case — a storage root
- *                          with an index that calls or pops
+ *   target_subscript_shared_case — a storage root, any indices, or a
+ *                          local root whose indices pop nothing.  A storage
+ *                          place stays in range and live after effectful
+ *                          indices by capacity-based provenance
+ *                          (targetSubscriptStorage.eval_base_place_storage_ready),
+ *                          from storage_layout_safe and
+ *                          contract_storage_well_formed in expr_sim_inv;
+ *                          no slot-separation premise
  *   target_subscript_local_pop_case — RESIDUAL: a local root with an index
  *                          that pops
  *)
@@ -1257,48 +1259,7 @@ Proof
   qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
 QED
 
-Theorem target_subscript_base_continuation:
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
-  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_vv_case nocalls ctx func cenv cx e) /\
-  (!nsid. target_root bt = TopLevelNameTarget nsid ==>
-    EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
-  (!id. target_root bt = NameTarget id ==>
-    ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) /\
-  type_place_target env bt = SOME bvt /\
-  subscript_vtype bvt (expr_type e) = SOME vt /\
-  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
-  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
-  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
-  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
-  fn_has_code sm sn func /\ fn_has_code sn sb func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) /\
-  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
-  t.vs_current_bb = sm.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\key. extend_place cx pv (ValueSubscript key)))
-    (mid with gas_obs := [],t)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
-      u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
-Proof
-  strip_tac >>
-  drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation >>
-  disch_then (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  disch_then irule >> simp[] >> metis_tac[]
-QED
-
-(* target_subscript_base_continuation for a local root whose indices may
+(* target_subscript_continuation for a local root whose indices may
    pop, when every successful run of the index (for any gas observations)
    leaves the base's place live in the local's value: x[y.pop()] = v, or a
    pop that leaves the base's element in place.  The local's memory still
@@ -1391,7 +1352,7 @@ Proof
   cheat
 QED
 
-(* target_subscript_base_continuation for a local root whose indices may
+(* target_subscript_continuation for a local root whose indices may
    pop: split on whether the base's place is still live after the index. *)
 Theorem target_subscript_local_pop_continuation:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
@@ -1510,41 +1471,6 @@ Proof
   goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qexistsl [`env`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
-QED
-
-Theorem target_subscript_main_case:
-  !nocalls ctx func cenv cx bt e.
-    target_case nocalls ctx func cenv cx bt /\
-    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e) /\
-    (!nsid. target_root bt = TopLevelNameTarget nsid ==>
-            EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
-    (!id. target_root bt = NameTarget id ==>
-          ~supported_target_exists (\x. ?ty t. x = Pop ty t)
-             (SubscriptTarget bt e)) ==>
-    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
-Proof
-  rpt gen_tac >> strip_tac >> irule target_subscript_shared_case >>
-  simp[] >> first_assum ACCEPT_TAC
-QED
-
-(* Effectful storage indices can shrink an ancestor after the base pointer
-   is captured.  Capacity-based provenance keeps that captured region valid;
-   the post-index source invariant supplies its storage readiness without a
-   storage-frame or purity restriction on the index. *)
-Theorem target_subscript_storage_effectful_case:
-  !nocalls ctx func cenv cx bt e nsid.
-    target_case nocalls ctx func cenv cx bt /\
-    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e) /\
-    target_root bt = TopLevelNameTarget nsid /\
-    ~EVERY pure_expr (target_indices (SubscriptTarget bt e)) ==>
-    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
-Proof
-  rpt gen_tac >> strip_tac >> irule target_subscript_shared_case >>
-  simp[] >> metis_tac[]
 QED
 
 (* RESIDUAL (a pop in a local target's index): the pop can pop an ancestor
