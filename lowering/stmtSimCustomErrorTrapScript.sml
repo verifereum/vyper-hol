@@ -1,12 +1,13 @@
 Theory stmtSimCustomErrorTrap
 Ancestors
   exprLoweringProps fragExec abiEncoderProps memSafeRun fcgDefs venomWf
+  contextCodegenRel
   venomExecSemantics venomInst venomState compileEnv list rich_list relation
 
 Definition ce_trap_inst_def:
   ce_trap_inst i =
     if i.inst_opcode = GAS \/ i.inst_opcode = INVOKE then
-      i with <|inst_opcode := GAS; inst_outputs := []|>
+      i with <|inst_opcode := GAS; inst_outputs := i.inst_outputs ++ i.inst_outputs|>
     else i
 End
 
@@ -173,4 +174,62 @@ Theorem ce_trap_recorded_alloca_size:
 Proof
   simp[ce_trap_fn_insts, MEM_MAP] >> rpt strip_tac >>
   gvs[ce_trap_inst_fields] >> metis_tac[]
+QED
+
+Theorem ce_trap_error:
+  i.inst_opcode = GAS \/ i.inst_opcode = INVOKE ==>
+  step_inst fuel ctx (ce_trap_inst i) s = Error "read0 requires single output"
+Proof
+  strip_tac >>
+  simp[ce_trap_inst_def, step_inst_non_invoke, step_inst_base_def, exec_gas_def] >>
+  Cases_on `i.inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[]
+QED
+
+Theorem ce_trap_step_back_assign:
+  step_back_assign (ce_trap_inst i) op = step_back_assign i op
+Proof
+  Cases_on `i.inst_opcode = GAS \/ i.inst_opcode = INVOKE` >>
+  Cases_on `op` >> gvs[ce_trap_inst_def, step_back_assign_def, MEM_APPEND]
+QED
+
+Theorem ce_trap_resolve_block_assigns:
+  !is op. resolve_block_assigns (MAP ce_trap_inst is) op = resolve_block_assigns is op
+Proof
+  Induct >> simp[resolve_block_assigns_def] >> gen_tac >>
+  Cases_on `h.inst_opcode = GAS \/ h.inst_opcode = INVOKE` >>
+  Cases_on `op` >> gvs[ce_trap_inst_def, resolve_block_assigns_def, MEM_APPEND]
+QED
+
+Theorem ce_trap_same_after_assigns:
+  !is p q. same_after_assigns (MAP ce_trap_inst is) p q = same_after_assigns is p q
+Proof
+  Induct >> simp[same_after_assigns_def, ce_trap_step_back_assign]
+QED
+
+Theorem ce_trap_observed_opcodes:
+  ((ce_trap_inst i).inst_opcode = ASSIGN <=> i.inst_opcode = ASSIGN) /\
+  ((ce_trap_inst i).inst_opcode = RETURNDATACOPY <=> i.inst_opcode = RETURNDATACOPY) /\
+  ((ce_trap_inst i).inst_opcode = REVERT <=> i.inst_opcode = REVERT)
+Proof
+  rw[ce_trap_inst_def] >> gvs[]
+QED
+
+Theorem ce_trap_revert_forward_pair:
+  revert_forward_pair (ce_trap_block bb) i j <=> revert_forward_pair bb i j
+Proof
+  simp[revert_forward_pair_def, ce_trap_get_instruction,
+       ce_trap_block_def, GSYM MAP_TAKE, GSYM MAP_DROP, GSYM MAP_REVERSE,
+       ce_trap_same_after_assigns, ce_trap_resolve_block_assigns] >>
+  Cases_on `get_instruction bb i` >> Cases_on `get_instruction bb j` >>
+  simp[ce_trap_inst_fields, ce_trap_observed_opcodes] >>
+  eq_tac >> rpt strip_tac >>
+  gvs[ce_trap_inst_fields, ce_trap_observed_opcodes] >>
+  metis_tac[ce_trap_observed_opcodes, optionTheory.option_CLAUSES]
+QED
+
+Theorem ce_trap_revert_forward_at:
+  revert_forward_at (ce_trap_block bb) k <=> revert_forward_at bb k
+Proof
+  simp[revert_forward_at_def, ce_trap_revert_forward_pair]
 QED
