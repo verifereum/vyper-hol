@@ -130,7 +130,7 @@ Proof
   Cases_on `rr` >> simp[]
 QED
 
-Theorem send_exempt_cert[local]:
+Theorem send_exempt_cert:
   LENGTH args = (if has_gas then 3 else 2) /\
   gas_exempt_cert memory tops p
     (ignore_bind (eval_exprs cx args) (return ())) start marks out endpoint ==>

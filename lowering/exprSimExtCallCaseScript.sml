@@ -186,6 +186,13 @@ Definition extcall_request_ready_def:
              evaluate_type (get_tenv cx) default_ty = SOME tv ==>
              compileEnv$regions_disjoint (w2n ro) cap (w2n w)
                (val_footprint tv d))) /\
+    (!pa pk. pa + pk <= s0.vs_alloca_next /\
+           (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
+              compileEnv$regions_disjoint pa pk pb pz) ==>
+           pa + pk <= t.vs_alloca_next /\
+           mem_bytes_at pa pk t.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
+           !pid pb pz. FLOOKUP t.vs_allocas pid = SOME (pb,pz) ==>
+             compileEnv$regions_disjoint pa pk pb pz) /\
     extcall_default_ready cx ret_type has_default default_op default_ty
       default_opt t
 End
@@ -213,6 +220,13 @@ Definition extcall_returned_def:
              FLOOKUP t.vs_allocas live = SOME (w2n ro, buf_size)) /\
           mem_bytes_at (w2n ro) (LENGTH (TAKE cap returnData)) t.vs_memory =
             TAKE cap returnData) /\
+    (!pa pk. pa + pk <= s0.vs_alloca_next /\
+           (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
+              compileEnv$regions_disjoint pa pk pb pz) ==>
+           pa + pk <= t.vs_alloca_next /\
+           mem_bytes_at pa pk t.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
+           !pid pb pz. FLOOKUP t.vs_allocas pid = SOME (pb,pz) ==>
+             compileEnv$regions_disjoint pa pk pb pz) /\
     extcall_default_ready cx ret_type has_default default_op default_ty
       default_opt t
 End
@@ -1149,7 +1163,11 @@ Theorem extcall_return_default:
            (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
               args dflt) es sa sb s0 ee' tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
-         t'.vs_inst_idx = LENGTH sb.cs_current_insts)
+         t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+         (!pa pk. pa + pk <= s0.vs_alloca_next /\
+                (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
+                   compileEnv$regions_disjoint pa pk pb pz) ==>
+                mem_bytes_at pa pk t'.vs_memory = mem_bytes_at pa pk s0.vs_memory))
       (\res ee r. expr_exit res r)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -1558,7 +1576,11 @@ Theorem extcall_return_values:
            (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
               args dflt) es sa sb s0 ee' tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
-         t'.vs_inst_idx = LENGTH sb.cs_current_insts)
+         t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+         (!pa pk. pa + pk <= s0.vs_alloca_next /\
+                (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
+                   compileEnv$regions_disjoint pa pk pb pz) ==>
+                mem_bytes_at pa pk t'.vs_memory = mem_bytes_at pa pk s0.vs_memory))
       (\res ee r. expr_exit res r)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

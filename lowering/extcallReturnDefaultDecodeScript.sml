@@ -116,6 +116,13 @@ Theorem return_prepared_counted_success:
     (abi_malformed_scratch_sites st en func) dstid live base_op dst
     B cap bs d (type_memory_bytes ce rt) s /\
   wb_frame ce es sa s0 s /\ local_ptrs_reserved ce sa /\
+  (!pa pk. pa + pk <= s0.vs_alloca_next /\
+         (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
+            compileEnv$regions_disjoint pa pk pb pz) ==>
+         pa + pk <= s.vs_alloca_next /\
+         mem_bytes_at pa pk s.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
+         !pid pb pz. FLOOKUP s.vs_allocas pid = SOME (pb,pz) ==>
+           compileEnv$regions_disjoint pa pk pb pz) /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= a.cs_next_var /\ sa.cs_next_id <= dstid /\
   sa.cs_next_id <= st.cs_next_id /\
@@ -123,6 +130,10 @@ Theorem return_prepared_counted_success:
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?z. gas_marked_path F ctx func s 0 (OK z) /\
     stmt_state_rel ctx func ce cx ee z /\ wb_frame ce es sa s0 z /\
+    (!pa pk. pa + pk <= s0.vs_alloca_next /\
+           (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
+              compileEnv$regions_disjoint pa pk pb pz) ==>
+           mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s0.vs_memory) /\
     eval_operand dst z = SOME (n2w d) /\
     val_in_memory actual_tv v d z.vs_memory /\
     abi_malformed_destination func ce ee.scopes dstid d

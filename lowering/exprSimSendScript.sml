@@ -336,7 +336,7 @@ Proof
 QED
 
 (* The ASSERT of the success word the CALL just bound. *)
-Theorem send_assert_ok[local]:
+Theorem send_assert_ok:
   !id x w s.
     w <> 0w ==>
     step_inst_base (mk_inst id ASSERT [Var x] []) (update_var x w s) =
@@ -347,7 +347,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem send_assert_fail[local]:
+Theorem send_assert_fail:
   !id x s.
     step_inst_base (mk_inst id ASSERT [Var x] []) (update_var x 0w s) =
       Abort Revert_abort (revert_state (set_returndata [] (update_var x 0w s)))
@@ -357,7 +357,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem send_call_read_step[local]:
+Theorem send_call_read_step:
   stmt_state_rel ctx func cenv cx es1 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
@@ -551,7 +551,7 @@ Proof
   gvs[]
 QED
 
-Theorem send_read_gas_obs[local]:
+Theorem send_read_gas_obs:
   bind (eval_send cx has_gas vs) (read_result cx) st = (res, st') ==>
   !tail. bind (eval_send cx has_gas vs) (read_result cx)
            (st with gas_obs := tail) = (res, st' with gas_obs := tail)
@@ -563,7 +563,7 @@ Proof
   drule eval_send_value >> strip_tac >> gvs[read_result_def, return_def]
 QED
 
-Theorem eval_expr_send_read_action[local]:
+Theorem eval_expr_send_read_action:
   LENGTH args = (if has_gas then 3 else 2) ==>
   bind (eval_expr cx (Call ann (Send has_gas) args dflt)) (read_result cx) =
   bind (eval_exprs cx args) (\vs. bind (eval_send cx has_gas vs) (read_result cx))
@@ -575,7 +575,7 @@ Proof
   strip_tac >> gvs[bind_def]
 QED
 
-Theorem send_tail_path[local]:
+Theorem send_tail_path:
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
@@ -653,7 +653,7 @@ Proof
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
 
-Theorem send_tail_summary[local]:
+Theorem send_tail_summary:
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
