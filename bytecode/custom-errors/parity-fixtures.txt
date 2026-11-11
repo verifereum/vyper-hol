@@ -1,8 +1,2 @@
-ce_assert_dynamic
-ce_assert_noargs
-ce_assert_static
-ce_raise_dynamic
-ce_raise_dynarray
-ce_raise_kwargs
-ce_raise_noargs
-ce_raise_static
+# Every custom-error fixture waits for the P4 direct-encoder port
+# (../pending-5127-port.md); list them here again once it lands.

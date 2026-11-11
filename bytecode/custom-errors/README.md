@@ -2,11 +2,15 @@
 
 These sources exercise the lowering of `raise E(...)` and `assert c, E(...)`
 for a declared `error E` ([issue #1195](https://github.com/verifereum/vyper-hol/issues/1195)).
-Python Vyper stores the arguments in a tuple buffer at their declared types,
-ABI-encodes them behind the error's selector and reverts with
-`selector || abi_encode(args)` (`_revert_with_custom_error` in
-`codegen_venom/stmt.py`); an error without arguments reverts with the
-selector alone. Each source has an exact bytecode comparison, run by
+The HOL lowering follows Python Vyper before vyperlang/vyper#5127: it
+stores the arguments in a tuple buffer at their declared types, ABI-encodes
+them behind the error's selector and reverts with
+`selector || abi_encode(args)`; an error without arguments reverts with the
+selector alone. At `VYPER_PIN`, `_revert_with_custom_error`
+(`codegen_venom/stmt.py`) lowers the arguments as values and encodes them
+with the direct encoder, so every fixture here waits for that port (P4 in
+[`../pending-5127-port.md`](../pending-5127-port.md)). Once it lands, each
+source has an exact bytecode comparison, run by
 `./native/bytecode_parity_native.exe . custom-errors` from `bytecode/`
 (`../native/README.md`).
 
