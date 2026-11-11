@@ -3,7 +3,7 @@ Theory bodyIntCallLocalLanding
 Ancestors
   localMemoryStorePath bodyIntCallProtectedReturn exprSimCopy tupleMemoryFrame
   stmtSimAssignStore exprSimDefs fragGasSeq fragGasMode localPtrsProps
-  vyperLookup finite_map pred_set rich_list venomState compileEnv exprLoweringProps
+  vyperLookup finite_map pred_set rich_list venomState compileEnv loweringStateRelDefs exprLoweringProps
   fragExec exprLowering emitHelperProps venomInst venomExecSemantics
   valueEncoding vyperState vyperInterpreter loweringPosts valueCopy list instIdxIndep
 

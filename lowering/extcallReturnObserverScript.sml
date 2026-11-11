@@ -2,7 +2,7 @@
 Theory extcallReturnObserver
 Ancestors
   extcallReturnCountedCheck exprSimAbiGasBridge abiMalformedRecursiveInterface
-  venomInst compileEnv exprLoweringProps fragExec list unitShapeDefs callLayoutDefs
+  venomInst compileEnv loweringStateRelDefs exprLoweringProps fragExec list unitShapeDefs callLayoutDefs
   venomWf localPtrsProps dftPipelineInvar sorting fcgDefs relation
   abiEncoderObserver venomExecSemantics venomExecProofs venomInstProofs1
   intCallCallee

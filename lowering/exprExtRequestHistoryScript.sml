@@ -2,7 +2,7 @@
 Theory exprExtRequestHistory
 Ancestors
   exprExtRequestReadProbe exprExtRequestImmutableFrame exprSimProps
-  loweringPosts exprLoweringProps compileEnv
+  loweringPosts exprLoweringProps compileEnv loweringStateRelDefs
 
 Definition extrequest_history_frame_def:
   extrequest_history_frame cenv cx ec sc tc ee sn t <=>
@@ -18,7 +18,7 @@ Definition extrequest_history_frame_def:
     (!aid b sz. FLOOKUP tc.vs_allocas aid = SOME (b,sz) /\
        aid < sc.cs_next_id /\
        (!n lb lsz. local_region cenv ec.scopes tc n lb lsz ==>
-          compileEnv$regions_disjoint b sz lb lsz) ==>
+          loweringStateRelDefs$regions_disjoint b sz lb lsz) ==>
        mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz tc.vs_memory) /\
     (cenv.ce_is_ctor ==> !name tv v off.
        FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
@@ -71,7 +71,7 @@ Theorem extrequest_history_frame_extend:
         MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
         sm.cs_next_id <= inst.inst_id /\
         FLOOKUP t'.vs_allocas inst.inst_id = SOME (b,sz) ==>
-        compileEnv$regions_disjoint off len b sz) ==>
+        loweringStateRelDefs$regions_disjoint off len b sz) ==>
      mem_bytes_at off len t'.vs_memory = mem_bytes_at off len t.vs_memory) ==>
   extrequest_history_frame cenv cx ec sc tc ee' sn t'
 Proof

@@ -2,7 +2,7 @@
 Theory exprExtRequestEncoderEntry
 Ancestors
   abiEncoderWindowRun abiEncoderSourceProducer abiEncoderWindow
-  abiEncoderAdmissible abiEncoderSourceInvoke valueEncoding
+  abiEncoderAdmissible abiEncoderSourceInvoke valueEncoding valueEncodingDefs
   vyperABI contractABI list
 
 Theorem extrequest_encoder_source_window:

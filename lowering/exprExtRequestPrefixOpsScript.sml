@@ -7,7 +7,7 @@ Ancestors
   exprSimMapKey exprSimAlloc exprSimHash stmtSimDeclPath valueEncodingProps
   valueEncodingProofs abiCanonicalHeadSize entryDispatchProps selectorDispatch
   exprLoweringProps exprSimProps exprSafeOperand freshWrites
-  emitHelper emitHelperProps compileEnv context fragExec fragGasMode
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs context fragExec fragGasMode
   venomInst venomState venomExecSemantics list arithmetic
 
 Theorem extrequest_add_endpoint:

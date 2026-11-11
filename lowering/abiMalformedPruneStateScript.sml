@@ -1,7 +1,7 @@
 (* Reserved pointer lookups suffice for decoder proof-state reentry. *)
 Theory abiMalformedPruneState
 Ancestors
-  abiDecoderReentry exprLoweringProps localPtrsProps compileEnv
+  abiDecoderReentry exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs
   venomState finite_map pred_set arithmetic
 
 Theorem abi_malformed_reserved_vars_state:

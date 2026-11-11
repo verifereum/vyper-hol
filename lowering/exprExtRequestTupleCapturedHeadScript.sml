@@ -4,7 +4,7 @@ Ancestors
   exprExtRequestTupleHead exprExtRequestTupleStore exprExtRequestHistoryCompose
   exprExtRequestJointUnwrap exprExtRequestReconstruct exprOperandVar
   exprSafeOperand exprLoweringProps exprSimProps exprLowering context
-  loweringPosts compileEnv venomState venomMemDefs gasSummary fragGasMode
+  loweringPosts compileEnv loweringStateRelDefs venomState venomMemDefs gasSummary fragGasMode
   valueTypingMemoryProps valueEncodingProps valueCopyBytes freshWrites fragExec fragGasPath
 Libs wordsLib
 
@@ -133,7 +133,7 @@ Resume extrequest_tuple_captured_head[store]:
      `local_region cenv ee.scopes s name b len` by
        metis_tac[exprExtRequestHistoryTheory.extrequest_history_local_regions] >>
      `regions_disjoint tuple_base sz b len` by metis_tac[] >>
-     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `~u.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def, gas_marked_path_def] >>
@@ -167,10 +167,10 @@ Resume extrequest_tuple_captured_head[history_and_finish]:
      conj_tac >- (qexistsl_tac [`ctx`, `func`] >> simp[]) >>
      qexistsl_tac [`w2n (w + n2w off)`, `live`, `type_memory_size tv`,
        `su`, `sz`, `u`, `tuple_base`] >>
-     simp[ci_mono_def, compileEnvTheory.regions_disjoint_def,
+     simp[ci_mono_def, loweringStateRelDefsTheory.regions_disjoint_def,
           venomStateTheory.lookup_var_def] >>
      fs[venomStateTheory.lookup_var_def, ci_mono_def,
-        compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+        loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   `extrequest_history_frame cenv cx ec sc tc ee sb q` by
     (qpat_x_assum `extrequest_history_frame _ _ _ _ _ _ _ (_ with vs_inst_idx := _)`
        mp_tac >>
@@ -190,8 +190,8 @@ Resume extrequest_tuple_captured_head[history_and_finish]:
         (irule extrequest_history_alloc_window >>
          first_assum (irule_at (Pat `extrequest_history_frame _ _ _ _ _ _ _ _`)) >>
          first_assum (irule_at (Pat `FLOOKUP _ live = _`)) >>
-         fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
-      fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+         fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at su x` by (irule not_fresh_at_mono >> qexists_tac `sm` >> simp[]) >>
@@ -212,8 +212,8 @@ Resume extrequest_tuple_captured_head[history_and_finish]:
          disch_then (qspecl_then [`aid`, `live`, `old_base`, `old_size`, `tuple_base`, `sz`] mp_tac) >>
          simp[]) >>
       `regions_disjoint old_base old_size (w2n (w + n2w off)) (type_memory_size tv)` by
-        (simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
-      fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+        (simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   rpt strip_tac >>
   `extrequest_history_frame cenv cx eb cb tb ee su u` by
     (irule extrequest_history_frame_trans >>
@@ -230,10 +230,10 @@ Resume extrequest_tuple_captured_head[arbitrary_root]:
      conj_tac >- (qexistsl_tac [`ctx`, `func`] >> simp[]) >>
      qexistsl_tac [`w2n (w + n2w off)`, `live`, `type_memory_size tv`,
        `su`, `sz`, `u`, `tuple_base`] >>
-     simp[ci_mono_def, compileEnvTheory.regions_disjoint_def,
+     simp[ci_mono_def, loweringStateRelDefsTheory.regions_disjoint_def,
           venomStateTheory.lookup_var_def] >>
      fs[venomStateTheory.lookup_var_def, ci_mono_def,
-        compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+        loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   qpat_x_assum `extrequest_history_frame _ _ eb cb tb _ _ (_ with vs_inst_idx := _)`
     mp_tac >>
   simp[exprExtRequestHistoryTheory.extrequest_history_frame_def,

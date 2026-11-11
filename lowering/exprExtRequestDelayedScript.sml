@@ -65,5 +65,5 @@ Proof
       drule mem_bytes_at_agree_window >> strip_tac >> metis_tac[])
   >- metis_tac[extrequest_local_read_kept]
   >> irule val_in_memory_footprint_agree >> conj_tac >- simp[] >>
-  qexists_tac `s0.vs_memory` >> simp[valueEncodingTheory.mem_bytes_at_def]
+  qexists_tac `s0.vs_memory` >> simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED

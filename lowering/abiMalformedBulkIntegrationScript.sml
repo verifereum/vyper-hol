@@ -12,7 +12,7 @@ Ancestors
   abiDecoderBytesBound abiDecoderGuards abiDecoderDynarrayBound abiDecoderArrayHeader
   abiDecoderBulkExecute abiDecoderVarSequence abiDecoderAbortReentry
   abiDecoderReentryPointer abiDecoderVarExtend fragExec freshWrites
-  abiStaticLayoutProps compileEnv venomState venomInst venomExecSemantics finite_map pred_set
+  abiStaticLayoutProps compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics finite_map pred_set
   abiDecoderCoherence vyperABI vyperValue contractABI list rich_list arithmetic words
 
 Theorem abi_malformed_bulk_static_prefix:

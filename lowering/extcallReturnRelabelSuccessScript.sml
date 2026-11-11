@@ -7,7 +7,7 @@ Ancestors
   extcallReturnDecodeSummary extcallReturnDecoderCode
   abiValidAllocatedContract abiMalformedRecursiveInterface
   exprSimAbiGasBridge abiEncoderObserver exprLoweringProps
-  compileEnv venomState venomInst venomExecSemantics venomExecProofs fragExec
+  compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics venomExecProofs fragExec
   list pred_set finite_map
 
 Theorem return_relabel_stmt_control[local]:

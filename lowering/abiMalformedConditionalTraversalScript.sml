@@ -153,7 +153,7 @@ Proof
      simp_tac bool_ss [abi_malformed_allocated_window_def] >> strip_tac >>
      qpat_x_assum `mem_bytes_at B L _.vs_memory = xs` mp_tac >>
      disch_then (mp_tac o AP_TERM ``LENGTH : word8 list -> num``) >>
-     simp[valueEncodingTheory.mem_bytes_at_def, LENGTH_TAKE, LENGTH_APPEND]) >>
+     simp[valueEncodingDefsTheory.mem_bytes_at_def, LENGTH_TAKE, LENGTH_APPEND]) >>
   `abi_reflected_head_ok (vyper_to_abi_type env ty) (DROP (p+32) xs) j /\
    abi_reflected_child (vyper_to_abi_type env ty) (DROP (p+32) xs) j =
      (if is_dynamic (vyper_to_abi_type env ty) then DROP (p+32+off) xs

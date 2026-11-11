@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallJointAggCore bodyAttributeMemory
   exprSimFieldLayout exprSimAttributeProps bodyFieldMemoryProps
   loweringPosts exprSimVVFrame exprLoweringProps emitHelperProps
-  compileEnv moduleLoweringProps venomState fragGasMode typedMemoryCopy instIdxIndep
+  compileEnv loweringStateRelDefs moduleLoweringProps venomState fragGasMode typedMemoryCopy instIdxIndep
   emitHelper exprSimAttribute exprSimDefs exprSimHypsDefs context
   exprSimUnwrap fragExec supportedExprs vyperTypeCallGraph stmtSimForced
   exprSimHyps vyperInterpreter vyperAST

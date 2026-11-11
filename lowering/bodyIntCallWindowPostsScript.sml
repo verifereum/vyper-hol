@@ -3,7 +3,7 @@ Theory bodyIntCallWindowPosts
 Ancestors
   loweringPosts context exprSimProps valueEncoding vyperInterpreter vyperState
   exprLoweringProps exprLowering exprSimCopy exprSimUnwrap loweringHalt
-  compileEnv finite_map words valueCopy exprSimStorageCopy
+  compileEnv loweringStateRelDefs finite_map words valueCopy exprSimStorageCopy
 
 Theorem vv_identity_location:
   read_result cx r es = (INL v,es) /\

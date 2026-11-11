@@ -5,7 +5,7 @@ Ancestors
   exprSimProps intCallFrame venomState bodyMemPopToplevelSim
   bodyMemPopToplevelPath exprSimPopStorage exprSimTopLevelProps
   exprSimSource exprSimHypsDefs exprSimDefs exprLoweringProps
-  exprLowering compileEnv context vyperInterpreter vyperStorageBackend
+  exprLowering compileEnv loweringStateRelDefs context vyperInterpreter vyperStorageBackend
   vyperStorageLayoutSafety vyperStorage vyperState venomExecSemantics
   venomInst accountsRelProps gasOutcome gasSummary fragGasMode fragGasPathMem
   list words finite_map fragExec bodySimStmtCases exprOpenCases

@@ -62,7 +62,7 @@ Proof
         `evaluate_type tenv dt = _`, `evaluate_type tenv st = _`,
         `default_value stv = _`] >>
      simp[Abbr `elem`, NoAsms] >> rpt (first_x_assum kall_tac) >>
-     simp[valueEncodingTheory.val_wf_def] >> rpt strip_tac >>
+     simp[valueEncodingDefsTheory.val_wf_def] >> rpt strip_tac >>
      metis_tac[typed_memory_sparse_lookup_type, typed_memory_sparse_lookup_wf]) >>
   `?z. val_in_memory (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs))
           (w2n sw) z.vs_memory /\

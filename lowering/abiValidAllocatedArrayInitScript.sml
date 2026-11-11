@@ -8,7 +8,7 @@ Ancestors
   abiDecoderIndexInit abiDecoderContract abiDecodeRanges abiMalformedNavigation
   abiDecoderAbortReentry abiDecoderReentry abiDecoderReentryPointer
   exprLoweringProps localPtrsProps emitHelperProps emitHelper
-  compileEnv context venomState venomMemDefs venomInst
+  compileEnv loweringStateRelDefs context venomState venomMemDefs venomInst
   abiValidAllocatedContract abiMalformedSiteFrame abiDecoderArrayHeader
   exprSimAlloc venomExecSemantics venomMemProps
   abiDecoderLoop fragExec abiMalformedMemberSetup instIdxIndep abiDecoderArrayInit

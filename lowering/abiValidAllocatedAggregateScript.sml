@@ -4,7 +4,7 @@ Ancestors
   abiValidAllocatedComplex abiValidAllocatedMemberFold abiValidAllocatedMembers
   abiValidAllocatedContract abiDecoderMemberInfos abiDecoderCoherence
   abiMalformedRecursiveInterface abiValidMembers abiValidAggregateHeads
-  abiDecoderContract abiEncoder vyperABI contractABI compileEnv valueEncoding
+  abiDecoderContract abiEncoder vyperABI contractABI compileEnv valueEncoding valueEncodingDefs
   vyperValue abiDecodeRanges abiDecoderMembers words list rich_list arithmetic
   abiDecoderStruct valueEncodingTyping valueEncodingProofs finite_map
   abiDecoderFixedMemory vyperABIValid exprSimAggregateEncoding

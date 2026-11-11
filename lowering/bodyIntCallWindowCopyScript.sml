@@ -2,7 +2,7 @@
 Theory bodyIntCallWindowCopy
 Ancestors
   bodyIntCallForcingCodeRun exprSimCopy immutableCopyExecution
-  valueCopy valueEncoding venomExecSemantics venomState compileEnv
+  valueCopy valueEncoding valueEncodingDefs venomExecSemantics venomState compileEnv loweringStateRelDefs
   fragExec emitHelperProps words exprLoweringProps exprLowering
   context
 

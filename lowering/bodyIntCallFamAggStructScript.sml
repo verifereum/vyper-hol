@@ -185,7 +185,7 @@ Resume intcall_struct_literal_step[ownership]:
       exprLoweringPropsTheory.compile_expr_ci_mono,
       exprLoweringPropsTheory.ci_mono_def, pairTheory.SND] >>
   conj_tac
-  >- (pure_rewrite_tac[Once valueEncodingTheory.val_in_memory_def] >> simp[]) >>
+  >- (pure_rewrite_tac[Once valueEncodingDefsTheory.val_in_memory_def] >> simp[]) >>
   reverse conj_tac
   >- (conj_tac
       >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
@@ -195,7 +195,7 @@ Resume intcall_struct_literal_step[ownership]:
   qexistsl_tac [`sa.cs_next_id`,`w2n w`,`type_memory_size_list tvs`] >>
   simp[loweringPostsTheory.val_footprint_def,
     valueEncodingTheory.type_memory_size_def, struct_layout_size_zip] >>
-  fs[compileEnvTheory.regions_disjoint_def]
+  fs[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Finalise intcall_struct_literal_step

@@ -4,7 +4,7 @@ Ancestors
   abiValidStatic abiCanonicalHeadSize vyperABIValid abiDecoderLayout
   abiDecoderBulk abiDecoderBulkExecute abiDecoderBulkReentry
   abiMalformedRecursiveInterface abiDecoderContract venomMemDefs
-  valueEncoding valueEncodingProps compileEnv contractABI words list arithmetic vyperABI
+  valueEncoding valueEncodingDefs valueEncodingProps compileEnv loweringStateRelDefs contractABI words list arithmetic vyperABI
   abiDecoderTypedContract abiDecoderCoherence abiDecoderReentry abiDecoderVarSequence
   abiDecoderVarExtend abiDecoderReentryPointer abiDecoderGuard abiStaticDynarrayLayout
   abiStaticLayoutProps finite_map vyperValue vyperTyping venomState byte exprLoweringProps

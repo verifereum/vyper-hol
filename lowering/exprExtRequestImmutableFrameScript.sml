@@ -17,7 +17,7 @@ Theorem extrequest_immutable_memory_kept:
         MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
         sa.cs_next_id <= inst.inst_id /\
         FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
-        compileEnv$regions_disjoint base len b sz) ==>
+        loweringStateRelDefs$regions_disjoint base len b sz) ==>
      mem_bytes_at base len s.vs_memory =
        mem_bytes_at base len s0.vs_memory) ==>
   mem_bytes_at off (type_memory_size tv) s.vs_memory =

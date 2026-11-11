@@ -12,7 +12,7 @@ Ancestors
   abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup
   exprSimAlloc localPtrsProps venomMemProps venomMemDefs valueEncodingProps
   exprLoweringProps emitHelperProps abiEncoder emitHelper fragExec compileEnv
-  contractABI valueEncoding venomInst venomState venomExecSemantics finite_map pred_set words list arithmetic
+  contractABI valueEncoding valueEncodingDefs venomInst venomState venomExecSemantics finite_map pred_set words list arithmetic
 
 Theorem abi_malformed_outcome_child_backedge:
   frag_outcome ctx func s child_end C (\r. ?v. r = Abort Revert_abort v) /\

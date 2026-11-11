@@ -1,7 +1,7 @@
 (* Compatible copies retain the source-footprint bound, including short literals. *)
 Theory bodyIntCallWidenCopy
 Ancestors
-  bodyIntCallProtectedReturn valueCopySource exprLoweringProps compileEnv
+  bodyIntCallProtectedReturn valueCopySource exprLoweringProps compileEnv loweringStateRelDefs
   valueEncoding venomState venomExecSemantics venomInst words list
 
 Theorem protected_compatible_store_run:

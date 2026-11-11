@@ -3,7 +3,7 @@ Theory bodyIntCallWindowStorage
 Ancestors
   bodyIntCallWindowLanding bodyIntCallStorageLanding bodyIntCallWindowCode
   exprSimCopy exprSimStorageCopy valueCopy valueEncoding valueEncodingProps
-  compileEnv context venomState words finite_map intCallFrame fragGasMode
+  compileEnv loweringStateRelDefs context venomState words finite_map intCallFrame fragGasMode
   loweringHalt venomInst exprLoweringProps emitHelperProps loweringPosts exprSimAlloc
   exprLowering exprSimFieldLayout fragExec bodyIntCallForcingReadOnly exprSimProps
 

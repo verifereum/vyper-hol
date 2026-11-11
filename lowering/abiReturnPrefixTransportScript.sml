@@ -4,7 +4,7 @@ Ancestors
   abiReturnSize abiReturnReject abiMalformedRecursiveInterface
   abiMalformedPruneState abiDecoderReentry freshWrites
   exprLoweringProps builtinSimple emitHelperProps exprLowering emitHelper
-  compileEnv venomExecSemantics venomState venomInst finite_map words list rich_list
+  compileEnv loweringStateRelDefs venomExecSemantics venomState venomInst finite_map words list rich_list
 
 Definition abi_return_decode_ready_def:
   abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst

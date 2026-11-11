@@ -3,7 +3,7 @@ Theory bodyIntCallForcingCode
 Ancestors
   bodyIntCallForcingCodeRun bodyIntCallLiteralLanding bodyIntCallMaterializeLanding
   exprSimCopy exprSimStorageCopy exprSimProps exprLoweringProps loweringPosts
-  context compileEnv valueEncodingProps valueEncoding intCallFrame exprSimAlloc
+  context compileEnv loweringStateRelDefs valueEncodingProps valueEncoding intCallFrame exprSimAlloc
   loweringHalt fragGasPath fragGasMode exprLowering exprSimFieldLayout
   emitHelperProps fragExec
   venomState venomInst finite_map list words vyperInterpreter vyperState

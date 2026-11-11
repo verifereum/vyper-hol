@@ -3,7 +3,7 @@ Theory extcallReturnDefaultStore
 Ancestors
   valueCopySource extcallReturnDefaultPath extCallSeamPrecheck bodyIntCallStoreRun
   placeMemoryPrimitiveForward storageCopyGasPath exprSimProps
-  loweringPosts context compileEnv venomState venomInst exprLoweringProps
+  loweringPosts context compileEnv loweringStateRelDefs venomState venomInst exprLoweringProps
   emitHelper emitHelperProps list rich_list finite_map arithmetic
 
 Theorem return_default_store_counted:

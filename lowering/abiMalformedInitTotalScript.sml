@@ -10,7 +10,7 @@ Ancestors
   abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderIndexInit
   abiDecoderArrayHeader abiDecoderGuards abiDecoderContract abiDecoderComposition
   abiMalformedNavigation abiDecoderReentry abiDecoderReentryPointer
-  exprLoweringProps localPtrsProps emitHelperProps emitHelper compileEnv context
+  exprLoweringProps localPtrsProps emitHelperProps emitHelper compileEnv loweringStateRelDefs context
   venomState venomInst venomMemDefs venomMemProps venomExecSemantics
   finite_map pred_set words list arithmetic
 

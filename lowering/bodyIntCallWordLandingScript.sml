@@ -2,7 +2,7 @@
 Theory bodyIntCallWordLanding
 Ancestors
   bodyIntCallLiteralLanding exprSimBopRestWordLoadPath
-  exprSimBopRestWordLayout exprLowering venomState compileEnv list
+  exprSimBopRestWordLayout exprLowering venomState compileEnv loweringStateRelDefs list
 
 Theorem protected_ptr_load_landing:
   !ctx func ce scopes loc addr sa sb op s a b value reserved.

@@ -2,7 +2,7 @@
    assert a counterexample to the packaged-callee seam. *)
 Theory bodyIntCallReturnBoundary
 Ancestors
-  bodySim stmtSimDefs loweringPosts exprLoweringProps compileEnv
+  bodySim stmtSimDefs loweringPosts exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomMemDefs words finite_map
 
 Theorem ret_pc_ok_return_buf_independent:

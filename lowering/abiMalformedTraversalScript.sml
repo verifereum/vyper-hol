@@ -10,7 +10,7 @@ Ancestors
   abiDecoderLoopSetup abiDecoderIndexedAddress
   abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup
   abiDecoderReentryPointer abiDecoderAbortReentry abiDecoderVarExtend
-  abiDecoderVarSequence fragExec compileEnv
+  abiDecoderVarSequence fragExec compileEnv loweringStateRelDefs
   venomState venomExecSemantics finite_map pred_set words list arithmetic
 
 (* The generated header changes registers only. In particular it retains the
@@ -94,10 +94,10 @@ Proof
   `stmt_state_rel ctx func cenv cx es (mstore slot w s)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`slot`, `inst`, `32`] >> simp[] >> rpt strip_tac >>
-     `compileEnv$regions_disjoint slot 32 lb lsz` by
+     `loweringStateRelDefs$regions_disjoint slot 32 lb lsz` by
        (fs[stmt_state_rel_def, state_rel_def] >>
         drule_all local_ptrs_rel_alloca_disjoint >> simp[]) >>
-     gvs[compileEnvTheory.regions_disjoint_def]) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   simp[abi_malformed_resource_post_def, mstore_def, write_memory_with_expansion_def] >>
   rpt strip_tac >>
   `aid <> inst.inst_id` by metis_tac[] >>
@@ -1016,7 +1016,7 @@ Proof
      simp_tac bool_ss [abi_malformed_allocated_window_def] >> strip_tac >>
      qpat_x_assum `mem_bytes_at B L _.vs_memory = xs` mp_tac >>
      disch_then (mp_tac o AP_TERM ``LENGTH : word8 list -> num``) >>
-     simp[valueEncodingTheory.mem_bytes_at_def, LENGTH_TAKE, LENGTH_APPEND]) >>
+     simp[valueEncodingDefsTheory.mem_bytes_at_def, LENGTH_TAKE, LENGTH_APPEND]) >>
   `abi_reflected_head_ok (vyper_to_abi_type env ty) (DROP (p+32) xs) j /\
    abi_reflected_child (vyper_to_abi_type env ty) (DROP (p+32) xs) j =
      (if is_dynamic (vyper_to_abi_type env ty) then DROP (p+32+off) xs

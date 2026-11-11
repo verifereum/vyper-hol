@@ -2,7 +2,7 @@
 Theory bodyIntCallJointAggCore
 Ancestors
   bodyIntCallJointContract loweringPosts exprSimWordArgs
-  compileEnv stmtSimProps bodyMemoryDefs freshWrites
+  compileEnv loweringStateRelDefs stmtSimProps bodyMemoryDefs freshWrites
   placeMemoryCopyEffect exprSimCopy bodyIntCallCopySharpDynamic
   venomState intCallFrame context emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomMemProps

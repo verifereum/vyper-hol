@@ -2,7 +2,7 @@
    Neither field belongs to the successful decoder's resource/frame payload. *)
 Theory extcallReturnCountedCheck
 Ancestors
-  abiValidAllocatedContract exprSimAbiGasBridge exprLoweringProps compileEnv
+  abiValidAllocatedContract exprSimAbiGasBridge exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomMemDefs abiMalformedRecursiveInterface abiMalformedSiteFrame
 
 Theorem extcall_return_observer_state_rel:

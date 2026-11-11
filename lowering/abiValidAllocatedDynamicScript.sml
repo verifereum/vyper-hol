@@ -9,7 +9,7 @@ Ancestors
   abiValidAllocatedContract abiDecoderContract abiDecoderReentry
   abiDecoderLoop abiValidAllocatedArrayPrefix
   abiMalformedRecursiveInterface abiMalformedSiteFrame abiMalformedTraversal
-  exprLoweringProps exprLowering compileEnv fragExec
+  exprLoweringProps exprLowering compileEnv loweringStateRelDefs fragExec
   valueEncoding valueEncodingProps vyperABI vyperValue contractABI
   abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderDynarrayPrefix
   abiDecoderArrayHeader abiEncoder context exprSimAlloc emitHelperProps emitHelper rich_list venomInst

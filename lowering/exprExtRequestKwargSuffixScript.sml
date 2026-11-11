@@ -2,7 +2,7 @@
 Theory exprExtRequestKwargSuffix
 Ancestors
   exprExtRequestHistory exprExtRequestHistoryCompose exprExtRequestReadProbe
-  exprSimProps exprSimDefs loweringPosts compileEnv freshWrites
+  exprSimProps exprSimDefs loweringPosts compileEnv loweringStateRelDefs freshWrites
   exprLoweringProps valueEncodingProofs
   gasSummary gasSummaryCompose gasOutcome gasExemptCert exprExtRequestGasBind
   exprExtRequestStrongCapture exprLowering vyperInterpreter vyperState

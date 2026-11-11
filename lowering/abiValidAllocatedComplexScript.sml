@@ -6,7 +6,7 @@ Ancestors
   abiMalformedConstructorContract abiMalformedRecursiveInterface abiMalformedSiteFrame
   abiDecoderSequenceReach abiDecoderReentry abiDecoderReentryPointer
   abiDecoderContract abiDecoderTypedCompose abiDecoderLoop abiDecoderDynamicLoopSetup
-  exprLoweringProps exprSimDefs compileEnv venomState venomInst instIdxIndep
+  exprLoweringProps exprSimDefs compileEnv loweringStateRelDefs venomState venomInst instIdxIndep
   emitHelperProps freshWrites words list arithmetic pred_set
   abiDecoderCoherence abiDecoderMemberInfos abiDecodeRanges abiEncoder vyperABI valueEncoding
   abiMalformedMemberSetup

@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtReturnStackExit
 Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtReturnStackRun
-  bodyIntCallForcingReadOnly ctorReturnFrame compileEnv exprLoweringProps
+  bodyIntCallForcingReadOnly ctorReturnFrame compileEnv loweringStateRelDefs exprLoweringProps
   loweringPosts fragExec stmtSimReturn venomExecSemantics venomState
 
 Theorem intcall_stack_exit_frame:

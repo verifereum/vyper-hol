@@ -1,7 +1,7 @@
 (* Request-buffer capacity and immutable separation boundary. *)
 Theory exprExtRequestBuffer
 Ancestors
-  exprSimAlloc exprLoweringProps context compileEnv words
+  exprSimAlloc exprLoweringProps context compileEnv loweringStateRelDefs words
 
 Theorem extrequest_alloc_capacity:
   !ctx func cenv cx es sa sb buf sz cap s.

@@ -2,7 +2,7 @@
 Theory exprExtRequestRetained
 Ancestors
   exprExtRequestHistory exprExtRequestReconstruct exprSafeOperand exprSimProps
-  loweringPosts compileEnv freshWrites valueEncodingProofs abiCallerAllocation
+  loweringPosts compileEnv loweringStateRelDefs freshWrites valueEncodingProofs abiCallerAllocation
   exprLoweringProps venomState
 
 Definition extrequest_retained_value_def:
@@ -16,7 +16,7 @@ Definition extrequest_retained_value_def:
         val_footprint tv v <= size /\
         w2n w + val_footprint tv v <= t.vs_alloca_next /\
         (!name b sz. local_region cenv ee.scopes t name b sz ==>
-          compileEnv$regions_disjoint (w2n w) size b sz))
+          loweringStateRelDefs$regions_disjoint (w2n w) size b sz))
 End
 
 Theorem extrequest_retained_value_transport:

@@ -9,7 +9,7 @@ Ancestors
   abiDecoderArrayBackedge abiDecoderReentry abiDecoderCoherence abiDecoderOffset abiMalformedNavigation
   abiDecodeRanges abiValidAggregateHeads abiDecoderOffsetHead abiDecoderDynamic emitHelperProps rich_list
   abiDecoderTypedCompose abiDecoderLoopRegisters abiDecoderLoopSetup
-  localPtrsProps exprSimDefs exprLoweringProps compileEnv fragExec
+  localPtrsProps exprSimDefs exprLoweringProps compileEnv loweringStateRelDefs fragExec
   venomState venomMemDefs venomMemProps venomExecSemantics venomInst
   valueEncoding valueEncodingProps vyperABI contractABI finite_map pred_set words list arithmetic
 

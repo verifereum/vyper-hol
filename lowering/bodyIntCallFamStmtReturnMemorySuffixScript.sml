@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtReturnMemorySuffix
 Ancestors
   bodyIntCallFamStmtReturnMemoryPath bodyIntCallFamStmtReturnBytesEffect
   bodyIntCallJointStmtBoundary bodyIntCallCopySharpRank
-  bodyIntCallJointContract placeMemoryCopyEffect compileEnv loweringPosts
+  bodyIntCallJointContract placeMemoryCopyEffect compileEnv loweringStateRelDefs loweringPosts
   venomState venomExecSemantics
 
 Theorem intcall_compound_store_return_exit:

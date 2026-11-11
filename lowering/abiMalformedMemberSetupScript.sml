@@ -4,7 +4,7 @@ Ancestors
   abiMalformedMembers abiMalformedTraversal abiDecoderMemberSetup
   abiMalformedPruneState abiMalformedRecursiveInterface abiDecoderContract abiDecoderReentry
   abiDecoderNavigationTotal abiMalformedNavigation abiDecoderReentryPointer
-  abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv
+  abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   venomExecSemantics venomState venomInst valueEncoding finite_map
   words list rich_list arithmetic abiDecodeRanges contractABI vyperValue vyperABI
   abiDecoderMemberCode instIdxIndep fragExec

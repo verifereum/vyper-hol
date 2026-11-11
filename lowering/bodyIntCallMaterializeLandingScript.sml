@@ -3,10 +3,10 @@ Theory bodyIntCallMaterializeLanding
 Ancestors
   bodyIntCallProtectedAlloc bodyIntCallForceLanding placeMemoryStaging
   exprSimAlloc exprSimPrecompiles placeMemoryPrimitiveForward context emitHelperProps
-  exprLoweringProps compileEnv venomState venomInst fragGasMode instIdxIndep
+  exprLoweringProps compileEnv loweringStateRelDefs venomState venomInst fragGasMode instIdxIndep
   finite_map list rich_list words intCallFrame emitHelper entrySinkExtraction
   immutableCopyExecution immutableConstructorRelation exprSimCopy
-  abiDecoderArrayInitExec stmtReasonMemory valueCopy valueEncodingProps valueEncoding
+  abiDecoderArrayInitExec stmtReasonMemory valueCopy valueEncodingProps valueEncoding valueEncodingDefs
   venomExecSemantics
 
 (* Resource projections of the actual allocation run. *)

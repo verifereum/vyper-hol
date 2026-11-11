@@ -2,7 +2,7 @@
 Theory abiMalformedCopyState
 Ancestors
   exprLoweringProps localPtrsProps loweringSlice typedMemoryCopy valueCopy
-  compileEnv venomExecSemantics venomState venomMemDefs immutableMemoryFrame
+  compileEnv loweringStateRelDefs venomExecSemantics venomState venomMemDefs immutableMemoryFrame
   finite_map list arithmetic
 
 Theorem abi_malformed_mcopy_state_rel:
@@ -38,7 +38,7 @@ Proof
      first_x_assum drule_all >> strip_tac >>
      `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
      irule mem_bytes_at_mcopy_disjoint >>
-     gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   irule stmt_state_rel_allocas_frame >> conj_tac
   >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
       simp[mcopy_def, write_memory_with_expansion_def, lookup_var_def] >>

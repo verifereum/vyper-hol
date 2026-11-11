@@ -3,7 +3,7 @@ Theory exprExtRequestPrefix
 Ancestors
   exprExtRequestShape exprExtRequestPayload exprExtRequestHistoryCompose
   exprExtRequestTupleFold loweringHalt exprSafeOperand fragGasMode
-  exprLoweringProps emitHelperProps compileEnv list fragExec venomExecSemantics venomState
+  exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs list fragExec venomExecSemantics venomState
   abiEncoderInputFrame loweringPosts
 
 Theorem extrequest_prefix_split:
@@ -48,7 +48,7 @@ Proof
   >- (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def])
   >- (rpt strip_tac >>
       fs[exprExtRequestHistoryTheory.extrequest_history_frame_def,
-         compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+         loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   rewrite_tac[locals_kept_def] >> rpt strip_tac >>
   `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
     (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
@@ -298,7 +298,7 @@ Resume extrequest_tuple_prefix_endpoint[history]:
     (fs[ci_mono_def] >> decide_tac) >>
   `safe_operand sp buf.buf_operand` by metis_tac[safe_operand_mono] >>
   `!aid p k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
-     compileEnv$regions_disjoint (w2n w) (MAX abisz retsz+32) p k` by
+     loweringStateRelDefs$regions_disjoint (w2n w) (MAX abisz retsz+32) p k` by
     (rpt strip_tac >>
      `FLOOKUP q.vs_allocas aid = SOME (p,k)` by
        (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
@@ -327,7 +327,7 @@ Resume extrequest_tuple_prefix_endpoint[history]:
      >- (rpt strip_tac >>
          `aid < sn.cs_next_id /\ FLOOKUP q.vs_allocas aid = SOME (b,sz)` by
            (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
-         `compileEnv$regions_disjoint (w2n w) (MAX abisz retsz+32) b sz` by
+         `loweringStateRelDefs$regions_disjoint (w2n w) (MAX abisz retsz+32) b sz` by
            metis_tac[] >>
          `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz q.vs_memory` by
            metis_tac[] >>

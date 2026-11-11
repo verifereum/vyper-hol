@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallAllocatedForcing bodyIntCallWindowCopy
   bodyIntCallMaterializeLanding bodyIntCallProtectedAlloc exprSimAlloc exprSimPrecompiles
   placeMemoryPrimitiveForward context emitHelperProps exprLoweringProps
-  compileEnv venomState venomInst fragGasMode instIdxIndep finite_map
+  compileEnv loweringStateRelDefs venomState venomInst fragGasMode instIdxIndep finite_map
   list rich_list words intCallFrame emitHelper entrySinkExtraction
   abiBuiltinAllocation venomExecSemantics
 Libs

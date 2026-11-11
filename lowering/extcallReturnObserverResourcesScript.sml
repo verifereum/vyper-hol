@@ -2,7 +2,7 @@
 Theory extcallReturnObserverResources
 Ancestors
   extcallReturnObserver extcallReturnCountedTransport abiReturnPrefixTransport
-  abiMalformedRecursiveInterface localPtrsProps compileEnv venomState
+  abiMalformedRecursiveInterface localPtrsProps compileEnv loweringStateRelDefs venomState
   list sorting pred_set exprLoweringProps venomInst venomWf
 
 Theorem return_observer_alloca_structure:

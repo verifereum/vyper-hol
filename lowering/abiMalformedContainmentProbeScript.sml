@@ -3,7 +3,7 @@ Theory abiMalformedContainmentProbe
 Ancestors
   abiMalformedIndexState abiDecoderIndexInit exprSimAlloc
   fragExec compileEnv context emitHelper emitHelperProps exprLowering exprLoweringProps
-  venomState venomInst venomMemDefs valueEncoding words list rich_list arithmetic
+  venomState venomInst venomMemDefs valueEncoding valueEncodingDefs words list rich_list arithmetic
 
 Theorem abi_malformed_index_resource_code:
   abi_decode_index_init st = (ip,en) /\ fn_has_code st en func ==>

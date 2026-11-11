@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtReturnMemoryExit
 Ancestors
   bodyIntCallJointContract stmtSimReturnWiden ctorReturnFrame
-  exprLoweringProps loweringPosts compileEnv exprSimStorageCopy
+  exprLoweringProps loweringPosts compileEnv loweringStateRelDefs exprSimStorageCopy
   stmtSimReturn venomState venomExecSemantics vyperState bodySim
 
 Theorem intcall_memory_exit_frame:

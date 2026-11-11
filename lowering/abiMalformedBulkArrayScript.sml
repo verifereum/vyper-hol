@@ -9,7 +9,7 @@ Ancestors
   venomMemDefs valueEncoding valueEncodingProps
   abiBoundedBytesExecution abiDecoderDynarrayPrefix abiDecoderDynarrayBound
   abiDecoderBytesBound abiDecoderGuards abiDecoderRange abiDecoderContract
-  abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv
+  abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomExecSemantics words list rich_list arithmetic
 
 Theorem abi_malformed_dynarray_prefix_total:

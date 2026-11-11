@@ -1,7 +1,7 @@
 (* Byte-chunk stores carry protected regions and reserved operands on one run. *)
 Theory bodyIntCallProtectedLiteral
 Ancestors
-  exprSimLiteralBuffer exprLoweringProps exprLowering compileEnv
+  exprSimLiteralBuffer exprLoweringProps exprLowering compileEnv loweringStateRelDefs
   venomState venomInst valueEncoding list words
 
 Theorem protected_literal_chunks_run:

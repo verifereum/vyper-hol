@@ -7,7 +7,7 @@ Ancestors
   abiReturnSize abiBoundaryChecks abiDecoderCoherence abiReturnPrefixTransport
   abiMalformedRecursiveInterface abiMalformedSiteFrame abiValidAllocatedContract
   exprLoweringProps exprSimWordArgs placeMemoryPrimitiveForward fragExec fragGasSeq fragGasMode
-  compileEnv venomState venomInst venomExecSemantics exprLowering emitHelper emitHelperProps
+  compileEnv loweringStateRelDefs venomState venomInst venomExecSemantics exprLowering emitHelper emitHelperProps
   builtinSimple context arithmetic list rich_list finite_map words
 
 Theorem return_size_counted:

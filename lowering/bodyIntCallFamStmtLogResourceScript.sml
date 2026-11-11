@@ -5,7 +5,7 @@ Ancestors
   exprSimHypsDefs vyperTypeInvariants vyperTypeExtCallSoundness
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation
   exprSimProps exprLoweringProps stmtSimProps bodyMemoryDefs
-  compileEnv loweringPosts intCallFrame venomState list rich_list
+  compileEnv loweringStateRelDefs loweringPosts intCallFrame venomState list rich_list
   fragGasSeq entrySinkExtraction emitHelperProps loweringSlice fragExec
 
 Theorem log_expr_sim_inv:

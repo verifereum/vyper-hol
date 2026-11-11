@@ -246,7 +246,7 @@ Theorem intcall_pure_below_frontier_memory:
 Proof
   strip_tac >> drule_all vv_post_pure_memory_frame >> strip_tac >>
   first_x_assum irule >> rpt strip_tac >>
-  simp[compileEnvTheory.regions_disjoint_def] >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   first_x_assum drule_all >> decide_tac
 QED
 
@@ -283,7 +283,7 @@ Proof
          goal_assum (drule_at Any)) >>
       drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
       strip_tac >> sym_tac >> first_x_assum irule >> simp[]) >>
-  simp[valueEncodingTheory.mem_bytes_at_def]
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 (* Deferred reads depend only on the source places, not on gas observations. *)
@@ -443,8 +443,8 @@ Proof
   qexistsl [`cx`, `tr`] >> reverse conj_tac >- metis_tac[] >>
   Cases_on `tr` >>
   fs[exprLoweringPropsTheory.stmt_state_rel_def,
-     compileEnvTheory.state_rel_def, compileEnvTheory.storage_rel_def,
-     compileEnvTheory.transient_rel_def, vyperStorageBackendTheory.get_storage_def] >>
+     loweringStateRelDefsTheory.state_rel_def, loweringStateRelDefsTheory.storage_rel_def,
+     loweringStateRelDefsTheory.transient_rel_def, vyperStorageBackendTheory.get_storage_def] >>
   gvs[vfmStateTheory.lookup_account_def]
 QED
 

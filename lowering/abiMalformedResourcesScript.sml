@@ -61,7 +61,7 @@ Proof
      fs[stmt_state_rel_def, mstore_def, write_memory_with_expansion_def]) >>
   `B + L <= w2n w \/ w2n w + 32 <= B` by
     (qpat_x_assum `!aid b len. _` drule >>
-     disch_then drule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     disch_then drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `mem_bytes_at B L (mstore (w2n w) 0w allocated).vs_memory =
    mem_bytes_at B L allocated.vs_memory` by
     (irule mstore_mem_bytes_at_disjoint >> simp[]) >>

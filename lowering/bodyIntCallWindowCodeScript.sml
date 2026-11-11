@@ -6,7 +6,7 @@ Ancestors
   immutableCopyExecution immutableConstructorRelation valueEncodingProps
   valueEncoding valueCopy venomExecSemantics context intCallFrame
   fragGasMode entrySinkExtraction abiDecoderArrayInitExec stmtReasonMemory
-  finite_map list rich_list words placeMemoryStaging venomState compileEnv
+  finite_map list rich_list words placeMemoryStaging venomState compileEnv loweringStateRelDefs
   fragExec emitHelperProps exprLoweringProps venomInst instIdxIndep
   placeMemoryPrimitiveForward vyperInterpreter vyperState loweringHalt
   exprSimAlloc bodyIntCallLiteralLanding exprSimProps

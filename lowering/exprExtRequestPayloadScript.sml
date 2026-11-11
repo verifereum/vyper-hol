@@ -4,8 +4,8 @@ Ancestors
   exprExtRequestPrefixOps exprExtRequestEncoderState exprExtRequestTupleWindow
   exprExtRequestReconstruct exprExtRequestHistoryCompose exprSafeOperand fragGasMode
   exprExtRequestTupleFold exprExtRequestAllocationEndpoint loweringHalt
-  compileEnv emitHelperProps exprLoweringProps
-  valueEncoding valueEncodingProps valueEncodingProofs venomState venomExecSemantics
+  compileEnv loweringStateRelDefs emitHelperProps exprLoweringProps
+  valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs venomState venomExecSemantics
   vyperABI selectorDispatch list arithmetic
 
 Theorem extrequest_calldata_window:
@@ -129,12 +129,12 @@ Theorem extrequest_encoder_calldata_endpoint:
   mem_bytes_at b 32 s.vs_memory =
     word_to_bytes (n2w (ce.ce_method_id fname tys):bytes32) T /\
   (!name p k. local_region ce ee.scopes s name p k ==>
-    compileEnv$regions_disjoint b sz p k) /\
+    loweringStateRelDefs$regions_disjoint b sz p k) /\
   (ce.ce_is_ctor ==> !name tv v p.
     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
-    compileEnv$regions_disjoint b sz p (type_memory_size tv)) ==>
+    loweringStateRelDefs$regions_disjoint b sz p (type_memory_size tv)) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     stmt_state_rel ctx func ce cx ee t /\
     ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\
@@ -173,7 +173,7 @@ Proof
   `!name p k. local_region ce ee.scopes s name p k ==>
     venomMemDefs$regions_disjoint (p,k) (b+32,LENGTH (enc at av))` by
     (rpt strip_tac >> first_x_assum drule >>
-     simp[compileEnvTheory.regions_disjoint_def,
+     simp[loweringStateRelDefsTheory.regions_disjoint_def,
        venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `ce.ce_is_ctor ==> !name tv v p.
     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
@@ -182,7 +182,7 @@ Proof
     venomMemDefs$regions_disjoint (p,type_memory_size tv)
       (b+32,LENGTH (enc at av))` by
     (rpt strip_tac >> qpat_x_assum `ce.ce_is_ctor ==> _` drule >>
-     disch_then drule >> simp[compileEnvTheory.regions_disjoint_def,
+     disch_then drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def,
        venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `b <= b /\ b + 32 <= b + sz` by decide_tac >>
   drule_all extrequest_encoder_run_state >> strip_tac >>
@@ -257,7 +257,7 @@ Proof
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint off (type_memory_size tv) (w2n w) sz` by
     (rpt strip_tac >> qpat_x_assum `ce.ce_is_ctor ==> _` drule >>
-     disch_then drule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     disch_then drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `sa.cs_next_id <= sa.cs_next_id /\ w2n w <= w2n w /\
    w2n w + SUM (MAP (\(e,r,vv,ty,tv,v). type_memory_size tv) cells) <= w2n w + sz` by simp[] >>
   `ce.ce_is_ctor ==> !name tv v off.
@@ -368,12 +368,12 @@ Theorem extrequest_tuple_payload_endpoint:
   mem_bytes_at b 32 s.vs_memory =
     word_to_bytes (n2w (ce.ce_method_id fname ats):bytes32) T /\
   (!name p k. local_region ce ee.scopes s name p k ==>
-    compileEnv$regions_disjoint b cap p k) /\
+    loweringStateRelDefs$regions_disjoint b cap p k) /\
   (ce.ce_is_ctor ==> !name tv v p.
     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
-    compileEnv$regions_disjoint b cap p (type_memory_size tv)) /\
+    loweringStateRelDefs$regions_disjoint b cap p (type_memory_size tv)) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
@@ -405,7 +405,7 @@ Theorem extrequest_tuple_payload_endpoint:
          mem_bytes_at p (type_memory_size tv) s.vs_memory) /\
     (!aid p k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
        FLOOKUP t.vs_allocas aid = SOME (p,k) /\
-       (compileEnv$regions_disjoint b cap p k ==>
+       (loweringStateRelDefs$regions_disjoint b cap p k ==>
         mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory))
 Proof
   strip_tac >> drule_all extrequest_allocate_tuple_endpoint >> strip_tac >>
@@ -473,9 +473,9 @@ Resume extrequest_tuple_payload_endpoint[encoder]:
      qpat_assum `extrequest_history_frame ce cx ee sa s ee st u`
        (irule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >>
-     fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[ADD_COMM]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[ADD_COMM]) >>
   `!name p k. local_region ce ee.scopes u name p k ==>
-    compileEnv$regions_disjoint b cap p k` by
+    loweringStateRelDefs$regions_disjoint b cap p k` by
     (rpt strip_tac >>
      `local_region ce ee.scopes s name p k` by
        metis_tac[exprExtRequestHistoryTheory.extrequest_history_local_regions] >>
@@ -560,7 +560,7 @@ Resume extrequest_tuple_payload_endpoint[frames]:
   `venomMemDefs$regions_disjoint (p,k)
     (b+32,LENGTH (enc (vyper_to_abi_type (get_tenv cx)
       (TupleT (MAP (\(e,r,vv,ty,tv,v). ty) cells))) av))` by
-    (fs[compileEnvTheory.regions_disjoint_def,
+    (fs[loweringStateRelDefsTheory.regions_disjoint_def,
         venomMemDefsTheory.regions_disjoint_def, vyperABITheory.vyper_to_abi_type_def] >>
      decide_tac) >>
   `mem_bytes_at p k t.vs_memory = mem_bytes_at p k q.vs_memory` by

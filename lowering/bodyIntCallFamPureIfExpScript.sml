@@ -469,7 +469,7 @@ Resume ifexp_joint_expr_producer[normal]:
        fs[intcall_expr_cont_def] >>
      pop_assum mp_tac >>
      simp[intcall_expr_res_def, stmt_state_rel_jump_to, stmtSimPropsTheory.ret_pc_ok_jump_to,
-          bodyMemoryDefsTheory.return_buf_frame_jump_to, intCallFrameTheory.allocas_above_def, compileEnvTheory.local_region_def,
+          bodyMemoryDefsTheory.return_buf_frame_jump_to, intCallFrameTheory.allocas_above_def, loweringStateRelDefsTheory.local_region_def,
           jump_to_def, eval_operand_def, lookup_var_def] >>
      strip_tac >>
      `local_ptrs_reserved ce se` by

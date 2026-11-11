@@ -5,7 +5,7 @@ Theory bodyIntCallPrologueInit
 Ancestors
   bodyIntCallPrologueResource bodyIntCallSemanticEntry intCallFrame
   loweringPosts intCallCallee vyperTypeCallStackSoundness
-  exprLoweringProps compileEnv venomState venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs venomState venomExecSemantics
   list rich_list finite_map words fragExec
 
 (* Administrative room invariants at the fixed instruction endpoint. *)

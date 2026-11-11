@@ -53,7 +53,7 @@ Theorem extrequest_operand_cps:
       (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
         sm.cs_next_id <= inst.inst_id /\
         FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
-        compileEnv$regions_disjoint off len b sz) ==>
+        loweringStateRelDefs$regions_disjoint off len b sz) ==>
       mem_bytes_at off len u.vs_memory = mem_bytes_at off len t.vs_memory)) /\
   (!target rs vs esA esB tB ee t target_addr.
     (?used. !tail. vyperState$bind (eval_expr cx a) (read_result cx)

@@ -36,7 +36,7 @@ Proof
      qexistsl_tac [`w2n w`, `mk_inst st.cs_next_id ALLOCA [Lit 32w]
        [STRING #"%" (toString st.cs_next_var)]`, `32`] >>
      conj_tac >- (rpt strip_tac >> qpat_x_assum `!name b len. _` drule >>
-       simp[compileEnvTheory.regions_disjoint_def]) >>
+       simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
      gvs[mk_inst_def]) >>
   qexistsl_tac [`mstore (w2n w) 0w allocated`, `w2n w`] >>
   gvs[mload_mstore_same, mstore_def, write_memory_with_expansion_def]

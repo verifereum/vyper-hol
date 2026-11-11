@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallJointAggCore exprSimAggregateLayout
   exprSimSource exprSimHyps exprSimHypsDefs exprSimAggregateChildren exprSimAggregateSource
   vyperTypeInvariants stmtSimDeclPath placeMemoryCopyEffect
-  compileEnv emitHelper emitHelperProps venomState venomExecSemantics venomMemProps
+  compileEnv loweringStateRelDefs emitHelper emitHelperProps venomState venomExecSemantics venomMemProps
   valueEncodingProps intCallFrame exprSimProps exprSimAlloc venomInst
   fragGasMode context exprSimAggregateLoops exprSimAggregateEncoding
   exprSimWordArgs gasOutcome gasSummary gasSummaryCompose
@@ -281,7 +281,7 @@ Resume intcall_array_elems_outcome[nil]:
   qexistsl_tac [`es`, `OK t`, `INL []`] >>
   simp[eval_exprs_nil, gas_marked_path_def, fragGasPathTheory.gas_path_rules] >>
   gvs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def,
-      valueEncodingTheory.val_in_memory_def] >>
+      valueEncodingDefsTheory.val_in_memory_def] >>
   metis_tac[fragGasPathTheory.gas_path_rules]
 QED
 
@@ -394,7 +394,7 @@ Resume intcall_array_elems_outcome[cons_memory]:
      (impl_tac >- (Cases_on `header` >> fs[Abbr `off`, arithmeticTheory.LEFT_ADD_DISTRIB, arithmeticTheory.MULT_CLAUSES] >> decide_tac)) >>
      simp[]) >>
   conj_tac
-  >- (simp[valueEncodingTheory.val_in_memory_def] >>
+  >- (simp[valueEncodingDefsTheory.val_in_memory_def] >>
       fs[Abbr `off`, arithmeticTheory.LEFT_ADD_DISTRIB,
          AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
   conj_tac >- metis_tac[] >> rpt strip_tac >>

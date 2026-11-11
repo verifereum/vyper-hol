@@ -3,7 +3,7 @@ Ancestors
   bodyIntCallProtectedBuffer exprSimLiteralBuffer exprSimAlloc
   exprLowering exprLoweringProps context compileEnv emitHelperProps
   fragExec freshWrites intCallFrame valueEncodingProps finite_map
-  rich_list list words venomState valueEncoding
+  rich_list list words venomState valueEncoding valueEncodingDefs
 
 Theorem protected_bytelike_literal_run:
   compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\

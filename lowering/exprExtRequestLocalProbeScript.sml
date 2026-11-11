@@ -1,7 +1,7 @@
 (* Interface probes for the local branch of captured operand posts. *)
 Theory exprExtRequestLocalProbe
 Ancestors
-  loweringPosts valueEncoding
+  loweringPosts valueEncoding valueEncodingDefs
 
 (* An empty outer array constrains its root length, not the length of
    the first capacity slot, even when that slot is itself a dynamic array. *)

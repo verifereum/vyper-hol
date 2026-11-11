@@ -8,7 +8,7 @@ Ancestors
   abiEncoder abiDecoderCounters abiDecoderCode exprLoweringProps localPtrsProps
   abiMalformedConstructorContract abiDecoderDynamic abiDecoderComplexHead abiDecoderMemberCode
   abiDecoderOffset abiDecoderAppend fragExec compileEnv emitHelper emitHelperProps
-  abiDecodeRanges abiDecoderWordTyped contractABI vyperABI valueEncoding words list rich_list arithmetic
+  abiDecodeRanges abiDecoderWordTyped contractABI vyperABI valueEncoding valueEncodingDefs words list rich_list arithmetic
 
 Theorem abi_malformed_entry_restrict_sites[local]:
   abi_malformed_entry ctx func cenv cx es st sites dstid live

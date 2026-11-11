@@ -3,7 +3,7 @@ Theory abiDecoderAbortReentry
 Ancestors
   abiDecoderVarSequence abiDecoderReentryPointer abiDecoderVarExtend
   execEquivParamProps execEquivParamDefs stateEquiv
-  venomExecSemantics venomState venomInst exprLoweringProps compileEnv
+  venomExecSemantics venomState venomInst exprLoweringProps compileEnv loweringStateRelDefs
   abiDecoderReentry finite_map arithmetic list option
 
 Theorem abi_decoder_revert_inputs:

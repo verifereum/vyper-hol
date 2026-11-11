@@ -4,7 +4,7 @@ Ancestors
   exprExtRequestStoragePath exprExtRequestMaterialize exprExtRequestAllocationEndpoint
   exprExtRequestUnwrapAdapter exprExtRequestHistory exprExtRequestReadProbe
   exprSimMemoryRead exprSimMemorySource exprSimUnwrapProps
-  loweringPosts exprLoweringProps compileEnv freshWrites exprLowering
+  loweringPosts exprLoweringProps compileEnv loweringStateRelDefs freshWrites exprLowering
   gasSummary fragGasMode fragGasPath exprSimMemoryPath exprSimProps
   venomState venomExecSemantics valueEncodingProps emitHelperProps emitHelper
   exprSimUnwrap exprSimStorageCopy exprSimCopy vyperInterpreter vyperState venomInst
@@ -586,7 +586,7 @@ Proof
   `!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
      mem_bytes_at p k z.vs_memory = mem_bytes_at p k t.vs_memory` by
     (map_every qx_gen_tac [`aid`, `old_base`, `old_size`] >> strip_tac >>
-     `compileEnv$regions_disjoint (w2n w) (type_memory_size tv) old_base old_size` by metis_tac[] >>
+     `loweringStateRelDefs$regions_disjoint (w2n w) (type_memory_size tv) old_base old_size` by metis_tac[] >>
      metis_tac[]) >>
   qexistsl_tac [`v`, `z`] >> simp[] >>
   simp[gas_marked_exec_def] >>
@@ -707,7 +707,7 @@ Proof
   `!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
      mem_bytes_at p k z.vs_memory = mem_bytes_at p k t.vs_memory` by
     (map_every qx_gen_tac [`aid`, `old_base`, `old_size`] >> strip_tac >>
-     `compileEnv$regions_disjoint (w2n w) sz old_base old_size` by metis_tac[] >>
+     `loweringStateRelDefs$regions_disjoint (w2n w) sz old_base old_size` by metis_tac[] >>
      metis_tac[]) >>
   qexists_tac `z` >> simp[] >>
   `gas_marked_path F ctx func t (0 + 0) (OK z)` by

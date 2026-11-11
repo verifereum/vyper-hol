@@ -6,7 +6,7 @@ Ancestors
   abiMalformedRecursiveInterface abiMalformedMemberSetup abiDecoderMemberCons
   abiMalformedSiteFrame
   abiDecoderCoherence abiDecoderContract abiDecoderLoop abiDecoderTypedCompose
-  compileEnv venomState valueEncoding valueEncodingProofs valueEncodingTyping
+  compileEnv venomState valueEncoding valueEncodingDefs valueEncodingProofs valueEncodingTyping
   vyperTypeABI exprSimDefs exprLoweringProps words list rich_list arithmetic pred_set
 
 Theorem abi_valid_allocated_members_cons_post:

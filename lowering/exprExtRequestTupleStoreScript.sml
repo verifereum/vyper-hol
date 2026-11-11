@@ -106,15 +106,15 @@ Theorem extrequest_history_store_alloca:
   local_ptrs_reserved cenv sm /\
   (q with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>) = t /\
   (!x. not_fresh_at sn x ==> lookup_var x q = lookup_var x t) /\
-  (!a k. compileEnv$regions_disjoint a k dst n ==>
+  (!a k. loweringStateRelDefs$regions_disjoint a k dst n ==>
      mem_bytes_at a k q.vs_memory = mem_bytes_at a k t.vs_memory) /\
   (!name b len. local_region cenv ee.scopes t name b len ==>
-     compileEnv$regions_disjoint b len dst n) /\
+     loweringStateRelDefs$regions_disjoint b len dst n) /\
   (cenv.ce_is_ctor ==> !name tv v off.
      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
      FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
-     compileEnv$regions_disjoint off (type_memory_size tv) dst n) ==>
+     loweringStateRelDefs$regions_disjoint off (type_memory_size tv) dst n) ==>
   extrequest_history_frame cenv cx ec sc tc ee sm q
 Proof
   strip_tac >> irule extrequest_history_store_frame >>
@@ -129,7 +129,7 @@ Proof
         (fs[extrequest_history_frame_def] >> metis_tac[]) >>
       `aid <> live` by decide_tac >>
       fs[venomMemDefsTheory.allocas_non_overlapping_def,
-         compileEnvTheory.regions_disjoint_def] >>
+         loweringStateRelDefsTheory.regions_disjoint_def] >>
       `b + sz' <= tuple_base \/ tuple_base + sz <= b` by metis_tac[] >> decide_tac) >>
   gvs[extrequest_history_frame_def,
       exprExtRequestReadProbeTheory.extrequest_read_frame_def] >> metis_tac[]

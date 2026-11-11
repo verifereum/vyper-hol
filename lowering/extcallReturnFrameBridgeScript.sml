@@ -3,7 +3,7 @@ Theory extcallReturnFrameBridge
 Ancestors
   abiValidAllocatedContract abiMalformedRecursiveInterface abiMalformedSiteFrame
   abiCallerLocalScratch abiDecoderReentry localPtrsProps exprSimProps loweringPosts
-  exprLoweringProps compileEnv venomState finite_map pred_set list arithmetic
+  exprLoweringProps compileEnv loweringStateRelDefs venomState finite_map pred_set list arithmetic
 
 Theorem return_allocated_local_frame:
   alloca_inv s /\ fn_inst_ids_distinct func /\

@@ -2,7 +2,7 @@
 Theory extcallReturnEntryBridge
 Ancestors
   instIdxIndep
-  compileEnv venomState finite_map pred_set ASCIInumbers list arithmetic
+  compileEnv loweringStateRelDefs venomState finite_map pred_set ASCIInumbers list arithmetic
   abiReturnPrefixTransport abiValidAllocatedContract abiMalformedRecursiveInterface
   abiDecoderReentry exprSafeOperand placeMemoryStaging exprSimAlloc loweringHalt
   exprLoweringProps emitHelperProps venomInst venomExecSemantics fragGasMode words

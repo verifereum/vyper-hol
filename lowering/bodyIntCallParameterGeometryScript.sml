@@ -30,6 +30,6 @@ Proof
   rpt strip_tac >>
   drule_all internal_args_memory_slot_bound >> strip_tac >>
   mp_tac source_span_in_separated_slot >>
-  simp[compileEnvTheory.regions_disjoint_def] >>
-  gvs[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def]
 QED

@@ -3,7 +3,7 @@ Ancestors
   abiValidAllocatedContract abiValidDecodedMetadata abiDecoderValidBytesInput
   abiDecoderValidFixed abiValidBytes abiCanonicalHeadSize
   abiDecoderReentry abiDecoderBytes abiDecoderFrame
-  compileEnv venomState valueEncoding valueEncodingProps finite_map words list arithmetic
+  compileEnv loweringStateRelDefs venomState valueEncoding valueEncodingProps finite_map words list arithmetic
   abiMalformedRecursiveInterface abiDecoderValidBytes abiDecoderContract
   abiDecoderBytesShape exprLoweringProps abiDecodeStaticProps venomMemDefs
   abiDecoderTypedContract abiDecoderBytesTyped

@@ -1,7 +1,7 @@
 (* Protected regions and reserved operands across reachable Return suffixes. *)
 Theory bodyIntCallProtectedReturn
 Ancestors
-  bodyIntCallReachableReturn bodyIntCallReturnCopy valueCopy compileEnv exprLoweringProps
+  bodyIntCallReachableReturn bodyIntCallReturnCopy valueCopy compileEnv loweringStateRelDefs exprLoweringProps
   exprSimDefs intCallReturnMem fragExec emitHelper instIdxIndep rich_list
   fragGasPath vyperContext loweringPosts intCallResult
   stmtLowering stmtSimDefs context finite_map vyperState

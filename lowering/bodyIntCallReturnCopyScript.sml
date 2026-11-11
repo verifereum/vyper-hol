@@ -3,7 +3,7 @@ Theory bodyIntCallReturnCopy
 Ancestors
   intCallReturnMem valueCopy intCallResult loweringSlice loweringPosts instIdxIndep
   stmtSimReturn fragExec exprLoweringProps stmtLowering exprLowering
-  emitHelper emitHelperProps compileEnv context valueEncoding
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs context valueEncoding
   vyperState vyperTyping venomExecSemantics venomInst venomState
   list rich_list
 

@@ -2,7 +2,7 @@
 Theory bodyIntCallJointStmtSeq
 Ancestors
   bodyIntCallJointContract bodyIntCallJointStmtBoundary bodyIntCallJointStmtZero
-  stmtSimSeqEnv stmtSimProps loweringPosts stmtLowering compileEnv
+  stmtSimSeqEnv stmtSimProps loweringPosts stmtLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperTypeSystem bodyExprPreFacts
   supportedStmts supportedStmtTraverse supportedExprTraverse vyperTypeCallGraph
   vyperTypeCallStackSoundness exprLoweringProps freshWrites

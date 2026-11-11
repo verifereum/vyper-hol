@@ -4,7 +4,7 @@ Ancestors
   exprExtRequestSourceFrame exprExtRequestSourceProbe exprExtRequestReadProbe
   exprExtRequestDelayed vyperCallOutcomeFrame vyperState
   supportedExprTraverse vyperInterpreter loweringPosts exprSimProps
-  compileEnv accountsRelProps exprLoweringProps vyperStorageBackend
+  compileEnv loweringStateRelDefs accountsRelProps exprLoweringProps vyperStorageBackend
   vyperStatePreservation
 
 Theorem extrequest_read_after_pure_expr:

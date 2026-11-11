@@ -4,7 +4,7 @@ Ancestors
   abiBoundedLeafReflection abiMalformedPrefix abiDecodeRanges entryDecodeStaticProps calldataReconstruction valueEncodingProps
   vyperTypeABI vyperABI vyperTyping vyperABIValid abiVyperAdmissible abiDecoderCoherence
   vyperABIRoundtrip vyperTypeDefaults abiStaticSparseProps
-  contractABI vyperValue valueEncoding words list rich_list alist pair arithmetic
+  contractABI vyperValue valueEncoding valueEncodingDefs words list rich_list alist pair arithmetic
 
 Theorem abi_typed_encoding_reflected:
   has_type (vyper_to_abi_type env ty) av /\

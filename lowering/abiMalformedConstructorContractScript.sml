@@ -4,7 +4,7 @@ Theory abiMalformedConstructorContract
 Ancestors
   abiMalformedTraversal abiMalformedLeafProbe abiMalformedRecursiveInterface
   abiMalformedPruneState exprSimAlloc abiDecoderCoherence abiEncoder
-  exprLoweringProps localPtrsProps compileEnv venomMemProps venomMemDefs
+  exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs venomMemProps venomMemDefs
   venomState valueEncoding valueEncodingProps abiDecoderReentry
   freshWrites abiDecoderClampedWord abiDecoderClamp abiDecoderContract
   emitHelper emitHelperProps abiDecoderReentryPointer abiDecoderAbortReentry
@@ -64,7 +64,7 @@ Proof
      `alloca_inv (s with vs_vars := vars)` by fs[stmt_state_rel_def] >>
      `FLOOKUP (s with vs_vars := vars).vs_allocas inst.inst_id = SOME (b,sz)` by simp[] >>
      drule_all local_ptrs_rel_alloca_disjoint >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   ` (mstore d w (s with vs_vars := vars)).vs_allocas = s.vs_allocas /\
     (mstore d w (s with vs_vars := vars)).vs_alloca_next = s.vs_alloca_next /\
     (mstore d w (s with vs_vars := vars)).vs_vars = vars` by

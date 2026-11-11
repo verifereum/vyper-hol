@@ -1,7 +1,7 @@
 (* Active local provenance when scopes and compiler bindings change. *)
 Theory bodyIntCallDeclarationRegions
 Ancestors
-  compileEnv exprLoweringProps vyperState finite_map pred_set list
+  compileEnv loweringStateRelDefs exprLoweringProps vyperState finite_map pred_set list
   intCallFrame stmtSimDeclPath venomState venomExecSemantics venomInst
 
 (* Lookup support, rather than equality of scopes, is sufficient for projection. *)

@@ -4,7 +4,7 @@ Ancestors
   exprExtRequestAllocationEndpoint exprExtRequestJointUnwrap
   exprExtRequestHistoryCompose exprExtRequestHistory exprExtRequestMaterialize
   exprOperandVar exprSafeOperand exprLoweringProps exprSimProps exprSimDefs loweringPosts
-  gasSummary fragGasMode fragGasPath freshWrites compileEnv venomState
+  gasSummary fragGasMode fragGasPath freshWrites compileEnv loweringStateRelDefs venomState
   exprLowering emitHelper valueCopy valueEncodingProps exprSimBufferStore
 
 Theorem extrequest_store_same_no_gas[local]:

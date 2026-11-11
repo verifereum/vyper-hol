@@ -1,7 +1,7 @@
 (* Region-containment interfaces for the callee's memory certificate. *)
 Theory bodyIntCallFrameBoundary
 Ancestors
-  intCallFrame compileEnv venomState valueEncoding list pair finite_map arithmetic
+  intCallFrame compileEnv loweringStateRelDefs venomState valueEncoding list pair finite_map arithmetic
 
 Theorem callee_writes_above_contained:
   !lo lo' excl excl' m m'.

@@ -3,7 +3,7 @@ Theory abiValidAllocatedMembers
 Ancestors
   abiValidAllocatedContract abiDecoderMemberInfos abiValidMembers
   abiMalformedRecursiveInterface abiDecoderCoherence abiDecoderContract
-  abiEncoder compileEnv venomState valueEncoding words list arithmetic vyperABI
+  abiEncoder compileEnv loweringStateRelDefs venomState valueEncoding valueEncodingDefs words list arithmetic vyperABI
   abiDecoderLoop abiDecoderEmpty abiValidAggregateHeads
   abiMalformedConstructorContract abiDecoderComplexGuard abiDecoderReentryPointer
   abiDecoderTypedContract abiDecoderSequenceReach abiDecoderReentry abiDecoderContract

@@ -8,7 +8,7 @@ Ancestors
   exprLoweringProps localPtrsProps abiEncoder emitHelper emitHelperProps
   abiDecoderMemberInfos abiDecoderCoherence abiDecoderCode abiDecoderCounters
   abiDecoderAppend abiVyperAdmissible contractABI vyperABI valueEncoding
-  fragExec compileEnv venomState venomExecSemantics words list arithmetic
+  fragExec compileEnv loweringStateRelDefs venomState venomExecSemantics words list arithmetic
 
 Theorem abi_malformed_aggregate_guard_run:
   abi_decode_complex_head_guard src hi H st = ((),en) /\

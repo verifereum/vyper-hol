@@ -4,7 +4,7 @@ Theory abiMalformedSiteFrame
 Ancestors
   abiMalformedIndexState abiMalformedResources abiMalformedCopyState
   abiMalformedPruneState abiDecoderReentry abiDecoderIndexInit
-  exprLoweringProps localPtrsProps compileEnv valueCopy valueEncoding
+  exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs valueCopy valueEncoding valueEncodingDefs
   venomState venomMemDefs venomMemProps venomExecSemantics finite_map
   pred_set list arithmetic
 
@@ -97,10 +97,10 @@ Proof
   >- (irule abi_malformed_mcopy_state_rel >>
       simp[] >> qexistsl_tac [`b`, `inst`, `sz`] >> simp[] >>
       rpt strip_tac >>
-      `compileEnv$regions_disjoint b sz lb lsz` by
+      `loweringStateRelDefs$regions_disjoint b sz lb lsz` by
         (fs[stmt_state_rel_def, state_rel_def] >>
          drule_all local_ptrs_rel_alloca_disjoint >> simp[]) >>
-      gvs[compileEnvTheory.regions_disjoint_def]) >>
+      gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   reverse conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
   irule mem_bytes_at_mcopy_disjoint >>
   `allocas_non_overlapping s` by gvs[stmt_state_rel_def, alloca_inv_def] >>

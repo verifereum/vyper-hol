@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallFamAggTupleLoop
   exprSimHyps exprSimProps exprSimHypsDefs valueEncoding words list
   bodyIntCallJointAggCore actualAllocExec bodyIntCallRestoreResults
-  loweringPosts context compileEnv exprCallBounds
+  loweringPosts context compileEnv loweringStateRelDefs exprCallBounds
 
 (* Evaluated child layouts are small enough for the counted store interface. *)
 Theorem intcall_children_layout:
@@ -168,7 +168,7 @@ Proof
   strip_tac >> conj_tac
   >- (simp[vv_holds_def, mk_ptr_def, vyperStateTheory.read_result_def,
            vyperStateTheory.return_def] >>
-      simp[valueEncodingTheory.val_in_memory_def]) >>
+      simp[valueEncodingDefsTheory.val_in_memory_def]) >>
   irule bodyIntCallRestoreResultsTheory.allocated_value_vv_at >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[mk_ptr_def] >> reverse conj_tac

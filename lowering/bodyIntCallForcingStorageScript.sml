@@ -2,7 +2,7 @@
 Theory bodyIntCallForcingStorage
 Ancestors
   bodyIntCallStorageLanding bodyIntCallLiteralLanding exprSimStorageCopy
-  exprSimUnwrap exprSimFieldLayout exprLowering context compileEnv
+  exprSimUnwrap exprSimFieldLayout exprLowering context compileEnv loweringStateRelDefs
   valueEncodingProps valueEncoding loweringPosts venomState words
   fragExec emitHelperProps exprLoweringProps exprSimCopy intCallFrame
   finite_map list loweringHalt

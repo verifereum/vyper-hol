@@ -3,7 +3,7 @@ Theory exprExtRequestReconstruct
 Ancestors
   exprExtRequestHistory exprExtRequestReadProbe exprExtRequestSuffix
   loweringPosts exprSafeOperand exprSimProps valueEncodingProofs
-  valueEncoding compileEnv venomExecSemantics venomState vyperValue
+  valueEncoding valueEncodingDefs compileEnv loweringStateRelDefs venomExecSemantics venomState vyperValue
   valueTypingMemoryProps
 
 Theorem extrequest_history_operand:

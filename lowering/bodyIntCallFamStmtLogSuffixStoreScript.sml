@@ -5,7 +5,7 @@ Ancestors
   stmtSimLogStoreContinue stmtSimLogAllocate stmtSimLogStoreEncode
   stmtSimLogDataInput stmtSimLogEncodeLayout stmtSimLogTrace stmtSimLogDataRun
   abiDecoderFrame abiDecoderReentry abiEncoderCounters abiEncoderInput
-  vyperTypeABI vyperABI compileEnv supportedTypes contractABI
+  vyperTypeABI vyperABI compileEnv loweringStateRelDefs supportedTypes contractABI
   exprLoweringProps localPtrsProps emitHelperProps venomExecSemantics
   venomState finite_map words list arithmetic
 

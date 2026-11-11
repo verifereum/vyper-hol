@@ -8,7 +8,7 @@ Ancestors
   exprLoweringProps instIdxIndep
   abiDecoderMemberCons abiDecoderMemberSetup abiDecoderCoherence abiDecoderContract
   abiMalformedRecursiveInterface abiMalformedMembers abiDecoderMemberInfos
-  abiEncoder compileEnv venomState vyperABI contractABI valueEncoding
+  abiEncoder compileEnv loweringStateRelDefs venomState vyperABI contractABI valueEncoding
   words list rich_list arithmetic pred_set abiDecodeRanges abiValidMembers
 
 Theorem abi_valid_allocated_members_head_entry:

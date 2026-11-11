@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallFamStmtReturnStackExit bodyIntCallFamStmtReturnLayout
   exprSimTypedAlloc exprSimFieldLayout placeMemoryTypedBase
   stmtSimReturn stmtLowering compileEnv exprLoweringProps loweringPosts
-  vyperTyping vyperTypeABI vyperValue valueEncoding valueEncodingProofs
+  vyperTyping vyperTypeABI vyperValue valueEncoding valueEncodingDefs valueEncodingProofs
   valueEncodingTyping fragExec list rich_list
 
 Theorem stack_return_operand_layout:

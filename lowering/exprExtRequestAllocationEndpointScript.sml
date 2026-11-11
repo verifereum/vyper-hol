@@ -3,7 +3,7 @@ Ancestors
   exprExtRequestMaterialize exprSimCopy exprSimStorageCopy loweringHalt exprSimAlloc
   exprExtRequestHistoryCompose exprExtRequestHistory
   exprSimProps exprLoweringProps fragGasSeq fragGasMode fragGasFresh
-  freshWrites context compileEnv emitHelper emitHelperProps
+  freshWrites context compileEnv loweringStateRelDefs emitHelper emitHelperProps
   venomInst venomInstProofs venomExecSemantics venomState list rich_list
   arithmetic fragExec
 

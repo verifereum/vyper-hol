@@ -5,7 +5,7 @@ Ancestors
   exprSimAggregateSource exprSimHyps exprLoweringProps exprLowering
   bodyIntCallJointContract valueEncoding valueEncodingProps
   gasOutcome gasSummary stmtReasonVvMemory vyperInterpreter vyperState
-  finite_map list compileEnv
+  finite_map list compileEnv loweringStateRelDefs
 
 Theorem intcall_tuple_cons_compile:
   compile_make_tuple compile_expr ce (e::args) buf off si = (out,sb) ==>
@@ -221,7 +221,7 @@ Proof
            fragGasModeTheory.gas_marked_path_def,
            fragGasPathTheory.gas_path_rules, intcall_expr_cont_def] >>
       gvs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def,
-          valueEncodingTheory.val_in_memory_def,
+          valueEncodingDefsTheory.val_in_memory_def,
           exprSimWordArgsTheory.stmt_state_rel_gas_obs,
           exprSimHypsDefsTheory.expr_sim_inv_gas_obs] >>
       simp[fragGasPathTheory.gas_path_rules] >>
@@ -262,7 +262,7 @@ Proof
       rpt gen_tac >> strip_tac >> gvs[] >>
       rename1 `tuple_in_memory _ tail_types _ final_state.vs_memory` >>
       conj_tac
-      >- (simp[Once valueEncodingTheory.val_in_memory_def] >>
+      >- (simp[Once valueEncodingDefsTheory.val_in_memory_def] >>
           irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
           simp[] >> qexistsl_tac [`type_memory_size h`, `head_state.vs_memory`] >> simp[] >>
           sym_tac >> first_x_assum irule >> decide_tac) >>

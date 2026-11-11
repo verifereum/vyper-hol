@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallJointStmtSeq stmtSimExpr bodySimStmtCases
   bodyExprPreFacts exprSimHypsDefs exprSimDefs exprSimSource loweringPosts
   stmtSimDefs stmtSimProps
-  stmtLowering exprLowering exprLoweringProps compileEnv vyperInterpreter vyperState
+  stmtLowering exprLowering exprLoweringProps compileEnv loweringStateRelDefs vyperInterpreter vyperState
   vyperTypeSystem vyperTypeCallStackSoundness supportedStmts supportedStmtTraverse
   supportedExprTraverse supportedExprs allocLimits gasOutcome gasSummary
   fragGasMode list finite_map bodySim vyperTypeCallGraph gasContext

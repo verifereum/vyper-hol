@@ -4,7 +4,7 @@ Ancestors
   extcallReturnRelabelSuccess extcallReturnRelabelPrefix
   extcallReturnCountedCheck abiValidAllocatedContract
   abiMalformedRecursiveInterface abiMalformedSiteFrame exprSimAbiGasBridge
-  abiEncoderObserver fragGasMode compileEnv venomState venomExecSemantics
+  abiEncoderObserver fragGasMode compileEnv loweringStateRelDefs venomState venomExecSemantics
   list pred_set finite_map
 
 Theorem return_resource_initial_label[local]:

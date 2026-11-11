@@ -4,7 +4,7 @@ Ancestors
   abiValidAllocatedObservations abiValidAllocatedContract abiDecoderFrame
   ctorAbiActualWorld abiDecoderReentry abiDecoderContract
   abiMalformedRecursiveInterface venomMemDefs
-  localPtrsProps loweringSlice exprLoweringProps compileEnv venomState
+  localPtrsProps loweringSlice exprLoweringProps compileEnv loweringStateRelDefs venomState
   finite_map words list arithmetic
 
 Theorem abi_valid_allocated_scratch_free_resource:
@@ -53,7 +53,7 @@ Proof
        (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
      first_x_assum match_mp_tac >>
      qpat_x_assum `!name lb lsz. _ ==> regions_disjoint _ _ _ _` drule >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     (irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
      reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
@@ -61,7 +61,7 @@ Proof
      `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
      qhdtm_assum `abi_decode_frame`
        (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
-     first_x_assum match_mp_tac >> fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     first_x_assum match_mp_tac >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `stmt_state_rel ctx func cenv cx es t` by
     (irule stmt_state_rel_allocas_frame >> conj_tac
      >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>

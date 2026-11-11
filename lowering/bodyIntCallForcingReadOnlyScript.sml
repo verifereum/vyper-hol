@@ -2,8 +2,8 @@
 Theory bodyIntCallForcingReadOnly
 Ancestors
   bodyIntCallForceLanding exprSimUnwrap exprSimHash exprSimAggregateChildren
-  fragGasMode exprLoweringProps loweringPosts intCallFrame compileEnv
-  venomState valueEncoding valueCopy valueCopyBytes list finite_map
+  fragGasMode exprLoweringProps loweringPosts intCallFrame compileEnv loweringStateRelDefs
+  venomState valueEncoding valueEncodingDefs valueCopy valueCopyBytes list finite_map
   bodyIntCallWordLanding vyperInterpreter vyperState exprLowering
 
 Theorem forcing_readonly_state_rel:

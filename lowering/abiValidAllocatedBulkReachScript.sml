@@ -4,7 +4,7 @@ Ancestors
   abiDecoderBulkExecute abiDecoderSequenceReach abiDecoderContract
   abiMalformedRecursiveInterface abiDecoderReentry exprLoweringProps
   emitHelperProps instIdxIndep venomInst venomState list
-  abiMalformedSiteFrame compileEnv abiDecoderBulk abiDecoderTypedCompose
+  abiMalformedSiteFrame compileEnv loweringStateRelDefs abiDecoderBulk abiDecoderTypedCompose
 
 Theorem abi_valid_allocated_bulk_reach:
   type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =

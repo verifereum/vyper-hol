@@ -6,7 +6,7 @@ Ancestors
   abiMalformedSiteFrame abiMalformedPruneState abiMalformedPrefix
   abiDecoderReentry abiDecoderVarExtend abiDecoderContract fragExec
   venomExecSemantics exprLoweringProps compileEnv
-  venomState venomMemDefs valueEncoding finite_map pred_set words list arithmetic
+  venomState venomMemDefs valueEncoding valueEncodingDefs finite_map pred_set words list arithmetic
 
 Definition abi_malformed_destination_def:
   abi_malformed_destination func cenv scopes aid d n s <=>

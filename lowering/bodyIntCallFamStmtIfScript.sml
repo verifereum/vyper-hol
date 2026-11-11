@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtIf
 Ancestors
   bodyIntCallJointContract bodyIntCallJointStmtJump
   bodyIntCallJointStmtBoundary bodyIntCallDeclarationRegions
-  bodyExprPreFacts exprLoweringProps intCallFrame compileEnv
+  bodyExprPreFacts exprLoweringProps intCallFrame compileEnv loweringStateRelDefs
   vyperState finite_map list exprSimHypsDefs vyperTypeEvalSoundness
   vyperTypeInvariants vyperTypeSystem vyperTypeCallGraph
   bodyStoragePreservation vyperTypeExprSoundness vyperTypeStoragePreservation

@@ -2,7 +2,7 @@
    compiler local-map construction. *)
 Theory bodyIntCallResourceEntry
 Ancestors
-  bodySim bodySimEntry compileEnv intCallCallee compileVyper
+  bodySim bodySimEntry compileEnv loweringStateRelDefs intCallCallee compileVyper
   bodyIntCallResourceAllocation
   vyperInterpreter vyperContext vyperState list finite_map
   vyperTypeEvalSoundness vyperTypeBindArguments vyperTypeInvariants

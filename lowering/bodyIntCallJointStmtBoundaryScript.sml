@@ -22,12 +22,12 @@ Theorem intcall_return_buffer_source_disjoint:
   a <= p /\ p + k <= a + z /\
   (fp.jc_lo <= a \/
    ?b n. fp.jc_staged b n /\ b <= a /\ a + z <= b + n) ==>
-  compileEnv$regions_disjoint p k (w2n bw) cap
+  loweringStateRelDefs$regions_disjoint p k (w2n bw) cap
 Proof
   strip_tac >>
   qpat_x_assum `intcall_frame_ok fp` mp_tac >>
   simp[intcall_frame_ok_def] >> strip_tac >>
-  gvs[compileEnvTheory.regions_disjoint_def] >>
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >>
   qpat_x_assum `!b z. fp.jc_staged b z ==> _ \/ _` drule >>
   strip_tac >> decide_tac
 QED
@@ -145,7 +145,7 @@ Proof
     (irule bytestring_val_in_memory_transfer >> metis_tac[]) >>
   `!b sz. P b sz ==> regions_disjoint b sz (w2n bw)
      (MIN (type_memory_size dv) (type_memory_size av))` by
-    (gvs[compileEnvTheory.regions_disjoint_def] >> rpt strip_tac >>
+    (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> rpt strip_tac >>
      first_x_assum drule >> strip_tac >> simp[arithmeticTheory.MIN_DEF]) >>
   `!x. reserved (Var x) \/ Var x = rpc ==> not_fresh_at sa x` by
     metis_tac[] >>

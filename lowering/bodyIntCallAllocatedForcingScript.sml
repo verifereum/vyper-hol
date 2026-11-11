@@ -2,7 +2,7 @@
 Theory bodyIntCallAllocatedForcing
 Ancestors
   bodyIntCallMaterializeLanding bodyIntCallForcingCode bodyIntCallStorageLanding
-  bodyIntCallLiteralLanding exprSimPrecompiles exprLoweringProps compileEnv
+  bodyIntCallLiteralLanding exprSimPrecompiles exprLoweringProps compileEnv loweringStateRelDefs
   exprSimStorageCopy context venomState words finite_map intCallFrame
   fragGasMode exprSimCopy exprSimProps exprSimAlloc venomInst loweringPosts
   exprLowering exprSimFieldLayout emitHelperProps loweringHalt fragExec valueEncoding valueEncodingProps

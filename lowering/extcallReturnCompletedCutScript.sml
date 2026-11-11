@@ -5,7 +5,7 @@ Ancestors
   extcallReturnCountedTransport extcallReturnObserverResources
   abiEncoderObserver abiDecoderLoop exprSimAbiGasBridge
   abiMalformedRecursiveInterface abiMalformedSiteFrame exprSimHash
-  venomExecSemantics venomInstProps venomInst venomState compileEnv
+  venomExecSemantics venomInstProps venomInst venomState compileEnv loweringStateRelDefs
   extcallReturnObserver extcallReturnObserverIds callLayoutDefs rich_list
   list pred_set finite_map
 

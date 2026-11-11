@@ -6,7 +6,7 @@ Ancestors
   extcallReturnEntryBridge extcallReturnSyntax extcallReturnLabelSyntax
   extcallReturnDecoderLabels
   abiReturnReject abiMalformedRecursiveInterface abiReturnPrefixTransport
-  exprLoweringProps exprSimAbiGasBridge abiEncoderObserver fragExec fragGasMode compileEnv venomState venomInst
+  exprLoweringProps exprSimAbiGasBridge abiEncoderObserver fragExec fragGasMode compileEnv loweringStateRelDefs venomState venomInst
   venomExecSemantics localPtrsProps list finite_map words
 
 (* The corresponding success-side fact is local to its theory. *)

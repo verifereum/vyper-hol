@@ -2,7 +2,7 @@
 Theory bodyIntCallFamPureAtom
 Ancestors
   bodyIntCallJointContract bodyIntCallJointPureCont bodyIntCallJointPureSlot
-  exprSimWordArgs exprSimHypsDefs loweringPosts stmtSimProps compileEnv
+  exprSimWordArgs exprSimHypsDefs loweringPosts stmtSimProps compileEnv loweringStateRelDefs
   exprSimDefs exprSimAggregateSource exprLoweringProps exprOperandVar
   gasOutcome gasSummary fragGasMode exprSimNameValue exprSimTopLevel
   exprSimFlagWord exprSimLeaves exprSimHyps exprLowering supportedExprTraverse

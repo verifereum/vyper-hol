@@ -1,7 +1,7 @@
 (* Spatial authorization for protected caller intervals. *)
 Theory bodyIntCallResourceSpans
 Ancestors
-  intCallFrame intCallCallee compileEnv venomState arithmetic
+  intCallFrame intCallCallee compileEnv loweringStateRelDefs venomState arithmetic
 
 Theorem protected_span_subregion:
   (!a n. P a n ==> regions_disjoint a n b z) /\

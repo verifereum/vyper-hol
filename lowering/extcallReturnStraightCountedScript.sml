@@ -7,7 +7,7 @@ Ancestors
   extcallReturnObserverResources extcallReturnObserverIds extcallReturnObserver
   fragExec venomExecSemantics venomExecProofs venomWf
   abiValidAllocatedContract abiMalformedRecursiveInterface
-  exprSimAbiGasBridge abiEncoderObserver fragGasMode compileEnv venomState
+  exprSimAbiGasBridge abiEncoderObserver fragGasMode compileEnv loweringStateRelDefs venomState
   venomInst exprLoweringProps list rich_list pred_set finite_map
 
 Theorem return_straight_sanitized_code[local]:

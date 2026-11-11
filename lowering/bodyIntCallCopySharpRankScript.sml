@@ -3,7 +3,7 @@ Ancestors
   bodyIntCallCopySharpChild bodyIntCallCopySharpPrimitive
   bodyIntCallCopySharpFixed bodyIntCallCopySharpFast bodyIntCallCopySharpDynamic
   bodyIntCallCopySharpFields placeMemoryTypedForward placeMemoryTypedPrimitive
-  typedCopyDomain compileEnv vyperTypeSystem vyperValue vyperTyping valueEncoding
+  typedCopyDomain compileEnv vyperTypeSystem vyperValue vyperTyping valueEncoding valueEncodingDefs
   placeMemoryCopyEffect placeMemoryTypedBase context vyperTypeValues
   placeMemoryDynarrayForward list
 

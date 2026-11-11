@@ -34,7 +34,7 @@ Ancestors
   list rich_list loweringPosts supportedExprTraverse exprSimHypsDefs exprSimHyps vyperAST
   vyperInterpreter vyperState exprSimDefs
   extCallSeamPrecheck extCallSeamOracle extCallSeamFrame extCallSeamFinish
-  extCallSeamSummary exprLowering emitHelper rawCallFragPath compileEnv
+  extCallSeamSummary exprLowering emitHelper rawCallFragPath compileEnv loweringStateRelDefs
   exprExtRequestOperandCps exprExtRequestPrefix exprExtRequestValue
   exprLoweringProps exprSafeOperand fragGasPath gasSummary gasSummaryCompose
   extcallReturnDefaultResources extcallReturnDefaultRouting extcallReturnDefaultStore
@@ -563,7 +563,7 @@ Proof
        qexists_tac `s4` >> simp[]) >>
      fs[ci_mono_def] >> decide_tac)) >>
   `!name b sz. local_region cenv ee.scopes t'' name b sz ==>
-      compileEnv$regions_disjoint (w2n w)
+      loweringStateRelDefs$regions_disjoint (w2n w)
         (abi_size_bound cenv.ce_struct_fields
           (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) b sz` by
     (rpt strip_tac >>
@@ -574,17 +574,17 @@ Proof
      qpat_assum `inst.inst_id = s4.cs_next_id`
        (fn th => rule_assum_tac (ONCE_REWRITE_RULE [GSYM th])) >>
      drule_all localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
-     simp[compileEnvTheory.regions_disjoint_def] >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
   `!name b sz. local_region cenv es.scopes s0 name b sz ==>
-      compileEnv$regions_disjoint (w2n w)
+      loweringStateRelDefs$regions_disjoint (w2n w)
         (abi_size_bound cenv.ce_struct_fields
           (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) b sz` by
     (drule_all wordArgsPtrTheory.wb_frame_local_regions >> strip_tac >>
      metis_tac[]) >>
   `!aid b sz. aid <> s4.cs_next_id /\
       FLOOKUP t''.vs_allocas aid = SOME (b,sz) ==>
-      compileEnv$regions_disjoint (w2n w)
+      loweringStateRelDefs$regions_disjoint (w2n w)
         (abi_size_bound cenv.ce_struct_fields
           (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) b sz` by
     (`allocas_non_overlapping t''` by
@@ -596,11 +596,11 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[venomMemDefsTheory.allocas_non_overlapping_def] >> rpt strip_tac >>
      first_x_assum drule >> disch_then drule >> simp[] >>
-     simp[compileEnvTheory.regions_disjoint_def, arithmeticTheory.MAX_DEF] >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, arithmeticTheory.MAX_DEF] >>
      decide_tac) >>
   `!aid b sz. aid < sa.cs_next_id /\
       FLOOKUP t''.vs_allocas aid = SOME (b,sz) ==>
-      compileEnv$regions_disjoint (w2n w)
+      loweringStateRelDefs$regions_disjoint (w2n w)
         (abi_size_bound cenv.ce_struct_fields
           (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) b sz` by
     (rpt strip_tac >> first_x_assum irule >> qexists_tac `aid` >> simp[] >>
@@ -610,7 +610,7 @@ Proof
       FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
         NONE => FEMPTY | SOME imms => get_source_immutables cenv.ce_module imms)
         name = SOME (tv,v) ==>
-      compileEnv$regions_disjoint (w2n w)
+      loweringStateRelDefs$regions_disjoint (w2n w)
         (abi_size_bound cenv.ce_struct_fields
           (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
         off (type_memory_size tv)` by
@@ -623,12 +623,12 @@ Proof
      disch_then drule >> disch_then drule >> strip_tac >>
      qpat_x_assum `!inst b sz. _` (qspec_then `inst` mp_tac) >>
      simp[] >>
-     simp[compileEnvTheory.regions_disjoint_def] >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
   `!d dw tv. ext_call_kwarg EKDefault opts vs = SOME d /\
       ~is_word_type default_ty /\ eval_operand default_op t'' = SOME dw /\
       evaluate_type (get_tenv cx) default_ty = SOME tv ==>
-      compileEnv$regions_disjoint (w2n w)
+      loweringStateRelDefs$regions_disjoint (w2n w)
         (abi_size_bound cenv.ce_struct_fields
           (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
         (w2n dw) (val_footprint tv d)` by
@@ -646,11 +646,11 @@ Proof
      `dw = w'` by gvs[] >> fs[] >>
      fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >>
      `FLOOKUP t''.vs_allocas aid = SOME (w2n w',size')` by metis_tac[] >>
-     `compileEnv$regions_disjoint (w2n w)
+     `loweringStateRelDefs$regions_disjoint (w2n w)
         (abi_size_bound cenv.ce_struct_fields
           (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
         (w2n w') size'` by (first_x_assum irule >> qexists_tac `aid` >> simp[]) >>
-     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `outcomes_accounts_typed ee.outcomes /\ accounts_runtime_well_typed ee.accounts` by
     (qpat_assum `expr_sim_inv cenv cx env ee` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
@@ -1610,7 +1610,7 @@ Resume extcall_return_values[none]:
        vv_holds_def, vv_at_def, vyperStateTheory.read_result_def, return_def,
        expr_val_rel_def, expr_val_at_def, venomStateTheory.eval_operand_def,
        vyperValueTheory.evaluate_type_def, is_word_type_def,
-       valueEncodingTheory.val_in_memory_def, valueEncodingTheory.val_wf_def,
+       valueEncodingDefsTheory.val_in_memory_def, valueEncodingDefsTheory.val_wf_def,
        val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
   qpat_x_assum `wb_frame cenv es sa s0 t` mp_tac >>
   simp[wb_frame_def] >> metis_tac[]

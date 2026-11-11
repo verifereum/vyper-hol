@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallAggregateStoreLanding exprSimAggregateChildren
   bodyIntCallWidenCopy bodyIntCallLiteralLanding localMemoryStorePath
   placeMemoryPrimitiveForward entrySinkExtraction valueCopyBytes valueEncoding
-  exprLoweringProps compileEnv loweringPosts venomState venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs loweringPosts venomState venomExecSemantics
   venomInst words list rich_list fragGasMode instIdxIndep finite_map
 
 Theorem protected_compatible_store_frame_landing:

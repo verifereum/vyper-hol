@@ -3,7 +3,7 @@ Theory bodyIntCallDeclarationStore
 Ancestors
   bodyIntCallDeclarationRegions bodyIntCallProtectedBuffer bodyIntCallLocalLanding
   stmtSimDeclStore valueCopy localMemoryStorePath localPtrsProps intCallFrame
-  compileEnv exprLoweringProps exprSimDefs loweringPosts valueEncoding
+  compileEnv loweringStateRelDefs exprLoweringProps exprSimDefs loweringPosts valueEncoding
   venomState venomInst venomExecSemantics finite_map list vyperState
   entrySinkExtraction exprSimCopy tupleMemoryFrame fragGasPath fragGasMode fragExec fragGasSeq instIdxIndep rich_list
 

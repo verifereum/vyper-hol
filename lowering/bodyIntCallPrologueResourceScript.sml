@@ -2,7 +2,7 @@
 Theory bodyIntCallPrologueResource
 Ancestors
   intCallCallee bodyIntCallResourceSpans bodyIntCallWriteAuthorization
-  exprLoweringProps compileEnv venomState venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs venomState venomExecSemantics
   context list rich_list finite_map words arithmetic
 Libs
   monadsyntax

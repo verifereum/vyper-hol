@@ -9,7 +9,7 @@ Ancestors
   bodyIntCallFamStmtLogPost bodyIntCallFamStmtLogArgs
   bodyIntCallFamStmtLogMarked bodyIntCallFamStmtLogCounted bodyIntCallFamStmtLogCompose
   bodyIntCallJointStmtSeq stmtSimProps stmtSimDefs loweringPosts stmtLowering
-  compileEnv emitHelper exprLoweringProps bodySimLog supportedStmts supportedExprs
+  compileEnv loweringStateRelDefs emitHelper exprLoweringProps bodySimLog supportedStmts supportedExprs
   supportedStmtTraverse vyperTypeSystem vyperInterpreter vyperState
   exprSimHypsDefs gasOutcome gasContext stmtSimLogCompose freshWrites list
   vyperTypeCallGraph vyperTypeCallStackSoundness bodyExprPreFacts allocLimits

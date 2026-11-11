@@ -1,7 +1,7 @@
 (* Stack layout includes singleton tuples and structs. *)
 Theory bodyIntCallFamStmtReturnLayout
 Ancestors
-  stmtSimReturn compileEnv valueEncoding valueEncodingProofs
+  stmtSimReturn compileEnv loweringStateRelDefs valueEncoding valueEncodingProofs
   vyperTyping vyperValue list rich_list
 
 Theorem tuple_return_words:

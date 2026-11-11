@@ -6,7 +6,7 @@ Ancestors
   extcallReturnDecoderOwnership extcallReturnDecoderLabels
   abiReturnSize abiReturnPrefixTransport abiMalformedRecursiveInterface
   abiValidAllocatedContract abiMalformedSiteFrame exprSimWordArgs
-  exprLoweringProps loweringPosts compileEnv venomState fragGasMode
+  exprLoweringProps loweringPosts compileEnv loweringStateRelDefs venomState fragGasMode
   list rich_list arithmetic fragExec localPtrsProps exprSimProps abiBoundaryChecks
 
 Theorem return_prepared_counted_entry:

@@ -76,7 +76,7 @@ Theorem extrequest_strong_capture_extend:
         MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
         sm.cs_next_id <= inst.inst_id /\
         FLOOKUP t'.vs_allocas inst.inst_id = SOME (b,sz) ==>
-        compileEnv$regions_disjoint off len b sz) ==>
+        loweringStateRelDefs$regions_disjoint off len b sz) ==>
      mem_bytes_at off len t'.vs_memory = mem_bytes_at off len t.vs_memory) ==>
   extrequest_strong_capture ctx func cenv cx captured result value ee' sn t'
 Proof
@@ -138,7 +138,7 @@ Theorem extrequest_strong_captures_extend:
         MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
         sm.cs_next_id <= inst.inst_id /\
         FLOOKUP t'.vs_allocas inst.inst_id = SOME (b,sz) ==>
-        compileEnv$regions_disjoint off len b sz) ==>
+        loweringStateRelDefs$regions_disjoint off len b sz) ==>
      mem_bytes_at off len t'.vs_memory = mem_bytes_at off len t.vs_memory) ==>
   extrequest_strong_captures ctx func cenv cx es rs vvs ee' sn t'
 Proof

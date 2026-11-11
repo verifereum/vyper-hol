@@ -7,8 +7,8 @@ Ancestors
   abiBoundedLeafReflection abiDecoderBytesFrame abiDecoderVarExtend
   abiDecoderReentryPointer abiDecoderAbortReentry
   abiDecoderBytesRuntime abiDecoderBytesPhases emitHelperProps emitHelper venomInst
-  exprLoweringProps localPtrsProps compileEnv venomMemDefs venomMemProps
-  venomState venomExecSemantics valueEncoding valueEncodingProps valueCopy abiCanonicalHeadSize
+  exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs venomMemDefs venomMemProps
+  venomState venomExecSemantics valueEncoding valueEncodingDefs valueEncodingProps valueCopy abiCanonicalHeadSize
   abiDecoderBytestringCases abiDecoderCoherence exprLowering abiEncoder
   rich_list finite_map pred_set words list arithmetic
 
@@ -38,7 +38,7 @@ Proof
      `alloca_inv s` by fs[stmt_state_rel_def] >>
      `FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz)` by simp[] >>
      drule_all local_ptrs_rel_alloca_disjoint >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   ` (mcopy at source_addr n s).vs_vars = s.vs_vars /\
     (mcopy at source_addr n s).vs_allocas = s.vs_allocas /\
     (mcopy at source_addr n s).vs_alloca_next = s.vs_alloca_next` by

@@ -2,7 +2,7 @@
 Theory exprExtRequestEncoderState
 Ancestors
   exprExtRequestEncoderEndpoint exprExtRequestEncoderWindows
-  exprExtRequestPathFields localPtrsProps loweringSlice compileEnv
+  exprExtRequestPathFields localPtrsProps loweringSlice compileEnv loweringStateRelDefs
   abiEncoderRegisteredEffect abiEncoderWindowContract exprLoweringProps
   exprSimProps exprExtRequestEncoderWitness venomState
 
@@ -95,7 +95,7 @@ Proof
      >- (Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
          >- (fs[window_alloca_growth_def] >>
              first_x_assum drule_all >>
-             simp[compileEnvTheory.regions_disjoint_def]) >>
+             simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
          `FLOOKUP t.vs_allocas inst.inst_id = SOME x` by
            metis_tac[abi_encoder_registered_effect_allocated] >>
          gvs[] >> metis_tac[]) >>

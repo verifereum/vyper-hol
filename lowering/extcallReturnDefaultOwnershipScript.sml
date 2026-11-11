@@ -2,7 +2,7 @@
 Theory extcallReturnDefaultOwnership
 Ancestors
   abiMalformedRecursiveInterface abiCallerAllocation localPtrsProps exprSimProps
-  exprLoweringProps loweringPosts compileEnv venomState venomInst
+  exprLoweringProps loweringPosts compileEnv loweringStateRelDefs venomState venomInst
   finite_map list arithmetic
 
 Theorem return_default_destination_separation:

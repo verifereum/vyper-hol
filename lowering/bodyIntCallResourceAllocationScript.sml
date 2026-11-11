@@ -1,6 +1,6 @@
 Theory bodyIntCallResourceAllocation
 Ancestors
-  entryStateRel compileVyper compileEnv supportedProgram supportedDecls vyperTypeContract vyperAST
+  entryStateRel compileVyper compileEnv loweringStateRelDefs supportedProgram supportedDecls vyperTypeContract vyperAST
   vyperContext vyperState list finite_map option
 
 (* Distinct flattened namespaces separate keys of different declarations. *)

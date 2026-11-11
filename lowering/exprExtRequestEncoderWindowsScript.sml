@@ -18,7 +18,7 @@ Proof
   drule_all extrequest_encoder_function_alloca_not_local >>
   disch_then (qspec_then `scopes` strip_assume_tac) >>
   drule_all local_ptrs_rel_alloca_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def,
+  simp[loweringStateRelDefsTheory.regions_disjoint_def,
        venomMemDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
@@ -57,7 +57,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[window_alloca_sites_def] >>
   first_x_assum drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def,
+  simp[loweringStateRelDefsTheory.regions_disjoint_def,
        venomMemDefsTheory.regions_disjoint_def]
 QED
 

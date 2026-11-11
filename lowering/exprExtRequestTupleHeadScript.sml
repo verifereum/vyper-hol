@@ -4,7 +4,7 @@ Ancestors
   exprExtRequestTupleStore exprExtRequestMaterialize exprExtRequestHistoryCompose
   exprExtRequestJointUnwrap stmtSimDeclGas
   exprSimHash exprSafeOperand exprLoweringProps emitHelperProps
-  exprLowering compileEnv context emitHelper venomState venomInst loweringPosts
+  exprLowering compileEnv loweringStateRelDefs context emitHelper venomState venomInst loweringPosts
   venomInstProofs venomExecSemantics freshWrites gasSummaryCompose
 Libs wordsLib
 
