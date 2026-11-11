@@ -1,7 +1,7 @@
 (* Body-aware MakeArray integration over the counted widened-child loops. *)
 Theory exprSimAggregateBodyCase
 Ancestors
-  exprSimAggregateBodyLoops exprSimAggregatesAllocCounted exprSimAggregateLoops
+  exprSimAggregateBodyLoops exprSimAggregatesAllocCounted exprSimAggregateLoops exprSimAlloc
   exprSimAggregateBodySource exprSimAggregateBodyAlloc stmtSimDeclCompose
   exprSimAggregateLayout exprSimAggregateSource exprSimAggregateChildren
   exprSimHyps exprSimHypsDefs exprSimDefs exprSimSource exprSimProps
@@ -82,6 +82,20 @@ Resume compile_make_array_body_vv_case[tuple_post]:
   pop_assum SUBST1_TAC >> irule buffer_loop_memory_vv_post >>
   simp[Abbr `e`, vyperASTTheory.expr_type_def, post_value_type_def, is_word_type_def,
        contextTheory.mk_ptr_def] >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `EVERY _ args ==> _` drule >> strip_tac >>
+      drule_all buffer_alloc_code >> strip_tac >>
+      `FLOOKUP t'.vs_allocas sa.cs_next_id = SOME (b,type_memory_size_list tvs)` by metis_tac[] >>
+      irule aggregate_pure_frame_buffer >>
+      qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+      qpat_assum `FLOOKUP t'.vs_allocas _ = SOME (b,_)` (irule_at Any) >>
+      qexistsl_tac [`t`, `sm`] >>
+      simp[] >> conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!name lo sz. local_region _ _ s0 _ _ _ ==> _` irule >>
+          qexists_tac `n` >> simp[]) >>
+      gvs[]) >>
   qexistsl_tac [`b`, `sm`, `type_memory_size_list tvs`, `t`] >>
   simp[venomStateTheory.eval_operand_def, valueEncodingDefsTheory.val_in_memory_def] >>
   conj_tac >- (rpt strip_tac >>
@@ -172,6 +186,20 @@ Resume compile_make_array_body_vv_case[array_post]:
   pop_assum SUBST1_TAC >> irule buffer_loop_memory_vv_post >>
   simp[Abbr `e`, vyperASTTheory.expr_type_def, post_value_type_def, is_word_type_def,
        contextTheory.mk_ptr_def] >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `EVERY _ args ==> _` drule >> strip_tac >>
+      drule_all buffer_alloc_code >> strip_tac >>
+      `FLOOKUP t'.vs_allocas sa.cs_next_id = SOME (b,type_memory_bytes cenv (ArrayT et bnd))` by metis_tac[] >>
+      irule aggregate_pure_frame_buffer >>
+      qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+      qpat_assum `FLOOKUP t'.vs_allocas _ = SOME (b,_)` (irule_at Any) >>
+      qexistsl_tac [`t`, `sm`] >>
+      simp[] >> conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!name lo sz. local_region _ _ s0 _ _ _ ==> _` irule >>
+          qexists_tac `n` >> simp[]) >>
+      gvs[]) >>
   qexistsl_tac [`b`, `sm`, `type_memory_bytes cenv (ArrayT et bnd)`, `t`] >>
   simp[venomStateTheory.eval_operand_def] >>
   conj_tac >- (rpt strip_tac >>
