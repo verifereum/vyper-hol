@@ -50,7 +50,7 @@ Proof
   rpt strip_tac >>
   `?label ce params has_rb is_nr key trans view ctor ilen ss' rt.
     set_internal_package_target cenv.ce_target
-      (package_internal_fn tops F (assign_nkeys tops 0) cenv.ce_is_ctor
+      (package_internal_fn tops T (K global_nonreentrant_slot) cenv.ce_is_ctor
         (if cx.in_deploy then
            compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops
          else 0)

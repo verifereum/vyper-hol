@@ -87,7 +87,7 @@ Theorem lower_vyper_deploy_unit_selected_internal_code:
   IS_SOME (SND (SND (SND (classify_functions tops)))) /\
   MEM (FunctionDecl Internal mut isnr rr name args dflts ret ss) tops /\
   set_internal_package_target policy.rpol_target
-    (package_internal_fn tops F (assign_nkeys tops 0) T
+    (package_internal_fn tops T (K global_nonreentrant_slot) T
       (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops)
       (mut,isnr,rr,name,args,dflts,ret,ss)) =
     (label,ce,params,has_buf,nr,key,trans,view,ctor,ilen,compiled_ss,rty) ==>
@@ -117,7 +117,7 @@ Proof
     (irule deploy_internal_package_certificates >>
      qexistsl_tac [`compute_immutables_len
                      (get_struct_fields (make_struct_fields_map tops)) tops`,
-                   `T`, `assign_nkeys tops 0`, `policy.rpol_target`, `tops`, `F`] >>
+                   `T`, `K global_nonreentrant_slot`, `policy.rpol_target`, `tops`, `T`] >>
      simp[Abbr `pkgs`]) >>
   `MEM (label,ce,params,has_buf,nr,key,trans,view,ctor,ilen,compiled_ss,rty) pkgs` by
     (simp[Abbr `pkgs`, MEM_MAP] >>

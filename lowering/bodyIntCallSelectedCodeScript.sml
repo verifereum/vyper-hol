@@ -7,7 +7,7 @@ Theorem body_inv_selected_internal_code:
   body_inv tops ctx cenv cx /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
   set_internal_package_target cenv.ce_target
-    (package_internal_fn tops F (assign_nkeys tops 0) cx.in_deploy
+    (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
       (if cx.in_deploy then
          compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops
        else 0)

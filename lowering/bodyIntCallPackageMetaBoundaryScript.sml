@@ -147,7 +147,7 @@ Proof
           (mut,nr,rr,name,args,dflts,ret,stmts))
     (internal_fn_descriptors
       (MAP (set_internal_package_target rp.rpol_target o
-        package_internal_fn tops F (assign_nkeys tops 0) T
+        package_internal_fn tops T (K global_nonreentrant_slot) T
           (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops))
         ints))` by
     (simp[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,

@@ -17,7 +17,7 @@ Theorem invoked_internal_body_run:
   eval_operands arg_ops t = SOME argv /\
   cenv.ce_func_info (nsid_to_string (NONE,name)) = (nret,rbs,pvs) /\
   set_internal_package_target cenv.ce_target
-    (package_internal_fn tops F (assign_nkeys tops 0) cenv.ce_is_ctor
+    (package_internal_fn tops T (K global_nonreentrant_slot) cenv.ce_is_ctor
       (if cx.in_deploy then
          compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops
        else 0)

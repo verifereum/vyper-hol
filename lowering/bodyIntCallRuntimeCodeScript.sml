@@ -215,7 +215,7 @@ Theorem lower_vyper_runtime_unit_selected_internal_code:
   supported_program tops /\ lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
   set_internal_package_target rpolicy.rpol_target
-    (package_internal_fn tops F (assign_nkeys tops 0) F 0
+    (package_internal_fn tops T (K global_nonreentrant_slot) F 0
       (mut,nr,rr,name,args,dflts,ret,ss)) =
     (label,ce,params,has_buf,nr',key,trans,view,ctor,imm_len,compiled_ss,rty) ==>
   ?func before old entry after.
@@ -246,23 +246,23 @@ Proof
     rewrite_tac[build_selectors_fn_labels] >>
   `EVERY external_fn_shape_ok
     (MAP (set_external_package_target rpolicy.rpol_target o
-      package_external_fn tops F (assign_nkeys tops 0)) exts)` by
+      package_external_fn tops T (K global_nonreentrant_slot)) exts)` by
     (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      irule package_external_fn_shape_ok >> gs[]) >>
   `fallback_shape_ok (set_fallback_package_target rpolicy.rpol_target
-    (package_fallback_fn tops F (assign_nkeys tops 0) fb))` by
-    (qspecl_then [`tops`, `F`, `assign_nkeys tops 0`,
+    (package_fallback_fn tops T (K global_nonreentrant_slot) fb))` by
+    (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
        `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> gs[]) >>
   `EVERY internal_fn_shape_ok
     (MAP (set_internal_package_target rpolicy.rpol_target o
-      package_internal_fn tops F (assign_nkeys tops 0) F 0) ints)` by
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)` by
     (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      irule package_internal_fn_shape_ok >> gs[]) >>
   qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
   impl_tac >- fs[] >> strip_tac >> gvs[] >>
   `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors
     (MAP (set_internal_package_target rpolicy.rpol_target o
-      package_internal_fn tops F (assign_nkeys tops 0) F 0) ints))` by
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints))` by
     (fs[] >> simp[GSYM MAP_MAP_o,
       internal_fn_descriptors_set_internal_package_target,
       internal_fn_descriptors_MAP_package_internal_fn]) >>

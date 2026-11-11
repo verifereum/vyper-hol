@@ -17,15 +17,15 @@ Theorem runtime_unit_alloca_charge:
     compile_generate_runtime
       (build_selectors (type_env tops) exts)
       (MAP (set_external_package_target policy.rpol_target o
-        package_external_fn tops F (assign_nkeys tops 0)) exts)
+        package_external_fn tops T (K global_nonreentrant_slot)) exts)
       (MAP (set_internal_package_target policy.rpol_target o
-        package_internal_fn tops F (assign_nkeys tops 0) F 0) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)
       (set_fallback_package_target policy.rpol_target
-        (package_fallback_fn tops F (assign_nkeys tops 0) fb))
+        (package_fallback_fn tops T (K global_nonreentrant_slot) fb))
       policy.rpol_frontend_dispatch 0 0 []
       (build_dense_entry_info (build_selectors (type_env tops) exts)
         (MAP (set_external_package_target policy.rpol_target o
-          package_external_fn tops F (assign_nkeys tops 0)) exts))
+          package_external_fn tops T (K global_nonreentrant_slot)) exts))
       (initial_compile_state "__entry") = ((),st) ==>
     SUM (MAP alloca_lit_size
       (FILTER (\i. i.inst_opcode = ALLOCA) (state_insts st))) <=
@@ -48,7 +48,7 @@ Theorem deploy_unit_alloca_charge:
     classify_functions tops = (exts,ints,fb,ctor) /\
     set_constructor_package_target policy.rpol_target
       (case ctor of
-         SOME cf => package_constructor tops F (assign_nkeys tops 0) cf
+         SOME cf => package_constructor tops T (K global_nonreentrant_slot) cf
        | NONE => (ARB, ([] : (string # bool # bool # num # abi_dec_info) list),
                   F,F,0n,F,([] : stmt list),NoneT)) =
       (ce,cargs,pay,nr,key,trans,body,rt) /\
@@ -57,7 +57,7 @@ Theorem deploy_unit_alloca_charge:
       cargs 0
       (if IS_SOME ctor then
          MAP (set_internal_package_target policy.rpol_target o
-           package_internal_fn tops F (assign_nkeys tops 0) T
+           package_internal_fn tops T (K global_nonreentrant_slot) T
              (compute_immutables_len
                (get_struct_fields (make_struct_fields_map tops)) tops)) ints
        else [])
