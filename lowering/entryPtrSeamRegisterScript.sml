@@ -28,7 +28,28 @@ Ancestors
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
   list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
   valueEncoding entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
-  ctorDeployMemoryFrontier
+  ctorDeployMemoryFrontier registrationSizeAdmissibility
+
+(* Source lookup selects a declaration whose original byte sizes were checked. *)
+Theorem registration_external_allocs_ok:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ name <> "__default__" /\
+  lookup_function NONE name External tops =
+    SOME (mut,nr,args,defaults,ret,fbody) ==>
+  ?rr:bool. fn_allocs_ok tops (mut,nr,rr,name,args,defaults,ret,fbody)
+Proof
+  strip_tac >>
+  `(!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
+   (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops)` by
+    (fs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def,
+        EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e` drule >>
+     simp[supportedDeclsTheory.supported_declaration_header_def]) >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  drule_all lookup_function_external_mem >> strip_tac >> gvs[] >>
+  qexists_tac `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
+  metis_tac[]
+QED
 
 (* Argument registration starts before any allocation or memory write. *)
 Theorem registration_start_resources:
@@ -342,6 +363,76 @@ Resume registration_source_parameter_inputs[coherent]:
 QED
 
 Finalise registration_source_parameter_inputs
+
+Theorem registration_owned_entry_inputs:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME scope /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) /\
+  vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+    vs_inst_idx := 0 |>) s /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+  ~ctx_has_dalloca unit.cu_context ==>
+  ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+  dec_cenv_agrees ce (type_env tops) /\
+  (!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE) /\
+  s.vs_allocas = FEMPTY /\ s.vs_alloca_next = 0 /\ s.vs_memory = [] /\
+  alloca_inv s /\ allocas_from 0 s /\ s.vs_call_ctx = vs.vs_call_ctx /\
+  alloca_frontier_inv unit.cu_context fn site s /\
+  unit_alloca_budget unit.cu_context < dimword (:256) /\
+  (!label bb. lookup_block label fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+    tx.args vs.vs_call_ctx.cc_calldata /\
+  LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256) /\
+  ?tvs.
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv)
+      (MAP SND args) tvs /\
+    LIST_REL (abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields)
+      (MAP SND args) tvs /\
+    LIST_REL value_has_type tvs tx.args /\
+    (!i. i < LENGTH args ==> ?off.
+      FLOOKUP ce.ce_vars (FST (EL i args)) =
+        SOME (MemLoc off (type_memory_size (EL i tvs)))) /\
+    (!i. i < LENGTH args ==>
+      type_memory_size (EL i tvs) < dimword (:256))
+Proof
+  strip_tac >>
+  drule_all registration_source_parameter_inputs >> strip_tac >>
+  drule_all registration_initial_ptr_resources >>
+  disch_then (qspec_then `site` strip_assume_tac) >>
+  `calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+     tx.args vs.vs_call_ctx.cc_calldata` by
+    gvs[e2eDefsTheory.valid_vyper_call_def] >>
+  `LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)` by
+    (fs[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def,
+        e2eDefsTheory.source_typing_ok_def,
+        vyperTypeContractSoundnessTheory.call_tx_well_typed_def] >>
+     gvs[wordsTheory.dimword_def]) >>
+  asm_rewrite_tac [] >> qexists_tac `tvs` >> asm_rewrite_tac [] >>
+  `tx.function_name <> "__default__"` by fs[e2eDefsTheory.valid_vyper_call_def] >>
+  drule_all registration_external_allocs_ok >> strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_type_def_keys_distinct] >>
+  rpt strip_tac >>
+  `evaluate_type (type_env tops) (SND (EL i args)) = SOME (EL i tvs)` by
+    (fs[LIST_REL_EL_EQN, EL_MAP] >> metis_tac[]) >>
+  `type_memory_size (EL i tvs) < 2 ** 64` by
+    (irule registration_parameter_memory_limit >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `FST (EL i args)` >> simp[EL_MEM]) >>
+  `2 ** 64 < dimword (:256)` by
+    (rewrite_tac[wordsTheory.dimword_def, fcpTheory.index_bit0,
+       fcpTheory.finite_bit0, fcpTheory.index_one, fcpTheory.finite_one] >>
+     EVAL_TAC) >> decide_tac
+QED
 
 (* A selected argument occupies its canonical tuple window, including dynamic
    tails.  This source-only interface is independent of execution resources. *)
