@@ -409,3 +409,18 @@ Proof
      metis_tac[]) >>
   drule_all frame_reachable_saved_frontier >> strip_tac >> simp[] >> metis_tac[]
 QED
+
+(* A byte of one occurrence misses every bounded subrange of a distinct
+   occurrence.  This is symmetric by exchanging the two owner-indexed keys.
+   Empty subranges need no positivity premise; k < z supplies positivity
+   for the accessed occurrence.  All arithmetic is over natural addresses. *)
+Theorem occurrence_geometry_byte_subrange_exclusion:
+  occurrence_natural_geometry lo a U B stk s /\
+  FLOOKUP B id = SOME (b,z) /\ FLOOKUP B jd = SOME (c,w) /\
+  id <> jd /\ k < z /\ off + len <= w ==>
+  ~(c + off <= b + k /\ b + k < c + off + len)
+Proof
+  strip_tac >> Cases_on `len = 0` >- simp[] >>
+  `0 < z /\ 0 < w` by decide_tac >>
+  drule_all occurrence_geometry_sites_disjoint >> decide_tac
+QED
