@@ -36,7 +36,8 @@
 
 Theory invokeCopyFwdCommonDefs
 Ancestors
-  readonlyMemoryArgsDefs dfgDefs basePtrDefs memAliasDefs dominatorDefs
+  readonlyMemoryArgsDefs pointerConfinedDefs dfgDefs basePtrDefs memAliasDefs
+  dominatorDefs
   passSharedDefs venomEffects cfgDefs passResidualFrame stateEquiv pred_set While pair indexedLists list
 
 (* ===== Analysis Context ===== *)
@@ -439,6 +440,54 @@ Definition ricf_no_derived_mutable_sibling_def:
         v IN aliases /\
         v <> dst ==>
         ~MEM (Var v) use_inst.inst_operands
+End
+
+(* For ricf: an MCOPY into an alloca-backed buffer copies from an
+   alloca-backed buffer named directly, so a forward relocates one alloca
+   site onto another.  The source variable feeds no pointer arithmetic or
+   alias (so no other variable points into it), is never an MCOPY
+   destination, and nothing after the copy in its block writes through it,
+   so the forwarded buffer keeps the copied bytes. *)
+Definition ricf_src_alloca_def:
+  ricf_src_alloca (fn : ir_function) : bool <=>
+    let dfg = dfg_build_function fn in
+    !bb k copy_inst dst src_op size_op dst_inst.
+      MEM bb fn.fn_blocks /\
+      k < LENGTH bb.bb_instructions /\
+      EL k bb.bb_instructions = copy_inst /\
+      copy_inst.inst_opcode = MCOPY /\
+      copy_inst.inst_operands = [Var dst; src_op; size_op] /\
+      dfg_get_def dfg (icf_assign_root dfg {} dst) = SOME dst_inst /\
+      icf_is_alloca dst_inst ==>
+      ?sv src_inst.
+        src_op = Var sv /\
+        dfg_get_def dfg sv = SOME src_inst /\
+        icf_is_alloca src_inst /\
+        (!use_inst.
+           MEM use_inst (fn_insts fn) /\
+           MEM (Var sv) use_inst.inst_operands ==>
+           ~is_pointer_preserving_op use_inst.inst_opcode /\
+           (use_inst.inst_opcode = MCOPY ==>
+            EL 0 use_inst.inst_operands <> Var sv)) /\
+        (!j ops.
+           k <= j /\ j < LENGTH bb.bb_instructions /\
+           mem_write_ops (EL j bb.bb_instructions) = SOME ops ==>
+           ops.iao_ofst <> Var sv)
+End
+
+(* For ricf: every PARAM reads the parameter whose position the readonly
+   analysis gives its output, the i-th output of the entry block's leading
+   PARAMs reads parameter i. *)
+Definition ricf_param_order_ok_def:
+  ricf_param_order_ok (fn : ir_function) : bool <=>
+    !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PARAM ==>
+      ?i idx params.
+        params = (case entry_block fn of
+                    NONE => []
+                  | SOME bb => entry_param_outputs bb.bb_instructions) /\
+        i < LENGTH params /\ w2n idx = i /\
+        inst.inst_operands = [Lit idx] /\
+        inst.inst_outputs = [EL i params]
 End
 
 Theorem icf_aliases_step_mem:
