@@ -8,6 +8,7 @@ Ancestors bodyPtrStructLitOwnershipConsumers bodyPtrStructLitOwnershipLoops
   context compileEnv stmtLowering loweringShapeDefs loweringShapeRules
   bodyPtrStructLitOwnershipFrame bodyPtrStructLitOwnershipPop
   loweringShapeProps supportedExprTraverse exprLowering
+  bodyPtrStructLitOwnershipCallFrames
 
 Theorem alloc_run_compile_range_bound_checks:
   alloc_run fresh_outputs
@@ -47,21 +48,20 @@ Proof
 QED
 
 Theorem alloc_run_compile_log_store_data:
-  !ops buf offset.
-    alloc_run fresh_outputs (compile_log_store_data ce ops buf offset)
+  !ops tys buf offset.
+    alloc_run fresh_outputs (compile_log_store_data ce ops tys buf offset)
       (\u s. fresh_outputs s)
 Proof
-  Induct >> simp[compile_log_store_data_def, comp_ignore_bind_def]
+  Induct >> rpt strip_tac >> Cases_on `tys` >>
+  simp[compile_log_store_data_def, comp_ignore_bind_def,
+    alloc_run_emit_void_fresh]
   >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
-  rpt gen_tac >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
   reverse conj_tac >- simp[alloc_run_emit_op_fresh] >> gen_tac >> simp[] >>
   irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
   reverse conj_tac
-  >- (Cases_on `is_word_type (SND h)` >>
-      Cases_on `is_bytestring_type (SND h)` >>
-      simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
-        SRULE [SF ETA_ss] alloc_run_compile_store_bytestring]) >>
-  first_x_assum (mp_tac o SRULE [SF ETA_ss]) >> simp[SF ETA_ss]
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_memory] >>
+  gen_tac >> fs[SF ETA_ss]
 QED
 
 Theorem alloc_run_compile_encode_log_topic:
@@ -124,11 +124,31 @@ Proof
     SRULE [SF ETA_ss] alloc_run_compile_store_memory]
 QED
 
+Theorem alloc_run_compile_nonreentrant_unlock:
+  alloc_run fresh_outputs (compile_nonreentrant_unlock key transient view)
+    (\u s. fresh_outputs s)
+Proof
+  Cases_on `view` >> Cases_on `transient` >>
+  simp[compile_nonreentrant_unlock_def, alloc_run_emit_void_fresh] >>
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+QED
+
+Theorem alloc_run_compile_return_unlock[local]:
+  alloc_run fresh_outputs (compile_return_unlock ce) (\u s. fresh_outputs s)
+Proof
+  rewrite_tac[compile_return_unlock_def] >>
+  `?a b c d. ce.ce_nonreentrant = (a,b,c,d)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
+  Cases_on `a` >> gvs[alloc_run_compile_nonreentrant_unlock] >>
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+QED
+
 Theorem alloc_run_compile_internal_return_from_env:
   alloc_run fresh_outputs (compile_internal_return_from_env ce ty src op rpc)
     (\u s. fresh_outputs s)
 Proof
-  simp[compile_internal_return_from_env_def] >>
+  simp[compile_internal_return_from_env_def, comp_ignore_bind_def] >>
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  reverse conj_tac >- simp[alloc_run_compile_return_unlock] >> gen_tac >>
   Cases_on `ce.ce_return_buf` >> simp[]
   >- (rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
         reverse conj_tac >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
@@ -267,15 +287,6 @@ Proof
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_empty_fresh]
 QED
 
-Theorem alloc_run_compile_nonreentrant_unlock:
-  alloc_run fresh_outputs (compile_nonreentrant_unlock key transient view)
-    (\u s. fresh_outputs s)
-Proof
-  Cases_on `view` >> Cases_on `transient` >>
-  simp[compile_nonreentrant_unlock_def, alloc_run_emit_void_fresh] >>
-  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
-QED
-
 Theorem alloc_run_compile_external_return:
   alloc_run fresh_outputs
     (compile_external_return rv prim raw info bytes nr key transient view)
@@ -310,15 +321,23 @@ Proof
   >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
   gen_tac >> strip_tac >>
   irule alloc_run_bind >>
-  qexists `\v s. shape_state s /\ cenv_shape_ok s ce` >>
+  qexists `\v s. shape_state s /\ cenv_shape_ok s ce /\ plain_operand s v` >>
   reverse conj_tac
   >- (irule alloc_run_conseq >>
       irule_at Any (Q.INST [`R` |-> `\s. T`] alloc_run_lower_value_frame) >>
       simp[shape_stable_def] >> metis_tac[]) >>
   gen_tac >> simp[] >> irule alloc_run_bind >>
   qexists `\v s. shape_state s /\ cenv_shape_ok s ce` >>
-  reverse conj_tac >- (first_x_assum irule >> metis_tac[]) >>
-  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+  conj_tac
+  >- (gen_tac >> simp[] >> irule alloc_run_bind >>
+      qexists `\v s. shape_state s /\ cenv_shape_ok s ce` >>
+      reverse conj_tac >- (first_x_assum irule >> metis_tac[]) >>
+      simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
+  simp[compile_log_save_arg_def] >> IF_CASES_TAC
+  >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
+  irule alloc_run_conseq >>
+  irule_at Any (Q.INST [`R` |-> `\s. T`] alloc_run_compile_materialize_vv_frame) >>
+  simp[shape_stable_def, value_shape_ok_def]
 QED
 
 Theorem alloc_run_compile_reason_message:

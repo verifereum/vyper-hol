@@ -116,7 +116,10 @@ Proof
           structlit_uniform_endpoint_posts) >>
       simp[expr_type_def, lowered_value_type_def, post_value_type_def, type_memory_bytes_def] >>
       disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >> simp[] >>
-      disch_then drule_all >> disch_then (qspec_then `kes` mp_tac) >>
+      disch_then (qspecl_then [`vs`, `kes`] mp_tac) >>
+      impl_tac
+      >- (rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+          >- first_assum ACCEPT_TAC >> simp[EVERY_MEM]) >>
       strip_tac >> simp[contextTheory.base_ptr_def] >>
       irule structlit_uniform_pointer_posts_cong >>
       goal_assum (drule_at Any) >> simp[contextTheory.base_ptr_def, contextTheory.mk_ptr_def]) >>
