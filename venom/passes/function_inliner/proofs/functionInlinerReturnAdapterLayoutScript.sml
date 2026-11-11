@@ -4,6 +4,7 @@ Theory functionInlinerReturnAdapterLayout
 Ancestors
   functionInlinerParameterLocations functionInlinerParameterPropagation
   functionInlinerReachableCuts functionInlinerLocation functionInlinerSiteLayout
+  functionInlinerOccurrences functionInlinerActivation functionInlinerRoutedProvenance
   functionInlinerDefs functionInlinerFrame venomInst list rich_list
 
 Definition inline_adapter_interval_def:
@@ -244,4 +245,189 @@ Proof
   gvs[inline_cell_focus_def, clone_instruction_def, rewrite_inline_inst_def,
       is_param_opcode_def, inline_edit_repair_def, inline_inst_fields_def,
       inline_adapter_clone_fields_def, SF ETA_ss]
+QED
+
+Theorem inline_adapter_interval_opcodes:
+  inline_adapter_interval fn l start assigns target /\
+  lookup_block l fn.fn_blocks = SOME cb ==>
+  start + (LENGTH assigns+1) <= LENGTH cb.bb_instructions /\
+  (!k. k < LENGTH assigns+1 ==>
+    (EL (start+k) cb.bb_instructions).inst_opcode = ASSIGN \/
+    (EL (start+k) cb.bb_instructions).inst_opcode = JMP)
+Proof
+  strip_tac >> conj_tac >- gvs[inline_adapter_interval_def] >>
+  rpt strip_tac >>
+  `inline_fetched_fields fn l (start+k)
+    (inline_inst_fields (EL (start+k) cb.bb_instructions))` by
+    (simp[inline_fetched_fields_def, get_instruction_def] >>
+     gvs[inline_adapter_interval_def]) >>
+  drule_all inline_adapter_interval_class >> simp[inline_inst_fields_def]
+QED
+
+Theorem inline_adapter_clone_opcode[simp]:
+  FST (inline_adapter_clone_fields p labels fields) = FST fields
+Proof
+  PairCases_on `fields` >> simp[inline_adapter_clone_fields_def]
+QED
+
+Theorem inline_adapter_enter_transport:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  lookup_block l e.ise_callee.fn_blocks = SOME cb /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  ~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+  STRCAT e.ise_prefix l <> e.ise_return /\
+  MEM target (fn_labels e.ise_callee) /\
+  inline_adapter_interval e.ise_callee l start assigns target ==>
+  inline_adapter_interval e.ise_final (STRCAT e.ise_prefix l)
+    (LENGTH (FST (inline_cell_prefix e bb cb start)))
+    (MAP (inline_adapter_clone_fields e.ise_prefix (fn_labels e.ise_callee)) assigns)
+    (STRCAT e.ise_prefix target)
+Proof
+  strip_tac >> drule_all inline_adapter_interval_opcodes >> strip_tac >>
+  `LENGTH (FST (inline_cell_prefix e bb cb (start+(LENGTH assigns+1)))) =
+   LENGTH (FST (inline_cell_prefix e bb cb start))+(LENGTH assigns+1)` by
+    (irule inline_adapter_prefix_length_interval >> simp[]) >>
+  `inline_parameter_boundary (InlineEnter e) e.ise_callee l
+    (start+(LENGTH assigns+1)) e.ise_final (STRCAT e.ise_prefix l)
+    (LENGTH (FST (inline_cell_prefix e bb cb (start+(LENGTH assigns+1)))))` by
+    (irule inline_enter_boundary_produce >> simp[]) >>
+  simp[inline_adapter_interval_points] >> conj_tac >-
+    gvs[inline_adapter_interval_def, EVERY_MAP] >>
+  qpat_x_assum `inline_parameter_boundary _ _ _ _ _ _ _` mp_tac >>
+  simp[inline_parameter_boundary_def] >> strip_tac >>
+  qexists `tb` >> simp[] >> rpt strip_tac >>
+  `EL k (MAP (inline_adapter_clone_fields e.ise_prefix (fn_labels e.ise_callee))
+     assigns ++ [(JMP,[Label (STRCAT e.ise_prefix target)],[])]) =
+   inline_adapter_clone_fields e.ise_prefix (fn_labels e.ise_callee)
+     (EL k (assigns ++ [(JMP,[Label target],[])]))` by
+    (Cases_on `k < LENGTH assigns` >>
+     simp[EL_APPEND_EQN, EL_MAP, inline_adapter_clone_fields_def, clone_operand_def] >>
+     `k = LENGTH assigns` by decide_tac >>
+     simp[inline_adapter_clone_fields_def, clone_operand_def]) >>
+  simp[] >> irule (SRULE [arithmeticTheory.ADD_COMM] inline_adapter_enter_points) >>
+  simp[] >> conj_tac >-
+    (qexists `LENGTH assigns+1` >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  irule (SRULE [arithmeticTheory.ADD_COMM] inline_adapter_interval_fetched) >> simp[]
+QED
+
+(* Entry labels survive even when the first instruction is selected later.
+   This is deliberately not a statement about the cell at index zero. *)
+Theorem inline_adapter_choice_label:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  ((choice = InlineKeep e /\ fn = e.ise_caller) \/
+   (choice = InlineEnter e /\ fn = e.ise_callee)) /\
+  MEM l (fn_labels fn) ==>
+  MEM (inline_choice_rename choice l) (fn_labels e.ise_final)
+Proof
+  strip_tac >> drule inline_edit_final_labels >> simp[] >>
+  drule functionInlinerWfTheory.inline_call_site_labels >>
+  disch_then (qspecl_then [`e.ise_callee`, `e.ise_prefix`, `e.ise_return`,
+    `e.ise_index`] assume_tac) >>
+  gvs[inline_choice_rename_def, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem inline_adapter_path_label:
+  !path fn root l.
+  inline_annotated_choice_path ctx path fn root /\ MEM l (fn_labels fn) ==>
+  MEM (inline_path_rename path l) (fn_labels root)
+Proof
+  Induct >> simp[inline_annotated_choice_path_def, inline_path_rename_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+  first_x_assum irule >> simp[] >>
+  metis_tac[inline_adapter_choice_label]
+QED
+
+Definition inline_adapter_choice_fields_def:
+  (inline_adapter_choice_fields (InlineKeep e) fields = fields) /\
+  (inline_adapter_choice_fields (InlineEnter e) fields =
+    inline_adapter_clone_fields e.ise_prefix (fn_labels e.ise_callee) fields)
+End
+
+Theorem inline_adapter_choice_fields_functions[simp]:
+  inline_adapter_choice_fields (InlineKeep e) = I /\
+  inline_adapter_choice_fields (InlineEnter e) =
+    inline_adapter_clone_fields e.ise_prefix (fn_labels e.ise_callee)
+Proof
+  simp[FUN_EQ_THM, inline_adapter_choice_fields_def]
+QED
+
+Definition inline_adapter_path_fields_def:
+  (inline_adapter_path_fields [] fields = fields) /\
+  (inline_adapter_path_fields (choice::rest) fields =
+    inline_adapter_path_fields rest (MAP (inline_adapter_choice_fields choice) fields))
+End
+
+Theorem inline_adapter_choice_transport:
+  inline_annotated_origin ctx e.ise_state.is_inline_count e.ise_caller a /\
+  inline_annotated_origin ctx e.ise_state.is_inline_count e.ise_callee b /\
+  inline_site_edit_valid e /\
+  ((choice = InlineKeep e /\ fn = e.ise_caller) \/
+   (choice = InlineEnter e /\ fn = e.ise_callee)) /\
+  MEM target (fn_labels fn) /\
+  inline_adapter_interval fn l start assigns target ==>
+  ?ml mj.
+    inline_adapter_interval e.ise_final ml mj
+      (MAP (inline_adapter_choice_fields choice) assigns)
+      (inline_choice_rename choice target) /\
+    inline_parameter_boundary choice fn l start e.ise_final ml mj
+Proof
+  strip_tac >> drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+  `(EL e.ise_index bb.bb_instructions).inst_opcode = INVOKE` by
+    (`ALL_DISTINCT (fn_labels e.ise_caller)` by
+       metis_tac[inline_annotated_origin_labels] >>
+     gvs[inline_site_edit_valid_def] >>
+     drule_all functionInlinerWfTheory.find_invoke_site_lookup >> gvs[]) >>
+  gvs[]
+  >- (qexistsl [`FST (inline_keep_boundary e l start)`,
+               `SND (inline_keep_boundary e l start)`] >>
+      simp[inline_adapter_choice_fields_def, inline_choice_rename_def,
+           MAP_ID] >>
+      conj_tac >- (irule inline_adapter_keep_transport >> metis_tac[]) >>
+      irule inline_keep_boundary_produce >> gvs[inline_adapter_interval_def]) >>
+  `?cb. lookup_block l e.ise_callee.fn_blocks = SOME cb /\
+    start+(LENGTH assigns+1) <= LENGTH cb.bb_instructions` by
+    gvs[inline_adapter_interval_def] >>
+  `MEM l (fn_labels e.ise_callee)` by
+    (simp[fn_labels_def, MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+               venomExecPropsTheory.lookup_block_label]) >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  qexistsl [`STRCAT e.ise_prefix l`,
+            `LENGTH (FST (inline_cell_prefix e bb cb start))`] >>
+  simp[inline_adapter_choice_fields_def, inline_choice_rename_def] >>
+  conj_tac >- (irule inline_adapter_enter_transport >> metis_tac[]) >>
+  irule inline_enter_boundary_produce >> simp[]
+QED
+
+Theorem inline_adapter_path_transport:
+  !path fn root l start assigns target.
+  inline_annotated_choice_path ctx path fn root /\
+  MEM target (fn_labels fn) /\
+  inline_adapter_interval fn l start assigns target ==>
+  ?ml mj.
+    inline_adapter_interval root ml mj (inline_adapter_path_fields path assigns)
+      (inline_path_rename path target) /\
+    inline_parameter_boundary_path path fn l start root ml mj /\
+    MEM (inline_path_rename path target) (fn_labels root)
+Proof
+  Induct >-
+    simp[inline_annotated_choice_path_def, inline_adapter_path_fields_def,
+         inline_path_rename_def, inline_parameter_boundary_path_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `inline_annotated_choice_path _ _ _ _` mp_tac >>
+  simp[inline_annotated_choice_path_def] >> strip_tac >>
+  `?il ij. inline_adapter_interval e.ise_final il ij
+      (MAP (inline_adapter_choice_fields h) assigns) (inline_choice_rename h target) /\
+    inline_parameter_boundary h fn l start e.ise_final il ij` by
+    metis_tac[inline_adapter_choice_transport] >>
+  `MEM (inline_choice_rename h target) (fn_labels e.ise_final)` by
+    (drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+     metis_tac[inline_adapter_choice_label]) >>
+  first_x_assum drule >> disch_then drule >> disch_then drule >> strip_tac >>
+  qexistsl [`ml`,`mj`] >>
+  simp[inline_adapter_path_fields_def, inline_path_rename_def,
+       inline_parameter_boundary_path_def] >> metis_tac[]
 QED
