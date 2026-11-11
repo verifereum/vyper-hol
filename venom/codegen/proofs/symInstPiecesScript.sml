@@ -1612,6 +1612,129 @@ Proof
   gvs[asmSymSemTheory.asm_static_wf_def, asmSemTheory.asm_block_at_def]
 QED
 
+Theorem sym_assert_unreachable_frame_prepare[local]:
+  lo = SND (compute_label_offsets prog) /\ inst.inst_opcode = ASSERT_UNREACHABLE /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs cs /\
+  sym_frame_inv prog env ctx cplan fn ret srest labs0 ps cs ss /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\ qs.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf_marked sb ps /\ codegen_ready_fn fn /\ opaque_use_ok fn /\
+  ~is_param_opcode inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
+  MEM inst (fn_insts fn) /\ fn_shape_ok fn /\ dfg = dfg_build_function fn /\
+  source_memory_reads_disjoint cplan inst vs /\ context_source_memory_writes_disjoint cplan inst vs /\
+  step_inst fuel ctx inst vs = OK vsout /\
+  emit_input_plan ASSERT_UNREACHABLE [cond] nl ps = (iops,prepared) /\
+  reorder_plan dfg [cond] prepared = (rops,arranged) /\
+  fresh_label "reachable" (arranged with ps_stack := stack_pop 1 arranged.ps_stack) = (lbl,p3) /\
+  qs = release_dead_spills nl p3 /\
+  LENGTH [cond] <= LENGTH (SND (emit_input_plan ASSERT_UNREACHABLE [cond] nl ps)).ps_stack /\
+  (!l. MEM (Label l) [cond] ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op. MEM op [cond] /\ is_var_operand op ==> MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) [cond] /\
+  (!op at. MEM op [cond] /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at [cond]) /\
+    operand_equiv dfg op at ==> operand_val (frame_view fn ra vs) lo op =
+      operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  ops = iops ++ rops ++ [SOPushLabel lbl; SOEmit "JUMPI"; SOEmit "INVALID"; SOLabel lbl] /\
+  asm_static_wf prog /\ asm_block_at prog cs.as_pc (execute_plan cplan.cp_initial_fmp ops) ==>
+  ?mid ready localtop.
+    arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ [cond] /\
+    venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := cs.as_memory) mid /\
+    sym_steps prog env (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) ss = SymOK ready /\
+    sym_kinds_ok cplan fn ret srest arranged ready /\
+    ready.sym_base.as_pc = cs.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) /\
+    (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+      FLOOKUP ready.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    ready.sym_stack = localtop ++ srest /\
+    asm_sym_rel prog env mid (ready with sym_stack := localtop) /\
+    sym_kinds_ok cplan fn ret [] arranged (ready with sym_stack := localtop) /\
+    asm_block_at prog ready.sym_base.as_pc
+      [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl]
+Proof
+  strip_tac >>
+  `r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+   arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    (drule allocMonoTheory.fresh_label_spill_base >> simp[] >> strip_tac >>
+     gvs[allocMonoTheory.release_dead_spills_spill_base,
+       allocMonoTheory.release_dead_spills_next_offset] >>
+     metis_tac[allocMonoTheory.emit_input_plan_spill_base,
+       allocMonoTheory.reorder_plan_spill_base]) >>
+  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+   asm_block_at prog cs.as_pc (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
+      stackOpSimTheory.asm_block_at_append] >>
+  `emit_input_plan inst.inst_opcode [cond] nl ps = (iops,prepared)` by simp[] >>
+  drule_at (Pat `step_inst _ _ _ _ = _`) sym_frame_selected_prefix_paired >>
+  disch_then (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> disch_then (qspecl_then [`sb`, `r`, `cplan.cp_initial_fmp`, `qs`] mp_tac) >>
+  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  gvs[stackOpSimTheory.execute_plan_append, planExecTheory.execute_plan_def,
+    planExecTheory.exec_stack_op_def, stackOpSimTheory.asm_block_at_append] >> metis_tac[]
+QED
+
+Theorem sym_assert_fresh_release_kinds[local]:
+  sym_kinds_ok cplan fn ret srest
+    (release_dead_spills nl (ps with ps_stack := stack_pop 1 ps.ps_stack)) ss /\
+  fresh_label prefix (ps with ps_stack := stack_pop 1 ps.ps_stack) = (lbl,qs) ==>
+  sym_kinds_ok cplan fn ret srest (release_dead_spills nl qs) ss
+Proof
+  strip_tac >> gvs[stackPlanTypesTheory.fresh_label_def] >>
+  irule sym_kinds_ok_inventory_mono >> goal_assum (drule_at Any) >>
+  mp_tac (Q.SPECL
+    [`ps with <|ps_stack := stack_pop 1 ps.ps_stack;
+       ps_label_counter := ps.ps_label_counter + 1|>`,
+     `ps with ps_stack := stack_pop 1 ps.ps_stack`, `nl`]
+    (GEN_ALL release_dead_spills_inventory_cong)) >> simp[]
+QED
+
+Theorem sym_assert_unreachable_prepared_suffix[local]:
+  inst.inst_opcode = ASSERT_UNREACHABLE /\ inst.inst_operands = [cond] /\
+  step_inst fuel ctx inst vs = OK vsout /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ fn_shape_ok fn /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  asm_sym_rel prog env mid (ready with sym_stack := localtop) /\
+  sym_kinds_ok cplan fn ret [] arranged (ready with sym_stack := localtop) /\
+  sym_kinds_ok cplan fn ret srest arranged ready /\ ready.sym_stack = localtop ++ srest /\
+  venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := m) mid /\
+  arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ [cond] /\
+  EVERY (\op. op <> dead_stack_marker) [cond] /\
+  (!op. MEM op [cond] ==> eval_operand op (frame_view fn ra vs) =
+    operand_val (frame_view fn ra vs) lo op) /\
+  asm_static_wf prog /\ asm_block_at prog ready.sym_base.as_pc
+    [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl] /\
+  fresh_label "reachable" (arranged with ps_stack := stack_pop 1 arranged.ps_stack) = (lbl,p3) ==>
+  ?full. sym_steps prog env 3 ready = SymOK full /\
+    full.sym_mem_labels = ready.sym_mem_labels /\
+    sym_kinds_ok cplan fn ret srest (release_dead_spills nl p3) full
+Proof
+  strip_tac >>
+  `INDEX_OF (AsmLabel lbl) prog = SOME (ready.sym_base.as_pc + 3)` by
+    (drule_at (Pat `asm_block_at _ _ _`) asm_static_block_label_index >>
+     disch_then (qspecl_then [`lbl`, `3`] mp_tac) >> simp[]) >>
+  drule_at (Pat `venom_asm_rel _ arranged _ mid`) sym_assertion_prepared_run >>
+  disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ [] _ _`)) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ ready`)) >>
+  disch_then (drule_at (Pat `step_inst _ _ _ vs = _`)) >>
+  simp[] >> disch_then (qspecl_then [`stack_pop 1 arranged.ps_stack`, `nl`, `lbl`] mp_tac) >>
+  (impl_tac >- gvs[venomMemPropsTheory.eval_operand_with_memory,
+    genFrameSimTheory.operand_val_memory_update]) >> strip_tac >>
+  rename1 `sym_steps prog env 3 ready = SymOK full` >>
+  `sym_kinds_ok cplan fn ret srest
+    (release_dead_spills nl (arranged with ps_stack := stack_pop 1 arranged.ps_stack)) full`
+    by metis_tac[] >>
+  drule_all sym_assert_fresh_release_kinds >> strip_tac >>
+  qexists `full` >> simp[]
+QED
+
 Theorem sym_assert_unreachable_inst_symbolic_run:
   lo = SND (compute_label_offsets prog) /\
   inst.inst_opcode = ASSERT_UNREACHABLE /\ inst_wf inst /\ inst.inst_operands = [cond] /\
@@ -1653,50 +1776,16 @@ Proof
   strip_tac >> drule_all assert_unreachable_plan_decompose >> strip_tac >>
   rename1 `emit_input_plan ASSERT_UNREACHABLE [cond] nl ps = (iops,prepared)` >>
   rename1 `reorder_plan _ [cond] prepared = (rops,arranged)` >>
-  `r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
-   arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by
-    (drule allocMonoTheory.fresh_label_spill_base >> simp[] >> strip_tac >>
-     gvs[allocMonoTheory.release_dead_spills_spill_base,
-       allocMonoTheory.release_dead_spills_next_offset] >>
-     metis_tac[allocMonoTheory.emit_input_plan_spill_base,
-       allocMonoTheory.reorder_plan_spill_base]) >>
-  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
-    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
-   asm_block_at prog cs.as_pc (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
-    gvs[listTheory.EVERY_APPEND, stackOpSimTheory.execute_plan_append,
-      stackOpSimTheory.asm_block_at_append] >>
-  `emit_input_plan inst.inst_opcode [cond] nl ps = (iops,prepared)` by simp[] >>
-  drule_at (Pat `step_inst _ _ _ _ = _`) sym_frame_selected_prefix_paired >>
-  disch_then (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >> disch_then (qspecl_then [`sb`, `r`, `cplan.cp_initial_fmp`, `qs`] mp_tac) >>
-  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
+  drule_all sym_assert_unreachable_frame_prepare >> strip_tac >>
   rename1 `sym_steps prog env _ ss = SymOK ready` >>
   rename1 `asm_sym_rel prog env mid (ready with sym_stack := localtop)` >>
-  `asm_block_at prog ready.sym_base.as_pc
-    [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl]` by
-    gvs[stackOpSimTheory.execute_plan_append, planExecTheory.execute_plan_def,
-      planExecTheory.exec_stack_op_def, stackOpSimTheory.asm_block_at_append] >>
-  `INDEX_OF (AsmLabel lbl) prog = SOME (ready.sym_base.as_pc + 3)` by
-    (drule_at (Pat `asm_block_at _ _ _`) asm_static_block_label_index >>
-     disch_then (qspecl_then [`lbl`, `3`] mp_tac) >> simp[]) >>
-  drule_at (Pat `venom_asm_rel _ arranged _ mid`) sym_assertion_prepared_run >>
-  disch_then (drule_at (Pat `asm_sym_rel _ _ _ _`)) >>
-  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ [] _ _`)) >>
-  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ ready`)) >>
-  disch_then (drule_at (Pat `step_inst _ _ _ vs = _`)) >>
-  simp[] >> disch_then (qspecl_then [`stack_pop 1 arranged.ps_stack`, `nl`, `lbl`] mp_tac) >>
-  (impl_tac >- gvs[venomMemPropsTheory.eval_operand_with_memory,
-    genFrameSimTheory.operand_val_memory_update]) >>
-  strip_tac >> rename1 `sym_steps prog env 3 ready = SymOK full` >>
+  `EVERY (\op. op <> dead_stack_marker) [cond]` by gvs[] >>
+  drule_all sym_assert_unreachable_prepared_suffix >>
+  disch_then (qspec_then `nl` strip_assume_tac) >>
+  rename1 `sym_steps prog env 3 ready = SymOK full` >>
   `!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
     FLOOKUP full.sym_mem_labels b = FLOOKUP ready.sym_mem_labels b` by simp[] >>
   drule_all sym_frame_suffix_compose >> strip_tac >>
   qexists `full` >> gvs[stackOpSimTheory.execute_plan_append,
-    planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def,
-    stackPlanTypesTheory.fresh_label_def] >>
-  irule sym_kinds_ok_inventory_mono >>
-  goal_assum (drule_at Any) >> simp[]
+    planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def]
 QED

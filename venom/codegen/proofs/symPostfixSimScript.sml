@@ -53,6 +53,29 @@ Proof
   metis_tac[release_spill_fold_lookup]
 QED
 
+Theorem release_spill_fold_inventory_cong[local]:
+  !xs ps qs.
+  ps.ps_spilled = qs.ps_spilled ==>
+  (FOLDL (\p (at,slot). p with
+    <|ps_spilled := p.ps_spilled \\ at;
+      ps_alloc := free_spill_slot slot p.ps_alloc|>) ps xs).ps_spilled =
+  (FOLDL (\p (at,slot). p with
+    <|ps_spilled := p.ps_spilled \\ at;
+      ps_alloc := free_spill_slot slot p.ps_alloc|>) qs xs).ps_spilled
+Proof
+  Induct_on `xs` >- simp[] >>
+  Cases >> simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem release_dead_spills_inventory_cong:
+  ps.ps_stack = qs.ps_stack /\ ps.ps_spilled = qs.ps_spilled ==>
+  (release_dead_spills nl ps).ps_stack = (release_dead_spills nl qs).ps_stack /\
+  (release_dead_spills nl ps).ps_spilled = (release_dead_spills nl qs).ps_spilled
+Proof
+  strip_tac >> conj_tac >- simp[release_dead_spills_stack] >>
+  simp[release_dead_spills_def] >> irule release_spill_fold_inventory_cong >> simp[]
+QED
+
 Theorem sym_kinds_ok_release_dead_spills:
   sym_kinds_ok cplan fn ret srest ps ss ==>
   sym_kinds_ok cplan fn ret srest (release_dead_spills nl ps) ss
