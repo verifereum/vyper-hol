@@ -119,21 +119,22 @@ Theorem ld_exec_delegatecall_backward_extract:
       (TAKE (w2n rs) rT.vs_returndata) t).vs_memory
 Proof
   strip_tac >>
-  `s.vs_outcomes = t.vs_outcomes` by fs[lowerDloadSharedStateTheory.ld_shared_state_def] >>
+  `s.vs_outcomes = t.vs_outcomes` by
+    gvs[lowerDloadSharedStateTheory.ld_shared_state_def] >>
   qabbrev_tac `rqS = venom_call_request s addr 0w offS sz F with
     cr_kind := DelegateMessageCall` >>
   qabbrev_tac `rqT = venom_call_request t addr 0w offT sz F with
     cr_kind := DelegateMessageCall` >>
   `rqS.cr_kind = rqT.cr_kind /\ rqS.cr_value = rqT.cr_value /\
    rqS.cr_target = rqT.cr_target /\ rqS.cr_data = rqT.cr_data` by
-    fs[Abbr `rqS`, Abbr `rqT`, venom_call_request_def] >>
+    simp[Abbr `rqS`, Abbr `rqT`, venom_call_request_def] >>
   drule ld_take_outcome_success_cong >>
   disch_then (qspec_then `t.vs_outcomes` assume_tac) >>
   drule ld_take_outcome_returndata_cong >>
   disch_then (qspec_then `t.vs_outcomes` assume_tac) >>
   Cases_on `consume_call_outcome rqS (w2n roS) (w2n rs) s` >>
   Cases_on `consume_call_outcome rqT (w2n roT) (w2n rs) t` >>
-  gvs[exec_delegatecall_def, Abbr `rqS`, Abbr `rqT`,
+  gvs[exec_delegatecall_def, Abbr `rqT`,
       Excl "consume_call_outcome_eq", AllCaseEqs()] >>
   gvs[consume_call_outcome_eq]
 QED
@@ -154,7 +155,7 @@ Theorem ld_exec_delegatecall_backward:
 Proof
   strip_tac >> drule_all ld_exec_delegatecall_backward_extract >>
   disch_then (qspec_then `roS` strip_assume_tac) >>
-  qexistsl [`out`, `w`, `rS`, `rT`] >> simp[]
+  qexistsl [`out`, `w`, `rS`, `rT`] >> simp[Excl "consume_call_outcome_eq"]
 QED
 
 (* Matching operand interfaces permit input/output offsets to move. CALL's
@@ -286,5 +287,5 @@ Theorem ld_delegatecall_step_backward:
 Proof
   strip_tac >> drule_all ld_delegatecall_step_backward_extract >>
   disch_then (qspec_then `CS` strip_assume_tac) >>
-  qexistsl [`out`,`w`,`rS`,`rT`] >> simp[]
+  qexistsl [`out`,`w`,`rS`,`rT`] >> simp[Excl "consume_call_outcome_eq"]
 QED

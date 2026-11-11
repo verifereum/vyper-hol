@@ -192,14 +192,11 @@ Resume ld_normal_external_backward[call_shared]:
 QED
 
 Resume ld_normal_external_backward[delegate_shared]:
-  markerLib.RESUME_TAC >> (
        `ld_shared_state (step_taint i s rS tn) (step_taint i t rT un) rS rT` by
          (irule ld_delegate_consume_tainted_shared >>
-          conj_tac >- first_assum ACCEPT_TAC >>
-          reverse conj_tac >- first_assum ACCEPT_TAC >>
-          goal_assum (drule_at (Pat `consume_call_outcome _ _ _ _ = _`)) >>
-          goal_assum (drule_at (Pat `consume_call_outcome _ _ _ _ = _`)) >>
-          simp[venom_call_request_def, Excl "consume_call_outcome_eq"] >>
+          qpat_assum `consume_call_outcome _ _ _ s = _` (irule_at Any) >>
+          qpat_assum `consume_call_outcome _ _ _ t = _` (irule_at Any) >>
+          simp[MEM, venom_call_request_def, Excl "consume_call_outcome_eq"] >>
           qpat_x_assum `read_memory _ _ s = _` mp_tac >>
           asm_rewrite_tac[]) >>
        drule ld_consume_call_frame_fields >> strip_tac >>
@@ -253,7 +250,7 @@ Resume ld_normal_external_backward[delegate_shared]:
        >- (qexistsl_tac [`rS`,`rT`,`w`] >> simp[update_var_def]) >>
        qpat_x_assum `ld_byte_rel _ _ _ _ _` mp_tac >>
        simp[step_taint_def, update_var_def, mem_taint_def, new_site_bytes_def,
-            step_writes_def, read_memory_def])
+            step_writes_def, read_memory_def]
 QED
 
 Resume ld_normal_external_backward[create_shared]:

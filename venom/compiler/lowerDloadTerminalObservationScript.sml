@@ -231,9 +231,10 @@ Proof
   simp[halt_state_def, set_returndata_def, lookup_account_def,
        step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
   rpt gen_tac >> rpt IF_CASES_TAC >> simp[] >>
-  rw[vfmExecutionTheory.transfer_value_def, vfmStateTheory.update_account_def,
-     vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM] >>
-  rw[]
+  simp[vfmExecutionTheory.transfer_value_def, vfmStateTheory.update_account_def,
+       vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM] >>
+  rpt IF_CASES_TAC >> simp[combinTheory.APPLY_UPDATE_THM] >>
+  rpt IF_CASES_TAC >> simp[]
 QED
 
 Theorem ld_normal_halt_observation:

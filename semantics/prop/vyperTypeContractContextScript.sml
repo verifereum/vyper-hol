@@ -854,5 +854,5 @@ Proof
   rpt (pop_assum mp_tac) >>
   rw[well_typed_expr_def, AllCaseEqs()] >>
   gvs[] >>
-  metis_tac[]
+  metis_tac[subscript_base_type_exact_transfer]
 QED
