@@ -773,6 +773,12 @@ Proof
   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
 QED
 
+(* The assembly's static check is off when the EVM frame isn't static. *)
+val starve_nonstatic_tac : tactic =
+  `~as.as_call_ctx.cc_static` by
+    (Cases_on `es.contexts` >> gvs[] >> PairCases_on `h` >>
+     drule_all asm_evm_rel_static >> gvs[]);
+
 Theorem starve_tstore:
   !prog as es.
     asm_encoding_wf prog /\ asm_evm_rel prog as es /\
@@ -788,7 +794,8 @@ Theorem starve_tstore:
     | AsmError _ => T
     | _ => F
 Proof
-  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_tstore_def, LET_THM] >>
+  rpt strip_tac >> starve_nonstatic_tac >>
+  Cases_on `as.as_stack` >> simp[asm_tstore_def, LET_THM] >>
   Cases_on `t` >> simp[] >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   drule_all asm_evm_step_setup >> strip_tac >>
@@ -1197,7 +1204,7 @@ Theorem starve_log:
     | AsmError _ => T
     | _ => F
 Proof
-  rpt strip_tac >> simp[asm_log_def, LET_THM] >>
+  rpt strip_tac >> starve_nonstatic_tac >> simp[asm_log_def, LET_THM] >>
   Cases_on `LENGTH as.as_stack < n + 2` >> simp[] >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   drule_all asm_evm_step_setup >> strip_tac >>
@@ -1262,7 +1269,8 @@ Theorem starve_sstore:
     | AsmError _ => T
     | _ => F
 Proof
-  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_sstore_def, LET_THM] >>
+  rpt strip_tac >> starve_nonstatic_tac >>
+  Cases_on `as.as_stack` >> simp[asm_sstore_def, LET_THM] >>
   Cases_on `t` >> simp[] >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   drule_all asm_evm_step_setup >> strip_tac >>
