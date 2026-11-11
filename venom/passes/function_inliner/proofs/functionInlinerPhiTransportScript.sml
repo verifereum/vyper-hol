@@ -412,3 +412,17 @@ Proof
   Cases_on `MEM bb.bb_label (bb_succs rb)` >> gvs[] >>
   simp[inline_phi_prefix_repair_contents]
 QED
+
+(* Freshness is needed only on the supported source namespace, not globally. *)
+Theorem inline_resolve_phi_supported_repair:
+  phi_well_formed ops /\
+  EVERY (\op. !l. op = Label l ==> MEM l labels) ops /\
+  MEM prev labels /\ ~MEM fresh labels ==>
+  resolve_phi (if repair /\ prev = old then fresh else prev)
+    (if repair then MAP (subst_label_op old fresh) ops else ops) =
+  resolve_phi prev ops
+Proof
+  strip_tac >> Cases_on `repair` >> simp[] >>
+  irule inline_resolve_phi_repair >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED

@@ -1158,3 +1158,37 @@ Proof
   simp[inline_phi_entry_step_def] >> rpt strip_tac >>
   rpt IF_CASES_TAC >> gvs[]
 QED
+
+(* Selection at the actual fields produced by a Keep edit.  Namespace support
+   rules out capture by the new continuation without global injectivity. *)
+Theorem inline_phi_entry_keep_selection:
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  inst.inst_opcode = PHI /\ phi_well_formed inst.inst_operands /\
+  EVERY (\op. !l. op = Label l ==> MEM l (fn_labels e.ise_caller))
+    inst.inst_operands /\
+  MEM prev (fn_labels e.ise_caller) /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  inline_inst_fields target = inline_inst_fields
+    (inline_edit_repair e source_bb dest inst) ==>
+  ?q. SND (inline_phi_entry_step (InlineKeep e) (dest,SOME prev)) = SOME q /\
+    resolve_phi q target.inst_operands = resolve_phi prev inst.inst_operands
+Proof
+  strip_tac >> drule inline_phi_entry_keep_some >>
+  disch_then (qspecl_then [`prev`, `dest`] assume_tac) >>
+  gvs[inline_edit_repair_def, inline_inst_fields_def] >>
+  simp[COND_RAND, cfgTransformTheory.subst_label_inst_def] >>
+  metis_tac[functionInlinerPhiTransportTheory.inline_resolve_phi_supported_repair]
+QED
+
+(* Prefixing is injective, including when source PHIs repeat a label. *)
+Theorem inline_phi_entry_enter_selection:
+  inline_inst_fields target = inline_inst_fields
+    (inline_rename_inst (STRCAT e.ise_prefix) (STRCAT e.ise_prefix) inst) ==>
+  ?q. SND (inline_phi_entry_step (InlineEnter e) (dest,SOME prev)) = SOME q /\
+    resolve_phi q target.inst_operands =
+      OPTION_MAP (inline_rename_operand (STRCAT e.ise_prefix) (STRCAT e.ise_prefix))
+        (resolve_phi prev inst.inst_operands)
+Proof
+  simp[inline_inst_fields_def, inline_rename_inst_def, inline_phi_entry_step_def] >>
+  strip_tac >> irule inline_rename_resolve_phi >> simp[]
+QED
