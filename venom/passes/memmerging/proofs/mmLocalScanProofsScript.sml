@@ -6722,7 +6722,7 @@ Proof
 QED
 
 Theorem mm_local_scan_step_war_exclusion[local]:
-  mm_local_history is H n /\ q < n /\ q < LENGTH is /\ i = EL q is /\
+  q < n /\ q < LENGTH is /\ i = EL q is /\
   MEM h ss.ss_copies /\ ~MEM h (scan_inst dfg Mem2Mem ss i).ss_flushed /\
   mm_local_write_capture is H n q = SOME (d,bs) ==>
   h.cg_length = 0 \/ LENGTH bs = 0 \/
@@ -6814,8 +6814,7 @@ Proof
   drule_all mm_local_write_capture_sound >> disch_then assume_tac >>
   `h.cg_length = 0 \/ LENGTH x1 = 0 \/
    h.cg_src + h.cg_length <= x0 \/ x0 + LENGTH x1 <= h.cg_src` by
-    (drule mm_local_scan_step_war_exclusion >> simp[] >>
-     disch_then irule >> metis_tac[]) >>
+    (metis_tac[mm_local_scan_step_war_exclusion]) >>
   simp[venomStateTheory.read_memory_def] >>
   irule frameViewMemoryTheory.padded_memory_read_cong >> rpt strip_tac >>
   irule frameViewMemoryTheory.write_memory_byte_outside >> decide_tac
@@ -7568,6 +7567,36 @@ Proof
   drule_all (REWRITE_RULE [] (Q.INST [`s0` |->
     `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is)`]
     (SPEC_ALL mm_local_indexed_store_owner))) >> metis_tac[]
+QED
+
+Theorem mm_local_canonical_pending_capture_owner[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n <= LENGTH is /\ MEM j (mm_local_pending_indices is gs n) /\
+  mm_local_write_capture is H N j = SOME (d,bs) ==>
+  ?h. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+  `j < LENGTH is` by decide_tac >>
+  `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
+  drule_all mm_local_final_write_birth >> strip_tac
+  >- (drule_all mm_local_indexed_bulk_owner >> strip_tac >>
+      qexists `h` >>
+      gvs[mm_local_write_capture_def, venomStateTheory.eval_operand_def,
+          venomStateTheory.read_memory_def, AllCaseEqs()]) >>
+  drule_all (REWRITE_RULE [] (Q.INST [`s0` |->
+    `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is)`]
+    (SPEC_ALL mm_local_indexed_store_owner))) >> strip_tac >>
+  qexists `h` >>
+  gvs[mm_local_write_capture_def, venomStateTheory.eval_operand_def,
+      AllCaseEqs()]
 QED
 
 Theorem mm_local_canonical_pending_owner[local]:
@@ -11236,7 +11265,6 @@ Theorem mm_local_pending_prefix_source_exclusion[local]:
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\ q < j /\ j <= r /\ r < LENGTH is /\ r < N /\
-  mm_local_history is H N /\
   ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
   ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
       (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
@@ -11263,7 +11291,7 @@ Proof
     h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length` by
     (mp_tac (Q.INST [`gs` |->
        `(scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed`,
-       `n` |-> `j`, `j` |-> `q`] (SPEC_ALL mm_local_canonical_pending_owner)) >>
+       `n` |-> `j`, `j` |-> `q`] (SPEC_ALL mm_local_canonical_pending_capture_owner)) >>
      simp[] >> metis_tac[]) >>
   qpat_x_assum `MEM q (mm_local_pending_indices _ _ r)`
     (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
@@ -11288,7 +11316,6 @@ Theorem mm_local_pending_suffix_source_exclusion[local]:
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\ j <= q /\ q < r /\ r < LENGTH is /\ r < N /\
-  mm_local_history is H N /\
   s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
   ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE q is) /\
   ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
@@ -11536,12 +11563,14 @@ Proof
     venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]
 QED
 
-Theorem mm_local_fixed_cut_source_replay[local]:
+Theorem mm_local_fixed_cut_source_replay_interval[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\ a <= j /\ j <= r /\ r < LENGTH is /\ r < N /\
-  mm_local_history is H N /\
+  (!q. a <= q /\ q < r ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H N q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
   s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
   gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
   (!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))) /\
@@ -11575,10 +11604,6 @@ Proof
       mp_tac (Q.INST [`j` |-> `j`, `r` |-> `r`, `ss` |-> `s0`]
         (SPEC_ALL mm_local_pending_prefix_source_exclusion)) >>
       simp[] >> gvs[]) >>
-  reverse conj_tac
-  >- (`a <= r` by decide_tac >>
-      mp_tac (Q.INST [`a` |-> `a`, `r` |-> `r`]
-        (SPEC_ALL mm_local_fixed_cut_capture_recurrence)) >> simp[]) >>
   rpt strip_tac >>
   `j < r` by decide_tac >>
   `?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
@@ -11589,6 +11614,44 @@ Proof
     `ss` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE q is)`]
     (SPEC_ALL mm_local_pending_suffix_source_exclusion)) >>
   simp[] >> gvs[]
+QED
+
+Theorem mm_local_fixed_cut_source_replay[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ a <= j /\ j <= r /\ r < LENGTH is /\ r < N /\
+  mm_local_history is H N /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  (!q. a <= q /\ q < r ==> ?b. MEM b (mm_local_pending_indices is gs (SUC q))) /\
+  ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+      c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+             cg_inst_ids := [(EL j is).inst_id]|>) \/
+   (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dj; Var vj] /\
+      FLOOKUP s0.ss_loads vj = SOME srcj /\
+      c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+             cg_inst_ids := [(EL j is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vj of
+                  NONE => [] | SOME li => [li.inst_id])|>)) /\
+  (j = r \/ (?g. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g))) /\
+  t = FOLDL (\st q. if MEM q (mm_local_pending_indices is gs r) then st else
+    case mm_local_write_capture is H N q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) ==>
+  read_memory c.cg_src c.cg_length t = read_memory c.cg_src c.cg_length (H j)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  irule mm_local_fixed_cut_source_replay_interval >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  reverse conj_tac >- gvs[] >>
+  `a <= r` by decide_tac >>
+  mp_tac (Q.INST [`a` |-> `a`, `r` |-> `r`]
+    (SPEC_ALL mm_local_fixed_cut_capture_recurrence)) >> simp[]
 QED
 
 Theorem mm_local_final_birth_ancestor[local]:
