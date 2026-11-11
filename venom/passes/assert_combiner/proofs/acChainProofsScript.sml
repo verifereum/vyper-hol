@@ -897,3 +897,167 @@ QED
  * Chain invariant: packages all preconditions for the deferred abort proof.
  * This keeps the induction goal manageable.
  *)
+
+(* A scanner edge consists of two recognized assertions and a safe gap.
+   The first disjunct accounts precisely for the incoming pending origin. *)
+Theorem ac_scan_edge_decompose:
+  !dfg insts pending mc.
+    MEM mc (ac_scan_block dfg insts pending) ==>
+    (?gap second suffix op.
+       insts = gap ++ second :: suffix /\ EVERY ac_is_safe_between gap /\
+       pending = SOME (mc.mc_first_id, mc.mc_first_pred) /\
+       second.inst_id = mc.mc_second_id /\ second.inst_opcode = ASSERT /\
+       second.inst_operands = [op] /\
+       ac_get_iszero_operand dfg {} op = SOME mc.mc_second_pred) \/
+    (?prefix first gap second suffix op1 op2.
+       insts = prefix ++ first :: gap ++ second :: suffix /\
+       EVERY ac_is_safe_between gap /\
+       first.inst_id = mc.mc_first_id /\ first.inst_opcode = ASSERT /\
+       first.inst_operands = [op1] /\
+       ac_get_iszero_operand dfg {} op1 = SOME mc.mc_first_pred /\
+       second.inst_id = mc.mc_second_id /\ second.inst_opcode = ASSERT /\
+       second.inst_operands = [op2] /\
+       ac_get_iszero_operand dfg {} op2 = SOME mc.mc_second_pred)
+Proof
+  gen_tac >> Induct >> simp[ac_scan_block_def] >>
+  rpt gen_tac >>
+  Cases_on `h.inst_opcode = ASSERT` >> simp[]
+  >- (Cases_on `h.inst_operands` >> simp[]
+      >- (strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+          disj2_tac >> qexists_tac `h::prefix` >> simp[] >> metis_tac[]) >>
+      Cases_on `t` >> simp[]
+      >- (Cases_on `ac_get_iszero_operand dfg {} h'` >> simp[]
+          >- (strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+              disj2_tac >> qexists_tac `h::prefix` >> simp[] >> metis_tac[]) >>
+          Cases_on `pending` >> simp[]
+          >- (strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
+              >- (qexistsl_tac [`[]`, `h`] >> simp[] >> metis_tac[]) >>
+              qexists_tac `h::prefix` >> simp[] >> metis_tac[]) >>
+          Cases_on `x'` >> simp[] >> strip_tac
+          >- (gvs[] >> disj1_tac >> qexists_tac `[]` >> simp[] >> metis_tac[]) >>
+          first_x_assum drule >> strip_tac >> gvs[] >> disj2_tac
+          >- (qexistsl_tac [`[]`, `h`] >> simp[] >> metis_tac[]) >>
+          qexists_tac `h::prefix` >> simp[] >> metis_tac[]) >>
+      Cases_on `ac_get_iszero_operand dfg {} h'` >> simp[] >>
+      strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+      disj2_tac >> qexists_tac `h::prefix` >> simp[] >> metis_tac[]) >>
+  Cases_on `ac_is_safe_between h` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> strip_tac
+      >- (disj1_tac >> qexists_tac `h::gap` >> simp[] >> metis_tac[]) >>
+      disj2_tac >> qexists_tac `h::prefix` >> simp[] >> metis_tac[]) >>
+  strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+  disj2_tac >> qexists_tac `h::prefix` >> simp[] >> metis_tac[]
+QED
+
+Theorem ac_scan_pair_decompose:
+  !dfg insts mc.
+    MEM mc (ac_scan_block dfg insts NONE) ==>
+    ?prefix first gap second suffix op1 op2.
+      insts = prefix ++ first :: gap ++ second :: suffix /\
+      EVERY ac_is_safe_between gap /\
+      first.inst_id = mc.mc_first_id /\ first.inst_opcode = ASSERT /\
+      first.inst_operands = [op1] /\
+      ac_get_iszero_operand dfg {} op1 = SOME mc.mc_first_pred /\
+      second.inst_id = mc.mc_second_id /\ second.inst_opcode = ASSERT /\
+      second.inst_operands = [op2] /\
+      ac_get_iszero_operand dfg {} op2 = SOME mc.mc_second_pred
+Proof
+  rpt strip_tac >> drule ac_scan_edge_decompose >> simp[]
+QED
+
+Theorem ac_scan_unique_first_id_pending:
+  !dfg insts pending.
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+    (!id p. pending = SOME (id,p) ==> ~MEM id (MAP (\i. i.inst_id) insts)) ==>
+    ALL_DISTINCT (MAP (\mc. mc.mc_first_id) (ac_scan_block dfg insts pending))
+Proof
+  gen_tac >> Induct >> simp[ac_scan_block_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = ASSERT` >> simp[]
+  >- (Cases_on `h.inst_operands` >> simp[] >>
+      Cases_on `ac_get_iszero_operand dfg {} h'` >> simp[] >>
+      Cases_on `t` >> simp[]
+      >- (Cases_on `pending` >> simp[] >>
+          Cases_on `x'` >> simp[MEM_MAP] >> conj_tac
+          >- (rpt strip_tac >> drule ac_scan_first_is_assert >>
+              strip_tac >> gvs[MEM_MAP] >> metis_tac[]) >>
+          first_x_assum irule >> gvs[]) >>
+      first_x_assum irule >> simp[] >> gvs[]) >>
+  Cases_on `ac_is_safe_between h` >> simp[] >>
+  first_x_assum irule >> gvs[] >> metis_tac[]
+QED
+
+Theorem ac_scan_unique_first_id:
+  !dfg insts.
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) ==>
+    ALL_DISTINCT (MAP (\mc. mc.mc_first_id) (ac_scan_block dfg insts NONE))
+Proof
+  rpt strip_tac >> irule ac_scan_unique_first_id_pending >> simp[]
+QED
+
+(* Ordered edges cannot leave the last assertion in a finite chain.
+   This also covers overlapping pairs, not just isolated merges. *)
+Theorem ac_cands_terminal_endpoint:
+  !insts cands i.
+    ac_cands_ordered cands insts /\ MEM i insts ==>
+    ?j. MEM j insts /\
+        RTC (\a b. ?mc. MEM mc cands /\ mc.mc_first_id = a /\
+                         mc.mc_second_id = b) i.inst_id j.inst_id /\
+        ~EXISTS (\mc. mc.mc_first_id = j.inst_id) cands
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  `ac_cands_ordered cands insts` by metis_tac[ac_cands_ordered_tail] >>
+  Cases_on `i = h`
+  >- (gvs[] >>
+      Cases_on `EXISTS (\mc. mc.mc_first_id = h.inst_id) cands`
+      >- (gvs[EXISTS_MEM] >>
+          `?k. MEM k insts /\ k.inst_id = mc.mc_second_id` by
+            (qpat_x_assum `ac_cands_ordered cands (h::insts)` mp_tac >>
+             simp[ac_cands_ordered_def] >> strip_tac >>
+             first_x_assum (qspec_then `mc` mp_tac) >>
+             (impl_tac >- metis_tac[MEM]) >> strip_tac >>
+             Cases_on `idx_s` >> gvs[] >>
+             qexists_tac `EL n insts` >> simp[EL_MEM]) >>
+          first_x_assum drule >> disch_then drule >> strip_tac >>
+          qexists_tac `j` >> simp[] >>
+          irule (cj 2 relationTheory.RTC_RULES) >>
+          qexists_tac `k.inst_id` >> simp[] >>
+          qexists_tac `mc` >> simp[]) >>
+      qexists_tac `h` >> gvs[relationTheory.RTC_REFL, EXISTS_MEM, EVERY_MEM]) >>
+  `MEM i insts` by gvs[] >>
+  first_x_assum drule >> disch_then drule >> strip_tac >>
+  qexists_tac `j` >> gvs[EXISTS_MEM, EVERY_MEM]
+QED
+
+Theorem ac_scan_cands_ordered:
+  !dfg insts.
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) ==>
+    ac_cands_ordered (ac_scan_block dfg insts NONE) insts
+Proof
+  rpt strip_tac >> irule ac_cands_ordered_full >>
+  simp[] >> metis_tac[ac_scan_block_ordered_indices]
+QED
+
+Theorem ac_scan_terminal_endpoint:
+  !dfg insts mc.
+    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+    MEM mc (ac_scan_block dfg insts NONE) ==>
+    ?last. MEM last insts /\
+      RTC (\a b. ?edge. MEM edge (ac_scan_block dfg insts NONE) /\
+                       edge.mc_first_id = a /\ edge.mc_second_id = b)
+          mc.mc_second_id last.inst_id /\
+      RTC (\a b. ?edge. MEM edge (ac_scan_block dfg insts NONE) /\
+                       edge.mc_first_id = a /\ edge.mc_second_id = b)
+          mc.mc_first_id last.inst_id /\
+      ~EXISTS (\edge. edge.mc_first_id = last.inst_id)
+              (ac_scan_block dfg insts NONE)
+Proof
+  rpt strip_tac >>
+  drule ac_scan_cands_ordered >> disch_then (qspec_then `dfg` assume_tac) >>
+  drule ac_scan_second_id_mem >> strip_tac >>
+  drule_all ac_cands_terminal_endpoint >> strip_tac >>
+  qexists_tac `j` >> gvs[EXISTS_MEM, EVERY_MEM] >>
+  irule (cj 2 relationTheory.RTC_RULES) >>
+  qexists_tac `i.inst_id` >> simp[] >>
+  qexists_tac `mc` >> simp[]
+QED
