@@ -53,7 +53,7 @@ Proof
   rpt strip_tac >>
   qpat_assum `_ = _ ++ _` (fn th => once_rewrite_tac[th]) >>
   simp[EL_APPEND1] >>
-  drule_all param_insts_from_el >>
+  drule_all callLayoutDefsTheory.param_insts_from_el >>
   simp[callLayoutDefsTheory.param_inst_at_def]
 QED
 
