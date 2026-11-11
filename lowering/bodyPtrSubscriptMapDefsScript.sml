@@ -56,7 +56,7 @@ Definition expr_map_sim_ptr_def:
                         off + sz <= b \/ b + sz' <= off) ==>
              mem_bytes_at off sz t.vs_memory =
                mem_bytes_at off sz s0.vs_memory) /\
-          locals_kept cenv es s0 t /\
+          locals_kept cenv es ee s0 t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           ghost_inv d cenv cx ee G tn t /\

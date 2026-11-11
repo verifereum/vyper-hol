@@ -57,7 +57,7 @@ Theorem membership_loop_layout:
        mk_inst (sa.cs_next_id+13+delta+width) ASSIGN [Var next] [idx];
        mk_inst (sa.cs_next_id+14+delta+width) JMP [Label cond] []]|> ==>
     compile_array_membership_loop needle arr len stride skip
-      (compile_ptr_load is_ctor imm loc) is_in sa =
+      (compile_ptr_load is_ctor imm loc) NONE is_in sa =
     ((if is_in then Var result else Var neg), sa with <|
       cs_next_label := sa.cs_next_label+6;
       cs_next_var := sa.cs_next_var+7+delta+width+(if is_in then 0 else 1);

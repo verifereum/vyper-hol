@@ -9,13 +9,17 @@ Theorem pop_framed_memory_live_vv_post:
   expr_sim_inv cenv cx env es /\
   stmt_state_rel ctx func cenv cx es s0 /\
   stmt_state_rel ctx func cenv cx mid s /\
-  wb_frame cenv es sa s0 s /\
+  wb_frame cenv es mid sa s0 s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM mid.scopes /\
   MAP FDOM mid.scopes = MAP FDOM scopes' /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  popped_keys_indexed mid.scopes /\
   lookup_scopes id mid.scopes = SOME entry /\
-  lookup_scopes id scopes' = SOME (entry with <|value := updated; popped := hist|>) /\
+  lookup_scopes id scopes' =
+    SOME (entry with <|value := updated;
+            popped := (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)
+                      :: entry.popped|>) /\
   (!j. j <> id ==> lookup_scopes j scopes' = lookup_scopes j mid.scopes) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\ lookup_var p s = SOME b /\
   local_region cenv mid.scopes s id (w2n b) sz /\ k+32 <= sz /\

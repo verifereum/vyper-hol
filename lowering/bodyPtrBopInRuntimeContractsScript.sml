@@ -46,7 +46,7 @@ QED
 
 Theorem membership_slot_load_contract:
   compile_array_membership_loop needle arr_op len 1 prefix
-    (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   (!x. arr_op = Var x ==> not_fresh_at sa x) /\
   vv_holds cenv cx (ArrayT ety bd) tvv (LocatedValue ann p) es s0 /\
@@ -81,7 +81,7 @@ QED
 
 Theorem membership_code_load_contract:
   compile_array_membership_loop needle arr_op len 32 prefix
-    (compile_ptr_load F imm LocCode) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocCode) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   (!x. arr_op = Var x ==> not_fresh_at sa x) /\
   stmt_state_rel ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
@@ -116,7 +116,7 @@ QED
 
 Theorem membership_memory_load_contract:
   compile_array_membership_loop needle (Var basesrc) len 32 prefix
-    (compile_ptr_load F imm LocMemory) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocMemory) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ not_fresh_at sa basesrc /\
   stmt_state_rel ctx fn cenv cx es s0 /\
   vv_at cenv cx aty sc sd es tvv (LocatedValue ann p) s0 /\
@@ -162,7 +162,7 @@ QED
 
 Theorem membership_code_load_contract_source:
   compile_array_membership_loop needle arr_op len 32 prefix
-    (compile_ptr_load F imm LocCode) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocCode) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\
   (!x. arr_op = Var x ==> not_fresh_at early x) /\
   membership_loop_frame early G0 tn0 s0 Gh tnh sh /\
@@ -199,7 +199,7 @@ QED
 
 Theorem membership_memory_load_contract_source:
   compile_array_membership_loop needle (Var basesrc) len 32 prefix
-    (compile_ptr_load F imm LocMemory) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocMemory) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ not_fresh_at early basesrc /\
   membership_loop_frame early G0 tn0 s0 Gh tnh sh /\
   (!x. not_fresh_at early x ==> not_fresh_at sa x) /\

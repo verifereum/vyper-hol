@@ -24,9 +24,9 @@ Theorem memory_vv_post_readonly_tail:
   vv_post ctx func cenv cx e es sa sd s0 ee r (LocatedValue ann p) z
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 s` by
+  `wb_frame cenv es ee sa s0 s` by
     (gvs[vv_post_def, wb_frame_def] >> metis_tac[]) >>
-  `wb_frame cenv es sa s0 z` by
+  `wb_frame cenv es ee sa s0 z` by
     (irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >> metis_tac[]) >>
   `vv_holds cenv cx (expr_type e) r (LocatedValue ann p) ee z` by
     (irule vv_holds_vars_frame >> qexists_tac `s` >>
@@ -197,8 +197,11 @@ Resume fixed_array_represented_summary_ptr[endpoint]:
     (qpat_x_assum `compile_array_subscript p.ptr_operand _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[exprLoweringTheory.compile_array_subscript_def]) >>
   `sc.cs_next_id <= sd.cs_next_id` by
-    (drule array_subscript_grows >>
-     simp[ci_mono_compile_ptr_load]) >>
+    (`ci_mono sc sd` suffices_by simp[exprLoweringPropsTheory.ci_mono_def] >>
+     qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ sc = _`
+       (SUBST1_TAC o SYM o PURE_REWRITE_RULE [pairTheory.SND] o Q.AP_TERM `SND`) >>
+     irule exprLoweringPropsTheory.ci_mono_compile_array_subscript >>
+     simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
   `eval_operand p.ptr_operand sf = SOME w` by
     metis_tac[venomStateTheory.eval_operand_def] >>
   `!name b sz. local_region cenv ee.scopes q name b sz <=>

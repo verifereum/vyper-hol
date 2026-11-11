@@ -31,7 +31,7 @@ Theorem mapping_slot_hash_ptr_frame:
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
       ghost_kept cenv es sa G tn s G' tn' /\
       op_taint tn' op = {} /\ op_prov G' op = NONE /\
-      wb_frame cenv es sa s t /\
+      wb_frame cenv es es sa s t /\
       (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s /\
         FLOOKUP G' z = FLOOKUP G z /\ op_taint tn' (Var z) = op_taint tn (Var z))
 Proof
@@ -48,7 +48,7 @@ Proof
      qexistsl [`G`, `ctx`, `fn`, `s`, `sa`, `tn`] >> simp[] >> metis_tac[]) >>
   `ghost_kept cenv es sa G tn s G' tn'` by
     (irule hash_ghost_kept_frame >> gvs[SUBSET_DEF] >> metis_tac[]) >>
-  `wb_frame cenv es sa s t` by
+  `wb_frame cenv es es sa s t` by
     (simp[wb_frame_def] >> conj_tac >- metis_tac[] >>
      irule locals_kept_regions >> metis_tac[]) >>
   qexistsl [`t`, `G'`, `tn'`] >> simp[hash_ghost_inv_inst_idx] >> metis_tac[]

@@ -13,7 +13,7 @@ Theorem membership_dynamic_memory_header_runtime:
       emit_inst ASSERT [valid] [];
       comp_return len od) early = (len,sa) /\
   compile_array_membership_loop needle (Var basesrc) len 32 32
-    (compile_ptr_load F imm LocMemory) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocMemory) NONE is_in sa = (op,sb) /\
   fn_has_code early sa fn /\ fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = early.cs_current_bb /\ s.vs_inst_idx = LENGTH early.cs_current_insts /\
@@ -51,7 +51,7 @@ Proof
      (MAP (typed_val_to_w256 tv) vs) Gh tnh sh` by
     (irule membership_memory_load_contract_source >> simp[] >>
      goal_assum (drule_at (Pat `vv_at _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `membership_loop_frame _ _ _ _ _ _ _`)) >>
      simp[] >> metis_tac[]) >>
   `LENGTH vs < dimword (:256)` by

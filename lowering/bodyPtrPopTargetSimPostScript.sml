@@ -14,7 +14,7 @@ Theorem target_post_wb_frame:
        place_ptr_rel cenv cx s pv w (FST (SND r)) vt) /\
   SND (SND r) = SOME (value_type_place vt) /\
   (!x. FST r = Var x ==> not_fresh_at sb x) /\
-  place_readable cx ee pv /\ wb_frame cenv es sa s0 s
+  place_readable cx ee pv /\ wb_frame cenv es ee sa s0 s
 Proof
   simp[target_post_def, wb_frame_def]
 QED
@@ -26,18 +26,17 @@ Theorem target_post_index_frame:
   local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM em.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id ==>
-  wb_frame cenv es sa s0 s
+  wb_frame cenv es ef sa s0 s
 Proof
-  strip_tac >> irule wb_frame_trans >> simp[] >>
-  reverse conj_tac >- metis_tac[] >>
-  qexistsl_tac [`em`, `sm`, `u`] >>
-  fs[target_post_wb_frame, expr_post_def, wb_frame_def] >> metis_tac[]
+  strip_tac >> imp_res_tac expr_post_frame >> fs[target_post_wb_frame] >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `em`, `ef`, `sm`, `u`, `s`,
+               `ctx`] mp_tac wb_frame_trans >> simp[]
 QED
 
 (* Child layout and source readability are deliberately supplied by the
    source selection boundary; neither follows just from the saved pointer. *)
 Theorem target_post_readonly_suffix:
-  wb_frame cenv es sa s0 s /\ sa.cs_next_var <= sn.cs_next_var /\
+  wb_frame cenv es ef sa s0 s /\ sa.cs_next_var <= sn.cs_next_var /\
   (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x s) /\
   t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
   stmt_state_rel ctx func cenv cx ef t /\
@@ -82,7 +81,7 @@ QED
    operand is classified for the child by source selection, not readability
    of the pre-index parent.  All ghost effects here are fresh-register writes. *)
 Theorem target_readonly_suffix_post_ptr:
-  wb_frame cenv es sa s0 s /\
+  wb_frame cenv es ef sa s0 s /\
   stmt_state_rel ctx func cenv cx ef s /\ ghost_inv d cenv cx ef G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var /\

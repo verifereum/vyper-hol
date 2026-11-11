@@ -43,7 +43,7 @@ Theorem membership_array_continuation_summary_ptr:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
-  wb_frame cenv es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\ ee.gas_obs = [] ==>
+  wb_frame cenv es ee sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\ ee.gas_obs = [] ==>
   gas_summary_ptr_at D (ctx,fn) PG []
     (bind (read_result cx tvv) (\a. lift_sum (evaluate_binop u (ArrayTV tv bd) bop v a)))
     (ee,s,G,tn)

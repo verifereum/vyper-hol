@@ -16,7 +16,7 @@ Theorem mapping_leaf_summary_ptr:
   stmt_state_rel ctx fn cenv cx (ee with gas_obs := []) u /\
   ghost_inv d cenv cx (ee with gas_obs := []) G tn u /\
   p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand u = SOME slot /\
-  op_taint tn p.ptr_operand = {} /\ wb_frame cenv es sa s0 u /\
+  op_taint tn p.ptr_operand = {} /\ wb_frame cenv es (ee with gas_obs := []) sa s0 u /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
@@ -106,7 +106,7 @@ Theorem mapping_selection_summary_ptr:
   gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG (bind (eval_expr cx idx) (read_result cx))
     (mid with gas_obs := [],t,G1,tn1) right (INL kv) fin Gi tni (OK it) /\
   storage_mapping_region cx tr base_slot (HashMapT kt vt) /\
-  wb_frame cenv es sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
+  wb_frame cenv es (mid with gas_obs := []) sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   stmt_state_rel ctx fn cenv cx es s0 /\
   stmt_state_rel ctx fn cenv cx (mid with gas_obs := []) t /\
   expr_post ctx fn cenv cx idx (mid with gas_obs := []) sm sn t
@@ -160,17 +160,17 @@ Proof
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   gvs[] >> drule_all mapping_index_tail_ptr >>
   disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
-  `wb_frame cenv (mid with gas_obs := []) sm t it` by
+  `wb_frame cenv (mid with gas_obs := []) (fin with gas_obs := []) sm t it` by
     (gvs[loweringPostsTheory.expr_post_def, loweringPostsTheory.wb_frame_def] >>
      metis_tac[]) >>
-  `wb_frame cenv (mid with gas_obs := []) sm t u` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     first_assum (irule_at (Pat `wb_frame _ _ _ _ u`)) >>
-     first_assum (irule_at (Pat `wb_frame _ _ _ t _`)) >> simp[] >> metis_tac[]) >>
-  `wb_frame cenv es sa s0 u` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     first_assum (irule_at (Pat `wb_frame _ _ _ _ u`)) >>
-     first_assum (irule_at (Pat `wb_frame _ _ _ t _`)) >> simp[] >> metis_tac[]) >>
+  `wb_frame cenv (mid with gas_obs := []) (fin with gas_obs := []) sm t u` by
+    (qspecl_then [`fn`, `cenv`, `cx`, `mid with gas_obs := []`, `t`, `sm`,
+                  `fin with gas_obs := []`, `fin with gas_obs := []`, `sn`, `it`, `u`,
+                  `ctx`] mp_tac exprSimWordArgsTheory.wb_frame_trans >> simp[]) >>
+  `wb_frame cenv es (fin with gas_obs := []) sa s0 u` by
+    (qspecl_then [`fn`, `cenv`, `cx`, `es`, `s0`, `sa`, `mid with gas_obs := []`,
+                  `fin with gas_obs := []`, `sm`, `t`, `u`, `ctx`]
+       mp_tac exprSimWordArgsTheory.wb_frame_trans >> simp[]) >>
   `ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gu tnu` by
     (irule bodyPtrHashBuiltinsGhostComposeTheory.hash_expr_post_ghost_kept_compose >>
      first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
@@ -281,7 +281,7 @@ Proof
   rewrite_tac[expr_map_sim_ptr_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  rewrite_tac[exprSimSubscriptMapTheory.eval_subscript_bind] >>
+  rewrite_tac[exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind] >>
   disch_then (mp_then Any irule gas_outcome_result_cases_ptr) >>
   reverse conj_tac
   >- (conj_tac
@@ -321,7 +321,7 @@ QED
 Resume compile_mapping_subscript_outcome_ptr[selection]:
   qpat_x_assum `(\res ee G' tn' t'. _) _ _ _ _ _` mp_tac >>
   simp[] >> strip_tac >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es (mid with gas_obs := []) sa s0 t` by
     (simp[loweringPostsTheory.wb_frame_def] >> metis_tac[]) >>
   `!z. p.ptr_operand = Var z ==> not_fresh_at sm z` by
     (qpat_assum `compile_expr _ _ obj _ = _`

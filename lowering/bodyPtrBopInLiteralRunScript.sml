@@ -4,44 +4,101 @@ Ancestors exprSimBopInLiteralWord
   contextCodegenRel fragExec venomExecSemantics venomState venomInst
   list words
 
-Resume literal_notin_run[single]:
-  drule_all emit_op_EQ_correct >> strip_tac >>
-  drule_all emit_op_ISZERO_correct >> strip_tac >>
-  imp_res_tac emit_op_extends >>
-  drule_all run_inst_seq_chain >> strip_tac >>
-  qexists_tac `ss''` >> simp[] >>
-  Cases_on `w = h'` >> simp[bool_to_word_def]
+Theorem literal_shape_trans[local]:
+  !P sa sm sb.
+    (sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
+     same_blocks sa sm /\ EVERY P (emitted_insts sa sm)) /\
+    (sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
+     same_blocks sm sb /\ EVERY P (emitted_insts sm sb)) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ EVERY P (emitted_insts sa sb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  gvs[same_blocks_def]
 QED
 
-Resume literal_notin_run[cons]:
-  drule_all emit_op_EQ_correct >> strip_tac >>
-  drule_all emit_op_ISZERO_correct >> strip_tac >>
-  `LIST_REL (\x v. eval_operand x ss'' = SOME v) t ys` by
-    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  qpat_x_assum `!ws needle' w sa' op sb ss. _`
-    (qspec_then `v::ys` mp_tac) >> simp[] >> disch_then drule >>
-  disch_then (qspecl_then [`w`, `ss''`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  `eval_operand neq_res tt = SOME (bool_to_word (bool_to_word (w = h'') = 0w))`
-    by metis_tac[] >>
-  drule_all emit_op_AND_correct >> strip_tac >>
-  rename1 `emit_op AND _ sm = (op,sb)` >>
-  rename1 `run_inst_seq (emitted_insts sm sb) tt = OK sf` >>
-  imp_res_tac emit_op_extends >>
-  drule_all (Q.SPECL [`sa`, `cs'`, `cs''`] run_inst_seq_chain) >> strip_tac >>
-  `run_inst_seq (emitted_insts sa cs'') ss = OK ss''` by simp[] >>
-  drule_all (Q.SPECL [`sa`, `cs''`, `sm`] run_inst_seq_chain) >> strip_tac >>
-  `run_inst_seq (emitted_insts sa sm) ss = OK tt` by simp[] >>
-  drule_all (Q.SPECL [`sa`, `sm`, `sb`] run_inst_seq_chain) >> strip_tac >>
-  `bool_to_word (bool_to_word (w = h'') = 0w) &&
-   bool_to_word (w <> v /\ ~MEM w ys) =
-   bool_to_word (w <> h'' /\ w <> v /\ ~MEM w ys)` by
-    (Cases_on `w = h''` >> Cases_on `w <> v /\ ~MEM w ys` >>
-     simp[bool_to_word_def, WORD_AND_IDEM, WORD_AND_CLAUSES]) >>
-  qexists_tac `sf` >> simp[] >> metis_tac[]
+Theorem literal_shape_op[local]:
+  !opc ops sa v sb.
+    emit_op opc ops sa = (v,sb) /\ MEM opc [EQ; OR; AND; ISZERO] /\
+    (LENGTH ops = 1 \/ LENGTH ops = 2) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\
+    EVERY (\i. (i.inst_opcode = EQ \/ i.inst_opcode = OR \/
+                i.inst_opcode = AND \/ i.inst_opcode = ISZERO) /\
+      (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
+      LENGTH i.inst_outputs = 1) (emitted_insts sa sb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emit_op_extends >> drule emitted_insts_emit_op >> rpt strip_tac >>
+  gvs[mk_inst_def]
 QED
 
-Finalise literal_notin_run
+Theorem literal_eqs_shape:
+  !xs needle sa cs sb.
+    emit_membership_eqs needle xs sa = (cs,sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\
+    EVERY (\i. (i.inst_opcode = EQ \/ i.inst_opcode = OR \/
+                i.inst_opcode = AND \/ i.inst_opcode = ISZERO) /\
+      (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
+      LENGTH i.inst_outputs = 1) (emitted_insts sa sb)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[emit_membership_eqs_def, comp_return_def, emitted_insts_refl,
+          same_blocks_def] >>
+  simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  drule literal_shape_op >> impl_tac >- simp[] >> strip_tac >>
+  irule literal_shape_trans >> metis_tac[]
+QED
+
+Theorem literal_or_shape:
+  !cs acc sa op sb.
+    fold_membership_or acc cs sa = (op,sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\
+    EVERY (\i. (i.inst_opcode = EQ \/ i.inst_opcode = OR \/
+                i.inst_opcode = AND \/ i.inst_opcode = ISZERO) /\
+      (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
+      LENGTH i.inst_outputs = 1) (emitted_insts sa sb)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[fold_membership_or_def, comp_return_def, emitted_insts_refl,
+          same_blocks_def] >>
+  simp[fold_membership_or_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule literal_shape_op >> impl_tac >- simp[] >> strip_tac >>
+  irule literal_shape_trans >> metis_tac[]
+QED
+
+Theorem literal_and_shape:
+  !cs acc sa op sb.
+    fold_membership_and acc cs sa = (op,sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\
+    EVERY (\i. (i.inst_opcode = EQ \/ i.inst_opcode = OR \/
+                i.inst_opcode = AND \/ i.inst_opcode = ISZERO) /\
+      (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
+      LENGTH i.inst_outputs = 1) (emitted_insts sa sb)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[fold_membership_and_def, comp_return_def, emitted_insts_refl,
+          same_blocks_def] >>
+  simp[fold_membership_and_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  rename1 `emit_op ISZERO _ sa = (_,s1)` >>
+  rename1 `emit_op AND _ s1 = (_,s2)` >>
+  qpat_x_assum `emit_op ISZERO _ _ = _` assume_tac >>
+  drule literal_shape_op >> impl_tac >- simp[] >> strip_tac >>
+  qpat_x_assum `emit_op AND _ _ = _` assume_tac >>
+  drule literal_shape_op >> impl_tac >- simp[] >> strip_tac >>
+  metis_tac[literal_shape_trans]
+QED
 
 Theorem literal_in_code_shape:
   !xs needle sa dst sb.
@@ -52,23 +109,13 @@ Theorem literal_in_code_shape:
       (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
       LENGTH i.inst_outputs = 1) (emitted_insts sa sb)
 Proof
-  Induct >> rpt gen_tac
-  >- simp[compile_list_membership_in_def, comp_return_def, emitted_insts_refl,
-          same_blocks_def] >>
-  Cases_on `xs` >> simp[compile_list_membership_in_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac
-  >- (drule emit_op_extends >> strip_tac >>
-      drule emitted_insts_emit_op >> strip_tac >>
-      simp[mk_inst_def]) >>
-  first_x_assum drule >> strip_tac >>
-  imp_res_tac emit_op_extends >>
-  `emitted_insts sa cs'' = emitted_insts sa cs' ++ emitted_insts cs' cs''` by
-    (irule emitted_insts_append >> simp[]) >>
-  `cs''.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cs''` by simp[] >>
-  `emitted_insts sa sb = emitted_insts sa cs'' ++ emitted_insts cs'' sb` by
-    (irule emitted_insts_append >> simp[]) >>
-  imp_res_tac emitted_insts_emit_op >>
-  simp[mk_inst_def] >> gvs[same_blocks_def]
+  rpt gen_tac >> simp[compile_list_membership_in_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, _)` >>
+  drule literal_eqs_shape >> strip_tac >>
+  Cases_on `cs` >> gvs[comp_return_def] >>
+  drule literal_or_shape >> strip_tac >>
+  irule literal_shape_trans >> metis_tac[]
 QED
 
 Theorem literal_notin_code_shape:
@@ -80,27 +127,15 @@ Theorem literal_notin_code_shape:
       (LENGTH i.inst_operands = 1 \/ LENGTH i.inst_operands = 2) /\
       LENGTH i.inst_outputs = 1) (emitted_insts sa sb)
 Proof
-  Induct >> rpt gen_tac
-  >- simp[compile_list_membership_notin_def, comp_return_def, emitted_insts_refl,
-          same_blocks_def] >>
-  Cases_on `xs` >> simp[compile_list_membership_notin_def, comp_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac
-  >- (imp_res_tac emit_op_extends >>
-      drule_all emitted_insts_append >> strip_tac >>
-      imp_res_tac emitted_insts_emit_op >>
-      simp[mk_inst_def] >> gvs[same_blocks_def]) >>
-  first_x_assum drule >> strip_tac >>
-  imp_res_tac emit_op_extends >>
-  `emitted_insts sa cs'' = emitted_insts sa cs' ++ emitted_insts cs' cs''` by
-    (irule emitted_insts_append >> simp[]) >>
-  `cs''.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cs''` by simp[] >>
-  `emitted_insts sa cs''' = emitted_insts sa cs'' ++ emitted_insts cs'' cs'''` by
-    (irule emitted_insts_append >> simp[]) >>
-  `cs'''.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cs'''` by simp[] >>
-  `emitted_insts sa sb = emitted_insts sa cs''' ++ emitted_insts cs''' sb` by
-    (irule emitted_insts_append >> simp[]) >>
-  imp_res_tac emitted_insts_emit_op >>
-  simp[mk_inst_def] >> gvs[same_blocks_def]
+  rpt gen_tac >> simp[compile_list_membership_notin_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_membership_eqs needle xs sa = (cs, _)` >>
+  drule literal_eqs_shape >> strip_tac >>
+  Cases_on `cs` >> gvs[comp_return_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  drule literal_and_shape >> strip_tac >>
+  drule literal_shape_op >> impl_tac >- simp[] >> strip_tac >>
+  metis_tac[literal_shape_trans]
 QED
 
 Theorem membership_scalar_run_frame:

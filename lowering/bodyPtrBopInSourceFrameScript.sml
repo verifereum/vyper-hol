@@ -107,17 +107,17 @@ QED
 (* A shared name keeps the whole-expression certificates readable. *)
 Definition probe_expr_def:
   probe_expr = Builtin (BaseT BoolT) (Bop In)
-    [Literal (BaseT (StringT 1)) (StringL "a");
-     Builtin (ArrayT (BaseT (StringT 1)) (Fixed 1))
-       (MakeArray (SOME (BaseT (StringT 1))) (Fixed 1))
-       [Literal (BaseT (StringT 1)) (StringL "a")]]
+    [Literal (BaseT (UintT 256)) (IntL 1);
+     Builtin (ArrayT (BaseT (UintT 256)) (Fixed 1))
+       (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1))
+       [Literal (BaseT (UintT 256)) (IntL 1)]]
 End
 
 Theorem membership_body_pre:
   expr_body_pre probe_cenv probe_cx probe_env probe_expr probe_es
 Proof
   simp[exprSimHypsDefsTheory.expr_body_pre_def, empty_source_invariant,
-       probe_expr_def, string_membership_expression_typing_probe] >>
+       probe_expr_def, word_membership_expression_typing_probe] >>
   EVAL_TAC >> simp[dimword_def, venomMemPropsTheory.dimindex_256] >>
   qexists `[]` >>
   simp[vyperInterpreterTheory.lookup_function_def,
@@ -129,9 +129,9 @@ QED
 
 
 Theorem probe_make_array_builtin:
-  evaluate_builtin cx acc (ArrayT (BaseT (StringT 1)) (Fixed 1))
-    (MakeArray (SOME (BaseT (StringT 1))) (Fixed 1)) tys [StringV "a"] =
-    INL (ArrayV (SArrayV [(0,StringV "a")]))
+  evaluate_builtin cx acc (ArrayT (BaseT (UintT 256)) (Fixed 1))
+    (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1)) tys [IntV 1] =
+    INL (ArrayV (SArrayV [(0,IntV 1)]))
 Proof
   simp[evaluate_builtin_def] >> EVAL_TAC >>
   simp[dimword_def, venomMemPropsTheory.dimindex_256] >> EVAL_TAC
@@ -139,11 +139,18 @@ QED
 
 Theorem probe_in_builtin:
   evaluate_builtin cx acc (BaseT BoolT) (Bop In)
-    [BaseT (StringT 1); ArrayT (BaseT (StringT 1)) (Fixed 1)]
-    [StringV "a"; ArrayV (SArrayV [(0,StringV "a")])] = INL (BoolV T)
+    [BaseT (UintT 256); ArrayT (BaseT (UintT 256)) (Fixed 1)]
+    [IntV 1; ArrayV (SArrayV [(0,IntV 1)])] = INL (BoolV T)
 Proof
   simp[evaluate_builtin_def] >> EVAL_TAC >>
   simp[dimword_def, venomMemPropsTheory.dimindex_256] >> EVAL_TAC
+QED
+
+Theorem probe_membership_type:
+  evaluate_type tenv (ArrayT (BaseT (UintT 256)) (Fixed 1)) =
+    SOME (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+Proof
+  EVAL_TAC >> simp[dimword_def, venomMemPropsTheory.dimindex_256]
 QED
 
 Theorem membership_whole_source:
@@ -158,5 +165,8 @@ Proof
        vyperValueTheory.compatible_bound_def,
        vyperValueOperationTheory.evaluate_literal_def,
        vyperStateTheory.lift_sum_def, vyperASTTheory.expr_type_def,
-       probe_make_array_builtin, probe_in_builtin]
+       probe_make_array_builtin, probe_membership_type,
+       vyperStateTheory.lift_option_type_def,
+       vyperValueOperationTheory.evaluate_membership_def,
+       vyperValueOperationTheory.evaluate_in_array_def]
 QED

@@ -41,7 +41,7 @@ Theorem vv_at_ptr_mem_frame:
   read_result cx r es = (INL v,es) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   expr_sim_inv cenv cx env es /\ dynarray_free tv /\
-  wb_frame cenv es sb s s' /\
+  wb_frame cenv es ee sb s s' /\
   ghost_kept cenv es sb G tn s G' tn' /\
   eval_operand p.ptr_operand s' = eval_operand p.ptr_operand s /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
@@ -62,7 +62,7 @@ Theorem vv_at_ptr_vv_memory_frame:
   p.ptr_location = LocMemory /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   expr_sim_inv cenv cx env es /\ dynarray_free tv /\
-  wb_frame cenv es sb s s' /\
+  wb_frame cenv es ee sb s s' /\
   ghost_kept cenv es sb G tn s G' tn' /\
   eval_operand p.ptr_operand s' = eval_operand p.ptr_operand s /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
@@ -102,7 +102,7 @@ Theorem captured_memory_ptr_index_frame:
   ptr_buf_ok cenv obj p.ptr_operand G' s'
 Proof
   strip_tac >>
-  `wb_frame cenv es sb s s'` by
+  `wb_frame cenv es es' sb s s'` by
     (gvs[expr_post_def, wb_frame_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `eval_operand p.ptr_operand s' = SOME w` by

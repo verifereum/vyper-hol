@@ -86,7 +86,7 @@ Proof
   disch_then (qspec_then `cenv` strip_assume_tac) >> simp[] >>
   `eval_operand bop s1 = SOME base_slot /\ loc = SOME (slot_loc tr) /\
    (!x. bop = Var x ==> not_fresh_at sm x) /\
-   stmt_state_rel ctx func cenv cx em s1 /\ wb_frame cenv es sa s0 s1` by
+   stmt_state_rel ctx func cenv cx em s1 /\ wb_frame cenv es em sa s0 s1` by
     (fs[target_post_wb_frame, place_ptr_rel_def] >> metis_tac[]) >>
   drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
     compile_mapping_index_success_tail_ptr >> simp[] >> disch_then drule_all >>
@@ -95,11 +95,10 @@ Proof
 QED
 
 Resume target_map_normal_continue_ptr[post]:
-  `wb_frame cenv es sa s0 u` by
-    (irule wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`em`, `sm`, `s1`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es en sa s0 u` by
+    (qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `em`, `en`, `sm`, `s1`, `u`,
+                  `ctx`] mp_tac wb_frame_trans >> simp[]) >>
+  `wb_frame cenv es en sa s0 t` by
     (drule_all target_post_index_frame >> simp[]) >>
   `ghost_kept cenv es sa G0 tn0 s0 H tm` by suspend "ghost" >>
   `!x. slot = Var x ==> not_fresh_at sb x` by

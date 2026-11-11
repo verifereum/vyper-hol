@@ -9,7 +9,7 @@ Theorem bop_pair_first_post_kept:
   stmt_state_rel ctx func cenv cx es s /\
   local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es sb s t /\
+  sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es ee sb s t /\
   (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l) /\
   log_arg_rel cenv cx sa sb es s (op,ty) v /\
   ptr_val_ok cx ty v op G tn s /\
@@ -148,8 +148,8 @@ Theorem bop_pair_posts_kept:
   ghost_kept cenv es sa G0 tn0 s0 G2 tn2
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 s1` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
-  `wb_frame cenv es1 sb s1 s2` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
+  `wb_frame cenv es es1 sa s0 s1` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
+  `wb_frame cenv es1 es2 sb s1 s2` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
   `stmt_state_rel ctx func cenv cx es1 s1` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `log_arg_rel cenv cx sa sb es1 s1 (x,post_value_type cenv e1) v1` by

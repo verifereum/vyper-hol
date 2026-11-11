@@ -101,9 +101,9 @@ Proof
   `eval_operand x t1 = SOME (typed_val_to_w256 tv1 (BytesV b1)) /\
    eval_operand y t2 = SOME (typed_val_to_w256 tv1 (BytesV b2))` by
     metis_tac[bop_operand_post_typed_word] >>
-  irule bop_compare_bytes_run >> simp[] >>
+  irule bop_compare_bytes_run >> simp[listTheory.oEL_def] >>
   qexistsl_tac [`if bop = Exp then expr_int_literal e1 else NONE`,
-    `if bop = Exp then expr_int_literal e2 else NONE`, `tv1`, `expr_type e1`, `x`, `y`] >>
+    `if bop = Exp then expr_int_literal e2 else NONE`, `expr_type e1`, `x`, `y`] >>
   simp[] >> metis_tac[]
 QED
 

@@ -2,7 +2,7 @@
 Theory bodyPtrBopInName
 Ancestors
   bodyPtrBopInNameBoundary bodyPtrPreds bodyPtrDefs exprPtrUnwrap
-  bodyPtrBopInOperandBoundary bodyPtrBopInLocalSuffix
+  bodyPtrBopInOperandBoundary bodyPtrBopInCompareBoundary
   exprSimNameValue exprSimHypsDefs exprSimDefs exprSimProps
   fragGasPathPtr gasCount gasSummary stmtFragPtr loweringSlice
   exprLowering exprLoweringProps compileEnv context loweringPosts

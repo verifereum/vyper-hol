@@ -220,7 +220,7 @@ QED
 
 Theorem membership_compiled_product_lookup:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn ==>
   ?bb. lookup_block (fresh_label_output "in_body" (sa.cs_next_label+2))
          fn.fn_blocks = SOME bb /\
@@ -236,7 +236,7 @@ QED
 
 Theorem membership_product_path:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
@@ -272,7 +272,7 @@ QED
 
 Theorem membership_compiled_runtime_address_lookup:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load F imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ delta = (if 0 < skip then 1 else 0) ==>
   ?bb. lookup_block (fresh_label_output "in_body" (sa.cs_next_label+2))
          fn.fn_blocks = SOME bb /\
@@ -299,7 +299,7 @@ QED
 
 Theorem membership_runtime_offset_path:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load F imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
@@ -342,7 +342,7 @@ QED
 
 Theorem membership_runtime_address_path:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load F imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
@@ -379,7 +379,7 @@ QED
 
 Theorem membership_runtime_address_prefix:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load F imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
@@ -495,7 +495,7 @@ QED
 
 Theorem membership_memory_load_path:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load F imm LocMemory) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocMemory) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
@@ -577,7 +577,7 @@ QED
 
 Theorem membership_memory_array_element_prefix:
   compile_array_membership_loop needle (Var basesrc) len 32 prefix
-    (compile_ptr_load F imm LocMemory) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocMemory) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
@@ -634,7 +634,7 @@ QED
 
 Theorem membership_memory_array_element_prefix_source:
   compile_array_membership_loop needle (Var basesrc) len 32 prefix
-    (compile_ptr_load F imm LocMemory) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocMemory) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame early G0 tn0 s0 Gh tnh sh /\
   (!x. not_fresh_at early x ==> not_fresh_at sa x) /\

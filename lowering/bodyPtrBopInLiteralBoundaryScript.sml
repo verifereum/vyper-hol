@@ -8,7 +8,7 @@ Theorem list_membership_empty:
   compile_list_membership_notin needle [] st = (Lit 1w, st)
 Proof
   simp[compile_list_membership_in_def, compile_list_membership_notin_def,
-       comp_return_def]
+       emit_membership_eqs_def, comp_bind_def, comp_return_def]
 QED
 
 Theorem membership_eq_access:

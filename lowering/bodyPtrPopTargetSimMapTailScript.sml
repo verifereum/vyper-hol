@@ -163,7 +163,7 @@ Theorem map_index_key_prefix_ptr:
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t H tm. gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
     eval_operand hashed t = SOME (encode_hashmap_key (expr_type e) kv) /\
-    stmt_state_rel ctx fn cenv cx en t /\ wb_frame cenv en sm s t /\
+    stmt_state_rel ctx fn cenv cx en t /\ wb_frame cenv en en sm s t /\
     ghost_inv d cenv cx en H tm t /\ ghost_kept cenv en sm G tn s H tm /\
     op_taint tm hashed = {} /\ op_prov H hashed = NONE /\
     (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s /\
@@ -195,7 +195,7 @@ Resume map_index_key_prefix_ptr[dynamic]:
    t.vs_current_bb = s.vs_current_bb` by
     (qpat_x_assum `t with vs_vars := _ = _`
       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas,z.vs_current_bb)`) >> simp[]) >>
-  `wb_frame cenv en sm s t` by
+  `wb_frame cenv en en sm s t` by
     (irule wb_frame_readonly_tail >> qexistsl_tac [`sm`, `s`] >>
      simp[wb_frame_refl]) >>
   `~t.vs_halted` by
@@ -229,7 +229,7 @@ Theorem compile_mapping_index_success_tail_ptr:
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sn x) ==>
   ?u H tm. gas_path_ptr D 0 ctx func PG G tn t 0 H tm (OK u) /\
     eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-    stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em sm s1 u /\
+    stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em en sm s1 u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv d cenv cx en H tm u /\ ghost_kept cenv en sn G tn t H tm /\
@@ -301,16 +301,16 @@ Resume compile_mapping_index_success_tail_ptr[compose]:
     (irule hash_ghost_kept_then >> simp[] >>
      qexistsl_tac [`H`, `t'`, `sp`, `tm`] >> simp[] >>
      fs[wb_frame_def] >> metis_tac[]) >>
-  `wb_frame cenv em sm s1 t` by
+  `wb_frame cenv em en sm s1 t` by
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
-  `wb_frame cenv em sm s1 t'` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
-  `wb_frame cenv em sm s1 t''` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`en`, `sp`, `t'`] >> simp[] >> decide_tac) >>
-     goal_assum (drule_at Any)) >>
+  `wb_frame cenv em en sm s1 t'` by
+    (qspecl_then [`func`, `cenv`, `cx`, `em`, `s1`, `sm`, `en`, `en`, `sn`, `t`, `t'`,
+                  `ctx`] mp_tac exprSimWordArgsTheory.wb_frame_trans >> simp[]) >>
+  `sm.cs_next_var <= sp.cs_next_var /\ sm.cs_next_id <= sp.cs_next_id` by
+    decide_tac >>
+  `wb_frame cenv em en sm s1 t''` by
+    (qspecl_then [`func`, `cenv`, `cx`, `em`, `s1`, `sm`, `en`, `en`, `sp`, `t'`, `t''`,
+                  `ctx`] mp_tac exprSimWordArgsTheory.wb_frame_trans >> simp[]) >>
   drule (cj 2 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >> strip_tac >>
   `gas_path_ptr D 0 ctx func PG G tn t 0 G'' tn''
     (OK (t'' with vs_inst_idx := LENGTH sb.cs_current_insts))` by

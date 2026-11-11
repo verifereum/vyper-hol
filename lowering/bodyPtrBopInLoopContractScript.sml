@@ -107,7 +107,7 @@ QED
 
 Theorem membership_loop_contract_init:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -144,7 +144,7 @@ QED
    loader widths. This does not claim that a representation supplies it. *)
 Theorem membership_load_endpoint_compare:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load is_ctor imm loc) is_in sa = (op,sb) /\
+    (compile_ptr_load is_ctor imm loc) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\
   t.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   t.vs_inst_idx = 2 + (if 0 < skip then 1 else 0) +

@@ -7,6 +7,7 @@ Ancestors
 Theorem pop_local_vv_post_cursor:
   stmt_state_rel ctx func cenv cx es s /\
   local_ptrs_rel func cenv es.scopes s /\
+  popped_keys_indexed es.scopes /\
   find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
   cenv.ce_var_type id = SOME (ArrayT ann (Dynamic n)) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -55,6 +56,12 @@ Proof
   drule read_result_gas_obs >> simp[]
 QED
 
+Theorem pop_local_locals_kept_gas_obs:
+  locals_kept cenv es (ee with gas_obs := gs) s0 t <=> locals_kept cenv es ee s0 t
+Proof
+  simp[locals_kept_def, popped_kept_def]
+QED
+
 Theorem pop_local_memory_post_gas_obs:
   vv_post ctx func cenv cx (Pop ann bt) es sa sb s0 ee tv
     (LocatedValue ann (mk_ptr op LocMemory)) t ==>
@@ -62,7 +69,7 @@ Theorem pop_local_memory_post_gas_obs:
     (LocatedValue ann (mk_ptr op LocMemory)) t
 Proof
   simp[vv_post_def, vv_holds_def, vv_at_def, mk_ptr_def,
-       pop_local_read_gas_obs] >> metis_tac[]
+       pop_local_read_gas_obs, pop_local_locals_kept_gas_obs] >> metis_tac[]
 QED
 
 Theorem pop_local_memory_ptr_gas_obs:

@@ -6,23 +6,19 @@ Ancestors bodyPtrBopInLoopLayout exprLowering context compileEnv emitHelper
 
 Theorem membership_dynamic_compile_split:
   compile_var_array_membership cenv needle arr (ArrayT ety (Dynamic cap)) is_in =
-  (do len <- (do len <- compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
-                    (case vv_location arr of SOME l => l | NONE => LocMemory)
-                    (vv_operand arr);
-                 flag <- emit_op GT [len;Lit (n2w cap)];
-                 valid <- emit_op ISZERO [flag];
-                 emit_inst ASSERT [valid] [];
-                 comp_return len od);
+  (do len <- compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
+               (case vv_location arr of SOME l => l | NONE => LocMemory)
+               (vv_operand arr);
       compile_array_membership_loop needle (vv_operand arr) len
         (elem_size_in_location cenv
           (case vv_location arr of SOME l => l | NONE => LocMemory) ety)
         (word_scale (case vv_location arr of SOME l => l | NONE => LocMemory))
         (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
-          (case vv_location arr of SOME l => l | NONE => LocMemory)) is_in od)
+          (case vv_location arr of SOME l => l | NONE => LocMemory))
+        (SOME cap) is_in od)
 Proof
   simp[FUN_EQ_THM, compile_var_array_membership_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >> rpt gen_tac >>
-  rpt (pairarg_tac >> gvs[])
+       comp_ignore_bind_def, comp_return_def]
 QED
 
 Theorem membership_runtime_header_layout:
@@ -103,7 +99,7 @@ Theorem membership_fixed_compile_split:
     (elem_size_in_location cenv
       (case vv_location arr of SOME l => l | NONE => LocMemory) ety) 0
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
-      (case vv_location arr of SOME l => l | NONE => LocMemory)) is_in
+      (case vv_location arr of SOME l => l | NONE => LocMemory)) NONE is_in
 Proof
   simp[FUN_EQ_THM, compile_var_array_membership_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def]

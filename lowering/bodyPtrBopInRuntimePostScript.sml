@@ -30,9 +30,9 @@ Theorem membership_runtime_readonly_frames:
   local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-  wb_frame cenv es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var ==>
+  wb_frame cenv es es' sa s0 s /\ sa.cs_next_var <= sm.cs_next_var ==>
   stmt_state_rel ctx fn cenv cx ee t /\ ghost_inv d cenv cx ee G' tn' t /\
-  ghost_kept cenv ee sm G tn s G' tn' /\ wb_frame cenv es sa s0 t
+  ghost_kept cenv ee sm G tn s G' tn' /\ wb_frame cenv es es' sa s0 t
 Proof
   strip_tac >>
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
@@ -47,6 +47,6 @@ Proof
       qexists_tac `sm` >> fs[membership_loop_frame_def]) >>
   conj_tac >- metis_tac[membership_loop_frame_ghost_kept] >>
   irule wb_frame_readonly_tail >>
-  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   qexists_tac `sm` >> fs[membership_loop_frame_def]
 QED
