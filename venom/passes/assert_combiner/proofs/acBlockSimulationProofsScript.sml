@@ -10,24 +10,6 @@ Ancestors
   stateEquiv stateEquivProps stateFrame irSupply irSupplyFreshProps list rich_list pred_set
   acSourceBlockInvariantProofs venomExecProps mmWfProofs
 
-(* PHIs form a prefix of a well-formed block, so nothing after the
-   PHI prefix is a PHI. *)
-val phi_suffix_nonphi_tac =
-  `!xs. (!i j. i < j /\ j < LENGTH xs /\ (EL j xs).inst_opcode = PHI ==>
-               (EL i xs).inst_opcode = PHI) ==>
-        EVERY (\i. i.inst_opcode <> PHI) (DROP (phi_prefix_length xs) xs)` by
-    (rpt (pop_assum kall_tac) >>
-     Induct >> simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
-     rpt strip_tac >> Cases_on `h.inst_opcode = PHI`
-     >- (simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
-         first_x_assum irule >> rpt strip_tac >>
-         first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
-     simp[venomExecSemanticsTheory.phi_prefix_length_def, EVERY_MEM] >>
-     rpt strip_tac >> gvs[] >>
-     `?j. j < LENGTH xs /\ EL j xs = i` by metis_tac[MEM_EL] >>
-     first_x_assum (qspecl_then [`0`, `SUC j`] mp_tac) >> simp[]) >>
-  pop_assum irule >> gvs[bb_well_formed_def] >> metis_tac[];
-
 Theorem ac_query_fresh_operand:
   ir_supply_covers_fn su fn /\
   ac_get_iszero_operand (dfg_build_function fn) {} c = SOME (Var v) ==>
@@ -150,7 +132,7 @@ Proof
   simp[phi_prefix_length_le, ir_supply_extends_refl] >>
   reverse conj_tac
   >- (conj_tac >- metis_tac[ALL_DISTINCT_DROP, MAP_DROP] >>
-      phi_suffix_nonphi_tac) >>
+      metis_tac[bb_well_formed_phi_suffix_nonphi]) >>
   rpt gen_tac >> disch_tac >> irule ac_fresh_vars_original_var >> simp[] >>
   simp[fn_ir_vars_def, MEM_FLAT, MEM_MAP] >>
   qexists `block_ir_vars bb` >> conj_tac
@@ -195,5 +177,5 @@ Proof
   irule ac_source_run_block_successor >> simp[] >>
   qexistsl [`bb`, `ctx`, `fuel`, `s`] >> simp[] >> conj_tac
   >- metis_tac[phi_prefix_length_lt_wf] >>
-  phi_suffix_nonphi_tac
+  metis_tac[bb_well_formed_phi_suffix_nonphi]
 QED

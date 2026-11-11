@@ -605,7 +605,12 @@ QED
 
 (* PHIs form a prefix of a well-formed block, so nothing after the
    PHI prefix is a PHI. *)
-val phi_suffix_nonphi_tac =
+Theorem bb_well_formed_phi_suffix_nonphi:
+  bb_well_formed bb ==>
+  EVERY (\i. i.inst_opcode <> PHI)
+    (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+Proof
+  strip_tac >>
   `!xs. (!i j. i < j /\ j < LENGTH xs /\ (EL j xs).inst_opcode = PHI ==>
                (EL i xs).inst_opcode = PHI) ==>
         EVERY (\i. i.inst_opcode <> PHI) (DROP (phi_prefix_length xs) xs)` by
@@ -619,7 +624,8 @@ val phi_suffix_nonphi_tac =
      rpt strip_tac >> gvs[] >>
      `?j. j < LENGTH xs /\ EL j xs = i` by metis_tac[MEM_EL] >>
      first_x_assum (qspecl_then [`0`, `SUC j`] mp_tac) >> simp[]) >>
-  pop_assum irule >> gvs[bb_well_formed_def] >> metis_tac[];
+  pop_assum irule >> gvs[bb_well_formed_def] >> metis_tac[]
+QED
 
 (* The parallel PHI batch is unchanged; only the non-PHI suffix is merged. *)
 Theorem ac_transform_block_phi_boundary:
@@ -639,7 +645,7 @@ Proof
   `EVERY (\i. i.inst_opcode = PHI) pre` by
     (simp[Abbr `pre`, EVERY_MEM] >> metis_tac[phi_prefix_mem]) >>
   `EVERY (\i. i.inst_opcode <> PHI) rest` by
-    (simp[Abbr `rest`] >> phi_suffix_nonphi_tac) >>
+    (simp[Abbr `rest`] >> metis_tac[bb_well_formed_phi_suffix_nonphi]) >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) rest)` by
     (gvs[MAP_APPEND, ALL_DISTINCT_APPEND]) >>
   Cases_on `ac_merge_insts (ac_scan_block dfg rest NONE) [] su rest` >>
