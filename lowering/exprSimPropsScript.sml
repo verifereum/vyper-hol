@@ -180,6 +180,7 @@ Proof
          simp[]) >>
      rename1 `HashMapRef _ _ _ vt` >> Cases_on `sb` >> Cases_on `vt` >>
      gvs[select_result_def, extend_place_def, bind_def, return_def,
+         ignore_bind_def, record_storage_event_def,
          lift_option_type_def, raise_def, AllCaseEqs(), LET_THM]) >>
   rpt gen_tac >> eq_tac >> rw[] >> res_tac >> gvs[]
 QED
@@ -729,15 +730,15 @@ Proof
 QED
 
 Theorem stmt_state_rel_vars_frame:
-  !func cenv cx es s V ctx.
-    stmt_state_rel ctx func cenv cx es s /\
+  !H func cenv cx es s V ctx.
+    stmt_state_rel H ctx func cenv cx es s /\
     (!name entry p sz.
        lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
        lookup_var p (s with vs_vars := V) = lookup_var p s) /\
     (!p. cenv.ce_imm_alloca = SOME (Var p) ==>
        lookup_var p (s with vs_vars := V) = lookup_var p s) ==>
-    stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
+    stmt_state_rel H ctx func cenv cx es (s with vs_vars := V)
 Proof
   rpt strip_tac >>
   `immutable_base_zero cenv (s with vs_vars := V)` by
@@ -767,9 +768,9 @@ Proof
 QED
 
 Theorem stmt_state_rel_vars_ext:
-  !func cenv cx es t t' ctx.
-    stmt_state_rel ctx func cenv cx es t /\ vars_ext t t' ==>
-    stmt_state_rel ctx func cenv cx es t'
+  !H func cenv cx es t t' ctx.
+    stmt_state_rel H ctx func cenv cx es t /\ vars_ext t t' ==>
+    stmt_state_rel H ctx func cenv cx es t'
 Proof
   rw[vars_ext_def] >>
   qpat_x_assum `t' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
@@ -784,10 +785,10 @@ Proof
 QED
 
 Theorem stmt_state_rel_drop_fresh:
-  !func cenv cx es st s ctx.
+  !H func cenv cx es st s ctx.
     local_ptrs_reserved cenv st ==>
-    (stmt_state_rel ctx func cenv cx es (drop_fresh st s) <=>
-     stmt_state_rel ctx func cenv cx es s)
+    (stmt_state_rel H ctx func cenv cx es (drop_fresh st s) <=>
+     stmt_state_rel H ctx func cenv cx es s)
 Proof
   rpt strip_tac >> eq_tac >> strip_tac
   >- (irule stmt_state_rel_vars_ext >> qexists_tac `drop_fresh st s` >>
@@ -1073,8 +1074,8 @@ Proof
 QED
 
 Theorem vv_post_initial_gas:
-  vv_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee tv vv t <=>
-  vv_post ctx func cenv cx e es sa sb s0 ee tv vv t
+  vv_post H ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee tv vv t <=>
+  vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t
 Proof
   simp[vv_post_def, locals_kept_def, popped_kept_def]
 QED
@@ -1123,8 +1124,8 @@ Proof
 QED
 
 Theorem stmt_state_rel_region_lt:
-  !func cenv cx es s ctx.
-    stmt_state_rel ctx func cenv cx es s ==>
+  !H func cenv cx es s ctx.
+    stmt_state_rel H ctx func cenv cx es s ==>
     (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
                 b + sz < dimword (:256)) /\
     (!n b sz. local_region cenv es.scopes s n b sz ==>

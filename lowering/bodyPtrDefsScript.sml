@@ -14,7 +14,7 @@
  *)
 Theory bodyPtrDefs
 Ancestors
-  fragGasPathPtr gasContext bodySim stmtSimDefs exprSimDefs exprSimHypsDefs fragExec ptrSafeRun ptrDiscipline
+  fragGasPathPtr gasContext bodySim stmtSimDefs exprSimDefs exprSimProps exprSimHypsDefs fragExec ptrSafeRun ptrDiscipline
   compileEnv valueEncoding exprLowering exprLoweringProps context
   venomState venomExecSemantics vyperInterpreter vyperTypeSystem list
   finite_map words
