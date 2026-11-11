@@ -255,7 +255,7 @@ Proof
   TRY (irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
        qexistsl [`caller`, `env`] >> simp[] >> NO_TAC) >>
   qpat_x_assum `bare_globals_layout _ _ _ _ _ _` mp_tac >>
-  fs[bare_globals_layout_def] >> rpt strip_tac >> fs[]
+  fs[bare_globals_layout_def, get_tenv_def] >> rpt strip_tac >> fs[]
 QED
 
 Theorem internal_prologue_locals_declared:
