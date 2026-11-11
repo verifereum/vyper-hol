@@ -95,6 +95,14 @@ Definition expr_vv_sim_full_def:
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
           ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
           ptr_vv_ok cx (post_value_type cenv e) tv vv ee G tn t /\
+          (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+           ?val. read_result cx tv ee = (INL val, ee) /\
+                 !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) =
+                          SOME rt /\
+                        eval_operand (vv_operand vv) t = SOME w ==>
+                        w2n w + type_memory_size rt <= lo /\
+                        (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
+                               val_in_memory rt val (w2n w) mem)) /\
           (!t' op. vv = StackValue t' op /\
                    ~is_word_type (post_value_type cenv e) ==>
                    ptr_buf_ok cenv e op G t) /\
