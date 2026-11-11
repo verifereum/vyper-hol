@@ -1007,7 +1007,12 @@ in
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
       "val () = holbuild_extra_deps [\"", jsonp_from_generated,
-      "\", \"", jsonp_from_generated, ".provenance\"];\n", call, "\n"]
+      "\", \"", jsonp_from_generated, ".provenance\", ",
+      "\"../../VYPER_PIN\", \"../semantics-profile.json\", ",
+      "\"../semantics-test-constraints.txt\", \"../semantics-build-constraints.txt\", ",
+      "\"../../tools/vyper_test_exports.py\", \"../../tools/vyper_test_export_plugin.py\", ",
+      "\"../../.github/actions/setup-vyper-test-exports/action.yml\", ",
+      "\"../vyper-regression\"];\n", call, "\n"]
     val existing =
       if OS.FileSys.access(fname, []) then let
         val input = TextIO.openIn fname
