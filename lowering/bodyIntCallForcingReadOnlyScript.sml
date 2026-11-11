@@ -1,7 +1,7 @@
 (* Read-only forcing: semantic and resource facts at one counted endpoint. *)
 Theory bodyIntCallForcingReadOnly
 Ancestors
-  bodyIntCallForceLanding exprSimUnwrap exprSimHash exprSimAggregateChildren
+  bodyIntCallForceLanding exprSimUnwrap exprSimHash exprSimHashBoundary exprSimAggregateChildren
   fragGasMode exprLoweringProps loweringPosts intCallFrame compileEnv loweringStateRelDefs
   venomState valueEncoding valueEncodingDefs valueCopy valueCopyBytes list finite_map
   bodyIntCallWordLanding vyperInterpreter vyperState exprLowering
