@@ -118,11 +118,19 @@ Resume body_struct_lit_widened_call_elem_mem[value_post]:
        aggregate_pure_frame_buffer) >>
      qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
      qpat_assum `FLOOKUP t'.vs_allocas sa.cs_next_id = SOME (b,_)` (irule_at Any) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
-     rpt gen_tac >> disch_tac >>
-     qpat_x_assum `!p n. _ /\ (!i c sz. _) ==> _` irule >>
-     pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
-     strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+     qexistsl [`t`, `sm`] >> rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- (qpat_assum `!name p n. local_region cenv es.scopes t name p n <=> _`
+           (fn th => rewrite_tac [th]) >>
+         qpat_assum `t.vs_memory = s0.vs_memory` (fn th => rewrite_tac [th]) >>
+         first_assum ACCEPT_TAC)
+     >- (qpat_assum `t.vs_memory = s0.vs_memory` (fn th => rewrite_tac [th]) >>
+         qx_genl_tac [`pp`, `nn`] >> strip_tac >>
+         qpat_assum `!p n. (n + p <= b \/ _) /\ _ ==> _` (qspecl_then [`pp`, `nn`] mp_tac) >>
+         (impl_tac >- (conj_tac >- decide_tac >> first_assum ACCEPT_TAC)) >>
+         disch_then ACCEPT_TAC)
+     >- (irule arithmeticTheory.LESS_IMP_LESS_OR_EQ >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   suspend "buffer_post"
 QED
 
