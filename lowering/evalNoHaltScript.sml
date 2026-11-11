@@ -148,6 +148,7 @@ Theorem call_ops_nh[local]:
   (precompile_call_success bt s = (INR HaltException, s') ==> F) /\
   (frame_call_value cx vo s = (INR HaltException, s') ==> F) /\
   (take_call_outcome tg cd vo s = (INR HaltException, s') ==> F) /\
+  (take_delegate_outcome tg cd vo s = (INR HaltException, s') ==> F) /\
   (adopt_call_outcome rq oc s = (INR HaltException, s') ==> F) /\
   (acquire_nonreentrant_lock a sl iv s = (INR HaltException, s') ==> F) /\
   (release_nonreentrant_lock a sl s = (INR HaltException, s') ==> F)
@@ -159,6 +160,7 @@ Proof
       simp[frame_call_value_def, ignore_bind_def, bind_def, check_def,
            assert_def, return_def] >> rw[])
   >- (strip_tac >> drule take_call_outcome_error >> simp[])
+  >- (strip_tac >> drule take_delegate_outcome_error >> simp[])
   >- simp[adopt_call_outcome_equation]
   >- (simp[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
            get_transient_storage_def, LET_THM, return_def] >>

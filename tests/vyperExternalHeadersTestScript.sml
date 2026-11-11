@@ -92,13 +92,15 @@ val () = both "nested_nonreentrant_calls" true (mutate external_f 2 ``T``);
 (* Vyper rejects @raw_return on non-external functions
    (vyper/semantics/types/function.py:539 at VYPER_PIN). *)
 val () = both "internal_raw_return_bytes" false (mutate internal_h 3 ``T``);
-val () = both "private_x_function_name" true (mutate burn 4 ``"x"``);
-val () = both "internal_external_same_name" true (mutate pure_fn 4 ``"h"``);
+(* Functions of every visibility and storage variables share Vyper's self
+   namespace (NamespaceCollision), so these renamings are rejected. *)
+val () = both "private_x_function_name" false (mutate burn 4 ``"x"``);
+val () = both "internal_external_same_name" false (mutate pure_fn 4 ``"h"``);
 (* Constructor mutability is checked in both runtime and deployment modes. *)
 val () = both "constructor_view_guard" false
   (subst [ctor |-> ``FunctionDecl Deploy View T F "__init__"
     [] [] NoneT [Pass]``] base_dom1);
-val () = both "internal_fallback_name" true
+val () = both "internal_fallback_name" false
   (subst [internal_h |-> header 4 ``"__default__"`` internal_h,
     external_k |-> ``FunctionDecl External Nonpayable F F "k" [] [] ^bytes10
       [Return (SOME (Call ^bytes10 (IntCall (NONE,"__default__")) [] NONE))]``]
