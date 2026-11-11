@@ -2100,3 +2100,67 @@ Proof
   drule_all inline_one_site_final_assembly >> strip_tac >> gvs[] >>
   irule inline_caller_produced_optional_phis >> simp[] >> metis_tac[]
 QED
+
+Theorem inline_rewrite_phi_prefix_contents:
+  !insts n.
+  TAKE (phi_prefix_length (FST (rewrite_inline_insts args outs ret insts n)))
+    (FST (rewrite_inline_insts args outs ret insts n)) =
+  TAKE (phi_prefix_length insts) insts
+Proof
+  Induct_on `insts` >- simp[rewrite_inline_insts_def, phi_prefix_length_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI`
+  >- simp[rewrite_inline_insts_def, inline_rewrite_phi, pairTheory.UNCURRY,
+          phi_prefix_length_def] >>
+  drule inline_rewrite_nonphi_head >>
+  disch_then (qspecl_then [`ret`, `outs`, `n`, `args`] strip_assume_tac) >>
+  simp[rewrite_inline_insts_def, pairTheory.UNCURRY, phi_prefix_length_def]
+QED
+
+Theorem inline_clone_phi_prefix_contents:
+  !insts. EVERY (\inst. inst.inst_opcode = PHI ==>
+    EVERY (\op. !l. op = Label l ==> MEM l labs) inst.inst_operands) insts ==>
+  TAKE (phi_prefix_length (MAP (clone_instruction p labs) insts))
+    (MAP (clone_instruction p labs) insts) =
+  MAP (inline_rename_inst (STRCAT p) (STRCAT p))
+    (TAKE (phi_prefix_length insts) insts)
+Proof
+  Induct_on `insts` >- simp[] >> simp[] >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- simp[inline_clone_phi_inst, inline_rename_inst_def, phi_prefix_length_def] >>
+  simp[clone_instruction_def, phi_prefix_length_def]
+QED
+
+Theorem inline_clone_produced_phi_prefix_fields:
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b callee.fn_blocks = SOME cb /\
+  ~MEM (STRCAT p b) (fn_labels caller) /\ STRCAT p b <> ret /\
+  (!l. MEM l (bb_succs rb) ==> MEM l (fn_labels caller)) /\
+  inliner_phi_labels_closed callee ==>
+  ?tb. lookup_block (STRCAT p b)
+      (renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+        (inline_call_site p ret caller callee lbl i))).fn_blocks = SOME tb /\
+    MAP inline_inst_fields (TAKE (phi_prefix_length tb.bb_instructions) tb.bb_instructions) =
+    MAP inline_inst_fields (MAP (inline_rename_inst (STRCAT p) (STRCAT p))
+      (TAKE (phi_prefix_length cb.bb_instructions) cb.bb_instructions))
+Proof
+  strip_tac >> drule_all inline_call_site_lookup_clone >>
+  disch_then (qspec_then `i` assume_tac) >>
+  qpat_assum `lookup_block (STRCAT p b) (inline_call_site _ _ _ _ _ _).fn_blocks = _`
+    (mp_then Any mp_tac inline_final_lookup_fields) >>
+  disch_then (qspecl_then [`rb`, `lbl`, `ret`] strip_assume_tac) >>
+  qexists `tb` >> simp[] >>
+  `~MEM (STRCAT p b) (bb_succs rb)` by metis_tac[] >>
+  `cb.bb_label = b` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  gvs[rewrite_inline_block_label, clone_basic_block_def] >>
+  drule inline_fields_phi_prefix_contents >>
+  simp[rewrite_inline_block_def, pairTheory.UNCURRY,
+       inline_rewrite_phi_prefix_contents] >>
+  disch_then SUBST1_TAC >>
+  `EVERY (\inst. inst.inst_opcode = PHI ==>
+    EVERY (\op. !l. op = Label l ==> MEM l (fn_labels callee)) inst.inst_operands)
+    cb.bb_instructions` by
+    (gvs[functionInlinerOriginTheory.inliner_phi_labels_closed_def, EVERY_MEM] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+       unitShapeDefsTheory.MEM_fn_insts_blocks_iff, venomInstTheory.fn_insts_def]) >>
+  drule inline_clone_phi_prefix_contents >> simp[]
+QED

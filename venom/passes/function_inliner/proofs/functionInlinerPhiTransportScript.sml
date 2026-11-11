@@ -338,3 +338,77 @@ Proof
   strip_tac >> irule venomExecProofsTheory.eval_phis_no_phis >>
   irule inline_invoke_suffix_nonphi >> simp[]
 QED
+
+Theorem inline_fields_phi_prefix_contents:
+  !xs ys. MAP inline_inst_fields xs = MAP inline_inst_fields ys ==>
+    MAP inline_inst_fields (TAKE (phi_prefix_length xs) xs) =
+    MAP inline_inst_fields (TAKE (phi_prefix_length ys) ys)
+Proof
+  rpt strip_tac >> drule inline_fields_phi_prefix >> strip_tac >>
+  simp[MAP_TAKE]
+QED
+
+Theorem inline_phi_prefix_split:
+  !i insts next. i < LENGTH insts /\ (EL i insts).inst_opcode <> PHI /\
+    next.inst_opcode <> PHI ==>
+    TAKE (phi_prefix_length (TAKE i insts ++ [next])) (TAKE i insts ++ [next]) =
+    TAKE (phi_prefix_length insts) insts
+Proof
+  Induct >- (Cases_on `insts` >> simp[phi_prefix_length_def]) >>
+  Cases_on `insts` >> simp[] >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def]
+QED
+
+Theorem inline_caller_raw_phi_prefix:
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b caller.fn_blocks = SOME bb /\
+  i < LENGTH call_bb.bb_instructions /\
+  (EL i call_bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?raw. lookup_block b (inline_call_site p ret caller callee lbl i).fn_blocks = SOME raw /\
+    raw.bb_label = bb.bb_label /\
+    TAKE (phi_prefix_length raw.bb_instructions) raw.bb_instructions =
+    TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions
+Proof
+  strip_tac >> Cases_on `b = lbl`
+  >- (gvs[] >> drule inline_call_site_lookup_call >>
+      disch_then (qspecl_then [`ret`, `p`, `i`, `callee`] assume_tac) >>
+      simp[] >> irule inline_phi_prefix_split >> simp[]) >>
+  drule_all inline_call_site_lookup_other >>
+  disch_then (qspecl_then [`ret`, `p`, `i`, `callee`] assume_tac) >>
+  metis_tac[]
+QED
+
+Theorem inline_phi_prefix_repair_contents:
+  !insts. TAKE (phi_prefix_length
+      (MAP (\inst. if inst.inst_opcode <> PHI then inst else subst_label_inst old fresh inst) insts))
+      (MAP (\inst. if inst.inst_opcode <> PHI then inst else subst_label_inst old fresh inst) insts) =
+    MAP (subst_label_inst old fresh) (TAKE (phi_prefix_length insts) insts)
+Proof
+  Induct >> simp[] >> gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  gvs[phi_prefix_length_def, subst_label_inst_def]
+QED
+
+Theorem inline_caller_produced_phi_prefix_fields:
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b caller.fn_blocks = SOME bb /\
+  i < LENGTH call_bb.bb_instructions /\
+  (EL i call_bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?tb. lookup_block b
+      (renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+        (inline_call_site p ret caller callee lbl i))).fn_blocks = SOME tb /\
+    MAP inline_inst_fields (TAKE (phi_prefix_length tb.bb_instructions) tb.bb_instructions) =
+    MAP inline_inst_fields
+      (if MEM bb.bb_label (bb_succs rb) then
+        MAP (subst_label_inst lbl ret)
+          (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+       else TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+Proof
+  strip_tac >> drule_all inline_caller_raw_phi_prefix >>
+  disch_then (qspecl_then [`ret`, `p`, `callee`] strip_assume_tac) >>
+  drule inline_final_lookup_fields >>
+  disch_then (qspecl_then [`rb`, `lbl`, `ret`] strip_assume_tac) >>
+  qexists `tb` >> simp[] >>
+  drule inline_fields_phi_prefix_contents >>
+  Cases_on `MEM bb.bb_label (bb_succs rb)` >> gvs[] >>
+  simp[inline_phi_prefix_repair_contents]
+QED
