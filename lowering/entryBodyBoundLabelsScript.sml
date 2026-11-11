@@ -21,7 +21,8 @@ Proof
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[comp_return_def] >>
   rename1 `SOME loc` >> Cases_on `var_location_decode_operand loc` >>
   simp[comp_return_def, bound_labels_emit_void] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+    compile_abi_arg_ptr_guard_def, comp_return_def,
     cj 1 bound_labels_abi_decode]), gen_tac, strip_tac,
     irule bound_labels_bind, irule bound_labels_ignore_bind, conj_tac])
 QED

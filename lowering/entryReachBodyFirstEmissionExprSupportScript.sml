@@ -185,54 +185,6 @@ Proof
   simp[comp_return_def, cs_extends_refl]
 QED
 
-Theorem first_emission_subscript:
-  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
-  !a x b. compile_subscript cfn ce rt ty base_e idx_e a = (x,b) ==>
-  cs_extends a b /\
-  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-    a.cs_current_insts = b.cs_current_insts) \/
-   (!fn. fn_has_code a b fn ==> ?bb i.
-     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  strip_tac >> rewrite_tac[compile_subscript_def] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- metis_tac[] >>
-  gen_tac >> Cases_on `place_type ce base_e` >>
-  FIRST [rename1 `ValPT bt` >> Cases_on `bt`, all_tac] >>
-  simp_tac (srw_ss()) [LET_THM, compile_tuple_subscript_def]
-  >>~- ([`emit_op ADD`],
-    ho_match_mp_tac first_emission_strong >>
-    ho_match_mp_tac first_emission_strong_bind >> conj_tac
-    >- (rpt strip_tac >> drule_at Any
-         (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
-    simp[comp_return_def, cs_extends_refl]) >>
-  (ho_match_mp_tac first_emission_bind >>
-   (conj_tac
-    >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
-    gen_tac))
-  >~ [`compile_keccak256_key`]
-  >- (ho_match_mp_tac first_emission_bind >> conj_tac
-      >- (IF_CASES_TAC >> simp[] >> rpt strip_tac >>
-          metis_tac[first_emission_return, first_emission_keccak256_key]) >>
-      gen_tac >> ho_match_mp_tac first_emission_strong >>
-      ho_match_mp_tac first_emission_strong_bind >> conj_tac
-      >- metis_tac[first_emission_mapping_subscript] >>
-      simp[comp_return_def, cs_extends_refl]) >>
-  ho_match_mp_tac first_emission_strong >>
-  ho_match_mp_tac first_emission_strong_bind >>
-  (conj_tac
-   >- (ho_match_mp_tac first_emission_array_subscript >>
-       metis_tac[first_emission_ptr_load]) >>
-   simp[comp_return_def, cs_extends_refl])
-QED
-
 Theorem first_emission_multi_vvs:
   !es ce.
   (!e a x b. MEM e es /\ cfn ce (expr_type e) e a = (x,b) ==>
@@ -352,6 +304,56 @@ Proof
       >- metis_tac[first_emission_materialize_vv] >>
       metis_tac[first_emission_return]) >>
   metis_tac[first_emission_return]
+QED
+
+Theorem first_emission_subscript:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_subscript cfn ce rt ty base_e idx_e a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rewrite_tac[compile_subscript_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (IF_CASES_TAC >> metis_tac[first_emission_return, first_emission_snapshot_vv]) >>
+  gen_tac >> Cases_on `place_type ce base_e` >>
+  FIRST [rename1 `ValPT bt` >> Cases_on `bt`, all_tac] >>
+  simp_tac (srw_ss()) [LET_THM, compile_tuple_subscript_def]
+  >>~- ([`emit_op ADD`],
+    ho_match_mp_tac first_emission_strong >>
+    ho_match_mp_tac first_emission_strong_bind >> conj_tac
+    >- (rpt strip_tac >> drule_at Any
+         (CONJUNCT2 (CONJUNCT2 first_emission_emit_helpers)) >> simp[]) >>
+    simp[comp_return_def, cs_extends_refl]) >>
+  (ho_match_mp_tac first_emission_bind >>
+   (conj_tac
+    >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+    gen_tac))
+  >~ [`compile_keccak256_key`]
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (IF_CASES_TAC >> simp[] >> rpt strip_tac >>
+          metis_tac[first_emission_return, first_emission_keccak256_key]) >>
+      gen_tac >> ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- metis_tac[first_emission_mapping_subscript] >>
+      simp[comp_return_def, cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >>
+  (conj_tac
+   >- (ho_match_mp_tac first_emission_array_subscript >>
+       metis_tac[first_emission_ptr_load]) >>
+   simp[comp_return_def, cs_extends_refl])
 QED
 
 Theorem first_emission_ext_call_kwarg:
