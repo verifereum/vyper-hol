@@ -37,12 +37,6 @@ Ancestors
 
 (* ===== Side conditions ===== *)
 
-(* A program without immutable declarations. *)
-Definition immutable_free_program_def:
-  immutable_free_program tops <=>
-    EVERY (\top. case top of VariableDecl _ Immutable _ _ _ => F | _ => T) tops
-End
-
 (* How many arguments the builtin dispatchers read by position (HD, EL n).
    Fewer leaves HD [] for compile_expr, an unspecified expression. *)
 Definition builtin_arity_def:

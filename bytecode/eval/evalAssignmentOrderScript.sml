@@ -107,41 +107,6 @@ Proof
   EVAL_TAC
 QED
 
-Theorem nested_tuple_lowering_remains_excluded:
-  ~supported_stmt tops bindings
-    (Assign (TupleTarget [TupleTarget targets]) rhs)
-Proof
-  simp[supported_stmt_def, supported_assignment_def]
-QED
-
-Theorem nested_pop_key_rejected[local]:
-  ~supported_expr tops
-    (Builtin ty (Bop Add) (Pop pty target :: rest))
-Proof
-  simp[supportedExprsTheory.supported_expr_def,
-       supportedExprsTheory.supported_pure_expr_def,
-       supportedExprsTheory.supported_effect_expr_def]
-QED
-
-Theorem nested_pop_assignment_rejected[local]:
-  ~supported_stmt tops bindings
-    (Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget id)
-      (Builtin ty (Bop Add) (Pop pty target :: rest)))) rhs)
-Proof
-  simp[supported_stmt_def, supported_assignment_def, supported_target_def,
-       supportedTargetsTheory.supported_target_info_def, nested_pop_key_rejected]
-QED
-
-Theorem nested_pop_compiler_form_remains_excluded:
-  ~supported_program assign_nested_popped_read_source_program
-Proof
-  strip_tac >> drule supported_program_declaration >>
-  disch_then (qspec_then `EL 1 assign_nested_popped_read_source_program` mp_tac) >>
-  simp[DB.fetch "evalAssignmentOrder" "assign_nested_popped_read_source_program_def",
-       supported_declaration_body_def, supported_function_body_def,
-       supported_stmts_list, nested_pop_assignment_rejected]
-QED
-
 Theorem assignment_cont_pre[cv_pre]:
   cont_pre (eval_stmts_cps cx ss st DoneK)
 Proof

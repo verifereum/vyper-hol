@@ -2,7 +2,7 @@
  * compile_expr keeps its block open
  *
  * TOP-LEVEL:
- *   compile_expr_open_general — a supported expression that evaluates
+ *   compile_expr_open_general — a well-typed expression that evaluates
  *     compiles, at any annotated type, without terminating its block:
  *     bodySimStmtCases's compile_expr_open
  *   supported_immutable_bound — a supported immutable is bound
@@ -17,6 +17,9 @@ Ancestors
   bodySim  supportedExprs supportedExprForms supportedTypes
   exprLowering exprCallBounds compileEnv vyperAST vyperTypeSystem list
   supportedDecls vyperTypeInvariants
+  whitelistExprOpen whitelistCheckerTypes exprSimTopLevelProps
+  vyperTypeGlobalLookupSoundness allocLimits supportedExprTraverse
+  vyperInterpreter vyperState
 
 Theorem supported_variable_decl_mem[local]:
   !tops src id vis mut ty slot.
@@ -55,7 +58,7 @@ QED
 
 Theorem compile_expr_open_general:
   !e tops ctx cenv cx env es tv es1 aty sa vv sb.
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx env e es /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     eval_expr cx e es = (INL tv,es1) /\
@@ -76,7 +79,7 @@ Proof
         simp[Once compile_expr_def] >> strip_tac >>
         drule_all compile_literal_vv_open >> simp[])
   >~ [`compile_expr _ _ (FlagMember _ _ _) _ = _`]
-    >- gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+    >- metis_tac[compile_flag_member_open]
   >~ [`compile_expr _ _ (Builtin _ _ _) _ = _`] >- suspend "builtin"
   >~ [`compile_expr _ _ (TypeBuiltin _ _ _ _) _ = _`] >- suspend "type_builtin" >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
@@ -93,28 +96,43 @@ Proof
     >- (simp[compile_expr_body_def] >> metis_tac[compile_subscript_open])
   >~ [`compile_expr_body _ _ _ _ _ (Attribute _ _ _) _ = _`]
     >- (simp[compile_expr_body_def] >> metis_tac[compile_attribute_open]) >>
-  simp[compile_expr_body_def] >> metis_tac[compile_supported_call_open]
+  simp[compile_expr_body_def] >> strip_tac >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
+  fs[expr_body_pre_def, expr_has_evm_run_thm] >>
+  metis_tac[compile_call_open]
 QED
 
 Resume compile_expr_open_general[toplevel]:
   rename1 `TopLevelName ann nsid` >>
-  Cases_on `supported_immutable_type tops nsid = SOME ann`
-  >- (qpat_x_assum `!y. _` kall_tac >>
-      `?off. FLOOKUP cenv.ce_module_vars nsid = SOME (ImmutableLoc off)` by
-        (gvs[expr_body_pre_def] >> metis_tac[supported_immutable_bound]) >>
-      qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
-      simp[compile_expr_def] >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!y. _` kall_tac >>
   PairCases_on `nsid` >>
-  irule compile_expr_toplevel_open >>
-  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-  gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-      body_inv_def] >>
-  qexistsl_tac [`cx`, `es`, `es1`, `tops`, `tv`] >> simp[]
+  `expr_sim_inv cenv cx env es /\
+   well_typed_expr env (TopLevelName ann (nsid0,nsid1))` by
+    fs[expr_body_pre_def] >>
+  Cases_on `get_module_code cx nsid0`
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, vyperStateTheory.lookup_global_def,
+           vyperStateTheory.bind_def, vyperStateTheory.lift_option_type_def,
+           vyperStateTheory.raise_def]) >>
+  rename1 `get_module_code cx nsid0 = SOME ts` >>
+  Cases_on `find_var_decl_by_name nsid1 ts`
+  >- (`FLOOKUP env.bare_globals (nsid0,nsid1) = SOME ann` by
+        (irule toplevel_find_NONE_bare_global >>
+         fs[expr_sim_inv_def] >> metis_tac[]) >>
+      `?off. FLOOKUP cenv.ce_module_vars (nsid0,nsid1) = SOME (ImmutableLoc off)` by
+        (fs[expr_sim_inv_def] >> metis_tac[]) >>
+      gvs[compile_expr_def]) >>
+  rename1 `find_var_decl_by_name nsid1 ts = SOME di` >> PairCases_on `di` >>
+  Cases_on `di0`
+  >~ [`HashMapVarDecl`]
+    >- (fs[expr_sim_inv_def] >>
+        metis_tac[TopLevelName_Type_HashMapVarDecl_impossible]) >>
+  drule_all eval_toplevel_decl_bound >> strip_tac >> gvs[compile_expr_def]
 QED
 
 Resume compile_expr_open_general[builtin]:
   rename1 `compile_expr cenv aty (Builtin ann bi args) sa = (vv,sb)` >>
-  `!arg rest. args = arg::rest ==>
+  `!arg rest. args = arg::rest /\ (!n. bi <> Slice n) ==>
      !cty v st. lower_value
        (expr_child_callback (list_size expr_size args) compile_expr)
        cenv cty arg sa = (v,st) ==> ~block_is_terminated st` by
@@ -124,14 +142,8 @@ Resume compile_expr_open_general[builtin]:
      rpt gen_tac >> strip_tac >>
      drule eval_builtin_head_success >> strip_tac >>
      drule expr_body_pre_builtin_head >>
-     impl_tac
-     >- (disj1_tac >> rpt strip_tac >>
-         gvs[supported_expr_def, supported_pure_expr_def,
-             supported_effect_expr_def, supported_builtin_form_def]) >>
+     impl_tac >- simp[] >>
      disch_tac >>
-     `supported_expr tops arg` by
-       gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-           supported_pure_exprs_every] >>
      qpat_x_assum `!y. expr_size y < _ ==> _` irule >>
      goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
      simp[expr_size_def] >> metis_tac[expr_list_member_bound, MEM]) >>
@@ -162,16 +174,14 @@ Resume compile_expr_open_general[type_builtin]:
   >~ [`AbiEncode`] >- metis_tac[compile_type_dispatch_abi_open]
   >~ [`AbiDecode`] >- metis_tac[compile_type_dispatch_abi_open]
   >~ [`Extract32`]
-    >- (Cases_on `args` >>
-        gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-            supported_type_builtin_form_def] >>
-        rename1 `TypeBuiltin _ _ _ (arg_e::rest)` >> Cases_on `rest` >>
-        gvs[supported_type_builtin_form_def]) >>
+    >- metis_tac[compile_extract32_open] >>
+  `LENGTH args = 1` by
+    (fs[expr_body_pre_def, well_typed_expr_def] >>
+     drule well_typed_type_builtin_args_arity >> simp[]) >>
   Cases_on `args` >>
-  gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-      supported_type_builtin_form_def, supported_pure_exprs_every] >>
+  gvs[] >>
   rename1 `TypeBuiltin _ _ _ (arg_e::rest)` >> Cases_on `rest` >>
-  gvs[supported_type_builtin_form_def] >>
+  gvs[] >>
   drule_at (Pat `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _`)
     compile_type_dispatch_convert_open >> disch_then irule >> simp[] >>
   rpt gen_tac >> strip_tac >>
@@ -181,13 +191,23 @@ Resume compile_expr_open_general[type_builtin]:
   drule expr_body_pre_type_builtin_head >> disch_tac >>
   qpat_x_assum `!y. expr_size y < _ ==> _` irule >>
   goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-  simp[expr_size_def, supported_expr_def] >> metis_tac[]
+  simp[expr_size_def] >> metis_tac[]
 QED
 
 Resume compile_expr_open_general[builtin_dispatch]:
-  `supported_builtin_form tops ann bi args` by
-    gvs[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def] >>
-  Cases_on `bi`
+  `well_typed_builtin_app ann bi (MAP expr_type args)` by
+    fs[expr_body_pre_def, well_typed_expr_def] >>
+  drule well_typed_builtin_app_arity >> disch_tac >>
+  Cases_on `bi` >> gvs[]
+  >~ [`Len`] >- metis_tac[compile_len_open]
+  >~ [`CalldataLen`] >- metis_tac[compile_calldatalen_open]
+  >~ [`Keccak256`] >- metis_tac[compile_keccak256_open]
+  >~ [`Sha256`] >- metis_tac[compile_sha256_open]
+  >~ [`Ceil`] >- metis_tac[compile_ceil_open]
+  >~ [`Floor`] >- metis_tac[compile_floor_open]
+  >~ [`MethodId`] >- metis_tac[compile_method_id_open]
+  >~ [`Concat`] >- metis_tac[compile_concat_open]
+  >~ [`Slice`] >- metis_tac[compile_slice_open]
   >~ [`Not`] >- metis_tac[compile_dispatch_not_open]
   >~ [`Neg`] >- metis_tac[compile_dispatch_terminal_open]
   >~ [`Abs`] >- metis_tac[compile_dispatch_terminal_open]
@@ -203,20 +223,28 @@ Resume compile_expr_open_general[builtin_dispatch]:
   >~ [`Uint2Str`] >- metis_tac[compile_dispatch_terminal_open]
   >~ [`CalldataSlice`] >- metis_tac[compile_dispatch_terminal_open]
   >~ [`MakeArray elem bound`]
-    >- (Cases_on `elem` >> gvs[supported_builtin_form_def] >>
+    >- (Cases_on `elem` >>
         drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
-          compile_dispatch_make_array_open >> simp[] >> metis_tac[]) >>
-  Cases_on `args` >> gvs[supported_builtin_form_def] >>
-  rename1 `compile_builtin_dispatch_body _ _ _ _ _ (arg_e::rest) _ = _` >>
-  Cases_on `rest` >> gvs[supported_builtin_form_def]
+          compile_dispatch_make_array_open >>
+        fs[well_typed_builtin_app_def, EVERY_MAP, EVERY_MEM] >> metis_tac[]) >>
+  gvs[LENGTH_EQ_NUM_compute]
   >~ [`Bop op`]
-    >- (rename1 `compile_builtin_dispatch_body _ _ _ _ _ (arg_e::arg2_e::rest) _ = _` >>
-        Cases_on `rest` >> gvs[supported_builtin_form_def] >>
-        metis_tac[compile_dispatch_bop_open])
+    >- (rename1 `compile_builtin_dispatch_body _ _ _ _ (Bop op) [arg_e;arg2_e] sa = (v,st)` >>
+        `op <> ExpMod` by
+          (strip_tac >> gvs[well_typed_builtin_app_def, well_typed_binop_def]) >>
+        gvs[SF ETA_ss] >>
+        qspecl_then
+          [`expr_child_callback (list_size expr_size [arg_e;arg2_e]) compile_expr`,
+           `cenv`, `ann`, `aty`, `op`, `arg_e`, `arg2_e`, `sa`, `v`, `st`]
+          mp_tac compile_dispatch_bop_open >>
+        simp[expr_size_def, SF ETA_ss] >> disch_then irule >> strip_tac >>
+        first_assum (qspec_then `expr_type arg_e` mp_tac) >> simp[])
   >~ [`AsWeiValue`]
     >- (drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
           compile_dispatch_as_wei_value_open >> simp[] >>
         disch_then irule >> rpt strip_tac >> gvs[SF ETA_ss] >> metis_tac[]) >>
+  rename1 `compile_builtin_dispatch_body _ _ _ _ (Acc item) _ _ = _` >>
+  `item <> Code` by fs[expr_body_pre_def, alloc_limits_expr_def] >>
   drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
     compile_dispatch_acc_open >> simp[] >> disch_then irule >>
   rpt strip_tac >> gvs[SF ETA_ss] >> metis_tac[]
