@@ -195,8 +195,8 @@ Proof
 QED
 
 Theorem lowered_value_type_memory_bound:
-  !cenv e env tops.
-    supported_expr tops e /\ well_typed_expr env e /\
+  !cenv e env.
+    well_typed_expr env e /\
     (lowered_value_type cenv e = expr_type e \/
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\
@@ -215,8 +215,8 @@ Proof
 QED
 
 Theorem memory_rhs_destination_bound:
-  !cenv e env tops ty tenv.
-    supported_expr tops e /\ well_typed_expr env e /\
+  !cenv e env ty tenv.
+    well_typed_expr env e /\
     type_widens_to tenv (expr_type e) ty /\
     (expr_type e = ty \/ is_bytestring_type ty) /\
     0 < type_memory_bytes cenv ty /\

@@ -2,7 +2,7 @@
 Theory fmpStepShape
 Ancestors
   fmpStepStructural fmpStepLayout fmpStepOpaque fmpStepRestrictions
-  fmpStepCallChecks fmpStepRetpcShape
+  fmpStepRetpcShape
   fmpLowerProps fmpWfDefs venomWf venomInst unitShapeDefs o1PassContract
   venomFnScheduleRunner irSupply list rich_list
 
@@ -31,7 +31,6 @@ Theorem fmp_lower_function_fn_shape_ok:
   ir_supply_inst_ok s /\ ir_supply_covers_fn s fn ==> fn_shape_ok fn'
 Proof
   strip_tac >>
-  drule_all fmp_lower_function_call_checks_ok >> strip_tac >>
   drule_all fmp_lower_function_opaque_use_ok >> strip_tac >>
   drule_all fmp_lower_function_retpc_shape_ok >> strip_tac >>
   drule fmp_lower_function_preserves_nonfmp_metadata >> strip_tac >>

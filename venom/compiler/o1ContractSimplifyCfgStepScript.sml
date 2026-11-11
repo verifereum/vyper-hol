@@ -11,7 +11,7 @@
  *)
 Theory o1ContractSimplifyCfgStep
 Ancestors
-  o1PassContract simplifyCfgCorrectness simplifyCfgCallChecks simplifyCfgLabelProps
+  o1PassContract simplifyCfgCorrectness simplifyCfgLabelProps
   simplifyCfgDefs simplifyCfgInvariant simplifyCfgCollapseShape simplifyCfgRetpc
   simplifyCfgOpaque unitShapeDefs cfgTransform venomPassDispatcher venomWf
   venomInst list
@@ -149,9 +149,6 @@ Proof
       Cases_on `f.fn_blocks` >> gvs[]) >>
   `EVERY (\bb. ~reserved_label bb.bb_label) f.fn_blocks` by
     gvs[o1_fn_shape_def, fn_shape_ok_def] >>
-  `call_checks_ok (FST (simplify_cfg_fn_with_labels f))` by
-    (rewrite_tac[GSYM simplify_cfg_fn_def] >>
-     irule simplify_cfg_call_checks_ok >> gvs[o1_fn_shape_def]) >>
   `retpc_shape_ok (FST (simplify_cfg_fn_with_labels f))` by
     (rewrite_tac[GSYM simplify_cfg_fn_def] >>
      irule simplify_cfg_retpc_shape_ok >> gvs[o1_fn_shape_def]) >>

@@ -1,8 +1,8 @@
 (* The shape facts the per-function simulation proof threads through each
-   rewrite step: fn_shape_ok without its call-check and return-PC
+   rewrite step: fn_shape_ok without its return-PC
    conjuncts, inst_shape_ok without its PHI arity conjunct, and
    label_positions_ok without distinct JNZ targets.  The whole pass is shown
-   to keep those separately (simplifyCfgCallChecks, simplifyCfgPhi2,
+   to keep those separately (simplifyCfgPhi2,
    simplifyCfgJnzdist, o1ContractSimplifyCfgStep); an intermediate step
    need not. *)
 Theory simplifyCfgShapeCore

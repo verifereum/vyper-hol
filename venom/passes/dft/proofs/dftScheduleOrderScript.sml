@@ -25,6 +25,7 @@
  *)
 Theory dftScheduleOrder
 Ancestors
+  sorting finite_map relation
   dftCorrectness dftStructural dftDefs dftTopoSort dftWf dftIdempotent passSharedDefs venomWf venomInst venomEffects list rich_list
 
 (* a comes before b in the list l. *)
@@ -1594,4 +1595,275 @@ Proof
   simp[dft_fn_def, LET_THM] >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> simp[] >>
   irule funpow_dft_loop_block_rel >> simp[]
+QED
+
+Theorem from_block_nonflippable_identity:
+  !bi x y.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    from_block bi x /\ MEM y bi /\
+    x.inst_id = y.inst_id /\ ~is_flippable y.inst_opcode ==>
+    x = y
+Proof
+  rpt strip_tac >>
+  gvs[from_block_def] >>
+  `j = y` by
+    metis_tac[flip_operands_inst_id, all_distinct_map_mem_inj] >>
+  gvs[]
+QED
+
+Theorem dft_block_schedule_order:
+  !bb order.
+    bb_well_formed bb /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+    non_pseudo_defs_before_uses bb.bb_instructions ==>
+    output_producer_before bb.bb_instructions
+      (FILTER (\i. ~is_pseudo i.inst_opcode)
+        (dft_block order bb).bb_instructions) /\
+    output_eda_before (build_eda bb.bb_instructions)
+      (FILTER (\i. ~is_pseudo i.inst_opcode)
+        (dft_block order bb).bb_instructions)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `bi = bb.bb_instructions` >>
+  `eda_wf (dft_eda bi) bi` by simp[dft_eda_wf] >>
+  `np_defs_before_uses bi /\ bi <> [] /\
+   is_terminator (LAST bi).inst_opcode /\
+   (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
+        k = PRE (LENGTH bi))` by
+    gvs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`] >>
+  `eda_topo_compatible bi (dft_eda bi) order` by
+    (irule eda_topo_compatible_dft_eda >> simp[Abbr `bi`]) >>
+  qabbrev_tac `entries = entry_instructions bi order (dft_eda bi)` >>
+  qabbrev_tac `sched = schedule_from_entries bi order (dft_eda bi)
+    (build_offspring_map bi order) entries` >>
+  `EVERY (\i. MEM i bi) entries` by simp[Abbr `entries`, entry_instructions_mem] >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) sched` by
+    (simp[EVERY_MEM, Abbr `sched`] >> rpt strip_tac >>
+     metis_tac[schedule_output_from_block]) >>
+  `FILTER (\i. ~is_pseudo i.inst_opcode)
+     (dft_block order bb).bb_instructions = sched` by
+    (simp[dft_block_def, LET_THM, Abbr `sched`, Abbr `entries`, Abbr `bi`,
+          FILTER_APPEND_DISTRIB, FILTER_FILTER] >>
+     simp[FILTER_EQ_ID]) >>
+  simp[] >>
+  conj_tac >> simp[Abbr `sched`]
+  >- metis_tac[schedule_output_producer_before] >>
+  irule output_eda_before_dft_eda >>
+  metis_tac[schedule_output_eda_before]
+QED
+
+Theorem dft_block_nonflippable_mem:
+  !bb order i.
+    bb_well_formed bb /\
+    ALL_DISTINCT (MAP (\j. j.inst_id) bb.bb_instructions) /\
+    non_pseudo_defs_before_uses bb.bb_instructions /\
+    MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
+    ~is_flippable i.inst_opcode ==>
+    MEM i (dft_block order bb).bb_instructions
+Proof
+  rpt strip_tac >>
+  drule_all dft_block_perm_ids >>
+  disch_then (qspec_then `order` assume_tac) >>
+  `MEM i.inst_id (MAP (\j. j.inst_id)
+    (FILTER (\j. ~is_pseudo j.inst_opcode)
+       (dft_block order bb).bb_instructions))` by
+    (drule PERM_MEM_EQ >> disch_then (qspec_then `i.inst_id` mp_tac) >>
+     simp[MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  gvs[MEM_MAP, MEM_FILTER] >>
+  rename1 `MEM j (dft_block order bb).bb_instructions` >>
+  `from_block bb.bb_instructions j` by
+    (irule dft_block_from_orig >> simp[MEM_FILTER] >> metis_tac[]) >>
+  `j = i` by metis_tac[from_block_nonflippable_identity] >>
+  gvs[]
+QED
+
+Theorem nonterminator_deps_backward:
+  !bi order inst dep.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    non_pseudo_defs_before_uses bi /\ MEM inst bi /\
+    ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
+    MEM dep (inst_all_deps bi order (build_eda bi) inst) ==>
+    ?i j. i < j /\ j < LENGTH bi /\ i < LENGTH bi /\
+          EL i bi = dep /\ EL j bi = inst
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM dep (inst_all_deps _ _ _ _)` mp_tac >>
+  simp[inst_all_deps_def, inst_data_deps_def,
+       passSharedDefsTheory.MEM_nub_first] >> strip_tac
+  >- (gvs[MEM_MAP, MEM_FILTER, optionTheory.IS_SOME_EXISTS] >>
+      rename1 `operand_producer bi op = SOME dep` >>
+      Cases_on `op` >> gvs[operand_producer_def] >>
+      `?j. j < LENGTH bi /\ EL j bi = inst` by metis_tac[MEM_EL] >>
+      qpat_x_assum `non_pseudo_defs_before_uses _` mp_tac >>
+      rewrite_tac[non_pseudo_defs_before_uses_def, np_defs_before_uses_def] >>
+      disch_then (qspecl_then [`j`, `s`, `dep`] mp_tac) >> simp[] >>
+      strip_tac >> qexistsl [`i`, `j`] >> simp[]) >>
+  Cases_on `FLOOKUP (build_eda bi) inst.inst_id` >> gvs[] >>
+  `~is_pseudo dep.inst_opcode` by
+    metis_tac[build_eda_wf, eda_wf_def] >>
+  metis_tac[eda_deps_backward_plain]
+QED
+
+Theorem nonterminator_dft_eda_deps_backward:
+  !bi order inst dep.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    non_pseudo_defs_before_uses bi /\ MEM inst bi /\
+    ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
+    MEM dep (inst_all_deps bi order (dft_eda bi) inst) ==>
+    ?i j. i < j /\ j < LENGTH bi /\ i < LENGTH bi /\
+          EL i bi = dep /\ EL j bi = inst
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM dep (inst_all_deps _ _ _ _)` mp_tac >>
+  simp[inst_all_deps_def, inst_data_deps_def,
+       passSharedDefsTheory.MEM_nub_first] >> strip_tac
+  >- (gvs[MEM_MAP, MEM_FILTER, optionTheory.IS_SOME_EXISTS] >>
+      rename1 `operand_producer bi op = SOME dep` >>
+      Cases_on `op` >> gvs[operand_producer_def] >>
+      `?j. j < LENGTH bi /\ EL j bi = inst` by metis_tac[MEM_EL] >>
+      qpat_x_assum `non_pseudo_defs_before_uses _` mp_tac >>
+      rewrite_tac[non_pseudo_defs_before_uses_def, np_defs_before_uses_def] >>
+      disch_then (qspecl_then [`j`, `s`, `dep`] mp_tac) >> simp[] >>
+      strip_tac >> qexistsl [`i`, `j`] >> simp[]) >>
+  Cases_on `FLOOKUP (dft_eda bi) inst.inst_id` >> gvs[] >>
+  `~is_pseudo dep.inst_opcode` by
+    metis_tac[dft_eda_wf, eda_wf_def] >>
+  metis_tac[dft_eda_deps_backward]
+QED
+
+Theorem output_producer_before_filter_position:
+  !bi dst P k v p.
+    output_producer_before bi (FILTER P dst) /\
+    k < LENGTH dst /\ P (EL k dst) /\
+    MEM (Var v) (EL k dst).inst_operands /\
+    producing_inst bi v = SOME p /\ ~is_pseudo p.inst_opcode ==>
+    ?m. m < k /\ P (EL m dst) /\ (EL m dst).inst_id = p.inst_id
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `pre = FILTER P (TAKE k dst)` >>
+  qabbrev_tac `post = FILTER P (DROP (SUC k) dst)` >>
+  `FILTER P dst = pre ++ EL k dst::post` by
+    (qspec_then `k` (qspec_then `dst` mp_tac) TAKE_DROP_SUC >>
+     simp[] >> disch_then (fn th =>
+       GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [GSYM th]) >>
+     simp[FILTER_APPEND, Abbr `pre`, Abbr `post`]) >>
+  `?j. j < LENGTH pre /\ (EL j pre).inst_id = p.inst_id` by
+    (qpat_x_assum `output_producer_before _ _` mp_tac >>
+     simp[output_producer_before_def] >> strip_tac >>
+     first_x_assum (qspecl_then [`LENGTH pre`, `v`, `p`] mp_tac) >>
+     simp[EL_APPEND1, EL_APPEND2] >> strip_tac >>
+     qexists_tac `m` >> gvs[EL_APPEND1]) >>
+  `MEM (EL j pre) (TAKE k dst) /\ P (EL j pre)` by
+    (metis_tac[MEM_EL, MEM_FILTER]) >>
+  qpat_x_assum `MEM _ (TAKE _ _)` mp_tac >>
+  rewrite_tac[MEM_EL] >> strip_tac >>
+  qexists_tac `n` >> gvs[EL_TAKE, Abbr `pre`]
+QED
+
+Theorem dft_block_producer_position:
+  !bb order p v k.
+    bb_well_formed bb /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+    non_pseudo_defs_before_uses bb.bb_instructions /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) /\
+    MEM p bb.bb_instructions /\ ~is_pseudo p.inst_opcode /\
+    MEM v p.inst_outputs /\
+    k < LENGTH (dft_block order bb).bb_instructions /\
+    ~is_pseudo (EL k (dft_block order bb).bb_instructions).inst_opcode /\
+    MEM (Var v) (EL k (dft_block order bb).bb_instructions).inst_operands ==>
+    ?m. m < k /\
+      ~is_pseudo (EL m (dft_block order bb).bb_instructions).inst_opcode /\
+      (EL m (dft_block order bb).bb_instructions).inst_id = p.inst_id
+Proof
+  rpt gen_tac >> strip_tac >>
+  `producing_inst bb.bb_instructions v = SOME p` by
+    (irule producing_inst_distinct_outputs >> simp[]) >>
+  drule_all dft_block_schedule_order >>
+  disch_then (qspec_then `order` strip_assume_tac) >>
+  drule output_producer_before_filter_position >>
+  disch_then (qspecl_then [`k`, `v`, `p`] mp_tac) >> simp[]
+QED
+
+Theorem dft_block_producer_position_identity:
+  !bb order p v k.
+    bb_well_formed bb /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+    non_pseudo_defs_before_uses bb.bb_instructions /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) /\
+    MEM p bb.bb_instructions /\ ~is_pseudo p.inst_opcode /\
+    ~is_flippable p.inst_opcode /\ MEM v p.inst_outputs /\
+    k < LENGTH (dft_block order bb).bb_instructions /\
+    ~is_pseudo (EL k (dft_block order bb).bb_instructions).inst_opcode /\
+    MEM (Var v) (EL k (dft_block order bb).bb_instructions).inst_operands ==>
+    ?m. m < k /\ EL m (dft_block order bb).bb_instructions = p
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dft_block_producer_position >> strip_tac >>
+  qexists_tac `m` >> simp[] >>
+  irule from_block_nonflippable_identity >> simp[] >>
+  qexists_tac `bb.bb_instructions` >> simp[] >>
+  irule dft_block_from_orig >> simp[MEM_FILTER] >>
+  qexists_tac `order` >> simp[] >>
+  irule EL_MEM >> decide_tac
+QED
+
+Theorem dft_block_outputs_perm:
+  !bb order.
+    bb_well_formed bb /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+    non_pseudo_defs_before_uses bb.bb_instructions ==>
+    PERM (MAP (\i. i.inst_outputs) bb.bb_instructions)
+      (MAP (\i. i.inst_outputs) (dft_block order bb).bb_instructions)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `PERM
+    (MAP (\i. i.inst_outputs) (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions))
+    (MAP (\i. i.inst_outputs) (FILTER (\i. ~is_pseudo i.inst_opcode)
+       (dft_block order bb).bb_instructions))` by
+    (irule dftHelpersTheory.PERM_TRANSFER_inst_id_inst_outputs >>
+     simp[all_distinct_map_filter] >> reverse conj_tac
+     >- metis_tac[dft_block_perm_ids, PERM_SYM] >>
+     rpt gen_tac >> strip_tac >>
+     irule from_block_same_inst_id_outputs_filtered_local >> simp[] >>
+     qexists_tac `bb.bb_instructions` >>
+     gvs[MEM_FILTER, all_distinct_map_filter] >>
+     conj_tac
+     >- (simp[from_block_def] >> metis_tac[]) >>
+     irule dft_block_from_orig >> simp[MEM_FILTER] >> metis_tac[]) >>
+  `PERM bb.bb_instructions
+    (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++
+     FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions)` by
+    metis_tac[PERM_SPLIT] >>
+  `PERM (dft_block order bb).bb_instructions
+    (FILTER (\i. is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions ++
+     FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions)` by
+    metis_tac[PERM_SPLIT] >>
+  drule (Q.ISPEC `\i:instruction. i.inst_outputs` PERM_MAP) >>
+  strip_tac >>
+  qpat_x_assum `PERM bb.bb_instructions _`
+    (mp_tac o MATCH_MP (Q.ISPEC `\i:instruction. i.inst_outputs` PERM_MAP)) >>
+  simp[MAP_APPEND, dft_block_phis] >>
+  strip_tac >> fs[MAP_APPEND, dft_block_phis] >>
+  `PERM
+    (MAP (\i. i.inst_outputs) (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) ++
+     MAP (\i. i.inst_outputs) (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions))
+    (MAP (\i. i.inst_outputs) (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) ++
+     MAP (\i. i.inst_outputs) (FILTER (\i. ~is_pseudo i.inst_opcode)
+       (dft_block order bb).bb_instructions))` by
+    (irule PERM_CONG >> simp[]) >>
+  metis_tac[PERM_TRANS, PERM_SYM]
+QED
+
+Theorem dft_block_outputs_distinct:
+  !bb order.
+    bb_well_formed bb /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+    non_pseudo_defs_before_uses bb.bb_instructions /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs)
+      (dft_block order bb).bb_instructions))
+Proof
+  rpt strip_tac >> drule_all dft_block_outputs_perm >>
+  disch_then (qspec_then `order` mp_tac) >>
+  metis_tac[PERM_FLAT, ALL_DISTINCT_PERM]
 QED
