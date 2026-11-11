@@ -12,7 +12,7 @@ Ancestors
   bodyIntCallFamCallIntEntrySource bodyIntCallFamCallIntEntryFrame
   bodyIntCallFamCallIntEntryPackage bodyIntCallFamCallIntEntryLookup
   bodyIntCallFamCallIntEntryRuntimeCode bodyIntCallFamCallIntEntryDeployCode
-  bodyIntCallFamCallIntEntryFunctionCode
+  bodyIntCallFamCallIntEntryFunctionCode bodyIntCallFamCallIntEntryCalleeCode
 Libs
   monadsyntax
 
