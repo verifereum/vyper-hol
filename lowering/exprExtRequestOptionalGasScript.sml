@@ -1,8 +1,8 @@
 Theory exprExtRequestOptionalGas
 Ancestors
   exprExtRequestHistory exprExtRequestSourceProbe exprExtRequestReadProbe exprSafeOperand
-  exprSimHash exprSimWordArgs exprLoweringProps emitHelperProps emitHelper
-  venomState venomInst venomInstProofs venomExecSemantics compileEnv
+  exprSimHash exprSimHashBoundary exprSimWordArgs exprLoweringProps emitHelperProps emitHelper
+  venomState venomInst venomInstProofs venomExecSemantics compileEnv loweringStateRelDefs
   loweringPosts fragExec list rich_list arithmetic finite_map
 
 Theorem extrequest_optional_gas_run:
