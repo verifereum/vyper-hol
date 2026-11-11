@@ -3,7 +3,7 @@ Theory bodyIntCallEncoderCountedLeaves
 Ancestors
   bodyIntCallDecoderCountedPrimitive abiEncoderSequence abiScratchLeafEffect
   abiScratchEncoderContract abiDecoderContract abiDecoderAllocation abiDecoderLoop
-  abiEncoderReentryLeaves abiEncoderBytes abiEncoderBytesCode abiEncoderLeafCode abiEncoderAdmissible
+  abiEncoderReentryLeaves abiEncoderLeafGlobals abiEncoderBytes abiEncoderBytesCode abiEncoderLeafCode abiEncoderAdmissible
   compileEnv emitHelperProps exprLoweringProps fragExec fragGasPath entrySinkExtraction
   venomState venomExecSemantics venomInst instIdxIndep valueEncoding contractABI
   words list rich_list
@@ -54,6 +54,8 @@ Proof
   `abi_encoder_static_leaf AbiPrimWord` by simp[abi_encoder_static_leaf_def] >>
   drule_all abi_encode_static_leaf_shape >> strip_tac >>
   drule_all abi_encoder_word_input_reentry >> strip_tac >>
+  drule abi_encoder_word_global_code >> strip_tac >>
+  drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
   irule intcall_encoder_sequence_counted >> simp[] >>
   simp[abi_encoder_sequence_post_def]
 QED
@@ -78,6 +80,8 @@ Proof
   `abi_encoder_static_leaf (AbiCopy sz)` by simp[abi_encoder_static_leaf_def] >>
   drule_all abi_encode_static_leaf_shape >> strip_tac >>
   drule_all abi_encoder_copy_input_reentry >> strip_tac >>
+  drule abi_encoder_copy_global_code >> strip_tac >>
+  drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
   irule intcall_encoder_sequence_counted >> simp[] >>
   simp[abi_encoder_sequence_post_def]
 QED
@@ -105,6 +109,8 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st st')` by fs[EVERY_MEM] >>
   drule_all abi_encoder_bytes_sequence >> strip_tac >>
+  drule abi_encoder_bytes_global_code >> strip_tac >>
+  drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
   irule intcall_encoder_sequence_counted >> simp[] >>
   simp[abi_encoder_sequence_post_def]
 QED
