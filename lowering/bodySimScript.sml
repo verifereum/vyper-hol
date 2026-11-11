@@ -286,6 +286,7 @@ Definition body_stmt_ok_def:
   body_stmt_ok cx s <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+      body_stmt_safe tops s /\
       (!target. supported_stmt_expr_exists
          (expr_abi_decode_target_root target) s ==>
          occurs_abi_decode_target target tops) /\
@@ -302,6 +303,7 @@ Definition body_stmts_ok_def:
   body_stmts_ok cx ss <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+      body_stmts_safe tops ss /\
       (!target. supported_stmts_expr_exists
          (expr_abi_decode_target_root target) ss ==>
          occurs_abi_decode_target target tops) /\

@@ -118,7 +118,7 @@ Theorem body_assert_case:
     (ak = AssertBare \/ ak = AssertUnreachable) /\ body_expr_ok cx e ==>
     body_stmt_ok cx (Assert e ak)
 Proof
-  rw[body_stmt_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   `supported_expr tops e` by gvs[supported_stmt_def, supported_expr_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
@@ -141,13 +141,13 @@ QED
 Theorem body_pass_case:
   !cx. body_stmt_ok cx Pass
 Proof
-  rw[body_stmt_ok_def, compile_pass_frag]
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff, compile_pass_frag]
 QED
 
 Theorem body_continue_case:
   !cx. body_stmt_ok cx Continue
 Proof
-  rw[body_stmt_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   Cases_on `lctx`
   >- simp[stmt_frag_def, stmt_framed_frag_def, gasContextTheory.gas_admissible_def,
           Once evaluate_def, raise_def, stmt_res_ok_def] >>
@@ -157,7 +157,7 @@ QED
 Theorem body_break_case:
   !cx. body_stmt_ok cx Break
 Proof
-  rw[body_stmt_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   Cases_on `lctx`
   >- simp[stmt_frag_def, stmt_framed_frag_def, gasContextTheory.gas_admissible_def,
           Once evaluate_def, raise_def, stmt_res_ok_def] >>
@@ -168,7 +168,7 @@ QED
 Theorem body_return_none_case:
   !cx. body_stmt_ok cx (Return NONE)
 Proof
-  rw[body_stmt_ok_def, frame_ret_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff, frame_ret_ok_def] >>
   first_x_assum irule >> simp[same_frame_refl] >>
   qexists_tac `env` >> simp[]
 QED
@@ -176,7 +176,7 @@ QED
 Theorem body_return_case:
   !cx e. body_expr_ok cx e ==> body_stmt_ok cx (Return (SOME e))
 Proof
-  rw[body_stmt_ok_def, frame_ret_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff, frame_ret_ok_def] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
@@ -288,7 +288,7 @@ QED
 Theorem body_raise_reason_case:
   !cx e. body_expr_ok cx e ==> body_stmt_ok cx (Raise (RaiseReason e))
 Proof
-  rw[body_stmt_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
   >- (gvs[] >> irule compile_raise_reason_lit_frag >> simp[]) >>
   `supported_string_reason tops e` by
@@ -383,7 +383,7 @@ Theorem body_assert_reason_case:
     body_expr_ok cx e ==>
     body_stmt_ok cx (Assert e (AssertReason se))
 Proof
-  rw[body_stmt_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   `supported_pure_expr tops e /\ supported_string_reason tops se` by
     gvs[supported_stmt_def, supported_assert_reason_def] >>
   `expr_type e = BaseT BoolT /\ well_typed_expr env e /\
@@ -448,7 +448,7 @@ Theorem body_append_storage_other:
     body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `nid` >>
-  rw[body_stmt_ok_def, supported_stmt_def, supported_append_target_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff, supported_stmt_def, supported_append_target_def] >>
   irule body_append_storage_fragment >> metis_tac[supported_expr_def]
 QED
 
@@ -463,7 +463,7 @@ Proof
   rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
   >- (gvs[] >> irule body_append_storage_other >> first_assum ACCEPT_TAC) >>
   Cases_on `t` >> gvs[] >>
-  rw[body_stmt_ok_def, supported_stmt_def, supported_append_target_def]
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff, supported_stmt_def, supported_append_target_def]
 QED
 
 (* ===== Assignments ===== *)
@@ -1386,7 +1386,7 @@ Theorem body_assign_case:
     body_expr_ok cx e ==>
     body_stmt_ok cx (Assign (BaseTarget t) e)
 Proof
-  rw[body_stmt_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   `supported_expr tops e` by
     gvs[supported_stmt_def, supported_assignment_def] >>
   Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
@@ -1976,7 +1976,7 @@ Theorem body_assign_tuple_case:
        body_tuple_target_ok cx (TupleTarget gs) v) /\ body_expr_ok cx e ==>
     body_stmt_ok cx (Assign (TupleTarget gs) e)
 Proof
-  rw[body_stmt_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   `supported_expr tops e` by
     gvs[supported_stmt_def, supported_assignment_def] >>
   reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
@@ -2341,7 +2341,7 @@ Theorem body_augassign_case:
        body_expr_ok cx e) /\ body_base_target_ok cx t ==>
     body_stmt_ok cx (AugAssign ty t bop e)
 Proof
-  rw[body_stmt_ok_def] >>
+  rw[body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
   Cases_on `?id. t = NameTarget id`
   >- (gvs[] >> irule body_augassign_local >> metis_tac[]) >>
@@ -2370,7 +2370,7 @@ Theorem body_if_case:
        body_stmts_ok cx ss2) /\ body_expr_ok cx e ==>
     body_stmt_ok cx (If e ss1 ss2)
 Proof
-  rpt gen_tac >> strip_tac >> simp[Once body_stmt_ok_def] >>
+  rpt gen_tac >> strip_tac >> simp[Once body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   rpt gen_tac >> strip_tac >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       stmt_exprs_ok_def, supported_stmt_expr_exists_def, optionTheory.IS_SOME_EXISTS] >>
@@ -2405,10 +2405,10 @@ Proof
     (drule_all expr_body_pre_eval_gas >> simp[]) >>
   drule expr_sim_inv_push_scope >> strip_tac >>
   rpt (qpat_x_assum `body_stmts_ok _ _`
-         (strip_assume_tac o REWRITE_RULE [body_stmts_ok_def])) >>
+         (strip_assume_tac o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff])) >>
   Cases_on `b` >> fs[] >> first_x_assum irule >>
   gvs[stmts_exprs_ok_EVERY, stmt_exprs_ok_def, alloc_limits_stmt_def,
-      stmt_valued_return_def] >>
+      stmt_valued_return_def, GSYM optionTheory.IS_SOME_EXISTS] >>
   metis_tac[call_evaluation_safe_append_left, call_evaluation_safe_append_right]
 QED
 
@@ -2417,7 +2417,7 @@ QED
 Theorem body_expr_stmt_case:
   !cx e. body_expr_ok cx e ==> body_stmt_ok cx (Expr e)
 Proof
-  rpt gen_tac >> strip_tac >> simp[Once body_stmt_ok_def] >>
+  rpt gen_tac >> strip_tac >> simp[Once body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   rpt gen_tac >> strip_tac >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
       stmt_exprs_ok_def, supported_stmt_expr_exists_def] >>
@@ -2445,7 +2445,7 @@ QED
 Theorem body_stmts_nil_case:
   !cx. body_stmts_ok cx []
 Proof
-  rw[body_stmts_ok_def, stmt_frag_nil]
+  rw[body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff, stmt_frag_nil]
 QED
 
 (* stmtSim's stmt_frag_cons_env: the head by the IH, the tail by the IH at
@@ -2456,7 +2456,7 @@ Theorem body_stmts_cons_case:
     body_stmt_ok cx s ==>
     body_stmts_ok cx (s::ss)
 Proof
-  rpt gen_tac >> strip_tac >> simp[Once body_stmts_ok_def] >>
+  rpt gen_tac >> strip_tac >> simp[Once body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   rpt gen_tac >> strip_tac >>
   gvs[supported_stmt_def, type_stmt_def, AllCaseEqs(), int_calls_stmt_def,
       supported_stmt_expr_exists_def] >>
@@ -2464,7 +2464,7 @@ Proof
   irule stmt_frag_cons_env >>
   simp[cj 1 compile_stmt_cs_mono, stmts_env_cs_mono] >> reverse conj_tac
   >- (rpt strip_tac >>
-      qpat_x_assum `body_stmt_ok _ _` (irule o REWRITE_RULE [body_stmt_ok_def]) >>
+      qpat_x_assum `body_stmt_ok _ _` (irule o REWRITE_RULE [body_stmt_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
       metis_tac[call_evaluation_safe_append_left]) >>
   rpt strip_tac >>
   rename1 `stmt_env cenv lctx ret_ty s sa = (c, sm)` >>
@@ -2481,6 +2481,6 @@ Proof
   `frame_ret_ok ctx func cx RetQ c ret_ty` by
     metis_tac[frame_ret_ok_same_frame] >>
   qpat_x_assum `!s'' t. _ ==> body_stmts_ok _ _` drule >>
-  simp[body_stmts_ok_def] >> disch_then irule >>
+  simp[body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >> disch_then irule >>
   metis_tac[call_evaluation_safe_append_right]
 QED

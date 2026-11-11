@@ -15,7 +15,7 @@
 
 Theory bodySimMain
 Ancestors
-  list bodySim bodySimStmtCases bodySimDeclCases bodySimExprCases
+  list bodySim bodyExprPreFacts bodySimStmtCases bodySimDeclCases bodySimExprCases
   bodySimCallCases
   bodySimEntry bodySimLog stmtSimIf
   supportedStmts
@@ -128,7 +128,7 @@ Theorem body_stmts_sim:
     stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
       (eval_stmts cx ss) es
 Proof
-  metis_tac[body_sim_mutual, body_stmts_ok_def]
+  metis_tac[body_sim_mutual, body_stmts_ok_def, supported_stmts_body_safe]
 QED
 
 Theorem body_stmt_sim:
@@ -145,7 +145,7 @@ Theorem body_stmt_sim:
     stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ret_ty s)
       (eval_stmt cx s) es
 Proof
-  metis_tac[body_sim_mutual, body_stmt_ok_def]
+  metis_tac[body_sim_mutual, body_stmt_ok_def, supported_stmt_body_safe]
 QED
 
 (* compile_expr_sim without its int_calls_expr e = [], in a frame of the

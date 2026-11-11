@@ -212,7 +212,8 @@ Proof
      Cases_on `supported_target_info tops bindings t` >> fs[]) >>
   irule (Q.SPECL [`tops`, `bindings`] target_indices_body_pre) >>
   gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-      supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def] >>
+      supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      listTheory.EVERY_CONJ] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
 
