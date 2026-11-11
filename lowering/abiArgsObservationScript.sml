@@ -67,22 +67,11 @@ in simp_tac (srw_ss() ++ rewrites
        mstore_def, mstore8_def, sstore_def, tstore_def, istore_def,
        write_memory_with_expansion_def, mcopy_def])) [] end;
 
-Theorem abi_extract_labels[local]:
-  extract_venom_result s v off sz r = SOME (out,t) ==>
-  t.vs_labels = s.vs_labels
-Proof
-  simp[extract_venom_result_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[] >> pairarg_tac >> gvs[]
-QED
-
 Theorem abi_delegatecall_labels[local]:
   abi_result_labels s.vs_labels (exec_delegatecall inst s gas addr ao az ro rz)
 Proof
   simp[exec_delegatecall_def] >>
-  BasicProvers.TOP_CASE_TAC >- simp[abi_result_labels_def] >>
-  PairCases_on `x` >>
-  drule abi_extract_labels >> strip_tac >>
-  abi_result_shape_simp >> simp[] >> abi_result_shape_simp
+  Cases_on `inst.inst_outputs` >> abi_result_shape_simp
 QED
 
 Theorem abi_create_labels[local]:
