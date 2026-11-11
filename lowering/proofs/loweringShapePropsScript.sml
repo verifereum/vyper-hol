@@ -2583,7 +2583,7 @@ Resume compile_typed_copy_shape[dyn_labels]:
       ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
   ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]
 QED
-Finalise compile_typed_copy_shape[local]
+Finalise compile_typed_copy_shape
 
 Theorem compile_store_memory_shape:
   !cenv src dst dst_ty src_ty internal.
