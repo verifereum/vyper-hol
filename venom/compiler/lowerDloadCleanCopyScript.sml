@@ -1,6 +1,6 @@
 Theory lowerDloadCleanCopy
 Ancestors
-  lowerDloadRelocation regularCallEmitSim regularMemorySim codegenRel
+  lowerDloadRelocation regularCallEmitSim regularMemorySim memoryReadRel codegenRel
   venomState list pred_set ptrDiscipline memLocDefs venomExecSemantics finite_map
 
 Theorem ld_shared_payload_write:

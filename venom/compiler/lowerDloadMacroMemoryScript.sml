@@ -1,7 +1,7 @@
 Theory lowerDloadMacroMemory
 Ancestors
   lowerDloadMacroBoundary lowerDloadPhaseBoundary lowerDloadRelocation ptrDiscipline
-  regularCallEmitSim regularMemorySim codegenRel
+  regularCallEmitSim regularMemorySim memoryReadRel codegenRel
   venomState venomExecSemantics finite_map words list pred_set
 
 Theorem ld_read_memory_singleton[local]:

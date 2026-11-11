@@ -110,9 +110,10 @@ Proof
   `lowering_context_ok unit.cu_context` by
     (qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
      simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
-     Cases_on `classify_functions tops` >> PairCases_on `r` >>
-     simp[] >> every_case_tac >> rpt strip_tac >>
-     metis_tac[run_grouped_lowering_context, run_lowering_context_ok]) >>
+     Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
+     strip_tac >> Cases_on `EXISTS external_has_defaults q` >> gvs[] >>
+     imp_res_tac run_grouped_lowering_context >>
+     imp_res_tac run_lowering_context_ok >> simp[]) >>
   pop_assum (mp_tac o MATCH_MP lowering_context_ok_static_integrity) >>
   strip_tac >> drule_all ctx_inst_ids_distinct_fn >>
   simp[fn_inst_ids_distinct_def, fn_insts_def,

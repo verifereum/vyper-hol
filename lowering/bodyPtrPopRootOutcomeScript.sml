@@ -2,7 +2,7 @@ Theory bodyPtrPopRootOutcome
 Ancestors
   bodyPtrPopRootEntry bodyPtrPopRootPost bodyPtrPopRootEndpoint bodyPtrPopZeroAbort
   bodyPtrPopCountedTransfer bodyPtrPopSliceTransfer bodyPtrPopReturned bodyPtrPopEmittedTransfer
-  appendStorageGhostPtr appendStorageSourcePtr fragExec vyperStorage vyperValue venomExecSemantics
+  appendStorageGhostPtr stmtSimAppendStorageCompose fragExec vyperStorage vyperValue venomExecSemantics
   exprSimPopStorage storageCopyGasPath bodyPtrDefs fragGasPathPtr
   exprSimDefs exprSimHypsDefs exprSimSource exprSimTopLevelProps exprLoweringProps compileEnv loweringStateRelDefs context venomState venomInst
   list rich_list vyperStorageLayoutSafety vyperStorageBackend
