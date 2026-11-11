@@ -25,7 +25,8 @@ Ancestors
   memContinuationExit fragExec emitHelperProps loweringHalt actualAllocExec words
   venomInst arithmetic compilerInstructionSuffix windowPhaseMem abiEncoderWindowPhase
   stmtSimCustomErrorPrepare externalReturnEncoderSites abiEncoderResultLive
-  calldataDynOwned allocaSiteResource
+  calldataDynOwned allocaSiteResource stmtSimCustomErrorTrapCompile
+  stmtSimCustomErrorTrap runFromGasPathMem
 
 Definition custom_error_revert_tail_def:
   custom_error_revert_tail cenv id tys args_buf no_args =
@@ -73,6 +74,25 @@ Proof
   qexistsl_tac [`args_alloc`,`sa`,`sm`] >>
   gvs[compile_revert_with_custom_error_def, custom_error_revert_tail_def,
       comp_bind_def, comp_ignore_bind_def, comp_return_def]
+QED
+
+Theorem ce_trap_custom_error_revert_tail:
+  custom_error_revert_tail cenv id tys args_buf no_args sm = ((),sb) ==>
+  custom_error_revert_tail cenv id tys args_buf no_args (ce_trap_cs sm) =
+    ((),ce_trap_cs sb)
+Proof
+  `ce_compile_commutes (custom_error_revert_tail cenv id tys args_buf no_args)`
+    suffices_by metis_tac[ce_compile_commutes_def] >>
+  rewrite_tac[custom_error_revert_tail_def] >>
+  irule ce_compile_bind >> simp[ce_compile_alloc_buffer] >> gen_tac >>
+  irule ce_compile_bind >> simp[ce_compile_return] >> gen_tac >>
+  irule ce_compile_ignore_bind >> simp[ce_compile_emit_helpers] >>
+  Cases_on `no_args` >> simp[]
+  >- (irule ce_compile_bind >> simp[ce_compile_emit_helpers]) >>
+  irule ce_compile_bind >> simp[ce_compile_emit_helpers] >> gen_tac >>
+  irule ce_compile_bind >> simp[cj 2 ce_compile_encoder_mutual] >> gen_tac >>
+  irule ce_compile_bind >> simp[ce_compile_emit_helpers] >> gen_tac >>
+  irule ce_compile_bind >> simp[ce_compile_emit_helpers]
 QED
 
 Theorem custom_error_revert_tail_safe_exit:
@@ -302,6 +322,53 @@ Resume custom_error_revert_tail_safe_exit[encoded]:
   metis_tac[abi_encoder_registered_effect_trans]
 QED
 Finalise custom_error_revert_tail_safe_exit
+
+Theorem custom_error_revert_tail_projected_path:
+  !ctx func cenv id tys args_buf no_args sm sb s a aid n ei at av.
+    custom_error_revert_tail cenv id tys args_buf no_args sm = ((),sb) /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    abi_size_bound cenv.ce_struct_fields (TupleT tys) + 32 < 2 ** 64 /\
+    ei = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT tys) /\
+    (~no_args ==>
+       abi_encoder_admissible ei /\
+       eval_operand args_buf s = SOME (n2w a) /\
+       (!x. args_buf = Var x ==> not_fresh_at sm x) /\
+       FLOOKUP s.vs_allocas aid = SOME (a,n) /\ aid NOTIN frag_ids sm sb /\
+       type_memory_bytes cenv (TupleT tys) <= n /\
+       abi_encoder_window_input ei at av a (type_memory_bytes cenv (TupleT tys))
+         s.vs_memory /\
+       LENGTH (enc at av) <= abi_size_bound cenv.ce_struct_fields (TupleT tys)) /\
+    alloca_inv s /\ alloca_room ctx func s /\
+    (!inst w base sz.
+       MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+       inst.inst_operands = [Lit w] /\
+       FLOOKUP s.vs_allocas inst.inst_id = SOME (base,sz) ==>
+       sz = w2n w) /\
+    ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?t count. gas_path_mem (ce_trap_ctx ctx) (ce_trap_fn func) s count
+                (Abort Revert_abort t) /\
+        abi_encoder_registered_effect (frag_ids sm sb) [] s t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?t fuel. run_from fuel (ce_trap_ctx ctx) (ce_trap_fn func) s =
+       Abort Revert_abort t /\
+     mem_safe_run fuel (ce_trap_ctx ctx) (ce_trap_fn func) s /\
+     abi_encoder_registered_effect (frag_ids sm sb) [] s t` by
+    (mp_tac (Q.INST [`ctx` |-> `ce_trap_ctx ctx`,
+                     `func` |-> `ce_trap_fn func`,
+                     `sm` |-> `ce_trap_cs sm`, `sb` |-> `ce_trap_cs sb`]
+       (SPEC_ALL custom_error_revert_tail_safe_exit)) >>
+     simp[ce_trap_custom_error_revert_tail, ce_trap_fn_has_code,
+       ce_trap_fn_inst_ids_distinct, ce_trap_frag_ids, ce_trap_alloca_room,
+       ce_trap_recorded_alloca_size, ce_trap_cs_def, loweringStateRelDefsTheory.not_fresh_at_def] >>
+     impl_tac >- (conj_tac
+       >- gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+       drule ce_trap_recorded_alloca_size >> simp[]) >> simp[]) >>
+  drule run_from_gas_path_mem >> simp[exit_result_def] >>
+  strip_tac >> metis_tac[]
+QED
 
 (* ADMITTED: the gadget lemma (run from the state after the argument stores).
    With arguments, the args tuple is a registered alloca outside this fragment,
