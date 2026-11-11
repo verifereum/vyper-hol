@@ -285,6 +285,8 @@ Proof
   Cases_on `var_location_decode_operand x` >> simp[] >>
   rpt (ho_match_mp_tac ctor_id_bind >> conj_tac
         >- simp[ctor_id_prims] >> gen_tac) >>
+  ho_match_mp_tac ctor_id_ignore_bind >> conj_tac
+  >- simp[compile_abi_arg_ptr_guard_def, comp_return_def, ctor_id_prims] >>
   (ho_match_mp_tac ctor_id_ignore_bind >> conj_tac
    >- (gen_tac >>
        mp_tac (cj 1 abi_decoder_code_mutual) >>

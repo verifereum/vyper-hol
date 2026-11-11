@@ -2466,6 +2466,16 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+Theorem subscript_base_snapshot_labels[local]:
+  !c cenv x s.
+    cs_extends s (SND ((if c then compile_snapshot_vv cenv T x
+                        else comp_return x) s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND ((if c then compile_snapshot_vv cenv T x
+                                                else comp_return x) s)))
+Proof
+  rw[compile_snapshot_vv_labels, comp_return_labels]
+QED
+
 Theorem compile_subscript_labels:
   !cfn cenv ret_ty ty base_e idx_e s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
@@ -2479,12 +2489,14 @@ Proof
   Cases_on `place_type cenv base_e`
   >- (simp[] >>
       rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
-           simp[comp_return_labels, lower_value_labels, compile_mapping_subscript_labels]) >>
+           simp[comp_return_labels, lower_value_labels, compile_mapping_subscript_labels,
+                subscript_base_snapshot_labels]) >>
       IF_CASES_TAC >> simp[compile_keccak256_key_labels, comp_return_labels]) >>
   rename1 `place_type cenv base_e = ValPT bt` >> Cases_on `bt` >> simp[LET_THM] >>
   rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
        simp[comp_return_labels, lower_value_labels, compile_tuple_subscript_labels,
-            compile_array_subscript_labels, compile_ptr_load_labels])
+            compile_array_subscript_labels, compile_ptr_load_labels,
+            subscript_base_snapshot_labels])
 QED
 
 Theorem compile_get_target_ptr_labels:

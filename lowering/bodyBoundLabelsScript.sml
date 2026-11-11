@@ -1036,6 +1036,27 @@ Proof
   rpt strip_tac >> IF_CASES_TAC >> simp[]
 QED
 
+Theorem bound_labels_ext_call_args:
+  !es tys s.
+  (!ty e t. MEM e es /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_ext_call_args cfn ce kw_es tys es s))))
+Proof
+  Induct_on `es` >> rpt gen_tac >> Cases_on `tys` >>
+  simp[compile_ext_call_args_def, comp_return_def] >>
+  rpt strip_tac >> irule bound_labels_bind >> conj_tac
+  >- (simp[] >> rpt strip_tac >> irule bound_labels_bind >> conj_tac
+      >- (simp[] >> rpt strip_tac >> irule bound_labels_bind >>
+          simp[comp_return_def] >> first_x_assum irule >> simp[] >>
+          metis_tac[]) >>
+      rpt strip_tac >> irule bound_labels_snapshot_vv >> gvs[]) >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
 Theorem bound_labels_call_external[local]:
   (!ty e t. MEM e args /\
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
@@ -1053,7 +1074,7 @@ Proof
   >- (irule bound_labels_lower_value >> simp[] >> metis_tac[listTheory.MEM]) >>
   rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
-  >- (irule bound_labels_multi_vvs >> simp[] >>
+  >- (irule bound_labels_ext_call_args >> simp[] >>
       metis_tac[listTheory.MEM, rich_listTheory.MEM_TAKE]) >>
   rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac

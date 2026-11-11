@@ -244,6 +244,9 @@ Resume code_expr_not_memory[subscript]:
   simp[exprCallBoundsTheory.expr_child_callback_def, expr_size_def] >>
   strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  qpat_x_assum `(if subscript_reads_base _ _ _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
   drule select_result_memory_origin >> strip_tac >> gvs[] >>
   fs[Once well_typed_expr_def]
   >~ [`type_place_expr env obj = SOME vt`] >-
