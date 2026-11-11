@@ -231,6 +231,75 @@ Proof
   metis_tac[release_nonreentrant_lock_immutables]
 QED
 
+val im_stmts = ``\cx ss. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_stmts ss) (int_calls_stmts ss) /\
+  eval_stmts cx ss st = (res,st') ==> ^immutable_frame cx A st st'``;
+val im_exprs = ``\cx es. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) /\
+  eval_exprs cx es st = (res,st') ==> ^immutable_frame cx A st st'``;
+val im_results = ``\cx es. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) /\
+  eval_expr_results cx es st = (res,st') ==> ^immutable_frame cx A st st'``;
+val im_expr = ``\cx e. !A R st res st'.
+  ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_expr e) (int_calls_expr e) /\
+  eval_expr cx e st = (res,st') ==> ^immutable_frame cx A st st'``;
+
+(* Fix analysis parameters before consuming a guarded recursive IH. *)
+Theorem immutable_exprs_frame_rule[local]:
+  ^im_exprs cx es /\ ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
+  !st res st'. eval_exprs cx es st = (res,st') ==>
+    ^immutable_frame cx A st st'
+Proof
+  BETA_TAC >> strip_tac >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_tac >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem immutable_results_frame_rule[local]:
+  ^im_results cx es /\ ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
+  !st res st'. eval_expr_results cx es st = (res,st') ==>
+    ^immutable_frame cx A st st'
+Proof
+  BETA_TAC >> strip_tac >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_tac >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem immutable_stmts_frame_rule[local]:
+  ^im_stmts cx ss /\ ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_stmts ss) (int_calls_stmts ss) ==>
+  !st res st'. eval_stmts cx ss st = (res,st') ==>
+    ^immutable_frame cx A st st'
+Proof
+  BETA_TAC >> strip_tac >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_tac >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+(* Select the actual callable without exposing closure in consumers. *)
+Theorem immutable_callable_safe[local]:
+  !cx A R src fn ts mut nr args dflts ret body.
+  ^callable_closed cx A R /\ MEM (src,fn) R /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  ^safe_accesses A R (accesses_exprs dflts) (int_calls_exprs dflts) /\
+  ^safe_accesses A R (accesses_stmts body) (int_calls_stmts body)
+Proof
+  BETA_TAC >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!src fn ts mut nr args dflts ret body. _` drule_all >>
+  simp[function_int_calls_def, safe_accesses_append]
+QED
+
 Theorem eval_expr_unwritten_immutable:
   !cx e st res st' env mods src id.
     eval_expr cx e st = (res,st') /\
