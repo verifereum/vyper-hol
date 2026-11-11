@@ -357,5 +357,13 @@ Theorem fuel_ok_compile_copy_dynarray_typed:
     !Wv E. fuel_ok Wv {} E
              (compile_copy_dynarray_typed cenv dst dst_elem cap src src_elem)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  Cases_on `type_memory_bytes cenv dst_elem = type_memory_bytes cenv src_elem /\ dst_elem = src_elem`
+  >- (simp[Once (cj 6 compile_store_memory_typed_def), compile_copy_memory_dynamic_def] >>
+      fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void] >>
+      simp[is_terminator_def]) >>
+  simp[fuel_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule_all dynarray_compile_structure >> strip_tac >> simp[] >>
+  drule_all dynarray_counted_run >> strip_tac >>
+  FAIL_TAC "assembly"
 QED
