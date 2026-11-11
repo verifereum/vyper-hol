@@ -79,6 +79,22 @@
       "returned": 0,
       "runtime_sha256": "cd4e9cf8ae447ef46a1e2b4df70bc3da01317459f87f0d931276f60f692cbf13",
       "signature": "f()"
+    },
+    {
+      "arguments": [],
+      "expected": 5,
+      "fixture": "subscript_base_copy",
+      "returned": 5,
+      "runtime_sha256": "7b42e69d3a3c4530af17909518bb1520ec1d8946b8a1992e6341e508aca4eeb9",
+      "signature": "f()"
+    },
+    {
+      "arguments": [],
+      "expected": 7,
+      "fixture": "subscript_base_live",
+      "returned": 7,
+      "runtime_sha256": "b8a8a44104274ac4253586c294ec043d92dca1dc7af60d4d76a266dfc2eed59d",
+      "signature": "f()"
     }
   ],
   "evm_version": "Prague",

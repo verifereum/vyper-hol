@@ -56,16 +56,25 @@ Definition eval_pure_expr_def:
   (* Subscript *)
   eval_pure_expr cx st (Subscript ty e1 e2) =
     (case eval_pure_expr cx st e1 of
-     | SOME tv1 =>
-       (case eval_pure_expr cx st e2 of
-        | SOME idx =>
-          (case read_result cx idx st of
-           | (INL v2, _) =>
-             (case select_result cx (expr_type e1) tv1 (ValueSubscript v2) st of
-              | (INL result, _) => SOME result
+     | SOME tv0 =>
+       (* As eval_expr: a base derived through a dynamic-array element is
+          read before the index. *)
+       (case (if subscript_reads_base cx e1 e2 then
+                (case read_result cx tv0 st of
+                 | (INL v, _) => SOME (Value v)
+                 | _ => NONE)
+              else SOME tv0) of
+        | SOME tv1 =>
+          (case eval_pure_expr cx st e2 of
+           | SOME idx =>
+             (case read_result cx idx st of
+              | (INL v2, _) =>
+                (case select_result cx (expr_type e1) tv1 (ValueSubscript v2) st of
+                 | (INL result, _) => SOME result
+                 | _ => NONE)
               | _ => NONE)
            | _ => NONE)
-        | _ => NONE)
+        | NONE => NONE)
      | NONE => NONE) ∧
 
   (* Attribute access *)
@@ -356,12 +365,13 @@ Proof
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
       strip_tac >> gvs[AllCaseEqs()] >>
-      `s'' = st` by metis_tac[eval_expr_preserves_state, pure_expr_def] >>
-      pop_assum SUBST_ALL_TAC >>
-      `s'³' = st` by metis_tac[eval_expr_preserves_state, pure_expr_def] >>
-      pop_assum SUBST_ALL_TAC >>
+      imp_res_tac eval_expr_preserves_state >> gvs[] >>
+      Cases_on `subscript_reads_base cx e e'` >>
+      gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      imp_res_tac eval_expr_preserves_state >> gvs[] >>
       imp_res_tac read_result_state >>
-      imp_res_tac select_result_state >> gvs[])
+      imp_res_tac select_result_state >> gvs[] >> metis_tac[])
   (* Attribute *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>

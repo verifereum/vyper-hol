@@ -494,7 +494,19 @@ Resume eval_expr_oracle_storage_mutual[Expr_Subscript]:
     (irule oracle_storage_entry_suffix >> qexists_tac `st` >> simp[] >>
      drule (cj 5 eval_outcome_suffix_mutual) >> simp[]) >>
   Cases_on `base_res` >> gvs[return_def, raise_def]
-  >- (Cases_on `eval_expr cx e' st1` >>
+  >- (rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
+      Cases_on `(if subscript_reads_base cx e e' then
+        bind (read_result cx base_tv) (\v. return (Value v))
+        else return base_tv) st1` >>
+      rename1 `(if subscript_reads_base cx e e' then _ else _) st1 = (early_res,early_st)` >>
+      `early_st = st1` by
+        (Cases_on `subscript_reads_base cx e e'` >>
+         gvs[bind_def, return_def, AllCaseEqs()] >>
+         metis_tac[read_result_state]) >>
+      qpat_x_assum `early_st = st1` SUBST_ALL_TAC >>
+      reverse (Cases_on `early_res`) >> gvs[return_def, raise_def]
+      >- (strip_tac >> gvs[]) >>
+      Cases_on `eval_expr cx e' st1` >>
       rename1 `eval_expr cx e' st1 = (index_res,st2)` >>
       first_x_assum drule_all >> strip_tac >>
       `contract_storage_well_formed cx st2` by metis_tac[] >>

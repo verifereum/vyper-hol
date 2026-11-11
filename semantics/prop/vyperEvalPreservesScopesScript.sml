@@ -1946,6 +1946,9 @@ Proof
     gvs[Once evaluate_def, return_def, bind_apply,
         ignore_bind_apply, AllCaseEqs(), sum_CASE_rator,
          prod_CASE_rator] >>
+    rpt (qpat_x_assum `!s res t s' res' t'. _` drule_all >> strip_tac) >>
+    Cases_on `subscript_reads_base cx e e'` >>
+    gvs[bind_apply, return_def, AllCaseEqs()] >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac select_result_state >>
     imp_res_tac lift_sum_state >>
@@ -1954,8 +1957,7 @@ Proof
     rpt (first_x_assum drule) >> rw[] >>
     irule preserves_tv_trans
     >> goal_assum drule
-    >> first_x_assum drule
-    >> rw[]) >>
+    >> simp[]) >>
   (* Attribute expr *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>

@@ -467,6 +467,13 @@ Resume evaluate_read_only[expr_subscript]:
 QED
 Resume evaluate_read_only[subscript_second_expr]:
   rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
+  conj_tac >- suspend "subscript_index" >>
+  Cases_on `subscript_reads_base cx e e'` >> simp[machine_frame_primitives] >>
+  irule machine_frame_bind >>
+  simp[machine_frame_read_result, machine_frame_primitives]
+QED
+Resume evaluate_read_only[subscript_index]:
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
   conj_tac >- suspend "subscript_tail" >> metis_tac[]
 QED
 Resume evaluate_read_only[subscript_tail]:

@@ -498,7 +498,10 @@ Theorem eval_expr_tuple_subscript[local]:
   !cx ann obj ity k es.
     eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))) es =
     (do r <- eval_expr cx obj;
-        select_result cx (expr_type obj) r (ValueSubscript (IntV (&k))) od)
+        r' <- (if subscript_reads_base cx obj (Literal ity (IntL (&k))) then
+                 do v <- read_result cx r; return (Value v) od
+               else return r);
+        select_result cx (expr_type obj) r' (ValueSubscript (IntV (&k))) od)
       es
 Proof
   rpt gen_tac >> simp[Once evaluate_def, bind_def] >>
@@ -970,7 +973,10 @@ Proof
   drule attr_extends >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
   drule_all fn_has_code_split >> strip_tac >>
-  gvs[eval_expr_tuple_subscript, bind_def] >>
+  `~subscript_reads_base cx obj (Literal ity (IntL (&k)))` by
+    simp[vyperInterpreterTheory.subscript_reads_base_def,
+         vyperSubscriptOverlapTheory.subscript_overlap_def] >>
+  gvs[eval_expr_tuple_subscript, bind_def, return_def] >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (er, es1)` >>
   `expr_vv_res_ok er` by (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _` mp_tac >>

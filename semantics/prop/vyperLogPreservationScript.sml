@@ -423,7 +423,11 @@ Proof
 QED
 
 Theorem case_expr_subscript_logs[local]:
-  (!s0 tv1 s1. eval_expr cx e1 s0 = (INL tv1,s1) ==>
+  (!s0 tv1 s1 s0' tv1' s1'.
+     eval_expr cx e1 s0 = (INL tv1,s1) /\
+     (if subscript_reads_base cx e1 e2 then
+        bind (read_result cx tv1) (\v. return (Value v))
+      else return tv1) s0' = (INL tv1',s1') ==>
      !s2 r s3. eval_expr cx e2 s2 = (r,s3) ==> log_extends s2 s3) /\
   (!s0 r s1. eval_expr cx e1 s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'.
@@ -437,10 +441,17 @@ Proof
   drule bind_log_extends_forward >>
   disch_then irule >>
   rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!s0 tv1 s1. eval_expr _ e1 s0 = (INL tv1,s1) ==> _` drule >>
-  strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  reverse conj_tac
+  >- (rpt strip_tac >> Cases_on `subscript_reads_base cx e1 e2` >>
+      gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[log_extends_refl]) >>
+  rpt strip_tac >> gvs[] >>
   drule bind_log_extends_forward >> disch_then irule >>
   rpt strip_tac >>
+  gvs[] >>
+  qpat_assum `!s0 tv1 s1 s0' tv1' s1'. _` drule_all >>
+  strip_tac >>
   gvs[vyperStateTheory.bind_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >>
   imp_res_tac select_result_state >> gvs[log_extends_refl]
