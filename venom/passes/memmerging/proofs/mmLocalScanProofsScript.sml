@@ -16117,6 +16117,92 @@ Proof
   qexists `t` >> simp[] >> metis_tac[mm_local_exec_prefix_suffix]
 QED
 
+Theorem mm_local_cut_empty_non_ok[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\
+  ~(?u. step_inst fuel ctx i (H n) = OK u) ==>
+  lift_result (\_ _. F) (execution_equiv excluded) revert_equiv
+    (step_inst fuel ctx i (H n)) (step_inst fuel ctx i t)
+Proof
+  strip_tac >>
+  `state_equiv excluded ((H n) with vs_inst_idx := pc) t` by
+    metis_tac[mm_local_cut_empty_state_equiv] >>
+  `result_equiv excluded
+    (step_inst fuel ctx i ((H n) with vs_inst_idx := pc))
+    (step_inst fuel ctx i t)` by
+    (irule removeUnusedProofsTheory.step_inst_result_equiv_full >> simp[]) >>
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (gvs[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+      Cases_on `step_inst fuel ctx i (H n)` >>
+      Cases_on `step_inst fuel ctx i t` >>
+      gvs[result_equiv_def, lift_result_def, execution_equiv_def,
+        revert_equiv_def, stateFrameTheory.execution_frame_def]) >>
+  gvs[analysisSimProofsBaseTheory.step_inst_idx_indep] >>
+  Cases_on `step_inst fuel ctx i (H n)` >>
+  Cases_on `step_inst fuel ctx i t` >>
+  gvs[instIdxIndepTheory.exec_result_map_def, result_equiv_def,
+    lift_result_def, execution_equiv_def, revert_equiv_def,
+    stateFrameTheory.execution_frame_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_mem2mem_phi_emission[local]:
+  !xs es. wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem bb.bb_instructions gs /\
+  rs = rep_map_of_groups bb.bb_instructions gs /\
+  EVERY (\i. MEM i bb.bb_instructions /\ i.inst_opcode = PHI) xs ==>
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) es xs = (xs,es)
+Proof
+  Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
+  rpt strip_tac >> fs[] >>
+  `!r. apply_groups_inst_supply Mem2Mem ns rs r h = ([h],r)` by
+    (gvs[] >> irule mm_local_prefix_nonselected_unchanged >>
+     simp[mode_copy_opcode_def, mode_load_opcode_def] >> metis_tac[]) >>
+  simp[mm_flat_map_supply_def] >> gvs[]
+QED
+
+Theorem mm_local_mem2mem_phi_boundary[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem bb.bb_instructions gs /\
+  rs = rep_map_of_groups bb.bb_instructions gs /\
+  bb.bb_instructions = phis ++ tail_insts /\
+  EVERY (\i. i.inst_opcode = PHI) phis /\
+  EVERY (\i. i.inst_opcode <> PHI) tail_insts /\
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk tail_insts = (out,es) ==>
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk bb.bb_instructions =
+    (phis ++ out,es) /\
+  EVERY (\i. i.inst_opcode <> PHI) out /\
+  phi_prefix_length (phis ++ out) = phi_prefix_length bb.bb_instructions /\
+  (!s. eval_phis s (phis ++ out) = eval_phis s bb.bb_instructions)
+Proof
+  strip_tac >>
+  `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk phis = (phis,sk)` by
+    (irule mm_local_mem2mem_phi_emission >>
+     qexistsl [`bb`, `fn0`, `gs`, `index`, `k`, `sk`, `supply`] >>
+     simp[EVERY_MEM, MEM_APPEND] >> gvs[EVERY_MEM]) >>
+  `EVERY (\i. i.inst_opcode <> PHI) out` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     `MEM i tail_insts` by
+       (irule (Q.ISPECL [`apply_groups_inst_supply Mem2Mem ns rs`,
+           `\i:instruction. i.inst_opcode = PHI`]
+          mmSupplyWfProofsTheory.mm_flat_map_supply_origin) >>
+        metis_tac[mmSupplyWfProofsTheory.apply_groups_inst_supply_phi_origin]) >>
+     gvs[EVERY_MEM]) >>
+  conj_tac >- (qpat_x_assum `bb.bb_instructions = _` SUBST_ALL_TAC >>
+    irule mm_local_flat_map_supply_append >> metis_tac[]) >>
+  simp[dftIndexedExecTheory.dft_phi_prefix_append,
+    dftIndexedExecTheory.dft_eval_phis_append]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
