@@ -61,7 +61,7 @@ Ancestors
   fragExec localPtrsProps exprLoweringProps
   compileVyper moduleLowering stmtLowering exprLowering emitHelper context compileEnv
   valueEncoding valueEncodingProps venomMemDefs
-  venomExecSemantics venomInst venomState venomMemProps vyperState
+  venomExecSemantics venomInst venomState venomMemProps vyperState venomWfProps
 
 (* ===== The prologue ===== *)
 
@@ -679,7 +679,7 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       Cases_on `inst.inst_id = id0`
       >- (`inst = mk_inst id0 ALLOCA [Lit (n2w sz)] [x0]` by
-            (irule fn_inst_ids_distinct_inj >> simp[mk_inst_def] >>
+            (irule venomWfPropsTheory.fn_inst_ids_distinct_inj >> simp[mk_inst_def] >>
              qexists_tac `func` >> fs[mk_inst_def]) >>
           gvs[mk_inst_def, Abbr `sa`, update_var_def, FLOOKUP_UPDATE]) >>
       first_x_assum irule >>
@@ -1574,7 +1574,7 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       Cases_on `inst.inst_id = id`
       >- (`inst = mk_inst id ALLOCA [Lit n] [x]` by
-            (irule fn_inst_ids_distinct_inj >> simp[mk_inst_def] >>
+            (irule venomWfPropsTheory.fn_inst_ids_distinct_inj >> simp[mk_inst_def] >>
              qexists_tac `func` >> fs[mk_inst_def, Abbr `id`, Abbr `x`]) >>
           gvs[mk_inst_def, Abbr `t`, update_var_def, FLOOKUP_UPDATE]) >>
       first_x_assum irule >>
