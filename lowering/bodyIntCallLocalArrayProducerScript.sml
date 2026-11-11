@@ -307,7 +307,7 @@ Theorem local_fixed_array_address:
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var root_var) sz) /\
   entry.type = ArrayTV etv (Fixed cnt) /\
-  value_has_type entry.type entry.value /\
+  value_has_type (ArrayTV etv (Fixed cnt)) entry.value /\
   stmt_state_rel ctx func cenv cx es s ==>
   ?b. lookup_var root_var s = SOME b /\
       val_wf entry.type entry.value /\
