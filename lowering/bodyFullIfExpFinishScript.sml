@@ -7,6 +7,16 @@ Ancestors
   bodyPtrDefs loweringPosts exprLowering fragExec emitHelper compileEnv
   allocaHistory stmtSimDefs vyperAST vyperInterpreter vyperState venomState
 
+(* Diagnostic boundary: the frozen reservation premises protect the
+   immutable base register even when the alloca lower bound is nonzero. *)
+Theorem ifexp_immutable_register_protected[local]:
+  local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> x <> rv) ==>
+  !x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> x <> rv
+Proof
+  metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base]
+QED
+
 Theorem ifexp_arm_finish_full:
   (* the root's premises *)
   stmt_state_rel ctx func cenv cx es s0 /\ return_buf_frame d cenv sa s0 /\
