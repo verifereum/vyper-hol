@@ -72,7 +72,8 @@ Theorem abi_decode_setup_success_sequence:
     abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
       (Lit 0w) 0w hi sb K tk u /\
     (!mem'. mem_agree_outside tk.t_mem u.vs_memory mem' ==>
-      tuple_in_memory vs tvs (w2n d) mem')
+      tuple_in_memory vs tvs (w2n d) mem') /\
+    abi_decode_member_frame ready H tf u0 K tk u (w2n d) cap
 Proof
   strip_tac >>
   drule abi_decode_member_live_compiler >> strip_tac >>

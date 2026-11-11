@@ -9,7 +9,7 @@ Ancestors
   abiDecodePtrEntry exprSimHash abiDecoderContract
   words arithmetic abiDecoderReentry abiBuiltinDecodeHeader loweringHalt execEquivParamDefs
   fragGasSeqPtr stmtReasonLitFragMemory exprLoweringProps fragExec emitHelperProps compileEnv venomExecSemantics
-  venomState venomInst list rich_list
+  venomState venomInst list rich_list freshWrites
 
 Theorem abi_decode_actual_reject_path:
   fn_has_code sa sb func /\ inst_extends sa sb /\
@@ -235,7 +235,8 @@ Theorem abi_decode_setup_actual_success:
     ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers K tk dst v cap /\
     (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>
-      tuple_in_memory vs tvs (w2n d) mem')
+      tuple_in_memory vs tvs (w2n d) mem') /\
+    (?u. abi_decode_member_frame ready H tf u0 K tk u (w2n d) cap)
 Proof
   strip_tac >>
   `hi <> Lit 0w /\ cap < dimword(:256)` by fs[abi_decode_member_live_def] >>
@@ -324,7 +325,8 @@ Theorem abi_decode_operand_actual_success:
     ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers K tk dst v outsz /\
     (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>
-      tuple_in_memory vs tvs (w2n d) mem')
+      tuple_in_memory vs tvs (w2n d) mem') /\
+    ghost_kept cenv es sa G tn s K tk
 Proof
   strip_tac >>
   drule_all hash_dynamic_post_view >> strip_tac >>
@@ -335,6 +337,54 @@ Proof
       (abi_decode_source MLOAD u) = bs` by
     simp[abi_decode_source_def, word_add_def, w2n_n2w, LESS_MOD] >>
   drule_at (Pat `abi_decode_member_live _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    abi_decode_setup_actual_success >> simp[] >>
+    abi_decode_setup_actual_success >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> disch_then (drule_at (Pat `abi_builtin_decode_header _ _ _ _ = _`)) >>
+  simp[] >> disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `evaluate_type_builtin _ _ _ _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  rename1 `abi_decode_member_frame ready G2 tn2 u J tj uf _ _` >>
+  `sa.cs_next_var <= ready.cs_next_var` by
+    (drule abi_builtin_decode_header_shape >> strip_tac >>
+     drule compile_alloc_buffer_parts >> strip_tac >> decide_tac) >>
+  `ghost_kept cenv es sa G tn s J tj` by
+    (qpat_x_assum `ghost_kept cenv es sa G tn s G2 tn2` mp_tac >>
+     simp_tac bool_ss [bodyPtrDefsTheory.ghost_kept_def] >> strip_tac >>
+     conj_tac
+     >- (qx_gen_tac `x` >> strip_tac >>
+         `not_fresh_at ready x` by
+           (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+         fs[abi_decode_member_frame_def] >> metis_tac[]) >>
+     conj_tac >- suspend "alloc_kept" >> suspend "local_kept") >>
   metis_tac[]
 QED
+
+Resume abi_decode_operand_actual_success[alloc_kept]:
+  rpt gen_tac >> strip_tac >>
+  `~(w2n wout <= i /\ i < w2n wout + SUM (MAP (type_memory_bytes ce) tys))` by
+    (qpat_x_assum `!aid b k. _ ==> regions_disjoint _ _ _ _` drule_all >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  qpat_x_assum `abi_decode_member_frame _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [abi_decode_member_frame_def] >> strip_tac >>
+  `i IN tn2.t_mem` by
+    gvs[] >>
+  qpat_x_assum `!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ _ ==> _` irule >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Resume abi_decode_operand_actual_success[local_kept]:
+  rpt gen_tac >> strip_tac >>
+  `~(w2n wout <= i /\ i < w2n wout + SUM (MAP (type_memory_bytes ce) tys))` by
+    (qpat_x_assum `!name b k. _ ==> regions_disjoint _ _ _ _` drule_all >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  qpat_x_assum `abi_decode_member_frame _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [abi_decode_member_frame_def] >> strip_tac >>
+  `i IN tn2.t_mem` by
+    gvs[] >>
+  qpat_x_assum `!n b sz i. local_region cenv es.scopes s n b sz /\ _ ==> _` irule >>
+  simp[] >> qexistsl_tac [`b'`, `n`, `sz`] >> gvs[]
+QED
+
+Finalise abi_decode_operand_actual_success
