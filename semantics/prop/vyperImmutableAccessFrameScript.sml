@@ -190,6 +190,47 @@ Proof
   metis_tac[eval_base_place_immutable_access]
 QED
 
+(* Access/closure interface shared by the untyped constructor proofs. *)
+val allowed_writes = ``\A xs. !ns.
+  MEM (WriteAcc (StateRef ns)) xs ==> MEM (WriteAcc (StateRef ns)) A``;
+val safe_accesses = ``\A (R:(num option # string) list) xs cs.
+  ^allowed_writes A xs /\ ~MEM RiskyAcc xs /\
+  (!c. MEM c cs ==> MEM c R)``;
+val callable_closed = ``\cx A R.
+  !src fn ts mut nr args dflts ret body.
+    MEM (src,fn) R /\ get_module_code cx src = SOME ts /\
+    lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,body) ==>
+    ^safe_accesses A R (accesses_exprs dflts ++ accesses_stmts body)
+      (function_int_calls dflts body)``;
+
+Theorem immutable_safe_accesses_drop[local]:
+  !es n. ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
+    ^safe_accesses A R (accesses_exprs (DROP n es)) (int_calls_exprs (DROP n es))
+Proof
+  Induct >> simp[accesses_expr_def, int_calls_expr_def] >>
+  Cases_on `n` >> simp[accesses_expr_def, int_calls_expr_def] >>
+  metis_tac[]
+QED
+
+Theorem lock_if_nr_immutables[local]:
+  lock_if_nr cx nr is_view st = (res,st') ==> st'.immutables = st.immutables
+Proof
+  Cases_on `nr` >> Cases_on `is_view` >>
+  simp[lock_if_nr_def, return_def] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  simp[return_def, raise_def, ignore_bind_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> imp_res_tac acquire_nonreentrant_lock_immutables >> gvs[]
+QED
+
+Theorem unlock_if_nr_immutables[local]:
+  unlock_if_nr cx nr is_view st = (res,st') ==> st'.immutables = st.immutables
+Proof
+  Cases_on `nr /\ ~is_view` >>
+  simp[unlock_if_nr_def, return_def] >>
+  Cases_on `cx.nonreentrant_slot` >> simp[return_def] >>
+  metis_tac[release_nonreentrant_lock_immutables]
+QED
+
 Theorem eval_expr_unwritten_immutable:
   !cx e st res st' env mods src id.
     eval_expr cx e st = (res,st') /\
