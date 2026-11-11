@@ -14955,6 +14955,106 @@ Proof
   gvs[mm_local_exec_prefix_single] >> fs[mm_local_cut_def]
 QED
 
+Theorem mm_local_mem2mem_scan_classification[local]:
+  scan_inst dfg Mem2Mem ss i <> hard_barrier ss ==>
+  ((?w out. i.inst_opcode = MLOAD /\ i.inst_operands = [Lit w] /\
+       i.inst_outputs = [out]) \/
+   (?dst v src. i.inst_opcode = MSTORE /\
+       i.inst_operands = [Lit dst; Var v] /\
+       FLOOKUP ss.ss_loads v = SOME src) \/
+   (?dst src len. i.inst_opcode = MCOPY /\
+       i.inst_operands = [Lit dst; Lit src; Lit len]) \/
+   (i.inst_opcode NOTIN {MLOAD; MSTORE; MCOPY} /\ ~is_volatile_memory i))
+Proof
+  simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  Cases_on `i.inst_opcode = MLOAD` >> simp[]
+  >- (simp[scan_load_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+      gvs[operand_lit_val_def] >>
+      rename1 `i.inst_operands = [a]` >> Cases_on `a` >>
+      gvs[operand_lit_val_def]) >>
+  Cases_on `i.inst_opcode = MSTORE` >> simp[]
+  >- (simp[scan_store_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+      gvs[operand_lit_val_def, operand_var_name_def] >>
+      rename1 `i.inst_operands = [a;b]` >>
+      Cases_on `a` >> Cases_on `b` >>
+      gvs[operand_lit_val_def, operand_var_name_def]) >>
+  Cases_on `i.inst_opcode = MCOPY` >> simp[]
+  >- (simp[scan_bulk_copy_def] >> rpt BasicProvers.TOP_CASE_TAC >>
+      gvs[operand_lit_val_def] >>
+      rename1 `i.inst_operands = [a;b;c]` >>
+      map_every Cases_on [`a`,`b`,`c`] >> gvs[operand_lit_val_def]) >>
+  Cases_on `is_volatile_memory i` >> simp[]
+QED
+
+Theorem mm_local_mem2mem_nonbarrier_write_owner[local]:
+  bb.bb_instructions = pre ++ i::post /\
+  ss = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state pre /\
+  i.inst_opcode IN {MSTORE; MCOPY} /\
+  scan_inst dfg Mem2Mem ss i <> hard_barrier ss ==>
+  ?g. MEM g (scan_block dfg Mem2Mem bb).ss_flushed /\
+      MEM i.inst_id g.cg_inst_ids
+Proof
+  strip_tac >>
+  `SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies` by
+    (gvs[] >> irule mm_local_fold_order >> simp[empty_scan_state_def]) >>
+  drule mm_local_mem2mem_scan_classification >> strip_tac >> fs[]
+  >- (`?h. MEM h (scan_store dfg Mem2Mem ss i).ss_copies /\
+        mm_local_copy_ancestor
+          <|cg_dst := w2n dst; cg_src := src; cg_length := 32;
+            cg_inst_ids := [i.inst_id] ++
+              (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id])|> h` by
+        (irule mm_local_store_new_fragment >> gvs[operand_var_name_def, operand_lit_val_def]) >>
+      `?g. MEM g (scan_block dfg Mem2Mem bb).ss_flushed /\
+        mm_local_copy_ancestor h g` by
+        (irule mm_local_prefix_final_fragment >>
+         qexistsl [`post`,`pre ++ [i]`] >>
+         gvs[FOLDL_APPEND, scan_inst_def, mode_load_opcode_def, MEM_APPEND]) >>
+      gvs[mm_local_copy_ancestor_def] >> metis_tac[MEM_APPEND, MEM]) >>
+  `?h. MEM h (scan_bulk_copy Mem2Mem ss i).ss_copies /\
+    mm_local_copy_ancestor
+      <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+        cg_inst_ids := [i.inst_id]|> h` by
+    (irule mm_local_bulk_new_fragment >> simp[operand_lit_val_def]) >>
+  `?g. MEM g (scan_block dfg Mem2Mem bb).ss_flushed /\
+    mm_local_copy_ancestor h g` by
+    (irule mm_local_prefix_final_fragment >>
+     qexistsl [`post`,`pre ++ [i]`] >>
+     gvs[FOLDL_APPEND, scan_inst_def, mode_load_opcode_def,
+       mode_copy_opcode_def, MEM_APPEND]) >>
+  gvs[mm_local_copy_ancestor_def] >> metis_tac[]
+QED
+
+Theorem mm_local_mem2mem_ordinary_classification[local]:
+  bb.bb_instructions = pre ++ i::post /\
+  ss = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state pre /\
+  (i.inst_opcode IN {MSTORE; MCOPY} ==>
+    ~(?g. MEM g (scan_block dfg Mem2Mem bb).ss_flushed /\
+          MEM i.inst_id g.cg_inst_ids)) ==>
+  scan_inst dfg Mem2Mem ss i = hard_barrier ss \/
+  (?w out. i.inst_opcode = MLOAD /\ i.inst_operands = [Lit w] /\
+     i.inst_outputs = [out]) \/
+  (i.inst_opcode NOTIN {MLOAD; MSTORE; MCOPY} /\ ~is_volatile_memory i)
+Proof
+  strip_tac >>
+  Cases_on `scan_inst dfg Mem2Mem ss i = hard_barrier ss` >- simp[] >>
+  `i.inst_opcode NOTIN {MSTORE; MCOPY}` by
+    metis_tac[mm_local_mem2mem_nonbarrier_write_owner] >>
+  drule mm_local_mem2mem_scan_classification >> fs[]
+QED
+
+Theorem mm_local_nonvolatile_effects[local]:
+  ~is_volatile_memory i ==>
+  i.inst_opcode <> INVOKE /\ ~is_ext_call_op i.inst_opcode /\
+  i.inst_opcode NOTIN {CALLDATACOPY; DLOADBYTES} /\
+  Eff_MEMORY NOTIN read_effects i.inst_opcode /\
+  Eff_MEMORY NOTIN write_effects i.inst_opcode
+Proof
+  Cases_on `i.inst_opcode` >>
+  simp[is_volatile_memory_def, venomEffectsTheory.read_effects_def,
+    venomEffectsTheory.write_effects_def, venomInstTheory.is_ext_call_op_def,
+    venomEffectsTheory.all_effects_def]
+QED
+
 Theorem mm_local_nonwrite_successor[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -15127,6 +15227,51 @@ Proof
   gvs[state_equiv_frame, venomStateTheory.update_var_def,
     venomStateTheory.lookup_var_def, stateFrameTheory.state_frame_def,
     venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_cut_ordinary_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  ((EL n is).inst_opcode IN {MSTORE; MCOPY} ==>
+    ~(?g. MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids)) /\
+  apply_groups_inst_supply Mem2Mem ns rs es (EL n is) = ([EL n is],es') /\
+  mm_local_cut is gs H n excluded pc t /\
+  ~is_terminator (EL n is).inst_opcode /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n ==>
+  ?t'. mm_local_exec_prefix fuel ctx [EL n is] t t' /\
+    mm_local_cut is gs H (SUC n) excluded (SUC pc) t'
+Proof
+  strip_tac >>
+  `bb.bb_instructions = TAKE n is ++ EL n is::DROP (SUC n) is` by
+    (qspec_then `n` (qspec_then `is` mp_tac) rich_listTheory.TAKE_DROP_SUC >> simp[]) >>
+  `scan_inst (dfg_build_function fn0) Mem2Mem
+      (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is))
+      (EL n is) = hard_barrier
+      (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is)) \/
+   (?w out. (EL n is).inst_opcode = MLOAD /\ (EL n is).inst_operands = [Lit w] /\
+       (EL n is).inst_outputs = [out]) \/
+   ((EL n is).inst_opcode NOTIN {MLOAD; MSTORE; MCOPY} /\
+      ~is_volatile_memory (EL n is))` by
+    (irule mm_local_mem2mem_ordinary_classification >>
+     metis_tac[]) >>
+  qpat_x_assum `bb.bb_instructions = _ ++ _` kall_tac >>
+  pop_assum strip_assume_tac
+  >- (irule mm_local_cut_barrier_transition >> metis_tac[])
+  >- (irule mm_local_cut_literal_load_transition >> metis_tac[]) >>
+  drule mm_local_nonvolatile_effects >> strip_tac >>
+  `!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded` by
+    (qx_gen_tac `v` >> disch_tac >>
+     irule (cj 3 mm_local_retained_operand_protected) >>
+     simp[] >> metis_tac[EL_MEM, venomWfPropsTheory.operand_var_in_inst_uses]) >>
+  irule mm_local_cut_nonmemory_transition >> fs[] >> metis_tac[]
 QED
 
 Theorem mm_local_cut_init[local]:
