@@ -129,7 +129,7 @@ Theorem expr_exit_halt_exit:
   !res r cx ee.
     expr_exit res r /\ (!s. r <> Halt s) ==> halt_exit cx ee res r
 Proof
-  Cases_on `r` >> simp[]
+  Cases_on `r` >> simp[] >> rpt strip_tac >> gvs[expr_exit_def]
 QED
 
 Theorem halt_exit_INR_type:

@@ -209,6 +209,5 @@ Proof
   drule_all stmts_no_control_escape_eval_stmts_no_loop_control >>
   strip_tac >> rename1 `INR y` >> Cases_on `y` >> gvs[stmt_res_ok_def]
   >~ [`Error e`]
-  >- (Cases_on `e` >> gvs[stmt_res_ok_def, no_type_error_result_def]) >>
-  metis_tac[external_body_no_halt, source_deployment_context]
+  >- (Cases_on `e` >> gvs[stmt_res_ok_def, no_type_error_result_def])
 QED

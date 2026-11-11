@@ -145,6 +145,11 @@ Theorem call_external_body_run:
                (INL v',
                 abstract_machine_from_state am.sources am.exports am.layouts
                   es', es'.requests)) /\
+    (res = INR HaltException ==>
+     call_external_body am cx F mut tenv es0 env fbody ret =
+       (INR HaltException,
+        abstract_machine_from_state am.sources am.exports am.layouts es',
+        es'.requests)) /\
     (!e. res = INR e /\ (!v. e <> ReturnException v) /\ e <> HaltException ==>
      call_external_body am cx F mut tenv es0 env fbody ret =
        (INR e, am, es'.requests))
@@ -311,9 +316,20 @@ Proof
                     (fn th => qexists_tac `fuel2` >> SUBST1_TAC th)) >>
       qpat_x_assum `!tail. stmt_exit _ _ _ _` (qspec_then `[]` mp_tac) >>
       simp[stmt_exit_def] >> strip_tac
-      >- ((* an error or an assertion *)
+      >- ((* an error, an assertion or a halt *)
           Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR e) _` >>
-          `e <> HaltException` by (strip_tac >> gvs[stmt_res_ok_def]) >>
+          Cases_on `e = HaltException`
+          >- ((* a halt (selfdestruct): halt_exit relates the final states *)
+              gvs[] >>
+              qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[] >>
+              strip_tac >> gvs[expr_exit_def] >>
+              qspecl_then [`cx`, `es'`, `s`, `cx_tops cx`, `tx`, `am.sources`,
+                           `am.exports`, `am.layouts`] mp_tac
+                external_halt_rel_success >>
+              impl_tac >- gvs[Abbr`cx`, initial_evaluation_context_def] >>
+              strip_tac >>
+              gvs[external_call_result_rel_def, Abbr`cx`,
+                  initial_evaluation_context_def]) >>
           `!v. e <> ReturnException v` by
             (rpt strip_tac >> gvs[] >>
              qpat_x_assum `expr_exit _ _` mp_tac >>

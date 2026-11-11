@@ -1810,3 +1810,45 @@ Proof
     external_halt_success_unlock >>
   simp[vyperStateTheory.return_def]
 QED
+
+(* A source halt (selfdestruct) with halt_rel to Venom's halt state gives
+   the finalized effects external_call_result_rel compares on a halt. *)
+Theorem external_halt_rel_success:
+  !cx es ss tops tx srcs exps layouts.
+    halt_rel cx es ss /\
+    cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target ==>
+    accounts_agree (initial_evaluation_context srcs layouts tx NONE)
+      (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es)).accounts
+      (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+    transient_agree (initial_evaluation_context srcs layouts tx NONE)
+      (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es)).tStorage
+      ss.vs_transient /\
+    logs_correspond (compiled_event_info tops) (type_env tops) tx.target
+      (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es)).logs
+      ss.vs_logs /\
+    LIST_REL (request_agree (initial_evaluation_context srcs layouts tx NONE))
+      es.requests ss.vs_requests
+Proof
+  rpt strip_tac >> gvs[] >>
+  `accounts_agree (initial_evaluation_context cx.sources cx.layouts tx NONE) =
+     accounts_agree cx /\
+   transient_agree (initial_evaluation_context cx.sources cx.layouts tx NONE) =
+     transient_agree cx /\
+   request_agree (initial_evaluation_context cx.sources cx.layouts tx NONE) =
+     request_agree cx` by
+    (irule agree_cx_cong >> simp[initial_evaluation_context_def]) >>
+  asm_rewrite_tac[] >>
+  `accounts_agree cx
+     (process_deletions es.pending_deletions es.accounts)
+     (process_deletions es.pending_deletions ss.vs_accounts)` by
+    (irule accounts_agree_process_deletions >>
+     fs[halt_rel_def, accounts_rel_def]) >>
+  `log_entry_corresponds (compiled_event_info tops) (type_env tops)
+     tx.target = $=` by
+    simp[FUN_EQ_THM, log_entry_corresponds_concrete_event] >>
+  gvs[halt_rel_def, accounts_rel_def, logs_correspond_def, LIST_REL_eq,
+      finalize_pending_deletions_def, abstract_machine_from_state_def]
+QED
