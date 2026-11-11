@@ -27,7 +27,7 @@ Related documents:
   mandatory-pass surrogate. Successful compilation is a boundary input;
   identity finalization yields `runtime_bc = assemble prog` via L1.
 - `e2eCorrectness.vyper_call_correct` has the exact
-  [seven-premise public schema](compiler-proof-status-2026-10-09.md#public-runtime-theorem).
+  [eight-premise public schema](compiler-proof-status-2026-10-09.md#public-runtime-theorem).
   Its composition proof inherits **exactly seven ADMITTED stage leaves**, not
   one. The old configured `e2e_vyper_to_evm_O1` export is retired.
 - `e2eCorrectness.e2e_vyper_to_evm` is **proved generic composition** with
@@ -120,7 +120,7 @@ not align warm addresses, depth, stipend, balance checks, precompile dispatch,
 **Implemented boundary:** Verifereum's `run_call` stops at our fresh nonstatic
 head frame, with arbitrary caller frames below it; it does not finish their
 transaction. Live post-transfer accounts, exact installed singleton source and
-layouts, exact frame code/parser and message/transaction/block ties are in
+layouts, installed frame code/parser and message/transaction/block ties are in
 `e2eDefs.call_state_rel`. `frameOutcome.frame_outcome` describes success/failure,
 return bytes/logs and the parent's success word, PC, short memory splice and
 rollback. L9's proved single-frame bridge **consumes** `frame_outcome`; deriving
@@ -145,8 +145,8 @@ failed call; failed/static calls adopt no accounts/transient/log effects;
 successful nonstatic calls adopt the supplied complete payload. Source
 `take_call_outcome` checks successful nonstatic account balance/code bounds;
 this is **not a storage validator**. The public `call_outcomes_ok` additionally
-requires actual source storage validity for every successful record, including
-static ones. No arbitrary-callee or source-executed-callee producer exists yet.
+requires bounded return data, account bounds and actual source storage validity
+for every record, including failed and static ones. No arbitrary-callee or source-executed-callee producer exists yet.
 
 **Deterministic observer, not a freely chosen oracle.**
 [callTrace](../venom/codegen/frame/callTraceScript.sml) defines `frame_obs_tr`
@@ -218,7 +218,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D13 | Literal endpoint range checks + allocation-budget compiler check | `stmtLowering` tests both literal endpoints; five fixture bounds corrected historically. `vyperCompiler.lowering_context_ok` checks `unit_alloca_budget < dimword(:256)`. This is not a proof that every raw access is valid. | 5 / 6 |
 | D14 | STOP clears data, empty setup_callee accepted, CALL/STATICCALL outcomes | `venomExecSemantics` implemented; DELEGATECALL takes its outcome from the oracle too, but DELEGATECALL/CREATE/CREATE2 stay excluded by `unit_shape_ok`, not oracle-certified. | 2.1 / 4 |
 | D15 | Exclude static entry, not change write effects | `call_state_rel`/`initial_ctx_rel` nonstatic; outgoing STATICCALL is allowed. No static-entry correctness claim. | 7 generalization |
-| D16 | Exclude runtime immutables | Whitelist excludes them; fresh frame code is exactly runtime bytes. `call_state_rel` requires the live target account's code to equal the frame code; source installation is exact. Deployment/immutables generalization deferred. | 6 item7 |
+| D16 | Exclude runtime immutables | The top theorem assumes `immutable_free_program`; `call_state_rel` requires frame code `runtime_bc ++ section` with `immutables_section_rel` for the target's immutables, and the live target account's code to equal the frame code; source installation is exact. Deployment/immutables generalization deferred. | 6 item7 |
 | D17 | Forward success/weak abort transport, not observable_equiv for aborts | `unitTransformDefs.unit_result_rel`: Halt observables; Abort requires only REVERT stays REVERT. Failure returndata/kind/requests may differ. S4 ADMITTED. | 3 |
 | D18 | S6 output shape, not new compiler final-hook check | S6 ADMITTED; existing literal O1 hooks unchanged. Raw-only restrictions not required of output. | 3 |
 | D19 | Syntax memory restrictions + raw memory contract | Internal local/nested-call/loop-call/name/fallback-argument exclusions in whitelist; `raw_unit_memory_ok` below frontier at actual sites. S3/S5 ADMITTED; empty memory is not a producer. | 5 |
@@ -228,14 +228,14 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D23 | Encoding wf only; remove positive-size hypothesis | `asm_encoding_wf` replaces `asm_wf` in encoding/step consumers; zero-size reverse lookup repaired. **Still absent:** general producer for actual generated output. | 2.1 |
 | D24 | Reserved-label exclusions | `reserved_label`, `unit_shape_ok`, supported internal-name rules; S6 must produce shape, not arbitrary label-map assumptions. | 3 |
 | D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. Fallback invocation remains deferred. | 7 |
-| D26 | Initial and successful-outcome storage validity | `source_storage_ok` + `call_outcomes_ok` use actual context/storage invariants. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
+| D26 | Initial and outcome storage validity | `source_storage_ok` + `call_outcomes_ok` use actual context/storage invariants. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements; meaningful deployment is a new admission, not a proof upgrade of old T. | every proof owner |
 | D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness, uninstalled source target, and empty target account in `es.originalAccounts`. The precompile builtins are excluded, since the constructor runs without the oracle. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
 | D30 | Fresh output labels proved; unused false local claims retired | `fresh_label_output_inj` / output-state `fresh_label_produces_external` proved. Assign/zero-pad/generate-runtime correctness claims retired with provenance, not rewritten under the same names; Assign belongs to statement induction, runtime to S1. | 6 |
 | D31 | Do not claim call_state_rel satisfiable in Milestone1 | No general producer or satisfiability theorem; focused checks are not a compiled-program witness. Top-level transaction construction is explicitly future work. | 7 |
 
-D3's GAS restriction, D16's exact code/source boundary, D27/D30's retirement
+D3's GAS restriction, D16's installed code/source boundary, D27/D30's retirement
 semantics, and D28's deployment refinement are implementation qualifications,
 not guesses about future proofs. The old roadmap's three gas/call/GAS “scoped
 cheats” recipe is superseded by the outcome/opacity handoff in 2.1. No new stage
@@ -575,7 +575,7 @@ unit simulation by themselves.
 | `evaluate_abi_encode_bytes` | Builtin encode/ABI buffer path | Supported single-argument/flag form and corrected typed size rule D12j; same bytes incl dynamic multiblock encoding. |
 | Static `evaluate_abi_decode` | `lower_abi_decode`/clamps | Prove exactly same acceptance/value for static targets; conversion errors **not exempt**. |
 | Dynamic ABI tuple String/Bytes | Dynamic decoder offsets/end/padding | For source-accepted bytes same value. Source rejects nonzero padding that lowering accepts; raw Venom wraparound reads can survive where EVM starves. Test overlapping/out-of-order/head/trailing/short/overbound tails; exact D9 exemption, no blanket decoder correctness. |
-| Storage scalar read/write | SLOAD/SSTORE/TLOAD/TSTORE | Full-word types only; actual initial/successful-outcome storage validity. Narrow stored masking differs outside subset. |
+| Storage scalar read/write | SLOAD/SSTORE/TLOAD/TSTORE | Full-word types only; actual initial/outcome storage validity. Narrow stored masking differs outside subset. |
 | Fixed/dynamic arrays, Append/Pop | `compile_array_subscript`, dynamic append/pop | Signed/unsigned bounds, effect-free index/RHS; storage length invariant and corrected length-only Pop D12b. |
 | Hashmap / `hashmap_slot` | `compile_mapping_subscript`/SHA3 | Admitted integer/bool/address key forms; no byte/nested/transient hashmap write claim; carry layout/hash separation. |
 | Storage struct field | Field read/write paths | Write all admitted fields; read first field only. |
@@ -665,7 +665,7 @@ composition fully verified. Concrete T10.3 inputs:
 | H7-fallback | `valid_vyper_call` excludes `__default__`; whitelist only allows argument-free fallback declaration | Extend call boundary/dispatcher reasoning for fallback invocation; no current producer or fallback correctness theorem is supplied by this roadmap. |
 | H7-storage | `source_storage_ok`, `source_typing_ok`, `contract_storage_well_formed`, `storage_layout_safe` | Deployment establishes and later transactions preserve exact installed-source/readiness, machine/tx typing and actual storage/layout/hash separation. Existing storage-preservation and load/call typing results are **conditional partial producers**: retain runtime-storage consistency, protected calls, evaluation/oracle-storage and external-call-input readiness hypotheses. |
 | H7-entry | `call_state_rel`, `source_deployment_rel`, `valid_vyper_call` | Construct a real top-level transaction entry with live transfer, wf/Collect, code/parser/length, fresh Memory frame, installed singleton source/layouts, exact ABI bindings and block ties. Prove **satisfiability of the combined environmental boundary**, not merely implication from it; no universal compile success or supported/satisfiable compiled-program witness exists here. D31 deliberately defers this. |
-| H7-callees | `call_outcomes_ok` and source concrete `call_external NONE` / `load_contract NONE` | Prove the **source-executed-callee** producer: under explicit source typing/storage/protected-call assumptions, if the source itself ran every callee, all successful corresponding outcomes satisfy account bounds **and contract storage validity in the actual caller context**, including static successes. Failed records impose no success guard. No current such lemma exists; arbitrary EVM callee validity does not imply it. |
+| H7-callees | `call_outcomes_ok` and source concrete `call_external NONE` / `load_contract NONE` | Prove the **source-executed-callee** producer: under explicit source typing/storage/protected-call assumptions, if the source itself ran every callee, all corresponding outcomes, including failed and static ones, satisfy the return-data length and account bounds **and contract storage validity in the actual caller context**. No current such lemma exists; arbitrary EVM callee validity does not imply it. |
 | H7-compose | Frame theorem / H21 trace and frame decomposition | Split actual nested execution into prefix, inner `run_call`, suffix with environment transports; apply separately to reentrant/multicontract entries. Compose transactions by persistent world-state induction, rebuilding a fresh **outcome trace oracle** at each top call, not a gas-number list. |
 
 Read the [actual partial-producer premises](compiler-proof-status-2026-10-09.md#what-partial-producers-actually-establish)

@@ -93,11 +93,11 @@ The entire public theorem is:
 ```sml
 !policy tops deploy_bc runtime_bc am tx ret es.
   compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-  supported_program tops /\
+  supported_program tops /\ immutable_free_program tops /\
   source_typing_ok tops am tx /\
   source_storage_ok tops am tx /\
   call_state_rel tops runtime_bc am tx es /\
-  valid_vyper_call tops tx (FST (HD es.contexts)).msgParams.data ret /\
+  valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
   call_outcomes_ok am tx (MAP SND (call_trace es))
   ==>
   ?r es'. run_call es = SOME (r, es') /\
@@ -106,7 +106,7 @@ The entire public theorem is:
 ```
 
 This is the actual O1 compiler with identity finalizer `K SOME`, not an
-arbitrary minimal/custom pipeline. Exactly seven public premises remain;
+arbitrary minimal/custom pipeline. Exactly eight public premises remain;
 L1 produces raw/O1/assembly/plan witnesses and exact runtime bytes from compile
 success, and L6–L8 construct initial relations from the supplied boundary.
 The whitelist `supported_program` is computational syntax on `tops` alone,
@@ -117,13 +117,15 @@ with 101 fixture membership proofs; it is not typing or semantic correctness.
 A call frame is the head EVM context. `run_call` is Verifereum's execution until
 that frame ends; parent frames below it are arbitrary. It is not a claim about
 running the entire transaction. `call_state_rel` requires a fresh **nonstatic**
-frame: wf_state/Collect mode, memory output, code exactly `runtime_bc`, its
+frame: wf_state/Collect mode, memory output, code `runtime_bc ++ section` with
+`immutables_section_rel tops (account_immutables am tx.target) section`, its
 `parse_code 0 FEMPTY` map, size <=24576, jumpDest NONE, PC0 and empty stack,
 memory, logs and return data. Message caller/callee/value and transaction/block
 fields agree with the source. Block number is nonzero and <2**255 and the hash
 window obeys MIN256 <= length <=256. Entry value transfer succeeds and **live**
 `es.rollback.accounts` are the post-transfer source accounts (not the saved
-head rollback snapshot); transient storage agrees and source input logs are empty.
+head rollback snapshot); transient storage agrees, source input logs and pending
+deletions are empty, and `es.rollback.toDelete` equals the pending deletions.
 
 The exact singleton main source must already be installed at `tx.target`, with
 no exports and declared layout slots. Runtime typing readiness likewise requires
@@ -167,9 +169,9 @@ that whole execution into an outcome. Re-applying a frame theorem to an inner
 call requires its own premises. No current theorem connects all source-executed
 callees to the EVM outcomes or proves a closed-world/reentrant composition.
 
-`call_outcomes_ok` has **no current producer**. For every successful outcome
-(including static ones) it requires the actual runtime account bounds (balances
-<2**256, code length <=24576) and source contract-storage validity of the supplied
+`call_outcomes_ok` has **no current producer**. For every outcome (including
+failed and static ones) it requires return-data length <2**256, the actual runtime
+account bounds (balances <2**256, code length <=24576) and source contract-storage validity of the supplied
 accounts/transient storage in the actual initial context. The source checks
 account bounds on successful nonstatic adoption, **not storage validity**.
 Type/storage preservation theorems consume guards; they do not weaken them or
