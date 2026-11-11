@@ -2989,6 +2989,220 @@ Proof
   disch_then drule_all >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem ircf_exec_block_sim_from_terminal:
+  ((!D lo vs C fn_meta rma k stk PG G tn fn s t bb inst.
+    o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+    EVERY ircf_no_dst_write_alias C.ctx_functions /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
+    ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
+    fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
+      (ircf_R D fn_meta rma C) (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\
+    MEM fn C.ctx_functions /\
+    frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    s.vs_current_bb = t.vs_current_bb /\ s.vs_inst_idx = t.vs_inst_idx /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+    ircf_cross tn (ircf_gam_cur fn_meta rma C fn s UNION
+      ircf_gam_stk fn_meta rma C stk) s t /\
+    terminates (step_inst k C inst s) /\
+    (!u. step_inst k C inst s = OK u ==>
+      is_terminator inst.inst_opcode) ==>
+    ?m. block_step_rel D vs C (ircf_R D fn_meta rma C)
+      (ircf_R_ret_reachable vs D fn_meta rma C) stk PG fn
+      (exec_block k C bb s)
+      (exec_block m (ircf_transform_ctx fn_meta rma C)
+        (ircf_tbb fn_meta rma C fn bb) t)) /\
+   (!D lo vs C fn_meta rma k stk PG G tn fn s t bb inst.
+    o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+    EVERY ircf_no_dst_write_alias C.ctx_functions /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\
+    ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
+    fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
+      (ircf_R D fn_meta rma C) (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\
+    MEM fn C.ctx_functions /\
+    frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    s.vs_current_bb = t.vs_current_bb /\ s.vs_inst_idx = t.vs_inst_idx /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+    ircf_cross tn (ircf_gam_cur fn_meta rma C fn s UNION
+      ircf_gam_stk fn_meta rma C stk) s t /\
+    inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
+    terminates (exec_block k C bb s) ==>
+    ?m. block_step_rel D vs C (ircf_R D fn_meta rma C)
+      (ircf_R_ret_reachable vs D fn_meta rma C) stk PG fn
+      (exec_block k C bb s)
+      (exec_block m (ircf_transform_ctx fn_meta rma C)
+        (ircf_tbb fn_meta rma C fn bb) t))) ==>
+  !D lo vs C fn_meta rma k stk PG G tn fn s t bb inst.
+    o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+    EVERY ircf_no_dst_write_alias C.ctx_functions /\
+    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\ 
+    ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
+    fn_sim_below D vs C (ircf_transform_ctx fn_meta rma C)
+      (ircf_R D fn_meta rma C) (ircf_R_ret_reachable vs D fn_meta rma C) (SUC k) /\
+    MEM fn C.ctx_functions /\
+    frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    s.vs_current_bb = t.vs_current_bb /\ s.vs_inst_idx = t.vs_inst_idx /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+    ircf_cross tn (ircf_gam_cur fn_meta rma C fn s UNION
+      ircf_gam_stk fn_meta rma C stk) s t /\
+    terminates (exec_block k C bb s) ==>
+    ?m. block_step_rel D vs C (ircf_R D fn_meta rma C)
+      (ircf_R_ret_reachable vs D fn_meta rma C) stk PG fn
+      (exec_block k C bb s)
+      (exec_block m (ircf_transform_ctx fn_meta rma C)
+        (ircf_tbb fn_meta rma C fn bb) t)
+Proof
+  disch_then (CONJUNCTS_THEN2 (mk_asm "terminal") (mk_asm "forward")) >>
+  rpt gen_tac >>
+  map_every qid_spec_tac [`inst`, `t`, `tn`, `G`] >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s`
+  >- (asm "forward" irule >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[]) >>
+  `terminates (step_inst k C inst s)` by
+    (qpat_x_assum `terminates (exec_block _ _ _ _)` mp_tac >>
+     simp[Once exec_block_def] >>
+     Cases_on `step_inst k C inst s` >> simp[passSimulationDefsTheory.terminates_def]) >>
+  Cases_on `!u. step_inst k C inst s = OK u ==>
+     is_terminator inst.inst_opcode`
+  >- (asm "terminal" irule >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[]) >>
+  asm_x "terminal" kall_tac >> asm_x "forward" kall_tac >>
+  gvs[] >> rename1 `step_inst k C inst s = OK s1` >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   inst = EL s.vs_inst_idx bb.bb_instructions` by
+    gvs[get_instruction_def] >>
+  `~in_revert_forward fn s` by
+    (strip_tac >>
+     fs[contextCodegenRelTheory.in_revert_forward_def,
+        contextCodegenRelTheory.revert_forward_at_def,
+        contextCodegenRelTheory.revert_forward_pair_def] >>
+     gvs[] >> fs[is_terminator_def]) >>
+  suspend "continue"
+QED
+
+Resume ircf_exec_block_sim_from_terminal[continue]:
+  `s1.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstProofsTheory.step_preserves_control_flow] >>
+  `terminates (exec_block k C bb (s1 with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (qpat_x_assum `terminates (exec_block _ _ _ s)` mp_tac >>
+     simp[Once exec_block_def] >> gvs[]) >>
+  `SUC s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (spose_not_then assume_tac >>
+     qpat_x_assum `terminates (exec_block _ _ _ _)` mp_tac >>
+     simp[Once exec_block_def, get_instruction_def,
+          passSimulationDefsTheory.terminates_def]) >>
+  `active_inst fn (EL (SUC s.vs_inst_idx) bb.bb_instructions)
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (simp[contextCodegenRelTheory.active_inst_def] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+               venomExecPropsTheory.lookup_block_label]) >>
+  `ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    (simp[ircf_tbb_def] >> irule ircf_transform_block_plan >>
+     fs[EVERY_MEM, o1_ctx_shape_def, ctx_wf_def, o1_fn_shape_def] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+  qabbrev_tac `tb = ircf_tbb fn_meta rma C fn bb` >>
+  qabbrev_tac `ti = EL s.vs_inst_idx tb.bb_instructions` >>
+  `get_instruction tb t.vs_inst_idx = SOME ti /\
+   ~is_terminator ti.inst_opcode` by
+    (gvs[Abbr `ti`, Abbr `tb`, ircf_block_plan_def] >>
+     simp[get_instruction_def] >>
+     rw[] >> simp[mk_nop_inst_def, is_terminator_def]) >>
+  `?h t1 G1 tn1.
+     step_inst h (ircf_transform_ctx fn_meta rma C) ti t = OK t1 /\
+     frame_reachable vs C stk PG G1 tn1 fn
+       (EL (SUC s.vs_inst_idx) bb.bb_instructions)
+       (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+     taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C)
+       (s1 with vs_inst_idx := SUC s.vs_inst_idx) stk) tn1
+       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+       (t1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+     ircf_cross tn1 (ircf_gam_cur fn_meta rma C fn
+       (s1 with vs_inst_idx := SUC s.vs_inst_idx) UNION
+       ircf_gam_stk fn_meta rma C stk)
+       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+       (t1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (Cases_on `inst.inst_opcode = INVOKE`
+     >- suspend "call_packet" >> suspend "base_packet") >>
+  suspend "join"
+QED
+
+Resume ircf_exec_block_sim_from_terminal[base_packet]:
+  `step_inst_base inst s = OK s1` by gvs[Once step_inst_def] >>
+  `ti = EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions` by
+    simp[Abbr `ti`, Abbr `tb`] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by metis_tac[] >>
+  drule_all ircf_noninvoke_next >> strip_tac >>
+  `ti.inst_opcode <> INVOKE` by
+    (fs[ircf_block_plan_def, Abbr `ti`] >>
+     rw[] >> gvs[mk_nop_inst_def]) >>
+  qexistsl_tac [`k`, `t'`, `step_prov PG G inst s1`, `step_taint inst s s1 tn`] >>
+  conj_tac >- simp[Once step_inst_def] >>
+  conj_tac >- (irule frame_reachable_next >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  conj_tac >- (
+    `ircf_dead (ircf_dst_ids fn_meta rma C)
+       (s1 with vs_inst_idx := SUC s.vs_inst_idx) stk =
+     ircf_dead (ircf_dst_ids fn_meta rma C) s1 stk` by simp[ircf_dead_def] >>
+    pop_assum (pure_rewrite_tac o single) >>
+    irule taint_agree_inst_idx >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `ircf_cross (step_taint _ _ _ _) _ _ _` mp_tac >>
+  simp[ircf_cross_def]
+QED
+Resume ircf_exec_block_sim_from_terminal[call_packet]:
+  `ctx_wf C /\ lo <= vs.vs_alloca_next /\ taint_ok fn tn inst s` by
+    (fs[o1_ctx_shape_def, ptr_discipline_def] >> metis_tac[]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by metis_tac[] >>
+  `fn_inst_ids_distinct fn /\ ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks` by
+    (fs[EVERY_MEM, o1_ctx_shape_def, ctx_wf_def] >>
+     drule_all allocaFrontierBoundTheory.ctx_inst_ids_distinct_fn >>
+     simp[fn_inst_ids_distinct_def, fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+  `ti = inst` by
+    (simp[Abbr `ti`] >> metis_tac[ircf_block_plan_invoke]) >>
+  `get_instruction bb s.vs_inst_idx = SOME inst /\
+   terminates (step_inst k C inst s)` by simp[] >>
+  drule_all ircf_invoke_step_transport >> simp[] >> strip_tac >>
+  metis_tac[]
+QED
+Resume ircf_exec_block_sim_from_terminal[join]:
+  `s1.vs_current_bb = t1.vs_current_bb` by
+    metis_tac[venomInstProofsTheory.step_preserves_control_flow] >>
+  qpat_x_assum `!y. _` (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then (qspec_then `s1 with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then (qspecl_then [`G1`, `tn1`, `t1 with vs_inst_idx := SUC s.vs_inst_idx`,
+    `EL (SUC s.vs_inst_idx) bb.bb_instructions`] mp_tac) >>
+  simp[get_instruction_def] >> strip_tac >>
+  qpat_x_assum `_ ==> ?m. _` mp_tac >>
+  (impl_tac >- (fs[] >> metis_tac[])) >> strip_tac >>
+  `!e. run_block_non_phis m (ircf_transform_ctx fn_meta rma C) tb
+     (t1 with vs_inst_idx := SUC t.vs_inst_idx) <> Error e` by
+    (Cases_on `run_block_non_phis k C bb (s1 with vs_inst_idx := SUC t.vs_inst_idx)` >>
+     Cases_on `run_block_non_phis m (ircf_transform_ctx fn_meta rma C) tb
+       (t1 with vs_inst_idx := SUC t.vs_inst_idx)` >>
+     gvs[block_step_rel_def, fn_run_rel_def]) >>
+  `step_inst (MAX h m) (ircf_transform_ctx fn_meta rma C) ti t = OK t1` by
+    (irule (cj 1 venomExecPropsTheory.fuel_mono) >>
+     simp[] >> qexists `h` >> simp[]) >>
+  `run_block_non_phis (MAX h m) (ircf_transform_ctx fn_meta rma C) tb
+     (t1 with vs_inst_idx := SUC t.vs_inst_idx) =
+   run_block_non_phis m (ircf_transform_ctx fn_meta rma C) tb
+     (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule (cj 2 venomExecPropsTheory.fuel_mono) >>
+     simp[] >> qexists `m` >> simp[]) >>
+  qexists `MAX h m` >>
+  once_rewrite_tac[exec_block_def] >>
+  simp[] >> gvs[]
+QED
+Finalise ircf_exec_block_sim_from_terminal
+
 Theorem ircf_runner_noninvoke_nonok:
   !D lo vs C fn_meta rma k stk PG G tn fn s t bb inst.
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
