@@ -25,6 +25,7 @@ Ancestors
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   dfgDefs symPlannerSim symShuffleSim asmSymPc codegenEncodingWf
+  spillPlanSim reorderStages inputMaterialised reduceDepthSim mixedPrefixSim
 
 (* Pointwise kind equivalence transports a typed symbolic stack. *)
 Theorem list_rel_op_kind_transport:
@@ -115,13 +116,13 @@ Proof
                  planAlignTheory.apply_prefix_ops_nil] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   drule doSwapSimTheory.spill_alloc_layout_wf_spilled_separated >> strip_tac >>
-  drule_all generatedPrefixSimTheory.do_restore_layout_wf >> strip_tac >>
+  drule_all spillPlanSimTheory.do_restore_layout_wf >> strip_tac >>
   drule_all planAlignTheory.do_restore_ss_align >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   gvs[] >> gen_tac >>
   simp[planAlignTheory.apply_prefix_ops_append] >>
   qspecl_then [`ops2`, `lo`] mp_tac
-    reorderSimTheory.apply_prefix_ops_ext_stack_spilled >>
+    mixedPrefixSimTheory.apply_prefix_ops_ext_stack_spilled >>
   metis_tac[]
 QED
 
@@ -455,7 +456,7 @@ Proof
      gvs[is_var_operand_def, dead_stack_marker_def]) >>
   drule_all deepResidualBudgetTheory.residual_budget_wf_marked_do_spill_at >>
   strip_tac >> simp[] >>
-  drule reorderSimTheory.do_spill_at_stack_length >> simp[] >> decide_tac
+  drule reduceDepthSimTheory.do_spill_at_stack_length >> simp[] >> decide_tac
 QED
 
 Theorem sym_reduce_depth_plan_frame_sim:
@@ -1846,7 +1847,7 @@ Proof
   >- (rpt gen_tac >> strip_tac >> gvs[foldlSimTheory.plan_steps_def] >>
       simp[execute_plan_def, asm_steps_def, sym_steps_def]) >>
   rpt gen_tac >> PairCases_on `h` >> strip_tac >>
-  drule reorderSimTheory.plan_steps_cons_result >> strip_tac >>
+  drule reorderStagesTheory.plan_steps_cons_result >> strip_tac >>
   qpat_x_assum `ops = _` SUBST_ALL_TAC >>
   suspend "step"
 QED
@@ -1890,7 +1891,7 @@ Proof
     (simp[listTheory.EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
      rpt strip_tac >> gvs[] >> metis_tac[listTheory.EL_MEM]) >>
   qpat_x_assum `reorder_plan _ _ _ = _`
-    (assume_tac o REWRITE_RULE [reorderSimTheory.reorder_plan_eq_plan_steps]) >>
+    (assume_tac o REWRITE_RULE [reorderStagesTheory.reorder_plan_eq_plan_steps]) >>
   drule_all sym_plan_steps_reorder_frame_sim_marked >> simp[]
 QED
 
@@ -1923,7 +1924,7 @@ Theorem sym_restore_spilled_cons_frame_sim:
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (ops1 ++ ops2))
 Proof
   strip_tac >>
-  drule_all_then strip_assume_tac generatedPrefixSimTheory.do_restore_layout_wf >>
+  drule_all_then strip_assume_tac spillPlanSimTheory.do_restore_layout_wf >>
   gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
   `!off. MEM (SORestore off) ops1 ==> off < dimword(:256)` by metis_tac[] >>
   `!off. MEM (SORestore off) ops2 ==> off < dimword(:256)` by metis_tac[] >>
@@ -3297,7 +3298,7 @@ Theorem reorder_plan_read_only_kind_replay:
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
   (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
 Proof
-  rewrite_tac[reorderSimTheory.reorder_plan_eq_plan_steps] >>
+  rewrite_tac[reorderStagesTheory.reorder_plan_eq_plan_steps] >>
   MATCH_ACCEPT_TAC reorder_steps_read_only_kind_replay
 QED
 
@@ -3530,7 +3531,7 @@ Theorem reorder_plan_spill_free_kind_replay:
   LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
     (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack
 Proof
-  rewrite_tac[reorderSimTheory.reorder_plan_eq_plan_steps] >>
+  rewrite_tac[reorderStagesTheory.reorder_plan_eq_plan_steps] >>
   metis_tac[reorder_steps_spill_free_kind_replay]
 QED
 
@@ -6011,7 +6012,7 @@ Proof
     metis_tac[deepResidualBudgetTheory.emit_input_plan_residual_budget_wf_marked,
               listTheory.APPEND] >>
   `!x. LIST_ELEM_COUNT x inputs <= LIST_ELEM_COUNT x prepared.ps_stack` by
-    metis_tac[reorderSimTheory.emit_input_plan_materialised] >>
+    metis_tac[inputMaterialisedTheory.emit_input_plan_materialised] >>
   drule_all_then strip_assume_tac
     deepResidualBudgetTheory.reorder_plan_materialised_arranged_marked >> gvs[]
 QED

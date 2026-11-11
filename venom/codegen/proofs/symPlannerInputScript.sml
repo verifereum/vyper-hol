@@ -2,7 +2,7 @@ Theory symPlannerInput
 Ancestors
   symPlannerMoves symPlannerBase symPlannerScratch stackPlanGen stackPlanOps
   stackModel stackOpSim planExec asmSymSem asmSem codegenSymRel list
-  deepResidualBudget allocMono generatedPrefixSim
+  deepResidualBudget allocMono generatedPrefixSim spillPlanSim
 
 Theorem sym_push_kind_step:
   sym_kinds_ok cplan fn ret srest ps ss /\ op_kind_ok fn ret op sv ==>
@@ -144,7 +144,7 @@ Proof
   drule_then assume_tac do_restore_not_spilled >>
   drule_then assume_tac do_restore_spill_base >>
   drule_then assume_tac emit_one_input_next_offset >>
-  gvs[] >> metis_tac[do_restore_layout_wf, arithmeticTheory.LESS_EQ_TRANS]
+  gvs[] >> metis_tac[spillPlanSimTheory.do_restore_layout_wf, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem sym_input_restore_finish[local]:

@@ -12,7 +12,7 @@ Ancestors
   symShuffleSim symPlannerReorder symPlannerInput codegenSymRel deepResidualSim deepResidualBudget fnPlanPrefix
   doSwapSim planSpillBounds contextCodegenRel unitShapeDefs venomWf
   stackPlanGen stackPlanOps stackPlanTypes planExec asmSymSem asmSem
-  dfgDefs
+  dfgDefs inputMaterialised
 
 (* Input emission then reorder, from planner state ps to arranged, keeps
    the kinds of the frame's values; spills and restores stay inside the
@@ -53,7 +53,7 @@ Proof
   `residual_budget_wf_marked spillbase selected prepared` by
     metis_tac[residual_budget_wf_marked_perm] >>
   `pending_inventory_wf selected prepared` by
-    (drule_all_then assume_tac reorderSimTheory.emit_input_plan_materialised >>
+    (drule_all_then assume_tac inputMaterialisedTheory.emit_input_plan_materialised >>
      fs[reorderSimTheory.pending_inventory_wf_def] >>
      metis_tac[genericInputReadyTheory.perm_operand_counts, arithmeticTheory.LESS_EQ_TRANS,
        arithmeticTheory.LESS_EQ_ADD]) >>
