@@ -7,6 +7,14 @@ Ancestors
   gasSummary gasOutcome gasContext stmtSimForRounds vyperInterpreter
   vyperState loweringPosts compileEnv exprLoweringProps exprLowering list pair
 
+(* A frame with no source step reads its environment only through its scopes. *)
+Theorem wb_frame_same_scopes[local]:
+  es1.scopes = es2.scopes ==>
+  (wb_frame ce es1 es1 sa s0 s <=> wb_frame ce es2 es2 sa s0 s)
+Proof
+  strip_tac >> fs[wb_frame_def, locals_kept_def, popped_kept_def]
+QED
+
 Theorem intcall_args_frame_accumulated:
   !args H a sm es s vals sn k initial_es sinitial_es.
   body_inv tops ctx ce cx /\ body_results_ok cx args /\
@@ -91,9 +99,7 @@ Resume intcall_args_frame_accumulated[tail]:
   `local_ptrs_reserved ce sh` by metis_tac[local_ptrs_reserved_next_var] >>
   `wb_frame ce initial_es initial_es a sinitial_es t` by
     (`wb_frame ce initial_es initial_es sm s t` by
-       (`wb_frame ce initial_es initial_es sm s t <=> wb_frame ce es es sm s t` by
-          (qpat_assum `es.scopes = _` (fn sc => simp[wb_frame_def, locals_kept_def, popped_kept_def, sc])) >>
-        pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+       metis_tac[wb_frame_same_scopes] >>
      mp_tac (Q.SPECL [`func`, `ce`, `cx`, `initial_es`, `sinitial_es`, `a`,
                       `initial_es`, `initial_es`, `sm`, `s`, `t`, `ctx`]
                wb_frame_trans) >>
