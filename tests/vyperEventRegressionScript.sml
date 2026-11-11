@@ -73,7 +73,9 @@ fun mixed_topic_program second_field fourth_indexed =
        [Log (NONE,"E") [Name (BaseT (BytesT (Fixed 32))) "x";
          Name (BaseT AddressT) "y"; Name (BaseT (UintT 8)) "z";
          Name (BaseT BoolT) "w"]]])] : (num option # toplevel list) list``;
+val () = regression "IDX4" false (mixed_topic_program ``"b"`` ``T``);
 val () = regression "e10_idx3" true (mixed_topic_program ``"b"`` ``F``);
+val () = regression "DUP_FIELD" false (mixed_topic_program ``"a"`` ``F``);
 val () = regression "e87_storage_bytes20" true
   ``[(NONE,[EventDecl "E" [(("a",^b20),T); (("b",^b20),F)];
      VariableDecl Private Storage "v" ^b20 (SOME 0);

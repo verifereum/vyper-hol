@@ -358,7 +358,7 @@ Proof
        get_accounts_def, update_accounts_def, get_transient_storage_def,
        lift_option_def, update_transient_def, append_logs_def,
        update_pending_deletions_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>

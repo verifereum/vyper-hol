@@ -82,9 +82,10 @@ Proof
   PairCases_on `r` >> gvs[set_external_package_target_def] >>
   drule_all package_external_fn_vars >> strip_tac >>
   `~r0.ce_is_ctor /\ r0.ce_imm_alloca = NONE` by
-    (gvs[package_external_fn_def, update_cenv_nonreentrant_def] >>
-     rw[update_cenv_ret_abi_def, build_compile_env_imm_alloca,
-        build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
+    (`~(build_compile_env tops External mut tx.function_name args ret fbody
+         F).ce_is_ctor` by simp[build_compile_env_def, pairTheory.UNCURRY] >>
+     gvs[package_external_fn_def, update_cenv_nonreentrant_def] >>
+     rw[update_cenv_ret_abi_def, build_compile_env_imm_alloca] >> gvs[]) >>
   `storage_vars_rel r0 (initial_evaluation_context am.sources am.layouts tx NONE) /\
    transient_vars_rel r0 (initial_evaluation_context am.sources am.layouts tx NONE)` by
     (irule runtime_module_storage_rel >> simp[] >>

@@ -131,6 +131,7 @@ Theorem no_control_prims:
   (release_nonreentrant_lock a n s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (adopt_call_outcome rq oc s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (take_call_outcome t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
+  (take_delegate_outcome t cd vo s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (eval_create cx k hs rof tys vs bs s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (check_create_blueprint hs vs s = (INR exc,s') ⇒ no_control_exc exc)
 Proof
@@ -143,6 +144,7 @@ Proof
      update_pending_deletions_def,
      no_control_exc_def] >>
   imp_res_tac take_call_outcome_error >>
+  imp_res_tac take_delegate_outcome_error >>
   imp_res_tac eval_create_exception_is_error >>
   imp_res_tac check_create_blueprint_exception_is_error >> gvs[]
 QED

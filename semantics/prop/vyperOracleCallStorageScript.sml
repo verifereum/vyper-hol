@@ -67,8 +67,9 @@ Proof
   drule_all eval_ext_call_effects_oracle_storage_preserved >> simp[]
 QED
 
-(* A call or staticcall raw_call adopts its oracle outcome; a delegate
-   raw_call runs the callee even in oracle mode, so it is excluded. *)
+(* A call or staticcall raw_call adopts its oracle outcome. Delegate raw_calls
+   adopt theirs too (take_adopt_delegate_outcome_storage_suffix); this
+   statement keeps its non-delegate hypothesis for its existing users. *)
 Theorem eval_raw_call_oracle_storage_preserved:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   IS_SOME st.outcomes /\ ~flags.rcf_is_delegate /\

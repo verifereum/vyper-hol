@@ -372,24 +372,20 @@ Theorem delegatecall_emit_venom_asm_rel:
       vs' ab
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `read_memory (w2n ao) (w2n az) vs =
-    TAKE (w2n az) (DROP (w2n ao)
-      (asm_expand_memory (w2n ao + w2n az) st.as_memory))` by
-    (irule related_call_input_bytes >> qexistsl_tac [`lo`, `ps`] >> simp[]) >>
-  `st.as_accounts = vs.vs_accounts /\ st.as_call_ctx = vs.vs_call_ctx` by
-    fs[venom_asm_rel_def] >>
-  drule related_delegatecall_state >> strip_tac >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [exec_delegatecall_def, LET_THM] >>
-  simp_tac (srw_ss()) [AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `_ = (_, _)` SUBST_ALL_TAC >>
-  drule_all extract_result_venom_asm_rel >> strip_tac >> gnvs[] >>
-  `6 <= LENGTH ps.ps_stack` by
-    fs[venom_asm_rel_def, plan_stack_rel_def] >>
-  qexists_tac `asm_next (ab with as_stack := output :: stk)` >>
-  conj_tac
-  >- simp[asm_exec_delegatecall_def, LET_THM] >>
-  simp[asm_next_def] >>
+  simp_tac std_ss [exec_delegatecall_def, LET_THM] >> pairarg_tac >>
+  pure_asm_rewrite_tac[] >> strip_tac >>
+  rename1 `consume_call_outcome _ _ _ _ = (output, vb)` >>
+  `asm_call_request st addr 0w (w2n ao) (w2n az) F =
+   venom_call_request vs addr 0w ao az F` by
+    (irule related_call_request >> qexistsl_tac [`lo`, `ps`] >> simp[]) >>
+  drule_all consume_call_outcome_venom_asm_rel >>
+  disch_then (qspecl_then [`w2n ao`, `w2n az`, `stk`] strip_assume_tac) >>
+  qpat_x_assum `consume_call_outcome _ _ _ _ = _` kall_tac >>
+  qexists_tac `ab` >> conj_tac
+  >- gvs[asm_exec_delegatecall_def] >>
+  simp[] >>
+  `6 <= LENGTH ps.ps_stack` by fs[venom_asm_rel_def, plan_stack_rel_def] >>
   drule emit_output_venom_asm_rel >>
   disch_then (qspecl_then [`output`, `out`, `6`] mp_tac) >>
   gvs[asm_next_def, venom_asm_rel_def, update_var_def]

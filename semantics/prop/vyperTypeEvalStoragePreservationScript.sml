@@ -1584,8 +1584,13 @@ Proof
    irule run_raw_call_storage_frame >> simp[] >> metis_tac[]) >>~-
   ([`adopt_call_outcome _ _ _ = (INR _,_)`],
    imp_res_tac vyperCallOutcomeTheory.adopt_call_outcome_frame >> gvs[]) >>~-
+  ([`take_delegate_outcome _ _ _ _ = (INL _,_)`,
+    `adopt_call_outcome _ _ _ = (INL (),_)`],
+   drule_all take_adopt_delegate_outcome_storage_suffix >> simp[]) >>~-
   ([`adopt_call_outcome _ _ _ = (INL (),_)`],
-   drule_all take_adopt_call_outcome_storage_suffix >> simp[]) >>
+   drule_all take_adopt_call_outcome_storage_suffix >> simp[]) >>~-
+  ([`take_delegate_outcome _ _ _ _ = _`],
+   drule_all take_delegate_outcome_storage_suffix >> simp[]) >>
   drule_all take_call_outcome_storage_suffix >> simp[]
 QED
 

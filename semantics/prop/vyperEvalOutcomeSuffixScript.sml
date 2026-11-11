@@ -444,15 +444,31 @@ Proof
   drule_all outcome_suffix_trans >> simp[]
 QED
 
+Theorem outcomes_suffix_take_request:
+  (!st. g st = take_request_outcome (f st) st) ==> outcomes_suffix g
+Proof
+  simp[outcomes_suffix_def] >> rpt strip_tac >>
+  Cases_on `take_request_outcome (f st) st` >>
+  Cases_on `st.outcomes`
+  >- gvs[take_request_outcome_NONE] >>
+  drule_all take_request_outcome_suffix >> strip_tac >>
+  simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
+QED
+
 Theorem outcomes_suffix_take:
   outcomes_suffix (take_call_outcome target calldata value_opt)
 Proof
-  simp[outcomes_suffix_def] >> gen_tac >>
-  Cases_on `take_call_outcome target calldata value_opt st` >>
-  Cases_on `st.outcomes`
-  >- gvs[take_call_outcome_NONE] >>
-  drule_all take_call_outcome_suffix >> strip_tac >>
-  simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
+  irule outcomes_suffix_take_request >>
+  qexists_tac `call_outcome_request target calldata value_opt` >>
+  simp[take_call_outcome_def]
+QED
+
+Theorem outcomes_suffix_take_delegate:
+  outcomes_suffix (take_delegate_outcome target calldata value_opt)
+Proof
+  irule outcomes_suffix_take_request >>
+  qexists_tac `delegate_outcome_request target calldata value_opt` >>
+  simp[take_delegate_outcome_def]
 QED
 
 Theorem outcomes_frame_adopt:
@@ -567,7 +583,8 @@ fun outcomes_suffix_step facts =
   end;
 
 val outcomes_suffix_base_facts =
-  outcomes_suffix_create_oracle :: outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
+  outcomes_suffix_create_oracle :: outcomes_suffix_read :: outcomes_suffix_take ::
+  outcomes_suffix_take_delegate :: outcomes_suffix_frame_simps;
 
 Theorem outcomes_suffix_ext_call:
   outcomes_suffix (eval_ext_call cx static skip_check sig opts vs)

@@ -987,50 +987,6 @@ Proof
   Cases >> simp[]
 QED
 
-Triviality extract_venom_result_result_equiv:
-  !vars inst s1 s2 output_val retOff retSize rr none_msg output_msg.
-    state_equiv vars s1 s2 ==>
-    result_equiv vars
-      (case extract_venom_result s1 output_val retOff retSize rr of
-       | SOME (output, s') =>
-           (case inst.inst_outputs of
-            | [out] => OK (update_var out output s')
-            | _ => Error output_msg)
-       | NONE => Error none_msg)
-      (case extract_venom_result s2 output_val retOff retSize rr of
-       | SOME (output, s') =>
-           (case inst.inst_outputs of
-            | [out] => OK (update_var out output s')
-            | _ => Error output_msg)
-       | NONE => Error none_msg)
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[extract_venom_result_def] >>
-  Cases_on `rr` >> simp[result_equiv_def, revert_equiv_def] >>
-  Cases_on `x` >> simp[] >>
-  rename1 `r.contexts` >>
-  Cases_on `r.contexts` >>
-  simp[result_equiv_def, revert_equiv_def] >>
-  Cases_on `t` >> simp[result_equiv_def, revert_equiv_def] >>
-  Cases_on `h` >> simp[] >>
-  Cases_on `q` >> simp[] >>
-  TRY (Cases_on `x` >> simp[]) >>
-  Cases_on `inst.inst_outputs` >>
-  simp[result_equiv_def, revert_equiv_def] >>
-  Cases_on `LENGTH inst.inst_outputs = 1` >>
-  gvs[listTheory.LENGTH_EQ_NUM_compute, result_equiv_def, revert_equiv_def] >>
-  simp[update_var_def, state_equiv_def, execution_equiv_def,
-       lookup_var_def, FLOOKUP_UPDATE,
-       write_memory_with_expansion_def, LET_THM] >>
-  rpt strip_tac >>
-  fs[state_equiv_def, execution_equiv_def, lookup_var_def] >>
-  Cases_on `inst.inst_outputs` >>
-  gvs[result_equiv_def, revert_equiv_def, exec_result_case_tail_error] >>
-  TRY (Cases_on `y` >> gvs[result_equiv_def, revert_equiv_def]) >>
-  gvs[result_equiv_def, revert_equiv_def] >>
-  rw[state_equiv_def, execution_equiv_def, lookup_var_def, FLOOKUP_UPDATE]
-QED
-
 (* exec_ext_call preserves equiv when states and operands match *)
 Triviality exec_ext_call_equiv:
   !vars inst s1 s2 gas addr value ao as_ ro rs is_static.
@@ -1083,17 +1039,24 @@ Triviality exec_delegatecall_equiv:
       (exec_delegatecall inst s1 gas addr ao as_ ro rs)
       (exec_delegatecall inst s2 gas addr ao as_ ro rs)
 Proof
-  rw[exec_delegatecall_def, LET_THM] >>
-  `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
-   s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
-   s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
-   s1.vs_prev_hashes = s2.vs_prev_hashes /\
-   s1.vs_transient = s2.vs_transient`
-    by fs[state_equiv_def, execution_equiv_def] >>
-  simp[read_memory_def, make_venom_delegatecall_state_def,
-       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
-       LET_THM] >>
-  irule extract_venom_result_result_equiv >> simp[]
+  rpt strip_tac >>
+  `venom_call_request s1 addr 0w ao as_ F =
+   venom_call_request s2 addr 0w ao as_ F` by
+    fs[state_equiv_def, execution_equiv_def,
+       venom_call_request_def, read_memory_def] >>
+  fs[state_equiv_def, execution_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[exec_delegatecall_def, result_equiv_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> simp[exec_delegatecall_def, result_equiv_def] >>
+  qpat_abbrev_tac `taken = take_outcome _ _` >>
+  qpat_abbrev_tac `adopted = adopt_outcome _ _ _` >>
+  `!off bs. (write_memory_with_expansion off bs s1).vs_memory =
+            (write_memory_with_expansion off bs s2).vs_memory` by
+    simp[write_memory_with_expansion_def] >>
+  asm_rewrite_tac[] >>
+  rw[state_equiv_def, execution_equiv_def] >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  Cases_on `out = v` >> simp[]
 QED
 
 (* exec_create preserves equiv when states and operands match *)

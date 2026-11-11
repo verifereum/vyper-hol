@@ -162,6 +162,8 @@ Definition call_state_rel_def:
       (?mr. ctxt.msgParams.outputTo = Memory mr) /\
       installed_code_rel tops runtime_bc (account_immutables am tx.target)
         ctxt.msgParams.code /\
+      (lookup_account tx.target es.rollback.accounts).code =
+        ctxt.msgParams.code /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
       LENGTH ctxt.msgParams.code <= 24576 /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\

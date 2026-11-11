@@ -4587,8 +4587,8 @@ Proof
   qpat_assum `lookup_block exit_lbl _ = _`
     (irule_at (Pat `lookup_block exit_lbl _ = _`)) >>
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
-  >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
+  rpt conj_tac >>
+  FIRST [first_assum (ACCEPT_TAC o BETA_RULE), simp_tac bool_ss []] >>
   irule calldata_owned_header_initial_repeat_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>

@@ -142,6 +142,7 @@ Proof
       adopt_outcome_deletions_def, logs_rel_eq, record_request_def] >>
   Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
   Cases_on `rq.cr_kind = MessageCall` >>
+  Cases_on `rq.cr_kind = DelegateMessageCall` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
       call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
   gvs[immutables_rel_def] >>
@@ -192,7 +193,7 @@ Proof
           es1 = es with <| outcomes := SOME rest;
                            requests := record_request rq es.requests |>` by
     (qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
-     simp[take_call_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
+     simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
      qexists_tac `rest` >> simp[]) >>
   `request_agree cx rq (venom_call_request s aw vw ao az stat)` by
     (qpat_x_assum `rq = _` SUBST1_TAC >>
@@ -303,5 +304,5 @@ Proof
           vyperStateTheory.return_def]) >>
   strip_tac >> disj1_tac >>
   qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
-  simp[take_call_outcome_def] >> pairarg_tac >> rw[] >> gvs[]
+  simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> rw[] >> gvs[]
 QED

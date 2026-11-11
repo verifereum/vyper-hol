@@ -19,7 +19,7 @@ val EXT_CALL_FIXTURE_SIMP =
    evaluate_literal_def, dest_AddressV_def, read_result_def, read_results_def,
    empty_evaluation_context_def, get_tenv_def, get_accounts_def,
    get_scopes_def, lookup_scopes_def,
-   take_call_outcome_def, call_outcome_request_def, take_outcome_def,
+   take_call_outcome_def, take_request_outcome_def, call_outcome_request_def, take_outcome_def,
    record_request_def, computed_precompile_addresses, failed_outcome_def,
    empty_state_def, UNCURRY, sum_CASE_rator, option_CASE_rator,
    EVAL ``empty_call_txn.is_static``];
