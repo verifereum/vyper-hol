@@ -32,7 +32,7 @@ Proof
     (gvs[expr_body_pre_def] >>
      metis_tac[post_value_type_widens, return_source_word_widens_eq]) >>
   drule vv_post_materialises >> strip_tac >>
-  drule_all vv_post_materialise >> strip_tac >>
+  drule_all vv_post_read_result >> strip_tac >>
   drule vv_post_rebase >> strip_tac >>
   `~is_word_type (expr_type e)` by metis_tac[post_value_type_word] >>
   Cases_on `vv`

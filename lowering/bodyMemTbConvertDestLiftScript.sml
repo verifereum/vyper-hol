@@ -116,7 +116,8 @@ Proof
     drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
       (Q.INST [`e1` |-> `e`, `e` |-> `TypeBuiltin ann Convert ann [e]`, `ee` |-> `ee`]
         convert_bytestring_continuation_summary_mem
-       |> REWRITE_RULE [th, vyperASTTheory.expr_type_def])) >>
+       |> REWRITE_RULE [th, vyperASTTheory.expr_type_def,
+                       loweringPostsTheory.expr_has_effect_thm, listTheory.EXISTS_DEF])) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `value_has_type _ _`)) >>
   disch_then (qspecl_then [`sb`, `op`] mp_tac) >>

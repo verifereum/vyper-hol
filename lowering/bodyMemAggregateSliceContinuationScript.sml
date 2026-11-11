@@ -110,9 +110,9 @@ Proof
      `local_region ce es'.scopes r ln lb lk` by
        (irule local_region_frame >> conj_tac
         >- (qexists `func` >>
-            gvs[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
+            gvs[expr_post_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
         qexistsl_tac [`sm`, `es'.scopes`, `s`] >>
-        gvs[expr_post_def, not_fresh_at_def]) >> metis_tac[]) >>
+        gvs[expr_post_def, loweringStateRelDefsTheory.not_fresh_at_def]) >> metis_tac[]) >>
   Cases_on `post_value_type ce e = expr_type e`
   >- (drule_all aggregate_equal_post_store_kind >> strip_tac
       >- (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)

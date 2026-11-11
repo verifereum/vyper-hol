@@ -114,7 +114,7 @@ Proof
     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
     (simp[Abbr `t`] >> gvs[]) >>
   drule_all exprSimAggregateChildrenTheory.aggregate_store_rebased_control_frame >> strip_tac >>
-  `alloca_inv s` by gvs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
+  `alloca_inv s` by gvs[expr_post_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `alloca_history func t` by
     (irule fragGasPathFrameMemTheory.gas_path_mem_zero_history >> simp[] >>
      metis_tac[bodyMemAggregatePathTheory.aggregate_mem_path_alloca_inv]) >>

@@ -46,7 +46,7 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   qpat_x_assum `dst = Var _` SUBST_ALL_TAC >>
   qmatch_asmsub_abbrev_tac `eval_operand (Var d) q` >>
-  `not_fresh_at sn d` by simp[Abbr `d`, not_fresh_at_def, toString_11] >>
+  `not_fresh_at sn d` by simp[Abbr `d`, loweringStateRelDefsTheory.not_fresh_at_def, toString_11] >>
   `alloca_inv q` by
     (irule aggregate_mem_path_alloca_inv >>
      qexistsl_tac [`ctx`, `func`, `0`, `r`] >> fs[gas_marked_path_def]) >>
@@ -58,7 +58,7 @@ Proof
     local_region ce es'.scopes r n lo k` by
     (rpt gen_tac >> eq_tac >> strip_tac
      >- (irule local_region_frame >> conj_tac
-         >- (qexists `func` >> fs[vv_post_def, stmt_state_rel_def, state_rel_def]) >>
+         >- (qexists `func` >> fs[vv_post_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
          qexistsl_tac [`sm`, `es'.scopes`, `q`] >> simp[]) >>
      irule local_region_frame_fwd >>
      qexistsl_tac [`r`, `sm`, `es'.scopes`] >> simp[]) >>

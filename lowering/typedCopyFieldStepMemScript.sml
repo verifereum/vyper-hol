@@ -34,7 +34,7 @@ Proof
     (Cases_on `src` >> gvs[eval_operand_def, venom_state_component_equality] >>
      metis_tac[]) >>
   `!x. src = Var x ==> not_fresh_at sc x` by
-    (rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    (rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   drule_all normalize_byte_offset_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `gas_path_mem ctx fn t 0 (OK u)` >>
@@ -42,9 +42,9 @@ Proof
     (Cases_on `dp` >> gvs[eval_operand_def, venom_state_component_equality] >>
      metis_tac[]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at sc x` by
-    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   conj_tac >- decide_tac >>
-  conj_tac >- (rpt strip_tac >> gvs[not_fresh_at_def] >>
+  conj_tac >- (rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   qexists_tac `u` >> simp[] >>
   conj_tac >- (drule_all gas_path_mem_then >> simp[]) >>
@@ -109,6 +109,6 @@ Proof
   conj_tac >- gvs[abi_decode_footprint_frame_def, venom_state_component_equality] >>
   conj_tac >- (rpt strip_tac >>
     `not_fresh_at sd x` by
-      (gvs[not_fresh_at_def] >> decide_tac) >> metis_tac[]) >>
+      (gvs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >> metis_tac[]) >>
   gvs[venom_state_component_equality]
 QED

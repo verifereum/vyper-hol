@@ -5,6 +5,7 @@ Ancestors
   exprLoweringProps loweringPosts fragGasMode compileEnv
 
 Theorem convert_dynamic_counted_cont_mem:
+  (~expr_has_effect e ==> ~expr_has_effect e1) /\
   ((expr_type e1 = BaseT (BytesT (Dynamic i))) \/
     expr_type e1 = BaseT (StringT i)) /\
   ((expr_type e = BaseT (BytesT (Dynamic n))) \/
@@ -57,6 +58,7 @@ Resume convert_dynamic_counted_cont_mem[success]:
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`e1`, `tv1`, `v`] >>
   simp[] >> conj_tac >- gvs[is_bytestring_type_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   irule convert_readonly_expr_post >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`s`, `sm`, `x`] >> simp[]

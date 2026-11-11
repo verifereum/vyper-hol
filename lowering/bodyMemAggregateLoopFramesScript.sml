@@ -79,7 +79,7 @@ Proof
     (rpt strip_tac >>
      `local_region ce es1.scopes t1 name lo sz` by
        (irule local_region_frame >> conj_tac
-        >- (qexists `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+        >- (qexists `func` >> gvs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
         qexistsl_tac [`sm`, `es1.scopes`, `q`] >> asm_rewrite_tac[]) >> metis_tac[]) >>
   `mem_bytes_at p n t1.vs_memory = mem_bytes_at p n s0.vs_memory` by
     (irule vv_post_old_buffer >> goal_assum (drule_at Any) >>

@@ -246,7 +246,7 @@ Proof
   qexists_tac `vs` >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> qpat_x_assum `!z w. _ ==> _` irule >>
-      gvs[not_fresh_at_def, mstore_def, lookup_var_def]) >>
+      gvs[loweringStateRelDefsTheory.not_fresh_at_def, mstore_def, lookup_var_def]) >>
   gvs[mstore_def] >> metis_tac[]
 QED
 

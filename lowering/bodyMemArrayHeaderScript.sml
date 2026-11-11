@@ -20,7 +20,7 @@ Proof
    sm.cs_next_id = SUC sa.cs_next_id /\ sm.cs_next_var = sa.cs_next_var` by
     gvs[emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
-  simp[local_ptrs_reserved_def, not_fresh_at_def]
+  simp[loweringStateRelDefsTheory.local_ptrs_reserved_def, loweringStateRelDefsTheory.not_fresh_at_def]
 QED
 
 Theorem array_header_path_mem[local]:

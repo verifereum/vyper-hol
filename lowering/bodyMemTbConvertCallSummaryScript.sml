@@ -157,7 +157,8 @@ Proof
       (Q.INST [`e1` |-> `Call a (IntCall fid) args drv`,
                `e` |-> `TypeBuiltin ann Convert ann [Call a (IntCall fid) args drv]`,
                `ee` |-> `ee`] convert_bytestring_continuation_summary_mem
-       |> REWRITE_RULE [th, vyperASTTheory.expr_type_def])) >>
+       |> REWRITE_RULE [th, vyperASTTheory.expr_type_def,
+                       loweringPostsTheory.expr_has_effect_thm, listTheory.EXISTS_DEF])) >>
   disch_then (drule_at (Pat `value_has_type _ _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ ann = SOME _`)) >>
   disch_then (qspecl_then [`sb`, `op`] mp_tac) >>

@@ -6,6 +6,7 @@ Ancestors
   vyperTypeSystem valueCopyBytes loweringPosts fragExec
 
 Theorem convert_bytestring_counted_cont_mem:
+  (~expr_has_effect e ==> ~expr_has_effect e1) /\
   valid_conversion (expr_type e1) (expr_type e) /\
   is_bytestring_type (expr_type e) /\
   is_bytestring_type (lowered_value_type cenv e1) /\
@@ -81,6 +82,7 @@ QED
 Finalise convert_bytestring_counted_cont_mem
 
 Theorem convert_bytestring_continuation_summary_mem:
+  (~expr_has_effect e ==> ~expr_has_effect e1) /\
   valid_conversion (expr_type e1) (expr_type e) /\
   is_bytestring_type (expr_type e) /\
   is_bytestring_type (lowered_value_type cenv e1) /\

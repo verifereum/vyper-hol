@@ -87,7 +87,7 @@ Proof
   simp[jump_to_def, typed_sa_header_state_def, update_var_def,
        lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
        venom_state_component_equality] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   metis_tac[DECIDE ``n <= n+1 /\ n <= n+2``]
 QED
 
@@ -471,7 +471,7 @@ Proof
     simp[phi_prefix_length_def, mk_inst_def] >>
   `not_fresh_at sc ("%" ++ toString (sa.cs_next_var+10)) /\
    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+11))` by
-    (simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >> decide_tac) >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >> decide_tac) >>
   `?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
     phi_prefix_length entry.bb_instructions = 0` by
     (drule_all normalize_typed_backedge_entry >> simp[]) >>
@@ -495,7 +495,7 @@ Proof
       (k+12)+1=k+13 /\ (k+12)+2=k+14 /\ (k+12)+3=k+15``] >>
   conj_tac >- (rpt strip_tac >>
     qpat_x_assum `Var _ = Var x` mp_tac >>
-    simp[not_fresh_at_def] >> disch_then (SUBST1_TAC o SYM) >>
+    simp[loweringStateRelDefsTheory.not_fresh_at_def] >> disch_then (SUBST1_TAC o SYM) >>
     simp[ASCIInumbersTheory.toString_inj]) >>
   gvs[basic_block_component_equality]
 QED
@@ -542,7 +542,7 @@ Proof
   simp[jump_to_def, update_var_def, eval_operand_def, lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   conj_tac >- simp[venom_state_component_equality] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+  rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj]
 QED
 
 Theorem typed_dynarray_exit_path_mem[local]:
@@ -579,7 +579,7 @@ Proof
   goal_assum (drule_at Any) >>
   simp[jump_to_def, typed_sa_header_state_def, update_var_def, lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, venom_state_component_equality] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   metis_tac[DECIDE ``k+5 <= k+6 /\ k+5 <= k+7``]
 QED
 
@@ -666,7 +666,7 @@ Resume typed_dynarray_suffix_path_mem[operands]:
   `not_fresh_at sm ("%" ++ toString (sa.cs_next_var+3)) /\
    not_fresh_at sm ("%" ++ toString (sa.cs_next_var+4)) /\
    not_fresh_at sm ("%" ++ toString sa.cs_next_var)` by
-    (simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
      rpt strip_tac >> gvs[ASCIInumbersTheory.toString_inj]) >>
   qpat_x_assum `!x. not_fresh_at sm x ==> lookup_var x u = _` mp_tac >>
   qpat_x_assum `eval_operand (Var ("%" ++ toString (sa.cs_next_var+3))) s = _` mp_tac >>
@@ -843,7 +843,7 @@ QED
 Resume typed_dynarray_compiler_path_mem[length_word]:
   `mload b t = mload b (mstore b (n2w n) s)` by
     (qpat_x_assum `mem_bytes_at b 32 t.vs_memory = _` mp_tac >>
-     pure_rewrite_tac[GSYM mem_word_at_eq_mload, mem_word_at_def, mem_bytes_at_def] >>
+     pure_rewrite_tac[GSYM mem_word_at_eq_mload, mem_word_at_def, valueEncodingDefsTheory.mem_bytes_at_def] >>
      disch_then SUBST1_TAC >> REFL_TAC) >>
   gvs[mload_mstore_same]
 QED
@@ -865,7 +865,7 @@ QED
 Resume typed_dynarray_compiler_path_mem[registers]:
   rpt strip_tac >>
   `not_fresh_at (sa with cs_next_var := sa.cs_next_var+5) x` by
-    (gvs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+    (gvs[loweringStateRelDefsTheory.not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   metis_tac[]
 QED
 Finalise typed_dynarray_compiler_path_mem

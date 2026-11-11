@@ -45,7 +45,7 @@ Theorem fields_runtime_advance[local]:
 Proof
   strip_tac >>
   `!x. not_fresh_at sa x ==> not_fresh_at sc x` by
-    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   conj_tac >- decide_tac >>
   conj_tac >- metis_tac[] >>
   conj_tac
@@ -55,7 +55,7 @@ Proof
         vs_current_bb := _; vs_inst_idx := _; vs_prev_bb := _|> = s` mp_tac >>
       simp_tac (srw_ss()) [venom_state_component_equality]) >>
   `!x. dst = Var x \/ src = Var x ==> not_fresh_at se x` by
-    (rpt strip_tac >> gvs[not_fresh_at_def] >>
+    (rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
      qpat_x_assum `!x. dst = Var x \/ src = Var x ==> _` drule >>
      disch_then (qspec_then `n` mp_tac) >> simp[]) >>
   simp[] >> Cases_on `dst` >> Cases_on `src` >>

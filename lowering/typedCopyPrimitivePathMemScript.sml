@@ -140,5 +140,5 @@ Proof
   conj_tac >- (qpat_x_assum `s.vs_inst_idx = _` (SUBST1_TAC o SYM) >>
                 simp[] >> irule (cj 1 gas_path_mem_rules) >> simp[]) >>
   irule valueEncodingPropsTheory.val_in_memory_relocate >>
-  simp[] >> qexistsl_tac [`s.vs_memory`, `0`, `p`] >> simp[mem_bytes_at_def]
+  simp[] >> qexistsl_tac [`s.vs_memory`, `0`, `p`] >> simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED

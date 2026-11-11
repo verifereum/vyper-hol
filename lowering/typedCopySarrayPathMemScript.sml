@@ -38,7 +38,7 @@ Proof
   simp[jump_to_def, typed_sa_header_state_def, update_var_def,
        lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   conj_tac >- simp[venom_state_component_equality] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   metis_tac[DECIDE ``n <= n+1 /\ n <= n+2``]
 QED
 
@@ -76,7 +76,7 @@ Proof
   simp[jump_to_def, typed_sa_header_state_def, update_var_def,
        lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   conj_tac >- simp[venom_state_component_equality] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   metis_tac[DECIDE ``n <= n+1 /\ n <= n+2``]
 QED
 
@@ -182,7 +182,7 @@ Proof
   simp[jump_to_def, typed_sa_backedge_state_def, update_var_def,
        eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   conj_tac >- simp[venom_state_component_equality] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   metis_tac[LESS_EQ_TRANS, LESS_EQ_REFL]
 QED
 
@@ -586,7 +586,7 @@ Proof
   simp[jump_to_def, update_var_def, eval_operand_def, lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   conj_tac >- simp[venom_state_component_equality] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+  rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj]
 QED
 
 Theorem typed_sarray_compiler_iteration_path_mem[local]:
@@ -661,7 +661,7 @@ Proof
     simp[phi_prefix_length_def, mk_inst_def] >>
   `not_fresh_at sc ("%" ++ toString (sa.cs_next_var+5)) /\
    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+6))` by
-    (simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >> decide_tac) >>
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >> decide_tac) >>
   `?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
     phi_prefix_length entry.bb_instructions = 0` by
     (drule_all normalize_typed_prefix_zero >> strip_tac >>

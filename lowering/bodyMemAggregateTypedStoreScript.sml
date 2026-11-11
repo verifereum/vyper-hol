@@ -64,7 +64,7 @@ Proof
     vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
     vs_inst_idx := s.vs_inst_idx|>) = s` by fs[] >>
   drule_all aggregate_store_rebased_control_frame >> strip_tac >>
-  `alloca_inv s` by gvs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
+  `alloca_inv s` by gvs[expr_post_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `alloca_history fn t` by
     (irule gas_path_mem_zero_history >> simp[] >>
      metis_tac[aggregate_mem_path_alloca_inv]) >>
