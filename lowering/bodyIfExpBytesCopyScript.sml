@@ -116,10 +116,13 @@ Resume ifexp_copy_post_transport[post]:
        qpat_assum `q.vs_allocas = _` (fn th2 =>
          qpat_assum `!n b sz. local_region _ _ q _ _ _ <=> _` (fn th3 =>
            rewrite_tac[loweringPostsTheory.expr_val_own_def, th1, th2, th3])))) >>
+  `locals_kept cenv es ee s0 q` by
+    (irule exprSimPropsTheory.locals_kept_mem_tail >>
+     qexists_tac `m` >> fs[loweringPostsTheory.expr_post_def]) >>
   reverse conj_tac
   >- (fs[exprSimMemDefsTheory.vv_store_bound_def, contextTheory.mk_ptr_def]) >>
   fs[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
-     loweringPostsTheory.expr_val_at_def, loweringPostsTheory.locals_kept_def] >>
+     loweringPostsTheory.expr_val_at_def] >>
   conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
   conj_tac
   >- (rpt strip_tac >>
@@ -127,12 +130,7 @@ Resume ifexp_copy_post_transport[post]:
         (irule freshWritesTheory.not_fresh_at_mono >>
          qexists_tac `origin` >> simp[]) >>
       metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> _`
-        irule >> conj_tac >- (first_assum ACCEPT_TAC) >>
-      qexists_tac `aid` >> simp[]) >>
-  rpt strip_tac >> qpat_x_assum `!n b sz off len. _` irule >> metis_tac[]
+  gvs[]
 QED
 
 Finalise ifexp_copy_post_transport
