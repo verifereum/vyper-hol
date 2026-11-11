@@ -43,6 +43,7 @@
 
 Theory assertCombinerCorrectness
 Ancestors
+  acFunctionSimulationProofs
   acSupplyProofs acChainProofs acAbortRelProofs acBaseProofs
   assertCombinerDefs irSupply irSupplyFreshProps venomFnScheduleRunner
   stateEquiv stateEquivProps venomWf venomWfProps venomExecSemantics
@@ -67,5 +68,6 @@ Theorem ac_transform_function_correct:
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (FST (ac_transform_function su fn)) s)
 Proof
-  cheat
+  pure_rewrite_tac[GSYM ac_abort_equiv_def, ETA_THM] >>
+  MATCH_ACCEPT_TAC ac_run_blocks_simulation
 QED
