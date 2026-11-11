@@ -162,7 +162,8 @@ Proof
       not_local_ptr ce ee.scopes q` by
     (rpt strip_tac >> irule return_decoder_scratch_owned >> metis_tac[]) >>
   `wb_frame ce es ee sa s0 z` by
-    (irule return_allocated_wb_frame >> (conj_tac >- simp[]) >>
+    (irule return_allocated_wb_frame >>
+     rpt (conj_tac >- FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC]) >>
      goal_assum (drule_at (Pat `abi_valid_allocated_frame _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `abi_malformed_resource_post _ _ _ _ _ _ _ _ _ _`)) >>
      `a.cs_next_var <= st.cs_next_var` by
