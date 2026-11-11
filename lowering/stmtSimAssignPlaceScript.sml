@@ -75,6 +75,10 @@ Theorem assign_place_effectful_index_case:
     target_indices_pre cenv cx env bt /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\
+    body_inv tops ctx cenv cx /\
+    stmt_exprs_ok cenv (Assign (BaseTarget bt) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget bt) e)) /\
+    cenv.ce_func_mutability = build_func_mutability tops /\
     acyclic_struct_metadata cenv.ce_struct_fields ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget bt) e))
