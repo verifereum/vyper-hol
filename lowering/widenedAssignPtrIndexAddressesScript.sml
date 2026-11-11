@@ -2,6 +2,7 @@ Theory widenedAssignPtrIndexAddresses
 Ancestors
   bodyPtrPopLocalRootFrame placeTypedCopyRecursivePath bodyPtrAttributeAdd
   exprLoweringProps typedMemoryCopy fragExec
+  bodyPtrBytestringBuiltinsExternalSlice assignTuplePtrCopyLen
   typedCopyLoopHeaderPtr emitHelperProps emitHelper compileEnv loweringStateRelDefs
   venomState ptrDiscipline finite_map words list fragGasPathPtr
 
@@ -113,4 +114,79 @@ Proof
   gvs[eval_operand_def, GSYM word_mul_n2w, WORD_MULT_COMM] >>
   qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >>
   qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem widened_assign_index_adds_counted:
+  emit_op ADD [src;so] sa = (sp,sb) /\
+  emit_op ADD [dst;doff] sb = (dp,sc) /\
+  (!x. src = Var x \/ dst = Var x \/ doff = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  eval_operand so s = SOME (n2w soff) /\ eval_operand doff s = SOME (n2w dtoff) /\
+  op_taint tn src = {} /\ op_taint tn dst = {} /\
+  op_taint tn so = {} /\ op_taint tn doff = {} /\
+  (0 < sn ==> ?root total. src = Var root /\ ptr_covers G tn root s total /\
+    soff < total /\ soff+sn <= total /\ w2n sw + soff < dimword(:256)) /\
+  (0 < dn ==> ?root total. dst = Var root /\ ptr_covers G tn root s total /\
+    dtoff < total /\ dtoff+dn <= total /\ w2n dw + dtoff < dimword(:256)) /\
+  fn_has_code sa sc fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?p q t H tm. sp = Var p /\ dp = Var q /\
+    not_fresh_at sc p /\ not_fresh_at sc q /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    eval_operand sp t = SOME (sw+n2w soff) /\
+    eval_operand dp t = SOME (dw+n2w dtoff) /\
+    op_taint tm sp = {} /\ op_taint tm dp = {} /\
+    (0 < sn ==> ptr_covers H tm p t sn) /\
+    (0 < dn ==> ptr_covers H tm q t dn) /\
+    t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
+    ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!v. not_fresh_at sa v ==> lookup_var v t = lookup_var v s /\
+      FLOOKUP H v = FLOOKUP G v /\ op_taint tm (Var v) = op_taint tn (Var v))
+Proof
+  strip_tac >>
+  `ci_mono sa sb /\ ci_mono sb sc` by metis_tac[typed_copy_emit_op_mono] >>
+  `fn_has_code sa sb fn /\ fn_has_code sb sc fn` by metis_tac[fn_has_code_split, ci_mono_def] >>
+  `!v. not_fresh_at sa v ==> not_fresh_at sb v` by
+    (gvs[ci_mono_def, not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+  qpat_assum `emit_op ADD _ sa = _` (mp_then Any mp_tac widened_assign_index_add_exact) >>
+  disch_then (qspecl_then [`tn`, `s`, `soff`, `sn`] mp_tac) >>
+  disch_then drule >>
+  disch_then (qspecl_then [`ctx`, `sw`, `PG`, `G`, `D`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `eval_operand dst t = SOME dw /\ eval_operand doff t = SOME (n2w dtoff) /\
+   op_taint tn' dst = {} /\ op_taint tn' doff = {}` by
+    (qpat_assum `t.vs_labels = _` (mp_then Any mp_tac reserved_operand_ghost_frame) >>
+     disch_then drule >> strip_tac >> metis_tac[]) >>
+  `0 < dn ==> ?root total. dst = Var root /\ ptr_covers G' tn' root t total /\
+    dtoff < total /\ dtoff+dn <= total /\ w2n dw + dtoff < dimword(:256)` by
+    (strip_tac >> qpat_x_assum `0 < dn ==> _` drule >> strip_tac >>
+     rename1 `ptr_covers G tn root s cap` >>
+     qexistsl_tac [`root`, `cap`] >> simp[] >>
+     irule ptr_covers_lookup_frame >> metis_tac[]) >>
+  qpat_assum `emit_op ADD _ sb = _` (mp_then Any mp_tac widened_assign_index_add_exact) >>
+  disch_then (qspecl_then [`tn'`, `t`, `dtoff`, `dn`] mp_tac) >>
+  disch_then drule >>
+  disch_then (qspecl_then [`ctx`, `dw`, `PG`, `G'`, `D`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G' tn' t 0 H tm (OK u)` >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK u)` by
+    (qpat_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+      (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  `u.vs_labels = t.vs_labels` by
+    (qpat_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `eval_operand sp u = SOME (sw+n2w soff) /\ op_taint tm sp = {}` by
+    (qpat_assum `u.vs_labels = _` (mp_then Any mp_tac reserved_operand_ghost_frame) >>
+     disch_then drule >> strip_tac >> simp[]) >>
+  `0 < sn ==> ptr_covers H tm out u sn` by
+    (strip_tac >> irule ptr_covers_lookup_frame >> metis_tac[]) >>
+  `u = s with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>` by
+    (qpat_assum `u = _` (fn th => once_rewrite_tac[th]) >>
+     qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  qexistsl_tac [`out`, `out'`, `u`, `H`, `tm`] >>
+  simp[] >> gvs[ci_mono_def, not_fresh_at_def] >> decide_tac
 QED
