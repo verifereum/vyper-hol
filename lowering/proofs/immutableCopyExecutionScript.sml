@@ -1121,7 +1121,7 @@ Definition immutable_loop_frame_def:
     (fresh_vars_wrt sa s ==> fresh_vars_wrt sb t)
 End
 
-Theorem immutable_loop_frame_write[local]:
+Theorem immutable_loop_frame_write:
   immutable_loop_frame sa sb s a b i t /\
   (!x. not_fresh_at sa x ==> x <> name) /\ not_fresh_at sb name ==>
   immutable_loop_frame sa sb s a b i (update_var name v t)
