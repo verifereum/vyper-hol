@@ -493,7 +493,10 @@ Theorem self_code_tail_success_ptr:
   v = u with vs_vars := v.vs_vars /\
   (!x. not_fresh_at sb x ==> lookup_var x v = lookup_var x u) /\
   ghost_inv d cenv cx es G tn v /\
-  ptr_covers G tn dst v (w2n n) /\ ptr_covers G tn out v 32 /\
+  ptr_covers G tn dst v (w2n n) /\ ptr_covers G tn out v sz /\
+  val_store_size (BaseTV (BytesT (Dynamic bound)))
+    (BytesV (TAKE (w2n n) (DROP (w2n a) u.vs_code))) <= sz /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= sz /\
   op_taint tn src = {} /\ op_taint tn len = {} /\ ~ctx_has_dalloca ctx /\
   local_ptrs_reserved cenv sd /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sd x) /\
@@ -506,6 +509,10 @@ Theorem self_code_tail_success_ptr:
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sd sf) v G tn' /\
     ghost_inv d cenv cx es G tn' z /\
     ghost_kept cenv es sd G tn v G tn' /\
+    ptr_vv_ok cx (expr_type e)
+      (Value (BytesV (TAKE (w2n n) (DROP (w2n a) u.vs_code))))
+      (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) es G tn' z /\
+    ptr_buf_ok cenv e (Var out) G z /\
     z = mstore (w2n p) n (write_memory_with_expansion (w2n p+32)
       (TAKE (w2n n) (DROP (w2n a) u.vs_code)) v) /\
     tn' = (tn with t_mem := (tn.t_mem DIFF
@@ -528,6 +535,8 @@ Proof
   `!nm off cap. local_region cenv es.scopes v nm off cap ==>
     off+cap <= w2n p \/ w2n p+32+w2n n <= off` by suspend "separation" >>
   `w2n p+32 < dimword (:256) /\ w2n a+w2n n <= LENGTH v.vs_code` by simp[] >>
+  `ptr_covers G tn out v 32` by
+    (fs[ptr_covers_def] >> goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
   drule_all self_code_copy_store_emitted_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   `emitted_insts sb sf = (emitted_insts sb sc ++ emitted_insts sc sd) ++
@@ -540,7 +549,7 @@ Proof
      qpat_assum `run_inst_seq (emitted_insts sd sf) v = OK t'`
        (fn th => pure_rewrite_tac[th]) >> simp[]) >>
   `t = t'` by gvs[listTheory.APPEND_ASSOC] >>
-  qexistsl_tac [`t`,`tn'`] >> gvs[]
+  qexistsl_tac [`t`,`tn'`] >> gvs[] >> suspend "result"
 QED
 
 Resume self_code_tail_success_ptr[separation]:
@@ -563,7 +572,7 @@ Resume self_code_tail_success_ptr[layout]:
   simp[listTheory.APPEND_ASSOC]
 QED
 
-Finalise self_code_tail_success_ptr
+(* Finalised after the result interface below. *)
 
 (* Consume the semantic value view and coverage without exposing its buffer
    allocation witness to the continuation consumer. *)
@@ -591,3 +600,26 @@ Proof
   qexistsl_tac [`b`,`bs`,`cap`,`p`,`sz'`,`tn`] >>
   simp[read_result_def, vyperStateTheory.return_def] >> decide_tac
 QED
+
+Resume self_code_tail_success_ptr[result]:
+  qmatch_goalsub_abbrev_tac `mstore (w2n p) n (write_memory_with_expansion off bs v)` >>
+  `LENGTH bs = w2n n` by simp[Abbr `bs`] >>
+  `val_wf (BaseTV (BytesT (Dynamic bound))) (BytesV bs)` by
+    (simp[val_wf_def, type_memory_size_def] >>
+     qspec_then `bound` mp_tac le_word_size_mul >> decide_tac) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
+  `vv_holds cenv cx (expr_type e) (Value (BytesV bs))
+    (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) es
+    (mstore (w2n p) n (write_memory_with_expansion off bs v))` by
+    (gvs[vv_post_def]) >>
+  irule self_code_covered_result >>
+  reverse conj_tac >- gvs[] >>
+  qexistsl_tac [`bound`,`p`,`sz`,`tn`] >>
+  simp[Abbr `off`, Abbr `bs`] >>
+  qpat_x_assum `ptr_covers G tn out v sz` mp_tac >>
+  simp[NoAsms, ptr_covers_def, mstore_def,
+       write_memory_with_expansion_def, lookup_var_def]
+QED
+
+Finalise self_code_tail_success_ptr
