@@ -551,3 +551,146 @@ Resume ac_merge_inst_emission_pointwise[allocate]:
 QED
 
 Finalise ac_merge_inst_emission_pointwise
+
+
+Theorem ac_merge_emission_conditional:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\
+  (!mc. MEM mc cs ==> ?i j c d.
+    i < j /\ j < LENGTH xs /\
+    (EL i xs).inst_id = mc.mc_first_id /\
+    (EL j xs).inst_id = mc.mc_second_id /\
+    (EL i xs).inst_opcode = ASSERT /\ (EL i xs).inst_operands = [c] /\
+    ac_get_iszero_operand dfg {} c = SOME mc.mc_first_pred /\
+    (EL j xs).inst_opcode = ASSERT /\ (EL j xs).inst_operands = [d] /\
+    ac_get_iszero_operand dfg {} d = SOME mc.mc_second_pred /\
+    (!k. i < k /\ k < j ==> ac_is_safe_between (EL k xs))) /\
+  ir_supply_extends (SND (ac_merge_insts cs [] su0 xs)) su_end /\
+  (set su_end.irs_used_vars DIFF set su0.irs_used_vars) SUBSET X /\
+  n < LENGTH xs /\ ac_merge_static xs cs su0 su_end n mp su /\
+  ac_merge_inst cs mp su (EL n xs) = (mp',out,su') ==>
+  ac_merge_static xs cs su0 su_end (SUC n) mp' su' /\
+  ir_supply_extends su su' /\
+  ac_merge_emission_form dfg X (EL n xs)
+    (ac_merge_pending xs cs n mp su)
+    (ac_merge_pending xs cs (SUC n) mp' su') out
+Proof
+  strip_tac >>
+  `ac_merge_static xs cs su0 su_end (SUC n) mp' su' /\
+   ir_supply_extends su su'` by metis_tac[ac_merge_static_step] >>
+  simp[] >> irule ac_merge_inst_emission_pointwise >>
+  qexistsl [`cs`,`mp`,`mp'`,`su`,`su'`] >> simp[] >>
+  conj_tac >- suspend "fresh" >>
+  conj_tac >- suspend "outgoing" >>
+  conj_tac >- suspend "incoming" >>
+  conj_tac >- suspend "end" >>
+  conj_tac >- suspend "start" >>
+  suspend "carry"
+QED
+
+Resume ac_merge_emission_conditional[fresh]:
+  `ir_supply_extends su0 su` by
+    (fs[ac_merge_static_def] >> metis_tac[ac_merge_prefix_bounds]) >>
+  fs[ac_merge_static_def, ir_supply_extends_def, list_subset_def,
+     EVERY_MEM, SUBSET_DEF] >> metis_tac[]
+QED
+Resume ac_merge_emission_conditional[incoming]:
+  gen_tac >> disch_tac >>
+  `MEM mc cs /\ mc.mc_second_id = (EL n xs).inst_id` by
+    (imp_res_tac FIND_MEM >> imp_res_tac FIND_P >> fs[]) >>
+  ` (EL n xs).inst_opcode = ASSERT /\
+    ?c. (EL n xs).inst_operands = [c] /\
+        ac_get_iszero_operand dfg {} c = SOME mc.mc_second_pred` by
+    (qpat_x_assum `!mc. MEM mc cs ==> _` drule >> strip_tac >>
+     `j = n` by
+       (qpat_x_assum `ALL_DISTINCT _`
+         (mp_tac o REWRITE_RULE [EL_ALL_DISTINCT_EL_EQ]) >>
+        simp[EL_MAP] >> metis_tac[]) >> gvs[]) >>
+  simp[] >>
+  `FIND (ac_merge_crossing xs n) cs =
+   FIND (\mc. mc.mc_second_id = (EL n xs).inst_id) cs` by
+    (irule (cj 1 ac_merge_assert_find_conditional) >> simp[] >>
+     qexists `dfg` >> simp[]) >>
+  simp[ac_merge_pending_def]
+QED
+Resume ac_merge_emission_conditional[outgoing]:
+  gen_tac >> disch_tac >>
+  `MEM mc cs /\ mc.mc_first_id = (EL n xs).inst_id` by
+    (imp_res_tac FIND_MEM >> imp_res_tac FIND_P >> fs[]) >>
+  `(EL n xs).inst_opcode = ASSERT /\
+    ?c. (EL n xs).inst_operands = [c] /\
+        ac_get_iszero_operand dfg {} c = SOME mc.mc_first_pred` by
+    (qpat_x_assum `!mc. MEM mc cs ==> _` drule >> strip_tac >>
+     `i < LENGTH xs` by decide_tac >>
+     `i = n` by
+       (qpat_x_assum `ALL_DISTINCT _`
+         (mp_tac o REWRITE_RULE [EL_ALL_DISTINCT_EL_EQ]) >>
+        simp[EL_MAP] >> metis_tac[]) >> gvs[]) >>
+  simp[] >>
+  `FIND (ac_merge_crossing xs (SUC n)) cs =
+   FIND (\mc. mc.mc_first_id = (EL n xs).inst_id) cs` by
+    (irule (cj 2 ac_merge_assert_find_conditional) >> simp[] >>
+     qexists `dfg` >> simp[]) >>
+  simp[ac_merge_pending_def]
+QED
+Resume ac_merge_emission_conditional[start]:
+  strip_tac >> reverse conj_tac
+  >- (irule ac_merge_prefix_unprocessed >>
+      fs[ac_merge_static_def] >> metis_tac[LESS_EQ_REFL]) >>
+  Cases_on `FIND (\c. c.mc_first_id = (EL n xs).inst_id) cs` >> fs[] >>
+  rename1 `FIND _ cs = SOME mc` >>
+  `MEM mc cs /\ mc.mc_first_id = (EL n xs).inst_id` by
+    (imp_res_tac FIND_MEM >> imp_res_tac FIND_P >> fs[]) >>
+  `(EL n xs).inst_opcode = ASSERT` by
+    (qpat_x_assum `!mc. MEM mc cs ==> _` drule >> strip_tac >>
+     `i < LENGTH xs` by decide_tac >>
+     `i = n` by
+       (qpat_x_assum `ALL_DISTINCT _`
+         (mp_tac o REWRITE_RULE [EL_ALL_DISTINCT_EL_EQ]) >>
+        simp[EL_MAP] >> metis_tac[]) >> gvs[]) >>
+  `FIND (ac_merge_crossing xs n) cs = NONE` by
+    (irule EQ_TRANS >>
+     qexists `FIND (\mc. mc.mc_second_id = (EL n xs).inst_id) cs` >>
+     reverse conj_tac >- simp[] >>
+     irule (cj 1 ac_merge_assert_find_conditional) >> simp[] >>
+     qexists `dfg` >> simp[]) >>
+  simp[ac_merge_pending_def]
+QED
+Resume ac_merge_emission_conditional[end]:
+  strip_tac >>
+  Cases_on `FIND (\c. c.mc_second_id = (EL n xs).inst_id) cs` >> fs[] >>
+  rename1 `FIND _ cs = SOME mc` >>
+  `MEM mc cs /\ mc.mc_second_id = (EL n xs).inst_id` by
+    (imp_res_tac FIND_MEM >> imp_res_tac FIND_P >> fs[]) >>
+  `(EL n xs).inst_opcode = ASSERT` by
+    (qpat_x_assum `!mc. MEM mc cs ==> _` drule >> strip_tac >>
+     `j = n` by
+       (qpat_x_assum `ALL_DISTINCT _`
+         (mp_tac o REWRITE_RULE [EL_ALL_DISTINCT_EL_EQ]) >>
+        simp[EL_MAP] >> metis_tac[]) >> gvs[]) >>
+  `FIND (ac_merge_crossing xs (SUC n)) cs =
+   FIND (\mc. mc.mc_first_id = (EL n xs).inst_id) cs` by
+    (irule (cj 2 ac_merge_assert_find_conditional) >> simp[] >>
+     qexists `dfg` >> simp[]) >>
+  simp[ac_merge_pending_def]
+QED
+Resume ac_merge_emission_conditional[carry]:
+  strip_tac >>
+  `!mc. MEM mc cs ==> mc.mc_first_id <> (EL n xs).inst_id /\
+                         mc.mc_second_id <> (EL n xs).inst_id` by
+    (qpat_x_assum `FIND (\c. c.mc_first_id = _) cs = NONE` mp_tac >>
+     qpat_x_assum `FIND (\c. c.mc_second_id = _) cs = NONE` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Induct_on `cs` >- simp[] >>
+     Cases_on `h.mc_first_id = (EL n xs).inst_id` >>
+     Cases_on `h.mc_second_id = (EL n xs).inst_id` >>
+     gvs[FIND_thm] >> metis_tac[]) >>
+  `FIND (ac_merge_crossing xs n) cs = FIND (ac_merge_crossing xs (SUC n)) cs /\
+   (!mc. FIND (ac_merge_crossing xs n) cs = SOME mc ==>
+         ac_is_safe_between (EL n xs))` by
+    (irule ac_merge_carry_find_conditional >> simp[] >> qexists `dfg` >> simp[]) >>
+  `mp' = mp` by (fs[ac_merge_inst_def] >>
+    Cases_on `EXISTS (\mc. mc.mc_first_id = (EL n xs).inst_id) cs` >> gvs[]) >>
+  gvs[ac_merge_pending_def] >>
+  Cases_on `FIND (ac_merge_crossing xs (SUC n)) cs` >> gvs[]
+QED
+Finalise ac_merge_emission_conditional
