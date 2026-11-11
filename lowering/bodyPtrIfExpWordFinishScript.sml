@@ -51,11 +51,13 @@ Theorem ifexp_word_finish_post:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id ==>
   vv_post ctx fn cenv cx (IfExp t c a b) es sa sb s0 ee tv (StackValue t (Var rv))
     (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
   strip_tac >>
+  qpat_x_assum `_ ==> ~expr_has_effect e` (assume_tac o SIMP_RULE (srw_ss()) []) >>
   irule (SRULE [expr_type_def]
     (Q.INST [`e` |-> `IfExp t c a b`] ifexp_word_vv_post_read)) >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -141,6 +143,7 @@ Theorem ifexp_word_arm_finish_ptr:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id /\ sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
   emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
@@ -158,7 +161,9 @@ Theorem ifexp_word_arm_finish_ptr:
       ghost_inv d cenv cx ee G tn u /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts) R
 Proof
-  strip_tac >> irule ifexp_outcome_zero_suffix_ptr >>
+  strip_tac >>
+  qpat_x_assum `_ ==> ~expr_has_effect e` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  irule ifexp_outcome_zero_suffix_ptr >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
   `?w. eval_operand op u = SOME w` by metis_tac[expr_post_def, expr_val_rel_def] >>
   `sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by decide_tac >>
