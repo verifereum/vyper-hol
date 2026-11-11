@@ -239,6 +239,9 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fb,ctor_src)` >>
   simp[] >> strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (drule supported_program_no_external_defaults >> simp[]) >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   `MEM (mut,nr,rr,name,args,dflts,ret,ss) ints` by
     metis_tac[MEM_classify_internal, pairTheory.FST, pairTheory.SND] >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)

@@ -324,7 +324,8 @@ Proof
          >~ [`compile_call _ _ _ _ RawLog _ _ _`] >- rawlog_tac
          >~ [`compile_call _ _ _ _ RawRevert _ _ _`] >- rawrevert_tac
          >~ [`compile_call _ _ _ _ SelfDestructTarget _ _ _`] >-
-           (simp[compile_call_def, LET_THM] >> pairarg_tac >> rpt strip_tac >> gvs[vv_operand_def])
+           (simp[compile_call_def, LET_THM] >> rpt strip_tac >> every_case_tac >>
+            gvs[] >> rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def])
          >~ [`compile_call _ _ _ _ (Send _) _ _ _`] >- send_tac
          >~ [`compile_call _ _ _ _ (RawCallTarget _) _ _ _`] >-
            (namedCases_on `l` ["", "e1 xs"] >> simp[compile_call_def, LET_THM]

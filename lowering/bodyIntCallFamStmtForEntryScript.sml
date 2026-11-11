@@ -35,7 +35,7 @@ Theorem intcall_for_body_entry_frame:
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 ==>
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
          stmt_state_rel ctx func bc cx
