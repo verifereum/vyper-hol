@@ -20,7 +20,7 @@
  *)
 Theory symFrameControl
 Ancestors
-  codegenSymRel fnFrameDeepJmp fnFrameDeepJnz fnFrameDeepRet fnFrameDeepHalt
+  asmSplice codegenSymRel fnFrameDeepJmp fnFrameDeepJnz fnFrameDeepRet fnFrameDeepHalt
   fnFrameDeepAbort fnFrameDeepGas fnFrameStepsRevertForwardDeep asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
@@ -6665,6 +6665,211 @@ Proof
   simp[sym_steps_add]
 QED
 
+Theorem sym_assert_unreachable_suffix_terminal:
+  asm_block_at p ss.sym_base.as_pc
+    [AsmPushLabel l; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel l] /\
+  ss.sym_stack = Val 0w :: stk ==>
+  sym_terminal (sym_steps p env 3 ss)
+Proof
+  strip_tac >>
+  fs[stackOpSimTheory.asm_block_at_cons] >>
+  rewrite_tac[numLib.num_CONV ``3:num``, arithmeticTheory.TWO,
+              arithmeticTheory.ONE, sym_steps_def] >>
+  simp[Once sym_step_def, sym_set_stack_def, asm_next_def] >>
+  simp[Once sym_step_def, sym_step_op_def, sym_jumpi_def] >>
+  simp[sym_set_stack_def, asm_next_def] >>
+  simp[Once sym_step_def, sym_terminal_opcode_concrete] >>
+  simp[sym_step_concrete_def, asm_op_arity_def, asm_op_arity_table_def,
+       asm_op_mem_reads_def, asmSemTheory.log_table_def, mem_labels_hit_def] >>
+  simp[SRULE [asm_step_def] stackOpAsmSimTheory.asm_step_invalid,
+       sym_lift_def, sym_terminal_def]
+QED
+
+Theorem sym_assert_zero_iszero:
+  asm_block_at p ss.sym_base.as_pc [AsmOp "ISZERO"] /\
+  ss.sym_stack = Val 0w :: stk ==>
+  codegenSymRel$sym_steps p env 1 ss = SymOK
+    (ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
+               sym_stack := Val 1w :: stk|>)
+Proof
+  strip_tac >> fs[stackOpSimTheory.asm_block_at_cons] >>
+  rewrite_tac[arithmeticTheory.ONE, codegenSymRelTheory.sym_steps_def] >>
+  drule asmSpliceTheory.sym_step_iszero_val >>
+  disch_then (qspecl_then [`p`, `env`] assume_tac) >> simp[]
+QED
+
+Theorem sym_assert_suffix_terminal:
+  asm_block_at p ss.sym_base.as_pc
+    [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"] /\
+  ss.sym_stack = Val 0w :: stk /\
+  sym_jump_dest p (Lab "revert" 0) = SOME pc /\
+  asm_block_at p pc (execute_plan fmp revert_postamble) ==>
+  sym_terminal (sym_steps p env 7 ss)
+Proof
+  strip_tac >>
+  `asm_block_at p ss.sym_base.as_pc [AsmOp "ISZERO"]` by
+    fs[stackOpSimTheory.asm_block_at_cons] >>
+  drule_all sym_assert_zero_iszero >> strip_tac >>
+  `sym_steps p env 2
+     (ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
+                sym_stack := Val 1w :: stk|>) = SymOK
+     (ss with <|sym_base := (ss.sym_base with as_stack := []) with as_pc := pc;
+                sym_stack := stk|>)` by
+    (qspec_then `ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
+                          sym_stack := Val 1w :: stk|>` mp_tac
+       (GEN ``ss:sym_state``
+         (Q.INST [`l` |-> `"revert"`, `w` |-> `1w:bytes32`] sym_jnz_suffix_nonzero)) >>
+     simp[asm_next_def] >>
+     disch_then irule >> fs[stackOpSimTheory.asm_block_at_cons]) >>
+  `sym_terminal (sym_steps p env 4
+     (ss with <|sym_base := (ss.sym_base with as_stack := []) with as_pc := pc;
+                sym_stack := stk|>))` by
+    (irule sym_revert_postamble_steps >> simp[] >> metis_tac[]) >>
+  once_rewrite_tac[GSYM (numLib.REDUCE_CONV ``1 + (2 + 4):num``)] >>
+  asm_rewrite_tac[sym_steps_add] >> simp[] >> gvs[]
+QED
+
+Theorem sym_conditional_abort_zero_stack:
+  !cp.
+  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
+  inst.inst_operands = [cond] /\ eval_operand cond vs = SOME 0w /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  opaque_use_ok fn /\ label_flow_ok ctx /\ label_positions_ok inst /\
+  EVERY (\op. op <> dead_stack_marker) (compute_operands inst) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  arranged.ps_stack = tail ++ compute_operands inst /\
+  venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := m) mid /\
+  sym_frame_inv prog env ctx cp fn ret srest labs0 arranged
+    (mid with as_stack := mid.as_stack ++ rest) ss ==>
+  ?stk. ss.sym_stack = Val 0w :: stk
+Proof
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `MEM inst.inst_opcode [STOP; RETURN; SELFDESTRUCT; REVERT; ASSERT;
+     ASSERT_UNREACHABLE; INVALID; CREATE; CREATE2; RETURNDATACOPY] /\
+   eval_operands (REVERSE (compute_operands inst)) vs = SOME [0w]` by
+    (Cases_on `inst.inst_opcode = ASSERT` >>
+     gvs[compute_operands_def, python_stack_operands_def,
+         ir_specific_operand_order_def, eval_operands_def]) >>
+  drule_then (map_every assume_tac o CONJUNCTS) (iffLR sym_frame_inv_def) >>
+  drule_all terminal_arranged_word_stack >> simp[]
+QED
+
+Theorem sym_conditional_abort_inversion:
+  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
+  step_inst fuel ctx inst vs = Abort a vs' ==>
+  ?cond. inst.inst_operands = [cond] /\ eval_operand cond vs = SOME 0w
+Proof
+  metis_tac[genBlockSimTheory.step_inst_assert_abort,
+            genBlockSimTheory.step_inst_assert_unreachable_abort]
+QED
+
+Theorem sym_abort_conditional_terminal_exists:
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
+   is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
+   env ret srest labs0 ss a vs'.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    inst.inst_opcode <> INVOKE /\ ~vs.vs_call_ctx.cc_static /\
+    source_memory_reads_disjoint cp inst vs /\ opaque_use_ok fn /\
+    ~is_param_opcode inst.inst_opcode /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    generated_plan_state_wf_marked base ps /\ codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\ inst_wf inst /\
+    (inst.inst_opcode = ASSERT ==>
+     ?off pc. FLOOKUP lo "revert" = SOME off /\ off < dimword (:256) /\
+              FLOOKUP o2pc off = SOME pc /\
+              asm_block_at prog pc (execute_plan cp.cp_initial_fmp revert_postamble)) /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      IS_SOME (stack_get_depth op ps.ps_stack) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+    (!lbl i. i < LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+             EL i (execute_plan cp.cp_initial_fmp ops) = AsmLabel lbl ==>
+             ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+                   FLOOKUP o2pc off = SOME (as.as_pc + i)) /\
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
+             operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps = SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) /\
+    dfg = dfg_build_function fn /\ MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
+    label_flow_ok ctx /\ asm_static_wf prog /\
+    (inst.inst_opcode = ASSERT ==> MEM (AsmLabel "revert") prog) /\
+    sym_frame_inv prog env ctx cp fn ret srest labs0 ps as ss /\
+    step_inst fuel ctx inst vs = Abort a vs' /\
+    (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) ==>
+    ?m. sym_terminal (sym_steps prog env m ss)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all sym_conditional_abort_inversion >> strip_tac >>
+  `ssa_form fn` by fs[stackPlanGenTheory.codegen_ready_fn_def] >>
+  `label_positions_ok inst` by
+    metis_tac[unitShapeDefsTheory.fn_shape_ok_def,
+              unitShapeDefsTheory.inst_shape_ok_def, listTheory.EVERY_MEM] >>
+  `EVERY (\op. op <> dead_stack_marker) (compute_operands inst)` by
+    (qpat_x_assum `EVERY (\op. op <> dead_stack_marker /\ _) _` mp_tac >>
+     simp[listTheory.EVERY_CONJ]) >>
+  `compute_operands inst = [cond]` by
+    (Cases_on `inst.inst_opcode = ASSERT` >>
+     gvs[compute_operands_def, python_stack_operands_def,
+         ir_specific_operand_order_def]) >>
+  drule_all sym_conditional_abort_frame_prefix_deep >> strip_tac >>
+  `arranged.ps_stack = stack_pop 1 arranged.ps_stack ++ compute_operands inst` by gvs[] >>
+  drule_all sym_conditional_abort_zero_stack >> strip_tac >>
+  `ss_mid.sym_base.as_pc = mid.as_pc` by
+    (qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ arranged _ _` mp_tac >>
+     simp[sym_frame_inv_def] >> strip_tac >>
+     drule asm_sym_rel_pc >> simp[]) >>
+  (reverse (Cases_on `inst.inst_opcode = ASSERT`)
+  >- (`sym_terminal (sym_steps prog env 3 ss_mid)` by
+        (irule sym_assert_unreachable_suffix_terminal >>
+         gvs[execute_plan_def, exec_stack_op_def] >> metis_tac[]) >>
+      qexists_tac `LENGTH (execute_plan cp'.cp_initial_fmp pre) + 3` >>
+      asm_rewrite_tac[sym_steps_add] >> simp[]) >>
+  `?off pc. FLOOKUP lo "revert" = SOME off /\ off < dimword (:256) /\
+     FLOOKUP o2pc off = SOME pc /\
+     asm_block_at prog pc (execute_plan cp'.cp_initial_fmp revert_postamble)` by metis_tac[] >>
+  `sym_jump_dest prog (Lab "revert" 0) = SOME pc` by
+    (irule sym_code_label_dest >> metis_tac[]) >>
+  `sym_terminal (sym_steps prog env 7 ss_mid)` by
+    (irule sym_assert_suffix_terminal >>
+     gvs[execute_plan_def, exec_stack_op_def] >> metis_tac[]) >>
+  qexists_tac `LENGTH (execute_plan cp'.cp_initial_fmp pre) + 7` >>
+  asm_rewrite_tac[sym_steps_add] >> simp[])
+QED
+
+Theorem sym_abort_terminal_counts_join:
+  ((a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out) \/
+   (a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out)) /\
+  venom_asm_terminal_rel vs out /\
+  sym_terminal (sym_steps prog env m ss) ==>
+  ?k fin.
+    ((a = Revert_abort /\ asm_steps lo o2pc prog k st = AsmRevert fin) \/
+     (a = ExHalt_abort /\ asm_steps lo o2pc prog k st = AsmFault fin)) /\
+    venom_asm_terminal_rel vs fin /\ sym_terminal (sym_steps prog env k ss)
+Proof
+  strip_tac >> qexistsl_tac [`n + m`, `out`] >>
+  simp[stackOpSimTheory.asm_steps_add] >>
+  metis_tac[sym_steps_terminal_extend, arithmeticTheory.ADD_COMM]
+QED
+
 Theorem sym_abort_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
@@ -6741,7 +6946,16 @@ Theorem sym_abort_frame_sim_deep:
         venom_asm_terminal_rel vs' as' /\
         sym_terminal (sym_steps prog env n ss)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `?m. sym_terminal (sym_steps prog env m ss)` by
+    (Cases_on `inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE`
+     >- (drule_all sym_abort_conditional_terminal_exists >> simp[]) >>
+     `MEM inst.inst_opcode [REVERT; INVALID; CREATE; CREATE2; RETURNDATACOPY]` by
+       (drule opcodeClassTheory.step_inst_abort_opcodes >> simp[] >> metis_tac[]) >>
+     drule_all sym_abort_regular_terminal_exists >> simp[]) >>
+  drule_all gen_inst_abort_frame_sim_deep >>
+  disch_then (qx_choose_then `n` (qx_choose_then `out` assume_tac)) >>
+  irule sym_abort_terminal_counts_join >> metis_tac[]
 QED
 
 Theorem sym_pop_pushed_steps:
