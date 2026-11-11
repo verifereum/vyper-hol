@@ -58,7 +58,8 @@ Proof
   simp[expr_post_def, aggregate_stmt_state_rel_current_bb,
        expr_val_rel_def, expr_val_at_def, expr_val_own_def,
        start_relabel_def, eval_operand_def, lookup_var_def,
-       local_region_def, locals_kept_def, popped_kept_def]
+       local_region_def, locals_kept_def, popped_kept_def,
+       loweringPostsTheory.pure_frame_def]
 QED
 
 Theorem aggregate_typed_sarray_start_swap_endpoint:

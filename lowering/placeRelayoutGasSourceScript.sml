@@ -35,6 +35,6 @@ Proof
   `stmt_res_ok lctx (INR ex)` by
     (drule gas_admissible_result >> disch_then irule >>
      qexistsl_tac [`ee`, `prefix ++ gs`] >>
-     simp[Once evaluate_def, bind_def]) >>
+     simp[Once evaluate_def, bind_def, read_result_def, return_def]) >>
   gvs[stmt_res_ok_def, target_place_res_ok_def, no_control_exc_def]
 QED

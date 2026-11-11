@@ -5,7 +5,7 @@ Ancestors
   exprSimAlloc fragGasSeq fragGasMode context emitHelperProps venomExecSemantics
   compileEnv loweringStateRelDefs emitHelper fragExec exprLoweringProps venomInst gasCount fragGasPath
   exprSimUnwrap exprSimAggregateChildren exprLowering loweringPosts vyperState
-  valueCopyBytes vyperAST
+  valueCopyBytes vyperAST exprSimUnwrapProps
 
 Theorem typed_copy_semantic_frame:
   typed_copy_state_frame sa b sz s t /\
@@ -184,7 +184,7 @@ Theorem unwrap_value_physical_path:
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  strip_tac >> dxrule_all vv_post_materialise >> strip_tac >>
+  strip_tac >> dxrule_all vv_post_read_result >> strip_tac >>
   Cases_on `post_value_type ce e = expr_type e`
   >- (gvs[] >> drule_all (SRULE [] unwrap_value_path) >>
       simp[gas_marked_path_def]) >>
