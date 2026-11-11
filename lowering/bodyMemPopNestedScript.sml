@@ -3,6 +3,7 @@
 Theory bodyMemPopNested
 Ancestors
   bodyMemoryPreds popNestedTargetMemory popNestedImmutableTransport
+  popNestedLocalAccessMemory
 
 Theorem body_pop_nested_mem_case:
   !cx v10 bt.
