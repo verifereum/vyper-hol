@@ -1,10 +1,10 @@
 Theory externalReturnPlan
 Ancestors
-  externalReturnPackage retAbiPlanProps externalReturnSupport
+  externalReturnPackage retAbiPlanProps externalReturnSupport vyperTypeContractGetter vyperGetter
   e2eDefs vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
   vyperInterpreter supportedDecls supportedProgram abiTypeBoundProps compileVyper compileEnv loweringStateRelDefs exprLowering
   abiEncoderProps structFieldsProps typedCopyProducer supportedTypes
-  vyperTypeSystem vyperContext vyperValue vyperABI contractABI
+  vyperTypeSystem vyperAST vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin
 
 Theorem return_plan_array[local]:
@@ -308,18 +308,35 @@ Proof
   drule_all return_selected_package_plan >> simp[]
 QED
 
-Theorem return_decl_from_headers[local]:
-  !tops tops0 name mut nr args dflts ret fbody.
-    EVERY (supported_declaration_header tops0) tops /\
-    lookup_function NONE name External tops =
-      SOME (mut,nr,args,dflts,ret,fbody) ==>
-    ?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops
+Theorem return_checked_getter_type[local]:
+  check_contract F
+    (layouts:(address # (storage_layout # storage_layout)) list)
+    (addr:160 word) mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\ module_allocated layouts addr src ts /\
+  MEM decl ts /\ is_public_getter_decl fn decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,stmts) ==>
+  check_value_type (type_env_all_modules mods) (Type ret)
 Proof
-  Induct >- simp[lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
-  BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
-  metis_tac[]
+  strip_tac >>
+  `check_toplevel_decl mods art src decl` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  Cases_on `decl` >>
+  gvs[is_public_getter_decl_def, external_getter_tuple_def]
+  >~ [`check_toplevel_decl _ _ _ (VariableDecl vis vmut id typ slot)`]
+  >- (Cases_on `vis` >> gvs[external_getter_tuple_def] >>
+      Cases_on `is_ArrayT typ` >> gvs[getter_def]
+      >- (rpt (pairarg_tac >> gvs[]) >>
+          `check_value_type (type_env_all_modules mods) (Type typ)` by
+            (Cases_on `vmut` >>
+             gvs[check_toplevel_decl_def, check_value_type_def]) >>
+          metis_tac[check_value_type_ArrayT_type, build_getter_ret_checked]) >>
+      Cases_on `vmut` >> gvs[check_toplevel_decl_def, check_value_type_def]) >>
+  rename1 `check_toplevel_decl _ _ _ (HashMapDecl vis tr id kt vt slot)` >>
+  Cases_on `vis` >> gvs[external_getter_tuple_def, getter_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `check_value_type (type_env_all_modules mods) vt` by
+    gvs[check_toplevel_decl_def] >>
+  metis_tac[build_getter_ret_checked]
 QED
 
 Theorem return_selected_type_evaluates:
@@ -327,18 +344,23 @@ Theorem return_selected_type_evaluates:
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) ==>
   ?tv. evaluate_type (type_env tops) ret = SOME tv
 Proof
-  strip_tac >>
-  `?raw. MEM (FunctionDecl External mut F raw fname args [] ret fbody) tops` by
-    (irule return_decl_from_headers >>
-     gvs[supported_program_def, supported_declaration_headers_def] >> metis_tac[]) >>
+  strip_tac >> drule lookup_function_External_cases >> strip_tac
+  >- (gvs[source_typing_ok_def] >>
+      `module_allocated am.layouts tx.target NONE tops` by
+        (fs[check_contract_def, main_module_allocated_def]) >>
+      `check_function_body am.layouts tx.target [(NONE,tops)] art NONE External
+         mut F args [] ret fbody` by
+        (irule check_contract_runtime_function_body_MEM >> simp[] >> metis_tac[]) >>
+      gvs[check_function_body_def, IS_SOME_EXISTS] >>
+      gvs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def]) >>
   gvs[source_typing_ok_def] >>
   `module_allocated am.layouts tx.target NONE tops` by
-    (fs[check_contract_def, main_module_allocated_def]) >>
-  `check_function_body am.layouts tx.target [(NONE,tops)] art NONE External
-     mut F args [] ret fbody` by
-    (irule check_contract_runtime_function_body_MEM >> simp[] >> metis_tac[]) >>
-  gvs[check_function_body_def, IS_SOME_EXISTS] >>
-  gvs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def]
+    (drule check_contract_main_module_allocated >> simp[]) >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
+  drule_all return_checked_getter_type >>
+  simp[check_value_type_def, IS_SOME_EXISTS,
+       vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def] >>
+  metis_tac[assignable_type_well_formed, well_formed_type_def, IS_SOME_EXISTS]
 QED
 
 Theorem return_selected_plan:

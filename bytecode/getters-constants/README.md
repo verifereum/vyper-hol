@@ -38,6 +38,19 @@ These syntax computations alone establish neither bytecode parity nor a general
 compiler-correctness theorem. In particular, existing subscript simulation
 admissions are outside these concrete bytecode checks.
 
+## Compiler proof coverage
+
+Supported declaration headers admit public storage/transient variables and
+hashmaps. External-entry proofs distinguish explicit functions from synthesized
+getters and use the checked getter argument/body typing package.
+
+Module constants are substituted into function bodies and defaults, rather than
+lowered as immutables. The general replay proof remains conditional, including
+its restriction on SHA256 expressions. Every `Constant` declaration, and public
+immutable declarations, still fails the supported-header gate. Concrete parity
+for these forms does not discharge constant bare-global simulation invariants
+without that gate.
+
 ## Pending nonreentrancy fixture
 
 `g37_pub_nonreentrancy_pragma` remains in `sources/`, `all-fixtures.txt` and the
