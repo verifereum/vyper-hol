@@ -4,7 +4,7 @@ Ancestors
   symInstKinds symShuffleSim regularPostfixSim fnPlanPrefix
   doSwapSim deepDupCallerSim planWf codegenEncodingWf rich_list
   stackPlanOps stackPlanGen stackModel planExec prefixExec prefixSim
-  codegenSymRel asmSymSem asmSem finite_map list
+  codegenSymRel asmSymSem asmSem asmOpSim finite_map list
 
 Theorem sym_kinds_ok_inventory_mono:
   sym_kinds_ok cplan fn ret srest ps ss /\
@@ -549,8 +549,7 @@ Proof
   simp[sym_mstore_def, scratch_store_labels_def, sym_step_concrete_def,
        sym_lift_def, sval_val_def, asm_op_arity_def, asm_op_arity_table_def,
        asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
-       mem_labels_hit_def, asm_step_op_def, asm_step_arith_def,
-       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       mem_labels_hit_def, asmOpSimTheory.asm_step_op_mstore,
        asm_mstore_def, asm_next_def]
 QED
 
@@ -569,8 +568,7 @@ Proof
   simp[sym_mload_def, mem_label_at_def, sym_step_concrete_def,
        sym_lift_def, sval_val_def, asm_op_arity_def, asm_op_arity_table_def,
        asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
-       mem_labels_hit_def, asm_step_op_def, asm_step_arith_def,
-       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       mem_labels_hit_def, asmOpSimTheory.asm_step_op_mload,
        asm_mload_def, asm_next_def] >>
   `~(?i. i IN FDOM ss.sym_mem_labels /\ in_mem_range (w2n off) 32 i)` by
     metis_tac[mem_sval_at_def] >>

@@ -2390,7 +2390,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_source_ok >> strip_tac >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    sym_invoke_enter_callee_paired >> disch_then drule_all >> strip_tac >>
+    sym_invoke_enter_callee_paired >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
+  disch_then (drule_at (Pat `setup_callee _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  disch_then (drule_at (Pat `sym_fn_sim_at _`)) >>
+  disch_then drule_all >> strip_tac >>
   qpat_x_assum `!rv v. run_blocks _ _ _ _ = IntRet rv v ==> _` drule >> strip_tac >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_plan_decompose >> strip_tac >>
   rename1 `codegen_context_obligations Inv ctx cplan` >>
