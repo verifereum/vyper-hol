@@ -158,6 +158,12 @@ Resume effect_free_eval_expr_frame[builtin]:
   >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, AllCaseEqs()] >>
       imp_res_tac next_gas_reading_state >> gvs[]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, lift_sum_def, AllCaseEqs()] >>
+      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac lift_option_type_state >> gvs[] >>
+      qpat_x_assum `!e. MEM e args ==> _` kall_tac >> metis_tac[]) >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
       AllCaseEqs()] >>

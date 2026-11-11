@@ -62,6 +62,12 @@ Proof
   >> metis_tac[get_place_state]
 QED
 
+Theorem extrequest_read_lift_option_type[local]:
+  state_rel_frame (extrequest_read_frame cx) (lift_option_type x msg)
+Proof
+  irule extrequest_read_observation_frame >> metis_tac[lift_option_type_state]
+QED
+
 Theorem extrequest_evaluate_read_frame:
   (!cx s. eval_stmt cx s = eval_stmt cx s) /\
   (!cx ss. eval_stmts cx ss = eval_stmts cx ss) /\
@@ -212,6 +218,14 @@ Resume extrequest_evaluate_read_frame[builtin]:
       rpt strip_tac >> irule state_rel_frame_bind_guarded >>
       simp[extrequest_read_frame_def, extrequest_read_pure_frames]) >>
   Cases_on `bt = Env MsgGas` >> simp[extrequest_read_bookkeeping_frame] >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
+  >- (irule state_rel_frame_bind_guarded >> simp[extrequest_read_frame_def] >>
+      reverse conj_tac >- metis_tac[] >>
+      rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+      simp[extrequest_read_frame_def, extrequest_read_pure_frames] >>
+      rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+      simp[extrequest_read_frame_def, extrequest_read_lift_option_type] >>
+      rpt strip_tac >> simp[extrequest_read_pure_frames]) >>
   irule state_rel_frame_bind_guarded >> simp[extrequest_read_frame_def] >>
   reverse conj_tac >- metis_tac[] >>
   rpt strip_tac >> irule state_rel_frame_bind_guarded >>

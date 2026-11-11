@@ -59,6 +59,13 @@ Proof
     extrequest_obs_lookup_global, extrequest_obs_precompile]
 QED
 
+Theorem extrequest_replay_lift_option_type[local]:
+  extrequest_success_replay (lift_option_type x msg)
+Proof
+  irule extrequest_equivariant_replay >>
+  Cases_on `x` >> simp[lift_option_type_def]
+QED
+
 Theorem extrequest_evaluate_replay:
   (!cx s. eval_stmt cx s = eval_stmt cx s) /\
   (!cx ss. eval_stmts cx ss = eval_stmts cx ss) /\
@@ -206,6 +213,13 @@ Resume extrequest_evaluate_replay[builtin]:
       simp[extrequest_replay_primitives, extrequest_replay_return]) >>
   Cases_on `bt = Env MsgGas` >> simp[]
   >- simp[extrequest_replay_gas_read] >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
+  >- (irule extrequest_replay_bind_guarded >> reverse conj_tac >- metis_tac[] >>
+      rpt strip_tac >> simp[] >> irule extrequest_replay_bind >>
+      simp[extrequest_replay_primitives] >>
+      gen_tac >> simp[] >> irule extrequest_replay_bind >>
+      simp[extrequest_replay_lift_option_type] >>
+      gen_tac >> simp[extrequest_replay_primitives]) >>
   irule extrequest_replay_bind_guarded >> reverse conj_tac >- metis_tac[] >>
   rpt strip_tac >> simp[] >> irule extrequest_replay_bind >>
   simp[extrequest_replay_primitives] >>
