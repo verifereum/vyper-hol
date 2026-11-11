@@ -47,6 +47,8 @@ Theorem intcall_mapping_base_outcome:
         (ValueSubscript kv) en = (INL selected,en) /\
       eval_operand op out = SOME (hashmap_slot slot (encode_hashmap_key kt kv)) /\
       (!x. op = Var x ==> not_fresh_at sb x) /\
+      (~expr_has_effect (Subscript ann obj idx) ==>
+       pure_frame ce fp.jc_func es sa s0 out) /\
       intcall_expr_cont fp ce env es sa s0 en sb out)
     (\res en r. expr_exit res r)
 Proof

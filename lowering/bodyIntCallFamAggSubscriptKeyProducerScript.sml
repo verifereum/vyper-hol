@@ -19,6 +19,7 @@ Theorem intcall_mapping_key_producer:
   gas_marked_exec F (fp.jc_ctx,fp.jc_func) (eval_expr fp.jc_cx obj)
     (es,s0) marks (INL (HashMapRef tr slot kt vt)) mid (OK t) /\
   intcall_expr_cont fp ce env es sa s0 (mid with gas_obs := []) sm t /\
+  (~expr_has_effect obj ==> pure_frame ce fp.jc_func es sa s0 t) /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
   lower_value compile_expr ce (expr_type idx) idx sm = (key,sn) /\
@@ -40,6 +41,8 @@ Theorem intcall_mapping_key_producer:
         (ValueSubscript kv) en = (INL selected,en) /\
       eval_operand op out = SOME (hashmap_slot slot (encode_hashmap_key kt kv)) /\
       (!x. op = Var x ==> not_fresh_at sb x) /\
+      (~expr_has_effect (Subscript ann obj idx) ==>
+       pure_frame ce fp.jc_func es sa s0 out) /\
       intcall_expr_cont fp ce env es sa s0 en sb out)
     (\res en r. expr_exit res r)
 Proof

@@ -306,6 +306,7 @@ Definition intcall_map_producer_def:
            vv = LocatedValue tp p /\ p.ptr_location = slot_loc tr /\
            eval_operand p.ptr_operand u = SOME slot /\
            (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
+           (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 End
