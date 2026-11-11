@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem recovery_result_posts:
-  stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es sf s t /\
+  stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es es' sf s t /\
   eval_operand res t = SOME (typed_val_to_w256 (BaseTV AddressT) (AddressV addr)) /\
   op_prov G res = NONE /\ op_taint tn res = {} ==>
   vv_post ctx fn cenv cx (Builtin (BaseT AddressT) ECRecover args)

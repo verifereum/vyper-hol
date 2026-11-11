@@ -51,7 +51,7 @@ Theorem computed_full_output_framed_paths:
         ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
         ghost_kept cenv es sf G tn s G2 tn2 /\
         stmt_state_rel ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) q /\
-        wb_frame cenv es sf s q) /\
+        wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s q) /\
     ((precompile_result (venom_call_request s target 0w wi insz T).cr_target
         (venom_call_request s target 0w wi insz T).cr_data = SOME NONE \/
       s.vs_outcomes = [] \/ ?co rest. s.vs_outcomes = co::rest /\ ~co.co_success) ==>

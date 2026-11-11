@@ -61,7 +61,7 @@ Theorem ecmul_framed_input:
     mem_bytes_at (w2n b) 96 t.vs_memory =
       word_to_bytes (mload (w2n a) s) T ++
       word_to_bytes (mload (w2n a+32) s) T ++ word_to_bytes w T /\
-    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es es sf s t /\
     ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sf G tn s Gf tnf /\
     (!name lo len. local_region cenv es.scopes t name lo len ==>
        regions_disjoint (w2n c) 64 lo len) /\
@@ -181,7 +181,7 @@ Theorem ecadd_framed_input:
     mem_bytes_at (w2n b) 128 t.vs_memory =
       word_to_bytes (mload (w2n a1) s) T ++ word_to_bytes (mload (w2n a1+32) s) T ++
       word_to_bytes (mload (w2n a2) s) T ++ word_to_bytes (mload (w2n a2+32) s) T /\
-    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es es sf s t /\
     ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sf G tn s Gf tnf /\
     (!name lo len. local_region cenv es.scopes t name lo len ==>
        regions_disjoint (w2n c) 64 lo len) /\

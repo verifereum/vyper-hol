@@ -57,7 +57,7 @@ Theorem scratch_store_wb_frame:
     b+n <= a \/ a+sz <= b) /\
   (!aid a sz. FLOOKUP s.vs_allocas aid = SOME (a,sz) /\ aid < sc.cs_next_id ==>
     b+n <= a \/ a+sz <= b) ==>
-  wb_frame cenv es sc s t
+  wb_frame cenv es es sc s t
 Proof
   strip_tac >> drule scratch_reset_allocations >> strip_tac >>
   simp[wb_frame_def] >>

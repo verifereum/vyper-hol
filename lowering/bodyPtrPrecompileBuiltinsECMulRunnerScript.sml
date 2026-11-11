@@ -296,11 +296,11 @@ Resume ecmul_expr_vv_sim_ptr[tail_outcome]:
 QED
 
 Resume ecmul_expr_vv_sim_ptr[entry_rebase]:
-  `wb_frame cenv es sa s0 t` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv ee s1 t t'` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es ee sa s0 t` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv ee ee' s1 t t'` by metis_tac[expr_post_frame] >>
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by decide_tac >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by metis_tac[] >>
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es ee' sa s0 t'` by
     (drule_all wb_frame_trans >> simp[]) >>
   `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
     (irule wordArgsPtrTheory.ghost_kept_wb_trans >>

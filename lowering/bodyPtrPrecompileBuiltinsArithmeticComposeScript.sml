@@ -67,11 +67,11 @@ Theorem precompile_two_operand_entry_rebase:
   ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 t` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv ee s1 t t'` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es ee sa s0 t` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv ee ee' s1 t t'` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es ee' sa s0 t'` by
     (irule wb_frame_trans >>
-     qpat_assum `wb_frame _ ee s1 t t'` (irule_at Any) >> simp[] >> metis_tac[]) >>
+     qpat_assum `wb_frame _ ee _ s1 t t'` (irule_at Any) >> simp[] >> metis_tac[]) >>
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by decide_tac >>
   `MAP FDOM es.scopes = MAP FDOM ee'.scopes` by metis_tac[] >>
   `ghost_kept cenv es sa G0 tn0 s0 G2 tn2` by

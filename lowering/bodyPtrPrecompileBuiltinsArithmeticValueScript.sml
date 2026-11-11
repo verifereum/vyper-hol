@@ -186,7 +186,7 @@ QED
 Theorem ec_result_pointer_post:
   post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es es' sa s0 t /\
   eval_operand pop t = SOME w /\
   mem_bytes_at (w2n w) 64 t.vs_memory =
     word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T /\
@@ -268,7 +268,7 @@ QED
 (* Common ordinary and pointer posts for the arithmetic memory result. *)
 Theorem ec_builtin_result_posts:
   (!c. bt <> Concat c) /\
-  stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es es' sa s0 t /\
   eval_operand (Var dst) t = SOME w /\ ptr_covers G tn dst t 64 /\
   (!i. w2n w <= i /\ i < w2n w+64 ==> i NOTIN tn.t_mem) /\
   mem_bytes_at (w2n w) 64 t.vs_memory =

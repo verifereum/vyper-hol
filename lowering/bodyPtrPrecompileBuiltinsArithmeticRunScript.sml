@@ -8,7 +8,7 @@ Ancestors bodyPtrPrecompileBuiltinsRecoveryRun wordArgsPtr
 Theorem expr_val_at_wb_frame:
   expr_val_at cenv cx ty lo sf es v op s /\
   stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sf /\
-  wb_frame cenv es sf s t /\ eval_operand op t = eval_operand op s ==>
+  wb_frame cenv es es' sf s t /\ eval_operand op t = eval_operand op s ==>
   expr_val_at cenv cx ty lo sf es v op t
 Proof
   strip_tac >>
@@ -34,7 +34,7 @@ Theorem allocation_point_operand:
     FLOOKUP t.vs_allocas sf.cs_next_id = SOME (w2n b,n) /\
     w2n b + n < dimword(:256) /\ t.vs_memory = s.vs_memory /\
     sf.cs_next_id < sa.cs_next_id /\ t.vs_labels = s.vs_labels /\ 
-    wb_frame cenv es sf s t /\
+    wb_frame cenv es es sf s t /\
     expr_val_at cenv cx ty lo sf es v op t /\
     eval_operand op t = eval_operand op s /\
     (!x. not_fresh_at sf x ==> lookup_var x t = lookup_var x s) /\
@@ -107,10 +107,10 @@ Theorem ecmul_prefix_runtime:
       word_to_bytes (mload (w2n p) s0) T ++
       word_to_bytes (mload (w2n p+32) s0) T ++ word_to_bytes w T /\
     (!x. not_fresh_at sf x ==> lookup_var x s2 = lookup_var x s0) /\
-    wb_frame cenv es sf s0 s1 /\ wb_frame cenv es sf s1 s2 /\
+    wb_frame cenv es es sf s0 s1 /\ wb_frame cenv es es sf s1 s2 /\
     s2.vs_allocas = s1.vs_allocas /\
     FLOOKUP s3.vs_allocas sp.cs_next_id = SOME (w2n c,64) /\
-    wb_frame cenv es sp s2 s3 /\ wb_frame cenv es sf s0 s3 /\
+    wb_frame cenv es es sp s2 s3 /\ wb_frame cenv es es sf s0 s3 /\
     sf.cs_next_var <= sp.cs_next_var /\ sf.cs_next_id <= sp.cs_next_id /\
     (!name a len. local_region cenv es.scopes s3 name a len ==>
        regions_disjoint (w2n c) 64 a len) /\
@@ -143,7 +143,7 @@ Proof
     (qpat_assum `(do src <- _; value <- _; dst <- _; _ od) sa = _`
        (mp_then Any strip_assume_tac point_payload_counters) >> decide_tac) >>
   `?s2. run_inst_seq (emitted_insts sa smid ++ emitted_insts smid sp) s1 = OK s2 /\
-    stmt_state_rel ctx fn cenv cx es s2 /\ wb_frame cenv es sf s1 s2 /\
+    stmt_state_rel ctx fn cenv cx es s2 /\ wb_frame cenv es es sf s1 s2 /\
     (!x. not_fresh_at sa x ==> lookup_var x s2 = lookup_var x s1) /\
     s2.vs_allocas = s1.vs_allocas /\ eval_operand ib.buf_operand s2 = SOME b /\
     mem_bytes_at (w2n b) 96 s2.vs_memory =
@@ -171,15 +171,17 @@ Resume ecmul_prefix_runtime[finish]:
           comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
      rpt strip_tac >> gvs[]) >>
   `sf.cs_next_var <= sp.cs_next_var /\ sf.cs_next_id <= sp.cs_next_id` by decide_tac >>
-  `wb_frame cenv es sf s2 s3` by
+  `wb_frame cenv es es sf s2 s3` by
     (irule bodyPtrPrecompileBuiltinsRecoveryPostFrameTheory.wb_frame_counter_weaken >>
      qexists `sp` >> simp[]) >>
-  `wb_frame cenv es sf s0 s2` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >> conj_tac
-     >- (qexistsl [`es`,`sf`,`s1`] >> simp[]) >> goal_assum (drule_at Any)) >>
-  `wb_frame cenv es sf s0 s3` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >> conj_tac
-     >- (qexistsl [`es`,`sf`,`s2`] >> simp[]) >> goal_assum (drule_at Any)) >>
+  `wb_frame cenv es es sf s0 s2` by
+    (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s1`,`s2`,`ctx`]
+       mp_tac exprSimWordArgsTheory.wb_frame_trans >>
+     impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `wb_frame cenv es es sf s0 s3` by
+    (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s2`,`s3`,`ctx`]
+       mp_tac exprSimWordArgsTheory.wb_frame_trans >>
+     impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   `mload (w2n p) s1 = mload (w2n p) s0 /\
    mload (w2n p+32) s1 = mload (w2n p+32) s0` by
     simp[GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
@@ -236,10 +238,10 @@ Theorem ecadd_prefix_runtime:
       word_to_bytes (mload (w2n p) s0) T ++ word_to_bytes (mload (w2n p+32) s0) T ++
       word_to_bytes (mload (w2n q) s0) T ++ word_to_bytes (mload (w2n q+32) s0) T /\
     (!x. not_fresh_at sf x ==> lookup_var x s2 = lookup_var x s0) /\
-    wb_frame cenv es sf s0 s1 /\ wb_frame cenv es sf s1 s2 /\
+    wb_frame cenv es es sf s0 s1 /\ wb_frame cenv es es sf s1 s2 /\
     s2.vs_allocas = s1.vs_allocas /\
     FLOOKUP s3.vs_allocas sp.cs_next_id = SOME (w2n c,64) /\
-    wb_frame cenv es sp s2 s3 /\ wb_frame cenv es sf s0 s3 /\
+    wb_frame cenv es es sp s2 s3 /\ wb_frame cenv es es sf s0 s3 /\
     sf.cs_next_var <= sp.cs_next_var /\ sf.cs_next_id <= sp.cs_next_id /\
     (!name a len. local_region cenv es.scopes s3 name a len ==>
        regions_disjoint (w2n c) 64 a len) /\
@@ -280,7 +282,7 @@ QED
 
 Resume ecadd_prefix_runtime[payload]:
   `?s2. run_inst_seq (emitted_insts sa smid ++ emitted_insts smid sp) s1 = OK s2 /\
-    stmt_state_rel ctx fn cenv cx es s2 /\ wb_frame cenv es sf s1 s2 /\
+    stmt_state_rel ctx fn cenv cx es s2 /\ wb_frame cenv es es sf s1 s2 /\
     (!x. not_fresh_at sa x ==> lookup_var x s2 = lookup_var x s1) /\
     s2.vs_allocas = s1.vs_allocas /\ eval_operand ib.buf_operand s2 = SOME b /\
     mem_bytes_at (w2n b) 128 s2.vs_memory =
@@ -307,15 +309,17 @@ Resume ecadd_prefix_runtime[finish]:
      qpat_assum `(do src <- _; value <- _; dst <- _; _ od) smid = _`
        (mp_then Any strip_assume_tac point_payload_counters) >> decide_tac) >>
   `sf.cs_next_var <= sp.cs_next_var /\ sf.cs_next_id <= sp.cs_next_id` by decide_tac >>
-  `wb_frame cenv es sf s2 s3` by
+  `wb_frame cenv es es sf s2 s3` by
     (irule bodyPtrPrecompileBuiltinsRecoveryPostFrameTheory.wb_frame_counter_weaken >>
      qexists `sp` >> simp[]) >>
-  `wb_frame cenv es sf s0 s2` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >> conj_tac
-     >- (qexistsl [`es`,`sf`,`s1`] >> simp[]) >> goal_assum (drule_at Any)) >>
-  `wb_frame cenv es sf s0 s3` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >> conj_tac
-     >- (qexistsl [`es`,`sf`,`s2`] >> simp[]) >> goal_assum (drule_at Any)) >>
+  `wb_frame cenv es es sf s0 s2` by
+    (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s1`,`s2`,`ctx`]
+       mp_tac exprSimWordArgsTheory.wb_frame_trans >>
+     impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `wb_frame cenv es es sf s0 s3` by
+    (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s2`,`s3`,`ctx`]
+       mp_tac exprSimWordArgsTheory.wb_frame_trans >>
+     impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   `!a. mload a s1 = mload a s0` by
     simp[GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   qexistsl [`s1`,`s2`,`s3`,`b`,`c`] >> simp[] >>

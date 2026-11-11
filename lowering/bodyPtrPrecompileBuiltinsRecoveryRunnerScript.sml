@@ -243,9 +243,9 @@ fun recovery_safe () = (
     fs[exprSafeOperandTheory.safe_operand_def]);
 
 fun recovery_word () = (
-  `wb_frame cenv ee s1 t t'` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
-  `wb_frame cenv ee' s2 t' t''` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
-  `wb_frame cenv ee'' s3 t'' t'''` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
+  `wb_frame cenv ee ee' s1 t t'` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
+  `wb_frame cenv ee' ee'' s2 t' t''` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
+  `wb_frame cenv ee'' ee''' s3 t'' t'''` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
   `eval_operand h t = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) v')` by
     (qpat_x_assum `expr_post _ _ _ _ ah _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
@@ -254,7 +254,8 @@ fun recovery_word () = (
    op_taint tn' h = {}` by
     (irule (clean_word_operand_frame |> INST_TYPE [``:'a`` |-> ``:num # num``]) >>
      fs[bodyPtrDefsTheory.ptr_val_ok_def, exprSafeOperandTheory.safe_operand_def] >>
-     qpat_assum `ghost_kept _ ee s1 _ _ t _ tn'` (irule_at Any) >> simp[]) >>
+     qpat_assum `ghost_kept _ ee s1 _ _ t _ tn'` (irule_at Any) >>
+     qpat_assum `wb_frame _ ee _ s1 t _` (irule_at Any) >> simp[]) >>
   `!x. h = Var x ==> not_fresh_at s2 x` by
     (fs[exprSafeOperandTheory.safe_operand_def] >>
      metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
@@ -262,14 +263,16 @@ fun recovery_word () = (
    op_taint tn'' h = {}` by
     (irule (clean_word_operand_frame |> INST_TYPE [``:'a`` |-> ``:num # num``]) >>
      fs[exprSafeOperandTheory.safe_operand_def] >>
-     qpat_assum `ghost_kept _ ee' s2 _ _ t' _ tn''` (irule_at Any) >> simp[]) >>
+     qpat_assum `ghost_kept _ ee' s2 _ _ t' _ tn''` (irule_at Any) >>
+     qpat_assum `wb_frame _ ee' _ s2 t' _` (irule_at Any) >> simp[]) >>
   `!x. h = Var x ==> not_fresh_at s3 x` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `eval_operand h t''' = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) v') /\
    op_taint tn''' h = {}` by
     (irule (clean_word_operand_frame |> INST_TYPE [``:'a`` |-> ``:num # num``]) >>
      fs[exprSafeOperandTheory.safe_operand_def] >>
-     qpat_assum `ghost_kept _ ee'' s3 _ _ t'' _ tn'''` (irule_at Any) >> simp[]));
+     qpat_assum `ghost_kept _ ee'' s3 _ _ t'' _ tn'''` (irule_at Any) >>
+     qpat_assum `wb_frame _ ee'' _ s3 t'' _` (irule_at Any) >> simp[]));
 
 fun recovery_other_words () = (
   `eval_operand v t' = SOME (typed_val_to_w256
@@ -291,7 +294,8 @@ fun recovery_other_words () = (
      (THE (evaluate_type (get_tenv cx) (expr_type av))) v'') /\ op_taint tn'' v = {}` by
     (irule (clean_word_operand_frame |> INST_TYPE [``:'a`` |-> ``:num # num``]) >>
      fs[bodyPtrDefsTheory.ptr_val_ok_def, exprSafeOperandTheory.safe_operand_def] >>
-     qpat_assum `ghost_kept _ ee' s2 _ _ t' _ tn''` (irule_at Any) >> simp[]) >>
+     qpat_assum `ghost_kept _ ee' s2 _ _ t' _ tn''` (irule_at Any) >>
+     qpat_assum `wb_frame _ ee' _ s2 t' _` (irule_at Any) >> simp[]) >>
   `!x. v = Var x ==> not_fresh_at s3 x` by
     (fs[exprSafeOperandTheory.safe_operand_def] >>
      metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
@@ -299,12 +303,14 @@ fun recovery_other_words () = (
      (THE (evaluate_type (get_tenv cx) (expr_type av))) v'') /\ op_taint tn''' v = {}` by
     (irule (clean_word_operand_frame |> INST_TYPE [``:'a`` |-> ``:num # num``]) >>
      fs[exprSafeOperandTheory.safe_operand_def] >>
-     qpat_assum `ghost_kept _ ee'' s3 _ _ t'' _ tn'''` (irule_at Any) >> simp[]) >>
+     qpat_assum `ghost_kept _ ee'' s3 _ _ t'' _ tn'''` (irule_at Any) >>
+     qpat_assum `wb_frame _ ee'' _ s3 t'' _` (irule_at Any) >> simp[]) >>
   `eval_operand r t''' = SOME (typed_val_to_w256
      (THE (evaluate_type (get_tenv cx) (expr_type ar))) v''') /\ op_taint tn''' r = {}` by
     (irule (clean_word_operand_frame |> INST_TYPE [``:'a`` |-> ``:num # num``]) >>
      fs[bodyPtrDefsTheory.ptr_val_ok_def, exprSafeOperandTheory.safe_operand_def] >>
-     qpat_assum `ghost_kept _ ee'' s3 _ _ t'' _ tn'''` (irule_at Any) >> simp[]));
+     qpat_assum `ghost_kept _ ee'' s3 _ _ t'' _ tn'''` (irule_at Any) >>
+     qpat_assum `wb_frame _ ee'' _ s3 t'' _` (irule_at Any) >> simp[]));
 
 fun recovery_typed_tail () = (
   `value_has_type (BaseTV (BytesT (Fixed 32))) v' /\
@@ -354,23 +360,23 @@ fun recovery_tail_outcome () = (
   simp[vyperASTTheory.expr_type_def, as_ptr_val_def]);
 
 fun recovery_entry_rebase () = (
-  `wb_frame cenv es sa s0 t` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv ee'' s3 t'' t'''` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es ee sa s0 t` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv ee'' ee''' s3 t'' t'''` by metis_tac[expr_post_frame] >>
   `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id /\
    sa.cs_next_var <= s3.cs_next_var /\ sa.cs_next_id <= s3.cs_next_id /\
    sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by decide_tac >>
   `MAP FDOM es.scopes = MAP FDOM ee'.scopes /\
    MAP FDOM es.scopes = MAP FDOM ee''.scopes /\
    MAP FDOM es.scopes = MAP FDOM ee'''.scopes` by metis_tac[] >>
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es ee' sa s0 t'` by
     (irule wb_frame_trans >>
-     qpat_assum `wb_frame _ ee s1 t t'` (irule_at Any) >> simp[] >> metis_tac[]) >>
-  `wb_frame cenv es sa s0 t''` by
+     qpat_assum `wb_frame _ ee _ s1 t t'` (irule_at Any) >> simp[] >> metis_tac[]) >>
+  `wb_frame cenv es ee'' sa s0 t''` by
     (irule wb_frame_trans >>
-     qpat_assum `wb_frame _ ee' s2 t' t''` (irule_at Any) >> simp[] >> metis_tac[]) >>
-  `wb_frame cenv es sa s0 t'''` by
+     qpat_assum `wb_frame _ ee' _ s2 t' t''` (irule_at Any) >> simp[] >> metis_tac[]) >>
+  `wb_frame cenv es ee''' sa s0 t'''` by
     (irule wb_frame_trans >>
-     qpat_assum `wb_frame _ ee'' s3 t'' t'''` (irule_at Any) >> simp[] >> metis_tac[]));
+     qpat_assum `wb_frame _ ee'' _ s3 t'' t'''` (irule_at Any) >> simp[] >> metis_tac[]));
 
 fun recovery_ghost_rebase () = (
   `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
