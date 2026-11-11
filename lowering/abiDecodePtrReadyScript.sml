@@ -3,7 +3,7 @@ Theory abiDecodePtrReady
 Ancestors
   abiDecodePtrHeaderFrame abiDecodePtrInputWindow abiBuiltinDecodeSetup abiBuiltinDecodeHeader
   bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsShaAllocInput
-  bodyPtrHashBuiltinsShaAllocPath venomInstProofs venomExecSemantics stmtReasonLitFragMemory
+  bodyPtrHashBuiltinsShaAllocPath bodyPtrHashBuiltinsShaEndpoint bodyPtrHashBuiltinsGhostFrame venomInstProofs venomExecSemantics stmtReasonLitFragMemory
   venomInst assignTuplePtrCopyEndpoint instIdxIndep
   loweringHalt fragExec fragExecPtr fragGasPathPtr fragGasSeqPtr bodyPtrBopScalarSeq
   bodyPtrBopHashFootprint emitHelperProps exprLoweringProps
@@ -42,6 +42,7 @@ Theorem abi_builtin_decode_phased_ready_ptr:
     u.vs_inst_idx = LENGTH ready.cs_current_insts /\
     FLOOKUP u.vs_allocas sh.cs_next_id = SOME (w2n wout,outsz) /\
     u.vs_memory = s.vs_memory /\ sh.cs_next_id < ready.cs_next_id /\
+    ghost_kept cenv es sa G tn s G2 tn2 /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP u.vs_allocas aid = SOME entry) /\
     (!aid b k. aid < sh.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
@@ -112,6 +113,15 @@ Resume abi_builtin_decode_phased_ready_ptr[compose]:
   `lookup_var q t = SOME (w+32w) /\ eval_operand (Var r) t = SOME (n2w cnt) /\
    op_prov G1 (Var r) = NONE /\ op_taint tn1 (Var r) = {}` by
     (fs[ghost_kept_def, op_prov_def, eval_operand_def] >> simp[]) >>
+  `ghost_kept cenv es sa G tn s H tm` by
+    (irule hash_ghost_kept_frame >> simp[] >> metis_tac[]) >>
+  `ghost_kept cenv es sa G tn s G1 tn1` by
+    (irule hash_ghost_kept_then >>
+     simp[] >> qexistsl_tac [`H`, `h`, `sh`, `tm`] >> simp[] >>
+     conj_tac
+     >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `sa` >> simp[]) >>
+     qpat_x_assum `ghost_kept cenv es sh H tm h G1 tn1` mp_tac >> simp[]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH ready.cs_current_insts`,
     `G1`, `tn1`, `p'`, `q`, `r`, `w'`] >>
   simp[stmt_state_rel_inst_idx, ghost_inv_inst_idx, ptr_covers_def,
@@ -134,6 +144,8 @@ Resume abi_builtin_decode_phased_ready_ptr[path]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (
+  qpat_x_assum `ghost_kept cenv es sa G tn s _ _` kall_tac >>
+  qpat_x_assum `ghost_kept cenv es sa G tn s _ _` kall_tac >>
   qpat_x_assum `run_inst_seq [_] h = OK t` mp_tac >>
   simp[run_inst_seq_def, step_inst_base_def, exec_alloca_def, mk_inst_def,
        AllCaseEqs()] >> rpt strip_tac >>
