@@ -80,6 +80,20 @@ Proof
   simp[decode_upper_frame_def, decode_memory_frame_def]
 QED
 
+Theorem decode_site_resources_alloca_below:
+  decode_site_resources ctx fn s /\ FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
+  b + sz <= s.vs_alloca_next
+Proof
+  rw[decode_site_resources_def, alloca_inv_def, alloca_next_valid_def] >>
+  res_tac >> simp[]
+QED
+
+Theorem decode_upper_frame_memory:
+  t.vs_memory = s.vs_memory ==> decode_upper_frame s t
+Proof
+  simp[decode_upper_frame_def, decode_memory_frame_def]
+QED
+
 Theorem decode_upper_frame_trans:
   decode_upper_frame s t /\ decode_upper_frame t u /\
   t.vs_alloca_next <= u.vs_alloca_next ==>

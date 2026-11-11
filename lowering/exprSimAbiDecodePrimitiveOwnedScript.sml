@@ -62,6 +62,9 @@ Proof
     (drule abi_decoder_vars_extend_restore >>
      fs[decode_site_effect_def, decode_static_frame_def, abi_decoder_prune_vars_def,
        venom_state_component_equality]) >>
+  `decode_upper_frame s actual` by
+    fs[decode_site_effect_def, decode_upper_frame_def, decode_memory_frame_def,
+      abi_decoder_prune_vars_def] >>
   fs[decode_site_effect_def, decode_memory_frame_def, abi_decoder_prune_vars_def] >>
   metis_tac[abi_decoder_operand_live_mono]
 QED
@@ -75,6 +78,7 @@ Theorem abi_decode_scalar_source_reentry:
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   next <= st.cs_next_var /\ abi_decoder_clamp_wf clamp /\
   decode_site_resources ctx func s /\ {a | d <= a /\ a < d+32} SUBSET writes /\
+  d+32 <= s.vs_alloca_next /\
   assignable_type env ty /\ abi_decode_bytes_widths env ty /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
@@ -106,6 +110,8 @@ Proof
    EVERY (\i. abi_bytes_opcode i.inst_opcode) (emitted_insts st st')` by
     (fs[EVERY_MEM, abi_word_opcode_def, abi_bytes_opcode_def,
        abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
+  `d+32 <= (abi_decoder_prune_vars st.cs_next_var s).vs_alloca_next` by
+    simp[abi_decoder_prune_vars_def] >>
   drule_all abi_decoder_scalar_source_outcome >>
   disch_then (qspec_then `next` strip_assume_tac)
   >- (drule_all abi_decoder_sequence_reentry_prefix >> strip_tac >>
@@ -133,6 +139,7 @@ Theorem abi_decode_bytestring_source_reentry:
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   next <= st.cs_next_var /\ decode_site_resources ctx func s /\
   {a | d <= a /\ a < d+abi_decode_bytes_copy_size n} SUBSET writes /\
+  d+abi_decode_bytes_copy_size n <= s.vs_alloca_next /\
   bs = mem_bytes_at (B+pos) (H-pos) s.vs_memory /\
   (bt = BytesT (Dynamic n) \/ bt = StringT n) ==>
   (?t v. run_inst_seq (emitted_insts st st') s = OK t /\
@@ -168,6 +175,9 @@ Proof
      (abi_decoder_prune_vars st.cs_next_var s)) =
    w2n (abi_decode_load MLOAD (n2w (B+pos):bytes32)
      (abi_decoder_prune_vars st.cs_next_var s))` by simp[] >>
+  `d+abi_decode_bytes_copy_size n <=
+    (abi_decoder_prune_vars st.cs_next_var s).vs_alloca_next` by
+    simp[abi_decoder_prune_vars_def] >>
   drule_all abi_decoder_bytestring_source_outcome >>
   disch_then (qspecl_then [`next`, `env`] strip_assume_tac)
   >- (drule_all abi_decoder_sequence_reentry_prefix >> strip_tac >>
@@ -231,6 +241,8 @@ Proof
   `{a | d <= a /\ a < d+32} SUBSET
     (scratch UNION {a | d <= a /\ a < d+type_memory_bytes ce ty})` by
     simp[pred_setTheory.SUBSET_DEF] >>
+  `d+32 <= s.vs_alloca_next` by
+    (qpat_x_assum `abi_decode_owned _ _ _ _ _` mp_tac >> simp[abi_decode_owned_def]) >>
   drule_all abi_decode_scalar_source_reentry >>
   strip_tac
   >- (drule_all abi_decoder_run_sequence_prefix >> strip_tac >>
@@ -238,7 +250,8 @@ Proof
       qexistsl_tac [`t'`, `v`] >>
       conj_tac >- metis_tac[Dreach_straight_prefix] >>
       gvs[abi_decode_entry_def, fresh_vars_wrt_def, decode_site_effect_inst_idx,
-        abi_decode_alloc_progress_def, decode_site_effect_def, decode_static_frame_def] >>
+        abi_decode_alloc_progress_def, decode_site_effect_def, decode_static_frame_def,
+        decode_upper_frame_def] >>
       conj_tac >- (rpt strip_tac >> gvs[]) >>
       qpat_x_assum `(_ : venom_state) = _` mp_tac >>
       simp[venom_state_component_equality]) >>
@@ -293,6 +306,8 @@ Proof
     fs[abi_decode_code_context_def, abi_decode_entry_def] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st last)` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `d+abi_decode_bytes_copy_size n <= s.vs_alloca_next` by
+    (qpat_x_assum `abi_decode_owned _ _ _ _ _` mp_tac >> simp[abi_decode_owned_def]) >>
   drule_all abi_decode_bytestring_source_reentry >>
   disch_then (qspec_then `env` strip_assume_tac)
   >- (drule_all abi_decoder_run_sequence_prefix >> strip_tac >>
@@ -300,7 +315,8 @@ Proof
       qexistsl_tac [`t'`, `v`] >>
       conj_tac >- metis_tac[Dreach_straight_prefix] >>
       gvs[abi_decode_entry_def, fresh_vars_wrt_def, decode_site_effect_inst_idx,
-        abi_decode_alloc_progress_def, decode_site_effect_def, decode_static_frame_def] >>
+        abi_decode_alloc_progress_def, decode_site_effect_def, decode_static_frame_def,
+        decode_upper_frame_def] >>
       conj_tac >- (rpt strip_tac >> gvs[]) >>
       qpat_x_assum `(_ : venom_state) = _` mp_tac >>
       simp[venom_state_component_equality] >> rpt strip_tac >> gvs[]) >>

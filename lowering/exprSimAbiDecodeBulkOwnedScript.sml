@@ -32,7 +32,8 @@ Theorem abi_decode_array_bulk_success_reentry:
   EVERY (abi_decoder_operand_live st.cs_next_var) [src;dst;base_op;hi] /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   next <= st.cs_next_var /\ decode_site_resources ctx func s /\
-  {a | d <= a /\ a < d+32+n*mem_sz} SUBSET writes ==>
+  {a | d <= a /\ a < d+32+n*mem_sz} SUBSET writes /\
+  d+32+n*mem_sz <= s.vs_alloca_next ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     mem_word_at d t.vs_memory = n2w n /\
     mem_bytes_at (d+32) (n*mem_sz) t.vs_memory =
@@ -65,6 +66,8 @@ Proof
   `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')` by
     (fs[EVERY_MEM, abi_bytes_opcode_def, abi_word_opcode_def,
         abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
+  `d+32+n*mem_sz <= (abi_decoder_prune_vars st.cs_next_var s).vs_alloca_next` by
+    simp[abi_decoder_prune_vars_def] >>
   drule abi_decode_array_bulk_success_effect >>
   disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   disch_then (drule_at (Pat `eval_operand src _ = _`)) >>
@@ -101,7 +104,8 @@ Theorem abi_decode_array_bulk_source_reentry:
   EVERY (abi_decoder_operand_live st.cs_next_var) [src;dst;base_op;hi] /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   next <= st.cs_next_var /\ decode_site_resources ctx func s /\
-  (n <= maxn ==> {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty} SUBSET writes) ==>
+  (n <= maxn ==> {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty} SUBSET writes) /\
+  (n <= maxn ==> d+32+n*type_memory_bytes ce ty <= s.vs_alloca_next) ==>
   (?t v. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decode_source_accepts env (ArrayT ty (Dynamic maxn)) bs v /\
     val_in_memory (ArrayTV tv (Dynamic maxn)) v d t.vs_memory /\
@@ -127,6 +131,7 @@ Resume abi_decode_array_bulk_source_reentry[success]:
     (gvs[] >> decide_tac) >>
   `abi_decode_load MLOAD (n2w (b+pos):bytes32) s = n2w n` by
     simp[abi_decode_load_def, abi_decode_source_def, mload_def, mem_word_at_def, mem_bytes_at_def] >>
+  `d+32+n*type_memory_bytes ce ty <= s.vs_alloca_next` by metis_tac[] >>
   drule abi_decode_array_bulk_success_reentry >>
   disch_then (drule_at (Pat `eval_operand src _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
@@ -183,6 +188,7 @@ Theorem abi_decode_array_bulk_fetched_reentry:
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   next <= st.cs_next_var /\ decode_site_resources ctx func s /\
   (n <= maxn ==> {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty} SUBSET writes) /\
+  (n <= maxn ==> d+32+n*type_memory_bytes ce ty <= s.vs_alloca_next) /\
   fn_has_code st st' fn /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -275,6 +281,11 @@ Proof
     (rpt strip_tac >>
      `n*type_memory_bytes ce ty <= maxn*type_memory_bytes ce ty` by simp[] >>
      simp[type_memory_bytes_def, SUBSET_DEF] >> rpt strip_tac >> disj2_tac >> decide_tac) >>
+  `!n. n <= maxn ==> d+32+n*type_memory_bytes ce ty <= s.vs_alloca_next` by
+    (rpt strip_tac >>
+     `n*type_memory_bytes ce ty <= maxn*type_memory_bytes ce ty` by simp[] >>
+     qpat_x_assum `abi_decode_owned _ _ _ _ _` mp_tac >>
+     simp[abi_decode_owned_def, type_memory_bytes_def] >> rpt strip_tac >> decide_tac) >>
   `EVERY (abi_decoder_operand_live st.cs_next_var) [src;dst;base_op;hi]` by fs[EVERY_DEF] >>
   `fn_has_code st last fn /\ ~s.vs_halted /\
    s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts` by

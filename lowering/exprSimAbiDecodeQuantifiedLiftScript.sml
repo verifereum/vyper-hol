@@ -276,7 +276,7 @@ Proof
   >- (qpat_x_assum `eval_operand out u' = _` mp_tac >>
       Cases_on `out` >> simp[eval_operand_def, lookup_var_def]) >>
   gvs[decode_site_effect_def, abi_decoder_prune_vars_def,
-      decode_memory_frame_def, decode_static_frame_def] >>
+      decode_memory_frame_def, decode_static_frame_def, decode_upper_frame_def] >>
   reverse conj_tac >- metis_tac[] >>
   conj_tac
   >- (irule decode_site_resources_fields >> qexists_tac `t` >> simp[]) >>

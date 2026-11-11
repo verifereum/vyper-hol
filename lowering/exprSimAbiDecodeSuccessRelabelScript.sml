@@ -13,7 +13,7 @@ Theorem abi_decode_site_effect_entry_current_bb:
   decode_site_effect ctx fn next writes (s with vs_current_bb := L) t =
   decode_site_effect ctx fn next writes s t
 Proof
-  simp[decode_site_effect_def, decode_static_frame_def, decode_memory_frame_def,
+  simp[decode_site_effect_def, decode_static_frame_def, decode_memory_frame_def, decode_upper_frame_def,
        abi_decode_eval_operand_entry_current_bb]
 QED
 
