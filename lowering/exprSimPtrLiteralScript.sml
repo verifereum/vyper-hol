@@ -214,14 +214,17 @@ fun literal_buffer_prepare_tac is_expr =
       Once evaluate_def, return_def, evaluate_literal_def,
       alloc_limits_expr_def, literal_alloc_ok_def];
 
-fun literal_buffer_consumer_tac is_expr norm bound_tac rep e size tv value vvpost =
+(* Two phases, so holbuild times the run setup and the closing simps apart. *)
+fun literal_buffer_consumer_open is_expr norm bound_tac rep e size tv vvpost =
   literal_buffer_prepare_tac is_expr >>
   literal_buffer_run_tac norm (size @ ` < dimword (:256)`) >>
   bound_tac >>
   drule_all rep >> strip_tac >>
   Q.SUBGOAL_THEN vvpost ASSUME_TAC
     >- literal_buffer_vv_post_tac norm e size tv >>
-  literal_buffer_ghost_tac size >>
+  literal_buffer_ghost_tac size;
+
+fun literal_buffer_consumer_close is_expr e size tv value =
   (if is_expr then
      (drule (GEN_ALL (SRULE [vyperASTTheory.expr_type_def, is_word_type_def]
         (Q.INST [`e` |-> e] (SPEC_ALL literal_memory_vv_expr_post)))) >>
@@ -240,13 +243,16 @@ fun literal_buffer_consumer_tac is_expr norm bound_tac rep e size tv value vvpos
   gvs[vyperASTTheory.expr_type_def, contextTheory.base_ptr_def,
       ptr_vv_ok_def, ptr_val_ok_def, vyperStateTheory.read_result_def];
 
-fun literal_bytes_consumer_tac is_expr =
-  literal_buffer_consumer_tac is_expr I
+val bytes_lit = `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`;
+val bytes_size = `32+32*word_size (LENGTH (bs:word8 list))`;
+fun literal_bytes_consumer_close is_expr =
+  literal_buffer_consumer_close is_expr bytes_lit bytes_size
+    `BaseTV (BytesT (Dynamic n))` `BytesV bs`;
+fun literal_bytes_consumer_open is_expr =
+  literal_buffer_consumer_open is_expr I
     (`LENGTH (bs:word8 list) <= n` by gvs[vyperValueTheory.compatible_bound_def])
-    literal_ptr_bytes_representation
-    `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`
-    `32+32*word_size (LENGTH (bs:word8 list))`
-    `BaseTV (BytesT (Dynamic n))` `BytesV bs`
+    literal_ptr_bytes_representation bytes_lit bytes_size
+    `BaseTV (BytesT (Dynamic n))`
     `vv_post ctx func cenv cx
       (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) es sa cs' s0 (es with gas_obs := [])
       (Value (BytesV bs)) (LocatedValue (BaseT (BytesT (Dynamic n))) (base_ptr buf))
@@ -256,11 +262,15 @@ fun literal_string_norm th =
   GEN_ALL (SRULE [listTheory.LENGTH_MAP]
     (Q.INST [`bs` |-> `(MAP (n2w o ORD) str : word8 list)`] (SPEC_ALL th)));
 
-fun literal_string_consumer_tac is_expr =
-  literal_buffer_consumer_tac is_expr literal_string_norm all_tac literal_ptr_string_representation
-    `Literal (BaseT (StringT n)) (StringL str)`
-    `32+32*word_size (LENGTH (str:string))`
-    `BaseTV (StringT n)` `StringV str`
+val string_lit = `Literal (BaseT (StringT n)) (StringL str)`;
+val string_size = `32+32*word_size (LENGTH (str:string))`;
+fun literal_string_consumer_close is_expr =
+  literal_buffer_consumer_close is_expr string_lit string_size
+    `BaseTV (StringT n)` `StringV str`;
+fun literal_string_consumer_open is_expr =
+  literal_buffer_consumer_open is_expr literal_string_norm all_tac
+    literal_ptr_string_representation string_lit string_size
+    `BaseTV (StringT n)`
     `vv_post ctx func cenv cx
       (Literal (BaseT (StringT n)) (StringL str)) es sa cs' s0 (es with gas_obs := [])
       (Value (StringV str)) (LocatedValue (BaseT (StringT n)) (base_ptr buf))
@@ -280,16 +290,16 @@ Proof
 QED
 
 Resume literal_buffer_sim_ptr[bytes_vv]:
-  literal_bytes_consumer_tac false
+  literal_bytes_consumer_open false >> literal_bytes_consumer_close false
 QED
 Resume literal_buffer_sim_ptr[bytes_expr]:
-  literal_bytes_consumer_tac true
+  literal_bytes_consumer_open true >> literal_bytes_consumer_close true
 QED
 Resume literal_buffer_sim_ptr[string_vv]:
-  literal_string_consumer_tac false
+  literal_string_consumer_open false >> literal_string_consumer_close false
 QED
 Resume literal_buffer_sim_ptr[string_expr]:
-  literal_string_consumer_tac true
+  literal_string_consumer_open true >> literal_string_consumer_close true
 QED
 Finalise literal_buffer_sim_ptr
 

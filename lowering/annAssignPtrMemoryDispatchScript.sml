@@ -58,7 +58,7 @@ Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
  Cases_on `loc = SOME LocMemory`
  >- (gvs[] >> irule annassign_memory_assignment_declaration_ptr >>
-     asm_rewrite_tac[] >> metis_tac[]) >>
+     asm_rewrite_tac[] >> FIRST [metis_tac[]]) >>
  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
  simp[compile_assign_value_def] >> disch_tac >>
  `!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==>
