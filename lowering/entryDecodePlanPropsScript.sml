@@ -700,13 +700,14 @@ Theorem build_flag_info_other[local]:
   !tops fmid fnm id.
     ~MEM (NONE, id)
        (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) ==>
+    FST (build_flag_info tops fmid fnm) id = fmid id /\
     SND (build_flag_info tops fmid fnm) id = fnm id
 Proof
   Induct >> simp[build_flag_info_def] >> Cases >>
   rw[build_flag_info_def, vyperTypeContractTheory.type_def_keys_toplevel_def]
 QED
 
-Theorem build_flag_info_n_members[local]:
+Theorem build_flag_info_n_members:
   !tops fmid fnm nsid m.
     ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
     FLOOKUP (type_env_for_module NONE tops) nsid = SOME (FlagArgs m) ==>
@@ -718,6 +719,40 @@ Proof
        ALL_DISTINCT_APPEND] >>
   rw[] >> gvs[nsid_to_string_def, build_flag_info_other] >>
   first_x_assum irule >> simp[]
+QED
+
+Theorem build_flag_member_id_one_index[local]:
+  !ms idx i.
+    INDEX_OF mid ms = SOME i ==> build_flag_member_id_one ms idx mid = idx + i
+Proof
+  Induct >- simp[INDEX_OF_eq_SOME] >>
+  rpt gen_tac >> simp[build_flag_member_id_one_def] >>
+  Cases_on `mid = h` >> simp[]
+  >- (simp[INDEX_OF_eq_SOME] >> rpt strip_tac >> CCONTR_TAC >>
+      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  strip_tac >>
+  `?k. i = SUC k /\ INDEX_OF mid ms = SOME k` by
+    (qpat_x_assum `INDEX_OF _ _ = _` mp_tac >>
+     simp[INDEX_OF_eq_SOME] >> strip_tac >>
+     Cases_on `i` >- gvs[] >>
+     rename1 `SUC k` >> qexists_tac `k` >> fs[] >> rpt strip_tac >>
+     first_x_assum (qspec_then `SUC j` mp_tac) >> simp[]) >>
+  first_x_assum drule >> simp[]
+QED
+
+(* build_flag_info's member ids are the source flag's member indices. *)
+Theorem build_flag_info_member_id:
+  !tops fmid fnm fid ls mid i.
+    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+    lookup_flag fid tops = SOME ls /\ INDEX_OF mid ls = SOME i ==>
+    FST (build_flag_info tops fmid fnm) fid mid = i
+Proof
+  Induct >> simp[vyperStateTheory.lookup_flag_def] >> Cases >>
+  simp[vyperStateTheory.lookup_flag_def, build_flag_info_def,
+       vyperTypeContractTheory.type_def_keys_toplevel_def,
+       ALL_DISTINCT_APPEND] >>
+  rw[] >> gvs[build_flag_info_other] >>
+  drule build_flag_member_id_one_index >> simp[]
 QED
 
 Theorem build_compile_env_ce_flag_n_members[local]:
