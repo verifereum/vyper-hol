@@ -16227,6 +16227,75 @@ Proof
     venomStateTheory.halt_state_def, venomStateTheory.set_returndata_def]
 QED
 
+Theorem mm_local_source_stopping_history[local]:
+  !xs bb s h r.
+  xs = DROP h bb.bb_instructions /\ h = s.vs_inst_idx /\
+  h <= LENGTH bb.bb_instructions /\
+  r = exec_block fuel ctx bb s /\ ~(?err. r = Error err) /\
+  EVERY (\((p,d',id),f,i,t). p = [] ==> static_mem_ok eom ctx f i t)
+    (trace_block [] d fuel ctx fn bb s) ==>
+  ?n H. h <= n /\ n < LENGTH bb.bb_instructions /\ H h = s /\
+    (!q. h <= q /\ q <= n ==> (H q).vs_inst_idx = q) /\
+    (!q. h <= q /\ q < n ==>
+      ~is_terminator (EL q bb.bb_instructions).inst_opcode /\
+      ?u. step_inst fuel ctx (EL q bb.bb_instructions) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC q) /\
+    (!q. h <= q /\ q <= n ==>
+      static_mem_ok eom ctx fn (EL q bb.bb_instructions) (H q)) /\
+    (is_terminator (EL n bb.bb_instructions).inst_opcode \/
+      ~(?u. step_inst fuel ctx (EL n bb.bb_instructions) (H n) = OK u)) /\
+    r = dft_exec_suffix fuel ctx [EL n bb.bb_instructions] (H n)
+Proof
+  Induct_on `xs`
+  >- (rpt strip_tac >>
+      `exec_block fuel ctx bb s = dft_exec_suffix fuel ctx [] s` by
+        (irule dft_exec_suffix_boundary >> gvs[]) >>
+      gvs[dft_exec_suffix_def]) >>
+  map_every qx_gen_tac [`i`,`bb`,`s`,`j`,`r`] >> strip_tac >>
+  `j < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `_::_ = DROP _ _` (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     simp[LENGTH_DROP] >> decide_tac) >>
+  `get_instruction bb s.vs_inst_idx = SOME i` by
+    (simp[venomInstTheory.get_instruction_def] >>
+     qpat_x_assum `_::_ = DROP _ _` (mp_tac o AP_TERM ``EL 0:instruction list -> instruction``) >>
+     simp[EL_DROP]) >>
+  `EL j bb.bb_instructions = i` by gvs[venomInstTheory.get_instruction_def] >>
+  `exec_block fuel ctx bb s = dft_exec_suffix fuel ctx (i::xs) s` by
+    (irule dft_exec_suffix_boundary >> gvs[]) >>
+  drule dftGasFromListTraceDefsTheory.trace_block_visit >>
+  disch_then (fn th => qpat_x_assum `EVERY _ _` (mp_tac o REWRITE_RULE [th])) >>
+  simp[EVERY_APPEND] >> strip_tac >>
+  Cases_on `is_terminator i.inst_opcode \/ ~(?u. step_inst fuel ctx i s = OK u)`
+  >- (`r = dft_exec_suffix fuel ctx [i] s` by
+        (qpat_x_assum `exec_block fuel ctx bb s = dft_exec_suffix _ _ _ _` mp_tac >>
+         Cases_on `step_inst fuel ctx i s` >>
+         simp[dft_exec_suffix_def] >> gvs[]) >>
+      qexistsl [`j`,`\q. s`] >> simp[] >>
+      simp[DECIDE ``(j:num) <= q /\ q <= j <=> q = j``] >>
+      metis_tac[]) >>
+  gvs[] >> rename1 `step_inst fuel ctx i s = OK u` >>
+  `xs = DROP (SUC s.vs_inst_idx) bb.bb_instructions` by
+    (qpat_x_assum `_::_ = DROP _ _`
+      (mp_tac o AP_TERM ``DROP 1:instruction list -> instruction list``) >>
+     simp[DROP_DROP,arithmeticTheory.ADD1]) >>
+  `exec_block fuel ctx bb (u with vs_inst_idx := SUC s.vs_inst_idx) =
+    dft_exec_suffix fuel ctx xs (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule dft_exec_suffix_boundary >> simp[]) >>
+  `dft_exec_suffix fuel ctx (DROP s.vs_inst_idx bb.bb_instructions) s =
+    exec_block fuel ctx bb (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_x_assum `_::_ = DROP _ _` (assume_tac o SYM) >>
+     asm_rewrite_tac[dft_exec_suffix_def] >> simp[]) >>
+  first_x_assum (qspecl_then [`bb`,`u with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+  simp[] >> (impl_tac >- gvs[]) >>
+  strip_tac >>
+  qexistsl [`n`,`\q. if q = s.vs_inst_idx then s else H q`] >>
+  simp[] >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `q = s.vs_inst_idx` >>
+  gvs[venomInstTheory.get_instruction_def] >>
+  `SUC s.vs_inst_idx <= q` by decide_tac >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
