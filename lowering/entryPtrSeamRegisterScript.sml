@@ -730,6 +730,56 @@ Proof
   gvs[]
 QED
 
+(* Decoder writes are separated from each earlier installed local slot. *)
+Theorem registration_owned_footprint_disjoint:
+  alloca_inv t /\
+  FLOOKUP t.vs_allocas old = SOME (b,n) /\
+  FLOOKUP t.vs_allocas owner = SOME (d,k) /\ old <> owner /\
+  d <= e /\ e+m <= d+k /\ b <= p /\ p+sz <= b+n /\
+  (!a z. MEM (a,z) fp ==> ?id. first <= id /\ id < last /\
+    FLOOKUP t.vs_allocas id = SOME (a,z)) /\
+  (old < first \/ last <= old) ==>
+  abi_footprint_disjoint p sz ((e,m)::fp)
+Proof
+  strip_tac >> simp[abiDecoderFrameTheory.abi_footprint_disjoint_def] >>
+  (rpt gen_tac >> strip_tac
+   >- (gvs[] >> drule_all abiCallerAllocationTheory.abi_caller_allocation_separate >>
+       decide_tac) >>
+   qpat_x_assum `!a z. MEM (a,z) fp ==> _`
+     (qspecl_then [`d'`, `sz'`] mp_tac) >> simp[] >> strip_tac >>
+   `old <> id` by decide_tac >>
+   drule_all abiCallerAllocationTheory.abi_caller_allocation_separate >> decide_tac)
+QED
+
+Theorem registration_owned_local_frame:
+  alloca_inv t /\
+  FLOOKUP t.vs_allocas old = SOME (b,n) /\
+  FLOOKUP t.vs_allocas owner = SOME (d,k) /\ old <> owner /\
+  d <= e /\ e+m <= d+k /\ b <= p /\
+  p + val_footprint tv v <= b+n /\
+  (!a z. MEM (a,z) fp ==> ?id. first <= id /\ id < last /\
+    FLOOKUP t.vs_allocas id = SOME (a,z)) /\
+  (old < first \/ last <= old) /\
+  abi_decode_footprint_frame ((e,m)::fp) s t /\
+  val_wf tv v /\ u.t_mem SUBSET tn.t_mem /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory tv v p mem) /\
+  ptr_covers G tn q s sz /\
+  lookup_var q t = lookup_var q s /\ FLOOKUP H q = FLOOKUP G q /\
+  op_taint u (Var q) = op_taint tn (Var q) ==>
+  ptr_covers H u q t sz /\ val_in_memory tv v p t.vs_memory /\
+  (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+    val_in_memory tv v p mem)
+Proof
+  strip_tac >>
+  `abi_footprint_disjoint p (val_footprint tv v) ((e,m)::fp)` by
+    (irule registration_owned_footprint_disjoint >>
+     qexistsl_tac [`b`, `d`, `first`, `k`, `last`, `n`, `old`, `owner`, `t`] >>
+     simp[]) >>
+  (conj_tac >- gvs[ptr_covers_def]) >>
+  drule_all sourceRecursiveComplexPtrTheory.robust_value_footprint_frame >> simp[]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
