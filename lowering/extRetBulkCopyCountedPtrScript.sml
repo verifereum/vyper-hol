@@ -419,7 +419,8 @@ Theorem emit_mstore_clean_ambient_counted_ptr:
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. lookup_var p sf = lookup_var p s /\
-         op_taint tnf (Var p) = op_taint tn (Var p))
+         op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    sf.vs_labels = s.vs_labels
 Proof
   strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb /\

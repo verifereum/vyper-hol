@@ -96,7 +96,8 @@ Theorem encoder_index_init_resource_ambient_counted_ptr:
       op_taint tnf (Var v) = op_taint tn (Var v)) /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
-    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_labels = s.vs_labels
 Proof
   strip_tac >>
   drule_all window_array_index_alloca_member >> strip_tac >>

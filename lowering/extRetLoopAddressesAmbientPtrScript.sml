@@ -37,6 +37,7 @@ Theorem loop_coordinates_ambient_counted_ptr[local]:
     lookup_var data sf = SOME (n2w (w2n a+32)) /\
     lookup_var addr sf = SOME (n2w (w2n a+32+j*stride)) /\
     ptr_covers Gf tnf addr sf n /\
+    ptr_covers Gf tnf data sf (cap-32) /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!p. not_fresh_at sa p ==>
@@ -73,8 +74,9 @@ Proof
      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
        fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >>
      gvs[not_fresh_at_def]) >>
-  `32+(j*stride+n) <= cap /\ w2n a+32 < dimword(:256)` by decide_tac >>
-  drule_all (emit_bulk_offset_ambient_counted_ptr |> Q.INST [`off` |-> `32`, `n` |-> `j*stride+n`] |> SRULE []) >>
+  `32+(cap-32) <= cap /\ j*stride+n <= cap-32 /\
+   w2n a+32 < dimword(:256)` by decide_tac >>
+  drule_all (emit_bulk_offset_ambient_counted_ptr |> Q.INST [`off` |-> `32`, `n` |-> `cap-32`] |> SRULE []) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `eval_operand (Var idx) sf = SOME (n2w j) /\
    eval_operand (Lit (n2w stride)) sf = SOME (n2w stride) /\
@@ -85,12 +87,12 @@ Proof
   disch_then (qspecl_then [`PG`, `Gf`, `D`] strip_assume_tac) >>
   `lookup_var data sf' = SOME (n2w (w2n a+32)) /\
    lookup_var off sf' = SOME (n2w (j*stride)) /\
-   ptr_covers Gf' tnf' data sf' (j*stride+n) /\
+   ptr_covers Gf' tnf' data sf' (cap-32) /\
    w2n (n2w (w2n a+32):bytes32)+j*stride < dimword(:256)` by
     (gvs[ptr_covers_def, GSYM word_mul_n2w, w2n_n2w, LESS_MOD] >>
      `w2n a+32 < dimword(:256)` by decide_tac >>
      simp[LESS_MOD] >> metis_tac[]) >>
-  `j*stride+n <= j*stride+n` by simp[] >>
+  `j*stride+n <= cap-32` by decide_tac >>
   drule_all abi_bytes_lastptr_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf''`, `tnf''`, `sf''`] >>
@@ -99,10 +101,10 @@ Proof
      qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[] >>
      irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
      qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]) >>
-  simp[w2n_n2w, LESS_MOD] >> metis_tac[]
+  simp[w2n_n2w, LESS_MOD] >> gvs[ptr_covers_def] >> metis_tac[]
 QED
 
-Theorem abi_array_addresses_ambient_counted_ptr:
+Theorem abi_array_addresses_ambient_counted_ptr_with_base:
   abi_encode_array_addresses (Var ip) (Var src) (Var dst) asz msz sa =
     (((Var idx,Var child_src),(Var data,Var child_dst)),sb) /\
   fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -125,6 +127,8 @@ Theorem abi_array_addresses_ambient_counted_ptr:
     lookup_var child_src sf = SOME (n2w (w2n a+32+j*msz)) /\
     lookup_var child_dst sf = SOME (n2w (w2n b+32+j*asz)) /\
     ptr_covers Gf tnf child_src sf msz /\ ptr_covers Gf tnf child_dst sf asz /\
+    lookup_var data sf = SOME (n2w (w2n b+32)) /\
+    ptr_covers Gf tnf data sf (dcap-32) /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
     (!v. not_fresh_at sa v ==>
@@ -182,4 +186,41 @@ Proof
      irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
      qexistsl_tac [`Gf'`, `sf'`, `tnf'`] >> simp[]) >>
   simp[] >> gvs[ptr_covers_def] >> metis_tac[]
+QED
+
+(* Backwards-compatible projection: static consumers need only indexed heads. *)
+Theorem abi_array_addresses_ambient_counted_ptr:
+  abi_encode_array_addresses (Var ip) (Var src) (Var dst) asz msz sa =
+    (((Var idx,Var child_src),(Var data,Var child_dst)),sb) /\
+  fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa ip /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var ip s = SOME p /\ lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  ptr_covers G tn ip s 32 /\ ptr_covers G tn src s scap /\ ptr_covers G tn dst s dcap /\
+  mload (w2n p) s = n2w j /\
+  (!i. w2n p <= i /\ i < w2n p+32 ==> i NOTIN tn.t_mem) /\
+  32+j*msz+msz <= scap /\ 32+j*asz+asz <= dcap /\
+  w2n a+scap < dimword(:256) /\ w2n b+dcap < dimword(:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\
+    lookup_var idx sf = SOME (n2w j) /\ op_taint tnf (Var idx) = {} /\
+    lookup_var child_src sf = SOME (n2w (w2n a+32+j*msz)) /\
+    lookup_var child_dst sf = SOME (n2w (w2n b+32+j*asz)) /\
+    ptr_covers Gf tnf child_src sf msz /\ ptr_covers Gf tnf child_dst sf asz /\
+    sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v)) /\
+    tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx
+Proof
+  strip_tac >> drule_all abi_array_addresses_ambient_counted_ptr_with_base >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED

@@ -99,7 +99,8 @@ Theorem abi_decode_index_init_ambient_counted_ptr:
     (!i. i < addr \/ addr+32 <= i ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
     sf.vs_memory = (mstore addr 0w s).vs_memory /\
     tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
-    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_labels = s.vs_labels
 Proof
   strip_tac >> drule abi_decode_index_init_trace >> strip_tac >> gvs[] >>
   qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
