@@ -121,21 +121,22 @@ Theorem is_immutable_decl_vtype_key[local]:
     is_immutable_decl id tls ==>
     MEM (src,id) (FLAT (MAP (toplevel_vtype_keys_toplevel src) tls))
 Proof
-  Induct_on `tls` >> simp[is_immutable_decl_def] >>
+  Induct_on `tls` >> simp[vyperInterpreterTheory.is_immutable_decl_def] >>
   Cases >> TRY (rename1 `VariableDecl _ m _ _ _` >> Cases_on `m`) >>
-  rw[is_immutable_decl_def, toplevel_vtype_keys_toplevel_def] >>
+  rw[vyperInterpreterTheory.is_immutable_decl_def, toplevel_vtype_keys_toplevel_def] >>
   metis_tac[]
 QED
 
 Theorem is_immutable_decl_not_constant_decl:
   !src tls id.
-    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tls)) /    is_immutable_decl id tls ==>
+    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tls)) /\
+    is_immutable_decl id tls ==>
     ~constant_decl id tls
 Proof
   Induct_on `tls` >- simp[constant_decl_def] >>
   Cases >>
   simp[toplevel_vtype_keys_toplevel_def, listTheory.ALL_DISTINCT_APPEND] >>
   rpt gen_tac >> TRY (rename1 `VariableDecl _ m _ _ _` >> Cases_on `m`) >>
-  rw[constant_decl_def, is_immutable_decl_def] >>
+  rw[constant_decl_def, vyperInterpreterTheory.is_immutable_decl_def] >>
   metis_tac[is_immutable_decl_vtype_key, constant_decl_vtype_key]
 QED
