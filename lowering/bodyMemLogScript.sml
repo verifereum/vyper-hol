@@ -138,7 +138,7 @@ Proof
    call_evaluation_safe cx (int_calls_exprs args) /\
    (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
              occurs_abi_decode_target target tops)` by
-    gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+    gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         int_calls_stmt_def, AllCaseEqs()] >>
   `alloc_limits_exprs cenv args` by
     fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
