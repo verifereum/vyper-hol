@@ -3331,8 +3331,12 @@ Resume raw_call_success_run_aged[view]:
   qpat_x_assum `t' = _` (fn th => ONCE_REWRITE_TAC[th]) >>
   qpat_x_assum `u with vs_vars := FEMPTY = _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >>
-  simp[venom_state_component_equality, drop_fresh_def] >>
-  strip_tac >> simp[raw_call_finish_view_def, mstore_def]
+  simp[drop_fresh_def] >>
+  disch_then (mp_tac o AP_TERM
+    ``\v. raw_call_finish_view
+      (mstore (w2n (addr:256 word))
+        (n2w (MIN (LENGTH s.vs_returndata) cap)) v)``) >>
+  simp[raw_call_finish_view_def, mstore_def]
 QED
 
 Finalise raw_call_success_run_aged
@@ -4307,6 +4311,7 @@ QED
 Finalise raw_call_allocated_tail_frag_aged
 
 Theorem raw_call_none_post:
+  expr_has_effect e /\
   expr_type e = NoneT /\ post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es es' sa s0 s ==>
@@ -4321,6 +4326,7 @@ Proof
 QED
 
 Theorem raw_call_bool_post:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   expr_type e = BaseT BoolT /\
   stmt_state_rel ctx func cenv cx es' s /\
@@ -4334,6 +4340,7 @@ Proof
 QED
 
 Theorem raw_call_tuple_post:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   expr_type e = TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))] /\
   evaluate_type (get_tenv cx) (expr_type e) =
@@ -4363,6 +4370,7 @@ Proof
 QED
 
 Theorem raw_call_nonrevert_vv_path[local]:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
@@ -4412,6 +4420,7 @@ Proof
 QED
 
 Theorem raw_call_bytes_post:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -4452,6 +4461,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_zero_tail_vv_path[local]:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   cap = 0 /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
@@ -4615,6 +4625,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[finish]:
   qpat_x_assum `flags.rcf_max_outsize = 0` mp_tac >>
   qpat_x_assum `local_ptrs_reserved cenv sc` mp_tac >>
   qpat_x_assum `initial.cs_next_var <= sc.cs_next_var` mp_tac >>
+  qpat_x_assum `expr_has_effect e` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
   Cases_on `flags.rcf_revert_on_failure`
   >- suspend "revert_zero" >>
@@ -4642,6 +4653,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[revert_zero]:
   disch_then (mp_then Any irule frag_path_conseq) >> simp[] >>
   rpt strip_tac >> gvs[] >>
   match_mp_tac raw_call_none_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- gvs[raw_call_return_type_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac
@@ -4676,6 +4688,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_positive_tail_vv_path[local]:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
@@ -4977,6 +4990,7 @@ Theorem raw_call_outbuf_tail_vv_path[local]:
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (0 < cap ==> 64 + ((cap + 31) DIV 32) * 32 < dimword (:256)) /\
   flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
+  expr_has_effect e /\
   (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
       else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) /\
@@ -5001,6 +5015,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_tail_vv_frag[local]:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
@@ -5362,12 +5377,16 @@ Theorem raw_call_keywords_post[local]:
     LIST_REL (\x v. eval_operand x s = SOME
       (typed_val_to_w256 (BaseTV (UintT 256)) v)) xs vs
 Proof
-  Induct >> rpt gen_tac >>
-  Cases_on `xs` >> Cases_on `vs` >>
-  simp[typed_args_post_def, vyperValueTheory.evaluate_type_def] >>
-  strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
-  first_x_assum irule >> simp[typed_args_post_def] >>
-  goal_assum (drule_at Any) >> simp[]
+  simp[typed_args_post_def] >> rpt strip_tac >>
+  qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+  qpat_x_assum `LENGTH ks = LENGTH vs` mp_tac >>
+  qpat_x_assum `EVERY _ ks` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  map_every qid_spec_tac [`xs`, `vs`, `ks`] >>
+  Induct >> rpt gen_tac >> Cases_on `xs` >> Cases_on `vs` >>
+  simp[vyperValueTheory.evaluate_type_def] >>
+  rpt strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 Theorem raw_call_value_operand[local]:
@@ -5709,7 +5728,7 @@ Resume raw_call_tail_outcome[lift]:
   qpat_assum `stmt_state_rel _ _ _ _ esK t` assume_tac >>
   rpt (goal_assum (drule_at (Pos hd))) >>
   qexistsl_tac [`Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`, `ann`] >>
-  simp[] >>
+  simp[expr_has_effect_thm] >>
   `es2 with gas_obs := [] = es2` by
     (Cases_on `es2` >> gvs[evaluation_state_fn_updates]) >>
   conj_tac >- (rpt strip_tac >> gvs[expr_exit_def]) >>

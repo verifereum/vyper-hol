@@ -507,23 +507,19 @@ Definition exec_ext_call_def:
        | _ => Error "ext_call requires single output"
 End
 
-(* Execute DELEGATECALL via verifereum EVM semantics.
-   Runs target's code in caller's own context (storage, address, balance).
-   msg.sender = caller's original caller; msg.value = inherited.
+(* Execute DELEGATECALL using the shared outcome oracle, as CALL does. The
+   request carries the target's code address, the calldata, no value and the
+   caller's static flag; the outcome's accounts carry the effects on the
+   caller's own storage.
    Operands: [gas; addr; argsOff; argsSize; retOff; retSize] *)
 Definition exec_delegatecall_def:
   exec_delegatecall inst s gas addr_w argsOff argsSize retOff retSize =
-    let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
-    let target : address = w2w addr_w in
-    let code = (lookup_account target s.vs_accounts).code in
-    let evm_s = make_venom_delegatecall_state s target (w2n gas)
-                  calldata code s.vs_call_ctx.cc_static in
-    case extract_venom_result s 1w (w2n retOff) (w2n retSize) (run evm_s) of
-    | SOME (output, s') =>
-        (case inst.inst_outputs of
-           [out] => OK (update_var out output s')
-         | _ => Error "delegatecall requires single output")
-    | NONE => Error "delegatecall: non-terminating or invalid state"
+    let rq = venom_call_request s addr_w 0w argsOff argsSize F with
+               cr_kind := DelegateMessageCall;
+        (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
+    in case inst.inst_outputs of
+         [out] => OK (update_var out output s')
+       | _ => Error "delegatecall requires single output"
 End
 
 (* CREATE/CREATE2 share the observed outcome oracle with CALL. *)

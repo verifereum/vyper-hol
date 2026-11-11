@@ -31,6 +31,12 @@ conversion produces assumptions or an unexpected theorem shape, or the
 artifact is open. `check_contract_conv` can be used directly when a caller
 needs to inspect a computed rejection theorem ending in `NONE`.
 
+Literal integer ranges require a strictly increasing pair of endpoints and
+an iteration bound equal to their difference, as recorded by the frontend.
+The bound may exceed the loop variable type's maximum: `range(-128, 127)`
+with an `int8` loop variable has bound 255. Constructor headers reject
+`@nonreentrant` in both runtime and deployment checking modes.
+
 `in_deploy` is an ML `bool`; the library constructs the corresponding HOL
 Boolean internally. Use `true` when checking the deployment context and
 `false` for the runtime context.
@@ -96,6 +102,24 @@ val checked = vyperCheckContractLib.check_contract_with extended_conv input;
 Rules added this way must be trusted kernel theorems. A local extension is
 preferable to changing the shared compset for contract-specific definitions;
 the shared compset should contain only dependencies of the general checker.
+
+## Deployed interface
+
+`check_contract` checks selector uniqueness separately for each source module.
+For a loaded contract, `exports_ok` also requires distinct four-byte selectors
+across the main module's external entries and the library entries named in the
+exports map. Both checks include every default-argument prefix and public
+variable/hashmap getter. Unexported library entries do not enter the combined
+interface. `check_contract_single_module_exports_ok` proves that a successfully
+checked single module with no exports already satisfies this additional check.
+
+## Member names
+
+The checker requires a single member-name namespace per module: every function
+(internal, external or deploy), variable and hashmap contributes its name.
+Repeating a name across those declaration kinds or visibilities rejects the
+contract in both runtime and deployment mode. Different modules may reuse a
+name. The signature, getter-name and selector checks also remain in force.
 
 ## Constant initializers
 

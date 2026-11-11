@@ -66,7 +66,7 @@ Proof
     metis_tac[supported_string_reason_body_calls] >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          int_calls_stmt_def, body_inv_def] >>
      qexists_tac `int_calls_assert_reason (AssertReason se)` >> simp[]) >>
   `expr_sim_mem ctx func cenv cx (BaseT BoolT) e es` by
@@ -75,7 +75,7 @@ Proof
               cs_extends sa sb` by metis_tac[compile_expr_grows] >>
   `~supported_expr_exists
       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se` by
-    gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+    gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         supported_assert_exists_def] >>
   `alloc_limits_expr cenv se` by
     (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists _ se` mp_tac >>

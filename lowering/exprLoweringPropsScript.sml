@@ -3301,6 +3301,13 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
+Theorem ci_mono_compile_snapshot_vv:
+  ∀cenv copy vv sa. ci_mono sa (SND (compile_snapshot_vv cenv copy vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
+  ci_mono_chain_tac [ci_mono_unwrap_value, ci_mono_compile_materialize_vv]
+QED
+
 Theorem ci_mono_compile_abi_encode_child_branches[local]:
   (¬is_dyn ⇒ ∀dst sa.
      ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒

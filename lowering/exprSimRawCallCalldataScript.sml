@@ -337,7 +337,7 @@ Proof
     metis_tac[take_call_outcome_typed] >>
   Cases_on `es.outcomes` >> gvs[] >>
   qpat_x_assum `FST _ <> _` mp_tac >>
-  simp[take_call_outcome_def] >> pairarg_tac >> simp[] >>
+  simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> simp[] >>
   IF_CASES_TAC >> simp[]
 QED
 
@@ -4078,7 +4078,7 @@ Theorem calldata_take_call_outcome_bound:
   LENGTH oc.co_returnData < dimword(:256)
 Proof
   Cases_on `es.outcomes` >>
-  simp[vyperCallOutcomeTheory.take_call_outcome_def] >>
+  simp[vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def] >>
   pairarg_tac >> simp[] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   irule calldata_take_outcome_bound >>
@@ -4163,6 +4163,7 @@ Proof
 QED
 
 Theorem raw_call_value_vv_post[local]:
+  expr_has_effect e /\
   n < dimword (:256) /\ flags.rcf_max_outsize = n /\
   post_value_type cenv e = expr_type e /\
   expr_type e = raw_call_return_type flags /\
@@ -4214,6 +4215,7 @@ Proof
 QED
 
 Theorem raw_call_finish_vv_frag[local]:
+  expr_has_effect e /\
   compile_raw_call_finish aop dp dl gop vop call_ty n flags.rcf_revert_on_failure ov op sc = (result,se) /\
   emit_void SETFMP [dp] se = ((),sb) /\
   (call_ty = StaticCall \/ call_ty = RegularCall) /\
@@ -4327,6 +4329,7 @@ Resume raw_call_finish_vv_frag[suffix]:
   qpat_x_assum `~flags.rcf_revert_on_failure` mp_tac >>
   qpat_x_assum `n < dimword (:256)` mp_tac >>
   qpat_x_assum `t.vs_returndata = _` mp_tac >>
+  qpat_x_assum `expr_has_effect e` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
   suspend "suffix_value"
 QED
@@ -4489,7 +4492,8 @@ Proof
   qmatch_goalsub_abbrev_tac `expr_exit source_result` >>
   qexists_tac `Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (addr::kws) NONE` >>
   qexists_tac `expr_exit source_result` >>
-  simp[Abbr `source_result`, expr_type_def, raw_call_return_type_def] >>
+  simp[Abbr `source_result`, expr_type_def, raw_call_return_type_def,
+       expr_has_effect_thm] >>
   Cases_on `flags.rcf_is_static` >> fs[expr_exit_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
@@ -4584,7 +4588,7 @@ Theorem calldata_take_call_outcome_gas_obs[local]:
        SND (take_call_outcome target cd vo st) with gas_obs := g) /\
     (SND (take_call_outcome target cd vo st)).gas_obs = st.gas_obs
 Proof
-  rpt gen_tac >> simp[take_call_outcome_def, call_outcome_request_def] >>
+  rpt gen_tac >> simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
   Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >> rw[]
 QED
 

@@ -225,15 +225,19 @@ Theorem ifexp_finish_post[local]:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
-  sd.cs_next_id <= sb.cs_next_id ==>
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
+  sd.cs_next_id <= sb.cs_next_id /\ is_word_type t ==>
   vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
     (if is_word_type t then StackValue t (Var rv)
      else LocatedValue t (mk_ptr (Var rv) LocMemory))
     (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
   strip_tac >>
-  irule (SRULE [vyperASTTheory.expr_type_def]
-    (Q.INST [`e` |-> `IfExp t c a b`] exprSimIfExpTheory.ifexp_root_vv_post_of_expr_post_read)) >>
+  qpat_x_assum `_ ==> ~expr_has_effect e` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qpat_assum `is_word_type _` (fn th => rewrite_tac[th] >>
+    irule (SRULE [vyperASTTheory.expr_type_def, th]
+      (Q.INST [`e` |-> `IfExp t c a b`]
+        exprSimIfExpTheory.ifexp_root_vv_post_of_expr_post_read))) >>
   goal_assum (drule_at Any) >>
   irule expr_post_ifexp >>
   `~not_fresh_at sa rv` by metis_tac[] >>
@@ -247,6 +251,7 @@ Theorem ifexp_forced_arm_finish_mem[local]:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id /\ sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
   emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
@@ -263,7 +268,9 @@ Theorem ifexp_forced_arm_finish_mem[local]:
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next) R
 Proof
-  strip_tac >> irule ifexp_outcome_suffix_mem >>
+  strip_tac >>
+  qpat_x_assum `_ ==> ~expr_has_effect e` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  irule ifexp_outcome_suffix_mem >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
   `post_value_type cenv e = expr_type e` by
     metis_tac[loweringPostsTheory.post_value_type_word] >>
@@ -271,7 +278,7 @@ Proof
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
   qexists_tac `v` >> simp[] >> conj_tac
-  >- (irule expr_post_ifexp >> metis_tac[post_value_type_word]) >>
+  >- (irule expr_post_ifexp >> simp[] >> metis_tac[post_value_type_word]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func ((update_var rv w u) with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
@@ -656,11 +663,16 @@ Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
   conj_tac
   >- (`sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
         (qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
+      `~expr_has_effect (IfExp (expr_type a) c a b) ==> ~expr_has_effect (if sel then a else b)` by
+        (Cases_on `sel` >>
+     rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+     strip_tac >> asm_rewrite_tac[]) >>
       qpat_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _`
         (mp_then Any mp_tac ifexp_finish_post) >>
       disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
-      simp[] >> disch_then irule >> gvs[post_value_type_word]) >>
+      qpat_assum `is_word_type _` (fn th => simp[th]) >>
+      disch_then irule >> gvs[post_value_type_word]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func (update_var rv w u with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
@@ -1060,6 +1072,10 @@ Resume compile_ifexp_word_sim_mem[forced_entry]:
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
   simp[expr_store_bound_word] >> strip_tac >>
   simp[Abbr `root_post`, expr_store_bound_word, vyperASTTheory.expr_type_def] >>
+  `~expr_has_effect (IfExp (expr_type a) c a b) ==> ~expr_has_effect (if sel then a else b)` by
+    (Cases_on `sel` >>
+     rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+     strip_tac >> asm_rewrite_tac[]) >>
   qpat_assum `sb.cs_current_insts = []`
     (fn th => irule (SRULE [th] ifexp_forced_arm_finish_mem)) >>
   goal_assum (drule_at Any) >>

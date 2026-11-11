@@ -19,7 +19,7 @@ Proof
   `~is_extcode e` by metis_tac[supported_string_reason_body_calls] >>
   `~supported_expr_exists
       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e` by
-    gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+    gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         supported_raise_exists_def] >>
   `alloc_limits_expr cenv e` by
     (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists _ _` mp_tac >>
@@ -35,7 +35,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_raise_exists_def, int_calls_stmt_def,
          int_calls_raise_reason_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
