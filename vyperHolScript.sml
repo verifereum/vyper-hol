@@ -38,3 +38,5 @@ Ancestors
   mmBlockSimProofs mmSupplySsaProofs mmSupplyWfProofs
   (* codegen: stack planning *)
   stackPlanGenCompute
+  (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
+  codegenLabelDisciplined
