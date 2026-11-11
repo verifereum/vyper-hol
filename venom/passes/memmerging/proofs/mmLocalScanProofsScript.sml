@@ -12817,6 +12817,70 @@ Proof
   qexists `t` >> gvs[]
 QED
 
+Theorem mm_local_interval_replay[local]:
+  !n a H cap. a <= n /\
+  (!q. a <= q /\ q < n ==> (H (SUC q)).vs_memory =
+    (case cap q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) ==>
+  (H n).vs_memory = (FOLDL (\st q. case cap q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (n-a)))).vs_memory
+Proof
+  Induct_on `n`
+  >- (rpt strip_tac >> gvs[rich_listTheory.COUNT_LIST_def]) >>
+  rpt strip_tac >> Cases_on `a = SUC n`
+  >- gvs[rich_listTheory.COUNT_LIST_def] >>
+  `a <= n` by decide_tac >>
+  ` (H n).vs_memory = (FOLDL (\st q. case cap q of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (n-a)))).vs_memory` by
+    (first_x_assum irule >> simp[]) >>
+  pop_assum (mk_asm "replay") >>
+  ` (H (SUC n)).vs_memory = (case cap n of NONE => H n
+    | SOME (d,bs) => write_memory_with_expansion d bs (H n)).vs_memory` by
+    (first_x_assum irule >> simp[]) >>
+  `SUC n - a = SUC (n-a) /\ a+(n-a) = n` by decide_tac >>
+  simp[rich_listTheory.COUNT_LIST_SNOC, MAP_SNOC,
+    rich_listTheory.FOLDL_SNOC] >>
+  Cases_on `cap n` >> gvs[] >> PairCases_on `x` >>
+  gvs[write_as_replace] >> asm "replay" mp_tac >>
+  pure_rewrite_tac[write_as_replace] >> disch_then (fn th => rewrite_tac[th])
+QED
+
+Theorem mm_local_interval_runtime_capture[local]:
+  q < n /\ n <= LENGTH is /\
+  ((EL q is).inst_opcode = MSTORE \/ (EL q is).inst_opcode = MCOPY) /\
+  step_inst fuel ctx (EL q is) (H q) = OK t /\
+  H (SUC q) = t with vs_inst_idx := SUC (H q).vs_inst_idx ==>
+  ?d bs. mm_local_write_capture is H n q = SOME (d,bs) /\
+    (H (SUC q)).vs_memory = (write_memory_with_expansion d bs (H q)).vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_write2_def] >>
+  gvs[AllCaseEqs()] >> strip_tac >>
+  gvs[mm_local_write_capture_def, venomMemPropsTheory.mstore_eq_write_mem,
+    venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]
+QED
+
+Theorem mm_local_interval_runtime_replay_one[local]:
+  q < n /\ n <= LENGTH is /\
+  ((EL q is).inst_opcode = MSTORE \/ (EL q is).inst_opcode = MCOPY) /\
+  step_inst fuel ctx (EL q is) (H q) = OK t /\
+  H (SUC q) = t with vs_inst_idx := SUC (H q).vs_inst_idx ==>
+  (H (SUC q)).vs_memory = (FOLDL (\st j.
+    case mm_local_write_capture is H n j of NONE => st
+    | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H q) (MAP (\j. q+j) (COUNT_LIST (SUC q-q)))).vs_memory
+Proof
+  strip_tac >> drule_at (Pat `step_inst _ _ _ _ = _`)
+    mm_local_interval_runtime_capture >>
+  disch_then (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
+  simp[rich_listTheory.count_list_sub1, rich_listTheory.COUNT_LIST_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
