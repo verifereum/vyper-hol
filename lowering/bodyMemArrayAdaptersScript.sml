@@ -236,6 +236,7 @@ Proof
     (strip_tac >>
      qpat_x_assum `~EXISTS expr_has_effect args ==> _` (drule_then strip_assume_tac) >>
      irule exprSimAggregateChildrenTheory.aggregate_pure_frame_trans >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`es`, `sm`, `sh`] >> rpt conj_tac >>
      TRY (first_assum ACCEPT_TAC) >> TRY (rewrite_tac[] >> NO_TAC) >>
      rpt strip_tac
