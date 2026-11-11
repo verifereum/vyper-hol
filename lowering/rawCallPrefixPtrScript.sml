@@ -151,7 +151,7 @@ Theorem raw_call_emit_gas_stage:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
   ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 1 H un (OK t) /\
     ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
     eval_operand (Var out) t = SOME
@@ -190,18 +190,18 @@ Proof
 QED
 
 Resume raw_call_emit_gas_stage[frame]:
-  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t` by
+  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t` by
     (`stmt_state_rel ctx func cenv cx es
        ((update_var out (case s.vs_gas_readings of [] => 0w | r::rs => r) s)
           with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-      wb_frame cenv es sa s
+      wb_frame cenv es es sa s
        ((update_var out (case s.vs_gas_readings of [] => 0w | r::rs => r) s)
           with vs_inst_idx := LENGTH sb.cs_current_insts)` by
        (irule rawCallDataHeaderPtrTheory.raw_call_fresh_update_state_frame >> simp[]) >>
      fs[Abbr `t`, Abbr `u`, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
        exprSimHashTheory.hash_gas_readings_state_rel,
        loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
-       venomStateTheory.lookup_var_def]) >>
+       loweringPostsTheory.popped_kept_def, venomStateTheory.lookup_var_def]) >>
   qexistsl_tac [`H`, `un`, `t`] >> simp[] >>
   simp[Abbr `un`, Abbr `u`, raw_call_gas_step_taint] >>
   simp[Abbr `t`, venomStateTheory.update_var_def,
@@ -229,7 +229,7 @@ Theorem raw_call_optional_gas_stage:
   ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s
       (case gas_opt of SOME g => 0 | NONE => 1) H un (OK t) /\
     ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
     eval_operand gas_op t = SOME (case gas_opt of SOME g => gasw
@@ -341,7 +341,7 @@ Theorem raw_call_operands_sim_ptr:
       EVERY (\op. !l. op <> Label l) xs /\
       EVERY (\op. !v. op = Var v ==> not_fresh_at s5 v) xs /\
       stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
-      wb_frame cenv es sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
+      wb_frame cenv es ee sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       t.vs_current_bb = s5.cs_current_bb /\
@@ -460,17 +460,16 @@ Resume raw_call_operands_sim_ptr[keyword_map]:
     (Q.GEN `f` (SPEC_ALL operandOutcomePtrTheory.gas_outcome_ptr_map_return)))) >>
   goal_assum (drule_at Any) >> conj_tac
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
-      `wb_frame cenv es sa s0 t'` by
-        (irule exprSimWordArgsTheory.wb_frame_trans >>
-         goal_assum (drule_at Any) >> conj_tac
-         >- (qexistsl_tac [`ee`,`sm`,`t`] >>
-             simp[] >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
-         goal_assum (drule_at Any)) >>
+      `wb_frame cenv es ee' sa s0 t'` by
+        (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `ee`, `ee'`, `sm`, `t`,
+           `t'`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >>
+         simp[] >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
       `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
-        (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+        (irule wordOperandsPtrTheory.ghost_kept_trans >>
+         simp[] >> conj_tac
          >- (qexists_tac `func` >>
              fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
-         qexistsl_tac [`G`, `ee`, `t`, `sm`, `tn`] >>
+         qexistsl_tac [`G`, `ee`, `ee`, `t`, `sm`, `tn`] >>
          fs[exprLoweringPropsTheory.ci_mono_def]) >>
       `expr_val_rel cx (BaseT AddressT) av addr t' /\ op_taint tn' addr = {}` by
         (qpat_assum `!op. _ ==> op_prov G' op = _ /\ _`
@@ -546,7 +545,7 @@ Theorem raw_call_prefix_sim_ptr:
       EVERY (\op. !l. op <> Label l) xs /\
       EVERY (\op. !v. op = Var v ==> not_fresh_at s6 v) xs /\
       stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
-      wb_frame cenv es sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
+      wb_frame cenv es ee sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       t.vs_current_bb = s6.cs_current_bb /\
@@ -643,7 +642,7 @@ Resume raw_call_prefix_sim_ptr[gas_post]:
   >- (irule gas_marked_exec_ptr_implicit_suffix >> goal_assum (drule_at Any) >>
       goal_assum (drule_at Any)) >>
   disj1_tac >> qexists_tac `t'` >> simp[] >>
-  qexistsl_tac [`xs'`, `ea`, `ed`, `ta`, `tb`, `t'`, `b`, `base'`, `sz`, `t`, `gasw`] >>
+  qexistsl_tac [`xs'`, `ea`, `ed`, `ta`, `tb`, `th`, `b`, `base'`, `sz`, `t`, `gasw`] >>
   simp[] >> suspend "transport"
 QED
 
@@ -666,16 +665,15 @@ Resume raw_call_prefix_sim_ptr[transport]:
   >- (fs[listTheory.EVERY_MEM, exprLoweringPropsTheory.ci_mono_def] >>
       metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
   conj_tac
-  >- (irule exprSimWordArgsTheory.wb_frame_trans >>
-      goal_assum (drule_at Any) >> conj_tac
-      >- (qexistsl_tac [`es_end`, `s5`, `t`] >>
-          simp[] >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
-      goal_assum (drule_at Any)) >>
+  >- (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `es_end`, `es_end`, `s5`, `t`,
+        `t'`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >>
+      fs[exprSimWordArgsTheory.wb_frame_gas_obs, exprLoweringPropsTheory.ci_mono_def]) >>
   conj_tac
-  >- (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+  >- (irule wordOperandsPtrTheory.ghost_kept_trans >>
+      simp[] >> conj_tac
       >- (qexists_tac `func` >>
           fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
-      qexistsl_tac [`G`, `es_end`, `t`, `s5`, `tn`] >>
+      qexistsl_tac [`G`, `es_end with gas_obs := []`, `es_end`, `t`, `s5`, `tn`] >>
       fs[exprLoweringPropsTheory.ci_mono_def]) >>
   conj_tac
   >- (qpat_x_assum `expr_val_rel cx (BaseT AddressT) av addr t` mp_tac >>
@@ -691,9 +689,15 @@ Resume raw_call_prefix_sim_ptr[transport]:
 QED
 
 Resume raw_call_prefix_sim_ptr[typed_post]:
+  `wb_frame cenv ed (es_end with gas_obs := []) sm th t'` by
+    (irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
+     qexistsl_tac [`s5`, `t`] >>
+     fs[exprSimPrecompilesTheory.typed_args_post_def] >>
+     qpat_x_assum `wb_frame cenv es_end es_end s5 t t'` mp_tac >>
+     simp[loweringPostsTheory.wb_frame_def]) >>
+  pop_assum mp_tac >>
   qpat_x_assum `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[exprSimPrecompilesTheory.typed_args_post_def,
-    exprSimWordArgsTheory.wb_frame_refl] >> strip_tac >>
+  simp[exprSimPrecompilesTheory.typed_args_post_def] >> rpt strip_tac >>
   qpat_x_assum `EVERY (\op. !v. op = Var v ==> not_fresh_at s5 v) xs'` mp_tac >>
   qpat_x_assum `!op. _ ==> op_taint un op = _ /\ _` mp_tac >>
   qpat_x_assum `LIST_REL _ xs' _` mp_tac >>

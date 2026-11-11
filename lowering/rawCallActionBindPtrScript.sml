@@ -88,9 +88,9 @@ Theorem raw_call_scalar_action_outcome:
       expr_val_rel cx (BaseT BoolT) v result t /\
       expr_val_at cenv cx (BaseT BoolT) sa sb ee v result t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
-      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em s6 tm u /\
-      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em s6 u t /\
+      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
+      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
+      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -285,7 +285,7 @@ Theorem raw_call_prepared_prefix_sim_ptr:
       EVERY (\op. !l. op <> Label l) xs /\
       EVERY (\op. !v. op = Var v ==> not_fresh_at s6 v) xs /\
       stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
-      wb_frame cenv es sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
+      wb_frame cenv es ee sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       sa.cs_next_id <= s6.cs_next_id /\
@@ -458,9 +458,9 @@ Theorem raw_call_zero_reverting_action_outcome:
       expr_val_at cenv cx NoneT sa sb ee v result t /\
       ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
-      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em s6 tm u /\
-      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em s6 u t /\
+      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
+      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
+      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -545,9 +545,9 @@ Theorem raw_call_bytes_action_outcome:
       expr_val_at cenv cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) sa sb ee v result t /\
       ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
-      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em s6 tm u /\
-      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em s6 u t /\
+      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
+      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
+      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -629,9 +629,9 @@ Theorem raw_call_tuple_action_outcome:
       expr_val_at cenv cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) sa sb ee v result t /\
       ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
-      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em s6 tm u /\
-      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em s6 u t /\
+      ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
+      ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
+      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof

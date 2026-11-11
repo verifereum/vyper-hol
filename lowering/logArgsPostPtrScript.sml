@@ -6,7 +6,7 @@ Ancestors
 
 Theorem log_argument_ptr_buf_kept:
   ptr_buf_ok cenv e x G1 t /\ expr_val_rel cx (expr_type e) v x t /\
-  wb_frame cenv es1 sm t u /\ ghost_kept cenv es1 sm G1 tn1 t G2 tn2 /\
+  wb_frame cenv es1 es' sm t u /\ ghost_kept cenv es1 sm G1 tn1 t G2 tn2 /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) ==>
   ptr_buf_ok cenv e x G2 u
 Proof
@@ -21,7 +21,7 @@ Theorem log_args_ptr_vals_cons:
   ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
   expr_val_rel cx (expr_type e) v x t /\
   expr_val_at cenv cx (expr_type e) sa sm es1 v x t /\
-  wb_frame cenv es1 sm t u /\ ghost_kept cenv es1 sm G1 tn1 t G2 tn2 /\
+  wb_frame cenv es1 es' sm t u /\ ghost_kept cenv es1 sm G1 tn1 t G2 tn2 /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
   log_arg_clear cenv cx (expr_type e) v /\
   LIST_REL (\p v. ptr_val_ok cx (SND p) v (FST p) G2 tn2 u) ys vs ==>
@@ -34,7 +34,7 @@ QED
 Theorem log_args_ptr_bufs_cons:
   (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G1 t) /\
   expr_val_rel cx (expr_type e) v x t /\
-  wb_frame cenv es1 sm t u /\ ghost_kept cenv es1 sm G1 tn1 t G2 tn2 /\
+  wb_frame cenv es1 es' sm t u /\ ghost_kept cenv es1 sm G1 tn1 t G2 tn2 /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
   LIST_REL (\e p. ~is_word_type (expr_type e) ==>
     ptr_buf_ok cenv e (FST p) G2 u) args ys ==>
@@ -73,8 +73,8 @@ Theorem log_args_post_ptr_cons:
   ghost_kept cenv es sa G0 tn0 s0 G2 tn2
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 t` by (drule_all expr_post_frame >> simp[]) >>
-  `wb_frame cenv es1 sm t u` by (drule_all log_args_post_frame >> simp[]) >>
+  `wb_frame cenv es es1 sa s0 t` by (drule_all expr_post_frame >> simp[]) >>
+  `wb_frame cenv es1 es' sm t u` by (drule_all log_args_post_frame >> simp[]) >>
   `expr_val_rel cx (expr_type e) v x t /\
    expr_val_at cenv cx (expr_type e) sa sm es1 v x t` by
     gvs[expr_post_def] >>

@@ -85,8 +85,8 @@ Theorem raw_call_allocated_scalar_outcome:
       expr_val_rel cx (BaseT BoolT) v result t /\
       expr_val_at cenv cx (BaseT BoolT) sa sc ee v result t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es sa s u /\
-      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es sa u t /\
+      ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
+      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -170,8 +170,8 @@ Theorem raw_call_allocated_zero_reverting_outcome:
       expr_val_rel cx NoneT v result t /\
       expr_val_at cenv cx NoneT sa sc ee v result t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es sa s u /\
-      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es sa u t /\
+      ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
+      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -260,8 +260,8 @@ Theorem raw_call_allocated_positive_reverting_outcome:
       expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sa sc ee v result t /\
       ptr_buf_ok cenv e result H t /\ stmt_state_rel ctx func cenv cx ee t /\
       ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es sa s u /\
-      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es sa u t /\
+      ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
+      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -386,8 +386,8 @@ Theorem raw_call_allocated_positive_nonreverting_outcome:
       expr_val_at cenv cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) sa sc ee v result t /\
       ptr_buf_ok cenv e result H t /\ stmt_state_rel ctx func cenv cx ee t /\
       ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es sa s u /\
-      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es sa u t /\
+      ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
+      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof

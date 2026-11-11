@@ -7,19 +7,21 @@ Theorem raw_call_action_frames:
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM em.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
-  ghost_kept cenv em sm J jn tm Gmid kn /\ wb_frame cenv em sm tm u /\
-  ghost_kept cenv em sm Gmid kn u H un /\ wb_frame cenv em sm u t ==>
-  ghost_kept cenv es sa G0 tn0 s0 H un /\ wb_frame cenv es sa s0 t
+  ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
+  ghost_kept cenv em sm J jn tm Gmid kn /\ wb_frame cenv em em sm tm u /\
+  ghost_kept cenv em sm Gmid kn u H un /\ wb_frame cenv em ee sm u t ==>
+  ghost_kept cenv es sa G0 tn0 s0 H un /\ wb_frame cenv es ee sa s0 t
 Proof
   strip_tac >>
   `ghost_kept cenv es sa G0 tn0 s0 Gmid kn` by
     (irule ghost_kept_wb_trans >> metis_tac[]) >>
-  `wb_frame cenv es sa s0 u` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> metis_tac[]) >>
+  `wb_frame cenv es em sa s0 u` by
+    (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `em`, `em`, `sm`, `tm`, `u`, `ctx`]
+       exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >> simp[]) >>
   conj_tac
   >- (irule ghost_kept_wb_trans >> metis_tac[]) >>
-  irule exprSimWordArgsTheory.wb_frame_trans >> metis_tac[]
+  mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `em`, `ee`, `sm`, `u`, `t`, `ctx`]
+    exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >> simp[]
 QED
 
 Theorem raw_call_stack_value_view_post:
@@ -27,7 +29,7 @@ Theorem raw_call_stack_value_view_post:
   stmt_state_rel ctx func cenv cx ee t /\
   expr_val_rel cx (expr_type e) v op t /\
   expr_val_at cenv cx (expr_type e) sa sb ee v op t /\
-  wb_frame cenv es sa s0 t ==>
+  wb_frame cenv es ee sa s0 t ==>
   vv_post ctx func cenv cx e es sa sb s0 ee (Value v) (StackValue ty op) t
 Proof
   strip_tac >> irule vv_post_frame_intro >> asm_rewrite_tac[] >> simp[] >>
@@ -40,7 +42,7 @@ Theorem raw_call_memory_value_view_post:
   stmt_state_rel ctx func cenv cx ee t /\
   expr_val_rel cx (expr_type e) v op t /\
   expr_val_at cenv cx (expr_type e) sa sb ee v op t /\
-  wb_frame cenv es sa s0 t ==>
+  wb_frame cenv es ee sa s0 t ==>
   vv_post ctx func cenv cx e es sa sb s0 ee (Value v)
     (LocatedValue lowty (mk_ptr op LocMemory)) t
 Proof

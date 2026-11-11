@@ -86,18 +86,19 @@ QED
 
 Theorem wb_frame_scopes_cong:
   ee.scopes = es.scopes ==>
-  (wb_frame cenv ee protected s t <=> wb_frame cenv es protected s t)
+  (wb_frame cenv ee es' protected s t <=> wb_frame cenv es es' protected s t)
 Proof
-  simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def]
+  simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+    loweringPostsTheory.popped_kept_def]
 QED
 
 Theorem oracle_suffix_frames_compose:
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
   ee.scopes = es.scopes /\ ci_mono protected sa /\
   ghost_kept cenv es protected G tn s H un /\
-  wb_frame cenv es protected s t /\
-  ghost_kept cenv ee sa H un t J vn /\ wb_frame cenv ee sa t u ==>
-  ghost_kept cenv es protected G tn s J vn /\ wb_frame cenv es protected s u
+  wb_frame cenv es ee protected s t /\
+  ghost_kept cenv ee sa H un t J vn /\ wb_frame cenv ee es' sa t u ==>
+  ghost_kept cenv es protected G tn s J vn /\ wb_frame cenv es es' protected s u
 Proof
   strip_tac >>
   `local_ptrs_rel func cenv es.scopes s` by
@@ -108,18 +109,18 @@ Proof
   conj_tac
   >- (irule wordOperandsPtrTheory.ghost_kept_trans >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  irule exprSimWordArgsTheory.wb_frame_trans >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `protected`, `ee`, `es'`, `sa`, `t`, `u`, `ctx`]
+    exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >> simp[]
 QED
 
 Theorem oracle_taken_suffix_frames:
   take_call_outcome target data value_opt es = (INL (rq,outcome),es1) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
   ci_mono protected sa /\ ghost_kept cenv es protected G tn s H un /\
-  wb_frame cenv es protected s t /\
+  wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s t /\
   ghost_kept cenv (SND (adopt_call_outcome rq outcome es1)) sa H un t J vn /\
-  wb_frame cenv (SND (adopt_call_outcome rq outcome es1)) sa t u ==>
-  ghost_kept cenv es protected G tn s J vn /\ wb_frame cenv es protected s u
+  wb_frame cenv (SND (adopt_call_outcome rq outcome es1)) es' sa t u ==>
+  ghost_kept cenv es protected G tn s J vn /\ wb_frame cenv es es' protected s u
 Proof
   strip_tac >> drule_all oracle_take_adoption_locals >> strip_tac >>
   irule oracle_suffix_frames_compose >> goal_assum (drule_at Any) >>

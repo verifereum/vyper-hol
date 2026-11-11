@@ -53,7 +53,7 @@ Theorem saved_dynamic_bytes_across_word_args:
   (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem)
 Proof
   strip_tac >>
-  `wb_frame cenv es sb s t` by
+  `wb_frame cenv es es' sb s t` by
     fs[exprSimPrecompilesTheory.typed_args_post_def] >>
   `log_arg_clear cenv cx (BaseT (BytesT (Dynamic n))) (BytesV bs)` by
     metis_tac[log_arg_clear_base] >>
@@ -174,7 +174,7 @@ Theorem raw_call_kwargs_execution_ptr:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
       ghost_inv dep cenv cx ee G tn t /\
-      wb_frame cenv es sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      wb_frame cenv es ee sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       sa.cs_next_id <= sb.cs_next_id)
     (\rr ee gt r. wb_args_exit rr r)
 Proof
@@ -266,7 +266,7 @@ Theorem raw_call_kwargs_sim_ptr:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
       ghost_inv dep cenv cx ee G tn t /\
-      wb_frame cenv es sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      wb_frame cenv es ee sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sd sb ee
         (BytesV bs) (Var x) t /\
       eval_operand (Var x) t = SOME (n2w b) /\

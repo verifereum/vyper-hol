@@ -266,7 +266,7 @@ Theorem raw_call_alloc_buffer_ghost_stage:
   ?u b H un.
     gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
     ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     u.vs_current_bb = sb.cs_current_bb /\ ~u.vs_halted /\
     eval_operand buf.buf_operand u = SOME (n2w b) /\
@@ -310,8 +310,8 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
-  `wb_frame cenv es sa s (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+  `wb_frame cenv es es sa s (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (simp[loweringPostsTheory.wb_frame_def, exprSimPropsTheory.locals_kept_mem,
        venomStateTheory.lookup_var_def] >> metis_tac[venomStateTheory.lookup_var_def]) >>
   qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`, `b`,
     `G |+ (STRING #"%" (toString sa.cs_next_var),(b,n))`,
@@ -345,7 +345,7 @@ Theorem raw_call_outbuf_add_stage:
   op_taint tn (Var x) = {} /\ 32+cap <= n /\ b+n < dimword(:256) ==>
   ?H un u. gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
     ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u n /\ ptr_covers H un dx u cap /\
@@ -372,7 +372,7 @@ Proof
        fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[] >>
      fs[not_fresh_at_def]) >>
   `x <> dx` by metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u` by
+  `stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u` by
     (qunabbrev_tac `u` >> irule rawCallDataHeaderPtrTheory.raw_call_fresh_update_state_frame >>
      goal_assum (drule_at Any) >> simp[]) >>
   `H = G |+ (dx,(b,n)) /\ un = tn with t_var := tn.t_var |+ (dx,{})` by
@@ -443,7 +443,7 @@ Theorem raw_call_outbuf_positive_stage:
   ?H un u x dx. ov = Var x /\ op = Var dx /\
     gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
     ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (((cap+31) DIV 32)*32+32) /\
@@ -490,10 +490,9 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u')` by
     (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
-  `wb_frame cenv es sa s u'` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     first_assum (irule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-     qexistsl_tac [`u`, `sm`, `es`] >> simp[] >> metis_tac[]) >>
+  `wb_frame cenv es es sa s u'` by
+    (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sa`, `es`, `es`, `sm`, `u`, `u'`, `ctx`]
+       exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >> simp[] >> metis_tac[]) >>
   `?dst. eval_operand (Var dx) u' = SOME (n2w dst) /\
     dst < dimword(:256) /\ dst+cap < dimword(:256) /\
     (!name a len. local_region cenv es.scopes s name a len ==>
@@ -529,7 +528,7 @@ Theorem raw_call_outbuf_zero_stage:
   ?H un u x. ov = Var x /\ op = Var x /\
     gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
     ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u 0 /\ u.vs_memory = s.vs_memory /\
@@ -572,7 +571,7 @@ Theorem raw_call_outbuf_stage:
   ?H un u x dx. ov = Var x /\ op = Var dx /\
     gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
     ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
@@ -631,7 +630,7 @@ Theorem raw_call_outbuf_ready_stage:
   ?H un u x dx. ov = Var x /\ op = Var dx /\
     gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
     ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es sa s u /\
+    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
@@ -715,7 +714,7 @@ Theorem raw_call_outbuf_ready_outcome:
       Q rr ee G tn t /\ ov = Var x /\ op = Var dx /\
       expr_val_at cenv cx (BaseT (BytesT (Dynamic lim))) sd sa ee (BytesV bs) data t /\
       ghost_inv dep cenv cx ee H un u /\ ghost_kept cenv ee sa G tn t H un /\
-      stmt_state_rel ctx func cenv cx ee u /\ wb_frame cenv ee sa t u /\
+      stmt_state_rel ctx func cenv cx ee u /\ wb_frame cenv ee ee sa t u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
       ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
@@ -762,7 +761,7 @@ Resume raw_call_outbuf_ready_outcome[normal]:
     ghost_inv dep cenv cx (es_end with gas_obs := []) H un u /\
     ghost_kept cenv (es_end with gas_obs := []) sa G tn t H un /\
     stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) u /\
-    wb_frame cenv (es_end with gas_obs := []) sa t u /\
+    wb_frame cenv (es_end with gas_obs := []) (es_end with gas_obs := []) sa t u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\

@@ -17,7 +17,7 @@ Theorem raw_call_scalar_suffix:
   ptr_val_ok cx ty v result G tn s /\
   (~is_word_type ty ==> ptr_buf_ok cenv e result G s) /\
   stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
-  ghost_kept cenv es protected G tn s G tn /\ wb_frame cenv es protected s s /\
+  ghost_kept cenv es protected G tn s G tn /\ wb_frame cenv es es protected s s /\
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   eval_operand result s = SOME (val_to_w256 v) /\ ~s.vs_halted
 Proof
@@ -83,20 +83,21 @@ Theorem raw_call_success_bytes_suffix:
     result = Var dst /\ lookup_var dst t = SOME a /\ t.vs_allocas = s.vs_allocas /\
     ptr_val_ok cx ty (BytesV bs) result H un t /\ ptr_buf_ok cenv e result H t /\
     ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn s H un /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es protected s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ t.vs_returndata = s.vs_returndata
 Proof
   strip_tac >> drule_all raw_call_success_branch_stage >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
-  `wb_frame cenv es protected s (jump_to good s)` by
+  `wb_frame cenv es es protected s (jump_to good s)` by
     simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+      loweringPostsTheory.popped_kept_def,
       venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def,
       loweringStateRelDefsTheory.local_region_def] >>
   `?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn (jump_to good s) 0 H un (OK t) /\
     ptr_val_ok cx ty (BytesV bs) (Var dst) H un t /\ ptr_buf_ok cenv e (Var dst) H t /\
     ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn (jump_to good s) H un /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es protected (jump_to good s) t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es protected (jump_to good s) t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ t.vs_returndata = s.vs_returndata /\ result = Var dst /\
     lookup_var dst t = SOME a /\ t.vs_allocas = s.vs_allocas` by
@@ -106,7 +107,7 @@ Proof
      strip_tac >>
      qexistsl_tac [`H`, `un`, `t`] >> gvs[venomStateTheory.jump_to_def]) >>
   `ci_mono protected protected` by simp[exprLoweringPropsTheory.ci_mono_refl] >>
-  `ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t` by
+  `ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es es protected s t` by
     (irule (oracle_suffix_frames_compose |> Q.INST
       [`sa` |-> `protected`, `t` |-> `jump_to good s`, `H` |-> `G`, `un` |-> `tn`]) >>
      goal_assum (drule_at Any) >> simp[wordArgsPtrTheory.ghost_kept_refl] >> metis_tac[]) >>
@@ -127,7 +128,7 @@ Theorem raw_call_success_none_suffix:
     result = Lit 0w /\
     ptr_val_ok cx NoneT NoneV result G tn t /\ ptr_buf_ok cenv e result G t /\
     stmt_state_rel ctx func cenv cx es t /\ ghost_inv dep cenv cx es G tn t /\
-    ghost_kept cenv es protected G tn s G tn /\ wb_frame cenv es protected s t /\
+    ghost_kept cenv es protected G tn s G tn /\ wb_frame cenv es es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ t.vs_returndata = s.vs_returndata
 Proof
@@ -137,6 +138,7 @@ Proof
   gvs[compileEnvTheory.comp_return_def, callStepPtrTheory.ptr_val_ok_none,
     callStepPtrTheory.ptr_buf_ok_zero_type, wordArgsPtrTheory.ghost_kept_refl] >>
   simp[loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
+      loweringPostsTheory.popped_kept_def,
     venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def,
     loweringStateRelDefsTheory.local_region_def]
 QED
@@ -196,7 +198,7 @@ Theorem raw_call_nonrevert_suffix:
       ArrayV (TupleV [BoolV flag;BytesV (TAKE n s.vs_returndata)])) result H un t /\
     (~is_word_type ty ==> ptr_buf_ok cenv e result H t) /\
     ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn s H un /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es protected s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ t.vs_returndata = s.vs_returndata
 Proof
@@ -263,7 +265,7 @@ Theorem raw_call_reverting_suffix:
       ptr_val_ok cx ty (if n = 0 then NoneV else BytesV (TAKE n s.vs_returndata)) result H un t /\
       ptr_buf_ok cenv e result H t /\
       ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn s H un /\
-      stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es protected s t /\
+      stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted
      else t.vs_halted)
 Proof

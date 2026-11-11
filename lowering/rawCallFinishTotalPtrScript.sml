@@ -111,7 +111,8 @@ Theorem raw_call_scalar_finish:
     (~is_word_type ty ==> ptr_buf_ok cenv e result H t) /\
     stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
     ghost_inv dep cenv cx (SND (adopt_call_outcome rq outcome es1)) H un t /\
-    ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+    ghost_kept cenv es protected G tn s H un /\
+    wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted
 Proof
   strip_tac >> drule_all raw_call_nonrevert_code_groups >> strip_tac >>
@@ -176,7 +177,8 @@ Theorem raw_call_zero_reverting_finish:
       ptr_val_ok cx NoneT NoneV result H un t /\ ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
       ghost_inv dep cenv cx (SND (adopt_call_outcome rq outcome es1)) H un t /\
-      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      ghost_kept cenv es protected G tn s H un /\
+      wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted
      else t.vs_halted)
 Proof
@@ -260,7 +262,8 @@ Theorem raw_call_positive_reverting_finish:
       ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
       ghost_inv dep cenv cx (SND (adopt_call_outcome rq outcome es1)) H un t /\
-      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      ghost_kept cenv es protected G tn s H un /\
+      wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted
      else t.vs_halted)
 Proof
@@ -283,7 +286,8 @@ Proof
      `addr_op` |-> `addr`, `ao_op` |-> `dp`, `az_op` |-> `dl`, `ro_op` |-> `op`,
      `rz_op` |-> `Lit (n2w n)`, `cap` |-> `n`, `iid` |-> `sa.cs_next_id`,
      `flag` |-> `outcome.co_success`, `rd` |-> `outcome.co_returnData`,
-     `ee` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
+     `ee` |-> `SND (adopt_call_outcome rq outcome es1)`,
+     `es'` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
   impl_tac >- (drule rawCallMemoryFramePtrTheory.oracle_take_adoption_locals >>
     strip_tac >> gvs[venomStateTheory.eval_operand_def,
       venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >> metis_tac[]) >> strip_tac >>
@@ -368,7 +372,8 @@ Theorem raw_call_positive_nonreverting_finish:
       BytesV (TAKE n outcome.co_returnData)])) result H un t /\ ptr_buf_ok cenv e result H t /\
     stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
     ghost_inv dep cenv cx (SND (adopt_call_outcome rq outcome es1)) H un t /\
-    ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+    ghost_kept cenv es protected G tn s H un /\
+    wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted
 Proof
   strip_tac >> drule_all raw_call_nonrevert_code_groups >> strip_tac >>
@@ -390,7 +395,8 @@ Proof
      `addr_op` |-> `addr`, `ao_op` |-> `dp`, `az_op` |-> `dl`, `ro_op` |-> `op`,
      `rz_op` |-> `Lit (n2w n)`, `cap` |-> `n`, `iid` |-> `sa.cs_next_id`,
      `flag` |-> `outcome.co_success`, `rd` |-> `outcome.co_returnData`,
-     `ee` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
+     `ee` |-> `SND (adopt_call_outcome rq outcome es1)`,
+     `es'` |-> `SND (adopt_call_outcome rq outcome es1)`]) >>
   impl_tac >- (drule rawCallMemoryFramePtrTheory.oracle_take_adoption_locals >>
     strip_tac >> gvs[venomStateTheory.eval_operand_def,
       venomStateTheory.update_var_def, wordsTheory.w2n_n2w] >> metis_tac[]) >> strip_tac >>
@@ -464,7 +470,7 @@ Theorem raw_call_scalar_finish_outcome:
       ptr_val_ok cx ty v result H un t /\
       (~is_word_type ty ==> ptr_buf_ok cenv e result H t) /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es ee protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -474,7 +480,8 @@ Proof
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (Value (BoolV outcome.co_success))`,
     `SND (adopt_call_outcome rq outcome es1)`, `H`, `un`, `OK t`] >>
-  simp[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs] >>
+  simp[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs,
+    exprSimWordArgsTheory.wb_frame_gas_obs] >>
   metis_tac[]
 QED
 
@@ -527,7 +534,7 @@ Theorem raw_call_zero_reverting_finish_outcome:
       result = Lit 0w /\
       ptr_val_ok cx NoneT v result H un t /\ ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es ee protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -541,6 +548,7 @@ Proof
     `if outcome.co_success then OK t else Abort Revert_abort t`] >>
   Cases_on `outcome.co_success` >>
   gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs,
+    exprSimWordArgsTheory.wb_frame_gas_obs,
     fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
 QED
 
@@ -601,7 +609,7 @@ Theorem raw_call_positive_reverting_finish_outcome:
         regions_disjoint ob capacity a len) /\
       ptr_val_ok cx ty v result H un t /\ ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es ee protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -615,6 +623,7 @@ Proof
     `if outcome.co_success then OK t else Abort Revert_abort t`] >>
   Cases_on `outcome.co_success` >>
   gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs,
+    exprSimWordArgsTheory.wb_frame_gas_obs,
     fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def] >>
   first_assum MATCH_ACCEPT_TAC
 QED
@@ -683,7 +692,7 @@ Theorem raw_call_positive_nonreverting_finish_outcome:
           regions_disjoint b (32+capacity) a len)) /\
       ptr_val_ok cx ty v result H un t /\ ptr_buf_ok cenv e result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
-      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es protected s t /\
+      ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es ee protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -694,6 +703,7 @@ Proof
   qexistsl_tac [`INL (Value (ArrayV (TupleV [BoolV outcome.co_success;
     BytesV (TAKE n outcome.co_returnData)])))`,
     `SND (adopt_call_outcome rq outcome es1)`, `H`, `un`, `OK t`] >>
-  gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs] >>
+  gvs[gasSummaryTheory.gas_explicit_def, stmtFragPtrTheory.ghost_inv_gas_obs,
+    exprSimWordArgsTheory.wb_frame_gas_obs] >>
   qexistsl_tac [`b`, `ai`] >> simp[] >> first_assum MATCH_ACCEPT_TAC
 QED
