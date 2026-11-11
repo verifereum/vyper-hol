@@ -121,11 +121,6 @@ Resume compile_abi_bytes_seq_ptr[suffix]:
   qabbrev_tac `w = v with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts ready copied)` >>
   `eval_operand (FST ops) w = SOME (n2w cnt) /\ op_taint tk (FST ops) = {}` by
     (gvs[Abbr `w`, eval_operand_def, lookup_var_def] >> metis_tac[]) >>
-  `not_fresh_at copied lv` by
-    (qpat_assum `abi_encode_bytes_copy _ _ _ _ ready = _`
-       (mp_then Any strip_assume_tac abi_encode_bytes_copy_shape) >>
-     qpat_assum `not_fresh_at ready lv` mp_tac >>
-     rw[not_fresh_at_def] >> first_x_assum irule >> simp[]) >>
   drule_all abi_encode_bytes_suffix_seq_ptr >>
   disch_then (qspecl_then [`fn`,`PG`,`J`,`D`]
     (qx_choose_then `Gf` (qx_choose_then `tf` (qx_choose_then `z` strip_assume_tac)))) >>
