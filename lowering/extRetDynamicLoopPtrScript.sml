@@ -109,8 +109,11 @@ Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac)
   >- (
     `j = N /\ j <= N /\ p < dimword(:256)` by decide_tac >>
-    drule_all encoder_dynamic_header_counted_ptr >>
-    disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+    drule_at (Pat `encoder_dynamic_loop_inv ctx fn sites protected ip cursor src dst cv p c a b scap dcap tv v N ns j G tn s`)
+      encoder_dynamic_header_counted_ptr >>
+    disch_then (qspecl_then [`sh`,`sa`,`hdr`,`exit_lbl`,`body_lbl`,`PG`,`D`] mp_tac) >>
+    (impl_tac >- asm_simp_tac bool_ss []) >>
+    disch_then strip_assume_tac >>
     `DROP j costs = [] /\ ~(j<N)` by
       (conj_tac >- (irule DROP_LENGTH_TOO_LONG >> decide_tac) >> decide_tac) >>
     qpat_x_assum `N = 0+j` kall_tac >>
