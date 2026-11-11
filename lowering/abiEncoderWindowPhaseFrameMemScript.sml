@@ -209,3 +209,24 @@ Proof
   >- (drule_all window_cursor_load_phase_mem_frame >> metis_tac[]) >>
   drule_all window_cursor_load_phase_mem >> metis_tac[]
 QED
+
+Theorem window_emit_alloca32_phase_mem_conditional_frame:
+  emit_op ALLOCA [Lit 32w] st = (out,en) /\
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
+  fn_has_code st en func /\ alloca_room ctx func s /\ alloca_inv s /\
+  (!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==> sz = 32) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t b. window_phase ctx func st en {st.cs_next_id} [] s t /\
+    eval_operand out t = SOME (n2w b) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
+    b+32 <= t.vs_alloca_next /\ t.vs_memory = s.vs_memory /\
+    t.vs_labels = s.vs_labels /\ mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
+Proof
+  strip_tac >> Cases_on `fn_inst_ids_distinct func`
+  >- (drule_all window_emit_alloca32_phase_mem_frame >> metis_tac[]) >>
+  drule_all window_emit_alloca32_phase_mem >> metis_tac[]
+QED
