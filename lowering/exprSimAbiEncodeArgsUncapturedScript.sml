@@ -49,6 +49,7 @@ Theorem abi_args_uncaptured_cons_sim_counted[local]:
      gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es1,t)
        (\rr ee u. ?vs. rr = INL vs /\
           abi_args_post ctx func ce cx es1 sm sb t ee args ops vs u /\
+          (~EXISTS expr_has_effect args ==> pure_frame ce func es1 sm t u) /\
           (live ==> EVERY (abi_decoder_operand_live sb.cs_next_var) ops) /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -56,6 +57,7 @@ Theorem abi_args_uncaptured_cons_sim_counted[local]:
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx (e::args)) (es,s0)
     (\rr ee u. ?vs. rr = INL vs /\
        abi_args_post ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
+       (~EXISTS expr_has_effect (e::args) ==> pure_frame ce func es sa s0 u) /\
        (live ==> EVERY (abi_decoder_operand_live sb.cs_next_var) (op::ops)) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -118,6 +120,7 @@ Resume abi_args_uncaptured_cons_sim_counted[tail_normal]:
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
   disj1_tac >> simp[] >>
   conj_tac >- suspend "post" >>
+  conj_tac >- suspend "frame" >>
   metis_tac[abi_args_operand_live]
 QED
 Resume abi_args_uncaptured_cons_sim_counted[tail_exit]:
@@ -174,6 +177,29 @@ Resume abi_args_uncaptured_cons_sim_counted[post]:
   simp[extract32_expr_post_start_gas_obs, ci_mono_def] >>
   gvs[ci_mono_def]
 QED
+Resume abi_args_uncaptured_cons_sim_counted[frame]:
+  rpt strip_tac >>
+  `MAP FDOM es.scopes = MAP FDOM es_end.scopes` by
+    (drule (CONV_RULE (DEPTH_CONV ETA_CONV)
+       forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
+  `pure_frame ce func es sa s0 t` by
+    (drule_all exprSimWordArgsTheory.expr_post_pure_frame >> simp[]) >>
+  `wb_frame ce es (es_end with gas_obs := []) sa s0 t` by
+    (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
+  `pure_frame ce func es_end sm t t'` by
+    (qpat_x_assum `EVERY _ args ==> pure_frame _ _ _ _ _ _` irule >>
+     first_assum ACCEPT_TAC) >>
+  match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es_end`, `sa`, `sm`, `s0`, `t`, `t'`]
+    exprSimPropsTheory.pure_frame_trans) >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac)
+  >- fs[abi_args_post_def, wb_frame_def]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >> fs[wb_frame_def]
+QED
 Finalise abi_args_uncaptured_cons_sim_counted
 
 Theorem abi_args_uncaptured_cons_sim:
@@ -210,12 +236,14 @@ Theorem abi_args_uncaptured_cons_sim:
      gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es1,t)
        (\rr ee u. ?vs. rr = INL vs /\
           abi_args_post ctx func ce cx es1 sm sb t ee args ops vs u /\
+          (~EXISTS expr_has_effect args ==> pure_frame ce func es1 sm t u) /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
        (\rr ee r. wb_args_exit rr r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx (e::args)) (es,s0)
     (\rr ee u. ?vs. rr = INL vs /\
        abi_args_post ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
+       (~EXISTS expr_has_effect (e::args) ==> pure_frame ce func es sa s0 u) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\rr ee r. wb_args_exit rr r)
@@ -258,6 +286,7 @@ Theorem abi_args_uncaptured_cons_sim_live:
      gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es1,t)
        (\rr ee u. ?vs. rr = INL vs /\
           abi_args_post ctx func ce cx es1 sm sb t ee args ops vs u /\
+          (~EXISTS expr_has_effect args ==> pure_frame ce func es1 sm t u) /\
           EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -265,6 +294,7 @@ Theorem abi_args_uncaptured_cons_sim_live:
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx (e::args)) (es,s0)
     (\rr ee u. ?vs. rr = INL vs /\
        abi_args_post ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
+       (~EXISTS expr_has_effect (e::args) ==> pure_frame ce func es sa s0 u) /\
        EVERY (abi_decoder_operand_live sb.cs_next_var) (op::ops) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)

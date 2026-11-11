@@ -14,6 +14,7 @@ Definition materialize_owned_post_def:
     wb_frame ce es es' sa s0 s /\
     expr_val_rel cx (lowered_value_type ce e) v dst s /\
     expr_val_at ce cx (lowered_value_type ce e) sa sb es' v dst s /\
+    (~expr_has_effect e ==> pure_frame ce func es sa s0 s) /\
     sm.cs_next_id < sb.cs_next_id /\
     ?w. eval_operand dst s = SOME w /\
         FLOOKUP s.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_size tv) /\
@@ -30,7 +31,8 @@ Proof
   Cases_on `dst` >>
   simp[materialize_owned_post_def, hash_returndata_state_rel,
        wb_frame_def, expr_val_rel_def, expr_val_at_def,
-       locals_kept_def, popped_kept_def, local_region_def, venomStateTheory.eval_operand_def,
+       locals_kept_def, popped_kept_def, local_region_def,
+       loweringPostsTheory.pure_frame_def, venomStateTheory.eval_operand_def,
        venomStateTheory.lookup_var_def]
 QED
 
@@ -1560,6 +1562,29 @@ Resume compile_materialize_vv_owned_path[store_continuation]:
     (qpat_assum `gas_marked_path F ctx func r 0 (OK z)`
        (mp_then Any mp_tac gas_marked_path_then) >>
      disch_then drule >> simp[]) >>
+  `~expr_has_effect e ==> pure_frame ce func es sa s0 u'` by
+    (strip_tac >>
+     match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `sa`, `s0`, `z`, `u'`, `inst`,
+       `w2n (w:256 word)`, `type_memory_size tv`] exprSimPropsTheory.pure_frame_buffer_tail) >>
+     rpt conj_tac
+     >~ [`pure_frame _ _ _ _ _ z`]
+     >- (qpat_assum `expr_post _ _ _ _ _ es sa _ s0 _ _ _ z`
+           (mp_then Any irule exprSimWordArgsTheory.expr_post_pure_frame) >>
+         first_assum ACCEPT_TAC)
+     >- (rpt strip_tac >>
+         qpat_x_assum `u'.vs_allocas = z.vs_allocas` SUBST1_TAC >>
+         first_assum ACCEPT_TAC)
+     >- first_assum ACCEPT_TAC
+     >- first_assum ACCEPT_TAC
+     >- (qpat_assum `inst.inst_id = _` SUBST1_TAC >> first_assum ACCEPT_TAC)
+     >- (qpat_assum `inst.inst_id = _` SUBST1_TAC >> first_assum ACCEPT_TAC)
+     >- (simp[regions_disjoint_def] >> rpt strip_tac >>
+         qpat_x_assum `!name b len. local_region _ es.scopes s0 _ _ _ ==> _` drule >>
+         simp[]) >>
+     rpt strip_tac >>
+     qpat_x_assum `!off len. regions_disjoint _ _ _ _ ==>
+                     mem_bytes_at _ _ u'.vs_memory = _` irule >>
+     first_assum ACCEPT_TAC) >>
   qexists_tac `u'` >> simp[materialize_owned_post_def] >> metis_tac[]
 QED
 Finalise compile_materialize_vv_owned_path
