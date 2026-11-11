@@ -116,7 +116,48 @@ Theorem body_log_widen_mem_case:
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Log id args)) (eval_stmt cx (Log id args)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all body_log_metadata >> strip_tac >>
+  `LIST_REL event_arg_compatible (MAP (SND o FST) fields) (MAP expr_type args)` by
+    (gvs[LIST_REL_EL_EQN, EL_MAP] >> rpt strip_tac >>
+     first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
+     qabbrev_tac `fld = EL n fields` >> PairCases_on `fld` >> simp[]) >>
+  `SUM (MAP (type_memory_bytes cenv)
+          (log_non_indexed_types (MAP SND fields) (MAP expr_type args))) < dimword (:256) /\
+   abi_size_bound cenv.ce_struct_fields
+     (TupleT (log_non_indexed_types (MAP SND fields) (MAP expr_type args))) < dimword (:256)` by
+    (gvs[stmt_exprs_ok_def, alloc_limits_stmt_def, log_alloc_ok_def] >>
+     conj_tac >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+     qexists_tac `2 ** 64` >> gvs[wordsTheory.dimword_def]) >>
+  `well_typed_exprs env args /\
+   !id t. FLOOKUP env.var_types id = SOME t ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[type_stmt_def, expr_sim_inv_def, AllCaseEqs()] >>
+  `~supported_exprs_exists
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
+   call_evaluation_safe cx (int_calls_exprs args) /\
+   (!target. supported_exprs_exists (expr_abi_decode_target_root target) args ==>
+             occurs_abi_decode_target target tops)` by
+    gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+        int_calls_stmt_def, AllCaseEqs()] >>
+  `alloc_limits_exprs cenv args` by
+    fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) args` by
+    (fs[body_stmt_safe_log_args, EVERY_CONJ] >>
+     rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
+     metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem]) >>
+  qabbrev_tac `RR = \tail s. EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) tail /\ body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s /\ supported_pure_exprs tops tail /\ well_typed_exprs env tail /\ ~supported_exprs_exists (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\ call_evaluation_safe cx (int_calls_exprs tail) /\ (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==> occurs_abi_decode_target target tops)` >>
+  irule compile_log_ready_stmt_frag_mem_widen >>
+  conj_tac >- (
+    qexists_tac `RR` >> simp[Abbr `RR`] >>
+    rpt gen_tac >> strip_tac >>
+    rename1 `body_exprs_mem_ok cx (e::tail)` >>
+    qmatch_goalsub_rename_tac `expr_sim_mem ctx func cenv cx (expr_type e) e s` >>
+    qspecl_then [`tops`, `ctx`, `func`, `cenv`, `cx`, `env`, `e`, `tail`, `s`]
+      mp_tac log_mem_args_step >> simp[DE_MORGAN_THM]) >>
+  conj_tac >- (
+    qexistsl_tac [`MAP SND fields`, `h`, `MAP (SND o FST) fields`] >> simp[]) >>
+  qexists_tac `env` >> simp[]
 QED
 
 Theorem body_log_mem_case:
