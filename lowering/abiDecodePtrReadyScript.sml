@@ -43,6 +43,7 @@ Theorem abi_builtin_decode_phased_ready_ptr:
     FLOOKUP u.vs_allocas sh.cs_next_id = SOME (w2n wout,outsz) /\
     u.vs_memory = s.vs_memory /\ sh.cs_next_id < ready.cs_next_id /\
     ghost_kept cenv es sa G tn s G2 tn2 /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP u.vs_allocas aid = SOME entry) /\
     (!aid b k. aid < sh.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
@@ -141,12 +142,16 @@ Resume abi_builtin_decode_phased_ready_ptr[path]:
   conj_tac >- suspend "raw" >>
   conj_tac >- suspend "sequence" >>
   gvs[lookup_var_def, eval_operand_def, local_region_def] >>
+  conj_tac >- suspend "old_vars" >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (
-  qpat_x_assum `ghost_kept cenv es sa G tn s _ _` kall_tac >>
-  qpat_x_assum `ghost_kept cenv es sa G tn s _ _` kall_tac >>
+  `sh.cs_next_var < limit_st.cs_next_var` by decide_tac >>
+  qpat_x_assum `fresh_vars_wrt limit_st h` mp_tac >>
+  qpat_x_assum `sh.cs_next_var < limit_st.cs_next_var` mp_tac >>
+  qpat_x_assum `sh.cs_next_var = _` mp_tac >>
   qpat_x_assum `run_inst_seq [_] h = OK t` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
   simp[run_inst_seq_def, step_inst_base_def, exec_alloca_def, mk_inst_def,
        AllCaseEqs()] >> rpt strip_tac >>
   gvs[fresh_vars_wrt_def, update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
@@ -269,6 +274,13 @@ Resume abi_builtin_decode_phased_ready_ptr[sequence]:
   qpat_x_assum `run_inst_seq (emitted_insts sh ready) h = OK t` mp_tac >>
   simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
   gvs[inst_seq_ptr_def, ptr_inst_ok_alloca]
+QED
+
+Resume abi_builtin_decode_phased_ready_ptr[old_vars]:
+  rpt strip_tac >>
+  `not_fresh_at sh x` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  metis_tac[]
 QED
 
 Finalise abi_builtin_decode_phased_ready_ptr

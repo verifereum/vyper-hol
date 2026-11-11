@@ -34,6 +34,13 @@ Theorem abi_decode_ptr_operand_entry:
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
       (abi_decoder_prune_vars sa.cs_next_var s) G2 tn2 /\
     u.vs_memory = s.vs_memory /\
+    ghost_kept cenv es sa G tn s G2 tn2 /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+       regions_disjoint (w2n wout) outsz b k) /\
+    (!name b k. local_region cenv es.scopes s name b k ==>
+       regions_disjoint (w2n wout) outsz b k) /\
     abi_decode_member_live d ctx func cenv cx es q (w+32w) (LENGTH bs)
       out wout outsz (Lit 0w) 0w (Var r) ready G2 tn2 u /\
     abi_decoder_vars_extend s.vs_vars (abi_decoder_prune_vars sa.cs_next_var s) s
@@ -111,6 +118,16 @@ Resume abi_decode_ptr_operand_entry[normalize]:
   qexistsl_tac [`u`, `G2`, `tn2`, `out`, `q`, `r`, `wout`] >>
   simp[abi_decoder_prune_vars_def] >>
   conj_tac >- (
+    qpat_x_assum `ghost_kept cenv es sa G tn _ G2 tn2` mp_tac >>
+    simp_tac bool_ss [bodyPtrDefsTheory.ghost_kept_def] >>
+    asm_rewrite_tac[] >> simp[abi_decoder_prune_vars_def] >>
+    strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!aid b k. aid < sh.cs_next_id /\ _ ==> _` irule >>
+    simp[abi_decoder_prune_vars_def] >>
+    goal_assum (drule_at Any) >> decide_tac) >>
+  conj_tac >- suspend "locals" >>
+  conj_tac >- (
     `local_ptrs_reserved cenv ready` by
       (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
     `w2n ((n2w b:256 word) + 32w) = b + 32` by
@@ -130,6 +147,16 @@ Resume abi_decode_ptr_operand_entry[normalize]:
       qpat_x_assum `!name b k. local_region _ _ _ _ _ _ ==> _` drule >>
       metis_tac[]) >> first_assum ACCEPT_TAC) >>
   MATCH_ACCEPT_TAC (REWRITE_RULE [abi_decoder_prune_vars_def] abi_decoder_prune_extension)
+QED
+
+Resume abi_decode_ptr_operand_entry[locals]:
+  `!name a k. local_region cenv es.scopes u name a k <=>
+      local_region cenv es.scopes (abi_decoder_prune_vars sa.cs_next_var s) name a k` by
+    (rpt gen_tac >> irule bop_local_region_readonly_frame >>
+     qexists_tac `sa` >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!name b k. local_region _ _ u _ _ _ ==> _` irule >>
+  asm_rewrite_tac[] >> goal_assum (drule_at Any)
 QED
 
 Finalise abi_decode_ptr_operand_entry
