@@ -6,7 +6,7 @@ Ancestors
   externalReturnDestinationMem abiEncoderWindowChild abiEncoderRegisteredEffect
   emitHelperProps exprLoweringProps emitHelper compileEnv
   venomState venomExecSemantics venomInst words list arithmetic pred_set
-  fragExec abiEncoderAddressReach instIdxIndep venomMemProps
+  fragExec abiEncoderAddressReach instIdxIndep venomMemProps abiBuiltinEncodeMethod
   abiEncoderWindowContract memContinuation abiEncodeAllocationPhase
 
 Theorem abi_encode_finish_window_mem:
@@ -70,7 +70,9 @@ Theorem abi_encode_method_id_window_mem:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t. window_phase ctx func st en {} (case mid of NONE => [] | SOME _ => [(p+32,32)]) s t /\
-    mem_cont_sim ctx func s t /\ eval_operand buf t = SOME (n2w p)
+    mem_cont_sim ctx func s t /\ eval_operand buf t = SOME (n2w p) /\
+    (case mid of NONE => T | SOME m =>
+      mem_bytes_at (p+32) 4 t.vs_memory = abi_builtin_encode_method_bytes m)
 Proof
   Cases_on `mid`
   >- (simp[abi_builtin_encode_method_id_def, comp_return_def] >>
@@ -101,6 +103,7 @@ Proof
   >- (irule window_phase_chain >> qexistsl_tac [`{}`, `[]`, `add_st`,
         `{}`, `[(p+32,32)]`, `prepared`] >> simp[]) >>
   conj_tac >- metis_tac[mem_cont_sim_trans] >>
-  simp[eval_operand_mstore, eval_op_inst_idx] >>
-  metis_tac[window_phase_operand]
+  simp[eval_operand_mstore, eval_op_inst_idx] >> conj_tac
+  >- metis_tac[window_phase_operand] >>
+  irule abi_builtin_encode_method_window >> simp[mload_mstore_same]
 QED
