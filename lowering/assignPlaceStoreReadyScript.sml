@@ -42,7 +42,7 @@ Theorem assign_place_store_from_expr_post:
    is_bytestring_type (lowered_value_type cenv e) /\
    arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
   0 < type_slot_size dtv /\ 0 < type_memory_size dtv /\
-  (~is_word_type dty /\ dty <> lowered_value_type cenv e /\
+  (loc <> LocMemory /\ ~is_word_type dty /\ dty <> lowered_value_type cenv e /\
    ~(is_bytestring_type dty /\ is_bytestring_type (lowered_value_type cenv e)) ==>
    type_alloc_ok cenv dty) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
