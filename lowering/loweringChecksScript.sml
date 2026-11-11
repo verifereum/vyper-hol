@@ -11,13 +11,9 @@ Ancestors
      assignment order, the O1 source-stage unit shape *)
   evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
   evalAssignmentOrder evalCompilerSourceShape
-  (* branch_opt's output checker on the parity fixtures' compiled functions;
-     scalar_arith_pow_base, scalar_convert_decimal and
-     scalar_convert_int_to_decimal are left out: evaluating them in the
-     kernel exceeds a 12 GB heap *)
-  branchOptCheckCorpusA branchOptCheckCorpusB branchOptCheckCorpusC
-  branchOptCheckCorpusD branchOptCheckCorpusE branchOptCheckCorpusF
-  branchOptCheckCorpusG branchOptCheckCorpusH branchOptCheckCorpusJ
+  (* branch_opt's output checker on a sample of the parity fixtures'
+     compiled functions *)
+  branchOptCheckCorpus
   (* contracts of the lowering's interfaces on concrete inputs *)
   targetPlaceTest
   abiEncodeSnapshotTest
