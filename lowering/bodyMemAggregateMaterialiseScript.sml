@@ -33,7 +33,7 @@ Theorem aggregate_storage_materialise_capacity:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all storage_unwrap_layout_facts >> strip_tac >>
-  drule_all storage_unwrap_type_facts >> strip_tac >>
+  drule_all storage_unwrap_type_facts_physical >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[local_ptrs_reserved_next_var] >>
   drule_all alloc_buffer_source_path_mem >> strip_tac >>
@@ -88,7 +88,7 @@ Theorem aggregate_storage_materialise_post_capacity:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all storage_unwrap_layout_facts >> strip_tac >>
-  drule_all storage_unwrap_type_facts >> strip_tac >>
+  drule_all storage_unwrap_type_facts_physical >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[local_ptrs_reserved_next_var] >>
   drule_all alloc_buffer_source_path_mem >> strip_tac >>
@@ -107,7 +107,7 @@ Proof
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   drule_all storage_unwrap_typed_suffix_path_mem >> strip_tac >>
   `expr_post ctx func cenv cx e es sa sb s0 es' v buf.buf_operand z` by
-    (irule buffer_post_transport >>
+    (irule buffer_post_transport_physical >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      qexistsl_tac [`mid`, `p`, `s`, `sm`, `t`, `tv`, `u`, `w`] >>
@@ -151,7 +151,7 @@ Proof
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
   gvs[] >> rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
   rename1 `compile_imm_copy_to_memory _ _ _ _ _ _ mid = (_,sc)` >>
-  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+  `t = post_value_type cenv e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s = SOME a /\
        immutable_holds cenv cx t (Value v) a es' s` by
     gvs[vv_post_def, vv_holds_def] >>
@@ -212,7 +212,7 @@ Proof
      irule exprSimStorageCopyTheory.storage_copy_operand_preserved >> simp[] >>
      qexists_tac `mid` >> simp[]) >>
   `expr_post ctx func cenv cx e es sa sc s0 es' v buf.buf_operand z` by
-    (irule buffer_post_transport >>
+    (irule buffer_post_transport_physical >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      qexistsl_tac [`mid`, `p`, `s`, `sm`, `t`, `tv`, `u`, `w`] >>
