@@ -1926,3 +1926,177 @@ Proof
   simp[lookup_var_def] >>
   metis_tac[inline_protected_phis, lookup_var_def]
 QED
+
+(* Producer, not a target-prefix assumption: both retained and split caller
+   blocks are fetched from the actual final one-edit assembly. *)
+Theorem inline_caller_produced_phis:
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b caller.fn_blocks = SOME bb /\
+  i < LENGTH call_bb.bb_instructions /\
+  (EL i call_bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?tb. lookup_block b
+      (renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+        (inline_call_site p ret caller callee lbl i))).fn_blocks = SOME tb /\
+    eval_phis t tb.bb_instructions =
+      eval_phis t (if MEM b (bb_succs rb) then
+        MAP (\inst. if inst.inst_opcode <> PHI then inst
+                    else subst_label_inst lbl ret inst) bb.bb_instructions
+        else bb.bb_instructions)
+Proof
+  strip_tac >>
+  `?raw_bb. lookup_block b
+      (inline_call_site p ret caller callee lbl i).fn_blocks = SOME raw_bb` by
+    (Cases_on `b = lbl` >> gvs[]
+     >- metis_tac[inline_call_site_lookup_call] >>
+     metis_tac[inline_call_site_lookup_other]) >>
+  drule inline_final_lookup_fields >>
+  disch_then (qspecl_then [`rb`, `lbl`, `ret`] strip_assume_tac) >>
+  qexists `tb` >> simp[] >>
+  irule inline_caller_layout_eval_phis >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_clone_produced_phis:
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b callee.fn_blocks = SOME cb /\
+  ~MEM (STRCAT p b) (fn_labels caller) /\ STRCAT p b <> ret /\
+  (!l. MEM l (bb_succs rb) ==> MEM l (fn_labels caller)) /\
+  inliner_phi_labels_closed callee ==>
+  ?tb. lookup_block (STRCAT p b)
+      (renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+        (inline_call_site p ret caller callee lbl i))).fn_blocks = SOME tb /\
+    eval_phis t tb.bb_instructions =
+      eval_phis t (MAP (inline_rename_inst (STRCAT p) (STRCAT p))
+        cb.bb_instructions)
+Proof
+  strip_tac >>
+  drule_all inline_call_site_lookup_clone >>
+  disch_then (qspec_then `i` assume_tac) >>
+  qpat_assum `lookup_block (STRCAT p b) (inline_call_site _ _ _ _ _ _).fn_blocks = _`
+    (mp_then Any mp_tac inline_final_lookup_fields) >>
+  disch_then (qspecl_then [`rb`, `lbl`, `ret`] strip_assume_tac) >>
+  qexists `tb` >> simp[] >>
+  `~MEM (STRCAT p b) (bb_succs rb)` by metis_tac[] >>
+  `cb.bb_label = b` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  gvs[rewrite_inline_block_label, clone_basic_block_def] >>
+  drule inline_fields_eval_phis >> disch_then (qspec_then `t` mp_tac) >>
+  simp[rewrite_inline_block_def, pairTheory.UNCURRY,
+       inline_rewrite_eval_phis] >>
+  disch_then SUBST1_TAC >> irule inline_clone_eval_phis >>
+  gvs[functionInlinerOriginTheory.inliner_phi_labels_closed_def, EVERY_MEM] >>
+  metis_tac[venomExecPropsTheory.lookup_block_MEM,
+            unitShapeDefsTheory.MEM_fn_insts_blocks_iff,
+            venomInstTheory.fn_insts_def]
+QED
+
+Theorem inline_one_site_final_assembly:
+  find_invoke_site callee.fn_name caller.fn_blocks = SOME (lbl,i) /\
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  ~MEM (return_block_label (inline_prefix ist.is_inline_count)
+    ist.is_label_counter) (fn_labels caller) /\
+  inline_one_site caller callee ist = SOME (final,ist') ==>
+  final = renumber_fn_inst_ids (fix_inline_phis lbl
+    (return_block_label (inline_prefix ist.is_inline_count) ist.is_label_counter)
+    <|bb_label := return_block_label (inline_prefix ist.is_inline_count) ist.is_label_counter;
+      bb_instructions := DROP (i+1) call_bb.bb_instructions|>
+    (inline_call_site (inline_prefix ist.is_inline_count)
+      (return_block_label (inline_prefix ist.is_inline_count) ist.is_label_counter)
+      caller callee lbl i))
+Proof
+  strip_tac >> drule_all inline_call_site_lookup_return >>
+  disch_then (qspecl_then [`inline_prefix ist.is_inline_count`, `i`, `callee`]
+    assume_tac) >>
+  gvs[inline_one_site_def]
+QED
+
+Theorem inline_caller_produced_optional_phis:
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b caller.fn_blocks = SOME bb /\
+  i < LENGTH call_bb.bb_instructions /\
+  (EL i call_bb.bb_instructions).inst_opcode = INVOKE /\
+  inliner_phi_labels_closed caller /\ fn_inst_wf caller /\
+  ~MEM ret (fn_labels caller) /\
+  (!prev. prev_bb = SOME prev ==> MEM prev (fn_labels caller)) /\
+  eval_phis (s with vs_prev_bb := prev_bb) bb.bb_instructions = OK u ==>
+  ?tb. lookup_block b
+      (renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+        (inline_call_site p ret caller callee lbl i))).fn_blocks = SOME tb /\
+    eval_phis (s with vs_prev_bb :=
+      (if MEM b (bb_succs rb) then
+        OPTION_MAP (\l. if l = lbl then ret else l) prev_bb else prev_bb))
+      tb.bb_instructions =
+    OK (u with vs_prev_bb := (if MEM b (bb_succs rb) then
+        OPTION_MAP (\l. if l = lbl then ret else l) prev_bb else prev_bb))
+Proof
+  strip_tac >> drule_all inline_caller_produced_phis >>
+  disch_then (qspecl_then [`s with vs_prev_bb :=
+    (if MEM b (bb_succs rb) then
+      OPTION_MAP (\l. if l = lbl then ret else l) prev_bb else prev_bb)`,
+    `ret`, `rb`, `p`, `callee`] strip_assume_tac) >>
+  qexists `tb` >> simp[] >> Cases_on `MEM b (bb_succs rb)` >> gvs[]
+  >- (drule inline_eval_phis_optional_repair >>
+      disch_then (qspecl_then [`s`, `prev_bb`, `lbl`, `ret`, `bb`] mp_tac) >>
+      simp[] >> metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+  drule eval_phis_only_updates_vs_vars >> simp[] >> strip_tac >>
+  qpat_x_assum `u = _` SUBST1_TAC >> simp[]
+QED
+
+Theorem inline_saved_suffix_succs_closed:
+  fn_succs_closed caller /\ lookup_block lbl caller.fn_blocks = SOME bb /\
+  i + 1 < LENGTH bb.bb_instructions ==>
+  !l. MEM l (bb_succs <|bb_label := ret;
+      bb_instructions := DROP (i+1) bb.bb_instructions|>) ==>
+    MEM l (fn_labels caller)
+Proof
+  strip_tac >> simp[functionInlinerWfTheory.inline_return_succs] >>
+  metis_tac[fn_succs_closed_def, venomExecPropsTheory.lookup_block_MEM]
+QED
+
+Theorem inline_one_site_clone_produced_phis:
+  find_invoke_site callee.fn_name caller.fn_blocks = SOME (lbl,i) /\
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b callee.fn_blocks = SOME cb /\
+  p = inline_prefix ist.is_inline_count /\
+  ret = return_block_label p ist.is_label_counter /\
+  ~MEM ret (fn_labels caller) /\ ~MEM (STRCAT p b) (fn_labels caller) /\
+  STRCAT p b <> ret /\ fn_succs_closed caller /\
+  i + 1 < LENGTH call_bb.bb_instructions /\
+  inliner_phi_labels_closed callee /\
+  inline_one_site caller callee ist = SOME (final,ist') ==>
+  ?tb. lookup_block (STRCAT p b) final.fn_blocks = SOME tb /\
+    eval_phis t tb.bb_instructions =
+      eval_phis t (MAP (inline_rename_inst (STRCAT p) (STRCAT p))
+        cb.bb_instructions)
+Proof
+  strip_tac >> gvs[] >>
+  drule_all inline_one_site_final_assembly >> strip_tac >>
+  gvs[] >> irule inline_clone_produced_phis >> simp[] >>
+  metis_tac[inline_saved_suffix_succs_closed]
+QED
+
+Theorem inline_one_site_caller_produced_phis:
+  find_invoke_site callee.fn_name caller.fn_blocks = SOME (lbl,i) /\
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b caller.fn_blocks = SOME bb /\
+  p = inline_prefix ist.is_inline_count /\
+  ret = return_block_label p ist.is_label_counter /\
+  rb = <|bb_label := ret;
+    bb_instructions := DROP (i+1) call_bb.bb_instructions|> /\
+  i < LENGTH call_bb.bb_instructions /\
+  (EL i call_bb.bb_instructions).inst_opcode = INVOKE /\
+  inliner_phi_labels_closed caller /\ fn_inst_wf caller /\
+  ~MEM ret (fn_labels caller) /\
+  (!prev. prev_bb = SOME prev ==> MEM prev (fn_labels caller)) /\
+  eval_phis (s with vs_prev_bb := prev_bb) bb.bb_instructions = OK u /\
+  inline_one_site caller callee ist = SOME (final,ist') ==>
+  ?tb. lookup_block b final.fn_blocks = SOME tb /\
+    eval_phis (s with vs_prev_bb :=
+      (if MEM b (bb_succs rb) then
+        OPTION_MAP (\l. if l = lbl then ret else l) prev_bb else prev_bb))
+      tb.bb_instructions =
+    OK (u with vs_prev_bb := (if MEM b (bb_succs rb) then
+        OPTION_MAP (\l. if l = lbl then ret else l) prev_bb else prev_bb))
+Proof
+  strip_tac >> gvs[] >>
+  drule_all inline_one_site_final_assembly >> strip_tac >> gvs[] >>
+  irule inline_caller_produced_optional_phis >> simp[] >> metis_tac[]
+QED
