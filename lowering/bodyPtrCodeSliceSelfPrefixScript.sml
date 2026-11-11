@@ -252,83 +252,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem self_code_prefix_checked:
-  compile_slice_out_buf sz sa = ((out,dst),sb) /\
-  emit_op CODESIZE [] sb = (src_len,sc) /\
-  compile_assert_slice_bounds sop lop src_len sc = ((),sd) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  32 <= sz /\ sz < dimword (:256) /\
-  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
-    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  ghost_inv d cenv cx es G tn s /\
-  (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
-  (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
-  eval_operand sop s = SOME wa /\ eval_operand lop s = SOME wn /\
-  op_taint tn sop = {} /\ op_taint tn lop = {} /\
-  op_prov G sop = NONE /\ op_prov G lop = NONE /\
-  (!x. sop = Var x ==> not_fresh_at sa x) /\
-  (!x. lop = Var x ==> not_fresh_at sa x) ==>
-  ?Gf tnf.
-    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sd) s Gf tnf
-Proof
-  strip_tac >> drule_all self_code_out_buffer_checked >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  drule_all slice_out_buf_run >> strip_tac >> gvs[] >>
-  `!value. (!x. value = Var x ==> not_fresh_at sa x) ==>
-    eval_operand value t = eval_operand value s /\
-    op_prov G1 value = op_prov G value /\ op_taint tn1 value = op_taint tn value` by
-    (gen_tac >> disch_tac >> irule self_code_prefix_operand_frame >>
-     metis_tac[]) >>
-  `sa.cs_next_var <= sb.cs_next_var` by
-    (mp_tac (Q.SPECL [`sz`, `sa`] ci_mono_compile_slice_out_buf) >>
-     simp[ci_mono_def]) >>
-  `!x. not_fresh_at sa x ==> not_fresh_at sb x` by
-    simp[not_fresh_at_def] >>
-  `?Gf tnf. inst_seq_ptr D 0 ctx fn PG G1 tn1
-     (emitted_insts sb sc ++ emitted_insts sc sd)
-     (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) Gf tnf` by
-    (irule self_code_size_bounds_checked >>
-     simp[eval_operand_inst_idx] >>
-     goal_assum (drule_at (Pat `compile_assert_slice_bounds _ _ _ _ = _`)) >>
-     simp[]) >>
-  `emitted_insts sa sd = emitted_insts sa sb ++
-    (emitted_insts sb sc ++ emitted_insts sc sd)` by suspend "emission" >>
-  qexistsl_tac [`Gf`, `tnf`] >>
-  qpat_x_assum `emitted_insts sa sd = _` (fn th => pure_once_rewrite_tac [th]) >>
-  irule literal_inst_seq_ptr_append >>
-  conj_tac >- suspend "nonterm" >>
-  qexistsl_tac [`G1`, `tn1`, `t`] >> simp[]
-QED
-
-Resume self_code_prefix_checked[emission]:
-  drule slice_out_buf_decompose >> strip_tac >>
-  qpat_assum `emit_op CODESIZE [] sb = _`
-    (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
-  drule slice_bounds_shape >> strip_tac >>
-  `emitted_insts sb sd = emitted_insts sb sc ++ emitted_insts sc sd` by
-    (irule emitted_insts_append >> simp[]) >>
-  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
-    simp[emitted_insts_append] >>
-  `emitted_insts sa sd = emitted_insts sa sb ++ emitted_insts sb sd` by
-    (irule emitted_insts_append >> simp[]) >> simp[]
-QED
-
-Resume self_code_prefix_checked[nonterm]:
-  drule slice_out_buf_decompose >> strip_tac >>
-  drule compile_alloc_buffer_parts >> strip_tac >>
-  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
-  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
-    (irule emitted_insts_append >> simp[]) >>
-  drule compile_alloc_buffer_emission >> strip_tac >>
-  drule emitted_insts_emit_inst >> strip_tac >>
-  `emitted_insts sa sm = emitted_insts sx sm` by
-    (qpat_x_assum `sx = _` SUBST1_TAC >>
-     simp[NoAsms, emitted_insts_def]) >>
-  simp[mk_inst_def, is_terminator_def]
-QED
-
-Finalise self_code_prefix_checked
 
 Theorem self_code_bounds_cursor_frame:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
@@ -414,3 +337,135 @@ Resume self_code_size_bounds_frame[kept_runtime]:
 QED
 
 Finalise self_code_size_bounds_frame
+
+Theorem self_code_checked_prefix_ptr:
+  compile_slice_out_buf sz sa = ((out,dst),sb) /\
+  emit_op CODESIZE [] sb = (src_len,sc) /\
+  compile_assert_slice_bounds sop lop src_len sc = ((),sd) /\
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  32 <= sz /\ sz < dimword (:256) /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
+  ghost_inv d cenv cx es G tn s /\
+  (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
+  (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
+  eval_operand sop s = SOME wa /\ eval_operand lop s = SOME wn /\
+  op_taint tn sop = {} /\ op_taint tn lop = {} /\
+  op_prov G sop = NONE /\ op_prov G lop = NONE /\
+  (!x. sop = Var x ==> not_fresh_at sa x) /\
+  (!x. lop = Var x ==> not_fresh_at sa x) ==>
+  ?Gf tnf.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sd) s Gf tnf /\
+    (!t. run_inst_seq (emitted_insts sa sd) s = OK t ==>
+      ghost_inv d cenv cx es Gf tnf t /\
+      ghost_kept cenv es sa G tn s Gf tnf /\
+      (?p q. out = Var p /\ dst = Var q /\
+        ptr_covers Gf tnf p t sz /\ ptr_covers Gf tnf q t (sz - 32)) /\
+      eval_operand sop t = SOME wa /\ eval_operand lop t = SOME wn /\
+      op_taint tnf sop = {} /\ op_taint tnf lop = {} /\
+      op_prov Gf sop = NONE /\ op_prov Gf lop = NONE)
+Proof
+  strip_tac >> drule_all self_code_out_buffer_checked >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  drule_all slice_out_buf_run >> strip_tac >> gvs[] >>
+  `!value. (!x. value = Var x ==> not_fresh_at sa x) ==>
+    eval_operand value t = eval_operand value s /\
+    op_prov G1 value = op_prov G value /\ op_taint tn1 value = op_taint tn value` by
+    (gen_tac >> disch_tac >> irule self_code_prefix_operand_frame >> metis_tac[]) >>
+  `sa.cs_next_var <= sb.cs_next_var` by
+    (mp_tac (Q.SPECL [`sz`, `sa`] ci_mono_compile_slice_out_buf) >> simp[ci_mono_def]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x` by simp[not_fresh_at_def] >>
+  `?Gf tnf. inst_seq_ptr D 0 ctx fn PG G1 tn1
+     (emitted_insts sb sc ++ emitted_insts sc sd)
+     (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) Gf tnf` by
+    (irule self_code_size_bounds_checked >> simp[eval_operand_inst_idx] >>
+     goal_assum (drule_at (Pat `compile_assert_slice_bounds _ _ _ _ = _`)) >> simp[]) >>
+  `emitted_insts sa sd = emitted_insts sa sb ++
+    (emitted_insts sb sc ++ emitted_insts sc sd)` by suspend "emission" >>
+  qexistsl_tac [`Gf`, `tnf`] >> conj_tac
+  >- (qpat_assum `emitted_insts sa sd = _` (fn th => pure_once_rewrite_tac [th]) >>
+      irule literal_inst_seq_ptr_append >> conj_tac >- suspend "nonterm" >>
+      qexistsl_tac [`G1`, `tn1`, `t`] >> simp[]) >>
+  suspend "endpoint"
+QED
+
+Resume self_code_checked_prefix_ptr[emission]:
+  drule slice_out_buf_decompose >> strip_tac >>
+  qpat_assum `emit_op CODESIZE [] sb = _`
+    (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+  drule slice_bounds_shape >> strip_tac >>
+  `emitted_insts sb sd = emitted_insts sb sc ++ emitted_insts sc sd` by
+    (irule emitted_insts_append >> simp[]) >>
+  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
+    simp[emitted_insts_append] >>
+  `emitted_insts sa sd = emitted_insts sa sb ++ emitted_insts sb sd` by
+    (irule emitted_insts_append >> simp[]) >> simp[]
+QED
+
+Resume self_code_checked_prefix_ptr[nonterm]:
+  drule slice_out_buf_decompose >> strip_tac >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  drule compile_alloc_buffer_emission >> strip_tac >>
+  drule emitted_insts_emit_inst >> strip_tac >>
+  `emitted_insts sa sm = emitted_insts sx sm` by
+    (qpat_x_assum `sx = _` SUBST1_TAC >> simp[NoAsms, emitted_insts_def]) >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Resume self_code_checked_prefix_ptr[endpoint]:
+  qx_gen_tac `tf` >> disch_tac >>
+  `run_inst_seq (emitted_insts sb sc ++ emitted_insts sc sd) t = OK tf` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sb) s = OK t`
+       (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `emitted_insts sb sc ++ emitted_insts sc sd` mp_tac) >>
+     gvs[]) >>
+  `local_ptrs_reserved cenv sb` by
+    (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `(!p j. cenv.ce_return_buf = SOME (PtrVar (Var p) j) ==> not_fresh_at sb p) /\
+   (!p j. cenv.ce_return_pc = SOME (PtrVar (Var p) j) ==> not_fresh_at sb p)` by
+    metis_tac[] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+    (emitted_insts sb sc ++ emitted_insts sc sd)` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+     drule slice_bounds_shape >> strip_tac >> simp[mk_inst_def, is_terminator_def]) >>
+  `run_inst_seq (emitted_insts sb sc ++ emitted_insts sc sd)
+    (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) =
+    OK (tf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))` by
+    simp[fragExecTheory.run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
+  `ghost_inv d cenv cx es G1 tn1
+    (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))` by
+    simp[hash_ghost_inv_inst_idx] >>
+  drule_all self_code_size_bounds_frame >>
+  simp[hash_ghost_inv_inst_idx, lookup_var_def] >> strip_tac >>
+  `ghost_kept cenv es sb G1 tn1 t Gf tnf` by
+    (gvs[ghost_kept_def, local_region_def, eval_operand_def, lookup_var_def] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "finish"
+QED
+
+Resume self_code_checked_prefix_ptr[finish]:
+  `!name b k. local_region cenv es.scopes s name b k <=>
+     local_region cenv es.scopes t name b k` by
+    (gvs[local_region_def, local_ptrs_reserved_def, eval_operand_def, lookup_var_def] >>
+     metis_tac[]) >>
+  conj_tac
+  >- (irule wordArgsPtrTheory.ghost_kept_trans >>
+      goal_assum (drule_at (Pat `ghost_kept _ _ sb _ _ t _ _`)) >> simp[]) >>
+  conj_tac
+  >- (gvs[ptr_covers_def, ghost_kept_def, lookup_var_def] >> metis_tac[]) >>
+  `!value. (!x. value = Var x ==> not_fresh_at sa x) ==>
+    eval_operand value tf = eval_operand value s /\
+    op_prov Gf value = op_prov G value /\ op_taint tnf value = op_taint tn value` by
+    (rpt strip_tac >>
+     `eval_operand value tf = eval_operand value t /\
+      op_prov Gf value = op_prov G1 value /\ op_taint tnf value = op_taint tn1 value` by
+       (irule self_code_prefix_operand_frame >> simp[lookup_var_def] >> metis_tac[]) >>
+     metis_tac[]) >>
+  metis_tac[]
+QED
+
+Finalise self_code_checked_prefix_ptr
