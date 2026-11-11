@@ -226,7 +226,7 @@ Theorem intret_mem_q_raw_gas_obs[local]:
   intret_mem_q_raw func cenv cx ret_tv buf v (es with gas_obs := readings) r =
   intret_mem_q_raw func cenv cx ret_tv buf v es r
 Proof
-  simp[intret_mem_q_raw_def, result_rel_gas_obs]
+  simp[intret_mem_q_raw_def, loweringStateRelDefsTheory.result_rel_gas_obs]
 QED
 
 Theorem reachable_memory_return:
