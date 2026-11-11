@@ -5,7 +5,8 @@ Ancestors
   allocationPtr wordLoadStorePtr bodyPtrMakeArrayWordStore fragGasSeqPtr
   fragExecPtr mstoreOperandStep exprSimProps venomMemProps loweringHalt
   fragExec ghostPcTransportPtr instIdxIndep exprLoweringProps
-  venomInst venomExecSemantics
+  venomInst venomExecSemantics moduleLowering compileEnv intCallCallee
+  bodyPtrPrecompileBuiltinsSeq
 
 Theorem intcall_local_value_transport:
   intcall_local_value entry p sz G tn s /\
@@ -203,3 +204,203 @@ Resume intcall_materialize_scalar_ptr[frame]:
 QED
 
 Finalise intcall_materialize_scalar_ptr
+
+Theorem intcall_materialize_path_ptr:
+  !caps ce st done src s G tn ce' st'.
+    materialize_internal_params ce caps st = (ce',st') /\
+    intcall_completed done ce G tn s /\ intcall_pending src ce caps G tn s /\
+    ALL_DISTINCT (MAP FST caps) /\
+    DISJOINT (FDOM done) (set (MAP FST caps)) /\
+    EVERY (\c. ?p. SND (SND c) = Var p /\ not_fresh_at st p) caps /\
+    (!name p sz. name IN FDOM done /\
+      FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
+    (!aid. aid IN FDOM s.vs_allocas ==> aid < st.cs_next_id) /\
+    s.vs_alloca_next + internal_stack_size ce (MAP (\c. (FST c,FST (SND c))) caps)
+      < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
+    ?t H un.
+      run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s = OK t /\
+      (!k. inst_seq_ptr D 0 ctx fn PG G tn
+        (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts)
+        (s with vs_inst_idx := k) H un) /\
+      intcall_completed (FUNION done (DRESTRICT src (set (MAP FST caps)))) ce' H un t /\
+      t.vs_alloca_next = s.vs_alloca_next +
+        internal_stack_size ce (MAP (\c. (FST c,FST (SND c))) caps) /\
+      (!aid. aid IN FDOM t.vs_allocas ==> aid < st'.cs_next_id) /\
+      (!a. a < s.vs_alloca_next ==>
+        mem_bytes_at a 1 t.vs_memory = mem_bytes_at a 1 s.vs_memory) /\
+      (!a. a < s.vs_alloca_next /\ a IN un.t_mem ==> a IN tn.t_mem) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      un.t_stor = tn.t_stor /\ un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
+      (!x. not_fresh_at st x ==>
+        lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+        op_taint un (Var x) = op_taint tn (Var x))
+Proof
+  Induct >- suspend "empty" >>
+  PairCases >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!ce st done src s G tn ce' st'. _` (mk_asm "ih") >>
+  gvs[intcall_pending_def, EVERY_DEF] >>
+  Cases_on `h1` >- suspend "scalar" >>
+  suspend "memory"
+QED
+
+Resume intcall_materialize_path_ptr[empty]:
+  simp[materialize_internal_params_def, comp_return_def,
+       internal_stack_size_def] >> rpt strip_tac >> gvs[] >>
+  qexistsl_tac [`s`,`G`,`tn`] >>
+  simp[run_inst_seq_def, inst_seq_ptr_def, DRESTRICT_IS_FEMPTY]
+QED
+
+Resume intcall_materialize_path_ptr[memory]:
+  gvs[] >>
+  qabbrev_tac `ce1 = ce with ce_vars := ce.ce_vars |+ (h0,PtrVar (Var p) sz)` >>
+  `ce with ce_vars updated_by (\m. m |+ (h0,PtrVar (Var p) sz)) = ce1` by
+    simp[Abbr `ce1`, compile_env_component_equality] >>
+  `materialize_internal_params ce1 caps st = (ce',st')` by
+    (qpat_x_assum `materialize_internal_params _ _ _ = _` mp_tac >>
+     simp[Once materialize_internal_params_def, Abbr `ce1`]) >>
+  `intcall_completed (done |+ (h0,entry)) ce1 G tn s` by
+    (simp[Abbr `ce1`] >> irule intcall_completed_bind >> simp[]) >>
+  `intcall_pending src ce1 caps G tn s` by
+    (simp[Abbr `ce1`] >> irule intcall_pending_drop_bind >>
+     simp[intcall_pending_def] >>
+     qpat_x_assum `~MEM h0 (MAP FST caps)` mp_tac >>
+     simp[MEM_MAP, EVERY_MEM, pairTheory.FORALL_PROD] >>
+     disch_then (fn th => simp[th])) >>
+  `!name q n. name IN FDOM (done |+ (h0,entry)) /\
+    FLOOKUP ce1.ce_vars name = SOME (PtrVar (Var q) n) ==> not_fresh_at st q` by
+    (simp[Abbr `ce1`, FLOOKUP_UPDATE] >> rpt strip_tac >>
+     Cases_on `name = h0` >> gvs[] >> metis_tac[]) >>
+  `DISJOINT (FDOM (done |+ (h0,entry))) (set (MAP FST caps))` by simp[] >>
+  `s.vs_alloca_next + internal_stack_size ce1
+    (MAP (\c. (FST c,FST (SND c))) caps) < dimword (:256)` by
+    (qpat_assum `ce with ce_vars updated_by _ = ce1`
+       (fn th => once_rewrite_tac[GSYM th]) >>
+     simp[mat_tail_stack_size] >> gvs[internal_stack_size_def]) >>
+  asm_x "ih" drule_all >>
+  strip_tac >> qexistsl_tac [`t`,`H`,`un`] >> simp[] >>
+  reverse conj_tac >-
+    (qpat_assum `ce with ce_vars updated_by _ = ce1`
+       (fn th => once_rewrite_tac[GSYM th]) >>
+     simp[mat_tail_stack_size, internal_stack_size_def]) >>
+  `FUNION (done |+ (h0,entry)) (DRESTRICT src (set (MAP FST caps))) =
+   FUNION done (DRESTRICT src (h0 INSERT set (MAP FST caps)))` by
+    (`FLOOKUP done h0 = NONE` by simp[flookup_thm] >>
+     simp[fmap_eq_flookup, FLOOKUP_FUNION, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+     qx_gen_tac `n` >> Cases_on `n = h0` >> gvs[] >>
+     Cases_on `FLOOKUP done n` >> simp[]) >>
+  metis_tac[]
+QED
+
+Resume intcall_materialize_path_ptr[scalar]:
+  gvs[] >> drule_all materialize_stack_split >> strip_tac >>
+  qabbrev_tac `q = STRING #"%" (toString st.cs_next_var)` >>
+  `p <> q` by gvs[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `q`] >>
+  `FLOOKUP s.vs_allocas st.cs_next_id = NONE` by
+    (simp[flookup_thm] >> metis_tac[prim_recTheory.LESS_REFL]) >>
+  `s.vs_alloca_next + sz < dimword (:256)` by
+    (gvs[internal_stack_size_def] >> decide_tac) >>
+  `lookup_var p s = SOME w` by gvs[eval_operand_def] >>
+  drule_all intcall_materialize_scalar_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`G`,`D`] mp_tac) >>
+  disch_then (qx_choose_then `s1` (qx_choose_then `G1`
+    (qx_choose_then `tn1` strip_assume_tac))) >>
+  qabbrev_tac `ce1 = ce with ce_vars := ce.ce_vars |+ (h0,PtrVar (Var q) sz)` >>
+  `ce with ce_vars updated_by (\m. m |+ (h0,PtrVar (Var q) sz)) = ce1` by
+    simp[Abbr `ce1`, compile_env_component_equality] >>
+  `!x. not_fresh_at st x ==> x <> q /\ not_fresh_at mid x` by
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `q`] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `intcall_completed done ce G1 tn1 s1` by suspend "scalar_completed" >>
+  `intcall_completed (done |+ (h0,entry)) ce1 G1 tn1 s1` by
+    (simp[Abbr `ce1`] >> irule intcall_completed_bind >> simp[]) >>
+  `intcall_pending src ce1 caps G1 tn1 s1` by suspend "scalar_pending" >>
+  `!name r n. name IN FDOM (done |+ (h0,entry)) /\
+    FLOOKUP ce1.ce_vars name = SOME (PtrVar (Var r) n) ==> not_fresh_at mid r` by
+    (simp[Abbr `ce1`, FLOOKUP_UPDATE] >> rpt strip_tac >>
+     Cases_on `name = h0` >> gvs[] >-
+       simp[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `q`,
+            ASCIInumbersTheory.toString_inj] >> metis_tac[]) >>
+  `EVERY (\c. ?p. SND (SND c) = Var p /\ not_fresh_at mid p) caps` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `DISJOINT (FDOM (done |+ (h0,entry))) (set (MAP FST caps))` by simp[] >>
+  `!aid. aid IN FDOM s1.vs_allocas ==> aid < mid.cs_next_id` by
+    suspend "scalar_sites" >>
+  `s1.vs_alloca_next + internal_stack_size ce1
+    (MAP (\c. (FST c,FST (SND c))) caps) < dimword (:256)` by
+    (qpat_assum `ce with ce_vars updated_by _ = ce1`
+       (fn th => once_rewrite_tac[GSYM th]) >>
+     simp[mat_tail_stack_size] >> gvs[internal_stack_size_def]) >>
+  `materialize_internal_params ce1 caps mid = (ce',st')` by metis_tac[] >>
+  asm_x "ih" drule_all >> strip_tac >> suspend "scalar_join"
+QED
+
+Resume intcall_materialize_path_ptr[scalar_completed]:
+  simp[intcall_completed_def] >> rpt strip_tac >>
+  qpat_x_assum `intcall_completed done ce G tn s` mp_tac >>
+  simp[intcall_completed_def] >> disch_then drule >> strip_tac >>
+  qexistsl_tac [`p'`,`sz'`] >> simp[] >>
+  `not_fresh_at st p'` by metis_tac[flookup_thm] >>
+  `p' <> q` by metis_tac[] >>
+  `op_taint tn1 (Var p') = {}` by
+    (fs[intcall_local_value_def, ptr_covers_def] >> metis_tac[]) >>
+  irule intcall_local_value_transport >> simp[] >>
+  qexistsl_tac [`G`,`s`,`tn`] >> simp[]
+QED
+Resume intcall_materialize_path_ptr[scalar_pending]:
+  `intcall_pending src ce1 caps G tn s` by
+    (simp[Abbr `ce1`] >> irule intcall_pending_drop_bind >>
+     simp[intcall_pending_def] >>
+     qpat_x_assum `~MEM h0 (MAP FST caps)` mp_tac >>
+     simp[MEM_MAP, EVERY_MEM, pairTheory.FORALL_PROD] >>
+     disch_then (fn th => simp[th])) >>
+  irule intcall_pending_transport >>
+  qexistsl_tac [`G`,`s`,`tn`] >> simp[] >>
+  rpt strip_tac >>
+  fs[MEM_MAP, EVERY_MEM] >>
+  qpat_x_assum `!e. MEM e caps ==> ?p. _` drule >> strip_tac >>
+  gvs[eval_operand_def] >> metis_tac[]
+QED
+Resume intcall_materialize_path_ptr[scalar_sites]:
+  qabbrev_tac `u = update_var q (n2w s.vs_alloca_next)
+    (s with <|vs_allocas := s.vs_allocas |+ (st.cs_next_id,(s.vs_alloca_next,sz));
+              vs_alloca_next := s.vs_alloca_next + sz|>)` >>
+  `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [q]) s = OK u` by
+    simp[Abbr `u`, step_alloca_fresh] >>
+  `eval_operand (Var q) u = SOME (n2w s.vs_alloca_next) /\
+   eval_operand (Var p) u = SOME w` by
+    fs[eval_operand_def, Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `step_inst_base (mk_inst (st.cs_next_id+1) MSTORE [Var q; Var p] []) u =
+    OK (mstore s.vs_alloca_next w u)` by
+    (qpat_assum `eval_operand (Var q) u = _`
+       (mp_then (Pos hd) mp_tac step_mstore_operands) >> simp[]) >>
+  `s1 = mstore s.vs_alloca_next w u` by
+    (qpat_x_assum `run_inst_seq _ s = OK s1` mp_tac >> simp[run_inst_seq_def]) >>
+  simp[Abbr `u`, mstore_def, update_var_def] >>
+  rpt strip_tac >> gvs[] >> res_tac >> decide_tac
+QED
+Resume intcall_materialize_path_ptr[scalar_join]:
+  `FUNION (done |+ (h0,entry)) (DRESTRICT src (set (MAP FST caps))) =
+   FUNION done (DRESTRICT src (h0 INSERT set (MAP FST caps)))` by
+    (`FLOOKUP done h0 = NONE` by simp[flookup_thm] >>
+     simp[fmap_eq_flookup, FLOOKUP_FUNION, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+     qx_gen_tac `n` >> Cases_on `n = h0` >> gvs[] >>
+     Cases_on `FLOOKUP done n` >> simp[]) >>
+  qexistsl_tac [`t`,`H`,`un`] >>
+  conj_tac >-
+    (qpat_assum `run_inst_seq _ s = OK s1`
+       (mp_then (Pos hd) mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `DROP (LENGTH mid.cs_current_insts) st'.cs_current_insts`
+       assume_tac) >> gvs[]) >>
+  conj_tac >-
+    (qpat_assum `DROP (LENGTH st.cs_current_insts) _ = _` (fn th => rewrite_tac[th]) >>
+     irule inst_seq_ptr_append_cursors >>
+     simp[mk_inst_def, is_terminator_def] >>
+     qexistsl_tac [`G1`,`s1`,`tn1`] >> gvs[mk_inst_def]) >>
+  simp[] >>
+  conj_tac >- metis_tac[] >>
+  qpat_assum `ce with ce_vars updated_by _ = ce1`
+    (fn th => once_rewrite_tac[GSYM th]) >>
+  simp[mat_tail_stack_size, internal_stack_size_def]
+QED
+
+Finalise intcall_materialize_path_ptr
