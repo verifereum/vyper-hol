@@ -111,9 +111,10 @@ Proof
   rename1 `lookup_var p s = SOME rootw` >>
   `not_fresh_at sm p` by
     (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `state_well_typed es` by fs[expr_sim_inv_def] >>
   `val_in_memory tv v (w2n rootw + k) t.vs_memory` by
     (irule vv_post_local_sub_layout_value >> goal_assum (drule_at Any) >>
-     metis_tac[]) >>
+     metis_tac[vyperTypeStatePreservationTheory.lookup_scopes_state_well_typed_value_has_type]) >>
   gvs[arithmeticTheory.ADD_COMM]
 QED
 

@@ -10,6 +10,7 @@ Theorem vv_post_local_sub_layout_value:
   lookup_scopes n es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) /\
   not_fresh_at sm p /\ lookup_var p s0 = SOME w /\
+  value_has_type entry.type entry.value /\
   sub_layout entry.type entry.value k tv v ==>
   val_in_memory tv v (w2n w + k) s.vs_memory
 Proof
