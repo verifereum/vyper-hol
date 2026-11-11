@@ -39,6 +39,6 @@ Theorem intcall_traverse_child_admissible:
 Proof
   strip_tac >> irule expr_body_pre_vv_gas_admissible >>
   qexistsl [`ce`, `env`] >> irule expr_body_pre_state_transport >>
-  conj_tac >- fs[intcall_joint_res_def] >>
+  conj_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
   qexists `es` >> simp[]
 QED

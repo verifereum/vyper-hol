@@ -129,7 +129,7 @@ Resume intcall_deferred_suffix[child]:
     fs[intcall_expr_cont_def] >>
   `expr_body_pre ce fp.jc_cx env child live` by
     (irule expr_body_pre_state_transport >>
-     conj_tac >- fs[intcall_joint_res_def] >>
+     conj_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
      qexists `es` >> first_assum ACCEPT_TAC) >>
   drule_all intcall_traverse_child_admissible >> disch_tac >>
   drule_all (BETA_RULE intcall_deferred_child_run) >> disch_tac >>
