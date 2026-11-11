@@ -301,3 +301,14 @@ Theorem calldata_decode_args_examples:
 Proof
   rpt conj_tac >> EVAL_TAC
 QED
+
+(* Short calldata goes to __default__ when there is one, else nowhere. *)
+Theorem calldata_dispatch_fallback_examples:
+  calldata_dispatch
+    [FunctionDecl External Payable F F "__default__" [] [] NoneT []] [] =
+    SOME ("__default__", []) /\
+  calldata_dispatch
+    [FunctionDecl External Nonpayable F F "f" [] [] NoneT []] [1w; 2w] = NONE
+Proof
+  EVAL_TAC
+QED

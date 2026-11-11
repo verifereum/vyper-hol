@@ -16,6 +16,7 @@ Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
+  loweringCalldataCorrect
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
   codegenCorrectness immutableCodeLayout
@@ -769,14 +770,16 @@ QED
 (* The raw O1 shape theorems no longer need immutable_free_program; it
    remains in this statement, which is unchanged. *)
 
-Theorem vyper_call_correct:
+(* The call theorem for calldata that dispatches to tx's function and
+   arguments; vyper_call_correct below covers every calldata. *)
+Theorem vyper_call_correct_dispatched:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ immutable_free_program tops /\
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
     call_outcomes_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
@@ -808,7 +811,7 @@ Proof
    vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
    vs.vs_call_ctx.cc_calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     simp[Abbr`vs`, entry_venom_state_def] >>
-  `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  `dispatched_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
    call_outcomes_ok am tx vs.vs_outcomes` by simp[] >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
   `o1_run_state_ok vs` by
@@ -831,10 +834,10 @@ Proof
     (irule gas_variant_outcomes >> simp[]) >>
   `vs_in.vs_call_ctx = vs.vs_call_ctx` by
     (irule gas_variant_call_ctx >> simp[]) >>
-  `valid_vyper_call tops tx vs_in.vs_call_ctx.cc_calldata ret /\
+  `dispatched_vyper_call tops tx vs_in.vs_call_ctx.cc_calldata ret /\
    call_outcomes_ok am tx vs_in.vs_outcomes` by simp[] >>
   `source_unit_execution_correct tops ret am tx unit vs_in` by
-    (irule lower_vyper_runtime_unit_correct >> simp[] >>
+    (irule lower_vyper_runtime_unit_correct_dispatched >> simp[] >>
      qexists_tac `rpolicy` >> simp[]) >>
   `?marks. source_unit_execution_correct_at
              (gas_explicit marks vs_in.vs_gas_readings) tops ret am tx unit vs_in` by
@@ -871,13 +874,13 @@ Proof
    taint_within
      (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
      unit.cu_context vs_in` by
-    (drule lower_vyper_runtime_unit_memory_ok >>
+    (drule lower_vyper_runtime_unit_memory_ok_dispatched >>
      disch_then (qspecl_then [`am`, `tx`, `ret`, `vs_in`] mp_tac) >>
      impl_tac >- fs[] >>
      strip_tac >> simp[] >>
      metis_tac[external_call_dead_observations]) >>
   `mem_inv dload_offset_ok unit.cu_context vs_in` by
-    (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>
+    (irule lower_vyper_runtime_unit_dload_offset_ok_dispatched >> simp[] >>
      qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `tx`] >> gvs[]) >>
   `mem_inv dload_headroom_ok unit.cu_context vs_in` by
     (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
@@ -962,4 +965,90 @@ Proof
   rpt strip_tac >>
   gvs[AllCaseEqs()] >>
   goal_assum $ drule_at Any
+QED
+
+
+(* ===== Every calldata ===== *)
+
+(* Calldata that dispatches to nothing (no fallback, a short head, or
+   arguments the decoder rejects) makes the compiled contract revert with
+   empty returndata, or run out of resources. *)
+Theorem vyper_call_reverts:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\ immutable_free_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    calldata_dispatch tops
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) = NONE
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
+Proof
+  cheat
+QED
+
+(* The call premises read only tx's environment, not which function it
+   calls or with what. *)
+Theorem call_premises_dispatch_invariant:
+  !tops runtime_bc am tx es os f vals.
+    (source_typing_ok tops am (tx with <| function_name := f; args := vals |>)
+       <=> source_typing_ok tops am tx) /\
+    (source_storage_ok tops am (tx with <| function_name := f; args := vals |>)
+       <=> source_storage_ok tops am tx) /\
+    (call_state_rel tops runtime_bc am
+       (tx with <| function_name := f; args := vals |>) es
+       <=> call_state_rel tops runtime_bc am tx es) /\
+    (call_outcomes_ok am (tx with <| function_name := f; args := vals |>) os
+       <=> call_outcomes_ok am tx os)
+Proof
+  cheat
+QED
+
+(* Compiler correctness for a single external call, for every calldata:
+   the compiled contract does what the source does with the call the
+   calldata dispatches to (tx supplies only the environment: sender,
+   target, value, block), and reverts with empty returndata when it
+   dispatches to nothing. *)
+Theorem vyper_call_correct:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\ immutable_free_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    call_outcomes_ok am tx (MAP SND (call_trace es)) /\
+    (!f vals.
+       calldata_dispatch tops
+         (buffer_to_list (FST (HD es.contexts)).msgParams.data) =
+         SOME (f, vals) ==>
+       ?mut args ret body.
+         vyperInterpreter$lookup_function NONE f External tops =
+           SOME (mut, F, args, [], ret, body))
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       case calldata_dispatch tops
+              (buffer_to_list (FST (HD es.contexts)).msgParams.data) of
+         NONE => ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs
+       | SOME (f, vals) =>
+           ?ret. call_result_rel tops ret am
+                   (tx with <| function_name := f; args := vals |>) es r es')
+Proof
+  rpt strip_tac >>
+  Cases_on `calldata_dispatch tops
+              (buffer_to_list (FST (HD es.contexts)).msgParams.data)` >>
+  gvs[]
+  >- (drule_all vyper_call_reverts >> simp[]) >>
+  rename1 `_ = SOME fv` >> PairCases_on `fv` >>
+  first_x_assum (qspecl_then [`fv0`, `fv1`] mp_tac) >> simp[] >> strip_tac >>
+  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`,
+               `tx with <| function_name := fv0; args := fv1 |>`, `ret`, `es`]
+    mp_tac vyper_call_correct_dispatched >>
+  impl_tac >- gvs[dispatched_vyper_call_def, call_premises_dispatch_invariant] >>
+  strip_tac >> simp[] >> metis_tac[]
 QED
