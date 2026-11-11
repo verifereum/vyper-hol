@@ -245,7 +245,9 @@ Resume tuple_place_value_storage_run_frame[normalize_suffix]:
       `func`, `u`, `dw`, `w2n root + delta`, `ctx`, `cx`, `env`, `ee`, `mid`,
       `var_name`, `keys`, `root`, `tv`, `path`, `delta`, `writes`, `v`] mp_tac
        place_store_slots_suffix_run >>
-     (impl_tac >- (fs[] >> metis_tac[])) >> simp[]) >>
+     (impl_tac >- (fs[] >> metis_tac[])) >>
+     disch_then (qx_choose_then `t` strip_assume_tac) >>
+     qexists_tac `t` >> simp[]) >>
   qexists_tac `t` >> conj_tac
   >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
        gas_marked_path_then)) >> goal_assum (drule_at Any) >> simp[]) >>
