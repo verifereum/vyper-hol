@@ -986,7 +986,7 @@ Proof
       assignable_type_def, well_formed_type_def]
 QED
 
-Theorem check_value_type_ArrayT_type[local]:
+Theorem check_value_type_ArrayT_type:
   is_ArrayT typ /\
   check_value_type tenv (Type typ) ==>
   check_value_type tenv (Type (ArrayT_type typ))
