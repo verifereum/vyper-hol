@@ -48,7 +48,8 @@ Theorem membership_mixed_post_frames:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id ==>
   wb_frame cenv es es2 sa s0 s2 /\
-  ghost_kept cenv es sa G0 tn0 s0 G2 tn2
+  ghost_kept cenv es sa G0 tn0 s0 G2 tn2 /\
+  (~expr_has_effect e1 /\ ~expr_has_effect e2 ==> pure_frame cenv fn es sa s0 s2)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   fs[bodyPtrBopOperandContractTheory.bop_operand_post_def,
@@ -57,9 +58,32 @@ Proof
   `wb_frame cenv es1 es2 sc s1 s2` by
     (fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.wb_frame_def] >>
      metis_tac[]) >>
+  `~expr_has_effect e1 /\ ~expr_has_effect e2 ==> pure_frame cenv fn es sa s0 s2` by
+    (strip_tac >>
+     `pure_frame cenv fn es sa s0 s1` by
+       (qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
+          (mp_then Any mp_tac expr_post_pure_frame) >> simp[]) >>
+     `pure_frame cenv fn es1 sc s1 s2` by
+       (qpat_x_assum `vv_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+        rewrite_tac[loweringPostsTheory.vv_post_def] >> strip_tac >>
+        qpat_x_assum `~expr_has_effect e2 ==> _` irule >> first_assum ACCEPT_TAC) >>
+     `!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
+              FLOOKUP s2.vs_allocas aid = SOME b` by
+       (qpat_x_assum `wb_frame cenv es1 es2 sc s1 s2` mp_tac >>
+        rewrite_tac[loweringPostsTheory.wb_frame_def] >> strip_tac >>
+        first_assum ACCEPT_TAC) >>
+     `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+            lookup_var x s1 = SOME w` by
+       (qpat_x_assum `wb_frame cenv es es1 sa s0 s1` mp_tac >>
+        rewrite_tac[loweringPostsTheory.wb_frame_def] >> strip_tac >>
+        first_assum ACCEPT_TAC) >>
+     match_mp_tac (exprSimPropsTheory.pure_frame_trans
+       |> Q.SPECL [`cenv`, `fn`, `es`, `es1`, `sa`, `sc`, `s0`, `s1`, `s2`]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (qspecl_then [`fn`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `es2`, `sc`, `s1`, `s2`,
                    `ctx`] mp_tac wb_frame_trans >> simp[]) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   qpat_assum `ghost_kept cenv es1 sc G1 tn1 s1 G2 tn2`
     (mp_then (Pos last) mp_tac wordArgsPtrTheory.ghost_kept_wb_trans) >>
   disch_then irule >>
@@ -167,6 +191,12 @@ Resume nonliteral_expr_sim_ptr[success]:
   drule_all membership_mixed_post_frames >> strip_tac >>
   `sa.cs_next_var <= sm.cs_next_var` by decide_tac >>
   `post_value_type cenv e2 = expr_type e2` by fs[] >>
+  `~expr_has_effect (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) ==>
+   pure_frame cenv fn es sa s0 s2` by
+    (rewrite_tac[loweringPostsTheory.expr_has_effect_thm, listTheory.EXISTS_DEF,
+                 DE_MORGAN_THM] >>
+     strip_tac >> qpat_x_assum `_ /\ _ ==> pure_frame _ _ _ _ _ s2` irule >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all membership_array_continuation_summary_ptr >>
   disch_then (qspecl_then [`Unsigned 0`,`e1`,`PG`,`cx_dead cx`] assume_tac) >>
   drule membership_typed_read_continuation >> disch_then (fn th => rewrite_tac[th]) >>
