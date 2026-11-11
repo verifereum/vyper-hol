@@ -382,7 +382,7 @@ Proof
   >~ [`compile_abi_arg_ptr_guard`]
   >- (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
       >- simp[compile_abi_arg_ptr_guard_def, abi_decoder_phi_return] >>
-      (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
+      gen_tac >> (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
    >- simp[cj 1 abi_decoder_phi_mutual] >> simp[])) >>
   (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
    >- simp[cj 1 abi_decoder_phi_mutual] >> simp[])
