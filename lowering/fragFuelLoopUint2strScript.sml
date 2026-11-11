@@ -121,6 +121,57 @@ Proof
   disj2_tac >> irule uint2str_prefix_failure >> metis_tac[]
 QED
 
+Theorem uint2str_body_quotient[local]:
+  eval_operand (Var (u2s_var a 0)) s = SOME xw /\
+  run_inst_seq (TAKE 9 (u2s_body a buf n)) s = OK t ==>
+  eval_operand (Var (u2s_var a 0)) t = SOME (safe_div xw 10w)
+Proof
+  strip_tac >>
+  `TAKE 9 (u2s_body a buf n) = TAKE 5 (u2s_body a buf n) ++
+     (TAKE 2 (DROP 5 (u2s_body a buf n)) ++
+      TAKE 2 (DROP 7 (u2s_body a buf n)))` by simp[u2s_body_def] >>
+  `?s1. run_inst_seq (TAKE 5 (u2s_body a buf n)) s = OK s1` by
+    (Cases_on `run_inst_seq (TAKE 5 (u2s_body a buf n)) s` >>
+     gvs[] >>
+     gvs[exprLoweringPropsTheory.run_inst_seq_append_err]) >>
+  `eval_operand (Var (u2s_var a 0)) s1 = SOME xw` by
+    (`lookup_var (u2s_var a 0) s1 = lookup_var (u2s_var a 0) s` by
+       (irule exprLoweringPropsTheory.run_inst_seq_preserves_field >>
+        qexists_tac `TAKE 5 (u2s_body a buf n)` >> simp[] >>
+        rpt strip_tac >>
+        `~MEM (u2s_var a 0) i.inst_outputs /\
+         i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+          (gvs[u2s_body_def, u2s_inst_def, mk_inst_def, is_terminator_def] >> simp[]) >>
+        metis_tac[venomInstPropsTheory.step_preserves_non_output_vars,
+                  venomExecSemanticsTheory.step_inst_non_invoke]) >>
+     gvs[venomStateTheory.eval_operand_def]) >>
+  drule u2s_body_div_run >> strip_tac >>
+  `run_inst_seq (TAKE 2 (DROP 7 (u2s_body a buf n)))
+     (update_var (u2s_var a 0) (safe_div xw 10w)
+       (update_var (u2s_var a 9) (safe_div xw 10w) s1)) = OK t` by
+    (qpat_x_assum `run_inst_seq (TAKE 9 _) _ = _` mp_tac >>
+     asm_rewrite_tac[] >>
+     drule_all exprLoweringPropsTheory.run_inst_seq_append >>
+     disch_then (qspec_then `TAKE 2 (DROP 5 (u2s_body a buf n)) ++ TAKE 2 (DROP 7 (u2s_body a buf n))` SUBST1_TAC) >>
+     first_x_assum (qspecl_then [`n`, `buf`] assume_tac) >>
+     drule_all exprLoweringPropsTheory.run_inst_seq_append >>
+     simp[]) >>
+  `lookup_var (u2s_var a 0) t =
+     lookup_var (u2s_var a 0)
+       (update_var (u2s_var a 0) (safe_div xw 10w)
+         (update_var (u2s_var a 9) (safe_div xw 10w) s1))` by
+    (irule exprLoweringPropsTheory.run_inst_seq_preserves_field >>
+     qexists_tac `TAKE 2 (DROP 7 (u2s_body a buf n))` >> simp[] >>
+     rpt strip_tac >>
+     `~MEM (u2s_var a 0) i.inst_outputs /\
+      i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+       (gvs[u2s_body_def, u2s_inst_def, mk_inst_def, is_terminator_def] >> simp[]) >>
+     metis_tac[venomInstPropsTheory.step_preserves_non_output_vars,
+               venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+      venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 (* The loop works on a fresh copy val_var of val_op, made before the loop
    (so no precondition on val_op is needed), and on a fresh counter i_var
    from 0.  Each round (cond -> body -> cond) runs straight-line code, sets
