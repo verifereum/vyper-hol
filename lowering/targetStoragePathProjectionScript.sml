@@ -4,7 +4,7 @@ Ancestors
   vyperStorageLayoutSafety loweringStateRelDefs targetPlaceLive
   vyperStoragePlaceProvenance vyperInterpreter vyperState exprSimPopNestedBase
   allocLimits targetPlaceSim vyperTypeEnv stmtSimAssignAttr exprLowering
-  targetEffectfulStorageHeader
+  targetEffectfulStorageHeader targetPlaceSimCasesBase stmtSimAugAssignPlaceStorage
 
 Theorem storage_read_live_declared_relative_projection:
   !cx mid name keys tr root rtv slot tv st.
@@ -327,4 +327,108 @@ Proof
   irule (iffRL (INST_TYPE [alpha |-> ``:256``] slots_in_range_capacity_frame)) >>
   goal_assum (drule_at Any) >>
   qexists_tac `raw` >> simp[] >> decide_tac
+QED
+
+Theorem target_storage_resolution_capacity_frame:
+  !bt tops ctx cenv cx env st vt tr slot tv em.
+    body_inv tops ctx cenv cx /\ target_pre cenv cx env bt st /\
+    type_place_target env bt = SOME vt /\
+    eval_base_place cx bt st = (INL (PlaceR (StoragePlace tr slot tv)),em) /\
+    (!b ix s0 pv sm ev se value sf mid name keys tr0 root rtv.
+      RTC (\u v. (?fld. v = AttributeTarget u fld) \/
+                  (?ix. v = SubscriptTarget u ix)) (SubscriptTarget b ix) bt /\
+      target_through_dynarray cenv b /\
+      target_pre cenv cx env (SubscriptTarget b ix) s0 /\
+      (?vty. type_place_target env (SubscriptTarget b ix) = SOME vty) /\
+      eval_base_place cx b s0 = (INL pv,sm) /\
+      eval_expr cx ix sm = (INL ev,se) /\
+      read_result cx ev se = (INL value,sf) /\
+      declared_storage_region cx mid name keys = SOME (tr0,root,rtv) /\
+      (?leaf off path delta. pv = PlaceR (StoragePlace tr0 off leaf) /\
+        storage_subregion rtv path delta leaf /\ off = root + n2w delta) ==>
+      !q. w2n root <= q /\ q < w2n root + type_slot_size rtv ==>
+        lookup_storage (n2w q) (get_storage cx sf tr0) =
+        lookup_storage (n2w q) (get_storage cx sm tr0)) ==>
+    storage_read_live cx tr (get_storage cx em tr) slot tv /\
+    slots_in_range (get_storage cx em tr) (w2n slot) tv
+Proof
+  measureInduct_on `base_assignment_target_size bt` >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_inv cenv cx env em` by metis_tac[eval_base_place_sim_inv] >>
+  reverse (Cases_on `target_through_dynarray cenv bt`)
+  >- (irule target_no_dynamic_storage_projection >> metis_tac[]) >>
+  Cases_on `bt` >>
+  gvs[target_through_dynarray_def, type_place_target_AttributeTarget,
+      type_place_target_SubscriptTarget, Once evaluate_def, bind_def,
+      AllCaseEqs(), return_def, raise_def] >>
+  `target_pre cenv cx env b st` by metis_tac[target_pre_sub] >>
+  `expr_sim_inv cenv cx env s''` by metis_tac[eval_base_place_sim_inv] >>
+  Cases_on `pv` >> gvs[extend_place_def, raise_def]
+  >>~- ([`HashMapRef b' c t v`],
+      drule eval_base_place_region >>
+      simp[storage_result_region_def, storage_mapping_region_def] >> strip_tac >>
+      Cases_on `v` >>
+      gvs[extend_place_def, bind_def, lift_option_type_def, return_def,
+          raise_def, AllCaseEqs(), vyperMiscTheory.option_CASE_rator] >>
+      rename1 `hashmap_slot c (encode_hashmap_key t key)` >>
+      qpat_x_assum `!subs leaf_slot leaf_tv.
+        resolve_hashmap_leaf _ _ _ subs = SOME (leaf_slot,leaf_tv) ==> _`
+        (qspec_then `[ValueSubscript key]` mp_tac) >>
+      simp[resolve_hashmap_leaf_def, subscript_to_value_def] >> strip_tac >>
+      conj_tac
+      >- (irule accountsRelPropsTheory.declared_storage_region_read_live >>
+          goal_assum (drule_at Any)) >>
+      irule declared_region_post_index_slots >> conj_tac
+      >- (goal_assum (drule_at Any)) >>
+      fs[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
+  Cases_on `p` >>
+  gvs[extend_memory_place_def, extend_place_def, bind_def, return_def,
+      raise_def, ignore_bind_def, AllCaseEqs()] >>
+  rename1 `extend_storage_place cx base_tr base_slot base_tv sb sf =
+    (INL (StoragePlace tr slot tv),em)` >>
+  qpat_x_assum `!y. base_assignment_target_size y < _ ==> _`
+    (qspec_then `b` mp_tac) >> simp[] >>
+  disch_then (drule_at (Pat `eval_base_place _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
+  disch_then (drule_at (Pat `target_pre _ _ _ _ _`)) >> simp[] >>
+  (impl_tac
+   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+       first_x_assum irule >>
+       simp[] >>
+       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+       simp[] >> conj_tac >- metis_tac[] >>
+       simp[relationTheory.RTC_RULES_RIGHT1])) >>
+  strip_tac >>
+  drule vyperPlaceFramesTheory.extend_storage_place_state >> strip_tac >> gvs[]
+  >~ [`target_pre cenv cx env (AttributeTarget b s) st`]
+  >- (drule_all aug_place_storage_extend_live_all >> strip_tac >> gvs[] >>
+      drule_all aug_place_storage_extend_range >> simp[]) >>
+  `storage_read_live cx base_tr (get_storage cx em base_tr) base_slot base_tv /\
+   slots_in_range (get_storage cx em base_tr) (w2n base_slot) base_tv` by
+    (Cases_on `type_slot_size base_tv = 0`
+     >- (conj_tac
+         >- (simp[storage_read_live_def] >>
+             metis_tac[wordsTheory.w2n_lt, arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+         irule (cj 1 vyperLookupStorageTheory.slots_in_range_zero_reads) >> simp[]) >>
+     Cases_on `target_through_dynarray cenv b`
+     >- (drule eval_base_place_region >>
+         simp[storage_result_region_def, storage_place_region_def] >> strip_tac >>
+         irule storage_saved_place_capacity_frame >>
+         conj_tac >- fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> simp[] >>
+         goal_assum (drule_at Any) >>
+         goal_assum (drule_at Any) >> simp[] >>
+         qexists_tac `get_storage cx s'' base_tr` >> simp[] >>
+         rpt strip_tac >>
+         qpat_x_assum `!b' ix s0 pv' sm ev se value sf mid name keys tr0 root rtv. _`
+           (qspecl_then [`b`,`e`] mp_tac) >>
+         disch_then (drule_at (Pat `eval_base_place _ _ _ = _`)) >>
+         disch_then (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+         disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+         disch_then (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
+         simp[relationTheory.RTC_REFL] >> metis_tac[]) >>
+     irule target_no_dynamic_storage_projection >> metis_tac[]) >>
+  drule_all aug_place_storage_extend_live_all >> strip_tac >> gvs[] >>
+  drule_all aug_place_storage_extend_range >> simp[]
 QED
