@@ -77,7 +77,7 @@ Proof
   drule_all for_bytes_runtime_extent >> strip_tac >>
   `ptr_covers G tn src s 32` by
     (gvs[ptr_covers_def] >> goal_assum (drule_at Any) >> decide_tac) >>
-  `w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) <=
+  `w2n (((mload (w2n a) s + 31w) && ~31w) + 32w) <=
     type_memory_size tv` by metis_tac[] >>
   drule_all compile_bytes_copy_endpoint_frames >> simp[]
 QED

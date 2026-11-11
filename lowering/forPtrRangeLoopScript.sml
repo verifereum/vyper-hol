@@ -55,9 +55,9 @@ Theorem for_range_loop_ptr:
     (i2w (n1 + &j) : bytes32) <> i2w n2) ==>
   !k es s G tn.
     k <= LENGTH vs /\ Inv k es G tn s /\
-    gas_admissible (eval_for cx tyv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
+    gas_admissible (eval_for cx tyv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
-      (eval_for cx tyv id stmts (DROP k vs)) (es,s,G,tn)
+      (eval_for cx tyv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
       (\res ee gf tf t. res = INL () /\ Done ee gf tf t)
       (\res ee gt r. ?ex. res = INR ex /\
         !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)

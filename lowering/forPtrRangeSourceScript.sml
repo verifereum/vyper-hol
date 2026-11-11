@@ -6,7 +6,7 @@ Ancestors forPtrRangePrepare forPtrRounds stmtSimForParts gasContext
 Libs monadsyntax
 
 Theorem for_body_admissible:
-  gas_admissible (eval_for cx tyv id stmts (v::vs))
+  gas_admissible (eval_for cx tyv id stmts (Value v::vs))
     (stmt_res_ok lctx) es /\ lookup_scopes id es.scopes = NONE ==>
   gas_admissible (eval_stmts cx stmts)
     (stmt_res_ok (InLoop exit_lbl incr_lbl))
@@ -17,7 +17,7 @@ Theorem for_body_admissible:
 Proof
   strip_tac >> simp[gas_admissible_def] >> rpt gen_tac >> strip_tac >>
   rename1 `eval_stmts cx stmts _ = (res, ee)` >>
-  Cases_on `eval_for cx tyv id stmts (v::vs) (es with gas_obs := gs)` >>
+  Cases_on `eval_for cx tyv id stmts (Value v::vs) (es with gas_obs := gs)` >>
   rename1 `_ = (lr, le)` >>
   `stmt_res_ok lctx lr` by
     (gvs[gas_admissible_def] >> metis_tac[]) >>
@@ -27,7 +27,7 @@ QED
 
 Theorem for_range_body_admissible:
   k < LENGTH vs /\
-  gas_admissible (eval_for cx tyv id stmts (DROP k vs))
+  gas_admissible (eval_for cx tyv id stmts (MAP Value (DROP k vs)))
     (stmt_res_ok lctx) es /\ lookup_scopes id es.scopes = NONE ==>
   gas_admissible (eval_stmts cx stmts)
     (stmt_res_ok (InLoop exit_lbl incr_lbl))
@@ -39,7 +39,7 @@ Proof
   strip_tac >> irule for_body_admissible >>
   drule rich_listTheory.DROP_CONS_EL >> disch_tac >>
   conj_tac >- simp[] >>
-  qexistsl_tac [`lctx`, `DROP (SUC k) vs`] >> gvs[]
+  qexistsl_tac [`lctx`, `MAP Value (DROP (SUC k) vs)`] >> gvs[]
 QED
 
 Theorem for_push_scope_marked_ptr:

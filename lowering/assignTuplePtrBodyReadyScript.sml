@@ -75,7 +75,8 @@ Proof
       gvs[run_deploy_lowering_def, AllCaseEqs(), lowering_policy_ok_def]) >>
   gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
   rpt (pairarg_tac >> gvs[]) >>
-  gvs[run_lowering_def, AllCaseEqs(), lowering_policy_ok_def]
+  gvs[run_lowering_def, vyperCompilerTheory.run_grouped_lowering_def,
+      AllCaseEqs(), lowering_policy_ok_def]
 QED
 
 Theorem tuple_eval_bind_notation_ptr:

@@ -17,11 +17,11 @@ Theorem for_checked_range_tail_action:
   (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
       check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
       eval_for cx tyv id stmts
-        (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od) =
+        (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od) =
   if n1 <= n2 then
     if Num (n2-n1) <= bound then
       eval_for cx tyv id stmts
-        (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1)))
+        (MAP Value (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1))))
     else raise (Error (RuntimeError "For too long"))
   else raise (Error (RuntimeError "no range"))
 Proof
@@ -78,7 +78,7 @@ Theorem for_checked_range_tail_compose:
        gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 Gc tc (OK cc) /\
        gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
          (eval_for cx tyv id stmts
-           (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1))))
+           (MAP Value (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1)))))
          (es,cc,Gc,tc) Post
          (\res ee gt r. !tail.
            stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)) ==>
@@ -86,7 +86,7 @@ Theorem for_checked_range_tail_compose:
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (es,s,G,tn) Post
     (\res ee gt r. !tail.
       stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
@@ -133,7 +133,7 @@ Theorem for_checked_range_entry_outcome_ptr:
        lookup_var x (ee with vs_vars := vs) = lookup_var x ee) ==>
      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
        (eval_for cx tyv id stmts
-         (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1))))
+         (MAP Value (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1)))))
        (es,jump_to lbl (ee with vs_vars := vs),
         DRESTRICT G (COMPL {cv;rv;g1;z1;g2;z2;ev}),
         tn with t_var := tn.t_var |++
@@ -144,7 +144,7 @@ Theorem for_checked_range_entry_outcome_ptr:
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (es,ee,G,tn) Post
     (\res ee gt r. !tail.
       stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
@@ -225,13 +225,13 @@ Theorem for_range_checked_tail_outcome_ptr:
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (stmt_res_ok lctx) es ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (es,s,G,tn)
     (\res ee Gf tf t.
        res = INL () /\ stmt_lands lctx sf res t /\ ~t.vs_halted /\

@@ -18,12 +18,13 @@ Theorem for_ptr_literal_source_action[local]:
     (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
        bound stmts) =
   eval_for cx tyv id stmts
-    (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+    (MAP Value (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))))
 Proof
   strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM,
        lift_option_type_def, lift_option_def, return_def, raise_def,
-       eval_iterator_range_lit, check_def, assert_def, compatible_bound_def]
+       eval_iterator_range_lit, check_def, assert_def, compatible_bound_def,
+       listTheory.MAP_GENLIST, combinTheory.o_DEF]
 QED
 
 Theorem compile_for_range_frag_ptr:
@@ -33,7 +34,8 @@ Theorem compile_for_range_frag_ptr:
     (!s. lower_value compile_expr cenv fty e1 s = (Lit (i2w n1), s)) /\
     (!s. lower_value compile_expr cenv fty e2 s = (Lit (i2w n2), s)) /\
     (?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)) /\
-    evaluate_type (get_tenv cx) fty = SOME tyv /\ type_memory_size tyv = 32 /\
+    evaluate_type (get_tenv cx) fty = SOME tyv /\ word_memory_type tyv /\
+    type_memory_size tyv = 32 /\
     32 <= type_memory_bytes cenv fty /\
     type_memory_bytes cenv fty < dimword (:256) /\
     n1 <= n2 /\ Num (n2 - n1) <= bound /\ Num (n2 - n1) < dimword (:256) /\

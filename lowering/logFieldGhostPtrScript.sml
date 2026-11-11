@@ -13,8 +13,8 @@ Theorem ghost_kept_exterior_transport:
     FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
     (!n b sz'. local_region ce es.scopes s0 n b sz' ==>
       off+sz <= b \/ b+sz' <= off) /\ off <= i /\ i < off+sz ==> i NOTIN writes) /\
-  (!n b sz i. local_region ce es.scopes s0 n b sz /\ b <= i /\ i < b+sz /\
-    (!k. dynarray_len_at ce n k ==> i < b+k \/ b+k+32 <= i) ==> i NOTIN writes) ==>
+  (!n b sz i. local_region ce es.scopes s0 n b sz /\ b <= i /\ i < b+sz ==>
+    i NOTIN writes) ==>
   ghost_kept ce es sa G0 tn0 s0 H tm
 Proof
   rw[ghost_kept_def] >> metis_tac[not_fresh_at_mono]
