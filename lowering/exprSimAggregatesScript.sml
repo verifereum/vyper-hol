@@ -290,6 +290,7 @@ Resume compile_make_array_vv_case[tuple]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
+  gvs[exprLoweringTheory.tuple_literal_types_def, listTheory.MAP_MAP_o] >>
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
@@ -311,7 +312,7 @@ Resume compile_make_array_vv_case[tuple]:
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all buffer_alloc_counted >> strip_tac >> gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) aggregate_make_tuple_sim >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_make_tuple_sim >>
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>

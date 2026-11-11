@@ -2427,15 +2427,16 @@ Proof
 QED
 
 Theorem compile_make_tuple_labels:
-  !cfn cenv es buf off s.
+  !cfn cenv es tys buf off s.
     (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
       EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
-    cs_extends s (SND (compile_make_tuple cfn cenv es buf off s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_make_tuple cfn cenv es buf off s)))
+    cs_extends s (SND (compile_make_tuple cfn cenv es tys buf off s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_make_tuple cfn cenv es tys buf off s)))
 Proof
   Induct_on `es`
   >- simp[compile_make_tuple_def, comp_return_labels] >>
-  rpt gen_tac >> disch_tac >>
+  rpt gen_tac >> disch_tac >> Cases_on `tys`
+  >- simp[compile_make_tuple_def, comp_return_labels] >>
   once_rewrite_tac[compile_make_tuple_def] >> simp[LET_THM] >> BETA_TAC >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>

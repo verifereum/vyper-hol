@@ -10,7 +10,8 @@ Ancestors
 
 Theorem aggregate_make_tuple_sim_mem:
   !args ce cx env off sa out sb es tvs func inst x b asz s0 ctx tops.
-  compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var x) off sa =
+    (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
@@ -170,7 +171,7 @@ Resume aggregate_make_tuple_sim_mem[tail]:
   irule aggregate_tuple_value_bind_any >>
   goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `!ce' cx' env' off' sa' out' sb' es' tvs' func' inst' x' b' asz' s0' ctx' tops'. _`
-    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>

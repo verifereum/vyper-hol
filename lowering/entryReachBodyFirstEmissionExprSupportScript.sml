@@ -2028,9 +2028,12 @@ QED
 
 Theorem make_tuple_extension_only[local]:
   (!ce ty e s. cs_extends s (SND (cfn ce ty e s))) ==>
-  !ce es buf off. cs_appends (compile_make_tuple cfn ce es buf off)
+  !ce es tys buf off. cs_appends (compile_make_tuple cfn ce es tys buf off)
 Proof
   strip_tac >> gen_tac >> Induct >> rpt gen_tac >>
+  simp_tac (srw_ss()) [compile_make_tuple_def, LET_THM]
+  >- simp[cs_appends_return] >>
+  Cases_on `tys` >>
   simp_tac (srw_ss()) [compile_make_tuple_def, LET_THM]
   >- simp[cs_appends_return] >>
   irule cs_appends_bind >> reverse conj_tac

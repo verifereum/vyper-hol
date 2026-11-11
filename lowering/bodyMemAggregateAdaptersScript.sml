@@ -142,7 +142,8 @@ Proof
   `OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) =
      SOME (REPLICATE (LENGTH args) tv)` by
     (irule exprSimAggregateEncodingTheory.OPT_MMAP_uniform_map >> metis_tac[]) >>
-  `compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb)` by
+  `compile_make_tuple compile_expr ce args (MAP expr_type args) (Var x) off sa =
+     (out,sb)` by
     (gvs[] >> metis_tac[]) >>
   drule aggregate_make_tuple_sim_mem >> disch_then drule >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>

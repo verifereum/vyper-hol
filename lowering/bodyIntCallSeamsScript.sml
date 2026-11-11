@@ -55,7 +55,8 @@ End
      the callee's body is call-safe at the pushed context.
    - Code: the call's code as compile_call_intcall_shape gives it: the
      arguments (sa to st1), the return buffer rbuf if any (st1 to st2),
-     the staging (st2 to st3), the INVOKE of the callee's label at st3
+     the staging at the callee's declared parameter types (st2 to st3),
+     the INVOKE of the callee's label at st3
      with the buffer's pointer first when the callee returns through it,
      and after it the results' store into rbuf, up to sb; vv is rbuf's
      located value, or the void call's literal.
@@ -101,8 +102,9 @@ Definition intcall_entry_def:
     ?arg_vals st1 st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
       cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
       compile_multi_vvs compile_expr cenv es sa = (arg_vals,st1) /\
-      compile_stage_intcall_args cenv arg_vals pvs (MAP expr_type es) st2 =
-        (invoke_args,st3) /\
+      compile_stage_intcall_args cenv arg_vals pvs
+        (TAKE (LENGTH es) (cenv.ce_func_param_types (nsid_to_string (NONE,name))))
+        st2 = (invoke_args,st3) /\
       lbl = internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
               (nsid_to_string (NONE,name))
               (cenv.ce_func_param_types (nsid_to_string (NONE,name)))

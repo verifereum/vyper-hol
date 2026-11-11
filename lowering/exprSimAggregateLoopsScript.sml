@@ -201,21 +201,22 @@ QED
 (* One child's code: its value, the destination ADD, the unwrap and the
    store, then the rest of the tuple. *)
 Theorem aggregate_tuple_cons_compile[local]:
-  compile_make_tuple compile_expr ce (e::args) buf off sa = (out,sb) /\
+  compile_make_tuple compile_expr ce (e::args) (expr_type e::MAP expr_type args)
+    buf off sa = (out,sb) /\
   (lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e)) ==>
   ?vv sm dst sn op su st.
     compile_expr ce (expr_type e) e sa = (vv,sm) /\
     emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
     unwrap_value ce vv sn = (op,su) /\
     compile_store_memory ce op dst (expr_type e) (expr_type e) su = ((),st) /\
-    compile_make_tuple compile_expr ce args buf
+    compile_make_tuple compile_expr ce args (MAP expr_type args) buf
       (off + type_memory_bytes ce (expr_type e)) st = (out,sb)
 Proof
   strip_tac >>
   `!src dst. compile_store_memory ce src dst (expr_type e) (lowered_value_type ce e) =
              compile_store_memory ce src dst (expr_type e) (expr_type e)` by
     metis_tac[aggregate_store_lowered_elem] >>
-  qpat_x_assum `compile_make_tuple _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_make_tuple _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once compile_make_tuple_def, comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `compile_expr ce (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv,sm)` >>
@@ -461,7 +462,8 @@ QED
 
 Theorem aggregate_make_tuple_sim:
   !args ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls.
-  compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var x) off sa =
+    (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
@@ -979,7 +981,7 @@ Theorem compile_make_array_elems_as_tuple:
   EVERY (\e. expr_type e = elem_ty) args ==>
   compile_make_array_elems cfn ce args elem_ty (type_memory_bytes ce elem_ty)
     header buf idx =
-  compile_make_tuple cfn ce args buf
+  compile_make_tuple cfn ce args (MAP expr_type args) buf
     ((if header then 32 else 0) + idx * type_memory_bytes ce elem_ty)
 Proof
   Induct >> simp[compile_make_array_elems_def, compile_make_tuple_def] >>
@@ -1124,7 +1126,8 @@ Proof
   `OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) =
      SOME (REPLICATE (LENGTH args) tv)` by
     (irule OPT_MMAP_uniform_map >> metis_tac[]) >>
-  `compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb)` by
+  `compile_make_tuple compile_expr ce args (MAP expr_type args) (Var x) off sa =
+     (out,sb)` by
     (gvs[] >> metis_tac[]) >>
   `off + type_memory_size_list (REPLICATE (LENGTH args) tv) <= asz` by
     gvs[type_memory_size_list_replicate] >>

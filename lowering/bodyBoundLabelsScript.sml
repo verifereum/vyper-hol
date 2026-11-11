@@ -607,13 +607,15 @@ Theorem bound_labels_make_tuple:
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks
       (SND (cfn ce (expr_type e) e t))))) ==>
-  !buf off s. (!l. compiler_label l ==> P l) /\
+  !tys buf off s. (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_make_tuple cfn ce es buf off s))))
+    (SND (compile_make_tuple cfn ce es tys buf off s))))
 Proof
   Induct >> simp[compile_make_tuple_def, comp_return_def] >>
-  rpt strip_tac >> irule bound_labels_bind >> conj_tac
+  rpt strip_tac >> Cases_on `tys` >>
+  gvs[compile_make_tuple_def, comp_return_def] >>
+  irule bound_labels_bind >> conj_tac
   >- (simp[] >> rpt strip_tac >>
       rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
         bound_labels_unwrap_value, bound_labels_store_memory]),

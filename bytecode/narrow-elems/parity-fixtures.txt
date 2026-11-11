@@ -1,0 +1,9 @@
+n01_intcall_tuple_narrow_str
+n02_intcall_dynarr_lit_narrow_str
+n03_struct_lit_narrow_str
+n04_intcall_tuple_wider_str
+n05_intcall_dynarr_lit_wider_str
+n06_struct_lit_wider_str
+n07_intcall_str_arg_wider
+n08_annassign_tuple_lit_wider_str
+n09_intcall_two_str_args_wider

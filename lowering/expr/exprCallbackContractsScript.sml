@@ -54,10 +54,12 @@ Proof
 QED
 
 Theorem compile_make_tuple_callback_contract:
-  ∀es buf off. expr_callbacks_agree f g cenv es ⇒
-    compile_make_tuple f cenv es buf off = compile_make_tuple g cenv es buf off
+  ∀es tys buf off. expr_callbacks_agree f g cenv es ⇒
+    compile_make_tuple f cenv es tys buf off =
+    compile_make_tuple g cenv es tys buf off
 Proof
-  Induct >> simp[compile_make_tuple_def] >> rpt strip_tac >> fs[]
+  Induct >> simp[compile_make_tuple_def] >> rpt strip_tac >>
+  Cases_on `tys` >> fs[compile_make_tuple_def]
 QED
 
 Theorem compile_make_array_elems_callback_contract:
@@ -465,8 +467,8 @@ Proof
 QED
 
 Theorem compile_make_tuple_list_child_calls:
-  compile_make_tuple (expr_child_callback (list_size expr_size args) f) cenv args buf off =
-  compile_make_tuple f cenv args buf off
+  compile_make_tuple (expr_child_callback (list_size expr_size args) f) cenv args tys buf off =
+  compile_make_tuple f cenv args tys buf off
 Proof
   irule compile_make_tuple_callback_contract >> irule expr_list_child_callback_agrees
 QED

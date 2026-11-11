@@ -354,11 +354,12 @@ Proof
 QED
 
 Theorem compiler_make_tuple_result:
-  !es off sa op sb.
-    compile_make_tuple cfn cenv es buf off sa = (op,sb) ==> op = buf
+  !es tys off sa op sb.
+    compile_make_tuple cfn cenv es tys buf off sa = (op,sb) ==> op = buf
 Proof
   Induct >> simp[Once compile_make_tuple_def, LET_THM, comp_return_def] >>
-  rpt gen_tac >>
+  rpt gen_tac >> Cases_on `tys`
+  >- simp[Once compile_make_tuple_def, comp_return_def] >>
   simp[Once compile_make_tuple_def, LET_THM,
        comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> metis_tac[]
@@ -388,8 +389,8 @@ Theorem compiler_aggregate_buffer_var:
     compile_make_array cfn cenv es et sz lw buf sa = (op,sb) /\
     (!x. buf = Var x ==> not_fresh_at sa x) ==>
     !x. op = Var x ==> not_fresh_at sb x) /\
-  (!sa sb op es off buf.
-    compile_make_tuple cfn cenv es buf off sa = (op,sb) /\
+  (!sa sb op es tys off buf.
+    compile_make_tuple cfn cenv es tys buf off sa = (op,sb) /\
     (!x. buf = Var x ==> not_fresh_at sa x) ==>
     !x. op = Var x ==> not_fresh_at sb x) /\
   (!sa sb op fields ty off buf.
@@ -1502,12 +1503,13 @@ QED
 Theorem compiler_make_tuple_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) ==>
-  !es buf off sa. local_ptrs_reserved ce sa ==>
-    compile_make_tuple f ce es buf off sa =
-    compile_make_tuple g ce es buf off sa
+  !es tys buf off sa. local_ptrs_reserved ce sa ==>
+    compile_make_tuple f ce es tys buf off sa =
+    compile_make_tuple g ce es tys buf off sa
 Proof
   strip_tac >> Induct >- simp[compile_make_tuple_def] >>
-  rpt gen_tac >> strip_tac >> simp[compile_make_tuple_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `tys` >- simp[compile_make_tuple_def] >>
+  simp[compile_make_tuple_def] >>
   irule compiler_reserved_bind_cong >> simp[] >> qexists `ce` >> simp[] >>
   rpt gen_tac >> strip_tac >>
   irule compiler_reserved_bind_cong >> simp[ci_mono_emit_op] >>

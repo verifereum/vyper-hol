@@ -223,14 +223,15 @@ Proof
 QED
 
 Theorem compile_make_tuple_open:
-  !cfn cenv es buf off sa r sb.
+  !cfn cenv es tys buf off sa r sb.
     acyclic_struct_metadata cenv.ce_struct_fields /\
     ~block_is_terminated sa /\
-    compile_make_tuple cfn cenv es buf off sa = (r,sb) ==>
+    compile_make_tuple cfn cenv es tys buf off sa = (r,sb) ==>
     ~block_is_terminated sb
 Proof
   Induct_on `es` >- (simp[compile_make_tuple_def, comp_return_def] >> metis_tac[]) >>
-  rpt gen_tac >>
+  rpt gen_tac >> Cases_on `tys`
+  >- (simp[compile_make_tuple_def, comp_return_def] >> metis_tac[]) >>
   simp[compile_make_tuple_def, comp_bind_def, comp_ignore_bind_def] >>
   ntac 4 (pairarg_tac >> simp[]) >> strip_tac >>
   drule emit_op_nonterminator_open >> simp[is_terminator_def] >> disch_tac >>

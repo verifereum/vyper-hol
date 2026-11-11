@@ -156,6 +156,7 @@ Resume body_make_array_nowiden_mem[tuple]:
   rw[expr_vv_sim_mem_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
+  gvs[exprLoweringTheory.tuple_literal_types_def, listTheory.MAP_MAP_o] >>
   `expr_sim_inv cenv cx env st` by gvs[expr_body_pre_def] >>
   `!e s. MEM e es /\ expr_sim_inv cenv cx env s ==>
     expr_body_pre cenv cx env e s` by
@@ -180,7 +181,7 @@ Resume body_make_array_nowiden_mem[tuple]:
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >> gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)
     bodyMemAggregateLoopsTheory.aggregate_make_tuple_sim_mem >>
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>

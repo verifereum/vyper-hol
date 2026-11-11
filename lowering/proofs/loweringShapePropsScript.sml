@@ -5340,14 +5340,16 @@ Theorem compile_make_tuple_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
        (cfn ce t child) (\v st. value_shape_ok st v)) ==>
-  !es cur_offset R. ~supported_exprs_exists expr_shape_root es /\ shape_stable R ==>
+  !es tys cur_offset R. ~supported_exprs_exists expr_shape_root es /\ shape_stable R ==>
   shape_step internal compiler_label
     (\st. R st /\ cenv_shape_ok st cenv /\ plain_operand st buf_op)
-    (compile_make_tuple cfn cenv es buf_op cur_offset)
+    (compile_make_tuple cfn cenv es tys buf_op cur_offset)
     (\v st. R st /\ plain_operand st v)
 Proof
   strip_tac >> Induct >> rpt strip_tac >> gvs[supported_exprs_exists_every] >>
   simp[compile_make_tuple_def]
+  >- (irule shape_step_return >> simp[]) >>
+  Cases_on `tys` >> simp[compile_make_tuple_def]
   >- (irule shape_step_return >> simp[]) >>
   shape_collection_cons_tac ()
 QED

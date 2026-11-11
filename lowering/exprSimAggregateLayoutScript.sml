@@ -96,7 +96,8 @@ Theorem compile_struct_lit_as_tuple:
         (case ty of StructT nsid => nsid_to_string nsid | _ => "")) name =
       SOME (expr_type e,type_memory_bytes ce (expr_type e))) fields ==>
     compile_struct_lit cfn ce ty fields buf off =
-    compile_make_tuple cfn ce (MAP SND fields) buf off
+    compile_make_tuple cfn ce (MAP SND fields) (MAP expr_type (MAP SND fields))
+      buf off
 Proof
   Induct >> simp[exprLoweringTheory.compile_struct_lit_def,
                  exprLoweringTheory.compile_make_tuple_def] >>
@@ -345,7 +346,7 @@ QED
 
 Theorem tuple_child_compile:
   compile_make_tuple (expr_child_callback (list_size expr_size args) compile_expr)
-    ce args buf off sa = compile_make_tuple compile_expr ce args buf off sa
+    ce args tys buf off sa = compile_make_tuple compile_expr ce args tys buf off sa
 Proof
   AP_THM_TAC >> MATCH_ACCEPT_TAC compile_make_tuple_list_child_calls
 QED
@@ -373,8 +374,9 @@ QED
 Theorem compile_tuple_literal:
   compile_expr ce ty (Builtin ann (MakeArray NONE bnd) args) sa =
   let (ba,sm) = compile_alloc_buffer
-    (SUM (MAP (type_memory_bytes ce o expr_type) args)) sa in
-  as_ptr_val ann LocMemory (compile_make_tuple compile_expr ce args ba.buf_operand 0 sm)
+    (SUM (MAP (type_memory_bytes ce) (tuple_literal_types ann args))) sa in
+  as_ptr_val ann LocMemory (compile_make_tuple compile_expr ce args
+    (tuple_literal_types ann args) ba.buf_operand 0 sm)
 Proof
   simp_tac (srw_ss() ++ boolSimps.ETA_ss) [make_array_not_names, compile_expr_builtin_dispatch,
     cj 2 compile_expr_raw_def,
@@ -395,13 +397,17 @@ QED
 Theorem compile_tuple_literal_inv:
   compile_expr ce ty (Builtin ann (MakeArray NONE bnd) args) sa = (vv,sb) ==>
   ?ba sm u.
-    compile_alloc_buffer (SUM (MAP (type_memory_bytes ce o expr_type) args)) sa = (ba,sm) /\
-    compile_make_tuple compile_expr ce args ba.buf_operand 0 sm = (u,sb) /\
+    compile_alloc_buffer
+      (SUM (MAP (type_memory_bytes ce) (tuple_literal_types ann args))) sa = (ba,sm) /\
+    compile_make_tuple compile_expr ce args (tuple_literal_types ann args)
+      ba.buf_operand 0 sm = (u,sb) /\
     vv = LocatedValue ann (mk_ptr u LocMemory)
 Proof
-  Cases_on `compile_alloc_buffer (SUM (MAP (type_memory_bytes ce o expr_type) args)) sa` >>
+  Cases_on `compile_alloc_buffer
+    (SUM (MAP (type_memory_bytes ce) (tuple_literal_types ann args))) sa` >>
   rename1 `compile_alloc_buffer _ sa = (ba,sm)` >>
-  Cases_on `compile_make_tuple compile_expr ce args ba.buf_operand 0 sm` >>
+  Cases_on `compile_make_tuple compile_expr ce args (tuple_literal_types ann args)
+    ba.buf_operand 0 sm` >>
   simp[compile_tuple_literal, as_ptr_val_def] >> strip_tac >> gvs[] >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED

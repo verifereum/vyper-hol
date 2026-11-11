@@ -25,7 +25,10 @@ Ancestors
    store.  From a state s in P, the ALLOCA leaves s1, which binds the
    buffer operand to s.vs_alloca_next, and the store leaves t, which
    differs from s1 only in variables fresh at sm and in memory, where it
-   holds the value at the buffer and keeps the bytes outside the buffer. *)
+   holds the value at the buffer and keeps the bytes outside the buffer.
+   ty is the callee's declared parameter type: an argument of a narrower
+   String or Bytes type is the same bytes in memory at ty
+   (bytestring_val_in_memory_transfer), so the premises hold there. *)
 Theorem stage_mem_arg_frag:
   !ctx cenv ty tenv tv v val_op sa sm sb buf P Q R.
     compile_alloc_buffer (MAX 32 (type_memory_bytes cenv ty)) sa =
