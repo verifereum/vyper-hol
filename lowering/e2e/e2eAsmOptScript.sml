@@ -96,9 +96,9 @@ QED
    layout from es; its code is prog's followed by the section es's code
    has after prog'. *)
 Theorem opt_entry_fields:
-  !tops prog prog' am tx es cp.
-  call_state_rel tops (assemble prog') am tx es ==>
-  let vs = entry_venom_state prog cp (opt_entry_frame prog prog' es) in
+  !tops prog prog' am tx es cp vs.
+  call_state_rel tops (assemble prog') am tx es /\
+  vs = entry_venom_state prog cp (opt_entry_frame prog prog' es) ==>
     vs.vs_outcomes = MAP SND (call_trace es) /\
     vs.vs_gas_readings = gas_readings es /\
     vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\

@@ -958,10 +958,10 @@ Proof
   qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`, `rpolicy`,
                `out.po_unit`] mp_tac opt_entry_code_layout_valid >>
   impl_tac >- simp[] >> strip_tac >>
-  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`] mp_tac
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`,
+               `entry_venom_state prog cplan (opt_entry_frame prog prog' es)`] mp_tac
     opt_entry_fields >>
-  impl_tac >- first_assum ACCEPT_TAC >>
-  CONV_TAC (LAND_CONV (SIMP_CONV bool_ss [LET_THM])) >> strip_tac >>
+  impl_tac >- simp[] >> strip_tac >>
   qabbrev_tac `vs = entry_venom_state prog cplan (opt_entry_frame prog prog' es)` >>
   `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
    call_outcomes_ok am tx vs.vs_outcomes` by simp[] >>

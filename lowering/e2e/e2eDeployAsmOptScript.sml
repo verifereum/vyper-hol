@@ -59,9 +59,9 @@ QED
    constructor arguments, which follow prog' in es's code; swapping the
    shadow frame's code is the shadow of the swapped frame. *)
 Theorem opt_deploy_entry_fields:
-  !tops prog prog' am tx es cp.
-  deploy_state_rel tops (assemble prog') am tx es ==>
-  let vs = deploy_entry_state prog cp tops (opt_entry_frame prog prog' es) in
+  !tops prog prog' am tx es cp vs.
+  deploy_state_rel tops (assemble prog') am tx es /\
+  vs = deploy_entry_state prog cp tops (opt_entry_frame prog prog' es) ==>
     vs.vs_code = assemble prog ++ vs.vs_data_section /\
     (FST (HD (shadow_root es).contexts)).msgParams.code =
       assemble prog' ++ vs.vs_data_section /\

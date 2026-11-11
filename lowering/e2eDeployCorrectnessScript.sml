@@ -226,10 +226,10 @@ Proof
   qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`] mp_tac
     opt_deploy_state_rel >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`] mp_tac
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`,
+               `deploy_entry_state prog cplan tops (opt_entry_frame prog prog' es)`] mp_tac
     opt_deploy_entry_fields >>
-  impl_tac >- first_assum ACCEPT_TAC >>
-  CONV_TAC (LAND_CONV (SIMP_CONV bool_ss [LET_THM])) >> strip_tac >>
+  impl_tac >- simp[] >> strip_tac >>
   qabbrev_tac `es_p = opt_entry_frame prog prog' es` >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
