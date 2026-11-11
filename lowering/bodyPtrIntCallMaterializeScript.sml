@@ -404,3 +404,52 @@ Resume intcall_materialize_path_ptr[scalar_join]:
 QED
 
 Finalise intcall_materialize_path_ptr
+
+Theorem intcall_materialize_counted_ptr:
+  materialize_internal_params ce caps st = (ce',st') /\
+  run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s = OK t /\
+  (!k. inst_seq_ptr D 0 ctx fn PG G tn
+    (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts)
+    (s with vs_inst_idx := k) H un) /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts)
+    (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0 H un
+    (OK (t with vs_inst_idx := s.vs_inst_idx +
+      LENGTH (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts)))
+Proof
+  strip_tac >>
+  drule intCallCalleeTheory.materialize_internal_params_shape >> strip_tac >>
+  gvs[] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) new` by
+    (fs[EVERY_MEM, is_terminator_def] >> rpt strip_tac >>
+     first_x_assum drule >> strip_tac >> gvs[is_terminator_def]) >>
+  `FILTER (\i. i.inst_opcode = GAS) new = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM] >>
+     rpt strip_tac >>
+     qpat_x_assum `!i. MEM i new ==> i.inst_opcode = ALLOCA \/ _` drule >>
+     strip_tac >> gvs[]) >>
+  qpat_assum `run_inst_seq _ s = OK t`
+    (mp_then (Pos last) mp_tac run_inst_seq_gas_path_ptr) >>
+  simp[DROP_PREFIX] >> disch_then irule >> fs[DROP_PREFIX] >>
+  first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]
+QED
+
+Theorem intcall_materialize_return_frame:
+  materialize_internal_params ce caps st = (ce',st') /\
+  return_buf_ptr d ce G tn s /\
+  (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
+  (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==>
+    not_fresh_at st p /\ op_taint tn (Var p) = {}) /\
+  (!p. not_fresh_at st p ==>
+    lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+    op_taint un (Var p) = op_taint tn (Var p)) ==>
+  return_buf_ptr d ce' H un t /\
+  (!p sz. ce'.ce_return_pc = SOME (PtrVar (Var p) sz) ==>
+    op_taint un (Var p) = {})
+Proof
+  strip_tac >>
+  drule intCallCalleeTheory.materialize_internal_params_shape >> strip_tac >>
+  gvs[] >> Cases_on `d` >> simp[return_buf_ptr_def] >>
+  PairCases_on `x` >> gvs[return_buf_ptr_def, ptr_covers_def] >> metis_tac[]
+QED
