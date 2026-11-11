@@ -13,6 +13,7 @@ Ancestors
   abiEncoderArrayCode abiEncoderArrayBodyCode fragExec rich_list
   venomExecSemantics emitHelperProps list arithmetic exprSimAbiEncodeObliviousFacts
   exprSimAbiEncodeObliviousCode exprSimAbiEncodeObliviousContext
+  abiStaticLoopBody eventTopicCode
 Libs
   fragFuelLib
 
@@ -148,6 +149,123 @@ Proof
       Cases_on `run_inst_seq code v` >>
       gvs[instIdxIndepTheory.exec_result_map_def, ADD_CLAUSES]) >>
   simp[]
+QED
+
+(* The last store repairs arbitrary writes in the middle of the body. *)
+Theorem encode_static_saved_counter[local]:
+  !id aid sid iv nv ip mid s t p.
+    eval_operand ip s = SOME p /\ ip <> Var iv /\ ip <> Var nv /\
+    EVERY (\i. ~is_terminator i.inst_opcode /\
+      EVERY (\name. ip <> Var name /\ Var iv <> Var name) i.inst_outputs) mid /\
+    run_inst_seq ([mk_inst id MLOAD [ip] [iv]] ++ mid ++
+      [mk_inst aid ADD [Var iv; Lit 1w] [nv];
+       mk_inst sid MSTORE [ip; Var nv] []]) s = OK t ==>
+    mload (w2n p) t = mload (w2n p) s + 1w
+Proof
+  rpt gen_tac >> strip_tac >>
+  `step_inst_base (mk_inst id MLOAD [ip] [iv]) s =
+    OK (update_var iv (mload (w2n p) s) s)` by simp[step_MLOAD] >>
+  fs[exprLoweringPropsTheory.run_inst_seq_def] >>
+  Cases_on `run_inst_seq mid (update_var iv (mload (w2n p) s) s)` >>
+  gvs[exprLoweringPropsTheory.run_inst_seq_append,
+      exprLoweringPropsTheory.run_inst_seq_append_err] >>
+  `eval_operand ip v = SOME p /\
+   eval_operand (Var iv) v = SOME (mload (w2n p) s)` by
+    (conj_tac
+     >- (drule run_inst_seq_operand_frame >>
+         disch_then (qspec_then `ip` mp_tac) >>
+         impl_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
+         simp[ssaOperandFrameTheory.eval_operand_update_var_avoids]) >>
+     drule run_inst_seq_operand_frame >>
+     disch_then (qspec_then `Var iv` mp_tac) >>
+     impl_tac >- (fs[EVERY_MEM] >> metis_tac[]) >> simp[eval_operand_update_var]) >>
+  `step_inst_base (mk_inst aid ADD [Var iv; Lit 1w] [nv]) v =
+     OK (update_var nv (mload (w2n p) s + 1w) v)` by
+    (irule step_ADD >> simp[eval_operand_lit]) >>
+  `step_inst_base (mk_inst sid MSTORE [ip; Var nv] [])
+      (update_var nv (mload (w2n p) s + 1w) v) =
+     OK (mstore (w2n p) (mload (w2n p) s + 1w)
+       (update_var nv (mload (w2n p) s + 1w) v))` by
+    (irule step_MSTORE >>
+     simp[eval_operand_update_var,
+       ssaOperandFrameTheory.eval_operand_update_var_avoids]) >>
+  drule exprLoweringPropsTheory.run_inst_seq_append >>
+  disch_then (qspec_then
+    `[mk_inst aid ADD [Var iv; Lit 1w] [nv]; mk_inst sid MSTORE [ip; Var nv] []]`
+    assume_tac) >>
+  gvs[exprLoweringPropsTheory.run_inst_seq_def,
+      venomMemPropsTheory.mload_mstore_same]
+QED
+
+Theorem encode_static_body_work_counter[local]:
+  !id v labels dst src info asz msz s t p.
+    eval_operand (Var (compiler_var_name v 0)) s = SOME p /\
+    run_inst_seq (abi_static_loop_body_work id v labels dst src info asz msz) s = OK t ==>
+    mload (w2n p) t = mload (w2n p) s + 1w
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `mid =
+    TL (abiStaticLoopCode$abi_static_loop_body_prefix id v dst src asz msz) ++
+    static_info_insts (id+14) (v+11)
+      (Var (compiler_var_name v 10)) (Var (compiler_var_name v 7)) info` >>
+  `abi_static_loop_body_work id v labels dst src info asz msz =
+    [mk_inst (id+7) MLOAD [Var (compiler_var_name v 0)] [compiler_var_name v 4]] ++
+    mid ++ [mk_inst (id+14+static_info_id_count info) ADD
+      [Var (compiler_var_name v 4); Lit 1w]
+      [compiler_var_name v (11+static_info_var_count info)];
+    mk_inst (id+15+static_info_id_count info) MSTORE
+      [Var (compiler_var_name v 0);
+       Var (compiler_var_name v (11+static_info_var_count info))] []]` by
+    (Cases_on `info` >>
+     simp[Abbr `mid`, abi_static_loop_body_work_def,
+      abiStaticLoopCodeTheory.abi_static_loop_body_def,
+      abiStaticLoopCodeTheory.abi_static_loop_body_prefix_def,
+      abiStaticLoopCodeTheory.static_info_insts_def,
+      FRONT_APPEND]) >>
+  fs[] >>
+  drule_at (Pat `run_inst_seq _ _ = OK _`)
+    (SIMP_RULE std_ss [APPEND] encode_static_saved_counter) >>
+  disch_then (qspec_then `p` irule) >>
+  Cases_on `info` >>
+  simp[Abbr `mid`, abiStaticLoopCodeTheory.abi_static_loop_body_prefix_def,
+    abiStaticLoopCodeTheory.static_info_insts_def,
+    abiStaticLoopCodeTheory.static_info_var_count_def,
+    abiStaticLoopCodeTheory.compiler_var_name_add,
+    mk_inst_def, is_terminator_def]
+QED
+
+Theorem encode_static_body_work_frame[local]:
+  !id v labels dst src info asz msz s t op.
+    run_inst_seq (abi_static_loop_body_work id v labels dst src info asz msz) s = OK t /\
+    EVERY (\name. op <> Var name) (abi_static_loop_body_names v info) ==>
+    eval_operand op t = eval_operand op s
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule run_inst_seq_operand_frame >>
+  qexists_tac `abi_static_loop_body_work id v labels dst src info asz msz` >>
+  simp[] >> Cases_on `info` >>
+  fs[abi_static_loop_body_names_def] >>
+  simp[abi_static_loop_body_work_def,
+    abiStaticLoopCodeTheory.abi_static_loop_body_def,
+    abiStaticLoopCodeTheory.abi_static_loop_body_prefix_def,
+    abiStaticLoopCodeTheory.static_info_insts_def,
+    abiStaticLoopCodeTheory.static_info_var_count_def,
+    abiStaticLoopCodeTheory.compiler_var_name_add,
+    FRONT_APPEND, mk_inst_def, is_terminator_def]
+QED
+
+Theorem encode_static_body_work_vars_kept[local]:
+  !id v labels dst src info asz msz s t N.
+    run_inst_seq (abi_static_loop_body_work id v labels dst src info asz msz) s = OK t /\
+    EVERY (\name. ~var_below N name) (abi_static_loop_body_names v info) ==>
+    vars_kept N {} s t
+Proof
+  rpt gen_tac >> strip_tac >> simp[vars_kept_def] >>
+  rpt strip_tac >>
+  `eval_operand (Var x) t = eval_operand (Var x) s` suffices_by
+    simp[venomStateTheory.eval_operand_def] >>
+  irule encode_static_body_work_frame >>
+  goal_assum (drule_at Any) >> fs[EVERY_MEM] >> metis_tac[]
 QED
 
 (* The loop counter lives in a buffer the function allocates itself and
