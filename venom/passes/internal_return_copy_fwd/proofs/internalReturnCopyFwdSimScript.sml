@@ -832,6 +832,50 @@ Proof
   drule_all taint_agree_operand_clean >> simp[eval_operand_def] >> metis_tac[]
 QED
 
+Theorem ircf_redirect_operand_defined_forward:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\ MEM op inst.inst_operands /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY ssa_form C.ctx_functions /\ taint_agree D X tn s t /\
+  IS_SOME (eval_operand op s) ==>
+  IS_SOME (eval_operand (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb) op) t)
+Proof
+  strip_tac >> Cases_on `op` >> simp[ircf_redirect_op_def, eval_operand_def]
+  >- (rename1 `lookup_var (ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v) t` >>
+      Cases_on `ircf_redirect fn bb (ircf_tbb fn_meta rma C fn bb) v = v`
+      >- metis_tac[taint_agree_operand_defined, eval_operand_def] >>
+      drule_all ircf_redirect_read_address_defined >>
+      strip_tac >> gvs[eval_operand_def]) >>
+  metis_tac[taint_agree_operand_defined, eval_operand_def]
+QED
+
+Theorem ircf_redirect_operands_defined_forward:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY ssa_form C.ctx_functions /\ taint_agree D X tn s t /\
+  IS_SOME (eval_operands inst.inst_operands s) ==>
+  IS_SOME (eval_operands
+    (MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) inst.inst_operands) t)
+Proof
+  strip_tac >>
+  fs[o1LowerDloadJointInternalEffectsTheory.ld_eval_operands_defined,
+     EVERY_MAP, EVERY_MEM] >>
+  rpt strip_tac >> irule ircf_redirect_operand_defined_forward >>
+  simp[EVERY_MEM] >>
+  goal_assum (drule_at Any) >> fs[] >> metis_tac[]
+QED
+
 Theorem ircf_redirect_clean_read_slice:
   wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
   ircf_alias_boundary fn s G /\
@@ -1352,6 +1396,49 @@ Proof
   simp[] >> metis_tac[ircf_dead_noninvoke_mono]
 QED
 
+Theorem ircf_unchanged_nonassign_step:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  active_inst fn inst s /\ o1_ctx_shape C /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ ctx_inst_ids_distinct C /\
+  EVERY wf_function C.ctx_functions /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\ MEM fn C.ctx_functions /\
+  EVERY (\f. MEM f.cf_fn C.ctx_functions) stk /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> INVOKE /\
+  EL s.vs_inst_idx (ircf_tbb fn_meta rma C fn bb).bb_instructions = inst /\
+  ptr_discipline lo C vs /\ taint_within D C vs /\ dead_wf D /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  step_inst_base inst s = r /\ terminates r ==>
+  (!s'. r = OK s' ==> ?t'. step_inst_base inst t = OK t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s' stk)
+      (step_taint inst s s' tn) s' t') /\
+  (!v s'. r = IntRet v s' ==> ?t'. step_inst_base inst t = IntRet v t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s' t') /\
+  (!s'. r = Halt s' ==> ?t'. step_inst_base inst t = Halt t' /\
+    dead_result_rel D (Halt s') (Halt t')) /\
+  (!a s'. r = Abort a s' ==> ?t'. step_inst_base inst t = Abort a t')
+Proof
+  strip_tac >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[occ_frame_reachable_projection] >>
+  `!off len p. MEM (off,len) (source_memory_read_ranges inst s) /\
+      off <= p /\ p < off+len ==>
+      p NOTIN ircf_dead (ircf_dst_ids fn_meta rma C) s stk` by
+    (rpt strip_tac >> drule_all ircf_unchanged_dead_read_disjoint >> simp[]) >>
+  drule_all taint_agree_step_base >> strip_tac >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  `?t'. step_inst_base inst t = OK t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk)
+      (step_taint inst s s' tn) s' t'` by metis_tac[] >>
+  qexists_tac `t'` >> simp[] >> irule ircf_dead_step_agree >>
+  metis_tac[step_inst_non_invoke]
+QED
+
 Theorem ircf_unchanged_nonassign_ok:
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
   active_inst fn inst s /\ o1_ctx_shape C /\
@@ -1374,19 +1461,8 @@ Theorem ircf_unchanged_nonassign_ok:
       (step_taint inst s s' tn) s' t'
 Proof
   strip_tac >>
-  `frame_reachable vs C stk PG G tn fn inst s` by
-    metis_tac[occ_frame_reachable_projection] >>
-  `!off len p. MEM (off,len) (source_memory_read_ranges inst s) /\
-      off <= p /\ p < off+len ==>
-      p NOTIN ircf_dead (ircf_dst_ids fn_meta rma C) s stk` by
-    (rpt strip_tac >> drule_all ircf_unchanged_dead_read_disjoint >> simp[]) >>
   `terminates (OK s')` by simp[passSimulationDefsTheory.terminates_def] >>
-  drule_all taint_agree_step_base >> strip_tac >>
-  `?t'. step_inst_base inst t = OK t' /\
-    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk)
-      (step_taint inst s s' tn) s' t'` by metis_tac[] >>
-  qexists_tac `t'` >> simp[] >> irule ircf_dead_step_agree >>
-  metis_tac[step_inst_non_invoke]
+  drule_all ircf_unchanged_nonassign_step >> metis_tac[]
 QED
 
 Theorem ircf_redirect_mload_ok:
