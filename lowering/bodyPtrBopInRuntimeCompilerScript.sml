@@ -5,7 +5,7 @@ Ancestors exprLowering context compileEnv bodyPtrBopInHeaderCode
 
 Theorem membership_runtime_loop_extends:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load ctor imm loc) is_in sa = (op,sb) ==>
+    (compile_ptr_load ctor imm loc) NONE is_in sa = (op,sb) ==>
   cs_extends sa sb
 Proof
   strip_tac >> gvs[SRULE [] membership_loop_layout] >>

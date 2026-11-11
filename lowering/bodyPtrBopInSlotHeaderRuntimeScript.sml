@@ -11,7 +11,7 @@ Theorem membership_dynamic_slot_header_runtime:
       emit_inst ASSERT [valid] [];
       comp_return len od) early = (len,sa) /\
   compile_array_membership_loop needle arr_op len 1 1
-    (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm (if tr then LocTransient else LocStorage)) NONE is_in sa = (op,sb) /\
   fn_has_code early sa fn /\ fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = early.cs_current_bb /\ s.vs_inst_idx = LENGTH early.cs_current_insts /\
@@ -61,7 +61,7 @@ Proof
      (if tr then LocTransient else LocStorage) (MAP (typed_val_to_w256 tv) vs) Gh tnh sh` by
     (irule membership_slot_load_contract >> simp[] >>
      goal_assum (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >> gvs[] >>
-     goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`)) >>
      simp[] >> metis_tac[]) >>
   `LENGTH vs < dimword (:256)` by (fs[value_has_type_def] >> decide_tac) >>
   `!x. needle = Var x ==> not_fresh_at sa x` by metis_tac[] >>

@@ -39,10 +39,10 @@ Proof
      (if tr then LocTransient else LocStorage) ws G tn s` by
     (irule membership_slot_load_contract >> simp[] >>
      goal_assum (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >> gvs[] >>
-     goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`)) >>
      simp[] >> metis_tac[]) >>
   irule membership_loop_conditional >> simp[] >>
-  goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[eval_operand_def, op_prov_def, op_taint_def] >> gvs[]
 QED
 
@@ -79,13 +79,13 @@ Proof
   simp[membership_dynamic_compile_split, vv_location_def, vv_operand_def] >>
   pure_once_rewrite_tac[comp_bind_def] >> simp[LET_THM] >>
   pairarg_tac >> simp[] >> strip_tac >>
-  rename1 `compile_array_membership_loop _ _ _ _ _ _ _ mid = _` >>
+  rename1 `compile_array_membership_loop _ _ _ _ _ _ _ _ mid = _` >>
   `cs_extends sa mid /\ cs_extends mid sb` by
     metis_tac[membership_runtime_header_extends, membership_runtime_loop_extends] >>
   `fn_has_code sa mid fn /\ fn_has_code mid sb fn` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   irule membership_dynamic_slot_header_runtime >> simp[] >>
   goal_assum (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >> gvs[] >>
-  goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
 QED

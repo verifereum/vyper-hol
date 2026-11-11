@@ -75,7 +75,7 @@ Proof
   rewrite_tac[membership_dynamic_compile_split] >>
   pure_once_rewrite_tac[comp_bind_def] >> rewrite_tac[LET_THM] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  rename1 `compile_array_membership_loop _ _ _ _ _ _ _ mid = _` >>
+  rename1 `compile_array_membership_loop _ _ _ _ _ _ _ _ mid = _` >>
   `cs_extends sa mid` by
     (irule membership_runtime_header_extends >> goal_assum (drule_at Any)) >>
   drule membership_runtime_loop_extends >>

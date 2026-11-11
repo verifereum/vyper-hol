@@ -49,7 +49,7 @@ QED
 
 Theorem membership_code_load_path:
   compile_array_membership_loop needle arr len stride skip
-    (compile_ptr_load F imm LocCode) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocCode) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
@@ -112,7 +112,7 @@ QED
 
 Theorem membership_code_array_element_prefix:
   compile_array_membership_loop needle arr_op len 32 prefix
-    (compile_ptr_load F imm LocCode) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocCode) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame sa G0 tn0 s0 G tn s /\
   membership_loop_registers sa i r G tn s /\
@@ -160,7 +160,7 @@ QED
 
 Theorem membership_code_array_element_prefix_source:
   compile_array_membership_loop needle arr_op len 32 prefix
-    (compile_ptr_load F imm LocCode) is_in sa = (op,sb) /\
+    (compile_ptr_load F imm LocCode) NONE is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   membership_loop_frame early G0 tn0 s0 Gh tnh sh /\
   (!x. not_fresh_at early x ==> not_fresh_at sa x) /\
