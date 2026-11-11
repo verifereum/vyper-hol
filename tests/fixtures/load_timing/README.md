@@ -15,9 +15,9 @@ storage scalar or pops the memory array.
 evaluating the second argument, which changes that storage slot.
 `subscript_base_copy` returns 5: the base `self.a[0]` is read before the index
 call writes `self.a[0][1]`, since the index writes a variable the base reads.
-`subscript_base_live` returns 7: the index `0` cannot change the base, so
-`self.d[0][0]` stays a live location, and the assignment reads it after the
-target's internal call has written 7 there.
+`subscript_base_live` returns 7: the base `self.d[0]` is a fixed array, not one
+reached through a dynamic array, so it stays a live location while the index
+call writes 7 to `self.d[0][1]`, and the read sees that write.
 
 `vyperLoadTimingTestTheory` translates the annotated AST and layout in `oracle/`,
 binds the entry's declared parameters, and executes the source interpreter.

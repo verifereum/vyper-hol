@@ -261,8 +261,15 @@ Proof
 QED
 
 Theorem first_emission_stage_intcall_args:
-  !ce vals flags tys a x b.
-  compile_stage_intcall_args ce vals flags tys a = (x,b) ==>
+  !cfn ce es flags tys.
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_stage_intcall_args cfn ce es flags tys a = (x,b) ==>
   cs_extends a b /\
   ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
     a.cs_current_insts = b.cs_current_insts) \/
@@ -272,16 +279,21 @@ Theorem first_emission_stage_intcall_args:
 Proof
   ho_match_mp_tac compile_stage_intcall_args_ind >> rpt conj_tac
   >- simp[compile_stage_intcall_args_def, comp_return_def, cs_extends_refl] >>
-  rpt gen_tac >> disch_tac >>
+  rpt gen_tac >> rpt disch_tac >>
   once_rewrite_tac[compile_stage_intcall_args_def] >> simp_tac (srw_ss()) [LET_THM] >>
   ho_match_mp_tac first_emission_bind >>
-  (conj_tac >- metis_tac[first_emission_unwrap_value] >> gen_tac)
+  (conj_tac >- metis_tac[] >> gen_tac)
   >~ [`compile_alloc_buffer`]
   >- (ho_match_mp_tac first_emission_strong >>
       ho_match_mp_tac first_emission_strong_bind >> conj_tac
       >- metis_tac[first_emission_alloc_buffer] >>
       gen_tac >> simp[LET_THM, GSYM cs_appends_def] >>
       CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      irule cs_appends_bind >> conj_tac
+      >- (rw[cs_appends_def] >>
+          qspecl_then [`ce`, `vv`, `st`] mp_tac (cj 1 unwrap_value_labels) >>
+          simp[]) >>
+      gen_tac >> BETA_TAC >>
       irule cs_appends_ignore_bind >> conj_tac
       >- (IF_CASES_TAC >> simp[cs_appends_emit_helpers] >>
           IF_CASES_TAC
@@ -293,9 +305,9 @@ Proof
           qspecl_then [`ce`, `val_op`, `buf_alloc.buf_operand`, `ty`, `vv_type vv`, `st`]
             mp_tac (cj 1 compile_store_memory_labels) >> simp[]) >>
       irule cs_appends_bind >> simp[cs_appends_return] >>
-      rw[cs_appends_def] >>
-      qspecl_then [`ce`, `vals`, `flags`, `tys`, `st`] mp_tac
-        (cj 1 compile_stage_intcall_args_labels) >> simp[]) >>
+      rw[cs_appends_def] >> metis_tac[]) >>
+  ho_match_mp_tac first_emission_bind >>
+  (conj_tac >- metis_tac[first_emission_unwrap_value] >> gen_tac) >>
   ho_match_mp_tac first_emission_bind >>
   (conj_tac >- metis_tac[] >> metis_tac[first_emission_return])
 QED
@@ -457,8 +469,6 @@ Proof
   simp[Once compile_call_def, LET_THM] >>
   map_every qid_spec_tac [`b`, `x`, `a`] >>
   ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (ho_match_mp_tac first_emission_multi_vvs >> metis_tac[]) >>
-  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
   >- (Cases_on `n > 0` >> simp[]
       >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
           >- metis_tac[first_emission_alloc_buffer] >>
@@ -467,7 +477,7 @@ Proof
       ho_match_mp_tac first_emission_pair_let >> conj_tac
       >- metis_tac[first_emission_alloc_buffer] >> simp[cs_extends_refl]) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- metis_tac[first_emission_stage_intcall_args] >>
+  >- (irule first_emission_stage_intcall_args >> metis_tac[]) >>
   gen_tac >> Cases_on `n > 0` >> simp[]
   >- (Cases_on `return_buf` >> simp_tac (srw_ss()) [LET_THM]
       >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
@@ -2260,11 +2270,11 @@ Proof
 QED
 
 Theorem first_emission_slice_result[local]:
-  !m src data start len sz addr out.
+  !m src data start len sz addr.
   (m = compile_slice_data src data start len sz \/
    m = compile_slice_calldata start len sz \/
    m = compile_slice_code start len sz \/
-   m = compile_slice_extcode addr start len out data) ==>
+   m = compile_slice_extcode addr start len sz) ==>
   !a x b. m a = (x,b) ==>
   cs_extends a b /\
   (!fn. fn_has_code a b fn ==> ?bb i.
@@ -2338,13 +2348,10 @@ Resume first_emission_builtin_slice[slice_extcode]:
   ho_match_mp_tac first_emission_pair_let >>
   (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >>
-  (conj_tac >- (ho_match_mp_tac first_emission_strong >>
-    ho_match_mp_tac first_emission_slice_pairs >> metis_tac[])) >>
-  PairCases >> simp[] >> ho_match_mp_tac first_emission_pair_let >>
   (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
   gen_tac >> rpt gen_tac >>
-  qmatch_goalsub_abbrev_tac `as_ptr_val ret_ty LocMemory (m st4)` >>
-  Cases_on `m st4` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val ret_ty LocMemory (m st3)` >>
+  Cases_on `m st3` >> simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
   qspec_then `m` mp_tac first_emission_slice_result >>
   simp[Abbr `m`] >> metis_tac[]
 QED

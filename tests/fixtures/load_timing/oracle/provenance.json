@@ -58,11 +58,11 @@
       "source_sha256": "d67d81261609d1daf1a96b310a7acf5ca5ed1dea8ec18d51305a37f499a9db9f"
     },
     "subscript_base_live": {
-      "deploy_sha256": "4c6be863d61e1edbd57e900c4265ea6e72ecafb1816386b2ed6dacac1a65d7ae",
-      "frontend_sha256": "b6e374583c5579501e89409fc1c8a8110464b1860857a6204570da54b2e17e6e",
-      "runtime_sha256": "b8a8a44104274ac4253586c294ec043d92dca1dc7af60d4d76a266dfc2eed59d",
+      "deploy_sha256": "6189009fe4991a0f04f91a9f7891882ea4b7dc6b9963f61c62c6a53034ccbad6",
+      "frontend_sha256": "c708e9fec7fba164c5355d39f269c61c018047989168a4adf4ff9b3c1e2f09ed",
+      "runtime_sha256": "19267fc303e55f2a03b2a0ea3d01e8f15e82f5abf64b72883901dc086a62e152",
       "source": "sources/subscript_base_live.vy",
-      "source_sha256": "16dbf3dd4e414bca7fee6fe2eccea23a46f204abdd6682e1321c7eee9e4e19c8"
+      "source_sha256": "1f330f588e4ecfc0be5470a36946a994ad0187cfc74fb3c6abd7e664723778e5"
     }
   },
   "producer": "pinned Python Vyper",

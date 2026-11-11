@@ -85,7 +85,7 @@
       "expected": 7,
       "fixture": "subscript_base_live",
       "returned": 7,
-      "runtime_sha256": "b8a8a44104274ac4253586c294ec043d92dca1dc7af60d4d76a266dfc2eed59d",
+      "runtime_sha256": "19267fc303e55f2a03b2a0ea3d01e8f15e82f5abf64b72883901dc086a62e152",
       "signature": "f()"
     }
   ],

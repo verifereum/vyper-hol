@@ -510,9 +510,16 @@ Theorem eval_expr_tuple_subscript[local]:
 Proof
   rpt gen_tac >>
   `~subscript_reads_base cx obj (Literal ity (IntL (&k)))` by
-    simp[vyperInterpreterTheory.subscript_reads_base_def,
-         vyperSubscriptOverlapTheory.subscript_overlap_def] >>
-  simp[Once evaluate_def, bind_def, return_def] >>
+    (`!vs. ~any_written vs []` by
+       (Induct >> simp[vyperSubscriptOverlapTheory.any_written_def]) >>
+     simp[vyperInterpreterTheory.subscript_reads_base_def,
+          vyperSubscriptOverlapTheory.subscript_overlap_def,
+          vyperSubscriptOverlapTheory.expr_accesses_def,
+          vyperSubscriptOverlapTheory.accesses_expr_def,
+          vyperSubscriptOverlapTheory.reached_functions_def,
+          vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    simp[th, Once evaluate_def, bind_def, return_def]) >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (rr, es1)` >>
   Cases_on `rr` >> simp[] >>
   simp[Once evaluate_def, evaluate_literal_def, return_def, read_result_def]

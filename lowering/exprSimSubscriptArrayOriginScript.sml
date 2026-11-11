@@ -100,6 +100,9 @@ Proof
   >- (PairCases_on `p` >> gvs[Once evaluate_def] >>
       gvs[lookup_global_not_memory]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  qpat_x_assum `(if subscript_reads_base _ _ _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
   drule select_result_memory_origin >> strip_tac >> gvs[] >>
   rename1 `type_place_expr env obj = SOME obj_vt` >>
   first_x_assum (qspec_then `expr_size obj` mp_tac) >>
@@ -107,6 +110,14 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+
+Theorem snapshot_vv_location[local]:
+  compile_snapshot_vv cenv T vv s = (v,t) ==>
+  vv_location v = NONE \/ vv_location v = SOME LocMemory
+Proof
+  rw[compile_snapshot_vv_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[vv_location_def, mk_ptr_def]
+QED
 
 Theorem compile_subscript_code_origin:
   vv_location (FST (compile_subscript f cenv rt ty obj idx sa)) = SOME LocCode ==>
@@ -117,6 +128,8 @@ Proof
   Cases_on `place_type cenv obj` >>
   simp[compile_subscript_def, comp_bind_def, comp_return_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >>
+  qpat_x_assum `(if copies_subscript_base _ _ _ then _ else _) _ = _` mp_tac >>
+  rw[comp_return_def] >> imp_res_tac snapshot_vv_location >> gvs[] >>
   simp[vv_location_def, mk_ptr_def] >>
   Cases_on `t` >> simp[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> simp[vv_location_def, mk_ptr_def]

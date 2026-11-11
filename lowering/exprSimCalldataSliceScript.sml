@@ -662,6 +662,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule slice_calldata_shape >> strip_tac >>
   drule slice_calldata_parts >> strip_tac >> gvs[] >>
+  rename1 `emit_op CALLDATASIZE [] sa = (csize,_)` >>
+  rename1 `compile_alloc_buffer _ _ = (_,s3)` >>
   drule_all slice_calldata_prefix_shape >> strip_tac >>
   `s3.cs_current_insts = s2.cs_current_insts ++ emitted_insts s2 s3 /\
    s2.cs_next_var <= s3.cs_next_var` by
@@ -833,6 +835,11 @@ Proof
      qpat_assum `!off len. regions_disjoint _ _ (w2n w) _ ==> _` irule >>
      qpat_x_assum `!name b len. local_region _ _ t _ _ _ ==> _` drule >>
      simp[regions_disjoint_def] >> decide_tac) >>
+  `FLOOKUP t.vs_allocas (sa.cs_next_id + 7) = SOME (w2n w,32 + 32 * word_size n)` by
+    (qpat_assum `s2.cs_next_id = _` (fn th =>
+       qpat_assum `FLOOKUP t.vs_allocas s2.cs_next_id = _`
+         (mp_tac o REWRITE_RULE [th])) >>
+     simp[]) >>
   `pure_frame cenv func es sa s u` by
     (match_mp_tac exprSimPropsTheory.pure_frame_fresh_alloca >>
      qpat_assum `MEM _ (fn_insts _)` (irule_at Any) >>
