@@ -22,7 +22,7 @@ Ancestors
   list rich_list finite_map
   fragExec  exprSimAlloc exprSimCopy exprSimStorageCopy
   intCallReturnMem intCallResult typedMemoryCopy exprSimTypedAlloc valueCopy valueCopyBytes
-  loweringSlice localPtrsProps stmtSimReturn
+  loweringSlice localPtrsProps stmtSimReturn emptyScopeMemoryFrame
   stmtLowering exprLowering emitHelper exprLoweringProps context compileEnv loweringStateRelDefs
   typedCopyDomain valueEncoding vyperTypeSystem vyperState vyperTyping
   venomExecSemantics venomInst venomState
@@ -53,37 +53,9 @@ Theorem typed_return_empty_state_frame[local]:
     lookup_var x t = lookup_var x s) ==>
   stmt_state_rel ctx func cenv cx (es with scopes := []) t
 Proof
-  rpt strip_tac >> drule copy_static_fields >> strip_tac >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
-     (es with scopes := []) t` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
-     simp[] >> reverse conj_tac
-     >- gvs[stmt_state_rel_def, state_rel_def] >>
-     rpt strip_tac >> first_x_assum irule >>
-     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> simp[regions_disjoint_def]) >>
-  rewrite_tac[stmt_state_rel_def] >> conj_tac
-  >- (irule state_rel_frame >> conj_tac
-      >- simp[local_ptrs_rel_def, local_region_def, lookup_scopes_def] >>
-      qexistsl_tac [`es with scopes := []`, `s`] >>
-      gvs[stmt_state_rel_def, state_rel_def, copy_static_def,
-          venom_state_component_equality, local_ptrs_rel_def,
-          local_region_def, lookup_scopes_def]) >>
-  conj_tac >- (irule alloca_inv_fields >> qexists_tac `s` >>
-               gvs[stmt_state_rel_def]) >>
-  conj_tac >- (irule alloca_room_fields >> qexists_tac `s` >>
-               gvs[stmt_state_rel_def]) >>
-  conj_tac >- (irule fmp_room_fields >> qexists_tac `s` >>
-               gvs[stmt_state_rel_def] >>
-               qpat_x_assum `copy_static t = copy_static s` mp_tac >>
-               simp[copy_static_def, venom_state_component_equality]) >>
-  conj_tac >- (irule immutable_alloca_sep_fields >>
-               qexistsl_tac [`s`, `es with scopes := []`] >>
-               gvs[stmt_state_rel_def, local_region_def, lookup_scopes_def]) >>
-  conj_tac >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
-               gvs[stmt_state_rel_def]) >>
-  gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
-      local_region_def, lookup_scopes_def] >> first_assum ACCEPT_TAC
+  strip_tac >> irule empty_scope_memory_frame >>
+  qexistsl_tac [`b`, `s`, `sz`] >> simp[] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 
