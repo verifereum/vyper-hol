@@ -391,6 +391,39 @@ Proof
   asm_rewrite_tac[] >> decide_tac
 QED
 
+(* Runtime-only assembly: the compiler boundary supplies these two phases. *)
+Theorem sa_iterate_initialized[local]:
+  fuel_outcome G ctx fn r 1
+    (\s. s.vs_current_bb = lc /\ s.vs_inst_idx = 0 /\
+         vars_kept N {} r s /\
+         ?k. k <= w2n (n2w n : 256 word) /\
+             lookup_var c s = SOME (n2w k)) /\
+  (!s. s.vs_current_bb = lc /\ s.vs_inst_idx = 0 /\
+       vars_kept N {} r s /\
+       (?k. k <= w2n (n2w n : 256 word) /\
+            lookup_var c s = SOME (n2w k)) ==>
+    ?j. j <= Kr /\ fuel_outcome G ctx fn s j
+      (\t. (at_point sz t /\ vars_kept N {} r t) \/
+           ((t.vs_current_bb = lc /\ t.vs_inst_idx = 0 /\
+             vars_kept N {} r t /\
+             ?k. k <= w2n (n2w n : 256 word) /\
+                 lookup_var c t = SOME (n2w k)) /\
+            w2n (n2w n : 256 word) - w2n (THE (lookup_var c t)) <
+            w2n (n2w n : 256 word) - w2n (THE (lookup_var c s))))) ==>
+  ?j. j <= 1 + (2 ** 256) * Kr /\
+      fuel_outcome G ctx fn r j
+        (\t. at_point sz t /\ vars_kept N {} r t)
+Proof
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `fuel_outcome G ctx fn r 1 H` >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn r _ Q` >>
+  qabbrev_tac `mu = \s. w2n (n2w n : 256 word) -
+                         w2n (THE (lookup_var c s))` >>
+  irule fuel_outcome_compose >> qexists_tac `H` >> asm_rewrite_tac[] >>
+  rpt strip_tac >> irule fuel_outcome_iterate >> qexistsl_tac [`H`, `mu`] >>
+  asm_simp_tac bool_ss [Abbr `mu`, sa_measure_bound, Abbr `H`, Abbr `Q`]
+QED
+
 (* Given a bound for the element copy (the recursive call), the copy of a
    static array of n elements is bounded.  The slow path counts a fresh
    counter from 0 while it is below the literal n2w n; each round copies one
