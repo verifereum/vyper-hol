@@ -1,6 +1,8 @@
 Theory extRetDynamicPreparePtr
 Ancestors
-  abiEncoderArrayTail extRetAbiBytesCountedPtr extRetBytesCopyCountedPtr
+  abiEncoderArrayTail abiEncoderArrayBodyCode abiDecoderContract abiDecoderReentry
+  extRetLoopAddressesAmbientPtr
+  extRetAbiBytesCountedPtr extRetBytesCopyCountedPtr
   extRetBulkCopyCountedPtr extRetLoopScalarAmbientPtr
   fragGasPathPtr fragExec bodyPtrDefs ptrDiscipline ptrSafeRun
   emitHelperProps exprLoweringProps emitHelper compileEnv
@@ -66,4 +68,76 @@ Proof
     (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
      qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[]) >>
   simp[] >> metis_tac[]
+QED
+
+(* The actual preparation phases, before the recursive to_buf call. *)
+Theorem abi_array_prepare_ambient_counted_ptr:
+  abi_encode_array_addresses (Var ip) (Var src) (Var dst) asz msz sa =
+    (((Var idx,Var child_src),(Var data,Var head)),sc) /\
+  abi_encode_array_tail (Var data) (Var cursor) sc =
+    ((Var offset,Var child_dst),sb) /\
+  fn_has_code sa sc fn /\ fn_has_code sc sb fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa ip /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\ not_fresh_at sa cursor /\
+  lookup_var ip s = SOME p /\ lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  ptr_covers G tn ip s 32 /\ ptr_covers G tn src s scap /\ ptr_covers G tn dst s dcap /\
+  mload (w2n p) s = n2w j /\
+  (!i. w2n p <= i /\ i < w2n p+32 ==> i NOTIN tn.t_mem) /\
+  lookup_var cursor s = SOME (n2w c) /\ c < dimword(:256) /\
+  ptr_covers G tn cursor s 32 /\ mload c s = n2w k /\
+  (!i. c <= i /\ i < c+32 ==> i NOTIN tn.t_mem) /\
+  32+j*msz+msz <= scap /\ 32+j*asz+asz <= dcap /\
+  32+k+n <= dcap /\
+  w2n a+scap < dimword(:256) /\ w2n b+dcap < dimword(:256) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var idx sf = SOME (n2w j) /\ op_taint tnf (Var idx) = {} /\
+    lookup_var child_src sf = SOME (n2w (w2n a+32+j*msz)) /\
+    ptr_covers Gf tnf child_src sf msz /\
+    lookup_var head sf = SOME (n2w (w2n b+32+j*asz)) /\
+    ptr_covers Gf tnf head sf asz /\
+    lookup_var offset sf = SOME (n2w k) /\ op_taint tnf (Var offset) = {} /\
+    lookup_var child_dst sf = SOME (n2w (w2n b+32+k)) /\
+    ptr_covers Gf tnf child_dst sf n /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_memory = s.vs_memory /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+    sf.vs_call_ctx = s.vs_call_ctx /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v))
+Proof
+  strip_tac >>
+  drule abi_encode_array_addresses_shape >>
+  simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+       not_fresh_at_def] >> strip_tac >>
+  `not_fresh_at sc idx /\ not_fresh_at sc child_src /\
+   not_fresh_at sc data /\ not_fresh_at sc head /\
+   (!v. not_fresh_at sa v ==> not_fresh_at sc v)` by
+    (gvs[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+  drule_all abi_array_addresses_ambient_counted_ptr_with_base >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `lookup_var cursor sf = SOME (n2w c) /\ ptr_covers Gf tnf cursor sf 32 /\
+   mload c sf = n2w k /\
+   (!i. c <= i /\ i < c+32 ==> i NOTIN tnf.t_mem)` by
+    (gvs[ptr_covers_def, mload_def] >> metis_tac[]) >>
+  `k+n <= dcap-32 /\
+   w2n (n2w (w2n b+32):bytes32)+k < dimword(:256)` by
+    (`w2n b+32 < dimword(:256)` by decide_tac >>
+     simp[w2n_n2w, LESS_MOD] >> decide_tac) >>
+  drule_all abi_array_tail_ambient_counted_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf'`, `tnf'`, `sf'`] >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[]) >>
+  `w2n b+32 < dimword(:256)` by decide_tac >>
+  simp[w2n_n2w, LESS_MOD] >> gvs[ptr_covers_def] >>
+  rpt strip_tac >> metis_tac[not_fresh_at_def]
 QED
