@@ -1,5 +1,6 @@
 Theory o1LowerDloadRunnerExec
 Ancestors
+  gasEvents gasEventsFuel ctxLookupAgreeHelpers
   o1LowerDloadRunner o1LowerDloadNonCallContinuation
   o1LowerDloadRunnerEndpoints o1LowerDloadUnchangedFetch
   o1LowerDloadRunnerBoundary o1ContractSimplifyCfg o1ContractSimplifyCfgSrcFrame o1PassContract ptrDiscipline
@@ -52,6 +53,10 @@ Resume ld_runner_exec_clause[ok]:
   >- (drule_all ld_runner_branch_endpoint >> strip_tac >>
       qexists_tac `fuel` >>
       `exec_block fuel C bb s = OK v` by simp[Once exec_block_def] >>
+      `gas_events_block fuel C fn.fn_name bb s = []` by
+        (`i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE` by
+           (conj_tac >> strip_tac >> gvs[is_terminator_def]) >>
+         simp[Once gas_events_block_def, gas_events_step_def]) >>
       fs[Abbr `RR`] >> metis_tac[]) >>
   `v.vs_current_bb = s.vs_current_bb /\
    v.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
@@ -84,7 +89,8 @@ Resume ld_runner_exec_clause[ok]:
   `exec_block fuel C bb s =
    exec_block fuel C bb (v with vs_inst_idx := SUC s.vs_inst_idx)` by
     simp[Once exec_block_def] >>
-  gvs[] >> qexists_tac `m` >> simp[]
+  gvs[] >> qexists_tac `m` >> simp[] >>
+  sym_tac >> irule gas_events_block_nonterminator >> simp[]
 QED
 
 Resume ld_runner_exec_clause[halt]:
@@ -96,10 +102,15 @@ Resume ld_runner_exec_clause[halt]:
       `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
       drule_all ld_joint_unchanged_fetch >> strip_tac >>
       `exec_block m C' bb' t = Halt te` by simp[Once exec_block_def] >>
-      qexists_tac `m` >> gvs[Abbr `RR`]) >>
+      `fn'.fn_name = fn.fn_name` by metis_tac[lookup_function_selected_name] >>
+      qexists_tac `m` >> gvs[Abbr `RR`] >>
+      once_rewrite_tac[gas_events_block_def] >> simp[]) >>
   `taint_within D C vs` by fs[o1_src_inv_def] >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_runner_halt_endpoint) >>
-  strip_tac >> qexists_tac `fuel` >> gvs[Abbr `RR`]
+  strip_tac >> qexists_tac `fuel` >> gvs[Abbr `RR`] >>
+  `i.inst_opcode <> GAS` by
+    (drule step_inst_halt_opcodes >> rpt strip_tac >> gvs[]) >>
+  simp[Once gas_events_block_def, gas_events_step_def]
 QED
 
 Resume ld_runner_exec_clause[abort]:
@@ -111,9 +122,14 @@ Resume ld_runner_exec_clause[abort]:
       `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
       drule_all ld_joint_unchanged_fetch >> strip_tac >>
       `exec_block m C' bb' t = Abort reason te` by simp[Once exec_block_def] >>
-      qexists_tac `m` >> gvs[Abbr `RR`]) >>
+      `fn'.fn_name = fn.fn_name` by metis_tac[lookup_function_selected_name] >>
+      qexists_tac `m` >> gvs[Abbr `RR`] >>
+      once_rewrite_tac[gas_events_block_def] >> simp[]) >>
   drule_all ld_runner_abort_endpoint >>
-  strip_tac >> qexists_tac `fuel` >> gvs[Abbr `RR`]
+  strip_tac >> qexists_tac `fuel` >> gvs[Abbr `RR`] >>
+  `i.inst_opcode <> GAS` by
+    (drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>
+  simp[Once gas_events_block_def, gas_events_step_def]
 QED
 
 Resume ld_runner_exec_clause[ret]:
@@ -134,6 +150,8 @@ Resume ld_runner_exec_clause[ret]:
      fs[no_dret_def, EVERY_MEM] >> strip_tac >>
      gvs[is_raw_fmp_opcode_def]) >>
   drule_all ld_runner_ret_endpoint >> strip_tac >>
+  `gas_events_block fuel C fn.fn_name bb s = []` by
+    simp[Once gas_events_block_def, gas_events_step_def] >>
   qexists_tac `fuel` >> fs[Abbr `RR`] >> metis_tac[]
 QED
 
@@ -173,7 +191,19 @@ Resume ld_runner_exec_clause[call_ok]:
   `exec_block (MAX m m') C' bb' t =
    exec_block m' C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
     simp[Once exec_block_def] >>
-  qexists_tac `MAX m m'` >> simp[]
+  `fn'.fn_name = fn.fn_name` by metis_tac[lookup_function_selected_name] >>
+  `gas_events_step (MAX m m') C' fn.fn_name i t =
+   gas_events_step m C' fn.fn_name i t` by
+    (irule (cj 2 (cj 2 (cj 1 gas_events_fuel_extension))) >> simp[]) >>
+  `gas_events_block (MAX m m') C' fn'.fn_name bb'
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx) =
+   gas_events_block m' C' fn'.fn_name bb'
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule (cj 2 (cj 2 (cj 2 gas_events_fuel_extension))) >> simp[] >>
+     Cases_on `exec_block m' C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx)` >>
+     fs[terminates_def]) >>
+  qexists_tac `MAX m m'` >> simp[] >>
+  once_rewrite_tac[gas_events_block_def] >> simp[is_terminator_def] >> gvs[]
 QED
 Finalise ld_runner_exec_clause
 

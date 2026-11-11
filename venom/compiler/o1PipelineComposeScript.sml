@@ -417,6 +417,23 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem o1_prune_gas_events:
+  fcg = fcg_analyze unit.cu_context /\ o1_ctx_shape unit.cu_context /\
+  unit.cu_context.ctx_entry = SOME entry /\
+  lookup_function entry unit.cu_context.ctx_functions = SOME fn ==>
+  !fuel vs. gas_events_blocks fuel unit.cu_context fn vs =
+    gas_events_blocks fuel (prune_unit_fcg_unreachable unit fcg).cu_context fn vs
+Proof
+  rpt strip_tac >>
+  `ctx_wf unit.cu_context /\ wf_invoke_targets unit.cu_context` by
+    metis_tac[o1_ctx_shape_wf] >>
+  drule_all prune_unit_ctx_agree >> strip_tac >>
+  `fcg_is_reachable fcg entry` by metis_tac[fcg_analyze_entry_reachable] >>
+  `fn_calls_within (fcg_is_reachable fcg) fn` by metis_tac[ctx_agree_def] >>
+  irule (cj 3 gas_events_defs_ctx_agree) >>
+  qexists_tac `fcg_is_reachable fcg` >> simp[]
+QED
+
 (* Pruning keeps the source invariant: the pruned context's functions
    are among the source's, and its reachable frames are the source's. *)
 Theorem o1_src_inv_prune:

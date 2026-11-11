@@ -20,7 +20,7 @@
 Theory ctxSealAgree
 Ancestors
   venomExecSemantics venomInst venomState contextRawReachable
-  contextCodegenRel unitMemInv ctxLookupAgreeHelpers list
+  contextCodegenRel unitMemInv ctxLookupAgreeHelpers gasEvents list
 
 Definition fn_seal_eq_def:
   fn_seal_eq f g <=>
@@ -251,3 +251,87 @@ Proof
   drule_all raw_reachable_seal_eq >> strip_tac >>
   metis_tac[fn_seal_eq_sym]
 QED
+
+(* Sealing preserves the sites and order of reads, including those inside
+   INVOKE, for every finite execution prefix. *)
+Theorem gas_events_defs_seal_eq:
+  (!fuel C owner inst s C'. ctx_seal_eq C C' ==>
+     gas_events_step fuel C owner inst s =
+       gas_events_step fuel C' owner inst s) /\
+  (!fuel C owner bb s C'. ctx_seal_eq C C' ==>
+     gas_events_block fuel C owner bb s =
+       gas_events_block fuel C' owner bb s) /\
+  (!fuel C fn s C' fn'. ctx_seal_eq C C' /\ fn_seal_eq fn fn' ==>
+     gas_events_blocks fuel C fn s = gas_events_blocks fuel C' fn' s)
+Proof
+  ho_match_mp_tac gas_events_defs_ind >> rpt conj_tac
+  >- suspend "step"
+  >- suspend "block"
+  >> suspend "run"
+QED
+
+Resume gas_events_defs_seal_eq[step]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [gas_events_step_def])) >>
+  Cases_on `inst.inst_opcode = GAS` >- simp[] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- suspend "invoke" >> simp[]
+QED
+
+Resume gas_events_defs_seal_eq[invoke]:
+  simp[] >> Cases_on `decode_invoke inst` >- simp[] >>
+  rename1 `decode_invoke inst = SOME decoded` >> PairCases_on `decoded` >>
+  rename1 `decode_invoke inst = SOME (nm,ops)` >> simp[] >>
+  `LIST_REL fn_seal_eq C.ctx_functions C'.ctx_functions`
+    by fs[ctx_seal_eq_def] >>
+  drule_then (qspec_then `nm` strip_assume_tac) lookup_function_seal_eq >>
+  Cases_on `lookup_function nm C.ctx_functions` >- gvs[] >>
+  rename1 `lookup_function nm C.ctx_functions = SOME callee` >>
+  `?f'. lookup_function nm C'.ctx_functions = SOME f' /\ fn_seal_eq callee f'`
+    by metis_tac[] >> simp[] >>
+  Cases_on `eval_operands ops s` >- simp[] >>
+  rename1 `eval_operands ops s = SOME args` >> simp[] >>
+  drule fn_seal_eq_fields >> strip_tac >>
+  `setup_callee f' args s = setup_callee callee args s`
+    by simp[setup_callee_def] >>
+  Cases_on `setup_callee callee args s` >- simp[] >>
+  rename1 `setup_callee callee args s = SOME cs` >>
+  gvs[] >> metis_tac[]
+QED
+
+Resume gas_events_defs_seal_eq[block]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [gas_events_block_def])) >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >- simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `step_inst fuel C inst s = step_inst fuel C' inst s`
+    by metis_tac[run_defs_seal_eq] >>
+  `gas_events_step fuel C owner inst s = gas_events_step fuel C' owner inst s`
+    by metis_tac[] >>
+  simp[] >> Cases_on `step_inst fuel C' inst s` >> simp[] >>
+  IF_CASES_TAC >> simp[] >> first_x_assum irule >> simp[]
+QED
+
+Resume gas_events_defs_seal_eq[run]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule fn_seal_eq_fields >> strip_tac >>
+  CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [gas_events_blocks_def])) >>
+  Cases_on `fuel` >- simp[] >>
+  rename1 `SUC n` >> simp[] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >- simp[] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  Cases_on `eval_phis s bb.bb_instructions` >> simp[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+  `exec_block n C bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
+   exec_block n C' bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)`
+    by metis_tac[run_defs_seal_eq] >>
+  `gas_events_block n C fn.fn_name bb
+      (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) =
+   gas_events_block n C' fn.fn_name bb
+      (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)`
+    by metis_tac[] >>
+  simp[] >>
+  Cases_on `exec_block n C' bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+  simp[] >> IF_CASES_TAC >> simp[] >> first_x_assum irule >> simp[]
+QED
+
+Finalise gas_events_defs_seal_eq

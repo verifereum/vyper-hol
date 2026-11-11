@@ -28,7 +28,7 @@ Ancestors
   venomExecSemantics o1LowerDloadSourceEntry o1LowerDloadRunner
   o1LowerDloadRunnerExec
   o1LowerDloadEndpointConsumer o1LowerDloadJointRelation o1LowerDloadOccurrence
-  o1LowerDloadOccurrenceHeadroom venomWf passSimulationDefs venomState
+  o1LowerDloadOccurrenceHeadroom venomWf passSimulationDefs venomState gasEvents
 
 (* The runner supplies a covering supply separately for each function. *)
 Theorem lower_dload_stage_supply_rel:
@@ -194,14 +194,18 @@ Resume ld_runner_step_clause[return]:
      simp[update_var_def] >> disch_then drule >>
      simp[adopt_return_fmp_def, merge_callee_state_def]) >>
   `step_inst m C' inst t = OK t1'` by simp[Once step_inst_def] >>
-  qexists_tac `m` >> goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `m` >>
+  conj_tac >- simp[gas_events_step_def] >>
+  goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
 QED
 Resume ld_runner_step_clause[halt]:
-  qexists_tac `m` >> simp[Once step_inst_def] >> simp[Once step_inst_def] >> gvs[]
+  qexists_tac `m` >> simp[Once step_inst_def] >> simp[Once step_inst_def] >>
+  gvs[] >> simp[gas_events_step_def]
 QED
 Resume ld_runner_step_clause[abort]:
-  qexists_tac `m` >> simp[Once step_inst_def] >> simp[Once step_inst_def] >> gvs[]
+  qexists_tac `m` >> simp[Once step_inst_def] >> simp[Once step_inst_def] >>
+  gvs[] >> simp[gas_events_step_def]
 QED
 Finalise ld_runner_step_clause
 
@@ -346,8 +350,43 @@ Proof
   qexists_tac `m` >> metis_tac[]
 QED
 
-(* Kernel-level certification of the frozen contract. *)
-val _ = if null (hyp lower_dload_stage_sim) andalso
-               null (List.filter (fn s => s <> "DISK_THM")
-                       (#1 (Tag.dest_tag (Thm.tag lower_dload_stage_sim))))
+(* Admission checks run through holbuild check. *)
+val _ = if null (hyp lower_dload_stage_sim)
         then () else raise Fail "lower_dload_stage_sim proof audit failed";
+
+Theorem lower_dload_stage_sim_events:
+  !rpolicy D view C C' vs names fuel.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
+    terminates (run_context fuel C vs) ==>
+    ?fuel' name fn fn' lbl.
+      C.ctx_entry = SOME name /\ C'.ctx_entry = SOME name /\
+      lookup_function name C.ctx_functions = SOME fn /\
+      lookup_function name C'.ctx_functions = SOME fn' /\
+      fn_entry_label fn = SOME lbl /\ fn_entry_label fn' = SOME lbl /\
+      dead_result_rel D (run_context fuel C vs) (run_context fuel' C' vs) /\
+      terminates (run_context fuel' C' vs) /\
+      gas_events_blocks fuel' C' fn'
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) =
+      gas_events_blocks fuel C fn
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
+Proof
+  rpt strip_tac >>
+  `run_context fuel C vs = run_context fuel C vs` by simp[] >>
+  drule_all lower_dload_stage_root_entry >> strip_tac >>
+  `opaque_use_ok fn` by metis_tac[ld_ctx_shape_lookup_opaque] >>
+  `fn.fn_name = name` by
+    (qpat_assum `lookup_function name C.ctx_functions = SOME fn`
+       (mp_tac o REWRITE_RULE [lookup_function_def]) >>
+     disch_then (mp_tac o MATCH_MP venomExecPropsTheory.FIND_P) >> simp[]) >>
+  `terminates (run_blocks fuel C fn s0)` by metis_tac[] >>
+  drule_at (Pat `ld_joint_boundary`) (SIMP_RULE bool_ss [] (cj 3 ld_runner_simulation)) >>
+  simp[] >>
+  disch_then (drule_at (Pat `terminates (run_blocks _ _ _ _)`)) >>
+  simp[] >> disch_then (drule_all_then strip_assume_tac) >>
+  drule ld_root_result_shape >>
+  disch_then (qspecl_then [`vs`,`fuel`] strip_assume_tac) >>
+  gvs[terminates_def] >>
+  qexists_tac `m` >> simp[]
+QED

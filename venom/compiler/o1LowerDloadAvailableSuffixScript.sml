@@ -2,7 +2,7 @@
 Theory o1LowerDloadAvailableSuffix
 Ancestors
   venomExecSemantics venomExecProps venomState venomInst
-  o1LowerDloadJointAssign list finite_map pred_set
+  o1LowerDloadJointAssign list finite_map pred_set gasEvents
 
 Theorem ld_available_operand:
   s.vs_labels = t.vs_labels /\
@@ -111,4 +111,33 @@ Proof
       simp[NoAsms, arithmeticTheory.ADD_CLAUSES] >> metis_tac[]) >>
   qexists_tac `ri` >>
   gvs[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM]
+QED
+
+(* A finite assignment suffix ending at REVERT cannot reach a GAS site,
+   including when fetching or executing an assignment fails early. *)
+Theorem ld_assign_suffix_events:
+  !d s.
+    get_instruction bb (s.vs_inst_idx + d) = SOME ri /\
+    ri.inst_opcode = REVERT /\
+    (!k ii. k < d /\ get_instruction bb (s.vs_inst_idx + k) = SOME ii ==>
+            ii.inst_opcode = ASSIGN) ==>
+    gas_events_block fuel C owner bb s = []
+Proof
+  Induct_on `d`
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      simp[Once gas_events_block_def, gas_events_step_def, is_terminator_def] >>
+      Cases_on `step_inst fuel C ri s` >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- simp[Once gas_events_block_def] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME cur` >>
+  `cur.inst_opcode = ASSIGN` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[Once gas_events_block_def, gas_events_step_def, is_terminator_def] >>
+  Cases_on `step_inst fuel C cur s` >> simp[] >>
+  first_x_assum irule >>
+  gvs[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM] >>
+  rpt strip_tac >>
+  qpat_x_assum `!k ii. _` (qspec_then `SUC k` mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES]
 QED

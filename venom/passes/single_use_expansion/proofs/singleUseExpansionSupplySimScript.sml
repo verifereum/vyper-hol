@@ -1324,7 +1324,7 @@ Proof
   irule step_inst_inst_idx_indep >> simp[is_terminator_def]
 QED
 
-Theorem sue_drop_cons_index[local]:
+Theorem sue_drop_cons_index:
   !xs k. DROP k xs = h::tail ==>
     k < LENGTH xs /\ EL k xs = h /\ DROP (SUC k) xs = tail
 Proof
@@ -1498,7 +1498,7 @@ Proof
   pure_rewrite_tac[sue_step_inst_idx_norm] >> simp[]
 QED
 
-Theorem sue_drop_prefix_index[local]:
+Theorem sue_drop_prefix_index:
   !prefix xs k inst tail. DROP k xs = prefix ++ inst::tail ==>
     k + LENGTH prefix < LENGTH xs /\ EL (k + LENGTH prefix) xs = inst
 Proof

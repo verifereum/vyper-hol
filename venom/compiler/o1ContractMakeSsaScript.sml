@@ -20,7 +20,7 @@ Ancestors
   makeSsaCurrentDefs makeSsaCurrentSim makeSsaCurrentFrameRf
   makeSsaCurrentWfSsa makeSsaCurrentNonDegenerate makeSsaCurrentInputOk
   o1ContractMakeSsaReplay o1ContractMakeSsaStep o1ContractMakeSsaPtr
-  o1ContractMakeSsaTaint o1ContractMakeSsaSrc list
+  o1ContractMakeSsaTaint o1ContractMakeSsaSrc gasEvents makeSsaCurrentEvents list
 
 (* ===== The stage's functions ===== *)
 
@@ -213,6 +213,29 @@ Proof
       irule make_ssa_stage_mem_inv >>
       metis_tac[mem_corr_closed_rf_lowered_mem_fact]) >>
   metis_tac[make_ssa_stage_wf_ssa]
+QED
+
+Theorem make_ssa_stage_gas_events:
+  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+  o1_ctx_shape C /\
+  EVERY make_ssa_input_ok C.ctx_functions /\
+  lookup_function name C.ctx_functions = SOME fn ==>
+  ?fn'. lookup_function name C'.ctx_functions = SOME fn' /\
+    !fuel st. fn_entry_state fn st ==>
+      gas_events_blocks fuel C fn st = gas_events_blocks fuel C' fn' st
+Proof
+  strip_tac >> drule make_ssa_stage_functions >> strip_tac >>
+  drule current_events_lookup_functions >>
+  disch_then (qspec_then `name` mp_tac) >>
+  simp[optionTheory.OPTREL_def] >> strip_tac >>
+  rename1 `lookup_function name C'.ctx_functions = SOME final` >>
+  qexists `final` >> simp[] >> rpt strip_tac >>
+  irule make_ssa_current_fn_gas_events >>
+  simp[] >> conj_tac
+  >- metis_tac[lookup_function_MEM] >>
+  conj_tac
+  >- (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  metis_tac[lookup_function_MEM]
 QED
 
 Theorem o1_contract_make_ssa_1:

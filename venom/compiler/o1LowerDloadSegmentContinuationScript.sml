@@ -4,7 +4,7 @@ Ancestors
   o1LowerDloadSuppliedSegmentNext o1LowerDloadSuppliedSegmentExec
   o1LowerDloadSuppliedSegmentResources o1LowerDloadJointRelation o1PassContract
   venomExecSemantics venomState venomInst instIdxIndep lowerDloadDefs irSupply
-  ptrDiscipline unitMemInv o1LowerDloadOccurrence list rich_list finite_map
+  ptrDiscipline unitMemInv o1LowerDloadOccurrence gasEvents list rich_list finite_map
 
 Theorem ld_generated_step_pc:
   MEM inst.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD] /\
@@ -42,6 +42,50 @@ Proof
   first_x_assum (qspec_then `SUC j` mp_tac) >> simp[]
 QED
 
+Theorem ld_generated_packet_continuation_joint:
+  TAKE (LENGTH es) (DROP (f 0).vs_inst_idx bb.bb_instructions) = es /\
+  (f 0).vs_inst_idx + LENGTH es <= LENGTH bb.bb_instructions /\
+  EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) es /\
+  (!j. j < LENGTH es ==> step_inst fuel C (EL j es) (f j) = OK (f (SUC j))) ==>
+  exec_block fuel C bb (f 0) =
+  exec_block fuel C bb
+    (f (LENGTH es) with vs_inst_idx := (f 0).vs_inst_idx + LENGTH es) /\
+  gas_events_block fuel C owner bb (f 0) =
+  gas_events_block fuel C owner bb
+    (f (LENGTH es) with vs_inst_idx := (f 0).vs_inst_idx + LENGTH es)
+Proof
+  strip_tac >>
+  qabbrev_tac `g = \j. f j with vs_inst_idx := (f 0).vs_inst_idx + j` >>
+  `!j. j < LENGTH es ==>
+      get_instruction bb (g j).vs_inst_idx = SOME (EL j es) /\
+      ~is_terminator (EL j es).inst_opcode /\
+      (EL j es).inst_opcode <> GAS /\
+      (EL j es).inst_opcode <> INVOKE /\
+      ?u. step_inst fuel C (EL j es) (g j) = OK u /\
+          g (SUC j) = u with vs_inst_idx := SUC (g j).vs_inst_idx` suffices_by
+    (strip_tac >>
+     qspecl_then [`es`,`g`] mp_tac ld_exec_block_finite_continuation >>
+     qspecl_then [`es`,`g`] mp_tac gas_events_block_silent_finite_continuation >>
+     simp[Abbr `g`] >> metis_tac[]) >>
+  simp[Abbr `g`] >> gen_tac >> strip_tac >>
+  `MEM (EL j es).inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]` by
+    (gvs[EVERY_MEM] >> metis_tac[MEM_EL]) >>
+  `step_inst fuel C (EL j es)
+     (f j with vs_inst_idx := (f 0).vs_inst_idx + j) =
+   OK (f (SUC j) with vs_inst_idx := (f 0).vs_inst_idx + j)` by
+    (irule ld_generated_step_pc >> metis_tac[]) >>
+  `~is_terminator (EL j es).inst_opcode` by
+    gvs[MEM, is_terminator_def] >>
+  `((EL j es).inst_opcode <> GAS) /\ ((EL j es).inst_opcode <> INVOKE)` by
+    gvs[MEM] >>
+  simp[] >> conj_tac
+  >- (simp[get_instruction_def] >>
+      `EL j (TAKE (LENGTH es) (DROP (f 0).vs_inst_idx bb.bb_instructions)) = EL j es`
+        by simp[] >>
+      gvs[EL_TAKE, EL_DROP]) >>
+  qexists_tac `f (SUC j) with vs_inst_idx := (f 0).vs_inst_idx + j` >> gvs[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM]
+QED
+
 Theorem ld_generated_packet_continuation:
   TAKE (LENGTH es) (DROP (f 0).vs_inst_idx bb.bb_instructions) = es /\
   (f 0).vs_inst_idx + LENGTH es <= LENGTH bb.bb_instructions /\
@@ -51,25 +95,28 @@ Theorem ld_generated_packet_continuation:
   exec_block fuel C bb
     (f (LENGTH es) with vs_inst_idx := (f 0).vs_inst_idx + LENGTH es)
 Proof
+  metis_tac[ld_generated_packet_continuation_joint]
+QED
+
+Theorem ld_two_step_packet_continuation_joint:
+  LENGTH es = 2 /\
+  TAKE 2 (DROP t.vs_inst_idx bb.bb_instructions) = es /\
+  t.vs_inst_idx + 2 <= LENGTH bb.bb_instructions /\
+  EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) es /\
+  step_inst fuel C (EL 0 es) t = OK t2 /\
+  step_inst fuel C (EL 1 es) t2 = OK t3 ==>
+  exec_block fuel C bb t =
+  exec_block fuel C bb (t3 with vs_inst_idx := t.vs_inst_idx + 2) /\
+  gas_events_block fuel C owner bb t =
+  gas_events_block fuel C owner bb (t3 with vs_inst_idx := t.vs_inst_idx + 2)
+Proof
   strip_tac >>
-  qspec_then `es` (qspec_then `\j. f j with vs_inst_idx := (f 0).vs_inst_idx + j` mp_tac)
-    ld_exec_block_finite_continuation >>
+  `es <> []` by (strip_tac >> gvs[]) >>
+  qspecl_then [`es`, `\j. if j = 0 then t else if j = 1 then t2 else t3`]
+    mp_tac (Q.GENL [`es`,`f`] ld_generated_packet_continuation_joint) >>
   simp[] >> disch_then irule >>
   gen_tac >> strip_tac >>
-  `MEM (EL j es).inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]` by
-    (gvs[EVERY_MEM] >> metis_tac[MEM_EL]) >>
-  `step_inst fuel C (EL j es)
-     (f j with vs_inst_idx := (f 0).vs_inst_idx + j) =
-   OK (f (SUC j) with vs_inst_idx := (f 0).vs_inst_idx + j)` by
-    (irule ld_generated_step_pc >> metis_tac[]) >>
-  `~is_terminator (EL j es).inst_opcode` by
-    gvs[MEM, is_terminator_def] >>
-  simp[] >> conj_tac
-  >- (simp[get_instruction_def] >>
-      `EL j (TAKE (LENGTH es) (DROP (f 0).vs_inst_idx bb.bb_instructions)) = EL j es`
-        by simp[] >>
-      gvs[EL_TAKE, EL_DROP]) >>
-  qexists_tac `f (SUC j) with vs_inst_idx := (f 0).vs_inst_idx + j` >> gvs[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM]
+  `j = 0 \/ j = 1` by decide_tac >> gvs[]
 QED
 
 Theorem ld_two_step_packet_continuation:
@@ -82,13 +129,31 @@ Theorem ld_two_step_packet_continuation:
   exec_block fuel C bb t =
   exec_block fuel C bb (t3 with vs_inst_idx := t.vs_inst_idx + 2)
 Proof
+  metis_tac[ld_two_step_packet_continuation_joint]
+QED
+
+Theorem ld_four_step_packet_continuation_joint:
+  LENGTH es = 4 /\
+  TAKE 4 (DROP t.vs_inst_idx bb.bb_instructions) = es /\
+  t.vs_inst_idx + 4 <= LENGTH bb.bb_instructions /\
+  EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) es /\
+  step_inst fuel C (EL 0 es) t = OK t1 /\
+  step_inst fuel C (EL 1 es) t1 = OK t2 /\
+  step_inst fuel C (EL 2 es) t2 = OK t3 /\
+  step_inst fuel C (EL 3 es) t3 = OK t4 ==>
+  exec_block fuel C bb t =
+  exec_block fuel C bb (t4 with vs_inst_idx := t.vs_inst_idx + 4) /\
+  gas_events_block fuel C owner bb t =
+  gas_events_block fuel C owner bb (t4 with vs_inst_idx := t.vs_inst_idx + 4)
+Proof
   strip_tac >>
   `es <> []` by (strip_tac >> gvs[]) >>
-  qspecl_then [`es`, `\j. if j = 0 then t else if j = 1 then t2 else t3`]
-    mp_tac (Q.GENL [`es`,`f`] ld_generated_packet_continuation) >>
+  qspecl_then [`es`, `\j. if j = 0 then t else if j = 1 then t1 else
+                         if j = 2 then t2 else if j = 3 then t3 else t4`]
+    mp_tac (Q.GENL [`es`,`f`] ld_generated_packet_continuation_joint) >>
   simp[] >> disch_then irule >>
   gen_tac >> strip_tac >>
-  `j = 0 \/ j = 1` by decide_tac >> gvs[]
+  `j = 0 \/ j = 1 \/ j = 2 \/ j = 3` by decide_tac >> gvs[]
 QED
 
 Theorem ld_four_step_packet_continuation:
@@ -103,14 +168,7 @@ Theorem ld_four_step_packet_continuation:
   exec_block fuel C bb t =
   exec_block fuel C bb (t4 with vs_inst_idx := t.vs_inst_idx + 4)
 Proof
-  strip_tac >>
-  `es <> []` by (strip_tac >> gvs[]) >>
-  qspecl_then [`es`, `\j. if j = 0 then t else if j = 1 then t1 else
-                         if j = 2 then t2 else if j = 3 then t3 else t4`]
-    mp_tac (Q.GENL [`es`,`f`] ld_generated_packet_continuation) >>
-  simp[] >> disch_then irule >>
-  gen_tac >> strip_tac >>
-  `j = 0 \/ j = 1 \/ j = 2 \/ j = 3` by decide_tac >> gvs[]
+  metis_tac[ld_four_step_packet_continuation_joint]
 QED
 
 Theorem ld_successful_supply_packet:
