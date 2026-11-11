@@ -1,6 +1,6 @@
 Theory assignPlaceStorage
 Ancestors
-  assignPlaceStoreReady assignPlacePhysicalBytes assignPlaceNormalizeFrame
+  assignPlaceRelayoutProvenance assignPlacePhysicalBytes assignPlaceNormalizeFrame
   assignPlaceStorageSuffix assignPlaceStorageCompile assignPlaceLayout
   loweringPosts stmtSimDefs stmtLowering compileEnv placeStore valueCopyBytes
 Libs monadsyntax

@@ -1,6 +1,6 @@
 Theory assignPlaceMemory
 Ancestors
-  assignPlaceStorage assignPlaceDirectCopy assignPlaceStaging assignPlaceStagedEndpoint
+  assignPlaceRelayoutProvenance assignPlaceStorage assignPlaceDirectCopy assignPlaceStaging assignPlaceStagedEndpoint
   assignPlacePhysicalBytes assignPlaceLayout placeMemoryCopyEffect
   placeMemoryLiveRegion loweringPosts stmtLowering placeStore
   stmtSimDefs compileEnv exprLowering placeDestinationBounds context
@@ -104,7 +104,7 @@ Resume assign_place_memory_from_expr_post[aggregate]:
   `0 < type_memory_size stv` by
     metis_tac[assignPlaceLayoutTheory.widening_source_memory_size_pos] >>
   Cases_on `src_loc = NONE \/ src_loc = SOME LocMemory`
-  >- (irule assignPlaceStoreReadyTheory.assign_place_relayout_from_provenance >>
+  >- (irule assignPlaceRelayoutProvenanceTheory.assign_place_relayout_from_provenance >>
       simp[] >> (conj_tac >- metis_tac[]) >>
       goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
       simp[] >> metis_tac[]) >>
@@ -220,7 +220,7 @@ Resume assign_place_memory_from_expr_post[relayout_direct]:
     (type_memory_bytes cenv dty) su = ((),sb)` by
     (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def] >> metis_tac[]) >>
-  irule assignPlaceStoreReadyTheory.assign_place_relayout_from_provenance >>
+  irule assignPlaceRelayoutProvenanceTheory.assign_place_relayout_from_provenance >>
   simp[] >> (conj_tac >- metis_tac[]) >>
   goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[])
