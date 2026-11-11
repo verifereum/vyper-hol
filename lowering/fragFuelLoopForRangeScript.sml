@@ -21,6 +21,7 @@ Theory fragFuelLoopForRange
 Ancestors
   fragFuel fragFuelContextBase fragFuelContext fragFuelStmtBase
   stmtLowering exprLowering compileEnv emitHelper context venomInst
+  venomExecSemantics venomState
 Libs
   fragFuelLib
 
@@ -78,6 +79,116 @@ Proof
     (drule_then assume_tac) >>
   simp[] >> gvs[var_below_def] >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+(* Exact fixed-code boundary; unlike fuel_ok_emit this retains the values. *)
+Theorem range_condition_outcome[local]:
+  !G ctx fn s bb eqi br counter endpoint test c e yes no N Wv.
+    no_phi_fn fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME eqi /\
+    get_instruction bb (SUC s.vs_inst_idx) = SOME br /\
+    eqi.inst_opcode = EQ /\ eqi.inst_operands = [Var counter; Var endpoint] /\
+    eqi.inst_outputs = [test] /\
+    br.inst_opcode = JNZ /\ br.inst_operands = [Var test; Label yes; Label no] /\
+    lookup_var counter s = SOME c /\ lookup_var endpoint s = SOME e /\
+    test <> counter /\ test <> endpoint /\
+    (~var_below N test \/ test IN Wv) ==>
+    fuel_outcome G ctx fn s 1
+      (\t. vars_kept N Wv s t /\
+           lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+           t.vs_current_bb = (if c = e then yes else no) /\ t.vs_inst_idx = 0)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `u = (update_var test (bool_to_word (c = e)) s)
+                    with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `!f. run_from f ctx fn s = run_from f ctx fn u` by
+    (gen_tac >>
+     `~is_terminator eqi.inst_opcode` by simp[is_terminator_def] >>
+     drule_all run_from_nonterm >>
+     simp[is_terminator_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+          exec_pure2_def, eval_operand_def, Abbr `u`]) >>
+  `fuel_outcome G ctx fn u 1
+      (\t. vars_kept N Wv s t /\
+           lookup_var counter t = SOME c /\ lookup_var endpoint t = SOME e /\
+           t.vs_current_bb = (if c = e then yes else no) /\ t.vs_inst_idx = 0)` by
+    (irule fuel_outcome_jump >>
+     simp[] >> qexistsl_tac [`bb`, `br`, `if c = e then yes else no`] >>
+     Cases_on `c = e` >> simp[Abbr `u`, update_var_def, is_terminator_def,
+          step_inst_base_opcode_eqs, eval_operand_def, lookup_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE, bool_to_word_def, jump_to_def,
+          vars_kept_def] >> rpt strip_tac >> gvs[lookup_var_def] >> metis_tac[]) >>
+  gvs[fuel_outcome_def] >> metis_tac[]
+QED
+
+(* Missing operands fix the result immediately, without a typing premise. *)
+Theorem range_condition_undefined[local]:
+  !G ctx fn s bb eqi counter endpoint P.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME eqi /\
+    eqi.inst_opcode = EQ /\ eqi.inst_operands = [Var counter; Var endpoint] /\
+    (lookup_var counter s = NONE \/ lookup_var endpoint s = NONE) ==>
+    fuel_outcome G ctx fn s 0 P
+Proof
+  rpt strip_tac >> simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+  `~is_terminator eqi.inst_opcode` by simp[is_terminator_def] >>
+  drule_all run_from_nonterm >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure2_def,
+       eval_operand_def] >>
+  Cases_on `lookup_var counter s` >> simp[]
+QED
+
+Theorem range_increment_outcome[local]:
+  !G ctx fn s bb addi assi ji counter endpoint tmp c e cond N Wv.
+    no_phi_fn fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME addi /\
+    get_instruction bb (SUC s.vs_inst_idx) = SOME assi /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) = SOME ji /\
+    addi.inst_opcode = ADD /\ addi.inst_operands = [Var counter; Lit 1w] /\
+    addi.inst_outputs = [tmp] /\
+    assi.inst_opcode = ASSIGN /\ assi.inst_operands = [Var tmp] /\
+    assi.inst_outputs = [counter] /\
+    ji.inst_opcode = JMP /\ ji.inst_operands = [Label cond] /\
+    lookup_var counter s = SOME c /\ lookup_var endpoint s = SOME e /\
+    tmp <> counter /\ tmp <> endpoint /\ counter <> endpoint /\
+    (~var_below N tmp \/ tmp IN Wv) /\
+    (~var_below N counter \/ counter IN Wv) ==>
+    fuel_outcome G ctx fn s 1
+      (\t. vars_kept N Wv s t /\ lookup_var counter t = SOME (c + 1w) /\
+           lookup_var endpoint t = SOME e /\
+           t.vs_current_bb = cond /\ t.vs_inst_idx = 0)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `u = (update_var tmp (c + 1w) s)
+                    with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `v = (update_var counter (c + 1w) u)
+                    with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
+  `!f. run_from f ctx fn s = run_from f ctx fn u` by
+    (gen_tac >> `~is_terminator addi.inst_opcode` by simp[is_terminator_def] >>
+     drule_all run_from_nonterm >>
+     simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+          exec_pure2_def, eval_operand_def, Abbr `u`]) >>
+  `!f. run_from f ctx fn u = run_from f ctx fn v` by
+    (gen_tac >>
+     `lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb u.vs_inst_idx = SOME assi /\
+      ~is_terminator assi.inst_opcode` by
+       simp[Abbr `u`, update_var_def, is_terminator_def] >>
+     drule_all run_from_nonterm >>
+     simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+          eval_operand_def, Abbr `v`, Abbr `u`, update_var_def, lookup_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `fuel_outcome G ctx fn v 1
+      (\t. vars_kept N Wv s t /\ lookup_var counter t = SOME (c + 1w) /\
+           lookup_var endpoint t = SOME e /\
+           t.vs_current_bb = cond /\ t.vs_inst_idx = 0)` by
+    (irule fuel_outcome_jump >> simp[] >> qexistsl_tac [`bb`, `ji`, `cond`] >>
+     simp[Abbr `v`, Abbr `u`, update_var_def, is_terminator_def,
+          step_inst_base_opcode_eqs, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+          jump_to_def, vars_kept_def] >>
+     rpt strip_tac >> gvs[lookup_var_def] >> metis_tac[]) >>
+  gvs[fuel_outcome_def] >> metis_tac[]
 QED
 
 Theorem fuel_okS_compile_for_range:
