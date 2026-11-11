@@ -140,8 +140,10 @@ Proof
   conj_tac >- (
     qexists_tac `RR` >> simp[Abbr `RR`] >>
     rpt gen_tac >> strip_tac >>
-    irule (SIMP_RULE std_ss [DE_MORGAN_THM] log_mem_args_step) >>
-    simp[]) >>
+    rename1 `body_exprs_mem_ok cx (e::tail)` >>
+    qmatch_goalsub_rename_tac `expr_sim_mem ctx func cenv cx (expr_type e) e s` >>
+    qspecl_then [`tops`, `ctx`, `func`, `cenv`, `cx`, `env`, `e`, `tail`, `s`]
+      mp_tac log_mem_args_step >> simp[DE_MORGAN_THM]) >>
   conj_tac >- (
     qexistsl_tac [`MAP SND fields`, `h`, `MAP (SND o FST) fields`] >>
     simp[] >>
