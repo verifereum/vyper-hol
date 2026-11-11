@@ -105,6 +105,46 @@ Proof
   gvs[stmt_exits_in_def] >> metis_tac[]
 QED
 
+(* Modular distance decreases even when the index increment wraps. *)
+Theorem iter_distance_decreases[local]:
+  !(i:256 word) len.
+    i <> len ==> w2n (len - (i + 1w)) < w2n (len - i)
+Proof
+  rpt strip_tac >>
+  `len - (i + 1w) = (len - i) - 1w` by wordsLib.WORD_DECIDE_TAC >>
+  pure_asm_rewrite_tac [] >> irule wordsTheory.WORD_PRED_THM >>
+  simp[wordsTheory.WORD_EQ_SUB_ZERO]
+QED
+
+(* One non-exiting round preserves length and advances the equality counter.
+   Fixed outcomes and external exits are carried by fuel_outcome and Q. *)
+Theorem iter_equality_cycle[local]:
+  !G ctx fn H Q idx len Kround.
+    (!s. H s ==>
+      ?j. j <= Kround /\
+          fuel_outcome G ctx fn s j
+            (\t. Q t \/
+                 (H t /\ idx s <> len s /\
+                  (idx t :256 word) = idx s + 1w /\ len t = len s))) ==>
+    !s. H s ==>
+      ?j. j <= (2 ** 256) * Kround /\ fuel_outcome G ctx fn s j Q
+Proof
+  rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac fuel_outcome_iterate >>
+  qexists_tac `\s. w2n (len s - idx s :256 word)` >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qspec_then `len s - idx s :256 word` mp_tac wordsTheory.w2n_lt >>
+      simp[wordsTheory.dimword_def]) >>
+  rpt strip_tac >> first_x_assum (drule_then strip_assume_tac) >>
+  qexists_tac `j` >> conj_tac >- asm_rewrite_tac[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  gen_tac >> BETA_TAC >> strip_tac
+  >- simp[] >>
+  disj2_tac >> asm_rewrite_tac[] >>
+  metis_tac[iter_distance_decreases]
+QED
+
 Theorem fuel_okS_compile_for_iter:
   !cenv lctx ty id fty arr_e bound body Wv E.
     (!c t e Wv' E'. fuel_ok Wv' {} E' (compile_expr c t e)) /\
