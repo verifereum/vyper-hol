@@ -46,5 +46,7 @@ Ancestors
   typedCopyArrayExecutionPtr wordCopyRobustPtr
   (* end-to-end runtime correctness *)
   e2eCorrectness
+  (* sufficient gas, the companion to the call theorem *)
+  e2eGasSufficient
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness

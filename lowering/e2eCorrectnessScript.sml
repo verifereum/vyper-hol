@@ -746,19 +746,19 @@ QED
 
 *)
 
-Theorem gas_variant_outcomes[local]:
+Theorem gas_variant_outcomes:
   gas_variant si so ==> si.vs_outcomes = so.vs_outcomes
 Proof
   rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
 QED
 
-Theorem gas_variant_call_ctx[local]:
+Theorem gas_variant_call_ctx:
   gas_variant si so ==> si.vs_call_ctx = so.vs_call_ctx
 Proof
   rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
 QED
 
-Theorem gas_variant_initial_venom_state_rel[local]:
+Theorem gas_variant_initial_venom_state_rel:
   gas_variant si so /\ initial_venom_state_rel tops am tx so ==>
   initial_venom_state_rel tops am tx si
 Proof
