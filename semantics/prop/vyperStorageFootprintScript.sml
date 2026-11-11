@@ -91,18 +91,14 @@ Definition storage_trace_backends_well_formed_def:
     | _ => T) observations
 End
 
-(* Finite execution obligations are inherited by every observed prefix. *)
+(* Finite storage obligations are inherited by every observed prefix.
+   Outcome account and returndata bounds are independent execution facts. *)
 Definition storage_observations_ok_def:
   storage_observations_ok cx H observations <=>
     EVERY (\region. MEM region (FST H)) (storage_trace_regions observations) /\
     EVERY (\slot. MEM slot (SND H)) (storage_trace_locks observations) /\
     storage_roots_fit observations /\
-    storage_trace_backends_well_formed cx (FST H) observations /\
-    EVERY (\observation. case observation of
-      StorageOutcome rq outcome =>
-        LENGTH outcome.co_returnData < dimword(:256)
-    | StorageBackend accounts transient => accounts_runtime_well_typed accounts
-    | _ => T) observations
+    storage_trace_backends_well_formed cx (FST H) observations
 End
 
 Theorem storage_well_formed_on_backends:
