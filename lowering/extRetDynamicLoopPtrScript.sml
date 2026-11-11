@@ -158,5 +158,7 @@ Proof
      simp[SUM, ADD1]) >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> asm_simp_tac bool_ss [] >>
   irule gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[] >>
-  irule gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[]
+  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`] |>
+    REWRITE_RULE [ADD_CLAUSES]) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
