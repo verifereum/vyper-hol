@@ -463,7 +463,7 @@ Proof
       >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
           >- metis_tac[first_emission_alloc_buffer] >>
           simp[cs_extends_refl]) >>
-      Cases_on `p0 > 0` >> simp[cs_extends_refl] >>
+      Cases_on `ce.ce_func_return_type (nsid_to_string fid) = NoneT` >> simp[cs_extends_refl] >>
       ho_match_mp_tac first_emission_pair_let >> conj_tac
       >- metis_tac[first_emission_alloc_buffer] >> simp[cs_extends_refl]) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
