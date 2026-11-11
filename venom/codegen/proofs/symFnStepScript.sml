@@ -15,7 +15,7 @@ Ancestors
   symBlockBody symFrameBoundary symFnSimSpec codegenSymRel fnEntryStep
   fnBlockStep fnBlockStepHelpers fnBlockBody fnSimSpec asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel venomExecSemantics
-  venomState planExec stackOpSim blockSimHelpers
+  venomState planExec stackOpSim blockSimHelpers fnPlanLineageEntryProduction
 Libs
   prefixContractLib
 
