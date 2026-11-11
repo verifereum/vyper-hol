@@ -10,7 +10,8 @@ Ancestors
   exprLowering builtinBytes emitHelper freshWrites compileEnv
   exprSimHashBoundary stmtSimLogTopics exprSimSliceData exprSimProps
   exprSimWordArgs loweringPosts finite_map pred_set
-  exprSimHash valueEncodingDefs valueEncoding vyperValue context
+  exprSimHash valueEncodingDefs valueEncoding vyperValue context pair
+  exprSimSliceExtcodeEntry exprSimSliceExtcodeContinue
 
 Theorem self_code_size_bounds_run:
   emit_op CODESIZE [] sa = (limit,sb) /\
@@ -371,3 +372,96 @@ Proof
       irule self_code_copy_store_run >> simp[eval_operand_def]) >>
   metis_tac[]
 QED
+
+(* Identify the ordinary allocation/bounds endpoint with the endpoint used
+   by the checked prefix.  All endpoints here have raw instruction cursors. *)
+Theorem self_code_prefix_success_entry:
+  compile_slice_out_buf sz sa = ((out,dst),sb) /\
+  emit_op CODESIZE [] sb = (limit,sc) /\
+  compile_assert_slice_bounds src len limit sc = ((),sd) /\
+  fn_has_code sa sd fn /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ~ctx_has_dalloca ctx /\ 32 <= sz /\ sz < dimword (:256) /\
+  ghost_inv d cenv cx es G tn s /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
+  op_taint tn src = {} /\ op_taint tn len = {} /\
+  op_prov G src = NONE /\ op_prov G len = NONE /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. len = Var x ==> not_fresh_at sa x) /\
+  LENGTH s.vs_code < dimword (:256) /\ w2n a+w2n n <= LENGTH s.vs_code ==>
+  ?u v p Gf tnf.
+    run_inst_seq (emitted_insts sa sb) s = OK u /\
+    run_inst_seq (emitted_insts sb sc ++ emitted_insts sc sd) u = OK v /\
+    run_inst_seq (emitted_insts sa sd) s = OK v /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sd) s Gf tnf /\
+    ghost_inv d cenv cx es Gf tnf v /\
+    ghost_kept cenv es sa G tn s Gf tnf /\
+    (?x y. out = Var x /\ dst = Var y /\
+      ptr_covers Gf tnf x v sz /\ ptr_covers Gf tnf y v (sz-32)) /\
+    eval_operand src v = SOME a /\ eval_operand len v = SOME n /\
+    op_taint tnf src = {} /\ op_taint tnf len = {} /\
+    op_prov Gf src = NONE /\ op_prov Gf len = NONE /\
+    eval_operand out u = SOME p /\ eval_operand dst u = SOME (p+32w) /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n p,sz) /\
+    w2n p+sz < dimword (:256) /\ sa.cs_next_id < sb.cs_next_id /\
+    (!nm off cap. local_region cenv es.scopes u nm off cap ==>
+      regions_disjoint (w2n p) sz off cap) /\
+    (?x. out = Var x /\ not_fresh_at sb x) /\
+    (?x. dst = Var x /\ not_fresh_at sb x) /\
+    stmt_state_rel ctx fn cenv cx es u /\ wb_frame cenv es es sa s u /\
+    (!id off cap. id < sa.cs_next_id /\ FLOOKUP u.vs_allocas id = SOME (off,cap) ==>
+      regions_disjoint (w2n p) sz off cap) /\
+    v = u with vs_vars := v.vs_vars /\
+    (!x. not_fresh_at sb x ==> lookup_var x v = lookup_var x u)
+Proof
+  strip_tac >>
+  `ci_mono sa sb` by metis_tac[ci_mono_compile_slice_out_buf, SND] >>
+  drule emit_op_extends >> strip_tac >>
+  drule exprSimSliceBoundsTheory.slice_bounds_shape >> strip_tac >>
+  `cs_extends sb sc /\ cs_extends sc sd` by
+    (conj_tac >> irule cs_extends_same_block >>
+     fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  `cs_extends sb sd` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sb fn` by (fs[ci_mono_def] >> metis_tac[fn_has_code_split]) >>
+  drule_all slice_extcode_output_entry >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sb) s = OK u` >>
+  drule_all slice_extcode_out_owner_inst >> strip_tac >>
+  drule_all self_code_checked_prefix_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `eval_operand src u = SOME a /\ eval_operand len u = SOME n` by
+    (Cases_on `src` >> Cases_on `len` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `(!x. src = Var x ==> not_fresh_at sb x) /\
+   (!x. len = Var x ==> not_fresh_at sb x)` by
+    (fs[ci_mono_def] >> metis_tac[not_fresh_at_mono]) >>
+  `u.vs_code = s.vs_code` by
+    (fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >> metis_tac[]) >>
+  qpat_x_assum `emitted_insts sc sd = _` kall_tac >>
+  `?v. run_inst_seq (emitted_insts sb sc ++ emitted_insts sc sd) u = OK v /\
+    v = u with vs_vars := v.vs_vars /\
+    (!x. not_fresh_at sb x ==> lookup_var x v = lookup_var x u)` by
+    (qpat_x_assum `eval_operand src s = _` kall_tac >>
+     qpat_x_assum `eval_operand len s = _` kall_tac >>
+     `LENGTH u.vs_code < dimword (:256)` by simp[] >>
+     drule_all self_code_size_bounds_run >> simp[]) >>
+  `emitted_insts sa sd = emitted_insts sa sb ++
+     (emitted_insts sb sc ++ emitted_insts sc sd)` by suspend "emission" >>
+  `run_inst_seq (emitted_insts sa sd) s = OK v` by
+    (qpat_assum `run_inst_seq (emitted_insts sa sb) s = OK u`
+      (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then `emitted_insts sb sc ++ emitted_insts sc sd` mp_tac) >> simp[]) >>
+  qpat_x_assum `!t. run_inst_seq (emitted_insts sa sd) s = OK t ==> _`
+    (qspec_then `v` mp_tac) >> simp[] >> strip_tac >>
+  qexistsl_tac [`Gf`,`tnf`] >> fs[listTheory.APPEND_ASSOC] >> metis_tac[]
+QED
+
+Resume self_code_prefix_success_entry[emission]:
+  drule slice_extcode_out_control >> strip_tac >>
+  `emitted_insts sb sd = emitted_insts sb sc ++ emitted_insts sc sd` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sa sd = emitted_insts sa sb ++ emitted_insts sb sd` by
+    (irule emitted_insts_append >> simp[]) >> simp[]
+QED
+
+Finalise self_code_prefix_success_entry
