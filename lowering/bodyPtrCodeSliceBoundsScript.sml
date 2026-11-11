@@ -5,6 +5,7 @@ Ancestors
   fragGasSeqPtr bodyPtrDefs ptrSafeRun ptrDiscipline venomExecSemantics
   venomInst venomState codegenRel contextCodegenRel compileEnv
   loweringStateRelDefs words finite_map pred_set list
+  decoderGhostFramePtr venomInstProofs1 venomMemProofs
 
 Theorem slice_bounds_binop_checked:
   !D ctx fn G tn s id opc a b dst fuel.
@@ -230,4 +231,82 @@ Proof
   irule slice_bounds_assert_checked >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
        op_taint_def, FLOOKUP_UPDATE]
+QED
+
+Theorem slice_bounds_step_frame[local]:
+  !i s u tn.
+    MEM i.inst_opcode [ADD;LT;GT;OR;ISZERO;ASSERT] /\
+    step_inst_base i s = OK u ==>
+    (step_taint i s u tn).t_mem = tn.t_mem /\
+    (step_taint i s u tn).t_stor = tn.t_stor /\
+    (step_taint i s u tn).t_trans = tn.t_trans /\
+    (step_taint i s u tn).t_imm = tn.t_imm
+Proof
+  rpt gen_tac >> strip_tac >>
+  `u.vs_allocas = s.vs_allocas` by
+    (irule step_inst_base_preserves_allocas >> qexists_tac `i` >>
+     gvs[] >> metis_tac[]) >>
+  `u.vs_fmp = s.vs_fmp` by
+    (irule step_inst_base_preserves_fmp_ordinary >> qexists_tac `i` >>
+     gvs[] >> simp[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
+  `new_site_bytes s u = {}` by
+    simp[new_site_bytes_def, FLOOKUP_DEF, EXTENSION, SF CONJ_ss] >>
+  gvs[] >>
+  simp[step_taint_def, mem_taint_def, step_writes_def,
+       source_memory_write_ranges_def, written_taint_def, store_taint_def,
+       adopt_reset_def, imm_taint_def, range_bytes_def] >>
+  Cases_on `i.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[] >>
+  Cases_on `t` >> simp[]
+QED
+
+Theorem slice_bounds_seq_frame[local]:
+  !code sa D ctx fn PG G tn s Gf tnf.
+    EVERY (\i. MEM i.inst_opcode [ADD;LT;GT;OR;ISZERO;ASSERT] /\
+      EVERY (\x. ~not_fresh_at sa x) i.inst_outputs) code /\
+    inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tnf (Var x) = op_taint tn (Var x))
+Proof
+  Induct >- simp[inst_seq_ptr_def] >>
+  rpt gen_tac >> simp_tac pure_ss [Once inst_seq_ptr_def, EVERY_DEF] >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  full_simp_tac bool_ss [exec_result_case_def] >>
+  rename1 `step_inst_base h s = OK u` >>
+  (first_x_assum (drule_all_then strip_assume_tac) >>
+      drule_at (Pat `step_inst_base _ _ = _`) slice_bounds_step_frame >>
+      simp[] >> disch_then (qspec_then `tn` strip_assume_tac) >>
+      simp[] >> rpt strip_tac >>
+      `~MEM x h.inst_outputs` by (gvs[EVERY_MEM] >> metis_tac[]) >>
+      metis_tac[step_prov_other_output, step_taint_other_output])
+QED
+
+Theorem slice_bounds_ghost_frame:
+  !d cenv cx es D ctx fn PG G tn s a n limit sa sb t Gf tnf.
+    compile_assert_slice_bounds a n limit sa = ((),sb) /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+    (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
+    (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) ==>
+    ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sa G tn s Gf tnf
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\i. MEM i.inst_opcode [ADD;LT;GT;OR;ISZERO;ASSERT] /\
+     EVERY (\x. ~not_fresh_at sa x) i.inst_outputs) (emitted_insts sa sb)` by
+    (drule slice_bounds_shape >> strip_tac >>
+     simp[mk_inst_def, not_fresh_at_def]) >>
+  drule_all slice_bounds_seq_frame >> strip_tac >>
+  `writes_fresh sa (emitted_insts sa sb)` by
+    (irule slice_bounds_writes_fresh >> metis_tac[]) >>
+  drule_all freshWritesTheory.run_inst_seq_writes_fresh >> strip_tac >>
+  `t with vs_vars := s.vs_vars = s` by
+    (qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac [th]) >>
+     simp[]) >>
+  conj_tac
+  >- (irule hash_readonly_ghost_inv >> qexistsl_tac [`G`, `s`, `sa`, `tn`] >>
+      simp[lookup_var_def] >> metis_tac[]) >>
+  irule hash_ghost_kept_frame >> simp[]
 QED
