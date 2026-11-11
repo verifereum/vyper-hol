@@ -3,7 +3,7 @@ Ancestors
   loweringStateRelDefs
   abiEncodeMaterializeExec exprSimAggregateChildren exprSimUnwrap
   exprSimDefs exprSimProps loweringPosts context finite_map exprSimCopy freshWrites fragExec exprSimStorageCopy
-  exprSimWordArgs venomMemDefs exprSimAlloc exprLowering compileEnv
+  exprSimWordArgs venomMemDefs exprSimAlloc exprLowering compileEnv exprSimVVFrame
 
 (* Allocating a new buffer extends the allocation map, rather than leaving
    it equal.  Existing value ownership only needs preservation of entries. *)
@@ -120,7 +120,7 @@ Theorem materialize_store_state_run:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!off len. off + len <= w2n dw \/ w2n dw + type_memory_size tv <= off ==>
         mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
-      locals_kept ce es s t
+      locals_kept ce es es s t
 Proof
   strip_tac >> drule_all materialize_store_owned_run >> strip_tac >>
   `copy_static t = copy_static s` by

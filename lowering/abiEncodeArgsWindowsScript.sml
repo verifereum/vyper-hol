@@ -47,7 +47,7 @@ Theorem dynamic_local_window_kept:
     lookup_var p ss0 = SOME w /\ lookup_var p ss1 = SOME w /\
     entry.type = ArrayTV etv (Dynamic n) /\
     entry.value = ArrayV (DynArrayV vs) /\
-    locals_kept ce es ss0 ss1 ==>
+    locals_kept ce es es1 ss0 ss1 ==>
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss1.vs_memory =
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss0.vs_memory
 Proof
@@ -59,7 +59,7 @@ Proof
   >- (gvs[val_footprint_def, type_memory_size_def] >>
       `local_region ce es.scopes ss0 name (w2n w) sz`
         by (simp[local_region_def] >> metis_tac[]) >>
-      qpat_x_assum `locals_kept _ _ _ _` mp_tac >>
+      qpat_x_assum `locals_kept _ _ _ _ _` mp_tac >>
       simp[locals_kept_def] >> strip_tac >> first_x_assum irule >>
       qexistsl_tac [`w2n w`, `name`, `sz`] >> simp[])
   >> gvs[val_footprint_def, type_memory_size_def]
@@ -75,7 +75,7 @@ Theorem dynamic_local_window_scopes_kept:
     lookup_var p ss0 = SOME w /\ lookup_var p ss1 = SOME w /\
     entry.type = ArrayTV etv (Dynamic n) /\
     entry.value = ArrayV (DynArrayV vs) /\
-    locals_kept ce es ss0 ss1 ==>
+    locals_kept ce es es1 ss0 ss1 ==>
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss1.vs_memory =
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss0.vs_memory
 Proof
