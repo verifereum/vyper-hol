@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the call step: every other call target (external calls and send; the rest are not supported_expr). *)
 Theory bodyIntCallFamCallExt
 Ancestors
-  bodyIntCallJointContract bodyIntCallFamCallExtAudit
+  bodyIntCallJointContract bodyIntCallFamCallExtAudit bodyIntCallFamCallExtSource
 
 Theorem intcall_extcall_step:
   (!e'. expr_size e' < expr_size e ==>
