@@ -79,3 +79,33 @@ Proof
   gvs[AllCaseEqs()] >>
   drule_all intcall_extracted_internal_lookup >> simp[]
 QED
+
+Theorem intcall_deploy_source_lookup:
+  !tops policy runtime unit exts ints fb cf src.
+    lower_vyper_deploy_unit tops policy runtime = SOME unit /\
+    classify_functions tops = (exts,ints,fb,SOME cf) /\ MEM src ints ==>
+    ?blocks.
+      lookup_function (FST (source_internal_fn_descriptor tops T src))
+        unit.cu_context.ctx_functions =
+      SOME (mk_internal_function
+        (FST (source_internal_fn_descriptor tops T src)) blocks
+        (FST (SND (source_internal_fn_descriptor tops T src)))
+        (SND (SND (source_internal_fn_descriptor tops T src)))) /\
+      blocks <> [] /\
+      (HD blocks).bb_label = FST (source_internal_fn_descriptor tops T src)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all deploy_ctor_lowering_trace >> strip_tac >>
+  `MEM (source_internal_fn_descriptor tops T src)
+    (internal_fn_descriptors
+      (MAP (set_internal_package_target policy.rpol_target o
+        package_internal_fn tops F (assign_nkeys tops 0) T (imm_len tops)) ints))`
+    by (simp[GSYM listTheory.MAP_MAP_o,
+          compileVyperTheory.internal_fn_descriptors_set_internal_package_target,
+          compileVyperTheory.internal_fn_descriptors_MAP_package_internal_fn,
+          listTheory.MEM_MAP] >>
+        qexists_tac `src` >> simp[]) >>
+  Cases_on `source_internal_fn_descriptor tops T src` >>
+  rename1 `_ = (lbl,metadata)` >> PairCases_on `metadata` >> gvs[] >>
+  drule_all intcall_extracted_internal_lookup >> simp[]
+QED
