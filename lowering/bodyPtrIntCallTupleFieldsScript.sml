@@ -203,3 +203,286 @@ Proof
                type_memory_size (EL k tvs)}`] >>
   simp[] >> rpt strip_tac >> gvs[]
 QED
+
+Theorem intcall_tuple_fields_conditional:
+  !D ctx fn PG ce dst src dts sts dtvs stvs vs sa sz G tn s b a.
+    LENGTH dts = LENGTH vs /\ LENGTH sts = LENGTH vs /\
+    LENGTH dtvs = LENGTH vs /\ LENGTH stvs = LENGTH vs /\
+    values_have_types dtvs vs /\ values_have_types stvs vs /\
+    (!i. i < LENGTH vs ==>
+      type_memory_bytes ce (EL i dts) = type_memory_size (EL i dtvs) /\
+      type_memory_bytes ce (EL i sts) = type_memory_size (EL i stvs)) /\
+    compile_typed_copy_fields ce (Var dst) (Var src) dts sts 0 0 sa = ((),sz) /\
+    fn_has_code sa sz fn /\ not_fresh_at sa dst /\ not_fresh_at sa src /\
+    lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\
+    ptr_covers G tn dst s (SUM (MAP type_memory_size dtvs)) /\
+    ptr_covers G tn src s (SUM (MAP type_memory_size stvs)) /\
+    w2n b + SUM (MAP type_memory_size dtvs) < dimword (:256) /\
+    w2n a + SUM (MAP type_memory_size stvs) < dimword (:256) /\
+    (w2n b + SUM (MAP type_memory_size dtvs) <= w2n a \/
+     w2n a + SUM (MAP type_memory_size stvs) <= w2n b) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      tuple_in_memory vs stvs (w2n a) m) /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+    ~ctx_has_dalloca ctx /\
+    (!i c d dp sp bv av H t u.
+      i < LENGTH vs /\
+      compile_store_memory_typed ce (Var dp) (EL i dts)
+        (Var sp) (EL i sts) c = ((),d) /\ fn_has_code c d fn /\
+      not_fresh_at c dp /\ not_fresh_at c sp /\
+      lookup_var dp u = SOME bv /\ lookup_var sp u = SOME av /\
+      ptr_covers H t dp u (type_memory_size (EL i dtvs)) /\
+      ptr_covers H t sp u (type_memory_size (EL i stvs)) /\
+      w2n bv + type_memory_size (EL i dtvs) < dimword (:256) /\
+      w2n av + val_footprint (EL i stvs) (EL i vs) < dimword (:256) /\
+      (w2n bv + type_memory_size (EL i dtvs) <= w2n av \/
+       w2n av + type_memory_size (EL i stvs) <= w2n bv) /\
+      (!m. mem_agree_outside t.t_mem u.vs_memory m ==>
+        val_in_memory (EL i stvs) (EL i vs) (w2n av) m) /\
+      u.vs_current_bb = c.cs_current_bb /\
+      u.vs_inst_idx = LENGTH c.cs_current_insts /\ ~u.vs_halted ==>
+      ?K tf z. gas_path_ptr D 0 ctx fn PG H t u 0 K tf (OK z) /\
+        z.vs_current_bb = d.cs_current_bb /\
+        z.vs_inst_idx = LENGTH d.cs_current_insts /\ ~z.vs_halted /\
+        (!m. mem_agree_outside tf.t_mem z.vs_memory m ==>
+          val_in_memory (EL i dtvs) (EL i vs) (w2n bv) m) /\
+        tf.t_stor = t.t_stor /\ tf.t_trans = t.t_trans /\ tf.t_imm = t.t_imm /\
+        z.vs_allocas = u.vs_allocas /\ z.vs_alloca_next = u.vs_alloca_next /\
+        z.vs_fmp = u.vs_fmp /\ z.vs_accounts = u.vs_accounts /\
+        z.vs_transient = u.vs_transient /\ z.vs_call_ctx = u.vs_call_ctx /\
+        (!x. not_fresh_at c x ==>
+          lookup_var x z = lookup_var x u /\ FLOOKUP K x = FLOOKUP H x /\
+          op_taint tf (Var x) = op_taint t (Var x)) /\
+        (!j. ~(w2n bv <= j /\ j < w2n bv + type_memory_size (EL i dtvs)) ==>
+          mem_bytes_at j 1 z.vs_memory = mem_bytes_at j 1 u.vs_memory /\
+          (j IN tf.t_mem <=> j IN t.t_mem))) ==>
+    ?K tf z. gas_path_ptr D 0 ctx fn PG G tn s 0 K tf (OK z) /\
+      z.vs_current_bb = sz.cs_current_bb /\
+      z.vs_inst_idx = LENGTH sz.cs_current_insts /\ ~z.vs_halted /\
+      (!m. mem_agree_outside tf.t_mem z.vs_memory m ==>
+        tuple_in_memory vs dtvs (w2n b) m) /\
+      tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+      z.vs_allocas = s.vs_allocas /\ z.vs_alloca_next = s.vs_alloca_next /\
+      z.vs_fmp = s.vs_fmp /\ z.vs_accounts = s.vs_accounts /\
+      z.vs_transient = s.vs_transient /\ z.vs_call_ctx = s.vs_call_ctx /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x z = lookup_var x s /\ FLOOKUP K x = FLOOKUP G x /\
+        op_taint tf (Var x) = op_taint tn (Var x)) /\
+      (!i. ~(w2n b <= i /\ i < w2n b + SUM (MAP type_memory_size dtvs)) ==>
+        mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+        (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `tupInv = \ds ss doff soff c H t u.
+    ?k. k <= LENGTH vs /\ ds = DROP k dts /\ ss = DROP k sts /\
+      doff = SUM (MAP type_memory_size (TAKE k dtvs)) /\
+      soff = SUM (MAP type_memory_size (TAKE k stvs)) /\
+      compile_typed_copy_fields ce (Var dst) (Var src) ds ss doff soff c = ((),sz) /\
+      cs_extends sa c /\ sa.cs_next_var <= c.cs_next_var /\ fn_has_code c sz fn /\
+      u.vs_current_bb = c.cs_current_bb /\
+      u.vs_inst_idx = LENGTH c.cs_current_insts /\ ~u.vs_halted /\
+      lookup_var dst u = SOME b /\ lookup_var src u = SOME a /\
+      ptr_covers H t dst u (SUM (MAP type_memory_size dtvs)) /\
+      ptr_covers H t src u (SUM (MAP type_memory_size stvs)) /\
+      (!m. mem_agree_outside t.t_mem u.vs_memory m ==>
+        tuple_in_memory vs stvs (w2n a) m) /\
+      (!j. j < k ==> !m. mem_agree_outside t.t_mem u.vs_memory m ==>
+        val_in_memory (EL j dtvs) (EL j vs)
+          (w2n b + SUM (MAP type_memory_size (TAKE j dtvs))) m) /\
+      t.t_stor = tn.t_stor /\ t.t_trans = tn.t_trans /\ t.t_imm = tn.t_imm /\
+      u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
+      u.vs_fmp = s.vs_fmp /\ u.vs_accounts = s.vs_accounts /\
+      u.vs_transient = s.vs_transient /\ u.vs_call_ctx = s.vs_call_ctx /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x u = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+        op_taint t (Var x) = op_taint tn (Var x)) /\
+      (!i. ~(w2n b <= i /\ i < w2n b + doff) ==>
+        mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+        (i IN t.t_mem <=> i IN tn.t_mem))` >>
+  `tupInv dts sts 0 0 sa G tn s` by
+    (simp[Abbr `tupInv`] >> qexists_tac `0` >> simp[cs_extends_def]) >>
+  qspecl_then [`D`, `ctx`, `fn`, `PG`, `ce`, `Var dst`, `Var src`, `tupInv`]
+    mp_tac intcall_typed_fields_counted_traversal >>
+  (impl_tac
+   >- (rpt gen_tac >> strip_tac >> conj_tac
+       >- (mp_tac (cj 1 exprLoweringPropsTheory.ci_mono_typed_memory_family) >>
+           disch_then (qspecl_then [`ce`, `dp`, `dt`, `sp`, `st`, `c`] mp_tac) >>
+           simp[] >> simp[exprLoweringPropsTheory.ci_mono_def] >>
+           metis_tac[assign_base_offset_extends, cs_extends_trans]) >>
+       rpt gen_tac >> strip_tac >>
+       qpat_x_assum `tupInv (dt::ds) (st::ss) _ _ _ _ _ _` mp_tac >>
+       simp_tac (srw_ss()) [Abbr `tupInv`] >> strip_tac >>
+       qpat_x_assum `doff = _` SUBST_ALL_TAC >>
+       qpat_x_assum `soff = _` SUBST_ALL_TAC >>
+       qpat_assum `compile_typed_copy_fields _ _ _ (_::_) (_::_) _ _ _ = _`
+         mp_tac >>
+       pure_rewrite_tac[Once compile_store_memory_typed_def] >>
+       asm_simp_tac (srw_ss()) [LET_THM, pairTheory.UNCURRY_DEF,
+         comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+       strip_tac >>
+       `k < LENGTH vs` by
+         (metis_tac[listTheory.LENGTH_DROP, listTheory.LENGTH, arithmeticTheory.SUB_EQ_0,
+                    arithmeticTheory.NOT_LESS_EQUAL, numTheory.NOT_SUC]) >>
+       `dt = EL k dts /\ st = EL k sts` by
+         (metis_tac[listTheory.HD_DROP, listTheory.HD]) >>
+       `cs_extends a' b' /\ cs_extends b' c` by
+         metis_tac[assign_base_offset_extends] >>
+       `cs_extends c d` by
+         (mp_tac (cj 1 exprLoweringPropsTheory.ci_mono_typed_memory_family) >>
+          disch_then (qspecl_then [`ce`, `dp`, `dt`, `sp`, `st`, `c`] mp_tac) >>
+          simp[] >> simp[exprLoweringPropsTheory.ci_mono_def]) >>
+       `cs_extends d sz` by
+         (mp_tac (cj 2 exprLoweringPropsTheory.ci_mono_typed_memory_family) >>
+          disch_then (qspecl_then [`ce`, `Var dst`, `Var src`, `ds`, `ss`,
+            `SUM (MAP type_memory_size (TAKE k dtvs)) + type_memory_bytes ce dt`,
+            `SUM (MAP type_memory_size (TAKE k stvs)) + type_memory_bytes ce st`, `d`] mp_tac) >>
+          simp[] >> simp[exprLoweringPropsTheory.ci_mono_def]) >>
+       `cs_extends a' c /\ cs_extends c sz /\ cs_extends sa d` by
+         metis_tac[cs_extends_trans] >>
+       `fn_has_code a' c fn /\ fn_has_code c d fn /\ fn_has_code d sz fn` by
+         metis_tac[fn_has_code_split] >>
+       `SUM (MAP type_memory_size (TAKE k dtvs)) + type_memory_size (EL k dtvs)
+          <= SUM (MAP type_memory_size dtvs) /\
+        SUM (MAP type_memory_size (TAKE k stvs)) + type_memory_size (EL k stvs)
+          <= SUM (MAP type_memory_size stvs)` by
+         (conj_tac
+          >- (qspecl_then [`dtvs`, `type_memory_size`, `k`, `LENGTH dtvs`]
+                mp_tac sum_take_element_before >> simp[]) >>
+          qspecl_then [`stvs`, `type_memory_size`, `k`, `LENGTH stvs`]
+            mp_tac sum_take_element_before >> simp[]) >>
+       `SUM (MAP type_memory_size (TAKE k stvs)) + val_footprint (EL k stvs) (EL k vs)
+          <= SUM (MAP type_memory_size stvs)` by
+         metis_tac[tuple_child_footprint_contained] >>
+       `!m. mem_agree_outside tn'.t_mem s'.vs_memory m ==>
+          val_in_memory (EL k stvs) (EL k vs)
+            (w2n a + SUM (MAP type_memory_size (TAKE k stvs))) m` by
+         metis_tac[tupleMemoryLayoutTheory.tuple_in_memory_element] >>
+       `not_fresh_at a' dst /\ not_fresh_at a' src` by
+         (conj_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
+          simp[]) >>
+       qpat_assum `compile_with_byte_offset (Var dst) _ a' = _`
+         (mp_then Any mp_tac intcall_field_store_counted) >>
+       disch_then drule >>
+       disch_then (drule_at (Pat `!m. mem_agree_outside _ _ m ==> val_in_memory _ _ _ m`)) >>
+       disch_then (drule_at (Pat `lookup_var dst _ = _`)) >>
+       disch_then (drule_at (Pat `ptr_covers _ _ dst _ _`)) >>
+       disch_then (drule_at (Pat `ptr_covers _ _ src _ _`)) >>
+       disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+       disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
+       disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+       disch_then (qspecl_then [`D`, `PG`, `EL k dtvs`, `d`] mp_tac) >>
+       simp[] >>
+       (impl_tac
+        >- (rpt gen_tac >> strip_tac >>
+            qpat_x_assum `dp = Var _` SUBST_ALL_TAC >>
+            qpat_x_assum `sp = Var _` SUBST_ALL_TAC >>
+            qpat_x_assum `dt = EL k dts` SUBST_ALL_TAC >>
+            qpat_x_assum `st = EL k sts` SUBST_ALL_TAC >>
+            qpat_assum `!i c d dp sp bv av H t u. _`
+              (qspec_then `k` mp_tac) >>
+            simp[] >>
+            disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+            disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
+            disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+            simp[])) >>
+       strip_tac >>
+       `!j. j < SUC k ==> !m. mem_agree_outside tf.t_mem z.vs_memory m ==>
+          val_in_memory (EL j dtvs) (EL j vs)
+            (w2n b + SUM (MAP type_memory_size (TAKE j dtvs))) m` by
+         (match_mp_tac intcall_tuple_prefix_advance >>
+          qexistsl_tac [`tn'.t_mem`, `s'.vs_memory`] >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- simp[] >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac
+          >- (qx_gen_tac `i` >> strip_tac >>
+              qpat_x_assum `!i. _ ==> mem_bytes_at i 1 z.vs_memory = _ /\ _`
+                (qspec_then `i` mp_tac) >>
+              impl_tac >- decide_tac >> simp[]) >>
+          simp_tac (srw_ss()) [ADD_COMM] >> simp[]) >>
+       `sa.cs_next_var <= d.cs_next_var` by
+         (mp_tac (cj 1 exprLoweringPropsTheory.ci_mono_typed_memory_family) >>
+          disch_then (qspecl_then [`ce`, `dp`, `dt`, `sp`, `st`, `c`] mp_tac) >>
+          simp[] >> simp[exprLoweringPropsTheory.ci_mono_def] >> strip_tac >>
+          `a'.cs_next_var <= b'.cs_next_var /\ b'.cs_next_var <= c.cs_next_var` by
+            metis_tac[assign_base_offset_extends] >> decide_tac) >>
+       qexistsl_tac [`K'`, `tf`, `z`] >> simp[] >>
+       qexists_tac `SUC k` >>
+       `ds = DROP (SUC k) dts /\ ss = DROP (SUC k) sts` by
+         (rewrite_tac[rich_listTheory.DROP_SUC] >>
+          conj_tac
+          >- (qpat_x_assum `dt::ds = DROP k dts` (SUBST1_TAC o SYM) >> simp[]) >>
+          qpat_x_assum `st::ss = DROP k sts` (SUBST1_TAC o SYM) >> simp[]) >>
+       simp[rich_listTheory.TAKE_SUC_BY_TAKE, listTheory.MAP_SNOC,
+            rich_listTheory.SUM_SNOC] >>
+       conj_tac
+       >- (irule ptr_covers_old_transport >>
+           qexistsl_tac [`G'`, `s'`, `a'`, `tn'`] >>
+           conj_tac >- simp[] >>
+           conj_tac >- simp[] >>
+           qpat_assum `!x. not_fresh_at a' x ==> _` mp_tac >>
+           metis_tac[]) >>
+       conj_tac
+       >- (irule ptr_covers_old_transport >>
+           qexistsl_tac [`G'`, `s'`, `a'`, `tn'`] >>
+           conj_tac >- simp[] >>
+           conj_tac >- simp[] >>
+           qpat_assum `!x. not_fresh_at a' x ==> _` mp_tac >>
+           metis_tac[]) >>
+       conj_tac
+       >- (rewrite_tac[GSYM valueEncodingPropsTheory.val_in_memory_tuple] >>
+           rpt strip_tac >> irule toplevel_robust_exterior_frame >>
+           conj_tac
+           >- (irule valueTypingMemoryPropsTheory.value_has_type_memory_wf >>
+               simp[vyperTypingTheory.value_has_type_def]) >>
+           qexistsl_tac [`s'.vs_memory`, `z.vs_memory`, `tn'.t_mem`, `tf.t_mem`,
+             `{i | SUM (MAP type_memory_size (TAKE k dtvs)) + w2n b <= i /\
+                   i < SUM (MAP type_memory_size (TAKE k dtvs)) +
+                       (type_memory_size (EL k dtvs) + w2n b)}`] >>
+           simp[valueEncodingPropsTheory.val_in_memory_tuple,
+                loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def,
+                valueEncodingProofsTheory.type_memory_size_list_sum] >>
+           conj_tac
+           >- (rpt strip_tac >>
+               qpat_x_assum `!i. _ ==> mem_bytes_at i 1 z.vs_memory = _ /\ _`
+                 (qspec_then `i` mp_tac) >> simp[]) >>
+           rpt strip_tac >>
+           qpat_x_assum `!i. _ ==> mem_bytes_at i 1 z.vs_memory = _ /\ _`
+             (qspec_then `i` mp_tac) >> simp[]) >>
+       conj_tac
+       >- (simp_tac (srw_ss()) [ADD_COMM] >> first_assum ACCEPT_TAC) >>
+       conj_tac
+       >- (qx_gen_tac `x` >> strip_tac >>
+           `not_fresh_at a' x` by
+             (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+           qpat_x_assum `!x. not_fresh_at a' x ==> _` (qspec_then `x` mp_tac) >>
+           qpat_x_assum `!x. not_fresh_at sa x ==> _` (qspec_then `x` mp_tac) >>
+           simp[]) >>
+       qx_gen_tac `i` >> strip_tac >>
+       qpat_x_assum `!i. _ ==> mem_bytes_at i 1 z.vs_memory = _ /\ _`
+         (qspec_then `i` mp_tac) >>
+       qpat_x_assum `!i. _ ==> mem_bytes_at i 1 s'.vs_memory = _ /\ _`
+         (qspec_then `i` mp_tac) >>
+       simp[] >> metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM,
+                          arithmeticTheory.LESS_EQ_ADD])) >>
+  disch_then (qspecl_then [`dts`, `sts`, `0`, `0`, `sa`, `sz`] mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`G`, `tn`, `s`] mp_tac) >>
+  simp[] >> strip_tac >>
+  fs[Abbr `tupInv`] >>
+  `k' = LENGTH vs` by simp[] >>
+  gvs[] >>
+  `TAKE (LENGTH vs) dtvs = dtvs` by simp[listTheory.TAKE_LENGTH_ID_rwt2] >>
+  gvs[] >>
+  `!m. mem_agree_outside tf.t_mem u.vs_memory m ==>
+       tuple_in_memory vs dtvs (w2n b) m` by
+    (rpt strip_tac >> irule tuple_in_memory_from_elements >>
+     simp[] >>
+     qpat_x_assum `!j. j < LENGTH vs ==> _` mp_tac >>
+     simp_tac (srw_ss()) [ADD_COMM] >> metis_tac[]) >>
+  qexistsl_tac [`H`, `tf`, `u`] >> simp[] >>
+  qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >> simp[] >>
+  qpat_x_assum `!i. _ ==> mem_bytes_at i 1 u.vs_memory = _ /\ _` mp_tac >>
+  disch_tac >> disch_tac >> first_assum ACCEPT_TAC
+QED
