@@ -54,7 +54,7 @@ Proof
        ext_call_precheck_ok_def, lift_sum_runtime_def,
        evaluate_literal_def, dest_AddressV_def, read_result_def, read_results_def,
        empty_evaluation_context_def, get_tenv_def,
-       get_accounts_def, take_call_outcome_def, call_outcome_request_def,
+       get_accounts_def, take_call_outcome_def, take_request_outcome_def, call_outcome_request_def,
        take_outcome_def, record_request_def, computed_precompile_addresses,
        failed_outcome_def, empty_state_def, UNCURRY]
 QED
