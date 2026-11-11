@@ -3,7 +3,7 @@ Theory vyperStorageTraceTest
 Ancestors
   vyperInterpreter vyperState vyperContext vyperValue vyperAST
   vyperCallOutcome vyperCallOutcomeProps extCallOracle vyperStorage
-  vyperStorageBackend
+  vyperStorageBackend vyperStorageFootprint
 Libs
   wordsLib
 
@@ -116,4 +116,26 @@ Proof
        update_accounts_def, update_transient_def, append_logs_def,
        update_pending_deletions_def,
        return_def, evaluation_state_component_equality]
+QED
+
+(* Rejected oracle accounts are observed but never adopted. The finite
+   guard checks the observed data bound without requiring those accounts. *)
+Theorem rejected_accounts_trace_domain:
+  st.storage_trace = [] /\ st.outcomes = SOME os /\
+  take_outcome rq os = (outcome,rest) /\
+  outcome.co_success /\ ~rq.cr_static /\
+  ~accounts_runtime_well_typed outcome.co_accounts /\
+  LENGTH outcome.co_returnData < dimword(:256) ==>
+  FST (take_request_outcome rq st) =
+    INR (Error (RuntimeError "call outcome accounts")) /\
+  storage_trace_domain cx st
+    (SND (take_request_outcome rq st)).storage_trace
+Proof
+  simp[take_request_outcome_def] >> strip_tac >>
+  simp[storage_trace_domain_def, valid_horizon_def,
+       storage_trace_horizon_def, storage_trace_regions_def,
+       storage_trace_locks_def, regions_consistent_def,
+       storage_locks_separated_def, storage_well_formed_on_def,
+       storage_observations_ok_def, storage_roots_fit_def,
+       storage_trace_backends_well_formed_def]
 QED

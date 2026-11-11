@@ -100,11 +100,7 @@ Definition storage_observations_ok_def:
     storage_trace_backends_well_formed cx (FST H) observations /\
     EVERY (\observation. case observation of
       StorageOutcome rq outcome =>
-        LENGTH outcome.co_returnData < dimword(:256) /\
-        (~rq.cr_static /\
-         (outcome.co_success \/
-          (rq.cr_kind <> MessageCall /\ rq.cr_kind <> DelegateMessageCall)) ==>
-         accounts_runtime_well_typed outcome.co_accounts)
+        LENGTH outcome.co_returnData < dimword(:256)
     | StorageBackend accounts transient => accounts_runtime_well_typed accounts
     | _ => T) observations
 End
