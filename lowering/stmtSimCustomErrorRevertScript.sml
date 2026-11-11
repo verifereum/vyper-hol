@@ -26,7 +26,7 @@ Ancestors
   venomInst arithmetic compilerInstructionSuffix windowPhaseMem abiEncoderWindowPhase
   stmtSimCustomErrorPrepare externalReturnEncoderSites abiEncoderResultLive
   calldataDynOwned allocaSiteResource stmtSimCustomErrorTrapCompile
-  stmtSimCustomErrorTrap runFromGasPathMem
+  stmtSimCustomErrorTrap stmtSimCustomErrorTrapPath runFromGasPathMem
 
 Definition custom_error_revert_tail_def:
   custom_error_revert_tail cenv id tys args_buf no_args =
@@ -402,5 +402,8 @@ Theorem custom_error_revert_tail_run:
     ?t. gas_path_mem ctx func s 0 (Abort Revert_abort t) /\
         abi_encoder_registered_effect (frag_ids sm sb) [] s t
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all custom_error_revert_tail_projected_path >> strip_tac >>
+  drule custom_error_trap_path_reflect >> simp[] >>
+  strip_tac >> metis_tac[]
 QED
