@@ -16,6 +16,7 @@ Ancestors
   bodyIntCallFamAggSubscriptMap bodyIntCallFamAggSubscriptArrayPrepare
   bodyIntCallFamAggSubscriptArrayCompose bodyIntCallFamAggSubscriptArraySequence
   bodyIntCallFamAggSubscriptArraySetup bodyIntCallFamAggSubscriptGas
+  bodyIntCallFamAggSubscriptArrayProducer
   bodyIntCallFamAggSubscriptBaseOutcome bodyIntCallFamAggSubscriptPosts
 
 Theorem intcall_subscript_step:
