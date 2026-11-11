@@ -52,7 +52,7 @@ Theorem aggregate_typed_store_path_mem:
       off <= a /\ a+len <= off+sz /\
       (a+len <= w2n dw \/ w2n dw+type_memory_size dtv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-    locals_kept ce es' r q /\ alloca_history fn q /\
+    locals_kept ce es' es' r q /\ alloca_history fn q /\
     q.vs_alloca_next = s.vs_alloca_next
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

@@ -139,7 +139,7 @@ Theorem aggregate_tuple_head_tail_mem[local]:
       (!name lb len. local_region ce es1.scopes t1 name lb len ==> lo+sz <= lb \/ lb+len <= lo) /\
       lo <= a /\ a+k <= lo+sz /\ (a+k <= b+off \/ b+off+type_memory_size htv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k t1.vs_memory) /\
-    locals_kept ce es1 t1 q /\ q.vs_current_bb = ss.cs_current_bb /\
+    locals_kept ce es1 es1 t1 q /\ q.vs_current_bb = ss.cs_current_bb /\
     q.vs_inst_idx = LENGTH ss.cs_current_insts /\
     alloca_history func q /\ t1.vs_alloca_next <= q.vs_alloca_next /\
     lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas inst.inst_id = SOME (b,asz) /\
@@ -213,7 +213,7 @@ Theorem aggregate_tuple_tail_outcome_mem[local]:
         aid < ss.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es1.scopes q name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) /\
-      locals_kept ce es1 q r /\ alloca_history func r /\ q.vs_alloca_next <= r.vs_alloca_next)
+      locals_kept ce es1 es2 q r /\ alloca_history func r /\ q.vs_alloca_next <= r.vs_alloca_next)
     (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit) /\
   vv_post ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
   ci_mono sa sm /\ ci_mono sa ss /\
@@ -233,7 +233,7 @@ Theorem aggregate_tuple_tail_outcome_mem[local]:
     lo <= a /\ a+k <= lo+sz /\
     (a+k <= b+off \/ b+off+type_memory_size htv <= a) ==>
     mem_bytes_at a k q.vs_memory = mem_bytes_at a k t1.vs_memory) /\
-  locals_kept ce es1 t1 q /\ s0.vs_alloca_next <= t1.vs_alloca_next /\
+  locals_kept ce es1 es1 t1 q /\ s0.vs_alloca_next <= t1.vs_alloca_next /\
   t1.vs_alloca_next <= q.vs_alloca_next /\
   fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
   (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
@@ -253,7 +253,7 @@ Theorem aggregate_tuple_tail_outcome_mem[local]:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
+      locals_kept ce es es2 s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
     (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
   strip_tac >>
@@ -323,7 +323,7 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
           aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
           (!name lo sz. local_region ce es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-        locals_kept ce es s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
+        locals_kept ce es es' s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
       (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)) /\
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
   expr_body_pre ce cx env h es /\ body_exprs_mem_ok cx (h::args) /\
@@ -371,7 +371,7 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
+      locals_kept ce es es2 s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
     (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
   strip_tac >>
@@ -446,7 +446,7 @@ Theorem aggregate_make_tuple_body_sim_mem:
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
+      locals_kept ce es es' s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
     (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
   Induct_on `args`

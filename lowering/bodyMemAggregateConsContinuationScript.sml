@@ -77,20 +77,20 @@ Theorem aggregate_slice_frame_transport[local]:
     (!n b len. local_region ce es'.scopes u n b len ==> lo+sz <= b \/ b+len <= lo) /\
     lo <= a /\ a+k <= lo+sz /\ D a k ==>
     mem_bytes_at a k q.vs_memory = mem_bytes_at a k u.vs_memory) /\
-  locals_kept ce es' u q ==>
+  locals_kept ce es' es' u q ==>
   (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
   (!i a. FLOOKUP r.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
   (!i lo sz a k. FLOOKUP r.vs_allocas i = SOME (lo,sz) /\ i < N /\
     (!n b len. local_region ce es'.scopes r n b len ==> lo+sz <= b \/ b+len <= lo) /\
     lo <= a /\ a+k <= lo+sz /\ D a k ==>
     mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-  locals_kept ce es' r q
+  locals_kept ce es' es' r q
 Proof
   strip_tac >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
-  fs[locals_kept_def] >> metis_tac[]
+  fs[locals_kept_def, popped_kept_def] >> metis_tac[]
 QED
 
 Theorem aggregate_cons_slice_static[local]:
@@ -204,7 +204,7 @@ Theorem aggregate_cons_from_slice_mem_cursor:
         (a+k <= w2n (n2w (b+off):bytes32) \/
           w2n (n2w (b+off):bytes32)+type_memory_size tv <= a) ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k u.vs_memory) /\
-      locals_kept ce es' u q /\
+      locals_kept ce es' es' u q /\
       q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func q /\ u.vs_alloca_next <= q.vs_alloca_next) ==>
   ?v q. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r) [] (INL v) es' (OK q) /\
@@ -216,7 +216,7 @@ Theorem aggregate_cons_from_slice_mem_cursor:
       (!n b len. local_region ce es'.scopes r n b len ==> lo+sz <= b \/ b+len <= lo) /\
       lo <= a /\ a+k <= lo+sz /\ (a+k <= b+off \/ b+off+type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
     lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz)
@@ -234,7 +234,7 @@ Proof
      qexistsl_tac [`ctx`, `func`, `0`, `u`] >> simp[])) >> strip_tac >>
   `!z. not_fresh_at sm z ==> not_fresh_at sn z` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists `sm` >> fs[ci_mono_def]) >>
-  drule_at (Pat `locals_kept _ _ _ _`) aggregate_slice_frame_transport >>
+  drule_at (Pat `locals_kept _ _ _ _ _`) aggregate_slice_frame_transport >>
   disch_then (qspecl_then [`sn`, `sm`, `r`, `sa.cs_next_id`,
     `\a k. a+k <= b+off \/ b+(off+type_memory_size tv) <= a`] mp_tac) >>
   (impl_tac >- (gvs[] >> rpt strip_tac >> first_x_assum irule >> metis_tac[])) >> strip_tac >>

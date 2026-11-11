@@ -37,7 +37,8 @@ Theorem aggregate_completed_buffer_result:
     (!name lo k. local_region ce es.scopes t name lo k ==>
       a+n <= lo \/ lo+k <= a) ==>
     mem_bytes_at a n r.vs_memory = mem_bytes_at a n t.vs_memory) /\
-  t.vs_memory = s0.vs_memory /\ locals_kept ce es t r ==>
+  t.vs_memory = s0.vs_memory /\ locals_kept ce es es' t r /\
+  (~expr_has_effect e ==> pure_frame ce func es sa s0 r) ==>
   vv_post ctx func ce cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) p) r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' (Value v)

@@ -44,7 +44,7 @@ Theorem aggregate_body_head_continuation_mem:
         lo+sz <= lb \/ lb+len <= lo) /\
       lo <= a /\ a+k <= lo+sz /\ (a+k <= b+off \/ b+off+type_memory_size htv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k t1.vs_memory) /\
-    locals_kept ce es1 t1 q /\ q.vs_current_bb = ss.cs_current_bb /\
+    locals_kept ce es1 es1 t1 q /\ q.vs_current_bb = ss.cs_current_bb /\
     q.vs_inst_idx = LENGTH ss.cs_current_insts /\
     alloca_history func q /\ t1.vs_alloca_next <= q.vs_alloca_next /\
     lookup_var x q = SOME (n2w b) /\

@@ -51,7 +51,7 @@ Theorem aggregate_body_cons_continuation_mem_cursor:
       lo <= a /\ a + k <= lo + sz /\
       (a + k <= b+off \/ b+off + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
