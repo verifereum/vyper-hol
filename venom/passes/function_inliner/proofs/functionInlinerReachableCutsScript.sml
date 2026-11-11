@@ -1569,3 +1569,16 @@ Proof
   qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `LENGTH`) >>
   simp[LENGTH_TAKE, venomExecProofsTheory.phi_prefix_length_le]
 QED
+
+Theorem inline_routed_leaf_source_member:
+  !cert root p fn path. inline_routed_leaf cert root p fn path ==>
+  !C n. inline_annotated_origin C n root cert ==> MEM fn C.ctx_functions
+Proof
+  ho_match_mp_tac inline_routed_leaf_strongind >> rpt conj_tac
+  >- (rpt strip_tac >>
+      drule functionInlinerOccurrencesTheory.inline_annotated_entry_identity >>
+      simp[functionInlinerOccurrencesTheory.inline_entry_function_def]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule functionInlinerOccurrencesTheory.inline_annotated_origin_edit_elim >>
+  simp[] >> strip_tac >> gvs[] >> metis_tac[]
+QED

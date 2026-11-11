@@ -1806,3 +1806,108 @@ Proof
   qpat_x_assum `!snap frame. _` drule >>
   fs[INSERT_UNION_EQ]
 QED
+
+Theorem inline_tracked_read_defined:
+  inline_tracked_snapshot fn a route snap frame /\
+  MEM v (cfgTransform$fn_all_vars fn) /\
+  lookup_var v snap.ils_state = SOME w ==>
+  ?u. lookup_var (route.ir_rename v) frame.ipf_state = SOME u /\
+    (~retpc_var fn v ==> u = w)
+Proof
+  simp[inline_tracked_snapshot_def, inline_snapshot_data_def] >>
+  rpt strip_tac >> Cases_on `retpc_var fn v` >> gvs[IN_APP] >>
+  metis_tac[optionTheory.IS_SOME_EXISTS, optionTheory.IS_SOME_DEF]
+QED
+
+Theorem inline_tracked_phi_read:
+  inline_tracked_snapshot fn a route snap frame /\
+  inline_opacity_ok fn (retpc_var fn) /\
+  MEM i (fn_insts fn) /\ i.inst_opcode = PHI /\
+  phi_well_formed i.inst_operands /\
+  snap.ils_state.vs_prev_bb = SOME prev /\
+  frame.ipf_state.vs_prev_bb = SOME q /\
+  j.inst_outputs = MAP route.ir_rename i.inst_outputs /\
+  (!v. resolve_phi prev i.inst_operands = SOME (Var v) ==>
+    resolve_phi q j.inst_operands = SOME (Var (route.ir_rename v))) /\
+  eval_one_phi snap.ils_state i = SOME (x,w) ==>
+  ?u. eval_one_phi frame.ipf_state j = SOME (route.ir_rename x,u) /\
+    (~retpc_var fn x ==> u = w)
+Proof
+  strip_tac >>
+  `?op. resolve_phi prev i.inst_operands = SOME op /\
+        eval_operand op snap.ils_state = SOME w /\ i.inst_outputs = [x]` by
+    gvs[eval_one_phi_def, AllCaseEqs()] >>
+  drule_all venomWfPropsTheory.resolve_phi_well_formed >> strip_tac >> gvs[] >>
+  `EVERY (inline_inst_vars_in (\v. MEM v (cfgTransform$fn_all_vars fn))) (fn_insts fn)` by
+    simp[GSYM functionInlinerNamespaceTheory.inline_fn_vars_in] >>
+  `!ins y. MEM ins (fn_insts fn) /\ MEM (Var y) ins.inst_operands ==>
+    y IN set (cfgTransform$fn_all_vars fn)` by
+    (gvs[EVERY_MEM, functionInlinerNamespaceTheory.inline_inst_vars_in_def] >>
+     rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     qpat_x_assum `!op. MEM op ins.inst_operands ==> _`
+       (qspec_then `Var y` mp_tac) >> simp[]) >>
+  drule_all functionInlinerSimulationTheory.inline_phi_selected_static >>
+  strip_tac >>
+  `lookup_var var snap.ils_state = SOME w` by gvs[eval_operand_def] >>
+  drule_all inline_tracked_read_defined >> strip_tac >>
+  qexists_tac `u` >> simp[eval_one_phi_def, eval_operand_def] >>
+  metis_tac[IN_APP]
+QED
+
+Theorem inline_owner_phi_observations:
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_routed_leaf cert root p a.ia_function path /\
+  route.ir_rename = inline_path_rename path /\
+  lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks = SOME sb /\
+  lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME tb /\
+  (!q. snap.ils_state.vs_prev_bb = SOME q ==> MEM q (fn_labels a.ia_function)) /\
+  inline_phi_entry_path path (snap.ils_state.vs_current_bb,snap.ils_state.vs_prev_bb) =
+    (frame.ipf_state.vs_current_bb,frame.ipf_state.vs_prev_bb) ==>
+  LIST_REL (\i j. !x w. eval_one_phi snap.ils_state i = SOME (x,w) ==>
+    ?u. eval_one_phi frame.ipf_state j = SOME (route.ir_rename x,u) /\
+      (~retpc_var a.ia_function x ==> u = w))
+    (TAKE (phi_prefix_length sb.bb_instructions) sb.bb_instructions)
+    (TAKE (phi_prefix_length tb.bb_instructions) tb.bb_instructions)
+Proof
+  strip_tac >>
+  drule inline_owner_storage_head >> strip_tac >>
+  `inliner_input_ok C /\ MEM a.ia_function C.ctx_functions` by
+    metis_tac[inline_routed_leaf_source_member,
+      functionInlinerEnvelopesTheory.inline_annotated_origin_erasure,
+      functionInlinerOriginTheory.qualified_origin_erasure,
+      functionInlinerOriginTheory.inliner_fn_origin_input_ok] >>
+  `fn_inst_wf a.ia_function /\ inline_opacity_ok a.ia_function (retpc_var a.ia_function)` by
+    (conj_tac
+     >- (gvs[functionInlinerContractTheory.inliner_input_ok_def, EVERY_MEM] >> metis_tac[]) >>
+     drule_all functionInlinerOpacityTheory.inliner_input_opacity >> simp[GSPEC_ETA, SF ETA_ss]) >>
+  drule_all inline_routed_phi_prefix_length >>
+  disch_then (qspec_then `snap.ils_state.vs_prev_bb` mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  `phi_prefix_length sb.bb_instructions <= LENGTH tb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+  simp[LIST_REL_EL_EQN, LENGTH_TAKE, venomExecProofsTheory.phi_prefix_length_le] >>
+  qx_gen_tac `k` >> strip_tac >> simp[EL_TAKE] >>
+  `k < LENGTH sb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le, arithmeticTheory.LESS_LESS_EQ_TRANS] >>
+  `MEM (EL k sb.bb_instructions) (fn_insts a.ia_function)` by
+    (simp[venomInstTheory.fn_insts_def,
+       unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+     qexists_tac `sb` >> conj_tac
+     >- metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+     metis_tac[MEM_EL]) >>
+  `(EL k sb.bb_instructions).inst_opcode = PHI` by
+    (qspec_then `sb.bb_instructions` mp_tac
+      analysisSimProofsBaseTheory.phi_prefix_all_phi >>
+     simp[EVERY_EL, LENGTH_TAKE, venomExecProofsTheory.phi_prefix_length_le, EL_TAKE] >>
+     disch_then (qspec_then `k` mp_tac) >> simp[]) >>
+  `phi_well_formed (EL k sb.bb_instructions).inst_operands` by
+    (gvs[venomWfTheory.fn_inst_wf_def, EVERY_MEM] >>
+     `inst_wf (EL k sb.bb_instructions)` by
+       metis_tac[venomExecPropsTheory.lookup_block_MEM, MEM_EL] >>
+     gvs[venomWfTheory.inst_wf_def]) >>
+  Cases_on `snap.ils_state.vs_prev_bb`
+  >- (Cases_on `(EL k sb.bb_instructions).inst_outputs` >> simp[eval_one_phi_def]) >>
+  gvs[] >> drule_all inline_routed_phi_at >> simp[] >> strip_tac >> gvs[] >>
+  rpt strip_tac >> metis_tac[inline_tracked_phi_read]
+QED
