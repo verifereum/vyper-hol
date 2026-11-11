@@ -36,17 +36,12 @@ Proof
   Cases >> simp[load_opc_for_def, store_opc_for_def, is_terminator_def]
 QED
 
-Theorem fuel_ok_stmt_expr_assign[local]:
-  (!cenv ty e Wv E.
-     fuel_ok Wv {} E
-       (do compile_expr cenv (expr_type e) e; return () od)) /\
-  (!cenv id vtyp e Wv E.
-     cenv_ptrs_in Wv cenv ==>
-     fuel_ok Wv {} E (compile_stmt cenv lctx ty (AnnAssign id vtyp e)))
+Theorem fuel_ok_stmt_annassign[local]:
+  !cenv lctx ty id vtyp e Wv E.
+    cenv_ptrs_in Wv cenv ==>
+    fuel_ok Wv {} E (compile_stmt cenv lctx ty (AnnAssign id vtyp e))
 Proof
-  conj_tac >> rpt gen_tac
-  >- fuel_auto [fuel_ok_compile_expr_cb] >>
-  strip_tac >> simp_tac std_ss [compile_stmt_def] >>
+  rpt gen_tac >> strip_tac >> simp_tac std_ss [compile_stmt_def] >>
   Cases_on `FLOOKUP cenv.ce_vars id` >>
   TRY (rename1 `SOME x` >> Cases_on `x`) >>
   simp_tac (srw_ss()) [] >>
@@ -204,17 +199,22 @@ Theorem fuel_ok_compile_stmt_simple:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `s`
   >- simp[compile_stmt_def, fuel_ok_return]
+  >- (Cases_on `lctx` >> fs[stmt_exits_in_def] >>
+      simp[compile_stmt_def, fuel_ok_emit_inst_any, is_terminator_def] >>
+      (* Continue: a jump to the loop's continue label, in E *)
+      irule fuel_ok_emit_inst_jmp >> simp[])
+  >- (Cases_on `lctx` >> fs[stmt_exits_in_def] >>
+      simp[compile_stmt_def, fuel_ok_emit_inst_any, is_terminator_def] >>
+      irule fuel_ok_emit_inst_jmp >> simp[])
   >- (simp[compile_stmt_def] >> fuel_auto [fuel_ok_compile_expr_cb])
-  >- (Cases_on `a` >> simp[fuel_ok_stmt_assign_base, fuel_ok_stmt_assign_tuple])
-  >- (irule (CONJUNCT2 fuel_ok_stmt_expr_assign) >> simp[])
-  >- simp[fuel_ok_stmt_augassign]
-  >- simp[fuel_ok_stmt_append]
+  >- fs[]
+  >- fs[]
   >- simp[fuel_ok_stmt_assert]
+  >- simp[fuel_ok_stmt_log]
   >- simp[fuel_ok_stmt_raise]
   >- (Cases_on `o'` >> simp[fuel_ok_stmt_return_none, fuel_ok_stmt_return_some])
-  >- simp[fuel_ok_stmt_log]
-  >- (Cases_on `lctx` >>
-      simp[compile_stmt_def, fuel_ok_emit_inst_any, is_terminator_def]
-      >- (irule fuel_ok_emit_inst_any >> simp[])) >>
-  fs[]
+  >- (Cases_on `a` >> simp[fuel_ok_stmt_assign_base, fuel_ok_stmt_assign_tuple])
+  >- simp[fuel_ok_stmt_augassign]
+  >- simp[fuel_ok_stmt_append] >>
+  simp[fuel_ok_stmt_annassign]
 QED
