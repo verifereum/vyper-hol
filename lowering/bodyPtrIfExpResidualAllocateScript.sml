@@ -80,6 +80,11 @@ Resume ifexp_residual_allocating_arm_ptr[apply]:
     simp[expr_type_def, lowered_value_type_def] >>
   `post_value_type ce (IfExp ty cond a b) = expr_type (IfExp ty cond a b)` by
     simp[loweringPostsTheory.post_value_type_def] >>
+  `~expr_has_effect (IfExp ty cond a b) ==> ~expr_has_effect arm` by
+    (rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+     strip_tac >>
+     qpat_assum `arm = a \/ arm = b` (DISJ_CASES_THEN SUBST1_TAC) >>
+     first_assum ACCEPT_TAC) >>
   drule_all ifexp_allocate_unwrap_bytes >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf`, `q`] >> gvs[expr_type_def]

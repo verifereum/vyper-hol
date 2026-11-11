@@ -10,6 +10,7 @@ Theorem ifexp_allocate_unwrap_bytes:
   post_value_type ce arm = expr_type arm /\
   post_value_type ce result = expr_type result /\
   vv_post ctx fn ce cx arm es sa sb s0 ee raw vv s /\
+  (~expr_has_effect result ==> ~expr_has_effect arm) /\
   stmt_state_rel ctx fn ce cx es s0 /\
   ghost_inv d ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
