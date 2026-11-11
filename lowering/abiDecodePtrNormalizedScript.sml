@@ -74,38 +74,3 @@ Proof
       simp[venom_state_component_equality]) >>
   fs[lookup_var_def]
 QED
-
-(* Interface probe: two compiler scalar phases compose at their own PCs. *)
-Theorem abi_decode_scalar_compile_pair_ptr[local]:
-  bop_scalar_seq R A (emitted_insts sa sb) B /\
-  bop_scalar_seq R B (emitted_insts sb sc) C /\
-  (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  inst_extends sa sb /\ same_blocks sa sb /\ fn_has_code sa sb func /\
-  inst_extends sb sc /\ same_blocks sb sc /\ fn_has_code sb sc func /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  u.vs_inst_idx = LENGTH sc.cs_current_insts /\
-  run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
-  run_inst_seq (emitted_insts sb sc) t = OK (u with vs_inst_idx := t.vs_inst_idx) ==>
-  ?G2 tn2. inst_seq_ptr D 0 ctx func PG G tn
-    (emitted_insts sa sb ++ emitted_insts sb sc) s G2 tn2
-Proof
-  strip_tac >>
-  drule_all abi_decode_scalar_compile_replay_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb` by
-    (qpat_x_assum `t = s with <|vs_vars := _; vs_inst_idx := _|>` mp_tac >>
-     fs[same_blocks_def] >> simp[venom_state_component_equality]) >>
-  drule_all abi_decode_scalar_compile_replay_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
-   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sb sc)` by
-    (imp_res_tac bop_scalar_seq_opcodes >> fs[EVERY_MEM]) >>
-  `t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sa sb) /\
-   u.vs_inst_idx = t.vs_inst_idx + LENGTH (emitted_insts sb sc)` by
-    fs[inst_extends_def] >>
-  drule_all inst_seq_ptr_append_normalized >>
-  strip_tac >> goal_assum (drule_at Any)
-QED
