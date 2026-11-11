@@ -39,6 +39,7 @@ Theorem ifexp_selected_body_nonword_outcome_ptr:
     (\res ee G tn z. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
       expr_post ctx fn cenv cx (if sel then a else b)
         (mid with gas_obs := []) se sx v0 ee v op z /\
+      vv_at cenv cx t se sx ee tv (LocatedValue t (mk_ptr op LocMemory)) z /\
       ptr_val_ok cx t v op G tn z /\ ptr_buf_ok cenv (IfExp t c a b) op G z /\
       ghost_inv d cenv cx ee G tn z /\
       ghost_kept cenv (mid with gas_obs := []) se G1 tn1 v0 G tn /\
@@ -132,6 +133,7 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`cop`,`if sel then a else b`,`op`,`sc`,`se`,`sx`,`sy`,`sz`,`BoolV sel`] >>
   simp[] >> conj_tac >- (Cases_on `sel` >> simp[]) >>
+  conj_tac >- (Cases_on `sel` >> simp[]) >>
   conj_tac >- (Cases_on `sel` >> simp[]) >>
   irule ifexp_selected_body_nonword_outcome_ptr >> goal_assum (drule_at Any) >> simp[] >>
   simp[jump_to_def, ghost_inv_jump_to, stmt_state_rel_jump_to] >>

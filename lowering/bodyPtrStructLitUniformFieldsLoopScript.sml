@@ -11,7 +11,7 @@ Theorem structlit_uniform_fields_loop_outcome_ptr:
       SOME (expr_type e,type_memory_bytes ce (expr_type e))) fields /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (MAP SND fields)) = SOME tvs /\
   expr_sim_inv ce cx env es /\
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
   off + type_memory_size_list tvs <= capacity /\
@@ -23,13 +23,14 @@ Theorem structlit_uniform_fields_loop_outcome_ptr:
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx (MAP SND fields) /\
   (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  (!e. MEM e (MAP SND fields) ==> post_value_type ce e = expr_type e) ==>
+  (!e. MEM e (MAP SND fields) ==> post_value_type ce e = expr_type e) /\
+  (pure ==> ~EXISTS expr_has_effect (MAP SND fields)) ==>
   out = Var root /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx (MAP SND fields)) (es,s0,G0,tn0)
     (\res ee H tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
-      literal_loop_frame ctx func ce cx d root aid addr capacity
+      literal_loop_frame pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb H tm z (cells ++ added) (off + type_memory_size_list tvs) /\
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>

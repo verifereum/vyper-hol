@@ -85,7 +85,9 @@ Proof
   `compile_alloc_buffer (type_memory_size_list tvs) sa = (ba,sm)` by metis_tac[] >>
   fs[EVERY_MEM] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)
-    structlit_uniform_allocated_fields_outcome_ptr >>
+    (REWRITE_RULE []
+      (Q.INST [`pure` |-> `~EXISTS (expr_has_effect o SND) (fields : (string # expr) list)`]
+        (SPEC_ALL structlit_uniform_allocated_fields_outcome_ptr))) >>
   simp[EVERY_MEM] >> disch_then drule_all >>
   disch_then (qspec_then `PG` strip_assume_tac) >> gvs[] >>
   dxrule structlit_uniform_outcome_source_run >> strip_tac >>
@@ -109,7 +111,7 @@ Proof
          goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
          simp[expr_type_def, read_result_def, return_def] >>
          goal_assum (drule_at Any) >> simp[]) >>
-      drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+      drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
         (Q.INST [`e` |-> `StructLit (StructT (src_id_opt,id)) (src_id_opt,id) kes`]
           structlit_uniform_endpoint_posts) >>
       simp[expr_type_def, lowered_value_type_def, post_value_type_def, type_memory_bytes_def] >>
