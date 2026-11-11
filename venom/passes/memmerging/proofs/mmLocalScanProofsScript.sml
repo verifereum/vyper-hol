@@ -6823,24 +6823,42 @@ Proof
   metis_tac[mm_local_surviving_write_opcode]
 QED
 
-Theorem mm_local_surviving_source_read[local]:
-  mm_local_history is H n /\ q < n /\ MEM h ss.ss_copies /\
+Theorem mm_local_surviving_source_read_recurrence[local]:
+  q < n /\ q < LENGTH is /\
+  (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H n q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory /\
+  MEM h ss.ss_copies /\
   ~MEM h (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed /\
   h.cg_src <= a /\ a + len <= h.cg_src + h.cg_length ==>
   read_memory a len (H (SUC q)) = read_memory a len (H q)
 Proof
   strip_tac >> Cases_on `mm_local_write_capture is H n q`
-  >- (drule_all mm_local_surviving_history_frame >>
-      simp[venomStateTheory.read_memory_def]) >>
-  PairCases_on `x` >>
-  `q < LENGTH is` by gvs[mm_local_history_def] >>
-  drule_all mm_local_write_capture_sound >> disch_then assume_tac >>
+  >- gvs[venomStateTheory.read_memory_def] >>
+  PairCases_on `x` >> gvs[] >>
   `h.cg_length = 0 \/ LENGTH x1 = 0 \/
    h.cg_src + h.cg_length <= x0 \/ x0 + LENGTH x1 <= h.cg_src` by
     (metis_tac[mm_local_scan_step_war_exclusion]) >>
   simp[venomStateTheory.read_memory_def] >>
   irule frameViewMemoryTheory.padded_memory_read_cong >> rpt strip_tac >>
   irule frameViewMemoryTheory.write_memory_byte_outside >> decide_tac
+QED
+
+Theorem mm_local_surviving_source_read[local]:
+  mm_local_history is H n /\ q < n /\ MEM h ss.ss_copies /\
+  ~MEM h (scan_inst dfg Mem2Mem ss (EL q is)).ss_flushed /\
+  h.cg_src <= a /\ a + len <= h.cg_src + h.cg_length ==>
+  read_memory a len (H (SUC q)) = read_memory a len (H q)
+Proof
+  strip_tac >>
+  `q < LENGTH is` by gvs[mm_local_history_def] >>
+  `(H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H n q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    (Cases_on `mm_local_write_capture is H n q`
+     >- (simp[] >> metis_tac[mm_local_surviving_history_frame]) >>
+     PairCases_on `x` >> simp[] >> metis_tac[mm_local_write_capture_sound]) >>
+  metis_tac[mm_local_surviving_source_read_recurrence]
 QED
 
 Theorem mm_local_scan_interval_read[local]:
@@ -9765,8 +9783,11 @@ Proof
   metis_tac[mm_local_insert_sorted_mem]
 QED
 
-Theorem mm_local_ancestral_interval_read[local]:
-  !b a. mm_local_history is H n /\ a <= b /\ b <= n /\
+Theorem mm_local_ancestral_interval_read_recurrence[local]:
+  !b a. a <= b /\ b <= n /\ b <= LENGTH is /\
+  (!q. a <= q /\ q < b ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H n q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
   (!q. a <= q /\ q < b ==>
     ?h. MEM h (cuts q).ss_copies /\ mm_local_copy_ancestor c h /\
         ~MEM h (scan_inst dfg Mem2Mem (cuts q) (EL q is)).ss_flushed) ==>
@@ -9787,7 +9808,35 @@ Proof
   `h.cg_src <= c.cg_src /\
    c.cg_src + c.cg_length <= h.cg_src + h.cg_length` by
     (gvs[mm_local_copy_ancestor_def] >> decide_tac) >>
-  drule_all mm_local_surviving_source_read >> simp[]
+  `b < LENGTH is` by decide_tac >>
+  `(H (SUC b)).vs_memory =
+    (case mm_local_write_capture is H n b of NONE => H b
+     | SOME (d,bs) => write_memory_with_expansion d bs (H b)).vs_memory` by
+    (first_x_assum irule >> simp[]) >>
+  drule_all mm_local_surviving_source_read_recurrence >> simp[]
+QED
+
+Theorem mm_local_ancestral_interval_read[local]:
+  !b a. mm_local_history is H n /\ a <= b /\ b <= n /\
+  (!q. a <= q /\ q < b ==>
+    ?h. MEM h (cuts q).ss_copies /\ mm_local_copy_ancestor c h /\
+        ~MEM h (scan_inst dfg Mem2Mem (cuts q) (EL q is)).ss_flushed) ==>
+  read_memory c.cg_src c.cg_length (H b) =
+  read_memory c.cg_src c.cg_length (H a)
+Proof
+  rpt strip_tac >>
+  `b <= LENGTH is` by gvs[mm_local_history_def] >>
+  `!q. a <= q /\ q < b ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H n q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    (rpt strip_tac >> `q < n` by decide_tac >>
+     `?h. MEM h (cuts q).ss_copies /\ mm_local_copy_ancestor c h /\
+        ~MEM h (scan_inst dfg Mem2Mem (cuts q) (EL q is)).ss_flushed` by
+       metis_tac[] >>
+     Cases_on `mm_local_write_capture is H n q`
+     >- (simp[] >> metis_tac[mm_local_surviving_history_frame]) >>
+     PairCases_on `x` >> simp[] >> metis_tac[mm_local_write_capture_sound]) >>
+  metis_tac[mm_local_ancestral_interval_read_recurrence]
 QED
 
 Theorem mm_local_ancestral_interval_captures[local]:
@@ -11104,12 +11153,15 @@ Proof
   gvs[mm_local_history_def]
 QED
 
-Theorem mm_local_indexed_selected_captures_compatible[local]:
+Theorem mm_local_indexed_selected_captures_compatible_interval[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\ j < l /\ l <= r /\ r < LENGTH is /\
-  l < N /\ mm_local_history is H N /\
+  l < N /\
+  (!q. j <= q /\ q < l ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H N q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory) /\
   s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
   ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE l is) /\
   ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
@@ -11161,25 +11213,89 @@ Proof
   `SUC j <= l /\ l <= N /\ j < N` by decide_tac >>
   `read_memory c.cg_src c.cg_length (H l) =
     read_memory c.cg_src c.cg_length (H (SUC j))` by
-    (drule_all mm_local_ancestral_interval_read >> simp[]) >>
+    (irule mm_local_ancestral_interval_read_recurrence >>
+     (conj_tac >- simp[]) >>
+     qexistsl [`cuts`, `dfg_build_function fn0`, `is`, `N`] >>
+     gvs[]) >>
   `mm_local_write_capture is H N j =
     SOME (c.cg_dst,read_memory c.cg_src c.cg_length (H j))` by
-    (irule mm_local_selected_write_capture >> simp[] >>
+    (irule mm_local_selected_write_capture_bounds >> simp[] >>
      qpat_x_assum `(?dj sj lj. (EL j is).inst_opcode = MCOPY /\ _) \/ _` strip_assume_tac >>
      gvs[] >> metis_tac[]) >>
   `mm_local_write_capture is H N l =
     SOME (h.cg_dst,read_memory h.cg_src h.cg_length (H l))` by
-    (irule mm_local_selected_write_capture >> simp[] >>
+    (irule mm_local_selected_write_capture_bounds >> simp[] >>
      qpat_x_assum `(?dl sl ll. (EL l is).inst_opcode = MCOPY /\ _) \/ _` strip_assume_tac >>
      gvs[] >> metis_tac[]) >>
   `(H (SUC j)).vs_memory =
      (write_memory_with_expansion c.cg_dst (read_memory c.cg_src c.cg_length (H j)) (H j)).vs_memory` by
-    (irule mm_local_write_capture_sound >> goal_assum (drule_at Any) >> simp[]) >>
+    (first_x_assum (qspec_then `j` mp_tac) >> simp[]) >>
   `mm_local_write_compatible c.cg_dst (read_memory c.cg_src c.cg_length (H j))
      h.cg_dst (read_memory h.cg_src h.cg_length (H l))` by
     (irule mm_local_overlap_chronology >>
      simp[] >> qexistsl [`H j`, `H (SUC j)`, `H l`] >> simp[] >> metis_tac[]) >>
   gvs[]
+QED
+
+Theorem mm_local_indexed_selected_captures_compatible[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < l /\ l <= r /\ r < LENGTH is /\
+  l < N /\ mm_local_history is H N /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE l is) /\
+  ((?dj sj lj. (EL j is).inst_opcode = MCOPY /\
+      (EL j is).inst_operands = [Lit dj; Lit sj; Lit lj] /\
+      c = <|cg_dst := w2n dj; cg_src := w2n sj; cg_length := w2n lj;
+             cg_inst_ids := [(EL j is).inst_id]|>) \/
+   (?dj vj srcj. (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dj; Var vj] /\
+      FLOOKUP s0.ss_loads vj = SOME srcj /\
+      lookup_var vj (H j) = SOME (mload srcj (H j)) /\
+      c = <|cg_dst := w2n dj; cg_src := srcj; cg_length := 32;
+             cg_inst_ids := [(EL j is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vj of
+                  NONE => [] | SOME li => [li.inst_id])|>)) /\
+  ((?dl sl ll. (EL l is).inst_opcode = MCOPY /\
+      (EL l is).inst_operands = [Lit dl; Lit sl; Lit ll] /\
+      h = <|cg_dst := w2n dl; cg_src := w2n sl; cg_length := w2n ll;
+             cg_inst_ids := [(EL l is).inst_id]|>) \/
+   (?dl vl srcl. (EL l is).inst_opcode = MSTORE /\
+      (EL l is).inst_operands = [Lit dl; Var vl] /\
+      FLOOKUP ss.ss_loads vl = SOME srcl /\
+      lookup_var vl (H l) = SOME (mload srcl (H l)) /\
+      h = <|cg_dst := w2n dl; cg_src := srcl; cg_length := 32;
+             cg_inst_ids := [(EL l is).inst_id] ++
+               (case dfg_get_def (dfg_build_function fn0) vl of
+                  NONE => [] | SOME li => [li.inst_id])|>)) /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  mm_local_write_capture is H N j = SOME (a,p) /\
+  mm_local_write_capture is H N l = SOME (b,qbytes) ==>
+  mm_local_write_compatible a p b qbytes
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `!q. j <= q /\ q < l ==> (H (SUC q)).vs_memory =
+    (case mm_local_write_capture is H N q of NONE => H q
+     | SOME (d,bs) => write_memory_with_expansion d bs (H q)).vs_memory` by
+    (rpt strip_tac >> `q < N /\ q < r` by decide_tac >>
+     Cases_on `q = j`
+     >- (gvs[] >> metis_tac[mm_local_write_capture_sound]) >>
+     `SUC j <= q` by decide_tac >>
+     `?A. MEM A (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+         empty_scan_state (TAKE q is)).ss_copies /\ mm_local_copy_ancestor c A /\
+       ~MEM A (scan_inst (dfg_build_function fn0) Mem2Mem
+         (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+           empty_scan_state (TAKE q is)) (EL q is)).ss_flushed` by
+       (qpat_x_assum `(?dj sj lj. (EL j is).inst_opcode = MCOPY /\ _) \/ _` strip_assume_tac
+        >- metis_tac[mm_local_indexed_bulk_trajectory] >>
+        metis_tac[mm_local_indexed_store_trajectory]) >>
+     Cases_on `mm_local_write_capture is H N q`
+     >- (simp[] >> metis_tac[mm_local_surviving_history_frame]) >>
+     PairCases_on `x` >> simp[] >> metis_tac[mm_local_write_capture_sound]) >>
+  mp_tac (SPEC_ALL mm_local_indexed_selected_captures_compatible_interval) >> simp[]
 QED
 
 Theorem mm_local_indexed_store_bulk_captures_compatible[local]:
