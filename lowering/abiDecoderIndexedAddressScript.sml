@@ -49,18 +49,18 @@ Proof
   `c1.cs_next_var <= limit_st.cs_next_var /\ c2.cs_next_var <= limit_st.cs_next_var`
     by decide_tac >>
   `eval_operand (Lit 32w) s = SOME 32w` by simp[eval_operand_def] >>
-  drule_all (SIMP_RULE bool_ss []
+  drule_all (SIMP_RULE (srw_ss()) []
     (Q.INST [`opc` |-> `ADD`] abi_decoder_binary_reentry)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
   `eval_operand idx s1 = SOME (n2w i)` by metis_tac[] >>
   `eval_operand (Lit (n2w stride)) s1 = SOME (n2w stride)` by simp[eval_operand_def] >>
-  drule_all (SIMP_RULE bool_ss []
+  drule_all (SIMP_RULE (srw_ss()) []
     (Q.INST [`opc` |-> `MUL`] abi_decoder_binary_reentry)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` >>
   `abi_decoder_operand_live c1.cs_next_var data_op` by
     first_assum ACCEPT_TAC >>
   `eval_operand data_op s2 = SOME ((n2w sb : bytes32) + 32w)` by metis_tac[] >>
-  drule_all (SIMP_RULE bool_ss []
+  drule_all (SIMP_RULE (srw_ss()) []
     (Q.INST [`opc` |-> `ADD`] abi_decoder_binary_reentry)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c2 st') s2 = OK t` >>
   `run_inst_seq (emitted_insts st c2) s = OK s2 /\ inst_extends st c2` by

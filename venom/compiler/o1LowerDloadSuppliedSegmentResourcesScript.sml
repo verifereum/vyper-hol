@@ -70,7 +70,7 @@ Proof
 QED
 
 Theorem ld_joint_segment_control:
-  !(ptr : operand). ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\ active_inst fn inst s /\
   ((inst.inst_opcode = DLOAD /\ inst.inst_operands = [ptr] /\
      inst.inst_outputs = [out]) \/
@@ -96,7 +96,7 @@ Theorem ld_joint_segment_control:
         (s with vs_inst_idx := SUC s.vs_inst_idx)
         (t with vs_inst_idx := t.vs_inst_idx + LENGTH es))
 Proof
-  gen_tac >> strip_tac >>
+  strip_tac >>
   `wf_function fn` by
     (drule ld_joint_source >> strip_tac >>
      drule occ_frame_reachable_projection >> strip_tac >>

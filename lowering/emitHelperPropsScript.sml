@@ -874,10 +874,12 @@ Proof
     irule fresh_vars_wrt_advance
     >> simp[] >>
     goal_assum $ drule_at Any >> gvs[] ) >>
-  rw[]
-  >> irule eval_operand_update_fresh
-  >> rw[]
-  >> goal_assum $ drule_at Any >> gvs[]
+  conj_tac >- (
+    rw[]
+    \\ irule eval_operand_update_fresh
+    >> rw[]
+    >> goal_assum $ drule_at Any >> gvs[] ) >>
+  rw[update_var_def]
 QED
 
 (* Generic: emit_op for pure 2-operand opcode *)
@@ -912,10 +914,12 @@ Proof
     irule fresh_vars_wrt_advance
     >> simp[] >>
     goal_assum $ drule_at Any >> gvs[] ) >>
-  rw[]
-  >> irule eval_operand_update_fresh
-  >> rw[]
-  >> goal_assum $ drule_at Any >> gvs[]
+  conj_tac >- (
+    rw[]
+    \\ irule eval_operand_update_fresh
+    >> rw[]
+    >> goal_assum $ drule_at Any >> gvs[] ) >>
+  rw[update_var_def]
 QED
 
 Theorem emit_op_ADD_correct:
@@ -1368,8 +1372,10 @@ Proof
   conj_tac
   >- (irule fresh_vars_wrt_advance >> simp[] >>
       goal_assum $ drule_at Any >> gvs[]) >>
-  rw[] >> irule eval_operand_update_fresh >> rw[] >>
-  goal_assum $ drule_at Any >> gvs[]
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
 QED
 
 Theorem fresh_vars_wrt_emit_void:
@@ -1591,8 +1597,10 @@ Proof
   conj_tac
   >- (irule fresh_vars_wrt_advance >> simp[] >>
       goal_assum $ drule_at Any >> gvs[]) >>
-  rw[] >> irule eval_operand_update_fresh >> rw[] >>
-  goal_assum $ drule_at Any >> gvs[]
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
 QED
 
 Theorem emit_op_SLOAD_correct:
@@ -1874,8 +1882,10 @@ Proof
   conj_tac
   >- (irule fresh_vars_wrt_advance >> simp[] >>
       goal_assum $ drule_at Any >> gvs[]) >>
-  rw[] >> irule eval_operand_update_fresh >> rw[] >>
-  goal_assum $ drule_at Any >> gvs[]
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
 QED
 
 (* Instantiation: CALLVALUE *)
@@ -1954,8 +1964,10 @@ Proof
   conj_tac
   >- (irule fresh_vars_wrt_advance >> simp[] >>
       goal_assum $ drule_at Any >> gvs[]) >>
-  rw[] >> irule eval_operand_update_fresh >> rw[] >>
-  goal_assum $ drule_at Any >> gvs[]
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
 QED
 
 (* Instantiation: ISZERO *)
@@ -1983,8 +1995,10 @@ Proof
   conj_tac
   >- (irule fresh_vars_wrt_advance >> simp[] >>
       goal_assum $ drule_at Any >> gvs[]) >>
-  rw[] >> irule eval_operand_update_fresh >> rw[] >>
-  goal_assum $ drule_at Any >> gvs[]
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
 QED
 
 (* Instantiation: LT *)
@@ -2018,8 +2032,10 @@ Proof
   conj_tac
   >- (irule fresh_vars_wrt_advance >> simp[] >>
       goal_assum $ drule_at Any >> gvs[]) >>
-  rw[] >> irule eval_operand_update_fresh >> rw[] >>
-  goal_assum $ drule_at Any >> gvs[]
+  conj_tac
+  >- (rw[] >> irule eval_operand_update_fresh >> rw[] >>
+      goal_assum $ drule_at Any >> gvs[]) >>
+  rw[update_var_def]
 QED
 
 (* ===== ASSERT: combined outcome ===== *)
@@ -2199,16 +2215,18 @@ Resume emit_op_ALLOCA_correct[none_case]:
     rpt strip_tac >>
     Cases_on `n = st.cs_next_var` >> gvs[]
   ) >>
-  rpt strip_tac >>
-  Cases_on `op` >>
-  gvs[eval_operand_def, lookup_var_def, update_var_def,
-      finite_mapTheory.FLOOKUP_UPDATE] >>
-  spose_not_then strip_assume_tac >> gvs[] >>
-  gvs[fresh_vars_wrt_def] >>
-  first_x_assum (qspec_then `st.cs_next_var` mp_tac) >>
-  simp[finite_mapTheory.FLOOKUP_DEF] >>
-  Cases_on `STRING #"%" (toString st.cs_next_var) = s` >>
-  gvs[finite_mapTheory.FLOOKUP_DEF]
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `op` >>
+      gvs[eval_operand_def, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+      spose_not_then strip_assume_tac >> gvs[] >>
+      gvs[fresh_vars_wrt_def] >>
+      first_x_assum (qspec_then `st.cs_next_var` mp_tac) >>
+      simp[finite_mapTheory.FLOOKUP_DEF] >>
+      Cases_on `STRING #"%" (toString st.cs_next_var) = s` >>
+      gvs[finite_mapTheory.FLOOKUP_DEF]) >>
+  simp[update_var_def]
 QED
 
 Resume emit_op_ALLOCA_correct[some_case]:
@@ -2220,11 +2238,13 @@ Resume emit_op_ALLOCA_correct[some_case]:
     irule fresh_vars_wrt_advance >>
     qexistsl [`st.cs_next_var`, `st`] >> gvs[]
   ) >>
-  rpt strip_tac >>
-  irule eval_operand_update_fresh >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexists `st.cs_next_var` >> simp[] >>
-  qexists `st` >> simp[]
+  conj_tac
+  >- (rpt strip_tac >>
+      irule eval_operand_update_fresh >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexists `st.cs_next_var` >> simp[] >>
+      qexists `st` >> simp[]) >>
+  simp[update_var_def]
 QED
 
 Finalise emit_op_ALLOCA_correct

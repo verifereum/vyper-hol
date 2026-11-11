@@ -4,7 +4,7 @@ Ancestors
   finite_map list relation words abiDecoderCode abiDecoderAllocation localPtrsProps
   loweringMemSafetyDefs pred_set venomInstProofs1 abiAllocationInvariant
   abiScratchDecodeResources abiScratchDecodeInput abiBuiltinAllocation abiBuiltinDecodeSetup
-  venomMemDefs compileEnv arithmetic venomWfProps
+  venomMemDefs compileEnv arithmetic
 
 (* ===== Allocation History ===== *)
 
