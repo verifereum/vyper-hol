@@ -10,6 +10,10 @@
 Theory bodyPtrIntCallCase
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
+  bodyPtrIntCallFrameRet bodyPtrIntCallArrayHeader bodyPtrIntCallConcreteFields
+  bodyPtrIntCallEntryContracts bodyPtrIntCallMargin bodyPtrIntCallPureReads
+  bodyPtrIntCallRunConfinement bodyPtrIntCallStageArgument
+  bodyPtrIntCallStaticArrayCopy bodyPtrIntCallWordStore
   vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
