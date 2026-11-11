@@ -52,7 +52,7 @@ Theorem concat_prefix_list_frame:
   wb_frame cenv es es' sa s0 u
 Proof
   strip_tac >> irule protected_allocation_frame_tail >> simp[] >>
-  reverse conj_tac >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
+  conj_tac >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
   qexistsl_tac [`\p n. (p+n <= B \/ B+bsz <= p) /\
                        (p+n <= w2n ow \/ w2n ow+64 <= p)`,
                 `ee`, `sc`, `t`] >>
@@ -174,7 +174,7 @@ Proof
   `32 <= bsz` by decide_tac >>
   `wb_frame cenv es ee sa s0 u` by
     (simp[Abbr `u`] >> irule concat_suffix_frame >>
-     asm_rewrite_tac[] >> qexists_tac `ee` >> simp[] >>
+     asm_rewrite_tac[] >> simp[] >>
      rpt strip_tac >>
      qpat_x_assum `!name p n. local_region _ _ _ _ _ _ ==> _` drule >>
      decide_tac) >>
