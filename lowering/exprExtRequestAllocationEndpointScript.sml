@@ -87,7 +87,7 @@ Proof
      rpt strip_tac >>
      qpat_x_assum `immutable_alloca_sep _ _ _ _ t'` mp_tac >>
      simp[immutable_alloca_sep_def] >>
-     disch_then drule >> disch_then drule >> strip_tac >>
+     disch_then (drule o CONJUNCT2) >> disch_then drule >> strip_tac >>
      qpat_x_assum `!inst b sz. _ ==> regions_disjoint _ _ b sz` drule >>
      simp[venomInstTheory.mk_inst_def, regions_disjoint_def]) >>
   `!x. not_fresh_at sn x ==> lookup_var x t' = lookup_var x t` by

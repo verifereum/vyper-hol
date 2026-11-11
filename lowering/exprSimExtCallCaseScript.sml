@@ -620,7 +620,7 @@ Proof
      rpt strip_tac >>
      qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
      simp[immutable_alloca_sep_def] >>
-     disch_then drule >> disch_then drule >> strip_tac >>
+     disch_then (drule o CONJUNCT2) >> disch_then drule >> strip_tac >>
      qpat_x_assum `!inst b sz. _` (qspec_then `inst` mp_tac) >>
      simp[] >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
