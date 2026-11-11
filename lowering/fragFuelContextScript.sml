@@ -3,12 +3,15 @@
  *
  * TOP-LEVEL:
  *   fuel_ok_context_copies, fuel_ok_context_storage,
- *   fuel_ok_compile_store_immutable, fuel_ok_compile_zero_memory
+ *   fuel_ok_compile_store_immutable, fuel_ok_compile_zero_memory,
+ *   fuel_ok_context_misc, fuel_ok_typed_memory_family,
+ *   fuel_ok_compile_store_memory
  *)
 
 Theory fragFuelContext
 Ancestors
-  fragFuel fragFuelContextBase fragFuelLoopWcopy compileEnv emitHelper context venomInst
+  fragFuel fragFuelContextBase fragFuelLoopWcopy fragFuelLoopSarray
+  fragFuelLoopDynarray compileEnv emitHelper context venomInst
 Libs
   fragFuelLib
 
@@ -171,4 +174,157 @@ Theorem fuel_ok_compile_zero_memory:
 Proof
   Cases_on `n` >> simp_tac std_ss [compile_zero_memory_def] >> rpt gen_tac >>
   fuel_auto [fuel_ok_compile_zero_memory_loop]
+QED
+
+Theorem fuel_ok_compile_iload_to_memory:
+  !n src dst Wv E. fuel_ok Wv {} E (compile_iload_to_memory src dst n)
+Proof
+  Induct >> simp_tac std_ss [compile_iload_to_memory_def] >> rpt gen_tac >>
+  fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any] >>
+  simp[is_terminator_def]
+QED
+
+Theorem fuel_ok_compile_gep_to_memory:
+  !n base off dst Wv E. fuel_ok Wv {} E (compile_gep_to_memory base off dst n)
+Proof
+  Induct >> simp_tac std_ss [compile_gep_to_memory_def] >> rpt gen_tac >>
+  fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any] >>
+  simp[is_terminator_def]
+QED
+
+Theorem fuel_ok_context_misc:
+  (!v b. fuel_ok Wv {} E (compile_encode_log_topic v b)) /\
+  (!p b. fuel_ok Wv {} E (compile_load_memory p b)) /\
+  (!v slot b n. fuel_ok Wv {} E (compile_store_transient v slot b n)) /\
+  (!off b n sz opt.
+     fuel_ok Wv {} E (compile_load_immutable_ctor off b n sz opt))
+Proof
+  rpt conj_tac >> rpt gen_tac
+  >- (simp_tac std_ss [compile_encode_log_topic_def] >>
+      fuel_auto [fuel_ok_emit_op] >> simp[is_terminator_def])
+  >- (simp_tac std_ss [compile_load_memory_def] >>
+      fuel_auto [fuel_ok_emit_op] >> simp[is_terminator_def])
+  >- (simp_tac std_ss [compile_store_transient_def] >>
+      fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any,
+                 fuel_ok_context_copies] >>
+      simp[is_terminator_def]) >>
+  Cases_on `opt` >>
+  simp_tac (srw_ss()) [compile_load_immutable_ctor_def] >>
+  fuel_auto [fuel_ok_emit_op, fuel_ok_compile_alloc_buffer,
+             fuel_ok_compile_iload_to_memory, fuel_ok_compile_gep_to_memory] >>
+  simp[is_terminator_def]
+QED
+
+(* ===== The typed memory copy family ===== *)
+
+Theorem fuel_ok_typed_memory_family:
+  (!cenv dst dst_ty src src_ty Wv E.
+     fuel_ok Wv {} E (compile_store_memory_typed cenv dst dst_ty src src_ty)) /\
+  (!cenv dst src dst_tys src_tys dst_off src_off Wv E.
+     fuel_ok Wv {} E
+       (compile_typed_copy_fields cenv dst src dst_tys src_tys dst_off src_off)) /\
+  (!cenv dst dst_ty src src_ty count Wv E.
+     fuel_ok Wv {} E
+       (compile_copy_sarray_typed cenv dst dst_ty src src_ty count)) /\
+  (!cenv dst dst_ty cap src src_ty Wv E.
+     fuel_ok Wv {} E
+       (compile_copy_dynarray_typed cenv dst dst_ty cap src src_ty)) /\
+  (!cenv dst src dst_fields src_fields dst_off src_off Wv E.
+     fuel_ok Wv {} E
+       (compile_struct_typed_copy cenv dst src dst_fields src_fields dst_off
+          src_off))
+Proof
+  ho_match_mp_tac compile_store_memory_typed_ind
+  >> rpt conj_tac
+  >- suspend "dispatch"
+  >- suspend "fields_nil"
+  >- suspend "fields_mismatch"
+  >- suspend "fields_cons"
+  >- suspend "sarray"
+  >- suspend "dynarray"
+  >- suspend "struct_nil"
+  >> suspend "struct_cons"
+QED
+
+Resume fuel_ok_typed_memory_family[dispatch]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  Cases_on `is_word_type dst_ty`
+  >- (simp_tac std_ss [Once compile_store_memory_typed_def] >>
+      asm_rewrite_tac[] >>
+      fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any] >>
+      simp[is_terminator_def]) >>
+  Cases_on `is_bytestring_type dst_ty /\ is_bytestring_type src_ty`
+  >- (simp_tac std_ss [Once compile_store_memory_typed_def] >>
+      asm_rewrite_tac[] >> simp[fuel_ok_context_copies, fuel_ok_context_storage]) >>
+  Cases_on `acyclic_struct_metadata cenv.ce_struct_fields`
+  >- (Cases_on `dst_ty` >> Cases_on `src_ty` >>
+      TRY (rename1 `compile_store_memory_typed cenv dst (ArrayT dt db) src
+                      (ArrayT st sb)` >>
+           Cases_on `db` >> Cases_on `sb`) >> gvs[] >>
+      simp[Once compile_store_memory_typed_def, LET_THM,
+           fuel_ok_compile_copy_memory] >> metis_tac[]) >>
+  simp_tac std_ss [Once compile_store_memory_typed_def] >>
+  asm_rewrite_tac[] >> fuel_auto [fuel_ok_emit_void_any] >>
+  simp[is_terminator_def]
+QED
+
+Resume fuel_ok_typed_memory_family[fields_nil]:
+  simp[Once compile_store_memory_typed_def, fuel_ok_return]
+QED
+
+Resume fuel_ok_typed_memory_family[fields_mismatch]:
+  simp[Once compile_store_memory_typed_def, fuel_ok_return]
+QED
+
+Resume fuel_ok_typed_memory_family[fields_cons]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> gvs[] >>
+  simp_tac std_ss [Once compile_store_memory_typed_def] >>
+  fuel_auto [fuel_ok_context_copies, fuel_ok_context_storage] >> metis_tac[]
+QED
+
+Resume fuel_ok_typed_memory_family[sarray]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  Cases_on `type_memory_bytes cenv dst_ty = type_memory_bytes cenv src_ty /\
+            ~is_abi_dynamic cenv.ce_struct_fields dst_ty`
+  >- (simp_tac std_ss [Once compile_store_memory_typed_def, LET_THM] >>
+      asm_rewrite_tac[] >> simp[fuel_ok_compile_copy_memory]) >>
+  irule fuel_ok_compile_copy_sarray_typed >> gvs[] >> metis_tac[]
+QED
+
+Resume fuel_ok_typed_memory_family[dynarray]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  Cases_on `type_memory_bytes cenv dst_ty = type_memory_bytes cenv src_ty /\
+            dst_ty = src_ty`
+  >- (gvs[] >> simp_tac std_ss [Once compile_store_memory_typed_def, LET_THM] >>
+      simp[] >>
+      fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any,
+                 fuel_ok_context_storage] >>
+      simp[is_terminator_def]) >>
+  irule fuel_ok_compile_copy_dynarray_typed >> gvs[] >> metis_tac[]
+QED
+
+Resume fuel_ok_typed_memory_family[struct_nil]:
+  simp[Once compile_store_memory_typed_def, fuel_ok_return]
+QED
+
+Resume fuel_ok_typed_memory_family[struct_cons]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> gvs[] >>
+  simp_tac std_ss [Once compile_store_memory_typed_def] >>
+  Cases_on `ALOOKUP src_fields name`
+  >- (gvs[] >> fuel_auto [fuel_ok_context_copies, fuel_ok_context_storage] >>
+      metis_tac[]) >>
+  rename1 `ALOOKUP src_fields name = SOME p` >> PairCases_on `p` >> gvs[] >>
+  fuel_auto [fuel_ok_context_copies, fuel_ok_context_storage] >> metis_tac[]
+QED
+
+Finalise fuel_ok_typed_memory_family
+
+Theorem fuel_ok_compile_store_memory:
+  !cenv src dst dst_ty src_ty Wv E.
+    fuel_ok Wv {} E (compile_store_memory cenv src dst dst_ty src_ty)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_store_memory_def] >>
+  fuel_auto [fuel_ok_emit_void_any, fuel_ok_context_copies, fuel_ok_context_storage,
+             fuel_ok_typed_memory_family, fuel_ok_compile_copy_memory] >>
+  simp[is_terminator_def]
 QED
