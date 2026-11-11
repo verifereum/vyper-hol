@@ -2677,12 +2677,15 @@ Proof
   Cases_on `d <= 15` >- simp[] >>
   simp[stackPlanOpsTheory.do_dup_def] >> rpt strip_tac >>
   pairarg_tac >> gvs[] >>
-  Cases_on `d <= 31`
-  >- (gvs[dup_restore_indices_explicit, listTheory.MEM_APPEND,
-          listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-      metis_tac[listTheory.MEM, listTheory.MEM_APPEND]) >>
-  fs[listTheory.MEM_APPEND, dup_restore_indices_explicit] >>
-  metis_tac[deep_dup_restore_sequence_member, arithmeticTheory.NOT_LESS_EQUAL]
+  qexists_tac `EL (d - 16) offsets` >>
+  `MEM (d - 16) (dup_restore_indices (d - 15))` by
+    (Cases_on `d <= 31` >>
+     fs[stackPlanOpsTheory.dup_restore_indices_explicit,
+        listTheory.MEM_GENLIST] >>
+     TRY (qexists_tac `0` >> simp[])) >>
+  simp[listTheory.MEM_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+       PULL_EXISTS] >>
+  metis_tac[listTheory.MEM]
 QED
 
 Theorem do_dup_read_only_shallow:
