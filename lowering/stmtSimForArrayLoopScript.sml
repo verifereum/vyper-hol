@@ -272,7 +272,7 @@ Proof
      simp[Abbr `bb`, get_instruction_def,
           mk_inst_def, is_terminator_def, update_var_def] >>
      Cases_on `a = b` >>
-     gvs[step_inst_base_def, bool_to_word_def, eval_operand_def,
+     gvs[step_inst_base_opcode_eqs, bool_to_word_def, eval_operand_def,
           lookup_var_def, FLOOKUP_UPDATE, jump_to_def, update_var_def]) >>
   fs[]
 QED
