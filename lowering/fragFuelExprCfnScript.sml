@@ -25,12 +25,15 @@
  *
  * Also (framework additions, local to this theory but exported):
  *   fuel_ok_emit_multi_op
+ *
+ * Also: fuel_ok_compile_binop, fuel_ok_compile_return_value_decode,
+ *   fuel_ok_compile_default_return_path, fuel_ok_compile_external_call_kwargs
  *)
 
 Theory fragFuelExprCfn
 Ancestors
   fragFuel fragFuelContextBase fragFuelContext compileEnv emitHelper context
-  venomInst fragFuelExprHelpers fragFuelBuiltins fragFuelAbi exprLowering
+  venomInst fragFuelExprHelpers fragFuelBuiltins fragFuelAbi exprLowering vyperAST
 Libs
   fragFuelLib
 
@@ -71,7 +74,13 @@ val tidy_tac = CHANGED_TAC (simp_tac std_ss [uncurry_map, SF ETA_ss]);
 
 (* fuel_auto, then a case, a pair or an eta step it can't take, repeated. *)
 fun fa ths =
-  rpt (fuel_auto (map pn ths) >> FIRST [tidy_tac, prod_tac, TOP_CASE_TAC]);
+  rpt (CHANGED_TAC (fuel_auto (map pn ths) >>
+         TRY (FIRST [tidy_tac, prod_tac, BasicProvers.TOP_CASE_TAC])));
+
+(* One round of fa, for proofs too big for one tactic step. *)
+fun fa1 ths =
+  TRY (CHANGED_TAC (fuel_auto (map pn ths) >>
+         TRY (FIRST [tidy_tac, prod_tac, BasicProvers.TOP_CASE_TAC])));
 
 (* ===== Generic lemmas ===== *)
 
@@ -128,11 +137,9 @@ val base = [fuel_ok_emit_op, fuel_ok_emit_void_any, fuel_ok_emit_inst_any,
             fuel_ok_context_storage, fuel_ok_compile_ensure_in_memory];
 
 val helpers = [fuel_ok_unwrap_value, fuel_ok_compile_multi_vvs,
-               fuel_ok_compile_keccak256_key, fuel_ok_compile_mapping_subscript,
-               fuel_ok_compile_array_subscript, fuel_ok_compile_tuple_subscript,
+               fuel_ok_misc_emit, fuel_ok_compile_array_subscript,
                fuel_ok_compile_name_vv, fuel_ok_compile_stage_intcall_args,
-               fuel_ok_store_multi_results, fuel_ok_compile_external_call_kwargs,
-               fuel_ok_compile_extcall_store_values];
+               fuel_ok_store_multi_results, fuel_ok_compile_extcall_store_values];
 
 (* ===== lower_value and friends ===== *)
 
@@ -158,7 +165,18 @@ Theorem fuel_ok_compile_get_target_ptr:
   !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
     !cenv tgt Wv E. fuel_ok Wv {} E (compile_get_target_ptr cfn cenv tgt)
 Proof
-  gen_tac >> strip_tac >> gen_tac >> Induct >> rpt gen_tac >>
+  gen_tac >> strip_tac >> gen_tac >> measureInduct_on `base_assignment_target_size tgt` >>
+  Cases_on `tgt` >> rpt gen_tac
+  >- (simp_tac std_ss [compile_get_target_ptr_def] >> fa (lv :: base @ helpers))
+  >- (simp_tac std_ss [compile_get_target_ptr_def] >> fa (lv :: base @ helpers))
+  >- (rename1 `SubscriptTarget bt idx_e` >>
+      first_x_assum (qspec_then `bt` mp_tac) >>
+      impl_tac >- simp[expr_size_def] >> strip_tac >>
+      simp_tac std_ss [compile_get_target_ptr_def] >>
+      fa (lv :: base @ helpers) >> simp[is_terminator_def]) >>
+  rename1 `AttributeTarget bt fld` >>
+  first_x_assum (qspec_then `bt` mp_tac) >>
+  impl_tac >- simp[expr_size_def] >> strip_tac >>
   simp_tac std_ss [compile_get_target_ptr_def] >>
   fa (lv :: base @ helpers) >> simp[is_terminator_def]
 QED
@@ -182,7 +200,7 @@ Proof
   gen_tac >> strip_tac >> Induct >> rpt gen_tac
   >- simp[compile_concat_def, fuel_ok_return] >>
   Cases_on `infos` >> simp[compile_concat_def, fuel_ok_return] >>
-  rename1 `p::infos` >> PairCases_on `p` >>
+  qmatch_goalsub_rename_tac `compile_concat _ _ _ _ (p::_) _` >> PairCases_on `p` >>
   simp_tac std_ss [compile_concat_def] >>
   fa (lv :: base @ helpers) >> simp[is_terminator_def]
 QED
@@ -448,6 +466,80 @@ Proof
   fa (fuel_ok_compile_pow_mod256 :: base @ helpers) >> simp[is_terminator_def]
 QED
 
+(* ===== Helpers that call builtin and ABI code ===== *)
+
+val bt = fa ([fuel_ok_arith_basic, fuel_ok_compile_compare,
+              fuel_ok_compile_safe_pow, fuel_ok_compile_select] @ base) >>
+         simp[is_terminator_def];
+
+Theorem fuel_ok_compile_binop:
+  !op x y ty bl el Wv E. fuel_ok Wv {} E (compile_binop op x y ty bl el)
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  simp_tac (srw_ss()) [compile_binop_def, LET_THM]
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >- bt
+  >> bt
+QED
+
+Theorem fuel_ok_compile_return_value_decode:
+  !min_sz max_sz Wv E.
+    fuel_ok Wv {} E (compile_return_value_decode min_sz max_sz)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_return_value_decode_def] >>
+  fa (fuel_ok_compile_select :: base) >> simp[is_terminator_def]
+QED
+
+Theorem fuel_ok_compile_default_return_path:
+  !cenv rt dt buf res def addr skip min_sz max_sz info Wv E.
+    fuel_ok Wv {} E
+      (compile_default_return_path cenv rt dt buf res def addr skip min_sz
+         max_sz info)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_default_return_path_def] >>
+  fa (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz ::
+      fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers) >>
+  simp[is_terminator_def]
+QED
+
+Theorem fuel_ok_compile_external_call_kwargs:
+  !cenv addr arg_vals arg_types mem_sz abi_sz mid ret_abi min_ret ret_mem
+   is_static cv gas skip has_def def_op rt dt enc dec Wv E.
+    fuel_ok Wv {} E
+      (compile_external_call_kwargs cenv addr arg_vals arg_types mem_sz abi_sz
+         mid ret_abi min_ret ret_mem is_static cv gas skip has_def def_op rt dt
+         enc dec)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_external_call_kwargs_def, LET_THM] >>
+  fa (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path ::
+      fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf ::
+      fuel_ok_compile_abi_encode_to_buf :: base @ helpers) >>
+  simp[is_terminator_def]
+QED
+
 (* ===== compile_call, one theorem per call target ===== *)
 
 Theorem fuel_ok_compile_call_int[local]:
@@ -458,10 +550,12 @@ Proof
   rpt strip_tac >>
   `?a b c. cenv.ce_func_info (nsid_to_string fid) = (a,b,c)` by
     (Cases_on `cenv.ce_func_info (nsid_to_string fid)` >> Cases_on `r` >> gvs[]) >>
-  pop_assum (qx_choosel_then [`a`,`b`,`c`] (fn th =>
-    simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, th])) >>
+  pop_assum (fn th =>
+    simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, th]) >>
   fa (lv :: base @ helpers) >> simp[is_terminator_def]
 QED
+
+val extl = [fuel_ok_compile_ext_call_kwargs, fuel_ok_compile_external_call_kwargs];
 
 Theorem fuel_ok_compile_call_ext[local]:
   !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
@@ -470,9 +564,30 @@ Theorem fuel_ok_compile_call_ext[local]:
         (compile_call cfn cenv ret_ty ty
            (ExtCall is_static skip (fname,atys,rty) opts) args dflt)
 Proof
-  rpt strip_tac >> Cases_on `args` >>
-  simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map] >>
-  fa (lv :: fuel_ok_compile_ext_call_kwargs :: base @ helpers) >>
+  rpt strip_tac >> Cases_on `args`
+  >- (simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
+      fa (lv :: extl @ base @ helpers) >> simp[is_terminator_def]) >>
+  simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
+  fa1 (lv :: extl @ base @ helpers) >>
   simp[is_terminator_def]
 QED
 
@@ -481,7 +596,7 @@ Theorem fuel_ok_compile_call_send[local]:
     !cenv ret_ty ty has_gas args dflt Wv E.
       fuel_ok Wv {} E (compile_call cfn cenv ret_ty ty (Send has_gas) args dflt)
 Proof
-  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map] >>
+  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
   fa (lv :: base @ helpers) >> simp[is_terminator_def]
 QED
 
@@ -491,7 +606,7 @@ Theorem fuel_ok_compile_call_rawcall[local]:
       fuel_ok Wv {} E
         (compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args dflt)
 Proof
-  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map] >>
+  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
   fa (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf ::
       fuel_ok_compile_raw_call_finish :: base @ helpers) >>
   simp[is_terminator_def]
@@ -503,7 +618,7 @@ Theorem fuel_ok_compile_call_rawcalldata[local]:
       fuel_ok Wv {} E
         (compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf) args dflt)
 Proof
-  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map] >>
+  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
   fa (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf ::
       fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory ::
       base @ helpers) >>
@@ -515,7 +630,7 @@ Theorem fuel_ok_compile_call_rawlog[local]:
     !cenv ret_ty ty args dflt Wv E.
       fuel_ok Wv {} E (compile_call cfn cenv ret_ty ty RawLog args dflt)
 Proof
-  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map] >>
+  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
   fa (lv :: fuel_ok_compile_multi_exprs :: base @ helpers) >>
   simp[is_terminator_def]
 QED
@@ -525,7 +640,7 @@ Theorem fuel_ok_compile_call_rawrevert[local]:
     !cenv ret_ty ty args dflt Wv E.
       fuel_ok Wv {} E (compile_call cfn cenv ret_ty ty RawRevert args dflt)
 Proof
-  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map] >>
+  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
   fa (lv :: fuel_ok_compile_raw_revert :: base @ helpers) >>
   simp[is_terminator_def]
 QED
@@ -536,7 +651,7 @@ Theorem fuel_ok_compile_call_selfdestruct[local]:
       fuel_ok Wv {} E
         (compile_call cfn cenv ret_ty ty SelfDestructTarget args dflt)
 Proof
-  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map] >>
+  rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
   fa (lv :: fuel_ok_compile_selfdestruct :: base @ helpers) >>
   simp[is_terminator_def]
 QED
