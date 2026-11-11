@@ -321,5 +321,6 @@ Proof
       simp[gas_marked_exec_def, gas_marked_path_def] >>
       metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
   gvs[arithmeticTheory.ADD_COMM, locals_kept_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `popped_kept _ _ _ r q` mp_tac >> simp[popped_kept_def]
 QED
