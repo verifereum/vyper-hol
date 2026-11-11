@@ -159,9 +159,12 @@ Proof
   conj_tac
   >- (irule step_inst_base_preserves_allocas >>
       qexists_tac `EL n (SND (structlit_callee_return_compiled F)).cs_current_insts` >>
+      asm_rewrite_tac[] >>
+      qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
       gvs[structlit_return_instructions, mk_inst_def]) >>
   irule step_inst_base_preserves_fmp_ordinary >>
   goal_assum (drule_at Any) >>
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
   gvs[structlit_return_instructions, mk_inst_def,
       is_terminator_def, is_alloca_op_def, is_ext_call_op_def]
 QED
