@@ -1099,6 +1099,96 @@ Proof
   fs[]
 QED
 
+Theorem evaluate_immutable_for_nil_case[local]:
+  ^(hd (immutable_stmt_cases "eval_for"))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[Once evaluate_def, return_def]
+QED
+
+Theorem evaluate_immutable_for_stmt_case[local]:
+  ^(immutable_stmt_case "For")
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  gvs[accesses_stmt_def, int_calls_stmt_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+  Cases_on `evaluate_type (get_tenv cx) typ`
+  >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, lift_option_type_def, raise_def] >>
+      strip_tac >> gvs[]) >>
+  qpat_x_assum `!s tyv t. lift_option_type _ _ _ = _ ==> _` mp_tac >>
+  simp[lift_option_type_def, return_def] >> disch_tac >>
+  qpat_x_assum `!s tyv t s1 vs t1 s2 t2. lift_option_type _ _ _ = _ /\ _ ==> _` mp_tac >>
+  simp[lift_option_type_def, return_def, check_def, ignore_bind_def,
+       bind_def, assert_def, raise_def] >> disch_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, lift_option_type_def,
+       check_def, ignore_bind_def, assert_def, return_def, raise_def,
+       AllCaseEqs()] >> strip_tac >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[] >> strip_tac >>
+  qpat_x_assum `!s vs t. eval_iterator _ _ _ = _ /\ _ ==> _`
+    (drule_at (Pat `eval_iterator _ _ _ = _`)) >>
+  simp[check_def, ignore_bind_def, bind_def, assert_def, return_def, raise_def] >>
+  disch_then (qspecl_then [`A`,`R`] mp_tac) >> simp[] >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem immutable_try_loop_frame[local]:
+  (!r t. f st = (r,t) ==> ^immutable_frame cx A st t) /\
+  try (ignore_bind f (return F)) handle_loop_exception st = (res,st') ==>
+  ^immutable_frame cx A st st'
+Proof
+  Cases_on `f st` >> Cases_on `q` >>
+  simp[try_def, ignore_bind_def, bind_def, return_def, raise_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  imp_res_tac handle_loop_exception_state >> gvs[] >> metis_tac[]
+QED
+
+Theorem evaluate_immutable_for_cons_case[local]:
+  ^(List.nth (immutable_stmt_cases "eval_for",1))
+Proof
+  BETA_TAC >> rpt strip_tac >>
+  qpat_x_assum `!s x t. push_scope_with_var _ _ _ _ = _ ==> _` mp_tac >>
+  simp[push_scope_with_var_def, return_def] >> disch_tac >>
+  qpat_x_assum `!s x t s1 broke t1. push_scope_with_var _ _ _ _ = _ /\ _ ==> _` mp_tac >>
+  simp[push_scope_with_var_def, return_def] >> disch_tac >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_tac >>
+  `!s r t. eval_stmts cx body' s = (r,t) ==> ^immutable_frame cx A s t` by
+    (BETA_TAC >> rpt strip_tac >> first_x_assum irule >> simp[] >> gvs[]) >>
+  qpat_x_assum `!st res st'. (_ /\ eval_stmts _ _ _ = _) ==> _` kall_tac >>
+  `!s r t. finally (try (ignore_bind (eval_stmts cx body') (return F)) handle_loop_exception) pop_scope s = (r,t) ==>
+    ^immutable_frame cx A s t` by
+    (BETA_TAC >> rpt strip_tac >>
+     drule_at (Pat `finally _ _ _ = _`) (BETA_RULE immutable_frame_finally) >>
+     disch_then (qspecl_then [`cx`,`A`] mp_tac) >>
+     disch_then irule >> conj_tac
+     >- (rpt strip_tac >> drule (BETA_RULE immutable_pop_scope_frame) >>
+         disch_then (qspecl_then [`cx`,`A`] mp_tac) >> simp[]) >>
+     rpt strip_tac >> drule_at (Pat `try _ _ _ = _`) (BETA_RULE immutable_try_loop_frame) >>
+     disch_then (qspecl_then [`cx`,`A`] mp_tac) >>
+     disch_then irule >> rpt strip_tac >> first_x_assum (drule o BETA_RULE) >> simp[]) >>
+  qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
+  simp[Once evaluate_def, push_scope_with_var_def, ignore_bind_def, return_def, bind_def] >>
+  Cases_on `finally (try (ignore_bind (eval_stmts cx body') (return F)) handle_loop_exception) pop_scope
+    (st with scopes updated_by CONS (FEMPTY |+ (nm, <|assignable := F; type := tyv; value := v; popped := []|>)))` >>
+  reverse (Cases_on `q`)
+  >- (simp[raise_def] >> strip_tac >> gvs[GSYM ignore_bind_def] >>
+      qpat_assum `!s r t. finally _ _ _ = _ ==> _` drule_all >>
+      disch_then (mp_tac o SRULE []) >> simp[]) >>
+  simp[] >> strip_tac >> gvs[GSYM ignore_bind_def] >>
+  Cases_on `x`
+  >- (gvs[return_def] >>
+      qpat_assum `!s r t. finally _ _ _ = _ ==> _` drule_all >>
+      disch_then (mp_tac o SRULE []) >> simp[]) >>
+  gvs[] >>
+  qpat_x_assum `!s t. finally _ _ _ = _ ==> _` drule >>
+  disch_then (qspecl_then [`A`,`R`] mp_tac) >> simp[] >>
+  disch_then drule_all >> simp[] >> strip_tac >>
+  qpat_assum `!s r t. finally _ _ _ = _ ==> _` drule_all >>
+  disch_then (mp_tac o SRULE []) >> simp[]
+QED
+
 Theorem immutable_defaults_scope_frame[local]:
   (!r t. f (st with scopes := scopes) = (r,t) ==>
     ^immutable_frame cx A (st with scopes := scopes) t) /\
