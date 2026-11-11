@@ -575,11 +575,11 @@ End
    bytes inside one of the expression's own allocations or a live local's
    region, word types included, unless it occupies none.  In a local's
    region, a source result that is a place of a local is that place
-   (local_place_at).  A result of a non-word type is a memory place only
-   behind a pointer into memory. *)
+   (local_place_at).  A result of a non-word type is a place only behind a
+   pointer. *)
 Definition vv_at_def:
   (vv_at cenv cx t sa sb es tv (StackValue t' op) s <=>
-     (~is_word_type t ==> !id path. tv <> PlaceR (MemoryPlace id path)) /\
+     (~is_word_type t ==> !p. tv <> PlaceR p) /\
      !v. read_result cx tv es = (INL v, es) ==> expr_val_at cenv cx t sa sb es v op s) /\
   (vv_at cenv cx t sa sb es tv (LocatedValue t' p) s <=>
      (p.ptr_location <> LocMemory /\ ~is_word_type t ==>
