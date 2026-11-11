@@ -5,17 +5,6 @@ Ancestors
   exprSimHypsDefs exprSimMemDefs loweringPosts exprSimUint2Str exprSimHash
   exprLoweringProps exprSimSource exprSafeOperand vyperTyping vyperTypeSystem vyperArith arithmetic context compileEnv valueEncoding loweringSlice vyperValue vyperAST
 
-Theorem u2s_wb_frame_scopes[local]:
-  MAP FDOM es.scopes = MAP FDOM et.scopes ==>
-  (wb_frame cenv es ee sa s0 s <=> wb_frame cenv et ee sa s0 s)
-Proof
-  strip_tac >>
-  `!t name b sz. local_region cenv es.scopes t name b sz <=>
-    local_region cenv et.scopes t name b sz` by
-    metis_tac[local_region_scopes_domain] >>
-  simp[wb_frame_def, locals_kept_def]
-QED
-
 Theorem uint2str_numeric_mem_path:
   expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT k) /\
   lower_value compile_expr cenv ty e sa = (x,sm) /\
@@ -41,7 +30,7 @@ Proof
   strip_tac >> drule_all compile_uint2str_layout >> strip_tac >>
   drule_all expr_post_frame >> strip_tac >>
   drule_all expr_post_state >> strip_tac >>
-  `wb_frame cenv es' es' sa s0 s` by metis_tac[u2s_wb_frame_scopes] >>
+  `wb_frame cenv es' es' sm s s` by simp[wb_frame_refl] >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   `well_formed_type env.type_defs (expr_type e)` by
@@ -52,10 +41,14 @@ Proof
      gvs[well_formed_type_def, is_word_type_def, word_value_def,
         val_to_w256_def, evaluate_type_def, integer_wordTheory.i2w_def]) >>
   `32 <= sz` by decide_tac >>
-  drule_all u2s_allocated_mem_exit >>
+  drule_all (SRULE [] (Q.INST
+    [`sa` |-> `sm`, `sp` |-> `sm`, `spre` |-> `s`] u2s_allocated_mem_exit)) >>
   disch_then (qspec_then `BaseTV (StringT n)` mp_tac) >>
   strip_tac >>
-  `wb_frame cenv es es' sa s0 t` by metis_tac[u2s_wb_frame_scopes] >>
+  `wb_frame cenv es es' sa s0 t` by
+    (irule wb_frame_trans >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`es'`, `sm`, `s`] >> simp[]) >>
   mp_tac (Q.INST [`X` |-> `X`, `n` |-> `n`] uint2str_result_memory_bounds) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `LENGTH (num_to_dec_string X) <= n` by
