@@ -76,7 +76,7 @@ Proof
     MEM request (compiler_alloca_requests profile_start final_cut)` by
     (qspecl_then [`profile_start`, `cs`, `load_cut`, `final_cut`] mp_tac compiler_alloca_requests_subprofile >>
      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp_tac bool_ss []) >>
-  `~is_word_type (lowered_value_type cenv e) /\ ~EVERY pure_expr suffix ==>
+  `~is_word_type (lowered_value_type cenv e) /\ exprs_can_mutate cenv suffix ==>
     MEM (load_cut.cs_next_id,type_memory_size tv) (compiler_alloca_requests profile_start final_cut) /\
     MEM load_cut.cs_next_id (compiler_alloca_ids profile_start final_cut)` by
     (strip_tac >> qspecl_then [`tops`, `cenv`, `lowered_value_type cenv e`, `src`, `suffix`, `load_cut`,

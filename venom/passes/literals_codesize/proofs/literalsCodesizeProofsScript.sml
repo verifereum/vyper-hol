@@ -30,6 +30,7 @@ Ancestors
   literalsCodesizeDefs passSimulationDefs passSimulationProps venomWf
   venomExecSemantics venomExecProofs stateEquiv stateEquivProps crossBlockSimProps
   option list passSimulationProofs
+  passTransform
 Libs
   fcpLib
 
@@ -194,7 +195,7 @@ Triviality block_map_transform_bb_instructions[local]:
   !f bb. (block_map_transform f bb).bb_instructions = MAP f bb.bb_instructions
 Proof
   Cases_on `bb` >>
-  simp[passSimulationDefsTheory.block_map_transform_def] >>
+  simp[passTransformTheory.block_map_transform_def] >>
   EVAL_TAC >> simp[]
 QED
 
@@ -203,7 +204,7 @@ Theorem block_map_transform_label:
   !f bb. (block_map_transform f bb).bb_label = bb.bb_label
 Proof
   Cases_on `bb` >>
-  simp[passSimulationDefsTheory.block_map_transform_def] >>
+  simp[passTransformTheory.block_map_transform_def] >>
   EVAL_TAC >> simp[]
 QED
 
@@ -216,7 +217,7 @@ Proof
   rpt strip_tac >>
   irule passSimulationPropsTheory.lookup_block_map >>
   rpt strip_tac >> Cases_on `bb` >>
-  simp[passSimulationDefsTheory.block_map_transform_def] >>
+  simp[passTransformTheory.block_map_transform_def] >>
   EVAL_TAC >> simp[]
 QED
 

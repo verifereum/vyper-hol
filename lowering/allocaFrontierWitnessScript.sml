@@ -46,9 +46,9 @@ Proof
   simp[Once run_blocks_def, lookup_block_def, FIND_thm, eval_phis_def,
        phi_prefix_length_def] >>
   simp[Once exec_block_def, get_instruction_def, step_inst_non_invoke,
-       step_inst_base_def, exec_alloca_def, update_var_def, is_terminator_def] >>
+       step_inst_base_opcode_eqs, exec_alloca_def, update_var_def, is_terminator_def] >>
   simp[Once exec_block_def, get_instruction_def, step_inst_non_invoke,
-       step_inst_base_def, eval_operands_def, eval_operand_def,
+       step_inst_base_opcode_eqs, eval_operands_def, eval_operand_def,
        bind_outputs_def, adopt_return_fmp_def, merge_callee_state_def,
        dimword_def, fcpTheory.index_bit0, fcpTheory.index_bit1,
        fcpTheory.index_one, fcpTheory.finite_bit0, fcpTheory.finite_bit1,

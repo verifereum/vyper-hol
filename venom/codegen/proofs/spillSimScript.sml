@@ -498,6 +498,7 @@ Theorem spill_asm_steps:
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
           st'.as_pending_deletions = st.as_pending_deletions /\
+          st'.as_gas_readings = st.as_gas_readings /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -547,6 +548,7 @@ Theorem restore_asm_steps:
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
           st'.as_pending_deletions = st.as_pending_deletions /\
+          st'.as_gas_readings = st.as_gas_readings /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -567,10 +569,6 @@ Proof
   simp[asm_step_def, asm_step_op_mload, asm_mload_def,
        asm_next_def, asm_steps_def]
 QED
-
-(* =========================================================================
-   memory_rel through MSTORE in spill region
-   ========================================================================= *)
 
 (* =========================================================================
    SOSpill preserves venom_asm_rel

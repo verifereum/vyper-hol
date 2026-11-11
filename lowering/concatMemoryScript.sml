@@ -3,7 +3,7 @@ Theory concatMemory
 Ancestors
   fragExecMem instMemFrontier allocaFootprint exprLoweringProps
   emitHelper emitHelperProps compileEnv context venomInst venomState
-  venomExecSemantics venomMemDefs words arithmetic finite_map list
+  venomExecSemantics venomMemDefs words arithmetic finite_map list abiDecoderIndexInit
 Libs
   monadsyntax
 
@@ -37,7 +37,7 @@ Proof
   simp[word_add_def, w2n_n2w, MOD_LESS_EQ]
 QED
 
-Theorem concat_fixed_shape[local]:
+Theorem concat_fixed_shape:
   (do offset_op <- emit_op MLOAD [off_ptr];
       dst <- emit_op ADD [data_ptr; offset_op];
       emit_void MSTORE [dst; v];
@@ -110,10 +110,10 @@ Proof
   pure_rewrite_tac[GSYM mk_inst_def] >>
   qmatch_goalsub_abbrev_tac `run_inst_seq_mem_ok _ s3` >>
   `eval_operand off_ptr s3 = SOME off` by
-    simp[Abbr `s3`, eval_operand_mstore_eq, Abbr `s2`] >>
+    simp[Abbr `s3`, abi_decoder_operand_mstore, Abbr `s2`] >>
   `eval_operand (Var (STRING #"%" (toString sa.cs_next_var))) s3 =
       SOME (mload (w2n off) s)` by
-    simp[Abbr `s3`, eval_operand_mstore_eq, Abbr `s2`,
+    simp[Abbr `s3`, abi_decoder_operand_mstore, Abbr `s2`,
          eval_operand_def, lookup_var_update_var] >>
   simp[Once run_inst_seq_mem_ok_cons] >> conj_tac
   >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
@@ -121,7 +121,7 @@ Proof
        eval_operand_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[run_inst_seq_mem_ok_last, below_frontier_MSTORE] >>
-  simp[Abbr `s3`, eval_operand_mstore_eq, Abbr `s2`,
+  simp[Abbr `s3`, abi_decoder_operand_mstore, Abbr `s2`,
        concat_store_frontier]
 QED
 
@@ -134,7 +134,7 @@ val () =
      else raise Fail "concat memory footprint inherited admission"
   end;
 
-Theorem concat_bytes_shape[local]:
+Theorem concat_bytes_shape:
   (do arg_len <- emit_op MLOAD [mem_ptr];
       arg_data <- emit_op ADD [mem_ptr; Lit 32w];
       offset_op <- emit_op MLOAD [off_ptr];

@@ -2,7 +2,7 @@
    payload memory and earlier operands. Helpers frame source invariants. *)
 Theory nameLoweringProps
 Ancestors
-  exprLoweringProps exprLowering context compileEnv valueLoadProps
+  loweringStateRelDefs exprLoweringProps exprLowering context compileEnv valueLoadProps
   valueEncodingProps eventTopicExecProps localPtrsProps
   venomState venomExecSemantics
 

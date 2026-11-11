@@ -25,13 +25,14 @@ Theorem checked_log_argument_reserved_save:
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==>
       abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     alloca_inv ss /\ log_args_rel prefix ptvs pvs ss /\
     EVERY (\arg. abi_operand_before cs.cs_next_var (FST arg)) prefix /\
-    log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) (EVERY pure_expr suffix) prefix ptvs /\
-    (~is_word_type ty /\ EVERY pure_expr suffix ==> !src_addr. eval_operand src ss = SOME src_addr ==>
+    log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) (~exprs_can_mutate cenv suffix) prefix ptvs /\
+    (~is_word_type ty /\ ~exprs_can_mutate cenv suffix ==> !src_addr. eval_operand src ss = SOME src_addr ==>
       argument_origin cenv es.scopes ss (compiler_alloca_ids cut final_cut) T (w2n src_addr) (type_memory_size tv)) /\
     abi_request_credit reserved requests credit ss /\
-    (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+    (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       MEM (cs.cs_next_id,type_memory_size tv) requests /\ MEM cs.cs_next_id ids) /\
     fn_has_code cs cut func /\ cs_extends cut final_cut /\ fn_has_code cut final_cut func /\
     ss.vs_current_bb = cs.cs_current_bb /\ ss.vs_inst_idx = LENGTH cs.cs_current_insts ==>
@@ -42,26 +43,26 @@ Theorem checked_log_argument_reserved_save:
       source_alloca_floor cenv es.scopes ids out /\
       log_args_rel (prefix ++ [(saved,ty)]) (ptvs ++ [tv]) (pvs ++ [v]) out /\
       EVERY (\arg. abi_operand_before cut.cs_next_var (FST arg)) (prefix ++ [(saved,ty)]) /\
-      log_args_origins cenv es.scopes out (compiler_alloca_ids cut final_cut) (EVERY pure_expr suffix)
+      log_args_origins cenv es.scopes out (compiler_alloca_ids cut final_cut) (~exprs_can_mutate cenv suffix)
         (prefix ++ [(saved,ty)]) (ptvs ++ [tv]) /\
       abi_request_trace requests ss out /\ abi_request_credit reserved requests credit out /\
       (fresh_vars_wrt cs ss ==> fresh_vars_wrt cut out) /\ alloca_inv out /\
       abi_state_frame ss out /\ allocation_growth ss out /\ cs.cs_next_var <= cut.cs_next_var /\
       (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op out = eval_operand arg_op ss) /\
-      (is_word_type ty \/ EVERY pure_expr suffix ==> out = ss)
+      (is_word_type ty \/ ~exprs_can_mutate cenv suffix ==> out = ss)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
   qspecl_then [`cenv`, `ty`, `src`, `suffix`, `cs`, `saved`, `cut`, `final_cut`]
     mp_tac compile_log_save_arg_remaining_profile >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> strip_tac >>
-  `~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+  `~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
     ss.vs_alloca_next + type_memory_size tv < dimword(:256) /\
     abi_alloca_request_ok cs.cs_next_id (type_memory_size tv) ss /\
     log_args_safe prefix ptvs ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv)` by
     (qspecl_then [`prefix`, `ptvs`, `cenv`, `es.scopes`, `ss`, `compiler_alloca_ids cs final_cut`,
        `ty`, `tv`, `suffix`, `cs`, `reserved`, `requests`, `credit`] mp_tac log_argument_reserved_snapshot_safe >>
      impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, fs[]]) >> simp[]) >>
-  `~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+  `~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
     ss.vs_alloca_next + type_memory_size tv < dimword(:256) /\
     abi_alloca_request_ok cs.cs_next_id (type_memory_size tv) ss /\
     log_args_safe prefix ptvs ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv) /\ MEM cs.cs_next_id ids` by
@@ -71,12 +72,12 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   disch_then (qx_choose_then `out` strip_assume_tac) >>
   `abi_request_trace requests ss out` by
-    (qspecl_then [`requests`, `ty`, `tv`, `suffix`, `cs`, `ss`, `out`] mp_tac log_argument_save_request_trace >>
+    (qspecl_then [`requests`, `ty`, `tv`, `suffix`, `cs`, `ss`, `out`, `cenv`] mp_tac log_argument_save_request_trace >>
      impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, fs[]]) >> simp[]) >>
   `abi_request_credit reserved requests credit out` by (drule_all abi_request_trace_credit >> simp[]) >>
   `~is_word_type ty ==> !saved_addr. eval_operand saved out = SOME saved_addr ==>
     argument_origin cenv es.scopes out (compiler_alloca_ids cut final_cut)
-      (EVERY pure_expr suffix) (w2n saved_addr) (type_memory_size tv)` by
+      (~exprs_can_mutate cenv suffix) (w2n saved_addr) (type_memory_size tv)` by
     (qspecl_then [`func`, `cenv`, `es.scopes`, `ty`, `src`, `suffix`, `cs`, `saved`, `cut`, `final_cut`,
        `ss`, `out`, `ids`, `type_memory_size tv`] mp_tac compile_log_save_arg_value_origin >>
      impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, fs[]]) >> simp[]) >>
@@ -90,12 +91,12 @@ Proof
   `EVERY (\arg. eval_operand (FST arg) out = eval_operand (FST arg) ss) prefix` by
     (simp_tac bool_ss [EVERY_MEM] >> qx_gen_tac `arg` >> DISCH_TAC >>
      qpat_x_assum `!arg_op. _` irule >> fs[EVERY_MEM]) >>
-  `log_args_origins cenv es.scopes out (compiler_alloca_ids cut final_cut) (EVERY pure_expr suffix) prefix ptvs` by
+  `log_args_origins cenv es.scopes out (compiler_alloca_ids cut final_cut) (~exprs_can_mutate cenv suffix) prefix ptvs` by
     (qspecl_then [`prefix`, `ptvs`, `env`, `cx`, `es`, `es`, `cenv`, `ss`, `out`, `compiler_alloca_ids cs final_cut`,
-       `compiler_alloca_ids cut final_cut`, `EVERY pure_expr suffix`, `EVERY pure_expr suffix`]
+       `compiler_alloca_ids cut final_cut`, `~exprs_can_mutate cenv suffix`, `~exprs_can_mutate cenv suffix`]
        mp_tac log_args_origins_consistent_growth >>
      impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[]]) >> simp[]) >>
-  `log_args_origins cenv es.scopes out (compiler_alloca_ids cut final_cut) (EVERY pure_expr suffix)
+  `log_args_origins cenv es.scopes out (compiler_alloca_ids cut final_cut) (~exprs_can_mutate cenv suffix)
     (prefix ++ [(saved,ty)]) (ptvs ++ [tv])` by (irule log_args_origins_snoc >> simp[]) >>
   qexists_tac `out` >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED

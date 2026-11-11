@@ -1,7 +1,7 @@
 (* Compiler and source ABI sizes agree for types that evaluate. *)
 Theory abiTypeBoundProps
 Ancestors
-  compileEnv vyperValue vyperABI vyperTypeABI vyperTyping
+  compileEnv loweringStateRelDefs vyperValue vyperABI vyperTypeABI vyperTyping
   finite_map list rich_list option pair
 
 (* Evaluation and the ABI type are stable under a larger type env: a type
@@ -286,4 +286,21 @@ Proof
   Cases_on `vyper_is_dynamic tenv ty` >>
   gvs[abi_embedded_static_size_def, vyper_abi_size_bound_def,
       arithmeticTheory.ADD_COMM]
+QED
+
+Theorem abi_size_bound_tuple_typed:
+  !sf tenv ts.
+    sfields_tenv_consistent sf tenv /\
+    EVERY (\t. IS_SOME (evaluate_type tenv t)) ts ==>
+    abi_size_bound sf (TupleT ts) = vyper_abi_size_bound tenv (TupleT ts)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once abi_size_bound_def, Once vyper_abi_size_bound_def] >>
+  qpat_x_assum `EVERY _ ts` mp_tac >>
+  Induct_on `ts` >> simp[vyper_abi_size_bound_def] >>
+  rpt strip_tac >>
+  gvs[IS_SOME_EXISTS] >>
+  drule_all abi_props_vyper_typed >> strip_tac >>
+  qpat_x_assum `_ = vyper_abi_embedded_size tenv h` mp_tac >>
+  simp[Once vyper_abi_size_bound_def] >> decide_tac
 QED

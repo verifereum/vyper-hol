@@ -14,7 +14,7 @@ Theory entryArgPtrs
 Ancestors
   list rich_list finite_map alist
   vyperLoweringCorrect entryDecodePlanProps entryDecodeProps fragExec
-  compileEnv compileVyper moduleLowering selectorDispatch
+  compileEnv loweringStateRelDefs compileVyper moduleLowering selectorDispatch
   vyperInterpreter vyperState vyperContext vyperAST
   venomState vyperCall loweringHalt entryDecodeStaticProps retAbiPlanProps
   valueEncodingProofs vyperABIRoundtrip contractABI entryDispatchProps
@@ -727,8 +727,8 @@ Proof
   qexists_tac `a` >> simp[] >>
   drule compile_alloc_buffer_parts >> strip_tac >> simp[] >>
   `FLOOKUP s.vs_allocas st.cs_next_id = NONE` by simp[] >>
-  `not_local_ptr cenv scopes (STRING #"%" (toString st.cs_next_var))` by
-    (irule local_ptrs_rel_fresh_not_local_ptr >>
+  `not_scope_ptr cenv scopes (STRING #"%" (toString st.cs_next_var))` by
+    (irule local_ptrs_rel_fresh_not_scope_ptr >>
      qexistsl_tac [`func`, `s`, `st`] >> simp[arithmeticTheory.GREATER_EQ]) >>
   `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
       [STRING #"%" (toString st.cs_next_var)]) s (n2w n : bytes32) =

@@ -2,7 +2,7 @@
 Theory abiEncoderAddressReach
 Ancestors
   abiBuiltinPrefix abiDecoderReentryAddress abiDecoderDynamicLoopSetup abiDecoderReentry
-  abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv emitHelperProps emitHelper
+  abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv loweringStateRelDefs emitHelperProps emitHelper
   venomExecSemantics venomState venomInst words list rich_list
 
 Theorem abi_encoder_emit_address_shape:

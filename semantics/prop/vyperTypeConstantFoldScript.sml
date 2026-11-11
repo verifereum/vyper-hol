@@ -267,16 +267,6 @@ Proof
   qexists `tv::tvs` >> simp[]
 QED
 
-Theorem constant_struct_names_typed[local]:
-  !names tvs vs.
-    LENGTH names = LENGTH tvs /\ LENGTH tvs = LENGTH vs /\
-    LIST_REL value_has_type tvs vs ==>
-    struct_has_type (ZIP (names,tvs)) (ZIP (names,vs))
-Proof
-  Induct >> Cases_on `tvs` >> Cases_on `vs` >>
-  simp[Once value_has_type_def]
-QED
-
 Theorem constant_expr_types_OPT_MMAP[local]:
   !kes tvs.
     LIST_REL (\e tv. evaluate_type tenv (expr_type e) = SOME tv)
@@ -285,18 +275,6 @@ Theorem constant_expr_types_OPT_MMAP[local]:
 Proof
   Induct >> Cases_on `tvs` >> simp[OPT_MMAP_def] >>
   PairCases_on `h` >> simp[OPT_MMAP_def]
-QED
-
-Theorem constant_types_OPT_MMAP_mono[local]:
-  !types tenv nid tvs.
-    OPT_MMAP (evaluate_type (tenv \\ nid)) types = SOME tvs ==>
-    OPT_MMAP (evaluate_type tenv) types = SOME tvs
-Proof
-  Induct >> simp[OPT_MMAP_def] >> rpt gen_tac >>
-  Cases_on `evaluate_type (tenv \\ nid) h` >> simp[] >>
-  Cases_on `OPT_MMAP (evaluate_type (tenv \\ nid)) types` >> simp[] >>
-  strip_tac >> gvs[] >> drule (cj 1 evaluate_type_mono) >> strip_tac >>
-  first_x_assum drule >> simp[]
 QED
 
 Theorem constant_struct_value_typed[local]:
@@ -314,17 +292,10 @@ Proof
   drule constant_expr_types_OPT_MMAP >>
   qpat_x_assum `MAP (expr_type o SND) kes = MAP SND args` (assume_tac o GSYM) >>
   gvs[] >>
-  drule constant_types_OPT_MMAP_mono >> strip_tac >> gvs[] >>
-  strip_tac >> gvs[] >> irule constant_struct_names_typed >>
+  drule vyperTypeEvalSoundnessTheory.OPT_MMAP_evaluate_type_mono_stmt >> strip_tac >> gvs[] >>
+  strip_tac >> gvs[] >> irule vyperTypeEvalSoundnessTheory.struct_has_type_zip_same_names_stmt >>
   imp_res_tac LIST_REL_LENGTH >> gvs[LENGTH_MAP] >>
   metis_tac[LENGTH_MAP]
-QED
-
-Theorem constant_named_exprs_typed[local]:
-  !env kes. well_typed_named_exprs env kes ==> well_typed_exprs env (MAP SND kes)
-Proof
-  gen_tac >> Induct >> simp[well_typed_expr_def] >>
-  Cases >> simp[well_typed_expr_def]
 QED
 
 Theorem checked_constant_decl_typed[local]:
@@ -389,18 +360,6 @@ Proof
 QED
 
 (* Checked constant folding agrees with resolution and explicit reads. *)
-Theorem constant_place_annotation[local]:
-  !env e vt. type_place_expr env e = SOME vt ==>
-    vtype_annotation_ok vt (expr_type e)
-Proof
-  Cases_on `e` >> simp[expr_type_def] >> rpt strip_tac >>
-  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
-  simp[Once well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()]
-  >- (Cases_on `p` >>
-      simp[Once well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()]) >>
-  metis_tac[]
-QED
-
 Theorem constant_subscript_type_ok[local]:
   well_typed_expr env (Subscript ty e1 e2) /\
   well_typed_expr env e1 ==>
@@ -409,7 +368,7 @@ Proof
   strip_tac >>
   qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
   simp[Once well_typed_expr_def] >> strip_tac >>
-  drule constant_place_annotation >> strip_tac >>
+  drule vyperTypeEvalSoundnessTheory.type_place_expr_annotation_ok_stmt >> strip_tac >>
   Cases_on `vt` >> gvs[vtype_annotation_ok_def, subscript_vtype_def] >>
   Cases_on `expr_type e1` >>
   gvs[subscript_vtype_def, subscript_type_ok_def] >>
@@ -557,6 +516,15 @@ Definition constant_machine_immutables_def:
     case ALOOKUP am.immutables addr of NONE => [] | SOME imms => imms
 End
 
+(* Constant folding runs without the outcome oracle, so a precompile's
+   success check passes without consuming anything. *)
+Theorem precompile_call_success_initial_state:
+  precompile_call_success bt (initial_state am sc) =
+  return () (initial_state am sc)
+Proof
+  simp[precompile_call_success_def, initial_state_def]
+QED
+
 Theorem constant_value_eval_expr_shape[local]:
   (!mods imms e v cx am sc artifact current_src mode checker_layouts checker_addr.
      constant_value mods imms e = SOME v /\
@@ -608,7 +576,7 @@ Proof
   >~ [`StructLit`] >- (
     gvs[constant_value_def, constant_expr_def, AllCaseEqs()] >>
     `well_typed_exprs (artifact_env artifact mods current_src) (MAP SND kes)` by
-      (irule constant_named_exprs_typed >> gvs[well_typed_expr_def]) >>
+      (irule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >> gvs[well_typed_expr_def]) >>
     `EVERY (constant_expr mods) (MAP SND kes)` by fs[EVERY_MEM] >>
     first_x_assum (qspecl_then [`cx`,`am`] mp_tac) >>
     simp[] >> disch_then drule_all >>
@@ -720,7 +688,8 @@ Proof
     qexists `Value v` >>
     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
          lift_sum_def, get_accounts_def, return_def, expr_type_def, eval_result_typed_def,
-         read_result_def, value_runtime_typed_def, constant_result_shape_def] >>
+         read_result_def, value_runtime_typed_def, constant_result_shape_def,
+         precompile_call_success_initial_state] >>
     metis_tac[])
   >~ [`TypeBuiltin`] >- (
     `well_typed_exprs (artifact_env artifact mods current_src) es /\
@@ -941,7 +910,7 @@ QED
 Resume constant_eval_expr_fold_agreement[struct]:
     strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     `well_typed_exprs (artifact_env artifact mods current_src) (MAP SND kes)` by
-      (irule constant_named_exprs_typed >> gvs[well_typed_expr_def]) >>
+      (irule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >> gvs[well_typed_expr_def]) >>
     `!e pv next. MEM e (MAP SND kes) /\
        eval_expr cx e (initial_state am sc) = (INL pv,next) ==>
        next = initial_state am sc /\
@@ -1045,9 +1014,11 @@ Resume constant_eval_expr_fold_agreement[builtin]:
          lift_sum_def, get_accounts_def, return_def] >> strip_tac >>
     gvs[sum_CASE_rator, AllCaseEqs()] >>
     drule_all constant_eval_exprs_fold_lift >> strip_tac >>
-    gvs[return_def, raise_def, constant_result_shape_def, read_result_def] >>
+    gvs[return_def, raise_def, constant_result_shape_def, read_result_def,
+        precompile_call_success_initial_state] >>
     `get_tenv cx = type_env_all_modules mods` by simp[get_tenv_def] >>
-    `evaluate_builtin (constant_context mods) empty_accounts v8 bt (MAP expr_type es) vs = INL v''` by
+    rename1 `evaluate_builtin cx _ v8 bt (MAP expr_type es) vs = INL bv` >>
+    `evaluate_builtin (constant_context mods) empty_accounts v8 bt (MAP expr_type es) vs = INL bv` by
       metis_tac[evaluate_builtin_constant_context] >>
     gvs[constant_value_def]
 QED

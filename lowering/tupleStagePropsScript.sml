@@ -9,8 +9,9 @@
  *)
 Theory tupleStageProps
 Ancestors
-  stmtSimDeclMem valueCopyBytes stmtSimReturn tupleMemoryLayout exprSim valueTypingMemoryProps
-  list rich_list finite_map compileEnv valueEncoding vyperTyping
+  loweringPosts
+  stmtSimDeclMem valueCopyBytes stmtSimReturn tupleMemoryLayout  valueTypingMemoryProps
+  list rich_list finite_map compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs vyperTyping
   loweringHalt context emitHelper emitHelperProps exprLoweringProps freshWrites
   loweringSlice fragExec localPtrsProps venomInst venomState venomExecSemantics
 Libs

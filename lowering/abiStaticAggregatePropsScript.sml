@@ -1,6 +1,6 @@
 Theory abiStaticAggregateProps
 Ancestors
-  abiStaticLayoutProps valueEncoding vyperABI vyperTyping compileEnv contractABI byte
+  abiStaticLayoutProps valueEncoding valueEncodingDefs vyperABI vyperTyping compileEnv contractABI byte
   integer_word bitstring venomMemProofs venomMemProps abiStaticSparseProps list rich_list
 
 (* Slice-local reverse representation boundaries for static ABI chunks. *)
@@ -62,13 +62,6 @@ Theorem abi_compatible_flag_layout:
   val_in_memory (FlagTV m) (FlagV k) off mem
 Proof
   simp[abi_static_flag_layout]
-QED
-
-Theorem mem_bytes_at_bounded:
-  off + n <= LENGTH mem ==>
-  mem_bytes_at off n mem = TAKE n (DROP off mem)
-Proof
-  simp[mem_bytes_at_def, rich_listTheory.TAKE_APPEND, listTheory.LENGTH_DROP]
 QED
 
 Theorem mem_bytes_at_child_slice:

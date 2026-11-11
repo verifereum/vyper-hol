@@ -3,7 +3,7 @@
    manufacture an ImmutableLoc. No name-freshness premise is needed. *)
 Theory immutableLocationProps
 Ancestors
-  immutableSectionRel immutableRelation compileVyper compileEnv context finite_map list arithmetic
+  loweringStateRelDefs immutableSectionRel immutableRelation compileVyper compileEnv context finite_map list arithmetic
 
 Theorem immutable_allocate_args_origin:
   !args off vars vars' off' key loc.
@@ -23,8 +23,10 @@ Theorem immutable_module_vars_origin:
 Proof
   Induct >> simp[add_module_var_locations_def] >> rpt gen_tac >>
   Cases_on `h` >> simp[add_module_var_locations_def] >>
-  rpt CASE_TAC >> simp[] >> strip_tac >>
-  first_x_assum drule >> simp[FLOOKUP_UPDATE] >> rw[]
+  strip_tac >> first_x_assum drule >>
+  simp[] >> Cases_on `o'` >> simp[]
+  >- (Cases_on `v0` >> simp[FLOOKUP_UPDATE] >> rw[]) >>
+  Cases_on `b` >> simp[FLOOKUP_UPDATE] >> rw[]
 QED
 
 Theorem immutable_locations_cons:
@@ -54,6 +56,23 @@ Theorem immutable_len_cons:
     compute_immutables_len sft [top] + compute_immutables_len sft tops
 Proof
   mp_tac (Q.SPECL [`[top]`, `tops`] compute_immutables_len_append) >> simp[]
+QED
+
+(* Two distinct immutables of one declaration list occupy disjoint
+   stretches of the sums compute_immutables_len takes. *)
+Theorem immutable_layout_disjoint:
+  !pre1 pre2 post1 post2 v1 v2 n1 n2 t1 t2 s1 s2 sft.
+    pre1 ++ VariableDecl v1 Immutable n1 t1 s1 :: post1 =
+    pre2 ++ VariableDecl v2 Immutable n2 t2 s2 :: post2 /\ n1 <> n2 ==>
+    regions_disjoint (compute_immutables_len sft pre1) (type_mem_bytes sft t1)
+      (compute_immutables_len sft pre2) (type_mem_bytes sft t2)
+Proof
+  simp[regions_disjoint_def] >>
+  Induct >> Cases_on `pre2` >> rw[] >>
+  ONCE_REWRITE_TAC [immutable_len_cons] >>
+  TRY (gvs[compute_immutables_len_def] >> NO_TAC) >>
+  first_x_assum drule_all >> disch_then (qspec_then `sft` mp_tac) >>
+  decide_tac
 QED
 
 Theorem immutable_locations_origin:

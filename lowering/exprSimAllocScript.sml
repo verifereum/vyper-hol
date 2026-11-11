@@ -1,7 +1,7 @@
 (* Shared execution interface for expression buffer allocations. *)
 Theory exprSimAlloc
 Ancestors
-  list rich_list finite_map context compileEnv loweringSlice exprLoweringProps
+  list rich_list finite_map context compileEnv loweringStateRelDefs loweringSlice exprLoweringProps
   emitHelperProps fragExec localPtrsProps venomInst venomState
   venomExecSemantics
 
@@ -58,7 +58,7 @@ Proof
       `FLOOKUP t.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
       gvs[venomMemDefsTheory.alloca_inv_def,
           venomMemDefsTheory.allocas_non_overlapping_def,
-          compileEnvTheory.regions_disjoint_def] >>
+          loweringStateRelDefsTheory.regions_disjoint_def] >>
       qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _` drule >>
       disch_then (qspecl_then [`b`, `sz`, `w2n w`, `w2n n`] mp_tac) >>
       simp[arithmeticTheory.ADD_COMM]) >>
@@ -106,7 +106,7 @@ Proof
       wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
   qexistsl_tac [`t`, `w`] >>
   simp[exprLoweringPropsTheory.run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_def,
+       step_inst_base_opcode_eqs,
        venomInstTheory.mk_inst_def, eval_operand_def,
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
   conj_tac
@@ -173,11 +173,17 @@ Proof
   >- (irule exprLoweringPropsTheory.alloca_room_fields >>
       qexists_tac `s` >> simp[mstore_def]) >>
   conj_tac
+  >- (irule exprLoweringPropsTheory.fmp_room_fields >>
+      qexists_tac `s` >> simp[mstore_def]) >>
+  conj_tac
   >- (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
       qexistsl_tac [`s`, `es`] >> simp[mstore_def] >>
       rpt strip_tac >> qexists_tac `id` >>
       fs[local_region_def, lookup_var_def]) >>
-  simp[mstore_def] >> metis_tac[]
+  conj_tac
+  >- (irule exprLoweringPropsTheory.immutable_base_zero_frame >>
+      qexists_tac `s` >> simp[mstore_def, lookup_var_def]) >>
+  simp[mstore_def] >> first_assum MATCH_ACCEPT_TAC
 QED
 
 (* Allocation preserves label operands as well as older registers. *)
@@ -190,8 +196,24 @@ Proof
        comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[emitted_insts_def,
        rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+       step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
   gvs[update_var_def]
+QED
+
+(* Allocation leaves storage and transient storage alone. *)
+Theorem alloc_buffer_storage:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  run_inst_seq (emitted_insts sa sm) s = OK t ==>
+  contract_storage t = contract_storage s /\
+  contract_transient t = contract_transient s
+Proof
+  simp[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def, comp_bind_def,
+       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >> gvs[emitted_insts_def,
+       rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+  gvs[update_var_def, venomStateTheory.contract_storage_def,
+      venomStateTheory.contract_transient_def]
 QED
 
 Theorem alloc_buffer_source_frag_labels:
@@ -217,19 +239,25 @@ Theorem alloc_buffer_source_frag_labels:
          regions_disjoint (w2n w) sz b len) /\
       (!name b len. local_region cenv es.scopes u name b len ==>
          regions_disjoint (w2n w) sz b len) /\
-      (?p. buf.buf_operand = Var p /\ not_fresh_at mid p)
+      (?p. buf.buf_operand = Var p /\ not_fresh_at mid p) /\
+      contract_storage u = contract_storage s /\
+      contract_transient u = contract_transient s
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   `t.vs_labels = s.vs_labels` by metis_tac[hash_alloc_buffer_labels] >>
+  `contract_storage t = contract_storage s /\
+   contract_transient t = contract_transient s` by
+    metis_tac[alloc_buffer_storage] >>
   `eval_operand src t = SOME a` by
     (Cases_on `src` >> gvs[eval_operand_def]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH mid.cs_current_insts`, `w`] >>
   simp[] >> reverse conj_tac
   >- (Cases_on `src` >>
       gvs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
-          local_region_def] >> metis_tac[]) >>
+          local_region_def, venomStateTheory.contract_storage_def,
+          venomStateTheory.contract_transient_def] >> metis_tac[]) >>
   irule frag_exec_run_inst_seq >>
   qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
   simp[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
@@ -262,7 +290,9 @@ Theorem alloc_buffer_source_frag:
          regions_disjoint (w2n w) sz b len) /\
       (!name b len. local_region cenv es.scopes u name b len ==>
          regions_disjoint (w2n w) sz b len) /\
-      (?p. buf.buf_operand = Var p /\ not_fresh_at mid p)
+      (?p. buf.buf_operand = Var p /\ not_fresh_at mid p) /\
+      contract_storage u = contract_storage s /\
+      contract_transient u = contract_transient s
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all alloc_buffer_source_frag_labels >>

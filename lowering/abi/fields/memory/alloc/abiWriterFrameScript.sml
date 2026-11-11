@@ -167,7 +167,7 @@ Proof
     `FLOOKUP after.vs_allocas id = SOME allocation` by (drule_all allocation_growth_old >> simp[]) >>
     `allocation = (region_base,region_size)` by fs[] >> gvs[] >>
     qpat_x_assum `!id region_base region_size. _` (qspecl_then [`id`, `region_base`, `region_size`] mp_tac) >> simp[]) >>
-  simp[abi_window_separated_def, compileEnvTheory.regions_disjoint_def]
+  simp[abi_window_separated_def, loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Theorem abi_writer_frame_prefix:

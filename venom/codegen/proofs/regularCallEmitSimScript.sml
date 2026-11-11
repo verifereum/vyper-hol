@@ -55,6 +55,18 @@ Proof
   gvs[asm_call_request_def, venom_call_request_def, venom_asm_rel_def]
 QED
 
+Theorem related_create_request[local]:
+  venom_asm_rel lo ps vs st /\
+  (w2n sz = 0 \/ w2n off + w2n sz <= ps.ps_alloc.sa_spill_base \/
+   ps.ps_alloc.sa_next_offset <= w2n off) ==>
+  asm_create_request st value (w2n off) (w2n sz) salt_opt =
+  venom_create_request vs value off sz salt_opt
+Proof
+  strip_tac >> drule related_call_input_bytes >>
+  disch_then (qspecl_then [`w2n off`, `w2n sz`] mp_tac) >>
+  gvs[asm_create_request_def, venom_create_request_def, venom_asm_rel_def]
+QED
+
 Theorem asm_call_memory_read_byte:
   read_byte i (asm_call_memory ao asz ro rsz mem) = read_byte i mem
 Proof
@@ -185,6 +197,39 @@ Proof
       irule plan_spill_rel_call_return_write >> simp[] >>
       qexists_tac `spill_base` >> simp[]) >>
   irule memory_rel_call_return_write >> simp[]
+QED
+
+Theorem consume_create_outcome_venom_asm_rel[local]:
+  !lo ps vs st rq result vb off sz stk.
+  venom_asm_rel lo ps vs st /\
+  consume_create_outcome rq vs = (result, vb) ==>
+  ?ab.
+    asm_consume_create_outcome rq stk
+      (st with as_memory := asm_call_memory off sz 0 0 st.as_memory) = AsmOK ab /\
+    ab.as_stack = result :: stk /\ ab.as_pc = st.as_pc + 1 /\
+    venom_asm_rel lo ps vb (ab with as_stack := st.as_stack)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `st.as_outcomes = vs.vs_outcomes /\
+   st.as_accounts = vs.vs_accounts /\
+   st.as_transient = vs.vs_transient /\ st.as_logs = vs.vs_logs` by
+    fs[venom_asm_rel_def] >>
+  qpat_x_assum `consume_create_outcome _ _ = _` mp_tac >>
+  simp_tac std_ss [consume_create_outcome_def, LET_THM] >>
+  pairarg_tac >> gnvs[] >> pairarg_tac >> gnvs[] >> strip_tac >>
+  simp[asm_consume_create_outcome_def, LET_THM] >>
+  gnvs[asm_next_def, venom_asm_rel_def] >>
+  qmatch_goalsub_abbrev_tac `plan_stack_rel lo completed` >>
+  `!op. operand_val completed lo op = operand_val vs lo op` by
+    (Cases >> simp[Abbr `completed`, operand_val_def]) >>
+  conj_tac >- fs[plan_stack_rel_def] >>
+  conj_tac
+  >- (`plan_spill_rel lo vs ps.ps_spilled
+         (asm_call_memory off sz 0 0 st.as_memory)` suffices_by
+        simp[plan_spill_rel_def] >>
+      Cases_on `sz = 0` >> simp[asm_call_memory_def] >>
+      irule plan_spill_rel_expand >> simp[]) >>
+  fs[memory_rel_def, asm_call_memory_read_byte] >> metis_tac[]
 QED
 
 Theorem memory_rel_expanded_return_write[local]:
@@ -327,63 +372,23 @@ Theorem delegatecall_emit_venom_asm_rel:
       vs' ab
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `read_memory (w2n ao) (w2n az) vs =
-    TAKE (w2n az) (DROP (w2n ao)
-      (asm_expand_memory (w2n ao + w2n az) st.as_memory))` by
-    (irule related_call_input_bytes >> qexistsl_tac [`lo`, `ps`] >> simp[]) >>
-  `st.as_accounts = vs.vs_accounts /\ st.as_call_ctx = vs.vs_call_ctx` by
-    fs[venom_asm_rel_def] >>
-  drule related_delegatecall_state >> strip_tac >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [exec_delegatecall_def, LET_THM] >>
-  simp_tac (srw_ss()) [AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `_ = (_, _)` SUBST_ALL_TAC >>
-  drule_all extract_result_venom_asm_rel >> strip_tac >> gnvs[] >>
-  `6 <= LENGTH ps.ps_stack` by
-    fs[venom_asm_rel_def, plan_stack_rel_def] >>
-  qexists_tac `asm_next (ab with as_stack := output :: stk)` >>
-  conj_tac
-  >- simp[asm_exec_delegatecall_def, LET_THM] >>
-  simp[asm_next_def] >>
+  simp_tac std_ss [exec_delegatecall_def, LET_THM] >> pairarg_tac >>
+  pure_asm_rewrite_tac[] >> strip_tac >>
+  rename1 `consume_call_outcome _ _ _ _ = (output, vb)` >>
+  `asm_call_request st addr 0w (w2n ao) (w2n az) F =
+   venom_call_request vs addr 0w ao az F` by
+    (irule related_call_request >> qexistsl_tac [`lo`, `ps`] >> simp[]) >>
+  drule_all consume_call_outcome_venom_asm_rel >>
+  disch_then (qspecl_then [`w2n ao`, `w2n az`, `stk`] strip_assume_tac) >>
+  qpat_x_assum `consume_call_outcome _ _ _ _ = _` kall_tac >>
+  qexists_tac `ab` >> conj_tac
+  >- gvs[asm_exec_delegatecall_def] >>
+  simp[] >>
+  `6 <= LENGTH ps.ps_stack` by fs[venom_asm_rel_def, plan_stack_rel_def] >>
   drule emit_output_venom_asm_rel >>
   disch_then (qspecl_then [`output`, `out`, `6`] mp_tac) >>
   gvs[asm_next_def, venom_asm_rel_def, update_var_def]
-QED
-
-(* CREATE/CREATE2 completion: the oracle outcome is adopted identically on
-   both sides; only the asm memory is expanded over the init-code range. *)
-Theorem consume_create_outcome_venom_asm_rel:
-  !lo ps vs st rq result vb ao az stk.
-  venom_asm_rel lo ps vs st /\
-  consume_create_outcome rq vs = (result, vb) ==>
-  ?ab.
-    asm_consume_create_outcome rq stk
-      (st with as_memory := asm_call_memory ao az 0 0 st.as_memory) = AsmOK ab /\
-    ab.as_stack = result :: stk /\ ab.as_pc = st.as_pc + 1 /\
-    venom_asm_rel lo ps vb (ab with as_stack := st.as_stack)
-Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `st.as_outcomes = vs.vs_outcomes /\
-   st.as_accounts = vs.vs_accounts /\
-   st.as_transient = vs.vs_transient /\ st.as_logs = vs.vs_logs` by
-    fs[venom_asm_rel_def] >>
-  `memory_rel ps.ps_alloc vs.vs_memory
-     (asm_call_memory ao az 0 0 st.as_memory)` by
-    (fs[venom_asm_rel_def, memory_rel_def, asm_call_memory_read_byte] >>
-     metis_tac[]) >>
-  qpat_x_assum `consume_create_outcome _ _ = _` mp_tac >>
-  simp_tac std_ss [consume_create_outcome_def, LET_THM] >>
-  pairarg_tac >> gnvs[] >> pairarg_tac >> gnvs[] >> strip_tac >>
-  simp[asm_consume_create_outcome_def, LET_THM] >>
-  gnvs[asm_next_def, venom_asm_rel_def] >>
-  qmatch_goalsub_abbrev_tac `plan_stack_rel lo completed` >>
-  `!op. operand_val completed lo op = operand_val vs lo op` by
-    (Cases >> simp[Abbr `completed`, operand_val_def]) >>
-  `plan_spill_rel lo vs ps.ps_spilled
-     (asm_call_memory ao az 0 0 st.as_memory)` suffices_by
-    (strip_tac >> fs[plan_spill_rel_def, plan_stack_rel_def]) >>
-  simp[asm_call_memory_def] >> rw[] >> fs[] >>
-  irule plan_spill_rel_expand >> fs[]
 QED
 
 Theorem create_emit_venom_asm_rel:
@@ -407,23 +412,20 @@ Theorem create_emit_venom_asm_rel:
       vs' ab
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `read_memory (w2n off) (w2n sz) vs =
-    TAKE (w2n sz) (DROP (w2n off)
-      (asm_expand_memory (w2n off + w2n sz) st.as_memory))` by
-    (irule related_call_input_bytes >> qexistsl_tac [`lo`, `ps`] >> simp[]) >>
-  `asm_create_request st value (w2n off) (w2n sz) salt_opt =
-   venom_create_request vs value off sz salt_opt` by
-    gvs[asm_create_request_def, venom_create_request_def, venom_asm_rel_def] >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [exec_create_def, LET_THM] >> pairarg_tac >>
+  simp_tac std_ss [exec_create_def, LET_THM] >>
+  Cases_on `w2n sz > 2 * max_code_size` >- simp[] >>
+  asm_simp_tac std_ss [] >> pairarg_tac >>
   pure_asm_rewrite_tac[] >> strip_tac >>
   rename1 `consume_create_outcome _ _ = (output, vb)` >>
+  `asm_create_request st value (w2n off) (w2n sz) salt_opt =
+   venom_create_request vs value off sz salt_opt` by
+    (irule related_create_request >> qexistsl_tac [`lo`, `ps`] >> simp[]) >>
   drule_all consume_create_outcome_venom_asm_rel >>
   disch_then (qspecl_then [`w2n off`, `w2n sz`, `stk`] strip_assume_tac) >>
   qpat_x_assum `consume_create_outcome _ _ = _` kall_tac >>
   qexists_tac `ab` >> conj_tac
-  >- (Cases_on `salt_opt` >>
-      gvs[asm_exec_create_def, asm_exec_create2_def, LET_THM]) >>
+  >- (Cases_on `salt_opt` >> gvs[asm_exec_create_def, asm_exec_create2_def]) >>
   simp[] >>
   `(case salt_opt of NONE => 3 | SOME salt => 4) <= LENGTH ps.ps_stack` by
     (Cases_on `salt_opt` >> fs[venom_asm_rel_def, plan_stack_rel_def]) >>
@@ -611,6 +613,9 @@ Resume external_arranged_emit_sim[create]:
        ir_specific_operand_order_def, venom_to_evm_name_def] >>
   rename1 `exec_create inst vs value off sz NONE = _` >>
   rename1 `inst.inst_operands = [vop; oop; sop]` >>
+  (* the static-frame guard's undefined-operand case is impossible here *)
+  TRY (qpat_x_assum `eval_operands _ _ = NONE` mp_tac >>
+       simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [vop; oop; sop] vs = SOME [value; off; sz]` by
     simp[eval_operands_def] >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>
@@ -640,6 +645,9 @@ Resume external_arranged_emit_sim[create2]:
        ir_specific_operand_order_def, venom_to_evm_name_def] >>
   rename1 `exec_create inst vs value off sz (SOME salt) = _` >>
   rename1 `inst.inst_operands = [vop; oop; sop; salt_op]` >>
+  (* the static-frame guard's undefined-operand case is impossible here *)
+  TRY (qpat_x_assum `eval_operands _ _ = NONE` mp_tac >>
+       simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [vop; oop; sop; salt_op] vs = SOME [value; off; sz; salt]` by
     simp[eval_operands_def] >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>

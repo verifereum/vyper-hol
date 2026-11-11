@@ -16,8 +16,8 @@
  *
  * A first operand in a live local's region (expr_val_at's other case)
  * is covered by expr_post_operand_local_kept.  It assumes the value lies
- * outside a DynArray local's mutable length word; locals_kept preserves
- * the remaining bytes through the second fragment.
+ * apart from the local's dynamic array length words, which a pop writes;
+ * locals_kept preserves the remaining bytes through the second fragment.
  *
  * TOP-LEVEL:
  *   expr_val_in_alloca      — a memory value sits in one of the
@@ -40,8 +40,11 @@
 
 Theory exprSimOperands
 Ancestors
+  exprBopSimProps
+  exprSimProps
+  loweringPosts
   finite_map
-  exprSim exprSimOps localPtrsProps compileEnv exprLoweringProps
+   exprSimOps localPtrsProps compileEnv loweringStateRelDefs exprLoweringProps
   valueEncodingProofs venomState venomInst
 
 (* ===== Values in an expression's own allocations ===== *)
@@ -99,7 +102,7 @@ Proof
   `alloca_inv s /\ local_ptrs_rel func cenv es.scopes s` by
     gvs[stmt_state_rel_def, state_rel_def] >>
   drule_all local_ptrs_rel_alloca_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 (* expr_val_in_alloca from the ALLOCA behind the value's allocation: an
@@ -155,6 +158,7 @@ QED
    operand's expr_post keep it again. *)
 Theorem expr_post_operand_kept_stable:
   !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y.
+    post_value_type cenv e1 = expr_type e1 /\
     expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
     expr_val_in_alloca cenv cx (expr_type e1) sa s1 es1 v1 x t /\
     expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
@@ -175,6 +179,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_x_assum `expr_post ctx _ _ _ e2 _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  rfs[] >>
   Cases_on `is_word_type (expr_type e1)`
   >- (simp[expr_val_in_alloca_def] >> fs[expr_val_rel_def] >> gvs[]) >>
   qpat_x_assum `expr_val_in_alloca _ _ _ _ _ _ _ _ _`
@@ -209,6 +214,7 @@ QED
 (* KEY LEMMA: fresh non-label operands satisfy the stability premise. *)
 Theorem expr_post_operand_kept:
   !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y ctx.
+    post_value_type cenv e1 = expr_type e1 /\
     expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
     expr_val_in_alloca cenv cx (expr_type e1) sa s1 es1 v1 x t /\
     expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
@@ -229,6 +235,7 @@ QED
    for. *)
 Theorem expr_post_operand_kept_at:
   !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y ctx.
+    post_value_type cenv e1 = expr_type e1 /\
     expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
     expr_val_in_alloca cenv cx (expr_type e1) sa s1 es1 v1 x t /\
     expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
@@ -243,16 +250,17 @@ Proof
   simp[expr_val_in_alloca_at]
 QED
 
-(* Local-region preservation for a non-dynamic-array value, assuming its
-   footprint excludes any mutable length word of the enclosing local. *)
+(* Local-region preservation for a value whose footprint is apart from the
+   enclosing local's dynamic array length words. *)
 Theorem expr_post_operand_local_kept:
   expr_val_rel cx ty v op s /\
-  ~is_word_type ty /\ ~dynarray_type ty /\
+  ~is_word_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
   eval_operand op s = SOME w /\ eval_operand op s' = SOME w /\
   local_region cenv es.scopes s n b sz /\
   b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
-  (dynarray_local cenv n ==> b + 32 <= w2n w) /\
+  (!k. dynarray_len_at cenv n k ==>
+       w2n w + val_footprint tv v <= b + k \/ b + k + 32 <= w2n w) /\
   expr_post ctx func cenv cx e es sa sb s es' v' op' s' ==>
   expr_val_rel cx ty v op s'
 Proof
@@ -262,7 +270,7 @@ Proof
   sym_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  qpat_x_assum `locals_kept _ _ _ _`
-    (mp_tac o REWRITE_RULE [locals_kept_def]) >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
   disch_then irule >> qexistsl_tac [`b`, `n`, `sz`] >> simp[]
 QED

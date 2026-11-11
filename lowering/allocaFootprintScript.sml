@@ -46,9 +46,9 @@ Theory allocaFootprint
 Ancestors
   fragExecMem instMemFrontier loweringHalt abiBuiltinAllocation
   abiEncoderWrites builtinHashing exprLowering
-  context emitHelper emitHelperProps exprLoweringProps compileEnv
+  context emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomInst venomExecSemantics venomMemDefs memSafeRun
-  finite_map list rich_list words arithmetic
+  finite_map list rich_list words arithmetic abiDecoderIndexInit
 
 (* ===== State facts ===== *)
 
@@ -74,12 +74,6 @@ Theorem eval_operand_same_vars:
     eval_operand op s' = eval_operand op s
 Proof
   Cases >> simp[eval_operand_def, lookup_var_def]
-QED
-
-Theorem eval_operand_mstore_eq[simp]:
-  eval_operand op (mstore p w s) = eval_operand op s
-Proof
-  irule eval_operand_same_vars >> simp[]
 QED
 
 Theorem allocate_state_fields[simp]:
@@ -151,6 +145,9 @@ Theorem emit_op_mem_ok:
     emit_op opc ops st = (v, st') /\
     inst_mem_below_frontier
       (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)])
+      s /\
+    inst_dload_in_section
+      (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)])
       s ==>
     run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
@@ -161,7 +158,8 @@ QED
 Theorem emit_void_mem_ok:
   !opc ops st st' s.
     emit_void opc ops st = ((), st') /\
-    inst_mem_below_frontier (mk_inst st.cs_next_id opc ops []) s ==>
+    inst_mem_below_frontier (mk_inst st.cs_next_id opc ops []) s /\
+    inst_dload_in_section (mk_inst st.cs_next_id opc ops []) s ==>
     run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
   rpt strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
@@ -171,7 +169,8 @@ QED
 Theorem emit_inst_mem_ok:
   !opc ops outs st st' s.
     emit_inst opc ops outs st = ((), st') /\
-    inst_mem_below_frontier (mk_inst st.cs_next_id opc ops outs) s ==>
+    inst_mem_below_frontier (mk_inst st.cs_next_id opc ops outs) s /\
+    inst_dload_in_section (mk_inst st.cs_next_id opc ops outs) s ==>
     run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
   rpt strip_tac >> drule emit_inst_extends >> strip_tac >>
@@ -287,8 +286,7 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `FLOOKUP s.vs_allocas id`
   >- gvs[abi_builtin_allocate_state_def, FLOOKUP_UPDATE, step_alloca_fresh]
   >> gvs[abi_builtin_allocate_state_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_alloca_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def]
 QED
 
 Theorem alloca_site_frontier:

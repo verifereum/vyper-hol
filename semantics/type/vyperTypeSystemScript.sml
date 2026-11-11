@@ -281,6 +281,13 @@ Definition account_item_type_def:
   account_item_type Code = BaseT (BytesT (Dynamic 24576))
 End
 
+(* Static capacities used by Vyper's concat result inference. *)
+Definition bytelike_type_bound_def:
+  bytelike_type_bound (BaseT (BytesT bd)) = bound_length bd /\
+  bytelike_type_bound (BaseT (StringT n)) = n /\
+  bytelike_type_bound _ = 0
+End
+
 Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Bop bop) ts =
     (LENGTH ts = 2 /\ well_typed_binop ty bop (EL 0 ts) (EL 1 ts)) /\
@@ -303,7 +310,7 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (AsWeiValue _) ts =
     (LENGTH ts = 1 ∧ ty = BaseT (UintT 256) ∧ is_uint_type (HD ts)) ∧
   well_typed_builtin_app ty (Concat n) ts =
-    (2 <= LENGTH ts /\
+    (2 <= LENGTH ts /\ SUM (MAP bytelike_type_bound ts) <= n /\
      ((ty = BaseT (BytesT (Dynamic n)) /\ EVERY (\t. ?bd. t = BaseT (BytesT bd)) ts) \/
       (ty = BaseT (StringT n) /\ EVERY (\t. ?m. t = BaseT (StringT m)) ts))) /\
   well_typed_builtin_app ty (Slice n) ts =
@@ -380,6 +387,27 @@ Termination
   disj1_tac >>
   CCONTR_TAC >>
   fs[]
+End
+
+(* ABI decoding admits Python's bytes1 through bytes32, including inside
+   aggregates. General assignability alone also permits bytes0. *)
+Definition abi_decode_bytes_widths_def:
+  abi_decode_bytes_widths tenv (BaseT bt) =
+    (case bt of BytesT (Fixed n) => 0 < n | _ => T) /\
+  abi_decode_bytes_widths tenv (TupleT tys) =
+    EVERY (abi_decode_bytes_widths tenv) tys /\
+  abi_decode_bytes_widths tenv (ArrayT elem bd) =
+    abi_decode_bytes_widths tenv elem /\
+  abi_decode_bytes_widths tenv (StructT nsid) =
+    (case FLOOKUP tenv nsid of
+       SOME (StructArgs args) =>
+         EVERY (abi_decode_bytes_widths (tenv \\ nsid) o SND) args
+     | _ => F) /\
+  abi_decode_bytes_widths tenv (FlagT nsid) = T /\
+  abi_decode_bytes_widths tenv NoneT = T
+Termination
+  WF_REL_TAC `inv_image ($< LEX $<) (\(tenv, ty). (CARD (FDOM tenv), type_size ty))` >>
+  rw[FLOOKUP_DEF] >> disj1_tac >> CCONTR_TAC >> fs[]
 End
 
 Theorem assignable_type_not_NoneT:
@@ -578,11 +606,10 @@ Definition valid_conversion_def:
     (20 <= m /\ m <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT AddressT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
-  valid_conversion (FlagT _) (BaseT (IntT _)) = T /\
-  valid_conversion (FlagT _) (BaseT (UintT _)) = T /\
+  (* Vyper converts flags only to and from uint256 (vyperlang/vyper#5127). *)
+  valid_conversion (FlagT _) (BaseT (UintT n)) = (n = 256) /\
   valid_conversion (FlagT _) (BaseT (BytesT bd)) = (bd = Fixed 32) /\
-  valid_conversion (BaseT (UintT _)) (FlagT _) = T /\
-  valid_conversion (BaseT (IntT _)) (FlagT _) = T /\
+  valid_conversion (BaseT (UintT n)) (FlagT _) = (n = 256) /\
   valid_conversion (BaseT (UintT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
   valid_conversion (BaseT (IntT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (StringT _)) = T /\
@@ -612,10 +639,11 @@ Definition well_typed_type_builtin_args_def:
   well_typed_type_builtin_args Convert target_ty ts =
     (LENGTH ts = 1 /\ valid_conversion (HD ts) target_ty) /\
   well_typed_type_builtin_args Extract32 target_ty ts =
-    (LENGTH ts = 2 /\ (?bd. EL 0 ts = BaseT (BytesT bd)) /\ is_int_type (EL 1 ts) /\
+    (LENGTH ts = 2 /\ (?m. EL 0 ts = BaseT (BytesT (Dynamic m))) /\
+     is_uint_type (EL 1 ts) /\
      (?bt. target_ty = BaseT bt /\ extract32_result_base_ok bt)) /\
   well_typed_type_builtin_args (AbiDecode _) target_ty ts =
-    (LENGTH ts = 1 /\ ?bd. HD ts = BaseT (BytesT bd)) /\
+    (LENGTH ts = 1 /\ ?n. HD ts = BaseT (BytesT (Dynamic n))) /\
   well_typed_type_builtin_args (AbiEncode _ method_id) target_ty ts =
     (ts <> [] /\ target_ty = TupleT ts /\
      case method_id of NONE => T | SOME bs => LENGTH bs = 4)
@@ -644,7 +672,9 @@ Definition type_builtin_result_ok_def:
   type_builtin_result_ok tenv Epsilon result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv Convert result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv Extract32 result_ty target_ty arg_tys = (result_ty = target_ty) ∧
-  type_builtin_result_ok tenv (AbiDecode _) result_ty target_ty arg_tys = (result_ty = target_ty)
+  type_builtin_result_ok tenv (AbiDecode _) result_ty target_ty arg_tys =
+    (result_ty = target_ty /\ assignable_type tenv target_ty /\
+     abi_decode_bytes_widths tenv target_ty)
 End
 
 Definition bound_at_most_def[simp]:
@@ -847,6 +877,11 @@ Definition well_typed_expr_def:
         assignable, as params_ok requires of InterfaceDecl. *)
      (ret_ty <> NoneT ==> assignable_type env.type_defs ret_ty) /\
      EVERY (assignable_type env.type_defs) arg_types /\
+     (* Vyper has only bytes1 through bytes32 (RANGE_1_32 in
+        semantics/types/primitives.py), so no ABI type of the call,
+        nested or not, contains bytes0. *)
+     abi_decode_bytes_widths env.type_defs ret_ty /\
+     EVERY (abi_decode_bytes_widths env.type_defs) arg_types /\
      LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
      expr_type (HD args) = BaseT AddressT /\
      (* positional arguments may be narrower than the declared types *)
@@ -866,7 +901,7 @@ Definition well_typed_expr_def:
      LENGTH args = 2 + LENGTH flags.rcf_kws /\
      raw_call_kws_ok flags (DROP 2 args) /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
-     (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd))) /\
+     (?n. EL 1 (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\
@@ -973,7 +1008,9 @@ End
 Definition well_typed_atarget_def:
   well_typed_atarget env (BaseTarget bt) ty = well_typed_target env bt ty /\
   well_typed_atarget env (TupleTarget tgts) ty =
-    (?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty) tgts tys /\ ty = TupleT tys)
+    (* Neither pinned Python backend can generate nested tuple targets. *)
+    (EVERY (\tgt. case tgt of BaseTarget _ => T | TupleTarget _ => F) tgts /\
+     ?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty) tgts tys /\ ty = TupleT tys)
 Termination
   WF_REL_TAC `measure (\(_,t,_). assignment_target_size t)`
 End
@@ -988,14 +1025,6 @@ Definition atarget_accepts_def:
      | _ => F) /\
   atarget_accepts env (TupleTarget tgts) t =
     well_typed_atarget env (TupleTarget tgts) t
-End
-
-Definition well_typed_iterator_def:
-  well_typed_iterator env typ (Array e) =
-    (well_typed_expr env e /\ ?bd. expr_type e = ArrayT typ bd) /\
-  well_typed_iterator env typ (Range e1 e2) =
-    (well_typed_expr env e1 /\ well_typed_expr env e2 /\
-     is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ)
 End
 
 Definition well_typed_custom_error_def:
@@ -1033,16 +1062,20 @@ Definition place_contains_def:
     isPREFIX (SND (place_access w [])) (SND (place_access p []))
 End
 
-(* _get_variable_access on an iterator: NONE for anything but a variable
-   seen through attributes and subscripts. *)
-Definition expr_place_def:
-  expr_place (Name _ id) = SOME (NameTarget id) /\
-  expr_place (TopLevelName _ n) = SOME (TopLevelNameTarget n) /\
-  expr_place (Subscript _ e i) =
-    OPTION_MAP (\tgt. SubscriptTarget tgt i) (expr_place e) /\
-  expr_place (Attribute _ e a) =
-    OPTION_MAP (\tgt. AttributeTarget tgt a) (expr_place e) /\
-  expr_place _ = NONE
+(* _get_variable_access on an iterator, also through a ternary's arms:
+   the places it may read in place.  The compiled ternary uses an arm's
+   memory directly when its layout is the result's (compile_ifexp_arm, like
+   lower_IfExp in Python), also under a subscript or attribute.  Stricter
+   than Vyper, whose _get_variable_access doesn't look into a ternary. *)
+Definition expr_places_def:
+  expr_places (Name _ id) = [NameTarget id] /\
+  expr_places (TopLevelName _ n) = [TopLevelNameTarget n] /\
+  expr_places (Subscript _ e i) =
+    MAP (\tgt. SubscriptTarget tgt i) (expr_places e) /\
+  expr_places (Attribute _ e a) =
+    MAP (\tgt. AttributeTarget tgt a) (expr_places e) /\
+  expr_places (IfExp _ _ e1 e2) = expr_places e1 ++ expr_places e2 /\
+  expr_places _ = []
 End
 
 (* ok holds of every place written by pop() in an expression.  The
@@ -1130,12 +1163,90 @@ Termination
   simp[]
 End
 
+(* The expression's source is a function call (a vy_ast.Call), whose
+   result Vyper doesn't iterate over (IteratorException "Cannot iterate over
+   the result of a function call" in visit_For,
+   vyper/semantics/analysis/local.py).  extcall and staticcall have their
+   own AST nodes there, and a list literal is a MakeArray builtin here.  The
+   remaining builtins are calls or, like msg.sender, never arrays. *)
+Definition call_result_expr_def:
+  call_result_expr (Pop _ _) = T /\
+  call_result_expr (TypeBuiltin _ _ _ _) = T /\
+  call_result_expr (Builtin _ (MakeArray _ _) _) = F /\
+  call_result_expr (Builtin _ _ _) = T /\
+  call_result_expr (Call _ (ExtCall _ _ _ _) _ _) = F /\
+  call_result_expr (Call _ _ _ _) = T /\
+  call_result_expr _ = F
+End
+
+(* A call Vyper doesn't count as state-modifying: a staticcall or a raw_call
+   with is_static_call=True.  An extcall's function is nonpayable or payable
+   (visit_Call), a non-static raw_call and the create builtins modify state,
+   and send, raw_log, raw_revert and selfdestruct are statements.  Internal
+   calls count as static here only because fn_sig carries no mutability. *)
+Definition call_target_static_def:
+  call_target_static (IntCall _) = T /\
+  call_target_static (ExtCall static _ _ _) = static /\
+  call_target_static (RawCallTarget flags) = flags.rcf_is_static /\
+  call_target_static (RawCallCalldataTarget flags) = flags.rcf_is_static /\
+  call_target_static _ = F
+End
+
+(* Every call anywhere in the expression is static (call_target_static). *)
+Definition expr_static_calls_def:
+  expr_static_calls (Name _ _) = T /\
+  expr_static_calls (TopLevelName _ _) = T /\
+  expr_static_calls (FlagMember _ _ _) = T /\
+  expr_static_calls (IfExp _ c x y) =
+    (expr_static_calls c /\ expr_static_calls x /\ expr_static_calls y) /\
+  expr_static_calls (Literal _ _) = T /\
+  expr_static_calls (StructLit _ _ kes) = EVERY expr_static_calls (MAP SND kes) /\
+  expr_static_calls (Subscript _ x y) =
+    (expr_static_calls x /\ expr_static_calls y) /\
+  expr_static_calls (Attribute _ x _) = expr_static_calls x /\
+  expr_static_calls (Builtin _ _ es) = EVERY expr_static_calls es /\
+  expr_static_calls (TypeBuiltin _ _ _ es) = EVERY expr_static_calls es /\
+  expr_static_calls (Pop _ tgt) = target_static_calls tgt /\
+  expr_static_calls (Call _ ct es drv) =
+    (call_target_static ct /\ EVERY expr_static_calls es /\
+     case drv of NONE => T | SOME d => expr_static_calls d) /\
+  target_static_calls (NameTarget _) = T /\
+  target_static_calls (TopLevelNameTarget _) = T /\
+  target_static_calls (SubscriptTarget tgt e) =
+    (target_static_calls tgt /\ expr_static_calls e) /\
+  target_static_calls (AttributeTarget tgt _) = target_static_calls tgt
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL e => expr_size e
+    | INR tgt => base_assignment_target_size tgt)` >>
+  rw[] >>
+  TRY (Induct_on `kes` >> rw[] >> PairCases_on `h` >> rw[] >>
+       res_tac >> simp[] >> NO_TAC) >>
+  TRY (Induct_on `es` >> rw[] >> res_tac >> simp[] >> NO_TAC) >>
+  Cases_on `drv` >> fs[]
+End
+
+(* Vyper also rejects a state-modifying call anywhere in an iterator
+   (StateAccessViolation "May not call state modifying function within a
+   range expression or for loop iterator", and in codegen "Cannot make
+   modifying calls from a range expression"): here, a pop(), which
+   expr_writes_ok (\_. F) excludes, or a non-static call (expr_static_calls).
+   Nonpayable internal calls stay accepted: fn_sig carries no mutability. *)
+Definition well_typed_iterator_def:
+  well_typed_iterator env typ (Array e) =
+    (well_typed_expr env e /\ (?bd. expr_type e = ArrayT typ bd) /\
+     ~call_result_expr e /\ expr_writes_ok (\_. F) e /\ expr_static_calls e) /\
+  well_typed_iterator env typ (Range e1 e2) =
+    (well_typed_expr env e1 /\ well_typed_expr env e2 /\
+     is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ /\
+     expr_writes_ok (\_. F) e1 /\ expr_writes_ok (\_. F) e2 /\
+     expr_static_calls e1 /\ expr_static_calls e2)
+End
+
 Definition iterator_unmodified_def:
   iterator_unmodified (Range _ _) body = T /\
   iterator_unmodified (Array e) body =
-    case expr_place e of
-    | NONE => T
-    | SOME p => stmts_writes_ok (\w. ~place_contains w p) body
+    EVERY (\p. stmts_writes_ok (\w. ~place_contains w p) body) (expr_places e)
 End
 
 (* ===== Executable statement typing ===== *)
@@ -1203,7 +1314,8 @@ Definition type_stmt_def:
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
         (case it of
-           Range (Literal _ (IntL _)) (Literal _ (IntL _)) => T
+           Range (Literal _ (IntL start)) (Literal _ (IntL finish)) =>
+             start < finish /\ n = Num (finish - start)
          | Range _ _ => 0 < n /\ well_typed_literal typ (IntL (&n))
          | Array _ => T) /\
         id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
@@ -1217,6 +1329,15 @@ Termination
     case x of INL(_,_,t) => stmt_size t
             | INR(_,_,ts) => list_size stmt_size ts)`
 End
+
+Theorem type_stmt_for_range_literal_bounds:
+  type_stmt env ret_ty
+    (For id typ (Range (Literal start_ty (IntL start))
+                      (Literal end_ty (IntL finish))) n body) = SOME env' ==>
+  start < finish /\ n = Num (finish - start)
+Proof
+  rw[type_stmt_def, AllCaseEqs()]
+QED
 
 (* Conservative syntactic control-flow predicate for callable bodies.  If this
  * holds for a statement/list, the evaluator should not be able to fall through

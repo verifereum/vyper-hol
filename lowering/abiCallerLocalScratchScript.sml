@@ -3,7 +3,7 @@
    runtime allocation order. Site/output ownership is supplied by generated code. *)
 Theory abiCallerLocalScratch
 Ancestors
-  abiDecoderFootprint abiDecoderFrame localPtrsProps compileEnv venomMemDefs
+  abiDecoderFootprint abiDecoderFrame localPtrsProps compileEnv loweringStateRelDefs venomMemDefs
   venomState venomInst venomWf finite_map pred_set list arithmetic
 
 Theorem abi_caller_local_end:
@@ -28,7 +28,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!id off len. _` drule >> disch_then drule >> strip_tac >> gvs[] >>
   drule_all local_ptrs_rel_alloca_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem abi_caller_local_scratch_frame:
@@ -47,7 +47,8 @@ QED
 
 Theorem abi_caller_generated_local_scratch:
   alloca_inv s /\ fn_inst_ids_distinct func /\
-  local_ptrs_rel func ce scopes s /\ local_region ce scopes s name lo sz /\
+  local_ptrs_rel func ce scopes s /\ immutable_base_zero ce s /\
+  local_region ce scopes s name lo sz /\
   fresh_vars_wrt st s /\ FINITE ids /\ s.vs_alloca_next <= b + cap /\
   (!id off len. id IN ids /\ FLOOKUP s.vs_allocas id = SOME (off,len) ==>
     ?inst k. MEM inst (fn_insts func) /\ inst.inst_id = id /\

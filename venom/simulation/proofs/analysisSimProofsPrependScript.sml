@@ -14,6 +14,7 @@ Ancestors
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
   venomState venomWf cfgAnalysisProps execEquivProofs
   list finite_map pred_set string
+  passTransform
 
 (* Forward-specialized dataflow theorems: need intra_fwd for prepend proofs *)
 val intra_fwd = SIMP_RULE (srw_ss()) []

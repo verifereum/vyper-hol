@@ -1,7 +1,7 @@
 (* Scratch-aware observational frames; no decoder execution assumption. *)
 Theory abiDecoderFrame
 Ancestors
-  abiDecoderContract valueEncodingProps valueEncoding venomState words list arithmetic
+  abiDecoderContract valueEncodingProps valueEncoding valueEncodingDefs venomState words list arithmetic
 
 Definition abi_footprint_disjoint_def:
   abi_footprint_disjoint p n (fp : (num # num) list) <=>

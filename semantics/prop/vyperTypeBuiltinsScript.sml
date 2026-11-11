@@ -2675,7 +2675,7 @@ Proof
   TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Dynamic n))) (Slice n) _ vs = INL v` >>
        metis_tac[slice_bytes_builtin_success_type] >> NO_TAC) >>
   TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Slice n) _ vs = INL v` >>
-       metis_tac[slice_string_builtin_success_type] >> NO_TAC) >>
+       drule_all slice_string_builtin_success_type >> simp[] >> NO_TAC) >>
   (* MakeArray success produces the tuple/array value requested by the static rule. *)
   TRY (rename1 `evaluate_builtin _ _ ty (MakeArray o' b) _ vs = INL v` >>
        metis_tac[make_array_success_type] >> NO_TAC) >>
@@ -2917,7 +2917,8 @@ Resume well_typed_type_builtin_no_type_error[extract32]:
   gvs[LENGTH_EQ_NUM_compute] >>
   Cases_on `tvs` >> gvs[] >>
   drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
-  drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
+  rename1 `evaluate_type _ (BaseT (UintT width)) = SOME _` >>
+  `is_int_type (BaseT (UintT width))` by simp[] >>
   drule_all evaluate_extract32_supported_no_type_error >>
   fs[evaluate_type_builtin_def] >>
   simp[AllCaseEqs(), LET_THM]
@@ -3044,6 +3045,8 @@ Proof
   >- (gvs[LENGTH_EQ_NUM_compute] >>
       Cases_on `tvs` >> gvs[] >>
       drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
+      rename1 `evaluate_type _ (BaseT (UintT width)) = SOME _` >>
+      `is_int_type (BaseT (UintT width))` by simp[] >>
       drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
       gvs[evaluate_type_builtin_def, AllCaseEqs()] >>
       drule_all evaluate_extract32_well_typed >> simp[])

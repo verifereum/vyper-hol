@@ -1,8 +1,8 @@
 (*
  * Available Expression Analysis — Proofs (internal)
  *
- * Cheated proofs for safety properties. Consumers import them
- * through availExprAnalysisScript.sml.
+ * Proofs for lattice, canonicalization, and transfer properties.
+ * Consumers import them through availExprAnalysisScript.sml.
  *)
 
 Theory availExprProofs
@@ -127,7 +127,7 @@ Theorem avail_transfer_inst_nonidempotent_no_add:
     is_nonidempotent inst.inst_opcode ⇒
     FDOM (avail_transfer_inst dfg inst ae) ⊆ FDOM ae
 Proof
-  rw[avail_transfer_inst_def] >>
+  rw[avail_transfer_inst_def, avail_nonidempotent_def] >>
   simp[avail_remove_effect_FDOM_SUBSET]
 QED
 
@@ -148,7 +148,7 @@ Theorem avail_transfer_inst_adds:
     inst.inst_opcode ≠ ASSIGN ∧
     ¬is_terminator inst.inst_opcode ∧
     LENGTH inst.inst_outputs ≤ 1 ∧
-    ¬is_nonidempotent inst.inst_opcode ∧
+    ¬avail_nonidempotent inst.inst_opcode ∧
     ¬has_conflicting_effects inst.inst_opcode ∧
     mk_expr dfg inst ∉ FDOM (avail_remove_effect ae
                                (write_effects inst.inst_opcode)) ⇒
@@ -170,6 +170,12 @@ QED
 
 Theorem expr_effects_lit:
   ∀l. expr_effects (ExprLit l) = empty_effects
+Proof
+  simp[expr_effects_def]
+QED
+
+Theorem expr_effects_label:
+  ∀l. expr_effects (ExprLabel l) = empty_effects
 Proof
   simp[expr_effects_def]
 QED
@@ -198,6 +204,7 @@ Proof
   rpt conj_tac >| [
     rw[stringTheory.string_le_def] >> metis_tac[stringTheory.string_lt_antisym],
     rw[] >> metis_tac[wordsTheory.w2n_11, arithmeticTheory.LESS_EQUAL_ANTISYM],
+    rw[stringTheory.string_le_def] >> metis_tac[stringTheory.string_lt_antisym],
     rw[] >> `opcode2num op1 = opcode2num op2` by DECIDE_TAC >>
       fs[venomInstTheory.opcode2num_11],
     Cases_on `l2` >> simp[expr_leq_def],
@@ -212,6 +219,7 @@ Theorem expr_leq_total[local]:
 Proof
   ho_match_mp_tac expr_leq_ind >> simp[expr_leq_def] >>
   rpt conj_tac >| [
+    rw[stringTheory.string_le_def] >> metis_tac[stringTheory.string_lt_cases],
     rw[stringTheory.string_le_def] >> metis_tac[stringTheory.string_lt_cases],
     rw[] >> `opcode2num op1 < opcode2num op2 ∨
              opcode2num op1 = opcode2num op2 ∨
@@ -234,6 +242,10 @@ Proof
     metis_tac[stringTheory.string_lt_trans, stringTheory.string_lt_cases],
     (* ExprLit *)
     Cases_on `y` >> Cases_on `z` >> simp[expr_leq_def],
+    (* ExprLabel *)
+    Cases_on `y` >> Cases_on `z` >> simp[expr_leq_def] >>
+    rw[stringTheory.string_le_def] >>
+    metis_tac[stringTheory.string_lt_trans, stringTheory.string_lt_cases],
     (* ExprOp *)
     rw[] >> Cases_on `y` >> Cases_on `z` >> fs[expr_leq_def] >>
     `opcode2num o' < opcode2num o'' ∨
@@ -351,4 +363,157 @@ Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
   rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >>
   qexists_tac `h::t` >> gvs[listTheory.MEM]
+QED
+
+(* Source membership boundaries, independent of execution semantics. *)
+Theorem avail_add_source_member:
+  !ae e0 inst e i.
+    (?xs. FLOOKUP (avail_add ae e0 inst) e = SOME xs /\ MEM i xs) <=>
+    (?xs. FLOOKUP ae e = SOME xs /\ MEM i xs) \/ (e = e0 /\ i = inst)
+Proof
+  rpt gen_tac >> Cases_on `e = e0` >>
+  Cases_on `FLOOKUP ae e0` >>
+  simp[avail_add_def, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem avail_remove_effect_source_member:
+  !ae eff e i.
+    (?xs. FLOOKUP (avail_remove_effect ae eff) e = SOME xs /\ MEM i xs) <=>
+    (?xs. FLOOKUP ae e = SOME xs /\ MEM i xs) /\
+    DISJOINT (root_effects e) eff
+Proof
+  rpt gen_tac >> Cases_on `eff = empty_effects`
+  >- simp[avail_remove_effect_def, venomEffectsTheory.empty_effects_def] >>
+  simp[avail_remove_effect_def, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+  Cases_on `FLOOKUP ae e` >>
+  gvs[finite_mapTheory.FLOOKUP_DEF] >>
+  Cases_on `DISJOINT (root_effects e) eff` >> simp[]
+QED
+
+Theorem avail_meet_two_source_member:
+  !a b e i.
+    (?xs. FLOOKUP (avail_meet_two a b) e = SOME xs /\ MEM i xs) <=>
+    (?xs. FLOOKUP a e = SOME xs /\ MEM i xs) /\
+    (?xs. FLOOKUP b e = SOME xs /\ MEM i xs)
+Proof
+  rpt gen_tac >>
+  simp[avail_meet_two_def, finite_mapTheory.FLOOKUP_DEF,
+       inter_fdom_finite, finite_mapTheory.FUN_FMAP_DEF] >>
+  Cases_on `e IN FDOM a` >> Cases_on `e IN FDOM b` >>
+  simp[listTheory.MEM_FILTER, CONJ_COMM]
+QED
+
+Theorem avail_transfer_inst_source_member:
+  !d inst ae e i.
+    (?xs. FLOOKUP (avail_transfer_inst d inst ae) e = SOME xs /\ MEM i xs) <=>
+    if is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
+       is_terminator inst.inst_opcode then
+      (?xs. FLOOKUP ae e = SOME xs /\ MEM i xs)
+    else
+      ((?xs. FLOOKUP ae e = SOME xs /\ MEM i xs) /\
+       DISJOINT (root_effects e) (write_effects inst.inst_opcode)) \/
+      (LENGTH inst.inst_outputs <= 1 /\
+       ~avail_nonidempotent inst.inst_opcode /\
+       ~has_conflicting_effects inst.inst_opcode /\
+       e = mk_expr d inst /\ i = inst)
+Proof
+  rpt gen_tac >> simp[avail_transfer_inst_def] >>
+  Cases_on `is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
+            is_terminator inst.inst_opcode` >> simp[] >>
+  Cases_on `LENGTH inst.inst_outputs > 1` >> simp[]
+  >- simp[avail_remove_effect_source_member] >>
+  Cases_on `avail_nonidempotent inst.inst_opcode` >> simp[]
+  >- simp[avail_remove_effect_source_member] >>
+  Cases_on `has_conflicting_effects inst.inst_opcode` >> simp[] >>
+  simp[avail_add_source_member, avail_remove_effect_source_member]
+QED
+
+Theorem avail_transfer_inst_source_inversion:
+  !d inst ae e i xs.
+    FLOOKUP (avail_transfer_inst d inst ae) e = SOME xs /\ MEM i xs ==>
+    (?ys. FLOOKUP ae e = SOME ys /\ MEM i ys) \/
+    (i = inst /\ e = mk_expr d inst)
+Proof
+  rpt gen_tac >>
+  `(?xs. FLOOKUP (avail_transfer_inst d inst ae) e = SOME xs /\ MEM i xs) ==>
+   (?ys. FLOOKUP ae e = SOME ys /\ MEM i ys) \/
+   (i = inst /\ e = mk_expr d inst)` suffices_by metis_tac[] >>
+  simp[avail_transfer_inst_source_member] >>
+  Cases_on `is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
+            is_terminator inst.inst_opcode` >> simp[] >> metis_tac[]
+QED
+
+Theorem foldl_latest_birth[local]:
+  !T P S B.
+    (!x a. P (T x a) <=> (P a /\ S x) \/ B x) ==>
+    !xs a. P (FOLDL (\a x. T x a) a xs) <=>
+      (P a /\ EVERY (\x. S x /\ ~B x) xs) \/
+      (?pre x post. xs = pre ++ [x] ++ post /\ B x /\
+                    EVERY (\y. S y /\ ~B y) post)
+Proof
+  rpt gen_tac >> strip_tac >> Induct >> simp[] >>
+  rpt gen_tac >> simp[listTheory.FOLDL] >>
+  eq_tac
+  >- (disch_then (DISJ_CASES_THEN2 assume_tac strip_assume_tac)
+      >- (Cases_on `B h`
+          >- (disj2_tac >> qexistsl_tac [`[]`, `h`, `xs`] >> simp[]) >>
+          disj1_tac >> gvs[]) >>
+      disj2_tac >> qexistsl_tac [`h::pre`, `x`, `post`] >> simp[]) >>
+  strip_tac >- metis_tac[] >>
+  Cases_on `pre` >> gvs[] >> metis_tac[]
+QED
+
+(* Proof-only occurrence classification, not an executable transfer. *)
+Definition avail_source_survives_def:
+  avail_source_survives e inst <=>
+    is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
+    is_terminator inst.inst_opcode \/
+    DISJOINT (root_effects e) (write_effects inst.inst_opcode)
+End
+
+Definition avail_source_birth_def:
+  avail_source_birth d e src inst <=>
+    ~(is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
+      is_terminator inst.inst_opcode) /\
+    LENGTH inst.inst_outputs <= 1 /\
+    ~avail_nonidempotent inst.inst_opcode /\
+    ~has_conflicting_effects inst.inst_opcode /\
+    e = mk_expr d inst /\ src = inst
+End
+
+Theorem avail_fold_latest_source:
+  !d e src xs ae.
+    (?vs. FLOOKUP (FOLDL (\a inst. avail_transfer_inst d inst a) ae xs) e =
+          SOME vs /\ MEM src vs) <=>
+    ((?vs. FLOOKUP ae e = SOME vs /\ MEM src vs) /\
+     EVERY (\inst. avail_source_survives e inst /\
+                   ~avail_source_birth d e src inst) xs) \/
+    (?pre inst post. xs = pre ++ [inst] ++ post /\
+      avail_source_birth d e src inst /\
+      EVERY (\i. avail_source_survives e i /\
+                 ~avail_source_birth d e src i) post)
+Proof
+  rpt gen_tac >>
+  qspecl_then [`\inst a. avail_transfer_inst d inst a`,
+               `\a. ?vs. FLOOKUP a e = SOME vs /\ MEM src vs`,
+               `avail_source_survives e`, `avail_source_birth d e src`]
+    mp_tac foldl_latest_birth >>
+  (impl_tac >- (
+    rpt gen_tac >> simp[avail_transfer_inst_source_member,
+      avail_source_survives_def, avail_source_birth_def] >>
+    Cases_on `is_pseudo x.inst_opcode \/ x.inst_opcode = ASSIGN \/
+              is_terminator x.inst_opcode` >> simp[] >> metis_tac[])) >>
+  simp[]
+QED
+
+Theorem avail_fold_empty_latest_source:
+  !d e src xs.
+    (?vs. FLOOKUP (FOLDL (\a inst. avail_transfer_inst d inst a) FEMPTY xs) e =
+          SOME vs /\ MEM src vs) <=>
+    (?pre inst post. xs = pre ++ [inst] ++ post /\
+      avail_source_birth d e src inst /\
+      EVERY (\i. avail_source_survives e i /\
+                 ~avail_source_birth d e src i) post)
+Proof
+  simp[avail_fold_latest_source]
 QED

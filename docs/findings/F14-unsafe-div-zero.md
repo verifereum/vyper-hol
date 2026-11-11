@@ -27,9 +27,9 @@ succeeds but its divisor is zero.
   `unsafe_div_success_nonzero_counterexample` proves the concrete success AND
   negates the old conclusion; boundary/EVAL/CV and actual builtin checks.
 - [Lowering](../../lowering/defs/exprLoweringScript.sml): unsafe arithmetic DIV/SDIV dispatch.
-- Unchanged [unsigned fixture](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/scalar_arith_unsafe_uint.vy)
-  and [signed fixture](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/scalar_arith_unsafe_int.vy),
-  [HOL scalar ASTs](../../lowering/defs/bytecode/eval/evalCompilerSubsetScalarsScript.sml).
+- Unchanged [unsigned fixture](../../bytecode/python-o1-no-asm-opt-sources/scalar_arith_unsafe_uint.vy)
+  and [signed fixture](../../bytecode/python-o1-no-asm-opt-sources/scalar_arith_unsafe_int.vy),
+  [HOL scalar ASTs](../../bytecode/eval/evalCompilerSubsetScalarsScript.sml).
 
 Pinned reference `docs/built-in-functions.rst:848–850` specifies division by
 zero returns0; `vyper/builtins/functions.py`, `_UnsafeMath.build_IR`1894–1920

@@ -6,7 +6,7 @@ Ancestors
   logArgumentListContract logArgumentOrigins logArgumentOriginSafety logArgumentSourceWindows logArgumentBacking
   logArgumentWriters sourceAllocationPrivacy sourceMemoryFrames nameLoweringProps
   abiRequestCredit abiRequestProfile abiAllocationBudgetBounds abiAllocatedWindows abiMemoryFrame abiFieldOperands typedLogArgs
-  memoryValueSnapshot compileAllocaProvenance compileEnv venomMemDefs venomState
+  memoryValueSnapshot compileAllocaProvenance compileEnv exprLowering venomMemDefs venomState
   list pair words arithmetic
 
 Theorem source_window_log_buffer_range[local]:
@@ -15,7 +15,7 @@ Theorem source_window_log_buffer_range[local]:
     source_value_window cenv scopes ss offset read_len /\
     source_memory_separated cenv scopes ss dst byte_count ==>
     offset + read_len <= ss.vs_alloca_next /\
-    compileEnv$regions_disjoint offset read_len dst byte_count
+    loweringStateRelDefs$regions_disjoint offset read_len dst byte_count
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `source_value_window _ _ _ _ _`
@@ -28,13 +28,13 @@ Proof
     qpat_assum `source_memory_separated _ _ _ _ _`
       (mp_tac o Q.SPECL [`name`, `entry`, `region_base`, `region_size`] o
         CONJUNCT1 o REWRITE_RULE [source_memory_separated_def]) >> simp[] >>
-    fs[compileEnvTheory.regions_disjoint_def] >> decide_tac,
+    fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac,
     rename1 `lookup_var p ss = SOME ptr_addr` >>
     drule_all local_ptrs_rel_value >> strip_tac >>
     qpat_assum `source_memory_separated _ _ _ _ _`
       (mp_tac o Q.SPECL [`name`, `entry`, `p`, `region_size`, `ptr_addr`] o
         CONJUNCT2 o REWRITE_RULE [source_memory_separated_def]) >>
-    gvs[eval_operand_def, compileEnvTheory.regions_disjoint_def] >> decide_tac]
+    gvs[eval_operand_def, loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac]
 QED
 
 Theorem argument_origin_log_buffer[local]:
@@ -45,16 +45,16 @@ Theorem argument_origin_log_buffer[local]:
     ss.vs_alloca_next + capacity < dimword(:256) /\ byte_count <= capacity /\
     source_memory_separated cenv scopes ss (w2n (memory_snapshot_addr id ss)) byte_count ==>
     offset + read_len < dimword(:256) /\
-    compileEnv$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count
+    loweringStateRelDefs$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `offset = 0 /\ read_len = 0`
-  >- (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  >- (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   Cases_on `private_value_window cenv scopes ss writers offset read_len`
   >- (`argument_origin cenv scopes ss writers F offset read_len` by simp[argument_origin_def] >>
       qspecl_then [`cenv`, `scopes`, `ss`, `writers`, `offset`, `read_len`, `id`, `capacity`]
         mp_tac argument_origin_request_safe >>
       impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-      simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >> decide_tac) >>
   `source_value_window cenv scopes ss offset read_len` by fs[argument_origin_def] >>
   drule_all source_window_log_buffer_range >> strip_tac >>
   conj_tac >- decide_tac >> first_assum MATCH_ACCEPT_TAC
@@ -82,7 +82,7 @@ Proof
       qspecl_then [`func`, `cenv`, `scopes`, `ids`, `ss`, `writers`, `id`, `capacity`, `byte_count`,
         `w2n src_addr`, `type_memory_size tv`] mp_tac argument_origin_log_buffer >>
       impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-      simp[compileEnvTheory.regions_disjoint_def]) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   qpat_x_assum `!tvs func cenv scopes ids ss writers id capacity byte_count. _`
     (qspecl_then [`rest_tvs`, `func`, `cenv`, `scopes`, `ids`, `ss`, `writers`, `id`, `capacity`, `byte_count`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]
@@ -101,7 +101,7 @@ Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
   qpat_x_assum `log_prefix_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
-  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[] >>
+  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[expr_can_mutate_def] >>
   `abi_request_reservation reserved requests ss` by (drule_all abi_request_credit_reservation >> simp[]) >>
   qspecl_then [`reserved`, `requests`, `allocation_cs.cs_next_id`, `capacity`, `ss`]
     mp_tac abi_request_reservation_room >>
@@ -116,6 +116,11 @@ Proof
     (qspecl_then [`cenv`, `es.scopes`, `cs.cs_next_var`, `allocation_cs.cs_next_var`]
       mp_tac source_pointer_lifetimes_mono >>
      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]) >>
+  `!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before allocation_cs.cs_next_var (Var x)` by
+    (rpt strip_tac >> MATCH_MP_TAC abi_operand_before_mono >> qexists_tac `cs.cs_next_var` >>
+     conj_tac >- (qpat_x_assum `!x. cenv.ce_imm_alloca = SOME (Var x) ==> _` irule >>
+                  first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   `source_memory_separated cenv es.scopes ss (w2n (memory_snapshot_addr allocation_cs.cs_next_id ss)) byte_count` by
     (qspecl_then [`func`, `cenv`, `es.scopes`, `ss`, `capacity`, `allocation_cs`, `buf`, `cut`, `byte_count`, `ids`]
       mp_tac compile_buffer_payload_private >>
@@ -142,7 +147,7 @@ Proof
       `alloca_next_valid ss` by fs[alloca_inv_def] >>
       drule_all abi_allocated_window_frontier >> simp[]) >>
   `source_memory_separated cenv scopes ss 0 0` by
-    simp[source_memory_separated_def, compileEnvTheory.regions_disjoint_def] >>
+    simp[source_memory_separated_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
   qspecl_then [`func`, `cenv`, `scopes`, `ids`, `ss`, `offset`, `read_len`, `0`, `0`]
     mp_tac source_window_log_buffer_range >> simp[]
 QED
@@ -167,7 +172,7 @@ Proof
       qspecl_then [`func`, `cenv`, `scopes`, `ids`, `ss`, `writers`,
         `w2n src_addr`, `type_memory_size tv`] mp_tac argument_origin_log_read_bound >>
       impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   first_x_assum drule_all >> simp[]
 QED
 
@@ -178,7 +183,7 @@ Theorem log_ready_arguments_empty_safe:
 Proof
   rpt gen_tac >>
   disch_then (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
-  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[] >>
+  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[expr_can_mutate_def] >>
   `abi_request_reservation reserved requests ss` by (drule_all abi_request_credit_reservation >> simp[]) >>
   `ss.vs_alloca_next < dimword(:256)` by
     (qspecl_then [`reserved`, `MAP FST requests`, `ss`, `0`] mp_tac abi_alloca_budget_request_room >>

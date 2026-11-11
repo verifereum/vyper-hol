@@ -29,6 +29,7 @@ Ancestors
   venomFnInstsProofs passSimulationDefs execEquivParamProofs execEquivParamBase execEquivParamDefs
   stateEquivProps execEquivProps stateEquiv venomInst venomExecSemantics
   venomExecProofs venomWf list indexedLists
+  passTransform
 
 (* Rewrite only constructor-headed lifts in the goal.  In particular, do not
    expand the guarded fuel IH or lifts of still-unknown executions. *)
@@ -1531,7 +1532,7 @@ Proof
   irule rich_listTheory.MAP_SUBLIST >> simp[]
 QED
 
-Theorem fn_insts_blocks_flat[local]:
+Theorem fn_insts_blocks_flat:
   !l. fn_insts_blocks l = FLAT (MAP (\bb. bb.bb_instructions) l)
 Proof
   Induct >> simp[fn_insts_blocks_def]

@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-NATIVE = ROOT / "lowering/defs/bytecode/native"
+NATIVE = ROOT / "bytecode/native"
 MLB = NATIVE / "bytecode_parity_json.mlb"
 EXE = NATIVE / "bytecode_parity_json.exe"
 

@@ -6,7 +6,7 @@ Ancestors
   codegenRel asmSem planExec planWf stackOpSim
   list rich_list finite_map arithmetic
 
-Theorem do_spill_at_stack_length[local]:
+Theorem do_spill_at_stack_length:
   !d ps.
     d < LENGTH ps.ps_stack ==>
     LENGTH (SND (do_spill_at d ps)).ps_stack = LENGTH ps.ps_stack - 1

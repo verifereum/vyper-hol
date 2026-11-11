@@ -18,10 +18,11 @@
 
 Theory intCallReturnMem
 Ancestors
+  loweringPosts
   list rich_list
-  fragExec exprSim stmtSimReturn intCallResult valueCopy instIdxIndep
+  fragExec  stmtSimReturn intCallResult valueCopy instIdxIndep
   stmtLowering exprLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv valueEncoding
+  context compileEnv loweringStateRelDefs valueEncoding
   vyperState vyperTyping venomExecSemantics venomInst venomState
 
 (* An internal function's memory return: an IntRet satisfying the exact
@@ -34,6 +35,13 @@ Definition intret_mem_q_def:
     ?ir s. r = IntRet ir s /\ val_in_memory ret_tv v (w2n buf) s.vs_memory
 End
 
+Theorem intret_mem_q_gas_obs:
+  intret_mem_q func cenv cx ret_tv buf v (es with gas_obs := readings) r =
+  intret_mem_q func cenv cx ret_tv buf v es r
+Proof
+  simp[intret_mem_q_def, intret_q_gas_obs]
+QED
+
 (* The low-level helper emits no unlock.  Keep its result explicitly raw;
    only the environment/epilogue-level theorem below promises intret_q. *)
 Definition intret_mem_q_raw_def:
@@ -45,7 +53,7 @@ Definition intret_mem_q_raw_def:
 End
 
 (* RET with only the return PC: an IntRet with no values. *)
-Theorem emit_ret_pc_frag[local]:
+Theorem emit_ret_pc_frag:
   !ctx sm sb rpc P Q R.
     emit_inst RET [rpc] [] sm = ((),sb) /\
     (!s. P s ==> (?pc. eval_operand rpc s = SOME pc) /\
@@ -63,7 +71,7 @@ Proof
   `run_from 0 ctx fn s =
      IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s` by
     simp[run_from_def, Once exec_block_def, step_inst_non_invoke,
-         mk_inst_def, step_inst_base_def, eval_operands_def] >>
+         mk_inst_def, step_inst_base_opcode_eqs, eval_operands_def] >>
   qexists_tac `0` >> simp[exit_result_def]
 QED
 
@@ -85,6 +93,7 @@ Theorem compile_internal_return_memory_frag_raw:
     (!x. val_op = Var x ==> not_fresh_at sa x) /\
     (!x. buf_op = Var x ==> not_fresh_at sa x) /\
     (!x. rpc = Var x ==> not_fresh_at sa x) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x) /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
     val_wf tv v /\ type_memory_bytes cenv ty = type_memory_size tv /\
     w2n bw + type_memory_size tv + 64 < dimword (:256) /\
@@ -166,7 +175,8 @@ Resume compile_internal_return_memory_frag_raw[store]:
   conj_tac
   >- (irule result_state_memory_frame >> simp[] >> qexists_tac `s` >>
       simp[local_region_def, lookup_scopes_def] >>
-      fs[venom_state_component_equality]) >>
+      fs[venom_state_component_equality] >>
+      metis_tac[]) >>
   qexists_tac `pc` >>
   qspecl_then [`rpc`, `sa`, `s`, `t1`] mp_tac store_result_operand_frame >>
   simp[]
@@ -205,6 +215,7 @@ Theorem compile_internal_return_memory_frag:
     (!x. val_op = Var x ==> not_fresh_at sa x) /\
     (!x. buf_op = Var x ==> not_fresh_at sa x) /\
     (!x. rpc = Var x ==> not_fresh_at sa x) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x) /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
     val_wf tv v /\ type_memory_bytes cenv ty = type_memory_size tv /\
     w2n bw + type_memory_size tv + 64 < dimword (:256) /\
@@ -227,10 +238,12 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[frag_exec_def] >> rpt strip_tac >>
   rename1 `stmt_state_rel ctx func cenv cx (es with scopes := []) s0` >>
+  `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule compile_return_unlock_shape >> strip_tac >>
   `(!x. val_op = Var x ==> not_fresh_at su x) /\
    (!x. buf_op = Var x ==> not_fresh_at su x) /\
-   (!x. rpc = Var x ==> not_fresh_at su x)` by
+   (!x. rpc = Var x ==> not_fresh_at su x) /\
+   (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at su x)` by
     (fs[not_fresh_at_def] >> metis_tac[]) >>
   qpat_x_assum `compile_internal_return _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_internal_return_def, comp_ignore_bind_def, comp_bind_def] >>
@@ -277,7 +290,10 @@ Resume compile_internal_return_memory_frag[frame]:
   `stmt_state_rel ctx func cenv cx (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
     (irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
-     simp[local_region_def, lookup_scopes_def]) >>
+     simp[local_region_def, lookup_scopes_def] >> rpt strip_tac >>
+     `not_fresh_at su x` by metis_tac[] >>
+     qpat_x_assum `!x. not_fresh_at su x ==> _` drule >>
+     simp[lookup_var_def]) >>
   `stmt_state_rel ctx func cenv cx (es with scopes := []) pre` by
     (qspecl_then [`func`, `cenv`, `cx`, `es with scopes := []`,
        `s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>`,

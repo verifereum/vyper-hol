@@ -3,8 +3,8 @@
  *
  * Key theorem: nop_output_not_used_as_operand
  *   Under wf_ssa + ssa_form, NOP'd variables are never used
- *   as operands. This discharges the extern in
- *   remove_unused_single_pass_correct_proof.
+ *   as operands. This supplies the fixed erased-variable invariant for
+ *   backward GAS-oracle reconstruction.
  *
  * Strategy:
  *   Same block: live_vars_at_uses + live_vars_at_propagate_range gives
@@ -20,39 +20,16 @@ Ancestors
   passSimulationDefs passSimulationProps analysisSimProps
   livenessProofs livenessDefs
   dfAnalyzeDefs dfAnalyzeProps dfHelperProps
-  venomInstProps venomWf venomExecProps
+  venomInstProps venomWf venomExecProps venomExecProofs
   stateEquiv stateEquivProps stateEquivProofs
   execEquivProps cfgTransformProps cfgDefs
   passSharedDefs passSharedProps
   venomInst venomState venomExecSemantics
   indexedLists cfgAnalysisProps pointerConfinedDefs
   worklistDefs list rich_list combin
+  venomWfProps
 
 (* ===== Fixpoint bridge: edge_transfer ⊆ live_exit ===== *)
-
-
-Theorem edge_transfer_subset_live_exit[local]:
-  !fn pred_lbl pred_bb succ_lbl v.
-    wf_function fn ==>
-    let lr = liveness_analyze fn in
-    let cfg = cfg_analyze fn in
-      MEM pred_lbl cfg.cfg_dfs_pre /\
-      lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
-      MEM succ_lbl (cfg_succs_of cfg pred_lbl) /\
-      MEM v (liveness_edge_transfer fn.fn_blocks succ_lbl pred_lbl
-               (df_boundary [] lr succ_lbl)) ==>
-      MEM v (live_vars_at lr pred_lbl (LENGTH pred_bb.bb_instructions))
-Proof
-  rpt gen_tac >> simp_tac std_ss [LET_THM] >>
-  strip_tac >> strip_tac >>
-  `cfg_reachable_of (cfg_analyze fn) pred_lbl` by
-    (drule cfg_analyze_reachable_sets >>
-     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
-  drule_all livenessConvergenceProofsTheory.liveness_recompute_edge_subset >>
-  gvs[liveness_analyze_def, livenessBlockProofsTheory.liveness_instrs_def, live_vars_at_def,
-      livenessLocalProofsTheory.liveness_recompute_boundary_entry,
-      pred_setTheory.SUBSET_DEF] >> metis_tac[]
-QED
 
 (* ===== NOP output liveness helpers ===== *)
 
@@ -98,198 +75,8 @@ Proof
   gvs[]
 QED
 
-(* v not live at idx+1 (directly from NOP condition) *)
-Theorem nop_output_not_live_after_def[local]:
-  !fn lr cfg lbl bb idx inst v.
-    wf_function fn /\ ssa_form fn /\
-    lr = liveness_analyze fn /\
-    cfg = cfg_analyze fn /\
-    MEM lbl cfg.cfg_dfs_pre /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    idx < LENGTH bb.bb_instructions /\
-    EL idx bb.bb_instructions = inst /\
-    remove_unused_inst
-      (live_after_at lr lbl idx (LENGTH bb.bb_instructions))
-      inst = mk_nop_inst inst /\
-    MEM v inst.inst_outputs ==>
-    ~MEM v (live_vars_at lr lbl (SUC idx))
-Proof
-  rpt strip_tac >>
-  drule remove_unused_inst_nop_outputs_not_live >> strip_tac >>
-  gvs[listTheory.EVERY_MEM, live_after_at_suc]
-QED
-
 (* ===== Main theorem: NOP'd variables not used as operands ===== *)
 
-(* fn_insts_blocks = FLAT (MAP bb_instructions ...) *)
-Theorem fn_insts_blocks_flat:
-  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
-(* Kept under this name for existing users; proved in venomFnInstsProofs. *)
-Theorem all_distinct_flat_map_member =
-  venomFnInstsProofsTheory.all_distinct_flat_map_member
-
-(* Strongest SSA uniqueness: same output var ⇒ same instruction AND same block *)
-Theorem ssa_unique_output_block[local]:
-  !fn bb1 inst1 bb2 inst2 v.
-    ssa_form fn /\
-    MEM bb1 fn.fn_blocks /\ MEM inst1 bb1.bb_instructions /\
-    MEM v inst1.inst_outputs /\
-    MEM bb2 fn.fn_blocks /\ MEM inst2 bb2.bb_instructions /\
-    MEM v inst2.inst_outputs ==> bb1 = bb2 /\ inst1 = inst2
-Proof
-  rpt strip_tac >> spose_not_then strip_assume_tac >>
-  rename1 `ssa_form func` >>
-  gvs[ssa_form_def, fn_insts_def, fn_insts_blocks_flat] >>
-  (* The key: rewrite the flat-inst ALL_DISTINCT to block-level form *)
-  `!bbs. FLAT (MAP (\i:instruction. i.inst_outputs)
-              (FLAT (MAP (\bb:basic_block. bb.bb_instructions) bbs))) =
-         FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
-              bbs)` by
-    rw[MAP_FLAT, FLAT_FLAT, MAP_MAP_o, combinTheory.o_DEF] >>
-  fs[] >>
-  (* Specialize the cross lemma for blocks *)
-  qabbrev_tac `bouts = \bb:basic_block.
-    FLAT (MAP (\i:instruction. i.inst_outputs) bb.bb_instructions)` >>
-  `MEM v (bouts bb1) /\ MEM v (bouts bb2)` by
-    (simp[Abbr `bouts`, MEM_FLAT, MEM_MAP] >> metis_tac[])
-  >- (
-    (* bb1 ≠ bb2: block-level *)
-    metis_tac[venomFnInstsProofsTheory.all_distinct_flat_map_unique])
-  >- (
-    (* inst1 ≠ inst2: within-block *)
-    Cases_on `bb1 = bb2`
-    >- (
-      gvs[] >>
-      drule_all all_distinct_flat_map_member >> strip_tac >>
-      gvs[Abbr `bouts`] >>
-      metis_tac[venomFnInstsProofsTheory.all_distinct_flat_map_unique])
-    >- metis_tac[venomFnInstsProofsTheory.all_distinct_flat_map_unique])
-QED
-
-(* ===== Boilerplate: reachability / lookup helpers ===== *)
-
-Theorem fn_reachable_in_cfg_dfs_pre[local]:
-  !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre
-Proof
-  rpt strip_tac >>
-  gvs[fn_reachable_def, fn_entry_label_def, entry_block_def] >>
-  Cases_on `NULL fn.fn_blocks` >> gvs[] >>
-  (* Goal: MEM lbl cfg_dfs_pre. Strategy: show cfg_reachable_of *)
-  `cfg_reachable_of (cfg_analyze fn) lbl` suffices_by (
-    strip_tac >>
-    `wf_function fn` by simp[] >>
-    drule cfg_analyze_reachable_sets >> strip_tac >>
-    fs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
-  (* cfg_reachable_of ⟺ cfg_path from entry *)
-  drule_at Any cfg_analyze_semantic_reachability >>
-  disch_then (qspecl_then [`HD fn.fn_blocks`, `lbl`] mp_tac) >>
-  simp[entry_block_def] >> strip_tac >>
-  (* cfg_path from RTC fn_cfg_edge via RTC_MONOTONE *)
-  pop_assum kall_tac >>
-  simp[cfg_path_def] >>
-  irule relationTheory.RTC_MONOTONE >>
-  qexists_tac `fn_cfg_edge fn` >> simp[] >>
-  rw[fn_cfg_edge_def] >>
-  irule bb_succs_in_cfg_succs >> gvs[wf_function_def]
-QED
-
-(* fn_dominates predecessor: if d dominates n, d ≠ n, and p → n is CFG edge,
-   and p is reachable, then d dominates p *)
-
-(* phi_pairs produces only vars present in the operand list *)
-Theorem phi_pairs_mem_var[local]:
-  !ops l v. MEM (l, v) (phi_pairs ops) ==> MEM (Var v) ops
-Proof
-  ho_match_mp_tac phi_pairs_ind >> rw[phi_pairs_def] >> gvs[] >>
-  qpat_x_assum `!l v. _` (drule_then assume_tac) >> simp[]
-QED
-
-Theorem phi_well_formed_var_pair[local]:
-  !ops v.
-    phi_well_formed ops /\ MEM (Var v) ops ==>
-    ?lbl. MEM (lbl,v) (phi_pairs ops)
-Proof
-  ho_match_mp_tac phi_pairs_ind >>
-  rw[phi_pairs_def, phi_well_formed_def] >> gvs[] >> metis_tac[]
-QED
-
-(* Helper: fn_cfg_edge target has a block *)
-Theorem fn_cfg_edge_target_block[local]:
-  !fn a b. wf_function fn /\ fn_cfg_edge fn a b ==>
-    ?bb. lookup_block b fn.fn_blocks = SOME bb
-Proof
-  rw[fn_cfg_edge_def, wf_function_def] >> rpt strip_tac >>
-  `MEM b (fn_labels fn)` by metis_tac[fn_succs_closed_def] >>
-  gvs[fn_labels_def, MEM_MAP] >>
-  metis_tac[MEM_lookup_block]
-QED
-
-(* Helper: is_fn_path init (drop last element) *)
-Theorem is_fn_path_init[local]:
-  !fn path x. is_fn_path fn (SNOC x path) ==> is_fn_path fn path
-Proof
-  Induct_on `path` >> simp[is_fn_path_def, SNOC] >> rpt strip_tac >>
-  Cases_on `path` >> gvs[SNOC, is_fn_path_def] >>
-  metis_tac[]
-QED
-
-(* Helper: is_fn_path last edge *)
-Theorem is_fn_path_last_edge[local]:
-  !fn path x. is_fn_path fn (SNOC x path) /\ path <> [] ==>
-    fn_cfg_edge fn (LAST path) x
-Proof
-  Induct_on `path` >> simp[SNOC] >> rpt strip_tac >>
-  Cases_on `path` >> gvs[SNOC, is_fn_path_def, listTheory.LAST_DEF]
-QED
-
-(* Helper: is_fn_path suffix — if d ∈ path, take suffix from d *)
-Theorem is_fn_path_suffix[local]:
-  !fn path d. is_fn_path fn path /\ MEM d path ==>
-    ?suffix. is_fn_path fn (d :: suffix) /\
-             LAST (d :: suffix) = LAST path
-Proof
-  Induct_on `path` >> simp[] >> rpt strip_tac >> gvs[]
-  >- (qexists_tac `path` >> Cases_on `path` >> gvs[is_fn_path_def])
-  >- (Cases_on `path` >> gvs[is_fn_path_def] >>
-      first_x_assum drule_all >> strip_tac >>
-      qexists_tac `suffix` >> simp[] >>
-      Cases_on `suffix` >> gvs[listTheory.LAST_DEF])
-QED
-
-(* Helper: reachable node along path from reachable start *)
-Theorem is_fn_path_all_reachable[local]:
-  !fn path lbl. is_fn_path fn path /\ path <> [] /\
-    fn_reachable fn (HD path) /\ MEM lbl path ==>
-    fn_reachable fn lbl
-Proof
-  Induct_on `path` >> simp[] >> rpt strip_tac >> gvs[] >>
-  Cases_on `path` >> gvs[is_fn_path_def, listTheory.MEM]
-  >- metis_tac[fn_reachable_step]
-  >- (first_x_assum irule >> simp[] >> metis_tac[fn_reachable_step])
-QED
-
-(* Helper: reachable implies has a block (via wf_function) *)
-Theorem fn_reachable_has_block[local]:
-  !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
-    ?bb. lookup_block lbl fn.fn_blocks = SOME bb
-Proof
-  rpt strip_tac >> gvs[fn_reachable_def] >>
-  gvs[Once relationTheory.RTC_CASES2]
-  >- (
-    (* lbl = entry: entry block exists *)
-    gvs[fn_entry_label_def, entry_block_def] >>
-    Cases_on `fn.fn_blocks` >> gvs[] >>
-    rename1 `hd :: tl` >>
-    qexists_tac `hd` >>
-    irule MEM_lookup_block >>
-    gvs[wf_function_def, fn_labels_def])
-  >- metis_tac[fn_cfg_edge_target_block]
-QED
 
 (* If v is live at block p's exit, v is only defined at d_bb, and p <> d,
    then v is live at p's entry (backward propagation through non-defining block) *)
@@ -438,7 +225,7 @@ Proof
   `MEM d path_to_n` by (
     gvs[fn_dominates_def] >>
     first_x_assum (qspec_then `path_to_n` mp_tac) >> simp[]) >>
-  drule_all is_fn_path_suffix >> strip_tac >>
+  drule_all is_fn_path_mem_suffix >> strip_tac >>
   rename1 `is_fn_path fn (d :: suffix)` >>
   `LAST (d :: suffix) = n` by simp[] >>
   Cases_on `suffix` >- gvs[] >>
@@ -647,25 +434,5 @@ Proof
     metis_tac[])
 QED
 
-(* ===== Compose with existing single-pass proof ===== *)
-
-Theorem remove_unused_single_pass_correct_ssa:
-  !fuel ctx fn s.
-    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn /\
-    wf_ssa fn /\ ssa_form fn /\
-    alloca_pointer_confined fn /\
-    s.vs_inst_idx = 0 /\
-    fn_entry_label fn = SOME s.vs_current_bb ==>
-    let elim = single_pass_nop_outputs fn in
-    (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (remove_unused_single_pass fn) s)
-Proof
-  rpt strip_tac >> simp_tac std_ss [LET_THM] >>
-  irule (SIMP_RULE std_ss [LET_THM] remove_unused_single_pass_correct_proof) >>
-  simp[] >> rpt strip_tac >>
-  CCONTR_TAC >> fs[] >>
-  metis_tac[nop_output_not_used_as_operand]
-QED
-
+(* Same-state single-pass correctness removed: reconstruction uses the
+   unchanged global operand-exclusion theorem above. *)

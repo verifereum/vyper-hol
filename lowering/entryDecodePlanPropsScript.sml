@@ -38,7 +38,7 @@ Ancestors
   valueEncodingProofs valueEncoding
   vyperABI vyperABIRoundtrip vyperTyping vyperValue vyperTypeSystem
   vyperMisc vyperTypeABI contractABI
-  compileEnv compileVyper exprLowering moduleLowering selectorDispatch
+  compileEnv loweringStateRelDefs compileVyper exprLowering moduleLowering selectorDispatch
   fragExec
 
 (* ===== Hypotheses ===== *)

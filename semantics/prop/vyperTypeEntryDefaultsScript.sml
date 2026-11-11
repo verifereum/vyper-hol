@@ -2,6 +2,7 @@
 
 Theory vyperTypeEntryDefaults
 Ancestors
+  vyperGetter
   list rich_list arithmetic finite_map option pair
   vyperAST vyperValue vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues

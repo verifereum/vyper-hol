@@ -4,7 +4,7 @@
 Theory abiValueEncoding
 Ancestors
   list rich_list words byte divides bitstring integer_word
-  valueEncoding valueEncodingProps compileEnv vyperABI vyperTyping vyperValue contractABI
+  valueEncoding valueEncodingDefs valueEncodingProps compileEnv vyperABI vyperTyping vyperValue contractABI
   venomMemProps
 Libs
   dep_rewrite wordsLib

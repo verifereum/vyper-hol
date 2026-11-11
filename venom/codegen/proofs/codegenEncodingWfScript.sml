@@ -3,8 +3,8 @@
  *
  * TOP-LEVEL:
  *   codegen_assembly_asm_encoding_wf — codegen output of an OFFSET-free
- *     (unit_shape_ok) unit is asm_encoding_wf when its bytecode is
- *     shorter than 2^16 bytes (labels are pushed as 2-byte immediates).
+ *     (unit_shape_ok) unit is asm_encoding_wf (codegen_assembly checks the
+ *     program fits the 2-byte label pushes).
  *   generate_context_plan_no_push_ofst — without OFFSET instructions the
  *     stack plan contains no SOPushOfst.
  *)
@@ -72,18 +72,6 @@ Proof
   >- (strip_tac >> Cases_on `evm_opcode_byte s` >> gvs[])
   >- (Cases_on `l` >> simp[encode_inst_def]) >>
   rpt CASE_TAC >> rw[pad_bytes_def, symbol_size_def]
-QED
-
-Theorem sum_size_le_encode[local]:
-  !prog.
-    EVERY (\inst. !name. inst = AsmOp name ==>
-                         IS_SOME (evm_opcode_byte name)) prog ==>
-    SUM (MAP asm_inst_size prog) <=
-      LENGTH (FLAT (MAP (encode_inst offsets) prog))
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  irule LESS_EQ_LESS_EQ_MONO >> simp[] >>
-  irule asm_inst_size_le_encode >> simp[]
 QED
 
 (* ===== No SOPushOfst without OFFSET ===== *)
@@ -194,6 +182,16 @@ Theorem do_restore_no_push_ofst[local]:
 Proof
   simp[do_restore_def] >>
   Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >> rw[] >> simp[]
+QED
+
+Theorem restore_spilled_plan_no_push_ofst[local]:
+  !ops0 ps ops ps'.
+    restore_spilled_plan ops0 ps = (ops, ps') ==>
+    !lbl d. ~MEM (SOPushOfst lbl d) ops
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  imp_res_tac do_restore_no_push_ofst >> metis_tac[]
 QED
 
 Theorem do_dup_no_push_ofst[local]:
@@ -323,7 +321,9 @@ Proof
   gvs[] >> qpat_x_assum `_ = (input_ops, ps1)` kall_tac >>
   pairarg_tac >>
   `!lbl d. ~MEM (SOPushOfst lbl d) join_ops` by
-    (gvs[AllCaseEqs()] >> metis_tac[reorder_plan_no_push_ofst]) >>
+    (gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+     metis_tac[reorder_plan_no_push_ofst,
+               restore_spilled_plan_no_push_ofst]) >>
   gvs[] >> qpat_x_assum `_ = (join_ops, ps2)` kall_tac >>
   pairarg_tac >>
   `!lbl d. ~MEM (SOPushOfst lbl d) reorder_ops` by
@@ -519,13 +519,13 @@ QED
 (* ===== Main theorem ===== *)
 
 Theorem codegen_assembly_asm_encoding_wf:
-  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
-  LENGTH (assemble prog) < 65536 ==>
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit ==>
   asm_encoding_wf prog
 Proof
   strip_tac >>
   `?cp. generate_context_plan unit.cu_context = SOME cp /\
         assembly_target_safe rpolicy.rpol_target prog /\
+        asm_symbols_ok prog /\
         prog = execute_plan cp.cp_initial_fmp (context_plan_ops cp) ++
                data_segment_asm unit.cu_data_segment ++
                [AsmDataHeader "code_end"]` by
@@ -548,10 +548,7 @@ Proof
     (gvs[assembly_target_safe_def, EVERY_MEM] >> rw[] >> res_tac >>
      gvs[asm_inst_target_safe_def, asm_opcode_target_supported_def] >>
      Cases_on `bytes = []` >> gvs[]) >>
-  `SUM (MAP asm_inst_size prog) < 65536` by
-    (drule sum_size_le_encode >>
-     disch_then (qspec_then `SND (compute_label_offsets prog)` assume_tac) >>
-     Cases_on `compute_label_offsets prog` >> gvs[assemble_def]) >>
+  `SUM (MAP asm_inst_size prog) < 65536` by fs[asm_symbols_ok_def] >>
   qspec_then `prog` strip_assume_tac compute_label_offsets_bound >>
   Cases_on `compute_label_offsets prog` >> gvs[asm_encoding_wf_def] >>
   rpt conj_tac >> rpt strip_tac

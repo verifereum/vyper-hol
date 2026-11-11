@@ -1,6 +1,6 @@
 Theory vyperABIEntries
 Ancestors
-  vyperABI vyperAST list rich_list arithmetic words
+  vyperABI vyperAST list rich_list arithmetic words alist
 Libs
   cv_transLib
 
@@ -82,9 +82,9 @@ Definition abi_decl_signatures_def:
   abi_decl_signatures (FunctionDecl External mut nr rr name args dflts ret body) =
     (if name = "__default__" then []
      else abi_function_signatures name args dflts) /\
-  abi_decl_signatures (VariableDecl Public mut name ty slot) =
+  abi_decl_signatures (VariableDecl (Public nr) mut name ty slot) =
     [(name, abi_array_getter_args ty)] /\
-  abi_decl_signatures (HashMapDecl Public trans name kt vt slot) =
+  abi_decl_signatures (HashMapDecl (Public nr) trans name kt vt slot) =
     [(name, kt :: abi_getter_args vt)] /\
   abi_decl_signatures _ = []
 End
@@ -97,6 +97,19 @@ Definition abi_external_method_ids_def:
   abi_external_method_ids tenv tops =
     MAP (\(name,tys). abi_method_id tenv name tys)
       (abi_external_signatures tops)
+End
+
+(* Only named exports join the main module's deployed interface. *)
+Definition abi_deployed_signatures_def:
+  abi_deployed_signatures (mods : (num option # toplevel list) list) exps =
+    (case ALOOKUP mods NONE of
+     | NONE => []
+     | SOME tops => abi_external_signatures tops) ++
+    FLAT (MAP (\(name,src).
+      case ALOOKUP mods (SOME src) of
+      | NONE => []
+      | SOME tops => FILTER (\(fn,tys). fn = name)
+                      (abi_external_signatures tops)) exps)
 End
 
 Theorem abi_function_signatures_no_defaults[simp]:
@@ -119,6 +132,7 @@ val () = cv_auto_trans abi_getter_args_def;
 val () = cv_auto_trans abi_decl_signatures_def;
 val () = cv_auto_trans abi_external_signatures_def;
 val () = cv_auto_trans abi_external_method_ids_def;
+val () = cv_auto_trans abi_deployed_signatures_def;
 
 (* Checked prefix order and the three selectors of the dflt_multi witness. *)
 Theorem dflt_multi_abi_method_ids:
@@ -133,10 +147,10 @@ QED
 
 Theorem abi_getter_signature_examples:
   abi_decl_signatures
-    (VariableDecl Public Storage "x" (BaseT (UintT 256)) NONE) =
+    (VariableDecl (Public nr) Storage "x" (BaseT (UintT 256)) NONE) =
       [("x",[])] /\
   abi_decl_signatures
-    (HashMapDecl Public F "m" (BaseT AddressT)
+    (HashMapDecl (Public nr) F "m" (BaseT AddressT)
       (Type (ArrayT (BaseT BoolT) (Fixed 3))) NONE) =
       [("m",[BaseT AddressT; BaseT (UintT 256)])]
 Proof

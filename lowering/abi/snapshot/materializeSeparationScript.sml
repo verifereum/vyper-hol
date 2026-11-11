@@ -55,6 +55,7 @@ Theorem compile_materialize_source_separated:
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==>
       abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     (!name entry offset region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (MemLoc offset region_size) ==>
       offset + type_memory_size entry.type <= w2n (memory_snapshot_addr cs.cs_next_id ss)) ==>

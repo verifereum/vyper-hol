@@ -5,7 +5,7 @@ Theory abiDecoderComplexGuard
 Ancestors
   abiDecoderComplexHead abiDecoderGuard abiDecoderReentryPointer abiDecoderReentry
   abiDecoderVarSequence abiDecoderVarExtend abiDecoderDynamicLoopSetup abiDecoderReservation
-  abiDecoderContract abiDecoderLoop fragExec instIdxIndep abiEncoder compileEnv emitHelper
+  abiDecoderContract abiDecoderLoop fragExec instIdxIndep abiEncoder compileEnv loweringStateRelDefs emitHelper
   emitHelperProps exprLoweringProps venomState venomExecSemantics venomInst words list rich_list
   arithmetic
 
@@ -13,12 +13,12 @@ Theorem abi_decoder_complex_guard_code:
   abi_decode_complex_head_guard src hi head_sz st = ((),st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
-  st'.cs_next_var = st.cs_next_var + (if hi = Lit 0w then 0 else 3) /\
+  st'.cs_next_var = st.cs_next_var + (if hi = Lit 0w then 0 else 6) /\
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\ i.inst_opcode <> INVOKE)
     (emitted_insts st st')
 Proof
   Cases_on `hi = Lit 0w` >>
-  simp[abi_decode_complex_head_guard_def, abi_decode_le_guard_def,
+  simp[abi_decode_complex_head_guard_def, compile_abi_decode_range_check_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
     emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -98,9 +98,9 @@ Proof
 QED
 
 Theorem abi_decode_complex_phases:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dyn infos) =
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dyn infos) =
     do abi_decode_complex_head_guard src hi (FOLDR (\(_,asz,_) acc. asz + acc) 0 infos);
-       compile_abi_decode_complex_elems dst src opc hi infos 0 0
+       compile_abi_decode_complex_elems dst src opc base_op hi infos 0 0
     od
 Proof
   Cases_on `hi = Lit 0w` >>

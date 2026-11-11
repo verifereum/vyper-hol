@@ -2,18 +2,18 @@
  * Memmerging — Well-formedness Preservation (Proofs)
  *
  * All proof infrastructure for bb_well_formed / wf_function preservation.
- * Re-exported by mmWfScript.sml.
  *)
 
 Theory mmWfProofs
 Ancestors
   venomFnInstsProofs allocaRemapSSA
   mmCorrectnessProofs mmTransform
-  venomExecSemantics venomInst venomState venomWf venomInstProofs
+  venomExecSemantics venomInst venomInstIdsProps venomState venomWf venomInstProofs
   pred_set finite_map list rich_list arithmetic words alist
   mmCopyEquiv mmCopy mmScan passSharedField
   dfgAnalysisProps dfgDefs passSimulationDefs passSimulationProps
   venomExecProofs
+  passTransform
 
 (* ===== Structural helpers for wf preservation ===== *)
 
@@ -176,20 +176,22 @@ Theorem flat_map_only_last_terminator[local]:
     ==>
     i = PRE (LENGTH (FLAT (MAP f l)))
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `EVERY (\x. ~is_terminator x.inst_opcode) (FRONT l)` by
     (irule every_front >> simp[]) >>
-  `EVERY (\y. ~is_terminator y.inst_opcode)
+  `EVERY (\x. ~is_terminator x.inst_opcode)
      (FLAT (MAP f (FRONT l)))` by
     (irule every_flat_map_front >> simp[] >>
      qexists_tac `\x. ~is_terminator x.inst_opcode` >> simp[]) >>
   `FLAT (MAP f l) = FLAT (MAP f (FRONT l)) ++ [LAST l]` by
     metis_tac[flat_map_front_last] >>
   qpat_x_assum `is_terminator (EL i _).inst_opcode` mp_tac >>
+  qpat_x_assum `i < LENGTH _` mp_tac >>
+  simp[] >>
   Cases_on `i < LENGTH (FLAT (MAP f (FRONT l)))`
   >- (simp[EL_APPEND1] >>
-      fs[EVERY_EL]) >>
-  fs[LENGTH_APPEND]
+      fs[EVERY_EL] >> metis_tac[]) >>
+  simp[EL_APPEND2]
 QED
 
 Theorem flat_map_bb_well_formed[local]:
@@ -264,8 +266,8 @@ Theorem find_dload_pair_mstore_in_uses[local]:
     ?use_inst out_var. dfg_get_uses dfg out_var = [use_inst] /\
       use_inst.inst_opcode = MSTORE /\ dp.dp_mstore_id = use_inst.inst_id
 Proof
-  rpt strip_tac >> gvs[find_dload_mstore_pair_def, AllCaseEqs()] >>
-  metis_tac[]
+  rpt strip_tac >>
+  gvs[find_dload_mstore_pair_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 (* Kept under this theory's name for the compiler-proof integration branch. *)
@@ -498,14 +500,16 @@ Theorem scan_load_has_id[local]:
     scan_has_id (scan_load mode ss inst) id ==> scan_has_id ss id
 Proof
   rpt gen_tac >>
-  Cases_on `inst.inst_operands` >> simp[scan_load_def, hard_barrier_has_id] >>
-  rename1 `inst.inst_operands = src_op::ops` >> Cases_on `ops` >>
-  simp[hard_barrier_has_id] >>
-  Cases_on `operand_lit_val src_op` >> simp[hard_barrier_has_id] >>
+  Cases_on `inst.inst_operands` >>
+  simp[scan_load_def, hard_barrier_has_id] >>
+  rename1 `inst.inst_operands = src::rest` >>
+  Cases_on `rest` >> simp[hard_barrier_has_id] >>
+  Cases_on `operand_lit_val src` >> simp[hard_barrier_has_id] >>
   Cases_on `inst.inst_outputs` >> simp[hard_barrier_has_id] >>
-  rename1 `inst.inst_outputs = out_var::outs` >> Cases_on `outs` >>
-  simp[hard_barrier_has_id, LET_THM, scan_has_id_loads_irrel] >>
-  rpt IF_CASES_TAC >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> simp[hard_barrier_has_id] >>
+  simp[scan_has_id_loads_irrel] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
   simp[flush_copies_has_id, MEM_FILTER, copies_that_overwrite_def]
 QED
 
@@ -527,19 +531,17 @@ Theorem scan_store_has_id[local]:
     (?v li. dfg_get_def dfg v = SOME li /\ li.inst_id = id)
 Proof
   rpt gen_tac >>
-  Cases_on `inst.inst_operands` >> simp[scan_store_def, hard_barrier_has_id] >>
-  rename1 `inst.inst_operands = dst_op::ops` >>
-  Cases_on `ops` >> simp[hard_barrier_has_id] >>
-  rename1 `inst.inst_operands = dst_op::val_op::rest` >>
-  Cases_on `rest` >> simp[hard_barrier_has_id] >>
-  Cases_on `operand_var val_op` >> simp[hard_barrier_has_id] >>
-  rename1 `operand_var val_op = SOME var` >>
-  Cases_on `operand_lit_val dst_op` >> simp[hard_barrier_has_id] >>
+  namedCases_on `inst.inst_operands` ["", "dst rest"] >>
+  simp[scan_store_def, hard_barrier_has_id] >>
+  namedCases_on `rest` ["", "value tail"] >> simp[hard_barrier_has_id] >>
+  Cases_on `tail` >> simp[hard_barrier_has_id] >>
+  namedCases_on `operand_var value` ["", "var"] >> simp[hard_barrier_has_id] >>
+  Cases_on `operand_lit_val dst` >> simp[hard_barrier_has_id] >>
   Cases_on `FLOOKUP ss.ss_loads var` >> simp[hard_barrier_has_id] >>
-  Cases_on `dfg_get_def dfg var` >>
-  Cases_on `mode_allows_overlap mode` >>
-  simp[LET_THM, scan_has_id_add_copy, flush_hazards_has_id,
-       invalidate_loads_has_id] >> metis_tac[]
+  Cases_on `dfg_get_def dfg var` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  simp[scan_has_id_add_copy, flush_hazards_has_id, invalidate_loads_has_id] >>
+  strip_tac >> gvs[MEM_APPEND] >> metis_tac[]
 QED
 
 Theorem scan_bulk_copy_has_id[local]:
@@ -548,19 +550,17 @@ Theorem scan_bulk_copy_has_id[local]:
     scan_has_id ss id \/ inst.inst_id = id
 Proof
   rpt gen_tac >>
-  Cases_on `inst.inst_operands` >> simp[scan_bulk_copy_def, hard_barrier_has_id] >>
-  rename1 `inst.inst_operands = dst_op::ops` >>
-  Cases_on `ops` >> simp[hard_barrier_has_id] >>
-  rename1 `inst.inst_operands = dst_op::src_op::rest` >>
-  Cases_on `rest` >> simp[hard_barrier_has_id] >>
-  rename1 `inst.inst_operands = dst_op::src_op::size_op::tail` >>
+  namedCases_on `inst.inst_operands` ["", "dst rest"] >>
+  simp[scan_bulk_copy_def, hard_barrier_has_id] >>
+  namedCases_on `rest` ["", "src rest2"] >> simp[hard_barrier_has_id] >>
+  namedCases_on `rest2` ["", "szop tail"] >> simp[hard_barrier_has_id] >>
   Cases_on `tail` >> simp[hard_barrier_has_id] >>
-  Cases_on `operand_lit_val dst_op` >> simp[hard_barrier_has_id] >>
-  Cases_on `operand_lit_val src_op` >> simp[hard_barrier_has_id] >>
-  Cases_on `operand_lit_val size_op` >> simp[hard_barrier_has_id] >>
-  Cases_on `mode_allows_overlap mode` >>
-  simp[LET_THM, scan_has_id_add_copy, flush_hazards_has_id,
-       invalidate_loads_has_id] >> metis_tac[]
+  Cases_on `operand_lit_val dst` >> simp[hard_barrier_has_id] >>
+  Cases_on `operand_lit_val src` >> simp[hard_barrier_has_id] >>
+  Cases_on `operand_lit_val szop` >> simp[hard_barrier_has_id] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  simp[scan_has_id_add_copy, flush_hazards_has_id, invalidate_loads_has_id] >>
+  strip_tac >> gvs[]
 QED
 
 (* Per-step: scan_inst preserves scan_has_id or adds inst/dfg id *)
@@ -591,9 +591,8 @@ Theorem scan_foldl_ids_inv[local]:
 Proof
   Induct_on `insts` >> simp[] >>
   rpt gen_tac >> strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  TRY (metis_tac[]) >>
-  drule scan_inst_has_id >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >> gvs[]
+  >- (drule scan_inst_has_id >> strip_tac >> gvs[] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -607,14 +606,15 @@ Theorem scan_load_loads_inv[local]:
     var IN FDOM ss.ss_loads \/ MEM var inst.inst_outputs
 Proof
   rpt gen_tac >>
-  Cases_on `inst.inst_operands` >> simp[scan_load_def, hard_barrier_def] >>
-  rename1 `inst.inst_operands = src_op::ops` >> Cases_on `ops` >>
-  simp[hard_barrier_def] >>
-  Cases_on `operand_lit_val src_op` >> simp[hard_barrier_def] >>
-  Cases_on `inst.inst_outputs` >> simp[hard_barrier_def] >>
-  rename1 `inst.inst_outputs = out_var::outs` >> Cases_on `outs` >>
-  simp[hard_barrier_def, LET_THM] >>
-  rpt IF_CASES_TAC >> simp[flush_copies_def, FDOM_FUPDATE] >> metis_tac[]
+  namedCases_on `inst.inst_operands` ["", "src rest"] >>
+  simp[scan_load_def, hard_barrier_def] >>
+  Cases_on `rest` >> simp[hard_barrier_def] >>
+  Cases_on `operand_lit_val src` >> simp[hard_barrier_def] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[hard_barrier_def] >>
+  Cases_on `outs` >> simp[hard_barrier_def] >>
+  rpt (IF_CASES_TAC >> simp[flush_copies_def, FDOM_DRESTRICT,
+       FLOOKUP_UPDATE, FDOM_FUPDATE]) >>
+  strip_tac >> gvs[FDOM_FUPDATE]
 QED
 
 (* Helper: flush_copies doesn't change ss_loads *)
@@ -647,17 +647,15 @@ Theorem scan_store_loads_inv[local]:
     var IN FDOM ss.ss_loads
 Proof
   rpt gen_tac >>
-  Cases_on `inst.inst_operands` >> simp[scan_store_def, hard_barrier_def] >>
-  rename1 `inst.inst_operands = dst_op::ops` >>
-  Cases_on `ops` >> simp[hard_barrier_def] >>
-  rename1 `inst.inst_operands = dst_op::val_op::rest` >>
-  Cases_on `rest` >> simp[hard_barrier_def] >>
-  Cases_on `operand_var val_op` >> simp[hard_barrier_def] >>
-  rename1 `operand_var val_op = SOME v` >>
-  Cases_on `operand_lit_val dst_op` >> simp[hard_barrier_def] >>
-  Cases_on `FLOOKUP ss.ss_loads v` >> simp[hard_barrier_def] >>
-  Cases_on `mode_allows_overlap mode` >>
-  simp[LET_THM, flush_hazards_loads, invalidate_loads_def, FDOM_DRESTRICT]
+  namedCases_on `inst.inst_operands` ["", "dst rest"] >>
+  simp[scan_store_def, hard_barrier_def] >>
+  namedCases_on `rest` ["", "value tail"] >> simp[hard_barrier_def] >>
+  Cases_on `tail` >> simp[hard_barrier_def] >>
+  namedCases_on `operand_var value` ["", "vname"] >> simp[hard_barrier_def] >>
+  Cases_on `operand_lit_val dst` >> simp[hard_barrier_def] >>
+  Cases_on `FLOOKUP ss.ss_loads vname` >> simp[hard_barrier_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  simp[flush_hazards_loads, invalidate_loads_def, FDOM_DRESTRICT]
 QED
 
 (* scan_bulk_copy: only removes from ss_loads or hard_barriers *)
@@ -667,18 +665,16 @@ Theorem scan_bulk_copy_loads_inv[local]:
     var IN FDOM ss.ss_loads
 Proof
   rpt gen_tac >>
-  Cases_on `inst.inst_operands` >> simp[scan_bulk_copy_def, hard_barrier_def] >>
-  rename1 `inst.inst_operands = dst_op::ops` >>
-  Cases_on `ops` >> simp[hard_barrier_def] >>
-  rename1 `inst.inst_operands = dst_op::src_op::rest` >>
-  Cases_on `rest` >> simp[hard_barrier_def] >>
-  rename1 `inst.inst_operands = dst_op::src_op::size_op::tail` >>
+  namedCases_on `inst.inst_operands` ["", "dst rest"] >>
+  simp[scan_bulk_copy_def, hard_barrier_def] >>
+  namedCases_on `rest` ["", "src rest2"] >> simp[hard_barrier_def] >>
+  namedCases_on `rest2` ["", "szop tail"] >> simp[hard_barrier_def] >>
   Cases_on `tail` >> simp[hard_barrier_def] >>
-  Cases_on `operand_lit_val dst_op` >> simp[hard_barrier_def] >>
-  Cases_on `operand_lit_val src_op` >> simp[hard_barrier_def] >>
-  Cases_on `operand_lit_val size_op` >> simp[hard_barrier_def] >>
-  Cases_on `mode_allows_overlap mode` >>
-  simp[LET_THM, flush_hazards_loads, invalidate_loads_def, FDOM_DRESTRICT]
+  Cases_on `operand_lit_val dst` >> simp[hard_barrier_def] >>
+  Cases_on `operand_lit_val src` >> simp[hard_barrier_def] >>
+  Cases_on `operand_lit_val szop` >> simp[hard_barrier_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  simp[flush_hazards_loads, invalidate_loads_def, FDOM_DRESTRICT]
 QED
 
 (* scan_inst: ss_loads vars come from prior state or load instructions *)
@@ -690,11 +686,10 @@ Theorem scan_inst_loads_inv[local]:
 Proof
   rpt gen_tac >> simp[scan_inst_def] >>
   rpt (IF_CASES_TAC >> simp[]) >>
-  TRY (strip_tac >> drule scan_load_loads_inv >> strip_tac >> gvs[] >>
-       metis_tac[]) >>
-  TRY (strip_tac >> drule scan_store_loads_inv >> metis_tac[]) >>
-  TRY (strip_tac >> drule scan_bulk_copy_loads_inv >> metis_tac[]) >>
   simp[hard_barrier_def]
+  >- (strip_tac >> drule scan_load_loads_inv >> metis_tac[])
+  >- (strip_tac >> drule scan_store_loads_inv >> metis_tac[]) >>
+  strip_tac >> drule scan_bulk_copy_loads_inv >> metis_tac[]
 QED
 
 (* FOLDL invariant: ss_loads vars come from mode_load_opcode instructions *)
@@ -707,9 +702,8 @@ Theorem scan_foldl_loads_inv[local]:
 Proof
   Induct_on `insts` >> simp[] >>
   rpt gen_tac >> strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  TRY (metis_tac[]) >>
-  drule scan_inst_loads_inv >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >> gvs[]
+  >- (drule scan_inst_loads_inv >> strip_tac >> gvs[] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -777,21 +771,41 @@ Proof
      (scan_inst_memzero dfg mz h) insts) id`
     by (simp[memzero_has_id_def] >> metis_tac[]) >>
   first_x_assum drule >> simp[memzero_has_id_def] >>
-  disch_then assume_tac >> gvs[] >>
-  TRY (metis_tac[]) >>
-  `memzero_has_id (scan_inst_memzero dfg mz h) id`
-    by (simp[memzero_has_id_def] >> metis_tac[]) >>
-  drule scan_inst_memzero_has_id >>
-  simp[memzero_has_id_def] >> metis_tac[]
+  metis_tac[scan_inst_memzero_has_id, memzero_has_id_def]
 QED
 
 (* ===== Key bridge: terminator ID not in scan results ===== *)
+
+(* fn_insts includes all block instructions *)
+Theorem fn_insts_mem_block:
+  !fn bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
+    MEM inst (fn_insts fn)
+Proof
+  rpt strip_tac >>
+  simp[fn_insts_def] >>
+  `!bbs. MEM bb bbs ==> MEM inst (fn_insts_blocks bbs)` suffices_by metis_tac[] >>
+  Induct >> simp[fn_insts_blocks_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* Reverse direction: MEM in fn_insts implies MEM in some block *)
+Theorem fn_insts_mem_block_rev[local]:
+  !fn inst. MEM inst (fn_insts fn) ==>
+    ?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions
+Proof
+  rpt strip_tac >> gvs[fn_insts_def] >>
+  `!bbs. MEM inst (fn_insts_blocks bbs) ==>
+         ?bb. MEM bb bbs /\ MEM inst bb.bb_instructions`
+    suffices_by metis_tac[] >>
+  Induct >> simp[fn_insts_blocks_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
 
 (* fn_inst_wf + MEM in fn_insts => inst_wf *)
 Theorem fn_inst_wf_mem[local]:
   !fn inst. fn_inst_wf fn /\ MEM inst (fn_insts fn) ==> inst_wf inst
 Proof
-  rpt strip_tac >> imp_res_tac fn_insts_mem_block >>
+  rpt strip_tac >> imp_res_tac fn_insts_mem_block_rev >>
   fs[fn_inst_wf_def] >> metis_tac[]
 QED
 
@@ -813,7 +827,7 @@ Proof
   Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
 QED
 
-Theorem fn_inst_ids_distinct_block[local]:
+Theorem fn_inst_ids_distinct_block:
   !fn bb. fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks ==>
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
 Proof
@@ -905,7 +919,7 @@ Proof
 QED
 
 (* ALL_DISTINCT (MAP f xs) implies f-injectivity on xs *)
-Theorem all_distinct_map_inv[local]:
+Theorem all_distinct_map_inv:
   !f xs a b. ALL_DISTINCT (MAP f xs) /\ MEM a xs /\ MEM b xs /\
              f a = f b ==> a = b
 Proof
@@ -1083,7 +1097,7 @@ Proof
 QED
 
 (* Weakened memzero scan: terminator ID not in scan results *)
-Theorem term_id_not_in_memzero_scan_weak[local]:
+Theorem term_id_not_in_memzero_scan_weak:
   !dfg bb.
     bb.bb_instructions <> [] /\
     is_terminator (LAST bb.bb_instructions).inst_opcode /\
@@ -1133,7 +1147,7 @@ Proof
       gvs[] >> imp_res_tac fn_inst_wf_terminator_no_outputs >> gvs[])
 QED
 
-Theorem term_id_not_in_mode_scan_weak[local]:
+Theorem term_id_not_in_mode_scan_weak:
   !dfg fn bb mode.
     dfg = dfg_build_function fn /\
     fn_inst_wf fn /\ wf_function fn /\ fn_inst_ids_distinct fn /\
@@ -1189,7 +1203,7 @@ Proof
 QED
 
 (* Helper: dload transform preserves instruction IDs *)
-Theorem dload_preserves_ids[local]:
+Theorem dload_preserves_ids:
   !dfg bb.
     MAP (\i. i.inst_id) (transform_block_dload dfg bb).bb_instructions =
     MAP (\i. i.inst_id) bb.bb_instructions
@@ -1201,7 +1215,7 @@ Proof
 QED
 
 (* transform_block_dload preserves LAST *)
-Theorem transform_block_dload_last[local]:
+Theorem transform_block_dload_last:
   !fn bb.
     fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\ bb_well_formed bb ==>
     LAST (transform_block_dload (dfg_build_function fn) bb).bb_instructions =
@@ -1218,14 +1232,14 @@ Proof
 QED
 
 (* apply_memzero_inst always returns a non-empty list *)
-Theorem apply_memzero_inst_nonempty[local]:
+Theorem apply_memzero_inst_nonempty:
   !nop_set rep_map x. apply_memzero_inst nop_set rep_map x <> []
 Proof
   rw[apply_memzero_inst_def] >> rpt CASE_TAC
 QED
 
 (* apply_groups_inst always returns a non-empty list *)
-Theorem apply_groups_inst_nonempty[local]:
+Theorem apply_groups_inst_nonempty:
   !mode nop_set rep_map x. apply_groups_inst mode nop_set rep_map x <> []
 Proof
   rw[apply_groups_inst_def] >> rpt CASE_TAC
@@ -1376,7 +1390,8 @@ Proof
     simp[Abbr `bb5`] >>
     mp_tac (Q.SPECL [`dfg`, `fn`, `bb4`, `Mem2Mem`, `term`]
             mode_preserves_term_unique) >>
-    (impl_tac >- simp[Abbr `dfg`]) >> simp[LET_THM]) >>
+    pure_rewrite_tac[LET_THM] >> BETA_TAC >> disch_then match_mp_tac >>
+    simp[] >> simp[Abbr `dfg`]) >>
   (* Conclude: transform_block = bb5, use bb_succs_same_last_general *)
   `transform_block dfg bb = bb5` by
     simp[transform_block_def, LET_THM, Abbr `dfg`,
@@ -1396,19 +1411,17 @@ Theorem scan_store_has_id_strong[local]:
             dfg_get_def dfg v = SOME li /\ li.inst_id = id)
 Proof
   rpt gen_tac >>
-  Cases_on `inst.inst_operands` >> simp[scan_store_def, hard_barrier_has_id] >>
-  rename1 `inst.inst_operands = dst_op::ops` >>
-  Cases_on `ops` >> simp[hard_barrier_has_id] >>
-  rename1 `inst.inst_operands = dst_op::val_op::rest` >>
-  Cases_on `rest` >> simp[hard_barrier_has_id] >>
-  Cases_on `operand_var val_op` >> simp[hard_barrier_has_id] >>
-  rename1 `operand_var val_op = SOME var` >>
-  Cases_on `operand_lit_val dst_op` >> simp[hard_barrier_has_id] >>
-  Cases_on `FLOOKUP ss.ss_loads var` >> simp[hard_barrier_has_id] >>
-  Cases_on `dfg_get_def dfg var` >>
-  Cases_on `mode_allows_overlap mode` >>
-  simp[LET_THM, scan_has_id_add_copy, flush_hazards_has_id,
-       invalidate_loads_has_id] >> metis_tac[flookup_thm]
+  namedCases_on `inst.inst_operands` ["", "dst rest"] >>
+  simp[scan_store_def, hard_barrier_has_id] >>
+  namedCases_on `rest` ["", "value tail"] >> simp[hard_barrier_has_id] >>
+  Cases_on `tail` >> simp[hard_barrier_has_id] >>
+  namedCases_on `operand_var value` ["", "vname"] >> simp[hard_barrier_has_id] >>
+  Cases_on `operand_lit_val dst` >> simp[hard_barrier_has_id] >>
+  Cases_on `FLOOKUP ss.ss_loads vname` >> simp[hard_barrier_has_id] >>
+  Cases_on `dfg_get_def dfg vname` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  simp[scan_has_id_add_copy, flush_hazards_has_id, invalidate_loads_has_id] >>
+  strip_tac >> gvs[MEM_APPEND, flookup_thm] >> metis_tac[]
 QED
 
 (* Stronger scan_inst_has_id: direct adds have specific opcodes,
@@ -1448,13 +1461,11 @@ Theorem scan_foldl_ids_inv_strong[local]:
 Proof
   Induct_on `insts` >> simp[] >>
   rpt gen_tac >> strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  TRY (metis_tac[]) >>
-  TRY (
-    qpat_x_assum `scan_has_id (scan_inst _ _ _ _) _` (mp_tac o MATCH_MP scan_inst_has_id_strong) >>
-    strip_tac >> gvs[] >> metis_tac[]) >>
-  (* dfg case: v IN FDOM (scan_inst dfg mode ss h).ss_loads *)
-  drule scan_inst_loads_inv >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >> gvs[]
+  >- (drule scan_inst_has_id_strong >> strip_tac >> gvs[] >> metis_tac[])
+  >- metis_tac[]
+  >- metis_tac[]
+  >- (drule scan_inst_loads_inv >> strip_tac >> gvs[] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -1500,12 +1511,7 @@ Proof
      (scan_inst_memzero dfg mz h) insts) id`
     by (simp[memzero_has_id_def] >> metis_tac[]) >>
   first_x_assum drule >> simp[memzero_has_id_def] >>
-  disch_then assume_tac >> gvs[] >>
-  TRY (metis_tac[]) >>
-  `memzero_has_id (scan_inst_memzero dfg mz h) id`
-    by (simp[memzero_has_id_def] >> metis_tac[]) >>
-  drule scan_inst_memzero_has_id_strong >>
-  simp[memzero_has_id_def] >> metis_tac[]
+  metis_tac[scan_inst_memzero_has_id_strong, memzero_has_id_def]
 QED
 
 (* Memzero scan group IDs come from MSTORE/CALLDATACOPY instructions *)
@@ -1566,15 +1572,12 @@ Theorem phi_id_not_in_mode_scan_gen[local]:
     phi_inst.inst_id <> id
 Proof
   rpt strip_tac >>
-  drule_all scan_block_ids_from_fn_strong >> strip_tac >>
-  TRY (
-    (* Cases 1-2: inst in bb with MSTORE/mode_copy opcode *)
-    CCONTR_TAC >> gvs[] >>
-    (* inst has same ID as phi_inst and is in bb — by uniqueness, inst = phi_inst *)
-    `inst = phi_inst` by metis_tac[] >>
-    gvs[] >>
-    Cases_on `mode` >> gvs[mode_copy_opcode_def] >> NO_TAC
-  ) >>
+  drule_all scan_block_ids_from_fn_strong >> strip_tac
+  >- (CCONTR_TAC >> gvs[] >>
+      `inst = phi_inst` by metis_tac[] >> gvs[])
+  >- (CCONTR_TAC >> gvs[] >>
+      `inst = phi_inst` by metis_tac[] >> gvs[] >>
+      Cases_on `mode` >> gvs[mode_copy_opcode_def]) >>
   (* Case 3: id from dfg_get_def — inst is in fn_insts, load_inst has
      mode_load_opcode so also in fn_insts by precondition *)
   CCONTR_TAC >> gvs[] >>
@@ -1688,7 +1691,7 @@ QED
 (* ===== Per-sub-transform bb_well_formed ===== *)
 
 (* Dload sub-transform preserves bb_well_formed *)
-Theorem transform_block_dload_wf[local]:
+Theorem transform_block_dload_wf:
   !fn bb.
     fn_inst_ids_distinct fn /\
     MEM bb fn.fn_blocks /\ bb_well_formed bb ==>
@@ -1718,7 +1721,7 @@ Proof
 QED
 
 (* Memzero sub-transform preserves bb_well_formed *)
-Theorem transform_block_memzero_wf[local]:
+Theorem transform_block_memzero_wf:
   !dfg bb.
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
     bb_well_formed bb ==>
@@ -1791,7 +1794,7 @@ QED
 (* Mode sub-transform preserves bb_well_formed.
    Weakened: mode_load precondition requires inst_outputs <> [] (needed for
    intermediate blocks where dload creates empty-output DLOADBYTES). *)
-Theorem transform_block_mode_wf[local]:
+Theorem transform_block_mode_wf:
   !fn dfg mode bb.
     dfg = dfg_build_function fn /\
     fn_inst_wf fn /\ wf_function fn /\
@@ -1944,7 +1947,7 @@ Proof
 QED
 
 (* PHI in dload output came from input — dload is MAP, identity on PHI *)
-Theorem dload_phi_from[local]:
+Theorem dload_phi_from:
   !fn bb inst.
     fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
     MEM inst (transform_block_dload (dfg_build_function fn) bb).bb_instructions /\
@@ -2079,7 +2082,7 @@ Proof
 QED
 
 (* Dload doesn't create mode_load opcodes with non-empty outputs *)
-Theorem dload_mode_load_passthrough[local]:
+Theorem dload_mode_load_passthrough:
   !fn bb inst m.
     fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
     MEM inst (transform_block_dload (dfg_build_function fn) bb).bb_instructions /\
@@ -2291,40 +2294,6 @@ Proof
   simp[LET_THM]
 QED
 
-(* ===== Obligations ===== *)
-
-(* Fresh names introduced by the transform:
-   - "__mm_load_<id>" from mode sub-passes (32-byte non-mstore rep)
-   - "__mz_cds_<id>" from memzero sub-pass (cg_length > 32)
-   These must not collide with any existing output variable. *)
-Definition mm_fresh_outputs_def:
-  mm_fresh_outputs fn =
-    let dfg = dfg_build_function fn in
-    BIGUNION (IMAGE (λbb.
-      let bb1 = transform_block_dload dfg bb in
-      let bb2 = transform_block_memzero dfg bb1 in
-      let bb3 = transform_block_mode dfg CalldataMerge bb2 in
-      let bb4 = transform_block_mode dfg DloadMerge bb3 in
-      mm_block_fresh_memzero dfg bb1 ∪
-      mm_block_fresh_mode dfg CalldataMerge bb2 ∪
-      mm_block_fresh_mode dfg DloadMerge bb3 ∪
-      mm_block_fresh_mode dfg Mem2Mem bb4
-    ) (set fn.fn_blocks))
-End
-
-Definition mm_fresh_names_ok_def:
-  mm_fresh_names_ok fn ⇔
-    DISJOINT (mm_fresh_outputs fn)
-             (set (FLAT (MAP (λi. i.inst_outputs) (fn_insts fn))))
-End
-
-Theorem mm_preserves_ssa_form:
-  ∀fn. ssa_form fn ∧ mm_fresh_names_ok fn ⇒
-       ssa_form (transform_function fn)
-Proof
-  cheat
-QED
-
 (* Main theorem: transform_block preserves bb_well_formed *)
 Theorem transform_block_wf[local]:
   !fn bb.
@@ -2464,7 +2433,10 @@ Proof
   rpt strip_tac >> gvs[] >> res_tac >> metis_tac[]
 QED
 
-Theorem mm_preserves_wf_function:
+(* For transform_function, which reuses the rewritten instruction's id for
+   the inserted one; the supply-threaded form is mmSupplyProofs'
+   mm_preserves_wf_function. *)
+Theorem mm_preserves_wf_function_simple:
   ∀fn. fn_inst_wf fn ∧ wf_function fn ∧ ssa_form fn ∧
        fn_inst_ids_distinct (transform_function fn) ⇒
        wf_function (transform_function fn)

@@ -1,7 +1,7 @@
 (* Constructor argument aliasing: an earlier local array is mutated by a later
    argument before the generated code copies the earlier value to its tuple.
    Pinned Vyper now snapshots the earlier argument first, and its bytecode is
-   out of parity until that change is ported (../../lowering/defs/bytecode/
+   out of parity until that change is ported (../../bytecode/
    pending-5127-port.md); this checks the HOL compiler against the source
    semantics. *)
 Theory vyperCtorAliasTest

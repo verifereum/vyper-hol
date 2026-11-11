@@ -644,7 +644,10 @@ Theorem base_storage_write_footprint:
   (!a. a < dimword(:256) /\ a <> w2n slot ==>
      read_slot (get_storage cx st' tr) a = read_slot (get_storage cx st tr) a)
 Proof
-  simp_tac bool_ss [write_storage_slot_eq, vyperStorageTheory.encode_value_def] >>
+  Cases_on `cx.txn.is_static`
+  >- (simp[write_storage_slot_eq] >> strip_tac >> gvs[]) >>
+  pop_assum (fn th => simp_tac bool_ss
+    [th, write_storage_slot_eq, vyperStorageTheory.encode_value_def]) >>
   Cases_on `encode_base_to_slot v (BaseTV (UintT 256))` >>
   simp_tac (srw_ss()) [] >> strip_tac >> gvs[] >>
   Cases_on `tr` >>
@@ -856,7 +859,8 @@ Resume storage_append_preserves_array[zero_width]:
   RESUME_TAC >>
   drule_all typed_zero_storage_write_footprint >> strip_tac >>
   Cases_on `res` >> gvs[]
-  >- (gvs[write_storage_slot_eq, vyperStorageTheory.encode_value_def,
+  >- (Cases_on `cx.txn.is_static` >>
+      gvs[write_storage_slot_eq, vyperStorageTheory.encode_value_def,
            vyperStorageTheory.encode_base_to_slot_def] >>
       simp[zero_width_dynamic_storage_region, get_storage_after_set,
            vyperStorageTheory.read_slot_def, vyperStorageTheory.apply_writes_def,

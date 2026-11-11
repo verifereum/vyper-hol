@@ -2,7 +2,7 @@
    never the unregistered remainder of a physical scratch reserve. *)
 Theory abiEncoderRegisteredEffect
 Ancestors
-  valueEncoding venomState finite_map pred_set list
+  valueEncoding valueEncodingDefs venomState finite_map pred_set list
 
 Definition abi_encoder_registered_effect_def:
   abi_encoder_registered_effect ids outs (s0:venom_state) (s:venom_state) <=>

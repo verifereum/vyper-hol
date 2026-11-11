@@ -14,13 +14,6 @@
  *   - is_revert_label           : Check if label points to simple revert block
  *   - transform_jnz             : Transform JNZ to assert pattern if applicable
  *
- * This theory imports state equivalence definitions from stateEquivTheory:
- *   - state_equiv        : State equivalence ignoring a set of variables
- *   - execution_equiv    : State equivalence ignoring control flow
- *   - observable_equiv          : External effect equivalence
- *   - result_equiv       : Result equivalence for exec_result
- *   - terminates                : Predicate for successful termination (not Error)
- *
  * ============================================================================
  * TRANSFORMATION PATTERNS
  * ============================================================================
@@ -56,7 +49,8 @@
 
 Theory rtaDefs
 Ancestors
-  passSimulationDefs stateEquiv venomExecSemantics venomInst venomState finite_map pred_set
+  passTransform venomExecSemantics venomInst venomState irSupply
+  finite_map pred_set
 Libs
   finite_mapTheory venomStateTheory
 
@@ -227,6 +221,59 @@ End
 Definition transform_context_def:
   transform_context ctx =
     ctx with ctx_functions := MAP transform_function ctx.ctx_functions
+End
+
+(* ==========================================================================
+   Supply-Threaded Transformation
+   ========================================================================== *)
+
+(*
+ * The id- and name-based transform above is the model rta_pass_correct is
+ * proved for. The variant below matches the compiler's allocation: like
+ * Python's fn.get_next_variable(), it draws the ISZERO output and the ids
+ * of the inserted ISZERO/ASSERT from the unit-wide supply, and the JNZ
+ * keeps its id as it becomes the JMP (Python rewrites it in place).
+ *)
+Definition rta_transform_inst_supply_def:
+  rta_transform_inst_supply fn s inst =
+    if inst.inst_opcode <> JNZ then ([inst],s)
+    else case inst.inst_operands of
+      [cond_op; Label if_nonzero; Label if_zero] =>
+        if is_revert_label fn if_nonzero then
+          (case fresh_ir_var s of (tmp,s1) =>
+           case fresh_inst_id s1 of (iz_id,s2) =>
+           case fresh_inst_id s2 of (as_id,s3) =>
+             ([mk_iszero_inst iz_id cond_op tmp;
+               mk_assert_inst as_id (Var tmp);
+               mk_jmp_inst inst.inst_id if_zero],s3))
+        else if is_revert_label fn if_zero then
+          (case fresh_inst_id s of (as_id,s1) =>
+             ([mk_assert_inst as_id cond_op;
+               mk_jmp_inst inst.inst_id if_nonzero],s1))
+        else ([inst],s)
+    | _ => ([inst],s)
+End
+
+Definition rta_transform_insts_supply_def:
+  rta_transform_insts_supply fn s [] = ([],s) /\
+  rta_transform_insts_supply fn s (inst::insts) =
+    case rta_transform_inst_supply fn s inst of (out,s1) =>
+    case rta_transform_insts_supply fn s1 insts of (outs,s2) =>
+      (out ++ outs,s2)
+End
+
+Definition rta_transform_blocks_supply_def:
+  rta_transform_blocks_supply fn s [] = ([],s) /\
+  rta_transform_blocks_supply fn s (bb::bbs) =
+    case rta_transform_insts_supply fn s bb.bb_instructions of (insts,s1) =>
+    case rta_transform_blocks_supply fn s1 bbs of (bbs',s2) =>
+      ((bb with bb_instructions := insts)::bbs',s2)
+End
+
+Definition rta_transform_function_supply_def:
+  rta_transform_function_supply s fn =
+    case rta_transform_blocks_supply fn s fn.fn_blocks of (bbs,s1) =>
+      (fn with fn_blocks := bbs,s1)
 End
 
 (* ==========================================================================

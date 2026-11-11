@@ -136,7 +136,7 @@ Theorem vsr_step_inst_read0:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
     MEM inst.inst_opcode
-      [CALLER;ADDRESS;CALLVALUE;GAS;ORIGIN;GASPRICE;CHAINID;
+      [CALLER;ADDRESS;CALLVALUE;ORIGIN;GASPRICE;CHAINID;
        COINBASE;TIMESTAMP;NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;
        BLOBBASEFEE;SELFBALANCE;CALLDATASIZE;RETURNDATASIZE;MEMTOP;
        CODESIZE] ==>
@@ -144,6 +144,15 @@ Theorem vsr_step_inst_read0:
 Proof
   rw[] >> vsr_opcode_tac () >> simp[] >>
   vsr_irule vsr_exec_read0 >> simp[] >> vsr_read_eq_tac ()
+QED
+
+Theorem vsr_step_inst_gas:
+  !R_ok R_term inst s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\ inst.inst_opcode = GAS ==>
+    lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
+Proof
+  rw[] >> vsr_opcode_tac () >> simp[] >>
+  vsr_irule vsr_exec_gas >> simp[]
 QED
 
 Theorem vsr_step_inst_read1:
@@ -178,7 +187,13 @@ Theorem vsr_step_inst_write2:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> vsr_opcode_tac () >> simp[] >>
+  rw[] >>
+  `s1.vs_call_ctx = s2.vs_call_ctx` by metis_tac[vsr_R_ok_fields] >>
+  `eval_operands inst.inst_operands s1 = eval_operands inst.inst_operands s2` by
+    (vsr_irule vsr_eval_operands >> simp[]) >>
+  vsr_opcode_tac () >> simp[] >>
+  TRY (IF_CASES_TAC >- (REWRITE_TAC [] >> irule vsr_static_abort >> simp[]) >>
+       REWRITE_TAC []) >>
   vsr_irule vsr_exec_write2 >> simp[] >> rw[] >>
   FIRST [vsr_irule vsr_mstore, vsr_irule vsr_mstore8,
          vsr_irule vsr_sstore, vsr_irule vsr_tstore] >>
@@ -431,8 +446,12 @@ Theorem vsr_step_inst_log:
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >>
+  `s1.vs_call_ctx = s2.vs_call_ctx` by metis_tac[vsr_R_ok_fields] >>
+  `eval_operands inst.inst_operands s1 = eval_operands inst.inst_operands s2` by
+    (vsr_irule vsr_eval_operands >> simp[]) >>
   imp_res_tac vsr_log_data_eq >> vsr_eval_ops_tac () >>
   vsr_opcode_tac () >> simp[] >>
+  IF_CASES_TAC >- (REWRITE_TAC [] >> irule vsr_static_abort >> simp[]) >>
   Cases_on `inst.inst_operands` >> simp[lift_result_def] >>
   Cases_on `h` >> simp[lift_result_def] >>
   rename1 `Lit tc :: rest` >>

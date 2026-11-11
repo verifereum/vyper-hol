@@ -3,7 +3,7 @@
    encoder's length, payload and physical separation precondition. *)
 Theory abiComplexMemory
 Ancestors
-  abiComplexEntry abiStaticLoopEntry abiStaticLoopCode abiBytestringCorrect
+  loweringStateRelDefs abiComplexEntry abiStaticLoopEntry abiStaticLoopCode abiBytestringCorrect
   memoryReadProps ssaOperandFrame compileEnv venomState venomExecSemantics
   finite_map list words arithmetic
 

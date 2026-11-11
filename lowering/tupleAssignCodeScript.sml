@@ -1,7 +1,8 @@
 (* Target-independent tuple assignment code decomposition. *)
 Theory tupleAssignCode
 Ancestors
-  stmtSim stmtLowering exprLowering emitHelper compileEnv
+  loweringPosts stmtSimDefs stmtSimProps
+   stmtLowering exprLowering emitHelper compileEnv
   list rich_list
 Libs
   monadsyntax
@@ -10,6 +11,7 @@ Theorem assign_tuple_targets_code_decompose:
   !cenv lctx ty gs e tys sa sf c.
     stmt_env cenv lctx ty (Assign (TupleTarget gs) e) sa = (c,sf) /\
     expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) ==>
     c = cenv /\
     ?vv sc op su staged sl elems ss.

@@ -41,6 +41,7 @@ Ancestors
   o1PassContract unitMemInv contextRawReachable contextCodegenRel
   unitTransformDefs passSimulationDefs stateEquiv stateFrame
   venomExecSemantics venomExecProps venomInst venomMemDefs venomState list finite_map
+  venomExecProofs venomStepProps
 
 (* ===== Run correspondence ===== *)
 
@@ -879,6 +880,28 @@ Definition mem_corr_closed_rf_def:
        M ctx' fn' inst' s')
 End
 
+Theorem mem_corr_trans:
+  mem_corr i1 s1 i2 s2 /\ mem_corr i2 s2 i3 s3 ==>
+  mem_corr i1 s1 i3 s3
+Proof
+  simp[mem_corr_def] >> metis_tac[]
+QED
+
+(* Frame simulations away from revert-forward pairs compose. *)
+Theorem frame_sim_rf_trans:
+  frame_sim_rf L C1 C2 f g /\ frame_sim_rf L C2 C3 g h /\
+  fn_entry_label f = fn_entry_label g ==> frame_sim_rf L C1 C3 f h
+Proof
+  simp[frame_sim_rf_def] >> rpt strip_tac >>
+  `fn_entry_state g s0` by gvs[fn_entry_state_def] >>
+  `?inst s. frame_reach C2 g s0 inst s /\ ~in_revert_forward g s /\
+     mem_corr inst s inst' s'` by metis_tac[] >>
+  `inst_mem_ranges inst s <> []` by gvs[mem_corr_def] >>
+  `?inst0 s1. frame_reach C1 f s0 inst0 s1 /\ ~in_revert_forward f s1 /\
+     mem_corr inst0 s1 inst s` by metis_tac[] >>
+  metis_tac[mem_corr_trans]
+QED
+
 Theorem mem_corr_closed_rf_intro:
   mem_corr_closed M ==> mem_corr_closed_rf M
 Proof
@@ -975,4 +998,17 @@ Theorem mem_corr_closed_rf_lowered_mem_fact:
 Proof
   rw[mem_corr_closed_rf_def, mem_corr_def, lowered_mem_fact_def,
      lowered_mem_ok_def] >> fs[] >> metis_tac[]
+QED
+
+(* Shared reachability fact, moved unchanged from o1ContractCfgNorm. *)
+Theorem supply_frame_reach_not_halted:
+  !ctx f s0 inst st. frame_reach ctx f s0 inst st ==>
+  (~s0.vs_halted ==> ~st.vs_halted)
+Proof
+  ho_match_mp_tac frame_reach_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[enters_block_def] >>
+      metis_tac[eval_phis_preserves_halted])
+  >- (rpt strip_tac >> drule step_inst_ok_halted >> gvs[]) >>
+  rpt strip_tac >> gvs[enters_block_def] >>
+  metis_tac[eval_phis_preserves_halted]
 QED

@@ -77,7 +77,7 @@ val step_base_result_tac =
   rw[step_inst_base_def] >>
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, exec_alloca_def,
      extract_venom_result_def] >>
@@ -117,8 +117,8 @@ val exec_delegatecall_update_var = prove(
     | Abort ab s' => Abort ab (update_var x w s')
     | Halt s' => Halt (update_var x w s')
     | IntRet vs s' => IntRet vs (update_var x w s')``,
-  rw[exec_delegatecall_def, read_memory_def, update_var_def,
-     make_venom_delegatecall_state_def, venom_to_tx_params_def,
+  rw[exec_delegatecall_def, venom_call_request_def, read_memory_def,
+     update_var_def, make_venom_delegatecall_state_def, venom_to_tx_params_def,
      extract_venom_result_def, write_memory_with_expansion_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]);
 
@@ -134,7 +134,7 @@ Theorem exec_create_update_var[local]:
     | IntRet vs s' => IntRet vs (update_var x w s')
 Proof
   rw[exec_create_def, update_var_def, venom_create_request_def,
-     read_memory_def] >>
+     read_memory_def, halt_state_def, set_returndata_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
@@ -243,6 +243,20 @@ Proof
                          finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
+Triviality exec_gas_var_frame[local]:
+  !inst x w st.
+    ~MEM x inst.inst_outputs ==>
+    exec_gas inst (update_var x w st) =
+    var_frame_result x w (exec_gas inst st)
+Proof
+  rw[exec_gas_def, var_frame_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `st.vs_gas_readings` >>
+  gvs[var_frame_result_def, update_var_def,
+      finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
 Triviality exec_read1_var_frame[local]:
   !f inst x w st.
     (!a s0. f a (update_var x w s0) = f a s0) /\
@@ -338,7 +352,8 @@ QED
 
 val exec_frame_thms =
   [exec_pure1_var_frame, exec_pure2_var_frame, exec_pure3_var_frame,
-   exec_read0_var_frame, exec_read1_var_frame, exec_write2_var_frame,
+   exec_read0_var_frame, exec_gas_var_frame, exec_read1_var_frame,
+   exec_write2_var_frame,
    exec_alloca_var_frame, exec_ext_call_var_frame,
    exec_delegatecall_var_frame, exec_create_var_frame];
 

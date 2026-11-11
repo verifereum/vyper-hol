@@ -34,7 +34,7 @@
 
 Theory memoryCopyElisionDefs
 Ancestors
-  analysisSimDefs dfAnalyzeDefs dfgDefs passSharedDefs venomEffects
+  passTransform dfAnalyzeDefs dfgDefs passSharedDefs venomEffects
   memAliasDefs memLocDefs basePtrDefs
 
 (* normalize_operand and operand_equiv are in dfgDefs *)
@@ -368,9 +368,13 @@ End
    loaded from there within this block, NOP the store.
    Python: _try_elide_load_store in _process_bb. *)
 
-(* Load opcodes that create load facts *)
+(* Load opcodes that create load facts.
+   DIVERGENCE from Python: upstream also records MLOAD facts and elides
+   `mstore p (mload p)`. In Venom's semantics MLOAD does not expand memory
+   but MSTORE does, so that elision can change the memory size (and
+   MEMTOP/MSIZE) when p is past the end of memory. Only storage and
+   transient loads create facts here. *)
 Definition is_load_fact_opcode_def:
-  is_load_fact_opcode MLOAD = T /\
   is_load_fact_opcode SLOAD = T /\
   is_load_fact_opcode TLOAD = T /\
   is_load_fact_opcode _ = F
@@ -421,7 +425,8 @@ End
    1. Loads → record load fact
    2. Stores → try elide + alias-invalidate in store's space
    3. Copy opcodes → alias-invalidate MEMORY loads only
-   4. Volatile memory → clear MEMORY loads only (not storage/transient)
+   4. Other writers → clear loads in each address space the instruction
+      writes (its write_effects)
 
    Elision: compares write_loc == load_loc (equality, not alias).
    Invalidation: uses may_alias, scoped to matching address space. *)
@@ -466,13 +471,10 @@ Definition load_store_step_def:
       let write_loc = bp_get_write_location bp inst AddrSp_Memory in
       let lf' = invalidate_loads aliases lf write_loc AddrSp_Memory in
       (lf', inst)
-    (* 4. Volatile writers: clear loads for every address space whose
-       effect is in the instruction's write_effects.
-       DIVERGENCE from Python: upstream only clears MEMORY loads here
-       (vyper/venom/passes/memory_copy_elision.py L276-280), keeping
-       STORAGE and TRANSIENT facts alive across INVOKE/CALL/etc.
-       That is unsound — see https://github.com/vyperlang/vyper/pull/4914 *)
-    else if Eff_MEMORY IN write_effects inst.inst_opcode then
+    (* 4. Other writers: clear loads for every address space whose
+       effect is in the instruction's write_effects (e.g. CREATE writes
+       storage but not memory). *)
+    else
       let weffs = write_effects inst.inst_opcode in
       let lf' = DRESTRICT lf
         { v | !lfact eff. FLOOKUP lf v = SOME lfact /\
@@ -480,7 +482,6 @@ Definition load_store_step_def:
                 (load_opcode_addr_space lfact.lf_opcode) = SOME eff ==>
               eff NOTIN weffs } in
       (lf', inst)
-    else (lf, inst)
 End
 
 Definition load_store_elim_block_def:

@@ -63,28 +63,6 @@ Proof
   simp[asm_create_request_def]
 QED
 
-Theorem make_asm_delegatecall_state_pc_add[local]:
-  make_asm_delegatecall_state (s with as_pc := s.as_pc + n) a g d c st =
-  make_asm_delegatecall_state s a g d c st
-Proof
-  simp[make_asm_delegatecall_state_def, asm_to_tx_params_def]
-QED
-
-Theorem extract_asm_result_pc_add[local]:
-  extract_asm_result (s with as_pc := s.as_pc + n) v ro rs rr =
-  OPTION_MAP (\(output,t). (output,t with as_pc := t.as_pc + n))
-    (extract_asm_result s v ro rs rr)
-Proof
-  Cases_on `rr` >- simp[extract_asm_result_def] >>
-  rename1 `SOME res` >> PairCases_on `res` >>
-  simp[extract_asm_result_def] >>
-  Cases_on `res1.contexts` >- simp[] >>
-  rename1 `res1.contexts = ctx :: ctxs` >>
-  Cases_on `ctxs` >> simp[] >>
-  PairCases_on `ctx` >>
-  simp[] >> pairarg_tac >> simp[]
-QED
-
 Theorem asm_consume_call_outcome_pc_add[local]:
   asm_consume_call_outcome rq ro rs stk (s with as_pc := s.as_pc + n) =
   asm_result_pc_add n (asm_consume_call_outcome rq ro rs stk s)
@@ -298,10 +276,12 @@ Theorem asm_exec_delegatecall_pc_add[local]:
   asm_result_pc_add n (asm_exec_delegatecall s)
 Proof
   simp[asm_exec_delegatecall_def,
-       ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] make_asm_delegatecall_state_pc_add,
-       ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] extract_asm_result_pc_add] >>
+       ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] asm_call_request_pc_add] >>
   rpt asm_pc_add_spine_tac >>
-  PairCases_on `x` >> gvs[asm_result_pc_add_def]
+  qmatch_goalsub_abbrev_tac `s with as_memory := mem` >>
+  qspec_then `s with as_memory := mem` (mp_tac o GEN_ALL)
+    (GEN ``s:asm_state`` asm_consume_call_outcome_pc_add) >>
+  simp[] >> disch_then assume_tac >> first_x_assum irule
 QED
 
 Theorem asm_step_extcall_pc_add[local]:

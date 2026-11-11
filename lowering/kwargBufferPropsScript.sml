@@ -147,7 +147,7 @@ Theorem compile_init_kwargs_static_probe:
        Literal (BaseT (UintT 256)) (IntL 0))]
     36 1 (Lit 999w) kwarg_probe_state =
   (do head <- emit_op ADD [Lit 4w; Lit 32w];
-      compile_abi_decode_to_buf (Lit 128w) head CALLDATALOAD (Lit 0w)
+      compile_abi_decode_to_buf (Lit 128w) head CALLDATALOAD (Lit 0w) (Lit 0w)
         (DecComplex F [(DecPrimWord NoClamp,32,32); (DecPrimWord NoClamp,32,32)])
    od) kwarg_probe_state
 Proof

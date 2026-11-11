@@ -7,7 +7,7 @@ Ancestors
   abiEncoderExtendSim abiScratchEffect abiScratchEncoderContract abiScratchChild
   abiDecoderAllocation emitHelper emitHelperProps venomInst venomExecSemantics exprLoweringProps
   compileEnv venomState venomMemDefs words list rich_list abiEncoderMemberSpine
-  abiEncoderCounters abiEncoderChildCode abiEncoderChildSuffix valueEncoding
+  abiEncoderCounters abiEncoderChildCode abiEncoderChildSuffix valueEncoding valueEncodingDefs
 
 (* Rich interpretation of the neutral array-tail driver.  No member-prefix
    equality is used: the actual two-instruction array preparation is retained. *)

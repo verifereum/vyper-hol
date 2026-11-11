@@ -1,10 +1,9 @@
 Theory vyperInterpreter
 Ancestors
   vyperCallOutcome[ignore_grammar]
-  vyperCallOutcomeFrame[ignore_grammar]
   arithmetic alist combin option list finite_map pair
   rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
-  vfmExecution[ignore_grammar] vyperAST vyperABI
+  vfmExecution[ignore_grammar] vyperAST vyperGetter vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
 Libs
@@ -58,58 +57,6 @@ val () = transfer_value_def
 * within a contract, including implicit functions associated with public
 * variables *)
 
-Definition getter_vtype_annotation_def:
-  getter_vtype_annotation (Type ty) = ty ∧
-  getter_vtype_annotation (HashMapT _ _) = NoneT
-End
-
-val () = cv_auto_trans getter_vtype_annotation_def;
-
-Definition build_getter_def:
-  build_getter e kt (Type vt) n =
-    (let vn = num_to_dec_string n in
-      if is_ArrayT vt then
-        (let (args, ret, exp) =
-           build_getter
-             (Subscript vt e (Name kt vn))
-             (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n) in
-           ((vn, kt)::args, ret, exp))
-      else ([(vn, kt)], vt, Subscript vt e (Name kt vn))) ∧
-  build_getter e kt (HashMapT typ vtyp) n =
-    (let vn = num_to_dec_string n in
-     let (args, ret, exp) =
-       build_getter
-         (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e (Name kt vn))
-         typ vtyp (SUC n) in
-     ((vn, kt)::args, ret, exp))
-Termination
-  WF_REL_TAC ‘measure (value_type_size o FST o SND o SND)’
-  \\ Cases \\ rw[type_size_def]
-End
-
-val () = cv_auto_trans_rec build_getter_def (
-  WF_REL_TAC ‘measure (cv_size o FST o SND o SND)’
-  \\ conj_tac \\ Cases \\ rw[]
-  >- (
-    qmatch_goalsub_rename_tac`cv_snd p`
-    \\ Cases_on`p` \\ rw[] )
-  \\ qmatch_asmsub_rename_tac`cv_is_ArrayT a`
-  \\ Cases_on `a` \\ gvs[cv_is_ArrayT_def, cv_ArrayT_type_def]
-  \\ rw[] \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`cv_fst p`
-  \\ Cases_on `p` \\ gvs[]
-);
-
-Definition getter_def:
-  getter ne kt vt =
-  let (args, ret, exp) =
-    build_getter ne kt vt 0
-  in
-    (View, F, args, [], ret, [Return $ SOME exp])
-End
-
-val () = cv_auto_trans getter_def;
-
 (* Deploy lookup deliberately synthesizes an empty payable constructor when no
    matching declaration is found.  Thus source contracts without an explicit
    __init__ use the ordinary constructor-call path; Deploy lookup on a finite
@@ -120,15 +67,15 @@ Definition lookup_function_def:
   lookup_function src_id_opt name vis (FunctionDecl fv fm nr _ id args dflts ret body :: ts) =
   (if id = name ∧ vis = fv then SOME (fm, nr, args, dflts, ret, body)
    else lookup_function src_id_opt name vis ts) ∧
-  lookup_function src_id_opt name External (VariableDecl Public mut id typ _ :: ts) =
+  lookup_function src_id_opt name External (VariableDecl (Public nr) mut id typ _ :: ts) =
   (if id = name then
     let ne = TopLevelName typ (src_id_opt, id) in
     if ¬is_ArrayT typ
-    then SOME (View, F, [], [], typ, [Return (SOME ne)])
-    else SOME $ getter ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
+    then SOME (View, nr, [], [], typ, [Return (SOME ne)])
+    else SOME $ getter nr ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
    else lookup_function src_id_opt name External ts) ∧
-  lookup_function src_id_opt name External (HashMapDecl Public _ id kt vt _ :: ts) =
-  (if id = name then SOME $ getter (TopLevelName NoneT (src_id_opt, id)) kt vt
+  lookup_function src_id_opt name External (HashMapDecl (Public nr) _ id kt vt _ :: ts) =
+  (if id = name then SOME $ getter nr (TopLevelName NoneT (src_id_opt, id)) kt vt
    else lookup_function src_id_opt name External ts) ∧
   lookup_function src_id_opt name vis (_ :: ts) =
     lookup_function src_id_opt name vis ts
@@ -892,7 +839,8 @@ Definition make_delegate_call_state_def:
        Only code lookup uses the target; the message still belongs to the proxy. *)
     let (code, accesses) =
       code_from_tx accounts accesses (tx with to := SOME target_addr) in
-    let ctxt = initial_context cx.txn.target code F empty_return_destination tx in
+    let ctxt = initial_context cx.txn.target code cx.txn.is_static
+                 empty_return_destination tx in
     let rollback =
       <| accounts := accounts; tStorage := tStorage; accesses := accesses;
          toDelete := [] |> in
@@ -928,7 +876,7 @@ Definition run_raw_call_def:
     if flags.rcf_is_delegate then
       run_delegate_call cx target_addr calldata gas accounts tStorage
     else run_ext_call cx.txn.target target_addr calldata
-      (if flags.rcf_is_static then NONE else SOME amount)
+      (if flags.rcf_is_static \/ cx.txn.is_static then NONE else SOME amount)
       gas accounts tStorage (vyper_to_tx_params cx.txn)
 End
 
@@ -1005,22 +953,50 @@ End
 
 val () = cv_auto_trans ext_call_precheck_ok_def;
 
+(* A static frame may call only without value, and every call it makes is
+   static: NONE stands for a static call (call_outcome_request,
+   make_ext_call_state). *)
+Definition frame_call_value_def:
+  frame_call_value cx value_opt =
+    if cx.txn.is_static then do
+      check (value_opt = NONE \/ value_opt = SOME 0)
+        "write in static context";
+      return NONE
+    od else return value_opt
+End
+
+val () = frame_call_value_def
+  |> SRULE [FUN_EQ_THM, COND_RATOR, ignore_bind_def, bind_def, check_def,
+            assert_def]
+  |> cv_auto_trans;
+
+Theorem frame_call_value_state:
+  frame_call_value cx value_opt st = (res, st') ==> st' = st
+Proof
+  rw[frame_call_value_def, ignore_bind_def, bind_def, check_def, assert_def,
+     return_def] >> gvs[AllCaseEqs()]
+QED
+
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects.
-   A call or staticcall takes its outcome from the external-call oracle when
-   st.outcomes is SOME, as extcall does (eval_ext_call_effects); a delegate
-   call, and any call without the oracle, runs the callee. *)
+   Every raw call, delegate or not, takes its outcome from the external-call
+   oracle when st.outcomes is SOME, as extcall does (eval_ext_call_effects);
+   without the oracle it runs the callee. *)
 Definition eval_raw_call_def:
   eval_raw_call cx flags target_addr calldata amount gas = do
     type_check
       (¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
        ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0))
       "raw_call flags/value";
+    value_opt <- frame_call_value cx
+      (if flags.rcf_is_static then NONE else SOME amount);
     outcomes <- (λst. return st.outcomes st);
     (success, returnData) <-
-      if IS_SOME outcomes ∧ ¬flags.rcf_is_delegate then do
-        (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata
-          (if flags.rcf_is_static then NONE else SOME amount);
+      if IS_SOME outcomes then do
+        (rq, outcome) <-
+          if flags.rcf_is_delegate then
+            vyperCallOutcome$take_delegate_outcome target_addr calldata value_opt
+          else vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
         vyperCallOutcome$adopt_call_outcome rq outcome;
         return (call_outcome_success outcome, call_outcome_return_data outcome)
       od else do
@@ -1070,7 +1046,9 @@ Proof
        UNCURRY, COND_RATOR,
        option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac take_call_outcome_frame >> imp_res_tac adopt_call_outcome_frame >>
+  imp_res_tac frame_call_value_state >>
+  imp_res_tac take_call_outcome_frame >> imp_res_tac take_delegate_outcome_frame >>
+  imp_res_tac adopt_call_outcome_frame >>
   gvs[evaluation_state_component_equality]
 QED
 
@@ -1181,6 +1159,7 @@ Definition eval_ext_call_def:
     accounts <- get_accounts;
     check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
           "ExtCall target has no code";
+    value_opt <- frame_call_value cx value_opt;
     returnData <- eval_ext_call_effects cx target_addr calldata value_opt
       (forwarded_gas default_evm_gas_limit gas_opt) accounts;
     case (if returnData = [] then default_opt else NONE) of
@@ -1215,10 +1194,11 @@ Definition eval_send_def:
     amount <- lift_option_type (dest_NumV amount_v) "Send not NumV";
     (* the gas operand is send's only keyword argument *)
     gas_opt <<- ext_call_kwarg EKGas [EKGas] gas_vs;
+    value_opt <- frame_call_value cx (SOME amount);
     outcomes <- (λst. return st.outcomes st);
     case outcomes of
     | SOME _ => do
-      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] value_opt;
       check (call_outcome_success outcome) "send failed";
       vyperCallOutcome$adopt_call_outcome rq outcome;
       return $ Value $ NoneV
@@ -1227,7 +1207,7 @@ Definition eval_send_def:
       accounts <- get_accounts;
       tStorage <- get_transient_storage;
       result <- lift_option
-        (run_ext_call cx.txn.target toAddr [] (SOME amount)
+        (run_ext_call cx.txn.target toAddr [] value_opt
                       (forwarded_gas 0 gas_opt)
                       accounts tStorage (vyper_to_tx_params cx.txn))
         "send run failed";
@@ -1252,67 +1232,6 @@ val () = eval_send_def
             prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
             lift_option_type_def, type_check_def, check_def, assert_def]
   |> cv_auto_trans;
-
-(* Compose local-state frames without expanding the external-call oracle. *)
-Theorem append_logs_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables) (append_logs logs)
-Proof
-  simp[state_rel_frame_def, append_logs_def, return_def]
-QED
-
-val call_locals_relation =
-  ``\s:evaluation_state t. t.scopes = s.scopes /\ t.immutables = s.immutables``;
-val call_locals_primitives =
-  state_rel_frame_locals_primitives |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-val call_locals_take =
-  state_rel_frame_locals_take |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-val call_locals_bind =
-  state_rel_frame_bind_guarded |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-
-val CALL_LOCALS_STEP = FIRST [
-  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS call_locals_primitives)),
-  MATCH_ACCEPT_TAC call_locals_take,
-  MATCH_ACCEPT_TAC append_logs_locals,
-  MATCH_MP_TAC call_locals_bind >> conj_tac,
-  gen_tac, strip_tac,
-  CHANGED_TAC (simp_tac bool_ss
-    [FORALL_PROD, LET_THM, ignore_bind_def, UNCURRY, pair_case_thm]),
-  BasicProvers.TOP_CASE_TAC];
-
-Theorem eval_ext_call_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
-    (eval_ext_call cx static skip_check sig opts vs)
-Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >>
-  rpt CALL_LOCALS_STEP
-QED
-
-Theorem eval_ext_call_preserves_non_accounts:
-  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
-Proof
-  mp_tac (REWRITE_RULE [state_rel_frame_result] eval_ext_call_locals) >> simp[]
-QED
-
-Theorem eval_send_preserves_non_accounts:
-  eval_send cx has_gas vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
-Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       get_accounts_def, update_accounts_def, get_transient_storage_def,
-       lift_option_def, update_transient_def, append_logs_def,
-       update_pending_deletions_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()]
-QED
 
 (* ===== Reentrancy Lock Helpers ===== *)
 (* Vyper's @nonreentrant uses transient storage (EIP-1153 on Cancun+).
@@ -1373,6 +1292,39 @@ End
 
 val () = cv_auto_trans next_gas_reading_def;
 
+(* sha256, ecrecover, ecadd and ecmul compile to an asserted STATICCALL of
+   a computed precompile (2, 1, 6, 7), which the EVM can fail for lack of
+   gas. With the oracle, that call's success is the next outcome's, as in
+   take_outcome; the value is still computed. *)
+Definition precompile_builtin_def[simp]:
+  precompile_builtin Sha256 = T ∧
+  precompile_builtin ECRecover = T ∧
+  precompile_builtin ECAdd = T ∧
+  precompile_builtin ECMul = T ∧
+  precompile_builtin _ = F
+End
+
+val () = cv_auto_trans precompile_builtin_def;
+
+Definition precompile_call_success_def:
+  precompile_call_success bt st =
+    if ¬precompile_builtin bt then return () st else
+    case st.outcomes of
+    | NONE => return () st
+    | SOME [] => check F "precompile failed" st
+    | SOME (outcome::rest) =>
+        check (call_outcome_success outcome) "precompile failed"
+          (st with outcomes := SOME rest)
+End
+
+val () = cv_auto_trans precompile_call_success_def;
+
+Theorem precompile_call_success_not_builtin[simp]:
+  ~precompile_builtin bt ==> precompile_call_success bt = return ()
+Proof
+  simp[FUN_EQ_THM, precompile_call_success_def]
+QED
+
 Definition is_view_mut_def[simp]:
   is_view_mut mut ⇔ mut = View ∨ mut = Pure
 End
@@ -1386,12 +1338,19 @@ Definition lock_if_nr_def:
     if nr then
       case cx.nonreentrant_slot of
       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+      | SOME slot => do
+          (* A static frame checks the lock and then fails before taking
+             it, as the compiled TLOAD, ASSERT, TSTORE does. *)
+          acquire_nonreentrant_lock cx.txn.target slot
+            (is_view \/ cx.txn.is_static);
+          if is_view then return () else check_not_static cx
+        od
     else return ()
 End
 
 val () = lock_if_nr_def
-  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator]
+  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator, ignore_bind_def,
+            bind_def]
   |> cv_auto_trans;
 
 Definition unlock_if_nr_def:
@@ -1575,6 +1534,7 @@ Definition evaluate_def:
     event <- lift_option
       (encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs)
       "Log encode event";
+    check_not_static cx;
     push_log event
   od ∧
   eval_stmt cx (AnnAssign id typ e) = do
@@ -1592,8 +1552,8 @@ Definition evaluate_def:
   od ∧
   eval_stmt cx (Assign (BaseTarget t) e) = do
     pv <- eval_expr cx e;
-    p <- eval_target_place cx t;
     v <- read_result cx pv;
+    p <- eval_target_place cx t;
     write_place cx p v
   od ∧
   eval_stmt cx (Assign (TupleTarget gs) e) = do
@@ -1705,7 +1665,9 @@ Definition evaluate_def:
     else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;
-      lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs
+      v <- lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
+      precompile_call_success bt;
+      return v
     od;
     return $ Value v
   od ∧
@@ -1807,6 +1769,7 @@ Definition evaluate_def:
     topic_vals <<- (case topics of
        TupleV vs => vs | DynArrayV vs => vs | _ => []);
     type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+    check_not_static cx;
     push_log (encode_raw_event_values cx.txn.target topic_vals data);
     return $ Value NoneV
   od ∧
@@ -1822,6 +1785,7 @@ Definition evaluate_def:
     vs <- eval_exprs cx es;
     type_check (LENGTH vs = 1) "selfdestruct args";
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+    check_not_static cx;
     accounts <- get_accounts;
     self <<- cx.txn.target;
     balance <<- (lookup_account self accounts).balance;
@@ -1923,73 +1887,57 @@ Termination
   | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,es)))))))))) => 4 * exprs_bound (remcode cx) es)`
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
-  \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
-  \\ pure_rewrite_tac [prim_recTheory.measure_def, relationTheory.inv_image_def]
+  \\ simp_tac pure_ss [prim_recTheory.measure_def, relationTheory.inv_image_def,
+                sumTheory.sum_case_def, pairTheory.pair_case_def]
   \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[custom_error_exprs_size]
-  \\ rpt (FIRST [
-    (* Custom-error keyword operands are a declaration-order permutation. *)
-    (qmatch_asmsub_rename_tac
-       `order_custom_error_args params err = SOME es`
-    \\ drule_all order_custom_error_args_exprs_bound
-    \\ gvs[]),
-    (* Blueprint operand slices are bounded by the original argument list. *)
-    (qmatch_goalsub_abbrev_tac `exprs_bound fts (TAKE n es)`
-    \\ irule LESS_EQ_LESS_TRANS
-    \\ qexists_tac `exprs_bound fts es`
-    \\ simp[exprs_bound_TAKE] \\ NO_TAC),
-    (qmatch_goalsub_abbrev_tac `exprs_bound fts (DROP n es)`
-    \\ irule LESS_EQ_LESS_TRANS
-    \\ qexists_tac `exprs_bound fts es`
-    \\ simp[exprs_bound_DROP] \\ NO_TAC),
-    (* For loop: compatible_bound case *)
-    (rename1`compatible_bound`
-    \\ gvs[compatible_bound_def, check_def, type_check_def, assert_def]
-    \\ qmatch_goalsub_abbrev_tac`(LENGTH vs) * x`
-    \\ irule LESS_EQ_LESS_TRANS
-    \\ qexists_tac`LENGTH vs + n * x + 1` \\ simp[]
-    \\ PROVE_TAC[MULT_COMM, LESS_MONO_MULT]),
-    (* Builtin: builtin_args_length_ok case *)
-    (rename1`builtin_args_length_ok`
-    \\ gvs[builtin_args_length_ok_def, check_def, type_check_def, assert_def,
-           LENGTH_EQ_NUM_compute, bound_def]),
-    (* TypeBuiltin: type_builtin_args_length_ok case *)
-    (rename1`type_builtin_args_length_ok`
-    \\ gvs[type_builtin_args_length_ok_def, check_def, type_check_def, assert_def,
-           LENGTH_EQ_NUM_compute, bound_def]),
-    (* IntCall cases *)
-    (qmatch_asmsub_rename_tac
-       `lift_option_type (lookup_callable_function _ _ _) _ _ = (INL callable,_)`
-    \\ PairCases_on `callable`
-    \\ gvs[check_def, type_check_def, assert_def]
-    \\ gvs[push_function_def, return_def]
-    \\ gvs[lift_option_def, lift_option_type_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
-           raise_def, return_def]
-    \\ gvs[remcode_def, get_module_code_def, ADELKEY_def]
-    \\ TRY (qpat_x_assum`OUTR _ _ = _`kall_tac)
-    \\ gvs[CaseEq"option"]
-    \\ simp[bound_def]
-    \\ qmatch_asmsub_rename_tac`lookup_callable_function _ fn ts = SOME (_, _, args, dflts, ret, bdy)`
-    \\ Cases_on`(dflts, bdy) = ([], [])`
+  (* Discharge each non-structural call class independently.  Selection is by
+     the bound or premise that justifies that class, rather than repeated
+     speculative simplification of every remaining call. *)
+  >>~- ([`order_custom_error_args params err = SOME es`],
+    drule_all order_custom_error_args_exprs_bound >> gvs[])
+  >>~- ([`compatible_bound`],
+    gvs[compatible_bound_def, check_def, type_check_def, assert_def]
+    >> qmatch_goalsub_abbrev_tac `(LENGTH vs) * x`
+    >> irule LESS_EQ_LESS_TRANS
+    >> qexists_tac `LENGTH vs + n * x + 1` >> simp[]
+    >> PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
+  >>~- ([`builtin_args_length_ok`],
+    gvs[builtin_args_length_ok_def, check_def, type_check_def, assert_def,
+        LENGTH_EQ_NUM_compute, bound_def])
+  >>~- ([`type_builtin_args_length_ok`],
+    gvs[type_builtin_args_length_ok_def, check_def, type_check_def, assert_def,
+        LENGTH_EQ_NUM_compute, bound_def])
+  >>~- ([`lift_option_type (lookup_callable_function _ _ _) _ _ = (INL callable,_)`],
+    PairCases_on `callable`
+    >> gvs[check_def, type_check_def, assert_def]
+    >> gvs[push_function_def, return_def]
+    >> gvs[lift_option_def, lift_option_type_def, CaseEq "option", CaseEq "prod",
+           option_CASE_rator, raise_def, return_def]
+    >> gvs[remcode_def, get_module_code_def, ADELKEY_def]
+    >> rpt (qpat_x_assum `OUTR _ _ = _` kall_tac)
+    >> gvs[CaseEq "option"]
+    >> simp[bound_def]
+    >> qmatch_asmsub_rename_tac
+         `lookup_callable_function _ fn ts = SOME (_, _, args, dflts, ret, bdy)`
+    >> Cases_on `(dflts, bdy) = ([], [])`
     >- gvs[bound_def]
-    \\ `(dflts, bdy) <> ([], [])` by (strip_tac >> gvs[])
-    \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac)
+    >> `(dflts, bdy) <> ([], [])` by (strip_tac >> gvs[])
+    >> drule_all_then (qspec_then `src_id_opt` strip_assume_tac)
          lookup_callable_function_eq_ALOOKUP_module_fns
-    \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
-    \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
-    \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
-    \\ TRY (simp[ALOOKUP_FILTER, FILTER_FILTER, Abbr`k`] \\ simp[LAMBDA_PROD]
-      \\ qmatch_goalsub_abbrev_tac`exprs_bound fts (DROP n dflts)`
-      \\ qspecl_then[`fts`,`n`,`dflts`]mp_tac exprs_bound_DROP
-      \\ simp[] \\ NO_TAC)
-    \\ pop_assum SUBST_ALL_TAC
-    \\ simp[ALOOKUP_FILTER]
-    \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
-    \\ simp[LAMBDA_PROD])
-  ])
-  \\ irule LESS_EQ_LESS_TRANS
-  \\ qexists_tac `exprs_bound (remcode cx) es`
-  \\ simp[exprs_bound_TAKE_DROP, exprs_bound_TAKE, exprs_bound_DROP, DROP_DROP_T]
-  \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
+    >> drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
+    >> qmatch_goalsub_abbrev_tac `ALOOKUP (FILTER P ls) k`
+    >> `P = \(k,v). ~MEM k cx.stk` by simp[Abbr `P`, FUN_EQ_THM, FORALL_PROD]
+    >> pop_assum SUBST_ALL_TAC
+    >> simp[ALOOKUP_FILTER]
+    >> rw[FILTER_FILTER, UNCURRY, Abbr `k`]
+    >> simp[LAMBDA_PROD]
+    >> qmatch_goalsub_abbrev_tac `exprs_bound fts (DROP n dflts)`
+    >> qspecl_then [`fts`, `n`, `dflts`] mp_tac exprs_bound_DROP
+    >> simp[])
+  (* All remaining calls consume a slice of the original operands. *)
+  >> irule LESS_EQ_LESS_TRANS
+  >> qexists_tac `exprs_bound (remcode cx) es`
+  >> simp[exprs_bound_TAKE_DROP, exprs_bound_TAKE, exprs_bound_DROP, DROP_DROP_T]
 End
 
 Theorem eval_exprs_length:
@@ -2146,6 +2094,13 @@ Definition abstract_machine_from_state_def:
 End
 
 val () = cv_auto_trans abstract_machine_from_state_def;
+
+Theorem abstract_machine_from_state_gas_obs:
+  abstract_machine_from_state srcs exps layouts (st with gas_obs := readings) =
+  abstract_machine_from_state srcs exps layouts st
+Proof
+  simp[abstract_machine_from_state_def]
+QED
 
 (* Top-level entry-points into the semantics: loading (deploying) a contract,
 * and calling its external functions *)

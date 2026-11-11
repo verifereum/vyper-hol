@@ -23,6 +23,7 @@ QED
 Theorem external_phase_packaged_entry:
   compile_internal_fn_bodies internal_fns entry_end = (r,final) /\
   shape_state entry_end /\ EVERY internal_fn_shape_ok internal_fns /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
   ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) /\
   EVERY (\d. ~compiler_label (FST d) /\
     ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks entry_end)))
@@ -50,6 +51,7 @@ QED
 Theorem external_phase_extracted_decoder_owned:
   compile_internal_fn_bodies internal_fns entry_end = (r,final) /\
   shape_state entry_end /\ EVERY internal_fn_shape_ok internal_fns /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
   ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) /\
   EVERY (\d. ~compiler_label (FST d) /\
     ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks entry_end)))
@@ -72,6 +74,7 @@ Theorem run_lowering_external_decoder_owned:
     entry_info (initial_compile_state "__entry") = ((),final) /\
   compile_internal_fn_bodies internal_fns entry_end = (r,final) /\
   shape_state entry_end /\ EVERY internal_fn_shape_ok internal_fns /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
   ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) /\
   EVERY (\d. ~compiler_label (FST d) /\
     ~MEM (FST d) (MAP (\bb. bb.bb_label) (all_blocks entry_end)))

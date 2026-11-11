@@ -1,7 +1,7 @@
 Theory abiBuiltinSource
 Ancestors
   abiBuiltinCanonicalPre abiBuiltinAllocation abiBuiltinDecodeSetup abiDecoderCoherence
-  abiDecoderTypedContract abiDecoderAllocation abiDecoderFrame valueEncoding valueEncodingProps
+  abiDecoderTypedContract abiDecoderAllocation abiDecoderFrame valueEncoding valueEncodingDefs valueEncodingProps
   vyperABI vyperTypeABI contractABI compileEnv venomState finite_map words list arithmetic
   abiBuiltinUnwrapCorrect abiBuiltinDecodeEffect abiDecoderContract abiDecoderLoop builtinAbi
   fragExec vyperContext venomExecSemantics vyperABIValid
@@ -25,6 +25,17 @@ Definition abi_builtin_decode_resources_def:
     abi_decoder_budget first last b cap
       (abi_builtin_allocate_state (abi_builtin_decode_output_site st min_size max_size) outsz s)
 End
+
+(* The decoder reads the payload, not the saved outer Bytes length word. *)
+Theorem abi_builtin_decode_resources_payload_separation:
+  abi_builtin_decode_resources st first last min_size max_size outsz cnt p d b cap s ==>
+  p + 32 + cnt <= d \/ d + outsz <= p + 32
+Proof
+  simp_tac bool_ss [abi_builtin_decode_resources_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qhdtm_x_assum `abi_footprint_disjoint` mp_tac >>
+  simp[abi_footprint_disjoint_def] >> metis_tac[]
+QED
 
 Theorem abi_builtin_source_metadata:
   abi_decoder_coherent ce env sf ty tv /\

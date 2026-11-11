@@ -7,7 +7,6 @@ Ancestors
   vyperConstEvalWitness
   livenessProofIntegrity
   vyperAccountCodehashTest
-  vyperAssignmentOrderAudit
   vyperBytesAddressConvertTest
   vyperBytesDecimalConvertTest
   vyperCallOutcomeTest
@@ -23,7 +22,7 @@ Ancestors
   vyperCreateStorageTest
   vyperCustomErrorTest
   vyperDecimalConvertTest
-  vyperDecimalMulAudit
+  vyperEqualitySemanticsTest
   vyperDecimalMulTest
   vyperDelegateRawCallTest
   vyperECPrecompileTest
@@ -62,7 +61,7 @@ Ancestors
   vyperASTSyntaxTest
   (* creation builtins and constructors *)
   vyperCreateOracleTest createOracleResultTest createSourceSizeBoundaryTest
-  vyperCreateTypingTest vyperCtorStorageAliasTest createSemanticAudit
+  vyperCreateTypingTest vyperCtorStorageAliasTest
   (* external entries: initial oracle state, defaults, headers, behavior *)
   vyperOracleInitialStateTest vyperExternalDefaultsTest vyperExternalHeadersTest
   vyperExternalEntryBehavior vyperExternalEntrySourceBehavior
@@ -72,3 +71,8 @@ Ancestors
   vyperImportedEventRegression
   (* typing of raw/system builtins, pop receivers and argument writes *)
   vyperRawSystemTypingTest vyperPopTypingTest vyperArgWriteTypingTest
+  (* ABI decode typing, constructor ABI domain *)
+  abiDecodeTypingTest ctorAbiDomainWitness
+  createSizeBoundaryTest
+  createSizeClassificationCounterexample
+  selfdestructReturnDataTest

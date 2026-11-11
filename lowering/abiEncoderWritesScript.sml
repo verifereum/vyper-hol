@@ -6,7 +6,7 @@ Ancestors
   finite_map
   valueEncodingProps
   abiDecoderContract abiDecoderDynamicLoopSetup emitHelperProps exprLoweringProps
-  emitHelper compileEnv venomState venomExecSemantics venomInst words list
+  emitHelper compileEnv loweringStateRelDefs venomState venomExecSemantics venomInst words list
 
 Theorem abi_encoder_write_observations[simp]:
   (mstore p w s).vs_call_ctx = s.vs_call_ctx /\
@@ -32,7 +32,7 @@ Theorem abi_encoder_emit_store:
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   drule inst_extends_emit_void >> strip_tac >>
-  asm_simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def,
+  asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_opcode_eqs,
     exec_write2_def, mk_inst_def, w2n_n2w] >>
   fs[fresh_vars_wrt_def, lookup_var_def, mstore_def]
 QED
@@ -48,7 +48,7 @@ Theorem abi_encoder_emit_copy:
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   drule inst_extends_emit_void >> strip_tac >>
-  asm_simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def, mk_inst_def, w2n_n2w] >>
+  asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, w2n_n2w] >>
   fs[fresh_vars_wrt_def, lookup_var_def, mcopy_def, write_memory_with_expansion_def]
 QED
 
@@ -174,6 +174,16 @@ QED
 
 (* The three post-child stores at the generated body's addresses. Operand
    facts are intentionally separate from the exact-effect premise. *)
+Theorem encoder_mstore_at[local]:
+  eval_operand a s = SOME (n2w p) /\ eval_operand b s = SOME w /\
+  p + 32 < dimword (:256) ==>
+  step_inst_base (mk_inst site MSTORE [a;b] []) s = OK (mstore p w s)
+Proof
+  rpt strip_tac >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
+  simp[exec_write2_def, w2n_n2w]
+QED
+
 Theorem encoder_dynamic_iteration_stores:
   d+32+i*h+32 < dimword (:256) /\
   dyn_p+32 < dimword (:256) /\ idx_p+32 < dimword (:256) /\
@@ -190,9 +200,8 @@ Theorem encoder_dynamic_iteration_stores:
   step_inst_base (mk_inst isite MSTORE [idx_op;next_idx_op] []) v =
     OK (mstore idx_p (n2w (i+1)) v)
 Proof
-  strip_tac >> simp[mk_inst_def] >>
-  simp[step_inst_base_opcode_eqs] >>
-  simp[exec_write2_def] >> gvs[]
+  strip_tac >>
+  gvs[] >> rpt conj_tac >> irule encoder_mstore_at >> simp[]
 QED
 
 Theorem encoder_registered_cell_initialization_and_repeat:

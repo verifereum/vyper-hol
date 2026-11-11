@@ -1,11 +1,31 @@
 (* Operational calldata primitive-word decoding companions. *)
 Theory calldataWordLeaf
 Ancestors
-  safeSequence entryDecodeProps abiDecoderClampedWord abiDecoderReservation
-  abiDecoderGuards moduleLoweringProps
+  valueEncodingDefs loweringStateRelDefs safeSequence entryDecodeProps abiDecoderClampedWord abiDecoderReservation
+  abiDecoderGuards abiDecoderRange moduleLoweringProps
   abiDecoderAllocation abiDecoderContract abiEncoder emitHelperProps
   exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps
   venomExecSemantics venomState venomInst words arithmetic list rich_list
+
+(* The calldata decoders emit no INVOKE, terminator, DLOAD or DLOADBYTES,
+   as frag_exec_mem_run_inst_seq requires. *)
+Theorem calldata_word_opcodes:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (emitted_insts st st')
+Proof
+  Cases_on `clamp` >>
+  FIRST [rename1 `IntClamp bits signed` >> Cases_on `signed`, all_tac] >>
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, compile_abi_decode_static_def,
+       compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+       compile_abi_bytes_clamp_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def, emitted_insts_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
 
 Theorem abi_decode_frame_bytes:
   abi_decode_frame d n s t /\ (q + k <= d \/ d + n <= q) ==>
@@ -22,7 +42,7 @@ Proof
 QED
 
 Theorem calldata_word_accepted_sequence:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d < dimword (:256) /\ fresh_vars_wrt st s /\
   abi_clamp_ok clamp (abi_decode_load CALLDATALOAD p s) ==>
@@ -32,7 +52,7 @@ Theorem calldata_word_accepted_sequence:
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] st = (val_op,c1)` >>
@@ -59,9 +79,9 @@ Proof
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
     (irule abi_decode_sequence_allocation_frame >>
      qexists_tac `emitted_insts st st'` >> simp[] >>
-     `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+     `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
         (DecPrimWord clamp) st = ((),st')` by
-       simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+       simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, compile_abi_decode_static_def,
             comp_bind_def, comp_ignore_bind_def] >>
      drule_all abi_decoder_clamped_word_shape >>
      simp[EVERY_MEM] >> metis_tac[]) >>
@@ -73,12 +93,12 @@ Proof
 QED
 
 Theorem calldata_word_rejected_sequence:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src s = SOME p /\ fresh_vars_wrt st s /\
   ~abi_clamp_ok clamp (abi_decode_load CALLDATALOAD p s) ==>
   ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] st = (val_op,c1)` >>
@@ -183,13 +203,13 @@ Proof
 QED
 
 Theorem calldata_word_prefix_safe:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= s.vs_alloca_next /\ fresh_vars_wrt st s ==>
   !pre i post u. emitted_insts st st' = pre ++ i::post /\
     run_inst_seq pre s = OK u ==> inst_mem_below_frontier i u
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] st = (value,c1)` >>
@@ -227,7 +247,7 @@ Proof
 QED
 
 Theorem calldata_word_accepted_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
   fresh_vars_wrt st initial /\
@@ -245,6 +265,7 @@ Proof
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st st')` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule calldata_word_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_word_prefix_safe) >>
@@ -256,7 +277,7 @@ Proof
 QED
 
 Theorem calldata_word_rejected_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
   fresh_vars_wrt st initial /\
@@ -269,6 +290,7 @@ Proof
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st st')` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule calldata_word_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_word_prefix_safe) >>
@@ -280,7 +302,7 @@ QED
 (* Operational totality: arbitrary calldata either passes the actual clamp or
    exits through the generated assertion. No source-encoding premise is used. *)
 Theorem calldata_word_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
   fresh_vars_wrt st initial ==>

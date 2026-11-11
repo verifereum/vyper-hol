@@ -3,7 +3,7 @@
    images and preservation outside the written destination range. *)
 Theory bytesCopyMemory
 Ancestors
-  bytesCopyExec bytesSnapshotMemory memoryValueDefs memoryValueFrame
+  valueEncodingDefs bytesCopyExec bytesSnapshotMemory memoryValueDefs memoryValueFrame
   abiBytestringMemory abiBytestringExec memoryReadProps valueLoadProps
   valueEncoding valueEncodingProps vyperValue vyperTyping vyperAST
   compileEnv contractABI eventTopicValueProps vfmConstants

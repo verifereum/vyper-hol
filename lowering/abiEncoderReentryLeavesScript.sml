@@ -1,11 +1,12 @@
 (* Word and fixed-copy encoders under enclosing variable freshness. *)
 Theory abiEncoderReentryLeaves
 Ancestors
-  abiEncoderInput abiEncoderBytes abiEncoderMemory abiEncoderLeafRaw
-  abiDecoderArrayHeader abiDecoderReentry abiDecoderContract abiDecoderGuards
-  abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
-  valueEncoding valueEncodingProps contractABI venomState venomExecSemantics
-  venomInst words list arithmetic ssaOperandFrame abiBytestringCode abiDecoderReentryAddress
+  loweringStateRelDefs abiDecoderRange abiEncoderLeaves abiEncoderInput abiEncoderWrites abiEncoderBytes abiEncoderBytesPrefix
+  abiEncoderMemory abiBuiltinPrefix abiDecoderArrayHeader abiDecoderDynamicLoopSetup
+  abiDecoderReentry abiDecoderContract abiDecoderGuards abiEncoder emitHelperProps
+  exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps contractABI
+  venomState venomExecSemantics venomInst words list arithmetic
+  abiEncoderLeafRaw ssaOperandFrame abiBytestringCode abiDecoderReentryAddress
 
 Theorem abi_encode_word_trace:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') ==>

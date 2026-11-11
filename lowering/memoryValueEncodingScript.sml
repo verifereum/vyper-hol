@@ -4,7 +4,7 @@
    No ABI encoder or encoder recursion is involved. *)
 Theory memoryValueEncoding
 Ancestors
-  memoryValueDefs valueEncoding vyperTyping vyperValue list alist
+  valueEncodingDefs memoryValueDefs valueEncoding vyperTyping vyperValue list alist
   arithmetic pair sorting typeValueInduction
 
 (* ===== Canonical list interfaces ===== *)

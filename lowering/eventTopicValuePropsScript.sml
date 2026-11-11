@@ -3,7 +3,7 @@
    also work when adding the header size wraps the unused data pointer. *)
 Theory eventTopicValueProps
 Ancestors
-  eventTopicExecProps eventTopicProps valueLoadProps valueEncoding valueEncodingProps compileEnv
+  valueEncodingDefs eventTopicExecProps eventTopicProps valueLoadProps valueEncoding valueEncodingProps compileEnv
   context exprLowering exprLoweringProps nameLoweringProps vyperTypeContract
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperValue vyperTyping vyperEvent
   vyperEventSoundness

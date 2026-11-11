@@ -37,10 +37,21 @@ QED
 Theorem checked_expr_event_arg_compatible:
   !env cx st cenv fty e.
     env_consistent env cx st /\ abi_struct_env_rel env.type_defs cenv.ce_struct_fields /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     well_typed_expr env e /\ event_arg_compatible fty (expr_type e) ==>
     event_arg_compatible fty (lowered_value_type cenv e)
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `e` >> fs[expr_type_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `e` >> fs[expr_type_def]
+  >~ [`Call _ cl _ _`]
+  >- (Cases_on `cl` >> gvs[lowered_value_type_def, expr_type_def] >>
+      rename1 `IntCall fid` >> PairCases_on `fid` >> fs[Once well_typed_expr_def] >>
+      first_x_assum drule >> strip_tac >>
+      gvs[event_arg_compatible_alias_def, type_widens_to_def] >>
+      metis_tac[typedCopyCompatibilityTheory.arg_type_fits_trans])
+  >~ [`Builtin _ b _`]
+  >- (Cases_on `b` >>
+      FIRST [irule concat_event_arg_compatible >> fs[Once well_typed_expr_def],
+        simp[lowered_value_type_def, expr_type_def]]) >>
   FIRST [irule literal_event_arg_compatible >> fs[Once well_typed_expr_def],
     drule_all checked_type_builtin_event_arg_compatible >> simp[],
     simp[lowered_value_type_def, expr_type_def]]
@@ -49,6 +60,7 @@ QED
 Theorem checked_exprs_event_arg_compatible:
   !args fields env cx st cenv.
     env_consistent env cx st /\ abi_struct_env_rel env.type_defs cenv.ce_struct_fields /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     well_typed_exprs env args /\ LIST_REL (\fty e. event_arg_compatible fty (expr_type e)) fields args ==>
     LIST_REL event_arg_compatible fields (MAP (lowered_value_type cenv) args)
 Proof
@@ -63,6 +75,7 @@ QED
 Theorem checked_compile_log_eval_all_types:
   !env cx st cenv fields args cs.
     env_consistent env cx st /\ abi_struct_env_rel env.type_defs cenv.ce_struct_fields /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     well_typed_exprs env args /\ LIST_REL (\fty e. event_arg_compatible fty (expr_type e)) fields args ==>
     LIST_REL event_arg_compatible fields (MAP SND (FST (compile_log_eval_all cenv args cs)))
 Proof
@@ -83,6 +96,7 @@ QED
 Theorem checked_log_compiler_argument_types:
   !env cx st cenv ret event_id args env' fields cs.
     env_consistent env cx st /\ abi_struct_env_rel env.type_defs cenv.ce_struct_fields /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     type_stmt env ret (Log event_id args) = SOME env' /\
     FLOOKUP env.event_fields event_id = SOME fields ==>
     LIST_REL event_arg_compatible (MAP (SND o FST) fields)

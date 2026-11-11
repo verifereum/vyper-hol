@@ -4,7 +4,7 @@
    Helpers bound static MemLocs below fresh and cached profile slots. *)
 Theory sourceAllocationPrivacy
 Ancestors
-  sourceMemoryFrames sourceAbiFrames sourceBufferFrames allocationGrowth localPtrsProps nameLoweringProps
+  loweringStateRelDefs sourceMemoryFrames sourceAbiFrames sourceBufferFrames allocationGrowth localPtrsProps nameLoweringProps
   abiAllocationWindows abiAllocatedWindows abiAllocationFrame memoryValueSnapshot
   compileEnv venomState venomMemDefs finite_map list pair words arithmetic
 
@@ -119,6 +119,7 @@ Theorem compile_buffer_payload_private:
     MEM cs.cs_next_id ids /\ byte_count <= capacity /\
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     abi_alloca_request_ok cs.cs_next_id capacity ss ==>
     source_memory_separated cenv scopes ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) byte_count
 Proof
@@ -147,14 +148,14 @@ Proof
   >- (MAP_EVERY qx_gen_tac [`name`, `entry`, `offset`, `region_size`] >> strip_tac >>
       qpat_x_assum `!name entry offset region_size. _`
         (qspecl_then [`name`, `entry`, `offset`, `region_size`] mp_tac) >>
-      impl_tac >- simp[] >> simp[compileEnvTheory.regions_disjoint_def]) >>
+      impl_tac >- simp[] >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   MAP_EVERY qx_gen_tac [`name`, `entry`, `p`, `region_size`, `ptr_addr`] >> strip_tac >>
   `local_region cenv scopes before name (w2n ptr_addr) region_size` by
     (simp_tac bool_ss [local_region_def] >> qexistsl_tac [`entry`, `p`, `ptr_addr`] >> simp[]) >>
   qspecl_then [`func`, `cenv`, `scopes`, `before`, `after`, `inst`, `q`, `region_base`, `capacity`,
     `name`, `w2n ptr_addr`, `region_size`] mp_tac local_ptrs_rel_growing_alloca_disjoint >>
   impl_tac >- simp[] >> DISCH_TAC >> drule_all local_ptrs_rel_value >> strip_tac >>
-  gvs[eval_operand_def, compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[eval_operand_def, loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem source_owned_allocation_private:

@@ -1,12 +1,12 @@
 (* Allocator ownership for the actual dynamic calldata shell. *)
 Theory calldataDynOwned
 Ancestors
-  calldataDynInit calldataDynStep calldataChildFrame actualAllocExec fragExecMem
+  valueEncodingDefs loweringStateRelDefs calldataDynInit calldataDynStep calldataChildFrame actualAllocExec fragExecMem
   allocaFrontierBound allocaBudgetProps abiDecoderIndexInit abiDecoderContract
   compileEnv emitHelper venomState venomInst venomExecSemantics venomMemProps venomMemDefs
   valueEncodingProps finite_map words arithmetic list rich_list
   abiDecoderIndexedAddress abiDecoderReentryAddress abiDecoderReentry
-  abiDecoderGuards abiDecoderFrame emitHelperProps exprLoweringProps abiEncoder
+  abiDecoderGuards abiDecoderRange abiDecoderFrame emitHelperProps exprLoweringProps abiEncoder
   abiDecoderExecution valueEncoding safeSequence instIdxIndep
   abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup abiDecoderArraySetupInputs
   abiDecoderLoopEmit abiDecoderCounters abiDecoderDynarrayPrefix
@@ -110,7 +110,7 @@ QED
 Finalise calldata_index_init_owned_fields
 
 Theorem calldata_array_loop_init_owned:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -233,7 +233,11 @@ Proof
   gvs[run_inst_seq_def, AllCaseEqs()] >>
   `abi_decoder_operand_live (st.cs_next_var + 1) op /\
    abi_decoder_operand_live (st.cs_next_var + 2) op` by
-    (Cases_on `op` >>
+    (Cases_on `op`
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac)
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   qpat_x_assum `step_inst_base _ s = _` mp_tac >>
@@ -257,7 +261,7 @@ QED
 (* Use the very same successful phase executions for values, safety, and
    the full old-variable frame.  In particular, NONE is preserved too. *)
 Theorem calldata_array_loop_init_safe_live:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -318,6 +322,13 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st loop_st)` by
     (asm_rewrite_tac[EVERY_APPEND] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+              i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+     (emitted_insts st loop_st)` by
+    (imp_res_tac calldata_dynarray_prefix_opcodes >>
+     imp_res_tac calldata_array_header_opcodes >>
+     imp_res_tac abi_decode_index_init_opcodes >>
+     asm_rewrite_tac[EVERY_APPEND]) >>
   reverse (Cases_on `w2n (abi_decode_load CALLDATALOAD srcword initial) <= maxn`)
   >- suspend "reject" >>
   `abi_decode_load CALLDATALOAD srcword initial =
@@ -363,7 +374,11 @@ Resume calldata_array_loop_init_safe_live[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (Cases_on `op` >>
+    (Cases_on `op`
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac)
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `eval_operand op g = eval_operand op initial` by
@@ -475,7 +490,7 @@ QED
 Finalise calldata_array_loop_init_safe_live
 
 Theorem calldata_array_loop_init_owned_live:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -629,7 +644,7 @@ QED
 
 Theorem calldata_element_pointer_repeat:
   !head data stride st ptr st' s hp dp.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') /\ eval_operand head s = SOME hp /\ eval_operand data s = SOME dp /\
   abi_decoder_operand_live st.cs_next_var head /\
   abi_decoder_operand_live st.cs_next_var data ==>
@@ -644,7 +659,7 @@ Theorem calldata_element_pointer_repeat:
     t.vs_halted = s.vs_halted /\ inst_extends st st'
 Proof
   rpt gen_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,c1)` >>
@@ -710,7 +725,7 @@ Theorem calldata_shell_operand_protection:
   abi_decoder_operand_live loop_st.cs_next_var src /\
   abi_decoder_operand_live loop_st.cs_next_var dst /\
   abi_decoder_operand_live loop_st.cs_next_var ip /\
-  abi_decode_loop_prefix ip src opc loop_st = (labels,st0) /\
+  abi_decode_loop_prefix ip src opc (Lit 0w) loop_st = (labels,st0) /\
   st0.cs_next_var <= st1.cs_next_var /\
   hiv = STRING #"%" (toString loop_st.cs_next_var) /\
   hcv = STRING #"%" (toString (loop_st.cs_next_var+1)) /\
@@ -723,8 +738,9 @@ Theorem calldata_shell_operand_protection:
 Proof
   strip_tac >>
   `st0.cs_next_var = loop_st.cs_next_var + 4` by
-    (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def] >>
+    (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
+     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def, abi_decode_position_header_zero,
+       abi_decode_position_header_delta_def] >>
      strip_tac >> gvs[]) >>
   rpt gen_tac >> disch_tac >>
   `abi_decoder_operand_live loop_st.cs_next_var op` by
@@ -739,7 +755,7 @@ Proof
 QED
 
 Theorem calldata_element_setup_static_live:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st = (ops,middle) ==>
+  abi_decode_array_element_setup ip src dst opc (Lit 0w) hi di abi_sz mem_sz st = (ops,middle) ==>
   abi_decoder_operand_live middle.cs_next_var (FST ops) /\
   abi_decoder_operand_live middle.cs_next_var (FST (SND ops)) /\
   abi_decoder_operand_live middle.cs_next_var (SND (SND ops)) /\
@@ -755,9 +771,9 @@ Theorem calldata_shell_static_producer:
   first <= loop_st.cs_next_var /\
   abi_decoder_operand_live first src /\ abi_decoder_operand_live first dst /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src opc loop_st = (labels,st0) /\
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi di middle = ((),st1) ==>
+  abi_decode_loop_prefix ip src opc (Lit 0w) loop_st = (labels,st0) /\
+  abi_decode_array_element_setup ip src dst opc (Lit 0w) hi di abi_sz mem_sz st0 = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc (Lit 0w) hi di middle = ((),st1) ==>
   abi_decoder_operand_live middle.cs_next_var (FST ops) /\
   abi_decoder_operand_live middle.cs_next_var (FST (SND ops)) /\
   abi_decoder_operand_live middle.cs_next_var (SND (SND ops)) /\
@@ -893,7 +909,8 @@ Theorem calldata_indexed_address_code_shape:
   abi_decode_indexed_address base_op idx stride st = (address,st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
     (emitted_insts st st')
 Proof
   simp[abi_decode_indexed_address_def, comp_bind_def, comp_return_def,
@@ -905,15 +922,16 @@ QED
 
 Theorem calldata_element_pointer_code_shape:
   !head data stride st ptr st'.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
     (emitted_insts st st')
 Proof
   rpt gen_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
@@ -946,7 +964,7 @@ QED
 
 Theorem calldata_element_pointer_repeat_frag_mem:
   !head data stride st ptr st' initial hp dp ctx.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) stride st =
     (ptr,st') /\ eval_operand head initial = SOME hp /\
   eval_operand data initial = SOME dp /\
   abi_decoder_operand_live st.cs_next_var head /\
@@ -1053,7 +1071,7 @@ Proof
 QED
 
 Theorem calldata_static_setup_repeat:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst opc (Lit 0w) hi di abi_sz mem_sz st = (ops,st') /\
   ~dec_info_needs_offset di /\ eval_operand ip s = SOME p /\
   mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -1074,7 +1092,7 @@ Theorem calldata_static_setup_repeat:
     t.vs_halted = s.vs_halted /\ inst_extends st st'
 Proof
   strip_tac >> drule_all abi_decode_static_element_setup_operands >> strip_tac >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_static_element_setup_phases, comp_bind_def,
     comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
@@ -1217,7 +1235,7 @@ Proof
 QED
 
 Theorem calldata_dynamic_setup_repeat:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') /\ dec_info_needs_offset di /\
   eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -1239,14 +1257,14 @@ Theorem calldata_dynamic_setup_repeat:
     t.vs_halted = s.vs_halted /\ inst_extends st st'
 Proof
   strip_tac >> drule_all abi_decode_dynamic_element_setup_counters >> strip_tac >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_dynamic_element_setup_phases,
     abi_decode_array_source_setup_def, comp_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   PairCases_on `src_ops` >> PairCases_on `head_ops` >> gvs[] >>
   pairarg_tac >> gvs[] >>
   rename1 `abi_decode_array_head_setup ip src abi_sz st = ((idx,data,head),c1)` >>
-  rename1 `compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) abi_sz c1 =
+  rename1 `compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) abi_sz c1 =
     (child_src,c2)` >>
   rename1 `abi_decode_indexed_address dst idx mem_sz c2 = (child_dst,end_st)` >>
   imp_res_tac abi_decode_array_head_setup_counters >>
@@ -1283,7 +1301,7 @@ Proof
 QED
 
 Theorem calldata_element_setup_repeat:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') /\
   eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -1311,7 +1329,7 @@ Proof
 QED
 
 Theorem calldata_element_setup_repeat_frag_mem:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,st') /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -1335,6 +1353,7 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_array_element_setup_shape >> strip_tac >>
   drule_all calldata_element_setup_repeat >> strip_tac >>
+  drule calldata_element_setup_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> asm_rewrite_tac[] >>
   simp_tac bool_ss [] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
@@ -1485,8 +1504,6 @@ Proof
   qexists_tac `ins` >> asm_rewrite_tac []
 QED
 
-(* Derived once here: rederiving it inside a tactic counts against that
-   step's time limit. *)
 Theorem calldata_owned_interval_replace_let[local] =
   GEN_ALL (SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace)
 
@@ -1550,13 +1567,13 @@ QED
 (* Exact concrete initial header boundary; H deliberately includes equality
    of absent as well as present old operands. *)
 Theorem calldata_owned_header_initial:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
   st.cs_next_id <= header_st.cs_next_id /\
   header_st.cs_next_id < end_st.cs_next_id /\
@@ -2026,7 +2043,7 @@ Proof
 QED
 
 Theorem calldata_owned_header_step:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -2743,13 +2760,13 @@ Theorem calldata_owned_header_initial_apply[local]:
       !q k. MEM (q,k) scratch ==> ?id.
         st.cs_next_id <= id /\ id < end_st.cs_next_id /\
         FLOOKUP u.vs_allocas id = SOME (q,k)) /\
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = ((hdr,body_lbl,exit_lbl),st0) /\
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = ((hdr,body_lbl,exit_lbl),st0) /\
   st.cs_next_id <= header_st.cs_next_id /\ header_st.cs_next_id < end_st.cs_next_id /\
   fn_has_code st loop_st fn /\ fn_has_code loop_st st0 fn /\
   eval_operand src initial = SOME srcword /\
@@ -2817,7 +2834,7 @@ Theorem calldata_owned_header_step_apply[local]:
       !q k. MEM (q,k) scratch ==> ?id.
         st.cs_next_id <= id /\ id < end_st.cs_next_id /\
         FLOOKUP u.vs_allocas id = SOME (q,k)) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -2999,17 +3016,17 @@ Proof
 QED
 
 Theorem calldata_nonbulk_owned:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -3191,10 +3208,10 @@ Proof
      conj_tac >- first_assum ACCEPT_TAC >>
      qpat_assum `Abbrev (H = _)`
        (irule_at (Pat `H = _`) o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`
-       (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`)) >>
-     qpat_assum `abi_decode_loop_prefix _ _ _ _ = _`
-       (irule_at (Pat `abi_decode_loop_prefix _ _ _ _ = _`)) >>
+     qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
+       (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
+     qpat_assum `abi_decode_loop_prefix _ _ _ _ _ = _`
+       (irule_at (Pat `abi_decode_loop_prefix _ _ _ _ _ = _`)) >>
      qpat_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _`
        (irule_at (Pat `abi_decode_dynarray_prefix _ _ _ _ _ _ = _`)) >>
      qexists_tac `tv` >> rpt conj_tac >>
@@ -3219,8 +3236,8 @@ Proof
      conj_tac >- simp[] >>
      qpat_assum `Abbrev (H = _)`
        (irule_at (Pat `H = _`) o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`
-       (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`)) >>
+     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`
+       (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)) >>
      qpat_assum `lookup_block hdr _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`
        (irule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`)) >>
      qpat_assum `lookup_block st1.cs_current_bb _ = _`
@@ -3616,6 +3633,7 @@ Proof
        fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
      simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
      simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+  drule calldata_array_header_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> fs[inst_extends_def] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_array_header_repeat_prefix_safe) >>
@@ -3641,7 +3659,7 @@ Proof
 QED
 
 Theorem calldata_array_loop_init_repeat_safe:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -3701,6 +3719,13 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st loop_st)` by
     (asm_rewrite_tac[EVERY_APPEND] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+              i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+     (emitted_insts st loop_st)` by
+    (imp_res_tac calldata_dynarray_prefix_opcodes >>
+     imp_res_tac calldata_array_header_opcodes >>
+     imp_res_tac abi_decode_index_init_opcodes >>
+     asm_rewrite_tac[EVERY_APPEND]) >>
   reverse (Cases_on `w2n (abi_decode_load CALLDATALOAD srcword initial) <= maxn`)
   >- suspend "reject" >>
   drule_all calldata_count_guard_repeat_sequence >> strip_tac >>
@@ -3761,9 +3786,8 @@ Resume calldata_array_loop_init_repeat_safe[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (Cases_on `op` >>
-     gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
-     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+    (conj_tac >> irule abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> simp[]) >>
   `eval_operand op h = eval_operand op initial` by metis_tac[] >>
   drule_all calldata_index_init_live_frame >> simp[]
 QED
@@ -3851,13 +3875,13 @@ QED
 Finalise calldata_array_loop_init_repeat_safe
 
 Theorem calldata_owned_header_initial_repeat:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
   st.cs_next_id <= header_st.cs_next_id /\
   header_st.cs_next_id < end_st.cs_next_id /\
@@ -4060,10 +4084,11 @@ QED
 
 Finalise calldata_owned_header_initial_repeat
 
+Theorem calldata_owned_header_initial_repeat_simp[local] = SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat
 
 (* Composition from the owned header boundary, independently of register freshness. *)
 Theorem calldata_owned_after_initial_repeat[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -4272,8 +4297,8 @@ Proof
      conj_tac >- simp[] >>
      qpat_assum `Abbrev (H = _)`
        (irule_at (Pat `H = _`) o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`
-       (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`)) >>
+     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`
+       (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)) >>
      qpat_assum `lookup_block hdr _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`
        (irule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`)) >>
      qpat_assum `lookup_block st1.cs_current_bb _ = _`
@@ -4387,17 +4412,17 @@ QED
 Finalise calldata_owned_after_initial_repeat
 
 Theorem calldata_nonbulk_owned_repeat:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -4553,8 +4578,8 @@ Proof
     Abbr `bufsize`, Abbr `nelts`] >>
   BETA_TAC >>
   irule calldata_owned_after_initial_repeat >>
-  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`
-    (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`)) >>
+  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`
+    (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qpat_assum `lookup_block hdr _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`
     (irule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`)) >>
   qpat_assum `lookup_block st1.cs_current_bb _ = _`
@@ -4562,13 +4587,13 @@ Proof
   qpat_assum `lookup_block exit_lbl _ = _`
     (irule_at (Pat `lookup_block exit_lbl _ = _`)) >>
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
-  >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
-  irule (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat) >>
-  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`
-    (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`)) >>
-  qpat_assum `abi_decode_loop_prefix _ _ _ _ = _`
-    (irule_at (Pat `abi_decode_loop_prefix _ _ _ _ = _`)) >>
+  rpt conj_tac >>
+  FIRST [first_assum (ACCEPT_TAC o BETA_RULE), simp_tac bool_ss []] >>
+  irule calldata_owned_header_initial_repeat_simp >>
+  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
+    (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
+  qpat_assum `abi_decode_loop_prefix _ _ _ _ _ = _`
+    (irule_at (Pat `abi_decode_loop_prefix _ _ _ _ _ = _`)) >>
   qpat_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_dynarray_prefix _ _ _ _ _ _ = _`)) >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []] >>
@@ -4645,7 +4670,7 @@ Proof
 QED
 
 Theorem calldata_array_loop_init_repeat_safe_mod:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
@@ -4691,10 +4716,11 @@ Proof
     (qpat_assum `abi_decode_dynarray_prefix _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_dynarray_prefix_def, comp_bind_def,
         calldata_count_guard_mod_limit]) >>
-  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w)
+  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w)
      (maxn MOD dimword (:256)) abi_sz st = ((ip,cnt),loop_st)` by
-    (qpat_assum `abi_decode_array_loop_init _ _ _ _ maxn _ _ = _` mp_tac >>
+    (qpat_assum `abi_decode_array_loop_init _ _ _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+        abi_decode_dynarray_position_prefix_def, compile_abi_dec_addr_def,
         comp_bind_def, comp_ignore_bind_def, calldata_count_guard_mod_limit]) >>
   `maxn MOD dimword (:256) < dimword (:256)` by simp[] >>
   drule_all calldata_array_loop_init_repeat_safe >>
@@ -4894,7 +4920,7 @@ QED
    case the old step can use the observed count as its capacity without
    changing any footprint, destination extent, or child obligation. *)
 Theorem calldata_owned_header_step_observed:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -5052,13 +5078,13 @@ Proof
 QED
 
 Theorem calldata_owned_header_initial_repeat_observed:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
   st.cs_next_id <= header_st.cs_next_id /\
   header_st.cs_next_id < end_st.cs_next_id /\
@@ -5137,10 +5163,11 @@ Proof
     (qpat_assum `abi_decode_dynarray_prefix _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_dynarray_prefix_def, comp_bind_def,
         calldata_count_guard_mod_limit]) >>
-  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w)
+  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w)
      (maxn MOD dimword (:256)) abi_sz st = ((ip,cnt),loop_st)` by
-    (qpat_assum `abi_decode_array_loop_init _ _ _ _ maxn _ _ = _` mp_tac >>
+    (qpat_assum `abi_decode_array_loop_init _ _ _ _ _ maxn _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+        abi_decode_dynarray_position_prefix_def, compile_abi_dec_addr_def,
         comp_bind_def, comp_ignore_bind_def, calldata_count_guard_mod_limit]) >>
   `maxn MOD dimword (:256) < dimword (:256)` by simp[] >>
   mp_tac (Q.INST [`maxn` |-> `maxn MOD dimword (:256)`]
@@ -5156,6 +5183,8 @@ Proof
      disch_then (ACCEPT_TAC o CONJUNCT2)) >>
   disj2_tac >> qexists_tac `u` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+Theorem calldata_owned_header_initial_repeat_observed_simp[local] = SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat_observed
 
 Theorem calldata_owned_header_step_apply_observed[local]:
   Own = (\lo hi s. !id q k.
@@ -5195,7 +5224,7 @@ Theorem calldata_owned_header_step_apply_observed[local]:
       !q k. MEM (q,k) scratch ==> ?id.
         st.cs_next_id <= id /\ id < end_st.cs_next_id /\
         FLOOKUP u.vs_allocas id = SOME (q,k)) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -5344,7 +5373,7 @@ Proof
 QED
 
 Theorem calldata_owned_after_initial_repeat_observed[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   fn_has_code st0 middle fn /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -5553,8 +5582,8 @@ Proof
      conj_tac >- simp[] >>
      qpat_assum `Abbrev (H = _)`
        (irule_at (Pat `H = _`) o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`
-       (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`)) >>
+     qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`
+       (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)) >>
      qpat_assum `lookup_block hdr _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`
        (irule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`)) >>
      qpat_assum `lookup_block st1.cs_current_bb _ = _`
@@ -5668,17 +5697,17 @@ QED
 Finalise calldata_owned_after_initial_repeat_observed
 
 Theorem calldata_nonbulk_owned_repeat_observed:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
@@ -5834,8 +5863,8 @@ Proof
     Abbr `bufsize`, Abbr `nelts`] >>
   BETA_TAC >>
   irule calldata_owned_after_initial_repeat_observed >>
-  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`
-    (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`)) >>
+  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`
+    (irule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qpat_assum `lookup_block hdr _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`
     (irule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := abi_decode_header_insts _ _ _ _ _ _ _ _ _ _|>`)) >>
   qpat_assum `lookup_block st1.cs_current_bb _ = _`
@@ -5845,11 +5874,11 @@ Proof
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
   >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
-  irule (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat_observed) >>
-  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`
-    (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`)) >>
-  qpat_assum `abi_decode_loop_prefix _ _ _ _ = _`
-    (irule_at (Pat `abi_decode_loop_prefix _ _ _ _ = _`)) >>
+  irule calldata_owned_header_initial_repeat_observed_simp >>
+  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
+    (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
+  qpat_assum `abi_decode_loop_prefix _ _ _ _ _ = _`
+    (irule_at (Pat `abi_decode_loop_prefix _ _ _ _ _ = _`)) >>
   qpat_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_dynarray_prefix _ _ _ _ _ _ = _`)) >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []] >>

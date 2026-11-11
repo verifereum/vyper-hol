@@ -2,7 +2,7 @@
    The slot is explicit: callers must establish source/compiled slot agreement. *)
 Theory nonreentrantEquiv
 Ancestors
-  transientLockProps transientLockFrameProps
+  loweringStateRelDefs transientLockProps transientLockFrameProps
   accountsRelProps vyperStorageLayoutSafety
   emitHelperProps exprLoweringProps context compileEnv
   venomExecSemantics venomState
@@ -117,6 +117,7 @@ Theorem compile_nonreentrant_lock_source_correct:
     state_rel func cenv cx vs' ss'
 Proof
   strip_tac >>
+  `~ss.vs_call_ctx.cc_static` by fs[state_rel_def] >>
   `storage_read_live cx T (vs.tStorage cx.txn.target) (n2w key)
      (BaseTV (UintT 256))` by
     (irule nonreentrant_slot_read_live >> simp[]) >>
@@ -161,7 +162,8 @@ Proof
   Cases_on `is_view` >> strip_tac
   >- gvs[compile_nonreentrant_unlock_transient_view, emitted_insts_def,
          run_inst_seq_def, vyperStateTheory.return_def] >>
-  drule compile_nonreentrant_unlock_transient_correct >> strip_tac >>
+  `~ss.vs_call_ctx.cc_static` by fs[state_rel_def] >>
+  drule_all compile_nonreentrant_unlock_transient_correct >> strip_tac >>
   simp[release_nonreentrant_lock_execution] >>
   irule state_rel_transient_update >> simp[] >>
   metis_tac[storage_dead_update_zero]

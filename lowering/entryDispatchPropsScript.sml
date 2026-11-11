@@ -28,7 +28,7 @@ Theory entryDispatchProps
 Ancestors
   list rich_list words
   moduleLoweringProps selectorDispatch compileVyper vyperInterpreter
-  vyperTypeBytesCrypto contractABI moduleLowering compileEnv fragExec
+  vyperTypeBytesCrypto contractABI moduleLowering compileEnv loweringStateRelDefs fragExec
   emitHelper emitHelperProps venomState
 Libs
   wordsLib
@@ -130,8 +130,8 @@ Theorem lookup_function_external_mem:
     lookup_function src name External tops =
       SOME (mut, nr, args, dflts, ret, body) /\
     name <> "__default__" /\
-    (!mut' typ x. ~MEM (VariableDecl Public mut' name typ x) tops) /\
-    (!b kt vt x. ~MEM (HashMapDecl Public b name kt vt x) tops) ==>
+    (!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
+    (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops) ==>
     ?rr. MEM (mut, nr, rr, name, args, dflts, ret, body)
            (FST (classify_functions tops))
 Proof
@@ -159,8 +159,8 @@ Theorem linear_dispatch_selects_function:
     lookup_function NONE name External tops =
       SOME (mut, nr, args, dflts, ret, body) /\
     name <> "__default__" /\
-    (!mut' typ x. ~MEM (VariableDecl Public mut' name typ x) tops) /\
-    (!b kt vt x. ~MEM (HashMapDecl Public b name kt vt x) tops) /\
+    (!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
+    (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops) /\
     ALL_DISTINCT
       (MAP FST (build_selectors (type_env tops)
                   (FST (classify_functions tops)))) /\
@@ -211,8 +211,8 @@ QED
    name shadows it. *)
 Theorem lookup_function_default:
   !tops src.
-    (!mut typ x. ~MEM (VariableDecl Public mut "__default__" typ x) tops) /\
-    (!b kt vt x. ~MEM (HashMapDecl Public b "__default__" kt vt x) tops) ==>
+    (!nr' mut typ x. ~MEM (VariableDecl (Public nr') mut "__default__" typ x) tops) /\
+    (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b "__default__" kt vt x) tops) ==>
     lookup_function src "__default__" External tops =
     OPTION_MAP (\(mut, nr, rr, fname, args, dflts, ret, fbody).
                   (mut, nr, args, dflts, ret, fbody))
@@ -240,8 +240,8 @@ QED
 Theorem fallback_package_lookup:
   !tops src target ut nkm exts ints fb ctor.
     classify_functions tops = (exts, ints, fb, ctor) /\
-    (!mut typ x. ~MEM (VariableDecl Public mut "__default__" typ x) tops) /\
-    (!b kt vt x. ~MEM (HashMapDecl Public b "__default__" kt vt x) tops) ==>
+    (!nr' mut typ x. ~MEM (VariableDecl (Public nr') mut "__default__" typ x) tops) /\
+    (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b "__default__" kt vt x) tops) ==>
     case set_fallback_package_target target
            (package_fallback_fn tops ut nkm fb) of
       NONE => vyperInterpreter$lookup_function src "__default__" External tops = NONE
@@ -305,7 +305,7 @@ Proof
   simp[venomInstTheory.mk_inst_def] >>
   simp[exprLoweringPropsTheory.run_inst_seq_def,
        venomExecSemanticsTheory.step_inst_base_opcode_eqs,
-       venomExecSemanticsTheory.exec_read0_def,
+       venomExecSemanticsTheory.exec_read0_def, venomExecSemanticsTheory.exec_gas_def,
        venomExecSemanticsTheory.exec_pure1_def,
        venomInstTheory.mk_inst_def, eval_operand_def,
        lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>

@@ -3,7 +3,7 @@
    Helpers expose words through typed memory so the existing frames apply. *)
 Theory typedDynLoopMemory
 Ancestors
-  dynCopyPrefixExec typedSArrayDynInvariant typedArrayCopyMemory
+  valueEncodingDefs dynCopyPrefixExec typedSArrayDynInvariant typedArrayCopyMemory
   memoryValueDefs memoryValueFrame valueEncoding valueEncodingProps
   vyperValue venomState list words arithmetic integer_word
 

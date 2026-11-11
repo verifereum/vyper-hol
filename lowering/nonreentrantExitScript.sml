@@ -13,12 +13,12 @@ QED
 
 Theorem literal_tstore_step[local]:
   !id key s.
+    ~s.vs_call_ctx.cc_static ==>
     step_inst_base (mk_inst id TSTORE [Lit key; Lit 0w] []) s =
     OK (tstore key 0w s)
 Proof
   rpt gen_tac >> simp[mk_inst_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[exec_write2_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, eval_operands_def]
 QED
 
 Theorem empty_frag_mem_indexed[local]:
@@ -39,6 +39,7 @@ Theorem optional_unlock_frag_mem:
     (if nr then compile_nonreentrant_unlock nkey ut iv else comp_return ())
       st = ((), st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!s. P s ==>
          Q ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
               vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
@@ -47,6 +48,7 @@ Proof
   rpt strip_tac >> drule_all optional_unlock_code >> strip_tac >>
   Cases_on `nr /\ ~iv`
   >- (gvs[] >> irule frag_exec_mem_step >> simp[] >>
-      simp[literal_tstore_mem_safe, literal_tstore_step, is_terminator_def]) >>
+      rpt strip_tac >> res_tac >>
+      gvs[literal_tstore_mem_safe, literal_tstore_step, is_terminator_def]) >>
   gvs[] >> irule empty_frag_mem_indexed >> simp[]
 QED

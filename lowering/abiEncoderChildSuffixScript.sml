@@ -4,7 +4,7 @@ Ancestors
   abiEncoderChildCode abiEncoderWrites abiEncoderReentryLeaves abiBuiltinPrefix
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderFrame abiDecoderGuards abiDecoderContract
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps
-  venomState venomExecSemantics venomInst words list arithmetic
+  venomState venomExecSemantics venomInst words list arithmetic abiDecoderRange
 
 Theorem abi_encoder_store_footprint:
   MEM (p,32) fp ==> abi_decode_footprint_frame fp s (mstore p w s)

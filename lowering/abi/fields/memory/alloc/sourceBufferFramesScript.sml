@@ -64,6 +64,7 @@ Theorem compile_buffer_source_separated:
     abi_alloca_request_ok cs.cs_next_id capacity ss /\ ss.vs_alloca_next < dimword(:256) /\
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     (!name entry offset region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (MemLoc offset region_size) ==>
       offset + type_memory_size entry.type <= w2n (memory_snapshot_addr cs.cs_next_id ss)) ==>
@@ -94,11 +95,11 @@ Proof
   >- (MAP_EVERY qx_gen_tac [`name`, `entry`, `offset`, `region_size`] >> strip_tac >>
       qpat_x_assum `!name entry offset region_size. _`
         (qspecl_then [`name`, `entry`, `offset`, `region_size`] mp_tac) >>
-      impl_tac >- simp[] >> simp_tac bool_ss [compileEnvTheory.regions_disjoint_def] >> strip_tac >> decide_tac) >>
+      impl_tac >- simp[] >> simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >> decide_tac) >>
   MAP_EVERY qx_gen_tac [`name`, `entry`, `p`, `region_size`, `ptr_addr`] >> strip_tac >>
   qpat_x_assum `!name entry p region_size ptr_addr. _`
     (qspecl_then [`name`, `entry`, `p`, `region_size`, `ptr_addr`] mp_tac) >>
-  impl_tac >- simp[] >> simp_tac bool_ss [compileEnvTheory.regions_disjoint_def] >> strip_tac >> decide_tac
+  impl_tac >- simp[] >> simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >> decide_tac
 QED
 
 Theorem source_writes_separated_prefix:
@@ -118,6 +119,7 @@ Theorem compile_buffer_source_state:
     abi_alloca_request_ok cs.cs_next_id capacity ss /\ ss.vs_alloca_next + capacity < dimword(:256) /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     (!name entry offset region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (MemLoc offset region_size) ==>
       offset + type_memory_size entry.type <= w2n (memory_snapshot_addr cs.cs_next_id ss)) /\

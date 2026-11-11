@@ -35,12 +35,12 @@
  *)
 Theory entryDecodeStaticProps
 Ancestors
-  arithmetic list rich_list words sorting alist
+  exprSimProps arithmetic list rich_list words sorting alist
   abiDecodeStaticProps entryDecodeProps entryDispatchProps moduleLoweringProps
-  valueEncodingProofs valueEncodingProps valueEncoding
+  valueEncodingProofs valueEncodingProps valueEncoding valueEncodingDefs
   vyperABI vyperABIRoundtrip vyperTyping vyperTypeDefaults vyperTypeABI
   vyperValue vfmTypes
-  compileEnv exprLowering moduleLowering selectorDispatch
+  compileEnv loweringStateRelDefs exprLowering moduleLowering selectorDispatch
   emitHelperProps fragExec venomState memoryValueDefs
 Libs
   wordsLib
@@ -178,10 +178,8 @@ Theorem word_val_in_memory_complete:
 Proof
   rpt gen_tac >> strip_tac >>
   `(?bt. tv = BaseTV bt) \/ (?n. tv = FlagTV n)` by
-    (qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
-     qpat_x_assum `is_word_type _` mp_tac >>
-     Cases_on `ty` >> simp[is_word_type_def, evaluate_type_def] >>
-     rw[AllCaseEqs()]) >>
+    (drule_all loweringSliceTheory.evaluate_word_memory_type >>
+     simp[loweringSliceTheory.word_memory_type_def]) >>
   gvs[memory_value_rel_def]
 QED
 
@@ -613,7 +611,7 @@ Theorem compile_abi_decode_static_buf_correct:
   !env ty tv v av info dst src st st' ctx s0 p a.
     abi_dec_plan env ty info /\ evaluate_type env ty = SOME tv /\
     value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st =
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info st =
       ((), st') /\
     eval_operand dst s0 = SOME p /\ eval_operand src s0 = SOME a /\
     fresh_vars_wrt st s0 /\
@@ -682,7 +680,7 @@ Theorem compile_decode_static_arg_phases:
     var_location_decode_operand loc = SOME dst ==>
     ?src st1.
       emit_op ADD [Lit 4w; Lit (n2w (off - 4))] st = (src, st1) /\
-      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st1 =
+      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info st1 =
         ((), st')
 Proof
   rpt strip_tac >>

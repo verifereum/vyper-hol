@@ -7,7 +7,7 @@
 Theory valueEncodingProofs
 Ancestors
   list rich_list venomMemProofs
-  valueEncoding vyperStorage vyperValue venomState venomExecSemantics
+  valueEncoding valueEncodingDefs vyperStorage vyperValue venomState venomExecSemantics
   vyperABI vyperABIRoundtrip vyperTyping vyperTypeABI contractABI
 Libs
   blastLib intLib
@@ -426,8 +426,7 @@ QED
    The byte-list surgery is: mstore writes TAKE off expanded ++ word_to_bytes w T ++ DROP (off+32) expanded,
    then mem_word_at reads TAKE 32 (DROP off result ++ REPLICATE 32 0w).
    Need to show DROP off (TAKE off X ++ bytes ++ tail) = bytes ++ tail,
-   then TAKE 32 (bytes ++ ...) = bytes when LENGTH bytes = 32.
-   See lowerDloadProofsScript.sml:write_then_mload for a similar local proof. *)
+   then TAKE 32 (bytes ++ ...) = bytes when LENGTH bytes = 32. *)
 Theorem drop_take_append[local]:
   ∀ off (xs : α list) ys.
     off ≤ LENGTH xs ⇒ DROP off (TAKE off xs ++ ys) = ys

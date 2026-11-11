@@ -13,6 +13,7 @@ Ancestors
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   venomWf venomInst venomEffects venomMemDefs basePtrProps
   list rich_list indexedLists
+  passTransform
 Libs
   pairLib BasicProvers
 
@@ -25,6 +26,7 @@ Theorem copy_elision_function_correct:
     fn_inst_wf fn /\
     wf_ssa fn /\
     s.vs_inst_idx = 0 /\
+    ~s.vs_call_ctx.cc_static /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_assigns_sound dfg s /\
     bp_ptr_sound bp s /\
@@ -53,6 +55,11 @@ Theorem copy_elision_function_correct:
        allocas_non_overlapping (s1 with vs_inst_idx := 0) /\
        allocas_in_word (s1 with vs_inst_idx := 0) /\
        bp_ptrs_bounded bp fn (s1 with vs_inst_idx := 0)) /\
+    (!bb inst sp.
+       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       sp <> AddrSp_Memory ==>
+       (bp_get_read_location bp inst sp).ml_alloca = NONE /\
+       (bp_get_write_location bp inst sp).ml_alloca = NONE) /\
     LENGTH s.vs_memory < dimword (:256) ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})

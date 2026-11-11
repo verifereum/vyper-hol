@@ -1,0 +1,71 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5332
+Status: merged (67606b378fe6878099e39ff41383bee416bf79bd)
+Scope: immutable stores; storage and transient stores are ported separately.
+
+diff --git a/vyper/codegen_venom/context.py b/vyper/codegen_venom/context.py
+index 064af344..f36c4998 100644
+--- a/vyper/codegen_venom/context.py
++++ b/vyper/codegen_venom/context.py
+@@ -756,7 +756,7 @@ class VenomCodegenContext:
+         self,
+         src_addr: IROperand,
+         dst_addr: IROperand,
+-        word_count: int,
++        word_count: int | IROperand,
+         load_fn,
+         store_fn,
+         src_scale: int,
+@@ -783,7 +783,9 @@ class VenomCodegenContext:
+ 
+         b.append_block(cond_block)
+         b.set_block(cond_block)
+-        done = b.eq(counter, IRLiteral(word_count))
++        if isinstance(word_count, int):
++            word_count = IRLiteral(word_count)
++        done = b.eq(counter, word_count)
+         cond_finish = b.current_block
+ 
+         b.append_block(body_block)
+@@ -810,6 +812,13 @@ class VenomCodegenContext:
+         b.append_block(exit_block)
+         b.set_block(exit_block)
+ 
++    def _bytestring_word_count(self, src: IROperand) -> IROperand:
++        """The words a bytestring at memory `src` occupies: its length word
++        and the words holding its bytes, 1 + ceil(length / 32)."""
++        assert isinstance(src, IRVariable)
++        b = self.builder
++        return b.shr(IRLiteral(5), b.add(b.mload(src), IRLiteral(63)))
++
+     def _load_storage_to_memory(self, slot: IROperand, buf: IROperand, word_count: int) -> None:
+         """Load multi-word storage value to memory buffer."""
+         self._word_copy_loop(
+diff --git a/vyper/codegen_venom/stmt.py b/vyper/codegen_venom/stmt.py
+index 916871c1..9240363b 100644
+--- a/vyper/codegen_venom/stmt.py
++++ b/vyper/codegen_venom/stmt.py
+@@ -187,8 +187,22 @@ class Stmt:
+                 )
+                 store_fn(src, dst_ptr.operand, typ)
+         elif loc == DataLocation.IMMUTABLES:
+-            # Immutables in constructor
+-            if typ.memory_bytes_required <= 32:
++            # Immutables in constructor.
++            if isinstance(typ, _BytestringT):
++                def store_immutable_word(offset, val):
++                    self.ctx.store_word(offset, val, DataLocation.IMMUTABLES)
++
++                self.ctx._word_copy_loop(
++                    src,
++                    dst_ptr.operand,
++                    self.ctx._bytestring_word_count(src),
++                    self.builder.mload,
++                    store_immutable_word,
++                    32,
++                    32,
++                    "m2i",
++                )
++            elif typ.memory_bytes_required <= 32:
+                 assert isinstance(src, IRVariable)
+                 val = self.builder.mload(src)
+                 self.ctx.ptr_store(dst_ptr, val)

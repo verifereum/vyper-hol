@@ -2,7 +2,7 @@
    allocation and copy. Zero-size aggregates emit only the allocation. *)
 Theory memoryValueSnapshot
 Ancestors
-  memoryValueRelocation memoryValueDefs valueEncoding
+  valueEncodingDefs memoryValueRelocation memoryValueDefs valueEncoding
   stmtLowering exprLowering context compileEnv exprLoweringProps emitHelper emitHelperProps
   ssaOperandFrame fragBlockPath fragExec instIdxIndep memoryReadProps
   venomExecSemantics venomState venomInst

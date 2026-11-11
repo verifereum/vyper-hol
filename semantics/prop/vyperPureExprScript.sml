@@ -3,9 +3,20 @@ Ancestors
   vyperExprEffects vyperMisc vyperContext vyperState vyperStorageBackend
   vyperInterpreter vyperLookup vyperStatePreservation vyperPlaceFrames
 
-(* Re-export the shared syntax definition for existing proof clients.
-   msg.gas is excluded there because it consumes a gas reading. *)
-Theorem pure_expr_def = vyperExprEffectsTheory.pure_expr_def;
+(* Pure expressions: expressions that do not modify state.  msg.gas is not
+   pure: it consumes a gas reading; nor are the precompile builtins, which
+   consume a call outcome.  The shared syntax definition spells the
+   precompiles out; restate that through precompile_builtin. *)
+Theorem precompile_builtin_exclusion[local]:
+  !bt P. bt <> Sha256 /\ bt <> ECRecover /\ bt <> ECAdd /\ bt <> ECMul /\ P <=>
+         ~precompile_builtin bt /\ P
+Proof
+  Cases >> simp[]
+QED
+
+Theorem pure_expr_def =
+  REWRITE_RULE [precompile_builtin_exclusion]
+    vyperExprEffectsTheory.pure_expr_def;
 
 (* Specialize the canonical evaluator induction theorem. Only expression
    and expression-list evaluation carry whole-state preservation obligations. *)
@@ -177,7 +188,8 @@ Proof
   Cases_on `bt = Len`
   >- (rpt strip_tac >>
       gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
-          type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+          type_check_def, assert_def, return_def, raise_def,
+          precompile_call_success_def, precompile_builtin_def, AllCaseEqs()] >>
       gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
       imp_res_tac result_array_length_state >> gvs[] >>
       `pure_expr (HD es)` by
@@ -186,7 +198,8 @@ Proof
   rpt strip_tac >>
   gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
       type_check_def, assert_def, return_def, raise_def,
-      get_accounts_def, lift_sum_def, AllCaseEqs()] >>
+      get_accounts_def, lift_sum_def, precompile_call_success_def,
+      AllCaseEqs()] >>
   gvs[get_accounts_def, ETA_THM, return_def, raise_def,
       sum_CASE_rator, AllCaseEqs()] >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn` >>

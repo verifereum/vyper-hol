@@ -35,7 +35,11 @@ Definition call_external_body_def:
    let lock_action = if nr then
      case cx.nonreentrant_slot of
      | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             (is_view \/ cx.txn.is_static);
+           if is_view then return () else check_not_static cx
+         od
      else return () in
    let unlock_action = if nr ∧ ¬is_view then
      case cx.nonreentrant_slot of

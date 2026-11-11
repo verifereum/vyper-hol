@@ -35,11 +35,19 @@
 Theory valueEncodingProps
 Ancestors
   list rich_list
-  valueEncoding valueEncodingProofs
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperValue
 Libs
   wordsLib
 
-(* ===== val_to_w256 agrees with encode_base_to_slot ===== *)
+Theorem type_memory_size_slots:
+  (!tv. type_memory_size tv = 32 * type_slot_size tv) /\
+  (!tvs. type_memory_size_list tvs = 32 * type_slot_size_list tvs) /\
+  (!fields. type_memory_size_fields fields = 32 * type_slot_size_fields fields)
+Proof
+  ho_match_mp_tac type_memory_size_ind >>
+  simp[type_memory_size_def, type_slot_size_def,
+       arithmeticTheory.LEFT_ADD_DISTRIB]
+QED
 
 Theorem val_to_w256_encode_agree:
   ∀ v tv w.

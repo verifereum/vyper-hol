@@ -1,7 +1,7 @@
 Theory abiTupleProps
 Ancestors
   exprLowering exprLoweringProps contextProps emitHelperProps
-  valueEncoding valueEncodingProps compileEnv context venomExecSemantics words
+  valueEncoding valueEncodingDefs valueEncodingProps compileEnv context venomExecSemantics words
 Libs
   wordsLib
 
