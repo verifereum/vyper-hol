@@ -80,3 +80,57 @@ Proof
   irule intcall_decoded_entry >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem intcall_void_invoke_landing:
+  !tops ctx ce cx func t lbl ops argv callee setup si sb.
+    body_inv tops ctx ce cx /\ MEM callee ctx.ctx_functions /\
+    ~t.vs_halted /\
+    emit_void INVOKE (Label lbl :: ops) si = ((),sb) /\
+    fn_has_code si sb func /\
+    t.vs_current_bb = si.cs_current_bb /\
+    t.vs_inst_idx = LENGTH si.cs_current_insts /\
+    lookup_function lbl ctx.ctx_functions = SOME callee /\
+    eval_operands ops t = SOME argv /\
+    setup_callee callee argv t = SOME setup ==>
+    (?bb inst. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      decode_invoke inst = SOME (lbl,ops)) /\
+    gas_invoke_entry (ctx,func) t callee setup
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all emit_void_invoke_instruction >> strip_tac >>
+  conj_tac
+  >- (goal_assum (drule_at Any) >> simp[decode_invoke_def, mk_inst_def]) >>
+  `decode_invoke (mk_inst si.cs_next_id INVOKE (Label lbl :: ops) []) =
+     SOME (lbl,ops)` by simp[decode_invoke_def, mk_inst_def] >>
+  `(mk_inst si.cs_next_id INVOKE (Label lbl :: ops) []).inst_opcode = INVOKE`
+    by simp[mk_inst_def] >>
+  metis_tac[intcall_body_decoded_entry]
+QED
+
+Theorem intcall_multi_invoke_landing:
+  !tops ctx ce cx func t lbl ops argv callee setup si sj n results.
+    body_inv tops ctx ce cx /\ MEM callee ctx.ctx_functions /\
+    ~t.vs_halted /\
+    emit_multi_op INVOKE (Label lbl :: ops) n si = (results,sj) /\
+    fn_has_code si sj func /\
+    t.vs_current_bb = si.cs_current_bb /\
+    t.vs_inst_idx = LENGTH si.cs_current_insts /\
+    lookup_function lbl ctx.ctx_functions = SOME callee /\
+    eval_operands ops t = SOME argv /\
+    setup_callee callee argv t = SOME setup ==>
+    (?bb inst. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      decode_invoke inst = SOME (lbl,ops)) /\
+    gas_invoke_entry (ctx,func) t callee setup
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all emit_multi_invoke_instruction >> strip_tac >>
+  conj_tac
+  >- (goal_assum (drule_at Any) >> simp[decode_invoke_def, mk_inst_def]) >>
+  `decode_invoke (mk_inst si.cs_next_id INVOKE (Label lbl :: ops) outs) =
+     SOME (lbl,ops)` by simp[decode_invoke_def, mk_inst_def] >>
+  `(mk_inst si.cs_next_id INVOKE (Label lbl :: ops) outs).inst_opcode = INVOKE`
+    by simp[mk_inst_def] >>
+  metis_tac[intcall_body_decoded_entry]
+QED
