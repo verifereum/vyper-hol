@@ -14,7 +14,7 @@ Theory bodyPtrAssignCases
 Ancestors
   annAssignPtrDispatch annAssignPtrWord annAssignPtrFacts supportedStmts compileEnv
   bodyPtrAssignResidual bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
-  vyperState vyperContext vyperTypeCallGraph list
+  vyperState vyperContext vyperTypeCallGraph vyperTypeSystem memoryLocalRhsProps list
 
 val _ = Parse.hide "body";
 
