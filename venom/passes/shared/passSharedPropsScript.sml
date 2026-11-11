@@ -1152,3 +1152,13 @@ Proof
   drule eval_phis_only_updates_vs_vars >>
   simp[venom_state_component_equality] >> metis_tac[]
 QED
+
+Theorem execution_equiv_normalize_index:
+  execution_equiv {} s t /\ s.vs_current_bb = t.vs_current_bb /\
+  s.vs_prev_bb = t.vs_prev_bb ==>
+  (s with vs_inst_idx := i) = (t with vs_inst_idx := i)
+Proof
+  strip_tac >> irule stateEquivPropsTheory.state_equiv_empty_eq >>
+  gvs[state_equiv_def, execution_equiv_def,
+      stateFrameTheory.execution_frame_def, lookup_var_def]
+QED

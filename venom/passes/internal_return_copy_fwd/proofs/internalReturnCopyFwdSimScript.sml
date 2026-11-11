@@ -3559,6 +3559,52 @@ Proof
   irule ircf_runner_noninvoke_nonok >> simp[] >> metis_tac[]
 QED
 
+Theorem ircf_R_ret_execution_transport:
+  ircf_R_ret D fm rma C stk PG G tn fn v s t /\
+  execution_equiv {} t u /\ t.vs_current_bb = u.vs_current_bb /\
+  t.vs_prev_bb = u.vs_prev_bb ==>
+  ircf_R_ret D fm rma C stk PG G tn fn v s u
+Proof
+  strip_tac >>
+  `(t with vs_inst_idx := s.vs_inst_idx) =
+   (u with vs_inst_idx := s.vs_inst_idx)` by
+    metis_tac[passSharedPropsTheory.execution_equiv_normalize_index] >>
+  gvs[ircf_R_ret_def] >>
+  fs[ircf_cross_def, stateEquivTheory.execution_equiv_def,
+     stateFrameTheory.execution_frame_eq_reconstruct] >>
+  qpat_x_assum `_ = u` (SUBST1_TAC o SYM) >> simp[] >> metis_tac[]
+QED
+
+Theorem ircf_block_step_clear_nops:
+  bb_well_formed tb /\
+  block_step_rel D vs C (ircf_R D fm rma C)
+    (ircf_R_ret_reachable vs D fm rma C) stk PG fn r
+    (run_block m tc tb t) ==>
+  block_step_rel D vs C (ircf_R D fm rma C)
+    (ircf_R_ret_reachable vs D fm rma C) stk PG fn r
+    (run_block m tc (clear_nops_block tb) t)
+Proof
+  strip_tac >>
+  drule passSharedPropsTheory.clear_nops_run_block_equiv >>
+  disch_then (qspecl_then [`m`, `tc`, `t`] mp_tac) >>
+  Cases_on `run_block m tc tb t` >>
+  Cases_on `run_block m tc (clear_nops_block tb) t` >>
+  Cases_on `r` >>
+  gvs[stateEquivTheory.result_equiv_def, block_step_rel_def, fn_run_rel_def]
+  >- metis_tac[stateEquivPropsTheory.state_equiv_empty_eq]
+  >- (fs[dead_result_rel_def, stateEquivTheory.execution_equiv_def,
+         stateFrameTheory.execution_frame_eq_reconstruct] >>
+      strip_tac >> qpat_x_assum `_ = v'` (SUBST1_TAC o SYM) >> gvs[])
+  >- (strip_tac >> gvs[dead_result_rel_def])
+  >> rpt strip_tac >>
+  `v'.vs_current_bb = v.vs_current_bb /\ v'.vs_prev_bb = v.vs_prev_bb` by
+    metis_tac[passSharedPropsTheory.run_block_IntRet_control] >>
+  fs[ircf_R_ret_reachable_def] >>
+  qexistsl_tac [`G`, `tn`] >> conj_tac
+  >- (irule ircf_R_ret_execution_transport >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem ircf_block_sim:
   !D lo vs C fn_meta rma k stk PG G tn fn fn' s t bb.
     o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
