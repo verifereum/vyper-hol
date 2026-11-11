@@ -1,7 +1,7 @@
 (* Transport metadata of a captured argument, without selecting another run. *)
 Theory bodyIntCallHeldFrame
 Ancestors
-  bodyIntCallProducerInterface bodyIntCallSourceFrame
+  exprSimHypsDefs bodyIntCallProducerInterface bodyIntCallSourceFrame
   bodyIntCallArgOwnedFrame bodyIntCallArgLocalFrame bodyIntCallStorageFrame
   exprSimSubscriptArrayFrame exprSimProps loweringPosts exprLoweringProps
   compileEnv loweringStateRelDefs context bodyMemAssignTopCopySem
