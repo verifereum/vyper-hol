@@ -98,6 +98,27 @@ Proof
   gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
 QED
 
+(* Memory twin of body_log_widen_case: compatible scalar argument bounds. *)
+Theorem body_log_widen_mem_case:
+  !d cx id args tops ctx func cenv env env' ret_ty lctx RetQ es fields.
+    body_stmt_safe tops (Log id args) /\
+    body_exprs_mem_ok cx args /\ body_inv tops ctx cenv cx /\
+    supported_pure_exprs tops args /\
+    supported_event_fields tops id = SOME fields /\
+    LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) args fields /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Log id args) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Log id args) = SOME env' /\
+    stmt_exprs_ok cenv (Log id args) /\
+    call_evaluation_safe cx (int_calls_stmt (Log id args)) ==>
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Log id args)) (eval_stmt cx (Log id args)) es
+Proof
+  cheat
+QED
+
 Theorem body_log_mem_case:
   !cx id es. body_exprs_mem_ok cx es ==> body_stmt_mem_ok cx (Log id es)
 Proof
