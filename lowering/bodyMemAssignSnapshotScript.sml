@@ -13,16 +13,21 @@ Ancestors
 Theorem snapshot_vv_counted_mem:
   !ctx func cenv cx e es sa sm sb s0 ee tv v vv saved s.
     post_value_type cenv e = expr_type e /\
-    (* The lowered annotation is a word iff e's type is.  Only an IntCall's
-       can differ (lowered_value_type_def: cenv.ce_func_return_type).  The
-       Assign caller discharges this from well_typed_expr's
-       type_widens_to env.type_defs sig.ret_ty (expr_type e),
-       memoryLocalRhsProps.supported_internal_signature_return
-       (body_inv: ce_func_return_type = sig.ret_ty), and widening keeping
-       word-ness both ways (compileEnv.type_widens_to_word,
-       typedMemoryCopy.return_source_word_widens_eq); every other case is
-       expr_type e or a bytestring of a bytestring-typed e. *)
-    (is_word_type (lowered_value_type cenv e) <=> is_word_type (expr_type e)) /\
+    (* The RHS annotations are compatible, as body_assign_place_mem_case
+       carries: the Assign caller has the disjunction from its split
+       (bodyMemAssign's Cases_on, as for body_assign_local_memory_mem); the
+       widened-aggregate IntCall rest goes to
+       body_assign_place_widened_aggregate_call_mem.  A located value not
+       in memory comes from a place read, where lowered_value_type_def's
+       catch-all clause gives expr_type e: an IntCall result is in memory
+       (incompatibleReturnLayout.nonzero_internal_call_located), and
+       literals, Concat and AbiEncode compile into memory buffers. *)
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
+    (!t p. vv = LocatedValue t p /\ p.ptr_location <> LocMemory ==>
+           lowered_value_type cenv e = expr_type e) /\
     compile_snapshot_vv cenv T (vv_with_type (lowered_value_type cenv e) vv) sm =
       (saved, sb) /\
     read_result cx tv ee = (INL v, ee) /\
@@ -33,9 +38,11 @@ Theorem snapshot_vv_counted_mem:
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-    (!t op'. vv = StackValue t op' ==> is_word_type (expr_type e)) /\
-    (is_word_type (expr_type e) ==>
-     ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt) /\
+    (* Both annotations evaluate: exprSimHyps.expr_body_pre_type_evaluates
+       for expr_type e, memoryLocalRhsProps.memory_rhs_lowered_runtime_layout
+       (from the compatibility above) for the lowered one. *)
+    (?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt) /\
+    (?ltv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv) /\
     (!t tvt. (t = expr_type e \/ t = lowered_value_type cenv e) /\
              evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
              type_memory_bytes cenv t = type_memory_size tvt /\
