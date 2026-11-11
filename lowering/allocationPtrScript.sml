@@ -157,8 +157,7 @@ Theorem reused_alloca_step:
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s =
       OK (update_var out (n2w b) s)
 Proof
-  rpt strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_alloca_def]
+  rpt strip_tac >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def]
 QED
 
 Theorem reused_alloca_ghost:
@@ -432,8 +431,7 @@ Theorem alloca_step_operand_preserved:
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[]
   >- (strip_tac >> gvs[] >> Cases_on `op` >>
       gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>

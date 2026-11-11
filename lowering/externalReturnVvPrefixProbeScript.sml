@@ -5,7 +5,9 @@ Ancestors
 
 Theorem return_vv_located_tag:
   vv_post ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty p) s ==>
-  ty = expr_type e
+  (ty = post_value_type ce e \/
+   p.ptr_location = LocMemory /\ is_bytestring_type (post_value_type ce e) /\
+   is_bytestring_type ty)
 Proof
   simp[vv_post_def, vv_holds_def]
 QED
@@ -22,7 +24,7 @@ Theorem return_vv_located_prefix:
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
-    (\res ee s. ?tv. res = INL tv /\ ty = expr_type e /\
+    (\res ee s. ?tv. res = INL tv /\
       vv_post ctx func ce cx e es sa sb s0 ee tv (LocatedValue ty p) s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -32,7 +34,7 @@ Proof
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
   simp[expr_vv_sim_def] >> disch_then drule_all >>
   simp[gas_outcome_def, gas_summary_at_def] >>
-  metis_tac[return_vv_located_tag]
+  metis_tac[]
 QED
 
 Theorem return_site_vv_admissible:
@@ -57,7 +59,6 @@ Theorem return_intcall_vv_prefix:
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_expr cx (Call ann (IntCall fid) args drv)) (es,s0)
     (\res ee s. ?tv. res = INL tv /\
-      ce.ce_func_return_type (nsid_to_string fid) = ann /\
       vv_post ctx func ce cx (Call ann (IntCall fid) args drv) es sa sb s0 ee tv
         (LocatedValue (ce.ce_func_return_type (nsid_to_string fid)) p) s /\
       s.vs_current_bb = sb.cs_current_bb /\

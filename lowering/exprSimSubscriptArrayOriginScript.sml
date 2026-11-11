@@ -295,7 +295,8 @@ Proof
   gvs[AllCaseEqs(), oneline as_stack_val_def, oneline as_ptr_val_def,
       vv_location_def, mk_ptr_def, base_ptr_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  rpt strip_tac >>
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  fs[vv_location_def, mk_ptr_def, base_ptr_def] >>
   gvs[AllCaseEqs(), vv_location_def, mk_ptr_def, base_ptr_def]
   >~ [`compile_literal_vv _ _ _ = _`] >-
     (Cases_on `rt` >> gvs[compile_literal_vv_def, comp_return_def, vv_location_def]

@@ -1,7 +1,7 @@
 Theory stmtLogTopicsMemory
 Ancestors
   freshWrites stmtLowering stmtSimLogTopics stmtReasonMemory fragExecMem instMemFrontier
-  stmtSimLogArgs exprSimHash exprSimDefs supportedTypes vyperTyping vyperValue
+  stmtSimLogArgs exprSimHash exprSimHashBoundary exprSimDefs supportedTypes vyperTyping vyperValue
   valueEncoding valueEncodingDefs valueEncodingProps exprSimProps stmtReasonMemory moduleLoweringProps context emitHelper emitHelperProps exprLoweringProps venomExecSemantics
   contractABI venomState venomInst words finite_map list rich_list arithmetic compileEnv
 

@@ -115,7 +115,10 @@ QED
 Theorem expand_memory_retains[local]:
   i < LENGTH m ==> EL i (asm_expand_memory k m) = EL i m
 Proof
-  rw[asm_expand_memory_def] >> simp[EL_APPEND_EQN]
+  strip_tac >>
+  `i < LENGTH (asm_expand_memory k m)` by
+    (mp_tac expand_memory_grows >> decide_tac) >>
+  simp[el_expand_read_byte]
 QED
 
 Theorem expand_memory_agrees[local]:
@@ -124,9 +127,10 @@ Theorem expand_memory_agrees[local]:
   !i. i < LENGTH (asm_expand_memory k n) /\ i NOTIN L ==>
     EL i (asm_expand_memory k m) = EL i (asm_expand_memory k n)
 Proof
-  rw[asm_expand_memory_def] >>
-  Cases_on `i < LENGTH n` >>
-  gvs[EL_APPEND_EQN, rich_listTheory.EL_REPLICATE]
+  rpt strip_tac >>
+  `i < LENGTH (asm_expand_memory k m)` by metis_tac[expand_memory_lengths] >>
+  simp[el_expand_read_byte] >>
+  Cases_on `i < LENGTH n` >> simp[]
 QED
 
 Theorem expand_memory_read[local]:
@@ -278,16 +282,6 @@ Proof
   disch_then (qspec_then `off + sz` assume_tac) >>
   gvs[asm_sym_rel_def] >>
   simp[asm_create_request_def]
-QED
-
-Theorem related_delegatecall_state[local]:
-  asm_sym_rel p env cs ss ==>
-  make_asm_delegatecall_state (ss.sym_base with as_stack := args)
-    target gas calldata code st =
-  make_asm_delegatecall_state cs target gas calldata code st
-Proof
-  rw[asm_sym_rel_def] >> gvs[] >>
-  simp[make_asm_delegatecall_state_def, asm_to_tx_params_def]
 QED
 
 Theorem sym_step_concrete_good[local]:
@@ -501,22 +495,6 @@ Proof
   gvs[sval_conc_def] >> decide_tac
 QED
 
-(* The trunk's CREATE/CREATE2 fault on an oversized init code before
-   consuming an outcome; the symbolic step lifts that fault the same way. *)
-Theorem related_create_fault[local]:
-  asm_sym_rel p env cs ss ==>
-  asm_sym_step_rel p env
-    (sym_lift k labs ss
-       (AsmFault (ss.sym_base with <| as_stack := args;
-                                      as_returndata := [] |>)))
-    (AsmFault (cs with as_returndata := []))
-Proof
-  rw[asm_sym_rel_def] >>
-  simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def,
-       asmSemTheory.asm_state_component_equality] >>
-  qexists_tac `cs with as_returndata := []` >> simp[]
-QED
-
 Theorem asm_step_op_create[local]:
   asm_step_op otp "CREATE" s = asm_exec_create s /\
   asm_step_op otp "CREATE2" s = asm_exec_create2 s
@@ -552,8 +530,11 @@ Proof
       simp[asm_step_op_create, asm_exec_create_def, asm_op_mem_writes_def,
            mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
            finite_mapTheory.DRESTRICT_UNIV] >>
-      IF_CASES_TAC >> REWRITE_TAC [] >- (irule related_create_fault >> gvs[]) >>
-      irule related_create_completion >> simp[]) >>
+      (* an oversized initcode faults before the create on both sides *)
+      IF_CASES_TAC
+      >- (gvs[asm_sym_rel_def] >>
+          simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
+      rewrite_tac[COND_CLAUSES] >> irule related_create_completion >> simp[]) >>
   rename1 `cs.as_stack = value :: off :: sz :: tail0` >>
   Cases_on `tail0` >- gvs[] >> gvs[] >>
   rename1 `cs.as_stack = value :: off :: sz :: salt :: tail` >>
@@ -565,8 +546,11 @@ Proof
   simp[asm_step_op_create, asm_exec_create2_def, asm_op_mem_writes_def,
        mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
-  IF_CASES_TAC >> REWRITE_TAC [] >- (irule related_create_fault >> gvs[]) >>
-  irule related_create_completion >> simp[]
+  (* an oversized initcode faults before the create on both sides *)
+  IF_CASES_TAC
+  >- (gvs[asm_sym_rel_def] >>
+      simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
+  rewrite_tac[COND_CLAUSES] >> irule related_create_completion >> simp[]
 QED
 
 Theorem asm_step_op_call[local]:
@@ -637,68 +621,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem delegate_memory_as_call[local]:
-  asm_expand_memory (ro + rs) m = asm_call_memory 0 (ro + rs) ro rs m
-Proof
-  simp[asm_call_memory_def] >>
-  Cases_on `ro + rs = 0` >- gvs[asm_expand_memory_def] >>
-  Cases_on `rs = 0` >> simp[] >>
-  simp[asm_expand_memory_def] >> rpt IF_CASES_TAC >> gvs[]
-QED
-
-Theorem related_delegate_completion[local]:
-  asm_sym_rel p env cs ss /\
-  LIST_REL (\sv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
-    (DROP k ss.sym_stack) tail /\
-  (!i. ro <= i /\ i < ro + rs ==> i NOTIN FDOM ss.sym_mem_labels) ==>
-  asm_sym_step_rel p env
-    (sym_lift k ss.sym_mem_labels ss
-      (case extract_asm_result (ss.sym_base with as_stack := args) 1w ro rs rr of
-         SOME (output,s') => AsmOK (asm_next (s' with as_stack := [output]))
-       | NONE => AsmError "delegatecall: non-terminating"))
-    (case extract_asm_result cs 1w ro rs rr of
-       SOME (output,s') => AsmOK (asm_next (s' with as_stack := output :: tail))
-     | NONE => AsmError "delegatecall: non-terminating")
-Proof
-  strip_tac >> Cases_on `rr` >>
-  simp[extract_asm_result_def, sym_lift_def, asm_sym_step_rel_def] >>
-  PairCases_on `x` >>
-  Cases_on `x1.contexts` >>
-  simp[extract_asm_result_def, sym_lift_def, asm_sym_step_rel_def] >>
-  Cases_on `t` >>
-  simp[extract_asm_result_def, sym_lift_def, asm_sym_step_rel_def] >>
-  PairCases_on `h` >>
-  Cases_on `x0` >> gvs[asm_sym_rel_def] >>
-  simp[] >> TRY (Cases_on `y` >> simp[]) >>
-  simp[sym_lift_def, asm_sym_step_rel_def, asm_sym_rel_def, asm_next_def,
-       sval_conc_def, delegate_memory_as_call, Excl "LENGTH_APPEND"] >>
-  `LENGTH (TAKE rs h0.returnData) <= rs` by simp[LENGTH_TAKE_EQ] >>
-  (conj_tac
-  >- (qexists_tac `TAKE ro (asm_call_memory 0 (ro + rs) ro rs m) ++
-        TAKE rs h0.returnData ++
-        DROP (ro + LENGTH (TAKE rs h0.returnData))
-          (asm_call_memory 0 (ro + rs) ro rs m)` >>
-      simp[asm_state_component_equality, call_output_length, call_memory_lengths] >>
-      rpt strip_tac >> irule call_output_agrees >>
-      simp[call_output_length] >>
-      qexists_tac `FDOM ss.sym_mem_labels` >> simp[]) >>
-  rpt strip_tac >>
-  `i IN FDOM ss.sym_mem_labels` by
-    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
-  `~in_mem_range ro rs i` by
-    (gvs[in_mem_range_def] >> metis_tac[]) >>
-  first_x_assum drule >> strip_tac >>
-  `EL i (TAKE ro (asm_call_memory 0 (ro + rs) ro rs cs.as_memory) ++
-      TAKE rs h0.returnData ++
-      DROP (ro + LENGTH (TAKE rs h0.returnData))
-        (asm_call_memory 0 (ro + rs) ro rs cs.as_memory)) = EL i cs.as_memory` by
-    (irule call_output_retains >> simp[]) >>
-  simp[call_output_length] >>
-  `LENGTH cs.as_memory <= LENGTH (asm_call_memory 0 (ro + rs) ro rs cs.as_memory)` by
-    simp[call_memory_grows] >>
-  gvs[sval_conc_def] >> decide_tac)
-QED
-
 Theorem sym_step_delegatecall_sim[local]:
   asm_sym_rel p env cs ss ==>
   asm_sym_step_rel p env (sym_step_concrete "DELEGATECALL" ss)
@@ -711,27 +633,15 @@ Proof
   Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   rename1 `cs.as_stack = gas :: addr :: ao :: az :: ro :: rs :: tail` >>
-  `~mem_labels_hit ss.sym_mem_labels (in_mem_range (w2n ao) (w2n az))` by
-    (gvs[asm_op_mem_reads_def, log_table_def, mem_labels_hit_def] >> metis_tac[]) >>
-  drule_all related_memory_read >>
-  disch_then (qspec_then `w2n ao + w2n az` assume_tac) >>
-  `ss.sym_base.as_accounts = cs.as_accounts /\
-   ss.sym_base.as_call_ctx = cs.as_call_ctx` by gvs[asm_sym_rel_def] >>
-  `make_asm_delegatecall_state
-      (ss.sym_base with as_stack := [gas;addr;ao;az;ro;rs])
-      (w2w addr) (w2n gas)
-      (TAKE (w2n az) (DROP (w2n ao)
-         (asm_expand_memory (w2n ao + w2n az) cs.as_memory)))
-      (lookup_account (w2w addr) cs.as_accounts).code cs.as_call_ctx.cc_static =
-   make_asm_delegatecall_state cs (w2w addr) (w2n gas)
-      (TAKE (w2n az) (DROP (w2n ao)
-         (asm_expand_memory (w2n ao + w2n az) cs.as_memory)))
-      (lookup_account (w2w addr) cs.as_accounts).code cs.as_call_ctx.cc_static` by
-    (irule related_delegatecall_state >> metis_tac[]) >>
+  `asm_call_request (ss.sym_base with as_stack := [gas;addr;ao;az;ro;rs])
+      addr 0w (w2n ao) (w2n az) F =
+   asm_call_request cs addr 0w (w2n ao) (w2n az) F` by
+    (irule related_call_request >>
+     gvs[asm_op_mem_reads_def, log_table_def, mem_labels_hit_def] >> metis_tac[]) >>
   simp[asm_step_op_call, asm_exec_delegatecall_def, asm_op_mem_writes_def,
        mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
-  irule related_delegate_completion >> simp[] >>
+  irule related_call_completion >> simp[] >>
   gvs[asm_op_mem_reads_def, log_table_def, mem_labels_hit_def, in_mem_range_def] >>
   metis_tac[]
 QED
@@ -1377,8 +1287,7 @@ Proof
   >- (irule sym_step_create_sim >> simp[]) >>
   Cases_on `MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"; "SELFDESTRUCT";
     "GAS"; "MLOAD"; "SHA3"; "CALLDATACOPY"; "EXTCODECOPY"; "MCOPY"; "RETURNDATACOPY"]`
-  >- (qpat_x_assum `MEM name _`
-        (REPEAT_TCL DISJ_CASES_THEN SUBST_ALL_TAC o REWRITE_RULE [MEM]) >>
+  >- (qpat_x_assum `MEM name _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
       simp[sym_step_call_sim, sym_step_staticcall_sim,
         sym_step_delegatecall_sim, sym_step_selfdestruct_sim, sym_step_gas_sim,
         sym_step_mload_sim, sym_step_sha3_sim, sym_step_calldatacopy_sim,
@@ -1582,9 +1491,7 @@ Proof
   Cases_on `ss.sym_stack` >- simp[sym_mstore_def] >>
   Cases_on `t` >- simp[sym_mstore_def] >>
   Cases_on `h` >> Cases_on `h'` >> simp[sym_mstore_def] >>
-  drule_all mstore_label_sim >>
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
-       asm_step_bitwise_def, asm_step_memory_def]
+  drule_all mstore_label_sim >> simp[asm_step_op_mstore]
 QED
 
 Theorem mem_label_at_bytes[local]:
@@ -1787,8 +1694,8 @@ Proof
       Cases_on `w2n dst <= i /\ i < w2n dst + w2n sz` >> simp[] >>
       fs[mem_labels_clear_def, finite_mapTheory.FDOM_DRESTRICT, in_mem_range_def,
          pred_setTheory.IN_INTER, pred_setTheory.SPECIFICATION] >>
-      simp[Abbr `em`, Abbr `ec`] >>
-      irule mstore_expansion_equal >> simp[] >> metis_tac[]) >>
+      simp[Abbr `em`, Abbr `ec`, el_expand_read_byte] >>
+      Cases_on `i < LENGTH cs.as_memory` >> simp[] >> metis_tac[]) >>
   rpt strip_tac >>
   gvs[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT, in_mem_range_def,
       pred_setTheory.SPECIFICATION] >>
@@ -1797,7 +1704,7 @@ Proof
     (simp[Abbr `ec`, asm_expand_memory_def] >> IF_CASES_TAC >> simp[]) >>
   `i < LENGTH ec` by decide_tac >>
   simp[] >>
-  `ec❲i❳ = cs.as_memory❲i❳` by simp[Abbr `ec`, expand_memory_retains] >>
+  `ec❲i❳ = cs.as_memory❲i❳` by simp[Abbr `ec`, el_expand_read_byte] >>
   metis_tac[]
 QED
 

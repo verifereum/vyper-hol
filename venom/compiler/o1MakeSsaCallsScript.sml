@@ -8,6 +8,7 @@ Ancestors
   makeSsaDefs makeSsaCurrentProps o1MakeSsaFormats o1MakeSsaFrontier
   o1MakeSsaActualMaps o1MakeSsaOwnership makeSsaCurrentAnalysis
   venomWf venomInst venomFnScheduleRunner irSupply list pred_set simplifyCfgCallChecks
+  venomWfProps
 
 (* latest_current_name of the initial rename state is the identity *)
 val _ = augment_srw_ss [rewrites [makeSsaCurrentTreeTraceTheory.current_initial_latest]];

@@ -1,7 +1,7 @@
 Theory concretizePtrCoverageStaticMemReachability
 Ancestors
   ptrDiscipline contextRawReachable venomExecProofs venomExecSemantics
-  stepWriteFootprintBase venomInstProofs contextCodegenRel
+  stepWriteFootprintBase venomInstProofs contextCodegenRel contextCodegenRelProps
 
 Theorem ptr_run_defs_frame_lift:
   (!fuel ctx inst s. !vs0 stk PG G tn fn.

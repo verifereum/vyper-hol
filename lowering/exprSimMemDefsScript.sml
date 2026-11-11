@@ -159,7 +159,7 @@ QED
    the value it points at, and a zero-size type needs no room. *)
 Theorem vv_store_bound_capacity:
   vv_post ctx func cenv cx e es sa sb s0 es' tv (LocatedValue vt p) t /\
-  vt = expr_type e /\
+  vt = expr_type e /\ post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
   eval_operand p.ptr_operand t = SOME fw /\
   (type_memory_size ftv = 0 \/
@@ -172,6 +172,7 @@ QED
 
 Theorem expr_store_bound_capacity:
   expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+  post_value_type cenv e = expr_type e /\
   (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
         ~is_word_type (expr_type e) ==>
         ?w. eval_operand op t = SOME w /\

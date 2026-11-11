@@ -2,7 +2,7 @@
 Theory bodyPtrHashBuiltinsShaPrefix
 Ancestors bodyPtrHashBuiltinsKeccakBytesRun fragGasSeqPtr ptrDiscipline
   venomState venomInst venomExecSemantics words finite_map pred_set
-  typedCopyPtr typedCopyLoopHeaderPtr exprSimHash list bodyPtrDefs valueEncodingProps
+  typedCopyPtr typedCopyLoopHeaderPtr exprSimHash exprSimHashBoundary list bodyPtrDefs valueEncodingProps
   emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps ASCIInumbers rich_list arithmetic
   bodyPtrHashBuiltinsGhostFrame exprSimProps
 

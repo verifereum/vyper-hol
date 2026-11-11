@@ -755,15 +755,13 @@ Resume compile_copy_sarray_strings_two_frag_ptr[initial_control]:
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      simp[fragExecTheory.run_from_def, Once exec_block_def, get_instruction_def,
        step_inst_non_invoke, listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
        instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
      simp[eval_operand_def] >>
      simp[Once exec_block_def, get_instruction_def, update_var_def,
        step_inst_non_invoke, is_terminator_def, listTheory.EL_APPEND_EQN,
        arithmeticTheory.ADD1] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
        instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
      simp[eval_operand_def, jump_to_def]) >>
   `lookup_block sinit.vs_current_bb fn.fn_blocks = SOME test /\
@@ -849,16 +847,14 @@ Resume compile_copy_sarray_strings_two_frag_ptr[initial_control]:
      simp[ptrSafeRunTheory.ghost_run_def,
        Once ptrSafeRunTheory.ghost_block_def, get_instruction_def,
        step_inst_non_invoke, listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
        combinTheory.K_THM, opcode_case_def] >>
      simp[eval_operand_def, is_terminator_def,
        ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke] >>
      simp[Once ptrSafeRunTheory.ghost_block_def, get_instruction_def,
        update_var_def, step_inst_non_invoke, listTheory.EL_APPEND_EQN,
        arithmeticTheory.ADD1] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
        combinTheory.K_THM, opcode_case_def] >>
      simp[eval_operand_def, is_terminator_def, jump_to_def] >>
      qmatch_goalsub_abbrev_tac `entry_prov fn sj gg` >>
@@ -890,8 +886,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[initial_control]:
        Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
        ptrSafeRunTheory.ptr_safe_step_def, step_inst_non_invoke,
        listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
        combinTheory.K_THM, opcode_case_def] >>
      simp[eval_operand_def, is_terminator_def] >>
      conj_tac
@@ -901,15 +896,14 @@ Resume compile_copy_sarray_strings_two_frag_ptr[initial_control]:
            codegenRelTheory.source_memory_write_ranges_def,
            contextCodegenRelTheory.source_memory_read_ranges_def,
            ptrDisciplineTheory.op_taint_def] >>
-         simp[step_inst_non_invoke, step_inst_base_def,
+         simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
            eval_operand_def, update_var_def]) >>
      simp[ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke,
-       step_inst_base_def, eval_operand_def] >>
+       step_inst_base_opcode_eqs, eval_operand_def] >>
      simp[Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
        ptrSafeRunTheory.ptr_safe_step_def, update_var_def,
        step_inst_non_invoke, listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
        combinTheory.K_THM, opcode_case_def] >>
      simp[eval_operand_def, is_terminator_def, jump_to_def] >>
      conj_tac
@@ -919,7 +913,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[initial_control]:
            codegenRelTheory.source_memory_write_ranges_def,
            contextCodegenRelTheory.source_memory_read_ranges_def,
            ptrDisciplineTheory.op_taint_def] >>
-         simp[step_inst_non_invoke, step_inst_base_def,
+         simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
            eval_operand_def, jump_to_def]) >>
      qmatch_goalsub_abbrev_tac `entry_prov fn sj gg` >>
      qmatch_goalsub_abbrev_tac `entry_taint_vars fn sj tt` >>

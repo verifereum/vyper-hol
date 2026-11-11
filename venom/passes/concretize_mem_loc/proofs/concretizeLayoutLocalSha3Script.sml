@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalSha3
-Ancestors concretizeMemLocProofs concretizeLayoutAccessGeometry
+Ancestors concretizeLayoutAccessGeometry
   frameRelocationValues frameRelocationWriteCoverage frameJointTaint
   frameRelocationCleanValueSteps frameRelocationTaintOrder frameRelocationCopyTaint
   frameRelocationGuardedValues frameRelocationGhostCopy frameOriginUpdates

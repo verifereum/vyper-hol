@@ -38,10 +38,13 @@ Proof
      metis_tac[method_id_literal_dynamic_vv_sim_mem,
        body_method_id_literal_word_mem, body_expr_mem_ok_def]) >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
+  `post_value_type cenv (Builtin ann MethodId [e]) =
+     expr_type (Builtin ann MethodId [e])` by
+    simp[loweringPostsTheory.post_value_type_not_int_call] >>
+  qpat_assum `post_value_type _ (Builtin _ _ _) = _`
     (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
       body_expr_sim_mem_of_vv_sim_mem)) >>
-  disch_then (qspecl_then [`ctx`, `func`, `ty'`] mp_tac) >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `env`, `ty'`, `es'`] mp_tac) >>
   simp[] >>
   impl_tac >- (
     simp[expr_type_def, is_word_type_def, Abbr `ann`] >>

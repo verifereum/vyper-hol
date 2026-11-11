@@ -1,6 +1,7 @@
 Theory concretizePtrCandidateSeparation
 Ancestors
-  concretizeMemLocProofs concretizeMemLocDefs list finite_map enumeral
+  concretizeMemLocTransitionProofs concretizeMemLocDefs list finite_map enumeral
+  execEquivParamDefs execEquivProofs
 
 Theorem ptr_awl_untouched[local]:
   !pending global already initial.

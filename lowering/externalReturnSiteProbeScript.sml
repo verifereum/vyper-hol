@@ -34,11 +34,12 @@ QED
 Theorem return_site_equal_memory:
   expr_post ctx func ce cx e es sa sb s0 es' v op s /\
   expr_type e = ret /\ ~is_word_type ret /\
+  post_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) ret = SOME tv ==>
   ?w. eval_operand op s = SOME w /\
       val_in_memory tv v (w2n w) s.vs_memory
 Proof
-  rw[expr_post_def, expr_val_rel_def] >> metis_tac[]
+  strip_tac >> gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]
 QED
 
 (* Bytestring widening does not change physical reads or actual footprints. *)
@@ -62,15 +63,6 @@ Theorem return_site_empty_struct:
 Proof
   simp[val_in_memory_def, val_footprint_def,
        type_memory_size_def]
-QED
-
-(* The current invariant cannot constrain the physical IntCall return table. *)
-Theorem return_site_inv_return_table:
-  expr_sim_inv (ce with ce_func_return_type := f) cx env es <=>
-  expr_sim_inv ce cx env es
-Proof
-  simp[expr_sim_inv_def,
-       placeTypingPropsTheory.place_map_tables_agree_on_defined_def]
 QED
 
 Theorem return_site_intcall_physical_type:

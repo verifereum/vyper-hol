@@ -200,7 +200,7 @@ Proof
   qabbrev_tac `s5 = mcopy (w2n (dp + kw)) (w2n (src + 32w)) (w2n lw) s4` >>
   `step_inst_base (mk_inst (sa.cs_next_id + 4) MCOPY [Var x3; Var x1; Var x0] [])
      s4 = OK s5` by
-    simp[Abbr `s5`, step_inst_base_def, mk_inst_def] >>
+    simp[Abbr `s5`, step_inst_base_opcode_eqs, mk_inst_def] >>
   `!op. eval_operand op s5 = eval_operand op s4` by
     (gen_tac >> simp[Abbr `s5`] >> irule eval_operand_same_vars >>
      simp[mcopy_def, write_memory_with_expansion_def]) >>

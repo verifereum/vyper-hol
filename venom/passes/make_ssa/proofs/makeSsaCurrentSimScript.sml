@@ -173,7 +173,6 @@ Resume current_prepared_run_forward[ok]:
      >- (conj_tac
          >- (qpat_x_assum `bb_well_formed old` mp_tac >>
              simp[bb_well_formed_def]) >>
-         reverse conj_tac >- asm_rewrite_tac[] >>
          qexistsl [`C`, `fuel`, `post`] >> simp[IgnAsm `fn' = _`]) >>
      qpat_x_assum `bb_well_formed old` mp_tac >>
      pure_rewrite_tac[bb_well_formed_def] >> rpt strip_tac >>
@@ -233,7 +232,6 @@ Resume current_prepared_run_forward[ok]:
              `bb_well_formed bb'` by metis_tac[] >>
              qpat_x_assum `bb_well_formed bb'` mp_tac >>
              pure_rewrite_tac[bb_well_formed_def] >> metis_tac[]) >>
-         reverse conj_tac >- metis_tac[] >>
          qexistsl [`C`, `fuel`, `done`] >> simp[IgnAsm `fn' = _`]) >>
      metis_tac[passSimulationPropsTheory.wf_non_terminator_prefix]) >>
   Cases_on `blocks_have_leading_phi fn.fn_blocks`

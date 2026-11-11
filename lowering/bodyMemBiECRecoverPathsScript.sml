@@ -7,7 +7,7 @@ Ancestors
   vyperValue vyperTypeInvariants valueEncoding integer_word words byte context
   emitHelper emitHelperProps venomExecSemantics venomInst venomState
   venomMemDefs venomCallOracleDefs extCallOracle fragExec fragGasSeqAbort
-  fragGasSeqMem allocaHistoryFragment exprSimHash venomMemProps venomInstProofs
+  fragGasSeqMem allocaHistoryFragment exprSimHash exprSimHashBoundary venomMemProps venomInstProofs
   fragGasMode bodyMemBiSha256Compose
 
 Theorem ecrecover_seq_path_mem:
@@ -71,7 +71,7 @@ Theorem ecrecover_success_path_mem:
   t.vs_outcomes = co::rest /\ co.co_success /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
   (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sm x) /\
-  wb_frame cenv es sa s0 t /\
+  wb_frame cenv es es' sa s0 t /\
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -79,7 +79,8 @@ Theorem ecrecover_success_path_mem:
   eval_operand h t = SOME wh /\ eval_operand v t = SOME wv /\
   eval_operand r t = SOME wr /\ eval_operand sig t = SOME ws /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) ==>
   ?n u. gas_marked_path T ctx func t n (OK u) /\
     expr_post ctx func cenv cx (Builtin (BaseT AddressT) ECRecover args)
       es sa sb s0 (es' with outcomes := SOME rest)
@@ -112,11 +113,16 @@ Proof
   qexistsl_tac [`LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sb))`,
     `output with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sm sb)`] >>
   simp[gas_marked_path_def] >>
+  `~expr_has_effect (Builtin (BaseT AddressT) ECRecover args) ==>
+   pure_frame cenv func es sa s0 output` by
+    (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
+     match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es'`, `sm`, `t`] >> fs[wb_frame_def]) >>
   irule expr_post_typed_stack_intro >>
   simp[stmt_state_rel_inst_idx, expr_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def] >>
   irule wb_frame_trans >> conj_tac >- simp[] >>
-  conj_tac
+  reverse conj_tac
   >- (qexistsl_tac [`es'`, `sm`, `t`] >>
       gvs[wb_frame_def, lookup_var_def] >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>

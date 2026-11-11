@@ -104,7 +104,7 @@ Resume array_loop_initialize_mem[invariant]:
 QED
 Resume array_loop_initialize_mem[path]:
   `step_inst_base ainst s0 = OK s1` by
-    simp[Once step_inst_base_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, eval_operand_def] >>
   `gas_path_mem_edge ctx func s0 0
      (OK (s1 with vs_inst_idx := SUC (LENGTH pre)))` by
     (drule_at (Pat `step_inst_base _ _ = _`) straight_line_mem_edge >>
@@ -119,15 +119,15 @@ Resume array_loop_initialize_mem[path]:
      qexists_tac `mk_inst j JMP [Label entry] []` >>
      simp[get_instruction_def, EL_APPEND_EQN, gas_count_step_def,
           mem_safe_step_non_invoke, step_inst_non_invoke,
-          Once step_inst_base_def, is_terminator_def, inst_dload_in_section_def] >>
+          step_inst_base_opcode_eqs, is_terminator_def, inst_dload_in_section_def] >>
      conj_tac
      >- (disj2_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
      disj2_tac >> disj1_tac >> qexists_tac `entry` >>
-     simp[step_inst_base_def, mk_inst_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def]) >>
   `jump_to entry a = jump_to entry s1` by simp[Abbr `a`, jump_to_def] >>
   `step_inst_base (mk_inst ei ASSIGN [Lit 0w] [idx]) (jump_to entry s1) =
      OK (update_var idx 0w (jump_to entry s1))` by
-    simp[Once step_inst_base_def, mk_inst_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
   `gas_path_mem_edge ctx func (jump_to entry s1) 0
      (OK ((update_var idx 0w (jump_to entry s1)) with vs_inst_idx := 1))` by
     (drule_at (Pat `step_inst_base _ _ = _`) straight_line_mem_edge >>
@@ -142,7 +142,7 @@ QED
 Resume array_loop_initialize_mem[history]:
   `alloca_inv s0` by fs[stmt_state_rel_def] >>
   `step_inst_base ainst s0 = OK s1` by
-    simp[Once step_inst_base_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, eval_operand_def] >>
   drule_at (Pat `step_inst_base _ _ = _`) alloca_history_base_step >>
   simp[is_terminator_def] >>
   disch_then (qspecl_then [`func`,
@@ -156,7 +156,7 @@ Resume array_loop_initialize_mem[last_jump]:
   `b.vs_current_bb = entry /\ b.vs_inst_idx = 1 /\ ~b.vs_halted` by
     simp[Abbr `b`, update_var_def, jump_to_def] >>
   `step_inst_base (mk_inst ej JMP [Label cond] []) b = OK (jump_to cond b)` by
-    simp[step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   `gas_path_mem_edge ctx func b 0 (OK (jump_to cond b))` by
     (simp[gas_path_mem_edge_def] >> qexists_tac `0` >>
      qexists_tac `mk_inst ej JMP [Label cond] []` >>

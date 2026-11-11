@@ -41,6 +41,7 @@ Theorem compile_subscript_array_framed_base_case:
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
     (!t r t'. eval_expr cx idx t = (INL r, t') ==>
               t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
     (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
@@ -54,6 +55,10 @@ Proof
   rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (Cases_on `nocalls` >> fs[] >>
+     `int_calls_expr obj = []` by fs[int_calls_expr_def] >>
+     drule post_value_type_no_calls >> simp[]) >>
   drule_all_then assume_tac
     exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base >>
   `expr_vv_sim ctx func cenv cx ty obj es` by
@@ -205,7 +210,7 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
       qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
         (mp_tac o CONJUNCT1 o CONJUNCT2 o
          REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
-      simp[loweringPostsTheory.vv_holds_def] >> rpt strip_tac >>
+      simp[loweringPostsTheory.vv_holds_def, compileEnvTheory.is_bytestring_type_def] >> rpt strip_tac >>
       gvs[Abbr `loc`, contextTheory.vv_location_def]) >>
   qpat_x_assum `bvv = _` SUBST_ALL_TAC >>
   qpat_x_assum `loc = _` SUBST_ALL_TAC >>
@@ -364,6 +369,7 @@ Theorem compile_subscript_array_place_base_case:
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
     ~((!t r t'. eval_expr cx idx t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
       (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
@@ -382,7 +388,8 @@ Theorem compile_subscript_array_case:
     expr_vv_case nocalls ctx func cenv cx obj /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) /\
-    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) ==>
+    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt strip_tac >>

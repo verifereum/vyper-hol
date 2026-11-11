@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringNoCtor
 Ancestors
-  ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
+  structFieldsProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
   immutableDeployExecution ctorDeployDefs e2eEntry venomState vyperCompiler
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
@@ -2125,67 +2125,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem no_ctor_zero_word_bytes:
-  word_to_bytes (0w:bytes32) T = REPLICATE 32 (0w:word8)
-Proof
-  simp[byteTheory.word_to_bytes_def,
-       fcpLib.INDEX_CONV ``dimindex(:256)``] >> EVAL_TAC >>
-  simp[wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0]
-QED
-
-Theorem no_ctor_zero_address_bytes:
-  word_to_bytes (0w:160 word) T = REPLICATE 20 (0w:word8)
-Proof
-  simp[byteTheory.word_to_bytes_def,
-       fcpLib.INDEX_CONV ``dimindex(:160)``] >> EVAL_TAC >>
-  simp[wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0]
-QED
-
-Theorem no_ctor_fit_zero:
-  immutable_fit n (REPLICATE m (0w:word8)) = REPLICATE n 0w
-Proof
-  simp[immutable_fit_def, rich_listTheory.REPLICATE_APPEND,
-       rich_listTheory.REPLICATE_GENLIST, listTheory.TAKE_GENLIST,
-       arithmeticTheory.MIN_DEF]
-QED
-
-Theorem no_ctor_flat_zero_slots:
-  !n sz. FLAT (GENLIST (\i. REPLICATE sz (0w:word8)) n) =
-    REPLICATE (n * sz) 0w
-Proof
-  Induct >> simp[listTheory.GENLIST_CONS, combinTheory.o_DEF,
-    rich_listTheory.REPLICATE_APPEND, arithmeticTheory.MULT]
-QED
-
-Theorem no_ctor_padded_zero_word:
-  (word_of_bytes_be (PAD_RIGHT 0w 32 (REPLICATE n 0w)):bytes32) = 0w /\
-  (word_of_bytes_be (PAD_LEFT 0w 32 (REPLICATE n 0w)):bytes32) = 0w
-Proof
-  simp[listTheory.PAD_RIGHT, listTheory.PAD_LEFT,
-       GSYM rich_listTheory.REPLICATE_GENLIST,
-       rich_listTheory.REPLICATE_APPEND, byteTheory.word_of_bytes_be_def,
-       immutable_word_of_zero_bytes]
-QED
-
-Theorem no_ctor_default_encoding:
-  (!tv. encode_immutable_value tv (default_value tv) =
-    REPLICATE (type_memory_size tv) 0w) /\
-  (!tvs. encode_immutable_tuple tvs (MAP default_value tvs) =
-    REPLICATE (type_memory_size_list tvs) 0w) /\
-  (!fts. encode_immutable_fields fts
-    (MAP (\(id,t). (id, default_value t)) fts) =
-    REPLICATE (type_memory_size_fields fts) 0w)
-Proof
-  ho_match_mp_tac type_memory_size_ind >>
-  rw[default_value_def, default_value_tuple_MAP, default_value_struct_MAP,
-     encode_immutable_value_def, type_memory_size_def,
-     immutable_word_bytes_def, typed_val_to_w256_def, val_to_w256_def,
-     integer_wordTheory.i2w_0, no_ctor_padded_zero_word,
-     no_ctor_zero_word_bytes, no_ctor_zero_address_bytes,
-     no_ctor_flat_zero_slots, no_ctor_fit_zero,
-     rich_listTheory.REPLICATE_APPEND]
-QED
-
 Theorem no_ctor_zero_section:
   (!pre vis name ty slot post.
     tops = pre ++ VariableDecl vis Immutable name ty slot :: post ==>
@@ -2574,22 +2513,23 @@ Theorem no_ctor_source_success:
 Proof
   strip_tac >> drule no_ctor_constants_frame >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac `evaluate_all_constants cx installed` >>
-  `cx.in_deploy /\ cx.txn = tx` by
+  `cx.in_deploy /\ cx.txn = tx with created_in_tx := T` by
     simp[Abbr `cx`, deploy_evaluation_context_def,
          initial_evaluation_context_def] >>
   `evaluate_all_constants cx installed cx.txn.target [(NONE,tops)] = SOME am_c` by
     gvs[Abbr `cx`, Abbr `installed`] >>
   qabbrev_tac `st0 = initial_state am_c [FEMPTY] with
     <| outcomes := NONE; requests := []; gas_obs := gobs |>` >>
-  `value_transfer_ok cx.txn st0.accounts` by simp[Abbr `st0`, initial_state_def] >>
+  `value_transfer_ok cx.txn st0.accounts` by
+    simp[Abbr `st0`, initial_state_def, value_transfer_created_in_tx] >>
   drule no_ctor_send_value >> strip_tac >>
   `call_external_function NONE gobs installed cx F Payable tops [(NONE,tops)]
     [] [] [] [] NoneT =
     (INL NoneV, am_c with accounts := accounts_after_transfer tx am.accounts, [])` by
-    (gvs[Abbr `st0`] >> drule_all no_ctor_empty_external >>
+    (qunabbrev_tac `st0` >> drule_all no_ctor_empty_external >>
      disch_then (qspec_then `tops` mp_tac) >>
-     simp[initial_state_def, abstract_machine_from_state_def,
-          abstract_machine_component_equality]) >>
+     gvs[initial_state_def, abstract_machine_from_state_def,
+         abstract_machine_component_equality, value_transfer_created_in_tx]) >>
   gvs[Abbr `installed`, Abbr `cx`] >>
   drule no_ctor_load_reduce >> simp[abstract_machine_component_equality]
 QED

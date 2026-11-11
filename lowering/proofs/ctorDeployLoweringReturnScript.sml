@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringReturn
 Ancestors
-  ctorDeployLoweringDefs ctorDeployDefs o1PassContract ctorReturnFrame
+  valueEncodingDefs ctorDeployLoweringDefs ctorDeployDefs o1PassContract ctorReturnFrame
   vyperInterpreter supportedDecls symbolResolve ctorDeployInitcodeAsm
   codegenEncodingWf ctorDeployShape o1PipelineCorrect asmToBytecodeProofs list rich_list venomPipelineData unitLabelMap venomFnScheduleRunner
   venomPipelineRunner venomPipelineDriver vyperCompiler compileVyper asmIR
@@ -10,24 +10,6 @@ Ancestors
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractSoundness
   vyperImmutableMetadataFrame
   entryStateRel structFieldsProps vyperTypeDeploymentSoundness moduleLowering compileEnv loweringStateRelDefs
-
-Theorem deploy_supported_constructor_nr[local]:
-  !tops env mut nr args dflts ret body.
-    EVERY (supported_declaration_header env) tops /\
-    lookup_function NONE "__init__" Deploy tops =
-      SOME (mut,nr,args,dflts,ret,body) ==> ~nr
-Proof
-  Induct_on `tops` >> simp[lookup_function_def] >>
-  Cases_on `h` >>
-  simp[supported_declaration_headers_def, supported_declaration_header_def,
-       lookup_function_def] >> rpt strip_tac >>
-  gvs[AllCaseEqs()]
-  >~ [`lookup_function _ _ _ (VariableDecl vis _ _ _ _ :: _) = _`]
-  >- (Cases_on `vis` >> gvs[lookup_function_def] >> metis_tac[])
-  >~ [`lookup_function _ _ _ (HashMapDecl vis _ _ _ _ _ :: _) = _`]
-  >- (Cases_on `vis` >> gvs[lookup_function_def] >> metis_tac[]) >>
-  metis_tac[]
-QED
 
 Theorem deploy_ctor_finish_normal[local]:
   ~nr /\ st.pending_deletions = [] /\
@@ -67,11 +49,9 @@ Theorem deploy_ctor_start_nr[local]:
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==> ~nr
 Proof
-  strip_tac >>
-  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_state_rel_def,
-      deploy_ctor_start_def, supportedProgramTheory.supported_program_def,
-      supported_declaration_headers_def] >>
-  metis_tac[deploy_supported_constructor_nr]
+  simp[e2eDeployDefsTheory.deploy_state_rel_def,
+    e2eDeployDefsTheory.constructor_args_encode_def, deploy_ctor_start_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem deploy_ctor_body_pending[local]:
@@ -283,20 +263,6 @@ Proof
   Cases_on `ALOOKUP s''.immutables tx.target` >>
   gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
   metis_tac[]
-QED
-
-Theorem deploy_immutable_type_size[local]:
-  ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
-  evaluate_type (type_env tops) ty = SOME tv ==>
-  type_memory_size tv =
-    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty
-Proof
-  strip_tac >>
-  `type_memory_bytes
-     (build_compile_env tops Deploy Payable "__init__" [] NoneT [] F) ty =
-     type_memory_size tv` by
-    (irule build_compile_env_type_memory_bytes >> simp[]) >>
-  gvs[GSYM type_mem_bytes_type_memory_bytes, build_compile_env_ce_struct_fields]
 QED
 
 Theorem deploy_initial_state_scopes[local]:
@@ -605,7 +571,7 @@ Proof
   drule_all deploy_ctor_final_immutable_lookup >> strip_tac >> gvs[] >>
   conj_tac
   >- (irule deploy_state_immutable_val_wf >> metis_tac[]) >>
-  drule_at (Pat `evaluate_type _ _ = _`) deploy_immutable_type_size >> simp[]
+  drule_at (Pat `evaluate_type _ _ = _`) evaluated_type_mem_bytes >> simp[]
 QED
 
 Theorem deploy_snapshot_observations[local]:

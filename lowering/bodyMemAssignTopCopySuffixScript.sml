@@ -240,6 +240,12 @@ Proof
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `post_value_type cenv e = expr_type e` by
+    (qpat_x_assum `lowered_value_type cenv e = expr_type e` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     Cases_on `e` >> gvs[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
   drule_all topcopy_post_region >> strip_tac >>
   `0 < type_memory_size tv` by simp[type_memory_size_slots] >>
   `w2n w + type_memory_size tv <= s1.vs_alloca_next` by

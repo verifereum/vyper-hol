@@ -8,6 +8,7 @@
  *)
 Theory tupleAssignMemory
 Ancestors
+  loweringPosts
   fragGasMode
   exprSimDefs loweringPosts tupleAssignParts tupleAssignPrefix
   tupleTypedLoad tupleStageProps stmtSimAssignTuple tupleLocalStoreProps

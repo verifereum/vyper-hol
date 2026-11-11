@@ -1,6 +1,6 @@
 Theory concretizePtrPhiTotality
 Ancestors venomWfProps
-  concretizePtrLocalOrigin concretizePtrClosure execEquivParamBase phiWellFormed
+  concretizePtrLocalOrigin concretizePtrClosure execEquivParamBase
   ptrDiscipline pointerConfinedDefs venomWf venomExecSemantics venomState
   venomInst finite_map pred_set list
 

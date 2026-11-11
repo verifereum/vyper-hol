@@ -14,7 +14,7 @@
 
 Theory pointerConfinedProps
 Ancestors
-  allocaRemapSSA pointerConfinedDefs While
+  allocaRemapSSA pointerConfinedDefs venomInst While
 Libs
   listTheory pred_setTheory
 
@@ -90,6 +90,30 @@ Proof
   rpt strip_tac >>
   qspecl_then [`fn`, `vars`] strip_assume_tac pointer_use_vars_fixpoint >>
   gvs[SUBSET_DEF]
+QED
+
+Theorem roots_in_pointer_derived_vars:
+  !fn roots v. FINITE roots /\ v IN roots ==>
+    v IN pointer_derived_vars fn roots
+Proof
+  rw[pointer_derived_vars_def] >>
+  irule pointer_use_vars_initial >>
+  metis_tac[MEM_SET_TO_LIST]
+QED
+
+Theorem FINITE_alloca_roots:
+  !fn. FINITE (alloca_roots fn)
+Proof
+  rw[alloca_roots_def] >>
+  irule SUBSET_FINITE >>
+  qexists `set (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn)))` >>
+  simp[SUBSET_DEF, MEM_FLAT, MEM_MAP] >> rpt strip_tac >>
+  rename1 `MEM ainst (fn_insts fn)` >>
+  qexists `ainst.inst_outputs` >> simp[] >>
+  (conj_tac >- (qexists `ainst` >> simp[])) >>
+  gvs[inst_output_def] >>
+  Cases_on `ainst.inst_outputs` >> gvs[inst_output_def] >>
+  Cases_on `t` >> gvs[]
 QED
 
 Theorem pointer_use_vars_closed:

@@ -205,10 +205,18 @@ Theorem body_base_memory_at_struct:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es.scopes s n b sz /\
                b <= w2n w /\ w2n w + val_footprint stv v <= b + sz /\
-               local_val_at cenv cx n (w2n w - b) stv v) \/
+               local_val_at cenv cx n (w2n w - b) stv v /\
+               local_place_at cenv cx n (w2n w - b) stv tv) \/
      val_footprint stv v = 0)
 Proof
-  rpt gen_tac >> Cases_on `vv` >>
+  rpt gen_tac >> Cases_on `vv`
+  >~ [`StackValue _ _`]
+  >- (simp[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
+           expr_val_at_def, is_word_type_def] >>
+      rpt strip_tac >> gvs[] >>
+      `!n k ptv. local_place_at cenv cx n k ptv tv` by
+        simp[local_place_at_def] >>
+      metis_tac[]) >>
   simp[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
        expr_val_at_def, is_word_type_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
@@ -241,7 +249,9 @@ Theorem body_attr_memory_at_field:
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
     struct_has_type fs vals /\ ALOOKUP vals fld = SOME fv /\
     ALOOKUP fs fld = SOME ftv /\ evaluate_type (get_tenv cx) ann = SOME ftv /\
-    vv_loc bvv = LocMemory ==>
+    vv_loc bvv = LocMemory /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_at cenv cx ann sa sn es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -272,7 +282,12 @@ Proof
   >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
       `w2n w + struct_field_offset fields fld - b =
        (w2n w - b) + struct_field_offset fields fld` by decide_tac >>
-      pop_assum SUBST1_TAC >> irule body_local_val_at_field >> metis_tac[]) >>
+      pop_assum SUBST1_TAC >>
+      conj_tac >- (irule body_local_val_at_field >> metis_tac[]) >>
+      irule local_place_at_step >>
+      qexistsl [`AttrSubscript fld`, `StructTV fs`, `tv`] >>
+      simp[mem_step_offset_def] >>
+      irule mem_field_offset_layout >> simp[]) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
@@ -282,7 +297,7 @@ Theorem body_attr_memory_vv_post:
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
-    expr_type obj = StructT sid /\
+    expr_type obj = StructT sid /\ post_value_type cenv obj = expr_type obj /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
     fields_layout
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
@@ -292,7 +307,9 @@ Theorem body_attr_memory_vv_post:
     (!vals. read_result cx tv es1 = (INL (StructV vals), es1) ==>
        ?fv. ALOOKUP vals fld = SOME fv /\
             read_result cx tv' es1 = (INL fv, es1)) /\
-    vv_loc bvv = LocMemory ==>
+    vv_loc bvv = LocMemory /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -336,8 +353,13 @@ Proof
   >- (simp[expr_type_def] >>
       qpat_assum `vv_loc bvv = LocMemory`
         (fn th => pure_once_rewrite_tac[GSYM th]) >>
-      irule body_attr_memory_at_field >> simp[] >> metis_tac[]) >>
-  first_assum ACCEPT_TAC
+      irule body_attr_memory_at_field >> simp[] >>
+      conj_tac >- metis_tac[] >>
+      qexistsl [`fld`, `fs`, `sid`, `tv`, `vals`] >> simp[])
+  >~ [`vv_own _ _ _ _ _ _ _ _ _`] >- simp[]
+  >~ [`vv_storage_live _ (LocatedValue _ _) _ _`] >- simp[mk_ptr_def] >>
+  TRY (first_assum ACCEPT_TAC) >>
+  simp[loweringPostsTheory.expr_has_effect_thm]
 QED
 
 Theorem body_attribute_name_compile:
@@ -406,7 +428,7 @@ Theorem body_base_memory_post_read_struct:
     ?v. read_result cx tv es1 = (INL v, es1)
 Proof
   rpt strip_tac >> fs[vv_post_def] >>
-  drule_all body_base_memory_holds_struct >> metis_tac[]
+  Cases_on `bvv` >> gvs[vv_holds_def, vv_loc_def, vv_location_def]
 QED
 
 Theorem body_word_load_prefix_mem_ok:
@@ -480,11 +502,12 @@ Theorem body_word_load_run_post:
       q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next
 Proof
   rpt strip_tac >>
-  `t = expr_type e /\
+  `t = post_value_type cenv e /\
    ?w. eval_operand p.ptr_operand s = SOME w /\
-       !tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+       !tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt ==>
              mem_word_at (w2n w) s.vs_memory = typed_val_to_w256 tvt v` by
-    (gvs[vv_post_def, vv_holds_def, read_result_def, return_def] >> metis_tac[]) >>
+    (gvs[vv_post_def, vv_holds_def, read_result_def, return_def] >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
   gvs[] >> drule emitted_insts_emit_op >> strip_tac >>
   qabbrev_tac `out = STRING #"%" (toString sm.cs_next_var)` >>
   `not_local_ptr cenv es'.scopes out` by
@@ -497,13 +520,13 @@ Proof
   qexists_tac `update_var out (mload (w2n w) s) s` >>
   simp[run_inst_seq_def, Abbr `out`] >>
   reverse conj_tac >- simp[update_var_def] >>
-  irule expr_post_of_vv_post_load >>
+  irule expr_post_of_vv_post_load_physical >>
   goal_assum (drule_at Any) >>
   simp[eval_operand_def, lookup_var_update_var,
        GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   conj_tac
   >- (irule stmt_state_rel_update_var >> simp[] >> fs[vv_post_def]) >>
-  qexistsl_tac [`p`, `s`, `sm`, `expr_type e`] >>
+  qexistsl_tac [`p`, `s`, `sm`, `post_value_type cenv e`] >>
   simp[update_var_def]
 QED
 
@@ -544,11 +567,13 @@ Proof
   qpat_x_assum `run_inst_seq _ _ = OK q` mp_tac >>
   qpat_x_assum `alloca_history func (q with vs_inst_idx := _)` mp_tac >>
   simp[mk_inst_def] >> rpt strip_tac >>
-  `is_word_type (expr_type e)` by gvs[vv_post_def, vv_holds_def] >>
-  fs[expr_post_def, expr_val_rel_def, expr_val_at_def,
+  `is_word_type (post_value_type cenv e)` by
+    (gvs[vv_post_def, vv_holds_def] >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
+  fs[expr_post_def, expr_val_rel_def, expr_val_at_def, expr_val_own_def,
      stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
-     local_region_def, locals_kept_def] >>
-  conj_tac >> first_x_assum MATCH_ACCEPT_TAC
+     local_region_def] >>
+  rpt conj_tac >> first_x_assum MATCH_ACCEPT_TAC
 QED
 
 Theorem body_attribute_name_capacity:
@@ -762,8 +787,8 @@ Theorem body_field_expr_post_inst_idx[simp]:
   expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, stmt_state_rel_inst_idx, eval_operand_def,
-       lookup_var_def, expr_val_rel_def, expr_val_at_def, local_region_def,
-       locals_kept_def]
+       lookup_var_def, expr_val_rel_def, expr_val_at_def, expr_val_own_def,
+       local_region_def, locals_kept_def]
 QED
 
 Theorem body_unwrap_memory_counted_read:
@@ -791,7 +816,7 @@ Proof
     (rw[vv_store_bound_def] >> gvs[read_result_def, return_def] >>
      metis_tac[]) >>
   `vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s` by
-    (drule vv_post_read_result >> disch_then (fn th => fs[th])) >>
+    metis_tac[vv_post_read_result] >>
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
   simp[unwrap_value_def] >> Cases_on `is_word_type t` >> simp[]
   >- (strip_tac >> fs[compile_ptr_load_def] >>

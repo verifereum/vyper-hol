@@ -27,8 +27,7 @@ Proof
   fs[relocation_env_def] >> strip_tac >> gvs[] >>
   gvs[concretize_supplement_def, halt_state_def, set_returndata_def,
     step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
-  drule accounts_agree_except_selfdestruct >>
-  disch_then (qspecl_then [`t.vs_call_ctx.cc_address`, `w2w addr`] mp_tac) >> simp[]
+  drule accounts_agree_except_selfdestruct_eip6780 >> simp[]
 QED
 
 

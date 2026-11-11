@@ -1,6 +1,7 @@
 (* Tail execution with arbitrary stale temporary bindings. *)
 Theory exprSimExtract32TailLift
 Ancestors
+  exprSimHashBoundary
   exprSimExtract32Lift exprSimExtract32Tail exprSimExtract32Assembly
   exprSimExtract32Read exprSimExtract32Run exprSimExtract32Post
   exprSimExtract32Value exprSimHash exprSimVVFrame exprSimDefs loweringPosts

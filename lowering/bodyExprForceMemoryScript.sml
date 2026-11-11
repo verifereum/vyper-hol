@@ -4,9 +4,11 @@
 Theory bodyExprForceMemory
 Ancestors
   exprSimMemUnwrap exprSimMemDefs exprSimHyps exprSimDefs exprLowering
+  loweringPosts
 
 Theorem body_expr_sim_mem_of_vv_sim_mem:
   !ctx func cenv cx env ty e es.
+    post_value_type cenv e = expr_type e /\
     expr_body_pre cenv cx env e es /\
     expr_vv_sim_mem ctx func cenv cx ty e es /\
     (!sa t op sb. compile_expr cenv ty e sa = (StackValue t op, sb) ==>

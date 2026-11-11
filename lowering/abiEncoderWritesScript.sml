@@ -32,7 +32,7 @@ Theorem abi_encoder_emit_store:
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   drule inst_extends_emit_void >> strip_tac >>
-  asm_simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def,
+  asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_opcode_eqs,
     exec_write2_def, mk_inst_def, w2n_n2w] >>
   fs[fresh_vars_wrt_def, lookup_var_def, mstore_def]
 QED
@@ -48,7 +48,7 @@ Theorem abi_encoder_emit_copy:
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   drule inst_extends_emit_void >> strip_tac >>
-  asm_simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def, mk_inst_def, w2n_n2w] >>
+  asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, w2n_n2w] >>
   fs[fresh_vars_wrt_def, lookup_var_def, mcopy_def, write_memory_with_expansion_def]
 QED
 
@@ -180,7 +180,7 @@ Theorem encoder_mstore_at[local]:
   step_inst_base (mk_inst site MSTORE [a;b] []) s = OK (mstore p w s)
 Proof
   rpt strip_tac >>
-  simp[Once step_inst_base_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[exec_write2_def, w2n_n2w]
 QED
 

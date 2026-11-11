@@ -123,7 +123,7 @@ Proof
   >- (Cases_on `d` >> fs[return_buf_ptr_def] >>
       PairCases_on `x` >>
       gvs[return_buf_ptr_def] >>
-      metis_tac[ptr_covers_old_transport]) >>
+      drule_all ptr_covers_old_transport >> simp[]) >>
   simp[] >> metis_tac[ret_pc_ok_def]
 QED
 

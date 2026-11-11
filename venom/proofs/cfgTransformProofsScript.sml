@@ -185,3 +185,14 @@ QED
 
 (* ===== Well-formedness Preservation ===== *)
 
+(* ===== Function Variables ===== *)
+
+Theorem inst_output_in_fn_all_vars:
+  !func bb inst out.
+    MEM bb func.fn_blocks /\ MEM inst bb.bb_instructions /\
+    MEM out inst.inst_outputs ==>
+    MEM out (fn_all_vars func)
+Proof
+  rw[fn_all_vars_def, listTheory.MEM_FLAT, listTheory.MEM_MAP, PULL_EXISTS] >>
+  metis_tac[]
+QED

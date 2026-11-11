@@ -84,7 +84,7 @@ Proof
     (drule emit_inst_extends >> strip_tac >>
      gvs[emitted_insts_def, same_blocks_def, Abbr `A`, DROP_LENGTH_APPEND]) >>
   `run_inst_seq (emitted_insts sa sA) s = OK t` by
-    (gvs[mk_inst_def] >> simp[run_inst_seq_def, step_inst_base_def]) >>
+    (gvs[mk_inst_def] >> simp[run_inst_seq_def, step_inst_base_opcode_eqs]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sA) s` by
     (simp[run_inst_seq_mem_ok_last] >>
      irule instMemFrontierTheory.below_frontier_no_ranges >> simp[Abbr `A`, mk_inst_def]) >>

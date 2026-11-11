@@ -107,7 +107,7 @@ Proof
   qid_spec_tac `s` >>
   Cases_on `word_scale load_loc = 1` >>
   Cases_on `word_scale store_loc = 1` >>
-  simp[contextTheory.compile_word_copy_loop_def, comp_ignore_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def, comp_ignore_bind_def] >>
   rpt gen_tac >>
   rpt (irule compiler_counter_bind >> conj_tac >> rpt gen_tac >> BETA_TAC) >>
   simp[compiler_counter_primitives, compiler_counter_return,
@@ -821,9 +821,6 @@ Proof
     suspend "rawcalldata"
   >~ [`compile_call _ _ _ _ (Send _) _ _ _`] >-
     suspend "send"
-  >~ [`compile_call _ _ _ _ (CreateTarget _ _ _ _) _ _ _`] >-
-    (simp[compile_call_def] >>
-     metis_tac[compiler_create_call_var])
   >~ [`compile_call _ _ _ _ RawLog _ _ _`] >-
     (namedCases_on `args` ["", "topics_e rest"] >-
        compiler_literal_call_result_tac >>
@@ -833,7 +830,14 @@ Proof
   >~ [`compile_call _ _ _ _ RawRevert _ _ _`] >-
     (namedCases_on `args` ["", "data_e rest"] >-
        compiler_literal_call_result_tac >>
-     Cases_on `rest` >> compiler_literal_call_result_tac) >>
+     Cases_on `rest` >> compiler_literal_call_result_tac)
+  >~ [`compile_call _ _ _ _ SelfDestructTarget _ _ _`] >-
+    (namedCases_on `args` ["", "to_e rest"] >-
+       compiler_literal_call_result_tac >>
+     Cases_on `rest` >> compiler_literal_call_result_tac)
+  >~ [`compile_call _ _ _ _ (CreateTarget _ _ _ _) _ _ _`] >-
+    (simp[compile_call_def] >>
+     metis_tac[compiler_create_call_var]) >>
   simp[compile_call_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def]
@@ -1307,9 +1311,19 @@ Resume compiler_builtin_var[sha]:
   >- (builtin_stack_var_tac >>
       metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_bytes_safe_operand,
                 exprSafeOperandTheory.safe_operand_def]) >>
-  rpt CASE_TAC >> simp[] >> builtin_stack_var_tac >>
-  metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_bytesm_safe_operand,
-            exprSafeOperandBuiltinsTheory.compile_sha256_word_safe_operand,
+  Cases_on `expr_type (HD args)` >> simp[]
+  >~ [`BaseT bt`]
+  >- (Cases_on `bt` >> simp[]
+      >~ [`BytesT bd`]
+      >- (Cases_on `bd` >> simp[] >> builtin_stack_var_tac >>
+          metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_bytesm_safe_operand,
+                    exprSafeOperandBuiltinsTheory.compile_sha256_word_safe_operand,
+                    exprSafeOperandTheory.safe_operand_def]) >>
+      builtin_stack_var_tac >>
+      metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_word_safe_operand,
+                exprSafeOperandTheory.safe_operand_def]) >>
+  builtin_stack_var_tac >>
+  metis_tac[exprSafeOperandBuiltinsTheory.compile_sha256_word_safe_operand,
             exprSafeOperandTheory.safe_operand_def]
 QED
 Resume compiler_builtin_var[calldata]:
@@ -1360,6 +1374,15 @@ Theorem compiler_ci_mono_reserved:
   local_ptrs_reserved ce sb
 Proof
   metis_tac[local_ptrs_reserved_next_var, ci_mono_def]
+QED
+
+Theorem compiler_hash_reserved[local]:
+  local_ptrs_reserved ce sa /\
+  compile_bytestring_hash p sa = (h,sb) ==>
+  local_ptrs_reserved ce sb
+Proof
+  rpt strip_tac >> irule compiler_ci_mono_reserved >>
+  qexists `sa` >> metis_tac[ci_mono_compile_bytestring_hash, pairTheory.SND]
 QED
 
 Theorem compiler_guarded_callback_ci_mono:
@@ -1850,14 +1873,15 @@ Proof
   simp[compile_call_def]
 QED
 
-(* RawRevert's single callback is entered in the original reserved state. *)
-Theorem compiler_raw_revert_reserved_cong:
+(* The single callback is entered in the original reserved state. *)
+Theorem compiler_single_arg_call_reserved_cong:
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
-  local_ptrs_reserved ce sa ==>
-  compile_call f ce rt ty RawRevert args dr sa =
-  compile_call g ce rt ty RawRevert args dr sa
+  local_ptrs_reserved ce sa /\
+  (target = RawRevert \/ target = SelfDestructTarget) ==>
+  compile_call f ce rt ty target args dr sa =
+  compile_call g ce rt ty target args dr sa
 Proof
-  strip_tac >>
+  rw[] >>
   `!ty e. lower_value f ce ty e sa = lower_value g ce ty e sa` by
     (rpt gen_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
   (namedCases_on `args` ["", "arg_e rest"] >- simp[compile_call_def] >>
@@ -2072,7 +2096,7 @@ Proof
          irule compiler_raw_call_reserved_cong >> simp[],
          irule compiler_raw_call_calldata_reserved_cong >> simp[],
          irule compiler_raw_log_reserved_cong >> simp[],
-         irule compiler_raw_revert_reserved_cong >> simp[],
+         irule compiler_single_arg_call_reserved_cong >> simp[] >> NO_TAC,
          rename1 `ExtCall _ _ signature _` >> PairCases_on `signature` >>
            irule compiler_extcall_reserved_cong >> simp[],
          (rename1 `CreateTarget ck salted rof kw_order` >>
@@ -2177,11 +2201,19 @@ Resume compiler_builtin_reserved_cong[bop]:
       Cases_on `HD (TL args)` >> simp[] >>
       rename1 `Builtin _ rhs_b _` >> Cases_on `rhs_b` >> simp[] >>
       AP_TERM_TAC >> irule compiler_multi_exprs_reserved_cong >> simp[]) >>
-  IF_CASES_TAC >> simp[] >>
-  pairarg_tac >>
-  qpat_assum `!ty e s v sb. _ /\ lower_value _ _ _ _ _ = _ ==> _`
-    drule_all >>
-  strip_tac >> simp[]
+  IF_CASES_TAC >> simp[]
+  >- (Cases_on `bytestring_literal_hash (HD args)` >> simp[]
+      >- (Cases_on `lower_value g ce (expr_type (HD args)) (HD args) sa` >>
+          rename1 `lower_value g ce _ _ sa = (p,sb)` >>
+          `local_ptrs_reserved ce sb` by metis_tac[] >>
+          simp[] >> Cases_on `compile_bytestring_hash p sb` >>
+          rename1 `compile_bytestring_hash p sb = (h,sc)` >>
+          `local_ptrs_reserved ce sc` by
+            (irule compiler_hash_reserved >> metis_tac[]) >>
+          simp[] >>
+          Cases_on `bytestring_literal_hash (HD (TL args))` >> simp[]) >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> simp[]) >>
+  rpt compiler_reserved_pair_tac
 QED
 
 Resume compiler_builtin_reserved_cong[concat]:

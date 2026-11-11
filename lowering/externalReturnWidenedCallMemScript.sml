@@ -14,8 +14,8 @@ Ancestors
   venomExecSemantics venomState compileEnv e2eDefs supportedProgram
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
-  vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
-  entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
+  vyperLoweringCorrect fragExecMem bodyMemoryDefs
+  entryHaltMem bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
@@ -36,7 +36,7 @@ Theorem external_frame_ret_widened_call_mem:
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env0 /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =

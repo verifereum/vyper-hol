@@ -106,7 +106,7 @@ Proof
       wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
   qexistsl_tac [`t`, `w`] >>
   simp[exprLoweringPropsTheory.run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_def,
+       step_inst_base_opcode_eqs,
        venomInstTheory.mk_inst_def, eval_operand_def,
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
   conj_tac
@@ -196,7 +196,7 @@ Proof
        comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[emitted_insts_def,
        rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+       step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
   gvs[update_var_def]
 QED
 
@@ -211,7 +211,7 @@ Proof
        comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >> gvs[emitted_insts_def,
        rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+       step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
   gvs[update_var_def, venomStateTheory.contract_storage_def,
       venomStateTheory.contract_transient_def]
 QED

@@ -240,9 +240,14 @@ Proof
      gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
   drule_all attr_add_counted_post >> strip_tac >>
   rename1 `gas_path_mem ctx func t 0 (OK u)` >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule attr_pre_base >> strip_tac >> drule_all attr_post_value_type >>
+     simp[]) >>
   `vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
      (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
-    (irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>
+    (qpat_assum `!tail. select_result _ _ _ _ _ = _`
+       (qspec_then `[]` (assume_tac o MATCH_MP select_result_memory_place)) >>
+     irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>
   qexistsl_tac [`tv'`, `u`] >> simp[] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ann`, `obj`, `fld`, `es`, `sa`,
                `sb`, `s0`, `ee`, `tv'`, `dst`, `bvv`, `u`, `tv`, `sid`, `fs`,

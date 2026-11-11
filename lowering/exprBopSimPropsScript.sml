@@ -8,12 +8,60 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec varsExt  freshWrites exprBopLowering loweringSlice
   localPtrsProps vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
+  vyperEvalScopesProgress vyperLookup valueEncodingProps valueEncodingProofs
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding venomExecSemantics venomInst venomState
   vyperValue integer integer_word int_bitwise words intBits vyperTyping
 Libs
   pairLib
+
+Theorem comparison_digest_run:
+  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
+   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
+  eval_operand h1 s = SOME w1 /\ eval_operand h2 s = SOME w2 ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (bool_to_word (if bop = vyperAST$Eq then w1 = w2 else w1 <> w2)) /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)
+Proof
+  Cases_on `bop = vyperAST$Eq` >>
+  simp[emit_op_def, fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
+    by decide_tac >>
+  simp[emitted_insts_def, DROP_APPEND, run_inst_seq_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, exec_pure1_def,
+       bind_outputs_def] >>
+  simp[eval_operand_def, lookup_var_update_var, update_var_def, bool_to_word_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
+                       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem comparison_digest_shape:
+  (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
+   else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) ==>
+  same_blocks sa sb /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts +
+    LENGTH (emitted_insts sa sb) /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = [] /\
+  ci_mono sa sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
+  EVERY (\i. i.inst_opcode = EQ \/ i.inst_opcode = ISZERO)
+    (emitted_insts sa sb)
+Proof
+  Cases_on `bop = vyperAST$Eq` >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
+    by decide_tac >>
+  simp[same_blocks_def, emitted_insts_def, DROP_APPEND, mk_inst_def,
+       is_terminator_def, ci_mono_def, cs_extends_def, IS_PREFIX_APPEND,
+       not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+QED
 
 
 Theorem eval_expr_bop_cases:
@@ -32,6 +80,7 @@ Theorem eval_expr_bop_cases:
             res = bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es')
 Proof
   rpt gen_tac >>
+  Cases_on `bop = In \/ bop = NotIn` >> (
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -53,10 +102,10 @@ Proof
   >- (simp[] >> rw[] >> simp[]) >>
   rename1 `read_result cx r2 st2 = (INL v2, es2)` >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       lift_sum_def, bop_result_def] >>
-  Cases_on `evaluate_builtin cx es2.accounts ann (Bop bop)
-              [expr_type e1; expr_type e2] [v1; v2]` >>
-  simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[]
+       lift_sum_def, lift_option_type_def, type_check_def, assert_def,
+       bop_result_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[])
 QED
 
 Theorem eval_operand_frame:
@@ -109,17 +158,143 @@ Proof
 QED
 
 Theorem locals_kept_trans:
-  !cenv es es1 sa s0 t u.
-    local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  !cenv es es1 es' sa s0 t u.
+    local_ptrs_reserved cenv sa /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x t = SOME w) /\
-    locals_kept cenv es s0 t /\ locals_kept cenv es1 t u ==>
-    locals_kept cenv es s0 u
+    locals_kept cenv es es1 s0 t /\ locals_kept cenv es1 es' t u ==>
+    locals_kept cenv es es' s0 u
 Proof
-  rw[locals_kept_def] >>
-  `local_region cenv es1.scopes t n b sz` by
+  rpt gen_tac >> strip_tac >>
+  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by fs[locals_kept_def] >>
+  `!n b sz. local_region cenv es.scopes s0 n b sz ==>
+            local_region cenv es1.scopes t n b sz` by
     metis_tac[local_region_frame_fwd] >>
+  fs[locals_kept_def] >> rpt conj_tac
+  >- metis_tac[]
+  >- metis_tac[scopes_progress_trans]
+  >- (rpt strip_tac >>
+      `?e e1. lookup_scopes n es.scopes = SOME e /\
+              lookup_scopes n es1.scopes = SOME e1` by
+        (gvs[local_region_def] >>
+         metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE,
+                   optionTheory.option_CASES]) >>
+      `e1 = e` by
+        (qpat_x_assum `scopes_progress es.scopes _`
+           (qspecl_then [`n`, `e`, `e1`] mp_tac o
+            SIMP_RULE std_ss [scopes_progress_def]) >>
+         qpat_x_assum `scopes_progress es1.scopes _`
+           (qspecl_then [`n`, `e1`, `e`] mp_tac o
+            SIMP_RULE std_ss [scopes_progress_def]) >>
+         gvs[] >> rw[] >> gvs[]) >>
+      gvs[] >> metis_tac[]) >>
+  fs[popped_kept_def] >> rpt strip_tac >>
+  qpat_x_assum `!n b sz entry' h. local_region _ es1.scopes _ _ _ _ /\ _ ==> _`
+    irule >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `n` >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!n b sz entry' h. local_region _ es.scopes _ _ _ _ /\ _ ==> _`
+        irule >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexists_tac `n` >> fs[])
+  >- simp[] >>
   metis_tac[]
+QED
+
+(* A pop of a live dynamic array in the local id stores its new length at
+   offset k of id's region and records one snapshot in id's history.  When
+   the new snapshot sits in memory after the store and no older snapshot's
+   bytes hold the length word, that is a locals_kept step. *)
+Theorem locals_kept_pop_store:
+  !func cenv es es' s0 u id b sz k w entry entry' hnew.
+    local_ptrs_rel func cenv es.scopes s0 /\
+    local_region cenv es.scopes s0 id b sz /\ k + 32 <= sz /\
+    dynarray_len_at cenv id k /\
+    u.vs_memory = (mstore (b + k) w s0).vs_memory /\
+    MAP FDOM es'.scopes = MAP FDOM es.scopes /\
+    lookup_scopes id es.scopes = SOME entry /\
+    lookup_scopes id es'.scopes = SOME entry' /\
+    (!n. n <> id ==> lookup_scopes n es'.scopes = lookup_scopes n es.scopes) /\
+    entry'.type = entry.type /\ entry'.popped = hnew :: entry.popped /\
+    snapshot_in entry.type b sz hnew u.vs_memory /\
+    (!path pv j ptv. MEM (path,pv) entry.popped /\
+       mem_path_offset entry.type path = SOME (j,ptv) ==>
+       j + type_memory_size ptv <= k \/ k + 32 <= j) ==>
+    locals_kept cenv es es' s0 u
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n b' sz'. local_region cenv es.scopes s0 n b' sz' /\ n <> id ==>
+     mem_bytes_at b' sz' u.vs_memory = mem_bytes_at b' sz' s0.vs_memory` by
+    (rpt strip_tac >> simp[] >> irule mstore_mem_bytes_at_disjoint >>
+     `regions_disjoint b sz b' sz'` by (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `!p. MEM p entry.popped /\ snapshot_in entry.type b sz p s0.vs_memory ==>
+       snapshot_in entry.type b sz p u.vs_memory` by
+    (Cases >> rw[snapshot_in_def] >>
+     rename1 `mem_path_offset _ q = SOME (j,ptv)` >>
+     qexistsl_tac [`j`, `ptv`] >> simp[] >>
+     irule (cj 1 valueEncodingProofsTheory.val_in_memory_mem_agree_proof) >>
+     simp[] >> qexists_tac `s0.vs_memory` >> simp[] >>
+     `j + type_memory_size ptv <= k \/ k + 32 <= j` by metis_tac[] >>
+     qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
+     irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
+  simp[locals_kept_def] >> rpt conj_tac
+  >- (rpt strip_tac >> rename1 `local_region _ _ _ nm b' sz'` >> simp[] >>
+      irule mstore_mem_bytes_at_disjoint >>
+      Cases_on `nm = id`
+      >- (`b' = b` by gvs[local_region_def] >> gvs[] >>
+          qpat_x_assum `!k. dynarray_len_at _ _ k ==> _` drule >> simp[]) >>
+      `regions_disjoint b sz b' sz'` by (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
+      gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
+  >- (rw[scopes_progress_def] >> Cases_on `n = id` >> gvs[])
+  >- (rpt strip_tac >> rename1 `local_region _ _ _ nm b' sz'` >>
+      Cases_on `nm = id`
+      >- (`entry' = entry` by gvs[] >> gvs[listTheory.CONS_ACYCLIC]) >>
+      metis_tac[]) >>
+  simp[popped_kept_def] >> rpt strip_tac >>
+  qpat_x_assum `u.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >>
+  rename1 `lookup_scopes nm es'.scopes = SOME ent` >>
+  rename1 `local_region _ _ _ nm b' sz'` >>
+  Cases_on `nm = id`
+  >- (`b' = b /\ sz' = sz /\ ent = entry'` by gvs[local_region_def] >>
+      gvs[] >> Cases_on `h = hnew` >> gvs[] >> metis_tac[]) >>
+  `lookup_scopes nm es.scopes = SOME ent` by metis_tac[] >>
+  `snapshot_in ent.type b' sz' h s0.vs_memory` by metis_tac[] >>
+  irule snapshot_in_mem_agree >> qexists_tac `s0.vs_memory` >> simp[] >>
+  metis_tac[]
+QED
+
+(* The pop's array is live, at path, and every older snapshot is at a dead
+   path (popped_keys_indexed), so no older snapshot holds its length word. *)
+Theorem locals_kept_live_pop:
+  !func cenv es es' s0 u id b sz k w entry entry' hnew path arr etv n.
+    local_ptrs_rel func cenv es.scopes s0 /\
+    local_region cenv es.scopes s0 id b sz /\ k + 32 <= sz /\
+    dynarray_len_at cenv id k /\
+    u.vs_memory = (mstore (b + k) w s0).vs_memory /\
+    MAP FDOM es'.scopes = MAP FDOM es.scopes /\
+    lookup_scopes id es.scopes = SOME entry /\
+    lookup_scopes id es'.scopes = SOME entry' /\
+    (!n. n <> id ==> lookup_scopes n es'.scopes = lookup_scopes n es.scopes) /\
+    entry'.type = entry.type /\ entry'.popped = hnew :: entry.popped /\
+    snapshot_in entry.type b sz hnew u.vs_memory /\
+    EVERY (\q. ?err. evaluate_subscripts entry.type entry.value q = INR err)
+      (MAP FST entry.popped) /\
+    evaluate_subscripts entry.type entry.value path = INL arr /\
+    mem_path_offset entry.type path = SOME (k, ArrayTV etv (Dynamic n)) ==>
+    locals_kept cenv es es' s0 u
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`func`, `cenv`, `es`, `es'`, `s0`, `u`, `id`, `b`, `sz`, `k`,
+               `w`, `entry`, `entry'`, `hnew`] mp_tac locals_kept_pop_store >>
+  impl_tac
+  >- (fs[] >> rpt strip_tac >> rename1 `MEM (q,pv) entry.popped` >>
+      `?err. evaluate_subscripts entry.type entry.value q = INR err` by
+        (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+         metis_tac[]) >>
+      metis_tac[mem_path_offset_dead_apart]) >>
+  simp[]
 QED
 
 Theorem expr_post_bop:
@@ -178,9 +353,20 @@ Proof
           qexists_tac `sa.cs_next_id` >> asm_rewrite_tac[]) >>
       qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
       first_assum ACCEPT_TAC) >>
-  (* the locals' memory: kept by e1, then by e2 *)
-  irule locals_kept_mem_tail >> qexists_tac `u` >> simp[] >>
-  irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
+  conj_tac
+  >- ((* the locals' memory: kept by e1, then by e2 *)
+      irule locals_kept_mem_tail >> qexists_tac `u` >> simp[] >>
+      irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  (* the pure frame: kept by e1, then by e2 *)
+  simp[expr_has_effect_thm] >> strip_tac >>
+  `pure_frame cenv func es sa s0 t` by
+    (qpat_x_assum `_ ==> pure_frame _ _ _ _ s0 t` irule >> first_assum ACCEPT_TAC) >>
+  `pure_frame cenv func es1 s1 t u` by
+    (qpat_x_assum `_ ==> pure_frame _ _ _ _ t u` irule >> first_assum ACCEPT_TAC) >>
+  `pure_frame cenv func es sa s0 u` by
+    (drule_all pure_frame_trans >> disch_then ACCEPT_TAC) >>
+  irule pure_frame_mem_tail >> qexists_tac `u` >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -194,6 +380,7 @@ Theorem eval_expr_bop_bind:
                 v1 v2 es2, es2)) od)
 Proof
   simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `bop = In \/ bop = NotIn` >> (
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -211,10 +398,10 @@ Proof
   reverse (Cases_on `res2`) >- simp[] >>
   rename1 `read_result cx r2 st2 = (INL v2, es2)` >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       lift_sum_def, bop_result_def] >>
-  Cases_on `evaluate_builtin cx es2.accounts ann (Bop bop)
-              [expr_type e1; expr_type e2] [v1; v2]` >>
-  simp[read_result_def, return_def, raise_def]
+       lift_sum_def, lift_option_type_def, type_check_def, assert_def,
+       bop_result_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[bind_def, return_def, raise_def, read_result_def])
 QED
 
 Theorem bop_result_gas_obs[simp]:

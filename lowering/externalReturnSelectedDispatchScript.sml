@@ -10,7 +10,7 @@ Theorem return_selected_success_suffix:
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
@@ -26,7 +26,7 @@ Theorem return_selected_success_suffix:
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
   ((!ann fid xs drv. e <> Call ann (IntCall fid) xs drv) \/
-    lowered_value_type ce e = expr_type e \/
+    (?ann fid xs drv. e = Call ann (IntCall fid) xs drv) \/
     (?ann fid xs drv pvs. e = Call ann (IntCall fid) xs drv /\
       ce.ce_func_info (nsid_to_string fid) = (0,0,pvs) /\ op = Lit 0w)) /\
   return_consumer_suffix ce ret (lowered_value_type ce e) op sa = (u,sf) /\
@@ -46,7 +46,15 @@ Proof
   >- (drule_all return_site_ordinary_compatible >>
       disch_then (qspec_then `ce` assume_tac) >>
       drule_all return_selected_compatible_suffix >> simp[])
-  >- (drule_all return_selected_located_suffix >> simp[]) >>
+  >- (gvs[] >>
+      `well_typed_expr env (Call ann (IntCall fid) xs drv)` by
+        gvs[type_stmt_def, AllCaseEqs()] >>
+      `post_value_type ce (Call ann (IntCall fid) xs drv) <>
+         lowered_value_type ce (Call ann (IntCall fid) xs drv) ==>
+       is_bytestring_type (post_value_type ce (Call ann (IntCall fid) xs drv)) /\
+       is_bytestring_type (lowered_value_type ce (Call ann (IntCall fid) xs drv))`
+        by metis_tac[return_intcall_post_lowered] >>
+      drule_all return_selected_located_suffix >> simp[]) >>
   gvs[] >> PairCases_on `fid` >>
   `well_typed_expr env (Call ann (IntCall (fid0,fid1)) xs drv)` by
     gvs[type_stmt_def, AllCaseEqs()] >>

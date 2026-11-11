@@ -210,6 +210,12 @@ Definition dse_equiv_def:
     dse_frame space s1 = dse_frame space s2
 End
 
+(* Terminal (Halt/IntRet) relation for every space: storage and transient
+   commit, so only memory and the control/FMP fields may differ.  Storage and
+   transient DSE treat every Halt/IntRet opcode as a read barrier, so their
+   terminal states agree there. *)
+Overload dse_term_equiv = ``dse_equiv AddrSp_Memory``
+
 (* After all 3 spaces: memory, transient, and accounts may differ *)
 (* Note: vs_current_bb and vs_inst_idx are excluded — they are internal
    control-flow fields with no semantic meaning after function completion.

@@ -78,7 +78,7 @@ Proof
   >- (qspec_then `[mk_inst id ASSIGN [Lit 0w] [cv]]` mp_tac storage_copy_seq_path >>
       simp_tac bool_ss [LENGTH, ONE] >> disch_then irule >>
       simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
-           step_inst_base_def, eval_operand_def, run_inst_seq_mem_ok_def] >>
+           step_inst_base_opcode_eqs, eval_operand_def, run_inst_seq_mem_ok_def] >>
       conj_tac
       >- (strip_tac >> irule below_frontier_no_ranges >> simp[]) >>
       gvs[mk_inst_def]) >>
@@ -241,7 +241,7 @@ Proof
   `gas_marked_path memory ctx func r 0 (OK (jump_to hdr r))` by
     (irule storage_copy_jump_path >> (conj_tac >- simp[]) >>
      qexistsl [`bb`, `mk_inst id JMP [Label hdr] []`] >>
-     simp[mk_inst_def, step_inst_base_def]) >>
+     simp[mk_inst_def, step_inst_base_opcode_eqs]) >>
   conj_tac
   >- (drule_all gas_marked_path_then >> simp[]) >>
   drule storage_copy_inv_control >> simp[jump_to_def]
@@ -270,7 +270,7 @@ Proof
      (OK (jump_to (if k = n then exit else loop_body) r))` by
     (irule storage_copy_jump_path >> (conj_tac >- simp[]) >>
      qexistsl [`bb`, `mk_inst id JNZ [Var tv; Label exit; Label loop_body] []`] >>
-     simp[mk_inst_def, step_inst_base_def] >>
+     simp[mk_inst_def, step_inst_base_opcode_eqs] >>
      Cases_on `k = n` >> simp[bool_to_word_def]) >>
   conj_tac
   >- (drule_all gas_marked_path_then >> simp[]) >>

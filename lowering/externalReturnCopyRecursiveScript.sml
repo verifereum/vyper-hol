@@ -90,7 +90,7 @@ Proof
   strip_tac >> drule_all return_copy_word_raw_frag >>
   disch_then (qspec_then `ctx` (mp_then Any irule frag_exec_conseq)) >> simp[] >>
   conj_tac
-  >- (drule_all val_in_memory_word >> strip_tac >>
+  >- (drule_all exprSimPropsTheory.val_in_memory_word >> strip_tac >>
       simp[mstore_mem_word_at_same, GSYM mem_word_at_eq_mload]) >>
   simp[return_copy_word_frame]
 QED
@@ -117,7 +117,7 @@ Proof
   `sty = dty` by metis_tac[type_widens_to_word] >> gvs[] >>
   `type_memory_size dtv = 32` by metis_tac[return_copy_word_layout] >>
   `mem_word_at (w2n sw) s.vs_memory = typed_val_to_w256 dtv v` by
-    metis_tac[val_in_memory_word] >>
+    metis_tac[exprSimPropsTheory.val_in_memory_word] >>
   drule_all return_copy_word_frag >> simp[]
 QED
 

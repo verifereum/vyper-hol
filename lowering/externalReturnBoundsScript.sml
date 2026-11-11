@@ -64,7 +64,7 @@ Proof
   `val_in_memory tv v (w2n w) s.vs_memory` by
     gvs[expr_val_rel_def] >>
   `w2n w + val_footprint tv v < dimword (:256)` by
-    metis_tac[expr_val_at_bound] >>
+    metis_tac[exprSimTypedAllocTheory.expr_val_at_bound] >>
   `w2n w + val_footprint tv v <= dimword (:256)` by decide_tac >>
   drule_all raw_return_value_read >> strip_tac >>
   `val_footprint tv v = 32 + LENGTH bs` by

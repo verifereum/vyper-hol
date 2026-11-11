@@ -18,6 +18,8 @@
  *
  * TOP-LEVEL:
  *   ao_transform_function     — function-level transform
+ *   ao_transform_function_supply — the same, with inserted instructions'
+ *                               ids and variables from an ir_supply
  *   ao_peephole_inst          — main peephole dispatch
  *   ao_handle_offset_inst     — add(lit,label) → offset
  *   ao_opt_producer           — producer-based pattern rewrites
@@ -28,7 +30,7 @@
 Theory algebraicOptDefs
 Ancestors
   passTransform passSharedDefs dfgDefs rangeAnalysisDefs
-  venomExecSemantics venomInst
+  venomExecSemantics venomInst irSupply
 Libs
   pred_setTheory integerTheory
 
@@ -39,6 +41,16 @@ val _ = Parse.hide "chain";
 Definition ao_fresh_var_def:
   ao_fresh_var (id:num) (suffix:string) =
     STRCAT "ao_" (STRCAT (toString id) (STRCAT "_" suffix))
+End
+
+(* The rewrites take the id and output variable of each instruction they
+   insert from a fresh-name function `fr`, keyed by the inserted value's
+   role: "not" or "xor" for the inner value, "iz" for an inserted ISZERO.
+   A rewrite inserts at most one inner value and one ISZERO.
+   ao_transform_function names them after the rewritten instruction;
+   ao_transform_function_supply allocates them from an ir_supply. *)
+Definition ao_inst_fresh_def:
+  ao_inst_fresh (id:num) (tag:string) = (id, ao_fresh_var id tag)
 End
 
 (* Truthy instructions: can accept a truthy value (0/nonzero).
@@ -216,7 +228,7 @@ Definition ao_opt_producer_def:
                     if producer.inst_opcode = SIGNEXTEND then
                       (case producer.inst_operands of
                          [Lit inner_w; _] =>
-                           if w >= inner_w then
+                           if inner_w <=+ w then
                              SOME [inst with <| inst_opcode := ASSIGN;
                                                 inst_operands := [x] |>]
                            else NONE
@@ -267,7 +279,7 @@ Definition ao_opt_signextend_def:
       [n_op; x] =>
         (case n_op of
            Lit w =>
-             if w >= 31w then
+             if 31w <=+ w then
                [inst with <| inst_opcode := ASSIGN; inst_operands := [x] |>]
              else
                let n = w2n w in
@@ -408,7 +420,7 @@ End
        prefer_iszero: eq(x,y) → iszero(xor(x,y))
    Commutative: after pre-flip, literal at op2. *)
 Definition ao_opt_eq_def:
-  ao_opt_eq dfg inst =
+  ao_opt_eq dfg fr inst =
     case inst.inst_operands of
       [op1; op2] =>
         if op1 = op2 then
@@ -416,16 +428,14 @@ Definition ao_opt_eq_def:
         else if lit_eq op2 0w then
           [inst with <| inst_opcode := ISZERO; inst_operands := [op1] |>]
         else if lit_eq op2 (0w - 1w) then
-          let id = inst.inst_id in
-          let tmp = ao_fresh_var id "not" in
+          let (id, tmp) = fr "not" in
           [<| inst_id := id; inst_opcode := NOT;
               inst_operands := [op1]; inst_outputs := [tmp] |>;
            inst with <| inst_opcode := ISZERO;
                         inst_operands := [Var tmp] |>]
         (* prefer_iszero: eq(x,y) → iszero(xor(x,y)) when uses are assert/iszero *)
         else if ao_all_prefer_iszero dfg inst then
-          let id = inst.inst_id in
-          let tmp = ao_fresh_var id "xor" in
+          let (id, tmp) = fr "xor" in
           [<| inst_id := id; inst_opcode := XOR;
               inst_operands := [op1; op2]; inst_outputs := [tmp] |>;
            inst with <| inst_opcode := ISZERO;
@@ -520,8 +530,8 @@ End
 (* Helper: prefer_iszero + almost_always with val=0
    gt x 0 in iszero context → iszero(iszero(x)) *)
 Definition ao_cmp_prefer_iz_zero_def:
-  ao_cmp_prefer_iz_zero id op1 inst =
-    let tmp = ao_fresh_var id "iz" in
+  ao_cmp_prefer_iz_zero fr op1 inst =
+    let (id, tmp) = fr "iz" in
     [<| inst_id := id; inst_opcode := ISZERO;
         inst_operands := [op1]; inst_outputs := [tmp] |>;
      inst with <| inst_opcode := ISZERO;
@@ -531,10 +541,10 @@ End
 (* Helper: prefer_iszero + almost_always with val=-1
    slt x MAX in iszero context → iszero(iszero(not(x))) *)
 Definition ao_cmp_prefer_iz_max_def:
-  ao_cmp_prefer_iz_max id op1 inst =
-    let inner = ao_fresh_var id "not" in
-    let tmp = ao_fresh_var id "iz" in
-    [<| inst_id := id; inst_opcode := NOT;
+  ao_cmp_prefer_iz_max fr op1 inst =
+    let (inner_id, inner) = fr "not" in
+    let (id, tmp) = fr "iz" in
+    [<| inst_id := inner_id; inst_opcode := NOT;
         inst_operands := [op1]; inst_outputs := [inner] |>;
      <| inst_id := id; inst_opcode := ISZERO;
         inst_operands := [Var inner]; inst_outputs := [tmp] |>;
@@ -545,10 +555,10 @@ End
 (* Helper: prefer_iszero + almost_always with general val
    cmp x val in iszero context → iszero(iszero(xor(x, val))) *)
 Definition ao_cmp_prefer_iz_general_def:
-  ao_cmp_prefer_iz_general id op1 op2 inst =
-    let inner = ao_fresh_var id "xor" in
-    let tmp = ao_fresh_var id "iz" in
-    [<| inst_id := id; inst_opcode := XOR;
+  ao_cmp_prefer_iz_general fr op1 op2 inst =
+    let (inner_id, inner) = fr "xor" in
+    let (id, tmp) = fr "iz" in
+    [<| inst_id := inner_id; inst_opcode := XOR;
         inst_operands := [op1; op2]; inst_outputs := [inner] |>;
      <| inst_id := id; inst_opcode := ISZERO;
         inst_operands := [Var inner]; inst_outputs := [tmp] |>;
@@ -566,7 +576,7 @@ End
  *   - prefer_iszero + almost_always uses xor/not pattern (not eq)
  *)
 Definition ao_opt_comparator_def:
-  ao_opt_comparator dfg ra lbl idx inst =
+  ao_opt_comparator dfg ra lbl idx fr inst =
     let opc = inst.inst_opcode in
     case inst.inst_operands of
       [op1; op2] =>
@@ -578,7 +588,7 @@ Definition ao_opt_comparator_def:
           let signed = (opc = SGT \/ opc = SLT) in
           (* Range-based optimization *)
           let range_result = ao_opt_cmp_range ra lbl idx inst is_gt signed in
-          case range_result of
+          (case range_result of
             SOME replacement =>
               [inst with <| inst_opcode := ASSIGN;
                             inst_operands := [replacement] |>]
@@ -601,8 +611,7 @@ Definition ao_opt_comparator_def:
                             inst_operands := [op1] |>]
             else if never = 0w - 1w then
               (* eq x (-1) → iszero(not(x)) *)
-              let id = inst.inst_id in
-              let tmp = ao_fresh_var id "not" in
+              let (id, tmp) = fr "not" in
               [<| inst_id := id; inst_opcode := NOT;
                   inst_operands := [op1]; inst_outputs := [tmp] |>;
                inst with <| inst_opcode := ISZERO;
@@ -616,25 +625,23 @@ Definition ao_opt_comparator_def:
              - val=-1: inner=not(x)
              - else: inner=xor(val, x) *)
           else if prefer_iszero /\ lit_eq op2 almost_always then
-            let id = inst.inst_id in
             let val_w = case op2 of Lit w => w | _ => 0w in
             if val_w = 0w then
-              ao_cmp_prefer_iz_zero id op1 inst
+              ao_cmp_prefer_iz_zero fr op1 inst
             else if val_w = 0w - 1w then
-              ao_cmp_prefer_iz_max id op1 inst
+              ao_cmp_prefer_iz_max fr op1 inst
             else
-              ao_cmp_prefer_iz_general id op1 op2 inst
+              ao_cmp_prefer_iz_general fr op1 op2 inst
           (* gt x 0 → iszero(iszero(x)). Only for unsigned GT with literal 0. *)
           else if opc = GT /\ lit_eq op2 0w then
-            let id = inst.inst_id in
-            let tmp = ao_fresh_var id "iz" in
+            let (id, tmp) = fr "iz" in
             [<| inst_id := id; inst_opcode := ISZERO;
                 inst_operands := [op1]; inst_outputs := [tmp] |>;
              inst with <| inst_opcode := ISZERO;
                           inst_operands := [Var tmp] |>]
           (* Remaining comparators: iszero insertion/removal handled by
              ao_cmp_flip_function (separate mini-pass after peephole). *)
-          else [inst]
+          else [inst])
     | _ => [inst]
 End
 
@@ -645,7 +652,7 @@ End
  * Pre-flip is applied before dispatch, post-flip after.
  *)
 Definition ao_peephole_inst_def:
-  ao_peephole_inst (dfg : dfg_analysis) ra lbl idx inst =
+  ao_peephole_inst (dfg : dfg_analysis) ra lbl idx fr inst =
     let opc = inst.inst_opcode in
     if inst.inst_outputs = [] then [inst]
     else if opc = ASSIGN \/ opc = PHI \/ opc = PARAM then [inst]
@@ -657,9 +664,9 @@ Definition ao_peephole_inst_def:
     else if opc = MUL \/ opc = Div \/ opc = SDIV \/
             opc = Mod \/ opc = SMOD then ao_opt_muldiv inst
     else if opc = OR then ao_opt_or dfg inst
-    else if opc = EQ then ao_opt_eq dfg inst
+    else if opc = EQ then ao_opt_eq dfg fr inst
     else if opc = GT \/ opc = LT \/ opc = SGT \/ opc = SLT then
-      ao_opt_comparator dfg ra lbl idx inst
+      ao_opt_comparator dfg ra lbl idx fr inst
     else [inst]
 End
 
@@ -712,7 +719,7 @@ End
  * Returns three lists:
  *   flips   : (cmp_id, new_opcode, new_literal, original_op1)
  *   removes : iszero inst_ids to convert to ASSIGN
- *   inserts : (assert_id, cmp_out_var, fresh_var, cmp_id) for iszero insertion
+ *   inserts : (assert_id, cmp_out_var, cmp_id) for iszero insertion
  *)
 Definition ao_cmp_flip_scan_def:
   ao_cmp_flip_scan dfg [] = ([], [], []) /\
@@ -752,14 +759,15 @@ Definition ao_cmp_flip_scan_def:
                         inserts)
                  | _ => (flips, removes, inserts))
               else (* after.opcode = ASSERT: insert iszero before assert *)
-                let fresh = ao_fresh_var inst.inst_id "iz" in
                 ((inst.inst_id, new_opc, new_w, op1) :: flips,
                  removes,
-                 (after.inst_id, out_var, fresh, inst.inst_id) :: inserts)
+                 (after.inst_id, out_var, inst.inst_id) :: inserts)
     | _ => (flips, removes, inserts)
 End
 
-(* Apply cmp_flip changes to a single instruction. *)
+(* Apply cmp_flip changes to a single instruction.  `inserts` maps an
+   ASSERT's id to the comparator output and the id and output variable of
+   the ISZERO inserted before it. *)
 Definition ao_cmp_flip_apply_inst_def:
   ao_cmp_flip_apply_inst flips removes inserts inst =
     case ALOOKUP flips inst.inst_id of
@@ -771,12 +779,21 @@ Definition ao_cmp_flip_apply_inst_def:
           [inst with <| inst_opcode := ASSIGN |>]
         else
           case ALOOKUP inserts inst.inst_id of
-            SOME (cmp_out, fresh, cmp_id) =>
-              [<| inst_id := cmp_id; inst_opcode := ISZERO;
+            SOME (cmp_out, iz_id, fresh) =>
+              [<| inst_id := iz_id; inst_opcode := ISZERO;
                   inst_operands := [Var cmp_out];
                   inst_outputs := [fresh] |>;
                inst with <| inst_operands := [Var fresh] |>]
           | NONE => [inst]
+End
+
+Definition ao_cmp_flip_apply_fn_def:
+  ao_cmp_flip_apply_fn flips removes inserts fn =
+    fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        FLAT (MAP (ao_cmp_flip_apply_inst flips removes inserts)
+                  bb.bb_instructions))
+        fn.fn_blocks
 End
 
 (* Apply cmp_flip to a function: scan all instructions, then FLAT MAP per block. *)
@@ -786,11 +803,8 @@ Definition ao_cmp_flip_function_def:
     let (flips, removes, inserts) = ao_cmp_flip_scan dfg all_insts in
     if NULL flips then fn
     else
-      fn with fn_blocks :=
-        MAP (\bb. bb with bb_instructions :=
-          FLAT (MAP (ao_cmp_flip_apply_inst flips removes inserts)
-                    bb.bb_instructions))
-          fn.fn_blocks
+      ao_cmp_flip_apply_fn flips removes
+        (MAP (\(a, out, c). (a, (out, ao_inst_fresh c "iz"))) inserts) fn
 End
 
 (* ===== Block and Function Transform ===== *)
@@ -802,7 +816,7 @@ End
  * 3. Pre-flip + peephole + post-flip
  *)
 Definition ao_transform_inst_def:
-  ao_transform_inst dfg ra lbl idx targets inst =
+  ao_transform_inst dfg ra lbl idx targets fr inst =
     let inst0 = ao_resolve_iszero_inst targets inst in
     if inst0.inst_outputs = [] then [inst0]
     else if inst0.inst_opcode = ASSIGN \/ inst0.inst_opcode = PHI \/
@@ -812,7 +826,7 @@ Definition ao_transform_inst_def:
         SOME result => MAP ao_post_flip_inst result
       | NONE =>
           let inst1 = ao_pre_flip_inst inst0 in
-          let result = ao_peephole_inst dfg ra lbl idx inst1 in
+          let result = ao_peephole_inst dfg ra lbl idx fr inst1 in
           MAP ao_post_flip_inst result
 End
 
@@ -820,7 +834,8 @@ Definition ao_transform_block_def:
   ao_transform_block dfg ra targets bb =
     bb with bb_instructions :=
       FLAT (MAPi (\idx inst.
-        ao_transform_inst dfg ra bb.bb_label idx targets inst)
+        ao_transform_inst dfg ra bb.bb_label idx targets
+          (ao_inst_fresh inst.inst_id) inst)
         bb.bb_instructions)
 End
 
@@ -847,6 +862,86 @@ Definition ao_transform_function_def:
     (* Phase 4: comparator iszero flip *)
     let dfg1 = dfg_build_function fn1 in
     ao_cmp_flip_function dfg1 fn1
+End
+
+(* ===== Supply-Threaded Transform ===== *)
+
+(*
+ * ao_transform_function_supply is ao_transform_function with every
+ * inserted instruction's id and output variable taken from an ir_supply,
+ * as Python's InstUpdater takes them from the function
+ * (fn.get_next_variable()).  ao_transform_function, which names them after
+ * the rewritten instruction, is kept for venomPipeline.
+ *
+ * Each instruction of the main rewrite pass gets one fresh (id, var) pair
+ * for an inner value and one for an inserted ISZERO, whether or not its
+ * rewrite uses them.
+ *)
+Definition ao_alloc_fresh_def:
+  ao_alloc_fresh s =
+    case fresh_inst_id s of (inner_id, s1) =>
+    case fresh_ir_var s1 of (inner, s2) =>
+    case fresh_inst_id s2 of (iz_id, s3) =>
+    case fresh_ir_var s3 of (iz, s4) =>
+      ((\tag:string. if tag = "iz" then (iz_id, iz) else (inner_id, inner)),
+       s4)
+End
+
+Definition ao_transform_insts_supply_def:
+  ao_transform_insts_supply dfg ra lbl targets s (idx:num) [] = ([], s) /\
+  ao_transform_insts_supply dfg ra lbl targets s idx (inst::insts) =
+    case ao_alloc_fresh s of (fr, s1) =>
+    case ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts of
+      (outs, s2) =>
+        (ao_transform_inst dfg ra lbl idx targets fr inst ++ outs, s2)
+End
+
+Definition ao_transform_block_supply_def:
+  ao_transform_block_supply dfg ra targets s bb =
+    case ao_transform_insts_supply dfg ra bb.bb_label targets s 0
+           bb.bb_instructions of
+      (insts, s1) => (bb with bb_instructions := insts, s1)
+End
+
+Definition ao_transform_blocks_supply_def:
+  ao_transform_blocks_supply dfg ra targets s [] = ([], s) /\
+  ao_transform_blocks_supply dfg ra targets s (bb::bbs) =
+    case ao_transform_block_supply dfg ra targets s bb of (bb', s1) =>
+    case ao_transform_blocks_supply dfg ra targets s1 bbs of
+      (bbs', s2) => (bb' :: bbs', s2)
+End
+
+(* Name each comparator-flip ISZERO insertion from the supply. *)
+Definition ao_name_inserts_supply_def:
+  ao_name_inserts_supply s [] = ([], s) /\
+  ao_name_inserts_supply s ((a, out, (c:num)) :: rest) =
+    case fresh_inst_id s of (iz_id, s1) =>
+    case fresh_ir_var s1 of (iz, s2) =>
+    case ao_name_inserts_supply s2 rest of
+      (named, s3) => ((a, (out, iz_id, iz)) :: named, s3)
+End
+
+Definition ao_cmp_flip_function_supply_def:
+  ao_cmp_flip_function_supply dfg s fn =
+    let (flips, removes, inserts) = ao_cmp_flip_scan dfg (fn_insts fn) in
+    if NULL flips then (fn, s)
+    else
+      case ao_name_inserts_supply s inserts of
+        (named, s1) => (ao_cmp_flip_apply_fn flips removes named fn, s1)
+End
+
+Definition ao_transform_function_supply_def:
+  ao_transform_function_supply s fn =
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    case ao_transform_blocks_supply dfg ra targets s fn0.fn_blocks of
+      (bbs, s1) =>
+        let fn1 = fn0 with fn_blocks := bbs in
+        ao_cmp_flip_function_supply (dfg_build_function fn1) s1 fn1
 End
 
 Definition ao_transform_context_def:

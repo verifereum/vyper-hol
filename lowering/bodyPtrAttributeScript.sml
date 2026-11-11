@@ -21,7 +21,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule attr_pre_base >> strip_tac >>
   qpat_x_assum `body_expr_ptr_ok cx e`
-    (mp_tac o REWRITE_RULE [body_expr_ptr_ok_def]) >>
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ptr_ok_def]) >>
   disch_then drule_all >>
   disch_then (qspecl_then [`d`, `PG`, `func`, `ty`] strip_assume_tac) >>
   `expr_vv_sim_ptr d ctx PG func cenv cx ty (Attribute v9 e id) es` by

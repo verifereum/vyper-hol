@@ -669,9 +669,8 @@ Proof
      rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
      metis_tac[local_ptrs_reserved_imm_base, cj 1 compile_expr_grows]) >>
   gvs[vv_post_def, vv_holds_def] >>
-  irule (INST_TYPE [alpha |-> ``:type``] compile_revert_code_reason_path) >> simp[] >>
-  qexistsl_tac [`w`, `cenv`, `type_memory_bytes cenv (expr_type r)`,
-                `expr_type r`, `p`, `sm`, `sb`, `expr_type r`] >>
+  irule (INST_TYPE [alpha |-> ``:type``] compile_revert_code_reason_path) >>
+  qpat_x_assum `compile_revert_with_reason _ _ _ _ _ = _` (irule_at Any) >>
   simp[]
 QED
 

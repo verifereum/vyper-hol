@@ -23,7 +23,9 @@ Theorem return_intcall_located_force:
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_expr cx (Call ann (IntCall fid) args drv)) (read_result cx))
     (es,s0)
-    (\res ee s. ?v. res = INL v /\ ty = ann /\
+    (\res ee s. ?v. res = INL v /\
+      ty = ce.ce_func_return_type (nsid_to_string fid) /\
+      p.ptr_location = LocMemory /\
       expr_post ctx func ce cx (Call ann (IntCall fid) args drv)
         es sa sb s0 ee v op s /\
       s.vs_current_bb = sb.cs_current_bb /\

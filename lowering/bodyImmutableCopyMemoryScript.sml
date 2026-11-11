@@ -38,7 +38,7 @@ Proof
   >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   conj_tac
   >- (rw[inst_dload_in_section_def, mk_inst_def] >> metis_tac[]) >>
-  simp[step_inst_base_def, exec_read1_def] >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def] >>
   Cases_on `eval_operand src s` >> simp[] >>
   rewrite_tac[run_inst_seq_mem_ok_last] >>
   `!y. not_fresh_at sa y ==>

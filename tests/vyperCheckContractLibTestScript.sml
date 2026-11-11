@@ -812,22 +812,22 @@ in assert_some (check p03_constructor_modules);
    assert_none (check p15x_constructor_modules)
 end) [false,true];
 
-(* Event declaration regressions: indexed aggregates and duplicate event names
-   are rejected; field-name duplication and four indexed fields remain legal. *)
+(* Event declaration regressions: indexed aggregates, duplicate event names,
+   duplicate field names and more than three indexed fields are rejected. *)
 Theorem event_declaration_regressions:
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])] = NONE /\
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F)];
             EventDecl "E" [(("b",BaseT (UintT 256)),T)]])] = NONE /\
-  IS_SOME (check_contract F [] 0w
+  check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
                           (("b",BaseT (UintT 256)),T);
                           (("c",BaseT (UintT 256)),T);
-                          (("d",BaseT (UintT 256)),T)]])]) /\
-  IS_SOME (check_contract F [] 0w
+                          (("d",BaseT (UintT 256)),T)]])] = NONE /\
+  check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
-                          (("a",BaseT BoolT),F)]])]) /\
+                          (("a",BaseT BoolT),F)]])] = NONE /\
   IS_SOME (check_contract F [] 0w
     [(NONE,[FlagDecl "F" ["A";"B"];
             EventDecl "E" [(("a",FlagT (NONE,"F")),T);
@@ -840,6 +840,14 @@ val event_decl_rejections =
   [``([(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])]
       : (num option # toplevel list) list)``,
    ``([(NONE,[EventDecl "E" []; EventDecl "E" []])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
+                            (("b",BaseT (UintT 256)),T);
+                            (("c",BaseT (UintT 256)),T);
+                            (("d",BaseT (UintT 256)),T)]])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
+                            (("a",BaseT BoolT),F)]])]
       : (num option # toplevel list) list)``];
 val () = List.app (fn mods =>
   let val th = vyperCheckContractLib.check_contract_conv
@@ -849,18 +857,18 @@ val () = List.app (fn mods =>
   end) event_decl_rejections;
 
 Theorem event_arg_recursive_widening_eval:
-  event_arg_compatible (BaseT (StringT 10)) (BaseT (StringT 5)) /\
-  event_arg_compatible (ArrayT (BaseT (UintT 256)) (Dynamic 5))
-    (ArrayT (BaseT (UintT 256)) (Dynamic 3)) /\
-  event_arg_compatible (ArrayT (BaseT (StringT 5)) (Dynamic 2))
-    (ArrayT (BaseT (StringT 3)) (Dynamic 2)) /\
-  event_arg_compatible (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 5))])
-    (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 3))]) /\
-  event_arg_compatible (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 2))
-    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (Fixed 2)) /\
-  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (UintT 8)) /\
-  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (BytesT (Dynamic 40))) /\
-  ~event_arg_compatible (BaseT (StringT 3)) (BaseT (StringT 5))
+  arg_type_fits (BaseT (StringT 5)) (BaseT (StringT 10)) /\
+  arg_type_fits (ArrayT (BaseT (UintT 256)) (Dynamic 3))
+    (ArrayT (BaseT (UintT 256)) (Dynamic 5)) /\
+  arg_type_fits (ArrayT (BaseT (StringT 3)) (Dynamic 2))
+    (ArrayT (BaseT (StringT 5)) (Dynamic 2)) /\
+  arg_type_fits (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 3))])
+    (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 5))]) /\
+  arg_type_fits (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (Fixed 2))
+    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 2)) /\
+  ~arg_type_fits (BaseT (UintT 8)) (BaseT (UintT 256)) /\
+  ~arg_type_fits (BaseT (BytesT (Dynamic 40))) (BaseT (UintT 256)) /\
+  ~arg_type_fits (BaseT (StringT 5)) (BaseT (StringT 3))
 Proof
   EVAL_TAC
 QED
@@ -883,7 +891,7 @@ Theorem log_type_mismatch_rejected_eval:
     [(("a",BaseT (UintT 256)),T)])) ret
     (Log (NONE,"E") [Literal (BaseT (UintT 8)) (IntL 1)]) = NONE
 Proof
-  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def]
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, arg_type_fits_def]
 QED
 
 Theorem log_literal_accepted_eval:
@@ -893,7 +901,7 @@ Theorem log_literal_accepted_eval:
   SOME (env with event_fields := FEMPTY |+ ((NONE,"E"),
     [(("a",BaseT (UintT 256)),T)]))
 Proof
-  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def,
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, arg_type_fits_def,
        well_typed_expr_def, well_typed_literal_def] >> EVAL_TAC
 QED
 
@@ -901,7 +909,7 @@ Theorem log_variable_compatibility_probe:
   FLOOKUP env.event_fields id = SOME [(("a",fty),idx)] /\
   FLOOKUP env.var_types "x" = SOME aty ==>
   (type_stmt env ret (Log id [Name aty "x"]) = SOME env <=>
-   event_arg_compatible fty aty)
+   arg_type_fits aty fty)
 Proof
   simp[type_stmt_def, well_typed_expr_def, vyperASTTheory.expr_type_def]
 QED
@@ -1547,6 +1555,86 @@ Proof
   CONV_TAC vyperCheckContractLib.check_contract_conv
 QED
 
+(* burn(uint256) and collate_propagate_storage(bytes16) share 0x42966c68. *)
+fun selector_main name =
+  ``FunctionDecl External Pure F F ^(stringSyntax.fromMLstring name)
+      [("a", BaseT (UintT 256))] [] NoneT []``
+val selector_collate =
+  ``FunctionDecl External Pure F F "collate_propagate_storage"
+      [("a", BaseT (BytesT (Fixed 16)))] [] NoneT []``
+fun selector_modules name lib =
+  ``[(NONE, [^(selector_main name)]); (SOME 1, ^lib)]
+    : (num option # toplevel list) list``
+val selector_exports = ``[("collate_propagate_storage", 1n)]``
+val selector_collision_modules = selector_modules "burn" ``[^selector_collate]``
+
+Theorem exports_ok_function_selector_collision:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_collision_modules) /\
+  ~exports_ok ^empty_layouts ^zero_address ^selector_collision_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_renamed_modules = selector_modules "burn_safe" ``[^selector_collate]``
+Theorem exports_ok_renamed_selector_accepted:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_renamed_modules) /\
+  exports_ok ^empty_layouts ^zero_address ^selector_renamed_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_default_modules = selector_modules "burn"
+  ``[FunctionDecl External Pure F F "collate_propagate_storage"
+       [("a", BaseT (BytesT (Fixed 16))); ("b", BaseT (UintT 256))]
+       [Literal (BaseT (UintT 256)) (IntL 0)] NoneT []]``
+Theorem exports_ok_default_prefix_selector_collision:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_default_modules) /\
+  ~exports_ok ^empty_layouts ^zero_address ^selector_default_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_getter_modules = selector_modules "burn"
+  ``[HashMapDecl (Public F) F "collate_propagate_storage"
+       (BaseT (BytesT (Fixed 16))) (Type (BaseT (UintT 256))) NONE]``
+val selector_getter_layouts =
+  ``([((0w : address),
+       ([((SOME 1, "collate_propagate_storage"), 0)] : storage_layout,
+        [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+Theorem exports_ok_getter_selector_collision:
+  IS_SOME (check_contract F ^selector_getter_layouts ^zero_address
+             ^selector_getter_modules) /\
+  ~exports_ok ^selector_getter_layouts ^zero_address ^selector_getter_modules
+     ^selector_exports
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+val selector_unexported_modules = selector_modules "burn"
+  ``[^selector_collate; FunctionDecl External Pure F F "safe" [] [] NoneT []]``
+Theorem exports_ok_unexported_selector_accepted:
+  IS_SOME (check_contract F ^empty_layouts ^zero_address
+             ^selector_unexported_modules) /\
+  exports_ok ^empty_layouts ^zero_address ^selector_unexported_modules
+     [("safe", 1)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
+Theorem check_contract_main_selector_collision:
+  check_contract F ^empty_layouts ^zero_address
+    [(NONE, [^(selector_main "burn"); ^selector_collate])] = NONE
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED
+
 (* Operator forms Vyper rejects, where the compiled code would not compute
    what the semantics does: ** with neither a literal base nor a non-negative
    literal exponent, unary minus on an unsigned type, << on a type narrower
@@ -1583,6 +1671,7 @@ fun neg_function ty =
 val () = List.app assert_none
   [binop_function u256 u256 ``vyperAST$Exp`` (op_name u256 "y"),
    binop_function u8 u8 ``vyperAST$Exp`` (op_name u8 "y"),
+   binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 300),
    binop_function i256 i256 ``vyperAST$Exp`` (op_lit i256 ~2),
    aug_function u256 u256 ``vyperAST$Exp`` (op_name u256 "y"),
    aug_function i256 i256 ``vyperAST$Exp`` (op_lit i256 ~2),
@@ -1604,12 +1693,11 @@ val pow_literal_base_function =
     ``[Return (SOME (Builtin ^u256 (Bop vyperAST$Exp)
                        [^(op_lit u256 2); ^(op_name u256 "y")]))]``
 
-(* An over-large literal exponent stays accepted: compile_safe_pow checks the
-   base against it. >> of a narrow unsigned value and the bitwise augmented
-   assignments on bool compute what the semantics does. *)
+(* A dynamic base requires a literal exponent within its value-bit bound.
+   >> of a narrow unsigned value and bitwise augmented assignments on bool
+   compute what the semantics does. *)
 val () = List.app assert_some
-  [binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 300),
-   binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 0),
+  [binop_function u256 u256 ``vyperAST$Exp`` (op_lit u256 0),
    pow_literal_base_function,
    aug_function u256 u256 ``vyperAST$Exp`` (op_lit u256 2),
    neg_function i256,
@@ -1672,6 +1760,39 @@ fun check_selector_decls in_deploy layouts decls =
     ``check_contract ^(if in_deploy then T else F) ^layouts ^zero_address
         [(NONE, ^decls)]``
 
+(* Literal ranges carry the exact positive span, even when that span does not
+   fit the loop variable's signed type. *)
+fun literal_range_check in_deploy ty start finish count =
+  check_selector_decls in_deploy empty_layouts
+    ``[FunctionDecl ^(if in_deploy then ``Deploy`` else ``External``)
+         Nonpayable F F ^(if in_deploy then ``"__init__"`` else ``"f"``)
+         [] [] NoneT
+         [For "i" ^ty
+            (Range (Literal ^ty (IntL ^(intSyntax.term_of_int (Arbint.fromInt start))))
+                   (Literal ^ty (IntL ^(intSyntax.term_of_int (Arbint.fromInt finish)))))
+            ^(numSyntax.term_of_int count) [Pass]]]``
+
+val () = List.app (fn deploy =>
+  (List.app (fn (start, finish, count) =>
+     assert_none (literal_range_check deploy u256 start finish count))
+     [(2,1,0), (2,2,0), (2,3,0), (2,3,2)];
+   assert_some (literal_range_check deploy u256 2 3 1);
+   assert_some (literal_range_check deploy ``BaseT (IntT 8)`` (~128) 127 255)))
+  [false,true]
+
+(* A valid lock layout must not make a guarded constructor legal. Headers
+   are checked in runtime mode too, when the constructor body is inactive. *)
+val () = List.app (fn deploy => List.app (fn layouts =>
+  (assert_none (check_selector_decls deploy layouts
+     ``[FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT [Pass]]``);
+   assert_some (check_selector_decls deploy layouts
+     ``[FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT [Pass]]``)))
+  [empty_layouts,
+   ``[(0w : address,
+       ([] : storage_layout,
+        [((NONE,"$.nonreentrant_key"),0)] : storage_layout))]``])
+  [false,true]
+
 val () = List.app (fn in_deploy =>
   (List.app (fn (name, expect) => let
      val layouts =
@@ -1697,6 +1818,52 @@ val () = List.app (fn in_deploy =>
             [("a", BaseT (BytesT (Fixed 16)))] [] NoneT []]``))
    [(``[Literal (BaseT (UintT 256)) (IntL 0)]``, assert_none),
     (``([] : expr list)``, assert_some)])) [false, true]
+
+(* Vyper reports NamespaceCollision for repeated self members, independently
+   of function visibility, variable visibility, declaration order or mode.
+   Renaming only the second member makes each control acceptable. *)
+fun self_member_function vis name =
+  ``FunctionDecl ^vis Nonpayable F F ^name [] [] NoneT []``
+
+fun self_member_variable vis name =
+  ``VariableDecl ^vis Storage ^name (BaseT (UintT 256)) (SOME 0)``
+
+fun self_member_hashmap vis name =
+  ``HashMapDecl ^vis F ^name (BaseT (UintT 256))
+      (Type (BaseT (UintT 256))) (SOME 0)``
+
+val self_member_layouts =
+  ``[((0w : address),
+      ([((NONE,"foo"),0); ((NONE,"bar"),0)] : storage_layout,
+       [] : storage_layout))]``
+
+val () = List.app (fn in_deploy =>
+  List.app (fn (first, second) =>
+    List.app (fn reverse_order =>
+      List.app (fn (name, expect) => let
+        val a = first ``"foo"``
+        val b = second name
+        val decls = if reverse_order then ``[^b; ^a]`` else ``[^a; ^b]``
+      in
+        expect (check_selector_decls in_deploy self_member_layouts decls)
+      end) [(``"foo"``, assert_none), (``"bar"``, assert_some)])
+      [false, true])
+    ((self_member_function ``Internal``, self_member_function ``External``) ::
+     List.concat (map (fn vis => map (fn variable =>
+       (self_member_function vis, variable))
+       [self_member_variable ``Private``, self_member_variable ``Public F``,
+        self_member_hashmap ``Private``, self_member_hashmap ``Public F``])
+       [``Internal``, ``External``, ``Deploy``]))) [false, true]
+
+val () = cv_auto_trans contract_namespaces_ok_def;
+
+Theorem cross_visibility_self_member_clash_cv:
+  ~contract_namespaces_ok F
+    [(NONE, [FunctionDecl Internal Nonpayable F F "foo" [] [] NoneT [];
+             FunctionDecl External Nonpayable F F "foo" [] [] NoneT []])]
+Proof
+  CONV_TAC cv_eval
+QED
 
 (* Like Vyper (ImmutableViolation "Cannot modify loop variable"), a loop
    body may not write the array it iterates over: the evaluator iterates
@@ -1725,3 +1892,331 @@ val () = check_rejects empty_layouts (iterated_write_function
        ^(op_lit u256 2)]``)
 val () = check_accepts "loop without iterated array write" false empty_layouts
   (iterated_write_function ``[] : stmt list``)
+
+(* Nor may it call a function that writes the iterated array, directly or
+   through further internal calls: Vyper's test_modify_iterator_function_call
+   and test_modify_iterator_recursive_function_call
+   (tests/unit/semantics/analysis/test_for_loop.py).
+     a: uint256[3]
+     b: uint256[3]
+     d: DynArray[uint256, 3]
+     @internal
+     def foo():
+         self.a[0] = 1     # accepted with self.b[0] = 1
+     @internal
+     def bar():
+         self.foo()
+     @internal
+     def baz():
+         for i: uint256 in self.a:
+             self.foo()    # or self.bar()
+   The loop may also sit inside an if or another loop.  A call evaluates
+   the callee's omitted default arguments, so a default that pops the
+   iterated array counts too (Vyper rejects such a default as not
+   constant).  A callee's own locals are not the caller's: a loop over a
+   local xs may call a function that writes its own local xs. *)
+val arr3 = ``ArrayT (BaseT (UintT 256)) (Fixed 3)``
+val dyn3 = ``ArrayT (BaseT (UintT 256)) (Dynamic 3)``
+val zeros3 = ``Builtin ^arr3 (MakeArray (SOME ^u256) (Fixed 3))
+                 [^(op_lit u256 0); ^(op_lit u256 0); ^(op_lit u256 0)]``
+val loop_call_layouts =
+  ``([((0w : address),
+       ([((NONE, "a"), 0); ((NONE, "b"), 3); ((NONE, "d"), 6)]
+          : storage_layout,
+        [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+fun element_write tgt =
+  ``Assign (BaseTarget (SubscriptTarget ^tgt ^(op_lit u256 0)))
+      ^(op_lit u256 1)``
+fun internal_fn name args dflts body =
+  ``FunctionDecl Internal Nonpayable F F ^(stringSyntax.fromMLstring name)
+      ^args ^dflts NoneT ^body``
+fun plain_fn name body =
+  internal_fn name ``[] : (string # type) list`` ``[] : expr list`` body
+fun loop_call_modules foo baz_body =
+  ``[(NONE,
+      [VariableDecl Private Storage "a" ^arr3 (SOME 0);
+       VariableDecl Private Storage "b" ^arr3 (SOME 3);
+       VariableDecl Private Storage "d" ^dyn3 (SOME 6);
+       ^foo;
+       ^(plain_fn "bar"
+           ``[Expr (Call NoneT (IntCall (NONE, "foo")) [] NONE)]``);
+       ^(plain_fn "baz" baz_body)])]
+    : (num option # toplevel list) list``
+fun state_var var = ``(NONE : num option, ^(stringSyntax.fromMLstring var))``
+fun loop_calling ty var callee =
+  ``For "i" ^u256 (Array (TopLevelName ^ty ^(state_var var))) 3
+      [Expr (Call NoneT (IntCall (NONE, ^(stringSyntax.fromMLstring callee)))
+         [] NONE)]``
+fun writing_foo var =
+  plain_fn "foo" ``[^(element_write ``TopLevelNameTarget ^(state_var var)``)]``
+(* def foo(x: uint256 = self.d.pop()): pass *)
+val popping_default_foo =
+  internal_fn "foo" ``[("x", ^u256)]``
+    ``[Pop ^u256 (TopLevelNameTarget (NONE, "d"))]`` ``[Pass]``
+fun in_if s = ``[If (Literal (BaseT BoolT) (BoolL T)) [^s] []]``
+fun in_loop s =
+  ``[For "j" ^u256 (Array (TopLevelName ^arr3 (NONE, "b"))) 3 [^s]]``
+val () = List.app (fn callee =>
+  (check_rejects loop_call_layouts
+     (loop_call_modules (writing_foo "a")
+        ``[^(loop_calling arr3 "a" callee)]``);
+   check_accepts ("loop calling " ^ callee ^ " without iterated array write")
+     false loop_call_layouts
+     (loop_call_modules (writing_foo "b")
+        ``[^(loop_calling arr3 "a" callee)]``)))
+  ["foo", "bar"]
+val () = List.app (fn wrap =>
+  check_rejects loop_call_layouts
+    (loop_call_modules (writing_foo "a") (wrap (loop_calling arr3 "a" "foo"))))
+  [in_if, in_loop]
+val () = check_rejects loop_call_layouts
+  (loop_call_modules popping_default_foo ``[^(loop_calling dyn3 "d" "foo")]``)
+val () = check_accepts "loop calling a default that pops another array" false
+  loop_call_layouts
+  (loop_call_modules popping_default_foo ``[^(loop_calling arr3 "a" "foo")]``)
+val () = check_accepts "loop over a local calling a local write" false
+  loop_call_layouts
+  (loop_call_modules
+     (plain_fn "foo"
+        ``[AnnAssign "xs" ^arr3 ^zeros3; ^(element_write ``NameTarget "xs"``)]``)
+     ``[AnnAssign "xs" ^arr3 ^zeros3;
+        For "i" ^u256 (Array (Name ^arr3 "xs")) 3
+          [Expr (Call NoneT (IntCall (NONE, "foo")) [] NONE)]]``)
+
+(* A computed range bound must be positive and fit the loop variable's type. *)
+Theorem range_computed_bound_typing:
+  type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
+    (For "i" (BaseT (UintT 256))
+      (Range (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
+             (Literal (BaseT (UintT 256)) (IntL 2))) (2 ** 256) [Pass]) = NONE /\
+  IS_SOME (type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
+    (For "i" (BaseT (UintT 256))
+      (Range (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
+             (Literal (BaseT (UintT 256)) (IntL 2))) 1 [Pass])) /\
+  IS_SOME (type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
+    (For "i" (BaseT (IntT 8))
+      (Range (Literal (BaseT (IntT 8)) (IntL (-128)))
+             (Literal (BaseT (IntT 8)) (IntL 127))) 255 [Pass]))
+Proof
+  EVAL_TAC
+QED
+(* Nested assignment targets reach a codegen panic in both pinned Python
+   backends, for both abi_decode and internal-call RHSs. Complex values in
+   flat targets remain valid; the restriction concerns targets, not types. *)
+val unpack_pair_ty = ``TupleT [^u256; ^u256]``
+val unpack_nested_ty = ``TupleT [^u256; ^unpack_pair_ty]``
+val unpack_deep_ty = ``TupleT [^u256; ^unpack_nested_ty]``
+val unpack_nested_target =
+  ``TupleTarget [BaseTarget (NameTarget "a");
+       TupleTarget [BaseTarget (NameTarget "b"); BaseTarget (NameTarget "c")]]``
+val unpack_deep_target =
+  ``TupleTarget [BaseTarget (NameTarget "a");
+       TupleTarget [BaseTarget (NameTarget "b");
+         TupleTarget [BaseTarget (NameTarget "c"); BaseTarget (NameTarget "d")]]]``
+val unpack_data_ty = ``BaseT (BytesT (Dynamic 128))``
+
+fun unpack_modules via_call ty target locals = let
+  val decoded = ``TypeBuiltin ^ty (AbiDecode F) ^ty
+                    [Name ^unpack_data_ty "data"]``
+  val helpers = if via_call then
+    ``[FunctionDecl Internal Pure F F "g" [("data", ^unpack_data_ty)] []
+         ^ty [Return (SOME ^decoded)]]``
+    else ``[] : toplevel list``
+  val rhs = if via_call then
+    ``Call ^ty (IntCall (NONE, "g")) [Name ^unpack_data_ty "data"] NONE``
+    else decoded
+in
+  ``[(NONE, ^helpers ++
+       [FunctionDecl External Nonpayable F F "f"
+          [("data", ^unpack_data_ty)] [] ^u256
+          (^locals ++ [Assign ^target ^rhs;
+                       Return (SOME (Name ^u256 "a"))])])]
+    : (num option # toplevel list) list``
+end
+
+val unpack_word_locals =
+  ``[AnnAssign "a" ^u256 ^(uint 0); AnnAssign "b" ^u256 ^(uint 0);
+     AnnAssign "c" ^u256 ^(uint 0); AnnAssign "d" ^u256 ^(uint 0)]``
+
+val () = List.app (fn in_deploy =>
+  List.app (fn via_call =>
+    List.app (fn (ty, target) =>
+      check_rejects_in (if in_deploy then ``T`` else ``F``) empty_layouts
+        (unpack_modules via_call ty target unpack_word_locals))
+      [(unpack_nested_ty, unpack_nested_target),
+       (unpack_deep_ty, unpack_deep_target)]) [false, true]) [false, true]
+
+val () = List.app (fn in_deploy =>
+  List.app (fn via_call =>
+    List.app (fn elem_ty =>
+      check_accepts "flat tuple target with complex value" in_deploy empty_layouts
+        (unpack_modules via_call ``TupleT [^u256; ^elem_ty]``
+          ``TupleTarget [BaseTarget (NameTarget "a"); BaseTarget (NameTarget "b")]``
+          ``[AnnAssign "a" ^u256 ^(uint 0);
+             AnnAssign "b" ^elem_ty (TypeBuiltin ^elem_ty Empty ^elem_ty [])]``))
+      [u256, ``ArrayT ^u256 (Fixed 2)``, unpack_pair_ty]) [false, true])
+    [false, true]
+
+val () = print "tuple targets: nested rejected, flat controls accepted in both modes\n"
+
+(* Like Vyper (IteratorException "Cannot iterate over the result of a
+   function call"), a loop doesn't iterate over a call's result: self.g(),
+   xss.pop(), ecadd(xs, ys), empty(uint256[2]).  A list literal, a staticcall
+   and a ternary over calls are not calls and are accepted.
+     @internal
+     @view
+     def g() -> uint256[2]: return [1, 2]
+     @external
+     def f(c: bool, i: I) -> uint256:
+         xs: uint256[2] = [1, 2]
+         ys: uint256[2] = [3, 4]
+         xss: DynArray[DynArray[uint256, 2], 2] = [[1]]
+         out: uint256 = 0
+         for x: uint256 in <iterable>:
+             <writes>
+             out = x
+         return out *)
+val iter_arr = ``ArrayT (BaseT (UintT 256)) (Fixed 2)``
+val iter_dyn = ``ArrayT (BaseT (UintT 256)) (Dynamic 2)``
+val iter_dyn2 = ``ArrayT ^iter_dyn (Dynamic 2)``
+fun iter_lit a b =
+  ``Builtin ^iter_arr (MakeArray (SOME ^u256) (Fixed 2))
+      [^(op_lit u256 a); ^(op_lit u256 b)]``
+fun iter_name id = ``Name ^iter_arr ^(stringSyntax.fromMLstring id)``
+val iter_g = ``Call ^iter_arr (IntCall (NONE, "g")) [] NONE``
+fun iter_ifexp a b = ``IfExp ^iter_arr (Name (BaseT BoolT) "c") ^a ^b``
+fun iterator_function iterator writes =
+  ``[(NONE,
+      [FunctionDecl Internal View F F "g" [] [] ^iter_arr
+         [Return (SOME ^(iter_lit 1 2))];
+       FunctionDecl External Nonpayable F F "f"
+         [("c", BaseT BoolT); ("i", BaseT AddressT)] [] ^u256
+         [AnnAssign "xs" ^iter_arr ^(iter_lit 1 2);
+          AnnAssign "ys" ^iter_arr ^(iter_lit 3 4);
+          AnnAssign "xss" ^iter_dyn2
+            (Builtin ^iter_dyn2 (MakeArray (SOME ^iter_dyn) (Dynamic 2))
+               [Builtin ^iter_dyn (MakeArray (SOME ^u256) (Dynamic 2))
+                  [^(op_lit u256 1)]]);
+          AnnAssign "out" ^u256 ^(op_lit u256 0);
+          For "x" ^u256 ^iterator 2
+            (^writes ++
+             [Assign (BaseTarget (NameTarget "out")) (Name ^u256 "x")]);
+          Return (SOME (Name ^u256 "out"))]])]
+    : (num option # toplevel list) list``
+fun iterable_function iterable writes =
+  iterator_function ``Array ^iterable`` writes
+val no_writes = ``[] : stmt list``
+val () = List.app (fn iterable =>
+    check_rejects empty_layouts (iterable_function iterable no_writes))
+  [iter_g,
+   ``Pop ^iter_dyn (NameTarget "xss")``,
+   ``Builtin ^iter_arr ECAdd [^(iter_name "xs"); ^(iter_name "ys")]``,
+   ``TypeBuiltin ^iter_arr Empty ^iter_arr []``]
+val () = List.app (fn (label, iterable) =>
+    check_accepts label false empty_layouts
+      (iterable_function iterable no_writes))
+  [("iterate over a local", iter_name "xs"),
+   ("iterate over a list literal", iter_lit 5 6),
+   ("iterate over a staticcall",
+    ``Call ^iter_arr (ExtCall T F ("g", [], ^iter_arr) [])
+        [Name (BaseT AddressT) "i"] NONE``),
+   ("iterate over a ternary of calls", iter_ifexp iter_g iter_g)]
+
+(* Like Vyper (StateAccessViolation "May not call state modifying function
+   within a range expression or for loop iterator"), a pop() anywhere in an
+   iterator is rejected: [xss[0].pop(), 1], xss[xss[0].pop()],
+   (xss.pop() if c else xss[0]), staticcall I(i).g(xss[0].pop()),
+   range(0, xss[0].pop()). *)
+val xss0 = ``Subscript ^iter_dyn (Name ^iter_dyn2 "xss") ^(op_lit u256 0)``
+val pop_xss0 =
+  ``Pop ^u256 (SubscriptTarget (NameTarget "xss") ^(op_lit u256 0))``
+val () = List.app (fn iterator =>
+    check_rejects empty_layouts (iterator_function iterator no_writes))
+  [``Array (Builtin ^iter_arr (MakeArray (SOME ^u256) (Fixed 2))
+             [^pop_xss0; ^(op_lit u256 1)])``,
+   ``Array (Subscript ^iter_dyn (Name ^iter_dyn2 "xss") ^pop_xss0)``,
+   ``Array (IfExp ^iter_dyn (Name (BaseT BoolT) "c")
+             (Pop ^iter_dyn (NameTarget "xss")) ^xss0)``,
+   ``Array (Call ^iter_arr (ExtCall T F ("g", [^u256], ^iter_arr) [])
+             [Name (BaseT AddressT) "i"; ^pop_xss0] NONE)``,
+   ``Range ^(op_lit u256 0) ^pop_xss0``]
+
+(* The same for a non-static call: an extcall, whose function Vyper requires
+   to be nonpayable or payable, a raw_call without is_static_call=True, and a
+   create builtin: extcall I(i).k(), [extcall I(i).h(), 1],
+   range(0, extcall I(i).h()), [len(raw_call(i, b"\x00", max_outsize=32)), 1],
+   range(0, len(raw_call(...))), [convert(create_minimal_proxy_to(i),
+   uint256), 1], range(0, convert(raw_create(b"\x00"), uint256)).  A raw_call
+   with is_static_call=True is accepted. *)
+fun ext_call ty =
+  ``Call ^ty (ExtCall F F ("k", [], ^ty) []) [Name (BaseT AddressT) "i"] NONE``
+val byte0 = ``Literal (BaseT (BytesT (Dynamic 1))) (BytesL [0w])``
+fun raw_call_len static =
+  ``Builtin ^u256 Len
+      [Call (BaseT (BytesT (Dynamic 32)))
+         (RawCallTarget <|rcf_max_outsize := 32; rcf_is_delegate := F;
+                          rcf_is_static := ^static;
+                          rcf_revert_on_failure := T; rcf_kws := []|>)
+         [Name (BaseT AddressT) "i"; ^byte0] NONE]``
+fun raw_call_list static =
+  ``Builtin ^iter_arr (MakeArray (SOME ^u256) (Fixed 2))
+      [^(raw_call_len static); ^(op_lit u256 1)]``
+val proxy =
+  ``Call (BaseT AddressT) (CreateTarget CreateMinimalProxy F T [])
+      [Name (BaseT AddressT) "i"; ^(op_lit u256 0)] NONE``
+val raw_create =
+  ``Call (BaseT AddressT) (CreateTarget RawCreate F T [])
+      [^byte0; ^(op_lit u256 0)] NONE``
+fun create_u256 create =
+  ``TypeBuiltin ^u256 Convert ^u256 [^create]``
+fun create_list create =
+  ``Builtin ^iter_arr (MakeArray (SOME ^u256) (Fixed 2))
+      [^(create_u256 create); ^(op_lit u256 1)]``
+val () = List.app (fn iterator =>
+    check_rejects empty_layouts (iterator_function iterator no_writes))
+  [``Array ^(ext_call iter_arr)``,
+   ``Array (Builtin ^iter_arr (MakeArray (SOME ^u256) (Fixed 2))
+             [^(ext_call u256); ^(op_lit u256 1)])``,
+   ``Range ^(op_lit u256 0) ^(ext_call u256)``,
+   ``Array ^(raw_call_list F)``,
+   ``Range ^(op_lit u256 0) ^(raw_call_len F)``,
+   ``Array ^(create_list proxy)``,
+   ``Range ^(op_lit u256 0) ^(create_u256 raw_create)``]
+val () = List.app (fn (label, iterator) =>
+    check_accepts label false empty_layouts
+      (iterator_function iterator no_writes))
+  [("iterate over a subscript", ``Array ^xss0``),
+   ("staticcall without a pop() argument",
+    ``Array (Call ^iter_arr (ExtCall T F ("g", [^u256], ^iter_arr) [])
+             [Name (BaseT AddressT) "i"; ^(op_lit u256 0)] NONE)``),
+   ("range to a local", ``Range ^(op_lit u256 0) (Name ^u256 "out")``),
+   ("static raw_call in a list literal", ``Array ^(raw_call_list T)``)]
+
+(* Stricter than Vyper, which accepts these: the body may not write an arm
+   of a ternary it iterates over, directly or through a subscript, since the
+   compiled ternary uses an arm's memory in place.
+     for x: uint256 in (xs if c else ys):
+         xs[1] = 99
+     for x: uint256 in (xss if c else xss)[0]:
+         xss[0][0] = 99 *)
+val xs_write =
+  ``[Assign (BaseTarget (SubscriptTarget (NameTarget "xs") ^(op_lit u256 1)))
+       ^(op_lit u256 99)]``
+val xss_write =
+  ``[Assign (BaseTarget (SubscriptTarget
+       (SubscriptTarget (NameTarget "xss") ^(op_lit u256 0))
+       ^(op_lit u256 0))) ^(op_lit u256 99)]``
+val xss_ifexp_head =
+  ``Subscript ^iter_dyn
+      (IfExp ^iter_dyn2 (Name (BaseT BoolT) "c")
+         (Name ^iter_dyn2 "xss") (Name ^iter_dyn2 "xss"))
+      ^(op_lit u256 0)``
+val () = check_rejects empty_layouts
+  (iterable_function (iter_ifexp (iter_name "ys") (iter_name "xs")) xs_write)
+val () = check_rejects empty_layouts
+  (iterable_function xss_ifexp_head xss_write)
+val () = check_accepts "ternary arms not written" false empty_layouts
+  (iterable_function (iter_ifexp (iter_name "ys") (iter_name "ys")) xs_write)
+val () = check_accepts "subscripted ternary not written" false empty_layouts
+  (iterable_function xss_ifexp_head xs_write)

@@ -303,7 +303,7 @@ Resume generate_regular_plan_bottom_frame[tail]:
      (ps4 with ps_stack := stack_pop (LENGTH operands) (prefix ++ ps4.ps_stack))
      inst.inst_outputs = pushed with ps_stack := prefix ++ pushed.ps_stack` by
     simp[Abbr `pushed`, Abbr `consumed`, parameter_push_fold,
-         fnPlanLineagePhiTemporalTheory.stack_pop_bottom_extension, APPEND_ASSOC] >>
+         fnPlanLineageInventoryTheory.stack_pop_bottom_extension, APPEND_ASSOC] >>
   suspend "reconstruction"
 QED
 
@@ -704,6 +704,9 @@ Proof
   simp[generate_phi_plan_def] >>
   Cases_on `MEM (operand_to_string (stack_peek x ps.ps_stack)) nl` >> simp[do_dup_cleanup_frame] >>
   Cases_on `do_dup x ps` >> simp[] >>
+  `r.ps_stack = stack_dup x ps.ps_stack` by
+    (qspecl_then [`x`, `ps`] mp_tac stackPlanOpsTheory.do_dup_stack >>
+     asm_rewrite_tac[pairTheory.SND]) >>
   Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) nl` >> simp[popmany_plan_cleanup_frame] >>
   rpt (pairarg_tac >> gvs[])
   >- (qspecl_then [`[Var (HD inst.inst_outputs)]`,

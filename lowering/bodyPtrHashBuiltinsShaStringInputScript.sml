@@ -1,6 +1,6 @@
 (* String source values retain their constructor across the hash memory window. *)
 Theory bodyPtrHashBuiltinsShaStringInput
-Ancestors bodyPtrHashBuiltinsInputWindow exprSimHash arithmetic
+Ancestors bodyPtrHashBuiltinsInputWindow exprSimHash exprSimHashBoundary arithmetic
 
 Theorem hash_string_input_window:
   expr_val_at cenv cx ty sa sb es (StringV str) op s /\

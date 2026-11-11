@@ -9,6 +9,108 @@ Ancestors externalReturnSelectedResources externalReturnSiteSemantics
   externalReturnBufferlessNormalize vyperTypeContract supportedDecls supportedProgram
   vyperInterpreter
 
+Theorem selected_arg_fits_trans_mutual[local]:
+  (!a b. !c. arg_type_fits a b /\ arg_type_fits b c ==> arg_type_fits a c) /\
+  (!as_ bs. !cs. arg_types_fit as_ bs /\ arg_types_fit bs cs ==>
+    arg_types_fit as_ cs)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  rw[arg_type_fits_def]
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (BaseT bt)` >> Cases_on `bt` >> gvs[arg_type_fits_def])
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (BaseT bt)` >> Cases_on `bt` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (BaseT (BytesT bd))` >> Cases_on `bd` >> gvs[arg_type_fits_def])
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (ArrayT ct bd)` >> Cases_on `bd` >> gvs[arg_type_fits_def] >>
+      metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
+      rename1 `arg_type_fits _ (ArrayT ct bd)` >> Cases_on `bd` >> gvs[arg_type_fits_def] >>
+      metis_tac[])
+  >- (Cases_on `c` >> gvs[arg_type_fits_def] >> metis_tac[])
+  >> Cases_on `cs` >> gvs[arg_type_fits_def] >> metis_tac[]
+QED
+
+Theorem selected_widens_trans[local]:
+  type_widens_to tenv a b /\ type_widens_to tenv b c ==>
+  type_widens_to tenv a c
+Proof
+  simp[type_widens_to_def] >> metis_tac[selected_arg_fits_trans_mutual]
+QED
+
+(* The returned value read at the type expr_post states it at
+   (post_value_type): typed there, and widening to the return type. *)
+Theorem return_site_post_semantics:
+  expr_sim_inv ce cx env es /\
+  IS_SOME (type_stmt env ret (Return (SOME e))) /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) ==>
+  type_widens_to (get_tenv cx) (post_value_type ce e) ret /\
+  ?ptv dtv.
+    evaluate_type (get_tenv cx) (post_value_type ce e) =
+      SOME ptv /\
+    evaluate_type (get_tenv cx) ret = SOME dtv /\
+    value_has_type ptv v /\ value_has_type dtv v /\
+    val_wf dtv v /\ safe_cast dtv v = SOME v
+Proof
+  strip_tac >> drule_all return_site_value_semantics >> strip_tac >>
+  Cases_on `post_value_type ce e = expr_type e`
+  >- (gvs[] >> metis_tac[]) >>
+  `?ann fid args drv. e = Call ann (IntCall fid) args drv` by
+    (spose_not_then strip_assume_tac >>
+     `!ty fid args drv. e <> Call ty (IntCall fid) args drv` by metis_tac[] >>
+     drule post_value_type_not_int_call >>
+     disch_then (qspec_then `ce` mp_tac) >> simp[]) >>
+  gvs[] >>
+  `well_typed_expr env (Call ann (IntCall fid) args drv)` by
+    gvs[type_stmt_def, AllCaseEqs()] >>
+  `~is_word_type ann /\ ~is_bytestring_type ann` by
+    (CCONTR_TAC >>
+     gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
+  `post_value_type ce (Call ann (IntCall fid) args drv) =
+   lowered_value_type ce (Call ann (IntCall fid) args drv)` by
+    simp[post_value_type_def] >>
+  pop_assum SUBST1_TAC >>
+  drule_all return_intcall_physical_typed >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[exprSimHypsDefsTheory.expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  drule_all return_intcall_lowered_widens >> strip_tac >>
+  gvs[vyperASTTheory.expr_type_def] >>
+  metis_tac[selected_widens_trans]
+QED
+
+Theorem selected_bytestring_target[local]:
+  is_bytestring_type sty /\ type_widens_to tenv sty dty ==>
+  is_bytestring_type dty
+Proof
+  simp[type_widens_to_def] >> strip_tac >> Cases_on `sty` >>
+  gvs[is_bytestring_type_def] >>
+  rename1 `BaseT sb` >> Cases_on `sb` >> gvs[is_bytestring_type_def] >>
+  Cases_on `dty` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `BaseT db` >> Cases_on `db` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  Cases_on `b` >> Cases_on `b'` >> gvs[arg_type_fits_def, is_bytestring_type_def]
+QED
+
+(* An internal call's post type is its callee's declared return type, or a
+   bytestring (which the call site may widen) whose layout reads the same. *)
+Theorem return_intcall_post_lowered:
+  expr_sim_inv ce cx env es /\ well_typed_expr env (Call ann (IntCall fid) args drv) ==>
+  post_value_type ce (Call ann (IntCall fid) args drv) =
+    lowered_value_type ce (Call ann (IntCall fid) args drv) \/
+  is_bytestring_type (post_value_type ce (Call ann (IntCall fid) args drv)) /\
+  is_bytestring_type (lowered_value_type ce (Call ann (IntCall fid) args drv))
+Proof
+  strip_tac >> drule_all return_intcall_lowered_widens >> strip_tac >>
+  Cases_on `is_word_type ann`
+  >- (drule_all typed_copy_word_widening >> strip_tac >>
+      gvs[post_value_type_def]) >>
+  Cases_on `is_bytestring_type ann`
+  >- (drule_all typed_copy_bytestring_source >> strip_tac >>
+      gvs[post_value_type_def]) >>
+  gvs[post_value_type_def]
+QED
+
 (* Word destinations force the annotation to be exactly the destination.
    Use typed encoding, including address and bytesN, not word_value. *)
 Theorem return_site_word_operand:
@@ -123,8 +225,8 @@ Theorem return_site_nocopy_memory:
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   expr_post ctx func ce cx e es sa sb s0 ee v op s /\
   ~is_word_type ret /\
-  (expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)) ==>
+  (post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)) ==>
   ?tv w. evaluate_type (get_tenv cx) ret = SOME tv /\
     safe_cast tv v = SOME v /\ val_wf tv v /\
     stmt_state_rel ctx func ce cx ee s /\
@@ -133,11 +235,11 @@ Theorem return_site_nocopy_memory:
     expr_val_at ce cx ret sa sb ee v op s /\
     w2n w + val_footprint tv v < dimword (:256)
 Proof
-  strip_tac >> drule_all return_site_value_semantics >> strip_tac >>
+  strip_tac >> drule_all return_site_post_semantics >> strip_tac >>
   `expr_val_rel cx ret v op s /\ expr_val_at ce cx ret sa sb ee v op s` by
     (fs[expr_post_def] >>
      (conj_tac
-      >- (`~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
+      >- (`~is_word_type (post_value_type ce e)` by metis_tac[is_bytestring_word_type] >>
           fs[expr_val_rel_def] >>
           drule_all bytestring_val_in_memory_transfer >> simp[])) >>
      drule_all return_bytestring_val_at >> simp[]) >>
@@ -146,54 +248,7 @@ Proof
   (conj_tac
    >- (qpat_x_assum `!tv. evaluate_type _ ret = SOME tv ==> _`
          (qspec_then `dtv` mp_tac) >> simp[])) >>
-  drule_all expr_val_at_bound >> simp[]
-QED
-
-Theorem return_site_raw_bytes_path:
-  expr_sim_inv ce cx env es /\
-  IS_SOME (type_stmt env ret (Return (SOME e))) /\
-  call_evaluation_safe cx (int_calls_expr e) /\
-  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es sa sb s0 ee v op s /\
-  is_bytestring_type ret /\ ce.ce_raw_return /\
-  ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
-    tx.function_name External tops /\
-  ce.ce_nonreentrant = (F,nkey,ut,iv) /\
-  get_tenv cx = type_env tops /\
-  cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
-  lowered_value_type ce e = expr_type e /\
-  return_consumer_suffix ce ret (lowered_value_type ce e) op sb = (u,sf) /\
-  (!y. op = Var y ==> not_fresh_at sb y) /\
-  fn_has_code sb sf func /\ ~s.vs_halted /\
-  s.vs_current_bb = sb.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
-  ?n r. gas_path ctx func s n r /\ exit_result r /\
-    (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
-      safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
-        (INL v', finalize_pending_deletions
-          (abstract_machine_from_state am.sources am.exports am.layouts ee),
-         ee.requests) r)
-Proof
-  strip_tac >> drule_all return_site_value_semantics >> strip_tac >>
-  `is_bytestring_type (expr_type e)` by metis_tac[typed_copy_bytestring_source] >>
-  `~is_word_type ret` by metis_tac[is_bytestring_word_type] >>
-  (Q.SUBGOAL_THEN `expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)` assume_tac
-    >- simp[]) >>
-  drule_all return_site_nocopy_memory >> strip_tac >>
-  `compile_external_return (SOME op) F T ce.ce_ret_enc_info
-     ce.ce_max_return_size F nkey ut iv sb = (u,sf)` by
-    (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
-     gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
-  `state_rel func ce cx ee s` by fs[stmt_state_rel_def] >>
-  `lookup_raw_return_or_F (NONE:num option) tx.function_name External tops`
-    by fs[] >>
-  `w2n w + val_footprint tv v <= dimword (:256)` by simp[] >>
-  `evaluate_type (type_env tops) ret = SOME tv` by metis_tac[] >>
-  drule_all return_raw_suffix_path >> strip_tac >>
-  first_x_assum (qspecl_then [`am.exports`, `ctx`] strip_assume_tac) >>
-  qexistsl_tac [`n`, `r`] >> simp[] >> metis_tac[]
+  drule_all exprSimTypedAllocTheory.expr_val_at_bound >> simp[]
 QED
 
 Theorem return_selected_nocopy_window:
@@ -201,7 +256,7 @@ Theorem return_selected_nocopy_window:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -211,8 +266,8 @@ Theorem return_selected_nocopy_window:
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   expr_post ctx func ce cx e es sa sb s0 ee v op s /\
   ~is_word_type ret /\ ret <> NoneT /\
-  (expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)) ==>
+  (post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)) ==>
   ?tv w ct rv. evaluate_type (type_env tops) ret = SOME tv /\
     safe_cast tv v = SOME v /\
     stmt_state_rel ctx func ce cx ee s /\
@@ -230,8 +285,8 @@ Theorem return_selected_nocopy_window:
         b <= w2n w /\ w2n w + val_footprint tv v <= b + len))
 Proof
   strip_tac >> drule_all return_selected_consumer_resources >> strip_tac >>
-  (Q.SUBGOAL_THEN `expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)` assume_tac
+  (Q.SUBGOAL_THEN `post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)` assume_tac
     >- simp[]) >>
   drule_all return_site_nocopy_memory >> strip_tac >>
   qpat_x_assum `ret <> NoneT ==> _` mp_tac >> simp[] >> strip_tac >>
@@ -306,7 +361,7 @@ Theorem return_selected_nocopy_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -319,9 +374,11 @@ Theorem return_selected_nocopy_path:
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
-  lowered_value_type ce e = expr_type e /\
-  (expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)) /\
+  (post_value_type ce e <> lowered_value_type ce e ==>
+    is_bytestring_type (post_value_type ce e) /\
+    is_bytestring_type (lowered_value_type ce e)) /\
+  (post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)) /\
   return_consumer_suffix ce ret (lowered_value_type ce e) op sb = (u,sf) /\
   (!y. op = Var y ==> not_fresh_at sb y) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sb /\
@@ -336,14 +393,16 @@ Theorem return_selected_nocopy_path:
          ee.requests) r)
 Proof
   strip_tac >> drule_all return_selected_consumer_resources >> strip_tac >>
-  (Q.SUBGOAL_THEN `expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)` assume_tac
+  (Q.SUBGOAL_THEN `post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)` assume_tac
     >- simp[]) >>
   drule_all return_selected_nocopy_window >> strip_tac >>
+  `(is_bytestring_type ret /\ is_bytestring_type (lowered_value_type ce e)) \/
+    lowered_value_type ce e = ret` by metis_tac[] >>
   `ce.ce_max_return_size < dimword (:256)` by
     (drule_all return_site_output_buffer_bound >> simp[]) >>
   `compile_external_return (SOME op) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sb = (u,sf)` by
+    ce.ce_max_return_size F nkey ut (mut = View) sb = (u,sf)` by
     (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
      gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\
@@ -372,7 +431,7 @@ Theorem return_selected_allocated_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -385,7 +444,7 @@ Theorem return_selected_allocated_path:
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
   compile_external_return (SOME op) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sb = (u,sf) /\
+    ce.ce_max_return_size F nkey ut (mut = View) sb = (u,sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sb /\ stmt_state_rel ctx func ce cx ee s /\
   (!y. op = Var y ==> not_fresh_at sb y) /\
@@ -454,7 +513,7 @@ QED
 Theorem return_normalize_compiler_context:
   compile_alloc_buffer sz sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand dst src sty sm = ((),sn) /\
-  compile_external_return (SOME buf.buf_operand) F F ei msz F nk ut iv sn = (u,sf) /\
+  compile_external_return (SOME buf.buf_operand) F raw ei msz F nk ut iv sn = (u,sf) /\
   fn_has_code sa sf func /\ local_ptrs_reserved ce sa ==>
   fn_has_code sa sn func /\ fn_has_code sn sf func /\
   fn_has_code sa sm func /\ fn_has_code sm sn func /\
@@ -468,7 +527,7 @@ Proof
     (`ci_mono sm (SND (compile_store_memory_typed ce buf.buf_operand dst src sty sm))`
       by simp[cj 1 ci_mono_typed_memory_family] >> gvs[]) >>
   `ci_mono sn sf` by
-    (`ci_mono sn (SND (compile_external_return (SOME buf.buf_operand) F F ei msz F nk ut iv sn))`
+    (`ci_mono sn (SND (compile_external_return (SOME buf.buf_operand) F raw ei msz F nk ut iv sn))`
       by simp[cj 3 stmtLoweringMonoTheory.ci_mono_return_helpers] >> gvs[]) >>
   drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
   `local_ptrs_reserved ce sn` by
@@ -484,7 +543,7 @@ Theorem return_selected_located_normalize_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -493,14 +552,68 @@ Theorem return_selected_located_normalize_path:
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   expr_post ctx func ce cx e es se sa s0 ee v src s /\
-  ~is_word_type ret /\ ~is_word_type (expr_type e) /\ ~ce.ce_raw_return /\
+  ~is_word_type ret /\ ~is_word_type (post_value_type ce e) /\ ~ce.ce_raw_return /\
+  ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
+    tx.function_name External tops /\
+  cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
+  compile_alloc_buffer (type_memory_bytes ce ret) sa = (buf,sm) /\
+  compile_store_memory_typed ce buf.buf_operand ret src (post_value_type ce e) sm = ((),sn) /\
+  compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
+    ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf) /\
+  fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  (!y. src = Var y ==> not_fresh_at sa y) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?n r. gas_path ctx func s n r /\ exit_result r /\
+    (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
+      safe_cast tv v = SOME v' /\
+      external_call_result_rel tops ret tx
+        (INL v', finalize_pending_deletions
+          (abstract_machine_from_state am.sources am.exports am.layouts ee),
+         ee.requests) r)
+Proof
+  strip_tac >> drule_all return_selected_consumer_resources >> strip_tac >>
+  drule_all return_site_post_semantics >> strip_tac >>
+  drule return_site_copy_metadata >> strip_tac >>
+  drule_all return_normalize_compiler_context >> strip_tac >>
+  `type_memory_bytes ce ret = type_memory_size dtv` by
+    (irule return_site_memory_size >> metis_tac[]) >>
+  `type_memory_size dtv < dimword (:256)` by metis_tac[] >>
+  drule_all (SRULE [] (Q.INST [`sty` |-> `post_value_type ce e`]
+    return_consumer_located_normalize)) >> strip_tac >>
+  drule return_normalizing_prefix_path >>
+  disch_then (qspec_then `func` mp_tac) >> simp[] >>
+  disch_then ho_match_mp_tac >>
+  rpt strip_tac >>
+  drule_all return_selected_allocated_path >>
+  gvs[] >> metis_tac[]
+QED
+
+(* A raw return copies the value into a fresh temporary of the declared
+   bytestring type, then returns the temporary's bytes. *)
+Theorem return_selected_raw_copy_path:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+  source_typing_ok tops am tx /\
+  lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
+  set_external_package_target target
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
+  same_frame cenv ce /\ get_tenv cx = type_env tops /\
+  expr_sim_inv ce cx env es /\ stmt_exprs_ok ce (Return (SOME e)) /\
+  IS_SOME (type_stmt env ret (Return (SOME e))) /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
+  expr_post ctx func ce cx e es se sa s0 ee v src s /\
+  is_bytestring_type ret /\ ce.ce_raw_return /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
   compile_alloc_buffer (type_memory_bytes ce ret) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand ret src (expr_type e) sm = ((),sn) /\
-  compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sn = (u,sf) /\
+  compile_external_return (SOME buf.buf_operand) F T ce.ce_ret_enc_info
+    ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   (!y. src = Var y ==> not_fresh_at sa y) /\
@@ -521,43 +634,29 @@ Proof
   `type_memory_bytes ce ret = type_memory_size dtv` by
     (irule return_site_memory_size >> metis_tac[]) >>
   `type_memory_size dtv < dimword (:256)` by metis_tac[] >>
+  `is_bytestring_type (expr_type e)` by metis_tac[typed_copy_bytestring_source] >>
+  `~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
+  `expr_type e = post_value_type ce e` by
+    simp[loweringPostsTheory.post_value_type_bytestring] >>
   drule_all (SRULE [] (Q.INST [`sty` |-> `expr_type e`]
     return_consumer_located_normalize)) >> strip_tac >>
+  qpat_x_assum `expr_type e = post_value_type ce e` kall_tac >>
   drule return_normalizing_prefix_path >>
   disch_then (qspec_then `func` mp_tac) >> simp[] >>
   disch_then ho_match_mp_tac >>
   rpt strip_tac >>
-  drule_all return_selected_allocated_path >>
-  gvs[] >> metis_tac[]
-QED
-
-Theorem selected_arg_fits_trans_mutual[local]:
-  (!a b. !c. arg_type_fits a b /\ arg_type_fits b c ==> arg_type_fits a c) /\
-  (!as_ bs. !cs. arg_types_fit as_ bs /\ arg_types_fit bs cs ==>
-    arg_types_fit as_ cs)
-Proof
-  ho_match_mp_tac arg_type_fits_ind >>
-  rw[arg_type_fits_def]
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (BaseT bt)` >> Cases_on `bt` >> gvs[arg_type_fits_def])
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (BaseT bt)` >> Cases_on `bt` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (BaseT (BytesT bd))` >> Cases_on `bd` >> gvs[arg_type_fits_def])
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (ArrayT ct bd)` >> Cases_on `bd` >> gvs[arg_type_fits_def] >>
-      metis_tac[arithmeticTheory.LESS_EQ_TRANS])
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (ArrayT ct bd)` >> Cases_on `bd` >> gvs[arg_type_fits_def] >>
-      metis_tac[])
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >> metis_tac[])
-  >> Cases_on `cs` >> gvs[arg_type_fits_def] >> metis_tac[]
-QED
-
-Theorem selected_widens_trans[local]:
-  type_widens_to tenv a b /\ type_widens_to tenv b c ==>
-  type_widens_to tenv a c
-Proof
-  simp[type_widens_to_def] >> metis_tac[selected_arg_fits_trans_mutual]
+  `state_rel func ce cx ee t` by fs[stmt_state_rel_def] >>
+  `lookup_raw_return_or_F (NONE:num option) tx.function_name External tops`
+    by fs[] >>
+  `evaluate_type (type_env tops) ret = SOME dtv` by metis_tac[] >>
+  `val_footprint dtv v <= type_memory_size dtv` by
+    (irule externalReturnCopyTransportTheory.return_footprint_le_layout >> gvs[]) >>
+  `w2n w + val_footprint dtv v <= dimword (:256)` by decide_tac >>
+  drule_all return_raw_suffix_path >> strip_tac >>
+  first_x_assum (qspecl_then [`am.exports`, `ctx`] strip_assume_tac) >>
+  qexistsl_tac [`n`, `r`] >> simp[] >> qexists_tac `v` >>
+  `tv = dtv` by metis_tac[optionTheory.SOME_11] >>
+  pop_assum SUBST_ALL_TAC >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem return_selected_bufferless_normalize_path:
@@ -565,7 +664,7 @@ Theorem return_selected_bufferless_normalize_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -584,7 +683,7 @@ Theorem return_selected_bufferless_normalize_path:
   compile_alloc_buffer (type_memory_bytes ce ret) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand ret (Lit 0w) phy sm = ((),sn) /\
   compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sn = (u,sf) /\
+    ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -609,7 +708,7 @@ Proof
     >- metis_tac[]) >>
   drule_all return_bufferless_site_zero_semantics >> strip_tac >>
   `type_widens_to (get_tenv cx) phy ret` by
-    metis_tac[selected_widens_trans] >>
+    metis_tac[typedCopyCompatibilityTheory.type_widens_to_trans] >>
   `compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm)` by metis_tac[] >>
   drule_all return_alloc_zero_value_run >> strip_tac >>
   drule_all return_selected_allocated_path >> strip_tac >>
@@ -626,7 +725,7 @@ Theorem return_selected_bufferless_nocopy_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -643,7 +742,7 @@ Theorem return_selected_bufferless_nocopy_path:
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
   compile_external_return (SOME (Lit 0w)) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sb = (u,sf) /\
+    ce.ce_max_return_size F nkey ut (mut = View) sb = (u,sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sb /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -767,7 +866,7 @@ Theorem return_selected_located_suffix:
   source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
@@ -780,7 +879,9 @@ Theorem return_selected_located_suffix:
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
-  lowered_value_type ce e = expr_type e /\
+  (post_value_type ce e <> lowered_value_type ce e ==>
+    is_bytestring_type (post_value_type ce e) /\
+    is_bytestring_type (lowered_value_type ce e)) /\
   return_consumer_suffix ce ret (lowered_value_type ce e) op sa = (u,sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ (!y. op = Var y ==> not_fresh_at sa y) /\
@@ -794,27 +895,44 @@ Theorem return_selected_located_suffix:
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
 Proof
-  strip_tac >> drule_all return_selected_consumer_resources >> strip_tac >>
+  strip_tac >>
+  drule_all return_selected_consumer_resources >> strip_tac >>
   drule return_site_valued_not_none >> strip_tac >>
   Cases_on `ce.ce_raw_return`
   >- (`lookup_raw_return_or_F (NONE:num option) tx.function_name External tops` by fs[] >>
       drule_all return_selected_raw_bytes >> strip_tac >>
-      drule_all return_site_raw_bytes_path >> simp[]) >>
+      drule_all return_site_value_semantics >> strip_tac >>
+      `is_bytestring_type (expr_type e)` by
+        metis_tac[typed_copy_bytestring_source] >>
+      `is_bytestring_type (lowered_value_type ce e)` by
+        metis_tac[loweringPostsTheory.post_value_type_bytestring] >>
+      drule_all return_consumer_raw_split >> strip_tac >>
+      `compile_store_memory_typed ce buf.buf_operand ret op (expr_type e) sm =
+         ((),sn)` by
+        (qpat_x_assum `compile_store_memory_typed _ _ _ _ (lowered_value_type ce e) _ = _`
+           mp_tac >>
+         ONCE_REWRITE_TAC[contextTheory.compile_store_memory_typed_def] >>
+         simp[is_bytestring_word_type]) >>
+      `compile_external_return (SOME buf.buf_operand) F T ce.ce_ret_enc_info
+         ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf)` by
+        gvs[is_bytestring_word_type] >>
+      drule_all return_selected_raw_copy_path >> simp[]) >>
   Cases_on `is_word_type ret`
   >- (drule_all return_site_nonraw_word_path >> simp[]) >>
-  Cases_on `expr_type e = ret \/
-    (is_bytestring_type (expr_type e) /\ is_bytestring_type ret)`
+  Cases_on `post_value_type ce e = ret \/
+    (is_bytestring_type (post_value_type ce e) /\ is_bytestring_type ret)`
   >- (drule_all return_selected_nocopy_path >> simp[]) >>
-  `~is_word_type (expr_type e)` by
-    (drule_all return_site_value_semantics >> strip_tac >>
-     metis_tac[selected_source_word_eq]) >>
+  drule_all return_site_post_semantics >> strip_tac >>
+  `~is_word_type (post_value_type ce e)` by metis_tac[selected_source_word_eq] >>
+  `post_value_type ce e = lowered_value_type ce e` by
+    metis_tac[selected_bytestring_target] >>
   `~(is_bytestring_type ret /\ is_bytestring_type (lowered_value_type ce e)) /\
     lowered_value_type ce e <> ret` by metis_tac[] >>
   drule_all return_consumer_normalize_split >> strip_tac >>
-  `compile_store_memory_typed ce buf.buf_operand ret op (expr_type e) sm = ((),sn)`
+  `compile_store_memory_typed ce buf.buf_operand ret op (post_value_type ce e) sm = ((),sn)`
     by metis_tac[] >>
   `compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sn = (u,sf)` by gvs[] >>
+    ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf)` by gvs[] >>
   drule_all return_selected_located_normalize_path >> simp[]
 QED
 
@@ -834,7 +952,7 @@ Theorem return_selected_bufferless_suffix:
   source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
@@ -882,7 +1000,7 @@ Proof
      drule_all return_selected_raw_bytes >> simp[]) >>
   Cases_on `phy = ret`
   >- (`compile_external_return (SOME (Lit 0w)) F F ce.ce_ret_enc_info
-         ce.ce_max_return_size F nkey F (mut = View) sa = (u,sf)` by
+         ce.ce_max_return_size F nkey ut (mut = View) sa = (u,sf)` by
         (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
          gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
       drule_all return_selected_bufferless_nocopy_path >> simp[]) >>
@@ -892,6 +1010,6 @@ Proof
   `compile_store_memory_typed ce buf.buf_operand ret (Lit 0w) phy sm = ((),sn)`
     by metis_tac[] >>
   `compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sn = (u,sf)` by gvs[] >>
+    ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf)` by gvs[] >>
   drule_all return_selected_bufferless_normalize_path >> simp[]
 QED

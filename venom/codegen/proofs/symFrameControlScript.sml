@@ -121,7 +121,7 @@ Proof
   gvs[] >> gen_tac >>
   simp[planAlignTheory.apply_prefix_ops_append] >>
   qspecl_then [`ops2`, `lo`] mp_tac
-    reorderSimTheory.apply_prefix_ops_ext_stack_spilled >>
+    mixedPrefixSimTheory.apply_prefix_ops_ext_stack_spilled >>
   metis_tac[]
 QED
 

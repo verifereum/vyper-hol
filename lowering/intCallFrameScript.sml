@@ -156,7 +156,7 @@ Proof
           TRY (drule_then strip_assume_tac invoke_return_frame) >>
           gvs[] >> res_tac >> simp[]) >>
       Cases_on `inst.inst_opcode = ALLOCA`
-      >- (ONCE_REWRITE_TAC[step_inst_def] >> simp[step_inst_base_def] >>
+      >- (ONCE_REWRITE_TAC[step_inst_def] >> simp[step_inst_base_opcode_eqs] >>
           rpt (BasicProvers.TOP_CASE_TAC >> simp[result_allocas_above_def]) >>
           metis_tac[exec_alloca_allocas_above]) >>
       `step_inst fuel ctx inst s = step_inst_base inst s` by

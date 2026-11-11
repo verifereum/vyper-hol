@@ -45,6 +45,23 @@ Proof
   metis_tac[]
 QED
 
+Theorem generate_block_insts_plan_final_call:
+  !insts lv dfg cfg fn lbl halt np bl ps i ops ps'.
+    generate_block_insts_plan lv dfg cfg fn lbl halt np bl i insts ps =
+      SOME (ops,ps') /\ insts <> [] ==>
+    ?before last_ops.
+      generate_inst_plan lv dfg cfg fn (LAST insts)
+        (live_vars_at lv lbl bl) halt F lbl before = SOME (last_ops,ps')
+Proof
+  Induct_on `insts` >- simp[] >>
+  rpt gen_tac >> Cases_on `insts = []`
+  >- (gvs[generate_block_insts_plan_def, AllCaseEqs()] >>
+      strip_tac >> goal_assum (drule_at Any)) >>
+  simp[Once generate_block_insts_plan_def] >> strip_tac >>
+  gvs[AllCaseEqs(), LAST_DEF] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem generate_block_insts_plan_jmp_suffix:
   !insts ps i ops ps'.
   generate_block_insts_plan liveness dfg cfg fn lbl ih np bl i insts ps =

@@ -1,6 +1,6 @@
 Theory exprSimPopNestedLocalMemory
 Ancestors
-  exprSimPopNestedLocalLayout exprSimPopNestedLocalPath exprSimPop exprSimProps
+  compileEnv exprSimPopNestedLocalLayout exprSimPopNestedLocalPath exprSimPop exprSimProps
   valueEncoding valueEncodingDefs valueEncodingProps loweringPosts
   vyperState vyperTyping vyperPlaceWriteSoundness vyperTypeInvariants
   venomState vyperAssignPreservesType arithmetic exprSimAggregateEncoding

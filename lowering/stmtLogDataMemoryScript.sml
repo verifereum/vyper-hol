@@ -43,7 +43,7 @@ QED
 
 Theorem compile_log_store_data_mem_ok:
   !xs vs off sa sb s.
-  compile_log_store_data ce xs buf off sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) /\
   LIST_REL (log_data_source cx b cap s) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
   (!x. buf = Var x ==> not_fresh_at sa x) /\
@@ -63,7 +63,7 @@ Proof
   Cases_on `h` >> gvs[] >>
   rename1 `log_data_source cx b cap s (src,ty) v` >>
   `supported_scalar_type ty` by fs[log_data_source_def] >>
-  drule_all compile_log_store_data_split >> strip_tac >>
+  drule_all compile_log_store_data_scalar_split >> strip_tac >>
   `?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
     value_has_type tv v /\ val_wf tv v /\ expr_val_rel cx ty v src s` by
     fs[log_data_source_def] >>
@@ -195,7 +195,7 @@ Proof
 QED
 
 Theorem compile_log_store_data_frontier:
-  compile_log_store_data ce xs buf off sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) /\
   LIST_REL (log_data_source cx b cap s) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
   (!x. buf = Var x ==> not_fresh_at sa x) /\
@@ -212,7 +212,7 @@ Proof
 QED
 
 Theorem compile_log_store_data_run_mem:
-  compile_log_store_data ce xs buf off sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) /\
   LIST_REL (log_data_source cx b cap s) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
   (!x. buf = Var x ==> not_fresh_at sa x) /\
@@ -254,7 +254,7 @@ QED
 
 Theorem log_allocate_store_prepare_mem:
   compile_alloc_buffer srccap source_st = (srcbuf,start) /\
-  compile_log_store_data ce xs srcbuf.buf_operand 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) srcbuf.buf_operand 0 start = ((),stored_st) /\
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   fn_has_code source_st start func /\ fn_has_code stored_st prepared func /\
   ~block_is_terminated source_st /\ ~block_is_terminated stored_st /\
@@ -293,11 +293,11 @@ Proof
   drule_all log_data_sources_rounded_bound >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts start stored_st) initial` by
     (irule compile_log_store_data_mem_ok >>
-     goal_assum (drule_at (Pat `compile_log_store_data _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_log_store_data _ _ _ _ _ _ = _`)) >>
      qexistsl_tac [`b`,`srccap`,`cx`,`vs`] >> simp[]) >>
   `stored.vs_alloca_next = initial.vs_alloca_next` by
     (irule compile_log_store_data_frontier >>
-     goal_assum (drule_at (Pat `compile_log_store_data _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_log_store_data _ _ _ _ _ _ = _`)) >>
      qexistsl_tac [`b`,`srccap`,`cx`,`vs`] >> simp[]) >>
   `before.vs_alloca_next <= initial.vs_alloca_next` by
     (drule_all log_alloc_buffer_run_frontier >> simp[]) >>

@@ -18,11 +18,31 @@ Definition return_consumer_suffix_def:
              (compile_store_memory_typed ce ptr ty op sty)
              (comp_return ptr)))
        else comp_return op)
-      (\rop. compile_external_return (SOME rop) (is_word_type ty)
-        ce.ce_raw_return ce.ce_ret_enc_info ce.ce_max_return_size
-        (FST ce.ce_nonreentrant) (FST (SND ce.ce_nonreentrant))
-        (FST (SND (SND ce.ce_nonreentrant)))
-        (SND (SND (SND ce.ce_nonreentrant))))
+      (\rop.
+        if ce.ce_raw_return then
+          comp_ignore_bind
+            (if FST ce.ce_nonreentrant then
+               compile_nonreentrant_unlock (FST (SND ce.ce_nonreentrant))
+                 (FST (SND (SND ce.ce_nonreentrant)))
+                 (SND (SND (SND ce.ce_nonreentrant)))
+             else comp_return ())
+            (comp_bind (compile_alloc_buffer (type_memory_bytes ce ty))
+              (\raw_buf. comp_ignore_bind
+                (compile_store_memory_typed ce raw_buf.buf_operand ty rop
+                  (if ~is_word_type ty /\
+                      ~(is_bytestring_type ty /\ is_bytestring_type sty) /\
+                      sty <> ty then ty else sty))
+                (compile_external_return (SOME raw_buf.buf_operand)
+                  (is_word_type ty) T ce.ce_ret_enc_info ce.ce_max_return_size F
+                  (FST (SND ce.ce_nonreentrant))
+                  (FST (SND (SND ce.ce_nonreentrant)))
+                  (SND (SND (SND ce.ce_nonreentrant))))))
+        else
+          compile_external_return (SOME rop) (is_word_type ty)
+            F ce.ce_ret_enc_info ce.ce_max_return_size
+            (FST ce.ce_nonreentrant) (FST (SND ce.ce_nonreentrant))
+            (FST (SND (SND ce.ce_nonreentrant)))
+            (SND (SND (SND ce.ce_nonreentrant))))
 End
 
 Theorem return_consumer_compile:
@@ -34,6 +54,8 @@ Proof
   strip_tac >> simp[Once compile_stmt_def, return_consumer_suffix_def,
     comp_bind_def, comp_return_def, FUN_EQ_THM] >>
   gen_tac >> pairarg_tac >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  Cases_on `ce.ce_raw_return` >>
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def]
 QED
 
@@ -48,11 +70,12 @@ Proof
 QED
 
 Theorem return_consumer_no_normalize:
+  ~ce.ce_raw_return /\
   (is_word_type ty \/
    (is_bytestring_type ty /\ is_bytestring_type sty) \/ sty = ty) ==>
   return_consumer_suffix ce ty sty op =
     compile_external_return (SOME op) (is_word_type ty)
-      ce.ce_raw_return ce.ce_ret_enc_info ce.ce_max_return_size
+      F ce.ce_ret_enc_info ce.ce_max_return_size
       (FST ce.ce_nonreentrant) (FST (SND ce.ce_nonreentrant))
       (FST (SND (SND ce.ce_nonreentrant)))
       (SND (SND (SND ce.ce_nonreentrant)))
@@ -65,11 +88,11 @@ QED
    In the located branch the producer supplies sty = expr_type e. *)
 Theorem return_consumer_annotation_memory:
   expr_post ctx func ce cx e es sa sb s0 ee v op s /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  ~is_word_type (expr_type e) ==>
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
+  ~is_word_type (post_value_type ce e) ==>
   ?w. stmt_state_rel ctx func ce cx ee s /\
     eval_operand op s = SOME w /\ val_in_memory tv v (w2n w) s.vs_memory /\
-    expr_val_at ce cx (expr_type e) sa sb ee v op s /\ val_wf tv v
+    expr_val_at ce cx (post_value_type ce e) sa sb ee v op s /\ val_wf tv v
 Proof
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def] >> metis_tac[]
 QED
@@ -79,7 +102,7 @@ QED
    demanded when the footprint is zero. *)
 Theorem return_consumer_located_normalize:
   expr_post ctx func ce cx e es se sa s0 ee v src s /\
-  sty = expr_type e /\ ~is_word_type sty /\
+  sty = post_value_type ce e /\ ~is_word_type sty /\
   compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand dty src sty sm = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -105,21 +128,21 @@ Theorem return_consumer_located_normalize:
       val_in_memory dtv v (w2n w) t.vs_memory /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) (\r. F)
 Proof
-  strip_tac >> qpat_x_assum `sty = expr_type e` SUBST_ALL_TAC >>
+  strip_tac >> qpat_x_assum `sty = post_value_type ce e` SUBST_ALL_TAC >>
   drule_all return_consumer_annotation_memory >> strip_tac >>
   irule return_normalize_expr_frag >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem return_consumer_normalize_split:
-  ~is_word_type ty /\
+  ~ce.ce_raw_return /\ ~is_word_type ty /\
   ~(is_bytestring_type ty /\ is_bytestring_type sty) /\ sty <> ty /\
   return_consumer_suffix ce ty sty op sa = (u,sf) ==>
   ?buf sm sn.
     compile_alloc_buffer (type_memory_bytes ce ty) sa = (buf,sm) /\
     compile_store_memory_typed ce buf.buf_operand ty op sty sm = ((),sn) /\
     compile_external_return (SOME buf.buf_operand) (is_word_type ty)
-      ce.ce_raw_return ce.ce_ret_enc_info ce.ce_max_return_size
+      F ce.ce_ret_enc_info ce.ce_max_return_size
       (FST ce.ce_nonreentrant) (FST (SND ce.ce_nonreentrant))
       (FST (SND (SND ce.ce_nonreentrant)))
       (SND (SND (SND ce.ce_nonreentrant))) sn = (u,sf)
@@ -129,6 +152,24 @@ Proof
   rpt strip_tac >> pairarg_tac >>
   gvs[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> metis_tac[]
+QED
+
+(* A raw return of a bytestring unlocks (here a no-op), copies the value into
+   a fresh temporary of the declared type, and returns from it. *)
+Theorem return_consumer_raw_split:
+  return_consumer_suffix ce ty sty op sa = (u,sf) /\
+  ce.ce_raw_return /\ ce.ce_nonreentrant = (F,nkey,ut,iv) /\
+  is_bytestring_type ty /\ is_bytestring_type sty ==>
+  ?buf sm sn.
+    compile_alloc_buffer (type_memory_bytes ce ty) sa = (buf,sm) /\
+    compile_store_memory_typed ce buf.buf_operand ty op sty sm = ((),sn) /\
+    compile_external_return (SOME buf.buf_operand) (is_word_type ty) T
+      ce.ce_ret_enc_info ce.ce_max_return_size F nkey ut iv sn = (u,sf)
+Proof
+  simp[return_consumer_suffix_def, comp_bind_def, comp_return_def,
+    comp_ignore_bind_def] >>
+  rpt strip_tac >> gvs[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[])
 QED
 
 Theorem return_consumer_intcall_located_type:

@@ -16,7 +16,7 @@ Theorem log_emit_step:
     [<|logger := w2w s.vs_call_ctx.cc_address; topics := topics;
        data := mem_bytes_at (w2n off) (w2n sz) s.vs_memory |>])
 Proof
-  strip_tac >> simp[step_inst_base_def, w2n_n2w, REVERSE_APPEND,
+  strip_tac >> simp[step_inst_base_opcode_eqs, w2n_n2w, REVERSE_APPEND,
     mem_bytes_at_def]
 QED
 

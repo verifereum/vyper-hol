@@ -31,14 +31,44 @@ Proof
   drule_all oracle_storage_ok_suffix >> simp[]
 QED
 
+Theorem take_request_outcome_outcome_suffix:
+  take_request_outcome rq st = (res,st') ==>
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  rpt strip_tac >> Cases_on `st.outcomes`
+  >- (gvs[take_request_outcome_NONE] >> simp[]) >>
+  drule_all take_request_outcome_suffix >> strip_tac >>
+  simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
+QED
+
 Theorem take_call_outcome_outcome_suffix:
   take_call_outcome target calldata value_opt st = (res,st') ==>
   outcome_suffix st.outcomes st'.outcomes
 Proof
-  rpt strip_tac >> Cases_on `st.outcomes`
-  >- (gvs[take_call_outcome_NONE] >> simp[]) >>
-  drule_all take_call_outcome_suffix >> strip_tac >>
-  simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
+  PURE_REWRITE_TAC [take_call_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_outcome_suffix
+QED
+
+Theorem take_delegate_outcome_outcome_suffix:
+  take_delegate_outcome target calldata value_opt st = (res,st') ==>
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  PURE_REWRITE_TAC [take_delegate_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_outcome_suffix
+QED
+
+Theorem take_request_outcome_storage_suffix:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  take_request_outcome rq st = (res,st') ==>
+  contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  rpt strip_tac >> drule take_request_outcome_frame >>
+  simp[evaluation_state_component_equality] >> strip_tac >>
+  imp_res_tac take_request_outcome_outcome_suffix >>
+  imp_res_tac oracle_storage_ok_suffix >> simp[] >>
+  irule contract_storage_well_formed_backends_frame >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem take_call_outcome_storage_suffix:
@@ -47,16 +77,40 @@ Theorem take_call_outcome_storage_suffix:
   contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
   outcome_suffix st.outcomes st'.outcomes
 Proof
-  rpt strip_tac >> drule take_call_outcome_frame >>
-  simp[evaluation_state_component_equality] >> strip_tac >>
-  imp_res_tac take_call_outcome_outcome_suffix >>
-  imp_res_tac oracle_storage_ok_suffix >> simp[] >>
-  irule contract_storage_well_formed_backends_frame >>
-  goal_assum (drule_at Any) >> simp[]
+  PURE_REWRITE_TAC [take_call_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_storage_suffix
+QED
+
+Theorem take_delegate_outcome_storage_suffix:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  take_delegate_outcome target calldata value_opt st = (res,st') ==>
+  contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  PURE_REWRITE_TAC [take_delegate_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_storage_suffix
 QED
 
 (* Recorded success uses T6.2; computed success uses the request snapshots.
    Neither argument asserts that the runtime balance/code guard checks storage. *)
+Theorem take_request_success_storage_payload:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  st.outcomes = SOME os /\
+  rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
+  take_outcome rq os = (co,rest) /\
+  co.co_success ==>
+  contract_storage_well_formed cx
+    (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)
+Proof
+  rpt strip_tac >>
+  Cases_on `computed_precompile rq`
+  >- (drule computed_precompile_state >> disch_then (qspec_then `os` mp_tac) >>
+      simp[] >> strip_tac >>
+      irule contract_storage_well_formed_backends_frame >>
+      qexists_tac `st` >> gvs[]) >>
+  Cases_on `os` >> gvs[take_outcome_def] >> fs[oracle_storage_ok_def]
+QED
+
 Theorem take_outcome_success_storage_payload:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   st.outcomes = SOME os /\
@@ -66,15 +120,34 @@ Theorem take_outcome_success_storage_payload:
     (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)
 Proof
   rpt strip_tac >>
-  Cases_on `computed_precompile (call_outcome_request target calldata value_opt st)`
-  >- (drule computed_precompile_state >> disch_then (qspec_then `os` mp_tac) >>
-      simp[] >> strip_tac >>
-      irule contract_storage_well_formed_backends_frame >>
-      qexists_tac `st` >> gvs[call_outcome_request_def]) >>
-  Cases_on `os` >> gvs[take_outcome_def] >> fs[oracle_storage_ok_def]
+  drule_at (Pat `take_outcome _ _ = _`) take_request_success_storage_payload >>
+  simp[call_outcome_request_def]
 QED
 
 (* Atomic take plus raw adoption, tied to the real request snapshot. *)
+Theorem take_adopt_request_outcome_storage_suffix:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  take_request_outcome rq0 st = (INL (rq,co),st1) /\
+  adopt_call_outcome rq co st1 = (INL (),st2) /\
+  rq0.cr_accounts = st.accounts /\ rq0.cr_tStorage = st.tStorage /\
+  (rq0.cr_kind = MessageCall \/ rq0.cr_kind = DelegateMessageCall) ==>
+  contract_storage_well_formed cx st2 /\ oracle_storage_ok cx st2 /\
+  outcome_suffix st.outcomes st2.outcomes
+Proof
+  rpt strip_tac >> drule_all take_request_outcome_storage_suffix >> strip_tac >>
+  drule take_request_outcome_success >> strip_tac >>
+  `co.co_success ==> contract_storage_well_formed cx
+     (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)` by
+    (strip_tac >> gvs[] >> drule_all take_request_success_storage_payload >> simp[]) >>
+  Cases_on `rq.cr_static` >> Cases_on `co.co_success` >>
+  gvs[adopt_call_outcome_equation] >>
+  FIRST [
+    irule contract_storage_well_formed_backends_frame >>
+    qexists_tac `st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>` >>
+    simp[] >> NO_TAC,
+    irule oracle_storage_ok_suffix >> qexists_tac `st` >> simp[]]
+QED
+
 Theorem take_adopt_call_outcome_storage_suffix:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   take_call_outcome target calldata value_opt st = (INL (rq,co),st1) /\
@@ -82,18 +155,23 @@ Theorem take_adopt_call_outcome_storage_suffix:
   contract_storage_well_formed cx st2 /\ oracle_storage_ok cx st2 /\
   outcome_suffix st.outcomes st2.outcomes
 Proof
-  rpt strip_tac >> drule_all take_call_outcome_storage_suffix >> strip_tac >>
-  drule take_call_outcome_success >> strip_tac >>
-  `co.co_success ==> contract_storage_well_formed cx
-     (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)` by
-    (strip_tac >> gvs[] >> drule_all take_outcome_success_storage_payload >> simp[]) >>
-  Cases_on `rq.cr_static` >> Cases_on `co.co_success` >>
-  gvs[adopt_call_outcome_equation, call_outcome_request_def] >>
-  FIRST [
-    irule contract_storage_well_formed_backends_frame >>
-    qexists_tac `st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>` >>
-    simp[] >> NO_TAC,
-    irule oracle_storage_ok_suffix >> qexists_tac `st` >> simp[]]
+  rw[take_call_outcome_def] >>
+  drule_at (Pat `take_request_outcome _ _ = _`)
+    take_adopt_request_outcome_storage_suffix >>
+  disch_then (qspecl_then [`st2`, `cx`] mp_tac) >> simp[call_outcome_request_def]
+QED
+
+Theorem take_adopt_delegate_outcome_storage_suffix:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  take_delegate_outcome target calldata value_opt st = (INL (rq,co),st1) /\
+  adopt_call_outcome rq co st1 = (INL (),st2) ==>
+  contract_storage_well_formed cx st2 /\ oracle_storage_ok cx st2 /\
+  outcome_suffix st.outcomes st2.outcomes
+Proof
+  rw[take_delegate_outcome_def] >>
+  drule_at (Pat `take_request_outcome _ _ = _`)
+    take_adopt_request_outcome_storage_suffix >>
+  disch_then (qspecl_then [`st2`, `cx`] mp_tac) >> simp[delegate_outcome_request_def, call_outcome_request_def]
 QED
 
 (* No-adoption needs no payload assumption: even arbitrary bad storage/code
@@ -173,7 +251,7 @@ Proof
 QED
 
 Theorem take_adopt_create_outcome_storage_suffix:
-  kind <> MessageCall /\
+  kind <> MessageCall /\ kind <> DelegateMessageCall /\
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   take_create_outcome kind value code st = (INL (rq,co),st1) /\
   adopt_call_outcome rq co st1 = (INL (),st2) ==>

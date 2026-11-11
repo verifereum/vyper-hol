@@ -1,5 +1,6 @@
 Theory stmtSimLogDataInput
 Ancestors
+  exprSimProps
   stmtSimLogDataRun stmtSimLogSource abiEncoderSourceCorrect
   abiBuiltinEncodeWord entryDecodeProps entryDecodeStaticProps
   supportedTypes vyperTyping vyperABI contractABI vyperValue words integer arithmetic typedCopyMetadata
@@ -289,7 +290,7 @@ Proof
 QED
 
 Theorem compile_log_store_data_input:
-  compile_log_store_data cenv xs buf off sa = ((),sb) /\
+  compile_log_store_data cenv xs (MAP SND xs) buf off sa = ((),sb) /\
   LIST_REL (log_data_source cx b cap s) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
   (!x. buf = Var x ==> not_fresh_at sa x) /\

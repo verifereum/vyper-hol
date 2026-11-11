@@ -190,3 +190,49 @@ Theorem supported_internal_stmts_shape_list:
 Proof
   Induct_on `ss` >> simp[supported_internal_stmt_shape_def]
 QED
+
+Theorem supported_assignment_exists_disj:
+  (!p t q. supported_assignment_exists (\x. p x \/ q x) t =
+    (supported_assignment_exists p t \/ supported_assignment_exists q t)) /\
+  (!p ts q. supported_assignments_exists (\x. p x \/ q x) ts =
+    (supported_assignments_exists p ts \/ supported_assignments_exists q ts))
+Proof
+  ho_match_mp_tac supported_assignment_exists_ind >>
+  simp[supported_assignment_exists_def, supported_expr_exists_disj] >> metis_tac[]
+QED
+
+Theorem supported_iterator_exists_disj:
+  !p it q. supported_iterator_exists (\x. p x \/ q x) it =
+    (supported_iterator_exists p it \/ supported_iterator_exists q it)
+Proof
+  Cases_on `it` >> simp[supported_iterator_exists_def,
+    supported_expr_exists_disj] >> metis_tac[]
+QED
+
+Theorem supported_assert_exists_disj:
+  !p r q. supported_assert_exists (\x. p x \/ q x) r =
+    (supported_assert_exists p r \/ supported_assert_exists q r)
+Proof
+  Cases_on `r` >> simp[supported_assert_exists_def,
+    supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem supported_raise_exists_disj:
+  !p r q. supported_raise_exists (\x. p x \/ q x) r =
+    (supported_raise_exists p r \/ supported_raise_exists q r)
+Proof
+  Cases_on `r` >> simp[supported_raise_exists_def,
+    supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem supported_stmt_expr_exists_disj:
+  (!p s q. supported_stmt_expr_exists (\x. p x \/ q x) s =
+    (supported_stmt_expr_exists p s \/ supported_stmt_expr_exists q s)) /\
+  (!p ss q. supported_stmts_expr_exists (\x. p x \/ q x) ss =
+    (supported_stmts_expr_exists p ss \/ supported_stmts_expr_exists q ss))
+Proof
+  ho_match_mp_tac supported_stmt_expr_exists_ind >>
+  simp[supported_stmt_expr_exists_def, supported_expr_exists_disj,
+       supported_assignment_exists_disj, supported_iterator_exists_disj,
+       supported_assert_exists_disj, supported_raise_exists_disj] >> metis_tac[]
+QED

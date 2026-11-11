@@ -333,17 +333,6 @@ Proof
   simp[make_venom_call_state_def, LET_THM, venom_to_tx_params_jump]
 QED
 
-Theorem make_venom_delegatecall_state_jump[local]:
-  !s target gas calldata code is_static pb cb idx.
-    make_venom_delegatecall_state
-      (s with <|vs_prev_bb := pb; vs_current_bb := cb;
-                vs_inst_idx := idx|>)
-      target gas calldata code is_static =
-    make_venom_delegatecall_state s target gas calldata code is_static
-Proof
-  simp[make_venom_delegatecall_state_def, LET_THM, venom_to_tx_params_jump]
-QED
-
 (* Utility: case-OPTION_MAP fusion *)
 Theorem option_case_OPTION_MAP[local]:
   !f x n g.
@@ -414,10 +403,10 @@ Theorem exec_delegatecall_jump[local]:
       (exec_delegatecall inst s gas addr ao as_ ro rs)
 Proof
   rpt gen_tac >>
-  simp([exec_delegatecall_def, make_venom_delegatecall_state_jump]
-       @ ext_call_rw) >>
+  simp([exec_delegatecall_def, venom_call_request_def,
+        write_memory_with_expansion_def] @ ext_call_rw) >>
   EVERY_CASE_TAC >>
-  simp[instIdxIndepTheory.exec_result_map_def, update_var_jump,
+  simp[instIdxIndepTheory.exec_result_map_def, update_var_def, update_var_jump,
        venom_state_component_equality]
 QED
 

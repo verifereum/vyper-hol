@@ -48,6 +48,30 @@ the declared output; a numerical scratch-reserve frame alone does not imply
 that guarantee. The shared endpoint therefore retains both physical scratch
 effects and registered-allocation effects.
 
+## Log consumer
+
+[`logAbiEncoder`](../lowering/logAbiEncoderScript.sml) composes
+`compile_abi_encode_to_buf_frag_effect` with the actual LOG instruction.
+[`logDataPacking`](../lowering/logDataPackingScript.sml) supplies its input from
+checked argument packing. `memory_value_rel_val_in_memory` in
+[`memoryValueEncoding`](../lowering/memoryValueEncodingScript.sml)
+bridges typed packing to the canonical `val_in_memory` relation.
+[`checkedLogDataExecution`](../lowering/checkedLogDataExecutionScript.sml)
+composes argument evaluation, topics, buffer allocation, packing and encoding,
+preserving source-state and local pointer relations and the source event.
+These standalone event proofs use the legacy fixed-offset `state_rel_simple`
+relation, including `immutables_rel_simple`'s word-indexed constructor
+bookkeeping. This is separate from `state_rel` and its `immutables_rel`
+constructor-memory/deployment invariant; no implication between the two state
+relations is claimed.
+
+The former native recursive Log encoder and its array, resource and trace
+machinery are retired. Log uses the shared encoder's `enc_scratch`/`enc_frame`
+resource contract and non-error continuation simulation. Cached scratch is
+permitted above live source/output regions; the resource premises do not assume
+encoder execution. The shared registered effect preserves the source context
+fields needed by both return and Log consumers.
+
 ## Compiler fixtures
 
 The `abi-codegen` corpus contains twelve pinned-Python source, AST and bytecode

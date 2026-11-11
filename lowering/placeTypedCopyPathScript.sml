@@ -62,7 +62,7 @@ Proof
     (update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n a) s0) s0))
       with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[typed_copy_word_state_frame] >>
-  drule_all val_in_memory_word >> strip_tac >>
+  drule_all exprSimPropsTheory.val_in_memory_word >> strip_tac >>
   simp[mstore_mem_word_at_same, GSYM mem_word_at_eq_mload,
        mstore_def, write_memory_with_expansion_def, update_var_def,
        same_blocks_def] >> gvs[same_blocks_def]

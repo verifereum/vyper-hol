@@ -27,6 +27,14 @@ Proof
   rw[comp_bind_def]
 QED
 
+val return_prefix_chain_tac =
+  ci_mono_chain_tac
+    [ci_mono_return_helpers, ci_mono_context_helpers, ci_mono_emit_op,
+     ci_mono_compile_alloc_buffer, cj 1 ci_mono_typed_memory_family] >>
+  FIRST [simp [ci_mono_comp_return, ci_mono_return_helpers,
+               ci_mono_context_helpers, ci_mono_emit_op,
+               ci_mono_compile_alloc_buffer, cj 1 ci_mono_typed_memory_family]];
+
 Theorem return_value_code_prefix:
   stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv', sb) /\
   lower_value compile_expr cenv ty e sa = (op, s1) ==> cs_extends s1 sb
@@ -39,11 +47,19 @@ Proof
           comp_ignore_bind_def, comp_return_def, pairTheory.UNCURRY]) >>
   pop_assum SUBST1_TAC >> simp[Once compile_stmt_def] >>
   irule ci_mono_bind_after >> simp[] >>
-  ci_mono_chain_tac
-    [ci_mono_return_helpers, ci_mono_emit_op, ci_mono_compile_alloc_buffer,
-     cj 1 ci_mono_typed_memory_family] >>
-  FIRST [simp [ci_mono_comp_return, ci_mono_return_helpers, ci_mono_emit_op,
-               ci_mono_compile_alloc_buffer, cj 1 ci_mono_typed_memory_family]]
+  (* One fragment per return location and raw-return case, so each chain
+     fits the tactic timeout. *)
+  Cases_on `cenv.ce_raw_return` >> Cases_on `cenv.ce_return_pc`
+  >- (simp[] >> return_prefix_chain_tac)
+  >- (rename1 `SOME loc` >> Cases_on `loc` >> simp[]
+      >- return_prefix_chain_tac >- return_prefix_chain_tac
+      >- return_prefix_chain_tac >- return_prefix_chain_tac
+      >> return_prefix_chain_tac)
+  >- (simp[] >> return_prefix_chain_tac)
+  >> (rename1 `SOME loc` >> Cases_on `loc` >> simp[]
+      >- return_prefix_chain_tac >- return_prefix_chain_tac
+      >- return_prefix_chain_tac >- return_prefix_chain_tac
+      >> return_prefix_chain_tac)
 QED
 
 Theorem update_cenv_ret_abi_frame[local]:

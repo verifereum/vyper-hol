@@ -49,7 +49,7 @@ Proof
               disch_then (qspec_then `es with gas_obs :=
                 gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
               simp[]) >>
-          gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
+          gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
               ptr_vv_ok_def, read_result_def, return_def] >>
           first_assum ACCEPT_TAC) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
