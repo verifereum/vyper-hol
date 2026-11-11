@@ -7,19 +7,8 @@ Ancestors
   abiEncoderRegisteredEffect emitHelperProps exprLoweringProps compileEnv
   emitHelper fragExec memContinuation venomState venomExecSemantics freshWrites
   venomInst words list rich_list arithmetic pred_set finite_map
-  abiEncodeAllocationPhase loweringHalt abiBuiltinAllocation pair
+  abiEncodeAllocationPhase loweringHalt abiBuiltinAllocation pair abiEncodeWindowTransport
 
-Theorem abi_encode_method_id_shape[local]:
-  abi_builtin_encode_method_id mid buf st = ((),en) ==>
-  cs_extends st en /\ st.cs_next_var <= en.cs_next_var
-Proof
-  Cases_on `mid` >>
-  simp[abi_builtin_encode_method_id_def, comp_return_def, comp_bind_def, comp_ignore_bind_def,
-    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  simp[cs_extends_def, emitted_insts_def, IS_PREFIX_APPEND, is_terminator_def, mk_inst_def,
-    GSYM APPEND_ASSOC, DROP_LENGTH_APPEND]
-QED
 
 Theorem abi_encode_address_prefix_mem[local]:
   emit_op ADD [buf;Lit (n2w (32 + (case mid of NONE => 0 | SOME _ => 4)))] st = (data,en) /\
@@ -64,24 +53,6 @@ Proof
   metis_tac[word_add_n2w, ADD_ASSOC]
 QED
 
-Theorem abi_encode_setup_parts[local]:
-  abi_builtin_encode_setup mid maxlen st = (ops,ready) /\
-  compile_alloc_buffer (32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4))) st = (buf,allocated) /\
-  emit_op ADD [buf.buf_operand;Lit (n2w (32+(case mid of NONE => 0 | SOME _ => 4)))] allocated = (data,addressed) /\
-  abi_builtin_encode_method_id mid buf.buf_operand addressed = ((),ready) /\
-  fn_has_code st ready func ==>
-  fn_has_code st allocated func /\ fn_has_code allocated ready func /\
-  st.cs_next_var <= allocated.cs_next_var
-Proof
-  strip_tac >> drule compile_alloc_buffer_parts >> strip_tac >>
-  drule compile_alloc_buffer_insts >> strip_tac >>
-  drule abi_encoder_emit_address_shape >> strip_tac >>
-  drule abi_encode_method_id_shape >> strip_tac >>
-  `cs_extends allocated ready` by metis_tac[cs_extends_trans] >>
-  `cs_extends st allocated` by
-    (irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]) >>
-  drule_all fn_has_code_split >> simp[]
-QED
 
 Theorem abi_encode_setup_window_mem:
   abi_builtin_encode_setup mid maxlen st = (ops,ready) /\
@@ -134,20 +105,3 @@ Proof
   conj_tac >- decide_tac >> conj_tac >- decide_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem abi_encode_setup_source[local]:
-  window_phase ctx func st en {st.cs_next_id}
-    (case mid of NONE => [] | SOME _ => [(p+32,32)]) s t /\
-  abi_encoder_window_input ei at av sb cap s.vs_memory /\
-  FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
-  venomMemDefs$regions_disjoint (sb,cap) (p,n) /\
-  (IS_SOME mid ==> 64 <= n) ==>
-  abi_encoder_window_input ei at av sb cap t.vs_memory
-Proof
-  strip_tac >> irule abi_encoder_window_effect_source >>
-  qexistsl_tac [`{st.cs_next_id}`,
-    `case mid of NONE => [] | SOME _ => [(p+32,32)]`, `s`] >>
-  conj_tac >- simp[window_phase_effect] >> conj_tac
-  >- (Cases_on `mid` >> simp[] >>
-      fs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  metis_tac[window_phase_effect]
-QED
