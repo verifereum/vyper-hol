@@ -33,7 +33,7 @@ Proof
        comp_return_def] >> gvs[]
 QED
 
-Theorem assign_history[local]:
+Theorem assign_history:
   emit_inst ASSIGN [src] [out] st = ((),st') /\ fn_has_code st st' func /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
   s.vs_current_bb = st.cs_current_bb /\
@@ -83,7 +83,7 @@ Proof
   drule_all assign_history >> simp[update_var_def]
 QED
 
-Theorem ifexp_history_jump[local]:
+Theorem ifexp_history_jump:
   alloca_history func s ==> alloca_history func (jump_to lbl s)
 Proof
   strip_tac >> irule alloca_history_jump >> simp[jump_to_def] >>
@@ -142,7 +142,7 @@ QED
 
 
 
-Theorem ifexp_suffix_path_mem[local]:
+Theorem ifexp_suffix_path_mem:
   emit_inst ASSIGN [op] [rv] sx = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
   fn_has_code sx sy func /\ fn_has_code sy sz func /\
@@ -168,7 +168,7 @@ Proof
   metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem ifexp_marked_zero_suffix_mem[local]:
+Theorem ifexp_marked_zero_suffix_mem:
   gas_marked_exec T (ctx,func) source (es,s0) marks res mid (OK u) /\
   gas_path_mem ctx func u 0 (OK v) ==>
   gas_marked_exec T (ctx,func) source (es,s0) marks res mid (OK v)
@@ -177,7 +177,7 @@ Proof
   metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem ifexp_selected_outcome_prefix_mem[local]:
+Theorem ifexp_selected_outcome_prefix_mem:
   gas_marked_exec T (ctx,func)
     (vyperState$bind (eval_expr cx c) (read_result cx))
     (es,s0) marks (INL (BoolV sel)) mid (OK u) /\
@@ -229,7 +229,7 @@ Proof
   rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem ifexp_finish_post[local]:
+Theorem ifexp_finish_post:
   post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
@@ -544,7 +544,7 @@ Proof
   irule gas_exempt_cert_error_result >> simp[ignore_bind_def]
 QED
 
-Theorem compile_ifexp_word_vv_sim_mem[local]:
+Theorem compile_ifexp_word_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     is_word_type t /\
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
