@@ -364,6 +364,25 @@ val _ = assert_modules "stub-only interfaces are removed"
   ``[(NONE, [])] : (num option # toplevel list) list``
   (prepare_ast (repeated_interface_ast ``[^interface_stub]``
     ``[^interface_stub]``));
+(* Called directly, as by callers that skip prepare_translated_input,
+   remove_interface_sources returns one listing per source ID. Listings of
+   one module that differ only in their nonreentrancy default both survive
+   translation, with equal translated sources. *)
+val twice_listed_ast =
+  ``JAnnotatedAST (JModule 0 F [])
+      [JImportedModule 1 "IPing.vyi" "utils/IPing.vyi" F ^interface_event;
+       JImportedModule 1 "IPing.vyi" "utils/IPing.vyi" T ^interface_event]``;
+val twice_listed_translation = optionSyntax.dest_some
+  (rhs (concl (bossLib.EVAL ``translate_annotated_ast ^twice_listed_ast``)));
+fun source_ids translated =
+  map (fst o pairSyntax.dest_pair)
+    (fst (listSyntax.dest_list (fst (pairSyntax.dest_pair translated))));
+val _ = if length (source_ids twice_listed_translation) = 3 then ()
+  else raise Fail "twice-listed interface: translation no longer repeats it";
+val _ = if length (source_ids
+    (vyperCheckContractFrontendLib.remove_interface_sources twice_listed_ast
+       twice_listed_translation)) = 2 then ()
+  else raise Fail "remove_interface_sources kept a repeated source ID";
 val builtin_interfaces =
   ``JAnnotatedAST (JModule 0 F [])
       [JImportedModule (-2) "IERC20.vyi" "builtin/IERC20.vyi" F
