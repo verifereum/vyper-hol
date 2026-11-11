@@ -232,13 +232,19 @@ Proof
   simp[structlit_callee_bytes_copy_operands]
 QED
 
+(* Evaluate the compiled fixture once, so prefix-state certificates only
+   run the concrete instruction prefix. *)
+Theorem structlit_callee_insts[local] =
+  EVAL ``(SND (structlit_callee_compiled F)).cs_current_insts``
+
 Theorem structlit_callee_store_to_copy_steps:
   !n k. MEM n [2;3;4;5;6;7;8;9] ==>
     step_inst_base (EL n (SND (structlit_callee_compiled F)).cs_current_insts)
       (structlit_callee_state F n with vs_inst_idx := k) =
     OK (structlit_callee_state F (SUC n) with vs_inst_idx := k)
 Proof
-  simp[] >> rpt strip_tac >> gvs[] >> EVAL_TAC
+  simp[] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[structlit_callee_state_def, structlit_callee_insts] >> EVAL_TAC
 QED
 
 Theorem structlit_callee_intermediate_memory_fields:
@@ -248,7 +254,8 @@ Theorem structlit_callee_intermediate_memory_fields:
     (structlit_callee_state F (SUC n)).vs_fmp =
       (structlit_callee_state F n).vs_fmp
 Proof
-  simp[] >> rpt strip_tac >> gvs[] >> EVAL_TAC
+  simp[] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[structlit_callee_state_def, structlit_callee_insts] >> EVAL_TAC
 QED
 
 Theorem structlit_callee_intermediate_writes:
@@ -258,7 +265,8 @@ Theorem structlit_callee_intermediate_writes:
     written_taint tn (EL n (SND (structlit_callee_compiled F)).cs_current_insts)
       (structlit_callee_state F n) = {}
 Proof
-  simp[] >> rpt strip_tac >> gvs[] >> EVAL_TAC
+  simp[] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[structlit_callee_state_def, structlit_callee_insts] >> EVAL_TAC
 QED
 
 Theorem structlit_callee_intermediate_memory_taint:

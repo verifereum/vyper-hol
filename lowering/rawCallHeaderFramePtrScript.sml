@@ -76,7 +76,9 @@ Proof
     venomInstTheory.mk_inst_def,
     codegenRelTheory.source_memory_write_ranges_def,
     finite_mapTheory.FLOOKUP_DEF] >>
-  rpt (CASE_TAC >> gvs[]) >> simp[SF CONJ_ss])
+  qmatch_goalsub_abbrev_tac `_ UNION _ UNION cs = _` >>
+  `cs = {}` by (unabbrev_all_tac >> rpt CASE_TAC) >>
+  simp[SF CONJ_ss])
 QED
 
 Theorem raw_call_emit_mload_ghost_frame:
