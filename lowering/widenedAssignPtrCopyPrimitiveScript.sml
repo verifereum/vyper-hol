@@ -1,7 +1,7 @@
 (* Primitive counted typed-copy paths for widened local assignment. *)
 Theory widenedAssignPtrCopyPrimitive
 Ancestors
-  typedCopyPtr typedMemoryCopy bodyPtrBytestringBuiltinsConcatSuffix reasonMemoryEncoderPtr
+  context valueEncodingDefs typedCopyPtr typedMemoryCopy bodyPtrBytestringBuiltinsConcatSuffix reasonMemoryEncoderPtr
   assignTuplePtrLoadStep calldataReconstruction representationCleanPtr
   assignBasePtrBytesPost assignBasePtrTypedBytesField annAssignPtrStage
   compileEnv emitHelper emitHelperProps bodyPtrDefs ptrDiscipline
@@ -126,4 +126,31 @@ Proof
   conj_tac
   >- (irule typed_copy_state_frame_subinterval >> goal_assum (drule_at Any) >> simp[]) >>
   rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Theorem widened_assign_typed_none_counted:
+  !ctx PG D fn cenv dst src sa sb G tn s dw.
+    compile_store_memory_typed cenv dst NoneT src NoneT sa = ((),sb) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK s) /\
+    s.vs_current_bb = sb.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    typed_copy_state_frame sa (w2n dw) (type_memory_size NoneTV) s s /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory NoneTV NoneV (w2n dw) m) /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p s = lookup_var p s /\ FLOOKUP G p = FLOOKUP G p /\
+      op_taint tn (Var p) = op_taint tn (Var p)) /\
+    tn.t_stor = tn.t_stor /\ tn.t_trans = tn.t_trans /\ tn.t_imm = tn.t_imm /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw+type_memory_size NoneTV) ==>
+      (i IN tn.t_mem <=> i IN tn.t_mem))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `sb = sa` by
+    gvs[Once compile_store_memory_typed_def, is_word_type_def,
+        is_bytestring_type_def, type_memory_bytes_def,
+        contextPropsTheory.compile_copy_memory_zero] >>
+  simp[val_in_memory_def] >> irule (cj 1 gas_path_ptr_rules) >> simp[]
 QED
