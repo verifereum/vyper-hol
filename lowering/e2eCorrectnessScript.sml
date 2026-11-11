@@ -1,5 +1,7 @@
 (* End-to-End Vyper-to-EVM Correctness (PLAN §2.1/§8.1).
- * TOP-LEVEL: vyper_call_correct (exact §2.1, composed from S1-S7),
+ * TOP-LEVEL: vyper_call_correct (exact §2.1, composed from S1-S7, over the
+ * accepted finalizers; vyper_call_correct_identity and
+ * vyper_call_correct_asm_opt are its two cases),
  * e2e_vyper_to_evm (admission-free generic §8.1 composition),
  * e2e_venom_pipeline, compile_vyper_runtime_bytecode (preserved proved APIs).
  * e2e_deploy_correctness (the §5.11 admission) is in e2eDeployCorrectness.
@@ -18,7 +20,7 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
-  codegenCorrectness immutableCodeLayout
+  codegenCorrectness immutableCodeLayout asmOptimizer
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
@@ -769,7 +771,7 @@ QED
 (* The raw O1 shape theorems no longer need immutable_free_program; it
    remains in this statement, which is unchanged. *)
 
-Theorem vyper_call_correct:
+Theorem vyper_call_correct_identity:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ immutable_free_program tops /\
@@ -907,6 +909,56 @@ Proof
   >- metis_tac[external_call_dead_observations] >>
   gen_tac >> irule codegen_correct >> simp[] >>
   qexistsl_tac [`Inv`, `prog`, `rpolicy`] >> simp[]
+QED
+
+(* The final assembly optimizer's case: the program, compiled with Python's
+   O1 final assembly optimizer, under the same hypotheses plus the temporary
+   exclusion of programs that read their own code. *)
+Theorem vyper_call_correct_asm_opt:
+  !policy tops deploy_bc runtime_bc am tx ret es.
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    ~program_reads_self_code tops /\
+    supported_program tops /\ immutable_free_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    call_outcomes_ok am tx (MAP SND (call_trace es))
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       call_result_rel tops ret am tx es r es')
+Proof
+  cheat
+QED
+
+(* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
+   O1 final assembly).  The optimizer's case excludes, for now, programs that
+   read their own code. *)
+Theorem vyper_call_correct:
+  !fin policy tops deploy_bc runtime_bc am tx ret es.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\ immutable_free_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    call_outcomes_ok am tx (MAP SND (call_trace es))
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       call_result_rel tops ret am tx es r es')
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
+  >- (drule_all vyper_call_correct_identity >> simp[])
+  >> `~program_reads_self_code tops` by fs[] >>
+  drule_all vyper_call_correct_asm_opt >> simp[]
 QED
 
 (* ===== Component Theorems ===== *)
