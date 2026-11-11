@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeStagedObserver
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeCallerSuffix exprSimAbiEncodeStateTransport
   exprSimAbiEncodeTranslatedCounted exprSimAbiEncodeExecFrame
   exprSimAbiEncodeSemantic exprSimHash abiBuiltinEncodeSetup

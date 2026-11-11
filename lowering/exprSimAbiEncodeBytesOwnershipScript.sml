@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeBytesOwnership
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   loweringPosts valueEncoding vyperValue vyperContext compileEnv
   venomState words finite_map arithmetic abiBuiltinAllocation
   exprSimAbiEncodePrefixWindow localPtrsProps exprLoweringProps
@@ -55,7 +56,7 @@ Proof
   drule_at (Pat `MEM _ (fn_insts _)`) local_ptrs_rel_alloca_disjoint >>
   simp[mk_inst_def] >>
   disch_then drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Theorem abi_encode_row_local_exclusion:

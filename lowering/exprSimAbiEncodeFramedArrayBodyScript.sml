@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFramedArrayBody
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   exprSimAbiEncodeFramedPhases exprSimAbiEncodeFramedBuiltin
   exprSimAbiEncodeSemantic
   abiEncoderWindowArrayBody abiEncoderArrayBodyCode abiEncoderArrayCode

@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFinish
 Ancestors
+  abiDecoderRange
   abiBuiltinEncodeCorrect abiBuiltinEncodeCode abiEncoderSequence
   abiEncoderRegisteredEffect abiDecoderReentry abiDecoderDynamicLoopSetup
   abiEncoderWrites abiEncoderWindowLookup emitHelperProps exprLoweringProps

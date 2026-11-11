@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFinishExtension
 Ancestors
+  loweringStateRelDefs
   abiEncodeWindowBuiltin abiEncoderExtendSim abiBuiltinEncodeCode abiBuiltinEncodeCorrect venomState
   abiEncoderWindowContract abiDecoderContract abiDecoderReentry
   abiEncoderRegisteredEffect abiEncoderSequence abiDecoderLoop instIdxIndep

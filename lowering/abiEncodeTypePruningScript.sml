@@ -1,5 +1,6 @@
 Theory abiEncodeTypePruning
 Ancestors
+  loweringStateRelDefs
   retAbiPlanProps vyperTyping compileEnv vyperValue finite_map list
 
 Theorem abi_encode_struct_alias_value:

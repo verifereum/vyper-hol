@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeNonwordResult
 Ancestors
+  valueEncodingDefs
   exprSimAbiEncodeBytesOwnership exprSimAbiEncodeCapacity
   abiBuiltinEncodeSource vyperTypeInvariants vyperTypeSystem vyperAST exprSimHypsDefs
   exprSimAbiEncodeSourceMetadata abiBuiltinEncodeMethod valueEncoding

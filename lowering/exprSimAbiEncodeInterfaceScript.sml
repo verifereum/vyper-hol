@@ -2,6 +2,7 @@
    unlike the execution relation itself these facts ignore return data. *)
 Theory exprSimAbiEncodeInterface
 Ancestors
+  loweringStateRelDefs
   abiScratchBuiltinEffect abiScratchBuiltinOpenSource exprSimHash
   compileEnv abiDecoderAllocation abiScratchFootprint abiDecoderFrame
   venomState venomExecSemantics venomMemDefs

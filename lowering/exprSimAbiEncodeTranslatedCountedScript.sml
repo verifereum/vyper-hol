@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTranslatedCounted
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeTranslatedNoBlock exprSimAbiEncodeTranslatedObserver
   exprSimAbiEncodeNonwordCounted exprSimAbiEncodeOblivious exprSimAbiGasBridge
   list words venomState exprSimHash exprSimAbiEncodeExecFrame exprSimAbiEncodeSemantic

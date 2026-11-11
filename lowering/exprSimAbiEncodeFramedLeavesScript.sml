@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFramedLeaves
 Ancestors
+  valueEncodingDefs
   exprSimAbiEncodeExecFrame exprSimAbiEncodeMemoryLength abiEncoderWindowLeaves abiEncoderWindowBytes
   venomInstProofs1 rich_list abiEncoderWindowSequence abiEncoderRounding abiEncoderBytes
   abiEncoderWindowContract abiEncoderLeaves abiEncoderWrites

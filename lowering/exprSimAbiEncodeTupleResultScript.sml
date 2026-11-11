@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTupleResult
 Ancestors
+  valueEncodingDefs
   exprSimAbiEncodeTupleCounted exprSimAbiEncodeNonwordResult
   exprSimAbiEncodeBytesOwnership exprSimAbiEncodeStagedObserver exprSimAbiEncodeStagedFrame
   exprBopSimProps exprSimProps freshWrites loweringPosts

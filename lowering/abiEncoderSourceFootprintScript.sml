@@ -1,5 +1,6 @@
 Theory abiEncoderSourceFootprint
 Ancestors
+  valueEncodingDefs
   abiEncoderSourceProducer abiEncoderSourceAggregate abiEncoderOpenInput
   abiEncoderProps exprSimDefs exprSimProps loweringPosts valueEncoding vyperValue vyperTyping vyperABI
   abiEncoderSourceWindow abiBuiltinAllocation contractABI compileEnv vyperMisc list

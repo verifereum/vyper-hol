@@ -33,6 +33,7 @@
 
 Theory retAbiPlanProps
 Ancestors
+  venomLayout
   abiTypeBoundProps compileVyper compileEnv loweringStateRelDefs exprLowering abiEncoderProps structFieldsProps
   typedCopyProducer supportedTypes
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
@@ -273,7 +274,7 @@ Proof
       Cases_on `bt` >> TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
       gvs[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
           vyper_is_dynamic_def, vyper_abi_size_bound_def,
-          contractABITheory.ceil32_def])
+          venomLayoutTheory.ceil32_def])
   >~ [`evaluate_types tenv (t::ts) acc`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
       gvs[evaluate_type_def, AllCaseEqs()] >>

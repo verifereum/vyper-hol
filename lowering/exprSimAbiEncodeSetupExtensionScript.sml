@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeSetupExtension
 Ancestors
+  loweringStateRelDefs
   abiEncodeWindowBuiltin abiBuiltinEncodeCorrect abiEncoderExtendSim abiBuiltinEncodeSetup
   abiBuiltinEncodeMethod abiBuiltinEncodeAllocate abiBuiltinEncodeCode
   abiBuiltinSetupFrames abiBuiltinAllocation abiEncoderSequence

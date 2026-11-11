@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeConcreteLeaves
 Ancestors
+  valueEncodingDefs
   abiEncoderWindowLeaves abiEncoderWindowContract abiEncoderLeaves abiEncoderWrites
   abiEncoderReentryLeaves moduleLoweringProps abiEncoderMemory
   abiEncoder abiEncoderOpenInput abiEncoderInput contractABI valueEncoding

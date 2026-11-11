@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeCallerFrame
 Ancestors
+  loweringStateRelDefs
   compileEnv venomMemDefs venomState venomInst finite_map pred_set list arithmetic
   exprSimAbiEncodeSuffixOwnership exprSimAbiEncodeFrameTransfer abiDecodeStaticProps
   exprLoweringProps localPtrsProps exprSimAbiEncodeSiteResources
@@ -29,7 +30,7 @@ Proof
   PairCases_on `x` >>
   `FLOOKUP actual.vs_allocas i = SOME(x0,x1)` by metis_tac[] >>
   gvs[] >> qpat_x_assum `!aid b' sz'. _` drule >>
-  simp[compileEnvTheory.regions_disjoint_def, ADD_COMM]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def, ADD_COMM]
 QED
 
 Theorem abi_encode_initial_region_separation:
@@ -94,7 +95,7 @@ Proof
   gvs[] >>
   qpat_x_assum `!i. i IN ids ==> _` drule >> strip_tac >> gvs[] >>
   qpat_x_assum `!inst q k. _` drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def, ADD_COMM]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def, ADD_COMM]
 QED
 
 Theorem abi_encode_local_ptr_separation:

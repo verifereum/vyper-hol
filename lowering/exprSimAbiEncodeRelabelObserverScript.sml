@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeRelabelObserver
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeRelabelResources exprSimAbiEncodeExecution
   exprSimAbiEncodeEmptyExecution exprSimAbiEncodeWindowRoom
   exprSimAbiEncodeObliviousSimulation exprSimAbiEncodeObliviousContext

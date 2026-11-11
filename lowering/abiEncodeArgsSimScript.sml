@@ -1,5 +1,6 @@
 Theory abiEncodeArgsSim
 Ancestors
+  valueEncodingDefs exprBopSimProps loweringStateRelDefs
   abiEncodeMaterialize abiEncodeArgsScopes abiEncodeArgsWindows abiDecoderReentry
   compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs abiArgsLabelObserver exprOperandVar
   abiArgsLabelBoundary
@@ -149,11 +150,11 @@ Proof
          qexistsl [`name`, `es`] >> gvs[expr_sim_inv_def]) >>
       `mem_word_at b s1.vs_memory = mem_word_at b s0.vs_memory` by
         (Cases_on `entry.value` >>
-         gvs[valueEncodingTheory.val_wf_def, valueEncodingTheory.val_in_memory_def,
+         gvs[valueEncodingDefsTheory.val_wf_def, valueEncodingDefsTheory.val_in_memory_def,
              vyperTypingTheory.value_has_type_inv] >>
          rename1 `entry.value = ArrayV av` >>
-         Cases_on `av` >> gvs[valueEncodingTheory.val_wf_def,
-                              valueEncodingTheory.val_in_memory_def]) >>
+         Cases_on `av` >> gvs[valueEncodingDefsTheory.val_wf_def,
+                              valueEncodingDefsTheory.val_in_memory_def]) >>
       `32 <= sz` by gvs[valueEncodingTheory.type_memory_size_def] >>
       `mem_bytes_at b 32 s1.vs_memory = mem_bytes_at b 32 s0.vs_memory` by
         simp[valueEncodingProofsTheory.mem_bytes_at_word] >>
@@ -188,7 +189,7 @@ Theorem abi_args_operand_kept:
   eval_operand op s0 = SOME w ==>
   eval_operand op s1 = SOME w
 Proof
-  strip_tac >> irule exprSimOpsTheory.eval_operand_frame >>
+  strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
   simp[] >> qexistsl [`st`, `s0`] >> gvs[wb_frame_def]
 QED
 
@@ -208,13 +209,13 @@ Proof
   >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >>
       conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >> simp[] >>
       rpt strip_tac >> first_x_assum irule >> qexists `n` >>
-      irule exprSimOpsTheory.local_region_frame >>
+      irule exprSimPropsTheory.local_region_frame >>
       conj_tac
       >- (qexists `func` >>
           gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
       qexistsl [`st`, `es'.scopes`, `s1`] >> gvs[wb_frame_def])
   >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
-      irule exprSimOpsTheory.local_region_frame_fwd >>
+      irule exprSimPropsTheory.local_region_frame_fwd >>
       qexistsl [`s0`, `st`, `es.scopes`] >> gvs[wb_frame_def])
   >> simp[]
 QED
@@ -235,13 +236,13 @@ Proof
   >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >>
       conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >> simp[] >>
       rpt strip_tac >> first_x_assum irule >> qexists `n` >>
-      irule exprSimOpsTheory.local_region_frame >>
+      irule exprSimPropsTheory.local_region_frame >>
       conj_tac
       >- (qexists `func` >>
           gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
       qexistsl [`st`, `es'.scopes`, `s1`] >> gvs[wb_frame_def])
   >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
-      irule exprSimOpsTheory.local_region_frame_fwd >>
+      irule exprSimPropsTheory.local_region_frame_fwd >>
       qexistsl [`s0`, `st`, `es.scopes`] >> gvs[wb_frame_def])
   >> simp[]
 QED
@@ -274,7 +275,7 @@ Proof
       drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
       simp[])
   >- (sym_tac >> irule abi_args_local_window_kept >> metis_tac[])
-  >> simp[valueEncodingTheory.mem_bytes_at_def]
+  >> simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem abi_args_value_kept:

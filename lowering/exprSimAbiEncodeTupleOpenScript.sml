@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTupleOpen
 Ancestors
+  valueEncodingDefs abiDecoderRange
   abiEncoderOpenRelocate abiEncoderOpenInput abiEncoderWrites abiEncoderBytes
   abiDecoderContract abiDecoderReentry abiTupleEncodeSlot
   context exprLowering emitHelper emitHelperProps exprLoweringProps

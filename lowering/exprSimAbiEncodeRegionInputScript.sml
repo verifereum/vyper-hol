@@ -1,6 +1,7 @@
 (* Empty-safe logical source separation for tuple staging. *)
 Theory exprSimAbiEncodeRegionInput
 Ancestors
+  valueEncodingDefs
   abiTupleEncodeOpenInput abiEncoderOpenInput abiEncoderOpenInputFrame
   abiEncoderInputFrame abiDecoderReentry abiDecoderContract
   abiEncodeInputSupplier compileEnv exprLowering venomMemDefs venomState

@@ -1,6 +1,7 @@
 (* Exact static staging windows without aggregate cardinality typing. *)
 Theory abiTupleEncodeOpenStatic
 Ancestors
+  valueEncodingDefs
   abiTupleEncodeOpenMemory abiTupleEncodeLayout abiEncoderOpenInput
   abiEncoderInput abiEncoderAdmissible abiEncoderMemory abiEncoderSourceWindow
   abiStaticAggregateProps abiTupleProps abiDecodeRanges exprLowering compileEnv

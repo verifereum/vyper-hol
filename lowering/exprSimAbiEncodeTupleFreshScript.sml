@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeTupleFresh
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeTupleCompletion exprSimVVFrame abiEncodeArgsSim
   abiDecoderReentry freshWrites varsExt exprSimProps loweringPosts
   compileEnv localPtrsProps finite_map pred_set arithmetic

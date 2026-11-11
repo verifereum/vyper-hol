@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeConcreteDynamic
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeConcreteWrappers abiEncoderWindowChild abiEncoderChildCode
   abiEncoderWindowSequence abiEncoderWindowPhase abiEncoderWindowLookup
   abiEncoderAddressReach emitHelperProps compileEnv emitHelper

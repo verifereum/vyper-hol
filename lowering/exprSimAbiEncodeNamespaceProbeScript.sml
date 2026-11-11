@@ -1,6 +1,7 @@
 (* Diagnostic sufficient condition, not an expression precondition. *)
 Theory exprSimAbiEncodeNamespaceProbe
 Ancestors
+  loweringStateRelDefs
   compileEnv finite_map words
 
 Theorem abi_encode_namespace_collision:

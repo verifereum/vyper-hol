@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeObserverExtension
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodePhaseExtension exprSimAbiEncodeStagedObserver
   exprSimVVFrame abiDecoderReentry freshWrites varsExt exprSimProps
   loweringPosts compileEnv localPtrsProps finite_map pred_set arithmetic

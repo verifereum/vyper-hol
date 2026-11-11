@@ -1,5 +1,6 @@
 Theory abiEncodeMaterialize
 Ancestors
+  loweringStateRelDefs
   abiEncodeMaterializeExec exprSimAggregateChildren exprSimUnwrap
   exprSimDefs exprSimProps loweringPosts context finite_map exprSimCopy freshWrites fragExec exprSimStorageCopy
   exprSimWordArgs venomMemDefs exprSimAlloc exprLowering compileEnv
@@ -450,7 +451,7 @@ Resume compile_materialize_vv_owned_sim[store_continuation]:
      `local_region ce es'.scopes u name b len` by
        (qpat_assum `expr_post _ _ _ _ _ es' _ _ u _ _ _ _`
           (mp_then Any strip_assume_tac expr_post_frame) >>
-        irule exprSimOpsTheory.local_region_frame >>
+        irule exprSimPropsTheory.local_region_frame >>
         conj_tac
         >- (qexists_tac `func` >>
             gvs[vv_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
@@ -462,7 +463,7 @@ Resume compile_materialize_vv_owned_sim[store_continuation]:
      w2n w + type_memory_size tv <= b \/ b + len <= w2n w` by
     (rpt strip_tac >>
      qpat_x_assum `!name b len. local_region _ _ z _ _ _ ==> _` irule >>
-     qexists_tac `name` >> irule exprSimOpsTheory.local_region_frame_fwd >>
+     qexists_tac `name` >> irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl [`s0`, `sa`, `es.scopes`] >>
      drule expr_post_frame >> simp[wb_frame_def]) >>
   drule_all buffer_alloc_code >> strip_tac >>

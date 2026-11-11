@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeFramedBuiltin
 Ancestors
+  loweringStateRelDefs
   exprSimAbiEncodeFramedLeaves abiEncodeWindowBuiltin
   abiBuiltinEncodeCorrect abiEncoderWindowContract abiDecoderContract
   abiBuiltinEncodeCode abiDecoderEffect valueEncoding venomState finite_map words

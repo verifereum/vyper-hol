@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeNonwordCase
 Ancestors
+  exprSimHashBoundary
   exprSimAbiEncodeNonwordResult abiBuiltinEncodeCode emitHelper compileEnv
   exprSimHash vyperInterpreter vyperState exprSimSource exprSimWordArgs
   exprLowering exprBopLowering vyperAST list exprSimHypsDefs exprSimDefs

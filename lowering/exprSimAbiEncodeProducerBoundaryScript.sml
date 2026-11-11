@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeProducerBoundary
 Ancestors
+  loweringStateRelDefs exprSimHashBoundary
   exprSimHash localPtrsProps allocaSiteResource compileEnv venomMemDefs
   venomState venomInst list words
 
@@ -20,7 +21,7 @@ Proof
          goal_assum (drule_at Any) >> metis_tac[]) >>
       gvs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac)
   >- (drule_all local_ptrs_rel_alloca_disjoint >>
-      simp[compileEnvTheory.regions_disjoint_def,
+      simp[loweringStateRelDefsTheory.regions_disjoint_def,
         venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
   simp[venomMemDefsTheory.regions_disjoint_def]
 QED

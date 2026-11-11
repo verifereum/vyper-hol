@@ -1,5 +1,6 @@
 Theory abiTupleEncodeOpenSlot
 Ancestors
+  valueEncodingDefs abiDecoderRange
   abiTupleEncodeSlot abiTupleEncodeInput abiTupleEncodeOpenInput abiEncoderOpenInput abiEncoderOpenRelocate
   abiBuiltinEncodeCorrect abiBuiltinEncodeWord abiEncoderWrites abiEncoderBytes
   abiEncoderInputFrame abiDecoderReentry abiDecoderContract abiDecoderGuards

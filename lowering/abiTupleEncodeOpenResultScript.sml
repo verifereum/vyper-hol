@@ -1,6 +1,7 @@
 (* Open tuple staging results retain every execution and frame guarantee. *)
 Theory abiTupleEncodeOpenResult
 Ancestors
+  abiDecoderRange
   abiTupleEncodeResult abiTupleEncodeOpenInput abiTupleEncodeOpenMemory abiTupleProps
   abiEncoderOpenInputFrame abiEncoderInputFrame abiDecoderReentry abiDecoderContract
   abiDecoderGuards abiDecoderFrameCompose compileEnv emitHelperProps exprLoweringProps

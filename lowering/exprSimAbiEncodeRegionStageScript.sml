@@ -1,5 +1,6 @@
 Theory exprSimAbiEncodeRegionStage
 Ancestors
+  abiDecoderRange
   exprSimAbiEncodeRegionInput abiTupleEncodeOpenPrepare
   abiTupleEncodePrepare abiTupleEncodeOpenSlot abiTupleEncodeOpenResult
   abiTupleEncodeOpenInput abiTupleEncodeOpenMemory abiTupleProps abiTupleEncodeSlot

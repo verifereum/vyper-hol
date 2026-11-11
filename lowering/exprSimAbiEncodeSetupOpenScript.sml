@@ -1,6 +1,7 @@
 (* Finite setup execution without assumptions on unrelated registers. *)
 Theory exprSimAbiEncodeSetupOpen
 Ancestors
+  abiDecoderRange
   exprSimAbiEncodeOpenSetup abiBuiltinPrefix abiBuiltinSetupFrames
   abiBuiltinAllocation abiBuiltinEncodeAllocate abiBuiltinEncodeMethod
   abiBuiltinEncodeSetup abiBuiltinEncodeCode abiEncodeWindowBuiltin
