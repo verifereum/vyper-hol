@@ -452,9 +452,18 @@ Proof
       (BytesV (TAKE (w2n n) (DROP (w2n b) s.vs_code))) (w2n p) t.vs_memory` by
     (qpat_x_assum `t.vs_memory = _` (fn th => pure_rewrite_tac[th]) >>
      metis_tac[exprSimCalldataSliceTheory.bytes_buffer_write_encoding, n2w_w2n]) >>
-  qpat_x_assum `t.vs_memory = _` kall_tac >>
   qpat_x_assum `wb_frame _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+  `pure_frame cenv func es sbase s t` by
+    (match_mp_tac (Q.SPECL [`cenv`, `func`, `es`, `sbase`, `s`, `t`, `inst`,
+                            `w2n (p:bytes32)`, `cap`,
+                            `TAKE (w2n (n:bytes32)) (DROP (w2n (b:bytes32)) s.vs_code)`]
+                     exprSimSliceDataTheory.slice_allocated_bytes_pure_frame) >>
+     qpat_assum `LENGTH _ = w2n n`
+       (fn th => rewrite_tac[th, wordsTheory.n2w_w2n]) >>
+     qpat_assum `inst.inst_id = aid` (fn th => rewrite_tac[th]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `t.vs_memory = _` kall_tac >>
   `post_value_type cenv e = expr_type e` by
     (irule loweringPostsTheory.post_value_type_bytestring >>
      simp[compileEnvTheory.is_bytestring_type_def]) >>
@@ -620,6 +629,11 @@ Proof
     fs[Abbr `u1`, loweringPostsTheory.wb_frame_def,
        loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def,
        venomStateTheory.lookup_var_def] >>
+  `pure_frame cenv func es sa s u1` by
+    (simp[Abbr `u1`] >>
+     match_mp_tac (Q.SPECL [`cenv`, `func`, `es`, `sa`, `s`, `s`, `u`]
+                     exprSimPropsTheory.pure_frame_mem_tail) >>
+     fs[loweringPostsTheory.wb_frame_def]) >>
   `!op. MEM op [sop; lop] ==> eval_operand op u1 = eval_operand op s` by
     (rpt strip_tac >>
      `(?w. op = Lit w) \/ (?z. op = Var z /\ not_fresh_at sa z)` by metis_tac[] >>

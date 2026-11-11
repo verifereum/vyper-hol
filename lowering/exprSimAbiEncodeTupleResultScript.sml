@@ -45,7 +45,9 @@ Theorem abi_encode_tuple_observation_vv_post:
   abi_encode_staged_observation ctx func ce cx es' staged out mid
     (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))+
       (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual /\
-  wb_frame ce es es' origin s0 s /\ local_ptrs_reserved ce origin /\
+  wb_frame ce es es' origin s0 s /\
+  (~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid0) target args) ==>
+   pure_frame ce func es origin s0 s) /\ local_ptrs_reserved ce origin /\
   origin.cs_next_var <= staged.cs_next_var /\ origin.cs_next_id <= staged.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
   vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid0) target args)
@@ -72,6 +74,17 @@ Proof
      qpat_assum `stmt_state_rel ctx func ce cx es' actual` (irule_at Any) >>
      metis_tac[]) >>
   drule abi_encode_strict_id_growth >> strip_tac >>
+  `~expr_has_effect (TypeBuiltin ann (AbiEncode ensure mid0) target args) ==>
+   pure_frame ce func es origin s0 actual` by
+    (strip_tac >>
+     `pure_frame ce func es origin s0 s` by
+       (qpat_x_assum `~expr_has_effect _ ==> pure_frame _ _ _ _ _ s` irule >>
+        first_assum ACCEPT_TAC) >>
+     qpat_assum `wb_frame ce es es' origin s0 s`
+       (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+     match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es'`, `origin`, `staged`, `s0`, `s`, `actual`]
+                     exprSimPropsTheory.pure_frame_trans) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule abi_encode_bytes_vv_post >> goal_assum (drule_at Any) >>
   simp[read_result_def, return_def] >>
   qexistsl [`staged.cs_next_id`, `p`,

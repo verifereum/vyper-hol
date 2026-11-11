@@ -63,6 +63,7 @@ Proof
   `!j. MEM j (fn_insts func) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)` by simp[] >>
   drule_all abi_encode_phases_caller_state >> strip_tac >>
+  drule_all abi_encode_phases_caller_pure_frame >> strip_tac >>
   `alloca_inv actual` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
      simp_tac bool_ss [stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC) >>

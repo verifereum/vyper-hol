@@ -67,6 +67,15 @@ Proof
   `!name b n. local_region ce es'.scopes actual name b n ==> p+outsz <= b \/ b+n <= p` by
     (rpt strip_tac >> drule_all abi_encode_row_local_exclusion >> simp[]) >>
   drule abi_encode_strict_id_growth >> strip_tac >>
+  `~expr_has_effect e ==> pure_frame ce func es origin s0 actual` by
+    (strip_tac >>
+     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     `pure_frame ce func es origin s0 s` by
+       (qpat_x_assum `~expr_has_effect e ==> _` irule >> first_assum ACCEPT_TAC) >>
+     match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es'`, `origin`, `sa`, `s0`, `s`, `actual`]
+                     exprSimPropsTheory.pure_frame_trans) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `actual` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>

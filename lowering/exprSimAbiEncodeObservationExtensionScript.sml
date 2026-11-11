@@ -30,6 +30,8 @@ Proof
   fs[vars_ext_def] >>
   qpat_x_assum `v = u with vs_vars := _` SUBST_ALL_TAC >>
   gvs[abi_encode_staged_observation_def,
+      Q.INST [`t` |-> `u with vs_vars := vv`, `s` |-> `u`]
+        (SPEC_ALL loweringPostsTheory.pure_frame_state_cong),
       abi_encode_semantic_obs_def, mload_def] >>
   rpt strip_tac >>
   gvs[lookup_var_def] >> metis_tac[FLOOKUP_SUBMAP]

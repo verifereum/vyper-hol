@@ -57,6 +57,7 @@ Theorem abi_encode_translated_relabel_observer:
       mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    pure_frame ce func es' sa s actual /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
       SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
     p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
@@ -214,6 +215,13 @@ Resume abi_encode_translated_relabel_observer[transport]:
      simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def,
        local_region_def, lookup_var_def] >>
      strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `pure_frame ce func es' sa s actual` by
+    (drule_all (SIMP_RULE bool_ss [] (Q.INST
+       [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
+       (SPEC_ALL abi_encode_phases_caller_pure_frame))) >>
+     asm_rewrite_tac[] >>
+     simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def,
+       loweringPostsTheory.pure_frame_def, local_region_def, lookup_var_def]) >>
   `abi_decode_sim ctx obs rs actual` by
     (drule_all abi_decode_sim_ctx_no_invoke >> disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
   `(!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>

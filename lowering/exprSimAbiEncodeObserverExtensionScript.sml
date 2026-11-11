@@ -26,7 +26,7 @@ Theorem abi_encode_staged_observation_clean_initial:
      initial actual)
 Proof
   strip_tac >>
-  simp[abi_encode_staged_observation_def, abi_encode_observer_local_region_clean,
+  simp[abi_encode_staged_observation_def, loweringPostsTheory.pure_frame_def, abi_encode_observer_local_region_clean,
        abi_encode_semantic_obs_def, drop_fresh_def, lookup_var_def,
        FLOOKUP_DRESTRICT] >>
   metis_tac[not_fresh_at_def]

@@ -24,6 +24,7 @@ Definition abi_encode_staged_observation_def:
       mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz initial.vs_memory) /\
     (!name b n. local_region ce vs.scopes initial name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n initial.vs_memory) /\
+    pure_frame ce func vs st initial actual /\
     FLOOKUP actual.vs_allocas st.cs_next_id = SOME(p,outsz) /\
     p+outsz <= actual.vs_alloca_next /\ actual.vs_alloca_next < dimword (:256) /\
     eval_operand out actual = SOME(n2w p) /\
@@ -93,6 +94,7 @@ Proof
     (qpat_assum `outsz = _` (fn th => rewrite_tac [th]) >>
      qpat_assum `m = _` (fn th => rewrite_tac [th])) >>
   drule_all abi_encode_phases_caller_state >> strip_tac >>
+  drule_all abi_encode_phases_caller_pure_frame >> strip_tac >>
   `alloca_inv actual` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
      simp_tac bool_ss [stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
@@ -202,7 +204,7 @@ Theorem abi_encode_staged_observation_prev_bb[simp]:
   abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av initial actual
 Proof
   Cases_on `out` >>
-  simp[abi_encode_staged_observation_def, abi_encode_staged_stmt_rel_prev_bb,
+  simp[abi_encode_staged_observation_def, loweringPostsTheory.pure_frame_def, abi_encode_staged_stmt_rel_prev_bb,
     abi_encode_semantic_obs_updates, eval_operand_def, lookup_var_def, mload_def]
 QED
 
@@ -212,6 +214,6 @@ Theorem abi_encode_staged_observation_returndata[simp]:
   abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av initial actual
 Proof
   Cases_on `out` >>
-  simp[abi_encode_staged_observation_def, hash_returndata_state_rel,
+  simp[abi_encode_staged_observation_def, loweringPostsTheory.pure_frame_def, hash_returndata_state_rel,
     abi_encode_semantic_obs_updates, eval_operand_def, lookup_var_def, mload_def]
 QED

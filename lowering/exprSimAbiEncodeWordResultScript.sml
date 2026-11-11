@@ -20,7 +20,8 @@ Theorem abi_encode_word_observation_vv_post:
   origin.cs_next_id <= staged.cs_next_id /\
   abi_encode_staged_observation ctx func ce cx es' staged out mid
     (32+32*word_size (32+(case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual /\
-  wb_frame ce es es' origin s0 actual ==>
+  wb_frame ce es es' origin s0 actual /\
+  (~expr_has_effect e ==> pure_frame ce func es origin s0 actual) ==>
   vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) target [e])
     es origin final s0 es' (Value (BytesV (abi_encode_method_id_bytes mid0 ++ enc ct rv)))
     (LocatedValue (expr_type (TypeBuiltin ann (AbiEncode F mid0) target [e]))

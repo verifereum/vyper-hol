@@ -97,7 +97,8 @@ Theorem abi_encode_bytes_vv_post:
   origin.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   32+LENGTH payload <= sz /\
   (!name b n. local_region ce es'.scopes actual name b n ==> p+sz <= b \/ b+n <= p) /\
-  wb_frame ce es es' origin s0 actual ==>
+  wb_frame ce es es' origin s0 actual /\
+  (~expr_has_effect e ==> pure_frame ce func es origin s0 actual) ==>
   vv_post ctx func ce cx e es origin sb s0 es' result
     (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) actual
 Proof
@@ -110,7 +111,7 @@ Proof
     goal_assum (drule_at Any) >> simp[]) >>
   conj_tac >- (simp[] >> irule abi_encode_bytes_vv_at >>
     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  fs[wb_frame_def] >> first_assum ACCEPT_TAC
+  fs[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_encode_nonword_success_suffix:
@@ -174,6 +175,15 @@ Proof
   `!name b n. local_region ce es'.scopes actual name b n ==> p+outsz <= b \/ b+n <= p` by
     (rpt strip_tac >> drule_all abi_encode_row_local_exclusion >> simp[]) >>
   drule abi_encode_strict_id_growth >> strip_tac >>
+  `~expr_has_effect e ==> pure_frame ce func es origin s0 actual` by
+    (strip_tac >>
+     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     `pure_frame ce func es origin s0 s` by
+       (qpat_x_assum `~expr_has_effect e ==> _` irule >> first_assum ACCEPT_TAC) >>
+     match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es'`, `origin`, `sa`, `s0`, `s`, `actual`]
+                     exprSimPropsTheory.pure_frame_trans) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `actual` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>

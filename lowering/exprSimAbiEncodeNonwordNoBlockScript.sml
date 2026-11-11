@@ -480,6 +480,7 @@ Theorem abi_encode_nonword_no_block_phases:
       mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    pure_frame ce func es' sa s actual /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
       SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
     p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
@@ -558,6 +559,10 @@ Resume abi_encode_nonword_no_block_phases[caller]:
     (drule_all (SIMP_RULE bool_ss [] (Q.INST
        [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
        (SPEC_ALL abi_encode_phases_caller_state))) >> asm_rewrite_tac[]) >>
+  `pure_frame ce func es' sa s actual` by
+    (drule_all (SIMP_RULE bool_ss [] (Q.INST
+       [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
+       (SPEC_ALL abi_encode_phases_caller_pure_frame))) >> asm_rewrite_tac[]) >>
   `(!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w)` by
     (drule abi_encode_caller_phase_registers >>
@@ -626,6 +631,7 @@ Theorem abi_encode_nonword_no_block_run:
       mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    pure_frame ce func es' sa s actual /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
       SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
     p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
@@ -690,6 +696,7 @@ Theorem abi_encode_nonword_no_block_observer:
       mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    pure_frame ce func es' sa s actual /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
       SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
     p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\

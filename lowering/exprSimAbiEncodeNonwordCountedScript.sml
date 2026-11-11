@@ -66,6 +66,7 @@ Theorem abi_encode_nonword_counted_suffix:
       mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    pure_frame ce func es' sa s actual /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
       SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
     p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
@@ -87,6 +88,7 @@ Proof
       mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    pure_frame ce func es' sa s actual /\
     ?p. FLOOKUP actual.vs_allocas sa.cs_next_id =
       SOME(p,32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) /\
     p+(32+32*word_size(abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
@@ -101,7 +103,12 @@ Proof
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector)` >>
   `(!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
    (!t prev. Q t ==> Q (t with vs_prev_bb := prev))` by
-    (Cases_on `out` >> simp[Abbr `Q`, mload_def, eval_operand_def, lookup_var_def,
+    (Cases_on `out` >>
+     simp[Abbr `Q`, mload_def,
+       Q.INST [`t` |-> `t with vs_returndata := rd`, `s` |-> `t`]
+         (SPEC_ALL pure_frame_state_cong),
+       Q.INST [`t` |-> `t with vs_prev_bb := prev`, `s` |-> `t`]
+         (SPEC_ALL pure_frame_state_cong), eval_operand_def, lookup_var_def,
        hash_returndata_state_rel, abi_encode_stmt_rel_prev_bb,
        abi_encode_semantic_obs_updates] >> metis_tac[]) >>
   Cases_on `sa.cs_blocks = sb.cs_blocks`
@@ -128,7 +135,7 @@ Resume abi_encode_nonword_counted_suffix[no_blocks]:
       qexists `actual` >> conj_tac
       >- (fs[abi_encode_exec_frame_def] >>
           simp_tac bool_ss [Abbr `Q`] >>
-          ntac 10 (conj_tac >- first_assum ACCEPT_TAC) >>
+          ntac 11 (conj_tac >- first_assum ACCEPT_TAC) >>
           qexists `p` >> asm_rewrite_tac[]) >>
       gvs[]
 QED
@@ -152,7 +159,7 @@ Resume abi_encode_nonword_counted_suffix[blocks]:
       qexists `actual` >> conj_tac
       >- (fs[abi_encode_exec_frame_def] >>
           simp_tac bool_ss [Abbr `Q`] >>
-          ntac 10 (conj_tac >- first_assum ACCEPT_TAC) >>
+          ntac 11 (conj_tac >- first_assum ACCEPT_TAC) >>
           qexists `p` >> asm_rewrite_tac[]) >>
       gvs[]
 QED

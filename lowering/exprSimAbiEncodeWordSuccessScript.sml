@@ -276,6 +276,15 @@ Proof
      RULE_ASSUM_TAC (PURE_REWRITE_RULE [arithmeticTheory.ADD_ASSOC]) >>
      asm_rewrite_tac [arithmeticTheory.ADD_ASSOC] >> rpt strip_tac >>
      metis_tac[arithmeticTheory.ADD_ASSOC]) >>
+  `pure_frame ce func es st initial actual` by
+    (irule abi_encode_phases_caller_pure_frame >>
+     qpat_assum `abi_builtin_encode_setup _ _ _ = _` (irule_at Any) >>
+     qpat_assum `compile_abi_encode_to_buf _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     RULE_ASSUM_TAC (PURE_REWRITE_RULE [arithmeticTheory.ADD_ASSOC]) >>
+     asm_rewrite_tac [arithmeticTheory.ADD_ASSOC] >> rpt strip_tac >>
+     metis_tac[arithmeticTheory.ADD_ASSOC]) >>
   `alloca_inv actual` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
      simp_tac bool_ss [stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
@@ -444,7 +453,8 @@ Theorem abi_encode_word_staged_counted:
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_staged_observation ctx func ce cx es' sh out mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4)))
-      p ct rv initial actual /\ wb_frame ce es es' origin s0 actual
+      p ct rv initial actual /\ wb_frame ce es es' origin s0 actual /\
+    (~expr_has_effect e ==> pure_frame ce func es origin s0 actual)
 Proof
   strip_tac >> drule abi_builtin_alloc_buffer_shape >> strip_tac >>
   `fn_has_code sa sm func` by
@@ -511,6 +521,36 @@ Proof
   `origin.cs_next_var <= sh.cs_next_var /\
    origin.cs_next_id <= sh.cs_next_id` by decide_tac >>
   drule_all abi_encode_staged_origin_frame >> strip_tac >>
+  `~expr_has_effect e ==> pure_frame ce func es origin s0 actual` by
+    (strip_tac >>
+     qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [abi_encode_staged_observation_def]) >>
+     `pure_frame ce func es' sa s initial` by
+       (qpat_assum `pure_frame _ _ _ sa s staged` mp_tac >> simp[Abbr `initial`]) >>
+     `!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+        FLOOKUP actual.vs_allocas aid = SOME row` by
+       (rpt strip_tac >>
+        qpat_x_assum `!aid row. FLOOKUP initial.vs_allocas aid = SOME row ==> _` irule >>
+        simp[Abbr `initial`]) >>
+     `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+        lookup_var x initial = SOME w` by
+       (rpt strip_tac >>
+        qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x staged = _` drule >>
+        gvs[Abbr `initial`, lookup_var_def]) >>
+     `pure_frame ce func es' sa s actual` by
+       (match_mp_tac (Q.SPECL [`ce`, `func`, `es'`, `es'`, `sa`, `sh`, `s`, `initial`, `actual`]
+                        exprSimPropsTheory.pure_frame_trans) >>
+        rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+        >- decide_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+        >- simp[] >>
+        first_assum ACCEPT_TAC) >>
+     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     `pure_frame ce func es origin s0 s` by
+       (qpat_x_assum `~expr_has_effect e ==> _` irule >> first_assum ACCEPT_TAC) >>
+     match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es'`, `origin`, `sa`, `s0`, `s`, `actual`]
+                     exprSimPropsTheory.pure_frame_trans) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`p`, `ct`, `rv`, `initial`, `actual`] >>
   asm_rewrite_tac[] >> simp[Abbr `initial`]
 QED

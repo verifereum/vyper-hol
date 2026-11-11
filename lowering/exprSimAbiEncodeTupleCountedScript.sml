@@ -270,7 +270,7 @@ Resume abi_encode_tuple_relabel_observer[phases]:
   qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [Abbr `rst`, Abbr `rs`] >>
   POP_ASSUM_LIST (K ALL_TAC) >>
-  simp[abi_encode_staged_observation_def, start_relabel_def, not_fresh_at_def,
+  simp[abi_encode_staged_observation_def, loweringPostsTheory.pure_frame_def, start_relabel_def, not_fresh_at_def,
     local_region_def, lookup_var_def] >> metis_tac[]
 QED
 
