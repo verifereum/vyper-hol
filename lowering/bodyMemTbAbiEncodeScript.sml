@@ -4,7 +4,7 @@ Ancestors
   bodyMemoryPreds abiEncodeContinuationMemory abiEncodeWindowMemory abiEncodeWindowLift
   bodyAbiEncodeMemorySource abiEncodeEmptySourceInput abiEncodeEmptySourceSteps
   bodyAbiEncodeWordMemory abiTupleEncodeMemoryChecks abiTupleEncodeMemoryReach
-  bodyAbiEncodeTupleMemory
+  bodyAbiEncodeTupleMemory abiEncoderWindowMemFrame
 
 Theorem body_type_builtin_abi_encode_mem_case:
   !cx v11 ensure mid typ es.
