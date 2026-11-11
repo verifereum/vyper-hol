@@ -9,7 +9,7 @@ Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness e2eDeployFrame
   frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs
   frameGas venomRunBounded ctorDeployCallFree o1OpcodeAbsence
-  codegenAsmProgOk frameRunRaises
+  codegenAsmProgOk frameRunRaises frameStep ctorDeployEntry immutableSectionRel
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)
@@ -144,6 +144,42 @@ Proof
   drule deploy_venom_result_rel_terminates >> simp[terminates_def]
 QED
 
+(* ===== S7g-d helpers ===== *)
+
+Theorem add_frame_gas_single_context[local]:
+  (add_frame_gas g es).contexts = [x] ==> ?c rb. es.contexts = [(c, rb)]
+Proof
+  rw[add_frame_gas_def] >> every_case_tac >> gvs[]
+QED
+
+Theorem shadow_root_add_frame_gas[local]:
+  es.contexts = [(c, rb)] ==>
+  shadow_root (add_frame_gas g es) = add_frame_gas g (shadow_root es)
+Proof
+  rw[shadow_root_def, add_frame_gas_def, shadow_root_contexts_def,
+     vfmContextTheory.execution_state_component_equality]
+QED
+
+(* A halting root-shadowed run that leaves gas for the largest deposit:
+   the real frame's deposit fails with OutOfGas only when oversized. *)
+Theorem deploy_frame_halt_deposit[local]:
+  es.contexts = [(c0, rb0)] /\ c0.msgParams.outputTo = Code target /  run (shadow_root es) = SOME (INR NONE, es1) /  code_deposit_cost * max_code_size <= frame_gas_left es1 /  es1.contexts = [(c1, rb1)]
+  ==>
+  ?r es'. run_call es = SOME (r, es') /          (r = INR (SOME OutOfGas) ==> max_code_size < LENGTH c1.returnData)
+Proof
+  strip_tac >>
+  `es.contexts <> []` by simp[] >>
+  drule_all shadow_root_run_halt >> strip_tac >>
+  `run_call es = run es` by (irule run_call_eq_run_single_context >> simp[]) >>
+  gvs[root_output_to_def, shadow_root_def, shadow_root_contexts_def,
+      frame_gas_left_def] >>
+  Cases_on `handle_step NONE mid` >> simp[] >> strip_tac >>
+  qspecl_then [`mid`, `ctxt`, `rb`, `target`] mp_tac
+    deploy_handle_step_out_of_gas >>
+  `0 < code_deposit_cost * max_code_size` by EVAL_TAC >>
+  simp[]
+QED
+
 (* PLANNED ADMISSION S7g-d, sufficient gas for deployment: the deploy-side
    counterpart of codegen_gas_sufficient together with deploy_venom_frame.
    Given the constructor unit's resource bound, some gas g, independent of
@@ -155,7 +191,10 @@ QED
    returns, so the deposit's length is LENGTH runtime_bc + imm_len tops.
    Proof idea: S7g's per-instruction argument on the root-shadowed frame
    codegen runs (shadow_root), with no RETURNDATACOPY run, plus the
-   deposit, which costs at most code_deposit_cost * max_code_size. *)
+   deposit, which costs at most code_deposit_cost * max_code_size.
+   wf_state es keeps the frame's own gas use within its limit: otherwise the
+   gassed frame could start with no gas left.  deploy_typing_ok fixes each
+   builtin's argument count, which the call-free lowering needs. *)
 Theorem deploy_frame_gas_sufficient:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan fuel M.
     deploy_phases policy tops (deploy_bc, runtime_bc)
@@ -164,7 +203,7 @@ Theorem deploy_frame_gas_sufficient:
     constructor_call_free tops
     ==>
     ?g. !g' am tx es Inv.
-      g <= g' /\
+      g <= g' /\ wf_state es /\ deploy_typing_ok tops am tx /\
       deploy_state_rel tops deploy_bc am tx (add_frame_gas g' es) /\
       LENGTH (FST (HD (add_frame_gas g' es).contexts)).msgParams.code
         <= dimword(:256) DIV 2 /\
@@ -184,5 +223,92 @@ Theorem deploy_frame_gas_sufficient:
         (r = INR (SOME OutOfGas) ==>
          max_code_size < LENGTH runtime_bc + imm_len tops)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+   o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
+   codegen_assembly rpolicy dout.po_unit = SOME prog /\
+   generate_context_plan dout.po_unit.cu_context = SOME cplan` by
+    fs[deploy_phases_def] >>
+  (* S7g's surplus, with the largest deposit's gas in reserve *)
+  qspecl_then [`rpolicy`, `dout.po_unit`, `cplan`, `prog`, `fuel`, `M`,
+               `code_deposit_cost * max_code_size`] mp_tac codegen_gas_surplus >>
+  impl_tac >- fs[] >> disch_then (qx_choose_then `g` assume_tac) >>
+  qexists_tac `g` >> rpt strip_tac >>
+  (* no RETURNDATACOPY anywhere in the creation code *)
+  drule_all lower_vyper_deploy_unit_call_free_entry >> strip_tac >>
+  `!fn inst. MEM fn dout.po_unit.cu_context.ctx_functions /\
+             MEM inst (fn_insts fn) ==> inst.inst_opcode <> RETURNDATACOPY` by
+    (rpt gen_tac >> strip_tac >>
+     qspecl_then [`rpolicy`, `dunit`, `dout`, `efn`] mp_tac
+       o1_pipeline_leaf_entry_no_returndatacopy >>
+     impl_tac >- fs[] >> disch_then drule_all >> simp[]) >>
+  drule_all codegen_assembly_no_returndatacopy >> strip_tac >>
+  `?c0 rb0. es.contexts = [(c0, rb0)]` by
+    (fs[deploy_state_rel_def] >> metis_tac[add_frame_gas_single_context]) >>
+  drule shadow_root_add_frame_gas >> disch_then (qspec_then `g'` assume_tac) >>
+  `?ctxt rb. (add_frame_gas g' es).contexts = [(ctxt, rb)] /\
+             ctxt.msgParams.outputTo = Code tx.target /\
+             wf_state (add_frame_gas g' es)` by fs[deploy_state_rel_def] >>
+  `wf_state (shadow_root (add_frame_gas g' es))` by simp[shadow_root_wf_state] >>
+  `g' <= frame_gas_left (shadow_root (add_frame_gas g' es))` by
+    metis_tac[wf_state_frame_gas_left, shadow_root_wf_state] >>
+  drule_all deploy_entry_state_ok >> strip_tac >>
+  qabbrev_tac `vs = deploy_entry_state prog cplan tops (add_frame_gas g' es)` >>
+  qabbrev_tac `sh = shadow_root (add_frame_gas g' es)` >>
+  `!t. ~frame_inst_at sh t ReturnDataCopy` by
+    (gen_tac >>
+     qspecl_then [`rpolicy`, `dout.po_unit`, `cplan`, `prog`, `fuel`, `M`,
+                  `Inv`, `vs`, `sh`, `t`] mp_tac codegen_no_returndatacopy >>
+     impl_tac >- fs[] >> simp[]) >>
+  `!s op r s'. frame_inst_at sh s op /\ step_inst op s = (r, s') /\
+               LENGTH s'.contexts = LENGTH s.contexts ==>
+               r <> INR (SOME OutOfGas) /\
+               code_deposit_cost * max_code_size <= frame_gas_left s'` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!g' Inv vs es s op r s'. _`
+       (qspecl_then [`g'`, `Inv`, `vs`, `shadow_root es`, `s`, `op`, `r`, `s'`]
+          mp_tac) >>
+     qpat_x_assum `shadow_root _ = _` (assume_tac o GSYM) >>
+     impl_tac >- fs[Abbr `sh`] >> simp[]) >>
+  (* the shadowed frame's run, and how it ends *)
+  qspecl_then [`vfuel`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `Inv`,
+               `vs`, `sh`] mp_tac codegen_correct >>
+  impl_tac >- fs[] >> strip_tac >>
+  `sh.contexts = [(ctxt with msgParams updated_by
+                     (\mp. mp with outputTo := Memory <| offset := 0; size := 0 |>),
+                   rb)]` by simp[Abbr `sh`, shadow_root_def, shadow_root_contexts_def] >>
+  qspecl_then [`sh`, `ctxt with msgParams updated_by
+                     (\mp. mp with outputTo := Memory <| offset := 0; size := 0 |>)`,
+               `rb`, `r`, `es'`] mp_tac run_call_root_ends_at_inst >>
+  impl_tac >- simp[] >> strip_tac >>
+  `r <> INR (SOME OutOfGas)` by
+    (strip_tac >> gvs[frame_inst_raises_def] >>
+     first_x_assum drule >> disch_then drule >> gvs[frame_inst_at_def]) >>
+  `run sh = SOME (r, es')` by
+    metis_tac[run_call_eq_run_single_context, LENGTH, ONE] >>
+  `run_call (add_frame_gas g' es) = run (add_frame_gas g' es)` by
+    (irule run_call_eq_run_single_context >> simp[]) >>
+  drule deploy_venom_result_rel_terminates >> strip_tac >>
+  Cases_on `run_context vfuel dout.po_unit.cu_context vs` >>
+  gvs[terminates_def]
+  >~ [`Halt ss`]
+  >- (Cases_on `frame_resource_starved sh r es'`
+      >- gvs[frame_resource_starved_def, frame_outcome_def] >>
+      gvs[venom_frame_rel_def, frame_outcome_def] >>
+      Cases_on `src` >> gvs[deploy_source_exempt_def]
+      >- (PairCases_on `x` >> gvs[deploy_venom_result_rel_def] >>
+          drule immutables_section_rel_length >> strip_tac >>
+          qspecl_then [`add_frame_gas g' es`, `ctxt`, `rb`, `tx.target`,
+                       `es'`, `ctxt'`, `rb'`] mp_tac
+            (Q.GENL [`es`, `c0`, `rb0`, `target`, `es1`, `c1`, `rb1`]
+               deploy_frame_halt_deposit) >>
+          impl_tac >- metis_tac[] >> simp[imm_len_def]) >>
+      Cases_on `y` >> gvs[deploy_venom_result_rel_def]) >>
+  (* an exceptional end: the real run ends the same way *)
+  `?exc. r = INR (SOME exc)` by
+    (Cases_on `frame_resource_starved sh r es'` >>
+     gvs[frame_resource_starved_def, frame_outcome_def, venom_frame_rel_def] >>
+     rename1 `Abort ab _` >> Cases_on `ab` >>
+     gvs[venom_frame_rel_def, frame_outcome_def]) >>
+  gvs[Abbr `sh`] >> drule shadow_root_run_exception >> strip_tac >> simp[]
 QED
