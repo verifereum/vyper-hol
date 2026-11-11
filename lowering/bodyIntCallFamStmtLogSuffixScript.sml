@@ -15,9 +15,9 @@ Ancestors
   bodyIntCallFamStmtLogSuffixPipeline bodyIntCallFamStmtLogSuffixCompose
 
 Theorem intcall_log_suffix_run:
-  !ce id h tys flags args sa xs sm ops st lctx ty sb ctx func cx es s vs
+  !ce id h flags args sa xs sm ops st lctx ty sb ctx func cx es s vs
    topics avs lo.
-    ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
+    ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
     compile_log_eval_all ce args sa = (xs,sm) /\
     compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
     compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\

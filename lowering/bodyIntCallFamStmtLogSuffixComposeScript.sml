@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem intcall_log_suffix_memory:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   compile_log_eval_all ce args sa = (xs,sm) /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
@@ -44,6 +44,7 @@ Theorem intcall_log_suffix_memory:
     mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory
 Proof
   strip_tac >>
+  `log_eval_view ce args sa xs sm` by simp[log_eval_view_def, LIST_REL_EL_EQN] >>
   drule_all compile_split_log_topics_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sm st) s = OK topic_state` >>
   `topic_state.vs_memory = s.vs_memory` by
