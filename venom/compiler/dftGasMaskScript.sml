@@ -1856,6 +1856,30 @@ Theorem identity_suffix_mask_cuts[local]:
            (EL k ms = [] /\ EL k ess = []) \/
            (?w. EL k ms = [SOME w] /\
              EL k ess = [(s.vs_current_bb,(EL k xs).inst_id)])))) /\
+      (!k t. k < LENGTH xs /\ (EL k xs).inst_opcode = INVOKE /\
+        EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
+        R fuel C' (TAKE k xs) s = OK t ==>
+        ?unused_k.
+          LENGTH (EL k ms) = LENGTH (EL k ess) /\
+          PERM (MAP THE (FILTER IS_SOME (EL k ms)) ++ unused_k) t.vs_gas_readings /\
+          (!u. (step_inst fuel C' (EL k xs) t = OK u \/
+                (?ir. step_inst fuel C' (EL k xs) t = IntRet ir u)) ==>
+            EVERY IS_SOME (EL k ms) /\ unused_k = u.vs_gas_readings) /\
+          !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (EL k ms) gs ==>
+            (?extra. EL k ess = gas_events_step fuel C t.vs_current_bb (EL k xs)
+               (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+            ((?j. terminates (step_inst j C (EL k xs)
+               (t with vs_gas_readings := gs ++ tail))) ==>
+              terminates (step_inst fuel C (EL k xs) (t with vs_gas_readings := gs ++ tail)) /\
+              dft_res_rel
+                (restore_result [] (step_inst fuel C (EL k xs) (t with vs_gas_readings := gs ++ tail)))
+                (restore_result [] (step_inst fuel C' (EL k xs) t)) /\
+              (((?u. step_inst fuel C' (EL k xs) t = OK u) \/
+                (?ir u. step_inst fuel C' (EL k xs) t = IntRet ir u)) ==>
+                gas_events_step fuel C t.vs_current_bb (EL k xs)
+                  (t with vs_gas_readings := gs ++ tail) = EL k ess /\
+                residual_result tail (step_inst fuel C' (EL k xs) t)
+                  (step_inst fuel C (EL k xs) (t with vs_gas_readings := gs ++ tail))))) /\
       !n. n <= LENGTH xs ==> ?unused.
         S (TAKE n xs) s (FLAT (TAKE n ms)) (FLAT (TAKE n ess)) unused
 Proof
@@ -1954,6 +1978,7 @@ Proof
       gvs[rich_listTheory.EL_REPLICATE] >>
       Cases_on `h.inst_opcode = GAS` >> gvs[] >>
       Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  conj_tac >- suspend "stopped_provenance" >>
   gen_tac >> strip_tac >> Cases_on `n`
   >- (simp[] >> metis_tac[]) >>
   simp[TAKE] >>
@@ -2023,6 +2048,7 @@ Resume identity_suffix_mask_cuts[returning_head]:
   >- (gen_tac >> strip_tac >> Cases_on `k` >> gvs[] >>
       Cases_on `h.inst_opcode = GAS` >> gvs[] >>
       Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  conj_tac >- suspend "returning_provenance" >>
   gen_tac >> strip_tac >> Cases_on `n`
   >- (simp[] >> metis_tac[]) >>
   qpat_x_assum `!n. n <= LENGTH xs ==> _` (qspec_then `n'` mp_tac) >>
@@ -2078,6 +2104,7 @@ Resume identity_suffix_mask_cuts[terminator_head]:
       gvs[rich_listTheory.EL_REPLICATE] >>
       Cases_on `h.inst_opcode = GAS` >> gvs[] >>
       Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  conj_tac >- suspend "terminator_provenance" >>
   gen_tac >> strip_tac >> Cases_on `n`
   >- (simp[] >> metis_tac[]) >>
   simp[TAKE] >>
@@ -2097,6 +2124,26 @@ Resume identity_suffix_mask_cuts[terminator_head]:
   strip_tac >> Cases_on `u.vs_halted` >>
   simp[restore_result_def, dftRunRelTheory.dft_res_rel_def,
        residual_result_cases, passSimulationDefsTheory.terminates_def]
+QED
+Resume identity_suffix_mask_cuts[stopped_provenance]:
+  rpt gen_tac >> strip_tac >> Cases_on `k`
+  >- (gvs[Abbr `R`] >> qexists_tac `unused` >> simp[] >>
+      qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _ /\ _` mp_tac >>
+      qpat_x_assum `!u. _ ==> EVERY IS_SOME m /\ _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  qpat_x_assum `R fuel C' (TAKE _ _) s = OK t` mp_tac >>
+  simp[TAKE] >> Cases_on `step_inst fuel C' h s` >> fs[]
+QED
+Resume identity_suffix_mask_cuts[returning_provenance]:
+  rpt gen_tac >> strip_tac >> Cases_on `k`
+  >- (gvs[Abbr `R`] >> metis_tac[]) >>
+  gvs[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+  first_x_assum irule >> simp[]
+QED
+Resume identity_suffix_mask_cuts[terminator_provenance]:
+  rpt gen_tac >> strip_tac >> Cases_on `k`
+  >- (gvs[Abbr `R`] >> metis_tac[]) >>
+  fs[TAKE]
 QED
 Finalise identity_suffix_mask_cuts[local]
 
