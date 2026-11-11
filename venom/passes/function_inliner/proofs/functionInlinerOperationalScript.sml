@@ -2975,71 +2975,78 @@ Proof
     metis_tac[inline_opaque_frame_observations] >>
   `step_inst_base src s = Abort a u` by gvs[step_inst_non_invoke] >>
   drule step_inst_base_abort_opcodes >> strip_tac
-  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def,
-          listTheory.LENGTH_EQ_NUM_compute] >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-      gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
-          inline_shared_frame_def, stateFrameTheory.execution_frame_def,
-          revert_state_def, set_returndata_def, lookup_var_def,
-          venom_state_component_equality])
-  >- (gvs[step_inst_base_opcode_eqs] >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-      gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
-          inline_shared_frame_def, stateFrameTheory.execution_frame_def,
-          halt_state_def, set_returndata_def, lookup_var_def,
-          venom_state_component_equality])
-  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def,
-          listTheory.LENGTH_EQ_NUM_compute] >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-      gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
-          inline_shared_frame_def, stateFrameTheory.execution_frame_def,
-          revert_state_def, set_returndata_def, lookup_var_def,
-          venom_state_component_equality])
-  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def,
-          listTheory.LENGTH_EQ_NUM_compute] >>
-      gvs[optionTheory.IS_SOME_EXISTS] >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-      metis_tac[inline_opaque_frame_exceptional_halt])
-  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
-      qpat_x_assum `step_inst_base src s = _` mp_tac >>
-      simp[inline_create_eval_list] >>
-      Cases_on `eval_operands src.inst_operands s` >> gvs[] >>
-      strip_tac >>
-      gvs[inline_create_eval_list, exec_create_abort_iff, AllCaseEqs()] >>
-      simp[step_inst_non_invoke, inline_create_eval_list, exec_create_abort_iff] >>
-      metis_tac[inline_opaque_frame_exceptional_halt])
-  >- (gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
-      qpat_x_assum `step_inst_base src s = _` mp_tac >>
-      simp[inline_create_eval_list] >>
-      Cases_on `eval_operands src.inst_operands s` >> gvs[] >>
-      strip_tac >>
-      gvs[inline_create_eval_list, exec_create_abort_iff, AllCaseEqs()] >>
-      simp[step_inst_non_invoke, inline_create_eval_list, exec_create_abort_iff] >>
-      metis_tac[inline_opaque_frame_exceptional_halt])
-  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def,
-          listTheory.LENGTH_EQ_NUM_compute] >>
-      gvs[optionTheory.IS_SOME_EXISTS] >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-      metis_tac[inline_opaque_frame_exceptional_halt])
-  >- (gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs(),
-          eval_operands_def] >>
-      gvs[optionTheory.IS_SOME_EXISTS] >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-      metis_tac[inline_opaque_frame_exceptional_halt])
-  >- (gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs(),
-          eval_operands_def] >>
-      gvs[optionTheory.IS_SOME_EXISTS] >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-      metis_tac[inline_opaque_frame_exceptional_halt])
-  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
-      gvs[optionTheory.IS_SOME_EXISTS] >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-      metis_tac[inline_opaque_frame_exceptional_halt])
-  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def] >>
-      gvs[optionTheory.IS_SOME_EXISTS] >>
-      simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
-      metis_tac[inline_opaque_frame_exceptional_halt])
-  >> gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+  >- suspend "revert"
+  >- suspend "invalid"
+  >- suspend "revert"
+  >- suspend "checked_abort"
+  >- suspend "create"
+  >- suspend "create"
+  >- suspend "checked_abort"
+  >- suspend "static_write"
+  >- suspend "static_write"
+  >- suspend "static_log"
+  >- suspend "static_selfdestruct"
+  >> suspend "static_call"
+QED
+
+Resume inline_ordinary_abort_transport[revert]:
+  markerLib.RESUME_TAC >> gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def,
+      listTheory.LENGTH_EQ_NUM_compute] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      revert_state_def, set_returndata_def, lookup_var_def,
+      venom_state_component_equality]
+QED
+
+Resume inline_ordinary_abort_transport[invalid]:
+  gvs[step_inst_base_opcode_eqs] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  metis_tac[inline_opaque_frame_exceptional_halt]
+QED
+
+Resume inline_ordinary_abort_transport[checked_abort]:
+  markerLib.RESUME_TAC >> gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def,
+      listTheory.LENGTH_EQ_NUM_compute] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  metis_tac[inline_opaque_frame_exceptional_halt]
+QED
+
+Resume inline_ordinary_abort_transport[create]:
+  markerLib.RESUME_TAC >> gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+  qpat_x_assum `step_inst_base src s = _` mp_tac >>
+  simp[inline_create_eval_list] >>
+  Cases_on `eval_operands src.inst_operands s` >> gvs[] >>
+  strip_tac >>
+  gvs[inline_create_eval_list, exec_create_abort_iff, AllCaseEqs()] >>
+  simp[step_inst_non_invoke, inline_create_eval_list, exec_create_abort_iff] >>
+  metis_tac[inline_opaque_frame_exceptional_halt]
+QED
+
+Resume inline_ordinary_abort_transport[static_write]:
+  markerLib.RESUME_TAC >> gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs(),
+      eval_operands_def] >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  metis_tac[inline_opaque_frame_exceptional_halt]
+QED
+
+Resume inline_ordinary_abort_transport[static_log]:
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  metis_tac[inline_opaque_frame_exceptional_halt]
+QED
+
+Resume inline_ordinary_abort_transport[static_selfdestruct]:
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs(), eval_operands_def] >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  metis_tac[inline_opaque_frame_exceptional_halt]
+QED
+
+Resume inline_ordinary_abort_transport[static_call]:
+  gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
   qpat_x_assum `step_inst_base src s = _` mp_tac >>
   simp[inline_call_eval_list] >>
   Cases_on `eval_operands src.inst_operands s` >> gvs[] >>
@@ -3050,3 +3057,5 @@ Proof
        extract_venom_result_def] >>
   metis_tac[inline_opaque_frame_exceptional_halt]
 QED
+
+Finalise inline_ordinary_abort_transport
