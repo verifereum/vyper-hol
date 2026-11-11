@@ -637,3 +637,133 @@ Proof
      disch_then (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
   asm_rewrite_tac[] >> simp[] >> metis_tac[]
 QED
+
+Theorem tuple_dynamic_storage_init_counted:
+  !s fn bb id root len ctr hdr a n capacity tn G ctx D PG loc k.
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [Var root] [len]) /\
+    get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (id+1) ASSIGN [Lit 0w] [ctr]) /\
+    get_instruction bb (s.vs_inst_idx+2) = SOME (mk_inst (id+2) JMP [Label hdr] []) /\
+    ALL_DISTINCT [root;len;ctr] /\ ~ctx_has_dalloca ctx /\
+    ptr_covers G tn root s capacity /\ 32 <= capacity /\ lookup_var root s = SOME a /\
+    mload (w2n a) s = n2w n /\ mem_word_taint tn.t_mem (w2n a) = {} ==>
+    ?Gf tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+      execution_frame u = execution_frame s /\
+      assign_base_store_frame loc (a+32w) (k+1w) s tn 0 u tf /\
+      ptr_covers Gf tf root u capacity /\ lookup_var root u = SOME a /\
+      lookup_var len u = SOME (n2w n) /\ FLOOKUP Gf len = NONE /\ op_taint tf (Var len) = {} /\
+      lookup_var ctr u = SOME 0w /\ FLOOKUP Gf ctr = NONE /\ op_taint tf (Var ctr) = {} /\
+      u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+      (!x. ~MEM x [len;ctr] ==> lookup_var x u = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ptr_covers G tn root s 32 /\ root <> len` by
+    (gvs[bodyPtrDefsTheory.ptr_covers_def, ALL_DISTINCT] >> decide_tac) >>
+  drule_all assign_base_mload_counted >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  `eval_operand (Var root) s = SOME a` by simp[eval_operand_def] >>
+  drule assign_base_mload_ghost >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`, `id`, `len`] assume_tac) >>
+  strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 g1 t1 (OK s1)` >>
+  `~s1.vs_halted /\ lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s1.vs_inst_idx = SOME (mk_inst (id+1) ASSIGN [Lit 0w] [ctr]) /\
+   get_instruction bb (SUC s1.vs_inst_idx) = SOME (mk_inst ((id+1)+1) JMP [Label hdr] [])` by
+    (simp[Abbr `s1`, update_var_def] >> gvs[ADD1]) >>
+  drule_all assign_base_storage_init_counted >>
+  disch_then (qspecl_then [`t1`, `g1`, `D`, `PG`] assume_tac) >>
+  qexistsl_tac [`DRESTRICT g1 (COMPL {ctr})`, `t1 with t_var := t1.t_var |+ (ctr,{})`,
+    `jump_to hdr ((update_var ctr 0w s1) with vs_inst_idx := SUC s1.vs_inst_idx)`] >>
+  conj_tac >-
+    (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+      (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  simp[Abbr `g1`, Abbr `t1`, Abbr `s1`, assign_base_store_frame_def,
+    assign_base_store_prefix_zero, assign_base_store_taint_prefix_def,
+    execution_frame_def, jump_to_def, update_var_def, lookup_var_def,
+    FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def] >>
+  gvs[bodyPtrDefsTheory.ptr_covers_def, ALL_DISTINCT, lookup_var_def, op_taint_def,
+    FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
+QED
+
+Theorem tuple_dynamic_storage_compiled_counted:
+  !tr root dst sa z sb fn s G tn ctx D PG a k n capacity.
+    compile_dynarray_to_storage (Var root) dst 1 32 tr sa = (z,sb) /\
+    fn_has_code sa sb fn /\ not_fresh_at sa root /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
+    eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
+    mload (w2n a) s = n2w n /\ mem_word_taint tn.t_mem (w2n a) = {} /\
+    n < dimword (:256) /\ 32+32*n <= capacity /\
+    w2n a+32+32*n < dimword (:256) /\
+    ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\ ~ctx_has_dalloca ctx /\
+    s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?Gf tf u v tv.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+      assign_base_store_frame (if tr then LocTransient else LocStorage)
+        (a+32w) (k+1w) s tn n v tv /\
+      u = ((if tr then tstore k (n2w n) v else sstore k (n2w n) v)
+        with vs_inst_idx := 1) /\
+      tf = (if tr then tv with t_trans := key_update tv.t_trans k {}
+            else tv with t_stor := key_update tv.t_stor k {}) /\
+      ptr_covers Gf tf root u capacity /\ lookup_var root u = SOME a /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+      (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >> drule tuple_dynamic_storage_compile_shape >> strip_tac >>
+  gvs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def,
+    DISJ_IMP_THM, FORALL_AND_THM] >>
+  qmatch_asmsub_abbrev_tac `lookup_block bodylbl fn.fn_blocks = SOME bodyblock` >>
+  qmatch_asmsub_abbrev_tac `lookup_block hdr fn.fn_blocks = SOME headerblock` >>
+  qmatch_asmsub_abbrev_tac `lookup_block sa.cs_current_bb fn.fn_blocks = SOME initblock` >>
+  `ALL_DISTINCT [root;len;ctr] /\ 32 <= capacity /\
+   lookup_block s.vs_current_bb fn.fn_blocks = SOME initblock /\
+   get_instruction initblock s.vs_inst_idx = SOME (mk_inst sa.cs_next_id MLOAD [Var root] [len]) /\
+   get_instruction initblock (SUC s.vs_inst_idx) = SOME (mk_inst (sa.cs_next_id+1) ASSIGN [Lit 0w] [ctr]) /\
+   get_instruction initblock (s.vs_inst_idx+2) = SOME (mk_inst (sa.cs_next_id+2) JMP [Label hdr] [])` by
+    (simp[Abbr `initblock`, get_instruction_def, EL_APPEND_EQN, ADD1, ALL_DISTINCT] >>
+     metis_tac[]) >>
+  drule_all tuple_dynamic_storage_init_counted >>
+  disch_then (qspecl_then [`D`, `PG`, `if tr then LocTransient else LocStorage`, `k`] mp_tac) >>
+  disch_then (qx_choose_then `g1` (qx_choose_then `t1` (qx_choose_then `s1` strip_assume_tac))) >>
+  `eval_operand dst s1 = SOME k /\ op_taint t1 dst = {}` by
+    (Cases_on `dst` >> gvs[eval_operand_def, op_taint_def] >>
+     metis_tac[execution_frame_def]) >>
+  `?g2 t2 s2.
+    gas_path_ptr D 0 ctx fn PG g1 t1 s1 0 g2 t2 (OK s2) /\
+    assign_base_store_frame (if tr then LocTransient else LocStorage)
+      (a+32w) (k+1w) s tn n s2 t2 /\
+    ptr_covers g2 t2 root s2 capacity /\ lookup_var root s2 = SOME a /\
+    eval_operand dst s2 = SOME k /\ op_taint t2 dst = {} /\
+    lookup_var len s2 = SOME (n2w n) /\ FLOOKUP g2 len = NONE /\ op_taint t2 (Var len) = {} /\
+    lookup_var ctr s2 = SOME (n2w n) /\ FLOOKUP g2 ctr = NONE /\ op_taint t2 (Var ctr) = {} /\
+    s2.vs_current_bb = sb.cs_current_bb /\ s2.vs_inst_idx = 0 /\ ~s2.vs_halted /\
+    (!x. ~MEM x [ctr;lt;done;mv;off;ptr';value;slot;dv;nv] ==>
+      lookup_var x s2 = lookup_var x s1 /\ FLOOKUP g2 x = FLOOKUP g1 x /\
+      op_taint t2 (Var x) = op_taint t1 (Var x))` by
+    (irule (Q.SPEC `n` tuple_dynamic_storage_loop_remaining) >>
+     simp[ALL_DISTINCT] >>
+     qexistsl_tac [`bodyblock`, `sa.cs_next_id+6`, `bodylbl`, `sa.cs_next_id+3`] >>
+     simp[Abbr `bodyblock`, Abbr `headerblock`, get_instruction_def]) >>
+  `lookup_block s2.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s2.vs_inst_idx = SOME (mk_inst (sa.cs_next_id+16)
+     (if tr then TSTORE else SSTORE) [dst;Var len] []) /\
+   eval_operand (Var len) s2 = SOME (n2w n) /\ ~s2.vs_call_ctx.cc_static` by
+    (Cases_on `bb.bb_instructions` >>
+     gvs[eval_operand_def, get_instruction_def, assign_base_store_frame_def]) >>
+  drule_all assign_base_storage_write_counted >>
+  disch_then (qspecl_then [`g2`, `D`, `PG`] assume_tac) >>
+  qexistsl_tac [`g2`, `s2`, `t2`] >>
+  conj_tac >-
+    (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+      (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[] >>
+     disch_then (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  simp[] >> conj_tac >-
+    (Cases_on `tr` >> gvs[bodyPtrDefsTheory.ptr_covers_def, lookup_var_def, op_taint_def,
+      sstore_def, tstore_def]) >>
+  Cases_on `tr` >> simp[sstore_def, tstore_def, lookup_var_def, op_taint_def] >>
+  gvs[MEM, lookup_var_def, op_taint_def] >> metis_tac[]
+QED
