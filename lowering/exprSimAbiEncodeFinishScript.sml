@@ -105,7 +105,7 @@ Proof
     mstore_def]
 QED
 
-Theorem abi_builtin_encode_finish_global_code[local]:
+Theorem abi_builtin_encode_finish_global_code:
   abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) ==>
   EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT}) (emitted_insts st final)
 Proof

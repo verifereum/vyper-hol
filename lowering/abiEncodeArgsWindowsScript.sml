@@ -31,11 +31,11 @@ Theorem local_ptrs_rel_value_at:
     lookup_scopes name sc = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) /\
     lookup_var p ss = SOME w ==>
-    val_in_memory entry.type entry.value (w2n w) ss.vs_memory /\
+    memory_value_rel entry.type entry.value (w2n w) ss.vs_memory /\
     type_memory_size entry.type <= sz
 Proof
   rpt strip_tac >> gvs[local_ptrs_rel_def] >>
-  first_x_assum drule_all >> simp[]
+  first_x_assum drule_all >> strip_tac >> gvs[]
 QED
 
 Theorem dynamic_local_window_kept:

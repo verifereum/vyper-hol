@@ -5,7 +5,7 @@ Ancestors
   exprSimAbiEncodeExecFrame abiEncoderRegisteredEffect abiDecoderContract
   abiDecoderLoop instIdxIndep entrySinkExtraction venomState compileEnv emitHelper
   exprLoweringProps venomInst list rich_list arithmetic abiDecoderVarSequence
-  exprSimAbiEncodeFramedBuiltin
+  exprSimAbiEncodeFramedBuiltin abiEncoderLeafGlobals
 
 Theorem abi_encode_open_finish_opcodes[local]:
   abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) ==>
@@ -48,6 +48,8 @@ Proof
   drule abi_encode_open_finish_opcodes >> strip_tac >>
   drule_all abi_encode_finish_sequence_open >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK encoded` >>
+  drule abi_builtin_encode_finish_global_code >> strip_tac >>
+  drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
   `abi_encode_exec_frame func initial encoded` by
     (drule_all abi_encode_framed_finish_sequence >> simp[]) >>
   `eval_operand buf encoded = SOME (n2w p)` by
