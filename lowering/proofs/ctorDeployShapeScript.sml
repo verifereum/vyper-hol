@@ -78,7 +78,7 @@ Proof
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
-Theorem package_internal_fn_ctor_shape_ok[local]:
+Theorem package_internal_fn_ctor_shape_ok:
   !tops use_trans nkey_map imm target src.
     supported_program tops /\
     MEM src (FST (SND (classify_functions tops))) ==>
@@ -153,7 +153,7 @@ QED
 
 (* The facts of the unpacked lower_vyper_deploy_unit that
    run_deploy_lowering_source_unit_ok asks for. *)
-Theorem lower_vyper_deploy_unit_run[local]:
+Theorem lower_vyper_deploy_unit_run:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
     supported_program tops ==>

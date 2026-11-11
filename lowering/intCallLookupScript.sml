@@ -73,7 +73,7 @@ Proof
   qexists_tac `fbs` >> simp[]
 QED
 
-Theorem descriptor_names_fn_names[local]:
+Theorem descriptor_names_fn_names:
   !ds fs.
     LIST_REL internal_fn_matches_descriptor ds fs ==>
     MAP FST ds = MAP (\f. f.fn_name) fs
