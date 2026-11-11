@@ -6499,13 +6499,39 @@ Proof
          fs[eval_operand_def, lookup_var_def]) >>
       qpat_assum `Abbrev (P = _)` (fn def =>
         qpat_assum `P (y::rest) s (mh::mt) (eh::et)`
-          (mp_tac o cj 5 o SIMP_RULE bool_ss
-            [REWRITE_RULE [markerTheory.Abbrev_def] def,
-             markerTheory.Abbrev_def])) >>
+          (mp_tac o cj 5 o BETA_RULE o PURE_REWRITE_RULE
+            [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
       disch_then (qspecl_then [`0`, `s`] mp_tac) >>
-      (impl_tac >- simp[Abbr `R`]) >>
-      pure_rewrite_tac[EL, HD] >> strip_tac >>
-      FAIL_TAC "head provenance selected") >>
+      pure_rewrite_tac[EL, HD] >>
+      qmatch_goalsub_abbrev_tac `_ = (HP : bytes32 list -> venom_state -> bool)` >>
+      BasicProvers.LET_ELIM_TAC >>
+      qpat_x_assum `0 < LENGTH (y::rest) /\ _ ==> _` mp_tac >>
+      (impl_tac >- simp[Abbr `R`]) >> strip_tac >>
+      qpat_assum `Abbrev (T' = _)` (fn def =>
+        pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+      pure_rewrite_tac [markerTheory.Abbrev_def] >>
+      BETA_TAC >>
+      asm_rewrite_tac [occurrence_extract_packets] >>
+      qmatch_goalsub_abbrev_tac `TAKE (LENGTH pre) rm ++ [mh] ++ DROP (LENGTH pre) rm` >>
+      qmatch_goalsub_abbrev_tac `TAKE (LENGTH pre) re ++ [eh] ++ DROP (LENGTH pre) re` >>
+      `LENGTH rm = LENGTH pre + LENGTH post /\
+       LENGTH re = LENGTH pre + LENGTH post` by
+        (qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+         simp[Abbr `rm`, Abbr `re`]) >>
+      `LENGTH mh = LENGTH eh` by
+        (qpat_assum `Abbrev (P = _)` (fn def =>
+          qpat_assum `P (y::rest) s (mh::mt) (eh::et)`
+            (mp_tac o cj 3 o SIMP_RULE bool_ss
+              [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+         simp[]) >>
+      ntac 2 gen_tac >> disch_then SUBST1_TAC >> disch_then SUBST1_TAC >>
+      conj_tac >- simp[] >>
+      conj_tac >- simp[] >>
+      conj_tac
+      >- (irule EVERY2_APPEND_suff >> conj_tac
+          >- simp[EVERY2_TAKE] >>
+          simp[EVERY2_DROP]) >>
+      FAIL_TAC "returning semantic clauses") >>
   FAIL_TAC "stopped head transport"
 QED
 
