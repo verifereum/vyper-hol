@@ -1,6 +1,8 @@
 (* Same-endpoint index-slot allocation and initialization boundaries. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopSlot
 Ancestors
+  loweringHalt
+  slotCopyExecution
   ghostPcTransportPtr
   ctorDeployMemoryRunPtrPrefixAllocationFloor
   ctorDeployMemoryRunPtrPrefixSteps ctorDeployMemoryRunPtrPrefixBoolBody
@@ -74,7 +76,8 @@ Theorem prefix_loop_slot_zero_pair:
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid MSTORE [Var ip;Lit 0w] []) a = OK (mstore p 0w a)` by
-    (drule prefix_mstore_step >>
+    (drule (Q.GENL [`id`,`a`,`b`,`s`,`x`,`y`]
+    slotCopyExecutionTheory.slot_copy_step_store) >>
      disch_then (qspecl_then [`iid`,`Lit 0w`,`0w`] mp_tac) >>
      simp[eval_operand_def]) >>
   conj_tac >- asm_rewrite_tac[] >>
@@ -124,7 +127,7 @@ Proof
   conj_tac >- (irule prefix_alloca_ptr_step >> simp[]) >>
   Cases_on `FLOOKUP s.vs_allocas aid`
   >- (`32 < dimword (:256)` by (CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >> EVAL_TAC) >>
-      gvs[prefix_alloca_step] >>
+      gvs[(SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh)))] >>
       simp[SRULE [LET_THM] prefix_loop_slot_fresh_taint] >>
       gvs[update_var_def, FLOOKUP_UPDATE] >>
       simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
@@ -215,7 +218,7 @@ Resume prefix_loop_index_slot_pair[allocation_lookup]:
     eval_operand_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[mstore_def, write_memory_def] >>
   Cases_on `FLOOKUP s.vs_allocas aid`
-  >- gvs[prefix_alloca_step, update_var_def, FLOOKUP_UPDATE,
+  >- gvs[(SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh))), update_var_def, FLOOKUP_UPDATE,
           eval_operand_def, lookup_var_def] >>
   PairCases_on `x` >>
   gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, eval_operand_def,
@@ -223,7 +226,8 @@ Resume prefix_loop_index_slot_pair[allocation_lookup]:
 QED
 
 Resume prefix_loop_index_slot_pair[store_endpoint]:
-  drule prefix_mstore_step >>
+  drule (Q.GENL [`id`,`a`,`b`,`s`,`x`,`y`]
+    slotCopyExecutionTheory.slot_copy_step_store) >>
   disch_then (qspecl_then [`aid+1`,`Lit 0w`,`0w`] mp_tac) >>
   simp[eval_operand_def] >> strip_tac >> gvs[]
 QED

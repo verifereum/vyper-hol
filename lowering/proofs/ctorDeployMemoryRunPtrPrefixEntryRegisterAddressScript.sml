@@ -77,39 +77,6 @@ Proof
  drule_all ctor_checked_arg_add_reach >> strip_tac >> gvs[update_var_def]
 QED
 
-Theorem prefix_entry_register_address_add_actual:
- emit_op ADD [a;b] st = (out,middle) /\
- eval_operand a initial = SOME u /\ eval_operand b initial = SOME v /\
- op_taint tn a = {} /\ op_taint tn b = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
- fresh_vars_wrt st initial /\ fn_has_code st middle func /\
- ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
- initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
- ?prepared H qt.
- eval_operand out prepared = SOME (u+v) /\ op_taint qt out = {} /\
- fresh_vars_wrt middle prepared /\
- prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
- prepared.vs_alloca_next = initial.vs_alloca_next /\
- prepared.vs_data_section = initial.vs_data_section /\
- prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
- abi_encoder_registered_effect {} [] initial prepared /\
- (!x v. not_fresh_at st x /\ lookup_var x initial = SOME v ==>
-   lookup_var x prepared = SOME v) /\
- (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-   op_taint qt (Var x) = op_taint tn (Var x)) /\
- qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
- qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
- ~prepared.vs_halted /\ prepared.vs_current_bb = middle.cs_current_bb /\
- prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\
- abi_decode_sim ctx func initial prepared /\
- prepared.vs_code = initial.vs_code /\ prepared.vs_outcomes = initial.vs_outcomes /\
- prepared.vs_tx_ctx = initial.vs_tx_ctx /\ prepared.vs_block_ctx = initial.vs_block_ctx /\
- prepared.vs_gas_readings = initial.vs_gas_readings /\
- ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
-   !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
- mp_tac (Q.SPEC `F` prefix_entry_register_address_add_actual_mode) >> simp[]
-QED
 
 val RegisterAddressDloadMode = ``\checked.
  emit_op DLOAD [off] st = (out,middle) /\
@@ -181,38 +148,6 @@ Proof
  disch_then (qspec_then `ctx` strip_assume_tac) >> fs[update_var_def] >> gvs[]
 QED
 
-Theorem prefix_entry_register_address_dload_actual:
- emit_op DLOAD [off] st = (out,middle) /\
- eval_operand off initial = SOME a /\ op_taint tn off = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
- fresh_vars_wrt st initial /\ fn_has_code st middle func /\
- ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
- initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
- ?prepared H qt.
- eval_operand out prepared = SOME (abi_decode_load DLOAD a initial) /\
- op_taint qt out = {} /\ fresh_vars_wrt middle prepared /\
- prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
- prepared.vs_alloca_next = initial.vs_alloca_next /\
- prepared.vs_data_section = initial.vs_data_section /\
- prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
- abi_encoder_registered_effect {} [] initial prepared /\
- (!x v. not_fresh_at st x /\ lookup_var x initial = SOME v ==>
-   lookup_var x prepared = SOME v) /\
- (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-   op_taint qt (Var x) = op_taint tn (Var x)) /\
- qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
- qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
- ~prepared.vs_halted /\ prepared.vs_current_bb = middle.cs_current_bb /\
- prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\
- abi_decode_sim ctx func initial prepared /\
- prepared.vs_code = initial.vs_code /\ prepared.vs_outcomes = initial.vs_outcomes /\
- prepared.vs_tx_ctx = initial.vs_tx_ctx /\ prepared.vs_block_ctx = initial.vs_block_ctx /\
- prepared.vs_gas_readings = initial.vs_gas_readings /\
- ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
-   !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
- mp_tac (Q.SPEC `F` prefix_entry_register_address_dload_actual_mode) >> simp[]
-QED
 
 val RegisterAddressDynamicMode = ``\checked.
  emit_op ADD [Lit 0w;Lit (n2w off)] st = (head,first) /\
@@ -302,39 +237,6 @@ Proof
  qexists_tac `p2` >> simp[]
 QED
 
-Theorem prefix_entry_register_address_dynamic_actual:
- emit_op ADD [Lit 0w;Lit (n2w off)] st = (head,first) /\
- emit_op DLOAD [head] first = (offset,second) /\
- emit_op ADD [Lit 0w;offset] second = (src,middle) /\
- fresh_vars_wrt st initial /\ fn_has_code st middle func /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
- ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
- initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
- ?prepared H qt.
- eval_operand src prepared = SOME (abi_decode_load DLOAD (n2w off : bytes32) initial) /\
- op_taint qt src = {} /\ fresh_vars_wrt middle prepared /\
- prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
- prepared.vs_alloca_next = initial.vs_alloca_next /\
- prepared.vs_data_section = initial.vs_data_section /\
- prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
- abi_encoder_registered_effect {} [] initial prepared /\
- (!x v. not_fresh_at st x /\ lookup_var x initial = SOME v ==>
-   lookup_var x prepared = SOME v) /\
- (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-   op_taint qt (Var x) = op_taint tn (Var x)) /\
- qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
- qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
- ~prepared.vs_halted /\ prepared.vs_current_bb = middle.cs_current_bb /\
- prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\
- abi_decode_sim ctx func initial prepared /\
- prepared.vs_code = initial.vs_code /\ prepared.vs_outcomes = initial.vs_outcomes /\
- prepared.vs_tx_ctx = initial.vs_tx_ctx /\ prepared.vs_block_ctx = initial.vs_block_ctx /\
- prepared.vs_gas_readings = initial.vs_gas_readings /\
- ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
-   !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
- mp_tac (Q.SPEC `F` prefix_entry_register_address_dynamic_actual_mode) >> simp[]
-QED
 
 Theorem prefix_entry_register_singleton_address_paired_mode:
  !checked ptr.
@@ -412,52 +314,6 @@ Proof
  qexistsl [`src`,`middle`,`prepared`,`H`,`qt`] >> gvs[]
 QED
 
-Theorem prefix_entry_register_singleton_address_paired:
- !ptr. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var ptr) (type_memory_bytes ce ty)) /\
- compile_decode_args ce [build_positional_arg ce (name,ty)] off
-   DLOAD (Lit 0w) 0 st = ((),last) /\
- fresh_vars_wrt st initial /\ fn_has_code st last func /\
- (st.cs_blocks = last.cs_blocks \/ !bb.
-   lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
-     phi_prefix_length bb.bb_instructions = 0) /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
- ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
- initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
- ?src middle prepared H qt.
- compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w)
-   (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
- eval_operand src prepared = SOME
-   (if ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty
-    then abi_decode_load DLOAD (n2w off : bytes32) initial else n2w off) /\
- op_taint qt src = {} /\ fresh_vars_wrt middle prepared /\
- cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
- st.cs_next_var <= middle.cs_next_var /\ st.cs_next_id <= middle.cs_next_id /\
- fn_has_code middle last func /\ frag_ids middle last SUBSET frag_ids st last /\
- (middle.cs_blocks = last.cs_blocks \/ !bb.
-   lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
-     phi_prefix_length bb.bb_instructions = 0) /\
- prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
- prepared.vs_alloca_next = initial.vs_alloca_next /\
- prepared.vs_data_section = initial.vs_data_section /\
- prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
- abi_encoder_registered_effect {} [] initial prepared /\
- (!x v. not_fresh_at st x /\ lookup_var x initial = SOME v ==>
-   lookup_var x prepared = SOME v) /\
- (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-   op_taint qt (Var x) = op_taint tn (Var x)) /\
- qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
- qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
- ~prepared.vs_halted /\ prepared.vs_current_bb = middle.cs_current_bb /\
- prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\
- abi_decode_sim ctx func initial prepared /\
- prepared.vs_code = initial.vs_code /\ prepared.vs_outcomes = initial.vs_outcomes /\
- prepared.vs_tx_ctx = initial.vs_tx_ctx /\ prepared.vs_block_ctx = initial.vs_block_ctx /\
- prepared.vs_gas_readings = initial.vs_gas_readings /\
- ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
-   !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
- mp_tac (Q.SPEC `F` prefix_entry_register_singleton_address_paired_mode) >> simp[]
-QED
 
 
 
@@ -562,62 +418,5 @@ Proof
  strip_tac >> gvs[Excl "enc_def"] >> decide_tac
 QED
 
-Theorem prefix_entry_register_canonical_address_paired:
- !ptr. i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
- EL i atys = vyper_to_abi_type env ty /\ has_types atys avs /\
- encoded = enc (Tuple atys) (ListV avs) /\
- mem_bytes_at 0 (LENGTH encoded) initial.vs_data_section = encoded /\
- LENGTH encoded < dimword (:256) /\
- off = SUM (MAP abi_member_head_size (TAKE i atys)) /\
- abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
- FLOOKUP ce.ce_vars name = SOME (PtrVar (Var ptr) (type_memory_bytes ce ty)) /\
- lookup_var ptr initial = SOME (n2w d) /\ not_fresh_at st ptr /\
- compile_decode_args ce [build_positional_arg ce (name,ty)] off
-   DLOAD (Lit 0w) 0 st = ((),last) /\
- fresh_vars_wrt st initial /\ fn_has_code st last func /\
- (st.cs_blocks = last.cs_blocks \/ !bb.
-   lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
-     phi_prefix_length bb.bb_instructions = 0) /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
- ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
- initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
- ?src middle prepared sb H qt.
- compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w)
-   (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
- eval_operand src prepared = SOME (n2w sb) /\
- eval_operand (Var ptr) prepared = SOME (n2w d) /\
- (!x. src = Var x \/ Var ptr = Var x \/ Lit 0w = Var x ==> not_fresh_at middle x) /\
- mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)))
-   prepared.vs_data_section = enc (vyper_to_abi_type env ty) (EL i avs) /\
- sb + LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)) < dimword (:256) /\
- op_taint qt src = {} /\ fresh_vars_wrt middle prepared /\
- cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
- st.cs_next_var <= middle.cs_next_var /\ st.cs_next_id <= middle.cs_next_id /\
- fn_has_code middle last func /\ frag_ids middle last SUBSET frag_ids st last /\
- (middle.cs_blocks = last.cs_blocks \/ !bb.
-   lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
-     phi_prefix_length bb.bb_instructions = 0) /\
- prepared.vs_memory = initial.vs_memory /\ prepared.vs_allocas = initial.vs_allocas /\
- prepared.vs_alloca_next = initial.vs_alloca_next /\ allocas_from lo prepared /\
- prepared.vs_data_section = initial.vs_data_section /\
- prepared.vs_call_ctx = initial.vs_call_ctx /\ prepared.vs_labels = initial.vs_labels /\
- abi_encoder_registered_effect {} [] initial prepared /\
- (!x v. not_fresh_at st x /\ lookup_var x initial = SOME v ==>
-   lookup_var x prepared = SOME v) /\
- (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-   op_taint qt (Var x) = op_taint tn (Var x)) /\
- qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
- qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
- ~prepared.vs_halted /\ prepared.vs_current_bb = middle.cs_current_bb /\
- prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\
- abi_decode_sim ctx func initial prepared /\
- prepared.vs_code = initial.vs_code /\ prepared.vs_outcomes = initial.vs_outcomes /\
- prepared.vs_tx_ctx = initial.vs_tx_ctx /\ prepared.vs_block_ctx = initial.vs_block_ctx /\
- prepared.vs_gas_readings = initial.vs_gas_readings /\
- ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
-   !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
- mp_tac (Q.SPEC `F` prefix_entry_register_canonical_address_paired_mode) >> simp[]
-QED
 
 val _ = export_theory();

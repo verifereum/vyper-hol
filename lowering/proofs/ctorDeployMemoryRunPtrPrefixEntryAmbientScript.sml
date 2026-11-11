@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryAmbient
 Ancestors
+  ctorDeployMemoryRunMemEntryLanding
   compileEnv
   ctorDeployMemoryRunPtrPrefixEntrySemantic ctorDeployLoweringEntrySourceFrame
   ctorDeployDefs e2eDeployDefs e2eDefs e2eEntry o1PassContract
@@ -40,7 +41,7 @@ Theorem deploy_ptr_entry_actual_state_rel:
     (es0 with outcomes := SOME vs.vs_outcomes) actual
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all deploy_ptr_ctor_storage_vars >> strip_tac >>
+  drule_all ctorDeployMemoryRunMemEntryLandingTheory.ctor_task_landing_layout >> strip_tac >>
   drule_all deploy_ctor_source_start_fields >> strip_tac >>
   drule_all deploy_ptr_entry_source_accounts >> strip_tac >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,

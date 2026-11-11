@@ -553,43 +553,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem prefix_complete_array_index_entry_pair:
-  abi_decode_index_init st = (ip,st') /\
-  (!i. MEM i (emitted_insts st st') ==> MEM i (fn_insts func)) /\
-  st.cs_next_id IN ctor_actual_sites func ids /\
-  ctor_actual_scratch func ids D N s /\ D+N <= s.vs_alloca_next /\
-  alloca_inv s /\ alloca_frontier_inv_from k ctx func site s /\
-  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts func)) /\
-  k + unit_alloca_budget ctx < dimword (:256) /\
-  D <= d /\ d+32 <= D+N /\ mload d s = n2w (LENGTH vs) /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  fn_has_code st st' func /\ ~s.vs_halted /\
-  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t p H qt.
-    (^Ok) k ctx func site ids D N d outsz
-      st.cs_next_var limit_st tv vs st.cs_next_id p s 0 0 t /\
-    FLOOKUP H (STRING #"%" (toString st.cs_next_var)) = SOME (p,32) /\
-    eval_operand ip t = SOME (n2w p) /\ op_taint qt ip = {} /\
-    DISJOINT qt.t_mem {b | p <= b /\ b < p+32} /\ qt.t_mem SUBSET tn.t_mem /\
-    qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    allocas_from lo t /\ lo <= t.vs_alloca_next /\ lo <= p /\
-    (!v. abi_decoder_older_vars st.cs_next_var v ==>
-      FLOOKUP H v = FLOOKUP G v /\
-      eval_operand (Var v) t = eval_operand (Var v) s /\
-      op_taint qt (Var v) = op_taint tn (Var v)) /\
-    (!b n. b+n <= p \/ p+32 <= b ==>
-      mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
-    ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
-    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
-    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
-    t.vs_block_ctx = s.vs_block_ctx /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
-     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
-Proof
-  mp_tac (Q.INST [`checked` |-> `F`] prefix_complete_array_index_entry_mode) >>
-  simp_tac bool_ss []
-QED
 
 Theorem prefix_complete_array_setup_mode_exact:
   abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\

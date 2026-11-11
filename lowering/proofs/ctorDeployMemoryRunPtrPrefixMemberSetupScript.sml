@@ -1,6 +1,7 @@
 (* Zero-high-bound member-address setup. *)
 Theory ctorDeployMemoryRunPtrPrefixMemberSetup
 Ancestors
+  exprSimUnwrap
   slotCopyExecution
   compileEnv
   ctorDeployMemoryRunPtrPrefixBoolBody ctorDeployMemoryRunPtrPrefixSteps
@@ -108,7 +109,7 @@ Theorem prefix_member_dload_pair:
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [off] [x]) s = OK (update_var x w s)` by
-    (drule prefix_dload_step >>
+    (drule exprSimUnwrapTheory.step_DLOAD >>
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def]) >>
   simp[step_inst_non_invoke, mk_inst_def, prefix_dload_ptr_step] >>
@@ -275,7 +276,7 @@ Proof
      fs[allocas_from_def] >> metis_tac[]) >>
   `step_inst_base (mk_inst (iid+1) DLOAD [Var x] [y]) s1 = OK s2` by
     (simp[Abbr `s2`, Abbr `w`] >>
-     drule prefix_dload_step >>
+     drule exprSimUnwrapTheory.step_DLOAD >>
      disch_then (qspecl_then [`iid+1`,`y`] mp_tac) >>
      simp[abi_decode_load_def, abi_decode_source_def]) >>
   `t = s2` by gvs[run_inst_seq_def] >>

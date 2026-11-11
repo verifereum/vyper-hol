@@ -1,6 +1,8 @@
 (* Successful zero-hi copy decoders, with the supplied execution endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixCopyRun
 Ancestors
+  venomExecProofs
+  exprSimUnwrap
   instIdxIndep
   slotCopyExecution
   ghostPcTransportPtr
@@ -50,7 +52,7 @@ Proof
   `cnt < dimword (:256)` by decide_tac >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s =
      OK (update_var x (n2w cnt) s)` by
-    (drule prefix_dload_step >>
+    (drule exprSimUnwrapTheory.step_DLOAD >>
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def]) >>
   `step_inst_base (mk_inst (iid+1) GT [Var x;Lit (n2w limit)] [y])
@@ -69,7 +71,7 @@ Proof
     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   asm_rewrite_tac[] >>
   conj_tac
-  >- (drule prefix_assert_step >> disch_then (qspec_then `iid+3` mp_tac) >> simp[]) >>
+  >- (drule (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior) >> disch_then (qspec_then `iid+3` mp_tac) >> simp[]) >>
   conj_tac
   >- (qpat_assum `eval_operand src s = SOME a`
         (mp_then Any mp_tac prefix_dload_ghost_step) >>
@@ -574,7 +576,7 @@ Theorem prefix_bulk_reload_success_block:
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s = OK (update_var x w s)` by
-    (drule prefix_dload_step >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
+    (drule exprSimUnwrapTheory.step_DLOAD >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def]) >>
   `step_inst fuel ctx (mk_inst iid DLOAD [src] [x]) s = OK (update_var x w s)` by
     simp[step_inst_non_invoke, mk_inst_def] >>
@@ -615,7 +617,7 @@ Theorem prefix_bulk_body_raw:
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [src] [r]) s = OK (update_var r (n2w cnt) s)` by
-    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac prefix_dload_step) >>
+    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
      disch_then (qspecl_then [`iid`,`r`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def]) >>
   simp[run_inst_seq_def, comp_bind_def, comp_return_def] >>
@@ -626,7 +628,7 @@ Proof
   `step_inst_base (mk_inst (iid+1) MSTORE [Var dst;Var r] [])
      (update_var r (n2w cnt) s) =
      OK (mstore (w2n d) (n2w cnt) (update_var r (n2w cnt) s))` by
-    (irule prefix_mstore_step >> simp[]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_store >> simp[]) >>
   asm_rewrite_tac[] >>
   qmatch_goalsub_abbrev_tac `mstore (w2n d) (n2w cnt) s1` >>
   qabbrev_tac `s2 = mstore (w2n d) (n2w cnt) s1` >>

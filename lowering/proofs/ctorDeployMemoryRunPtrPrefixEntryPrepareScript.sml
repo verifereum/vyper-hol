@@ -1,6 +1,7 @@
 (* Preparation with an explicit ambient frame at the paired endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixEntryPrepare
 Ancestors
+  slotCopyExecution
   compileEnv
   ctorDeployMemoryRunPtrPrefixPrepare
   ctorDeployMemoryRunPtrPrefixRegisterAddress ctorDeployMemoryRunPtrPrefixSteps
@@ -84,7 +85,10 @@ Proof
       (update_var (STRING #"%" (toString st.cs_next_var)) w initial)` by
     (drule emitted_insts_emit_op >> strip_tac >>
      gvs[is_terminator_def, run_inst_seq_def, prefix_prepare_callvalue_step,
-       prefix_prepare_zero_step, prefix_prepare_iszero_step]) >>
+       SIMP_RULE (srw_ss()) [venomStateTheory.eval_operand_def]
+         (Q.INST [`a` |-> `Lit 0w`] slotCopyExecutionTheory.slot_copy_step_assign),
+       SIMP_RULE (srw_ss()) [venomExecSemanticsTheory.bool_to_word_def]
+         (Q.SPECL [`a`,`0w`] emitHelperPropsTheory.step_ISZERO)]) >>
   drule_all prefix_register_address_emit_finish >>
   disch_then (qspec_then `ctx` mp_tac) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>

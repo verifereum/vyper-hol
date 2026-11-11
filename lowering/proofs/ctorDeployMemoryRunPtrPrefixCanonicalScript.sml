@@ -1,6 +1,7 @@
 (* Canonical value semantics at the concrete checked decoder endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixCanonical
 Ancestors
+  exprSimUnwrap slotCopyExecution
   compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixWord ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixBoolWord
@@ -110,7 +111,7 @@ Proof
         (word_of_bytes T (0w:bytes32)
           (TAKE 32 (DROP sb initial.vs_data_section ++ REPLICATE 32 0w))) initial))` by
     (qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
-     gvs[run_inst_seq_def, prefix_dload_step, prefix_mstore_step,
+     gvs[run_inst_seq_def, exprSimUnwrapTheory.step_DLOAD, slotCopyExecutionTheory.slot_copy_step_store,
       step_inst_base_def, mk_inst_def, exec_read1_def, exec_write2_def,
       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
       w2n_n2w]) >>

@@ -1,6 +1,7 @@
 (* Successful finite deployment prefix before argument registration. *)
 Theory ctorDeployMemoryRunPtrPrefixPrepare
 Ancestors
+  slotCopyExecution
   compileEnv
   ctorDeployMemoryRunPtrPrefixRegisterAddress ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixSequence context emitHelper emitHelperProps exprLoweringProps
@@ -15,11 +16,6 @@ Proof
   simp[step_inst_base_def, mk_inst_def, exec_read0_def]
 QED
 
-Theorem prefix_prepare_zero_step:
-  step_inst_base (mk_inst iid ASSIGN [Lit 0w] [x]) s = OK (update_var x 0w s)
-Proof
-  simp[step_inst_base_def, mk_inst_def, eval_operand_def]
-QED
 
 Theorem prefix_prepare_callvalue_ptr:
   allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
@@ -37,10 +33,16 @@ Theorem prefix_prepare_zero_ptr:
   ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid ASSIGN [Lit 0w] [x]) s
 Proof
   strip_tac >>
+  `step_inst_base (mk_inst iid ASSIGN [Lit 0w] [x]) s =
+     OK (update_var x 0w s)` by
+    (irule slotCopyExecutionTheory.slot_copy_step_assign >>
+     simp[venomStateTheory.eval_operand_def]) >>
+  `step_inst fuel ctx (mk_inst iid ASSIGN [Lit 0w] [x]) s =
+     OK (update_var x 0w s)` by
+    simp[step_inst_non_invoke, mk_inst_def] >>
   simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def,
-    step_inst_non_invoke, prefix_prepare_zero_step, mk_inst_def,
     taint_ok_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
-    op_taint_def, update_var_def]
+    op_taint_def, update_var_def, mk_inst_def]
 QED
 
 Theorem prefix_prepare_callvalue_ghost:
@@ -59,7 +61,14 @@ Theorem prefix_prepare_zero_ghost:
   ghost_step fuel ctx PG G tn (mk_inst iid ASSIGN [Lit 0w] [x]) s =
     (DRESTRICT G (COMPL {x}), tn with t_var := tn.t_var |+ (x,{}))
 Proof
-  simp[ghost_step_def, step_inst_non_invoke, prefix_prepare_zero_step,
+  `step_inst_base (mk_inst iid ASSIGN [Lit 0w] [x]) s =
+     OK (update_var x 0w s)` by
+    (irule slotCopyExecutionTheory.slot_copy_step_assign >>
+     simp[venomStateTheory.eval_operand_def]) >>
+  `step_inst fuel ctx (mk_inst iid ASSIGN [Lit 0w] [x]) s =
+     OK (update_var x 0w s)` by
+    simp[step_inst_non_invoke, mk_inst_def] >>
+  simp[ghost_step_def,
     step_prov_def, set_prov_def, out_prov_def, step_taint_def, out_taint_def,
     set_var_taint_def, mem_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
     new_site_bytes_def, step_writes_def, written_taint_def, range_bytes_def, update_var_def,
@@ -129,12 +138,6 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem prefix_prepare_iszero_step:
-  eval_operand a s = SOME 0w ==>
-  step_inst_base (mk_inst iid ISZERO [a] [x]) s = OK (update_var x 1w s)
-Proof
-  simp[step_inst_base_def, mk_inst_def, exec_pure1_def, bool_to_word_def]
-QED
 
 Theorem prefix_prepare_iszero_ghost:
   eval_operand a s = SOME 0w ==>
@@ -142,7 +145,14 @@ Theorem prefix_prepare_iszero_ghost:
     (DRESTRICT G (COMPL {x}), tn with t_var := tn.t_var |+ (x,{}))
 Proof
   strip_tac >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_prepare_iszero_step,
+  `step_inst_base (mk_inst iid ISZERO [a] [x]) s =
+     OK (update_var x 1w s)` by
+    (drule emitHelperPropsTheory.step_ISZERO >>
+     simp[venomExecSemanticsTheory.bool_to_word_def]) >>
+  `step_inst fuel ctx (mk_inst iid ISZERO [a] [x]) s =
+     OK (update_var x 1w s)` by
+    simp[step_inst_non_invoke, mk_inst_def] >>
+  simp[ghost_step_def,
     step_prov_def, set_prov_def, out_prov_def, step_taint_def, out_taint_def,
     set_var_taint_def, mem_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
     new_site_bytes_def, step_writes_def, written_taint_def, range_bytes_def, update_var_def,
@@ -167,7 +177,9 @@ Proof
   simp[update_var_def] >> rpt strip_tac >>
   `step_inst fuel ctx (mk_inst st.cs_next_id ISZERO [a] [STRING #"%" (toString st.cs_next_var)]) s =
     OK (update_var (STRING #"%" (toString st.cs_next_var)) 1w s)` by
-    simp[step_inst_non_invoke, mk_inst_def, prefix_prepare_iszero_step] >>
+    (drule emitHelperPropsTheory.step_ISZERO >>
+     simp[venomExecSemanticsTheory.bool_to_word_def] >>
+     disch_tac >> simp[step_inst_non_invoke, mk_inst_def]) >>
   `get_instruction bb s.vs_inst_idx = SOME
     (mk_inst st.cs_next_id ISZERO [a] [STRING #"%" (toString st.cs_next_var)])` by simp[] >>
   `~is_terminator (mk_inst st.cs_next_id ISZERO [a] [STRING #"%" (toString st.cs_next_var)]).inst_opcode` by

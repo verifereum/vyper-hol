@@ -1,6 +1,9 @@
 (* The emitted Bool-array preheader, including both rejecting guards. *)
 Theory ctorDeployMemoryRunPtrPrefixBoolPreheader
 Ancestors
+  loweringHalt
+  emitHelperProps venomExecProofs
+  exprSimUnwrap slotCopyExecution
   instIdxIndep
   ghostPcTransportPtr
   ctorDeployMemoryRunPtrPrefixBoolLoop ctorDeployMemoryRunPtrPrefixBoolBody
@@ -15,13 +18,6 @@ Ancestors
 
 
 
-Theorem prefix_bool_preheader_gt_step:
-  eval_operand u s = SOME w /\ eval_operand v s = SOME z ==>
-  step_inst_base (mk_inst iid GT [u;v] [x]) s =
-    OK (update_var x (bool_to_word (w2n z < w2n w)) s)
-Proof
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def, GREATER_DEF]
-QED
 
 Theorem prefix_bool_preheader_guard_dispatch[local]:
   step_inst_base (mk_inst iid GT ops outs) s =
@@ -48,12 +44,12 @@ Theorem prefix_bool_preheader_count_guard:
      else Abort Revert_abort (revert_state (set_returndata [] s3))
 Proof
   rpt strip_tac >>
-  drule prefix_dload_step >>
+  drule exprSimUnwrapTheory.step_DLOAD >>
   disch_then (qspecl_then [`iid`,`cnt`] assume_tac) >>
   gvs[ALL_DISTINCT] >>
   simp[abi_decode_load_def, abi_decode_source_def] >>
-  simp[run_inst_seq_def, prefix_bool_preheader_gt_step,
-       prefix_boolword_iszero_step, prefix_assert_step,
+  simp[run_inst_seq_def, (REWRITE_RULE [arithmeticTheory.GREATER_DEF] emitHelperPropsTheory.step_GT),
+       emitHelperPropsTheory.step_ISZERO, (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior),
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
        bool_to_word_def, word_lo_def, w2n_n2w] >>
   simp[prefix_bool_preheader_guard_dispatch, exec_pure2_def, exec_pure1_def,
@@ -115,7 +111,7 @@ Proof
   qabbrev_tac `n = abi_decode_load DLOAD (n2w a:bytes32) s` >>
   `step_inst_base (mk_inst iid DLOAD [Var src] [cnt]) s =
      OK (update_var cnt n s)` by
-    (drule prefix_dload_step >>
+    (drule exprSimUnwrapTheory.step_DLOAD >>
      disch_then (qspecl_then [`iid`,`cnt`] mp_tac) >>
      simp[Abbr `n`, abi_decode_load_def, abi_decode_source_def]) >>
   `eval_operand (Var cnt) (update_var cnt n s) = SOME n` by
@@ -148,7 +144,7 @@ Proof
            bool_to_word_def]) >>
   conj_tac
   >- (qpat_assum `eval_operand (Var ok) _ = SOME _`
-        (mp_then Any (qspec_then `iid+3` mp_tac) prefix_assert_step) >>
+        (mp_then Any (qspec_then `iid+3` mp_tac) (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior)) >>
       Cases_on `w2n n <= max_count` >> simp[bool_to_word_def]) >>
   conj_tac
   >- (qpat_assum `eval_operand (Var src) s = SOME _`
@@ -173,14 +169,6 @@ Proof
        FLOOKUP_DRESTRICT]
 QED
 
-Theorem prefix_bool_preheader_arith_dispatch[local]:
-  step_inst_base (mk_inst iid MUL ops outs) s =
-    exec_pure2 $* (mk_inst iid MUL ops outs) s /\
-  step_inst_base (mk_inst iid ADD ops outs) s =
-    exec_pure2 $+ (mk_inst iid ADD ops outs) s
-Proof
-  simp[step_inst_base_def, mk_inst_def]
-QED
 
 Theorem prefix_bool_preheader_extent_guard:
   ALL_DISTINCT [src;cnt;vm;va;vend;cmp;ok] /\
@@ -215,7 +203,7 @@ Proof
      simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `!w t. eval_operand (Lit w) t = SOME w` by simp[eval_operand_def] >>
   gvs[ALL_DISTINCT] >>
-  simp[run_inst_seq_def, prefix_bool_preheader_arith_dispatch,
+  simp[run_inst_seq_def, ctorDeployMemoryRunPtrPrefixBoolBodyTheory.prefix_bool_body_add_dispatch, ctorDeployMemoryRunPtrPrefixBoolBodyTheory.prefix_bool_body_mul_dispatch,
        prefix_bool_preheader_guard_dispatch, exec_pure2_def, exec_pure1_def,
        mk_inst_def, word_mul_n2w, word_add_n2w, w2n_n2w, GREATER_DEF] >>
   `a+(32*n+32) = a+32*(n+1)` by decide_tac >>
@@ -298,7 +286,7 @@ Proof
      simp[Abbr `t2`]) >>
   once_rewrite_tac[ptr_safe_block_def] >> simp[is_terminator_def] >>
   qpat_assum `eval_operand (Var ok) t2 = SOME _`
-    (mp_then Any (qspec_then `iid+2` assume_tac) prefix_assert_step) >>
+    (mp_then Any (qspec_then `iid+2` assume_tac) (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior)) >>
   qpat_assum `eval_operand (Var ok) t2 = SOME _`
     (mp_then Any (qspec_then `iid+2` assume_tac) prefix_assert_ghost_step) >>
   once_rewrite_tac[ptr_safe_block_def] >> simp[] >>
@@ -342,7 +330,7 @@ Proof
   qabbrev_tac `t1 = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
   `step_inst_base i s = OK s1` by
     (qpat_assum `eval_operand (Var src) s = SOME _`
-       (mp_then Any (qspecl_then [`iid`,`cnt`] mp_tac) prefix_dload_step) >>
+       (mp_then Any (qspecl_then [`iid`,`cnt`] mp_tac) exprSimUnwrapTheory.step_DLOAD) >>
      simp[Abbr `i`, Abbr `s1`, abi_decode_load_def, abi_decode_source_def]) >>
   `i.inst_opcode = DLOAD` by simp[Abbr `i`, mk_inst_def] >>
   `step_inst fuel ctx i s = OK s1` by simp[step_inst_non_invoke] >>
@@ -415,7 +403,7 @@ Proof
   qabbrev_tac `q = step_taint i s t tn` >>
   `a < dimword(:256)` by (gvs[Abbr `a`] >> decide_tac) >>
   `step_inst_base i s = OK t` by
-    simp[Abbr `i`, Abbr `t`, Abbr `a`, prefix_alloca_step] >>
+    simp[Abbr `i`, Abbr `t`, Abbr `a`, (SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh)))] >>
   `eval_operand (Var ip) t = SOME (n2w a) /\
    eval_operand (Lit 0w) t = SOME 0w /\
    FLOOKUP (G |+ (ip,(a,32))) ip = SOME (a,32)` by
@@ -1015,7 +1003,7 @@ Proof
   qabbrev_tac `v = mstore s.vs_alloca_next 0w u` >>
   `step_inst_base (mk_inst iid DLOAD [Var src] [loaded]) s = OK l` by
     (qpat_assum `eval_operand (Var src) s = _`
-       (mp_then Any mp_tac prefix_dload_step) >>
+       (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
      disch_then (qspecl_then [`iid`,`loaded`] mp_tac) >>
      gvs[Abbr `l`, abi_decode_load_def, abi_decode_source_def]) >>
   `eval_operand (Var dst) l = SOME(n2w d) /\
@@ -1024,19 +1012,21 @@ Proof
         update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst (iid+1) MSTORE [Var dst;Var loaded] []) l = OK t` by
     (qpat_assum `eval_operand (Var dst) l = _`
-       (mp_then Any mp_tac prefix_mstore_step) >>
+       (mp_then Any mp_tac slotCopyExecutionTheory.slot_copy_step_store) >>
      disch_then drule >> disch_then (qspec_then `iid+1` mp_tac) >>
      simp[Abbr `t`, w2n_n2w]) >>
   `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas` by
     simp[Abbr `t`, Abbr `l`, mstore_def, update_var_def] >>
   `step_inst_base (mk_inst (iid+2) ALLOCA [Lit 32w] [ip]) t = OK u` by
-    simp[prefix_alloca_step, Abbr `u`] >>
+    simp[(SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh))), Abbr `u`] >>
   `eval_operand (Var ip) u = SOME(n2w s.vs_alloca_next)` by
     simp[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `s.vs_alloca_next < dimword(:256)` by decide_tac >>
   `step_inst_base (mk_inst (iid+3) MSTORE [Var ip;Lit 0w] []) u = OK v` by
     (qpat_assum `eval_operand (Var ip) u = _`
-       (mp_then Any mp_tac prefix_mstore_step) >>
+       (mp_then Any mp_tac
+         (Q.GENL [`id`,`a`,`b`,`s`,`x`,`y`]
+           slotCopyExecutionTheory.slot_copy_step_store)) >>
      disch_then (qspecl_then [`iid+3`,`Lit 0w`] mp_tac) >>
      simp[Abbr `v`, eval_operand_def, w2n_n2w]) >>
   `step_inst_base (mk_inst (iid+4) JMP [Label hdr] []) v = OK (jump_to hdr v)` by
@@ -1358,7 +1348,7 @@ Resume prefix_bool_preheader_initialize_paired[safety]:
   `d < dimword(:256)` by decide_tac >>
   `step_inst_base (mk_inst iid DLOAD [Var src] [loaded]) s = OK l` by
     (qpat_assum `eval_operand (Var src) s = _`
-       (mp_then Any mp_tac prefix_dload_step) >>
+       (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
      disch_then (qspecl_then [`iid`,`loaded`] mp_tac) >>
      gvs[Abbr `l`, abi_decode_load_def, abi_decode_source_def]) >>
   `s with vs_inst_idx := LENGTH prefix = s` by
@@ -1406,7 +1396,7 @@ Resume prefix_bool_preheader_initialize_paired[safety]:
   `step_inst_base (mk_inst (iid+2) ALLOCA [Lit 32w] [ip])
       (t with vs_inst_idx := LENGTH prefix+2) =
       OK (u with vs_inst_idx := LENGTH prefix+2)` by
-    simp[prefix_alloca_step, Abbr `u`, update_var_def] >>
+    simp[(SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh))), Abbr `u`, update_var_def] >>
   `step_taint (mk_inst (iid+2) ALLOCA [Lit 32w] [ip])
       (t with vs_inst_idx := LENGTH prefix+2)
       (u with vs_inst_idx := LENGTH prefix+2) r = z` by
@@ -1456,7 +1446,7 @@ Resume prefix_bool_preheader_initialize_paired[safety]:
      >- simp[step_inst_base_def, exec_write2_def, mk_inst_def,
              Abbr `t`, w2n_n2w] >>
      conj_tac
-     >- simp[prefix_alloca_step, Abbr `u`] >>
+     >- simp[(SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh))), Abbr `u`] >>
      `eval_operand (Lit 0w) u = SOME 0w` by simp[eval_operand_def] >>
      simp[step_inst_base_def, exec_write2_def, mk_inst_def,
           Abbr `v`, w2n_n2w]) >>

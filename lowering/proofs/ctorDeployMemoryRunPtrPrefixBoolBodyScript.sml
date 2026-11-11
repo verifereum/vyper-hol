@@ -1,6 +1,7 @@
 (* Arithmetic and two-region frames for the repeatedly visited Bool body. *)
 Theory ctorDeployMemoryRunPtrPrefixBoolBody
 Ancestors
+  exprSimUnwrap
   slotCopyExecution
   compileEnv
   ctorDeployMemoryRunPtrPrefixBoolHeader ctorDeployMemoryRunPtrPrefixBoolWord
@@ -12,14 +13,14 @@ Ancestors
   venomExecSemantics venomExecProofs venomState venomInst emitHelper
   words arithmetic list finite_map pred_set codegenRel contextCodegenRel memLocDefs
 
-Theorem prefix_bool_body_add_dispatch[local]:
+Theorem prefix_bool_body_add_dispatch:
   step_inst_base (mk_inst iid ADD ops outs) s =
     exec_pure2 $+ (mk_inst iid ADD ops outs) s
 Proof
   pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[]
 QED
 
-Theorem prefix_bool_body_mul_dispatch[local]:
+Theorem prefix_bool_body_mul_dispatch:
   step_inst_base (mk_inst iid MUL ops outs) s =
     exec_pure2 $* (mk_inst iid MUL ops outs) s
 Proof
@@ -174,7 +175,7 @@ QED
 
 Resume prefix_bool_body_address_steps[load]:
   qpat_assum `eval_operand (Var ip) s = SOME _`
-    (mp_then Any mp_tac prefix_mload_step) >>
+    (mp_then Any mp_tac exprLoweringPropsTheory.step_MLOAD_local) >>
   simp[Abbr `u0`, w2n_n2w]
 QED
 
@@ -385,7 +386,7 @@ Proof
      irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_lit_local]) >>
   `step_inst_base k t = OK u` by
     (qpat_assum `eval_operand (Var ip) t = SOME _`
-       (mp_then Any mp_tac prefix_mstore_step) >>
+       (mp_then Any mp_tac slotCopyExecutionTheory.slot_copy_step_store) >>
      disch_then drule >> disch_then (qspec_then `iid+1` mp_tac) >>
      simp[Abbr `k`, Abbr `u`, w2n_n2w]) >>
   simp[run_inst_seq_def] >>
@@ -556,7 +557,7 @@ Resume prefix_bool_body_execution[tail]:
     (gvs[ALL_DISTINCT] >> simp[Abbr `v4`, prefix_bool_body_eval_update]) >>
   `step_inst_base (mk_inst (iid+13) MSTORE [Var ip;Var inc] []) v4 = OK v5` by
     (qpat_assum `eval_operand (Var ip) v4 = SOME _`
-       (mp_then Any mp_tac prefix_mstore_step) >>
+       (mp_then Any mp_tac slotCopyExecutionTheory.slot_copy_step_store) >>
      disch_then drule >> disch_then (qspec_then `iid+13` mp_tac) >>
      simp[Abbr `v5`, w2n_n2w]) >>
   `step_inst_base (mk_inst (iid+14) JMP [Label hdr] []) v5 = OK (jump_to hdr v5)` by
@@ -610,7 +611,7 @@ Proof
   `scratch < dimword(:256)` by decide_tac >>
   `step_inst_base inst s = OK t` by
     (simp[Abbr `inst`, Abbr `t`] >>
-     drule prefix_mload_step >> simp[w2n_n2w]) >>
+     drule exprLoweringPropsTheory.step_MLOAD_local >> simp[w2n_n2w]) >>
   `step_inst fuel ctx inst s = OK t` by
     simp[Abbr `inst`, step_inst_non_invoke] >>
   simp[] >> conj_tac >- suspend "indexed" >>
@@ -907,7 +908,8 @@ Resume prefix_bool_body_paired[source_add]:
   simp_tac pure_ss [Abbr `g1`, Abbr `t1`, Abbr `u1`] >>
   qpat_x_assum `EL 1 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_add_n2w] >>
-  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -950,7 +952,8 @@ Resume prefix_bool_body_paired[source_mul]:
   simp_tac pure_ss [Abbr `g2`, Abbr `t2`, Abbr `u2`] >>
   qpat_x_assum `EL 2 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_mul_n2w] >>
-  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `MUL`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `MUL`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -996,7 +999,8 @@ Resume prefix_bool_body_paired[source_ptr]:
   simp_tac pure_ss [Abbr `g3`, Abbr `t3`, Abbr `u3`] >>
   qpat_x_assum `EL 3 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM ADD_ASSOC, GSYM word_add_n2w] >>
-  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >> simp[word_add_n2w]
 QED
 
@@ -1040,7 +1044,8 @@ Resume prefix_bool_body_paired[dest_add]:
   simp_tac pure_ss [Abbr `g4`, Abbr `t4`, Abbr `u4`] >>
   qpat_x_assum `EL 4 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_add_n2w] >>
-  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -1090,7 +1095,8 @@ Resume prefix_bool_body_paired[dest_mul]:
   simp_tac pure_ss [Abbr `g5`, Abbr `t5`, Abbr `u5`] >>
   qpat_x_assum `EL 5 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_mul_n2w] >>
-  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `MUL`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `MUL`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -1137,7 +1143,8 @@ Resume prefix_bool_body_paired[dest_ptr]:
   simp_tac pure_ss [Abbr `g6`, Abbr `t6`, Abbr `u6`] >>
   qpat_x_assum `EL 6 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM ADD_ASSOC, GSYM word_add_n2w] >>
-  irule (GEN_ALL (SIMP_RULE bool_ss [LET_THM, opcode_distinct] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >> simp[word_add_n2w]
 QED
 
@@ -1209,7 +1216,7 @@ QED
 
 Resume prefix_bool_body_paired[word_load_raw]:
   qpat_assum `eval_operand (Var sp) u6 = _`
-    (mp_then Any mp_tac prefix_dload_step) >>
+    (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
   disch_then (qspecl_then [`iid+7`,`x`] mp_tac) >>
   simp[Abbr `v0`, Abbr `w`, abi_decode_load_def, abi_decode_source_def]
 QED
@@ -1276,7 +1283,9 @@ Resume prefix_bool_body_paired[word_store]:
   `EL 11 insns = mk_inst (iid+11) MSTORE [Var dp;Var x] []` by simp[Abbr `insns`] >>
   `step_inst_base (EL 11 insns) v2 = OK v3` by
     (qpat_assum `eval_operand (Var dp) v2 = _`
-      (mp_then Any mp_tac prefix_mstore_step) >>
+      (mp_then Any mp_tac
+        (Q.GENL [`id`,`a`,`b`,`s`,`x`,`y`]
+          slotCopyExecutionTheory.slot_copy_step_store)) >>
      disch_then (qspecl_then [`iid+11`,`Var x`,`w`] mp_tac) >>
      simp[Abbr `v3`]) >>
   `!f check_fn. step_inst f ctx (EL 11 insns) v2 = OK v3 /\
@@ -1376,7 +1385,8 @@ Resume prefix_bool_body_paired[tail_apply]:
   simp_tac pure_ss [Abbr `g10`, Abbr `t11`, Abbr `t12`, Abbr `v5`, Abbr `v4`] >>
   qpat_x_assum `EL 12 insns = _` (fn th => pure_rewrite_tac [th]) >>
   qpat_x_assum `EL 13 insns = _` (fn th => pure_rewrite_tac [th]) >>
-  irule (GEN_ALL (SRULE [LET_THM, GSYM ADD_ASSOC]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, GSYM ADD_ASSOC]
     (Q.INST [`iid` |-> `iid+12`] prefix_bool_body_increment_store))) >> simp[] >>
   qexists_tac `ncount` >> simp[]
 QED
@@ -1665,7 +1675,7 @@ Resume prefix_bool_body_paired[terminal_facts]:
       qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   simp[step_inst_non_invoke] >>
   qpat_assum `eval_operand (Var z) (_ with vs_inst_idx := _) = SOME 0w`
-    (mp_then Any (qspec_then `iid+10` mp_tac) prefix_assert_step) >> simp[]
+    (mp_then Any (qspec_then `iid+10` mp_tac) (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior)) >> simp[]
 QED
 
 Resume prefix_bool_body_paired[continuation]:
@@ -1688,7 +1698,7 @@ Resume prefix_bool_body_paired[raw_trace]:
          POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
       simp_tac (srw_ss()) [Abbr `insns`, Abbr `u0`] >>
       qpat_assum `eval_operand (Var ip) s = _`
-        (mp_then Any mp_tac prefix_mload_step) >> simp[]) >>
+        (mp_then Any mp_tac exprLoweringPropsTheory.step_MLOAD_local) >> simp[]) >>
   simp[step_inst_non_invoke]
 QED
 

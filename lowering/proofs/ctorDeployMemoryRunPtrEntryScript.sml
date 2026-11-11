@@ -410,69 +410,6 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem deploy_ptr_entry_prefix_source:
-  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
-  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
-  deploy_ctor_code tops rp runtime_bc unit
-    (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
-  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
-  lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
-  fn_entry_label fn = SOME lbl ==>
-  ?actual H qt scope fargs ce0.
-    nr = F /\
-    lookup_function NONE tx.function_name Deploy tops = SOME (mut,F,fargs,[],NoneT,body) /\
-    es0.scopes = [scope] /\
-    (!id b sz. local_region ce es0.scopes actual id b sz ==> imm_len tops <= b) /\
-    es0.tStorage = am.tStorage /\ es0.logs = am.logs /\
-    es0.requests = [] /\ es0.pending_deletions = am.pending_deletions /\
-    imm_len tops <= actual.vs_alloca_next /\
-    es0.immutables = am_c.immutables /\ es0.outcomes = NONE /\
-    send_call_value mut (deploy_evaluation_context tops am tx)
-      (initial_state am_c [scope]) = (INL (),es0) /\
-    am_c.accounts = am.accounts /\
-    (!inst n base sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-      inst.inst_operands = [Lit n] /\
-      FLOOKUP actual.vs_allocas inst.inst_id = SOME (base,sz) ==> sz = w2n n) /\
-    actual.vs_accounts = vs.vs_accounts /\ actual.vs_transient = vs.vs_transient /\
-    actual.vs_logs = vs.vs_logs /\ actual.vs_requests = vs.vs_requests /\
-    actual.vs_pending_deletions = vs.vs_pending_deletions /\
-    allocas_from (imm_len tops) actual /\
-    (!a. a < imm_len tops ==> read_byte a actual.vs_memory = 0w) /\
-    bind_arguments (type_env tops) fargs tx.args = SOME scope /\
-    local_ptrs_rel func ce [scope] actual /\
-    alloca_inv actual /\
-    (!site. alloca_frontier_inv_from (imm_len tops) unit.cu_context func site actual) /\
-    fresh_vars_wrt sa actual /\
-    (!aid. sa.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
-    ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
-    actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    actual.vs_data_section = vs.vs_data_section /\
-    actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_labels = vs.vs_labels /\
-    actual.vs_code = vs.vs_code /\ actual.vs_outcomes = vs.vs_outcomes /\
-    actual.vs_tx_ctx = vs.vs_tx_ctx /\ actual.vs_block_ctx = vs.vs_block_ctx /\
-    actual.vs_gas_readings = vs.vs_gas_readings /\
-    abi_decode_sim unit.cu_context func
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) actual /\
-    eval_operand imm actual = SOME 0w /\ op_taint qt imm = {} /\ op_prov H imm = NONE /\
-    deploy_ptr_inv tops runtime_bc am tx imm H qt actual /\
-    ((!fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
-        fuel unit.cu_context func [] H qt actual) ==>
-      !fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
-        fuel unit.cu_context func [] FEMPTY entry_taint
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)) /\
-    (!j. j < LENGTH fargs ==>
-      ?entry d B.
-        lookup_scopes (FST (EL j fargs)) [scope] = SOME entry /\
-        local_region ce [scope] actual (FST (EL j fargs)) d
-          (type_memory_bytes ce0 (SND (EL j fargs))) /\
-        FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce0 (SND (EL j fargs)))] /\
-        DISJOINT B qt.t_mem /\ (!a. a IN B ==> a < actual.vs_alloca_next) /\
-        (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
-          val_in_memory entry.type entry.value d mem))
-Proof
-  mp_tac (Q.SPEC `F` deploy_ptr_entry_prefix_source_mode) >> simp_tac bool_ss []
-QED
 
 Theorem deploy_ptr_entry_prefix_related_checked:
   deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\

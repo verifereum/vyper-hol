@@ -1,6 +1,7 @@
 (* Zero-hi element preparation: concrete code boundaries for paired execution. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopElement
 Ancestors
+  exprSimUnwrap
   instIdxIndep
   ghostPcTransportPtr
   slotCopyExecution
@@ -167,13 +168,14 @@ Proof
   simp[eval_operand_def,op_taint_def,Abbr `s1`,allocas_from_def,update_var_def] >>
   simp[ADD1] >>
   qmatch_goalsub_abbrev_tac `step_taint _ us ut tq` >>
-  `ut = update_var y (j*stride) us` by
+  `ut = (update_var y (j*stride) us) with vs_inst_idx := s.vs_inst_idx+1` by
     simp[Abbr `ut`,Abbr `us`,update_var_def] >>
   `op_taint tq idx = {} /\ op_taint tq (Lit stride) = {}` by
     simp[Abbr `tq`,op_taint_def] >>
   `step_taint (mk_inst (iid+1) MUL [idx;Lit stride] [y]) us ut tq =
      tq with t_var := tq.t_var |+ (y,{})` by
-    (simp[] >> irule prefix_loop_element_mul_taint >> simp[op_taint_def]) >>
+    (simp[ghostPcTransportPtrTheory.step_taint_inst_idx_right] >>
+     irule prefix_loop_element_mul_taint >> simp[op_taint_def]) >>
   simp[] >>
   irule prefix_member_add_block >> simp[] >>
   conj_tac >- (fs[allocas_from_def,Abbr `us`,update_var_def] >> metis_tac[]) >>
@@ -207,9 +209,9 @@ Theorem prefix_loop_element_mload_pair:
       op_taint qt (Var v) = op_taint tn (Var v))
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  conj_tac >- (irule prefix_mload_step >> simp[]) >>
+  conj_tac >- (irule exprLoweringPropsTheory.step_MLOAD_local >> simp[]) >>
   conj_tac >- (simp[step_inst_non_invoke,mk_inst_def] >>
-    pure_rewrite_tac[GSYM mk_inst_def] >> irule prefix_mload_step >> simp[]) >>
+    pure_rewrite_tac[GSYM mk_inst_def] >> irule exprLoweringPropsTheory.step_MLOAD_local >> simp[]) >>
   conj_tac >- (irule prefix_mload_ptr_step >> simp[]) >>
   conj_tac >- (irule (SRULE [LET_THM] prefix_mload_ghost_step) >> simp[]) >>
   conj_tac >- (irule prefix_mload_output_clean >> simp[] >> metis_tac[ADD_COMM]) >>
@@ -274,7 +276,7 @@ Proof
       lookup_var_def,update_var_def,op_taint_def,FLOOKUP_UPDATE]) >>
   `step_inst_base (mk_inst iid DLOAD [head] [x]) s = OK s1` by
     (simp[Abbr `s1`,Abbr `w`] >>
-     qpat_assum `eval_operand head s = SOME a` (mp_then Any mp_tac prefix_dload_step) >>
+     qpat_assum `eval_operand head s = SOME a` (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>
   `step_inst_base (mk_inst (iid+1) ADD [base_op;Var x] [y]) s1 = OK s2` by
@@ -452,7 +454,6 @@ Proof
   simp[] >>
   conj_tac
   >- simp[eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE] >>
-  conj_tac >- simp[update_var_def] >>
   conj_tac
   >- (rpt strip_tac >> Cases_on `op` >>
       fs[abi_decoder_operand_live_def,abi_decoder_older_vars_def,
@@ -499,7 +500,7 @@ Proof
       lookup_var_def,update_var_def,FLOOKUP_UPDATE]) >>
   `step_inst_base (mk_inst iid DLOAD [head] [x]) s = OK s1` by
     (simp[Abbr `s1`] >>
-     qpat_assum `eval_operand head s = SOME a` (mp_then Any mp_tac prefix_dload_step) >>
+     qpat_assum `eval_operand head s = SOME a` (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>
   `step_inst_base (mk_inst (iid+1) ADD [base_op;Var x] [y]) s1 = OK s2` by
@@ -723,7 +724,7 @@ Proof
       lookup_var_def,update_var_def,op_taint_def,FLOOKUP_UPDATE]) >>
   `step_inst_base (mk_inst iid DLOAD [head] [x]) s = OK s1` by
     (simp[Abbr `s1`,Abbr `w`] >>
-     qpat_assum `eval_operand head s = SOME a` (mp_then Any mp_tac prefix_dload_step) >>
+     qpat_assum `eval_operand head s = SOME a` (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>
   `step_inst_base (mk_inst (iid+1) ADD [base_op;Var x] [y]) s1 = OK s2` by
@@ -1006,7 +1007,6 @@ Proof
   simp[] >>
   conj_tac
   >- simp[eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE] >>
-  conj_tac >- simp[update_var_def] >>
   conj_tac
   >- (rpt strip_tac >> Cases_on `op` >>
       fs[abi_decoder_operand_live_def,abi_decoder_older_vars_def,

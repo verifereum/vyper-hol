@@ -54,7 +54,7 @@ Proof
      irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_lit_local]) >>
   `step_inst_base k u = OK t` by
     (qpat_assum `eval_operand (Var ip) u = SOME _`
-      (mp_then Any mp_tac prefix_mstore_step) >> disch_then drule >>
+      (mp_then Any mp_tac slotCopyExecutionTheory.slot_copy_step_store) >> disch_then drule >>
      disch_then (qspec_then `iid+1` mp_tac) >>
      simp[Abbr `k`,Abbr `t`,w2n_n2w]) >>
   `q.t_mem = tn.t_mem /\ q.t_stor = tn.t_stor /\

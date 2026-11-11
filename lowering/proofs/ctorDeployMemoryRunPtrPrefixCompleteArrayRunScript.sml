@@ -142,50 +142,6 @@ Proof
   simp[jump_to_def,abi_decode_header_state_def,update_var_def]
 QED
 
-Theorem prefix_complete_array_header_pair:
-  (^Ok) k ctx func site ids D N d outsz next limit_st
-    tv vs slot_id slot initial j j s /\
-  abi_decode_loop_cfg func hdr body_lbl exit_lbl hid (Var slot_var) src DLOAD
-    (STRING #"%" (toString first)) (STRING #"%" (toString (first+1)))
-    (STRING #"%" (toString (first+2))) (STRING #"%" (toString (first+3))) /\
-  next <= first /\ first+4 <= limit_st.cs_next_var /\
-  abi_decoder_operand_live next src /\ abi_decoder_operand_live next (Var slot_var) /\
-  s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  eval_operand (Var slot_var) s = SOME (n2w slot) /\
-  eval_operand src s = SOME srcaddr /\
-  abi_decode_load DLOAD srcaddr s = n2w (LENGTH vs) /\
-  LENGTH vs < dimword(:256) /\ FLOOKUP G slot_var = SOME (slot,32) /\
-  slot+32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword(:256) /\
-  allocas_from lo s /\ lo <= slot /\ ~ctx_has_dalloca ctx /\
-  op_taint tn (Var slot_var) = {} /\ op_taint tn src = {} /\
-  (!a. a<32 ==> slot+a NOTIN tn.t_mem) ==>
-  let t = jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
-    (abi_decode_header_state (STRING #"%" (toString first))
-      (STRING #"%" (toString (first+1))) (STRING #"%" (toString (first+2)))
-      (STRING #"%" (toString (first+3))) j (LENGTH vs) s)
-  in ?H qt.
-    (^Ok) k ctx func site ids D N d outsz next limit_st
-      tv vs slot_id slot initial j j t /\
-    abi_decode_sim ctx func s t /\
-    ~t.vs_halted /\ t.vs_inst_idx = 0 /\
-    t.vs_current_bb = (if j < LENGTH vs then body_lbl else exit_lbl) /\
-    t.vs_memory = s.vs_memory /\ t.vs_data_section = s.vs_data_section /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    allocas_from lo t /\ lo <= t.vs_alloca_next /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!x. abi_decoder_older_vars next x ==> FLOOKUP H x = FLOOKUP G x) /\
-    (!opr. abi_decoder_operand_live next opr ==>
-      eval_operand opr t = eval_operand opr s /\ op_taint qt opr = op_taint tn opr) /\
-    op_taint qt (Var (STRING #"%" (toString first))) = {} /\
-    t.vs_code = s.vs_code /\ t.vs_gas_readings = s.vs_gas_readings /\
-    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
-    t.vs_block_ctx = s.vs_block_ctx /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
-     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
-Proof
-  mp_tac (prefix_complete_array_header_pair_mode |> Q.INST [`checked` |-> `F`]) >> simp[]
-QED
 
 Theorem prefix_complete_array_header_reach_pair_mode:
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src dst
@@ -257,42 +213,6 @@ Proof
   goal_assum (drule_at Any) >> fs[]
 QED
 
-Theorem prefix_complete_array_header_reach_pair:
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src dst
-    DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Var slot_var) src dst
-    sb d slot b cap next initial /\
-  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
-    initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
-  (^Ok) k ctx func site ids D N d outsz next limit_st
-    tv vs slot_id slot initial j j s /\
-  ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\
-  FLOOKUP G slot_var = SOME (slot,32) /\
-  slot+32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword(:256) /\
-  allocas_from lo s /\ lo <= slot /\ ~ctx_has_dalloca ctx /\
-  op_taint tn (Var slot_var) = {} /\ op_taint tn src = {} /\
-  (!a. a < 32 ==> slot+a NOTIN tn.t_mem) ==>
-  ?t H qt.
-    (^Ok) k ctx func site ids D N d outsz next limit_st
-      tv vs slot_id slot initial j j t /\
-    abi_decode_sim ctx func s t /\ ~t.vs_halted /\ t.vs_inst_idx = 0 /\
-    t.vs_current_bb = (if j < LENGTH vs then st.cs_current_bb else exit_lbl) /\
-    t.vs_memory = s.vs_memory /\ t.vs_data_section = s.vs_data_section /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    allocas_from lo t /\ lo <= t.vs_alloca_next /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!x. abi_decoder_older_vars next x ==> FLOOKUP H x = FLOOKUP G x) /\
-    (!opr. abi_decoder_operand_live next opr ==>
-      eval_operand opr t = eval_operand opr s /\ op_taint qt opr = op_taint tn opr) /\
-    t.vs_code = s.vs_code /\ t.vs_gas_readings = s.vs_gas_readings /\
-    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
-    t.vs_block_ctx = s.vs_block_ctx /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
-     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
-Proof
-  mp_tac (prefix_complete_array_header_reach_pair_mode |> Q.INST [`checked` |-> `F`]) >> simp[]
-QED
 
 (* The persistent relation carries operational and ambient frames together. *)
 val Frame = ``\(s,G,tn,B) (t,H,qt,A).
@@ -324,11 +244,6 @@ Proof
   metis_tac[abi_decode_sim_trans,SUBSET_TRANS,SUBSET_DEF,gas_path_mem_then,ADD_0]
 QED
 
-Theorem prefix_complete_array_frame_transitive:
-  transitive (^Frame)
-Proof
-  mp_tac (prefix_complete_array_frame_transitive_mode |> Q.INST [`checked` |-> `F`]) >> simp[transitive_def]
-QED
 
 val Pk = ``
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src (Var dst_var)
@@ -570,32 +485,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem prefix_complete_array_body_pair:
-  (^Pk) /\ j < LENGTH vs /\
-  (^LoopAt) st.cs_current_bb (LENGTH st.cs_current_insts) j X ==>
-  ?prepared H qt.
-    (^Ok) k ctx func site ids D N d
-      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
-      tv vs slot_id slot initial j j prepared /\
-    ~prepared.vs_halted /\ prepared.vs_current_bb = middle.cs_current_bb /\
-    prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\
-    eval_operand (FST ops) prepared = SOME (n2w j) /\
-    eval_operand (FST (SND ops)) prepared = SOME (n2w (sb +
-      abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j)) /\
-    eval_operand (SND (SND ops)) prepared = SOME (n2w (d+32+j*type_memory_bytes ce ty)) /\
-    abi_decoder_operand_live middle.cs_next_var (FST ops) /\
-    abi_decoder_operand_live middle.cs_next_var (FST (SND ops)) /\
-    abi_decoder_operand_live middle.cs_next_var (SND (SND ops)) /\
-    op_taint qt (FST ops) = {} /\ op_taint qt (FST (SND ops)) = {} /\
-    op_taint qt (SND (SND ops)) = {} /\
-    op_prov H (SND (SND ops)) = SOME (b,cap) /\
-    allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\
-    prepared.vs_memory = (FST X).vs_memory /\
-    (^Frame) X (prepared,H,qt,SND (SND (SND X)))
-Proof
-  mp_tac (Q.SPEC `F` (GEN ``checked:bool`` prefix_complete_array_body_pair_mode)) >>
-  simp[]
-QED
 
 Theorem prefix_complete_array_header_support:
   (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 s.vs_memory) ==>
@@ -855,15 +744,6 @@ QED
 
 Finalise prefix_complete_array_body_iteration_pair_mode
 
-Theorem prefix_complete_array_body_iteration_pair:
-  (^CshiftCode) ty tv ==>
-  (^Pk) /\ j < LENGTH vs /\
-  (^LoopAt) st.cs_current_bb (LENGTH st.cs_current_insts) j X ==>
-  ?Y. (^LoopAt) hdr 0 (SUC j) Y /\ (^Frame) X Y
-Proof
-  mp_tac (prefix_complete_array_body_iteration_pair_mode |> Q.INST [`checked` |-> `F`]) >>
-  simp_tac std_ss []
-QED
 
 Theorem prefix_complete_array_successor_pair_mode:
   (^CshiftMode) checked ty tv ==>
@@ -888,14 +768,6 @@ Proof
   qexists_tac `Y` >> asm_rewrite_tac[]
 QED
 
-Theorem prefix_complete_array_successor_pair:
-  (^CshiftCode) ty tv ==>
-  (^Pk) /\ j < LENGTH vs /\ (^LoopAt) hdr 0 j X ==>
-  ?Y. (^LoopAt) hdr 0 (SUC j) Y /\ (^Frame) X Y
-Proof
-  mp_tac (prefix_complete_array_successor_pair_mode |> Q.INST [`checked` |-> `F`]) >>
-  simp_tac std_ss []
-QED
 
 Theorem prefix_complete_array_finite_pair_mode:
   (^CshiftMode) checked ty tv ==> (^PkMode) ==>
@@ -922,14 +794,6 @@ Proof
   qexists_tac `Y` >> asm_rewrite_tac[]
 QED
 
-Theorem prefix_complete_array_finite_pair:
-  (^CshiftCode) ty tv ==> (^Pk) ==>
-  !n j X. LENGTH vs = j+n /\ (^LoopAt) hdr 0 j X ==>
-    ?Y. (^LoopAt) exit_lbl 0 (LENGTH vs) Y /\ (^Frame) X Y
-Proof
-  mp_tac (prefix_complete_array_finite_pair_mode |> Q.INST [`checked` |-> `F`]) >>
-  simp_tac std_ss []
-QED
 
 Theorem prefix_complete_array_prepared_pair_mode:
   (^CshiftMode) checked ty tv ==> (^PkMode) /\
@@ -986,22 +850,5 @@ Proof
   fs[mload_def,mem_word_at_def] >> metis_tac[]
 QED
 
-Theorem prefix_complete_array_prepared_pair:
-  (^CshiftCode) ty tv ==> (^Pk) /\
-  (^LoopAt) prepared.vs_current_bb (LENGTH prefix) 0 (prepared,G,tn,B) /\
-  lookup_block prepared.vs_current_bb func.fn_blocks = SOME bb /\
-  bb.bb_instructions = prefix ++ [mk_inst id JMP [Label hdr] []] /\
-  lookup_block hdr func.fn_blocks = SOME hdr_bb /\
-  phi_prefix_length hdr_bb.bb_instructions = 0 ==>
-  ?actual H qt A.
-    (^LoopAt) exit_lbl 0 (LENGTH vs) (actual,H,qt,A) /\
-    (^Frame) (prepared,G,tn,B) (actual,H,qt,A) /\
-    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
-    (!mem. (!a. a IN A ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
-      val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d mem)
-Proof
-  mp_tac (prefix_complete_array_prepared_pair_mode |> Q.INST [`checked` |-> `F`]) >>
-  simp_tac std_ss []
-QED
 
 val _ = export_theory();

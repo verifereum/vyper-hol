@@ -1,6 +1,7 @@
 (* Paired boundaries for canonical dynamic-array loop preparation. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopSetup
 Ancestors
+  exprSimUnwrap
   ghostPcTransportPtr
   ctorDeployMemoryRunPtrPrefixBoolWord
   compileEnv
@@ -99,7 +100,7 @@ Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s =
     OK (update_var x (abi_decode_load DLOAD a s) s)` by
-    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac prefix_dload_step) >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
+    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>
   `eval_operand (Var dst) (update_var x (abi_decode_load DLOAD a s) s) = SOME (n2w d)` by
     fs[eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE] >>
@@ -201,6 +202,8 @@ Resume prefix_loop_count_header_block_interior[trace]:
   fs[ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def] >>
   mp_tac prefix_loop_count_header_steps_interior >>
   simp[prefix_copy_pure_taint] >> strip_tac >>
+  gvs[GSYM mk_inst_def] >>
+  gvs[prefix_copy_pure_taint] >>
   gvs[step_inst_non_invoke,mk_inst_def,update_var_def,mstore_def]
 QED
 

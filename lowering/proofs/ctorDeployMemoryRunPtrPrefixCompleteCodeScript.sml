@@ -524,32 +524,8 @@ Proof
   simp[prefix_scalar_complete_mode_contract]
 QED
 
-Theorem prefix_empty_complete_mode_contract:
-  type_to_abi_dec_info sf ce ty = DecComplex T [] ==> (^CshiftMode) checked ty tv
-Proof
-  disch_tac >> BETA_TAC >> rpt gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
-    (DecComplex T []) st = ((),st')` by metis_tac[] >>
-  drule prefix_empty_inline_code >> strip_tac >>
-  drule_all abi_decoder_empty_metadata_value >> strip_tac >>
-  qexistsl [`initial`,`G`,`tn`,`{}`] >>
-  simp[abi_encoder_registered_effect_refl, abi_decode_sim_refl, gas_path_mem_rules] >>
-  metis_tac[]
-QED
 
-Theorem prefix_empty_complete_code_contract:
-  type_to_abi_dec_info sf ce ty = DecComplex T [] ==> (^CshiftCode) ty tv
-Proof
-  mp_tac (Q.INST [`checked` |-> `F`] prefix_empty_complete_mode_contract) >>
-  simp_tac bool_ss []
-QED
 
-Theorem prefix_empty_complete_checked_contract:
-  type_to_abi_dec_info sf ce ty = DecComplex T [] ==> (^CshiftMode) T ty tv
-Proof
-  simp[prefix_empty_complete_mode_contract]
-QED
 
 val HshiftMode = ``\checked ctx func site ids D N limit_st tv v d sz st st' initial G tn actual H qt B Ddead lo PG.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
@@ -913,45 +889,3 @@ QED
 
 (* The generic interface is exactly false mode; normalize the quotation once. *)
 val MshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^MshiftMode) F``));
-
-Theorem prefix_members_complete_code_nil:
-  (^MshiftCode) [] []
-Proof
-  mp_tac (Q.INST [`checked` |-> `F`] prefix_members_complete_mode_nil) >>
-  simp_tac bool_ss []
-QED
-
-Theorem prefix_members_complete_checked_nil:
-  (^MshiftMode) T [] []
-Proof
-  simp_tac bool_ss [prefix_members_complete_mode_nil]
-QED
-
-Theorem prefix_members_complete_code_cons:
-  (^CshiftCode) ty tv /\ (^MshiftCode) tys tvs ==>
-  (^MshiftCode) (ty::tys) (tv::tvs)
-Proof
-  mp_tac (Q.INST [`checked` |-> `F`] prefix_members_complete_mode_cons) >>
-  simp_tac bool_ss []
-QED
-
-Theorem prefix_members_complete_checked_cons:
-  (^CshiftMode) T ty tv /\ (^MshiftMode) T tys tvs ==>
-  (^MshiftMode) T (ty::tys) (tv::tvs)
-Proof
-  mp_tac (Q.INST [`checked` |-> `T`] prefix_members_complete_mode_cons) >>
-  simp_tac bool_ss []
-QED
-
-Theorem prefix_members_complete_code:
-  !tys tvs. LIST_REL (^CshiftCode) tys tvs ==> (^MshiftCode) tys tvs
-Proof
-  mp_tac (Q.INST [`checked` |-> `F`] prefix_members_complete_mode) >>
-  simp_tac bool_ss []
-QED
-
-Theorem prefix_members_complete_checked:
-  !tys tvs. LIST_REL ((^CshiftMode) T) tys tvs ==> (^MshiftMode) T tys tvs
-Proof
-  simp_tac bool_ss [prefix_members_complete_mode]
-QED
