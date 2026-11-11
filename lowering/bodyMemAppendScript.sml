@@ -10,7 +10,8 @@ Theorem body_append_storage_narrow_mem:
     body_inv tops ctx cenv cx /\
     supported_variable_decl tops nid =
       SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
-    (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem ==>
+    (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem /\
+    type_memory_bytes cenv elem < 2 ** 64 ==>
     body_stmt_mem_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
   cheat
