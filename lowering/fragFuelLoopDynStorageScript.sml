@@ -387,6 +387,139 @@ Proof
   simp[vars_kept_def]
 QED
 
+(* Framed opcode boundaries retain the two loop registers and the entry frame. *)
+Theorem dynstorage_condition_frame[local]:
+  !G ctx fn s bb lv counter vl vd l c id1 id2 id3 body exit N origin.
+    no_phi_fn fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id1 LT [Var counter; Var lv] [vl]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst id2 ISZERO [Var vl] [vd]) /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) =
+      SOME (mk_inst id3 JNZ [Var vd; Label exit; Label body] []) /\
+    lookup_var lv s = SOME l /\ lookup_var counter s = SOME c /\
+    lv <> vl /\ lv <> vd /\ counter <> vl /\ counter <> vd /\
+    ~var_below N vl /\ ~var_below N vd /\ vars_kept N {} origin s ==>
+    fuel_outcome G ctx fn s 1
+      (\t. t.vs_current_bb = (if w2n c < w2n l then body else exit) /\
+           t.vs_inst_idx = 0 /\ lookup_var lv t = SOME l /\
+           lookup_var counter t = SOME c /\ vars_kept N {} origin t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dynstorage_condition_outcome >> simp[] >>
+  disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[jump_to_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       vars_kept_def] >>
+  rpt strip_tac >> fs[vars_kept_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem dynstorage_increment_frame[local]:
+  !G ctx fn s bb lv counter vi l c id1 id2 id3 cond N origin.
+    no_phi_fn fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id1 ADD [Var counter; Lit 1w] [vi]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst id2 ASSIGN [Var vi] [counter]) /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) =
+      SOME (mk_inst id3 JMP [Label cond] []) /\
+    lookup_var lv s = SOME l /\ lookup_var counter s = SOME c /\
+    lv <> counter /\ lv <> vi /\
+    ~var_below N vi /\ ~var_below N counter /\ vars_kept N {} origin s ==>
+    fuel_outcome G ctx fn s 1
+      (\t. t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+           lookup_var lv t = SOME l /\ lookup_var counter t = SOME (c + 1w) /\
+           vars_kept N {} origin t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dynstorage_increment_outcome >> simp[] >>
+  disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[jump_to_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       vars_kept_def] >>
+  rpt strip_tac >> fs[vars_kept_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem dynstorage_round_outcome[local]:
+  !G ctx fn N origin l lv counter vl vd vi
+   s8 s12 s13 s17 body exit cond bc bi a b d e f g Kcopy.
+    no_phi_fn fn /\
+    s8.cs_current_bb = cond /\ s8.cs_current_insts = [] /\
+    s12.cs_current_bb = body /\ s12.cs_current_insts = [] /\
+    s17.cs_current_bb = exit /\ s17.cs_current_insts = [] /\
+    lv <> vl /\ lv <> vd /\ counter <> vl /\ counter <> vd /\
+    lv <> counter /\ lv <> vi /\
+    ~var_below N vl /\ ~var_below N vd /\
+    ~var_below N vi /\ ~var_below N counter /\
+    (!t. at_point s8 t ==>
+      lookup_block t.vs_current_bb fn.fn_blocks = SOME bc /\
+      get_instruction bc t.vs_inst_idx =
+        SOME (mk_inst a LT [Var counter; Var lv] [vl]) /\
+      get_instruction bc (SUC t.vs_inst_idx) =
+        SOME (mk_inst b ISZERO [Var vl] [vd]) /\
+      get_instruction bc (SUC (SUC t.vs_inst_idx)) =
+        SOME (mk_inst d JNZ [Var vd; Label exit; Label body] [])) /\
+    (!t. at_point s13 t ==>
+      lookup_block t.vs_current_bb fn.fn_blocks = SOME bi /\
+      get_instruction bi t.vs_inst_idx =
+        SOME (mk_inst e ADD [Var counter; Lit 1w] [vi]) /\
+      get_instruction bi (SUC t.vs_inst_idx) =
+        SOME (mk_inst f ASSIGN [Var vi] [counter]) /\
+      get_instruction bi (SUC (SUC t.vs_inst_idx)) =
+        SOME (mk_inst g JMP [Label cond] [])) /\
+    (!t c. at_point s12 t /\ lookup_var lv t = SOME l /\
+      lookup_var counter t = SOME c /\ vars_kept N {} origin t ==>
+      ?j. j <= Kcopy /\ fuel_outcome G ctx fn t j
+        (\u. at_point s13 u /\ lookup_var lv u = SOME l /\
+             lookup_var counter u = SOME c /\ vars_kept N {} origin u)) ==>
+    let H = \t. at_point s8 t /\ lookup_var lv t = SOME l /\
+                 (?c. lookup_var counter t = SOME c) /\ vars_kept N {} origin t in
+    let Q = \t. at_point s17 t /\ vars_kept N {} origin t in
+    let mu = \t. w2n l - w2n (THE (lookup_var counter t)) in
+      !s. H s ==> ?j. j <= Kcopy + 2 /\
+        fuel_outcome G ctx fn s j (\t. Q t \/ (H t /\ mu t < mu s))
+Proof
+  rpt gen_tac >> strip_tac >> simp_tac std_ss [LET_THM] >> rpt strip_tac >>
+  qabbrev_tac `round_post = \t.
+    (at_point s17 t /\ vars_kept N {} origin t) \/
+    ((at_point s8 t /\ lookup_var lv t = SOME l /\
+      (?c. lookup_var counter t = SOME c) /\ vars_kept N {} origin t) /\
+     w2n l - w2n (THE (lookup_var counter t)) <
+     w2n l - w2n (THE (lookup_var counter s)))` >>
+  qpat_assum `!t. at_point s8 t ==> _` (drule_then strip_assume_tac) >>
+  drule_all dynstorage_condition_frame >>
+  disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then [`round_post`, `Kcopy + 1`] mp_tac) >>
+  impl_tac
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      Cases_on `w2n c < w2n l`
+      >- (fs[] >>
+          `at_point s12 t` by simp[at_point_def] >>
+          qpat_assum `!t c. _` (drule_all_then strip_assume_tac) >>
+          drule fuel_outcome_compose >>
+          disch_then (qspecl_then [`round_post`, `1`] mp_tac) >>
+          impl_tac
+          >- (rpt gen_tac >> simp[] >> strip_tac >>
+              qpat_assum `!t. at_point s13 t ==> _`
+                (drule_then strip_assume_tac) >>
+              drule_all dynstorage_increment_frame >>
+              disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
+              qexists_tac `1` >> simp[] >>
+              irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+              drule dynstorage_remaining_decreases >> strip_tac >>
+              simp[Abbr `round_post`, at_point_def] >>
+              rpt strip_tac >> simp[] >> metis_tac[]) >>
+          strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac) >>
+      qexists_tac `0` >> simp[] >>
+      irule fuel_outcome_weaken >>
+      qexists_tac `\u. u = t` >> simp[fuel_outcome_refl] >>
+      simp[Abbr `round_post`, at_point_def]) >>
+  strip_tac >> qexists_tac `j` >> simp[] >> gvs[]
+QED
+
 Theorem fuel_ok_compile_dynarray_to_storage:
   !src_ptr dst_slot elem_words elem_mem_size transient Wv E.
     fuel_ok Wv {} E
