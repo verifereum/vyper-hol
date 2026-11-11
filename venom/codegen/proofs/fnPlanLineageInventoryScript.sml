@@ -1515,9 +1515,9 @@ Proof
     (ps with ps_stack := prefix ++ suffix) =
     ([SODup (d+1)], ps with ps_stack := prefix ++ (suffix ++ [Var v]))` by
     (irule emit_one_input_suffix_shallow >> simp[]) >>
-  simp[emit_input_plan_def, dfgDefsTheory.operand_vars_def,
+  simp[emit_input_plan_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
-       dfgDefsTheory.operand_var_def] >>
+       venomInstTheory.operand_var_def] >>
   simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def]
 QED
 
@@ -1531,9 +1531,9 @@ Theorem emit_input_repeated_var_restored:
 Proof
   strip_tac >> drule emit_one_repeated_var_restored >>
   disch_then (qspecl_then [`next`, `opc`] assume_tac) >>
-  simp[emit_input_plan_def, dfgDefsTheory.operand_vars_def,
+  simp[emit_input_plan_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
-       dfgDefsTheory.operand_var_def] >>
+       venomInstTheory.operand_var_def] >>
   simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
        DOMSUB_FLOOKUP_THM]
 QED
@@ -2656,8 +2656,8 @@ Proof
     assume_tac emit_one_input_inventory_upper >>
   Cases_on `x IN FDOM ps.ps_spilled` >>
   Cases_on `h` >> Cases_on `x` >>
-  gvs[venomInstTheory.operand_vars_def, dfgDefsTheory.operand_vars_def,
-      venomInstTheory.operand_var_def, dfgDefsTheory.operand_var_def,
+  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def, venomInstTheory.operand_var_def,
       stackPlanTypesTheory.is_var_operand_def,
       elem_count_append, MAP_APPEND, LIST_ELEM_COUNT_DEF, MEM_MAP] >>
   rpt IF_CASES_TAC >> gvs[] >> decide_tac
@@ -2676,7 +2676,7 @@ Theorem emit_input_plan_live_upper_acc[local]:
       (if MEM x (MAP Var nl) then 1 else 0)
 Proof
   Induct_on `rest` >- simp[venomInstTheory.operand_vars_def,
-                          dfgDefsTheory.operand_vars_def] >>
+                          venomInstTheory.operand_vars_def] >>
   rpt gen_tac >> strip_tac >>
   drule emit_one_input_live_upper_acc >>
   disch_then (qspec_then `opc` assume_tac) >>

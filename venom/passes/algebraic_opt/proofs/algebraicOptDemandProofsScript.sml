@@ -10,8 +10,8 @@ Theorem ao_nontruthy_use_exact:
     ~is_truthy_inst use.inst_opcode ==> ao_main_exact fn x
 Proof
   rpt strip_tac >>
-  `MEM x (dfgDefs$operand_vars use.inst_operands)` by
-    metis_tac[MEM_operand_vars_eq_Var, ao_cmp_operand_vars_eq] >>
+  `MEM x (operand_vars use.inst_operands)` by
+    metis_tac[MEM_operand_vars_eq_Var] >>
   drule_all dfg_build_function_uses_complete >> strip_tac >>
   simp[ao_main_exact_def] >>
   Cases_on `?i. MEM i (fn_insts fn) /\ MEM x i.inst_outputs`

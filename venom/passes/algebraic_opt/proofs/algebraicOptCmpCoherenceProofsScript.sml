@@ -439,7 +439,7 @@ Proof
   qpat_x_assum `after = inst` SUBST_ALL_TAC >>
   `inst.inst_operands = [Var v]` by
     (Cases_on `inst.inst_operands` >> gvs[] >>
-     Cases_on `h` >> gvs[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def,
+     Cases_on `h` >> gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
        venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
   qexistsl_tac [`v`, `iz_out`] >> asm_rewrite_tac[] >> conj_tac
   >- (simp[ao_cmp_flipped_def] >>
@@ -480,7 +480,7 @@ Proof
   qpat_x_assum `after = inst` SUBST_ALL_TAC >>
   `inst.inst_operands = [Var v]` by
     (Cases_on `inst.inst_operands` >> gvs[] >>
-     Cases_on `h` >> gvs[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def,
+     Cases_on `h` >> gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
        venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
   asm_rewrite_tac[] >> simp[ao_cmp_flipped_def] >>
   qexistsl_tac [`i`, `f`] >> simp[] >> gvs[ao_cmp_source_def]

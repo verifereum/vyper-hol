@@ -1119,11 +1119,11 @@ QED
 
 
 Theorem input_mem_operand_vars:
-  !ops v. MEM v (dfgDefs$operand_vars ops) <=> MEM (Var v) ops
+  !ops v. MEM v (operand_vars ops) <=> MEM (Var v) ops
 Proof
-  Induct >> simp[dfgDefsTheory.operand_vars_def] >>
+  Induct >> simp[venomInstTheory.operand_vars_def] >>
   rpt gen_tac >> Cases_on `h` >>
-  simp[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]
+  simp[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]
 QED
 
 Theorem emit_input_plan_inventory_accumulation:

@@ -245,8 +245,10 @@ fun literal_buffer_consumer_parts is_expr norm bound_tac rep e size tv value vvp
 fun literal_bytes_consumer_parts is_expr =
   literal_buffer_consumer_parts is_expr I
     (`LENGTH (bs:word8 list) <= n` by gvs[vyperValueTheory.compatible_bound_def])
-    literal_ptr_bytes_representation bytes_lit bytes_size
-    `BaseTV (BytesT (Dynamic n))`
+    literal_ptr_bytes_representation
+    `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`
+    `32+32*word_size (LENGTH (bs:word8 list))`
+    `BaseTV (BytesT (Dynamic n))` `BytesV bs`
     `vv_post ctx func cenv cx
       (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) es sa cs' s0 (es with gas_obs := [])
       (Value (BytesV bs)) (LocatedValue (BaseT (BytesT (Dynamic n))) (base_ptr buf))

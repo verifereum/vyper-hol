@@ -249,7 +249,7 @@ Resume ao_cmp_selected_chunk[removed]:
   asm_rewrite_tac[] >> irule ao_cmp_removed_chunk >>
   gvs[DISJOINT_ALT, inst_ir_vars_def, inst_uses_def,
       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
-      dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]
+      venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]
 QED
 
 Resume ao_cmp_selected_chunk[assert]:
@@ -261,7 +261,7 @@ Resume ao_cmp_selected_chunk[assert]:
   asm_rewrite_tac[] >> irule ao_cmp_assert_chunk >>
   gvs[DISJOINT_ALT, inst_ir_vars_def, inst_uses_def,
       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
-      dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]
+      venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]
 QED
 
 Resume ao_cmp_selected_chunk[producer]:
@@ -278,13 +278,13 @@ Resume ao_cmp_selected_chunk[producer]:
   drule_all ao_cmp_flip_cert_origin >> strip_tac >>
   `inst.inst_opcode <> ISZERO /\ inst.inst_opcode <> ASSERT` by
     gvs[is_comparator_def] >>
-  `DISJOINT (set (dfgDefs$operand_vars inst.inst_operands)) flipped` by
+  `DISJOINT (set (operand_vars inst.inst_operands)) flipped` by
     (drule_all ao_cmp_flipped_nonconsumer_reads >>
      disch_then (qspec_then `fs` mp_tac) >> asm_rewrite_tac[]) >>
   asm_rewrite_tac[] >> irule ao_cmp_producer_chunk >>
   gvs[is_comparator_def, DISJOINT_ALT, inst_ir_vars_def, inst_uses_def,
       venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
-      dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def] >>
+      venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >>
   metis_tac[]
 QED
 

@@ -277,6 +277,7 @@ Proof
       >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
       gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
       irule cs_appends_bind >> simp[cs_appends_emit_helpers] >> gen_tac >>
+      irule cs_appends_bind >> simp[cs_appends_emit_helpers] >> gen_tac >>
       irule cs_appends_bind >> simp[cs_appends_emit_helpers]) >>
   gen_tac >> rewrite_tac[GSYM cs_appends_def] >> simp[cs_appends_emit_helpers]
 QED
