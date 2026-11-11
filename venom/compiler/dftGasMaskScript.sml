@@ -1923,7 +1923,8 @@ Theorem noninvoke_segment_mask_shape[local]:
   LENGTH (gas_events_step fuel C' s.vs_current_bb i s) <= LENGTH s.vs_gas_readings ==>
   ?m es unused.
     (if i.inst_opcode = GAS then
-       ?w. m = [SOME w] /\ es = [(s.vs_current_bb,i.inst_id)]
+       ?w rest. s.vs_gas_readings = w::rest /\
+         m = [SOME w] /\ es = [(s.vs_current_bb,i.inst_id)]
      else m = [] /\ es = []) /\
     LENGTH m = LENGTH es /\
     PERM (MAP THE (FILTER IS_SOME m) ++ unused) s.vs_gas_readings /\
@@ -2208,6 +2209,11 @@ Theorem identity_suffix_mask_cuts[local]:
                                ~MEM (FST q) (EL k xs).inst_outputs) us ==>
                 P (u0 ++ r) (FOLDL (\st q. update_var (FST q) (SND q) st)
                   (t with vs_gas_readings := p ++ r) us)) /\
+      (!j t. j < LENGTH xs /\ (EL j xs).inst_opcode = GAS /\
+        EVERY (\i. ~is_terminator i.inst_opcode) (TAKE j xs) /\
+        R fuel C' (TAKE j xs) s = OK t ==>
+        ?w rest. t.vs_gas_readings = w::rest /\ EL j ms = [SOME w] /\
+          EL j ess = [(s.vs_current_bb,(EL j xs).inst_id)]) /\
       !n. n <= LENGTH xs ==> ?unused.
         S (TAKE n xs) s (FLAT (TAKE n ms)) (FLAT (TAKE n ess)) unused
 Proof
@@ -2262,7 +2268,8 @@ Proof
   `?m es unused.
     (h.inst_opcode <> INVOKE ==>
       if h.inst_opcode = GAS then
-        ?w. m = [SOME w] /\ es = [(s.vs_current_bb,h.inst_id)]
+        ?w rest. s.vs_gas_readings = w::rest /\
+          m = [SOME w] /\ es = [(s.vs_current_bb,h.inst_id)]
       else m = [] /\ es = []) /\
     H m es unused s /\
     (h.inst_opcode = INVOKE ==>
@@ -2342,6 +2349,7 @@ Proof
       Cases_on `h.inst_opcode = GAS` >> gvs[] >>
       Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
   conj_tac >- suspend "stopped_provenance" >>
+  conj_tac >- suspend "stopped_gas_provenance" >>
   gen_tac >> strip_tac >> Cases_on `n`
   >- (simp[] >> metis_tac[]) >>
   simp[TAKE] >>
@@ -2412,6 +2420,7 @@ Resume identity_suffix_mask_cuts[returning_head]:
       Cases_on `h.inst_opcode = GAS` >> gvs[] >>
       Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
   conj_tac >- suspend "returning_provenance" >>
+  conj_tac >- suspend "returning_gas_provenance" >>
   gen_tac >> strip_tac >> Cases_on `n`
   >- (simp[] >> metis_tac[]) >>
   qpat_x_assum `!n. n <= LENGTH xs ==> _` (qspec_then `n'` mp_tac) >>
@@ -2469,6 +2478,7 @@ Resume identity_suffix_mask_cuts[terminator_head]:
       Cases_on `h.inst_opcode = GAS` >> gvs[] >>
       Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
   conj_tac >- suspend "terminator_provenance" >>
+  conj_tac >- suspend "terminator_gas_provenance" >>
   gen_tac >> strip_tac >> Cases_on `n`
   >- (simp[] >> metis_tac[]) >>
   simp[TAKE] >>
@@ -2511,6 +2521,26 @@ Resume identity_suffix_mask_cuts[returning_provenance]:
 QED
 Resume identity_suffix_mask_cuts[terminator_provenance]:
   rpt (FIRST [gen_tac, disch_then strip_assume_tac]) >> Cases_on `k`
+  >- gvs[Abbr `R`, venomInstTheory.is_terminator_def] >>
+  fs[TAKE]
+QED
+Resume identity_suffix_mask_cuts[stopped_gas_provenance]:
+  rpt gen_tac >> strip_tac >> Cases_on `j`
+  >- (gvs[Abbr `R`] >>
+      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  qpat_x_assum `R fuel C' (TAKE _ _) s = OK t` mp_tac >>
+  simp[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C' h s` >> fs[]
+QED
+Resume identity_suffix_mask_cuts[returning_gas_provenance]:
+  rpt gen_tac >> strip_tac >> Cases_on `j`
+  >- (gvs[Abbr `R`] >>
+      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  gvs[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+  first_x_assum irule >> simp[]
+QED
+Resume identity_suffix_mask_cuts[terminator_gas_provenance]:
+  rpt gen_tac >> strip_tac >> Cases_on `j`
   >- gvs[Abbr `R`, venomInstTheory.is_terminator_def] >>
   fs[TAKE]
 QED
