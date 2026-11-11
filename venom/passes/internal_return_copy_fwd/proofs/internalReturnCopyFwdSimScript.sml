@@ -2465,17 +2465,7 @@ Proof
      qpat_assum `t' = _`
        (mp_tac o Q.AP_TERM `\x. x.vs_memory`) >> simp[]) >>
   `step_taint inst s s' tn = tn /\ s'.vs_prev_bb <> NONE` by
-    (gvs[MEM] >>
-     qpat_x_assum `step_inst_base _ s = OK s'` mp_tac >>
-     simp[step_inst_base_opcode_eqs, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[] >>
-     simp[step_taint_def, mem_taint_def, store_taint_def, jump_to_def,
-          imm_taint_def, adopt_reset_def, new_site_bytes_def,
-          step_writes_def, codegenRelTheory.source_memory_write_ranges_def, written_taint_def,
-          range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, set_var_taint_def,
-          DRESTRICT_UNIV, taint_component_equality] >>
-     gvs[jump_to_def, venom_state_component_equality] >>
-     rpt (BasicProvers.TOP_CASE_TAC >> simp[])) >>
+    metis_tac[step_taint_jump] >>
   `~t'.vs_halted` by
     (drule taint_agree_frame >>
      disch_then (mp_tac o Q.AP_TERM `\x. x.vs_halted`) >> simp[]) >>
