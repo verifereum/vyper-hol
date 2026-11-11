@@ -176,7 +176,7 @@ QED
 Theorem abi_array_backedge_effect:
   decode_site_resources ctx func s /\ fresh_vars_wrt limit_st s /\
   next < limit_st.cs_next_var /\ first <= next /\
-  {a | slot <= a /\ a < slot+32} SUBSET writes ==>
+  {a | slot <= a /\ a < slot+32} SUBSET writes /\ slot+32 <= s.vs_alloca_next ==>
   decode_site_effect ctx func first writes s
     (jump_to hdr (mstore slot w (update_var (STRING #"%" (toString next)) w s))) /\
   fresh_vars_wrt limit_st
@@ -202,9 +202,16 @@ Proof
   conj_tac
   >- simp[decode_static_frame_def, Abbr `t`, jump_to_def, mstore_def,
           update_var_def, write_memory_with_expansion_def] >>
-  `decode_memory_frame writes s (mstore slot w s)` suffices_by
-    (simp[decode_memory_frame_def, Abbr `t`, jump_to_def, update_var_def,
-      mstore_def, write_memory_with_expansion_def]) >>
+  `decode_memory_frame writes s (mstore slot w s) /\
+   decode_upper_frame s (mstore slot w s)` suffices_by
+    (simp[decode_upper_frame_def, decode_memory_frame_def, Abbr `t`, jump_to_def,
+      update_var_def, mstore_def, write_memory_with_expansion_def]) >>
+  reverse conj_tac
+  >- (`mstore slot w s = write_memory_with_expansion slot (word_to_bytes w T) s` by
+        simp[mstore_def, write_memory_with_expansion_def] >>
+      pop_assum SUBST1_TAC >> simp[decode_upper_frame_def] >>
+      irule decode_memory_frame_write >>
+      simp[write_memory_with_expansion_def, SUBSET_DEF] >> rpt strip_tac >> decide_tac) >>
   simp_tac bool_ss [decode_memory_frame_def] >> rpt strip_tac >>
   Cases_on `n = 0` >- simp[mem_bytes_at_def] >>
   irule mstore_mem_bytes_at_disjoint >>
@@ -369,7 +376,8 @@ Proof
     (Cases_on `base_op = Lit 0w` >>
      simp[decode_static_frame_def, Abbr `t`, abi_decode_position_header_state_def,
        jump_to_def, update_var_def] >> simp[venom_state_component_equality]) >>
-  asm_simp_tac bool_ss [decode_site_effect_def, decode_memory_frame_def, LESS_EQ_REFL] >>
+  asm_simp_tac bool_ss [decode_site_effect_def, decode_memory_frame_def, LESS_EQ_REFL,
+    decode_upper_frame_memory] >>
   metis_tac[abi_decoder_operand_live_mono]
 QED
 
@@ -459,7 +467,7 @@ Proof
     (irule decode_site_resources_fields >> qexists `s` >> simp[jump_to_def]) >>
   fs[jump_to_def, eval_operand_def, lookup_var_def,
     fresh_vars_wrt_def, abi_decode_alloc_progress_def,
-    abi_array_memory_prefix_def, decode_site_effect_def,
+    abi_array_memory_prefix_def, decode_site_effect_def, decode_upper_frame_def,
     decode_static_frame_def, decode_memory_frame_def, mload_def, abi_decode_load_def] >>
   gs[] >>
   conj_tac >- first_assum ACCEPT_TAC >>

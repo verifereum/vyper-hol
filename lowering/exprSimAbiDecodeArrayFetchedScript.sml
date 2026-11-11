@@ -118,7 +118,8 @@ Theorem abi_decode_array_bulk_success_effect:
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME(n2w h) /\
     pos+32+n*abi_sz <= h /\ h < dimword(:256)) /\
   fresh_vars_wrt st s /\ decode_site_resources ctx func s /\
-  {a | d <= a /\ a < d+32+n*mem_sz} SUBSET writes ==>
+  {a | d <= a /\ a < d+32+n*mem_sz} SUBSET writes /\
+  d+32+n*mem_sz <= s.vs_alloca_next ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     mem_word_at d t.vs_memory = n2w n /\
     mem_bytes_at (d+32) (n*mem_sz) t.vs_memory =
@@ -146,6 +147,10 @@ Proof
   `decode_memory_frame writes s t` by
     (irule abi_bytes_frame_memory >> qexistsl [`32+n*mem_sz`, `d`] >>
      pure_rewrite_tac[ADD_ASSOC] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `decode_memory_frame {a | d <= a /\ a < d + (32+n*mem_sz)} s t` by
+    (irule abi_bytes_frame_memory >> qexistsl [`32+n*mem_sz`, `d`] >> simp[]) >>
+  `decode_upper_frame s t` by
+    (irule decode_upper_frame_region >> qexistsl [`d`, `32+n*mem_sz`] >> simp[]) >>
   qexists `t` >> simp[decode_site_effect_def, abi_decode_source_def]
 QED
 
@@ -208,7 +213,8 @@ Theorem abi_decode_array_bulk_source_outcome:
   d+32 < dimword(:256) /\
   (b+h <= d \/ d+32 <= b+pos+32) /\
   fresh_vars_wrt st s /\ decode_site_resources ctx func s /\
-  {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty} SUBSET writes ==>
+  {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty} SUBSET writes /\
+  d+32+n*type_memory_bytes ce ty <= s.vs_alloca_next ==>
   (?t v. run_inst_seq (emitted_insts st st') s = OK t /\
     vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
     abi_to_vyper env (ArrayT ty (Dynamic maxn))
@@ -298,6 +304,7 @@ Theorem abi_decode_array_bulk_fetched_outcome:
   (b+h <= d \/ d+32 <= b+pos+32) /\
   fresh_vars_wrt st s /\ decode_site_resources ctx func s /\
   {a | d <= a /\ a < d+32+n*type_memory_bytes ce ty} SUBSET writes /\
+  d+32+n*type_memory_bytes ce ty <= s.vs_alloca_next /\
   fn_has_code st st' fn /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>

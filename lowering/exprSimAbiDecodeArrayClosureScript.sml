@@ -64,6 +64,7 @@ Theorem abi_array_memory_init_fetched_reentry:
   MEM (mk_inst header_st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString header_st.cs_next_var)]) (fn_insts func) /\
   fn_has_code st header_st fn /\ fn_has_code header_st loop_st fn /\
+  d+32 <= s.vs_alloca_next /\
   abi_decode_entry st s ==>
   (n <= maxn /\ p+32+n*abi_member_head_size at <= h /\
     ?prepared t slot. Dreach ctx fn s prepared /\ Dreach ctx fn prepared t /\
@@ -496,6 +497,9 @@ Proof
          simp[Abbr `suffix`, TAKE_LENGTH_TOO_LONG]) >>
      `LENGTH bs-pos = 0 /\ LENGTH bs <= pos` by decide_tac >>
      simp[Abbr `suffix`, mem_bytes_at_def, DROP_EQ_NIL]) >>
+  `d+32 <= s.vs_alloca_next` by
+    (qpat_x_assum `abi_decode_owned _ _ _ _ _` mp_tac >>
+     simp[abi_decode_owned_def, type_memory_bytes_def] >> rpt strip_tac >> decide_tac) >>
   drule_all abi_array_memory_init_fetched_reentry >>
   disch_then (qspecl_then [`ty`, `env`]
     (DISJ_CASES_THEN2 strip_assume_tac

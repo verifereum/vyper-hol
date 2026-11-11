@@ -98,7 +98,7 @@ Proof
   strip_tac >> drule abi_decode_builtin_setup_progress >>
   simp_tac bool_ss [abi_decode_alloc_progress_def, abi_builtin_allocation_frame_def,
     decode_site_effect_def, decode_memory_frame_def] >>
-  rpt strip_tac >> gvs[abi_builtin_allocation_frame_def]
+  rpt strip_tac >> gvs[abi_builtin_allocation_frame_def, decode_upper_frame_memory]
 QED
 
 Theorem abi_decode_builtin_setup_site_reach:

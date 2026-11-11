@@ -204,7 +204,8 @@ Theorem abi_decoder_bytes_success_effect:
   d+abi_decode_bytes_copy_size n < dimword (:256) /\
   (b+h <= d \/ d+abi_decode_bytes_copy_size n <= b) /\
   fresh_vars_wrt st s /\ decode_site_resources ctx fn s /\
-  {a | d <= a /\ a < d+abi_decode_bytes_copy_size n} SUBSET writes ==>
+  {a | d <= a /\ a < d+abi_decode_bytes_copy_size n} SUBSET writes /\
+  d+abi_decode_bytes_copy_size n <= s.vs_alloca_next ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\ fresh_vars_wrt st' t /\
     mem_bytes_at d (32+c) t.vs_memory = mem_bytes_at (b+p) (32+c) s.vs_memory /\
     mem_bytes_at (d+32+c) (32*((c+31) DIV 32)-c) t.vs_memory =
@@ -234,6 +235,13 @@ Proof
   `0 < abi_decode_bytes_copy_size n` by simp[abi_decode_bytes_copy_size_def] >>
   `decode_memory_frame writes s t` by
     (drule_all abi_bytes_frame_memory >> simp[]) >>
+  `decode_upper_frame s t` by
+    (match_mp_tac (Q.SPECL [`d`, `abi_decode_bytes_copy_size n`] decode_upper_frame_outside) >>
+     reverse conj_tac >- fs[] >>
+     qpat_x_assum `abi_decode_frame _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [abi_decode_frame_def]) >>
+     rpt strip_tac >>
+     qpat_x_assum `!p k. _ ==> mem_bytes_at p k _ = _` irule >> decide_tac) >>
   qexists `t` >> simp[decode_site_effect_def]
 QED
 
@@ -333,7 +341,8 @@ Theorem abi_decoder_bytes_outcome:
   d+abi_decode_bytes_copy_size n < dimword (:256) /\
   (b+h <= d \/ d+abi_decode_bytes_copy_size n <= b) /\
   fresh_vars_wrt st s /\ decode_site_resources ctx fn s /\
-  {a | d <= a /\ a < d+abi_decode_bytes_copy_size n} SUBSET writes ==>
+  {a | d <= a /\ a < d+abi_decode_bytes_copy_size n} SUBSET writes /\
+  d+abi_decode_bytes_copy_size n <= s.vs_alloca_next ==>
   ((?t. run_inst_seq (emitted_insts st st') s = OK t) <=>
      p+32 <= h /\ c <= n /\ p+32+c <= h) /\
   (if p+32 <= h /\ c <= n /\ p+32+c <= h then

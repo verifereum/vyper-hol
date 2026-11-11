@@ -187,6 +187,7 @@ Theorem abi_decode_dynarray_prepare_site_effect:
   abi_decode_array_header dst addr MLOAD guard_st = (cnt,header_st) /\
   run_inst_seq (emitted_insts st header_st) s = OK t /\
   abi_decode_frame d 32 s t /\ decode_site_resources ctx func s /\
+  d+32 <= s.vs_alloca_next /\
   (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
     eval_operand op t = SOME w) ==>
   decode_site_effect ctx func st.cs_next_var {a | d <= a /\ a < d+32} s t
@@ -198,6 +199,9 @@ Proof
       fs[venom_state_component_equality]) >>
   `decode_memory_frame {a | d <= a /\ a < d+32} s t` by
     (irule abi_word_frame_memory >> qexists `d` >> simp[]) >>
+  `t.vs_alloca_next = s.vs_alloca_next` by fs[venom_state_component_equality] >>
+  `decode_upper_frame s t` by
+    (irule decode_upper_frame_region >> qexistsl [`d`, `32`] >> simp[]) >>
   fs[decode_site_effect_def, decode_static_frame_def, venom_state_component_equality]
 QED
 
@@ -218,6 +222,7 @@ Theorem abi_decode_dynarray_memory_prepare_fetched_reentry:
   abi_decoder_operand_live st.cs_next_var hi /\
   header_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   decode_site_resources ctx func s /\ fn_has_code st header_st fn /\
+  d+32 <= s.vs_alloca_next /\
   abi_decode_entry st s ==>
   (n <= maxn /\ p+32+n*abi_member_head_size at <= h /\
     ?t. Dreach ctx fn s t /\ abi_decode_entry header_st t /\

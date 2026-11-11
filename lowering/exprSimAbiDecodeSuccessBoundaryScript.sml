@@ -10,6 +10,7 @@ Ancestors
   vyperEvalExprPreservesScopesDom vyperTypeSystem vyperTypeInvariants
   exprSimHypsDefs vyperTypeABI arithmetic
   valueTypingMemoryProps valueEncodingProps vyperAST vyperTyping finite_map
+  exprSimAbiDecodeRegionFrame exprSimAbiDecodeImmutableFrame exprSimProps
 
 (* Compose the decoder frames with the actual post of the unwrapped child.
    The value-specific clauses are discharged by the two callers below. *)
@@ -59,8 +60,19 @@ Proof
       `aid < start.cs_next_id` by decide_tac >>
       `mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory` by
         (drule_all abi_decode_success_old_memory >> simp[]) >>
-      metis_tac[expr_post_def]) >>
-  irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `s`] >>
+      metis_tac[expr_post_def])
+  >- (irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `s`] >>
+      fs[expr_post_def]) >>
+  strip_tac >>
+  `pure_frame ce func es sa s0 s` by fs[expr_post_def] >>
+  `pure_frame ce func es1 start s t` by
+    (simp_tac bool_ss [pure_frame_def] >> conj_tac
+     >- (rpt strip_tac >> drule_all abi_decode_success_local_memory >> simp[]) >>
+     fs[abi_decode_immutable_success_def, abi_decode_window_frame_def]) >>
+  match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es1`, `sa`, `start`, `s0`, `s`, `t`]
+    pure_frame_trans) >>
+  asm_rewrite_tac [] >>
+  conj_tac >- (rpt strip_tac >> drule_all abi_decode_success_old_allocation >> simp[]) >>
   fs[expr_post_def]
 QED
 

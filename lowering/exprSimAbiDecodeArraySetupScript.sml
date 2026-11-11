@@ -106,10 +106,10 @@ Proof
      conj_tac
      >- (simp_tac bool_ss [decode_static_frame_def] >>
          qpat_x_assum `allocated = _` (fn th => once_rewrite_tac[th]) >> simp[venom_state_component_equality]) >>
-     simp_tac bool_ss [decode_memory_frame_def] >> rpt strip_tac >>
      `allocated.vs_memory = s.vs_memory` by
        (qpat_x_assum `allocated = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-     simp[]) >>
+     conj_tac >- (simp_tac bool_ss [decode_memory_frame_def] >> rpt strip_tac >> simp[]) >>
+     irule decode_upper_frame_memory >> first_assum ACCEPT_TAC) >>
   `decode_site_effect ctx func st.cs_next_var {a | p <= a /\ a < p+32}
      allocated (mstore p 0w allocated)` by
     (`mstore p 0w allocated =
@@ -225,6 +225,7 @@ Theorem abi_decode_dynarray_prepare_site_outcome:
   eval_operand base_op s = SOME(n2w b) /\
   eval_operand hi s = SOME(n2w h) /\
   eval_operand dst s = SOME(n2w d) /\ d < dimword(:256) /\
+  d+32 <= s.vs_alloca_next /\
   abi_decode_load opc (n2w (b+pos):bytes32) s = n2w n /\
   pos < dimword(:256) /\ h < dimword(:256) /\
   n < dimword(:256) /\ maxn < dimword(:256) /\
@@ -253,6 +254,8 @@ Proof
         (irule decode_site_resources_fields >> qexists `s` >> simp[]) >>
       `decode_memory_frame {a | d <= a /\ a < d+32} s t` by
         (irule abi_word_frame_memory >> qexists `d` >> simp[]) >>
+      `decode_upper_frame s t` by
+        (irule decode_upper_frame_region >> qexistsl [`d`, `32`] >> simp[]) >>
       simp[decode_site_effect_def]) >>
   disj2_tac >> simp[] >> goal_assum (drule_at Any)
 QED
@@ -369,6 +372,9 @@ Proof
   drule abi_decode_index_init_shape >> strip_tac >>
   `st.cs_next_var <= header_st.cs_next_var` by decide_tac >>
   `n < dimword(:256)` by simp[wordsTheory.w2n_lt] >>
+  `root + outsz <= s.vs_alloca_next` by
+    metis_tac[decode_site_resources_alloca_below] >>
+  `d + 32 <= s.vs_alloca_next` by decide_tac >>
   drule_all abi_decode_dynarray_prepare_site_outcome >>
   disch_then (qspec_then `st.cs_next_var` mp_tac) >>
   disch_then strip_assume_tac

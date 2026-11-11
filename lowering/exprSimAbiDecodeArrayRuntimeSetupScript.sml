@@ -501,7 +501,7 @@ Proof
     (irule decode_site_resources_fields >> qexists_tac `s` >>
      fs[abi_decoder_address_frame_def, venom_state_component_equality]) >>
   `decode_site_effect ctx func st.cs_next_var writes s u` by
-    (simp[decode_site_effect_def, decode_memory_frame_def] >>
+    (simp[decode_site_effect_def, decode_memory_frame_def, decode_upper_frame_def] >>
      fs[abi_decoder_address_frame_def, decode_static_frame_def,
        venom_state_component_equality]) >>
   qpat_x_assum `u = s with <|vs_vars := _; vs_memory := _|>` kall_tac >>

@@ -79,7 +79,7 @@ Proof
    t.vs_fmp = s.vs_fmp /\ t.vs_halted = s.vs_halted /\ decode_static_frame s t` by
     fs[decode_static_frame_def, venom_state_component_equality] >>
   `decode_site_resources ctx fn t` by metis_tac[decode_site_resources_fields] >>
-  simp[decode_site_effect_def, decode_memory_frame_def]
+  simp[decode_site_effect_def, decode_memory_frame_def, decode_upper_frame_memory]
 QED
 
 Theorem abi_decode_member_setup_fetched_success:
@@ -156,6 +156,7 @@ Theorem abi_decode_bytes_member_fetched_outcome:
   d+vo+abi_decode_bytes_copy_size n < dimword(:256) /\
   (B+H <= d+vo \/ d+vo+abi_decode_bytes_copy_size n <= B) /\
   {a | d+vo <= a /\ a < d+vo+abi_decode_bytes_copy_size n} SUBSET writes /\
+  d+vo+abi_decode_bytes_copy_size n <= s.vs_alloca_next /\
   delta = w2n(abi_decode_load MLOAD (n2w(B+p+ao):bytes32) s) /\
   bs = mem_bytes_at (B+(p+delta)) (H-(p+delta)) s.vs_memory /\
   fresh_vars_wrt st s /\ decode_site_resources ctx fn s /\
@@ -204,8 +205,9 @@ Resume abi_decode_bytes_member_fetched_outcome[child]:
   `decode_site_resources ctx fn t` by metis_tac[decode_site_effect_resources] >>
   `w2n(abi_decode_load MLOAD (n2w(B+(p+delta)):bytes32) t) =
    w2n(abi_decode_load MLOAD (n2w(B+(p+delta)):bytes32) t)` by rewrite_tac[] >>
+  `d+vo+abi_decode_bytes_copy_size n <= t.vs_alloca_next` by simp[] >>
   drule_all abi_decoder_bytestring_fetched_outcome >>
-  ntac 35 (pop_last_assum kall_tac) >>
+  ntac 36 (pop_last_assum kall_tac) >>
   qpat_x_assum `abi_decode_load _ _ _ = _` kall_tac >>
   disch_then (qspecl_then [`st.cs_next_var`,`env`] strip_assume_tac)
   >- (qpat_x_assum `mem_bytes_at _ _ t'.vs_memory = mem_bytes_at _ _ _` kall_tac >>
@@ -285,6 +287,7 @@ Theorem abi_decode_scalar_member_fetched_outcome:
   ao + abi_embedded_static_size ce.ce_struct_fields ty <= heads /\ p+heads <= H /\
   B+H < dimword(:256) /\ d+vo+32 < dimword(:256) /\
   {a | d+vo <= a /\ a < d+vo+32} SUBSET writes /\
+  d+vo+32 <= s.vs_alloca_next /\
   bs = mem_bytes_at (B+(p+ao)) 32 s.vs_memory /\
   fresh_vars_wrt st s /\ decode_site_resources ctx fn s /\
   fn_has_code st end_st func /\ ~s.vs_halted /\
@@ -317,6 +320,7 @@ Proof
   `bs = mem_bytes_at (B+(p+ao)) 32 (abi_decode_source MLOAD t)` by
     gvs[abi_decode_source_def] >>
   `p+ao+32 <= H /\ d+vo+32 < dimword(:256)` by decide_tac >>
+  `d+vo+32 <= t.vs_alloca_next` by simp[] >>
   drule_all abi_decoder_scalar_fetched_outcome >>
   qpat_x_assum `decoder_straight_prefix func s t` mp_tac >>
   qpat_x_assum `decode_site_effect _ _ _ _ s t` mp_tac >>
