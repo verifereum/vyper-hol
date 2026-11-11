@@ -900,7 +900,7 @@ Proof
 QED
 
 (* LUPDATE at different indices commutes *)
-Theorem lupdate_commutes[local]:
+Theorem lupdate_commutes:
   !i j (a:'a) b xs.
     i <> j ==>
     LUPDATE a i (LUPDATE b j xs) = LUPDATE b j (LUPDATE a i xs)

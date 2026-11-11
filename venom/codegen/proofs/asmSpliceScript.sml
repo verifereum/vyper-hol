@@ -474,7 +474,7 @@ Proof
   metis_tac[every_data_at_end]
 QED
 
-Theorem data_discipline_append[local]:
+Theorem data_discipline_append:
   !a b. EVERY (\i. ~is_data_inst i) a ==>
   ((asm_data_at_end (a ++ b) /\
     (!i. i < LENGTH (a ++ b) /\ is_data_inst (EL i (a ++ b)) ==>

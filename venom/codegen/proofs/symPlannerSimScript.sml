@@ -9,7 +9,7 @@
  *)
 Theory symPlannerSim
 Ancestors
-  symShuffleSim codegenSymRel deepResidualSim deepResidualBudget fnPlanPrefix
+  symShuffleSim symPlannerReorder symPlannerInput codegenSymRel deepResidualSim deepResidualBudget fnPlanPrefix
   doSwapSim planSpillBounds contextCodegenRel unitShapeDefs venomWf
   stackPlanGen stackPlanOps stackPlanTypes planExec asmSymSem asmSem
   dfgDefs
@@ -44,5 +44,32 @@ Theorem sym_selected_prefix_sim_marked:
         (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
              FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  cheat
+  strip_tac >>
+  drule_all_then assume_tac allocMonoTheory.emit_input_plan_spill_base >>
+  drule_all_then assume_tac allocMonoTheory.reorder_plan_next_offset >>
+  `prepared.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+  `residual_budget_wf_marked spillbase operands prepared` by
+    (drule_all_then mp_tac emit_input_plan_residual_budget_wf_marked >> simp[]) >>
+  `residual_budget_wf_marked spillbase selected prepared` by
+    metis_tac[residual_budget_wf_marked_perm] >>
+  `pending_inventory_wf selected prepared` by
+    (drule_all_then assume_tac reorderSimTheory.emit_input_plan_materialised >>
+     fs[reorderSimTheory.pending_inventory_wf_def] >>
+     metis_tac[genericInputReadyTheory.perm_operand_counts, arithmeticTheory.LESS_EQ_TRANS,
+       arithmeticTheory.LESS_EQ_ADD]) >>
+  `LENGTH selected <= LENGTH prepared.ps_stack` by
+    metis_tac[sortingTheory.PERM_LENGTH] >>
+  rule_assum_tac (PURE_REWRITE_RULE [stackOpSimTheory.execute_plan_append,
+    stackOpSimTheory.asm_block_at_append, listTheory.EVERY_APPEND]) >>
+  rpt (qpat_x_assum `_ /\ _` strip_assume_tac) >>
+  drule_all_then (qspec_then `env` (qx_choose_then `mid` strip_assume_tac))
+    sym_emit_input_plan >>
+  `asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp rops)`
+    by asm_rewrite_tac[] >>
+  `r.sr_spill_base <= prepared.ps_alloc.sa_spill_base` by metis_tac[] >>
+  drule_all_then (qspec_then `env` (qx_choose_then `last` strip_assume_tac))
+    sym_reorder_plan >>
+  qexists_tac `last` >>
+  pure_rewrite_tac[stackOpSimTheory.execute_plan_append, listTheory.LENGTH_APPEND] >>
+  ho_match_mp_tac symPlannerBaseTheory.sym_steps_frame_compose >> asm_rewrite_tac[]
 QED

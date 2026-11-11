@@ -22,7 +22,7 @@ Ancestors
    with any-depth ownership and an address bound on the plan's offsets.
    RET's plan never shrinks the planner stack below the operand count and
    ends empty, so the stack holds at most 16 cells throughout. *)
-Theorem ret_frame_prefix_marked:
+Theorem ret_frame_prefix_marked_exact:
   !ctx cp lo o2pc prog liveness dfg cfg fn inst nl halting term label
     base ps vs st ops final ra rest mem0 values.
   inst.inst_opcode = RET /\ inst_wf inst /\
@@ -48,8 +48,8 @@ Theorem ret_frame_prefix_marked:
   final.ps_stack = [] /\
   asm_block_at prog st.as_pc (execute_plan cp.cp_initial_fmp ops) /\
   eval_operands (REVERSE (compute_operands inst)) (frame_view fn ra vs) = SOME values ==>
-  ?n mid.
-    asm_steps lo o2pc prog n st = AsmOK mid /\
+  ?mid.
+    asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp ops) - 1) st = AsmOK mid /\
     asm_block_at prog mid.as_pc [AsmOp "JUMP"] /\
     mid.as_stack = values ++ rest /\
     context_memory_rel cp vs.vs_memory mid.as_memory /\
@@ -64,7 +64,7 @@ Proof
   suspend "local_run"
 QED
 
-Resume ret_frame_prefix_marked[local_run]:
+Resume ret_frame_prefix_marked_exact[local_run]:
   rename1 `generated_plan_state_wf_marked spillbase ps` >>
   rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
   `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
@@ -102,7 +102,7 @@ Resume ret_frame_prefix_marked[local_run]:
   suspend "labels"
 QED
 
-Resume ret_frame_prefix_marked[labels]:
+Resume ret_frame_prefix_marked_exact[labels]:
   `LIST_REL (\op value. operand_val (frame_view fn ra vs) lo op = SOME value)
     (REVERSE (compute_operands inst)) values` by
     (irule eval_operands_operand_val_rel >> simp[]) >>
@@ -126,7 +126,7 @@ Resume ret_frame_prefix_marked[labels]:
   suspend "lift"
 QED
 
-Resume ret_frame_prefix_marked[lift]:
+Resume ret_frame_prefix_marked_exact[lift]:
   rename1 `venom_asm_rel lo arranged _ endpoint` >>
   `prefix_wf lo (LENGTH ps.ps_stack) iops` by
     (`prefix_wf lo (LENGTH ps.ps_stack)
@@ -166,7 +166,7 @@ Resume ret_frame_prefix_marked[lift]:
   suspend "finish"
 QED
 
-Resume ret_frame_prefix_marked[finish]:
+Resume ret_frame_prefix_marked_exact[finish]:
   `context_memory_rel cplan vs.vs_memory st.as_memory /\
    (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
      read_byte b st.as_memory = read_byte b mem0)` by
@@ -184,9 +184,9 @@ Resume ret_frame_prefix_marked[finish]:
   drule asm_steps_frame >> disch_then (qspec_then `rest` assume_tac) >>
   `st with as_stack := top ++ rest = st` by
     simp[asm_state_component_equality] >>
-  qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))`,
-    `endpoint with as_stack := endpoint.as_stack ++ rest`] >>
-  conj_tac >- gvs[] >>
+  qexists_tac `endpoint with as_stack := endpoint.as_stack ++ rest` >>
+  conj_tac
+  >- gvs[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   conj_tac
   >- (gvs[execute_plan_append, asm_block_at_append, execute_plan_def,
           exec_stack_op_def]) >>
@@ -194,10 +194,131 @@ Resume ret_frame_prefix_marked[finish]:
   metis_tac[]
 QED
 
-Finalise ret_frame_prefix_marked
+Finalise ret_frame_prefix_marked_exact
+
+(* Existential public interface, preserved for existing consumers. *)
+Theorem ret_frame_prefix_marked:
+  !ctx cp lo o2pc prog liveness dfg cfg fn inst nl halting term label
+    base ps vs st ops final ra rest mem0 values.
+  inst.inst_opcode = RET /\ inst_wf inst /\
+  generated_plan_state_wf_marked base ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  generate_inst_plan liveness dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
+  final.ps_stack = [] /\
+  asm_block_at prog st.as_pc (execute_plan cp.cp_initial_fmp ops) /\
+  eval_operands (REVERSE (compute_operands inst)) (frame_view fn ra vs) = SOME values ==>
+  ?n mid.
+    asm_steps lo o2pc prog n st = AsmOK mid /\
+    asm_block_at prog mid.as_pc [AsmOp "JUMP"] /\
+    mid.as_stack = values ++ rest /\
+    context_memory_rel cp vs.vs_memory mid.as_memory /\
+    (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+      read_byte b mid.as_memory = read_byte b mem0) /\
+    shared_state_rel vs mid
+Proof
+  rpt strip_tac >> drule_all ret_frame_prefix_marked_exact >>
+  metis_tac[]
+QED
 
 (* gen_ret_frame_sim with any-depth ownership, generated_plan_state_wf_marked and an
    address bound on spill and restore offsets. *)
+Theorem gen_ret_frame_sim_deep_exact:
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
+   is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0 pc_ret.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    inst.inst_opcode = RET /\
+    MEM inst (fn_insts (reachable_fn fn)) /\
+    codegen_ready_fn fn /\ opaque_use_ok fn /\ retpc_shape_ok fn /\
+    inst_wf inst /\
+    generated_plan_state_wf_marked base ps /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      IS_SOME (stack_get_depth op ps.ps_stack) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op (frame_view fn ra vs) =
+          operand_val (frame_view fn ra vs) lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
+             operand_val (frame_view fn ra vs) lo op =
+             operand_val (frame_view fn ra vs) lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    ps'.ps_stack = [] /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+    !ret vs'. step_inst fuel ctx inst vs = IntRet ret vs' ==>
+      ?as'.
+        asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp ops)) as = AsmOK as' /\
+        as'.as_pc = pc_ret /\
+        as'.as_stack = REVERSE ret.iret_values ++ rest /\
+        context_memory_rel cp vs'.vs_memory as'.as_memory /\
+        (!b. context_spill_byte cp b /\
+             ~closure_spill_byte ctx cp fn.fn_name b ==>
+             read_byte b as'.as_memory = read_byte b mem0) /\
+        shared_state_rel vs' as'
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_tac >>
+  drule_all ret_source_frame_boundary >>
+  disch_then (qspec_then `ra` strip_assume_tac) >>
+  drule_all ret_frame_prefix_marked_exact >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs as` >>
+  rename1 `asm_block_at prog mid.as_pc [AsmOp "JUMP"]` >>
+  `FLOOKUP o2pc (w2n ra) = SOME pc_ret` by metis_tac[] >>
+  `asm_steps lo o2pc prog (SUC 0) mid =
+    AsmOK (mid with <| as_pc := pc_ret;
+      as_stack := REVERSE ret.iret_values ++ rest |>)` by
+    (pure_rewrite_tac[asm_steps_def] >>
+     qpat_x_assum `asm_block_at prog mid.as_pc _` mp_tac >>
+     simp[asm_block_at_def] >> strip_tac >>
+     `mid.as_pc < LENGTH prog` by decide_tac >>
+     gvs[asm_step_jump, asm_jump_def]) >>
+  `0 < LENGTH (execute_plan cplan.cp_initial_fmp ops)` by
+    (drule_all ret_plan_decompose >> strip_tac >>
+     gvs[execute_plan_append, execute_plan_def, exec_stack_op_def]) >>
+  qexists_tac
+    `mid with <| as_pc := pc_ret; as_stack := REVERSE ret.iret_values ++ rest |>` >>
+  conj_tac
+  >- (`LENGTH (execute_plan cplan.cp_initial_fmp ops) =
+         (LENGTH (execute_plan cplan.cp_initial_fmp ops) - 1) + SUC 0` by decide_tac >>
+      pop_assum SUBST1_TAC >>
+      irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
+  gvs[shared_state_rel_def, venom_asm_terminal_rel_def]
+QED
+
+(* Preserve the original existential endpoint contract. *)
 Theorem gen_ret_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0 pc_ret.
@@ -248,24 +369,6 @@ Theorem gen_ret_frame_sim_deep:
              read_byte b as'.as_memory = read_byte b mem0) /\
         shared_state_rel vs' as'
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  rpt gen_tac >> disch_tac >>
-  drule_all ret_source_frame_boundary >>
-  disch_then (qspec_then `ra` strip_assume_tac) >>
-  drule_all ret_frame_prefix_marked >>
-  disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  rename1 `asm_steps lo o2pc prog n as = AsmOK mid` >>
-  `FLOOKUP o2pc (w2n ra) = SOME pc_ret` by metis_tac[] >>
-  `asm_steps lo o2pc prog (SUC 0) mid =
-    AsmOK (mid with <| as_pc := pc_ret;
-      as_stack := REVERSE ret.iret_values ++ rest |>)` by
-    (pure_rewrite_tac[asm_steps_def] >>
-     qpat_x_assum `asm_block_at prog mid.as_pc _` mp_tac >>
-     simp[asm_block_at_def] >> strip_tac >>
-     `mid.as_pc < LENGTH prog` by decide_tac >>
-     gvs[asm_step_jump, asm_jump_def]) >>
-  qexistsl_tac [`n + SUC 0`,
-    `mid with <| as_pc := pc_ret; as_stack := REVERSE ret.iret_values ++ rest |>`] >>
-  conj_tac >- (irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
-  gvs[shared_state_rel_def, venom_asm_terminal_rel_def]
+  rpt strip_tac >> drule_all gen_ret_frame_sim_deep_exact >>
+  metis_tac[]
 QED

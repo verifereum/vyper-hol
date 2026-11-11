@@ -1620,7 +1620,7 @@ Finalise spill_alloc_n_offset_props;
    --------------------------------------------------------------- *)
 
 (* The desired permutation indices are all < chunk *)
-Theorem desired_indices_bound[local]:
+Theorem desired_indices_bound:
   !(n:num) k.
     n >= 2 /\
     k < n ==>
@@ -1753,7 +1753,7 @@ Proof
 QED
 
 (* The two DUP restoration schedules visit every temporary slot once. *)
-Theorem dup_restore_indices_reverse[local]:
+Theorem dup_restore_indices_reverse:
   !k. 0 < k ==>
     GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1] =
     REVERSE (GENLIST I (k - 1)) ++ [k - 1] /\
@@ -2486,7 +2486,7 @@ Proof
 QED
 
 (* execute_plan initial_fmp length for MAP SOSpill *)
-Theorem execute_plan_map_spill_length[local]:
+Theorem execute_plan_map_spill_length:
   !offs. LENGTH (execute_plan initial_fmp (MAP SOSpill offs)) = 2 * LENGTH offs
 Proof
   Induct >> simp[execute_plan_def, exec_stack_op_def] >>
@@ -2494,7 +2494,7 @@ Proof
 QED
 
 (* execute_plan initial_fmp length for MAP SORestore *)
-Theorem execute_plan_map_restore_length[local]:
+Theorem execute_plan_map_restore_length:
   !offs. LENGTH (execute_plan initial_fmp (MAP SORestore offs)) = 2 * LENGTH offs
 Proof
   Induct >> simp[execute_plan_def, exec_stack_op_def] >>
@@ -2502,7 +2502,7 @@ Proof
 QED
 
 (* execute_plan initial_fmp length for spill ++ restore *)
-Theorem execute_plan_spill_restore_length[local]:
+Theorem execute_plan_spill_restore_length:
   !spill_offs restore_offs.
     LENGTH (execute_plan initial_fmp (MAP SOSpill spill_offs ++ MAP SORestore restore_offs)) =
       2 * LENGTH spill_offs + 2 * LENGTH restore_offs
@@ -2582,7 +2582,7 @@ QED
 
 (* Occurrence-indexed temporary offsets for a deep swap.  This interface is
    deliberately independent of operand equality. *)
-Theorem deep_swap_occurrence_offsets[local]:
+Theorem deep_swap_occurrence_offsets:
   !dist items al sp.
     dist > 16 /\
     LENGTH items = dist + 1 /\
@@ -2632,7 +2632,7 @@ Proof
   CONV_TAC (LHS_CONV fcpLib.INDEX_CONV) >> REFL_TAC
 QED
 
-Theorem raw_spill_push_encode_num_roundtrip[local]:
+Theorem raw_spill_push_encode_num_roundtrip:
   n < dimword(:256) ==>
   word_of_bytes F (0w:bytes32)
     (REVERSE (encode_num_bytes n)) = n2w n
@@ -4425,7 +4425,7 @@ Proof
   rpt IF_CASES_TAC >> gvs[] >> simp[PRE_SUB1]
 QED
 
-Theorem reverse_desired_values[local]:
+Theorem reverse_desired_values:
   !(items:'a list) dist.
     LENGTH items = dist + 1 /\ dist > 0 ==>
     REVERSE (MAP (\i. EL i items)

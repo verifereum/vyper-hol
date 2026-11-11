@@ -2991,7 +2991,7 @@ Proof
   Cases_on `alloc_spill_slot ps.ps_alloc` >> simp[]
 QED
 
-Theorem do_spill_at_relevant_align_layout[local]:
+Theorem do_spill_at_relevant_align_layout:
   !d ps lo.
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
     (apply_prefix_ops initial_fmp lo (FST (do_spill_at d ps)) ps).ps_stack =
@@ -3229,7 +3229,7 @@ Finalise reduce_depth_plan_align;
 
 
 (* Prefix interpretation depends only on the planner stack and spill map. *)
-Theorem apply_prefix_ops_ext_stack_spilled[local]:
+Theorem apply_prefix_ops_ext_stack_spilled:
   !ops lo ps1 ps2.
     ps1.ps_stack = ps2.ps_stack /\
     ps1.ps_spilled = ps2.ps_spilled ==>
@@ -6048,7 +6048,7 @@ Proof
   Cases_on `src = 0` >> simp[do_swap_def]
 QED
 
-Theorem reverse_stack_poke[local]:
+Theorem reverse_stack_poke:
   !d x stk. d < LENGTH stk ==>
     REVERSE (stack_poke d x stk) = LUPDATE x d (REVERSE stk)
 Proof
@@ -6279,7 +6279,7 @@ Proof
   gvs[MAP_MAP_o, combinTheory.o_DEF, REVERSE_APPEND, MAP_APPEND, SNOC_APPEND]
 QED
 
-Theorem reduce_depth_plan_layout_wf[local]:
+Theorem reduce_depth_plan_layout_wf:
   !fuel target_ops target_op f target_len ps.
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
     spill_alloc_layout_wf

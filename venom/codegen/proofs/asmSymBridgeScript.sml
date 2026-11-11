@@ -1381,14 +1381,12 @@ Proof
   >- (irule sym_step_create_sim >> simp[]) >>
   Cases_on `MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"; "SELFDESTRUCT";
     "GAS"; "MLOAD"; "SHA3"; "CALLDATACOPY"; "EXTCODECOPY"; "MCOPY"; "RETURNDATACOPY"]`
-  >- (qpat_x_assum `MEM name _` mp_tac >> pure_rewrite_tac [MEM] >>
-      strip_tac >> gvs[] >>
-      FIRST [irule sym_step_call_sim, irule sym_step_staticcall_sim,
-        irule sym_step_delegatecall_sim, irule sym_step_selfdestruct_sim,
-        irule sym_step_gas_sim, irule sym_step_mload_sim,
-        irule sym_step_sha3_sim, irule sym_step_calldatacopy_sim,
-        irule sym_step_extcodecopy_sim, irule sym_step_mcopy_sim,
-        irule sym_step_returndatacopy_sim] >> simp[]) >>
+  >- (qpat_x_assum `MEM name _`
+        (REPEAT_TCL DISJ_CASES_THEN SUBST_ALL_TAC o REWRITE_RULE [MEM]) >>
+      simp[sym_step_call_sim, sym_step_staticcall_sim,
+        sym_step_delegatecall_sim, sym_step_selfdestruct_sim, sym_step_gas_sim,
+        sym_step_mload_sim, sym_step_sha3_sim, sym_step_calldatacopy_sim,
+        sym_step_extcodecopy_sim, sym_step_mcopy_sim, sym_step_returndatacopy_sim]) >>
   Cases_on `ALOOKUP log_table name`
   >- (gvs[MEM] >> irule sym_step_concrete_good >> simp[] >> rpt strip_tac >>
       simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
@@ -1400,7 +1398,7 @@ QED
 
 (* ===== One step: the opcodes with label cases ===== *)
 
-Theorem asm_sym_rel_pc[local]:
+Theorem asm_sym_rel_pc:
   asm_sym_rel p env cs ss ⇒
   ss.sym_base.as_pc = cs.as_pc ∧ LENGTH ss.sym_stack = LENGTH cs.as_stack
 Proof
@@ -1863,7 +1861,7 @@ Proof
 QED
 
 (* A code label's offset fits a PUSH2 and maps back to the label. *)
-Theorem asm_static_wf_code_label[local]:
+Theorem asm_static_wf_code_label:
   asm_static_wf p ∧ INDEX_OF (AsmLabel l) p = SOME i ⇒
   ∃off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off ∧
         off < 65536 ∧ FLOOKUP (build_offset_to_pc p) off = SOME i
@@ -2120,7 +2118,7 @@ QED
 
 (* ===== Runs ===== *)
 
-Theorem asm_sym_rel_init[local]:
+Theorem asm_sym_rel_init:
   s.as_pc = 0 ∧ asm_data_env_ok p env s.as_code ⇒
   asm_sym_rel p env s (sym_init s)
 Proof

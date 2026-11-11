@@ -325,7 +325,7 @@ QED
 
 (* ===== The block's prefix: cleanup and PHIs ===== *)
 
-Theorem take_drop_phi_prefix[local]:
+Theorem take_drop_phi_prefix:
   !bb. non_param_insts bb = bb.bb_instructions ==>
     LENGTH (TAKE (phi_prefix_length bb.bb_instructions) (non_param_insts bb)) =
       phi_prefix_length bb.bb_instructions
