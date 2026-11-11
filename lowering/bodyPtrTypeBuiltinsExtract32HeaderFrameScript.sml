@@ -26,7 +26,7 @@ Proof
   `stmt_state_rel ctx func cenv cx ee t` by
     (irule stmt_state_rel_readonly_vars_pc >>
      qexistsl_tac [`s`,`sm`] >> gvs[expr_post_def]) >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es ee sa s0 t` by
     (irule wb_frame_readonly_tail >> qexistsl_tac [`sm`,`s`] >>
      simp[] >> metis_tac[expr_post_frame]) >>
   `expr_val_at cenv cx (expr_type src) sa sb ee (BytesV bs) op t` by

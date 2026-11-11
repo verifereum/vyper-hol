@@ -62,10 +62,13 @@ Proof
     (irule copy_buffer_state_rel_frame >>
      qexistsl_tac [`w2n w`, `inst`, `u`, `mid`, `sz`] >>
      simp[] >> gvs[regions_disjoint_def] >> metis_tac[]) >>
-  `locals_kept cenv es s0 z` by
+  `locals_kept cenv es es' s0 z` by
     (irule copy_buffer_locals_kept_frame >>
-     qexistsl_tac [`w2n w`, `u`, `sz`] >>
-     gvs[vv_post_def, locals_kept_def, regions_disjoint_def] >> metis_tac[]) >>
+     qexistsl_tac [`w2n w`, `u`, `sz`] >> rpt conj_tac
+     >~ [`locals_kept _ _ _ _ u`]
+     >- (irule exprSimPropsTheory.locals_kept_mem_tail >> qexists_tac `s` >>
+         gvs[vv_post_def]) >>
+     first_assum ACCEPT_TAC) >>
   suspend "post"
 QED
 

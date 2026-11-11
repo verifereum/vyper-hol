@@ -27,7 +27,7 @@ Theorem u2s_alloc_concrete_ptr:
     ghost_inv d cenv cx es G1 tn1 sr /\ ghost_kept cenv es sa G tn s G1 tn1 /\
     FLOOKUP G1 p = SOME (b,sz) /\ lookup_var p sr = SOME (n2w b) /\
     op_taint tn1 (Var p) = {} /\ b+sz < dimword(:256) /\
-    wb_frame cenv es sa s sr /\
+    wb_frame cenv es es sa s sr /\
     (!x. not_fresh_at sa x ==> lookup_var x sr = lookup_var x s) /\
     (!aid off len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
       off+len <= b \/ b+sz <= off) /\
@@ -136,7 +136,7 @@ Theorem u2s_alloc_ready_ptr:
       <|bb_label := a.cs_current_bb;
         bb_instructions := a.cs_current_insts ++ u2s_setup a op (Var p)|> /\
     (!out. u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr out ==>
-      stmt_state_rel ctx fn cenv cx es out /\ wb_frame cenv es sa s out /\
+      stmt_state_rel ctx fn cenv cx es out /\ wb_frame cenv es es sa s out /\
       FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz))
 Proof
   strip_tac >> drule_all u2s_alloc_concrete_ptr >>

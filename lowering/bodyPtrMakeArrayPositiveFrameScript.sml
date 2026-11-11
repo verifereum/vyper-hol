@@ -35,7 +35,7 @@ Theorem literal_store_outer_wb:
   z.vs_allocas = s.vs_allocas /\ off+n <= capacity /\
   (!i. ~(addr+off <= i /\ i < addr+off+n) ==>
     mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 s.vs_memory) ==>
-  wb_frame ce ees fr sf z
+  wb_frame ce ees es fr sf z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   gvs[literal_loop_frame_def] >>
@@ -45,16 +45,27 @@ Proof
      `~(addr+off <= i /\ i < addr+(n+off))` by decide_tac >> metis_tac[]) >>
   `!x. not_fresh_at fr x ==> lookup_var x z = lookup_var x s` by
     metis_tac[not_fresh_at_mono] >>
-  gvs[wb_frame_def, locals_kept_def] >> conj_tac
-  >- (rpt strip_tac >>
-      `addr+capacity <= off' \/ sz+off' <= addr` by metis_tac[] >>
-      `mem_bytes_at off' sz z.vs_memory = mem_bytes_at off' sz s.vs_memory` by metis_tac[] >>
-      metis_tac[]) >>
-  rpt strip_tac >>
-  `addr+capacity <= b \/ sz+b <= addr` by metis_tac[] >>
-  `addr+capacity <= off' \/ len+off' <= addr` by decide_tac >>
-  `mem_bytes_at off' len z.vs_memory = mem_bytes_at off' len s.vs_memory` by metis_tac[] >>
-  metis_tac[]
+  qpat_x_assum `wb_frame _ _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+  simp[wb_frame_def] >> rpt conj_tac
+  >- (qx_genl_tac [`aid0`, `lo`, `k`] >> strip_tac >>
+      `addr+capacity <= lo \/ k+lo <= addr` by
+        (qpat_x_assum `!old p k. FLOOKUP sf.vs_allocas old = SOME (p,k) /\ old < fr.cs_next_id ==> _`
+           drule_all >> simp[]) >>
+      `mem_bytes_at lo k z.vs_memory = mem_bytes_at lo k s.vs_memory` by
+        (qpat_x_assum `!p k. addr + capacity <= p \/ p + k <= addr ==> _` irule >>
+         decide_tac) >>
+      `mem_bytes_at lo k s.vs_memory = mem_bytes_at lo k sf.vs_memory` by
+        (qpat_x_assum `!aid off sz. FLOOKUP sf.vs_allocas aid = SOME (off,sz) /\ _ /\ _ ==> _`
+           irule >> conj_tac >- first_assum ACCEPT_TAC >>
+           qexists_tac `aid0` >> simp[]) >>
+      simp[]) >>
+  irule exprSimPropsTheory.locals_kept_regions_tail >> qexists_tac `s` >> simp[] >>
+  qx_genl_tac [`nm`, `lo`, `k`] >> strip_tac >>
+  `addr+capacity <= lo \/ k+lo <= addr` by
+    (qpat_x_assum `!name p k. local_region ce ees.scopes sf name p k ==> _` drule >>
+     simp[]) >>
+  qpat_x_assum `!p k. addr + capacity <= p \/ p + k <= addr ==> _` irule >>
+  decide_tac
 QED
 
 Theorem literal_loop_store_endpoint:

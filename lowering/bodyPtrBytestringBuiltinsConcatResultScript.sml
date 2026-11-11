@@ -59,7 +59,7 @@ Theorem concat_result_endpoint_ptr:
   b <= w2n w /\ w2n w + concat_alloc_size (MAP expr_type args) <= b+sz /\
   (!name lb lsz. local_region ce es'.scopes s name lb lsz ==>
     b+sz <= lb \/ lb+lsz <= b) /\
-  wb_frame ce es sa s0 s ==>
+  wb_frame ce es es' sa s0 s ==>
   ?v. evaluate_concat n vs = INL v /\
     vv_post ctx fn ce cx (Builtin ann (Concat n) args) es sa sb s0 es'
       (Value v) (LocatedValue ann <|ptr_operand := Var p; ptr_location := LocMemory|>) s /\
@@ -271,7 +271,7 @@ Resume concat_result_vv_sim_ptr[endpoint]:
   `!x. not_fresh_at s4 x ==> lookup_var x tf = lookup_var x t'` by metis_tac[] >>
   `!name b k. local_region ce es.scopes s0 name b k <=>
      local_region ce es.scopes t name b k` by metis_tac[] >>
-  `wb_frame ce es sa s0 tf` by (drule_all concat_original_wb_frame >> simp[]) >>
+  `wb_frame ce es ee sa s0 tf` by (drule_all concat_original_wb_frame >> simp[]) >>
   `ghost_kept ce es sa G0 tn0 s0 G tn` by
     (drule_all wordArgsPtrTheory.ghost_kept_trans >> simp[]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at s4 x` by
@@ -328,7 +328,8 @@ Resume concat_result_vv_sim_ptr[outcome]:
      qpat_x_assum `buf.buf_operand = Var r` mp_tac >>
      rpt (pop_assum kall_tac) >> strip_tac >>
      simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
-       contextTheory.base_ptr_def, read_result_def, vyperStateTheory.return_def] >>
+       contextTheory.base_ptr_def, read_result_def, vyperStateTheory.return_def,
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
      metis_tac[]) >>
   simp[NoAsms, stmtFragPtrTheory.ghost_inv_gas_obs] >>
   conj_tac >- first_assum ACCEPT_TAC >>

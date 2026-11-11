@@ -132,15 +132,16 @@ QED
 
 Resume extract32_operands_ptr_prefix[finish]:
   `ghost_kept cenv es sa G0 tn0 s0 H' th'` by
-    (`wb_frame cenv es sa s0 u` by
-       metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
+    (qpat_assum `expr_post _ _ _ _ src es sa _ s0 _ _ _ u`
+       (assume_tac o MATCH_MP exprSimWordArgsTheory.expr_post_frame) >>
      `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
        (qpat_assum `gas_marked_exec_ptr _ _ _ _ (es,s0,G0,tn0) _ _ _ _ _ _`
           (mp_tac o MATCH_MP gas_marked_exec_ptr_exec) >>
         disch_then (mp_tac o MATCH_MP (CONV_RULE (DEPTH_CONV ETA_CONV) bop_marked_scopes_dom)) >> simp[]) >>
      irule wordOperandsPtrTheory.ghost_kept_trans >>
      qpat_assum `ghost_kept cenv es sa G0 tn0 s0 H th` (irule_at Any) >>
-     qpat_assum `ghost_kept _ _ sb H th u H' th'` (irule_at Any) >> simp[] >>
+     qpat_assum `ghost_kept _ _ sb H th u H' th'` (irule_at Any) >>
+     qpat_assum `wb_frame cenv es _ sa s0 u` (irule_at Any) >> simp[] >>
      qexists_tac `func` >> conj_tac
      >- gvs[stmt_state_rel_def, state_rel_def] >>
      qpat_assum `lower_value _ _ _ src sa = _` (mp_tac o MATCH_MP (cj 2 compile_expr_grows)) >>

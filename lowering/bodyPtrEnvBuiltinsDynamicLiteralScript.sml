@@ -73,7 +73,9 @@ Proof
   simp[method_literal_dynamic_source, gas_explicit_def] >>
   conj_tac >- (gvs[vv_post_def, vv_holds_def, vv_at_def,
     stmt_state_rel_gas_obs, base_ptr_def, read_result_def, return_def,
-    expr_type_def] >> first_assum ACCEPT_TAC) >>
+    expr_type_def, loweringPostsTheory.locals_kept_def,
+    loweringPostsTheory.popped_kept_def] >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- (drule_all folded_selector_code >> strip_tac >> simp[]) >>
   gvs[ghost_inv_gas_obs, ptr_vv_ok_def, base_ptr_def, expr_type_def,
     read_result_def, return_def, ptr_val_ok_def, is_word_type_def,

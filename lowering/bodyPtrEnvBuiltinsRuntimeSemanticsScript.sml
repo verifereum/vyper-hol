@@ -11,13 +11,13 @@ Theorem method_id_mask_frame_transport:
   emit_op SHL [Lit 224w; sel] sn = (op,sb) /\
   eval_operand hash h = SOME w /\
   stmt_state_rel ctx fn cenv cx es h /\ local_ptrs_reserved cenv sh /\
-  wb_frame cenv es sa s0 h /\ local_ptrs_reserved cenv sa /\
+  wb_frame cenv es es' sa s0 h /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sh.cs_next_var /\ sa.cs_next_id <= sh.cs_next_id ==>
   ?t. run_inst_seq (emitted_insts sh sb) h = OK t /\
     eval_operand op t = SOME
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 4)))
         (BytesV (TAKE 4 (word_to_bytes w T)))) /\
-    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es es' sa s0 t /\
     (t with vs_vars := h.vs_vars) = h
 Proof
   strip_tac >> drule_all method_id_mask_frame >> strip_tac >>
@@ -48,7 +48,7 @@ Theorem method_id_fixed_hash_root_frame:
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  wb_frame cenv es sa s t
+  wb_frame cenv es es sa s t
 Proof
   strip_tac >> drule_all compile_keccak256_bytesm_frame >> strip_tac >>
   gvs[] >> simp[wb_frame_def] >> conj_tac
@@ -64,11 +64,11 @@ Theorem method_id_memory_hash_root_frame:
   mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  wb_frame cenv es sa s t
+  wb_frame cenv es es sa s t
 Proof
   strip_tac >> drule_all compile_keccak256_bytes_run >> strip_tac >>
   gvs[] >> gvs[venom_state_component_equality] >>
-  simp[wb_frame_def, locals_kept_def]
+  simp[wb_frame_def, locals_kept_mem]
 QED
 
 Theorem method_id_fixed_typed_root_frame:
@@ -80,7 +80,7 @@ Theorem method_id_fixed_typed_root_frame:
   (!x. arg = Var x ==> not_fresh_at sm x) /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sm /\ fn_has_code sm sh fn /\
   run_inst_seq (emitted_insts sm sh) s = OK t ==>
-  wb_frame cenv es' sm s t
+  wb_frame cenv es' es' sm s t
 Proof
   strip_tac >> `m <= 32` by gvs[evaluate_type_def, AllCaseEqs()] >>
   drule_at (Pat `expr_type _ = _`) hash_fixed_post_view >>
@@ -103,7 +103,7 @@ Theorem method_id_memory_typed_root_frame:
   compile_method_id_hash (expr_type e) arg sm = (op,sh) /\
   (!x. arg = Var x ==> not_fresh_at sm x) /\
   run_inst_seq (emitted_insts sm sh) s = OK t ==>
-  wb_frame cenv es' sm s t
+  wb_frame cenv es' es' sm s t
 Proof
   strip_tac
   >- (gvs[] >> drule_at (Pat `expr_type _ = _`) hash_dynamic_post_view >>
@@ -127,7 +127,7 @@ Theorem method_id_hash_typed_root_frame:
   (!x. arg = Var x ==> not_fresh_at sm x) /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sm /\ fn_has_code sm sh fn /\
   run_inst_seq (emitted_insts sm sh) s = OK t ==>
-  wb_frame cenv es' sm s t
+  wb_frame cenv es' es' sm s t
 Proof
   strip_tac >> Cases_on `bty` >> gvs[is_bytes_or_string_type_def]
   >- (Cases_on `v` >> gvs[value_has_type_def] >>
@@ -175,7 +175,7 @@ Theorem method_id_hash_mask_semantics:
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) (BytesV bs)) /\
     eval_operand op t = SOME
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 4))) (BytesV (TAKE 4 bs))) /\
-    stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es' sm s t /\
+    stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es' es' sm s t /\
     ~h.vs_halted /\ h.vs_current_bb = sh.cs_current_bb /\
     (t with vs_vars := h.vs_vars) = h /\
     (!ann. builtin_result cx es'.accounts ann MethodId [expr_type e] [v] =

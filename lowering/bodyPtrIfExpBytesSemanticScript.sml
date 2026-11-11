@@ -57,7 +57,7 @@ Theorem ifexp_bytes_original_semantic_frame:
   (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
     (!name p len. local_region ce es.scopes s0 name p len ==> off+sz <= p \/ p+len <= off) ==>
     mem_bytes_at off sz sf.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-  locals_kept ce es s0 sf
+  locals_kept ce es ee s0 sf
 Proof
   strip_tac >>
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x sf = SOME w` by
@@ -75,9 +75,9 @@ Proof
       simp[] >>
       (impl_tac >- (rpt strip_tac >> first_x_assum drule >>
                     simp[arithmeticTheory.ADD_COMM])) >> simp[]) >>
-  `locals_kept ce es s0 t` by gvs[vv_post_def] >>
+  `locals_kept ce es ee s0 t` by gvs[vv_post_def] >>
   irule copy_buffer_locals_kept_frame >>
-  goal_assum (drule_at (Pat `locals_kept _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `locals_kept _ _ _ _ _`)) >>
   qexistsl_tac [`b`, `n`] >> conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!name p sz. local_region _ _ _ _ _ _ ==> _` drule >>

@@ -52,7 +52,7 @@ Resume allocated_bytes_write_state_rel[immutable]:
   rpt strip_tac >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
   simp[immutable_alloca_sep_def] >>
-  disch_then drule_all >> strip_tac >>
+  disch_then (drule_all o CONJUNCT2) >> strip_tac >>
   `regions_disjoint off (type_memory_size tv) b N` by
     (qpat_x_assum `!inst b sz. _` drule_all >> simp[]) >>
   irule bytes_buffer_write_frame >>
@@ -78,11 +78,11 @@ Theorem allocated_bytes_write_locals_kept:
   LENGTH data = n /\ 32 + n <= N /\
   (!name p len. local_region cenv es.scopes s name p len ==>
     regions_disjoint b N p len) ==>
-  locals_kept cenv es s
+  locals_kept cenv es es s
     (mstore b (n2w n)
       (write_memory_with_expansion (b + 32) data s))
 Proof
-  strip_tac >> gvs[] >> rw[locals_kept_def] >>
+  strip_tac >> gvs[] >> irule locals_kept_regions >> rpt strip_tac >>
   irule bytes_buffer_write_frame >>
   qpat_x_assum `!name p len. _` drule >>
   simp[regions_disjoint_def] >> decide_tac
@@ -149,7 +149,7 @@ Theorem calldata_copy_store_semantic:
     stmt_state_rel ctx fn cenv cx es t /\
     val_in_memory (BaseTV (BytesT (Dynamic bound)))
       (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) b t.vs_memory /\
-    locals_kept cenv es s t /\ t.vs_allocas = s.vs_allocas /\
+    locals_kept cenv es es s t /\ t.vs_allocas = s.vs_allocas /\
     (!x. lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule_all calldata_copy_store_runtime >> strip_tac >>
@@ -269,7 +269,7 @@ Theorem compile_slice_calldata_semantic:
     (!aid b len. aid < sa.cs_next_id /\
       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
       mem_bytes_at b len zf.vs_memory = mem_bytes_at b len s.vs_memory) /\
-    locals_kept cenv es s zf /\
+    locals_kept cenv es es s zf /\
     zf.vs_accounts = s.vs_accounts /\ zf.vs_transient = s.vs_transient /\
     zf.vs_call_ctx = s.vs_call_ctx /\
     (!name b len. local_region cenv es.scopes s name b len ==>
@@ -374,7 +374,7 @@ Resume compile_slice_calldata_semantic[old_frame]:
      qexistsl_tac [`s`,`sa`,`es.scopes`] >> simp[]) >>
   `LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) = n` by
     (simp[LENGTH_TAKE_EQ] >> decide_tac) >>
-  `locals_kept cenv es s z` by
+  `locals_kept cenv es es s z` by
     (irule locals_kept_regions >>
      map_every qx_gen_tac [`name`,`bb`,`sz`] >> strip_tac >>
      `regions_disjoint (w2n w) N bb sz` by

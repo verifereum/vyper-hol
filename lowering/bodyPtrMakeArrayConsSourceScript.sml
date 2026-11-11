@@ -9,7 +9,7 @@ Theorem literal_vv_post_marked_input:
   vv_post ctx func ce cx e (es with gas_obs := gs) si sm s0 ee raw vv s <=>
   vv_post ctx func ce cx e es si sm s0 ee raw vv s
 Proof
-  simp[vv_post_def, locals_kept_def]
+  simp[vv_post_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem literal_marked_child_materialises:

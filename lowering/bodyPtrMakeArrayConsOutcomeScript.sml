@@ -6,7 +6,7 @@ Ancestors
   bodyPtrMakeArrayConsInvariant bodyPtrMakeArrayChildUnwrap bodyPtrMakeArrayZeroWidth
   bodyPtrMakeArrayPositiveFrame bodyPtrMakeArrayPositiveBytes bodyPtrMakeArrayPositiveWord
   bodyPtrMakeArrayChildScalar
-  exprLoweringProps exprOperandVar fragExec emitHelperProps compileEnv loweringStateRelDefs loweringPosts fragGasPathPtr
+  exprLoweringProps exprOperandVar fragExec emitHelperProps compileEnv loweringStateRelDefs loweringPosts fragGasPathPtr exprSimWordArgs
 
 Theorem literal_cons_compiler_stages:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
@@ -440,7 +440,8 @@ Resume literal_cons_outcome_ptr[normal]:
   `literal_loop_frame ctx func ce cx d root aid addr capacity
      ees fr sf Gf tnf marked si G0 tn0 s0 cells off` by
     (gvs[Abbr `marked`, literal_loop_frame_def, bodyPtrDefsTheory.ghost_inv_def,
-        bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
+        bodyPtrDefsTheory.ghost_kept_def, exprSimWordArgsTheory.wb_frame_gas_obs] >>
+        metis_tac[]) >>
   `ghost_kept ce marked si G0 tn0 s0 G tn` by
     (gvs[Abbr `marked`, bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
   `expr_body_pre ce cx env e marked` by simp[Abbr `marked`] >>

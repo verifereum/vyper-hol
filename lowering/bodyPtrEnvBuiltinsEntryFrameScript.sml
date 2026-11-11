@@ -6,7 +6,7 @@ Theorem expr_post_entry_gas_obs:
   expr_post ctx fn cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s <=>
   expr_post ctx fn cenv cx e es sa sb s0 ee v op s
 Proof
-  simp[expr_post_def, locals_kept_def]
+  simp[expr_post_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem ghost_kept_entry_gas_obs:

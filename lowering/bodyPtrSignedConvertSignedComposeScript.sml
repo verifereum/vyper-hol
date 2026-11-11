@@ -677,7 +677,9 @@ Proof
   conj_tac
   >- (gvs[stmtFragPtrTheory.ghost_inv_gas_obs]) >>
   gvs[expr_post_def, expr_val_at_def, stmt_state_rel_def,
-      state_rel_gas_obs] >> metis_tac[]
+      state_rel_gas_obs,
+      loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+    metis_tac[]
 QED
 
 Theorem signed_zero_capacity_continuation:
@@ -1385,7 +1387,9 @@ Proof
   >- (qpat_assum `t with vs_inst_idx := _ = s with <|vs_vars := _; vs_inst_idx := _|>`
         (mp_tac o Q.AP_TERM `\st. st.vs_current_bb`) >> simp[]) >>
   conj_tac >- gvs[stmtFragPtrTheory.ghost_inv_gas_obs] >>
-  gvs[expr_post_def, expr_val_at_def, stmt_state_rel_def, state_rel_gas_obs] >> metis_tac[]
+  gvs[expr_post_def, expr_val_at_def, stmt_state_rel_def, state_rel_gas_obs,
+      loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+    metis_tac[]
 QED
 
 Theorem signed_clamped_success_continuation:
@@ -1642,7 +1646,9 @@ Proof
       conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
       conj_tac >- gvs[stmtFragPtrTheory.ghost_inv_gas_obs] >>
       qexists_tac `op` >>
-      gvs[expr_post_def, expr_val_at_def, stmt_state_rel_def, state_rel_gas_obs] >> metis_tac[]) >>
+      gvs[expr_post_def, expr_val_at_def, stmt_state_rel_def, state_rel_gas_obs,
+      loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+    metis_tac[]) >>
   qpat_x_assum `if _ then _ else _` mp_tac >> simp[] >> strip_tac >>
   drule_all signed_nonzero_continuation >> simp[]
 QED
@@ -1748,7 +1754,9 @@ Proof
   >- (qpat_x_assum `u with vs_inst_idx := _ = _` mp_tac >>
       simp[venom_state_component_equality]) >>
   conj_tac >- gvs[stmtFragPtrTheory.ghost_inv_gas_obs] >>
-  gvs[expr_post_def, expr_val_at_def, stmt_state_rel_def, state_rel_gas_obs] >> metis_tac[]
+  gvs[expr_post_def, expr_val_at_def, stmt_state_rel_def, state_rel_gas_obs,
+      loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+    metis_tac[]
 QED
 
 Theorem signed_nonzero_continuation_actual[local]:
@@ -1847,7 +1855,9 @@ Proof
       conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
       conj_tac >- gvs[stmtFragPtrTheory.ghost_inv_gas_obs] >>
       qexists_tac `op` >>
-      gvs[expr_post_def, expr_val_at_def, stmt_state_rel_def, state_rel_gas_obs] >> metis_tac[]) >>
+      gvs[expr_post_def, expr_val_at_def, stmt_state_rel_def, state_rel_gas_obs,
+      loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+    metis_tac[]) >>
   qpat_x_assum `if _ then _ else _` mp_tac >> simp[] >> strip_tac >>
   drule_all signed_nonzero_continuation_actual >> simp[]
 QED

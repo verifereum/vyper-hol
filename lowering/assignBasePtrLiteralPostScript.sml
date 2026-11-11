@@ -403,7 +403,7 @@ Proof
   drule_all assign_base_ptr_one_byte_run_state_rel >> strip_tac >>
   drule_all assign_base_ptr_one_byte_run_frame >> strip_tac >>
   drule_all assign_base_ptr_one_byte_run_value >> strip_tac >>
-  `locals_kept cenv es s t` by
+  `locals_kept cenv es es s t` by
     (irule exprSimPropsTheory.locals_kept_regions >> first_assum ACCEPT_TAC) >>
   simp[loweringPostsTheory.expr_post_def, vyperASTTheory.expr_type_def] >> metis_tac[]
 QED

@@ -73,9 +73,10 @@ Theorem ifexp_condition_arm_ghost_kept:
   ghost_kept cenv es sa G0 tn0 s0 G tn
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 (jump_to lbl tt)` by
-    (gvs[expr_post_def, wb_frame_def, jump_to_def, lookup_var_def,
-         locals_kept_def] >> metis_tac[]) >>
+  `wb_frame cenv es es1 sa s0 (jump_to lbl tt)` by
+    (qspecl_then [`cenv`,`es`,`es1`,`sa`,`s0`,`tt`,`sa`,`jump_to lbl tt`]
+       irule wb_frame_readonly_tail >>
+     simp[jump_to_def, lookup_var_def] >> metis_tac[expr_post_frame]) >>
   drule_all ghost_kept_wb_trans >> simp[]
 QED
 

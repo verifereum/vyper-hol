@@ -18,7 +18,7 @@ Definition literal_loop_frame_def:
   literal_loop_frame ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es cs G tn s cells off <=>
     stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
-    wb_frame ce ees fr sf s /\
+    wb_frame ce ees es fr sf s /\
     ghost_kept ce ees fr Gf tnf sf G tn /\
     MAP FDOM ees.scopes = MAP FDOM es.scopes /\
     ~s.vs_halted /\ s.vs_current_bb = cs.cs_current_bb /\
@@ -179,12 +179,10 @@ Theorem literal_outer_frame_expr:
   stmt_state_rel ctx func ce cx ees sf /\ local_ptrs_reserved ce fr /\
   expr_post ctx func ce cx e esi si sb s0 es' v op z /\
   ghost_kept ce esi si G0 tn0 s0 H tm ==>
-  wb_frame ce ees fr sf z /\ ghost_kept ce ees fr Gf tnf sf H tm
+  wb_frame ce ees es' fr sf z /\ ghost_kept ce ees fr Gf tnf sf H tm
 Proof
   simp[literal_loop_frame_def] >> rpt strip_tac >>
-  `wb_frame ce esi si s0 z` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, wb_frame_def] >> metis_tac[]) >>
+  `wb_frame ce esi es' si s0 z` by metis_tac[expr_post_frame] >>
   `fr.cs_next_id <= si.cs_next_id` by decide_tac >>
   metis_tac[wb_frame_trans, ghost_kept_wb_trans]
 QED
@@ -210,9 +208,8 @@ Proof
     mp_tac >> simp[literal_loop_frame_def] >> strip_tac >>
   `MAP FDOM esi.scopes = MAP FDOM es'.scopes` by
     metis_tac[eval_expr_preserves_scopes_dom] >>
-  `wb_frame ce esi si s0 z /\ stmt_state_rel ctx func ce cx es' z` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, wb_frame_def] >> metis_tac[]) >>
+  `wb_frame ce esi es' si s0 z /\ stmt_state_rel ctx func ce cx es' z` by
+    metis_tac[expr_post_frame, expr_post_def] >>
   reverse conj_tac
   >- (`EVERY (\(tv,v,p,k). addr <= p /\ p+k <= addr+capacity) cells` by
         (gvs[EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>

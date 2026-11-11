@@ -119,7 +119,8 @@ Proof
   conj_tac >- metis_tac[] >>
   conj_tac
   >- (qpat_x_assum `expr_post _ _ _ _ (Builtin _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
-      simp[expr_post_def, expr_val_at_def, stmt_state_rel_gas_obs] >>
+      simp[expr_post_def, expr_val_at_def, stmt_state_rel_gas_obs,
+           loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
       metis_tac[]) >>
   metis_tac[]
 QED

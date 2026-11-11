@@ -143,7 +143,7 @@ Proof
   `inst'.inst_opcode = inst.inst_opcode` by gvs[inst_pair_def] >>
   drule_all inst_pair_ops >> strip_tac >>
   `s'.vs_call_entry_fmp = s.vs_call_entry_fmp` by
-    metis_tac[state_rel_def, execution_frame_fields] >>
+    metis_tac[o1FrameLockstepTheory.state_rel_def, execution_frame_fields] >>
   drule_all write_ranges_pair >> strip_tac >>
   drule_all read_ranges_pair >> strip_tac >>
   drule inst_pair_write_offset >> strip_tac >>

@@ -117,7 +117,8 @@ Theorem loop_shape_word_copy:
     (\s. plain_operand s src /\ plain_operand s dst)
     (compile_word_copy_loop src dst n ll sl ctor) (\u s. T)
 Proof
-  simp[compile_word_copy_loop_def] >> irule shape_step_bind >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def,
+       compile_word_copy_loop_base_def] >> irule shape_step_bind >>
   qexists `\l s. (plain_operand s src /\ plain_operand s dst) /\ compiler_label l` >>
   reverse conj_tac
   >- (ho_match_mp_tac shape_step_fresh_label >>

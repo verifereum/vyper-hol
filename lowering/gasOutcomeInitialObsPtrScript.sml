@@ -17,7 +17,7 @@ Theorem expr_post_initial_obs:
   expr_post ctx fn cenv cx e (es with gas_obs := gs) sa sb s0 ee v op t <=>
   expr_post ctx fn cenv cx e es sa sb s0 ee v op t
 Proof
-  simp[expr_post_def, locals_kept_def]
+  simp[expr_post_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem gas_value_prefix_initial_obs:

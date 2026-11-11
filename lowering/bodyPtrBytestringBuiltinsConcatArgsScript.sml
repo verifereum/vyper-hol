@@ -75,7 +75,7 @@ Theorem concat_args_sim_ptr:
         (p+n <= B \/ B+bsz <= p) /\ (p+n <= w2n ow \/ w2n ow+64 <= p) /\
         (!name lo sz. local_region cenv es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept cenv es s0 t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+      locals_kept cenv es ee s0 t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       ghost_inv d cenv cx ee G tn t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       ptr_covers G tn dv t (bsz-32) /\ ptr_covers G tn ov t 32 /\ ~t.vs_halted /\
       (!i. B+32 <= i /\ i < B+32+k+LENGTH (FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs)) ==> i NOTIN tn.t_mem) /\
@@ -241,15 +241,16 @@ QED
 
 Resume concat_args_sim_ptr[locals_ghost]:
   conj_tac
-  >- (`locals_kept cenv es s0 t2` by
+  >- (`locals_kept cenv es ee s0 t2` by
         (irule locals_kept_regions_tail >>
-         qpat_assum `locals_kept cenv es s0 t` (irule_at (Pat `locals_kept _ _ _ _`)) >>
+         qpat_assum `locals_kept cenv es ee s0 t` (irule_at (Pat `locals_kept _ _ _ _ _`)) >>
          rpt strip_tac >>
          qpat_assum `!p n. _ ==> mem_bytes_at p n t2.vs_memory = _` irule >>
          metis_tac[]) >>
+      qpat_x_assum `ee = _` SUBST_ALL_TAC >>
       irule exprBopSimPropsTheory.locals_kept_trans >>
-      qpat_assum `locals_kept cenv es s0 t2` (irule_at (Pat `locals_kept _ _ _ _`)) >>
-      qpat_assum `locals_kept cenv _ t2 t'` (irule_at (Pat `locals_kept _ _ _ _`)) >>
+      qpat_assum `locals_kept cenv es _ s0 t2` (irule_at (Pat `locals_kept _ _ _ _ _`)) >>
+      qpat_assum `locals_kept cenv _ _ t2 t'` (irule_at (Pat `locals_kept _ _ _ _ _`)) >>
       simp[] >> metis_tac[]) >>
   `ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
     (irule ghost_kept_locals_trans >>

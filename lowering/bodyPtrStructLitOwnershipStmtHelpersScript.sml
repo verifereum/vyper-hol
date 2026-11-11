@@ -175,6 +175,20 @@ Proof
   irule alloc_run_conseq >> irule_at Any alloc_run_emit_void_fresh >> simp[]
 QED
 
+Theorem alloc_run_compile_store_immutable_bytestring:
+  alloc_run fresh_outputs (compile_store_immutable_bytestring imm src dst)
+    (\u s. fresh_outputs s)
+Proof
+  simp[compile_store_immutable_bytestring_def, compile_bytestring_word_count_def,
+       comp_ignore_bind_def, comp_bind_assoc] >>
+  rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+    reverse conj_tac
+    >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
+         SRULE [SF ETA_ss] alloc_run_compile_word_copy_loop_base] >>
+    gen_tac >> simp[]) >>
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+QED
+
 Theorem alloc_run_compile_assign_value:
   alloc_run fresh_outputs
     (compile_assign_value ce dst loc src prim src_loc dt st da bytes)
@@ -204,6 +218,7 @@ Proof
     SRULE [SF ETA_ss] alloc_run_compile_dynarray_to_storage,
     SRULE [SF ETA_ss] alloc_run_compile_imm_store_word,
     SRULE [SF ETA_ss] alloc_run_compile_imm_store_words,
+    SRULE [SF ETA_ss] alloc_run_compile_store_immutable_bytestring,
     SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
   TRY (rename1 `alloc_run _ (comp_return _) _` >>
     simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC) >>

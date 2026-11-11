@@ -3,29 +3,70 @@ Ancestors bodyPtrStructLitOwnershipMultiExprs bodyPtrStructLitOwnershipInterface
   bodyPtrStructLitOwnershipFreshness bodyPtrStructLitOwnershipSteps
   exprLowering compileEnv context loweringShapeDefs
 
+Theorem alloc_run_emit_membership_eqs[local]:
+  !elems. alloc_run fresh_outputs (emit_membership_eqs needle elems)
+    (\v s. fresh_outputs s)
+Proof
+  Induct >> simp[emit_membership_eqs_def]
+  >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
+  gen_tac >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  reverse conj_tac
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+  gen_tac >> simp[] >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  reverse conj_tac >- (pop_assum mp_tac >> simp[SF ETA_ss]) >>
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+QED
+
+Theorem alloc_run_fold_membership_or[local]:
+  !cs acc. alloc_run fresh_outputs (fold_membership_or acc cs)
+    (\v s. fresh_outputs s)
+Proof
+  Induct >> simp[fold_membership_or_def]
+  >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
+  rpt gen_tac >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  reverse conj_tac
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+  pop_assum mp_tac >> simp[SF ETA_ss]
+QED
+
+Theorem alloc_run_fold_membership_and[local]:
+  !cs acc. alloc_run fresh_outputs (fold_membership_and acc cs)
+    (\v s. fresh_outputs s)
+Proof
+  Induct >> simp[fold_membership_and_def]
+  >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
+  rpt gen_tac >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  reverse conj_tac
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+  gen_tac >> simp[] >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  reverse conj_tac
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+  pop_assum mp_tac >> simp[SF ETA_ss]
+QED
+
 Theorem alloc_run_compile_list_membership_in:
   !elems. alloc_run fresh_outputs (compile_list_membership_in needle elems)
     (\v s. fresh_outputs s)
 Proof
-  Induct >> simp[compile_list_membership_in_def]
-  >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
-  Cases_on `elems` >> simp[compile_list_membership_in_def, alloc_run_emit_op_fresh] >>
-  gen_tac >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >> reverse conj_tac
-  >- gvs[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
-  gen_tac >> simp[] >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
-  gvs[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh]
+  gen_tac >> simp[compile_list_membership_in_def] >>
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  simp[SF ETA_ss, alloc_run_emit_membership_eqs] >>
+  Cases >> simp[SRULE [SF ETA_ss] alloc_run_fold_membership_or] >>
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
 QED
 
 Theorem alloc_run_compile_list_membership_notin:
   !elems. alloc_run fresh_outputs (compile_list_membership_notin needle elems)
     (\v s. fresh_outputs s)
 Proof
-  Induct >> simp[compile_list_membership_notin_def]
+  gen_tac >> simp[compile_list_membership_notin_def] >>
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  simp[SF ETA_ss, alloc_run_emit_membership_eqs] >>
+  Cases >> simp[]
   >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
-  Cases_on `elems` >> simp[compile_list_membership_notin_def] >> gen_tac >>
-  rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >> reverse conj_tac
-    >- gvs[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >> gen_tac >> simp[]) >>
-  gvs[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh]
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
+       SRULE [SF ETA_ss] alloc_run_fold_membership_and]
 QED
 
 Theorem alloc_run_compile_builtin_dispatch_body_literal_membership:

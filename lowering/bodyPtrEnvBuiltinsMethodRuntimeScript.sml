@@ -61,7 +61,7 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
     metis_tac[cj 2 compile_expr_grows] >>
-  `wb_frame cenv es sa s0 s` by (gvs[expr_post_def, wb_frame_def] >> metis_tac[]) >>
+  `wb_frame cenv es es' sa s0 s` by metis_tac[expr_post_frame] >>
   drule_all ghost_kept_wb_trans >> strip_tac >>
   drule_all method_id_typed_suffix_shape >> strip_tac >>
   `t.vs_current_bb = s.vs_current_bb` by

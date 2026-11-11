@@ -175,7 +175,8 @@ Theorem assign_base_ptr_expr_post_gas_obs:
 Proof
   simp[loweringPostsTheory.expr_post_def, stmt_state_rel_def, state_rel_gas_obs,
     loweringPostsTheory.expr_val_at_def,
-    loweringPostsTheory.expr_val_own_def]
+    loweringPostsTheory.expr_val_own_def, loweringPostsTheory.locals_kept_def,
+    loweringPostsTheory.popped_kept_def]
 QED
 
 Theorem assign_base_ptr_one_byte_outcome:

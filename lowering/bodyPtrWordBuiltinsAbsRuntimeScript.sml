@@ -77,6 +77,7 @@ Theorem word_abs_runtime_cenv_eval:
     ce_ret_dec_info := DecPrimWord NoClamp; ce_max_return_size := 0;
     ce_is_ctor := F; ce_imm_alloca := NONE; ce_func_info := K (0,0,[]);
     ce_func_param_types := K []; ce_func_return_type := K NoneT;
+    ce_func_mutability := K Nonpayable;
     ce_func_ids := K 0; ce_nonreentrant := (F,0,F,F);
     ce_raw_return := F; ce_alloca_locals := T|>
 Proof

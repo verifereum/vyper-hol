@@ -43,7 +43,7 @@ QED
 Theorem u2s_alloc_loop_ghost_kept:
   compile_alloc_buffer sz sa = (ba,a) /\
   stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
-  wb_frame cenv es sa s ready /\
+  wb_frame cenv es es sa s ready /\
   ghost_kept cenv es sa G tn s G1 tn1 /\
   ghost_kept cenv es a G1 tn1 ready G2 tn2 ==>
   ghost_kept cenv es sa G tn s G2 tn2
@@ -53,9 +53,9 @@ Proof
     (mp_tac (Q.SPECL [`sz`, `sa`]
        exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >>
      simp[exprLoweringPropsTheory.ci_mono_def]) >>
-  irule ghost_kept_wb_trans >> simp[] >> conj_tac
-  >- metis_tac[] >>
-  qexistsl_tac [`G1`, `es`, `ready`, `a`, `tn1`] >> simp[]
+  irule (Q.INST [`es1` |-> `es`, `es'` |-> `es`, `s1` |-> `ready`, `sb` |-> `a`]
+    wordArgsPtrTheory.ghost_kept_wb_trans) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem u2s_result_control:
@@ -72,7 +72,7 @@ Theorem u2s_result_vv_post:
   u2s_layout a op ba.buf_operand n sb /\ out = Var (u2s_var a 2) /\
   inst.inst_id = sa.cs_next_id /\
   u2s_safe ctx fn cenv cx es a ba.buf_operand b (sz+n) inst sr t /\
-  wb_frame cenv es sa s t /\
+  wb_frame cenv es es sa s t /\
   post_value_type cenv e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\

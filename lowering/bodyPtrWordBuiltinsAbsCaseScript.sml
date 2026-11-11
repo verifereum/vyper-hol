@@ -146,10 +146,14 @@ Proof
   conj_tac >- metis_tac[] >>
   conj_tac
   >- (qpat_x_assum `expr_post _ _ _ _ (Builtin _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
-      simp[expr_post_def, expr_val_at_def, stmt_state_rel_gas_obs] >> metis_tac[]) >>
+      simp[expr_post_def, expr_val_at_def, stmt_state_rel_gas_obs,
+           loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+      metis_tac[]) >>
   qpat_x_assum `expr_post _ _ _ _ (Builtin _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def, expr_val_at_def, stmt_state_rel_gas_obs,
-       expr_type_def, is_word_type_def] >> metis_tac[]
+       expr_type_def, is_word_type_def,
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+  metis_tac[]
 QED
 
 Theorem word_abs_overflow_ptr_outcome:

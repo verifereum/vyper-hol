@@ -47,7 +47,8 @@ Proof
   qmatch_asmsub_abbrev_tac `eval_expr cx e marked = _` >>
   `literal_loop_frame ctx func ce cx d root aid addr capacity
      ees fr sf Gf tnf marked si G0 tn0 s0 cells off` by
-    (gvs[Abbr `marked`, literal_loop_frame_def, ghost_inv_def, ghost_kept_def] >> metis_tac[]) >>
+    (gvs[Abbr `marked`, literal_loop_frame_def, ghost_inv_def, ghost_kept_def,
+       exprSimWordArgsTheory.wb_frame_gas_obs] >> metis_tac[]) >>
   `ghost_kept ce marked si G0 tn0 s0 G tn` by
     (gvs[Abbr `marked`, ghost_kept_def] >> metis_tac[]) >>
   `expr_body_pre ce cx env e marked` by simp[Abbr `marked`] >>

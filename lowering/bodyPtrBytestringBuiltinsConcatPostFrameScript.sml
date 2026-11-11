@@ -50,16 +50,16 @@ Theorem concat_original_locals_frame:
   32 <= bsz /\
   (!b k. b+k <= obase \/ obase+64 <= b ==>
     mem_bytes_at b k s.vs_memory = mem_bytes_at b k s0.vs_memory) /\
-  locals_kept ce es s u /\
+  locals_kept ce es es' s u /\
   (!b k. b+k <= B \/ B+32 <= b ==>
     mem_bytes_at b k t.vs_memory = mem_bytes_at b k u.vs_memory) ==>
-  locals_kept ce es s0 t
+  locals_kept ce es es' s0 t
 Proof
   strip_tac >>
-  `locals_kept ce es s0 s` by
+  `locals_kept ce es es s0 s` by
     (irule locals_kept_regions >> rpt strip_tac >>
      qpat_x_assum `!b k. b+k <= obase \/ _ ==> _` irule >> metis_tac[]) >>
-  `locals_kept ce es s0 u` by
+  `locals_kept ce es es' s0 u` by
     (irule exprBopSimPropsTheory.locals_kept_trans >>
      qexistsl_tac [`es`,`sa`,`s`] >> simp[]) >>
   irule exprSimCopyTheory.copy_buffer_locals_kept_frame >>
@@ -88,16 +88,16 @@ Theorem concat_original_wb_frame:
   32 <= bsz /\
   (!b k. b+k <= obase \/ obase+64 <= b ==>
     mem_bytes_at b k s.vs_memory = mem_bytes_at b k s0.vs_memory) /\
-  locals_kept ce es s u /\
+  locals_kept ce es es' s u /\
   (!b k. b+k <= B \/ B+32 <= b ==>
     mem_bytes_at b k t.vs_memory = mem_bytes_at b k u.vs_memory) ==>
-  wb_frame ce es sa s0 t
+  wb_frame ce es es' sa s0 t
 Proof
   strip_tac >>
   `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
     (simp[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
      lookup_var x s = SOME w` by metis_tac[] >>
-  `locals_kept ce es s0 t` by (drule_all concat_original_locals_frame >> simp[]) >>
+  `locals_kept ce es es' s0 t` by (drule_all concat_original_locals_frame >> simp[]) >>
   simp[wb_frame_def] >> rpt conj_tac >> metis_tac[]
 QED

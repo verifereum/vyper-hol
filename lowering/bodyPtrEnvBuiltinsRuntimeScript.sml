@@ -114,7 +114,7 @@ Proof
   `stmt_state_rel ctx fn cenv cx es' s` by gvs[expr_post_def] >>
   gvs[] >>
   drule_at (Pat `compile_alloc_buffer _ _ = _`) method_id_selector_append_counted >>
-  disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `emit_void MSTORE [_;_] _ = _`)) >>
   simp[] >> disch_then drule_all >>
