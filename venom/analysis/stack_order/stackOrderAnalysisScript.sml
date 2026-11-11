@@ -1,4 +1,4 @@
 (* Stack Order Analysis — public API *)
 Theory stackOrderAnalysis
 Ancestors
-  stackOrderDefs stackOrderProps
+  stackOrderDefs stackOrderProofs cfgAnalysisProps

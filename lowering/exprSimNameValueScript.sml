@@ -6,7 +6,7 @@ Ancestors
   list finite_map fragExec localPtrsProps loweringSlice
   exprLowering exprLoweringProps compileEnv loweringStateRelDefs context
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeEnv vyperTypeInvariants
-  valueEncoding valueEncodingProofs venomInst venomState
+  valueEncoding valueEncodingProofs venomInst venomState memoryValueEncoding
 
 Theorem name_value_marked_exec:
   lookup_scopes id es.scopes = SOME entry /\ ~s0.vs_halted ==>
@@ -54,7 +54,8 @@ Proof
        val_wf entry.type entry.value /\
        val_in_memory entry.type entry.value (w2n w) s0.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     first_x_assum drule_all >> metis_tac[]) >>
+     first_x_assum drule_all >> strip_tac >> qexists_tac `w` >>
+     simp[] >> irule memory_value_rel_val_in_memory >> simp[]) >>
   simp[vv_post_def, vv_holds_def, vv_at_def, mk_ptr_def,
        vyperASTTheory.expr_type_def, eval_operand_def, locals_kept_mem] >>
   conj_tac >- metis_tac[val_in_memory_word_type] >>
@@ -63,7 +64,8 @@ Proof
   asm_simp_tac (srw_ss()) [local_region_def] >>
   drule val_footprint_le >> strip_tac >>
   conj_tac >- decide_tac >>
-  irule local_path_at_val_at >> irule local_path_at_root >> simp[]
+  conj_tac >- (irule local_path_at_val_at >> irule local_path_at_root >> simp[]) >>
+  irule local_place_at_root >> simp[]
 QED
 
 Theorem compile_name_vv_sim:

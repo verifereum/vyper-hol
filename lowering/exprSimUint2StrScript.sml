@@ -1546,7 +1546,7 @@ Theorem u2s_alloc_safe:
   ?t (w:256 word). run_inst_seq (emitted_insts sa a) s = OK t /\
     u2s_safe ctx fn cenv cx es a buf.buf_operand (w2n w) sz inst t t /\
     w2n w + sz < dimword (:256) /\ sa.cs_next_id < a.cs_next_id /\
-    wb_frame cenv es es sa s t /\
+    wb_frame cenv es es sa s t /\ t.vs_memory = s.vs_memory /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid off len. aid < sa.cs_next_id /\
        FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
@@ -1681,6 +1681,43 @@ Theorem u2s_safe_wb_tail:
 Proof
   rpt strip_tac >> gvs[u2s_safe_def] >>
   irule u2s_frame_wb_tail >> simp[] >> qexistsl_tac [`a`, `b`, `s0`, `sz`] >> simp[] >> metis_tac[]
+QED
+
+(* The buffer is uint2str's own allocation, so a safe state is a pure frame
+   of the state before it. *)
+Theorem u2s_safe_pure_tail:
+  wb_frame cenv es es sa s s0 /\ local_ptrs_reserved cenv sa /\
+  s0.vs_memory = s.vs_memory /\
+  (!name lb len. local_region cenv es.scopes s0 name lb len ==>
+    b+sz <= lb \/ lb+len <= b) /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_id = sa.cs_next_id /\
+  u2s_safe ctx fn cenv cx es a buf b sz inst s0 out ==>
+  pure_frame cenv fn es sa s out
+Proof
+  strip_tac >>
+  qpat_x_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [u2s_safe_def, u2s_frame_def]) >>
+  rewrite_tac[pure_frame_def] >> conj_tac
+  >- (qx_genl_tac [`nm`, `lb`, `lsz`] >> strip_tac >>
+      `local_region cenv es.scopes s0 nm lb lsz` by
+        (match_mp_tac local_region_frame_fwd >>
+         qexistsl_tac [`es.scopes`, `sa`, `s`] >> fs[wb_frame_def]) >>
+      `b + sz <= lb \/ lb + lsz <= b` by
+        (qpat_x_assum `!name lb len. local_region _ _ s0 _ _ _ ==> _` drule >>
+         decide_tac) >>
+      `mem_bytes_at lb lsz out.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
+        (qpat_x_assum `!off len. _ ==> mem_bytes_at off len out.vs_memory = _` irule >>
+         decide_tac) >>
+      qpat_x_assum `s0.vs_memory = _` (fn th => fs[GSYM th])) >>
+  qx_genl_tac [`off`, `len`] >> strip_tac >>
+  `regions_disjoint off len b sz` by
+    (qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `inst` >> simp[]) >>
+  `mem_bytes_at off len out.vs_memory = mem_bytes_at off len s0.vs_memory` by
+    (qpat_x_assum `!off len. _ ==> mem_bytes_at off len out.vs_memory = _` irule >>
+     fs[regions_disjoint_def]) >>
+  qpat_x_assum `s0.vs_memory = _` (fn th => fs[GSYM th])
 QED
 
 (* The code carrier need not own the semantic allocation invariant. *)
@@ -2582,7 +2619,8 @@ Theorem u2s_alloc_ready_path:
     gas_marked_path F ctx fn s 0 (OK ready) /\
     (!out. u2s_safe ctx func cenv cx es a ba.buf_operand b sz inst s0 out ==>
       stmt_state_rel ctx func cenv cx es out /\ wb_frame cenv es es sa s out /\
-      FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz))
+      FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz) /\
+      pure_frame cenv func es sa s out)
 Proof
   strip_tac >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
@@ -2610,6 +2648,14 @@ Proof
       FLOOKUP out.vs_allocas sa.cs_next_id = SOME (w2n w,sz)` by
     (match_mp_tac u2s_safe_wb_tail >> simp[Abbr `inst`, venomInstTheory.mk_inst_def] >>
      metis_tac[ADD_COMM]) >>
+  `!out. u2s_safe ctx func cenv cx es a ba.buf_operand (w2n w) sz inst t out ==>
+      pure_frame cenv func es sa s out` by
+    (rpt strip_tac >>
+     match_mp_tac (Q.INST [`buf` |-> `ba.buf_operand`,
+                           `b` |-> `w2n (w:256 word)`, `s0` |-> `t`]
+                     u2s_safe_pure_tail) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[Abbr `inst`, venomInstTheory.mk_inst_def] >> metis_tac[ADD_COMM]) >>
   `!fuel. run_from fuel ctx fn s =
       run_from fuel ctx fn (t with vs_inst_idx := LENGTH a.cs_current_insts)` by
     (gen_tac >> irule u2s_alloc_continue >>
@@ -2662,7 +2708,8 @@ Theorem u2s_alloc_ready:
     (!fuel. run_from fuel ctx fn s = run_from fuel ctx fn ready) /\
     (!out. u2s_safe ctx func cenv cx es a ba.buf_operand b sz inst s0 out ==>
       stmt_state_rel ctx func cenv cx es out /\ wb_frame cenv es es sa s out /\
-      FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz))
+      FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz) /\
+      pure_frame cenv func es sa s out)
 Proof
   strip_tac >> drule_all u2s_alloc_ready_path >> metis_tac[]
 QED
@@ -2695,7 +2742,8 @@ Proof
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   rename1 `val_in_memory tv _ _ t.vs_memory` >>
   `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
-    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,sz + n)` by metis_tac[] >>
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,sz + n) /\
+    pure_frame cenv func es sa s t` by metis_tac[] >>
   `w2n (n2w (b+n-LENGTH (num_to_dec_string X)):bytes32) =
     b+n-LENGTH (num_to_dec_string X)` by
     (simp[wordsTheory.w2n_n2w] >> irule LESS_MOD >> decide_tac) >>
@@ -2876,6 +2924,7 @@ Theorem vv_post_prefix_frag:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   wb_frame cenv es es1 sa s0 t /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
   frag_exec ctx sm sb P
     (\u. vv_post ctx func cenv cx e es1 sm sb t es2 tv vv u) R ==>
   frag_exec ctx sm sb P
@@ -2934,6 +2983,9 @@ Proof
           integer_wordTheory.i2w_pos]) >>
   mp_tac (Q.INST [`X` |-> `X`, `n` |-> `n`] uint2str_result_memory_bounds) >>
   simp[] >> strip_tac >>
+  `~expr_has_effect (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) ==>
+   pure_frame cenv func es sa s0 s` by
+    (simp[expr_has_effect_thm] >> metis_tac[expr_post_pure_frame]) >>
   irule vv_post_prefix_frag >> simp[] >>
   qexistsl_tac [`es'`, `s`] >> simp[] >>
   reverse conj_tac >- metis_tac[expr_post_frame] >>
@@ -3033,6 +3085,9 @@ Proof
   >- (simp[is_word_type_def, vyperValueTheory.evaluate_type_def,
            vyperValueTheory.type_slot_size_def] >> decide_tac) >>
   strip_tac >> qexists_tac `t` >> simp[] >>
+  `~expr_has_effect (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) ==>
+   pure_frame cenv func es sa s0 s` by
+    (simp[expr_has_effect_thm] >> metis_tac[expr_post_pure_frame]) >>
   irule vv_post_prefix_frame >>
   first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[expr_post_frame]

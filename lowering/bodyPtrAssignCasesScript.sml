@@ -50,8 +50,9 @@ QED
 (* ADMITTED: a piece of the body induction. *)
 Theorem body_assign_case_ptr:
   !cx t e.
-    (!s'' pv t'.
-       eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ptr_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ptr_ok cx t) /\
     body_expr_ptr_ok cx e ==>
     body_stmt_ptr_ok cx (Assign (BaseTarget t) e)
 Proof

@@ -217,14 +217,6 @@ Proof
   (PairCases_on `z` >> gvs[])
 QED
 
-Theorem find_containing_scope_lookup_scopes[local]:
-  ∀id sc. IS_SOME (find_containing_scope id sc) ⇒ IS_SOME (lookup_scopes id sc)
-Proof
-  rpt strip_tac >>
-  Cases_on `find_containing_scope id sc` >> gvs[] >>
-  PairCases_on `x` >> drule find_containing_scope_lookup >> simp[]
-QED
-
 Theorem lookup_scopes_update_preserves:
   ∀n pre env id v rest.
     FLOOKUP env id = SOME w ⇒
@@ -270,23 +262,6 @@ Proof
   rpt strip_tac >> Cases_on `st.scopes` >>
   gvs[tl_scopes_def, evaluation_state_accfupds] >>
   Cases_on `st` >> simp[evaluation_state_fn_updates, evaluation_state_component_equality]
-QED
-
-Theorem lookup_in_current_scope_singleton_same[local]:
-  ∀st id v.
-    HD st.scopes = FEMPTY |+ (id, v) ⇒
-    lookup_in_current_scope st id = SOME v
-Proof
-  simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem lookup_in_current_scope_singleton_other[local]:
-  ∀st id v n.
-    HD st.scopes = FEMPTY |+ (id, v) ∧ n ≠ id ⇒
-    lookup_in_current_scope st n = NONE
-Proof
-  simp[lookup_in_current_scope_def, finite_mapTheory.FLOOKUP_UPDATE,
-       finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
 (****************************************)
