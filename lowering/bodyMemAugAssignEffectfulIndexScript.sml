@@ -4,7 +4,7 @@
    augassign_place_effectful_index_case. *)
 Theory bodyMemAugAssignEffectfulIndex
 Ancestors
-  bodyMemoryPreds supportedTargets targetPlaceSim
+  bodyMemoryPreds supportedTargets targetPlaceSim augAssignPlaceReadyContinuation
 
 (* RESIDUAL (held): false on the frozen definitions, as its S1 twin: an
    index call in the target can replace the nested array the target names
