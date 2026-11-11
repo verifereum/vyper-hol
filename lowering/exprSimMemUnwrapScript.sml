@@ -673,7 +673,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem storage_unwrap_layout_facts[local]:
+Theorem storage_unwrap_layout_facts:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   ~is_word_type t /\ fn_has_code sm sb func ==>
