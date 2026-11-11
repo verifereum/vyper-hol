@@ -672,6 +672,150 @@ Proof
   simp[] >> irule fuel_outcome_refl >> simp[at_point_def]
 QED
 
+(* ===== Derived combinators ===== *)
+
+Theorem fuel_ok_bind0:
+  !m f Wv L E.
+    fuel_ok Wv {} E m /\ (!a. fuel_ok Wv L E (f a)) ==>
+    fuel_ok Wv L E (comp_bind m f)
+Proof
+  rpt strip_tac >>
+  `fuel_ok Wv ({} UNION L) E (comp_bind m f)` suffices_by simp[] >>
+  match_mp_tac fuel_ok_bind >> qexistsl_tac [`E`, `E`] >>
+  simp[SUBSET_DEF]
+QED
+
+Theorem fuel_ok_ignore_bind0:
+  !m f Wv L E.
+    fuel_ok Wv {} E m /\ fuel_ok Wv L E f ==>
+    fuel_ok Wv L E (comp_ignore_bind m f)
+Proof
+  rw[comp_ignore_bind_def] >> match_mp_tac fuel_ok_bind0 >> simp[]
+QED
+
+Theorem fuel_ok_if:
+  !b m1 m2 Wv L E.
+    (b ==> fuel_ok Wv L E m1) /\ (~b ==> fuel_ok Wv L E m2) ==>
+    fuel_ok Wv L E (if b then m1 else m2)
+Proof
+  rw[]
+QED
+
+Theorem fuel_ok_get_bind:
+  !f Wv L E. (!cs. fuel_ok Wv L E (f cs)) ==> fuel_ok Wv L E (comp_bind comp_get f)
+Proof
+  rpt strip_tac >> match_mp_tac fuel_ok_bind0 >> simp[fuel_ok_prims]
+QED
+
+Theorem fuel_ok_emit_inst:
+  !opc ops outs Wv E.
+    ~is_terminator opc /\ opc <> PHI /\ (!x. MEM x outs ==> x IN Wv) ==>
+    fuel_ok Wv {} E (emit_inst opc ops outs)
+Proof
+  rw[emit_inst_def] >> match_mp_tac fuel_ok_bind0 >>
+  conj_tac >- simp[fuel_ok_prims] >>
+  gen_tac >> BETA_TAC >> match_mp_tac fuel_ok_emit >> simp[mk_inst_def]
+QED
+
+Theorem fuel_ok_emit_void:
+  !opc ops Wv E.
+    ~is_terminator opc /\ opc <> PHI ==> fuel_ok Wv {} E (emit_void opc ops)
+Proof
+  rw[emit_void_def] >> match_mp_tac fuel_ok_bind0 >>
+  conj_tac >- simp[fuel_ok_prims] >>
+  gen_tac >> BETA_TAC >> match_mp_tac fuel_ok_emit >> simp[mk_inst_def]
+QED
+
+Theorem fuel_ok_emit_op:
+  !opc ops Wv E.
+    ~is_terminator opc /\ opc <> PHI ==> fuel_ok Wv {} E (emit_op opc ops)
+Proof
+  rw[emit_op_def] >> match_mp_tac fuel_ok_bind0 >>
+  conj_tac >- simp[fuel_ok_prims] >>
+  gen_tac >> BETA_TAC >> match_mp_tac fuel_ok_fresh_var >> gen_tac >> BETA_TAC >>
+  match_mp_tac fuel_ok_ignore_bind0 >> simp[fuel_ok_return] >>
+  match_mp_tac fuel_ok_emit >> simp[mk_inst_def]
+QED
+
+Theorem fuel_ok_emit_inst_jmp:
+  !lbl Wv E. lbl IN E ==> fuel_ok Wv {} E (emit_inst JMP [Label lbl] [])
+Proof
+  rw[emit_inst_def] >> match_mp_tac fuel_ok_bind0 >>
+  conj_tac >- simp[fuel_ok_prims] >>
+  gen_tac >> BETA_TAC >> match_mp_tac fuel_ok_emit_jmp >> simp[mk_inst_def]
+QED
+
+Theorem fuel_ok_emit_inst_jnz:
+  !c l1 l2 Wv E.
+    l1 IN E /\ l2 IN E ==>
+    fuel_ok Wv {} E (emit_inst JNZ [c; Label l1; Label l2] [])
+Proof
+  rw[emit_inst_def] >> match_mp_tac fuel_ok_bind0 >>
+  conj_tac >- simp[fuel_ok_prims] >>
+  gen_tac >> BETA_TAC >> match_mp_tac fuel_ok_emit_jnz >> simp[mk_inst_def]
+QED
+
+Theorem fuel_ok_emit_jmp_if_not_terminated:
+  !lbl Wv E. lbl IN E ==> fuel_ok Wv {} E (emit_jmp_if_not_terminated lbl)
+Proof
+  rw[emit_jmp_if_not_terminated_def] >> match_mp_tac fuel_ok_get_bind >>
+  qx_gen_tac `cs` >> BETA_TAC >> match_mp_tac fuel_ok_if >>
+  simp[fuel_ok_return, fuel_ok_emit_inst_jmp]
+QED
+
+(* Terminators that end the run: none of them steps to OK. *)
+Theorem step_inst_base_halting_not_ok[local]:
+  !inst s s'.
+    MEM inst.inst_opcode [STOP; RETURN; REVERT; SINK; INVALID; RET; RETFMP; DRET] /\
+    step_inst_base inst s = OK s' ==> s'.vs_halted
+Proof
+  rpt gen_tac >> simp[] >> strip_tac >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem fuel_ok_emit_inst_halt:
+  !opc ops outs Wv E.
+    MEM opc [STOP; RETURN; REVERT; SINK; INVALID; RET; RETFMP; DRET] ==>
+    fuel_ok Wv {} E (emit_inst opc ops outs)
+Proof
+  rpt gen_tac >> simp_tac std_ss [listTheory.MEM] >> strip_tac >>
+  gvs[] >> simp_tac std_ss [emit_inst_def] >>
+  match_mp_tac fuel_ok_bind0 >> (conj_tac >- simp[fuel_ok_prims]) >>
+  gen_tac >> BETA_TAC >> match_mp_tac fuel_ok_emit_halt >>
+  simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+  drule_at Any step_inst_base_halting_not_ok >> simp[mk_inst_def]
+QED
+
+Theorem fuel_ok_emit_void_halt:
+  !opc ops Wv E.
+    MEM opc [STOP; RETURN; REVERT; SINK; INVALID; RET; RETFMP; DRET] ==>
+    fuel_ok Wv {} E (emit_void opc ops)
+Proof
+  rpt strip_tac >>
+  `emit_void opc ops = emit_inst opc ops []` by simp[emit_void_def, emit_inst_def] >>
+  simp[fuel_ok_emit_inst_halt]
+QED
+
+(* Either form, so that one lemma covers every opcode in automation. *)
+Theorem fuel_ok_emit_inst_any:
+  !opc ops outs Wv E.
+    (~is_terminator opc /\ opc <> PHI /\ (!x. MEM x outs ==> x IN Wv)) \/
+    MEM opc [STOP; RETURN; REVERT; SINK; INVALID; RET; RETFMP; DRET] ==>
+    fuel_ok Wv {} E (emit_inst opc ops outs)
+Proof
+  rpt strip_tac >> metis_tac[fuel_ok_emit_inst, fuel_ok_emit_inst_halt]
+QED
+
+Theorem fuel_ok_emit_void_any:
+  !opc ops Wv E.
+    (~is_terminator opc /\ opc <> PHI) \/
+    MEM opc [STOP; RETURN; REVERT; SINK; INVALID; RET; RETFMP; DRET] ==>
+    fuel_ok Wv {} E (emit_void opc ops)
+Proof
+  rpt strip_tac >> metis_tac[fuel_ok_emit_void, fuel_ok_emit_void_halt]
+QED
+
 (* ===== Functions ===== *)
 
 (* A function whose body is a fragment with no exits, after whose end the
