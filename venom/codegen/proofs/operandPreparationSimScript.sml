@@ -16,7 +16,7 @@ Theorem emit_input_plan_layout_wf:
     spill_alloc_layout_wf post.ps_alloc post.ps_spilled
 Proof
   Induct >- simp[emit_input_plan_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `emit_one_input opc (dfgDefs$operand_vars operands ++ nl) h ps` >>
+  Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >>
   rename1 `emit_one_input _ _ _ _ = (step_ops,mid)` >>
   Cases_on `emit_input_plan opc operands nl mid` >>
   rename1 `emit_input_plan opc operands nl mid = (rest_ops,last)` >>

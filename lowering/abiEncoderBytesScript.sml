@@ -272,16 +272,16 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   mp_tac (Q.INST [`cnt` |-> `LENGTH (bs:byte list)`] abi_encoder_ceil32_bounds) >> strip_tac >>
   drule abi_encode_bytes_shape >> strip_tac >>
-  `st.cs_next_var+8 <= limit_st.cs_next_var /\ LENGTH bs+31 < dimword (:256) /\
+  `st.cs_next_var+9 <= limit_st.cs_next_var /\ LENGTH bs+31 < dimword (:256) /\
    db < dimword (:256) /\ db+contractABI$ceil32 (LENGTH bs) < dimword (:256) /\
    32+LENGTH bs < dimword (:256)` by decide_tac >>
   `mload sb s = n2w (LENGTH bs)` by fs[mem_word_at_eq_mload] >>
-  `EVERY (\name. src <> Var name /\ dst <> Var name) (compiler_var_names st.cs_next_var 8)` by
+  `EVERY (\name. src <> Var name /\ dst <> Var name) (compiler_var_names st.cs_next_var 9)` by
     (simp_tac bool_ss [EVERY_CONJ] >> conj_tac >> irule abi_encoder_live_names >> simp[]) >>
   drule_all compile_abi_bytestring_execution >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st final) s = OK actual` >>
   `fresh_vars_wrt limit_st actual` by
-    (mp_tac (Q.SPECL [`limit_st`, `st.cs_next_var`, `8`, `s`, `actual`]
+    (mp_tac (Q.SPECL [`limit_st`, `st.cs_next_var`, `9`, `s`, `actual`]
       fresh_vars_wrt_operand_frame) >> simp[]) >>
   `bytestring_round_word (n2w (LENGTH bs)) = n2w (contractABI$ceil32 (LENGTH bs))` by
     (simp_tac bool_ss [bytestring_round_word_def] >>

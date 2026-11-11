@@ -74,10 +74,10 @@ pre-existing JSON/hex byte-for-byte.
 
 The permanent normative checked-frontend equalities cover:
 
-* p01, p03, p04, p06, p09, p10, p21, p39, p40, p41, p92;
+* p01, p03, p04, p06, p09, p10, p21, p39, p40, p41, p76, p92;
 * `ctl_local_internal` and `nm_local_return_buf` in the name-collision group.
 
-p02, p47, p74 and p76 left the comparison at the v0.5.0b1 pin;
+p02, p47 and p74 left the comparison at the v0.5.0b1 pin;
 [`pending-5127-port.md`](../pending-5127-port.md) names what brings each back.
 
 The native runner checks these pinned pairs, together with the

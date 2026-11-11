@@ -124,7 +124,7 @@ Proof
        (fn_insts func) /\
    MEM (mk_inst (id0 + 3) ALLOCA [Lit (n2w Z)] ["%" ++ toString (v0 + 2)])
        (fn_insts func) /\
-   MEM (mk_inst (id0 + 4 + 5) ALLOCA [Lit 32w] ["%" ++ toString (v0 + 3 + 4)])
+   MEM (mk_inst (id0 + 4 + 6) ALLOCA [Lit 32w] ["%" ++ toString (v0 + 3 + 5)])
        (fn_insts func)` by
     (rpt conj_tac >>
      qpat_assum `!i. MEM i ecode ==> MEM i (fn_insts func)` irule >>
@@ -193,8 +193,8 @@ Proof
           impl_tac >- simp[] >> simp[])
       >- (gen_tac >> strip_tac >>
           `SND x = 32` by
-            (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4 + 5`,
-               `32`, `["%" ++ toString (v0 + 3 + 4)]`] mp_tac
+            (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4 + 6`,
+               `32`, `["%" ++ toString (v0 + 3 + 5)]`] mp_tac
                state_rel_site_size >>
              impl_tac >- simp[] >> disch_then drule >> simp[]) >>
           simp[] >> gen_tac >> strip_tac >>
@@ -206,7 +206,7 @@ Proof
           PairCases_on `x` >> PairCases_on `y` >> fs[] >>
           qpat_x_assum `allocas_non_overlapping t`
             (mp_tac o REWRITE_RULE [allocas_non_overlapping_def]) >>
-          disch_then (qspecl_then [`id0 + 4 + 5`, `id0 + 3`, `x0`, `32`,
+          disch_then (qspecl_then [`id0 + 4 + 6`, `id0 + 3`, `x0`, `32`,
                                    `y0`, `Z`] mp_tac) >>
           simp[])
       >- (rpt strip_tac >> fs[not_fresh_at_def] >>

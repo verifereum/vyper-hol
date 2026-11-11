@@ -265,12 +265,12 @@ Definition compile_abi_encode_child_def:
         emit_void MSTORE [last_word_ptr; Lit 0w];
         copy_len <- emit_op ADD [Lit 32w; len_op];
         emit_void MCOPY [dst; src; copy_len];
-        (* Python rebuilds the rounded length for the returned ABI size. *)
-        ceil_arg2 <- emit_op ADD [Lit 31w; len_op];
-        rounded_len <- emit_op AND
-          [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
-           ceil_arg2];
-        emit_op ADD [Lit 32w; rounded_len]
+        (* Python rebuilds the rounded length for the returned ABI size with
+           ceil32: and(add(len, 31), not 31), plus 32. *)
+        mask <- emit_op NOT [Lit 31w];
+        ceil_arg2 <- emit_op ADD [len_op; Lit 31w];
+        rounded_len <- emit_op AND [ceil_arg2; mask];
+        emit_op ADD [rounded_len; Lit 32w]
      od) ∧
 
   compile_abi_encode_to_buf dst src (AbiCopy mem_size) =

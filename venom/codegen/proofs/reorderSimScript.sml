@@ -15,6 +15,7 @@ Ancestors
   codegenRel asmSem planExec planWf
   indexedLists list rich_list finite_map arithmetic
   operandInventory inputInventory inputMaterialised reduceDepthSim reorderStages
+  venomInst
 
 
 (* Value-sensitive equality for planner stacks.  Reorder may replace an
@@ -1117,14 +1118,6 @@ Proof
 QED
 
 
-Theorem input_mem_operand_vars[local]:
-  !ops v. MEM v (dfgDefs$operand_vars ops) <=> MEM (Var v) ops
-Proof
-  Induct >> simp[dfgDefsTheory.operand_vars_def] >>
-  rpt gen_tac >> Cases_on `h` >>
-  simp[dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def]
-QED
-
 Theorem emit_input_plan_inventory_accumulation:
   !operands ps opc nl iops ps1 x.
     emit_input_plan opc operands nl ps = (iops,ps1) /\
@@ -1171,7 +1164,7 @@ Proof
        mp_tac emit_one_input_inventory_inc >> simp[] >>
      disch_then irule >> Cases_on `h` >>
      gvs[is_var_operand_def, venomInstTheory.operand_vars_def,
-         venomInstTheory.operand_var_def, input_mem_operand_vars] >>
+         venomInstTheory.operand_var_def, MEM_operand_vars_eq_Var] >>
      Cases_on `Var s IN FDOM ps.ps_spilled` >> gvs[] >>
      rewrite_tac[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
   Cases_on `x IN FDOM ps.ps_spilled` >>

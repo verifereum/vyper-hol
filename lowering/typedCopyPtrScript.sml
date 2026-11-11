@@ -663,6 +663,81 @@ Proof
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
 QED
 
+(* The NOT that builds the copy length's round-up mask: clean arithmetic
+   like the binops above. *)
+Theorem ptr_inst_ok_copy_len_not:
+  !D ctx fn G tn s id x tmp fuel.
+    op_taint tn x = {} /\ ~ctx_has_dalloca ctx ==>
+    ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id NOT [x] [tmp]) s
+Proof
+  rpt strip_tac >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def] >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_pure1_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem copy_len_not_frag_ptr:
+  !cx ctx PG sa sb id x tmp P Q R.
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++ [mk_inst id NOT [x] [tmp]] /\
+    (!G tn s. P G tn s ==>
+       op_taint tn x = {} /\
+       ?a. eval_operand x s = SOME a /\
+         Q (step_prov PG G (mk_inst id NOT [x] [tmp])
+              (update_var tmp (~a) s))
+           (step_taint (mk_inst id NOT [x] [tmp]) s
+              (update_var tmp (~a) s) tn)
+           ((update_var tmp (~a) s) with
+              vs_inst_idx := SUC s.vs_inst_idx)) ==>
+    frag_exec_ptr cx ctx PG sa sb P Q R
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule ptr_fragment_step >> simp[] >>
+  reverse conj_tac >- (gvs[is_terminator_def]) >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `update_var tmp (~a) s` >> conj_tac >-
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     pure_rewrite_tac[mk_inst_def, instruction_accessors,
+                      instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure1_def]) >>
+  asm_rewrite_tac[] >> simp[update_var_def] >> rpt strip_tac >>
+  irule ptr_inst_ok_copy_len_not >> simp[]
+QED
+
+Theorem copy_len_not_ghost_frame:
+  !PG G tn s id x tmp w.
+    op_taint (step_taint (mk_inst id NOT [x] [tmp]) s
+      (update_var tmp w s) tn) (Var tmp) = {} /\
+    (step_taint (mk_inst id NOT [x] [tmp]) s
+      (update_var tmp w s) tn).t_mem = tn.t_mem /\
+    (step_taint (mk_inst id NOT [x] [tmp]) s
+      (update_var tmp w s) tn).t_stor = tn.t_stor /\
+    (step_taint (mk_inst id NOT [x] [tmp]) s
+      (update_var tmp w s) tn).t_trans = tn.t_trans /\
+    (!p. p <> tmp ==>
+      FLOOKUP (step_prov PG G (mk_inst id NOT [x] [tmp])
+        (update_var tmp w s)) p = FLOOKUP G p /\
+      op_taint (step_taint (mk_inst id NOT [x] [tmp]) s
+        (update_var tmp w s) tn) (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >>
+  `new_site_bytes s (update_var tmp w s) = {}` by
+    simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF,
+         pred_setTheory.EXTENSION, SF CONJ_ss] >>
+  Cases_on `eval_operand x s` >> Cases_on `first_prov G [x]` >>
+  simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+       mk_inst_def, set_var_taint_def, out_taint_def, op_taint_def,
+       store_taint_def, adopt_reset_def, mem_taint_def, step_writes_def,
+       source_memory_write_ranges_def, written_taint_def, range_bytes_def,
+       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+QED
+
 Theorem emit_copy_len_binop_frag_ptr:
   !opc f G cx ctx PG R sa sb left right out tn s a b.
     (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
@@ -682,6 +757,25 @@ Theorem emit_copy_len_binop_frag_ptr:
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   typedCopyAmbientLib.emit_binop (copy_len_binop_frag_ptr, copy_len_binop_ghost_frame)
+QED
+
+Theorem emit_copy_len_not_frag_ptr:
+  !G cx ctx PG R sa sb x out tn s a.
+    emit_op NOT [x] sa = (Var out,sb) /\
+    eval_operand x s = SOME a /\ op_taint tn x = {} ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var out sf = SOME (~a) /\ op_taint tnf (Var out) = {} /\
+      sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  typedCopyAmbientLib.emit_not (copy_len_not_frag_ptr, copy_len_not_ghost_frame)
 QED
 
 Theorem emit_mload_clean_frag_ptr:
@@ -716,7 +810,7 @@ Theorem compile_bytestring_copy_len_frag_ptr:
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       eval_operand count_op sf =
-        SOME ((mload (w2n a) s + 31w && i2w (-32)) + 32w) /\
+        SOME ((mload (w2n a) s + 31w && ~31w) + 32w) /\
       op_taint tnf count_op = {} /\
       sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
@@ -726,7 +820,8 @@ Theorem compile_bytestring_copy_len_frag_ptr:
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   typedCopyAmbientLib.copy_len
-    (emit_mload_clean_frag_ptr, emit_copy_len_binop_frag_ptr, cs_extends_trans)
+    (emit_mload_clean_frag_ptr, emit_copy_len_not_frag_ptr,
+     emit_copy_len_binop_frag_ptr, cs_extends_trans)
 QED
 
 Theorem compile_store_bytestring_frag_ptr:

@@ -616,7 +616,8 @@ Theorem augassign_attr_typing_mem_src[local]:
   (bop = Exp ==> nonneg_int_literal e) /\
   (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
 Proof
-  simp[type_stmt_def, AllCaseEqs()] >> metis_tac[]
+  simp[type_stmt_def, AllCaseEqs()] >>
+  metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]
 QED
 
 (* Single fresh-output instruction boundary used by both load phases. *)

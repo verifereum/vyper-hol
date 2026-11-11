@@ -683,7 +683,10 @@ Proof
   drule mem_step_offset_shape >> strip_tac >> gvs[] >>
   TRY (drule mem_field_offset_sound >> strip_tac) >>
   Cases_on `a` >>
-  simp[evaluate_subscripts_def, subscript_type_def] >>
+  simp[evaluate_subscripts_def, subscript_type_def]
+  >- rpt (BasicProvers.TOP_CASE_TAC >> gvs[])
+  >- rpt (BasicProvers.TOP_CASE_TAC >> gvs[])
+  >- rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
   rpt (BasicProvers.TOP_CASE_TAC >> gvs[])
 QED
 

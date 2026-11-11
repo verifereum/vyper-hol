@@ -653,8 +653,11 @@ Proof
      simp[mk_inst_def]) >>
   `t.vs_call_ctx.cc_calldata = cx.txn.calldata /\
    LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
-         context_well_typed_def, wordsTheory.dimword_def]) >>
+    (qpat_x_assum `stmt_state_rel ctx func cenv cx es t` mp_tac >>
+     qpat_x_assum `context_well_typed cx` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+          context_well_typed_def, wordsTheory.dimword_def]) >>
   `t.vs_labels = s.vs_labels` by
     (drule compile_alloc_buffer_insts >> strip_tac >>
      qspecl_then [`sa.cs_next_id`,`n2w (32 * word_size n + 32)`,
