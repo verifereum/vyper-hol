@@ -127,6 +127,7 @@ Theorem packaged_internal_fields_expr_inv:
   env_consistent env_body (cx with stk updated_by CONS (NONE,name))
     (st with scopes := [sc]) /\
   bind_arguments (get_tenv cx) args vs = SOME sc /\
+  (is_ctor <=> cx.in_deploy) /\
   set_internal_package_target target
     (package_internal_fn tops use_trans nkeys is_ctor imm_size
       (mut,nr,rr,name,args,dflts,ret,ss)) =
@@ -153,8 +154,13 @@ Proof
   TRY (rpt strip_tac >>
        qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
          drule >> simp[] >> NO_TAC) >>
-  irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
-  qexistsl [`caller`, `env`] >> simp[]
+  TRY (irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
+       qexistsl [`caller`, `env`] >> simp[] >> NO_TAC) >>
+  (* the body's bare-global layout is the caller's at the same deploy flag *)
+  qpat_x_assum `bare_globals_layout _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[exprSimHypsDefsTheory.bare_globals_layout_def] >> strip_tac >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >> fs[get_tenv_def] >>
+  res_tac >> fs[]
 QED
 
 Theorem packaged_internal_entry_locals_alloc_ok:
@@ -216,6 +222,7 @@ Theorem packaged_internal_entry_expr_inv:
   env_consistent env_body (cx with stk updated_by CONS (NONE,name))
     (st with scopes := [sc]) /\
   bind_arguments (get_tenv cx) args vs = SOME sc /\
+  (is_ctor <=> cx.in_deploy) /\
   set_internal_package_target target
     (package_internal_fn tops use_trans nkeys is_ctor imm_size
       (mut,nr,rr,name,args,dflts,ret,ss)) =

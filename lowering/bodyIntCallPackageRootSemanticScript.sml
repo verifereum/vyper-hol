@@ -28,6 +28,7 @@ Theorem packaged_internal_entry_expr_inv_scopes:
   env_consistent env_body (cx with stk updated_by CONS (NONE,name)) st /\
   st.scopes = [sc] /\
   bind_arguments (get_tenv cx) args vs = SOME sc /\
+  (is_ctor <=> cx.in_deploy) /\
   set_internal_package_target target
     (package_internal_fn tops use_trans nkeys is_ctor imm_size
       (mut,nr,rr,name,args,dflts,ret,ss)) =
@@ -74,5 +75,6 @@ Proof
   drule intcall_entry_source >> strip_tac >>
   qhdtm_assum `cenv_module_pins`
     (strip_assume_tac o REWRITE_RULE [cenv_module_pins_def]) >>
+  `cenv.ce_is_ctor <=> cx.in_deploy` by fs[body_inv_def] >>
   drule_all packaged_internal_entry_expr_inv_scopes >> simp[]
 QED
