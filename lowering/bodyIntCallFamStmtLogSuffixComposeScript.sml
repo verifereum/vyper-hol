@@ -113,6 +113,11 @@ Resume intcall_log_suffix_memory[data]:
     (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[]) >>
   drule_all split_log_ops_data_types >> strip_tac >>
   gvs[] >>
+  `compile_log_store_data ce (MAP FST (FILTER (\p. ~SND p) (ZIP (xs,flags))))
+     (MAP SND (MAP FST (FILTER (\p. ~SND p) (ZIP (xs,flags)))))
+     src.buf_operand 0 s1 = ((),s2)` by
+    (qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _` mp_tac >>
+     qspecl_then [`xs`, `flags`] mp_tac split_log_ops_data_types >> simp[]) >>
   drule_at (Pat `compile_log_store_data _ _ _ _ _ _ = _`)
     intcall_log_data_pipeline_footprint >>
   simp[] >> disch_then drule_all >> strip_tac >>
