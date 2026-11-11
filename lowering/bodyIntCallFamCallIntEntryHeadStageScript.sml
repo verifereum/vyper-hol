@@ -5,6 +5,7 @@ Ancestors
   bodyIntCallFamCallIntStageAdapters bodyIntCallFamCallIntStageInterface
   bodyIntCallJointCallCore bodyIntCallJointContract exprLoweringProps
   exprLowering compileEnv fragExec loweringPosts bodyIntCallStageOrigin
+  bodyIntCallFamCallIntEntryPackage
 Libs
   monadsyntax
 
@@ -237,13 +238,12 @@ val allocation_origin = ``\func start current op tv s.
     inst.inst_id = aid /\ start.cs_next_id <= aid /\ aid < current.cs_next_id /\
     type_memory_size tv <= len``;
 
-Theorem intcall_allocation_origin_frame:
-  ^allocation_origin fp.jc_func start a op tv s /\
+Theorem intcall_allocation_origin_preserved:
+  ^allocation_origin fp.jc_func start bound op tv s /\
   (!x. op = Var x ==> not_fresh_at a x) /\
   intcall_expr_cont fp ce env es a s ee b u /\
-  gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) /\
-  a.cs_next_id <= b.cs_next_id ==>
-  ^allocation_origin fp.jc_func start b op tv u
+  gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) ==>
+  ^allocation_origin fp.jc_func start bound op tv u
 Proof
   BETA_TAC >> strip_tac >>
   `eval_operand op u = SOME w` by
@@ -252,7 +252,60 @@ Proof
      qexistsl_tac [`fp.jc_ctx`, `fp.jc_func`, `F`, `n`, `s`] >>
      fs[intcall_expr_cont_def]) >>
   qexistsl_tac [`aid`, `len`, `inst`, `w`] >>
-  fs[intcall_expr_cont_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+  fs[intcall_expr_cont_def]
+QED
+
+Theorem intcall_allocation_origin_frame:
+  ^allocation_origin fp.jc_func start a op tv s /\
+  (!x. op = Var x ==> not_fresh_at a x) /\
+  intcall_expr_cont fp ce env es a s ee b u /\
+  gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) /\
+  a.cs_next_id <= b.cs_next_id ==>
+  ^allocation_origin fp.jc_func start b op tv u
+Proof
+  strip_tac >> drule_all intcall_allocation_origin_preserved >>
+  BETA_TAC >> strip_tac >>
+  qexistsl_tac [`aid`, `len`, `inst`, `w`] >>
+  simp[] >> decide_tac
+QED
+
+Theorem intcall_allocation_origins_disjoint:
+  ^allocation_origin func start b op ti s /\
+  ^allocation_origin func b c other tj s /\ alloca_inv s /\
+  eval_operand op s = SOME w /\ eval_operand other s = SOME z ==>
+  regions_disjoint (w2n w) (type_memory_size ti) (w2n z) (type_memory_size tj)
+Proof
+  BETA_TAC >> strip_tac >> gvs[] >>
+  rename1 `left.inst_id < b.cs_next_id` >>
+  rename1 `b.cs_next_id <= right.inst_id` >>
+  `left.inst_id <> right.inst_id` by decide_tac >>
+  rename1 `FLOOKUP s.vs_allocas left.inst_id = SOME (w2n lw,lsz)` >>
+  rename1 `FLOOKUP s.vs_allocas right.inst_id = SOME (w2n rw,rsz)` >>
+  irule intcall_alloca_subregions_disjoint >>
+  qexistsl_tac [`w2n lw`, `left.inst_id`, `rsz`, `right.inst_id`, `w2n rw`,
+    `s`, `lsz`] >> simp[]
+QED
+
+val staged_regions = ``\cx ds flags ops s.
+  !i j ti tj w z. i < j /\ j < LENGTH ds /\ ~EL i flags /\ ~EL j flags /\
+    evaluate_type (get_tenv cx) (expr_type (EL i ds)) = SOME ti /\
+    evaluate_type (get_tenv cx) (expr_type (EL j ds)) = SOME tj /\
+    eval_operand (EL i ops) s = SOME w /\ eval_operand (EL j ops) s = SOME z ==>
+    regions_disjoint (w2n w) (type_memory_size ti) (w2n z) (type_memory_size tj)``;
+
+Theorem intcall_staged_regions_pairwise:
+  ^staged_regions cx ds flags out u ==>
+  !i j ti tj w z. i < LENGTH ds /\ j < LENGTH ds /\ i <> j /\
+    ~EL i flags /\ ~EL j flags /\
+    evaluate_type (get_tenv cx) (expr_type (EL i ds)) = SOME ti /\
+    evaluate_type (get_tenv cx) (expr_type (EL j ds)) = SOME tj /\
+    eval_operand (EL i out) u = SOME w /\ eval_operand (EL j out) u = SOME z ==>
+    regions_disjoint (w2n w) (type_memory_size ti) (w2n z) (type_memory_size tj)
+Proof
+  BETA_TAC >> rpt strip_tac >> Cases_on `i < j`
+  >- (first_x_assum irule >> qexistsl_tac [`i`, `j`] >> simp[]) >>
+  once_rewrite_tac [intCallCalleeTheory.regions_disjoint_sym] >>
+  first_x_assum irule >> qexistsl_tac [`j`, `i`] >> simp[] >> decide_tac
 QED
 
 Theorem intcall_list_stage_fresh_origin_endpoint:
@@ -282,6 +335,7 @@ Theorem intcall_list_stage_fresh_origin_endpoint:
   LENGTH out = LENGTH ds /\
   ?u. gas_marked_path F fp.jc_ctx fp.jc_func t 0 (OK u) /\
     intcall_expr_cont fp ce env es a t es c u /\
+    ^staged_regions fp.jc_cx ds flags out u /\
     ^deferred_list fp ce tail_ds tail_vs tail_rs c es u /\
     ^completed_prefix fp.jc_cx start c (tys ++ MAP expr_type ds)
       (pflags ++ flags) (pvalues ++ values) (pops ++ out) u /\
@@ -445,6 +499,7 @@ Resume intcall_list_stage_fresh_origin_endpoint[compose]:
   qexists_tac `u` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "separation" >>
   qpat_x_assum `[op] ++ rest = out` (SUBST1_TAC o SYM) >>
   qpat_x_assum `(^deferred_list) _ _ tail_ds tail_vs tail_rs c es u` mp_tac >>
   qpat_x_assum `(^completed_prefix) _ _ c _ _ _ _ u` mp_tac >>
@@ -466,6 +521,36 @@ Resume intcall_list_stage_fresh_origin_endpoint[compose]:
   qpat_x_assum `!i tv. _` drule_all >> strip_tac >>
   rename1 `FLOOKUP u.vs_allocas site.inst_id = SOME (w2n word,sz)` >>
   qexistsl_tac [`sz`, `site`, `word`] >> simp[] >> decide_tac
+QED
+
+Resume intcall_list_stage_fresh_origin_endpoint[separation]:
+  qpat_x_assum `[op] ++ rest = out` (SUBST1_TAC o SYM) >>
+  `~flag ==> ^allocation_origin fp.jc_func a b op tv u` by
+    (strip_tac >>
+     `^allocation_origin fp.jc_func a b op tv mid` by
+       (BETA_TAC >> metis_tac[]) >>
+     drule_all intcall_allocation_origin_preserved >> simp[]) >>
+  `alloca_inv u` by
+    (qpat_assum `intcall_expr_cont fp ce env es a t es c u` mp_tac >>
+     simp[NoAsms, intcall_expr_cont_def, intcall_expr_res_def, stmt_state_rel_def] >>
+     metis_tac[]) >>
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`~flag ==> (^allocation_origin) _ a b op tv u`,
+     `!i tv. i < LENGTH ds /\ ~EL i flags' /\ _ ==> _`,
+     `(^staged_regions) _ ds flags' rest u`,
+     `evaluate_type _ (expr_type h) = SOME tv`, `alloca_inv u`] >>
+  POP_ASSUM_LIST (K all_tac) >> ntac 5 strip_tac >>
+  BETA_TAC >> simp[NoAsms] >> rpt gen_tac >> strip_tac >>
+  Cases_on `i`
+  >- (Cases_on `j` >> gvs[] >>
+      rename1 `k < LENGTH ds` >>
+      `^allocation_origin fp.jc_func a b op ti u` by
+        (BETA_TAC >> metis_tac[]) >>
+      `^allocation_origin fp.jc_func b c (EL k rest) tj u` by
+        (qpat_x_assum `!i tv. _` drule_all >> BETA_TAC >> simp[]) >>
+      drule_all intcall_allocation_origins_disjoint >> simp[]) >>
+  Cases_on `j` >> gvs[] >>
+  qpat_x_assum `!i j ti tj w z. _` irule >> simp[] >> metis_tac[]
 QED
 
 Finalise intcall_list_stage_fresh_origin_endpoint
