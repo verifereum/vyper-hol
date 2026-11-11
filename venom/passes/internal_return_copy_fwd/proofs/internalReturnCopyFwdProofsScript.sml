@@ -12,7 +12,7 @@ Ancestors
   internalReturnCopyFwdSim internalReturnCopyFwdDefs invokeCopyFwdCommonDefs
   readonlyMemoryArgsProps
   readonlyMemoryArgsDefs callLayoutDefs memLocDefs o1PassContract
-  ptrSafeRun ptrDiscipline unitTransformDefs copyFwdEquiv passSharedDefs venomWf
+  ptrDiscipline ptrSafeRun ptrOkCheck unitTransformDefs copyFwdEquiv passSharedDefs venomWf
   venomInst venomInstProps venomExecSemantics venomState stateEquiv While
   list rich_list finite_map pred_set arithmetic pair option words
 
@@ -769,6 +769,29 @@ Resume ircf_witness_safe_entry[caller_rest]:
 QED
 
 Finalise ircf_witness_safe_entry
+Theorem ircf_witness_ptr_static:
+  EVERY (fn_ptr_ok (\nm. if nm = "callee" then {0} else {}))
+    ircf_witness_ctx.ctx_functions /\
+  EVERY (\f. fn_ptr_ok (\nm. if nm = "callee" then {0} else {})
+    (reachable_fn f)) ircf_witness_ctx.ctx_functions /\
+  EVERY (\f. ALL_DISTINCT (fn_labels f)) ircf_witness_ctx.ctx_functions
+Proof
+  `reachable_fn ircf_witness_callee = fn_reachable_blocks ircf_witness_callee` by
+    (sym_tac >> irule fn_reachable_blocks_reachable_fn >> EVAL_TAC) >>
+  `reachable_fn ircf_witness_main = fn_reachable_blocks ircf_witness_main` by
+    (sym_tac >> irule fn_reachable_blocks_reachable_fn >> EVAL_TAC) >>
+  ` (\nm:string. if nm = "callee" then {0:num} else {}) =
+    (\nm. set (if nm = "callee" then [0] else []))` by
+    (simp[FUN_EQ_THM] >> gen_tac >> IF_CASES_TAC >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  simp[ircf_witness_ctx_def] >> rpt conj_tac
+  >- (match_mp_tac (BETA_RULE (Q.SPEC `\nm. if nm = "callee" then [0] else []` fn_ptr_ok_check_sound)) >> EVAL_TAC >> simp[])
+  >- (match_mp_tac (BETA_RULE (Q.SPEC `\nm. if nm = "callee" then [0] else []` fn_ptr_ok_check_sound)) >> EVAL_TAC >> simp[])
+  >- (match_mp_tac (BETA_RULE (Q.SPEC `\nm. if nm = "callee" then [0] else []` fn_ptr_ok_check_sound)) >> EVAL_TAC >> simp[])
+  >- (match_mp_tac (BETA_RULE (Q.SPEC `\nm. if nm = "callee" then [0] else []` fn_ptr_ok_check_sound)) >> EVAL_TAC >> simp[])
+  >- EVAL_TAC
+  >- EVAL_TAC
+QED
 
 (* Every premise of ircf_pass_correct holds on ircf_witness_ctx, and the pass
    changes it.  D treats every storage, transient, immutable and return-data
