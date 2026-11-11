@@ -187,14 +187,14 @@ Proof
     (strip_assume_tac o SRULE [extrequest_kwargs_post_def]) >>
   `wb_frame cenv es ee' sa s0 t'` by
     (irule wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl [`ee`, `s1`, `t`] >> simp[]) >>
-     metis_tac[]) >>
+     conj_tac >- metis_tac[] >>
+     qexistsl [`ee`, `s1`, `t`] >> simp[] >> metis_tac[]) >>
   `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
     (fs[ci_mono_def] >> decide_tac) >>
   `wb_frame cenv es ee'' sa s0 t''` by
     (irule wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl [`ee'`, `s2`, `t'`] >> simp[]) >>
-     metis_tac[]) >>
+     conj_tac >- metis_tac[] >>
+     qexistsl [`ee'`, `s2`, `t'`] >> simp[] >> metis_tac[]) >>
   `safe_operand s2 addr_op` by
     (irule safe_operand_mono >> qexists `s1` >> gvs[ci_mono_def]) >>
   `safe_operand s3 addr_op` by metis_tac[safe_operand_mono] >>

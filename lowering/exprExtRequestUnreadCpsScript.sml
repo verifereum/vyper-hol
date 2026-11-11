@@ -331,7 +331,7 @@ Proof
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
     (fs[extrequest_read_frame_def]) >>
   `wb_frame cenv es ee sa s0 t'` by
-    (irule wb_frame_trans >> simp[] >>
+    (irule wb_frame_trans >> simp[] >> conj_tac >- metis_tac[] >>
      qexistsl [`mid with gas_obs := []`, `sm`, `t`] >> fs[ci_mono_def]) >>
   `extrequest_results_success cx (h::xs) es (r::rs) ee` by
     (irule extrequest_results_success_cons >>
