@@ -66,11 +66,11 @@ Triviality struct_fields_nonempty_headers:
     EVERY (supported_declaration_header tops) ts /\
     supported_struct_fields ts id = SOME fs ==> fs <> []
 Proof
-  Induct >> simp[supported_struct_fields_def] >>
+  Induct >> simp[supportedTypesTheory.supported_struct_fields_def] >>
   rpt gen_tac >> PairCases_on `id` >>
-  simp[supported_struct_fields_def] >> strip_tac >>
-  gvs[AllCaseEqs(), supportedDeclsTheory.supported_declaration_header_def] >>
-  first_x_assum irule >> metis_tac[]
+  simp[supportedTypesTheory.supported_struct_fields_def] >> strip_tac >>
+  gvs[AllCaseEqs(), listTheory.NULL_EQ, supportedDeclsTheory.supported_declaration_header_def] >>
+  metis_tac[]
 QED
 
 Theorem supported_program_struct_fields_nonempty:
