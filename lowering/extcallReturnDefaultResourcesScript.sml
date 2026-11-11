@@ -82,10 +82,8 @@ Proof
     (drule_all return_default_shell_reserved >> simp[]) >>
   `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
     gvs[jump_to_def, update_var_def] >>
-  fs[wb_frame_def] >> rpt conj_tac
-  >- gvs[not_fresh_at_def]
-  >- gvs[]
-  >- gvs[] >>
+  fs[wb_frame_def] >> rpt conj_tac >>
+  TRY (gvs[not_fresh_at_def] >> NO_TAC) >>
   irule locals_kept_mem_tail >> qexists `s` >> simp[]
 QED
 
