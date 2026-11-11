@@ -8,8 +8,8 @@ Ancestors
   e2eDefs supportedProgram supportedDecls entryStateRel
   vyperTypeSystem vyperTypeInvariants vyperTypeContract vyperTypeContractFunction
   vyperTypeContractContext vyperTypeContractSoundness vyperTypeContractGetter
-  vyperTypeExternalDefaults vyperTypeInitialState vyperTypeBindArguments
-  vyperInterpreter vyperState vyperContext
+  vyperTypeExternalDefaults vyperTypeInitialState vyperTypeBindArguments vyperTypeCallStackSoundness
+  vyperInterpreter vyperGetter vyperState vyperContext
 
 Theorem external_selected_body_typing:
   supported_program tops /\ source_typing_ok tops am tx /\
@@ -47,7 +47,7 @@ Proof
   `module_allocated am.layouts tx.target NONE tops` by
     (drule check_contract_main_module_allocated >> simp[]) >>
   `External <> Deploy` by simp[] >>
-  `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
   drule checked_function_body_typing_package >>
   simp[] >> disch_then drule >> simp[] >>
   strip_tac >>
@@ -65,13 +65,15 @@ Proof
   gvs[source_typing_ok_def, source_deployment_rel_def] >>
   `module_allocated am.layouts tx.target NONE tops` by
     (drule check_contract_main_module_allocated >> simp[]) >>
-  `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
   drule_all checked_public_getter_body_typing_package >> strip_tac >>
-  `getter_context_equiv
-     (initial_evaluation_context am.sources am.layouts tx NONE)
-     (initial_evaluation_context am.sources am.layouts tx NONE)` by
-    simp[getter_context_equiv_def] >>
-  drule_all selected_public_getter_body_eval_context_equiv >> strip_tac >>
+  `?exp. fbody = [Return (SOME exp)]` by
+    (Cases_on `decl` >>
+     gvs[is_public_getter_decl_def, external_getter_tuple_def] >>
+     Cases_on `v` >>
+     gvs[external_getter_tuple_def, getter_def, AllCaseEqs()] >>
+     rpt (pairarg_tac >> gvs[]) >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
   `int_calls_stmts fbody = []` by
     metis_tac[selected_public_getter_body_int_calls_empty] >>
   `call_evaluation_safe
@@ -87,7 +89,7 @@ Proof
      simp[initial_evaluation_context_def, calls_follow_call_graph_def]) >>
   qexistsl [`function_entry_env art [(NONE,tops)] NONE External args`,
             `env_after`] >>
-  simp[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static,
+  gvs[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static,
        get_tenv_def, initial_evaluation_context_def,
        stmt_no_control_escape_def, stmt_no_fallthrough_def] >>
   metis_tac[]
