@@ -261,7 +261,7 @@ Proof
   simp[regions_disjoint_def] >> decide_tac
 QED
 
-Theorem aggregate_make_tuple_body_frame_sim:
+Theorem aggregate_make_tuple_body_sim:
   !args ce cx env off sa out sb es tvs func inst x b asz s0 ctx.
   compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
@@ -327,7 +327,7 @@ Proof
   suspend "cons"
 QED
 
-Resume aggregate_make_tuple_body_frame_sim[cons]:
+Resume aggregate_make_tuple_body_sim[cons]:
   rpt gen_tac >> strip_tac >>
   drule aggregate_tuple_body_cons_compile >> strip_tac >>
   `expr_body_pre ce cx env h es` by metis_tac[listTheory.MEM] >>
@@ -390,7 +390,7 @@ Resume aggregate_make_tuple_body_frame_sim[cons]:
   suspend "tail"
 QED
 
-Resume aggregate_make_tuple_body_frame_sim[result]:
+Resume aggregate_make_tuple_body_sim[result]:
   qsuff_tac `!xs off a out z.
     compile_make_tuple compile_expr ce xs (Var x) off a = (out,z) ==>
     out = Var x`
@@ -401,7 +401,7 @@ Resume aggregate_make_tuple_body_frame_sim[result]:
   drule aggregate_tuple_body_cons_compile >> strip_tac >> metis_tac[]
 QED
 
-Resume aggregate_make_tuple_body_frame_sim[tail]:
+Resume aggregate_make_tuple_body_sim[tail]:
   `not_fresh_at st x` by
     (fs[not_fresh_at_def, ci_mono_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   `lookup_var x u = SOME (n2w b) /\
@@ -459,7 +459,7 @@ Resume aggregate_make_tuple_body_frame_sim[tail]:
   conj_tac >- suspend "normal" >> metis_tac[]
 QED
 
-Resume aggregate_make_tuple_body_frame_sim[normal]:
+Resume aggregate_make_tuple_body_sim[normal]:
   rpt strip_tac >> irule counted_outcome_return >>
   conj_tac >- (fs[gas_marked_exec_def] >>
     metis_tac[gas_marked_path_exec, gas_path_normal]) >>
@@ -512,4 +512,4 @@ Resume aggregate_make_tuple_body_frame_sim[normal]:
     rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
 QED
 
-Finalise aggregate_make_tuple_body_frame_sim
+Finalise aggregate_make_tuple_body_sim
