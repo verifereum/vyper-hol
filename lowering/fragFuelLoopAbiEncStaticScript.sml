@@ -268,6 +268,93 @@ Proof
   goal_assum (drule_at Any) >> fs[EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem encode_static_header_prefix[local]:
+  !ip s p len iv nw id cmp done body_lbl exit_lbl.
+    eval_operand ip s = SOME p /\ len <> Var iv /\
+    eval_operand len s = SOME nw ==>
+    run_inst_seq (TAKE 3 (abi_encode_array_header_insts
+      id ip len iv cmp done body_lbl exit_lbl)) s =
+    OK (abi_encode_array_header_state iv cmp done
+      (w2n (mload (w2n p) s)) (w2n nw) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `eval_operand len (update_var iv (mload (w2n p) s) s) = SOME nw` by
+    simp[ssaOperandFrameTheory.eval_operand_update_var_avoids] >>
+  `step_inst_base (mk_inst id MLOAD [ip] [iv]) s =
+     OK (update_var iv (mload (w2n p) s) s)` by simp[step_MLOAD] >>
+  simp[abiEncoderArrayHeaderTheory.abi_encode_array_header_insts_def,
+    exprLoweringPropsTheory.run_inst_seq_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+    venomStateTheory.eval_operand_def, lookup_var_update_var] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
+    venomStateTheory.eval_operand_def, lookup_var_update_var,
+    abiEncoderArrayHeaderTheory.abi_encode_array_header_state_def] >>
+  Cases_on `w2n (mload (w2n p) s) < w2n nw` >>
+  simp[bool_to_word_def]
+QED
+
+Theorem encode_static_header_missing_bound[local]:
+  !ip s p len iv id cmp done body_lbl exit_lbl t.
+    eval_operand ip s = SOME p /\ len <> Var iv /\
+    eval_operand len s = NONE ==>
+    run_inst_seq (TAKE 3 (abi_encode_array_header_insts
+      id ip len iv cmp done body_lbl exit_lbl)) s <> OK t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `eval_operand len (update_var iv (mload (w2n p) s) s) = NONE` by
+    simp[ssaOperandFrameTheory.eval_operand_update_var_avoids] >>
+  `step_inst_base (mk_inst id MLOAD [ip] [iv]) s =
+     OK (update_var iv (mload (w2n p) s) s)` by simp[step_MLOAD] >>
+  simp[abiEncoderArrayHeaderTheory.abi_encode_array_header_insts_def,
+    exprLoweringPropsTheory.run_inst_seq_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+    venomStateTheory.eval_operand_def, lookup_var_update_var]
+QED
+
+Theorem encode_static_header_branch[local]:
+  !id iv cmp done i n s body_lbl exit_lbl.
+    step_inst_base (mk_inst id JNZ
+      [Var done; Label exit_lbl; Label body_lbl] [])
+      (abi_encode_array_header_state iv cmp done i n s) =
+    OK (jump_to (if i < n then body_lbl else exit_lbl)
+      (abi_encode_array_header_state iv cmp done i n s))
+Proof
+  rpt gen_tac >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def,
+    abiEncoderArrayHeaderTheory.abi_encode_array_header_state_def,
+    venomStateTheory.eval_operand_def, lookup_var_update_var] >>
+  Cases_on `i < n` >> simp[bool_to_word_def]
+QED
+
+Theorem encode_static_header_frame[local]:
+  !iv cmp done i n s op.
+    op <> Var iv /\ op <> Var cmp /\ op <> Var done ==>
+    eval_operand op (abi_encode_array_header_state iv cmp done i n s) =
+    eval_operand op s
+Proof
+  simp[abiEncoderArrayHeaderTheory.abi_encode_array_header_state_def,
+    ssaOperandFrameTheory.eval_operand_update_var_avoids]
+QED
+
+Theorem encode_static_header_memory[local]:
+  !iv cmp done i n s addr.
+    mload addr (abi_encode_array_header_state iv cmp done i n s) = mload addr s
+Proof
+  simp[abiEncoderArrayHeaderTheory.abi_encode_array_header_state_def,
+    ssaOperandFrameTheory.mload_update_var]
+QED
+
+Theorem encode_static_header_vars_kept[local]:
+  !iv cmp done i n s N.
+    ~var_below N iv /\ ~var_below N cmp /\ ~var_below N done ==>
+    vars_kept N {} s (abi_encode_array_header_state iv cmp done i n s)
+Proof
+  rpt gen_tac >> strip_tac >> simp[vars_kept_def] >> rpt strip_tac >>
+  `eval_operand (Var x) (abi_encode_array_header_state iv cmp done i n s) =
+   eval_operand (Var x) s` suffices_by simp[venomStateTheory.eval_operand_def] >>
+  irule encode_static_header_frame >> simp[] >> metis_tac[]
+QED
+
 (* The loop counter lives in a buffer the function allocates itself and
    starts at 0.  Each round, while the counter is below len_op (unsigned),
    encodes one element with straight-line code (no calls back into the
