@@ -1,0 +1,2 @@
+# Every custom-error fixture waits for the P4 direct-encoder port
+# (../pending-5127-port.md); list them here again once it lands.
