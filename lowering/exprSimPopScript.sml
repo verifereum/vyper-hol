@@ -790,7 +790,7 @@ Proof
    (INL (LAST vs),
     es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest)` by
     (irule read_result_pop_name >> fs[lookup_scopes_update] >> metis_tac[]) >>
-  simp[vv_post_def, expr_type_def, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
+  simp[vv_post_def, expr_type_def, expr_has_effect_thm, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
   rpt conj_tac
   >- (irule pop_stmt_state_rel_scopes >>
       qpat_assum `immutable_base_zero cenv _` (irule_at Any) >>

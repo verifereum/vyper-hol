@@ -45,6 +45,7 @@ Proof
 QED
 
 Theorem pop_memory_live_suffix_post:
+  expr_has_effect e /\
   expr_sim_inv cenv cx env es /\
   stmt_state_rel ctx func cenv cx es s0 /\
   stmt_state_rel ctx func cenv cx mid s /\
