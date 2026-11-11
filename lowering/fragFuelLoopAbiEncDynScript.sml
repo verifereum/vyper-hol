@@ -8,7 +8,7 @@
 Theory fragFuelLoopAbiEncDyn
 Ancestors
   fragFuel fragFuelContextBase abiEncoder compileEnv emitHelper context
-  venomInst venomExecSemantics venomState
+  venomInst venomExecSemantics venomState ssaOperandFrame venomMemProps
 Libs
   fragFuelLib monadsyntax
 
@@ -715,6 +715,176 @@ Proof
        x <> x5 /\ x <> x6 /\ x <> x7 /\ x <> x8` by metis_tac[] >> simp[]) >>
   Cases_on `ip` >>
   gvs[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* suffix_semantics: the last store dominates every prior memory write. *)
+Theorem abi_encode_dyn_suffix_semantics[local]:
+  !id ip i2 hp off cl dp nd ni hdr G ctx fn s bb N a c.
+  let code = [mk_inst id MSTORE [hp; off] [];
+              mk_inst (id+1) ADD [off; cl] [nd];
+              mk_inst (id+2) MSTORE [dp; Var nd] [];
+              mk_inst (id+3) ADD [i2; Lit 1w] [ni];
+              mk_inst (id+4) MSTORE [ip; Var ni] [];
+              mk_inst (id+5) JMP [Label hdr] []]
+  in
+  no_phi_fn fn /\ callees_stable G ctx fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  (!i. i < 6 ==> get_instruction bb (s.vs_inst_idx+i) = SOME (EL i code)) /\
+  nd <> ni /\
+  EVERY (\v. ~var_below N v /\ ip <> Var v /\ i2 <> Var v) [nd;ni] /\
+  eval_operand ip s = SOME a /\ eval_operand i2 s = SOME c ==>
+  fuel_outcome G ctx fn s 1
+    (\t. t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+         vars_kept N {} s t /\ eval_operand ip t = SOME a /\
+         mload (w2n a) t = c+1w)
+Proof
+  rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn s 1 post` >>
+  `get_instruction bb s.vs_inst_idx = SOME (mk_inst id MSTORE [hp; off] [])`
+    by (qpat_x_assum `!i. i < 6 ==> _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `~is_terminator (mk_inst id MSTORE [hp; off] []).inst_opcode`
+    by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_from_nonterm_stable >> reverse strip_tac
+  >- (simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+      `G <= f+1 /\ G <= G+1` by decide_tac >> metis_tac[]) >>
+  gvs[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+      exec_write2_def, AllCaseEqs()] >>
+  rename1 `eval_operand hp s = SOME p0` >>
+  rename1 `eval_operand off s = SOME v0` >>
+  qabbrev_tac `u1 = mstore (w2n p0) v0 s with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `fuel_outcome G ctx fn u1 1 post` suffices_by
+    (simp[fuel_outcome_def] >>
+     `!f. G <= f ==> run_from (f+1) ctx fn s = run_from (f+1) ctx fn u1`
+       by (rpt strip_tac >> first_x_assum irule >> decide_tac) >> metis_tac[]) >>
+  `lookup_block u1.vs_current_bb fn.fn_blocks = SOME bb`
+    by simp[Abbr `u1`, mstore_def] >>
+  `get_instruction bb u1.vs_inst_idx =
+     SOME (mk_inst (id+1) ADD [off; cl] [nd])`
+    by (qpat_x_assum `!i. i < 6 ==> _` (qspec_then `1` mp_tac) >>
+        simp[Abbr `u1`, mk_inst_def, arithmeticTheory.ADD1]) >>
+  qpat_x_assum `get_instruction bb s.vs_inst_idx = _` kall_tac >>
+  `~is_terminator (mk_inst (id+1) ADD [off; cl] [nd]).inst_opcode`
+    by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_from_nonterm_stable >> reverse strip_tac
+  >- (simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+      `G <= f+1 /\ G <= G+1` by decide_tac >> metis_tac[]) >>
+  `?w1. s1 = update_var nd w1 u1` by
+    (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+     simp[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+          exec_pure2_def, AllCaseEqs()] >> metis_tac[]) >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` kall_tac >> gvs[] >>
+  qabbrev_tac `u2 = update_var nd w1 u1 with vs_inst_idx := SUC u1.vs_inst_idx` >>
+  `fuel_outcome G ctx fn u2 1 post` suffices_by
+    (simp[fuel_outcome_def] >>
+     `!f. G <= f ==> run_from (f+1) ctx fn u1 = run_from (f+1) ctx fn u2`
+       by (rpt strip_tac >> first_x_assum irule >> decide_tac) >> metis_tac[]) >>
+  `lookup_block u2.vs_current_bb fn.fn_blocks = SOME bb`
+    by simp[Abbr `u2`, update_var_def] >>
+  `get_instruction bb u2.vs_inst_idx =
+     SOME (mk_inst (id+2) MSTORE [dp; Var nd] [])`
+    by (qpat_x_assum `!i. i < 6 ==> _` (qspec_then `2` mp_tac) >>
+        simp[Abbr `u2`, Abbr `u1`, mk_inst_def, arithmeticTheory.ADD1]) >>
+  qpat_x_assum `get_instruction bb u1.vs_inst_idx = _` kall_tac >>
+  `~is_terminator (mk_inst (id+2) MSTORE [dp; Var nd] []).inst_opcode`
+    by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_from_nonterm_stable >> reverse strip_tac
+  >- (simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+      `G <= f+1 /\ G <= G+1` by decide_tac >> metis_tac[]) >>
+  gvs[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+      exec_write2_def, AllCaseEqs()] >>
+  rename1 `eval_operand dp u2 = SOME p2` >>
+  rename1 `eval_operand (Var nd) u2 = SOME v2` >>
+  qabbrev_tac `u3 = mstore (w2n p2) v2 u2 with vs_inst_idx := SUC u2.vs_inst_idx` >>
+  `fuel_outcome G ctx fn u3 1 post` suffices_by
+    (simp[fuel_outcome_def] >>
+     `!f. G <= f ==> run_from (f+1) ctx fn u2 = run_from (f+1) ctx fn u3`
+       by (rpt strip_tac >> first_x_assum irule >> decide_tac) >> metis_tac[]) >>
+  `eval_operand i2 u3 = SOME c` by
+    (rpt (qpat_x_assum `!f. G <= f ==> _` kall_tac) >>
+     qpat_x_assum `eval_operand i2 s = SOME c` mp_tac >>
+     Cases_on `i2` >>
+     asm_simp_tac (srw_ss()) [Abbr `u3`, Abbr `u2`, Abbr `u1`, eval_operand_def,
+               mstore_vars, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     gvs[]) >>
+  `lookup_block u3.vs_current_bb fn.fn_blocks = SOME bb`
+    by simp[Abbr `u3`, mstore_def] >>
+  `get_instruction bb u3.vs_inst_idx =
+     SOME (mk_inst (id+3) ADD [i2; Lit 1w] [ni])`
+    by (qpat_x_assum `!i. i < 6 ==> _` (qspec_then `3` mp_tac) >>
+        simp[Abbr `u3`, Abbr `u2`, Abbr `u1`, mk_inst_def, arithmeticTheory.ADD1]) >>
+  qpat_x_assum `get_instruction bb u2.vs_inst_idx = _` kall_tac >>
+  `~is_terminator (mk_inst (id+3) ADD [i2; Lit 1w] [ni]).inst_opcode`
+    by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_from_nonterm_stable >> reverse strip_tac
+  >- (simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+      `G <= f+1 /\ G <= G+1` by decide_tac >> metis_tac[]) >>
+  gvs[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+      exec_pure2_def, eval_operand_def] >>
+  qabbrev_tac `u4 = update_var ni (c+1w) u3 with vs_inst_idx := SUC u3.vs_inst_idx` >>
+  `fuel_outcome G ctx fn u4 1 post` suffices_by
+    (simp[fuel_outcome_def] >>
+     `!f. G <= f ==> run_from (f+1) ctx fn u3 = run_from (f+1) ctx fn u4`
+       by (rpt strip_tac >> first_x_assum irule >> decide_tac) >> metis_tac[]) >>
+  `eval_operand ip u4 = SOME a` by
+    (rpt (qpat_x_assum `!f. G <= f ==> _` kall_tac) >>
+     qpat_x_assum `eval_operand ip s = SOME a` mp_tac >>
+     Cases_on `ip` >>
+     asm_simp_tac (srw_ss()) [Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, eval_operand_def,
+          mstore_vars, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]) >>
+  `eval_operand (Var ni) u4 = SOME (c+1w)`
+    by simp[Abbr `u4`, eval_operand_def, update_var_def, lookup_var_def,
+            finite_mapTheory.FLOOKUP_UPDATE] >>
+  `lookup_block u4.vs_current_bb fn.fn_blocks = SOME bb`
+    by simp[Abbr `u4`, update_var_def] >>
+  `get_instruction bb u4.vs_inst_idx =
+     SOME (mk_inst (id+4) MSTORE [ip; Var ni] [])`
+    by (qpat_x_assum `!i. i < 6 ==> _` (qspec_then `4` mp_tac) >>
+        simp[Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, mk_inst_def,
+             arithmeticTheory.ADD1]) >>
+  qpat_x_assum `get_instruction bb u3.vs_inst_idx = _` kall_tac >>
+  `~is_terminator (mk_inst (id+4) MSTORE [ip; Var ni] []).inst_opcode`
+    by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_from_nonterm_stable >> reverse strip_tac
+  >- (simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+      `G <= f+1 /\ G <= G+1` by decide_tac >> metis_tac[]) >>
+  gvs[mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+      exec_write2_def] >>
+  qabbrev_tac `u5 = mstore (w2n a) (c+1w) u4 with vs_inst_idx := SUC u4.vs_inst_idx` >>
+  `fuel_outcome G ctx fn u5 1 post` suffices_by
+    (simp[fuel_outcome_def] >>
+     `!f. G <= f ==> run_from (f+1) ctx fn u4 = run_from (f+1) ctx fn u5`
+       by (rpt strip_tac >> first_x_assum irule >> decide_tac) >> metis_tac[]) >>
+  `lookup_block u5.vs_current_bb fn.fn_blocks = SOME bb`
+    by simp[Abbr `u5`, mstore_def] >>
+  `get_instruction bb u5.vs_inst_idx = SOME (mk_inst (id+5) JMP [Label hdr] [])`
+    by (qpat_x_assum `!i. i < 6 ==> _` (qspec_then `5` mp_tac) >>
+        simp[Abbr `u5`, Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`,
+             mk_inst_def, arithmeticTheory.ADD1]) >>
+  irule fuel_outcome_jump >> conj_tac >- simp[] >>
+  qexistsl_tac [`bb`, `mk_inst (id+5) JMP [Label hdr] []`, `hdr`] >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs] >>
+  strip_tac >>
+  rpt (qpat_x_assum `!f. G <= f ==> _` kall_tac) >>
+  rpt (qpat_x_assum `!x. _ ==> lookup_var x _ = _` kall_tac) >>
+  rpt (qpat_x_assum `!x. lookup_var x _ = _` kall_tac) >>
+  rpt (qpat_x_assum `_.vs_current_bb = _` kall_tac) >>
+  rpt (qpat_x_assum `lookup_block _ _ = _` kall_tac) >>
+  qpat_x_assum `!i. i < 6 ==> _` kall_tac >>
+  rpt (qpat_x_assum `get_instruction _ _ = _` kall_tac) >>
+  simp[Abbr `post`, jump_to_def] >>
+  conj_tac
+  >- (simp[vars_kept_def, Abbr `u5`, Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`,
+           lookup_var_def, mstore_vars, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+      rpt strip_tac >> `x <> nd /\ x <> ni` by metis_tac[] >> simp[]) >>
+  reverse conj_tac
+  >- (`mload (w2n a)
+         (u5 with <|vs_prev_bb := SOME u5.vs_current_bb; vs_current_bb := hdr; vs_inst_idx := 0|>) =
+       mload (w2n a) (mstore (w2n a) (c+1w) u4)`
+        by simp[Abbr `u5`, mload_def] >>
+      asm_rewrite_tac[mload_mstore_same]) >>
+  qpat_x_assum `eval_operand ip u4 = SOME a` mp_tac >>
+  Cases_on `ip` >>
+  simp[Abbr `u5`, eval_operand_def, lookup_var_def, mstore_vars]
 QED
 
 (* The body saves the counter in i2 before the recursive encoder.  Its last
