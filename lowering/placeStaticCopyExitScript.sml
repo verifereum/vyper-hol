@@ -85,8 +85,10 @@ Resume place_static_copy_exit[body]:
   drule_at (Pat `store_copy_frame _ _ _ _ _ _ q`) place_store_frame_fields >>
   strip_tac >>
   `eval_operand src q = SOME b /\ eval_operand dst q = SOME k` by
-    (Cases_on `src` >> Cases_on `dst` >>
-     gvs[eval_operand_def, store_copy_frame_def] >> metis_tac[]) >>
+    (Cases_on `src` >> Cases_on `dst` >> fs[eval_operand_def] >>
+     qpat_x_assum `store_copy_frame _ _ _ _ _ _ q`
+       (strip_assume_tac o REWRITE_RULE [store_copy_frame_def]) >>
+     metis_tac[]) >>
   `!x. MEM x [cv;mv;sv;vv;dv;nv] ==> src <> Var x /\ dst <> Var x` by
     (fs[ALL_DISTINCT] >> rpt strip_tac >> metis_tac[]) >>
   qabbrev_tac `code =
