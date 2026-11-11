@@ -1032,3 +1032,129 @@ Proof
   gvs[inline_cell_frame_def, inline_make_cell_def, get_instruction_def,
       inline_edit_repair_def, inline_inst_fields_def, is_param_opcode_iff]
 QED
+
+(* Block-entry predecessor action is separate from variable/label renaming:
+   an enclosing caller edit can repair an edge without renaming its target. *)
+Definition inline_phi_entry_step_def:
+  (inline_phi_entry_step (InlineKeep e) (l,prev) =
+    case lookup_block e.ise_block e.ise_caller.fn_blocks of
+      NONE => (l,prev)
+    | SOME bb =>
+      (l, if MEM l (bb_succs <|bb_label := e.ise_return;
+          bb_instructions := DROP (e.ise_index+1) bb.bb_instructions|>) then
+        OPTION_MAP (\q. if q = e.ise_block then e.ise_return else q) prev
+      else prev)) /\
+  (inline_phi_entry_step (InlineEnter e) (l,prev) =
+    (STRCAT e.ise_prefix l, OPTION_MAP (STRCAT e.ise_prefix) prev))
+End
+
+Definition inline_phi_entry_path_def:
+  inline_phi_entry_path path x = FOLDL (\x c. inline_phi_entry_step c x) x path
+End
+
+Theorem inline_phi_entry_path_append:
+  inline_phi_entry_path (xs ++ ys) x =
+    inline_phi_entry_path ys (inline_phi_entry_path xs x)
+Proof simp[inline_phi_entry_path_def, FOLDL_APPEND]
+QED
+
+Theorem inline_phi_entry_step_label:
+  FST (inline_phi_entry_step c (l,prev)) = inline_choice_rename c l
+Proof
+  Cases_on `c` >> simp[inline_phi_entry_step_def, inline_choice_rename_def] >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem inline_valid_edit_source_lookup:
+  inline_site_edit_valid e ==>
+  ?bb. lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb
+Proof
+  simp[inline_site_edit_valid_def] >> strip_tac >>
+  drule functionInlinerWfTheory.find_invoke_site_member >> strip_tac >>
+  `MEM e.ise_block (MAP (\b. b.bb_label) e.ise_caller.fn_blocks)` by
+    (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+  metis_tac[dfAnalyzeProofsTheory.lookup_block_exists]
+QED
+
+Theorem inline_phi_entry_keep_support:
+  inline_site_edit_valid e /\ MEM l (fn_labels e.ise_caller) /\
+  (!q. prev = SOME q ==> MEM q (fn_labels e.ise_caller)) ==>
+  MEM (FST (inline_phi_entry_step (InlineKeep e) (l,prev)))
+    (fn_labels e.ise_final) /\
+  (!q. SND (inline_phi_entry_step (InlineKeep e) (l,prev)) = SOME q ==>
+    MEM q (fn_labels e.ise_final))
+Proof
+  strip_tac >> drule inline_valid_edit_label_set >> strip_tac >>
+  drule inline_valid_edit_source_lookup >> strip_tac >>
+  simp[inline_phi_entry_step_def] >>
+  Cases_on `prev` >> simp[] >> IF_CASES_TAC >> simp[] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem inline_phi_entry_enter_support:
+  inline_site_edit_valid e /\ MEM l (fn_labels e.ise_callee) /\
+  (!q. prev = SOME q ==> MEM q (fn_labels e.ise_callee)) ==>
+  MEM (FST (inline_phi_entry_step (InlineEnter e) (l,prev)))
+    (fn_labels e.ise_final) /\
+  (!q. SND (inline_phi_entry_step (InlineEnter e) (l,prev)) = SOME q ==>
+    MEM q (fn_labels e.ise_final))
+Proof
+  strip_tac >> drule inline_valid_edit_label_set >> strip_tac >>
+  Cases_on `prev` >> simp[inline_phi_entry_step_def] >>
+  metis_tac[listTheory.MEM_MAP]
+QED
+
+Theorem inline_phi_entry_path_label:
+  !path l prev. FST (inline_phi_entry_path path (l,prev)) =
+    inline_path_rename path l
+Proof
+  Induct >> simp[inline_phi_entry_path_def, inline_path_rename_def] >>
+  rpt gen_tac >>
+  Cases_on `inline_phi_entry_step h (l,prev)` >>
+  simp[GSYM inline_phi_entry_path_def, combinTheory.o_DEF] >>
+  metis_tac[inline_phi_entry_step_label, pairTheory.FST]
+QED
+
+Theorem inline_routed_phi_entry_support:
+  !cert root p fn path. inline_routed_leaf cert root p fn path ==>
+  !l prev. MEM l (fn_labels fn) /\
+    (!q. prev = SOME q ==> MEM q (fn_labels fn)) ==>
+  MEM (FST (inline_phi_entry_path path (l,prev))) (fn_labels root) /\
+  (!q. SND (inline_phi_entry_path path (l,prev)) = SOME q ==>
+    MEM q (fn_labels root))
+Proof
+  ho_match_mp_tac inline_routed_leaf_ind >> rpt conj_tac >>
+  rpt strip_tac >>
+  gvs[inline_phi_entry_path_append, inline_phi_entry_path_def] >>
+  first_x_assum (qspecl_then [`l`, `prev`] mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `FOLDL (\x c. inline_phi_entry_step c x) (l,prev) path` >> gvs[] >>
+  metis_tac[inline_phi_entry_keep_support, inline_phi_entry_enter_support]
+QED
+
+Theorem inline_phi_entry_step_none:
+  inline_phi_entry_step c (l,NONE) = (inline_choice_rename c l,NONE)
+Proof
+  Cases_on `c` >> simp[inline_phi_entry_step_def, inline_choice_rename_def] >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem inline_phi_entry_path_none:
+  !path l. inline_phi_entry_path path (l,NONE) =
+    (inline_path_rename path l,NONE)
+Proof
+  Induct >- simp[inline_phi_entry_path_def, inline_path_rename_def] >>
+  once_rewrite_tac[inline_phi_entry_path_def] >>
+  simp[FOLDL, inline_phi_entry_step_none] >>
+  simp[GSYM inline_phi_entry_path_def, inline_path_rename_def, combinTheory.o_DEF]
+QED
+
+Theorem inline_phi_entry_keep_some:
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb ==>
+  inline_phi_entry_step (InlineKeep e) (l,SOME q) =
+    (l, SOME (if MEM l (bb_succs <|bb_label := e.ise_return;
+      bb_instructions := DROP (e.ise_index+1) bb.bb_instructions|>) /\
+      q = e.ise_block then e.ise_return else q))
+Proof
+  simp[inline_phi_entry_step_def] >> rpt strip_tac >>
+  rpt IF_CASES_TAC >> gvs[]
+QED
