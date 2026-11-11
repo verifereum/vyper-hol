@@ -40,7 +40,7 @@ Resume intcall_stmts_producer_raise_reason[setup]:
   rename1 `compile_expr ce _ e sa = (msg_op,reason_cs)` >>
   rename1 `compile_revert_with_reason ce msg_op _ _ reason_cs = ((),abort_cs)` >>
   `expr_body_pre ce fp.jc_cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule stmt_expr_body_pre_alloc >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, supported_raise_exists_def,
         alloc_limits_stmt_def] >>

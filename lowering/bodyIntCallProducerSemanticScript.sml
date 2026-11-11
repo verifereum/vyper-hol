@@ -25,7 +25,9 @@ Proof
      (cx with stk updated_by CONS owner)` by
     (irule body_inv_build_internal_env >> irule body_inv_push_stack >> simp[]) >>
   gvs[package_internal_fn_def, set_internal_package_target_def,
-      update_cenv_nonreentrant_def, body_inv_def] >> metis_tac[]
+      update_cenv_nonreentrant_def, body_inv_def] >>
+  conj_tac >- metis_tac[] >>
+  fs[cenv_module_pins_def]
 QED
 
 (* Presence alone suffices for this nonfailure fact; no namespace uniqueness
