@@ -1738,3 +1738,33 @@ Proof
   qexistsl [`bb`, `dst`, `v`] >> simp[Once exec_block_def] >>
   simp[Once exec_block_def]
 QED
+
+(* The immediate caller supplies adapter reads; no physical read is assumed. *)
+Theorem inline_tracked_call_argument_read:
+  inline_tracked_snapshot fn a route snap frame /\
+  eval_operands ops snap.ils_state = SOME vals /\
+  setup_callee callee vals snap.ils_state = SOME cs /\
+  EVERY (\op. !v. op = Var v ==>
+    MEM v (cfgTransform$fn_all_vars fn) /\ ~retpc_var fn v) ops /\
+  k < LENGTH ops ==>
+  eval_operand
+    (inline_rename_operand route.ir_rename lab
+      (EL k (rotate_invoke_ops (Label name::ops)))) frame.ipf_state =
+    SOME (EL k cs.vs_params)
+Proof
+  strip_tac >> drule_all inline_tracked_operands_success >> strip_tac >>
+  drule setup_callee_frame >> strip_tac >>
+  first_x_assum (qspec_then `lab` mp_tac) >>
+  disch_then (mp_then Any (qspec_then `k` mp_tac)
+    venomExecProofsTheory.eval_operands_index) >>
+  simp[functionInlinerDefsTheory.rotate_invoke_ops_def, EL_APPEND_EQN, EL_MAP]
+QED
+
+Theorem inline_residual_return_pc_literal_read:
+  eval_operand
+    (inline_rename_operand ren lab
+      (EL (LENGTH ops) (rotate_invoke_ops (Label name::ops)))) t = SOME 0w
+Proof
+  simp[functionInlinerDefsTheory.rotate_invoke_ops_def, EL_APPEND_EQN, inline_rename_operand_def,
+    eval_operand_def]
+QED

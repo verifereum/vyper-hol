@@ -1014,3 +1014,21 @@ Proof
      gvs[functionInlinerWfTheory.clone_function_labels]) >>
   drule_all inline_cell_zipper_entry_label >> simp[]
 QED
+
+Theorem inline_enter_parameter_exhausted_fields:
+  inline_cell_frame (EnterCell e k) c mid /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  lookup_block c.ic_block e.ise_callee.fn_blocks = SOME cb /\
+  args = rotate_invoke_ops (EL e.ise_index bb.bb_instructions).inst_operands /\
+  ci = clone_instruction e.ise_prefix (fn_labels e.ise_callee)
+    (EL c.ic_index cb.bb_instructions) /\
+  q = SND (inline_cell_prefix e bb cb c.ic_index) /\
+  is_param_opcode ci.inst_opcode /\ LENGTH args <= q ==>
+  k = 0 /\
+  mid.ic_index = LENGTH (FST (inline_cell_prefix e bb cb c.ic_index)) /\
+  mid.ic_fields = inline_inst_fields ci
+Proof
+  strip_tac >> drule_all inline_cell_parameter_focus >> strip_tac >>
+  gvs[inline_cell_frame_def, inline_make_cell_def, get_instruction_def,
+      inline_edit_repair_def, inline_inst_fields_def, is_param_opcode_iff]
+QED
