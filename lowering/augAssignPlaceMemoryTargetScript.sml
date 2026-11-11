@@ -22,7 +22,7 @@ Proof
     (irule aug_place_entry_type_agrees >> metis_tac[]) >>
   gvs[] >>
   `local_ptrs_rel func cenv es.scopes s` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+    fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `w2n b + sz <= s.vs_alloca_next /\ type_memory_size entry.type <= sz` by
     (qpat_x_assum `local_ptrs_rel _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
