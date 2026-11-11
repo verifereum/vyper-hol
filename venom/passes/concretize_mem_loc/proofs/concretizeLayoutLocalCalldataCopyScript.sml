@@ -336,7 +336,7 @@ Proof
   gvs[] >> simp[step_taint_def, mem_taint_def, written_taint_def,
     set_var_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
     taint_component_equality, DRESTRICT_UNIV] >>
-  rpt PURE_TOP_CASE_TAC >> simp[]
+  rpt (BasicProvers.PURE_TOP_CASE_TAC >> simp[])
 QED
 
 Theorem clean_copy_taint_order:
