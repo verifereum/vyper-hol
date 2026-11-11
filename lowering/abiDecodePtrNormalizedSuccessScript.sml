@@ -27,7 +27,8 @@ Theorem abi_decode_normalized_success:
     abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
       (Lit 0w) 0w hi sb H tf (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     (!mem'. mem_agree_outside tf.t_mem u.vs_memory mem' ==>
-      tuple_in_memory vs tvs (w2n d) mem')
+      tuple_in_memory vs tvs (w2n d) mem') /\
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
 Proof
   strip_tac >>
   drule abi_decode_member_live_resources >> strip_tac >>
@@ -141,7 +142,8 @@ Proof
   simp[] >> disch_tac >>
   qexistsl_tac [`K'`, `tk`] >>
   (conj_tac >- suspend "sequence" >>
-   reverse conj_tac >- (conj_tac >- metis_tac[] >> fs[] >> metis_tac[]) >>
+   reverse conj_tac >- (conj_tac >- metis_tac[] >>
+     conj_tac >- (fs[] >> metis_tac[]) >> suspend "opcodes") >>
    drule_all gas_path_ptr_then >> simp[] >> gvs[])
 QED
 
@@ -187,6 +189,15 @@ Resume abi_decode_normalized_success[sequence]:
   `inst_seq_ptr D 0 ctx func PG H tf (emitted_insts middle sb)
      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa middle)) K' tk` by simp[] >>
   drule_all bop_inst_seq_ptr_append >> simp[]
+QED
+
+Resume abi_decode_normalized_success[opcodes]:
+  markerLib.RESUME_TAC >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa middle)` by
+    (`?B. bop_scalar_seq {} UNIV (emitted_insts sa middle) B` by
+       (irule abi_decode_complex_header_scalar >> simp[] >> metis_tac[]) >>
+     drule bop_scalar_seq_opcodes >> simp[EVERY_MEM]) >>
+  simp[EVERY_MEM] >> fs[EVERY_MEM]
 QED
 
 Finalise abi_decode_normalized_success

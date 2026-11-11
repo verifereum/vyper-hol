@@ -1,0 +1,71 @@
+Theory abiDecodePtrNormalizedCompose
+Ancestors
+  abiDecodePtrEntry abiDecodePtrNormalizedSuccess abiDecodePtrComplexOutcomeAbort
+  abiDecodePtrMemberInterface abiDecoderReentry abiDecoderAppend
+  bodyPtrBopScalarSeq exprLoweringProps emitHelperProps fragExec instIdxIndep
+  compileEnv venomState venomExecSemantics list arithmetic
+
+Theorem abi_decode_setup_success_sequence:
+  run_inst_seq (emitted_insts sa ready) (abi_decoder_prune_vars sa.cs_next_var s) =
+    OK (u0 with vs_inst_idx := s.vs_inst_idx) /\
+  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
+    (abi_decoder_prune_vars sa.cs_next_var s) H tf /\
+  inst_extends sa ready /\ inst_extends ready sb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa ready) /\
+  abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
+    (Lit 0w) 0w hi ready H tf u0 /\
+  EVERY supported_scalar_type tys /\
+  abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
+  cap = SUM (MAP (type_memory_bytes ce) tys) /\
+  evaluate_type_builtin cx (AbiDecode F) (TupleT tys) arg_tys [BytesV bs] =
+    INL (ArrayV (TupleV vs)) /\
+  LIST_REL value_has_type tvs vs /\ LIST_REL val_wf tvs vs /\
+  mem_bytes_at (w2n b) (LENGTH bs) (abi_decode_source MLOAD u0) = bs /\
+  compile_abi_decode_to_buf (Var dst) (Lit 0w) MLOAD (Var src) hi
+    (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) ready = ((),sb) /\
+  fn_has_code ready sb func ==>
+  ?u K tk.
+    run_inst_seq (emitted_insts sa sb) (abi_decoder_prune_vars sa.cs_next_var s) =
+      OK (u with vs_inst_idx := s.vs_inst_idx) /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb)
+      (abi_decoder_prune_vars sa.cs_next_var s) K tk /\
+    abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
+      (Lit 0w) 0w hi sb K tk u /\
+    (!mem'. mem_agree_outside tk.t_mem u.vs_memory mem' ==>
+      tuple_in_memory vs tvs (w2n d) mem')
+Proof
+  strip_tac >>
+  drule abi_decode_member_live_compiler >> strip_tac >>
+  drule_all abi_decode_normalized_success >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `emitted_insts sa sb = emitted_insts sa ready ++ emitted_insts ready sb` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `(abi_decoder_prune_vars sa.cs_next_var s).vs_inst_idx +
+     LENGTH (emitted_insts sa ready) = u0.vs_inst_idx` by
+    (fs[abi_decoder_prune_vars_def, inst_extends_def] >> metis_tac[LENGTH_APPEND]) >>
+  suspend "compose"
+QED
+
+Resume abi_decode_setup_success_sequence[compose]:
+  markerLib.RESUME_TAC >>
+  `run_inst_seq (emitted_insts ready sb) (u0 with vs_inst_idx := s.vs_inst_idx) =
+     OK (u with vs_inst_idx := s.vs_inst_idx)` by
+    simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+  `run_inst_seq (emitted_insts sa sb) (abi_decoder_prune_vars sa.cs_next_var s) =
+     OK (u with vs_inst_idx := s.vs_inst_idx)` by
+    (qpat_assum `run_inst_seq (emitted_insts sa ready) _ = _`
+       (mp_then Any (qspec_then `emitted_insts ready sb` mp_tac) run_inst_seq_append) >>
+     simp[]) >>
+  `u0 with vs_inst_idx := LENGTH ready.cs_current_insts = u0` by
+    (simp_tac (srw_ss()) [NoAsms, venom_state_component_equality] >> simp[]) >>
+  `inst_seq_ptr D 0 ctx func PG H tf (emitted_insts ready sb)
+     ((u0 with vs_inst_idx := s.vs_inst_idx) with vs_inst_idx :=
+       (abi_decoder_prune_vars sa.cs_next_var s).vs_inst_idx +
+        LENGTH (emitted_insts sa ready)) H' tf'` by simp[] >>
+  drule_all bop_inst_seq_ptr_append >> strip_tac >>
+  qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`, `H'`, `tf'`] >>
+  simp[]
+QED
+
+Finalise abi_decode_setup_success_sequence
