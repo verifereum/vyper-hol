@@ -100,7 +100,7 @@ Theorem deploy_ctor_package_accepts_value[local]:
  lower_vyper_deploy_unit tops rp runtime = SOME unit /\
  classify_functions tops = (exts,ints,fb,SOME cf) /\
  set_constructor_package_target rp.rpol_target
-   (package_constructor tops F (assign_nkeys tops 0) cf) =
+   (package_constructor tops T (K global_nonreentrant_slot) cf) =
      (ce,pa,pay,nr,key,ut,body,ret) /\
  deploy_state_rel tops deploy_bc am tx es /\
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>
@@ -131,7 +131,7 @@ Theorem deploy_ctor_prefix_entry:
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
  classify_functions tops = (exts,ints,fb,SOME cf) /\
  set_constructor_package_target rpolicy.rpol_target
-   (package_constructor tops F (assign_nkeys tops 0) cf) =
+   (package_constructor tops T (K global_nonreentrant_slot) cf) =
      (cenv0,pos_args,is_payable,nr,nkey,ut,body,ret) ==>
  lookup_function func.fn_name dunit.cu_context.ctx_functions = SOME func /\
  ctx_wf dunit.cu_context /\ wf_invoke_targets dunit.cu_context /\
@@ -424,7 +424,7 @@ Theorem deploy_ctor_entry_before_register:
  deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) /\
  classify_functions tops = (exts,ints,fb,SOME cf) /\
  set_constructor_package_target rpolicy.rpol_target
-   (package_constructor tops F (assign_nkeys tops 0) cf) =
+   (package_constructor tops T (K global_nonreentrant_slot) cf) =
      (cenv0,pos_args,is_payable,nr,nkey,ut,body,ret) /\
  cap = imm_len tops /\
  (if is_payable then comp_return ()

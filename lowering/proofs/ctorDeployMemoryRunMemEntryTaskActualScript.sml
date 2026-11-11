@@ -15,7 +15,7 @@ Theorem ctor_task_actual_phase_contracts:
   deploy_ctor_code tops rpolicy runtime_bc dunit
     (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) /\
   classify_functions tops = (exts,ints,fb,SOME cf) /\
-  package_constructor tops F (assign_nkeys tops 0) cf =
+  package_constructor tops T (K global_nonreentrant_slot) cf =
     (ce_pack,pos_args,pay,nr,nkey,ut,body,ret) /\
   ce0 = ((ce_pack with ce_target := rpolicy.rpol_target) with
     ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)) /\
@@ -102,7 +102,7 @@ Theorem ctor_task_register_actual:
   entry = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
   classify_functions tops =
     (exts,ints,fb,SOME (mut,nr,rr,fname,fargs,dflts,ret,body)) /\
-  package_constructor tops F (assign_nkeys tops 0)
+  package_constructor tops T (K global_nonreentrant_slot)
     (mut,nr,rr,fname,fargs,dflts,ret,body) =
     (ce_pack,pos_args,mut = Payable,nr,nkey,ut,body,ret) /\
   ce0 = ((ce_pack with ce_target := rpolicy.rpol_target) with
@@ -143,13 +143,14 @@ Proof
   drule_all ctor_task_registration_initial >> strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
     metis_tac[ctorDeployLoweringDefsTheory.deploy_ctor_code_def] >>
-  `nkey = assign_nkeys tops 0 fname /\ ut = F` by
+  `nkey = global_nonreentrant_slot /\ ut = T` by
     (qpat_x_assum `package_constructor _ _ _ _ = _` mp_tac >>
      simp[compileVyperTheory.package_constructor_def] >> metis_tac[]) >>
   drule_all ctor_task_actual_encoded_inputs >> strip_tac >>
   drule ctor_task_checked_namespaces >> strip_tac >>
   gvs[] >>
   drule_all (SRULE [] (Q.INST [
+    `nkey_map` |-> `(K global_nonreentrant_slot : string -> num)`,
     `ce0` |-> `ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`,
     `immo` |-> `(if imm_len tops > 0 then SOME imm else NONE)`]
     (Q.INST [`imm` |-> `immo`] ctor_task_registration_metadata))) >>

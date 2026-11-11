@@ -198,7 +198,7 @@ Theorem deploy_ptr_entry_package_accepts_value[local]:
   lower_vyper_deploy_unit tops rp runtime = SOME unit /\
   classify_functions tops = (exts,ints,fb,SOME cf) /\
   set_constructor_package_target rp.rpol_target
-    (package_constructor tops F (assign_nkeys tops 0) cf) =
+    (package_constructor tops T (K global_nonreentrant_slot) cf) =
       (ce,pa,pay,nr,key,ut,body,ret) /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr',body',am_c,es0) ==>

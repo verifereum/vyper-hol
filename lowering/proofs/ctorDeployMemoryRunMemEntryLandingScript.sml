@@ -134,7 +134,7 @@ Theorem ctor_landing_phase_metadata:
  deploy_ctor_code tops rpolicy runtime_bc dunit
    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) /\
  ~nr /\ classify_functions tops = (exts,ints,fb,SOME cf) /\
- package_constructor tops F (assign_nkeys tops 0) cf =
+ package_constructor tops T (K global_nonreentrant_slot) cf =
    (ce_pack,pos_args,pay,nr,nkey,ut,body,ret) /\
  ce0 = ((ce_pack with ce_target := rpolicy.rpol_target) with
    ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)) /\

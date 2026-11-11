@@ -176,7 +176,7 @@ Theorem deploy_ctor_decoder_inputs:
  classify_functions tops =
    (exts,ints,fb,SOME (mut,nr,rr,"__init__",fargs,[],NoneT,body)) /\
  set_constructor_package_target rp.rpol_target
-   (package_constructor tops F (assign_nkeys tops 0)
+   (package_constructor tops T (K global_nonreentrant_slot)
      (mut,nr,rr,"__init__",fargs,[],NoneT,body)) =
    (ce_pack,pos_args,mut = Payable,nr,key,ut,body,NoneT) /\
  ce0 = (ce_pack with ce_imm_alloca := imm_opt) /\
@@ -218,10 +218,11 @@ Proof
    check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
    fs[deploy_source_ok_def, deploy_typing_ok_def] >>
  drule_all deploy_ctor_checked_argument_inputs >> strip_tac >>
- `ut = F /\ key = assign_nkeys tops 0 "__init__"` by
+ `ut = T /\ key = global_nonreentrant_slot` by
    fs[set_constructor_package_target_def, package_constructor_def] >>
  fs[] >>
- drule deploy_ctor_target_package_layout >>
+ drule (SRULE [] (Q.INST [`nkey_map` |-> `(K global_nonreentrant_slot : string -> num)`]
+   deploy_ctor_target_package_layout)) >>
  disch_then (qspecl_then [`imm_opt`, `ce_pack with ce_imm_alloca := imm_opt`] mp_tac) >>
  simp[] >> strip_tac >>
  drule_all deploy_ctor_allocation_bounds >> strip_tac >>

@@ -21,7 +21,7 @@ Theorem deploy_ctor_entry_registered_coordinated_normalized:
  classify_functions tops =
    (exts,ints,fb,SOME (mut,nr,rr,"__init__",fargs,[],NoneT,body)) /\
  set_constructor_package_target rp.rpol_target
-   (package_constructor tops F (assign_nkeys tops 0)
+   (package_constructor tops T (K global_nonreentrant_slot)
      (mut,nr,rr,"__init__",fargs,([]:expr list),NoneT,body)) =
    (ce_pack,pos_args,mut = Payable,nr,key,ut,body,NoneT) /\
  (if mut = Payable then comp_return ()

@@ -60,7 +60,7 @@ Theorem ctor_task_register_world_provenance:
  fn_entry_label func = SOME lbl /\
  entry = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|> /\
  classify_functions tops = (exts,ints,fb,SOME (mut,nr,rr,fname,fargs,dflts,ret,body)) /\
- package_constructor tops F (assign_nkeys tops 0) (mut,nr,rr,fname,fargs,dflts,ret,body) =
+ package_constructor tops T (K global_nonreentrant_slot) (mut,nr,rr,fname,fargs,dflts,ret,body) =
    (ce_pack,pos_args,mut = Payable,nr,nkey,ut,body,ret) /\
  ce0 = ((ce_pack with ce_target := rpolicy.rpol_target) with
    ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)) /\
@@ -107,7 +107,7 @@ Proof
  drule_all ctor_task_registration_initial_world >> strip_tac >>
  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
    metis_tac[ctorDeployLoweringDefsTheory.deploy_ctor_code_def] >>
- `nkey = assign_nkeys tops 0 fname /\ ut = F` by
+ `nkey = global_nonreentrant_slot /\ ut = T` by
    (qpat_x_assum `package_constructor _ _ _ _ = _` mp_tac >>
     simp[compileVyperTheory.package_constructor_def] >> metis_tac[]) >>
  `!name p sz. FLOOKUP ce_pack.ce_vars name <> SOME (PtrVar p sz)` by

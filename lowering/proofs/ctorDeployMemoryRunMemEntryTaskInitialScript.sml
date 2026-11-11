@@ -315,7 +315,7 @@ Theorem ctor_task_package_payable:
   deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   set_constructor_package_target rpolicy.rpol_target
-    (package_constructor tops F (assign_nkeys tops 0) cf) =
+    (package_constructor tops T (K global_nonreentrant_slot) cf) =
       (ce,pa,pay,nr,key,ut,ss,ret) ==>
   pay = (mut = Payable)
 Proof
