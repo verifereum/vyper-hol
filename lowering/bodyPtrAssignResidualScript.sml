@@ -138,11 +138,12 @@ QED
    states it with only the pointer substitutions (stmt_frag_ptr,
    frame_ret_ok_ptr, body_*_ptr_ok). Admitted until S1 proves its twin. *)
 Theorem body_assign_tuple_widened_call_ptr:
-  !d PG cx gs e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
+  !d PG cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
     (!s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
        body_tuple_target_ptr_ok cx (TupleTarget gs) v) /\
     body_expr_ptr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
