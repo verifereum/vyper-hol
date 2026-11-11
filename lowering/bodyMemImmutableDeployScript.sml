@@ -5,7 +5,7 @@
    and bodyAugAssignOther's immutable_deploy_augassign_case. *)
 Theory bodyMemImmutableDeploy
 Ancestors
-  bodyMemoryPreds targetPlaceSim bodyImmutableAssignFacts
+  bodyMemoryPreds targetPlaceSim bodyImmutableAssignFacts immutableAssignStoreMem
 
 (* RESIDUAL (held): as its S1 twin immutable_deploy_assign_case, which is
    admitted on this base. *)
