@@ -5,7 +5,7 @@
 Theory readonlyInvokeCopyFwdPlan
 Ancestors
   readonlyInvokeCopyFwdDefs readonlyMemoryArgsProps indexedLists dfgAnalysisProps
-  list rich_list pair option passSharedDefs
+  list rich_list pair option passSharedDefs allocaRemapSSA
 
 Datatype:
   ricf_forward_event = <|
@@ -793,4 +793,195 @@ Proof
     (mp_tac ricf_event_ids >>
      simp[LIST_EQ_REWRITE, EL_MAP] >> metis_tac[]) >>
   simp[ricf_event_operand_at]
+QED
+
+Theorem ricf_function_edit_assigns:
+  ricf_function_edit fn cur ==>
+  !inst. inst.inst_opcode = ASSIGN ==>
+    (MEM inst (fn_insts fn) <=> MEM inst (fn_insts cur))
+Proof
+  strip_tac >> drule ricf_function_edit_insts >>
+  simp[LIST_REL_EL_EQN] >> strip_tac >> rpt strip_tac >>
+  simp[MEM_EL] >> eq_tac >> strip_tac >>
+  qexists_tac `n` >> simp[] >>
+  first_x_assum (qspec_then `n` mp_tac) >>
+  simp[ricf_inst_edit_def] >> gvs[]
+QED
+
+Theorem ricf_function_edit_assign_uses:
+  ricf_function_edit fn cur ==>
+  !v out.
+    ((?inst. MEM inst (dfg_get_uses (dfg_build_function fn) v) /\
+       inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [out]) <=>
+     (?inst. MEM inst (dfg_get_uses (dfg_build_function cur) v) /\
+       inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [out]))
+Proof
+  strip_tac >> drule ricf_function_edit_assigns >> strip_tac >>
+  metis_tac[dfg_build_function_uses_sound, dfg_build_function_uses_complete]
+QED
+
+Theorem ricf_event_outputs:
+  i < LENGTH bb.bb_instructions ==>
+  (EL i (ricf_event_apply e bb).bb_instructions).inst_outputs =
+    if i = e.rfe_index then [] else (EL i bb.bb_instructions).inst_outputs
+Proof
+  simp[ricf_event_apply_def, ricf_apply_forward_def, EL_MAPi] >>
+  rpt strip_tac >> rw[mk_nop_inst_def]
+QED
+
+Theorem ricf_block_trace_outputs:
+  !bb es last. ricf_block_trace bb es last ==>
+  !i. i < LENGTH bb.bb_instructions ==>
+    (EL i last.bb_instructions).inst_outputs = [] \/
+    (EL i last.bb_instructions).inst_outputs =
+      (EL i bb.bb_instructions).inst_outputs
+Proof
+  ho_match_mp_tac ricf_block_trace_ind >> simp[] >> rpt strip_tac >>
+  drule ricf_event_prefix_and_copy >> strip_tac >>
+  first_x_assum (qspec_then `i` mp_tac) >> simp[] >>
+  drule ricf_event_outputs >> disch_then (qspec_then `e` mp_tac) >>
+  metis_tac[]
+QED
+
+Definition ricf_outputs_edit_def:
+  ricf_outputs_edit (a:instruction) b <=>
+    b.inst_outputs = [] \/ b.inst_outputs = a.inst_outputs
+End
+
+Theorem ricf_outputs_edit_trans:
+  ricf_outputs_edit a b /\ ricf_outputs_edit b c ==> ricf_outputs_edit a c
+Proof
+  simp[ricf_outputs_edit_def] >> metis_tac[]
+QED
+
+Theorem ricf_block_trace_outputs_rel:
+  ricf_block_trace bb es last ==>
+  LIST_REL ricf_outputs_edit bb.bb_instructions last.bb_instructions
+Proof
+  strip_tac >> drule ricf_block_trace_ids >> strip_tac >>
+  `LENGTH last.bb_instructions = LENGTH bb.bb_instructions` by
+    metis_tac[LENGTH_MAP] >>
+  simp[LIST_REL_EL_EQN, ricf_outputs_edit_def] >>
+  metis_tac[ricf_block_trace_outputs]
+QED
+
+Theorem ricf_outputs_blocks:
+  !bbs cs.
+  LIST_REL (\b c. LIST_REL ricf_outputs_edit b.bb_instructions c.bb_instructions)
+    bbs cs ==>
+  LIST_REL ricf_outputs_edit (fn_insts_blocks bbs) (fn_insts_blocks cs)
+Proof
+  Induct >> Cases_on `cs` >>
+  simp[venomInstTheory.fn_insts_blocks_def] >>
+  rpt strip_tac >> irule EVERY2_APPEND_suff >> simp[]
+QED
+
+Theorem ricf_round_certificate_outputs:
+  ricf_round_certificate ctx fn cur ==>
+  LIST_REL ricf_outputs_edit (fn_insts fn) (fn_insts cur)
+Proof
+  simp[ricf_round_certificate_def, venomInstTheory.fn_insts_def] >>
+  rpt strip_tac >> gvs[] >> irule ricf_outputs_blocks >>
+  gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule ricf_block_trace_outputs_rel >> simp[LIST_REL_EL_EQN]
+QED
+
+Theorem ricf_function_trace_outputs:
+  !base fn cur. ricf_function_trace base fn cur ==>
+  LIST_REL ricf_outputs_edit (fn_insts fn) (fn_insts cur)
+Proof
+  ho_match_mp_tac ricf_function_trace_ind >>
+  simp[LIST_REL_refl, ricf_outputs_edit_def] >> rpt strip_tac >>
+  drule ricf_round_certificate_outputs >> strip_tac >>
+  gvs[LIST_REL_EL_EQN] >> metis_tac[ricf_outputs_edit_trans]
+QED
+
+Theorem ricf_function_output_origin:
+  ricf_function_edit fn cur /\
+  LIST_REL ricf_outputs_edit (fn_insts fn) (fn_insts cur) /\
+  MEM inst (fn_insts cur) /\ MEM v inst.inst_outputs ==>
+  ?old. MEM old (fn_insts fn) /\ MEM v old.inst_outputs /\ ricf_inst_edit old inst
+Proof
+  strip_tac >> drule ricf_function_edit_insts >> strip_tac >>
+  gvs[MEM_EL, LIST_REL_EL_EQN] >>
+  qexists_tac `EL n (fn_insts fn)` >>
+  `n < LENGTH (fn_insts fn)` by simp[] >>
+  conj_tac >- metis_tac[EL_MEM] >>
+  first_x_assum (qspec_then `n` mp_tac) >>
+  qpat_x_assum `!n. _` (qspec_then `n` mp_tac) >>
+  simp[ricf_outputs_edit_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* A defining ASSIGN survives, and output deletion cannot expose a different
+   ASSIGN under SSA.  No equality of complete DFG definition maps is claimed. *)
+Theorem ricf_function_edit_assign_defs:
+  ricf_function_edit fn cur /\
+  LIST_REL ricf_outputs_edit (fn_insts fn) (fn_insts cur) /\ ssa_form fn ==>
+  !inst v. inst.inst_opcode = ASSIGN ==>
+    (dfg_get_def (dfg_build_function fn) v = SOME inst <=>
+     dfg_get_def (dfg_build_function cur) v = SOME inst)
+Proof
+  strip_tac >> drule ricf_function_edit_assigns >> strip_tac >>
+  rpt gen_tac >> strip_tac >> eq_tac >> strip_tac
+  >- (drule dfg_build_function_correct >> strip_tac >>
+      `MEM inst (fn_insts cur)` by metis_tac[] >>
+      drule_all dfg_build_function_defs_complete >> strip_tac >>
+      drule dfg_build_function_correct >> strip_tac >>
+      drule_all ricf_function_output_origin >> strip_tac >>
+      `old = inst` by (irule ssa_unique_output >> metis_tac[]) >>
+      gvs[ricf_inst_edit_def]) >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `MEM inst (fn_insts fn)` by metis_tac[] >>
+  drule_all dfg_build_function_defs_complete >> strip_tac >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `inst' = inst` by (irule ssa_unique_output >> metis_tac[]) >>
+  gvs[]
+QED
+
+Theorem ricf_function_trace_assign_defs:
+  ricf_function_trace ctx0 fn cur /\ ssa_form fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  !inst v. inst.inst_opcode = ASSIGN ==>
+    (dfg_get_def (dfg_build_function fn) v = SOME inst <=>
+     dfg_get_def (dfg_build_function cur) v = SOME inst)
+Proof
+  rpt strip_tac >> irule ricf_function_edit_assign_defs >> simp[] >>
+  metis_tac[ricf_function_trace_edit, ricf_function_trace_outputs]
+QED
+
+Theorem ricf_function_trace_assign_predecessor:
+  ricf_function_trace ctx0 fn cur /\ ssa_form fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  !v.
+    (case dfg_get_def (dfg_build_function fn) v of
+       NONE => NONE
+     | SOME inst => if inst.inst_opcode = ASSIGN then
+         (case inst.inst_operands of [Var src] => SOME src | _ => NONE)
+         else NONE) =
+    (case dfg_get_def (dfg_build_function cur) v of
+       NONE => NONE
+     | SOME inst => if inst.inst_opcode = ASSIGN then
+         (case inst.inst_operands of [Var src] => SOME src | _ => NONE)
+         else NONE)
+Proof
+  strip_tac >> drule ricf_function_trace_assign_defs >> simp[] >> strip_tac >>
+  gen_tac >>
+  Cases_on `dfg_get_def (dfg_build_function fn) v` >>
+  Cases_on `dfg_get_def (dfg_build_function cur) v` >> simp[] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  rename1 `ai.inst_opcode = ASSIGN` >>
+  qpat_x_assum `!inst v. _` (qspecl_then [`ai`,`v`] mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem ricf_function_trace_assign_uses:
+  ricf_function_trace ctx0 fn cur /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  !v out.
+    ((?inst. MEM inst (dfg_get_uses (dfg_build_function fn) v) /\
+       inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [out]) <=>
+     (?inst. MEM inst (dfg_get_uses (dfg_build_function cur) v) /\
+       inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [out]))
+Proof
+  metis_tac[ricf_function_trace_edit, ricf_function_edit_assign_uses]
 QED
