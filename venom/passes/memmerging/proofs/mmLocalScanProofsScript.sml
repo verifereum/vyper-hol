@@ -14662,6 +14662,90 @@ Proof
   simp[]
 QED
 
+(* Successful nonterminating list execution with the exec_block index update. *)
+Definition mm_local_exec_prefix_def:
+  (mm_local_exec_prefix fuel ctx [] s t <=> t = s) /\
+  (mm_local_exec_prefix fuel ctx (i::is) s t <=>
+    ~is_terminator i.inst_opcode /\
+    ?u. step_inst fuel ctx i s = OK u /\
+      mm_local_exec_prefix fuel ctx is
+        (u with vs_inst_idx := SUC s.vs_inst_idx) t)
+End
+
+Theorem mm_local_exec_prefix_append[local]:
+  !xs ys fuel ctx s t.
+    mm_local_exec_prefix fuel ctx (xs ++ ys) s t <=>
+    ?u. mm_local_exec_prefix fuel ctx xs s u /\
+        mm_local_exec_prefix fuel ctx ys u t
+Proof
+  Induct_on `xs` >> simp[mm_local_exec_prefix_def] >> metis_tac[]
+QED
+
+Theorem mm_local_exec_prefix_single[local]:
+  mm_local_exec_prefix fuel ctx [i] s t <=>
+  ~is_terminator i.inst_opcode /\
+  ?u. step_inst fuel ctx i s = OK u /\
+    t = u with vs_inst_idx := SUC s.vs_inst_idx
+Proof
+  simp[mm_local_exec_prefix_def]
+QED
+
+Theorem mm_local_exec_prefix_cursor[local]:
+  !is fuel ctx s t.
+    mm_local_exec_prefix fuel ctx is s t ==>
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH is
+Proof
+  Induct_on `is` >> simp[mm_local_exec_prefix_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem mm_local_exec_prefix_suffix[local]:
+  !xs fuel ctx s t ys.
+    mm_local_exec_prefix fuel ctx xs s t ==>
+    dft_exec_suffix fuel ctx (xs ++ ys) s = dft_exec_suffix fuel ctx ys t
+Proof
+  Induct_on `xs` >> simp[mm_local_exec_prefix_def] >> rpt strip_tac >>
+  simp[Once dft_exec_suffix_def] >> metis_tac[]
+QED
+
+Theorem mm_local_flat_map_supply_append[local]:
+  !xs ys f s out t tail u.
+    mm_flat_map_supply f s xs = (out,t) /\
+    mm_flat_map_supply f t ys = (tail,u) ==>
+    mm_flat_map_supply f s (xs ++ ys) = (out ++ tail,u)
+Proof
+  Induct_on `xs` >> simp[mm_flat_map_supply_def] >> rpt gen_tac >>
+  Cases_on `f s h` >> Cases_on `mm_flat_map_supply f r xs` >>
+  simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[pairTheory.pair_case_eq]
+QED
+
+Theorem mm_local_hard_barrier_pending_empty[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE n is) /\
+  n < LENGTH is /\
+  scan_inst (dfg_build_function fn0) Mem2Mem ss (EL n is) = hard_barrier ss ==>
+  mm_local_pending_indices is gs n = []
+Proof
+  strip_tac >>
+  Cases_on `mm_local_pending_indices is gs n` >- simp[] >>
+  rename1 `mm_local_pending_indices is gs n = j::js` >>
+  `MEM j (mm_local_pending_indices is gs n)` by simp[] >>
+  `?A. MEM A ss.ss_copies /\ MEM (EL j is).inst_id A.cg_inst_ids` by
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_canonical_pending_copy_owner >>
+     disch_then irule >> simp[] >> qexists `n` >> gvs[]) >>
+  qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+  `scan_inst (dfg_build_function fn0) Mem2Mem ss (EL n is) <> hard_barrier ss` by
+    (irule mm_local_indexed_future_nonbarrier >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem mm_local_cut_literal_load_read[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
