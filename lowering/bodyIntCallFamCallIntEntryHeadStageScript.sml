@@ -733,3 +733,69 @@ Proof
   `EL (argbase+k) argv = w'` by metis_tac[] >>
   qexistsl_tac [`w2n w'`,`len'`,`inst`] >> simp[]
 QED
+
+(* Allocate the return buffer and stage on the very same counted path. *)
+Theorem intcall_allocated_list_stage_endpoint:
+  compile_alloc_buffer sz a = (buf,b) /\
+  compile_stage_intcall_args ce vs flags (MAP expr_type ds) b = (out,c) /\
+  LENGTH vs = LENGTH ds /\ LENGTH rs = LENGTH ds /\
+  LENGTH values = LENGTH ds /\ LENGTH flags = LENGTH ds /\
+  ^deferred_list fp ce ds vs rs a es t /\
+  (!i. i < LENGTH ds ==>
+    post_value_type ce (EL i ds) = expr_type (EL i ds) /\
+    vv_type (EL i vs) = expr_type (EL i ds) /\
+    read_result fp.jc_cx (EL i rs) es = (INL (EL i values),es) /\
+    (EL i flags ==> is_word_type (expr_type (EL i ds))) /\
+    ?tv. evaluate_type (get_tenv fp.jc_cx) (expr_type (EL i ds)) = SOME tv /\
+      type_memory_bytes ce (expr_type (EL i ds)) = type_memory_size tv /\
+      type_memory_size tv < 2**64 /\ value_has_type tv (EL i values) /\
+      (~EL i flags ==> val_wf tv (EL i values))) /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es a t /\
+  fn_has_code a b fp.jc_func /\ fn_has_code b c fp.jc_func /\
+  fn_inst_ids_distinct fp.jc_func /\ sz < dimword (:256) /\
+  ~t.vs_halted /\ t.vs_current_bb = a.cs_current_bb /\
+  t.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  LENGTH out = LENGTH ds /\
+  ?u w. gas_marked_path F fp.jc_ctx fp.jc_func t 0 (OK u) /\
+    intcall_expr_cont fp ce env es a t es c u /\
+    ^staged_regions fp.jc_cx ds flags out u /\
+    ^completed_prefix fp.jc_cx a c (MAP expr_type ds) flags values out u /\
+    (!i tv. i < LENGTH ds /\ ~EL i flags /\
+      evaluate_type (get_tenv fp.jc_cx) (expr_type (EL i ds)) = SOME tv ==>
+      ^allocation_origin fp.jc_func b c (EL i out) tv u) /\
+    eval_operand buf.buf_operand u = SOME w /\
+    FLOOKUP u.vs_allocas a.cs_next_id = SOME (w2n w,sz) /\
+    fp.jc_lo <= w2n w /\ w2n w + sz < dimword (:256) /\
+    a.cs_next_id < b.cs_next_id
+Proof
+  strip_tac >>
+  `^completed_prefix fp.jc_cx a a [] [] [] [] t` by simp[] >>
+  drule_all intcall_stage_allocation_endpoint >> strip_tac >>
+  rename1 `intcall_expr_cont fp ce env es a t es b mid` >>
+  `a.cs_next_id <= b.cs_next_id /\ a.cs_next_var <= b.cs_next_var` by
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> simp[]) >>
+  `intcall_expr_res fp ce env es b mid /\ ~mid.vs_halted /\
+   mid.vs_current_bb = b.cs_current_bb /\
+   mid.vs_inst_idx = LENGTH b.cs_current_insts` by
+    fs[intcall_expr_cont_def] >>
+  drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)
+    intcall_list_stage_fresh_origin_endpoint >>
+  disch_then (qspecl_then [`[]`,`[]`,`[]`] mp_tac) >>
+  pure_rewrite_tac [listTheory.APPEND_NIL] >>
+  disch_then (drule_at (Pat `intcall_expr_res _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `(^completed_prefix) _ _ _ _ _ _ _ _`)) >>
+  pure_rewrite_tac [listTheory.LENGTH, listTheory.APPEND,
+    prim_recTheory.NOT_LESS_0, boolTheory.NOT_CLAUSES,
+    boolTheory.IMP_CLAUSES, boolTheory.AND_CLAUSES, boolTheory.FORALL_SIMP] >>
+  disch_then drule_all >> strip_tac >>
+  `gas_marked_path F fp.jc_ctx fp.jc_func t 0 (OK u)` by
+    (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
+  `intcall_expr_cont fp ce env es a t es c u` by
+    metis_tac[bodyIntCallJointCallCoreTheory.intcall_expr_cont_trans] >>
+  `lookup_var p u = SOME w` by
+    (fs[intcall_expr_cont_def, venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`u`,`w`] >>
+  pure_asm_rewrite_tac [] >>
+  fs[intcall_expr_cont_def, venomStateTheory.eval_operand_def]
+QED
