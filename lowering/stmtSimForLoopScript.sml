@@ -1182,7 +1182,7 @@ Proof
   simp[Abbr `Inv`] >>
   (impl_tac >- (qpat_x_assum `gas_admissible _ _ esk` mp_tac >> simp[arithmeticTheory.ADD_COMM])) >>
   strip_tac >> drule gas_outcome_exec_conseq >> disch_then irule >>
-  simp[Abbr `Done`, Abbr `R`] >> metis_tac[]
+  simp[Abbr `Done`, Abbr `R`] >> rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Resume for_loop_alloca[round]:
@@ -1208,7 +1208,7 @@ Resume for_loop_alloca[round]:
   qpat_x_assum `gas_admissible _ _ esk` kall_tac >>
   drule_all for_iteration_alloca >> strip_tac >>
   drule gas_outcome_exec_conseq >> disch_then irule >>
-  reverse conj_tac >- simp[Abbr `R`] >>
+  reverse conj_tac >- (simp[Abbr `R`] >> rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   conj_tac
   >- (strip_tac >> simp[Abbr `Done`]) >>

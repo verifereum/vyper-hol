@@ -131,8 +131,8 @@ Proof
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
   simp[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
-      irule forced_then_summary >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexists_tac `P` >> conj_tac >> first_assum ACCEPT_TAC) >>
+      irule forced_then_summary >> qexistsl_tac [`P`, `cx`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   ONCE_REWRITE_TAC [ignore_bind_bind_value] >>
@@ -222,8 +222,8 @@ Proof
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
   simp[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
-      irule forced_then_summary >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexists_tac `P` >> conj_tac >> first_assum ACCEPT_TAC) >>
+      irule forced_then_summary >> qexistsl_tac [`P`, `cx`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   ONCE_REWRITE_TAC [ignore_bind_bind_result] >>

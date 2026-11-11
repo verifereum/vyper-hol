@@ -2424,7 +2424,7 @@ QED
 Resume ifexp_arm_outcome[exception]:
   Cases_on `res`
   >- (Cases_on `r` >> gvs[expr_exit_def]) >>
-  qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
+  qexistsl_tac [`INR y`, `es_end`, `r`] >> fs[] >>
   irule gas_marked_exec_bind_exception >> goal_assum drule
 QED
 Finalise ifexp_arm_outcome[local]
