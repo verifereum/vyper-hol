@@ -14225,6 +14225,160 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_runtime_representative_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\ h = phi_prefix_length is /\ h <= r /\ r < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  (!q. h <= q /\ q <= r ==> ~is_terminator (EL q is).inst_opcode /\
+    ?z. step_inst fuel ctx (EL q is) (H q) = OK z /\
+      H (SUC q) = z with vs_inst_idx := SUC (H q).vs_inst_idx) /\
+  cap = mm_local_write_capture is H (SUC r) /\
+  js = mm_local_pending_indices is gs r /\ a = mm_local_epoch_start is gs r /\
+  u = FOLDL (\st q. if MEM q js then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a) (MAP (\q. a+q) (COUNT_LIST (r-a))) /\
+  t.vs_memory = u.vs_memory /\ mm_local_pending cap js (H r) t /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  excluded = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  (!v. v NOTIN excluded ==> lookup_var v (H r) = lookup_var v t) /\
+  fresh_inst_id es = (lid,es1) /\ fresh_ir_var es1 = (v,es2) /\
+  (!x. x IN P ==> x <> v) /\
+  g.cg_dst < dimword (:256) /\ g.cg_src < dimword (:256) /\ g.cg_length < dimword (:256) /\
+  a' = mm_local_epoch_start is gs (SUC r) ==>
+  ?out es' fin.
+    apply_groups_inst_supply Mem2Mem ns rs es (EL r is) = (out,es') /\
+    ((?i. out = [i] /\ step_inst fuel ctx i t = OK fin) \/
+     (?i j mid. out = [i;j] /\ step_inst fuel ctx i t = OK mid /\
+       step_inst fuel ctx j (mid with vs_inst_idx := SUC t.vs_inst_idx) = OK fin)) /\
+    (!x. x IN P ==> lookup_var x fin = lookup_var x t) /\
+    mm_local_pending cap (mm_local_pending_indices is gs (SUC r))
+      (H (SUC r)) (fin with vs_inst_idx := t.vs_inst_idx + LENGTH out) /\
+    (fin with vs_inst_idx := t.vs_inst_idx + LENGTH out).vs_memory =
+      (FOLDL (\st q. if MEM q (mm_local_pending_indices is gs (SUC r)) then st else
+        case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+        (H a') (MAP (\q. a'+q) (COUNT_LIST (SUC r-a')))).vs_memory
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `MEM (EL r is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+  `ALOOKUP rs (EL r is).inst_id = SOME g /\ ~MEM (EL r is).inst_id ns` by
+    (qpat_x_assum `ns = _` SUBST_ALL_TAC >>
+     qpat_x_assum `rs = _` SUBST_ALL_TAC >>
+     qpat_x_assum `is = _` SUBST_ALL_TAC >>
+     qpat_x_assum `gs = _` SUBST_ALL_TAC >>
+     drule_all mm_local_prefix_selected_rep >> simp[]) >>
+  `!q. h <= q /\ q < r ==> ~is_terminator (EL q is).inst_opcode /\
+    ?z. step_inst fuel ctx (EL q is) (H q) = OK z /\
+      H (SUC q) = z with vs_inst_idx := SUC (H q).vs_inst_idx` by
+    metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
+  `?out es' fin.
+    apply_groups_inst_supply Mem2Mem ns rs es (EL r is) = (out,es') /\
+    ((?i. out = [i] /\ step_inst fuel ctx i t = OK fin) \/
+     (?i j mid. out = [i;j] /\ step_inst fuel ctx i t = OK mid /\
+       step_inst fuel ctx j (mid with vs_inst_idx := SUC t.vs_inst_idx) = OK fin)) /\
+    (!x. x IN P ==> lookup_var x fin = lookup_var x t) /\
+    fin.vs_memory = (write_memory_with_expansion g.cg_dst
+      (read_memory g.cg_src g.cg_length t) t).vs_memory` by
+    (Cases_on `g.cg_length = 32`
+     >- (Cases_on `(EL r is).inst_opcode = MSTORE`
+         >- suspend "retained"
+         >> suspend "word") >> suspend "bulk") >>
+  suspend "renew"
+QED
+
+Resume mm_local_runtime_representative_transition[bulk]:
+  drule_all mm_local_mem2mem_bulk_runtime >>
+  disch_then (qspecl_then [`t`,`es`,`fuel`,`ctx`] strip_assume_tac) >>
+  qexistsl [`[out]`,`es`,`fin`] >> simp[]
+QED
+Resume mm_local_runtime_representative_transition[word]:
+  drule_all mm_local_mem2mem_word_runtime >>
+  metis_tac[]
+QED
+Resume mm_local_runtime_representative_transition[retained]:
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  `?dst w src. (EL r is).inst_operands = [Lit dst; Var w] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+      empty_scan_state (TAKE r is)).ss_loads w = SOME src` by
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_final_write_birth >>
+     disch_then (qspecl_then [`r`,`is`,`g`] mp_tac) >>
+     simp[] >> impl_tac >- gvs[] >> metis_tac[]) >>
+  `g.cg_dst = w2n dst /\ lookup_var w (H r) = SOME (mload g.cg_src t)` by
+    (irule mm_local_runtime_representative_store_payload >> metis_tac[]) >>
+  `apply_groups_inst_supply Mem2Mem ns rs es (EL r is) = ([EL r is],es)` by
+    simp[apply_groups_inst_supply_def] >>
+  `lookup_var w (H r) = lookup_var w t` by
+    (irule mm_local_retained_operand_agreement >>
+     goal_assum (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `apply_groups_inst_supply _ _ _ _ _ = _`)) >>
+     qexists `excluded` >>
+     simp[venomInstTheory.inst_uses_def, venomInstTheory.operand_vars_def,
+       venomInstTheory.operand_var_def] >> metis_tac[]) >>
+  qpat_assum `!q. h <= q /\ q <= r ==> _` (qspec_then `r` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule_all mm_local_mem2mem_retained_payload >>
+  disch_then (qspec_then `es` strip_assume_tac) >>
+  qexistsl [`[EL r is]`,`es`,`fin`] >> simp[] >> gvs[]
+QED
+Resume mm_local_runtime_representative_transition[renew]:
+  markerLib.RESUME_TAC >>
+  `fin.vs_memory = (FOLDL (\st q.
+    if MEM q (mm_local_pending_indices is gs (SUC r)) then st else
+    case cap q of NONE => st | SOME (d,bs) => write_memory_with_expansion d bs st)
+    (H a') (MAP (\q. a'+q) (COUNT_LIST (SUC r-a')))).vs_memory` by
+    (irule mm_local_runtime_retained_renew >> metis_tac[]) >>
+  `FILTER (\j. mm_local_rep_index is gs j <> r) js =
+    mm_local_pending_indices is gs (SUC r)` by
+    (`~MEM r (mm_local_pending_indices is gs (SUC r))` by
+       (strip_tac >>
+        qpat_x_assum `MEM r (mm_local_pending_indices _ _ _)`
+          (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+        rename1 `SUC r <= rr` >>
+        `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+        `rr = r` by (irule mm_local_write_rep_unique >> metis_tac[]) >> decide_tac) >>
+     `FILTER (\j. j < r) (mm_local_pending_indices is gs (SUC r)) =
+       mm_local_pending_indices is gs (SUC r)` by
+       (rewrite_tac[FILTER_EQ_ID, EVERY_MEM] >> qx_gen_tac `birth` >> strip_tac >>
+        drule (iffLR mm_local_pending_indices_mem) >> strip_tac >>
+        `birth <> r` by metis_tac[] >> simp[] >> decide_tac) >>
+     `r <= LENGTH is` by decide_tac >>
+     qpat_x_assum `js = _` SUBST_ALL_TAC >>
+     `FILTER (\j. mm_local_rep_index is gs j <> r) (mm_local_pending_indices is gs r) =
+       FILTER (\j. SUC r <= mm_local_rep_index is gs j) (mm_local_pending_indices is gs r)` suffices_by
+       metis_tac[mm_local_canonical_pending_keep] >>
+     rewrite_tac[rich_listTheory.FILTER_EQ] >> qx_gen_tac `x` >> strip_tac >>
+     `r <= mm_local_rep_index is gs x` by
+       (drule (iffLR mm_local_pending_indices_mem) >> strip_tac >>
+        `x < LENGTH is` by decide_tac >>
+        metis_tac[mm_local_rep_index_eq, pred_setTheory.IN_INSERT]) >> BETA_TAC >> decide_tac) >>
+  `(EL r is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    metis_tac[mm_local_canonical_rep_write] >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  `(EL r is).inst_opcode = MSTORE \/ (EL r is).inst_opcode = MCOPY` by
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_final_write_birth >>
+     disch_then (qspec_then `r` mp_tac) >> gvs[] >> metis_tac[]) >>
+  `?d bs. cap r = SOME (d,bs) /\
+    (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory` by
+    (qpat_assum `!q. h <= q /\ q <= r ==> _` (qspec_then `r` mp_tac) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     qpat_x_assum `cap = _` SUBST_ALL_TAC >>
+     irule mm_local_interval_runtime_capture >>
+     `SUC r <= LENGTH is /\ r < SUC r` by decide_tac >> metis_tac[]) >>
+  `mm_local_pending cap (FILTER (\j. mm_local_rep_index is gs j <> r) js)
+    (H (SUC r)) fin` by
+    (irule mm_local_runtime_pending_discharge >> metis_tac[]) >>
+  qexistsl [`out`,`es'`,`fin`] >> simp[] >>
+  gvs[mm_local_pending_def] >>
+  qexists `ws'` >> simp[] >> irule mm_local_write_log_memory_cong >> simp[]
+QED
+Finalise mm_local_runtime_representative_transition
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
