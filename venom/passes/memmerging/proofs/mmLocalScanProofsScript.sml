@@ -14435,6 +14435,61 @@ Proof
     simp[mm_local_write_capture_past] >> simp[]
 QED
 
+Theorem mm_local_write_runtime_frame[local]:
+  (i.inst_opcode = MSTORE \/ i.inst_opcode = MCOPY) /\ step_inst fuel ctx i s = OK t ==>
+  mm_local_nonmemory_frame t = mm_local_nonmemory_frame s /\
+  (!v. lookup_var v t = lookup_var v s)
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_write2_def] >>
+  gvs[AllCaseEqs()] >> strip_tac >>
+  gvs[venomMemPropsTheory.mstore_eq_write_mem,
+    venomExecSemanticsTheory.mcopy_def,
+    venomStateTheory.write_memory_with_expansion_def,
+    venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_cut_erased_write_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  phi_prefix_length is <= n /\ n < LENGTH is /\
+  MEM (EL n is).inst_id ns /\ (EL n is).inst_opcode IN {MSTORE; MCOPY} /\
+  mm_local_cut is gs H n excluded pc t /\
+  step_inst fuel ctx (EL n is) (H n) = OK s /\
+  H (SUC n) = s with vs_inst_idx := SUC (H n).vs_inst_idx ==>
+  apply_groups_inst_supply Mem2Mem ns rs es (EL n is) = ([mk_nop_from (EL n is)],es) /\
+  step_inst fuel ctx (mk_nop_from (EL n is)) t = OK t /\
+  mm_local_cut is gs H (SUC n) excluded (SUC pc)
+    (t with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >>
+  conj_tac >- simp[apply_groups_inst_supply_def] >>
+  conj_tac
+  >- simp[venomInstPropsTheory.step_nop_identity, mk_nop_from_def] >>
+  `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n]` by
+    (irule mm_local_erased_write_pending_suc >> metis_tac[]) >>
+  `mm_local_nonmemory_frame s = mm_local_nonmemory_frame (H n) /\
+    (!v. lookup_var v s = lookup_var v (H n))` by
+    (irule mm_local_write_runtime_frame >> metis_tac[pred_setTheory.IN_INSERT,
+      pred_setTheory.NOT_IN_EMPTY]) >>
+  `?d bs. mm_local_write_capture is H (SUC n) n = SOME (d,bs) /\
+    (H (SUC n)).vs_memory = (write_memory_with_expansion d bs (H n)).vs_memory` by
+    (irule mm_local_interval_runtime_capture >>
+     `SUC n <= LENGTH is` by decide_tac >>
+     simp[] >> metis_tac[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  irule mm_local_cut_erased_write_stutter >>
+  gvs[venomStateTheory.lookup_var_def] >> metis_tac[]
+QED
+
 Theorem mm_local_cut_init[local]:
   h = phi_prefix_length is ==>
   mm_local_cut is gs H h excluded pc (H h with vs_inst_idx := pc)
