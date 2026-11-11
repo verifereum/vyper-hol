@@ -30,7 +30,10 @@ Proof
   simp[Once mem_safe_block_def, get_instruction_def,
     abi_encode_array_header_insts_def, mem_safe_step_def,
     below_frontier_no_ranges, mk_inst_def, is_terminator_def] >>
-  rpt CASE_TAC >> simp[]
+  simp[eval_operand_def, lookup_var_update_var] >>
+  Cases_on `eval_operand count_op (update_var iv (mload (w2n p) s) s)` >>
+  simp[eval_operand_def, lookup_var_update_var] >>
+  CASE_TAC >> simp[]
 QED
 
 Theorem array_header_mem_cont:
