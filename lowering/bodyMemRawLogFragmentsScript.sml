@@ -9,6 +9,7 @@ Ancestors
   venomState venomInst vyperState vyperValue vyperAST list loweringStateRelDefs
 
 Theorem raw_log_dynamic_data_endpoint_mem[local]:
+  expr_has_effect call /\
   expr_body_pre cenv cx env data (mid with gas_obs := []) /\
   expr_type data = BaseT (BytesT (Dynamic cap)) /\
   post_value_type cenv call = expr_type call /\ expr_type call = NoneT /\
@@ -133,10 +134,11 @@ Proof
   qpat_assum `emit_op MLOAD _ _ = _` (irule_at Any) >>
   qpat_assum `emit_op ADD _ _ = _` (irule_at Any) >>
   qpat_assum `expr_body_pre _ _ _ data (_ with gas_obs := [])` (irule_at Any) >>
-  qexists_tac `ops` >> simp[expr_type_def, APPEND]
+  qexists_tac `ops` >> simp[expr_type_def, APPEND, expr_has_effect_thm]
 QED
 
 Theorem raw_log_fixed_data_endpoint_mem[local]:
+  expr_has_effect call /\
   expr_body_pre cenv cx env data (mid with gas_obs := []) /\
   expr_type data = BaseT (BytesT (Fixed 32)) /\
   post_value_type cenv call = expr_type call /\ expr_type call = NoneT /\
@@ -203,6 +205,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_allocated_mem[local]:
+  expr_has_effect call /\
   expr_sim_mem ctx func cenv cx (expr_type data) data (mid with gas_obs := []) /\
   (!s. expr_sim_inv cenv cx env s ==> expr_body_pre cenv cx env data s) /\
   expr_sim_inv cenv cx env (mid with gas_obs := []) /\
@@ -336,6 +339,6 @@ Proof
   qpat_assum `compile_alloc_buffer _ _ = _` (irule_at Any) >>
   qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
   qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >>
-  qexistsl_tac [`p`, `w`, `env`] >> fs[expr_type_def] >>
+  qexistsl_tac [`p`, `w`, `env`] >> fs[expr_type_def, expr_has_effect_thm] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED

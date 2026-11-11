@@ -232,6 +232,8 @@ Resume concat_result_vv_sim_mem[frame]:
      >- (qexistsl_tac [`ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`B`, `bsz`, `es`, `ow`, `s4`, `t`] >>
      asm_rewrite_tac[] >> simp[] >> first_assum ACCEPT_TAC) >>
+  `~expr_has_effect (Builtin ann (Concat n) args) ==>
+   pure_frame cenv func es sa s0 t'` by suspend "pure" >>
   once_rewrite_tac[vv_post_located_mk_ptr, vv_store_bound_located_mk_ptr] >>
   qpat_assum `buf.buf_operand = _`
     (fn th => pure_rewrite_tac[base_ptr_def, th]) >>
@@ -242,7 +244,82 @@ Resume concat_result_vv_sim_mem[frame]:
   irule (BETA_RULE (REWRITE_RULE[LET_THM, vyperASTTheory.expr_type_def,
                                  loweringPostsTheory.post_value_type_def]
     (Q.INST [`e` |-> `Builtin ann (Concat n) args`] (SPEC_ALL concat_suffix_post)))) >>
-  asm_rewrite_tac[] >> suspend "suffix_conditions"
+  asm_rewrite_tac[] >>
+  qpat_x_assum `~expr_has_effect _ ==> pure_frame _ _ _ _ _ _` kall_tac >>
+  suspend "suffix_conditions"
+QED
+
+Resume concat_result_vv_sim_mem[pure]:
+  strip_tac >>
+  qpat_x_assum `_ ==> (!n lb lsz. local_region _ _ t _ _ _ ==> _) /\ _` mp_tac >>
+  impl_tac
+  >- (qpat_x_assum `~expr_has_effect _` mp_tac >>
+      simp_tac (srw_ss()) [loweringPostsTheory.expr_has_effect_thm]) >>
+  strip_tac >>
+  rewrite_tac[loweringPostsTheory.pure_frame_def] >> conj_tac
+  >- (qx_genl_tac [`nm`, `lb`, `lsz`] >> strip_tac >>
+      `local_region cenv es.scopes t nm lb lsz` by
+        (qspecl_then [`cenv`, `sa`, `es.scopes`, `s0`, `t`, `nm`, `lb`, `lsz`]
+           mp_tac concat_local_region_vars >>
+         impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+         disch_then (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+      qpat_assum `!name lb lsz. local_region cenv es.scopes t _ _ _ ==> _ /\ _`
+        drule >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+      `mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
+        (qpat_x_assum `!p n. _ \/ _ ==> mem_bytes_at p n t.vs_memory = _`
+           (qspecl_then [`lb`, `lsz`] mp_tac) >>
+         impl_tac
+         >- (qpat_x_assum `w2n ow + 64 <= lb \/ _` mp_tac >>
+             rpt (pop_assum kall_tac) >> decide_tac) >>
+         disch_then ACCEPT_TAC) >>
+      `mem_bytes_at lb lsz t'.vs_memory = mem_bytes_at lb lsz t.vs_memory` by
+        (qpat_x_assum `!n lb lsz. local_region _ _ t _ _ _ ==>
+                         mem_bytes_at _ _ t'.vs_memory = _` irule >>
+         qexists_tac `nm` >> first_assum ACCEPT_TAC) >>
+      ntac 2 (pop_assum mp_tac) >> rpt (disch_then SUBST1_TAC) >> REFL_TAC) >>
+  qx_genl_tac [`off`, `len`] >> strip_tac >>
+  `FLOOKUP t'.vs_allocas binst.inst_id = SOME (B,bsz)` by
+    (qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==>
+                   FLOOKUP t'.vs_allocas aid = SOME a` irule >>
+     first_assum ACCEPT_TAC) >>
+  `FLOOKUP t'.vs_allocas oinst.inst_id = SOME (w2n ow,64)` by
+    (qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==>
+                   FLOOKUP t'.vs_allocas aid = SOME a` irule >>
+     first_assum ACCEPT_TAC) >>
+  `regions_disjoint off len B bsz` by
+    (qpat_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `binst` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_assum `binst.inst_id = _` (fn th => simp_tac arith_ss [th])) >>
+  `regions_disjoint off len (w2n ow) 64` by
+    (qpat_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `oinst` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `mem_bytes_at off len t'.vs_memory = mem_bytes_at off len t.vs_memory` by
+    (qpat_x_assum `!p n. _ /\ _ /\ (!inst b sz. _ ==> _) ==>
+                     mem_bytes_at p n t'.vs_memory = _`
+       (qspecl_then [`off`, `len`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac
+         >- (qpat_x_assum `regions_disjoint off len B bsz` mp_tac >>
+             rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
+             rpt (pop_assum kall_tac) >> decide_tac)
+         >- (qpat_x_assum `regions_disjoint off len (w2n ow) 64` mp_tac >>
+             rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
+             rpt (pop_assum kall_tac) >> decide_tac) >>
+         rpt strip_tac >>
+         qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+         qexists_tac `inst` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+         qpat_x_assum `sa.cs_next_id + 4 <= inst.inst_id` mp_tac >>
+         rpt (pop_assum kall_tac) >> decide_tac) >>
+     disch_then ACCEPT_TAC) >>
+  `mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory` by
+    (qpat_x_assum `!p n. _ \/ _ ==> mem_bytes_at p n t.vs_memory = _`
+       (qspecl_then [`off`, `len`] mp_tac) >>
+     impl_tac
+     >- (qpat_x_assum `regions_disjoint off len (w2n ow) 64` mp_tac >>
+         rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >>
+         rpt (pop_assum kall_tac) >> decide_tac) >>
+     disch_then ACCEPT_TAC) >>
+  ntac 2 (pop_assum mp_tac) >> rpt (disch_then SUBST1_TAC) >> REFL_TAC
 QED
 
 Resume concat_result_vv_sim_mem[suffix_conditions]:

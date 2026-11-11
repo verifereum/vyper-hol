@@ -212,7 +212,7 @@ Proof
     (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
      simp[vv_store_bound_def, read_result_def, return_def] >>
      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
-  drule vv_post_read_result >> strip_tac >> gvs[] >> pop_assum kall_tac >>
+  drule_all vv_post_read_result >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) convert_unwrap_value_path_mem_window >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspec_then `env` mp_tac) >>

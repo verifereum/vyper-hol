@@ -68,7 +68,16 @@ Theorem concat_args_sim_mem:
                           p + n <= lo \/ lo + sz <= p) ==>
             mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
          locals_kept cenv es ee s0 t /\ alloca_history func t /\
-         s0.vs_alloca_next <= t.vs_alloca_next)
+         s0.vs_alloca_next <= t.vs_alloca_next /\
+         (~EXISTS expr_has_effect args ==>
+            (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+               mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+            !p n. (p + n <= B \/ B + bsz <= p) /\ (p + n <= w2n ow \/ w2n ow + 64 <= p) /\
+              (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+                 sa.cs_next_id <= inst.inst_id /\
+                 FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
+                 regions_disjoint p n b sz) ==>
+              mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory))
       (\rr ee r. ?exc. rr = INR exc /\
          expr_exit (INR exc : eval_result + exception) r)
 Proof
@@ -237,6 +246,91 @@ QED
 Resume concat_args_sim_mem[post]:
   qexists_tac `tu` >> conj_tac >- REFL_TAC >>
   qexists_tac `v::vs` >> conj_tac >- REFL_TAC >>
+  qmatch_goalsub_abbrev_tac
+    `_ /\ (~expr_has_effect e /\ EVERY _ args ==> pure_args)` >>
+  `~expr_has_effect e /\ EVERY ($~ o expr_has_effect) args ==> pure_args` by
+    (qunabbrev_tac `pure_args` >> strip_tac >>
+     `pure_frame cenv func es sa s0 t` by
+       (drule_all expr_post_pure_frame >> disch_then ACCEPT_TAC) >>
+     qpat_x_assum `~EXISTS expr_has_effect args ==> _` mp_tac >>
+     impl_tac
+     >- (rewrite_tac[listTheory.NOT_EXISTS] >> first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+            lookup_var x t2 = SOME w` by
+       (rpt strip_tac >>
+        `not_fresh_at s1 x` by
+          (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
+           rpt conj_tac >> first_assum ACCEPT_TAC) >>
+        `lookup_var x t = SOME w` by
+          (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+             (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+           first_x_assum irule >> conj_tac >> first_assum ACCEPT_TAC) >>
+        qpat_x_assum `!z. not_fresh_at s1 z ==> _` drule >>
+        disch_then SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `pure_frame _ _ _ _ _ t`
+       (strip_assume_tac o REWRITE_RULE [pure_frame_def]) >>
+     conj_tac
+     >- (qx_genl_tac [`nm`, `lb`, `lsz`] >> strip_tac >>
+         `local_region cenv (es_end with gas_obs := []).scopes t2 nm lb lsz` by
+           (match_mp_tac local_region_frame_fwd >>
+            qexistsl_tac [`es.scopes`, `sa`, `s0`] >>
+            rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         `mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
+           (qpat_x_assum `!n b sz. local_region cenv es.scopes s0 n b sz ==>
+                            mem_bytes_at b sz t.vs_memory = _`
+              (drule_then ACCEPT_TAC)) >>
+         `mem_bytes_at lb lsz t2.vs_memory = mem_bytes_at lb lsz t.vs_memory` by
+           (qpat_x_assum `!p n. _ /\ _ ==> mem_bytes_at p n t2.vs_memory = _` irule >>
+            qpat_x_assum `!name lb lsz. local_region cenv es.scopes s0 _ _ _ ==> _ /\ _`
+              drule >> rpt (pop_assum kall_tac) >> decide_tac) >>
+         `mem_bytes_at lb lsz tu.vs_memory = mem_bytes_at lb lsz t2.vs_memory` by
+           (qpat_x_assum `!n lb lsz. local_region _ _ t2 _ _ _ ==>
+                            mem_bytes_at _ _ tu.vs_memory = _`
+              (drule_then ACCEPT_TAC)) >>
+         ntac 3 (pop_assum mp_tac) >> rpt (disch_then SUBST1_TAC) >> REFL_TAC) >>
+     qx_genl_tac [`off`, `len`] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+     `mem_bytes_at off len tu.vs_memory = mem_bytes_at off len t2.vs_memory` by
+       (qpat_x_assum `!p n. _ /\ _ /\ (!inst b sz. _ ==> _) ==>
+                        mem_bytes_at p n tu.vs_memory = _`
+          (qspecl_then [`off`, `len`] mp_tac) >>
+        impl_tac
+        >- (rpt conj_tac
+            >- (qpat_x_assum `_ \/ B + bsz <= off` mp_tac >>
+                rpt (pop_assum kall_tac) >> decide_tac)
+            >- (qpat_x_assum `_ \/ w2n ow + 64 <= off` mp_tac >>
+                rpt (pop_assum kall_tac) >> decide_tac) >>
+            rpt strip_tac >>
+            first_x_assum (qspecl_then [`inst`, `b`, `sz`] mp_tac) >>
+            impl_tac
+            >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                qpat_x_assum `s2.cs_next_id <= inst.inst_id` mp_tac >>
+                qpat_x_assum `sa.cs_next_id <= s2.cs_next_id` mp_tac >>
+                rpt (pop_assum kall_tac) >> decide_tac) >>
+            disch_then ACCEPT_TAC) >>
+        disch_then ACCEPT_TAC) >>
+     `mem_bytes_at off len t2.vs_memory = mem_bytes_at off len t.vs_memory` by
+       (qpat_x_assum `!p n. _ /\ _ ==> mem_bytes_at p n t2.vs_memory = _`
+          (qspecl_then [`off`, `len`] mp_tac) >>
+        impl_tac
+        >- (qpat_x_assum `_ \/ B + bsz <= off` mp_tac >>
+            qpat_x_assum `_ \/ w2n ow + 64 <= off` mp_tac >>
+            rpt (pop_assum kall_tac) >> decide_tac) >>
+        disch_then ACCEPT_TAC) >>
+     `mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory` by
+       (qpat_x_assum `!off len. (!inst b sz. _ ==> _) ==>
+                        mem_bytes_at off len t.vs_memory = _` irule >>
+        rpt strip_tac >>
+        first_x_assum (qspecl_then [`inst`, `b`, `sz`] mp_tac) >>
+        impl_tac
+        >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+            qpat_x_assum `!aid a. FLOOKUP t2.vs_allocas aid = SOME a ==> _` irule >>
+            qpat_x_assum `t2.vs_allocas = t.vs_allocas` (fn th => rewrite_tac[th]) >>
+            first_assum ACCEPT_TAC) >>
+        disch_then ACCEPT_TAC) >>
+     ntac 3 (pop_assum mp_tac) >> rpt (disch_then SUBST1_TAC) >> REFL_TAC) >>
+  qpat_x_assum `_ ==> pure_args` (fn th => rewrite_tac[th]) >>
+  qunabbrev_tac `pure_args` >>
   simp[] >> conj_tac
   >- (qpat_x_assum `expr_sim_inv _ _ _ (es_end' with gas_obs := [])` mp_tac >> simp[]) >>
   conj_tac

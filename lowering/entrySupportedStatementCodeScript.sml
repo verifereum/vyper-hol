@@ -41,9 +41,14 @@ Proof
   >- (irule entry_code_bind >> simp[entry_code_store_at_loc] >>
       irule entry_code_get_target_ptr >> simp[]) >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- (simp[entry_code_return, entry_code_unwrap_value] >>
+    >- (simp[entry_code_return, entry_code_unwrap_value, entry_code_snapshot_vv] >>
         irule entry_code_get_target_ptr >> simp[]) >>
     rpt gen_tac >> BETA_TAC) >>
+  rpt (IF_CASES_TAC ORELSE
+       (irule entry_code_bind >> reverse conj_tac
+        >- (simp[entry_code_return, entry_code_unwrap_value, entry_code_snapshot_vv] >>
+            irule entry_code_get_target_ptr >> simp[]) >>
+        rpt gen_tac >> BETA_TAC)) >>
   BasicProvers.TOP_CASE_TAC >> simp[entry_code_emit_void, entry_code_assign_value]
 QED
 
@@ -165,6 +170,15 @@ Proof
   simp[entry_code_return]
 QED
 
+(* Main's external Return SOME tail: plain, or copied to a raw buffer first. *)
+val external_return_value_tac =
+  rpt gen_tac >> Cases_on `ce.ce_raw_return` >> simp[entry_code_external_return] >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- rw[entry_code_return, entry_code_nonreentrant_unlock, entry_code_alloc_buffer,
+          entry_code_store_memory_typed] >>
+    rpt gen_tac >> BETA_TAC) >>
+  simp[entry_code_external_return];
+
 Theorem entry_code_return_some_stmt[local]:
   (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_expr ce' et e)) ==>
@@ -177,13 +191,15 @@ Proof
   Cases_on `ce.ce_return_pc`
   >- (simp[] >> irule entry_code_bind >>
       simp[SRULE [comp_ignore_bind_def] entry_code_normalize_return, entry_code_external_return,
-           comp_ignore_bind_def]) >>
+           comp_ignore_bind_def] >>
+      external_return_value_tac) >>
   rename1 `SOME binding` >> Cases_on `binding` >>
   simp[entry_code_internal_return_from_env] >>
   irule entry_code_bind >>
   simp[entry_code_emit_op, entry_code_internal_return_from_env,
        SRULE [comp_ignore_bind_def] entry_code_normalize_return, entry_code_external_return,
-       comp_ignore_bind_def]
+       comp_ignore_bind_def] >>
+  external_return_value_tac
 QED
 
 Theorem entry_code_log_stmt[local]:
