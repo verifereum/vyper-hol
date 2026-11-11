@@ -2674,9 +2674,10 @@ Proof
   simp[stackPlanOpsTheory.do_dup_def] >> rpt strip_tac >>
   pairarg_tac >> gvs[] >>
   Cases_on `d <= 31`
-  >- (gvs[listTheory.MEM_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-      metis_tac[listTheory.MEM]) >>
-  fs[listTheory.MEM_APPEND] >>
+  >- (gvs[dup_restore_indices_explicit, listTheory.MEM_APPEND,
+          listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+      metis_tac[listTheory.MEM, listTheory.MEM_APPEND]) >>
+  fs[listTheory.MEM_APPEND, dup_restore_indices_explicit] >>
   metis_tac[deep_dup_restore_sequence_member, arithmeticTheory.NOT_LESS_EQUAL]
 QED
 
