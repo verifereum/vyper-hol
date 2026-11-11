@@ -65,7 +65,7 @@ Theorem abi_encode_method_id_window_mem:
   abi_builtin_encode_method_id mid buf st = ((),en) /\
   fn_has_code st en func /\ eval_operand buf s = SOME (n2w p) /\
   (!x. buf = Var x ==> not_fresh_at st x) /\
-  p+32 < dimword (:256) /\ p+64 <= s.vs_alloca_next /\
+  p+32 < dimword (:256) /\ (IS_SOME mid ==> p+64 <= s.vs_alloca_next) /\
   alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
