@@ -1255,9 +1255,10 @@ Proof
   simp[copy_fwd_step_result_rel_def] >>
   `MEM x ctx.ctx_functions /\ x.fn_name = x0` by
     metis_tac[lookup_function_MEM_name] >>
-  `has_ret_instruction x` by res_tac >>
-  Cases_on `eval_operands x1 s1` >> simp[copy_fwd_step_result_rel_def] >>
-  gvs[] >>
+  `has_ret_instruction x` by
+    (qpat_x_assum `!callee_fn. SOME x = SOME callee_fn ==> _`
+       (qspec_then `x` mp_tac) >> simp[]) >>
+  Cases_on `eval_operands x1 s1` >> gvs[copy_fwd_step_result_rel_def] >>
   Cases_on `setup_callee x x' s1`
   >- (`setup_callee x args2 s2 = NONE` by
         (Cases_on `setup_callee x args2 s2` >> simp[] >>
@@ -1335,54 +1336,53 @@ Proof
       `icf_suffix_inst_rel ctx rma (w2n v_dst) (w2n v_src) sz
          (EL idx bb1.bb_instructions) (EL idx bb2.bb_instructions) s1 s2` by
         (first_assum irule >> simp[]) >>
-      pop_assum mp_tac >> simp[icf_suffix_inst_rel_def] >>
-      Cases_on `is_terminator (EL idx bb1.bb_instructions).inst_opcode` >> simp[]
+      Cases_on `is_terminator (EL idx bb1.bb_instructions).inst_opcode` >>
+      qpat_x_assum `icf_suffix_inst_rel _ _ _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [icf_suffix_inst_rel_def]) >>
+      simp[] >> strip_tac
       >- (`(EL idx bb1.bb_instructions).inst_opcode <> INVOKE /\
            (EL idx bb2.bb_instructions).inst_opcode <> INVOKE` by
             metis_tac[is_terminator_not_invoke] >>
           simp[step_inst_non_invoke] >>
           Cases_on `step_inst_base (EL idx bb1.bb_instructions) s1` >>
           Cases_on `step_inst_base (EL idx bb2.bb_instructions) s2` >>
-          simp[icf_exec_result_rel_def]) >>
-      strip_tac >>
+          gvs[icf_exec_result_rel_def]) >>
       `copy_fwd_step_result_rel (w2n v_dst) (w2n v_src) sz
          (step_inst fuel ctx (EL idx bb1.bb_instructions) s1)
          (step_inst fuel ctx (EL idx bb2.bb_instructions) s2)` by
-        (Cases_on `(EL idx bb1.bb_instructions).inst_opcode = INVOKE` >> gvs[]
+        (Cases_on `(EL idx bb1.bb_instructions).inst_opcode = INVOKE` >> fs[]
          >- (irule step_inst_invoke_under_copy_fwd_state_rel >>
-             qexists_tac `rma` >> simp[])
+             simp[] >> qexists_tac `rma` >> simp[])
          >- simp[step_inst_non_invoke]) >>
       Cases_on `step_inst fuel ctx (EL idx bb1.bb_instructions) s1` >>
       Cases_on `step_inst fuel ctx (EL idx bb2.bb_instructions) s2` >>
-      gvs[copy_fwd_step_result_rel_def, icf_exec_result_rel_def] >>
+      fs[copy_fwd_step_result_rel_def, icf_exec_result_rel_def] >>
       `!v'. MEM v' (EL idx bb2.bb_instructions).inst_outputs ==>
             MEM v' (EL idx bb1.bb_instructions).inst_outputs` by
         (gvs[icf_inst_compat_def, mk_nop_inst_def]) >>
       `eval_operand dst_op v = SOME v_dst` by
-        (drule_then (qspec_then `dst_op` mp_tac)
-           step_inst_preserves_eval_operand >>
-         simp[] >> impl_tac >- metis_tac[LESS_EQ_REFL] >> simp[]) >>
+        (qpat_x_assum `!m'. _` kall_tac >>
+         metis_tac[step_inst_preserves_eval_operand, LESS_EQ_REFL]) >>
       `eval_operand src_op v' = SOME v_src` by
-        (qpat_x_assum `step_inst fuel ctx (EL idx bb2.bb_instructions) s2 = OK v'`
-           (mp_tac o MATCH_MP
-             (GEN_ALL (CONV_RULE (LAND_CONV (ONCE_REWRITE_CONV [CONJ_SYM]))
-               (SPEC_ALL step_inst_preserves_eval_operand)))) >>
-         disch_then (qspec_then `src_op` mp_tac) >>
-         simp[] >> impl_tac >- metis_tac[LESS_EQ_REFL] >> simp[]) >>
-      qpat_x_assum `!m'. m' < m ==> _`
+        (qpat_assum `step_inst fuel ctx (EL idx bb2.bb_instructions) s2 = OK v'`
+           (mp_then Any (qspec_then `src_op` mp_tac)
+             step_inst_preserves_eval_operand) >>
+         simp[] >> impl_tac
+         >- (rpt strip_tac >> first_x_assum drule >>
+             metis_tac[LESS_EQ_REFL]) >> simp[]) >>
+      qpat_x_assum `!m'. m' < _ ==> _`
         (qspec_then `LENGTH bb1.bb_instructions - SUC idx` mp_tac) >>
       impl_tac >- decide_tac >>
       disch_then (qspecl_then [`fuel`, `ctx`, `rma`, `dst_op`, `src_op`,
-                               `v_dst`, `v_src`, `sz`, `bb1`, `bb2`, `SUC idx`,
+                               `v_dst`, `v_src`, `sz`, `bb1`, `bb2`,
                                `v with vs_inst_idx := SUC idx`,
                                `v' with vs_inst_idx := SUC idx`] mp_tac) >>
       simp[] >> impl_tac
-      >- (conj_tac
+      >- (rpt conj_tac
           >- (irule copy_fwd_state_rel_with_inst_idx >> simp[])
-          >- (conj_tac
-              >- (rpt strip_tac >> first_x_assum irule >>
-                  qexists_tac `j` >> simp[])
-              >- (rpt strip_tac >> first_x_assum irule >> simp[]))) >>
+          >- (rpt strip_tac >>
+              qpat_x_assum `!j v. _` (qspecl_then [`j`, `v''`] mp_tac) >>
+              simp[] >> decide_tac)) >>
       simp[])
   >- (`get_instruction bb1 s1.vs_inst_idx = NONE /\
        get_instruction bb2 s2.vs_inst_idx = NONE` by
@@ -1459,7 +1459,7 @@ Proof
   qexists_tac `copy_idx` >> simp[] >>
   rpt strip_tac >>
   drule prefix_steps_end_idx >> strip_tac >>
-  qpat_x_assum `rma_sound ctx rma`
+  qpat_assum `rma_sound ctx rma`
     (mp_tac o CONJUNCT2 o REWRITE_RULE [rma_sound_def]) >>
   disch_then (qspecl_then [`fn`, `bb0`, `bb1`, `copy_idx`, `bb2`,
                            `fuel`, `s`, `v`, `s_copy`] mp_tac) >>
@@ -1477,11 +1477,13 @@ Proof
     (irule step_inst_mcopy_ok >> simp[]) >>
   `~is_terminator (mk_nop_inst (EL copy_idx bb1.bb_instructions)).inst_opcode` by
     simp[mk_nop_inst_def, is_terminator_def] >>
-  simp[] >>
+  simp[is_terminator_def] >>
   irule exec_block_suffix_under_copy_fwd_state_rel >>
-  qexistsl_tac [`dst_op`, `src_op`, `v_dst`, `v_src`, `rma`,
-                `w2n sz_w`, `SUC copy_idx`] >>
   simp[] >>
+  qexistsl_tac [`dst_op`, `rma`, `src_op`,
+                `w2n sz_w`, `v_dst`, `v_src`] >>
+  simp[] >>
+  conj_tac >- (rpt strip_tac >> gvs[]) >>
   irule copy_fwd_state_rel_with_inst_idx >>
   simp[mcopy_establishes_copy_fwd_state_rel]
 QED
@@ -1505,7 +1507,7 @@ Proof
   `mload (w2n v_dst) s1 = mload (w2n v_src) s2` by
     (gvs[] >> irule mload_copy_fwd_state_rel_cross >>
      qexists_tac `sz` >> simp[]) >>
-  simp[update_var_preserves_copy_fwd_state_rel]
+  gvs[update_var_preserves_copy_fwd_state_rel]
 QED
 
 Theorem step_inst_base_sstore_copy_fwd_state_rel:
@@ -1533,17 +1535,20 @@ Proof
     (Cases_on `slot_op` >> Cases_on `val_op` >>
      simp[eval_operands_def, eval_operand_def]) >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
-  Cases_on `eval_operands [slot_op; val_op] s1` >>
-  simp[copy_fwd_step_result_rel_def] >>
-  Cases_on `x` >> simp[copy_fwd_step_result_rel_def] >>
-  Cases_on `t` >> simp[copy_fwd_step_result_rel_def] >>
-  Cases_on `t'` >> simp[copy_fwd_step_result_rel_def] >>
+  `eval_operand slot_op s2 = eval_operand slot_op s1 /\
+   eval_operand val_op s2 = eval_operand val_op s1` by
+    (Cases_on `slot_op` >> Cases_on `val_op` >> simp[eval_operand_def]) >>
+  Cases_on `eval_operand slot_op s1` >>
+  gvs[copy_fwd_step_result_rel_def] >>
+  Cases_on `eval_operand val_op s1` >>
+  gvs[copy_fwd_step_result_rel_def] >>
   Cases_on `s1.vs_call_ctx.cc_static` >>
   simp[copy_fwd_step_result_rel_def, revert_equiv_def] >>
   rw[copy_fwd_state_rel_def, icf_equiv_def, lookup_var_def, sstore_def,
      mem_agrees_except_def, Excl "pass_residual_mask_equality"] >>
-  fs[copy_fwd_state_rel_def, icf_equiv_def, lookup_var_def,
-     mem_agrees_except_def]
+  gvs[copy_fwd_state_rel_def, icf_equiv_def, lookup_var_def,
+      mem_agrees_except_def, eval_operands_def, copy_fwd_step_result_rel_def,
+      halt_state_def, set_returndata_def, revert_equiv_def]
 QED
 
 Theorem step_inst_base_stop_copy_fwd_state_rel:
@@ -1651,7 +1656,8 @@ Proof
               LIST_REL_lookup_block_mem) >>
       impl_tac
       >- (simp[Abbr `R`, clear_nops_block_def] >>
-          metis_tac[icf_block_compat_label]) >>
+          rpt strip_tac >> gvs[] >>
+          drule icf_block_compat_label >> simp[]) >>
       simp[clear_nops_function_def, Abbr `R`] >>
       Cases_on `lookup_block lbl fn1.fn_blocks` >> simp[] >>
       strip_tac >> gvs[] >>
@@ -1700,7 +1706,8 @@ Proof
   Cases_on `run_block fuel ctx bb2 s` >>
   simp[icf_exec_result_rel_def] >>
   strip_tac >> gvs[] >>
-  Cases_on `v.vs_halted` >> simp[icf_exec_result_rel_def] >>
+  Cases_on `v.vs_halted` >>
+  simp[icf_exec_result_rel_def, stateEquivPropsTheory.observable_equiv_refl] >>
   metis_tac[]
 QED
 
@@ -1824,7 +1831,8 @@ Proof
   Cases_on `run_block n A x s` >>
   Cases_on `run_block n B x s` >>
   gvs[icf_exec_result_rel_def] >>
-  Cases_on `v.vs_halted` >> simp[icf_exec_result_rel_def] >>
+  Cases_on `v.vs_halted` >>
+  simp[icf_exec_result_rel_def, stateEquivPropsTheory.observable_equiv_refl] >>
   first_x_assum irule >>
   irule icf_bounded_call_agree_mono >>
   qexists_tac `SUC n` >> simp[]
@@ -1876,6 +1884,8 @@ Proof
       `wf_function x /\ fn_ptr_ok P x` by (fs[EVERY_MEM] >> res_tac) >>
       `icf_exec_result_rel (run_blocks k C x s) (run_blocks k C f2 s)` by
         metis_tac[icf_fn_compat_run_blocks_same_ctx] >>
+      `icf_bounded_call_agree n C C'` by
+        (simp[icf_bounded_call_agree_def] >> metis_tac[]) >>
       `icf_bounded_call_agree k C C'` by
         (irule icf_bounded_call_agree_mono >>
          qexists_tac `n` >> simp[]) >>
@@ -1975,7 +1985,7 @@ Theorem unique_mcopy_7_at_3:
          (EL j [i0; i1; i2; i3; i4; i5; i6]).inst_opcode <> MCOPY)
 Proof
   rpt strip_tac >> simp[] >>
-  `j = 0 \/ j = 1 \/ j = 2 \/ j = 4 \/ j = 5 \/ j = 6` by decide_tac >>
+  `j = 0 \/ j = 1 \/ j = 2 \/ j = 4 \/ j = 5 \/ j = 6` by gvs[] >>
   gvs[]
 QED
 
@@ -1991,8 +2001,11 @@ Proof
                       case inst.inst_outputs of [out] => {out} | _ => {}
                     else {}) (set (dfg_get_uses dfg root))) DIFF {root} = {}` by
        (fs[EXTENSION, EVERY_MEM, PULL_EXISTS] >> rw[] >>
-        res_tac >> simp[]) >>
-     simp[]) >>
+        metis_tac[]) >>
+     `!U r:string. U DIFF {r} = {} ==> {r} UNION U = {r}` by
+       (pure_rewrite_tac[EXTENSION, IN_DIFF, NOT_IN_EMPTY, IN_UNION, IN_SING] >>
+        metis_tac[]) >>
+     simp[] >> first_x_assum irule >> first_assum ACCEPT_TAC) >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> simp[] >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> simp[]
 QED
