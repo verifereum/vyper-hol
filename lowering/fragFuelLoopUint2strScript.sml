@@ -172,6 +172,41 @@ Proof
       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+Theorem uint2str_block_outcome[local]:
+  no_phi_fn fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  DROP s.vs_inst_idx bb.bb_instructions = is ++ [inst] /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is /\
+  is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  (!x. var_below N x /\ x NOTIN Wv ==>
+       EVERY (\i. ~MEM x i.inst_outputs) is) /\
+  (!t. run_inst_seq is s = OK t ==> ?lbl.
+     step_inst_base inst (t with vs_inst_idx := s.vs_inst_idx + LENGTH is) =
+       OK (jump_to lbl (t with vs_inst_idx := s.vs_inst_idx + LENGTH is)) /\
+     P (jump_to lbl (t with vs_inst_idx := s.vs_inst_idx + LENGTH is))) ==>
+  fuel_outcome G ctx fn s 1 (\u. P u /\ vars_kept N Wv s u)
+Proof
+  strip_tac >>
+  `isPREFIX is (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  drule_all uint2str_prefix_outcome >> disch_then (qspec_then `ctx` strip_assume_tac)
+  >- (first_x_assum drule >> strip_tac >>
+      `get_instruction bb (s.vs_inst_idx + LENGTH is) = SOME inst` by
+        (`DROP (LENGTH is) (DROP s.vs_inst_idx bb.bb_instructions) = [inst]` by simp[exprLoweringPropsTheory.DROP_PREFIX] >>
+         fs[rich_listTheory.DROP_DROP_T] >>
+         drule fragExecTheory.DROP_EQ_CONS >>
+         simp[get_instruction_def, arithmeticTheory.ADD_COMM]) >>
+      `vars_kept N Wv s (jump_to lbl (t with vs_inst_idx := s.vs_inst_idx + LENGTH is))` by
+        (simp[vars_kept_def, venomStateTheory.lookup_var_def] >>
+         metis_tac[venomStateTheory.lookup_var_def]) >>
+      `fuel_outcome G ctx fn
+         (t with vs_inst_idx := s.vs_inst_idx + LENGTH is) 1
+         (\u. P u /\ vars_kept N Wv s u)` by
+        (irule fuel_outcome_jump >> simp[] >>
+         qexistsl [`inst`, `lbl`] >> gvs[arithmeticTheory.ADD_COMM]) >>
+      gvs[fuel_outcome_def] >> metis_tac[]) >>
+  simp[fuel_outcome_def] >> disj2_tac >> metis_tac[]
+QED
+
 (* The loop works on a fresh copy val_var of val_op, made before the loop
    (so no precondition on val_op is needed), and on a fresh counter i_var
    from 0.  Each round (cond -> body -> cond) runs straight-line code, sets
