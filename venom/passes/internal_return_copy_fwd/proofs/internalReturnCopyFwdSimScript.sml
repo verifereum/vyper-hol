@@ -876,6 +876,76 @@ Proof
   goal_assum (drule_at Any) >> fs[] >> metis_tac[]
 QED
 
+Theorem ircf_redirect_observation_abort:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY ssa_form C.ctx_functions /\ taint_agree D X tn s t /\
+  MEM inst.inst_opcode [MLOAD; SHA3; LOG] /\
+  step_inst_base inst s = Abort a s' ==>
+  ?t'. step_inst_base (inst with inst_operands :=
+    MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) inst.inst_operands) t = Abort a t'
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> ASSIGN` by fs[MEM] >>
+  `IS_SOME (eval_operands inst.inst_operands s) ==>
+   IS_SOME (eval_operands
+     (MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) inst.inst_operands) t)` by
+    (strip_tac >> irule ircf_redirect_operands_defined_forward >> metis_tac[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  fs[MEM] >>
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()] >> simp[]
+QED
+
+Theorem ircf_redirect_create_abort:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ fn_inst_ids_distinct fn /\
+  ircf_no_dst_write_alias fn /\ ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  inst = EL s.vs_inst_idx bb.bb_instructions /\
+  s.vs_inst_idx NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY ssa_form C.ctx_functions /\ taint_agree D X tn s t /\
+  taint_ok fn tn inst s /\ MEM inst.inst_opcode [CREATE; CREATE2] /\
+  step_inst_base inst s = Abort a s' ==>
+  ?t'. step_inst_base (inst with inst_operands :=
+    MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) inst.inst_operands) t = Abort a t'
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> ASSIGN` by fs[MEM] >>
+  `MEM bb fn.fn_blocks /\ ircf_block_plan fn bb (ircf_tbb fn_meta rma C fn bb)` by
+    metis_tac[ircf_tbb_def, ircf_transform_block_plan, venomExecPropsTheory.lookup_block_MEM] >>
+  `!pos op. pos < LENGTH inst.inst_operands /\ EL pos inst.inst_operands = op /\ pos <> 1 ==>
+     eval_operand (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb) op) t = eval_operand op s` by
+    (rpt strip_tac >>
+     `ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb) op = op` by
+       (irule ircf_redirect_non_address_operand >> simp[] >>
+        conj_tac >- metis_tac[wf_ssa_def] >>
+        qexistsl_tac [`s.vs_inst_idx`, `pos`] >>
+        gvs[wf_ssa_def, MEM, invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def]) >>
+     `op_taint tn op = {}` by
+       (irule taint_ok_observation_operand >> simp[] >>
+        metis_tac[EL_MEM, MEM]) >>
+     metis_tac[taint_agree_operand_clean]) >>
+  `!op. MEM op inst.inst_operands /\ IS_SOME (eval_operand op s) ==>
+    IS_SOME (eval_operand (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb) op) t)` by
+    (rpt strip_tac >> irule ircf_redirect_operand_defined_forward >> metis_tac[]) >>
+  `IS_SOME (eval_operands inst.inst_operands s) ==>
+   IS_SOME (eval_operands
+     (MAP (ircf_redirect_op fn bb (ircf_tbb fn_meta rma C fn bb)) inst.inst_operands) t)` by
+    (strip_tac >> irule ircf_redirect_operands_defined_forward >> metis_tac[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  fs[MEM] >> gvs[step_inst_base_opcode_eqs, AllCaseEqs(), exec_create_abort_iff] >>
+  qpat_assum `!pos. pos < _ /\ _ ==> _` (qspec_then `0` (assume_tac o SRULE [])) >>
+  qpat_x_assum `!pos. pos < _ /\ _ ==> _` (qspec_then `2` (assume_tac o SRULE [])) >>
+  gvs[eval_operands_def] >>
+  metis_tac[optionTheory.IS_SOME_DEF, optionTheory.option_CASES]
+QED
+
 Theorem ircf_redirect_clean_read_slice:
   wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
   ircf_alias_boundary fn s G /\
