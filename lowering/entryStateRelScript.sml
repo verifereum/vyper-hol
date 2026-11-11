@@ -198,7 +198,10 @@ Theorem entry_storage_vars_rel:
               ((NONE, name))) ==>
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
 Proof
-  rpt gen_tac >> strip_tac >> fs[source_deployment_rel_def] >>
+  rpt gen_tac >> strip_tac >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+   layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
   drule_all layouts_agree_lookup >> strip_tac >>
   `!src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops` by
     (simp[get_module_code_def] >> Cases >> simp[]) >>
