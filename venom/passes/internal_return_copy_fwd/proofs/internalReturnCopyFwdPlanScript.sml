@@ -20,7 +20,7 @@ Theory internalReturnCopyFwdPlan
 Ancestors
   internalReturnCopyFwdDefs invokeCopyFwdCommonDefs dfgDefs passSharedDefs
   venomWf venomInst list pred_set dfgAnalysisProps While venomWfProps
-  o1LowerDloadClosure
+  o1LowerDloadClosure readonlyMemoryArgsProps
 
 (* v is x, or the output of an ASSIGN of an alias of x *)
 Inductive ircf_alias:
@@ -1397,4 +1397,37 @@ Proof
   gvs[invokeCopyFwdCommonDefsTheory.is_mem_addr_position_def] >>
   gvs[venomWfTheory.inst_wf_def, memLocDefsTheory.mem_write_ops_def,
       LENGTH_EQ_NUM_compute]
+QED
+
+Theorem ircf_try_forward_phis:
+  ircf_try_forward ctx bb k = SOME ins ==>
+  phi_prefix_length ins = phi_prefix_length bb.bb_instructions /\
+  eval_phis s ins = eval_phis s bb.bb_instructions
+Proof
+  strip_tac >> drule ircf_try_forward_prefix_and_copy >> strip_tac >>
+  qspecl_then [`bb.bb_instructions`, `ins`, `k`, `s`] mp_tac
+    phi_prefix_eval_phis_agree_before >>
+  simp[mk_nop_inst_def]
+QED
+
+Theorem ircf_transform_block_phis:
+  phi_prefix_length (SND (ircf_transform_block ctx bb)).bb_instructions =
+    phi_prefix_length bb.bb_instructions /\
+  eval_phis s (SND (ircf_transform_block ctx bb)).bb_instructions =
+    eval_phis s bb.bb_instructions
+Proof
+  simp[ircf_transform_block_def] >>
+  qmatch_goalsub_abbrev_tac `FOLDL fold_step _ _` >>
+  `!xs acc. phi_prefix_length (SND (FOLDL fold_step acc xs)).bb_instructions =
+      phi_prefix_length (SND acc).bb_instructions /\
+    eval_phis s (SND (FOLDL fold_step acc xs)).bb_instructions =
+      eval_phis s (SND acc).bb_instructions` by
+    (Induct >> simp[] >> rpt gen_tac >>
+     first_x_assum (qspec_then `fold_step acc h` mp_tac) >>
+     PairCases_on `acc` >> simp[Abbr `fold_step`] >>
+     Cases_on `h >= LENGTH acc1.bb_instructions` >> simp[] >>
+     Cases_on `(EL h acc1.bb_instructions).inst_opcode <> MCOPY` >> simp[] >>
+     Cases_on `ircf_try_forward ctx acc1 h` >> simp[] >>
+     metis_tac[ircf_try_forward_phis]) >>
+  simp[]
 QED
