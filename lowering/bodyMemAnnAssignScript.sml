@@ -3,10 +3,8 @@
    the declared type: a word (bodyDeclWordMemory), the empty value of a type
    with a length word (bodyDeclEmptyMemory), a bytestring
    (bodyDeclBytesMemory), any other type copied from a value of the type
-   itself (bodyDeclCopyMemory), or a widened aggregate call
-   (bodyMemAnnAssignWidened, HELD).  A supported declaration copies a value
-   of the declared type, a word, or a bytestring (supported_copy_types), so
-   there are no other cases. *)
+   itself (bodyDeclCopyMemory), or a widened aggregate, from an internal call
+   or from any other expression (bodyMemAnnAssignWidened, HELD). *)
 Theory bodyMemAnnAssign
 Ancestors
   supportedExprTraverse allocLimitsProps
@@ -55,18 +53,6 @@ Proof
   qexists_tac `[]` >> simp[]
 QED
 
-(* A supported copy into a type other than the source's, and not a word,
-   is a bytestring copy. *)
-Theorem copy_types_not_word_bytestring_mem[local]:
-  !dst src.
-    supported_copy_types dst src /\ dst <> src /\ ~is_word_type dst ==>
-    is_bytestring_type dst
-Proof
-  simp[supported_copy_types_def] >> rpt strip_tac
-  >- metis_tac[supported_word_type_is_word] >>
-  BasicProvers.every_case_tac >> gvs[is_bytestring_type_def]
-QED
-
 Theorem body_annassign_mem_case:
   !cx id typ e.
     (!tenv s'' tyv t.
@@ -77,8 +63,7 @@ Theorem body_annassign_mem_case:
     body_stmt_mem_ok cx (AnnAssign id typ e)
 Proof
   rw[body_stmt_mem_ok_def] >>
-  `supported_expr tops e /\ supported_copy_types typ (expr_type e)` by
-    gvs[supported_stmt_def] >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
   `FLOOKUP cenv.ce_vars id = NONE` by
     (irule declared_name_unbound >> metis_tac[]) >>
   `well_typed_expr env e /\ assignable_type env.type_defs typ /\
@@ -130,7 +115,11 @@ Proof
             arg_type_fits (lowered_value_type cenv e) (expr_type e)`
   >- (Cases_on `is_bytestring_type typ`
       >- suspend "bytes" >>
-      suspend "copy") >>
+      `lowered_value_type cenv e = expr_type e` by
+        metis_tac[type_widens_to_def, arg_type_fits_bytestring_target] >>
+      Cases_on `expr_type e = typ`
+      >- suspend "copy" >>
+      irule body_annassign_widened_aggregate_mem >> metis_tac[]) >>
   irule body_annassign_widened_aggregate_call_mem >> metis_tac[]
 QED
 
@@ -160,8 +149,6 @@ Resume body_annassign_mem_case[empty]:
 QED
 
 Resume body_annassign_mem_case[copy]:
-  `expr_type e = typ` by
-    (CCONTR_TAC >> metis_tac[copy_types_not_word_bytestring_mem]) >>
   `lowered_value_type cenv e = typ` by gvs[] >>
   irule compile_annassign_copy_stmt_frag_mem >> simp[] >> rpt conj_tac
   >>~- ([`value_has_type _ _`],

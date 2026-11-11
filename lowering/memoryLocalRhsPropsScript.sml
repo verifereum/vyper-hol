@@ -214,6 +214,21 @@ Proof
   metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]
 QED
 
+(* A bytestring widens only to a bytestring. *)
+Theorem arg_type_fits_bytestring_target:
+  !t u. is_bytestring_type t /\ arg_type_fits t u ==> is_bytestring_type u
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `t` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT tb` >> Cases_on `tb` >> gvs[is_bytestring_type_def] >>
+  TRY (rename1 `BytesT tbd` >> Cases_on `tbd` >> gvs[is_bytestring_type_def]) >>
+  Cases_on `u` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `BaseT ub` >> Cases_on `ub` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `BytesT ubd` >> Cases_on `ubd` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def]
+QED
+
 Theorem memory_rhs_destination_bound:
   !cenv e env ty tenv.
     well_typed_expr env e /\
