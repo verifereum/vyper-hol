@@ -267,6 +267,82 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+Theorem registration_source_parameter_inputs:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME scope /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,ce,pos,mincd,pay,nr',key,ut',iv,fbody',rt) ==>
+  ALL_DISTINCT (MAP FST args) /\ pos = build_positional_args ce args /\
+  dec_cenv_agrees ce (type_env tops) /\
+  (!k. ~MEM k (MAP FST args) ==> FLOOKUP ce.ce_vars k = NONE) /\
+  ?tvs.
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv)
+      (MAP SND args) tvs /\
+    LIST_REL (abi_decoder_coherent ce (type_env tops) ce.ce_struct_fields)
+      (MAP SND args) tvs /\
+    LIST_REL value_has_type tvs tx.args /\
+    (!i. i < LENGTH args ==> ?off.
+      FLOOKUP ce.ce_vars (FST (EL i args)) =
+        SOME (MemLoc off (type_memory_size (EL i tvs))))
+Proof
+  strip_tac >>
+  `params_ok (type_env tops) args` by suspend "params" >>
+  `contract_namespaces_ok F [((NONE:num option),tops)]` by
+    (fs[e2eDefsTheory.source_typing_ok_def] >>
+     drule vyperTypeContractContextTheory.check_contract_namespaces_ok >> simp[]) >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_type_def_keys_distinct] >>
+  `ALL_DISTINCT (MAP FST args)` by fs[vyperTypeContractTheory.params_ok_def] >>
+  drule_all registration_package_inputs >> strip_tac >>
+  asm_rewrite_tac [] >>
+  drule bind_arguments_values_typed >> strip_tac >>
+  qexists_tac `tvs` >> asm_rewrite_tac [] >>
+  conj_tac >- suspend "coherent" >>
+  conj_tac >- gvs[vyperTypeDefaultsTheory.values_have_types_LIST_REL] >>
+  rpt strip_tac >>
+  `MEM (EL i args) args` by simp[EL_MEM] >>
+  `?off. FLOOKUP ce.ce_vars (FST (EL i args)) =
+    SOME (MemLoc off (type_memory_bytes ce (SND (EL i args))))` by
+    fs[EVERY_MEM] >>
+  qexists_tac `off` >> asm_rewrite_tac [] >> AP_TERM_TAC >> AP_TERM_TAC >>
+  fs[dec_cenv_agrees_def, LIST_REL_EL_EQN] >>
+  first_x_assum irule >> simp[EL_MAP] >>
+  qpat_x_assum `!n. n < LENGTH args ==> _`
+    (qspec_then `i` mp_tac) >> simp[EL_MAP]
+QED
+
+Resume registration_source_parameter_inputs[params]:
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
+  drule_at (Pos last) lookup_function_external_decl >>
+  disch_then (qspec_then `tops` mp_tac) >>
+  (impl_tac >- fs[supportedDeclsTheory.supported_declaration_headers_def]) >> strip_tac >>
+  fs[e2eDefsTheory.source_typing_ok_def] >>
+  drule vyperTypeContractContextTheory.check_contract_main_module_allocated >> simp[] >> strip_tac >>
+  drule vyperTypeContractContextTheory.check_contract_runtime_function_body_MEM >>
+  disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `F`,
+    `mut`, `tx.function_name`, `[]`, `fbody`, `args`] mp_tac) >>
+  simp[vyperTypeContractTheory.check_function_body_def,
+    vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
+    finite_mapTheory.FUNION_FEMPTY_2]
+QED
+
+Resume registration_source_parameter_inputs[coherent]:
+  fs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+  `evaluate_type (type_env tops) (EL n (MAP SND args)) = SOME (EL n tvs)` by
+    (first_x_assum irule >> simp[]) >>
+  `assignable_type (type_env tops) (EL n (MAP SND args))` by
+    (fs[vyperTypeContractTheory.params_ok_def, EVERY_MEM] >>
+     qpat_x_assum `!e. MEM e args ==> (\(nm,ty). assignable_type (type_env tops) ty) e`
+       (qspec_then `EL n args` mp_tac) >>
+     simp[EL_MEM, EL_MAP] >> Cases_on `EL n args` >> simp[]) >>
+  drule_all registration_package_coherent >> simp[]
+QED
+
+Finalise registration_source_parameter_inputs
+
 (* A selected argument occupies its canonical tuple window, including dynamic
    tails.  This source-only interface is independent of execution resources. *)
 Theorem registration_calldata_argument:
