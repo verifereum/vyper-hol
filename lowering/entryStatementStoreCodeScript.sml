@@ -75,6 +75,30 @@ Proof
     rpt gen_tac >> BETA_TAC) >> simp[entry_code_return]
 QED
 
+Theorem entry_code_store_immutable_bytestring[local]:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_store_immutable_bytestring imm src dst)
+Proof
+  `!ops base. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (comp_bind (emit_op MUL ops) (\scaled. emit_op ADD [base; scaled]))`
+    by (rpt gen_tac >> irule entry_code_bind >> simp[entry_code_emit_op]) >>
+  rewrite_tac[compile_store_immutable_bytestring_def,
+              compileEnvTheory.comp_ignore_bind_def] >>
+  irule entry_code_bind >> conj_tac
+  >- (rpt gen_tac >> BETA_TAC >> irule entry_code_bind >> simp[entry_code_return] >>
+      rewrite_tac[compile_word_copy_loop_base_def] >>
+      simp[compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.word_scale_def] >>
+      rpt (irule entry_code_bind >>
+           simp[entry_code_fresh_label, entry_code_fresh_var,
+                entry_code_emit_inst, entry_code_emit_op,
+                entry_code_ptr_load, entry_code_ptr_store, entry_code_new_block] >>
+           rpt gen_tac) >>
+      simp[entry_code_new_block]) >>
+  rewrite_tac[compile_bytestring_word_count_def] >>
+  rpt (irule entry_code_bind >> simp[entry_code_emit_op] >> rpt gen_tac) >>
+  simp[entry_code_emit_op]
+QED
+
 Theorem entry_code_assign_value:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_assign_value ce dst loc value prim sl dt st da memsz)
@@ -95,6 +119,7 @@ Proof
             entry_code_memory_to_transient] >> rpt gen_tac >> BETA_TAC) >>
   simp[entry_code_emit_void, entry_code_return, entry_code_imm_store,
        entry_code_imm_store_words] >>
+  simp[entry_code_store_immutable_bytestring] >>
   PairCases_on `x` >> simp[entry_code_dynarray_to_storage]
 QED
 

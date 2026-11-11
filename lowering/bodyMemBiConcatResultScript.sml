@@ -228,7 +228,7 @@ Resume concat_result_vv_sim_mem[frame]:
   `wb_frame cenv es ee sa s0 t'` by
     (irule (INST_TYPE [alpha |-> ``:256``] concat_prefix_list_frame) >>
      conj_tac >- first_assum ACCEPT_TAC >>
-     reverse conj_tac
+     conj_tac
      >- (qexistsl_tac [`ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`B`, `bsz`, `es`, `ow`, `s4`, `t`] >>
      asm_rewrite_tac[] >> simp[] >> first_assum ACCEPT_TAC) >>

@@ -135,6 +135,8 @@ Theorem entry_array_initializer_reentry_code:
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st loop_st)
 Proof
   simp[abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+       abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_position_prefix_unbounded,
+       abiEncoderTheory.compile_abi_dec_addr_def,
        abi_decode_count_guard_def, abi_decode_array_header_def,
        abi_decode_dynarray_end_guard_def, abi_decode_dynarray_end_def,
        abi_decode_le_guard_def, abi_decode_index_init_def, compile_alloc_buffer_def,

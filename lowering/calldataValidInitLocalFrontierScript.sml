@@ -139,7 +139,7 @@ Resume calldata_valid_init_header_local_frontier[header]:
     metis_tac[] >>
   `abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap t` by
-    (gvs[abi_decoder_ranges_def]) >>
+    (gvs[abi_decoder_ranges_def, venomStateTheory.eval_operand_def]) >>
   simp_tac bool_ss [Abbr `H`] >>
   simp[jump_to_def, fresh_vars_wrt_def, mload_def,
        abi_decode_load_def, abi_decode_source_def,

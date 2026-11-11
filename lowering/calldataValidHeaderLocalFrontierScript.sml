@@ -18,6 +18,17 @@ Proof
   metis_tac[lookup_block_fn_insts]
 QED
 
+Theorem position_prefix_unbounded_zero_base[local]:
+  abi_decode_dynarray_position_prefix src opc (Lit 0w) (Lit 0w) maxn asz st = (addr,st') <=>
+  addr = src /\ abi_decode_dynarray_prefix src opc (Lit 0w) maxn asz st = ((),st')
+Proof
+  simp[abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_position_prefix_unbounded,
+       abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
+       abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
+       abiEncoderTheory.compile_abi_dec_addr_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> eq_tac >> strip_tac >> gvs[]
+QED
+
 Theorem calldata_array_init_compile_inputs[local]:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\ fn_has_code st loop_st fn /\
@@ -35,6 +46,9 @@ Theorem calldata_array_init_compile_inputs[local]:
 Proof
   strip_tac >> drule abi_decode_array_loop_init_trace >>
   simp_tac std_ss [] >> strip_tac >>
+  qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _`
+    (strip_assume_tac o REWRITE_RULE [position_prefix_unbounded_zero_base]) >>
+  rpt BasicProvers.VAR_EQ_TAC >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_array_loop_init_shape >> strip_tac >>
   drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
@@ -136,6 +150,8 @@ Proof
     (fs[abi_decoder_valid_pre_def, abi_decoder_ranges_def]) >>
   qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
+  qpat_x_assum `mem_bytes_at (0 + _) _ _ = _`
+    (assume_tac o REWRITE_RULE [arithmeticTheory.ADD_CLAUSES]) >>
   mp_tac (Q.INST [`srcword` |-> `n2w sb`]
     (INST_TYPE [alpha |-> ``:value``] calldata_valid_init_header_local_frontier)) >>
   simp_tac (pure_ss ++ boolSimps.LET_ss) [] >>

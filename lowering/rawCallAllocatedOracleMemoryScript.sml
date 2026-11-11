@@ -68,8 +68,11 @@ Proof
     (rpt strip_tac >> Cases_on `p` >> gvs[safe_operand_def, eval_operand_def] >>
      irule wb_frame_vars >> qexistsl_tac [`cenv`,`es`,`es`,`s`,`sa`] >> simp[]) >>
   `wb_frame cenv initial_es es initial s0 t` by
-    (irule wb_frame_trans >> simp[] >> conj_tac
-     >- (qexistsl_tac [`es`,`sa`,`s`] >> fs[ci_mono_def]) >> metis_tac[]) >>
+    (mp_tac (Q.SPECL [`func`,`cenv`,`cx`,`initial_es`,`s0`,`initial`,`es`,`es`,
+                      `sa`,`s`,`t`,`ctx`] wb_frame_trans) >>
+     impl_tac >- (qpat_assum `ci_mono initial sa`
+                    (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >> simp[]) >>
+     simp[]) >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
   `cap <= ((cap+31) DIV 32)*32` by

@@ -43,6 +43,8 @@ Proof
     SUM (MAP type_memory_size tvs) <= SUM (MAP (type_memory_bytes ce) tys) /\
     p + SUM (MAP type_memory_size tvs) < dimword (:256)` by
     gvs[type_memory_size_def, type_memory_size_list_sum] >>
+  rpt (qpat_x_assum `mem_bytes_at (0 + _) _ _ = _`
+    (assume_tac o REWRITE_RULE [arithmeticTheory.ADD_CLAUSES])) >>
   drule_all (BETA_RULE (SIMP_RULE (pure_ss ++ boolSimps.LET_ss) []
     entry_source_members_tuple_success)) >> strip_tac >>
   qexistsl_tac [`t`,`scratch`] >>
@@ -92,6 +94,8 @@ Proof
   `!i. i < LENGTH (MAP SND args) ==> entry_member_child_contract ce
     (env \\ nsid) (sf \\ nsid_to_string nsid) ctx fn site limit_st
     (EL i (MAP SND args)) (EL i tvs)` by simp[EL_MAP] >>
+  rpt (qpat_x_assum `mem_bytes_at (0 + _) _ _ = _`
+    (assume_tac o REWRITE_RULE [arithmeticTheory.ADD_CLAUSES])) >>
   drule_all (BETA_RULE (SIMP_RULE (pure_ss ++ boolSimps.LET_ss) []
     entry_source_members_tuple_success)) >> strip_tac >>
   qexistsl_tac [`t`,`scratch`] >>
@@ -153,6 +157,8 @@ Proof
     entry_member_child_contract ce env sf ctx fn site limit_st
       (EL i (REPLICATE n ty)) (EL i (REPLICATE n tv))` by simp[EL_REPLICATE] >>
   `LENGTH vs = LENGTH (REPLICATE n ty)` by simp[] >>
+  rpt (qpat_x_assum `mem_bytes_at (0 + _) _ _ = _`
+    (assume_tac o REWRITE_RULE [arithmeticTheory.ADD_CLAUSES])) >>
   drule_all (BETA_RULE (SIMP_RULE (pure_ss ++ boolSimps.LET_ss) []
     entry_source_members_tuple_success)) >> strip_tac >>
   qexistsl_tac [`t`,`scratch`] >>

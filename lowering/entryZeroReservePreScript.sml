@@ -23,7 +23,8 @@ Theorem entry_zero_reserve_valid_pre:
     (Lit 0w) (Lit 0w) 0 sb p (p + type_memory_bytes ce ty) 0 ready
 Proof
   simp[abi_decoder_valid_pre_def, abi_decoder_ranges_def,
-    abi_decode_source_opcode_def, abi_decoder_operand_live_def]
+    abi_decode_source_opcode_def, abi_decoder_operand_live_def,
+    venomStateTheory.eval_operand_def]
 QED
 
 Theorem entry_zero_reserve_child_endpoint:

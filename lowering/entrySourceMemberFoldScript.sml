@@ -76,7 +76,7 @@ QED
 Resume entry_source_members_owned_success[mono]:
   `first.cs_next_id <= final.cs_next_id` by
     (mp_tac (cj 2 abi_decoder_code_mutual) >>
-     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`xs`,`0`,`0`] mp_tac) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`xs`,`0`,`0`] mp_tac) >>
      simp[] >> disch_then (qspec_then `first` mp_tac) >>
      simp[abi_decoder_code_def]) >>
   simp[ci_mono_def]

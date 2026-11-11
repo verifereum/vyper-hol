@@ -130,7 +130,9 @@ Resume ifexp_bytestring_adapter_path_mem[endpoint]:
   `wb_frame ce es ee origin s0 u` by metis_tac[expr_post_frame] >>
   `wb_frame ce es ee origin s0 (mcopy (w2n d) (w2n w) (32 + 32 * word_size len) u)` by
     (irule ifexp_copy_frame >> goal_assum (drule_at Any) >>
-     simp[] >> goal_assum (drule_at Any) >> simp[] >>
+     simp[] >> reverse conj_tac
+     >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
+     goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >>
      qexists_tac `sa.cs_next_id` >> simp[]) >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes ce t))]
