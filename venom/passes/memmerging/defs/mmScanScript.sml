@@ -73,11 +73,6 @@ Definition operand_lit_val_def:
   operand_lit_val _ = NONE
 End
 
-Definition operand_var_name_def:
-  operand_var_name (Var v) = SOME v /\
-  operand_var_name _ = NONE
-End
-
 (* ===== Scan state ===== *)
 
 Datatype:
@@ -177,7 +172,7 @@ Definition scan_store_def:
   scan_store dfg mode ss inst =
     case inst.inst_operands of
       [dst_op; val_op] =>
-        (case (operand_var_name val_op, operand_lit_val dst_op) of
+        (case (operand_var val_op, operand_lit_val dst_op) of
            (SOME var, SOME dst_addr) =>
              (case FLOOKUP ss.ss_loads var of
                 NONE => hard_barrier ss
@@ -289,7 +284,7 @@ Definition is_calldatasize_copy_def:
       [dst_op; src_op; size_op] =>
         IS_SOME (operand_lit_val dst_op) /\
         IS_SOME (operand_lit_val size_op) /\
-        (case operand_var_name src_op of
+        (case operand_var src_op of
            SOME v =>
              (case dfg_get_def dfg v of
                 SOME src_inst => src_inst.inst_opcode = CALLDATASIZE

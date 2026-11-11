@@ -30,15 +30,6 @@ Ancestors
 Libs
   dep_rewrite
 
-(* dimindex(:256) = 256, needed for word_to_bytes length etc. *)
-Theorem dimindex_256[local,simp]:
-  dimindex(:256) = 256
-Proof
-  simp[fcpTheory.index_bit0, wordsTheory.dimindex_128,
-       fcpTheory.finite_bit0, wordsTheory.finite_128,
-       fcpTheory.index_one, fcpTheory.finite_one]
-QED
-
 (* ===== Shared infrastructure for weak-spec proofs ===== *)
 
 (* eval_operand definedness is preserved through update_var.

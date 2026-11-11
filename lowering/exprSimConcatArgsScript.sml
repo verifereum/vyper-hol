@@ -1006,13 +1006,24 @@ Resume concat_args_sim[head_normal]:
   `exprs_case nocalls ctx func cenv cx args` by metis_tac[] >>
   `!e' st. MEM e' args /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e' st /\ (nocalls ==> int_calls_expr e' = [])` by
-    metis_tac[MEM] >>
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!e' st. (e' = e \/ MEM e' args) /\ _ ==> _`
+       (qspecl_then [`e'`, `st`] mp_tac) >>
+     impl_tac
+     >- (conj_tac >- (disj2_tac >> first_assum ACCEPT_TAC) >>
+         first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
    sa.cs_next_id <= s2.cs_next_id` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv s2` by
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
   `not_fresh_at s2 dv /\ not_fresh_at s2 ov` by
-    metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
+    (conj_tac >> irule not_fresh_at_mono >>
+     qexists_tac `sa` >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            irule arithmeticTheory.LESS_EQ_TRANS >>
+            qexists_tac `s1.cs_next_var` >> conj_tac >>
+            first_assum ACCEPT_TAC]) >>
   `binst.inst_id < s2.cs_next_id /\ oinst.inst_id < s2.cs_next_id` by decide_tac >>
   `32 + (P + concat_payload_capacity (expr_type e)) +
      SUM (MAP concat_payload_capacity (MAP expr_type args)) <= bsz` by

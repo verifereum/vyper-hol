@@ -206,12 +206,12 @@ Proof
    (EL i (collect_phis bb.bb_instructions)).inst_opcode = PHI` by
     (gvs[fn_inst_wf_def, listTheory.EVERY_MEM] >>
      metis_tac[listTheory.EL_MEM, collect_phis_mem]) >>
-  drule livenessAnalysisPropsTheory.live_vars_at_transfer >>
+  drule livenessProofsTheory.live_vars_at_transfer >>
   disch_then (qspecl_then [`lbl`, `bb`, `i`] mp_tac) >> simp[] >>
   `LENGTH (EL i (collect_phis bb.bb_instructions)).inst_outputs = 1` by
     gvs[inst_wf_def] >>
   Cases_on `(EL i (collect_phis bb.bb_instructions)).inst_outputs` >> gvs[] >>
-  simp[liveness_transfer_def, livenessProofsTheory.live_update_mem,
+  simp[liveness_transfer_def, livenessTransferProofsTheory.live_update_mem,
        inst_defs_def, MEM_ordered_inst_uses] >> metis_tac[]
 QED
 

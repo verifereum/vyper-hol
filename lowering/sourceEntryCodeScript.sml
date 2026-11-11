@@ -64,7 +64,7 @@ Proof
     `extpkgs`, `fallback`, `label_st`, `dispatch_st`, `external_st`, `entry_end`] >>
   simp[] >>
   `MEM (set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,rr,name,args,([] : expr list),ret,fbody))) extpkgs` by
     (simp_tac pure_ss [Once EQ_SYM_EQ] >>
      qpat_x_assum `extpkgs = _` (fn th => rewrite_tac[th]) >>
