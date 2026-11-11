@@ -1617,8 +1617,94 @@ Proof
   simp[]
 QED
 
+Theorem registration_singleton_owner_instruction:
+  compile_register_positional_args ce [(name,prim,dyn,sz,di)] (4+h) st = (ce',last) /\
+  (prim ==> ~dyn /\ ?clamp. di = DecPrimWord clamp) /\
+  FLOOKUP ce.ce_vars name = SOME loc /\ var_location_memory_size loc = SOME n /\
+  ce' = ce with ce_vars updated_by (\m. m |+ (name,PtrVar (Var q) n)) /\
+  fn_has_code st last fn ==>
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [q]) (fn_insts fn)
+Proof
+  strip_tac >>
+  `compile_register_positional_args ce [(name,F,dyn,sz,di)] (4+h) st = (ce',last)` by
+    (Cases_on `prim` >> gvs[registration_primitive_as_aggregate]) >>
+  drule_all registration_aggregate_phases >> strip_tac >>
+  `cs_extends st a /\ cs_extends a first /\ cs_extends first last` by
+    metis_tac[abiDecoderAppendTheory.cs_appends_abi_alloc_buffer,
+      abiDecoderAppendTheory.cs_appends_abi_member_pointer,
+      abiDecoderAppendTheory.cs_appends_abi_decode_mutual,
+      fragExecTheory.cs_appends_def] >>
+  `fn_has_code st a fn` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  drule_all actualAllocExecTheory.actual_alloc_buffer_site >>
+  `buf.buf_operand = Var q` by
+    (qpat_x_assum `ce' = ce with ce_vars updated_by (\m. m |+ (name,PtrVar buf.buf_operand n))`
+      mp_tac >>
+     qpat_x_assum `ce' = ce with ce_vars updated_by (\m. m |+ (name,PtrVar (Var q) n))`
+      mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     gvs[compile_env_component_equality, finite_mapTheory.fmap_eq_flookup,
+       finite_mapTheory.FLOOKUP_UPDATE] >> rpt strip_tac >>
+     first_x_assum (qspec_then `name` mp_tac) >> simp[]) >>
+  drule loweringHaltTheory.compile_alloc_buffer_parts >> simp[] >>
+  metis_tac[]
+QED
+
 (* The indexed owner invariant advances independently of the decoder's
    implementation.  The frame premise is the singleton's old-local frame. *)
+Theorem registration_owned_prefix_invariant_update:
+  ALL_DISTINCT names /\ i < LENGTH names /\
+  ce' = ce with ce_vars updated_by
+    (\m. m |+ (EL i names,PtrVar (Var q) (type_memory_size (EL i tvs)))) /\
+  (!j. j < i ==> ?aid q p n.
+    R aid q n /\ aid < st.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP ce.ce_vars (EL j names) = SOME (PtrVar (Var q) n) /\
+    lookup_var q s = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+    ptr_covers G tn q s n /\ val_wf (EL j tvs) (EL j vals) /\
+    val_footprint (EL j tvs) (EL j vals) <= n /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j vals) p mem)) /\
+  (!old q0 p0 n0 tv0 v0.
+    old < st.cs_next_id /\ FLOOKUP s.vs_allocas old = SOME (p0,n0) /\
+    lookup_var q0 s = SOME (n2w p0) /\ ptr_covers G tn q0 s n0 /\
+    val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory tv0 v0 p0 mem) ==>
+    old < last.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (p0,n0) /\
+    lookup_var q0 t = SOME (n2w p0) /\ ptr_covers H u q0 t n0 /\
+    val_wf tv0 v0 /\ val_footprint tv0 v0 <= n0 /\
+    (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory tv0 v0 p0 mem)) /\
+  R st.cs_next_id q (type_memory_size (EL i tvs)) /\
+  st.cs_next_id < last.cs_next_id /\
+  FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,type_memory_size (EL i tvs)) /\
+  lookup_var q t = SOME (n2w p) /\
+  ptr_covers H u q t (type_memory_size (EL i tvs)) /\
+  val_wf (EL i tvs) (EL i vals) /\
+  val_footprint (EL i tvs) (EL i vals) <= type_memory_size (EL i tvs) /\
+  (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+    val_in_memory (EL i tvs) (EL i vals) p mem) ==>
+  !j. j < SUC i ==> ?aid q p n.
+    R aid q n /\ aid < last.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,n) /\
+    FLOOKUP ce'.ce_vars (EL j names) = SOME (PtrVar (Var q) n) /\
+    lookup_var q t = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+    ptr_covers H u q t n /\ val_wf (EL j tvs) (EL j vals) /\
+    val_footprint (EL j tvs) (EL j vals) <= n /\
+    (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j vals) p mem)
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  Cases_on `j = i`
+  >- (gvs[] >> qexistsl_tac [`st.cs_next_id`, `q`, `p`] >>
+      simp[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `j < i` by decide_tac >>
+  `EL j names <> EL i names` by gvs[EL_ALL_DISTINCT_EL_EQ] >>
+  qpat_x_assum `!j. j < i ==> _` drule >> strip_tac >>
+  qpat_x_assum `!old q0 p0 n0 tv0 v0. _` drule_all >> strip_tac >>
+  qexistsl_tac [`aid`, `q'`, `p'`, `n`] >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 Theorem registration_owned_prefix_update:
   ALL_DISTINCT names /\ i < LENGTH names /\
   ce' = ce with ce_vars updated_by
@@ -1659,16 +1745,10 @@ Theorem registration_owned_prefix_update:
     (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
       val_in_memory (EL j tvs) (EL j vals) p mem)
 Proof
-  strip_tac >> gen_tac >> strip_tac >>
-  Cases_on `j = i`
-  >- (gvs[] >> qexistsl_tac [`st.cs_next_id`, `q`, `p`] >>
-      simp[finite_mapTheory.FLOOKUP_UPDATE]) >>
-  `j < i` by decide_tac >>
-  `EL j names <> EL i names` by gvs[EL_ALL_DISTINCT_EL_EQ] >>
-  qpat_x_assum `!j. j < i ==> _` drule >> strip_tac >>
-  qpat_x_assum `!old q0 p0 n0 tv0 v0. _` drule_all >> strip_tac >>
-  qexistsl_tac [`aid`, `q'`, `p'`, `n`] >>
-  gvs[finite_mapTheory.FLOOKUP_UPDATE]
+  strip_tac >> simp[] >>
+  match_mp_tac (registration_owned_prefix_invariant_update
+    |> SPEC_ALL |> Q.INST [`R` |-> `\aid q n. T`] |> SRULE []) >>
+  asm_rewrite_tac [] >> metis_tac[]
 QED
 
 (* Caller readiness is quantified over the unchanged decoder metadata and
