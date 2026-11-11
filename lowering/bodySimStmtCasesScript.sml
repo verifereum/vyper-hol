@@ -499,6 +499,19 @@ Proof
   irule body_append_storage_fragment >> metis_tac[supported_expr_def]
 QED
 
+Theorem body_append_storage_narrow:
+  !cx nid e tops ctx cenv vis mut elem dn slot.
+    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
+                body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\
+    supported_variable_decl tops nid =
+      SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem ==>
+    body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
+Proof
+  cheat
+QED
+
 (* supported_append_target admits no local, subscript or attribute target
    (#549, #559), so the storage root is the only form. *)
 Theorem body_append_case:

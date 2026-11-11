@@ -3,6 +3,19 @@ Theory bodyMemAppend
 Ancestors
   bodyMemoryPreds bodyMemAppendAdapter supportedStmts supportedExprs
 
+Theorem body_append_storage_narrow_mem:
+  !cx nid e tops ctx cenv vis mut elem dn slot.
+    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
+                body_expr_mem_ok cx e) /\
+    body_inv tops ctx cenv cx /\
+    supported_variable_decl tops nid =
+      SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem ==>
+    body_stmt_mem_ok cx (Append (TopLevelNameTarget nid) e)
+Proof
+  cheat
+QED
+
 Theorem body_append_mem_case:
   !cx t e.
     (!s'' p t'. eval_target_place cx t s'' = (INL p,t') ==> body_expr_mem_ok cx e) /\
