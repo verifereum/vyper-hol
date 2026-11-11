@@ -276,6 +276,9 @@ Resume for_range_checked_tail_outcome_ptr[layout]:
   `type_memory_size tyv = 32` by
     (Cases_on `fty` >> gvs[] >> rename1 `BaseT bt` >> Cases_on `bt` >>
      gvs[evaluate_type_def, AllCaseEqs(), type_memory_size_def]) >>
+  `word_memory_type tyv` by
+    (Cases_on `fty` >> gvs[] >> rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[evaluate_type_def, AllCaseEqs(), word_memory_type_def]) >>
   `MEM A (fn_insts func)` by
     (qpat_assum `lookup_block st.cs_current_bb _ = _`
        (mp_then Any mp_tac lookup_block_fn_insts) >> simp[Abbr `A`]) >>
@@ -285,7 +288,7 @@ Resume for_range_checked_tail_outcome_ptr[layout]:
       (sj.cs_next_id + 1) (sj.cs_next_id + 2) sb0 sb1 sj` by
     (simp[for_code_def, Abbr `A`] >>
      conj_tac >- simp[block_is_terminated_def, mk_inst_def, is_terminator_def] >>
-     simp[not_fresh_at_def] >> metis_tac[]) >>
+     simp[not_fresh_at_def] >> first_assum ACCEPT_TAC) >>
   suspend "allocation"
 QED
 
