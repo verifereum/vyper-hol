@@ -260,7 +260,7 @@ Proof
   rename1 `safe_cast tv v_ret` >> Cases_on `safe_cast tv v_ret` >> gvs[]
 QED
 
-Theorem external_call_trace_result_success_cases[local]:
+Theorem external_call_trace_result_success_cases:
   (case body_res of
      (INL (), st) =>
        (case unlock st of
