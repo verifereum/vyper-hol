@@ -6744,6 +6744,235 @@ Proof
   cheat
 QED
 
+Theorem sym_pop_pushed_steps:
+  ss.sym_stack = sv :: stk /\
+  asm_block_at p ss.sym_base.as_pc [AsmOp "POP"] ==>
+  sym_steps p env 1 ss =
+    SymOK (ss with <|sym_base := ss.sym_base with as_pc := ss.sym_base.as_pc + 1;
+                    sym_stack := stk|>)
+Proof
+  strip_tac >> rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >>
+  gvs[asm_block_at_def, sym_step_def, sym_step_op_def, sym_set_stack_def,
+      asm_next_def]
+QED
+
+Theorem sym_pop_pushed_frame_sim:
+  !p env ctx cp fn ret srest labs0 ps op cs ss.
+  sym_frame_inv p env ctx cp fn ret srest labs0
+    (ps with ps_stack := SNOC op ps.ps_stack) cs ss /\
+  asm_static_wf p /\ asm_block_at p cs.as_pc [AsmOp "POP"] ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p 1 cs = AsmOK cs' /\
+    sym_steps p env 1 ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 ps cs' ss' /\
+    cs'.as_pc = cs.as_pc + 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `sym_frame_inv p env ctx cplan fn ret srest labs0 _ cs ss` >>
+  `asm_sym_rel p env cs ss /\ sym_kinds_ok cplan fn ret srest
+    (ps with ps_stack := SNOC op ps.ps_stack) ss` by fs[sym_frame_inv_def] >>
+  `?sv stk. ss.sym_stack = sv :: stk` by
+    (fs[sym_kinds_ok_def, listTheory.REVERSE_SNOC, listTheory.LIST_REL_CONS1] >>
+     gvs[]) >>
+  `asm_block_at p ss.sym_base.as_pc [AsmOp "POP"]` by metis_tac[asm_sym_rel_pc] >>
+  drule_all sym_pop_pushed_steps >> disch_then (qspec_then `env` assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  conj_tac
+  >- (simp[sym_frame_inv_def] >> conj_tac
+      >- (irule sym_kinds_ok_pop >> metis_tac[]) >>
+      fs[sym_frame_inv_def]) >>
+  imp_res_tac asm_sym_rel_pc >> gvs[]
+QED
+
+Theorem sym_gas_emit_pc:
+  asm_sym_rel p env cs ss /\ asm_sym_rel p env cs' ss' /\
+  asm_block_at p cs.as_pc [AsmOp "GAS"] /\
+  sym_steps p env 1 ss = SymOK ss' ==>
+  cs'.as_pc = cs.as_pc + 1
+Proof
+  strip_tac >> imp_res_tac asm_sym_rel_pc >>
+  `asm_block_at p ss.sym_base.as_pc [AsmOp "GAS"]` by metis_tac[] >>
+  drule sym_gas_steps >> disch_then (qspec_then `env` assume_tac) >> gvs[]
+QED
+
+Theorem sym_gas_optimistic_frame_sim:
+  optimistic_swap_plan dfg inst nl term ps = (ops,ps') /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+  ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >> drule gasFrameSimTheory.gas_optimistic_cases >> strip_tac
+  >- (gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
+  drule_all sym_do_swap_frame_sim >> simp[]
+QED
+
+Theorem sym_gas_live_plan_frame_sim:
+  inst.inst_opcode = GAS /\ inst.inst_operands = [] /\ inst.inst_outputs = [out] /\
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  optimistic_swap_plan dfg inst nl term
+    (ps with ps_stack := SNOC (Var out) ps.ps_stack) = (tail, arranged) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) tail /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (SOEmit "GAS" :: tail)) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (SOEmit "GAS" :: tail))) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp (SOEmit "GAS" :: tail))) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 (release_dead_spills nl arranged) cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (SOEmit "GAS" :: tail))
+Proof
+  strip_tac >>
+  `execute_plan initial_fmp (SOEmit "GAS" :: tail) =
+    AsmOp "GAS" :: execute_plan initial_fmp tail` by
+    simp[execute_plan_def, exec_stack_op_def] >>
+  `asm_block_at p cs.as_pc [AsmOp "GAS"]` by
+    (fs[stackOpSimTheory.asm_block_at_cons] >>
+     simp[stackOpSimTheory.asm_block_at_cons, asm_block_at_def]) >>
+  `MEM out inst.inst_outputs` by simp[] >>
+  drule_all sym_gas_emit_frame_sim >> strip_tac >>
+  `cs'.as_pc = cs.as_pc + 1` by
+    (irule sym_gas_emit_pc >> fs[sym_frame_inv_def] >> metis_tac[]) >>
+  `asm_block_at p cs'.as_pc (execute_plan initial_fmp tail)` by
+    fs[stackOpSimTheory.asm_block_at_cons] >>
+  `spill_alloc_layout_wf (ps with ps_stack := SNOC (Var out) ps.ps_stack).ps_alloc
+    (ps with ps_stack := SNOC (Var out) ps.ps_stack).ps_spilled` by simp[] >>
+  gvs[allocMonoTheory.release_dead_spills_spill_base,
+      allocMonoTheory.release_dead_spills_next_offset] >>
+  `?cs'' ss''.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp tail)) cs' = AsmOK cs'' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp tail)) ss' = SymOK ss'' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 arranged cs'' ss'' /\
+    cs''.as_pc = cs'.as_pc + LENGTH (execute_plan initial_fmp tail)` by
+    (irule sym_gas_optimistic_frame_sim >> simp[] >> conj_tac
+     >- metis_tac[] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`cs''`, `ss''`] >> simp[] >>
+  rpt conj_tac
+  >- (pure_rewrite_tac[arithmeticTheory.ADD1] >>
+      once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+      irule blockSimHelpersTheory.asm_steps_compose_ok >>
+      goal_assum (drule_at Any) >> simp[])
+  >- (pure_rewrite_tac[arithmeticTheory.ADD1] >>
+      once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+      rewrite_tac[sym_steps_add] >> simp[]) >>
+  irule sym_frame_inv_release_dead_spills >> simp[]
+QED
+Theorem sym_gas_retained_plan_frame_sim:
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp [SOEmit "GAS"]) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp [SOEmit "GAS"])) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp [SOEmit "GAS"])) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0
+      (release_dead_spills nl (ps with ps_stack := SNOC (Var out) ps.ps_stack)) cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp [SOEmit "GAS"])
+Proof
+  strip_tac >> gvs[] >>
+  `execute_plan initial_fmp [SOEmit "GAS"] = [AsmOp "GAS"]` by
+    simp[execute_plan_def, exec_stack_op_def] >>
+  gvs[] >> `MEM out inst.inst_outputs` by simp[] >>
+  drule_all sym_gas_emit_frame_sim >> strip_tac >>
+  qexistsl_tac [`cs'`, `ss'`] >> simp[] >> conj_tac
+  >- (irule sym_frame_inv_release_dead_spills >> simp[]) >>
+  irule sym_gas_emit_pc >> fs[sym_frame_inv_def] >> metis_tac[]
+QED
+Theorem sym_gas_pop_plan_frame_sim:
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp [SOEmit "GAS"; SOPop 1]) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp [SOEmit "GAS"; SOPop 1])) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp [SOEmit "GAS"; SOPop 1])) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 (release_dead_spills nl ps) cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp [SOEmit "GAS"; SOPop 1])
+Proof
+  strip_tac >> gvs[] >>
+  `execute_plan initial_fmp [SOEmit "GAS"; SOPop 1] =
+    [AsmOp "GAS"; AsmOp "POP"]` by
+    EVAL_TAC >>
+  gvs[] >>
+  `asm_block_at p cs.as_pc [AsmOp "GAS"]` by
+    (fs[stackOpSimTheory.asm_block_at_cons] >>
+     simp[stackOpSimTheory.asm_block_at_cons, asm_block_at_def]) >>
+  `MEM out inst.inst_outputs` by simp[] >>
+  drule_all sym_gas_emit_frame_sim >> strip_tac >>
+  `cs'.as_pc = cs.as_pc + 1` by
+    (irule sym_gas_emit_pc >> fs[sym_frame_inv_def] >> metis_tac[]) >>
+  `asm_block_at p cs'.as_pc [AsmOp "POP"]` by
+    fs[stackOpSimTheory.asm_block_at_cons] >>
+  drule_all sym_pop_pushed_frame_sim >> strip_tac >>
+  qexistsl_tac [`cs''`, `ss''`] >> simp[] >> rpt conj_tac
+  >- (pure_rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ADD1] >>
+      irule blockSimHelpersTheory.asm_steps_compose_ok >>
+      goal_assum (drule_at Any) >> simp[])
+  >- (pure_rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ADD1] >>
+      rewrite_tac[sym_steps_add] >> simp[]) >>
+  irule sym_frame_inv_release_dead_spills >> simp[]
+QED
+Theorem sym_gas_plan_frame_sim:
+  inst.inst_opcode = GAS /\ inst.inst_operands = [] /\ inst.inst_outputs = [out] /\
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops,ps') /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+  ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  strip_tac >> drule_all gasFrameSimTheory.gas_plan_shape >> disch_then assume_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >> simp[] >>
+  Cases_on `MEM out nl` >> simp[]
+  >- (Cases_on `optimistic_swap_plan dfg inst nl term
+        (ps with ps_stack := SNOC (Var out) ps.ps_stack)` >>
+      simp[] >> suspend "live") >>
+  Cases_on `halting` >> simp[]
+  >- (rw[] >> drule_all sym_gas_retained_plan_frame_sim >> simp[]) >>
+  rw[] >> drule_all sym_gas_pop_plan_frame_sim >> simp[]
+QED
+Resume sym_gas_plan_frame_sim[live]:
+  strip_tac >> gvs[allocMonoTheory.release_dead_spills_spill_base,
+    allocMonoTheory.release_dead_spills_next_offset] >>
+  drule_all sym_gas_live_plan_frame_sim >> simp[]
+QED
+Finalise sym_gas_plan_frame_sim
+
 Theorem sym_gas_frame_sim_deep:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0
