@@ -2,7 +2,7 @@
  * Available Expression Analysis — Proofs (internal)
  *
  * Proofs for lattice, canonicalization, and transfer properties.
- * The externally-facing API is in availExprAnalysisPropsScript.sml.
+ * Consumers import them through availExprAnalysisScript.sml.
  *)
 
 Theory availExprProofs

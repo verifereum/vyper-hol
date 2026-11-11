@@ -1,5 +1,6 @@
 Theory fnBlockPlanStaticRetRegion
 Ancestors
+  cfgCorrectnessProof
   stackPlanGen cfgAnalysisProps venomExecProps simplifyCfgStruct
   venomWf venomInst cfgTransform cfgDefs relation
   livenessConvergenceProofs livenessBlockProofs livenessDefs list pred_set

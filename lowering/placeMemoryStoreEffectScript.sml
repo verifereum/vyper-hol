@@ -2,7 +2,8 @@ Theory placeMemoryStoreEffect
 Ancestors
   placeMemoryPrimitiveForward placeMemoryTypedPrimitive placeMemoryChildForward
   placeMemoryCopyEffect context memoryLocalRhsProps vyperTypeSystem
-  venomState compileEnv
+  venomState compileEnv memoryLayoutDefs memoryLayoutSource memoryLayoutRel
+  memoryValueEncoding
 
 Theorem compile_store_memory_nonword_effect:
   ~is_word_type dty /\ ~is_word_type sty /\
@@ -33,6 +34,8 @@ Proof
   >- suspend "same" >>
   Cases_on `is_bytestring_type dty`
   >- suspend "bytes" >>
+  Cases_on `tuple_memory_layout_eq dty sty`
+  >- suspend "layout" >>
   `compile_store_memory_typed cenv dp dty sp sty a = ((),b)` by
     gvs[compile_store_memory_def] >>
   `w2n sw + type_memory_size stv <= w2n dw \/
@@ -47,6 +50,33 @@ Resume compile_store_memory_nonword_effect[same]:
   disch_then (qspec_then `v` mp_tac) >>
   disch_then (drule_at (Pat `eval_operand sp _ = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
+  simp[] >> disch_then (qspecl_then [`func`, `ctx`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `t` >> simp[typed_copy_effect_def] >>
+  conj_tac
+  >- (qpat_x_assum `(t with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = u`
+        (mp_tac o Q.AP_TERM `\z. z with <|vs_prev_bb := u.vs_prev_bb;
+          vs_current_bb := u.vs_current_bb|>`) >> simp[]) >>
+  qpat_x_assum `(t with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = u`
+    (mp_tac o Q.AP_TERM `\z. z.vs_allocas`) >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+(* Tuples with equal layouts are copied in bulk, as the same type is. *)
+Resume compile_store_memory_nonword_effect[layout]:
+  `compile_store_memory cenv sp dp dty dty a = ((),b)` by
+    gvs[compile_store_memory_def] >>
+  `memory_layout_key dty = memory_layout_key sty` by
+    (Cases_on `dty` >> Cases_on `sty` >>
+     gvs[tuple_memory_layout_eq_def, memory_layout_key_tuple]) >>
+  `memory_layout_rel dtv stv` by metis_tac[memory_layout_key_evaluated] >>
+  `val_in_memory dtv v (w2n sw) u.vs_memory` by
+    (irule memory_value_rel_val_in_memory >> simp[] >>
+     irule memory_layout_rel_value >> qexists_tac `stv` >> simp[] >>
+     irule val_in_memory_memory_value_rel >> simp[]) >>
+  drule compile_store_memory_same_type_forward >>
+  disch_then (qspec_then `v` mp_tac) >>
+  disch_then (drule_at (Pat `eval_operand sp _ = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ dty = _`)) >>
   simp[] >> disch_then (qspecl_then [`func`, `ctx`] mp_tac) >>
   simp[] >> strip_tac >> qexists_tac `t` >> simp[typed_copy_effect_def] >>
   conj_tac

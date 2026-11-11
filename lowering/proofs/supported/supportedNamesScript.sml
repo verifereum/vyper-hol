@@ -1,5 +1,5 @@
 (* PLAN 5.6 name whitelist. TOP-LEVEL: supported_declaration_names,
-   supported_function_bindings, supported_selectors_distinct.
+   supported_function_bindings.
    Helpers: supported_module_names, supported_function_names,
    supported_event_names, supported_function_header_names.
    TASK_021 supplies ALL AnnAssign and For names (including nested branches)
@@ -7,7 +7,7 @@
 Theory supportedNames
 Ancestors
   supportedDecls supportedTypes compileVyper vyperContext vyperAST
-  list string pair
+  vyperTypeContract list string pair
 
 Definition supported_module_names_def:
   supported_module_names ([] : toplevel list) = [] /\
@@ -40,11 +40,13 @@ Definition supported_function_bindings_def:
     ALL_DISTINCT (MAP FST args ++ locals ++ loops)
 End
 
+(* Internal functions use internal_fn_label, not their bare source names.
+   External fallback argument validation belongs to function_header_ok in
+   check_contract, rather than this body-independent name whitelist. *)
 Definition supported_function_header_names_def:
   supported_function_header_names tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret stmts =>
-        (name = "__default__" ==> NULL args) /\
         supported_function_bindings tops args [] []
     | _ => T
 End
@@ -57,8 +59,10 @@ Definition supported_selectors_distinct_def:
       (build_selectors (type_env tops) (FST (classify_functions tops))))
 End
 
-(* Only body-independent names. Binding checks with locals/loops still must
-   be applied by TASK_021 in addition to this predicate. *)
+(* check_contract also checks names and selectors, including every ABI
+   prefix and public getter. The whitelist keeps distinct function names,
+   event names and selectors until its removal lands. Binding checks with
+   locals/loops still apply in addition to this predicate. *)
 Definition supported_declaration_names_def:
   supported_declaration_names tops <=>
     ALL_DISTINCT (supported_function_names tops) /\
@@ -77,11 +81,10 @@ Proof
 QED
 
 Theorem supported_fallback_no_arguments:
-  supported_function_header_names tops
-    (FunctionDecl vis mut nr rr "__default__" args defaults ret stmts) ==>
+  function_header_ok External mut nr rr "__default__" args defaults ret ==>
   args = []
 Proof
-  simp[supported_function_header_names_def, NULL_EQ]
+  simp[function_header_ok_def, NULL_EQ]
 QED
 
 Theorem supported_declaration_names_unique:

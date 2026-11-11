@@ -1,30 +1,22 @@
 Theory vyperPureExpr
 Ancestors
-  vyperMisc vyperContext vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperStatePreservation vyperPlaceFrames
+  vyperExprEffects vyperMisc vyperContext vyperState vyperStorageBackend
+  vyperInterpreter vyperLookup vyperStatePreservation vyperPlaceFrames
 
 (* Pure expressions: expressions that do not modify state.  msg.gas is not
    pure: it consumes a gas reading; nor are the precompile builtins, which
-   consume a call outcome. *)
-Definition pure_expr_def:
-  pure_expr (Name _ _) = T ∧
-  pure_expr (TopLevelName _ _) = T ∧
-  pure_expr (FlagMember _ _ _) = T ∧
-  pure_expr (Literal _ _) = T ∧
-  pure_expr (IfExp _ e1 e2 e3) = (pure_expr e1 ∧ pure_expr e2 ∧ pure_expr e3) ∧
-  pure_expr (StructLit _ _ kes) = EVERY pure_expr (MAP SND kes) ∧
-  pure_expr (Subscript _ e1 e2) = (pure_expr e1 ∧ pure_expr e2) ∧
-  pure_expr (Attribute _ e _) = pure_expr e ∧
-  pure_expr (Builtin _ bt es) =
-    (bt ≠ Env MsgGas ∧ ¬precompile_builtin bt ∧ EVERY pure_expr es) ∧
-  pure_expr (TypeBuiltin _ _ _ es) = EVERY pure_expr es ∧
-  pure_expr _ = F
-Termination
-  WF_REL_TAC `measure expr_size` >>
-  rw[] >>
-  Induct_on `kes` >> rw[] >>
-  PairCases_on `h` >> rw[] >>
-  res_tac >> simp[]
-End
+   consume a call outcome.  The shared syntax definition spells the
+   precompiles out; restate that through precompile_builtin. *)
+Theorem precompile_builtin_exclusion[local]:
+  !bt P. bt <> Sha256 /\ bt <> ECRecover /\ bt <> ECAdd /\ bt <> ECMul /\ P <=>
+         ~precompile_builtin bt /\ P
+Proof
+  Cases >> simp[]
+QED
+
+Theorem pure_expr_def =
+  REWRITE_RULE [precompile_builtin_exclusion]
+    vyperExprEffectsTheory.pure_expr_def;
 
 (* Specialize the canonical evaluator induction theorem. Only expression
    and expression-list evaluation carry whole-state preservation obligations. *)
@@ -32,7 +24,7 @@ local
   val p0 = ``\(cx:evaluation_context) (s:stmt). T``
   val p1 = ``\(cx:evaluation_context) (ss:stmt list). T``
   val p2 = ``\(cx:evaluation_context) (it:iterator). T``
-  val p3 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
+  val p3 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T``
   val p4 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st = st'``
   val p5 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st = st'``
   val p6 = ``\(cx:evaluation_context) (t:base_assignment_target). T``

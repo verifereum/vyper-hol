@@ -123,7 +123,7 @@ Theorem le_solver_iterate_join_input:
            ds_boundary := (init_df_state NONE (fn_labels fn)).ds_boundary |+
              (lbl, SOME FEMPTY))))
 Proof
-  strip_tac >> irule wl_iterate_invariant_proof >>
+  strip_tac >> irule wl_iterate_invariant >>
   simp[le_join_input_provenance_init, le_solver_entry_init, le_process_changed] >>
   conj_tac >- metis_tac[le_solver_process_closed, le_join_input_provenance_process] >>
   qexistsl [
