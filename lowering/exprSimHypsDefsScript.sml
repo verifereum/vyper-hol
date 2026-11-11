@@ -39,8 +39,9 @@ End
    declared type in ce_module_var_type, where compile_get_target_ptr
    reads a place type; and distinct immutables' regions are disjoint,
    as the section layout places them.  The compile env's modules are the
-   source's (so the overlap analysis classifies each name as the source
-   declares it), and each module's top-level names are distinct. *)
+   source's, each listed once (so the overlap analysis and its call graph,
+   which scans every entry, see the source's code), and each module's
+   top-level names are distinct. *)
 Definition bare_globals_layout_def:
   bare_globals_layout is_ctor module_var_type
       (module_vars:nsid |-> var_location)
@@ -64,7 +65,8 @@ Definition bare_globals_layout_def:
          off2 (type_memory_size tv2)) /\
     (!src. ALOOKUP modules src = get_module_code cx src) /\
     (!src ts. get_module_code cx src = SOME ts ==>
-       ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)))
+       ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
+    ALL_DISTINCT (MAP FST modules)
 End
 
 Definition expr_sim_inv_def:
