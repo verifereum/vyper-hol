@@ -45,6 +45,7 @@ Ancestors
   vyperTypeScopePop vyperEvalOutcomeSuffix vyperTypeCallGraph
   vyperEvalPreservesScopes
   vyperTypeCallStackSoundness compileVyper moduleLowering intCallCallee
+  targetPlaceSim
 Libs
   monadsyntax
 
@@ -1481,6 +1482,86 @@ Proof
    lookup_scopes id (ei with gas_obs := gs).scopes = NONE` by simp[] >>
   drule_at (Pat `eval_stmts`) array_body_scope_callback >>
   disch_then drule_all >> simp[] >> metis_tac[]
+QED
+
+(* ADMITTED (packet A2s): a For over an array place rooted at a module
+   variable that has a storage declaration (a storage or transient variable,
+   or a hashmap), read directly or through subscripts and attributes.  The
+   lowering reads the elements from their slots per iteration; the source
+   agrees once it does too (vyper-hol#1268) and the sparse storage copy is
+   in (SEQ-1699). *)
+Theorem body_for_storage_array:
+  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
+   es.
+    body_stmt_safe tops (For id typ it n body) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_ok cx it) /\
+    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ it n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
+    stmt_exprs_ok cenv (For id typ it n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    (?e tgt nid. it = Array e /\ expr_place e = SOME tgt /\
+       target_root tgt = TopLevelNameTarget nid /\ ~immutable_root cx tgt) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
+Proof
+  cheat
+QED
+
+(* ADMITTED (packet A2p): a For over a subscript or attribute of an
+   immutable.  compile_subscript/compile_attribute keep the code location, so
+   the loop reads the elements from the immutable section. *)
+Theorem body_for_immutable_projection:
+  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
+   es.
+    body_stmt_safe tops (For id typ it n body) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_ok cx it) /\
+    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ it n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
+    stmt_exprs_ok cenv (For id typ it n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    (?e tgt. it = Array e /\
+       ((?t b k. e = Subscript t b k) \/ (?t b f. e = Attribute t b f)) /\
+       expr_place e = SOME tgt /\ immutable_root cx tgt) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
+Proof
+  cheat
 QED
 
 Theorem body_for_other:
