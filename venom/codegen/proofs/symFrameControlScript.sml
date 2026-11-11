@@ -5956,7 +5956,16 @@ Theorem sym_jnz_frame_sim_deep:
         sym_steps prog env n ss = SymOK ss' /\
         sym_frame_inv prog env ctx cp fn ret srest labs0 ps' as' ss'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac gen_jnz_frame_sim_deep_exact >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `1 <= LENGTH ps1.ps_stack` by gvs[] >>
+  `operand_val (frame_view fn ra vs) lo cond_op = SOME w` by metis_tac[] >>
+  drule_all_then strip_assume_tac sym_jnz_plan_frame_sim >>
+  rename1 `MEM r cplan.cp_regions` >>
+  qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) +
+    (if w = 0w then 4 else 2)`, `as'`, `sy`] >>
+  gvs[]
 QED
 
 Theorem sym_ret_frame_sim_deep:
