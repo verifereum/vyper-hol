@@ -230,6 +230,7 @@ QED
 Theorem target_saved_post_transport:
   vv_post ctx func cenv cx e es sa sm s0 es1 r vv s /\
   target_post ctx func cenv cx es1 sm sb s ee pv vt op u /\
+  pure_frame cenv func es1 sm s u /\
   ee = es1 with <|gas_obs := gs; outcomes := os|> /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!l. vv_operand vv <> Label l) /\
@@ -261,6 +262,10 @@ Proof
      qexistsl_tac [`es1`, `sm`, `s`] >>
      gvs[vv_post_def, target_post_def, wb_frame_def] >> metis_tac[]) >>
   gvs[vv_post_def] >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
+    (strip_tac >> irule exprSimPropsTheory.pure_frame_trans >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`es1`, `sm`, `s`] >> gvs[target_post_def]) >>
   simp[SRULE [] target_saved_holds_oracles,
        SRULE [] target_saved_regions_oracles] >>
   rpt conj_tac

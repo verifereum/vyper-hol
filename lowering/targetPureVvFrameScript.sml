@@ -16,7 +16,7 @@
 
 Theory targetPureVvFrame
 Ancestors
-  targetPlaceSimDefs supportedTargets loweringPosts targetPurePostTransport
+  targetPureWalkFrame targetPlaceSimDefs supportedTargets loweringPosts targetPurePostTransport
   targetPureSourceFrame stmtLoweringMono gasOutcome gasSummary
 
 Theorem target_pure_vv_frame:
@@ -51,9 +51,8 @@ Proof
     (qspec_then `bt` (qspecl_then [`cenv`, `sm`] mp_tac)
        ci_mono_compile_get_target_ptr >> simp[exprLoweringPropsTheory.ci_mono_def]) >>
   `stmt_state_rel ctx func cenv cx es1 s1` by gvs[vv_post_def] >>
-  qpat_x_assum `target_sim _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[target_sim_def] >>
-  disch_then (qspecl_then [`vt`, `sm`, `sb`, `op`, `s1`] mp_tac) >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `env`, `tops`, `bt`, `es1`, `vt`,
+               `sm`, `sb`, `op`, `s1`] mp_tac target_pure_walk_pure_frame >>
   simp[] >>
   disch_then (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
