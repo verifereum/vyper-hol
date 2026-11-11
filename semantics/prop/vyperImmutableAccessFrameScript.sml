@@ -300,6 +300,51 @@ Proof
   simp[function_int_calls_def, safe_accesses_append]
 QED
 
+(* Wrapper rules retain the effects of failed computations as well. *)
+Theorem immutable_frame_finally[local]:
+  (!r mid. f st = (r,mid) ==> ^immutable_frame cx A st mid) /\
+  (!s r t. g s = (r,t) ==> ^immutable_frame cx A s t) /\
+  finally f g st = (res,st') ==>
+  ^immutable_frame cx A st st'
+Proof
+  Cases_on `f st` >> Cases_on `q` >>
+  simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[immutable_frame_trans]
+QED
+
+Theorem immutable_defaults_scope_frame[local]:
+  (!r t. f (st with scopes := scopes) = (r,t) ==>
+    ^immutable_frame cx A (st with scopes := scopes) t) /\
+  finally (ignore_bind (set_scopes scopes) f) (set_scopes prev) st = (res,st') ==>
+  ^immutable_frame cx A st st'
+Proof
+  simp[finally_def, set_scopes_def, ignore_bind_def, bind_def,
+       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem immutable_try_function_frame[local]:
+  (!r t. f st = (r,t) ==> ^immutable_frame cx A st t) /\
+  try (ignore_bind f (return NoneV)) handle_function st = (res,st') ==>
+  ^immutable_frame cx A st st'
+Proof
+  Cases_on `f st` >> Cases_on `q` >>
+  simp[try_def, ignore_bind_def, bind_def, return_def, raise_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  Cases_on `y` >> gvs[handle_function_def, return_def, raise_def] >>
+  metis_tac[]
+QED
+
+Theorem immutable_intcall_cleanup_frame[local]:
+  ignore_bind (pop_function prev) (unlock_if_nr cx nr view) st = (res,st') ==>
+  ^immutable_frame cx A st st'
+Proof
+  simp[pop_function_def, set_scopes_def, ignore_bind_def, bind_def,
+       return_def, Excl "unlock_if_nr_def"] >>
+  strip_tac >> drule unlock_if_nr_immutables >> simp[]
+QED
+
 Theorem eval_expr_unwritten_immutable:
   !cx e st res st' env mods src id.
     eval_expr cx e st = (res,st') /\
