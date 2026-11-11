@@ -786,25 +786,77 @@ Proof
   qexists_tac `0` >> simp[gas_count_step_def] >> metis_tac[]
 QED
 
+Theorem frag_jump_step_jump_to[local]:
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\ step_inst_base inst s = OK u ==>
+  ?lbl. u = jump_to lbl s
+Proof
+  simp[] >> strip_tac >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem eval_phis_phi_zero[local]:
+  phi_prefix_length l = 0 ==> eval_phis s l = OK s
+Proof
+  Cases_on `l` >> simp[phi_prefix_length_def, eval_phis_def] >> rw[]
+QED
+
+(* Every observer block a fragment jump can enter starts without a PHI:
+   the cut block when the fragment left its start block, or an emitted
+   block other than the start block, whose code is in frag_code. *)
+Theorem frag_observer_target_phi_zero[local]:
+  cs_extends sa sb /\ frag_gas_free sa sb /\ lbl <> sa.cs_current_bb /\
+  lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME bb ==>
+  phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >> drule frag_observer_lookup_cases >> strip_tac
+  >- (gvs[] >> drule_all frag_observer_end_nonphi >> strip_tac >>
+      Cases_on `sb.cs_current_insts` >>
+      gvs[phi_prefix_length_def, mk_inst_def]) >>
+  `emitted_blocks sa sb <> []` by (strip_tac >> gvs[]) >>
+  drule frag_extends_emitted_shape >> simp[] >> strip_tac >>
+  `bb <> LAST (emitted_blocks sa sb)` by (strip_tac >> gvs[]) >>
+  `MEM bb (FRONT (emitted_blocks sa sb))` by
+    metis_tac[frag_emitted_front_member] >>
+  `EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
+    (fs[frag_gas_free_def, frag_code_def, NULL_EQ, EVERY_APPEND,
+        EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     metis_tac[]) >>
+  Cases_on `bb.bb_instructions` >> gvs[phi_prefix_length_def]
+QED
+
+(* A step of the observer is a GAS-free edge of any function with the
+   fragment's code.  A jump closes the edge directly (gas_path_edge's
+   jump_to disjunct): its target starts without a PHI. *)
 Theorem frag_observer_step_zero_edge:
   cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
-  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
   abi_observer_step ctx (frag_observer sa sb fn id) (frag_observer_cut sb) s t ==>
   gas_path_edge ctx fn s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `abi_observer_step ctx fn (frag_observer_cut sb) s t` by
-    (irule frag_observer_step_transfer >> metis_tac[]) >>
-  irule abi_observer_step_zero_edge >>
-  reverse conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  qpat_x_assum `abi_observer_step ctx (frag_observer sa sb fn id) _ s t`
+  qpat_assum `abi_observer_step _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE[abi_observer_step_def]) >>
-  drule_all frag_observer_instruction_agrees >> strip_tac >> gvs[] >>
-  metis_tac[frag_observer_off_cut_opcodes]
+  drule_all frag_observer_off_cut_opcodes >> strip_tac >>
+  drule_all frag_observer_instruction_agrees >> strip_tac
+  >- (rewrite_tac[gas_path_edge_def] >> simp[] >>
+      qexists_tac `0` >> gvs[gas_count_step_def]) >>
+  `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+    metis_tac[frag_successful_terminator_jump] >>
+  `?lbl. middle = jump_to lbl s` by
+    metis_tac[frag_jump_step_jump_to, step_inst_non_invoke] >>
+  `middle.vs_current_bb <> sa.cs_current_bb` by
+    (irule frag_observer_jump_no_reentry >>
+     qexistsl_tac [`inst`, `s`] >> metis_tac[step_inst_non_invoke]) >>
+  `phi_prefix_length target.bb_instructions = 0` by
+    (irule frag_observer_target_phi_zero >> metis_tac[]) >>
+  `entered = middle` by
+    (drule eval_phis_phi_zero >>
+     disch_then (qspec_then `middle` mp_tac) >> gvs[]) >>
+  `t = jump_to lbl s` by gvs[jump_to_def] >>
+  rewrite_tac[gas_path_edge_def] >> asm_rewrite_tac[] >>
+  qexistsl_tac [`0`, `original`, `inst`, `OK (jump_to lbl s)`] >>
+  asm_simp_tac (srw_ss()) [gas_count_step_def] >>
+  metis_tac[]
 QED
 
 Theorem frag_observer_prefix_zero_path:
@@ -812,9 +864,6 @@ Theorem frag_observer_prefix_zero_path:
   !sa sb fn id.
   observed = frag_observer sa sb fn id /\ cut = frag_observer_cut sb /\
   cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
-  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb ==>
   gas_path ctx fn s 0 (OK t)
 Proof
@@ -849,10 +898,7 @@ Proof
 QED
 
 Theorem frag_observer_exit_path_aux[local]:
-  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
-  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) ==>
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb ==>
   !fuel n s bb r.
     (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
     ~s.vs_halted /\
@@ -974,9 +1020,6 @@ Finalise frag_observer_exit_path_aux
 
 Theorem frag_observer_exit_path:
   cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
-  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
   ~s.vs_halted /\
   run_from fuel ctx (frag_observer sa sb fn id) s = r /\
@@ -1049,9 +1092,6 @@ Theorem frag_exec_gas_path:
     frag_exec ctx sa sb P Q R /\ cs_extends sa sb /\ frag_gas_free sa sb /\
     (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\ (!h. ~R (Halt h)) /\
     fn_has_code sa sb fn /\
-    (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-     !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-          phi_prefix_length bb.bb_instructions = 0) /\
     P s /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

@@ -103,3 +103,26 @@ Proof
 QED
 
 (* Retained tags do not reconstruct axiom provenance erased by .dat loading. *)
+
+(* Arbitrary aligned windows admit typed static copy representatives, even empty. *)
+Theorem abi_encoder_open_window_representative:
+  sz MOD 32 = 0 /\ mem_bytes_at sb sz mem = bs ==>
+  ?ct rv. has_type ct rv /\ ~is_dynamic ct /\ static_length ct = sz /\
+    enc ct rv = bs /\
+    abi_encoder_open_input (AbiCopy sz) ct rv sb sz mem
+Proof
+  strip_tac >> drule abi_encoder_uniform_aligned_representative >>
+  disch_then (qx_choose_then `ct` strip_assume_tac) >>
+  `LENGTH bs = sz` by (qpat_x_assum `mem_bytes_at _ _ _ = bs` (SUBST1_TAC o SYM) >> simp[mem_bytes_at_def]) >>
+  first_x_assum (qspec_then `bs` mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `rv` strip_assume_tac) >>
+  qexistsl_tac [`ct`, `rv`] >> simp[] >>
+  irule abiEncoderOpenInputTheory.copy >> simp[]
+QED
+
+Theorem abi_encoder_open_empty_window_representative:
+  ?ct rv. has_type ct rv /\ ~is_dynamic ct /\ static_length ct = 0 /\
+    enc ct rv = [] /\ abi_encoder_open_input (AbiCopy 0) ct rv sb 0 mem
+Proof
+  irule abi_encoder_open_window_representative >> simp[mem_bytes_at_def]
+QED

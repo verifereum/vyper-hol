@@ -284,6 +284,24 @@ Proof
       vyperTypeSystemTheory.arg_type_fits_def]
 QED
 
+Theorem ifexp_arg_type_fits_refl[local]:
+  !t. arg_type_fits t t
+Proof
+  Induct >> simp[vyperTypeSystemTheory.arg_type_fits_def]
+  >- (Cases >> simp[vyperTypeSystemTheory.arg_type_fits_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      simp[vyperTypeSystemTheory.arg_type_fits_def])
+  >- (Induct_on `l` >> simp[vyperTypeSystemTheory.arg_type_fits_def]) >>
+  Cases >> simp[vyperTypeSystemTheory.arg_type_fits_def]
+QED
+
+Theorem ifexp_mapped_types_fit[local]:
+  !args. EVERY (\e. arg_type_fits (lowered_value_type ce e) (expr_type e)) args ==>
+    arg_types_fit (MAP (lowered_value_type ce) args) (MAP expr_type args)
+Proof
+  Induct >> simp[vyperTypeSystemTheory.arg_type_fits_def]
+QED
+
 Theorem ifexp_lowered_type_classify:
   !ce e env.
   well_typed_expr env e /\
@@ -293,7 +311,7 @@ Theorem ifexp_lowered_type_classify:
   lowered_value_type ce e = expr_type e \/
   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
     arg_type_fits (lowered_value_type ce e) (expr_type e) \/
-  (?ty fid args drv. e = Call ty (IntCall fid) args drv)
+  int_calls_expr e <> []
 Proof
   ho_match_mp_tac lowered_value_type_ind >>
   simp[lowered_value_type_def, expr_type_def,
@@ -302,7 +320,9 @@ Proof
        vyperTypeCallGraphTheory.int_calls_expr_def,
        is_bytestring_type_def] >>
   rpt strip_tac >> gvs[vyperTypeSystemTheory.well_typed_literal_def,
-    vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def] >>
+    vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def]
+  >~ [`concat_buffer_type ty _`]
+  >- (disj2_tac >> irule ifexp_concat_lowered_fits >> goal_assum drule) >>
   `!xs. well_typed_exprs env xs ==>
          EVERY (well_formed_type env.type_defs o expr_type) xs` by
     (Induct >> simp[vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -314,9 +334,27 @@ Proof
     (Induct >> simp[evaluate_type_def, vyperTypeSystemTheory.well_formed_type_def] >>
      rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >> simp[]) >>
   `?tvs. evaluate_types env.type_defs (MAP expr_type args) [] = SOME tvs` by metis_tac[] >>
-  TRY (disj2_tac >> irule ifexp_concat_lowered_fits >>
-       goal_assum drule >> NO_TAC) >>
-  qmatch_goalsub_abbrev_tac `abi_size_bound ce.ce_struct_fields enc_ty` >>
+  `abi_size_bound ce.ce_struct_fields
+     (if LENGTH args = 1 /\ ~ensure then lowered_value_type ce (HD args)
+      else TupleT (MAP (lowered_value_type ce) args)) <=
+   abi_size_bound ce.ce_struct_fields
+     (if LENGTH args = 1 /\ ~ensure then expr_type (HD args)
+      else TupleT (MAP expr_type args))` by
+    (IF_CASES_TAC
+     >- (irule (cj 1 exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_size_bound) >>
+         gvs[LENGTH_EQ_NUM_compute, vyperTypeSystemTheory.well_typed_expr_def,
+             vyperTypeCallGraphTheory.int_calls_expr_def] >>
+         metis_tac[ifexp_arg_type_fits_refl]) >>
+     simp[] >>
+     irule (cj 2 exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_size_bound) >>
+     irule ifexp_mapped_types_fit >> simp[EVERY_MEM] >>
+     rpt strip_tac >>
+     `well_typed_expr env e` by
+       metis_tac[well_typed_exprs_member] >>
+     `int_calls_expr e = []` by metis_tac[int_calls_exprs_mem] >>
+     metis_tac[ifexp_arg_type_fits_refl]) >>
+  qabbrev_tac `enc_ty = if LENGTH args = 1 /\ ~ensure then expr_type (HD args)
+                       else TupleT (MAP expr_type args)` >>
   `abi_size_bound ce.ce_struct_fields enc_ty <= vyper_abi_size_bound env.type_defs enc_ty` by
     (simp[Abbr `enc_ty`] >> IF_CASES_TAC >-
        (`?tv. evaluate_type env.type_defs (expr_type (HD args)) = SOME tv` by
@@ -336,7 +374,9 @@ Proof
   simp[Abbr `enc_ty`, is_bytestring_type_def] >>
   qmatch_asmsub_rename_tac `well_typed_exprs env (head::rest)` >>
   Cases_on `ensure` >> Cases_on `rest` >>
-  gvs[is_bytestring_type_def] >> decide_tac
+  gvs[is_bytestring_type_def] >> strip_tac >> disj2_tac >>
+  irule arithmeticTheory.LESS_EQ_TRANS >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem ifexp_compat_lowered_type:
@@ -377,6 +417,5 @@ Proof
   drule ifexp_lowered_type_classify >>
   disch_then (qspec_then `ce` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >>
-  drule ifexp_body_pre_intcall_physical >>
-  gvs[vyperTypeCallGraphTheory.int_calls_expr_def, expr_type_def]
+  metis_tac[expr_body_pre_lowered_fits, expr_body_pre_lowered_evaluates]
 QED

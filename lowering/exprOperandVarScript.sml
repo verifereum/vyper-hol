@@ -175,6 +175,24 @@ Proof
   simp[exprSafeOperandTheory.safe_operand_def]
 QED
 
+Theorem compiler_materialize_vv_var:
+  compile_materialize_vv ce ty vv sa = (op,sb) ==>
+  !x. op = Var x ==> not_fresh_at sb x
+Proof
+  Cases_on `compile_alloc_buffer (type_memory_bytes ce ty) sa` >>
+  rename1 `compile_alloc_buffer _ sa = (buf,sm)` >>
+  Cases_on `unwrap_value ce vv sm` >>
+  rename1 `unwrap_value ce vv sm = (src,su)` >>
+  Cases_on `compile_store_memory ce src buf.buf_operand ty ty su` >>
+  simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >> gvs[] >>
+  drule compiler_alloc_buffer_var >>
+  disch_then (qspec_then `x` mp_tac) >> simp[] >> strip_tac >>
+  irule not_fresh_at_mono >> qexists `sm` >> simp[] >>
+  metis_tac[ci_mono_unwrap_value, ci_mono_compile_store_memory,
+            ci_mono_def, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 Theorem compiler_var_prefix:
   (!a sa op sb. f a sa = (op,sb) ==>
      !x. op = Var x ==> not_fresh_at sb x) ==>
@@ -956,10 +974,15 @@ Proof
   conj_tac >>
   simp[builtinMiscTheory.compile_ecadd_points_def,
        builtinMiscTheory.compile_ecmul_point_def,
-       contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[] >>
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, emit_def] >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def] >>
+  gvs[] >>
   gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
@@ -1457,7 +1480,7 @@ Proof
     (irule compiler_ci_mono_reserved >> qexists `sa` >>
      metis_tac[pairTheory.SND]) >>
   Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate ce args` >> simp[]
-  >- (Cases_on `compile_materialize_vv ce (expr_type h) vv sb` >> simp[] >>
+  >- (Cases_on `compile_materialize_vv ce (lowered_value_type ce h) vv sb` >> simp[] >>
       `local_ptrs_reserved ce r` by
         (irule compiler_ci_mono_reserved >> qexists `sb` >>
          metis_tac[ci_mono_compile_materialize_vv, pairTheory.SND]) >>

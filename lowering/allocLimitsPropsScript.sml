@@ -24,7 +24,11 @@ Theorem lowered_value_type_struct_fields:
            lowered_value_type c' e = lowered_value_type c e
 Proof
   ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >> rpt strip_tac >>
-  gvs[exprLoweringTheory.lowered_value_type_def]
+  gvs[exprLoweringTheory.lowered_value_type_def] >>
+  Cases_on `LENGTH args = 1 /\ ~ensure` >> gvs[] >>
+  `MAP (lowered_value_type c') args = MAP (lowered_value_type c) args` by
+    (irule MAP_CONG >> rw[] >> metis_tac[]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> gvs[]
 QED
 
 Theorem ext_call_alloc_ok_struct_fields:
@@ -226,8 +230,7 @@ Theorem lowered_value_type_frame:
            c'.ce_func_return_type = c.ce_func_return_type ==>
            lowered_value_type c' e = lowered_value_type c e
 Proof
-  recInduct exprLoweringTheory.lowered_value_type_ind >>
-  simp[exprLoweringTheory.lowered_value_type_def]
+  metis_tac[lowered_value_type_struct_fields]
 QED
 
 Theorem assign_alloc_ok_frame:
