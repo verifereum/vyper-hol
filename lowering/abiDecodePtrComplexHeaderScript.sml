@@ -81,7 +81,9 @@ Theorem abi_decode_complex_header_success:
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi
       sb H tf (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    t.vs_memory = s.vs_memory
+    t.vs_memory = s.vs_memory /\
+    abi_decode_member_frame sa G tn s H tf
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts) (w2n d) 0
 Proof
   strip_tac >>
   drule abi_decode_member_live_compiler >> strip_tac >>
@@ -101,9 +103,10 @@ Proof
   qexistsl_tac [`H`, `tm`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- suspend "path" >>
-  reverse conj_tac
+  conj_tac >- suspend "live" >>
+  conj_tac
   >- (qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  suspend "live"
+  suspend "frame"
 QED
 
 Resume abi_decode_complex_header_success[path]:
@@ -158,6 +161,18 @@ Resume abi_decode_complex_header_success[live]:
   conj_tac >- fs[fresh_vars_wrt_def] >>
   goal_assum (drule_at (Pat `abi_decode_member_live _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`w2n d`, `0`] >> simp[]
+QED
+
+Resume abi_decode_complex_header_success[frame]:
+  `state_frame (t with vs_inst_idx := LENGTH sb.cs_current_insts) =
+     state_frame (s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+   t.vs_memory = s.vs_memory` by
+    (qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
+     simp[state_frame_def]) >>
+  irule abi_decode_member_frame_readonly >> simp[] >> gvs[] >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then `Var x` mp_tac) >>
+  simp[eval_operand_def, op_prov_def]
 QED
 
 Finalise abi_decode_complex_header_success

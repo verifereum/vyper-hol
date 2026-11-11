@@ -28,7 +28,9 @@ Theorem abi_decode_normalized_success:
       (Lit 0w) 0w hi sb H tf (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     (!mem'. mem_agree_outside tf.t_mem u.vs_memory mem' ==>
       tuple_in_memory vs tvs (w2n d) mem') /\
-    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+    abi_decode_member_frame sa G tn s H tf
+      (u with vs_inst_idx := LENGTH sb.cs_current_insts) (w2n d) cap
 Proof
   strip_tac >>
   drule abi_decode_member_live_resources >> strip_tac >>
@@ -143,7 +145,8 @@ Proof
   qexistsl_tac [`K'`, `tk`] >>
   (conj_tac >- suspend "sequence" >>
    reverse conj_tac >- (conj_tac >- metis_tac[] >>
-     conj_tac >- (fs[] >> metis_tac[]) >> suspend "opcodes") >>
+     conj_tac >- (fs[] >> metis_tac[]) >>
+     conj_tac >- suspend "opcodes" >> suspend "frame") >>
    drule_all gas_path_ptr_then >> simp[] >> gvs[])
 QED
 
@@ -198,6 +201,14 @@ Resume abi_decode_normalized_success[opcodes]:
        (irule abi_decode_complex_header_scalar >> simp[] >> metis_tac[]) >>
      drule bop_scalar_seq_opcodes >> simp[EVERY_MEM]) >>
   simp[EVERY_MEM] >> fs[EVERY_MEM]
+QED
+
+Resume abi_decode_normalized_success[frame]:
+  markerLib.RESUME_TAC >>
+  irule abi_decode_member_frame_compose >>
+  goal_assum (drule_at (Pat `abi_decode_member_frame sa _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `abi_decode_member_frame middle _ _ _ _ _ _ _ _`)) >>
+  simp[abi_decoder_member_infos_def, MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss]
 QED
 
 Finalise abi_decode_normalized_success
