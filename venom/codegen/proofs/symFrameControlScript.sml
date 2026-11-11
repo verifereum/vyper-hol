@@ -3170,6 +3170,137 @@ Proof
   metis_tac[fnFrameStepsRevertForwardTheory.rf_reduce_spill_free]
 QED
 
+Theorem reorder_restore_read_only_kind_replay:
+  (case stack_get_unfixed_depth op f n ps.ps_stack of
+     NONE => (case FLOOKUP ps.ps_spilled op of NONE => ([],ps)
+                | SOME off => do_restore op ps)
+   | SOME d => ([],ps)) = (ops,ps') /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) ==>
+  prefix_spill_wf fmp lo ops qs /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
+Proof
+  Cases_on `stack_get_unfixed_depth op f n ps.ps_stack` >> simp[]
+  >- (Cases_on `FLOOKUP ps.ps_spilled op` >> simp[]
+      >- (rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def,
+                              mixedPrefixSimTheory.prefix_spill_wf_def]) >>
+      metis_tac[do_restore_read_only_kind_replay]) >>
+  rpt strip_tac >> gvs[mixedPrefixSimTheory.apply_prefix_ops_def,
+                       mixedPrefixSimTheory.prefix_spill_wf_def]
+QED
+
+Theorem reorder_one_read_only_decompose:
+  reorder_one dfg pending idx op ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops) ==>
+  ?restore_ops ps1 suffix.
+    (case stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+        (LENGTH pending) ps.ps_stack of
+       NONE => (case FLOOKUP ps.ps_spilled op of NONE => ([],ps)
+                  | SOME off => do_restore op ps)
+     | SOME d => ([],ps)) = (restore_ops,ps1) /\
+    ops = restore_ops ++ suffix /\
+    control_reorder_place dfg pending op (LENGTH pending - (idx + 1)) ps1 = (suffix,ps')
+Proof
+  strip_tac >> drule control_reorder_one_decompose >> strip_tac
+  >- (qexistsl [`restore_ops`, `ps1`, `[]`] >>
+      simp[control_reorder_place_def]) >>
+  `reduce_ops = [] /\ ps2 = ps1` by
+    (irule reorder_reduce_no_spill_identity >>
+     fs[listTheory.MEM_APPEND] >> metis_tac[]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem reorder_one_read_only_kind_replay:
+  reorder_one dfg pending idx op ps = (ops,ps') /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. ~MEM (SOSpill off) ops) /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) ==>
+  prefix_spill_wf fmp lo ops qs /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
+Proof
+  strip_tac >> drule_all reorder_one_read_only_decompose >> strip_tac >>
+  gvs[listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >>
+  drule_all reorder_restore_read_only_kind_replay >>
+  disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
+  simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
+  metis_tac[control_reorder_place_read_only_kind_replay]
+QED
+
+Theorem reorder_steps_read_only_kind_replay:
+  !items ps qs ops ps' dfg pending fn ret fmp lo.
+  plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps = (ops,ps') /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. ~MEM (SOSpill off) ops) /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) ==>
+  prefix_spill_wf fmp lo ops qs /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
+Proof
+  Induct
+  >- simp[foldlSimTheory.plan_steps_def, mixedPrefixSimTheory.apply_prefix_ops_def,
+          mixedPrefixSimTheory.prefix_spill_wf_def] >>
+  Cases_on `h` >> rpt gen_tac >> simp[foldlSimTheory.plan_steps_def] >>
+  Cases_on `reorder_one dfg pending q r ps` >>
+  rename1 `reorder_one _ _ _ _ _ = (step_ops,mid)` >>
+  Cases_on `plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items mid` >>
+  simp[] >> strip_tac >>
+  gvs[listTheory.MEM_APPEND, DISJ_IMP_THM, FORALL_AND_THM] >>
+  drule_all (SRULE [] (Q.INST [`dfg` |-> `dfg_build_function fn`]
+    reorder_one_read_only_kind_replay)) >>
+  disch_then (qspecl_then [`lo`, `fmp`] strip_assume_tac) >>
+  `!op1 off1 op2 off2.
+    FLOOKUP mid.ps_spilled op1 = SOME off1 /\
+    FLOOKUP mid.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1` by
+    (drule_at Any doSwapSimTheory.safe_prefix_spilled_separated >>
+     simp[] >> disch_then assume_tac >> rpt strip_tac >>
+     first_x_assum irule >> simp[] >> metis_tac[]) >>
+  simp[doSwapSimTheory.prefix_spill_wf_append, planAlignTheory.apply_prefix_ops_append] >>
+  first_x_assum drule >> disch_then irule >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem reorder_plan_read_only_kind_replay:
+  reorder_plan dfg pending ps = (ops,ps') /\
+  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    qs.ps_stack ps.ps_stack /\ qs.ps_spilled = ps.ps_spilled /\
+  (!op1 off1 op2 off2.
+    FLOOKUP ps.ps_spilled op1 = SOME off1 /\
+    FLOOKUP ps.ps_spilled op2 = SOME off2 /\ op1 <> op2 ==>
+    off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
+  (!off. ~MEM (SOSpill off) ops) /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) ==>
+  prefix_spill_wf fmp lo ops qs /\
+  LIST_REL (\x y. !sv. op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
+    (apply_prefix_ops fmp lo ops qs).ps_stack ps'.ps_stack /\
+  (apply_prefix_ops fmp lo ops qs).ps_spilled = ps'.ps_spilled
+Proof
+  rewrite_tac[reorderSimTheory.reorder_plan_eq_plan_steps] >>
+  MATCH_ACCEPT_TAC reorder_steps_read_only_kind_replay
+QED
+
 Theorem reorder_one_spill_free_placement:
   reorder_one dfg pending idx op ps = (ops,ps') /\
   (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
