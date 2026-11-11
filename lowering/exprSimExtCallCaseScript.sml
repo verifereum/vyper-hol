@@ -1247,7 +1247,8 @@ Resume extcall_return_default[default]:
      POP_ASSUM_LIST (K all_tac) >>
      simp[expr_val_rel_def] >> rpt strip_tac >> gvs[] >>
      first_x_assum (qspec_then `dtv` mp_tac) >> simp[]) >>
-  `w2n (n2w d : bytes32) = d` by (simp[] >> decide_tac) >>
+  `w2n (n2w d : bytes32) = d` by
+    (qpat_x_assum `d + _ < dimword _` mp_tac >> simp[]) >>
   drule (Q.INST [`s` |-> `u`, `tv` |-> `rtv`, `v` |-> `dv`]
     return_default_store_counted) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
@@ -1382,7 +1383,8 @@ Resume extcall_return_default[decode]:
      allocated.cs_next_id <= aid` by
     (simp[abiMalformedRecursiveInterfaceTheory.abi_malformed_scratch_sites_def] >>
      fs[ci_mono_def] >> decide_tac) >>
-  `LENGTH t.vs_returndata < dimword (:256)` by simp[] >>
+  `LENGTH t.vs_returndata < dimword (:256)` by
+    (qpat_x_assum `LENGTH returnData < _` mp_tac >> simp[]) >>
   drule_all (Q.INST [`en` |-> `cs`,
     `sites` |-> `abi_malformed_scratch_sites hs he func`] return_default_allocated_entry) >>
   strip_tac >>
@@ -1401,7 +1403,8 @@ Resume extcall_return_default[decode]:
      returnData d
      (type_memory_bytes cenv (if needs_external_call_wrap ann then TupleT [ann] else ann)) u` by
     metis_tac[] >>
-  `u.vs_returndata = returnData /\ LENGTH returnData < dimword (:256)` by simp[] >>
+  `u.vs_returndata = returnData /\ LENGTH returnData < dimword (:256)` by
+    (qpat_x_assum `LENGTH returnData < _` mp_tac >> simp[]) >>
   Cases_on `evaluate_abi_decode_return (get_tenv cx) ann returnData` >-
     suspend "decode_success" >>
   suspend "decode_reject"
@@ -1686,7 +1689,7 @@ Resume extcall_return_values[decode_success]:
      first_assum (irule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
      first_assum (irule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `FLOOKUP t.vs_allocas _ = SOME _`)) >>
-     simp[]) >>
+     simp[] >> qpat_x_assum `w2n ro + _ < dimword _` mp_tac >> simp[]) >>
   qexists_tac `[]` >>
   simp[gas_summary_at_def, gas_marked_exec_def, lift_sum_runtime_def,
        bind_def, return_def] >>
@@ -1758,7 +1761,8 @@ Resume extcall_return_values[decode_reject]:
      first_assum (irule_at (Pat `FLOOKUP t.vs_allocas _ = SOME _`)) >>
      first_assum (irule_at (Pat `evaluate_abi_decode_return _ _ _ = INR _`)) >>
      first_assum (irule_at (Pat `stmt_state_rel _ _ _ _ _ t`)) >>
-     simp[]) >>
+     simp[] >> qpat_x_assum `w2n ro + _ < dimword _` mp_tac >>
+     qpat_x_assum `type_memory_size rtv + 64 < dimword _` mp_tac >> simp[]) >>
   qexists_tac `[]` >>
   simp[gas_summary_at_def, gas_marked_exec_def, lift_sum_runtime_def,
        bind_def, return_def, raise_def] >>
