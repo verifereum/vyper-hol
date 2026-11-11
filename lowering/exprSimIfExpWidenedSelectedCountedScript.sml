@@ -8,6 +8,42 @@ Ancestors
   exprSimIfExpWidenedArm exprSimIfExpCompat exprSimUnwrapProps
   exprSimSource exprSimProps exprSimHyps exprSimHypsDefs exprLoweringProps
   exprLowering compileEnv loweringPosts vyperAST vyperState context fragGasMode
+  memoryLayoutDefs memoryLayoutSource
+Libs
+  legacyInduction
+
+Theorem punnable_non_aggregate[local]:
+  (!b u. punnable ce u (BaseT b)) /\ (!n u. punnable ce u (StructT n)) /\
+  (!n u. punnable ce u (FlagT n)) /\ (!u. punnable ce u NoneT)
+Proof
+  rpt strip_tac >> Cases_on `u` >> simp[punnable_def]
+QED
+
+Theorem memory_layout_key_punnable[local]:
+  (!t u. memory_layout_key u = memory_layout_key t ==> punnable ce u t) /\
+  (!ts us. MAP memory_layout_key us = MAP memory_layout_key ts ==>
+     punnable_list ce us ts)
+Proof
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
+  rpt strip_tac >>
+  gvs[memory_layout_key_tuple, memory_layout_key_array,
+    memory_layout_key_tuple_cases, memory_layout_key_array_cases,
+    listTheory.MAP_EQ_CONS, punnable_non_aggregate, punnable_def] >>
+  metis_tac[memory_layout_key_bytes]
+QED
+
+(* An equal-layout tuple pair is already same_memory_layout, so the
+   changed-layout arm never takes compile_store_memory's bulk-copy branch. *)
+Theorem tuple_memory_layout_eq_same_layout[local]:
+  tuple_memory_layout_eq dst src ==> same_memory_layout ce src dst
+Proof
+  strip_tac >> simp[same_memory_layout_def] >>
+  `type_memory_bytes ce src = type_memory_bytes ce dst` by
+    metis_tac[tuple_memory_layout_eq_bytes] >>
+  simp[] >> Cases_on `dst` >> Cases_on `src` >>
+  gvs[tuple_memory_layout_eq_def, punnable_def] >>
+  metis_tac[memory_layout_key_punnable]
+QED
 
 Theorem compile_selected_ifexp_post_path:
   (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
@@ -49,6 +85,8 @@ Proof
   >- (irule compile_bytes_ifexp_post_path >> metis_tac[expr_has_effect_thm]) >>
   `lowered_value_type ce e <> expr_type e` by
     (strip_tac >> fs[same_memory_layout_def, punnable_reflexive]) >>
+  `~tuple_memory_layout_eq (expr_type e) (lowered_value_type ce e)` by
+    metis_tac[tuple_memory_layout_eq_same_layout] >>
   `?ann fid args drv. e = Call ann (IntCall fid) args drv` by
     (drule expr_body_pre_var_types_well_formed >> disch_then assume_tac >>
      qspecl_then [`ce`, `e`, `env`] mp_tac ifexp_lowered_type_classify >>
