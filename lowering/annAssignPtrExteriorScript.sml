@@ -1,7 +1,7 @@
 (* Exterior transport permits fresh temporary variable writes. *)
 Theory annAssignPtrExterior
 Ancestors
- annAssignPtrScratch annAssignPtrBytestring bodyPtrDefs ptrDiscipline
+ annAssignPtrScratch bodyPtrDefs ptrDiscipline
  venomState stmtSimProps exprSimProps finite_map pred_set
 
 Theorem annassign_ghost_vars_exterior_ptr:

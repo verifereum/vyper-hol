@@ -1,10 +1,14 @@
 (*
  * Dead Store Elimination — Correctness Statement
  *
- * Preconditions: wf_function + ssa_form, and a state invariant safe_inv that
- *   holds at the start, survives every step of fn, and implies alloca safety,
- *   soundness of fn's base-pointer analysis, and accesses staying in their
- *   own alloca (see deadStoreElimProofsScript)
+ * Preconditions: wf_function + ssa_form, a non-static, non-halted start state,
+ *   and a state invariant safe_inv that holds at the start, survives every
+ *   step of fn, and implies alloca safety, soundness of fn's base-pointer
+ *   analysis, and accesses staying in their own alloca (see
+ *   deadStoreElimProofsScript)
+ * Halt and IntRet states agree up to memory (dse_term_equiv): storage and
+ *   transient commit there, so they are equal; OK and Abort states agree up
+ *   to the eliminated space (dse_equiv / dse_all_equiv).
  * Conclusion includes Error disjunct: original execution may error while
  *   DSE-transformed succeeds (e.g. undefined operand in dead store).
  * See deadStoreElimProofsScript.sml for counterexamples and explanation.
@@ -18,6 +22,7 @@ Ancestors
   deadStoreElimProofs deadStoreElimComposition deadStoreElimCertificate
   decoratedExecution deadStoreElimStructure deadStoreElimEquiv venomWf
   basePtrProps While deadStoreElimDefs passSharedDefs passSharedProps
+  deadStoreElimChecker deadStoreElimCheckerDefs
   venomInst passSimulationProps allocaRemapDefs pointerConfinedDefs
   deadStoreElimFrame
 
@@ -121,7 +126,7 @@ QED
 Theorem dse_function_space_correct:
   !analysis_fn space fuel ctx fn s safe_inv.
     wf_function fn /\ ssa_form fn /\
-    s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ safe_inv s /\
+    s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\ safe_inv s /\
     (!bb s0 s1.
        lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
        s0.vs_inst_idx = 0 /\ safe_inv s0 /\
@@ -147,7 +152,7 @@ Theorem dse_function_space_correct:
              (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
              space fn') ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (dse_equiv space) (dse_equiv space) (dse_equiv space)
+    lift_result (dse_equiv space) dse_term_equiv (dse_equiv space)
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dse_function_space analysis_fn space fn) s)
 Proof
@@ -166,7 +171,7 @@ QED
 Theorem dse_function_correct:
   !analysis_fn fuel ctx fn s safe_inv.
     wf_function fn /\ ssa_form fn /\
-    s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ safe_inv s /\
+    s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\ safe_inv s /\
     (!bb s0 s1.
        lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
        s0.vs_inst_idx = 0 /\ safe_inv s0 /\
@@ -193,7 +198,7 @@ Theorem dse_function_correct:
         (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
         space fn') ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result dse_all_equiv dse_all_equiv dse_all_equiv
+    lift_result dse_all_equiv dse_term_equiv dse_all_equiv
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dse_function analysis_fn fn) s)
 Proof
@@ -207,4 +212,42 @@ Proof
   drule_all dse_function_certificate >> strip_tac >>
   fs[dse_run_certificate_def] >>
   drule_all decorated_run_erase >> strip_tac >> simp[]
+QED
+
+(* The checked analysis discharges the dead-store premise for any
+   candidate list. *)
+Theorem dse_checked_function_correct:
+  !cand fuel ctx fn s safe_inv.
+    wf_function fn /\ ssa_form fn /\
+    s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\ safe_inv s /\
+    (!bb s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       s0.vs_inst_idx = 0 /\ safe_inv s0 /\
+       eval_phis s0 bb.bb_instructions = OK s1 ==>
+       safe_inv (s1 with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
+    (!bb inst fuel' s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb s0.vs_inst_idx = SOME inst /\ safe_inv s0 /\
+       step_inst fuel' ctx inst s0 = OK s1 ==>
+       safe_inv (if is_terminator inst.inst_opcode then s1
+                 else s1 with vs_inst_idx := SUC s0.vs_inst_idx)) /\
+    (!s0. safe_inv s0 ==>
+       alloca_inv s0 /\
+       (!aid base sz. FLOOKUP s0.vs_allocas aid = SOME (base, sz) ==>
+                      base + sz < dimword (:256)) /\
+       bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0 /\
+       (!bb inst.
+          lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+          get_instruction bb s0.vs_inst_idx = SOME inst ==>
+          bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) inst s0)) ==>
+    (?e. run_blocks fuel ctx fn s = Error e) \/
+    lift_result dse_all_equiv dse_term_equiv dse_all_equiv
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (dse_function (dse_checked_analysis cand) fn) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule dse_function_correct >>
+  simp[dse_checked_analysis_dead_stores] >>
+  qexists_tac `safe_inv` >> asm_rewrite_tac[]
 QED

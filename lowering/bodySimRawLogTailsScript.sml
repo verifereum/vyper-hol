@@ -1,6 +1,7 @@
 (* Counted execution boundaries for RawLog body continuations. *)
 Theory bodySimRawLogTails
 Ancestors
+  exprSimHashBoundary
   bodySimRawLogBodySource exprSimRawLog exprSimHash gasSummary
   exprBopSimProps exprSimProps exprSimAlloc context ASCIInumbers
   bodySim exprSimSend exprSimHyps vyperTypeSystem vyperAST list
@@ -26,8 +27,8 @@ Theorem raw_log_dynamic_tail_counted:
     REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
-  expr_type e = NoneT /\ fn_has_code sm sb func /\
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\ fn_has_code sm sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
@@ -56,7 +57,7 @@ Proof
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) t' /\
-    wb_frame cenv es0 sa s0 t'` by
+    wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t'` by
     (irule raw_log_core_frame >> simp[mk_inst_def] >>
      qexistsl_tac [`ops`, `len_op`, `ptr_op`,
                   `n2w (b + 32)`, `n2w (LENGTH bs)`] >>
@@ -69,9 +70,14 @@ Proof
   drule_all hash_run_path >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `t' with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   conj_tac >- metis_tac[listTheory.LENGTH] >> simp[] >>
-  irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  fs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  `!n. wb_frame cenv es0 (es with logs := es.logs ++
+     [encode_raw_event_values cx.txn.target vals bs]) sa s0
+     (t' with vs_inst_idx := n)` by
+    (gen_tac >> qpat_x_assum `wb_frame cenv es0 (es with logs := _) sa s0 t'` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
+     disch_then strip_assume_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx]
 QED
 
 Theorem raw_log_fixed_tail_counted:
@@ -81,7 +87,7 @@ Theorem raw_log_fixed_tail_counted:
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\ LENGTH ops <= 4 /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -90,7 +96,7 @@ Theorem raw_log_fixed_tail_counted:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
-     regions_disjoint (w2n p) 32 b sz) /\ expr_type e = NoneT /\
+     regions_disjoint (w2n p) 32 b sz) /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sm sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -133,7 +139,7 @@ Proof
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) t /\
-    wb_frame cenv es0 sa s0 t` by
+    wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t` by
     (irule raw_log_core_frame >> simp[mk_inst_def] >>
      qexists_tac `32w` >> simp[eval_operand_def, wordsTheory.dimword_def]) >>
   `run_inst_seq (emitted_insts sm sb) s = OK t` by
@@ -147,9 +153,9 @@ Proof
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   conj_tac >- metis_tac[listTheory.LENGTH] >> simp[] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  qpat_x_assum `wb_frame cenv es0 sa s0 t` mp_tac >>
+  qpat_x_assum `wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t` mp_tac >>
   rpt (pop_assum kall_tac) >>
-  simp[wb_frame_def, locals_kept_def, lookup_var_def] >>
+  simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
   metis_tac[]
 QED
 
@@ -184,13 +190,13 @@ Theorem raw_log_data_post_transport:
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
                (!l. op <> Label l)) ops ==>
-  wb_frame cenv es0 sa s0 u /\
+  wb_frame cenv es0 es2 sa s0 u /\
   LIST_REL (\op v. eval_operand op u = SOME (val_to_w256 v)) ops vals
 Proof
   strip_tac >>
-  `wb_frame cenv es1 sm t u` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es1 es2 sm t u` by metis_tac[expr_post_frame] >>
   gvs[wb_args_post_def] >> conj_tac
-  >- (irule wb_frame_trans >> simp[] >> conj_tac
+  >- (irule wb_frame_trans >> simp[] >> reverse conj_tac
       >- (qexistsl_tac [`es1`, `sm`, `t`] >> simp[]) >>
       qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
@@ -220,7 +226,7 @@ Theorem raw_log_fixed_buffer_after_data:
      regions_disjoint (w2n p) 32 b sz)
 Proof
   strip_tac >>
-  `wb_frame cenv es sm t s` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es' sm t s` by metis_tac[expr_post_frame] >>
   `lookup_var pvar s = SOME p /\
    FLOOKUP s.vs_allocas aid = SOME (w2n p,32)` by
     (fs[wb_frame_def] >> metis_tac[]) >>
@@ -244,11 +250,11 @@ Theorem raw_log_alloc_counted:
   compile_alloc_buffer sz sm = (buf,sn) /\ fn_has_code sm sn func /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
-  wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t w. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 sa s0 t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sa s0 t /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -267,7 +273,7 @@ Theorem raw_log_alloc_counted:
 Proof
   strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
-  `wb_frame cenv es0 sa s0 t` by
+  `wb_frame cenv es0 es sa s0 t` by
     (irule wb_frame_readonly_tail >> qexistsl_tac [`sm`, `s`] >> simp[]) >>
   `sn.cs_current_bb = sm.cs_current_bb /\
    sn.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sn /\
@@ -285,9 +291,9 @@ Proof
   simp[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
        local_region_def] >>
   conj_tac
-  >- (qpat_x_assum `wb_frame cenv es0 sa s0 t` mp_tac >>
+  >- (qpat_x_assum `wb_frame cenv es0 es sa s0 t` mp_tac >>
       rpt (pop_assum kall_tac) >>
-      simp[wb_frame_def, locals_kept_def, lookup_var_def] >> metis_tac[]) >>
+      simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >> metis_tac[]) >>
   qpat_x_assum `sn.cs_current_insts = _` kall_tac >>
   fs[lookup_var_def, local_region_def] >>
   conj_tac >> first_assum ACCEPT_TAC
@@ -297,7 +303,10 @@ Theorem raw_log_post_gas_obs:
   expr_post ctx func cenv cx e es0 sa sb s0 ee v op t ==>
   expr_post ctx func cenv cx e es0 sa sb s0 (ee with gas_obs := gs) v op t
 Proof
-  simp[expr_post_def, expr_val_at_def] >> strip_tac >> simp[] >>
+  `locals_kept cenv es0 (ee with gas_obs := gs) s0 t <=>
+   locals_kept cenv es0 ee s0 t` by
+    simp[NoAsms, locals_kept_def, popped_kept_def] >>
+  simp[expr_post_def, expr_val_at_def, expr_val_own_def] >> strip_tac >> simp[] >>
   `stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) t` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `gs`] mp_tac) >>
