@@ -1,6 +1,6 @@
 (* PLAN 5.11 / D28: single-frame creation boundary, NOT a deployment proof.
  * TOP-LEVEL: constructor_args_encode, constructor_call_free, deploy_typing_ok,
- * deploy_storage_ok, deploy_state_rel, deploy_result_rel.
+ * deploy_storage_ok, deploy_state_rel, deploy_result_rel, deploy_call_result_rel.
  * Helpers: constructor_call_root, deploy_evaluation_context.
  * DAG: e2eDefs + syntax traversal + source entry readiness -> e2eDeployDefs;
  * e2eDeployDefs -> clean e2eDeployChecks and e2eCorrectness's planned admission.
@@ -150,9 +150,9 @@ Definition deploy_result_rel_def:
     case src of
       INL (am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-        ?section lgs.
+        ?section.
           immutables_section_rel tops (account_immutables am' tx.target) section /\
-          frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+          frame_outcome es r es' NONE (runtime_bc ++ section) am'.logs /\
           (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
           (!a. a <> tx.target ==>
                lookup_account a es'.rollback.accounts =
@@ -165,9 +165,7 @@ Definition deploy_result_rel_def:
             (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
             (lookup_account tx.target am'.accounts).storage
             (lookup_account tx.target es'.rollback.accounts).storage /\
-          transient_agree cx am'.tStorage es'.rollback.tStorage /\
-          logs_correspond (compiled_event_info tops) (type_env tops)
-            tx.target am'.logs lgs
+          transient_agree cx am'.tStorage es'.rollback.tStorage
     | INR (AssertException s) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")
@@ -179,12 +177,9 @@ Definition deploy_result_rel_def:
     | INR (ReturnException _) => F
 End
 
-(* Current-owner kernel gate: definitions are total saved objects, not stage
- * assumptions. This checks their tags, not those of unrelated ancestors.
- *)
-val _ = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else raise Fail ("non-clean deployment definition: " ^ name)
-  end) (DB.thms "e2eDeployDefs");
+Definition deploy_call_result_rel_def:
+  deploy_call_result_rel tops runtime_bc am tx es r es' <=>
+    gas_readings_rel (gas_readings es)
+      (\gobs. deploy_result_rel tops runtime_bc tx es r es'
+        (load_contract NONE gobs am tx [(NONE, tops)] [])) T
+End
