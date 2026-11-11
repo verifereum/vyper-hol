@@ -56,15 +56,27 @@ Proof
      simp[word_add_def, w2n_n2w] >>
      `q < dimword(:256) /\ w2n d+q < dimword(:256)` by decide_tac >>
      simp[]) >>
-  qexistsl_tac [`J`, `tj`, `H`, `tf`, `out`, `m`] >> simp[] >>
+  `mem_bytes_at (w2n d+q)
+     (abi_decode_runtime_footprint ei1 (w2n d+q)
+       (u1 with vs_inst_idx := LENGTH sm.cs_current_insts))
+     (u2 with vs_inst_idx := LENGTH sb.cs_current_insts).vs_memory =
+   mem_bytes_at (w2n d+q)
+     (abi_decode_runtime_footprint ei1 (w2n d+q)
+       (u1 with vs_inst_idx := LENGTH sm.cs_current_insts))
+     (u1 with vs_inst_idx := LENGTH sm.cs_current_insts).vs_memory` by
+    (drule abi_decode_member_frame_bytes >>
+     disch_then (qspecl_then [
+       `abi_decode_runtime_footprint ei1 (w2n d+q)
+         (u1 with vs_inst_idx := LENGTH sm.cs_current_insts)`, `w2n d+q`] mp_tac) >>
+     simp[]) >> gvs[] >>
+  qexistsl_tac [`J`, `tj`, `H`, `tf`, `out`,
+    `abi_decode_runtime_footprint ei1 (w2n d+q)
+      (u1 with vs_inst_idx := LENGTH sm.cs_current_insts)`] >> simp[] >>
   conj_tac >- (irule abi_decode_member_frame_compose >>
     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
     simp[] >> goal_assum (drule_at Any) >> simp[]) >>
-  conj_tac >- (irule abi_decode_member_frame_window >>
-    goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
-  qpat_assum `abi_decode_member_frame sm _ _ _ _ _ _ _ _`
-    (mp_tac o GEN_ALL o MATCH_MP (cj 1 (REWRITE_RULE [GSYM AND_IMP_INTRO] abi_decode_member_frame_bytes))) >>
-  disch_then (qspecl_then [`m`, `q+w2n d`] mp_tac) >> simp[]
+  irule abi_decode_member_frame_window >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem abi_decode_two_member_second_abort:
