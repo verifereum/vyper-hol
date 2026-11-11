@@ -14628,6 +14628,40 @@ Proof
   simp[] >> metis_tac[pred_setTheory.SUBSET_REFL]
 QED
 
+Theorem mm_local_pending_literal_load_disjoint[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n < LENGTH is /\ (EL n is).inst_opcode = MLOAD /\
+  (EL n is).inst_operands = [Lit w] /\ (EL n is).inst_outputs = [out] /\
+  MEM j (mm_local_pending_indices is gs n) /\
+  mm_local_write_capture is H N j = SOME (d,bs) ==>
+  bs = [] \/ w2n w + 32 <= d \/ d + LENGTH bs <= w2n w
+Proof
+  strip_tac >>
+  `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n` by
+    (irule mm_local_nop_pending_suc >> metis_tac[]) >>
+  `MEM j (mm_local_pending_indices is gs (SUC n))` by metis_tac[] >>
+  qabbrev_tac `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    empty_scan_state (TAKE (SUC n) is)` >>
+  `?h. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length` by
+    (irule mm_local_canonical_pending_capture_owner >>
+     simp[Abbr `ss`] >> metis_tac[arithmeticTheory.LESS_EQ]) >>
+  `ss = scan_load Mem2Mem
+    (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is))
+    (EL n is)` by
+    (simp[Abbr `ss`, rich_listTheory.TAKE_SUC_BY_TAKE, rich_listTheory.SNOC_APPEND,
+      FOLDL_APPEND] >> gvs[scan_inst_def, mode_load_opcode_def]) >>
+  Cases_on `bs = []` >- simp[] >>
+  `0 < h.cg_length` by (Cases_on `bs` >> gvs[] >> decide_tac) >>
+  `w2n w + 32 <= h.cg_dst \/ h.cg_dst + h.cg_length <= w2n w` by
+    (irule mm_local_load_pending_disjoint >> metis_tac[]) >>
+  simp[]
+QED
+
 Theorem mm_local_cut_representative_protected_operands[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
