@@ -125,6 +125,8 @@ Proof
       irule site_action_bind >> simp[site_action_emit_op] >> gen_tac >>
       irule site_action_ignore_bind >> simp[site_action_emit_void] >>
       irule site_action_bind >> simp[site_action_emit_op] >> gen_tac >>
+      irule site_action_ignore_bind >> simp[site_action_emit_void] >>
+      irule site_action_bind >> simp[site_action_emit_op] >> gen_tac >>
       simp[site_action_bind, site_action_ignore_bind,
            site_action_emit_op, site_action_emit_void])
   >- simp[site_action_ignore_bind, site_action_emit_void, site_action_return]

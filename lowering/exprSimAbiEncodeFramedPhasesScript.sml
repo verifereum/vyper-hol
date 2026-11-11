@@ -46,7 +46,7 @@ Theorem abi_encode_framed_cursor_load_phase_observed:
     abi_encode_exec_frame func s t
 Proof
   strip_tac >> drule_all window_cursor_load_sequence >> strip_tac >>
-  `EVERY (\i. MEM i.inst_opcode [ADD;AND;MLOAD;MSTORE;MCOPY]) (emitted_insts st en)` by
+  `EVERY (\i. MEM i.inst_opcode [ADD;AND;NOT;MLOAD;MSTORE;MCOPY]) (emitted_insts st en)` by
     (drule emitted_insts_emit_op >> simp[mk_inst_def]) >>
   `abi_encode_exec_frame func s t` by
     (`run_inst_seq (emitted_insts st en) s = OK t` by

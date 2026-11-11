@@ -93,7 +93,7 @@ Proof
 QED
 
 Definition abi_encode_raw_opcode_def:
-  abi_encode_raw_opcode opc <=> MEM opc [ALLOCA;ADD;AND;MLOAD;MSTORE;MCOPY]
+  abi_encode_raw_opcode opc <=> MEM opc [ALLOCA;ADD;AND;NOT;MLOAD;MSTORE;MCOPY]
 End
 
 Theorem abi_encode_whitelist_static:
@@ -147,6 +147,8 @@ Proof
       irule abi_encode_straight_bind >> simp[abi_encode_straight_emit_op, abi_encode_raw_opcode_def] >> gen_tac >>
       irule abi_encode_straight_ignore_bind >> simp[abi_encode_straight_emit_void, abi_encode_raw_opcode_def] >>
       irule abi_encode_straight_bind >> simp[abi_encode_straight_emit_op, abi_encode_raw_opcode_def] >> gen_tac >>
+      irule abi_encode_straight_ignore_bind >> simp[abi_encode_straight_emit_void, abi_encode_raw_opcode_def] >>
+      irule abi_encode_straight_bind >> simp[abi_encode_straight_emit_op, abi_encode_raw_opcode_def] >> gen_tac >>
       simp[abi_encode_straight_bind, abi_encode_straight_ignore_bind,
            abi_encode_straight_emit_op, abi_encode_straight_emit_void, abi_encode_raw_opcode_def])
   >- simp[abi_encode_straight_ignore_bind, abi_encode_straight_emit_void,
@@ -171,7 +173,7 @@ QED
 
 Theorem abi_encode_no_block_opcodes:
   compile_abi_encode_to_buf dst src ei st = (out,en) /\ st.cs_blocks = en.cs_blocks ==>
-  EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;AND;MLOAD;MSTORE;MCOPY]) (emitted_insts st en)
+  EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;AND;NOT;MLOAD;MSTORE;MCOPY]) (emitted_insts st en)
 Proof
   strip_tac >> mp_tac (cj 2 abi_encode_whitelist_mutual) >>
   simp_tac bool_ss [abi_encode_straight_ops_def] >>

@@ -263,6 +263,8 @@ Proof
       irule enc_straight_action_bind >> simp[enc_straight_action_emit_op, is_terminator_def] >> gen_tac >>
       irule enc_straight_action_ignore_bind >> simp[enc_straight_action_emit_void, is_terminator_def] >>
       irule enc_straight_action_bind >> simp[enc_straight_action_emit_op, is_terminator_def] >> gen_tac >>
+      irule enc_straight_action_ignore_bind >> simp[enc_straight_action_emit_void, is_terminator_def] >>
+      irule enc_straight_action_bind >> simp[enc_straight_action_emit_op, is_terminator_def] >> gen_tac >>
       simp[enc_straight_action_bind, enc_straight_action_ignore_bind,
            enc_straight_action_emit_op, enc_straight_action_emit_void, is_terminator_def])
   >- simp[enc_straight_action_ignore_bind, enc_straight_action_emit_void,

@@ -39,7 +39,7 @@ Proof
 QED
 
 Theorem abi_encode_leaf_step_memory_length:
-  MEM i.inst_opcode [ALLOCA;ADD;AND;MLOAD;MSTORE;MCOPY] /\
+  MEM i.inst_opcode [ALLOCA;ADD;AND;NOT;MLOAD;MSTORE;MCOPY] /\
   step_inst_base i s = OK t ==>
   LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
@@ -47,13 +47,13 @@ Proof
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   PURE_ONCE_REWRITE_TAC [step_inst_base_def] >>
   asm_rewrite_tac [opcode_case_def] >> strip_tac >>
-  gvs[exec_pure2_def, exec_read1_def, exec_write2_def, exec_alloca_def, AllCaseEqs()] >>
+  gvs[exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def, exec_alloca_def, AllCaseEqs()] >>
   gvs[update_var_def] >>
   metis_tac[abi_encode_mstore_memory_length, abi_encode_mcopy_memory_length]
 QED
 
 Theorem abi_encode_leaf_sequence_memory_length:
-  !code s t. EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;AND;MLOAD;MSTORE;MCOPY]) code /\
+  !code s t. EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;AND;NOT;MLOAD;MSTORE;MCOPY]) code /\
     run_inst_seq code s = OK t ==>
     LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof

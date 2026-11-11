@@ -46,7 +46,7 @@ Theorem abi_encode_framed_finish_sequence:
   abi_encode_exec_frame func s t
 Proof
   strip_tac >> drule abi_encode_framed_finish_opcodes >> strip_tac >>
-  `EVERY (\i. MEM i.inst_opcode [ADD;AND;MLOAD;MSTORE;MCOPY]) (emitted_insts st final)` by
+  `EVERY (\i. MEM i.inst_opcode [ADD;AND;NOT;MLOAD;MSTORE;MCOPY]) (emitted_insts st final)` by
     (fs[EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st final)` by
     (fs[EVERY_MEM] >> rpt strip_tac >>

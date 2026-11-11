@@ -18,7 +18,7 @@ Definition encode_region_certificate_def:
       ?bb inst. lookup_block lbl blocks = SOME bb /\
         get_instruction bb idx = SOME inst /\
         MEM inst.inst_opcode
-          [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; MCOPY; JMP; JNZ]) /\
+          [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; NOT; MCOPY; JMP; JNZ]) /\
     (!lbl idx bb inst. (lbl,idx) IN R /\ (lbl,idx) <> cut /\
       lookup_block lbl blocks = SOME bb /\ get_instruction bb idx = SOME inst ==>
       if is_terminator inst.inst_opcode then
@@ -35,7 +35,7 @@ Theorem encode_region_inventory:
   (lbl,idx) IN R /\ (lbl,idx) <> cut /\
   lookup_block lbl blocks = SOME bb /\ get_instruction bb idx = SOME inst ==>
   MEM inst.inst_opcode
-    [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; MCOPY; JMP; JNZ]
+    [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; NOT; MCOPY; JMP; JNZ]
 Proof
   simp[encode_region_certificate_def] >> metis_tac[optionTheory.SOME_11]
 QED

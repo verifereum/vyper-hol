@@ -5,6 +5,7 @@ Ancestors
   abiEncoderWrites abiEncoderWindowLookup emitHelperProps exprLoweringProps
   abiDecoderContract abiDecoderFrameCompose instIdxIndep
   abiDecoderArrayHeader venomMemProps abiDecoderGuards abiDecoderRange
+  abiEncoderLeafGlobals
   emitHelper compileEnv venomState venomExecSemantics venomInst words list finite_map
 
 Theorem abi_encode_store_run_open[local]:
@@ -104,6 +105,18 @@ Proof
     mstore_def]
 QED
 
+Theorem abi_builtin_encode_finish_global_code[local]:
+  abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) ==>
+  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT}) (emitted_insts st final)
+Proof
+  Cases_on `mid_size > 0` >>
+  simp[abi_builtin_encode_finish_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def]
+QED
+
 Theorem abi_encode_finish_reach_open:
   abi_builtin_encode_finish buf encoded_len mid_size st = ((),final) /\ fn_has_code st final func /\
   eval_operand buf initial = SOME (n2w p) /\ eval_operand encoded_len initial = SOME (n2w len) /\
@@ -124,6 +137,8 @@ Proof
   drule abi_builtin_encode_finish_shape >> strip_tac >>
   drule_all abi_encode_finish_sequence_open >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK encoded` >>
+  drule abi_builtin_encode_finish_global_code >> strip_tac >>
+  drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
   `eval_operand buf encoded = SOME (n2w p)` by
     (first_x_assum irule >> simp[]) >>
   drule_all abi_encoder_run_sequence_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>

@@ -11,7 +11,7 @@ End
 
 Theorem encode_linear_certificate:
   EVERY (\i. MEM i.inst_opcode
-    [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; MCOPY] ) code ==>
+    [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; NOT; MCOPY] ) code ==>
   encode_region_certificate
     [<|bb_label := lbl; bb_instructions := pre ++ code ++ [mk_inst k STOP [] []]|>]
     (lbl,LENGTH code + LENGTH pre)
@@ -42,7 +42,7 @@ Theorem encode_linear_producer:
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++ code /\ code <> [] /\
   EVERY (\i. MEM i.inst_opcode
-    [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; MCOPY]) code ==>
+    [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; NOT; MCOPY]) code ==>
   let obs = encode_retained_observer fn sa sb k in
   let cut = (sb.cs_current_bb,LENGTH sb.cs_current_insts) in
   let R = encode_linear_region sa.cs_current_bb (LENGTH sa.cs_current_insts)
@@ -88,7 +88,7 @@ Theorem encode_copy_bytes_shape:
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
   ?code. sb.cs_current_insts = sa.cs_current_insts ++ code /\ code <> [] /\
     EVERY (\i. MEM i.inst_opcode
-      [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; MCOPY]) code
+      [ALLOCA; ADD; MSTORE; MLOAD; MUL; LT; ISZERO; AND; NOT; MCOPY]) code
 Proof
   strip_tac >> gvs[] >>
   qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` mp_tac >>

@@ -160,7 +160,7 @@ QED
 
 Theorem abi_encode_leaf_sequence_semantic:
   run_inst_seq code s = OK t /\
-  EVERY (\i. MEM i.inst_opcode [ADD;AND;MLOAD;MSTORE;MCOPY]) code ==>
+  EVERY (\i. MEM i.inst_opcode [ADD;AND;NOT;MLOAD;MSTORE;MCOPY]) code ==>
   abi_encode_semantic_obs t = abi_encode_semantic_obs s
 Proof
   strip_tac >> irule abi_encode_semantic_sequence >>
@@ -170,7 +170,7 @@ QED
 
 Theorem abi_encode_leaf_sequence_fmp:
   run_inst_seq code s = OK t /\
-  EVERY (\i. MEM i.inst_opcode [ADD;AND;MLOAD;MSTORE;MCOPY]) code ==>
+  EVERY (\i. MEM i.inst_opcode [ADD;AND;NOT;MLOAD;MSTORE;MCOPY]) code ==>
   t.vs_fmp = s.vs_fmp
 Proof
   strip_tac >> irule (BETA_RULE (Q.ISPEC `\s:venom_state. s.vs_fmp`
@@ -185,7 +185,7 @@ QED
 
 Theorem abi_encode_bytes_opcodes:
   compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') ==>
-  EVERY (\i. MEM i.inst_opcode [ADD;AND;MLOAD;MSTORE;MCOPY]) (emitted_insts st st')
+  EVERY (\i. MEM i.inst_opcode [ADD;AND;NOT;MLOAD;MSTORE;MCOPY]) (emitted_insts st st')
 Proof
   simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
@@ -204,7 +204,7 @@ Proof
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
      FLOOKUP s.vs_allocas i = SOME (b,n) ==> n = 32` by
     metis_tac[window_pre_sites] >> pop_assum (mk_asm "sizes") >>
-  `EVERY (\i. MEM i.inst_opcode [ADD;AND;MLOAD;MSTORE;MCOPY]) (emitted_insts st st')` by
+  `EVERY (\i. MEM i.inst_opcode [ADD;AND;NOT;MLOAD;MSTORE;MCOPY]) (emitted_insts st st')` by
     metis_tac[abi_encode_bytes_opcodes] >>
   qpat_x_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
