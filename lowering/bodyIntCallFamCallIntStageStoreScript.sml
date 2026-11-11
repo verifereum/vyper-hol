@@ -53,7 +53,8 @@ Proof
       `~is_word_type dty` by
         metis_tac[compileEnvTheory.type_widens_to_word] >>
       `compile_store_memory ce src dst dty dty sa = ((),sb)` by
-        gvs[contextTheory.compile_store_memory_def] >>
+        (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+         simp[contextTheory.compile_store_memory_def]) >>
       `memory_layout_key dty = memory_layout_key sty` by
         (Cases_on `dty` >> Cases_on `sty` >>
          gvs[tuple_memory_layout_eq_def, memory_layout_key_tuple]) >>
