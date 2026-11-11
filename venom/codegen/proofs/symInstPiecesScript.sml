@@ -1789,3 +1789,48 @@ Proof
   qexists `full` >> gvs[stackOpSimTheory.execute_plan_append,
     planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def]
 QED
+
+Theorem sym_bump_postfix_applicability:
+  inst.inst_outputs = [ptr;next] /\ ptr <> next /\
+  ps7.ps_stack = residual ++ [Var ptr;Var next] /\
+  generated_plan_state_wf_marked sb ps7 /\
+  (if inst.inst_outputs = [] \/ halt then ([],ps7)
+   else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps7)
+    = (pops,ps8) /\
+  (if FILTER (\out. MEM out nl) inst.inst_outputs = [] then ([],ps8)
+   else optimistic_swap_plan dfg inst nl term ps8) = (opts,ps9) /\
+  qs = release_dead_spills nl ps9 /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= qs.ps_alloc.sa_spill_base /\
+  qs.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled /\
+  ps7.ps_alloc.sa_spill_base = qs.ps_alloc.sa_spill_base /\
+  ps7.ps_alloc.sa_next_offset <= qs.ps_alloc.sa_next_offset /\
+  (!off b. MEM (SOSpill off) (pops ++ opts) /\ in_mem_range off 32 b ==>
+    closure_spill_byte ctx cplan name b /\ context_spill_byte cplan b)
+Proof
+  strip_tac >>
+  `plan_slots_bounded sb ps7 /\ spill_alloc_layout_wf ps7.ps_alloc ps7.ps_spilled` by
+    fs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
+  drule_all bump_popmany_prefix >>
+  disch_then (qspecl_then [`ARB`, `ARB`] strip_assume_tac) >>
+  `plan_slots_bounded sb ps8` by
+    (gvs[planSpillBoundsTheory.plan_slots_bounded_def] >> metis_tac[]) >>
+  `((if inst.inst_outputs = [] \/ halt then (pops,ps8) = ([],ps7)
+    else popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) inst.inst_outputs)) ps7 = (pops,ps8)) /\
+    (if inst.inst_outputs = [] \/ FILTER (\out. MEM out nl) inst.inst_outputs = []
+     then (opts,ps9) = ([],ps8)
+     else optimistic_swap_plan dfg inst nl term ps8 = (opts,ps9)))` by
+    (Cases_on `halt` >>
+     Cases_on `FILTER (\out. MEM out nl) inst.inst_outputs = []` >> fs[] >> gvs[]) >>
+  drule_all generatedPrefixSimTheory.regular_postfix_alloc_frame >> strip_tac >>
+  `r.sr_spill_base <= sb` by
+    gvs[planSpillBoundsTheory.plan_slots_bounded_def, planSpillBoundsTheory.alloc_slots_bounded_def] >>
+  `ops_spill_bounded sb qs.ps_alloc.sa_next_offset opts` by
+    (Cases_on `FILTER (\out. MEM out nl) inst.inst_outputs = []`
+     >- gvs[planSpillBoundsTheory.ops_spill_bounded_def] >>
+     `optimistic_swap_plan dfg inst nl term ps8 = (opts,ps9)` by gvs[] >>
+     drule_all optimistic_swap_ops_bounded >>
+     simp[allocMonoTheory.release_dead_spills_next_offset]) >>
+  simp[] >> metis_tac[scratch_ops_region_confined]
+QED
