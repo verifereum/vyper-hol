@@ -368,7 +368,7 @@ Proof
   simp[] >> conj_tac >- first_assum ACCEPT_TAC >> conj_tac
   >- (qexists_tac `sm` >>
       gvs[Abbr `sh`, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
-      metis_tac[]) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   gvs[Abbr `sh`, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
