@@ -538,6 +538,9 @@ Proof
   irule vv_post_frame_intro >> simp[expr_type_def] >>
   conj_tac >- simp[contextTheory.mk_ptr_def] >>
   drule expr_post_frame >> strip_tac >>
+  conj_tac >-
+    (strip_tac >> irule exprSimPropsTheory.pure_frame_mem_tail >>
+     qexists_tac `s` >> simp[] >> drule_all expr_post_pure_frame >> simp[]) >>
   irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >>
   qexists_tac `sm` >> simp[]
 QED
