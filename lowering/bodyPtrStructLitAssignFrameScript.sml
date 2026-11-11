@@ -201,7 +201,19 @@ Resume alloc_run_compile_assign_value_frame[transient]:
 QED
 Resume alloc_run_compile_assign_value_frame[code]:
   irule alloc_run_assign_normalize_bind >> simp[] >>
-  gen_tac >> BETA_TAC >> irule alloc_run_conseq >>
+  gen_tac >> BETA_TAC >> Cases_on `is_bytestring_type dt` >> simp[]
+  >- (Cases_on `prim` >> simp[]
+      >- (irule alloc_run_conseq >>
+          irule_at Any (SRULE [compile_store_at_loc_def]
+            (Q.INST [`loc` |-> `SOME LocCode`]
+              alloc_run_compile_store_at_loc_frame)) >>
+          qexists `R` >> simp[]) >>
+      irule alloc_run_conseq >>
+      irule_at Any (Q.INST [`internal` |-> `F`] alloc_run_fresh_shape_frame) >>
+      irule_at Any compile_store_immutable_bytestring_shape >>
+      irule_at Any alloc_run_compile_store_immutable_bytestring >>
+      qexists `R` >> simp[]) >>
+  irule alloc_run_conseq >>
   irule_at Any (SRULE [compile_store_at_loc_def]
     (Q.INST [`loc` |-> `LocCode`] alloc_run_assign_suffix_frame)) >>
   qexists `R` >> simp[]

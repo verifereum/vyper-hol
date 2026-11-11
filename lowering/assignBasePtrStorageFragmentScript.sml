@@ -35,6 +35,7 @@ Proof
   strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+    exprLoweringTheory.expr_can_mutate_def, stmtLoweringTheory.target_to_expr_def,
     compile_get_target_ptr_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def] >>
   Cases_on `tr` >> simp[comp_return_def] >>

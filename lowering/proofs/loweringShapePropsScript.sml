@@ -10005,7 +10005,7 @@ Proof
   stmt_plain_emit
 QED
 
-Theorem compile_store_immutable_bytestring_shape[local]:
+Theorem compile_store_immutable_bytestring_shape:
   !internal cenv src dst.
     shape_step internal compiler_label
       (\st. cenv_shape_ok st cenv /\ plain_operand st dst /\ plain_operand st src)
