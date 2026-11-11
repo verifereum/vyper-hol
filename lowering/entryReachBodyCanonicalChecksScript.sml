@@ -82,6 +82,35 @@ Proof
     `registered`,`body_end`] >> simp[]
 QED
 
+Theorem external_name_keys_flat_source[local]:
+  !tops src.
+    FLAT (MAP (external_name_keys_toplevel src) tops) =
+    MAP (\name. (src,name))
+      (FLAT (MAP (\top. MAP SND (external_name_keys_toplevel () top)) tops))
+Proof
+  Induct_on `tops` >> simp[] >> Cases_on `h` >>
+  simp[vyperTypeContractTheory.external_name_keys_toplevel_def]
+  >~ [`FunctionDecl vis`] >- (
+    Cases_on `vis` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+  >~ [`VariableDecl kind`] >- (
+    Cases_on `kind` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+  >~ [`HashMapDecl kind`] >- (
+    Cases_on `kind` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+QED
+
+Theorem external_names_distinct_numeric_namespace[local]:
+  !tops src.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel src) tops)) ==>
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))
+Proof
+  rpt gen_tac >> simp_tac std_ss [external_name_keys_flat_source] >> strip_tac >>
+  irule ALL_DISTINCT_MAP_INJ >> simp[] >>
+  drule ALL_DISTINCT_MAP >> simp[]
+QED
+
 Theorem entry_source_canonical_phase[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
@@ -190,6 +219,7 @@ Proof
     `tx.function_name`,`args`,`ret`,`fbody`] strip_assume_tac selected_external_package >>
   `isPREFIX "fn_" ("fn_" ++ tx.function_name) /\
    ~isPREFIX "@" ("fn_" ++ tx.function_name)` by simp[] >>
+  drule external_names_distinct_numeric_namespace >> disch_tac >>
   drule_all entry_source_canonical_phase >> strip_tac >>
   qexistsl_tac [`"fn_" ++ tx.function_name`,`cenv`,`pos_args`,`min_cds`,
     `is_payable`,`nkey`,`ut`,`iv`,`rt`,`func`,`se`,`fb`,`label_st`,
