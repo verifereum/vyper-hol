@@ -816,6 +816,231 @@ Proof
   rpt strip_tac >> metis_tac[fuel_ok_emit_void, fuel_ok_emit_void_halt]
 QED
 
+(* State-passing forms: `let (a, st1) = m st in k a st1` is UNCURRY. *)
+Theorem fuel_ok_uncurry:
+  !m k Wv L E.
+    fuel_ok Wv {} E m /\ (!a. fuel_ok Wv L E (k a)) ==>
+    fuel_ok Wv L E (\st. UNCURRY k (m st))
+Proof
+  rpt strip_tac >>
+  `(\st. UNCURRY k (m st)) = comp_bind m k` by
+    (simp[FUN_EQ_THM, comp_bind_def] >> gen_tac >> Cases_on `m st` >> simp[]) >>
+  pop_assum SUBST1_TAC >> match_mp_tac fuel_ok_bind0 >> simp[]
+QED
+
+Theorem fuel_ok_uncurry_fresh_var:
+  !k Wv L E.
+    (!x. fuel_ok (x INSERT Wv) L E (k x)) ==>
+    fuel_ok Wv L E (\st. UNCURRY k (fresh_var st))
+Proof
+  rpt strip_tac >>
+  `(\st. UNCURRY k (fresh_var st)) = comp_bind fresh_var k` by
+    (simp[FUN_EQ_THM, comp_bind_def] >> gen_tac >> Cases_on `fresh_var st` >> simp[]) >>
+  pop_assum SUBST1_TAC >> match_mp_tac fuel_ok_fresh_var >> simp[]
+QED
+
+(* Forward labels: the code after m starts the blocks labelled Lf, so m may
+   jump to them. *)
+Theorem fuel_ok_seq_fwd:
+  !Lm Lf m f Wv L E.
+    fuel_ok Wv Lm (E UNION Lf) m /\ fuel_ok Wv Lf E f /\
+    L SUBSET Lm UNION Lf ==>
+    fuel_ok Wv L E (comp_ignore_bind m f)
+Proof
+  rpt strip_tac >> irule fuel_ok_mono >>
+  qexistsl_tac [`E`, `Lm UNION Lf`, `Wv`] >> simp[] >>
+  irule fuel_ok_ignore_bind >> metis_tac[SUBSET_REFL]
+QED
+
+Theorem fuel_ok_bind_fwd:
+  !Lm Lf m f Wv L E.
+    fuel_ok Wv Lm (E UNION Lf) m /\ (!a. fuel_ok Wv Lf E (f a)) /\
+    L SUBSET Lm UNION Lf ==>
+    fuel_ok Wv L E (comp_bind m f)
+Proof
+  rpt strip_tac >> irule fuel_ok_mono >>
+  qexistsl_tac [`E`, `Lm UNION Lf`, `Wv`] >> simp[] >>
+  irule fuel_ok_bind >> metis_tac[SUBSET_REFL]
+QED
+
+(* State-passing code: `let (a, st1) = m st in k a st1` is a bind. *)
+Theorem uncurry_comp_bind:
+  !m k. (\st. UNCURRY k (m st)) = comp_bind m k
+Proof
+  rw[FUN_EQ_THM, comp_bind_def] >> pairarg_tac >> fs[]
+QED
+
+Theorem comp_return_eta:
+  !x. (\s. (x, s)) = comp_return x
+Proof
+  rw[FUN_EQ_THM, comp_return_def]
+QED
+
+(* ===== Actions under a precondition on the compile state ===== *)
+
+(* fuel_okS P: fuel_ok for every start state satisfying P.  A loop whose
+   bound is an operand parameter terminates only when the operand was
+   allocated before the loop (so the body, which writes only variables it
+   allocates, leaves it alone); statements need their locals' pointer
+   variables allocated before, so a loop counter is none of them. *)
+Definition fuel_okS_def:
+  fuel_okS P Wv L E m <=>
+    !st x st'. P st /\ m st = (x, st') ==>
+      cs_extends st st' /\ st.cs_next_var <= st'.cs_next_var /\
+      (cs_no_phi st ==> cs_no_phi st') /\ ?Kb. frag_fuel Wv L E st st' Kb
+End
+
+Theorem fuel_okS_of_ok:
+  !P Wv L E m. fuel_ok Wv L E m ==> fuel_okS P Wv L E m
+Proof
+  rw[fuel_okS_def, fuel_ok_def] >> metis_tac[]
+QED
+
+Theorem fuel_okS_mono:
+  !P P' Wv Wv' L L' E E' m.
+    fuel_okS P Wv L E m /\ (!st. P' st ==> P st) /\ Wv SUBSET Wv' /\
+    L' SUBSET L /\ E SUBSET E' ==>
+    fuel_okS P' Wv' L' E' m
+Proof
+  rpt gen_tac >> strip_tac >> simp[fuel_okS_def] >> rpt gen_tac >> strip_tac >>
+  `P st` by metis_tac[] >>
+  qpat_x_assum `fuel_okS _ _ _ _ _`
+    (mp_tac o SIMP_RULE std_ss [fuel_okS_def]) >>
+  disch_then (drule_all_then strip_assume_tac) >>
+  `frag_fuel Wv' L' E' st st' Kb` by
+    (irule frag_fuel_mono >> qexistsl_tac [`E`, `Kb`, `L`, `Wv`] >> fs[]) >>
+  metis_tac[]
+QED
+
+Theorem fuel_ok_of_okS:
+  !P Wv L E m. (!st. P st) /\ fuel_okS P Wv L E m ==> fuel_ok Wv L E m
+Proof
+  rw[fuel_okS_def, fuel_ok_def] >> metis_tac[]
+QED
+
+(* The continuation runs under Q, which m establishes for its result. *)
+Theorem fuel_okS_bind:
+  !P Q m f Wv L1 L2 E1 E2 E.
+    fuel_okS P Wv L1 E1 m /\
+    (!st x st'. P st /\ m st = (x, st') ==> Q x st') /\
+    (!a. fuel_okS (Q a) Wv L2 E2 (f a)) /\
+    E1 SUBSET E UNION L2 /\ E2 SUBSET E ==>
+    fuel_okS P Wv (L1 UNION L2) E (comp_bind m f)
+Proof
+  rpt strip_tac >> simp[fuel_okS_def, comp_bind_def] >> rpt gen_tac >>
+  Cases_on `m st` >> rename1 `m st = (a, mid)` >> simp[] >> strip_tac >>
+  `cs_extends st mid /\ st.cs_next_var <= mid.cs_next_var /\
+   (cs_no_phi st ==> cs_no_phi mid) /\ ?K1. frag_fuel Wv L1 E1 st mid K1` by
+    metis_tac[fuel_okS_def] >>
+  `Q a mid` by metis_tac[] >>
+  `cs_extends mid st' /\ mid.cs_next_var <= st'.cs_next_var /\
+   (cs_no_phi mid ==> cs_no_phi st') /\ ?K2. frag_fuel Wv L2 E2 mid st' K2` by
+    metis_tac[fuel_okS_def] >>
+  rpt conj_tac
+  >- metis_tac[cs_extends_trans]
+  >- decide_tac
+  >- metis_tac[] >>
+  qexists_tac `K1 + K2` >> metis_tac[frag_fuel_seq]
+QED
+
+(* A precondition that only needs the variables allocated so far to stay
+   allocated survives any action. *)
+Definition next_stable_def:
+  next_stable P <=>
+    !st st'. P st /\ cs_extends st st' /\ st.cs_next_var <= st'.cs_next_var ==>
+             P st'
+End
+
+Theorem fuel_okS_bind_keep:
+  !P m f Wv L E.
+    next_stable P /\ fuel_okS P Wv {} E m /\ (!a. fuel_okS P Wv L E (f a)) ==>
+    fuel_okS P Wv L E (comp_bind m f)
+Proof
+  rpt strip_tac >>
+  `fuel_okS P Wv ({} UNION L) E (comp_bind m f)` suffices_by simp[] >>
+  match_mp_tac fuel_okS_bind >> qexistsl_tac [`\a. P`, `E`, `E`] >>
+  simp[SUBSET_DEF] >> fs[next_stable_def, fuel_okS_def] >> metis_tac[]
+QED
+
+Theorem fuel_okS_ignore_bind_keep:
+  !P m f Wv L E.
+    next_stable P /\ fuel_okS P Wv {} E m /\ fuel_okS P Wv L E f ==>
+    fuel_okS P Wv L E (comp_ignore_bind m f)
+Proof
+  rw[comp_ignore_bind_def] >> match_mp_tac fuel_okS_bind_keep >> simp[]
+QED
+
+Theorem fuel_okS_if:
+  !b m1 m2 P Wv L E.
+    (b ==> fuel_okS P Wv L E m1) /\ (~b ==> fuel_okS P Wv L E m2) ==>
+    fuel_okS P Wv L E (if b then m1 else m2)
+Proof
+  rw[]
+QED
+
+Theorem next_stable_var_below:
+  !x. next_stable (\st. var_below st.cs_next_var x)
+Proof
+  rw[next_stable_def, var_below_def]
+QED
+
+Theorem next_stable_conj:
+  !P Q. next_stable P /\ next_stable Q ==> next_stable (\st. P st /\ Q st)
+Proof
+  rw[next_stable_def] >> metis_tac[]
+QED
+
+(* The fresh variable is %n for the start state's n; later code runs with
+   n allocated. *)
+Theorem fuel_okS_fresh_var:
+  !P f Wv L E.
+    (!n. fuel_okS (\st. P (st with cs_next_var := n) /\ n + 1 = st.cs_next_var)
+           (STRING #"%" (toString n) INSERT Wv) L E
+           (f (STRING #"%" (toString n)))) ==>
+    fuel_okS P Wv L E (comp_bind fresh_var f)
+Proof
+  rpt strip_tac >> simp[fuel_okS_def, comp_bind_def, fresh_var_def] >>
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `mid = st with cs_next_var := st.cs_next_var + 1` >>
+  first_x_assum (qspec_then `st.cs_next_var` mp_tac) >>
+  PURE_REWRITE_TAC [fuel_okS_def] >>
+  disch_then (qspecl_then [`mid`, `x`, `st'`] mp_tac) >>
+  impl_tac >- (
+    `mid with cs_next_var := st.cs_next_var = st` by
+      simp[Abbr `mid`, compile_state_component_equality] >>
+    simp[Abbr `mid`] >> fs[]) >>
+  strip_tac >>
+  `mid.cs_blocks = st.cs_blocks /\ mid.cs_current_bb = st.cs_current_bb /\
+   mid.cs_current_insts = st.cs_current_insts /\
+   mid.cs_next_var = st.cs_next_var + 1` by simp[Abbr `mid`] >>
+  rpt conj_tac
+  >- fs[cs_extends_def]
+  >- decide_tac
+  >- fs[cs_no_phi_def] >>
+  qexists_tac `Kb` >> simp[frag_fuel_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `frag_fuel _ _ _ mid st' Kb`
+    (mp_tac o SIMP_RULE std_ss [frag_fuel_def]) >>
+  disch_then (qspecl_then [`G`, `N`, `ctx`, `fn`, `s`] mp_tac) >>
+  (impl_tac >- fs[at_point_def, fn_has_code_def, emitted_blocks_def]) >>
+  strip_tac >> qexists_tac `j` >> simp[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >> rw[] >>
+  irule vars_kept_fresh >> qexists_tac `st.cs_next_var` >> simp[]
+QED
+
+(* Monad laws, to bring a helper's fresh variable to the top. *)
+Theorem comp_bind_assoc:
+  !m g f. comp_bind (comp_bind m g) f = comp_bind m (\a. comp_bind (g a) f)
+Proof
+  rw[FUN_EQ_THM, comp_bind_def] >> Cases_on `m x` >> simp[] >>
+  Cases_on `g q r` >> simp[]
+QED
+
+Theorem comp_bind_return:
+  !x f. comp_bind (comp_return x) f = f x
+Proof
+  rw[FUN_EQ_THM, comp_bind_def, comp_return_def]
+QED
+
 (* ===== Functions ===== *)
 
 (* A function whose body is a fragment with no exits, after whose end the
