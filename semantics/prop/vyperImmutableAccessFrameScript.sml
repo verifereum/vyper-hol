@@ -140,6 +140,56 @@ Proof
   simp[]
 QED
 
+(* Target provenance: indices may have effects, but cannot change the root. *)
+Theorem lookup_global_immutable_origin[local]:
+  lookup_global cx s n st =
+    (INL (PlaceR (ImmutablePlace src id path)),st') ==>
+  s = src /\ n = id
+Proof
+  simp[lookup_global_def, vyperMiscTheory.option_CASE_rator,
+       vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
+       bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem eval_base_place_immutable_access[local]:
+  !t cx st src id path st'.
+    eval_base_place cx t st =
+      (INL (PlaceR (ImmutablePlace src id path)),st') ==>
+    MEM (WriteAcc (StateRef (src,id))) (accesses_target t)
+Proof
+  measureInduct_on `base_assignment_target_size t` >>
+  Cases_on `t` >> rpt gen_tac
+  >- simp[Once evaluate_def, bind_def, get_scopes_def,
+          type_check_def, assert_def, ignore_bind_def, return_def, raise_def,
+          AllCaseEqs()]
+  >- (PairCases_on `p` >> simp[Once evaluate_def] >> strip_tac >>
+      drule lookup_global_immutable_origin >>
+      simp[accesses_expr_def])
+  >> simp[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def] >>
+  rpt strip_tac >>
+  `?path0. pv = PlaceR (ImmutablePlace src id path0)` by
+    (Cases_on `pv` >> gvs[extend_place_def, raise_def]
+     >- (Cases_on `p` >>
+         gvs[extend_place_def, extend_memory_place_def, bind_def,
+             ignore_bind_def, return_def, AllCaseEqs()] >>
+         drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+         simp[]) >>
+     gvs[extend_place_def, bind_def, lift_option_type_def, return_def,
+         raise_def, value_type_CASE_rator, AllCaseEqs()]) >>
+  gvs[] >> first_x_assum (qspec_then `b` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem eval_target_place_immutable_access[local]:
+  eval_target_place cx t st = (INL (ImmutablePlace src id path),st') ==>
+  MEM (WriteAcc (StateRef (src,id))) (accesses_target t)
+Proof
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  metis_tac[eval_base_place_immutable_access]
+QED
+
 Theorem eval_expr_unwritten_immutable:
   !cx e st res st' env mods src id.
     eval_expr cx e st = (res,st') /\
