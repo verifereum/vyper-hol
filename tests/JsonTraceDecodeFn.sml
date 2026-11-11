@@ -498,10 +498,8 @@ val deployment : term decoder =
                   (field "deployment_type" string)),
                JSONDecode.map (fn kvs => mk_bool (reads_gas_source_json (JSON.OBJECT kvs)))
                  rawObject),
-              orElse (field "initcode"
-                        (JSONDecode.map (flat_bytes_from_hex o theoptstring)
-                          (nullable string)),
-                      succeed (flat_bytes_from_hex ""))))
+              JSONDecode.map (flat_bytes_from_hex o theoptstring)
+                (orElse (field "initcode" (nullable string), succeed NONE))))
 
 val trace : term decoder =
   andThen (field "trace_type" string) (fn kind =>
