@@ -195,14 +195,11 @@ Resume revert_reason_copy_checks[rounded]:
        by blastLib.BBLAST_TAC >> pop_assum SUBST1_TAC >>
      once_rewrite_tac [WORD_AND_COMM] >>
      rewrite_tac [Once WORD_ADD_COMM] >>
-     irule abi_encoder_round_ceil32 >>
-     qpat_assum `L + 63 < _` mp_tac >> simp[]) >>
-  `(n2w L:bytes32)+31w && 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w =
+     irule abi_encoder_round_ceil32 >> decide_tac) >>
+  `(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w:bytes32) && n2w L + 31w =
    n2w (contractABI$ceil32 L)` by
-    (once_rewrite_tac [WORD_AND_COMM] >>
-     rewrite_tac [Once WORD_ADD_COMM] >>
-     irule abi_encoder_round_ceil32 >>
-     qpat_assum `L + 63 < _` mp_tac >> simp[]) >>
+    (rewrite_tac [Once WORD_ADD_COMM] >>
+     irule abi_encoder_round_ceil32 >> decide_tac) >>
   `step_inst_base l s3 = OK (update_var (STRING #"%" (toString (v+3)))
      (n2w (contractABI$ceil32 L)) s3)` by
     (simp[Abbr `l`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s3`, Abbr `s2`,
@@ -388,8 +385,11 @@ Proof
   `(n2w L:bytes32)+31w && 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w =
    n2w (contractABI$ceil32 L)` by
     (once_rewrite_tac [WORD_AND_COMM] >> rewrite_tac [Once WORD_ADD_COMM] >>
-     irule abi_encoder_round_ceil32 >>
-     qpat_assum `L + 63 < _` mp_tac >> simp[]) >>
+     irule abi_encoder_round_ceil32 >> decide_tac) >>
+  `(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w:bytes32) && n2w L + 31w =
+   n2w (contractABI$ceil32 L)` by
+    (rewrite_tac [Once WORD_ADD_COMM] >>
+     irule abi_encoder_round_ceil32 >> decide_tac) >>
   `(n2w L:bytes32)+31w && ~31w = n2w (contractABI$ceil32 L)` by
     (`(~31w:bytes32) =
       0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w`
