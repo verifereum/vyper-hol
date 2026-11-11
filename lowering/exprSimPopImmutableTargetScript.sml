@@ -371,6 +371,61 @@ Proof
 QED
 
 
+Theorem imm_readable_path_nil[local]:
+  !tv v. value_has_type tv v /\ well_formed_type_value tv ==>
+    ?w. evaluate_subscripts tv v [] = INL w
+Proof
+  simp[evaluate_subscripts_def]
+QED
+
+Theorem imm_nondynamic_step_readable[local]:
+  !tv v sb d etv.
+    value_has_type tv v /\ well_formed_type_value tv /\
+    mem_step_offset tv sb = SOME (d,etv) /\
+    (!t n. tv <> ArrayTV t (Dynamic n)) ==>
+    ?w. evaluate_subscripts tv v [sb] = INL w
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `sb`
+  >- (rename1 `ValueSubscript idx` >> Cases_on `idx` >> Cases_on `tv` >>
+      gvs[mem_step_offset_def, AllCaseEqs()] >>
+      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >>
+      gvs[vyperTypingTheory.value_has_type_def, evaluate_subscripts_def,
+          vyperValueOperationTheory.array_index_def, AllCaseEqs()] >>
+      gvs[listTheory.oEL_EQ_EL, vyperTypingTheory.values_have_types_length]
+      >- metis_tac[vyperTypingTheory.values_have_types_length] >>
+      Cases_on `b` >>
+      gvs[vyperTypingTheory.value_has_type_def, mem_step_offset_def,
+          AllCaseEqs()] >>
+      Cases_on `ALOOKUP l (Num i)` >> simp[]) >>
+  `mem_path_offset tv [AttrSubscript s] = SOME (d,etv)` by
+    simp[mem_path_offset_def] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >>
+  simp[vyperStateTheory.subscripts_type_def, AllCaseEqs()] >>
+  metis_tac[vyperPlaceResultTypingTheory.evaluate_subscripts_attribute_ready]
+QED
+
+Theorem imm_readable_path_snoc[local]:
+  !itv path k tv sb d etv.
+    (!iv. value_has_type itv iv /\ well_formed_type_value itv ==>
+          ?v. evaluate_subscripts itv iv path = INL v) /\
+    mem_path_offset itv path = SOME (k,tv) /\
+    mem_step_offset tv sb = SOME (d,etv) /\
+    (!t n. tv <> ArrayTV t (Dynamic n)) ==>
+    !iv. value_has_type itv iv /\ well_formed_type_value itv ==>
+         ?v. evaluate_subscripts itv iv (path ++ [sb]) = INL v
+Proof
+  rpt strip_tac >>
+  `?v. evaluate_subscripts itv iv path = INL v` by metis_tac[] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  `value_has_type tv v /\ well_formed_type_value tv` by
+    metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_type,
+              vyperPlaceStatePreservationTheory.subscripts_type_well_formed] >>
+  drule_all imm_nondynamic_step_readable >> strip_tac >>
+  drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+  disch_then (qspec_then `[sb]` mp_tac) >> simp[]
+QED
+
 Theorem imm_typed_step_memory[local]:
   !tv v sub d ptv pv b mem.
     value_has_type tv v /\ well_formed_type_value tv /\
