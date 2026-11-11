@@ -22,7 +22,7 @@ Theorem expr_post_local_representation:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s0 = SOME w /\
   lookup_scopes name es'.scopes = SOME entry ==>
-  val_in_memory entry.type entry.value (w2n w) s.vs_memory
+  memory_value_rel entry.type entry.value (w2n w) s.vs_memory
 Proof
   strip_tac >>
   drule_all expr_post_local_pointer >> strip_tac >>
