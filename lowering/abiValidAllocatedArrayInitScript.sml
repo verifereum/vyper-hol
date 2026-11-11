@@ -266,7 +266,11 @@ Theorem abi_valid_allocated_array_init_fresh_effect:
   ?t. run_inst_seq (emitted_insts st en) s = OK t /\
     abi_valid_allocated_effect ctx func cenv cx es st.cs_next_var
       sites dstid d outsz s t /\ mem_word_at d t.vs_memory = n2w n /\
-    fresh_vars_wrt en t
+    fresh_vars_wrt en t /\
+    ?slot. eval_operand (FST setup) t = SOME (n2w slot) /\
+      eval_operand (SND setup) t = SOME (n2w n) /\ mload slot t = 0w /\
+      slot+32 < dimword (:256) /\
+      FLOOKUP t.vs_allocas (en.cs_next_id-2) = SOME (slot,32)
 Proof
   strip_tac >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
@@ -359,6 +363,18 @@ Resume abi_valid_allocated_array_init_fresh_effect[compose]:
      simp[] >> decide_tac) >>
   `mem_word_at d indexed.vs_memory = mem_word_at d prepared.vs_memory` by
     fs[abiStaticAggregatePropsTheory.mem_word_at_bytes] >>
+  `abi_decoder_operand_live header_st.cs_next_var cnt` by
+    (irule abi_decoder_operand_live_fresh >> qexists_tac `prepared` >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand cnt indexed = eval_operand cnt prepared` by
+    (qpat_assum `abi_valid_allocated_effect _ _ _ _ _ header_st.cs_next_var _ _ _ _ prepared indexed`
+       (mp_tac o PURE_REWRITE_RULE [abi_valid_allocated_effect_def]) >>
+     strip_tac >>
+     qhdtm_x_assum `abi_malformed_resource_post`
+       (mp_tac o PURE_REWRITE_RULE [abi_malformed_resource_post_def]) >>
+     strip_tac >>
+     qpat_x_assum `!op w. abi_decoder_operand_live _ op /\ eval_operand op prepared = SOME w ==> _`
+       (qspec_then `cnt` mp_tac) >> simp[]) >>
   gvs[abi_decode_load_def, mload_def]
 QED
 Finalise abi_valid_allocated_array_init_fresh_effect
@@ -369,7 +385,7 @@ Theorem abi_valid_allocated_array_init_effect:
     base_op hi src dst B L xs p d outsz s /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling s /\
   en.cs_next_var <= ceiling.cs_next_var /\
-  maxn < dimword (:256) /\ maxn*stride < dimword (:256) /\ 32 <= outsz /\
+  maxn < dimword (:256) /\ 32 <= outsz /\
   n = abi_head_word (DROP p xs) /\ n <= maxn /\ p+32+n*stride <= L /\
   MEM (mk_inst (en.cs_next_id-2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (en.cs_next_var-1))]) (fn_insts func) /\
@@ -383,8 +399,7 @@ Theorem abi_valid_allocated_array_init_effect:
     slot+32 < dimword (:256) /\
     FLOOKUP t.vs_allocas (en.cs_next_id-2) = SOME (slot,32)
 Proof
-  strip_tac >> drule_all abi_valid_allocated_array_init_resources >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st en) s = OK actual` >>
+  strip_tac >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_array_loop_init_reentry_code >> strip_tac >>
   drule abi_malformed_entry_prune >> strip_tac >>
@@ -394,11 +409,30 @@ Proof
   rename1 `run_inst_seq _ (abi_decoder_prune_vars _ _) = OK clean` >>
   `fresh_vars_wrt ceiling clean` by
     (irule fresh_vars_wrt_mono >> qexists_tac `en` >> simp[GREATER_EQ]) >>
-  drule_all abi_decoder_sequence_runtime_reentry >> strip_tac >> gvs[] >>
-  simp[abi_valid_allocated_effect_def] >>
+  drule_all abi_decoder_sequence_runtime_reentry >> strip_tac >>
+  `!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x clean` by
+    (rpt strip_tac >>
+     `lookup_var x actual = lookup_var x s` by
+       (drule abi_malformed_init_lookup >> disch_then drule >> simp[]) >>
+     `lookup_var x clean = lookup_var x (abi_decoder_prune_vars st.cs_next_var s)` by
+       (qpat_assum `run_inst_seq _ (abi_decoder_prune_vars _ _) = OK clean`
+          (mp_then Any mp_tac abi_malformed_init_lookup) >>
+        disch_then drule >> simp[]) >>
+     fs[abi_decoder_prune_vars_def, lookup_var_def, FLOOKUP_DRESTRICT,
+        abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `local_ptrs_reserved cenv st` by fs[abi_malformed_entry_def] >>
+  `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid
+     (abi_decoder_prune_vars st.cs_next_var s) clean` by
+    fs[abi_valid_allocated_effect_def] >>
+  drule_all abi_malformed_resource_restore >> strip_tac >>
+  `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid
+     s actual` by
+    (irule abi_malformed_resource_input_unprune >>
+     goal_assum (drule_at Any)) >>
+  qexistsl_tac [`actual`, `slot`] >> simp[mload_def] >>
   fs[abi_valid_allocated_effect_def, abi_valid_allocated_frame_def,
-     abi_malformed_site_range_def, abi_decoder_prune_vars_def] >>
-  metis_tac[]
+     abi_malformed_site_range_def, abi_decoder_prune_vars_def, mload_def] >>
+  gvs[]
 QED
 
 Theorem abi_valid_allocated_array_init_fragment:
@@ -407,7 +441,7 @@ Theorem abi_valid_allocated_array_init_fragment:
     base_op hi src dst B L xs p d outsz incoming /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling incoming /\
   en.cs_next_var <= ceiling.cs_next_var /\
-  maxn < dimword (:256) /\ maxn*stride < dimword (:256) /\ 32 <= outsz /\
+  maxn < dimword (:256) /\ 32 <= outsz /\
   n = abi_head_word (DROP p xs) /\ n <= maxn /\ p+32+n*stride <= L /\
   MEM (mk_inst (en.cs_next_id-2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (en.cs_next_var-1))]) (fn_insts func) /\
@@ -440,7 +474,7 @@ Theorem abi_valid_allocated_array_init_reach:
   en.cs_next_var <= ceiling.cs_next_var /\
   ~incoming.vs_halted /\ incoming.vs_current_bb = st.cs_current_bb /\
   incoming.vs_inst_idx = LENGTH st.cs_current_insts /\
-  maxn < dimword (:256) /\ maxn*stride < dimword (:256) /\ 32 <= outsz /\
+  maxn < dimword (:256) /\ 32 <= outsz /\
   LENGTH vs = abi_head_word (DROP p xs) /\ LENGTH vs <= maxn /\
   p+32+LENGTH vs*stride <= L /\
   MEM (mk_inst (en.cs_next_id-2) ALLOCA [Lit 32w]
@@ -483,7 +517,7 @@ Theorem abi_valid_allocated_array_init_loop_entry:
   en.cs_next_var <= ceiling.cs_next_var /\
   ~incoming.vs_halted /\ incoming.vs_current_bb = st.cs_current_bb /\
   incoming.vs_inst_idx = LENGTH st.cs_current_insts /\
-  maxn < dimword (:256) /\ maxn*stride < dimword (:256) /\ 32 <= outsz /\
+  maxn < dimword (:256) /\ 32 <= outsz /\
   LENGTH vs = abi_head_word (DROP p xs) /\ LENGTH vs <= maxn /\
   p+32+LENGTH vs*stride <= L /\
   MEM (mk_inst (loop_st.cs_next_id-2) ALLOCA [Lit 32w]
