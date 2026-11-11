@@ -58,7 +58,7 @@ QED
 
 Theorem compile_log_store_data_shape:
   !xs buf off sa sb. EVERY (supported_scalar_type o SND) xs /\
-    compile_log_store_data cenv xs buf off sa = ((),sb) ==>
+    compile_log_store_data cenv xs (MAP SND xs) buf off sa = ((),sb) ==>
     same_blocks sa sb /\
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
     sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id
@@ -67,8 +67,8 @@ Proof
   >- simp[compile_log_store_data_def, comp_return_def, same_blocks_def,
           emitted_insts_def] >>
   gen_tac >> PairCases_on `h` >> simp[] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_log_store_data _ _ _ _ _ = _` mp_tac >>
-  simp[compile_log_store_data_cons, comp_bind_def, comp_ignore_bind_def,
+  qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_log_store_data_scalar_cons, comp_bind_def, comp_ignore_bind_def,
        pairTheory.pair_case_eq] >>
   Cases_on `emit_op ADD [buf; Lit (n2w off)] sa` >>
   rename1 `emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm)` >>
@@ -132,16 +132,16 @@ Proof
   simp[] >> first_x_assum drule >> simp[]
 QED
 
-Theorem compile_log_store_data_split:
+Theorem compile_log_store_data_scalar_split:
   supported_scalar_type ty /\
-  compile_log_store_data cenv ((src,ty)::xs) buf off sa = ((),sb) ==>
+  compile_log_store_data cenv ((src,ty)::xs) (ty::MAP SND xs) buf off sa = ((),sb) ==>
   ?dst sm sn. emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm) /\
     compile_store_memory cenv src dst ty ty sm = ((),sn) /\
-    compile_log_store_data cenv xs buf (off + type_memory_bytes cenv ty) sn = ((),sb) /\
+    compile_log_store_data cenv xs (MAP SND xs) buf (off + type_memory_bytes cenv ty) sn = ((),sb) /\
     inst_extends sa sn /\ sa.cs_next_var <= sn.cs_next_var
 Proof
-  strip_tac >> qpat_x_assum `compile_log_store_data _ _ _ _ _ = _` mp_tac >>
-  simp[compile_log_store_data_cons, comp_bind_def, comp_ignore_bind_def] >>
+  strip_tac >> qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_log_store_data_scalar_cons, comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `emit_op ADD [buf; Lit (n2w off)] sa` >>
   rename1 `emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm)` >>
   Cases_on `compile_store_memory cenv src dst ty ty sm` >>
@@ -198,7 +198,7 @@ QED
 
 Theorem compile_log_store_data_run_core[local]:
   !xs vs off sa sb s.
-    compile_log_store_data cenv xs buf off sa = ((),sb) /\
+    compile_log_store_data cenv xs (MAP SND xs) buf off sa = ((),sb) /\
     LIST_REL (log_data_source cx b cap s) xs vs /\
     EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
     (!x. buf = Var x ==> not_fresh_at sa x) /\
@@ -218,7 +218,7 @@ Proof
   rename1 `log_data_source cx b cap s (src,ty) v` >>
   rename1 `LIST_REL (log_data_source cx b cap s) xs vs0` >>
   `supported_scalar_type ty` by gvs[log_data_source_def] >>
-  drule_all compile_log_store_data_split >> strip_tac >>
+  drule_all compile_log_store_data_scalar_split >> strip_tac >>
   qpat_x_assum `log_data_source _ _ _ _ _ _` mp_tac >>
   simp[log_data_source_def] >> strip_tac >>
   `b + off < dimword (:256) /\ type_memory_bytes cenv ty < dimword (:256)`
@@ -258,7 +258,7 @@ Proof
 QED
 
 Theorem compile_log_store_data_run:
-  compile_log_store_data cenv xs buf off sa = ((),sb) /\
+  compile_log_store_data cenv xs (MAP SND xs) buf off sa = ((),sb) /\
   LIST_REL (log_data_source cx b cap s) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
   (!x. buf = Var x ==> not_fresh_at sa x) /\

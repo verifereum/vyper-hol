@@ -2,7 +2,7 @@ Theory makeSsaCurrentCarrierExternal
 Ancestors
   makeSsaCurrentEntryProvenance makeSsaCurrentExternalExclusion
   makeSsaCurrentDominanceBridge makeSsaCurrentAnalysis makeSsaCurrentWfSsa
-  dominatorAnalysisProps venomExecProps cfgWf
+  dominatorProofs venomExecProps cfgWf
 
 Theorem current_wf_ancestor_output_external:
   current_wf_phi_context s fn renamed s' A H events /\

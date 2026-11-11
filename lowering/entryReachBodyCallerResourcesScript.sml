@@ -61,9 +61,8 @@ Theorem caller_runtime_allocation_budget:
   lower_vyper_runtime_unit tops policy = SOME unit ==>
   unit_alloca_budget unit.cu_context < dimword (:256)
 Proof
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  rw[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
-  drule vyperCompilerTheory.run_lowering_alloca_budget >> simp[]
+  metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry,
+            vyperCompilerTheory.lowering_context_ok_alloca_budget]
 QED
 
 

@@ -27,9 +27,9 @@ Definition extcall_call_def:
     case run_ext_call cx.txn.target target_addr calldata value_opt default_evm_gas_limit
                       accounts tStorage (vyper_to_tx_params cx.txn) of
     | NONE => NONE
-    | SOME (success, returnData, accounts', tStorage', emitted_logs) =>
+    | SOME (success, returnData, accounts', tStorage', emitted_logs, deletions) =>
       if ¬success then NONE
-      else SOME (returnData, accounts', tStorage', emitted_logs)
+      else SOME (returnData, accounts', tStorage', emitted_logs, deletions)
 End
 
 Definition extcall_result_def:
@@ -38,11 +38,11 @@ Definition extcall_result_def:
     case extcall_call cx is_static (func_name, arg_types, ret_type) vs
                       accounts tStorage of
     | NONE => NONE
-    | SOME (returnData, accounts', tStorage', emitted_logs) =>
+    | SOME (returnData, accounts', tStorage', emitted_logs, deletions) =>
       case evaluate_abi_decode_return (get_tenv cx) ret_type returnData of
       | INR _ => NONE
       | INL ret_val =>
-        SOME (ret_val, accounts', tStorage', emitted_logs)
+        SOME (ret_val, accounts', tStorage', emitted_logs, deletions)
 End
 
 Theorem eval_expr_intcall_drv:
@@ -88,7 +88,7 @@ Proof
   rpt strip_tac >>
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
   simp[bind_def, ignore_bind_def, type_check_def, assert_def, return_def,
-       get_scopes_def, set_scopes_def, finally_def, try_def,
+       get_scopes_def, set_scopes_def, finally_unless_halt_def, finally_def, try_def,
        push_function_def, pop_function_def, evaluate_def] >>
   Cases_on `eval_stmts (cx with stk updated_by CONS (src,fn)) body
               (st1 with scopes := [env])` >>
@@ -159,7 +159,7 @@ Theorem extract_call_result_success_logs:
   final_state.contexts = [(ctxt, rollback)] ⇒
   extract_call_result orig_accounts orig_tStorage (INR NONE, final_state) =
     SOME (T, ctxt.returnData, final_state.rollback.accounts,
-          final_state.rollback.tStorage, ctxt.logs)
+          final_state.rollback.tStorage, ctxt.logs, final_state.rollback.toDelete)
 Proof
   simp[extract_call_result_def]
 QED
@@ -168,7 +168,7 @@ Theorem extract_call_result_reverted_logs:
   final_state.contexts = [(ctxt, rollback)] ⇒
   extract_call_result orig_accounts orig_tStorage
     (INR (SOME Reverted), final_state) =
-    SOME (F, ctxt.returnData, orig_accounts, orig_tStorage, [])
+    SOME (F, ctxt.returnData, orig_accounts, orig_tStorage, [], [])
 Proof
   simp[extract_call_result_def]
 QED
@@ -225,30 +225,32 @@ in
 end;
 
 Theorem call_external_function_error_rollback:
-  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret = (INR e, am', rqs) ⇒
+  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret = (INR e, am', rqs) /\
+  e <> HaltException ⇒
   am' = am
 Proof
   call_rollback_simp_tac [Once call_external_function_def] >>
-  call_rollback_cases_tac
+  call_rollback_cases_tac >> rpt strip_tac >> gvs[]
 QED
 
 Theorem call_external_error_rollback:
-  call_external orc gobs am tx = (INR e, am', rqs) ⇒
+  call_external orc gobs am tx = (INR e, am', rqs) /\ e <> HaltException ⇒
   am' = am
 Proof
-  simp[Once call_external_def] >> strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac call_external_function_error_rollback
+  simp[Once call_external_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac call_external_function_error_rollback >> gvs[]
 QED
 
 Theorem call_external_transaction_error_logs_empty:
-  call_external_transaction orc gobs am tx = (INR e, am', rqs) ⇒ am'.logs = []
+  call_external_transaction orc gobs am tx = (INR e, am', rqs) /\ e <> HaltException ⇒ am'.logs = []
 Proof
   rw[call_external_transaction_def] >>
-  drule call_external_error_rollback >>
+  drule_all call_external_error_rollback >>
   simp[]
 QED
 
 Theorem call_external_error_no_state_change:
-  call_external orc gobs am tx = (INR e, am', rqs) ⇒
+  call_external orc gobs am tx = (INR e, am', rqs) /\ e <> HaltException ⇒
   am'.accounts = am.accounts ∧
   am'.tStorage = am.tStorage ∧
   am'.immutables = am.immutables
@@ -279,8 +281,10 @@ Theorem eval_expr_intcall_empty_defaults:
       rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
       lock_if_nr cx nr (is_view_mut mut);
       cxf <- push_function (NONE,fn) call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev))
+        (unlock_if_nr cx nr (is_view_mut mut));
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv) od)
 Proof
@@ -301,8 +305,10 @@ Theorem eval_expr_intcall_args_factor:
       rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
       lock_if_nr cx nr (is_view_mut mut);
       cxf <- push_function (src,fn) call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev))
+        (unlock_if_nr cx nr (is_view_mut mut));
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv) od)
 Proof
@@ -339,7 +345,7 @@ Proof
   disch_then (qspecl_then [`ty`,`drv`] SUBST1_TAC) >>
   rewrite_tac[FUN_EQ_THM] >> qx_gen_tac `st` >>
   simp[bind_def, ignore_bind_def, get_scopes_def, return_def,
-    lock_if_nr_def, unlock_if_nr_def] >>
+    lock_if_nr_def, unlock_if_nr_def, finally_unless_halt_return] >>
   Cases_on `eval_expr_results cx args st` >>
   rename1 `_ = (res,st1)` >> Cases_on `res` >> simp[] >>
   rename1 `read_results cx results st1` >>

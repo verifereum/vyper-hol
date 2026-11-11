@@ -2,7 +2,7 @@
 Theory calldataRegistrationLocals
 Ancestors
   valueEncodingDefs loweringStateRelDefs calldataRegistrationExec entryArgPtrs vyperInterpreter vyperTyping
-  compileEnv venomMemDefs localPtrsProps entryLocals
+  compileEnv venomMemDefs localPtrsProps entryLocals entryDecodeProps memoryValueEncoding
 
 Theorem decoded_arguments_bind:
   !args vals tenv.
@@ -41,7 +41,7 @@ Theorem decoded_scope_local_ptrs:
       ins.inst_outputs = [ptr] /\
       FLOOKUP v.vs_allocas ins.inst_id = SOME (p,sz) /\
       type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
-      val_in_memory entry.type entry.value p v.vs_memory) ==>
+      memory_value_rel entry.type entry.value p v.vs_memory) ==>
   local_ptrs_rel fn cef [env] v
 Proof
   strip_tac >> simp[local_ptrs_rel_def] >> conj_tac
@@ -120,10 +120,13 @@ Proof
   first_x_assum (qspec_then `i` mp_tac) >>
   simp[] >> Cases_on `EL i args` >> Cases_on `EL i tys` >>
   simp[] >> strip_tac >> gvs[] >>
+  drule_then (qspec_then `i` mp_tac) bind_arguments_word_arg >>
+  impl_tac >- gvs[] >> strip_tac >>
   qpat_x_assum `(_,_,_,_) = EL i outputs` (fn th =>
     gvs[listTheory.EL_MAP, venomStateTheory.eval_operand_def] >>
     gvs[GSYM th, venomStateTheory.eval_operand_def]) >>
-  goal_assum (drule_at Any) >> simp[]
+  goal_assum (drule_at Any) >> simp[] >>
+  irule val_in_memory_memory_value_rel >> gvs[]
 QED
 
 Theorem decoded_arguments_bind_typed:
