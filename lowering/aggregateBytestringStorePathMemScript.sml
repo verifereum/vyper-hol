@@ -124,5 +124,5 @@ Proof
   >- (`compile_store_memory ce op dst (expr_type e) (expr_type e) su = ((),sb)` by
         gvs[compile_store_memory_def] >>
       drule buffer_store_memory_shape >> simp[same_blocks_def]) >>
-  first_assum ACCEPT_TAC
+  conj_tac >> first_assum ACCEPT_TAC
 QED

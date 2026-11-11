@@ -86,5 +86,5 @@ Proof
   disch_then (qspec_then `n2w len` strip_assume_tac) >>
   `stmt_state_rel ctx func ce cx es sh` by simp[stmt_state_rel_inst_idx] >>
   gvs[locals_kept_def, mstore_def, lookup_var_def] >>
-  metis_tac[]
+  qpat_x_assum `popped_kept _ _ _ _ _` mp_tac >> simp[popped_kept_def]
 QED

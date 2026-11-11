@@ -279,7 +279,7 @@ Proof
         regions_disjoint p n c sz) ==>
      mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory` by
     (strip_tac >>
-     qpat_x_assum `~expr_has_effect e /\ local_ptrs_reserved _ _ /\ _ ==> _` mp_tac >>
+     qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ ==> _` mp_tac >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then (qspecl_then [`b`, `asz`] mp_tac) >>
      (impl_tac >- (qpat_assum `w2n (n2w (b+off):bytes32) = _`

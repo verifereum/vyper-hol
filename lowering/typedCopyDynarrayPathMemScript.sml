@@ -1,6 +1,6 @@
 Theory typedCopyDynarrayPathMem
 Ancestors
-  typedNormalizeDynarrayLoop typedNormalizeContinuation makeSsaHelper
+  typedNormalizeDynarrayLoop typedNormalizeContinuation venomExecProps
   valueEncoding valueEncodingProps venomMemProps
   typedCopySarrayPathMem typedCopyControlPathMem
   typedCopyArrayEntryPathMem exprSimBopRestWordLoopPath fragGasSeqMem

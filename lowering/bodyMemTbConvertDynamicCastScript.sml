@@ -58,7 +58,6 @@ Resume convert_dynamic_counted_cont_mem[success]:
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`e1`, `tv1`, `v`] >>
   simp[] >> conj_tac >- gvs[is_bytestring_type_def] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
   irule convert_readonly_expr_post >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`s`, `sm`, `x`] >> simp[]
