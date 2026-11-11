@@ -1,7 +1,10 @@
 (* Whitelist removal, rows S25/S26: same-named locals in disjoint scopes.
 
-   supported_function_bindings asks ALL_DISTINCT over a function's
-   arguments, locals and loop variables.  The checker gives less: type_stmt
+   supported_function_bindings asked ALL_DISTINCT over a function's
+   arguments, locals and loop variables; supported_function_body now asks
+   only what the checker gives (whitelistCheckerProgram
+   check_contract_function_body_bindings), and this records why that is
+   enough.  The checker gives less than the old list: type_stmt
    declares a name only if it is not in scope (id NOTIN FDOM
    env.var_types), and If/For do not thread their arms' environments, so a
    name reused in two if/else arms or two sequential loops is accepted.
@@ -50,6 +53,7 @@
 Theory whitelistScopes
 Ancestors
   list alist compileVyper entryStateRel externalBodyFrame whitelistCheckerDecls
+  whitelistCheckerProgram
 
 Theorem check_contract_arg_not_collect_locals:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
@@ -57,7 +61,7 @@ Theorem check_contract_arg_not_collect_locals:
   vis <> Deploy /\ MEM (id,ty) args ==>
   ~MEM id (MAP FST (collect_locals fbody))
 Proof
-  strip_tac >> drule_all check_contract_body_bindings_not_args >>
+  strip_tac >> drule_all check_contract_function_body_bindings >>
   simp[EVERY_MEM, collect_locals_supported_bindings_mem] >> strip_tac >>
   `MEM id (MAP FST args)` by (simp[MEM_MAP] >> qexists `(id,ty)` >> simp[]) >>
   metis_tac[]

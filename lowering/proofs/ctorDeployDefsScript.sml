@@ -47,7 +47,8 @@ End
 (* The source-side hypotheses of e2e_deploy_correctness. *)
 Definition deploy_source_ok_def:
   deploy_source_ok tops am tx <=>
-    supported_program tops /\ constructor_call_free tops /\
+    supported_program tops /\ supported_program_deploy tops /\
+    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx
 End
 

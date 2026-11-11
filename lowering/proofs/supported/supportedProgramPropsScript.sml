@@ -25,13 +25,13 @@ End
 
 Theorem supported_program_positive:
   supported_program [] /\
-  supported_program
-    [program_test_internal [Return (SOME (Name (BaseT (UintT 256)) "arg"))];
+  EVERY (\tops. supported_program tops /\ supported_program_deploy tops)
+   [[program_test_internal [Return (SOME (Name (BaseT (UintT 256)) "arg"))];
      program_test_deploy
        [AnnAssign "x" (BaseT (UintT 256)) expr_test_internal;
         Assign (BaseTarget (NameTarget "x")) expr_test_internal;
         program_test_range [AugAssign (BaseT (UintT 256)) (NameTarget "x") Add expr_test_uint];
-        If expr_test_uint [Expr expr_test_internal] [Pass]]]
+        If expr_test_uint [Expr expr_test_internal] [Pass]]]]
 Proof
   EVAL_TAC
 QED
@@ -46,8 +46,8 @@ Proof
 QED
 
 Theorem supported_storage_event_program_positive:
-  supported_program
-    [StructDecl "Record" [("first",BaseT (UintT 256)); ("second",BaseT (IntT 256))];
+  EVERY (\tops. supported_program tops /\ supported_program_deploy tops)
+   [[StructDecl "Record" [("first",BaseT (UintT 256)); ("second",BaseT (IntT 256))];
      VariableDecl Private Storage "record" (StructT (NONE,"Record")) (SOME 0);
      VariableDecl Private Storage "items" (ArrayT (BaseT (UintT 256)) (Dynamic 4)) (SOME 2);
      HashMapDecl Private F "map" (BaseT AddressT) (Type (BaseT (UintT 256))) (SOME 7);
@@ -56,7 +56,7 @@ Theorem supported_storage_event_program_positive:
        [Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (NONE,"record")) "second")) expr_test_int;
         Append (TopLevelNameTarget (NONE,"items")) expr_test_uint;
         Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"map")) expr_test_address)) expr_test_uint;
-        Log (NONE,"Updated") [expr_test_uint]]]
+        Log (NONE,"Updated") [expr_test_uint]]]]
 Proof
   EVAL_TAC
 QED
@@ -148,15 +148,14 @@ Proof
   EVAL_TAC
 QED
 
+(* Arguments must be distinct and no local or loop variable may reuse one.
+   Locals among themselves are the checker's business (type_stmt's
+   freshness): the same name in disjoint scopes is admitted. *)
 Theorem supported_binding_duplicates_rejected:
-  EVERY (\stmts. ~supported_program [program_test_deploy stmts])
-    [[AnnAssign "x" (BaseT (UintT 256)) expr_test_uint;
-      AnnAssign "x" (BaseT (UintT 256)) expr_test_uint];
-     [If expr_test_uint [AnnAssign "x" (BaseT (UintT 256)) expr_test_uint]
+  EVERY (\stmts. supported_program_deploy [program_test_deploy stmts])
+    [[If expr_test_uint [AnnAssign "x" (BaseT (UintT 256)) expr_test_uint]
        [AnnAssign "x" (BaseT (UintT 256)) expr_test_uint]];
-     [program_test_range []; program_test_range []];
-     [program_test_range [program_test_range []]];
-     [AnnAssign "i" (BaseT (UintT 256)) expr_test_uint; program_test_range []]] /\
+     [program_test_range []; program_test_range []]] /\
   ~supported_function_body [] Deploy [("arg",BaseT (UintT 256))]
     [If expr_test_uint [] [AnnAssign "arg" (BaseT (UintT 256)) expr_test_uint]] /\
   ~supported_function_body [] Deploy [("i",BaseT (UintT 256))]
@@ -168,12 +167,11 @@ Proof
 QED
 
 Theorem supported_module_bindings_accepted:
-  supported_program
-    [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
-     program_test_deploy [AnnAssign "x" (BaseT (UintT 256)) expr_test_uint]] /\
-  supported_program
+  EVERY (\tops. supported_program tops /\ supported_program_deploy tops)
+   [[VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
+     program_test_deploy [AnnAssign "x" (BaseT (UintT 256)) expr_test_uint]];
     [HashMapDecl Private F "i" (BaseT AddressT) (Type (BaseT (UintT 256))) (SOME 0);
-     program_test_deploy [program_test_range []]]
+     program_test_deploy [program_test_range []]]]
 Proof
   EVAL_TAC
 QED
@@ -190,9 +188,23 @@ Theorem supported_declaration_exclusions_assembled:
      VariableDecl (Public F) Storage "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
      VariableDecl Private Storage "x" (BaseT (UintT 8)) (SOME 0);
-     FlagDecl "Flag" ["a"];
-     StructDecl "S" [("f",StructT (SOME 0,"S"))];
-     InterfaceDecl "I" [("f",[("a",StructT (SOME 0,"S"))],NoneT,View)]]
+     StructDecl "S" [("f",StructT (SOME 0,"S"))]]
+Proof
+  EVAL_TAC
+QED
+
+(* Declarations the checker's own conditions cover.  An External argument
+   takes any type assignable_type admits (entry_abi_support); an Internal
+   __default__ is an ordinary internal function. *)
+Theorem supported_checker_declarations_accepted:
+  supported_program
+    [FlagDecl "Flag" ["a"];
+     ErrorDecl "Failed" [("code",BaseT (UintT 256))];
+     InterfaceDecl "I" [("f",[("a",StructT (SOME 0,"S"))],NoneT,View)];
+     FunctionDecl External Pure F F "flags"
+       [("f",FlagT (NONE,"Flag")); ("b",BaseT (BytesT (Fixed 20)))] [] NoneT [];
+     FunctionDecl Internal Pure F F "__default__"
+       [("arg",BaseT (UintT 256))] [] NoneT []]
 Proof
   EVAL_TAC
 QED
@@ -219,13 +231,7 @@ Theorem supported_annotation_module_exclusions:
   supported_type_namespace (TupleT [StructT (NONE,"S");
     ArrayT (FlagT (NONE,"F")) (Fixed 1)]) /\
   ~supported_type_namespace (TupleT [StructT (NONE,"S");
-    ArrayT (FlagT (SOME 0,"F")) (Fixed 1)]) /\
-  EVERY (\stmts. ~supported_program [program_test_deploy stmts])
-    [[Expr (Name (StructT (SOME 0,"S")) "x")];
-     [Expr (Subscript (BaseT (UintT 256))
-       (TopLevelName (StructT (SOME 0,"S")) (NONE,"missing")) expr_test_uint)];
-     [For "i" (StructT (SOME 0,"S"))
-       (Range expr_test_uint (Name (BaseT (UintT 256)) "end")) 1 []]]
+    ArrayT (FlagT (SOME 0,"F")) (Fixed 1)])
 Proof
   EVAL_TAC
 QED
@@ -234,7 +240,7 @@ QED
    Shape/name lookup can accept this ill-typed initializer, without consulting
    a type checker. No source-correctness claim is made by this test. *)
 Theorem supported_syntax_not_typing:
-  supported_program [program_test_deploy
+  supported_program_deploy [program_test_deploy
     [AnnAssign "x" (BaseT (UintT 256)) (Literal (BaseT BoolT) (BoolL T))]]
 Proof
   EVAL_TAC

@@ -9,19 +9,6 @@ Ancestors
 
 (* ===== Body-independent declarations ===== *)
 
-Definition supported_interface_signature_def:
-  supported_interface_signature tops (name, args, ret, mut) <=>
-    EVERY (supported_value_type tops o SND) args /\
-    supported_return_type tops ret
-End
-
-(* External arguments are decoded into fresh storage of their own type.
-   Internal argument copies retain their separate layout restriction. *)
-Definition supported_function_argument_def:
-  supported_function_argument tops External ty = supported_place_type tops ty /\
-  supported_function_argument tops vis ty = supported_value_type tops ty
-End
-
 Definition supported_function_return_def:
   supported_function_return tops External ty =
     (ty = NoneT \/ supported_place_type tops ty) /\
@@ -33,7 +20,10 @@ Definition supported_declaration_header_def:
     case top of
       FunctionDecl vis mut nr rr name args defaults ret body =>
         ~nr /\ NULL defaults /\
-        EVERY (supported_function_argument tops vis o SND) args /\
+        (* Internal argument copies keep their layout restriction.  External
+           arguments are what the checker's assignable_type admits
+           (entry_abi_support); supported_program_deploy constrains Deploy's. *)
+        (vis = Internal ==> EVERY (supported_value_type tops o SND) args) /\
         supported_function_return tops vis ret
     | VariableDecl Private Storage name ty (SOME slot) =>
         supported_storage_type tops ty
@@ -49,8 +39,9 @@ Definition supported_declaration_header_def:
         (* Python rejects more than three indexed fields (EventT) *)
         EVERY (supported_scalar_type o SND o FST) fields /\
         LENGTH (FILTER I (MAP SND fields)) <= 3
-    | InterfaceDecl name methods =>
-        EVERY (supported_interface_signature tops) methods
+    | InterfaceDecl name methods => T
+    | FlagDecl name members => T
+    | ErrorDecl name args => T
     | _ => F
 End
 
@@ -121,7 +112,7 @@ Theorem supported_function_header_contract:
   supported_declaration_header tops
     (FunctionDecl vis mut nr rr name args defaults ret body) <=>
   ~nr /\ NULL defaults /\
-  EVERY (supported_function_argument tops vis o SND) args /\
+  (vis = Internal ==> EVERY (supported_value_type tops o SND) args) /\
   supported_function_return tops vis ret
 Proof
   simp[supported_declaration_header_def]
@@ -197,12 +188,6 @@ Theorem supported_hashmap_location_independent:
   supported_declaration_header tops (HashMapDecl vis F name kt vt slot)
 Proof
   simp[supported_hashmap_header_contract]
-QED
-
-Theorem supported_flags_rejected:
-  ~supported_declaration_header tops (FlagDecl name members)
-Proof
-  simp[supported_declaration_header_def]
 QED
 
 Theorem supported_lookup_other_module:

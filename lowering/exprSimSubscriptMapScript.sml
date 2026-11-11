@@ -348,7 +348,9 @@ Theorem expr_pre_storage_preserved:
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
-                      get_module_code cx NONE = SOME tops) (int_calls_expr e) /\
+                      get_module_code cx NONE = SOME tops /\
+                      IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_expr e) /\
     eval_expr cx e es = (res, es') ==>
     contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
 Proof
@@ -363,6 +365,10 @@ Proof
           metis_tac[]) >>
       `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
         by (Cases_on `int_calls_expr e` >> gvs[] >> metis_tac[]) >>
+      `EVERY (\c. FST c = NONE /\
+                  IS_SOME (supported_function_decl tops c Internal))
+         (int_calls_expr e)` by
+        (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >> res_tac >> gvs[]) >>
       drule_at (Pat `eval_expr _ _ _ = _`) (cj 5 body_oracle_storage_mutual) >>
       disch_then (qspecl_then [`tops`, `env`] mp_tac) >>
       (impl_tac >-
