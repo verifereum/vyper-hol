@@ -5,7 +5,7 @@ Ancestors
   loweringPosts valueCopyBytes vyperAST compileEnv exprSimConcatResult
   exprSimIfExpWidenedPhysicalType
 
-Theorem snapshot_retag_unwrap[local]:
+Theorem snapshot_retag_unwrap:
   vv_holds ce cx t tv vv es s /\
   (pty = t \/ is_bytestring_type pty /\ is_bytestring_type t) /\
   (vv_location vv <> NONE /\ vv_location vv <> SOME LocMemory ==> pty = t) ==>
@@ -37,7 +37,7 @@ Proof
   strip_tac >> gvs[vv_location_def]
 QED
 
-Theorem snapshot_changed_type_location[local]:
+Theorem snapshot_changed_type_location:
   compile_expr ce ty e sc = (vv,sa) /\
   lowered_value_type ce e <> post_value_type ce e ==>
   vv_location vv = NONE \/ vv_location vv = SOME LocMemory
@@ -85,7 +85,7 @@ Finalise snapshot_changed_type_location
 Theorem snapshot_physical_unwrap_path:
   expr_body_pre ce cx env e es /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,ee) /\
-  compile_expr ce ty e sc = (vv,sm) /\
+  compile_expr ce ty e sc = (vv,se) /\
   unwrap_value ce (vv_with_type (lowered_value_type ce e) vv) sm = (op,sb) /\
   local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
