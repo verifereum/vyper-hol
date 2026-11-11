@@ -747,6 +747,35 @@ Proof
          compile_abi_decode_labels, comp_return_labels])
 QED
 
+Theorem first_emission_ext_call_args:
+  !cfn ce kw_es tys es.
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_ext_call_args cfn ce kw_es tys es a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  ntac 3 gen_tac >> Induct_on `es` >> rpt gen_tac >> Cases_on `tys` >>
+  simp[compile_ext_call_args_def, comp_return_def, cs_extends_refl] >>
+  strip_tac >>
+  ho_match_mp_tac first_emission_bind >> conj_tac >- metis_tac[] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[first_emission_snapshot_vv] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (qpat_x_assum `!tys. _ ==> _` (qspec_then `t` mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
+  metis_tac[first_emission_return]
+QED
+
 Theorem first_emission_extcall:
   (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
@@ -773,7 +802,10 @@ Proof
   ho_match_mp_tac first_emission_pair_let >> conj_tac
   >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (ho_match_mp_tac first_emission_multi_vvs >> metis_tac[]) >>
+  >- (qspecl_then [`cfn`, `ce`, `DROP (LENGTH sig1) t`,
+        `MAP (lowered_value_type ce) (TAKE (LENGTH sig1) t)`,
+        `TAKE (LENGTH sig1) t`] mp_tac first_emission_ext_call_args >>
+      impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
   >- (drule first_emission_ext_call_kwargs >> disch_then MATCH_ACCEPT_TAC) >>
   gen_tac >> PairCases_on `v` >> simp_tac (srw_ss()) [LET_THM] >>
