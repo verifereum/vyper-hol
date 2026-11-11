@@ -126,6 +126,17 @@ Definition pair_dret_words_def:
     OPTION_MAP (CONS (src,sz)) (pair_dret_words rest) /\
   pair_dret_words _ = NONE
 End
+Theorem pair_dret_words_none_length:
+  !xs ys. LENGTH xs = LENGTH ys ==>
+    (pair_dret_words xs = NONE <=> pair_dret_words ys = NONE)
+Proof
+  recInduct pair_dret_words_ind >> rpt strip_tac >>
+  Cases_on `ys` >> gvs[pair_dret_words_def] >>
+  rename1 `SUC (LENGTH rest) = LENGTH tail` >>
+  Cases_on `tail` >> gvs[pair_dret_words_def] >>
+  metis_tac[optionTheory.option_CLAUSES]
+QED
+
 (* Pack dynamic return values left-to-right from an explicit destination cursor. *)
 Definition pack_dret_dynamic_def:
   pack_dret_dynamic (cursor:bytes32) [] (s:venom_state) = ([], cursor, s) /\
