@@ -40,7 +40,7 @@ Proof
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
     (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
-      body_expr_sim_mem_of_vv_sim_mem)) >>
+      (ONCE_REWRITE_RULE [CONJ_COMM] body_expr_sim_mem_of_vv_sim_mem))) >>
   disch_then (qspecl_then [`ctx`, `func`, `ty'`] mp_tac) >>
   simp[] >>
   impl_tac >- (

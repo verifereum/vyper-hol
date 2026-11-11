@@ -71,8 +71,7 @@ Proof
        is_bytestring_type (lowered_value_type cenv e) /\
        arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
        same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` by
-    (rpt strip_tac >> irule ifexp_body_pre_lowered_type_compatible >>
-     metis_tac[]) >>
+    (rpt strip_tac >> metis_tac[ifexp_body_pre_lowered_type_compatible]) >>
   `!gs tv es1.
      (do result <- eval_expr cx e1; read_result cx result od)
        (es with gas_obs := gs) = (INL tv, es1) ==>
