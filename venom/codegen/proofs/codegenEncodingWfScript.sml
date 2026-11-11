@@ -257,7 +257,7 @@ Proof
   disch_then drule >> drule reorder_one_no_push_ofst >> simp[]
 QED
 
-Theorem reorder_plan_no_push_ofst[local]:
+Theorem reorder_plan_no_push_ofst:
   reorder_plan dfg target_ops ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
@@ -278,7 +278,7 @@ Proof
   pairarg_tac >> gvs[] >> metis_tac[do_dup_no_push_ofst]
 QED
 
-Theorem emit_input_plan_no_push_ofst[local]:
+Theorem emit_input_plan_no_push_ofst:
   !operands ps ops ps'.
   emit_input_plan opc operands live ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops

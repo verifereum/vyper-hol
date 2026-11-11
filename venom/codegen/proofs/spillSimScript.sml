@@ -465,7 +465,7 @@ val push_encode_256 =
       val leq_thm = numLib.REDUCE_CONV ``(8:num) <= 256``
   in REWRITE_RULE [div_thm, leq_thm] r1 end;
 
-Theorem push_encode_num_roundtrip[local]:
+Theorem push_encode_num_roundtrip:
   !n. n < dimword(:256) ==>
       word_of_bytes F (0w:bytes32)
         (REVERSE (encode_num_bytes n)) = n2w n

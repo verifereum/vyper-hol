@@ -2494,7 +2494,7 @@ Proof
 QED
 
 (* execute_plan initial_fmp length for MAP SORestore *)
-Theorem execute_plan_map_restore_length[local]:
+Theorem execute_plan_map_restore_length:
   !offs. LENGTH (execute_plan initial_fmp (MAP SORestore offs)) = 2 * LENGTH offs
 Proof
   Induct >> simp[execute_plan_def, exec_stack_op_def] >>
@@ -2582,7 +2582,7 @@ QED
 
 (* Occurrence-indexed temporary offsets for a deep swap.  This interface is
    deliberately independent of operand equality. *)
-Theorem deep_swap_occurrence_offsets[local]:
+Theorem deep_swap_occurrence_offsets:
   !dist items al sp.
     dist > 16 /\
     LENGTH items = dist + 1 /\
