@@ -2338,6 +2338,40 @@ QED
 
 Finalise registration_owned_locals_endpoint
 
+Theorem registration_indexed_locals_ghost:
+  bind_arguments tenv args vals = SOME env /\
+  ALL_DISTINCT (MAP FST args) /\
+  LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) (MAP SND args) tvs /\
+  es.scopes = [env] /\
+  (!j. j < LENGTH args ==> ?q p n.
+    FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+    lookup_var q s = SOME (n2w p) /\ p < dimword (:256) /\
+    ptr_covers G tn q s n /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory (EL j tvs) (EL j vals) p mem)) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    op_taint tn (Var x) = {}) /\
+  tn.t_stor = {} /\ tn.t_trans = {} /\ tn.t_imm = {} ==>
+  ghost_inv NONE cenv cx es G tn s
+Proof
+  strip_tac >>
+  simp[bodyPtrDefsTheory.ghost_inv_def, bodyPtrDefsTheory.return_buf_ptr_def,
+       bodyPtrDefsTheory.stor_taint_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `FLOOKUP env name = SOME entry` by
+    gvs[vyperStateTheory.lookup_scopes_def, AllCaseEqs()] >>
+  drule_all vyperTypeBindArgumentsTheory.bind_arguments_scope_lookup >> strip_tac >>
+  `?j. j < LENGTH args /\ EL j args = (name,typ)` by metis_tac[MEM_EL] >>
+  drule_all bind_arguments_lookup_index >> strip_tac >>
+  qpat_assum `LIST_REL (\ty tv. evaluate_type _ ty = SOME tv) _ _`
+    (mp_tac o SRULE [LIST_REL_EL_EQN]) >> strip_tac >>
+  `evaluate_type tenv (SND (EL j args)) = SOME (EL j tvs)` by
+    metis_tac[EL_MAP] >>
+  qpat_x_assum `!j. j < LENGTH args ==> ?q p n. _`
+    (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+  gvs[]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
