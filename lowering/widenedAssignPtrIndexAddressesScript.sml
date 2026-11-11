@@ -190,3 +190,92 @@ Proof
   qexistsl_tac [`out`, `out'`, `u`, `H`, `tm`] >>
   simp[] >> gvs[ci_mono_def, not_fresh_at_def] >> decide_tac
 QED
+
+Theorem widened_assign_index_addresses_counted:
+  emit_op MUL [Var counter; Lit (n2w ss)] sa = (so,sb) /\
+  emit_op MUL [Var counter; Lit (n2w ds)] sb = (doff,sc) /\
+  emit_op ADD [src;so] sc = (sp,sd) /\
+  emit_op ADD [dst;doff] sd = (dp,se) /\
+  not_fresh_at sa counter /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  lookup_var counter s = SOME (n2w k) /\ op_taint tn (Var counter) = {} /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  op_taint tn src = {} /\ op_taint tn dst = {} /\ k < N /\
+  w2n sw + N*ss < dimword(:256) /\ w2n dw + N*ds < dimword(:256) /\
+  (0 < ss ==> ?r. src = Var r /\ ptr_covers G tn r s (N*ss)) /\
+  (0 < ds ==> ?r. dst = Var r /\ ptr_covers G tn r s (N*ds)) /\
+  fn_has_code sa se fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?p q t H tm. sp = Var p /\ dp = Var q /\
+    not_fresh_at se p /\ not_fresh_at se q /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    eval_operand sp t = SOME (sw+n2w (k*ss)) /\
+    eval_operand dp t = SOME (dw+n2w (k*ds)) /\
+    op_taint tm sp = {} /\ op_taint tm dp = {} /\
+    (0 < ss ==> ptr_covers H tm p t ss) /\
+    (0 < ds ==> ptr_covers H tm q t ds) /\
+    t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
+    ~t.vs_halted /\ t.vs_current_bb = se.cs_current_bb /\
+    t.vs_inst_idx = LENGTH se.cs_current_insts /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!v. not_fresh_at sa v ==> lookup_var v t = lookup_var v s /\
+      FLOOKUP H v = FLOOKUP G v /\ op_taint tm (Var v) = op_taint tn (Var v))
+Proof
+  strip_tac >>
+  `ci_mono sa sb /\ ci_mono sb sc /\ ci_mono sc sd /\ ci_mono sd se` by
+    metis_tac[typed_copy_emit_op_mono] >>
+  `ci_mono sa sc /\ ci_mono sc se` by
+    (gvs[ci_mono_def] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `fn_has_code sa sc fn /\ fn_has_code sc se fn` by
+    metis_tac[fn_has_code_split, ci_mono_def] >>
+  `!v. not_fresh_at sa v ==> not_fresh_at sc v` by
+    (gvs[ci_mono_def, not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+  `!v. doff = Var v ==> not_fresh_at sc v` by
+    metis_tac[typed_copy_emit_op_fresh] >>
+  qpat_assum `emit_op MUL _ sa = _` (mp_then Any mp_tac widened_assign_index_offsets_counted) >>
+  disch_then drule >>
+  disch_then (qspecl_then [`tn`, `s`, `k`] mp_tac) >>
+  disch_then drule >>
+  disch_then (qspecl_then [`fn`, `ctx`, `PG`, `G`, `D`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `eval_operand src t = SOME sw /\ eval_operand dst t = SOME dw /\
+   op_taint tn' src = {} /\ op_taint tn' dst = {}` by
+    (qpat_assum `t.vs_labels = _` (mp_then Any mp_tac reserved_operand_ghost_frame) >>
+     disch_then drule >> strip_tac >> metis_tac[]) >>
+  `k*ss+ss <= N*ss /\ k*ds+ds <= N*ds` by
+    (`SUC k <= N` by decide_tac >>
+     qpat_assum `SUC k <= N` (mp_then Any mp_tac arithmeticTheory.LESS_MONO_MULT) >>
+     disch_then (fn th => map_every assume_tac [Q.SPEC `ss` th, Q.SPEC `ds` th]) >>
+     qpat_x_assum `SUC k * ss <= _` mp_tac >>
+     qpat_x_assum `SUC k * ds <= _` mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.MULT] >> decide_tac) >>
+  `0 < ss ==> ?root total. src = Var root /\ ptr_covers G' tn' root t total /\
+    k*ss < total /\ k*ss+ss <= total /\ w2n sw+k*ss < dimword(:256)` by
+    (strip_tac >> qpat_x_assum `0 < ss ==> _` drule >> strip_tac >>
+     qexistsl_tac [`r`, `N*ss`] >> simp[] >>
+     irule ptr_covers_lookup_frame >> metis_tac[]) >>
+  `0 < ds ==> ?root total. dst = Var root /\ ptr_covers G' tn' root t total /\
+    k*ds < total /\ k*ds+ds <= total /\ w2n dw+k*ds < dimword(:256)` by
+    (strip_tac >> qpat_x_assum `0 < ds ==> _` drule >> strip_tac >>
+     qexistsl_tac [`r`, `N*ds`] >> simp[] >>
+     irule ptr_covers_lookup_frame >> metis_tac[]) >>
+  qpat_assum `emit_op ADD _ sc = _` (mp_then Any mp_tac widened_assign_index_adds_counted) >>
+  disch_then drule >>
+  disch_then (qspec_then `tn'` mp_tac) >>
+  disch_then (qspecl_then [`sw`, `k*ss`, `ss`, `t`] mp_tac) >>
+  disch_then (qspec_then `fn` mp_tac) >>
+  disch_then (qspecl_then [`dw`, `k*ds`, `ds`] mp_tac) >>
+  disch_then (qspecl_then [`ctx`, `PG`, `G'`, `D`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G' tn' t 0 H tm (OK u)` >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK u)` by
+    (qpat_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+      (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  `u = s with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>` by
+    (qpat_assum `u = _` (fn th => once_rewrite_tac[th]) >>
+     qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  qexistsl_tac [`p`, `q`, `u`, `H`, `tm`] >> simp[]
+QED
