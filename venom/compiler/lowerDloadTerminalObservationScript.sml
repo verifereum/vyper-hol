@@ -232,7 +232,8 @@ Proof
        step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
   rpt gen_tac >> rpt IF_CASES_TAC >> simp[] >>
   rw[vfmExecutionTheory.transfer_value_def, vfmStateTheory.update_account_def,
-     combinTheory.APPLY_UPDATE_THM]
+     vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM,
+     COND_RAND]
 QED
 
 Theorem ld_normal_halt_observation:
