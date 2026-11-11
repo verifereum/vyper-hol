@@ -9,11 +9,12 @@ Ancestors
 Theorem ifexp_expr_post_same_type:
   post_value_type ce e = expr_type e /\
   post_value_type ce f = expr_type f /\
-  expr_type e = expr_type f ==>
-  (expr_post ctx fn ce cx e es sa sb s0 ee v op s <=>
-   expr_post ctx fn ce cx f es sa sb s0 ee v op s)
+  expr_type e = expr_type f /\
+  expr_post ctx fn ce cx e es sa sb s0 ee v op s /\
+  (~expr_has_effect f ==> pure_frame ce fn es sa s0 s) ==>
+  expr_post ctx fn ce cx f es sa sb s0 ee v op s
 Proof
-  simp[expr_post_def]
+  rw[expr_post_def] >> gvs[] >> metis_tac[]
 QED
 
 Theorem ifexp_nonword_arm_suffix:
@@ -54,9 +55,14 @@ Proof
   >- suspend "same" >>
   drule_all ifexp_residual_allocating_arm_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `expr_post ctx fn ce cx arm es sa sd s0 ee v op q` by
+    (irule ifexp_expr_post_same_type >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `IfExp ty c a b` >>
+     simp[post_value_type_def, expr_type_def] >> metis_tac[]) >>
   qexistsl_tac [`q`, `Gf`, `tnf`] >> simp[] >>
-  metis_tac[ifexp_expr_post_same_type, expr_type_def,
-            post_value_type_def]
+  metis_tac[expr_type_def, post_value_type_def]
 QED
 
 Resume ifexp_nonword_arm_suffix[same]:

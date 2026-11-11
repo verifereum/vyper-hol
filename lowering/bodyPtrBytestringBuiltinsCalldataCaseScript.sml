@@ -235,10 +235,14 @@ Proof
   simp[expr_type_def, mk_ptr_def] >> rpt gen_tac >> strip_tac >>
   qexists_tac `Value w` >> simp[] >>
   conj_tac
-  >- (irule vv_post_prefix_frame >> simp[] >>
+  >- (`~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+        (strip_tac >> irule exprSimWordArgsTheory.expr_post_pure_frame >>
+         metis_tac[]) >>
+      irule vv_post_prefix_frame >> simp[] >>
       qexistsl_tac [`ee`, `sm`, `t`] >> simp[] >>
       qpat_x_assum `vv_post _ _ _ _ _ ee sm _ _ _ _ _ _` mp_tac >>
-      once_rewrite_tac[vv_post_located_mk_ptr] >> simp[mk_ptr_def]) >>
+      once_rewrite_tac[vv_post_located_mk_ptr] >> simp[mk_ptr_def] >>
+      rpt strip_tac >> metis_tac[]) >>
   conj_tac >- fs[ptr_vv_ok_def] >>
   irule ghost_kept_wb_trans >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
