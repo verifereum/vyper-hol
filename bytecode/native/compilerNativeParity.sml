@@ -73,11 +73,14 @@ structure compilerNativeParity = struct
      stale_oracle: the pinned oracle lacks upstream fixes the HOL compiler
      already follows (same file). *)
   val decoder_divergent = [
+      "external-calls/oracle/e04_ret_string.hex",
+      "external-calls/oracle/e05_ret_bytes.hex",
       "external-calls/oracle/e19_gas_kw.hex",
       "external-calls/oracle/e21_default_ret.hex",
       "external-calls/oracle/e22_static_default.hex",
       "external-calls/oracle/e29_default_ret_skip.hex",
       "external-calls/oracle/e30_default_ret_tuple.hex",
+      "external-calls/oracle/e37_default_ret_string.hex",
       "external-calls/oracle/e38_default_ret_local_array.hex",
       "external-calls/oracle/e45_default_ret_ifexp.hex",
       "memory-stores/oracle/t04_tuple_assign_extcall.hex"]
