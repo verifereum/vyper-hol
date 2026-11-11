@@ -139,7 +139,7 @@ End
    made after sa) is clear of the locals, the immutables, the allocas before
    sa and a memory default. *)
 Definition extcall_request_ready_def:
-  extcall_request_ready ctx func cenv cx ret_type es sa s0 sp is_static
+  extcall_request_ready ctx func cenv cx ret_type es sa s0 prot sp is_static
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t <=>
@@ -186,9 +186,7 @@ Definition extcall_request_ready_def:
              evaluate_type (get_tenv cx) default_ty = SOME tv ==>
              compileEnv$regions_disjoint (w2n ro) cap (w2n w)
                (val_footprint tv d))) /\
-    (!pa pk. pa + pk <= s0.vs_alloca_next /\
-           (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
-              compileEnv$regions_disjoint pa pk pb pz) ==>
+    (!pa pk. prot pa pk ==>
            pa + pk <= t.vs_alloca_next /\
            mem_bytes_at pa pk t.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
            !pid pb pz. FLOOKUP t.vs_allocas pid = SOME (pb,pz) ==>
@@ -202,7 +200,7 @@ End
    and the return buffer (an
    alloca made after sa) holds its first cap bytes. *)
 Definition extcall_returned_def:
-  extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
+  extcall_returned ctx func cenv cx ret_type es sa s0 prot sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t <=>
     stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
@@ -220,9 +218,7 @@ Definition extcall_returned_def:
              FLOOKUP t.vs_allocas live = SOME (w2n ro, buf_size)) /\
           mem_bytes_at (w2n ro) (LENGTH (TAKE cap returnData)) t.vs_memory =
             TAKE cap returnData) /\
-    (!pa pk. pa + pk <= s0.vs_alloca_next /\
-           (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
-              compileEnv$regions_disjoint pa pk pb pz) ==>
+    (!pa pk. prot pa pk ==>
            pa + pk <= t.vs_alloca_next /\
            mem_bytes_at pa pk t.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
            !pid pb pz. FLOOKUP t.vs_allocas pid = SOME (pb,pz) ==>
@@ -237,7 +233,7 @@ End
    the return handling at sr, runs the whole call. *)
 Theorem extcall_request_setup:
   !nocalls ctx func cenv cx env ann is_static skip fname arg_types ret_type
-   opts args dflt ty es sa sb vv s0 Q.
+   opts args dflt ty es sa sb vv s0 prot Q.
     exprs_case nocalls ctx func cenv cx (TAKE 1 args) /\
     (!s target t.
        eval_exprs cx (TAKE 1 args) s = (INL target, t) ==>
@@ -268,6 +264,13 @@ Theorem extcall_request_setup:
     stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (* the protected windows: below s0's frontier, clear of its allocations,
+       and the target operand effect-free when any window is protected *)
+    (!pa pk. prot pa pk ==>
+       pa + pk <= s0.vs_alloca_next /\
+       !pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
+         compileEnv$regions_disjoint pa pk pb pz) /\
+    (!pa pk. prot pa pk ==> EVERY (\e. ~expr_has_effect e) (TAKE 1 args)) /\
     (!sp sr u result_op addr_op value_op gas_op buf_op call_offset call_len
       has_default default_op default_ty target_v rest target value_opt
       calldata ee t.
@@ -332,7 +335,7 @@ Theorem extcall_request_setup:
                | SOME v => dest_NumV v) /\
        build_ext_calldata (get_tenv cx) fname arg_types
          (TAKE (LENGTH arg_types) rest) = SOME calldata /\
-       extcall_request_ready ctx func cenv cx ret_type es sa s0 sp is_static
+       extcall_request_ready ctx func cenv cx ret_type es sa s0 prot sp is_static
          addr_op value_op gas_op buf_op call_offset call_len
          (abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
@@ -723,7 +726,7 @@ Proof
     (qpat_assum `expr_body_pre cenv cx env (Call _ _ _ _) es` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[expr_body_pre_def] >>
      metis_tac[exprExtRequestShapeTheory.extrequest_typed_nonempty]) >>
-  `extcall_request_ready ctx func cenv cx ret_type es sa s0 sp is_static'
+  `extcall_request_ready ctx func cenv cx ret_type es sa s0 prot sp is_static'
       addr_op (case value_opt of NONE => Lit 0w | SOME v => v) gas_op buf off len
       (abi_size_bound cenv.ce_struct_fields
         (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
@@ -844,7 +847,7 @@ QED
    against the source's RevertData; a successful call reaches sr with the
    returndata in the buffer. *)
 Theorem extcall_call_step:
-  !ctx func cenv cx es sa s0 sp sr u is_static skip ret_type
+  !ctx func cenv cx es sa s0 prot sp sr u is_static skip ret_type
    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
    calldata gas has_default default_op default_ty default_opt ee t k Q.
     comp_ignore_bind
@@ -870,12 +873,12 @@ Theorem extcall_call_step:
        (comp_ignore_bind (emit_inst REVERT [fail_buf.buf_operand; rds] [])
           (new_block cont_lbl)))))))))) sp = (u, sr) /\
     fn_has_code sp sr func /\ fn_inst_ids_distinct func /\
-    extcall_request_ready ctx func cenv cx ret_type es sa s0 sp is_static
+    extcall_request_ready ctx func cenv cx ret_type es sa s0 prot sp is_static
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t /\
     (!returnData ee' t'.
-       extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
+       extcall_returned ctx func cenv cx ret_type es sa s0 prot sr addr_op buf_op cap target
          has_default default_op default_ty default_opt returnData ee' t' ==>
        ?marks. gas_summary_at F (ctx,func) marks (k returnData) (ee',t') Q
                  (\res ee r. expr_exit res r)) ==>
@@ -1027,7 +1030,7 @@ Resume extcall_call_step[call_success]:
      disch_then irule >>
      simp[vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
      first_assum ACCEPT_TAC) >>
-  `extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
+  `extcall_returned ctx func cenv cx ret_type es sa s0 prot sr addr_op buf_op cap target
       has_default default_op default_ty default_opt oc.co_returnData
       (SND (adopt_call_outcome rq oc consumed)) (jump_to sr.cs_current_bb u')` by
     (simp[extcall_returned_def, stmt_state_rel_jump_to, extcall_jump_wb_frame,
@@ -1109,7 +1112,7 @@ Finalise extcall_call_step
    target-code check unless skip; otherwise the ABI decoder runs. *)
 Theorem extcall_return_default:
   !ctx func cenv cx env es ann is_static skip fname arg_types ret_type opts
-   args dflt sa sb s0 sr result_op vv addr_op buf_op cap target
+   args dflt sa sb s0 prot sr result_op vv addr_op buf_op cap target
    has_default default_op default_ty default_opt returnData ee t.
     expr_body_pre cenv cx env
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
@@ -1143,7 +1146,7 @@ Theorem extcall_return_default:
      !bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb ==>
           phi_prefix_length bb.bb_instructions = 0) /\
     local_ptrs_reserved cenv sa /\
-    extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
+    extcall_returned ctx func cenv cx ret_type es sa s0 prot sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t ==>
     ?marks. gas_summary_at F (ctx,func) marks
       (case (if returnData = [] then default_opt else NONE) of
@@ -1164,9 +1167,7 @@ Theorem extcall_return_default:
               args dflt) es sa sb s0 ee' tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
          t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
-         (!pa pk. pa + pk <= s0.vs_alloca_next /\
-                (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
-                   compileEnv$regions_disjoint pa pk pb pz) ==>
+         (!pa pk. prot pa pk ==>
                 mem_bytes_at pa pk t'.vs_memory = mem_bytes_at pa pk s0.vs_memory))
       (\res ee r. expr_exit res r)
 Proof
@@ -1523,7 +1524,7 @@ Finalise extcall_return_default
    evaluate_abi_decode_return rejects aborts. *)
 Theorem extcall_return_values:
   !ctx func cenv cx env es ann is_static skip fname arg_types ret_type opts
-   args dflt sa sb s0 sr result_op vv addr_op buf_op cap target
+   args dflt sa sb s0 prot sr result_op vv addr_op buf_op cap target
    has_default default_op default_ty default_opt returnData ee t.
     expr_body_pre cenv cx env
       (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
@@ -1556,7 +1557,7 @@ Theorem extcall_return_values:
      !bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb ==>
           phi_prefix_length bb.bb_instructions = 0) /\
     local_ptrs_reserved cenv sa /\
-    extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
+    extcall_returned ctx func cenv cx ret_type es sa s0 prot sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t ==>
     ?marks. gas_summary_at F (ctx,func) marks
       (case (if returnData = [] then default_opt else NONE) of
@@ -1577,9 +1578,7 @@ Theorem extcall_return_values:
               args dflt) es sa sb s0 ee' tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
          t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
-         (!pa pk. pa + pk <= s0.vs_alloca_next /\
-                (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
-                   compileEnv$regions_disjoint pa pk pb pz) ==>
+         (!pa pk. prot pa pk ==>
                 mem_bytes_at pa pk t'.vs_memory = mem_bytes_at pa pk s0.vs_memory))
       (\res ee r. expr_exit res r)
 Proof
@@ -1895,13 +1894,13 @@ Proof
   drule_all eval_ext_call_request >>
   disch_then (qspecl_then [`skip`, `ret_type`] SUBST1_TAC) >>
   ho_match_mp_tac extcall_call_step >>
-  qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `extcall_request_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `comp_ignore_bind _ _ _ = _` (irule_at Any) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   rpt strip_tac >>
   irule extcall_return_values >>
-  qpat_assum `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
   qexists_tac `result_op` >>
   rpt conj_tac >>

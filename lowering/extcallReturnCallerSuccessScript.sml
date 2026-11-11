@@ -244,9 +244,7 @@ Theorem return_actual_counted_success:
         phi_prefix_length bb.bb_instructions = 0) /\
   stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce a /\
   wb_frame ce es sa s0 s /\ local_ptrs_reserved ce sa /\
-  (!pa pk. pa + pk <= s0.vs_alloca_next /\
-         (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
-            compileEnv$regions_disjoint pa pk pb pz) ==>
+  (!pa pk. prot pa pk ==>
          pa + pk <= s.vs_alloca_next /\
          mem_bytes_at pa pk s.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
          !pid pb pz. FLOOKUP s.vs_allocas pid = SOME (pb,pz) ==>
@@ -271,9 +269,7 @@ Theorem return_actual_counted_success:
     (if needs_external_call_wrap ty then TupleTV [actual_tv] else actual_tv) ==>
   ?z d. gas_marked_path F ctx func s 0 (OK z) /\ d < dimword (:256) /\
     stmt_state_rel ctx func ce cx ee z /\ wb_frame ce es sa s0 z /\
-    (!pa pk. pa + pk <= s0.vs_alloca_next /\
-           (!pid pb pz. FLOOKUP s0.vs_allocas pid = SOME (pb,pz) ==>
-              compileEnv$regions_disjoint pa pk pb pz) ==>
+    (!pa pk. prot pa pk ==>
            mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s0.vs_memory) /\
     eval_operand buf.buf_operand z = SOME (n2w d) /\
     val_in_memory actual_tv v d z.vs_memory /\
