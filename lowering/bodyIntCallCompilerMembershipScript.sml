@@ -3,27 +3,59 @@ Ancestors
   bodyIntCallCompilerContext bodyIntCallCompilerFloor bodyIntCallCompilerEmit
   bodyIntCallCompilerInterval exprLowering compileEnv
 
+Theorem intcall_interval_membership_eqs[local]:
+  !es needle k a. k <= a.cs_next_var ==>
+  intcall_compiler_interval k a (SND (emit_membership_eqs needle es a))
+Proof
+  Induct >> rpt strip_tac >>
+  fs[emit_membership_eqs_def, intcall_interval_return] >>
+  irule intcall_interval_bind_floor >> fs[intcall_interval_emit_op] >>
+  rpt strip_tac >> irule intcall_interval_bind_floor >>
+  fs[intcall_interval_return]
+QED
+
+Theorem intcall_interval_fold_membership_or[local]:
+  !cs acc k a. k <= a.cs_next_var ==>
+  intcall_compiler_interval k a (SND (fold_membership_or acc cs a))
+Proof
+  Induct >> rpt strip_tac >>
+  fs[fold_membership_or_def, intcall_interval_return] >>
+  irule intcall_interval_bind_floor >> fs[intcall_interval_emit_op]
+QED
+
+Theorem intcall_interval_fold_membership_and[local]:
+  !cs acc k a. k <= a.cs_next_var ==>
+  intcall_compiler_interval k a (SND (fold_membership_and acc cs a))
+Proof
+  Induct >> rpt strip_tac >>
+  fs[fold_membership_and_def, intcall_interval_return] >>
+  irule intcall_interval_bind_floor >> fs[intcall_interval_emit_op] >>
+  rpt strip_tac >> irule intcall_interval_bind_floor >>
+  fs[intcall_interval_emit_op]
+QED
+
 Theorem intcall_interval_membership_in:
   !needle es k a. k <= a.cs_next_var ==>
   intcall_compiler_interval k a (SND (compile_list_membership_in needle es a))
 Proof
-  ho_match_mp_tac compile_list_membership_in_ind >> rpt conj_tac >>
-  rpt gen_tac >> rpt strip_tac >>
-  simp[Once compile_list_membership_in_def, intcall_interval_return,
-       intcall_interval_emit_op] >>
-  rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
-       simp[intcall_interval_emit_op])
+  rpt strip_tac >> simp[compile_list_membership_in_def] >>
+  irule intcall_interval_bind_floor >>
+  fs[intcall_interval_membership_eqs] >>
+  rpt strip_tac >> Cases_on `v` >>
+  fs[intcall_interval_return, intcall_interval_fold_membership_or]
 QED
 
 Theorem intcall_interval_membership_notin:
   !needle es k a. k <= a.cs_next_var ==>
   intcall_compiler_interval k a (SND (compile_list_membership_notin needle es a))
 Proof
-  ho_match_mp_tac compile_list_membership_notin_ind >> rpt conj_tac >>
-  rpt gen_tac >> rpt strip_tac >>
-  simp[Once compile_list_membership_notin_def, intcall_interval_return] >>
-  rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
-       simp[intcall_interval_emit_op])
+  rpt strip_tac >> simp[compile_list_membership_notin_def] >>
+  irule intcall_interval_bind_floor >>
+  fs[intcall_interval_membership_eqs] >>
+  rpt strip_tac >> Cases_on `v` >>
+  fs[intcall_interval_return] >>
+  irule intcall_interval_bind_floor >>
+  fs[intcall_interval_emit_op, intcall_interval_fold_membership_and]
 QED
 
 Theorem intcall_interval_membership_loop:
