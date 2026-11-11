@@ -7080,7 +7080,14 @@ Theorem sym_gas_frame_sim_deep:
         sym_steps prog env n ss = SymOK ss' /\
         sym_frame_inv prog env ctx cp fn ret srest labs0 ps' as' ss'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  drule_all fnFrameDeepGasTheory.gas_inst_frame_sim_owned_deep_exact >>
+  strip_tac >>
+  drule_all gasFrameSimTheory.gas_source_shape >> strip_tac >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    fs[fnPlanPrefixTheory.generated_plan_state_wf_marked_def] >>
+  drule_all sym_gas_plan_frame_sim >> strip_tac >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem sym_revert_forward_frame_sim_deep:
