@@ -33,22 +33,6 @@ Proof
   rpt gen_tac >> simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem deploy_classify_constructor_mem:
-  !tops mut nr rr fname args defaults ret body.
-    SND (SND (SND (classify_functions tops))) =
-      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
-    MEM (FunctionDecl Deploy mut nr rr fname args defaults ret body) tops
-Proof
-  Induct_on `tops` >- simp[classify_functions_def] >>
-  rpt gen_tac >>
-  `classify_functions (h::tops) = classify_function h (classify_functions tops)` by
-    simp[classify_functions_def] >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  Cases_on `h` >> simp[classify_function_def] >>
-  Cases_on `f` >> gvs[] >>
-  Cases_on `s = "__default__"` >> gvs[]
-QED
-
 Theorem deploy_constructor_package_shape:
   !tops exts ints fb cf target cenv args pay nr key ut body ret am tx.
     deploy_source_ok tops am tx /\
@@ -61,7 +45,10 @@ Theorem deploy_constructor_package_shape:
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `cf` >>
   `MEM (FunctionDecl Deploy cf0 cf1 cf2 cf3 cf4 cf5 cf6 cf7) tops` by
-    (irule deploy_classify_constructor_mem >> simp[]) >>
+    (drule classify_functions_ctor_mem >>
+     fs[deploy_source_ok_def, supported_program_def,
+        supported_declaration_headers_def, supported_headers_module_consts_env,
+        subst_consts_fn_empty]) >>
   `supported_program tops` by fs[deploy_source_ok_def] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>

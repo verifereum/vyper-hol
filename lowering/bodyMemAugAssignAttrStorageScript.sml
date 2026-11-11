@@ -11,6 +11,7 @@
    stated for any target whose place is a fixed storage slot. *)
 Theory bodyMemAugAssignAttrStorage
 Ancestors
+  bodySimStmtCases
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignTopWord bodyDeclMemoryCounted
   bodyDeclMemoryCore bodyMemEmitOpFrame allocaFootprint instMemFrontier memSafeRun
@@ -895,22 +896,7 @@ Theorem body_augassign_attr_storage_mem:
 Proof
   rpt strip_tac >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
-  `!ts vis mut id ty init.
-     MEM (VariableDecl vis mut id ty init) ts /\
-     (mut = Storage \/ mut = Transient) ==>
-     find_var_decl_by_name id ts <> NONE` by
-    (Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >>
-     metis_tac[]) >>
-  `src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-   ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops` by
-    (qpat_x_assum `supported_storage_field_write _ _ _` mp_tac >>
-     simp[supported_storage_field_write_def, supported_storage_fields_def] >>
-     Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
-     rename1 `SOME x` >> PairCases_on `x` >>
-     drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-     Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
-     simp[] >> metis_tac[]) >>
-  gvs[] >>
+  drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\ supported_program tops /\
    ALL_DISTINCT
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\

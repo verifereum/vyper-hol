@@ -21,33 +21,6 @@ Ancestors
 
 (* ===== The constructor's source ===== *)
 
-Theorem classify_function_ctor_source_step[local]:
-  !top acc mut nr rr fname args defaults ret body.
-    SND (SND (SND (classify_function top acc))) =
-      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
-    top = FunctionDecl Deploy mut nr rr fname args defaults ret body \/
-    SND (SND (SND acc)) = SOME (mut,nr,rr,fname,args,defaults,ret,body)
-Proof
-  rpt gen_tac >> PairCases_on `acc` >> Cases_on `top` >>
-  simp[classify_function_def] >>
-  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vis` >> rw[]
-QED
-
-Theorem classify_functions_ctor_mem:
-  !tops mut nr rr fname args defaults ret body.
-    SND (SND (SND (classify_functions tops))) =
-      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
-    MEM (FunctionDecl Deploy mut nr rr fname args defaults ret body) tops
-Proof
-  Induct_on `tops` >- simp[classify_functions_def] >>
-  rpt gen_tac >>
-  simp[classify_functions_def] >> strip_tac >>
-  drule classify_function_ctor_source_step >>
-  strip_tac >- simp[] >>
-  fs[GSYM classify_functions_def] >> metis_tac[]
-QED
-
 Theorem build_compile_env_non_internal_no_return_pc[local]:
   !tops vis mut fname args ret body use_trans.
     vis <> Internal ==>
@@ -70,6 +43,10 @@ Theorem package_constructor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_program_def, supported_declaration_headers_def,
+              supported_headers_module_consts_env] >>
+  gvs[subst_consts_fn_empty] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   gvs[package_constructor_def, set_constructor_package_target_def,

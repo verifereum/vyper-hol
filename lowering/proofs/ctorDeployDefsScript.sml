@@ -12,6 +12,70 @@ Ancestors
   venomExecSemantics venomState e2eEntry compileVyper compileEnv valueEncoding
   immutableSectionRel vyperValue vyperContext
 
+(* Classification normalizes defaults and bodies, while constructor metadata
+   still identifies the selected source declaration. *)
+Theorem classify_function_ctor_source_step[local]:
+  !top acc mut nr rr fname args defaults ret body.
+    SND (SND (SND (classify_function top acc))) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
+    top = FunctionDecl Deploy mut nr rr fname args defaults ret body \/
+    SND (SND (SND acc)) = SOME (mut,nr,rr,fname,args,defaults,ret,body)
+Proof
+  rpt gen_tac >> PairCases_on `acc` >> Cases_on `top` >>
+  simp[classify_function_def] >>
+  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vis` >> rw[]
+QED
+
+Theorem classify_functions_ctor_mem:
+  !tops mut nr rr fname args defaults ret body.
+    SND (SND (SND (classify_functions tops))) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
+    ?raw_defaults raw_body.
+      MEM (FunctionDecl Deploy mut nr rr fname args raw_defaults ret raw_body) tops /\
+      subst_consts_fn (module_consts_env tops [])
+        (mut,nr,rr,fname,args,raw_defaults,ret,raw_body) =
+        (mut,nr,rr,fname,args,defaults,ret,body)
+Proof
+  Induct_on `tops` >- simp[classify_functions_def] >>
+  rpt gen_tac >>
+  simp[classify_functions_def] >> strip_tac >>
+  drule classify_function_ctor_source_step >>
+  strip_tac >- simp[] >>
+  fs[GSYM classify_functions_def] >> metis_tac[]
+QED
+
+Theorem classify_functions_ctor_lookup:
+  !tops src name.
+    case SND (SND (SND (classify_functions tops))) of
+      NONE =>
+        vyperInterpreter$lookup_function src name Deploy tops =
+          SOME (Payable,F,[],[],NoneT,[])
+    | SOME (mut,nr,rr,fname,args,defaults,ret,body) =>
+        fname = name ==>
+        ?raw_defaults raw_body.
+          vyperInterpreter$lookup_function src name Deploy tops =
+            SOME (mut,nr,args,raw_defaults,ret,raw_body) /\
+          subst_consts_fn (module_consts_env tops [])
+            (mut,nr,rr,fname,args,raw_defaults,ret,raw_body) =
+            (mut,nr,rr,fname,args,defaults,ret,body)
+Proof
+  Induct >- simp[classify_functions_def, vyperInterpreterTheory.lookup_function_def] >>
+  rpt gen_tac >>
+  first_x_assum (qspecl_then [`src`, `name`] mp_tac) >>
+  simp[classify_functions_def] >>
+  `?a b c d. FOLDR classify_function ([],[],NONE,NONE) tops = (a,b,c,d)` by
+    metis_tac[pairTheory.ABS_PAIR_THM] >>
+  simp[] >> strip_tac >> Cases_on `h` >>
+  simp[classify_function_def, vyperInterpreterTheory.lookup_function_def]
+  >~ [`VariableDecl vd`]
+  >- (Cases_on `vd` >> simp[vyperInterpreterTheory.lookup_function_def])
+  >~ [`HashMapDecl hd`]
+  >- (Cases_on `hd` >> simp[vyperInterpreterTheory.lookup_function_def]) >>
+  qmatch_goalsub_rename_tac `case vv of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vv` >> rw[]
+QED
+
 (* Every artifact a successful compile_vyper (K SOME) produces for the
    deployment unit, as compile_vyper_runtime_phases does for the runtime unit. *)
 Definition deploy_phases_def:
