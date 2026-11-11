@@ -247,6 +247,7 @@ Definition alloc_env_agree_def:
   alloc_env_agree c c' <=>
     c'.ce_struct_fields = c.ce_struct_fields /\
     c'.ce_event_info = c.ce_event_info /\
+    c'.ce_error_info = c.ce_error_info /\
     c'.ce_module_vars = c.ce_module_vars /\
     c'.ce_hashmap_info = c.ce_hashmap_info /\
     c'.ce_module_var_type = c.ce_module_var_type /\
@@ -255,6 +256,14 @@ Definition alloc_env_agree_def:
     c'.ce_var_type = c.ce_var_type /\
     c'.ce_func_mutability = c.ce_func_mutability
 End
+
+Theorem custom_error_alloc_ok_frame:
+  !c c' err. alloc_env_agree c c' ==>
+    custom_error_alloc_ok c' err = custom_error_alloc_ok c err
+Proof
+  rw[alloc_env_agree_def] >> drule type_memory_bytes_frame >> strip_tac >>
+  Cases_on `err` >> simp[custom_error_alloc_ok_def]
+QED
 
 Theorem alloc_env_agree_var_type:
   !c c' f. alloc_env_agree c c' ==>
@@ -343,6 +352,7 @@ Proof
   ho_match_mp_tac alloc_limits_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> rename1 `alloc_env_agree c0 c1` >>
   drule assign_alloc_ok_frame >> strip_tac >>
+  drule custom_error_alloc_ok_frame >> strip_tac >>
   `!s. alloc_env_agree (decl_var_type c0 s) (decl_var_type c1 s)` by
     metis_tac[alloc_env_agree_decl_var_type] >>
   `!f. alloc_env_agree (c0 with ce_var_type updated_by f)
