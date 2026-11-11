@@ -127,8 +127,8 @@ QED
    - old allocation lookup: target_post_def.  Its byte frame additionally needs
      aid < pointer-start.cs_next_id and nonlocal separation of the whole owner;
      owned snapshot supplies these once the index bound is transported.
-   - borrowed bytes: tuple_place_pure_target_scopes and
-     tuple_place_pure_target_borrow_bytes.  Reconstruct local regions using
+   - borrowed bytes: tuple_place_supported_target_scopes and
+     tuple_place_supported_target_borrow_bytes.  Reconstruct local regions using
      copy_buffer_local_region_frame and local_region_scopes_domain, not entry
      equality.  local_path_at is static in cenv,cx.
    - static call safety for reachable-target geometry:
@@ -323,7 +323,7 @@ QED
        source operand equations and all pending aggregate representations
        from H hold at s, and tuple_place_snapshot ... ee ... sa.next_id ... s.
        Use tuple_place_target_allocation for an owner and
-       tuple_place_pure_target_borrow_bytes for a borrow; local-region
+       tuple_place_supported_target_borrow_bytes for a borrow; local-region
        equivalence is wb_frame_local_regions with scope-domain equality.
        Prove owner nonlocal separation at ee by the REVERSE region equivalence,
        not merely forward transport of the one borrowed local.

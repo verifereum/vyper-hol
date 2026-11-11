@@ -7,26 +7,6 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem tuple_place_root_static_ready:
-  expr_body_pre cenv cx env e es /\ expr_type e = TupleT tys /\
-  EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
-    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
-    target_indices_pre cenv cx env bt) gs ==>
-  type_alloc_ok cenv (TupleT tys) /\
-  EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
-    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
-    target_indices_pre cenv cx env bt /\
-    call_evaluation_safe cx (int_calls_target bt)) gs
-Proof
-  strip_tac >> conj_tac
-  >- (fs[expr_body_pre_def] >>
-      drule alloc_limits_expr_type_alloc_ok >> simp[]) >>
-  fs[EVERY_MEM] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  qexists `bt` >> simp[] >>
-  metis_tac[tuple_place_rhs_target_call_safe]
-QED
-
 Theorem tuple_place_root_layout_ready:
   expr_sim_inv cenv cx env es /\
   evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) ==>

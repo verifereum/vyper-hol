@@ -4,13 +4,14 @@ Ancestors
   tuplePlaceHeadOpen tuplePlaceHeadGas tuplePlaceSource tuplePlaceHead tuplePlaceSuffixCode
   stmtSimForRounds tupleTargetStoreProps vyperInterpreter vyperState
   stmtLowering compileEnv loweringStateRelDefs fragGasMode fragGasPath exprSimHypsDefs
-  vyperTypeDefaults list rich_list
+  vyperTypeDefaults bodySim list rich_list
 
 Theorem tuple_place_suffix_run_open:
   !ctx func cenv cx env tops gs tys ltys tvs ltvs vs elems w lo.
   LIST_REL (\g t. well_typed_atarget env g t) gs tys /\
-  EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
-    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
+  EVERY (\g. ?bt. g = BaseTarget bt /\ EVERY (supported_expr tops) (target_indices bt) /\
+    (body_base_target_ok cx bt ==> target_case F ctx func cenv cx bt) /\
+    ~immutable_root cx bt /\
     target_indices_pre cenv cx env bt /\
     call_evaluation_safe cx (int_calls_target bt)) gs /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
@@ -25,6 +26,7 @@ Theorem tuple_place_suffix_run_open:
   !i es sp sf s0.
     i <= LENGTH tys /\ expr_sim_inv cenv cx env es /\ ~block_is_terminated sp /\
     tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+    body_tuple_targets_ok cx (DROP i gs) (DROP i vs) /\
     compile_tuple_store_all cenv (DROP i ltys) (DROP i gs) (DROP i elems) sp = ((),sf) /\
     fn_has_code sp sf func ==>
     gas_outcome F (cx_tops cx) (ctx,func)
@@ -58,11 +60,20 @@ Proof
       fs[tuple_place_head_def, gas_marked_path_def] >>
       metis_tac[gas_path_rules]) >>
   `i < LENGTH tys` by decide_tac >>
-  `?bt. EL i gs = BaseTarget bt /\ supported_target_pure tops bt /\
-    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
+  `?bt. EL i gs = BaseTarget bt /\ EVERY (supported_expr tops) (target_indices bt) /\
+    (body_base_target_ok cx bt ==> target_case F ctx func cenv cx bt) /\
+    ~immutable_root cx bt /\
     target_indices_pre cenv cx env bt /\
     call_evaluation_safe cx (int_calls_target bt)` by
     fs[EVERY_EL] >>
+  `DROP i gs = BaseTarget bt :: DROP (SUC i) gs` by simp[DROP_CONS_EL] >>
+  `DROP i vs = EL i vs :: DROP (SUC i) vs` by simp[DROP_CONS_EL] >>
+  `body_base_target_ok cx bt /\
+   ((?ast ax ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL ax,ast')) ==>
+    body_tuple_targets_ok cx (DROP (SUC i) gs) (DROP (SUC i) vs))` by
+    (qpat_x_assum `body_tuple_targets_ok _ _ _` mp_tac >>
+     asm_rewrite_tac[] >> simp[body_tuple_target_ok_def]) >>
+  `target_case F ctx func cenv cx bt` by metis_tac[] >>
   `well_typed_target env bt (EL i tys)` by
     (fs[LIST_REL_EL_EQN] >>
      qpat_x_assum `!n. n < LENGTH tys ==> well_typed_atarget _ _ _`
@@ -70,8 +81,6 @@ Proof
      simp[vyperTypeSystemTheory.well_typed_atarget_def]) >>
   drule_all tuple_place_target_ready >> strip_tac >>
   drule_all tuple_place_suffix_code_parts >> strip_tac >>
-  `DROP i gs = BaseTarget bt :: DROP (SUC i) gs` by simp[DROP_CONS_EL] >>
-  `DROP i vs = EL i vs :: DROP (SUC i) vs` by simp[DROP_CONS_EL] >>
   asm_rewrite_tac[Once evaluate_def] >>
   simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
   irule (SRULE [ignore_bind_def] tuple_place_head_gas_continuation_open) >>
@@ -85,6 +94,7 @@ Proof
      qexists `sp` >> fs[tuple_place_head_def]) >>
   fs[LET_THM] >>
   rpt gen_tac >> strip_tac >>
+  `body_tuple_targets_ok cx (DROP (SUC i) gs) (DROP (SUC i) vs)` by metis_tac[] >>
   qpat_x_assum `!y. _ ==> _` (qspec_then `SUC i` mp_tac) >>
   simp[] >>
   disch_then (qspecl_then [`ff with gas_obs := []`,`sb`,`sf`,`t`] mp_tac) >>
