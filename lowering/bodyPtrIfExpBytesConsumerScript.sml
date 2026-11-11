@@ -120,8 +120,10 @@ Resume ifexp_allocated_bytes_writer[kept]:
 QED
 
 Resume ifexp_allocated_bytes_writer[pointer]:
-  irule ifexp_bytes_destination_ptr_post >> simp[] >>
-  qexistsl_tac [`capacity`, `b`] >> simp[eval_operand_def]
+  irule ifexp_bytes_destination_ptr_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`capacity`, `dtv`, `b`] >>
+  rewrite_tac[eval_operand_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise ifexp_allocated_bytes_writer

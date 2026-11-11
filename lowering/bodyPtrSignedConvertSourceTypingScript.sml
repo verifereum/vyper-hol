@@ -39,7 +39,8 @@ Proof
   gvs[lowered_value_type_def, is_bytestring_type_def, vyperASTTheory.expr_type_def]
   >~ [`is_bytestring_type (concat_buffer_type _ _)`]
   >- (rw[concat_buffer_type_def] >>
-      rpt CASE_TAC >> simp[is_bytestring_type_def]) >>
+      CASE_TAC >> simp[is_bytestring_type_def] >>
+      CASE_TAC >> simp[is_bytestring_type_def]) >>
   drule_all internal_call_lowered_bytestring >>
   simp[lowered_value_type_def]
 QED
@@ -171,7 +172,8 @@ Proof
   gvs[lowered_value_type_def, is_bytestring_type_def, vyperASTTheory.expr_type_def]
   >~ [`is_bytestring_type (concat_buffer_type _ _)`]
   >- (rw[concat_buffer_type_def] >>
-      rpt CASE_TAC >> simp[is_bytestring_type_def]) >>
+      CASE_TAC >> simp[is_bytestring_type_def] >>
+      CASE_TAC >> simp[is_bytestring_type_def]) >>
   drule_all body_internal_lowered_bytestring >> simp[lowered_value_type_def]
 QED
 

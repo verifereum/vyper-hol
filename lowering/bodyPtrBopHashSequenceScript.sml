@@ -257,7 +257,7 @@ Proof
   `op_prov G3 (Var h) = NONE` by gvs[bop_hash_sha3_output_no_prov] >>
   simp[] >> rpt strip_tac
   >- (gvs[] >> simp[bop_add_preserves_old_prov, bop_hash_load_hash_old_prov]) >>
-  gvs[step_taint_def, set_var_taint_def, mk_inst_def, FLOOKUP_UPDATE]
+  simp[step_taint_def, set_var_taint_def, mk_inst_def, FLOOKUP_UPDATE]
 QED
 
 Theorem bop_hash_seq_cons:
