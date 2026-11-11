@@ -11,7 +11,7 @@ Ancestors
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperTypeSystem vyperTypeInvariants vyperTypeValues vyperTypeEnv
-  vyperTypeExprSoundness
+  vyperTypeExprSoundness vyperTypeArgFits
 Libs
   wordsLib intLib
 
@@ -260,7 +260,8 @@ Theorem args_dflts_typing_to_el_stmt:
                          value_has_type tv v) vs args /\
     LIST_REL (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
                          value_has_type tv v) dflt_vs needed_dflts /\
-    MAP expr_type args = TAKE (LENGTH args) (MAP SND params) /\
+    LIST_REL (type_widens_to tenv) (MAP expr_type args)
+      (TAKE (LENGTH args) (MAP SND params)) /\
     MAP expr_type needed_dflts = MAP SND (DROP (LENGTH args) params) /\
     LENGTH args + LENGTH needed_dflts = LENGTH params ==>
     !i tv. i < LENGTH params /\ i < LENGTH (vs ++ dflt_vs) /\
@@ -280,11 +281,12 @@ Proof
       qpat_x_assum `LIST_REL _ vs args` mp_tac >>
       simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
       first_x_assum drule >> strip_tac >>
-      `expr_type (EL i args) = SND (EL i params)` by (
-        `EL i (MAP expr_type args) =
-         EL i (TAKE (LENGTH args) (MAP SND params))` by metis_tac[] >>
-        gvs[listTheory.EL_MAP, rich_listTheory.EL_TAKE]) >>
-      gvs[]) >>
+      `type_widens_to tenv (expr_type (EL i args)) (SND (EL i params))` by (
+        qpat_x_assum `LIST_REL (type_widens_to _) _ _` mp_tac >>
+        simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
+        first_x_assum (qspec_then `i` mp_tac) >>
+        simp[listTheory.EL_MAP, rich_listTheory.EL_TAKE]) >>
+      drule_all type_widens_to_value_has_type >> strip_tac >> gvs[]) >>
   `i >= LENGTH vs` by simp[] >>
   `i - LENGTH vs < LENGTH dflt_vs` by decide_tac >>
   simp[rich_listTheory.EL_APPEND2] >>
@@ -327,7 +329,8 @@ Theorem args_dflts_bind_arguments_stmt:
                          value_has_type tv v) vs args /\
     LIST_REL (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
                          value_has_type tv v) dflt_vs needed_dflts /\
-    MAP expr_type args = TAKE (LENGTH args) (MAP SND params) /\
+    LIST_REL (type_widens_to tenv) (MAP expr_type args)
+      (TAKE (LENGTH args) (MAP SND params)) /\
     MAP expr_type needed_dflts = MAP SND (DROP (LENGTH args) params) /\
     LENGTH args + LENGTH needed_dflts = LENGTH params ==>
     ?sc. bind_arguments tenv params (vs ++ dflt_vs) = SOME sc
@@ -340,10 +343,13 @@ Proof
   Cases_on `i < LENGTH args`
   >- (qpat_x_assum `LIST_REL _ vs args` mp_tac >>
       simp[listTheory.LIST_REL_EL_EQN] >> disch_then drule >> strip_tac >>
-      `EL i (MAP expr_type args) = EL i (MAP SND params)` by
-        simp[rich_listTheory.EL_TAKE] >>
-      qexists_tac `tv` >>
-      gvs[listTheory.EL_MAP, rich_listTheory.EL_APPEND1]) >>
+      `type_widens_to tenv (expr_type (EL i args)) (SND (EL i params))` by (
+        qpat_x_assum `LIST_REL (type_widens_to _) _ _` mp_tac >>
+        simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
+        first_x_assum (qspec_then `i` mp_tac) >>
+        simp[listTheory.EL_MAP, rich_listTheory.EL_TAKE]) >>
+      drule_all type_widens_to_value_has_type >> strip_tac >>
+      qexists_tac `tu` >> gvs[rich_listTheory.EL_APPEND1]) >>
   `i - LENGTH args < LENGTH needed_dflts` by decide_tac >>
   qpat_x_assum `LIST_REL _ dflt_vs needed_dflts` mp_tac >>
   simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
@@ -395,7 +401,8 @@ Theorem intcall_bind_arguments_from_runtime_typed:
     exprs_runtime_typed env es actual_vs /\
     exprs_runtime_typed (defaults_env env_body) needed_dflts dflt_vs /\
     env.type_defs = get_tenv cx /\ env_body.type_defs = get_tenv cx /\
-    MAP expr_type es = TAKE (LENGTH es) (MAP SND params) /\
+    LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND params)) /\
     MAP expr_type dflts = MAP SND (DROP (LENGTH params - LENGTH dflts) params) /\
     needed_dflts = DROP (LENGTH dflts - (LENGTH params - LENGTH es)) dflts /\
     LENGTH es <= LENGTH params /\ LENGTH params - LENGTH es <= LENGTH dflts /\

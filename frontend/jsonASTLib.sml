@@ -180,7 +180,7 @@ fun mk_JE_Compare (l, op_tm, r) =
 fun mk_JE_BoolOp (op_tm, es) = list_mk_comb(JE_BoolOp_tm, [op_tm, mk_list(es, json_expr_ty)])
 fun mk_JE_UnaryOp (op_tm, e, ty) = list_mk_comb(JE_UnaryOp_tm, [op_tm, e, ty])
 fun mk_JE_IfExp (test, body, els, ty) = list_mk_comb(JE_IfExp_tm, [test, body, els, ty])
-fun mk_JE_Tuple es = mk_comb(JE_Tuple_tm, mk_list(es, json_expr_ty))
+fun mk_JE_Tuple (es, ty) = list_mk_comb(JE_Tuple_tm, [mk_list(es, json_expr_ty), ty])
 fun mk_JE_List (es, ty) = list_mk_comb(JE_List_tm, [mk_list(es, json_expr_ty), ty])
 fun mk_JE_Call (func, args, kwargs, ty, src_id_opt_tm) =
   list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
@@ -785,7 +785,9 @@ fun d_json_expr () : term decoder = achoose "expr" [
 
   (* Tuple *)
   check_ast_type "Tuple" $
-    JSONDecode.map mk_JE_Tuple (field "elements" (array (delay d_json_expr))),
+    JSONDecode.map mk_JE_Tuple $
+    tuple2 (field "elements" (array (delay d_json_expr)),
+            orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* List *)
   check_ast_type "List" $
