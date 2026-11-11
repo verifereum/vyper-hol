@@ -11,9 +11,10 @@ Ancestors
   exprSimHypsDefs exprSimProps
 
 Theorem array_for_hypotheses:
-  !tops bindings id ty e n body env ret_ty env'.
+  !tops bindings id ty e n body env ret_ty env' m arr.
   supported_stmt tops bindings (For id ty (Array e) n body) /\
-  type_stmt env ret_ty (For id ty (Array e) n body) = SOME env' ==>
+  type_stmt env ret_ty (For id ty (Array e) n body) = SOME env' /\
+  e = Name (ArrayT ty (Fixed m)) arr ==>
   ?name env_b.
     e = Name (ArrayT ty (Fixed n)) name /\ env' = env /\
     well_typed_expr env (Name (ArrayT ty (Fixed n)) name) /\
@@ -25,8 +26,7 @@ Theorem array_for_hypotheses:
 Proof
   rpt gen_tac >> strip_tac >>
   `?name. e = Name (ArrayT ty (Fixed n)) name` by
-    (irule supported_array_iterator_shape >>
-     gvs[supported_stmt_def] >> metis_tac[]) >>
+    gvs[supported_stmt_def, supported_iterator_def] >>
   gvs[type_stmt_def, supported_stmt_def, well_typed_iterator_def,
       expr_type_def, optionTheory.IS_SOME_EXISTS, AllCaseEqs()]
 QED

@@ -63,7 +63,7 @@ Ancestors
   stmtSimForArray stmtSimForArrayFrag vyperTyping fragExec compileEnv loweringStateRelDefs
   supportedStmts supportedStmtTraverse compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness vyperAST vyperInterpreter vyperState vyperValue
   vyperValueOperation vyperTypeSystem vyperTypeInvariants vyperTypeValues
-  targetPlaceSim exprSimTopLevelProps
+  targetPlaceSim exprSimTopLevelProps bodyStorageMetadata
   vyperTypeEnv valueEncoding valueEncodingProps valueEncodingTyping exprSimAggregateEncoding
   venomState arithmetic
 Libs
@@ -314,9 +314,10 @@ Proof
   disch_then drule_all >> simp[] >> metis_tac[]
 QED
 
-(* ADMITTED, pending the whitelist manager's ruling (not in the packet): a
-   For over a memory iterable, an array that is not rooted at a top-level
-   name (a temporary or a projection of a local).  compile_for_mem_frag
+(* ADMITTED (out-of-packet key, allowed by the plan session): a For over a
+   memory iterable, an array that is not rooted at a top-level name, has no
+   ternary in it (#1254) and whose lowered value has the annotated type (no
+   widened internal call, #767): a temporary or a projection of a local.  compile_for_mem_frag
    proves the loop against a keep hook; discharging it needs stmt_post's
    alloca_frame (temporaries) and vv_at's local_place_at (places), which this
    base doesn't have yet. *)
@@ -347,10 +348,107 @@ Theorem body_for_memory_iterable:
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     (?e. it = Array e /\ ~(?t v. e = Name t v) /\ ~(?t nid. e = TopLevelName t nid) /\
+       ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+       post_value_type cenv e = expr_type e /\
        !tgt nid. expr_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
 Proof
   cheat
+QED
+
+(* The For case of body_sim_mutual over every iterator but a range of two
+   literals: it dispatches each array form to its case lemma. *)
+Theorem body_for_other:
+  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
+   es res es'.
+    body_stmt_safe tops (For id typ it n body) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_ok cx it) /\
+    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ it n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
+    stmt_exprs_ok cenv (For id typ it n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    ~(?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
+Proof
+  rpt strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >> Cases_on `it`
+  >~ [`Range _ _`] >- (irule body_for_range >> simp[] >> metis_tac[]) >>
+  rename1 `For id typ (Array e) n body` >>
+  `supported_type_namespace typ /\ supported_iterator tops typ (Array e) n /\
+   supported_stmts tops bindings body /\
+   ~supported_stmts_expr_exists expr_internal_call_root body` by
+    fs[supported_stmt_def] >>
+  `well_typed_expr env e /\ ?bd. expr_type e = ArrayT typ bd` by
+    gvs[type_stmt_def, well_typed_iterator_def, AllCaseEqs()] >>
+  `!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+              (For id typ (Array e) n body) ==> occurs_abi_decode_target target tops` by
+    metis_tac[] >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
+    fs[bodySimTheory.body_inv_def] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_declared_return >> simp[] >> rpt strip_tac >>
+     gvs[supported_iterator_def]) >>
+  Cases_on `e` >>
+  gvs[supported_iterator_def, expr_type_def, place_access_root]
+  >~ [`Name (ArrayT _ bd) arr`]
+  >- (Cases_on `bd` >> gvs[]
+      >- (irule body_for_array >> simp[] >> metis_tac[]) >>
+      irule body_for_dynarray_name >> simp[] >> metis_tac[])
+  >~ [`TopLevelName (ArrayT _ bd) nid`]
+  >- (PairCases_on `nid` >> gvs[optionTheory.IS_SOME_EXISTS] >>
+      drule_all supported_immutable_type_find_NONE >> strip_tac >> gvs[] >>
+      `FLOOKUP env.bare_globals (NONE,nid1) = SOME (ArrayT typ bd)` by
+        (irule toplevel_find_NONE_bare_global >>
+         fs[expr_sim_inv_def] >> metis_tac[]) >>
+      irule body_for_immutable_array >> simp[] >> metis_tac[]) >>
+  irule body_for_memory_iterable >> simp[] >> metis_tac[]
+QED
+
+Theorem body_for_case:
+  !cx id typ it n body.
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_ok cx it) ==>
+    body_stmt_ok cx (For id typ it n body)
+Proof
+  rpt gen_tac >> strip_tac >> REWRITE_TAC [body_stmt_ok_def] >>
+  rpt strip_tac >>
+  Cases_on `?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))`
+  >- (qpat_x_assum `?a1 n1 a2 n2. _`
+        (REPEAT_TCL CHOOSE_THEN SUBST_ALL_TAC) >>
+      drule_all body_for_range_lit >> simp[]) >>
+  drule_all body_for_other >> simp[]
 QED

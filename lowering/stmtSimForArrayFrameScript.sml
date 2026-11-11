@@ -1380,14 +1380,21 @@ QED
 
 Theorem supported_iterator_scopes:
   !tops ty it n cx es res es'.
-    supported_iterator tops ty it n /\ eval_iterator cx it es = (res,es') ==>
+    supported_iterator tops ty it n /\
+    ~supported_iterator_exists expr_internal_call_root it /\
+    eval_iterator cx it es = (res,es') ==>
     es'.scopes = es.scopes
 Proof
   Cases_on `it` >> rpt gen_tac >> strip_tac
   >~ [`eval_iterator cx (Array arr) es = _`]
-  >- (drule supported_array_iterator_shape >> strip_tac >> gvs[] >>
-      irule array_iterator_scopes >> goal_assum (drule_at Any) >>
-      metis_tac[name_expr_scopes]) >>
+  >- (irule array_iterator_scopes >> goal_assum (drule_at Any) >>
+      Cases_on `arr`
+      >~ [`Name _ _`] >- metis_tac[name_expr_scopes]
+      >~ [`TopLevelName _ nid`]
+      >- (PairCases_on `nid` >> simp[Once evaluate_def] >>
+          metis_tac[lookup_global_scopes]) >>
+      gvs[supported_iterator_def, supported_iterator_exists_def] >>
+      metis_tac[supported_expr_scopes]) >>
   rename1 `eval_iterator cx (Range a b) es = _` >>
   irule range_iterator_scopes >> goal_assum (drule_at Any) >>
   Cases_on `a`

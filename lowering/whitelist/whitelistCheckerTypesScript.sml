@@ -7,7 +7,7 @@
    a simulation case can split on it. *)
 Theory whitelistCheckerTypes
 Ancestors
-  supportedExprForms supportedTypes vyperTypeSystem vyperContext vyperValue
+  supportedExprForms supportedTypes supportedStmts vyperTypeSystem vyperContext vyperValue
   vyperAST vyperMisc exprLowering placeTypingProps abiCallerStructSize
   alist finite_map list pred_set pair arithmetic
 
@@ -581,4 +581,33 @@ Proof
        AllCaseEqs()] >>
   rw[] >> drule type_env_struct_fields >> rw[] >>
   drule ALOOKUP_MEM >> simp[MEM_MAP, EXISTS_PROD] >> metis_tac[]
+QED
+
+(* ===== For iterators ===== *)
+
+(* An array For the checker accepts is a supported iterator given the
+   residual the checker doesn't decide: the AST bound equals the array's
+   bound (type_stmt doesn't relate them, #1202), a top-level iterable is an
+   immutable, and any other iterable passes the expression gate, has no
+   ternary, is not a place rooted at a top-level name, and an internal call
+   at its top has its callee's declared return type. *)
+Theorem type_stmt_for_array_supported_iterator:
+  type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
+  (!bd. expr_type e = ArrayT typ bd ==> bound_length bd = n) /\
+  (!t nid. e = TopLevelName t nid ==>
+           IS_SOME (supported_immutable_type tops nid)) /\
+  ((!t v. e <> Name t v) /\ (!t nid. e <> TopLevelName t nid) ==>
+   supported_expr tops e /\
+   ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+   (!tgt nid. expr_place e = SOME tgt ==>
+              FST (place_access tgt []) <> TopLevelNameTarget nid) /\
+   (!t fid args drv. e = Call t (IntCall fid) args drv ==>
+      ?m nr rr ps ds b.
+        supported_function_decl tops fid Internal = SOME (m,nr,rr,ps,ds,t,b))) ==>
+  supported_iterator tops typ (Array e) n
+Proof
+  simp[Once type_stmt_def, well_typed_iterator_def] >> rpt strip_tac >>
+  `bound_length bd = n` by res_tac >>
+  Cases_on `e` >> gvs[supported_iterator_def, expr_type_def] >>
+  rename1 `ArrayT typ bd` >> Cases_on `bd` >> gvs[]
 QED

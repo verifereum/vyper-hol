@@ -13,7 +13,8 @@ Ancestors
   supportedStmts supportedStmtTraverse supportedExprs vyperAST
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeInvariants vyperTypeCallGraph gasContext stmtSimReturn
-  vyperTypeCallStackSoundness vyperTypeValues compileVyper targetPlaceSim
+  vyperTypeCallStackSoundness vyperTypeValues compileVyper targetPlaceSim exprSimTopLevelProps
+  bodyStorageMetadata
 Libs
   monadsyntax
 
@@ -29,7 +30,8 @@ Theorem array_for_source_ready_mem[local]:
     ==> body_for_mem_ok cx tyv id stmts vs) /\
   supported_stmt tops bindings (For id typ (Array e) n stmts) /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' ==>
+  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' /\
+  e = Name (ArrayT typ (Fixed m)) arr ==>
   ?name env_b entry tv ptr sz al vs.
     e = Name (ArrayT typ (Fixed n)) name /\ env' = env /\
     well_typed_expr env (Name (ArrayT typ (Fixed n)) name) /\
@@ -239,48 +241,13 @@ Proof
   cheat
 QED
 
-(* ADMITTED (packet A2-mem, storage/transient): memory twin of
-   bodySimDeclCases's body_for_storage_array (A2s), same form. *)
-Theorem body_for_storage_array_mem:
-  !cx id typ it n body d tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es.
-    body_stmt_safe tops (For id typ it n body) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_mem_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_mem_ok cx it) /\
-    body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings (For id typ it n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ it n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ it n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
-    (?e tgt nid. it = Array e /\ expr_place e = SOME tgt /\
-       target_root tgt = TopLevelNameTarget nid /\ ~immutable_root cx tgt) ==>
-    stmt_frag_mem d ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body))
-      (eval_stmt cx (For id typ it n body)) es
-Proof
-  cheat
-QED
-
 (* ADMITTED (packet A2-mem, memory iterable): a For over an array that is
    neither a name nor a top-level name, nor a place rooted at a storage
-   declaration: a temporary (literal, call result, IfExp), a projection of a
-   local, or a projection of an immutable (A2p's form). *)
+   declaration, with no ternary in it: a temporary (literal, call result) or
+   a projection of a local.  A ternary of same-layout arms lowers to a pointer
+   into one arm, which could alias a local the body writes (#1254); the
+   lowered value has the annotated type, so a widened internal call result
+   (#767) is out. *)
 Theorem body_for_memory_iterable_mem:
   !cx id typ it n body d tops bindings ctx func cenv env env' ret_ty lctx RetQ
    es.
@@ -309,6 +276,8 @@ Theorem body_for_memory_iterable_mem:
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
     (?e. it = Array e /\ ~(?t v. e = Name t v) /\ ~(?t nid. e = TopLevelName t nid) /\
+       ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+       post_value_type cenv e = expr_type e /\
        ~(?tgt nid. expr_place e = SOME tgt /\
                    target_root tgt = TopLevelNameTarget nid /\ ~immutable_root cx tgt) /\
        ?bd. expr_type e = ArrayT typ bd /\ bound_length bd <= n) ==>
@@ -319,9 +288,9 @@ Proof
   cheat
 QED
 
-Theorem body_for_array_mem:
+Theorem body_for_fixed_array_mem[local]:
   !cx id typ it n body d tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es.
+   es e m arr.
     body_stmt_safe tops (For id typ it n body) /\
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\
@@ -346,7 +315,7 @@ Theorem body_for_array_mem:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
-    (?e. it = Array e) ==>
+    it = Array e /\ e = Name (ArrayT typ (Fixed m)) arr ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
@@ -406,4 +375,64 @@ Proof
      (r, es2)` by simp[] >>
   drule_at (Pat `eval_stmts`) array_body_scope_callback >>
   disch_then drule_all >> simp[] >> metis_tac[]
+QED
+
+Theorem body_for_array_mem:
+  !cx id typ it n body d tops bindings ctx func cenv env env' ret_ty lctx RetQ
+   es.
+    body_stmt_safe tops (For id typ it n body) /\
+    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
+       (INL x,t'') ==>
+       body_for_mem_ok cx tyv id body vs) /\
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_iterator_mem_ok cx it) /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (For id typ it n body) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (For id typ it n body) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
+    stmt_exprs_ok cenv (For id typ it n body) /\
+    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
+    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
+    (?e. it = Array e) ==>
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (For id typ it n body))
+      (eval_stmt cx (For id typ it n body)) es
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `supported_iterator tops typ (Array e) n` by fs[supported_stmt_def] >>
+  `well_typed_expr env e /\ ?bd. expr_type e = ArrayT typ bd` by
+    gvs[type_stmt_def, well_typed_iterator_def, AllCaseEqs()] >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
+    fs[bodySimTheory.body_inv_def] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_declared_return >> simp[] >> rpt strip_tac >>
+     gvs[supported_iterator_def]) >>
+  Cases_on `e` >>
+  gvs[supported_iterator_def, expr_type_def, place_access_root]
+  >~ [`Name (ArrayT _ bd) arr`]
+  >- (Cases_on `bd` >> gvs[]
+      >- (irule body_for_fixed_array_mem >> simp[] >> metis_tac[]) >>
+      irule body_for_dynarray_name_mem >> simp[] >> metis_tac[])
+  >~ [`TopLevelName (ArrayT _ bd) nid`]
+  >- (PairCases_on `nid` >> gvs[optionTheory.IS_SOME_EXISTS] >>
+      drule_all supported_immutable_type_find_NONE >> strip_tac >> gvs[] >>
+      `FLOOKUP env.bare_globals (NONE,nid1) = SOME (ArrayT typ bd)` by
+        (irule toplevel_find_NONE_bare_global >>
+         fs[expr_sim_inv_def] >> metis_tac[]) >>
+      irule body_for_immutable_array_mem >> simp[] >> metis_tac[]) >>
+  irule body_for_memory_iterable_mem >> simp[] >> metis_tac[]
 QED

@@ -95,6 +95,14 @@ Definition target_root_def:
   target_root (SubscriptTarget t e) = target_root t
 End
 
+(* The type checker's access root of a place (vyperTypeSystem) is its root. *)
+Theorem place_access_root:
+  !tgt attrs. FST (place_access tgt attrs) = target_root tgt
+Proof
+  ho_match_mp_tac vyperTypeSystemTheory.place_access_ind >>
+  simp[vyperTypeSystemTheory.place_access_def, target_root_def]
+QED
+
 (* The target is inside an immutable or a constant: a module name with no
    storage declaration. *)
 Definition immutable_root_def:

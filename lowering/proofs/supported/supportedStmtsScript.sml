@@ -6,7 +6,8 @@
 Theory supportedStmts
 Ancestors
   supportedStmtTraverse supportedExprs supportedExprForms supportedExprTraverse
-  supportedTypes supportedDecls supportedTargets exprLowering vyperAST list alist integer
+  supportedTypes supportedDecls supportedTargets exprLowering vyperTypeSystem vyperAST list
+  alist integer
 
 Definition supported_local_word_def:
   supported_local_word bindings name <=>
@@ -110,8 +111,18 @@ Definition supported_log_def:
 End
 
 (* Literal ranges have exactly Num(b-a), including zero. The other range
-   branch requires a positive checked bound. Array iteration is precisely a
-   Name of a fixed array with the loop type and AST bound equal to its shape.
+   branch requires a positive checked bound. An array iterable has the loop
+   type as its element type and its bound at most the AST bound (exactly it
+   for a local fixed array): a local array, an immutable array, or another
+   supported array expression that is not a place rooted at a top-level name
+   and has no ternary in it.
+   - Storage and transient arrays stay out: the source iterates a snapshot
+     while the compiled loop reads the slots each iteration, which a
+     re-entrant call in the body can change (#1268).
+   - A ternary of same-layout arms lowers to a pointer into one arm, so a
+     ternary over locals would alias a local the body may write (#1254).
+   - An internal call's declared return type is the annotated type: a
+     narrower one would lay out the result buffer with another stride (#767).
    Source typing (including nonliteral endpoint types) remains separate. *)
 Definition supported_iterator_def:
   supported_iterator tops ty (Range a b) n =
@@ -122,7 +133,21 @@ Definition supported_iterator_def:
   supported_iterator tops ty (Array e) n =
     (case e of
        Name (ArrayT elem (Fixed m)) name => elem = ty /\ n = m
-     | _ => F)
+     | Name (ArrayT elem (Dynamic c)) name => elem = ty /\ c <= n
+     | Name _ _ => F
+     | TopLevelName (ArrayT elem bd) nid =>
+         elem = ty /\ bound_length bd <= n /\
+         IS_SOME (supported_immutable_type tops nid)
+     | TopLevelName _ _ => F
+     | _ => supported_expr tops e /\
+            ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+            (!tgt nid. expr_place e = SOME tgt ==>
+                       FST (place_access tgt []) <> TopLevelNameTarget nid) /\
+            (!t fid args drv. e = Call t (IntCall fid) args drv ==>
+               ?m nr rr ps ds b.
+                 supported_function_decl tops fid Internal =
+                   SOME (m,nr,rr,ps,ds,t,b)) /\
+            ?bd. expr_type e = ArrayT ty bd /\ bound_length bd <= n)
 End
 
 Definition supported_stmt_def:
@@ -186,15 +211,6 @@ Proof
   simp[supported_iterator_def]
 QED
 
-Theorem supported_array_iterator_shape:
-  supported_iterator tops ty (Array e) n ==>
-    ?name. e = Name (ArrayT ty (Fixed n)) name
-Proof
-  Cases_on `e` >> simp[supported_iterator_def] >>
-  rename1 `arr_ty = ArrayT ty (Fixed n)` >> Cases_on `arr_ty` >>
-  simp[] >> rename1 `bd = Fixed n` >>
-  Cases_on `bd` >> simp[]
-QED
 
 Theorem supported_loop_body_contract:
   supported_stmt tops bindings (For name ty iter n loop_body) ==>

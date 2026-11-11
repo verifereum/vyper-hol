@@ -13206,7 +13206,8 @@ Theorem supported_iterator_shape[local]:
 Proof
   Cases_on `iter` >>
   simp[supportedStmtsTheory.supported_iterator_def, supported_iterator_exists_def]
-  >- (Cases_on `e` >> simp[supported_expr_exists_def, expr_shape_root_def]) >>
+  >- (Cases_on `e` >> simp[supported_expr_exists_def, expr_shape_root_def] >>
+      metis_tac[supported_expr_shape]) >>
   qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root start_expr` >>
   Cases_on `start_expr` >> simp[]
   >~ [`Literal lit_ty lit`]

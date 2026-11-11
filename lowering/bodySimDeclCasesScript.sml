@@ -17,11 +17,10 @@
  *                                  the statement's expressions simulate
  *   expr_sim_inv_for_scope, expr_sim_inv_for_pop — expr_sim_inv into
  *                                  and out of a loop iteration's scope
- *   body_annassign_case, body_for_case — the cases
+ *   body_annassign_case          — the case
  *   body_annassign_memory        — the declarations in memory
  *   body_annassign_other         — the declarations it leaves, which are
  *                                  unsupported
- *   body_for_other               — dispatcher for computed ranges and arrays
  *   body_for_array               — iteration over a fixed array
  *   body_for_range               — checked integer-range body simulation
  *)
@@ -45,7 +44,6 @@ Ancestors
   vyperTypeScopePop vyperEvalOutcomeSuffix vyperTypeCallGraph
   vyperEvalPreservesScopes
   vyperTypeCallStackSoundness compileVyper moduleLowering intCallCallee
-  targetPlaceSim
 Libs
   monadsyntax
 
@@ -1166,7 +1164,8 @@ Theorem array_for_source_ready[local]:
     ==> body_for_ok cx tyv id stmts vs) /\
   supported_stmt tops bindings (For id typ (Array e) n stmts) /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' ==>
+  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' /\
+  e = Name (ArrayT typ (Fixed m)) arr ==>
   ?name env_b entry tv ptr sz al vs.
     e = Name (ArrayT typ (Fixed n)) name /\ env' = env /\
     well_typed_expr env (Name (ArrayT typ (Fixed n)) name) /\
@@ -1411,9 +1410,26 @@ Proof
   metis_tac[eval_stmts_preserves_tail_lookup_none]
 QED
 
+(* An expression whose top-level internal call, if any, is annotated with
+   its callee's declared return type is lowered at its annotated type. *)
+Theorem post_value_type_declared_return:
+  supported_program tops /\
+  cenv.ce_func_return_type = build_func_return_type tops /\
+  (!t fid args drv. e = Call t (IntCall fid) args drv ==>
+     ?m nr rr ps ds b.
+       supported_function_decl tops fid Internal = SOME (m,nr,rr,ps,ds,t,b)) ==>
+  post_value_type cenv e = expr_type e
+Proof
+  rpt strip_tac >>
+  Cases_on `?t fid args drv. e = Call t (IntCall fid) args drv`
+  >- (gvs[] >> drule_all supported_internal_return_type >> strip_tac >>
+      simp[post_value_type_def, lowered_value_type_def, expr_type_def]) >>
+  irule post_value_type_not_int_call >> metis_tac[]
+QED
+
 Theorem body_for_array:
   !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es res es'.
+   es res es' e m arr.
     body_stmt_safe tops (For id typ it n body) /\
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\
@@ -1437,7 +1453,7 @@ Theorem body_for_array:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    (?e. it = Array e) ==>
+    it = Array e /\ e = Name (ArrayT typ (Fixed m)) arr ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
@@ -1484,144 +1500,3 @@ Proof
   disch_then drule_all >> simp[] >> metis_tac[]
 QED
 
-(* ADMITTED (packet A2s): a For over an array place rooted at a module
-   variable that has a storage declaration (a storage or transient variable,
-   or a hashmap), read directly or through subscripts and attributes.  The
-   lowering reads the elements from their slots per iteration; the source
-   agrees once it does too (vyper-hol#1268) and the sparse storage copy is
-   in (SEQ-1699). *)
-Theorem body_for_storage_array:
-  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es.
-    body_stmt_safe tops (For id typ it n body) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ it n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ it n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    (?e tgt nid. it = Array e /\ expr_place e = SOME tgt /\
-       target_root tgt = TopLevelNameTarget nid /\ ~immutable_root cx tgt) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body))
-      (eval_stmt cx (For id typ it n body)) es
-Proof
-  cheat
-QED
-
-(* ADMITTED (packet A2p): a For over a subscript or attribute of an
-   immutable.  compile_subscript/compile_attribute keep the code location, so
-   the loop reads the elements from the immutable section. *)
-Theorem body_for_immutable_projection:
-  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es.
-    body_stmt_safe tops (For id typ it n body) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ it n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ it n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    (?e tgt. it = Array e /\
-       ((?t b k. e = Subscript t b k) \/ (?t b f. e = Attribute t b f)) /\
-       expr_place e = SOME tgt /\ immutable_root cx tgt) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body))
-      (eval_stmt cx (For id typ it n body)) es
-Proof
-  cheat
-QED
-
-Theorem body_for_other:
-  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es res es'.
-    body_stmt_safe tops (For id typ it n body) /\
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ it n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ it n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    ~(?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body))
-      (eval_stmt cx (For id typ it n body)) es
-Proof
-  rpt strip_tac >>
-  imp_res_tac body_stmt_safe_for_body >> Cases_on `it`
-  >- (irule body_for_array >> simp[] >> metis_tac[]) >>
-  irule body_for_range >> simp[] >> metis_tac[]
-QED
-
-Theorem body_for_case:
-  !cx id typ it n body.
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) ==>
-    body_stmt_ok cx (For id typ it n body)
-Proof
-  rpt gen_tac >> strip_tac >> REWRITE_TAC [body_stmt_ok_def] >>
-  rpt strip_tac >>
-  Cases_on `?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))`
-  >- (qpat_x_assum `?a1 n1 a2 n2. _`
-        (REPEAT_TCL CHOOSE_THEN SUBST_ALL_TAC) >>
-      drule_all body_for_range_lit >> simp[]) >>
-  drule_all body_for_other >> simp[]
-QED
