@@ -28,7 +28,7 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-Theorem gas_variant_code_layout_valid[local]:
+Theorem gas_variant_code_layout_valid:
   gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
 Proof
   rw[gas_variant_def] >> qpat_x_assum `so = _` SUBST_ALL_TAC >>
