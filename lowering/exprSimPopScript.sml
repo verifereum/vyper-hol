@@ -831,6 +831,10 @@ Proof
         (irule local_path_at_val_at >> simp[local_path_at_def] >>
          qexists_tac `[ValueSubscript (IntV &(LENGTH vs - 1))]` >>
          simp[mem_path_offset_def, mem_step_offset_def]) >>
+      `local_place_at cenv cx id
+         (32 + (LENGTH vs - 1) * type_memory_size etv) etv
+         (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))` by
+        simp[local_place_at_def, mem_path_offset_def, mem_step_offset_def] >>
       simp[] >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[] >>
       TRY (fs[local_region_def, lookup_var_inst_idx] >> metis_tac[]))

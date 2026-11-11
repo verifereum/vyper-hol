@@ -89,6 +89,8 @@ Proof
   `post_value_type cenv obj = expr_type obj` by
     (drule_all attr_post_value_type >> simp[]) >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
+  qpat_assum `select_result _ _ _ _ _ = _`
+    (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
   irule attr_vv_post >> conj_tac >- gs[] >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `btv` >> simp[] >> rpt strip_tac >> gvs[]

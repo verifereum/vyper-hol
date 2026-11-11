@@ -10,7 +10,7 @@ Ancestors
   valueEncoding valueEncodingDefs valueEncodingProofs vyperTypeSystem vyperTyping
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend vyperEvalPreservesScopes
-  vyperPlaceStatePreservation
+  vyperPlaceStatePreservation vyperStoragePlaceProvenance
 Libs
   pairLib
 
@@ -125,6 +125,81 @@ Theorem local_path_at_step:
     local_path_at cenv cx n (k + k2) etv
 Proof
   rw[local_path_at_def] >> drule_all mem_path_offset_snoc >> metis_tac[]
+QED
+
+(* A local's own place sits at its root. *)
+Theorem local_place_at_root:
+  !cenv cx n t0 tv0.
+    cenv.ce_var_type n = SOME t0 /\
+    evaluate_type (get_tenv cx) t0 = SOME tv0 ==>
+    local_place_at cenv cx n 0 tv0 (PlaceR (MemoryPlace n []))
+Proof
+  rw[local_place_at_def, mem_path_offset_def]
+QED
+
+(* A step from where a local's place sits gives where its extension sits,
+   when the result is a memory place exactly as the step's extension. *)
+Theorem local_place_at_step:
+  !cenv cx n k tv tv0 sb k2 etv tv'.
+    local_place_at cenv cx n k tv tv0 /\
+    mem_step_offset tv sb = SOME (k2,etv) /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [sb] /\ tv0 = PlaceR (MemoryPlace id path)) ==>
+    local_place_at cenv cx n (k + k2) etv tv'
+Proof
+  rpt gen_tac >> simp[local_place_at_def] >> strip_tac >>
+  qx_genl_tac [`i`, `q`] >> disch_tac >>
+  `?p. q = p ++ [sb] /\ tv0 = PlaceR (MemoryPlace i p)` by metis_tac[] >>
+  gvs[] >> metis_tac[mem_path_offset_snoc]
+QED
+
+(* A selection's result is a memory place exactly when it extends one. *)
+Theorem select_result_memory_place:
+  !cx ty tv sb st tv' st'.
+    select_result cx ty tv sb st = (INL tv', st') ==>
+    !id path'. tv' = PlaceR (MemoryPlace id path') <=>
+      ?path. path' = path ++ [sb] /\ tv = PlaceR (MemoryPlace id path)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!id path. tv = PlaceR (MemoryPlace id path) ==>
+     tv' = PlaceR (MemoryPlace id (path ++ [sb]))` by
+    (rpt strip_tac >>
+     gvs[select_result_def, extend_place_def, bind_def, return_def,
+         lift_sum_def, raise_def, ignore_bind_def, AllCaseEqs(),
+         extend_memory_place_def]) >>
+  `!id path'. tv' = PlaceR (MemoryPlace id path') ==>
+     ?path. tv = PlaceR (MemoryPlace id path)` by
+    (rpt strip_tac >> gvs[] >> Cases_on `tv`
+     >- gvs[select_result_def, bind_def, return_def, lift_option_type_def,
+            lift_sum_def, raise_def, AllCaseEqs()]
+     >- (rename1 `PlaceR pl` >> Cases_on `pl` >>
+         gvs[select_result_def, extend_place_def, bind_def, return_def,
+             lift_sum_def, raise_def, ignore_bind_def, AllCaseEqs(),
+             extend_memory_place_def] >>
+         drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+         simp[]) >>
+     rename1 `HashMapRef _ _ _ vt` >> Cases_on `sb` >> Cases_on `vt` >>
+     gvs[select_result_def, extend_place_def, bind_def, return_def,
+         lift_option_type_def, raise_def, AllCaseEqs(), LET_THM]) >>
+  rpt gen_tac >> eq_tac >> rw[] >> res_tac >> gvs[]
+QED
+
+(* A value of a base type is no place, so nothing pins it. *)
+Theorem local_place_at_value[simp]:
+  !cenv cx n k ptv v. local_place_at cenv cx n k ptv (Value v)
+Proof
+  simp[local_place_at_def]
+QED
+
+(* A located memory value is where expr_val_at says, dropping the pin. *)
+Theorem vv_at_memory_val_at:
+  !cenv cx t sa sb es tv t' p s v.
+    vv_at cenv cx t sa sb es tv (LocatedValue t' p) s /\
+    p.ptr_location = LocMemory /\ read_result cx tv es = (INL v, es) ==>
+    expr_val_at cenv cx t sa sb es v p.ptr_operand s
+Proof
+  rw[vv_at_def, expr_val_at_def] >> first_x_assum drule_all >> strip_tac >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem dynarray_free_step[local]:
