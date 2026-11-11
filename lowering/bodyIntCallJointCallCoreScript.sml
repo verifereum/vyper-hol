@@ -766,7 +766,7 @@ Proof
         loweringPostsTheory.wb_frame_def] >>
      rpt conj_tac >>
      TRY (qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >> simp[] >> NO_TAC) >>
-     qexists `c` >> simp[] >> rpt conj_tac >> rpt gen_tac >>
+     qexistsl [`ee`, `c`] >> simp[] >> rpt conj_tac >> rpt gen_tac >>
      strip_tac >> first_x_assum irule >> simp[] >>
      conj_tac >- (first_assum ACCEPT_TAC) >> qexists `aid` >> simp[]) >>
   conj_tac
