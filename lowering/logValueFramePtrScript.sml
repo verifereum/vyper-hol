@@ -142,10 +142,10 @@ Proof
 QED
 
 Theorem log_argument_ptr_val_kept:
-  !cenv cx ty v op sa sb es s t G0 tn0 G tn.
+  !cenv cx ty v op sa sb es es' s t G0 tn0 G tn.
     ptr_val_ok cx ty v op G0 tn0 s /\ expr_val_rel cx ty v op s /\
     expr_val_at cenv cx ty sa sb es v op s /\ 
-    wb_frame cenv es sb s t /\ ghost_kept cenv es sb G0 tn0 s G tn /\
+    wb_frame cenv es es' sb s t /\ ghost_kept cenv es sb G0 tn0 s G tn /\
     (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l) /\
     log_arg_clear cenv cx ty v ==>
     ptr_val_ok cx ty v op G tn t

@@ -34,7 +34,7 @@ QED
 Theorem bop_argument_ptr_val_kept:
   ptr_val_ok cx ty v op G tn s /\
   expr_val_at cenv cx ty sa sb es v op s /\
-  wb_frame cenv es sb s t /\ ghost_kept cenv es sb G tn s G' tn' /\
+  wb_frame cenv es es' sb s t /\ ghost_kept cenv es sb G tn s G' tn' /\
   log_arg_clear cenv cx ty v /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op t = eval_operand op s /\
