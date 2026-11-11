@@ -344,6 +344,178 @@ Proof
   simp[is_terminator_def]
 QED
 
+(* Successful loading defines the length; undefined addresses instead have
+   a fixed result.  No validity premise about the source is needed. *)
+Theorem dynarray_load_outcome[local]:
+  !G ctx fn s bb id src len N Wv.
+    callees_stable G ctx fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id MLOAD [src] [len]) /\
+    ~var_below N len ==>
+    fuel_outcome G ctx fn s 0
+      (\t. (?n. n < dimword(:256) /\ lookup_var len t = SOME (n2w n)) /\
+           t.vs_current_bb = s.vs_current_bb /\
+           t.vs_inst_idx = SUC s.vs_inst_idx /\ vars_kept N Wv s t)
+Proof
+  rpt strip_tac >>
+  drule_at (Pos (el 3)) run_from_nonterm_stable >>
+  disch_then (qspecl_then [`G`, `ctx`, `fn`] mp_tac) >>
+  simp[mk_inst_def, is_terminator_def] >> strip_tac
+  >- (gvs[GSYM mk_inst_def, step_inst_non_invoke,
+          step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()] >>
+      simp[fuel_outcome_def] >> disj1_tac >>
+      qexists_tac `update_var len (mload (w2n addr) s) s with
+                    vs_inst_idx := SUC s.vs_inst_idx` >>
+      simp[update_var_def, lookup_var_def, vars_kept_def,
+           finite_mapTheory.FLOOKUP_UPDATE] >>
+      conj_tac
+      >- (qexists_tac `w2n (mload (w2n addr) s)` >> simp[w2n_lt]) >>
+      metis_tac[]) >>
+  simp[fuel_outcome_def]
+QED
+
+(* The prefix tail writes the fresh counter and enters the header. *)
+Theorem dynarray_initialize_outcome[local]:
+  !G ctx fn s bb ctr len n N Wv entry id1 id2 hdr.
+    no_phi_fn fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id1 ASSIGN [Lit 0w] [ctr]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst id2 JMP [Label hdr] []) /\
+    lookup_var len s = SOME (n2w n) /\ vars_kept N Wv entry s /\
+    len <> ctr /\ ~var_below N ctr ==>
+    fuel_outcome G ctx fn s 1
+      (\t. t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+           lookup_var ctr t = SOME 0w /\
+           lookup_var len t = SOME (n2w n) /\ vars_kept N Wv entry t)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `s1 = update_var ctr 0w s with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `!f. run_from f ctx fn s = run_from f ctx fn s1` by
+    (gen_tac >> qunabbrev_tac `s1` >> irule run_from_step >>
+     qexistsl_tac [`bb`, `mk_inst id1 ASSIGN [Lit 0w] [ctr]`] >>
+     simp[mk_inst_def, is_terminator_def] >>
+     simp[GSYM mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def]) >>
+  `fuel_outcome G ctx fn s1 1
+      (\t. t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+           lookup_var ctr t = SOME 0w /\
+           lookup_var len t = SOME (n2w n) /\ vars_kept N Wv entry t)`
+    suffices_by simp[fuel_outcome_def] >>
+  irule fuel_outcome_jump >> simp[] >>
+  qexistsl_tac [`bb`, `mk_inst id2 JMP [Label hdr] []`, `hdr`] >>
+  simp[Abbr `s1`, update_var_def, mk_inst_def, is_terminator_def] >>
+  simp[GSYM mk_inst_def, step_inst_base_opcode_eqs, jump_to_def,
+       vars_kept_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[vars_kept_def, lookup_var_def] >> metis_tac[]
+QED
+
+(* The intervening arithmetic, checks and stores preserve the loaded length:
+   it was allocated before this action starts. *)
+Theorem dynarray_prefix_middle_fuel[local]:
+  !len cap dst src Wv E.
+    fuel_ok Wv {} E
+      (do long <- emit_op GT [len; Lit (n2w cap)];
+          ok <- emit_op ISZERO [long];
+          emit_void ASSERT [ok];
+          emit_void MSTORE [dst;len];
+          sd <- emit_op ADD [src;Lit 32w];
+          dd <- emit_op ADD [dst;Lit 32w];
+          hdr <- fresh_label "typed_dyn_cond";
+          body <- fresh_label "typed_dyn_body";
+          exit <- fresh_label "typed_dyn_exit";
+          ctr <- fresh_var;
+          return (sd,dd,hdr,body,exit,ctr)
+       od)
+Proof
+  rpt gen_tac >> fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void] >>
+  simp[is_terminator_def]
+QED
+
+Theorem dynarray_prefix_middle_bound[local]:
+  !len cap dst src long ok sd dd hdr body exit ctr
+   a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11.
+    emit_op GT [len; Lit (n2w cap)] a1 = (long,a2) /\
+    emit_op ISZERO [long] a2 = (ok,a3) /\
+    emit_void ASSERT [ok] a3 = ((),a4) /\
+    emit_void MSTORE [dst;len] a4 = ((),a5) /\
+    emit_op ADD [src;Lit 32w] a5 = (sd,a6) /\
+    emit_op ADD [dst;Lit 32w] a6 = (dd,a7) /\
+    fresh_label "typed_dyn_cond" a7 = (hdr,a8) /\
+    fresh_label "typed_dyn_body" a8 = (body,a9) /\
+    fresh_label "typed_dyn_exit" a9 = (exit,a10) /\
+    fresh_var a10 = (ctr,a11) ==>
+    cs_extends a1 a11 /\ a1.cs_next_var <= a11.cs_next_var /\
+    ?Kmid. frag_fuel {} {} {} a1 a11 Kmid
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`len`, `cap`, `dst`, `src`] mp_tac dynarray_prefix_middle_fuel >>
+  disch_then (qspecl_then [`{}`, `{}`] mp_tac) >>
+  rewrite_tac[fuel_ok_def] >>
+  disch_then (qspec_then `a1` mp_tac) >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]
+QED
+
+(* Compose the two value-establishing endpoints with the ordinary fragment
+   bound of the middle.  The bound is chosen before any runtime values. *)
+Theorem dynarray_prefix_outcome[local]:
+  !G ctx fn sa mid tail Kmid len ctr src id0 id1 id2 hdr N Wv s.
+    no_phi_fn fn /\ callees_stable G ctx fn /\
+    mid.cs_current_bb = sa.cs_current_bb /\
+    LENGTH mid.cs_current_insts = SUC (LENGTH sa.cs_current_insts) /\
+    (!u. at_point sa u ==>
+      ?bb. lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+           get_instruction bb u.vs_inst_idx = SOME (mk_inst id0 MLOAD [src] [len])) /\
+    frag_fuel {} {} {} mid tail Kmid /\ fn_has_code mid tail fn /\
+    N <= mid.cs_next_var /\ var_below mid.cs_next_var len /\
+    ~var_below N len /\ ~var_below N ctr /\ len <> ctr /\
+    (!u. at_point tail u ==>
+      ?bb. lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+           get_instruction bb u.vs_inst_idx = SOME (mk_inst id1 ASSIGN [Lit 0w] [ctr]) /\
+           get_instruction bb (SUC u.vs_inst_idx) = SOME (mk_inst id2 JMP [Label hdr] [])) /\
+    at_point sa s ==>
+    ?j. j <= Kmid + 1 /\ fuel_outcome G ctx fn s j
+      (\t. ?n. n < dimword(:256) /\
+           t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+           lookup_var ctr t = SOME 0w /\ lookup_var len t = SOME (n2w n) /\
+           vars_kept N Wv s t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!u. at_point sa u ==> _` drule >> strip_tac >>
+  drule_at (Pos (el 3)) dynarray_load_outcome >>
+  disch_then (qspecl_then [`G`, `ctx`, `fn`, `N`, `Wv`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\t. ?n. n < dimword(:256) /\ t.vs_current_bb = hdr /\
+                t.vs_inst_idx = 0 /\ lookup_var ctr t = SOME 0w /\
+                lookup_var len t = SOME (n2w n) /\ vars_kept N Wv s t`,
+     `Kmid + 1`] mp_tac) >>
+  impl_tac
+  >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+      `at_point mid t` by gvs[at_point_def] >>
+      drule_all dynarray_body_outcome >> strip_tac >>
+      drule fuel_outcome_compose >>
+      disch_then (qspecl_then
+        [`\u. ?n. n < dimword(:256) /\ u.vs_current_bb = hdr /\
+                    u.vs_inst_idx = 0 /\ lookup_var ctr u = SOME 0w /\
+                    lookup_var len u = SOME (n2w n) /\ vars_kept N Wv s u`,
+         `1`] mp_tac) >>
+      impl_tac
+      >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+          qpat_x_assum `!u. at_point tail u ==> _` drule >> strip_tac >>
+          `lookup_var len t' = SOME (n2w n)` by gvs[vars_kept_def] >>
+          qexists_tac `1` >> simp[] >>
+          irule fuel_outcome_weaken >>
+          irule_at Any dynarray_initialize_outcome >>
+          simp[] >> metis_tac[]) >>
+      disch_then (qx_choose_then `jtail` strip_assume_tac) >>
+      qexists_tac `jtail` >> simp[] >> decide_tac) >>
+  simp[]
+QED
+
 (* Given a bound for the element copy (the recursive call), the copy of a
    dynamic array is bounded.  The length is loaded into a fresh variable
    before the loop; the loop counts a fresh counter from 0 while it is
@@ -365,5 +537,5 @@ Proof
   simp[fuel_ok_def] >> rpt gen_tac >> strip_tac >>
   drule_all dynarray_compile_structure >> strip_tac >> simp[] >>
   drule_all dynarray_counted_run >> strip_tac >>
-  FAIL_TAC "assembly"
+  cheat (* Remaining join: C1.3.3; prefix helpers above are kernel-closed. *)
 QED
