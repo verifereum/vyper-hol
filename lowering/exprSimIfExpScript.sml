@@ -603,7 +603,7 @@ Proof
 QED
 
 (* The same destination as the place of any source result reading to v. *)
-Theorem ifexp_destination_vv_at[local]:
+Theorem ifexp_destination_vv_at:
   !cenv cx ty tvt v sa sb es op s w aid tv t'.
     evaluate_type (get_tenv cx) ty = SOME tvt /\ val_wf tvt v /\
     read_result cx tv es = (INL v,es) /\ eval_operand op s = SOME w /\
@@ -2059,7 +2059,7 @@ Proof
 QED
 
 (* A conditional result is its operand or the value it reads to. *)
-Theorem ifexp_conditional_result_shape[local]:
+Theorem ifexp_conditional_result_shape:
   conditional_result cx raw st = (INL tv,st') ==> tv = raw \/ ?v. tv = Value v
 Proof
   Cases_on `raw` >>
@@ -2069,7 +2069,7 @@ Proof
 QED
 
 (* vv_at of an arm's result holds of the conditional result it gives. *)
-Theorem ifexp_vv_at_conditional[local]:
+Theorem ifexp_vv_at_conditional:
   vv_at cenv cx t sa sb es raw vv s /\ read_result cx raw es = (INL v,es) /\
   (tv = raw \/ tv = Value v) ==>
   vv_at cenv cx t sa sb es tv vv s
@@ -2120,7 +2120,7 @@ Proof
 QED
 
 (* An operand placed as expr_post says, for a result that is no memory place. *)
-Theorem ifexp_vv_at_of_val_at[local]:
+Theorem ifexp_vv_at_of_val_at:
   ~is_word_type t /\ expr_val_at cenv cx t sa sb es v op s /\
   read_result cx tv es = (INL v,es) /\
   (!id path. tv <> PlaceR (MemoryPlace id path)) ==>
@@ -2478,7 +2478,7 @@ Proof
 QED
 
 (* The selected arm's vv_at, moved to the result variable it is assigned to. *)
-Theorem ifexp_vv_at_root_frame[local]:
+Theorem ifexp_vv_at_root_frame:
   vv_at cenv cx t sc sd es tv (LocatedValue t (mk_ptr op LocMemory)) u /\
   eval_operand op u = SOME w /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> x <> rv) /\
@@ -2507,7 +2507,7 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem ifexp_root_finish_post[local]:
+Theorem ifexp_root_finish_post:
   post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\

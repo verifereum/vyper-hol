@@ -65,7 +65,9 @@ Theorem ifexp_bytestring_adapter_path_mem:
     vv_store_bound cx t t ee raw (LocatedValue t (mk_ptr op LocMemory)) u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+    alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+    !tv'. read_result cx tv' ee = (INL v,ee) ==>
+      vv_at ce cx t origin sb ee tv' (LocatedValue t (mk_ptr op LocMemory)) u
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by
@@ -229,6 +231,9 @@ Resume ifexp_bytestring_adapter_path_mem[transport]:
   `local_ptrs_reserved ce sn /\ origin.cs_next_var <= sn.cs_next_var` by
     (fs[ci_mono_def] >> irule local_ptrs_reserved_next_var >>
      qexists_tac `origin` >> simp[] >> decide_tac) >>
+  `!tv'. read_result cx tv' ee = (INL v,ee) ==>
+     vv_at ce cx t origin sb ee tv' (LocatedValue t (mk_ptr op LocMemory)) q` by
+    suspend "dest" >>
   drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_copy_post_transport >>
   disch_then (drule_at (Pat `vv_store_bound _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`q`,`sn`] mp_tac) >>
@@ -238,6 +243,46 @@ Resume ifexp_bytestring_adapter_path_mem[transport]:
   strip_tac >> qexists_tac `q` >> simp[] >>
   conj_tac >- metis_tac[fragGasPathMemTheory.gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
   gvs[]
+QED
+
+Resume ifexp_bytestring_adapter_path_mem[dest]:
+  `not_fresh_at sn x` by
+    (qpat_assum `buf.buf_operand = Var _` (fn th =>
+       qpat_x_assum `!z. src = Var z \/ _ ==> _` (qspec_then `x` mp_tac) >>
+       simp[th])) >>
+  `eval_operand op q = SOME d` by
+    (`lookup_var x q = lookup_var x u` by
+       (qpat_x_assum `!x. not_fresh_at sn x ==> lookup_var x q = _` irule >>
+        first_assum ACCEPT_TAC) >>
+     qpat_x_assum `eval_operand buf.buf_operand u = SOME d` mp_tac >>
+     qpat_assum `op = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `buf.buf_operand = Var _` (fn th => rewrite_tac[th]) >>
+     simp[venomStateTheory.eval_operand_def]) >>
+  `FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n d,type_memory_size tvt)` by
+    (qpat_assum `q.vs_allocas = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `type_memory_bytes ce t = _` (fn th =>
+       qpat_assum `FLOOKUP u.vs_allocas _ = _` (ACCEPT_TAC o REWRITE_RULE [th]))) >>
+  `sa.cs_next_id < sb.cs_next_id` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `val_wf tvt v` by metis_tac[value_has_type_val_wf] >>
+  `!n b k. local_region ce ee.scopes q n b k ==>
+     b + k <= w2n d \/ w2n d + type_memory_size tvt <= b` by
+    (rpt strip_tac >>
+     `local_region ce ee.scopes u n b k` by
+       (qspecl_then [`ce`,`sn`,`u`,`q`,`ee.scopes`,`n`,`b`,`k`] mp_tac
+          exprSimCopyTheory.copy_buffer_local_region_frame >>
+        impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+        disch_then (fn th =>
+          qpat_x_assum `local_region _ _ q _ _ _` (mp_tac o REWRITE_RULE [th])) >>
+        simp[]) >>
+     qpat_x_assum `!name b len. local_region _ _ u _ _ _ ==> _` drule >>
+     qpat_assum `type_memory_bytes ce t = _`
+       (fn th => rewrite_tac[th, regions_disjoint_def]) >>
+     decide_tac) >>
+  rpt strip_tac >>
+  irule exprSimIfExpTheory.ifexp_destination_vv_at >>
+  qexistsl_tac [`sa.cs_next_id`,`tvt`,`v`,`d`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise ifexp_bytestring_adapter_path_mem
