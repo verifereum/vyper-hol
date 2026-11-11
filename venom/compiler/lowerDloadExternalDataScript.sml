@@ -88,7 +88,8 @@ Proof
        fs[Excl "consume_call_outcome_eq"] >>
        disch_then (qspec_then `CS` strip_assume_tac) >>
        qpat_x_assum `_ ==> ?out w rS rT. _` mp_tac >>
-       asm_rewrite_tac[] >> strip_tac >> suspend "delegate_shared") >>
+       gvs[Excl "consume_call_outcome_eq"] >> strip_tac >>
+       suspend "delegate_shared") >>
   Cases_on `i.inst_opcode = CREATE`
   >- (`?v off sz. i.inst_operands = [v;off;sz]` by
         (qpat_x_assum `inst_wf i` mp_tac >>
