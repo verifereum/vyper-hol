@@ -156,7 +156,7 @@ Resume intcall_pop_toplevel_producer[storage]:
       qexistsl [`INR (Error (RuntimeError "pop empty storage array"))`,
                 `es`, `Abort a t`] >>
       simp[gas_marked_exec_def, exit_result_def, expr_exit_def, LET_THM,
-           get_storage_gas_obs]) >>
+           pop_storage_gas_obs]) >>
   suspend "positive"
 QED
 Resume intcall_pop_toplevel_producer[positive]:
@@ -207,10 +207,10 @@ Resume intcall_pop_toplevel_producer[post]:
   `storage_holds fp.jc_cx tr ann (PlaceR (StoragePlace tr elem tv)) elem
      (ee with gas_obs := []) t` by
     (unabbrev_all_tac >>
-     irule (SRULE [get_storage_gas_obs, set_storage_gas_obs]
+     irule (SRULE [pop_storage_gas_obs]
        (Q.INST [`es` |-> `es with gas_obs := []`]
          (SPEC_ALL pop_mem_positive_holds_cursor))) >>
-     simp[get_storage_gas_obs] >>
+     simp[pop_storage_gas_obs] >>
      conj_tac >- metis_tac[] >>
      qexistsl [`ce`, `fp.jc_ctx`, `env`, `fp.jc_func`, `s`] >>
      simp[] >> Cases_on `tr` >> gvs[]) >>
@@ -222,8 +222,7 @@ Resume intcall_pop_toplevel_producer[post]:
   simp[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl [`INL (PlaceR (StoragePlace tr elem tv))`, `ee`, `OK t`] >>
-  simp[gas_marked_exec_def, LET_THM, get_storage_gas_obs,
-       set_storage_gas_obs, Abbr `post`] >>
+  simp[gas_marked_exec_def, LET_THM, pop_storage_gas_obs, Abbr `post`] >>
   fs[vv_post_def] >>
   simp[vv_operand_def, mk_ptr_def] >>
   Cases_on `tr` >> simp[] >>

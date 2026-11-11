@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtLogArgsFrame bodyIntCallFamStmtLogMarked
   exprBopSimProps vyperEvalExprPreservesScopesDom
   bodyIntCallFamStmtLogReady bodyIntCallFamStmtLogPost bodyIntCallFamStmtLogGas
-  stmtSimLogArgs stmtSimLogArgsRun stmtSimLogArgsGrowth stmtReasonVvMemory
+  logArgumentCompile stmtSimLogArgs stmtSimLogArgsRun stmtSimLogArgsGrowth stmtReasonVvMemory
   gasOutcome gasSummary fragGasPath fragGasMode
   stmtSimDefs loweringPosts exprSimHypsDefs vyperInterpreter vyperState
   list finite_map
