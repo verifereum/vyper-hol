@@ -25,7 +25,7 @@ Theorem supported_external_lookup_member:
     (FST (classify_functions tops))
 Proof
   strip_tac >> irule supported_headers_external_member >>
-  gvs[supported_program_def, valid_vyper_call_def]
+  gvs[supported_program_def]
 QED
 
 Theorem source_runtime_entry_witness:

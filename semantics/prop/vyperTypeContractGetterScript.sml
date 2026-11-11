@@ -968,7 +968,7 @@ Proof
   metis_tac[build_getter_args_no_current_name, PAIR]
 QED
 
-Theorem build_getter_ret_checked[local]:
+Theorem build_getter_ret_checked:
   !e kt vt n args ret exp tenv.
     build_getter e kt vt n = (args,ret,exp) /\
     check_value_type tenv vt ==>
@@ -1180,7 +1180,9 @@ Proof
 QED
 
 Theorem checked_public_getter_params_ok:
-  check_contract F layouts addr mods = SOME art /\
+  check_contract F
+    (layouts:(address # (storage_layout # storage_layout)) list)
+    (addr:160 word) mods = SOME art /\
   ALOOKUP mods src = SOME ts /\ module_allocated layouts addr src ts /\
   MEM decl ts /\ is_public_getter_decl fn decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
@@ -1203,7 +1205,8 @@ Proof
          Cases_on `vmut` >> gvs[check_toplevel_decl_def, check_value_type_def]) >>
       `assignable_type (type_env_all_modules mods) (BaseT (UintT 256))` by
         simp[assignable_type_def, well_formed_type_def, evaluate_type_def] >>
-      metis_tac[build_getter_args_assignable, combinTheory.o_DEF]) >>
+      drule_all build_getter_args_assignable >>
+      simp[combinTheory.o_DEF, pairTheory.LAMBDA_PROD]) >>
   rename1 `check_toplevel_decl _ _ _ (HashMapDecl vis tr id kt vt slot)` >>
   Cases_on `vis` >> gvs[external_getter_tuple_def, getter_def] >>
   rpt (pairarg_tac >> gvs[]) >>
@@ -1211,7 +1214,8 @@ Proof
    check_value_type (type_env_all_modules mods) vt` by
     (gvs[check_toplevel_decl_def] >>
      Cases_on `kt` >> gvs[hashmap_key_type_def, assignable_type_def]) >>
-  metis_tac[build_getter_args_assignable, combinTheory.o_DEF]
+  drule_all build_getter_args_assignable >>
+      simp[combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
 
 val () = export_theory();

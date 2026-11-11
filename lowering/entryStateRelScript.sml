@@ -19,7 +19,7 @@
 Theory entryStateRel
 Ancestors
   list rich_list finite_map alist
-  e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
+  e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec entryDispatchProps
   compileEnv loweringStateRelDefs compileVyper moduleLowering supportedProgram supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
   structFieldsProps
@@ -163,11 +163,28 @@ QED
 
 Theorem source_typing_ok_external_names_distinct:
   source_typing_ok tops am tx ==>
-  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops))
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))
 Proof
   rw[source_typing_ok_def] >>
   drule check_contract_namespaces_ok >>
   simp[contract_namespaces_ok_def, contract_keys_def]
+QED
+
+Theorem source_typing_ok_raw_external_decl:
+  source_typing_ok tops am tx /\
+  lookup_function NONE name External tops =
+    SOME (mut,nr,args,dflts,ret,stmts) /\
+  lookup_raw_return_or_F (NONE:num option) name External tops ==>
+  MEM (FunctionDecl External mut nr T name args dflts ret stmts) tops
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule lookup_function_external_raw_cases >> strip_tac
+  >- gvs[lookup_raw_return_or_F_def] >>
+  `lookup_raw_return (NONE:num option) name External tops = NONE` by
+    metis_tac[public_getter_raw_return_none] >>
+  gvs[lookup_raw_return_or_F_def]
 QED
 
 (* The layout's slots as lookup_var_slot_from_layout reads them. *)
@@ -552,7 +569,7 @@ Proof
   fs[source_typing_ok_def] >>
   `module_allocated am.layouts tx.target NONE tops` by
     (drule check_contract_main_module_allocated >> simp[]) >>
-  `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
   drule_all checked_public_getter_params_ok >> simp[type_env_all_modules_one]
 QED
 

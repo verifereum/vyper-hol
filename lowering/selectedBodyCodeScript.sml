@@ -3,7 +3,7 @@ Theory selectedBodyCode
 Ancestors actualRegistrationCode moduleLowering compileEnv
   loweringShapeDefs loweringShapeRules loweringShapeProps fragExec list
   sourceEntryCode compileVyper vyperInterpreter supportedProgramProps
-  entryDispatchProps rawEntryCode entryCheckIntervals sourceEntrySelection
+  entryDispatchProps constSubst rawEntryCode entryCheckIntervals sourceEntrySelection
   supportedProgram supportedDecls loweringShapeSource compileEnv supportedNames
   vyperCompiler actualDecoderPackaging
 
@@ -42,13 +42,14 @@ Theorem external_lookup_raw_package_member:
   supported_declaration_headers tops /\
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
   vyperInterpreter$lookup_function NONE name External tops =
-    SOME (mut,nr,args,dflts,ret,body) /\ name <> "__default__" ==>
+    SOME (mut,nr,args,dflts,ret,stmts) /\ name <> "__default__" ==>
   MEM (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
-       name,args,dflts,ret,body) (FST (classify_functions tops))
+       name,args,dflts,ret,stmts) (FST (classify_functions tops))
 Proof
   strip_tac >>
   `module_consts_env tops [] = []` by
     (irule supported_headers_module_consts_env >>
+     qexists_tac `tops` >>
      fs[supported_declaration_headers_def]) >>
   drule_all lookup_function_external_raw_member >> simp[subst_consts_fn_empty]
 QED

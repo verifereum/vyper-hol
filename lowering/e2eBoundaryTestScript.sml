@@ -193,7 +193,19 @@ Theorem source_lookup_getter_supported:
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
     supported_program tops
 Proof
-  EVAL_TAC
+  simp_tac bool_ss [LET_THM] >> conj_tac >- EVAL_TAC >>
+  simp[supported_program_def, supported_declaration_headers_def,
+    supported_declaration_header_def, supported_declaration_body_def,
+    supportedNamesTheory.supported_declaration_names_def,
+    supportedNamesTheory.supported_function_names_def,
+    supportedNamesTheory.supported_event_names_def,
+    supportedNamesTheory.supported_function_header_names_def,
+    supportedNamesTheory.supported_selectors_distinct_def,
+    compileVyperTheory.classify_functions_def,
+    compileVyperTheory.classify_function_def,
+    compileVyperTheory.public_getters_def, compileVyperTheory.public_getter_def,
+    constSubstTheory.module_consts_env_def, constSubstTheory.subst_consts_fn_empty,
+    compileVyperTheory.build_selectors_def] >> EVAL_TAC
 QED
 
 (* ===== Canonical external ABI wrapping ===== *)
