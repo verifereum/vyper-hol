@@ -957,7 +957,9 @@ End
 Definition well_typed_atarget_def:
   well_typed_atarget env (BaseTarget bt) ty = well_typed_target env bt ty /\
   well_typed_atarget env (TupleTarget tgts) ty =
-    (?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty) tgts tys /\ ty = TupleT tys)
+    (* Neither pinned Python backend can generate nested tuple targets. *)
+    (EVERY (\tgt. case tgt of BaseTarget _ => T | TupleTarget _ => F) tgts /\
+     ?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty) tgts tys /\ ty = TupleT tys)
 Termination
   WF_REL_TAC `measure (\(_,t,_). assignment_target_size t)`
 End
