@@ -2,7 +2,7 @@ Theory symPlannerInput
 Ancestors
   symPlannerMoves symPlannerBase symPlannerScratch stackPlanGen stackPlanOps
   stackModel stackOpSim planExec asmSymSem asmSem codegenSymRel list
-  deepResidualBudget allocMono generatedPrefixSim spillPlanSim
+  deepResidualBudget allocMono generatedPrefixSim spillPlanSim emitOperandSim
 
 Theorem sym_push_kind_step:
   sym_kinds_ok cplan fn ret srest ps ss /\ op_kind_ok fn ret op sv ==>
