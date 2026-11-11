@@ -163,7 +163,7 @@ jobs:
           fi
 
       - name: Export witness group HBX
-        run: holbuild export -o witnesses-${{ matrix.group }}.hbx ${{ steps.witnesses.outputs.targets }}
+        run: holbuild export --closure -o witnesses-${{ matrix.group }}.hbx ${{ steps.witnesses.outputs.targets }}
 
       - name: Upload witness group HBX
         uses: actions/upload-artifact@v7.0.1
@@ -231,7 +231,7 @@ jobs:
       - name: Export HBX archive
         run: |
           archive="$HBX_BASENAME.hbx"
-          holbuild export \
+          holbuild export --closure \
             -o "$archive" \
             --metadata-out "$archive.json"
           sha256sum "$archive" > "$archive.sha256"
