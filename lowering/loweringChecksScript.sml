@@ -11,6 +11,9 @@ Ancestors
      assignment order, the O1 source-stage unit shape *)
   evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
   evalAssignmentOrder evalCompilerSourceShape
+  (* branch_opt's output checker on a sample of the parity fixtures'
+     compiled functions *)
+  branchOptCheckCorpus
   (* contracts of the lowering's interfaces on concrete inputs *)
   targetPlaceTest
   abiEncodeSnapshotTest
