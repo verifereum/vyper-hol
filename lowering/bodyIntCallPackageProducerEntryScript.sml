@@ -14,7 +14,7 @@ Theorem intcall_entry_producer_semantics:
   lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
   functions_follow_call_graph E (cx with stk updated_by CONS (NONE,name)) /\
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   set_internal_package_target cenv.ce_target
     (package_internal_fn tops use_trans (nkeys:string->num) cenv.ce_is_ctor ilen
       (mut,F,rr,name,args,([]:expr list),ret,ss)) =
@@ -76,7 +76,7 @@ Theorem intcall_entry_producer_resources:
   lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
   functions_follow_call_graph E (cx with stk updated_by CONS (NONE,name)) /\
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
   decode_invoke inst = SOME (lbl,arg_ops) /\ eval_operands arg_ops t = SOME argv /\

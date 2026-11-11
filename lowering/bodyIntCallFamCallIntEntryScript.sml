@@ -33,11 +33,11 @@ Theorem intcall_nested_entry:
     (!res ee r. expr_exit res r ==> R res ee r) /\
     (!prev penv rtv es1 t.
        intcall_entry fp.jc_tops fp.jc_ctx fp.jc_func ce fp.jc_cx env name es
-         sa sb vv s0 es0 (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+         sa sb vv s0 es0 (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
        intcall_expr_res fp ce env (es1 with scopes := prev) sa t /\
        s0.vs_alloca_next <= t.vs_alloca_next ==>
        gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
-         (intcall_rest fp.jc_cx name mut ss prev rtv) (es1,t) Q R) ==>
+         (intcall_rest fp.jc_cx name mut F ss prev rtv) (es1,t) Q R) ==>
     gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
       (eval_expr fp.jc_cx (Call ann (IntCall (NONE,name)) es dflt)) (es0,s0) Q R
 Proof

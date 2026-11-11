@@ -319,7 +319,7 @@ Proof
   simp[] >> rpt strip_tac >>
   Cases_on `cenv.ce_func_return_type (nsid_to_string (NONE,fn)) = v16` >|
   map (qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,
-                    `es`,`v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`args`,`ret`,
+                    `es`,`v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`nr`,`args`,`ret`,
                     `ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,`t`,`nrc`,`nrbs`,
                     `npvs`] mp_tac)
     [intcall_return_restore, intcall_return_widened] >>

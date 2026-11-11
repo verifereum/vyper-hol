@@ -5,7 +5,7 @@ Ancestors
 
 Theorem intcall_entry_package_inputs:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
   decode_invoke inst = SOME (lbl,arg_ops) /\
@@ -40,7 +40,7 @@ QED
 
 Theorem intcall_entry_package_separation:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
   decode_invoke inst = SOME (lbl,arg_ops) /\
@@ -97,7 +97,7 @@ QED
 
 Theorem intcall_entry_caller_protection:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t ==>
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t ==>
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x t = SOME w) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>

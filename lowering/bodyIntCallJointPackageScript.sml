@@ -31,7 +31,7 @@ Theorem intcall_callee_packaging:
     (!fp. fp.jc_edges = E /\ fp.jc_owner = (NONE,name) /\ fp.jc_tops = tops ==>
           intcall_stmts_producer fp ss) /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-      (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+      (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
     gas_invoke_entry (ctx,func) t callee entered /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.

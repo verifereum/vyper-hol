@@ -15,7 +15,7 @@ Theorem intcall_entry_root_frame:
   irreflexive (TC (call_edge_rel E)) /\
   functions_follow_call_graph E (cx with stk updated_by CONS (NONE,name)) /\
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
   decode_invoke inst = SOME (lbl,arg_ops) /\ eval_operands arg_ops t = SOME argv /\

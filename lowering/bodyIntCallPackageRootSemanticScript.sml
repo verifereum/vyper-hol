@@ -47,7 +47,7 @@ QED
 
 Theorem intcall_entry_root_expr_inv:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   body_inv tops ctx cenv cx /\ cenv_module_pins tops cenv /\
   MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
   env_body.current_src = NONE /\ env_body.type_defs = get_tenv cx /\

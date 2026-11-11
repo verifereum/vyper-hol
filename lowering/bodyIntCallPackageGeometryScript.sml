@@ -7,7 +7,7 @@ Ancestors
 
 Theorem intcall_entry_buffer_allocation:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
   decode_invoke inst = SOME (lbl,arg_ops) /\
@@ -33,7 +33,7 @@ QED
 
 Theorem intcall_entry_root_geometry:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
   decode_invoke inst = SOME (lbl,arg_ops) /\

@@ -74,7 +74,7 @@ Theorem intcall_nested_return_enriched:
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   intcall_expr_res fp ce env es0 sa s0 /\
   intcall_entry fp.jc_tops fp.jc_ctx fp.jc_func ce fp.jc_cx env name es
-    sa sb vv s0 es0 (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    sa sb vv s0 es0 (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   intcall_expr_res fp ce env (es1 with scopes := prev) sa t /\
   s0.vs_alloca_next <= t.vs_alloca_next /\
   ce.ce_func_info (nsid_to_string (NONE,name)) = (rcn,rbs,pvs) /\
@@ -89,7 +89,7 @@ Theorem intcall_nested_return_enriched:
          (if rcn = 0 /\ ce.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
           then SOME (HD argv) else NONE) sa.cs_next_id sb.cs_next_id t)) ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
-    (intcall_rest fp.jc_cx name mut ss prev rtv) (es1,t)
+    (intcall_rest fp.jc_cx name mut F ss prev rtv) (es1,t)
     (\res ee out. ?tv. res = INL tv /\
       vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx
         (Call ann (IntCall (NONE,name)) es dflt) es0 sa sb s0 ee tv vv out /\
@@ -133,10 +133,10 @@ Proof
   qpat_x_assum `rbs = rbs'` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `pvs = pvs'` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _` drule_all >> strip_tac >>
-  rewrite_tac[intcall_rest_def] >> pure_once_rewrite_tac[GSYM intcall_callee_src_def] >>
+  rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_def] >>
   irule invoke_cleanup_outcome >>
   conj_tac >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-    rewrite_tac[intcall_rest_def] >> pure_once_rewrite_tac[GSYM intcall_callee_src_def] >> simp[]) >>
+    rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_def] >> simp[]) >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `gas_invoke_entry _ _ _ _`)) >>
   qexists `\v ee ir cs. intcall_callee_exit fp.jc_func ce fp.jc_cx rtv rcn
@@ -396,7 +396,7 @@ Theorem intcall_nested_return:
     fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
     intcall_expr_res fp ce env es0 sa s0 /\
     intcall_entry fp.jc_tops fp.jc_ctx fp.jc_func ce fp.jc_cx env name es
-      sa sb vv s0 es0 (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+      sa sb vv s0 es0 (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
     intcall_expr_res fp ce env (es1 with scopes := prev) sa t /\
     s0.vs_alloca_next <= t.vs_alloca_next /\
     ce.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
@@ -414,7 +414,7 @@ Theorem intcall_nested_return:
              then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t)) ==>
     gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
-      (intcall_rest fp.jc_cx name mut ss prev rtv) (es1,t)
+      (intcall_rest fp.jc_cx name mut F ss prev rtv) (es1,t)
       (\res ee u. ?tv. res = INL tv /\
          vv_holds ce fp.jc_cx
            (post_value_type ce (Call ann (IntCall (NONE,name)) es dflt)) tv vv ee u /\

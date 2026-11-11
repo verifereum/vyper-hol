@@ -102,7 +102,7 @@ Theorem intcall_entry_callee_dynamic:
   lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
   MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
   intcall_entry tops ctx func ce cx env name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   intcall_callee_src cx name ss (es1 with gas_obs := gs) = (res,ee) ==>
   state_well_typed ee /\ accounts_well_typed ee.accounts /\
   contract_storage_well_formed (cx with stk updated_by CONS (NONE,name)) ee /\
@@ -152,7 +152,7 @@ Theorem intcall_entry_marked_restore_inv:
   lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
   MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
   intcall_entry tops ctx func ce cx env name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   gas_marked_exec memory (ctx,callee) (intcall_callee_src cx name ss)
     (es1,entered) marks res ee r ==>
   expr_sim_inv ce cx env (ee with <|scopes := prev; gas_obs := []|>)

@@ -8,7 +8,7 @@ Libs
   monadsyntax
 
 Theorem intcall_rest_stmts_admissible:
-  gas_admissible (intcall_rest cx name mut ss prev rtv) expr_vv_res_ok es ==>
+  gas_admissible (intcall_rest cx name mut F ss prev rtv) expr_vv_res_ok es ==>
   gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss)
     (stmt_res_ok NoLoop) es
 Proof
@@ -16,7 +16,7 @@ Proof
     set_scopes prev` by
     simp[pop_function_def, unlock_if_nr_def, ignore_bind_def, bind_def,
          set_scopes_def, return_def, FUN_EQ_THM] >>
-  simp[intcall_rest_def] >>
+  simp[intcall_rest_F] >>
   metis_tac[function_rest_body_admissible]
 QED
 
@@ -25,7 +25,7 @@ Theorem intcall_entry_body_typing:
   MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t ==>
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t ==>
   ?env_body env_after.
     env_body.current_src = NONE /\ env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = tenv.fn_sigs /\

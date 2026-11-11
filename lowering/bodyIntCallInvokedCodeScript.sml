@@ -7,7 +7,7 @@ Theorem body_inv_invoked_internal_code:
   body_inv tops ctx cenv cx /\
   MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   gas_invoke_entry (ctx,func) t callee entered /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
