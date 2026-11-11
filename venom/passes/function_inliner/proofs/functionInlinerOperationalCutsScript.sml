@@ -2020,14 +2020,14 @@ Proof
     (qpat_assum `eval_phis snap.ils_state _ = OK u`
        (mp_tac o MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
      disch_then (fn th => once_rewrite_tac[th]) >>
-     simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def]) >>
+     simp[NoAsms, inline_shared_frame_def, stateFrameTheory.execution_frame_def]) >>
   `!k. inline_shared_frame (v with vs_inst_idx := k) = inline_shared_frame frame.ipf_state /\
       v.vs_current_bb = frame.ipf_state.vs_current_bb /\
       v.vs_prev_bb = frame.ipf_state.vs_prev_bb` by
     (qpat_assum `eval_phis frame.ipf_state _ = OK v`
        (mp_tac o MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
      disch_then (fn th => once_rewrite_tac[th]) >>
-     simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def]) >>
+     simp[NoAsms, inline_shared_frame_def, stateFrameTheory.execution_frame_def]) >>
   qexists_tac `v` >> simp[] >>
   drule inline_owner_storage_index >> simp[]
 QED
