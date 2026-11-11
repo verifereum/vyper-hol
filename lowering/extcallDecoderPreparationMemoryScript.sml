@@ -2,7 +2,7 @@
 Theory extcallDecoderPreparationMemory
 Ancestors
   abiDecoderRange abiDecoderMemberCode abiDecoderMemberSetup abiDecoderReentry
-  abiEncoder compileEnv emitHelper ssaOperandFrame
+  abiEncoder compileEnv emitHelper ssaOperandFrame abiDecoderMemberBound abiDecoderContract
   exprLoweringProps fragExecMem instMemFrontier fragGasSeqMem fragGasPathMem
   fragGasSeqAbort abiDecoderBytesBound exprSimCalldataSlice freshWrites
   extcallDecoderMemberPreparationMemory extcallDecoderArrayPreparationMemory
@@ -198,6 +198,109 @@ Proof
   drule abi_decode_bytes_head_fragment_shape >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts st st') s` by
     metis_tac[extcall_decoder_bytes_head_mem_ok] >>
+  drule_all (SIMP_RULE (srw_ss()) [] (Q.SPEC `T` run_inst_seq_abort_gas_path)) >>
+  simp[fragGasModeTheory.gas_marked_path_def] >> metis_tac[]
+QED
+
+Theorem extcall_decoder_underflow_reject_run[local]:
+  emit_op LT [actual;src] st = (under,c1) /\
+  emit_op ISZERO [under] c1 = (ok,c2) /\
+  emit_void ASSERT [ok] c2 = ((),fin) /\ fresh_vars_wrt st s /\
+  eval_operand actual s = SOME a /\ eval_operand src s = SOME b /\
+  w2n a < w2n b ==>
+  ?t. run_inst_seq (emitted_insts st fin) s = Abort Revert_abort t
+Proof
+  strip_tac >> drule_all emit_op_LT_correct >> strip_tac >>
+  gvs[bool_to_word_def] >> drule_all emit_op_ISZERO_correct >> strip_tac >>
+  gvs[bool_to_word_def] >> drule_all emit_void_ASSERT_revert_full >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  drule_all abi_decode_sequence_chain >> strip_tac >>
+  drule_all run_inst_seq_emit_extend >> metis_tac[]
+QED
+
+Theorem extcall_decoder_member_pointer_wrap_run[local]:
+  compile_getelemptr_abi src T ao MLOAD base_op hi st = (member_ptr,fin) /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off /\
+  sb < dimword(:256) /\ off < dimword(:256) /\
+  dimword(:256) <= sb+off /\ fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st fin) s = Abort Revert_abort t /\
+      inst_extends st fin
+Proof
+  strip_tac >> qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op ADD [src; Lit (n2w ao)] st = (hp,c1)` >>
+  rename1 `compile_abi_dec_addr base_op hp c1 = (ha,c2)` >>
+  rename1 `emit_op MLOAD [ha] c2 = (ov,c3)` >>
+  rename1 `emit_op ADD [src;ov] c3 = (member_ptr,c4)` >>
+  rename1 `emit_op LT [member_ptr;src] c4 = (under,c5)` >>
+  rename1 `emit_op ISZERO [under] c5 = (ok,c6)` >>
+  rename1 `emit_void ASSERT [ok] c6 = ((),last)` >>
+  `compile_getelemptr_abi src T ao MLOAD base_op (Lit 0w) st = (member_ptr,c4)` by
+    simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def] >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  `abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off` by
+    simp[ADD_COMM] >>
+  drule_all abi_decode_dynamic_member_pointer_sentinel >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c4) s = OK prepared` >>
+  `eval_operand src prepared = SOME (n2w sb)` by metis_tac[] >>
+  `w2n (n2w (sb+off) : bytes32) < w2n (n2w sb : bytes32)` by
+    (mp_tac (Q.INST [`modulus` |-> `dimword(:256)`, `a` |-> `sb`,
+        `n` |-> `off`, `limit` |-> `dimword(:256)-1`] slice_bounds_mod) >>
+     simp[w2n_n2w] >>
+     `0 < dimword(:256)` by simp[] >>
+     `((off+sb) MOD dimword(:256)) < dimword(:256)` by simp[] >> decide_tac) >>
+  drule_all extcall_decoder_underflow_reject_run >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  `inst_extends c4 last /\ inst_extends st last` by
+    metis_tac[inst_extends_trans] >>
+  drule_all run_inst_seq_emit_extend >> metis_tac[]
+QED
+
+Theorem extcall_decoder_member_setup_wrap_run[local]:
+  abi_decode_member_setup dst src MLOAD base_op hi T ao vo st = (ops,fin) /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off /\
+  sb < dimword(:256) /\ off < dimword(:256) /\
+  dimword(:256) <= sb+off /\ fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st fin) s = Abort Revert_abort t
+Proof
+  strip_tac >> qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_member_setup_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `compile_getelemptr_abi src T ao MLOAD base_op hi st = (mp,mid)` >>
+  rename1 `emit_op ADD [dst; Lit (n2w vo)] mid = (dp,last)` >>
+  `abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off` by simp[ADD_COMM] >>
+  `dimword(:256) <= sb+off` by simp[ADD_COMM] >>
+  drule_all extcall_decoder_member_pointer_wrap_run >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >>
+  `!u. run_inst_seq (emitted_insts st mid) s <> OK u` by simp[] >>
+  drule_all run_inst_seq_emit_extend_err >> metis_tac[]
+QED
+
+Theorem extcall_decoder_member_setup_wrap_reject:
+  abi_decode_member_setup dst src MLOAD base_op hi T ao vo st = (ops,fin) /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off /\
+  sb < dimword(:256) /\ off < dimword(:256) /\ dimword(:256) <= sb+off /\
+  B+sb+ao < dimword(:256) /\ B+sb+ao+32 <= s.vs_alloca_next /\
+  abi_decoder_operand_live st.cs_next_var base_op /\ fresh_vars_wrt st s /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st fin) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?n t. gas_path_mem ctx func s n (Abort Revert_abort t)
+Proof
+  strip_tac >> drule_all extcall_decoder_member_setup_wrap_run >> strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_member_setup_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st fin)` by fs[EVERY_CONJ] >>
+  `run_inst_seq_mem_ok (emitted_insts st fin) s` by
+    (irule extcall_decoder_member_setup_mem_ok >> metis_tac[]) >>
   drule_all (SIMP_RULE (srw_ss()) [] (Q.SPEC `T` run_inst_seq_abort_gas_path)) >>
   simp[fragGasModeTheory.gas_marked_path_def] >> metis_tac[]
 QED
