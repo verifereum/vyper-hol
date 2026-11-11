@@ -1066,10 +1066,9 @@ QED
 
 (* HELD: a member whose declared type is an aggregate its element only
    fits (a DynArray[String[5],2] element at DynArray[String[40],2], say)
-   is stored by compile_store_memory_typed, whose run
-   (compile_store_memory_typed_run) needs acyclic_struct_metadata, which
-   this expression-level simulation does not carry.  Unreachable for a
-   supported program: supported_literal_elements and
+   is stored by compile_store_memory_typed (compile_store_memory_typed_run),
+   which emits INVALID unless acyclic_struct_metadata holds, hence that
+   premise.  Unreachable for a supported program: supported_literal_elements and
    supported_struct_elements limit every member to supported_copy_types,
    all of which are flat. *)
 Theorem aggregate_make_tuple_nested_sim:
@@ -1080,6 +1079,7 @@ Theorem aggregate_make_tuple_nested_sim:
      ~is_bytestring_type t) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
@@ -1164,6 +1164,7 @@ Theorem aggregate_make_tuple_fits_sim:
   LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
@@ -1262,6 +1263,7 @@ Theorem aggregate_struct_fields_sim:
   compile_struct_lit compile_expr ce ty fields (Var x) off sa = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx (MAP SND fields) /\
@@ -1436,6 +1438,7 @@ Theorem aggregate_make_array_elems_sim:
   compile_make_array_elems compile_expr ce args elem_ty
     (type_memory_bytes ce elem_ty) header (Var x) idx sa = (out,sb) /\
   expr_sim_inv ce cx env es /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
@@ -1539,6 +1542,7 @@ Theorem aggregate_make_array_start_sim:
   type_memory_bytes ce elem_ty = type_memory_size tv /\
   compile_make_array_elems compile_expr ce args elem_ty stride header (Var x) 0 sa = (out,sb) /\
   expr_sim_inv ce cx env es /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
@@ -1629,6 +1633,7 @@ Theorem aggregate_make_array_sim:
   type_memory_bytes ce elem_ty = type_memory_size tv /\
   compile_make_array compile_expr ce args elem_ty stride header (Var x) sa = (out,sb) /\
   expr_sim_inv ce cx env es /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\

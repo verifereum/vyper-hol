@@ -184,6 +184,7 @@ QED
 
 Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -305,6 +306,7 @@ QED
 
 Theorem compile_make_array_vv_case:
   !nocalls ctx func cenv cx ann topt bnd args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -554,6 +556,7 @@ Finalise compile_make_array_vv_case
 
 Theorem compile_struct_lit_case:
   !nocalls ctx func cenv cx ann nsid fields.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -567,6 +570,7 @@ QED
 
 Theorem compile_make_array_case:
   !nocalls ctx func cenv cx ann topt bnd args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -582,6 +586,7 @@ QED
 
 Theorem compile_struct_lit_sim:
   !cenv ann nsid fields.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (expr_size (StructLit ann nsid fields)) ==>
     expr_vv_ok cenv (StructLit ann nsid fields)
 Proof
@@ -592,6 +597,7 @@ QED
 
 Theorem compile_make_array_sim:
   !cenv ann topt bnd args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann (MakeArray topt bnd) args)
 Proof
