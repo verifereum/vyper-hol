@@ -17,42 +17,7 @@ Ancestors
   venomState stateEquiv While list rich_list finite_map pred_set arithmetic
   pair option words
 
-(* ==========================================================================
-   1. The Block Pass as a Fold, and Function Names
-   ========================================================================== *)
-
-
-Theorem ricf_transform_function_fn_name:
-  !fn_meta ctx_fns rma fn.
-    (ricf_transform_function fn_meta ctx_fns rma fn).fn_name = fn.fn_name
-Proof
-  rpt gen_tac >> simp[ricf_transform_function_def] >>
-  qmatch_goalsub_abbrev_tac `OWHILE G step_fn (T, ctx0, fn)` >>
-  Cases_on `OWHILE G step_fn (T, ctx0, fn)` >> simp[] >>
-  PairCases_on `x` >> simp[] >>
-  mp_tac (WhileTheory.OWHILE_INV_IND
-            |> INST_TYPE [alpha |-> ``:bool # icf_ctx # ir_function``]
-            |> Q.INST [`P` |-> `\(c, ctx, cur_fn). cur_fn.fn_name = fn.fn_name`]
-            |> Q.SPECL [`G`, `step_fn`, `(T, ctx0, fn)`]) >>
-  impl_tac
-  >- (simp[] >> rpt strip_tac >> PairCases_on `x` >>
-      fs[Abbr `step_fn`, ricf_function_step_def, pairTheory.UNCURRY] >>
-      rw[] >> gvs[] >> rw[]) >>
-  disch_then (qspec_then `(x0, x1, x2)` mp_tac) >>
-  simp[clear_nops_function_def] >> rw[]
-QED
-
-(* ==========================================================================
-   2. Context-Level Transformation
-   ========================================================================== *)
-
-Theorem ricf_transform_ctx_entry[simp]:
-  !ctx fn_meta rma.
-    (ricf_transform_ctx fn_meta rma ctx).ctx_entry = ctx.ctx_entry
-Proof
-  simp[ricf_transform_ctx_def]
-QED
-
+(* Structural transformation facts are exported by readonlyInvokeCopyFwdPlan. *)
 (* ==========================================================================
    3. Concrete Non-Vacuity Witness (ricf_witness_ctx)
    ========================================================================== *)
