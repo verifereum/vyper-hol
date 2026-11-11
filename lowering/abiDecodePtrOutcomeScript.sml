@@ -10,6 +10,8 @@ Ancestors
   words arithmetic abiDecoderReentry abiBuiltinDecodeHeader loweringHalt execEquivParamDefs
   fragGasSeqPtr stmtReasonLitFragMemory exprLoweringProps fragExec emitHelperProps compileEnv venomExecSemantics
   venomState venomInst list rich_list freshWrites
+  abiDecodePtrSourceOutcome abiDecodePtrStaticReject abiDecodePtrConversionReject
+  vyperABI vyperTypeABI abiValidMembers abiDecoderMembers
 
 Theorem abi_decode_actual_reject_path:
   fn_has_code sa sb func /\ inst_extends sa sb /\
@@ -388,3 +390,118 @@ Resume abi_decode_operand_actual_success[local_kept]:
 QED
 
 Finalise abi_decode_operand_actual_success
+
+(* Source classification produces a concrete rejection witness before replay.
+   Dynamic invalid input remains the separately licensed exemption. *)
+Theorem abi_decode_source_reject_or_exempt:
+  abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
+    (Lit 0w) 0w hi sa G tn s /\
+  EVERY supported_scalar_type tys /\
+  abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
+  cap = SUM (MAP (type_memory_bytes ce) tys) /\
+  LENGTH tys < dimword(:256) /\
+  LENGTH bs <= vyper_abi_size_bound (get_tenv cx) (TupleT tys) /\
+  evaluate_abi_decode (get_tenv cx) (TupleT tys) bs = INR err /\
+  mem_bytes_at (w2n b) (LENGTH bs) (abi_decode_source MLOAD s) = bs /\
+  compile_abi_decode_to_buf (Var dst) (Lit 0w) MLOAD (Var src) hi
+    (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) sa = ((),sb) ==>
+  (err = "abi_decode invalid" /\
+    ~EVERY (\ty. ~is_dynamic (vyper_to_abi_type (get_tenv cx) ty)) tys) \/
+  ?u. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort u /\
+      abi_decode_reject_witness (emitted_insts sa sb) s u
+Proof
+  strip_tac >>
+  qpat_x_assum `evaluate_abi_decode _ _ _ = _`
+    (strip_assume_tac o REWRITE_RULE [abi_decode_source_error_iff])
+  >- (Cases_on `EVERY (\ty. ~is_dynamic (vyper_to_abi_type (get_tenv cx) ty)) tys`
+      >- (disj2_tac >> drule_all abi_decode_live_static_reject >> simp[]) >>
+      disj1_tac >> gvs[EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  disj2_tac >>
+  `abi_to_vyper_list (get_tenv cx) tys
+     (abi_decode_members (MAP (vyper_to_abi_type (get_tenv cx)) tys) bs bs) = NONE` by
+    (sg `vyper_decode_valid_enc (Tuple (MAP (vyper_to_abi_type (get_tenv cx)) tys)) bs`
+     >- fs[vyper_valid_enc_def, vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>
+     drule abi_valid_tuple_view >> strip_tac >>
+     gvs[vyper_to_abi_type_def, vyper_to_abi_types_MAP, Once abi_to_vyper_def,
+         AllCaseEqs()]) >>
+  drule_all abi_decode_live_conversion_reject >> simp[]
+QED
+
+Theorem abi_decode_setup_source_reject_or_exempt:
+  abi_builtin_decode_header data mn mx sa = (inputs,sh) /\
+  compile_alloc_buffer outsz sh = (buf,ready) /\
+  run_inst_seq (emitted_insts sa ready) (abi_decoder_prune_vars sa.cs_next_var s) =
+    OK (u0 with vs_inst_idx := s.vs_inst_idx) /\
+  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
+    (abi_decoder_prune_vars sa.cs_next_var s) H tf /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
+    (Lit 0w) 0w hi ready H tf u0 /\
+  EVERY supported_scalar_type tys /\
+  abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
+  cap = SUM (MAP (type_memory_bytes ce) tys) /\
+  LENGTH tys < dimword(:256) /\
+  LENGTH bs <= vyper_abi_size_bound (get_tenv cx) (TupleT tys) /\
+  evaluate_abi_decode (get_tenv cx) (TupleT tys) bs = INR err /\
+  mem_bytes_at (w2n b) (LENGTH bs) (abi_decode_source MLOAD u0) = bs /\
+  compile_abi_decode_to_buf (Var dst) (Lit 0w) MLOAD (Var src) hi
+    (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) ready = ((),sb) /\
+  fn_has_code ready sb func /\ fn_has_code sa sb func ==>
+  (err = "abi_decode invalid" /\
+    ~EVERY (\ty. ~is_dynamic (vyper_to_abi_type (get_tenv cx) ty)) tys) \/
+  ?v K tk n j. gas_path_ptr D 0 ctx func PG G tn s n K tk
+    (Abort Revert_abort (v with vs_inst_idx := j))
+Proof
+  strip_tac >>
+  drule_all abi_decode_source_reject_or_exempt >> strip_tac
+  >- (disj1_tac >> gvs[]) >>
+  disj2_tac >> drule_all abi_decode_setup_actual_reject >> metis_tac[]
+QED
+
+Theorem abi_decode_operand_actual_reject_or_exempt:
+  expr_post ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
+  ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
+  expr_type e = BaseT (BytesT (Dynamic cap)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
+  abi_builtin_decode_header (Var p) mn mx sa = ((len,src),sh) /\
+  compile_alloc_buffer outsz sh = (buf,ready) /\
+  fn_has_code sa ready func /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa p /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
+  mn <= LENGTH bs /\ LENGTH bs <= mx /\ mx < dimword (:256) /\
+  ghost_inv ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  fn_inst_ids_distinct func /\ outsz < dimword (:256) /\
+  EVERY supported_scalar_type tys /\
+  abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
+  outsz = SUM (MAP (type_memory_bytes ce) tys) /\
+  LENGTH tys < dimword(:256) /\
+  LENGTH bs <= vyper_abi_size_bound (get_tenv cx) (TupleT tys) /\
+  evaluate_abi_decode (get_tenv cx) (TupleT tys) bs = INR err /\
+  compile_abi_decode_to_buf buf.buf_operand (Lit 0w) MLOAD src len
+    (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) ready = ((),sb) /\
+  fn_has_code ready sb func /\ fn_has_code sa sb func ==>
+  (err = "abi_decode invalid" /\
+    ~EVERY (\ty. ~is_dynamic (vyper_to_abi_type (get_tenv cx) ty)) tys) \/
+  ?v K tk n j. gas_path_ptr D 0 ctx func PG G tn s n K tk
+    (Abort Revert_abort (v with vs_inst_idx := j))
+Proof
+  strip_tac >>
+  drule_all hash_dynamic_post_view >> strip_tac >>
+  drule_all abi_decode_ptr_operand_entry >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >> gvs[] >>
+  `mem_bytes_at (w2n (n2w b + 32w:bytes32)) (LENGTH bs)
+      (abi_decode_source MLOAD u) = bs` by
+    simp[abi_decode_source_def, word_add_def, w2n_n2w, LESS_MOD] >>
+  drule_at (Pat `abi_decode_member_live _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    abi_decode_setup_source_reject_or_exempt >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> disch_then (drule_at (Pat `abi_builtin_decode_header _ _ _ _ = _`)) >>
+  simp[] >> disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
