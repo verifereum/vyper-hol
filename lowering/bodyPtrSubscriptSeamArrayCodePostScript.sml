@@ -20,6 +20,18 @@ Proof
   drule select_result_nonstorage_gas_obs >> simp[]
 QED
 
+(* A base array's post is the post of its synthetic element selection: the
+   selection's post type is its annotation, and a pure selection has a pure
+   base. *)
+Theorem vv_post_array_base_subscript[local]:
+  vv_post ctx func cenv cx obj es sa sb s0 es' r vv s /\
+  post_value_type cenv obj = expr_type obj /\ expr_type obj = ArrayT et bd ==>
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sb s0 es' r vv s
+Proof
+  strip_tac >> gvs[loweringPostsTheory.vv_post_def, vyperASTTheory.expr_type_def] >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem code_array_element_ptr_summary:
   expr_body_pre cenv cx env obj es /\
   eval_expr cx obj es = (INL r,t) /\
@@ -56,9 +68,15 @@ Proof
   `?child. select_result cx (ArrayT et bd) r (ValueSubscript (IntV i)) ee =
       (INL child,ee) /\ read_result cx child ee = (INL v,ee)` by
     (irule framed_array_select_read >> simp[] >> metis_tac[]) >>
+  `vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+     (LocatedValue ann p) q` by
+    (irule vv_post_array_base_subscript >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `select_result _ _ _ _ _ = _`
+    (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
   `vv_post ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee child
      (LocatedValue et (mk_ptr dst p.ptr_location)) q` by
-    (irule vv_post_array_element >> simp[] >> metis_tac[]) >>
+    (irule vv_post_array_element >> simp[] >>
+     qexistsl [`ann`, `av`, `i`, `r`] >> simp[] >> metis_tac[]) >>
   irule select_result_ptr_counted_summary >> simp[] >>
   qexistsl [`G`,`OK q`,`tn`] >> simp[] >>
   `ee with gas_obs := [] = ee` by

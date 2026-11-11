@@ -82,6 +82,35 @@ Proof
   first_x_assum drule_all >> strip_tac >> decide_tac
 QED
 
+(* vv_at's memory placement of a non-word base, with the local place pin;
+   as exprSimTuple's base_vv_at_mem. *)
+Theorem tuple_base_vv_at_mem[local]:
+  !cenv cx t sa sb es tv vv s v tvt w.
+    vv_at cenv cx t sa sb es tv vv s /\ ~is_word_type t /\
+    read_result cx tv es = (INL v, es) /\
+    evaluate_type (get_tenv cx) t = SOME tvt /\
+    (!bt. tvt <> BaseTV bt) /\
+    vv_loc vv = LocMemory /\ eval_operand (vv_operand vv) s = SOME w ==>
+    val_wf tvt v /\
+    ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+                 sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+                 b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
+                 (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
+                              b + sz <= lb \/ lb + lsz <= b)) \/
+     (?n b sz. local_region cenv es.scopes s n b sz /\
+               b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
+               local_path_at cenv cx n (w2n w - b) tvt /\
+               local_place_at cenv cx n (w2n w - b) tvt tv) \/
+     val_footprint tvt v = 0)
+Proof
+  rpt gen_tac >> Cases_on `vv` >>
+  simp[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
+       expr_val_at_def, local_val_at_def] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  gvs[local_place_at_def] >> metis_tac[]
+QED
+
 Theorem tuple_child_placement:
   stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
   vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
@@ -92,17 +121,30 @@ Theorem tuple_child_placement:
   off = tuple_offset cenv tys (vv_loc bvv) k /\ ct = EL k tys /\
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-  LENGTH vs = LENGTH tvs /\ k < LENGTH tvs ==>
+  LENGTH vs = LENGTH tvs /\ k < LENGTH tvs /\
+  (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+     ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
   vv_at cenv cx ct sa sn es1 tv'
     (LocatedValue t (mk_ptr dst (vv_loc bvv))) q
 Proof
   strip_tac >> gvs[] >>
-  simp[vv_at_def, mk_ptr_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[vv_at_def, mk_ptr_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `?p0. tv = PlaceR (MemoryPlace id p0)` by metis_tac[] >>
+      qpat_x_assum `vv_at _ _ (TupleT _) _ _ _ _ _ _` mp_tac >>
+      Cases_on `bvv` >>
+      gvs[vv_at_def, vv_loc_def, vv_location_def, is_word_type_def]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
   `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
     (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
      impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >> simp[]) >>
   gvs[] >> drule_all tuple_memory_child_address >> strip_tac >>
-  drule_all tuple_memory_placement >> strip_tac >>
+  qspecl_then [`cenv`, `cx`, `TupleT tys`, `sa`, `sn`, `es1`, `tv`, `bvv`,
+               `q`, `ArrayV (TupleV vs)`, `TupleTV tvs`, `w`] mp_tac
+    tuple_base_vv_at_mem >>
+  impl_tac >- simp[is_word_type_def] >>
+  disch_then (strip_assume_tac o
+    SIMP_RULE (srw_ss()) [val_footprint_def, type_memory_size_def, val_wf_def]) >>
   `val_wf (EL k tvs) (EL k vs)` by (irule tuple_child_wf >> simp[]) >>
   `val_footprint (EL k tvs) (EL k vs) <= type_memory_size (EL k tvs)` by
     simp[val_footprint_le] >>
@@ -115,10 +157,13 @@ Proof
       `mem_step_offset (TupleTV tvs) (ValueSubscript (IntV (&k))) =
        SOME (SUM (TAKE k (MAP type_memory_size tvs)),EL k tvs)` by
         simp[mem_step_offset_def, type_memory_size_list_sum, MAP_TAKE] >>
+      `local_place_at cenv cx n
+         (w2n w - b + SUM (TAKE k (MAP type_memory_size tvs))) (EL k tvs) tv'` by
+        (irule local_place_at_step >> metis_tac[]) >>
       drule_all local_path_at_step >>
       `w2n w - b + SUM (TAKE k (MAP type_memory_size tvs)) =
        w2n w + SUM (TAKE k (MAP type_memory_size tvs)) - b` by decide_tac >>
-      simp[local_path_at_val_at] >> decide_tac) >>
+      gvs[local_path_at_val_at] >> decide_tac) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
