@@ -128,17 +128,17 @@ it from a general well-formed frame run is still a 2.1 obligation.
 
 [extCallOracle](../extCallOracleScript.sml) defines the actual records:
 
-| Record | Full fields (no gas field) |
+| Record | Fields |
 |---|---|
-| `call_request` | `cr_target`, `cr_value`, `cr_data`, `cr_static`, **live pre-call** `cr_accounts`, `cr_tStorage` |
-| `call_outcome` | `co_success`, `co_returnData`, **post-call accounts including balance/code/storage** `co_accounts`, `co_tStorage`, `co_logs` |
+| `call_request` | `cr_kind`, `cr_gas`, `cr_data_len`, `cr_target`, `cr_value`, `cr_data`, `cr_static`, **live pre-call** `cr_accounts`, `cr_tStorage` |
+| `call_outcome` | `co_created`, `co_success`, `co_returnData`, **post-call accounts including balance/code/storage** `co_accounts`, `co_tStorage`, `co_logs`, `co_toDelete` |
 
 One [source evaluator](../semantics/vyperInterpreterScript.sml) has two modes:
 `call_external NONE` concretely runs callees; `call_external (SOME os)` takes
 outcomes. Arbitrary SOME lists use this same evaluator, not a theorem-only
-interpreter. The unchanged two-argument `initial_state am scs` starts in NONE
-with empty requests. Runtime theorem mode is exactly
-`call_external (SOME (MAP SND (call_trace es))) am tx`.
+interpreter. Runtime theorem mode uses
+`call_external (SOME (MAP SND (call_trace es))) gobs am tx` for existential
+source gas observations `gobs`, not yet tied to EVM readings.
 Venom and [assembly](../venom/codegen/defs/asmSemScript.sml) CALL/STATICCALL also
 use `take_outcome`, `record_request`, `adopt_outcome`: ordinary exhaustion is a
 failed call; failed/static calls adopt no accounts/transient/log effects;
@@ -151,13 +151,13 @@ for every record, including failed and static ones. No arbitrary-callee or sourc
 **Deterministic observer, not a freely chosen oracle.**
 [callTrace](../venom/codegen/frame/callTraceScript.sml) defines `frame_obs_tr`
 with the `run_call_tr` gas-decrease measure. `trace_obs` has entries, readings
-and a pending `(request, pre-call log count)`. `observe` records only our frame:
+and a pending `(request, pre-call log count, pre-call deletion count)`. `observe` records only our frame:
 
 | Step shape | Actual observer action |
 |---|---|
 | Our frame executes GAS and continues at the same depth | append the post-step top stack word to `readings` |
-| CALL/STATICCALL with enough stack completes at our depth | append `request_of` / `outcome_of` immediately |
-| It pushes a callee | save request and our log count; descendant calls do not overwrite it |
+| CALL/STATICCALL/DELEGATECALL/CREATE/CREATE2 with enough stack completes at our depth | append `request_of` / `outcome_of` immediately |
+| It pushes a callee | save request and our log/deletion counts; descendant calls do not overwrite it |
 | That callee returns to our depth | append the pending pair and clear pending |
 | Our frame faults/pops, or an unobserved instruction/descendant step occurs | no new entry |
 
@@ -165,8 +165,8 @@ and a pending `(request, pre-call log count)`. `observe` records only our frame:
 `call_requests es` filters precisely those out of its requests. `gas_readings es` is a separate
 frame-local list for assembly initialization, **not a source gas-number
 oracle**. The observer is total/deterministic; trace decomposition and semantic
-correctness are not proved by totality and remain 2.1 work. CREATE/CREATE2,
-DELEGATECALL/CALLCODE are not observed and are outside S7 shape.
+correctness are not proved by totality and remain 2.1 work. CALLCODE is not observed;
+DELEGATECALL and CREATE/CREATE2 are observed but outside S7 shape.
 
 **Computed calls:** value zero to addresses 1/2/6/7 uses `precompile_result`
 (ecrecover/SHA256/ecadd/ecmul) for its return data, takes its success from
@@ -175,16 +175,16 @@ preserves state. The source's sha256/ecrecover/ecadd/ecmul builtins take that
 outcome too. Invalid EC input gives failure; invalid ecrecover is a valid
 successful empty result. Nonzero value or another precompile is ordinary.
 
-**Gas and observations:** entry `cc_gas = 0`; Venom GAS remains unchanged.
-`unitShapeDefs.opaque_use_ok` permits GAS copies/PHIs only into CALL/STATICCALL
-gas positions. Oracle calls evaluate but ignore that operand's value; assembly
-GAS consumes actual EVM readings (zero on exhaustion). No equality of Venom
+**Gas and observations:** entry `cc_gas = 0` and `vs_gas_readings = gas_readings es`.
+Venom GAS and assembly GAS consume frame-local readings, returning zero on
+exhaustion. `unitShapeDefs.opaque_use_ok` restricts return-address uses. No equality of Venom
 GAS with EVM readings, `msg.gas`/`gas=` guarantee or sufficient-gas existential
 is claimed. The conclusion is actual `run_call` and frame OutOfGas /
 StackOverflow, or `call_result_rel`.
 
-On success the result relates canonical wrapped return bytes, accounts,
-transient storage, ordered concrete logs and the **entire request sequence**.
+On success the result relates `tx_return_bytes`, accounts after EVM pending
+deletions and transient storage modulo dead target storage, ordered concrete logs
+and the filtered request sequence via `request_agree`.
 Failed-run requests, leftover terminal outcomes, revert data/reason and general
 abort kind are not compared. `unspecified_behaviour_exempt` covers exact
 `RuntimeError "abi_decode invalid"` with a dynamic ABI target occurring in a
@@ -203,9 +203,9 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 
 | Key | Decision / rejected alternative | Current implementation and explicit deviation or limit | Future owner |
 |---|---|---|---|
-| D1 | Full outcome oracle, not gas numbers; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption; `call_result_rel` compares whole successful requests. No forwarded-gas field. | 2.1 trace / 7 callee producer |
+| D1 | Full outcome oracle; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption; `call_result_rel` compares filtered successful requests via `request_agree`. The observer sets `cr_gas` to `NONE`; source gas observations are existential and not tied to EVM readings. | 2.1 trace / 7 callee producer |
 | D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. No gas-bound proof. | 2.1 / 4 |
-| D3 | Unchanged Venom GAS; asm readings; ignore call gas | `exec_read0` GAS unchanged; `asm_gas`, evaluated CALL/STATICCALL gas, `opaque_use_ok`, entry gas zero. **Implementation proof-scope deviation:** old asm/EVM step now excludes GAS after a checked counterexample; full trace-aware S7 is not proved. | 2.1 / 4.2 |
+| D3 | Frame-local GAS readings | Venom `exec_gas` and `asm_gas` consume readings, zero on exhaustion; entry uses `gas_readings es`. Source observations in the result are existential and not yet tied to EVM readings. | 2.1 / 4.2 |
 | D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, request filter `call_requests`; helper purity is proved, EVM purity bridge is deferred. | 2.1 |
 | D5 | One evaluator NONE/SOME, not duplicate evaluator or unchecked accounts | Source `evaluation_state.outcomes/requests`, `take_call_outcome` account guard; full triples at call/deploy entry, two-argument initializer retained. Existing storage/type proof guards remain conditional; no universal storage validator. | 6 / 7 |
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
@@ -223,7 +223,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D18 | S6 output shape, not new compiler final-hook check | S6 ADMITTED; existing literal O1 hooks unchanged. Raw-only restrictions not required of output. | 3 |
 | D19 | Syntax memory restrictions + raw memory contract | Internal local/nested-call/loop-call/name/fallback-argument exclusions in whitelist; `raw_unit_memory_ok` below frontier at actual sites. S3/S5 ADMITTED; empty memory is not a producer. | 5 |
 | D20 | Reachability at visited states, not unincremented results | `enters_block`, `fn_entry_inv`, `reachability_closed`, `codegen_reachability_package` include post-PHI, incremented continuations and INVOKE entries. Definitions are not a reachability proof. | 5 |
-| D21 | Canonical `return_bytes`, not always unwrapped encoding | `NoneT` empty; singleton tuple iff `needs_external_call_wrap`. | 6 |
+| D21 | `tx_return_bytes` | Raw-return functions use `raw_return_bytes`; otherwise `return_bytes` is empty for `NoneT` and uses a singleton tuple iff `needs_external_call_wrap`. | 6 |
 | D22 | Actual entry transfer/block/code/log/layout guards | `call_state_rel` uses LIVE post-transfer accounts, block window/nonzero bounds, <=24576 bytes, empty logs and declared slots/source installation. Satisfiability not established. | 7 |
 | D23 | Encoding wf only; remove positive-size hypothesis | `asm_encoding_wf` replaces `asm_wf` in encoding/step consumers; zero-size reverse lookup repaired. **Still absent:** general producer for actual generated output. | 2.1 |
 | D24 | Reserved-label exclusions | `reserved_label`, `unit_shape_ok`, supported internal-name rules; S6 must produce shape, not arbitrary label-map assumptions. | 3 |
@@ -370,7 +370,7 @@ of the same kind:
 
 - internal function calls;
 - supported calls to other contracts (creation is outside this runtime shape);
-- opaque GAS/trace-aware assembly steps (not source gas-number reads);
+- trace-aware GAS and assembly steps;
 - ABI values of variable size, respecting the exact decoding exemption.
 
 Deployment stays out of this step.
@@ -406,7 +406,7 @@ producer of that premise or proof of the driver.
 | Input | Known witness / problem | Concrete obligation before S4/S6 can be proved |
 |---|---|---|
 | F25 schedule | `MSTORE %p %v; ASSERT %x; RETURN %p 32` schedules ASSERT first, falsifying closed `dft_schedule_safe`. | Check actual `dft_fn`/`dft_block`/`build_eda`, then new correctness argument under raw shape/memory. Do not cite `dft_pass_correct` as unconditional preservation. |
-| F25 failure transport | ASSERT hoists before INVOKE or RETURNDATACOPY: INVALID vs REVERT, changed revert bytes; if callee STOPs, raw Halt vs output Abort. Two GAS instructions can swap. | D17 allows the first abort weakenings, not Halt->Abort. Raw shape excludes callee STOP/RETURN and ASSERT_UNREACHABLE; opaque GAS excludes arithmetic observations. Prove call order/state-write barriers and permitted hoisting, not failure request/byte equality. |
+| F25 failure transport | ASSERT hoists before INVOKE or RETURNDATACOPY: INVALID vs REVERT, changed revert bytes; if callee STOPs, raw Halt vs output Abort. Two GAS instructions can swap. | D17 allows the first abort weakenings, not Halt->Abort. Raw shape excludes callee STOP/RETURN and ASSERT_UNREACHABLE. Prove call order/state-write barriers and permitted hoisting, not failure request/byte equality. |
 | F26 entry / labels | Blocks `[B; A; X]`: B loads calldata/JNZ A X, A does GAS (or CALL)/JMP B, X STOP. SimplifyCFG can merge into entry B and start at A; Label in a terminator's value position counts as successor. | Independently check merge witness; carry `first_block_no_preds` and `label_positions_ok` from S2 through actual SimplifyCFG/label map. General well-formedness alone is insufficient. |
 | F26 dispatched variants | MakeSSA/LowerDload/SUE/CFGNormalization APIs differ from dispatch; call exclusions, missing returndata/immutables and contradictory empty-label/layout premises. | Bridge or re-prove the **actual dispatched functions**, preserving successful observables. Old pass APIs alone prove neither S4 nor S6. |
 | F26 whole driver | Pre-walk, pruning, label map, FmpLowering and callee-first mixed calling conventions lack semantic composition. | Per-function replacement with interprocedural INVOKE induction over mixed contexts, reachable-pruning and mapping arguments, then actual driver composition. |
@@ -461,7 +461,7 @@ Remaining work, roughly in dependency order (all future):
    `ssa`/`wf` cheats only where a later pass theorem consumes them. Restate
    them on the dispatched variants.
 8. **H3-shape / S6.** Prove entry function remains first/no params/no RET,
-   reserved-label and operand/label restrictions, opaque GAS/RETPC ASSIGN/PHI
+   reserved-label and operand/label restrictions, RETPC ASSIGN/PHI
    closure, and excluded opcodes. Track generated `formal_label_` names,
    FMP/RET forms in internal functions, function order and unchanged data
    segment. Output shape must not assert raw-only restrictions.
@@ -484,7 +484,7 @@ Remaining work, roughly in dependency order (all future):
 
    | Actual input | Required future frame-aware invariant fact |
    |---|---|
-   | `fn_entry_state_rel`, `fn_has_retpc`, `unit_shape_ok` / `opaque_use_ok` | Fresh callee vars need not already be valued. Exempt **opaque return-address and GAS variables** from stack/spill value matching (including copies/PHIs); no Venom GAS = asm-reading equality. Use concrete `lo = SND (compute_label_offsets prog)`, `o2pc = build_offset_to_pc prog`, and actual return-label lookup. |
+   | `fn_entry_state_rel`, `fn_has_retpc`, `unit_shape_ok` / `opaque_use_ok` | Fresh callee vars need not already be valued. Handle return-address variables and copies/PHIs under the actual entry relation. Use concrete `lo = SND (compute_label_offsets prog)`, `o2pc = build_offset_to_pc prog`, and actual return-label lookup. |
    | RET operand order / `IntRet` conclusion | At RET the callee stack is **exactly its RET operands above caller `rest`**, so JUMP pops the return destination and leaves `REVERSE ret.iret_values ++ rest` at `pc_ret`. Do not equate assembly return address with a source return-PC token. |
    | Assembly step stack behavior | Every emitted step leaves lower stack entries untouched below the operands it pops; allow arbitrary caller `rest`, not equality of whole model/real stack lengths. |
    | `closure_spill_byte`, `fn_return_state_rel` | Preserve caller spill bytes outside the **whole callee call-graph closure**, not just the immediate callee interval; preserve shared state/outcome suffix at internal return, while terminal observations omit leftover outcomes. |
@@ -504,7 +504,7 @@ Remaining work, roughly in dependency order (all future):
 4. **`codegen_correct`**, from the pieces above. Reuse proved
    `initial_state_bridge`, `block_insts_sim` and `terminal_asm_evm_final` only
    within their actual scopes; they do not already supply the new frame/trace
-   or opaque-variable invariant. Compose the required extensions into S7.
+   or return-address invariant. Compose the required extensions into S7.
 
 ## Milestone 5: Cross-stage invariants
 
@@ -515,7 +515,7 @@ Actual memory API is
 
 | Handoff | Exact current input/contract | Concrete deferred proof |
 |---|---|---|
-| H5-S2 | Lowering success + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | Inspect raw emission: only ALLOCA among allocation/FMP forms, no ASSERT_UNREACHABLE; RET only internal, STOP/RETURN only entry; fresh legal labels, read0 empty operands, first block no predecessor, opaque GAS/RETPC uses. This supplies S4/S6 raw shape, not a compile-success theorem. |
+| H5-S2 | Lowering success + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | Inspect raw emission: only ALLOCA among allocation/FMP forms, no ASSERT_UNREACHABLE; RET only internal, STOP/RETURN only entry; fresh legal labels, read0 empty operands, first block no predecessor, restricted RETPC uses. This supplies S4/S6 raw shape, not a compile-success theorem. |
 | H5-S3 | S1 boundary + `~source_exempt` -> `raw_unit_memory_ok` | Alloca-aware buffer/layout induction, checked `unit_alloca_budget`, memory accesses below frontier and frontier <2**256. Fresh empty memory alone proves nothing about later accesses. Exemption exclusion is essential: dynamic decoding may read unchecked wrapping offsets. |
 | H5-S5 | Actual O1/output plan, S2/raw entry/S3 and matching initial FMP -> exists `Inv` with output memory + reachability | Transport frontier/allocation safety through dispatched passes, including early SimplifyCFG/DretDesugar/MakeSSA/LowerDload and ConcretizeMemLoc; prove generated spill-region non-overlap, safe reads/writes and successful-step spill preservation, including aggregate INVOKE returns. Deliver **one shared invariant witness** to L5/S7. |
 
@@ -559,7 +559,7 @@ unit simulation by themselves.
 |---|---|---|
 | Selector lookup / `lookup_function` | Linear dispatcher and generated selectors | Distinct names/selectors, no public getter; exact External/no-default/count/binding boundary. Prove dispatcher reaches named function, not an arbitrary table premise. |
 | Calldata size, `bind_arguments` | CALLDATASIZE minimum, CALLDATALOAD/range checks | Canonical `calldata_encodes`; head sizes and every supported value shape, widths multiples of8. Establish alloca-aware arguments/vars relation. |
-| Successful return / fallthrough | MSTORE/ABI RETURN, STOP/typed INVALID | `return_bytes` wrapping, not unwrapped `enc` universally; typing excludes typed fallthrough. |
+| Successful return / fallthrough | MSTORE/ABI RETURN, STOP/typed INVALID | `tx_return_bytes` handles raw return or `return_bytes` wrapping; typing excludes typed fallthrough. |
 | Integer Add/Sub/Mul/Div/Mod / `evaluate_binop` | `compile_safe_add/sub/mul/div/mod` | Overflow, zero/div-min/-1 and range checks for signed/unsigned widths; prove matched runtime Abort, not merely equality on success. |
 | Exp / `evaluate_binop` | `compile_safe_pow` | Literal base or nonnegative literal exponent as whitelist requires; other cases excluded. |
 | Decimal Add/Sub/Div/Mod/Mul | Safe decimal paths | Include corrected minimum decimal product D12i, zero/overflow and scaling bounds. |
@@ -620,7 +620,7 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
 4. **ABI:**
    - `compile_abi_encode_to_buf_correct`, with multi-block dynamic cases;
    - static decode, restated to describe the decoded value;
-   - external return: actual `return_bytes` (including singleton wrapping).
+   - external return: actual `tx_return_bytes` (including raw return or singleton wrapping).
 5. **Module:**
    - linear dispatch reaches the entry for the calldata selector;
    - argument decoding establishes `local_ptrs_rel` in `state_rel`;
@@ -648,8 +648,10 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    and exactly one fresh nonstatic Code frame with
    `deploy_bc ++ args_bytes`, empty calldata/memory, live transfer and no0xEF
    runtime prefix. Prove constructor CODECOPY/ABI/body, epilogue, runtime embedding
-   and creation completion: returned **and installed** runtime code, other
-   accounts equal, target modulo code, transient storage and ordered logs;
+   and creation completion: returned **and installed** `runtime_bc ++ section`
+   satisfying `immutables_section_rel`, other accounts equal, target modulo code
+   and dead storage, transient storage
+   modulo dead target storage, and ordered logs;
    explicit failure/resource/exemption cases. Do not require runtime readiness
    for an undeployed target or claim the old T placeholder was this proof.
    Nested creation frames and general runtime immutables remain generalizations.
@@ -666,7 +668,7 @@ composition fully verified. Concrete T10.3 inputs:
 | H7-storage | `source_storage_ok`, `source_typing_ok`, `contract_storage_well_formed`, `storage_layout_safe` | Deployment establishes and later transactions preserve exact installed-source/readiness, machine/tx typing and actual storage/layout/hash separation. Existing storage-preservation and load/call typing results are **conditional partial producers**: retain runtime-storage consistency, protected calls, evaluation/oracle-storage and external-call-input readiness hypotheses. |
 | H7-entry | `call_state_rel`, `source_deployment_rel`, `valid_vyper_call` | Construct a real top-level transaction entry with live transfer, wf/Collect, code/parser/length, fresh Memory frame, installed singleton source/layouts, exact ABI bindings and block ties. Prove **satisfiability of the combined environmental boundary**, not merely implication from it; no universal compile success or supported/satisfiable compiled-program witness exists here. D31 deliberately defers this. |
 | H7-callees | `call_outcomes_ok` and source concrete `call_external NONE` / `load_contract NONE` | Prove the **source-executed-callee** producer: under explicit source typing/storage/protected-call assumptions, if the source itself ran every callee, all corresponding outcomes, including failed and static ones, satisfy the return-data length and account bounds **and contract storage validity in the actual caller context**. No current such lemma exists; arbitrary EVM callee validity does not imply it. |
-| H7-compose | Frame theorem / H21 trace and frame decomposition | Split actual nested execution into prefix, inner `run_call`, suffix with environment transports; apply separately to reentrant/multicontract entries. Compose transactions by persistent world-state induction, rebuilding a fresh **outcome trace oracle** at each top call, not a gas-number list. |
+| H7-compose | Frame theorem / H21 trace and frame decomposition | Split actual nested execution into prefix, inner `run_call`, suffix with environment transports; apply separately to reentrant/multicontract entries. Compose transactions by persistent world-state induction, rebuilding a fresh **outcome trace oracle** at each top call and relating source gas observations to EVM readings. |
 
 Read the [actual partial-producer premises](compiler-proof-status-2026-10-09.md#what-partial-producers-actually-establish)
 before using typing/storage results. Runtime source readiness requires installed
@@ -696,7 +698,7 @@ After Milestone 1, the work splits cleanly:
 | A: Lowering | Milestone 6 | `state_rel`, `lower_vyper_runtime_unit_correct` statement |
 | B: Pipeline | Milestone 3 | per-pass relation vs `observable_equiv`; `run_venom_pipeline_correct` statement |
 | C: Block codegen | Milestone 4.1 | actual `gen_inst_*_sim` interfaces; frame-aware integration still owed |
-| D: Function codegen and asm→EVM | Milestone 4.2–4.4 | actual S7/frame contract, outcome trace, opaque GAS/readings, frame-aware function invariant |
+| D: Function codegen and asm→EVM | Milestone 4.2–4.4 | actual S7/frame contract, outcome trace, GAS readings, frame-aware function invariant |
 | E: Invariants | Milestone 5 | memory and reachability invariant definitions |
 
 Milestone 2.1 comes from track C and part of track D. Milestone 2.2

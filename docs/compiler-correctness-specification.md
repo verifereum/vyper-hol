@@ -143,18 +143,17 @@ appends our logs; failure rolls back to the saved snapshot without appending
 failed-frame logs. This defined boundary and selected witnesses are not a proof
 of S7 or of environmental satisfiability.
 
-### Outcome oracle, not a source gas oracle
+### Outcome oracle and source gas observations
 
 `call_trace es` is the ordered request/outcome trace of **our frame**, not the
 trace of every descendant instruction. Requests contain target/value/calldata,
 static flag and live pre-call account/transient snapshots; outcomes contain
 success, return bytes, post-call accounts/transient storage and logs. Source
-`call_external (SOME (MAP SND (call_trace es))) am tx`, Venom and assembly take
+`call_external (SOME (MAP SND (call_trace es))) gobs am tx`, Venom and assembly take
 these outcomes instead of executing callees. Successful nonstatic outcomes
 adopt accounts (including storage/code), transient storage and logs; static and
 failed outcomes do not adopt payloads. The source's NONE mode still executes
-concrete calls and the two-argument initializer still starts with NONE/empty
-requests. Arbitrary source SOME lists use this **same evaluator**, not a second
+concrete calls. Arbitrary source SOME lists use this **same evaluator**, not a second
 source semantics.
 
 Computed value-zero precompiles 1/2/6/7 take their success from the next
@@ -180,18 +179,20 @@ manufacture a universal environmental producer. The detailed
 records readiness/input/constants/protected-storage/oracle hypotheses.
 
 The shared entry Venom state has **cc_gas=0**, concrete assembly labels and plan
-FMP fields. Venom GAS is untouched, with opaque GAS results restricted to
-CALL/STATICCALL gas operands; oracle call semantics evaluate then ignore those
-values. Assembly uses frame-local EVM gas readings. There is **no caller-read
-gas oracle**, source `msg.gas` guarantee or `gas=` keyword guarantee. The old
+FMP fields. Venom GAS consumes the frame-local `gas_readings es`, returning zero
+when exhausted; assembly also uses frame-local EVM gas readings. There is **no caller-read
+gas-reading correspondence**, source `msg.gas` guarantee or `gas=` keyword guarantee.
+The result relation existentially chooses source gas observations without tying
+them to EVM readings. The old
 2026-09-29 gas-oracle account of this design is superseded by the outcome oracle.
 
 ### Observations, resources and limits
 
-- Success requires a successful frame outcome, canonical `return_bytes`
-  (empty NoneT, otherwise ABI with required singleton wrapping), equal live
-  accounts/transient storage, ordered concrete logs and **the entire request
-  sequence** equal to the observed trace requests. Requests are compared only
+- Success requires a successful frame outcome, `tx_return_bytes` (raw return
+  bytes for raw-return functions, otherwise `return_bytes`), account agreement
+  after EVM pending deletions and transient-storage agreement modulo dead target
+  storage, ordered concrete logs and `LIST_REL (request_agree cx)` against
+  `call_requests es`. Requests are compared only
   on success; terminal leftover outcome lists are not related observations.
 - Assertion/raise requires Reverted, except `"UNREACHABLE"` permits any failure.
   Non-exempt source Error requires a failed frame. Lowering requires a
@@ -220,8 +221,9 @@ Deployment is separate: the real `e2e_deploy_correctness` is **ADMITTED**,
 Milestone6 item7, off this call path. It has Call-free constructor/canonical ABI,
 pre-constant deployment typing/storage and fresh single-frame creation with an
 uninstalled source target and an empty target account in `es.originalAccounts`;
-it returns/installs runtime bytes and compares other
-accounts and target modulo code, transient storage and logs. It is not the old
+it returns/installs `runtime_bc ++ section` satisfying `immutables_section_rel` and compares other
+accounts, target modulo code and dead storage, transient storage modulo dead
+target storage, and logs. It is not the old
 proved `==> T` placeholder. `gen_fn_simulation` is separately ADMITTED,
 Milestone4.2, also off path. The
 [completed retirement ledger](../lowering/e2eLegacy.md) retains original proof
