@@ -42,6 +42,7 @@ Theorem intcall_deferred_pure_child:
   ^deferred fp ce e vv r d ee u
 Proof
   BETA_TAC >> strip_tac >>
+  `intcall_expr_res fp ce env es c s` by fs[intcall_joint_res_def] >>
   drule_all intcall_pure_child_value_certificate >> strip_tac >>
   qexists `a` >> simp[]
 QED
