@@ -20,7 +20,7 @@ Definition extrequest_kwarg_post_def:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ sa.cs_next_var <= sb.cs_next_var /\
-    sa.cs_next_id <= sb.cs_next_id /\ wb_frame cenv es sa s0 t /\
+    sa.cs_next_id <= sb.cs_next_id /\ wb_frame cenv es ee sa s0 t /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     extrequest_strong_captures ctx func cenv cx old_es old_rs old_vvs ee sb t /\
     safe_operand sb op /\
@@ -43,7 +43,7 @@ Theorem extrequest_kwarg_history_writeback:
   extrequest_read_frame cx es ee /\ ci_mono sa sm /\
   local_ptrs_reserved cenv sa /\
   extrequest_history_frame cenv cx ee sm t ee sb z ==>
-  wb_frame cenv es sa s0 z
+  wb_frame cenv es ee sa s0 z
 Proof
   strip_tac >>
   `local_ptrs_rel func cenv es.scopes s0` by
@@ -72,13 +72,11 @@ Proof
             conj_tac >- (qexists `func` >> simp[]) >>
             qexistsl_tac [`sa`, `ee.scopes`, `t`] >> simp[]) >> metis_tac[]) >>
       fs[regions_disjoint_def] >> metis_tac[]) >>
-  fs[locals_kept_def] >> rpt strip_tac >>
+  irule locals_kept_regions_tail >> qexists `t` >> simp[] >>
+  rpt strip_tac >>
   `local_region cenv ee.scopes t n b sz` by
     (irule local_region_frame_fwd >>
      qexistsl_tac [`s0`, `sa`, `es.scopes`] >> simp[]) >>
-  `mem_bytes_at b sz z.vs_memory = mem_bytes_at b sz t.vs_memory` by metis_tac[] >>
-  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len t.vs_memory` by
-    (drule mem_bytes_at_agree_window >> simp[arithmeticTheory.ADD_COMM]) >>
   metis_tac[]
 QED
 
@@ -113,7 +111,7 @@ Theorem extrequest_kwarg_suffix_post:
     old_es old_rs old_vvs v ee z
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 z` by
+  `wb_frame cenv es ee sa s0 z` by
     (drule_all extrequest_kwarg_history_writeback >> simp[]) >>
   `extrequest_strong_captures ctx func cenv cx old_es old_rs old_vvs ee sb z` by
     (drule_all extrequest_strong_captures_history >> simp[]) >>

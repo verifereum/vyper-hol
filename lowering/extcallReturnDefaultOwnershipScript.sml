@@ -8,7 +8,7 @@ Ancestors
 Theorem return_default_destination_separation:
   stmt_state_rel ctx func ce cx ee s /\ fn_inst_ids_distinct func /\
   abi_malformed_destination func ce ee.scopes dstid d n s /\
-  wb_frame ce es sa s0 s /\ local_ptrs_reserved ce sa /\
+  wb_frame ce es ee sa s0 s /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\ sa.cs_next_id <= dstid ==>
   (!name lo sz. local_region ce ee.scopes s name lo sz ==>
      regions_disjoint d n lo sz) /\

@@ -21,7 +21,7 @@ Theorem intcall_expr_cont_frame:
   u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts /\
   s.vs_alloca_next <= u.vs_alloca_next /\
-  wb_frame ce es sa s u
+  wb_frame ce es ee sa s u
 Proof
   simp[intcall_expr_cont_def, wb_frame_def] >> metis_tac[]
 QED
@@ -36,7 +36,7 @@ Theorem intcall_expr_cont_trans:
   intcall_expr_cont fp ce env es sa s ee sb u
 Proof
   simp[intcall_expr_cont_frame] >> rpt strip_tac >>
-  `wb_frame ce es sa s u` by
+  `wb_frame ce es ee sa s u` by
     (irule wb_frame_trans >>
      gvs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
@@ -207,7 +207,7 @@ Proof
   rpt strip_tac >>
   `typed_copy_effect fp.jc_ctx fp.jc_func si sb s u b sz` by
     (irule typed_copy_effect_enlarge >> goal_assum (drule_at Any) >> simp[]) >>
-  `wb_frame ce es0 sa s0 u` by
+  `wb_frame ce es0 es sa s0 u` by
     (irule wb_frame_owned_memory_tail >> goal_assum (drule_at Any) >>
      qexistsl_tac [`aid`, `s`, `si`] >>
      fs[intcall_expr_cont_frame, typed_copy_effect_def] >> metis_tac[]) >>
@@ -347,7 +347,7 @@ Theorem intcall_expr_cont_readonly:
   intcall_expr_cont fp ce env es0 sa s0 es sb u
 Proof
   rpt strip_tac >>
-  `intcall_expr_res fp ce env es si s /\ wb_frame ce es0 sa s0 s` by
+  `intcall_expr_res fp ce env es si s /\ wb_frame ce es0 es sa s0 s` by
     fs[intcall_expr_cont_frame] >>
   `local_ptrs_reserved ce si` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `!n b k. local_region ce es.scopes u n b k <=>
@@ -363,7 +363,7 @@ Proof
      qexistsl_tac [`s`, `si`] >> simp[] >>
      rpt strip_tac >> Cases_on `op` >>
      gvs[intcall_joint_res_def, intcall_expr_res_def, eval_operand_def, lookup_var_def] >> metis_tac[]) >>
-  `wb_frame ce es0 sa s0 u` by
+  `wb_frame ce es0 es sa s0 u` by
     (irule wb_frame_readonly_tail >>
      qexistsl_tac [`si`, `s`] >> simp[]) >>
   fs[intcall_expr_cont_frame]

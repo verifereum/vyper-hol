@@ -171,7 +171,7 @@ Theorem protected_storage_value_window_forcing:
     (!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz) /\
     (!name b sz. local_region ce es.scopes s name b sz ==>
       regions_disjoint (w2n w) (type_memory_size tv) b sz) /\
-    locals_kept ce es s u /\
+    locals_kept ce es es s u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -206,9 +206,9 @@ Proof
   (impl_tac >- simp[type_memory_size_slots]) >> strip_tac >>
   `!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz` by
     (irule copy_buffer_local_region_frame >> qexists_tac `sa` >> simp[]) >>
-  `locals_kept ce es s u` by
-    (rw[locals_kept_def] >>
-     `regions_disjoint off len (w2n w) (type_memory_size tv)` by
+  `locals_kept ce es es s u` by
+    (irule locals_kept_regions >> rpt strip_tac >>
+     `regions_disjoint b sz (w2n w) (type_memory_size tv)` by
        (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
         simp[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
   qexistsl_tac [`u`, `w`] >> simp[expr_val_rel_def] >> gvs[]
@@ -229,7 +229,7 @@ Theorem protected_word_value_frame_forcing:
     (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     (!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz) /\
-    locals_kept ce es s u /\
+    locals_kept ce es es s u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -243,6 +243,6 @@ Proof
       (qspec_then `Var x` mp_tac) >> simp[eval_operand_def]) >>
   `u.vs_memory = s.vs_memory` by
     (qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  `locals_kept ce es s u` by (irule locals_kept_mem >> simp[]) >>
+  `locals_kept ce es es s u` by (irule locals_kept_mem >> simp[]) >>
   qexists_tac `u` >> simp[]
 QED

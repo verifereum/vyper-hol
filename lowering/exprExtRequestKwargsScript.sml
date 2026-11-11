@@ -96,7 +96,7 @@ Definition extrequest_kwargs_post_def:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\
     sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
-    wb_frame cenv es sa s0 t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+    wb_frame cenv es ee sa s0 t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     extrequest_strong_captures ctx func cenv cx old_es old_rs old_vvs ee sb t /\
     extrequest_history_frame cenv cx (es with gas_obs := []) sa s0 ee sb t /\
     extrequest_kwarg_selection cenv cx ret EKValue
@@ -232,12 +232,12 @@ Proof
   `mid with gas_obs := [] = mid` by simp[vyperStateTheory.evaluation_state_component_equality] >>
   `stmt_state_rel ctx func cenv cx mid tm /\
    sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-   MAP FDOM es.scopes = MAP FDOM mid.scopes /\ wb_frame cenv es sa s0 tm` by
+   MAP FDOM es.scopes = MAP FDOM mid.scopes /\ wb_frame cenv es mid sa s0 tm` by
     fs[extrequest_kwarg_post_def] >>
   `extrequest_history_frame cenv cx mid sm tm ee sb t /\
-   stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv mid sm tm t` by
+   stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv mid ee sm tm t` by
     fs[extrequest_kwargs_post_def] >>
-  `wb_frame cenv es sa s0 t` by (drule_all wb_frame_trans >> simp[]) >>
+  `wb_frame cenv es ee sa s0 t` by (drule_all wb_frame_trans >> simp[]) >>
   `extrequest_history_frame cenv cx (es with gas_obs := []) sa s0 ee sb t` by
     (irule extrequest_history_frame_trans >> conj_tac
      >- (qexistsl_tac [`ctx`, `func`] >> simp[]) >>

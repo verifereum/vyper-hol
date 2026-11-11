@@ -131,7 +131,7 @@ QED
 
 Theorem extrequest_vv_wb_frame[local]:
   vv_post ctx func cenv cx e es sa sb s0 ee r vv t ==>
-  wb_frame cenv es sa s0 t
+  wb_frame cenv es ee sa s0 t
 Proof
   simp[vv_post_def, wb_frame_def] >> metis_tac[]
 QED
@@ -184,7 +184,7 @@ Theorem extrequest_unread_cps:
     stmt_state_rel ctx func cenv cx ee t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    local_ptrs_reserved cenv sb /\ wb_frame cenv es sa s0 t /\
+    local_ptrs_reserved cenv sb /\ wb_frame cenv es ee sa s0 t /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ ee.gas_obs = [] /\
     extrequest_strong_captures ctx func cenv cx xs rs vvs ee sb t /\
     extrequest_strong_captures ctx func cenv cx old_es old_rs old_vvs ee sb t ==>
@@ -307,7 +307,7 @@ Proof
      fs[extrequest_read_frame_def]) >>
   `vv_post ctx func cenv cx h (es with gas_obs := []) sa sm s0
      (mid with gas_obs := []) r head_vv t` by simp[vv_post_initial_gas] >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es (mid with gas_obs := []) sa s0 t` by
     (irule extrequest_vv_wb_frame >>
      qpat_assum `vv_post _ _ _ _ h es _ _ _ _ _ _ _` (irule_at Any)) >>
   `extrequest_strong_captures ctx func cenv cx old_es old_rs old_vvs
@@ -330,35 +330,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
     (fs[extrequest_read_frame_def]) >>
-  `wb_frame cenv es sa s0 t'` by
-    (`local_ptrs_rel func cenv es.scopes s0` by
-       (qpat_assum `stmt_state_rel _ _ _ _ es s0` mp_tac >>
-        simp[NoAsms, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
-        metis_tac[]) >>
-     qpat_assum `wb_frame _ es sa s0 t` mp_tac >>
-     qpat_assum `wb_frame _ _ sm t t'` mp_tac >>
-     simp[NoAsms, wb_frame_def] >> strip_tac >> strip_tac >>
-     conj_tac
-     >- (rpt strip_tac >>
-         `not_fresh_at sm x` by
-           (irule freshWritesTheory.not_fresh_at_mono >>
-            qexists `sa` >> fs[ci_mono_def]) >> metis_tac[]) >>
-     conj_tac
-     >- (rpt strip_tac >>
-         `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
-         `aid < sm.cs_next_id` by fs[ci_mono_def] >>
-         `!n b sz'. local_region cenv mid.scopes t n b sz' ==>
-                     off + sz <= b \/ b + sz' <= off` by
-           (rpt strip_tac >>
-            `local_region cenv es.scopes s0 n b sz'` by
-              (irule local_region_frame >>
-               conj_tac >- (qexists `func` >> simp[]) >>
-               qexistsl_tac [`sa`, `mid.scopes`, `t`] >> simp[]) >> metis_tac[]) >>
-         metis_tac[]) >>
-     fs[locals_kept_def] >> rpt strip_tac >>
-     `local_region cenv mid.scopes t n b sz` by
-       (irule local_region_frame_fwd >>
-        qexistsl_tac [`s0`, `sa`, `es.scopes`] >> simp[]) >> metis_tac[]) >>
+  `wb_frame cenv es ee sa s0 t'` by
+    (irule wb_frame_trans >> simp[] >>
+     qexistsl [`mid with gas_obs := []`, `sm`, `t`] >> fs[ci_mono_def]) >>
   `extrequest_results_success cx (h::xs) es (r::rs) ee` by
     (irule extrequest_results_success_cons >>
      qexistsl_tac [`mid`, `gas_explicit marks s0.vs_gas_readings`] >> simp[]) >>

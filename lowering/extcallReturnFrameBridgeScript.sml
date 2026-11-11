@@ -33,7 +33,7 @@ Proof
 QED
 
 Theorem return_allocated_wb_frame:
-  wb_frame ce es sa s0 s /\ local_ptrs_reserved ce sa /\
+  wb_frame ce es ee sa s0 s /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   alloca_inv s /\ fn_inst_ids_distinct func /\ local_ptrs_rel func ce ee.scopes s /\
   abi_malformed_destination func ce ee.scopes dstid d n s /\
@@ -44,7 +44,7 @@ Theorem return_allocated_wb_frame:
       inst.inst_outputs = [q] /\ not_local_ptr ce ee.scopes q) /\
   abi_valid_allocated_frame sites d n s t /\
   abi_malformed_resource_post ctx func ce cx ee st.cs_next_var sites dstid s t ==>
-  wb_frame ce es sa s0 t
+  wb_frame ce es ee sa s0 t
 Proof
   strip_tac >>
   `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>

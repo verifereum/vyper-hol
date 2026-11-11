@@ -488,7 +488,7 @@ Proof
      conj_tac >- (qexistsl_tac [`ctx`, `func`] >>
        fs[exprExtRequestKwargsTheory.extrequest_kwargs_post_def]) >>
      qexistsl_tac [`ee`, `s4`, `t'`] >> simp[]) >>
-  `wb_frame cenv es sa s0 t''` by
+  `wb_frame cenv es ee sa s0 t''` by
     (irule exprSimWordArgsTheory.wb_frame_trans >>
      simp[] >> reverse conj_tac
      >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
@@ -1249,7 +1249,7 @@ Resume extcall_return_default[default]:
   drule (Q.INST [`s` |-> `u`, `tv` |-> `rtv`, `v` |-> `dv`]
     return_default_store_counted) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand default_op u = _`)) >>
   disch_then (drule_at (Pat `eval_operand buf.buf_operand u = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ ann = _`)) >>
@@ -1305,11 +1305,11 @@ Resume extcall_return_default[default_success]:
        exprLoweringPropsTheory.stmt_state_rel_jump_to] >>
   conj_tac >- suspend "default_holds" >>
   conj_tac >- suspend "default_at" >>
-  qpat_x_assum `wb_frame cenv es sa s0 checked` mp_tac >>
+  `wb_frame cenv es ee sa s0 (jump_to xl checked)` by
+    simp[extCallSeamFinishTheory.extcall_jump_wb_frame] >>
+  qpat_x_assum `wb_frame cenv es ee sa s0 (jump_to xl checked)` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
-  simp[wb_frame_def, locals_kept_def, venomStateTheory.jump_to_def,
-       local_region_def, venomStateTheory.lookup_var_def] >>
-  strip_tac >> conj_tac >> first_assum ACCEPT_TAC
+  simp[wb_frame_def] >> metis_tac[]
 QED
 Resume extcall_return_default[default_holds]:
   `safe_operand de buf.buf_operand` by
@@ -1409,7 +1409,7 @@ QED
 Resume extcall_return_default[decode_success]:
   drule_all return_default_source_success >> strip_tac >>
   `?z. gas_marked_path F ctx func u 0 (OK z) /\
-    stmt_state_rel ctx func cenv cx ee z /\ wb_frame cenv es sa s0 z /\
+    stmt_state_rel ctx func cenv cx ee z /\ wb_frame cenv es ee sa s0 z /\
     eval_operand buf.buf_operand z = SOME (n2w d) /\
     val_in_memory rtv x d z.vs_memory /\
     abi_malformed_destination func cenv ee.scopes sr.cs_next_id d
@@ -1419,7 +1419,7 @@ Resume extcall_return_default[decode_success]:
     (irule return_prepared_counted_success >>
      first_assum (irule_at (Pat `abi_return_decode_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
-     first_assum (irule_at (Pat `wb_frame _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `compile_return_value_decode _ _ _ = _`)) >>
      simp[] >> qexists_tac `ann` >> simp[]) >>
   `gas_marked_path F ctx func t 0 (OK z)` by
@@ -1436,7 +1436,7 @@ Resume extcall_return_default[decode_success]:
   simp[vv_post_def, post_value_type_def, expr_type_def] >>
   conj_tac >- suspend "decode_holds" >>
   conj_tac >- suspend "decode_at" >>
-  qpat_x_assum `wb_frame cenv es sa s0 (jump_to xl z)` mp_tac >>
+  qpat_x_assum `wb_frame cenv es _ sa s0 (jump_to xl z)` mp_tac >>
   simp[wb_frame_def] >> metis_tac[]
 QED
 Resume extcall_return_default[decode_holds]:
@@ -1483,7 +1483,7 @@ Resume extcall_return_default[decode_reject]:
     (irule return_prepared_counted_reject >>
      first_assum (irule_at (Pat `abi_return_decode_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
-     first_assum (irule_at (Pat `wb_frame _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `compile_return_value_decode _ _ _ = _`)) >>
      simp[] >> qexistsl_tac [`ann`, `y`] >> simp[]) >>
   `gas_marked_path F ctx func t 0 (Abort Revert_abort z)` by
@@ -1612,7 +1612,7 @@ Resume extcall_return_values[none]:
        vyperValueTheory.evaluate_type_def, is_word_type_def,
        valueEncodingDefsTheory.val_in_memory_def, valueEncodingDefsTheory.val_wf_def,
        val_footprint_def, valueEncodingTheory.type_memory_size_def] >>
-  qpat_x_assum `wb_frame cenv es sa s0 t` mp_tac >>
+  qpat_x_assum `wb_frame cenv es _ sa s0 t` mp_tac >>
   simp[wb_frame_def] >> metis_tac[]
 QED
 Resume extcall_return_values[decode]:
@@ -1674,7 +1674,7 @@ QED
 Resume extcall_return_values[decode_success]:
   drule_all return_default_source_success >> strip_tac >>
   `?z d. gas_marked_path F ctx func t 0 (OK z) /\ d < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx ee z /\ wb_frame cenv es sa s0 z /\
+    stmt_state_rel ctx func cenv cx ee z /\ wb_frame cenv es ee sa s0 z /\
     eval_operand buf.buf_operand z = SOME (n2w d) /\
     val_in_memory rtv x d z.vs_memory /\
     abi_malformed_destination func cenv ee.scopes sr.cs_next_id d
@@ -1697,7 +1697,7 @@ Resume extcall_return_values[decode_success]:
   simp[vv_post_def, post_value_type_def, expr_type_def] >>
   conj_tac >- suspend "decode_holds" >>
   conj_tac >- suspend "decode_at" >>
-  qpat_x_assum `wb_frame cenv es sa s0 z` mp_tac >>
+  qpat_x_assum `wb_frame cenv es _ sa s0 z` mp_tac >>
   simp[wb_frame_def] >> metis_tac[]
 QED
 Resume extcall_return_values[decode_holds]:

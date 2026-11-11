@@ -127,7 +127,7 @@ Theorem extrequest_target_cps:
        (es with gas_obs := used ++ tail) = (INL v,ee with gas_obs := tail)) /\
     v = AddressV target /\ dest_AddressV v = SOME target /\
     eval_operand op t = SOME (w2w target) /\ safe_operand sb op /\
-    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
     local_ptrs_reserved cenv sb /\

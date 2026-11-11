@@ -25,7 +25,7 @@ Theorem vv_post_forcing_frames:
          lookup_var x q = SOME w) /\
   (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
            FLOOKUP q.vs_allocas aid = SOME b) /\
-  locals_kept ce ee s q /\
+  locals_kept ce ee ee s q /\
   (!aid off sz.
      FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < sm.cs_next_id /\
      (!n b sz'. local_region ce ee.scopes s n b sz' ==>

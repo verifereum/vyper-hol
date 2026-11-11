@@ -41,7 +41,7 @@ QED
 
 Theorem extrequest_history_writeback:
   extrequest_history_frame ce cx ec sa s ee sp t ==>
-  wb_frame ce ec sa s t
+  wb_frame ce ec ee sa s t
 Proof
   strip_tac >> simp[wb_frame_def] >> rpt conj_tac
   >- (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def])
@@ -49,12 +49,9 @@ Proof
   >- (rpt strip_tac >>
       fs[exprExtRequestHistoryTheory.extrequest_history_frame_def,
          loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
-  rewrite_tac[locals_kept_def] >> rpt strip_tac >>
-  `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
-    (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
-  `off = b + (off-b) /\ off-b+len <= sz` by decide_tac >>
-  drule abi_encoder_window_slice >>
-  disch_then (qspecl_then [`off-b`, `len`] mp_tac) >> simp[]
+  irule exprSimPropsTheory.locals_kept_regions_tail >> qexists `s` >>
+  fs[exprExtRequestHistoryTheory.extrequest_history_frame_def,
+     exprExtRequestReadProbeTheory.extrequest_read_frame_def]
 QED
 
 Theorem extrequest_empty_prefix_endpoint:
@@ -77,7 +74,7 @@ Theorem extrequest_empty_prefix_endpoint:
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\
     local_ptrs_reserved ce sp /\ safe_operand sp offset /\
-    wb_frame ce ee sa s t /\ eval_operand bufop t = SOME w /\
+    wb_frame ce ee ee sa s t /\ eval_operand bufop t = SOME w /\
     safe_operand sp bufop /\ safe_operand sp len
 Proof
   strip_tac >> drule extrequest_prefix_split >> simp[] >> strip_tac >> gvs[] >>
@@ -92,7 +89,7 @@ Proof
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
   `32 <= MAX abisz retsz + 32` by decide_tac >>
   drule_all extrequest_empty_payload_endpoint >> strip_tac >>
-  `wb_frame ce ee sa s t` by metis_tac[extrequest_history_writeback] >>
+  `wb_frame ce ee ee sa s t` by metis_tac[extrequest_history_writeback] >>
   `safe_operand sp buf.buf_operand` by
     (drule compile_alloc_buffer_parts >> strip_tac >>
      simp[safe_operand_def] >> rpt strip_tac >>
@@ -208,7 +205,7 @@ Theorem extrequest_tuple_prefix_endpoint:
     (!aid p k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
        FLOOKUP t.vs_allocas aid = SOME (p,k)) /\
     extrequest_history_frame ce cx ee sa s ee sp t /\
-    wb_frame ce ee sa s t /\ safe_operand sp bufop
+    wb_frame ce ee ee sa s t /\ safe_operand sp bufop
 Proof
   strip_tac >> drule extrequest_prefix_split >> strip_tac >> gvs[] >>
   `ZIP (MAP (\(e,r,vv,ty,tv,v). vv) cells,

@@ -15,14 +15,14 @@ Theorem return_prepared_counted_entry:
   lo < dimword (:256) /\ cap < dimword (:256) /\
   s.vs_returndata = bs /\ LENGTH bs < dimword (:256) /\ lo <= LENGTH bs /\
   abi_return_decode_ready ctx func ce cx ee a sites dstid live base_op dst
-    B cap bs d n s /\ wb_frame ce es sa s0 s /\
+    B cap bs d n s /\ wb_frame ce es ee sa s0 s /\
   sa.cs_next_var <= a.cs_next_var /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
     abi_malformed_entry ctx func ce cx ee b sites dstid live base_op hi
       (Lit 0w) dst B (LENGTH (TAKE cap bs)) (TAKE cap bs) 0 d n u /\
-    wb_frame ce es sa s0 u /\
+    wb_frame ce es ee sa s0 u /\
     u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
     ~u.vs_halted /\ u.vs_current_bb = b.cs_current_bb /\
     u.vs_inst_idx = LENGTH b.cs_current_insts
@@ -31,7 +31,7 @@ Proof
   `gas_marked_path F ctx func s 0
      (OK (u with vs_inst_idx := LENGTH b.cs_current_insts))` by
     (irule return_size_counted >> metis_tac[]) >>
-  `wb_frame ce es sa s0 (u with vs_inst_idx := LENGTH b.cs_current_insts)` by
+  `wb_frame ce es ee sa s0 (u with vs_inst_idx := LENGTH b.cs_current_insts)` by
     (irule wb_frame_readonly_tail >>
      qexistsl_tac [`a`, `s`] >> simp[lookup_var_def] >>
      qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
@@ -66,7 +66,7 @@ Theorem return_prepared_counted_reject:
   abi_return_decode_ready ctx func ce cx ee a
     (abi_malformed_scratch_sites st en func) dstid live base_op dst
     B cap bs d (type_memory_bytes ce rt) s /\
-  wb_frame ce es sa s0 s /\ sa.cs_next_var <= a.cs_next_var /\
+  wb_frame ce es ee sa s0 s /\ sa.cs_next_var <= a.cs_next_var /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?z. gas_marked_path F ctx func s 0 (Abort Revert_abort z)
@@ -115,14 +115,14 @@ Theorem return_prepared_counted_success:
   abi_return_decode_ready ctx func ce cx ee a
     (abi_malformed_scratch_sites st en func) dstid live base_op dst
     B cap bs d (type_memory_bytes ce rt) s /\
-  wb_frame ce es sa s0 s /\ local_ptrs_reserved ce sa /\
+  wb_frame ce es ee sa s0 s /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= a.cs_next_var /\ sa.cs_next_id <= dstid /\
   sa.cs_next_id <= st.cs_next_id /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?z. gas_marked_path F ctx func s 0 (OK z) /\
-    stmt_state_rel ctx func ce cx ee z /\ wb_frame ce es sa s0 z /\
+    stmt_state_rel ctx func ce cx ee z /\ wb_frame ce es ee sa s0 z /\
     eval_operand dst z = SOME (n2w d) /\
     val_in_memory actual_tv v d z.vs_memory /\
     abi_malformed_destination func ce ee.scopes dstid d
@@ -161,7 +161,7 @@ Proof
       inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
       not_local_ptr ce ee.scopes q` by
     (rpt strip_tac >> irule return_decoder_scratch_owned >> metis_tac[]) >>
-  `wb_frame ce es sa s0 z` by
+  `wb_frame ce es ee sa s0 z` by
     (irule return_allocated_wb_frame >> (conj_tac >- simp[]) >>
      goal_assum (drule_at (Pat `abi_valid_allocated_frame _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `abi_malformed_resource_post _ _ _ _ _ _ _ _ _ _`)) >>

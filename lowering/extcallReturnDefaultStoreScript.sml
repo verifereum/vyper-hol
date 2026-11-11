@@ -20,7 +20,7 @@ Theorem return_default_store_counted:
    else val_in_memory stv v (w2n sw) s.vs_memory) /\
   type_memory_size tv + 64 < dimword (:256) /\
   stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce a /\
-  wb_frame ce es sa s0 s /\ sa.cs_next_var <= a.cs_next_var /\
+  wb_frame ce es ee sa s0 s /\ sa.cs_next_var <= a.cs_next_var /\
   (!name lo sz. local_region ce ee.scopes s name lo sz ==>
      regions_disjoint (w2n dw) (type_memory_size tv) lo sz) /\
   (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
@@ -36,7 +36,7 @@ Theorem return_default_store_counted:
   fn_has_code a b func /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func ce cx ee u /\ wb_frame ce es sa s0 u /\
+    stmt_state_rel ctx func ce cx ee u /\ wb_frame ce es ee sa s0 u /\
     val_in_memory tv v (w2n dw) u.vs_memory /\
     eval_operand dst u = SOME dw /\
     u.vs_allocas = s.vs_allocas /\
@@ -52,7 +52,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> GAS) (emitted_insts a b)` by
     suspend "no_gas" >>
   `stmt_state_rel ctx func ce cx ee t` by suspend "state" >>
-  `wb_frame ce es sa s0 t` by suspend "frame" >>
+  `wb_frame ce es ee sa s0 t` by suspend "frame" >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_halted = s.vs_halted /\
    t.vs_current_bb = s.vs_current_bb` by
     (qpat_x_assum `(t with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
@@ -61,10 +61,9 @@ Proof
     (OK (t with vs_inst_idx := LENGTH b.cs_current_insts))` by
     (irule straight_line_zero_gas_path >>
      goal_assum (drule_at Any) >> fs[same_blocks_def] >> metis_tac[]) >>
-  `wb_frame ce es sa s0 (t with vs_inst_idx := LENGTH b.cs_current_insts)` by
-    (qpat_x_assum `wb_frame ce es sa s0 t` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[wb_frame_def, locals_kept_def, lookup_var_def] >> metis_tac[]) >>
+  `wb_frame ce es ee sa s0 (t with vs_inst_idx := LENGTH b.cs_current_insts)` by
+    (irule wb_frame_readonly_tail >> qexistsl [`sa`, `t`] >>
+     simp[lookup_var_def]) >>
   qexists_tac `t with vs_inst_idx := LENGTH b.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac >- suspend "operand" >>
@@ -96,8 +95,8 @@ Resume return_default_store_counted[frame]:
     (qpat_x_assum `(t with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `MIN (type_memory_size stv) (type_memory_size tv) <= type_memory_size tv` by simp[] >>
-  qpat_x_assum `wb_frame ce es sa s0 s` mp_tac >>
-  rewrite_tac[wb_frame_def, locals_kept_def] >> strip_tac >>
+  qpat_x_assum `wb_frame ce es ee sa s0 s` mp_tac >>
+  rewrite_tac[wb_frame_def] >> strip_tac >>
   conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at a x` by
@@ -110,9 +109,10 @@ Resume return_default_store_counted[frame]:
       `off + sz <= w2n dw \/ w2n dw + MIN (type_memory_size stv) (type_memory_size tv) <= off`
         by (qpat_x_assum `regions_disjoint _ _ off sz` mp_tac >>
             pure_rewrite_tac[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
+  irule locals_kept_regions_tail >> qexists `s` >> simp[] >>
   rpt strip_tac >>
   `regions_disjoint (w2n dw) (type_memory_size tv) b' sz` by metis_tac[] >>
-  `off + len <= w2n dw \/ w2n dw + MIN (type_memory_size stv) (type_memory_size tv) <= off`
+  `b' + sz <= w2n dw \/ w2n dw + MIN (type_memory_size stv) (type_memory_size tv) <= b'`
     by (qpat_x_assum `regions_disjoint _ _ b' sz` mp_tac >>
         pure_rewrite_tac[regions_disjoint_def] >> decide_tac) >>
   metis_tac[]
@@ -140,10 +140,10 @@ Theorem return_default_optional_check_counted:
   eval_operand addr s = SOME aw /\ w2w aw = target /\
   stmt_state_rel ctx func ce cx ee s /\
   accounts_runtime_well_typed ee.accounts /\ local_ptrs_reserved ce a /\
-  wb_frame ce es sa s0 s /\ sa.cs_next_var <= a.cs_next_var ==>
+  wb_frame ce es ee sa s0 s /\ sa.cs_next_var <= a.cs_next_var ==>
   ?u. if skip \/ ext_call_has_code target ee.accounts then
     gas_marked_path F ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func ce cx ee u /\ wb_frame ce es sa s0 u /\
+    stmt_state_rel ctx func ce cx ee u /\ wb_frame ce es ee sa s0 u /\
     u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
     (!p. safe_operand a p ==> eval_operand p u = eval_operand p s) /\
     ~u.vs_halted /\ u.vs_current_bb = b.cs_current_bb /\

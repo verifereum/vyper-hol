@@ -37,7 +37,7 @@ Theorem intcall_expr_cont_suffix:
      (!n b len. local_region ce es.scopes s n b len ==>
        off + sz <= b \/ b + len <= off) ==>
      mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz t.vs_memory) /\
-  locals_kept ce ee t u /\
+  locals_kept ce ee ee t u /\
   (!name b sz. local_region ce ee.scopes u name b sz <=>
      local_region ce ee.scopes t name b sz) /\
   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\

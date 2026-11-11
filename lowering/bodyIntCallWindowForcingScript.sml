@@ -39,7 +39,7 @@ Theorem protected_value_window_forcing:
     (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
            lookup_var x u = SOME w) /\
-    locals_kept ce es s u /\
+    locals_kept ce es es s u /\
     (!sv. sv.cs_next_id <= sa.cs_next_id /\ vv_at ce cx ty sv sa es r vv s ==>
           expr_val_at ce cx ty sv sb es v op u) /\
     (!sv. sv.cs_next_id <= sa.cs_next_id /\ vv_own ce cx ty sv sa es r vv s ==>
@@ -58,7 +58,7 @@ Proof
   >- (drule (SRULE [] protected_identity_value_forcing) >>
       disch_then drule >> simp[] >>
       disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
-      qexists_tac `s` >> gvs[locals_kept_def, vv_operand_def] >>
+      qexists_tac `s` >> gvs[vv_operand_def] >>
       simp[vv_at_def, vv_own_def]) >>
   rename1 `LocatedValue ann p` >>
   Cases_on `is_word_type ty`
@@ -72,7 +72,7 @@ Proof
   Cases_on `p.ptr_location = LocMemory`
   >- (drule protected_identity_value_forcing >> disch_then drule >>
       simp[] >> disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
-      qexists_tac `s` >> gvs[locals_kept_def] >>
+      qexists_tac `s` >> gvs[] >>
       metis_tac[SRULE [] (Q.INST [`vv` |-> `LocatedValue ann p`]
         vv_identity_location)]) >>
   `ann = ty` by fs[vv_holds_def] >> gvs[] >>

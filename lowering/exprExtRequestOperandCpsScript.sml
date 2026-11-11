@@ -64,7 +64,7 @@ Theorem extrequest_operand_cps:
     extrequest_kwargs_post ctx func cenv cx rt opts (DROP (LENGTH ats) rest)
       esB s2 tB s3 value_op gas_op default_op
       (TAKE (LENGTH ats) rest) rs arg_vvs vs ee t /\
-    wb_frame cenv es sa s0 t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+    wb_frame cenv es ee sa s0 t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= s3.cs_next_var /\ sa.cs_next_id <= s3.cs_next_id ==>
     gas_outcome F (cx_tops cx) (ctx,func) (kont target rs vs) (ee,t) Q
       (\res ee r. expr_exit res r)) ==>
@@ -185,13 +185,13 @@ Proof
      simp[cj 1 compile_expr_ci_mono] >> metis_tac[SND]) >>
   qpat_assum `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o SRULE [extrequest_kwargs_post_def]) >>
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es ee' sa s0 t'` by
     (irule wb_frame_trans >> simp[] >>
      conj_tac >- (qexistsl [`ee`, `s1`, `t`] >> simp[]) >>
      metis_tac[]) >>
   `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
     (fs[ci_mono_def] >> decide_tac) >>
-  `wb_frame cenv es sa s0 t''` by
+  `wb_frame cenv es ee'' sa s0 t''` by
     (irule wb_frame_trans >> simp[] >>
      conj_tac >- (qexistsl [`ee'`, `s2`, `t'`] >> simp[]) >>
      metis_tac[]) >>

@@ -89,7 +89,7 @@ QED
 
 Theorem intcall_expr_cont_frame:
   intcall_expr_cont fp ce env es sa s ee sb u ==>
-  wb_frame ce es sa s u
+  wb_frame ce es ee sa s u
 Proof
   simp[intcall_expr_cont_def, loweringPostsTheory.wb_frame_def] >>
   metis_tac[]
@@ -104,9 +104,9 @@ Theorem intcall_expr_cont_trans:
   intcall_expr_cont fp ce env es a s ee d u
 Proof
   strip_tac >>
-  `wb_frame ce es a s t` by metis_tac[intcall_expr_cont_frame] >>
-  `wb_frame ce em b t u` by metis_tac[intcall_expr_cont_frame] >>
-  `wb_frame ce es a s u` by
+  `wb_frame ce es em a s t` by metis_tac[intcall_expr_cont_frame] >>
+  `wb_frame ce em ee b t u` by metis_tac[intcall_expr_cont_frame] >>
+  `wb_frame ce es ee a s u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >>
      conj_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
      conj_tac >- (qexistsl [`em`, `b`, `t`] >> simp[]) >>

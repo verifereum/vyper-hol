@@ -70,20 +70,23 @@ QED
 
 Theorem return_default_shell_wb_frame:
   a.cs_next_var <= n1 /\ a.cs_next_var <= n2 /\
-  sa.cs_next_var <= a.cs_next_var /\ wb_frame ce es sa s0 s /\
+  sa.cs_next_var <= a.cs_next_var /\ wb_frame ce es ee sa s0 s /\
   u = jump_to lbl
     ((update_var (STRING #"%" (toString n2)) w2
       (update_var (STRING #"%" (toString n1)) w1 s))
       with vs_inst_idx := k) ==>
-  wb_frame ce es sa s0 u
+  wb_frame ce es ee sa s0 u
 Proof
   strip_tac >>
   `!x. not_fresh_at a x ==> lookup_var x u = lookup_var x s` by
     (drule_all return_default_shell_reserved >> simp[]) >>
   `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
     gvs[jump_to_def, update_var_def] >>
-  fs[wb_frame_def, locals_kept_def] >> rpt conj_tac >>
-  gvs[not_fresh_at_def]
+  fs[wb_frame_def] >> rpt conj_tac
+  >- gvs[not_fresh_at_def]
+  >- gvs[]
+  >- gvs[] >>
+  irule locals_kept_mem_tail >> qexists `s` >> simp[]
 QED
 
 Theorem return_default_shell_ready:
@@ -129,11 +132,11 @@ Theorem return_default_ready_entry:
   b.cs_current_bb = (if s.vs_returndata = [] then dl else cl) /\
   b.cs_current_insts = [] /\ a.cs_next_var <= b.cs_next_var /\
   abi_return_decode_ready ctx func ce cx ee a sites dstid live base_op dst
-    B cap bs d n s /\ wb_frame ce es sa s0 s /\
+    B cap bs d n s /\ wb_frame ce es ee sa s0 s /\
   sa.cs_next_var <= a.cs_next_var ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
     abi_return_decode_ready ctx func ce cx ee b sites dstid live base_op dst
-      B cap bs d n u /\ wb_frame ce es sa s0 u /\
+      B cap bs d n u /\ wb_frame ce es ee sa s0 u /\
     (!op. abi_decoder_operand_live a.cs_next_var op ==>
        eval_operand op u = eval_operand op s) /\
     (!op ty v. abi_decoder_operand_live a.cs_next_var op /\
@@ -161,7 +164,7 @@ Proof
   qpat_assum `a.cs_next_var <= b.cs_next_var`
     (mp_then (Pos (el 2)) mp_tac return_default_shell_ready) >>
   disch_then drule_all >> strip_tac >>
-  `wb_frame ce es sa s0 u` by
+  `wb_frame ce es ee sa s0 u` by
     (drule_all return_default_shell_wb_frame >> simp[]) >>
   qexists_tac `u` >> simp[Abbr `u`, jump_to_def, update_var_def]
 QED
@@ -204,11 +207,11 @@ Theorem return_default_allocated_entry:
   live < a.cs_next_id /\
   mem_bytes_at B (LENGTH (TAKE cap bs)) s.vs_memory = TAKE cap bs /\
   (!aid. aid IN sites ==> b.cs_next_id <= aid) /\
-  wb_frame ce es sa s0 s /\ sa.cs_next_var <= a.cs_next_var ==>
+  wb_frame ce es ee sa s0 s /\ sa.cs_next_var <= a.cs_next_var ==>
   ?u d. gas_marked_path F ctx func s 0 (OK u) /\
     abi_return_decode_ready ctx func ce cx ee en sites a.cs_next_id live
       base_op buf.buf_operand B cap bs d n u /\
-    wb_frame ce es sa s0 u /\
+    wb_frame ce es ee sa s0 u /\
     (!op. abi_decoder_operand_live a.cs_next_var op ==>
        eval_operand op u = eval_operand op s) /\
     (!op ty v. abi_decoder_operand_live a.cs_next_var op /\
@@ -243,7 +246,7 @@ Proof
   `abi_return_decode_ready ctx func ce cx ee b sites a.cs_next_id live
      base_op buf.buf_operand B cap bs (w2n w) n r` by
     suspend "ready" >>
-  `wb_frame ce es sa s0 r` by suspend "frame" >>
+  `wb_frame ce es ee sa s0 r` by suspend "frame" >>
   `sa.cs_next_var <= b.cs_next_var` by
     (drule compile_alloc_buffer_parts >> simp[]) >>
   `~r.vs_halted /\ r.vs_current_bb = b.cs_current_bb /\
@@ -307,13 +310,14 @@ Resume return_default_allocated_entry[ready]:
   qpat_x_assum `w2n w = _` (fn th => rewrite_tac[GSYM th, wordsTheory.n2w_w2n])
 QED
 Resume return_default_allocated_entry[frame]:
-  simp[Abbr `r`, wb_frame_def, locals_kept_def, lookup_var_def] >>
-  fs[wb_frame_def, locals_kept_def, lookup_var_def] >>
+  simp[Abbr `r`, wb_frame_def, lookup_var_def] >>
+  fs[wb_frame_def, lookup_var_def] >>
   rpt conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at a x` by fs[not_fresh_at_def] >> metis_tac[])
-  >- metis_tac[] >>
-  gvs[]
+  >- metis_tac[]
+  >- gvs[] >>
+  irule locals_kept_mem_tail >> qexists `s` >> gvs[]
 QED
 Resume return_default_allocated_entry[allocation_returndata]:
   simp[Abbr `r`]

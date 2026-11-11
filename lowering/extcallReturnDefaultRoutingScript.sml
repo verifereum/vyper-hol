@@ -208,10 +208,10 @@ Theorem return_default_payload_join:
   fn_has_code a j func /\ new_block lbl last = (old,b) /\
   ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
   s.vs_inst_idx = LENGTH a.cs_current_insts /\
-  stmt_state_rel ctx func ce cx ee s /\ wb_frame ce es sa s0 s ==>
+  stmt_state_rel ctx func ce cx ee s /\ wb_frame ce es ee sa s0 s ==>
   gas_marked_path F ctx func initial n (OK (jump_to lbl s)) /\
   stmt_state_rel ctx func ce cx ee (jump_to lbl s) /\
-  wb_frame ce es sa s0 (jump_to lbl s) /\
+  wb_frame ce es ee sa s0 (jump_to lbl s) /\
   (jump_to lbl s).vs_current_bb = b.cs_current_bb /\
   (jump_to lbl s).vs_inst_idx = LENGTH b.cs_current_insts
 Proof

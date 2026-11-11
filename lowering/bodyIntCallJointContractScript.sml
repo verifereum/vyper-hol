@@ -180,7 +180,7 @@ Definition intcall_expr_cont_def:
        (!n b sz'. local_region ce es.scopes s n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory) /\
-    locals_kept ce es s u
+    locals_kept ce es ee s u
 End
 
 (* ===== Expression producers ===== *)

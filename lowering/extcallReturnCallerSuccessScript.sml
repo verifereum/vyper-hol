@@ -206,7 +206,7 @@ Proof
 QED
 
 Theorem return_allocation_prefix_wb_frame[local]:
-  wb_frame ce es sa s0 s /\ sa.cs_next_var <= a.cs_next_var /\
+  wb_frame ce es ee sa s0 s /\ sa.cs_next_var <= a.cs_next_var /\
   (!x. not_fresh_at a x ==> lookup_var x r = lookup_var x s) /\
   (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
      FLOOKUP r.vs_allocas aid = SOME e) /\
@@ -215,7 +215,7 @@ Theorem return_allocation_prefix_wb_frame[local]:
   u = r with <|vs_vars := u.vs_vars; vs_inst_idx := k|> /\
   (!x. not_fresh_at m x ==> lookup_var x u = lookup_var x r) /\
   a.cs_next_var <= m.cs_next_var ==>
-  wb_frame ce es sa s0 u
+  wb_frame ce es ee sa s0 u
 Proof
   strip_tac >>
   `r.vs_memory = s.vs_memory` by
@@ -229,7 +229,7 @@ Proof
   >- (fs[wb_frame_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS])
   >- (fs[wb_frame_def] >> metis_tac[])
   >- (fs[wb_frame_def] >> metis_tac[]) >>
-  fs[wb_frame_def, locals_kept_def] >> metis_tac[]
+  fs[wb_frame_def] >> irule locals_kept_mem_tail >> qexists `s` >> simp[]
 QED
 
 Theorem return_actual_counted_success:
@@ -243,7 +243,7 @@ Theorem return_actual_counted_success:
    !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
   stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce a /\
-  wb_frame ce es sa s0 s /\ local_ptrs_reserved ce sa /\
+  wb_frame ce es ee sa s0 s /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= a.cs_next_var /\ sa.cs_next_id <= a.cs_next_id /\
   type_memory_bytes ce ty < dimword (:256) /\ ~s.vs_halted /\
@@ -263,7 +263,7 @@ Theorem return_actual_counted_success:
     (if needs_external_call_wrap ty then TupleT [ty] else ty)
     (if needs_external_call_wrap ty then TupleTV [actual_tv] else actual_tv) ==>
   ?z d. gas_marked_path F ctx func s 0 (OK z) /\ d < dimword (:256) /\
-    stmt_state_rel ctx func ce cx ee z /\ wb_frame ce es sa s0 z /\
+    stmt_state_rel ctx func ce cx ee z /\ wb_frame ce es ee sa s0 z /\
     eval_operand buf.buf_operand z = SOME (n2w d) /\
     val_in_memory actual_tv v d z.vs_memory /\
     abi_malformed_destination func ce ee.scopes a.cs_next_id d
@@ -286,7 +286,7 @@ Proof
   `ci_mono a m /\ ci_mono m st` by
     (mp_tac (Q.SPECL [`type_memory_bytes ce ty`, `a`] ci_mono_compile_alloc_buffer) >>
      mp_tac (Q.SPECL [`lo`, `cap`, `m`] ci_mono_compile_return_value_decode) >> simp[]) >>
-  `wb_frame ce es sa s0 u` by
+  `wb_frame ce es ee sa s0 u` by
     (irule return_allocation_prefix_wb_frame >>
      qexistsl_tac [`a`, `LENGTH st.cs_current_insts`, `m`, `r`, `s`] >>
      fs[ci_mono_def] >> gvs[]) >>
@@ -308,7 +308,7 @@ Proof
       inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
       not_local_ptr ce ee.scopes q` by
     (rpt strip_tac >> irule return_decoder_scratch_owned >> metis_tac[]) >>
-  `wb_frame ce es sa s0 z` by
+  `wb_frame ce es ee sa s0 z` by
     (irule return_allocated_wb_frame >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >>
      qexistsl_tac [`ctx`, `cx`, `abi_malformed_scratch_sites st en func`, `st`] >>
