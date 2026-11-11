@@ -816,7 +816,8 @@ Proof
   map_every qx_gen_tac [`env`, `ret_ty`, `id`, `typ`, `e1`, `e2`, `bound`, `stmts`] >>
   rpt gen_tac >> strip_tac >>
   `((case Range e1 e2 of
-       Range (Literal _ (IntL _)) (Literal _ (IntL _)) => T
+       Range (Literal _ (IntL n1)) (Literal _ (IntL n2)) =>
+         n1 < n2 /\ bound = Num (n2 - n1)
      | Range _ _ => 0 < bound /\ well_typed_literal typ (IntL (&bound))
      | Array _ => T) =
     (0 < bound /\ well_typed_literal typ (IntL (&bound))))` by

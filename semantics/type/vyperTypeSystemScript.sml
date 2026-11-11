@@ -1263,7 +1263,8 @@ Definition type_stmt_def:
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
         (case it of
-           Range (Literal _ (IntL _)) (Literal _ (IntL _)) => T
+           Range (Literal _ (IntL start)) (Literal _ (IntL finish)) =>
+             start < finish /\ n = Num (finish - start)
          | Range _ _ => 0 < n /\ well_typed_literal typ (IntL (&n))
          | Array _ => T) /\
         id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
@@ -1277,6 +1278,15 @@ Termination
     case x of INL(_,_,t) => stmt_size t
             | INR(_,_,ts) => list_size stmt_size ts)`
 End
+
+Theorem type_stmt_for_range_literal_bounds:
+  type_stmt env ret_ty
+    (For id typ (Range (Literal start_ty (IntL start))
+                      (Literal end_ty (IntL finish))) n body) = SOME env' ==>
+  start < finish /\ n = Num (finish - start)
+Proof
+  rw[type_stmt_def, AllCaseEqs()]
+QED
 
 (* Conservative syntactic control-flow predicate for callable bodies.  If this
  * holds for a statement/list, the evaluator should not be able to fall through
