@@ -1849,7 +1849,7 @@ Proof
   simp[]
 QED
 
-Theorem compile_internal_prologue_shape[local]:
+Theorem compile_internal_prologue_shape:
   !cenv params has_rb ret_type st cenv' rpc st'.
     compile_internal_prologue cenv params has_rb ret_type st = ((cenv',rpc),st') ==>
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -1936,7 +1936,7 @@ Proof
       comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def]
 QED
 
-Theorem internal_prologue_stages[local]:
+Theorem internal_prologue_stages:
   !cenv params has_rb ret_type st0 cenv2 rpc st1.
     compile_internal_prologue cenv params has_rb ret_type st0 =
       ((cenv2,rpc),st1) ==>
@@ -1968,7 +1968,7 @@ Proof
   metis_tac[pairTheory.PAIR]
 QED
 
-Theorem internal_prologue_stage_shapes[local]:
+Theorem internal_prologue_stage_shapes:
   !has_rb st0 rb stb params caps next stp rpc sc ce cenv2 sm cenv ret_type st1.
     (if has_rb then
        do p <- emit_op PARAM [Lit 0w]; return (SOME p) od
