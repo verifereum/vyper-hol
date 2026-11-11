@@ -6,6 +6,7 @@ Ancestors
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext vyperValue vyperAST
+  supportedExprTraverse
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend accountsRelProps supportedExprTraverse
   vyperEvalScopesProgress
@@ -157,6 +158,19 @@ Definition local_val_at_def:
              val_footprint tv v <= type_memory_size (BaseTV bt0)
 End
 
+(* Where a source result of type ptv sits when its pointer is k bytes into
+   the local n's region: a memory place there is n's own, along a path that
+   reaches ptv at offset k in n's declared type.  A value is unconstrained. *)
+Definition local_place_at_def:
+  local_place_at cenv cx n k ptv tv <=>
+    (!id path. tv = PlaceR (MemoryPlace id path) ==>
+       id = n /\
+       ?t0 tv0.
+         cenv.ce_var_type n = SOME t0 /\
+         evaluate_type (get_tenv cx) t0 = SOME tv0 /\
+         mem_path_offset tv0 path = SOME (k, ptv))
+End
+
 (* No path through tv reaches a dynamic array: no part of a value of type
    tv is a length word that a pop writes. *)
 Definition dynarray_free_def:
@@ -256,6 +270,93 @@ Definition wb_frame_def:
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
     locals_kept cenv es es' s0 s
 End
+
+(* The memory frame of an effect-free expression's fragment, run from s0 to
+   s, lowered from compile state sa: every live local's region at es keeps
+   all its bytes, dynamic array length words included (no pop runs), and so
+   does every window clear of the allocations, in s, of the function's
+   ALLOCAs with instruction id sa.cs_next_id or above: the expression's own,
+   which are the only memory it writes.  expr_post and vv_post carry it for
+   an expression with no call and no pop (expr_has_effect). *)
+Definition pure_frame_def:
+  pure_frame cenv func es sa s0 s <=>
+    (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+    (!off len.
+       (!inst b sz.
+          MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+          regions_disjoint off len b sz) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory)
+End
+
+(* pure_frame reads only the scopes of the evaluation state. *)
+Theorem pure_frame_scopes:
+  es1.scopes = es.scopes ==>
+  (pure_frame cenv func es1 sa s0 s <=> pure_frame cenv func es sa s0 s)
+Proof
+  simp[pure_frame_def]
+QED
+
+Theorem pure_frame_gas_obs[simp]:
+  pure_frame cenv func (es with gas_obs := gs) sa s0 s <=>
+  pure_frame cenv func es sa s0 s
+Proof
+  simp[pure_frame_def]
+QED
+
+Theorem pure_frame_refl[simp]:
+  pure_frame cenv func es sa s s
+Proof
+  simp[pure_frame_def]
+QED
+
+Theorem pure_frame_mem_eq[simp]:
+  s.vs_memory = s0.vs_memory ==> pure_frame cenv func es sa s0 s
+Proof
+  simp[pure_frame_def]
+QED
+
+Theorem pure_frame_state_cong:
+  t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas ==>
+  (pure_frame cenv func es sa s0 t <=> pure_frame cenv func es sa s0 s)
+Proof
+  simp[pure_frame_def]
+QED
+
+Theorem pure_frame_inst_idx[simp]:
+  pure_frame cenv func es sa s0 (s with vs_inst_idx := n) <=>
+  pure_frame cenv func es sa s0 s
+Proof
+  simp[pure_frame_def]
+QED
+
+(* expr_has_effect by constructor. *)
+Theorem expr_has_effect_thm[simp]:
+  (expr_has_effect (Name ty name) <=> F) /\
+  (expr_has_effect (Literal ty lit) <=> F) /\
+  (expr_has_effect (TopLevelName ty id) <=> F) /\
+  (expr_has_effect (FlagMember ty id mem) <=> F) /\
+  (expr_has_effect (IfExp ty c a b) <=>
+     expr_has_effect c \/ expr_has_effect a \/ expr_has_effect b) /\
+  (expr_has_effect (StructLit ty id fields) <=>
+     EXISTS (expr_has_effect o SND) fields) /\
+  (expr_has_effect (Subscript ty e1 e2) <=>
+     expr_has_effect e1 \/ expr_has_effect e2) /\
+  (expr_has_effect (Attribute ty e1 fname) <=> expr_has_effect e1) /\
+  (expr_has_effect (Builtin ty blt es) <=> EXISTS expr_has_effect es) /\
+  (expr_has_effect (TypeBuiltin ty tb t0 es) <=> EXISTS expr_has_effect es) /\
+  (expr_has_effect (Pop ty target) <=> T) /\
+  (expr_has_effect (Call ty ct es default) <=> T)
+Proof
+  `expr_has_effect = supported_expr_exists expr_effect_root` by
+    simp[FUN_EQ_THM, expr_has_effect_def] >>
+  pop_assum SUBST1_TAC >>
+  simp[supported_expr_exists_def, expr_effect_root_def,
+       supported_exprs_exists_every, supported_fields_exists_every,
+       combinTheory.o_DEF, SF ETA_ss]
+QED
 
 Definition expr_val_at_def:
   expr_val_at cenv cx t sa sb es v op s <=>
@@ -376,7 +477,8 @@ Definition expr_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es es' s0 s
+    locals_kept cenv es es' s0 s /\
+    (~expr_has_effect e ==> pure_frame cenv func es sa s0 s)
 End
 
 (* The slot w holds the value obtained by reading the captured source
@@ -471,12 +573,18 @@ End
 (* Where a value in memory sits, as expr_val_at says for expr_post: for a
    StackValue, expr_val_at itself; for a pointer into memory, the value's
    bytes inside one of the expression's own allocations or a live local's
-   region, word types included, unless it occupies none. *)
+   region, word types included, unless it occupies none.  In a local's
+   region, a source result that is a place of a local is that place
+   (local_place_at).  A result of a non-word type is a memory place only
+   behind a pointer into memory. *)
 Definition vv_at_def:
   (vv_at cenv cx t sa sb es tv (StackValue t' op) s <=>
+     (~is_word_type t ==> !id path. tv <> PlaceR (MemoryPlace id path)) /\
      !v. read_result cx tv es = (INL v, es) ==> expr_val_at cenv cx t sa sb es v op s) /\
   (vv_at cenv cx t sa sb es tv (LocatedValue t' p) s <=>
-     p.ptr_location = LocMemory ==>
+     (p.ptr_location <> LocMemory /\ ~is_word_type t ==>
+      !id path. tv <> PlaceR (MemoryPlace id path)) /\
+     (p.ptr_location = LocMemory ==>
      !v tvt. read_result cx tv es = (INL v, es) /\
              evaluate_type (get_tenv cx) t = SOME tvt ==>
        val_wf tvt v /\
@@ -488,8 +596,9 @@ Definition vv_at_def:
                                     b + sz <= lb \/ lb + lsz <= b)) \/
             (?n b sz. local_region cenv es.scopes s n b sz /\
                       b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-                      local_val_at cenv cx n (w2n w - b) tvt v) \/
-            val_footprint tvt v = 0))
+                      local_val_at cenv cx n (w2n w - b) tvt v /\
+                      local_place_at cenv cx n (w2n w - b) tvt tv) \/
+            val_footprint tvt v = 0)))
 End
 
 (* vv_at without its local-region case (expr_val_own). *)
@@ -508,22 +617,6 @@ Definition vv_own_def:
                                     b + sz <= lb \/ lb + lsz <= b)) \/
             val_footprint tvt v = 0))
 End
-
-(* expr_has_effect by constructor, for the expressions whose posts the
-   simulation cases build. *)
-Theorem expr_has_effect_thm[simp]:
-  (expr_has_effect (Pop ty tgt) <=> T) /\
-  (expr_has_effect (Call ty ct es d) <=> T) /\
-  (expr_has_effect (Literal ty l) <=> F) /\
-  (expr_has_effect (Name ty n) <=> F) /\
-  (expr_has_effect (TopLevelName ty id) <=> F) /\
-  (expr_has_effect (FlagMember ty id f) <=> F) /\
-  (expr_has_effect (Attribute ty e1 f) <=> expr_has_effect e1) /\
-  (expr_has_effect (Subscript ty e1 e2) <=>
-     expr_has_effect e1 \/ expr_has_effect e2)
-Proof
-  simp[expr_has_effect_def, supported_expr_exists_def, expr_effect_root_def]
-QED
 
 (* A storage or transient pointer reads live slots at es: no byte of the
    slots it reads is dead but those its own type leaves dead
@@ -573,7 +666,8 @@ Definition vv_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es es' s0 s
+    locals_kept cenv es es' s0 s /\
+    (~expr_has_effect e ==> pure_frame cenv func es sa s0 s)
 End
 
 (* The location of a storage or transient place. *)

@@ -10,7 +10,7 @@ Ancestors
   valueEncoding valueEncodingDefs valueEncodingProofs vyperTypeSystem vyperTyping
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend vyperEvalPreservesScopes
-  vyperPlaceStatePreservation
+  vyperPlaceStatePreservation vyperStoragePlaceProvenance
 Libs
   pairLib
 
@@ -125,6 +125,81 @@ Theorem local_path_at_step:
     local_path_at cenv cx n (k + k2) etv
 Proof
   rw[local_path_at_def] >> drule_all mem_path_offset_snoc >> metis_tac[]
+QED
+
+(* A local's own place sits at its root. *)
+Theorem local_place_at_root:
+  !cenv cx n t0 tv0.
+    cenv.ce_var_type n = SOME t0 /\
+    evaluate_type (get_tenv cx) t0 = SOME tv0 ==>
+    local_place_at cenv cx n 0 tv0 (PlaceR (MemoryPlace n []))
+Proof
+  rw[local_place_at_def, mem_path_offset_def]
+QED
+
+(* A step from where a local's place sits gives where its extension sits,
+   when the result is a memory place exactly as the step's extension. *)
+Theorem local_place_at_step:
+  !cenv cx n k tv tv0 sb k2 etv tv'.
+    local_place_at cenv cx n k tv tv0 /\
+    mem_step_offset tv sb = SOME (k2,etv) /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [sb] /\ tv0 = PlaceR (MemoryPlace id path)) ==>
+    local_place_at cenv cx n (k + k2) etv tv'
+Proof
+  rpt gen_tac >> simp[local_place_at_def] >> strip_tac >>
+  qx_genl_tac [`i`, `q`] >> disch_tac >>
+  `?p. q = p ++ [sb] /\ tv0 = PlaceR (MemoryPlace i p)` by metis_tac[] >>
+  gvs[] >> metis_tac[mem_path_offset_snoc]
+QED
+
+(* A selection's result is a memory place exactly when it extends one. *)
+Theorem select_result_memory_place:
+  !cx ty tv sb st tv' st'.
+    select_result cx ty tv sb st = (INL tv', st') ==>
+    !id path'. tv' = PlaceR (MemoryPlace id path') <=>
+      ?path. path' = path ++ [sb] /\ tv = PlaceR (MemoryPlace id path)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!id path. tv = PlaceR (MemoryPlace id path) ==>
+     tv' = PlaceR (MemoryPlace id (path ++ [sb]))` by
+    (rpt strip_tac >>
+     gvs[select_result_def, extend_place_def, bind_def, return_def,
+         lift_sum_def, raise_def, ignore_bind_def, AllCaseEqs(),
+         extend_memory_place_def]) >>
+  `!id path'. tv' = PlaceR (MemoryPlace id path') ==>
+     ?path. tv = PlaceR (MemoryPlace id path)` by
+    (rpt strip_tac >> gvs[] >> Cases_on `tv`
+     >- gvs[select_result_def, bind_def, return_def, lift_option_type_def,
+            lift_sum_def, raise_def, AllCaseEqs()]
+     >- (rename1 `PlaceR pl` >> Cases_on `pl` >>
+         gvs[select_result_def, extend_place_def, bind_def, return_def,
+             lift_sum_def, raise_def, ignore_bind_def, AllCaseEqs(),
+             extend_memory_place_def] >>
+         drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+         simp[]) >>
+     rename1 `HashMapRef _ _ _ vt` >> Cases_on `sb` >> Cases_on `vt` >>
+     gvs[select_result_def, extend_place_def, bind_def, return_def,
+         lift_option_type_def, raise_def, AllCaseEqs(), LET_THM]) >>
+  rpt gen_tac >> eq_tac >> rw[] >> res_tac >> gvs[]
+QED
+
+(* A value of a base type is no place, so nothing pins it. *)
+Theorem local_place_at_value[simp]:
+  !cenv cx n k ptv v. local_place_at cenv cx n k ptv (Value v)
+Proof
+  simp[local_place_at_def]
+QED
+
+(* A located memory value is where expr_val_at says, dropping the pin. *)
+Theorem vv_at_memory_val_at:
+  !cenv cx t sa sb es tv t' p s v.
+    vv_at cenv cx t sa sb es tv (LocatedValue t' p) s /\
+    p.ptr_location = LocMemory /\ read_result cx tv es = (INL v, es) ==>
+    expr_val_at cenv cx t sa sb es v p.ptr_operand s
+Proof
+  rw[vv_at_def, expr_val_at_def] >> first_x_assum drule_all >> strip_tac >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem dynarray_free_step[local]:
@@ -878,6 +953,123 @@ Proof
     metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
   `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   Cases_on `lookup_scopes n scopes` >> gvs[]
+QED
+
+(* The frame of two fragments run one after the other, the second lowered
+   from s1 at or after sa, related at es1 whose scopes have es's names. *)
+Theorem pure_frame_trans:
+  !cenv func es es1 sa s1 s0 t u.
+    pure_frame cenv func es sa s0 t /\ pure_frame cenv func es1 s1 t u /\
+    sa.cs_next_id <= s1.cs_next_id /\
+    (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+             FLOOKUP u.vs_allocas aid = SOME b) /\
+    local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) ==>
+    pure_frame cenv func es sa s0 u
+Proof
+  rpt gen_tac >> simp[pure_frame_def] >> strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      `local_region cenv es1.scopes t n b sz` by
+        (irule local_region_frame_fwd >> metis_tac[]) >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  `mem_bytes_at off len u.vs_memory = mem_bytes_at off len t.vs_memory` by
+    (qpat_x_assum `!off len. _ ==> mem_bytes_at off len u.vs_memory = _`
+       irule >> rpt strip_tac >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `inst` >> gvs[]) >>
+  `mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory` by
+    (qpat_x_assum `!off len. _ ==> mem_bytes_at off len t.vs_memory = _`
+       irule >> rpt strip_tac >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `inst` >> gvs[]) >>
+  simp[]
+QED
+
+Theorem pure_frame_mem_tail:
+  !cenv func es sa s0 u ss.
+    pure_frame cenv func es sa s0 u /\ ss.vs_memory = u.vs_memory /\
+    (!aid b. FLOOKUP u.vs_allocas aid = SOME b ==>
+             FLOOKUP ss.vs_allocas aid = SOME b) ==>
+    pure_frame cenv func es sa s0 ss
+Proof
+  rpt gen_tac >> simp[pure_frame_def] >> strip_tac >>
+  qpat_x_assum `ss.vs_memory = _` (fn th => rewrite_tac[th]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  qpat_x_assum `!off len. _ ==> mem_bytes_at off len u.vs_memory = _` irule >>
+  rpt strip_tac >>
+  qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+  qexists_tac `inst` >> gvs[]
+QED
+
+(* A leaf that writes only inside one of its own allocations, and keeps the
+   live locals' regions, has the pure frame. *)
+Theorem pure_frame_fresh_alloca:
+  !cenv func es sa s0 t id ops outs b sz.
+    MEM (mk_inst id ALLOCA ops outs) (fn_insts func) /\
+    sa.cs_next_id <= id /\ FLOOKUP t.vs_allocas id = SOME (b,sz) /\
+    (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+       mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+    (!off len. regions_disjoint off len b sz ==>
+       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory) ==>
+    pure_frame cenv func es sa s0 t
+Proof
+  rpt gen_tac >> simp[pure_frame_def] >> strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!n lb lsz. local_region _ _ _ _ _ _ ==> _` irule >>
+      goal_assum (drule_at Any)) >>
+  rpt strip_tac >>
+  qpat_x_assum `!off len. regions_disjoint _ _ _ _ ==> _` irule >>
+  qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+  qexists_tac `mk_inst id ALLOCA ops outs` >>
+  simp[venomInstTheory.mk_inst_def]
+QED
+
+(* A suffix that writes only inside one fresh allocation, clear of the live
+   locals, keeps the pure frame. *)
+Theorem pure_frame_buffer_tail:
+  !cenv func es sa s0 s z inst bb bsz.
+    pure_frame cenv func es sa s0 s /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
+             FLOOKUP z.vs_allocas aid = SOME e) /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    sa.cs_next_id <= inst.inst_id /\
+    FLOOKUP z.vs_allocas inst.inst_id = SOME (bb,bsz) /\
+    (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+       regions_disjoint bb bsz lb lsz) /\
+    (!off len. regions_disjoint off len bb bsz ==>
+       mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) ==>
+    pure_frame cenv func es sa s0 z
+Proof
+  rpt gen_tac >> simp[pure_frame_def] >> strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      `regions_disjoint b sz bb bsz` by
+        (qpat_x_assum `!n lb lsz. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _`
+           drule >>
+         simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+      `mem_bytes_at b sz z.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (qpat_x_assum `!off len. regions_disjoint _ _ _ _ ==> _` irule >>
+         first_assum ACCEPT_TAC) >>
+      `mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory` by
+        (qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> mem_bytes_at _ _ _ = _`
+           irule >>
+         goal_assum (drule_at Any)) >>
+      simp[]) >>
+  rpt strip_tac >>
+  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory` by
+    (qpat_x_assum `!off len. regions_disjoint _ _ _ _ ==> _` irule >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `inst` >> simp[]) >>
+  `mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory` by
+    (qpat_x_assum `!off len. (!inst b sz. _) ==> mem_bytes_at _ _ s.vs_memory = _`
+       irule >>
+     rpt strip_tac >>
+     rename1 `FLOOKUP s.vs_allocas i.inst_id = SOME _` >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `i` >> simp[]) >>
+  simp[]
 QED
 
 Theorem vv_post_initial_gas:

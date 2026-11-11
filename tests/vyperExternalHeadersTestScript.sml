@@ -87,7 +87,8 @@ val () = both "fallback_arguments" false
 val () = both "constructor_value_return" false
   (subst [ctor |-> ``FunctionDecl Deploy Nonpayable F F "__init__"
     [] [] ^uint256 [Return (SOME ^one)]``] base_dom1);
-val () = both "constructor_guard_with_lock_layout" true (mutate ctor 2 ``T``);
+(* Vyper rejects @nonreentrant on __init__. *)
+val () = both "constructor_nonreentrant" false (mutate ctor 2 ``T``);
 val () = both "nested_nonreentrant_calls" true (mutate external_f 2 ``T``);
 (* Vyper rejects @raw_return on non-external functions
    (vyper/semantics/types/function.py:539 at VYPER_PIN). *)

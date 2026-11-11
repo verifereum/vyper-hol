@@ -91,9 +91,10 @@ Proof
        loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
-  `EVERY (stmt_exprs_ok cenv) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by
+  `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) stmts /\
+   type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
+       stmts_exprs_ok_thm, alloc_limits_stmt_def, stmt_valued_return_def] >>
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target)
               stmts ==> occurs_abi_decode_target target tops` by
     fs[supported_stmt_expr_exists_def] >>
@@ -115,7 +116,7 @@ Proof
       qpat_x_assum `body_stmts_mem_ok _ _`
         (irule o REWRITE_RULE [body_stmts_mem_ok_def]) >>
       simp[] >> rpt conj_tac
-      >- metis_tac[stmt_exprs_ok_same_frame]
+      >- metis_tac[for_declare_stmts_exprs_ok]
       >- metis_tac[body_inv_same_frame]
       >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
           `c.ce_struct_fields = cenv.ce_struct_fields` by

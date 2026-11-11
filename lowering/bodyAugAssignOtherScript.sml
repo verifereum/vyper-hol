@@ -172,7 +172,7 @@ Theorem augassign_rhs_pre[local]:
 Proof
   rpt strip_tac >>
   drule supported_expr_body_calls >> strip_tac >>
-  gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def, AllCaseEqs()] >>
   irule stmt_expr_body_pre >>
   fs[body_inv_def, gasContextTheory.cx_tops_def] >>
@@ -280,7 +280,8 @@ Proof
   `?pt. supported_target_info tops bindings t = SOME pt` by
     metis_tac[aug_place_supported_stmt_target_info] >>
   irule aug_place_target_indices_pre >>
-  gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_def,
+  gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_flat,
+      allocLimitsTheory.alloc_limits_stmt_def,
       supported_stmt_expr_exists_def, int_calls_stmt_def, AllCaseEqs()] >>
   fs[body_inv_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,

@@ -160,6 +160,22 @@ Proof
   rw[supported_expr_exists_def] >> metis_tac[]
 QED
 
+Theorem supported_expr_exists_disj:
+  (!p e q. supported_expr_exists (\x. p x \/ q x) e =
+    (supported_expr_exists p e \/ supported_expr_exists q e)) /\
+  (!p t q. supported_target_exists (\x. p x \/ q x) t =
+    (supported_target_exists p t \/ supported_target_exists q t)) /\
+  (!p es q. supported_exprs_exists (\x. p x \/ q x) es =
+    (supported_exprs_exists p es \/ supported_exprs_exists q es)) /\
+  (!p opt q. supported_opt_exists (\x. p x \/ q x) opt =
+    (supported_opt_exists p opt \/ supported_opt_exists q opt)) /\
+  (!p fs q. supported_fields_exists (\x. p x \/ q x) fs =
+    (supported_fields_exists p fs \/ supported_fields_exists q fs))
+Proof
+  ho_match_mp_tac supported_expr_exists_ind >>
+  simp[supported_expr_exists_def] >> metis_tac[]
+QED
+
 Theorem supported_expr_exists_root:
   p e ==> supported_expr_exists p e
 Proof

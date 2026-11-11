@@ -25,31 +25,31 @@ Its **entire** schema is:
 ```sml
 !policy tops deploy_bc runtime_bc am tx ret es.
   compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-  supported_program tops /\
+  supported_program tops /\ immutable_free_program tops /\
   source_typing_ok tops am tx /\
   source_storage_ok tops am tx /\
   call_state_rel tops runtime_bc am tx es /\
-  valid_vyper_call tops tx (FST (HD es.contexts)).msgParams.data ret /\
-  call_outcomes_ok tops am tx (MAP SND (call_trace es))
+  valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+  call_outcomes_ok am tx (MAP SND (call_trace es))
   ==>
   ?r es'.
     run_call es = SOME (r, es') /\
     (frame_resource_starved es r es' \/
-     precompile_call_starved es \/
      call_result_rel tops ret am tx es r es')
 ```
 
 `run_call` is Verifereum's frame run, not the retired local loop. The compilation
 is the actual O1 `compile_vyper`, with identity finalizer `K SOME`. There are
-exactly **seven** public premises: no extra gas sufficiency, Venom state,
+exactly **eight** public premises: no extra gas sufficiency, Venom state,
 selector table, shape, memory, invariant, context or policy-resolution premise.
 Empty kernel hypotheses do not mean this theorem is unadmitted: its saved tag
 inherits precisely S1–S7 below.
 
-## All seven public premises
+## All eight public premises
 
-Definitions are in [`e2eDefs`](../lowering/e2eDefsScript.sml), except the compiler
-and [`supportedProgram`](../lowering/proofs/supported/supportedProgramScript.sml).
+Definitions are in [`e2eDefs`](../lowering/e2eDefsScript.sml), except the compiler,
+[`supportedProgram`](../lowering/proofs/supported/supportedProgramScript.sml), and
+`immutable_free_program` in [`loweringShapeProps`](../lowering/proofs/loweringShapePropsScript.sml).
 “Producer” means a named result establishing the fact, not merely a definition
 or a theorem that consumes it.
 
@@ -57,11 +57,12 @@ or a theorem that consumes it.
 |---|---|---|
 | `compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc)` | boundary: successful compiler run | Caller supplies success; **no universal success producer**. Proved L1 `e2eProducers.compile_vyper_runtime_phases` extracts the actual resolved policy, raw unit, O1 output, assembly, plan and `runtime_bc = assemble prog`, including data segment and code-end header. |
 | `supported_program tops` | computational boundary on `tops` alone | The 101 exact manifest ASTs have named `*_supported_program` exports under `supportedFixtures*` (TASK022), each plain `EVAL_TAC`; e.g. `supportedFixturesMultiple.two_external_supported_program`. **No universal membership producer.** This is the exact syntax whitelist, not typing, layout safety, successful compilation or semantic correctness. |
+| `immutable_free_program tops` | computational boundary on `tops` alone | Excludes runtime immutables from the current call theorem. |
 | `source_typing_ok tops am tx` | boundary checker plus environmental readiness/machine/transaction bounds | `check_contract F` supplies an artifact; `vyperTypeContractSoundness.load_contract_establishes_checked_contract_runtime_ready`, `vyperTypeDeploymentMachine.load_contract_establishes_machine_well_typed` and `vyperTypeExternalCallMachine.checked_call_external_preserves_machine_well_typed` are **partial conditional producers**, detailed below. **No theorem produces the whole premise for arbitrary environments.** |
 | `source_storage_ok tops am tx` | environmental storage validity and layout/hash separation guard | Conditional preservation: `vyperTypeEvalStoragePreservation.eval_stmt_preserves_contract_storage_well_formed` and its statements/expressions family; oracle adoption: `vyperCallOutcomeStorage.take_adopt_call_outcome_storage_suffix`. **No complete deployment/transaction producer** of this public premise. Milestone 7 remains responsible. |
 | `call_state_rel tops runtime_bc am tx es` | environmental fresh-frame/live-state/source-installation boundary | **No general producer or satisfiability theorem.** L6/L8 consume it to produce initial simulation relations; they do not establish it. Milestone 7 top-level-transaction corollary is deferred. |
 | `valid_vyper_call tops tx calldata ret` | environmental exact function/ABI input boundary | Caller supplies exact lookup, binding and calldata encoding; **no general producer**. Computable focused boundary checks are not a universal call-entry theorem. Fallback calls remain Milestone 7 work. |
-| `call_outcomes_ok tops am tx (MAP SND (call_trace es))` | environmental successful-outcome account/storage guard | **No current producer.** In particular there is no theorem deriving it from arbitrary EVM callees or from source-executed callees. Milestone 7 source-callee execution result is future work; account/code bounds alone do not establish storage validity. |
+| `call_outcomes_ok am tx (MAP SND (call_trace es))` | environmental outcome return-data/account/storage guard | **No current producer.** In particular there is no theorem deriving it from arbitrary EVM callees or from source-executed callees. Milestone 7 source-callee execution result is future work; account/code bounds alone do not establish storage validity. |
 
 ### What partial producers actually establish
 
@@ -100,8 +101,8 @@ The source oracle's implemented account guard is unchanged:
 [`accounts_runtime_well_typed`](../semantics/vyperRuntimeAccountsScript.sml):
 every account has balance `< 2 ** 256` and code length `<= 24576`. It does not
 check contract storage or prove `call_outcomes_ok`. The public latter premise
-requires those same account bounds **and actual contract storage validity** of
-every successful payload, including static outcomes, in its initial source
+requires bounded return data, those same account bounds **and actual contract storage validity** of
+every payload, including failed and static outcomes, in its initial source
 context. Type/storage oracle guards in proof interfaces are assumptions or
 conditional preservation facts, not an extra implemented storage validator;
 no planned guard is silently weakened to “the oracle is trusted”.
@@ -110,43 +111,44 @@ no planned guard is silently weakened to “the oracle is trusted”.
 
 `call_state_rel` supplies a fresh nonstatic head frame and arbitrary caller
 frames below it: `wf_state`, `Collect` mode, `jumpDest = NONE`, memory output,
-code exactly `runtime_bc`, `parse_code 0 FEMPTY runtime_bc`, code size `<=24576`,
+code `runtime_bc ++ section` with `immutables_section_rel tops
+(account_immutables am tx.target) section`, `parse_code 0 FEMPTY` of that code, code size `<=24576`,
 PC zero and empty stack/memory/logs/return data. The source starts with empty
 logs; entry value transfer must succeed. **Live** `es.rollback.accounts` equal
 `accounts_after_transfer tx am.accounts`, not the saved head-frame rollback
-snapshot; transient storage agrees. Caller/callee/value, origin, gas price,
+snapshot; transient storage agrees, pending deletions are empty, and `es.rollback.toDelete`
+equals those pending deletions. Caller/callee/value, origin, gas price,
 chain id, timestamp, coinbase, block gas limit, fees, blob hashes, prevrandao
 and block hashes agree. Block number is nonzero and `< 2 ** 255`, with
 `MIN 256 block_number <= LENGTH block_hashes <= 256`.
 
 The target **must already have the exact singleton main source installed**,
 no exports, and declared layout slots, via `source_deployment_rel`. This is not
-an uninstalled-target call theorem. Bytecode is tied to the frame's code;
-there is no separate equation requiring the target account's code to equal
-`runtime_bc`. Deployment has a different uninstalled-source boundary below.
+an uninstalled-target call theorem. The live target account's code must equal
+the frame's code. Deployment has a different uninstalled-source boundary below.
 
 `valid_vyper_call` uses the source's exact `External` function lookup, with
 nonreentrant flag `F`, **no defaults**, exact declared argument count,
 successful `bind_arguments (type_env tops)`, and `calldata_encodes` for the same
 name/types/values. `__default__` is excluded. Return type `ret` is the looked-up
-type. `return_bytes` is empty for `NoneT`, otherwise the ABI encoding with the
-source's `needs_external_call_wrap` singleton-tuple rule, not always an
-unwrapped value. These are bounds/binding and encoding obligations, not a
+type. `tx_return_bytes` uses raw bytes for raw-return functions; otherwise
+`return_bytes` is empty for `NoneT` or uses the ABI encoding with the source's
+`needs_external_call_wrap` singleton-tuple rule. These are bounds/binding and encoding obligations, not a
 claim that all external inputs are valid.
 
 [`call_trace`](../venom/codegen/frame/callTraceScript.sml) records our frame's
 ordered `(request,outcome)` pairs. Requests contain target, value, calldata,
 static flag and live pre-call accounts/transient storage; outcomes contain
 success, return bytes, post-call accounts/transient storage and logs. The source
-runs `call_external (SOME (MAP SND (call_trace es))) am tx`; Venom/assembly take
+runs `call_external (SOME (MAP SND (call_trace es))) gobs am tx` for some
+source gas observations `gobs`; Venom/assembly take
 outcomes instead of executing callees. Successful nonstatic outcomes adopt
 account/code/storage/transient/log payloads; static or failed outcomes do not.
-`NONE` source mode still executes concrete calls; the two-argument
-`initial_state am scs` still starts with NONE and empty requests.
+`NONE` source mode still executes concrete calls.
 
-Value-zero calls to computed precompiles 1/2/6/7 are computed by the shared
-oracle helper and omitted from `call_trace`; they consume no oracle outcome
-and record no request. Nonzero-value calls and other precompiles remain in the
+Value-zero calls to computed precompiles 1/2/6/7 consume the next outcome's
+success flag and compute return data on success. They remain in `call_trace`,
+but `call_requests` filters them out. Nonzero-value calls and other precompiles remain in the
 ordinary trace. Callee/reentrant execution is absorbed into an outcome, not
 certified as source-equivalent by this runtime theorem. Even arbitrary source
 `SOME` lists use the same top-level source evaluator, not a second evaluator.
@@ -155,16 +157,18 @@ certified as source-equivalent by this runtime theorem. Even arbitrary source
 fresh state from the live EVM environment: empty memories/variables/allocations,
 concrete labels from `compute_label_offsets prog`, exact assembled code, three
 FMP fields set to `n2w cp.cp_initial_fmp`, trace outcomes and empty requests.
-It sets **`cc_gas = 0`**. Venom `GAS` is untouched; opaque GAS values may only
-feed CALL/STATICCALL gas operands, whose values oracle calls ignore. Assembly
-has frame-local EVM gas readings; **there is no caller-read gas oracle and no
-`msg.gas` guarantee**.
+It sets **`cc_gas = 0`** and `vs_gas_readings = gas_readings es`. Venom `GAS`
+consumes those readings, returning zero on exhaustion; assembly also has
+frame-local EVM gas readings. The result relation existentially chooses
+source gas observations; they are not yet tied to EVM readings. There is no
+`msg.gas` guarantee.
 
 ### Result clauses and deliberate limits
 
-- Source success requires successful `frame_outcome`, canonical ABI return
-  bytes, exact live accounts/transient storage, ordered concrete event logs,
-  and **the entire request sequence** equal to `MAP FST (call_trace es)`.
+- Source success requires successful `frame_outcome`, `tx_return_bytes`,
+  account agreement after EVM pending deletions and transient-storage agreement
+  (both modulo dead target storage), ordered concrete event logs, and
+  `LIST_REL (request_agree cx)` against `call_requests es`.
   Requests are compared **only on success**. Terminal leftover outcome lists
   are **not** observations required equal by this relation.
 - Ordinary assertion/raise requires EVM failure with `Reverted`;
@@ -183,9 +187,7 @@ has frame-local EVM gas readings; **there is no caller-read gas oracle and no
   rejection can also be exempt in such a program. Static-only decode and
   `"abi_decode conversion"` are not exempt. An exempt run has no result/effect
   correspondence obligation, but the theorem still supplies an actual EVM run.
-- Resource escape is a genuine frame `OutOfGas` or `StackOverflow`, or an
-  observed failed value-zero computed precompile with valid pure input
-  (`precompile_call_starved`); invalid ecadd/ecmul input is not starvation.
+- Resource escape is a genuine frame `OutOfGas` or `StackOverflow`.
   There is no existential “sufficient gas” loophole or guaranteed gas bound.
 - No static **entry**, runtime immutables, `msg.gas`, `gas=` keyword, fallback
   invocation, arbitrary source program, closed-world callee or whole-transaction
@@ -208,7 +210,7 @@ proof-owner memo, not a proved stage.
 | S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` | raw memory validity on non-exempt executions; Milestone 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` | exact O1 forward semantic simulation; Milestone 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` | existential invariant, output memory and reachability package; Milestone 5 |
-| S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` | output unit shape/opaque GAS/label facts; Milestone 3 |
+| S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` | output unit shape/return-address use/label facts; Milestone 3 |
 | S7 | `codegenCorrectness.codegen_correct` | frame-aware generated-code simulation with resource disjunction; Milestones 2.1 and 4 |
 
 Owners: [lowering](../lowering/vyperLoweringCorrectScript.sml),
@@ -265,10 +267,16 @@ Source owners: [e2eProducers](../lowering/e2e/e2eProducersScript.sml),
   supported syntax, `constructor_call_free`, deployment typing/storage,
   canonical constructor arguments and fresh **single-frame** creation, no
   installed source at the target, code `deploy_bc ++ args_bytes`, memory empty,
-  live entry transfer, and runtime not starting with `0xEF`. Deployment readiness
+  live entry transfer, an empty target account in `es.originalAccounts`, and
+  runtime not starting with `0xEF`. Deployment readiness
   is pre-constant setup, not runtime readiness for an uninstalled target.
-  Success requires returned/installed runtime bytes, exact other accounts and
-  target equality modulo code, transient storage and ordered logs; failures and
+  `deploy_state_rel` also requires empty pending deletions matching
+  `es.rollback.toDelete`, `call_outcomes_ok` for the trace, and storage
+  validity for every trace outcome in the deployment evaluation context.
+  Success requires returned/installed `runtime_bc ++ section`, with the section
+  satisfying `immutables_section_rel`, exact other accounts and
+  target equality modulo code and dead storage, transient storage modulo dead
+  target storage, and ordered logs; failures and
   resource/exemption cases are explicit. This is **stated, not proved**.
   See [deployment definitions](../lowering/e2eDeployDefsScript.sml).
 
