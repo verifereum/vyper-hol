@@ -181,11 +181,7 @@ Proof
                   [(NONE, tops)] []`,
                `run_context fuel' dout.po_unit.cu_context
                   (deploy_entry_state prog cplan tops es)`] mp_tac deploy_venom_frame >>
-  impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      (* the constructor of a supported program never halts, so a successful
-         load installs the source *)
-      rpt strip_tac >> drule_all ctorDeployDeadLoadTheory.load_contract_sources_layouts >> simp[]) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
   qexistsl_tac [`r`, `es'`] >> fs[] >>
   disj2_tac >> qexists_tac `gas_explicit marks vs_in.vs_gas_readings` >>
