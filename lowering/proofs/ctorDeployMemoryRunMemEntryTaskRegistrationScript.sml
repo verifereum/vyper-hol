@@ -19,12 +19,15 @@ Proof
       fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
       comp_return_def, emitted_insts_def, DROP_LENGTH_APPEND] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, run_inst_seq_def, step_inst_base_def,
-       mk_inst_def, eval_operand_def, lookup_var_def, update_var_def,
-       exec_read0_def, exec_pure1_def, bool_to_word_def] >>
   qexistsl [`STRING #"%" (toString st0.cs_next_var)`,
     `STRING #"%" (toString (st0.cs_next_var + 1))`] >>
-  simp[finite_mapTheory.FLOOKUP_UPDATE, bool_to_word_def]
+  simp_tac (srw_ss()) [DROP_LENGTH_APPEND, run_inst_seq_def, mk_inst_def] >>
+  simp_tac (srw_ss()) [Once step_inst_base_def, exec_read0_def] >>
+  simp_tac (srw_ss()) [Once step_inst_base_def, exec_pure1_def,
+    eval_operand_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE, bool_to_word_def] >>
+  simp[step_inst_base_def, eval_operand_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE, bool_to_word_def]
 QED
 
 Theorem ctor_task_payable_exact:
