@@ -20,7 +20,9 @@ Ancestors
   vyperSubscriptOverlap vyperInterpreter vyperState vyperContext
   vyperStorageAccessFrame vyperLocalAccessFrame
   vyperTypeInvariants vyperTypeCallStackSoundness vyperTypeCallGraphSoundness
-  vyperTypeCallGraph list
+  vyperTypeCallGraph list alist finite_map
+  vyperTypeInitialState vyperPlaceFrames vyperImmutablesPreservation
+  vyperStatePreservation vyperStorageBackend
 
 (* Why it holds (a reader may ignore this): immutables change only through
    an ImmutablePlace written by Assign, AugAssign, Append or Pop (inside an
@@ -32,6 +34,111 @@ Ancestors
    keep cx.txn.target, and a reached callee's own accesses are in
    expr_accesses through reached_functions, as in
    vyperStorageAccessFrame's evaluate_finite_frame. *)
+
+(* Closed term abbreviations, not additional semantic definitions. *)
+val immutable_observation = ``\cx src id (st:evaluation_state).
+  FLOOKUP (case ALOOKUP st.immutables cx.txn.target of
+             NONE => FEMPTY
+           | SOME imms => get_source_immutables src imms) id``;
+
+val immutable_frame = ``\cx A st st'. !src id.
+  ~MEM (WriteAcc (StateRef (src,id))) A ==>
+  ^immutable_observation cx src id st' =
+  ^immutable_observation cx src id st``;
+
+Theorem set_immutable_key_frame[local]:
+  set_immutable cx s n tv v st = (res,st') /\ (s,n) <> (src,id) ==>
+  ^immutable_observation cx src id st' =
+  ^immutable_observation cx src id st
+Proof
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  simp[set_immutable_def, get_address_immutables_def,
+       lift_option_type_def, bind_def, raise_def, return_def,
+       set_address_immutables_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `src = s` >>
+  gvs[get_source_immutables_set_same, get_source_immutables_set_other,
+      FLOOKUP_UPDATE]
+QED
+
+Theorem write_place_key_frame[local]:
+  write_place cx p v st = (res,st') /\
+  (!path. p <> ImmutablePlace src id path) ==>
+  ^immutable_observation cx src id st' =
+  ^immutable_observation cx src id st
+Proof
+  Cases_on `p`
+  >- (rpt strip_tac >> drule write_storage_place_immutables >> simp[])
+  >- (rpt strip_tac >> drule write_memory_place_immutables >> simp[]) >>
+  simp[write_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  rpt strip_tac >> gvs[] >>
+  drule set_immutable_key_frame >> simp[]
+QED
+
+Theorem append_place_key_frame[local]:
+  append_place cx p v st = (res,st') /\
+  (!path. p <> ImmutablePlace src id path) ==>
+  ^immutable_observation cx src id st' =
+  ^immutable_observation cx src id st
+Proof
+  Cases_on `p` >>
+  TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+       TRY (rename1 `ArrayTV et bd` >> Cases_on `bd`)) >>
+  simp[append_place_def, bind_def, ignore_bind_def,
+       check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac get_storage_backend_state >>
+  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
+  imp_res_tac lift_sum_state >> gvs[] >>
+  imp_res_tac write_storage_place_immutables >>
+  imp_res_tac write_memory_place_immutables >>
+  imp_res_tac write_storage_slot_immutables >> gvs[] >>
+  drule write_place_key_frame >> simp[]
+QED
+
+Theorem pop_place_key_frame[local]:
+  pop_place cx p st = (res,st') /\
+  (!path. p <> ImmutablePlace src id path) ==>
+  ^immutable_observation cx src id st' =
+  ^immutable_observation cx src id st
+Proof
+  Cases_on `p` >>
+  TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+       TRY (rename1 `ArrayTV et bd` >> Cases_on `bd`)) >>
+  simp[pop_place_def, bind_def, ignore_bind_def, check_def, assert_def,
+       get_scopes_def, type_check_def,
+       set_scopes_def, pairTheory.UNCURRY, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac get_storage_backend_state >>
+  gvs[get_scopes_def, return_def] >> imp_res_tac lift_option_type_state >>
+  imp_res_tac type_check_state >> imp_res_tac lift_sum_state >> gvs[] >>
+  imp_res_tac write_storage_slot_immutables >>
+  gvs[set_scopes_def, return_def] >>
+  imp_res_tac get_immutables_state >> gvs[] >>
+  drule set_immutable_key_frame >> simp[]
+QED
+
+Theorem immutable_frame_refl[local]:
+  ^immutable_frame cx A st st
+Proof
+  simp[]
+QED
+
+Theorem immutable_frame_trans[local]:
+  ^immutable_frame cx A st mid /\ ^immutable_frame cx A mid st' ==>
+  ^immutable_frame cx A st st'
+Proof
+  metis_tac[]
+QED
+
+Theorem immutable_frame_stack[local]:
+  ^immutable_frame (cx with stk := stk) A st st' =
+  ^immutable_frame cx A st st'
+Proof
+  simp[]
+QED
 
 Theorem eval_expr_unwritten_immutable:
   !cx e st res st' env mods src id.
