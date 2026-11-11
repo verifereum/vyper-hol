@@ -149,7 +149,13 @@ Theorem assign_tuple_locals_memory_suffix_path:
         lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP sv.vs_allocas aid = SOME b ==>
         FLOOKUP t.vs_allocas aid = SOME b) /\
-      gas_marked_path F ctx func sv 0 (OK t)
+      gas_marked_path F ctx func sv 0 (OK t) /\
+      (!c0 e0 sa0 s0.
+        alloca_frame c0 e0 sa0 s0 cenv es1 sv /\
+        sa0.cs_next_id <= su.cs_next_id /\
+        (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+          FLOOKUP sv.vs_allocas aid = SOME entry) ==>
+        alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `values_have_types tvs vs` by gvs[value_has_type_def] >>
@@ -247,9 +253,14 @@ Resume assign_tuple_locals_memory_suffix_path[compose]:
   qexists `sfv` >> asm_rewrite_tac [] >>
   conj_tac >- suspend "vars" >>
   conj_tac >- metis_tac[] >>
-  `gas_marked_path F ctx func sv (0 + 0) (OK sfv)` by
-    (irule gas_marked_path_then >> qexists `t` >> asm_rewrite_tac []) >>
-  gvs[]
+  conj_tac
+  >- (`gas_marked_path F ctx func sv (0 + 0) (OK sfv)` by
+        (irule gas_marked_path_then >> qexists `t` >> asm_rewrite_tac []) >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >>
+  irule stmtSimDefsTheory.alloca_frame_trans >>
+  goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
+  qexistsl [`cenv`, `es1`, `su`] >> asm_rewrite_tac[]
 QED
 Resume assign_tuple_locals_memory_suffix_path[vars]:
   rpt strip_tac >>
