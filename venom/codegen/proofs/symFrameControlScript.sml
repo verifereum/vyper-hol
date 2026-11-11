@@ -3416,6 +3416,57 @@ Proof
   metis_tac[doSwapSimTheory.spill_alloc_layout_wf_spilled_separated]
 QED
 
+Theorem sym_ret_generated_prepare_frame_sim:
+  !base cp.
+  inst.inst_opcode = RET /\ inst_wf inst /\
+  MEM inst (fn_insts (reachable_fn fn)) /\
+  codegen_ready_fn fn /\ fn_shape_ok fn /\
+  generated_plan_state_wf_marked base ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  generate_inst_plan lv (dfg_build_function fn) cfg fn inst nl halting term label ps =
+    SOME (ops,final) /\ final.ps_stack = [] /\
+  (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+  asm_block_at p cs.as_pc (execute_plan fmp ops) /\ asm_static_wf p /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss ==>
+  ?iops prepared rops arranged cs' ss'.
+    emit_input_plan RET (compute_operands inst) nl ps = (iops,prepared) /\
+    reorder_plan (dfg_build_function fn) (compute_operands inst) prepared = (rops,arranged) /\
+    ops = iops ++ rops ++ [SOEmit "JUMP"] /\
+    final.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack /\
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan fmp (iops ++ rops))) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan fmp (iops ++ rops))) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 arranged cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan fmp (iops ++ rops)) /\
+    (!b. FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac fnFrameBoundaryGenRetTheory.ret_plan_decompose >>
+  `!off. ~MEM (SOSpill off) ops` by
+    (irule fnFrameBoundaryGenRetTheory.ret_plan_no_spill >> metis_tac[]) >>
+  `MEM inst (fn_insts fn)` by
+    (irule reachable_fn_insts_nonphi >> simp[]) >>
+  `label_positions_ok inst /\ ssa_form fn` by
+    (fs[fn_shape_ok_def, stackPlanGenTheory.codegen_ready_fn_def, listTheory.EVERY_MEM] >>
+     metis_tac[inst_shape_ok_def]) >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+     MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (metis_tac[deepInstSimTheory.marked_operand_owned]) >>
+  `!l. ~MEM (Label l) (compute_operands inst)` by
+    (gvs[label_positions_ok_def, compute_operands_def, python_stack_operands_def,
+         ir_specific_operand_order_def, listTheory.EVERY_MEM] >>
+     metis_tac[is_label_operand_def]) >>
+  `asm_block_at p cs.as_pc (execute_plan fmp (iops ++ rops))` by
+    fs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  qexistsl [`iops`, `prepared`, `rops`, `arranged`] >> asm_rewrite_tac[] >>
+  irule sym_ret_prepare_frame_sim >> simp[] >>
+  conj_tac >- gvs[listTheory.MEM_APPEND] >>
+  qexistsl [`base'`, `compute_operands inst`, `nl`, `prepared`, `ps`] >> simp[]
+QED
+
 Theorem reorder_one_spill_free_placement:
   reorder_one dfg pending idx op ps = (ops,ps') /\
   (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
