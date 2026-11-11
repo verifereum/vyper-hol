@@ -5,7 +5,8 @@ Ancestors
   bodyIntCallFamCallIntStageAdapters bodyIntCallFamCallIntStageInterface
   bodyIntCallJointCallCore bodyIntCallJointContract exprLoweringProps
   exprLowering compileEnv fragExec loweringPosts bodyIntCallStageOrigin
-  bodyIntCallFamCallIntEntryPackage
+  bodyIntCallFamCallIntEntryPackage bodyIntCallFamCallIntEntryLanding
+  bodyIntCallFamCallIntEntryRoom fnFrameBoundaryGenRet
 Libs
   monadsyntax
 
@@ -839,4 +840,57 @@ Proof
   simp[] >> rpt strip_tac >>
   `i < LENGTH ops` by decide_tac >>
   drule_all tupleLoadPropsTheory.eval_operands_index >> simp[]
+QED
+
+(* The completed staging certificate and optional head operands determine
+   one operand vector, one successful setup, and the decoded landing. *)
+Theorem intcall_completed_invoke_landing:
+  ^completed_prefix cx start current tys flags values ops u /\
+  eval_operands prefix u = SOME head_values /\
+  body_inv tops ctx ce cx /\
+  lookup_function lbl ctx.ctx_functions = SOME callee /\
+  fn_directly_calls ctx func.fn_name lbl /\
+  alloca_room ctx func u /\ fmp_room ctx func u /\
+  fn_has_code a b callee /\ internal_stack_size cce params <= unit_alloca_frame ctx /\
+  ~u.vs_halted /\ u.vs_current_bb = current.cs_current_bb /\
+  u.vs_inst_idx = LENGTH current.cs_current_insts /\
+  ((?x last. emit_void INVOKE (Label lbl :: (prefix ++ ops)) current = (x,last) /\
+      fn_has_code current last func) \/
+   (?n results last.
+      emit_multi_op INVOKE (Label lbl :: (prefix ++ ops)) n current = (results,last) /\
+      fn_has_code current last func)) ==>
+  ?argv setup bb inst.
+    eval_operands (prefix ++ ops) u = SOME argv /\
+    LENGTH argv = LENGTH prefix + LENGTH tys /\
+    (!i w. i < LENGTH tys /\ eval_operand (EL i ops) u = SOME w ==>
+      EL (LENGTH prefix + i) argv = w) /\
+    lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb u.vs_inst_idx = SOME inst /\
+    decode_invoke inst = SOME (lbl,prefix ++ ops) /\
+    setup_callee callee argv u = SOME setup /\
+    gas_invoke_entry (ctx,func) u callee setup /\
+    u.vs_alloca_next + internal_stack_size cce params < dimword (:256) /\
+    alloca_room ctx callee setup /\ fmp_room ctx callee setup
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule intcall_completed_operands >> strip_tac >>
+  rename1 `eval_operands ops u = SOME tail_values` >>
+  `eval_operands (prefix ++ ops) u = SOME (head_values ++ tail_values)` by
+    simp[fnFrameBoundaryGenRetTheory.eval_operands_append] >>
+  `LENGTH head_values = LENGTH prefix` by
+    metis_tac[tupleLoadPropsTheory.eval_operands_length] >>
+  `callee.fn_name = lbl` by
+    metis_tac[vyperCompilerTheory.lookup_function_result_name] >>
+  `MEM callee ctx.ctx_functions` by
+    metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `lookup_function callee.fn_name ctx.ctx_functions = SOME callee /\
+   fn_directly_calls ctx func.fn_name callee.fn_name` by simp[] >>
+  drule_all compiled_callee_setup_rooms >>
+  disch_then (qspec_then `head_values ++ tail_values` strip_assume_tac) >>
+  qpat_x_assum `(?x last. _) \/ _` strip_assume_tac
+  >- (rename1 `emit_void INVOKE _ _ = (x,last)` >> Cases_on `x` >>
+      drule_all intcall_void_invoke_landing >> strip_tac >>
+      rpt (goal_assum (drule_at Any)) >> simp[listTheory.EL_APPEND_EQN]) >>
+  drule_all intcall_multi_invoke_landing >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >> simp[listTheory.EL_APPEND_EQN]
 QED
