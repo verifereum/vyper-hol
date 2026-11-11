@@ -26,6 +26,16 @@ Theorem extcall_allocated_copy_joint_payload:
     u.vs_inst_idx = LENGTH mid.cs_current_insts /\
     eval_operand buf.buf_operand u = SOME w /\ w2n w + sz < dimword (:256) /\
     u.vs_memory = t.vs_memory /\ u.vs_labels = t.vs_labels /\
+    contract_storage u = contract_storage t /\
+    contract_transient u = contract_transient t /\ ci_mono sn mid /\
+    (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>
+       FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (b,len) ==>
+       regions_disjoint (w2n w) sz b len) /\
+    (!name b len. local_region cenv ee.scopes t name b len ==>
+       regions_disjoint (w2n w) sz b len) /\
+    (!name b len. local_region cenv ee.scopes u name b len ==>
+       regions_disjoint (w2n w) sz b len) /\
     FLOOKUP u.vs_allocas sn.cs_next_id = SOME (w2n w,sz) /\
     (!x. not_fresh_at sn x ==> lookup_var x u = lookup_var x t) /\
     local_ptrs_reserved cenv mid /\
@@ -57,7 +67,7 @@ Proof
   drule_all extrequest_allocation_endpoint >> strip_tac >>
   qpat_x_assum `!u w. _` (qspecl_then [`u`, `w`] mp_tac) >>
   (impl_tac >- (simp[] >>
-    qpat_x_assum `cenv.ce_is_ctor ==> _` mp_tac >> simp[])) >> strip_tac >>
+    metis_tac[])) >> strip_tac >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `mid` >> fs[ci_mono_def]) >>
   `sn.cs_next_id < sb.cs_next_id` by
