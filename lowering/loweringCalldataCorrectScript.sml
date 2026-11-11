@@ -1,10 +1,10 @@
 (* S1 and S3 for every calldata: the call the calldata dispatches to
    (dispatched_vyper_call, including __default__ and noncanonical
    encodings), and the calldata that dispatches to nothing, which reverts
-   with no data.  valid_vyper_call (canonical calldata) is a special case. *)
+   with no data. *)
 Theory loweringCalldataCorrect
 Ancestors
-  vyperCalldata e2eDefs vyperLoweringCorrect loweringRuntimeCorrect
+  vyperCalldata calldataExact e2eDefs vyperLoweringCorrect loweringRuntimeCorrect
   loweringMemCorrect
 
 (* The call a contract makes of raw calldata: the external entry it
@@ -18,15 +18,6 @@ Definition dispatched_vyper_call_def:
       vyperInterpreter$lookup_function NONE tx.function_name External tops =
         SOME (mut, F, args, [], ret, body)
 End
-
-(* The canonical encoding of a non-fallback call dispatches to that call. *)
-Theorem valid_vyper_call_dispatched:
-  supported_program tops /\ source_typing_ok tops am tx /\
-  valid_vyper_call tops tx cd ret ==>
-  dispatched_vyper_call tops tx cd ret
-Proof
-  cheat
-QED
 
 (* S1 *)
 Theorem lower_vyper_runtime_unit_correct_dispatched:
