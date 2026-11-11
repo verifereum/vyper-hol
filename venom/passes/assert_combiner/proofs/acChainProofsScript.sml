@@ -1061,3 +1061,29 @@ Proof
   qexists_tac `i.inst_id` >> simp[] >>
   qexists_tac `mc` >> simp[]
 QED
+
+(* The selected predicate belongs to an ISZERO in the queried definition
+   closure. This is static provenance, independent of runtime bindings. *)
+Theorem ac_query_iszero_before:
+  !dfg visited op pred P.
+    ac_get_iszero_operand dfg visited op = SOME pred /\
+    (!v di. op = Var v /\ dfg_get_def dfg v = SOME di ==> P di) /\
+    (!di src v dj. P di /\ di.inst_opcode = ASSIGN /\
+       di.inst_operands = [src] /\ src = Var v /\
+       dfg_get_def dfg v = SOME dj ==> P dj) ==>
+    ?di. P di /\ di.inst_opcode = ISZERO /\ di.inst_operands = [pred]
+Proof
+  recInduct ac_get_iszero_operand_ind >> rpt strip_tac >>
+  qpat_x_assum `ac_get_iszero_operand _ _ _ = _` mp_tac >>
+  simp[Once ac_get_iszero_operand_def] >>
+  Cases_on `op` >> simp[] >>
+  Cases_on `dfg_get_def dfg s` >> simp[] >> strip_tac >>
+  qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+  Cases_on `x.inst_opcode = ISZERO` >> simp[] >>
+  Cases_on `x.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >> strip_tac >>
+  Cases_on `x.inst_opcode = ASSIGN` >> gvs[]
+  >- (qexists `x` >> simp[]) >>
+  first_x_assum (qspec_then `P` mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> simp[]
+QED
