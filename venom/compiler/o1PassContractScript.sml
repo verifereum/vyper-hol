@@ -573,14 +573,6 @@ Definition o1_run_state_ok_def:
     code_layout_valid vs /\ ~vs.vs_call_ctx.cc_static
 End
 
-(* The lowered-phase fact with the frame pointer read off the state: the
-   semantics never writes vs_initial_fmp, so this is lowered_mem_ok at the
-   initial state's fmp along every run. *)
-Definition lowered_mem_fact_def:
-  lowered_mem_fact eom ctx fn inst s <=>
-    lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s
-End
-
 (* The stage contract of one pass run, between consecutive stage contexts
    C and C' and one initial state: every terminating run of C is matched
    by a run of C' up to a well-formed set D of dead bytes, and the stage
@@ -709,7 +701,7 @@ End
 (* After FmpLowering: static, or dynamic at or above the initial fmp. *)
 Definition o1_lowered_inv_def:
   o1_lowered_inv C vs <=>
-    ?eom. max_live_eom C = SOME eom /\ mem_inv (lowered_mem_fact eom) C vs
+    ?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs
 End
 
 (* Rows 5 to 8 (SimplifyCFG's, SUE's, DFT's and the next run's input) add

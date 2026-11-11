@@ -219,7 +219,7 @@ Theorem fmp_lowering_stage_seal_only:
   callee_first names C.ctx_functions /\
   mem_inv (static_mem_ok eom) C vs ==>
   (!fuel. run_context fuel C' vs = run_context fuel C vs) /\
-  mem_inv (lowered_mem_fact eom) C' vs
+  mem_inv (static_mem_ok eom) C' vs
 Proof
   strip_tac >> drule_all fmp_lowering_stage_sealed >> strip_tac >>
   `ctx_seal_eq C C'`
@@ -228,9 +228,9 @@ Proof
         simp[fn_seal_eq_def]) >>
   conj_tac >- metis_tac[run_context_seal_eq] >>
   `!fn fn' inst s. fn_seal_eq fn fn' /\ static_mem_ok eom C fn inst s ==>
-                   lowered_mem_fact eom C' fn' inst s`
+                   static_mem_ok eom C' fn' inst s`
     by (rpt strip_tac >> drule fn_seal_eq_fields >>
-        fs[static_mem_ok_def, lowered_mem_ok_def, lowered_mem_fact_def,
+        fs[static_mem_ok_def,
            in_revert_forward_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
         metis_tac[]) >>
   metis_tac[mem_inv_seal_eq]

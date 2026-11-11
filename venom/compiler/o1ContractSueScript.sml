@@ -942,13 +942,13 @@ Theorem sue_stage_mem_inv:
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   EVERY (o1_fn_row 6) C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  mem_inv (lowered_mem_fact eom) C vs ==>
-  mem_inv (lowered_mem_fact eom) C' vs
+  mem_inv (static_mem_ok eom) C vs ==>
+  mem_inv (static_mem_ok eom) C' vs
 Proof
   strip_tac >>
   `ctx_bisim C C'` by (irule sue_stage_bisim >> metis_tac[]) >>
   drule sue_stage_functions >> strip_tac >>
-  irule frame_sim_rf_mem_inv >> simp[mem_corr_closed_rf_lowered_mem_fact] >>
+  irule frame_sim_rf_mem_inv >> simp[mem_corr_closed_rf_static_mem_ok] >>
   qexists_tac `C` >> simp[] >>
   gvs[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>

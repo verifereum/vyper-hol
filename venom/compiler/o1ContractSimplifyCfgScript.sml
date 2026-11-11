@@ -464,7 +464,7 @@ Proof
       qexists_tac `eom` >> conj_tac
       >- metis_tac[simplify_cfg_stage_max_live_eom] >>
       irule simplify_cfg_stage_mem_inv_rf >>
-      metis_tac[mem_corr_closed_rf_lowered_mem_fact]) >>
+      metis_tac[mem_corr_closed_rf_static_mem_ok]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
   simp[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> conj_tac >> rpt strip_tac
   >- (`simplify_cfg_fn_ok y` by gvs[EVERY_MEM] >>

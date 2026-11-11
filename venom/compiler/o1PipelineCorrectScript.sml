@@ -102,8 +102,7 @@ Theorem o1_lowered_inv_fixed_pointer[local]:
 Proof
   strip_tac >> fs[o1_lowered_inv_def] >>
   fs[mem_inv_raw_reachable] >>
-  rpt strip_tac >> first_x_assum drule >>
-  drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
+  rpt strip_tac >> first_x_assum drule >> simp[static_mem_ok_lowered]
 QED
 
 (* The output's memory invariant: every access is static (below some

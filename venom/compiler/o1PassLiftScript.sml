@@ -25,16 +25,15 @@
  *
  *   - frame_sim_rf L C C' fn fn': as frame_sim, but only for states of fn'
  *     that touch memory and sit outside a revert-forward pair, matched
- *     with a state of fn also outside one.  raw_mem_ok, static_mem_ok and
- *     lowered_mem_fact exempt states in a revert-forward pair, so they are
+ *     with a state of fn also outside one.  raw_mem_ok and static_mem_ok
+ *     exempt states in a revert-forward pair, so they are
  *     not closed under mem_corr alone; they are closed under the weaker
  *     mem_corr_closed_rf, and frame_sim plus frame_sim_rf transport any
  *     such fact (frame_sim_rf_mem_inv).
  *
  * TOP-LEVEL: ctx_bisim_ctx_sim, fn_bisim_ctx_bisim, frame_sim_mem_inv,
  *   frame_sim_rf_mem_inv, mem_corr_closed_rf_raw_mem_ok,
- *   mem_corr_closed_rf_intro, mem_corr_closed_rf_static_mem_ok,
- *   mem_corr_closed_rf_lowered_mem_fact.
+ *   mem_corr_closed_rf_intro, mem_corr_closed_rf_static_mem_ok.
  *)
 Theory o1PassLift
 Ancestors
@@ -993,12 +992,6 @@ Proof
   rw[mem_corr_closed_rf_def, mem_corr_def, static_mem_ok_def] >> fs[]
 QED
 
-Theorem mem_corr_closed_rf_lowered_mem_fact:
-  mem_corr_closed_rf (lowered_mem_fact eom)
-Proof
-  rw[mem_corr_closed_rf_def, mem_corr_def, lowered_mem_fact_def,
-     lowered_mem_ok_def] >> fs[] >> metis_tac[]
-QED
 
 (* Shared reachability fact, moved unchanged from o1ContractCfgNorm. *)
 Theorem supply_frame_reach_not_halted:
