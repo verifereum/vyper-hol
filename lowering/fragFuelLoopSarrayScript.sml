@@ -268,6 +268,129 @@ Proof
   simp[fuel_outcome_def]
 QED
 
+(* Adapt the recursive copy's empty-write fragment to the loop invariant. *)
+Theorem sa_recursive_boundary[local]:
+  frag_fuel {} {} {} a z Kb /\ fn_has_code a z fn /\
+  no_phi_fn fn /\ callees_stable G ctx fn /\
+  N <= a.cs_next_var /\ var_below a.cs_next_var c /\ at_point a s ==>
+  ?j. j <= Kb /\ fuel_outcome G ctx fn s j
+    (\t. at_point z t /\ vars_kept N {} s t /\
+         lookup_var c t = lookup_var c s)
+Proof
+  strip_tac >>
+  qpat_x_assum `frag_fuel _ _ _ _ _ _` mp_tac >>
+  simp[frag_fuel_def] >>
+  disch_then (qspecl_then [`G`, `a.cs_next_var`, `ctx`, `fn`, `s`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `j` >> simp[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[vars_kept_def] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >>
+  gvs[var_below_def] >> metis_tac[LESS_EQ_TRANS]
+QED
+
+(* A complete round.  Code hypotheses are lookups, so later code may follow
+   the opened exit and the recursive fragment may contain arbitrary blocks. *)
+Theorem sa_round[local]:
+  no_phi_fn fn /\ callees_stable G ctx fn /\
+  lookup_block lc fn.fn_blocks = SOME bc /\
+  get_instruction bc 0 = SOME (mk_inst i0 LT [Var c; Lit (n2w n)] [vlt]) /\
+  get_instruction bc 1 = SOME (mk_inst i1 ISZERO [Var vlt] [vdone]) /\
+  get_instruction bc 2 = SOME (mk_inst i2 JNZ [Var vdone; Label le; Label lb] []) /\
+  vlt <> c /\ vdone <> c /\ vlt <> vdone /\
+  ~var_below N vlt /\ ~var_below N vdone /\
+  lookup_block lb fn.fn_blocks = SOME bb /\
+  get_instruction bb 0 = SOME (mk_inst i3 MUL [Var c; Lit ss] [vs]) /\
+  get_instruction bb 1 = SOME (mk_inst i4 MUL [Var c; Lit ds] [vd]) /\
+  get_instruction bb 2 = SOME (mk_inst i5 ADD [src; Var vs] [ps]) /\
+  get_instruction bb 3 = SOME (mk_inst i6 ADD [dst; Var vd] [pd]) /\
+  ~MEM c [vs;vd;ps;pd] /\
+  EVERY (\x. ~var_below N x) [vs;vd;ps;pd] /\
+  a.cs_current_bb = lb /\ LENGTH a.cs_current_insts = 4 /\
+  frag_fuel {} {} {} a z Kb /\ fn_has_code a z fn /\
+  N <= a.cs_next_var /\ var_below a.cs_next_var c /\
+  ~var_below N c /\ ~var_below N vnext /\ c <> vnext /\
+  lookup_block z.cs_current_bb fn.fn_blocks = SOME bz /\
+  get_instruction bz (LENGTH z.cs_current_insts) =
+    SOME (mk_inst i7 ADD [Var c; Lit 1w] [vnext]) /\
+  get_instruction bz (SUC (LENGTH z.cs_current_insts)) =
+    SOME (mk_inst i8 ASSIGN [Var vnext] [c]) /\
+  get_instruction bz (SUC (SUC (LENGTH z.cs_current_insts))) =
+    SOME (mk_inst i9 JMP [Label lc] []) /\
+  s.vs_current_bb = lc /\ s.vs_inst_idx = 0 /\
+  vars_kept N {} r s /\ lookup_var c s = SOME (n2w k) /\
+  k <= w2n (n2w n : 256 word) ==>
+  ?j. j <= Kb+2 /\ fuel_outcome G ctx fn s j
+    (\t. vars_kept N {} r t /\
+      ((t.vs_current_bb = le /\ t.vs_inst_idx = 0) \/
+       (t.vs_current_bb = lc /\ t.vs_inst_idx = 0 /\
+        ?k'. k' <= w2n (n2w n : 256 word) /\
+          lookup_var c t = SOME (n2w k') /\
+          w2n (n2w n : 256 word) - w2n (THE (lookup_var c t)) <
+          w2n (n2w n : 256 word) - w2n (THE (lookup_var c s)))))
+Proof
+  strip_tac >>
+  `fuel_outcome G ctx fn s 1
+    (\t. vars_kept N {} s t /\ lookup_var c t = SOME (n2w k) /\
+      ((k = w2n (n2w n : 256 word) /\
+        t.vs_current_bb = le /\ t.vs_inst_idx = 0) \/
+       (k < w2n (n2w n : 256 word) /\
+        t.vs_current_bb = lb /\ t.vs_inst_idx = 0)))` by
+    (irule sa_condition >> simp[] >>
+     qexistsl_tac [`bc`, `mk_inst i0 LT [Var c; Lit (n2w n)] [vlt]`,
+       `mk_inst i1 ISZERO [Var vlt] [vdone]`,
+       `mk_inst i2 JNZ [Var vdone; Label le; Label lb] []`] >>
+     simp[mk_inst_def]) >>
+  qmatch_abbrev_tac `?j. j <= Kb+2 /\ fuel_outcome G ctx fn s j Post` >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then [`Post`, `Kb+1`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> qx_gen_tac `t` >> strip_tac
+      >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >>
+          simp[Abbr `Post`] >> metis_tac[vars_kept_trans]) >>
+      `fuel_outcome G ctx fn t 0
+        (\u. u.vs_current_bb = lb /\ u.vs_inst_idx = 4 /\
+             vars_kept N {} t u /\ lookup_var c u = lookup_var c t)` by
+        (irule sa_body_prefix >> simp[mk_inst_def] >> gvs[]) >>
+      drule fuel_outcome_compose >>
+      disch_then (qspecl_then [`Post`, `Kb+1`] mp_tac) >>
+      impl_tac
+      >- (simp[] >> qx_gen_tac `u` >> strip_tac >>
+          `at_point a u` by simp[at_point_def] >>
+          drule_all sa_recursive_boundary >> strip_tac >>
+          drule fuel_outcome_compose >>
+          disch_then (qspecl_then [`Post`, `1`] mp_tac) >>
+          impl_tac
+          >- (simp[] >> qx_gen_tac `v` >> strip_tac >>
+              `fuel_outcome G ctx fn v 1
+                (\w. w.vs_current_bb = lc /\ w.vs_inst_idx = 0 /\
+                  vars_kept N {} v w /\ lookup_var c w = SOME (n2w (k+1)))` by
+                (irule sa_increment >> gvs[at_point_def, mk_inst_def]) >>
+              qexists_tac `1` >> simp[] >>
+              irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+              simp[Abbr `Post`] >> qx_gen_tac `w` >> strip_tac >>
+              conj_tac >- metis_tac[vars_kept_trans] >>
+              `k+1 < dimword (:256)` by
+                (mp_tac (Q.ISPEC `n2w n : 256 word` w2n_lt) >>
+                 rewrite_tac[w2n_n2w] >>
+                 CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >> decide_tac) >>
+              `k < dimword (:256)` by decide_tac >>
+              disj2_tac >> simp[] >> qexists_tac `k+1` >>
+              gvs[LESS_MOD]) >>
+          strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac) >>
+      simp[]) >>
+  simp[]
+QED
+
+(* The round measure is uniformly bounded even outside the invariant. *)
+Theorem sa_measure_bound[local]:
+  !n c s. w2n (n2w n : 256 word) - w2n (THE (lookup_var c s)) < 2 ** 256
+Proof
+  rpt gen_tac >>
+  `dimword (:256) = 2 ** 256` by simp[dimword_def] >>
+  mp_tac (Q.ISPEC `n2w n : 256 word` w2n_lt) >>
+  asm_rewrite_tac[] >> decide_tac
+QED
+
 (* Given a bound for the element copy (the recursive call), the copy of a
    static array of n elements is bounded.  The slow path counts a fresh
    counter from 0 while it is below the literal n2w n; each round copies one
