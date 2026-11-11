@@ -378,7 +378,7 @@ Proof
   simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem materialize_internal_params_shape[local]:
+Theorem materialize_internal_params_shape:
   !caps cenv st cenv' st'.
     materialize_internal_params cenv caps st = (cenv', st') ==>
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -854,7 +854,7 @@ Proof
   qexists_tac `sz` >> simp[]
 QED
 
-Theorem mat_tail_stack_size[local]:
+Theorem mat_tail_stack_size:
   !caps cenv name loc.
     ~MEM name (MAP FST caps) ==>
     internal_stack_size (cenv with ce_vars updated_by (\m. m |+ (name, loc)))
@@ -1001,7 +1001,7 @@ Proof
   simp[update_var_def] >> qexistsl_tac [`f0`, `sz'`] >> simp[]
 QED
 
-Theorem materialize_stack_split[local]:
+Theorem materialize_stack_split:
   !cenv name off sz p caps st cenv' st'.
     FLOOKUP cenv.ce_vars name = SOME (MemLoc off sz) /\
     materialize_internal_params cenv ((name,T,Var p)::caps) st = (cenv',st') ==>
