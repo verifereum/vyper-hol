@@ -18,7 +18,7 @@ Proof
     gvs[supported_stmt_def, supported_raise_reason_def] >>
   `well_typed_expr env e` by gvs[type_stmt_def] >>
   `~is_extcode e` by
-    (irule alloc_limits_expr_not_extcode >>
+    (irule alloc_limits_expr_not_extcode >> qexists_tac `cenv` >>
      fs[stmt_exprs_ok_def, alloc_limits_stmt_def, alloc_limits_raise_def]) >>
   `~supported_expr_exists
       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e` by
