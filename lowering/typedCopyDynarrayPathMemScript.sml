@@ -843,7 +843,7 @@ QED
 Resume typed_dynarray_compiler_path_mem[length_word]:
   `mload b t = mload b (mstore b (n2w n) s)` by
     (qpat_x_assum `mem_bytes_at b 32 t.vs_memory = _` mp_tac >>
-     pure_rewrite_tac[GSYM mem_word_at_eq_mload, mem_word_at_def, valueEncodingDefsTheory.mem_bytes_at_def] >>
+     pure_rewrite_tac[GSYM mem_word_at_eq_mload, valueEncodingDefsTheory.mem_word_at_def, valueEncodingDefsTheory.mem_bytes_at_def] >>
      disch_then SUBST1_TAC >> REFL_TAC) >>
   gvs[mload_mstore_same]
 QED

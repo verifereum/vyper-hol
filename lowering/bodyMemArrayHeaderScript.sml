@@ -85,6 +85,8 @@ Proof
   drule_all array_header_store_boundary >>
   disch_then (qspec_then `n2w len` strip_assume_tac) >>
   `stmt_state_rel ctx func ce cx es sh` by simp[stmt_state_rel_inst_idx] >>
-  gvs[locals_kept_def, mstore_def, lookup_var_def] >>
-  qpat_x_assum `popped_kept _ _ _ _ _` mp_tac >> simp[popped_kept_def]
+  `locals_kept ce es es s0 sh` by
+    (irule exprSimPropsTheory.locals_kept_regions >> gvs[mstore_def]) >>
+  gvs[mstore_def, lookup_var_def] >>
+  metis_tac[]
 QED
