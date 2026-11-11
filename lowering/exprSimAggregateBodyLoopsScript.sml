@@ -4,6 +4,7 @@ Ancestors
   exprSimAggregateBodyHeader stmtSimDeclCompose stmtSimDeclPath emitHelper venomInst venomState
   exprSimAggregateBodyHead exprSimAggregateBodySource exprSimAggregateBodyFrames
   exprSimAggregateBodyCounted exprSimAggregateLoops exprSimAggregateSource
+  exprSimAggregateChildren
   exprSimAggregateEncoding exprSimAggregateLayout exprLoweringProps
   exprSimDefs exprSimHypsDefs exprSimHyps exprSimProps exprSimSource loweringPosts
   compileEnv loweringStateRelDefs exprLowering valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
@@ -61,7 +62,16 @@ Theorem aggregate_body_make_tuple_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es es' s0 r)
+      locals_kept ce es es' s0 r /\
+      (EVERY ($~ o expr_has_effect) args ==>
+        (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+          mem_bytes_at lo sz r.vs_memory = mem_bytes_at lo sz s0.vs_memory) /\
+        (!p n. (p+n <= b \/ b+asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+            sa.cs_next_id <= i.inst_id /\
+            FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+            regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -178,7 +188,16 @@ Proof
         (!name lo sz. local_region ce (mid with gas_obs := []).scopes q name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) /\
-      locals_kept ce (mid with gas_obs := []) ee q r)
+      locals_kept ce (mid with gas_obs := []) ee q r /\
+      (EVERY ($~ o expr_has_effect) args ==>
+        (!name lo sz. local_region ce (mid with gas_obs := []).scopes q name lo sz ==>
+          mem_bytes_at lo sz r.vs_memory = mem_bytes_at lo sz q.vs_memory) /\
+        (!p n. (p+n <= b \/ b+asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+            st.cs_next_id <= i.inst_id /\
+            FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+            regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory)))
     (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)` by
     (simp[] >> first_x_assum (irule o SRULE [] o
        Q.INST [`es'` |-> `mid with gas_obs := []`] o SPEC_ALL o cj 2) >>
@@ -217,7 +236,16 @@ Proof
         (!name lo sz. local_region ce (mid with gas_obs := []).scopes q name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) /\
-      locals_kept ce (mid with gas_obs := []) ee q r` >>
+      locals_kept ce (mid with gas_obs := []) ee q r /\
+      (EVERY ($~ o expr_has_effect) args ==>
+        (!name lo sz. local_region ce (mid with gas_obs := []).scopes q name lo sz ==>
+          mem_bytes_at lo sz r.vs_memory = mem_bytes_at lo sz q.vs_memory) /\
+        (!p n. (p+n <= b \/ b+asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+            st.cs_next_id <= i.inst_id /\
+            FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+            regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory))` >>
   reverse conj_tac >-
     (qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _` mp_tac >> simp[]) >>
   rpt gen_tac >> simp[] >> strip_tac >> simp[] >>
@@ -225,7 +253,8 @@ Proof
   conj_tac >- suspend "lookup_frame" >>
   conj_tac >- suspend "outside_frame" >>
   conj_tac >- suspend "old_frame" >>
-  suspend "locals_frame"
+  conj_tac >- suspend "locals_frame" >>
+  suspend "pure_frame"
 QED
 
 Resume aggregate_body_make_tuple_sim[tuple_memory]:
@@ -288,6 +317,20 @@ Resume aggregate_body_make_tuple_sim[locals_frame]:
   disch_then assume_tac >> drule eval_expr_preserves_scopes_dom >> simp[]
 QED
 
+Resume aggregate_body_make_tuple_sim[pure_frame]:
+  strip_tac >>
+  `~expr_has_effect h /\ EVERY ($~ o expr_has_effect) args` by fs[] >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (drule_all aggregate_body_marked_replay >> strip_tac >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  `sa.cs_next_id <= st.cs_next_id` by fs[ci_mono_def] >>
+  qpat_x_assum `~expr_has_effect h ==> _` mp_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `EVERY _ args ==> _` mp_tac >> simp[] >> strip_tac >>
+  match_mp_tac (SRULE [arithmeticTheory.ADD_COMM] aggregate_pure_frame_trans) >>
+  qexistsl_tac [`mid with gas_obs := []`, `st`, `q`] >> simp[] >>
+  rpt conj_tac >> first_assum (MATCH_ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])
+QED
+
 Finalise aggregate_body_make_tuple_sim
 
 Theorem aggregate_body_make_array_elems_sim:
@@ -340,7 +383,16 @@ Theorem aggregate_body_make_array_elems_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es es' s0 r)
+      locals_kept ce es es' s0 r /\
+      (EVERY ($~ o expr_has_effect) args ==>
+        (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+          mem_bytes_at lo sz r.vs_memory = mem_bytes_at lo sz s0.vs_memory) /\
+        (!p n. (p+n <= b \/ b+asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+            sa.cs_next_id <= i.inst_id /\
+            FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+            regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -369,7 +421,7 @@ Proof
   rpt gen_tac >> disch_then assume_tac >>
   gvs[SF CONJ_ss] >>
   fs[GSYM tuple_in_memory_replicate_elems] >>
-  metis_tac[]
+  rpt conj_tac >> first_assum (MATCH_ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])
 QED
 
 
@@ -422,7 +474,16 @@ Theorem aggregate_body_make_array_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es es' s0 r)
+      locals_kept ce es es' s0 r /\
+      (EVERY ($~ o expr_has_effect) args ==>
+        (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+          mem_bytes_at lo sz r.vs_memory = mem_bytes_at lo sz s0.vs_memory) /\
+        (!p n. (p+n <= b \/ b+asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+            sa.cs_next_id <= i.inst_id /\
+            FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+            regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -520,9 +581,25 @@ Resume aggregate_body_make_array_sim[dynamic]:
             fs[local_region_def, lookup_var_def] >> metis_tac[]) >>
          conj_tac >- (qexists_tac `aid` >> simp[Abbr `s1`, mstore_def]) >> simp[]) >>
       simp[Abbr `s1`] >> irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
-  irule locals_kept_trans >>
-  qexistsl_tac [`es`, `sm`, `s1`] >> simp[] >>
-  simp[Abbr `s1`, locals_kept_inst_idx, mstore_def, lookup_var_def]
+  conj_tac
+  >- (irule locals_kept_trans >>
+      qexistsl_tac [`es`, `sm`, `s1`] >> simp[] >>
+      simp[Abbr `s1`, locals_kept_inst_idx, mstore_def, lookup_var_def]) >>
+  strip_tac >>
+  qpat_x_assum `EVERY _ args ==> _` drule >> strip_tac >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `local_region ce es.scopes s1 name lo sz` by
+        gvs[Abbr `s1`, local_region_def, mstore_def, lookup_var_def] >>
+      `mem_bytes_at lo sz t.vs_memory = mem_bytes_at lo sz s1.vs_memory` by
+        metis_tac[] >>
+      gvs[Abbr `s1`, locals_kept_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `mem_bytes_at p n t.vs_memory = mem_bytes_at p n s1.vs_memory` by
+    (qpat_x_assum `!p n. (_ \/ _) /\ _ ==> mem_bytes_at p n t.vs_memory = _` irule >>
+     simp[] >> rpt strip_tac >> first_x_assum irule >>
+     qexists_tac `i` >> simp[] >> decide_tac) >>
+  simp[Abbr `s1`] >> irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
 Finalise aggregate_body_make_array_sim
