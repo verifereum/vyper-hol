@@ -80,15 +80,23 @@ Proof
   metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
 QED
 
+Theorem ac_fresh_vars_original_var:
+  ir_supply_covers_fn su fn /\ MEM v (fn_ir_vars fn) ==>
+  v NOTIN ac_fresh_vars su fn
+Proof
+  simp[ac_fresh_vars_def, ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
 Theorem ac_fresh_vars_original_operand:
   ir_supply_covers_fn su fn /\ MEM inst (fn_insts fn) /\
   MEM (Var v) inst.inst_operands ==>
   v NOTIN ac_fresh_vars su fn
 Proof
-  simp[ac_fresh_vars_def] >> rpt strip_tac >>
+  rpt strip_tac >>
   `MEM v (fn_ir_vars fn)` by
     (fs[fn_ir_vars_def, blocks_ir_vars_flat, fn_insts_def] >>
      simp[MEM_FLAT, MEM_MAP, PULL_EXISTS, inst_ir_vars_def,
           inst_uses_def, MEM_operand_vars_eq_Var] >> metis_tac[]) >>
-  fs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >> metis_tac[]
+  metis_tac[ac_fresh_vars_original_var]
 QED

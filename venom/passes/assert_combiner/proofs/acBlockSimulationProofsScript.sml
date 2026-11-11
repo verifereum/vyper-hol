@@ -7,7 +7,8 @@ Ancestors
   acRuntimePhiProofs acRuntimeSuccessorProofs acRuntimeInvariantDefs
   runInstsExecBlockProps assertCombinerDefs venomExecSemantics venomExecProofs
   venomWf venomWfProps venomState venomInst dfgAnalysisProps
-  stateEquiv stateEquivProps irSupply irSupplyFreshProps list rich_list pred_set
+  stateEquiv stateEquivProps stateFrame irSupply irSupplyFreshProps list rich_list pred_set
+  acSourceBlockInvariantProofs venomExecProps
 
 Theorem ac_query_fresh_operand:
   ir_supply_covers_fn su fn /\
@@ -78,4 +79,105 @@ Proof
   first_x_assum irule >>
   simp[ac_merge_live_def] >>
   fs[ac_merge_cursor_laws_def, Abbr `cert`]
+QED
+
+(* Concrete transformation, with the actual block-local supplies. *)
+Theorem ac_run_block_simulation:
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+  ir_supply_covers_fn su fn /\
+  ac_cursor_inv fn bb 0 s /\ ac_merge_safe_labels fn s /\
+  ac_transform_block (dfg_build_function fn) su0 bb = (bt,st) /\
+  (set st.irs_used_vars DIFF set su0.irs_used_vars) SUBSET ac_fresh_vars su fn /\
+  state_equiv (ac_fresh_vars su fn) s t ==>
+  (?e. run_block fuel ctx bb s = Error e) \/
+  lift_result (state_equiv (ac_fresh_vars su fn)) (execution_equiv UNIV)
+    ac_abort_equiv (run_block fuel ctx bb s) (run_block fuel ctx bt t)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by gvs[ac_cursor_inv_def] >>
+  `bb_well_formed bb` by metis_tac[wf_function_bb_well_formed] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_block, wf_function_def] >>
+  `bb_well_formed bt` by metis_tac[ac_transform_block_shape] >>
+  drule_all ac_transform_block_phi_boundary >> strip_tac >>
+  irule run_block_run_insts_lift_result >> simp[] >>
+  conj_tac >- simp[ac_abort_equiv_frame, execution_frame_def] >>
+  conj_tac >- simp[execution_equiv_def, execution_frame_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      gvs[state_equiv_def, execution_equiv_def, execution_frame_def, lookup_var_def]) >>
+  rpt strip_tac >>
+  `?v. eval_phis t bb.bb_instructions = OK v /\
+       state_equiv (ac_fresh_vars su fn) u v` by
+    (irule eval_phis_state_equiv >> simp[] >> reverse conj_tac
+     >- (qexists `s` >> simp[]) >> simp[EVERY_MEM] >> metis_tac[ac_fresh_vars_original_operand,
+       unitShapeDefsTheory.MEM_fn_insts_blocks_iff, fn_insts_def]) >>
+  qexists `v` >> simp[] >>
+  `ac_merge_runtime_cert fn bb (phi_prefix_length bb.bb_instructions) 0 u` by
+    (drule_all ac_cursor_inv_phis >> strip_tac >>
+     simp[ac_merge_runtime_cert_def, ac_merge_runtime_def] >> conj_tac
+     >- (fs[ac_cursor_inv_def] >>
+         `u with <|vs_current_bb := bb.bb_label;
+                   vs_inst_idx := phi_prefix_length bb.bb_instructions|> =
+          u with vs_inst_idx := phi_prefix_length bb.bb_instructions` by
+           simp[venom_state_component_equality] >>
+         qpat_x_assum `u with <|vs_current_bb := _; vs_inst_idx := _|> = _`
+           (fn th => pure_rewrite_tac[th]) >> metis_tac[]) >>
+     qpat_assum `eval_phis s _ = OK u`
+       (mp_tac o MATCH_MP eval_phis_preserves_labels) >>
+     fs[ac_merge_safe_labels_def] >> metis_tac[]) >>
+  mp_tac (Q.INST [`offset` |-> `phi_prefix_length bb.bb_instructions`,
+    `su_end` |-> `st`, `s` |-> `u`, `t` |-> `v`] ac_merge_suffix_simulation) >>
+  simp[] >> disch_then irule >>
+  simp[phi_prefix_length_le, ir_supply_extends_refl] >>
+  reverse conj_tac
+  >- (conj_tac >- metis_tac[ALL_DISTINCT_DROP, MAP_DROP] >>
+      simp[EVERY_EL, EL_DROP] >> rpt strip_tac >>
+      gvs[phi_prefix_length_non_phi_suffix]) >>
+  rpt gen_tac >> disch_tac >> irule ac_fresh_vars_original_var >> simp[] >>
+  simp[fn_ir_vars_def, MEM_FLAT, MEM_MAP] >>
+  qexists `block_ir_vars bb` >> conj_tac
+  >- (qexists `bb` >> simp[]) >>
+  simp[block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
+  qexists `inst_ir_vars i` >> conj_tac
+  >- (qexists `i` >> metis_tac[MEM_DROP_IMP]) >>
+  gvs[inst_ir_vars_def, inst_uses_def,
+      passSharedDefsTheory.MEM_operand_vars_eq_Var]
+QED
+
+(* Actual function supplies and lookup, with no remaining emission laws. *)
+Theorem ac_transform_function_run_block:
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+  ir_supply_covers_fn su fn /\
+  ac_cursor_inv fn bb 0 s /\ ac_merge_safe_labels fn s /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  state_equiv (ac_fresh_vars su fn) s t ==>
+  ?bt. lookup_block l (FST (ac_transform_function su fn)).fn_blocks = SOME bt /\
+    ((?e. run_block fuel ctx bb s = Error e) \/
+     lift_result (state_equiv (ac_fresh_vars su fn)) (execution_equiv UNIV)
+       ac_abort_equiv (run_block fuel ctx bb s) (run_block fuel ctx bt t))
+Proof
+  strip_tac >> drule ac_transform_function_lookup >>
+  disch_then (qspec_then `su` strip_assume_tac) >>
+  qexists `bb'` >> simp[] >> irule ac_run_block_simulation >> simp[] >>
+  metis_tac[]
+QED
+
+(* Successful source exits re-establish the entry certificate of the chosen
+   successor; all PHI-suffix side conditions follow from well-formedness. *)
+Theorem ac_run_block_successor:
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+  ac_cursor_inv fn bb 0 s /\ ac_merge_safe_labels fn s /\
+  run_block fuel ctx bb s = OK t /\
+  MEM sb fn.fn_blocks /\ sb.bb_label = t.vs_current_bb ==>
+  ac_cursor_inv fn sb 0 t /\ ac_merge_safe_labels fn t
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by gvs[ac_cursor_inv_def] >>
+  `bb_well_formed bb` by metis_tac[wf_function_bb_well_formed] >>
+  irule ac_source_run_block_successor >> simp[] >>
+  qexistsl [`bb`, `ctx`, `fuel`, `s`] >> simp[] >> conj_tac
+  >- metis_tac[bb_well_formed_phi_prefix_length_lt] >>
+  simp[EVERY_EL, EL_DROP] >> rpt strip_tac >>
+  gvs[phi_prefix_length_non_phi_suffix]
 QED

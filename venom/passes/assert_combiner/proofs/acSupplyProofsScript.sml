@@ -13,7 +13,7 @@ Theory acSupplyProofs
 Ancestors
   acChainProofs assertCombinerDefs irSupplyFreshProps irSupply
   venomFnScheduleRunner fmpStepChunk fmpStepList dfgAnalysisProps
-  passSharedDefs venomInstIdsProps venomWf venomInst alist list
+  passSharedDefs venomInstIdsProps venomWf venomInst venomExecProps alist list
 Libs
   listTheory
 
@@ -600,4 +600,45 @@ Proof
   drule ac_merge_insts_untouched_prefix >>
   disch_then (qspecl_then [`rest`,`mp`,`su`] mp_tac) >>
   simp[ac_scan_phi_prefix]
+QED
+
+(* The parallel PHI batch is unchanged; only the non-PHI suffix is merged. *)
+Theorem ac_transform_block_phi_boundary:
+  ac_transform_block dfg su bb = (bt,st) /\
+  bb_well_formed bb /\ ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) ==>
+  phi_prefix_length bt.bb_instructions = phi_prefix_length bb.bb_instructions /\
+  (!s. eval_phis s bt.bb_instructions = eval_phis s bb.bb_instructions) /\
+  ac_merge_insts
+    (ac_scan_block dfg (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) NONE)
+    [] su (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions) =
+    (DROP (phi_prefix_length bt.bb_instructions) bt.bb_instructions, st)
+Proof
+  strip_tac >>
+  qabbrev_tac `pre = TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions` >>
+  qabbrev_tac `rest = DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions` >>
+  `bb.bb_instructions = pre ++ rest` by simp[Abbr `pre`, Abbr `rest`] >>
+  `EVERY (\i. i.inst_opcode = PHI) pre` by
+    (simp[Abbr `pre`, EVERY_MEM] >> metis_tac[phi_prefix_mem]) >>
+  `EVERY (\i. i.inst_opcode <> PHI) rest` by
+    (simp[Abbr `rest`, EVERY_EL, EL_DROP] >> rpt strip_tac >>
+     gvs[venomExecProofsTheory.phi_prefix_length_non_phi_suffix]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) rest)` by
+    (gvs[MAP_APPEND, ALL_DISTINCT_APPEND]) >>
+  Cases_on `ac_merge_insts (ac_scan_block dfg rest NONE) [] su rest` >>
+  rename1 `ac_merge_insts _ _ _ rest = (out,su1)` >>
+  `EVERY (\i. i.inst_opcode <> PHI) out` by
+    (drule ac_merge_insts_shape >>
+     (impl_tac >- metis_tac[ac_scan_names_asserts]) >> simp[]) >>
+  `ac_merge_insts (ac_scan_block dfg (pre ++ rest) NONE) [] su (pre ++ rest) =
+    (pre ++ out,su1)` by gvs[ac_merge_phi_prefix] >>
+  `bt.bb_instructions = pre ++ out /\ st = su1` by
+    gvs[ac_transform_block_def] >>
+  `phi_prefix_length bt.bb_instructions = LENGTH pre` by
+    simp[venomExecProofsTheory.phi_prefix_length_prepend,
+         venomExecProofsTheory.no_phis_phi_prefix_length_zero] >>
+  `LENGTH pre = phi_prefix_length bb.bb_instructions` by
+    simp[Abbr `pre`, venomExecProofsTheory.phi_prefix_length_le] >>
+  simp[] >> conj_tac
+  >- metis_tac[venomExecProofsTheory.dft_eval_phis_append] >>
+  simp[DROP_APPEND]
 QED
