@@ -9,7 +9,7 @@ Ancestors
   supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
   vyperState vyperTypeSystem supportedProgram supportedNames vyperContext
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
-  vyperTypeCallStackSoundness
+  vyperTypeCallStackSoundness exprLowering
 
 Theorem body_log_case:
   !cx id es. body_exprs_ok cx es ==> body_stmt_ok cx (Log id es)
@@ -49,6 +49,10 @@ Proof
     (fs[body_stmt_safe_log_args, EVERY_CONJ] >>
      rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
      metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem]) >>
+  `~exprs_can_mutate cenv es` by metis_tac[supported_pure_expr_no_mutate] >>
+  `EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+              is_bytestring_type (expr_type e)) es` by
+    metis_tac[supported_pure_exprs_bytestring_iff] >>
   irule compile_log_stmt_frag >> simp[] >>
   conj_tac
   >- (qpat_x_assum `MAP expr_type _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>

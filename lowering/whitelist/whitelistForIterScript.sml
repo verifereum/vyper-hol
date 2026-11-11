@@ -56,6 +56,7 @@
  *)
 Theory whitelistForIter
 Ancestors
+  vyperTypeContract
   bodySimDeclCases whitelistForIterDynFrag whitelistForIterMem whitelistForIterImm
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map
   bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
@@ -352,7 +353,7 @@ Theorem body_for_memory_iterable:
     (?e. it = Array e /\ ~(?t v. e = Name t v) /\ ~(?t nid. e = TopLevelName t nid) /\
        ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
        post_value_type cenv e = expr_type e /\
-       !tgt nid. expr_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) ==>
+       !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
@@ -430,7 +431,7 @@ Proof
          fs[expr_sim_inv_def] >> metis_tac[]) >>
       irule body_for_immutable_array >> simp[] >> metis_tac[]) >>
   `~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
-   !tgt nid. expr_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid` by
+   !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid` by
     (Cases_on `e` >> gvs[supported_iterator_def, place_access_root]) >>
   irule body_for_memory_iterable >> simp[] >> metis_tac[]
 QED

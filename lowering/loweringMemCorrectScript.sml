@@ -126,9 +126,7 @@ Proof
   rpt strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
     first_assum (ACCEPT_TAC o REWRITE_RULE [gasSummaryTheory.gas_explicit_nil] o Q.SPEC `[]`) >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
     (imp_res_tac lookup_function_MEM >>
@@ -177,9 +175,7 @@ Theorem lower_vyper_runtime_unit_memory_ok:
           unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   drule lowering_context_ok_integrity >> strip_tac >>
   drule lowering_context_ok_static_integrity >> strip_tac >>
@@ -210,7 +206,7 @@ Proof
                         vs_inst_idx := 0 |>)` by
     (drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
   drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
-  drule run_lowering_eom_none >> strip_tac >>
+  drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
   drule_all lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
   simp[fixed_region_reserved_def]
 QED
@@ -239,9 +235,7 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok:
     ==> mem_inv dload_offset_ok unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
     (imp_res_tac lookup_function_MEM >>
@@ -301,9 +295,7 @@ Theorem lower_vyper_runtime_unit_dload_headroom_ok:
     ==> mem_inv dload_headroom_ok unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   drule lowering_context_ok_integrity >> strip_tac >>
   drule lowering_context_ok_static_integrity >> strip_tac >>

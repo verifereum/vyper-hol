@@ -14,7 +14,7 @@ Definition in_np_body_def:
 End
 
 (* Bridge: in_np_body can be derived from element-based MEM_FILTER *)
-Triviality mem_np_filter_in_np_body:
+Theorem mem_np_filter_in_np_body:
   !bi x. MEM x (FILTER (\i. ~is_pseudo i.inst_opcode) bi) ==>
          in_np_body bi x
 Proof
@@ -234,7 +234,7 @@ Proof
      fs[])
 QED
 
-Triviality filter_prefix_not_last:
+Theorem filter_prefix_not_last:
   !P l pre y sfx e.
     ALL_DISTINCT l /\ FILTER P l = pre ++ [y] ++ sfx /\
     MEM e pre /\ P e /\ MEM e l /\
@@ -566,14 +566,6 @@ Proof
         metis_tac[restricted_tc_last_barrier_neq_b])))
 QED
 
-(* Bridge: MEM (Var v) ops iff MEM v (operand_vars ops) *)
-Triviality mem_operand_vars_iff[local]:
-  !ops v. MEM v (operand_vars ops) <=> MEM (Var v) ops
-Proof
-  Induct >> simp[operand_vars_def] >>
-  rpt gen_tac >> Cases_on `h` >> simp[operand_var_def, operand_vars_def]
-QED
-
 (* data_dep_body is inst_id/set-equivariant *)
 Triviality data_dep_body_inst_id_equiv[local]:
   !bi x y x' y'.
@@ -584,7 +576,7 @@ Triviality data_dep_body_inst_id_equiv[local]:
     set y.inst_outputs = set y'.inst_outputs ==>
     (data_dep_body bi x y <=> data_dep_body bi x' y')
 Proof
-  simp[data_dep_body_def, mem_operand_vars_iff, EXTENSION]
+  simp[data_dep_body_def, MEM_operand_vars_eq_Var, EXTENSION]
 QED
 
 (* from_barrier_dep is inst_id/barrier-equivariant *)
@@ -594,18 +586,6 @@ Triviality from_barrier_dep_inst_id_equiv[local]:
     x.inst_id = x'.inst_id /\ y.inst_id = y'.inst_id /\
     (is_barrier x = is_barrier x') ==>
     from_barrier_dep bi x' y'
-Proof
-  rpt strip_tac >> fs[from_barrier_dep_def, in_np_body_def] >>
-  qexistsl_tac [`pfx`,`sfx`] >> simp[]
-QED
-
-(* from_barrier_dep reverse *)
-Triviality from_barrier_dep_inst_id_equiv_rev[local]:
-  !bi x y x' y'.
-    from_barrier_dep bi x' y' /\
-    x.inst_id = x'.inst_id /\ y.inst_id = y'.inst_id /\
-    (is_barrier x = is_barrier x') ==>
-    from_barrier_dep bi x y
 Proof
   rpt strip_tac >> fs[from_barrier_dep_def, in_np_body_def] >>
   qexistsl_tac [`pfx`,`sfx`] >> simp[]
@@ -622,21 +602,6 @@ Triviality on_barrier_dep_inst_id_equiv[local]:
 Proof
   rpt strip_tac >> fs[on_barrier_dep_def, in_np_body_def] >>
   qexistsl_tac [`pfx`,`sfx`,`mid`] >> simp[]
-QED
-
-(* on_barrier_dep reverse *)
-Triviality on_barrier_dep_inst_id_equiv_rev[local]:
-  !bi x y x' y'.
-    on_barrier_dep bi x' y' /\
-    x.inst_id = x'.inst_id /\ y.inst_id = y'.inst_id /\
-    (~is_barrier x = ~is_barrier x') /\
-    (is_barrier y = is_barrier y') ==>
-    on_barrier_dep bi x y
-Proof
-  rpt strip_tac >>
-  `is_barrier x' = is_barrier x` by metis_tac[] >>
-  irule on_barrier_dep_inst_id_equiv >>
-  qexistsl_tac [`x'`,`y'`] >> simp[]
 QED
 
 (* canonical_dep is invariant under inst_id and operand/output set-equivalence *)

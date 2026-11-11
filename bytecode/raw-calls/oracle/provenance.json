@@ -1,7 +1,7 @@
 {
   "producer": "pinned Python Vyper",
-  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
-  "vyper_version": "0.5.0a4+9362e36b+commit.9362e36b",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1+commit.577d2534",
   "python_version": "3.11.11",
   "dependencies": {
     "cbor2": "5.9.0",
@@ -48,19 +48,19 @@
   "outputs": {
     "rc01_stmt_nooutsize.hex": "4e14c42d1750fadfdf0cf420ac34b53c55e0b1ef78b956b293fef9d28cb76086",
     "rc01_stmt_nooutsize.json": "02cfc891f3b60f2e15357b3f173c5a39cf526b43aac71f6f3caebe55f747a43c",
-    "rc02_outsize_ret.hex": "f9e3614f4f7cf3fc73e5ec5bba22aa0f568c8980c697e4248b7cdcb3559b9057",
+    "rc02_outsize_ret.hex": "7a60f84deace572236bef85837a949fde57000e87bcdaec94a8a885946148ffc",
     "rc02_outsize_ret.json": "fba05b6ef7cb352c7ac0b3790c9961c3fda79bb710e2f702bb5cf5ef7d6a996d",
     "rc03_value_gas.hex": "5d52374a0f51c8bbb9bd599e386ba4bcef73f4b4f687a2cb41c8951b40de569d",
     "rc03_value_gas.json": "51531e95d15de5b712ccae8147077dbff13f5bd7626c762b42d05b978b99f029",
-    "rc04_static.hex": "d5f87a2965b307612169cad6bdea0f80a130a39719115624fca2a70be9d63e99",
+    "rc04_static.hex": "0e85783992726a5b86e7aa9f74c626f74fe26ad85e9a15a94db5071dd8cb2e19",
     "rc04_static.json": "8f305f2e71563299e73b2a7ceac6bcdd7f00333eaefff2a232e21052e0994c48",
     "rc06_rof_false_bool.hex": "6da7bf7d69f0ac28a7c68ab728cd12ddeebcdf1bf0262c4a2dc6033475d6eb6d",
     "rc06_rof_false_bool.json": "109f1177388dccd0a275f1be88ec61762f6d61f45acdd121def94d21fd947a9a",
-    "rc07_rof_false_tuple.hex": "c9caaf03bbc775bcb184e380c16503a0cccc323d3dba8d1e8dc4c4cbb4292ba5",
+    "rc07_rof_false_tuple.hex": "e5421faf2c0c58ca7965607d314c5c7ca881a430ea4f0a60911b516cb423384e",
     "rc07_rof_false_tuple.json": "3778531d7109ecc98eab4e61516a19d559d2564c389a2d21e1eb7f70a3792316",
     "rc17_nested_len.hex": "2d5c9909df61a740bc7cf87685eddf7eb3f141b4c8c76d417e827aa6e872d148",
     "rc17_nested_len.json": "8f6c226eeba89fdd688140889ceacac937db3de9fe83e6a9323eb7fd0d2602bd",
-    "rc19_dyn_data.hex": "f71cdc4280456fbe4a5ca33581cd966976d6b021290868e9798d283fa9062716",
+    "rc19_dyn_data.hex": "9905bd7bff80daa674475ea5d2ee5a8c672a9e072a5d82f5dca24af008e4a21d",
     "rc19_dyn_data.json": "4df19fc7882694d091b2957b03e75c2ce470090615f8ed62354376319d5e37b6",
     "rc20_storage_data.hex": "8c5528087189fba6253c38348591e739e60fd0b2ba04bec9b1c957b5aa5e551d",
     "rc20_storage_data.json": "ae98e1caeb31564fd651e91e71e9cdbdad2af4f86f2ea5d7dd581e7957c1cbf6",
@@ -68,9 +68,9 @@
     "rc21_internal_value_gas_order.json": "e10ddcb1610e589e9908b8dcc7fe0fc75c32b3214353429e760b2f11fa76828a",
     "rc22_bool_in_if.hex": "0625ef7f90943a69300a2dc17eae4d51545d4a5309663ffaa90bdd08b59bc303",
     "rc22_bool_in_if.json": "1d166d20fc7765ebb7daf48a3850b20ea36758fed86e7c3eec9c7803e70fef76",
-    "rc25_stmt_argdata.hex": "bf154d359137c3a4df29682df160a3fc4e114337567faf93b2023bc96362ea7e",
+    "rc25_stmt_argdata.hex": "df8f65080604225aa107313df8bc286a45dc3ede5e69fdf7408d059cc1b483fd",
     "rc25_stmt_argdata.json": "4ebe77b03fd88fad6ec44c89603775fb83763e886b909f7a17ae0208b334d4d3",
-    "rc29_delegate.hex": "826106079e95b7d68e0807a5252f84267b088231105a1d2897f1af29652098fd",
+    "rc29_delegate.hex": "ef92bfb7ffbd26951866fb2ad4632f04d890ab94222518a390c3ddbc29c8087b",
     "rc29_delegate.json": "25f7ecf81d58229b6c6b7113714b5ecaf3408cc3d954a0f3b8c4f2f77c900fac"
   }
 }

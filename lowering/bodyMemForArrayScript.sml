@@ -4,6 +4,7 @@
    array's unchanged binding as the loop invariant. *)
 Theory bodyMemForArray
 Ancestors
+  vyperTypeContract
   bodyMemoryPreds bodySeqMemory stmtForArrayMemory bodySimDeclCases
   stmtSimForArray stmtSimForArrayFrame venomState exprLoweringProps
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs
@@ -49,7 +50,7 @@ Theorem array_for_source_ready_mem[local]:
     0 < n /\ n < dimword (:256) /\ entry.value = ArrayV (SArrayV al) /\
     vs = array_elements (ArrayTV tv (Fixed n)) (SArrayV al) /\ LENGTH vs = n /\
     (!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
-            (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
     body_stmts_mem_ok cx stmts /\
     FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
@@ -67,20 +68,20 @@ Proof
         env_scopes_consistent_def] >> metis_tac[]) >>
   `!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
           (es with gas_obs := gs) =
-        (INL (array_elements (ArrayTV tv (Fixed n)) (SArrayV al)),
+        (INL (MAP Value (array_elements (ArrayTV tv (Fixed n)) (SArrayV al))),
          es with gas_obs := gs)` by
     (gen_tac >> irule eval_iterator_fixed_name >> simp[]) >>
   drule_all eval_iterator_fixed_name >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `INL vs` >>
+  qmatch_asmsub_abbrev_tac `INL (MAP Value vs)` >>
   `LENGTH vs = n` by simp[Abbr `vs`, fixed_array_elements_length] >>
-  `body_for_mem_ok cx tv id stmts vs` by
+  `body_for_mem_ok cx tv id stmts (MAP Value vs)` by
     (qpat_x_assum `!s tyv t s3 vs t3 s4 t4. _` mp_tac >>
      simp[lift_option_type_def, return_def, check_def, assert_def,
           compatible_bound_def] >> disch_then irule >> simp[] >>
      qexistsl_tac [`es`, `es`] >> simp[]) >>
   `body_stmts_mem_ok cx stmts` by
     (fs[body_for_mem_ok_def] >> `vs <> []` by (strip_tac >> gvs[]) >>
-     metis_tac[]) >>
+     Cases_on `vs` >> gvs[read_result_def, return_def]) >>
   `FLOOKUP cenv.ce_vars id = NONE` by
     (irule declared_name_unbound >> metis_tac[]) >>
   `lookup_scopes id es.scopes = NONE` by
@@ -278,7 +279,7 @@ Theorem body_for_memory_iterable_mem:
     (?e. it = Array e /\ ~(?t v. e = Name t v) /\ ~(?t nid. e = TopLevelName t nid) /\
        ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
        post_value_type cenv e = expr_type e /\
-       ~(?tgt nid. expr_place e = SOME tgt /\
+       ~(?tgt nid. loop_iterator_place e = SOME tgt /\
                    target_root tgt = TopLevelNameTarget nid /\ ~immutable_root cx tgt) /\
        ?bd. expr_type e = ArrayT typ bd /\ bound_length bd <= n) ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv

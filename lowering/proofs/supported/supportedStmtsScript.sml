@@ -5,6 +5,7 @@
    supported_assert_reason, supported_raise_reason, supported_log. *)
 Theory supportedStmts
 Ancestors
+  vyperTypeContract
   supportedStmtTraverse supportedExprs supportedExprForms supportedExprTraverse
   supportedTypes supportedDecls supportedTargets vyperTypeSystem exprLowering vyperAST list alist integer
 
@@ -154,7 +155,7 @@ Definition supported_iterator_def:
      | TopLevelName _ _ => F
      | _ => supported_expr tops e /\
             ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
-            (!tgt nid. expr_place e = SOME tgt ==>
+            (!tgt nid. loop_iterator_place e = SOME tgt ==>
                        FST (place_access tgt []) <> TopLevelNameTarget nid) /\
             (!t fid args drv. e = Call t (IntCall fid) args drv ==>
                ?m nr rr ps ds b.

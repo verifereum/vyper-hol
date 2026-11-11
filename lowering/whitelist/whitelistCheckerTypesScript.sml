@@ -7,6 +7,7 @@
    a simulation case can split on it. *)
 Theory whitelistCheckerTypes
 Ancestors
+  vyperTypeContract
   supportedStmts supportedDecls supportedExprs whitelistCheckerDecls
   supportedExprForms supportedTypes vyperTypeSystem vyperContext vyperValue
   vyperAST vyperMisc exprLowering placeTypingProps abiCallerStructSize
@@ -644,7 +645,7 @@ Theorem type_stmt_for_array_supported_iterator:
   ((!t v. e <> Name t v) /\ (!t nid. e <> TopLevelName t nid) ==>
    supported_expr tops e /\
    ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
-   (!tgt nid. expr_place e = SOME tgt ==>
+   (!tgt nid. loop_iterator_place e = SOME tgt ==>
               FST (place_access tgt []) <> TopLevelNameTarget nid) /\
    (!t fid args drv. e = Call t (IntCall fid) args drv ==>
       ?m nr rr ps ds b.

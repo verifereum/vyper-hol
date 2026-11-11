@@ -1,6 +1,6 @@
 Theory fmpLowerInvokeProps
 Ancestors
-  fmpLowerDefs
+  venomFnInstsProofs fmpLowerDefs
   fmpLowerProps
   fcgBridge venomInst
 
@@ -139,12 +139,12 @@ Proof
          venomInstTheory.fn_insts_def]
   >> TRY (qexists `out_inst` >> simp[] >> NO_TAC)
   >> Cases_on `root_layout` >> gvs[]
-  >> drule fmpLowerPropsTheory.fmp_fn_insts_blocks_mem >> strip_tac
+  >> drule mem_fn_insts_blocks_rev >> strip_tac
   >> drule fmp_make_root_layout_not_invokes >> strip_tac
   >> drule_all fmp_install_root_invokes >> strip_tac
   >> drule_all fmp_lower_blocks_invokes >> strip_tac
   >> qexists `inst'` >> simp[]
-  >> irule fmp_fn_insts_blocks_intro >> metis_tac[]
+  >> irule mem_fn_insts_blocks >> metis_tac[]
 QED
 
 

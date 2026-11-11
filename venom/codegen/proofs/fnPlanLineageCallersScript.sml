@@ -39,7 +39,7 @@ Proof
       (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))` by
     (drule livenessProofsTheory.live_vars_at_transfer >>
      disch_then (qspecl_then [`bb.bb_label`, `bb`, `i`] mp_tac) >> simp[]) >>
-  gvs[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem,
+  gvs[livenessDefsTheory.liveness_transfer_def, livenessTransferProofsTheory.live_update_mem,
       venomInstTheory.inst_defs_def] >>
   metis_tac[compute_operands_inst_uses, livenessDefsTheory.MEM_ordered_inst_uses]
 QED
