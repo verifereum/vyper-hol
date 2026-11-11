@@ -191,7 +191,36 @@ Proof
     (Cases_on `count_op` >> gvs[eval_operand_def, op_taint_def]) >>
   `!v. count_op = Var v ==> not_fresh_at sb v` by
     (rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `sb.cs_next_id IN sites` by simp[] >>
   drule_all encoder_cursor_product_init_counted_ptr >>
   disch_then (qspecl_then [`PG`,`Gf`,`D`] strip_assume_tac) >>
-  cheat
+  `not_fresh_at sb ip /\ (!v. not_fresh_at sa v ==> not_fresh_at sb v)` by
+    (gvs[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+  `lookup_var ip sf' = SOME (n2w addr) /\ ptr_covers Gf' tnf' ip sf' 32` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `mload addr sf' = 0w /\ (!i. addr <= i /\ i < addr+32 ==> i NOTIN tnf'.t_mem)` by
+    (qpat_x_assum `!parent p. FLOOKUP sf.vs_allocas parent = SOME (p,32) /\ _ ==> _`
+      (qspecl_then [`sa.cs_next_id`,`addr`] mp_tac) >> simp[]) >>
+  qexistsl_tac [`addr`,`addr'`,`Gf'`,`tnf'`,`sf'`] >>
+  conj_tac >-
+    (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+     qexistsl_tac [`Gf`,`sf`,`tnf`] >> simp[]) >>
+  `FLOOKUP sf'.vs_allocas (sa.cs_next_id+2) = SOME (addr',32)` by
+    (qpat_x_assum `FLOOKUP sf'.vs_allocas sb.cs_next_id = _` mp_tac >> simp[]) >>
+  `mem_agree_outside ({i | addr <= i /\ i < addr+32} UNION
+      {i | addr' <= i /\ i < addr'+32}) sf'.vs_memory s.vs_memory` by
+    (simp[mem_agree_outside_def] >> rpt strip_tac >>
+     qpat_x_assum `mem_agree_outside _ sf'.vs_memory sf.vs_memory`
+       (mp_tac o REWRITE_RULE [mem_agree_outside_def]) >>
+     disch_then (qspec_then `i` mp_tac) >>
+     qpat_x_assum `mem_agree_outside _ sf.vs_memory s.vs_memory`
+       (mp_tac o REWRITE_RULE [mem_agree_outside_def]) >>
+     disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  `i < addr \/ addr+32 <= i` by decide_tac >>
+  `i < addr' \/ addr'+32 <= i` by decide_tac >>
+  qpat_x_assum `!i. i < addr \/ addr+32 <= i ==> _`
+    (qspec_then `i` mp_tac) >>
+  qpat_x_assum `!i. i < addr' \/ addr'+32 <= i ==> _`
+    (qspec_then `i` mp_tac) >> simp[]
 QED
