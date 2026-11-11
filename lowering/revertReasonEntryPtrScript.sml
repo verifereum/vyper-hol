@@ -195,7 +195,7 @@ Proof
   `not_fresh_at sm src /\ not_fresh_at sm (STRING #"%" (toString sa.cs_next_var)) /\
    not_fresh_at sm (STRING #"%" (toString (sa.cs_next_var+1))) /\
    not_fresh_at sm (STRING #"%" (toString (sa.cs_next_var+2))) /\
-   sa.cs_next_id+3 <> sm.cs_next_id+5 /\
+   sa.cs_next_id+3 <> sm.cs_next_id+6 /\
    w2n B+64+ms < dimword(:256) /\ w2n P+32+ms < dimword(:256)` by
     (fs[copy_old_operand_def, not_fresh_at_def] >> rpt strip_tac >> gvs[]) >>
   `op = Var src /\ sn = sm` by
@@ -206,7 +206,7 @@ Proof
   qpat_x_assum `op = Var src` SUBST_ALL_TAC >>
   qpat_x_assum `sn = sm` SUBST_ALL_TAC >>
   drule_at (Pat `_ = _ ++ _`) revert_reason_tail_code >> disch_then drule_all >> strip_tac >>
-  `!a sz. FLOOKUP u.vs_allocas (sm.cs_next_id+5) = SOME (a,sz) ==> sz = 32` by
+  `!a sz. FLOOKUP u.vs_allocas (sm.cs_next_id+6) = SOME (a,sz) ==> sz = 32` by
     (rpt strip_tac >> qpat_x_assum `!i n a sz. _` drule >>
      simp[NoAsms, mk_inst_def] >> disch_then drule >> simp[]) >>
   `?z Gh th. gas_path_ptr D 0 ctx fn PG Gf tnf u 0 Gh th (Abort Revert_abort z)` by
