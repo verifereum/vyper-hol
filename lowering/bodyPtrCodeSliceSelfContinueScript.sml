@@ -10,6 +10,7 @@ Ancestors
   exprLowering builtinBytes emitHelper freshWrites compileEnv
   exprSimHashBoundary stmtSimLogTopics exprSimSliceData exprSimProps
   exprSimWordArgs loweringPosts finite_map pred_set
+  exprSimHash valueEncodingDefs valueEncoding vyperValue context
 
 Theorem self_code_size_bounds_run:
   emit_op CODESIZE [] sa = (limit,sb) /\
@@ -249,3 +250,63 @@ Resume self_code_tail_frame[write]:
 QED
 
 Finalise self_code_tail_frame
+
+Theorem self_code_tail_vv_post:
+  emit_op CODESIZE [] sa = (limit,sb) /\
+  compile_assert_slice_bounds src len limit sb = ((),sc) /\
+  emit_void CODECOPY [dst;src;len] sc = ((),sd) /\
+  emit_void MSTORE [out;len] sd = ((),se) /\
+  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
+  eval_operand out s = SOME p /\ eval_operand dst s = SOME (p+32w) /\
+  (!v x. MEM v [src;len;dst;out] /\ v = Var x ==> not_fresh_at sa x) /\
+  LENGTH s.vs_code < dimword (:256) /\ w2n a + w2n n <= LENGTH s.vs_code /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sbase /\ sbase.cs_next_var <= sa.cs_next_var /\
+  sbase.cs_next_id <= sa.cs_next_id /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n p,cap) /\
+  w2n p + cap < dimword (:256) /\ 32 + w2n n <= cap /\
+  (!nm off sz. local_region cenv es.scopes s nm off sz ==>
+    regions_disjoint (w2n p) cap off sz) /\
+  (!id off sz. id < sbase.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (off,sz) ==>
+    regions_disjoint (w2n p) cap off sz) /\
+  expr_type e = BaseT (BytesT (Dynamic bound)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic bound))) /\
+  w2n n <= bound /\
+  sbase.cs_next_id <= inst.inst_id /\ inst.inst_id < se.cs_next_id ==>
+  ?t. run_inst_seq (emitted_insts sa se) s = OK t /\
+    vv_post ctx fn cenv cx e es sbase se s es
+      (Value (BytesV (TAKE (w2n n) (DROP (w2n a) s.vs_code))))
+      (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t
+Proof
+  strip_tac >> drule_all self_code_tail_frame >> strip_tac >>
+  qabbrev_tac `bs = TAKE (w2n n) (DROP (w2n a) s.vs_code)` >>
+  `LENGTH bs = w2n n` by simp[Abbr `bs`] >>
+  `val_in_memory (BaseTV (BytesT (Dynamic bound))) (BytesV bs) (w2n p) t.vs_memory` by
+    (qpat_x_assum `t.vs_memory = _` (fn th => pure_rewrite_tac[th]) >>
+     metis_tac[bytes_buffer_write_encoding, n2w_w2n]) >>
+  `val_wf (BaseTV (BytesT (Dynamic bound))) (BytesV bs)` by
+    (simp[val_wf_def, type_memory_size_def] >>
+     qspec_then `bound` mp_tac le_word_size_mul >> decide_tac) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
+  qpat_x_assum `t.vs_memory = _` kall_tac >>
+  qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
+  irule vv_post_allocated_memory_intro >>
+  simp[mk_ptr_def, evaluate_type_def, is_word_type_def] >>
+  qexistsl_tac [`inst.inst_id`,`w2n p`,`cap`] >>
+  simp[val_footprint_def] >>
+  rpt strip_tac >> suspend "local"
+QED
+
+Resume self_code_tail_vv_post[local]:
+  `local_region cenv es.scopes s n' lb lsz` by
+    (irule local_region_frame >>
+     conj_tac
+     >- (qexists_tac `fn` >> fs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl_tac [`sbase`,`es.scopes`,`t`] >>
+     fs[wb_frame_def]) >>
+  fs[regions_disjoint_def] >> metis_tac[]
+QED
+
+Finalise self_code_tail_vv_post
