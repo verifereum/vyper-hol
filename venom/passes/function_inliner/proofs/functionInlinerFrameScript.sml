@@ -815,3 +815,56 @@ Proof
   gvs[setup_callee_def, inline_defined_support_def, lookup_var_def,
     AllCaseEqs()]
 QED
+
+(* All PHI reads observe s and t; writes run in reverse prefix order. *)
+Theorem inline_phis_paired_writes:
+  !srcs dsts s t u ren Q.
+  LIST_REL (\i j. !x a. eval_one_phi s i = SOME (x,a) ==>
+      ?b. eval_one_phi t j = SOME (ren x,b) /\ Q x a b)
+    (TAKE (phi_prefix_length srcs) srcs)
+    (TAKE (phi_prefix_length dsts) dsts) /\
+  eval_phis s srcs = OK u ==>
+  ?writes v. eval_phis t dsts = OK v /\
+    u = FOLDL (\z (x,a,b). update_var x a z) s writes /\
+    v = FOLDL (\z (x,a,b). update_var (ren x) b z) t writes /\
+    set (MAP FST writes) = inline_phi_outputs srcs /\
+    EVERY (\(x,a,b). Q x a b) writes
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (Cases_on `dsts` >> gvs[phi_prefix_length_def, eval_phis_def]
+      >- (qexists `[]` >> simp[inline_phi_outputs_def]) >>
+      Cases_on `h.inst_opcode = PHI` >>
+      gvs[phi_prefix_length_def, eval_phis_def] >>
+      qexists `[]` >> simp[inline_phi_outputs_def]) >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (Cases_on `dsts` >> gvs[phi_prefix_length_def] >>
+      Cases_on `h'.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
+      gvs[eval_phis_def, AllCaseEqs()] >>
+      rename1 `eval_one_phi s h = SOME (out,a)` >>
+      `?b. eval_one_phi t h' = SOME (ren out,b) /\ Q out a b` by metis_tac[] >>
+      first_x_assum (drule_then (drule_then strip_assume_tac)) >>
+      rename1 `set (MAP FST writes) = inline_phi_outputs srcs` >>
+      qexists `writes ++ [(out,a,b)]` >>
+      simp[rich_listTheory.FOLDL_APPEND, listTheory.MAP_APPEND, listTheory.EVERY_APPEND] >>
+      gvs[eval_one_phi_def, AllCaseEqs(), inline_phi_outputs_def,
+        pred_setTheory.UNION_COMM]) >>
+  Cases_on `dsts` >> gvs[phi_prefix_length_def, eval_phis_def, inline_phi_outputs_def] >>
+  Cases_on `h'.inst_opcode = PHI` >>
+  gvs[phi_prefix_length_def, eval_phis_def]
+QED
+
+(* Ordering check: repeated outputs are legal and the first PHI wins. *)
+Theorem inline_phis_pair_head_wins[local]:
+  i.inst_opcode = PHI /\ j.inst_opcode = PHI /\
+  eval_one_phi s i = SOME (x,a) /\ eval_one_phi s j = SOME (x,b) ==>
+  eval_phis s [i;j] = OK (update_var x a s)
+Proof
+  strip_tac >> simp[eval_phis_def, update_var_def, finite_mapTheory.FUPDATE_EQ]
+QED
+
+Theorem inline_phis_empty_prefix[local]:
+  phi_prefix_length insts = 0 ==> eval_phis s insts = OK s
+Proof
+  Cases_on `insts` >> simp[phi_prefix_length_def, eval_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[]
+QED
