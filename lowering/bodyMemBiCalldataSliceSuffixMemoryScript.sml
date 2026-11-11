@@ -273,6 +273,7 @@ Proof
   qpat_x_assum `buf_op = _` SUBST_ALL_TAC >>
   drule_all calldata_slice_allocation_split >> strip_tac >>
   qpat_x_assum `emitted_insts sa sb = _` SUBST1_TAC >>
+  PURE_REWRITE_TAC[GSYM listTheory.APPEND_ASSOC] >>
   (* CALLDATASIZE *)
   irule run_inst_seq_mem_ok_append >> reverse conj_tac
   >- (qpat_assum `emit_op CALLDATASIZE _ _ = _`
