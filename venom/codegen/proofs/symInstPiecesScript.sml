@@ -1223,6 +1223,24 @@ Proof
   qexists `full` >> simp[]
 QED
 
+Theorem reverse_two_operands[local]:
+  2 <= LENGTH (xs:operand list) ==>
+  ?a b tail. REVERSE xs = a :: b :: tail
+Proof
+  Cases_on `REVERSE xs` >> gvs[] >>
+  rename1 `REVERSE xs = h :: t` >> Cases_on `t` >>
+  gvs[] >> metis_tac[listTheory.LENGTH_REVERSE, listTheory.LENGTH]
+QED
+
+Theorem successful_log_operand_shape[local]:
+  inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: selected /\
+  step_inst fuel ctx inst vs = OK vsout ==>
+  ?offop lenop topicops. REVERSE selected = offop :: lenop :: topicops
+Proof
+  strip_tac >> drule_all step_inst_log_ok >> strip_tac >> gvs[] >>
+  irule reverse_two_operands >> simp[]
+QED
+
 Theorem sym_log_inst_symbolic_run:
   lo = SND (compute_label_offsets prog) /\
   inst.inst_opcode = LOG /\ inst_wf inst /\
@@ -1301,10 +1319,7 @@ Proof
     gvs[stackOpSimTheory.execute_plan_append, planExecTheory.execute_plan_def,
       planExecTheory.exec_stack_op_def, stackOpSimTheory.asm_block_at_append] >>
   `?offop lenop topicops. REVERSE selected = offop :: lenop :: topicops` by
-    (drule_all step_inst_log_ok >> strip_tac >>
-     Cases_on `REVERSE selected` >> gvs[] >>
-     rename1 `REVERSE selected = h :: t` >> Cases_on `t` >>
-     gvs[] >> metis_tac[listTheory.LENGTH_REVERSE, listTheory.LENGTH]) >>
+    metis_tac[successful_log_operand_shape] >>
   drule_at (Pat `sym_kinds_ok _ _ _ [] _ _`) sym_log_prepared_run >>
   disch_then (drule_at (Pat `venom_asm_rel _ arranged _ mid`)) >>
   disch_then (drule_at (Pat `step_inst _ _ _ (_ with vs_memory := _) = _`)) >>
