@@ -34,7 +34,7 @@
 
 Theory exprLowering
 Ancestors
-  pred_set list exprCallBounds vyperAST byte keccak
+  pred_set list exprCallBounds vyperAST vyperSubscriptOverlap byte keccak
   emitHelper compileEnv context valueEncoding venomInst vyperValueOperation
   builtinAbi builtinBytes builtinCreate
   builtinHashing builtinMath builtinMisc builtinSimple
@@ -2294,59 +2294,6 @@ Proof
   irule compile_multi_exprs_callback_cong >> simp[FUN_EQ_THM]
 QED
 
-(* Compile subscript access: array[index], mapping[key], tuple[N].
-   Dispatches on base type. HashMap (mapping) dispatched via ce_hashmap_info.
-   Mirrors Python: expr.py _lower_subscript *)
-Definition compile_subscript_def:
-  compile_subscript cfn cenv ret_ty ty base_e idx_e =
-    do base_vv <- cfn cenv ty base_e;
-       let base_op = vv_operand base_vv in
-       let loc = (case vv_location base_vv of
-                     SOME l => l | NONE => LocMemory) in
-       case place_type cenv base_e of
-         MapPT kt vt =>
-           do key_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
-              hashed_key <- (if is_bytestring_type kt
-                             then compile_keccak256_key key_op F
-                             else return key_op);
-              slot <- compile_mapping_subscript base_op hashed_key;
-              return (LocatedValue ret_ty (mk_ptr slot loc))
-           od
-       | ValPT (TupleT tys) =>
-           let idx = literal_int_index idx_e in
-           do p <- compile_tuple_subscript base_op
-                     (SUM (TAKE idx (MAP (elem_size_in_location cenv loc) tys)));
-              return (LocatedValue ret_ty (mk_ptr p loc))
-           od
-       | ValPT (StructT nsid) =>
-           let idx = literal_int_index idx_e in
-           let fld_info = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid) in
-           do p <- compile_tuple_subscript base_op
-                     (SUM (TAKE idx
-                       (MAP (λ(name, fty, sz). if is_slot_addressed loc
-                                              then (sz + 31) DIV 32 else sz)
-                            fld_info)));
-              return (LocatedValue ret_ty (mk_ptr p loc))
-           od
-       | ValPT base_type =>
-           let is_dynamic = (case base_type of ArrayT _ (Fixed _) => F | _ => T) in
-           let elem_ty = (case base_type of
-                            ArrayT t _ => t | _ => BaseT (UintT 256)) in
-           let static_count = (case base_type of
-                                 ArrayT _ (Fixed n) => n | _ => 0) in
-           let ws = word_scale loc in
-           let elem_size = elem_size_in_location cenv loc elem_ty in
-           let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
-           let is_signed_idx = is_signed_type (expr_type idx_e) in
-           do idx_op <- lower_value cfn cenv ty idx_e;
-              elem_ptr <-
-                compile_array_subscript base_op idx_op is_dynamic static_count
-                                         ws elem_size is_signed_idx loader;
-              return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
-           od
-    od
-End
-
 (* Compile attribute access. Returns VyperValue with correct location.
    unwrap_value handles loading for word types.
    Mirrors Python: expr.py lower_Attribute → VyperValue.from_ptr *)
@@ -2512,6 +2459,73 @@ Definition compile_snapshot_vv_def:
          return (LocatedValue (vv_type vv) (mk_ptr op LocMemory))
       od
     else return vv
+End
+
+(* Whether subscript base_e[idx_e] copies its base before lowering the index:
+   the index could resize a dynamic array the base was derived from.
+   Mirrors Python: expr.py _lower_array_subscript (overlap) *)
+Definition copies_subscript_base_def:
+  copies_subscript_base cenv base_e idx_e =
+    subscript_overlap cenv.ce_modules base_e idx_e
+End
+
+(* Compile subscript access: array[index], mapping[key], tuple[N].
+   Dispatches on base type. HashMap (mapping) dispatched via ce_hashmap_info.
+   Mirrors Python: expr.py _lower_subscript *)
+Definition compile_subscript_def:
+  compile_subscript cfn cenv ret_ty ty base_e idx_e =
+    do base_vv0 <- cfn cenv ty base_e;
+       (* Mirrors Python: expr.py _lower_array_subscript (materialize_value
+          on overlap); mapping, tuple and struct subscripts are never
+          copied. *)
+       base_vv <- (if copies_subscript_base cenv base_e idx_e
+                   then compile_snapshot_vv cenv T base_vv0
+                   else return base_vv0);
+       let base_op = vv_operand base_vv in
+       let loc = (case vv_location base_vv of
+                     SOME l => l | NONE => LocMemory) in
+       case place_type cenv base_e of
+         MapPT kt vt =>
+           do key_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
+              hashed_key <- (if is_bytestring_type kt
+                             then compile_keccak256_key key_op F
+                             else return key_op);
+              slot <- compile_mapping_subscript base_op hashed_key;
+              return (LocatedValue ret_ty (mk_ptr slot loc))
+           od
+       | ValPT (TupleT tys) =>
+           let idx = literal_int_index idx_e in
+           do p <- compile_tuple_subscript base_op
+                     (SUM (TAKE idx (MAP (elem_size_in_location cenv loc) tys)));
+              return (LocatedValue ret_ty (mk_ptr p loc))
+           od
+       | ValPT (StructT nsid) =>
+           let idx = literal_int_index idx_e in
+           let fld_info = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid) in
+           do p <- compile_tuple_subscript base_op
+                     (SUM (TAKE idx
+                       (MAP (λ(name, fty, sz). if is_slot_addressed loc
+                                              then (sz + 31) DIV 32 else sz)
+                            fld_info)));
+              return (LocatedValue ret_ty (mk_ptr p loc))
+           od
+       | ValPT base_type =>
+           let is_dynamic = (case base_type of ArrayT _ (Fixed _) => F | _ => T) in
+           let elem_ty = (case base_type of
+                            ArrayT t _ => t | _ => BaseT (UintT 256)) in
+           let static_count = (case base_type of
+                                 ArrayT _ (Fixed n) => n | _ => 0) in
+           let ws = word_scale loc in
+           let elem_size = elem_size_in_location cenv loc elem_ty in
+           let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
+           let is_signed_idx = is_signed_type (expr_type idx_e) in
+           do idx_op <- lower_value cfn cenv ty idx_e;
+              elem_ptr <-
+                compile_array_subscript base_op idx_op is_dynamic static_count
+                                         ws elem_size is_signed_idx loader;
+              return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
+           od
+    od
 End
 
 (* Lower the positional arguments of extcall/staticcall, freezing each one

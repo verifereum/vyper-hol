@@ -502,6 +502,9 @@ Datatype:
        later operands run.
        Mirrors Python: func_t.is_modifying in eval_order.py _call_can_mutate *)
     ce_func_modifying : string -> bool;
+    (* The contract's modules, for the subscript overlap check
+       (vyperSubscriptOverlap). *)
+    ce_modules : (num option # toplevel list) list;
     (* Nonreentrant lock info for explicit return statements:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.

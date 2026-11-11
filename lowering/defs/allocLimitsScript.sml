@@ -57,7 +57,9 @@ Definition alloc_limits_expr_def:
      alloc_limits_named_exprs cenv kes) /\
   alloc_limits_expr cenv (Subscript t x y) =
     (type_alloc_ok cenv t /\ alloc_limits_expr cenv x /\
-     alloc_limits_expr cenv y) /\
+     alloc_limits_expr cenv y /\
+     (copies_subscript_base cenv x y ==>
+      type_memory_bytes cenv (expr_type x) < 2 ** 64)) /\
   alloc_limits_expr cenv (Attribute t x _) =
     (type_alloc_ok cenv t /\ alloc_limits_expr cenv x) /\
   alloc_limits_expr cenv (Builtin t bi es) =

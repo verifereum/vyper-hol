@@ -21,3 +21,22 @@ Theorem call_memory_pop_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation call_memory_pop))) >> EVAL_TAC
 QED
+
+(* An array base read through a dynamic-array element, copied before an index
+   call that writes the array. *)
+val subscript_base_copy = memoryStoreWitnessLib.evaluate fixture_root "subscript_base_copy"
+Theorem subscript_base_copy_matches_python_oracle:
+  ^(#term subscript_base_copy) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "subscript_base_copy")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation subscript_base_copy))) >> EVAL_TAC
+QED
+
+(* The same kind of base, not copied, since its index cannot change it. *)
+val subscript_base_live = memoryStoreWitnessLib.evaluate fixture_root "subscript_base_live"
+Theorem subscript_base_live_matches_python_oracle:
+  ^(#term subscript_base_live) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "subscript_base_live")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation subscript_base_live))) >> EVAL_TAC
+QED

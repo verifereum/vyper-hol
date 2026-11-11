@@ -12,8 +12,6 @@ The changes, as they appear in the pinned Python compiler:
 
 - P4 direct ABI encoder: values are encoded straight into the destination
   buffer, and an external call sends exactly the encoded length plus 4 bytes.
-- P7 subscript overlap: a dynamic array's base is copied when the index
-  expression can modify it (also a source-semantics change).
 - P8 `raw_create` bytecode type: `raw_create` types its bytecode argument
   with the argument's own type rather than `Bytes[49152]`, which sizes its
   initcode buffer (the HOL lowering still snapshots 49152 bytes).
@@ -27,9 +25,11 @@ slice's output buffer allocated after its bounds check), P3 (escaping
 allocations: comparisons don't make an allocation escape, escaping static
 allocations stay live everywhere and are allocated first) and P6 (eager call
 arguments: internal- and external-call arguments are read as they are
-evaluated, also a source-semantics change) are ported. P2 still heads sections
-below: two fixtures that differ for other reasons, and those that also need P4
-or P8.
+evaluated, also a source-semantics change) and P7 (subscript overlap: an
+array base derived through a dynamic-array element is copied before an index
+that writes a variable the base reads or makes a risky call, also a
+source-semantics change) are ported. P2 still heads sections below: two
+fixtures that differ for other reasons, and those that also need P4 or P8.
 A fixture listed under several changes needs all of them. The attribution
 comes from reverting one change at a time in the pinned compiler and
 recompiling. The creation fixtures' P4 entries are by elimination: P4 can't
@@ -82,9 +82,12 @@ P2 is ported. These two still differ from the oracle with it:
 - `load_timing/call_storage_read`: matches once its internal functions are
   emitted in Python's order; the function bodies already match.
 
-## P7 (subscript overlap)
+## Pop receiver copy (vyperlang/vyper#5280), not #5127
 
-- `load_timing/nested_retained_pop`
+- `load_timing/nested_retained_pop`: the pinned compiler's
+  `_lower_dynarray_pop` copies a receiver whose index can resize it and pops
+  the copy, so the pop is lost; the source semantics pops the array itself.
+  Since vyperlang/vyper#5280, after the pin, the compiler rejects such a pop.
 
 ## P8 (`raw_create` bytecode type)
 

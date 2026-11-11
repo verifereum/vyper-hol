@@ -1931,6 +1931,31 @@ Proof
   irule ci_mono_bind >> simp[ci_mono_comp_return, ci_mono_emit_op]
 QED
 
+Theorem ci_mono_compile_materialize_vv:
+  ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[ci_mono_compile_store_memory] >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_snapshot_vv:
+  ∀cenv copy vv sa. ci_mono sa (SND (compile_snapshot_vv cenv copy vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
+  rpt IF_CASES_TAC
+  >- (ho_match_mp_tac ci_mono_bind >> simp[ci_mono_unwrap_value, ci_mono_comp_return])
+  >- (ho_match_mp_tac ci_mono_bind >>
+      simp[ci_mono_compile_materialize_vv, ci_mono_comp_return]) >>
+  simp[ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_subscript_cfn[local]:
   ∀ cfn cenv ret_ty ty base_e idx_e sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -1940,6 +1965,10 @@ Proof
   rewrite_tac[compile_subscript_def] >> BETA_TAC >>
   irule ci_mono_bind >> conj_tac
   >- (rpt gen_tac >> simp[LET_THM] >>
+      irule ci_mono_bind >> reverse conj_tac
+      >- (IF_CASES_TAC >>
+          simp[ci_mono_compile_snapshot_vv, ci_mono_comp_return]) >>
+      rpt gen_tac >> BETA_TAC >>
       Cases_on `place_type cenv base_e` >> simp[]
       >- (irule ci_mono_bind >> conj_tac
           >- (rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >> conj_tac
@@ -2956,31 +2985,6 @@ QED
 
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)
-Theorem ci_mono_compile_materialize_vv:
-  ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
-Proof
-  rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- simp[ci_mono_compile_alloc_buffer] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-  >- simp[ci_mono_compile_store_memory] >>
-  simp[ci_mono_comp_return]
-QED
-
-Theorem ci_mono_compile_snapshot_vv:
-  ∀cenv copy vv sa. ci_mono sa (SND (compile_snapshot_vv cenv copy vv sa))
-Proof
-  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
-  rpt IF_CASES_TAC
-  >- (ho_match_mp_tac ci_mono_bind >> simp[ci_mono_unwrap_value, ci_mono_comp_return])
-  >- (ho_match_mp_tac ci_mono_bind >>
-      simp[ci_mono_compile_materialize_vv, ci_mono_comp_return]) >>
-  simp[ci_mono_comp_return]
-QED
-
 Theorem ci_mono_compile_multi_vvs:
   ∀cfn cenv es sa.
     (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
