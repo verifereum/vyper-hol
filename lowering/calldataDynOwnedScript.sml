@@ -3778,13 +3778,8 @@ Resume calldata_array_loop_init_repeat_safe[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (qpat_x_assum `abi_decoder_operand_live st.cs_next_var op` mp_tac >>
-     qpat_x_assum `st.cs_next_var <= guard_st.cs_next_var` mp_tac >>
-     qpat_x_assum `header_st.cs_next_var = guard_st.cs_next_var + 1` mp_tac >>
-     rpt (pop_assum kall_tac) >> rpt strip_tac >>
-     Cases_on `op` >>
-     gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
-     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+    (conj_tac >> irule abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> simp[]) >>
   `eval_operand op h = eval_operand op initial` by metis_tac[] >>
   drule_all calldata_index_init_live_frame >> simp[]
 QED
@@ -4408,9 +4403,6 @@ QED
 
 Finalise calldata_owned_after_initial_repeat
 
-val calldata_owned_header_initial_repeat_simp =
-  SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat;
-
 Theorem calldata_nonbulk_owned_repeat:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
@@ -4587,8 +4579,8 @@ Proof
   qpat_assum `lookup_block exit_lbl _ = _`
     (irule_at (Pat `lookup_block exit_lbl _ = _`)) >>
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
-  >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
+  rpt conj_tac >>
+  FIRST [first_assum (ACCEPT_TAC o BETA_RULE), simp_tac bool_ss []] >>
   irule calldata_owned_header_initial_repeat_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
@@ -5695,9 +5687,6 @@ Resume calldata_owned_after_initial_repeat_observed[terminal]:
 QED
 
 Finalise calldata_owned_after_initial_repeat_observed
-
-val calldata_owned_header_initial_repeat_observed_simp =
-  SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat_observed;
 
 Theorem calldata_nonbulk_owned_repeat_observed:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =

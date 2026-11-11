@@ -83,7 +83,7 @@ Proof
   Cases_on `os`
   >- gvs[take_outcome_def, adopt_outcome_def, request_agree_except_def] >>
   gvs[take_outcome_def, adopt_outcome_def] >>
-  Cases_on `~rq'.cr_static /\ (h.co_success \/ rq'.cr_kind <> MessageCall)` >>
+  Cases_on `~rq'.cr_static /\ (h.co_success \/ rq'.cr_kind <> MessageCall /\ rq'.cr_kind <> DelegateMessageCall)` >>
   gvs[request_agree_except_def, accounts_agree_except_def,
       transient_agree_except_def, storage_agree_except_def, word_agree_except_def]
 QED

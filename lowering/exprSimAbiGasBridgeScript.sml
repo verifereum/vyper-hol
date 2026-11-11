@@ -1987,47 +1987,19 @@ Proof
   IF_CASES_TAC >> simp[instIdxIndepTheory.exec_result_map_def]
 QED
 
-Theorem frag_delegate_state_control:
-  make_venom_delegatecall_state
-    (s with <|vs_prev_bb := p; vs_current_bb := b|>) target gas data code static =
-  make_venom_delegatecall_state s target gas data code static
-Proof
-  simp[make_venom_delegatecall_state_def, venom_to_tx_params_def]
-QED
-
-Theorem frag_extract_control:
-  extract_venom_result (s with <|vs_prev_bb := p; vs_current_bb := b|>)
-    output ro rz result =
-  OPTION_MAP (\v. (FST v, SND v with <|vs_prev_bb := p; vs_current_bb := b|>))
-    (extract_venom_result s output ro rz result)
-Proof
-  Cases_on `result` >- simp[extract_venom_result_def] >>
-  rename1 `SOME pair` >> PairCases_on `pair` >>
-  simp[extract_venom_result_def] >>
-  namedCases_on `pair1.contexts` ["", "ctxt rest"] >> simp[] >>
-  Cases_on `rest` >> simp[] >>
-  PairCases_on `ctxt` >>
-  Cases_on `pair0` >> simp[write_memory_with_expansion_def] >>
-  qmatch_goalsub_rename_tac `case outcome of NONE => _ | SOME _ => _` >>
-  Cases_on `outcome` >>
-  simp[write_memory_with_expansion_def]
-QED
-
-Theorem frag_delegatecall_control:
+Theorem frag_delegatecall_control[local]:
   exec_delegatecall inst (s with <|vs_prev_bb := p; vs_current_bb := b|>)
     gas addr ao az ro rz =
     exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
       (exec_delegatecall inst s gas addr ao az ro rz)
 Proof
-  simp[exec_delegatecall_def, read_memory_def, frag_delegate_state_control,
-       frag_extract_control] >>
-  qmatch_goalsub_abbrev_tac `extract_venom_result s 1w (w2n ro) (w2n rz) run_result` >>
-  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) run_result` >>
-  simp[instIdxIndepTheory.exec_result_map_def] >>
-  rename1 `_ = SOME pair` >> PairCases_on `pair` >> simp[] >>
-  namedCases_on `inst.inst_outputs` ["", "out outs"] >>
-  simp[instIdxIndepTheory.exec_result_map_def] >>
-  Cases_on `outs` >> simp[instIdxIndepTheory.exec_result_map_def, update_var_def]
+  namedCases_on `inst.inst_outputs` ["", "out outs"]
+  >- simp[exec_delegatecall_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `outs` >>
+  simp[exec_delegatecall_def, frag_call_request_control,
+       venomCallOracleDefsTheory.consume_call_outcome_eq,
+       write_memory_with_expansion_def, update_var_def,
+       instIdxIndepTheory.exec_result_map_def]
 QED
 
 Theorem frag_read0_control:

@@ -92,16 +92,14 @@ Proof
   irule run_inst_seq_mem_ok_append >> simp[] >> rpt strip_tac >>
   drule calldata_slice_bounds_fresh >> strip_tac >>
   drule_all run_inst_seq_writes_fresh >> strip_tac >>
-  `s'.vs_alloca_next = s.vs_alloca_next /\
-   eval_operand dst s' = SOME wd /\ eval_operand src s' = SOME wa /\
+  qpat_x_assum `s' = s with vs_vars := _` (strip_assume_tac o
+    SIMP_RULE (srw_ss()) [venom_state_component_equality]) >>
+  `!op w. (!x. op = Var x ==> not_fresh_at sa x) /\ eval_operand op s = SOME w ==>
+          eval_operand op s' = SOME w` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  `eval_operand dst s' = SOME wd /\ eval_operand src s' = SOME wa /\
    eval_operand len s' = SOME wn /\ eval_operand pop s' = SOME wp` by
-    (`s'.vs_labels = s.vs_labels /\ s'.vs_alloca_next = s.vs_alloca_next` by
-       (qpat_x_assum `s' = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-     `!op w. (!x. op = Var x ==> not_fresh_at sa x) /\
-             eval_operand op s = SOME w ==> eval_operand op s' = SOME w` by
-       (Cases >> gvs[eval_operand_def, lookup_var_def]) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     rpt conj_tac >> first_x_assum irule >> asm_rewrite_tac[]) >>
+    (rpt conj_tac >> first_assum irule >> simp[]) >>
   irule (cj 1 calldata_slice_copy_store_emitted_mem) >> metis_tac[]
 QED
 
