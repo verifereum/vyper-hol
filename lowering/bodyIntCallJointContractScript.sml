@@ -58,16 +58,28 @@ Datatype:
   |>
 End
 
-(* A supported program declares no memberless struct: the interim
-   condition trunk's supported_program carries until the checker's
-   rejection of memberless structs (what Vyper rejects) reaches it.  Held
-   here; it is proved once supported_declaration_headers' StructDecl clause
-   requires fields <> []. *)
+(* A supported program declares no memberless struct (what Vyper rejects):
+   supported_declaration_header's StructDecl arm requires ~NULL fields, and
+   supported_struct_fields returns the fields of a StructDecl in tops. *)
+Triviality struct_fields_nonempty_headers:
+  !ts id fs.
+    EVERY (supported_declaration_header tops) ts /\
+    supported_struct_fields ts id = SOME fs ==> fs <> []
+Proof
+  Induct >> simp[supported_struct_fields_def] >>
+  rpt gen_tac >> PairCases_on `id` >>
+  simp[supported_struct_fields_def] >> strip_tac >>
+  gvs[AllCaseEqs(), supportedDeclsTheory.supported_declaration_header_def] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
 Theorem supported_program_struct_fields_nonempty:
   supported_program tops /\ supported_struct_fields tops id = SOME fs ==>
   fs <> []
 Proof
-  cheat
+  rw[supportedProgramTheory.supported_program_def,
+     supportedDeclsTheory.supported_declaration_headers_def] >>
+  metis_tac[struct_fields_nonempty_headers]
 QED
 
 (* The hypotheses on the fixed parameters alone: P lies below lo and clear
@@ -75,8 +87,8 @@ QED
    for owner; the return PC, the root return buffer's pointer and the
    immutable base are reserved, every reserved operand is a variable the
    prologue defined at the operand origin, and the return PC holds pc
-   there; no supported struct is memberless (the interim condition trunk's
-   supported_program carries until the checker's rejection reaches it); the return buffer's capacity is the return value's size and P
+   there; no supported struct is memberless (supported_program requires
+   it, supported_program_struct_fields_nonempty); the return buffer's capacity is the return value's size and P
    misses it; the source return type evaluates to ret_tv.  The root env
    returns internally (RET to the return PC, as the prologue sets it), with
    the stack-return count of the declared return type, and a return buffer
