@@ -59,9 +59,13 @@ Proof
   qexistsl_tac [`Gf`, `tnf`, `sf`] >>
   pure_rewrite_tac [LENGTH, MAP, SUM, GENLIST_CONS, combinTheory.o_DEF,
     pairTheory.pair_case_thm, ADD_ASSOC, ADD_CLAUSES] >>
-  simp[ADD_ASSOC] >>
+  simp_tac bool_ss [pairTheory.pair_case_thm, ADD_CLAUSES,
+    GSYM ADD_ASSOC, arithmeticTheory.ADD1] >>
+  reverse conj_tac >- gvs[] >>
   irule gas_path_ptr_then >>
-  qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[] >>
+  qexistsl_tac [`G1`, `s1`, `tn1`] >>
+  reverse conj_tac >- (qpat_x_assum `gas_path_ptr _ _ _ _ _ G1 _ _ _ _ _ _` mp_tac >>
+    simp_tac bool_ss [GSYM ADD1, ADD_CLAUSES]) >>
   irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`] |> SRULE []) >>
   qexistsl_tac [`Gp`, `sp`, `tnp`] >> simp[]
 QED
