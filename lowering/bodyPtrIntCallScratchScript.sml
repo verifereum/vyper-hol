@@ -4,7 +4,8 @@ Ancestors
   ghostPcTransportPtr instIdxIndep exprLoweringProps context compileEnv
   loweringStateRelDefs venomInst venomExecSemantics bodyPtrDefs venomState
   finite_map words list pred_set fragExec ptrDiscipline bodyPtrIntCallEntryContracts
-  bodyPtrMakeArrayWordStore loweringHalt
+  bodyPtrMakeArrayWordStore loweringHalt bodyPtrPrecompileBuiltinsAllocationFrame
+  fragGasPathPtr
 
 Theorem intcall_scratch_alloca_ptr:
   FLOOKUP s.vs_allocas aid = NONE /\
@@ -88,3 +89,56 @@ Resume intcall_scratch_alloca_ptr[return]:
 QED
 
 Finalise intcall_scratch_alloca_ptr
+
+(* The disabled branch is the optional, empty scratch tail. *)
+Theorem intcall_scratch_path_ptr:
+  (if enabled then compile_alloc_buffer n st else (buf,st)) = (buf,st') /\
+  (!aid. aid IN FDOM s.vs_allocas ==> aid < st.cs_next_id) /\
+  (enabled ==> s.vs_alloca_next + n < dimword (:256)) /\
+  ~ctx_has_dalloca ctx /\
+  intcall_completed env ce G tn s /\ return_buf_ptr d ce G tn s /\
+  stor_taint_ok cx tn s /\
+  (!p sz name. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+    not_fresh_at st p) /\
+  (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
+  (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==>
+    not_fresh_at st p /\ op_taint tn (Var p) = {}) ==>
+  ?t H un.
+    run_inst_seq (emitted_insts st st') s = OK t /\
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
+      (s with vs_inst_idx := k) H un) /\
+    (!bb. ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
+      gas_path_ptr D 0 ctx fn PG G tn s 0 H un
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st st')))) /\
+    intcall_completed env ce H un t /\ return_buf_ptr d ce H un t /\
+    stor_taint_ok cx un t /\
+    (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> op_taint un (Var p) = {}) /\
+    t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
+    t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    (!p. not_fresh_at st p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP H p = FLOOKUP G p /\ op_taint un (Var p) = op_taint tn (Var p))
+Proof
+  Cases_on `enabled` >> simp[] >> strip_tac
+  >- (drule emitted_allocation_singleton >> strip_tac >>
+      drule compile_alloc_buffer_parts >> strip_tac >>
+      `FLOOKUP s.vs_allocas st.cs_next_id = NONE` by
+        (simp[flookup_thm] >> metis_tac[prim_recTheory.LESS_REFL]) >>
+      `!p. not_fresh_at st p ==> p <> STRING #"%" (toString st.cs_next_var)` by
+        metis_tac[] >>
+      `s.vs_alloca_next + n < dimword (:256)` by decide_tac >>
+      `!p sz name. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+        p <> STRING #"%" (toString st.cs_next_var)` by metis_tac[] >>
+      `!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==>
+        p <> STRING #"%" (toString st.cs_next_var)` by metis_tac[] >>
+      `!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==>
+        p <> STRING #"%" (toString st.cs_next_var) /\ op_taint tn (Var p) = {}` by
+        metis_tac[] >>
+      drule_all intcall_scratch_alloca_ptr >>
+      disch_then (qspecl_then [`fn`,`PG`,`D`] mp_tac) >>
+      strip_tac >> qexistsl_tac [`t`,`H`,`un`] >> simp[] >> metis_tac[]) >>
+  gvs[] >> qexistsl_tac [`s`,`G`,`tn`] >>
+  simp[emitted_insts_refl, run_inst_seq_def, inst_seq_ptr_def] >>
+  rpt strip_tac >> simp[gas_path_ptr_rules]
+QED
