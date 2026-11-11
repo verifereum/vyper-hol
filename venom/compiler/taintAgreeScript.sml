@@ -2888,6 +2888,34 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM, arithmeticTheory.LESS_EQ_ADD]
 QED
 
+Theorem taint_agree_translated_return_halt:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  taint_within D C vs /\ taint_agree D X tn s t /\
+  inst.inst_opcode = RETURN /\ ti.inst_opcode = RETURN /\
+  inst.inst_operands = [addr;sz] /\ ti.inst_operands = [addr';sz'] /\
+  eval_operand addr s = SOME p /\ eval_operand sz s = SOME len /\
+  eval_operand addr' t = SOME p' /\ eval_operand sz' t = SOME len /\
+  (!q. q < w2n len /\ w2n p + q NOTIN tn.t_mem ==>
+    read_byte (w2n p + q) s.vs_memory = read_byte (w2n p' + q) t.vs_memory) /\
+  step_inst_base inst s = Halt sh ==>
+  ?th. step_inst_base ti t = Halt th /\ dead_result_rel D (Halt sh) (Halt th)
+Proof
+  strip_tac >>
+  `!q. q < w2n len /\ q NOTIN ret_taint tn inst s ==>
+    EL q (read_memory (w2n p) (w2n len) s) =
+    EL q (read_memory (w2n p') (w2n len) t)` by
+    metis_tac[taint_agree_translated_return_slice] >>
+  qexists_tac `halt_state (set_returndata (read_memory (w2n p') (w2n len) t) t)` >>
+  conj_tac >- simp[step_inst_base_opcode_eqs, read_memory_def] >>
+  irule taint_agree_halt_result >>
+  qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `active_inst _ _ _` (irule_at Any) >>
+  gvs[step_inst_base_opcode_eqs, halt_state_def, set_returndata_def,
+      step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+      ld_read_memory_length, GSYM read_memory_def,
+      taint_agree_def, ld_shared_agree_def]
+QED
+
 Theorem taint_agree_return_halt:
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
