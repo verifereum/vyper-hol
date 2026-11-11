@@ -166,12 +166,18 @@ Theorem supported_iterator_storage_syntax:
                IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator iter)
 Proof
   Cases_on `iter`
-  >- (simp[supported_iterator_def, supported_iterator_exists_def,
-           int_calls_iterator_def] >>
+  >- (simp[supported_iterator_exists_def, int_calls_iterator_def] >>
       qmatch_goalsub_rename_tac `int_calls_expr arr` >>
-      Cases_on `arr` >> simp[] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp[supported_expr_exists_def, call_operands_effect_root_def, expr_evm_run_root_def, int_calls_expr_def]) >>
+      Cases_on `arr`
+      >~ [`Name _ _`]
+      >- simp[supported_expr_exists_def, call_operands_effect_root_def,
+              expr_evm_run_root_def, int_calls_expr_def]
+      >~ [`TopLevelName _ _`]
+      >- simp[supported_expr_exists_def, call_operands_effect_root_def,
+              expr_evm_run_root_def, int_calls_expr_def] >>
+      simp[supported_iterator_def] >> strip_tac >>
+      metis_tac[supported_expr_main_calls, supported_expr_no_evm_run,
+                supported_expr_no_call_operand_effects, expr_has_evm_run_def]) >>
   simp[supported_iterator_def, supported_iterator_exists_def,
        int_calls_iterator_def, EVERY_APPEND] >>
   qmatch_goalsub_rename_tac `~supported_expr_exists _ lo /\ ~supported_expr_exists _ hi` >>
