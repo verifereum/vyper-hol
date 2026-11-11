@@ -356,12 +356,16 @@ Proof
   qexists_tac `sh` >> conj_tac >- fs[gas_marked_path_def] >>
   drule struct_gas_outcome_post >> disch_then irule >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >> rpt gen_tac >> strip_tac >>
+  `!n lb lsz. local_region ce es.scopes s0 n lb lsz ==> asz + b <= lb \/ lb + lsz <= b` by
+    (rpt strip_tac >>
+     qpat_assum `!name lo sz. local_region ce es.scopes s0 name lo sz ==> b + asz <= lo \/ _`
+       (drule_then mp_tac) >> decide_tac) >>
   pure_rewrite_tac [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
   irule (SRULE [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
     array_header_success_post) >>
   drule array_header_emit_entry >>
   disch_then (qspecl_then [`x`, `ce`] strip_assume_tac) >>
-  simp[] >> conj_tac
+  simp[] >> conj_tac >- first_assum ACCEPT_TAC >> conj_tac
   >- (qexists_tac `sm` >>
       gvs[Abbr `sh`, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
       metis_tac[]) >>
