@@ -387,6 +387,383 @@ Proof
   simp[vars_kept_def]
 QED
 
+(* Framed opcode boundaries retain the two loop registers and the entry frame. *)
+Theorem dynstorage_condition_frame[local]:
+  !G ctx fn s bb lv counter vl vd l c id1 id2 id3 body exit N origin.
+    no_phi_fn fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id1 LT [Var counter; Var lv] [vl]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst id2 ISZERO [Var vl] [vd]) /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) =
+      SOME (mk_inst id3 JNZ [Var vd; Label exit; Label body] []) /\
+    lookup_var lv s = SOME l /\ lookup_var counter s = SOME c /\
+    lv <> vl /\ lv <> vd /\ counter <> vl /\ counter <> vd /\
+    ~var_below N vl /\ ~var_below N vd /\ vars_kept N {} origin s ==>
+    fuel_outcome G ctx fn s 1
+      (\t. t.vs_current_bb = (if w2n c < w2n l then body else exit) /\
+           t.vs_inst_idx = 0 /\ lookup_var lv t = SOME l /\
+           lookup_var counter t = SOME c /\ vars_kept N {} origin t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dynstorage_condition_outcome >> simp[] >>
+  disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[jump_to_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       vars_kept_def] >>
+  rpt strip_tac >> fs[vars_kept_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem dynstorage_increment_frame[local]:
+  !G ctx fn s bb lv counter vi l c id1 id2 id3 cond N origin.
+    no_phi_fn fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id1 ADD [Var counter; Lit 1w] [vi]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst id2 ASSIGN [Var vi] [counter]) /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) =
+      SOME (mk_inst id3 JMP [Label cond] []) /\
+    lookup_var lv s = SOME l /\ lookup_var counter s = SOME c /\
+    lv <> counter /\ lv <> vi /\
+    ~var_below N vi /\ ~var_below N counter /\ vars_kept N {} origin s ==>
+    fuel_outcome G ctx fn s 1
+      (\t. t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+           lookup_var lv t = SOME l /\ lookup_var counter t = SOME (c + 1w) /\
+           vars_kept N {} origin t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dynstorage_increment_outcome >> simp[] >>
+  disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[jump_to_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       vars_kept_def] >>
+  rpt strip_tac >> fs[vars_kept_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem dynstorage_round_outcome[local]:
+  !G ctx fn N origin l lv counter vl vd vi
+   s8 s12 s13 s17 body exit cond bc bi a b d e f g Kcopy.
+    no_phi_fn fn /\
+    s8.cs_current_bb = cond /\ s8.cs_current_insts = [] /\
+    s12.cs_current_bb = body /\ s12.cs_current_insts = [] /\
+    s17.cs_current_bb = exit /\ s17.cs_current_insts = [] /\
+    lv <> vl /\ lv <> vd /\ counter <> vl /\ counter <> vd /\
+    lv <> counter /\ lv <> vi /\
+    ~var_below N vl /\ ~var_below N vd /\
+    ~var_below N vi /\ ~var_below N counter /\
+    (!t. at_point s8 t ==>
+      lookup_block t.vs_current_bb fn.fn_blocks = SOME bc /\
+      get_instruction bc t.vs_inst_idx =
+        SOME (mk_inst a LT [Var counter; Var lv] [vl]) /\
+      get_instruction bc (SUC t.vs_inst_idx) =
+        SOME (mk_inst b ISZERO [Var vl] [vd]) /\
+      get_instruction bc (SUC (SUC t.vs_inst_idx)) =
+        SOME (mk_inst d JNZ [Var vd; Label exit; Label body] [])) /\
+    (!t. at_point s13 t ==>
+      lookup_block t.vs_current_bb fn.fn_blocks = SOME bi /\
+      get_instruction bi t.vs_inst_idx =
+        SOME (mk_inst e ADD [Var counter; Lit 1w] [vi]) /\
+      get_instruction bi (SUC t.vs_inst_idx) =
+        SOME (mk_inst f ASSIGN [Var vi] [counter]) /\
+      get_instruction bi (SUC (SUC t.vs_inst_idx)) =
+        SOME (mk_inst g JMP [Label cond] [])) /\
+    (!t c. at_point s12 t /\ lookup_var lv t = SOME l /\
+      lookup_var counter t = SOME c /\ vars_kept N {} origin t ==>
+      ?j. j <= Kcopy /\ fuel_outcome G ctx fn t j
+        (\u. at_point s13 u /\ lookup_var lv u = SOME l /\
+             lookup_var counter u = SOME c /\ vars_kept N {} origin u)) ==>
+    let H = \t. at_point s8 t /\ lookup_var lv t = SOME l /\
+                 (?c. lookup_var counter t = SOME c) /\ vars_kept N {} origin t in
+    let Q = \t. at_point s17 t /\ vars_kept N {} origin t in
+    let mu = \t. w2n l - w2n (THE (lookup_var counter t)) in
+      !s. H s ==> ?j. j <= Kcopy + 2 /\
+        fuel_outcome G ctx fn s j (\t. Q t \/ (H t /\ mu t < mu s))
+Proof
+  rpt gen_tac >> strip_tac >> simp_tac std_ss [LET_THM] >> rpt strip_tac >>
+  qabbrev_tac `round_post = \t.
+    (at_point s17 t /\ vars_kept N {} origin t) \/
+    ((at_point s8 t /\ lookup_var lv t = SOME l /\
+      (?c. lookup_var counter t = SOME c) /\ vars_kept N {} origin t) /\
+     w2n l - w2n (THE (lookup_var counter t)) <
+     w2n l - w2n (THE (lookup_var counter s)))` >>
+  qpat_assum `!t. at_point s8 t ==> _` (drule_then strip_assume_tac) >>
+  drule_all dynstorage_condition_frame >>
+  disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then [`round_post`, `Kcopy + 1`] mp_tac) >>
+  impl_tac
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      Cases_on `w2n c < w2n l`
+      >- (fs[] >>
+          `at_point s12 t` by simp[at_point_def] >>
+          qpat_assum `!t c. _` (drule_all_then strip_assume_tac) >>
+          drule fuel_outcome_compose >>
+          disch_then (qspecl_then [`round_post`, `1`] mp_tac) >>
+          impl_tac
+          >- (rpt gen_tac >> simp[] >> strip_tac >>
+              qpat_assum `!t. at_point s13 t ==> _`
+                (drule_then strip_assume_tac) >>
+              drule_all dynstorage_increment_frame >>
+              disch_then (qspecl_then [`G`, `ctx`] assume_tac) >>
+              qexists_tac `1` >> simp[] >>
+              irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+              drule dynstorage_remaining_decreases >> strip_tac >>
+              simp[Abbr `round_post`, at_point_def] >>
+              rpt strip_tac >> simp[] >> metis_tac[]) >>
+          strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac) >>
+      qexists_tac `0` >> simp[] >>
+      irule fuel_outcome_weaken >>
+      qexists_tac `\u. u = t` >> simp[fuel_outcome_refl] >>
+      simp[Abbr `round_post`, at_point_def]) >>
+  strip_tac >> qexists_tac `j` >> simp[] >> gvs[]
+QED
+
+(* Entry either fixes an exceptional result or loads an arbitrary word and
+   starts the counter at zero.  No validity premise on the source is needed. *)
+Theorem dynstorage_entry_outcome[local]:
+  !G ctx fn s bb s0 s8 src lv counter id1 id2 id3 cond.
+    no_phi_fn fn /\ at_point s0 s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id1 MLOAD [src] [lv]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst id2 ASSIGN [Lit 0w] [counter]) /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) =
+      SOME (mk_inst id3 JMP [Label cond] []) /\
+    lv <> counter /\
+    ~var_below s0.cs_next_var lv /\
+    ~var_below s0.cs_next_var counter /\
+    s8.cs_current_bb = cond /\ s8.cs_current_insts = [] ==>
+    fuel_outcome G ctx fn s 1
+      (\t. at_point s8 t /\ lookup_var counter t = SOME 0w /\
+           (?l:bytes32. lookup_var lv t = SOME l) /\
+           vars_kept s0.cs_next_var {} s t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eval_operand src s`
+  >- (`!f. run_from f ctx fn s = Error "undefined operand"` by
+        (gen_tac >> simp[run_from_def, Once exec_block_def,
+          step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+          exec_read1_def]) >>
+      simp[fuel_outcome_def]) >>
+  qmatch_asmsub_rename_tac `eval_operand src s = SOME addr` >>
+  qabbrev_tac `s1 = (update_var lv (mload (w2n addr) s) s)
+                     with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `s2 = (update_var counter 0w s1)
+                     with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
+  `!f. run_from f ctx fn s = run_from f ctx fn s2` by
+    (gen_tac >>
+     simp[run_from_def, Once exec_block_def, step_inst_non_invoke,
+          step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
+     simp[Once exec_block_def, step_inst_non_invoke,
+          step_inst_base_opcode_eqs, mk_inst_def, is_terminator_def,
+          eval_operands_def, eval_operand_def, Abbr `s1`, Abbr `s2`,
+          update_var_def]) >>
+  `fuel_outcome G ctx fn s2 1
+      (\t. at_point s8 t /\ lookup_var counter t = SOME 0w /\
+           (?l:bytes32. lookup_var lv t = SOME l) /\
+           vars_kept s0.cs_next_var {} s t)`
+    suffices_by gvs[fuel_outcome_def] >>
+  irule fuel_outcome_jump >> conj_tac >- simp[] >>
+  qexistsl [`bb`, `mk_inst id3 JMP [Label cond] []`, `cond`] >>
+  simp[Abbr `s2`, Abbr `s1`, mk_inst_def, is_terminator_def,
+       step_inst_base_opcode_eqs, at_point_def, jump_to_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE, vars_kept_def] >>
+  metis_tac[]
+QED
+
+(* Compiler boundaries for the five slices; no runtime state is involved. *)
+Theorem dynstorage_entry_extends[local]:
+  !src s0 len s1 cond s2 body s3 exit s4 counter s5 s6 s7 old s8.
+  emit_op MLOAD [src] s0 = (len,s1) /\
+  fresh_label "dyn_cond" s1 = (cond,s2) /\
+  fresh_label "dyn_body" s2 = (body,s3) /\
+  fresh_label "dyn_exit" s3 = (exit,s4) /\
+  fresh_var s4 = (counter,s5) /\
+  emit_inst ASSIGN [Lit 0w] [counter] s5 = ((),s6) /\
+  emit_inst JMP [Label cond] [] s6 = ((),s7) /\
+  new_block cond s7 = (old,s8) ==>
+  cs_extends s0 s8 /\ s0.cs_next_var <= s8.cs_next_var
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, fresh_label_def,
+      emit_def, new_block_def] >>
+  simp[cs_extends_def, listTheory.APPEND_ASSOC]
+QED
+
+Theorem dynstorage_condition_extends[local]:
+  !counter len s8 lt s9 done s10 exit body s11 old s12.
+  emit_op LT [Var counter; len] s8 = (lt,s9) /\
+  emit_op ISZERO [lt] s9 = (done,s10) /\
+  emit_inst JNZ [done; Label exit; Label body] [] s10 = ((),s11) /\
+  new_block body s11 = (old,s12) ==>
+  cs_extends s8 s12 /\ s8.cs_next_var <= s12.cs_next_var
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, emit_def, new_block_def] >>
+  simp[cs_extends_def, listTheory.APPEND_ASSOC]
+QED
+
+Theorem dynstorage_increment_extends[local]:
+  !counter s13 inc s14 s15 cond s16 exit old s17.
+  emit_op ADD [Var counter; Lit 1w] s13 = (inc,s14) /\
+  emit_inst ASSIGN [inc] [counter] s14 = ((),s15) /\
+  emit_inst JMP [Label cond] [] s15 = ((),s16) /\
+  new_block exit s16 = (old,s17) ==>
+  cs_extends s13 s17 /\ s13.cs_next_var <= s17.cs_next_var
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, emit_def, new_block_def] >>
+  simp[cs_extends_def, listTheory.APPEND_ASSOC]
+QED
+
+Theorem dynstorage_slice_code[local]:
+  !s0 s8 s12 s13 s17 sf fn.
+    cs_extends s0 s8 /\ cs_extends s8 s12 /\
+    cs_extends s12 s13 /\ cs_extends s13 s17 /\ cs_extends s17 sf /\
+    fn_has_code s0 sf fn ==>
+    fn_has_code s0 s8 fn /\ fn_has_code s8 s12 fn /\
+    fn_has_code s12 s13 fn /\ fn_has_code s13 s17 fn /\
+    fn_has_code s17 sf fn
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cs_extends s0 s12` by metis_tac[cs_extends_trans] >>
+  `cs_extends s0 s13` by metis_tac[cs_extends_trans] >>
+  `cs_extends s0 s17` by metis_tac[cs_extends_trans] >>
+  `fn_has_code s0 s17 fn /\ fn_has_code s17 sf fn` by
+    metis_tac[fn_has_code_split] >>
+  `fn_has_code s0 s13 fn /\ fn_has_code s13 s17 fn` by
+    metis_tac[fn_has_code_split] >>
+  `fn_has_code s0 s12 fn /\ fn_has_code s12 s13 fn` by
+    metis_tac[fn_has_code_split] >>
+  metis_tac[fn_has_code_split]
+QED
+
+Theorem dynstorage_entry_code[local]:
+  !src s0 len s1 cond s2 body s3 exit s4 counter s5 s6 s7 old s8 fn s.
+  emit_op MLOAD [src] s0 = (len,s1) /\
+  fresh_label "dyn_cond" s1 = (cond,s2) /\
+  fresh_label "dyn_body" s2 = (body,s3) /\
+  fresh_label "dyn_exit" s3 = (exit,s4) /\
+  fresh_var s4 = (counter,s5) /\
+  emit_inst ASSIGN [Lit 0w] [counter] s5 = ((),s6) /\
+  emit_inst JMP [Label cond] [] s6 = ((),s7) /\
+  new_block cond s7 = (old,s8) /\
+  fn_has_code s0 s8 fn /\ at_point s0 s ==>
+  ?bb lv.
+    len = Var lv /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst s0.cs_next_id MLOAD [src] [lv]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst (s0.cs_next_id + 1) ASSIGN [Lit 0w] [counter]) /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) =
+      SOME (mk_inst (s0.cs_next_id + 2) JMP [Label cond] [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, fresh_label_def,
+      emit_def, new_block_def, fn_has_code_def, emitted_blocks_def,
+      at_point_def] >>
+  simp[get_instruction_def, listTheory.APPEND_ASSOC,
+       listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1]
+QED
+
+Theorem dynstorage_condition_code[local]:
+  !counter lv s8 lt s9 done s10 exit body s11 old s12 fn s.
+  s8.cs_current_insts = [] /\
+  emit_op LT [Var counter; Var lv] s8 = (lt,s9) /\
+  emit_op ISZERO [lt] s9 = (done,s10) /\
+  emit_inst JNZ [done; Label exit; Label body] [] s10 = ((),s11) /\
+  new_block body s11 = (old,s12) /\
+  fn_has_code s8 s12 fn /\ at_point s8 s ==>
+  ?bb vl vd.
+    lt = Var vl /\ done = Var vd /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst s8.cs_next_id LT [Var counter; Var lv] [vl]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst (s8.cs_next_id + 1) ISZERO [Var vl] [vd]) /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) =
+      SOME (mk_inst (s8.cs_next_id + 2) JNZ
+        [Var vd; Label exit; Label body] [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, emit_def, new_block_def,
+      fn_has_code_def, emitted_blocks_def, at_point_def] >>
+  simp[get_instruction_def]
+QED
+
+Theorem dynstorage_increment_code[local]:
+  !counter s13 inc s14 s15 cond s16 exit old s17 fn s.
+  emit_op ADD [Var counter; Lit 1w] s13 = (inc,s14) /\
+  emit_inst ASSIGN [inc] [counter] s14 = ((),s15) /\
+  emit_inst JMP [Label cond] [] s15 = ((),s16) /\
+  new_block exit s16 = (old,s17) /\
+  fn_has_code s13 s17 fn /\ at_point s13 s ==>
+  ?bb vi.
+    inc = Var vi /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst s13.cs_next_id ADD [Var counter; Lit 1w] [vi]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst (s13.cs_next_id + 1) ASSIGN [Var vi] [counter]) /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) =
+      SOME (mk_inst (s13.cs_next_id + 2) JMP [Label cond] [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_id_def, fresh_var_def, emit_def, new_block_def,
+      fn_has_code_def, emitted_blocks_def, at_point_def] >>
+  simp[get_instruction_def, listTheory.APPEND_ASSOC,
+       listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1]
+QED
+
+Theorem dynstorage_slice_frontiers[local]:
+  !N lv counter s8 lt s9 done s10 exit body s11 old s12
+    copy s13 inc s14 s15 cond s16 old' s17.
+  N <= s8.cs_next_var /\
+  var_below s8.cs_next_var lv /\ var_below s8.cs_next_var counter /\
+  s8.cs_current_insts = [] /\
+  emit_op LT [Var counter; Var lv] s8 = (lt,s9) /\
+  emit_op ISZERO [lt] s9 = (done,s10) /\
+  emit_inst JNZ [done; Label exit; Label body] [] s10 = ((),s11) /\
+  new_block body s11 = (old,s12) /\
+  fuel_ok {} {} {} copy /\ copy s12 = ((),s13) /\
+  emit_op ADD [Var counter; Lit 1w] s13 = (inc,s14) /\
+  emit_inst ASSIGN [inc] [counter] s14 = ((),s15) /\
+  emit_inst JMP [Label cond] [] s15 = ((),s16) /\
+  new_block exit s16 = (old',s17) ==>
+  ?vl vd vi.
+    lt = Var vl /\ done = Var vd /\ inc = Var vi /\
+    ~var_below N vl /\ ~var_below N vd /\ ~var_below N vi /\
+    lv <> vl /\ lv <> vd /\ lv <> vi /\
+    counter <> vl /\ counter <> vd /\ counter <> vi /\
+    var_below s12.cs_next_var lv /\ var_below s12.cs_next_var counter /\
+    var_below s13.cs_next_var lv /\ var_below s13.cs_next_var counter /\
+    cs_extends s12 s13 /\ s12.cs_next_var <= s13.cs_next_var /\
+    s12.cs_current_bb = body /\ s12.cs_current_insts = [] /\
+    s17.cs_current_bb = exit /\ s17.cs_current_insts = []
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all dynstorage_condition_layout >> strip_tac >>
+  drule_all dynstorage_increment_layout >> strip_tac >>
+  qpat_x_assum `fuel_ok _ _ _ copy` mp_tac >>
+  rewrite_tac[fuel_ok_def] >> disch_then drule >> strip_tac >>
+  simp[] >>
+  `N <= s13.cs_next_var` by decide_tac >>
+  `var_below s13.cs_next_var lv /\ var_below s13.cs_next_var counter` by
+    (fs[var_below_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  simp[var_below_fresh] >>
+  gvs[var_below_def] >> metis_tac[LESS_EQ_REFL]
+QED
+
 Theorem fuel_ok_compile_dynarray_to_storage:
   !src_ptr dst_slot elem_words elem_mem_size transient Wv E.
     fuel_ok Wv {} E
