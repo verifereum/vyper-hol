@@ -2,7 +2,7 @@
    separately from checked pointer sequences. *)
 Theory bodyPtrCodeSliceSelfContinue
 Ancestors
-  bodyPtrCodeSliceSelfPrefix bodyPtrCodeSliceSelfSuffix
+  bodyPtrCodeSliceSelfPrefix bodyPtrCodeSliceSelfSuffix bodyPtrDefs vyperState
   exprSimSliceBounds exprSimCalldataSlice exprSimSliceSource
   fragGasSeqPtr gasSummaryComposePtr exprSimSliceExtcode
   emitHelperProps loweringShapeDefs venomState venomInst venomExecSemantics
@@ -506,6 +506,8 @@ Theorem self_code_tail_success_ptr:
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sd sf) v G tn' /\
     ghost_inv d cenv cx es G tn' z /\
     ghost_kept cenv es sd G tn v G tn' /\
+    z = mstore (w2n p) n (write_memory_with_expansion (w2n p+32)
+      (TAKE (w2n n) (DROP (w2n a) u.vs_code)) v) /\
     tn' = (tn with t_mem := (tn.t_mem DIFF
       {j | w2n p+32 <= j /\ j < w2n p+32+w2n n}) DIFF
       {j | w2n p <= j /\ j < w2n p+32})
@@ -562,3 +564,30 @@ Resume self_code_tail_success_ptr[layout]:
 QED
 
 Finalise self_code_tail_success_ptr
+
+(* Consume the semantic value view and coverage without exposing its buffer
+   allocation witness to the continuation consumer. *)
+Theorem self_code_covered_result:
+  evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic cap))) /\
+  vv_holds cenv cx ty (Value (BytesV bs))
+    (LocatedValue ty (mk_ptr (Var out) LocMemory)) es s /\
+  ptr_covers G tn out s sz /\
+  val_wf (BaseTV (BytesT (Dynamic cap))) (BytesV bs) /\
+  val_store_size (BaseTV (BytesT (Dynamic cap))) (BytesV bs) <= sz /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= sz /\
+  tn' = (tn with t_mem := (tn.t_mem DIFF
+    {j | w2n p+32 <= j /\ j < w2n p+32+LENGTH bs}) DIFF
+    {j | w2n p <= j /\ j < w2n p+32}) /\
+  lookup_var out s = SOME p ==>
+  ptr_vv_ok cx ty (Value (BytesV bs))
+    (LocatedValue ty (mk_ptr (Var out) LocMemory)) es G tn' s /\
+  ptr_buf_ok cenv e (Var out) G s
+Proof
+  strip_tac >> fs[ptr_covers_def] >>
+  `val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs)
+     (w2n p) s.vs_memory` by
+    (fs[vv_holds_def, mk_ptr_def, eval_operand_def, read_result_def, vyperStateTheory.return_def] >> metis_tac[]) >>
+  irule self_code_copy_store_located_result >>
+  qexistsl_tac [`b`,`bs`,`cap`,`p`,`sz'`,`tn`] >>
+  simp[read_result_def, vyperStateTheory.return_def] >> decide_tac
+QED
