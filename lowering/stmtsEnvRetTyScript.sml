@@ -26,14 +26,16 @@ QED
 
 Theorem body_inv_dynarrays_typed[local]:
   !tops ctx cenv cx id.
-    body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops id ==>
+    body_inv tops ctx cenv cx /\
+    supported_append_target tops (TopLevelNameTarget id) ==>
     ?t b. cenv.ce_module_var_type id = SOME (ArrayT t b)
 Proof
   rw[body_inv_def] >> PairCases_on `id` >>
   `id0 = NONE` by
     (CCONTR_TAC >> Cases_on `tops` >>
-     gvs[supported_storage_dynamic_array_def, supported_variable_decl_def]) >>
-  gvs[supported_storage_dynamic_array_def] >>
+     gvs[supported_append_target_def, supported_storage_dynamic_array_def,
+         supported_variable_decl_def]) >>
+  gvs[supported_append_target_def, supported_storage_dynamic_array_def] >>
   BasicProvers.every_case_tac >> gvs[] >>
   drule supported_variable_decl_var_type >> simp[]
 QED
@@ -85,13 +87,13 @@ QED
    has an array type in the compile env, and no declaration changes module types. *)
 Theorem compile_stmt_ret_ty[local]:
   (!cenv lctx ty s.
-     (!id. supported_storage_dynamic_array tops id ==>
+     (!id. supported_append_target tops (TopLevelNameTarget id) ==>
           ?t b. cenv.ce_module_var_type id = SOME (ArrayT t b)) /\
      supported_stmt tops bindings s /\
      ~stmt_valued_return s ==>
      compile_stmt cenv lctx ty s = compile_stmt cenv lctx ty' s) /\
   (!cenv lctx ty ss.
-     (!id. supported_storage_dynamic_array tops id ==>
+     (!id. supported_append_target tops (TopLevelNameTarget id) ==>
           ?t b. cenv.ce_module_var_type id = SOME (ArrayT t b)) /\
      supported_stmts tops bindings ss /\
      ~stmts_valued_return ss ==>
@@ -108,7 +110,7 @@ Proof
       simp[Cong declare_stmt_local_bind_cong])
   >~ [`Append target _`]
   >- (rpt strip_tac >> Cases_on `target` >>
-      gvs[supported_stmt_def, supported_append_target_def,
+      gvs[supported_stmt_def,
           stmt_valued_return_def] >>
       first_x_assum (drule_then strip_assume_tac) >>
       ONCE_REWRITE_TAC [compile_stmt_def] >> simp[target_root_type_def]) >>
@@ -132,7 +134,7 @@ Theorem stmts_env_ret_ty:
     stmts_env cenv lctx ty ss = stmts_env cenv lctx ty' ss
 Proof
   rpt strip_tac >>
-  `!id. supported_storage_dynamic_array tops id ==>
+  `!id. supported_append_target tops (TopLevelNameTarget id) ==>
         ?t b. cenv.ce_module_var_type id = SOME (ArrayT t b)` by
     metis_tac[body_inv_dynarrays_typed] >>
   qpat_x_assum `body_inv _ _ _ _` kall_tac >>

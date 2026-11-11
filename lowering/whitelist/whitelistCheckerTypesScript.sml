@@ -7,7 +7,7 @@
    a simulation case can split on it. *)
 Theory whitelistCheckerTypes
 Ancestors
-  supportedExprForms supportedTypes vyperTypeSystem vyperContext vyperValue
+  supportedExprForms supportedTypes supportedStmts vyperTypeSystem vyperContext vyperValue
   vyperAST vyperMisc exprLowering placeTypingProps abiCallerStructSize
   alist finite_map list pred_set pair arithmetic
 
@@ -581,4 +581,25 @@ Proof
        AllCaseEqs()] >>
   rw[] >> drule type_env_struct_fields >> rw[] >>
   drule ALOOKUP_MEM >> simp[MEM_MAP, EXISTS_PROD] >> metis_tac[]
+QED
+
+(* The target residual excludes locals, subscripts and attributes. Full-word
+   non-Private arrays retain the visibility restriction of the old clause. *)
+Theorem type_stmt_append_supported:
+  type_stmt env ret_ty (Append target e) = SOME env' /\
+  target = TopLevelNameTarget nid /\
+  supported_variable_decl tops nid = SOME (vis, mut, ty, SOME slot) /\
+  type_place_target env target = SOME (Type ty) /\
+  (mut = Storage \/ mut = Transient) /\
+  (vis = Private \/
+   ?elem dn. ty = ArrayT elem (Dynamic dn) /\ ~supported_full_word_type elem) /\
+  (!elem dn. ty = ArrayT elem (Dynamic dn) /\ ~supported_full_word_type elem ==>
+             expr_type e = elem) /\
+  supported_pure_expr tops e ==>
+  supported_stmt tops bindings (Append target e)
+Proof
+  rpt strip_tac >> Cases_on `ty` >>
+  gvs[type_stmt_def, supported_stmt_def, supported_append_target_def] >>
+  rename1 `ArrayT elem bd` >> Cases_on `bd` >>
+  gvs[type_stmt_def, supported_storage_dynamic_array_def] >> metis_tac[]
 QED

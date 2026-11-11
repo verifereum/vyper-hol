@@ -74,7 +74,12 @@ End
 
 Definition supported_append_target_def:
   supported_append_target tops (TopLevelNameTarget id) =
-    supported_storage_dynamic_array tops id /\
+    (supported_storage_dynamic_array tops id \/
+     ?vis mut elem dn slot.
+       supported_variable_decl tops id =
+         SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
+       (mut = Storage \/ mut = Transient) /\
+       ~supported_full_word_type elem) /\
   supported_append_target tops (NameTarget name) = F /\
   supported_append_target tops (SubscriptTarget target key) = F /\
   supported_append_target tops (AttributeTarget target fname) = F
@@ -142,7 +147,14 @@ Definition supported_stmt_def:
      supported_expr tops e /\
      supported_binop op ty (expr_type e) F (supported_nonnegative_literal e)) /\
   supported_stmt tops bindings (Append target e) =
-    (supported_append_target tops target /\ supported_pure_expr tops e) /\
+    (supported_append_target tops target /\ supported_pure_expr tops e /\
+     case target of
+       TopLevelNameTarget id =>
+         supported_storage_dynamic_array tops id \/
+         (?vis mut dn slot.
+           supported_variable_decl tops id =
+             SOME (vis, mut, ArrayT (expr_type e) (Dynamic dn), SOME slot))
+     | _ => F) /\
   supported_stmt tops bindings (If c yes no) =
     (supported_pure_expr tops c /\ supported_stmts tops bindings yes /\
      supported_stmts tops bindings no) /\

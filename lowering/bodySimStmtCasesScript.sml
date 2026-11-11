@@ -507,9 +507,20 @@ Theorem body_append_storage_other:
                 body_expr_ok cx e) ==>
     body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `nid` >>
-  rw[body_stmt_ok_def, supported_stmt_def, supported_append_target_def] >>
-  irule body_append_storage_fragment >> metis_tac[supported_expr_def]
+  rpt gen_tac >> strip_tac >> rw[body_stmt_ok_def] >>
+  Cases_on `supported_storage_dynamic_array tops nid`
+  >- (Cases_on `nid` >>
+      irule body_append_storage_fragment >>
+      gvs[supported_stmt_def] >> metis_tac[supported_expr_def]) >>
+  gvs[supported_stmt_def, supported_append_target_def] >>
+  `supported_stmt tops [] (Append (TopLevelNameTarget nid) e)` by
+    (simp[supported_stmt_def, supported_append_target_def] >> metis_tac[]) >>
+  drule bodyAppendStorageFactsTheory.body_append_element_alloc_bound >> strip_tac >>
+  drule_at (Pat `supported_variable_decl _ _ = _`)
+    body_append_storage_narrow >>
+  disch_then (qspecl_then [`cx`, `e`, `ctx`, `cenv`] mp_tac) >>
+  simp[] >>
+  rewrite_tac[body_stmt_ok_def] >> disch_then drule_all >> simp[]
 QED
 
 (* supported_append_target admits no local, subscript or attribute target
