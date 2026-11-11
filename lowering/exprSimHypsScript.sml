@@ -861,7 +861,7 @@ Proof
   gvs[expr_sim_inv_def, int_calls_expr_def, expr_type_def]
 QED
 
-Theorem ifexp_arg_type_fits_refl[local]:
+Theorem ifexp_arg_type_fits_refl:
   !t. arg_type_fits t t
 Proof
   Induct >> simp[arg_type_fits_def]
