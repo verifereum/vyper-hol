@@ -490,7 +490,7 @@ Proof
      qexistsl_tac [`ee`, `s4`, `t'`] >> simp[]) >>
   `wb_frame cenv es ee sa s0 t''` by
     (irule exprSimWordArgsTheory.wb_frame_trans >>
-     simp[] >> reverse conj_tac
+     simp[] >> conj_tac
      >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
      qexistsl_tac [`ee`, `s3`, `t`] >> simp[] >>
      irule exprExtRequestPrefixTheory.extrequest_history_writeback >>
