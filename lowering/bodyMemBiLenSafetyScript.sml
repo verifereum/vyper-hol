@@ -68,21 +68,27 @@ Proof
       simp[] >> fs[vv_operand_def] >> metis_tac[]) >>
   gvs[vv_location_def, vv_operand_def, vv_holds_def] >>
   Cases_on `p.ptr_location` >> gvs[]
-  >- (irule (Q.INST [`loc` |-> `LocMemory`] rest_word_ptr_load_mem_ok) >>
-      simp[] >> metis_tac[])
+  >>~- ([`p.ptr_location = LocMemory`],
+        irule (Q.INST [`loc` |-> `LocMemory`] rest_word_ptr_load_mem_ok) >>
+        simp[] >> metis_tac[])
   >- (irule (Q.INST [`loc` |-> `LocStorage`] rest_word_ptr_load_mem_ok) >>
       simp[] >> metis_tac[])
   >- (irule (Q.INST [`loc` |-> `LocTransient`] rest_word_ptr_load_mem_ok) >>
       simp[] >> metis_tac[]) >>
-  drule_all rest_word_immutable_region_bound >> strip_tac >>
+  mp_tac (Q.INST [`es` |-> `es'`, `ty` |-> `post_value_type cenv e`,
+                  `vt` |-> `pvt`] rest_word_immutable_region_bound) >>
+  impl_tac >- simp[] >> strip_tac >>
   `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
     eval_operand (THE cenv.ce_imm_alloca) s = SOME 0w)` by
     (fs[stmt_state_rel_def, immutable_base_zero_def] >>
      Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
-  irule (Q.INST [`loc` |-> `LocCode`, `ctor` |-> `cenv.ce_is_ctor`,
-                  `imm` |-> `cenv.ce_imm_alloca`] rest_word_ptr_load_mem_ok) >>
-  simp[] >> qexistsl [`w`, `p.ptr_operand`, `cenv`, `op`] >> simp[] >>
-  Cases_on `cenv.ce_is_ctor` >> gvs[] >> decide_tac
+  mp_tac (Q.INST [`loc` |-> `LocCode`, `ctor` |-> `cenv.ce_is_ctor`,
+                  `imm` |-> `cenv.ce_imm_alloca`, `addr` |-> `p.ptr_operand`,
+                  `a` |-> `w`, `sa` |-> `sm`] rest_word_ptr_load_mem_ok) >>
+  impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     Cases_on `cenv.ce_is_ctor` >> gvs[] >> decide_tac) >>
+  simp[]
 QED
 
 Theorem len_vv_not_calldata:

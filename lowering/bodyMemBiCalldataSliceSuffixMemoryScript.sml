@@ -96,8 +96,11 @@ Proof
    eval_operand dst s' = SOME wd /\ eval_operand src s' = SOME wa /\
    eval_operand len s' = SOME wn /\ eval_operand pop s' = SOME wp` by
     (fs[venom_state_component_equality] >>
-     Cases_on `dst` >> Cases_on `src` >> Cases_on `len` >> Cases_on `pop` >>
-     gvs[eval_operand_def, lookup_var_def]) >>
+     rpt conj_tac >|
+     [Cases_on `dst` >> gvs[eval_operand_def, lookup_var_def],
+      Cases_on `src` >> gvs[eval_operand_def, lookup_var_def],
+      Cases_on `len` >> gvs[eval_operand_def, lookup_var_def],
+      Cases_on `pop` >> gvs[eval_operand_def, lookup_var_def]]) >>
   irule (cj 1 calldata_slice_copy_store_emitted_mem) >> metis_tac[]
 QED
 
