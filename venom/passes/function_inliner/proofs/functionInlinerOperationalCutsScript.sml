@@ -1768,3 +1768,41 @@ Proof
   simp[functionInlinerDefsTheory.rotate_invoke_ops_def, EL_APPEND_EQN, inline_rename_operand_def,
     eval_operand_def]
 QED
+
+Theorem inline_owner_storage_paired_writes:
+  !writes snap frame.
+  inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  INJ route.ir_rename (set (MAP FST writes) UNION snap.ils_defined) UNIV /\
+  EVERY (\(x,w,u). MEM x (cfgTransform$fn_all_vars a.ia_function) /\
+    (~retpc_var a.ia_function x ==> w = u)) writes ==>
+  inline_owner_storage cert
+    ((p,a,route,snap with <|ils_state :=
+       FOLDL (\s (x,w,u). update_var x w s) snap.ils_state writes;
+       ils_defined := set (MAP FST writes) UNION snap.ils_defined|>)::rest)
+    (frame with ipf_state :=
+       FOLDL (\s (x,w,u). update_var (route.ir_rename x) u s)
+         frame.ipf_state writes)
+Proof
+  Induct >> simp[] >> qx_gen_tac `h` >> PairCases_on `h` >>
+  rpt gen_tac >> simp[] >> strip_tac >>
+  `INJ route.ir_rename (h0 INSERT snap.ils_defined) UNIV` by
+    (irule INJ_SUBSET >> goal_assum (drule_at Any) >>
+     simp[SUBSET_DEF]) >>
+  `inline_owner_storage cert
+    ((p,a,route,snap with <|ils_state := update_var h0 h1 snap.ils_state;
+       ils_defined := h0 INSERT snap.ils_defined|>)::rest)
+    (frame with ipf_state := update_var (route.ir_rename h0) h2 frame.ipf_state)` by
+    (Cases_on `retpc_var a.ia_function h0`
+     >- (irule inline_owner_storage_opaque_write >> simp[] >> metis_tac[]) >>
+     `h1 = h2` by gvs[] >>
+     drule inline_owner_storage_writes >>
+     disch_then (drule_at (Pat `inline_annotated_origin _ _ _ _`)) >>
+     disch_then (qspec_then `[(h0,h1)]` mp_tac) >>
+     simp[INSERT_UNION_EQ]) >>
+  `set (MAP FST writes) UNION (h0 INSERT snap.ils_defined) =
+   (h0 INSERT set (MAP FST writes)) UNION snap.ils_defined` by
+    SET_TAC[] >>
+  qpat_x_assum `!snap frame. _` drule >>
+  fs[INSERT_UNION_EQ]
+QED
