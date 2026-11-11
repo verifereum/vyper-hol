@@ -797,7 +797,7 @@ QED
    needs. *)
 Theorem external_package_alloc_env_agree:
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -931,7 +931,7 @@ Theorem external_package_body_inv:
   supported_program tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -964,7 +964,7 @@ Theorem external_package_dec_metadata:
   source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -976,7 +976,7 @@ Proof
     by metis_tac[source_typing_ok_type_def_keys_distinct] >>
   drule compile_register_positional_args_cenv >> strip_tac >>
   qpat_x_assum `cenv = _` SUBST1_TAC >>
-  Cases_on `package_external_fn tops F (assign_nkeys tops 0)
+  Cases_on `package_external_fn tops T (K global_nonreentrant_slot)
     (mut,F,rr,tx.function_name,args,[],ret,fbody)` >>
   PairCases_on `r` >> gvs[set_external_package_target_def] >>
   drule_all package_external_fn_dec_cenv_agrees >> strip_tac >>
@@ -1035,7 +1035,7 @@ Theorem external_package_struct_fields:
   source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
@@ -1071,7 +1071,7 @@ QED
 Theorem external_package_method_id:
   source_deployment_rel tops am tx /\
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -1096,7 +1096,7 @@ QED
 
 Theorem external_package_global_maps:
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
@@ -1124,7 +1124,7 @@ Theorem external_package_bare_globals:
   env_consistent env_t
     (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -1154,8 +1154,8 @@ Proof
           initial_evaluation_context_def, get_source_immutables_def] >>
       rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `!src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty ==>
-     src = (build_compile_env tops External mut tx.function_name args ret fbody F).ce_module /\
-     ?off. FLOOKUP (build_compile_env tops External mut tx.function_name args ret fbody F).ce_module_vars
+     src = (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module /\
+     ?off. FLOOKUP (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module_vars
        (src,id) = SOME (ImmutableLoc off) /\
        !tv. evaluate_type (get_tenv
          (initial_evaluation_context am.sources am.layouts tx NONE)) ty = SOME tv ==>
@@ -1198,7 +1198,7 @@ Theorem external_selected_return_buffer_ok:
     lookup_function NONE tx.function_name External tops =
       SOME (mut,F,args,[],ret,fbody) /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
           tx.function_name External tops,tx.function_name,args,[],ret,fbody)) =
       (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
@@ -1259,7 +1259,7 @@ Theorem external_body_frame:
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
       (INL (), es0) /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =

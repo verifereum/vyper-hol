@@ -306,20 +306,9 @@ QED
    stack_get_depth bounds
    ========================================================================= *)
 
-Theorem stack_find_bound:
-  !p l d. stack_find p l = SOME d ==> d < LENGTH l
-Proof
-  Induct_on `l` >> simp[stack_find_def] >> rpt strip_tac >>
-  Cases_on `p h` >> fs[] >>
-  Cases_on `stack_find p l` >> fs[] >> res_tac >> simp[]
-QED
-
-Theorem stack_get_depth_bound:
-  !op stk d. stack_get_depth op stk = SOME d ==> d < LENGTH stk
-Proof
-  rpt strip_tac >> fs[stack_get_depth_def] >>
-  imp_res_tac stack_find_bound >> fs[]
-QED
+(* Kept under this theory's name for the compiler-proof integration branch. *)
+Theorem stack_find_bound = stackModelTheory.stack_find_bound
+Theorem stack_get_depth_bound = stackModelTheory.stack_get_depth_bound
 
 (* =========================================================================
    emit_one_input alignment on ps_stack and ps_spilled

@@ -138,7 +138,9 @@ Resume body_assignment_place_premises[mcopy]:
   gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[vyperCompilerTheory.run_lowering_def, AllCaseEqs(),
-      vyperCompilerTheory.lowering_policy_ok_def]
+      vyperCompilerTheory.lowering_policy_ok_def] >>
+  drule vyperCompilerTheory.run_grouped_lowering_policy >>
+  simp[vyperCompilerTheory.lowering_policy_ok_def]
 QED
 
 Resume body_assignment_place_premises[immutable]:

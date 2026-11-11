@@ -1,0 +1,7 @@
+event_bytes20_indexed
+event_storage_bytes20_indexed
+event_widen_dynarray
+event_widen_nested_string
+event_widen_tuple
+event_widen_fixed_dynamic
+event_forward_struct

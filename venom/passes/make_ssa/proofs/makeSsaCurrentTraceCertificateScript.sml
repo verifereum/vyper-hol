@@ -5,7 +5,7 @@ Ancestors
   makeSsaCurrentCertificate makeSsaCurrentAllocation makeSsaCurrentTokens
   makeSsaCurrentProps makeSsaDefs cfgTransformProps
   makeSsaCurrentAnalysis cfgAnalysisProps cfgHelpers venomExecProps
-  venomFnScheduleRunner irSupply venomWf venomInst list rich_list pair sorting
+  venomFnScheduleRunner irSupply venomWf venomInst list rich_list pair sorting cfgCorrectnessProof
   venomExecProofs
 
 Theorem current_event_names_accessors:

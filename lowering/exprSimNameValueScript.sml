@@ -6,7 +6,7 @@ Ancestors
   list finite_map fragExec localPtrsProps loweringSlice
   exprLowering exprLoweringProps compileEnv loweringStateRelDefs context
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeEnv vyperTypeInvariants
-  valueEncoding valueEncodingProofs venomInst venomState
+  valueEncoding valueEncodingProofs venomInst venomState memoryValueEncoding
 
 Theorem name_value_marked_exec:
   lookup_scopes id es.scopes = SOME entry /\ ~s0.vs_halted ==>
@@ -54,7 +54,8 @@ Proof
        val_wf entry.type entry.value /\
        val_in_memory entry.type entry.value (w2n w) s0.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     first_x_assum drule_all >> metis_tac[]) >>
+     first_x_assum drule_all >> strip_tac >> qexists_tac `w` >>
+     simp[] >> irule memory_value_rel_val_in_memory >> simp[]) >>
   `vv_place_ptr cenv cx es s0 (PlaceR (MemoryPlace id []))
      (LocatedValue ann (mk_ptr (Var p) LocMemory))` by
     simp[vv_place_ptr_def, mk_ptr_def, eval_operand_def, mem_path_offset_def,

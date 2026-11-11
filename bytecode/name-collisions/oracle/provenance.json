@@ -1,7 +1,7 @@
 {
   "producer": "pinned Python Vyper",
-  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
-  "vyper_version": "0.5.0a4+9362e36b+commit.9362e36b",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1+commit.577d2534",
   "python_version": "3.11.11",
   "dependencies": {
     "cbor2": "5.9.0",
@@ -41,7 +41,7 @@
     "nm_local_return_buf.json": "1fffd8237c82000a7ab8d8cb6c1da5c717beb801441522792089224d9513ef62",
     "nm_local_storage_types.hex": "20311e345410dd004af9f16350b9081f89f2a6a1fdcb88f5bb5f611fe19b32ac",
     "nm_local_storage_types.json": "827cda6a56b132c7cd8ec8cbfff386ab4ab15846b341be9fd9c2567bb7850f0c",
-    "nm_redeclared_local.hex": "ffc6556eb9dd84cea6e76222b5546fb4c956531f8cdd888d560747c992ef769a",
+    "nm_redeclared_local.hex": "ed8a6d9a923fe03a393e7d9f5ee78967b0525b71c276863b172bf67543530bd4",
     "nm_redeclared_local.json": "b67e222905f62b1f5eddb601d97cc3749369ced776e43e6eab71bec9b3177035",
     "nm_redeclared_loop_var.hex": "b913b094ccbb56d245db02bbbf4417933cd99ecb971493fe9a1c8dbb9255379e",
     "nm_redeclared_loop_var.json": "9b88d22ef676e9a34dbccc3e1c001de12a007b2e20aa2afaf014c3cddde0a1c7",

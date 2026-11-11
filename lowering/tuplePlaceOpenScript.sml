@@ -73,7 +73,10 @@ Proof
   >- (simp[compile_get_target_ptr_def] >>
       rpt CASE_TAC >> simp[comp_return_def] >> metis_tac[])
   >- (simp[compile_get_target_ptr_def] >>
-      rpt CASE_TAC >> simp[comp_return_def] >> metis_tac[])
+      strip_tac >> Cases_on `FLOOKUP cenv.ce_module_vars p` >>
+      gvs[comp_return_def] >>
+      rename1 `FLOOKUP cenv.ce_module_vars p = SOME loc` >>
+      Cases_on `loc` >> gvs[comp_return_def])
   >- suspend "subscript"
   >> suspend "attribute"
 QED
