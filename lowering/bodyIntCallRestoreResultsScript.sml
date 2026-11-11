@@ -38,7 +38,6 @@ Theorem allocated_buffer_vv_post:
     (LocatedValue (expr_type e) (base_ptr buf)) s
 Proof
   strip_tac >> irule vv_post_frame_intro >> simp[] >> rpt conj_tac
-  >~ [`storage_read_live`] >- simp[contextTheory.base_ptr_def]
   >~ [`vv_holds`] >- (irule buffer_vv_holds >> goal_assum (drule_at Any) >> simp[] >>
       goal_assum (drule_at Any) >> simp[]) >>
   irule allocated_value_vv_at >>

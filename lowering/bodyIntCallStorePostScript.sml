@@ -62,7 +62,6 @@ Theorem owned_buffer_result_post:
     (LocatedValue (expr_type e) (base_ptr buf)) u
 Proof
   strip_tac >> irule vv_post_frame_intro >> simp[] >> rpt conj_tac
-  >~ [`storage_read_live`] >- simp[contextTheory.base_ptr_def]
   >~ [`vv_at`] >- (irule allocated_value_vv_at >>
       qexistsl_tac [`aid`,`b`,`sz`,`tv`,`w`] >>
       simp[contextTheory.base_ptr_def] >> reverse conj_tac
