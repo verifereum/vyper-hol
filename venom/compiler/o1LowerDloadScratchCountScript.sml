@@ -45,7 +45,7 @@ Proof
   `set xs DELETE h = set xs` by (simp[EXTENSION] >> metis_tac[]) >> simp[]
 QED
 
-Theorem ld_sum_members_bound[local]:
+Theorem ld_sum_members_bound:
   ALL_DISTINCT xs /\ EVERY (\x. MEM x ys) xs ==>
   SUM (MAP w xs) <= SUM (MAP w ys)
 Proof
