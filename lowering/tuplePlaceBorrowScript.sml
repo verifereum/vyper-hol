@@ -76,7 +76,7 @@ QED
      k + type_memory_size (TupleTV tvs) <= sz /\
      evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
      i < LENGTH tys /\ well_typed_target env bt (EL i tys) /\
-     supported_target_pure tops bt /\
+     EVERY (supported_expr tops) (target_indices bt) /\
      eval_base_place cx bt ee = (INL (PlaceR p),ee) /\
      place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys))
        ==> b+k+type_memory_size (TupleTV tvs) <= w2n dw \/
@@ -89,7 +89,7 @@ QED
    Actual source target reachability must be retained from target simulation.
 
    Premise ledger:
-   - LIST_REL and the root EVERY give typed BaseTargets and supported purity.
+   - LIST_REL and the root EVERY give typed BaseTargets with supported indices.
      EL specialization needs the equal lengths obtained from LIST_REL and
      evaluate_type. Success decomposition supplies the actual target equation.
    - expr_post supplies stmt_state_rel and expr_val_at at the RHS endpoint;
@@ -102,7 +102,7 @@ QED
      conditional expr_val_own supplies the OWNED alternative; do not claim
      borrowed witnesses are impossible. If equal, borrowed reasoning uses
      ltys=tys and consequently ltvs=tvs by evaluation uniqueness.
-   - Pure pointer evaluation preserves scopes and borrowed bytes by the two
+   - Supported-index pointer evaluation preserves scopes and borrowed bytes by the two
      boundaries above; target_post preserves old operands/allocations. These
      results do not apply to the following store.
 

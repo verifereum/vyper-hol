@@ -132,7 +132,7 @@ QED
      copy_buffer_local_region_frame and local_region_scopes_domain, not entry
      equality.  local_path_at is static in cenv,cx.
    - static call safety for reachable-target geometry:
-     tuple_place_rhs_empty_call_safe / tuple_place_rhs_target_call_safe.
+     the root EVERY's call_evaluation_safe cx (int_calls_target bt).
 
    Store step (tuple_place_value_run_frame, or equal_value_run_frame):
    - head source operand freshness: head plus compiler monotonicity; pointer
@@ -188,8 +188,9 @@ QED
      P = target_post ctx func cenv cx es sp sa s0 ee (PlaceR p)
            (Type (EL i tys)) (dst,SOME loc,SOME (EL i tys)) s
      E = eval_base_place cx bt es = (INL (PlaceR p),ee)
-     S = supported_target_pure tops bt /\ well_typed_target env bt (EL i tys) /\
-         target_indices_pre cenv cx env bt /\ call_evaluation_safe cx []
+     S = EVERY (supported_expr tops) (target_indices bt) /\
+         well_typed_target env bt (EL i tys) /\ target_indices_pre cenv cx env bt /\
+         call_evaluation_safe cx (int_calls_target bt)
      C = compile_get_target_ptr compile_expr cenv bt sp =
            ((dst,SOME loc,SOME (EL i tys)),sa)
      K = cs_extends sp sa
@@ -238,9 +239,10 @@ QED
      consequence of P. Code equations, fn_has_code, fn_inst_ids_distinct and
      control/halted facts are actual compilation/gas-path inputs; H's control
      at sp is NOT control at sa. The pointer execution must supply the latter.
-   - Static call safety: tuple_place_rhs_empty_call_safe from original RHS
-     expr_body_pre. S follows at every iteration from root EVERY/LIST_REL;
-     it does not require re-establishing RHS expr_body_pre after a write.
+   - Static call safety: the root EVERY's per-target call_evaluation_safe,
+     from the statement's int_calls_stmt.  S follows at every iteration from
+     root EVERY/LIST_REL; it does not require re-establishing RHS
+     expr_body_pre after a write.
 
    WORD BRANCH
    place_store_word_run needs exactly its emit_void equation, destination
@@ -339,7 +341,7 @@ QED
        for LocMemory. tuple_place_local_path_extent and
        tuple_place_borrow_destination_apart supply the geometry. The latter
        expects eval_base_place cx bt ee=(INL(PlaceR p),ee), not E as written.
-       Candidate adapter: supported_target_pure tops bt /\ E ==> ee=es.
+       Candidate adapter: EVERY (supported_expr tops) (target_indices bt) /\ E ==> ee=es.
        targetPlaceLive.nested_pop_eval_base_pure_state proves this from
        EVERY pure_expr (target_indices bt); a supported-purity-to-semantic-
        purity adapter is still to be checked/proved (scope equality alone

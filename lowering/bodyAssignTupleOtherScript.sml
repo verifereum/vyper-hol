@@ -420,7 +420,7 @@ Proof
   simp[arg_type_fits_def]
 QED
 
-(* body_assign_tuple_other for an RHS lowered at its own type: the two
+(* body_assign_tuple_other for an RHS lowered at its own type: the
    residual case, and otherwise every element is a place outside an
    immutable, which compile_assign_tuple_places_stmt_frag
    assigns.  The last three premises are what bodySimStmtCases' local
