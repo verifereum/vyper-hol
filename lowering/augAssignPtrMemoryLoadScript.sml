@@ -44,7 +44,7 @@ Proof
   metis_tac[mem_word_at_eq_mload]
 QED
 
-Theorem augassign_memory_load_clean_ptr:
+Theorem augassign_memory_load_clean_frame_ptr:
   target_post ctx func cenv cx es sa sm s0 mid
     (PlaceR (MemoryPlace id path)) (Type ty) (hdr,loc,pt) s /\
   target_ptr_ok cenv (PlaceR (MemoryPlace id path)) (hdr,loc,pt) G tn s /\
@@ -60,6 +60,7 @@ Theorem augassign_memory_load_clean_ptr:
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?H tm t tv.
+    t.vs_allocas = s.vs_allocas /\
     gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK t) /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur /\
     lookup_var out t = SOME (typed_val_to_w256 tv cur) /\
@@ -91,6 +92,7 @@ Proof
      rpt (pop_assum kall_tac) >>
      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_var_def, fresh_id_def, emit_def] >> rpt strip_tac >> gvs[]) >>
+  `sf.vs_allocas = s.vs_allocas` by simp[venomStateTheory.update_var_def] >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[IgnAsm `sf = _`] >>
   conj_tac
   >- (gvs[] >> simp[stmt_state_rel_inst_idx] >>
@@ -103,4 +105,38 @@ Proof
   conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[]) >>
   simp[not_fresh_at_def]
+QED
+
+Theorem augassign_memory_load_clean_ptr:
+  target_post ctx func cenv cx es sa sm s0 mid
+    (PlaceR (MemoryPlace id path)) (Type ty) (hdr,loc,pt) s /\
+  target_ptr_ok cenv (PlaceR (MemoryPlace id path)) (hdr,loc,pt) G tn s /\
+  expr_sim_inv cenv cx env mid /\ FLOOKUP env.var_types id = SOME root_ty /\
+  read_place cx (MemoryPlace id path) mid = (INL cur,mid) /\
+  (!entry. lookup_scopes id mid.scopes = SOME entry ==>
+     ISL (evaluate_subscripts entry.type entry.value path)) /\
+  word_value_type ty /\ ghost_inv d cenv cx mid G tn s /\
+  emit_op MLOAD [hdr] sm = (Var out,sb) /\ fn_has_code sm sb func /\
+  local_ptrs_reserved cenv sm /\ ret_pc_ok cenv sm s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?H tm t tv.
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK t) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur /\
+    lookup_var out t = SOME (typed_val_to_w256 tv cur) /\
+    op_taint tm (Var out) = {} /\ op_prov H (Var out) = NONE /\
+    stmt_state_rel ctx func cenv cx mid t /\ ghost_inv d cenv cx mid H tm t /\
+    ghost_kept cenv mid sm G tn s H tm /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\ not_fresh_at sb out /\
+    (!rp. not_fresh_at sm rp ==>
+      lookup_var rp t = lookup_var rp s /\ FLOOKUP H rp = FLOOKUP G rp /\
+      op_taint tm (Var rp) = op_taint tn (Var rp))
+Proof
+  strip_tac >> drule_all augassign_memory_load_clean_frame_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`H`, `tm`, `t`, `tv`] >> simp[]
 QED
