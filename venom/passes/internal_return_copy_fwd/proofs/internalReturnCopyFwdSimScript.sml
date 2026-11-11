@@ -2184,6 +2184,23 @@ Proof
   rpt strip_tac >> irule ircf_ordinary_nonassign_abort >> metis_tac[]
 QED
 
+Theorem ircf_ret_result:
+  inst.inst_opcode = RET /\ taint_ok fn tn inst s /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  ircf_cross tn (ircf_gam_cur fn_meta rma C fn s UNION
+                 ircf_gam_stk fn_meta rma C stk) s t /\
+  step_inst_base inst s = IntRet v s' ==>
+  ?t'. step_inst_base inst t = IntRet v t' /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s' stk) tn s' t' /\
+    ircf_cross tn (ircf_gam_stk fn_meta rma C stk) s' t'
+Proof
+  strip_tac >>
+  drule_all taint_agree_ret >> strip_tac >>
+  `s' = s /\ t' = t` by
+    gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  qexists_tac `t'` >> gvs[ircf_cross_def] >> metis_tac[IN_UNION]
+QED
+
 Theorem ircf_invoke_arguments:
   taint_agree D X tn s t /\ taint_ok fn tn inst s /\
   inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) ==>
