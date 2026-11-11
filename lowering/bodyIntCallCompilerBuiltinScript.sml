@@ -70,6 +70,10 @@ Proof
       rpt strip_tac >> irule intcall_interval_membership_list_callback >> simp[]) >>
   simp[exprBopLoweringTheory.as_stack_val_pair, intcall_interval_binop,
        intcall_interval_emit_op] >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[intcall_compiler_interval_refl] >>
+       rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
+            simp[intcall_interval_lower_value, intcall_interval_bytestring_hash] >>
+            rpt strip_tac) >> NO_TAC) >>
   IF_CASES_TAC >> simp[intcall_interval_emit_op] >>
   ho_match_mp_tac intcall_interval_pair_bind_floor >>
   simp[intcall_interval_emit_op]
