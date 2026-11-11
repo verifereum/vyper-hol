@@ -494,7 +494,7 @@ Proof
      >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
      qexistsl_tac [`ee`, `s3`, `t`] >> simp[] >>
      irule exprExtRequestPrefixTheory.extrequest_history_writeback >>
-     qexistsl_tac [`cx`, `ee`, `sp`] >> simp[]) >>
+     qexistsl_tac [`cx`, `sp`] >> simp[]) >>
   `extrequest_kwarg_selection cenv cx ret_type EKDefault
      (ext_call_kwarg EKDefault opts vs) default_opt ee sp t''` by
     (irule exprExtRequestKwargsTheory.extrequest_kwarg_selection_transport >>
