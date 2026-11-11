@@ -110,8 +110,10 @@ Definition body_iterator_ptr_ok_def:
 End
 
 Definition body_for_ptr_ok_def:
-  body_for_ptr_ok_at cx (tyv : type_value) (nm : identifier) body (vs : value list)
-  <=> vs <> [] ==> body_stmts_ptr_ok_at cx body
+  body_for_ptr_ok_at cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
+  <=>
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_ptr_ok_at cx body
 End
 
 Definition body_base_target_ptr_ok_def:
