@@ -44,17 +44,17 @@ End
 Definition word_abs_runtime_cenv_def:
   word_abs_runtime_cenv =
     (build_compile_env word_abs_runtime_tops External Nonpayable "foo"
-      [("x",BaseT (IntT 256))] NoneT [Expr word_abs_runtime_expr] F)
-    with <|ce_raw_return := F; ce_nonreentrant := (F,0,F,F)|>
+      [("x",BaseT (IntT 256))] NoneT [Expr word_abs_runtime_expr] T)
+    with <|ce_raw_return := F; ce_nonreentrant := (F,0,T,F)|>
 End
 
 Theorem word_abs_runtime_package:
-  package_external_fn word_abs_runtime_tops F (K 0)
+  package_external_fn word_abs_runtime_tops T (K 0)
     word_abs_runtime_source =
   ("fn_foo", word_abs_runtime_cenv,
    build_positional_args word_abs_runtime_cenv [("x",BaseT (IntT 256))],
    min_calldata_size word_abs_runtime_cenv [("x",BaseT (IntT 256))] 0,
-   F,F,0,F,F,[Expr word_abs_runtime_expr],NONE)
+   F,F,0,T,F,[Expr word_abs_runtime_expr],NONE)
 Proof
   simp[package_external_fn_def, word_abs_runtime_source_def,
        word_abs_runtime_cenv_def, update_cenv_nonreentrant_def]
@@ -82,7 +82,7 @@ Theorem word_abs_runtime_cenv_eval:
     ce_modules :=
       [(NONE, [FunctionDecl External Nonpayable F F "foo" [("x",BaseT (IntT 256))] [] NoneT
          [Expr (Builtin (BaseT (IntT 256)) Abs [Name (BaseT (IntT 256)) "x"])]])];
-    ce_nonreentrant := (F,0,F,F);
+    ce_nonreentrant := (F,0,T,F);
     ce_raw_return := F; ce_alloca_locals := T|>
 Proof
   CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV
