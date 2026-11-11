@@ -64,7 +64,8 @@ End
 (* The concrete state cs against the symbolic state ss of program p: the
    same pc and everything else but the stack, memory and code; stacks of
    the same values; memory equal except at label bytes, which hold the
-   label's concrete bytes; and env matching the concrete code. *)
+   label's concrete bytes; the own code bytes the concrete code; and env
+   matching the concrete code. *)
 Definition asm_sym_rel_def:
   asm_sym_rel p env cs ss ⇔
     LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
@@ -78,6 +79,7 @@ Definition asm_sym_rel_def:
          i < LENGTH cs.as_memory ∧ j < 32 ∧
          ∃w. sval_conc (SND (compute_label_offsets p)) (Lab l d) = SOME w ∧
              EL i cs.as_memory = EL j (word_to_bytes w T)) ∧
+    ss.sym_own_code = cs.as_code ∧
     asm_data_env_ok p env cs.as_code
 End
 
@@ -1363,7 +1365,9 @@ Proof
   >- (irule sym_step_create_sim >> simp[]) >>
   Cases_on `MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"; "SELFDESTRUCT";
     "GAS"; "MLOAD"; "SHA3"; "CALLDATACOPY"; "EXTCODECOPY"; "MCOPY"; "RETURNDATACOPY"]`
-  >- (gvs[MEM] >> simp[sym_step_call_sim, sym_step_staticcall_sim,
+  >- (qpat_x_assum `MEM name _`
+        (REPEAT_TCL DISJ_CASES_THEN SUBST_ALL_TAC o REWRITE_RULE [MEM]) >>
+      simp[sym_step_call_sim, sym_step_staticcall_sim,
         sym_step_delegatecall_sim, sym_step_selfdestruct_sim, sym_step_gas_sim,
         sym_step_mload_sim, sym_step_sha3_sim, sym_step_calldatacopy_sim,
         sym_step_extcodecopy_sim, sym_step_mcopy_sim, sym_step_returndatacopy_sim]) >>
@@ -1805,7 +1809,16 @@ Proof
       simp[sym_codecopy_def, asm_copy_to_mem_def, asm_sym_step_rel_def]) >>
   rename1 `ss.sym_stack = a::b::c::stk` >>
   Cases_on `a` >> Cases_on `b` >> Cases_on `c` >>
-  gvs[sym_codecopy_def, asm_sym_step_rel_def] >>
+  gvs[sym_codecopy_def, asm_sym_step_rel_def]
+  >~ [`asm_copy_to_mem (DROP (w2n src) ss.sym_own_code)`]
+  >- (`ss.sym_own_code = cs.as_code` by fs[asm_sym_rel_def] >>
+      gvs[sval_conc_def] >>
+      irule sym_copy_preserves >> simp[] >>
+      qmatch_goalsub_rename_tac `TAKE (w2n sz) (if sz = 0w then DROP (w2n src) _ else _)` >>
+      Cases_on `sz = 0w` >- simp[] >>
+      mp_tac (Q.INST [`n` |-> `w2n (sz:bytes32)`, `a` |-> `w2n (src:bytes32)`,
+                      `xs` |-> `cs.as_code`] sym_codecopy_slice) >>
+      simp[]) >>
   reverse IF_CASES_TAC >- simp[asm_sym_step_rel_def] >>
   `asm_data_env_ok p env cs.as_code` by fs[asm_sym_rel_def] >>
   drule_all sym_codecopy_address >> strip_tac >>
@@ -1960,6 +1973,22 @@ Proof
   irule asm_sym_rel_next >> simp[]
 QED
 
+Theorem sym_codesize_sim[local]:
+  asm_sym_rel p env cs ss ⇒
+  asm_sym_step_rel p env (sym_step_op p env "CODESIZE" ss)
+    (asm_step_op otp "CODESIZE" cs)
+Proof
+  strip_tac >>
+  `LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+     ss.sym_stack cs.as_stack ∧ ss.sym_own_code = cs.as_code`
+    by fs[asm_sym_rel_def] >>
+  simp[sym_step_op_def, asm_step_op_def, asm_step_arith_def,
+       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
+       asm_step_context_def, asm_push_val_def] >>
+  irule asm_sym_rel_next >> simp[sval_conc_def]
+QED
+
 Theorem sym_dup_sim[local]:
   asm_sym_rel p env cs ss ∧ ALOOKUP dup_table name = SOME n ⇒
   asm_sym_step_rel p env (sym_dup n ss) (asm_step_op otp name cs)
@@ -2021,7 +2050,7 @@ Proof
   Cases_on `name = "CODECOPY"`
   >- (simp[sym_step_op_def] >> irule sym_codecopy_sim >> simp[]) >>
   Cases_on `name = "CODESIZE"`
-  >- simp[sym_step_op_def, asm_sym_step_rel_def] >>
+  >- (gvs[] >> irule sym_codesize_sim >> simp[]) >>
   simp[sym_step_op_def] >>
   Cases_on `ALOOKUP dup_table name` >> simp[]
   >- (Cases_on `ALOOKUP swap_table name` >> simp[]

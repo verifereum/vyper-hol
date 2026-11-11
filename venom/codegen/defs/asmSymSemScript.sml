@@ -28,10 +28,11 @@
  *   - MSTORE writes one to memory, which records it byte by byte in a side
  *     map; MLOAD of 32 intact bytes of one label value gives it back.
  * Reading memory that holds label bytes in any other way is SymBad, and a
- * write over label bytes forgets them. Reading the code bytes themselves
- * (CODESIZE, CODECOPY from a concrete offset) is SymBad too, since the
- * finalizer changes them. EXTCODE* read the accounts, which both programs
- * share, so they stay concrete.
+ * write over label bytes forgets them. CODESIZE and CODECOPY from a
+ * concrete offset read the start state's code bytes, kept in the state as
+ * sym_own_code: a program and its finalized version both run against the
+ * same ones. EXTCODE* read the accounts, which both programs share, so
+ * they stay concrete.
  *
  * TOP-LEVEL:
  *   sval, sym_state, sym_result — values, states and results
@@ -52,15 +53,18 @@ Datatype:
   sval = Val bytes32 | Lab string num
 End
 
-(* sym_base holds everything but the stack, which is sym_stack;
-   sym_base.as_stack stays []. sym_mem_labels maps a memory byte holding
-   part of a label value to (label, delta, byte index in the word); the
-   byte itself in sym_base.as_memory is a placeholder. *)
+(* sym_base holds everything but the stack, which is sym_stack, and the
+   code, which is sym_own_code; sym_base.as_stack and sym_base.as_code stay
+   []. sym_mem_labels maps a memory byte holding part of a label value to
+   (label, delta, byte index in the word); the byte itself in
+   sym_base.as_memory is a placeholder. sym_own_code is the code bytes
+   CODESIZE and CODECOPY read; no step changes it. *)
 Datatype:
   sym_state = <|
     sym_base : asm_state;
     sym_stack : sval list;
-    sym_mem_labels : num |-> (string # num # num)
+    sym_mem_labels : num |-> (string # num # num);
+    sym_own_code : byte list
   |>
 End
 
@@ -84,7 +88,8 @@ Definition sym_init_def:
   sym_init (s : asm_state) =
     <| sym_base := s with <| as_stack := []; as_pc := 0; as_code := [] |>;
        sym_stack := MAP Val s.as_stack;
-       sym_mem_labels := FEMPTY |>
+       sym_mem_labels := FEMPTY;
+       sym_own_code := s.as_code |>
 End
 
 (* ===== Operand counts and memory ranges of the concrete opcodes ===== *)
@@ -322,9 +327,15 @@ Definition sym_codecopy_def:
             (asm_copy_to_mem (DROP d (env ' l))
                (ss.sym_base with as_stack := [dst; 0w; sz]))
         else SymBad "CODECOPY from a code label"
+    | Val dst :: Val src :: Val sz :: stk =>
+        sym_lift 3
+          (mem_labels_clear ss.sym_mem_labels
+             (in_mem_range (w2n dst) (w2n sz))) ss
+          (asm_copy_to_mem (DROP (w2n src) ss.sym_own_code)
+             (ss.sym_base with as_stack := [dst; 0w; sz]))
     | _ =>
         if LENGTH ss.sym_stack < 3 then SymError "codecopy: stack underflow"
-        else SymBad "CODECOPY of the code bytes"
+        else SymBad "label value used by CODECOPY"
 End
 
 Definition sym_dup_def:
@@ -354,7 +365,8 @@ Definition sym_step_op_def:
     else if name = "MSTORE" then sym_mstore ss
     else if name = "MLOAD" then sym_mload ss
     else if name = "CODECOPY" then sym_codecopy p env ss
-    else if name = "CODESIZE" then SymBad "CODESIZE"
+    else if name = "CODESIZE" then
+      sym_set_stack (Val (n2w (LENGTH ss.sym_own_code)) :: ss.sym_stack) ss
     else
       case ALOOKUP dup_table name of
         SOME n => sym_dup n ss
