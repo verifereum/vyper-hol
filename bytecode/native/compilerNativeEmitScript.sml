@@ -160,7 +160,8 @@ val suite_fixtures = [
     "p103_rbuf_control_word_ret_concat_arg", "p58_int_bytes_local",
     "p94_rbuf_bytes_ret_concat_arg", "p97_rbuf_stack_tuple_ret_concat_arg",
     "p98_rbuf_mem_tuple_ret_concat_arg", "p99_rbuf_string_ret_concat_arg",
-    "self_code_slice", "slice_bytes32", "struct_code_slice", "struct_data_slice"]),
+    "self_code_slice", "slice_bytes32", "struct_code_slice", "struct_data_slice",
+    "uint2str_local"]),
   ("conversions", [
     "b4_to_i256", "bool_to_i8", "bys16_to_dec", "bys1_to_u8", "bys20_to_addr",
     "bys32_to_i8", "bys32_to_u8", "bys4_to_b4", "flag_to_b32", "lit_int_to_addr",

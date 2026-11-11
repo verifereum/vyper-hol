@@ -760,10 +760,11 @@ Resume body_oracle_storage_mutual[intcall_live]:
   `contract_storage_well_formed cx args_st` by
     (qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
      simp[]) >>
-  Cases_on `args_res` >>
-  gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"]
-  >- suspend "intcall_args_success" >>
-  rpt strip_tac >> gvs[]
+  Cases_on `args_res`
+  >- (gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
+      suspend "intcall_args_success") >>
+  (simp_tac (srw_ss()) [] >> rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    first_assum ACCEPT_TAC)
 QED
 
 Resume body_oracle_storage_mutual[intcall_args_success]:

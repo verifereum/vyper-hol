@@ -75,7 +75,9 @@ Proof
     gvs[read_result_def, read_place_def, get_immutables_def,
       get_address_immutables_def, lift_option_type_def, bind_def, return_def,
       evaluate_subscripts_def, lift_sum_def] >>
-  drule vv_post_read_result >> disch_then (fn th => rewrite_tac[GSYM th]) >>
+  irule vv_post_read_result >>
+  qexists_tac `PlaceR (ImmutablePlace src id [])` >>
+  conj_tac >- simp[] >>
   irule toplevel_immutable_post >> simp[] >> metis_tac[]
 QED
 

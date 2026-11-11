@@ -9,8 +9,8 @@
  * python-o1-no-asm-opt/add_arg.hex or builtin-forms/oracle/ceil_dec.hex.  A
  * PATH selects that fixture, or every fixture under that directory; without
  * one, every fixture runs.  Every .hex file in a directory a selected fixture
- * sits in must have a fixture, except the pending ones below and the oracles
- * listed in ../pending-5127-port.md.  Exits non-zero
+ * sits in must have a fixture, except the oracles listed in
+ * ../pending-5127-port.md.  Exits non-zero
  * unless every selected fixture matches.
  *)
 structure compilerNativeParity = struct
@@ -62,20 +62,20 @@ structure compilerNativeParity = struct
                " (expected " ^ Int.toString (size expected div 2) ^ " bytes, got " ^
                Int.toString (size got div 2) ^ ")")
 
-  (* Out of parity on purpose; see ../pending-uint2str-buffer.md. *)
-  val pending = ["builtin-forms/oracle/uint2str_local.hex"]
-
   (* Fixtures that must compile but differ from the pinned oracle, so that a
      list entry that starts to match fails and gets removed: bounded memory
      decoding checks relative positions and head words before forming
      pointers, which the pinned Python does not (see
      ../pending-bounded-decode-guards.md). *)
   val decoder_divergent = [
+      "external-calls/oracle/e04_ret_string.hex",
+      "external-calls/oracle/e05_ret_bytes.hex",
       "external-calls/oracle/e19_gas_kw.hex",
       "external-calls/oracle/e21_default_ret.hex",
       "external-calls/oracle/e22_static_default.hex",
       "external-calls/oracle/e29_default_ret_skip.hex",
       "external-calls/oracle/e30_default_ret_tuple.hex",
+      "external-calls/oracle/e37_default_ret_string.hex",
       "external-calls/oracle/e38_default_ret_local_array.hex",
       "external-calls/oracle/e45_default_ret_ifexp.hex",
       "memory-stores/oracle/t04_tuple_assign_extcall.hex"]
@@ -142,7 +142,7 @@ structure compilerNativeParity = struct
       | [] => (print "usage: bytecode_parity_native.exe BYTECODE_DIR [PATH ...]\n";
                OS.Process.exit OS.Process.failure)
     (* A pending fixture runs only when its own path is requested. *)
-    val pending = pending @ pending_oracles root
+    val pending = pending_oracles root
     fun is_pending n = List.exists (fn k => k = n) pending
     val selected = List.filter (fn (n, _) =>
                      List.exists (fn p => p = n) paths orelse

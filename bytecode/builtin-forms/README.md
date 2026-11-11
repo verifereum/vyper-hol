@@ -8,10 +8,8 @@ the native runner (`../native/README.md`); from `bytecode/`:
 ./native/bytecode_parity_native.exe . builtin-forms
 ```
 
-`uint2str_local` is out of parity for now and is skipped by the runner; see
-`../pending-uint2str-buffer.md`.
 The sources whose bytes vyperlang/vyper#5127 changed at the v0.5.0b1 pin are
-skipped too; [`pending-5127-port.md`](../pending-5127-port.md) names what
+skipped; [`pending-5127-port.md`](../pending-5127-port.md) names what
 brings each back.
 
 | Source | Checks |

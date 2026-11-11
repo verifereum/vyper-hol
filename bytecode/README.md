@@ -41,6 +41,16 @@ current series contains:
   layout differs for nested bounded types.
 - `5254-inliner-retpc.patch`, vyperlang/vyper#5254: the inliner binds the
   unused return-PC parameter to zero instead of the removed callee's label.
+- `5280-target-subscript-overlap.patch`, vyperlang/vyper#5280: the array of an
+  `append` or `pop` is lowered as a target, so it is rejected
+  (`CompilerPanic("risky overlap")`) when one of its subscripts has a base that
+  passes through a dynamic-array element and an index that can write a
+  variable that base reads, or makes a risky call. The pin already rejects
+  such assignment and augmented-assignment targets.
+- `5282-assign-rhs-snapshot.patch`, vyperlang/vyper#5282 (its `lower_Assign`
+  hunk only): an assignment whose target indices can modify memory or storage
+  (`self.m[self.f()] = self.x`) freezes the right-hand side before lowering the
+  target, so the store sees the value from before those effects.
 - `5332-immutable-runtime-length.patch`, vyperlang/vyper#5332: constructor
   immutable bytestring stores copy the length word and live data words, rather
   than the declared capacity.
@@ -49,9 +59,16 @@ current series contains:
   after the previous run of aborting instructions.
 - `5338-widen-bytestring-convert.patch`, vyperlang/vyper#5338: widening
   bytestring conversions copy the value into a buffer of the result type.
+- `5344-uint2str-buffer.patch`, vyperlang/vyper#5344: `uint2str` allocates
+  `n_digits` bytes beyond its result type's size, since its result starts up
+  to `n_digits` bytes into the buffer and consumers copy the full type size.
 - `5349-dft-effectless-roots.patch`, vyperlang/vyper#5349: an instruction with
   no outputs and no effects (an `assert`) stays a scheduling root even when a
   later abort depends on it, so nothing is hoisted above it.
+- `5350-pop-subscript-overlap.patch`, vyperlang/vyper#5350 (open): an array
+  subscript whose base is a `pop()` result is rejected
+  (`CompilerPanic("risky overlap")`) when the index can write a variable the
+  base reads, or makes a risky call.
 - `5354-phi-origins.patch`, vyperlang/vyper#5354: PHI origin traversal uses
   an active recursion path and guarded memoization, so shared multi-origin PHIs
   cannot disappear from a sibling operand. The pass is used by O2/O3/Os; the O1
@@ -60,6 +77,11 @@ current series contains:
   the HOL pass does where it deliberately departs from upstream:
   `create`/`create2` count as aborts. Its name sorts after the PR files it
   builds on.
+
+The pin's overlap helpers (`_subscript_read_write_overlap` and the risky-call
+walk in `codegen_venom/expr.py`) serve both rejections. The same check also
+makes the pin copy an rvalue subscript's base to memory before evaluating an
+index that can make that base stale, and read the copy.
 
 The provenance's `vyper_commit` names the unpatched base revision.
 

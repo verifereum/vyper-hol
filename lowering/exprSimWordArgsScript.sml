@@ -301,6 +301,15 @@ Proof
   simp[expr_post_def, wb_frame_def] >> metis_tac[]
 QED
 
+Theorem expr_post_pure_frame:
+  !func cenv cx e es sa sb s0 es' v op s ctx.
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    ~expr_has_effect e ==>
+    pure_frame cenv func es sa s0 s
+Proof
+  simp[expr_post_def] >> rpt strip_tac >> gvs[]
+QED
+
 Theorem expr_post_state:
   !func cenv cx e es sa sb s0 es' v op s ctx.
     expr_post ctx func cenv cx e es sa sb s0 es' v op s ==>
@@ -323,7 +332,8 @@ QED
 Theorem expr_post_word_intro:
   !func cenv cx e es sa sb s0 es' v op s ctx.
     stmt_state_rel ctx func cenv cx es' s /\ is_word_type (expr_type e) /\ word_value v /\
-    eval_operand op s = SOME (val_to_w256 v) /\ wb_frame cenv es es' sa s0 s ==>
+    eval_operand op s = SOME (val_to_w256 v) /\ wb_frame cenv es es' sa s0 s /\
+    (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, wb_frame_def, expr_val_rel_def, expr_val_at_def,
@@ -564,6 +574,7 @@ Theorem lower_word_args_nil_sim:
     gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx []) (es, s0)
       (\rr ee t. ?vs. rr = INL vs /\
          wb_args_post ctx func cenv cx es sa s0 ee [] vs t /\
+         pure_frame cenv func es sa s0 t /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
       (\rr ee r. wb_args_exit rr r)
@@ -598,6 +609,29 @@ Proof
   irule wb_frame_trans >> simp[] >> reverse conj_tac
   >- (qexistsl_tac [`es1`, `s1`, `t`] >> simp[]) >>
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
+QED
+
+Theorem wb_args_pure_cons:
+  !func cenv cx e es sa s1 s0 es1 v x t es' args xs vs u ctx.
+    expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
+    wb_args_post ctx func cenv cx es1 s1 t es' xs vs u /\
+    (~EXISTS expr_has_effect args ==> pure_frame cenv func es1 s1 t u) /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    sa.cs_next_id <= s1.cs_next_id /\
+    ~expr_has_effect e /\ ~EXISTS expr_has_effect args ==>
+    pure_frame cenv func es sa s0 u
+Proof
+  rpt strip_tac >>
+  `pure_frame cenv func es sa s0 t` by
+    (drule_all expr_post_pure_frame >> disch_then ACCEPT_TAC) >>
+  `pure_frame cenv func es1 s1 t u` by
+    (qpat_x_assum `~EXISTS _ _ ==> _` (fn th =>
+       first_assum (ACCEPT_TAC o MATCH_MP th))) >>
+  `wb_frame cenv es es1 sa s0 t /\ wb_frame cenv es1 es' s1 t u` by
+    (fs[wb_args_post_def] >> drule expr_post_frame >> simp[]) >>
+  match_mp_tac pure_frame_trans >>
+  qexistsl_tac [`es1`, `s1`, `t`] >> fs[wb_frame_def]
 QED
 
 Theorem wb_frag_then:
@@ -674,6 +708,7 @@ Theorem lower_word_args_sim:
     gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx args) (es, s0)
       (\rr ee t. ?vs. rr = INL vs /\
          wb_args_post ctx func cenv cx es sa s0 ee xs vs t /\
+         (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\rr ee r. wb_args_exit rr r)
@@ -752,10 +787,14 @@ Resume lower_word_args_sim[tail_normal]:
       BETA_TAC >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _`
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
-  disj1_tac >> simp[] >>
-  irule wb_args_post_cons >>
-  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  goal_assum (drule_at Any) >> simp[]
+  disj1_tac >> simp[] >> conj_tac
+  >- (irule wb_args_post_cons >>
+      qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  strip_tac >> match_mp_tac wb_args_pure_cons >>
+  qexistsl_tac [`cx`, `e`, `s1`, `es_end with gas_obs := []`, `v`, `x`, `t`,
+                `es_end' with gas_obs := []`, `args`, `ys`, `vs`, `ctx`] >>
+  simp[]
 QED
 Resume lower_word_args_sim[tail_exit]:
   Cases_on `res` >- gvs[wb_args_exit_def] >>
@@ -779,6 +818,7 @@ Finalise lower_word_args_sim
 Theorem expr_post_word_builtin:
   !func cenv cx es sa sm s0 es' xs vs t ann bt args sb v op u ctx.
     wb_args_post ctx func cenv cx es sa s0 es' xs vs t /\
+    (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
     sa.cs_next_var <= sm.cs_next_var /\ is_word_type ann /\ word_value v /\
     stmt_state_rel ctx func cenv cx es' u /\ eval_operand op u = SOME (val_to_w256 v) /\
     (!z w. not_fresh_at sm z /\ lookup_var z t = SOME w ==> lookup_var z u = SOME w) /\
@@ -787,12 +827,16 @@ Theorem expr_post_word_builtin:
     expr_post ctx func cenv cx (Builtin ann bt args) es sa sb s0 es' v op u
 Proof
   rpt strip_tac >> irule expr_post_word_intro >>
-  simp[vyperASTTheory.expr_type_def] >> irule wb_frame_readonly_tail >>
+  simp[vyperASTTheory.expr_type_def, expr_has_effect_thm] >> conj_tac
+  >- (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `t` >>
+      gvs[]) >>
+  irule wb_frame_readonly_tail >>
   qexistsl_tac [`sm`, `t`] >> gvs[wb_args_post_def]
 QED
 
 Theorem word_builtin_continuation_summary:
   wb_args_post ctx func cenv cx es sa s0 (ee with gas_obs := []) xs vs t0 /\
+  (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t0) /\
   t0.vs_current_bb = sm.cs_current_bb /\
   t0.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t0.vs_halted /\
   word_builtin_frag ctx func cenv cx code
@@ -925,7 +969,9 @@ Resume compile_word_builtin_sim[normal]:
   disch_then (mp_tac o CONJUNCT1) >>
   disch_then (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
   qpat_x_assum `!gs vs es'. _` drule >> strip_tac >>
-  fs[] >> drule_all word_builtin_continuation_summary >>
+  fs[] >>
+  `~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t` by simp[] >>
+  drule_all word_builtin_continuation_summary >>
   rewrite_tac[gas_summary_at_def] >> strip_tac >>
   qexists_tac `marks` >> disj1_tac >>
   asm_simp_tac (srw_ss()) [eval_expr_builtin_action, gas_summary_at_def] >>

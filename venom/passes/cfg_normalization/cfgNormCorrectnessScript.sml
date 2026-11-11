@@ -8,7 +8,7 @@
 
 Theory cfgNormCorrectness
 Ancestors
-  cfgNormSupplySim o1ContractCfgNorm cfgNormIter
+  cfgNormSupplySim o1ContractCfgNorm
 
 Theorem cfg_norm_pass_correct:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ first_block_no_preds fn /\
