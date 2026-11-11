@@ -2,7 +2,8 @@
 Theory bodyIntCallFamCallIntEntryModes
 Ancestors
   bodyIntCallCompilerBoundary intCallStep exprLoweringProps fragExec
-  stmtLoweringMono compileEnv
+  stmtLoweringMono compileEnv bodyIntCallMetadata bodySim supportedNames
+  supportedProgram
 
 Theorem intcall_compiler_stage_slices:
   compile_multi_vvs compile_expr ce ds sa = (vs,a) /\ ci_mono a b /\
@@ -121,4 +122,24 @@ Proof
   drule_all intcall_compiler_stage_slices >> strip_tac >>
   goal_assum (drule_at Any) >> simp[Abbr `argv`] >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem intcall_nonstack_return_buffer_size:
+  body_inv tops ctx ce cx /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  ce.ce_func_info (nsid_to_string (NONE,name)) = (0,rbs,pvs) /\ ret <> NoneT ==>
+  rbs = type_mem_bytes (get_struct_fields ce.ce_struct_fields) ret
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (supported_function_names tops)` by
+    (fs[body_inv_def] >> drule supported_program_names >>
+     simp[supported_declaration_names_def]) >>
+  drule_all (SRULE [] (Q.SPEC `Internal`
+    (Q.GEN `vis` (SPEC_ALL build_func_info_distinct)))) >>
+  disch_then (qspec_then `get_struct_fields ce.ce_struct_fields` mp_tac) >>
+  fs[body_inv_def, nsid_to_string_def] >>
+  qpat_x_assum `ce.ce_func_info = _` (fn th =>
+    qpat_x_assum `ce.ce_func_info name = _` (mp_tac o REWRITE_RULE [th])) >>
+  simp[compute_func_info_def] >>
+  Cases_on `ret` >> gvs[]
 QED
