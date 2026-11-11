@@ -771,7 +771,7 @@ Proof
   >- (drule_all place_store_step_read >> strip_tac >>
       drule_all place_store_assign_cons >>
       disch_then (qspecl_then [`path`, `v`] mp_tac) >>
-      Cases_on `assign_subscripts ctv x path (Replace v)` >> gvs[] >>
+      Cases_on `assign_subscripts ctv x path (Replace v)` >> asm_rewrite_tac[] >> simp_tac (srw_ss()) [] >>
       strip_tac >>
       `val_in_memory ctv x' (b+j) mem'` by
         (first_x_assum irule >>
