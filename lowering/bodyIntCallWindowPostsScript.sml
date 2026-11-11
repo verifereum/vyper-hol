@@ -16,7 +16,7 @@ Theorem vv_identity_location:
 Proof
   strip_tac >> Cases_on `vv` >>
   simp[vv_at_def, vv_own_def, vv_operand_def, expr_val_at_def, expr_val_own_def] >>
-  gvs[]
+  gvs[] >> rpt strip_tac >> first_x_assum drule >> metis_tac[]
 QED
 
 Theorem allocated_value_location:
