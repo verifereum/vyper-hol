@@ -1470,3 +1470,76 @@ Proof
     planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def] >>
   metis_tac[]
 QED
+
+(* Frame specialization of paired preparation; branch allocation facts remain explicit. *)
+Theorem sym_frame_selected_prefix_paired:
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs cs /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 ps cs ss /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  inst.inst_opcode <> INVOKE /\ ~is_param_opcode inst.inst_opcode /\
+  ~is_terminator inst.inst_opcode /\ codegen_ready_fn fn /\ opaque_use_ok fn /\
+  MEM inst (fn_insts fn) /\ source_memory_reads_disjoint cplan inst vs /\
+  context_source_memory_writes_disjoint cplan inst vs /\
+  step_inst fuel ctx inst vs = OK vsout /\
+  generated_plan_state_wf_marked sb ps /\ fn_shape_ok fn /\
+  lo = SND (compute_label_offsets p) /\ dfg = dfg_build_function fn /\
+  emit_input_plan inst.inst_opcode operands nl ps = (iops,prepared) /\
+  reorder_plan dfg selected prepared = (rops,arranged) /\
+  PERM operands selected /\ LENGTH operands <= 16 /\
+  LENGTH operands <= LENGTH prepared.ps_stack /\
+  (!l. MEM (Label l) operands ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) operands /\
+  (!op at. MEM op operands /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at operands) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (iops ++ rops)) ==>
+  ?mid ready localtop m'.
+    plan_state_residual_wf_marked sb selected (LENGTH selected) arranged /\
+    arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected /\
+    venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := cs.as_memory) mid /\
+    mid.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops)) /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp (iops ++ rops))) ss = SymOK ready /\
+    sym_kinds_ok cplan fn ret srest arranged ready /\
+    ready.sym_base.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops)) /\
+    (!b. ~closure_spill_byte ctx cplan fn.fn_name b ==>
+      FLOOKUP ready.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    ready.sym_stack = localtop ++ srest /\
+    asm_sym_rel p env mid (ready with sym_stack := localtop) /\
+    sym_kinds_ok cplan fn ret [] arranged (ready with sym_stack := localtop) /\
+    LIST_REL (\sv w. sval_conc lo sv = SOME w) srest rest /\
+    LENGTH localtop = LENGTH mid.as_stack /\
+    step_inst fuel ctx inst (frame_view fn ra vs with vs_memory := cs.as_memory) =
+      OK (frame_view fn ra vsout with vs_memory := m') /\
+    EVERY (\(off,len). len = 0 \/ off + len <= final.ps_alloc.sa_spill_base \/
+      final.ps_alloc.sa_next_offset <= off)
+      (source_memory_read_ranges inst (frame_view fn ra vs with vs_memory := cs.as_memory))
+Proof
+  strip_tac >> drule_all frame_inst_local_setup >> strip_tac >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\ plan_slots_bounded sb ps /\
+   residual_budget_wf_marked sb [] ps` by
+    metis_tac[fnPlanPrefixTheory.generated_plan_state_wf_marked_def,
+      deepResidualSimTheory.generated_plan_state_wf_marked_residual_nil] >>
+  `ssa_form fn` by metis_tac[stackPlanGenTheory.codegen_ready_fn_def] >>
+  `asm_sym_rel p env cs ss /\ sym_kinds_ok cplan fn ret srest ps ss` by
+    metis_tac[sym_frame_inv_def] >>
+  drule_at (Pat `emit_input_plan _ _ _ _ = _`) sym_selected_prefix_paired >>
+  disch_then (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `sym_kinds_ok _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `venom_asm_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `asm_block_at _ _ _`)) >>
+  simp[] >> disch_then (qspecl_then [`sb`, `r`, `env`, `ctx`] mp_tac) >>
+  simp[genFrameSimTheory.operand_val_memory_update] >>
+  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
