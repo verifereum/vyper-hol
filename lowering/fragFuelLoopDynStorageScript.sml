@@ -387,6 +387,60 @@ Proof
   simp[vars_kept_def]
 QED
 
+(* Entry either fixes an exceptional result or loads an arbitrary word and
+   starts the counter at zero.  No validity premise on the source is needed. *)
+Theorem dynstorage_entry_outcome[local]:
+  !G ctx fn s bb s0 s8 src lv counter id1 id2 id3 cond.
+    no_phi_fn fn /\ at_point s0 s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id1 MLOAD [src] [lv]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst id2 ASSIGN [Lit 0w] [counter]) /\
+    get_instruction bb (SUC (SUC s.vs_inst_idx)) =
+      SOME (mk_inst id3 JMP [Label cond] []) /\
+    lv <> counter /\
+    ~var_below s0.cs_next_var lv /\
+    ~var_below s0.cs_next_var counter /\
+    s8.cs_current_bb = cond /\ s8.cs_current_insts = [] ==>
+    fuel_outcome G ctx fn s 1
+      (\t. at_point s8 t /\ lookup_var counter t = SOME 0w /\
+           (?l:bytes32. lookup_var lv t = SOME l) /\
+           vars_kept s0.cs_next_var {} s t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eval_operand src s`
+  >- (`!f. run_from f ctx fn s = Error "undefined operand"` by
+        (gen_tac >> simp[run_from_def, Once exec_block_def,
+          step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+          exec_read1_def]) >>
+      simp[fuel_outcome_def]) >>
+  qmatch_asmsub_rename_tac `eval_operand src s = SOME addr` >>
+  qabbrev_tac `s1 = (update_var lv (mload (w2n addr) s) s)
+                     with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `s2 = (update_var counter 0w s1)
+                     with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
+  `!f. run_from f ctx fn s = run_from f ctx fn s2` by
+    (gen_tac >>
+     simp[run_from_def, Once exec_block_def, step_inst_non_invoke,
+          step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
+     simp[Once exec_block_def, step_inst_non_invoke,
+          step_inst_base_opcode_eqs, mk_inst_def, is_terminator_def,
+          eval_operands_def, eval_operand_def, Abbr `s1`, Abbr `s2`,
+          update_var_def]) >>
+  `fuel_outcome G ctx fn s2 1
+      (\t. at_point s8 t /\ lookup_var counter t = SOME 0w /\
+           (?l:bytes32. lookup_var lv t = SOME l) /\
+           vars_kept s0.cs_next_var {} s t)`
+    suffices_by gvs[fuel_outcome_def] >>
+  irule fuel_outcome_jump >> conj_tac >- simp[] >>
+  qexistsl [`bb`, `mk_inst id3 JMP [Label cond] []`, `cond`] >>
+  simp[Abbr `s2`, Abbr `s1`, mk_inst_def, is_terminator_def,
+       step_inst_base_opcode_eqs, at_point_def, jump_to_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE, vars_kept_def] >>
+  metis_tac[]
+QED
+
 Theorem fuel_ok_compile_dynarray_to_storage:
   !src_ptr dst_slot elem_words elem_mem_size transient Wv E.
     fuel_ok Wv {} E
