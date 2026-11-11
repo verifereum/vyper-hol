@@ -32,10 +32,10 @@ Theorem aggregate_cons_state_frames_mem[local]:
   (!z a. not_fresh_at ss z /\ lookup_var z q = SOME a ==> lookup_var z r = SOME a) /\
   (!i a. FLOOKUP t1.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
   (!i a. FLOOKUP q.vs_allocas i = SOME a ==> FLOOKUP r.vs_allocas i = SOME a) /\
-  locals_kept ce es1 t1 q /\ locals_kept ce es1 q r ==>
+  locals_kept ce es1 es1 t1 q /\ locals_kept ce es1 es2 q r ==>
   (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==> lookup_var z r = SOME a) /\
   (!i a. FLOOKUP s0.vs_allocas i = SOME a ==> FLOOKUP r.vs_allocas i = SOME a) /\
-  locals_kept ce es s0 r
+  locals_kept ce es es2 s0 r
 Proof
   strip_tac >> conj_tac
   >- (rpt strip_tac >>
@@ -45,7 +45,7 @@ Proof
       qpat_x_assum `!z a. not_fresh_at sm z /\ _ ==> _` irule >> simp[] >>
       fs[vv_post_def] >> metis_tac[]) >>
   conj_tac >- (fs[vv_post_def] >> metis_tac[]) >>
-  `locals_kept ce es1 t1 r` by
+  `locals_kept ce es1 es2 t1 r` by
     (irule locals_kept_trans >> qexistsl_tac [`es1`, `sm`, `q`] >> simp[]) >>
   irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t1`] >> fs[vv_post_def]
 QED
@@ -71,7 +71,7 @@ Theorem aggregate_cons_success_post_mem:
     lo <= a /\ a+k <= lo+sz /\
     (a+k <= b+off \/ b+off+type_memory_size htv <= a) ==>
     mem_bytes_at a k q.vs_memory = mem_bytes_at a k t1.vs_memory) /\
-  locals_kept ce es1 t1 q /\ s0.vs_alloca_next <= t1.vs_alloca_next /\
+  locals_kept ce es1 es1 t1 q /\ s0.vs_alloca_next <= t1.vs_alloca_next /\
   t1.vs_alloca_next <= q.vs_alloca_next /\
   r.vs_current_bb = sb.cs_current_bb /\ r.vs_inst_idx = LENGTH sb.cs_current_insts /\
   expr_sim_inv ce cx env es2 /\ stmt_state_rel ctx func ce cx es2 r /\
@@ -87,7 +87,7 @@ Theorem aggregate_cons_success_post_mem:
     (!name lo sz. local_region ce es1.scopes q name lo sz ==>
       p+n <= lo \/ lo+sz <= p) ==>
     mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) /\
-  locals_kept ce es1 q r /\ alloca_history func r /\ q.vs_alloca_next <= r.vs_alloca_next ==>
+  locals_kept ce es1 es2 q r /\ alloca_history func r /\ q.vs_alloca_next <= r.vs_alloca_next ==>
   r.vs_current_bb = sb.cs_current_bb /\ r.vs_inst_idx = LENGTH sb.cs_current_insts /\
   expr_sim_inv ce cx env es2 /\ stmt_state_rel ctx func ce cx es2 r /\
   tuple_in_memory (v::vs) (htv::tvs) (b+off) r.vs_memory /\
@@ -101,7 +101,7 @@ Theorem aggregate_cons_success_post_mem:
     (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
       p+n <= lo \/ lo+sz <= p) ==>
     mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-  locals_kept ce es s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next
+  locals_kept ce es es2 s0 r /\ alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next
 Proof
   strip_tac >> drule_all aggregate_cons_state_frames_mem >> strip_tac >>
   `sa.cs_next_id <= ss.cs_next_id` by fs[ci_mono_def] >>
