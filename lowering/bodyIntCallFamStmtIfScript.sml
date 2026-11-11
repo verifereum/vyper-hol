@@ -249,7 +249,7 @@ Proof
   `supported_expr fp.jc_tops e` by
     simp[supportedExprsTheory.supported_expr_def] >>
   `expr_body_pre ce fp.jc_cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule stmt_expr_body_pre_alloc >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def] >>
      drule supported_expr_body_calls >> strip_tac >>
