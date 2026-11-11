@@ -1967,11 +1967,14 @@ Theorem inline_selfdestruct_eval_list:
               accts = s.vs_accounts;
               ben = w2w (HD ws);
               sa = lookup_account self accts;
-              ba = lookup_account ben accts in
-          Halt (halt_state (set_returndata [] (s with vs_accounts :=
-            (\a. if a = self then sa with balance := 0
-                 else if a = ben then ba with balance := ba.balance + sa.balance
-                 else accts a))))
+              transferred = transfer_value self ben sa.balance accts;
+              created = s.vs_call_ctx.cc_created_in_tx in
+          Halt (halt_state (set_returndata [] (s with <|
+            vs_accounts := if created then
+              update_account self (sa with balance := 0) transferred
+              else transferred;
+            vs_pending_deletions := if created then
+              self :: s.vs_pending_deletions else s.vs_pending_deletions |>)))
 Proof
   strip_tac >> Cases_on `inst.inst_operands` >> gvs[] >>
   simp[step_inst_base_opcode_eqs, eval_operands_def] >>
@@ -2001,15 +2004,19 @@ Proof
   `(clone_instruction p labels inst).inst_opcode = SELFDESTRUCT /\
     LENGTH (clone_instruction p labels inst).inst_operands = 1` by
     simp[clone_instruction_def] >>
-  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_accounts = t.vs_accounts` by
+  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_accounts = t.vs_accounts /\
+   s.vs_pending_deletions = t.vs_pending_deletions` by
     gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
       inline_shared_frame_def, stateFrameTheory.execution_frame_def,
       venom_state_component_equality] >>
   simp[step_inst_non_invoke, inline_selfdestruct_eval_list] >>
   simp[clone_instruction_def] >>
   Cases_on `eval_operands inst.inst_operands s` >> simp[] >>
-  IF_CASES_TAC >> simp[inline_opaque_frame_exceptional_halt,
-    inline_opaque_frame_accounts]
+  IF_CASES_TAC >> simp[inline_opaque_frame_exceptional_halt] >>
+  gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+    inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    halt_state_def, set_returndata_def, lookup_var_def,
+    venom_state_component_equality]
 QED
 
 Theorem inline_log_eval_list:
@@ -2065,7 +2072,7 @@ Proof
       venom_state_component_equality] >>
   `IS_SOME (eval_operands src.inst_operands s) =
    IS_SOME (eval_operands (REVERSE ops) s)` by
-    (simp[venomExecProofsTheory.eval_operands_IS_SOME_EVERY,
+    (simp[venomStateTheory.eval_operands_IS_SOME_EVERY,
       listTheory.EVERY_MEM] >> eq_tac >> rpt strip_tac >>
       gvs[eval_operand_def]) >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>

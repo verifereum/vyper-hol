@@ -323,7 +323,7 @@ Theorem inline_tracked_operands_success:
 Proof
   strip_tac >>
   `EVERY (\op. IS_SOME (eval_operand op snap.ils_state)) ops` by
-    (simp[GSYM venomExecProofsTheory.eval_operands_IS_SOME_EVERY] >> simp[]) >>
+    (simp[GSYM venomStateTheory.eval_operands_IS_SOME_EVERY] >> simp[]) >>
   irule EQ_TRANS >> qexists `eval_operands ops snap.ils_state` >>
   reverse conj_tac >- simp[] >>
   irule inline_snapshot_eval_operands >>
