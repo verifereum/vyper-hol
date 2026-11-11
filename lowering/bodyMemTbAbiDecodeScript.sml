@@ -1,7 +1,7 @@
 (* Memory case of the body induction for abi_decode (admitted; its own piece). *)
 Theory bodyMemTbAbiDecode
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds abiDecodeMemRange
 
 Theorem body_type_builtin_abi_decode_mem_case:
   !cx v11 unwrap typ es.
