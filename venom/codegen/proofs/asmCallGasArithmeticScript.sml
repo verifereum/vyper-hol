@@ -63,3 +63,18 @@ Proof
     (irule memory_cost_word_mono >> simp[]) >>
   simp[memory_expansion_cost_def, MAX_DEF] >> decide_tac
 QED
+
+Theorem call_memory_expansion_cost_bound:
+  (az = 0 \/ ao + az <= H) /\ (rs = 0 \/ ro + rs <= H) ==>
+  memory_expansion_cost old
+    (if 0 < SND (max_expansion_range (ao,az) (ro,rs))
+     then word_size (FST (max_expansion_range (ao,az) (ro,rs)) +
+                     SND (max_expansion_range (ao,az) (ro,rs))) * 32
+     else 0) <= memory_cost H
+Proof
+  strip_tac >>
+  Cases_on `az = 0` >> Cases_on `rs = 0` >>
+  gvs[max_expansion_range_def] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  metis_tac[memory_expansion_cost_bound, MULT_COMM]
+QED

@@ -12,6 +12,7 @@
 Theory asmFrameCallStep
 Ancestors
   evmCreationGuard frameCreationGuard asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
+  asmRunBounded asmCallGasArithmetic
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
   vfmPreserves vfmAccountDeletion vfmStaticCalls vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
@@ -1365,8 +1366,21 @@ Theorem asm_call_prepare_failure_view:
   ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
   6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
   asm_call_prepare op s = (INR e,t) ==>
-  t.contexts = (c with stack := DROP (6 + (if call_has_value op then 1 else 0)) c.stack,rb)::rest /\
-  t.txParams = s.txParams
+  (t.contexts = (c with stack := DROP (6 + (if call_has_value op then 1 else 0)) c.stack,rb)::rest /\
+   t.txParams = s.txParams) /\
+  ?mc oc requested dg stipend value ao az ro rs.
+    call_gas value requested (c.msgParams.gasLimit - c.gasUsed) mc oc = (dg,stipend) /\
+    c.msgParams.gasLimit < c.gasUsed + (static_gas op + dg + mc) /\
+    oc <= 39200 /\
+    ao = w2n (EL (2 + (if call_has_value op then 1 else 0)) c.stack) /\
+    az = w2n (EL (3 + (if call_has_value op then 1 else 0)) c.stack) /\
+    ro = w2n (EL (4 + (if call_has_value op then 1 else 0)) c.stack) /\
+    rs = w2n (EL (5 + (if call_has_value op then 1 else 0)) c.stack) /\
+    mc = memory_expansion_cost (buffer_length c.memory)
+      (if 0 < SND (max_expansion_range (ao,az) (ro,rs))
+       then word_size (FST (max_expansion_range (ao,az) (ro,rs)) +
+                       SND (max_expansion_range (ao,az) (ro,rs))) * 32
+       else 0)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   qabbrev_tac `vo:num = if call_has_value op then 1 else 0` >>
@@ -1405,11 +1419,76 @@ Proof
   `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack` by metis_tac[] >>
   drule_all asm_call_prepare_collect_eq >>
   qpat_x_assum `asm_call_prepare _ _ = _` (fn th => pure_rewrite_tac[th]) >>
-  Cases_on `c.msgParams.gasLimit < c.gasUsed + charge` >> simp[] >>
+  reverse (Cases_on `c.msgParams.gasLimit < c.gasUsed + charge`)
+  >- simp[] >>
+  qpat_assum `c.msgParams.gasLimit < _`
+    (fn th => pure_rewrite_tac[th, COND_CLAUSES, sumTheory.INR_11, pairTheory.PAIR_EQ]) >>
   strip_tac >>
-  Cases_on `get_delegate target.code` >>
-  qpat_x_assum `(resolved0,resolved1,resolved2) = _` mp_tac >>
-  simp[] >> strip_tac >> gvs[]
+  conj_tac
+  >- (Cases_on `get_delegate target.code` >>
+      qpat_x_assum `(resolved0,resolved1,resolved2) = _` mp_tac >>
+      simp[] >> strip_tac >> gvs[]) >>
+  suspend "costs"
+QED
+
+Resume asm_call_prepare_failure_view[costs]:
+  qexistsl_tac [`mxCost`, `ac+vc+cc+resolved1`, `gas`, `FST cg`, `SND cg`,
+               `value'`, `ao'`, `az'`, `ro'`, `rs'`] >>
+  qpat_assum `cg = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `charge = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  `ac <= 2600` by
+    (qpat_x_assum `ac = _` SUBST1_TAC >>
+     rewrite_tac[vfmConstantsTheory.warm_access_cost_def,
+                 vfmConstantsTheory.cold_access_cost_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `vc <= 9000` by
+    (qpat_x_assum `vc = _` SUBST1_TAC >>
+     rewrite_tac[vfmConstantsTheory.call_value_cost_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `cc <= 25000` by
+    (qpat_x_assum `cc = _` SUBST1_TAC >>
+     rewrite_tac[vfmConstantsTheory.new_account_cost_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `resolved1 <= 2600` by
+    (Cases_on `get_delegate target.code` >>
+     qpat_x_assum `(resolved0,resolved1,resolved2) = _` mp_tac >>
+     simp_tac (srw_ss()) [vfmConstantsTheory.warm_access_cost_def,
+                         vfmConstantsTheory.cold_access_cost_def] >>
+     strip_tac >> rpt IF_CASES_TAC >> simp[]) >>
+  `ac + vc + cc + resolved1 <= 39200` by decide_tac >>
+  asm_rewrite_tac[] >> simp[EL_TAKE]
+QED
+
+Finalise asm_call_prepare_failure_view
+
+Theorem asm_call_prepare_overhead_budget:
+  asm_inst_gas_ok H (AsmOp name) stk /\
+  (name = "CALL" \/ name = "STATICCALL") /\
+  op = (if name = "CALL" then Call else StaticCall) /\
+  6 + (if call_has_value op then 1 else 0) <= LENGTH stk /\
+  ao = w2n (EL (2 + (if call_has_value op then 1 else 0)) stk) /\
+  az = w2n (EL (3 + (if call_has_value op then 1 else 0)) stk) /\
+  ro = w2n (EL (4 + (if call_has_value op then 1 else 0)) stk) /\
+  rs = w2n (EL (5 + (if call_has_value op then 1 else 0)) stk) /\
+  mc = memory_expansion_cost old
+    (if 0 < SND (max_expansion_range (ao,az) (ro,rs))
+     then word_size (FST (max_expansion_range (ao,az) (ro,rs)) +
+                     SND (max_expansion_range (ao,az) (ro,rs))) * 32
+     else 0) /\ oc <= 39200 ==>
+  mc + oc + 6400 <= 50000 + 8 * H + memory_cost H /\
+  static_gas op <= 100
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  Q.SUBGOAL_THEN `(az = 0 \/ ao + az <= H) /\ (rs = 0 \/ ro + rs <= H)`
+    assume_tac
+  >- (Cases_on `name = "CALL"` >> gvs[call_has_value_def] >>
+      drule asm_inst_gas_ok_call_ranges >> simp[]) >>
+  `mc <= memory_cost H` by
+    (qpat_x_assum `mc = _` SUBST1_TAC >>
+     irule call_memory_expansion_cost_bound >> asm_rewrite_tac[]) >>
+  conj_tac >- decide_tac >>
+  Cases_on `name = "CALL"` >>
+  simp[static_gas_def, vfmConstantsTheory.warm_access_cost_def]
 QED
 
 Theorem asm_run_call_stops_after_step:
