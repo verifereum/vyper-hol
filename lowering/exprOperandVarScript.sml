@@ -698,7 +698,8 @@ Theorem compiler_internal_call_var:
 Proof
   simp[compile_call_def, LET_THM] >>
   pairarg_tac >> gvs[] >>
-  Cases_on `returns_count > 0` >> Cases_on `return_buf_size > 0` >>
+  Cases_on `returns_count > 0` >>
+  Cases_on `cenv.ce_func_return_type (nsid_to_string fid) = NoneT` >>
   gvs[] >> rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
   drule compiler_alloc_buffer_var >> strip_tac >>

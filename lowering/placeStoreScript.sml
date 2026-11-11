@@ -680,14 +680,10 @@ Theorem place_store_read_cons[local]:
        INL child => evaluate_subscripts ctv child path | INR err => INR err)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule mem_step_offset_shape >> strip_tac >> gvs[] >>
-  TRY (drule mem_field_offset_sound >> strip_tac) >>
-  Cases_on `a` >>
-  simp[evaluate_subscripts_def, subscript_type_def] >>
-  BasicProvers.TOP_CASE_TAC >>
-  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def] >>
-  BasicProvers.TOP_CASE_TAC >>
-  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def]
+  irule vyperPlaceStatePreservationTheory.evaluate_subscripts_cons_typed >>
+  drule mem_step_offset_shape >> strip_tac >>
+  imp_res_tac mem_field_offset_sound >>
+  gvs[subscript_type_def, vyperASTTheory.bound_length_def]
 QED
 
 Theorem place_store_path_unread_frame:

@@ -43,7 +43,7 @@ Proof
 QED
 
 (* A field selection reads no gas observation. *)
-Theorem select_attr_gas_obs[local]:
+Theorem select_attr_gas_obs:
   !cx ty tv fld ee tail.
     select_result cx ty tv (AttrSubscript fld) (ee with gas_obs := tail) =
     (FST (select_result cx ty tv (AttrSubscript fld) ee),
@@ -74,7 +74,7 @@ QED
 
 (* The source side of the field read: the selection from the base's
    result succeeds, under every gas tail, with the field's value. *)
-Theorem attr_select_field[local]:
+Theorem attr_select_field:
   expr_body_pre cenv cx env (Attribute ann obj fld) es /\
   expr_type obj = StructT sid /\
   attribute_type (get_tenv cx) (StructT sid) fld = SOME ann /\

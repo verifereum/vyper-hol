@@ -26,7 +26,8 @@
  *                              32 * returns_count bytes for stack returns,
  *                              which the INVOKE's outputs are stored into,
  *                              or return_buf_size bytes for a memory
- *                              return, which alone passes it to the callee
+ *                              return (any non-None return type that
+ *                              isn't on the stack), which alone passes it to the callee
  *                              as the INVOKE's first argument
  *
  * loweringHalt's compile_alloc_buffer_insts and
@@ -269,7 +270,8 @@ Theorem compile_call_intcall_shape:
          store_multi_results rbuf.buf_operand results 0 st4 = (u, st') /\
          v = LocatedValue (cenv.ce_func_return_type (nsid_to_string func_id))
                          (base_ptr rbuf)) /\
-      (ret_count = 0 /\ 0 < rbs ==>
+      (ret_count = 0 /\
+       cenv.ce_func_return_type (nsid_to_string func_id) <> NoneT ==>
        ?rbuf u.
          compile_alloc_buffer rbs st1 = (rbuf, st2) /\
          emit_void INVOKE
@@ -281,7 +283,8 @@ Theorem compile_call_intcall_shape:
            st3 = (u, st') /\
          v = LocatedValue (cenv.ce_func_return_type (nsid_to_string func_id))
                          (base_ptr rbuf)) /\
-      (ret_count = 0 /\ rbs = 0 ==>
+      (ret_count = 0 /\
+       cenv.ce_func_return_type (nsid_to_string func_id) = NoneT ==>
        ?u. st2 = st1 /\
            emit_void INVOKE
              (Label (internal_fn_label
@@ -305,7 +308,8 @@ Proof
       qexistsl_tac [`res`, `s4`] >> simp[]) >>
   qmatch_asmsub_rename_tac
     `compile_stage_intcall_args _ _ _ _ s2 = (ia, s3)` >>
-  Cases_on `0 < rbs` >> gvs[] >>
+  Cases_on `cenv.ce_func_return_type (nsid_to_string func_id) = NoneT` >>
+  gvs[] >>
   qexistsl_tac [`s2`, `ia`, `s3`] >> simp[]
 QED
 

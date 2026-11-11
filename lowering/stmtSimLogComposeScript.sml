@@ -112,7 +112,7 @@ Proof
 QED
 
 (* Outside a static frame the static-write check passes. *)
-Theorem eval_log_bind[local]:
+Theorem eval_log_bind:
   ~cx.txn.is_static ==>
   eval_stmt cx (Log id args) =
     bind (eval_exprs cx args)
@@ -125,7 +125,7 @@ Proof
   rpt (CASE_TAC >> gvs[])
 QED
 
-Theorem log_args_admissible[local]:
+Theorem log_args_admissible:
   ~cx.txn.is_static /\
   gas_admissible (eval_stmt cx (Log id args)) (stmt_res_ok lctx) es ==>
   gas_admissible (eval_exprs cx args) log_args_res_ok es
