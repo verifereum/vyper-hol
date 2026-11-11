@@ -217,9 +217,8 @@ Resume extrequest_evaluate_replay[builtin]:
   >- (irule extrequest_replay_bind_guarded >> reverse conj_tac >- metis_tac[] >>
       rpt strip_tac >> simp[] >> irule extrequest_replay_bind >>
       simp[extrequest_replay_primitives] >>
-      gen_tac >> simp[] >> irule extrequest_replay_bind >>
-      simp[extrequest_replay_lift_option_type] >>
-      gen_tac >> simp[extrequest_replay_primitives]) >>
+      irule extrequest_replay_bind >>
+      simp[extrequest_replay_lift_option_type, extrequest_replay_primitives]) >>
   irule extrequest_replay_bind_guarded >> reverse conj_tac >- metis_tac[] >>
   rpt strip_tac >> simp[] >> irule extrequest_replay_bind >>
   simp[extrequest_replay_primitives] >>
