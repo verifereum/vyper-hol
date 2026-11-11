@@ -2137,6 +2137,182 @@ Proof
   metis_tac[ctorArgDecodeTheory.ctor_arg_word_descriptor]
 QED
 
+Theorem registration_owned_locals_endpoint:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+  initial_venom_state_rel tops am tx vs /\
+  lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+  set_external_package_target target
+    (package_external_fn tops ut nk (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,mincd,pay,nr',key,ut',iv,fbody',rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+  vars_pc_only (vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>) s1 /\
+  fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+  s1.vs_current_bb = st.cs_current_bb /\ s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ~ctx_has_dalloca unit.cu_context ==>
+  ?tvs s0 G0 tn0.
+    LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) (MAP SND args) tvs /\
+    local_ptrs_rel efn cenv [env] s0 /\
+    (!j. j < LENGTH args ==> ?aid q p n inst.
+      MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_outputs = [q] /\ inst.inst_id = aid /\
+      aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+      FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+      lookup_var q s0 = SOME (n2w p) /\ n = type_memory_size (EL j tvs) /\
+      ptr_covers G0 tn0 q s0 n /\ val_wf (EL j tvs) (EL j tx.args) /\
+      val_footprint (EL j tvs) (EL j tx.args) <= n /\
+      (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+        val_in_memory (EL j tvs) (EL j tx.args) p mem)) /\
+    cenv = cenv0 with ce_vars := cenv.ce_vars /\
+    (!k. ~MEM k (MAP FST args) ==> FLOOKUP cenv.ce_vars k = NONE) /\
+    alloca_inv s0 /\ alloca_frontier_inv unit.cu_context efn site s0 /\ allocas_from 0 s0 /\
+    fresh_vars_wrt sa s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    tn0.t_stor = tn1.t_stor /\ tn0.t_trans = tn1.t_trans /\ tn0.t_imm = tn1.t_imm /\
+    s0.vs_call_ctx = s1.vs_call_ctx /\ s0.vs_accounts = s1.vs_accounts /\
+    s0.vs_transient = s1.vs_transient /\ s0.vs_logs = s1.vs_logs /\
+    s0.vs_outcomes = s1.vs_outcomes /\ s0.vs_requests = s1.vs_requests /\
+    s0.vs_pending_deletions = s1.vs_pending_deletions /\ s0.vs_tx_ctx = s1.vs_tx_ctx /\
+    s0.vs_block_ctx = s1.vs_block_ctx /\ s0.vs_fmp = s1.vs_fmp /\
+    s0.vs_gas_readings = s1.vs_gas_readings /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+      !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1)
+Proof
+  strip_tac >> drule_all registration_owned_entry_inputs >>
+  disch_then (qspec_then `site` strip_assume_tac) >>
+  drule_at (Pat `LIST_REL (abi_decoder_coherent _ _ _) _ _`)
+    registration_owned_source_ready >>
+  disch_then (drule_at (Pat `calldata_encodes _ _ _ _ _`)) >>
+  simp[] >> disch_tac >>
+  drule_at (Pat `fresh_vars_wrt _ _`)
+    (registration_owned_suffix_invariant_ptr |> Q.SPEC
+      `\aid q n. ?inst. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
+        inst.inst_outputs = [q] /\ inst.inst_id = aid`) >>
+  disch_then (qspec_then `efn` mp_tac) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `ALL_DISTINCT _`)) >>
+  disch_then (qspecl_then [`cenv0`, `tvs`, `tx.args`, `type_env tops`] mp_tac) >>
+  disch_then (drule_at (Pat `alloca_frontier_inv _ _ _ _`)) >>
+  disch_then (drule_at (Pat `allocas_from _ _`)) >>
+  disch_then (qspecl_then [`cenv0.ce_struct_fields`, `vs.vs_call_ctx`, `[]`,
+    `0`, `cenv0`] mp_tac) >>
+  disch_then (qspecl_then [`G1`, `tn1`, `cenv`] mp_tac) >>
+  impl_tac >- (conj_tac >- (rpt gen_tac >> strip_tac >>
+    drule_all registration_singleton_owner_instruction >>
+    strip_tac >> simp_tac (srw_ss()) [] >>
+    qexists_tac `mk_inst st2.cs_next_id ALLOCA [Lit (n2w n)] [q]` >>
+    simp[venomInstTheory.mk_inst_def]) >>
+    simp[var_location_memory_size_def] >>
+    conj_tac >- (rpt strip_tac >>
+      qpat_x_assum `!i. i < LENGTH args ==> ?off. _`
+        (qspec_then `j` mp_tac) >> simp[] >>
+      strip_tac >> goal_assum (drule_at Any) >>
+      simp[var_location_memory_size_def]) >>
+    conj_tac >- metis_tac[] >>
+    first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`s0`, `G0`, `tn0`] strip_assume_tac) >>
+  qexistsl_tac [`tvs`, `s0`, `G0`, `tn0`] >>
+  simp_tac (srw_ss()) [] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "endpoint_locals" >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n. _`
+      (qspec_then `j` mp_tac) >> simp[] >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "endpoint_domain" >>
+  qpat_x_assum `cenv = cenv0 with ce_vars := cenv.ce_vars` kall_tac >>
+  simp[]
+QED
+
+Resume registration_owned_locals_endpoint[endpoint_locals]:
+  rewrite_tac[local_ptrs_rel_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+    `FLOOKUP env name = SOME entry` by gvs[vyperStateTheory.lookup_scopes_def, AllCaseEqs()] >>
+    drule_all vyperTypeBindArgumentsTheory.bind_arguments_scope_lookup >>
+    strip_tac >>
+    `?j. j < LENGTH args /\ EL j args = (name,typ)` by metis_tac[MEM_EL] >>
+    drule_all bind_arguments_lookup_index >> strip_tac >>
+    qpat_assum `LIST_REL (\ty tv. evaluate_type _ ty = SOME tv) _ _`
+      (mp_tac o SRULE [LIST_REL_EL_EQN]) >>
+    strip_tac >>
+    `evaluate_type (type_env tops) (SND (EL j args)) = SOME (EL j tvs)` by
+      metis_tac[EL_MAP] >>
+    qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n. _`
+      (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+    qpat_x_assum `cenv = cenv0 with ce_vars := cenv.ce_vars` kall_tac >>
+    gvs[] >>
+    `p' + type_memory_size (EL j tvs) <= s0.vs_alloca_next` by
+      metis_tac[venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >>
+    `s0.vs_alloca_next < dimword (:256)` by
+      (qpat_x_assum `alloca_frontier_inv _ _ _ s0` mp_tac >>
+       simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> decide_tac) >>
+    `p' < dimword (:256)` by decide_tac >>
+    simp[] >> conj_tac >- metis_tac[local_backed_def] >>
+    first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  `cenv0.ce_vars = (build_compile_env tops External mut tx.function_name args ret fbody ut).ce_vars /\
+   cenv0.ce_imm_alloca = NONE` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[package_external_fn_def] >>
+     simp[set_external_package_target_def] >> strip_tac >>
+     gvs[update_cenv_nonreentrant_def] >>
+     rw[update_cenv_ret_abi_def, intCallCalleeTheory.build_compile_env_imm_alloca]) >>
+  `local_ptrs_reserved cenv sa` by
+    (qspecl_then [`tops`, `External`, `mut`, `tx.function_name`, `args`,
+       `ret`, `fbody`, `ut`] strip_assume_tac build_compile_env_vars >>
+     drule entryLocalsTheory.compile_register_positional_args_reserved >>
+     impl_tac >- gvs[build_positional_args_FST] >> simp[]) >>
+  `!name b sz. local_region cenv [env] s0 name b sz ==>
+    ?q inst. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var q) sz) /\
+      MEM inst (fn_insts efn) /\ inst.inst_outputs = [q] /\
+      FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,sz)` by
+    (rpt gen_tac >> simp[local_region_def] >> strip_tac >>
+     `FLOOKUP env name = SOME entry` by
+       gvs[vyperStateTheory.lookup_scopes_def, AllCaseEqs()] >>
+     drule_all vyperTypeBindArgumentsTheory.bind_arguments_scope_lookup >> strip_tac >>
+     `?j. j < LENGTH args /\ EL j args = (name,typ)` by metis_tac[MEM_EL] >>
+     qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n. _`
+       (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+     qpat_x_assum `cenv = cenv0 with ce_vars := cenv.ce_vars` kall_tac >>
+     gvs[] >>
+     `p' + type_memory_size (EL j tvs) <= s0.vs_alloca_next` by
+       metis_tac[venomMemDefsTheory.alloca_inv_def,
+         venomMemDefsTheory.alloca_next_valid_def] >>
+     `s0.vs_alloca_next < dimword (:256)` by
+       (qpat_x_assum `alloca_frontier_inv _ _ _ s0` mp_tac >>
+        simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> decide_tac) >>
+     `p' < dimword (:256)` by decide_tac >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!name b sz. local_region _ _ _ _ _ _ ==> _`
+    (qspecl_then [`n1`, `b1`, `sz1`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_assum `!name b sz. local_region _ _ _ _ _ _ ==> _`
+    (qspec_then `n2` mp_tac) >>
+  disch_then (qspecl_then [`b2`, `sz2`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `q <> q'` by metis_tac[local_ptrs_reserved_def] >>
+  `inst.inst_id <> inst'.inst_id` by
+    (strip_tac >> `inst = inst'` by
+       metis_tac[localPtrsPropsTheory.fn_inst_ids_distinct_inj] >> gvs[]) >>
+  gvs[venomMemDefsTheory.alloca_inv_def,
+      venomMemDefsTheory.allocas_non_overlapping_def] >>
+  metis_tac[regions_disjoint_def]
+QED
+
+Resume registration_owned_locals_endpoint[endpoint_domain]:
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  rpt strip_tac >>
+  qpat_x_assum `!n. ~MEM n (MAP FST pos_args) ==> _`
+    (qspec_then `k` mp_tac) >>
+  simp[build_positional_args_FST]
+QED
+
+Finalise registration_owned_locals_endpoint
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
