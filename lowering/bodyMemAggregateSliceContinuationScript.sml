@@ -121,7 +121,8 @@ Proof
           disch_then (qspecl_then [`w`, `tv`, `env`] mp_tac) >>
           (impl_tac >- (fs[expr_body_pre_def] >> metis_tac[])) >>
           disch_then (qx_choose_then `qq` strip_assume_tac) >>
-          qexists `qq` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          qexists `qq` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+          strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
       `~is_word_type (expr_type e)` by
         (Cases_on `expr_type e` >> gvs[is_bytestring_type_def, is_word_type_def] >>
          rename1 `is_bytestring_type (BaseT bt)` >> Cases_on `bt` >>

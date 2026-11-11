@@ -269,16 +269,22 @@ Proof
     (`b+off < dimword(:256)` by decide_tac >> simp[w2n_n2w]) >>
   `~expr_has_effect e /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
    (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
-      b + asz <= lb \/ lb + lsz <= b) ==>
+      asz + b <= lb \/ lb + lsz <= b) ==>
    (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
       mem_bytes_at lb lsz q.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
-   !p n. (p + n <= b \/ b + asz <= p) /\
+   !p n. (n + p <= b \/ asz + b <= p) /\
      (!inst c sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
         sa.cs_next_id <= inst.inst_id /\
         FLOOKUP q.vs_allocas inst.inst_id = SOME (c,sz) ==>
         regions_disjoint p n c sz) ==>
      mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory` by
     (strip_tac >>
+     `!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        b + asz <= lb \/ lb + lsz <= b` by
+       (rpt strip_tac >>
+        qpat_x_assum `!n lb lsz. local_region ce es.scopes s0 _ _ _ ==> asz + b <= _ \/ _`
+          (qspecl_then [`n`, `lb`, `lsz`] mp_tac) >>
+        (impl_tac >- first_assum ACCEPT_TAC) >> decide_tac) >>
      qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ ==> _` mp_tac >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then (qspecl_then [`b`, `asz`] mp_tac) >>
@@ -287,9 +293,9 @@ Proof
                    TRY (first_assum ACCEPT_TAC) >> decide_tac)) >>
      disch_then (fn th => conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
        qx_genl_tac [`pp`, `nn`] >> strip_tac >>
-       mp_tac (Q.SPECL [`pp`, `nn`] (CONJUNCT2 th)) >>
-       impl_tac >- (conj_tac >- decide_tac >> first_assum ACCEPT_TAC) >>
-       disch_then ACCEPT_TAC)) >>
+       (mp_tac (Q.SPECL [`pp`, `nn`] (CONJUNCT2 th)) >>
+        (impl_tac >- (conj_tac >- decide_tac >> first_assum ACCEPT_TAC)) >>
+        disch_then ACCEPT_TAC))) >>
   qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ /\ _ ==> _` (fn pth =>
     qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >>
   simp[] >>
