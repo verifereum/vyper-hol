@@ -41,9 +41,10 @@ Theorem abi_decode_complex_observed_abort:
   compile_abi_decode_to_buf (Var dst) (Lit 0w) MLOAD (Var src) hi
     (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) sa = ((),sb) /\
   fn_has_code sa sb func /\ run_inst_seq (emitted_insts sa sb) s = Abort a u ==>
-  ?H tf n j. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
+  (?H tf n j. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
     gas_path_ptr D 0 ctx func PG G tn s n H tf
-    (Abort a (u with vs_inst_idx := j))
+    (Abort a (u with vs_inst_idx := j))) /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
 Proof
   strip_tac >>
   drule abi_decode_member_live_compiler >> strip_tac >>
@@ -70,6 +71,7 @@ Proof
   drule_all abi_decode_flat_compile_shape >> strip_tac >>
   `emitted_insts sa sb = emitted_insts sa middle ++ emitted_insts middle sb` by
     (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  reverse conj_tac >- suspend "nonterminators" >>
   Cases_on `?t. run_inst_seq (emitted_insts sa middle) s = OK t`
   >- (pop_assum strip_assume_tac >> suspend "suffix") >>
   `run_inst_seq (emitted_insts sa middle) s = Abort a u` by
@@ -148,6 +150,14 @@ Resume abi_decode_complex_observed_abort[opcodes]:
   fs[EVERY_MEM] >> rpt strip_tac >>
   qpat_x_assum `!i. MEM i _ ==> abi_decoder_reentry_opcode _` drule >>
   simp[abi_decoder_reentry_opcode_def] >> strip_tac >> gvs[]
+QED
+
+Resume abi_decode_complex_observed_abort[nonterminators]:
+  markerLib.RESUME_TAC >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa middle)` by
+    (`?B. bop_scalar_seq {} UNIV (emitted_insts sa middle) B` by
+       (irule abi_decode_complex_header_scalar >> simp[] >> metis_tac[]) >>
+     drule bop_scalar_seq_opcodes >> simp[EVERY_MEM]) >> simp[]
 QED
 
 Finalise abi_decode_complex_observed_abort
