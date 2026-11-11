@@ -416,3 +416,74 @@ Proof
     (icf_collect_aliases e.rfe_ctx.icf_dfg
        (icf_assign_root e.rfe_ctx.icf_dfg {} dst))` >> simp[]
 QED
+
+Theorem ricf_event_opcode:
+  i < LENGTH bb.bb_instructions ==>
+  (EL i (ricf_event_apply e bb).bb_instructions).inst_opcode =
+    if i = e.rfe_index then NOP
+    else (EL i bb.bb_instructions).inst_opcode
+Proof
+  simp[ricf_event_apply_def, ricf_apply_forward_def, EL_MAPi] >>
+  rpt strip_tac >> rw[mk_nop_inst_def]
+QED
+
+Theorem ricf_event_unchanged:
+  i < LENGTH bb.bb_instructions /\ i <> e.rfe_index /\
+  ~MEM (EL i bb.bb_instructions).inst_id
+    (MAP (\(ri,p). ri.inst_id) e.rfe_sites) ==>
+  EL i (ricf_event_apply e bb).bb_instructions = EL i bb.bb_instructions
+Proof
+  simp[ricf_event_apply_def, ricf_apply_forward_def, EL_MAPi] >>
+  rpt strip_tac >>
+  `FILTER (\(ri,p). ri.inst_id = (EL i bb.bb_instructions).inst_id)
+     e.rfe_sites = []` by
+    (gvs[FILTER_EQ_NIL, EVERY_MEM, MEM_MAP, pairTheory.FORALL_PROD,
+         pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem ricf_event_surviving_mcopy:
+  ricf_event_ok e bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i (ricf_event_apply e bb).bb_instructions).inst_opcode = MCOPY /\
+  (!ri p. MEM (ri,p) e.rfe_sites /\
+     ri.inst_id = (EL i bb.bb_instructions).inst_id ==>
+     ri.inst_opcode = (EL i bb.bb_instructions).inst_opcode) ==>
+  EL i (ricf_event_apply e bb).bb_instructions = EL i bb.bb_instructions
+Proof
+  rpt strip_tac >>
+  drule ricf_event_opcode >> disch_then (qspec_then `e` mp_tac) >>
+  strip_tac >>
+  Cases_on `i = e.rfe_index` >> gvs[] >>
+  irule ricf_event_unchanged >> simp[] >>
+  gvs[MEM_MAP, pairTheory.EXISTS_PROD] >>
+  rpt strip_tac >>
+  drule_all ricf_event_sites_readonly >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem ricf_event_noninvoke:
+  ricf_event_ok e bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode <> MCOPY /\
+  (EL i bb.bb_instructions).inst_opcode <> INVOKE /\
+  (!ri p. MEM (ri,p) e.rfe_sites /\
+     ri.inst_id = (EL i bb.bb_instructions).inst_id ==>
+     ri.inst_opcode = (EL i bb.bb_instructions).inst_opcode) ==>
+  EL i (ricf_event_apply e bb).bb_instructions = EL i bb.bb_instructions
+Proof
+  rpt strip_tac >>
+  `i <> e.rfe_index` by
+    (drule ricf_event_copy_shape >> simp[ricf_event_copy_def] >> metis_tac[]) >>
+  irule ricf_event_unchanged >> simp[] >>
+  gvs[MEM_MAP, pairTheory.EXISTS_PROD] >> rpt strip_tac >>
+  drule_all ricf_event_sites_readonly >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem ricf_event_operand_length:
+  i < LENGTH bb.bb_instructions /\ i <> e.rfe_index ==>
+  LENGTH (EL i (ricf_event_apply e bb).bb_instructions).inst_operands =
+  LENGTH (EL i bb.bb_instructions).inst_operands
+Proof
+  simp[ricf_event_apply_def, ricf_apply_forward_def, EL_MAPi] >>
+  rpt strip_tac >> rw[]
+QED
