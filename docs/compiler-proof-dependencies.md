@@ -66,7 +66,7 @@ is `e2eCorrectness.vyper_call_correct`.
 | `source_storage_ok tops am tx` | environmental/layout/hash guard | Conditional `eval_stmt_preserves_contract_storage_well_formed` family and `take_adopt_call_outcome_storage_suffix`. No complete deployment/transaction producer; Milestone 7. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |
 | `valid_vyper_call tops tx calldata ret` | environmental ABI/function boundary | No general producer. Exact External lookup/no fallback/no defaults, count, binding and encoded calldata supplied by caller. |
-| `call_outcomes_ok tops am tx (MAP SND (call_trace es))` | environmental successful-payload guard | **No current producer**, neither arbitrary EVM callee nor source-executed callee. Milestone 7. |
+| `call_outcomes_ok am tx (MAP SND (call_trace es))` | environmental outcome-payload guard | **No current producer**, neither arbitrary EVM callee nor source-executed callee. Milestone 7. |
 
 The [partial-producer detail](compiler-proof-status-2026-10-09.md#what-partial-producers-actually-establish)
 is part of this inventory: runtime readiness requires installed exact sources
@@ -138,8 +138,9 @@ accounts, exact source installation/layouts, code/parse and message/transaction/
 block ties. `run_call` stops when our frame ends; parent return/revert/short
 output-copy behavior is specified by `frame_outcome`, not by a whole-transaction
 claim. Source oracle `SOME` and Venom/assembly calls take complete outcomes;
-computed value-zero precompiles1/2/6/7 consume none. No callee source correctness
-is presumed or proved.
+computed value-zero precompiles 1/2/6/7 consume the next outcome and use its
+success flag when the computed input is valid. No callee source correctness is
+presumed or proved.
 
 Success relates canonical returns/accounts/transient/logs and full request
 sequence. Requests are success-only; leftover outcomes are not final
@@ -149,8 +150,8 @@ revert-data/reason/general-kind equality. The sole exemption is exact
 body (including a return rejection producing that same message); not arbitrary
 `ReturnReject`, static-only decoding or conversion failure.
 
-Resources are frame OutOfGas/StackOverflow or valid computed-precompile failure,
-not an existential gas threshold. Entry `cc_gas=0`; Venom GAS stays unchanged
+The resource alternative is frame OutOfGas/StackOverflow, not an existential gas
+threshold. Entry `cc_gas=0`; Venom GAS stays unchanged
 and opaque, CALL/STATICCALL oracle semantics ignore evaluated gas operands.
 There is no static-entry/immutables/msg.gas/gas=/fallback guarantee or caller-read
 gas oracle. Combined environmental satisfiability and transaction/callee

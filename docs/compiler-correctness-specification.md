@@ -98,7 +98,7 @@ The entire public theorem is:
   source_storage_ok tops am tx /\
   call_state_rel tops runtime_bc am tx es /\
   valid_vyper_call tops tx (FST (HD es.contexts)).msgParams.data ret /\
-  call_outcomes_ok tops am tx (MAP SND (call_trace es))
+  call_outcomes_ok am tx (MAP SND (call_trace es))
   ==>
   ?r es'. run_call es = SOME (r, es') /\
     (frame_resource_starved es r es' \/
