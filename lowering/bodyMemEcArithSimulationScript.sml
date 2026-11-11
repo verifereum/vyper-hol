@@ -30,6 +30,7 @@ Theorem ec_two_operand_post[local]:
   expr_post ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
   MAP FDOM es.scopes = MAP FDOM es2.scopes /\
   MAP FDOM es1.scopes = MAP FDOM es2.scopes /\
+  (~expr_has_effect e ==> ~expr_has_effect a /\ ~expr_has_effect b) /\
   vv_post ctx func cenv cx e es2 sm sb u ee tv vv t' ==>
   vv_post ctx func cenv cx e es sa sb s0 ee tv vv t'
 Proof
@@ -37,11 +38,21 @@ Proof
   `sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
    s1.cs_next_var <= sm.cs_next_var /\ s1.cs_next_id <= sm.cs_next_id` by
     metis_tac[cj 2 compile_expr_grows] >>
+  `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
+    decide_tac >>
+  `wb_frame cenv es es1 sa s0 t /\ wb_frame cenv es1 es2 s1 t u` by
+    metis_tac[expr_post_frame] >>
   `wb_frame cenv es es2 sa s0 u` by
     (irule wb_frame_trans >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[expr_post_frame]) >>
-  irule vv_post_prefix_frame >> goal_assum (drule_at Any) >>
-  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
+    (strip_tac >> fs[] >>
+     `pure_frame cenv func es sa s0 t /\ pure_frame cenv func es1 s1 t u` by
+       metis_tac[expr_post_pure_frame] >>
+     match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es1`, `s1`, `t`] >> fs[wb_frame_def]) >>
+  irule vv_post_prefix_frame >> rpt conj_tac >- simp[] >- simp[] >>
+  qexistsl_tac [`es2`, `sm`, `u`] >> simp[]
 QED
 
 Theorem ec_pointer_tail_mem_outcome[local]:

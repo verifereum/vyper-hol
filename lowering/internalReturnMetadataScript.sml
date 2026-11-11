@@ -149,7 +149,9 @@ Proof
   simp[check_toplevel_decl_def, well_formed_type_def] >>
   fs[checked_contract_runtime_ready_def, get_tenv_def,
      initial_evaluation_context_def] >>
-  simp[optionTheory.IS_SOME_EXISTS]
+  strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
+  drule assignable_type_well_formed >>
+  simp[well_formed_type_def, optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem typed_widened_internal_convention:

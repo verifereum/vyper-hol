@@ -151,7 +151,9 @@ Theorem concat_suffix_post:
   (!ltv. evaluate_type (get_tenv cx) lt = SOME ltv ==>
          type_memory_size ltv <= bsz) /\ B+bsz <= t.vs_alloca_next /\
   lookup_var bv t = SOME (n2w B) /\ bv <> fresh /\
-  wb_frame cenv es ee sa s0 t /\ stmt_state_rel ctx func cenv cx ee t /\
+  wb_frame cenv es ee sa s0 t /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
+  stmt_state_rel ctx func cenv cx ee t /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (!x. not_fresh_at sa x ==> x <> fresh) /\
   not_local_ptr cenv ee.scopes fresh /\
@@ -199,6 +201,26 @@ Proof
     (qpat_assum `Abbrev (u = _)`
        (fn th => pure_rewrite_tac[REWRITE_RULE[markerTheory.Abbrev_def] th]) >>
      irule concat_suffix_value >> qexists_tac `bytes` >> simp[]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
+    (strip_tac >>
+     `u.vs_allocas = t.vs_allocas` by
+       simp[Abbr `u`, mstore_def, update_var_def] >>
+     `!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+        regions_disjoint B bsz lb lsz` by
+       (rpt strip_tac >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
+        qpat_x_assum `!name p n. local_region cenv ee.scopes t name p n ==> _`
+          irule >>
+        qexists_tac `n` >> irule local_region_frame_fwd >>
+        qexistsl_tac [`s0`, `sa`, `es.scopes`] >> fs[wb_frame_def]) >>
+     `!off len. regions_disjoint off len B bsz ==>
+        mem_bytes_at off len u.vs_memory = mem_bytes_at off len t.vs_memory` by
+       (rpt gen_tac >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
+        strip_tac >>
+        `off + len <= B \/ B + 32 <= off` by decide_tac >>
+        simp[Abbr `u`, mstore_mem_bytes_at_disjoint, update_var_def]) >>
+     match_mp_tac pure_frame_buffer_tail >>
+     qexistsl_tac [`t`, `inst`, `B`, `bsz`] >> simp[] >>
+     first_assum ACCEPT_TAC) >>
   conj_asm1_tac
   >- (irule vv_post_allocated_memory_intro >>
       simp[mk_ptr_def, eval_operand_def] >>

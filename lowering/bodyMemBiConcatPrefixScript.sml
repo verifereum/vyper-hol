@@ -52,7 +52,7 @@ Theorem concat_prefix_path_mem:
     MEM binst (fn_insts func) /\ binst.inst_opcode = ALLOCA /\
     binst.inst_id = sa.cs_next_id /\ binst.inst_id < s4.cs_next_id /\
     MEM oinst (fn_insts func) /\ oinst.inst_opcode = ALLOCA /\
-    oinst.inst_id < s4.cs_next_id /\
+    sa.cs_next_id <= oinst.inst_id /\ oinst.inst_id < s4.cs_next_id /\
     FLOOKUP t.vs_allocas binst.inst_id = SOME (B, bsz) /\
     FLOOKUP t.vs_allocas oinst.inst_id = SOME (w2n ow, 64) /\
     (!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
