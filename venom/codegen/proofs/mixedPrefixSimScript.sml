@@ -101,7 +101,7 @@ End
    Hilbert choice helper for SORestore
    ========================================================================= *)
 
-Theorem spill_lookup_flookup[local]:
+Theorem spill_lookup_flookup:
   !off ps.
     (?op. FLOOKUP ps.ps_spilled op = SOME off) ==>
     FLOOKUP ps.ps_spilled (spill_lookup off ps.ps_spilled) = SOME off
@@ -116,7 +116,7 @@ QED
    LENGTH helper: apply_prefix_op preserves stack_op_wf length invariant
    ========================================================================= *)
 
-Theorem apply_prefix_op_length[local]:
+Theorem apply_prefix_op_length:
   !initial_fmp lo op ps.
     is_prefix_op op ==>
     LENGTH (apply_prefix_op initial_fmp lo op ps).ps_stack =
