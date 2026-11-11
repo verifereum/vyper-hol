@@ -8,7 +8,7 @@ Ancestors
 
 Theorem aggregate_completed_buffer_result:
   expr_body_pre ce cx env e es /\
-  eval_expr cx e es = (INL (Value v),es') /\
+  eval_expr cx e (es with gas_obs := gs) = (INL (Value v),es') /\
   lowered_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -32,8 +32,8 @@ Theorem aggregate_completed_buffer_result:
     lookup_var z r = SOME w) /\
   (!aid a. FLOOKUP t.vs_allocas aid = SOME a ==>
     FLOOKUP r.vs_allocas aid = SOME a) /\
-  (!aid a n. FLOOKUP t.vs_allocas aid = SOME (a,n) /\
-    aid < sm.cs_next_id /\ (a+n <= b \/ b+sz <= a) /\
+  (!a n. (?aid. FLOOKUP t.vs_allocas aid = SOME (a,n) /\
+    aid < sm.cs_next_id) /\ regions_disjoint a n b sz /\
     (!name lo k. local_region ce es.scopes t name lo k ==>
       a+n <= lo \/ lo+k <= a) ==>
     mem_bytes_at a n r.vs_memory = mem_bytes_at a n t.vs_memory) /\
@@ -62,7 +62,12 @@ Proof
       qexistsl_tac [`b`, `sm`, `sz`, `t`] >>
       `b < dimword (:256)` by decide_tac >>
       gvs[arithmeticTheory.LESS_MOD,
-          AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
+          AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      rpt strip_tac >>
+      qpat_x_assum `!a n. (?aid. _) /\ _ ==> _` irule >>
+      simp[regions_disjoint_def] >> metis_tac[]) >>
   irule aggregate_allocated_result_store_bound_mem >> simp[] >>
   conj_tac >- fs[stmt_state_rel_def] >>
   reverse conj_tac >- metis_tac[] >>
