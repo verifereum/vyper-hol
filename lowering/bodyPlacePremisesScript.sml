@@ -86,7 +86,7 @@ Resume body_assignment_place_premises[rhs]:
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by gvs[body_inv_def] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
   irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >> metis_tac[call_evaluation_safe_append_right]
 QED
 
@@ -96,7 +96,8 @@ Resume body_assignment_place_premises[indices]:
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by gvs[body_inv_def] >>
   Cases_on `IS_SOME (supported_target_info tops bindings t)`
   >- (irule aug_place_target_indices_pre >>
-      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+      gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_assignment_def,
           supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def] >>
       conj_tac >- metis_tac[] >>
       metis_tac[call_evaluation_safe_append_left]) >>
@@ -111,12 +112,16 @@ Resume body_assignment_place_premises[indices]:
 QED
 
 Resume body_assignment_place_premises[legacy_index]:
+  `alloc_limits_target cenv (SubscriptTarget (TopLevelNameTarget p) k)` by
+    gvs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
+        allocLimitsTheory.alloc_limits_assignment_def] >>
+  gvs[Once allocLimitsTheory.alloc_limits_expr_def] >>
   rpt strip_tac >>
   `well_typed_expr env k` by fs[Once well_typed_expr_def, AllCaseEqs()] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
   irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, supported_expr_exists_def,
       int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
   qexists_tac `[]` >> simp[] >>

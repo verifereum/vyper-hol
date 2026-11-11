@@ -422,7 +422,7 @@ Proof
   `~supported_expr_exists
     (\e. ~is_extcode e /\
           ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) key` by
-    (gvs[stmt_exprs_ok_def] >> metis_tac[tuple_places_key_occurs]) >>
+    (gvs[stmt_exprs_ok_flat] >> metis_tac[tuple_places_key_occurs]) >>
   `cx_tops cx = tops` by
     (irule cx_tops_module >> gvs[body_inv_def]) >>
   irule stmt_expr_body_pre >> simp[] >>
@@ -430,6 +430,14 @@ Proof
   conj_tac >- metis_tac[tuple_places_key_occurs] >>
   conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
   qexists_tac `calls` >> simp[]
+QED
+
+Theorem alloc_limits_assignments_mem_target[local]:
+  !gs. MEM (BaseTarget bt) gs /\ alloc_limits_assignments cenv gs ==>
+       alloc_limits_target cenv bt
+Proof
+  Induct >> rw[allocLimitsTheory.alloc_limits_assignment_def] >>
+  gvs[allocLimitsTheory.alloc_limits_assignment_def]
 QED
 
 Theorem tuple_places_indices_pre:
@@ -450,6 +458,11 @@ Proof
       `well_typed_expr env key` by
         gvs[well_typed_atarget_def, well_typed_target_def,
             type_place_target_SubscriptTarget] >>
+      `alloc_limits_assignments cenv gs` by
+        gvs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
+            allocLimitsTheory.alloc_limits_assignment_def] >>
+      drule_all alloc_limits_assignments_mem_target >>
+      simp[Once allocLimitsTheory.alloc_limits_expr_def] >> strip_tac >>
       metis_tac[tuple_places_key_pre])
   >~ [`AttributeTarget t fld`]
   >- (Cases_on `t` >> gvs[target_indices_pre_def])

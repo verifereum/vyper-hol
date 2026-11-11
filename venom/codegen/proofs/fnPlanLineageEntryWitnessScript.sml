@@ -70,10 +70,10 @@ Proof
   `?j. j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = inst` by
     metis_tac[MEM_EL] >>
   `MEM v (live_vars_at (liveness_analyze fn) lbl j)` by
-    (drule livenessAnalysisPropsTheory.live_vars_at_uses >>
+    (drule livenessProofsTheory.live_vars_at_uses >>
      disch_then (qspecl_then [`lbl`, `bb`, `j`, `v`] mp_tac) >>
      simp[]) >>
-  drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+  drule livenessProofsTheory.live_vars_at_propagate_range >>
   disch_then (qspecl_then [`lbl`, `bb`, `0`, `j`, `v`] mp_tac) >>
   simp[] >>
   gvs[EVERY_EL, inst_defs_def] >> rpt strip_tac >>

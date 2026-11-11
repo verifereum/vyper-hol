@@ -1,6 +1,6 @@
 Theory fmpAliasProps
 Ancestors
-  fmpAliasDefs dfHelperProps arithmetic list finite_map
+  fmpAliasDefs arithmetic list finite_map dfHelperProofs
 
 Theorem fmp_capture_step_preserves:
   !insts vars v. MEM v vars ==> MEM v (fmp_capture_step insts vars)

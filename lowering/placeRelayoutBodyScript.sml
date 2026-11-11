@@ -54,21 +54,28 @@ Theorem expr_can_mutate_not_pure[local]:
      !tops. ~supported_pure_fields tops kes)
 Proof
   ho_match_mp_tac exprLoweringTheory.expr_can_mutate_ind >>
-  rw[exprLoweringTheory.expr_can_mutate_def, supported_pure_expr_def]
+  rw[exprLoweringTheory.expr_can_mutate_def, supported_pure_expr_def] >>
+  metis_tac[]
 QED
 
 Theorem supported_target_pure_not_mutate:
   !tops bt cenv.
     supported_target_pure tops bt ==> ~expr_can_mutate cenv (target_to_expr bt)
 Proof
-  gen_tac >> Induct >>
+  gen_tac >>
+  `(!e:expr. T) /\
+   !bt cenv. supported_target_pure tops bt ==>
+             ~expr_can_mutate cenv (target_to_expr bt)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
   rw[supported_target_pure_def, stmtLoweringTheory.target_to_expr_def,
      exprLoweringTheory.expr_can_mutate_def] >>
   metis_tac[expr_can_mutate_not_pure]
 QED
 
 Theorem body_assign_nonimmutable_widened_place:
-  (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx bt) /\
+  (!s'' pv t' s'3' v t''.
+     eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+     body_base_target_ok cx bt) /\
   body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget bt) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -139,7 +146,9 @@ Proof
        (assume_tac o SIMP_RULE (srw_ss()) [] o Q.SPEC `[]`) >>
      drule_all (cj 1 exprSimSourceTheory.expr_body_pre_eval_result) >> simp[]) >>
   `body_base_target_ok cx bt` by
-    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
+    (`!st. read_result cx (Value v) st = (INL v,st)` by
+       simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+     qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
      metis_tac[]) >>
   `target_sim ctx func cenv cx env bt (mid with gas_obs := [])` by
     (qpat_x_assum `body_base_target_ok _ _ ==> _` mp_tac >>

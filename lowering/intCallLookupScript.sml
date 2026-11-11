@@ -24,7 +24,7 @@
  *   lower_vyper_runtime_unit_internal_lookup — run_lowering_internal_lookup
  *                                  for a source internal function, at its
  *                                  label
- *   compile_call_intcall_label   — for a supported program, the label
+ *   compile_call_intcall_label   — with distinct function names, the label
  *                                  compile_call's INVOKE names is that label
  *)
 
@@ -107,6 +107,36 @@ Theorem run_lowering_internal_lookup:
 Proof
   rpt gen_tac >>
   simp[run_lowering_def, extract_context_with_internals_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  gvs[AllCaseEqs(), lowering_context_ok_def, ctx_fn_names_def,
+      mk_venom_context_def] >>
+  drule package_internal_blocks_metadata >> strip_tac >>
+  drule descriptor_names_fn_names >> strip_tac >>
+  `ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns))` by
+    gvs[] >>
+  drule_all package_internal_blocks_mem >> strip_tac >>
+  qexists_tac `fbs` >> simp[] >>
+  qspecl_then
+    [`mk_raw_function entry_label entry_blocks :: functions`,
+     `mk_internal_function name fbs has_ret_buf ret_count`]
+    mp_tac lookup_function_distinct_mem >>
+  simp[mk_internal_function_metadata]
+QED
+
+(* Grouped dispatch uses the same internal-function packaging and lookup. *)
+Theorem run_grouped_lowering_internal_lookup[local]:
+  !groups internal_fns fallback_fn rpolicy entry_label unit
+   name has_ret_buf ret_count.
+    run_grouped_lowering groups internal_fns fallback_fn rpolicy entry_label =
+      SOME unit /\
+    MEM (name, has_ret_buf, ret_count) (internal_fn_descriptors internal_fns) ==>
+    ?fbs. lookup_function name unit.cu_context.ctx_functions =
+            SOME (mk_internal_function name fbs has_ret_buf ret_count) /\
+          fbs <> [] /\ (HD fbs).bb_label = name
+Proof
+  rpt gen_tac >>
+  simp[run_grouped_lowering_def, extract_context_with_internals_def,
+       AllCaseEqs()] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   gvs[AllCaseEqs(), lowering_context_ok_def, ctx_fn_names_def,
       mk_venom_context_def] >>
@@ -242,7 +272,7 @@ Proof
           (mut,nr,rr,name,args,dflts,ret,stmts))
        (internal_fn_descriptors
           (MAP (set_internal_package_target rpolicy.rpol_target o
-                package_internal_fn tops F (assign_nkeys tops 0) F 0) ints))`
+                package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints))`
     by (simp[GSYM MAP_MAP_o,
             internal_fn_descriptors_set_internal_package_target,
             internal_fn_descriptors_MAP_package_internal_fn, MEM_MAP] >>
@@ -253,7 +283,9 @@ Proof
   `lbl = internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) F`
     by metis_tac[source_internal_fn_descriptor_label, pairTheory.FST] >>
   gvs[] >>
-  drule_all run_lowering_internal_lookup >> simp[]
+  Cases_on `EXISTS external_has_defaults exts` >> gvs[] >>
+  FIRST [drule_all run_lowering_internal_lookup,
+         drule_all run_grouped_lowering_internal_lookup] >> simp[]
 QED
 
 Theorem build_func_param_types_distinct[local]:
@@ -271,12 +303,15 @@ Proof
   `name <> s` by (strip_tac >> gvs[]) >> rw[]
 QED
 
-(* For a supported program, the label compile_call gives the INVOKE of a
-   main-module internal function is the label package_internal_fn gives
-   that function, when the call site's compile env is the program's. *)
+(* For a program with distinct function names, the label
+   compile_call gives the INVOKE of a main-module internal function is the
+   label package_internal_fn gives that function, when the call site's
+   compile env is the program's.  Name uniqueness is explicit because
+   supported_program permits Deploy/Internal name sharing, which can
+   shadow the parameter-table entry used to construct the call label. *)
 Theorem compile_call_intcall_label:
   !tops cenv mut nr rr name args dflts ret stmts.
-    supported_program tops /\
+    ALL_DISTINCT (supported_function_names tops) /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret stmts) tops /\
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
@@ -288,8 +323,6 @@ Theorem compile_call_intcall_label:
     internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) F
 Proof
   rpt strip_tac >> simp[nsid_to_string_def] >>
-  `ALL_DISTINCT (supported_function_names tops)` by
-    metis_tac[supported_program_names, supported_declaration_names_unique] >>
   qspecl_then [`tops`, `Internal`, `mut`, `nr`, `rr`, `name`, `args`,
                `dflts`, `ret`, `stmts`] mp_tac build_func_param_types_distinct >>
   simp[]

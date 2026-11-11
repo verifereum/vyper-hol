@@ -3651,7 +3651,7 @@ Proof
   strip_tac >> gvs[] >>
   `eval_operand (Var cv) s = SOME k` by simp[eval_operand_def] >>
   simp_tac (srw_ss()) [LET_THM] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
     exec_pure2_def, emitHelperPropsTheory.slot_copy_operand_update,
     emitHelperPropsTheory.eval_operand_lit] >>
   `src <> Var mv /\ src <> Var sv /\ src <> Var vv /\

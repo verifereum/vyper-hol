@@ -1,5 +1,5 @@
 Theory loadElimPopulation
-Ancestors
+Ancestors cfgCorrectnessProof
   loadElimConvergence loadElimSolverProvenance loadElimSolverHelpers
   loadElimDefs cfgDefs cfgAnalysisProps dfAnalyzeDefs venomWf venomInst venomExecProps
   finite_map list rich_list relation dfAnalyzeProofs

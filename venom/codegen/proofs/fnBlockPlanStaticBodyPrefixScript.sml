@@ -34,7 +34,7 @@ Proof
   strip_tac >>
   Cases_on `emit_input_plan opc operands nl ps` >> simp[] >>
   irule fnFrameStepsRevertForwardTheory.list_elem_count_dom_length >>
-  irule reorderSimTheory.emit_input_plan_materialised >>
+  irule inputMaterialisedTheory.emit_input_plan_materialised >>
   goal_assum (drule_at Any) >> simp[]
 QED
 

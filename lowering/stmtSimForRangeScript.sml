@@ -72,7 +72,7 @@ Theorem eval_iterator_range_forced[local]:
     do v1 <- (do raw <- eval_expr cx e1; read_result cx raw od);
        v2 <- (do raw <- eval_expr cx e2; read_result cx raw od);
        rl <- lift_sum (get_range_limits v1 v2);
-       return (GENLIST (\j. IntV (FST rl + &j)) (SND rl))
+       return (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl))
     od
 Proof
   rpt gen_tac >> simp[Once evaluate_def, FUN_EQ_THM, bind_def] >>
@@ -97,7 +97,7 @@ Theorem eval_stmt_for_range_forced[local]:
      rl <- lift_sum (get_range_limits v1 v2);
      check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
      eval_for cx tyv id body
-       (GENLIST (\j. IntV (FST rl + &j)) (SND rl))
+       (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl))
   od
 Proof
   rpt gen_tac >> strip_tac >> pure_once_rewrite_tac[Once evaluate_def] >>
@@ -175,11 +175,11 @@ Theorem checked_range_tail[local]:
   (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
       check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
       eval_for cx tyv id body
-        (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od) =
+        (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od) =
   if n1 <= n2 then
     if Num (n2 - n1) <= bound then
       eval_for cx tyv id body
-        (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+        (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))
     else raise (Error (RuntimeError "For too long"))
   else raise (Error (RuntimeError "no range"))
 Proof
@@ -201,7 +201,7 @@ Definition range_outcome_def:
     (n1 <= n2 /\ bound < Num (n2 - n1) /\
      res = INR (Error (RuntimeError "For too long")) /\ es' = es2) \/
     (n1 <= n2 /\ Num (n2 - n1) <= bound /\
-     eval_for cx tyv id body (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+     eval_for cx tyv id body (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))
        es2 = (res, es'))
 End
 
@@ -1168,13 +1168,13 @@ Theorem for_range_checked_tail_outcome[local]:
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od)
     (stmt_res_ok lctx) es ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od)
     (es,t0)
     (stmt_post ctx func cx lctx cenv cenv st sf es t0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
@@ -1343,6 +1343,12 @@ Resume for_range_checked_tail_outcome[loop_code]:
      irule declare_local_reserved >> metis_tac[]) >>
   `type_memory_size tyv = 32` by
     (drule_all is_int_type_memory_size >> simp[]) >>
+  `word_memory_type tyv` by
+    (qpat_x_assum `is_int_type fty` mp_tac >>
+     qpat_x_assum `evaluate_type _ fty = SOME tyv` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     `is_word_type fty` by (fs[is_int_type_cases] >> gvs[is_word_type_def]) >>
+     drule_all loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `(!scs. not_local_ptr cenv scs cv) /\ (!scs. not_local_ptr cenv scs dv) /\
    (!scs. not_local_ptr cenv scs nv)` by
     (rpt conj_tac >> gen_tac >>
@@ -1400,7 +1406,7 @@ Resume for_range_checked_tail_outcome[loop_normal]:
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[gas_summary_at_def] >> strip_tac >>
   `gas_marked_exec F (ctx,func)
-     (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1))))
+     (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2-n1))))
      (es,t0) marks res es_end r` by
     (irule gas_marked_exec_zero_prefix >> goal_assum (drule_at Any) >> simp[]) >>
   qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
@@ -1597,7 +1603,7 @@ Resume compile_for_range_checked_frag_active[endpoints]:
       rl <- lift_sum (get_range_limits v1 v2);
       check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
       eval_for cx tyv id stmts
-        (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od` by
+        (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od` by
     (irule eval_stmt_for_range_forced >> simp[]) >>
   qpat_x_assum `gas_admissible _ _ _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>

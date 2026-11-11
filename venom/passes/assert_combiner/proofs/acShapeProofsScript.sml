@@ -8,7 +8,7 @@
 
 Theory acShapeProofs
 Ancestors
-  acChainProofs assertCombinerDefs venomWf list
+  acChainProofs venomInst assertCombinerDefs venomWf list
 
 (* What ac_apply_merge_step emits for one original instruction. *)
 Definition ac_out_shape_def:

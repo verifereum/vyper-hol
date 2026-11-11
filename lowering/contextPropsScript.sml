@@ -29,7 +29,7 @@
 
 Theory contextProps
 Ancestors
-  exprLoweringProps emitHelperProps
+  exprLoweringProps emitHelperProps transientLockProps
   context compileEnv
   venomExecSemantics venomState
   valueEncoding vfmState

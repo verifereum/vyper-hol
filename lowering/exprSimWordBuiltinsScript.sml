@@ -617,7 +617,7 @@ Proof
   qspec_then `d` strip_assume_tac denomination_multiplier_bounds >>
   simp[builtin_result_def, evaluate_builtin_def, evaluate_as_wei_value_uint] >>
   Cases_on `w2n a * denomination_multiplier d < dimword (:256)` >>
-  gvs[dimword_def] 
+  gvs[dimword_def]
   >- (irule word_builtin_frag_success >>
       simp[straight_fresh_as_wei_value_int, word_value_def] >>
       rpt strip_tac >>
@@ -792,7 +792,9 @@ Proof
       >- metis_tac[expr_body_pre_type_evaluates]
       >- (rpt strip_tac >> drule_all expr_body_pre_word_result >> simp[]) >>
       rpt strip_tac >> drule_all expr_body_pre_word_result >> rw[]) >>
-  strip_tac >> first_x_assum irule >> metis_tac[]
+  strip_tac >> first_x_assum irule >> qexists_tac `nocalls` >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[]) >>
+  qpat_x_assum `_ ==> exprs_case _ _ _ _ _ _` irule >> metis_tac[]
 QED
 
 (* The same from expr_sim_ok of each operand, at compile_expr_sim's

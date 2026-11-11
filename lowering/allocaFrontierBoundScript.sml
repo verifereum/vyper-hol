@@ -12,7 +12,7 @@
    frontier 0, and implies the bound; all three are generic in ctx. *)
 Theory allocaFrontierBound
 Ancestors
-  allocaBudgetProps contextCodegenRel fcgPostorder fcgCorrectnessProof
+  venomFnInstsProofs allocaBudgetProps contextCodegenRel fcgPostorder fcgCorrectnessProof
   fcgDefs vyperCompiler venomWf venomExecSemantics venomExecProofs
   venomInstProofs1 venomState venomInst
   finite_map list pred_set relation arithmetic
@@ -76,31 +76,11 @@ QED
 
 (* ===== Frame accounting across steps ===== *)
 
-Theorem mem_fn_insts_blocks[local]:
-  !bbs bb i. MEM bb bbs /\ MEM i bb.bb_instructions ==>
-             MEM i (fn_insts_blocks bbs)
-Proof
-  Induct >> rw[fn_insts_blocks_def] >> metis_tac[]
-QED
-
 Theorem active_inst_mem_fn_insts:
   active_inst fn inst s ==> MEM inst (fn_insts fn)
 Proof
   rw[active_inst_def, fn_insts_def] >> irule mem_fn_insts_blocks >>
   metis_tac[EL_MEM]
-QED
-
-Theorem all_distinct_flat_mem[local]:
-  !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
-Proof
-  Induct >> rw[ALL_DISTINCT_APPEND] >> metis_tac[]
-QED
-
-Theorem fn_insts_blocks_inst_ids[local]:
-  !bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
-        FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
 QED
 
 Theorem ctx_inst_ids_distinct_fn:
@@ -109,7 +89,7 @@ Theorem ctx_inst_ids_distinct_fn:
 Proof
   rw[ctx_inst_ids_distinct_def] >> irule all_distinct_flat_mem >>
   first_x_assum (irule_at Any) >>
-  simp[fn_insts_def, fn_insts_blocks_inst_ids, MEM_MAP] >>
+  simp[fn_insts_def, fn_insts_blocks_map_id, MEM_MAP] >>
   metis_tac[]
 QED
 
