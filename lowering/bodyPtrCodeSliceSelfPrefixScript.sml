@@ -6,6 +6,7 @@ Ancestors
   bodyPtrDefs ptrDiscipline venomState venomInst venomExecSemantics
   compileEnv loweringStateRelDefs codegenRel ptrSafeRun memLocDefs
   contextCodegenRel words finite_map pred_set
+  bodyPtrCodeSliceBounds exprSimCalldataSlice ghostPcTransportPtr
 
 Theorem self_code_data_add_frame:
   !d cenv cx es G tn s sa dst src site off v PG id.
@@ -96,4 +97,65 @@ Proof
     OK (update_var dst (n2w (LENGTH s.vs_code)) s)` by
     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def] >>
   simp[inst_seq_ptr_def, self_code_codesize_ghost]
+QED
+
+Theorem self_code_alloca_operand_prov:
+  !ctx fn cenv cx es s id n out t b PG G tn value.
+    stmt_state_rel ctx fn cenv cx es s /\
+    MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
+    n < dimword (:256) /\
+    step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
+    FLOOKUP t.vs_allocas id = SOME (b,n) /\
+    (!x. value = Var x ==> x <> out) ==>
+    op_prov (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) t) value =
+      op_prov G value
+Proof
+  rpt gen_tac >> strip_tac >> drule_all hash_alloca_exterior_effects >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
+  Cases_on `value` >> gvs[op_prov_def]
+QED
+
+Theorem self_code_size_bounds_checked:
+  !D ctx fn PG G tn s a n limit sa sb sc wa wn.
+    emit_op CODESIZE [] sa = (limit,sb) /\
+    compile_assert_slice_bounds a n limit sb = ((),sc) /\
+    eval_operand a s = SOME wa /\ eval_operand n s = SOME wn /\
+    op_taint tn a = {} /\ op_taint tn n = {} /\
+    op_prov G a = NONE /\ op_prov G n = NONE /\
+    (!z. a = Var z ==> not_fresh_at sa z) /\
+    (!z. n = Var z ==> not_fresh_at sa z) /\ ~ctx_has_dalloca ctx ==>
+    ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
+      (emitted_insts sa sb ++ emitted_insts sb sc) s Gf tnf
+Proof
+  rpt gen_tac >> strip_tac >> drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  gvs[] >>
+  `a <> Var (STRING #"%" (toString sa.cs_next_var)) /\
+   n <> Var (STRING #"%" (toString sa.cs_next_var))` by
+    (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `not_fresh_at sb (STRING #"%" (toString sa.cs_next_var))` by
+    simp[not_fresh_at_def] >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x` by
+    (gvs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  `?Gf tnf. inst_seq_ptr D 0 ctx fn PG
+    (G \\ STRING #"%" (toString sa.cs_next_var))
+    (tn with t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{}))
+    (emitted_insts sb sc)
+    (update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH s.vs_code)) s with vs_inst_idx := SUC s.vs_inst_idx) Gf tnf` by
+    (irule slice_bounds_checked_ptr >> simp[] >>
+     goal_assum (drule_at Any) >>
+     simp[eval_operand_inst_idx, GSYM DRESTRICT_DOMSUB,
+       slice_bounds_scalar_operand_frame] >>
+     simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
+       op_taint_def, op_prov_def, DOMSUB_FLOOKUP_THM, FLOOKUP_UPDATE] >>
+     conj_tac >- (Cases_on `a` >> gvs[op_prov_def]) >>
+     Cases_on `n` >> gvs[op_prov_def]) >>
+  qexistsl_tac [`Gf`, `tnf`] >>
+  simp[Once inst_seq_ptr_def] >>
+  `ptr_inst_ok D 0 0 ctx fn G tn
+    (mk_inst sa.cs_next_id CODESIZE []
+      [STRING #"%" (toString sa.cs_next_var)]) s` by
+    (mp_tac self_code_codesize_checked >> simp[inst_seq_ptr_def]) >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def,
+    SRULE [mk_inst_def] self_code_codesize_ghost]
 QED
