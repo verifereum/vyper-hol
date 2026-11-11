@@ -31,7 +31,8 @@ Theorem type_builtin_unary_vv_sim_ptr_origin:
     ghost_inv d cenv cx ee G tn s /\
     ptr_val_ok cx (expr_type e) v x G tn s /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G s) /\
-    ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+    ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    stmt_state_rel ctx func cenv cx es s0 ==>
     (?marks. gas_summary_ptr_at (cx_dead cx) (ctx,func) PG marks
       (bind (lift_sum (evaluate_type_builtin cx tb typ [expr_type e] [v]))
         (\w. return (Value w))) (ee,s,G,tn)

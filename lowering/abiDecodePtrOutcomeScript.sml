@@ -118,6 +118,7 @@ Theorem abi_decode_actual_success_handoff:
     tuple_in_memory vs tvs (w2n d) mem') ==>
   ?v. gas_path_ptr D lo ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tf (OK v) /\
+    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv ret cenv cx es H tf v /\ stmt_state_rel ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers H tf dst v cap /\
     (!mem'. mem_agree_outside tf.t_mem v.vs_memory mem' ==>
@@ -145,8 +146,11 @@ Proof
   drule_all abi_decoder_vars_extend_eval >>
   drule_all abi_decoder_vars_extend_observations >>
   rpt strip_tac >>
+  `u.vs_current_bb = sb.cs_current_bb` by fs[abi_decode_member_live_def] >>
   qexists_tac `v with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  gvs[eval_operand_def, lookup_var_def]
+  gvs[eval_operand_def, lookup_var_def] >>
+  drule abi_decoder_vars_extend_restore >>
+  simp[venom_state_component_equality]
 QED
 
 Theorem abi_decode_actual_success_post:
@@ -165,6 +169,7 @@ Theorem abi_decode_actual_success_post:
     tuple_in_memory vs tvs (w2n d) mem') ==>
   ?v. gas_path_ptr D lo ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tf (OK v) /\
+    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv ret cenv cx es H tf v /\ stmt_state_rel ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers H tf dst v cap /\
     (!mem'. mem_agree_outside tf.t_mem v.vs_memory mem' ==>
@@ -261,6 +266,7 @@ Theorem abi_decode_setup_success_handoff:
   fn_has_code ready sb func /\ fn_has_code sa sb func ==>
   ?v K tk. gas_path_ptr D 0 ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) K tk (OK v) /\
+    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers K tk dst v cap /\
     (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>
@@ -305,6 +311,7 @@ Theorem abi_decode_setup_actual_success:
   fn_has_code ready sb func /\ fn_has_code sa sb func ==>
   ?v K tk. gas_path_ptr D 0 ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) K tk (OK v) /\
+    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers K tk dst v cap /\
     (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>
@@ -384,6 +391,7 @@ Theorem abi_decode_operand_success_handoff:
   ?v K tk dst d. buf.buf_operand = Var dst /\
     gas_path_ptr D 0 ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) K tk (OK v) /\
+    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers K tk dst v outsz /\
     (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>
@@ -494,6 +502,7 @@ Theorem abi_decode_operand_actual_success:
   ?v K tk dst d. buf.buf_operand = Var dst /\
     gas_path_ptr D 0 ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) K tk (OK v) /\
+    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers K tk dst v outsz /\
     (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>

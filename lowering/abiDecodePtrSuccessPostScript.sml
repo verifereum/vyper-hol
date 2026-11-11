@@ -105,6 +105,7 @@ Theorem abi_decode_operand_success_posts:
   ?v H tf dst d. buf.buf_operand = Var dst /\
     gas_path_ptr D 0 ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tf (OK v) /\
+    v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv ret cenv cx es H tf v /\ stmt_state_rel ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers H tf dst v outsz /\
     (!mem'. mem_agree_outside tf.t_mem v.vs_memory mem' ==>
