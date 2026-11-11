@@ -26,7 +26,7 @@ Ancestors
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
   rangeAnalysisProofs stepWriteFootprintBase o1LowerDloadOccurrence occurrenceGeometry
   venomExecProps fnRunFields ptrTaintClean internalReturnCopyFwdAbort
-  o1LowerDloadForwardInversion reachableNonhalted
+  o1LowerDloadForwardInversion reachableNonhalted calleeTransport
 
 (* The transformed block, before NOPs are cleared *)
 Definition ircf_tbb_def:
@@ -1927,9 +1927,14 @@ Proof
        read_byte i se.vs_memory = read_byte i te.vs_memory` by
     (rpt strip_tac >> drule_all ircf_R_ret_reachable_caller_memory >> simp[]) >>
   drule_all ircf_R_ret_reachable_resume >> strip_tac >>
-  `taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) se (f::stk)) tn se te` by
+  `taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) se (f::stk)) tn se
+     (te with vs_inst_idx := se.vs_inst_idx)` by
     gvs[ircf_R_ret_def] >>
-  drule_all taint_agree_resume_caller >> strip_tac >>
+  `!i. i NOTIN ircf_dead (ircf_dst_ids fn_meta rma C) f.cf_state stk /\
+       i NOTIN tn.t_mem /\ i < f.cf_state.vs_alloca_next ==>
+       read_byte i se.vs_memory =
+       read_byte i (te with vs_inst_idx := se.vs_inst_idx).vs_memory` by simp[] >>
+  drule_all taint_agree_resume_caller >> simp[] >> strip_tac >>
   qexists_tac `t'` >> simp[] >> conj_tac
   >- (irule taint_agree_inst_idx >> gvs[]) >>
   `s'.vs_memory = se.vs_memory /\ t'.vs_memory = te.vs_memory` by
@@ -3339,6 +3344,10 @@ Resume ircf_runner_noninvoke_nonok[intret]:
   simp[step_inst_non_invoke, block_step_rel_def, fn_run_rel_def] >>
   qexistsl_tac [`G`, `tn`] >>
   simp[ircf_R_ret_reachable_def, ircf_R_ret_def] >>
+  conj_tac
+  >- (qpat_x_assum `taint_agree _ _ _ v te` mp_tac >>
+      disch_then (mp_tac o Q.INST [`n` |-> `v.vs_inst_idx`] o
+                  MATCH_MP taint_agree_inst_idx) >> simp[]) >>
   qexistsl_tac [`EL t.vs_inst_idx bb.bb_instructions`, `s`, `k`] >>
   simp[step_inst_non_invoke]
 QED
