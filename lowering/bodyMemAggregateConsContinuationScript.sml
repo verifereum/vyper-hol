@@ -288,7 +288,7 @@ Proof
      disch_then (fn th => conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
        qx_genl_tac [`pp`, `nn`] >> strip_tac >>
        mp_tac (Q.SPECL [`pp`, `nn`] (CONJUNCT2 th)) >>
-       impl_tac >- (conj_tac >- simp[] >> first_assum ACCEPT_TAC) >>
+       impl_tac >- (conj_tac >- decide_tac >> first_assum ACCEPT_TAC) >>
        disch_then ACCEPT_TAC)) >>
   qpat_x_assum `~expr_has_effect e /\ MAP FDOM _ = _ /\ _ ==> _` (fn pth =>
     qexistsl_tac [`v`, `q`] >> conj_tac >- ACCEPT_TAC pth) >>
