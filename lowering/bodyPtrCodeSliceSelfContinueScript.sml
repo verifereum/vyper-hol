@@ -310,3 +310,64 @@ Resume self_code_tail_vv_post[local]:
 QED
 
 Finalise self_code_tail_vv_post
+
+(* Compiler-facing boundary for the two writes.  The source is code, not
+   memory; the only pointer operands are the allocated destination pair. *)
+Theorem self_code_copy_store_emitted_ptr:
+  emit_void CODECOPY [Var dst;src;len] sa = ((),sb) /\
+  emit_void MSTORE [Var out;len] sb = ((),sc) /\
+  ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn out s 32 /\
+  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
+  lookup_var out s = SOME p /\ lookup_var dst s = SOME (p+32w) /\
+  w2n p+32 < dimword (:256) /\ w2n a+w2n n <= LENGTH s.vs_code /\
+  op_taint tn src = {} /\ op_taint tn len = {} /\ ~ctx_has_dalloca ctx /\
+  ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!name off sz. local_region cenv es.scopes s name off sz ==>
+    off+sz <= w2n p \/ w2n p+32+w2n n <= off) ==>
+  ?t tn'. run_inst_seq (emitted_insts sa sc) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sc) s G tn' /\
+    ghost_inv d cenv cx es G tn' t /\
+    ghost_kept cenv es sa G tn s G tn' /\
+    tn' = (tn with t_mem := (tn.t_mem DIFF
+      {j | w2n p+32 <= j /\ j < w2n p+32+w2n n}) DIFF
+      {j | w2n p <= j /\ j < w2n p+32}) /\
+    t = mstore (w2n p) n (write_memory_with_expansion (w2n p+32)
+      (TAKE (w2n n) (DROP (w2n a) s.vs_code)) s)
+Proof
+  strip_tac >>
+  `w2n (p+32w) = w2n p+32` by
+    (simp[word_add_def, w2n_n2w] >> irule arithmeticTheory.LESS_MOD >> simp[]) >>
+  qabbrev_tac `bs = TAKE (w2n n) (DROP (w2n a) s.vs_code)` >>
+  `LENGTH bs = w2n n` by simp[Abbr `bs`] >>
+  `step_inst_base (mk_inst sa.cs_next_id CODECOPY [Var dst;src;len] []) s =
+    OK (write_memory_with_expansion (w2n p+32) bs s)` by
+    (`eval_operand (Var dst) s = SOME (p+32w)` by simp[eval_operand_def] >>
+     `TAKE (w2n n) (DROP (w2n a) s.vs_code ++ REPLICATE (w2n n) 0w) = bs` by
+       (simp[Abbr `bs`] >> irule rich_listTheory.TAKE_APPEND1 >> simp[]) >>
+     metis_tac[step_CODECOPY]) >>
+  `w2n n = LENGTH bs` by simp[] >>
+  qpat_x_assum `LENGTH bs = w2n n` kall_tac >>
+  `!name off sz. local_region cenv es.scopes s name off sz ==>
+    off+sz <= w2n p \/ w2n p+32+LENGTH bs <= off` by metis_tac[] >>
+  drule_all self_code_copy_store_ptr >>
+  disch_then (qspecl_then [`D`,`PG`,`sb.cs_next_id`] strip_assume_tac) >>
+  drule_all (emitted_insts_emit_void |> Q.SPECL [`CODECOPY`,`[Var dst;src;len]`,`sa`,`sb`]) >> strip_tac >>
+  drule_all (emitted_insts_emit_void |> Q.SPECL [`MSTORE`,`[Var out;len]`,`sb`,`sc`]) >> strip_tac >>
+  drule_all (emit_void_extends |> Q.SPECL [`CODECOPY`,`[Var dst;src;len]`,`sa`,`sb`]) >> strip_tac >>
+  drule_all (emit_void_extends |> Q.SPECL [`MSTORE`,`[Var out;len]`,`sb`,`sc`]) >> strip_tac >>
+  `emitted_insts sa sc = emitted_insts sa sb ++ emitted_insts sb sc` by
+    (irule emitted_insts_append >> simp[]) >>
+  qexistsl_tac [`mstore (w2n p) n (write_memory_with_expansion (w2n p+32) bs s)`,
+    `tn with t_mem := (tn.t_mem DIFF
+      {j | w2n p+32 <= j /\ j < w2n p+32+w2n n}) DIFF
+      {j | w2n p <= j /\ j < w2n p+32}`] >>
+  fs[Abbr `bs`] >>
+  conj_tac
+  >- (qpat_x_assum `w2n (p+32w) = _`
+        (fn th => pure_once_rewrite_tac[GSYM th]) >>
+      irule self_code_copy_store_run >> simp[eval_operand_def]) >>
+  metis_tac[]
+QED
