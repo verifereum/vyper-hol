@@ -4,7 +4,6 @@ Ancestors
   fragExec emitHelperProps exprLoweringProps list rich_list
 
 Theorem store_run_counted_post:
-  expr_has_effect e /\
   store_multi_results buf ops 0 si = ((),sb) /\
   fn_has_code si sb func /\ ~s.vs_halted /\
   s.vs_current_bb = si.cs_current_bb /\

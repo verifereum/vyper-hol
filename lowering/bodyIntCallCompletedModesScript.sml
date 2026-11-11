@@ -148,7 +148,6 @@ QED
 (* Composition keeps the actual store endpoint.  It does not infer a path
    from an existential fragment postcondition. *)
 Theorem invoke_store_completed_endpoint:
-  expr_has_effect e /\
   gas_invoke_entry (ctx,func) t callee entered /\
   gas_path ctx callee entered n (IntRet ir cs) /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
@@ -318,7 +317,6 @@ Proof
      simp[] >> rpt strip_tac >> gvs[] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   irule invoke_store_completed_endpoint >>
-  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> conj_tac >- metis_tac[] >>
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>
