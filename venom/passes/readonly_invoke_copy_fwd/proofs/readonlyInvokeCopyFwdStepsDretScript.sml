@@ -3,7 +3,7 @@ Ancestors
   readonlyInvokeCopyFwdStepsMemory readonlyInvokeCopyFwdStepsCore
   readonlyInvokeCopyFwdRel venomExecSemantics venomState venomInstProofs1
   taintAgree ptrDiscipline internalReturnCopyFwdSim venomInst words list pred_set
-  o1LowerDloadRangeTransport
+  o1LowerDloadRangeTransport fmpAlignment
 
 (* Raw taint follows the snapshots used by each individual MCOPY. *)
 Definition ricf_pack_mem_def:
@@ -88,6 +88,12 @@ Definition ricf_pack_footprint_def:
       (?j. j < LENGTH stk /\ tr IN ricf_site_triples (EL j maps))}
 End
 
+Theorem contractABI_ceil32_eq_venomLayout:
+  !n. contractABI$ceil32 n = venomLayout$ceil32 n
+Proof
+  simp[contractABITheory.ceil32_def, fmpAlignmentTheory.ceil32_div_mul,
+    arithmeticTheory.MULT_COMM]
+QED
 Theorem ricf_cert_pack_dret_dynamic:
   !pairs cursor qs D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t
     ps fc u pt gc v.
@@ -110,7 +116,8 @@ Proof
   PairCases_on `h` >> namedCases_on `qs` ["", "h tail"]
   >- simp[ricf_pack_checks_def] >>
   PairCases_on `h` >>
-  simp[ricf_pack_checks_def, ricf_pack_taint_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[ricf_pack_checks_def, ricf_pack_taint_def,
+    contractABI_ceil32_eq_venomLayout] >> rpt gen_tac >> strip_tac >> gvs[] >>
   `ricf_cert_core D ids stk PG
      (ricf_effective_prov fn (mcopy (w2n cursor) (w2n h0) (w2n h1) s) G0)
      (ricf_effective_taint fn (mcopy (w2n cursor) (w2n h0) (w2n h1) s)
@@ -120,7 +127,8 @@ Proof
      (mcopy (w2n cursor) (w2n h0') (w2n h1) t)` by
     (irule ricf_cert_mcopy_primitive >> simp[] >>
      fs[ricf_pack_footprint_def] >> metis_tac[]) >>
-  gvs[pack_dret_dynamic_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  first_x_assum drule >> disch_then drule >> simp[]
+  gvs[pack_dret_dynamic_def] >> rpt (pairarg_tac >> gvs[]) >>
+  first_x_assum drule >> simp[contractABI_ceil32_eq_venomLayout] >>
+  disch_then (qspecl_then [`cursor + n2w (venomLayout$ceil32 (w2n h1))`, `tail`] mp_tac) >>
+  disch_then drule_all >> simp[]
 QED
