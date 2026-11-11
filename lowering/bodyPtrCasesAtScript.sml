@@ -82,8 +82,9 @@ QED
    (bodyPtrAssignCases). *)
 Theorem body_assign_case_ptr_at:
   !cx t e.
-    (!s'' pv t'.
-       eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ptr_ok_at cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ptr_ok_at cx t) /\
     body_expr_ptr_ok_at cx e ==>
     body_stmt_ptr_ok_at cx (Assign (BaseTarget t) e)
 Proof
