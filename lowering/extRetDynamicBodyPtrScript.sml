@@ -252,6 +252,21 @@ Proof
   Cases_on `i < b+32+32*j` >- (gvs[] >> metis_tac[]) >> decide_tac
 QED
 
+Theorem encoder_dynamic_subregion_exterior[local]:
+  scratch_resource ctx fn sites q cap s /\
+  q <= r /\ r+len <= q+cap /\ regions_disjoint (r,len) (dst,dlen) ==>
+  !i. r <= i /\ i < r+len ==> i NOTIN encoder_write_envelope sites s dst dlen
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  simp[encoder_write_envelope_def, encoder_scratch_span_def] >>
+  conj_tac >- (fs[regions_disjoint_def] >> decide_tac) >>
+  rpt gen_tac >> strip_tac >> spose_not_then strip_assume_tac >>
+  `cap <> 0` by decide_tac >>
+  fs[scratch_resource_def] >>
+  `regions_disjoint (q,cap) (b,n)` by metis_tac[] >>
+  fs[regions_disjoint_def] >> decide_tac
+QED
+
 Theorem encoder_dynamic_body_backedge_counted_ptr:
   abi_encode_array_addresses (Var ip) (Var src) (Var dst) 32 msz sa =
     (((Var idx,Var child_src),(Var data,Var head)),sx) /\
@@ -318,12 +333,55 @@ Proof
    mload p s = n2w j /\ mload c s = n2w k /\
    (!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem) /\
    (!i. c <= i /\ i < c+32 ==> i NOTIN tn.t_mem)` by
-    metis_tac[encoder_dynamic_loop_inv_def] >>
+    gvs[encoder_dynamic_loop_inv_def] >>
   `w2n (n2w a : bytes32) = a /\ w2n (n2w b : bytes32) = b /\
    w2n (n2w p : bytes32) = p /\ c < dimword(:256) /\
    32+j*32+32 <= dcap /\ 32+k+capj <= dcap` by
-    cheat >>
+    (`a < dimword(:256) /\ b < dimword(:256) /\ p < dimword(:256)` by decide_tac >>
+     simp[w2n_n2w, LESS_MOD] >> decide_tac) >>
+  `mload (w2n (n2w p : bytes32)) s = n2w j /\
+   (!i. w2n (n2w p : bytes32) <= i /\ i < w2n (n2w p : bytes32)+32 ==>
+     i NOTIN tn.t_mem) /\
+   w2n (n2w a : bytes32)+scap < dimword(:256) /\
+   w2n (n2w b : bytes32)+dcap < dimword(:256)` by simp[] >>
   drule_all abi_array_prepare_ambient_counted_ptr >>
-  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`D`]
+    (qx_choose_then `Gp` (qx_choose_then `tnp` (qx_choose_then `sp` strip_assume_tac)))) >>
+  `encoder_resource ctx fn sites a scap protected s /\
+   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v a mem)` by
+    gvs[encoder_dynamic_loop_inv_def] >>
+  `encoder_resource ctx fn sites a scap protected sp` by
+    (irule encoder_resource_fields >> qexists_tac `s` >> simp[]) >>
+  `encoder_resource ctx fn children a scap ((cid,c,32)::protected) sp` by
+    (irule encoder_resource_push >> simp[] >> qexists_tac `sites` >> simp[]) >>
+  `encoder_resource ctx fn children a scap ((pid,p,32)::(cid,c,32)::protected) sp` by
+    (irule encoder_resource_push >> simp[] >> qexists_tac `children` >> simp[]) >>
+  `!mem. mem_agree_outside tnp.t_mem sp.vs_memory mem ==> val_in_memory tv v a mem` by
+    simp[] >>
+  qpat_x_assum `!Gp tnp sp. _` (qspecl_then [`Gp`,`tnp`,`sp`] mp_tac) >>
+  simp[] >>
+  disch_then (qx_choose_then `Gm` (qx_choose_then `tnm` (qx_choose_then `sm` assume_tac))) >>
+  qhdtm_assum `encoder_framed_child_result` mp_tac >>
+  pure_rewrite_tac[encoder_framed_child_result_def] >> strip_tac >>
+  `scratch_resource ctx fn children a scap sm` by
+    gvs[encoder_resource_def] >>
+  `scratch_resource ctx fn sites a scap sp` by
+    gvs[encoder_resource_def] >>
+  `scratch_resource ctx fn sites a scap sm` by
+    (irule encoder_child_scratch_restore >> qexistsl_tac [`children`,`sp`] >> simp[]) >>
+  `encoder_resource ctx fn sites a scap protected sm` by
+    (irule encoder_child_resource_restore >> simp[] >> qexists_tac `sp` >> simp[]) >>
+  `scratch_resource ctx fn children p 32 sm /\
+   scratch_resource ctx fn children c 32 sm /\
+   scratch_resource ctx fn children dbase dsize sm` by
+    (qpat_assum `encoder_resource _ _ children _ _ _ sm`
+       (strip_assume_tac o SRULE [encoder_resource_def]) >>
+     first_assum (qspecl_then [`did`,`dbase`,`dsize`] mp_tac) >> simp[] >> strip_tac >>
+     first_assum (qspecl_then [`cid`,`c`,`32`] mp_tac) >> simp[] >> strip_tac >>
+     first_assum (qspecl_then [`pid`,`p`,`32`] mp_tac) >> simp[]) >>
+  `!i. p <= i /\ i < p+32 ==>
+    i NOTIN encoder_write_envelope children sm (b+32+k) capj` by
+    (match_mp_tac encoder_dynamic_subregion_exterior >> qexistsl_tac [`32`,`ctx`,`fn`,`p`] >>
+     simp[] >> fs[regions_disjoint_def] >> decide_tac) >>
   cheat
 QED
