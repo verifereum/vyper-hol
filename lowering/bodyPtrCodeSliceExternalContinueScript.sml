@@ -9,6 +9,7 @@ Ancestors
   exprSimPtrLiteralBuffer bodyPtrCodeSliceSelfOperands
   instSeqComposePtr bodyPtrCodeSliceSelfContinue
   bodyPtrHashBuiltinsGhostFrame loweringStateRelDefs
+  annAssignPtrSetup bodyPtrCodeSliceSelfPrefix exprSimHashBoundary wordArgsPtr
 
 Theorem external_code_copy_store_emitted_ptr:
   emit_void EXTCODECOPY [addr;Var dst;src;len] sa = ((),sb) /\
@@ -177,3 +178,172 @@ Proof
   simp[NoAsms, ptr_covers_def, mstore_def,
     write_memory_with_expansion_def, lookup_var_def]
 QED
+
+Theorem external_code_prefix_success_frame:
+  emit_op EXTCODESIZE [addr] sa = (limit,sb) /\
+  compile_assert_slice_bounds src len limit sb = ((),sc) /\
+  eval_operand addr s = SOME av /\ op_taint tn addr = {} /\
+  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
+  op_taint tn src = {} /\ op_taint tn len = {} /\
+  op_prov G src = NONE /\ op_prov G len = NONE /\
+  (!z. src = Var z ==> not_fresh_at sa z) /\
+  (!z. len = Var z ==> not_fresh_at sa z) /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb ++ emitted_insts sb sc) s = OK t /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!p j. cenv.ce_return_buf = SOME (PtrVar (Var p) j) ==> not_fresh_at sa p) /\
+  (!p j. cenv.ce_return_pc = SOME (PtrVar (Var p) j) ==> not_fresh_at sa p) ==>
+  ?Gf tnf.
+    inst_seq_ptr D 0 ctx fn PG G tn
+      (emitted_insts sa sb ++ emitted_insts sb sc) s Gf tnf /\
+    ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sa G tn s Gf tnf /\
+    (!op. (!x. op = Var x ==> not_fresh_at sa x) ==>
+      eval_operand op t = eval_operand op s /\
+      op_prov Gf op = op_prov G op /\ op_taint tnf op = op_taint tn op) /\
+    (!p sz. not_fresh_at sa p /\ ptr_covers G tn p s sz ==>
+      ptr_covers Gf tnf p t sz)
+Proof
+  strip_tac >> drule_all external_code_size_bounds_checked >>
+  disch_then (qspecl_then [`D`,`fn`,`PG`] strip_assume_tac) >>
+  drule_all external_code_size_bounds_frame >> strip_tac >>
+  qexistsl_tac [`Gf`,`tnf`] >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule self_code_prefix_operand_frame >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  rpt strip_tac >> irule annassign_declared_pointer_after_rhs_ptr >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem external_code_tail_abort_checked:
+  compile_slice_extcode addr src len out dst sa = (r,sf) /\
+  eval_operand addr s = SOME av /\
+  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
+  (!x. MEM (Var x) [addr;src;len] ==> not_fresh_at sa x) /\
+  LENGTH (lookup_account (w2w av) s.vs_accounts).code < dimword (:256) /\
+  LENGTH (lookup_account (w2w av) s.vs_accounts).code < w2n a+w2n n /\
+  op_taint tn addr = {} /\ op_taint tn src = {} /\ op_taint tn len = {} /\
+  op_prov G src = NONE /\ op_prov G len = NONE /\ ~ctx_has_dalloca ctx ==>
+  ?t Gf tnf. run_inst_seq (emitted_insts sa sf) s = Abort Revert_abort t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sf) s Gf tnf
+Proof
+  strip_tac >> drule slice_extcode_shape >> strip_tac >>
+  drule_all slice_extcode_prefix_run >> simp[] >> strip_tac >>
+  `(!z. src = Var z ==> not_fresh_at sa z) /\
+   (!z. len = Var z ==> not_fresh_at sa z)` by metis_tac[MEM] >>
+  drule_all external_code_size_bounds_checked >>
+  disch_then (qspecl_then [`D`,`fn`,`PG`] strip_assume_tac) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+    (emitted_insts sa sc ++ emitted_insts sc sd)` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     drule exprSimSliceBoundsTheory.slice_bounds_shape >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  qexistsl_tac [`u`,`Gf`,`tnf`] >>
+  qpat_x_assum `emitted_insts sa sf = _` (fn th => pure_rewrite_tac[th]) >>
+  rewrite_tac[APPEND_ASSOC] >> conj_tac
+  >- simp[run_inst_seq_append_err] >>
+  irule inst_seq_ptr_abort_append >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem external_code_tail_success_checked:
+  compile_slice_extcode addr src len (Var out) (Var dst) sa = (r,sf) /\
+  eval_operand addr s = SOME av /\
+  eval_operand src s = SOME a /\ eval_operand len s = SOME n /\
+  lookup_var out s = SOME p /\ lookup_var dst s = SOME (p+32w) /\
+  (!x. MEM (Var x) [addr;src;len;Var out;Var dst] ==> not_fresh_at sa x) /\
+  LENGTH (lookup_account (w2w av) s.vs_accounts).code < dimword (:256) /\
+  w2n a+w2n n <= LENGTH (lookup_account (w2w av) s.vs_accounts).code /\
+  w2n p+32 < dimword (:256) /\
+  ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn out s 32 /\
+  op_taint tn addr = {} /\ op_taint tn src = {} /\ op_taint tn len = {} /\
+  op_prov G src = NONE /\ op_prov G len = NONE /\ ~ctx_has_dalloca ctx /\
+  ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!name off sz. local_region cenv es.scopes s name off sz ==>
+    off+sz <= w2n p \/ w2n p+32+w2n n <= off) ==>
+  ?z Gf tnf. run_inst_seq (emitted_insts sa sf) s = OK z /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sf) s Gf tnf /\
+    ghost_inv d cenv cx es Gf tnf z /\ ghost_kept cenv es sa G tn s Gf tnf
+Proof
+  strip_tac >> drule slice_extcode_shape >> strip_tac >>
+  `(!x. MEM (Var x) [addr;src;len] ==> not_fresh_at sa x) /\
+   (!x. src = Var x ==> not_fresh_at sa x) /\
+   (!x. len = Var x ==> not_fresh_at sa x)` by metis_tac[MEM] >>
+  drule_all slice_extcode_prefix_run >> simp[] >> strip_tac >>
+  drule_all external_code_prefix_success_frame >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  `(!op. MEM op [addr;src;len;Var out;Var dst] ==>
+     eval_operand op u = eval_operand op s /\
+     op_prov Gf op = op_prov G op /\ op_taint tnf op = op_taint tn op)` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!op. (!x. op = Var x ==> _) ==> _ /\ _`
+       (qspec_then `op` irule) >> metis_tac[]) >>
+  `sa.cs_next_var <= sd.cs_next_var /\ sa.cs_next_id <= sd.cs_next_id /\
+   local_ptrs_reserved cenv sd /\
+   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sd x) /\
+   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sd x)` by
+    suspend "compiler_frame" >>
+  `!name off sz. local_region cenv es.scopes u name off sz <=>
+     local_region cenv es.scopes s name off sz` by suspend "local_frame" >>
+  `stmt_state_rel ctx fn cenv cx es u` by
+    (irule exprSimHashBoundaryTheory.hash_readonly_state_rel >>
+     qexistsl_tac [`s`,`sa`] >> simp[] >>
+     qpat_x_assum `u = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
+     simp[]) >>
+  `eval_operand addr u = SOME av /\ eval_operand src u = SOME a /\
+   eval_operand len u = SOME n /\ lookup_var out u = SOME p /\
+   lookup_var dst u = SOME (p+32w) /\
+   op_taint tnf addr = {} /\ op_taint tnf src = {} /\ op_taint tnf len = {} /\
+   ptr_covers Gf tnf out u 32 /\ ptr_covers Gf tnf dst u (w2n n)` by
+    (fs[eval_operand_def] >> metis_tac[MEM]) >>
+  `u.vs_accounts = s.vs_accounts` by
+    (qpat_x_assum `u = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `!name off sz. local_region cenv es.scopes u name off sz ==>
+     off+sz <= w2n p \/ w2n p+32+w2n n <= off` by metis_tac[] >>
+  mp_tac (Q.INST [`s` |-> `u`, `G` |-> `Gf`, `tn` |-> `tnf`,
+    `sa` |-> `sd`, `sb` |-> `se`, `sc` |-> `sf`]
+    external_code_copy_store_uniform_ptr) >>
+  (impl_tac >- (gvs[] >> metis_tac[])) >> disch_then assume_tac >>
+  mp_tac (Q.INST [`s` |-> `u`, `G` |-> `Gf`, `tn` |-> `tnf`,
+    `sa` |-> `sd`, `sb` |-> `se`, `sc` |-> `sf`]
+    external_code_copy_store_emitted_ptr) >>
+  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
+  suspend "compose"
+QED
+
+Resume external_code_tail_success_checked[compiler_frame]:
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule exprSimSliceBoundsTheory.slice_bounds_shape >> strip_tac >>
+  `sa.cs_next_var <= sd.cs_next_var /\ sa.cs_next_id <= sd.cs_next_id` by
+    (gvs[] >> simp[]) >>
+  simp[] >> conj_tac
+  >- (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >> rpt strip_tac >> fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Resume external_code_tail_success_checked[local_frame]:
+  gvs[local_region_def, local_ptrs_reserved_def, eval_operand_def, lookup_var_def] >>
+  metis_tac[]
+QED
+
+Resume external_code_tail_success_checked[compose]:
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+    (emitted_insts sa sc ++ emitted_insts sc sd)` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     drule exprSimSliceBoundsTheory.slice_bounds_shape >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  qexistsl_tac [`t`,`Gf`,`tn'`] >> conj_tac
+  >- (rewrite_tac[APPEND_ASSOC] >>
+      qpat_x_assum `run_inst_seq (_ ++ _) s = OK u`
+        (mp_tac o MATCH_MP run_inst_seq_append) >>
+      disch_then (qspec_then `emitted_insts sd sf` mp_tac) >> simp[]) >>
+  conj_tac
+  >- (rewrite_tac[APPEND_ASSOC] >> irule inst_seq_ptr_append >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> gvs[]) >>
+  conj_tac >- simp[] >>
+  irule ghost_kept_trans >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qpat_x_assum `u = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+Finalise external_code_tail_success_checked
