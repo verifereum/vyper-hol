@@ -248,7 +248,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> qpat_x_assum `!z w. _ ==> _` irule >>
       gvs[loweringStateRelDefsTheory.not_fresh_at_def, mstore_def, lookup_var_def]) >>
-  gvs[mstore_def] >> metis_tac[]
+  gvs[mstore_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem aggregate_make_array_body_sim_mem:
