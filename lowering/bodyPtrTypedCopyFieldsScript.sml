@@ -188,7 +188,7 @@ Proof
     ?k. k <= LENGTH dts /\ ds = DROP k dts /\ ss = DROP k sts /\
       offd = doff + SUM (MAP (type_memory_bytes ce) (TAKE k dts)) /\
       offs = soff + SUM (MAP (type_memory_bytes ce) (TAKE k sts)) /\
-      cs_extends sa sc /\
+      cs_extends sa sc /\ sa.cs_next_var <= sc.cs_next_var /\
       typed_copy_state_frame sa (w2n b + doff)
         (SUM (MAP (type_memory_bytes ce) dts)) s u /\
       tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
@@ -229,11 +229,143 @@ Resume typed_fields_copy_robust[step]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `field_inv (dt::ds) (st::ss) _ _ _ _ _ _` mp_tac >>
   simp[Abbr `field_inv`] >> strip_tac >>
-  FAIL_TAC "indexed step"
+  `k < LENGTH dts /\ EL k dts = dt /\ DROP (SUC k) dts = ds /\
+   EL k sts = st /\ DROP (SUC k) sts = ss` by
+    metis_tac[fragExecTheory.DROP_EQ_CONS] >>
+  `not_fresh_at a' dst /\ not_fresh_at a' src` by
+    (conj_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[]) >>
+  `lookup_var src s' = SOME a /\ lookup_var dst s' = SOME b` by
+    metis_tac[] >>
+  `ptr_covers G' tn' src s' stot /\ ptr_covers G' tn' dst s' dtot` by
+    (conj_tac >> irule assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame >>
+     qexistsl_tac [`G`, `s`, `tn`] >> simp[] >> metis_tac[]) >>
+  `SUM (MAP (type_memory_bytes ce) (TAKE k dts)) +
+      type_memory_bytes ce (EL k dts) <= SUM (MAP (type_memory_bytes ce) dts) /\
+   SUM (MAP (type_memory_bytes ce) (TAKE k sts)) +
+      type_memory_bytes ce (EL k sts) <= SUM (MAP (type_memory_bytes ce) sts)` by
+    (conj_tac >> irule abi_encoder_prefix_sum_bound >> simp[]) >>
+  `doff' + type_memory_bytes ce dt <= dtot /\
+   soff' + type_memory_bytes ce st <= stot` by
+    (qpat_assum `!k. SUM (MAP (type_memory_bytes ce) (TAKE k dts)) = _`
+       (qspec_then `k` assume_tac) >>
+     qpat_assum `!k. SUM (MAP (type_memory_bytes ce) (TAKE k sts)) = _`
+       (qspec_then `k` assume_tac) >> gvs[] >> decide_tac) >>
+  `(type_memory_bytes ce st <> 0 /\ type_memory_bytes ce dt <> 0 ==>
+    w2n a + soff' + type_memory_bytes ce st <= w2n b + doff' \/
+    w2n b + doff' + type_memory_bytes ce dt <= w2n a + soff')` by
+    (qpat_assum `!k. SUM (MAP (type_memory_bytes ce) (TAKE k dts)) = _`
+       (qspec_then `k` assume_tac) >>
+     qpat_assum `!k. SUM (MAP (type_memory_bytes ce) (TAKE k sts)) = _`
+       (qspec_then `k` assume_tac) >> gvs[] >> decide_tac) >>
+  qpat_assum `!i. i < LENGTH dts ==> !tenv dtv stv v dst src sa sb ctx fn D PG G tn s a b. _`
+    (qspec_then `k` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (mp_then Any mp_tac typed_field_copy_step) >>
+  simp[] >>
+  disch_then (fn th =>
+    qpat_assum `compile_with_byte_offset (Var dst) doff' a' = _`
+      (mp_then Any mp_tac th)) >>
+  disch_then (fn th =>
+    qpat_assum `compile_with_byte_offset (Var src) soff' b' = _`
+      (mp_then Any mp_tac th)) >>
+  disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`tenv`, `EL k dtvs`, `EL k stvs`, `EL k vs`] mp_tac) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (fn th => qpat_assum `ptr_covers G' tn' src s' stot`
+    (mp_then Any mp_tac th)) >>
+  disch_then (fn th => qpat_assum `ptr_covers G' tn' dst s' dtot`
+    (mp_then Any mp_tac th)) >>
+  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (qspecl_then [`D`, `PG`, `a`, `b`] mp_tac) >>
+  (impl_tac >- (gvs[] >> rpt conj_tac >> gvs[])) >>
+  strip_tac >>
+  `a'.cs_next_var <= b'.cs_next_var /\ b'.cs_next_var <= c.cs_next_var /\
+   c.cs_next_var <= d.cs_next_var` by
+    metis_tac[typedCopyOperandFramesTheory.compile_with_byte_offset_next_var,
+      typedCopyVarFlowTheory.compile_store_memory_typed_next_var] >>
+  `typed_copy_state_frame sa (doff' + w2n b)
+     (type_memory_size (EL k dtvs)) s' sf` by
+    (qpat_assum `typed_copy_state_frame a' _ _ s' sf` mp_tac >>
+     pure_rewrite_tac[typed_copy_state_frame_def] >> strip_tac >>
+     simp[] >> rpt strip_tac >>
+     `not_fresh_at a' x` by
+       (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     metis_tac[]) >>
+  `typed_copy_state_frame sa (w2n b + doff)
+     (SUM (MAP (type_memory_bytes ce) dts)) s' sf` by
+    (irule typed_copy_state_frame_subinterval >>
+     qexistsl_tac [`doff' + w2n b`, `type_memory_size (EL k dtvs)`] >>
+     gvs[] >> decide_tac) >>
+  `typed_copy_state_frame sa (w2n b + doff)
+     (SUM (MAP (type_memory_bytes ce) dts)) s sf` by
+    (irule typed_copy_state_frame_trans >> qexists_tac `s'` >> simp[]) >>
+  qexistsl_tac [`H`, `tf`, `sf`] >> simp[] >>
+  qexists_tac `SUC k` >>
+  simp[typedNormalizeFieldsTheory.normalize_prefix_step] >>
+  gvs[] >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  conj_tac >- (rpt strip_tac >>
+    `~(doff + SUM (MAP type_memory_size (TAKE k dtvs)) + w2n b <= i /\
+       i < doff + SUM (MAP type_memory_size (TAKE k dtvs)) +
+         (type_memory_size (EL k dtvs) + w2n b))` by decide_tac >>
+    qpat_x_assum `!j. _ ==> (j IN tf.t_mem <=> _)` (qspec_then `i` mp_tac) >>
+    qpat_x_assum `!j. _ ==> (j IN tn'.t_mem <=> _)` (qspec_then `i` mp_tac) >>
+    `~(doff + w2n b <= i /\
+       i < doff + w2n b + SUM (MAP (type_memory_bytes ce) dts))` by decide_tac >>
+    pop_assum mp_tac >>
+    qpat_x_assum `~(_ /\ _)` mp_tac >>
+    POP_ASSUM_LIST (K all_tac) >>
+    simp[]) >>
+  conj_tac >- (rpt strip_tac >>
+    `not_fresh_at a' p` by
+      (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+    metis_tac[]) >>
+  `!i. ~(doff + (SUM (MAP type_memory_size (TAKE k dtvs)) + w2n b) <= i /\
+      i < doff + (SUM (MAP type_memory_size (TAKE k dtvs)) + w2n b) +
+        type_memory_size (EL k dtvs)) ==>
+      mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s'.vs_memory /\
+      (i IN tf.t_mem <=> i IN tn'.t_mem)` by
+    (gen_tac >> disch_tac >> conj_tac >-
+      (qpat_x_assum `typed_copy_state_frame a' _ _ s' sf` mp_tac >>
+       pure_rewrite_tac[typed_copy_state_frame_def, typed_copy_frame_def] >>
+       strip_tac >> first_x_assum irule >> decide_tac) >>
+     qpat_x_assum `!i. _ ==> (i IN tf.t_mem <=> _)` (qspec_then `i` mp_tac) >>
+     pop_assum mp_tac >> POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  conj_tac >-
+    (rpt gen_tac >> disch_tac >> Cases_on `j = k` >- simp[] >>
+     `j < k` by decide_tac >>
+     `doff + (SUM (MAP type_memory_size (TAKE j dtvs)) + w2n b) =
+       (doff + w2n b) + SUM (MAP type_memory_size (TAKE j dtvs))` by decide_tac >>
+     pop_assum SUBST1_TAC >>
+     gen_tac >> disch_tac >> irule typed_fields_robust_prefix_frame >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`k`, `s'.vs_memory`, `sf.vs_memory`, `tf.t_mem`, `tn'.t_mem`] >>
+     simp[]) >>
+  rpt gen_tac >> disch_tac >>
+  `soff + (SUM (MAP type_memory_size (TAKE j stvs)) + w2n a) =
+    (soff + w2n a) + SUM (MAP type_memory_size (TAKE j stvs))` by decide_tac >>
+  pop_assum SUBST1_TAC >>
+  gen_tac >> disch_tac >> irule typed_fields_robust_suffix_frame >>
+  simp[] >>
+  qexistsl_tac [`doff + (SUM (MAP type_memory_size (TAKE k dtvs)) + w2n b)`,
+    `k`, `s'.vs_memory`, `sf.vs_memory`, `type_memory_size (EL k dtvs)`,
+    `tf.t_mem`, `tn'.t_mem`] >>
+  simp[] >>
+  `SUM (MAP type_memory_size stvs) = SUM (MAP (type_memory_bytes ce) sts)` by
+    (qpat_x_assum `!k. _ = SUM (MAP type_memory_size (TAKE k stvs))`
+       (qspec_then `LENGTH sts` mp_tac) >>
+     `TAKE (LENGTH dts) stvs = stvs` by
+       (irule TAKE_LENGTH_TOO_LONG >> simp[]) >> simp[]) >>
+  rpt strip_tac >> decide_tac
 QED
 
 Resume typed_fields_copy_robust[finish]:
-  FAIL_TAC "field finish"
+  qpat_x_assum `field_inv [] [] _ _ _ _ _ _` mp_tac >>
+  simp[Abbr `field_inv`] >> strip_tac >>
+  `k = LENGTH dts` by (fs[DROP_EQ_NIL] >> decide_tac) >>
+  gvs[] >> qexistsl_tac [`G'`, `tn'`, `u`] >> simp[] >>
+  rpt strip_tac >> simp[tuple_in_memory_from_elements]
 QED
 
 Finalise typed_fields_copy_robust
