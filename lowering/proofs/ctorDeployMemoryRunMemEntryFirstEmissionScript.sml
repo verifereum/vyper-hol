@@ -699,9 +699,12 @@ QED
 Theorem ctor_clamp_basetype_appends:
   !v ty. cs_appends (compile_clamp_basetype v ty)
 Proof
-  rpt gen_tac >> rewrite_tac[oneline compile_clamp_basetype_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  rpt IF_CASES_TAC >> simp[cs_appends_return, ctor_clamp_and_return_appends] >>
+  rpt gen_tac >> Cases_on `ty` >> rewrite_tac[compile_clamp_basetype_def, cs_appends_return] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  rewrite_tac[compile_clamp_basetype_def, cs_appends_return] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+  rewrite_tac[compile_clamp_basetype_def, cs_appends_return] >> rpt IF_CASES_TAC >>
+  rewrite_tac[cs_appends_return, ctor_clamp_and_return_appends] >>
   rpt (FIRST [ho_match_mp_tac cs_appends_bind,
               ho_match_mp_tac cs_appends_ignore_bind] >>
        rw[cs_appends_emit_helpers, cs_appends_return])
@@ -717,8 +720,11 @@ Theorem ctor_clamp_basetype_first_emission:
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\
        i.inst_opcode <> PHI))
 Proof
-  ntac 2 gen_tac >> rewrite_tac[oneline compile_clamp_basetype_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >> rpt IF_CASES_TAC >> simp[] >>
+  ntac 2 gen_tac >> Cases_on `ty` >> rewrite_tac[compile_clamp_basetype_def] >>
+  TRY (rename1 `BaseT bt` >> Cases_on `bt`) >>
+  rewrite_tac[compile_clamp_basetype_def] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+  rewrite_tac[compile_clamp_basetype_def] >> rpt IF_CASES_TAC >>
   FIRST [
     (simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl] >> NO_TAC),
     (rpt gen_tac >> strip_tac >>
@@ -4207,17 +4213,39 @@ Proof
   irule (cj 1 first_emission_emit_helpers) >> goal_assum $ drule_at Any >> simp[]
 QED
 
-Theorem ctor_invalid_call_first_emission_strong:
-  !target. (target = SelfDestructTarget) ==>
-  !env rt ty args def a x b. compile_call cfn env rt ty target args def a = (x,b) ==>
+(* A one-argument selfdestruct lowers its target and emits
+   SELFDESTRUCT; any other arity still emits INVALID. *)
+Theorem ctor_selfdestruct_call_first_emission:
+  (!env ty e a x b. cfn env ty e a = (x,b) ==>
     cs_extends a b /\
-    (!fn. fn_has_code a b fn ==> ?bb i.
-      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !env rt ty args def a x b.
+    compile_call cfn env rt ty SelfDestructTarget args def a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  gen_tac >> strip_tac >> gvs[] >>
-  simp_tac (srw_ss()) [compile_call_def] >>
-  metis_tac[ctor_invalid_stack_first_emission_strong]
+  strip_tac >> ntac 3 gen_tac >> namedCases_on `args` ["", "to_e rest"] >>
+  simp_tac (srw_ss()) [compile_call_def]
+  >- (ho_match_mp_tac first_emission_strong >> metis_tac[ctor_invalid_stack_first_emission_strong]) >>
+  Cases_on `rest` >> simp_tac (srw_ss()) []
+  >- (simp_tac (srw_ss()) [LET_THM] >> rewrite_tac[state_pair_let_bind] >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
+      gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- (rpt gen_tac >> rewrite_tac[builtinSystemTheory.compile_selfdestruct_def] >>
+          strip_tac >> irule (cj 2 first_emission_emit_helpers) >>
+          goal_assum $ drule_at Any >> simp[]) >>
+      rpt gen_tac >> BETA_TAC >> rw[cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_strong >> metis_tac[ctor_invalid_stack_first_emission_strong]
 QED
 
 Theorem ctor_raw_revert_first_emission[local]:
@@ -4399,18 +4427,30 @@ Proof
   disch_then irule >> metis_tac[]
 QED
 
-Theorem ctor_invalid_call_expr_first_emission_strong:
-  !target. (target = SelfDestructTarget) ==>
-  !env ty ann args def a x b.
-    compile_expr_body cfn bfn tfn env ty (Call ann target args def) a = (x,b) ==>
+Theorem ctor_selfdestruct_call_expr_first_emission:
+  (!e env ty a. expr_size e < bound ==> !x b.
+    compile_expr env ty e a = (x,b) ==>
     cs_extends a b /\
-    (!fn. fn_has_code a b fn ==> ?bb i.
-      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !env ty ann args def a x b.
+    compile_expr_body (expr_child_callback bound compile_expr) bfn tfn
+      env ty (Call ann SelfDestructTarget args def) a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  gen_tac >> disch_tac >> simp_tac (srw_ss()) [Once compile_expr_body_def, LET_THM] >>
+  strip_tac >> dxrule ctor_expr_callback_first_emission >> disch_tac >>
+  simp_tac (srw_ss()) [Once compile_expr_body_def, LET_THM] >>
   rpt gen_tac >> disch_tac >>
-  drule_at (Pos last) ctor_invalid_call_first_emission_strong >> simp[]
+  drule_at (Pos last) ctor_selfdestruct_call_first_emission >>
+  disch_then irule >> metis_tac[]
 QED
 
 Theorem ctor_stage_intcall_args_first_emission:
@@ -5496,8 +5536,8 @@ Proof
   >~ [`CreateTarget _ _ _ _`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_create_call_expr_first_emission >> disch_then irule >> metis_tac[])
   >~ [`ExtCall _ _ sig _`] >- (PairCases_on `sig` >> rpt gen_tac >> strip_tac >>
       drule_at (Pos last) ctor_guarded_ext_call_expr_first_emission >> disch_then irule >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_invalid_call_expr_first_emission_strong >>
-  simp[] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_selfdestruct_call_expr_first_emission >>
+  disch_then irule >> metis_tac[]
 QED
 
 Theorem ctor_compile_expr_first_emission_mutual:
