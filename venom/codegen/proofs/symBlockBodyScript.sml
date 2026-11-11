@@ -894,7 +894,11 @@ Proof
       ["generate_inst_plan", "step_inst"] fnAliasStepTheory.alias_step_preserve) >>
      metis_tac[]) >>
   qexistsl_tac [`n`, `as1`, `ss1`, `target`, `toff`] >> simp[] >>
-  metis_tac[]
+  qpat_x_assum `ps' = ps_after` SUBST_ALL_TAC >>
+  rpt conj_tac >- gvs[] >- gvs[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!at. MEM at ps_after.ps_stack \/ _ ==> _`
+    (qspec_then `at` mp_tac) >> gvs[]
 QED
 
 Theorem body_succ_sym_label:
@@ -995,6 +999,9 @@ Proof
     (leaf_matches 2 (match_mp_tac o REWRITE_RULE [AND_IMP_INTRO]) (anchored_leaf_core false
       ["generate_inst_plan", "step_inst"] fnAliasStepTheory.alias_step_preserve) >>
      metis_tac[]) >>
+  qpat_x_assum `ps' = ps_after` SUBST_ALL_TAC >>
+  qpat_x_assum `!at. MEM at ps_after.ps_stack \/ _ ==> _` mp_tac >>
+  simp[] >> strip_tac >>
   qexistsl_tac [`n`, `as1`, `ss1`] >> simp[] >>
   metis_tac[]
 QED
