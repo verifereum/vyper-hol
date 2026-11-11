@@ -6,6 +6,7 @@ Ancestors
   loweringPosts vyperState vyperAST vyperTypeArgFits vyperTypeSystem exprSimDefs
 
 Theorem nocopy_ifexp_post_annotated:
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   expr_body_pre ce cx env e es /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   (is_word_type (expr_type e) \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) /\
@@ -76,6 +77,7 @@ Proof
 QED
 
 Theorem compile_nocopy_ifexp_post_frag:
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   expr_body_pre ce cx env e es /\
   eval_expr cx e es = (INL tvv,ee) /\
   read_result cx tvv ee = (INL v,ee) /\

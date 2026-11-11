@@ -33,6 +33,7 @@ Proof
 QED
 
 Theorem compile_selected_ifexp_post_frag:
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
   expr_body_pre ce cx env e es /\
   eval_expr cx e es = (INL tvv,ee) /\
   read_result cx tvv ee = (INL v,ee) /\
@@ -54,7 +55,7 @@ Proof
     same_memory_layout ce (lowered_value_type ce e) (expr_type e)`
   >- (irule compile_nocopy_ifexp_post_frag >> metis_tac[]) >>
   fs[] >> Cases_on `is_bytestring_type (expr_type e)`
-  >- (irule compile_bytes_ifexp_post_frag >> metis_tac[]) >>
+  >- (irule compile_bytes_ifexp_post_frag >> simp[] >> metis_tac[]) >>
   `lowered_value_type ce e <> expr_type e` by
     (strip_tac >> fs[same_memory_layout_def, punnable_reflexive]) >>
   `?ann fid args drv. e = Call ann (IntCall fid) args drv` by
@@ -78,7 +79,7 @@ Resume compile_selected_ifexp_post_frag[aggregate]:
   `(do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee)` by
     simp[ignore_bind_def, bind_def] >>
   `post_value_type ce e <> expr_type e` by metis_tac[] >>
-  drule_all compile_changed_aggregate_post_frag >>
+  drule_all (SIMP_RULE (srw_ss()) [] compile_changed_aggregate_post_frag) >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   qpat_x_assum `frag_exec _ _ _ _ _ _`
     (mp_then Any mp_tac frag_exec_conseq) >>
@@ -96,12 +97,12 @@ Resume compile_selected_ifexp_post_frag[aggregate]:
      rpt (pairarg_tac >> gvs[]) >> strip_tac >>
      gvs[base_ptr_def] >> metis_tac[])
   >- (gvs[unwrap_value_def, comp_return_def] >>
-      drule_all vv_post_read_result >> disch_then (fs o single) >>
+      drule_all vv_post_read_result >> strip_tac >>
       irule expr_post_of_vv_post_stack >> goal_assum drule) >>
   `t = post_value_type ce e` by
     (gvs[] >> fs[vv_post_def, vv_holds_def] >> gvs[]) >>
   gvs[unwrap_value_def, comp_return_def] >>
-  drule_all vv_post_read_result >> disch_then (fs o single) >>
+  drule_all vv_post_read_result >> strip_tac >>
   irule expr_post_of_vv_post_memory >> metis_tac[]
 QED
 

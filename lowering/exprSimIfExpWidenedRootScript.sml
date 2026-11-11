@@ -64,10 +64,13 @@ Proof
 QED
 
 Theorem normalized_arm_join_outcome[local]:
+  (~expr_has_effect (IfExp ann c a b) ==> ~expr_has_effect (IfExp ann nc na nb)) /\
   gas_outcome F tops (ctx,func) source (es1,jump_to lbl tt)
     (\res ee u. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
       expr_post ctx func ce cx (IfExp ann nc na nb) es1 sc sd
         (jump_to lbl tt) ee v op u /\
+      (~is_word_type ann ==> vv_at ce cx ann sc sd ee tv
+        (LocatedValue ann (mk_ptr op LocMemory)) u) /\
       u.vs_current_bb = sd.cs_current_bb /\
       u.vs_inst_idx = LENGTH sd.cs_current_insts)
     (\res ee r. expr_exit res r) /\

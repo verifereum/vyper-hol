@@ -18,6 +18,7 @@ Theorem normalized_expr_post_frame:
     (!n b sz. local_region ce es.scopes s0 n b sz ==>
       off+len <= b \/ b+sz <= off) ==>
     mem_bytes_at off len q.vs_memory = mem_bytes_at off len s.vs_memory) /\
+  (~expr_has_effect out ==> pure_frame ce func es sa s0 q) /\
   locals_kept ce es ee s0 q ==>
   expr_post ctx func ce cx out es sa sb s0 ee v dst q
 Proof
@@ -58,6 +59,8 @@ Theorem allocated_result_expr_post_frame:
   expr_val_rel cx (expr_type out) v dst q /\
   eval_operand dst q = SOME w /\
   FLOOKUP q.vs_allocas aid = SOME (b,N) /\
+  (~expr_has_effect out ==> ~expr_has_effect e) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
   origin.cs_next_id <= aid /\ aid < sb.cs_next_id /\ b <= w2n w /\
   (!tv. evaluate_type (get_tenv cx) (expr_type out) = SOME tv /\
     ~is_word_type (expr_type out) ==>
@@ -94,6 +97,19 @@ Proof
       `FLOOKUP s.vs_allocas aid' = SOME (off,len)` by metis_tac[] >>
       `b + N <= off \/ off + len <= b` by metis_tac[] >>
       metis_tac[]) >>
+  conj_tac
+  >- (strip_tac >>
+      irule exprSimPropsTheory.pure_frame_buffer_tail >>
+      qexistsl_tac [`b`, `N`, `inst`, `s`] >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
+      conj_tac
+      >- (rpt strip_tac >>
+          `local_region ce ee.scopes s n lb lsz` by metis_tac[] >>
+          qpat_x_assum `!n lb len. local_region _ _ s _ _ _ ==> _` drule >>
+          simp[arithmeticTheory.ADD_COMM]) >>
+      rpt strip_tac >>
+      qpat_x_assum `!off len. _ ==> mem_bytes_at off len q.vs_memory = _` irule >>
+      decide_tac) >>
   irule exprSimPropsTheory.locals_kept_regions_tail >>
   qexists_tac `s` >> asm_rewrite_tac[] >> rpt strip_tac >>
   `local_region ce ee.scopes s n b' sz` by metis_tac[] >>
