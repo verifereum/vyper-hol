@@ -7,7 +7,7 @@ Ancestors
   emitHelperProps exprLoweringProps emitHelper compileEnv
   venomState venomExecSemantics venomInst words list arithmetic pred_set
   fragExec abiEncoderAddressReach instIdxIndep venomMemProps
-  abiEncoderWindowContract memContinuation
+  abiEncoderWindowContract memContinuation abiEncodeAllocationPhase
 
 Theorem abi_encode_finish_window_mem:
   abi_builtin_encode_finish buf len mid st = ((),en) /\
