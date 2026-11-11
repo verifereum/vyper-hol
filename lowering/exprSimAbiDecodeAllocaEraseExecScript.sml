@@ -315,14 +315,9 @@ Theorem abi_decode_clean_exec_delegatecall_iff:
   ?t. exec_delegatecall inst s gas addr ao az ro rz = OK t /\
       u = abi_decode_clean_allocas func t
 Proof
-  simp[exec_delegatecall_def, abi_decode_clean_extract_result,
-       read_memory_def, abi_decode_clean_allocas_def, AllCaseEqs()] >>
-  qmatch_goalsub_abbrev_tac `extract_venom_result s _ _ _ res` >>
-  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) res`
-  >- simp[] >>
-  PairCases_on `x` >> simp[update_var_def, abi_decode_clean_allocas_def] >>
-  eq_tac >> strip_tac >> gvs[] >>
-  qexists_tac `x1 with vs_vars := x1.vs_vars |+ (out,x0)` >> simp[]
+  simp[exec_delegatecall_def, read_memory_def, abi_decode_clean_allocas_def,
+       update_var_def, AllCaseEqs(), PULL_EXISTS] >>
+  eq_tac >> strip_tac >> gvs[]
 QED
 
 Theorem abi_decode_clean_logs_update[simp]:
