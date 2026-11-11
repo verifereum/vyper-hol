@@ -1,8 +1,8 @@
 (*
  * Byte-level memory agreement facts for the frame view.
  *
- * The byte-level read/write lemmas are regularMemorySim's and
- * regularCallEmitSim's; this theory adds the agreement forms the
+ * The byte-level read/write lemmas are memoryReadRel's, regularMemorySim's
+ * and regularCallEmitSim's; this theory adds the agreement forms the
  * frameView* step lemmas use.
  *
  * TOP-LEVEL:
@@ -13,7 +13,7 @@
 
 Theory frameViewMemory
 Ancestors
-  venomState codegenRel regularMemorySim regularCallEmitSim list
+  memoryReadRel venomState codegenRel regularMemorySim regularCallEmitSim list
 
 Theorem padded_memory_read_cong:
   (!i. off <= i /\ i < off + n ==> read_byte i m = read_byte i mem) ==>

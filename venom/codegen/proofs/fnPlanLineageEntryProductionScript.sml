@@ -564,7 +564,7 @@ Theorem short_full_reorder_count_probe[local]:
     LIST_ELEM_COUNT (Var "x")
       (SND (do_swap 17 (ps with <|ps_stack := [Var "x"]; ps_spilled := FEMPTY|>))).ps_stack
 Proof
-  rpt gen_tac >> rewrite_tac[reorderSimTheory.reorder_plan_eq_plan_steps] >>
+  rpt gen_tac >> rewrite_tac[reorderStagesTheory.reorder_plan_eq_plan_steps] >>
   CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV (RATOR_CONV (RAND_CONV EVAL))))) >>
   pure_once_rewrite_tac[foldlSimTheory.plan_steps_def] >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>

@@ -1,5 +1,6 @@
 Theory fnPlanLineageInventory
 Ancestors
+  inputMaterialised inputPlanSim operandInventory reorderStages
   fnPlanPrefix fnPlanLineageSort fnPlanLineageSuffix fnPlanLineageReplay fnPlanLineageReduction genericInputReady reorderSim deepResidualBudget fnPlanLineageReorder doSwapSim stackPlanGen stackModel list rich_list
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory
@@ -1720,9 +1721,9 @@ Proof
     (ps with ps_stack := prefix ++ suffix) =
     ([SODup (d+1)], ps with ps_stack := prefix ++ (suffix ++ [Var v]))` by
     (irule emit_one_input_suffix_shallow >> simp[]) >>
-  simp[emit_input_plan_def, dfgDefsTheory.operand_vars_def,
+  simp[emit_input_plan_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
-       dfgDefsTheory.operand_var_def] >>
+       venomInstTheory.operand_var_def] >>
   simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def]
 QED
 
@@ -1736,9 +1737,9 @@ Theorem emit_input_repeated_var_restored:
 Proof
   strip_tac >> drule emit_one_repeated_var_restored >>
   disch_then (qspecl_then [`next`, `opc`] assume_tac) >>
-  simp[emit_input_plan_def, dfgDefsTheory.operand_vars_def,
+  simp[emit_input_plan_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
-       dfgDefsTheory.operand_var_def] >>
+       venomInstTheory.operand_var_def] >>
   simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
        DOMSUB_FLOOKUP_THM]
 QED
@@ -1868,7 +1869,7 @@ Proof
   rpt gen_tac >> strip_tac >> gen_tac >>
   qpat_x_assum `!v. _ <= _` (qspec_then `v` assume_tac) >>
   qspecl_then [`opc`, `operand_vars rest ++ nl`, `h`, `ps`, `Var v`]
-    assume_tac emit_one_input_inventory_mono_aux >>
+    assume_tac emit_one_input_inventory_mono >>
   Cases_on `Var v = h`
   >- (gvs[elem_count_append, LIST_ELEM_COUNT_THM] >>
       Cases_on `MEM (Var v) rest \/ MEM v keep`
@@ -1989,7 +1990,7 @@ Theorem emit_one_input_available_preserved:
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`opc`, `nl`, `op`, `ps`, `Var v`]
-    mp_tac emit_one_input_inventory_mono_aux >>
+    mp_tac emit_one_input_inventory_mono >>
   simp[] >> gvs[GSYM LIST_ELEM_COUNT_MEM] >>
   Cases_on `Var v IN FDOM ps.ps_spilled` >>
   Cases_on `Var v IN FDOM qs.ps_spilled` >> gvs[] >> decide_tac
@@ -3578,8 +3579,8 @@ Proof
     assume_tac emit_one_input_inventory_upper >>
   Cases_on `x IN FDOM ps.ps_spilled` >>
   Cases_on `h` >> Cases_on `x` >>
-  gvs[venomInstTheory.operand_vars_def, dfgDefsTheory.operand_vars_def,
-      venomInstTheory.operand_var_def, dfgDefsTheory.operand_var_def,
+  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_vars_def,
+      venomInstTheory.operand_var_def, venomInstTheory.operand_var_def,
       stackPlanTypesTheory.is_var_operand_def,
       elem_count_append, MAP_APPEND, LIST_ELEM_COUNT_DEF, MEM_MAP] >>
   rpt IF_CASES_TAC >> gvs[] >> decide_tac
@@ -3598,7 +3599,7 @@ Theorem emit_input_plan_live_upper_acc[local]:
       (if MEM x (MAP Var nl) then 1 else 0)
 Proof
   Induct_on `rest` >- simp[venomInstTheory.operand_vars_def,
-                          dfgDefsTheory.operand_vars_def] >>
+                          venomInstTheory.operand_vars_def] >>
   rpt gen_tac >> strip_tac >>
   drule emit_one_input_live_upper_acc >>
   disch_then (qspec_then `opc` assume_tac) >>

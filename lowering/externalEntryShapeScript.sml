@@ -1368,31 +1368,30 @@ Proof
        simp[LET_THM, comp_return_labels, emit_void_labels, emit_op_labels])
 QED
 
-Theorem emit_membership_eqs_labels[local]:
-  !ops needle s P. cs_extends s (SND (emit_membership_eqs needle ops s)) /\
+Theorem emit_membership_eqs_labels:
+  !needle ops s P. cs_extends s (SND (emit_membership_eqs needle ops s)) /\
     EVERY P (added_labels s (SND (emit_membership_eqs needle ops s)))
 Proof
-  Induct >> simp[emit_membership_eqs_def, comp_return_labels] >> rpt gen_tac >>
-  rpt (FIRST [irule comp_bind_labels >> conj_tac, disch_tac] >>
-       rpt gen_tac >> BETA_TAC >> simp[emit_op_labels, comp_return_labels])
+  Induct_on `ops` >> simp[emit_membership_eqs_def, comp_return_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[comp_return_labels]
 QED
 
-Theorem fold_membership_or_labels[local]:
-  !ops acc s P. cs_extends s (SND (fold_membership_or acc ops s)) /\
-    EVERY P (added_labels s (SND (fold_membership_or acc ops s)))
+Theorem fold_membership_or_labels:
+  !cs acc s P. cs_extends s (SND (fold_membership_or acc cs s)) /\
+    EVERY P (added_labels s (SND (fold_membership_or acc cs s)))
 Proof
-  Induct >> simp[fold_membership_or_def, comp_return_labels] >> rpt gen_tac >>
-  rpt (FIRST [irule comp_bind_labels >> conj_tac, disch_tac] >>
-       rpt gen_tac >> BETA_TAC >> simp[emit_op_labels, comp_return_labels])
+  Induct_on `cs` >> simp[fold_membership_or_def, comp_return_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels]
 QED
 
-Theorem fold_membership_and_labels[local]:
-  !ops acc s P. cs_extends s (SND (fold_membership_and acc ops s)) /\
-    EVERY P (added_labels s (SND (fold_membership_and acc ops s)))
+Theorem fold_membership_and_labels:
+  !cs acc s P. cs_extends s (SND (fold_membership_and acc cs s)) /\
+    EVERY P (added_labels s (SND (fold_membership_and acc cs s)))
 Proof
-  Induct >> simp[fold_membership_and_def, comp_return_labels] >> rpt gen_tac >>
-  rpt (FIRST [irule comp_bind_labels >> conj_tac, disch_tac] >>
-       rpt gen_tac >> BETA_TAC >> simp[emit_op_labels, comp_return_labels])
+  Induct_on `cs` >> simp[fold_membership_and_def, comp_return_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels] >>
+  rpt gen_tac >> irule comp_bind_labels >> simp[emit_op_labels]
 QED
 
 Theorem compile_list_membership_in_labels:
@@ -1400,10 +1399,9 @@ Theorem compile_list_membership_in_labels:
     EVERY P (added_labels s (SND (compile_list_membership_in needle ops s)))
 Proof
   rpt gen_tac >> simp[compile_list_membership_in_def] >>
-  irule comp_bind_labels >> reverse conj_tac >- simp[emit_membership_eqs_labels] >>
-  Cases >> simp[comp_return_labels, fold_membership_or_labels] >>
-  rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >>
-  simp[emit_op_labels, fold_membership_or_labels]
+  irule comp_bind_labels >> simp[emit_membership_eqs_labels] >>
+  rpt gen_tac >> CASE_TAC >>
+  simp[comp_return_labels, fold_membership_or_labels]
 QED
 
 Theorem compile_list_membership_notin_labels:
@@ -1411,10 +1409,9 @@ Theorem compile_list_membership_notin_labels:
     EVERY P (added_labels s (SND (compile_list_membership_notin needle ops s)))
 Proof
   rpt gen_tac >> simp[compile_list_membership_notin_def] >>
-  irule comp_bind_labels >> reverse conj_tac >- simp[emit_membership_eqs_labels] >>
-  Cases >> simp[comp_return_labels, fold_membership_and_labels] >>
-  rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >>
-  simp[emit_op_labels, fold_membership_and_labels]
+  irule comp_bind_labels >> simp[emit_membership_eqs_labels] >>
+  rpt gen_tac >> CASE_TAC >> simp[comp_return_labels] >>
+  irule comp_bind_labels >> simp[emit_op_labels, fold_membership_and_labels]
 QED
 
 (* Unlike ordinary bind, this rule retains the provenance of a fresh label. *)
@@ -1464,8 +1461,9 @@ Theorem compile_array_membership_loop_labels:
     EVERY (isPREFIX "@") (added_labels s
       (SND (compile_array_membership_loop needle arr len size offset loader bound_opt is_in s)))
 Proof
-  rpt gen_tac >> disch_tac >>
-  Cases_on `bound_opt` >> rewrite_tac[compile_array_membership_loop_def, LET_THM] >>
+  rpt gen_tac >> disch_tac >> Cases_on `bound_opt` >>
+  rewrite_tac[compile_array_membership_loop_def, LET_THM,
+              optionTheory.option_case_def] >>
   rpt (FIRST [irule fresh_label_bind_labels,
               irule new_block_action_labels >>
                 rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
@@ -3194,7 +3192,22 @@ Proof
       ho_match_mp_tac application_labels >> simp[lower_value_labels] >>
       rpt gen_tac >> ho_match_mp_tac application_labels >>
       simp[compile_raw_revert_labels, cs_extends_refl, added_labels_def,
-           DROP_LENGTH_TOO_LONG]) >>
+           DROP_LENGTH_TOO_LONG])
+  >~ [`SelfDestructTarget`]
+  >- (once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
+      Cases_on `args` >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      reverse (Cases_on `t`) >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      ho_match_mp_tac application_labels >> simp[lower_value_labels] >>
+      rpt gen_tac >> ho_match_mp_tac application_labels >>
+      simp[builtinSystemTheory.compile_selfdestruct_def, emit_void_labels,
+           SRULE [added_labels_def] emit_void_labels,
+           cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
   once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
   ho_match_mp_tac application_labels >>
   simp[emit_inst_labels, compile_create_call_labels, as_stack_val_labels,
@@ -3498,25 +3511,21 @@ Proof
         compile_var_array_membership_labels])
 QED
 
-Theorem bytestring_literal_or_hash_labels[local]:
+Theorem bytestring_operand_hash_labels[local]:
   (!ce t e s. cs_extends s (SND (f ce t e s)) /\
     EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
-  cs_extends st (SND
-    (case bytestring_literal_hash e of
-       SOME h => (Lit h, st)
-     | NONE => (\(ptr,t). compile_bytestring_hash ptr t)
-                 (lower_value f ce ty e st))) /\
-  EVERY (isPREFIX "@") (added_labels st (SND
-    (case bytestring_literal_hash e of
-       SOME h => (Lit h, st)
-     | NONE => (\(ptr,t). compile_bytestring_hash ptr t)
-                 (lower_value f ce ty e st))))
+  cs_extends st (SND (case bytestring_literal_hash e of
+       NONE => (\(m,t1). compile_bytestring_hash m t1) (lower_value f cenv ty e st)
+     | SOME h => (Lit h, st))) /\
+  EVERY (isPREFIX "@") (added_labels st (SND (case bytestring_literal_hash e of
+       NONE => (\(m,t1). compile_bytestring_hash m t1) (lower_value f cenv ty e st)
+     | SOME h => (Lit h, st))))
 Proof
-  disch_tac >> Cases_on `bytestring_literal_hash e` >> simp[]
-  >- (ho_match_mp_tac pair_case_labels >> conj_tac
-      >- (irule lower_value_labels >> simp[]) >>
-      simp[compile_bytestring_hash_labels]) >>
-  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+  strip_tac >> CASE_TAC
+  >- (ho_match_mp_tac pair_case_labels >>
+      simp[lower_value_labels, compile_bytestring_hash_labels]) >>
+  simp[cs_extends_refl, added_labels_def, all_blocks_def, MAP_APPEND] >>
+  once_rewrite_tac[DROP_APPEND] >> simp[DROP_LENGTH_TOO_LONG]
 QED
 
 Theorem builtin_bop_labels:
@@ -3531,16 +3540,13 @@ Proof
   >- (ho_match_mp_tac pair_case_labels >> conj_tac
       >- (irule lower_value_labels >> simp[]) >>
       rpt gen_tac >> irule (SRULE [LET_THM] builtin_membership_labels) >> simp[]) >>
-  IF_CASES_TAC
-  >- (ntac 2 (ho_match_mp_tac pair_case_labels >> conj_tac
-      >- (irule bytestring_literal_or_hash_labels >> simp[]) >>
-      rpt gen_tac) >>
-      IF_CASES_TAC
-      >- (irule as_stack_val_labels >> simp[emit_op_labels]) >>
-      ho_match_mp_tac pair_case_labels >> conj_tac >- simp[emit_op_labels] >>
-      rpt gen_tac >> irule as_stack_val_labels >> simp[emit_op_labels]) >>
-  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
-       simp[lower_value_labels, emit_op_labels]) >>
+  IF_CASES_TAC >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >>
+       TRY (irule bytestring_operand_hash_labels >> simp[] >> NO_TAC) >>
+       rpt gen_tac >>
+       simp[lower_value_labels, compile_bytestring_hash_labels, emit_op_labels]) >>
+  rpt IF_CASES_TAC >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >> simp[emit_op_labels]) >>
   irule as_stack_val_labels >> simp[compile_binop_labels, emit_op_labels]
 QED
 
@@ -3966,13 +3972,23 @@ val stmt_labels_rws = stmt_labels_rws @
   [compile_assign_value_labels, compile_store_at_loc_labels,
    compile_reason_message_labels, stmt_simple_helpers_labels, declare_stmt_local_labels];
 
+Theorem compile_log_save_arg_labels[local]:
+  !cenv ty op es s. cs_extends s (SND (compile_log_save_arg cenv ty op es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_log_save_arg cenv ty op es s)))
+Proof
+  rpt gen_tac >> simp[compile_log_save_arg_def] >> IF_CASES_TAC >>
+  simp[comp_return_labels, compile_materialize_vv_labels]
+QED
+
+val stmt_labels_rws = stmt_labels_rws @ [compile_log_save_arg_labels];
+
 Theorem stmt_list_helpers_labels:
   (!cenv es s. cs_extends s (SND (compile_log_eval_all cenv es s)) /\
     EVERY (isPREFIX "@") (added_labels s (SND (compile_log_eval_all cenv es s)))) /\
   (!xs s. cs_extends s (SND (compile_log_topic_ops xs s)) /\
     EVERY (isPREFIX "@") (added_labels s (SND (compile_log_topic_ops xs s)))) /\
-  (!cenv xs b off s. cs_extends s (SND (compile_log_store_data cenv xs b off s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_log_store_data cenv xs b off s)))) /\
+  (!cenv xs tys b off s. cs_extends s (SND (compile_log_store_data cenv xs tys b off s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_log_store_data cenv xs tys b off s)))) /\
   (!cenv src tys off s. cs_extends s (SND (compile_tuple_load_all cenv src tys off s)) /\
     EVERY (isPREFIX "@") (added_labels s (SND (compile_tuple_load_all cenv src tys off s)))) /\
   (!cenv tys ts vs s. cs_extends s (SND (compile_tuple_store_all cenv tys ts vs s)) /\
@@ -3985,7 +4001,9 @@ Proof
       stmt_labels_chain stmt_labels_rws)
   >- (Induct >> once_rewrite_tac[compile_log_topic_ops_def] >>
       stmt_labels_chain stmt_labels_rws)
-  >- (gen_tac >> Induct >> once_rewrite_tac[compile_log_store_data_def] >>
+  >- (ho_match_mp_tac compile_log_store_data_ind >> rpt conj_tac >> rpt gen_tac >>
+      TRY (disch_then (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+      once_rewrite_tac[compile_log_store_data_def] >>
       stmt_labels_chain stmt_labels_rws)
   >- (gen_tac >> gen_tac >> Induct >> once_rewrite_tac[compile_tuple_load_all_def] >>
       stmt_labels_chain stmt_labels_rws)
@@ -3995,6 +4013,17 @@ Proof
   gen_tac >> gen_tac >> Induct >> once_rewrite_tac[compile_load_tuple_elements_def] >>
   stmt_labels_chain stmt_labels_rws
 QED
+
+Theorem compile_return_unlock_labels[local]:
+  !cenv s. cs_extends s (SND (compile_return_unlock cenv s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_return_unlock cenv s)))
+Proof
+  rpt gen_tac >> simp[compile_return_unlock_def] >> pairarg_tac >> simp[] >>
+  IF_CASES_TAC >> simp[comp_return_labels, compile_nonreentrant_unlock_def] >>
+  rpt IF_CASES_TAC >> simp[comp_return_labels, emit_void_labels]
+QED
+
+val stmt_labels_rws = stmt_labels_rws @ [compile_return_unlock_labels];
 
 Theorem stmt_return_helpers_labels:
   (!cenv v pc n rt st ets rb s.
@@ -4128,7 +4157,24 @@ Proof
       stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
       stmt_labels_chain stmt_labels_rws)
   >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
-      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      (* Return (SOME e): one goal per path, each in its own fragment. *)
+      Cases_on `cenv.ce_return_pc` >> Cases_on `cenv.ce_raw_return` >>
+      Cases_on `FST cenv.ce_nonreentrant`
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >> stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
       stmt_labels_chain stmt_labels_rws)
   >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
       stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>

@@ -6,7 +6,9 @@ Libs
   wordsLib vyperCheckContractLib vyperCheckContractFrontendLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["fixtures/check_contract/raw_log_folded_topics.json"];
+val () = holbuild_extra_deps
+  ["fixtures/check_contract/raw_log_literal_topics.json",
+   "fixtures/check_contract/raw_log_constant_topics.json"];
 
 Theorem raw_log_rejects_named_topics:
   !env data.
@@ -14,6 +16,15 @@ Theorem raw_log_rejects_named_topics:
       (Call NoneT RawLog
         [Name (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic 4)) "topics";
          data] NONE)
+Proof
+  simp[well_typed_expr_def]
+QED
+
+(* A constant topic array (Vyper accepts a DynArray[bytes32, 4] constant)
+   stays a top-level name, whatever its type, and is rejected. *)
+Theorem raw_log_rejects_constant_topics:
+  !env ty nm data.
+    ~well_typed_expr env (Call NoneT RawLog [TopLevelName ty nm; data] NONE)
 Proof
   simp[well_typed_expr_def]
 QED
@@ -105,26 +116,47 @@ Proof
   simp[well_typed_expr_def, expr_type_def, FLOOKUP_UPDATE]
 QED
 
-(* Pinned 9362e36b preserves the original Subscript together with its
-   reduced List. The frontend must use the reduced list for raw_log. *)
-val folded_topics_fixture = vyperCheckContractFrontendLib.check_contract_result
+(* A literal topic list gets the compiler's DynArray[bytes32, 4] type, and
+   constant topics are folded to literals. *)
+val literal_topics_fixture = vyperCheckContractFrontendLib.check_contract_result
   {in_deploy = false, address = ``0w : address``,
    annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
-     "fixtures/check_contract/raw_log_folded_topics.json",
+     "fixtures/check_contract/raw_log_literal_topics.json",
    storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout
-     "fixtures/check_contract/raw_log_folded_topics.json"};
-val expected_folded_call = ``Call NoneT RawLog
+     "fixtures/check_contract/raw_log_literal_topics.json"};
+val topic_literal = ``Literal (BaseT (BytesT (Fixed 32)))
+  (BytesL [18w; 18w; 18w; 18w; 18w; 18w; 18w; 16w;
+           33w; 40w; 1w; 41w; 18w; 18w; 18w; 18w;
+           18w; 18w; 18w; 16w; 18w; 18w; 18w; 18w;
+           18w; 18w; 18w; 18w; 18w; 18w; 18w; 18w])``;
+val expected_literal_call = ``Call NoneT RawLog
   [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic 4))
      (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic 4))
-     [Literal (BaseT (BytesT (Fixed 32)))
-        (BytesL [18w; 18w; 18w; 18w; 18w; 18w; 18w; 16w;
-                 33w; 40w; 1w; 41w; 18w; 18w; 18w; 18w;
-                 18w; 18w; 18w; 16w; 18w; 18w; 18w; 18w;
-                 18w; 18w; 18w; 18w; 18w; 18w; 18w; 18w])];
+     [^topic_literal; ^topic_literal];
    Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])] NONE``;
-val () = case find_terms (aconv expected_folded_call)
-    (#modules folded_topics_fixture) of
+val () = case find_terms (aconv expected_literal_call)
+    (#modules literal_topics_fixture) of
     [_] => ()
-  | _ => raise Fail "folded raw_log frontend witness lost its topic or data";
-val _ = save_thm ("raw_log_folded_list_frontend_accepted",
-  #theorem folded_topics_fixture);
+  | _ => raise Fail "literal raw_log frontend witness lost its topics or data";
+val _ = save_thm ("raw_log_literal_topics_frontend_accepted",
+  #theorem literal_topics_fixture);
+
+(* raw_log(TOPICS, b'') with TOPICS a DynArray[bytes32, 4] constant: the
+   topics stay a top-level name, and the checker rejects the contract. *)
+val constant_topics_input = vyperCheckContractFrontendLib.prepare_check_input
+  {in_deploy = false, address = ``0w : address``,
+   annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
+     "fixtures/check_contract/raw_log_constant_topics.json",
+   storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout
+     "fixtures/check_contract/raw_log_constant_topics.json"};
+val () =
+  if can (find_term (can (match_term
+        ``Call NoneT RawLog [TopLevelName ty nm; d] NONE``)))
+      (#modules constant_topics_input)
+  then () else raise Fail "constant raw_log topics are not a top-level name";
+val () =
+  ((vyperCheckContractLib.check_contract constant_topics_input;
+    raise Fail "checker accepted raw_log with constant topics")
+   handle Fail message =>
+     if String.isSubstring "check_contract returned NONE" message then ()
+     else raise Fail message);

@@ -11,7 +11,7 @@ Theorem return_selected_valued_frag:
   source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
@@ -51,7 +51,15 @@ Proof
     (SND (return_consumer_suffix ce ret (lowered_value_type ce e) op sx))` by
     (gen_tac >> pure_rewrite_tac[return_consumer_suffix_def] >>
      irule ci_mono_bind >> conj_tac
-     >- simp[ci_mono_return_helpers] >>
+     >~ [`ce.ce_raw_return`]
+     >- (rpt gen_tac >> BETA_TAC >> IF_CASES_TAC
+         >- (irule ci_mono_ignore_bind >> conj_tac
+             >- (gen_tac >> IF_CASES_TAC >>
+                 simp[ci_mono_context_helpers, ci_mono_comp_return]) >>
+             gen_tac >> irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+             rpt gen_tac >> BETA_TAC >> irule ci_mono_ignore_bind >>
+             simp[ci_mono_typed_memory_family, ci_mono_return_helpers]) >>
+         simp[ci_mono_return_helpers]) >>
      rpt gen_tac >> IF_CASES_TAC >> simp[ci_mono_comp_return] >>
      irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
      rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_comp_return] >>

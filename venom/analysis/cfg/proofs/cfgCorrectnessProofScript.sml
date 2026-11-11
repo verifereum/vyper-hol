@@ -75,7 +75,7 @@ End
    1) Label-domain and shape invariants
    ========================================================================== *)
 
-Theorem cfg_analyze_reachable_in_labels_proof:
+Theorem cfg_analyze_reachable_in_labels:
   !fn lbl.
     cfg_reachable_of (cfg_analyze fn) lbl ==>
     MEM lbl (fn_labels fn)
@@ -90,7 +90,7 @@ Proof
   metis_tac[MEM_MAP]
 QED
 
-Theorem cfg_analyze_succ_labels_proof:
+Theorem cfg_analyze_succ_labels:
   !fn lbl succ.
     wf_function fn /\
     MEM succ (cfg_succs_of (cfg_analyze fn) lbl) ==>
@@ -109,7 +109,7 @@ Proof
   ]
 QED
 
-Theorem cfg_analyze_pred_labels_proof:
+Theorem cfg_analyze_pred_labels:
   !fn lbl pred.
     wf_function fn /\
     MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
@@ -130,7 +130,7 @@ Proof
   cfg_eval_tac >> simp[ce_fn1_def] >> cfg_eval_tac
 QED
 
-Theorem cfg_analyze_preds_domain_proof:
+Theorem cfg_analyze_preds_domain:
   !fn lbl.
     wf_function fn /\
     cfg_preds_of (cfg_analyze fn) lbl <> [] ==>
@@ -163,7 +163,7 @@ Proof
   simp[ce_fn2_def] >> cfg_eval_tac
 QED
 
-Theorem cfg_analyze_preserves_bb_succs_proof:
+Theorem cfg_analyze_preserves_bb_succs:
   !fn bb.
     wf_function fn /\
     MEM bb fn.fn_blocks ==>
@@ -175,7 +175,7 @@ Proof
   gvs[wf_function_def, fn_labels_def]
 QED
 
-Theorem cfg_analyze_edge_symmetry_proof:
+Theorem cfg_analyze_edge_symmetry:
   !fn lbl succ.
     MEM lbl (fn_labels fn) /\
     MEM succ (fn_labels fn) ==>
@@ -195,7 +195,7 @@ QED
    3) Traversal properties
    ========================================================================== *)
 
-Theorem cfg_analyze_dfs_post_distinct_proof:
+Theorem cfg_analyze_dfs_post_distinct:
   !fn. ALL_DISTINCT (cfg_dfs_post (cfg_analyze fn))
 Proof
   gen_tac >>
@@ -316,7 +316,7 @@ Proof
   )
 QED
 
-Theorem cfg_analyze_postorder_entry_last_proof:
+Theorem cfg_analyze_postorder_entry_last:
   !fn bb.
     entry_block fn = SOME bb ==>
     cfg_dfs_post (cfg_analyze fn) <> [] /\
@@ -393,7 +393,7 @@ QED
    5) Traversal ordering
    ========================================================================== *)
 
-Theorem cfg_analyze_postorder_order_proof:
+Theorem cfg_analyze_postorder_order:
   !fn a b i j.
     cfg_reachable_of (cfg_analyze fn) a /\
     MEM b (cfg_succs_of (cfg_analyze fn) a) /\
@@ -479,16 +479,6 @@ QED
    Unconditional edge symmetry
    ========================================================================== *)
 
-(* Helper: cfg_succs = build_succs *)
-Theorem cfg_succs_build[local]:
-  !fn. (cfg_analyze fn).cfg_succs = build_succs fn.fn_blocks
-Proof
-  rw[cfgDefsTheory.cfg_analyze_def] >> simp_tac std_ss [LET_THM] >>
-  Cases_on `entry_block fn` >> simp[] >>
-  Cases_on `dfs_post_walk (build_succs fn.fn_blocks) [] x.bb_label` >> simp[] >>
-  Cases_on `dfs_pre_walk (build_succs fn.fn_blocks) [] x.bb_label` >> simp[]
-QED
-
 (* Unconditional edge symmetry: removes MEM-in-fn_labels precondition.
    If label is NOT in fn_labels, succs is [] and preds side is vacuously false. *)
 Theorem cfg_edge_symmetry_uncond_proof:
@@ -508,4 +498,15 @@ Proof
       fs[]) >>
     qexists_tac `blk` >> fs[])
   >- metis_tac[]
+QED
+
+(* Reachable ⇒ MEM in cfg_dfs_pre *)
+Theorem reachable_in_dfs_pre:
+  !fn lbl.
+    wf_function fn /\ cfg_reachable_of (cfg_analyze fn) lbl ==>
+    MEM lbl (cfg_analyze fn).cfg_dfs_pre
+Proof
+  metis_tac[cfg_analyze_reachable_sets_proof,
+            pred_setTheory.EXTENSION, pred_setTheory.IN_GSPEC_IFF,
+            listTheory.MEM, pred_setTheory.SPECIFICATION]
 QED
