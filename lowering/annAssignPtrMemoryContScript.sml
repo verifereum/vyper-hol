@@ -77,8 +77,7 @@ Theorem annassign_memory_normal_continuation_ptr:
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
  `post_value_type c e = expr_type e` by
-   metis_tac[loweringPostsTheory.post_value_type_lowered,
-             loweringPostsTheory.post_value_type_bytestring] >>
+   metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
  `!tail. bind (eval_expr cx e) (read_result cx)
    (es with gas_obs := gas_explicit marks salloc.vs_gas_readings ++ tail) =
      (INL v,ee with gas_obs := tail)` by fs[gas_marked_exec_ptr_def] >>

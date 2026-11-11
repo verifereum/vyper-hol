@@ -116,7 +116,7 @@ Theorem attribute_nonmemory_field_ptr:
   t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
   t.vs_transient = s.vs_transient /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} ==>
+  op_taint tn' dst = {} /\ (vv_loc vv = LocCode ==> op_prov H dst = NONE) ==>
   ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc vv))) ee' H tn' t
 Proof
   strip_tac >> irule ptr_vv_ok_nonmemory >>

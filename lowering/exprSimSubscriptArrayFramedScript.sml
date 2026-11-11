@@ -27,7 +27,7 @@ Proof
     (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))`]
     mp_tac emit_op_read1_correct >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-  simp[step_inst_base_def, exec_read1_def] >> strip_tac >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def] >> strip_tac >>
   first_x_assum (qspecl_then [`b`, `ss`] mp_tac) >> simp[] >>
   strip_tac >> metis_tac[]
 QED
@@ -233,7 +233,7 @@ Theorem compile_imm_load_word_runtime_run:
 Proof
   simp[contextTheory.compile_imm_load_word_runtime] >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_read1_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_read1_def,
        venomInstTheory.mk_inst_def]
 QED
 

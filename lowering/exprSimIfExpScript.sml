@@ -100,7 +100,7 @@ Proof
   rpt strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   `step_inst_base (mk_inst sa.cs_next_id MCOPY [dst; src; sz] []) s =
      OK (mcopy (w2n d) (w2n w) (w2n n) s)` by
-    simp[step_inst_base_def] >>
+    simp[step_inst_base_opcode_eqs] >>
   simp[run_inst_seq_def]
 QED
 
@@ -1370,7 +1370,7 @@ Proof
     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[venomInstTheory.mk_inst_def, is_terminator_def] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >> disj1_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_pure1_def, comp_bind_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure1_def, comp_bind_def,
        comp_return_def] >> gvs[]
 QED
 
@@ -1412,7 +1412,7 @@ Proof
     (mp_tac (Q.INST [`i` |-> `mk_inst sa.cs_next_id ASSIGN [op] [rv]`,
                         `u` |-> `update_var rv w s`]
        tuple_straight_line_edge) >>
-     simp[venomInstTheory.mk_inst_def, is_terminator_def, step_inst_base_def,
+     simp[venomInstTheory.mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
           exec_pure1_def] >> metis_tac[]) >>
   `~((update_var rv w s) with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by
     simp[update_var_def] >>

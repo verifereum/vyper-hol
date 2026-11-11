@@ -71,6 +71,9 @@ QED
 Resume compile_annassign_empty_stmt_frag_ptr[rhs]:
  qpat_x_assum `!st0 c st1. _` kall_tac >>
  qpat_x_assum `!sa sb vv. _` kall_tac >>
+ `post_value_type c e = expr_type e` by
+   (irule post_value_type_not_int_call >> rpt strip_tac >>
+    gvs[is_empty_value_expr_def]) >>
  `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
    (eval_expr cx e) (es,s1,G1,tn1)
    (\res ee G tn t. ?tv. res = INL tv /\

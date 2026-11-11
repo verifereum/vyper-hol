@@ -10,7 +10,7 @@
  *)
 Theory ctorDeployImmBudget
 Ancestors
-  ctorDeployDefs vyperCompiler lowerDloadDefs
+  ctorDeployDefs immSectionDead vyperCompiler lowerDloadDefs
 
 Theorem run_deploy_lowering_imm_budget[local]:
   run_deploy_lowering has_constructor rpolicy runtime_bc immutables_len

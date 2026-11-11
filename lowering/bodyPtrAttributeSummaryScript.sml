@@ -11,8 +11,7 @@ Ancestors
    changing the destination variable. Code locations need no slot bound. *)
 Theorem attribute_nonmemory_endpoint_ptr:
   vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
-  post_value_type cenv obj = expr_type obj /\
-  expr_type obj = StructT sid /\ vv_loc bvv <> LocMemory /\
+  post_value_type cenv obj = StructT sid /\ vv_loc bvv <> LocMemory /\
   ptr_vv_ok cx (StructT sid) btv bvv ee G tn s /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
   evaluate_type (get_tenv cx) ann = SOME ftv /\
@@ -22,7 +21,7 @@ Theorem attribute_nonmemory_endpoint_ptr:
   t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
   t.vs_transient = s.vs_transient /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} ==>
+  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov H dst = NONE) ==>
   ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee' H tn' t
 Proof
   strip_tac >> drule struct_field_slot_exists >> strip_tac >>
@@ -52,7 +51,7 @@ Theorem attribute_selected_ptr:
   t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_transient = s.vs_transient /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} /\
+  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov H dst = NONE) /\
   (!x b sz. vv_operand bvv = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
      ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
   ?tv'. select_result cx (expr_type obj) btv (AttrSubscript fld) ee = (INL tv',ee) /\
@@ -60,9 +59,8 @@ Theorem attribute_selected_ptr:
     (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Attribute ann obj fld) dst H t)
 Proof
   strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
-  `post_value_type cenv obj = expr_type obj` by
-    (drule attr_pre_base >> strip_tac >>
-     metis_tac[exprSimAttributeTheory.attr_post_value_type]) >>
+  `post_value_type cenv obj = StructT sid` by
+    (drule attr_pre_base >> strip_tac >> drule_all attr_post_value_type >> gvs[]) >>
   Cases_on `vv_loc bvv = LocMemory`
   >- (`w2n (w + n2w (struct_field_offset
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)) =
@@ -88,10 +86,10 @@ Theorem attribute_selected_vv_post:
 Proof
   strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
   drule attr_pre_base >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule_all attr_post_value_type >> simp[]) >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
-  `post_value_type cenv obj = StructT sid` by
-    metis_tac[exprSimAttributeTheory.attr_post_value_type] >>
-  irule attr_vv_post >> conj_tac >- gvs[] >>
+  irule attr_vv_post >> conj_tac >- gs[] >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `btv` >> simp[] >> rpt strip_tac >> gvs[]
 QED
@@ -122,15 +120,12 @@ Theorem attribute_normal_endpoint_ptr:
     ghost_kept cenv es sa G0 tn0 s0 G' tn'
 Proof
   strip_tac >>
-  `post_value_type cenv obj = expr_type obj` by
-    (drule attr_pre_base >> strip_tac >>
-     metis_tac[exprSimAttributeTheory.attr_post_value_type]) >>
   `op_taint tn (vv_operand bvv) = {}` by
     (Cases_on `bvv` >> gvs[bodyPtrDefsTheory.ptr_vv_ok_def,
        bodyPtrDefsTheory.ptr_val_ok_def, vv_operand_def]) >>
   `?v w. read_result cx btv ee = (INL v,ee) /\
     eval_operand (vv_operand bvv) s = SOME w` by
-    (`vv_holds cenv cx (expr_type obj) btv bvv ee s` by fs[vv_post_def] >>
+    (`vv_holds cenv cx (post_value_type cenv obj) btv bvv ee s` by fs[vv_post_def] >>
      drule attribute_vv_holds_read_operand >> simp[]) >>
   drule_all attribute_add_path_post_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
@@ -149,6 +144,11 @@ Proof
      ?y. Var (STRING #"%" (toString sm.cs_next_var)) = Var y /\
          FLOOKUP G' y = SOME (b,sz)` by
     (rpt strip_tac >> simp[] >> gvs[op_prov_def]) >>
+  `vv_loc bvv = LocCode ==>
+     op_prov G' (Var (STRING #"%" (toString sm.cs_next_var))) = NONE` by
+    (Cases_on `bvv` >>
+     gvs[vv_loc_def, vv_location_def, vv_operand_def, op_prov_def,
+         bodyPtrDefsTheory.ptr_vv_ok_def]) >>
   `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) t =
     SOME (w + n2w (attr_offset cenv (expr_type obj) (vv_loc bvv) fld))` by
     simp[Abbr `t`, eval_operand_def, lookup_var_def, update_var_def,

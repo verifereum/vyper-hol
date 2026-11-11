@@ -2,7 +2,7 @@
    its buffer. Word stores and memory copies share this ghost boundary. *)
 Theory annAssignPtrStore
 Ancestors
-  bodyPtrDefs vyperState finite_map stmtSimDeclStore typedCopyPtr
+  wordLoadStorePtr bodyPtrDefs vyperState finite_map stmtSimDeclStore typedCopyPtr
   annAssignPtrSetup fragGasSeqPtr fragGasPathPtr fragExecPtr
   venomInst venomInstProofs venomExecSemantics venomState emitHelperProps
   representationCleanPtr valueEncodingProps valueEncoding list pred_set

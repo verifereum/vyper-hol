@@ -83,12 +83,11 @@ Theorem toplevel_immutable_expr_post_inst_idx[local,simp]:
   expr_post ctx fn ce cx e es sa sb s0 es' v op (s with vs_inst_idx := k) <=>
   expr_post ctx fn ce cx e es sa sb s0 es' v op s
 Proof
-  simp[expr_post_def, expr_val_own_def, expr_val_rel_def, expr_val_at_def, lookup_var_def,
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def, expr_val_own_def, lookup_var_def,
        stmt_state_rel_inst_idx, local_region_def]
 QED
 
 Theorem toplevel_immutable_run_expr_post:
-  post_value_type cenv e = expr_type e /\
   unwrap_value cenv (LocatedValue ann p) sm = (op,sb) /\
   p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type ann /\
   local_ptrs_reserved cenv sa /\
@@ -102,7 +101,9 @@ Theorem toplevel_immutable_run_expr_post:
   run_inst_seq (emitted_insts sm sb) (s with vs_inst_idx := k) = OK t ==>
   expr_post ctx fn cenv cx e es sa sb s0 es' v op t
 Proof
-  strip_tac >> drule_all runtime_code_copy_run_post >> strip_tac >>
+  strip_tac >>
+  `ann = post_value_type cenv e` by gvs[vv_post_def, vv_holds_def] >>
+  gvs[] >> drule_all runtime_code_copy_run_post_physical >> strip_tac >>
   `code = emitted_insts sm sb` by gvs[emitted_insts_def, DROP_LENGTH_APPEND] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) code` by
     (fs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
@@ -179,7 +180,6 @@ Proof
   `expr_post ctx fn cenv cx (TopLevelName ann nsid) es sa sb s0
      (es with gas_obs := []) v (Var p) t` by
     (irule toplevel_immutable_run_expr_post >>
-     conj_tac >- simp[] >>
      rpt (goal_assum (drule_at Any)) >> simp[] >>
      qexistsl [`ann`,`k`,`mk_ptr (Lit a) LocCode`,`s0`,`sa`] >>
      simp[mk_ptr_def] >> gvs[]) >>

@@ -27,10 +27,7 @@ Proof
  qpat_x_assum `w2n n = k` (SUBST_ALL_TAC o SYM) >>
  `step_inst_base (mk_inst id MCOPY [Var dst;Var src;count_op] []) s =
     OK (mcopy (w2n b) (w2n a) (w2n n) s)` by
-   (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-    pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
-                     combinTheory.K_THM, opcode_case_def] >>
-    simp[eval_operand_def]) >>
+   (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
  `gas_path_ptr_edge D 0 ctx func PG G tn s 0
    (step_prov PG G (mk_inst id MCOPY [Var dst;Var src;count_op] [])
      (mcopy (w2n b) (w2n a) (w2n n) s))

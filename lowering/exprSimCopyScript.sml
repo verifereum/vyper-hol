@@ -229,7 +229,7 @@ Proof
 QED
 
 (* Common semantic boundary for an allocation followed by either copy. *)
-Theorem copy_buffer_post_transport_physical[local]:
+Theorem copy_buffer_post_transport_physical:
   !ctx func cenv cx e es sa sm mid sb s0 es' v vv s u z tv op w sz inst.
     vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
     local_ptrs_reserved cenv sa /\
@@ -1543,19 +1543,18 @@ Proof
   qexistsl_tac [`t`, `w`] >> simp[] >> metis_tac[]
 QED
 
-Theorem runtime_code_copy_run_post:
-  !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
-    post_value_type cenv e = expr_type e /\
-    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
-    p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
+Theorem runtime_code_copy_run_post_physical:
+  !ctx func cenv cx e es sa sm sb s0 es' v p op s.
+    unwrap_value cenv (LocatedValue (post_value_type cenv e) p) sm = (op, sb) /\
+    p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type (post_value_type cenv e) /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
-    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
-           type_memory_bytes cenv t = type_memory_size tvt) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s ==>
+    (!tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt ==>
+           type_memory_bytes cenv (post_value_type cenv e) = type_memory_size tvt) /\
+    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue (post_value_type cenv e) p) s ==>
     ?code z. same_blocks sm sb /\
       sb.cs_current_insts = sm.cs_current_insts ++ code /\
       EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE]) code /\
@@ -1568,18 +1567,17 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
   gvs[] >> rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
-  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s = SOME a /\
-       immutable_holds cenv cx t (Value v) a es' s` by
+       immutable_holds cenv cx (post_value_type cenv e) (Value v) a es' s` by
     gvs[vv_post_def, vv_holds_def] >>
-  `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
+  `?tv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv` by
     (gvs[immutable_holds_def] >> metis_tac[]) >>
   `val_wf tv v /\ w2n a + type_memory_size tv < dimword (:256)` by
     (drule_all immutable_holds_bounds >> simp[]) >>
-  `type_memory_bytes cenv t = type_memory_size tv` by metis_tac[] >>
-  `type_memory_bytes cenv t < dimword (:256)` by decide_tac >>
+  `type_memory_bytes cenv (post_value_type cenv e) = type_memory_size tv` by metis_tac[] >>
+  `type_memory_bytes cenv (post_value_type cenv e) < dimword (:256)` by decide_tac >>
   `ci_mono sm mid` by
-    (qspecl_then [`type_memory_bytes cenv t`, `sm`] mp_tac
+    (qspecl_then [`type_memory_bytes cenv (post_value_type cenv e)`, `sm`] mp_tac
        ci_mono_compile_alloc_buffer >> simp[]) >>
   `ci_mono mid cs''` by
     (qpat_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _` mp_tac >>
@@ -1595,23 +1593,23 @@ Proof
   suspend "copy"
 QED
 
-Resume runtime_code_copy_run_post[copy]:
+Resume runtime_code_copy_run_post_physical[copy]:
   `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
     (rw[copy_old_operand_def] >> gvs[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `(type_memory_bytes cenv t + 31) DIV 32 = type_slot_size tv` by
+  `(type_memory_bytes cenv (post_value_type cenv e) + 31) DIV 32 = type_slot_size tv` by
     (simp[type_memory_size_slots] >> decide_tac) >>
   drule_all copy_runtime_run >> strip_tac >>
   suspend "finish"
 QED
 
-Resume runtime_code_copy_run_post[finish]:
+Resume runtime_code_copy_run_post_physical[finish]:
   `expr_post ctx func cenv cx e es sa cs'' s0 es' v buf.buf_operand s'` by
     suspend "post" >>
   suspend "code"
 QED
 
-Resume runtime_code_copy_run_post[post]:
+Resume runtime_code_copy_run_post_physical[post]:
   `s'.vs_memory = (immutable_transfers F F a w (type_slot_size tv) 0 u).vs_memory` by
     metis_tac[] >>
   `w2n w + type_memory_size tv < dimword (:256)` by metis_tac[] >>
@@ -1619,7 +1617,7 @@ Resume runtime_code_copy_run_post[post]:
   drule_all runtime_code_copy_memory_frame >> strip_tac >>
   `eval_operand buf.buf_operand s' = SOME w` by
     metis_tac[copy_runtime_frame_operand] >>
-  `MEM (mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv t))]
+  `MEM (mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv (post_value_type cenv e)))]
        [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
     metis_tac[buffer_alloc_code] >>
   qmatch_asmsub_abbrev_tac `MEM inst (fn_insts func)` >>
@@ -1628,7 +1626,7 @@ Resume runtime_code_copy_run_post[post]:
   `sm.cs_next_id < cs''.cs_next_id` by decide_tac >>
   fs[copy_runtime_frame_def] >>
   gvs[] >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) copy_buffer_post_transport >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) copy_buffer_post_transport_physical >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `copy_static _ = _`)) >>
   disch_then (drule_at (Pat `!x. not_fresh_at _ x ==> lookup_var x _ = lookup_var x _`)) >>
@@ -1639,7 +1637,7 @@ Resume runtime_code_copy_run_post[post]:
   disch_then irule >> metis_tac[]
 QED
 
-Resume runtime_code_copy_run_post[code]:
+Resume runtime_code_copy_run_post_physical[code]:
   `same_blocks sm mid /\
    mid.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm mid /\
    EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE])
@@ -1664,4 +1662,29 @@ Resume runtime_code_copy_run_post[code]:
   gvs[]
 QED
 
-Finalise runtime_code_copy_run_post
+Finalise runtime_code_copy_run_post_physical
+
+Theorem runtime_code_copy_run_post:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    post_value_type cenv e = expr_type e /\
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+           type_memory_bytes cenv t = type_memory_size tvt) /\
+    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s ==>
+    ?code z. same_blocks sm sb /\
+      sb.cs_current_insts = sm.cs_current_insts ++ code /\
+      EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE]) code /\
+      run_inst_seq code s = OK z /\
+      expr_post ctx func cenv cx e es sa sb s0 es' v op z
+Proof
+  rpt gen_tac >> strip_tac >>
+  `t = post_value_type cenv e` by gvs[vv_post_def, vv_holds_def] >>
+  qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
+  gvs[] >> drule_all runtime_code_copy_run_post_physical >> simp[]
+QED

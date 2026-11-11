@@ -1,6 +1,6 @@
 (* Instruction and counted-run boundary for covered clean byte strings. *)
 Theory bodyPtrHashBuiltinsKeccakBytesRun
-Ancestors bodyPtrHashBuiltinsKeccakShape bodyPtrHashBuiltinsKeccak
+Ancestors wordLoadStorePtr bodyPtrHashBuiltinsKeccakShape bodyPtrHashBuiltinsKeccak
   typedCopyPtr typedCopyLoopHeaderPtr bodyPtrDefs fragGasSeqPtr
   ghostPcTransportPtr instIdxIndep ptrDiscipline venomState venomInst
   venomExecSemantics words finite_map pred_set contextCodegenRel codegenRel valueEncodingProps exprSimHash
