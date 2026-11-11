@@ -243,6 +243,14 @@ fun recovery_safe () = (
     fs[exprSafeOperandTheory.safe_operand_def]);
 
 fun recovery_word () = (
+  `~expr_has_effect ah ==> pure_frame cenv fn es sa s0 t` by
+    metis_tac[exprSimWordArgsTheory.expr_post_pure_frame] >>
+  `~expr_has_effect av ==> pure_frame cenv fn ee s1 t t'` by
+    metis_tac[exprSimWordArgsTheory.expr_post_pure_frame] >>
+  `~expr_has_effect ar ==> pure_frame cenv fn ee' s2 t' t''` by
+    metis_tac[exprSimWordArgsTheory.expr_post_pure_frame] >>
+  `~expr_has_effect aq ==> pure_frame cenv fn ee'' s3 t'' t'''` by
+    metis_tac[exprSimWordArgsTheory.expr_post_pure_frame] >>
   `wb_frame cenv ee ee' s1 t t'` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
   `wb_frame cenv ee' ee'' s2 t' t''` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
   `wb_frame cenv ee'' ee''' s3 t'' t'''` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
@@ -397,6 +405,39 @@ fun recovery_final_rebase () = (
     (irule wordArgsPtrTheory.ghost_kept_wb_trans >>
      qpat_assum `ghost_kept _ ee''' sm _ _ _ _ _` (irule_at Any) >>
      simp[] >> metis_tac[]) >>
+  `~expr_has_effect ah /\ ~expr_has_effect av /\ ~expr_has_effect ar /\
+   ~expr_has_effect aq ==> pure_frame cenv fn es sa s0 t'''` by
+    (strip_tac >>
+     qpat_x_assum `~expr_has_effect ah ==> _` drule >> strip_tac >>
+     qpat_x_assum `~expr_has_effect av ==> _` drule >> strip_tac >>
+     qpat_x_assum `~expr_has_effect ar ==> _` drule >> strip_tac >>
+     qpat_x_assum `~expr_has_effect aq ==> _` drule >> strip_tac >>
+     `pure_frame cenv fn es sa s0 t'` by
+       (qpat_assum `wb_frame cenv es ee sa s0 t`
+          (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+        qpat_assum `wb_frame cenv ee ee' s1 t t'`
+          (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+        match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `ee`, `sa`, `s1`, `s0`, `t`, `t'`]
+          exprSimPropsTheory.pure_frame_trans) >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
+        metis_tac[]) >>
+     `pure_frame cenv fn es sa s0 t''` by
+       (qpat_assum `wb_frame cenv es ee' sa s0 t'`
+          (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+        qpat_assum `wb_frame cenv ee' ee'' s2 t' t''`
+          (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+        match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `ee'`, `sa`, `s2`, `s0`, `t'`, `t''`]
+          exprSimPropsTheory.pure_frame_trans) >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
+        metis_tac[]) >>
+     qpat_assum `wb_frame cenv es ee'' sa s0 t''`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     qpat_assum `wb_frame cenv ee'' ee''' s3 t'' t'''`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `ee''`, `sa`, `s3`, `s0`, `t''`, `t'''`]
+       exprSimPropsTheory.pure_frame_trans) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
+     metis_tac[]) >>
   irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
   qpat_assum `vv_post _ _ _ _ _ ee''' sm _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[]);

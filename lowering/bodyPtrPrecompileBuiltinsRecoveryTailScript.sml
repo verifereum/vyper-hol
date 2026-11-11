@@ -73,7 +73,8 @@ QED
 Theorem recovery_result_posts:
   stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es es' sf s t /\
   eval_operand res t = SOME (typed_val_to_w256 (BaseTV AddressT) (AddressV addr)) /\
-  op_prov G res = NONE /\ op_taint tn res = {} ==>
+  op_prov G res = NONE /\ op_taint tn res = {} /\
+  pure_frame cenv fn es sf s t ==>
   vv_post ctx fn cenv cx (Builtin (BaseT AddressT) ECRecover args)
     es sf sb s es' (Value (AddressV addr)) (StackValue (BaseT AddressT) res) t /\
   ptr_val_ok cx (BaseT AddressT) (AddressV addr) res G tn t /\
@@ -89,7 +90,7 @@ Proof
        vyperStateTheory.read_result_def, evaluate_type_def,
        is_word_type_def, vyperASTTheory.expr_type_def,
        vyperStateTheory.return_def, exprLoweringTheory.lowered_value_type_def,
-       type_memory_bytes_def] >> strip_tac >> first_assum ACCEPT_TAC
+       type_memory_bytes_def] >> rpt strip_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem recovery_source_tail_ptr_path:

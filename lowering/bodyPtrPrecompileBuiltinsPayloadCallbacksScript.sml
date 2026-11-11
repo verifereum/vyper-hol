@@ -5,7 +5,7 @@ Ancestors bodyPtrPrecompileBuiltinsPayloadRuns bodyPtrPrecompileBuiltinsPayloadC
           exprSimWordBuiltins exprSimPrecompiles emitHelperProps
           immutableMemoryFrame valueEncodingProps moduleLoweringProps
           venomMemProps immutableCopyExecution exprSimHash exprSimHashBoundary
-          loweringPosts vyperValue vyperTyping valueEncoding
+          loweringPosts vyperValue vyperTyping valueEncoding exprSimProps
 
 Theorem recovery_payload_run:
   (do emit_void MSTORE [buf; h];
@@ -55,6 +55,51 @@ Proof
   simp[GSYM lookup_var_def, lookup_var_mstore]
 QED
 
+(* The scratch prefix writes only inside its own input ALLOCA. *)
+Theorem scratch_prefix_pure_frame:
+  !fn cenv es sf s0 s3 s1 s2 id ops outs bb bsz.
+    MEM (mk_inst id ALLOCA ops outs) (fn_insts fn) /\ sf.cs_next_id <= id /\
+    FLOOKUP s1.vs_allocas id = SOME (bb,bsz) /\ s2.vs_allocas = s1.vs_allocas /\
+    (!aid entry. FLOOKUP s2.vs_allocas aid = SOME entry ==>
+       FLOOKUP s3.vs_allocas aid = SOME entry) /\
+    local_ptrs_reserved cenv sf /\
+    (!x. not_fresh_at sf x ==> lookup_var x s1 = lookup_var x s0) /\
+    (!name a len. local_region cenv es.scopes s1 name a len ==>
+       regions_disjoint bb bsz a len) /\
+    s1.vs_memory = s0.vs_memory /\ s3.vs_memory = s2.vs_memory /\
+    (!a len. regions_disjoint bb bsz a len ==>
+       mem_bytes_at a len s2.vs_memory = mem_bytes_at a len s1.vs_memory) ==>
+    pure_frame cenv fn es sf s0 s3
+Proof
+  rpt strip_tac >>
+  `!off len. regions_disjoint off len bb bsz ==>
+     mem_bytes_at off len s3.vs_memory = mem_bytes_at off len s0.vs_memory` by
+    (rpt strip_tac >>
+     `regions_disjoint bb bsz off len` by
+       (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+     qpat_x_assum `!a len. regions_disjoint bb bsz a len ==> _`
+       (qspecl_then [`off`, `len`] mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     asm_rewrite_tac[]) >>
+  `!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+     mem_bytes_at lb lsz s3.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
+    (rpt strip_tac >>
+     `local_region cenv es.scopes s1 n lb lsz` by
+       (match_mp_tac (Q.SPECL [`cenv`, `es.scopes`, `sf`, `es.scopes`, `s0`, `s1`,
+                         `n`, `lb`, `lsz`] exprSimPropsTheory.local_region_frame_fwd) >>
+        simp[]) >>
+     `regions_disjoint lb lsz bb bsz` by
+       (res_tac >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
+        decide_tac) >>
+     qpat_x_assum `!off len. regions_disjoint off len bb bsz ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  `FLOOKUP s3.vs_allocas id = SOME (bb,bsz)` by
+    (first_x_assum irule >> asm_rewrite_tac[]) >>
+  match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `sf`, `s0`, `s3`, `id`, `ops`, `outs`,
+                  `bb`, `bsz`] exprSimPropsTheory.pure_frame_fresh_alloca) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem recovery_payload_callback:
   (do emit_void MSTORE [buf; h];
       p1 <- emit_op ADD [buf; Lit 32w]; emit_void MSTORE [p1; v];
@@ -81,7 +126,9 @@ Theorem recovery_payload_callback:
     t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME p /\
     mem_bytes_at (w2n p) 128 t.vs_memory =
       word_to_bytes wh T ++ word_to_bytes wv T ++
-      word_to_bytes wr T ++ word_to_bytes ws T
+      word_to_bytes wr T ++ word_to_bytes ws T /\
+    (!a len. regions_disjoint (w2n p) 128 a len ==>
+       mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
 Proof
   strip_tac >> drule_all recovery_payload_run >> strip_tac >>
   drule precompile_alloca_immutable_disjoint >> disch_tac >>

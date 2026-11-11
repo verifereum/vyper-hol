@@ -62,7 +62,8 @@ Theorem precompile_two_operand_entry_rebase:
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   ghost_kept cenv ee s1 G1 tn1 t G2 tn2 /\
   vv_post ctx fn cenv cx e ee' sm sb t' fin tv vv u /\
-  ghost_kept cenv ee' sm G2 tn2 t' Gf tnf ==>
+  ghost_kept cenv ee' sm G2 tn2 t' Gf tnf /\
+  (~expr_has_effect e ==> ~expr_has_effect a /\ ~expr_has_effect b) ==>
   vv_post ctx fn cenv cx e es sa sb s0 fin tv vv u /\
   ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof
@@ -80,6 +81,18 @@ Proof
   reverse conj_tac >-
     (irule ghost_kept_wb_trans >>
      qpat_assum `ghost_kept _ ee' sm _ _ _ Gf tnf` (irule_at Any) >> simp[] >> metis_tac[]) >>
+  `~expr_has_effect e ==> pure_frame cenv fn es sa s0 t'` by
+    (strip_tac >>
+     qpat_x_assum `~expr_has_effect e ==> _` drule >> strip_tac >>
+     `pure_frame cenv fn es sa s0 t /\ pure_frame cenv fn ee s1 t t'` by
+       metis_tac[exprSimWordArgsTheory.expr_post_pure_frame] >>
+     qpat_x_assum `wb_frame cenv es ee sa s0 t`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     qpat_x_assum `wb_frame cenv ee ee' s1 t t'`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `ee`, `sa`, `s1`, `s0`, `t`, `t'`]
+       exprSimPropsTheory.pure_frame_trans) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   irule vv_post_prefix_frame >>
   qpat_assum `vv_post _ _ _ _ _ ee' sm _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[]

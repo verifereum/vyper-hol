@@ -20,6 +20,44 @@ Proof
   strip_tac >> gvs[]
 QED
 
+(* A word store into a fresh 32-byte ALLOCA, clear of the live locals,
+   keeps the pure frame. *)
+Theorem word_store_pure_frame[local]:
+  !fn cenv es sf s0 s3 id ops outs c.
+    pure_frame cenv fn es sf s0 s3 /\
+    MEM (mk_inst id ALLOCA ops outs) (fn_insts fn) /\ sf.cs_next_id <= id /\
+    FLOOKUP s3.vs_allocas id = SOME (w2n (c:256 word),32) /\
+    local_ptrs_reserved cenv sf /\
+    (!x w. not_fresh_at sf x /\ lookup_var x s0 = SOME w ==>
+       lookup_var x s3 = SOME w) /\
+    (!name lo len. local_region cenv es.scopes s3 name lo len ==>
+       regions_disjoint (w2n c) 32 lo len) ==>
+    pure_frame cenv fn es sf s0 (mstore (w2n c) 0w s3)
+Proof
+  rpt strip_tac >>
+  `!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+     regions_disjoint (w2n c) 32 lb lsz` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name lo len. local_region _ _ s3 _ _ _ ==> _` irule >>
+     qexists `n` >>
+     match_mp_tac (Q.SPECL [`cenv`, `es.scopes`, `sf`, `es.scopes`, `s0`, `s3`,
+                     `n`, `lb`, `lsz`] exprSimPropsTheory.local_region_frame_fwd) >>
+     simp[]) >>
+  `!off len. regions_disjoint off len (w2n c) 32 ==>
+     mem_bytes_at off len (mstore (w2n c) 0w s3).vs_memory =
+     mem_bytes_at off len s3.vs_memory` by
+    (rpt strip_tac >>
+     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
+  `(mstore (w2n c) 0w s3).vs_allocas = s3.vs_allocas` by
+    simp[NoAsms, venomStateTheory.mstore_def] >>
+  match_mp_tac (Q.SPECL [`cenv`, `fn`, `es`, `sf`, `s0`, `s3`,
+                  `mstore (w2n c) 0w s3`, `mk_inst id ALLOCA ops outs`,
+                  `w2n (c:256 word)`, `32`] exprSimPropsTheory.pure_frame_buffer_tail) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp[venomInstTheory.mk_inst_def]
+QED
+
 Theorem recovery_prefix_runtime:
   compile_alloc_buffer 128 sf = (ib,sa) /\
   (do emit_void MSTORE [ib.buf_operand; h];
@@ -79,7 +117,8 @@ Theorem recovery_prefix_runtime:
          | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
        regions_disjoint (w2n c) 32 off (type_memory_size tv)) /\
     (!name lo len. local_region cenv es.scopes s4 name lo len ==>
-       regions_disjoint (w2n c) 32 lo len)
+       regions_disjoint (w2n c) 32 lo len) /\
+    pure_frame cenv fn es sf s0 s4
 Proof
   strip_tac >>
   `128 < dimword(:256)` by simp[wordsTheory.dimword_def] >>
@@ -112,7 +151,9 @@ Proof
     s2.vs_allocas = s1.vs_allocas /\ eval_operand ib.buf_operand s2 = SOME b /\
     mem_bytes_at (w2n b) 128 s2.vs_memory =
       word_to_bytes wh T ++ word_to_bytes wv T ++
-      word_to_bytes wr T ++ word_to_bytes wq T` by
+      word_to_bytes wr T ++ word_to_bytes wq T /\
+    (!a len. regions_disjoint (w2n b) 128 a len ==>
+       mem_bytes_at a len s2.vs_memory = mem_bytes_at a len s1.vs_memory)` by
     (irule recovery_payload_callback >> simp[] >>
      conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
      conj_tac
@@ -165,6 +206,18 @@ Resume recovery_prefix_runtime[frame]:
     (qspecl_then [`fn`,`cenv`,`cx`,`es`,`s0`,`sf`,`es`,`es`,`sf`,`s3`,`mstore (w2n c) 0w s3`,`ctx`]
        mp_tac exprSimWordArgsTheory.wb_frame_trans >>
      impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `pure_frame cenv fn es sf s0 s3` by
+    (match_mp_tac (Q.SPECL [`fn`, `cenv`, `es`, `sf`, `s0`, `s3`, `s1`, `s2`,
+       `sf.cs_next_id`, `[Lit 128w]`, `[STRING #"%" (toString sf.cs_next_var)]`,
+       `w2n (b:256 word)`, `128`] scratch_prefix_pure_frame) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[NoAsms]) >>
+  `pure_frame cenv fn es sf s0 (mstore (w2n c) 0w s3)` by
+    (match_mp_tac (Q.SPECL [`fn`, `cenv`, `es`, `sf`, `s0`, `s3`, `sp.cs_next_id`,
+       `[Lit 32w]`, `[STRING #"%" (toString sp.cs_next_var)]`, `c:256 word`]
+       word_store_pure_frame) >>
+     qpat_assum `wb_frame cenv es es sf s0 s3`
+       (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl [`s1`,`s2`,`s3`,`mstore (w2n c) 0w s3`,`b`,`c`] >>
   simp[] >> conj_tac
   >- (qpat_assum `!name lo len. local_region _ _ s3 _ _ _ ==> _` ACCEPT_TAC) >>
