@@ -7,7 +7,7 @@ Ancestors
   fragGasMode stmtSimAugAssignPlace bodyAugPlaceTarget bodySimAugPlaceLive
   bodyMemEmitOpFrame venomExecSemantics venomInst venomState
   stmtSimAugAssignPlaceStorage gasContext targetPlaceSimCases stmtSimDefs
-  vyperExprNoControl vyperInterpreter vyperState
+  vyperExprNoControl vyperInterpreter vyperState loweringStateRelDefs
 
 Theorem aug_place_memory_word_frontier[local]:
   stmt_state_rel ctx func cenv cx es s /\
