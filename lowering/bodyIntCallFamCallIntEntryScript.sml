@@ -14,6 +14,7 @@ Ancestors
   bodyIntCallFamCallIntEntryRuntimeCode bodyIntCallFamCallIntEntryDeployCode
   bodyIntCallFamCallIntEntryFunctionCode bodyIntCallFamCallIntEntryCalleeCode
   bodyIntCallFamCallIntEntryCharge bodyIntCallFamCallIntEntryLanding
+  bodyIntCallFamCallIntEntryModes
 Libs
   monadsyntax
 
