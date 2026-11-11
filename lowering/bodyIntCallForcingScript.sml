@@ -39,7 +39,7 @@ Theorem protected_value_forcing:
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  drule_all exprSimAggregateChildrenTheory.vv_holds_materialise >> strip_tac >>
+  drule_all bodyIntCallForcingReadOnlyTheory.vv_holds_materialise >> strip_tac >>
   Cases_on `vv`
   >- (drule (SRULE [] protected_identity_value_forcing) >>
       disch_then drule >> simp[] >> strip_tac >>
