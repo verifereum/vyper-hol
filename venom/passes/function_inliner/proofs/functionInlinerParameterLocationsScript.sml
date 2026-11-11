@@ -156,3 +156,179 @@ Proof
   simp[inline_cell_frame_def, inline_make_cell_def, inline_keep_boundary_def] >>
   rpt strip_tac >> gvs[]
 QED
+
+Definition inline_parameter_interval_def:
+  inline_parameter_interval fn l start n <=>
+    ?bb. lookup_block l fn.fn_blocks = SOME bb /\
+      start+n <= LENGTH bb.bb_instructions /\
+      (!k. k < n ==>
+        is_param_opcode (EL (start+k) bb.bb_instructions).inst_opcode \/
+        (EL (start+k) bb.bb_instructions).inst_opcode = ASSIGN)
+End
+
+Definition inline_parameter_boundary_def:
+  (inline_parameter_boundary (InlineKeep e) fn l j fn' l' j' <=>
+    fn = e.ise_caller /\ fn' = e.ise_final /\
+    (?cb. lookup_block l fn.fn_blocks = SOME cb /\
+      j <= LENGTH cb.bb_instructions) /\
+    (l',j') = inline_keep_boundary e l j /\
+    (?tb. lookup_block l' fn'.fn_blocks = SOME tb /\
+      j' <= LENGTH tb.bb_instructions)) /\
+  (inline_parameter_boundary (InlineEnter e) fn l j fn' l' j' <=>
+    fn = e.ise_callee /\ fn' = e.ise_final /\
+    (?bb cb. lookup_block l fn.fn_blocks = SOME cb /\
+      j <= LENGTH cb.bb_instructions /\
+      lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+      l' = STRCAT e.ise_prefix l /\
+      j' = LENGTH (FST (inline_cell_prefix e bb cb j))) /\
+    (?tb. lookup_block l' fn'.fn_blocks = SOME tb /\
+      j' <= LENGTH tb.bb_instructions))
+End
+
+Definition inline_parameter_boundary_path_def:
+  (inline_parameter_boundary_path [] fn l j root l' j' <=>
+    root = fn /\ l' = l /\ j' = j) /\
+  (inline_parameter_boundary_path (choice::rest) fn l j root l' j' <=>
+    ?mid ml mj. inline_parameter_boundary choice fn l j mid ml mj /\
+      inline_parameter_boundary_path rest mid ml mj root l' j')
+End
+
+Theorem inline_parameter_boundary_functional:
+  inline_parameter_boundary choice fn l j a al aj /\
+  inline_parameter_boundary choice fn l j b bl bj ==>
+  a = b /\ al = bl /\ aj = bj
+Proof
+  Cases_on `choice` >> simp[inline_parameter_boundary_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[pairTheory.PAIR_EQ]
+QED
+
+Theorem inline_parameter_boundary_path_functional:
+  !path fn l j a al aj b bl bj.
+  inline_parameter_boundary_path path fn l j a al aj /\
+  inline_parameter_boundary_path path fn l j b bl bj ==>
+  a = b /\ al = bl /\ aj = bj
+Proof
+  Induct >> simp[inline_parameter_boundary_path_def] >> rpt strip_tac >>
+  `mid = mid' /\ ml = ml' /\ mj = mj'` by
+    metis_tac[inline_parameter_boundary_functional] >>
+  gvs[] >> metis_tac[]
+QED
+
+(* Repair and renumbering preserve block extent even when no next cell exists. *)
+Theorem inline_edit_boundary_extent:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  lookup_block l
+    (inline_call_site e.ise_prefix e.ise_return e.ise_caller e.ise_callee
+      e.ise_block e.ise_index).fn_blocks = SOME bb ==>
+  ?tb. lookup_block l e.ise_final.fn_blocks = SOME tb /\
+    LENGTH tb.bb_instructions = LENGTH bb.bb_instructions
+Proof
+  strip_tac >>
+  fs[functionInlinerActivationTheory.inline_site_edit_valid_def] >>
+  drule_all functionInlinerPhiTransportTheory.inline_one_site_lookup_fields >>
+  strip_tac >> qexists `tb` >> simp[] >>
+  qpat_x_assum `MAP inline_inst_fields _ = _`
+    (mp_tac o AP_TERM ``LENGTH : (opcode # operand list # string list) list -> num``) >>
+  simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem inline_keep_boundary_produce:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  e.ise_index < LENGTH source_bb.bb_instructions /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  lookup_block l e.ise_caller.fn_blocks = SOME cb /\
+  j <= LENGTH cb.bb_instructions ==>
+  inline_parameter_boundary (InlineKeep e) e.ise_caller l j e.ise_final
+    (FST (inline_keep_boundary e l j)) (SND (inline_keep_boundary e l j))
+Proof
+  strip_tac >>
+  simp[inline_parameter_boundary_def] >>
+  Cases_on `l = e.ise_block` >> gvs[inline_keep_boundary_def]
+      >- (Cases_on `e.ise_index < j` >> gvs[]
+          >- (drule_all functionInlinerSiteLayoutTheory.inline_call_site_lookup_return >>
+              disch_then (qspecl_then [`e.ise_prefix`, `e.ise_index`, `e.ise_callee`] assume_tac) >>
+              drule_all inline_edit_boundary_extent >> strip_tac >>
+              qexists `tb` >> simp[])
+          >> drule functionInlinerSiteLayoutTheory.inline_call_site_lookup_call >>
+          disch_then (qspecl_then [`e.ise_return`, `e.ise_prefix`, `e.ise_index`, `e.ise_callee`] assume_tac) >>
+          drule_all inline_edit_boundary_extent >> strip_tac >> qexists `tb` >> simp[])
+      >> drule_all functionInlinerSiteLayoutTheory.inline_call_site_lookup_other >>
+      disch_then (qspecl_then [`e.ise_return`, `e.ise_prefix`, `e.ise_index`, `e.ise_callee`] assume_tac) >>
+      drule_all inline_edit_boundary_extent >> strip_tac >> qexists `tb` >> simp[]
+QED
+
+Theorem inline_cell_prefix_length_bound:
+  j <= LENGTH cb.bb_instructions ==>
+  LENGTH (FST (inline_cell_prefix e bb cb j)) <=
+    LENGTH (FST (inline_cell_prefix e bb cb (LENGTH cb.bb_instructions)))
+Proof
+  strip_tac >>
+  `cb.bb_instructions = TAKE j cb.bb_instructions ++ DROP j cb.bb_instructions`
+    by simp[] >>
+  simp[inline_cell_prefix_def] >>
+  qpat_x_assum `cb.bb_instructions = _ ++ _` (fn th =>
+    GEN_REWRITE_TAC (RAND_CONV o ONCE_DEPTH_CONV) empty_rewrites [th]) >>
+  pure_rewrite_tac[MAP_APPEND,
+    functionInlinerSiteLayoutTheory.rewrite_inline_insts_append] >> simp[]
+QED
+
+Theorem inline_enter_boundary_produce:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  lookup_block l e.ise_callee.fn_blocks = SOME cb /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  ~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+  STRCAT e.ise_prefix l <> e.ise_return /\
+  j <= LENGTH cb.bb_instructions ==>
+  inline_parameter_boundary (InlineEnter e) e.ise_callee l j e.ise_final
+    (STRCAT e.ise_prefix l) (LENGTH (FST (inline_cell_prefix e bb cb j)))
+Proof
+  strip_tac >> simp[inline_parameter_boundary_def] >>
+  drule_all functionInlinerSiteLayoutTheory.inline_call_site_lookup_clone >>
+  disch_then (qspec_then `e.ise_index` assume_tac) >>
+  drule_all inline_edit_boundary_extent >> strip_tac >>
+  qexists `tb` >> simp[] >>
+  `LENGTH (FST (inline_cell_prefix e bb cb j)) <=
+    LENGTH (FST (inline_cell_prefix e bb cb (LENGTH cb.bb_instructions)))`
+    by (irule inline_cell_prefix_length_bound >> simp[]) >>
+  gvs[inline_cell_prefix_def, rewrite_inline_block_def, clone_basic_block_def,
+       pairTheory.UNCURRY]
+QED
+
+(* Empty intervals use lookup and extent, never a fabricated first cell. *)
+Theorem inline_keep_empty_selected_boundary:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  e.ise_index < LENGTH bb.bb_instructions /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) ==>
+  inline_parameter_interval e.ise_caller e.ise_block e.ise_index 0 /\
+  inline_parameter_boundary (InlineKeep e) e.ise_caller e.ise_block
+    e.ise_index e.ise_final e.ise_block e.ise_index
+Proof
+  strip_tac >> conj_tac >- simp[inline_parameter_interval_def] >>
+  `inline_parameter_boundary (InlineKeep e) e.ise_caller e.ise_block
+    e.ise_index e.ise_final
+    (FST (inline_keep_boundary e e.ise_block e.ise_index))
+    (SND (inline_keep_boundary e e.ise_block e.ise_index))` by
+    (irule inline_keep_boundary_produce >> simp[]) >>
+  gvs[inline_keep_boundary_def]
+QED
+
+Theorem inline_keep_empty_end_boundary:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  e.ise_index < LENGTH source_bb.bb_instructions /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  lookup_block l e.ise_caller.fn_blocks = SOME cb ==>
+  inline_parameter_interval e.ise_caller l (LENGTH cb.bb_instructions) 0 /\
+  inline_parameter_boundary (InlineKeep e) e.ise_caller l
+    (LENGTH cb.bb_instructions) e.ise_final
+    (FST (inline_keep_boundary e l (LENGTH cb.bb_instructions)))
+    (SND (inline_keep_boundary e l (LENGTH cb.bb_instructions)))
+Proof
+  strip_tac >> conj_tac >- simp[inline_parameter_interval_def] >>
+  irule inline_keep_boundary_produce >> simp[]
+QED
