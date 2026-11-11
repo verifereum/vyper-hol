@@ -3073,6 +3073,8 @@ Theorem body_intcall_guard_apply:
     push_function (NONE,fn) call_env cx s6 = (INL cxf,t6) ==> (!tops env ret_ty env' st res st'.
       type_stmts env ret_ty ss = SOME env' /\
       supported_program tops /\ get_module_code cxf NONE = SOME tops /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+        (int_calls_stmts ss) /\
       runtime_storage_consistent env cxf st /\ functions_well_typed cxf /\
       call_evaluation_safe cxf (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
@@ -3085,6 +3087,8 @@ Theorem body_intcall_guard_apply:
   push_function (NONE,fn) call_env cx lock_st = (INL cxf,body_st) ==> (!tops env ret_ty env' st res st'.
       type_stmts env ret_ty ss = SOME env' /\
       supported_program tops /\ get_module_code cxf NONE = SOME tops /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+        (int_calls_stmts ss) /\
       runtime_storage_consistent env cxf st /\ functions_well_typed cxf /\
       call_evaluation_safe cxf (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
