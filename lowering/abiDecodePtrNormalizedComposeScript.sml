@@ -5,6 +5,44 @@ Ancestors
   abiDecodePtrRejectChecks abiDecoderVarSequence
   bodyPtrBopScalarSeq exprLoweringProps emitHelperProps fragExec instIdxIndep
   compileEnv venomState venomExecSemantics list arithmetic
+  abiBuiltinDecodeHeader abiBuiltinLengthGuard abiBuiltinBoundTests
+  context emitHelper venomInst rich_list loweringHalt
+
+Theorem abi_decode_header_reentry_code:
+  abi_builtin_decode_header data mn mx sa = (inputs,sh) ==>
+  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts sa sh)
+Proof
+  Cases_on `mn = mx` >>
+  simp[abi_builtin_decode_header_def, abi_builtin_length_guard_def,
+    abi_builtin_interval_guard_def, abi_builtin_eq_guard_def, abi_builtin_bound_test_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, abi_decoder_reentry_opcode_def]
+QED
+
+Theorem abi_decode_setup_code:
+  abi_builtin_decode_header data mn mx sa = (inputs,sh) /\
+  compile_alloc_buffer outsz sh = (buf,ready) ==>
+  inst_extends sa ready /\
+  EVERY (\i. ~is_terminator i.inst_opcode /\ abi_decoder_reentry_opcode i.inst_opcode)
+    (emitted_insts sa ready)
+Proof
+  strip_tac >>
+  drule abi_builtin_decode_header_shape >> strip_tac >>
+  drule abi_decode_header_reentry_code >> strip_tac >>
+  drule compile_alloc_buffer_extends >> strip_tac >>
+  drule compile_alloc_buffer_insts >> strip_tac >>
+  `inst_extends sh ready` by simp[inst_extends_def, emitted_insts_def, DROP_LENGTH_APPEND] >>
+  `inst_extends sa ready` by
+    (irule inst_extends_trans >> qexists_tac `sh` >> simp[]) >>
+  `emitted_insts sa ready = emitted_insts sa sh ++ emitted_insts sh ready` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  fs[EVERY_CONJ] >>
+  simp[emitted_insts_def, DROP_LENGTH_APPEND, mk_inst_def,
+    abi_decoder_reentry_opcode_def, is_terminator_def]
+QED
 
 Theorem abi_decode_setup_success_sequence:
   run_inst_seq (emitted_insts sa ready) (abi_decoder_prune_vars sa.cs_next_var s) =
