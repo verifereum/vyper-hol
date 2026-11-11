@@ -216,6 +216,7 @@ Theorem packaged_internal_body_expr_inv:
     (package_internal_fn tops use_trans nkeys is_ctor imm_size
       (mut,nr,rr,name,args,dflts,ret,ss)) =
     (lbl,ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len,ss',rt) /\
+  (is_ctor <=> cx.in_deploy) /\
   compile_internal_prologue ce params has_rb rt st0 = ((ce2,pc),st1) ==>
   expr_sim_inv (ce2 with ce_alloca_locals := T)
     (cx with stk updated_by CONS (NONE,name)) env_body (st with scopes := [sc])
@@ -254,7 +255,7 @@ Proof
   TRY (irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
        qexistsl [`caller`, `env`] >> simp[] >> NO_TAC) >>
   qpat_x_assum `bare_globals_layout _ _ _ _ _ _` mp_tac >>
-  fs[bare_globals_layout_def]
+  fs[bare_globals_layout_def] >> rpt strip_tac >> fs[]
 QED
 
 Theorem internal_prologue_locals_declared:
