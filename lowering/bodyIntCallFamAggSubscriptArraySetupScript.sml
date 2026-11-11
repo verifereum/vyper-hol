@@ -4,6 +4,18 @@ Ancestors
   exprSimSubscriptArrayEndpoint exprLoweringProps fragExec compileEnv
   exprSimHypsDefs placeTypingProps
 
+Theorem array_subscript_grows:
+  compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader sa = (dst,sb) /\
+  (!op st. ci_mono st (SND (loader op st))) ==>
+  cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_id <= sb.cs_next_id
+Proof
+  strip_tac >>
+  `sb = SND (compile_array_subscript base_op idx_op dyn cnt ws esz sgn loader sa)` by simp[] >>
+  pop_assum SUBST1_TAC >> rewrite_tac[GSYM ci_mono_def] >>
+  irule ci_mono_compile_array_subscript >> simp[]
+QED
+
 Theorem intcall_array_compile_cuts:
   compile_expr ce ty obj sa = (bvv,sm) /\
   lower_value compile_expr ce ity idx sm = (iop,sc) /\

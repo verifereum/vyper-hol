@@ -102,6 +102,12 @@ Proof
   >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, next_gas_reading_def,
           AllCaseEqs(), evaluation_state_component_equality]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def, lift_option_type_def] >>
+      simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+      imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]) >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
   imp_res_tac lift_sum_state >> gvs[] >>

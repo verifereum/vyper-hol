@@ -5,6 +5,7 @@ Ancestors
   bodyIntCallFamAggSubscriptArraySuffix exprSimSubscriptArraySuffix
   exprSimSubscriptArrayEndpoint exprSimSubscriptArraySource exprSimSource
   bodyIntCallJointContract exprLoweringProps exprSimHypsDefs loweringPosts
+  bodyIntCallFamAggSubscriptArraySetup
 
 Theorem intcall_framed_array_child_suffix:
   ((?ty. vv_location (FST (compile_expr ce ty obj sa)) = SOME LocCode) \/
