@@ -217,7 +217,51 @@ Proof
      reverse conj_tac >- metis_tac[] >>
      gen_tac >> Cases_on `op = Var lv` >>
      simp[] >> Cases_on `op = Lit (n2w C)` >> gvs[]) >>
-  FAIL_TAC "endpoint"
+  `run_inst_seq_mem_ok [i1;i2;i3] s` by
+    (simp[fragExecMemTheory.run_inst_seq_mem_ok_def,
+      unitTransformDefsTheory.inst_mem_below_frontier_def,
+      memSafeRunTheory.inst_dload_in_section_def,
+      Abbr `i1`, Abbr `i2`, Abbr `i3`, venomInstTheory.mk_inst_def,
+      contextCodegenRelTheory.source_memory_read_ranges_def,
+      codegenRelTheory.source_memory_write_ranges_def,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+      venomExecSemanticsTheory.exec_pure1_def, venomExecSemanticsTheory.exec_pure2_def,
+      venomStateTheory.eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
+      wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
+      venomExecSemanticsTheory.bool_to_word_def, arithmeticTheory.NOT_LESS,
+      Abbr `u`]) >>
+  qpat_assum `fn_has_code _ _ _`
+    (strip_assume_tac o REWRITE_RULE [fragExecTheory.fn_has_code_def]) >>
+  `isPREFIX [i1;i2;i3] (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[rich_listTheory.IS_PREFIX_APPEND] >>
+     pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC] >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK (u with vs_inst_idx := s.vs_inst_idx + 3),Gf,tnf)` by
+    (`lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by gvs[] >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+        [i1;i2;i3]` by
+       simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, venomInstTheory.mk_inst_def,
+         venomInstTheory.is_terminator_def] >>
+     drule_all run_inst_seq_gas_origin_ptr_path >>
+     simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, venomInstTheory.mk_inst_def]) >>
+  qexistsl [`u with vs_inst_idx := s.vs_inst_idx + 3`, `Gf`, `tnf`] >>
+  simp[Abbr `u`, Abbr `Gf`, Abbr `tnf`, venomStateTheory.update_var_def] >>
+  `!p. not_fresh_at a p ==> p <> v1 /\ p <> v2` by
+    (gvs[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `v1`, Abbr `v2`] >>
+     metis_tac[DECIDE ``~(n < n) /\ ~(n < n + 1)``]) >>
+  simp[typed_copy_state_frame_def, typed_copy_frame_def,
+    venomStateTheory.lookup_var_def, venomStateTheory.eval_operand_def,
+    finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_DRESTRICT,
+    op_taint_def, SF CONJ_ss] >>
+  conj_tac >- (qpat_x_assum `s.vs_current_bb = _` (SUBST1_TAC o SYM) >>
+    qpat_x_assum `s.vs_inst_idx = _` (SUBST1_TAC o SYM) >> simp[]) >>
+  rpt strip_tac >> gvs[ptr_covers_def, venomStateTheory.eval_operand_def,
+    venomStateTheory.lookup_var_def,
+    op_taint_def, finite_mapTheory.FLOOKUP_UPDATE,
+    finite_mapTheory.FLOOKUP_DRESTRICT]
 
 QED
 
