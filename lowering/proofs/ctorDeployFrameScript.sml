@@ -89,6 +89,22 @@ Proof
   gvs[frame_outcome_def, shadow_root_def, shadow_root_contexts_def]
 QED
 
+(* A pending deletion erases any earlier update of the deleted account. *)
+Theorem process_deletions_update_mem[local]:
+  !dels accs a x.
+    MEM a dels ==>
+    process_deletions dels (update_account a x accs) =
+    process_deletions dels accs
+Proof
+  Induct >> fs[vfmExecutionTheory.process_deletions_def, update_account_def] >>
+  rpt gen_tac >> Cases_on `h = a` >> fs[combinTheory.UPDATE_EQ] >>
+  strip_tac >>
+  `(h =+ empty_account_state) ((a =+ x) accs) =
+   (a =+ x) ((h =+ empty_account_state) accs)` by
+    (irule combinTheory.UPDATE_COMMUTES >> simp[]) >>
+  simp[]
+QED
+
 Theorem deploy_venom_frame:
   !tops runtime_bc deploy_bc am tx es src res.
     deploy_state_rel tops deploy_bc am tx es /\
@@ -115,7 +131,29 @@ Proof
   >~ [`Halt ss`]
   >- (drule_all deploy_frame_halt_mid >> strip_tac >>
       Cases_on `src`
-      >- (PairCases_on `x` >> gvs[deploy_venom_result_rel_def] >>
+      >- (PairCases_on `x` >>
+          Cases_on `ALOOKUP x0.sources tx.target = NONE`
+          >- (gvs[deploy_venom_result_rel_def] >>
+              qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
+                deploy_frame_complete >>
+              impl_tac >- simp[] >>
+              strip_tac >> gvs[]
+              >- (disj1_tac >> irule creation_resource_starved_single_transfer >>
+                  metis_tac[]) >>
+              disj2_tac >> simp[deploy_result_rel_def] >>
+              qexists_tac `ss.vs_logs` >>
+              simp[lookup_account_def, update_account_def,
+                   combinTheory.APPLY_UPDATE_THM] >>
+              conj_tac
+              >- (irule frame_outcome_single_transfer_none >> metis_tac[]) >>
+              `process_deletions ss.vs_pending_deletions
+                 (update_account tx.target
+                    (lookup_account tx.target ss.vs_accounts with code := [])
+                    ss.vs_accounts) =
+               process_deletions ss.vs_pending_deletions ss.vs_accounts` by
+                (irule process_deletions_update_mem >> simp[]) >>
+              fs[update_account_def, lookup_account_def]) >>
+          gvs[deploy_venom_result_rel_def] >>
           qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
             deploy_frame_complete >>
           impl_tac >- (Cases_on `runtime_bc` >> gvs[]) >>

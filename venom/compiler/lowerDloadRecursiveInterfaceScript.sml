@@ -5891,6 +5891,29 @@ val ld_recursive_combined_singleton_choice =
   in list_mk_abs(args,list_mk_conj [current,saved,
     list_mk_exists(ws,mk_conj(b,list_mk_disj rs))]) end;
 
+(* Opcode classification for a single non-macro instruction; kept apart so
+   the 200-way case split runs without the proof's assumptions. *)
+Theorem ld_singleton_opcode_class[local]:
+  !op. op <> PHI /\ op <> DALLOCA /\ op <> SETFMP /\ op <> GETFMP /\
+       op <> FMP_PARAM /\ op <> MEMTOP /\ op <> DLOADBYTES /\ op <> DLOAD /\
+       op <> INVOKE /\ ~is_terminator op ==>
+       MEM op
+         [ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp; ADDMOD; MULMOD;
+          EQ; LT; GT; SLT; SGT; ISZERO; AND; OR; XOR; NOT; SHL; SHR; SAR;
+          SIGNEXTEND; BYTE; MLOAD; MSTORE; MSTORE8; MCOPY; SLOAD; SSTORE;
+          TLOAD; TSTORE; ILOAD; ISTORE; PARAM; RETPC_PARAM; ASSIGN; NOP;
+          INITIAL_FMP; BUMP; CALLER; CALLVALUE; CALLDATALOAD; CALLDATASIZE;
+          CALLDATACOPY; ADDRESS; ORIGIN; GASPRICE; GAS; GASLIMIT; COINBASE;
+          TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
+          BLOCKHASH; BASEFEE; CODESIZE; CODECOPY; EXTCODESIZE; EXTCODEHASH;
+          EXTCODECOPY; RETURNDATASIZE; RETURNDATACOPY; BLOBHASH; BLOBBASEFEE;
+          SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET] \/
+       MEM op [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] \/
+       op = ALLOCA
+Proof
+  Cases >> simp[is_terminator_def]
+QED
+
 Theorem ld_recursive_combined_singleton_choice_intro[local]:
   o1_ctx_shape CS /\ fmp_free_ctx CS /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -5951,7 +5974,10 @@ Proof
      `i.inst_opcode <> FMP_PARAM`, `i.inst_opcode <> GETFMP`,
      `i.inst_opcode <> SETFMP`, `i.inst_opcode <> DALLOCA`, `i.inst_opcode <> PHI`] >>
   POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
-  Cases_on `i.inst_opcode` >> gvs[is_terminator_def]
+  qpat_x_assum `j = i` SUBST_ALL_TAC >>
+  qspec_then `i.inst_opcode` mp_tac ld_singleton_opcode_class >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> asm_rewrite_tac[]
 QED
 
 Theorem ld_singleton_reassociate[local]:

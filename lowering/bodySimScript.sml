@@ -44,12 +44,15 @@ Ancestors
 (* ===== The frame ===== *)
 
 (* cenv agrees with every function's build_compile_env for tops on the
-   module-level fields no declaration changes: the module (the main one),
+   module-level fields no declaration changes: the module (the main one)
+   and the module list the overlap analysis reads, function mutabilities,
    module-variable types and locations (immutables included), flag
    metadata, custom-error parameters and method ids (build_compile_env_module_pins, bodySimEntry). *)
 Definition cenv_module_pins_def:
   cenv_module_pins tops cenv <=>
     cenv.ce_module = NONE /\
+    cenv.ce_modules = [(NONE, tops)] /\
+    cenv.ce_func_mutability = build_func_mutability tops /\
     cenv.ce_module_var_type = build_var_type_map tops /\
     cenv.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
@@ -129,6 +132,22 @@ Theorem body_inv_immutable_section_layout:
 Proof
   rw[body_inv_def] >> irule cenv_module_pins_immutable_section_layout >>
   simp[]
+QED
+
+(* The compile env's modules are the source's, the main module alone, whose
+   top-level names are distinct: as bare_globals_layout asks. *)
+Theorem body_inv_modules_aligned:
+  !tops ctx cenv cx.
+    body_inv tops ctx cenv cx ==>
+    (!src. ALOOKUP cenv.ce_modules src = get_module_code cx src) /\
+    (!src ts. get_module_code cx src = SOME ts ==>
+       ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
+    ALL_DISTINCT (MAP FST cenv.ce_modules)
+Proof
+  rw[body_inv_def, cenv_module_pins_def]
+  >- (Cases_on `src` >> simp[] >>
+      Cases_on `get_module_code cx (SOME x)` >> gvs[] >> res_tac >> gvs[]) >>
+  res_tac >> gvs[]
 QED
 
 (* The compile env binds no local the typing does not know: every name
@@ -295,6 +314,7 @@ Definition body_stmt_ok_def:
   body_stmt_ok cx s <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+      body_stmt_safe tops s /\
       (!target. supported_stmt_expr_exists
          (expr_abi_decode_target_root target) s ==>
          occurs_abi_decode_target target tops) /\
@@ -311,6 +331,7 @@ Definition body_stmts_ok_def:
   body_stmts_ok cx ss <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+      body_stmts_safe tops ss /\
       (!target. supported_stmts_expr_exists
          (expr_abi_decode_target_root target) ss ==>
          occurs_abi_decode_target target tops) /\

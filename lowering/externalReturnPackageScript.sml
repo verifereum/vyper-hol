@@ -187,16 +187,6 @@ Proof
   drule_all return_fn_alloc_size >> simp[]
 QED
 
-Theorem return_supported_no_getters[local]:
-  supported_program tops ==>
-  (!nr mut ty slot. ~MEM (VariableDecl (Public nr) mut name ty slot) tops) /\
-  (!nr tr kt vt slot. ~MEM (HashMapDecl (Public nr) tr name kt vt slot) tops)
-Proof
-  strip_tac >> conj_tac >> rpt strip_tac >>
-  drule_all supported_program_declaration >>
-  simp[supported_declaration_header_def]
-QED
-
 Theorem return_selected_lookup_size:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
@@ -205,16 +195,11 @@ Theorem return_selected_lookup_size:
   type_memory_bytes cenv ret < 2 ** 64
 Proof
   strip_tac >>
-  `(!nr mut ty slot. ~MEM (VariableDecl (Public nr) mut name ty slot) tops) /\
-   (!nr tr kt vt slot. ~MEM (HashMapDecl (Public nr) tr name kt vt slot) tops)` by
-    metis_tac[return_supported_no_getters] >>
-  Cases_on `name = "__default__"`
-  >- (gvs[] >> drule_all lookup_function_default >>
-      disch_then (qspec_then `NONE` mp_tac) >>
-      Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
-      Cases_on `r1` >> simp[] >> PairCases_on `x` >> simp[] >> strip_tac >> gvs[] >>
-      irule (SRULE [] return_runtime_function_size) >> metis_tac[]) >>
-  drule_all lookup_function_external_mem >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    (irule supported_headers_module_consts_env >>
+     qexists_tac `tops` >>
+     gvs[supported_program_def, supported_declaration_headers_def]) >>
+  drule lookup_function_external_classified >> simp[] >> strip_tac >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
   irule (SRULE [] return_runtime_function_size) >> metis_tac[]
 QED

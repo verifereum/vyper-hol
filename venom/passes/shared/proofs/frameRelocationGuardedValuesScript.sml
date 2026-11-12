@@ -21,6 +21,23 @@ Proof
   simp[word_agree_except_bits, fcpTheory.CART_EQ]
 QED
 
+Theorem word_agree_except_selector_mul:
+  word_agree_except m (x:bytes32) (x':bytes32) /\ word_agree_except n y y' /\
+  (m = {} \/ (n = {} /\ (y = 0w \/ y = 1w))) /\
+  (n = {} \/ (m = {} /\ (x = 0w \/ x = 1w))) ==>
+  word_agree_except
+    ((if x = 1w then n else {}) UNION (if y = 1w then m else {}))
+    (x * y) (x' * y')
+Proof
+  strip_tac >>
+  `m = {} ==> x = x'` by
+    (strip_tac >> irule word_agree_except_empty >> gvs[]) >>
+  `n = {} ==> y = y'` by
+    (strip_tac >> irule word_agree_except_empty >> gvs[]) >>
+  Cases_on `m = {}` >> Cases_on `n = {}` >>
+  gvs[wordsTheory.WORD_MULT_CLAUSES, word_agree_except_def]
+QED
+
 Theorem guarded_ptr_output:
   (~Opaque v ==> ~Opaque w) /\ guarded_ptr Opaque L rv w x y ==>
   guarded_ptr Opaque L (origin_set rv [v] (FLOOKUP rv w)) v x y
