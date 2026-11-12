@@ -3,7 +3,7 @@ Theory appendDynamicPrefixPtr
 Ancestors appendDynamicPointerAddPtr appendDynamicHeaderStorePtr
   appendDynamicPurePtr typedCopyAmbientFramePtr fragExecPtr
   valueEncodingProps bodyPtrDefs loweringStateRelDefs contextCodegenRel
-  compileEnv context emitHelper venomState venomInst words finite_map
+  compileEnv context emitHelper venomState venomInst words finite_map fragGasSeqPtr
   abiDecodeStaticProps emitHelperProps exprLoweringProps list rich_list
 
 Theorem dynamic_emit_op_fields[local]:
@@ -72,7 +72,25 @@ Proof
   simp[] >> metis_tac[cs_extends_trans]
 QED
 
-Theorem append_dynamic_prefix_ptr_conditional:
+Theorem dynamic_inst_seq_advanced_cons[local]:
+  !v s i PG G H tn tm D lo ctx fn code Gf tf.
+    v.vs_inst_idx = SUC s.vs_inst_idx /\
+    step_inst_base i s = OK (v with vs_inst_idx := s.vs_inst_idx) /\
+    step_prov PG G i (v with vs_inst_idx := s.vs_inst_idx) = H /\
+    step_taint i s (v with vs_inst_idx := s.vs_inst_idx) tn = tm /\
+    ptr_inst_ok D lo 0 ctx fn G tn i s /\
+    inst_seq_ptr D lo ctx fn PG H tm code v Gf tf ==>
+    inst_seq_ptr D lo ctx fn PG G tn (i::code) s Gf tf
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `((v with vs_inst_idx := s.vs_inst_idx) with
+      vs_inst_idx := SUC s.vs_inst_idx) = v` by
+    (qpat_assum `v.vs_inst_idx = _` (fn th => rewrite_tac[GSYM th]) >> simp[NoAsms]) >>
+  pure_once_rewrite_tac [inst_seq_ptr_def] >>
+  asm_rewrite_tac [] >> simp[]
+QED
+
+Theorem append_dynamic_prefix_core:
   !cx ctx PG R G tn s sa s1 s2 s3 s4 s5 s6 s7 sb
     src dst len gt ok sd dd count a b l sn dn esz.
     emit_op MLOAD [Var src] sa = (Var len,s1) /\
@@ -94,6 +112,8 @@ Theorem append_dynamic_prefix_ptr_conditional:
     w2n a+32 < dimword(:256) /\ w2n b+32 < dimword(:256) /\
     (w2n a+32+sn*esz <= w2n b \/ w2n b+32+dn*esz <= w2n a) ==>
     ?Gf tnf sf.
+      (!D ctx fn. ~ctx_has_dalloca ctx ==>
+        inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf) /\
       frag_exec_ptr cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
@@ -121,7 +141,7 @@ Theorem append_dynamic_prefix_ptr_conditional:
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all append_dynamic_prefix_shape >> strip_tac >>
-  qpat_x_assum `emitted_insts _ _ = _` kall_tac >>
+
   qpat_x_assum `_ \/ _` strip_assume_tac >>
   `ptr_covers G tn src s 32` by
     (gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
@@ -148,6 +168,8 @@ Proof
   `(1w:bytes32) <> 0w` by simp[] >>
   drule_all emit_dynamic_assert_true_ptr >>
   disch_then (qspecl_then [`G3`, `cx`, `ctx`, `PG`, `R`] assume_tac) >>
+  drule_all dynamic_assert_true_step_ptr >>
+  disch_then (qspecl_then [`G3`, `s3.cs_next_id`, `PG`] strip_assume_tac) >>
   qabbrev_tac `v4 = v3 with vs_inst_idx := SUC v3.vs_inst_idx` >>
   `!p. not_fresh_at sa p ==> not_fresh_at s1 p /\
     not_fresh_at s2 p /\ not_fresh_at s3 p /\ not_fresh_at s4 p /\
@@ -196,7 +218,40 @@ Proof
   disch_then (qspec_then `G7` mp_tac) >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G8` (qx_choose_then `tn8` (qx_choose_then `v8` strip_assume_tac)))) >>
-  qexistsl_tac [`G8`, `tn8`, `v8`] >> (conj_tac >-
+  qexistsl_tac [`G8`, `tn8`, `v8`] >>
+  (conj_tac >-
+    (rpt strip_tac >>
+     qpat_x_assum `emitted_insts _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+     irule dynamic_inst_seq_advanced_cons >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`G1`, `tn1`, `v1`] >> asm_rewrite_tac [] >>
+     irule dynamic_inst_seq_advanced_cons >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`G2`, `tn2`, `v2`] >> asm_rewrite_tac [] >>
+     irule dynamic_inst_seq_advanced_cons >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`G3`, `tn3`, `v3`] >> asm_rewrite_tac [] >>
+     `v4.vs_inst_idx = SUC v3.vs_inst_idx /\
+      (v4 with vs_inst_idx := v3.vs_inst_idx) = v3` by
+       simp[Abbr `v4`, NoAsms] >>
+     irule dynamic_inst_seq_advanced_cons >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`G3`, `tn3`, `v4`] >> asm_rewrite_tac [] >>
+     irule dynamic_inst_seq_advanced_cons >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`G3`, `tn5`, `v5`] >> asm_rewrite_tac [] >>
+     irule dynamic_inst_seq_advanced_cons >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`G6`, `tn6`, `v6`] >> asm_rewrite_tac [] >>
+     irule dynamic_inst_seq_advanced_cons >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`G7`, `tn7`, `v7`] >> asm_rewrite_tac [] >>
+     irule dynamic_inst_seq_advanced_cons >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`G8`, `tn8`, `v8`] >> asm_rewrite_tac [] >>
+     simp[inst_seq_ptr_def])) >>
+  qpat_x_assum `emitted_insts _ _ = _` kall_tac >>
+  (conj_tac >-
     (irule frag_exec_ptr_seq >>
      qpat_assum `frag_exec_ptr _ _ _ s7 sb _ _ _` (irule_at Any) >>
      simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
@@ -218,6 +273,11 @@ Proof
      irule frag_exec_ptr_seq >>
      qpat_assum `frag_exec_ptr _ _ _ s1 s2 _ _ _` (irule_at Any) >>
      simp[] >> metis_tac[])) >>
+  rpt (qpat_x_assum `step_inst_base _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `step_prov _ _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `step_taint _ _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `!D fuel ctx fn. _` kall_tac) >>
+  rpt (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|> = _` kall_tac) >>
   `not_fresh_at s7 sd /\ not_fresh_at sb sd /\ not_fresh_at sb dd` by
     (gvs[not_fresh_at_def] >> decide_tac) >>
   rename1 `emit_op MUL _ s7 = (Var bytecount,sb)` >>
@@ -240,4 +300,57 @@ Proof
      `i < w2n b \/ w2n b+32 <= i` by decide_tac >> metis_tac[])) >>
   (conj_tac >- metis_tac[]) >>
   simp[lookup_var_def] >> metis_tac[lookup_var_def]
+QED
+
+Theorem append_dynamic_prefix_ptr_conditional:
+  !cx ctx PG R G tn s sa s1 s2 s3 s4 s5 s6 s7 sb
+    src dst len gt ok sd dd count a b l sn dn esz.
+    emit_op MLOAD [Var src] sa = (Var len,s1) /\
+    emit_op GT [Var len;Lit (n2w dn)] s1 = (Var gt,s2) /\
+    emit_op ISZERO [Var gt] s2 = (Var ok,s3) /\
+    emit_void ASSERT [Var ok] s3 = ((),s4) /\
+    emit_void MSTORE [Var dst;Var len] s4 = ((),s5) /\
+    emit_op ADD [Var src;Lit 32w] s5 = (Var sd,s6) /\
+    emit_op ADD [Var dst;Lit 32w] s6 = (Var dd,s7) /\
+    emit_op MUL [Var len;Lit (n2w esz)] s7 = (Var count,sb) /\
+    not_fresh_at sa src /\ not_fresh_at sa dst /\
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    ptr_covers G tn src s (32+sn*esz) /\
+    ptr_covers G tn dst s (32+dn*esz) /\
+    mload (w2n a) s = n2w l /\
+    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+    l <= sn /\ sn <= dn /\ dn < dimword(:256) /\
+    l*esz < dimword(:256) /\
+    w2n a+32 < dimword(:256) /\ w2n b+32 < dimword(:256) /\
+    (w2n a+32+sn*esz <= w2n b \/ w2n b+32+dn*esz <= w2n a) ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var sd sf = SOME (n2w (w2n a+32)) /\
+      lookup_var dd sf = SOME (n2w (w2n b+32)) /\
+      ptr_covers Gf tnf sd sf (l*esz) /\
+      ptr_covers Gf tnf dd sf (l*esz) /\
+      lookup_var count sf = SOME (n2w (l*esz)) /\
+      op_taint tnf (Var count) = {} /\
+      (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
+        mem_word_at (w2n b) m = n2w l) /\
+      mem_bytes_at (w2n a) (32+sn*esz) sf.vs_memory =
+        mem_bytes_at (w2n a) (32+sn*esz) s.vs_memory /\
+      (!i. i < w2n b \/ w2n b+32 <= i ==>
+        mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+        (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+      cs_extends sa sb /\ not_fresh_at sb sd /\ not_fresh_at sb dd /\
+      not_fresh_at sb count /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all append_dynamic_prefix_core >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> asm_rewrite_tac []
 QED
