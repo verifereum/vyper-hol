@@ -2,7 +2,8 @@
  * deployment unit's result gives the real creation frame's result
  * (shadow_root_run_halt/_exception and deploy_frame_complete).
  * TOP-LEVEL: deploy_venom_frame (a piece of e2e_deploy_correctness; admitted until proved),
- * deploy_frame_gas_sufficient (S7g-d, a piece of e2e_deploy_gas_sufficient; a planned admission).
+ * deploy_frame_gas_sufficient (S7g-d, a piece of e2e_deploy_gas_sufficient), and its
+ * program-free end, deploy_frame_gas_tail.
  *)
 Theory ctorDeployFrame
 Ancestors
@@ -196,6 +197,93 @@ Proof
   strip_tac >> drule shadow_root_run_exception >> strip_tac >> gvs[]
 QED
 
+(* The creation frame's end, from its root-shadowed run: given the per-
+   instruction surplus with the largest deposit's gas in reserve, the frame
+   runs out of gas only when the code it deposits is oversized.  Nothing
+   here names the program or the unit, so any codegen that gives the shadowed
+   run's relation to the Venom result (codegen_correct or an optimised twin)
+   can use it. *)
+Theorem deploy_frame_gas_tail:
+  !es ctxt rb tx tops runtime_bc src res r es'.
+    es.contexts = [(ctxt, rb)] /\ ctxt.msgParams.outputTo = Code tx.target /\
+    wf_state es /\
+    (!s op r s'. frame_inst_at (shadow_root es) s op /\ step_inst op s = (r, s') /\
+       LENGTH s'.contexts = LENGTH s.contexts ==>
+       r <> INR (SOME OutOfGas) /\
+       code_deposit_cost * max_code_size <= frame_gas_left s') /\
+    run_call (shadow_root es) = SOME (r, es') /\
+    (frame_resource_starved (shadow_root es) r es' \/
+     venom_frame_rel (shadow_root es) r es' res) /\
+    ~deploy_source_exempt tops src /\ deploy_venom_result_rel tops runtime_bc tx src res
+    ==>
+    ?r es'. run_call es = SOME (r, es') /\
+      (r = INR (SOME OutOfGas) ==> max_code_size < LENGTH runtime_bc + imm_len tops)
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `wf_state (shadow_root es)` by simp[shadow_root_wf_state] >>
+  qabbrev_tac `sh = shadow_root es` >>
+  `sh.contexts = [(ctxt with msgParams updated_by
+                     (\mp. mp with outputTo := Memory <| offset := 0; size := 0 |>),
+                   rb)]` by
+    simp[Abbr `sh`, shadow_root_def, shadow_root_contexts_def] >>
+  qspecl_then [`sh`, `ctxt with msgParams updated_by
+                     (\mp. mp with outputTo := Memory <| offset := 0; size := 0 |>)`,
+               `rb`, `r`, `es'`] mp_tac run_call_root_ends_at_inst >>
+  impl_tac >- simp[] >> strip_tac >>
+  `r <> INR (SOME OutOfGas)` by
+    (strip_tac >> gvs[frame_inst_raises_def] >>
+     first_x_assum drule >> disch_then drule >> gvs[frame_inst_at_def]) >>
+  `run sh = SOME (r, es')` by
+    (`run_call sh = run sh` by (irule run_call_eq_run_single_context >> simp[]) >>
+     gvs[]) >>
+  `run_call es = run es` by (irule run_call_eq_run_single_context >> simp[]) >>
+  `!exc. r = INR (SOME exc) ==>
+         ?r es'. run_call es = SOME (r, es') /\
+                 (r = INR (SOME OutOfGas) ==>
+                  max_code_size < LENGTH runtime_bc + imm_len tops)` by
+    (rpt strip_tac >> qpat_x_assum `r = _` SUBST_ALL_TAC >>
+     qspecl_then [`es`, `exc`, `es'`,
+                  `max_code_size < LENGTH runtime_bc + imm_len tops`] mp_tac
+       (Q.GENL [`es`, `exc`, `ghost`, `P`] deploy_frame_exc_end) >>
+     impl_tac
+     >- (rpt conj_tac
+         >- (qpat_x_assum `run sh = _` mp_tac >> simp[Abbr `sh`])
+         >- (qpat_x_assum `INR (SOME exc) <> _` mp_tac >> simp[]) >>
+         first_assum ACCEPT_TAC) >>
+     simp[]) >>
+  (* a starved run ends in an exception *)
+  Cases_on `frame_resource_starved sh r es'`
+  >- (`?exc. r = INR (SOME exc)` by gvs[frame_resource_starved_def, frame_outcome_def] >>
+      qpat_x_assum `!exc. r = _ ==> _` (drule_then ACCEPT_TAC)) >>
+  drule deploy_venom_result_rel_terminates >> strip_tac >>
+  Cases_on `res` >> gvs[terminates_def]
+  >~ [`Halt ss`]
+  >- (gvs[venom_frame_rel_def, frame_outcome_def] >>
+      Cases_on `src` >> gvs[deploy_source_exempt_def]
+      >- (PairCases_on `x` >> gvs[deploy_venom_result_rel_def] >>
+          drule immutables_section_rel_length >> strip_tac >>
+          rename1 `es'.contexts = [(c1, rb1)]` >>
+          `LENGTH s.contexts = 1` by
+            (qpat_x_assum `frame_inst_at _ s op` mp_tac >>
+             qpat_x_assum `sh.contexts = _` mp_tac >>
+             simp[frame_inst_at_def] >> rpt strip_tac >> gvs[]) >>
+          `code_deposit_cost * max_code_size <= frame_gas_left es'` by
+            (qpat_x_assum `!s op r s'. frame_inst_at sh _ _ /\ _ ==> _`
+               (qspecl_then [`s`, `op`, `INR NONE`, `es'`] mp_tac) >>
+             impl_tac >- fs[] >> simp[]) >>
+          qspecl_then [`es`, `ctxt`, `rb`, `tx.target`, `es'`, `c1`, `rb1`] mp_tac
+            (Q.GENL [`es`, `c0`, `rb0`, `target`, `es1`, `c1`, `rb1`]
+               deploy_frame_halt_deposit) >>
+          impl_tac >- fs[Abbr `sh`] >> simp[imm_len_def]) >>
+      Cases_on `y` >> gvs[deploy_venom_result_rel_def])
+  (* an aborted run ends in an exception *)
+  >~ [`Abort ab ss`]
+  >- (`?exc. r = INR (SOME exc)` by
+        (Cases_on `ab` >> gvs[venom_frame_rel_def, frame_outcome_def]) >>
+      qpat_x_assum `!exc. r = _ ==> _` (drule_then ACCEPT_TAC)) >>
+  gvs[venom_frame_rel_def]
+QED
+
 (* PLANNED ADMISSION S7g-d, sufficient gas for deployment: the deploy-side
    counterpart of codegen_gas_sufficient together with deploy_venom_frame.
    Given the constructor unit's resource bound, some gas g, independent of
@@ -292,71 +380,9 @@ Proof
   impl_tac >- fs[] >>
   disch_then (qx_choosel_then [`r`, `es'`]
                 (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
-  `sh.contexts = [(ctxt with msgParams updated_by
-                     (\mp. mp with outputTo := Memory <| offset := 0; size := 0 |>),
-                   rb)]` by
-    (qpat_x_assum `(add_frame_gas g' es).contexts = _` mp_tac >>
-     qpat_x_assum `es.contexts = _` mp_tac >>
-     simp[Abbr `sh`, shadow_root_def, shadow_root_contexts_def,
-          add_frame_gas_def] >>
-     rw[] >> simp[vfmContextTheory.context_component_equality,
-                  vfmContextTheory.message_parameters_component_equality]) >>
-  qspecl_then [`sh`, `ctxt with msgParams updated_by
-                     (\mp. mp with outputTo := Memory <| offset := 0; size := 0 |>)`,
-               `rb`, `r`, `es'`] mp_tac run_call_root_ends_at_inst >>
-  impl_tac >- simp[] >> strip_tac >>
-  `r <> INR (SOME OutOfGas)` by
-    (strip_tac >> gvs[frame_inst_raises_def] >>
-     first_x_assum drule >> disch_then drule >> gvs[frame_inst_at_def]) >>
-  `run sh = SOME (r, es')` by
-    (`run_call sh = run sh` by (irule run_call_eq_run_single_context >> simp[]) >>
-     gvs[]) >>
-  `run_call (add_frame_gas g' es) = run (add_frame_gas g' es)` by
-    (irule run_call_eq_run_single_context >> simp[]) >>
-  `!exc. r = INR (SOME exc) ==>
-         ?r es'. run_call (add_frame_gas g' es) = SOME (r, es') /\
-                 (r = INR (SOME OutOfGas) ==>
-                  max_code_size < LENGTH runtime_bc + imm_len tops)` by
-    (rpt strip_tac >> qpat_x_assum `r = _` SUBST_ALL_TAC >>
-     qspecl_then [`add_frame_gas g' es`, `exc`, `es'`,
-                  `max_code_size < LENGTH runtime_bc + imm_len tops`] mp_tac
-       (Q.GENL [`es`, `exc`, `ghost`, `P`] deploy_frame_exc_end) >>
-     impl_tac >> simp[] >> rpt conj_tac
-     >- (qpat_x_assum `run sh = _` mp_tac >> simp[Abbr `sh`])
-     >- (qpat_x_assum `INR (SOME exc) <> _` mp_tac >> simp[]) >>
-     first_assum ACCEPT_TAC) >>
-  (* a starved run ends in an exception *)
-  Cases_on `frame_resource_starved sh r es'`
-  >- (`?exc. r = INR (SOME exc)` by gvs[frame_resource_starved_def, frame_outcome_def] >>
-      qpat_x_assum `!exc. r = _ ==> _` (drule_then ACCEPT_TAC)) >>
-  drule deploy_venom_result_rel_terminates >> strip_tac >>
-  Cases_on `run_context vfuel dout.po_unit.cu_context vs` >>
-  gvs[terminates_def]
-  >~ [`Halt ss`]
-  >- (gvs[venom_frame_rel_def, frame_outcome_def] >>
-      Cases_on `src` >> gvs[deploy_source_exempt_def]
-      >- (PairCases_on `x` >> gvs[deploy_venom_result_rel_def] >>
-          drule immutables_section_rel_length >> strip_tac >>
-          rename1 `es'.contexts = [(c1, rb1)]` >>
-          `LENGTH s.contexts = 1` by
-            (qpat_x_assum `frame_inst_at _ s op` mp_tac >>
-             qpat_x_assum `(add_frame_gas g' (shadow_root es)).contexts = _`
-               mp_tac >>
-             simp[frame_inst_at_def] >> rpt strip_tac >> gvs[]) >>
-          `code_deposit_cost * max_code_size <= frame_gas_left es'` by
-            (qpat_x_assum `!s op r s'. frame_inst_at (add_frame_gas _ _) _ _ /\ _ ==> _`
-               (qspecl_then [`s`, `op`, `INR NONE`, `es'`] mp_tac) >>
-             impl_tac >- fs[] >> simp[]) >>
-          qspecl_then [`add_frame_gas g' es`, `ctxt`, `rb`, `tx.target`,
-                       `es'`, `c1`, `rb1`] mp_tac
-            (Q.GENL [`es`, `c0`, `rb0`, `target`, `es1`, `c1`, `rb1`]
-               deploy_frame_halt_deposit) >>
-          impl_tac >- fs[] >> simp[imm_len_def]) >>
-      Cases_on `y` >> gvs[deploy_venom_result_rel_def])
-  (* an aborted run ends in an exception *)
-  >~ [`Abort ab ss`]
-  >- (`?exc. r = INR (SOME exc)` by
-        (Cases_on `ab` >> gvs[venom_frame_rel_def, frame_outcome_def]) >>
-      qpat_x_assum `!exc. r = _ ==> _` (drule_then ACCEPT_TAC)) >>
-  gvs[venom_frame_rel_def]
+  qpat_x_assum `sh = add_frame_gas _ _` kall_tac >>
+  qspecl_then [`add_frame_gas g' es`, `ctxt`, `rb`, `tx`, `tops`, `runtime_bc`,
+               `src`, `run_context vfuel dout.po_unit.cu_context vs`,
+               `r`, `es'`] mp_tac deploy_frame_gas_tail >>
+  impl_tac >- (fs[Abbr `sh`] >> first_assum ACCEPT_TAC) >> simp[]
 QED
