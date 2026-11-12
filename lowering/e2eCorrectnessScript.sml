@@ -927,7 +927,7 @@ Theorem vyper_call_correct_asm_opt:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -950,7 +950,7 @@ Theorem vyper_call_correct:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
