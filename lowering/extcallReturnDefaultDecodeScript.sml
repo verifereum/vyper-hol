@@ -1,7 +1,7 @@
 (* Return-size prefix with an already allocated destination. *)
 Theory extcallReturnDefaultDecode
 Ancestors
-  extcallReturnCallerSuccess extcallReturnCallerReject extcallReturnEntryBridge
+  extcallProtFrameDecode extcallReturnCallerSuccess extcallReturnCallerReject extcallReturnEntryBridge
   extcallReturnUnifiedCounted extcallReturnCountedReject extcallReturnFrameBridge
   extcallReturnDecoderOwnership extcallReturnDecoderLabels
   abiReturnSize abiReturnPrefixTransport abiMalformedRecursiveInterface
@@ -116,6 +116,11 @@ Theorem return_prepared_counted_success:
     (abi_malformed_scratch_sites st en func) dstid live base_op dst
     B cap bs d (type_memory_bytes ce rt) s /\
   wb_frame ce es ee sa s0 s /\ local_ptrs_reserved ce sa /\
+  (!pa pk. prot pa pk ==>
+         pa + pk <= s.vs_alloca_next /\
+         mem_bytes_at pa pk s.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
+         !pid pb pz. FLOOKUP s.vs_allocas pid = SOME (pb,pz) ==>
+           loweringStateRelDefs$regions_disjoint pa pk pb pz) /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= a.cs_next_var /\ sa.cs_next_id <= dstid /\
   sa.cs_next_id <= st.cs_next_id /\
@@ -123,6 +128,8 @@ Theorem return_prepared_counted_success:
   s.vs_inst_idx = LENGTH a.cs_current_insts ==>
   ?z. gas_marked_path F ctx func s 0 (OK z) /\
     stmt_state_rel ctx func ce cx ee z /\ wb_frame ce es ee sa s0 z /\
+    (!pa pk. prot pa pk ==>
+           mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s0.vs_memory) /\
     eval_operand dst z = SOME (n2w d) /\
     val_in_memory actual_tv v d z.vs_memory /\
     abi_malformed_destination func ce ee.scopes dstid d
@@ -182,5 +189,11 @@ Proof
       (type_memory_bytes ce rt) z` by
     (irule abi_malformed_resource_destination >> goal_assum (drule_at Any) >>
      fs[abi_malformed_entry_def]) >>
+  `!pa pk. prot pa pk ==>
+    mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s0.vs_memory` by
+    (rpt strip_tac >>
+     `mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s.vs_memory` by
+       (irule abi_valid_allocated_frame_path_protected >>
+        fs[abi_malformed_entry_def] >> metis_tac[]) >> metis_tac[]) >>
   qexists_tac `z` >> metis_tac[ADD_0]
 QED
