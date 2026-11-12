@@ -85,3 +85,15 @@ Proof
   simp[scfg_static_def, fn_shape_ok_scfg_shape, simplify_cfg_fn_def,
        simplify_cfg_fn_with_labels_def]
 QED
+
+(* The elementary forward simulations all retain the source fuel. *)
+Theorem simplify_cfg_fn_correct_fuel:
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
+  simplify_cfg_fn_ok fn ==>
+  fn_bisim_fuel I fn (simplify_cfg_fn fn)
+Proof
+  strip_tac >> irule simplify_cfg_fn_bisim_fuel_from_steps >>
+  metis_tac[simplifyCfgCleanupTheory.scfg_cleanup_fn_bisim_fuel,
+            simplifyCfgMergeGlobalRunsTheory.scfg_chain_fn_bisim_fuel,
+            simplifyCfgBypassSemanticsTheory.scfg_bypass_fn_bisim_fuel]
+QED

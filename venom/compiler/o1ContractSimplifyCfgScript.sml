@@ -261,7 +261,21 @@ Theorem simplify_cfg_stage_sim_fuel:
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
   o1_run_state_ok vs ==> ctx_sim_fuel I D C C' vs vs
 Proof
-  cheat
+  strip_tac >>
+  `LIST_REL (fn_bisim_fuel I) C.ctx_functions C'.ctx_functions` by
+    (drule simplify_cfg_stage_functions >> strip_tac >>
+     simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >> rpt strip_tac >>
+     simp[EL_MAP] >> irule simplify_cfg_fn_correct_fuel >>
+     gvs[o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def, MEM_EL]) >>
+  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
+  `!fuel v t. run_context fuel C vs <> IntRet v t` by
+    metis_tac[o1_ctx_shape_no_intret] >>
+  `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
+    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  rw[ctx_sim_fuel_def] >>
+  mp_tac (Q.INST [`fm` |-> `I`] fn_bisim_fuel_run_context) >>
+  simp[lift_fuel_I]
 QED
 
 (* The raw memory fact exempts revert-forward pairs, so it transfers through
