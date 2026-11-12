@@ -287,3 +287,99 @@ Proof
     FLOOKUP_DRESTRICT] >> rpt strip_tac >>
   gvs[ptr_covers_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED
+
+Theorem annassign_dynamic_header_counted:
+  !s fn bb id src dst len too_long ok sp dp a b ss ds n cap sa tn G ctx D PG.
+    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [Var src] [len]) /\
+    isPREFIX
+      [mk_inst (id+1) GT [Var len;Lit (n2w cap)] [too_long];
+       mk_inst (id+2) ISZERO [Var too_long] [ok];
+       mk_inst (id+3) ASSERT [Var ok] []]
+      (DROP (SUC s.vs_inst_idx) bb.bb_instructions) /\
+    get_instruction bb (s.vs_inst_idx+4) =
+      SOME (mk_inst (id+4) MSTORE [Var dst;Var len] []) /\
+    get_instruction bb (s.vs_inst_idx+5) =
+      SOME (mk_inst (id+5) ADD [Var src;Lit 32w] [sp]) /\
+    get_instruction bb (s.vs_inst_idx+6) =
+      SOME (mk_inst (id+6) ADD [Var dst;Lit 32w] [dp]) /\
+    ptr_covers G tn src s (32+ss) /\ lookup_var src s = SOME a /\
+    ptr_covers G tn dst s (32+ds) /\ lookup_var dst s = SOME b /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      mem_word_at (w2n a) mem = n2w n) /\
+    n <= cap /\ cap < dimword (:256) /\
+    w2n a+32 < dimword (:256) /\ w2n b+32 < dimword (:256) /\
+    ALL_DISTINCT [len;too_long;ok;sp;dp] /\
+    ~MEM src [len;too_long;ok] /\ ~MEM dst [len;too_long;ok;sp] /\
+    (!x. not_fresh_at sa x ==> ~MEM x [len;too_long;ok;sp;dp]) ==>
+    ?H tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 H tf (OK u) /\
+      u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx+7 /\
+      ~u.vs_halted /\ typed_copy_state_frame sa (w2n b) 32 s u /\
+      lookup_var len u = SOME (n2w n) /\ FLOOKUP H len = NONE /\
+      op_taint tf (Var len) = {} /\
+      lookup_var sp u = SOME (a+32w) /\ lookup_var dp u = SOME (b+32w) /\
+      ptr_covers H tf sp u ss /\ ptr_covers H tf dp u ds /\
+      tf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
+      tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+      (!mem. mem_agree_outside tf.t_mem u.vs_memory mem ==>
+        mem_word_at (w2n b) mem = n2w n) /\
+      (!x. ~MEM x [len;too_long;ok;sp;dp] ==>
+        lookup_var x u = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+        op_taint tf (Var x) = op_taint tn (Var x)) /\
+      (!i. ~(w2n b <= i /\ i < w2n b+32) ==>
+        mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+        (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32` by
+    (gvs[ptr_covers_def] >> conj_tac >> goal_assum (drule_at Any) >> decide_tac) >>
+  `ALL_DISTINCT [len;too_long;ok] /\ ~MEM dst [len;too_long;ok]` by
+    gvs[ALL_DISTINCT] >>
+  drule_all annassign_dynamic_header_copy_counted >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  `lookup_var src u = SOME a /\ lookup_var dst u = SOME b /\
+   ~u.vs_halted /\ lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb u.vs_inst_idx =
+     SOME (mk_inst (id+5) ADD [Var src;Lit 32w] [sp]) /\
+   get_instruction bb (u.vs_inst_idx+1) =
+     SOME (mk_inst ((id+5)+1) ADD [Var dst;Lit 32w] [dp])` by
+    gvs[mstore_def, write_memory_with_expansion_def, update_var_def,
+      lookup_var_def, FLOOKUP_UPDATE] >>
+  `ptr_covers H tf src u (32+ss) /\ ptr_covers H tf dst u (32+ds)` by
+    (gvs[ptr_covers_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `sp <> dst /\ sp <> dp` by gvs[ALL_DISTINCT] >>
+  drule_all annassign_dynamic_payload_addresses_counted >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`H'`,`tf'`,`u'`] >>
+  conj_tac >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+    goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)) >>
+  `u'.vs_memory = u.vs_memory` by gvs[update_var_def] >>
+  `lookup_var len u' = SOME (n2w n) /\ FLOOKUP H' len = NONE /\
+   op_taint tf' (Var len) = {}` by
+    (gvs[ALL_DISTINCT, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  simp[] >>
+  `!x. ~MEM x [len;too_long;ok;sp;dp] ==>
+    lookup_var x u' = lookup_var x s /\ FLOOKUP H' x = FLOOKUP G x /\
+    op_taint tf' (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >> fs[] >>
+     gvs[mstore_def, write_memory_with_expansion_def,
+       update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  simp[] >>
+  conj_tac >- gvs[update_var_def, mstore_def, write_memory_with_expansion_def] >>
+  reverse conj_tac >- (rpt strip_tac >>
+    gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+      mstore_def, write_memory_with_expansion_def]) >>
+  simp[typed_copy_state_frame_def] >>
+  conj_tac >- gvs[update_var_def, mstore_def, write_memory_with_expansion_def,
+    venom_state_component_equality] >>
+  conj_tac >- (rpt strip_tac >>
+    gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+      mstore_def, write_memory_with_expansion_def]) >>
+  simp[update_var_def, typed_copy_frame_def] >>
+  conj_tac >- (rpt strip_tac >> simp[mstore_mem_bytes_at_disjoint]) >>
+  simp[mstore_def, write_memory_with_expansion_def, byteTheory.LENGTH_word_to_bytes,
+    fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  Cases_on `w2n b+32 > LENGTH s.vs_memory` >> simp[] >> decide_tac
+QED
