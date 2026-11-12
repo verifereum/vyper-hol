@@ -7,7 +7,7 @@ Ancestors
   venomExecSemantics rich_list list words venomMemDefs instMemFrontier
   fragExec fragGasSeqMem fragGasMode allocaHistoryFragment bodyMemBiSha256Compose
   exprSimDefs loweringPosts varsExt freshWrites venomInstProofs valueCopyBytes
-  exprSimBufferStore bodyMemEcArithPrefix
+  exprSimBufferStore bodyMemEcArithPrefix exprSimUnwrap gasStorage
 
 Theorem convert_alloc_copy_insts_split[local]:
   compile_alloc_buffer d sm = (buf,mid) /\
@@ -29,12 +29,15 @@ Theorem convert_widen_copy_run_capacity[local]:
   (!z. x = Var z ==> not_fresh_at sm z) /\ eval_operand x s = SOME p /\
   run_inst_seq (emitted_insts sm sb) s = OK u ==>
   ?w. eval_operand op u = SOME w /\
-    w2n w + d <= u.vs_alloca_next
+    w2n w + d <= u.vs_alloca_next /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule_all convert_widen_copy_code >> strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   drule_all hash_alloc_buffer_labels >> strip_tac >>
+  drule_all exprSimUnwrapTheory.alloc_buffer_fields >> strip_tac >>
   `eval_operand x t = SOME p` by
     (Cases_on `x` >> gvs[eval_operand_def]) >>
   `w2n w + d <= t.vs_alloca_next` by
@@ -140,7 +143,8 @@ Theorem convert_widen_copy_owned_mem:
   compile_bytestring_widen_copy d x k sm = (op,sb) /\
   0 < k /\ k <= d /\ d < dimword (:256) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved cenv sm /\
   alloca_history func s /\ alloca_inv s /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next /\
@@ -155,7 +159,9 @@ Theorem convert_widen_copy_owned_mem:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
-    (?w. eval_operand op t = SOME w /\ w2n w + d <= t.vs_alloca_next)
+    (?w. eval_operand op t = SOME w /\ w2n w + d <= t.vs_alloca_next) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule_all convert_widen_copy_run >> strip_tac >>
   drule_all convert_widen_copy_run_capacity >> strip_tac >>
@@ -210,7 +216,9 @@ Theorem convert_widen_cont_mem:
     tt.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func tt /\ s.vs_alloca_next <= tt.vs_alloca_next /\
     (?w. eval_operand op tt = SOME w /\
-      w2n w + type_memory_bytes cenv (expr_type e) <= tt.vs_alloca_next)
+      w2n w + type_memory_bytes cenv (expr_type e) <= tt.vs_alloca_next) /\
+    tt.vs_accounts = s.vs_accounts /\ tt.vs_transient = s.vs_transient /\
+    tt.vs_requests = s.vs_requests /\ tt.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   drule_all convert_bytestring_lowered_widen_success >> strip_tac >>
@@ -230,7 +238,8 @@ Proof
     gvs[bytestring_type_cases, is_word_type_def] >>
   `0 < type_memory_bytes cenv (lowered_value_type cenv e1)` by
     metis_tac[bytestring_memory_bytes_positive] >>
-  `stmt_state_rel H ctx func cenv cx es1 s` by gvs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es1 s /\
+   storage_well_formed_on cx es1 (FST H)` by gvs[expr_post_def] >>
   `type_memory_bytes cenv (lowered_value_type cenv e1) <=
      type_memory_bytes cenv (expr_type e)` by decide_tac >>
   `val_in_memory tv2 v' (w2n p) s.vs_memory` by metis_tac[] >>
