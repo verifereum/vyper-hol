@@ -3009,6 +3009,20 @@ Proof
   metis_tac[BETA_RULE abi_dyn_region_target_phi]
 QED
 
+Theorem abi_dyn_region_entry_prefix[local]:
+  !sa sm sb s. entry_shape sm sb /\ sm.cs_blocks = sa.cs_blocks /\
+    sm.cs_current_bb = sa.cs_current_bb /\
+    LENGTH sa.cs_current_insts < LENGTH sm.cs_current_insts /\ at_point sa s ==>
+    (^dyn_R) sa sb s
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[entry_shape_def, at_point_def, emitted_blocks_def] >>
+  simp_tac std_ss [] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[listTheory.TAKE_APPEND2] >>
+  disj2_tac >> qexists_tac `<|bb_label := sa.cs_current_bb;
+    bb_instructions := sm.cs_current_insts ++ tail|>` >> simp[]
+QED
+
 Theorem abi_dyn_region_cut_instruction[local]:
   !sa sb fn id s. at_point sb s ==>
     ?bb. lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME bb /\
@@ -3097,6 +3111,45 @@ val abi_dyn_cut_hyp = ``\R C Q (ctx:venom_context) fn (ctx0:venom_context) obs.
       phi_prefix_length tb.bb_instructions = 0 /\
       phi_prefix_length tob.bb_instructions = 0 /\
       R (t with vs_inst_idx := 0) /\ Q (t with vs_inst_idx := 0))``;
+
+Theorem abi_dyn_middle_cut_hyp[local]:
+  !dst src lop base hi info asz msz i sa sb N s0 ctx fn ctx0 id.
+    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) /\
+    ~is_terminator lop /\ lop <> INVOKE /\ lop <> PHI /\ (^dyn_Old) sa /\
+    N <= sa.cs_next_var /\ fn_has_code sa sb fn /\ no_phi_fn fn ==>
+    (^abi_dyn_cut_hyp) ((^dyn_R) sa sb) (at_point sb)
+      (\s. vars_kept N {} s0 s /\ s.vs_labels = s0.vs_labels)
+      ctx fn ctx0 (frag_observer sa sb fn id)
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  drule_all (BETA_RULE abi_dyn_middle_terminal) >> strip_tac >>
+  drule_all (SRULE [code_action_def, code_step_def] abi_dyn_middle_code) >> strip_tac >>
+  simp_tac std_ss [] >> conj_tac
+  >- metis_tac[abi_dyn_region_cut_instruction] >>
+  conj_tac
+  >- metis_tac[BETA_RULE abi_dyn_middle_off_cut] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `MEM inst (frag_code sa sb)` by
+        metis_tac[BETA_RULE abi_dyn_region_code, entry_shape_extends] >>
+      `inst.inst_opcode <> INVOKE` by (gvs[EVERY_MEM] >> metis_tac[]) >>
+      `vars_kept N {} s t /\ t.vs_labels = s.vs_labels` by
+        metis_tac[BETA_RULE abi_dyn_middle_frame] >>
+      `(^dyn_R) sa sb (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+        (irule abi_dyn_region_step >> simp[] >> metis_tac[]) >>
+      `vars_kept N {} s0 t` by metis_tac[vars_kept_trans] >>
+      gvs[vars_kept_def, lookup_var_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `MEM inst (frag_code sa sb)` by
+    metis_tac[BETA_RULE abi_dyn_region_code, entry_shape_extends] >>
+  `vars_kept N {} s t /\ t.vs_labels = s.vs_labels` by
+    metis_tac[BETA_RULE abi_dyn_middle_frame] >>
+  drule_all (BETA_RULE abi_dyn_middle_jump) >>
+  disch_then (qspec_then `id` mp_tac) >> strip_tac >>
+  qexistsl_tac [`tb`, `tob`] >> simp[] >>
+  `vars_kept N {} s0 t` by metis_tac[vars_kept_trans] >>
+  gvs[vars_kept_def, lookup_var_def] >> metis_tac[]
+QED
 
 val abi_dyn_cut_result = ``\C Q ctx fn ctx0 obs n s.
   (?j t. j <= n /\ C t /\ Q t /\
