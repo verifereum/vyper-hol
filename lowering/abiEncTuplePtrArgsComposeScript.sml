@@ -2,6 +2,7 @@
 Theory abiEncTuplePtrArgsCompose
 Ancestors
   abiEncodeArgsSim wordArgsPtr stmtFragPtr argsTailPtr
+  abiEncTuplePtrArgLayout bodyPtrBytestringBuiltinsEval
   abiEncTuplePtrArgTransport exprSimAbiEncodeArgsCaptured
   exprSimAbiEncodeArgsMaterializePath exprSimProps
   exprSimWordArgs exprLoweringProps loweringStateRelDefs bodyPtrDefs
@@ -153,4 +154,92 @@ Proof
       `wb_frame ce es es1 sa s0 t` by metis_tac[materialize_owned_post_def] >>
       gvs[ci_mono_def] >> drule_all ghost_kept_wb_trans >> simp[]) >>
   Cases_on `rr` >> simp[wb_args_exit_def]
+QED
+
+(* The head runs at its physical type.  The tail callback starts only at
+   an actual successful source evaluation, with no assumed pointer path. *)
+Theorem abi_args_uncaptured_head_ptr:
+  expr_sim_ptr d ctx PG func ce cx (expr_type e) e es /\
+  expr_body_pre ce cx env e es /\
+  lower_value compile_expr ce (expr_type e) e sa = (op,sm) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
+  ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  stmt_state_rel ctx func ce cx es s0 /\ ghost_inv d ce cx es G0 tn0 s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ci_mono sa sm /\ ci_mono sm sb /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\ (!l. op <> Label l) /\
+  (!gs v es1.
+    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,es1) ==>
+    expr_sim_inv ce cx env es1 /\
+    (~is_word_type (expr_type e) ==>
+      ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+           value_has_type tv v /\ val_wf tv v)) /\
+  (!v es1 G1 tn1 t.
+    (?gs. bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gs) = (INL v,es1)) /\
+    stmt_state_rel ctx func ce cx es1 t /\ ghost_inv d ce cx es1 G1 tn1 t /\
+    ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG (eval_exprs cx args)
+      (es1,t,G1,tn1)
+      (\rr ee G tn u. ?vs. rr = INL vs /\
+        abi_args_post ctx func ce cx es1 sm sb t ee args ops vs u /\
+        LIST_REL (\op ev. ptr_val_ok cx (lowered_value_type ce (FST ev))
+          (SND ev) op G tn u) ops (ZIP (args,vs)) /\
+        EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
+        MAP FDOM ee.scopes = MAP FDOM es1.scopes /\
+        (~is_word_type (lowered_value_type ce e) ==> ee.scopes = es1.scopes) /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        ghost_inv d ce cx ee G tn u /\ ghost_kept ce es1 sm G1 tn1 t G tn)
+      (\rr ee ghosts r. wb_args_exit rr r)) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_exprs cx (e::args)) (es,s0,G0,tn0)
+    (\rr ee G tn u. ?vs. rr = INL vs /\
+      abi_args_post ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
+      LIST_REL (\op ev. ptr_val_ok cx (lowered_value_type ce (FST ev))
+        (SND ev) op G tn u) (op::ops) (ZIP (e::args,vs)) /\
+      EVERY (abi_decoder_operand_live sb.cs_next_var) (op::ops) /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ghost_inv d ce cx ee G tn u /\ ghost_kept ce es sa G0 tn0 s0 G tn)
+    (\rr ee ghosts r. wb_args_exit rr r)
+Proof
+  strip_tac >> rewrite_tac[eval_exprs_cons_action] >>
+  irule expr_sim_ptr_eval_suffix >>
+  qpat_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `lower_value _ _ _ _ _ = _` (irule_at Any) >>
+  simp[] >> conj_tac >- simp[oneline exprSimDefsTheory.expr_exit_def, wb_args_exit_def] >>
+  rpt gen_tac >> strip_tac >>
+  `bind (eval_expr cx e) (read_result cx)
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL v,ee)` by
+    (qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >> simp[]) >>
+  `expr_body_pre ce cx env e
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+  `expr_sim_inv ce cx env ee /\
+   (~is_word_type (expr_type e) ==>
+     ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+          value_has_type tv v /\ val_wf tv v)` by metis_tac[] >>
+  `expr_val_rel cx (lowered_value_type ce e) v op t` by
+    (irule abi_args_expr_post_lowered_rel >> metis_tac[]) >>
+  `expr_val_at ce cx (lowered_value_type ce e) sa sm ee v op t` by
+    (irule abi_args_expr_post_lowered_at >> metis_tac[]) >>
+  `ptr_val_ok cx (lowered_value_type ce e) v op G tn t` by
+    (irule abi_args_ptr_lowered_transport >> metis_tac[]) >>
+  irule (SRULE [] abi_args_uncaptured_cons_ptr) >>
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (irule_at Any) >> simp[] >>
+  qexists `env` >> conj_tac >- metis_tac[exprSimHypsDefsTheory.expr_sim_inv_gas_obs] >>
+  gvs[] >>
+  qpat_x_assum `!v es1 G1 tn1 t. _`
+    (qspecl_then [`v`, `ee0 with gas_obs := []`] mp_tac) >>
+  simp[] >> disch_then irule >> simp[] >> conj_tac
+  >- (qexists `gas_explicit marks s0.vs_gas_readings` >> simp[]) >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def]
 QED
