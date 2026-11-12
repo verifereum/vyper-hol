@@ -79,9 +79,9 @@ Proof
 QED
 
 Theorem annassign_alloca_operand_framed_path:
-  !ctx func cenv cx es st st1 p sz s0.
+  !H ctx func cenv cx es st st1 p sz s0.
     emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), st1) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
     MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
     fn_has_code st st1 func /\ ~s0.vs_halted /\
@@ -93,7 +93,7 @@ Theorem annassign_alloca_operand_framed_path:
       (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s1.vs_allocas aid = SOME entry) /\
-      stmt_state_rel ctx func cenv cx es s1 /\ ~s1.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es s1 /\ ~s1.vs_halted /\
       s1.vs_current_bb = st1.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
       gas_marked_path F ctx func s0 0 (OK s1)
@@ -150,13 +150,13 @@ Proof
 QED
 
 Theorem annassign_word_store_path:
-  !ctx func cenv cx es s id p sz w inst v tyv sc rest a op st st' wd.
+  !H ctx func cenv cx es s id p sz w inst v tyv sc rest a op st st' wd.
     emit_void MSTORE [Var p; op] st = ((), st') /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME wd /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -166,7 +166,8 @@ Theorem annassign_word_store_path:
     32 <= sz /\ type_memory_size tyv <= sz /\
     memory_value_rel tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     val_wf tyv v ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. t = mstore (w2n w) wd s with vs_inst_idx := SUC s.vs_inst_idx /\
+        stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -178,8 +179,8 @@ Theorem annassign_word_store_path:
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt strip_tac >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx es'` >>
-  `stmt_state_rel ctx func cenv cx es' (mstore (w2n w) wd s)` by
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx es'` >>
+  `stmt_state_rel H ctx func cenv cx es' (mstore (w2n w) wd s)` by
     (simp[Abbr `es'`] >> irule stmt_state_rel_declare_store >> simp[] >>
      qexists_tac `inst` >> gvs[]) >>
   drule_all emit_mstore_marked_path >> strip_tac >>
@@ -192,8 +193,8 @@ Proof
 QED
 
 Theorem annassign_word_store_post_path:
-  !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv sc rest a.
-    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+  !H ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv sc rest a.
+    expr_post H ctx func cenv cx e es sa sb s0 es1 v op s /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     store_lays_out etv tyv v /\
@@ -207,7 +208,9 @@ Theorem annassign_word_store_post_path:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. t = mstore (w2n w) (typed_val_to_w256 etv v) s with
+              vs_inst_idx := SUC s.vs_inst_idx /\
+        stmt_state_rel H ctx func cenv cx
           (es1 with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
@@ -221,7 +224,7 @@ Theorem annassign_word_store_post_path:
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   `eval_operand op s = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -236,5 +239,5 @@ Proof
   `type_memory_size tyv <= sz` by simp[] >>
   drule_all annassign_word_store_path >>
   disch_then (qspecl_then [`a`] mp_tac) >> strip_tac >>
-  qexists_tac `t` >> simp[] >> metis_tac[]
+  gvs[] >> metis_tac[]
 QED
