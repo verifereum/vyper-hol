@@ -158,6 +158,18 @@ Definition deploy_result_rel_def:
     case src of
       INL (am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+        if ALOOKUP am'.sources tx.target = NONE then
+          (* The constructor halted (selfdestruct): load_contract installed
+           * no source, and the EVM deposited no code. *)
+          ?lgs.
+            frame_outcome es r es' NONE [] lgs /\
+            (lookup_account tx.target es'.rollback.accounts).code = [] /\
+            accounts_agree H cx am'.accounts
+              (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+            transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+            logs_correspond (compiled_event_info tops) (type_env tops)
+              tx.target am'.logs lgs
+        else
         ?section lgs.
           immutables_section_rel tops (account_immutables am' tx.target) section /\
           frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
