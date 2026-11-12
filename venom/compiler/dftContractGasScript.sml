@@ -26,7 +26,7 @@ Ancestors
   o1DftStep dftSsaPreserve dftRunRel dftScheduleOrder dftDefs o1PassLift
   o1PassContract unitMemInv unitShapeDefs lowerDloadDefs venomPassDispatcher
   venomExecSemantics venomWf venomInst venomState list
-  dftGasMask gasEvents gasCount
+  dftGasMask gasEvents gasCount crossBlockSimProofs dftGasFromListRestore venomWfProps
 
 Theorem ctx_pass_stage_dft:
   ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' ==>
@@ -290,6 +290,37 @@ Proof
   irule dftSsaPreserveTheory.dft_block_rel_wf_ssa >> simp[]
 QED
 
+(* The actual entry run of a context, as its entry function's block run. *)
+Theorem run_context_entry_blocks[local]:
+  ctx.ctx_entry = SOME nm /\ lookup_function nm ctx.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl ==>
+  run_context fuel ctx s =
+  run_blocks fuel ctx fn
+    (s with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+Proof
+  simp[run_context_def, run_function_def]
+QED
+
+Theorem run_blocks_terminates_fuel_eq[local]:
+  terminates (run_blocks f1 ctx fn s) /\ terminates (run_blocks f2 ctx fn s) ==>
+  run_blocks f1 ctx fn s = run_blocks f2 ctx fn s
+Proof
+  rpt strip_tac >> Cases_on `f1 <= f2`
+  >- (mp_tac (Q.SPECL [`f1`, `ctx`, `fn`, `s`] run_blocks_fuel_mono) >>
+      simp[] >> disch_then (qspec_then `f2 - f1` mp_tac) >> simp[])
+  >> mp_tac (Q.SPECL [`f2`, `ctx`, `fn`, `s`] run_blocks_fuel_mono) >>
+  simp[] >> disch_then (qspec_then `f1 - f2` mp_tac) >> simp[]
+QED
+
+Theorem entry_gas_update_comm[local]:
+  (s with <| vs_prev_bb := NONE; vs_current_bb := l; vs_inst_idx := 0 |>)
+    with vs_gas_readings := g =
+  s with <| vs_gas_readings := g; vs_prev_bb := NONE; vs_current_bb := l;
+            vs_inst_idx := 0 |>
+Proof
+  simp[venom_state_component_equality]
+QED
+
 (* One raw-slot mask, fixed before every filling of the target's readings,
  * covers the source events of each compatible filling at the actual entry.
  * Source fillings that terminate are simulated for every dead mask. *)
@@ -297,7 +328,7 @@ Theorem dft_ctx_gas_mask:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
   C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
-  o1_ctx_shape C /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\
   ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' /\
   C'.ctx_entry = SOME nm /\ lookup_function nm C'.ctx_functions = SOME fn' /\
   fn_entry_label fn' = SOME lbl /\
@@ -317,7 +348,81 @@ Theorem dft_ctx_gas_mask:
                         vs_current_bb := lbl; vs_inst_idx := 0 |>) ++ extra) /\
       ((?fr. terminates
                (run_context fr C (vs' with vs_gas_readings := gobs ++ tail))) ==>
+       terminates (run_context fuel C (vs' with vs_gas_readings := gobs ++ tail)) /\
        !D. ctx_sim D C C' (vs' with vs_gas_readings := gobs ++ tail) vs')
 Proof
-  cheat
+  strip_tac >>
+  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
+    metis_tac[dft_ctx_functions_map] >>
+  `?fn. lookup_function nm C.ctx_functions = SOME fn /\ fn' = dft_fn fn` by
+    (qpat_x_assum `lookup_function nm C'.ctx_functions = _` mp_tac >>
+     simp[lookup_function_map]) >>
+  gvs[] >>
+  `fn_entry_label fn = SOME lbl` by gvs[dft_fn_entry_label] >>
+  `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `dft_fn_rel fn (dft_fn fn)` by
+    (gvs[MEM_EL, LIST_REL_EL_EQN, EL_MAP] >> metis_tac[]) >>
+  `ctx_labels_bound (C' : venom_context) vs'.vs_labels` by
+    (irule dft_ctx_labels_bound >> gvs[o1_run_state_ok_def]) >>
+  `~vs'.vs_call_ctx.cc_static` by gvs[o1_run_state_ok_def] >>
+  `run_context fuel C' vs' =
+   run_blocks fuel C' (dft_fn fn)
+     (vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)` by
+    (irule run_context_entry_blocks >> simp[dft_fn_entry_label] >>
+     qexists_tac `nm` >> gvs[]) >>
+  mp_tac (Q.SPECL [`fuel`, `C`, `C'`, `fn`, `dft_fn fn`,
+     `vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>`]
+     dft_blocks_gas_mask) >>
+  impl_tac
+  >- (gvs[] >> rpt conj_tac
+      >- (irule venomWfPropsTheory.strict_dom_vars_defined_entry >> simp[])
+      >- simp[fn_reachable_def]
+      >> gvs[LIST_REL_EL_EQN, EL_MAP]) >>
+  strip_tac >>
+  qexistsl [`raw_slots`, `sites`, `unused`] >>
+  rpt (conj_tac >- fs[]) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`gobs`, `tail`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  `vs' with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+               vs_current_bb := lbl; vs_inst_idx := 0 |> =
+   (vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+     with vs_gas_readings := gobs ++ tail` by
+    simp[venom_state_component_equality] >>
+  pop_assum SUBST1_TAC >>
+  qabbrev_tac `es = (vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                                 vs_inst_idx := 0 |>)
+                      with vs_gas_readings := gobs ++ tail` >>
+  conj_tac >- (qexists_tac `extra` >> qunabbrev_tac `es` >> fs[entry_gas_update_comm]) >>
+  disch_then (qx_choose_then `fr` assume_tac) >>
+  `!f. run_context f C (vs' with vs_gas_readings := gobs ++ tail) =
+       run_blocks f C fn es` by
+    (gen_tac >> qunabbrev_tac `es` >>
+     `(vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+        with vs_gas_readings := gobs ++ tail =
+      (vs' with vs_gas_readings := gobs ++ tail)
+        with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>` by
+       simp[venom_state_component_equality] >>
+     pop_assum SUBST1_TAC >>
+     irule run_context_entry_blocks >> simp[] >> qexists_tac `nm` >> gvs[]) >>
+  `terminates (run_blocks fr C fn es)` by metis_tac[] >>
+  qpat_x_assum `(?fuel_src. _) ==> _` mp_tac >>
+  impl_tac >- (qexists_tac `fr` >> first_assum ACCEPT_TAC) >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  rw[ctx_sim_def] >> qexists_tac `fuel` >>
+  `run_blocks fuel' C fn es = run_blocks fuel C fn es` by
+    (irule run_blocks_terminates_fuel_eq >> metis_tac[]) >>
+  irule gas_dft_dead_result >>
+  `run_blocks fuel' C fn es =
+   run_context fuel C (vs' with vs_gas_readings := gobs ++ tail)` by metis_tac[] >>
+  pop_assum SUBST1_TAC >>
+  rpt conj_tac
+  >- metis_tac[o1_ctx_shape_run_context_no_intret]
+  >- metis_tac[run_context_not_ok]
+  >- metis_tac[] >>
+  qexistsl [`restore_result [] (run_blocks fuel C fn es)`,
+            `restore_result [] (run_blocks fuel C' (dft_fn fn)
+               (vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                            vs_inst_idx := 0 |>))`] >>
+  gvs[restore_result_rel]
 QED
