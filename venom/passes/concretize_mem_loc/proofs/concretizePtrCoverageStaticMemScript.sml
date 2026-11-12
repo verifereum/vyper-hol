@@ -10,6 +10,7 @@ Ancestors
   o1PassContract concretizePtrPairedFields concretizePtrChronologicalHistory list pair
   contextCodegenRel concretizePtrOperationalOpcodes stepWriteFootprintBase
   venomExecProofs venomWf venomExecSemantics venomInst codegenRel lowerDloadDefs
+  ptrDisciplineEmptyTaint ptrDiscipline ctxLookupAgree
 
 Theorem ptr_paired_coverage_static_mem:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)

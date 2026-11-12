@@ -295,10 +295,15 @@ Proof
 QED
 
 Theorem fuel_ok_compile_stage_intcall_args:
-  !cenv vals flags tys Wv E.
-    fuel_ok Wv {} E (compile_stage_intcall_args cenv vals flags tys)
+  !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
+    !cenv vals flags tys Wv E.
+      fuel_ok Wv {} E (compile_stage_intcall_args cfn cenv vals flags tys)
 Proof
-  ho_match_mp_tac compile_stage_intcall_args_ind >> rpt strip_tac >>
+  `!cfn cenv vals flags tys.
+     (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
+     !Wv E. fuel_ok Wv {} E (compile_stage_intcall_args cfn cenv vals flags tys)`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac compile_stage_intcall_args_ind >> rpt strip_tac >> gvs[] >>
   simp_tac (srw_ss()) [Once compile_stage_intcall_args_def, LET_THM] >>
   ft [fuel_ok_unwrap_value, fuel_ok_compile_alloc_buffer,
       fuel_ok_context_storage, fuel_ok_compile_store_memory]

@@ -11,13 +11,13 @@ Ancestors
   exprSimAggregateLoops exprSimAggregateEncoding
 
 Theorem literal_tuple_cons_compile:
-  compile_make_tuple compile_expr ce (e::args) (Var root) off sa = (out,sb) ==>
+  compile_make_tuple compile_expr ce (e::args) (MAP expr_type (e::args)) (Var root) off sa = (out,sb) ==>
   ?vv sm dst sn op su ss.
     compile_expr ce (expr_type e) e sa = (vv,sm) /\
     emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
     unwrap_value ce vv sn = (op,su) /\
     compile_store_memory ce op (Var dst) (expr_type e) (lowered_value_type ce e) su = ((),ss) /\
-    compile_make_tuple compile_expr ce args (Var root)
+    compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root)
       (off+type_memory_bytes ce (expr_type e)) ss = (out,sb)
 Proof
   simp[Once compile_make_tuple_def, comp_bind_def] >>
@@ -117,7 +117,7 @@ QED
 
 Theorem literal_tuple_loop_outcome_ptr:
   !args ce cx env off si out sb es tvs cells G0 tn0 s0.
-  compile_make_tuple compile_expr ce args (Var root) off si = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) off si = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
@@ -212,7 +212,7 @@ Resume literal_tuple_loop_outcome_ptr[tail]:
   `off + type_memory_size h' + type_memory_size_list t <= capacity` by
     (fs[type_memory_size_def] >> decide_tac) >>
   qpat_x_assum `!ce' cx' env' off' si' out' sb' es' tvs' cells' G0' tn0' s0'. _`
-    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >>
   simp[] >>
   disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >>

@@ -18,7 +18,7 @@ Theory o1ContractSimplifyCfg
 Ancestors
   o1ContractSimplifyCfgParams o1ContractSimplifyCfgSrcStatic o1ContractSimplifyCfgSrcFrame o1ContractSimplifyCfgSrcHeadroom o1ContractSimplifyCfgStep o1PassContract o1ComposeSupport o1PassLift simplifyCfgCorrectness simplifyCfgProof
   simplifyCfgDefs simplifyCfgStruct simplifyCfgInvariant
-  unitMemInv venomPassSchedule venomCompilerTypes
+  unitMemInv ptrDiscipline venomPassSchedule venomCompilerTypes
   venomWf cfgWf simplifyCfgLabelProps venomPassDispatcher
   opcodeClass ctxLookupAgreeHelpers venomExecSemantics venomExecProofs list rich_list arithmetic simplifyCfgPhiProps allocaRemapSSA venomInst
 
@@ -337,12 +337,12 @@ Proof
    (!lo. fixed_region_reserved lo C ==> fixed_region_reserved lo C')` by
     (fs[o1_src_inv_def, fmp_free_ctx_def, EVERY_MAP, EVERY_MEM,
         fixed_region_reserved_def] >>
-     rpt conj_tac >> rpt strip_tac
+     rpt conj_tac >> rpt strip_tac >> gvs[MEM_MAP]
      >- metis_tac[simplify_cfg_fn_metadata, fn_static_layout_eq_def]
      >- metis_tac[simplify_cfg_fn_metadata, fn_fmp_convention_eq_def]
      >- (simp[pre_fmp_ops_def, simplify_cfg_fn_def] >>
          irule simplify_cfg_fn_with_labels_opcodes >>
-         simp[pre_fmp_opcode_def] >> metis_tac[pre_fmp_ops_def]) >>
+         fs[pre_fmp_ops_def, pre_fmp_opcode_def, EVERY_MEM] >> metis_tac[]) >>
      metis_tac[]) >> simp[] >>
   gen_tac >> strip_tac >> simp[EVERY_MAP, EVERY_MEM] >>
   gen_tac >> strip_tac >> irule simplify_cfg_fn_shape_ptr_ok >>
@@ -376,9 +376,10 @@ Proof
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
     fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `scfg_context_trace C C'` by metis_tac[scfg_context_trace_simplify_cfg] >>
-  `~ctx_has_dalloca C /\ taint_within D C vs /\
-   mem_inv dload_offset_ok C vs` by fs[o1_src_inv_def] >>
-  `~ctx_has_dalloca C'` by metis_tac[scfg_simplify_cfg_no_dalloca] >>
+  `taint_within D C vs /\ mem_inv dload_offset_ok C vs` by
+    fs[o1_src_inv_def] >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    metis_tac[scfg_simplify_cfg_no_dalloca] >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       drule_all scfg_context_trace_frame_rows >> simp[]) >>

@@ -79,9 +79,14 @@ Proof
   fs[pre_fmp_ops_def, EVERY_MEM] >> rpt strip_tac >>
   Cases_on `kept_opcode inst.inst_opcode`
   >- (`MEM inst.inst_opcode
+        (FILTER kept_opcode (MAP (\i. i.inst_opcode) (fn_insts fn)))` by
+        (simp_tac bool_ss [MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+      `MEM inst.inst_opcode
         (FILTER kept_opcode (MAP (\i. i.inst_opcode) (fn_insts fn')))` by
-        (simp[MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
-      fs[MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+        metis_tac[] >>
+      qpat_x_assum `MEM _ (FILTER _ (MAP _ (fn_insts fn')))` mp_tac >>
+      simp_tac bool_ss [MEM_FILTER, MEM_MAP] >> rpt strip_tac >>
+      metis_tac[]) >>
   gvs[kept_opcode_def, pre_fmp_opcode_def]
 QED
 

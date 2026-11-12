@@ -4377,13 +4377,14 @@ QED
 
 Theorem scfg_context_trace_frame_rows:
   scfg_context_trace C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C' /\
+  ptr_discipline lo C vs /\ (ctx_has_dalloca C' ==> ctx_has_dalloca C) /\
   frame_reachable vs C' stk PG G tn g j t ==>
   access_ok lo G g j t /\ taint_ok g tn j t /\ allocas_from lo t /\
   (ctx_has_dalloca C' ==> allocas_below_fmp t)
 Proof
   strip_tac >> drule_all scfg_context_trace_live_frame_back >> strip_tac >>
-  `access_ok lo G f i s /\ taint_ok f tn i s /\ allocas_from lo s` by
+  `access_ok lo G f i s /\ taint_ok f tn i s /\ allocas_from lo s /\
+   (ctx_has_dalloca C ==> allocas_below_fmp s)` by
     metis_tac[ptr_discipline_def] >>
   metis_tac[scfg_live_position_access_ok, scfg_live_position_trace_taint,
             scfg_data_agree_allocas]

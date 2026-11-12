@@ -210,7 +210,7 @@ Theorem static_mem_ok_gas_readings[simp]:
 Proof
   `inst_mem_ranges inst (t with vs_gas_readings := ws) = inst_mem_ranges inst t` by
     (irule supply_inst_mem_ranges_cong >> simp[]) >>
-  simp[static_mem_ok_def, in_revert_forward_def]
+  simp[static_mem_ok_def, dalloca_no_wrap_def, in_revert_forward_def]
 QED
 
 Theorem lowered_mem_fact_gas_readings[simp]:
