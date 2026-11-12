@@ -31,7 +31,8 @@ Theorem concretize_param_local_complete:
     (activation_lookup (0:num) (concretize_positions C')
       (birth::ids) (fn::MAP (\f. f.cf_fn) stk)) (resolved_parameter_entry rp i) x y)
     s.vs_params t.vs_params /\
-  PG = MAP (OPTION_MAP SND) rp /\
+  LENGTH PG = LENGTH rp /\
+  (!k e. k < LENGTH rp /\ EL k rp = SOME e ==> EL k PG = SOME (SND e)) /\
   resolution ct rp om rv /\
   relocation_env s t /\ relocation_reader_context s t /\
   local_rel (\u. F)
@@ -48,7 +49,6 @@ Theorem concretize_param_local_complete:
     rv' = origin_set rv [out] (resolved_parameter_entry rp (w2n idx)) /\
     step_inst_base inst t = OK tpost /\
     resolution ct rp (origin_step PG om inst post) rv' /\
-    step_prov PG (SND o_f rv) inst post = SND o_f rv' /\
     local_rel (\u. F)
       (guarded_ptr (retpc_var fn)
         (activation_lookup (0:num) (concretize_positions C')
@@ -80,14 +80,10 @@ Proof
   disch_then (drule_at (Pat `resolution _ _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   simp[] >> strip_tac >>
-  `step_prov PG (SND o_f rv) inst post =
-    SND o_f (origin_set rv [out] (resolved_parameter_entry rp (w2n idx)))` by
-    (imp_res_tac resolution_erasure >> gvs[origin_step_erase]) >>
   `relocation_env post post' /\ relocation_reader_context post post'` by
     (drule_all parameter_execution_shape >> strip_tac >>
      gvs[] >> simp[relocation_env_update_var, relocation_reader_context_update_var]) >>
   qpat_x_assum `post = _` SUBST_ALL_TAC >>
-  qpat_x_assum `PG = _` SUBST_ALL_TAC >>
   qexists_tac `post'` >> simp[] >> conj_tac
   >- (fs[local_rel_def, demand_agree_def] >> metis_tac[]) >>
   fs[relocation_taint_le_def, frameRelocationCopyTaintTheory.demand_taint_def] >> metis_tac[]

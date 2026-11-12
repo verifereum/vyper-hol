@@ -33,9 +33,11 @@ Proof
     fs[layout_ordinary_trace_def] >>
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >> fs[ETA_AX] >>
-  `PG = MAP (OPTION_MAP SND) rp /\
+  `(LENGTH PG = LENGTH rp /\
+    (!k e. k < LENGTH rp /\ EL k rp = SOME e ==> EL k PG = SOME (SND e))) /\
    resolution (resolved_cache birth s.vs_allocas) rp om rv` by
-    fs[resolved_config_ok_def, resolved_frame_ok_def] >>
+    (drule resolved_config_current >> simp[] >> strip_tac >>
+     drule resolved_frame_parameters >> fs[resolved_frame_ok_def]) >>
   rule_assum_tac (REWRITE_RULE[ETA_AX]) >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`)
     (REWRITE_RULE[GSYM concretizeLayoutSupplementTheory.concretize_local_obs_def, ETA_AX]

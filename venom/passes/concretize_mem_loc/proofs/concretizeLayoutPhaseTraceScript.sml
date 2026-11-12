@@ -39,7 +39,10 @@ Theorem layout_no_output_resolved_ordinary:
 Proof
   simp[joint_transition_ordinary] >> rpt strip_tac >> gvs[] >>
   gvs[resolved_config_ok_def] >>
-  `resolved_frame_ok birth post.vs_allocas PG G om (FST ann) (SND ann)
+  `post.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke,
+              ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp] >>
+  `resolved_frame_ok (w2n s.vs_initial_fmp) birth post.vs_allocas PG G om (FST ann) (SND ann)
     (birth::births)
     ((fn,post.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk)` by
     (irule resolved_frame_cache_transport >> goal_assum (drule_at Any) >>

@@ -111,6 +111,15 @@ Proof
   metis_tac[resolution_erasure, origin_erase_lookup]
 QED
 
+Theorem resolved_frame_parameters:
+  resolved_frame_ok dyn birth cache PG G om rp rv ids frames ==>
+  LENGTH PG = LENGTH rp /\
+  !k e. k < LENGTH rp /\ EL k rp = SOME e ==> EL k PG = SOME (SND e)
+Proof
+  simp[resolved_frame_ok_def, LIST_REL_EL_EQN] >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
 Theorem resolved_config_current:
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) (ann::anns) ==>

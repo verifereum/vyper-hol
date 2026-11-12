@@ -27,7 +27,8 @@ Theorem resolved_parameter_segment:
   inst.inst_outputs = [out] /\
   parameter_roots (\i x y. clean_resolved_root L (resolved_parameter_entry rp i) x y)
     s.vs_params t.vs_params /\
-  PG = MAP (OPTION_MAP SND) rp /\ resolution ct rp om rv /\
+  LENGTH PG = LENGTH rp /\
+  (!k e. k < LENGTH rp /\ EL k rp = SOME e ==> EL k PG = SOME (SND e)) /\ resolution ct rp om rv /\
   local_rel (\u. F) (guarded_ptr Opaque L rv)
     (guarded_bytes Opaque rv tn) R Obs s t /\
   relocation_taint_le R tn un /\
