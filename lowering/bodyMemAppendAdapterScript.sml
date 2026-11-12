@@ -13,7 +13,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem stmt_frag_mem_storage_rel_discharge[local]:
+Theorem stmt_frag_mem_storage_rel_discharge:
   storage_trace_frame source /\
   ((storage_vars_rel cenv cx /\ transient_vars_rel cenv cx) ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv m source es) ==>
