@@ -1,7 +1,9 @@
 (* Seam 2 joint induction, a held leaf of the agg step: an array subscript
    in exactly the residual case of
    exprSimSubscriptArrayTheory.compile_subscript_array_place_base_case
-   (lowering/exprSimSubscriptArrayScript.sml), which is ADMITTED there
+   (lowering/exprSimSubscriptArrayScript.sml), which is ADMITTED there,
+   including a base the index may overwrite (subscript_reads_base), read
+   before the index as Python does,
    because vv_post does not tie the base's pointer to its source place.
    Held: no run proves it; it is retired with that admission once a
    place-pointer clause (vv_place_ptr) is in vv_post. *)
@@ -16,7 +18,8 @@ Theorem intcall_subscript_array_place_base_held:
           intcall_map_producer fp e') /\
     e = Subscript ann obj idx /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\
-    ~((!t r t'. eval_expr fp.jc_cx idx t = (INL r, t') ==>
+    ~(~subscript_reads_base fp.jc_cx obj idx /\
+      (!t r t'. eval_expr fp.jc_cx idx t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
       (!s tr slot vt t.
          eval_expr fp.jc_cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\

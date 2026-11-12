@@ -47,7 +47,8 @@ Proof
     (irule supported_array_subscript_base_type >> metis_tac[]) >>
   `supported_expr fp.jc_tops obj` by
     (irule supported_subscript_value_base >> metis_tac[]) >>
-  Cases_on `(!t r t'. eval_expr fp.jc_cx idx t = (INL r,t') ==>
+  Cases_on `~subscript_reads_base fp.jc_cx obj idx /\
+    (!t r t'. eval_expr fp.jc_cx idx t = (INL r,t') ==>
       t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
     (!s tr slot vt t. eval_expr fp.jc_cx obj s <>
       (INL (PlaceR (StoragePlace tr slot vt)),t)) /\
