@@ -170,6 +170,7 @@ Resume body_struct_lit_widened_flat_mem[buffer_post]:
 QED
 Finalise body_struct_lit_widened_flat_mem
 
+(* PORT_ADMISSION: SEQ-4300, s3-mem-safety, replaces body_struct_lit_widened_call_elem_mem which built at 0de4aa499 *)
 (* HELD, the twin of bodyMemAggregateLoops' aggregate_make_tuple_nested_sim_mem:
    a field whose declared type it widens to other than as a bytestring (a
    nested bound change), which needs a typed relayout store. *)

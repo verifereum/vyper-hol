@@ -4,6 +4,7 @@ Theory bodyMemMakeArrayWidened
 Ancestors
   bodyMemMakeArrayAssembly
 
+(* PORT_ADMISSION: SEQ-4299, s3-mem-safety, replaces body_make_array_widened_call_elem_mem which built at 0de4aa499 *)
 (* HELD, the twin of bodyMemAggregateLoops' aggregate_make_tuple_nested_sim_mem:
    an element whose declared member type it widens to other than as a
    bytestring (a nested bound change), which needs a typed relayout store. *)
