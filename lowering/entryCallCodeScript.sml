@@ -29,28 +29,31 @@ Proof
 QED
 
 Theorem entry_code_stage_intcall_args:
-  !vals flags tys. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_stage_intcall_args cenv vals flags tys)
+  !args flags tys.
+    (!e ce ty. MEM e args ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_stage_intcall_args cfn cenv args flags tys)
 Proof
-  Induct_on `vals` >- simp[compile_stage_intcall_args_def, entry_code_return] >>
-  rpt gen_tac >> namedCases_on `flags` ["", "flag fs"]
-  >- (simp[compile_stage_intcall_args_def] >>
-      irule entry_code_bind >> reverse conj_tac >- simp[entry_code_unwrap_value] >>
-      rpt gen_tac >> BETA_TAC >> irule entry_code_bind >> simp[entry_code_return]) >>
-  Cases_on `tys`
-  >- (simp[compile_stage_intcall_args_def] >>
-      irule entry_code_bind >> reverse conj_tac >- simp[entry_code_unwrap_value] >>
-      rpt gen_tac >> BETA_TAC >> irule entry_code_bind >> simp[entry_code_return]) >>
-  Cases_on `flag` >> simp[compile_stage_intcall_args_def] >>
-  simp[compileEnvTheory.comp_ignore_bind_def] >>
+  Induct >- simp[compile_stage_intcall_args_def, entry_code_return] >>
+  rpt gen_tac >> strip_tac >>
+  `entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (cfn cenv (expr_type h) h)` by simp[] >>
+  `!flags tys. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_stage_intcall_args cfn cenv args flags tys)`
+    by (rpt gen_tac >> last_x_assum irule >> simp[]) >>
+  namedCases_on `flags` ["", "flag fs"] >>
+  TRY (Cases_on `flag`) >> Cases_on `tys` >>
+  simp[compile_stage_intcall_args_def, compileEnvTheory.comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_unwrap_value, entry_code_alloc_buffer] >> rpt gen_tac >> BETA_TAC) >>
-  simp[entry_code_return] >>
-  irule entry_code_bind >> reverse conj_tac
-  >- (rpt IF_CASES_TAC >> simp[entry_code_emit_void, entry_code_store_memory,
-        entry_code_store_bytestring] >> irule entry_code_bind >>
-      simp[entry_code_store_bytestring, entry_code_return]) >>
-  rpt gen_tac >> BETA_TAC >> irule entry_code_bind >> simp[entry_code_return]
+    >- (rpt IF_CASES_TAC >>
+        simp[entry_code_unwrap_value, entry_code_alloc_buffer,
+             entry_code_emit_void, entry_code_store_memory,
+             entry_code_store_bytestring, entry_code_return] >>
+        irule entry_code_bind >>
+        simp[entry_code_store_bytestring, entry_code_return]) >>
+    rpt gen_tac >> BETA_TAC) >>
+  simp[entry_code_return]
 QED
 
 Theorem entry_code_ext_call_kwarg:
@@ -180,21 +183,38 @@ Theorem entry_code_intcall:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_call cfn cenv ret_ty ty (IntCall fid) args default_ret)
 Proof
-  strip_tac >> rw[entry_preserves_code_def, compile_call_def] >>
+  strip_tac >>
+  `!flags tys. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_stage_intcall_args cfn cenv args flags tys)`
+    by simp[entry_code_stage_intcall_args] >>
+  rw[entry_preserves_code_def, compile_call_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  `entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_multi_vvs cfn cenv args)` by simp[entry_code_multi_vvs] >>
   fs[entry_preserves_code_def] >>
-  `entry_code_pred (\i. i.inst_opcode <> DALLOCA) st1` by metis_tac[] >>
   rpt IF_CASES_TAC >> gvs[AllCaseEqs()] >>
   rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac (SRULE [entry_preserves_code_def] entry_code_alloc_buffer) >>
-  imp_res_tac (SRULE [entry_preserves_code_def] entry_code_stage_intcall_args) >>
   imp_res_tac (SRULE [entry_preserves_code_def] (Q.INST [`opc` |-> `INVOKE`] entry_code_emit_op)) >>
   imp_res_tac (SRULE [entry_preserves_code_def] (Q.INST [`opc` |-> `INVOKE`] entry_code_emit_multi_op)) >>
   imp_res_tac (SRULE [entry_preserves_code_def] (Q.INST [`opc` |-> `INVOKE`] entry_code_emit_void)) >>
   imp_res_tac (SRULE [entry_preserves_code_def] entry_code_store_multi_results) >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem entry_code_ext_call_args:
+  !tys es.
+    (!e ce ty. MEM e es ==>
+      entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_ext_call_args cfn cenv kw_es tys es)
+Proof
+  Induct >> Cases_on `es` >>
+  simp[compile_ext_call_args_def, entry_code_return] >>
+  rpt strip_tac >>
+  irule entry_code_bind >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule entry_code_bind >> reverse conj_tac >- simp[entry_code_snapshot_vv] >>
+  rpt gen_tac >> BETA_TAC >>
+  irule entry_code_bind >> simp[entry_code_return]
 QED
 
 Theorem entry_code_extcall:
@@ -215,8 +235,10 @@ Proof
       (lower_value cfn cenv (BaseT AddressT) h)` by
     (irule entry_code_lower_value >> simp[]) >>
   `entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_multi_vvs cfn cenv (TAKE (LENGTH tys) t))` by
-    (irule entry_code_multi_vvs >> metis_tac[rich_listTheory.MEM_TAKE]) >>
+      (compile_ext_call_args cfn cenv (DROP (LENGTH tys) t)
+        (MAP (lowered_value_type cenv) (TAKE (LENGTH tys) t))
+        (TAKE (LENGTH tys) t))` by
+    (irule entry_code_ext_call_args >> metis_tac[rich_listTheory.MEM_TAKE]) >>
   `entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_ext_call_kwargs cfn cenv rt opts (DROP (LENGTH tys) t))` by
     (irule entry_code_ext_call_kwargs >> metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
