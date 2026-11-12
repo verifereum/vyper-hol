@@ -30,6 +30,7 @@ Theorem body_subscript_array_place_base_ptr:
     post_value_type cenv e1 = expr_type e1 /\
     ~((!t r t'. eval_expr cx e2 t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+      ~subscript_reads_base cx e1 e2 /\
       (!s tr slot vt t.
          eval_expr cx e1 s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
       ((~cenv.ce_is_ctor /\
