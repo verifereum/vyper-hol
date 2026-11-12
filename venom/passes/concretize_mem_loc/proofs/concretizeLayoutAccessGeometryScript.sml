@@ -76,7 +76,7 @@ Theorem concretize_memory_access_geometry:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
@@ -106,6 +106,8 @@ Theorem concretize_memory_access_geometry:
        w2n offT = concretize_positions C' owner aid + (w2n off-b)))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `s.vs_alloca_next < dimword (:256)` by
+    (drule_all layout_cut_safe_frontier >> simp[]) >>
   `LENGTH es = LENGTH qs` by
     metis_tac[joint_trace_def, joint_chain_length] >>
   `joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h)` by

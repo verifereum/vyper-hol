@@ -110,14 +110,15 @@ QED
 Definition layout_cut_safe_def:
   layout_cut_safe D lo n vs0 C q <=>
     ptr_discipline_upto lo n C vs0 /\ taint_within_upto D n C vs0 /\
-    gas_cut n vs0 (joint_state q)
+    gas_cut n vs0 (joint_state q) /\ alloca_frontier_upto n C vs0
 End
 
 Theorem layout_cut_safe_whole_run:
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
   ptr_discipline lo C vs0 /\ taint_within D C vs0 ==>
   layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C q
 Proof
-  simp[layout_cut_safe_def, gas_cut_def,
+  simp[layout_cut_safe_def, gas_cut_def, mem_inv_raw_alloca_frontier_upto,
        ptr_discipline_upto_whole, taint_within_upto_whole]
 QED
 
@@ -138,6 +139,16 @@ Proof
     (irule trace_config_gas_cut >> qexistsl_tac [`C`, `es`, `qend`] >>
      fs[layout_cut_safe_def]) >>
   gvs[joint_state_def]
+QED
+
+(* The alloca frontier at a configuration on the trace fits a word. *)
+Theorem layout_cut_safe_frontier:
+  layout_cut_safe D lo n vs0 C qend /\ joint_trace vs0 C q0 es qs qend /\
+  k <= LENGTH es /\ EL k (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h ==>
+  s.vs_alloca_next < dimword (:256)
+Proof
+  strip_tac >> drule_all layout_cut_safe_frame >>
+  fs[layout_cut_safe_def, alloca_frontier_upto_def] >> metis_tac[]
 QED
 
 Theorem layout_cut_safe_edge_frame:

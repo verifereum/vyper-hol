@@ -29,6 +29,25 @@ Proof
   metis_tac[raw_mem_ok_def]
 QED
 
+Theorem joint_activation_cache_strict_frontier:
+  s.vs_alloca_next < dimword (:256) /\
+  vs0.vs_allocas = FEMPTY /\
+  joint_config_reachable vs0 ctx
+    (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+    depth owner aid (b,sz) ==>
+  b + sz < dimword (:256)
+Proof
+  strip_tac >>
+  drule_all joint_reachable_cache_separated >> strip_tac >>
+  gvs[activation_cache_def]
+  >- (drule frame_cache_separated_local >>
+      simp[alloca_inv_def, alloca_next_valid_def] >>
+      metis_tac[LESS_EQ_LESS_TRANS]) >>
+  `LENGTH stk - SUC depth < LENGTH stk` by decide_tac >>
+  drule_all frame_cache_saved_bound >> decide_tac
+QED
+
 Theorem joint_activation_cache_strict:
   EVERY wf_function ctx.ctx_functions /\ mem_inv raw_mem_ok ctx vs0 /\
   vs0.vs_allocas = FEMPTY /\
@@ -41,11 +60,5 @@ Proof
   strip_tac >>
   `s.vs_alloca_next < dimword (:256)` by
     (drule_all joint_reachable_raw_frontier >> simp[]) >>
-  drule_all joint_reachable_cache_separated >> strip_tac >>
-  gvs[activation_cache_def]
-  >- (drule frame_cache_separated_local >>
-      simp[alloca_inv_def, alloca_next_valid_def] >>
-      metis_tac[LESS_EQ_LESS_TRANS]) >>
-  `LENGTH stk - SUC depth < LENGTH stk` by decide_tac >>
-  drule_all frame_cache_saved_bound >> decide_tac
+  drule_all joint_activation_cache_strict_frontier >> simp[]
 QED
