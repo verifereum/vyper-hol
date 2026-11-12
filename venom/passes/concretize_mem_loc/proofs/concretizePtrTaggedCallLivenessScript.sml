@@ -41,7 +41,6 @@ QED
 
 Theorem ptr_source_tagged_owner_call_liveset:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   n < LENGTH a.po_stack /\ EL (SUC n) tokens = owner /\
   FLOOKUP TG v = SOME (owner,aid) /\ fn = (EL n a.po_stack).cf_fn /\
   fn_ptr_ok P fn /\ ssa_form fn /\ wf_function fn /\ all_reachable fn /\
@@ -85,7 +84,7 @@ Theorem ptr_output_tagged_ancestor_destination_separation:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   ptr_chrono_history vs C h endpoint /\ t < LENGTH h /\
   stk = (EL t h).po_stack /\ n < LENGTH stk /\ k <= n /\
@@ -108,7 +107,6 @@ Theorem ptr_output_tagged_ancestor_destination_separation:
     ~MEM c (MAP (\i. Allocation i.inst_id)
       (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))) /\
   ptr_source_ownership vs C prefix (EL t h) tokens registry births PT TG saved /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EL (SUC n) tokens = owner /\ FLOOKUP TG v = SOME (owner,aid) /\
   ssa_form fn /\ all_reachable fn /\ fn_inst_wf fn /\ EVERY inst_wf (fn_insts fn) ==>
   ?pb. MEM (Allocation bid,pb,sb) (imported_mems_used observed.cu_context fn) /\
@@ -120,7 +118,6 @@ Proof
   drule_all ptr_source_tagged_owner_call_liveset >>
   disch_then (qspec_then `observed.cu_context` strip_assume_tac) >>
   irule ptr_output_suspended_descendant_separation >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   (conj_tac >- first_assum ACCEPT_TAC) >>

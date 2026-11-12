@@ -692,7 +692,7 @@ Proof
   pure_rewrite_tac[ptr_ledger_read_var_lookups] >>
   first_x_assum (qspec_then `v` assume_tac) >>
   Cases_on `v = "p"`
-  >- (asm_simp_tac bool_ss [ptr_prefix_value_def, WORD_SUB_REFL,
+  >- (gvs[] >> asm_simp_tac bool_ss [ptr_prefix_value_def, WORD_SUB_REFL,
         WORD_SUB_RZERO, optionTheory.option_CLAUSES, pairTheory.PAIR_EQ,
         pairTheory.pair_case_thm, optionTheory.option_case_def]) >>
   Cases_on `lookup_var v s` >>

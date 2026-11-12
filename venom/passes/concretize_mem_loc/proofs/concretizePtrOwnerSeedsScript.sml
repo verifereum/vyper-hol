@@ -98,7 +98,8 @@ Proof
     mems f.cf_inst`] (SPEC_ALL ptr_owner_seed_identify))) >>
   goal_assum (drule_at (Pat `ptr_active_alloc_geometry _`)) >> simp[] >>
   qexistsl_tac [`b`,`sz`,`b`] >> simp[] >>
-  drule_all ptr_frame_selected_read_seed >> strip_tac >> TRY (gvs[] >> NO_TAC) >>
+  drule_all ptr_frame_selected_read_seed >>
+  disch_then (qspec_then `mems` strip_assume_tac) >> TRY (gvs[] >> NO_TAC) >>
   metis_tac[]
 QED
 
@@ -132,5 +133,7 @@ Proof
     mems f.cf_inst`] (SPEC_ALL ptr_owner_seed_identify))) >>
   goal_assum (drule_at (Pat `ptr_active_alloc_geometry _`)) >> simp[] >>
   qexistsl_tac [`wb`,`ws`,`x`] >> simp[] >>
-  drule_all ptr_frame_operand_seed >> strip_tac >> TRY (gvs[] >> NO_TAC) >> metis_tac[]
+  drule_all ptr_frame_operand_seed >>
+  disch_then (qspec_then `mems` strip_assume_tac) >> TRY (gvs[] >> NO_TAC) >>
+  metis_tac[]
 QED
