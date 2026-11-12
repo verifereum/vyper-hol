@@ -11,11 +11,13 @@
  *)
 Theory fmpStageCoverCall
 Ancestors
-  fmpStageCoverBack
+  fmpStageCoverBack fmpCoverInvokeIndex fmpCoverSavedOutputs
+  fnFrameBoundaryInvoke
   fmpStageOpBase fmpStageRel o1PassContract ptrDiscipline contextCodegenRel
   unitTransformDefs passSimulationDefs venomExecSemantics venomState venomInst
   simplifyCfgAvailability o1ContractSimplifyCfgSrcFrame
   o1LowerDloadReadiness venomInstProofs1 concretizePtrOwnerPath
+  venomWf
   finite_map words list
   o1LowerDloadStackFunctions ctxLookupAgreeHelpers
   unitShapeDefs venomWf
@@ -79,7 +81,25 @@ Theorem fmp_stage_back_entry:
                   vs_inst_idx := 0 |>) s1 /\
     active_inst fn inst s1
 Proof
-  cheat
+  strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `wf_function fn /\ first_block_no_phi fn` by
+    (fs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >>
+     metis_tac[]) >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[fn_entry_label_def, entry_block_def] >>
+  rename1 `fn.fn_blocks = bb::bbs` >>
+  `bb.bb_instructions <> []` by
+    metis_tac[wf_function_def, bb_well_formed_def, MEM] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  rename1 `bb.bb_instructions = inst::rest` >>
+  `inst.inst_opcode <> PHI` by fs[first_block_no_phi_def] >>
+  qexistsl_tac
+    [`vs with <|vs_prev_bb := NONE; vs_current_bb := bb.bb_label; vs_inst_idx := 0|>`,
+     `inst`] >>
+  simp[enters_block_def, active_inst_def, get_instruction_def,
+       lookup_block_def, FIND_thm, eval_phis_def, phi_prefix_length_def] >>
+  qexists_tac `bb` >> simp[]
 QED
 
 (* Why it holds: callee_first (o1PassContract) orders callees strictly
@@ -174,6 +194,10 @@ Theorem fmp_stage_back_ret:
       (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
 Proof
   strip_tac >>
+  `ivk'.inst_outputs = f.cf_inst.inst_outputs` by
+    (irule fmp_cover_saved_outputs >>
+     conj_tac >- metis_tac[fmp_cover_invoke_index] >>
+     metis_tac[]) >>
   `s.vs_labels = t.vs_labels` by
     (fs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
   `rinst.inst_opcode <> PHI` by simp[] >>
@@ -188,14 +212,25 @@ Proof
      rpt strip_tac >> Cases_on `op` >> fs[eval_operand_def] >>
      metis_tac[eval_operand_def]) >>
   Cases_on `eval_operands rinst.inst_operands s` >> gvs[] >>
-  `!ops st vals. eval_operands ops st = SOME vals ==>
-     LENGTH vals = LENGTH ops` by
-    (Induct >> simp[eval_operands_def] >>
-     rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
-  `LENGTH x = LENGTH (v3::v4)` by metis_tac[] >>
-  `x <> []` by (Cases_on `x` >> fs[]) >>
-  qexistsl [`<| iret_values := FRONT x; iret_adopt_fmp := NONE |>`, `s`] >>
-  simp[Once step_inst_def, step_inst_base_def] >>
-  Cases_on `x` >> gvs[] >>
-  cheat
+  rename1 `eval_operands rinst.inst_operands s = SOME srcvals` >>
+  rename1 `eval_operands rinst.inst_operands t = SOME (hdval::tlvals)` >>
+  `LENGTH srcvals = LENGTH (hdval::tlvals)` by
+    metis_tac[eval_operands_some_length] >>
+  `srcvals <> []` by (Cases_on `srcvals` >> fs[]) >>
+  `LENGTH f.cf_inst.inst_outputs = LENGTH (FRONT srcvals)` by
+    (fs[bind_outputs_def] >>
+     simp[LENGTH_FRONT] >> fs[]) >>
+  `?s'. bind_outputs f.cf_inst.inst_outputs (FRONT srcvals)
+      (merge_callee_state f.cf_state s) = SOME s'` by
+    simp[bind_outputs_def] >>
+  `bind_outputs f.cf_inst.inst_outputs
+     (<| iret_values := FRONT srcvals; iret_adopt_fmp := NONE |>).iret_values
+     (adopt_return_fmp
+       <| iret_values := FRONT srcvals; iret_adopt_fmp := NONE |>
+       (merge_callee_state f.cf_state s)) = SOME s'` by
+    simp[adopt_return_fmp_def] >>
+  drule_all fmp_back_saved_continuation >> strip_tac >>
+  qexistsl [`<| iret_values := FRONT srcvals; iret_adopt_fmp := NONE |>`, `s`, `s'`, `inst'`] >>
+  simp[adopt_return_fmp_def] >>
+  Cases_on `srcvals` >> gvs[Once step_inst_def, step_inst_base_def]
 QED
