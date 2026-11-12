@@ -85,7 +85,65 @@ Proof
   strip_tac >> gvs[evaluation_state_component_equality]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
+Theorem outcomes_frame_exprs_members[local]:
+  !es. (!e. MEM e es ==> !cx s r t. eval_expr cx e s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) ==>
+  !cx s r t. eval_exprs cx es s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>
+Proof
+  Induct >> simp[Once evaluate_def, return_def] >>
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  imp_res_tac read_result_state >> gvs[] >>
+  metis_tac[outcomes_frame_trans]
+QED
+
+Theorem eval_code_operand_state[local]:
+  eval_exprs cx [addr] s = (r,t) ==>
+  SND (eval_expr cx (Builtin ct (Acc Code) [addr]) s) = t
+Proof
+  strip_tac >>
+  simp[Once evaluate_def, builtin_args_length_ok_def, bind_def,
+       ignore_bind_def, type_check_def, assert_def, return_def,
+       get_accounts_def, lift_sum_def, raise_def] >>
+  Cases_on `r` >> simp[] >>
+  Cases_on `evaluate_builtin cx t.accounts ct (Acc Code) [expr_type addr] x` >>
+  simp[return_def, raise_def]
+QED
+
+Theorem outcomes_frame_builtin_operands[local]:
+  (!cx s r t. eval_exprs cx es s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
+  (!e. MEM e es ==> !cx s r t. eval_expr cx e s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
+  (case code_slice_source bt es of
+     NONE => eval_exprs cx es
+   | SOME (ct,addr) => do
+       tail_vs <- eval_exprs cx (TL es);
+       addr_vs <- eval_exprs cx [addr];
+       acc <- get_accounts;
+       v <- lift_sum (evaluate_code_source cx acc (is_self_addr addr)
+                       ct (expr_type addr) addr_vs);
+       return (v::tail_vs)
+     od) s = (r,t) ==>
+  t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>
+Proof
+  strip_tac >>
+  irule (BETA_RULE (Q.SPEC `\s t. t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>`
+           builtin_operands_preserve)) >>
+  conj_tac >- metis_tac[outcomes_frame_trans] >>
+  qexistsl [`bt`, `cx`, `es`, `r`] >> simp[] >>
+  reverse conj_tac
+  >- (rpt strip_tac >> irule outcomes_frame_exprs_members >>
+      gvs[code_slice_source_SOME] >> metis_tac[listTheory.MEM]) >>
+  rpt strip_tac >>
+  drule eval_code_operand_state >> strip_tac >>
+  gvs[code_slice_source_SOME] >>
+  Cases_on `eval_expr cx (Builtin code_ty (Acc Code) [addr]) st` >>
+  qpat_x_assum `!ct. SND _ = _` (qspec_then `code_ty` mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem outcomes_frame_builtin[local]:
   (!cx s r t. eval_exprs cx es s = (r,t) ==>
     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
@@ -94,7 +152,6 @@ Theorem outcomes_frame_builtin[local]:
   eval_expr cx (Builtin ty bt es) s = (r,t) ==>
   t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>
 Proof
-  (* original proof, kept while held:
   rpt strip_tac >> Cases_on `bt = Len`
   >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, AllCaseEqs()] >>
@@ -112,12 +169,25 @@ Proof
       Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
       gvs[raise_def, return_def] >>
       imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]) >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+  gvs[Once evaluate_def] >>
+  qabbrev_tac `operands = (case code_slice_source bt es of
+    NONE => eval_exprs cx es
+  | SOME (ct,addr) => do
+      tail_vs <- eval_exprs cx (TL es);
+      addr_vs <- eval_exprs cx [addr];
+      acc <- get_accounts;
+      v <- lift_sum (evaluate_code_source cx acc (is_self_addr addr)
+                      ct (expr_type addr) addr_vs);
+      return (v::tail_vs)
+    od)` >>
+  `!s r t. operands s = (r,t) ==>
+     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>` by
+    (unabbrev_all_tac >> rpt strip_tac >>
+     irule outcomes_frame_builtin_operands >> metis_tac[]) >>
+  gvs[bind_def, ignore_bind_def, type_check_def, assert_def, return_def,
+      raise_def, get_accounts_def, AllCaseEqs()] >>
   imp_res_tac lift_sum_state >> gvs[] >>
   imp_res_tac outcomes_frame_precompile >> metis_tac[outcomes_frame_trans]
-  *)
-  cheat
 QED
 
 (* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
