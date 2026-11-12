@@ -44,7 +44,7 @@ Proof
 QED
 
 (* Why: the row-3 facts the step proofs use about the active instruction. *)
-Theorem fmp_stage_active_facts[local]:
+Theorem fmp_stage_active_facts:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s ==>
   pre_fmp_opcode inst.inst_opcode /\ inst.inst_opcode <> ALLOCA /\
@@ -88,7 +88,7 @@ QED
 (* Why: a kept instruction runs at the control map's index on the target,
    past its point's restore when that has run; an unrestored point is no
    reclaim point (fmp_stage_plan_point), so it has no restore. *)
-Theorem fmp_stage_target_inst[local]:
+Theorem fmp_stage_target_inst:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   ~MEM inst.inst_opcode [DALLOCA; INVOKE; RETPC_PARAM] /\
