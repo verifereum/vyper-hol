@@ -222,3 +222,12 @@ Proof
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
   irule convert_exempt_cert >> simp[]
 QED
+
+(* Reading a result and converting it adds nothing to the storage trace. *)
+Theorem convert_read_continuation_frame:
+  storage_trace_frame
+    (bind (read_result cx tv) (\v es. (convert_result cx t dst v,es)))
+Proof
+  irule storage_trace_frame_bind >> simp[storage_trace_frame_read_result] >>
+  rpt strip_tac >> simp[storage_trace_frame_def]
+QED
