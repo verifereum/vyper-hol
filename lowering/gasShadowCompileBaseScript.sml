@@ -134,16 +134,3 @@ Theorem gas_shadow_compiles_uncurry:
 Proof
   simp[comp_bind_uncurry, gas_shadow_compiles_bind]
 QED
-
-Theorem gas_shadow_compiles_uncurry_nested[local]:
-  gas_shadow_compiles f g /\
-  (!x. gas_shadow_compiles (h x) (k x)) /\
-  (!x y. gas_shadow_compiles (p x y) (q x y)) ==>
-  gas_shadow_compiles
-    (\s. UNCURRY (\x t. UNCURRY (p x) (h x t)) (f s))
-    (\s. UNCURRY (\x t. UNCURRY (q x) (k x t)) (g s))
-Proof
-  strip_tac >> simp[comp_bind_uncurry, SF ETA_ss] >>
-  match_mp_tac gas_shadow_compiles_bind >> simp[] >>
-  gen_tac >> match_mp_tac gas_shadow_compiles_bind >> simp[]
-QED
