@@ -3,7 +3,7 @@ Theory deployOutcomesFreeEntry
 Ancestors
   vyperCompiler list venomInst deployOutcomesFreeArgs deployOutcomesFreeScaffold
   ctorUnitShape ctorGeneratorShape ctorShapeProps loweringShapeProps supportedStmtTraverse moduleLowering deployOutcomesFreeLowering loweringShapeDefs
-  context emitHelper compileEnv
+  context emitHelper compileEnv ctorDeployLoweringCode compileVyper ctorDeployDefs stmtLowering
 Libs
   monadsyntax
 
@@ -183,4 +183,44 @@ Proof
     (drule extract_context_entry_every >> disch_then irule >>
      gvs[all_blocks_def]) >>
   gvs[install_immutable_reservation_def] >> metis_tac[]
+QED
+
+Theorem lower_vyper_deploy_unit_entry_excludes_outcomes:
+  deploy_source_ok tops am tx /\
+  lower_vyper_deploy_unit tops rp bc = SOME u /\
+  (!exts ints fb cf ce args pay nr key ut ss ret.
+    classify_functions tops = (exts,ints,fb,SOME cf) /\
+    set_constructor_package_target rp.rpol_target
+      (package_constructor tops T (K global_nonreentrant_slot) cf) =
+        (ce,args,pay,nr,key,ut,ss,ret) ==>
+    !env s.
+      EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+        [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+        bb.bb_instructions) (all_blocks s) ==>
+      EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+        [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+        bb.bb_instructions)
+        (all_blocks (SND (compile_stmts env NoLoop NoneT ss s)))) ==>
+  ?name fn. u.cu_context.ctx_entry = SOME name /\
+    lookup_function name u.cu_context.ctx_functions = SOME fn /\
+    EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (fn_insts fn)
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_vyper_deploy_unit _ _ _ = _` mp_tac >>
+  simp[lower_vyper_deploy_unit_def] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  Cases_on `ctor_fn` >> gvs[]
+  >- (gvs[set_constructor_package_target_def] >>
+      irule (SRULE [] run_deploy_lowering_entry_excludes_outcomes) >>
+      goal_assum (drule_at Any) >>
+      simp[compile_stmt_def, comp_return_def, internal_fn_descriptors_def]) >>
+  drule_all deploy_constructor_package_shape >> strip_tac >>
+  `supported_program tops` by fs[deploy_source_ok_def] >>
+  irule (SRULE [] run_deploy_lowering_entry_excludes_outcomes) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  drule deploy_internal_package_certificates >>
+  disch_then (qspecl_then [`rp.rpol_target`, `T`, `K global_nonreentrant_slot`,
+    `T`, `compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops`]
+    mp_tac) >> simp[] >> metis_tac[]
 QED
