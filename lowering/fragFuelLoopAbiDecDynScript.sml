@@ -990,6 +990,130 @@ Proof
   ho_match_mp_tac (BETA_RULE abi_dyn_closed_bind) >> simp[]
 QED
 
+Theorem abi_dyn_closed_return[local]:
+  !T v. (^dyn_closed) T (comp_return v)
+Proof
+  rpt gen_tac >> qspec_then `comp_return v` mp_tac abi_dyn_branchless_closed >>
+  simp[code_action_return]
+QED
+
+Theorem abi_dyn_closed_emit_op[local]:
+  !T opc ops. opc <> JMP /\ opc <> JNZ ==>
+    (^(inst [alpha |-> ``:operand``] dyn_closed)) T (emit_op opc ops)
+Proof
+  ntac 3 gen_tac >> strip_tac >>
+  qspec_then `emit_op opc ops` mp_tac abi_dyn_branchless_closed >>
+  simp[code_action_emit_op]
+QED
+
+Theorem abi_dyn_closed_emit_inst[local]:
+  !T opc ops outs. (^dyn_J) T (mk_inst 0 opc ops outs) ==>
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) T (emit_inst opc ops outs)
+Proof
+  simp_tac std_ss [emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[entry_shape_def, frag_code_def, emitted_blocks_def, emitted_insts_def,
+       DROP_APPEND, mk_inst_def] >>
+  metis_tac[]
+QED
+
+Theorem abi_dyn_closed_emit_void[local]:
+  !T opc ops. (^dyn_J) T (mk_inst 0 opc ops []) ==>
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) T (emit_void opc ops)
+Proof
+  simp_tac std_ss [emit_void_def, GSYM emit_inst_def] >>
+  metis_tac[BETA_RULE abi_dyn_closed_emit_inst]
+QED
+
+Theorem abi_dyn_closed_label[local]:
+  !T suffix. (^(inst [alpha |-> ``:string``] dyn_closed)) T (fresh_label suffix)
+Proof
+  ntac 2 gen_tac >> qspec_then `fresh_label suffix` mp_tac abi_dyn_branchless_closed >>
+  simp[code_action_fresh_label]
+QED
+
+Theorem abi_dyn_closed_block[local]:
+  !T l. (^(inst [alpha |-> ``:string``] dyn_closed)) T (new_block l)
+Proof
+  ntac 2 gen_tac >> qspec_then `new_block l` mp_tac abi_dyn_branchless_closed >>
+  simp[code_action_new_block]
+QED
+
+Theorem abi_dyn_closed_alloc[local]:
+  !T size. (^(inst [alpha |-> ``:buffer``] dyn_closed)) T (compile_alloc_buffer size)
+Proof
+  qx_gen_tac `targets` >> qx_gen_tac `sz` >>
+  qspec_then `compile_alloc_buffer sz` mp_tac abi_dyn_branchless_closed >>
+  simp[code_action_alloc_buffer]
+QED
+
+Theorem abi_dyn_targets_discharge[local]:
+  !T U a b. (^dyn_F) ((^dyn_J) ((T UNION U) UNION (^dyn_B) a b)) a b /\
+    U SUBSET (^dyn_B) a b ==>
+    (^dyn_F) ((^dyn_J) (T UNION (^dyn_B) a b)) a b
+Proof
+  BETA_TAC >> rpt gen_tac >> strip_tac >>
+  `(T' UNION U) UNION (^dyn_B) a b = T' UNION (^dyn_B) a b`
+    by (BETA_TAC >> ASM_SET_TAC[]) >>
+  pop_assum (fn th => rule_assum_tac (PURE_REWRITE_RULE [BETA_RULE th])) >> simp[]
+QED
+
+Theorem abi_dyn_switch_shape[local]:
+  !l a r b. new_block l a = (r,b) ==>
+    entry_shape a b /\ b.cs_current_bb = l
+Proof
+  simp[new_block_def, entry_shape_def] >> rpt strip_tac >>
+  disj2_tac >> qexistsl_tac [`[]`, `[]`] >> simp[]
+QED
+
+Theorem abi_dyn_marked_available[local]:
+  !a b c. entry_shape a b /\ entry_shape b c ==>
+    b.cs_current_bb IN (^dyn_B) a c
+Proof
+  rpt strip_tac >>
+  `cs_extends a b /\ cs_extends b c` by metis_tac[entry_shape_extends] >>
+  drule_all abi_dyn_available_compose >>
+  drule_all abi_dyn_current_available >>
+  simp_tac std_ss [pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+val dyn_skel = ``\hdr body exit (p:compile_state -> unit # compile_state)
+    (h:compile_state -> unit # compile_state) (q:compile_state -> unit # compile_state).
+  do p; new_block hdr; h; new_block body; q; new_block exit; return () od``;
+
+Theorem abi_dyn_skeleton_closed[local]:
+  !T hdr body exit p h q.
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) (T UNION {hdr;body;exit}) p /\
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) (T UNION {hdr;body;exit}) h /\
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) (T UNION {hdr;body;exit}) q ==>
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) T ((^dyn_skel) hdr body exit p h q)
+Proof
+  map_every qx_gen_tac [`targets`, `lh`, `lb`, `le`, `p`, `h`, `q`] >> strip_tac >>
+  `(^(inst [alpha |-> ``:unit``] dyn_closed)) (targets UNION {lh;lb;le}) ((^dyn_skel) lh lb le p h q)` by
+    (rule_assum_tac BETA_RULE >> simp_tac std_ss [] >> rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+      ho_match_mp_tac (BETA_RULE abi_dyn_closed_ignore_bind),
+      MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_block),
+      MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_return), conj_tac])) >>
+  simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+  MATCH_MP_TAC (BETA_RULE abi_dyn_targets_discharge) >>
+  qexists_tac `{lh;lb;le}` >> conj_tac
+  >- gvs[] >>
+  suspend "available"
+QED
+
+Resume abi_dyn_skeleton_closed[available]:
+  qpat_x_assum `do _ od a = _` mp_tac >>
+  simp_tac std_ss [comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
+  rule_assum_tac BETA_RULE >>
+  rpt (first_x_assum drule >> strip_tac) >>
+  imp_res_tac abi_dyn_switch_shape >>
+  qpat_x_assum `!a b. _` kall_tac >>
+  rpt (qpat_x_assum `EVERY _ _` kall_tac) >>
+  rpt conj_tac >> metis_tac[SRULE [] (BETA_RULE abi_dyn_marked_available), entry_shape_trans]
+QED
+Finalise abi_dyn_skeleton_closed
+
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
