@@ -15,6 +15,15 @@ Theory fmpStageControl
 Ancestors
   fmpStageRel o1PassContract fmpLowerDefs fmpReclaimDefs fmpWfDefs venomInst
   finite_map list rich_list fmpStepLayout fmpLowerProps
+  fmpStageControlWalk fmpStageControlLayout
+
+Theorem fmp_control_sum_lower[local]:
+  !n f. (!j. j < n ==> 1 <= f j) ==> n <= SUM (GENLIST f n)
+Proof
+  Induct >> simp[GENLIST, SUM_SNOC] >> rpt strip_tac >>
+  `n <= SUM (GENLIST f n)` by (first_x_assum irule >> simp[]) >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[]
+QED
 
 (* Why: the step proofs read the target's code at the control map's index
    off the lowering's own walk; a point's restores come first, then its
@@ -39,7 +48,56 @@ Theorem fmp_stage_tidx_code:
             bb.bb_instructions idx)
          bb'.bb_instructions = code
 Proof
-  cheat
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  qpat_x_assum `?info. _` (qx_choose_then `info` (CONJUNCTS_THEN assume_tac)) >>
+  drule fmp_control_rewrite >> simp[] >> strip_tac >>
+  drule_all fmp_control_checked_walk >> strip_tac >>
+  drule fmp_control_walk_suffix >> simp[] >>
+  disch_then (qspecl_then [`fmp_stage_plan infos ctx fn`, `idx`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule split_fmp_entry_reconstruct >> strip_tac >>
+  drule_all fmp_control_root_layout >> strip_tac >>
+  drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
+  drule fmp_lower_blocks_preserves_labels >> simp[] >> strip_tac >>
+  qpat_x_assum `blocks = _` SUBST_ALL_TAC >>
+  reverse (Cases_on `bb.bb_label = entry.bb_label`)
+  >- (`lookup_block bb.bb_label fn'.fn_blocks = SOME (bb with bb_instructions := code)` by
+        (drule fmp_control_install_other >> simp[] >> metis_tac[]) >>
+      qexistsl [`bb with bb_instructions := code`, `rsn`, `sn`, `left0`, `s1'`] >>
+      Cases_on `info.fi_needs_fmp` >>
+      simp[fmp_stage_tidx_def, arithmeticTheory.ADD_COMM]) >>
+  `lookup_block bb.bb_label (entry'::rest') = SOME entry'` by
+    gvs[lookup_block_def, FIND_thm] >>
+  `code = entry'.bb_instructions` by gvs[basic_block_accfupds] >>
+  Cases_on `root = NONE`
+  >- (`newpc = oldpc` by metis_tac[] >>
+      qpat_x_assum `fmp_install_root _ _ _ _ = _` mp_tac >>
+      simp[] >> strip_tac >>
+      drule_at Any fmp_control_install_no_root >> simp[callLayoutDefsTheory.OPTION_TO_LIST_def] >>
+      strip_tac >>
+      `fn'.fn_blocks = entry'::rest'` by
+        (first_x_assum (qspec_then `tail` mp_tac) >>
+         Cases_on `oldpc` >> simp[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
+      `~info.fi_needs_fmp` by metis_tac[] >>
+      qexistsl [`entry'`, `rsn`, `sn`, `left0`, `s1'`] >>
+      simp[fmp_stage_tidx_def, arithmeticTheory.ADD_COMM, lookup_block_def, FIND_thm] >>
+      metis_tac[]) >>
+  `info.fi_needs_fmp` by metis_tac[] >>
+  `LENGTH users + LENGTH (OPTION_TO_LIST oldpc) <= idx` by metis_tac[] >>
+  qmatch_asmsub_abbrev_tac `DROP m code` >>
+  `idx <= m` by
+    (simp[Abbr `m`] >> irule fmp_control_sum_lower >>
+     rpt strip_tac >> Cases_on `(EL j bb.bb_instructions).inst_opcode = DALLOCA` >>
+     Cases_on `(entry.bb_label,j) IN FDOM (fmp_stage_plan infos ctx fn)` >> simp[]) >>
+  drule_at (Pat `fmp_install_root _ _ _ _ = _`) fmp_control_install_suffix >>
+  disch_then (qspecl_then [`tail`, `oldpc`, `m`] mp_tac) >>
+  simp[] >>
+  (impl_tac >- (Cases_on `oldpc` >> simp[callLayoutDefsTheory.OPTION_TO_LIST_def])) >>
+  strip_tac >>
+  qexistsl [`entry''`, `rsn`, `sn`, `left0`, `s1'`] >>
+  simp[fmp_stage_tidx_def, lookup_block_def, FIND_thm] >>
+  Cases_on `root` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def] >>
+  Cases_on `oldpc` >> simp[callLayoutDefsTheory.OPTION_TO_LIST_def]
 QED
 
 (* Why: the other branches of the lowering keep the blocks (a sealed
