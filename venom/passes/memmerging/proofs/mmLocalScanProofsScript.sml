@@ -14399,6 +14399,36 @@ Proof
   irule mm_local_cut_nop_stutter >> simp[venomStateTheory.lookup_var_def]
 QED
 
+Theorem mm_local_pending_indices_deferred_suc[local]:
+  n < LENGTH is /\
+  (EL n is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  (?g r. MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+    n < r /\ r < LENGTH is) /\
+  (!g. MEM g gs ==> rep_of_group is g <> SOME ((EL n is).inst_id,g)) ==>
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n]
+Proof
+  strip_tac >>
+  `?g r. MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids /\
+    r < LENGTH is /\ SUC n <= r /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g)` by
+    (qexistsl [`g`,`r`] >> simp[]) >>
+  simp[NoAsms, mm_local_pending_indices_def, rich_listTheory.COUNT_LIST_SNOC,
+    rich_listTheory.SNOC_APPEND, FILTER_APPEND] >>
+  reverse IF_CASES_TAC
+  >- (gvs[] >>
+      qpat_x_assum `!g r. _` (qspecl_then [`g`,`r`] mp_tac) >> simp[]) >>
+  simp[NoAsms] >> rewrite_tac[rich_listTheory.FILTER_EQ] >>
+  qx_gen_tac `j` >> simp[MEM_COUNT_LIST] >> strip_tac >>
+  eq_tac
+  >- (strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+        arithmeticTheory.LESS_EQ_SUC_REFL]) >>
+  strip_tac >> gvs[] >>
+  rename1 `rep_of_group is h = SOME ((EL q is).inst_id,h)` >>
+  `q <> n` by metis_tac[] >>
+  `SUC n <= q` by decide_tac >> qexistsl [`h`,`q`] >> simp[]
+QED
+
 Theorem mm_local_erased_write_pending_suc[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -14432,24 +14462,8 @@ Proof
   `?r. n <= r /\ r < LENGTH is /\ rep_of_group is g = SOME ((EL r is).inst_id,g)` by
     metis_tac[mm_local_event_rep_position] >>
   `n < r` by (Cases_on `n = r` >> gvs[] >> decide_tac) >>
-  simp[NoAsms, mm_local_pending_indices_def, rich_listTheory.COUNT_LIST_SNOC,
-    rich_listTheory.SNOC_APPEND, FILTER_APPEND] >>
-  `MEM n (mm_local_pending_indices is gs (SUC n))` by
-    (rewrite_tac[mm_local_pending_indices_mem] >>
-     `SUC n <= r` by decide_tac >>
-     conj_tac >- decide_tac >> conj_tac >- gvs[] >>
-     qexistsl [`g`,`r`] >> simp[]) >>
-  qpat_x_assum `MEM n (mm_local_pending_indices is gs (SUC n))` mp_tac >>
-  simp[NoAsms, mm_local_pending_indices_mem] >> strip_tac >>
-  asm_rewrite_tac[] >> simp[NoAsms] >>
-  rewrite_tac[rich_listTheory.FILTER_EQ] >>
-  qx_gen_tac `j` >> simp[MEM_COUNT_LIST] >> strip_tac >>
-  eq_tac
-  >- (strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
-        arithmeticTheory.LESS_EQ_SUC_REFL]) >>
-  strip_tac >> gvs[] >>
-  `r'' <> n` by metis_tac[] >>
-  `SUC n <= r''` by decide_tac >> qexistsl [`g''`,`r''`] >> simp[]
+  irule mm_local_pending_indices_deferred_suc >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem mm_local_cut_erased_write_stutter[local]:
@@ -14496,14 +14510,15 @@ Proof
 QED
 
 Theorem mm_local_write_runtime_frame[local]:
-  (i.inst_opcode = MSTORE \/ i.inst_opcode = MCOPY) /\ step_inst fuel ctx i s = OK t ==>
+  i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  step_inst fuel ctx i s = OK t ==>
   mm_local_nonmemory_frame t = mm_local_nonmemory_frame s /\
   (!v. lookup_var v t = lookup_var v s)
 Proof
-  strip_tac >>
+  simp[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY] >> strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
   simp[venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.step_inst_base_opcode_eqs,
     venomExecSemanticsTheory.exec_write2_def] >>
   gvs[AllCaseEqs()] >> strip_tac >>
   gvs[venomMemPropsTheory.mstore_eq_write_mem,
@@ -15617,7 +15632,8 @@ Proof
     (!w. lookup_var w (H (SUC r)) = lookup_var w (H r))` by
     (`mm_local_nonmemory_frame z = mm_local_nonmemory_frame (H r) /\
       (!w. lookup_var w z = lookup_var w (H r))` by
-       (irule mm_local_write_runtime_frame >> metis_tac[]) >>
+       (irule mm_local_write_runtime_frame >>
+        metis_tac[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
      gvs[venomStateTheory.lookup_var_def]) >>
   qabbrev_tac `cap = mm_local_write_capture is H (SUC r)` >>
   qabbrev_tac `js = mm_local_pending_indices is gs r` >>
@@ -16840,6 +16856,35 @@ Proof
   simp[mm_local_pending_def] >> strip_tac >>
   qexists `ws` >> simp[] >>
   irule mm_local_write_log_memory_cong >> simp[]
+QED
+
+Theorem mm_local_zero_erased_pending_suc[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  n < LENGTH is /\ (EL n is).inst_opcode IN {MSTORE; CALLDATACOPY} /\
+  MEM (EL n is).inst_id (nop_ids_of_groups dfg Mem2Mem is gs) ==>
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n]
+Proof
+  strip_tac >>
+  `!g. MEM g gs ==> rep_of_group is g <> SOME ((EL n is).inst_id,g)` by
+    (rpt strip_tac >> metis_tac[mm_local_zero_selected_rep]) >>
+  `?g. MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids` by
+    (qpat_x_assum `MEM _ (nop_ids_of_groups _ _ _ _)` mp_tac >>
+     pure_rewrite_tac[nop_ids_of_groups_def, MEM_FLAT, MEM_MAP] >> strip_tac >>
+     gvs[] >> rename1 `MEM _ (nop_ids_of_group _ _ _ g)` >>
+     qexists `g` >> simp[] >>
+     qpat_x_assum `MEM _ (nop_ids_of_group _ _ _ _)` mp_tac >>
+     simp[nop_ids_of_group_def] >>
+     Cases_on `REVERSE (sort_ids_by_block bb.bb_instructions g.cg_inst_ids)` >>
+     simp[MEM_FILTER, MEM_REVERSE] >> strip_tac >>
+     `MEM (EL n bb.bb_instructions).inst_id
+       (REVERSE (sort_ids_by_block bb.bb_instructions g.cg_inst_ids))` by
+       metis_tac[MEM] >>
+     gvs[MEM_REVERSE, sort_ids_by_block_def, MEM_FILTER]) >>
+  `?r. n <= r /\ r < LENGTH is /\ rep_of_group is g = SOME ((EL r is).inst_id,g)` by
+    metis_tac[mm_local_event_rep_position] >>
+  `n < r` by (Cases_on `n = r` >> gvs[] >> decide_tac) >>
+  irule mm_local_pending_indices_deferred_suc >> gvs[] >> metis_tac[]
 QED
 
 Theorem mm_local_stage_correct:
