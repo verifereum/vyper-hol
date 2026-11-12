@@ -186,8 +186,9 @@ Resume compile_rest_word_membership_sim_mem[typed_tail]:
            (ACCEPT_TAC o cj 2 o REWRITE_RULE [exprSimHypsDefsTheory.expr_body_pre_def])) >>
      qexistsl [`cx`, `mid with gas_obs := []`] >> first_assum ACCEPT_TAC) >>
   `vv_holds cenv cx (ArrayT (expr_type e1) pbd) tv arr_vv (fin with gas_obs := []) u` by
-    (qpat_x_assum `post_value_type cenv e2 = _` (assume_tac o SYM) >>
-     fs[loweringPostsTheory.vv_post_def]) >>
+    (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def])) >>
+     qpat_assum `post_value_type cenv e2 = _` (fn th => fs[th])) >>
   drule rest_word_vv_read_suffix >>
   simp[] >> disch_then (qx_choose_then `v2` assume_tac) >>
   `value_has_type tvt v2` by metis_tac[] >>
@@ -204,24 +205,20 @@ Resume compile_rest_word_membership_sim_mem[typed_tail]:
   `?av. v2 = ArrayV av` by
     (Cases_on `v2` >> fs[vyperTypingTheory.value_has_type_def]) >>
   gnvs[] >>
-  `vv_post H ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
-      (fin with gas_obs := []) (Value (ArrayV av)) arr_vv u` by
-    (qpat_assum `!tail. read_result _ _ _ = _`
-       (qspec_then `[]` assume_tac) >>
-     drule vv_post_read_result >> simp[] >> metis_tac[]) >>
   `expr_body_pre cenv cx env e1
       (es with gas_obs := gas_explicit left s0.vs_gas_readings)` by simp[] >>
   `value_has_type et v1` by
     (drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_value) >>
      strip_tac >> gvs[]) >>
   `eval_operand needle t = SOME (typed_val_to_w256 et v1)` by
-    (qpat_x_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
-     simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def] >>
-     metis_tac[]) >>
+    (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _`
+       (drule_then (strip_assume_tac o
+          REWRITE_RULE [loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def])) >>
+     gvs[]) >>
   `eval_operand needle u = SOME (typed_val_to_w256 et v1)` by
-    (Cases_on `needle` >>
-     fs[venomStateTheory.eval_operand_def, loweringPostsTheory.vv_post_def] >>
-     metis_tac[]) >>
+    (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def])) >>
+     Cases_on `needle` >> fs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   `!z. needle = Var z \/ vv_operand arr_vv = Var z ==> not_fresh_at st2 z` by
     (rpt strip_tac
      >- metis_tac[freshWritesTheory.not_fresh_at_mono]
@@ -246,8 +243,10 @@ Resume compile_rest_word_membership_sim_mem[typed_tail]:
        (strip_assume_tac o REWRITE_RULE [gasSummaryTheory.gas_marked_exec_def]) >>
      metis_tac[fragGasModeTheory.gas_marked_path_exec,
        fragGasPathTheory.gas_path_normal]) >>
-  `alloca_inv u` by fs[loweringPostsTheory.vv_post_def,
-    exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
+  `alloca_inv u` by
+    (qpat_assum `!H. valid_horizon _ _ H fin.storage_trace ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.vv_post_def])) >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
   suspend "safe_tail"
 QED
 
@@ -256,22 +255,26 @@ Resume compile_rest_word_membership_sim_mem[safe_tail]:
        alloca_history func q /\ u.vs_alloca_next <= q.vs_alloca_next /\
        q.vs_current_bb = sb.cs_current_bb /\
        q.vs_inst_idx = LENGTH sb.cs_current_insts /\
-       vv_post H ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
-         (fin with gas_obs := []) tv arr_vv q /\
+       (!H. valid_horizon cx st0 H fin.storage_trace ==>
+          vv_post H ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
+            (fin with gas_obs := []) tv arr_vv q) /\
        eval_operand op q = SOME (bool_to_word
          (if bop = In then evaluate_in_array (ArrayTV et bd) v1 av
           else ~evaluate_in_array (ArrayTV et bd) v1 av))` by
     (qpat_assum `!tail. read_result cx tv (fin with gas_obs := tail) = _`
        (qspec_then `[]` assume_tac) >>
-     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ (Value _) _ _` kall_tac >>
      Cases_on `bd` >> gnvs[]
-     >- (drule (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`]
-           rest_word_fixed_tail_mem) >>
+     >- (qspec_then `\H. valid_horizon cx st0 H fin.storage_trace`
+           (drule o SRULE [])
+           (Q.GEN `P` (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`]
+              (SPEC_ALL rest_word_fixed_tail_mem))) >>
          simp[] >> disch_then drule >> simp[] >> disch_then drule >>
          simp[] >> disch_then drule >> simp[] >> metis_tac[]) >>
      qpat_x_assum `?m. pbd = Dynamic m` (qx_choose_then `pcap` SUBST_ALL_TAC) >>
-     drule (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`]
-       rest_word_dynamic_tail_mem) >>
+     qspec_then `\H. valid_horizon cx st0 H fin.storage_trace`
+       (drule o SRULE [])
+       (Q.GEN `P` (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`]
+          (SPEC_ALL rest_word_dynamic_tail_mem))) >>
      simp[] >> disch_then drule >> simp[] >> disch_then drule >>
      simp[] >> disch_then drule >> simp[] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `eval_operand op q = SOME (bool_to_word answer)` >>
