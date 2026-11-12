@@ -79,6 +79,7 @@ Theorem append_storage_word_success_post_mem[local]:
      else sstore slot (n2w len+1w) (sstore (slot+1w+n2w len) w s)) /\
   (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x u = SOME a) /\
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap /\
@@ -113,6 +114,7 @@ Theorem append_storage_word_success_path_mem:
   cap < dimword (:256) /\
   len = w2n (if tr then tload slot sbase else sload slot sbase) /\ len < cap /\
   stmt_state_rel H ctx func cenv cx es sbase /\ local_ptrs_reserved cenv sa /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\
@@ -211,6 +213,7 @@ Theorem append_storage_word_value_path_mem:
   (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\ encode_value tv v = SOME [(0,w)] /\
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es = (res,es') /\

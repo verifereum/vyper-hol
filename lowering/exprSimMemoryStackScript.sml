@@ -13,7 +13,7 @@ Theorem expr_stack_outcome_mem:
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee u. ?v. res = INL v /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       expr_store_bound cx (expr_type e) v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -21,7 +21,7 @@ Theorem expr_stack_outcome_mem:
     (\res ee r. expr_exit res r) ==>
   gas_outcome T (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
     (\res ee u. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
+      vv_post H ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
       vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv (StackValue t op) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
