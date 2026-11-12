@@ -9,7 +9,7 @@ Ancestors
   abiDecoderReentry abiEncoderRegisteredEffect
   ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryCompleteScalar
   compileEnv venomState venomMemDefs valueEncodingProps
-  ptrSafeRun ptrDiscipline words arithmetic list finite_map pred_set
+  ptrSafeRun ptrDiscipline words arithmetic list finite_map pred_set fragGasOriginPtr
 
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
@@ -156,6 +156,7 @@ val InitialPremMode = ``(^InitialPrem) /\ (checked ==>
 Theorem prefix_complete_array_initial_exit_pair_mode_exact:
   (^CshiftMode) checked ty tv ==> (^InitialPremMode) ==>
   ?actual Hout qout A slot.
+    (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, Hout, qout)) /\
     (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
       lookup_var x actual = lookup_var x initial) /\
@@ -183,7 +184,11 @@ Proof
      [(d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)))] initial actual` by
     (irule abi_encoder_registered_effect_trans >> qexists `prepared` >> asm_rewrite_tac[]) >>
   qexistsl [`actual`,`Hout`,`qout`,`A`,`slot`] >>
-  simp_tac std_ss [] >> asm_simp_tac bool_ss [] >>
+  simp_tac std_ss [] >>
+  conj_tac >-
+    (strip_tac >> qpat_x_assum `checked ==> !D explicit. _` drule >>
+     simp_tac std_ss []) >>
+  asm_simp_tac bool_ss [] >>
   conj_tac
   >- (rpt strip_tac >>
       `abi_decoder_older_vars loop_st.cs_next_var x` by res_tac >>
