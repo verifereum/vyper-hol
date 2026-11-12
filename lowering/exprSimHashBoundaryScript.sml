@@ -43,14 +43,14 @@ Theorem expr_sim_suffix:
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!gs v ee t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
        (INL v, ee) /\ ee.gas_obs = [] /\
-     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\ ~t.vs_halted /\
+     expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\ ~t.vs_halted /\
      t.vs_current_bb = sm.cs_current_bb /\
      t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
      ?marks. gas_summary_at F (ctx, func) marks (k v) (ee, t) Q R) ==>
@@ -131,10 +131,10 @@ Proof
 QED
 
 Theorem hash_readonly_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (t with vs_vars := s.vs_vars) = s /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
   `t = s with vs_vars := t.vs_vars` by
@@ -149,7 +149,7 @@ Proof
 QED
 
 Theorem hash_live_footprint_bound:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
       b <= p /\ p + n <= b + sz) \/
    (?name b sz. local_region cenv es.scopes s name b sz /\
@@ -169,14 +169,14 @@ QED
 
 Theorem hash_post_footprint_bound:
   post_value_type cenv e = expr_type e /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ eval_operand op s = SOME p ==>
   w2n p + val_footprint tv v < dimword (:256)
 Proof
   strip_tac >>
   Cases_on `val_footprint tv v = 0` >- simp[wordsTheory.w2n_lt] >>
-  `stmt_state_rel ctx func cenv cx es' s /\
+  `stmt_state_rel H ctx func cenv cx es' s /\
    expr_val_at cenv cx (expr_type e) sa sm es' v op s` by
     gvs[expr_post_def] >>
   drule_all expr_val_at_footprint >> strip_tac >>
@@ -186,7 +186,7 @@ Proof
 QED
 
 Theorem hash_dynamic_post_view:
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic cap))) ==>
@@ -211,7 +211,7 @@ Proof
 QED
 
 Theorem hash_string_post_view:
-  expr_post ctx func cenv cx e es sa sm s0 es' (StringV str) op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (StringV str) op s /\
   expr_type e = BaseT (StringT cap) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (StringT cap)) ==>
