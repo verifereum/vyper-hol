@@ -64,6 +64,7 @@ Theorem owned_member_navigation_record_ptr:
   ?r H u q.
     r = s with <| vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx |> /\
     abi_decode_sim ctx fn s r /\
+    gas_path_mem ctx fn s 0 (OK r) /\
     r.vs_current_bb = mid.cs_current_bb /\ r.vs_inst_idx = LENGTH mid.cs_current_insts /\
     abi_decoder_address_frame sa.cs_next_var s r /\ fresh_vars_wrt limit r /\
     (!op. abi_decoder_operand_live sa.cs_next_var op ==> eval_operand op r = eval_operand op s) /\
@@ -137,6 +138,7 @@ Theorem owned_member_navigation_ptr:
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r H u q.
     abi_decode_sim ctx fn s r /\
+    gas_path_mem ctx fn s 0 (OK r) /\
     r.vs_current_bb = mid.cs_current_bb /\ r.vs_inst_idx = LENGTH mid.cs_current_insts /\
     abi_decoder_address_frame sa.cs_next_var s r /\ fresh_vars_wrt limit r /\
     (!op. abi_decoder_operand_live sa.cs_next_var op ==> eval_operand op r = eval_operand op s) /\
@@ -261,6 +263,7 @@ Theorem source_owned_complex_suffix_ptr:
     r.vs_inst_idx = LENGTH mid.cs_current_insts ==>
     ?t J v fp.
       abi_decode_sim ctx fn r t /\
+      gas_path_mem ctx fn r 0 (OK t) /\
       ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\
       t.vs_inst_idx = LENGTH en.cs_current_insts /\ fresh_vars_wrt limit t /\
       val_in_memory (EL i tvs) (EL i vs) e t.vs_memory /\
@@ -340,6 +343,7 @@ Theorem source_owned_complex_suffix_ptr:
         (d + SUM (MAP type_memory_size (TAKE i tvs))) mem) ==>
     ?t H u fp.
       abi_decode_sim ctx fn s t /\
+      gas_path_mem ctx fn s 0 (OK t) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ fresh_vars_wrt limit t /\
       (!i. i < LENGTH tys ==>
@@ -884,6 +888,7 @@ Theorem source_owned_complex_elems_ptr:
     r.vs_inst_idx = LENGTH mid.cs_current_insts ==>
     ?t J v fp.
       abi_decode_sim ctx fn r t /\
+      gas_path_mem ctx fn r 0 (OK t) /\
       ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\
       t.vs_inst_idx = LENGTH en.cs_current_insts /\ fresh_vars_wrt limit t /\
       val_in_memory (EL i tvs) (EL i vs) e t.vs_memory /\
@@ -958,6 +963,7 @@ Theorem source_owned_complex_elems_ptr:
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t H u fp.
       abi_decode_sim ctx fn s t /\
+      gas_path_mem ctx fn s 0 (OK t) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ fresh_vars_wrt limit t /\
       (!i. i < LENGTH tys ==>

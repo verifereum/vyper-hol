@@ -408,6 +408,7 @@ Theorem source_owned_nonbulk_array_ptr:
     r.vs_inst_idx = LENGTH middle.cs_current_insts ==>
     ?t H u fp.
       abi_decode_sim ctx fn r t /\
+      gas_path_mem ctx fn r 0 (OK t) /\
       ~t.vs_halted /\ t.vs_current_bb = end_st.cs_current_bb /\
       t.vs_inst_idx = LENGTH end_st.cs_current_insts /\ fresh_vars_wrt limit t /\
       val_in_memory tv (EL i xs) e t.vs_memory /\
@@ -486,6 +487,7 @@ Theorem source_owned_nonbulk_array_ptr:
     s.vs_inst_idx = LENGTH st.cs_current_insts ==>
     ?t H u fp.
       abi_decode_sim ctx fn s t /\
+      gas_path_mem ctx fn s 0 (OK t) /\
       ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
       t.vs_inst_idx = LENGTH last.cs_current_insts /\
       val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d t.vs_memory /\
