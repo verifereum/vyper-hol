@@ -15,7 +15,10 @@ Theory fmpStageOpSteps
 Ancestors
   fmpStageOpFrame fmpStageOpSimPure fmpStageOpSimMem fmpStageTermSim fmpStageControl
   fmpStageOpBase fmpStageRel ptrDiscipline o1PassContract contextCodegenRel
-  venomExecSemantics venomState venomInst list
+  venomExecSemantics venomState venomInst list venomWf
+  fmpStageOpFrameForwardAbort fmpStageOpFrameForwardFetch
+  fmpStageOpFrameForwardScalars o1LowerDloadForwardInversion
+  dftGasToListReachBoundary
 
 (* Why: the target runs the same instruction (fmp_stage_kept_inst, at the
    control map's index, since an ordinary instruction is no reclaim
@@ -106,5 +109,27 @@ Theorem fmp_stage_revert_forward:
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block k' C' bb' t = r' /\ dead_result_rel D r r'
 Proof
-  cheat
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[o1_fn_shape_def, wf_function_def] >>
+  `get_instruction bb s.vs_inst_idx = SOME inst` by
+    metis_tac[active_inst_lookup_distinct, optionTheory.SOME_11] >>
+  `revert_forward_at bb s.vs_inst_idx` by
+    gvs[in_revert_forward_def] >>
+  drule_all revert_forward_at_terminates_abort >> strip_tac >>
+  `?j. revert_forward_pair bb s.vs_inst_idx j` by
+    (gvs[revert_forward_at_def]
+     >- metis_tac[] >> gvs[revert_forward_pair_def]) >>
+  drule_all fmp_forward_fetch >> strip_tac >>
+  `?dst src sz. inst.inst_operands = [dst;src;sz]` by
+    (gvs[revert_forward_pair_def] >> metis_tac[]) >>
+  drule_all fmp_forward_copy_scalars >> strip_tac >>
+  `s.vs_labels = t.vs_labels /\ s.vs_returndata = t.vs_returndata /\
+   (!v x. FLOOKUP s.vs_vars v = SOME x ==>
+     ?y. FLOOKUP t.vs_vars v = SOME y)` by
+    (gvs[fmp_stage_rel_def, fmp_frame_rel_def, fmp_env_rel_def] >> metis_tac[]) >>
+  `exec_block k C bb s = Abort reason se` by gvs[] >>
+  drule_all fmp_forward_available_abort >>
+  disch_then (qspec_then `C'` strip_assume_tac) >>
+  qexistsl_tac [`fn'`, `bb'`, `k`, `Abort reason t1`] >>
+  gvs[dead_result_rel_def]
 QED
