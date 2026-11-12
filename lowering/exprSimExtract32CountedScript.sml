@@ -113,7 +113,7 @@ QED
 Theorem extract32_outcome_read_prefix:
   gas_marked_exec memory (ctx, func)
     (a : evaluation_state -> value evaluation_result)
-    (es, s0) left (INL v) mid (OK t) /\
+    (es, s0) [] (INL v) mid (OK t) /\
   gas_outcome memory tops (ctx, func) cx st0 (k v)
     (mid with gas_obs := [], t) Q R ==>
   gas_outcome memory tops (ctx, func) cx st0 (bind a k) (es, s0) Q R
@@ -121,20 +121,20 @@ Proof
   disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
   rewrite_tac[gas_outcome_def] >>
   disch_then (qx_choose_then `right` (DISJ_CASES_THEN mp_tac))
-  >- (strip_tac >> qexists_tac `left ++ right` >> disj1_tac >>
+  >- (strip_tac >> qexists_tac `[] ++ right` >> disj1_tac >>
       irule gas_bad_storage_at_bind_right >> metis_tac[]) >>
   disch_then (DISJ_CASES_THEN mp_tac)
   >- (rewrite_tac[gas_summary_at_def] >>
       disch_then (qx_choose_then `out` (qx_choose_then `fin`
         (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac assume_tac)))) >>
-      qexists_tac `left ++ right` >> disj2_tac >> disj1_tac >>
+      qexists_tac `[] ++ right` >> disj2_tac >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >>
       qexistsl_tac [`out`, `fin`, `r`] >>
       conj_tac >- (irule gas_marked_exec_bind_normal >>
                     goal_assum drule >> simp[]) >>
       first_assum ACCEPT_TAC) >>
   strip_tac >>
-  qexists_tac `left ++ right` >> disj2_tac >> disj2_tac >>
+  qexists_tac `[] ++ right` >> disj2_tac >> disj2_tac >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule_at Any gas_exempt_cert_bind_value >>
   simp[GSYM ignore_bind_def] >> metis_tac[]
