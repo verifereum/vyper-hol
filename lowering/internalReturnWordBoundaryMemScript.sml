@@ -7,7 +7,7 @@ Ancestors
   fragExec venomExecSemantics loweringStateRelDefs stmtSimReturn stmtSimDefs
   stmtLoweringMono venomState
 
-Theorem internal_return_value_compile[local]:
+Theorem internal_return_value_compile:
   cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv',sb) /\
   lower_value compile_expr cenv ty e sa = (op,s1) ==>
