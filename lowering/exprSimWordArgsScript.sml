@@ -166,6 +166,36 @@ Proof
   drule eval_operand_drop_fresh >> simp[]
 QED
 
+(* straight_fresh_run_post's horizon-free part: the run's frame facts. *)
+Theorem straight_fresh_run_frame[local]:
+  straight_fresh m /\ m sa = (op,sb) /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  run_inst_seq (emitted_insts sa sb) (drop_fresh sa s0) = OK t0 /\
+  eval_operand op t0 = SOME w /\
+  run_inst_seq (emitted_insts sa sb) s0 = OK t /\ vars_ext t0 t ==>
+  eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w /\
+  (!z v. not_fresh_at sa z /\ lookup_var z s0 = SOME v ==>
+    lookup_var z (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME v) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+    FLOOKUP (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_allocas aid = SOME b) /\
+  (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_memory = s0.vs_memory /\
+  ~(t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_halted /\
+  (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_current_bb = sb.cs_current_bb /\
+  (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >>
+  `writes_fresh sa (emitted_insts sa sb) /\ sb.cs_current_bb = sa.cs_current_bb` by
+    metis_tac[straight_fresh_def] >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `eval_operand op t = SOME w` by
+    (fs[vars_ext_def] >>
+     qpat_x_assum `t = t0 with vs_vars := _` SUBST1_TAC >>
+     simp[eval_operand_vars_ext]) >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  simp[lookup_var_def] >>
+  Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
+QED
+
 Theorem word_builtin_frag_success:
   !ctx func cenv cx code res vs es0 v.
     res = INL v /\ word_value v /\
@@ -189,9 +219,11 @@ Proof
   qpat_x_assum `!xs. straight_fresh (code xs)` (qspec_then `xs` assume_tac) >>
   drule_all straight_fresh_clean_success_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  drule_all straight_fresh_run_post >> strip_tac >>
+  drule_all straight_fresh_run_frame >> strip_tac >>
   qexists_tac `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
-  simp[]
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  drule_all straight_fresh_run_post >> simp[]
 QED
 
 Theorem word_builtin_frag_revert:
