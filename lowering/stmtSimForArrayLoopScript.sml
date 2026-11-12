@@ -16,6 +16,17 @@ val alloca_frame_update_var_same =
     stmtSimDefsTheory.alloca_frame_update_var
   |> SIMP_RULE std_ss [stmtSimDefsTheory.alloca_frame_same];
 
+(* Storage well-formedness reads only accounts and transient storage. *)
+Theorem array_storage_wf_with[local,simp]:
+  (storage_well_formed_on cx (es with scopes := sc) R <=>
+   storage_well_formed_on cx es R) /\
+  (storage_well_formed_on cx (es with gas_obs := g) R <=>
+   storage_well_formed_on cx es R)
+Proof
+  conj_tac >>
+  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
+QED
+
 Definition array_for_code_def:
   array_for_code func cenv bc ty stmts id et tv n stride saved_base
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
@@ -68,11 +79,16 @@ Definition array_for_code_def:
     stride <= sz /\ stride + 64 < dimword (:256)
 End
 
+(* The loop head's relation holds at every horizon valid for the trace so
+   far, and there is one. *)
 Definition array_loop_inv_def:
-  array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
     ainst cond_lbl st k es s <=>
     s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-    stmt_state_rel ctx func cenv cx es s /\ P es /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s /\
+       storage_well_formed_on cx es (FST H)) /\ P es /\
     lookup_scopes id es.scopes = NONE /\ k <= LENGTH vs /\
     lookup_var idx s = SOME (n2w k) /\
     eval_operand saved_base s = SOME base /\
@@ -284,20 +300,20 @@ Proof
 QED
 
 Theorem array_condition_boundary:
-  !ctx func cenv cx P vs id idx saved_base base p dst sz ainst cond_lbl st
+  !ctx func cenv cx st0 P vs id idx saved_base base p dst sz ainst cond_lbl st
    k es cc n dv j1 j2 exit_lbl stmts_lbl.
   lookup_block cond_lbl func.fn_blocks =
     SOME <| bb_label := cond_lbl;
             bb_instructions :=
               [mk_inst j1 EQ [Var idx; Lit (n2w n)] [dv];
                mk_inst j2 JNZ [Var dv; Label exit_lbl; Label stmts_lbl] []] |> /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
     ainst cond_lbl st k es cc /\
   n = LENGTH vs /\ n < dimword (:256) /\
   not_local_ptr cenv es.scopes dv /\ dv <> idx /\ dv <> p /\
   (!x. saved_base = Var x ==> x <> dv) ==>
   ?next.
-    array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+    array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
       ainst (if k = n then exit_lbl else stmts_lbl) st k es next /\
     (!x. x <> dv ==> lookup_var x next = lookup_var x cc) /\
     next.vs_allocas = cc.vs_allocas /\
@@ -314,11 +330,13 @@ Proof
     (update_var dv (bool_to_word (k = n)) cc)` >>
   conj_tac
   >- (fs[array_loop_inv_def, lookup_var_def] >>
-      `stmt_state_rel ctx func cenv cx es
-         (update_var dv (bool_to_word (k = LENGTH vs)) cc)` by
-        (irule stmt_state_rel_update_var >> simp[]) >>
+      `!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es
+           (update_var dv (bool_to_word (k = LENGTH vs)) cc)` by
+        (rpt strip_tac >> irule stmt_state_rel_update_var >> simp[]) >>
       fs[stmt_state_rel_jump_to, jump_to_def, update_var_def,
            lookup_var_def, FLOOKUP_UPDATE] >>
+      conj_tac >- metis_tac[] >>
       conj_tac
       >- (Cases_on `saved_base` >>
           gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
@@ -408,7 +426,7 @@ Proof
 QED
 
 Theorem array_increment_boundary:
-  !ctx func cenv cx P vs id idx saved_base base p dst sz ainst cond_lbl
+  !ctx func cenv cx st0 P vs id idx saved_base base p dst sz ainst cond_lbl
    incr_lbl st k es dd nv i1 i2 i3.
   lookup_block incr_lbl func.fn_blocks =
     SOME <| bb_label := incr_lbl;
@@ -416,13 +434,13 @@ Theorem array_increment_boundary:
               [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
                mk_inst i2 ASSIGN [Var nv] [idx];
                mk_inst i3 JMP [Label cond_lbl] []] |> /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
     ainst incr_lbl st k es dd /\ k < LENGTH vs /\
   not_local_ptr cenv es.scopes idx /\ not_local_ptr cenv es.scopes nv /\
   p <> idx /\ p <> nv /\
   (!x. saved_base = Var x ==> x <> idx /\ x <> nv) ==>
   ?next.
-    array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+    array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
       ainst cond_lbl st (k+1) es next /\
     (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x dd) /\
     next.vs_allocas = dd.vs_allocas /\
@@ -436,9 +454,10 @@ Proof
     (update_var idx (n2w k + 1w) (update_var nv (n2w k + 1w) dd))` >>
   conj_tac
   >- (fs[array_loop_inv_def] >>
-      `stmt_state_rel ctx func cenv cx es
-        (update_var idx (n2w k + 1w) (update_var nv (n2w k + 1w) dd))` by
-        (irule stmt_state_rel_update_var >> simp[] >>
+      `!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es
+           (update_var idx (n2w k + 1w) (update_var nv (n2w k + 1w) dd))` by
+        (rpt strip_tac >> irule stmt_state_rel_update_var >> simp[] >>
          irule stmt_state_rel_update_var >> simp[]) >>
       `ret_pc_ok cenv st
         (update_var idx (n2w k + 1w) (update_var nv (n2w k + 1w) dd))` by
@@ -447,7 +466,7 @@ Proof
       fs[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
          word_add_n2w] >>
       Cases_on `saved_base` >>
-      gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+      gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   conj_tac >- simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   conj_tac >- simp[jump_to_def, update_var_def] >>
   conj_tac
@@ -497,16 +516,16 @@ Proof
 QED
 
 Theorem array_address_prefix_boundary:
-  !ctx func cenv cx es s idx saved_base arr_base k stride ov ep j3 j4 st.
+  !H ctx func cenv cx es s idx saved_base arr_base k stride ov ep j3 j4 st.
   lookup_var idx s = SOME (n2w k) /\
   eval_operand saved_base s = SOME arr_base /\
   (!x. saved_base = Var x ==> x <> ov) /\
-  stmt_state_rel ctx func cenv cx es s /\ ret_pc_ok cenv st s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ret_pc_ok cenv st s /\
   not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes ep ==>
   ?s1. run_inst_seq
       [mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov];
        mk_inst j4 ADD [saved_base; Var ov] [ep]] s = OK s1 /\
-    stmt_state_rel ctx func cenv cx es s1 /\ ret_pc_ok cenv st s1 /\
+    stmt_state_rel H ctx func cenv cx es s1 /\ ret_pc_ok cenv st s1 /\
     lookup_var ep s1 = SOME (n2w (w2n arr_base + k * stride)) /\
     (s1 with vs_vars := s.vs_vars) = s /\
     (!x. x <> ov /\ x <> ep ==> lookup_var x s1 = lookup_var x s)
@@ -556,7 +575,7 @@ Proof
 QED
 
 Theorem array_copy_run_declare:
-  !ctx func cenv cx es s id p sz dw inst v tv sc rest a sa sb src ty tenv sw.
+  !H ctx func cenv cx es s id p sz dw inst v tv sc rest a sa sb src ty tenv sw.
   compile_iter_elem_copy cenv src (Var p) (type_memory_size tv)
     LocMemory F ty ty sa = ((),sb) /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -566,7 +585,7 @@ Theorem array_copy_run_declare:
   type_memory_bytes cenv ty = type_memory_size tv /\
   val_in_memory tv v (w2n sw) s.vs_memory /\
   type_memory_size tv + 64 < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   not_local_ptr cenv es.scopes p /\
@@ -575,7 +594,7 @@ Theorem array_copy_run_declare:
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw,sz) /\
   type_memory_size tv <= sz ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tv; value := v; popped := []|>)) :: rest) t /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
@@ -612,10 +631,10 @@ Proof
 QED
 
 Theorem array_empty_scope_rel_transport:
-  !ctx func cenv bc cx es s.
+  !H ctx func cenv bc cx es s.
   cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\
-  stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func bc cx (es with scopes := FEMPTY :: es.scopes) s
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func bc cx (es with scopes := FEMPTY :: es.scopes) s
 Proof
   rpt gen_tac >> strip_tac >>
   `!name entry. lookup_scopes name es.scopes = SOME entry ==>
@@ -648,14 +667,14 @@ Proof
 QED
 
 Theorem array_for_body_entry_run:
-  !ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  !H ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
    idx saved_base arr_base k stride ov ep j3 j4.
   compile_iter_elem_copy cenv (Var ep) (Var p) stride LocMemory F et et sa = ((),sb0) /\
   stride = type_memory_size tv /\ type_memory_bytes cenv et = stride /\
   evaluate_type tenv et = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
   val_in_memory tv v (w2n arr_base + k * stride) s.vs_memory /\
   w2n arr_base + k * stride < dimword (:256) /\ stride + 64 < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\ local_ptrs_reserved bc sa /\
   lookup_scopes id es.scopes = NONE /\
   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -671,7 +690,7 @@ Theorem array_for_body_entry_run:
   ?t. run_inst_seq
     ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov];
       mk_inst j4 ADD [saved_base; Var ov] [ep]] ++ emitted_insts sa sb0) s = OK t /\
-    stmt_state_rel ctx func bc cx
+    stmt_state_rel H ctx func bc cx
       (es with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) t /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
@@ -694,10 +713,10 @@ Proof
   `run_inst_seq [mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov];
      mk_inst j4 ADD [saved_base; Var ov] [ep]] s = OK s1` by
     (simp[Abbr `s1`] >> irule array_address_prefix_run >> simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es s1` by
+  `stmt_state_rel H ctx func cenv cx es s1` by
     (simp[Abbr `s1`] >> irule stmt_state_rel_update_var >> simp[] >>
      irule stmt_state_rel_update_var >> simp[]) >>
-  `stmt_state_rel ctx func bc cx (es with scopes := FEMPTY :: es.scopes) s1` by
+  `stmt_state_rel H ctx func bc cx (es with scopes := FEMPTY :: es.scopes) s1` by
     (irule array_empty_scope_rel_transport >> qexists_tac `cenv` >> simp[]) >>
   `not_fresh_at sa p` by metis_tac[array_copy_live_ptrs_reserved] >>
   `!x. Var ep = Var x ==> not_fresh_at sa x` by simp[] >>
@@ -792,7 +811,7 @@ QED
 Finalise array_for_body_entry_run
 
 Theorem array_body_prefix_continuation:
-  !ctx func cenv cx es s t sb bb insts.
+  !ctx func cenv cx st0 es s t sb bb insts.
   lookup_block sb.cs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX sb.cs_current_insts bb.bb_instructions /\
   insts = sb.cs_current_insts /\
@@ -800,11 +819,13 @@ Theorem array_body_prefix_continuation:
   run_inst_seq insts s = OK t /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) insts /\
   EVERY (\i. i.inst_opcode <> GAS) insts /\
-  stmt_state_rel ctx func cenv cx es t /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es t) /\
   (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s ==>
   ?s2. s2.vs_current_bb = sb.cs_current_bb /\
     s2.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~s2.vs_halted /\
-    stmt_state_rel ctx func cenv cx es s2 /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s2) /\
     s2.vs_vars = t.vs_vars /\ s2.vs_allocas = s.vs_allocas /\
     s2.vs_memory = t.vs_memory /\
     gas_marked_path F ctx func s 0 (OK s2) /\
@@ -841,14 +862,16 @@ Proof
 QED
 
 Theorem array_for_body_entry:
-  !ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  !ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
    idx saved_base arr_base k stride ov ep j3 j4 bb st.
   compile_iter_elem_copy cenv (Var ep) (Var p) stride LocMemory F et et sa = ((),sb0) /\
   stride = type_memory_size tv /\ type_memory_bytes cenv et = stride /\
   evaluate_type tenv et = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
   val_in_memory tv v (w2n arr_base + k * stride) s.vs_memory /\
   w2n arr_base + k * stride < dimword (:256) /\ stride + 64 < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s) /\
   cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\ local_ptrs_reserved bc sa /\
   lookup_scopes id es.scopes = NONE /\
   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -871,9 +894,10 @@ Theorem array_for_body_entry:
     not_fresh_at sa x /\ x <> ov /\ x <> ep) ==>
   ?s2. s2.vs_current_bb = sb0.cs_current_bb /\
     s2.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s2.vs_halted /\
-    stmt_state_rel ctx func bc cx
-      (es with scopes :=
-        (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) s2 /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func bc cx
+         (es with scopes :=
+           (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) s2) /\
     ret_pc_ok bc st s2 /\ s2.vs_allocas = s.vs_allocas /\
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
       lookup_var x s2 = lookup_var x s) /\
@@ -889,8 +913,19 @@ Theorem array_for_body_entry:
             :: es.scopes) s2)
 Proof
   rpt gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
   drule_all array_for_body_entry_run >>
   disch_then (qspecl_then [`j3`, `j4`] strip_assume_tac) >>
+  `!H'. valid_horizon cx st0 H' es.storage_trace ==>
+     stmt_state_rel H' ctx func bc cx
+       (es with scopes :=
+         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+           :: es.scopes) t` by
+    (rpt strip_tac >>
+     qpat_x_assum `stmt_state_rel H _ _ cenv _ _ s` kall_tac >>
+     `stmt_state_rel H' ctx func cenv cx es s` by metis_tac[] >>
+     drule_all array_for_body_entry_run >>
+     disch_then (qspecl_then [`j3`, `j4`] strip_assume_tac) >> gvs[]) >>
   `run_inst_seq sb0.cs_current_insts s = OK t` by metis_tac[] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     sb0.cs_current_insts` by
@@ -899,8 +934,12 @@ Proof
     (irule iter_memory_copy_no_gas >> goal_assum (drule_at Any)) >>
   `EVERY (\i. i.inst_opcode <> GAS) sb0.cs_current_insts` by
     simp[mk_inst_def] >>
-  `sb0.cs_current_insts = sb0.cs_current_insts` by simp[] >>
-  drule_all array_body_prefix_continuation >> strip_tac >>
+  qspecl_then [`ctx`, `func`, `bc`, `cx`, `st0`,
+    `es with scopes :=
+       (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+         :: es.scopes`, `s`, `t`, `sb0`, `bb`, `sb0.cs_current_insts`]
+    mp_tac array_body_prefix_continuation >>
+  impl_tac >- simp[] >> simp[] >> strip_tac >>
   `ret_pc_ok bc st t` by (irule array_ret_pc_copy_frame >> metis_tac[]) >>
   qexists_tac `s2` >> simp[] >>
   `!x. lookup_var x s2 = lookup_var x t` by simp[lookup_var_def] >>
@@ -927,13 +966,13 @@ Proof
 QED
 
 Theorem array_body_scope_projection:
-  !ctx func cenv bc c3 cx ei stmts r es2 s sc rest.
+  !H ctx func cenv bc c3 cx ei stmts r es2 s sc rest.
   cenv_top_ext cenv bc ei.scopes /\
   eval_stmts cx stmts ei = (r,es2) /\
   cenv_top_ext bc c3 es2.scopes /\
-  stmt_state_rel ctx func c3 cx es2 s /\ es2.scopes = sc :: rest /\
+  stmt_state_rel H ctx func c3 cx es2 s /\ es2.scopes = sc :: rest /\
   (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-  stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s
+  stmt_state_rel H ctx func cenv cx (es2 with scopes := rest) s
 Proof
   rpt gen_tac >> strip_tac >>
   drule eval_stmts_preserves_scopes_dom >> strip_tac >>
@@ -944,20 +983,22 @@ Proof
 QED
 
 Theorem array_condition_exit_framed:
-  !ctx func cenv cx P vs id idx saved_base arr_base p dst sz ainst cond_lbl st
+  !ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz ainst cond_lbl st
    es cc dv j1 j2 exit_lbl stmts_lbl caller.
   lookup_block cond_lbl func.fn_blocks =
     SOME <|bb_label := cond_lbl; bb_instructions :=
       [mk_inst j1 EQ [Var idx; Lit (n2w (LENGTH vs))] [dv];
        mk_inst j2 JNZ [Var dv; Label exit_lbl; Label stmts_lbl] []]|> /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst cond_lbl st (LENGTH vs) es cc /\
   LENGTH vs < dimword (:256) /\
   not_local_ptr cenv es.scopes dv /\ dv <> idx /\ dv <> p /\
   (!x. saved_base = Var x ==> x <> dv) /\
   (!x. not_fresh_at caller x ==> x <> dv) ==>
   ?next. next.vs_current_bb = exit_lbl /\ next.vs_inst_idx = 0 /\
-    ~next.vs_halted /\ stmt_state_rel ctx func cenv cx es next /\
+    ~next.vs_halted /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es next) /\
     (!x w. not_fresh_at caller x /\ lookup_var x cc = SOME w ==>
       lookup_var x next = SOME w) /\
     (!aid b. FLOOKUP cc.vs_allocas aid = SOME b ==>
@@ -1053,17 +1094,19 @@ Proof
 QED
 
 Theorem array_body_to_increment:
-  !ctx func cenv cx es s r sb sj exit_lbl incr_lbl.
+  !ctx func cenv cx st0 es s r sb sj exit_lbl incr_lbl.
   stmt_lands (InLoop exit_lbl incr_lbl) sb r s /\
   (r = INL () \/ r = INR ContinueException) /\ ~s.vs_halted /\
-  stmt_state_rel ctx func cenv cx es s /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s) /\
   (r = INL () ==>
     sj.cs_blocks = sb.cs_blocks /\ sj.cs_current_bb = sb.cs_current_bb /\
     sj.cs_current_insts = sb.cs_current_insts ++
       [mk_inst sb.cs_next_id JMP [Label incr_lbl] []] /\
     fn_has_code sb sj func) ==>
   ?dd. dd.vs_current_bb = incr_lbl /\ dd.vs_inst_idx = 0 /\ ~dd.vs_halted /\
-    stmt_state_rel ctx func cenv cx es dd /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es dd) /\
     dd.vs_vars = s.vs_vars /\ dd.vs_allocas = s.vs_allocas /\
     dd.vs_memory = s.vs_memory /\
     gas_marked_path F ctx func s 0 (OK dd) /\
@@ -1093,14 +1136,17 @@ QED
 
 (* Logical copy-entry contract, shared by counted preparation and code extraction. *)
 Definition array_entry_inputs_def:
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
     idx saved_base arr_base k stride ov ep j3 j4 bb st <=>
   compile_iter_elem_copy cenv (Var ep) (Var p) stride LocMemory F et et sa = ((),sb0) /\
   stride = type_memory_size tv /\ type_memory_bytes cenv et = stride /\
   evaluate_type tenv et = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
   val_in_memory tv v (w2n arr_base + k * stride) s.vs_memory /\
   w2n arr_base + k * stride < dimword (:256) /\ stride + 64 < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)) /\
   cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\ local_ptrs_reserved bc sa /\
   lookup_scopes id es.scopes = NONE /\
   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -1124,12 +1170,13 @@ Definition array_entry_inputs_def:
 End
 
 Definition array_entry_ready_def:
-  array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s s2 <=>
+  array_entry_ready ctx func bc cx st0 es id tv v sb0 sa ov ep st s s2 <=>
   s2.vs_current_bb = sb0.cs_current_bb /\
   s2.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s2.vs_halted /\
-  stmt_state_rel ctx func bc cx
-    (es with scopes :=
-      (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) s2 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func bc cx
+       (es with scopes :=
+         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) s2) /\
   ret_pc_ok bc st s2 /\ s2.vs_allocas = s.vs_allocas /\
   (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
     lookup_var x s2 = lookup_var x s) /\
@@ -1138,9 +1185,9 @@ Definition array_entry_ready_def:
 End
 
 Theorem array_entry_inputs_run:
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
     idx saved_base arr_base k stride ov ep j3 j4 bb st ==>
-  ?s2. array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s s2 /\
+  ?s2. array_entry_ready ctx func bc cx st0 es id tv v sb0 sa ov ep st s s2 /\
     (!caller. caller.cs_next_id <= sa.cs_next_id /\
       caller.cs_next_id <= ainst.inst_id ==>
       alloca_frame cenv es caller s bc
@@ -1149,12 +1196,15 @@ Theorem array_entry_inputs_run:
             :: es.scopes) s2)
 Proof
   pure_rewrite_tac[array_entry_inputs_def, array_entry_ready_def] >>
-  strip_tac >> drule_all array_for_body_entry >> strip_tac >>
+  strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
+  drule_all (SIMP_RULE pure_ss [PULL_EXISTS] array_for_body_entry) >> strip_tac >>
   qexists_tac `s2` >> simp[]
 QED
 
 Theorem array_round_body_prepare:
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
     idx saved_base arr_base k stride ov ep j3 j4 bb sb0 /\
   gas_marked_path F ctx func cc 0 (OK s) /\
   ei = es with <|scopes :=
@@ -1164,15 +1214,15 @@ Theorem array_round_body_prepare:
   m sb0 = (bc',sb1) /\ fn_has_code sb0 sb1 func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved bc sb0 /\
   ~block_is_terminated sb0 /\ gas_admissible source (stmt_res_ok lctx) ei ==>
-  ?s2. array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep sb0 s s2 /\
+  ?s2. array_entry_ready ctx func bc cx st0 es id tv v sb0 sa ov ep sb0 s s2 /\
     gas_marked_exec F (ctx,func) (push_scope_with_var id tv v) (es,cc) []
       (INL ())
       (es with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
           :: es.scopes) (OK s2) /\
-    gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
-      (stmt_post ctx func cx lctx bc bc' sb0 sb1 ei s2)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 source (ei,s2)
+      (\H. stmt_post H ctx func cx lctx bc bc' sb0 sb1 ei s2)
+      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
     (!caller. caller.cs_next_id <= sa.cs_next_id /\
       caller.cs_next_id <= ainst.inst_id ==>
       alloca_frame cenv es caller s bc
@@ -1190,20 +1240,18 @@ Proof
   qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
   disch_then irule >> simp[] >>
-  fs[array_entry_ready_def] >>
-  `!E. stmt_state_rel ctx func bc cx E s2 ==>
-       stmt_state_rel ctx func bc cx (E with gas_obs := []) s2` by
-    (rpt strip_tac >>
-     `s2 = s2 with <|vs_gas_readings := s2.vs_gas_readings;
-                     vs_inst_idx := s2.vs_inst_idx|>` by
-       simp[venomStateTheory.venom_state_component_equality] >>
-     pop_assum SUBST1_TAC >> irule msg_gas_state_frame >> simp[]) >>
-  first_x_assum (qspec_then `es with scopes :=
-    (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
-      :: es.scopes` mp_tac) >>
-  impl_tac >- fs[] >>
-  match_mp_tac EQ_IMPLIES >> AP_THM_TAC >> AP_TERM_TAC >>
-  simp[vyperStateTheory.evaluation_state_component_equality]
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func bc cx
+       (es with <|scopes := (FEMPTY |+ (id,
+          <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes;
+          gas_obs := []|>) s2` by
+    (rpt strip_tac >> fs[array_entry_ready_def] >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ bc _ _ s2`
+       drule >> strip_tac >>
+     drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s2.vs_gas_readings`, `s2.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[stmt_state_rel_inst_idx]) >>
+  fs[array_entry_ready_def, array_entry_inputs_def] >> metis_tac[]
 QED
 
 (* The selected body run is normalized only at its finish; P is never
@@ -1211,7 +1259,9 @@ QED
 Theorem array_body_counted_post:
   gas_marked_exec F (ctx,func) (eval_stmts cx stmts) (ei,s0) marks res ee (OK t) /\
   cenv_top_ext cenv bc ei.scopes /\
-  stmt_post ctx func cx lctx bc bc' sa sb ei s0 res (ee with gas_obs := []) t /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_post H ctx func cx lctx bc bc' sa sb ei s0 res (ee with gas_obs := []) t) /\
   (!gs r es2. eval_stmts cx stmts (ei with gas_obs := gs) = (r,es2) ==>
     ?sc rest. es2.scopes = sc :: rest /\
       (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
@@ -1221,8 +1271,11 @@ Theorem array_body_counted_post:
   ?sc rest. ee.scopes = sc :: rest /\
     stmt_lands lctx sb res t /\ ~t.vs_halted /\
     (res = INL () ==> ~block_is_terminated sb) /\
-    stmt_state_rel ctx func cenv cx
-      (ee with <|scopes := rest; gas_obs := []|>) t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx
+         (ee with <|scopes := rest; gas_obs := []|>) t /\
+       storage_well_formed_on cx
+         (ee with <|scopes := rest; gas_obs := []|>) (FST H)) /\
     ((res = INL () \/ res = INR ContinueException) ==>
       P (ee with <|scopes := rest; gas_obs := []|>) /\
       lookup_scopes id rest = NONE) /\
@@ -1240,11 +1293,32 @@ Proof
     (fs[gas_marked_exec_def] >>
      qpat_x_assum `!tail. eval_stmts _ _ _ = _`
        (qspec_then `[]` mp_tac) >> simp[]) >>
-  first_x_assum drule >> strip_tac >>
+  qpat_x_assum `!gs r es2. _` drule >> strip_tac >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx
+       (ee with <|scopes := rest; gas_obs := []|>) t /\
+     storage_well_formed_on cx ee (FST H)` by
+    (qx_gen_tac `H1` >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H1` mp_tac) >>
+     impl_tac >- simp[] >>
+     rewrite_tac[stmt_post_def] >> strip_tac >>
+     reverse conj_tac >- fs[] >>
+     `stmt_state_rel H1 ctx func cenv cx
+        ((ee with gas_obs := []) with scopes := rest) t` suffices_by
+       simp[evaluation_state_component_equality] >>
+     irule array_body_scope_projection >>
+     (conj_tac >- (qexists_tac `sc` >> fs[])) >>
+     goal_assum (drule_at Any) >> fs[] >>
+     qexistsl_tac [`bc`, `ei with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+                   `res`, `stmts`] >> gvs[]) >>
+  `stmt_post H ctx func cx lctx bc bc' sa sb ei s0 res (ee with gas_obs := []) t`
+    by metis_tac[] >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    kall_tac >>
   qexistsl_tac [`sc`, `rest`] >> gvs[stmt_post_def] >>
   reverse conj_tac
-  >- (conj_tac >- metis_tac[] >>
-      drule eval_stmts_preserves_scopes_dom >> strip_tac >>
+  >- (drule eval_stmts_preserves_scopes_dom >> strip_tac >>
       `cenv_top_ext cenv cenv'' ee.scopes` by
         (irule cenv_top_ext_trans >> qexistsl_tac [`bc`, `ei.scopes`] >>
          gvs[preserves_scopes_dom_def]) >>
@@ -1254,20 +1328,15 @@ Proof
       irule alloca_frame_pop >>
       conj_tac >- (qexists_tac `sc` >> simp[]) >>
       qexists_tac `cenv''` >> gvs[]) >>
-  `stmt_state_rel ctx func cenv cx
-    ((ee with gas_obs := []) with scopes := rest) t` suffices_by
-      simp[evaluation_state_component_equality] >>
-  irule array_body_scope_projection >>
-  (conj_tac >- (qexists_tac `sc` >> simp[])) >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  metis_tac[]
 QED
 
 Theorem array_body_continue_iteration_framed:
-  !ctx func cenv cx P vs id idx saved_base arr_base p dst sz ainst st k es s
+  !ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz ainst st k es s
    r sb sj exit_lbl incr_lbl cond_lbl nv i1 i2 i3.
   stmt_lands (InLoop exit_lbl incr_lbl) sb r s /\
   (r = INL () \/ r = INR ContinueException) /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst s.vs_current_bb st k es (s with vs_inst_idx := 0) /\
 
   (!l. saved_base <> Label l) /\ k < LENGTH vs /\
@@ -1283,7 +1352,7 @@ Theorem array_body_continue_iteration_framed:
   not_local_ptr cenv es.scopes idx /\ not_local_ptr cenv es.scopes nv /\
   p <> idx /\ p <> nv /\
   (!x. saved_base = Var x ==> x <> idx /\ x <> nv) ==>
-  ?next. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  ?next. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst cond_lbl st (k+1) es next /\
     (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x s) /\
     next.vs_allocas = s.vs_allocas /\
@@ -1291,16 +1360,19 @@ Theorem array_body_continue_iteration_framed:
     alloca_frame cenv es st s cenv es next
 Proof
   rpt gen_tac >> strip_tac >>
-  `~s.vs_halted /\ stmt_state_rel ctx func cenv cx es s` by
+  `~s.vs_halted /\
+   !H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s` by
     fs[array_loop_inv_def, stmt_state_rel_inst_idx] >>
   drule array_body_to_increment >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `sj`] mp_tac) >>
+  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `st0`, `es`, `sj`] mp_tac) >>
   simp[] >> strip_tac >>
-  `array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  `array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst incr_lbl st k es dd` by
     (gvs[array_loop_inv_def, stmt_state_rel_inst_idx, ret_pc_ok_def,
          lookup_var_def] >>
-     Cases_on `saved_base` >> gvs[eval_operand_def, lookup_var_def]) >>
+     Cases_on `saved_base` >> gvs[eval_operand_def, lookup_var_def] >>
+     metis_tac[]) >>
   drule_all array_increment_boundary >> strip_tac >>
   `gas_marked_path F ctx func s 0 (OK next)` by
     (drule_all gas_marked_path_then >> simp[]) >>
@@ -1372,7 +1444,7 @@ Theorem array_for_code_entry_inputs:
   array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride saved_base
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst stmts_lbl st k es s /\
   evaluate_type tenv et = SOME tv /\ value_has_type tv (EL k vs) /\
   val_wf tv (EL k vs) /\
@@ -1384,7 +1456,7 @@ Theorem array_for_code_entry_inputs:
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\ ret_pc_ok bc sb0 s /\
   (!x z. bc.ce_return_pc = SOME (PtrVar (Var x) z) ==>
     not_fresh_at sa x /\ x <> ov /\ x <> ep) ==>
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv (EL k vs)
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv (EL k vs)
     et tenv sa sb0 idx saved_base arr_base k stride ov ep j3 j4 bb sb0
 Proof
   pure_rewrite_tac[array_for_code_def, array_loop_inv_def, array_entry_inputs_def] >>
@@ -1393,8 +1465,8 @@ Proof
 QED
 
 Theorem array_entry_ready_runtime:
-  array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep sb0 s s2 /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  array_entry_ready ctx func bc cx st0 es id tv v sb0 sa ov ep sb0 s s2 /\
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst lbl st k es s /\
   not_fresh_at sa idx /\ idx <> ov /\ idx <> ep /\
   not_fresh_at sa p /\ p <> ov /\ p <> ep /\
@@ -1473,8 +1545,10 @@ Theorem array_body_finish_counted:
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\ k < LENGTH vs /\
   gas_marked_exec F (ctx,func) (eval_stmts cx stmts) (entry,s2) marks res ee (OK t) /\
-  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
-    res (ee with gas_obs := []) t /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_post H ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
+       res (ee with gas_obs := []) t) /\
   cenv_top_ext cenv bc entry.scopes /\
   (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
     ?sc rest. es2.scopes = sc :: rest /\
@@ -1497,15 +1571,20 @@ Theorem array_body_finish_counted:
     gas_marked_path F ctx func t 0 (OK u) /\ array_caller_frame caller cc u /\
     ((res = INR BreakException /\ u.vs_current_bb = exit_lbl /\
       u.vs_inst_idx = 0 /\ ~u.vs_halted /\
-      stmt_state_rel ctx func cenv cx
-        (ee with <|scopes := rest; gas_obs := []|>) u) \/
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx
+           (ee with <|scopes := rest; gas_obs := []|>) u /\
+         storage_well_formed_on cx
+           (ee with <|scopes := rest; gas_obs := []|>) (FST H))) \/
      ((res = INL () \/ res = INR ContinueException) /\
-      array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+      array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
         ainst cond_lbl st (SUC k) (ee with <|scopes := rest; gas_obs := []|>) u)) /\
     alloca_frame cenv es caller cc cenv
       (ee with <|scopes := rest; gas_obs := []|>) u
 Proof
-  strip_tac >> drule_all array_body_counted_post >> strip_tac >>
+  strip_tac >>
+  drule_all (SIMP_RULE pure_ss [PULL_EXISTS] array_body_counted_post) >>
+  strip_tac >>
   `alloca_frame cenv es caller cc cenv
      (ee with <|scopes := rest; gas_obs := []|>) t` by
     (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
@@ -1517,12 +1596,12 @@ Proof
       fs[stmt_lands_def, gas_marked_path_def, gas_path_rules]) >>
   `res = INL () \/ res = INR ContinueException` by fs[stmt_lands_def] >>
   drule_all array_body_runtime_frame >> strip_tac >>
-  `array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  `array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst t.vs_current_bb st k (ee with <|scopes := rest; gas_obs := []|>)
     (t with vs_inst_idx := 0)` by
       (fs[array_loop_inv_def, stmt_state_rel_inst_idx, lookup_var_def,
            ret_pc_ok_def] >>
-       Cases_on `saved_base` >> gvs[eval_operand_def, lookup_var_def]) >>
+       metis_tac[]) >>
   drule array_for_code_iteration_static >> strip_tac >>
   `res = INL () ==>
      sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
@@ -1530,7 +1609,7 @@ Proof
        [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb1 sj func` by
     fs[array_for_code_def] >>
   qhdtm_x_assum `array_for_code` kall_tac >>
-  `?next. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  `?next. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
      ainst cond_lbl st (k+1) (ee with <|scopes := rest; gas_obs := []|>) next /\
      (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x t) /\
      next.vs_allocas = t.vs_allocas /\ gas_marked_path F ctx func t 0 (OK next) /\
@@ -1552,14 +1631,14 @@ Theorem array_round_prepare:
   array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride saved_base
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst cond_lbl st k es cc /\ k < LENGTH vs /\ LENGTH vs < dimword (:256) /\
   evaluate_type tenv et = SOME tv /\ value_has_type tv (EL k vs) /\
   val_wf tv (EL k vs) /\ w2n arr_base + k * stride < dimword (:256) /\
   not_local_ptr bc (FEMPTY :: es.scopes) p /\
   lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
-  (!s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  (!s. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
      ainst stmts_lbl st k es s ==>
      val_in_memory tv (EL k vs) (w2n arr_base + k * stride) s.vs_memory /\
      ret_pc_ok bc sb0 s) /\
@@ -1590,9 +1669,10 @@ Theorem array_round_prepare:
       (es with scopes := (FEMPTY |+ (id,
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)
       (OK s2) /\
-    gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
-      (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_stmts cx stmts) (entry,s2)
+      (\H. stmt_post H ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1
+              entry s2)
+      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
     alloca_frame cenv es caller cc bc entry s2
 Proof
   strip_tac >>
@@ -1601,7 +1681,7 @@ Proof
   `LENGTH vs = LENGTH vs` by simp[] >>
   `not_local_ptr cenv es.scopes dv` by metis_tac[] >>
   drule_all array_condition_boundary >> strip_tac >>
-  rename1 `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ s` >>
+  rename1 `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ s` >>
   `k <> LENGTH vs` by decide_tac >> gvs[] >>
   `cenv_top_ext cenv bc (FEMPTY :: es.scopes)` by
     (irule array_for_code_scope_frame >> fs[array_loop_inv_def] >> metis_tac[]) >>
@@ -1640,18 +1720,37 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
+(* The handler and the scope pop record no storage event, so a body whose
+   storage trace left the domain leaves the whole cleanup outside it. *)
+Theorem array_body_cleanup_bad[local]:
+  gas_bad_storage_at cx st0 src es s marks ==>
+  gas_bad_storage_at cx st0
+    (finally (try (do src; return F od) handle_loop_exception) pop_scope)
+    es s marks
+Proof
+  rewrite_tac[gasStorageTheory.gas_bad_storage_at_def] >> strip_tac >> gen_tac >>
+  first_x_assum (qspec_then `tail` mp_tac) >>
+  qmatch_goalsub_abbrev_tac `src st1` >>
+  Cases_on `src st1` >> rename1 `src st1 = (res,ee)` >>
+  Cases_on `res` >> Cases_on `ee.scopes` >>
+  simp[finally_def, try_def, ignore_bind_def, bind_def, return_def,
+       raise_def, pop_scope_def] >>
+  rw[handle_loop_exception_def, COND_RATOR, return_def, raise_def, bind_def,
+     pop_scope_def]
+QED
+
 Theorem array_for_round_counted:
   array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride saved_base
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst cond_lbl st k es cc /\ k < LENGTH vs /\ LENGTH vs < dimword (:256) /\
   evaluate_type tenv et = SOME tv /\ value_has_type tv (EL k vs) /\
   val_wf tv (EL k vs) /\ w2n arr_base + k * stride < dimword (:256) /\
   not_local_ptr bc (FEMPTY :: es.scopes) p /\
   lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
-  (!s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  (!s. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
      ainst stmts_lbl st k es s ==>
      val_in_memory tv (EL k vs) (w2n arr_base + k * stride) s.vs_memory /\
      ret_pc_ok bc sb0 s) /\
@@ -1678,30 +1777,42 @@ Theorem array_for_round_counted:
         lookup_scopes id rest = NONE)) /\
   caller.cs_next_id <= sa.cs_next_id /\ caller.cs_next_id <= ainst.inst_id /\
   caller.cs_next_id <= st.cs_next_id /\ caller.cs_next_id <= sb0.cs_next_id ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (do push_scope_with_var id tv (EL k vs);
         finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
           pop_scope od) (es,cc)
-    (\res ee t. ?broke. res = INL broke /\ array_caller_frame caller cc t /\
+    (\H res ee t. ?broke. res = INL broke /\ array_caller_frame caller cc t /\
       (broke ==> t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-        stmt_state_rel ctx func cenv cx ee t) /\
-      (~broke ==> array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base
+        stmt_state_rel H ctx func cenv cx ee t /\
+        storage_well_formed_on cx ee (FST H)) /\
+      (~broke ==> array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base
         p dst sz ainst cond_lbl st (SUC k) ee t) /\
       alloca_frame cenv es caller cc cenv ee t)
-    (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+    (\H res ee r. ?ex. res = INR ex /\
+      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
 Proof
   strip_tac >>
   `gas_admissible (eval_stmts cx stmts)
     (stmt_res_ok (InLoop exit_lbl incr_lbl)) entry` by
     (qpat_x_assum `!gs r es2. _` mp_tac >>
      rpt (pop_assum kall_tac) >> rewrite_tac[gas_admissible_def] >> metis_tac[]) >>
-  qmatch_goalsub_abbrev_tac `gas_outcome F (cx_tops cx) (ctx,func) round (es,cc) Q R` >>
+  qmatch_goalsub_abbrev_tac
+    `gas_outcome F (cx_tops cx) (ctx,func) cx st0 round (es,cc) Q R` >>
   drule_all array_round_prepare >> strip_tac >>
   qhdtm_x_assum `stmt_frag` kall_tac >>
   qhdtm_x_assum `gas_outcome` mp_tac >> rewrite_tac[gas_outcome_def] >> strip_tac
+  >- suspend "bad"
   >- suspend "ordinary"
   >> suspend "exempt"
+QED
+
+Resume array_for_round_counted[bad]:
+  qexists_tac `marks` >> disj1_tac >>
+  simp[Abbr `round`, Once ignore_bind_def] >>
+  irule (SRULE [] (Q.INST [`left` |-> `[]`]
+    gasStorageTheory.gas_bad_storage_at_bind_right)) >>
+  goal_assum (drule_at Any) >> gvs[] >>
+  irule array_body_cleanup_bad >> gvs[]
 QED
 
 Resume array_for_round_counted[exempt]:
@@ -1714,13 +1825,13 @@ Resume array_for_round_counted[exempt]:
      gvs[] >> strip_tac >> goal_assum (drule_at Any)) >>
   gvs[] >>
   drule_all loop_round_exempt_cert >> strip_tac >>
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   simp[Abbr `round`] >> goal_assum (drule_at Any)
 QED
 
 Resume array_for_round_counted[ordinary]:
   qhdtm_x_assum `gas_summary_at` mp_tac >>
-  rewrite_tac[gas_summary_at_def] >>
+  rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
   disch_then (qx_choose_then `res` (qx_choose_then `ee`
     (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
   `?sc rest. ee.scopes = sc :: rest` by
@@ -1736,16 +1847,26 @@ Resume array_for_round_counted[ordinary]:
     (simp[Abbr `round`, ignore_bind_def] >>
      irule (SRULE [] (Q.INST [`left` |-> `[]`] gas_marked_exec_bind_normal)) >>
      goal_assum (drule_at Any) >> gvs[]) >>
+  reverse (Cases_on `storage_trace_domain cx st0 ee.storage_trace`)
+  >- (strip_tac >> qexists_tac `marks` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+      qpat_assum `gas_marked_exec _ _ round _ _ _ _ _` (irule_at Any) >>
+      fs[Abbr `fin`]) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
+     ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   strip_tac >- suspend "normal_finish" >> suspend "exit_finish"
 QED
 
 Resume array_for_round_counted[exit_finish]:
   fs[] >>
+  `!tail. stmt_exit (RetQ (storage_trace_horizon ee.storage_trace))
+     (ee with gas_obs := tail) res r` by metis_tac[] >>
   `res <> INL () /\ res <> INR BreakException /\ res <> INR ContinueException` by
     (qpat_x_assum `!tail. stmt_exit _ _ _ _` (qspec_then `[]` mp_tac) >>
      metis_tac[stmt_exit_loop_ctl]) >>
   Cases_on `res` >- gvs[] >>
-  qexists_tac `marks` >> disj1_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`wrapped`, `fin`, `r`] >> simp[] >> disj2_tac >>
   gvs[Abbr `R`, Abbr `fin`, Abbr `wrapped`, stmt_exit_def]
 QED
@@ -1762,7 +1883,8 @@ Resume array_for_round_counted[normal_finish]:
         P (es2 with scopes := rest) /\
         lookup_scopes id rest = NONE)` by
     (qpat_x_assum `!gs r es2. _` mp_tac >> rpt (pop_assum kall_tac) >> metis_tac[]) >>
-  drule_all array_body_finish_counted >> strip_tac >>
+  drule_all (SIMP_RULE pure_ss [PULL_EXISTS] array_body_finish_counted) >>
+  strip_tac >>
   `gas_marked_exec F (ctx,func) round (es,cc) marks wrapped fin (OK u)` by
     (qhdtm_x_assum `gas_marked_path` mp_tac >>
      qpat_x_assum `gas_marked_exec _ _ round _ _ _ _ _` mp_tac >>
@@ -1771,7 +1893,7 @@ Resume array_for_round_counted[normal_finish]:
      qpat_x_assum `gas_marked_path _ _ _ cc _ _` mp_tac >>
      disch_then (mp_then Any mp_tac gas_marked_path_then) >>
      disch_then drule >> simp[]) >>
-  qexists_tac `marks` >> disj1_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`wrapped`, `fin`, `OK u`] >> simp[] >> disj1_tac >>
   simp[Abbr `Q`, Abbr `fin`, Abbr `wrapped`] >>
   gvs[]
@@ -1782,7 +1904,7 @@ Theorem array_loop_last_counted:
   array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride saved_base
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst cond_lbl st (LENGTH vs) es s /\
   LENGTH vs < dimword (:256) /\
   (!x. not_fresh_at caller x ==> x <> dv) /\ array_caller_frame caller old s /\
@@ -1790,7 +1912,9 @@ Theorem array_loop_last_counted:
   alloca_frame cenv origin_es caller old cenv es s ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx (es with gas_obs := []) t /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t /\
+       storage_well_formed_on cx (es with gas_obs := []) (FST H)) /\
     array_caller_frame caller old t /\
     alloca_frame cenv origin_es caller old cenv (es with gas_obs := []) t
 Proof
@@ -1798,18 +1922,42 @@ Proof
   drule array_for_code_entry_static >> strip_tac >>
   `not_local_ptr cenv es.scopes dv` by simp[] >>
   drule_all array_condition_exit_framed >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) next` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`next.vs_gas_readings`, `next.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[stmt_state_rel_inst_idx]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (es with gas_obs := []) next /\
+     storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (rpt strip_tac
+     >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ next`
+           drule >> strip_tac >>
+         drule msg_gas_state_frame >>
+         disch_then (qspecl_then [`next.vs_gas_readings`, `next.vs_inst_idx`, `[]`]
+           mp_tac) >>
+         simp[stmt_state_rel_inst_idx]) >>
+     fs[array_loop_inv_def] >> metis_tac[]) >>
   `alloca_frame cenv origin_es caller old cenv es next` by
     (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> fs[array_caller_frame_def]) >>
   `alloca_frame cenv origin_es caller old cenv (es with gas_obs := []) next` by
     (qpat_x_assum `alloca_frame cenv origin_es caller old cenv es next` mp_tac >>
      simp[alloca_frame_def]) >>
-  qexists_tac `next` >> simp[] >>
+  qexists_tac `next` >> fs[] >>
   fs[array_caller_frame_def] >> metis_tac[]
+QED
+
+Theorem array_round_storage_frame[local]:
+  storage_trace_frame
+    (do push_scope_with_var id tv v;
+        finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+          pop_scope od)
+Proof
+  irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_state_updates] >>
+  irule vyperStorageTraceTheory.storage_trace_frame_finally >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_pop_scope] >>
+  irule vyperStorageTraceTheory.storage_trace_frame_try >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_loop_handler] >>
+  irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_return]
 QED
 
 Theorem array_for_loop_counted:
@@ -1820,7 +1968,7 @@ Theorem array_for_loop_counted:
   (!j. j < LENGTH vs ==> value_has_type tv (EL j vs) /\ val_wf tv (EL j vs)) /\
   lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
-  (!j ei s. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  (!j ei s. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
      ainst stmts_lbl st j ei s /\ j < LENGTH vs ==>
      val_in_memory tv (EL j vs) (w2n arr_base + j * stride) s.vs_memory /\
      ret_pc_ok bc sb0 s) /\
@@ -1852,42 +2000,49 @@ Theorem array_for_loop_counted:
           P (es2 with scopes := rest) /\
           lookup_scopes id rest = NONE))) /\
   k <= LENGTH vs /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
     ainst cond_lbl st k es cc /\ array_caller_frame caller old cc /\
   gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es /\
   caller.cs_next_id <= sa.cs_next_id /\ caller.cs_next_id <= ainst.inst_id /\
   caller.cs_next_id <= st.cs_next_id /\ caller.cs_next_id <= sb0.cs_next_id /\
   alloca_frame cenv origin_es caller old cenv es cc ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,cc)
-    (\res ee t. res = INL () /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
-      ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
+    (\H res ee t. res = INL () /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+      ~t.vs_halted /\ stmt_state_rel H ctx func cenv cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       array_caller_frame caller old t /\
       alloca_frame cenv origin_es caller old cenv ee t)
-    (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+    (\H res ee r. ?ex. res = INR ex /\
+      !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
 Proof
   strip_tac >>
-  qabbrev_tac `Inv = \j ei s.
-    array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  qabbrev_tac `Inv = \(H:(bool # bytes32 # type_value) list # num list) j ei s.
+    array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
       ainst cond_lbl st j ei s /\ array_caller_frame caller old s /\
       alloca_frame cenv origin_es caller old cenv ei s` >>
-  qabbrev_tac `Done = \ei s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
-    ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ei s /\
+  qabbrev_tac `Done = \(H:(bool # bytes32 # type_value) list # num list) ei s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\ stmt_state_rel H ctx func cenv cx ei s /\
+    storage_well_formed_on cx ei (FST H) /\
     array_caller_frame caller old s /\
     alloca_frame cenv origin_es caller old cenv ei s` >>
-  qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
-  `(!j ei s. j < LENGTH vs /\ Inv j ei s /\
+  qabbrev_tac `R = \(H:(bool # bytes32 # type_value) list # num list) ex ee r.
+    !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r` >>
+  `(!j ei s. j < LENGTH vs /\
+      (!H. valid_horizon cx st0 H ei.storage_trace ==> Inv H j ei s) /\
       gas_admissible (eval_for cx tv id stmts (MAP Value (DROP j vs))) (stmt_res_ok lctx) ei ==>
-      gas_outcome F (cx_tops cx) (ctx,func)
+      gas_outcome F (cx_tops cx) (ctx,func) cx st0
         (do push_scope_with_var id tv (EL j vs);
             finally (try (do eval_stmts cx stmts; return F od)
               handle_loop_exception) pop_scope od) (ei,s)
-        (\res ee t. ?broke. res = INL broke /\
-          (broke ==> Done ee t) /\ (~broke ==> Inv (SUC j) ee t))
-        (\res ee r. ?ex. res = INR ex /\ R ex ee r)) /\
-    (!ei s. Inv (LENGTH vs) ei s ==>
-      ?t. gas_marked_path F ctx func s 0 (OK t) /\ Done (ei with gas_obs := []) t)` by
+        (\H res ee t. ?broke. res = INL broke /\
+          (broke ==> Done H ee t) /\ (~broke ==> Inv H (SUC j) ee t))
+        (\H res ee r. ?ex. res = INR ex /\ R H ex ee r)) /\
+    (!ei s. (?H. valid_horizon cx st0 H ei.storage_trace) /\
+      (!H. valid_horizon cx st0 H ei.storage_trace ==> Inv H (LENGTH vs) ei s) ==>
+      ?t. gas_marked_path F ctx func s 0 (OK t) /\
+        !H. valid_horizon cx st0 H ei.storage_trace ==>
+          Done H (ei with gas_obs := []) t)` by
     (conj_tac >- suspend "round" >> suspend "last") >>
   drule eval_for_value_rounds >>
   disch_then (qspecl_then [`k`, `es`, `cc`] mp_tac) >>
@@ -1896,12 +2051,26 @@ QED
 
 Resume array_for_loop_counted[last]:
   rpt gen_tac >> simp[Abbr `Inv`, Abbr `Done`] >> strip_tac >>
+  `array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
+     ainst cond_lbl st (LENGTH vs) ei s /\ array_caller_frame caller old s /\
+   alloca_frame cenv origin_es caller old cenv ei s` by metis_tac[] >>
   `!x. not_fresh_at caller x ==> x <> dv` by metis_tac[] >>
-  drule_all array_loop_last_counted >> simp[]
+  drule_all array_loop_last_counted >> strip_tac >>
+  qexists_tac `t` >> fs[]
 QED
 
 Resume array_for_loop_counted[round]:
-  rpt gen_tac >> simp[Abbr `Inv`] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `?H. valid_horizon cx st0 H ei.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      fs[vyperStorageFootprintTheory.storage_trace_domain_def,
+         array_round_storage_frame]) >>
+  `array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
+     ainst cond_lbl st j ei s /\ array_caller_frame caller old s /\
+   alloca_frame cenv origin_es caller old cenv ei s` by
+    (fs[Abbr `Inv`] >> metis_tac[]) >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> Inv _ _ _ _` kall_tac >>
   `P ei /\ lookup_scopes id ei.scopes = NONE` by fs[array_loop_inv_def] >>
   qpat_assum `!ei j. _` drule_all >> strip_tac >>
   `value_has_type tv (EL j vs) /\ val_wf tv (EL j vs)` by metis_tac[] >>
@@ -1916,7 +2085,7 @@ Resume array_for_loop_counted[round]:
         P (es2 with scopes := rest) /\
         lookup_scopes id rest = NONE)` by
     (qpat_x_assum `!gs r es2. _` mp_tac >> simp[Abbr `entry`]) >>
-  `!t. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+  `!t. array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
       ainst stmts_lbl st j ei t ==>
     val_in_memory tv (EL j vs) (w2n arr_base + j * stride) t.vs_memory /\
     ret_pc_ok bc sb0 t` by metis_tac[] >>
@@ -1927,19 +2096,21 @@ Resume array_for_loop_counted[round]:
   qhdtm_x_assum `gas_outcome` mp_tac >>
   qpat_x_assum `array_caller_frame caller old s` mp_tac >>
   qpat_x_assum `alloca_frame cenv origin_es caller old cenv ei s` mp_tac >>
-  simp[Abbr `Done`, Abbr `R`, NoAsms] >>
+  simp[Abbr `Inv`, Abbr `Done`, Abbr `R`, NoAsms] >>
   rpt (pop_assum kall_tac) >> strip_tac >> strip_tac >>
   rewrite_tac[gas_outcome_def] >>
   disch_then (qx_choose_then `marks` strip_assume_tac)
-  >- (qexists_tac `marks` >> disj1_tac >>
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       qhdtm_x_assum `gas_summary_at` mp_tac >>
-      rewrite_tac[gas_summary_at_def] >> strip_tac >>
+      rewrite_tac[gas_summary_at_def] >> BETA_TAC >> strip_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       suspend "round_post") >>
-  qexists_tac `marks` >> disj2_tac >> goal_assum (drule_at Any)
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >> goal_assum (drule_at Any)
 QED
 Resume array_for_loop_counted[round_post]:
-  markerLib.RESUME_TAC >> gvs[] >>
+  markerLib.RESUME_TAC >> gvs[exit_result_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
   `array_caller_frame caller old t` by
     (irule array_caller_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
   `alloca_frame cenv origin_es caller old cenv es_end t` by
