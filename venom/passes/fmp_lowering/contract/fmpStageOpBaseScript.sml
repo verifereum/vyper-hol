@@ -122,6 +122,26 @@ Proof
   simp[EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem stage_operand_live[local]:
+  wf_function fn /\ make_ssa_input_ok fn /\ active_inst fn inst s /\
+  MEM (Var v) inst.inst_operands ==>
+  MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+Proof
+  strip_tac >>
+  `fn_reachable fn s.vs_current_bb` by
+    (gvs[make_ssa_input_ok_def, cfgWfTheory.all_reachable_def, active_inst_def] >>
+     metis_tac[]) >>
+  `MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
+  gvs[active_inst_def] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    (irule venomExecProofsTheory.MEM_lookup_block >>
+     gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
+  drule live_vars_at_uses >> simp[] >>
+  disch_then irule >> goal_assum (drule_at Any) >>
+  simp[operand_var_in_inst_uses]
+QED
+
 (* Why: an operand of a non-PHI instruction is used there, so it is live
    at the point (live_vars_at_uses, once the block is known to be in the
    CFG's DFS order, as every frame_reachable block is), and fmp_env_rel
@@ -137,7 +157,27 @@ Theorem fmp_stage_operand:
   ?y. eval_operand op t = SOME y /\
       fmp_value_rel sm (op_prov G op) (op_taint tn op) x y
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_stage_frame_facts >> strip_tac >>
+  `fmp_env_rel sm fn
+     (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+     G tn.t_var s t /\ s.vs_labels = t.vs_labels` by
+    (gvs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
+  Cases_on `op` >>
+  gvs[venomStateTheory.eval_operand_def, op_prov_def, op_taint_def,
+      fmp_value_rel_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def,
+      word_agree_except_def]
+  >- (gvs[venomStateTheory.lookup_var_def] >>
+      `MEM s' (live_vars_at (liveness_analyze fn)
+                 s.vs_current_bb s.vs_inst_idx)` by
+        metis_tac[stage_operand_live, o1_fn_shape_def] >>
+      qpat_x_assum `fmp_env_rel _ _ _ _ _ _ _` mp_tac >>
+      simp[fmp_env_rel_def] >>
+      disch_then (qspec_then `s'` mp_tac) >> simp[op_taint_def] >>
+      strip_tac >> qexists `y` >>
+      gvs[fmp_value_rel_def,
+          o1LowerDloadRelocationKernelTheory.ld_value_agree_def,
+          word_agree_except_def])
 QED
 
 (* Why: fmp_frame_rel lets its lowering witness (infos, ctx, runner) be
