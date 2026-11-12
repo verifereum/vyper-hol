@@ -133,6 +133,7 @@ Proof
     qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
     pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
     gvs[] >> Cases_on `ex` >> Cases_on `r` >>
+    TRY (first_assum ACCEPT_TAC) >>
     gvs[expr_exit_def] >> Cases_on `e'` >> gvs[expr_exit_def]) >>
   reverse conj_tac >- (rpt strip_tac >> qexists_tac `v` >> asm_rewrite_tac[]) >>
   rpt strip_tac >>
