@@ -123,6 +123,8 @@ Proof
  drule_all ctor_source_landing_world >>
  disch_then strip_assume_tac >>
  drule_all ctor_source_start_world_fields >> strip_tac >>
+ `call_ctx_rel (tx with created_in_tx := T) actual.vs_call_ctx
+    actual.vs_tx_ctx actual.vs_block_ctx` by fs[call_ctx_rel_def, tx_env_ok_def] >>
  simp[state_rel_def, logs_rel_def] >>
  gvs[deploy_evaluation_context_def, initial_evaluation_context_def]
 QED
