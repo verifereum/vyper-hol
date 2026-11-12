@@ -1,6 +1,7 @@
 (* Counted control slices for independently-strided typed array copies. *)
 Theory bodyPtrTypedCopyArrayControl
 Ancestors typedCopyLoopHeaderPtr typedCopyLoopBackedgePtr exprSimPtrProps
+  forPtrControl forPtrAddress forPtrAdmin forPtrScalarStore annAssignPtrLength
   fragGasSeqPtr fragGasPathPtr venomExecSemantics venomInst venomState words finite_map arithmetic
 
 (* A jump endpoint deliberately stops before any target PHIs. *)
@@ -126,3 +127,127 @@ Proof
   simp[Abbr `s2`, Abbr `s1`, Abbr `t2`, Abbr `t1`, jump_to_def,
        update_var_def]
 QED
+
+Theorem typed_copy_loop_backedge_counted:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [Var ctr; Lit 1w] [tmp]) /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst id2 ASSIGN [Var tmp] [ctr]) /\
+  get_instruction bb (SUC (SUC s.vs_inst_idx)) = SOME (mk_inst id3 JMP [Label cond] []) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_var ctr s = SOME w /\ FLOOKUP G ctr = NONE /\ op_taint tn (Var ctr) = {} ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (DRESTRICT (DRESTRICT G (COMPL {tmp})) (COMPL {ctr}))
+    (tn with t_var := (tn.t_var |+ (tmp,{})) |+ (ctr,{}))
+    (OK (jump_to cond (update_var ctr (w+1w) (update_var tmp (w+1w) s))))
+Proof
+  strip_tac >> drule_all for_counter_increment_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 g1 t1 (OK s1)` >>
+  `gas_path_ptr D 0 ctx fn PG g1 t1 s1 0 g1 t1 (OK (jump_to cond s1))` by
+    (irule typed_copy_counted_jump >>
+     simp[Abbr `s1`, update_var_def] >>
+     simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs, eval_operand_def] >>
+     simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.access_ok_def,
+       ptrDisciplineTheory.taint_ok_def, ptrDisciplineTheory.allocas_from_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+       eval_operand_def, jump_to_def, ptrDisciplineTheory.op_taint_def]) >>
+  rev_drule gas_path_ptr_then >> disch_then drule >>
+  simp[Abbr `s1`, Abbr `g1`, Abbr `t1`, jump_to_def]
+QED
+
+Theorem typed_copy_loop_address_counted:
+  !D ctx fn PG sb si ctr so doff sp dp sr dr id i ss ds a b S T G tn s.
+    lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
+    lookup_var sr s = SOME a /\ lookup_var dr s = SOME b /\
+    ptr_covers G tn sr s S /\ ptr_covers G tn dr s T /\
+    ALL_DISTINCT [so;doff;sp;dp] /\
+    (!v. MEM v [so;doff;sp;dp] ==> ctr <> v /\ sr <> v /\ dr <> v) /\
+    i*ss < S /\ i*ss+ss <= S /\ i*ds < T /\ i*ds+ds <= T /\
+    w2n a+i*ss < dimword(:256) /\ w2n b+i*ds < dimword(:256) /\
+    si.cs_blocks = sb.cs_blocks /\ si.cs_current_bb = sb.cs_current_bb /\
+    si.cs_current_insts = sb.cs_current_insts ++
+      [mk_inst id MUL [Var ctr;Lit (n2w ss)] [so];
+       mk_inst (id+1) MUL [Var ctr;Lit (n2w ds)] [doff];
+       mk_inst (id+2) ADD [Var sr;Var so] [sp];
+       mk_inst (id+3) ADD [Var dr;Var doff] [dp]] /\
+    fn_has_code sb si fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+    ?Gf tnf sf.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+      lookup_var sp sf = SOME (n2w (w2n a+i*ss)) /\
+      lookup_var dp sf = SOME (n2w (w2n b+i*ds)) /\
+      ptr_covers Gf tnf sp sf ss /\ ptr_covers Gf tnf dp sf ds /\
+      sf.vs_memory=s.vs_memory /\ tnf.t_mem=tn.t_mem /\
+      tnf.t_stor=tn.t_stor /\ tnf.t_trans=tn.t_trans /\
+      (!p. ~MEM p [so;doff;sp;dp] ==>
+        lookup_var p sf=lookup_var p s /\ FLOOKUP Gf p=FLOOKUP G p /\
+        op_taint tnf (Var p)=op_taint tn (Var p))
+Proof
+  typedCopyLoopAmbientLib.address_witnesses >>
+  conj_tac >- suspend "path" >>
+  typedCopyLoopAmbientLib.address_resources typed_copy_loop_dynamic_offset_covers
+QED
+
+Resume typed_copy_loop_address_counted[path]:
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var ctr;Lit (n2w ss)] [so]) /\
+   get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (id+1) MUL [Var ctr;Lit (n2w ds)] [doff]) /\
+   get_instruction bb (SUC (SUC s.vs_inst_idx)) = SOME (mk_inst (id+2) ADD [Var sr;Var so] [sp]) /\
+   get_instruction bb (SUC (SUC (SUC s.vs_inst_idx))) = SOME (mk_inst (id+3) ADD [Var dr;Var doff] [dp])` by
+    (first_assum (qspec_then `0` assume_tac) >>
+     first_assum (qspec_then `1` assume_tac) >>
+     first_assum (qspec_then `2` assume_tac) >>
+     first_assum (qspec_then `3` assume_tac) >> gvs[arithmeticTheory.ADD1]) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 g1 tn1 (OK s1)` by
+    (simp[NoAsms, Abbr `g1`, Abbr `tn1`, Abbr `s1`] >>
+     irule typed_copy_arith_counted >> simp[update_var_def] >>
+     qexistsl_tac [`id`, `MUL`, `[Var ctr; Lit (n2w ss)]`] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+       eval_operand_def, word_mul_n2w, update_var_def] >>
+     conj_tac >- (rpt strip_tac >> gvs[ptrDisciplineTheory.op_taint_def]) >>
+     gvs[mk_inst_def]) >>
+  `gas_path_ptr D 0 ctx fn PG g1 tn1 s1 0 g2 tn2 (OK s2)` by
+    (simp[NoAsms, Abbr `g2`, Abbr `tn2`, Abbr `s2`] >>
+     irule typed_copy_arith_counted >> simp[Abbr `s1`, update_var_def] >>
+     qexistsl_tac [`id+1`, `MUL`, `[Var ctr; Lit (n2w ds)]`] >>
+     simp[Abbr `tn1`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     conj_tac >- (rpt strip_tac >> gvs[ptrDisciplineTheory.op_taint_def, FLOOKUP_UPDATE]) >>
+     gvs[lookup_var_def, update_var_def, word_mul_n2w, mk_inst_def]) >>
+  `op_taint tn (Var sr) = {} /\ op_taint tn (Var dr) = {}` by
+    gvs[bodyPtrDefsTheory.ptr_covers_def] >>
+  `gas_path_ptr D 0 ctx fn PG g2 tn2 s2 0 g3 tn3 (OK s3)` by
+    suspend "source_add" >>
+  `gas_path_ptr D 0 ctx fn PG g3 tn3 s3 0 g4 tn4 (OK s4)` by
+    suspend "destination_add" >>
+  qpat_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+    (mp_then Any mp_tac gas_path_ptr_then) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qpat_assum `gas_path_ptr _ _ _ _ _ G tn s _ g2 tn2 _`
+    (mp_then Any mp_tac gas_path_ptr_then) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  drule_all gas_path_ptr_then >> simp[]
+QED
+
+Resume typed_copy_loop_address_counted[source_add]:
+  simp[Abbr `g3`, Abbr `tn3`, Abbr `s3`, Abbr `t3`] >>
+  irule forPtrAdminTheory.copy_len_binop_zero_path_ptr >>
+  simp[Abbr `s2`, Abbr `s1`, update_var_def] >>
+  simp[Abbr `tn2`, Abbr `tn1`, ptrDisciplineTheory.op_taint_def,
+    FLOOKUP_UPDATE, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+    eval_operand_def, lookup_var_def, update_var_def] >> gvs[lookup_var_def, mk_inst_def, ptrDisciplineTheory.op_taint_def]
+QED
+
+Resume typed_copy_loop_address_counted[destination_add]:
+  simp[Abbr `g4`, Abbr `tn4`, Abbr `s4`, Abbr `t4`] >>
+  irule forPtrAdminTheory.copy_len_binop_zero_path_ptr >>
+  simp[Abbr `s3`, Abbr `t3`, Abbr `s2`, Abbr `s1`, update_var_def] >>
+  simp[Abbr `tn3`, typedCopyPtrTheory.copy_len_binop_ghost_frame] >>
+  simp[Abbr `tn2`, Abbr `tn1`, ptrDisciplineTheory.op_taint_def,
+    FLOOKUP_UPDATE, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+    eval_operand_def, lookup_var_def, update_var_def] >> gvs[lookup_var_def, mk_inst_def, ptrDisciplineTheory.op_taint_def]
+QED
+
+Finalise typed_copy_loop_address_counted
