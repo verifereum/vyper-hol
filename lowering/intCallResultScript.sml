@@ -376,7 +376,7 @@ Finalise stack_results_val_in_memory
    regions (as literal_state_memory_frame in exprSimLiteralBuffer). *)
 Theorem result_state_memory_frame:
   !func cenv cx es s t ctx.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
@@ -386,7 +386,7 @@ Theorem result_state_memory_frame:
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
          lookup_var x t = lookup_var x s) ==>
-    stmt_state_rel ctx func cenv cx es t
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt strip_tac >>
   `t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>` by
@@ -466,7 +466,7 @@ Theorem store_multi_results_frag:
                           evaluate_type (get_tenv cx) t' = SOME etv)
           (MAP SND ftvs))) /\
     intret_vals_match tv v ws /\ ws <> [] /\
-    stmt_state_rel ctx func cenv cx es s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
     eval_operand rbuf.buf_operand s0 = SOME w /\
     MAP (\op. eval_operand op s0) results = MAP SOME ws /\
     w2n w + 32 * LENGTH results < dimword (:256) /\
@@ -481,7 +481,7 @@ Theorem store_multi_results_frag:
        regions_disjoint (w2n w) (32 * LENGTH results) off
          (type_memory_size itv)) ==>
     frag_exec ctx sa sb (\s. s = s0)
-      (\s. stmt_state_rel ctx func cenv cx es s /\
+      (\s. stmt_state_rel H ctx func cenv cx es s /\
            vv_holds cenv cx t (Value v) (LocatedValue t (base_ptr rbuf)) es s /\
            (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s0) /\
            s.vs_allocas = s0.vs_allocas /\

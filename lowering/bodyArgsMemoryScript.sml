@@ -111,7 +111,7 @@ Proof
 QED
 
 Theorem lower_typed_args_nil_sim_mem:
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -139,7 +139,7 @@ Theorem lower_typed_args_sim_mem:
     lower_word_args cenv arg_ty args sa = (xs,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -189,7 +189,7 @@ Resume lower_typed_args_sim_mem[head_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
   gnvs[] >>
   drule_all typed_args_mem_marked_facts >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[expr_post_state] >>
   `~t.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
@@ -232,7 +232,7 @@ Resume lower_typed_args_sim_mem[tail_normal]:
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
   disj1_tac >> simp[] >>
   irule typed_args_post_cons >>
-  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >>
   Cases_on `evaluate_type (get_tenv cx) (expr_type e)` >> gvs[]
 QED
