@@ -96,7 +96,8 @@ Proof
        t.vs_inst_idx = LENGTH sp.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
         (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
-           (qspec_then `H0` mp_tac) >> simp[]) >>
+           (qspec_then `H0` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
+         simp[]) >>
       first_x_assum (qspecl_then [`p`, `mid with gas_obs := []`, `t`, `marks`]
                        mp_tac) >>
       impl_tac
