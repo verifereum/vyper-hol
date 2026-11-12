@@ -219,6 +219,7 @@ Theorem fmp_ordinary_root_transport[local]:
      lo = fmp_frame_lo fmp0 ts /\ st.frs_stack = [] /\
      (fn_is_context_entry ctx fn ==> fmp0 = fmp_frame_lo fmp0 ts) /\
      (~fn_is_context_entry ctx fn ==>
+       LENGTH s.vs_params = LENGTH (fn_user_param_insts fn) /\
        LENGTH s.vs_params < LENGTH t.vs_params /\
        EL (LENGTH s.vs_params) t.vs_params = n2w (fmp_frame_lo fmp0 ts))
    else lookup_var runner t = SOME (n2w lo) /\
@@ -237,6 +238,7 @@ Theorem fmp_ordinary_root_transport[local]:
        lo = fmp_frame_lo fmp0 ts /\ st'.frs_stack = [] /\
        (fn_is_context_entry ctx fn ==> fmp0 = fmp_frame_lo fmp0 ts) /\
        (~fn_is_context_entry ctx fn ==>
+         LENGTH s1.vs_params = LENGTH (fn_user_param_insts fn) /\
          LENGTH s1.vs_params < LENGTH t1.vs_params /\
          EL (LENGTH s1.vs_params) t1.vs_params = n2w (fmp_frame_lo fmp0 ts))
      else lookup_var runner (t1 with vs_inst_idx := j) = SOME (n2w lo) /\
