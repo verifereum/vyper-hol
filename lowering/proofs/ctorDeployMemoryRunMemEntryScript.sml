@@ -122,8 +122,10 @@ Proof
       conj_tac
       >- (drule ctorDeployMemoryRunMemEntryRegisterEnvTheory.ctor_register_constructor_env_fields >>
           strip_tac >> simp[] >>
-          irule ctor_registered_immutable_base_zero >> simp[] >>
-          metis_tac[]) >>
+          MATCH_MP_TAC (ctor_registered_immutable_base_zero |> SPEC_ALL
+            |> Q.INST [`cap` |-> `imm_len tops`, `st` |-> `st1`]
+            |> Q.GENL [`ce`, `actual`]) >>
+          simp[] >> metis_tac[]) >>
       metis_tac[]) >>
   strip_tac >>
   drule_all (SRULE [] ctorDeployMemoryRunMemEntryTaskActualTheory.ctor_task_actual_phase_contracts) >>
