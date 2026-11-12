@@ -19,8 +19,8 @@ Theory e2eOutcomesProducer
 Ancestors
   e2eDefs vyperLoweringCorrect gasSummary compileVyper loweringShapeProps
   supportedProgram callTrace frameOutcome extCallOracle vyperStorageFootprint
-  vyperRuntimeAccounts vyperInterpreter venomExecSemantics vfmAccountFrame
-  vfmExecution
+  vyperRuntimeAccounts vyperInterpreter venomExecSemantics vyperRequestTrace
+  vfmAccountFrame vfmExecution
 
 (* The call theorem's premises other than its storage guards, for one call
    frame es of the compiled contract.  Re-entries meet the same premises. *)
@@ -32,15 +32,6 @@ Definition vyper_call_staging_def:
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
-End
-
-(* The call outcomes in a source storage trace that the EVM frame also
-   records: a computed precompile's request is not recorded. *)
-Definition recorded_outcomes_count_def:
-  recorded_outcomes_count obs =
-    LENGTH (FILTER (\ev. case ev of
-                           StorageOutcome rq oc => ~computed_precompile rq
-                         | _ => F) obs)
 End
 
 (* The S1 request-prefix companion.  One gas marking, chosen without the
@@ -65,9 +56,9 @@ Definition s1_request_prefix_def:
            (gas_explicit marks vs.vs_gas_readings) ==>
          source_unit_execution_correct_at (gas_explicit marks vs.vs_gas_readings)
            tops ret am tx unit vs) /\
-        !fuel t res am' rqs obs obs_pre sfx H.
-          (run_context fuel unit.cu_context vs = Halt t \/
-           ?a. run_context fuel unit.cu_context vs = Abort a t) /\
+        !fuel ss res am' rqs obs obs_pre sfx H.
+          (run_context fuel unit.cu_context vs = Halt ss \/
+           ?a. run_context fuel unit.cu_context vs = Abort a ss) /\
           call_external_trace (SOME vs.vs_outcomes)
             (gas_explicit marks vs.vs_gas_readings) am tx = (res,am',rqs,obs) /\
           ~source_exempt tops (res,am',rqs) /\
@@ -75,11 +66,11 @@ Definition s1_request_prefix_def:
           valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
             (initial_state am []) H obs_pre ==>
           recorded_outcomes_count obs_pre <= LENGTH rqs /\
-          recorded_outcomes_count obs_pre <= LENGTH t.vs_requests /\
+          recorded_outcomes_count obs_pre <= LENGTH ss.vs_requests /\
           LIST_REL
             (request_agree H (initial_evaluation_context am.sources am.layouts tx NONE))
             (TAKE (recorded_outcomes_count obs_pre) rqs)
-            (TAKE (recorded_outcomes_count obs_pre) t.vs_requests)
+            (TAKE (recorded_outcomes_count obs_pre) ss.vs_requests)
 End
 
 (* H holds every region and lock of the call's source trace, whatever gas
