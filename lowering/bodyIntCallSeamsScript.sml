@@ -12,7 +12,7 @@
 
 Theory bodyIntCallSeams
 Ancestors
-  bodyIntCallSeamDefs bodyIntCallSeamArgs bodyIntCallSeamReturn
+  bodyIntCallSeamDefs bodyIntCallSeamArgs bodyIntCallSeamReturn bodyIntCallNonreentrantLock
   bodyIntCallJointPackage bodyIntCallJointInd vyperTypeCallStackSoundness
   bodyIntCallArgSequence bodyIntCallCompilerListTags bodyIntCallCompilerSeparation
   bodyIntCallCopyFrame bodyIntCallDecoderCountedClosure bodyIntCallEncoderActualCopy
@@ -59,9 +59,9 @@ Theorem intcall_callee_body_sim_F[local]:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut F ss)
         (es1,entered) (\res ee r. F)
-        (intcall_callee_exit func cenv cx rtv rc
+        (intcall_callee_exit func cenv cx mut F rtv rc
            (if rc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
@@ -101,9 +101,9 @@ Theorem intcall_seam2_nonreentrant:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut T ss)
         (es1,entered) (\res ee r. F)
-        (intcall_callee_exit func cenv cx rtv rc
+        (intcall_callee_exit func cenv cx mut T rtv rc
            (if rc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
@@ -130,9 +130,9 @@ Theorem intcall_callee_body_sim:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut nr ss)
         (es1,entered) (\res ee r. F)
-        (intcall_callee_exit func cenv cx rtv rc
+        (intcall_callee_exit func cenv cx mut nr rtv rc
            (if rc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)

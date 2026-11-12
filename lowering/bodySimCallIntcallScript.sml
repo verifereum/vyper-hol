@@ -10,6 +10,23 @@ Ancestors
   gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
   vyperState venomState compileEnv exprSimUnwrapProps
 
+(* A nonreentrant lock with its slot set, outside a static call, is taken
+   from a state where it is free. *)
+Theorem lock_if_nr_runs[local]:
+  (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static ==>
+  ?s u t. lock_if_nr cx nr v s = (INL u,t)
+Proof
+  Cases_on `nr` >> simp[lock_if_nr_def, return_def] >> strip_tac >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[] >>
+  qexists `ARB with tStorage := empty_transient_storage` >>
+  simp[acquire_nonreentrant_lock_def, get_transient_storage_def,
+       update_transient_def, bind_def, ignore_bind_def, return_def,
+       vfmContextTheory.empty_transient_storage_def,
+       vfmExecutionTheory.lookup_transient_storage_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.empty_storage_def] >>
+  rw[return_def]
+QED
+
 (* The IHs at a supported callee (body_intcall_source_selection): the
    supplied arguments', the omitted defaults' and the callee body's. *)
 Theorem intcall_results_ih[local]:
@@ -41,7 +58,7 @@ QED
 
 Theorem intcall_body_ih[local]:
   !cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1 sd dvs td
-   s3 u t3 penv rtv.
+   penv rtv.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
          t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
@@ -82,11 +99,13 @@ Theorem intcall_body_ih[local]:
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
       (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
     bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
-    lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+    (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static /\
     evaluate_type (get_tenv cx) ret = SOME rtv ==>
     body_stmts_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss
 Proof
   rpt strip_tac >>
+  `?s3 u t3. lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)` by
+    (irule lock_if_nr_runs >> simp[]) >>
   first_x_assum (qspecl_then
     [`s1`,`()`,`s1`,`s1`,`ts`,`s1`,`s1`,`(mut,nr,args,dflts,ret,ss)`,`s1`,
      `mut`,`(nr,args,dflts,ret,ss)`,`nr`,`(args,dflts,ret,ss)`,`args`,
@@ -363,14 +382,14 @@ Proof
        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
     (rpt strip_tac >> drule intcall_dflts_ih >> disch_then drule_all >>
      simp[]) >>
-  `!s1 vs t1 sd dvs td s3 u t3 penv rtv.
+  `!s1 vs t1 sd dvs td penv rtv.
      ~MEM (src_id_opt,fn) cx.stk /\
      eval_exprs cx es s1 = (INL vs,t1) /\
      eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
        (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
      bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
-     lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+     (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static /\
      evaluate_type (get_tenv cx) ret = SOME rtv ==>
      body_stmts_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss` by
     (rpt strip_tac >> drule intcall_body_ih >> disch_then drule_all >>
@@ -395,6 +414,11 @@ Proof
    >- (simp[] >> rpt strip_tac >>
        drule intcall_entry_source >> strip_tac >>
        `dflts' = dflts` by gvs[] >> gvs[] >>
+       `~cx.txn.is_static` by
+         fs[exprLoweringPropsTheory.stmt_state_rel_def,
+            loweringStateRelDefsTheory.state_rel_def] >>
+       `nr ==> IS_SOME cx.nonreentrant_slot` by
+         (strip_tac >> drule_all body_inv_nonreentrant_slot >> simp[]) >>
        `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
          metis_tac[] >>
        drule_all intcall_callee_body_sim >> simp[]) >>

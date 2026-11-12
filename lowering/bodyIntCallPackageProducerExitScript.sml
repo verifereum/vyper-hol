@@ -19,7 +19,7 @@ Theorem intcall_stmt_return_callee_exit:
     !aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
       n <= aid /\ aid < m ==> regions_disjoint a k off asz) /\
   OPTION_MAP FST fp.jc_rb = rb ==>
-  intcall_callee_exit func cenv cx rtv rc rb n m t (INL v) ee r
+  intcall_callee_exit func cenv cx mut F rtv rc rb n m t (INL v) ee r
 Proof
   rpt gen_tac >> disch_then (fn th =>
     mp_tac (CONJUNCT2 th) >>
@@ -32,7 +32,7 @@ Proof
     (irule state_rel_empty_scopes_env >>
      qexistsl [`fp.jc_root_ce`, `fp.jc_func`] >>
      fs[state_rel_call_stack]) >>
-  simp[intcall_callee_exit_def] >>
+  simp[intcall_callee_exit_F] >>
   conj_tac >- metis_tac[] >>
   rpt strip_tac >> rename1 `fp.jc_rb = SOME pair` >>
   PairCases_on `pair` >> gvs[]

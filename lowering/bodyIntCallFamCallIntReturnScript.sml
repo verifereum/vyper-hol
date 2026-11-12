@@ -84,8 +84,8 @@ Theorem intcall_nested_return_enriched:
      get_instruction bb t.vs_inst_idx = SOME inst /\
      decode_invoke inst = SOME (lbl,arg_ops) /\ eval_operands arg_ops t = SOME argv ==>
      gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,callee)
-       (intcall_callee_src fp.jc_cx name ss) (es1,entered) (\res ee r. F)
-       (intcall_callee_exit fp.jc_func ce fp.jc_cx rtv rcn
+       (intcall_callee_src fp.jc_cx name mut F ss) (es1,entered) (\res ee r. F)
+       (intcall_callee_exit fp.jc_func ce fp.jc_cx mut F rtv rcn
          (if rcn = 0 /\ ce.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
           then SOME (HD argv) else NONE) sa.cs_next_id sb.cs_next_id t)) ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
@@ -133,16 +133,16 @@ Proof
   qpat_x_assum `rbs = rbs'` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `pvs = pvs'` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _` drule_all >> strip_tac >>
-  rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_def] >>
+  rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_F] >>
   irule invoke_cleanup_outcome >>
   conj_tac >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-    rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_def] >> simp[]) >>
+    rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_F] >> simp[]) >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `gas_invoke_entry _ _ _ _`)) >>
-  qexists `\v ee ir cs. intcall_callee_exit fp.jc_func ce fp.jc_cx rtv rcn
+  qexists `\v ee ir cs. intcall_callee_exit fp.jc_func ce fp.jc_cx mut F rtv rcn
     (if rcn = 0 /\ ret <> NoneT then SOME (HD argv) else NONE)
     sa.cs_next_id sb.cs_next_id t (INL v) ee (IntRet ir cs)` >>
-  reverse conj_tac >- metis_tac[intcall_callee_exit_def] >>
+  reverse conj_tac >- metis_tac[intcall_callee_exit_F] >>
   rpt strip_tac >> suspend "physical"
 QED
 
@@ -159,13 +159,13 @@ Resume intcall_nested_return_enriched[physical]:
         first_assum ACCEPT_TAC) >>
      irule marked_body_immutable_alloca_sep >> goal_assum (drule_at Any) >>
      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     rewrite_tac[intcall_callee_src_def] >> strip_tac >> goal_assum (drule_at Any)) >>
+     rewrite_tac[intcall_callee_src_F] >> strip_tac >> goal_assum (drule_at Any)) >>
   `gas_path fp.jc_ctx callee entered (LENGTH marks) (IntRet ir cs)` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
      first_assum ACCEPT_TAC) >>
   qpat_x_assum `(\v ee ir cs. _) _ _ _ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [intcall_callee_exit_def, expr_exit_def]) >>
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [intcall_callee_exit_F, expr_exit_def]) >>
   `local_ptrs_reserved ce sa /\ allocas_above fp.jc_lo t /\
     (!a k. fp.jc_prot a k ==> a + k <= fp.jc_lo)` by
     (qpat_assum `intcall_expr_res _ _ _ _ _ t` mp_tac >>
@@ -414,8 +414,8 @@ Theorem intcall_nested_return:
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
        gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,callee)
-         (intcall_callee_src fp.jc_cx name ss) (es1,entered) (\res ee r. F)
-         (intcall_callee_exit fp.jc_func ce fp.jc_cx rtv rc
+         (intcall_callee_src fp.jc_cx name mut F ss) (es1,entered) (\res ee r. F)
+         (intcall_callee_exit fp.jc_func ce fp.jc_cx mut F rtv rc
             (if rc = 0 /\
                 ce.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
              then SOME (HD argv) else NONE)

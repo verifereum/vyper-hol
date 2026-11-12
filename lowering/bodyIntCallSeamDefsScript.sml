@@ -18,13 +18,16 @@ Ancestors
 Libs
   monadsyntax
 
-(* The source of an internal call after push_function: the body, the
-   frame's cleanup with the nonreentrant lock's release, and the cast of
-   the returned value.  A supported callee has no defaults
-   (body_intcall_source_selection). *)
+(* The source of an internal call after push_function: the nonreentrant
+   lock, the body, the frame's cleanup with the lock's release, and the
+   cast of the returned value.  The source takes the lock just before
+   push_function; lock_if_nr touches only transient storage and
+   push_function only the scopes, so taking it just after is the same
+   run, and matches the compiled callee, which takes it in its prologue. *)
 Definition intcall_rest_def:
   intcall_rest cx name mut nr ss prev rtv =
-    do rv <- finally_unless_halt
+    do lock_if_nr cx nr (is_view_mut mut);
+       rv <- finally_unless_halt
          (finally
             (try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
                      return NoneV
@@ -43,6 +46,12 @@ Proof
   Cases_on `f x` >> Cases_on `q` >> simp[oneTheory.one]
 QED
 
+Theorem return_unit_ignore_bind[local]:
+  ignore_bind (return ()) f = f
+Proof
+  simp[FUN_EQ_THM, ignore_bind_def, bind_def, return_def]
+QED
+
 (* Without the lock, the cleanup is the frame's pop alone. *)
 Theorem intcall_rest_F:
   intcall_rest cx name mut F ss prev rtv =
@@ -57,16 +66,30 @@ Theorem intcall_rest_F:
        return (Value crv)
     od
 Proof
-  simp[intcall_rest_def, finally_unless_halt_return, ignore_bind_return_unit]
+  simp[intcall_rest_def, finally_unless_halt_return, ignore_bind_return_unit,
+       lock_if_nr_def, unlock_if_nr_def, return_unit_ignore_bind]
 QED
 
-(* The callee's body as the INVOKE runs it. *)
+(* The callee as the INVOKE runs it: the nonreentrant lock its prologue
+   takes, then its body. *)
 Definition intcall_callee_src_def:
-  intcall_callee_src cx name ss =
+  intcall_callee_src cx name mut nr ss =
+    do lock_if_nr cx nr (is_view_mut mut);
+       try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
+               return NoneV
+            od) handle_function
+    od
+End
+
+(* Without the lock, the callee is its body alone. *)
+Theorem intcall_callee_src_F:
+  intcall_callee_src cx name mut F ss =
     try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
             return NoneV
          od) handle_function
-End
+Proof
+  simp[intcall_callee_src_def, lock_if_nr_def, return_unit_ignore_bind]
+QED
 
 (* The INVOKE of internal function name (mut, nonreentrancy flag nr,
    args,ret,ss, raw-return flag rr), called with arguments es from the caller func, whose code for the
@@ -76,7 +99,8 @@ End
    and rtv the evaluated return type.
    - Source: the supplied arguments evaluated, then the omitted ones'
      defaults evaluated in the callee's context, to the values penv binds;
-     the callee's body is call-safe at the pushed context.
+     the callee's body is call-safe at the pushed context.  es1 is before
+     the nonreentrant lock, which intcall_rest and intcall_callee_src take.
    - Code: the call's code as compile_call_intcall_shape gives it: the
      return buffer rbuf if any (sa to st2), each supplied argument
      lowered and staged at the callee's declared parameter type (st2 to
@@ -107,15 +131,14 @@ Definition intcall_entry_def:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
                 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t <=>
     ~MEM (NONE,name) cx.stk /\
-    (?dflts s1 vs t1 sd dvs td s3 u t3.
+    (?dflts s1 vs t1 sd dvs td.
        lookup_callable_function cx.in_deploy name tops =
          SOME (mut,nr,args,dflts,ret,ss) /\
        eval_exprs cx es s1 = (INL vs,t1) /\
        eval_exprs (cx with stk updated_by CONS (NONE,name))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
          (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
-       bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
-       lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)) /\
+       bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv) /\
     evaluate_type (get_tenv cx) ret = SOME rtv /\
     call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
       (int_calls_stmts ss) /\
@@ -267,8 +290,8 @@ End
 (* How the callee's run ends, seen from the caller's state t at the
    INVOKE, whose call's code has the ALLOCA ids in [n, m): an abort the
    call's source exception allows (expr_exit), or an IntRet with the
-   returned value v: the callee's global state related at the caller's
-   compile env, its stack values v's words (rc of them), the return
+   returned value v: the callee's global state, after the source releases
+   the nonreentrant lock (ee'), related at the caller's compile env, its stack values v's words (rc of them), the return
    buffer rb, if any, holding v, and the caller's memory below t's
    frontier untouched outside the call's own allocations (the return
    buffer and the staged memory arguments, which the callee may write).
@@ -276,9 +299,27 @@ End
    its entry frontier only through the pointers it is passed), not of the
    body's simulation: stmt_frag's post carries no memory frame. *)
 Definition intcall_callee_exit_def:
-  intcall_callee_exit func cenv cx rtv rc (rb:bytes32 option) (n:num)
+  intcall_callee_exit func cenv cx mut nr rtv rc (rb:bytes32 option) (n:num)
                       (m:num)
                       (t:venom_state) res (ee:evaluation_state) r <=>
+    expr_exit res r \/
+    ?v ir s' ee'.
+      res = INL v /\ r = IntRet ir s' /\
+      unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),ee') /\
+      state_rel func cenv cx (ee' with scopes := []) s' /\
+      intret_vals_match rtv v ir.iret_values /\
+      LENGTH ir.iret_values = rc /\ ir.iret_adopt_fmp = NONE /\
+      (!b sz. b + sz <= t.vs_alloca_next /\
+              (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
+                             n <= aid /\ aid < m ==>
+                             regions_disjoint b sz off asz) ==>
+              mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory) /\
+      (!p. rb = SOME p ==> val_in_memory rtv v (w2n p) s'.vs_memory)
+End
+
+(* Without the lock, the IntRet's state is the callee's own. *)
+Theorem intcall_callee_exit_F:
+  intcall_callee_exit func cenv cx mut F rtv rc rb n m t res ee r <=>
     expr_exit res r \/
     ?v ir s'.
       res = INL v /\ r = IntRet ir s' /\
@@ -291,7 +332,9 @@ Definition intcall_callee_exit_def:
                              regions_disjoint b sz off asz) ==>
               mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory) /\
       (!p. rb = SOME p ==> val_in_memory rtv v (w2n p) s'.vs_memory)
-End
+Proof
+  simp[intcall_callee_exit_def, unlock_if_nr_def, return_def]
+QED
 
 (* body_inv carries the module-level pins (cenv_module_pins, bodySim). *)
 Theorem body_inv_module_pins:
@@ -306,15 +349,14 @@ Theorem intcall_entry_source:
     (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
   ~MEM (NONE,name) cx.stk /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
-  ?dflts s1 vs t1 sd dvs td s3 u t3.
+  ?dflts s1 vs t1 sd dvs td.
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
     eval_exprs cx es s1 = (INL vs,t1) /\
     eval_exprs (cx with stk updated_by CONS (NONE,name))
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
       (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
-    bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
-    lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)
+    bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv
 Proof
   rw[intcall_entry_def] >> metis_tac[]
 QED

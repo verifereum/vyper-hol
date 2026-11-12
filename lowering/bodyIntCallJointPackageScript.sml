@@ -51,9 +51,9 @@ Theorem intcall_callee_packaging:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut F ss)
         (es1,entered) (\res ee r. F)
-        (intcall_callee_exit func cenv cx rtv rc
+        (intcall_callee_exit func cenv cx mut F rtv rc
            (if rc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
@@ -95,7 +95,7 @@ Proof
   irule gas_outcome_path_prefix >> goal_assum (drule_at Any) >>
   `cx_tops fp.jc_cx = cx_tops cx` by
     fs[gasContextTheory.cx_tops_def, vyperContextTheory.get_module_code_def] >>
-  pure_rewrite_tac[intcall_callee_src_def] >>
+  pure_rewrite_tac[intcall_callee_src_F] >>
   qpat_assum `cx_tops fp.jc_cx = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
   qpat_assum `fp.jc_ctx = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   qpat_assum `fp.jc_func = _` (fn th => pure_rewrite_tac[GSYM th]) >>

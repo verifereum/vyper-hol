@@ -38,9 +38,9 @@ Theorem intcall_seam3_nonreentrant:
        get_instruction bb t.vs_inst_idx = SOME inst /\
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
-       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut T ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx rtv rc
+         (intcall_callee_exit func cenv cx mut T rtv rc
             (if rc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
@@ -85,9 +85,9 @@ Theorem intcall_return_restore_F:
        get_instruction bb t.vs_inst_idx = SOME inst /\
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
-       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut F ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx rtv rc
+         (intcall_callee_exit func cenv cx mut F rtv rc
             (if rc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
@@ -142,25 +142,25 @@ Proof
   qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _` drule_all >>
   strip_tac >>
   rewrite_tac[intcall_rest_F] >>
-  pure_once_rewrite_tac[GSYM intcall_callee_src_def] >>
+  pure_once_rewrite_tac[GSYM intcall_callee_src_F] >>
   irule invoke_cleanup_outcome >>
   conj_tac >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
     rewrite_tac[intcall_rest_F] >>
-    pure_once_rewrite_tac[GSYM intcall_callee_src_def] >> simp[]) >>
+    pure_once_rewrite_tac[GSYM intcall_callee_src_F] >> simp[]) >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `gas_invoke_entry _ _ _ _`)) >>
-  qexists_tac `\v ee ir cs. intcall_callee_exit func cenv cx rtv rc'
+  qexists_tac `\v ee ir cs. intcall_callee_exit func cenv cx mut F rtv rc'
     (if rc' = 0 /\ ann <> NoneT then SOME (HD argv) else NONE)
     sa.cs_next_id sb.cs_next_id t (INL v) ee (IntRet ir cs)` >>
   reverse conj_tac >-
-    (simp[NoAsms, intcall_callee_exit_def] >>
+    (simp[NoAsms, intcall_callee_exit_F] >>
      qpat_assum `cenv.ce_func_return_type _ = ann` (fn th => rewrite_tac[th])) >>
   rpt strip_tac >>
   `immutable_alloca_sep func cenv cx (ee with scopes := prev) t` by
     (irule marked_body_immutable_alloca_sep >>
      goal_assum (drule_at Any) >>
      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     rewrite_tac[intcall_callee_src_def] >> strip_tac >>
+     rewrite_tac[intcall_callee_src_F] >> strip_tac >>
      goal_assum (drule_at Any)) >>
   `gas_path ctx callee entered (LENGTH marks) (IntRet ir cs)` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -168,7 +168,7 @@ Proof
        fragGasModeTheory.gas_marked_path_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `(\v ee ir cs. _) _ _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss())
-      [intcall_callee_exit_def, expr_exit_def]) >>
+      [intcall_callee_exit_F, expr_exit_def]) >>
   simp[NoAsms] >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule source_return_dispatch >> asm_rewrite_tac[] >>
@@ -209,9 +209,9 @@ Theorem intcall_return_restore:
        get_instruction bb t.vs_inst_idx = SOME inst /\
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
-       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut nr ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx rtv rc
+         (intcall_callee_exit func cenv cx mut nr rtv rc
             (if rc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
@@ -288,9 +288,9 @@ Theorem intcall_return_widened_F:
        get_instruction bb t.vs_inst_idx = SOME inst /\
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
-       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut F ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx rtv rc
+         (intcall_callee_exit func cenv cx mut F rtv rc
             (if rc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
@@ -341,25 +341,25 @@ Proof
   qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _` drule_all >>
   strip_tac >>
   rewrite_tac[intcall_rest_F] >>
-  pure_once_rewrite_tac[GSYM intcall_callee_src_def] >>
+  pure_once_rewrite_tac[GSYM intcall_callee_src_F] >>
   irule invoke_cleanup_outcome >>
   conj_tac >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
     rewrite_tac[intcall_rest_F] >>
-    pure_once_rewrite_tac[GSYM intcall_callee_src_def] >> simp[]) >>
+    pure_once_rewrite_tac[GSYM intcall_callee_src_F] >> simp[]) >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `gas_invoke_entry _ _ _ _`)) >>
-  qexists_tac `\v ee ir cs. intcall_callee_exit func cenv cx rtv rc'
+  qexists_tac `\v ee ir cs. intcall_callee_exit func cenv cx mut F rtv rc'
     (if rc' = 0 /\ ret <> NoneT then SOME (HD argv) else NONE)
     sa.cs_next_id sb.cs_next_id t (INL v) ee (IntRet ir cs)` >>
   reverse conj_tac >-
-    (simp[NoAsms, intcall_callee_exit_def] >>
+    (simp[NoAsms, intcall_callee_exit_F] >>
      qpat_assum `cenv.ce_func_return_type _ = ret` (fn th => rewrite_tac[th])) >>
   rpt strip_tac >>
   `immutable_alloca_sep func cenv cx (ee with scopes := prev) t` by
     (irule marked_body_immutable_alloca_sep >>
      goal_assum (drule_at Any) >>
      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     rewrite_tac[intcall_callee_src_def] >> strip_tac >>
+     rewrite_tac[intcall_callee_src_F] >> strip_tac >>
      goal_assum (drule_at Any)) >>
   `gas_path ctx callee entered (LENGTH marks) (IntRet ir cs)` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -367,7 +367,7 @@ Proof
        fragGasModeTheory.gas_marked_path_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `(\v ee ir cs. _) _ _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss())
-      [intcall_callee_exit_def, expr_exit_def]) >>
+      [intcall_callee_exit_F, expr_exit_def]) >>
   simp[NoAsms] >>
   `?k out. gas_path ctx func t (LENGTH marks + k) (OK out) /\
     out.vs_current_bb = sb.cs_current_bb /\
@@ -454,9 +454,9 @@ Theorem intcall_return_widened:
        get_instruction bb t.vs_inst_idx = SOME inst /\
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
-       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut nr ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx rtv rc
+         (intcall_callee_exit func cenv cx mut nr rtv rc
             (if rc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)

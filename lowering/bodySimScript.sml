@@ -121,7 +121,10 @@ Definition body_inv_def:
     (!id. cenv.ce_module_var_type (NONE, id) =
           build_var_type_map tops (NONE, id)) /\
     cenv_module_pins tops cenv /\
-    (!src ts. get_module_code cx src = SOME ts ==> src = NONE)
+    (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
+    (!vis mut rr name args dflts ret ss.
+       MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
+       cx.nonreentrant_slot = SOME global_nonreentrant_slot)
 End
 
 Theorem cenv_module_pins_immutable_section_layout:
@@ -137,6 +140,15 @@ Theorem body_inv_immutable_section_layout:
 Proof
   rw[body_inv_def] >> irule cenv_module_pins_immutable_section_layout >>
   simp[]
+QED
+
+(* A nonreentrant function of the module has the lock's slot set. *)
+Theorem body_inv_nonreentrant_slot:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr ==>
+  cx.nonreentrant_slot = SOME global_nonreentrant_slot
+Proof
+  rw[body_inv_def] >> res_tac
 QED
 
 (* The compile env's modules are the source's, the main module alone, whose
