@@ -124,7 +124,7 @@ Proof
 QED
 
 (* Updating one source immutable needs new bytes only for that root. *)
-Theorem immutables_rel_ctor_update[local]:
+Theorem immutables_rel_ctor_update:
   !cenv addr src es s t imms id tv updated off es'.
     immutables_rel cenv addr src T es s /\
     ALOOKUP es.immutables addr = SOME imms /\
