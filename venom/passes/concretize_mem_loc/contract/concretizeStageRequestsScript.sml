@@ -8,7 +8,9 @@ Theory concretizeStageRequests
 Ancestors
   concretizeStageSim o1RequestContract o1PassContract ptrDiscipline
   unitMemInv concretizeMemLocDefs venomPassDispatcher cfgWf
-  concretizeLayoutStageSimulation concretizeLayoutRequestRelations
+  concretizeLayoutStageSimulation concretizeLayoutCorridorRequests
+  concretizeLayoutRequestRelations concretizeLayoutRequestRun
+  concretizeLayoutRequestBase concretizeLayoutRequestBlock
 
 Theorem concretize_stage_abort_rq:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
