@@ -224,8 +224,8 @@ Proof
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32 <= z /\
        w2n x = b+j /\ w2n y = c+j))` by
     (irule ld_joint_mstore_operands >> metis_tac[]) >>
-  qexists_tac `mstore (w2n y) w t` >> conj_tac
-  >- (qexists_tac `y` >> simp[] >> qexists_tac `w` >> simp[]) >>
+  (qexists_tac `mstore (w2n y) w t` >> conj_tac
+   >- (qexists_tac `y` >> simp[] >> qexists_tac `w` >> simp[])) >>
   `mem_taint tn inst s (mstore (w2n x) v s) =
     ((tn.t_mem DIFF {i | w2n x <= i /\ i < w2n x+32}) UNION
      {w2n x+k | k IN op_taint tn vop})` by

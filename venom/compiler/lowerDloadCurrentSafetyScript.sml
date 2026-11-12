@@ -123,8 +123,10 @@ Resume ld_sync_ordinary_raw[ranges]:
       (!a. op_prov f.lf_H ops.iao_ofst = SOME a ==> ld_wordrel A (SOME a) x y)`
        suffices_by metis_tac[] >>
      irule ld_descriptor_offset_observation >> gvs[] >> metis_tac[]) >>
-  gvs[] >> once_rewrite_tac[ADD_COMM] >> irule ld_classified_range_frontier >>
-  metis_tac[]
+  gvs[] >>
+  `r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next` suffices_by
+    (strip_tac >> simp[]) >>
+  irule ld_classified_range_frontier >> metis_tac[]
 QED
 Finalise ld_sync_ordinary_raw
 

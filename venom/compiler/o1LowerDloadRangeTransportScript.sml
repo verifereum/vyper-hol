@@ -298,7 +298,8 @@ Proof
       IF_CASES_TAC
       >- (`i-p < len` by decide_tac >>
           `rp+(i-p) NOTIN mask` by
-            (gvs[] >> metis_tac[arithmeticTheory.SUB_ADD, ADD_COMM]) >>
+            (gvs[] >> qpat_x_assum `!k. i = _ ==> _` (qspec_then `i-p` mp_tac) >>
+             simp[]) >>
           metis_tac[]) >>
       fs[ptrDisciplineTheory.ld_dyn_agree_def] >> metis_tac[]) >>
   `~(p <= i /\ i < p+len) /\ ~(q <= i /\ i < q+len)` by decide_tac >>
