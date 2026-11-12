@@ -96,6 +96,35 @@ Proof
   simp[is_terminator_def]
 QED
 
+(* Custom-error reverts: store the arguments, write the selector, encode. *)
+Theorem fuel_ok_compile_custom_error_store_args[local]:
+  !cenv es tys dst off Wv E.
+    fuel_ok Wv {} E (compile_custom_error_store_args cenv es tys dst off)
+Proof
+  Induct_on `es` >> rpt gen_tac >> Cases_on `tys` >>
+  simp_tac std_ss [compile_custom_error_store_args_def, fuel_ok_return] >>
+  first_x_assum (fn ih =>
+    fuel_auto [ih, fuel_ok_compile_expr_cb, fuel_ok_emit_op,
+               fuel_ok_unwrap_value, fuel_ok_compile_store_memory]) >>
+  simp[is_terminator_def]
+QED
+
+Theorem fuel_ok_compile_revert_with_custom_error[local]:
+  !cenv err Wv E.
+    fuel_ok Wv {} E (compile_revert_with_custom_error cenv err)
+Proof
+  rpt gen_tac >> Cases_on `err` >> rename1 `CustomError id pos kw` >>
+  simp_tac std_ss [compile_revert_with_custom_error_def, LET_THM] >>
+  Cases_on `cenv.ce_error_info (nsid_to_string id)` >>
+  simp_tac (srw_ss()) []
+  >- (irule fuel_ok_emit_inst_any >> simp[]) >>
+  fuel_auto [fuel_ok_emit_inst_any, fuel_ok_emit_op, fuel_ok_emit_void_any,
+             fuel_ok_compile_alloc_buffer,
+             fuel_ok_compile_custom_error_store_args,
+             fuel_ok_compile_abi_encode_to_buf] >>
+  simp[is_terminator_def]
+QED
+
 Theorem fuel_ok_stmt_assert[local]:
   !cenv lctx ty c r Wv E.
     fuel_ok Wv {} E (compile_stmt cenv lctx ty (Assert c r))
@@ -103,7 +132,8 @@ Proof
   rpt gen_tac >> Cases_on `r` >> simp_tac std_ss [compile_stmt_def] >>
   fuel_auto [fuel_ok_lower_value_compile_expr, fuel_ok_emit_inst_jnz,
              fuel_ok_emit_inst_any, fuel_ok_compile_reason_message,
-             fuel_ok_compile_revert_with_reason] >>
+             fuel_ok_compile_revert_with_reason,
+             fuel_ok_compile_revert_with_custom_error] >>
   simp[is_terminator_def]
 QED
 
@@ -113,7 +143,8 @@ Theorem fuel_ok_stmt_raise[local]:
 Proof
   rpt gen_tac >> Cases_on `r` >> simp_tac std_ss [compile_stmt_def] >>
   fuel_auto [fuel_ok_emit_inst_any, fuel_ok_compile_reason_message,
-             fuel_ok_compile_revert_with_reason] >>
+             fuel_ok_compile_revert_with_reason,
+             fuel_ok_compile_revert_with_custom_error] >>
   simp[is_terminator_def]
 QED
 
