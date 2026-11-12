@@ -139,5 +139,29 @@ Proof
        conj_tac >> rpt strip_tac >>
        irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
        fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  FAIL_TAC "aggregate runner"
+  drule_all tuplePlacePointerReadyTheory.tuple_place_index_sizes >> strip_tac >>
+  `?sw. eval_operand (EL i elems) s0 = SOME sw /\
+     w2n sw = w2n w + SUM (MAP type_memory_size (TAKE i ltvs))` by
+    (fs[tuplePlaceHeadTheory.tuple_place_head_def] >>
+     qpat_x_assum `!j. i <= j /\ j < LENGTH tys ==> _`
+       (qspec_then `i` mp_tac) >> gvs[]) >>
+  `val_in_memory (EL i ltvs) (EL i vs) (w2n sw) s0.vs_memory /\
+   tuple_place_snapshot ce cx es lo sa.cs_next_id tys ltys ltvs w s0` by
+    fs[tuplePlaceHeadTheory.tuple_place_head_def] >>
+  `val_wf (EL i ltvs) (EL i vs) /\ val_wf (EL i tvs) (EL i vs)` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+   (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv.
+       evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields)` by
+    (fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
+  `type_memory_bytes ce ity = type_memory_size (EL i tvs)` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+   ce.ce_module_var_type (ce.ce_module,id) = SOME ity` by simp[] >>
+  drule_all immutableDeployAssignFactsTheory.immutable_assign_declared_region >> strip_tac >>
+  `LENGTH ltvs = LENGTH ltys` by simp[] >>
+  drule_all tuplePlacePointerReadyTheory.tuple_place_snapshot_element_bounds >> strip_tac >>
+  FAIL_TAC "aggregate geometry"
 QED
