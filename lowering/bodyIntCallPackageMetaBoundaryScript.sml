@@ -120,6 +120,7 @@ Theorem lower_vyper_deploy_unit_internal_lookup:
   !tops rp bytes unit mut nr rr name args dflts ret stmts.
     lower_vyper_deploy_unit tops rp bytes = SOME unit /\
     IS_SOME (SND (SND (SND (classify_functions tops)))) /\
+    module_consts_env tops [] = [] /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret stmts) tops ==>
     ?fbs.
       lookup_function
@@ -142,7 +143,8 @@ Proof
   Cases_on `ctor` >> simp[lower_vyper_deploy_unit_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   `MEM (mut,nr,rr,name,args,dflts,ret,stmts) ints` by
-    metis_tac[MEM_classify_internal, FST, SND] >>
+    (`ints = FST (SND (classify_functions tops))` by simp[] >>
+     pop_assum SUBST1_TAC >> simp[MEM_classify_internal]) >>
   `MEM (source_internal_fn_descriptor tops T
           (mut,nr,rr,name,args,dflts,ret,stmts))
     (internal_fn_descriptors
