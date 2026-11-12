@@ -101,13 +101,15 @@ Proof
   conj_tac >- (irule toplevel_storage_marked_exec >> simp[]) >>
   disj1_tac >> simp[] >> rpt strip_tac >>
   `valid_horizon cx st0 H es.storage_trace /\ MEM (tr,n2w slot,tvt) (FST H)` by
-    gvs[valid_horizon_def, storage_observations_ok_def,
-        storage_trace_regions_def] >>
+    gvs[vyperStorageFootprintTheory.valid_horizon_def,
+        vyperStorageFootprintTheory.storage_observations_ok_def,
+        vyperStorageFootprintTheory.storage_trace_regions_def] >>
   first_x_assum drule >> strip_tac >>
   `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt` by
-    gvs[storage_well_formed_on_def] >>
+    gvs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
   `w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256)` by
-    (gvs[valid_horizon_def, regions_consistent_def] >> metis_tac[]) >>
+    (gvs[vyperStorageFootprintTheory.valid_horizon_def,
+         vyperStorageFootprintTheory.regions_consistent_def] >> metis_tac[]) >>
   `!st. storage_read_live H tr st (n2w slot) tvt` by
     metis_tac[observed_storage_region_read_live] >>
   `typ = ann` by

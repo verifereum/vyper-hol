@@ -226,6 +226,8 @@ Resume compile_bop_typed_sim[right_normal]:
        (qpat_x_assum `!H. valid_horizon _ _ H es_end'.storage_trace ==> ?v. _`
           drule >> simp[]) >>
      simp[gas_value_prefix_def] >> metis_tac[]) >>
+  qpat_x_assum `res = INL v2` SUBST_ALL_TAC >>
+  qpat_x_assum `r = OK u` SUBST_ALL_TAC >>
   qpat_assum `gas_marked_exec _ _ _ _ _ (INL v2) _ _`
     (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
   disch_then (mp_tac o CONJUNCT1) >>

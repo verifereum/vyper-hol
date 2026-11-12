@@ -35,6 +35,10 @@ Proof
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   gvs[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
       literal_read_all_tails, expr_sim_pre_def, well_typed_expr_def] >>
   Cases_on `ann` >> gvs[well_typed_literal_def, is_word_type_def] >>

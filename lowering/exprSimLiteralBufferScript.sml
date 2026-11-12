@@ -1062,7 +1062,7 @@ Resume compile_literal_other_vv_sim[string]:
   mp_tac (SRULE [] (Q.INST [`H` |-> `H0`]
     (Q.SPECL [`func`, `cenv`, `cx`, `es with gas_obs := []`,
               `MAP (n2w o ORD) str : word8 list`, `sa`, `cs'`, `buf`, `s0`,
-              `ctx`] literal_bytelike_run))) >>
+              `ctx`] (INST_TYPE [alpha |-> ``:256``] literal_bytelike_run)))) >>
   (impl_tac >- fs[]) >> strip_tac >>
   drule_all literal_bytelike_gas_path >> strip_tac >>
   rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
@@ -1084,7 +1084,7 @@ Resume compile_literal_other_vv_sim[string]:
     (mp_tac (SRULE []
        (Q.SPECL [`func`, `cenv`, `cx`, `es with gas_obs := []`,
                  `MAP (n2w o ORD) str : word8 list`, `sa`, `cs'`, `buf`, `s0`,
-                 `ctx`] literal_bytelike_run)) >>
+                 `ctx`] (INST_TYPE [alpha |-> ``:256``] literal_bytelike_run))) >>
      (impl_tac >- fs[]) >> strip_tac >> gvs[]) >>
   once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
