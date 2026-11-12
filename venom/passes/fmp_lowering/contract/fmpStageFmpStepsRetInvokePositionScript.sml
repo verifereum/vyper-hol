@@ -305,3 +305,28 @@ Proof
   disch_then (qspecl_then [`plan`,`i`] mp_tac) >>
   simp[] >> metis_tac[]
 QED
+
+Theorem fmp_return_root_offset:
+  fn.fn_fmp_signature = NONE /\ FLOOKUP infos fn.fn_name = SOME info /\
+  split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
+  fn.fn_blocks = entry::rest /\
+  fmp_make_root_layout ctx fn info runner s = SOME (FmpRootLayout n root newpc s') /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  fmp_stage_tidx plan (fmp_stage_root infos ctx fn) lbl bb.bb_instructions i =
+  fmp_stage_tidx plan NONE lbl bb.bb_instructions i +
+    (if lbl = entry.bb_label then LENGTH (OPTION_TO_LIST root) else 0)
+Proof
+  strip_tac >> drule split_fmp_entry_reconstruct >> strip_tac >> gvs[] >>
+  drule split_fmp_entry_parameter_prefix >> strip_tac >>
+  Cases_on `lbl = entry.bb_label` >>
+  gvs[lookup_block_def, FIND_thm]
+  >- (`LENGTH (users ++ option_CASE oldpc [] (\i. [i])) <= i` by
+        (irule fmp_return_invoke_after_prefix >>
+         reverse conj_tac >- simp[] >> qexists `suffix` >> simp[APPEND_ASSOC]) >>
+      gvs[fmp_make_root_layout_def, fmp_stage_root_def,
+          fmp_stage_tidx_def, AllCaseEqs(), callLayoutDefsTheory.OPTION_TO_LIST_def] >>
+      Cases_on `newpc` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
+  gvs[fmp_make_root_layout_def, fmp_stage_root_def,
+      fmp_stage_tidx_def, AllCaseEqs(), callLayoutDefsTheory.OPTION_TO_LIST_def]
+QED
