@@ -8,7 +8,7 @@ Theorem intcall_memory_copy_open:
   (is_word_type dty \/ is_bytestring_type dty \/ dty = sty \/
    acyclic_struct_metadata ce.ce_struct_fields) /\
   ~block_is_terminated sa /\
-  compile_assign_value ce dst LocMemory src F loc dty sty info bytes sa = ((),sb) ==>
+  compile_assign_value ce dst LocMemory src F loc dty sty bytes sa = ((),sb) ==>
   ~block_is_terminated sb
 Proof
   simp[compile_assign_value_def] >>

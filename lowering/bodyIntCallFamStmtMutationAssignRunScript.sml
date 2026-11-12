@@ -8,7 +8,7 @@ Ancestors
 Theorem intcall_aggregate_initializer_run:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   intcall_expr_res fp ce env es sa s /\
-  compile_assign_value ce dst LocMemory src F loc dty sty info bytes sa = ((),sb) /\
+  compile_assign_value ce dst LocMemory src F loc dty sty bytes sa = ((),sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   (!x. src = Var x ==> not_fresh_at sa x) /\ (!lbl. src <> Label lbl) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\

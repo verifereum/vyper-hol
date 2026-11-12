@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtMutationAugTargetPrehash
 Ancestors
   bodyIntCallFamStmtMutationBinop bodyIntCallJointContract
-  exprSimMapKey exprSimHash exprLoweringProps compileEnv byte venomState list rich_list loweringStateRelDefs
+  exprSimMapKey exprSimHash exprSimHashBoundary exprLoweringProps compileEnv byte venomState list rich_list loweringStateRelDefs
 
 Theorem intcall_key_prehash:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\

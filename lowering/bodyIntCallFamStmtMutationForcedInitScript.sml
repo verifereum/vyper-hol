@@ -46,7 +46,7 @@ Theorem intcall_annassign_forced_initializer_run:
   emit_inst ALLOCA [Lit (n2w (type_memory_bytes ce ty))] [p] st = ((),sA) /\
   lower_value compile_expr c (expr_type e) e sA = (op,sB) /\
   compile_assign_value c (Var p) LocMemory op F loc ty
-    (lowered_value_type ce e) info bytes sB = ((),sf) /\
+    (lowered_value_type ce e) bytes sB = ((),sf) /\
   fn_has_code sB sf fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes ce ty)) /\
   intcall_expr_res fp c env es sA salloc /\

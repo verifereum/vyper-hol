@@ -88,7 +88,7 @@ Finalise intcall_bytes_staged_store
 
 Theorem intcall_bytes_initializer_run:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
-  compile_assign_value ce dst LocMemory src F loc dty physical info bytes sa = ((),sb) /\
+  compile_assign_value ce dst LocMemory src F loc dty physical bytes sa = ((),sb) /\
   is_bytestring_type dty /\ is_bytestring_type a /\ is_bytestring_type physical /\
   evaluate_type tenv a = SOME av /\ evaluate_type tenv dty = SOME dv /\
   evaluate_type tenv physical = SOME pv /\

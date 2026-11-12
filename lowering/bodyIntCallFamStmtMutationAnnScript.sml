@@ -90,9 +90,6 @@ Theorem intcall_annassign_copy_entry:
     lower_value compile_expr c (expr_type e) e sA = (op,sB) /\
     compile_assign_value c (Var p) LocMemory op F (vv_location vv)
       ty (lowered_value_type ce e)
-      (case ty of ArrayT elem_ty (Dynamic _) =>
-         SOME ((type_memory_bytes ce elem_ty + 31) DIV 32,
-               type_memory_bytes ce elem_ty) | _ => NONE)
       (type_memory_bytes ce ty) sB = ((),sf) /\
     fn_has_code sA sB fp.jc_func /\ fn_has_code sB sf fp.jc_func /\
     MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes ce ty))] [p])
