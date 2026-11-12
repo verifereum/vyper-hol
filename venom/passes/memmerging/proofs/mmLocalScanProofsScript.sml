@@ -17251,6 +17251,76 @@ Proof
   irule mm_local_write_log_memory_cong >> simp[]
 QED
 
+Theorem mm_local_zero_capture_finite[local]:
+  is = bb.bb_instructions /\
+  mm_local_zero_capture dfg is n j = SOME (d,bs) /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  s.vs_current_bb = bb.bb_label /\ s.vs_inst_idx = j /\
+  static_mem_ok eom ctx fn (EL j is) s /\ eom < dimword (:256) /\
+  step_inst fuel ctx (EL j is) s = OK u ==>
+  d + LENGTH bs < dimword (:256)
+Proof
+  strip_tac >> drule mm_local_zero_capture_cases >> strip_tac >>
+  `(EL j is).inst_opcode IN {MSTORE; CALLDATACOPY}` by
+    gvs[is_calldatasize_copy_def] >>
+  `~in_revert_forward fn s` by
+    (simp[contextCodegenRelTheory.in_revert_forward_def] >> strip_tac >>
+     `get_instruction bb j = SOME (EL j is)` by
+       gvs[venomInstTheory.get_instruction_def] >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >>
+     gvs[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  qpat_x_assum `static_mem_ok _ _ _ _ _` mp_tac >>
+  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+    EVERY_APPEND] >> strip_tac >>
+  gvs[is_calldatasize_copy_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    codegenRelTheory.fixed_source_write_range_def,
+    codegenRelTheory.sized_source_write_range_def,
+    venomStateTheory.eval_operand_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  with_opcode_clause simp >>
+  simp[venomStateTheory.eval_operand_def] >>
+  Cases_on `lookup_var v s` >> gvs[] >> strip_tac >>
+  mp_tac (Q.ISPEC `dst:256 word` wordsTheory.w2n_lt) >>
+  simp[] >> decide_tac
+QED
+
+Theorem mm_local_zero_representative_finite[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  MEM g gs /\ r < LENGTH is /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  mm_local_history is H (SUC r) /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!j. j <= r ==> (H j).vs_current_bb = bb.bb_label /\
+    (H j).vs_inst_idx = j /\ static_mem_ok eom ctx fn (EL j is) (H j)) /\
+  eom < dimword (:256) ==>
+  g.cg_dst < dimword (:256) /\ g.cg_length < dimword (:256)
+Proof
+  strip_tac >>
+  `mm_local_group_endpoint is (SUC r)
+    (mm_local_zero_capture dfg is (SUC r)) g` by
+    (gvs[] >> irule mm_local_zero_representative_endpoint >> simp[]) >>
+  `?j d bs. j < SUC r /\ j < LENGTH is /\
+      mm_local_zero_capture dfg is (SUC r) j = SOME (d,bs) /\
+      d + LENGTH bs = g.cg_dst + g.cg_length` by
+    (fs[mm_local_group_endpoint_def] >> metis_tac[]) >>
+  `(EL j is).inst_opcode IN {MSTORE; CALLDATACOPY}` by
+    (drule mm_local_zero_capture_cases >>
+     gvs[is_calldatasize_copy_def, pred_setTheory.IN_INSERT,
+       pred_setTheory.NOT_IN_EMPTY] >> metis_tac[]) >>
+  `step_inst fuel ctx (EL j is) (H j) = OK (H (SUC j))` by
+    (gvs[mm_local_history_def, pred_setTheory.IN_INSERT,
+       pred_setTheory.NOT_IN_EMPTY,
+       venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  `(H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j)` by
+    (first_x_assum irule >> decide_tac) >>
+  `d + LENGTH bs < dimword (:256)` by
+    (drule_all mm_local_zero_capture_finite >> simp[]) >> decide_tac
+QED
+
 Theorem mm_local_zero_cut_representative_write[local]:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
   is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
