@@ -15,7 +15,8 @@
  *)
 Theory fmpStageFmpSteps
 Ancestors
-  fmpStageReclaimSound fmpStageRel ptrStaticDiscipline o1PassContract
+  fmpStageOpBase fmpStageControl fmpStageReclaimSound fmpStageRel
+  ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
   list
 
