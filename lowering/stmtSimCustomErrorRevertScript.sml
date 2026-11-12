@@ -24,7 +24,7 @@ Ancestors
   stmtSimCustomErrorExit abiEncoderWindowRunMem abiEncoderAppend
   memContinuationExit fragExec emitHelperProps loweringHalt actualAllocExec words
   venomInst arithmetic compilerInstructionSuffix windowPhaseMem abiEncoderWindowPhase
-  stmtSimCustomErrorPrepare externalReturnEncoderSites abiEncoderResultLive
+  stmtSimCustomErrorPayloadPrepare externalReturnEncoderSites abiEncoderResultLive
   calldataDynOwned allocaSiteResource stmtSimCustomErrorTrapCompile
   stmtSimCustomErrorTrap stmtSimCustomErrorTrapPath runFromGasPathMem
 
