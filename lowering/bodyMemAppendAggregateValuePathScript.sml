@@ -122,6 +122,8 @@ Proof
   fs[EVERY_EL] >> metis_tac[]
 QED
 
+(* The suffix path does not depend on the horizon, so one path serves every
+   horizon P admits. *)
 Theorem append_storage_aggregate_value_path_mem:
   compile_dynarray_append cenv (Lit slot) op 1 (type_slot_size tv) dt vt cap F
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
@@ -130,16 +132,19 @@ Theorem append_storage_aggregate_value_path_mem:
   type_slot_size tv < dimword (:256) /\
   w2n b + 32*type_slot_size tv <= s.vs_alloca_next /\
   w2n b + 32*type_slot_size tv < dimword (:256) /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
-  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
-  storage_locks_separated (FST H) (SND H) /\
   w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
-  (!slot' tv'.
-    MEM (tr,slot',tv') (FST H) /\
-    (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
-    ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
-                    (w2n slot') (type_slot_size tv')) /\
+  (!(H:(bool # bytes32 # type_value) list # num list). P H ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
+    storage_locks_separated (FST H) (SND H) /\
+    (!slot' tv'.
+      MEM (tr,slot',tv') (FST H) /\
+      (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
+      ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
+                      (w2n slot') (type_slot_size tv'))) /\
+  P H0 /\
   0 < type_slot_size tv /\ well_formed_type_value tv /\ value_has_type tv v /\
   val_in_memory tv v (w2n b) s.vs_memory /\ encode_value tv v = SOME writes /\
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es = (res,es') /\
@@ -147,7 +152,8 @@ Theorem append_storage_aggregate_value_path_mem:
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   alloca_history func s ==>
   ?r. gas_marked_path T ctx func s 0 r /\
-    ((?t. r = OK t /\ res = INL () /\ stmt_state_rel H ctx func cenv cx es' t /\
+    ((?t. r = OK t /\ res = INL () /\
+      (!H. P H ==> stmt_state_rel H ctx func cenv cx es' t) /\
       stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
       (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
       t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
@@ -155,9 +161,14 @@ Theorem append_storage_aggregate_value_path_mem:
      (exit_result r /\ stmt_exit RetQ es' res r))
 Proof
   strip_tac >>
-  drule_all append_storage_header_agree_mem >> strip_tac >>
-  `~s.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `(if tr then tload slot s else sload slot s) =
+   lookup_storage slot (get_storage cx es tr) /\ ~s.vs_call_ctx.cc_static` by
+    (qpat_assum `!H. P H ==> _` (qspec_then `H0` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     conj_tac >- (drule_all append_storage_header_agree_mem >> simp[]) >>
+     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
   `eval_operand (Lit slot) s = SOME slot /\
    (!x. Lit slot = Var x \/ op = Var x ==> not_fresh_at sa x)` by
     simp[eval_operand_def] >>
@@ -176,10 +187,15 @@ Proof
         ~t.vs_halted /\ t.vs_memory = s.vs_memory /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
         (first_x_assum irule >> simp[]) >>
-      `res = INL () /\ stmt_state_rel H ctx func cenv cx es' t` by
-        (drule_all append_storage_aggregate_success_post_mem >> simp[]) >>
+      `!H. P H ==> res = INL () /\ stmt_state_rel H ctx func cenv cx es' t` by
+        (gen_tac >> strip_tac >>
+         qpat_assum `!H. P H ==> _` (qspec_then `H` mp_tac) >>
+         (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+         qpat_x_assum `!H. P H ==> _` kall_tac >>
+         drule_all append_storage_aggregate_success_post_mem >> simp[]) >>
+      `res = INL ()` by metis_tac[] >>
       `alloca_history func t` by (irule append_storage_aggregate_history >> metis_tac[]) >>
-      qexists_tac `OK t` >> simp[stmt_lands_def]) >>
+      qexists_tac `OK t` >> simp[stmt_lands_def] >> metis_tac[]) >>
   `cap <= w2n (lookup_storage slot (get_storage cx es tr))` by decide_tac >>
   drule append_storage_full >> strip_tac >>
   `?a t. gas_marked_path T ctx func s 0 (Abort a t)` by
