@@ -113,6 +113,8 @@ Resume ld_raw_next_closed[forward_entry]:
              MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[fn_insts_blocks_MEM]) >>
      `dload_headroom_ok C source inst s` by
        (fs[] >> drule_all ld_sync_source_mem_inv >> simp[]) >>
+     `raw_mem_ok C source inst s` by
+       (fs[] >> irule ld_sync_source_mem_inv >> metis_tac[]) >>
      `ir_supply_covers_fn f.lf_supply source` by
        (drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
           ld_sync_supply_covered >>

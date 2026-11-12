@@ -68,6 +68,56 @@ Proof
   qexistsl_tac [`jd`,`lo`,`mask`,`sites`,`sz`] >> gvs[]
 QED
 
+(* An MSTORE at or above the dynamic floor leaves the fixed bytes and the
+   sites, which lie below the floor, alone. *)
+Theorem ld_memory_agree_mstore_dyn[local]:
+  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
+  ld_dyn_floor_ok fl lo sites X /\ fl <= a ==>
+  ld_memory_agree sites lo
+    ((mask DIFF {i | a <= i /\ i < a+32}) UNION {a+k | k IN m})
+    (mstore a v s).vs_memory (mstore a w t).vs_memory
+Proof
+  strip_tac >>
+  `lo <= fl /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= fl /\ c+z <= fl` by fs[ld_dyn_floor_ok_def] >>
+  rewrite_tac[ld_memory_agree_def] >> conj_tac
+  >- (rpt strip_tac >> `~(a <= i /\ i < a+32)` by decide_tac >>
+      asm_rewrite_tac[ld_mstore_bytes] >> irule ld_memory_agree_fixed_byte >>
+      qexistsl_tac [`lo`,`mask`,`sites`] >> gvs[]) >>
+  rpt strip_tac >>
+  `b+z <= fl /\ c+z <= fl` by metis_tac[] >>
+  `~(a <= b+j /\ b+j < a+32) /\ ~(a <= c+j /\ c+j < a+32)` by decide_tac >>
+  asm_rewrite_tac[ld_mstore_bytes] >> irule ld_memory_agree_site_byte >>
+  qexistsl_tac [`id`,`lo`,`mask`,`sites`,`z`] >> gvs[]
+QED
+
+(* An MSTORE wholly below the dynamic floor on both sides. *)
+Theorem ld_dyn_agree_mstore_below[local]:
+  ld_dyn_agree fl mask s.vs_memory t.vs_memory /\ a+32 <= fl /\ c+32 <= fl ==>
+  ld_dyn_agree fl
+    ((mask DIFF {i | a <= i /\ i < a+32}) UNION {a+k | k IN m})
+    (mstore a v s).vs_memory (mstore c w t).vs_memory
+Proof
+  rewrite_tac[ld_dyn_agree_def] >> rpt strip_tac >>
+  `~(a <= i /\ i < a+32) /\ ~(c <= i /\ i < c+32)` by decide_tac >>
+  asm_rewrite_tac[ld_mstore_bytes] >> first_x_assum irule >> gvs[]
+QED
+
+(* The same MSTORE at or above the dynamic floor on both sides. *)
+Theorem ld_dyn_agree_mstore_dyn[local]:
+  ld_dyn_agree fl mask s.vs_memory t.vs_memory /\
+  word_agree_except m v w /\ fl <= a ==>
+  ld_dyn_agree fl
+    ((mask DIFF {i | a <= i /\ i < a+32}) UNION {a+k | k IN m})
+    (mstore a v s).vs_memory (mstore a w t).vs_memory
+Proof
+  rewrite_tac[ld_dyn_agree_def] >> rpt strip_tac >> simp[ld_mstore_bytes] >>
+  Cases_on `a <= i /\ i < a+32`
+  >- (`i-a NOTIN m` by (gvs[] >> metis_tac[arithmeticTheory.SUB_ADD]) >>
+      gvs[word_agree_except_def]) >>
+  simp[] >> first_x_assum irule >> gvs[]
+QED
+
 Theorem ld_joint_mstore_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
@@ -169,11 +219,12 @@ Proof
   rename1 `inst.inst_operands = [p;vop]` >>
   `?y w. eval_operand p t = SOME y /\ eval_operand vop t = SOME w /\
     word_agree_except (op_taint tn vop) v w /\
-    ((w2n x = w2n y /\ w2n x+32 <= lo) \/
+    ((w2n x=w2n y /\ (w2n x+32<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+32<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32 <= z /\
        w2n x = b+j /\ w2n y = c+j))` by
     (irule ld_joint_mstore_operands >> metis_tac[]) >>
-  (qexists_tac `mstore (w2n y) w t` >> conj_tac
+  qexists_tac `mstore (w2n y) w t` >> conj_tac
   >- (qexists_tac `y` >> simp[] >> qexists_tac `w` >> simp[]) >>
   `mem_taint tn inst s (mstore (w2n x) v s) =
     ((tn.t_mem DIFF {i | w2n x <= i /\ i < w2n x+32}) UNION
@@ -181,10 +232,26 @@ Proof
     (irule ld_mem_taint_mstore >> simp[] >> metis_tac[w2n_lt]) >>
   asm_rewrite_tac[] >>
   `ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U) /\
-   ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory` by
+   ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by
     fs[ld_joint_boundary_def] >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
-  disch_then irule >> simp[] >> metis_tac[])
+  `lo <= dyn_floor C vs /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
+    fs[ld_dyn_floor_ok_def] >>
+  qpat_x_assum `(w2n x = w2n y /\ _) \/ _` strip_assume_tac
+  >- (conj_tac
+      >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
+          disch_then irule >> simp[] >> metis_tac[]) >>
+      irule ld_dyn_agree_mstore_below >> simp[] >> decide_tac)
+  >- (qpat_x_assum `w2n x = w2n y` (SUBST_ALL_TAC o SYM) >> conj_tac
+      >- (irule ld_memory_agree_mstore_dyn >> metis_tac[]) >>
+      irule ld_dyn_agree_mstore_dyn >> metis_tac[]) >>
+  conj_tac
+  >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
+      disch_then irule >> simp[] >> metis_tac[]) >>
+  `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
+  irule ld_dyn_agree_mstore_below >> simp[] >> decide_tac
 QED
 
 Theorem ld_joint_memory_update_next:
