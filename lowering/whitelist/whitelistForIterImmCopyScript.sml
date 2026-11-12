@@ -132,7 +132,7 @@ Theorem immutable_iter_copy_typed_run:
   compile_iter_elem_copy cenv src dst bytes LocCode F ty ty sa = ((),sb) /\
   bytes = type_memory_size tv /\ 0 < bytes /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   immutable_holds cenv cx ty (Value v) a es s /\
   copy_old_operand sa src /\ copy_old_operand sa dst /\
   eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
@@ -274,7 +274,7 @@ Theorem immutable_iter_copy_typed_run_full:
   compile_iter_elem_copy cenv src dst bytes LocCode F ty ty sa = ((),sb) /\
   bytes = type_memory_size tv /\ 0 < bytes /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   immutable_holds cenv cx ty (Value v) a es s /\
   copy_old_operand sa src /\ copy_old_operand sa dst /\
   eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
@@ -347,7 +347,7 @@ Theorem immutable_iter_copy_declare_rel:
   compile_iter_elem_copy cenv src (Var p) bytes LocCode F ty ty sa = ((),sb) /\
   bytes = type_memory_size tv /\ 0 < bytes /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -360,7 +360,7 @@ Theorem immutable_iter_copy_declare_rel:
   local_ptrs_reserved cenv sa /\
   (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==> not_fresh_at sa q) ==>
   ?z. copy_runtime_frame sa s sb z /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes :=
         (sc |+ (id, <|assignable := assign; type := tv; value := v; popped := []|>)) :: rest) z /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es z /\
