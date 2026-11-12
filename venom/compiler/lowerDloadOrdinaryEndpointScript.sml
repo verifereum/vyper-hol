@@ -363,30 +363,6 @@ Proof
 QED
 
 (* The singleton consumer retains the full endpoint, even with no successor. *)
-(* TEMPORARILY CHEATED - P4b in progress: follows ld_sync_ordinary_effect
-   and ld_nonallocating_endpoint, restated for the DALLOCA ghosts.
-Proof
-  strip_tac >>
-  drule_all ld_sync_ordinary_effect >> strip_tac >>
-  `step_inst 0 C inst s = OK ss` by
-    gvs[step_inst_non_invoke] >>
-  `u.vs_inst_idx = t.vs_inst_idx` by
-    metis_tac[step_inst_preserves_inst_idx] >>
-  qabbrev_tac `g = f with
-    <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
-      lf_tgt := u with vs_inst_idx := p + 1;
-      lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>` >>
-  `ld_vars P A g /\ ld_maps A g /\
-   ld_global lo A (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
-   EVERY (ld_maps A) fs /\
-   (!next. active_inst fn next g.lf_src ==>
-     ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
-       (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt A (g::fs) N)` by
-    (drule_all ld_nonallocating_endpoint >>
-     simp[Abbr `g`]) >>
-  qexistsl [`ss`,`g`] >> simp[Abbr `g`]
-QED
-*)
 Theorem ld_ordinary_endpoint:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
@@ -417,7 +393,25 @@ Theorem ld_ordinary_endpoint:
       ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
         (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt A (g::fs) N)
 Proof
-  cheat
+  strip_tac >>
+  drule_all ld_sync_ordinary_effect >> strip_tac >>
+  `step_inst 0 C inst s = OK ss` by
+    gvs[step_inst_non_invoke] >>
+  `u.vs_inst_idx = t.vs_inst_idx` by
+    metis_tac[step_inst_preserves_inst_idx] >>
+  qabbrev_tac `g = f with
+    <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+      lf_tgt := u with vs_inst_idx := p + 1;
+      lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>` >>
+  `ld_vars P A g /\ ld_maps A g /\
+   ld_global lo A (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
+   EVERY (ld_maps A) fs /\
+   (!next. active_inst fn next g.lf_src ==>
+     ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+       (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt A (g::fs) N)` by
+    (drule_all ld_nonallocating_endpoint >>
+     simp[Abbr `g`]) >>
+  qexistsl [`ss`,`g`] >> simp[Abbr `g`]
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
