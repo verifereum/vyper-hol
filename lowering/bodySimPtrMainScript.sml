@@ -81,7 +81,7 @@ Proof
     (* 24 *) simp[body_iterator_ptr_ok_def],
     (* 25 *) rw[body_iterator_ptr_ok_def] >> metis_tac[],
     (* 26 *) simp[body_for_ptr_ok_def],
-    (* 27 *) rw[body_for_ptr_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def],
+    (* 27 *) rw[body_for_ptr_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def] >> metis_tac[],
     (* 28 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],
     (* 29 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],
     (* 30 *) rpt strip_tac >> irule body_expr_ptr_ok_leaf >> simp[],
@@ -132,7 +132,7 @@ Theorem body_stmts_ptr_ok_sim:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
-    EVERY (stmt_exprs_ok cenv) ss /\
+    stmts_exprs_ok cenv ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty ==>
     stmt_frag_ptr d ctx PG func cx lctx RetQ cenv

@@ -56,6 +56,10 @@ Proof
   (!u. val_in_memory tyv (default_value tyv) (w2n w)
      (mstore (w2n w) 0w u).vs_memory)` by metis_tac[] >>
  `32 <= type_memory_size tyv` by metis_tac[] >>
+ `!u. memory_value_rel tyv (default_value tyv) (w2n w)
+      (mstore (w2n w) 0w u).vs_memory` by
+   metis_tac[memoryValueEncodingTheory.val_in_memory_memory_value_rel,
+             vyperTypeDefaultsTheory.default_value_has_type_thm] >>
  `32 <= sz` by decide_tac >>
  `eval_operand (Lit 0w) s = SOME 0w /\ op_taint tn (Lit 0w) = {}` by
    simp[eval_operand_def, op_taint_def] >>

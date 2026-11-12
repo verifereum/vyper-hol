@@ -39,6 +39,7 @@ QED
 
 
 Theorem raw_log_dynamic_tail_frag:
+  expr_has_effect e /\
   emit_op MLOAD [data_op] sm = (len_op, s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op, s2) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) ::
@@ -70,6 +71,7 @@ QED
 
 
 Theorem raw_log_fixed_tail_frag:
+  expr_has_effect e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u, s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) ::
     (REVERSE ops ++ [Lit 32w; ptr_op])) [] s1 = (u', sb) /\

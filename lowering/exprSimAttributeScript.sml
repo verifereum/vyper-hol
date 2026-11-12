@@ -244,7 +244,8 @@ Theorem base_vv_at_struct[local]:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es.scopes s n b sz /\
                b <= w2n w /\ w2n w + val_footprint stv v <= b + sz /\
-               local_path_at cenv cx n (w2n w - b) stv) \/
+               local_path_at cenv cx n (w2n w - b) stv /\
+               local_place_at cenv cx n (w2n w - b) stv tv) \/
      val_footprint stv v = 0)
 Proof
   rpt gen_tac >> Cases_on `vv` >>
@@ -255,7 +256,7 @@ Proof
   TRY (qpat_x_assum `evaluate_type _ (StructT _) = SOME (BaseTV _)` mp_tac >>
        simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(), LET_THM] >>
        NO_TAC) >>
-  metis_tac[]
+  gvs[local_place_at_def] >> metis_tac[]
 QED
 
 (* A field's pointer does not wrap: the struct's bytes end below 2 ** 256,
@@ -276,12 +277,20 @@ Theorem attr_vv_at_field[local]:
     fields_layout
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
     struct_has_type fs vals /\ ALOOKUP vals fld = SOME fv /\
-    ALOOKUP fs fld = SOME ftv /\ evaluate_type (get_tenv cx) ann = SOME ftv ==>
+    ALOOKUP fs fld = SOME ftv /\ evaluate_type (get_tenv cx) ann = SOME ftv /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_at cenv cx ann sa sn es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[vv_at_def, mk_ptr_def] >> strip_tac >> gvs[attr_offset_def] >>
+  simp[vv_at_def, mk_ptr_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `?p0. tv = PlaceR (MemoryPlace id p0)` by metis_tac[] >>
+      qpat_x_assum `vv_at _ _ (StructT _) _ _ _ _ _ _` mp_tac >>
+      Cases_on `bvv` >>
+      gvs[vv_at_def, vv_loc_def, vv_location_def, is_word_type_def]) >>
+  strip_tac >> gvs[attr_offset_def] >>
   qabbrev_tac `fields =
     get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)` >>
   `struct_field_offset fields fld + type_memory_size ftv <=
@@ -311,10 +320,13 @@ Proof
       `mem_step_offset (StructTV fs) (AttrSubscript fld) =
        SOME (struct_field_offset fields fld, ftv)` by
         simp[mem_step_offset_def, mem_field_offset_layout] >>
-      drule_all local_path_at_step >>
       `w2n w - b + struct_field_offset fields fld =
        w2n w + struct_field_offset fields fld - b` by decide_tac >>
-      simp[local_path_at_val_at] >> decide_tac) >>
+      `local_place_at cenv cx n (w2n w - b + struct_field_offset fields fld)
+         ftv tv'` by
+        (irule local_place_at_step >> metis_tac[]) >>
+      drule_all exprSimPropsTheory.local_path_at_step >>
+      gvs[local_path_at_val_at] >> decide_tac) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
@@ -398,7 +410,9 @@ Theorem attr_vv_post:
          value_has_type (StructTV fs) v) /\
     (!vals. read_result cx tv es1 = (INL (StructV vals), es1) ==>
        ?fv. ALOOKUP vals fld = SOME fv /\
-            read_result cx tv' es1 = (INL fv, es1)) ==>
+            read_result cx tv' es1 = (INL fv, es1)) /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -452,10 +466,13 @@ Proof
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
-      metis_tac[])
+      (conj_tac
+      >- (qexistsl_tac [`ctx`, `func`] >> first_assum ACCEPT_TAC) >>
+      qexistsl_tac [`fld`, `fs`, `sid`, `tv`, `vals`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]))
   >~ [`storage_read_live`]
   >- (strip_tac >>
-      qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >>
+      qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
       asm_rewrite_tac[] >> strip_tac >>
       drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
       drule_all exprSimFieldLayoutTheory.struct_field_offset_slots_eq >>
@@ -471,8 +488,9 @@ Proof
           contextTheory.vv_operand_def, attr_offset_def] >>
       rpt strip_tac >> gvs[] >>
       irule accountsRelPropsTheory.storage_read_live_field >>
-      metis_tac[]) >>
-  first_assum ACCEPT_TAC
+      (qexistsl_tac [`fs`, `fld`] >> conj_tac >>
+        first_assum MATCH_ACCEPT_TAC))
+  >> first_assum ACCEPT_TAC
 QED
 
 (* ===== The simulation ===== *)
@@ -557,14 +575,30 @@ Proof
   >- (simp[select_result_def, extend_place_def, place_type_value_def,
            read_place_def, get_scopes_def, bind_def, ignore_bind_def,
            lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
-      rpt strip_tac >> gvs[]) >>
+      Cases_on `lookup_scopes id ee.scopes` >> simp[return_def, raise_def] >>
+      rename1 `subscripts_type entry.type path` >>
+      Cases_on `subscripts_type entry.type path` >>
+      simp[return_def, raise_def] >>
+      Cases_on `read_memory_path entry path` >> simp[return_def, raise_def] >>
+      rename1 `evaluate_subscripts tv v [AttrSubscript fld]` >>
+      Cases_on `evaluate_subscripts tv v [AttrSubscript fld]` >>
+      simp[return_def, raise_def]) >>
   simp[select_result_def, extend_place_def, place_type_value_def,
        read_place_def, get_immutables_def, get_address_immutables_def,
        bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
        return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[]
+  Cases_on `ALOOKUP ee.immutables cx.txn.target` >>
+  simp[return_def, raise_def] >>
+  rename1 `FLOOKUP (get_source_immutables src imms) id` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) id` >>
+  simp[return_def, raise_def] >>
+  rename1 `subscripts_type (FST tva) path` >>
+  Cases_on `subscripts_type (FST tva) path` >> simp[return_def, raise_def] >>
+  Cases_on `evaluate_subscripts (FST tva) (SND tva) path` >>
+  simp[return_def, raise_def] >>
+  rename1 `evaluate_subscripts tv v [AttrSubscript fld]` >>
+  Cases_on `evaluate_subscripts tv v [AttrSubscript fld]` >>
+  simp[return_def, raise_def]
 QED
 
 Theorem attr_operand_admissible[local]:
@@ -695,6 +729,7 @@ Proof
                |> REWRITE_RULE [APPEND_NIL]) >>
       qexistsl_tac [`fe`,`t`,`btv`] >> simp[] >>
       simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def]) >>
+  drule select_result_memory_place >> strip_tac >>
   disj1_tac >> irule attr_vv_post >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt strip_tac >> gvs[]

@@ -115,7 +115,7 @@ Theorem le_function_alias_maps_wf:
   wf_alias_sets (transient_alias_analyze bp fn)
 Proof
   simp[memory_alias_analyze_def, storage_alias_analyze_def,
-       transient_alias_analyze_def, memAliasPropsTheory.ma_analyze_wf]
+       transient_alias_analyze_def, memAliasProofsTheory.ma_analyze_wf]
 QED
 
 Theorem le_body_coupling_fetch:
@@ -813,7 +813,7 @@ Proof
   simp[init_preds_def, fmap_lookup_list_def] >> rpt strip_tac >>
   CASE_TAC >> simp[] >>
   qspecl_then [`MAP (\bb. bb.bb_label) fn.fn_blocks`, `[]`, `lbl`, `x`]
-    mp_tac dfAnalyzePropsTheory.foldl_fempty_val >>
+    mp_tac dfAnalyzeProofsTheory.foldl_fempty_val >>
   simp[rich_listTheory.FOLDL_MAP]
 QED
 

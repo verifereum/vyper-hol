@@ -1,6 +1,6 @@
 Theory concretizeLayoutExtension
-Ancestors concretizeMemLocProofs concretizeMemLocDefs finite_map list arithmetic
-  enumeral toto pair
+Ancestors concretizeMemLocTransitionProofs concretizeMemLocDefs finite_map list arithmetic
+  enumeral toto pair execEquivParamDefs execEquivProofs
 
 (* Public form of the allocator proof's private symmetry fact. *)
 Theorem layout_sinter_nonempty_comm:

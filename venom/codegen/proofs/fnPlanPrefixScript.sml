@@ -24,7 +24,8 @@
 
 Theory fnPlanPrefix
 Ancestors
-  callLayoutDefs fnLiveDefDom removeUnusedSsaProofs dominatorProofs dominatorAnalysisProps
+  cfgCorrectnessProof
+  callLayoutDefs fnLiveDefDom removeUnusedSsaProofs dominatorProofs
   livenessDefs livenessProofs codegenReadyCompute venomExecProofs
   stackPlanOps alist fnPlanLineageReorder genBlockSim stackPlanGen stackPlanTypes venomInst rich_list list arithmetic cfgAnalysisProps venomWf simplifyCfgDefs venomWfProps
 

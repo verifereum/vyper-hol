@@ -1,7 +1,7 @@
 (* Join independently obtained block and continuation fuel witnesses. *)
 Theory functionInlinerFuel
 Ancestors
-  venomExecSemantics venomExecProps crossBlockSimProps arithmetic
+  venomExecSemantics venomExecProps crossBlockSimProofs arithmetic
 
 Theorem inline_run_blocks_continue:
   lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -23,7 +23,7 @@ Proof
   qexists_tac `SUC (g + f)` >>
   drule_all inline_run_blocks_continue >> simp[] >>
   `terminates (run_blocks g ctx fn u)` by simp[] >>
-  drule crossBlockSimPropsTheory.run_blocks_fuel_mono >>
+  drule crossBlockSimProofsTheory.run_blocks_fuel_mono >>
   disch_then (qspec_then `f` mp_tac) >> simp[]
 QED
 

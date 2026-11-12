@@ -72,19 +72,30 @@ checker boundary tests retain primitive-word and flag acceptance plus rejection
 of strings, dynamic bytes, structs, tuples, nested arrays and oversized fixed
 bytes. Reducing the fixture set does not change these statements.
 
-`membershipCheckerIntegrity` audits the checker and typing dependencies.
-`vyperMembershipAuditTest` checks oracle tags on the parity, matrix, semantic,
-small-step, builtin and bytestring-hash results, together with the exported
-membership instruction traces. The retained aggregate behavior evidence and
-its limitations are described in `membership-element-consistency.md`.
+`holbuild check` audits the checker and typing dependencies and the parity,
+matrix, semantic, small-step, builtin and bytestring-hash results, together
+with the exported membership instruction traces: it fails on any axiom or any
+oracle other than DISK_THM. It doesn't check saved theorems for hypotheses.
+The retained aggregate behavior evidence and its limitations are described in
+`membership-element-consistency.md`.
 
 To rebuild the scoped fixture checks, from the repository root:
 
 ```sh
 holbuild --max-heap 8000 -j2 build --skip-checkpoints --skip-proof-steps \
   --force=theory vyperMembershipParityTestTheory \
-  vyperMembershipMatrixTestTheory vyperMembershipAuditTestTheory \
-  membershipCheckerIntegrityTheory
+  vyperMembershipMatrixTestTheory
+(set -e
+for t in vyperTypeSystemTheory vyperTypeBuiltinsTheory \
+    vyperTypeExprSoundnessTheory vyperTypeSoundnessTheory \
+    vyperMembershipSemanticsTestTheory vyperMembershipParityTestTheory \
+    vyperMembershipMatrixTestTheory vyperSmallStepTheory \
+    bytestringHashPropsTheory \
+    exprLoweringPropsTheory:list_membership_small_traces \
+    exprLoweringPropsTheory:array_membership_entry_traces; do
+  holbuild check "$t"
+done
+)
 ```
 
 These checks establish finite parity and the stated semantic boundaries.

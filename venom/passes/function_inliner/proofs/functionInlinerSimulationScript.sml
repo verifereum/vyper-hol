@@ -614,7 +614,7 @@ Proof
         (irule (cj 2 venomExecPropsTheory.fuel_mono) >>
          simp[] >> qexists `k` >> simp[]) >>
       `run_blocks (g+k) ctx' final v' = run_blocks g ctx' final v'` by
-        (drule crossBlockSimPropsTheory.run_blocks_fuel_mono >>
+        (drule crossBlockSimProofsTheory.run_blocks_fuel_mono >>
          disch_then (qspec_then `k` mp_tac) >> simp[]) >>
       qexists `SUC (g+k)` >> simp[])
   >> qexists `SUC k` >> simp[]

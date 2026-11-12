@@ -20,7 +20,7 @@ COMPILER = '''
 import json, sys, warnings
 import vyper
 from vyper.compiler.settings import Settings, OptimizationLevel
-assert vyper.__commit__ == "9362e36b"
+assert vyper.__commit__ == "577d2534"
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     result = vyper.compile_code(sys.stdin.read(),

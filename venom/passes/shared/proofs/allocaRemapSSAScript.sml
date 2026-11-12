@@ -5,36 +5,15 @@
 
 Theory allocaRemapSSA
 Ancestors
-  pointerConfinedDefs venomWf venomInst
+  pointerConfinedDefs venomWf venomInst venomFnInstsProofs
 Libs
   listTheory rich_listTheory arithmeticTheory pred_setTheory
-
-(* MEM inst (fn_insts fn) from block membership *)
-Theorem mem_fn_insts_blocks:
-  !bbs bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[MEM_APPEND] >> metis_tac[]
-QED
 
 Theorem mem_fn_insts_intro:
   !fn bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
     MEM inst (fn_insts fn)
 Proof
   simp[fn_insts_def] >> metis_tac[mem_fn_insts_blocks]
-QED
-
-(* SSA uniqueness: if ALL_DISTINCT (FLAT (MAP f l)) and v appears in
-   f a and f b for a,b in l, then a = b. *)
-Theorem all_distinct_flat_map_unique:
-  !(l:'a list) (f:'a -> 'b list) a b v.
-    ALL_DISTINCT (FLAT (MAP f l)) /\ MEM a l /\ MEM b l /\
-    MEM v (f a) /\ MEM v (f b) ==> a = b
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
-  metis_tac[]
 QED
 
 (* SSA uniqueness: two instructions sharing an output variable must be equal. *)

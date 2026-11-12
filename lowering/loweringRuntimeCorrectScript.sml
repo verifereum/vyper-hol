@@ -124,7 +124,7 @@ QED
 
 (* call_external_body without a lock, from es0 in the bound scope, where
    the body ran to es'. *)
-Theorem call_external_body_run[local]:
+Theorem call_external_body_run:
   !am cx mut tenv env fbody ret es0 res es'.
     es0.scopes = [env] /\
     eval_stmts cx fbody es0 = (res, es') ==>
@@ -145,7 +145,7 @@ Theorem call_external_body_run[local]:
                (INL v',
                 abstract_machine_from_state am.sources am.exports am.layouts
                   es', es'.requests)) /\
-    (!e. res = INR e /\ (!v. e <> ReturnException v) ==>
+    (!e. res = INR e /\ (!v. e <> ReturnException v) /\ e <> HaltException ==>
      call_external_body am cx F mut tenv es0 env fbody ret =
        (INR e, am, es'.requests))
 Proof
@@ -167,7 +167,7 @@ QED
    asks of the call's failure, given that a RevertData exit reverts. *)
 Theorem expr_exit_external_result[local]:
   !e r tops ret tx am rqs.
-    expr_exit (INR e : unit + exception) r /\
+    e <> HaltException /\ expr_exit (INR e : unit + exception) r /\
     (!d a t. e = Error (RevertData d) /\ r = Abort a t ==> a = Revert_abort) ==>
     external_call_result_rel tops ret tx (INR e, am, rqs) r
 Proof
@@ -313,6 +313,7 @@ Proof
       simp[stmt_exit_def] >> strip_tac
       >- ((* an error or an assertion *)
           Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR e) _` >>
+          `e <> HaltException` by (strip_tac >> gvs[stmt_res_ok_def]) >>
           `!v. e <> ReturnException v` by
             (rpt strip_tac >> gvs[] >>
              qpat_x_assum `expr_exit _ _` mp_tac >>
@@ -323,8 +324,9 @@ Proof
             mp_tac expr_exit_external_result >>
           impl_tac
           >- (conj_tac >- first_assum ACCEPT_TAC >>
+              conj_tac >- first_assum ACCEPT_TAC >>
               rpt strip_tac >> gvs[expr_exit_def]) >>
-          simp[]) >>
+          Cases_on `e` >> gvs[]) >>
       (* a return *)
       gvs[Abbr`RetQ`, Abbr`es'`, abstract_machine_from_state_def]) >>
   (* the body fails with an exempt error *)
