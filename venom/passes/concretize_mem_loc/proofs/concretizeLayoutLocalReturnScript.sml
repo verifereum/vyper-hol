@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalReturn
-Ancestors concretizeLayoutHaltExit concretizeLayoutSupplement frameRelocationLocal codegenRel
+Ancestors concretizeLayoutCutSafe concretizeLayoutHaltExit concretizeLayoutSupplement frameRelocationLocal codegenRel
   ptrDiscipline venomExecSemantics venomState list rich_list pred_set
   concretizeLayoutLocalSha3 concretizeLayoutAccessGeometry
   frameRelocationCleanOperands frameRelocationReachableSupport frameResolvedTrace
@@ -64,16 +64,15 @@ Theorem concretize_return_observation:
     codegenRel$read_byte (w2n off+i) s.vs_memory =
     codegenRel$read_byte (w2n offT+i) t.vs_memory) /\
   concretize_local_obs s t /\ concretize_supplement D tn s t /\
-  taint_within D C vs0 /\
+  taint_within_upto D ncut C vs0 /\ gas_cut ncut vs0 s /\
   frame_reachable vs0 C stk PG G tn fn inst s /\ active_inst fn inst s ==>
   ?post'. step_inst_base inst t = Halt post' /\
     dead_result_rel D (Halt post) (Halt post')
 Proof
   strip_tac >>
-  `final_taint vs0 C post (step_taint inst s post tn) (ret_taint tn inst s)` by
-    (simp[final_taint_def] >>
-     goal_assum (drule_at (Pat `frame_reachable _ _ _ _ _ _ _ _ _`)) >>
-     simp[step_inst_def] >> qexists_tac `0` >> simp[]) >>
+  `step_inst 0 C inst s = Halt post` by gvs[step_inst_non_invoke] >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  drule_all taint_within_upto_halt >> strip_tac >>
   drule_all return_execution_envelope >> strip_tac >> gvs[] >>
   drule_all (SRULE[arithmeticTheory.ADD_COMM] concretize_return_payload) >>
   strip_tac >> gvs[] >>
@@ -87,7 +86,8 @@ Proof
    s.vs_pending_deletions = t.vs_pending_deletions` by
     gvs[concretize_local_obs_def, dead_result_rel_def] >>
   simp[] >>
-  goal_assum (drule_at (Pat `final_taint _ _ _ _ _`)) >> simp[] >>
+  conj_tac >- (qexists_tac `ret_taint tn inst s` >> simp[]) >>
+  goal_assum (drule_at (Pat `_.t_imm SUBSET _`)) >> simp[] >>
   gvs[concretize_supplement_def, step_taint_def, adopt_reset_def,
       store_taint_def, imm_taint_def, halt_state_def, set_returndata_def]
 QED
@@ -112,7 +112,7 @@ Theorem concretize_return_read_agreement:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
@@ -148,7 +148,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `taint_ok fn tn inst s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `taint_ok fn tn inst s` by metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
@@ -171,6 +171,7 @@ Proof
       joint_relocation_demand lo (concretize_positions C') q0 es qs c
         (w2n off+i) (w2n offT+i))` by
     (irule concretize_read_demand_geometry >> simp[] >>
+     goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      simp[mem_read_ops_def, source_memory_read_ranges_def,

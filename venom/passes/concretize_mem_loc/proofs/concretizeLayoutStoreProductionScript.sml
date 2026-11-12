@@ -1,5 +1,5 @@
 Theory concretizeLayoutStoreProduction
-Ancestors concretizeLayoutAccessGeometry concretizeLayoutLoadProduction concretizeLayoutPointerRanges frameActivationSeparation
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutAccessGeometry concretizeLayoutLoadProduction concretizeLayoutPointerRanges frameActivationSeparation
   frameJointDemand venomState byte
   frameActivationCache frameRelocationBinding frameJointTrace frameJointTransition
   frameRelocationOpaque frameRelocationStoreValues frameRelocationStoreSteps frameRelocationWriteCoverage
@@ -57,7 +57,7 @@ Theorem concretize_mstore_execution_geometry:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
@@ -96,7 +96,7 @@ Proof
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `SND o_f rv = G` by
     (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
@@ -132,7 +132,7 @@ QED
 
 Resume concretize_mstore_execution_geometry[support]:
   `?Q. EVERY (fn_ptr_ok Q) C.ctx_functions` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[layout_cut_safe_def, ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
@@ -211,7 +211,7 @@ Theorem concretize_mstore_demand_execution:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\

@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalBase
-Ancestors concretizeLayoutCanonicalDriver concretizeLayoutCanonicalIndex frameResolvedCoherent
+Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalDriver concretizeLayoutCanonicalIndex frameResolvedCoherent
   concretizeLayoutPhaseSuccess concretizeLayoutEntryFlags
   concretizeLayoutPhaseOrigin concretizeLayoutAlignedControl venomExecSemantics
   frameFiniteJointDecoration frameJointTrace frameOriginHistory frameOriginReachable
@@ -126,7 +126,7 @@ Proof
 QED
 
 Theorem layout_ordinary_source_facts:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs qend g s t /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
   decoration_at fn inst s g.lop_config ==>
@@ -148,11 +148,13 @@ Proof
     (qpat_x_assum `decoration_at _ _ _ _` mp_tac >>
      simp[decoration_at_def, active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
      metis_tac[MEM_EL]) >>
-  fs[ptr_discipline_def] >> metis_tac[]
+  `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
+    (drule_all layout_ordinary_entry_cut >> simp[]) >>
+  drule_all ptr_discipline_upto_at >> simp[]
 QED
 
 Theorem layout_canonical_ordinary_environment:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
     q n i s j t (INL g) /\ decoration_at fn i s q ==>
@@ -221,7 +223,7 @@ Proof
 QED
 
 Theorem layout_canonical_nop_success:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -268,7 +270,7 @@ Proof
 QED
 
 Theorem layout_canonical_assign_success:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -304,7 +306,7 @@ Proof
 QED
 
 Theorem layout_canonical_clean_value_success:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -350,7 +352,7 @@ Proof
 QED
 
 Theorem layout_canonical_affine_success:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -385,6 +387,7 @@ Proof
      simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
   drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
     layout_affine_trace_step >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `g.lop_config = _`)) >>
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
   simp[] >>
@@ -402,7 +405,7 @@ Theorem layout_canonical_compare_success:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -436,6 +439,7 @@ Proof
      simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
   drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
     layout_compare_trace_step >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `g.lop_config = _`)) >>
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
   simp[] >>
@@ -476,7 +480,7 @@ Theorem layout_canonical_ordinary_nonterm_success:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -548,6 +552,7 @@ Proof
          `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_state_write_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -561,6 +566,7 @@ Proof
             fs[MEM] >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_assert_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -578,6 +584,7 @@ Proof
            (fs[layout_ordinary_trace_def, joint_read_exempt_def]) >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_memory_store_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rpolicy`, `rp`, `names`, `anns`, `P`] mp_tac) >>
@@ -605,6 +612,7 @@ Proof
      >- (`i.inst_opcode = ADD \/ i.inst_opcode = SUB` by metis_tac[MEM] >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_affine_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -612,6 +620,7 @@ Proof
      Cases_on `MEM i.inst_opcode [SHL; SHR; SAR]`
      >- (drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_shift_trace_step >>
+     disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -622,6 +631,7 @@ Proof
             rpt strip_tac >> gvs[]) >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_offset_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -651,6 +661,7 @@ Proof
             fs[MEM] >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_state_read_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -665,6 +676,7 @@ Proof
             gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_indexed_context_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -675,6 +687,7 @@ Proof
          `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_compare_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >>
@@ -687,6 +700,7 @@ Proof
             simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_code_data_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -713,6 +727,7 @@ Proof
             simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_balance_reader_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -739,6 +754,7 @@ Proof
          `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_returndatasize_trace_step >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -747,6 +763,7 @@ Proof
        (fs[MEM, indexed_context_read_opcode_def] >> metis_tac[]) >>
      drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
        layout_clean_value_trace_step >>
+     disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
      disch_then (drule_at (Pat `g.lop_config = _`)) >>
      disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
      simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>

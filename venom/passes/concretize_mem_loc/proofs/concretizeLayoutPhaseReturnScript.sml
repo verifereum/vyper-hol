@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseReturn
-Ancestors concretizeLayoutLocalReturn concretizeLayoutPhaseOrigin
+Ancestors concretizeLayoutCutSafe concretizeLayoutLocalReturn concretizeLayoutPhaseOrigin
   concretizeLayoutScopedPhase frameJointTrace frameJointTransition
   frameOriginHistory frameOriginReachable frameRelocationLocal
   concretizeLayoutReaderContext frameRelocationEnvironment
@@ -11,18 +11,20 @@ Theorem layout_return_halt:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   active_inst fn inst s /\ inst.inst_opcode = RETURN /\
-  taint_within D C vs0 /\ step_inst fuel C inst s = Halt post ==>
+  step_inst fuel C inst s = Halt post ==>
   ?post'. step_inst fuel' C' inst t = Halt post' /\
     dead_result_rel D (Halt post) (Halt post')
 Proof
   strip_tac >>
+  `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
+    (drule_all layout_ordinary_entry_cut >> simp[]) >>
   `layout_ordinary_trace vs0 C q0 es qs q g s /\
    layout_ordinary_state D lo C' q0 es qs g s t` by
     metis_tac[layout_ordinary_ready] >>
@@ -45,6 +47,7 @@ Proof
   `g.lop_cursor <= LENGTH es` by simp[] >>
   drule_all concretize_return_read_agreement >> strip_tac >>
   `concretize_local_obs s t` by metis_tac[local_rel_def] >>
+  `taint_within_upto D ncut C vs0` by fs[layout_cut_safe_def] >>
   drule_all concretize_return_observation >> strip_tac >>
   qexists_tac `post'` >> simp[step_inst_non_invoke]
 QED

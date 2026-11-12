@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalStateWrites
-Ancestors concretizeLayoutStateTransport concretizeLayoutLocalStateReads
+Ancestors concretizeLayoutCutSafe concretizeLayoutStateTransport concretizeLayoutLocalStateReads
   venomExecSemantics venomState ptrDiscipline frameRelocationStoreValues
   frameRelocationEnvironment frameRelocationTaintOrder concretizeLayoutReaderContext
   frameRelocationCleanOperands
@@ -176,7 +176,7 @@ Proof
 QED
 
 Theorem concretize_state_write_local_complete:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -226,7 +226,7 @@ Proof
      fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `taint_ok fn tn inst s` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>

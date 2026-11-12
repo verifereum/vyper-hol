@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalBlock
-Ancestors concretizeLayoutCanonicalDeferred concretizeLayoutCanonicalBase
+Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalDeferred concretizeLayoutCanonicalBase
   concretizeLayoutCanonicalDriver concretizeLayoutAlignedControl concretizeLayoutPhaseCompose
   concretizeLayoutPhaseCorridor concretizeLayoutPhaseOrigin frameRankedTerminalCorridor
   concretizeLayoutPairedEntry concretizeLayoutStagePairing concretizeStepStructure
@@ -471,7 +471,7 @@ Proof
 QED
 
 Theorem layout_canonical_nop_next:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -530,6 +530,7 @@ Proof
            (drule_all layout_canonical_block_witness_step >> strip_tac >>
             fs[layout_canonical_step_witness_def] >> metis_tac[]) >>
          drule_at (Pat `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`) layout_canonical_nop_success >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          simp[] >> disch_then (qspecl_then [`path`, `fn`, `P`] mp_tac) >>
          simp[] >> strip_tac >>
          `k.lop_config = qn /\ k.lop_cursor = SUC n` by
@@ -573,7 +574,7 @@ Proof
 QED
 
 Theorem layout_canonical_next_certificate:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\

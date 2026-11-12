@@ -1,5 +1,5 @@
 Theory concretizeLayoutCommonCall
-Ancestors concretizeLayoutInterference concretizeLayoutNumeric
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutInterference concretizeLayoutNumeric
   concretizeLayoutMetadataSchedule concretizeLayoutDemand
   concretizeAnalysisImportSizes concretizeAnalysisRuntimeItems
   concretizeAnalysisOwnership o1ScheduleDecompHelpers
@@ -46,7 +46,7 @@ Theorem concretize_common_call_activation_disjoint:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ c < n /\ n <= j /\ j <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
   joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\
@@ -125,7 +125,7 @@ Proof
         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
      metis_tac[MEM]) >>
   `caller.fn_forced_alloc_positions = FEMPTY` by
-    (gvs[ptr_discipline_def, EVERY_MEM] >> metis_tac[fn_ptr_ok_def]) >>
+    (gvs[layout_cut_safe_def, ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[fn_ptr_ok_def]) >>
   `fn_inst_ids_distinct caller` by metis_tac[source_member_ids_distinct] >>
   `concretize_function_fuel_in_context (concretize_memloc_fuel caller)
     observed.cu_context observed.cu_context.ctx_global_reserved caller = SOME fn'` by
@@ -147,7 +147,7 @@ Theorem concretize_common_call_disjoint:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ c < n /\ n <= j /\ j <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 caller invoke s0 oms0 om0 hs0 h0 /\
   joint_transition C (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\

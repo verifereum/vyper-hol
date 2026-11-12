@@ -1,5 +1,5 @@
 Theory concretizeLayoutCopyProduction
-Ancestors concretizeLayoutStoreProduction frameRelocationBinding
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutStoreProduction frameRelocationBinding
   frameRelocationCopyTaint frameJointTrace frameJointTransition frameJointDemand
   ptrDiscipline venomState frameJointTaint memLocDefs pointerConfinedDefs
   concretizeLayoutAccessGeometry frameRelocationCleanOperands frameRelocationValues
@@ -62,7 +62,7 @@ Theorem concretize_mcopy_execution_geometry:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
@@ -105,7 +105,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `taint_ok fn tn inst s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `taint_ok fn tn inst s` by metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `post = mcopy (w2n dst) (w2n src) (w2n sz) s` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def] >> metis_tac[]) >>
@@ -202,7 +202,7 @@ QED
 Resume concretize_mcopy_execution_geometry[size]:
   `?Q. fn_ptr_ok Q fn /\ (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv Q fn)` by
     (`?Q. EVERY (fn_ptr_ok Q) C.ctx_functions` by
-       (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+       (fs[layout_cut_safe_def, ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
      pop_assum strip_assume_tac >>
      `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
        (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_inst_wf_def, fn_insts_def,

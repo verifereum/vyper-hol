@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseStore
-Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
+Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   concretizeLayoutLocalStore concretizeLayoutLocalStore8 concretizeLayoutSupplement concretizeLayoutReaderContext
   frameRelocationEnvironment frameOriginUpdates frameResolvedTrace
   venomExecSemantics venomState venomInst memSafeRun o1PassContract ptrDiscipline list
@@ -10,7 +10,7 @@ Theorem layout_memory_store_trace_step:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
@@ -55,6 +55,7 @@ Proof
       (Q.INST [`D` |-> `<| d_stor := K (K UNIV); d_trans := K (K UNIV);
         d_imm := K UNIV; d_ret := K {} |>`] (SPEC_ALL th))))
     [concretize_mstore_local_complete, concretize_mstore8_local_complete] >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>

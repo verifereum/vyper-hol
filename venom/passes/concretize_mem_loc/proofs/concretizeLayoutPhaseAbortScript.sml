@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseAbort
-Ancestors concretizeLayoutScopedPhase concretizeLayoutLocalTerminals
+Ancestors concretizeLayoutCutSafe concretizeLayoutScopedPhase concretizeLayoutLocalTerminals
   concretizeLayoutLocalAssertions concretizeLayoutLocalSelfdestruct
   concretizeLayoutLocalReturnCopy concretizeLayoutPhaseOrigin
   frameRelocationLocal frameRelocationEnvironment list
@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem layout_guard_abort_step:
-  ptr_discipline lo C vs0 /\
+  layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -51,6 +51,8 @@ Theorem layout_guard_abort_step:
       (Abort a post) (Abort a tpost)
 Proof
   strip_tac >>
+  `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
+    (drule_all layout_ordinary_entry_cut >> simp[]) >>
   `layout_ordinary_trace vs0 C q0 es qs q g s /\
    layout_ordinary_state D lo C' q0 es qs g s t` by
     fs[layout_ordinary_entry_def] >>
@@ -73,7 +75,7 @@ Proof
 QED
 
 Theorem layout_returncopy_abort_step:
-  ptr_discipline lo C vs0 /\
+  layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -89,6 +91,8 @@ Theorem layout_returncopy_abort_step:
       (Abort a post) (Abort a tpost)
 Proof
   strip_tac >>
+  `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
+    (drule_all layout_ordinary_entry_cut >> simp[]) >>
   `layout_ordinary_trace vs0 C q0 es qs q g s /\
    layout_ordinary_state D lo C' q0 es qs g s t` by
     fs[layout_ordinary_entry_def] >>

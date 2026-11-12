@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseLog
-Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
+Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   concretizeLayoutLocalLog concretizeLayoutSupplement concretizeLayoutReaderContext
   frameRelocationEnvironment frameOriginUpdates frameResolvedTrace
   venomExecSemantics venomState venomInst ptrDiscipline list
@@ -10,7 +10,7 @@ Theorem layout_log_trace_step:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -50,6 +50,7 @@ Proof
         (SPEC_ALL concretize_log_local_complete))) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >>
