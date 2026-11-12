@@ -9,129 +9,14 @@ Ancestors
   exprSimAbiGasBridge exprSimAbiEncodeObliviousCode
   exprSimAbiEncodeObliviousContext venomMemDefs
   placeMemoryStaging externalNormalizePremises exprSimCopy stmtLowering
-  loweringHalt abiTupleProps exprSimAlloc rich_list
+  loweringHalt abiTupleProps exprSimAlloc rich_list annassignRelayoutBounds
+  placeMemoryCopyEffect
 
-Theorem typed_store_declare_frag[local]:
-  compile_store_memory_typed cenv (Var p) dty src sty sa = ((),sb) /\
-  acyclic_struct_metadata cenv.ce_struct_fields /\
-  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-    ALL_DISTINCT (MAP FST fields) /\
-    EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
-      sz = type_memory_size tv) fields) /\
-  type_widens_to (get_tenv cx) sty dty /\
-  evaluate_type (get_tenv cx) sty = SOME stv /\
-  evaluate_type (get_tenv cx) dty = SOME dtv /\
-  value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
-  eval_operand src s = SOME sw /\ lookup_var p s = SOME w /\
-  val_in_memory stv v (w2n sw) s.vs_memory /\
-  w2n sw + type_memory_size stv < dimword (:256) /\
-  w2n w + type_memory_size dtv < dimword (:256) /\
-  (w2n sw + type_memory_size stv <= w2n w \/
-   w2n w + type_memory_size dtv <= w2n sw) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-  es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
-  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-  not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
-  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
-  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-  local_ptrs_reserved cenv sa /\ type_memory_size dtv <= sz ==>
-  frag_exec ctx sa sb (\z. z = s)
-    (\t. stmt_state_rel ctx func cenv cx
-       (es with scopes :=
-         (sc |+ (id, <|assignable := a; type := dtv; value := v; popped := []|>)) :: rest) t /\
-       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-          FLOOKUP t.vs_allocas aid = SOME entry)) R
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
-  drule typed_return_store_frag >>
-  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
-  disch_then (drule_at (Pat `sfields_tenv_consistent _ _`)) >>
-  disch_then (drule_at (Pat `eval_operand (Var _) _ = _`)) >>
-  disch_then (qspecl_then [`dtv`, `ctx`, `R`,
-    `\t. (!off len. off + len <= w2n w \/ w2n w + type_memory_size dtv <= off ==>
-           mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
-         LENGTH s.vs_memory <= LENGTH t.vs_memory`] mp_tac) >>
-  impl_tac
-  >- (simp[] >> conj_tac >- metis_tac[] >>
-      rpt strip_tac >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-  disch_then (mp_then Any mp_tac frag_exec_weaken) >>
-  disch_then irule >> simp[] >> gen_tac >> strip_tac >> conj_tac
-  >- (irule stmt_state_rel_declare_copy_frame >> simp[] >>
-      qexistsl_tac [`inst`, `s`, `sa`, `w`] >>
-      simp[] >> conj_tac
-      >- (map_every qx_gen_tac [`b`, `n`] >> strip_tac >>
-          qpat_x_assum `!off len. _` (qspecl_then [`b`, `n`] mp_tac) >>
-          simp[arithmeticTheory.ADD_COMM]) >>
-      gvs[]) >>
-  drule copy_static_fields >> simp[]
-QED
-
-(* Observer instrumentation changes no field used by the declaration relation. *)
-Theorem stmt_state_rel_observer_fields[local]:
-  (stmt_state_rel ctx func cenv cx es (s with vs_current_bb := b) <=>
-   stmt_state_rel ctx func cenv cx es s) /\
-  (stmt_state_rel ctx func cenv cx es (s with vs_prev_bb := p) <=>
-   stmt_state_rel ctx func cenv cx es s) /\
-  (stmt_state_rel ctx func cenv cx es (s with vs_returndata := rd) <=>
-   stmt_state_rel ctx func cenv cx es s)
-Proof
-  simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
-       local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
-       transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
-       contract_storage_def, contract_transient_def, alloca_inv_def,
-       allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       fmp_room_def, pending_alloca_size_def, immutable_alloca_sep_def,
-       immutable_decl_sep_alt, immutable_base_zero_alt, accounts_rel_def]
-QED
-
-(* Compose the two observer interfaces without exposing compiler-shape premises
-   to the declaration continuation. *)
-Theorem typed_copy_frag_path[local]:
-  compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
-  (!l. dst <> Label l /\ src <> Label l) /\
-  frag_exec ctx sa sb (\z. z = s) Q (\r. F) /\
-  (!L ids. LENGTH ids = LENGTH sa.cs_current_insts ==>
-    frag_exec ctx (start_relabel L ids sa) (start_swap sa L ids sb)
-      (\z. z = s with vs_current_bb := L) Q (\r. F)) /\
-  (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
-  (!t p. Q t ==> Q (t with vs_prev_bb := p)) /\
-  fn_has_code sa sb func /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_marked_path F ctx func s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qspec_then `\opc. opc <> GAS /\ opc <> INVOKE /\ opc <> PHI /\
-                        opc <> STOP /\ opc <> RETURN` mp_tac typedCopyGasOpsTheory.typed_copy_code_family >>
-  simp[] >> strip_tac >>
-  `cs_extends sa sb /\ frag_ops_free sa sb /\
-   ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb))` by
-    (irule code_step_frag_facts >>
-     metis_tac[code_action_def]) >>
-  Cases_on `sa.cs_blocks = sb.cs_blocks`
-  >- (`frag_gas_free sa sb` by
-        (irule compile_store_memory_typed_same_block_gas_free >> metis_tac[]) >>
-      drule frag_exec_gas_path >> simp[] >> disch_then irule >> simp[]) >>
-  irule (SRULE [] (Q.INST [`R` |-> `\r. F`] (SPEC_ALL frag_exec_gas_path_relabel_edge))) >>
-  simp[] >> qexists_tac `sa` >> simp[] >> conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      qpat_x_assum `!L ids. _` (qspecl_then [`L`, `ids`] mp_tac) >>
-      simp[frag_exec_def] >>
-      disch_then (qspec_then `fn'` mp_tac) >>
-      simp[start_relabel_def, start_swap_fields] >>
-      metis_tac[]) >>
-  metis_tac[typedCopyGasControlTheory.compile_store_memory_typed_gas_boundary]
-QED
-
-Theorem typed_store_declare_path[local]:
-  compile_store_memory_typed cenv (Var p) dty src sty sa = ((),sb) /\
-  (!l. src <> Label l) /\
+(* Both memory-store shapes (typed relayout and equal-layout bulk copy) write
+   the value at the declared alloca and frame everything else. *)
+Theorem store_memory_declare_path[local]:
+  compile_store_memory cenv src (Var p) dty sty sa = ((),sb) /\
+  ~is_word_type dty /\ ~is_bytestring_type dty /\ sty <> dty /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
   (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
@@ -170,35 +55,32 @@ Theorem typed_store_declare_path[local]:
       t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  ho_match_mp_tac (Q.INST [`dst` |-> `Var p`] typed_copy_frag_path) >>
-  simp[] >> rpt conj_tac
-  >- (irule typed_store_declare_frag >> metis_tac[])
-  >- (map_every qx_gen_tac [`L`, `ids`] >> strip_tac >>
-      `!x. not_fresh_at (start_relabel L ids sa) x <=> not_fresh_at sa x` by
-        simp[not_fresh_at_def, start_relabel_def] >>
-      mp_tac (Q.INST [`sa` |-> `start_relabel L ids sa`,
-                      `sb` |-> `start_swap sa L ids sb`,
-                      `R` |-> `\r. F`,
-                      `s` |-> `s with vs_current_bb := L`]
-                    typed_store_declare_frag) >>
-      impl_tac
-      >- (conj_tac
-          >- (irule (SRULE [frag_start_oblivious_def]
-                 typedCopyGasControlTheory.compile_store_memory_typed_start_oblivious) >>
-              simp[]) >>
-          fs[stmt_state_rel_observer_fields, local_ptrs_reserved_def,
-             start_relabel_def, not_fresh_at_def, lookup_var_def] >>
-          Cases_on `src` >> gvs[eval_operand_def, lookup_var_def] >>
-          metis_tac[]) >>
-      simp[lookup_var_def])
-  >- (rpt strip_tac >>
-      gvs[stmt_state_rel_observer_fields, lookup_var_def]) >>
-  rpt strip_tac >>
-  gvs[stmt_state_rel_observer_fields, lookup_var_def]
+  `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
+  `dty <> sty` by (strip_tac >> gvs[]) >>
+  qspecl_then [`cenv`, `get_tenv cx`, `Var p`, `dty`, `src`, `sty`, `dtv`, `stv`,
+               `v`, `sa`, `sb`, `ctx`, `func`, `s`, `w`, `sw`] mp_tac
+    compile_store_memory_relayout_effect >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  `copy_static t = copy_static s` by
+    (drule typed_copy_effect_record >> simp[venom_state_component_equality] >>
+     strip_tac >> simp[copy_static_def, venom_state_component_equality]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
+    metis_tac[typed_copy_effect_lookup] >>
+  `!b n. b + n <= w2n w \/ w2n w + type_memory_size dtv <= b ==>
+     mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory` by
+    metis_tac[typed_copy_effect_bytes] >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    metis_tac[typed_copy_effect_length] >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `t`, `sa`, `id`, `p`, `sz`, `w`,
+               `inst`, `v`, `dtv`, `sc`, `rest`, `a`, `ctx`] mp_tac
+    stmt_state_rel_declare_copy_frame >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> qexists_tac `t` >> fs[typed_copy_effect_def]
 QED
 
 Theorem compile_assign_value_typed_path:
-  compile_assign_value cenv (Var p) LocMemory src F src_loc dty sty dyninfo mem_size sa = ((),sb) /\
+  compile_assign_value cenv (Var p) LocMemory src F src_loc dty sty mem_size sa = ((),sb) /\
   (!l. src <> Label l) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
@@ -244,7 +126,7 @@ Theorem compile_assign_value_typed_path:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   Cases_on `src_loc = SOME LocMemory`
-  >- (gvs[compile_assign_value_def, compile_store_memory_def,
+  >- (gvs[compile_assign_value_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
       rpt (pairarg_tac >> gvs[]) >>
       rename1 `compile_alloc_buffer _ sa = (buf,sm)` >>
@@ -254,9 +136,7 @@ Proof
         (drule_all compile_copy_memory_extends >> strip_tac >>
          gvs[same_blocks_def] >> irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]) >>
       `ci_mono sn sb` by
-        (mp_tac (cj 1 ci_mono_typed_memory_family) >>
-         disch_then (qspecl_then [`cenv`, `Var p`, `dty`, `buf.buf_operand`, `sty`, `sn`] mp_tac) >>
-         simp[]) >>
+        metis_tac[ci_mono_compile_store_memory, pairTheory.SND] >>
       `cs_extends sn sb` by fs[ci_mono_def] >>
       `fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func` by
         metis_tac[fn_has_code_split, cs_extends_trans] >>
@@ -338,8 +218,8 @@ Proof
                    loweringShapeDefsTheory.not_fresh_at_mono]) >>
       `lookup_var p u = SOME w /\ eval_operand buf.buf_operand u = SOME tw` by
         (fs[eval_operand_def] >> metis_tac[]) >>
-      drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)
-        typed_store_declare_path >>
+      drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
+        store_memory_declare_path >>
       disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ u`)) >>
       disch_then (drule_at (Pat `val_in_memory _ _ (w2n tw) _`)) >>
       simp[] >>
@@ -358,7 +238,7 @@ Proof
          simp[] >> simp[ci_mono_def] >> decide_tac) >>
       qexists_tac `t` >> simp[] >>
       metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
-  `compile_store_memory_typed cenv (Var p) dty src sty sa = ((),sb)` by
-    gvs[compile_assign_value_def, compile_store_memory_def] >>
-  irule typed_store_declare_path >> metis_tac[]
+  `compile_store_memory cenv src (Var p) dty sty sa = ((),sb)` by
+    gvs[compile_assign_value_def] >>
+  irule store_memory_declare_path >> metis_tac[]
 QED
