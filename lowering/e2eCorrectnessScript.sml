@@ -16,7 +16,6 @@ Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
-  whitelistS1 whitelistS2 whitelistS3
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
   codegenCorrectness immutableCodeLayout
@@ -767,13 +766,12 @@ Proof
 QED
 
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
-(* No whitelist premise: the type checker (source_typing_ok) is the only
-   restriction on the program.  The S1, S2 and S3 leaves without
-   supported_program are the whitelist* theories' admissions. *)
+(* The widened gate supplies the real stages' remaining source restrictions. *)
 
 Theorem vyper_call_correct:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
@@ -791,10 +789,11 @@ Proof
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
+  drule supported_program_raw_shape_free_program >> strip_tac >>
   `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
     metis_tac[source_typing_ok_def] >>
-  drule_all lower_vyper_runtime_unit_source_unit_ok_full >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_o1_shape_extras_full >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all entry_venom_state_initial_venom_state_rel >>
@@ -836,7 +835,7 @@ Proof
   `valid_vyper_call tops tx vs_in.vs_call_ctx.cc_calldata ret /\
    call_outcomes_ok am tx vs_in.vs_outcomes` by simp[] >>
   `source_unit_execution_correct tops ret am tx unit vs_in` by
-    (irule lower_vyper_runtime_unit_correct_full >> simp[] >>
+    (irule lower_vyper_runtime_unit_correct >> simp[] >>
      qexists_tac `rpolicy` >> simp[]) >>
   `?marks. source_unit_execution_correct_at
              (gas_explicit marks vs_in.vs_gas_readings) tops ret am tx unit vs_in` by
@@ -867,18 +866,19 @@ Proof
   `code_layout_valid vs_in` by
     (fs[gas_variant_def] >>
      qpat_x_assum `vs = _` SUBST_ALL_TAC >> fs[code_layout_valid_def]) >>
+  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   `raw_unit_memory_ok unit.cu_context vs_in /\
    ptr_discipline 0 unit.cu_context vs_in /\
    taint_within
      (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
      unit.cu_context vs_in` by
-    (drule lower_vyper_runtime_unit_memory_ok_full >>
+    (drule lower_vyper_runtime_unit_memory_ok >>
      disch_then (qspecl_then [`am`, `tx`, `ret`, `vs_in`] mp_tac) >>
      impl_tac >- fs[] >>
      strip_tac >> simp[] >>
      metis_tac[external_call_dead_observations]) >>
   `mem_inv dload_offset_ok unit.cu_context vs_in` by
-    (irule lower_vyper_runtime_unit_dload_offset_ok_full >> simp[] >>
+    (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>
      qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `tx`] >> gvs[]) >>
   `mem_inv dload_headroom_ok unit.cu_context vs_in` by
     (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
