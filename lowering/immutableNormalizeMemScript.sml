@@ -53,12 +53,15 @@ Theorem immutable_normalize_mem_endpoint:
       [Lit (n2w (type_memory_bytes ce dty))]
       [STRING #"%" (toString sm.cs_next_var)]) s
       (n2w (type_memory_bytes ce dty) : bytes32) =
-      OK (u with vs_inst_idx := s.vs_inst_idx)
+      OK (u with vs_inst_idx := s.vs_inst_idx) /\
+    FLOOKUP u.vs_allocas sm.cs_next_id = SOME (b,type_memory_size dtv)
 Proof
   strip_tac >> drule_all normalize_return_typed_windows >>
   disch_then (qx_choose_then `dtv` (qx_choose_then `t`
     (qx_choose_then `b` (map_every assume_tac o CONJUNCTS)))) >>
   `b < dimword (:256)` by decide_tac >>
+  `FLOOKUP t.vs_allocas sm.cs_next_id = SOME (b,type_memory_size dtv)` by
+    (drule_all normalize_alloc_registered >> simp[]) >>
   drule_all normalize_alloc_mem_cont >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `mem_cont_sim ctx func s u` >>
@@ -113,7 +116,12 @@ Resume immutable_normalize_mem_endpoint[frame]:
   drule_at (Pos (el 2)) stmtSimDeclPathTheory.exec_alloca_frames >>
   simp[emitHelperPropsTheory.mk_inst_outputs] >> strip_tac >>
   reverse conj_tac
-  >- (`(u with vs_inst_idx := s.vs_inst_idx) = t` by
+  >- (conj_tac >- suspend "allocation_execution" >> simp[Abbr `u`]) >>
+  simp[Abbr `u`, lookup_var_def] >> metis_tac[lookup_var_def]
+QED
+
+Resume immutable_normalize_mem_endpoint[allocation_execution]:
+  `(u with vs_inst_idx := s.vs_inst_idx) = t` by
         (qunabbrev_tac `u` >>
          qpat_x_assum `t.vs_inst_idx = s.vs_inst_idx` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
@@ -122,8 +130,7 @@ Resume immutable_normalize_mem_endpoint[frame]:
       qpat_assum `type_memory_bytes ce dty = type_memory_size dtv` mp_tac >>
       qpat_assum `(u with vs_inst_idx := s.vs_inst_idx) = t` mp_tac >>
       qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts` mp_tac >>
-      POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]) >>
-  simp[Abbr `u`, lookup_var_def] >> metis_tac[lookup_var_def]
+      POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]
 QED
 
 Finalise immutable_normalize_mem_endpoint
