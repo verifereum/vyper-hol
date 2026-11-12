@@ -345,12 +345,12 @@ Proof
   metis_tac[]
 QED
 
-Theorem typed_copy_loop_dynamic_offset_covers:
+Theorem typed_copy_loop_dynamic_offset_covers_endpoint:
   !PG G tn s root offset out id a off total n.
     lookup_var root s = SOME a /\
     eval_operand offset s = SOME (n2w off) /\
     ptr_covers G tn root s total /\
-    off < total /\ off + n <= total /\
+    off + n <= total /\
     w2n a + off < dimword(:256) /\ root <> out ==>
     ptr_covers
       (step_prov PG G (mk_inst id ADD [Var root; offset] [out])
@@ -370,6 +370,25 @@ Proof
        ptrDisciplineTheory.op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
        lookup_var_def, update_var_def, wordsTheory.w2n_add_2,
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac
+QED
+
+(* Compatibility projection of the endpoint-safe coverage boundary. *)
+Theorem typed_copy_loop_dynamic_offset_covers:
+  !PG G tn s root offset out id a off total n.
+    lookup_var root s = SOME a /\
+    eval_operand offset s = SOME (n2w off) /\
+    ptr_covers G tn root s total /\
+    off < total /\ off + n <= total /\
+    w2n a + off < dimword(:256) /\ root <> out ==>
+    ptr_covers
+      (step_prov PG G (mk_inst id ADD [Var root; offset] [out])
+        (update_var out (a + n2w off) s))
+      (step_taint (mk_inst id ADD [Var root; offset] [out]) s
+        (update_var out (a + n2w off) s) tn)
+      out (update_var out (a + n2w off) s) n
+Proof
+  rpt strip_tac >> irule typed_copy_loop_dynamic_offset_covers_endpoint >>
+  metis_tac[]
 QED
 
 Theorem typed_copy_loop_mul_frag_ptr:
@@ -479,3 +498,4 @@ Resume typed_copy_loop_address_frag_ptr[resources]:
 QED
 
 Finalise typed_copy_loop_address_frag_ptr
+
