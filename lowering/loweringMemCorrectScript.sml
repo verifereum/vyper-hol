@@ -287,11 +287,16 @@ QED
    stays below 2^256, so LowerDload's scratch sites do not wrap:
    alloca_frontier_inv bounds the frontier by unit_alloca_budget, and
    lowering_context_ok, which run_lowering checks, leaves 32 bytes per
-   DLOAD above that budget. *)
+   DLOAD above that budget.  With a DALLOCA in the unit the scratch sites
+   also stay below the initial free-memory pointer, which every reachable
+   state keeps, given that budget fits below it. *)
 Theorem lower_vyper_runtime_unit_dload_headroom_ok:
   !tops rpolicy unit am tx vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    initial_venom_state_rel tops am tx vs
+    initial_venom_state_rel tops am tx vs /\
+    (ctx_has_dalloca unit.cu_context ==>
+     unit_alloca_budget unit.cu_context +
+       32 * ctx_dload_count unit.cu_context <= w2n vs.vs_initial_fmp)
     ==> mem_inv dload_headroom_ok unit.cu_context vs
 Proof
   rpt strip_tac >>
@@ -307,15 +312,21 @@ Proof
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
      gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
-  simp[unitMemInvTheory.mem_inv_def, codegen_reachability_package_def] >>
-  qexists_tac `alloca_frontier_inv` >> rpt conj_tac
-  >- (irule alloca_frontier_inv_closed >> simp[])
-  >- (irule alloca_frontier_inv_entry >>
-      simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def, listTheory.MEM_MAP,
-           reachable_call_graph_acyclic_def] >>
-      fs[initial_venom_state_rel_def] >> metis_tac[]) >>
-  rw[dload_headroom_ok_def, alloca_frontier_inv_def, ctx_dload_count_def] >>
-  fs[rich_listTheory.FILTER_FLAT, rich_listTheory.LENGTH_FLAT, listTheory.MAP_MAP_o,
-     combinTheory.o_DEF] >>
-  decide_tac
+  `mem_inv (\ctx fn inst s. s.vs_alloca_next <= unit_alloca_budget ctx)
+     unit.cu_context vs` by
+    (simp[unitMemInvTheory.mem_inv_def, codegen_reachability_package_def] >>
+     qexists_tac `alloca_frontier_inv` >> rpt conj_tac
+     >- (irule alloca_frontier_inv_closed >> simp[])
+     >- (irule alloca_frontier_inv_entry >>
+         simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def,
+              listTheory.MEM_MAP, reachable_call_graph_acyclic_def] >>
+         fs[initial_venom_state_rel_def] >> metis_tac[]) >>
+     rw[alloca_frontier_inv_def] >> decide_tac) >>
+  fs[unitMemInvTheory.mem_inv_raw_reachable] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >> strip_tac >>
+  fs[dload_headroom_ok_def, ctx_dload_count_def, ctx_has_dalloca_def,
+     rich_listTheory.FILTER_FLAT, rich_listTheory.LENGTH_FLAT,
+     listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  rw[] >> fs[] >> decide_tac
 QED

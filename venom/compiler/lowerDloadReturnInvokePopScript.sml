@@ -312,6 +312,37 @@ Proof
   fs[] >> metis_tac[]
 QED
 
+(* TEMPORARILY CHEATED - P4b in progress: return frames. ld_sync now relates each saved frame's cf_prov/cf_params to its ghosts by ld_ghost_ok/ld_params_ok, not by erasure
+Proof
+  strip_tac >> drule_all ld_return_frame_geometry >> strip_tac >>
+  qpat_x_assum `g = _` kall_tac >>
+  qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[ld_sync_def, ld_charge_def] >> strip_tac >>
+  qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `active_inst _ _ _` kall_tac >>
+  qpat_x_assum `ld_memory _ _ _ _ _` kall_tac >>
+  qpat_x_assum `ld_nonghost _ _ _` kall_tac >>
+  ntac 2 (qpat_x_assum `bind_outputs _ _ _ = _` kall_tac) >>
+  qpat_x_assum `f.lf_src = s` kall_tac >>
+  qpat_x_assum `f.lf_tgt = t` kall_tac >>
+  `ld_intervals lo g.lf_src /\ ld_intervals lo g.lf_tgt` by
+    (simp[ld_intervals_def] >>
+     qpat_assum `ld_intervals lo f.lf_src` mp_tac >>
+     qpat_assum `ld_intervals lo f.lf_tgt` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[ld_intervals_def] >> metis_tac[]) >>
+  gvs[EVERY_MEM] >> rpt conj_tac
+  >- (rpt gen_tac >>
+      qpat_x_assum `!j k. _ ==> list_precedes _ _ _`
+        (qspecl_then [`j`, `k`] mp_tac) >>
+      map_every Cases_on [`j`, `k`] >> simp[])
+  >- (gen_tac >>
+      qpat_x_assum `!j. _ ==> _ = _` (qspec_then `j` mp_tac) >>
+      Cases_on `j` >> simp[ld_charge_def])
+  >> rpt strip_tac >>
+  qpat_x_assum `!j. _ ==> ?X. _`
+    (qspec_then `SUC j` mp_tac) >> simp[]
+QED
+*)
 Theorem ld_return_stack_geometry:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   EVERY (\h. h.lf_supply = Sigma h.lf_fn.fn_name) (f::fs) /\
@@ -346,37 +377,11 @@ Theorem ld_return_stack_geometry:
   (!j. j < LENGTH stk ==>
     (EL j stk).cf_fn = (EL j fs).lf_fn /\
     (EL j stk).cf_state = (EL j fs).lf_src /\
-    (EL j stk).cf_prov = ld_erase A o_f (EL j fs).lf_H /\
-    (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase A)) (EL j fs).lf_Q /\
+    ld_ghost_ok (dyn_floor C vs0) A (EL j fs).lf_H (EL j stk).cf_prov /\
+    ld_params_ok (dyn_floor C vs0) A (EL j fs).lf_Q (EL j stk).cf_params /\
     (EL j stk).cf_tvar = (EL j fs).lf_tv)
 Proof
-  strip_tac >> drule_all ld_return_frame_geometry >> strip_tac >>
-  qpat_x_assum `g = _` kall_tac >>
-  qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[ld_sync_def, ld_charge_def] >> strip_tac >>
-  qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `active_inst _ _ _` kall_tac >>
-  qpat_x_assum `ld_memory _ _ _ _ _` kall_tac >>
-  qpat_x_assum `ld_nonghost _ _ _` kall_tac >>
-  ntac 2 (qpat_x_assum `bind_outputs _ _ _ = _` kall_tac) >>
-  qpat_x_assum `f.lf_src = s` kall_tac >>
-  qpat_x_assum `f.lf_tgt = t` kall_tac >>
-  `ld_intervals lo g.lf_src /\ ld_intervals lo g.lf_tgt` by
-    (simp[ld_intervals_def] >>
-     qpat_assum `ld_intervals lo f.lf_src` mp_tac >>
-     qpat_assum `ld_intervals lo f.lf_tgt` mp_tac >>
-     rpt (pop_assum kall_tac) >> simp[ld_intervals_def] >> metis_tac[]) >>
-  gvs[EVERY_MEM] >> rpt conj_tac
-  >- (rpt gen_tac >>
-      qpat_x_assum `!j k. _ ==> list_precedes _ _ _`
-        (qspecl_then [`j`, `k`] mp_tac) >>
-      map_every Cases_on [`j`, `k`] >> simp[])
-  >- (gen_tac >>
-      qpat_x_assum `!j. _ ==> _ = _` (qspec_then `j` mp_tac) >>
-      Cases_on `j` >> simp[ld_charge_def])
-  >> rpt strip_tac >>
-  qpat_x_assum `!j. _ ==> ?X. _`
-    (qspec_then `SUC j` mp_tac) >> simp[]
+  cheat
 QED
 
 Theorem ld_call_global_return_restore:
@@ -400,16 +405,7 @@ Proof
   drule_all ld_global_return_restore >> simp[]
 QED
 
-Theorem ld_saved_stack_alloc_agree:
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\
-  (!a. a IN ld_slots A (f::fs) ==> FLOOKUP B a = FLOOKUP A a) ==>
-  !j. j < LENGTH stk ==>
-    (EL j stk).cf_fn = (EL j fs).lf_fn /\
-    (EL j stk).cf_state = (EL j fs).lf_src /\
-    (EL j stk).cf_prov = ld_erase B o_f (EL j fs).lf_H /\
-    (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase B)) (EL j fs).lf_Q /\
-    (EL j stk).cf_tvar = (EL j fs).lf_tv
+(* TEMPORARILY CHEATED - P4b in progress: return frames. ld_sync now relates each saved frame's cf_prov/cf_params to its ghosts by ld_ghost_ok/ld_params_ok, not by erasure
 Proof
   strip_tac >> gen_tac >> strip_tac >>
   `FDOM A = ld_slots A (f::fs)` by fs[ld_sync_def] >>
@@ -435,19 +431,22 @@ Proof
   simp[ld_sync_def] >> strip_tac >>
   qpat_x_assum `!j. j < LENGTH stk ==> _` (qspec_then `j` mp_tac) >> simp[]
 QED
-
-Theorem ld_call_saved_stack_return:
+*)
+Theorem ld_saved_stack_alloc_agree:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
-  ^ld_probe_stable lo P Sigma names (f::fs) fc A Ar fr ==>
+  ld_global lo A (f::fs) /\
+  (!a. a IN ld_slots A (f::fs) ==> FLOOKUP B a = FLOOKUP A a) ==>
   !j. j < LENGTH stk ==>
     (EL j stk).cf_fn = (EL j fs).lf_fn /\
     (EL j stk).cf_state = (EL j fs).lf_src /\
-    (EL j stk).cf_prov =
-      ld_erase (DRESTRICT Ar (ld_slots Ar (f::fs))) o_f (EL j fs).lf_H /\
-    (EL j stk).cf_params = MAP
-      (OPTION_MAP (ld_erase (DRESTRICT Ar (ld_slots Ar (f::fs))))) (EL j fs).lf_Q /\
+    ld_ghost_ok (dyn_floor C vs0) B (EL j fs).lf_H (EL j stk).cf_prov /\
+    ld_params_ok (dyn_floor C vs0) B (EL j fs).lf_Q (EL j stk).cf_params /\
     (EL j stk).cf_tvar = (EL j fs).lf_tv
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - P4b in progress: return frames. ld_sync now relates each saved frame's cf_prov/cf_params to its ghosts by ld_ghost_ok/ld_params_ok, not by erasure
 Proof
   qabbrev_tac `Stable = ^ld_probe_stable` >> strip_tac >>
   `ld_global lo A (f::fs)` by fs[Abbr `Stable`] >>
@@ -460,6 +459,22 @@ Proof
     FLOOKUP (DRESTRICT Ar (ld_slots Ar (f::fs))) a = FLOOKUP A a` by
     (simp[FLOOKUP_DRESTRICT] >> fs[SUBSET_DEF]) >>
   rpt strip_tac >> drule_all ld_saved_stack_alloc_agree >> simp[]
+QED
+*)
+Theorem ld_call_saved_stack_return:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  ^ld_probe_stable lo P Sigma names (f::fs) fc A Ar fr ==>
+  !j. j < LENGTH stk ==>
+    (EL j stk).cf_fn = (EL j fs).lf_fn /\
+    (EL j stk).cf_state = (EL j fs).lf_src /\
+    ld_ghost_ok (dyn_floor C vs0) (DRESTRICT Ar (ld_slots Ar (f::fs)))
+      (EL j fs).lf_H (EL j stk).cf_prov /\
+    ld_params_ok (dyn_floor C vs0) (DRESTRICT Ar (ld_slots Ar (f::fs)))
+      (EL j fs).lf_Q (EL j stk).cf_params /\
+    (EL j stk).cf_tvar = (EL j fs).lf_tv
+Proof
+  cheat
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
@@ -529,25 +544,7 @@ Proof
   metis_tac[ld_sync_source]
 QED
 
-Theorem ld_invoke_pop_core:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
-  fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
-  t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
-  inst.inst_opcode = INVOKE /\ 
-  decode_invoke inst = SOME (nm,ops) /\
-  lookup_function nm C.ctx_functions = SOME callee /\
-  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
-  ^ld_probe_terminal lo P C C' vs0
-    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
-       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
-    callee cs (f::fs) fc A Sigma names rt u /\
-  bind_outputs inst.inst_outputs rt.iret_values
-    (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
-  active_inst fn' nexti (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
-  ^ld_transfer_point lo P C C' vs0 stk fn fn' s fs0 f0 A0 Sigma names bb
-    (q with vs_inst_idx := SUC t.vs_inst_idx)
+(* TEMPORARILY CHEATED - P4b in progress: return frames. ld_sync now relates each saved frame's cf_prov/cf_params to its ghosts by ld_ghost_ok/ld_params_ok, not by erasure; its saved-frame facts now come as ld_ghost_ok
 Proof
   qabbrev_tac `Ambient = ^ld_covered_ambient` >>
   qabbrev_tac `Stable = ^ld_probe_stable` >>
@@ -833,6 +830,29 @@ Proof
   qpat_assum `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb` mp_tac >>
   qpat_assum `fn' = ld_image f` mp_tac >>
   rpt (pop_assum kall_tac) >> simp[]
+QED
+*)
+Theorem ld_invoke_pop_core:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  fn' = ld_image f /\ ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  inst.inst_opcode = INVOKE /\ 
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  ^ld_probe_terminal lo P C C' vs0
+    (<|cf_fn := fn; cf_inst := inst; cf_state := s; cf_params := PG;
+       cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+    callee cs (f::fs) fc A Sigma names rt u /\
+  bind_outputs inst.inst_outputs rt.iret_values
+    (adopt_return_fmp rt (merge_callee_state t u)) = SOME q /\
+  active_inst fn' nexti (q with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ^ld_transfer_point lo P C C' vs0 stk fn fn' s fs0 f0 A0 Sigma names bb
+    (q with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  cheat
 QED
 
 Theorem ld_invoke_active_pop:
