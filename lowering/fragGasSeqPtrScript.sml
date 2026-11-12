@@ -16,6 +16,7 @@
 Theory fragGasSeqPtr
 Ancestors
   fragGasPathPtr fragGasSeqAbort fragGasPath fragExec gasCount ptrSafeRun
+  ptrDiscipline codegenRel contextCodegenRel venomExecProofs
   exprLoweringProps instIdxIndep venomExecSemantics venomInstProofs
   venomInst venomState list rich_list arithmetic
   fragGasOriginPtr fragGasOrigin fragGasSeqMem fragExecMem gasEvents memSafeRun

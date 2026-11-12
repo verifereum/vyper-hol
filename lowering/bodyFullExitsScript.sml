@@ -308,6 +308,9 @@ Proof
       BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC)
   >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[])
+  >~ [`storage_trace_frame (bind (eval_expr _ _) _)`]
+  >- (irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result])
   >~ [`storage_trace_frame _`]
   >- rw[storage_trace_frame_raise, storage_trace_frame_return] >>
   qexists_tac `\H res ee G' tn' t. condQ H res ee G' tn' t /\ ~t.vs_halted /\
