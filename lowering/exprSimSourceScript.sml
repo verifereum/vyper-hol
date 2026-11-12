@@ -53,6 +53,7 @@ QED
 
 
 
+
 (* The outcomes stay SOME: evaluation only drops some from the front. *)
 Theorem eval_expr_outcomes_some:
   !cx e es res es'.
@@ -351,7 +352,8 @@ Theorem eval_expr_calls_no_halt:
   eval_expr cx e st <> (INR HaltException, st')
 Proof
   strip_tac >> irule (cj 1 eval_no_halt) >> fs[expr_has_evm_run_def] >>
-  Cases_on `int_calls_expr e` >> fs[] >> fs[EVERY_MEM]
+  Cases_on `int_calls_expr e` >> fs[] >> fs[EVERY_MEM] >>
+  metis_tac[optionTheory.SOME_11]
 QED
 
 Theorem expr_body_pre_res_ok:

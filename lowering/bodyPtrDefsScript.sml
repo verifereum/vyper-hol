@@ -26,25 +26,11 @@
  *)
 Theory bodyPtrDefs
 Ancestors
+  sourceUnitExecution
   fragGasPathPtr gasContext bodySim immSectionDead stmtSimDefs exprSimDefs exprSimProps exprSimHypsDefs fragExec ptrSafeRun ptrDiscipline
   compileEnv valueEncoding exprLowering exprLoweringProps context
   venomState venomExecSemantics vyperInterpreter vyperTypeSystem list
   finite_map words
-
-(* The dead bytes the body's run may leave taint in: those storage_dead
-   gives in the running contract's storage and transient storage, as
-   external_call_dead does for the source call that cx is the context of.
-   The return data may hold no taint. *)
-Definition cx_dead_def:
-  cx_dead H cx =
-    <| d_stor := (\a st. if a = cx.txn.target
-                         then {(k,b) | storage_dead H F st (w2n k) b}
-                         else {});
-       d_trans := (\a st. if a = cx.txn.target
-                          then {(k,b) | storage_dead H T st (w2n k) b}
-                          else {});
-       d_imm := K {}; d_ret := K {} |>
-End
 
 (* D holds every dead byte D0 does. *)
 Definition dead_sub_def:

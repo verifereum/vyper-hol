@@ -132,9 +132,10 @@ Proof
        Cases_on `res` >> simp[expr_exit_def]) >>
     qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
     pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
-    gvs[] >> Cases_on `ex` >> Cases_on `r` >>
-    TRY (first_assum ACCEPT_TAC) >>
-    gvs[expr_exit_def] >> Cases_on `e'` >> gvs[expr_exit_def]) >>
+    qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
+    qpat_x_assum `expr_exit _ _` mp_tac >>
+    rpt (pop_assum kall_tac) >>
+    simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
   reverse conj_tac >- (rpt strip_tac >> qexists_tac `v` >> asm_rewrite_tac[]) >>
   rpt strip_tac >>
   `!tail. eval_expr cx e

@@ -416,7 +416,7 @@ QED
 Theorem tuple_other_arg_types_fit_refl[local]:
   !ts. arg_types_fit ts ts
 Proof
-  gen_tac >> mp_tac (Q.SPEC `TupleT ts` exprSimHypsTheory.ifexp_arg_type_fits_refl) >>
+  gen_tac >> mp_tac (Q.SPEC `TupleT ts` (CONJUNCT1 vyperTypeSystemTheory.arg_type_fits_refl)) >>
   simp[arg_type_fits_def]
 QED
 
