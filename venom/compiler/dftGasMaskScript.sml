@@ -3471,6 +3471,70 @@ Proof
   metis_tac[]
 QED
 
+Theorem invoke_partner_endpoint_packet[local]:
+  !m es unused fuel C C' i pre s pg rs a.
+  let K = (\unused t.
+    LENGTH m = LENGTH es /\
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+    (!u. (step_inst fuel C' i t = OK u \/
+          (?ir. step_inst fuel C' i t = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C t.vs_current_bb i
+         (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?n. terminates (step_inst n C i (t with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C i (t with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C i (t with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' i t)) /\
+        (((?v. step_inst fuel C' i t = OK v) \/
+          (?ir v. step_inst fuel C' i t = IntRet ir v)) ==>
+          gas_events_step fuel C t.vs_current_bb i
+            (t with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' i t)
+            (step_inst fuel C i (t with vs_gas_readings := gs ++ tail)))));
+      U = (\q. ~MEM (Var (FST q)) i.inst_operands /\
+                 ~MEM (FST q) i.inst_outputs);
+      F = (\us st. FOLDL (\st q. update_var (FST q) (SND q) st) st us)
+  in
+    i.inst_opcode = INVOKE /\
+    EVERY (\x. dft_gas_swap_pair x i /\ inst_wf x) pre /\
+    LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := pg ++ rs) = OK a /\
+    (!us. EVERY U us ==> K unused (F us (s with vs_gas_readings := rs))) ==>
+    K unused a /\
+    !out w j. U (out,w) ==>
+      K unused ((update_var out w a) with vs_inst_idx := j)
+Proof
+  rpt gen_tac >> rpt BasicProvers.LET_ELIM_TAC >>
+  `!t j. K' unused (t with vs_inst_idx := j) <=> K' unused t` by
+    (rpt gen_tac >> simp[Abbr `K'`] >>
+     mp_tac invoke_fixed_segment_inst_idx >>
+     disch_then (qspecl_then [`m`, `es`, `unused`, `fuel`, `C`, `C'`, `i`] mp_tac) >>
+     simp[LET_THM]) >>
+  `EVERY (\x. dft_gas_swap_pair x i /\ inst_wf x /\
+      dftGasInvCallPartner$inv_partner_inputs x s s) pre` by
+    (fs[EVERY_MEM, dftGasInvCallPartnerTheory.inv_partner_inputs_def]) >>
+  drule_all (Q.INST [`y` |-> `i`] invoke_partner_prefix_portable) >>
+  disch_then (qspecl_then [`C`, `rs`] strip_assume_tac) >>
+  `EVERY U us` by (fs[Abbr `U`, EVERY_MEM] >> metis_tac[]) >>
+  `a = (F' us (s with vs_gas_readings := rs)) with
+      vs_inst_idx := s.vs_inst_idx + LENGTH pre` by
+    (simp[Abbr `F'`, pairTheory.LAMBDA_PROD, GSYM foldl_update_var_idx])
+  >- metis_tac[] >>
+  `EVERY U (us ++ [(out,w)])` by simp[] >>
+  `K' unused (F' (us ++ [(out,w)]) (s with vs_gas_readings := rs))` by
+    metis_tac[] >>
+  `((update_var out w a) with vs_inst_idx := j) =
+    (F' (us ++ [(out,w)]) (s with vs_gas_readings := rs)) with
+      vs_inst_idx := j` by
+    (asm_rewrite_tac[] >>
+     simp[Abbr `F'`, FOLDL_APPEND, update_var_def]) >>
+  qpat_x_assum `(_ with vs_inst_idx := j) = _` SUBST1_TAC >>
+  simp[]
+QED
+
 Theorem invoke_target_entry[local]:
   y.inst_opcode = INVOKE /\
   terminates (FOLDR (dft_exec_cons fuel D) OK (y::pre) s) /\
