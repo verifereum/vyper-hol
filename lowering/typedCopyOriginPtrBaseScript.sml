@@ -544,9 +544,11 @@ Proof
   pop_assum $ mk_asm "full" >>
   gvs[Abbr `q`, Abbr `G1`, Abbr `tn1`, jump_to_def, update_var_def,
       lookup_var_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def] >>
-  asm "full" mp_tac >> Cases_on `tn` >>
-  simp[jump_to_def, taint_accessors, taint_accfupds] >>
-  rpt (pop_assum kall_tac) >> FAIL_TAC "difference"
+  `tn with t_var := tn.t_var |+ (out,{}) |+ (counter,{}) =
+   <|t_mem := tn.t_mem; t_var := tn.t_var |+ (out,{}) |+ (counter,{});
+     t_stor := tn.t_stor; t_trans := tn.t_trans; t_imm := tn.t_imm|>` by
+    simp[taint_component_equality] >>
+  asm "full" mp_tac >> simp[jump_to_def]
 QED
 
 Theorem typed_copy_origin_ptr_offset_covers:
