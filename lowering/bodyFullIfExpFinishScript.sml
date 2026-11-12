@@ -6,6 +6,8 @@ Ancestors
   bodySimFull fragGasOriginPtr exprSimIfExp exprSimDefs exprSimMemDefs
   bodyPtrDefs loweringPosts exprLowering fragExec emitHelper compileEnv
   allocaHistory stmtSimDefs vyperAST vyperInterpreter vyperState venomState
+  bodyFullIfExpSuffix bodyFullIfExpGhost bodyFullIfExpPosts
+  bodyPtrIfExpWordFinish exprLoweringProps
 
 (* Diagnostic boundary: the frozen reservation premises protect the
    immutable base register even when the alloca lower bound is nonzero. *)
@@ -79,5 +81,42 @@ Theorem ifexp_arm_finish_full:
     (~is_word_type t ==> ptr_buf_ok cenv (IfExp t c a b) (Var rv) H z) /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 H tf
 Proof
-  cheat
+  strip_tac >>
+  `?w. eval_operand op u = SOME w` by
+    fs[expr_post_def, expr_val_rel_def] >>
+  `allocas_from lo u` by metis_tac[ghost_inv_at_def] >>
+  `sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
+    decide_tac >>
+  `ghost_kept_at lo cenv es sa G0 tn0 s0 G tn` by
+    (irule ifexp_condition_arm_ghost_kept_at >> simp[] >> metis_tac[]) >>
+  `(!name x sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var x) sz) ==> x <> rv) /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> rv) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> rv) /\
+   (!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> x <> rv)` by
+    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  qexistsl_tac
+    [`jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)`,
+     `step_prov PG G (mk_inst sd.cs_next_id ASSIGN [op] [rv]) (update_var rv w u)`,
+     `step_taint (mk_inst sd.cs_next_id ASSIGN [op] [rv]) u (update_var rv w u) tn`] >>
+  conj_tac >- (irule ifexp_suffix_origin_ptr_path >> simp[] >> metis_tac[]) >>
+  conj_tac >- (irule ifexp_root_finish_post >> simp[] >> metis_tac[]) >>
+  conj_tac >- (irule ifexp_suffix_vv_store_bound >> simp[] >>
+              qexists_tac `op` >> gvs[]) >>
+  conj_tac >- simp[jump_to_def] >>
+  conj_tac >- simp[jump_to_def] >>
+  conj_tac
+  >- (irule alloca_history_jump >> simp[jump_to_def, update_var_def] >>
+      qexists_tac `u` >> simp[]) >>
+  conj_tac >- (simp[jump_to_def, update_var_def] >> decide_tac) >>
+  `ghost_inv_at D lo d cenv cx ee
+     (step_prov PG G (mk_inst sd.cs_next_id ASSIGN [op] [rv]) (update_var rv w u))
+     (step_taint (mk_inst sd.cs_next_id ASSIGN [op] [rv]) u (update_var rv w u) tn)
+     (jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)) /\
+   ghost_kept_at lo cenv es sa G0 tn0 s0
+     (step_prov PG G (mk_inst sd.cs_next_id ASSIGN [op] [rv]) (update_var rv w u))
+     (step_taint (mk_inst sd.cs_next_id ASSIGN [op] [rv]) u (update_var rv w u) tn)` by
+    (irule assign_suffix_ghost_at >> simp[] >> metis_tac[]) >>
+  simp[] >> conj_tac
+  >- (irule (SRULE [post_value_type_def] ifexp_suffix_ptr_vv_ok) >> simp[] >> metis_tac[]) >>
+  simp[ifexp_suffix_ptr_buf_ok]
 QED
