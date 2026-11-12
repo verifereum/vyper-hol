@@ -48,6 +48,8 @@ Theorem eval_local_subscript:
              (ValueSubscript v)) es
 Proof
   strip_tac >>
+  `~subscript_reads_base cx (Name arrty id) idx` by
+    metis_tac[subscript_reads_base_through_dynarray, base_through_dynarray_def] >>
   simp[Once evaluate_def, bind_def, Once evaluate_def, get_scopes_def,
        type_check_def, assert_def, check_def, ignore_bind_def, return_def,
        expr_type_def] >>
