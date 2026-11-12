@@ -265,8 +265,9 @@ Theorem body_callee_sim:
                   as'.as_stack = REVERSE ret.iret_values ++ crest /\
                   fn_return_state_rel ctx cpl callee vs' cas as')
 Proof
-  mp_tac (Q.SPEC `NONE` body_callee_sim_cost) >>
-  simp[cost_le_def]
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all (SRULE [cost_le_def] (Q.SPEC `NONE` body_callee_sim_cost)) >>
+  disch_then irule >> simp[]
 QED
 
 (* ===== Moving the invariant past an instruction ===== *)
@@ -547,14 +548,15 @@ Proof
   `context_spill_step_safe cpl vs vs1` by
     (qpat_x_assum `!fuel vs1. _ ==> context_spill_step_safe _ _ _` irule >>
      qexists_tac `fuel` >> first_assum ACCEPT_TAC) >>
-  qspecl_then deep_args mp_tac gas_inst_frame_sim_owned_deep >>
+  qspecl_then deep_args mp_tac gas_inst_frame_sim_owned_deep_exact >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >~ [`stack_get_phi_depth`] >- phi_tac >> gas_tac) >>
   disch_then (qspec_then `vs1` mp_tac) >>
   impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qexistsl_tac [`ops`, `ps'`, `rest'`, `n`, `as'`] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  qexistsl_tac [`ops`, `ps'`, `rest'`,
+    `LENGTH (execute_plan cpl.cp_initial_fmp ops)`, `as'`] >>
+  simp[]
 QED
 
 (* ===== Instructions that end the run ===== *)
@@ -682,12 +684,12 @@ Proof
      `k + 1 < LENGTH bb.bb_instructions /\
       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode`,
      `bb.bb_label`, `spill_base`, `ps`, `vs`, `as`, `ops`, `ps'`, `ra`,
-     `rest`, `mem0`, `pc_ret`] mp_tac gen_ret_frame_sim_deep >>
+     `rest`, `mem0`, `pc_ret`] mp_tac gen_ret_frame_sim_deep_exact >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qspecl_then [`ret`, `vs1`] mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
   strip_tac >> irule body_result_cost_intret >>
-  qexistsl_tac [`n`, `as'`] >>
+  qexistsl_tac [`LENGTH (execute_plan cpl.cp_initial_fmp ops)`, `as'`] >>
   gvs[cost_le_def, execute_plan_append]
 QED
 
@@ -1082,7 +1084,7 @@ Proof
      `rest`, `mem0`, `target`, `tbb`,
      `MAP Var (input_vars_from bb.bb_label tbb.bb_instructions
                  (live_vars_at liveness target 0))`, `toff`, `tpc`]
-    mp_tac gen_jmp_frame_sim_deep >>
+    mp_tac gen_jmp_frame_sim_deep_exact >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >~ [`FST (restore_spilled_plan _ _)`]
@@ -1101,7 +1103,8 @@ Proof
   disch_then drule >> strip_tac >>
   qpat_x_assum `ps' = ps_after` SUBST_ALL_TAC >> jump_alias_tac >>
   qspecl_then ([`q`, `fuel`] @ body_vars @
-               [`inst`, `target`, `vs1`, `n`, `as'`, `toff`]) mp_tac
+               [`inst`, `target`, `vs1`,
+                `LENGTH (execute_plan cpl.cp_initial_fmp ops)`, `as'`, `toff`]) mp_tac
     body_jump_continue_cost >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -1187,7 +1190,7 @@ Proof
       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode`,
      `bb.bb_label`, `spill_base`, `ps`, `vs`, `as`, `ops`, `ps'`, `r`, `ra`,
      `rest`, `mem0`, `c`, `l1`, `l2`, `toff1`, `toff2`, `tpc1`, `tpc2`]
-    mp_tac gen_jnz_frame_sim_deep >>
+    mp_tac gen_jnz_frame_sim_deep_exact >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       rpt gen_tac >> strip_tac >>
@@ -1196,6 +1199,10 @@ Proof
       TRY (disj1_tac >> first_assum ACCEPT_TAC) >>
       disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC) >>
   disch_then drule >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `asm_steps lo o2pc prog n as` >>
+  `n <= LENGTH (execute_plan cpl.cp_initial_fmp rest_ops)` by
+    (simp[Abbr `n`, execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+     rw[] >> decide_tac) >>
   qpat_x_assum `ps' = ps_after` SUBST_ALL_TAC >> jump_alias_tac
   >- (qspecl_then ([`q`, `fuel`] @ body_vars @
                    [`inst`, `l1`, `vs1`, `n`, `as'`, `toff1`]) mp_tac
@@ -1203,14 +1210,22 @@ Proof
       impl_tac
       >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
           qpat_x_assum `as'.as_pc = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
-      jump_cost_finish_tac)
+      strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      irule body_result_cost_mono >> goal_assum (drule_at Any) >>
+      Cases_on `q` >- simp[] >>
+      qpat_x_assum `n <= LENGTH (execute_plan _ rest_ops)` mp_tac >>
+      simp[execute_plan_append] >> decide_tac)
   >- (qspecl_then ([`q`, `fuel`] @ body_vars @
                    [`inst`, `l2`, `vs1`, `n`, `as'`, `toff2`]) mp_tac
         body_jump_continue_cost >>
       impl_tac
       >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
           qpat_x_assum `as'.as_pc = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
-      jump_cost_finish_tac)
+      strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      irule body_result_cost_mono >> goal_assum (drule_at Any) >>
+      Cases_on `q` >- simp[] >>
+      qpat_x_assum `n <= LENGTH (execute_plan _ rest_ops)` mp_tac >>
+      simp[execute_plan_append] >> decide_tac)
 QED
 
 Theorem body_jmp_step:

@@ -218,7 +218,6 @@ Definition gen_fn_sim_cost_at_def:
       (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
       codegen_context_obligations Inv ctx cp /\
       reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
-      ~vs.vs_call_ctx.cc_static /\
       asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan) /\
       LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
       fn_entry_state_rel cp fn vs as ra rest /\
@@ -265,7 +264,6 @@ Definition gen_fn_frame_sim_cost_at_def:
       (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
       codegen_context_obligations Inv ctx cp /\
       reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
-      ~vs.vs_call_ctx.cc_static /\
       liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
       cfg = cfg_analyze fn /\
       ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx

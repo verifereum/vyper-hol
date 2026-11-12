@@ -1,12 +1,12 @@
 (*
- * gen_invoke_frame_sim_deep_cost: fnFrameBoundary's gen_invoke_frame_sim for INVOKE, with
+ * gen_invoke_frame_sim_deep_cost_reachable: fnFrameBoundary's gen_invoke_frame_sim for INVOKE, with
  * operands at any stack depth, repeated dead_stack_marker slots
  * (generated_plan_state_wf_marked) and only an address bound on the
  * plan's spill and restore offsets.  fnFrameDeep collects it with the
  * other instruction frame lemmas the block induction composes.
  *
  * TOP-LEVEL:
- *   gen_invoke_frame_sim_deep_cost
+ *   gen_invoke_frame_sim_deep_cost_reachable
  *)
 
 Theory fnFrameDeepInvoke
@@ -523,13 +523,15 @@ Theorem invoke_return_frame_numeric:
   r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
   final.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
   ?n fin.
+    n = LENGTH (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) /\
     asm_steps lo o2pc prog n asr = AsmOK fin /\
     fn_frame_inv ctx cplan lo fn ra rest mem0 final vs' fin /\
     fin.as_pc = asr.as_pc +
       LENGTH (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts)))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all invoke_return_frame_numeric_exact >> metis_tac[]
+  drule_all invoke_return_frame_numeric_exact >>
+  simp[execute_plan_def, exec_stack_op_def, arithmeticTheory.ADD1]
 QED
 
 (* ===== Entry: input prefix and call packet over the marked state ===== *)
@@ -992,7 +994,7 @@ QED
 
 (* gen_invoke_frame_sim with any-depth ownership, generated_plan_state_wf_marked and an
    address bound on spill and restore offsets. *)
-Theorem gen_invoke_frame_sim_deep_cost:
+Theorem gen_invoke_frame_sim_deep_cost_reachable:
   !b fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
    rest mem0 nm arg_ops.
@@ -1029,6 +1031,7 @@ Theorem gen_invoke_frame_sim_deep_cost:
        MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
        (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
        fn_entry_inv Inv ctx callee cvs /\
+       cvs.vs_call_ctx.cc_static = vs.vs_call_ctx.cc_static /\
        asm_block_at prog cas.as_pc (execute_plan cp.cp_initial_fmp rj.sr_plan) /\
        LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
        fn_entry_state_rel cp callee cvs cas cra crest /\
@@ -1137,7 +1140,7 @@ Proof
   gvs[asm_steps_compose_revert, asm_steps_compose_fault]
 QED
 
-Resume gen_invoke_frame_sim_deep_cost[ok]:
+Resume gen_invoke_frame_sim_deep_cost_reachable[ok]:
   drule_all invoke_source_ok >> strip_tac >> invoke_enter_marked_tac >>
   first_x_assum drule >> strip_tac >>
   rename1 `asm_steps lo o2pc prog n cas = AsmOK asr` >>
@@ -1150,7 +1153,7 @@ Resume gen_invoke_frame_sim_deep_cost[ok]:
   suspend "frame"
 QED
 
-Resume gen_invoke_frame_sim_deep_cost[frame]:
+Resume gen_invoke_frame_sim_deep_cost_reachable[frame]:
   `ordered_spill_regions cplan.cp_regions /\ ctx_wf ctx` by
     fs[codegen_context_obligations_def, context_plan_layout_wf_def] >>
   `fn_directly_calls ctx fn.fn_name (EL j ctx.ctx_functions).fn_name` by
@@ -1200,7 +1203,138 @@ Resume gen_invoke_frame_sim_deep_cost[frame]:
   fs[execute_plan_def, exec_stack_op_def]
 QED
 
-Finalise gen_invoke_frame_sim_deep_cost
+Finalise gen_invoke_frame_sim_deep_cost_reachable
+
+Theorem gen_invoke_frame_sim_deep_cost:
+  !b fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
+   next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
+   rest mem0 nm arg_ops.
+    ctx = unit.cu_context /\
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv ctx cp /\
+    reachability_closed Inv ctx /\
+    MEM fn ctx.ctx_functions /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    Inv ctx fn inst vs /\ active_inst fn inst vs /\
+    inst.inst_opcode = INVOKE /\
+    inst.inst_operands = Label nm :: arg_ops /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
+    (!j. j < LENGTH ctx.ctx_functions /\ (EL j ctx.ctx_functions).fn_name = nm ==>
+       ?off pc. FLOOKUP lo nm = SOME off /\ off < dimword (:256) /\
+                FLOOKUP o2pc off = SOME pc /\
+                asm_block_at prog pc
+                  (execute_plan cp.cp_initial_fmp (EL j cp.cp_regions).sr_plan)) /\
+    (!j callee rj cvs cas cra crest cpc.
+       j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
+       EL j cp.cp_regions = rj /\
+       MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
+       (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+       fn_entry_inv Inv ctx callee cvs /\
+       asm_block_at prog cas.as_pc (execute_plan cp.cp_initial_fmp rj.sr_plan) /\
+       LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
+       fn_entry_state_rel cp callee cvs cas cra crest /\
+       (fn_has_retpc callee ==> FLOOKUP o2pc (w2n cra) = SOME cpc) ==>
+       (!vs'. run_blocks fuel ctx callee cvs = Halt vs' ==>
+          ?n as'. (case b of NONE => T | SOME B => n <= B) /\
+                  asm_steps lo o2pc prog n cas = AsmHalt as' /\
+                  venom_asm_terminal_rel vs' as') /\
+       (!a vs'. run_blocks fuel ctx callee cvs = Abort a vs' ==>
+          ?n as'. (case b of NONE => T | SOME B => n <= B) /\
+                  ((a = Revert_abort /\
+                    asm_steps lo o2pc prog n cas = AsmRevert as') \/
+                   (a = ExHalt_abort /\
+                    asm_steps lo o2pc prog n cas = AsmFault as')) /\
+                  venom_asm_terminal_rel vs' as') /\
+       (!ret vs'. run_blocks fuel ctx callee cvs = IntRet ret vs' ==>
+          ?n as'. (case b of NONE => T | SOME B => n <= B) /\
+                  asm_steps lo o2pc prog n cas = AsmOK as' /\
+                  as'.as_pc = cpc /\
+                  as'.as_stack = REVERSE ret.iret_values ++ crest /\
+                  fn_return_state_rel ctx cp callee vs' cas as')) /\
+    opaque_use_ok fn /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    generated_plan_state_wf_marked base ps /\
+    codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+          IS_SOME (stack_get_depth op ps.ps_stack) \/
+          IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!lbl i. i < LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+             EL i (execute_plan cp.cp_initial_fmp ops) = AsmLabel lbl ==>
+             ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+                   FLOOKUP o2pc off = SOME (as.as_pc + i)) /\
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op (frame_view fn ra vs) =
+          operand_val (frame_view fn ra vs) lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
+             operand_val (frame_view fn ra vs) lo op =
+             operand_val (frame_view fn ra vs) lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    (!off. MEM (SORestore off) ops ==> off < dimword (:256)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps = SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+    (!vs'. step_inst fuel ctx inst vs = OK vs' ==>
+       ?n as'. (case b of NONE => T | SOME B =>
+                 n <= LENGTH (execute_plan cp.cp_initial_fmp ops) + B) /\
+         asm_steps lo o2pc prog n as = AsmOK as' /\
+         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
+         as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops)) /\
+    (!vs'. step_inst fuel ctx inst vs = Halt vs' ==>
+       ?n as'. (case b of NONE => T | SOME B =>
+                 n <= LENGTH (execute_plan cp.cp_initial_fmp ops) + B) /\
+               asm_steps lo o2pc prog n as = AsmHalt as' /\
+               venom_asm_terminal_rel vs' as') /\
+    (!a vs'. step_inst fuel ctx inst vs = Abort a vs' ==>
+       ?n as'. (case b of NONE => T | SOME B =>
+                 n <= LENGTH (execute_plan cp.cp_initial_fmp ops) + B) /\
+               ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+                (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+               venom_asm_terminal_rel vs' as')
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule gen_invoke_frame_sim_deep_cost_reachable >>
+  rpt (goal_assum (drule_at Any)) >>
+  conj_tac >- (qexistsl [`arg_ops`, `nm`] >> simp[]) >>
+  simp[] >>
+  conj_tac >- (qexistsl [`rpolicy`, `unit`] >> simp[]) >>
+  conj_tac >- (qexists `r` >> simp[]) >>
+  conj_tac >-
+   (qexists `Inv` >> gvs[] >>
+    rpt gen_tac >> strip_tac >>
+    first_x_assum irule >> simp[] >>
+    rpt (goal_assum (drule_at Any))) >>
+  gvs[] >> rpt (goal_assum (drule_at Any))
+QED
 
 (* The original unbounded interface is the NONE instance of the single
    cost-parametric construction above. *)
@@ -1317,7 +1451,18 @@ Theorem gen_invoke_frame_sim_deep:
                 (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
                venom_asm_terminal_rel vs' as')
 Proof
-  MATCH_ACCEPT_TAC
-    (Q.SPEC `NONE` gen_invoke_frame_sim_deep_cost |>
-     PURE_REWRITE_RULE [optionTheory.option_case_def, boolTheory.AND_CLAUSES])
+  rpt gen_tac >> strip_tac >>
+  irule (Q.SPEC `NONE` gen_invoke_frame_sim_deep_cost_reachable |>
+    PURE_REWRITE_RULE [optionTheory.option_case_def, boolTheory.AND_CLAUSES]) >>
+  rpt (goal_assum (drule_at Any)) >>
+  conj_tac >- (qexistsl [`arg_ops`, `nm`] >> simp[]) >>
+  simp[] >>
+  conj_tac >- (qexistsl [`rpolicy`, `unit`] >> simp[]) >>
+  conj_tac >- (qexists `r` >> simp[]) >>
+  conj_tac >-
+   (qexists `Inv` >> gvs[] >>
+    rpt gen_tac >> strip_tac >>
+    first_x_assum irule >> simp[] >>
+    rpt (goal_assum (drule_at Any))) >>
+  gvs[] >> rpt (goal_assum (drule_at Any))
 QED

@@ -883,7 +883,8 @@ Theorem gen_inst_log_static_frame_sim_deep[local]:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\
+    a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
     venom_asm_terminal_rel vs' out
 Proof
   rpt gen_tac >> strip_tac >>
@@ -955,6 +956,8 @@ Resume gen_inst_log_static_frame_sim_deep[prepared]:
   strip_tac >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (input_ops ++ reorder_ops)) + 1`,
     `st'`] >>
+  conj_tac
+  >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   simp[] >> irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
 QED
 

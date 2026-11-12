@@ -400,7 +400,9 @@ Theorem entry_prefix_asm:
       with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) /\
     asm_block_at prog a.as_pc (execute_plan cp.cp_initial_fmp
       (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) ==>
-    ?n a'. asm_steps lo o2pc prog n a = AsmOK a' /\
+    ?n a'. n = LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      asm_steps lo o2pc prog n a = AsmOK a' /\
       a'.as_pc = a.as_pc + LENGTH (execute_plan cp.cp_initial_fmp
         (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
       fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a'

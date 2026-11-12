@@ -354,14 +354,14 @@ Resume regular_inst_ok_sim_marked_count[postfix_done]:
   qexistsl_tac [`LENGTH (execute_plan initial_fmp (iops ++ rops)) +
     (1 + LENGTH (execute_plan initial_fmp (popops ++ optops)))`, `endpoint`] >>
   conj_tac
-  >- (qpat_x_assum `ops = _` SUBST1_TAC >>
-      simp[execute_plan_append, execute_plan_def, exec_stack_op_def]) >>
-  conj_tac
   >- (irule asm_steps_compose_ok >> qexists `mid` >> conj_tac
       >- asm_rewrite_tac[] >>
       irule asm_steps_compose_ok >> qexists `after_emit` >> asm_rewrite_tac[]) >>
   conj_tac >- asm_rewrite_tac[] >>
-  rpt strip_tac >>
+  reverse conj_tac
+  >- (strip_tac >> qpat_x_assum `ops = _` SUBST1_TAC >>
+      simp[execute_plan_append, execute_plan_def, exec_stack_op_def]) >>
+  strip_tac >>
   qpat_x_assum `ops = _` SUBST1_TAC >>
   qpat_x_assum `endpoint.as_pc = _` mp_tac >>
   qpat_x_assum `after_emit.as_pc = _` mp_tac >>
@@ -754,9 +754,6 @@ Theorem assign_inst_ok_sim_marked_count:
         n = LENGTH (execute_plan initial_fmp ops)
 Proof
   rpt gen_tac >> strip_tac >> qx_gen_tac `vs'` >> strip_tac >>
-  CONV_TAC (BINDER_CONV (BINDER_CONV
-    (RAND_CONV (RAND_CONV (RAND_CONV
-      (REWR_CONV arithmeticTheory.EQ_LESS_EQ)))))) >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
   drule_all step_inst_assign_ok >> strip_tac >>
   Cases_on `emit_input_plan ASSIGN [op] next_liveness ps` >>
@@ -834,10 +831,13 @@ Proof
      first_assum ACCEPT_TAC) >>
   drule_all assign_postfix_sim_numeric >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  qexistsl [`LENGTH (execute_plan initial_fmp (iops ++ rops)) +
-             LENGTH (execute_plan initial_fmp (pops ++ opts))`, `st9`] >>
-  conj_tac >- simp[execute_plan_append] >>
-  conj_tac >- (irule asm_steps_compose_ok >> goal_assum drule >> simp[]) >>
+  qexists `st9` >> simp_tac (srw_ss()) [execute_plan_append, LENGTH_APPEND] >>
+  conj_tac >-
+   (`asm_steps lo o2pc prog
+       (LENGTH (execute_plan initial_fmp (iops ++ rops)) +
+        LENGTH (execute_plan initial_fmp (pops ++ opts))) as = AsmOK st9` by
+      (irule asm_steps_compose_ok >> goal_assum drule >> simp[]) >>
+    metis_tac[execute_plan_append, LENGTH_APPEND, ADD_ASSOC]) >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   pure_rewrite_tac[execute_plan_append, LENGTH_APPEND] >>
   qpat_x_assum `st9.as_pc = _` SUBST1_TAC >>
@@ -1690,9 +1690,6 @@ Theorem phi_inst_ok_sim_marked_count:
         n = LENGTH (execute_plan initial_fmp ops)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
-  CONV_TAC (BINDER_CONV (BINDER_CONV
-    (RAND_CONV (RAND_CONV (RAND_CONV
-      (REWR_CONV arithmeticTheory.EQ_LESS_EQ)))))) >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
   `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
     fs[generated_plan_state_wf_marked_def] >>
@@ -1735,7 +1732,7 @@ Resume phi_inst_ok_sim_marked_count[phi_cases]:
   >- (
     (* NONE case: ops = [], ps' = ps *)
     gvs[] >>
-    Q.EXISTS_TAC `0` >> Q.EXISTS_TAC `as` >>
+    Q.EXISTS_TAC `as` >>
     simp[asm_steps_def, execute_plan_def] >>
     irule venom_asm_rel_update_var >>
     gvs[EVERY_MEM] >>
@@ -1764,7 +1761,7 @@ Resume phi_inst_ok_sim_marked_count[phi_dead]:
   IF_CASES_TAC >> simp[]
   >- suspend "phi_dead_pop"
   >> strip_tac >> gvs[] >>
-  qexistsl [`0`, `as`] >>
+  qexists `as` >>
   simp[asm_steps_def, execute_plan_def, exec_stack_op_def]
 QED
 
@@ -1777,8 +1774,9 @@ Resume phi_inst_ok_sim_marked_count[phi_dead_pop]:
     `as`, `initial_fmp`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
   strip_tac >>
-  qexistsl [`LENGTH (execute_plan initial_fmp pop_ops)`, `st'`] >>
-  simp[execute_plan_def, exec_stack_op_def]
+  qexists `st'` >>
+  simp[execute_plan_def, exec_stack_op_def] >>
+  metis_tac[execute_plan_def]
 QED
 
 Resume phi_inst_ok_sim_marked_count[phi_live]:
@@ -1789,8 +1787,9 @@ Resume phi_inst_ok_sim_marked_count[phi_live]:
   >> strip_tac >> gvs[] >>
   drule_all phi_dup_rename_sim_numeric >>
   disch_then (qspecl_then [`o2pc`] mp_tac) >>
-  strip_tac >> qexistsl [`LENGTH (execute_plan initial_fmp dup_ops)`, `mid`] >>
-  simp[execute_plan_append, execute_plan_def, exec_stack_op_def]
+  strip_tac >> qexists `mid` >>
+  simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  metis_tac[execute_plan_def]
 QED
 
 Resume phi_inst_ok_sim_marked_count[phi_live_pop]:
@@ -1823,11 +1822,14 @@ Resume phi_inst_ok_sim_marked_count[phi_live_pop_finish]:
     simp[is_simple_stack_op_def, prefix_wf_def, stack_op_wf_def,
          stack_poke_def]) >>
   strip_tac >>
-  qexistsl [`LENGTH (execute_plan initial_fmp dup_ops) +
-              LENGTH (execute_plan initial_fmp [SOPop 1])`, `st'`] >>
-  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  qexists `st'` >>
   conj_tac
-  >- (irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
+  >- (`asm_steps lo o2pc prog
+         (LENGTH (execute_plan initial_fmp dup_ops) +
+          LENGTH (execute_plan initial_fmp [SOPop 1])) as = AsmOK st'` by
+        (irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
+      pop_assum mp_tac >>
+      simp[execute_plan_append, execute_plan_def, exec_stack_op_def]) >>
   gvs[apply_simple_ops_def, apply_simple_op_def, stack_pop_def,
       execute_plan_append, execute_plan_def, exec_stack_op_def]
 QED
@@ -2003,8 +2005,6 @@ Theorem initial_fmp_inst_ok_sim_marked_count:
         n = LENGTH (execute_plan initial_fmp ops)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
-  CONV_TAC (BINDER_CONV (BINDER_CONV
-    (RAND_CONV (RAND_CONV (RAND_CONV (REWR_CONV arithmeticTheory.EQ_LESS_EQ)))))) >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
   `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
     fs[generated_plan_state_wf_marked_def] >>
@@ -2039,12 +2039,9 @@ Proof
           qspecl_then [`lo`, `o2pc`, `prog`, `ps`, `vs`, `as`,
             `initial_fmp`, `out`] mp_tac initial_fmp_emit_update_var_bridge >>
           (impl_tac >- ASM_REWRITE_TAC[]) >> strip_tac >>
-          qexistsl [`1`, `as'`] >> ASM_REWRITE_TAC[] >>
-          conj_tac >- simp[execute_plan_def, exec_stack_op_def] >>
-          conj_tac
-          >- (irule venom_asm_rel_release_dead_spills >>
-              simp[stack_push_def, stack_pop_def]) >>
-          simp[execute_plan_def, exec_stack_op_def]) >>
+          qexists_tac `as'` >> simp[execute_plan_def, exec_stack_op_def] >>
+          irule venom_asm_rel_release_dead_spills >>
+          simp[stack_push_def, stack_pop_def]) >>
       gvs[initial_fmp_dead_popmany] >>
       pairarg_tac >> gvs[] >>
       qspecl_then [`lo`, `o2pc`, `prog`, `ps`, `vs`, `as`,
@@ -2070,8 +2067,13 @@ Proof
       `venom_asm_rel lo (release_dead_spills next_liveness ps9)
          (update_var out vs.vs_initial_fmp vs) st'` by
         (irule venom_asm_rel_release_dead_spills >> ASM_REWRITE_TAC[]) >>
-      qexistsl [`1 + LENGTH (execute_plan initial_fmp opt_ops)`, `st'`] >>
-      gvs[asm_steps_add, execute_plan_def, exec_stack_op_def]) >>
+      qexists_tac `st'` >>
+      `LENGTH (execute_plan initial_fmp (SOInitialFmp::opt_ops)) =
+       1 + LENGTH (execute_plan initial_fmp opt_ops)` by
+        simp[execute_plan_def, exec_stack_op_def] >>
+      asm_rewrite_tac[] >> conj_tac
+      >- (once_rewrite_tac[asm_steps_add] >> simp[]) >>
+      simp_tac arith_ss[]) >>
   Cases_on `MEM out next_liveness`
   >- (gvs[initial_fmp_dead_popmany, popmany_plan_def] >>
       pairarg_tac >> gvs[] >>
@@ -2098,8 +2100,13 @@ Proof
       `venom_asm_rel lo (release_dead_spills next_liveness ps9)
          (update_var out vs.vs_initial_fmp vs) st'` by
         (irule venom_asm_rel_release_dead_spills >> ASM_REWRITE_TAC[]) >>
-      qexistsl [`1 + LENGTH (execute_plan initial_fmp opt_ops)`, `st'`] >>
-      gvs[asm_steps_add, execute_plan_def, exec_stack_op_def]) >>
+      qexists_tac `st'` >>
+      `LENGTH (execute_plan initial_fmp (SOInitialFmp::opt_ops)) =
+       1 + LENGTH (execute_plan initial_fmp opt_ops)` by
+        simp[execute_plan_def, exec_stack_op_def] >>
+      asm_rewrite_tac[] >> conj_tac
+      >- (once_rewrite_tac[asm_steps_add] >> simp[]) >>
+      simp_tac arith_ss[]) >>
   gvs[initial_fmp_dead_popmany, stack_push_def, stack_pop_def] >>
   qspecl_then [`lo`, `o2pc`, `prog`, `ps`, `vs`, `as`,
     `initial_fmp`, `out`] mp_tac initial_fmp_emit_update_var_bridge >>
@@ -2128,8 +2135,13 @@ Proof
       qpat_x_assum `venom_asm_rel lo (ps with ps_stack := SNOC _ _) _ _`
         mp_tac >> simp[SNOC_APPEND]) >>
   strip_tac >>
-  qexistsl [`1 + LENGTH (execute_plan initial_fmp [SOPop 1])`, `as''`] >>
-  gvs[asm_steps_add, execute_plan_def, exec_stack_op_def]
+  qexists_tac `as''` >>
+  `LENGTH (execute_plan initial_fmp [SOInitialFmp; SOPop 1]) =
+   1 + LENGTH (execute_plan initial_fmp [SOPop 1])` by
+    simp[execute_plan_def, exec_stack_op_def] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (once_rewrite_tac[asm_steps_add] >> simp[]) >>
+  simp_tac arith_ss[]
 QED
 
 Theorem initial_fmp_inst_ok_sim_marked:
@@ -2301,8 +2313,6 @@ Theorem bump_inst_ok_sim_marked_count:
         n = LENGTH (execute_plan initial_fmp ops)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
-  CONV_TAC (BINDER_CONV (BINDER_CONV
-    (RAND_CONV (RAND_CONV (RAND_CONV (REWR_CONV arithmeticTheory.EQ_LESS_EQ)))))) >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once generate_inst_plan_def, is_param_opcode_def] >> strip_tac >>
@@ -2477,11 +2487,35 @@ Proof
   `venom_asm_rel lo (release_dead_spills next_liveness ps9)
      (update_var h'³' (x + x') (update_var h'' x vs)) st'` by
     (irule venom_asm_rel_release_dead_spills >> ASM_REWRITE_TAC[]) >>
-  qexistsl [`LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops)) +
-             (2 + (LENGTH (execute_plan initial_fmp pop_ops) +
-                   LENGTH (execute_plan initial_fmp opt_ops)))`, `st'`] >>
-  gvs[asm_steps_add, execute_plan_append, LENGTH_APPEND] >>
-  simp[execute_plan_def, exec_stack_op_def, bump_emit_ops_def] >> decide_tac
+  qexists_tac `st'` >>
+  `LENGTH (execute_plan initial_fmp
+     (input_ops ++ reorder_ops ++ [SODup 2; SOEmit "ADD"] ++ pop_ops ++ opt_ops)) =
+   LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops)) +
+   (2 + (LENGTH (execute_plan initial_fmp pop_ops) +
+         LENGTH (execute_plan initial_fmp opt_ops)))` by
+    simp_tac std_ss[execute_plan_append, execute_plan_def, exec_stack_op_def,
+                    MAP, FLAT, LENGTH, APPEND, MAP_APPEND, FLAT_APPEND, LENGTH_APPEND, ADD_ASSOC] >>
+  qpat_assum `LENGTH (execute_plan _ (_ ++ _ ++ _ ++ _ ++ _)) = _`
+    (fn th => pure_once_rewrite_tac[th]) >> conj_tac
+  >- (`asm_steps lo o2pc prog
+         (LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops)) +
+          (2 + (LENGTH (execute_plan initial_fmp pop_ops) + nopt))) as = AsmOK st'`
+        suffices_by
+        (qpat_x_assum `nopt = _` SUBST_ALL_TAC >>
+         simp_tac std_ss[execute_plan_append, execute_plan_def, exec_stack_op_def,
+           MAP, FLAT, LENGTH, APPEND, MAP_APPEND, FLAT_APPEND, LENGTH_APPEND,
+           AC ADD_ASSOC ADD_COMM]) >>
+      qpat_assum `asm_steps _ _ _ _ as = AsmOK as'`
+        (fn th => pure_once_rewrite_tac [MATCH_MP asm_steps_add_ok th]) >>
+      qpat_assum `asm_steps _ _ _ 2 as' = AsmOK as''`
+        (fn th => pure_once_rewrite_tac [MATCH_MP asm_steps_add_ok th]) >>
+      qpat_assum `asm_steps _ _ _ _ as'' = AsmOK as8`
+        (fn th => pure_once_rewrite_tac [MATCH_MP asm_steps_add_ok th]) >>
+      asm_rewrite_tac[]) >>
+  asm_rewrite_tac[] >>
+  simp_tac std_ss[execute_plan_append, execute_plan_def, exec_stack_op_def,
+    MAP, FLAT, LENGTH, APPEND, MAP_APPEND, FLAT_APPEND, LENGTH_APPEND,
+    AC ADD_ASSOC ADD_COMM]
 QED
 
 Theorem bump_inst_ok_sim_marked:
@@ -2653,9 +2687,6 @@ Theorem istore_inst_ok_sim_marked_count:
         n = LENGTH (execute_plan initial_fmp ops)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
-  CONV_TAC (BINDER_CONV (BINDER_CONV
-    (RAND_CONV (RAND_CONV (RAND_CONV
-      (REWR_CONV arithmeticTheory.EQ_LESS_EQ)))))) >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once generate_inst_plan_def, is_param_opcode_def] >> strip_tac >>
@@ -2817,11 +2848,20 @@ Proof
        (ps4 with ps_stack := stack_pop 2 ps4.ps_stack))
      (istore (w2n x) x' vs) as2` by
     (irule venom_asm_rel_release_dead_spills >> ASM_REWRITE_TAC[]) >>
-  qexistsl [`LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops)) + 2`,
-             `as2`] >>
-  gvs[asm_steps_add, execute_plan_append, LENGTH_APPEND,
-      execute_plan_def, exec_stack_op_def] >>
-  simp[Abbr `as2`]
+  (qexists_tac `as2` >> conj_tac
+  >- (`asm_steps lo o2pc prog
+         (LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops)) + 2)
+         as = AsmOK as2` suffices_by
+        simp_tac std_ss[execute_plan_append, execute_plan_def, exec_stack_op_def,
+          MAP, FLAT, LENGTH, APPEND, MAP_APPEND, FLAT_APPEND, LENGTH_APPEND,
+          AC ADD_ASSOC ADD_COMM] >>
+      qpat_assum `asm_steps _ _ _ _ as = AsmOK as'`
+        (fn th => pure_once_rewrite_tac [MATCH_MP asm_steps_add_ok th]) >>
+      asm_rewrite_tac[]) >>
+  asm_rewrite_tac[] >>
+  simp_tac std_ss[Abbr `as2`, execute_plan_append, execute_plan_def,
+    exec_stack_op_def, MAP, FLAT, LENGTH, APPEND, MAP_APPEND, FLAT_APPEND,
+    LENGTH_APPEND, AC ADD_ASSOC ADD_COMM] >> simp[])
 QED
 
 Theorem istore_inst_ok_sim_marked:
@@ -3001,21 +3041,22 @@ Theorem gen_inst_ok_sim_marked:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = ASSIGN`
-  >- ok_case_lemma_tac assign_inst_ok_sim_marked >>
+  >- (ok_case_lemma_tac assign_inst_ok_sim_marked_count >> metis_tac[LESS_EQ_REFL]) >>
   Cases_on `inst.inst_opcode = LOG`
-  >- ok_case_lemma_tac log_inst_ok_sim_marked >>
+  >- (ok_case_lemma_tac log_inst_ok_sim_marked_count >> metis_tac[LESS_EQ_REFL]) >>
   Cases_on `inst.inst_opcode = ASSERT`
-  >- ok_case_lemma_tac assert_inst_ok_sim_marked >>
+  >- (ok_case_lemma_tac assert_inst_ok_sim_marked_count >> metis_tac[LESS_EQ_REFL]) >>
   Cases_on `inst.inst_opcode = ASSERT_UNREACHABLE`
-  >- ok_case_lemma_tac assert_unreachable_inst_ok_sim_marked >>
+  >- (ok_case_lemma_tac assert_unreachable_inst_ok_sim_marked_count >>
+      strip_tac >> goal_assum drule >> simp[]) >>
   Cases_on `inst.inst_opcode = PHI`
-  >- ok_case_lemma_tac phi_inst_ok_sim_marked >>
+  >- (ok_case_lemma_tac phi_inst_ok_sim_marked_count >> metis_tac[LESS_EQ_REFL]) >>
   Cases_on `inst.inst_opcode = INITIAL_FMP`
-  >- ok_case_lemma_tac initial_fmp_inst_ok_sim_marked >>
+  >- (ok_case_lemma_tac initial_fmp_inst_ok_sim_marked_count >> metis_tac[LESS_EQ_REFL]) >>
   Cases_on `inst.inst_opcode = BUMP`
-  >- ok_case_lemma_tac bump_inst_ok_sim_marked >>
+  >- (ok_case_lemma_tac bump_inst_ok_sim_marked_count >> metis_tac[LESS_EQ_REFL]) >>
   Cases_on `inst.inst_opcode = ISTORE`
-  >- ok_case_lemma_tac istore_inst_ok_sim_marked >>
+  >- (ok_case_lemma_tac istore_inst_ok_sim_marked_count >> metis_tac[LESS_EQ_REFL]) >>
   (* Do not substitute concrete maps into the preserved map-parametric proofs. *)
   qpat_x_assum `lo = SND (compute_label_offsets prog)` kall_tac >>
   qpat_x_assum `o2pc = build_offset_to_pc prog` kall_tac >>
@@ -3171,10 +3212,11 @@ Resume gen_inst_ok_sim_marked[none]:
 QED
 
 Resume gen_inst_ok_sim_marked[some_name]:
+  drule_all regular_named_ok_nonterminator >> strip_tac >>
   qspecl_then [`fuel`, `ctx`, `lo`, `o2pc`, `prog`, `liveness`, `dfg`, `cfg`,
     `fn`, `inst`, `next_liveness`, `is_halting`, `next_is_term`, `bb_label`,
     `base'`, `ps`, `vs`, `as`, `ops`, `ps'`, `name`, `initial_fmp`]
-    mp_tac regular_inst_ok_sim_marked >>
+    mp_tac regular_inst_ok_sim_marked_count >>
   ASM_REWRITE_TAC[] >>
   impl_tac >- (
     fs[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>

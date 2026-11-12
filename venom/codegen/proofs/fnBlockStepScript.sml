@@ -14,6 +14,7 @@ Ancestors
   fnBlockBody fnFrameSinglePred fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
   genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
   venomExecSemantics fnBlockStepHelpers contextCodegenRel venomExecProofs
+  stackOpSim fnBlockBodySteps stackPlanGen blockSimHelpers
 
 (* run_blocks (SUC fuel) runs the current block with run_block fuel and
    continues with run_blocks fuel from its OK result (run_blocks_unfold);
@@ -34,11 +35,12 @@ Ancestors
    from this block, dfs_block_state, the alias premise by
    lineage_alias_successor), and the successor run's assembly steps are
    added to the block's (asm_steps_add_ok). *)
-Theorem fn_block_frame_step:
-  !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel ==>
-         gen_fn_frame_sim_at (SUC fuel)
+Theorem fn_block_frame_step_cost:
+  !q fuel. gen_fn_sim_cost_at q fuel /\ gen_fn_frame_sim_cost_at q fuel ==>
+    gen_fn_frame_sim_cost_at (OPTION_MAP (\F unit cp prog.
+      fn_sim_coefficient unit.cu_context prog * (F unit cp prog + 1)) q) (SUC fuel)
 Proof
-  gen_tac >> strip_tac >> REWRITE_TAC [gen_fn_frame_sim_at_def] >>
+  rpt gen_tac >> strip_tac >> REWRITE_TAC [gen_fn_frame_sim_cost_at_def] >>
   rpt gen_tac >> strip_tac >>
   rename1 `generate_context_plan ctx = SOME cpl` >>
   qspecl_then [`vs`, `bb.bb_instructions`] strip_assume_tac
@@ -47,7 +49,7 @@ Proof
   >> simp[run_blocks_unfold, run_block_def]
 QED
 
-Resume fn_block_frame_step[ok]:
+Resume fn_block_frame_step_cost[ok]:
   `run_blocks (SUC fuel) ctx fn vs =
    block_rest fuel ctx fn bb
      (s' with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
@@ -92,17 +94,61 @@ Resume fn_block_frame_step[ok]:
          phi_prefix_length bb.bb_instructions <= i \/
          j < phi_prefix_length bb.bb_instructions` by
     metis_tac[revert_forward_pair_past_phis] >>
-  mp_tac (Q.SPECL [`fuel`, `rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`,
+  `n <= LENGTH prog` by
+    (drule asmSemTheory.asm_block_at_length >>
+     qpat_assum `block_ops = _` (fn th => rewrite_tac[th]) >>
+     simp[execute_plan_append] >> decide_tac) >>
+  `LENGTH bb.bb_instructions <= context_inst_count ctx` by
+    (irule context_inst_count_block >> qexists_tac `fn` >>
+     conj_tac
+     >- (drule livenessTransferProofsTheory.lookup_block_mem >> simp[]) >>
+     metis_tac[listTheory.EL_MEM]) >>
+  mp_tac (Q.SPECL [`q`, `fuel`, `rpolicy`, `unit`, `cpl`, `prog`, `ctx`, `lo`,
     `o2pc`, `i`, `fn`, `r`, `liveness`, `dfg`, `cfg`, `ch`, `growth`,
     `spill_base`, `lbl_ctr`, `fn_ops`, `ps_end`, `bb`, `ps`, `h`, `promised`,
     `ps_dfs`, `block_ops`, `ps_dfs_after`, `ps_after`, `prefix_ops`,
     `rest_ops`, `phi_prefix_length bb.bb_instructions`, `ps1`, `as.as_pc`,
     `s' with vs_inst_idx := phi_prefix_length bb.bb_instructions`, `as1`,
-    `Inv`, `ra`, `pc_ret`, `rest`, `mem0`] block_body_frame_sim) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-  disch_then assume_tac >>
-  match_mp_tac frame_conclusions_prefix >>
-  qexistsl_tac [`n`, `as1`] >> conj_tac >> first_assum ACCEPT_TAC
+    `Inv`, `ra`, `pc_ret`, `rest`, `mem0`] block_body_frame_sim_cost) >>
+  impl_tac >- (gvs[] >> rpt conj_tac >> gvs[] >> metis_tac[]) >>
+  simp_tac std_ss [body_result_cost_def] >> strip_tac >>
+  `!m. cost_le (OPTION_MAP (\F.
+      (LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions + 1) *
+      (LENGTH prog + F unit cpl prog + 8)) q) m ==>
+    cost_le (OPTION_MAP (\F.
+      fn_sim_coefficient unit.cu_context prog * (F unit cpl prog + 1)) q) (n + m)` by
+    (Cases_on `q` >> simp[cost_le_def] >> rpt strip_tac >>
+     rename1 `gen_fn_sim_cost_at (SOME budget) fuel` >>
+     qspecl_then [`LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions`,
+       `context_inst_count ctx`, `LENGTH prog`, `budget unit cpl prog`, `7`]
+       mp_tac fn_sim_budget_absorb >>
+     gvs[fn_sim_coefficient_def] >> decide_tac) >>
+  simp_tac std_ss [optionTheory.OPTION_MAP_COMPOSE, combinTheory.o_DEF] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (qpat_x_assum `!vs'. block_rest _ _ _ _ _ = Halt _ ==> _`
+        (qspec_then `vs'` mp_tac) >>
+      impl_tac >- metis_tac[] >> strip_tac >>
+      metis_tac[asm_steps_compose_halt])
+  >- (qpat_x_assum `!a vs'. block_rest _ _ _ _ _ = Abort _ _ ==> _`
+        (qspecl_then [`a`, `vs'`] mp_tac) >>
+      impl_tac >- metis_tac[] >> strip_tac >>
+      metis_tac[asm_steps_compose_revert, asm_steps_compose_fault])
+  >- (qpat_x_assum `!ret vs'. block_rest _ _ _ _ _ = IntRet _ _ ==> _`
+        (qspecl_then [`ret`, `vs'`] mp_tac) >>
+      impl_tac >- metis_tac[] >> strip_tac >>
+      rename1 `asm_steps _ _ _ m as1 = AsmOK as2` >>
+      qexistsl_tac [`n + m`, `as2`] >>
+      rpt conj_tac
+      >- metis_tac[]
+      >- metis_tac[asm_steps_compose_ok]
+      >> first_assum ACCEPT_TAC)
 QED
 
-Finalise fn_block_frame_step
+Finalise fn_block_frame_step_cost
+
+Theorem fn_block_frame_step:
+  !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel ==>
+         gen_fn_frame_sim_at (SUC fuel)
+Proof
+  mp_tac (Q.SPEC `NONE` fn_block_frame_step_cost) >> simp[]
+QED

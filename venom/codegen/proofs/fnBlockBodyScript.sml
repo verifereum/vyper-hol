@@ -608,6 +608,12 @@ Theorem block_body_frame_sim:
                     read_byte b as'.as_memory = read_byte b mem0) /\
                shared_state_rel vs' as')
 Proof
-  mp_tac (Q.SPEC `NONE` block_body_frame_sim_cost) >>
-  simp[body_result_def]
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  irule (SRULE [gen_fn_sim_cost_none, gen_fn_frame_sim_cost_none,
+                body_result_def] (Q.SPEC `NONE` block_body_frame_sim_cost)) >>
+  simp[SF SFY_ss] >> conj_tac
+  >- (qexists `Inv` >> simp[]) >>
+  rpt (goal_assum (drule_at Any)) >>
+  simp[SF SFY_ss] >>
+  qexistsl_tac [`prefixL`, `prefixD`, `core`] >> simp[]
 QED

@@ -589,6 +589,8 @@ Proof
                 `body_ops`, `ps1`, `1 + n`, `as'`] >>
   rpt conj_tac >> REWRITE_TAC [operand_val_frame_view_inst_idx] >>
   TRY (first_assum ACCEPT_TAC)
+  >~ [`1 + n = LENGTH _`]
+  >- simp[execute_plan_label_length]
   >- (REWRITE_TAC [block_plan_state_def] >>
       qexistsl_tac [`[]`,
         `ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>`,
