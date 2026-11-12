@@ -32,10 +32,18 @@
  * max_code_size, which the EVM rejects with OutOfGas at any gas.  Its
  * identity case is composed from S1b-d (deploy_unit_run_bounded), S6b and
  * S7g-d (deploy_frame_gas_sufficient).
+ *
+ * The call theorem, S1b and S6b rely on the lowering's bounded ABI decoder
+ * checking an offset before it loads through it.  With the upstream order
+ * (load first), a callee that reads GAS can return an offset that grows
+ * with the gas it is given, so the decoder's load runs out of gas for every
+ * amount of extra gas; the RETURNDATACOPY exemption, and the memory bound in
+ * venom_run_bounded, would then have to admit that load too.
  *)
 Theory e2eGasSufficient
 Ancestors
   e2eCorrectness e2eDefs e2eProducers e2eEntry unitTransformDefs
+  ptrDiscipline lowerDloadDefs e2eComposition
   o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs
@@ -56,7 +64,7 @@ Theorem call_state_rel_add_frame_gas:
 Proof
   rw[call_state_rel_def] >>
   drule add_frame_gas_contexts >> disch_then (qspec_then `g` assume_tac) >>
-  simp[add_frame_gas_wf_state, add_frame_gas_fields]
+  simp[add_frame_gas_wf_state, add_frame_gas_fields] >> fs[]
 QED
 
 (* The creation frame's relation, at the new gas, from the old one and its
@@ -76,6 +84,8 @@ Proof
   drule add_frame_gas_contexts >> disch_then (qspec_then `g` assume_tac) >>
   qexistsl_tac [`ctxt with msgParams updated_by (\p. p with gasLimit updated_by $+ g)`,
                 `rb`, `args_bytes`] >>
+  `(add_frame_gas g es).originalAccounts = es.originalAccounts` by
+    (simp[add_frame_gas_def] >> CASE_TAC >> simp[] >> CASE_TAC >> simp[]) >>
   fs[add_frame_gas_wf_state, add_frame_gas_fields]
 QED
 
