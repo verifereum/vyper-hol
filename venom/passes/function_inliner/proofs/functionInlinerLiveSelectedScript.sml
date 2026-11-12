@@ -231,7 +231,11 @@ Theorem inline_live_selected_return:
     inline_parameter_boundary_path zipper e.ise_final e.ise_return 0 root
       (inline_path_rename zipper e.ise_return) 0 /\
     (?continuation. lookup_block (inline_path_rename zipper e.ise_return)
-      root.fn_blocks = SOME continuation)
+      root.fn_blocks = SOME continuation) /\
+    (!path. inline_routed_leaf cert root q ca.ia_function path ==> ?counter.
+      inline_path_location path
+        (SOME <|il_block := rl; il_phase := InlineAtInstruction ri; il_counter := 0|>) =
+      SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := counter|>)
 Proof
   strip_tac >>
   drule inline_live_stack_storage >> strip_tac >>
@@ -289,4 +293,55 @@ Proof
           inline_shared_frame_def, stateFrameTheory.execution_frame_def] >>
      metis_tac[]) >>
   simp[jump_to_def]
+QED
+
+(* At a recursively established mapped cut the retained layout witness fixes
+   the adapter coordinates, so execution starts from the actual frame. *)
+Theorem inline_live_selected_return_at_cut:
+  inliner_input_ok C /\ inline_annotated_origin C n root cert /\
+  inline_live_stack C cert root
+    ((q,ca,route,snap)::(p,pa,proute,psnap)::rest) frame /\
+  inline_call_incidence cert root p pa.ia_function l j call (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert p proute.ir_rename pa.ia_function /\
+  inline_namespace_leaf_at cert q route.ir_rename ca.ia_function /\
+  lookup_block rl ca.ia_function.fn_blocks = SOME rb /\ get_instruction rb ri = SOME ret /\
+  MEM ret.inst_opcode [RET; RETFMP] /\ ret.inst_operands = ops ++ [pc] /\
+  step_inst fuel C ret snap.ils_state = IntRet ir s' /\ ~frame.ipf_state.vs_halted /\
+  lookup_function nm C.ctx_functions = SOME ca.ia_function /\
+  setup_callee ca.ia_function args psnap.ils_state = SOME ca.ia_entry /\
+  run_blocks cfuel C ca.ia_function ca.ia_entry = IntRet ir s' /\
+  ~ca.ia_entry.vs_halted /\
+  inline_live_location cert root q ca path
+    (InlineAtInstruction snap.ils_state.vs_inst_idx)
+    (InlineAtInstruction frame.ipf_state.vs_inst_idx) counter snap.ils_state frame.ipf_state /\
+  snap.ils_state.vs_current_bb = rl /\ snap.ils_state.vs_inst_idx = ri ==>
+  ?bb caller'.
+    let writes = FOLDL (\s (x,w). update_var x w s) frame.ipf_state
+          (ZIP (MAP proute.ir_rename call.inst_outputs,ir.iret_values));
+        target = jump_to (inline_path_rename zipper e.ise_return) writes;
+        resumed = adopt_return_fmp ir (merge_callee_state caller' s');
+        psnap' = psnap with <|ils_state := resumed;
+          ils_defined := set call.inst_outputs UNION psnap.ils_defined|> in
+    lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME bb /\
+    exec_block tfuel Tctx bb frame.ipf_state = OK target /\
+    bind_outputs call.inst_outputs ir.iret_values psnap.ils_state = SOME caller' /\
+    inline_live_stack C cert root ((p,pa,proute,psnap')::rest)
+      (frame with ipf_state := target) /\
+    target.vs_current_bb = inline_path_rename zipper e.ise_return /\
+    target.vs_prev_bb = SOME frame.ipf_state.vs_current_bb /\ target.vs_inst_idx = 0 /\
+    inline_parameter_boundary_path zipper e.ise_final e.ise_return 0 root
+      (inline_path_rename zipper e.ise_return) 0 /\
+    (?continuation. lookup_block (inline_path_rename zipper e.ise_return)
+      root.fn_blocks = SOME continuation)
+Proof
+  strip_tac >> drule_all inline_live_selected_return >>
+  disch_then (qspecl_then [`tfuel`,`Tctx`] strip_assume_tac) >>
+  fs[inline_live_location_def] >>
+  `?next. inline_path_location path
+      (SOME <|il_block := rl; il_phase := InlineAtInstruction ri; il_counter := 0|>) =
+    SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := next|>` by
+    metis_tac[] >>
+  `frame.ipf_state.vs_current_bb = ml /\ frame.ipf_state.vs_inst_idx = mj` by
+    gvs[] >>
+  simp[]
 QED

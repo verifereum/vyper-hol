@@ -93,7 +93,11 @@ Theorem inline_selected_return_adapter_execute:
       OK (jump_to (inline_path_rename zipper e.ise_return)
         (FOLDL (\s (x,w). update_var x w s) frame.ipf_state
           (ZIP (MAP prename call.inst_outputs,ir.iret_values)))) /\
-    s' = snap.ils_state /\ LENGTH call.inst_outputs = LENGTH ir.iret_values
+    s' = snap.ils_state /\ LENGTH call.inst_outputs = LENGTH ir.iret_values /\
+    (!path. inline_routed_leaf cert root q child path ==> ?counter.
+      inline_path_location path
+        (SOME <|il_block := rl; il_phase := InlineAtInstruction ri; il_counter := 0|>) =
+      SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := counter|>)
 Proof
   strip_tac >>
   `raw_return_user_arity ret = SOME (LENGTH call.inst_outputs)` by
@@ -201,7 +205,11 @@ Theorem inline_selected_return_execute:
     inline_parameter_boundary_path zipper e.ise_final e.ise_return 0 root
       (inline_path_rename zipper e.ise_return) 0 /\
     (?continuation. lookup_block (inline_path_rename zipper e.ise_return)
-      root.fn_blocks = SOME continuation)
+      root.fn_blocks = SOME continuation) /\
+    (!path. inline_routed_leaf cert root q child path ==> ?counter.
+      inline_path_location path
+        (SOME <|il_block := rl; il_phase := InlineAtInstruction ri; il_counter := 0|>) =
+      SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := counter|>)
 Proof
   strip_tac >>
   `route.ir_rename = route.ir_rename` by simp[] >>

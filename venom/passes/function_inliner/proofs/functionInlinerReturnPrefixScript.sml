@@ -45,7 +45,9 @@ Theorem inline_return_keep_path_produce:
     inline_cell_zipper c frames d /\
     MAP (\(tag,next). inline_cell_choice tag) frames = path /\
     d.ic_function = root /\ inline_cell_at d /\
-    d.ic_fields = (opc,ops,outs)
+    d.ic_fields = (opc,ops,outs) /\
+    (!counter. inline_path_location path (SOME (inline_cell_location c counter)) =
+      SOME (inline_cell_location d counter))
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- (qexistsl_tac [`[]`, `c`] >>
@@ -59,7 +61,11 @@ Proof
   first_x_assum (qspec_then `d` mp_tac) >> simp[] >>
   disch_then (qspec_then `root` mp_tac) >> simp[] >> strip_tac >>
   qexistsl_tac [`(KeepCell e,d)::frames`, `d'`] >>
-  simp[inline_cell_zipper_def, inline_cell_choice_def]
+  simp[inline_cell_zipper_def, inline_cell_choice_def] >>
+  gen_tac >> drule inline_keep_cell_projection >>
+  disch_then (qspec_then `counter` assume_tac) >>
+  pure_rewrite_tac[inline_path_location_def, FOLDL, inline_location_step_def] >>
+  simp[GSYM inline_path_location_def]
 QED
 
 (* The final cursor is shared by prefix and focus calculations at Enter;
@@ -77,14 +83,20 @@ Theorem inline_return_keep_prefix_fetch:
     lookup_block d.ic_block mid.fn_blocks = SOME current /\
     get_instruction current d.ic_index = SOME ret /\
     inline_inst_fields ret = inline_inst_fields inst /\
-    d.ic_fields = inline_inst_fields inst
+    d.ic_fields = inline_inst_fields inst /\
+    (!counter. inline_path_location path
+      (SOME (inline_cell_location (inline_make_cell fn l j (inline_inst_fields inst)) counter)) =
+      SOME (inline_cell_location d counter))
 Proof
   strip_tac >>
   `?frames d.
      inline_cell_zipper (inline_make_cell fn l j (inline_inst_fields inst)) frames d /\
      MAP (\(tag,next). inline_cell_choice tag) frames = path /\
      d.ic_function = mid /\ inline_cell_at d /\
-     d.ic_fields = (inst.inst_opcode,inst.inst_operands,inst.inst_outputs)` by
+     d.ic_fields = (inst.inst_opcode,inst.inst_operands,inst.inst_outputs) /\
+     (!counter. inline_path_location path
+       (SOME (inline_cell_location (inline_make_cell fn l j (inline_inst_fields inst)) counter)) =
+       SOME (inline_cell_location d counter))` by
     (irule inline_return_keep_path_produce >>
      simp[inline_make_cell_def, inline_inst_fields_def,
           inline_cell_at_def, inline_fetched_fields_def] >>

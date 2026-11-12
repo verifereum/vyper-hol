@@ -24,7 +24,11 @@ Theorem inline_selected_paired_separation:
         p = u ++ [F] ++ oldp /\
         q = u ++ [T] ++ inline_entry_address b /\
         inline_routed_leaf a e.ise_caller oldp fn path /\
-        inline_routed_leaf cert root p fn (path ++ [InlineKeep e] ++ zipper)
+        inline_routed_leaf cert root p fn (path ++ [InlineKeep e] ++ zipper) /\
+        (!prefix. inline_routed_leaf b e.ise_callee (inline_entry_address b)
+          (inline_entry_function b) prefix ==>
+          inline_routed_leaf cert root q (inline_entry_function b)
+            (prefix ++ [InlineEnter e] ++ zipper))
 Proof
   ho_match_mp_tac inline_call_incidence_strongind >> rpt conj_tac >> simp[] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>

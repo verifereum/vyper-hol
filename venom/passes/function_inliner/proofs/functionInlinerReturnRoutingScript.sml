@@ -3,6 +3,7 @@
 Theory functionInlinerReturnRouting
 Ancestors
   functionInlinerReturnPrefix functionInlinerReturnAdapterLayout
+  functionInlinerReturnCoordinates functionInlinerRouteKeys
   functionInlinerSelectedParameterReads
   functionInlinerParameterPropagation functionInlinerOperationalCuts
   functionInlinerOpacity functionInlinerContract cfgTransform unitShapeDefs
@@ -210,7 +211,11 @@ Theorem inline_selected_return_interval:
       (inline_path_rename zipper e.ise_return) /\
     inline_parameter_boundary_path zipper e.ise_final e.ise_return 0 root
       (inline_path_rename zipper e.ise_return) 0 /\
-    (?target. lookup_block (inline_path_rename zipper e.ise_return) root.fn_blocks = SOME target)
+    (?target. lookup_block (inline_path_rename zipper e.ise_return) root.fn_blocks = SOME target) /\
+    (!path. inline_routed_leaf cert root q child path ==> ?counter.
+      inline_path_location path
+        (SOME <|il_block := rl; il_phase := InlineAtInstruction ri; il_counter := 0|>) =
+      SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := counter|>)
 Proof
   strip_tac >> (
   qpat_assum `MEM ret.inst_opcode _` (assume_tac o REWRITE_RULE [MEM]) >>
@@ -227,7 +232,11 @@ Proof
      d.ic_function = e.ise_callee /\
      lookup_block d.ic_block e.ise_callee.fn_blocks = SOME current /\
      get_instruction current d.ic_index = SOME ret' /\
-     inline_inst_fields ret' = inline_inst_fields ret` by
+     inline_inst_fields ret' = inline_inst_fields ret /\
+     (!counter. inline_path_location prefix
+       (SOME (inline_cell_location
+         (inline_make_cell child rl ri (inline_inst_fields ret)) counter)) =
+       SOME (inline_cell_location d counter))` by
     metis_tac[inline_return_keep_prefix_fetch] >>
   rename1 `lookup_block d.ic_block e.ise_callee.fn_blocks = SOME cb` >>
   `ret'.inst_opcode = RET \/ ret'.inst_opcode = RETFMP` by
@@ -243,6 +252,37 @@ Proof
   `inline_annotated_choice_path C zipper e.ise_final root` by
     metis_tac[inline_selected_annotated_choice_path] >>
   drule_all inline_adapter_path_transport >> strip_tac >>
+  `inline_routed_leaf cert root q child (prefix ++ [InlineEnter e] ++ zipper)` by
+    metis_tac[] >>
+  `e.ise_index < LENGTH bb.bb_instructions` by
+    (drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+     gvs[]) >>
+  `d.ic_index < LENGTH cb.bb_instructions` by gvs[get_instruction_def] >>
+  `inline_choice_location (InlineEnter e) (inline_cell_location d 0) =
+     SOME <|il_block := STRCAT e.ise_prefix d.ic_block;
+       il_phase := InlineAtInstruction (LENGTH (FST (inline_cell_prefix e bb cb d.ic_index)));
+       il_counter := SND (inline_cell_prefix e bb cb d.ic_index)|>` by
+    simp[inline_cell_location_def, inline_choice_location_def,
+         inline_cell_prefix_def, get_instruction_def] >>
+  drule_all inline_adapter_path_coordinates >>
+  disch_then (qspec_then `SND (inline_cell_prefix e bb cb d.ic_index)` strip_assume_tac) >>
+  `!path. inline_routed_leaf cert root q child path ==> ?counter.
+     inline_path_location path
+       (SOME <|il_block := rl; il_phase := InlineAtInstruction ri; il_counter := 0|>) =
+     SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := counter|>` by
+    (qx_gen_tac `rpath` >> disch_tac >>
+     `MAP inline_choice_key rpath =
+       MAP inline_choice_key (prefix ++ [InlineEnter e] ++ zipper)` by
+       metis_tac[inline_routed_leaf_key_unique] >>
+     `inline_path_location rpath =
+       inline_path_location (prefix ++ [InlineEnter e] ++ zipper)` by
+       metis_tac[inline_path_key_location] >>
+     simp[inline_path_location_append] >>
+     qpat_x_assum `!counter. inline_path_location prefix _ = _`
+       (qspec_then `0` mp_tac) >>
+     simp[inline_cell_location_def, inline_make_cell_def] >> disch_tac >>
+     pure_rewrite_tac[inline_path_location_def, FOLDL, inline_location_step_def] >>
+     simp[GSYM inline_path_location_def] >> gvs[inline_cell_location_def]) >>
   drule_all inline_adapter_path_entry >> strip_tac >>
   metis_tac[])
 QED
@@ -446,7 +486,11 @@ Theorem inline_selected_return_layout:
     inline_parameter_boundary_path zipper e.ise_final e.ise_return 0 root
       (inline_path_rename zipper e.ise_return) 0 /\
     (?target. lookup_block (inline_path_rename zipper e.ise_return)
-      root.fn_blocks = SOME target)
+      root.fn_blocks = SOME target) /\
+    (!path. inline_routed_leaf cert root q child path ==> ?counter.
+      inline_path_location path
+        (SOME <|il_block := rl; il_phase := InlineAtInstruction ri; il_counter := 0|>) =
+      SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := counter|>)
 Proof
   strip_tac >>
   `MEM child C.ctx_functions` by
