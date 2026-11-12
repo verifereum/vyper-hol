@@ -642,14 +642,12 @@ Proof
   qexists `[]` >> simp[]
 QED
 
-Theorem p23_deploy_result_from_immutables:
-  immutables_section_rel p23_tops
-    (account_immutables p23_am_dep_post p23_deploy_tx.target)
-    (word_to_bytes (42w:bytes32) T) ==>
+Theorem p23_deploy_result:
   deploy_call_result_rel p23_tops p23_runtime_bc initial_machine_state
     p23_deploy_tx p23_es_dep (INR NONE) p23_es_dep_post
 Proof
-  strip_tac >> simp[deploy_call_result_rel_def, p23_dep_trace] >>
+  assume_tac p23_immutables_section >>
+  simp[deploy_call_result_rel_def, p23_dep_trace] >>
   irule gas_readings_rel_empty >> simp[p23_load, deploy_result_rel_def] >>
   rpt strip_tac >> qexists `word_to_bytes (42w:bytes32) T` >>
   conj_tac >- simp[] >>
@@ -665,15 +663,6 @@ Proof
        vfmContextTheory.empty_transient_storage_def, combinTheory.APPLY_UPDATE_THM,
        vfmStateTheory.account_state_component_equality] >>
   EVAL_TAC >> simp[]
-QED
-
-(* Final assembly, owned by C1.5 once the shared section fact is integrated. *)
-Theorem p23_deploy_result:
-  deploy_call_result_rel p23_tops p23_runtime_bc initial_machine_state
-    p23_deploy_tx p23_es_dep (INR NONE) p23_es_dep_post
-Proof
-  irule p23_deploy_result_from_immutables >>
-  ACCEPT_TAC p23_immutables_section
 QED
 
 Theorem p23_call_result:

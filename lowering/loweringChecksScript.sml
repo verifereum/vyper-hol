@@ -34,3 +34,5 @@ Ancestors
   (* ABI encode/decode edge cases and size boundaries *)
   abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
   createSizeBoundaryTest
+  (* a closed deploy-then-call run meeting every premise of both top theorems *)
+  e2eWitness
