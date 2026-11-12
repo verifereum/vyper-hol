@@ -8,7 +8,8 @@
  *)
 Theory bodyFullCases
 Ancestors
-  bodyFullPreds bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
+  bodyFullAssertReason bodyFullPreds bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   bodyMemBiEnvMsgGas exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
