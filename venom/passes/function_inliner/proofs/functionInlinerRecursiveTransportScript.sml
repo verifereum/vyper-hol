@@ -345,3 +345,42 @@ Proof
   goal_assum (drule_at Any) >> qexistsl [`0`, `1`] >>
   irule inline_segment_entry_body >> simp[]
 QED
+
+(* Source residual equations used by the fuel/remaining-instructions induction.
+   In particular an OK block result is resumed, not identified with the
+   completed activation result. *)
+Theorem inline_resume_entry_unfold:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK post ==>
+  inline_resume C fn (SUC fuel) (InlineEntry s) =
+  inline_resume C fn fuel
+    (InlineBody bb (post with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+Proof
+  simp[inline_resume_def, Once run_blocks_def]
+QED
+
+Theorem inline_resume_body_next:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  ~is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK u ==>
+  inline_resume C fn fuel (InlineBody bb s) =
+  inline_resume C fn fuel (InlineBody bb (u with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  simp[inline_resume_def, Once exec_block_def]
+QED
+
+Theorem inline_resume_body_branch:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK u /\
+  ~u.vs_halted ==>
+  inline_resume C fn fuel (InlineBody bb s) = inline_resume C fn fuel (InlineEntry u)
+Proof
+  simp[inline_resume_def, Once exec_block_def]
+QED
+
+Theorem inline_resume_body_return:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst fuel C inst s = IntRet ir u ==>
+  inline_resume C fn fuel (InlineBody bb s) = IntRet ir u
+Proof
+  simp[inline_resume_def, Once exec_block_def]
+QED
