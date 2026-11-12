@@ -392,7 +392,29 @@ Theorem fmp_stage_live_edge:
             (PRE (LENGTH pbb.bb_instructions))) /\
    EVERY (\q. ~MEM v q.inst_outputs) (collect_phis sbb.bb_instructions))
 Proof
-  cheat
+  strip_tac >>
+  `MEM sbb fn.fn_blocks /\ sbb.bb_label = sl` by
+    metis_tac[lookup_block_mem, lookup_block_label] >>
+  `fmp_phi_ready_block (liveness_analyze fn) sbb` by
+    (drule fmp_reclaim_states_phi_ready >> simp[EVERY_MEM]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) sl
+    (LENGTH (collect_phis sbb.bb_instructions)))` by
+    metis_tac[regional_collect_phis_length] >>
+  Cases_on `?phi. MEM phi (collect_phis sbb.bb_instructions) /\
+                     MEM v phi.inst_outputs`
+  >- (disj1_tac >>
+      drule_all fmp_ready_phi_witness >> strip_tac >>
+      rename1 `MEM phi (collect_phis sbb.bb_instructions)` >>
+      qexists_tac `phi` >> simp[] >> rpt strip_tac >>
+      irule fmp_input_at_terminator >>
+      goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[fmp_ready_selected_input]) >>
+  `EVERY (\q. ~MEM v q.inst_outputs) (collect_phis sbb.bb_instructions)` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  disj2_tac >> simp[] >>
+  irule fmp_input_at_terminator >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[fmp_ready_nonphi_input]
 QED
 
 Theorem fresh_transfer[local]:
