@@ -108,7 +108,7 @@ Proof
   qpat_x_assum `unop_frag _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [unop_frag_def]) >>
   disch_then (qspecl_then [`st0`,`s1`,`sb`,`x`,`op`,`t0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac
+  (impl_tac >- (simp[] >> qexists_tac `H` >> simp[])) >> strip_tac
   >- (simp[gas_summary_at_def] >>
       qexistsl_tac [`unop_result cx ann bi [expr_type e1] v1 ee`,`ee`,`r`] >>
       conj_tac
