@@ -198,7 +198,8 @@ Theorem fallback_entry_declared:
     MEM n (MAP FST fargs)
 Proof
   rpt gen_tac >> simp[package_fallback_fn_def, update_cenv_nonreentrant_def] >> strip_tac >>
-  gvs[] >> drule build_compile_env_bound >> simp[]
+  Cases_on `ret = NoneT` >> gvs[update_cenv_ret_abi_def] >>
+  drule build_compile_env_bound >> simp[]
 QED
 
 Theorem materialize_internal_params_bound[local]:
