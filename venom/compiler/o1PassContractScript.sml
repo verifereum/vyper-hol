@@ -731,11 +731,17 @@ End
    max_live_eom (the largest function layout end and global reserved end),
    where codegen's spill regions start, or in the dynamic region.  The
    bound is the context's, not existential over any upper bound, so it is
-   not satisfiable by a large eom.  FmpLowering also needs taint reaching
-   only the dead bytes D. *)
+   not satisfiable by a large eom.  FmpLowering, which relocates the
+   dynamic allocations, also needs their pointers used only as addresses
+   within their site (ptr_discipline's facts at eom, without its ALLOCA
+   ones: no ALLOCA is left) and taint reaching only the dead bytes D. *)
 Definition o1_static_inv_def:
   o1_static_inv D C vs <=>
-    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs) /\
+    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs /\
+           ?P. EVERY (fn_ptr_ok P) C.ctx_functions /\
+               !stk PG G tn fn inst s.
+                 frame_reachable vs C stk PG G tn fn inst s ==>
+                 access_ok eom G fn inst s /\ taint_ok fn tn inst s) /\
     taint_within D C vs /\ fmp_free_ctx C
 End
 

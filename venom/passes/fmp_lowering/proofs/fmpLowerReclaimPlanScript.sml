@@ -255,6 +255,13 @@ QED
 
 (* Every block of an accepted analysis is stable: processing it again
    leaves the states as they are. *)
+Theorem fmp_reclaim_states_phi_ready:
+  fmp_reclaim_states infos fn = SOME states ==>
+  EVERY (fmp_phi_ready_block (liveness_analyze fn)) fn.fn_blocks
+Proof
+  rw[fmp_reclaim_states_def] >> gvs[AllCaseEqs()]
+QED
+
 Theorem fmp_reclaim_states_stable:
   fmp_reclaim_states infos fn = SOME states /\
   fmp_base_analyze (fn_insts fn) = SOME env /\
