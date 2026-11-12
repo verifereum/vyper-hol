@@ -8,9 +8,9 @@ Ancestors
 (* Ownership is separated from the target's input locals.  The target frame
    carries the destination's live local region back to precisely those locals. *)
 Theorem target_post_owned_source_local_disjoint:
-  target_post ctx func cenv cx es sa sb s0 ee pv vt r s /\
+  target_post H ctx func cenv cx es sa sb s0 ee pv vt r s /\
   expr_val_own cenv cx ty si sj es v op s0 /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -34,9 +34,9 @@ Proof
 QED
 
 Theorem target_post_owned_memory_destination_disjoint:
-  target_post ctx func cenv cx es sa sb s0 ee pv vt r s /\
+  target_post H ctx func cenv cx es sa sb s0 ee pv vt r s /\
   expr_val_own cenv cx ty si sj es v op s0 /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -50,7 +50,7 @@ Theorem target_post_owned_memory_destination_disjoint:
   w2n dw + type_memory_size dtv <= w2n w
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[target_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[target_post_def] >>
   `!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
     evaluate_type (get_tenv cx) t0 = SOME entry.type` by
@@ -62,7 +62,7 @@ QED
 (* Full-size registration is obtained from the non-bytes layout, not from
    a value-dependent footprint estimate. *)
 Theorem target_post_owned_source_registered:
-  target_post ctx func cenv cx es sa sb s0 ee pv vt r s /\
+  target_post H ctx func cenv cx es sa sb s0 ee pv vt r s /\
   expr_val_own cenv cx ty si sj es v op s0 /\
   sj.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id <= sb.cs_next_id /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
@@ -87,11 +87,11 @@ Theorem owned_target_relayout_store_run:
   compile_assign_value cenv dst loc op (is_word_type dty) src_loc dty sty
     (type_memory_bytes cenv dty) sb = ((),sf) /\
   compile_get_target_ptr cfn cenv bt sa = ((dst,SOME loc,SOME (ValPT dty)),sb) /\
-  target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
+  target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
     (dst,SOME loc,SOME (ValPT dty)) s /\
   expr_val_own cenv cx sty si sj es v op s0 /\
   sj.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id <= sb.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (src_loc = NONE \/ src_loc = SOME LocMemory) /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
@@ -114,7 +114,7 @@ Theorem owned_target_relayout_store_run:
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx ff t /\
+      stmt_state_rel H ctx func cenv cx ff t /\
       (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
@@ -127,7 +127,7 @@ Proof
   `val_footprint stv v = type_memory_size stv` by
     metis_tac[nonbytes_evaluated_val_footprint] >>
   drule_all target_post_owned_source_registered >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[target_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[target_post_def] >>
   `?dw. eval_operand dst s = SOME dw /\
         place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type dty)` by
     fs[target_post_def] >>
