@@ -2255,16 +2255,21 @@ Theorem ec_binary_call_gas[local]:
   lower_value compile_expr cenv (expr_type b) b s1 = (q,sm) /\
   cs_extends sm sb /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!es1 es2 v1 v2 t u res es'.
-    expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
-    expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
+    (!H. valid_horizon cx st0 H es2.storage_trace ==>
+       expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
+       expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
+       stmt_state_rel H ctx func cenv cx es2 u) /\
+    (?H. valid_horizon cx st0 H es2.storage_trace) /\
     expr_val_rel cx (expr_type a) v1 p u /\
     expr_val_at cenv cx (expr_type a) sa sm es2 v1 p u /\
     expr_result_typed env a (Value v1) /\ expr_result_typed env b (Value v2) /\
-    stmt_state_rel H ctx func cenv cx es2 u /\ local_ptrs_reserved cenv sm /\
+    local_ptrs_reserved cenv sm /\
     fn_has_code sm sb func /\ ~u.vs_halted /\
     u.vs_current_bb = sm.cs_current_bb /\
     u.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -2273,18 +2278,19 @@ Theorem ec_binary_call_gas[local]:
     ?n r. gas_marked_path F ctx func u n r /\
       ((?w. r = OK w /\
           (?tv. res = INL tv /\
-             vv_post H ctx func cenv cx (Builtin ann bt [a;b]) es2 sm sb u es'
-               tv vv w) /\
+             !H. valid_horizon cx st0 H es'.storage_trace ==>
+               vv_post H ctx func cenv cx (Builtin ann bt [a;b]) es2 sm sb u es'
+                 tv vv w) /\
           w.vs_current_bb = sb.cs_current_bb /\
           w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
        (exit_result r /\ expr_exit res r))) ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx (Builtin ann bt [a;b]))
-    (es,s0)
-    (\res ee t. ?tv. res = INL tv /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (eval_expr cx (Builtin ann bt [a;b])) (es,s0)
+    (\H res ee t. ?tv. res = INL tv /\
        vv_post H ctx func cenv cx (Builtin ann bt [a;b]) es sa sb s0 ee tv vv t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
