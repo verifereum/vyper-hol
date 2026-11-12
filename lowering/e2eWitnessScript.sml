@@ -460,6 +460,15 @@ val p23_constructor_encoding_eval = EVAL
 val p23_deploy_env_eval = EVAL
   ``tx_block_fields_rel p23_deploy_tx p23_tx_params``;
 
+(* No account holds any balance before the deployment. *)
+Theorem p23_total_balance_empty[local]:
+  vfmTotalBalance$total_balance empty_accounts = 0
+Proof
+  simp[vfmTotalBalanceTheory.total_balance_def, pred_setTheory.SUM_IMAGE_ZERO,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
+       vfmStateTheory.empty_account_state_def]
+QED
+
 Theorem p23_deploy_state:
   deploy_state_rel p23_tops p23_deploy_bc initial_machine_state p23_deploy_tx
     p23_es_dep
@@ -487,7 +496,8 @@ Proof
        vfmStateTheory.empty_accounts_def, vfmStateTheory.empty_account_state_def,
        vyperInterpreterTheory.bind_arguments_def, listTheory.REV_DEF,
        tx_block_fields_rel_def, p23_tx_params_def,
-       loweringStateRelDefsTheory.tx_env_ok_def]
+       loweringStateRelDefsTheory.tx_env_ok_def,
+       vfmTotalBalanceTheory.balance_bounded_def, p23_total_balance_empty]
 QED
 
 val p23_exports_eval = EVAL ``exports_ok [] 2w [(NONE,p23_tops)] []``;
@@ -559,11 +569,29 @@ val p23_committed_code_eval = EVAL
       p23_runtime_bc ++ word_to_bytes (42w : bytes32) T``;
 val p23_runtime_length_eval = EVAL ``LENGTH p23_runtime_bc``;
 
+(* The call starts with no balance anywhere and no return data. *)
+Theorem p23_call_bounds[local]:
+  balance_bounded (2 ** 256 - 1) p23_es_call /\ returndata_bounded p23_es_call
+Proof
+  `vfmTotalBalance$total_balance
+     (process_deletions p23_es_dep_post.rollback.toDelete
+        p23_es_dep_post.rollback.accounts) = 0` by
+    (simp[vfmTotalBalanceTheory.total_balance_def,
+          pred_setTheory.SUM_IMAGE_ZERO] >>
+     simp[p23_es_dep_post_def, vfmExecutionTheory.process_deletions_def,
+          vfmStateTheory.lookup_account_def] >>
+     gen_tac >> EVAL_TAC >> Cases_on `2w = x` >> simp[] >> EVAL_TAC) >>
+  rewrite_tac[p23_es_call_from_post] >>
+  simp[p23_es_call_of_def, LET_THM, vfmTotalBalanceTheory.balance_bounded_def,
+       vfmReturndataBoundTheory.returndata_bounded_def,
+       vfmExecutionPropTheory.all_accounts_def, p23_frame_def]
+QED
+
 Theorem p23_call_state:
   call_state_rel p23_tops p23_runtime_bc p23_am_call p23_call_tx p23_es_call
 Proof
-  rewrite_tac[call_state_rel_def, p23_es_call_from_post,
-              p23_es_call_of_def] >>
+  rewrite_tac[call_state_rel_def, p23_call_bounds] >>
+  rewrite_tac[p23_es_call_from_post, p23_es_call_of_def] >>
   simp[LET_THM] >>
   simp[p23_frame_def, p23_call_tx_def, vyperContextTheory.empty_call_txn_def,
        p23_am_call_def, next_source_machine_def,
@@ -642,8 +670,10 @@ Proof
     simp[frame_outcome_def, p23_es_dep_def, p23_frame_def,
          p23_es_dep_post_def, p23_am_dep_post_def] >>
     EVAL_TAC >> simp[vfmContextTheory.transaction_parameters_component_equality]) >>
-  simp[loweringStateRelDefsTheory.storage_agree_def,
+  simp[loweringStateRelDefsTheory.accounts_agree_def,
+       loweringStateRelDefsTheory.storage_agree_def,
        loweringStateRelDefsTheory.transient_agree_def,
+       vfmStateTheory.update_account_def,
        p23_am_dep_post_def, p23_es_dep_post_def, p23_deploy_tx_def,
        initial_evaluation_context_def, vfmStateTheory.lookup_account_def,
        vfmStateTheory.empty_accounts_def, vfmStateTheory.empty_account_state_def,
