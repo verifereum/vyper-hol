@@ -28,7 +28,8 @@
 
 Theory fragFuelAbi
 Ancestors
-  fragFuel fragFuelContextBase fragFuelContext fragFuelLoopAbiEncStatic
+  fragFuel fragFuelContextBase fragFuelContext fragFuelExprHelpers
+  fragFuelBuiltins fragFuelLoopAbiEncStatic
   fragFuelLoopAbiEncDyn fragFuelLoopAbiDecDyn compileEnv emitHelper context
   venomInst abiEncoder builtinAbi builtinCreate builtinSimple builtinMisc
 Libs
@@ -41,16 +42,6 @@ Theorem next_stable_opvar[local]:
 Proof
   rw[next_stable_def, var_below_def] >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
-QED
-
-Theorem emit_op_var[local]:
-  !opc ops st x st'. emit_op opc ops st = (x, st') ==>
-    !y. x = Var y ==> var_below st'.cs_next_var y
-Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[] >> simp[var_below_def] >> rpt strip_tac >>
-  fs[ASCIInumbersTheory.toString_inj]
 QED
 
 Theorem compile_alloc_buffer_var[local]:
@@ -104,14 +95,6 @@ Theorem opcode_case3[local]:
   if lo = CALLDATALOAD then a else if lo = DLOAD then b else c
 Proof
   Cases_on `lo` >> simp[]
-QED
-
-(* compile_select, used by floor and ceil (proved by another theory too). *)
-Theorem fuel_ok_compile_select[local]:
-  !c t e Wv E. fuel_ok Wv {} E (compile_select c t e)
-Proof
-  rpt gen_tac >> simp_tac std_ss [compile_select_def] >>
-  fuel_auto [fuel_ok_emit_op] >> simp[is_terminator_def]
 QED
 
 (* ===== Clamps and straight-line helpers ===== *)
