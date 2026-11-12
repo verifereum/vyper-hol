@@ -177,7 +177,10 @@ Proof
   disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
   qexistsl_tac [`N`, `H`] >> rpt gen_tac >> strip_tac >>
   fs[venom_run_bounded_def] >>
-  drule_all mem_inv_conj >>
+  qpat_x_assum `mem_inv (\ctx fn inst s. in_revert_forward fn s \/ _) _ _`
+    (fn th1 =>
+     qpat_x_assum `mem_inv (\ctx fn inst s. inst_create_size_ok inst s) _ _`
+       (fn th2 => mp_tac (MATCH_MP mem_inv_conj (CONJ th1 th2)))) >>
   disch_then (qx_choose_then `MemInv` strip_assume_tac o
               REWRITE_RULE [mem_inv_def]) >>
   qpat_x_assum `!Inv vs as. _` (qspecl_then
