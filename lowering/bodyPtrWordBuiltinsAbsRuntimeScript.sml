@@ -314,6 +314,11 @@ Proof
   simp[]
 QED
 
+fun word_abs_runtime_code_conv tm =
+  computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``,
+     ``fn_has_code``] tm
+
 Theorem word_abs_runtime_code:
   fn_has_code word_abs_runtime_sa word_abs_runtime_sb word_abs_runtime_func /\
   fn_inst_ids_distinct word_abs_runtime_func
@@ -334,9 +339,11 @@ Proof
     word_abs_runtime_allocs, word_abs_runtime_fallback,
     word_abs_runtime_posargs, word_abs_runtime_mincds] >>
   simp[external_return_buffer_ok_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``,
-     ``fn_has_code``]) >>
+  CONV_TAC (LAND_CONV
+    (RATOR_CONV (RATOR_CONV (RAND_CONV word_abs_runtime_code_conv)))) >>
+  CONV_TAC (LAND_CONV (RATOR_CONV (RAND_CONV word_abs_runtime_code_conv))) >>
+  CONV_TAC (LAND_CONV (RAND_CONV word_abs_runtime_code_conv)) >>
+  CONV_TAC (RAND_CONV word_abs_runtime_code_conv) >>
   simp[listTheory.INDEX_FIND_def] >>
   CONV_TAC (computeLib.RESTR_EVAL_CONV
     [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``,
