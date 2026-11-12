@@ -12,6 +12,7 @@ Ancestors
   moduleLowering context emitHelper fragExec
   ptrSafeRun ptrDiscipline venomState venomExecSemantics venomInst
   finite_map words arithmetic pred_set list rich_list
+  fragExecMem fragGasOriginPtrLoop
 
 Theorem prefix_register_address_emit_shape:
   emit_op opc ops st = (out,middle) ==>
@@ -98,6 +99,49 @@ Proof
   `ptr_safe_block D lo fuel ctx fn PG G tn bb s` by
     (qpat_x_assum `!fuel bb. _ ==> _ ==> _` irule >> simp[]) >>
   simp[ptr_safe_run_def]
+QED
+
+(* The forward twin of prefix_register_address_emit_run: the emitted
+   non-GAS instruction is one zero-mark joint path to the same endpoint. *)
+Theorem prefix_register_address_emit_origin:
+  emit_op opc ops st = (out,middle) /\ fn_has_code st middle fn /\
+  ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  opc <> INVOKE /\ ~is_terminator opc /\ opc <> GAS /\
+  run_inst_seq_mem_ok
+    [mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]] s /\
+  ptr_safe_step D lo 0 ctx fn PG G tn
+    (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]) s /\
+  run_inst_seq
+    [mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]] s =
+    OK t /\
+  ghost_step 0 ctx PG G tn
+    (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]) s =
+    (H, qt) ==>
+  gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (s, G, tn) []
+    (OK (t with vs_inst_idx := LENGTH middle.cs_current_insts), H, qt)
+Proof
+  strip_tac >> drule prefix_register_address_emit_shape >> strip_tac >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX middle.cs_current_insts bb.bb_instructions` by
+    (fs[fn_has_code_def] >> metis_tac[]) >>
+  `get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)])` by
+    (gvs[IS_PREFIX_APPEND] >> simp[get_instruction_def, EL_APPEND_EQN]) >>
+  qpat_x_assum `run_inst_seq_mem_ok _ _`
+    (strip_assume_tac o SRULE [run_inst_seq_mem_ok_def]) >>
+  `step_inst 0 ctx
+     (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]) s =
+     OK t` by
+    (qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+     simp[run_inst_seq_def, step_inst_non_invoke, mk_inst_def] >>
+     CASE_TAC >> simp[run_inst_seq_def]) >>
+  `LENGTH middle.cs_current_insts = SUC s.vs_inst_idx` by simp[ADD1] >>
+  pop_assum SUBST1_TAC >>
+  mp_tac (Q.INST [`func` |-> `fn`,
+    `i` |-> `mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]`,
+    `u` |-> `t`, `G'` |-> `H`, `tn'` |-> `qt`] step_origin_ptr_path) >>
+  simp[] >> simp[mk_inst_def]
 QED
 
 Theorem prefix_register_address_add_run:
