@@ -2435,8 +2435,51 @@ Proof
   goal_assum drule >> simp[]
 QED
 
-Theorem unwrap_value_marked_read_fields[local]:
-  !ctx func cenv cx e es sa sm sb s0 ee tv vv op s.
+(* unwrap_value_path and unwrap_value_marked_read at every valid horizon of
+   a trace, with one endpoint. *)
+Theorem unwrap_value_path_horizons:
+  !ctx func cenv cx e es sa sm sb s0 es' v vv op s st0 tr H0.
+    post_value_type cenv e = expr_type e /\
+    unwrap_value cenv vv sm = (op, sb) /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) /\
+    (!H. valid_horizon cx st0 H tr ==>
+       vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) vv s) /\
+    valid_horizon cx st0 H0 tr /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?u. gas_path ctx func s 0 (OK u) /\
+        (!H. valid_horizon cx st0 H tr ==>
+           expr_post H ctx func cenv cx e es sa sb s0 es' v op u) /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >>
+  `vv_post H0 ctx func cenv cx e es sa sm s0 es' (Value v) vv s` by
+    metis_tac[] >>
+  qspecl_then [`H0`, `ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`,
+               `s0`, `es'`, `v`, `vv`, `op`, `s`] mp_tac
+    (Q.GEN `H` unwrap_value_path_fields) >>
+  impl_tac >- (asm_rewrite_tac[] >> simp[]) >> strip_tac >>
+  qexists_tac `u` >> asm_rewrite_tac[] >> rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H tr ==> _` (drule_then strip_assume_tac) >>
+  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (fn th => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                       expr_post_fields_transport) th)) >>
+  asm_rewrite_tac[] >> qexists_tac `s` >> asm_rewrite_tac[]
+QED
+
+Theorem unwrap_value_marked_read_horizons:
+  !ctx func cenv cx e es sa sm sb s0 ee tv vv op s st0 tr H0.
     post_value_type cenv e = expr_type e /\
     unwrap_value cenv vv sm = (op, sb) /\
     local_ptrs_reserved cenv sa /\
@@ -2448,28 +2491,34 @@ Theorem unwrap_value_marked_read_fields[local]:
            ~is_word_type (expr_type e) ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
+    (!H. valid_horizon cx st0 H tr ==>
+       vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s) /\
+    valid_horizon cx st0 H0 tr /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?v u. gas_marked_exec F (ctx,func) (read_result cx tv) (ee,s)
             [] (INL v) ee (OK u) /\
-      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
+      (!H. valid_horizon cx st0 H tr ==>
+         expr_post H ctx func cenv cx e es sa sb s0 ee v op u) /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
-      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
+      u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   rpt gen_tac >> strip_tac >>
+  `vv_post H0 ctx func cenv cx e es sa sm s0 ee tv vv s` by metis_tac[] >>
   Cases_on `read_result cx tv ee` >> rename1 `_ = (res, ee')` >>
-  `ee' = ee` by metis_tac[read_result_state] >> gvs[] >>
+  `ee' = ee` by metis_tac[read_result_state] >>
+  qpat_x_assum `ee' = ee` SUBST_ALL_TAC >>
   reverse (Cases_on `res`)
   >- metis_tac[vv_post_failed_read] >>
   rename1 `read_result cx tv ee = (INL v, ee)` >>
-  drule_all vv_post_read_result >> strip_tac >>
-  drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path_fields >>
-  disch_then (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  impl_tac >- simp[] >> strip_tac >>
-  qexistsl_tac [`v`, `u`] >> simp[] >>
+  `!H. valid_horizon cx st0 H tr ==>
+     vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) vv s` by
+    metis_tac[vv_post_read_result] >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`,
+               `ee`, `v`, `vv`, `op`, `s`, `st0`, `tr`, `H0`] mp_tac
+    unwrap_value_path_horizons >>
+  impl_tac >- (asm_rewrite_tac[] >> simp[]) >> strip_tac >>
+  qexistsl_tac [`v`, `u`] >> asm_rewrite_tac[] >>
   simp[gas_marked_exec_def, gas_marked_path_def] >>
   metis_tac[read_result_gas_obs, APPEND]
 QED
@@ -2544,24 +2593,13 @@ Proof
              strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
              drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
              simp[]) >>
-          qspecl_then [`storage_trace_horizon es_end.storage_trace`, `ctx`, `func`,
-                       `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`,
-                       `es_end with gas_obs := []`, `tv`, `vv`, `op`, `t1`] mp_tac
-            (Q.GEN `H` unwrap_value_marked_read_fields) >>
+          qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`,
+                       `s0`, `es_end with gas_obs := []`, `tv`, `vv`, `op`, `t1`,
+                       `st0`, `es_end.storage_trace`,
+                       `storage_trace_horizon es_end.storage_trace`] mp_tac
+            unwrap_value_marked_read_horizons >>
           impl_tac >- (asm_rewrite_tac[] >> simp[]) >> strip_tac >>
           rename1 `gas_marked_exec F _ (read_result _ _) _ [] _ _ (OK u2)` >>
-          `!H. valid_horizon cx st0 H es_end.storage_trace ==>
-             expr_post H ctx func cenv cx e es sa sb s0
-               (es_end with gas_obs := []) v op u2` by
-            (rpt strip_tac >>
-             qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
-               (drule_then strip_assume_tac) >>
-             qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
-               (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
-             qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-               (fn th => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
-                                  expr_post_fields_transport) th)) >>
-             asm_rewrite_tac[] >> qexists_tac `t1` >> asm_rewrite_tac[]) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u2`] >>
           simp[] >>
           `marks = marks ++ []` by simp[] >>
