@@ -32,6 +32,7 @@ QED
 
 Theorem tuple_subscript_compile:
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sc) /\
+  expr_type obj = TupleT tys /\
   place_type cenv obj = ValPT (TupleT tys) ==>
   ?bvv sb q.
     compile_expr cenv ty obj sa = (bvv,sb) /\
@@ -41,6 +42,9 @@ Theorem tuple_subscript_compile:
     vv = LocatedValue ann (mk_ptr q (vv_loc bvv))
 Proof
   strip_tac >>
+  `~copies_subscript_base cenv obj idx` by
+    simp[exprLoweringTheory.copies_subscript_base_def,
+         vyperSubscriptOverlapTheory.subscript_overlap_def] >>
   qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
        compile_subscript_def, compile_tuple_subscript_def, comp_bind_def,
@@ -79,6 +83,7 @@ Proof
     gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   drule compile_name_value_ptr >>
   disch_then (qspecl_then [`ty`, `sa`, `TupleT tys`] assume_tac) >>
+  `expr_type (Name (TupleT tys) id) = TupleT tys` by simp[expr_type_def] >>
   drule_all tuple_subscript_compile >> strip_tac >>
   gvs[vv_loc_def, vv_operand_def, vv_location_def, mk_ptr_def,
       literal_int_index_def]
