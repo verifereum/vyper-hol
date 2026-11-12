@@ -53,7 +53,7 @@ Theorem lower_typed_args_cons_tail_ptr:
          args xs vs G tn u /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee ghosts r. wb_args_exit rr r) ==>
+    (\rr ee ghosts r. wb_args_exit rr r /\ halt_exit cx ee rr r) ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
     (do vs <- eval_exprs cx args; return (v::vs) od) (es1,t,G1,tn1)
     (\rr ee G tn u. ?vs. rr = INL vs /\
@@ -61,7 +61,7 @@ Theorem lower_typed_args_cons_tail_ptr:
          (e::args) (x::xs) vs G tn u /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee ghosts r. wb_args_exit rr r)
+    (\rr ee ghosts r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> irule gas_outcome_ptr_return_map >>
   goal_assum (drule_at Any) >> conj_tac

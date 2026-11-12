@@ -314,7 +314,7 @@ Theorem send_args_summary_mem:
        t.vs_current_bb = sm.cs_current_bb /\
        t.vs_inst_idx = LENGTH sm.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\rr ee r. wb_args_exit rr r) /\
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r) /\
   (~has_gas ==> gas_op = Lit 0w) /\
   MAP expr_type args =
     [BaseT AddressT; BaseT (UintT 256)] ++

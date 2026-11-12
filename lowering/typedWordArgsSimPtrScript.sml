@@ -89,7 +89,7 @@ Theorem lower_typed_args_sim_ptr:
         typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0 ee args xs vs G tn t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee ghosts r. wb_args_exit rr r)
+      (\rr ee ghosts r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   Induct
   >- (rpt strip_tac >> gvs[lower_word_args_nil] >>

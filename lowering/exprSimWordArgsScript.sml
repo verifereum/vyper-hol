@@ -60,7 +60,7 @@ End
 Theorem builtin_result_not_halt[simp]:
   builtin_result cx acc ty bt ts vs <> INR HaltException
 Proof
-  simp[builtin_result_def] >> CASE_TAC >> simp[]
+  Cases_on `evaluate_builtin cx acc ty bt ts vs` >> simp[builtin_result_def]
 QED
 
 Theorem eval_expr_builtin_cases:
@@ -583,7 +583,7 @@ Theorem lower_word_args_nil_sim:
          pure_frame cenv func es sa s0 t /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   rpt strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
@@ -717,7 +717,7 @@ Theorem lower_word_args_sim:
          (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>

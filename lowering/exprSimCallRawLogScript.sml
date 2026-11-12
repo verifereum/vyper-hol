@@ -366,7 +366,7 @@ Theorem raw_log_topics_sim[local]:
        typed_args_post ctx func cenv cx es sa s0 ee topics ops vs t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. wb_args_exit rr r)
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule_all raw_log_topics_ready >> strip_tac >>
   irule lower_typed_args_sim >> simp[] >>
@@ -709,7 +709,7 @@ Proof
   reverse conj_tac
   >- (`(\(rr : value list + exception) (ee : evaluation_state) r.
           ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
-       (\rr ee r. wb_args_exit rr r)` by
+       (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)` by
         (simp[FUN_EQ_THM] >> Cases >> simp[wb_args_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>
       pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>
@@ -836,7 +836,7 @@ Proof
   reverse conj_tac
   >- (`(\(rr : value list + exception) (ee : evaluation_state) r.
           ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
-       (\rr ee r. wb_args_exit rr r)` by
+       (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)` by
         (simp[FUN_EQ_THM] >> Cases >> simp[wb_args_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>
       pop_assum (fn th => rewrite_tac[th]) >> first_x_assum irule >> simp[]) >>

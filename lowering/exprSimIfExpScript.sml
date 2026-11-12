@@ -2734,7 +2734,7 @@ Proof
       `?sel. v = BoolV sel` by
         (irule ifexp_root_condition_bool >> metis_tac[]) >> gvs[] >>
       suspend "selected")
-  >- (irule ifexp_root_condition_exit >> metis_tac[]) >>
+  >- (fs[] >> irule ifexp_root_condition_exit >> metis_tac[]) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
   metis_tac[ifexp_root_condition_cert]
 QED

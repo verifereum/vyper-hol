@@ -13,8 +13,8 @@ Ancestors
 (* Memory-mode counterpart of eval_exprs_suffix in exprSimPrecompiles. *)
 Theorem ecrecover_eval_exprs_suffix_mem:
   gas_outcome T tops (ctx,func) (eval_exprs cx args) (es,s0)
-    (\rr ee t. ?vs. rr = INL vs /\ P vs ee t) (\rr ee r. wb_args_exit rr r) /\
-  (!exc ee r. wb_args_exit (INR exc) r ==> R (INR exc) ee r) /\
+    (\rr ee t. ?vs. rr = INL vs /\ P vs ee t) (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r) /\
+  (!exc ee r. wb_args_exit (INR exc) r /\ halt_exit cx ee (INR exc : value list + exception) r ==> R (INR exc) ee r) /\
   (!gs vs ee t.
      eval_exprs cx args (es with gas_obs := gs) = (INL vs, ee) /\
      ee.gas_obs = [] /\ P vs ee t /\ ~t.vs_halted ==>

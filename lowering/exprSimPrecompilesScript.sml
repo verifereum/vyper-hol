@@ -408,7 +408,7 @@ Theorem lower_typed_args_nil_sim:
        typed_args_post ctx func cenv cx es sa s0 ee [] [] vs t /\
        t.vs_current_bb = sa.cs_current_bb /\
        t.vs_inst_idx = LENGTH sa.cs_current_insts)
-    (\rr ee r. wb_args_exit rr r)
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> rewrite_tac[fragGasModeTheory.gas_marked_path_def, gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
@@ -505,7 +505,7 @@ Theorem lower_typed_args_sim:
          typed_args_post ctx func cenv cx es sa s0 ee args xs vs t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
@@ -2958,8 +2958,8 @@ QED
 (* An argument list's gas outcome, then a continuation on its values. *)
 Theorem eval_exprs_suffix:
   gas_outcome F tops (ctx,func) (eval_exprs cx args) (es,s0)
-    (\rr ee t. ?vs. rr = INL vs /\ P vs ee t) (\rr ee r. wb_args_exit rr r) /\
-  (!exc ee r. wb_args_exit (INR exc) r ==> R (INR exc) ee r) /\
+    (\rr ee t. ?vs. rr = INL vs /\ P vs ee t) (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r) /\
+  (!exc ee r. wb_args_exit (INR exc) r /\ halt_exit cx ee (INR exc : value list + exception) r ==> R (INR exc) ee r) /\
   (!gs vs ee t.
      eval_exprs cx args (es with gas_obs := gs) = (INL vs, ee) /\
      ee.gas_obs = [] /\ P vs ee t /\ ~t.vs_halted ==>

@@ -19,7 +19,8 @@ Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list bodyPtrCallResidual
   bodyPtrCallCalldata exprSendPtr bodyWordArgsReady typedWordArgsReadyPtr
-  exprSimSend exprSimPrecompiles exprSimHypsDefs
+  exprSimSend exprSimPrecompiles exprSimHypsDefs exprSimSelfDestruct
+  exprSimSelfDestructPtr
 
 val _ = Parse.hide "body";
 
@@ -107,16 +108,20 @@ Proof
   ACCEPT_TAC raw_revert_case_ptr_residual
 QED
 
-(* Vacuous: expr_body_pre excludes selfdestruct (expr_evm_run_root). *)
 Theorem body_selfdestruct_case_ptr:
   !cx v24 es v25.
     body_exprs_ptr_ok cx es ==>
     body_expr_ptr_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  rw[body_expr_ptr_ok_def] >>
-  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
-      supportedExprTraverseTheory.expr_has_evm_run_thm,
-      supportedExprTraverseTheory.expr_evm_run_root_def]
+  rpt gen_tac >> strip_tac >> rewrite_tac[body_expr_ptr_ok_def] >>
+  reverse conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  drule selfdestruct_pre_arg >> strip_tac >> gvs[] >>
+  `expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es'` by
+    (gvs[body_expr_ptr_ok_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule selfdestruct_sim_ptr >> gvs[]) >>
+  irule selfdestruct_vv_sim_ptr >> gvs[]
 QED
 
 (* Vacuous: expr_body_pre excludes the creates, which the source runs on

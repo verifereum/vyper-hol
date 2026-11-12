@@ -42,9 +42,13 @@ Theorem gas_exempt_cert_start_gas_obs:
 Proof
   ho_match_mp_tac gas_exempt_cert_ind >> rpt strip_tac >> simp[]
   >- (irule gas_exempt_cert_origin >>
-      fs[gas_exempt_origin_def] >>
+      qpat_x_assum `gas_exempt_origin _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_exempt_origin_def]) >>
+      simp[gas_exempt_origin_def] >>
       drule gas_value_prefix_start_gas_obs >>
-      disch_then (qspec_then `gs` assume_tac) >> metis_tac[]) >>
+      disch_then (qspec_then `gs` assume_tac)
+      >- (disj1_tac >> metis_tac[]) >>
+      disj2_tac >> metis_tac[]) >>
   fs[]
   >- metis_tac[gas_exempt_cert_bind_unit, gas_marked_exec_start_gas_obs]
   >- metis_tac[gas_exempt_cert_error_unit]

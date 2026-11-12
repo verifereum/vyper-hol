@@ -16,6 +16,7 @@ Ancestors
   vyperContext vyperTypeCallGraph
   bodySimCallExtcall bodySimCallIntcall bodySimCallRawCall
   bodySimCallRawCallCalldata bodySimCallRawLog bodySimCallRawRevert
+  bodySimCallSelfDestruct
 
 Theorem body_extcall_case:
   !cx v14 is_static skip_check sig opts es v15.
@@ -141,10 +142,7 @@ Theorem body_selfdestruct_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  rpt strip_tac >> match_mp_tac body_expr_ok_intro >> conj_tac >- gvs[] >> simp[] >>
-  rw[exprSimHypsDefsTheory.expr_body_pre_def,
-     supportedExprTraverseTheory.expr_has_evm_run_thm,
-     supportedExprTraverseTheory.expr_evm_run_root_def]
+  ACCEPT_TAC selfdestruct_body_expr_ok
 QED
 
 Theorem body_create_case:

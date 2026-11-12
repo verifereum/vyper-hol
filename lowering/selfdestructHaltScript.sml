@@ -125,6 +125,18 @@ Definition selfdestruct_overflows_def:
       2 ** 256 <= (lookup_account a accts).balance + bal
 End
 
+(* The tail never yields a value: it raises HaltException or an error. *)
+Theorem selfdestruct_tail_raises:
+  !cx v st. ?ex st'. selfdestruct_tail cx v st = (INR ex, st')
+Proof
+  rw[selfdestruct_tail_def,
+     vyperInterpreterTheory.transfer_value_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+     vyperStateTheory.lift_option_type_def, vyperStateTheory.check_not_static_def, vyperStateTheory.check_def, vyperStateTheory.assert_def,
+     vyperStateTheory.get_accounts_def, vyperStateTheory.update_accounts_def, vyperStateTheory.update_pending_deletions_def,
+     vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
 Theorem selfdestruct_tail_overflow:
   !cx v a st.
     dest_AddressV v = SOME a /\ ~cx.txn.is_static /\
