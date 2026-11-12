@@ -1,5 +1,6 @@
 Theory bodyImmFragMemory
 Ancestors
+  bodyImmCompiledMemory
   whitelistForIterImmFrag stmtForArrayMemorySupport stmtSimDefs
   stmtSimProps stmtSimForArrayLoop stmtLowering loweringPosts
   compileEnv context emitHelper exprLoweringProps loweringStateRelDefs
@@ -179,3 +180,55 @@ Resume compile_for_immutable_frag_mem_from_outcome[post]:
   simp[array_caller_frame_def]
 QED
 Finalise compile_for_immutable_frag_mem_from_outcome
+
+(* TOP-LEVEL: full memory fragment for immutable-array iteration. *)
+Theorem compile_for_immutable_frag_mem:
+  !d ctx func cx cenv lctx RetQ ty id et bd n src name off stmts tv vs es P.
+  FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+  cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  elem_size_in_location cenv LocCode et = type_memory_size tv /\
+  type_memory_bytes cenv et = type_memory_size tv /\
+  0 < type_memory_size tv /\ type_memory_bytes cenv et + 64 < dimword (:256) /\
+  LENGTH vs <= bound_length bd /\ bound_length bd < dimword (:256) /\
+  (case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T) /\
+  (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==> cs_extends sa sb) /\
+  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s ==>
+    (case bd of Fixed cap => T | Dynamic cap =>
+       ?av. immutable_holds cenv cx (ArrayT et (Dynamic cap))
+               (Value (ArrayV av)) (n2w off) ei s /\
+            value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\
+            LENGTH vs = array_length (ArrayTV tv (Dynamic cap)) av) /\
+    (!k. k < LENGTH vs ==> immutable_holds cenv cx et (Value (EL k vs))
+      (n2w off + n2w ((case bd of Fixed cap => 0 | Dynamic cap => 32) +
+                      k * type_memory_size tv)) ei s)) /\
+  (!st0 bc sd ex inc ei k.
+    declare_local cenv id et st0 = (bc,sd) /\ P ei /\
+    lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs ==>
+    stmt_frag_mem d ctx func cx (InLoop ex inc) RetQ bc
+      (stmts_env bc (InLoop ex inc) ty stmts) (eval_stmts cx stmts)
+      (ei with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes)) /\
+  (!ei k gs r es2. P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
+    eval_stmts cx stmts (ei with <|scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes;
+      gas_obs := gs|>) = (r,es2) ==>
+    (!ex inc. stmt_res_ok (InLoop ex inc) r) /\
+    ?sc rest. es2.scopes = sc :: rest /\
+      (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+      ((r = INL () \/ r = INR ContinueException) ==>
+        P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
+  bound_length bd <= n /\ lookup_scopes id es.scopes = NONE /\
+  P (es with gas_obs := []) /\
+  (!gs. eval_iterator cx (Array (TopLevelName (ArrayT et bd) (src,name)))
+    (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) ==>
+  stmt_frag_mem d ctx func cx lctx RetQ cenv
+    (stmt_env cenv lctx ty
+      (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts))
+    (eval_stmt cx
+      (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts)) es
+Proof
+  mp_tac compile_for_immutable_frag_mem_from_outcome >>
+  (impl_tac >- ACCEPT_TAC immutable_compiled_loop_outcome_mem) >>
+  disch_then ACCEPT_TAC
+QED
