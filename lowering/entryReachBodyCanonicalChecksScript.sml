@@ -274,7 +274,7 @@ Theorem entry_canonical_checks_reached:
     SOME (mut,F,args,[],ret,fbody) ==>
   ?lbl ce pos mincd pay key ut iv rt func se checks start cenv registered body_end s.
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
          tx.function_name,args,([]:expr list),ret,fbody)) =
       (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\

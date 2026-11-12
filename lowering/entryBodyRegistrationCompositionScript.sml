@@ -151,7 +151,7 @@ Theorem entry_canonical_registration_reached:
       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) ==>
   ?lbl ce pos mincd pay key ut iv rt fn start cenv registered final site t.
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
          tx.function_name,args,([]:expr list),ret,fbody)) =
       (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\

@@ -610,7 +610,7 @@ QED
 Finalise entry_owned_canonical_bytes_array_execution
 
 Theorem owned_array_initializer_gas[local]:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
@@ -682,7 +682,7 @@ Resume owned_array_initializer_gas[control]:
 QED
 Resume owned_array_initializer_gas[pc_frame]:
   map_every (fn q => qpat_x_assum q kall_tac)
-    [`abi_decode_array_loop_init _ _ _ _ _ _ _ = _`,
+    [`abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`,
      `abi_decode_dynarray_prefix _ _ _ _ _ _ = _`,
      `abi_decode_array_header _ _ _ _ = _`, `abi_decode_index_init _ = _`,
      `eval_operand src initial = _`, `eval_operand dst initial = _`,
