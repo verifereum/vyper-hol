@@ -830,7 +830,7 @@ Proof
           codegenRelTheory.source_memory_write_ranges_def,
           ptr_inst_ok_def, access_ok_def, taint_ok_def, op_taint_def,
           step_inst_non_invoke] >>
-     gvs[mk_inst_def]) >>
+     gvs[mk_inst_def] >> rw[] >> gvs[]) >>
   qpat_x_assum `step_prov _ _ _ _ = G`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
@@ -964,9 +964,9 @@ Proof
      `allocas_from lo s0 /\ op_taint tn0 (Var rpc) = {}` by
        fs[ghost_inv_at_def] >>
      drule_all compile_return_none_int_origin_ptr >>
-     disch_then (qspecl_then [`tn0`, `PG`, `G0`,
-                              `gas_explicit_sites ctx shadow_ctx`]
-                   strip_assume_tac) >>
+     disch_then (strip_assume_tac o
+       Q.INST [`tn` |-> `tn0`, `G` |-> `G0`,
+               `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] o SPEC_ALL) >>
      metis_tac[]) >>
   irule (Q.INST [`res` |-> `INR (ReturnException NoneV)`, `ee` |-> `es`]
            gas_outcome_full_exit) >>
@@ -1226,9 +1226,9 @@ Proof
   `~t.vs_call_ctx.cc_static /\ allocas_from lo t` by
     fs[expr_post_def, stmt_state_rel_def, state_rel_def, ghost_inv_at_def] >>
   drule_all return_word_suffix_origin_ptr >>
-  disch_then (qspecl_then [`tn1`, `PG`, `G1`,
-                           `gas_explicit_sites ctx shadow_ctx`]
-                strip_assume_tac) >>
+  disch_then (strip_assume_tac o
+    Q.INST [`tn` |-> `tn1`, `G` |-> `G1`,
+            `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] o SPEC_ALL) >>
   irule (Q.INST [`res` |-> `INR (ReturnException v)`, `ee` |-> `mid`]
            gas_outcome_full_exit) >>
   qexistsl_tac [`G'`,
