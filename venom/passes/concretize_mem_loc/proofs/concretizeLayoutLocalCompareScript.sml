@@ -216,7 +216,7 @@ Proof
   disch_then (drule_at (Pat `lifetime_ok _ _ _`)) >>
   disch_then (qspecl_then [`k`, `vs0`, `u`, `lo`]
     (drule_at (Pat `_ \/ SND o_f _ = _`))) >>
-  disch_then (qspecl_then [`vs0`, `lo`] mp_tac) >>
+  disch_then (qspecl_then [`vs0`, `u`, `lo`, `k`] mp_tac) >>
   impl_tac >- fs[] >> strip_tac >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`) guarded_pointer_compare_step >>
   disch_then (drule_at (Pat `step_inst_base _ _ = OK _`)) >>

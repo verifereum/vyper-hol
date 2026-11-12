@@ -173,7 +173,10 @@ Proof
        w2n dst+32 <= b+sz /\
        w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
     suspend "address" >>
-  pop_assum strip_assume_tac >>
+  `~(dyn_floor C s <= w2n dst)` by
+    fs[dyn_floor_def, NOT_LESS_EQUAL, w2n_lt] >>
+  qpat_x_assum `~(dyn_floor C s <= w2n dst)` (fn th =>
+    qpat_x_assum `?dstT. _` (strip_assume_tac o REWRITE_RULE [th])) >>
   `(!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
       w2n dst <= a /\ a < w2n dst+32 ==>
       w2n dstT <= z /\ z < w2n dstT+32 /\ a-w2n dst = z-w2n dstT) /\

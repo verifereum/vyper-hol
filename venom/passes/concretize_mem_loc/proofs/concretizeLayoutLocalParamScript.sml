@@ -79,7 +79,8 @@ Proof
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
   disch_then (drule_at (Pat `resolution _ _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
-  simp[] >> strip_tac >>
+  simp[] >> disch_then (qspec_then `PG` mp_tac) >>
+  impl_tac >- fs[] >> strip_tac >>
   `relocation_env post post' /\ relocation_reader_context post post'` by
     (drule_all parameter_execution_shape >> strip_tac >>
      gvs[] >> simp[relocation_env_update_var, relocation_reader_context_update_var]) >>
