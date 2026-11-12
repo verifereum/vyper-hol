@@ -175,13 +175,14 @@ Proof
   >- (simp[ptr_tagged_step_def, step_prov_def, out_prov_def] >>
       irule ptr_owner_set_projection >> simp[] >>
       Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >>
-      simp[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def, FLOOKUP_DEF] >>
-      metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME]) >>
+      simp[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def] >>
+      qpat_x_assum `!aid. _` (qspec_then `inst.inst_id` assume_tac) >>
+      gvs[FLOOKUP_DEF]) >>
   Cases_on `inst.inst_opcode = DALLOCA`
   >- (simp[ptr_tagged_step_def, step_prov_def] >>
       irule ptr_owner_set_projection >>
       simp[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def, out_prov_def] >>
-      every_case_tac >> gvs[] >> metis_tac[]) >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
   simp[ptr_tagged_step_def] >> irule ptr_owner_step_projection >> simp[] >>
   metis_tac[]
 QED
