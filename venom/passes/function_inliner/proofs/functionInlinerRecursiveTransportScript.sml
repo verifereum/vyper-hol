@@ -168,3 +168,90 @@ Proof
   simp[inline_terminal_def, inline_resume_def] >> rpt strip_tac >>
   irule (cj 3 venomExecPropsTheory.fuel_mono) >> simp[] >> qexists `b` >> simp[]
 QED
+
+(* A fixed finite successful trace remains the same trace at larger fuel.
+   Unlike equality of residual evaluations, this also covers error residuals. *)
+Theorem inline_finite_trace_residual:
+  !N ts.
+    (!i. i < N ==> ?inst u.
+      get_instruction bb (ts i).vs_inst_idx = SOME inst /\
+      ~is_terminator inst.inst_opcode /\
+      step_inst b ctx inst (ts i) = OK u /\
+      ts (SUC i) = u with vs_inst_idx := SUC (ts i).vs_inst_idx) ==>
+    !h. b <= h ==>
+      exec_block h ctx bb (ts 0) = exec_block h ctx bb (ts N)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `exec_block h ctx bb (ts 0) = exec_block h ctx bb (ts N)` by
+    (first_x_assum irule >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  `N < SUC N` by simp[] >>
+  qpat_x_assum `!i. i < SUC N ==> _` (qspec_then `N` mp_tac) >>
+  simp[] >> strip_tac >>
+  `step_inst h ctx inst (ts N) = OK u` by
+    (irule (cj 1 venomExecPropsTheory.fuel_mono) >> simp[] >>
+     qexists `b` >> simp[]) >>
+  asm_rewrite_tac[] >> simp[Once exec_block_def]
+QED
+
+Theorem inline_segment_entry_trace:
+  exec_block b ctx tb t = OK v /\ ~v.vs_halted /\
+  lookup_block v.vs_current_bb root.fn_blocks = SOME bb /\
+  eval_phis v bb.bb_instructions = OK v /\
+  phi_prefix_length bb.bb_instructions = v.vs_inst_idx /\ ts 0 = v /\
+  (!i. i < N ==> ?inst u.
+    get_instruction bb (ts i).vs_inst_idx = SOME inst /\
+    ~is_terminator inst.inst_opcode /\ step_inst b ctx inst (ts i) = OK u /\
+    ts (SUC i) = u with vs_inst_idx := SUC (ts i).vs_inst_idx) ==>
+  inline_segment ctx root b 1 (InlineBody tb t) (InlineBody bb (ts N))
+Proof
+  strip_tac >> irule inline_segment_entry_prefix >> qexists `v` >> simp[] >>
+  conj_tac
+  >- (drule inline_finite_trace_residual >> simp[]) >>
+  rpt strip_tac >> irule (cj 2 venomExecPropsTheory.fuel_mono) >>
+  simp[] >> qexists `b` >> simp[]
+QED
+
+Theorem inline_selected_source_segment:
+  inliner_input_ok C /\ inline_annotated_origin C n root cert /\
+  inline_live_stack C cert root ((p,pa,proute,psnap)::entries) frame /\
+  inline_original_child C cfuel pa.ia_id occurrence orig psnap.ils_state r ca res /\
+  inline_call_incidence cert root p pa.ia_function l j orig
+    (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert q route.ir_rename ca.ia_function /\
+  ca.ia_function.fn_blocks = entry::rest /\
+  entry.bb_instructions = params ++ tail /\ param_insts_from 0 params /\
+  inline_cell_frame (SelectedJump e) c mid /\
+  (clone_function e.ise_prefix e.ise_callee).fn_blocks = eb::blocks /\
+  inline_cell_zipper mid frames d /\ d.ic_function = root /\
+  MAP (\(tag,next). inline_cell_choice tag) frames = zipper /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  frame.ipf_state.vs_current_bb = d.ic_block /\
+  frame.ipf_state.vs_inst_idx = d.ic_index /\ ~frame.ipf_state.vs_halted ==>
+  ?k bres ss ml bb tb snap ts.
+    cfuel = SUC k /\
+    exec_block k C entry (ss (LENGTH params)) = bres /\
+    (!err. bres <> Error err) /\
+    res = (case bres of
+      OK z => if z.vs_halted then Halt z else run_blocks k C ca.ia_function z
+    | IntRet ir z => IntRet ir z | other => other) /\
+    lookup_block d.ic_block root.fn_blocks = SOME tb /\
+    lookup_block ml root.fn_blocks = SOME bb /\
+    inline_segment Tctx root 0 1 (InlineBody tb frame.ipf_state)
+      (InlineBody bb (ts (LENGTH params))) /\
+    inline_parameter_boundary_path (InlineEnter e::zipper)
+      e.ise_callee entry.bb_label (LENGTH params) root ml (LENGTH params) /\
+    (ts (LENGTH params)).vs_current_bb = ml /\
+    (ts (LENGTH params)).vs_inst_idx = LENGTH params /\
+    inline_live_stack C cert root
+      ((q,ca,route,snap with <|ils_state := ss (LENGTH params);
+        ils_defined := set (FLAT (MAP (\i. i.inst_outputs) params))|>)::
+       (p,pa,proute,psnap)::entries)
+      (frame with ipf_state := ts (LENGTH params))
+Proof
+  strip_tac >> drule_all inline_live_selected_source_entry_trace >>
+  disch_then (qspecl_then [`0`, `Tctx`] strip_assume_tac) >>
+  qexistsl [`k`, `bres`, `ss`, `ml`, `bb`, `tb`, `snap`, `ts`] >> simp[] >>
+  irule inline_segment_entry_trace >> simp[] >>
+  gvs[venomStateTheory.jump_to_def]
+QED
