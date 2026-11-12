@@ -274,6 +274,8 @@ Proof
     (* no simplification here: it would reorder the mask's sums away from
        the lemmas' syntactic form *)
     rpt (qpat_x_assum `l = 0w` (fn th => fs[th])) >>
+    rpt (qpat_x_assum `d = d'` SUBST_ALL_TAC) >>
+    rpt (qpat_x_assum `r = r'` SUBST_ALL_TAC) >>
     pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
     rpt conj_tac >>
     ld_on_head "ld_memory_agree"
