@@ -788,7 +788,7 @@ Proof
   qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
   Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
   gvs[return_unlock_insts_def, return_unlock_state_def] >>
-  TRY (qexistsl_tac [`G`, `tn`] >> rw[] >>
+  TRY (qexists_tac `tn` >> rw[] >>
        irule (cj 1 gas_origin_ptr_path_rules) >> simp[] >> NO_TAC) >>
   first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `get_instruction bb _ = SOME i` >>
@@ -799,10 +799,10 @@ Proof
   `~u.vs_halted /\ u.vs_allocas = s.vs_allocas /\
    u.vs_requests = s.vs_requests /\ u.vs_fmp = s.vs_fmp` by
     simp[Abbr `u`, tstore_def, sstore_def] >>
-  qexistsl_tac [`step_prov PG G i u`, `step_taint i s u tn`] >>
-  conj_tac
-  >- simp[Abbr `i`, step_prov_def, set_prov_def, mk_inst_def,
-          finite_mapTheory.DRESTRICT_UNIV] >>
+  `step_prov PG G i u = G` by
+    simp[Abbr `i`, step_prov_def, set_prov_def, mk_inst_def,
+         finite_mapTheory.DRESTRICT_UNIV] >>
+  qexists_tac `step_taint i s u tn` >>
   conj_tac
   >- simp[Abbr `i`, step_taint_def, set_var_taint_def, mk_inst_def,
           finite_mapTheory.DRESTRICT_UNIV] >>
@@ -812,22 +812,27 @@ Proof
            codegenRelTheory.source_memory_write_ranges_def] >>
       simp[pred_setTheory.EXTENSION, finite_mapTheory.FLOOKUP_DEF]) >>
   gen_tac >>
+  `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn) []
+     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+      step_prov PG G i u, step_taint i s u tn)` by
+    (qspecl_then [`s`, `func`, `bb`, `i`, `D`, `lo`, `ctx`, `G`, `tn`, `u`,
+                  `explicit`, `PG`] mp_tac
+       (GEN_ALL straight_line_origin_ptr_edge) >>
+     simp[Abbr `i`, mk_inst_def, is_terminator_def] >>
+     disch_then irule >>
+     simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def,
+          codegenRelTheory.source_memory_write_ranges_def,
+          ptr_inst_ok_def, access_ok_def, taint_ok_def, op_taint_def,
+          step_inst_non_invoke] >>
+     gvs[mk_inst_def]) >>
+  qpat_x_assum `step_prov _ _ _ _ = G`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
            (SPEC_ALL (cj 2 gas_origin_ptr_path_rules)))) >>
-  qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`,
-                `step_prov PG G i u`, `step_taint i s u tn`] >>
-  simp[gas_origin_ptr_path_rules] >>
-  qspecl_then [`s`, `func`, `bb`, `i`, `D`, `lo`, `ctx`, `G`, `tn`, `u`,
-               `explicit`, `PG`] mp_tac
-    (GEN_ALL straight_line_origin_ptr_edge) >>
-  simp[Abbr `i`, mk_inst_def, is_terminator_def] >>
-  disch_then irule >>
-  simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
-       contextCodegenRelTheory.source_memory_read_ranges_def,
-       codegenRelTheory.source_memory_write_ranges_def,
-       ptr_inst_ok_def, access_ok_def, taint_ok_def, op_taint_def,
-       step_inst_non_invoke] >>
-  gvs[mk_inst_def]
+  qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`, `G`,
+                `step_taint i s u tn`] >>
+  simp[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
 QED
 
 (* RET of words already on hand, with untainted operands. *)
