@@ -1008,3 +1008,35 @@ Proof
   simp[inline_parameter_boundary_path_def, inline_parameter_boundary_def] >>
   metis_tac[venomExecProofsTheory.phi_prefix_length_le]
 QED
+
+Theorem inline_live_phi_body_boundary:
+  inline_live_stack C cert root ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_routed_leaf cert root p a.ia_function path /\
+  route.ir_rename = inline_path_rename path /\
+  lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks = SOME sb /\
+  lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME tb /\
+  (!q. snap.ils_state.vs_prev_bb = SOME q ==> MEM q (fn_labels a.ia_function)) /\
+  inline_phi_entry_path path (snap.ils_state.vs_current_bb,snap.ils_state.vs_prev_bb) =
+    (frame.ipf_state.vs_current_bb,frame.ipf_state.vs_prev_bb) /\
+  ~snap.ils_state.vs_halted /\ ~frame.ipf_state.vs_halted /\
+  eval_phis snap.ils_state sb.bb_instructions = OK u ==>
+  ?v. eval_phis frame.ipf_state tb.bb_instructions = OK v /\
+    let su = u with vs_inst_idx := phi_prefix_length sb.bb_instructions;
+        tv = v with vs_inst_idx := phi_prefix_length tb.bb_instructions
+    in inline_live_stack C cert root
+      ((p,a,route,snap with <|ils_state := su;
+        ils_defined := inline_phi_outputs sb.bb_instructions UNION snap.ils_defined|>)::rest)
+      (frame with ipf_state := tv) /\
+      inline_parameter_boundary_path path a.ia_function su.vs_current_bb su.vs_inst_idx
+        root tv.vs_current_bb tv.vs_inst_idx /\
+      ~su.vs_halted /\ ~tv.vs_halted
+Proof
+  strip_tac >>
+  drule_all functionInlinerLiveStepsTheory.inline_live_phi_body_cut >> strip_tac >>
+  drule_all inline_routed_phi_prefix_boundary >> strip_tac >>
+  `inline_path_rename path snap.ils_state.vs_current_bb = frame.ipf_state.vs_current_bb` by
+    metis_tac[functionInlinerReachableCutsTheory.inline_phi_entry_path_label, pairTheory.FST] >>
+  gvs[] >>
+  metis_tac[venomExecProofsTheory.eval_phis_preserves_halted]
+QED
