@@ -7,7 +7,7 @@
  *)
 Theory dftRequestsGas
 Ancestors
-  dftGasRequestContract dftGasRequestSwap dftGasRequestPartner
+  dftGasRequestContract dftGasRequestLift dftGasRequestSwap dftGasRequestPartner
   dftGasRequestSchedule dftGasRequestRel
   dftContractGas o1RequestContract o1PassContract o1PassLift unitMemInv
   dftDefs venomExecSemantics venomState list
@@ -22,5 +22,8 @@ Theorem dft_ctx_sim_rq_gas:
        ctx_abort_rq D C C' vs vs' /\
        (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
 Proof
-  cheat
+  strip_tac >>
+  irule dft_ctx_sim_rq_gas_conditional >>
+  simp[] >> rpt strip_tac >>
+  irule dft_ev_context_sim_rq >> simp[]
 QED
