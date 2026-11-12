@@ -219,9 +219,9 @@ Theorem target_place_sim_mem:
         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
       (\H res ee r. expr_exit res r)
 Proof
-  rpt strip_tac >> irule gas_outcome_post_mono >>
+  rpt strip_tac >> drule_all target_place_sim_mem_ready >> strip_tac >>
+  irule gas_outcome_post_mono >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
-  irule_at Any target_place_sim_mem_ready >>
   rpt gen_tac >> strip_tac >> gvs[]
 QED
 
