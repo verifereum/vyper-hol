@@ -430,16 +430,17 @@ Proof
       Cases_on `?H. valid_horizon cx st0 H es_end.storage_trace`
       >- (pop_assum strip_assume_tac >>
           first_assum drule >> strip_tac >> gvs[]
-          >- (drule gas_path_ptr_erase >> strip_tac >>
+          >- (`gas_path ctx func s0 (LENGTH marks) (OK t)` by
+                metis_tac[gas_path_ptr_erase] >>
               mp_tac (Q.INST [`left` |-> `marks`, `mid` |-> `es_end`,
                               `G1` |-> `G`, `tn1` |-> `tn`]
                         gas_outcome_ptr_bind_normal) >>
               impl_tac
               >- (rpt conj_tac
                   >- simp[gas_marked_exec_def, gas_marked_path_def]
-                  >- (rpt strip_tac >> first_x_assum drule >> simp[])
-                  >- simp[]
-                  >- simp[] >>
+                  >- fs[]
+                  >- fs[]
+                  >- fs[] >>
                   rpt strip_tac >>
                   qpat_x_assum `!left v mid t right err ee leaf fstate. _`
                     (qspecl_then [`marks`, `v`, `es_end`, `t`, `right`,
