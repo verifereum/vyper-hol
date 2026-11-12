@@ -1204,7 +1204,7 @@ Proof
      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
   pop_assum SUBST1_TAC >>
   `?pc. lookup_var rpc s0 = SOME pc` by metis_tac[ret_pc_ok_def] >>
-  match_mp_tac gas_outcome_full_bind_all >>
+  match_mp_tac (GEN_ALL gas_outcome_full_bind_all) >>
   qexists_tac `\H res mid G1 tn1 t. ?v. res = INL v /\
      expr_post H ctx func cenv cx e es sa sm s0 mid v shadow_op t /\
      ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
