@@ -95,7 +95,8 @@ Theorem ld_joint_clean_write_destination:
      eval_operand sz s = SOME l /\ len=w2n l)) /\
   eval_operand dst s = SOME d ==>
   ?d'. eval_operand dst t = SOME d' /\
-    (len=0 \/ (w2n d=w2n d' /\ w2n d+len<=lo) \/
+    (len=0 \/ (w2n d=w2n d' /\ (w2n d+len<=lo \/
+       dyn_floor C vs<=w2n d /\ w2n d+len<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
                     w2n d=b+j /\ w2n d'=c+j))
 Proof
@@ -119,7 +120,8 @@ Theorem ld_joint_clean_write_execution:
   ?p q xs. s1 = write_memory_with_expansion p xs s /\
     step_inst fuel C' inst t = OK (write_memory_with_expansion q xs t) /\
     source_memory_write_ranges inst s = [(p,LENGTH xs)] /\
-    (LENGTH xs=0 \/ (p=q /\ p+LENGTH xs<=lo) \/
+    (LENGTH xs=0 \/ (p=q /\ (p+LENGTH xs<=lo \/
+       dyn_floor C vs<=p /\ p+LENGTH xs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+LENGTH xs<=z /\
                     p=b+j /\ q=c+j))
 Proof

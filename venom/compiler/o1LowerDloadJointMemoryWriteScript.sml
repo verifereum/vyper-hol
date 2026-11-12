@@ -76,7 +76,8 @@ Theorem ld_joint_mstore_operands[local]:
   eval_operand p s = SOME x /\ eval_operand vop s = SOME v ==>
   ?y w. eval_operand p t = SOME y /\ eval_operand vop t = SOME w /\
     word_agree_except (op_taint tn vop) v w /\
-    ((w2n x = w2n y /\ w2n x+32 <= lo) \/
+    ((w2n x=w2n y /\ (w2n x+32<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+32<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32 <= z /\
        w2n x = b+j /\ w2n y = c+j))
 Proof

@@ -18,7 +18,8 @@ Theorem ld_joint_operand_range:
    ?v b z. op = Var v /\ FLOOKUP G v = SOME (b,z) /\
      b<=w2n x /\ w2n x+len<=b+z) ==>
   ?y. eval_operand op t = SOME y /\
-    (len=0 \/ (w2n x=w2n y /\ w2n x+len<=lo) \/
+    (len=0 \/ (w2n x=w2n y /\ (w2n x+len<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+len<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
                     w2n x=b+j /\ w2n y=c+j))
 Proof
@@ -58,7 +59,8 @@ Theorem ld_joint_write_operand_range:
   op_taint tn op = {} /\ eval_operand op s = SOME x /\
   MEM (w2n x,len) (source_memory_write_ranges inst s) ==>
   ?y. eval_operand op t = SOME y /\
-    (len=0 \/ (w2n x=w2n y /\ w2n x+len<=lo) \/
+    (len=0 \/ (w2n x=w2n y /\ (w2n x+len<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+len<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
                     w2n x=b+j /\ w2n y=c+j))
 Proof
@@ -79,7 +81,8 @@ Theorem ld_joint_read_operand_range:
   op_taint tn op = {} /\ eval_operand op s = SOME x /\
   MEM (w2n x,len) (source_memory_read_ranges inst s) ==>
   ?y. eval_operand op t = SOME y /\
-    (len=0 \/ (w2n x=w2n y /\ w2n x+len<=lo) \/
+    (len=0 \/ (w2n x=w2n y /\ (w2n x+len<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+len<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
                     w2n x=b+j /\ w2n y=c+j))
 Proof
@@ -145,10 +148,12 @@ Theorem ld_joint_mcopy_operands:
   eval_operand sz s = SOME l ==>
   ?d' r'. eval_operand dst t = SOME d' /\ eval_operand src t = SOME r' /\
     eval_operand sz t = SOME l /\
-    (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n d=w2n d' /\ (w2n d+w2n l<=lo \/
+       dyn_floor C vs<=w2n d /\ w2n d+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n d=b+j /\ w2n d'=c+j)) /\
-    (w2n l=0 \/ (w2n r=w2n r' /\ w2n r+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n r=w2n r' /\ (w2n r+w2n l<=lo \/
+       dyn_floor C vs<=w2n r /\ w2n r+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n r=b+j /\ w2n r'=c+j))
 Proof

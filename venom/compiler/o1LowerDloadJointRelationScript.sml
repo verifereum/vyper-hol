@@ -116,18 +116,29 @@ Definition ld_joint_geometry_def:
        id <> jd ==> c+32 <= d \/ d+32 <= c)
 End
 
+(* Relocated sites and scratch slots on both sides, and lo, lie at or
+   below the floor fl of the dynamic region. *)
+Definition ld_dyn_floor_ok_def:
+  ld_dyn_floor_ok fl lo sites X <=>
+    lo <= fl /\
+    (!id b c z. FLOOKUP sites id = SOME (b,c,z) ==> b+z <= fl /\ c+z <= fl) /\
+    (!id aid c. FLOOKUP X id = SOME (aid,c) ==> c+32 <= fl)
+End
+
 Definition ld_joint_boundary_def:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
       n a U B HP H sites X ts <=>
     occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
-    occurrence_annotation_ok n a U B HP H stk PG G s /\
+    occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s /\
     ld_joint_erasure sites B /\
     ld_joint_geometry sites X lo (a::MAP (\x. x.of_owner) U) /\
+    ld_dyn_floor_ok (dyn_floor C vs) lo sites X /\
     (?u fn'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
        ld_joint_frame sites X lo a (MAP (\x. x.of_owner) U)
          u fn fn' H HP tn.t_var s t) /\
     ld_joint_saved C' sites X lo U stk ts /\
     ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
+    ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
     ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
     s.vs_returndata = t.vs_returndata
 End

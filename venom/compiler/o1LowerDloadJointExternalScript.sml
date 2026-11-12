@@ -158,7 +158,8 @@ Theorem ld_joint_delegatecall_operands[local]:
     eval_operand rsop t = SOME rs /\
     read_memory (w2n off) (w2n sz) s =
       read_memory (w2n off') (w2n sz) t /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))
 Proof
@@ -225,7 +226,8 @@ Theorem ld_joint_delegatecall_execute:
         (TAKE rs r.vs_returndata) t).vs_memory |>)) /\
     request_agree_except D rq rq /\
     source_memory_write_ranges inst s = [(ro,rs)] /\
-    (rs=0 \/ (ro=ro' /\ ro+rs<=lo) \/
+    (rs=0 \/ (ro=ro' /\ (ro+rs<=lo \/
+       dyn_floor C vs<=ro /\ ro+rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+rs<=z /\
                     ro=b+j /\ ro'=c+j))
 Proof
@@ -658,7 +660,8 @@ Theorem ld_joint_call_operands[local]:
   (!op. MEM op (prefix ++ [szop;rsop]) ==> eval_operand op s = eval_operand op t) /\
   ?off' ro'. eval_operand offop t = SOME off' /\ eval_operand rop t = SOME ro' /\
     read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))
 Proof
@@ -760,7 +763,8 @@ Theorem ld_joint_call_execute_effects[local]:
                  t_trans := if r1.vs_transient <> s.vs_transient then {} else tn.t_trans|>)
       r1 r2 /\
     source_memory_write_ranges inst s = [(w2n ro,w2n rs)] /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j)) /\
     ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn)
@@ -868,7 +872,8 @@ Theorem ld_joint_call_execute:
                  t_trans := if r1.vs_transient <> s.vs_transient then {} else tn.t_trans|>)
       r1 r2 /\
     source_memory_write_ranges inst s = [(w2n ro,w2n rs)] /\
-    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=lo) \/
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ (w2n ro+w2n rs<=lo \/
+       dyn_floor C vs<=w2n ro /\ w2n ro+w2n rs<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n rs<=z /\
                     w2n ro=b+j /\ w2n ro'=c+j))
 Proof

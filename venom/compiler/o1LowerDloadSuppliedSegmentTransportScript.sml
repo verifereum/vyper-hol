@@ -17,7 +17,8 @@ Theorem ld_joint_dloadbytes_destination:
   eval_operand dst s = SOME p /\ eval_operand src s = SOME x /\
   eval_operand sz s = SOME z ==>
   ?q. eval_operand dst t = SOME q /\
-    (w2n z = 0 \/ (w2n p = w2n q /\ w2n p + w2n z <= lo) \/
+    (w2n z = 0 \/ (w2n p=w2n q /\ (w2n p+w2n z<=lo \/
+       dyn_floor C vs<=w2n p /\ w2n p+w2n z<=dimword (:256))) \/
      (?id b c k j. FLOOKUP sites id = SOME (b,c,k) /\
        j + w2n z <= k /\ w2n p = b+j /\ w2n q = c+j))
 Proof
