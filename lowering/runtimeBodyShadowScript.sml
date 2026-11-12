@@ -156,9 +156,12 @@ Proof
     rewrite_tac[build_selectors_fn_labels] >>
   `EVERY external_fn_shape_ok
     (pre ++ (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt)::post)` by
-    (qpat_x_assum `MAP _ exts = _` (SUBST1_TAC o SYM) >>
-     simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
-     irule package_external_fn_shape_ok >> gs[]) >>
+    (`EVERY external_fn_shape_ok
+       (MAP (set_external_package_target rpolicy.rpol_target o
+         package_external_fn tops T (K global_nonreentrant_slot)) exts)` by
+       (simp_tac (srw_ss()) [EVERY_MAP, EVERY_MEM, combinTheory.o_DEF] >>
+        rpt strip_tac >> irule package_external_fn_shape_ok >> gs[]) >>
+     metis_tac[]) >>
   `EVERY internal_fn_shape_ok
     (MAP (set_internal_package_target rpolicy.rpol_target o
       package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)` by
