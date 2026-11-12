@@ -406,7 +406,8 @@ Resume compile_log_ready_stmt_frag[post]:
   `storage_well_formed_on cx
      (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) (FST HH)` by
     (`(es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>).accounts =
-        (es_end with gas_obs := []).accounts /      (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>).tStorage =
+        (es_end with gas_obs := []).accounts /\
+      (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>).tStorage =
         (es_end with gas_obs := []).tStorage` by simp[] >>
      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   qpat_assum `MAP SND xs = MAP expr_type args`
