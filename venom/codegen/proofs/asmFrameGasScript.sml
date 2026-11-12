@@ -16,7 +16,7 @@ Ancestors
   asmFrameRel asmRunBounded frameStep callTrace asmSem asmWf symbolResolve
   vfmExecution vfmExecutionProp asmCallGasArithmetic asmFrameCallStep codegenRel
   vfmState vfmOperation asmNonCallCheapGas asmNonCallStorageGas asmNonCallMemoryGas
-  asmNonCallCopyGas asmFrameLocalStep
+  asmNonCallCopyGas asmFrameLocalStep asmFrameCreateGas
 
 (* At least the gas of any instruction asm_inst_gas_ok H allows: static
    and access costs (a value-carrying CALL to a new account costs 36700),

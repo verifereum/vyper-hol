@@ -115,3 +115,15 @@ Proof
   strip_tac >> gvs[] >>
   Cases_on `asm_step lo o2pc (EL s.as_pc prog) s` >> gvs[]
 QED
+
+Theorem asm_inst_gas_ok_create_ranges:
+  asm_inst_gas_ok H (AsmOp (if two then "CREATE2" else "CREATE")) stk ==>
+  3 <= LENGTH stk /\ w2n (EL 2 stk) <= 2 * max_code_size /\
+  (w2n (EL 2 stk) = 0 \/ w2n (EL 1 stk) + w2n (EL 2 stk) <= H)
+Proof
+  Cases_on `two` >>
+  namedCases_on `stk` ["", "value tail"] >> simp[asm_inst_gas_ok_def] >>
+  namedCases_on `tail` ["", "off tail2"] >> simp[asm_inst_gas_ok_def] >>
+  namedCases_on `tail2` ["", "sz tail3"] >>
+  simp[asm_inst_gas_ok_def, asm_mem_ranges_def]
+QED
