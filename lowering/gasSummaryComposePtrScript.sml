@@ -288,7 +288,7 @@ Theorem gas_summary_ptr_at_bind_exception:
 Proof
   rewrite_tac[gas_summary_ptr_at_def] >> strip_tac >>
   qexistsl_tac [`INR exc`, `fin`, `G`, `tn`, `r`] >>
-  simp[gas_source_bind_exception]
+  simp[gas_source_bind_exception] >> metis_tac[]
 QED
 
 (* gas_exempt_cert_zero_prefix for a prefix of generated reads only. *)
