@@ -15,6 +15,7 @@ Ancestors
   ctorDeployLoweringFrameRet ctorReturnFrame bodySimMain bodyAbiDecodeTarget stmtSimDefs stmtSimProps
   loweringPosts gasOutcome gasContext gasExemptCert fragGasMode fragGasPath
   fragExec exprSimDefs compileEnv e2eDeployDefs vyperContext vyperInterpreter
+  ctorDeployRunBounded
 
 val _ = Parse.hide "body";
 
@@ -240,5 +241,17 @@ Theorem deploy_unit_run_bounded:
       ==>
       terminates (run_context fuel dunit.cu_context vs)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  `!fn. MEM fn dunit.cu_context.ctx_functions ==>
+        ?Kf. !G. callees_stable G dunit.cu_context fn ==>
+                 fuel_stable (G + Kf) dunit.cu_context fn` by
+    metis_tac[deploy_unit_fns_fuel_stable] >>
+  drule (GEN_ALL deploy_unit_context_ok) >> strip_tac >>
+  drule_all run_context_uniform_fuel >> strip_tac >>
+  qexists_tac `fuel` >> rpt strip_tac >>
+  first_x_assum irule >>
+  drule_all deploy_unit_execution_correct >>
+  metis_tac[deploy_venom_result_rel_terminates]
 QED
