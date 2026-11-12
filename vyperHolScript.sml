@@ -46,8 +46,8 @@ Ancestors
   typedCopyArrayExecutionPtr wordCopyRobustPtr
   (* end-to-end runtime correctness *)
   e2eCorrectness
-  (* sufficient gas: the identity-finalizer cases *)
-  e2eGasSufficient
+  (* sufficient gas, the companions to the call and deploy theorems *)
+  e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
   (* body induction: custom-error rows, admitted until the gate admits them *)
