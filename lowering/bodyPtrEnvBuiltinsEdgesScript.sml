@@ -268,15 +268,16 @@ Theorem scalar_builtin_outcome_prefix:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
   step_inst_base (mk_inst id opc ops [out]) s = OK u /\
-  gas_outcome_ptr D tops (ctx, fn) PG source
+  gas_outcome_ptr D tops (ctx, fn) PG cx st0 source
     (es, u with vs_inst_idx := SUC s.vs_inst_idx,
      step_prov PG G (mk_inst id opc ops [out]) u,
      step_taint (mk_inst id opc ops [out]) s u tn) Q R ==>
-  gas_outcome_ptr D tops (ctx, fn) PG source (es, s, G, tn) Q R
+  gas_outcome_ptr D tops (ctx, fn) PG cx st0 source (es, s, G, tn) Q R
 Proof
-  strip_tac >> drule_all scalar_builtin_counted_suffix >> strip_tac >>
-  irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
-  qexists_tac `if opc = GAS then 1 else 0` >> simp[]
+  strip_tac >> irule gas_outcome_ptr_prefix >>
+  goal_assum (drule_at Any) >>
+  qexists_tac `if opc = GAS then 1 else 0` >>
+  gen_tac >> irule scalar_builtin_counted_suffix >> simp[]
 QED
 
 Theorem emit_scalar_builtin_counted_suffix:
