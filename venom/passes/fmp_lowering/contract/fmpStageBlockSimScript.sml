@@ -242,8 +242,7 @@ Proof
     `t2`, `sm2`, `lo2`, `G2`, `tn2`, `i2`, `r`] mp_tac) >>
   simp[] >> strip_tac >>
   drule fmp_stage_rel_cur >> strip_tac >> gvs[] >>
-  drule fmp_stage_result_not_error >> strip_tac >>
-  first_x_assum (qspec_then `q2` mp_tac) >> gvs[]
+  drule fmp_stage_result_not_error >> strip_tac >> gvs[]
 QED
 
 (* Source: a step that doesn't continue ends the block with its result. *)
