@@ -6,7 +6,7 @@
 
 Theory fnFrameStepsPhi
 Ancestors
-  planWfMarked fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
+  frameViewFacts planWfMarked fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
   allocaRemapSSA fnPlanPrefix dftCommutation fnFrameDeepInvoke cfgCorrectnessProof livenessProofs fnPlanLineagePhiClasses
@@ -606,7 +606,7 @@ Proof
   metis_tac[phi_uses_disjoint_el]
 QED
 
-Theorem phi_prefix_is_collect_phis[local]:
+Theorem phi_prefix_is_collect_phis:
   !phis body.
     LENGTH phis = phi_prefix_length (phis ++ body) ==>
     phis = collect_phis (phis ++ body)
@@ -1524,22 +1524,6 @@ Proof
   metis_tac[phi_prefix_output_not_operand]
 QED
 
-Theorem phi_output_retpc:
-  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
-  MEM out inst.inst_outputs /\ MEM (Var src) inst.inst_operands ==>
-  (retpc_var fn out <=> retpc_var fn src)
-Proof
-  strip_tac >> eq_tac
-  >- (strip_tac >>
-      qpat_x_assum `retpc_shape_ok fn` mp_tac >>
-      simp[retpc_shape_ok_def] >> strip_tac >>
-      qpat_x_assum `!inst x. MEM inst _ /\ MEM x _ /\ retpc_var _ _ ==> _`
-        (qspecl_then [`inst`, `out`] mp_tac) >>
-      simp[]) >>
-  simp[retpc_var_def] >> strip_tac >>
-  irule copy_phi_var_phi >> metis_tac[]
-QED
-
 Theorem phi_selected_frame_value:
   retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
   MEM inst phis /\ EVERY (\i. i.inst_opcode = PHI) phis /\
@@ -1561,7 +1545,7 @@ Proof
   `MEM (Var src) inst.inst_operands` by
     metis_tac[dftCommutationTheory.resolve_phi_MEM] >>
   `retpc_var fn out = retpc_var fn src` by
-    (irule phi_output_retpc >> simp[] >> qexists_tac `inst` >> simp[]) >>
+    (irule frameViewFactsTheory.phi_output_retpc >> simp[] >> qexists_tac `inst` >> simp[]) >>
   simp[operand_val_def, frame_view_vars_lookup]
 QED
 
