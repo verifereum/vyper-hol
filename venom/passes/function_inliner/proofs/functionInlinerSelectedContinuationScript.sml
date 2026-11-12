@@ -10,6 +10,7 @@ Ancestors
   functionInlinerRouteKeys functionInlinerLiveInvariant functionInlinerOperationalCuts
   functionInlinerParameterAncestry functionInlinerParameterSavedReads
   functionInlinerFrame functionInlinerSimulation
+  functionInlinerParameterPropagation functionInlinerOrigin
   functionInlinerSiteLayout functionInlinerReachableCuts functionInlinerDefs venomInst list
 
 Theorem inline_parameter_boundary_path_append:
@@ -219,4 +220,115 @@ Proof
     fetch "venomState" "venom_state_component_equality",
     fetch "functionInlinerActivation" "inline_physical_frame_component_equality"] >>
   metis_tac[inline_parameter_saved_reads_head_replace]
+QED
+
+Theorem inline_annotated_path_zero_phi[local]:
+  !path fn root l bb.
+    inline_annotated_choice_path C path fn root /\
+    lookup_block l fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0 ==>
+    ?tb. lookup_block (inline_path_rename path l) root.fn_blocks = SOME tb /\
+      phi_prefix_length tb.bb_instructions = 0
+Proof
+  Induct >> simp[inline_annotated_choice_path_def, inline_path_rename_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+  `wf_function e.ise_caller /\ inliner_phi_labels_closed e.ise_callee` by
+    metis_tac[inline_annotated_origin_erasure, qualified_origin_erasure,
+      inliner_fn_origin_structure, qualified_origin_phi_labels_closed] >>
+  `ALL_DISTINCT (fn_labels e.ise_caller) /\ fn_succs_closed e.ise_caller` by
+    gvs[venomWfTheory.wf_function_def] >>
+  rename1 `lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb` >>
+  `!z. MEM z (bb_succs <|bb_label := e.ise_return;
+       bb_instructions := DROP (e.ise_index+1) source_bb.bb_instructions|>) ==>
+      MEM z (fn_labels e.ise_caller)` by
+    (Cases_on `e.ise_index+1 < LENGTH source_bb.bb_instructions`
+     >- metis_tac[inline_saved_suffix_succs_closed] >>
+     simp[DROP_LENGTH_TOO_LONG, bb_succs_def]) >>
+  gvs[]
+  >- (qpat_assum `lookup_block l e.ise_caller.fn_blocks = SOME bb`
+        (mp_then (Pat `lookup_block l e.ise_caller.fn_blocks = SOME bb`)
+          mp_tac inline_edit_keep_phi_prefix_fields) >>
+      disch_then (qspec_then `source_bb` mp_tac) >> simp[] >> strip_tac >>
+      simp[inline_choice_rename_def] >> first_x_assum irule >>
+      qexistsl [`tb`, `e.ise_final`] >> simp[venomExecSemanticsTheory.phi_prefix_length_def]) >>
+  `MEM l (fn_labels e.ise_callee)` by
+    metis_tac[venomExecPropsTheory.lookup_block_label,
+      venomExecPropsTheory.lookup_block_MEM, fn_labels_def, MEM_MAP] >>
+  qpat_assum `lookup_block l e.ise_callee.fn_blocks = SOME bb`
+    (mp_then (Pat `lookup_block l e.ise_callee.fn_blocks = SOME bb`)
+      mp_tac inline_edit_enter_phi_prefix_fields) >>
+  disch_then (qspec_then `source_bb` mp_tac) >> simp[] >> strip_tac >>
+  simp[inline_choice_rename_def] >> first_x_assum irule >>
+  qexistsl [`tb`, `e.ise_final`] >>
+  simp[venomExecSemanticsTheory.phi_prefix_length_def]
+QED
+
+Theorem inline_selected_continuation_zero_phi:
+  inline_annotated_origin C n root cert /\
+  inline_call_incidence cert root p fn l j call (InlineSelected u q e zipper) ==>
+  ?tb. lookup_block (inline_path_rename zipper e.ise_return) root.fn_blocks = SOME tb /\
+    phi_prefix_length tb.bb_instructions = 0 /\
+    (!v. eval_phis v tb.bb_instructions = OK v)
+Proof
+  strip_tac >>
+  `inline_annotated_choice_path C zipper e.ise_final root` by
+    metis_tac[inline_selected_annotated_choice_path] >>
+  drule inline_selected_paired_separation >> simp[] >> disch_then drule >> strip_tac >>
+  drule_all inline_annotated_edit_fetch_facts >> strip_tac >>
+  `wf_function e.ise_caller` by
+    metis_tac[inline_annotated_origin_erasure, qualified_origin_erasure,
+      inliner_fn_origin_structure] >>
+  drule_all inline_generated_continuation_phi_cut >> strip_tac >>
+  drule_all inline_annotated_path_zero_phi >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[analysisSimProofsBaseTheory.phi_prefix_length_zero_eval_phis_ok]
+QED
+
+Theorem inline_live_selected_return_continuation:
+  inliner_input_ok C /\ inline_annotated_origin C n root cert /\
+  inline_live_stack C cert root
+    ((q,ca,route,snap)::(p,pa,proute,psnap)::rest) frame /\
+  inline_call_incidence cert root p pa.ia_function l j call (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert p proute.ir_rename pa.ia_function /\
+  inline_namespace_leaf_at cert q route.ir_rename ca.ia_function /\
+  lookup_block rl ca.ia_function.fn_blocks = SOME rb /\ get_instruction rb ri = SOME ret /\
+  MEM ret.inst_opcode [RET; RETFMP] /\ ret.inst_operands = ops ++ [pc] /\
+  step_inst fuel C ret snap.ils_state = IntRet ir s' /\ ~frame.ipf_state.vs_halted /\
+  lookup_function nm C.ctx_functions = SOME ca.ia_function /\
+  setup_callee ca.ia_function args psnap.ils_state = SOME ca.ia_entry /\
+  run_blocks cfuel C ca.ia_function ca.ia_entry = IntRet ir s' /\
+  ~ca.ia_entry.vs_halted /\
+  inline_live_location cert root q ca path
+    (InlineAtInstruction snap.ils_state.vs_inst_idx)
+    (InlineAtInstruction frame.ipf_state.vs_inst_idx) counter snap.ils_state frame.ipf_state /\
+  snap.ils_state.vs_current_bb = rl /\ snap.ils_state.vs_inst_idx = ri ==>
+  ?bb caller' continuation caller_path.
+    let writes = FOLDL (\s (x,w). update_var x w s) frame.ipf_state
+          (ZIP (MAP proute.ir_rename call.inst_outputs,ir.iret_values));
+        target = jump_to (inline_path_rename zipper e.ise_return) writes;
+        resumed = adopt_return_fmp ir (merge_callee_state caller' s');
+        psnap' = psnap with <|ils_state := resumed with vs_inst_idx := SUC j;
+          ils_defined := set call.inst_outputs UNION psnap.ils_defined|> in
+    lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME bb /\
+    exec_block tfuel Tctx bb frame.ipf_state = OK target /\
+    bind_outputs call.inst_outputs ir.iret_values psnap.ils_state = SOME caller' /\
+    inline_live_stack C cert root ((p,pa,proute,psnap')::rest)
+      (frame with ipf_state := target) /\
+    target.vs_current_bb = inline_path_rename zipper e.ise_return /\
+    target.vs_prev_bb = SOME frame.ipf_state.vs_current_bb /\ target.vs_inst_idx = 0 /\
+    inline_routed_leaf cert root p pa.ia_function caller_path /\
+    inline_parameter_boundary_path caller_path pa.ia_function l (SUC j) root
+      (inline_path_rename zipper e.ise_return) 0 /\
+    lookup_block (inline_path_rename zipper e.ise_return) root.fn_blocks = SOME continuation /\
+    phi_prefix_length continuation.bb_instructions = 0 /\
+    (!v. eval_phis v continuation.bb_instructions = OK v)
+Proof
+  strip_tac >> drule_all inline_live_selected_return_at_cut >>
+  disch_then (qspecl_then [`tfuel`, `Tctx`] mp_tac) >> simp[] >> strip_tac >>
+  drule_all inline_selected_continuation_boundary >> strip_tac >>
+  drule_all inline_selected_continuation_zero_phi >> strip_tac >>
+  drule inline_live_stack_source_index >>
+  disch_then (qspec_then `SUC j` mp_tac) >> simp[] >> strip_tac >>
+  qexists `path'` >> simp[]
 QED
