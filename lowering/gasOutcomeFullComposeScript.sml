@@ -175,6 +175,21 @@ Proof
   qexistsl_tac [`res`, `ee`, `OK t`, `G'`, `tn'`] >> simp[]
 QED
 
+(* The exit twin of gas_outcome_full_pure: a zero-mark path ending in
+   an exit result. *)
+Theorem gas_outcome_full_exit:
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+    (s, G, tn) [] (r, G', tn') /\
+  exit_result r /\ R res (ee with gas_obs := []) (G', tn') r ==>
+  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
+    (es, s, G, tn) Q R
+Proof
+  strip_tac >> rewrite_tac[gas_outcome_full_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >> simp[]
+QED
+
 (* gas_outcome_full_post_mono, with the source run that reached the
    normal post, its emptied observations and the end state's running
    flag. *)
