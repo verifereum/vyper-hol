@@ -93,7 +93,9 @@ Theorem aggregate_body_physical_store_path_mem:
       (a+len <= w2n dw \/ w2n dw+type_memory_size dtv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
     locals_kept ce es' es' r q /\ alloca_history func q /\
-    q.vs_alloca_next = s.vs_alloca_next
+    q.vs_alloca_next = s.vs_alloca_next /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by

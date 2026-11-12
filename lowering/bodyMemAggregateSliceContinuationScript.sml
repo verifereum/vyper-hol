@@ -98,7 +98,9 @@ Theorem aggregate_body_rebased_store_slice_mem[local]:
     (post_value_type ce e = expr_type e ==>
       (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
       !a len. a+len <= w2n w \/ w2n w+type_memory_size tv <= a ==>
-        mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory)
+        mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory) /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> `eval_operand (Var x) s = SOME w` by
     (drule_at (Pos hd) expr_post_rebased_lookup >> simp[eval_operand_def]) >>
@@ -224,7 +226,9 @@ Theorem aggregate_body_unwrap_store_slice_mem_cursor:
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
     locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next
+    alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
+    q.vs_accounts = r.vs_accounts /\ q.vs_transient = r.vs_transient /\
+    q.vs_requests = r.vs_requests /\ q.vs_call_ctx = r.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_at (Pat `unwrap_value _ _ _ = _`) aggregate_body_rebased_marked_read_mem_capacity >>

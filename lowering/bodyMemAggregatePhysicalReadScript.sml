@@ -85,7 +85,9 @@ Theorem aggregate_body_rebased_marked_read_mem_capacity:
        type_memory_size tvt = 0 \/ w2n w + type_memory_size tvt <= u.vs_alloca_next) /\
     u.vs_current_bb = su.cs_current_bb /\
     u.vs_inst_idx = LENGTH su.cs_current_insts /\
-    alloca_history func u /\ r.vs_alloca_next <= u.vs_alloca_next
+    alloca_history func u /\ r.vs_alloca_next <= u.vs_alloca_next /\
+    u.vs_accounts = r.vs_accounts /\ u.vs_transient = r.vs_transient /\
+    u.vs_requests = r.vs_requests /\ u.vs_call_ctx = r.vs_call_ctx
 Proof
   strip_tac >> Cases_on `post_value_type ce e = expr_type e`
   >- (drule_all aggregate_rebased_marked_read_mem_capacity >> strip_tac >>
