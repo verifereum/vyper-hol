@@ -22,7 +22,7 @@ Theorem compile_copy_sarray_strings_two_frag_ptr:
         (ArrayV (make_array_value (BaseTV (StringT 1)) (Fixed 2)
           [StringV x; StringV y])) (w2n a) m) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t u. g=G /\ t=tn /\ u=s)
         (\g t u. g=Gf /\ t=tnf /\ u=sf) R /\
       (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
@@ -36,7 +36,7 @@ Theorem compile_copy_sarray_strings_two_frag_ptr:
       (!p. not_fresh_at sa p ==>
         lookup_var p sf=lookup_var p s /\ FLOOKUP Gf p=FLOOKUP G p /\
         op_taint tnf (Var p)=op_taint tn (Var p)) /\
-      (stor_taint_ok cx tn s ==> stor_taint_ok cx tnf sf)
+      (stor_taint_ok H cx tn s ==> stor_taint_ok H cx tnf sf)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `!i. i < 2 ==> !m. mem_agree_outside tn.t_mem s.vs_memory m ==>
@@ -131,7 +131,7 @@ Proof
     assume_tac >- simp[] >>
   drule_all compile_store_bytestring_robust_ambient_frag_ptr >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
-  rename1 `frag_exec_ptr cx ctx PG si se
+  rename1 `frag_exec_ptr H cx ctx PG si se
     (\g t v. g = ga0 /\ t = ta0 /\ v = u0)
     (\g t v. g = gc0 /\ t = tc0 /\ v = v0) R` >>
   qabbrev_tac `tmp = STRCAT "%" (toString se.cs_next_var)` >>
@@ -151,7 +151,7 @@ Proof
     suspend "address1_resources" >>
   drule_all typedCopyAmbientFramePtrTheory.typed_copy_loop_address_ambient_frag_ptr >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
-  rename1 `frag_exec_ptr cx ctx PG sb' si
+  rename1 `frag_exec_ptr H cx ctx PG sb' si
     (\g t v. g = gh1 /\ t = th1 /\ v = sh1)
     (\g t v. g = ga1 /\ t = ta1 /\ v = u1) R` >>
   qabbrev_tac `ny = 32 + 32 * ((LENGTH y + 31) DIV 32)` >>
@@ -170,7 +170,7 @@ Proof
     assume_tac >- simp[] >>
   drule_all compile_store_bytestring_robust_ambient_frag_ptr >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
-  rename1 `frag_exec_ptr cx ctx PG si se
+  rename1 `frag_exec_ptr H cx ctx PG si se
     (\g t v. g = ga1 /\ t = ta1 /\ v = u1)
     (\g t v. g = gc1 /\ t = tc1 /\ v = v1) R` >>
   qabbrev_tac `sback2 = jump_to cond
@@ -196,8 +196,8 @@ Resume compile_copy_sarray_strings_two_frag_ptr[continuation]:
     !fuel r. run_from fuel ctx fn v = r /\ (!e. r <> Error e) ==>
       ?fuel'. run_from fuel' ctx fn u = r /\
         ghost_run fuel' ctx fn PG g t u = ghost_run fuel ctx fn PG g' t' v /\
-        (ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG g' t' v ==>
-         ptr_safe_run (cx_dead cx) 0 fuel' ctx fn PG g t u)` >>
+        (ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG g' t' v ==>
+         ptr_safe_run (cx_dead H cx) 0 fuel' ctx fn PG g t u)` >>
   `!g0 t0 u g1 t1 v g2 t2 w.
      C g0 t0 u g1 t1 v /\ C g1 t1 v g2 t2 w ==> C g0 t0 u g2 t2 w` by
     (simp_tac (srw_ss()) [Abbr `C`] >>
@@ -219,7 +219,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[continuation]:
        sf.vs_current_bb = sb.cs_current_bb /\
        sf.vs_inst_idx = LENGTH sb.cs_current_insts)` by
     suspend "later_control" >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sb' si (\g t v. g = gh /\ _) _ _`
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sb' si (\g t v. g = gh /\ _) _ _`
     mp_tac >>
   simp_tac (srw_ss()) [bodyPtrDefsTheory.frag_exec_ptr_def] >>
   disch_then drule_all >>
@@ -238,7 +238,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[continuation]:
   `C G tn s ga0 ta0 u0` by
     (qpat_assum `!g0 t0 u g1 t1 v g2 t2 w. _` irule >>
      qexistsl_tac [`gh`, `th`, `sh`] >> asm_rewrite_tac[]) >>
-  qpat_x_assum `frag_exec_ptr _ _ _ si se (\g t v. g = ga0 /\ _) _ _`
+  qpat_x_assum `frag_exec_ptr _ _ _ _ si se (\g t v. g = ga0 /\ _) _ _`
     mp_tac >>
   simp_tac (srw_ss()) [bodyPtrDefsTheory.frag_exec_ptr_def] >>
   disch_then drule_all >>
@@ -261,7 +261,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[continuation]:
   `C G tn s gh1 th1 sh1` by
     (qpat_assum `!g0 t0 u g1 t1 v g2 t2 w. _` irule >>
      qexistsl_tac [`gc0`, `tc0`, `v0`] >> asm_rewrite_tac[]) >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sb' si (\g t v. g = gh1 /\ _) _ _`
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sb' si (\g t v. g = gh1 /\ _) _ _`
     mp_tac >>
   simp_tac (srw_ss()) [bodyPtrDefsTheory.frag_exec_ptr_def] >>
   disch_then drule_all >>
@@ -280,7 +280,7 @@ Resume compile_copy_sarray_strings_two_frag_ptr[continuation]:
   `C G tn s ga1 ta1 u1` by
     (qpat_assum `!g0 t0 u g1 t1 v g2 t2 w. _` irule >>
      qexistsl_tac [`gh1`, `th1`, `sh1`] >> asm_rewrite_tac[]) >>
-  qpat_x_assum `frag_exec_ptr _ _ _ si se (\g t v. g = ga1 /\ _) _ _`
+  qpat_x_assum `frag_exec_ptr _ _ _ _ si se (\g t v. g = ga1 /\ _) _ _`
     mp_tac >>
   simp_tac (srw_ss()) [bodyPtrDefsTheory.frag_exec_ptr_def] >>
   disch_then drule_all >>
@@ -803,8 +803,8 @@ Resume compile_copy_sarray_strings_two_frag_ptr[initial_control]:
   `op_taint tinit (Var ctr) = {}` by
     simp[Abbr `tinit`, ptrDisciplineTheory.op_taint_def,
       finite_mapTheory.FLOOKUP_UPDATE] >>
-  `!fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG gh th sh ==>
-     ptr_safe_run (cx_dead cx) 0 (SUC fuel) ctx fn PG ginit tinit sinit` by
+  `!fuel. ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG gh th sh ==>
+     ptr_safe_run (cx_dead H cx) 0 (SUC fuel) ctx fn PG ginit tinit sinit` by
     (simp_tac (srw_ss()) [Abbr `gh`, Abbr `th`, Abbr `sh`] >>
      rpt strip_tac >>
      drule_all (SRULE [wordsTheory.dimword_def, bool_to_word_def]
@@ -868,8 +868,8 @@ Resume compile_copy_sarray_strings_two_frag_ptr[initial_control]:
      >- simp[eval_phis_def] >>
      Cases_on `h.inst_opcode = PHI` >>
      gvs[phi_prefix_length_def, eval_phis_def]) >>
-  `!fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG ginit tinit sinit ==>
-     ptr_safe_run (cx_dead cx) 0 (SUC fuel) ctx fn PG G tn s` by
+  `!fuel. ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG ginit tinit sinit ==>
+     ptr_safe_run (cx_dead H cx) 0 (SUC fuel) ctx fn PG G tn s` by
     (qpat_assum `step_prov PG G _ _ = ginit` mp_tac >>
      qpat_assum `step_taint _ s _ tn = tinit` mp_tac >>
      qpat_assum `lookup_block s.vs_current_bb _ = _` mp_tac >>
@@ -1048,8 +1048,8 @@ Resume compile_copy_sarray_strings_two_frag_ptr[later_control]:
            (Q.INST [`i` |-> `0`, `n` |-> `2`]
              (SPEC_ALL typed_copy_loop_backedge_ghost_run))) >>
          simp[] >> metis_tac[]) >>
-      `!fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG gback1 tback1 sback1 ==>
-         ptr_safe_run (cx_dead cx) 0 (SUC fuel) ctx fn PG gc0 tc0 v0` by
+      `!fuel. ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG gback1 tback1 sback1 ==>
+         ptr_safe_run (cx_dead H cx) 0 (SUC fuel) ctx fn PG gc0 tc0 v0` by
         (qpat_assum `lookup_block v0.vs_current_bb _ = SOME back` mp_tac >>
          qpat_assum `back.bb_instructions = _` mp_tac >>
          qpat_assum `v0.vs_inst_idx = _` mp_tac >>
@@ -1084,8 +1084,8 @@ Resume compile_copy_sarray_strings_two_frag_ptr[later_control]:
       `op_taint tback1 (Var ctr) = {}` by
         simp[Abbr `tback1`, ptrDisciplineTheory.op_taint_def,
           finite_mapTheory.FLOOKUP_UPDATE] >>
-      `!fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG gh1 th1 sh1 ==>
-         ptr_safe_run (cx_dead cx) 0 (SUC fuel) ctx fn PG gback1 tback1 sback1` by
+      `!fuel. ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG gh1 th1 sh1 ==>
+         ptr_safe_run (cx_dead H cx) 0 (SUC fuel) ctx fn PG gback1 tback1 sback1` by
         (simp_tac (srw_ss()) [Abbr `gh1`, Abbr `th1`, Abbr `sh1`] >>
          rpt strip_tac >>
          drule_all (SRULE [wordsTheory.dimword_def, bool_to_word_def]
@@ -1134,8 +1134,8 @@ Resume compile_copy_sarray_strings_two_frag_ptr[later_control]:
      irule (SRULE [wordsTheory.dimword_def]
        (Q.INST [`i` |-> `1`, `n` |-> `2`]
          (SPEC_ALL typed_copy_loop_backedge_ghost_run))) >> simp[] >> metis_tac[]) >>
-  `!fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG gback2 tback2 sback2 ==>
-     ptr_safe_run (cx_dead cx) 0 (SUC fuel) ctx fn PG gc1 tc1 v1` by
+  `!fuel. ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG gback2 tback2 sback2 ==>
+     ptr_safe_run (cx_dead H cx) 0 (SUC fuel) ctx fn PG gc1 tc1 v1` by
     (qpat_assum `lookup_block v1.vs_current_bb _ = SOME back` mp_tac >>
      qpat_assum `back.bb_instructions = _` mp_tac >>
      qpat_assum `v1.vs_inst_idx = _` mp_tac >>
@@ -1185,8 +1185,8 @@ Resume compile_copy_sarray_strings_two_frag_ptr[later_control]:
   `op_taint tback2 (Var ctr) = {}` by
     simp[Abbr `tback2`, ptrDisciplineTheory.op_taint_def,
       finite_mapTheory.FLOOKUP_UPDATE] >>
-  `!k. ptr_safe_run (cx_dead cx) 0 k ctx fn PG gf tf sf ==>
-     ptr_safe_run (cx_dead cx) 0 (SUC k) ctx fn PG gback2 tback2 sback2` by
+  `!k. ptr_safe_run (cx_dead H cx) 0 k ctx fn PG gf tf sf ==>
+     ptr_safe_run (cx_dead H cx) 0 (SUC k) ctx fn PG gback2 tback2 sback2` by
     (simp_tac (srw_ss()) [Abbr `gf`, Abbr `tf`, Abbr `sf`] >>
      rpt strip_tac >>
      drule_all (SRULE [wordsTheory.dimword_def, bool_to_word_def]

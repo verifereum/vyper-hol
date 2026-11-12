@@ -256,11 +256,10 @@ Theorem invoke_intret_state_rel:
          s'.vs_halted = s.vs_halted
 Proof
   rpt strip_tac >>
-  `storage_dead H' = storage_dead H /\ accounts_agree H cx' = accounts_agree H cx /\
+  `accounts_agree H cx' = accounts_agree H cx /\
    transient_agree H cx' = transient_agree H cx /\
    request_agree H cx' = request_agree H cx` by
-    (qspecl_then [`cx`, `cx'`] mp_tac storage_dead_cx_cong >>
-     qspecl_then [`cx`, `cx'`] mp_tac agree_cx_cong >> simp[]) >>
+    (qspecl_then [`cx`, `cx'`] mp_tac agree_cx_cong >> simp[]) >>
   `local_ptrs_rel func cenv es.scopes s` by gvs[stmt_state_rel_def, state_rel_def] >>
   drule_all step_inst_invoke_live_regions >> strip_tac >>
   qexists_tac `s'` >> simp[] >>

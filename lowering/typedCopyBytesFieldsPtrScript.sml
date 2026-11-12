@@ -61,7 +61,7 @@ Theorem compile_bytestring_field_frag_ptr:
       val_in_memory stv v (w2n a+soff) m) ==>
     cs_extends sa sd /\
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sd
+      frag_exec_ptr H cx ctx PG sa sd
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       (!i. ~(w2n b+doff <= i /\ i < w2n b+doff+n) ==>
@@ -127,13 +127,13 @@ Resume compile_bytestring_field_frag_ptr[package]:
   qexistsl_tac [`Gf`, `tnf`, `sf`] >>
   conj_tac >-
     (irule frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sa sb _ _ _` (irule_at Any) >>
+     qpat_assum `frag_exec_ptr _ _ _ _ sa sb _ _ _` (irule_at Any) >>
      simp[] >> conj_tac >- metis_tac[cs_extends_trans] >>
      irule frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sb sc _ _ _` (irule_at Any) >> simp[]) >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sa sb _ _ _` kall_tac >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sb sc _ _ _` kall_tac >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sc sd _ _ _` kall_tac >>
+     qpat_assum `frag_exec_ptr _ _ _ _ sb sc _ _ _` (irule_at Any) >> simp[]) >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sa sb _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sb sc _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sc sd _ _ _` kall_tac >>
   qpat_x_assum `sf.vs_memory = _` kall_tac >>
   qpat_x_assum `n = _` kall_tac >>
   qpat_x_assum `(?bs. _) \/ _` kall_tac >>
@@ -196,7 +196,7 @@ Theorem compile_bytestring_fields_frag_ptr:
           (w2n a + (soff + SUM (MAP (type_memory_bytes cenv) (TAKE i sts)))) m)) ==>
     cs_extends sa sz /\
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sz
+      frag_exec_ptr H cx ctx PG sa sz
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
@@ -270,7 +270,7 @@ Proof
      qpat_x_assum `!i. i < LENGTH dts ==> _` kall_tac >>
      asm_simp_tac bool_ss [AC ADD_ASSOC ADD_COMM] >> decide_tac)) >>
   strip_tac >>
-  rename1 `frag_exec_ptr cx ctx PG sa sm _
+  rename1 `frag_exec_ptr H cx ctx PG sa sm _
     (\g t v. g = G1 /\ t = tn1 /\ v = s1) R` >>
   `sa.cs_next_var <= sm.cs_next_var` by
     (qpat_x_assum `!sts dtvs stvs vals lens tenv cx ctx PG R cenv dst src sa sz a b G tn s dtotal stotal doff soff. _` kall_tac >>

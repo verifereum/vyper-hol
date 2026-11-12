@@ -77,7 +77,8 @@ Proof
   qmatch_goalsub_abbrev_tac `emit_inst opc ops [] sa` >>
   Cases_on `emit_inst opc ops [] sa` >> rename1 `_ = (u, sm)` >>
   Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
-  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
   simp[gas_summary_ptr_at_def, Once evaluate_def, raise_def] >>
   qmatch_goalsub_abbrev_tac `AssertException msg` >>
   qexistsl_tac [`INR (AssertException msg)`, `es`, `G0`, `tn0`] >>
@@ -85,11 +86,11 @@ Proof
   `?a t. step_inst_base (mk_inst sa.cs_next_id opc ops []) s0 = Abort a t /\
          expr_exit (INR (AssertException msg) : unit + exception) (Abort a t)` by
     (simp[expr_exit_def] >> metis_tac[step_revert_zero, step_invalid]) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 G0 tn0 (Abort a t)` by
-    (irule emit_abort_zero_path_ptr >> simp[] >>
+  qexists_tac `Abort a t` >>
+  `!D. gas_path_ptr D 0 ctx func PG G0 tn0 s0 0 G0 tn0 (Abort a t)` by
+    (gen_tac >> irule emit_abort_zero_path_ptr >> simp[] >>
      qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> simp[] >>
      irule ptr_inst_ok_abort_zero >> simp[]) >>
-  qexists_tac `Abort a t` >> simp[exit_result_def, stmt_exit_ptr_def] >>
-  gvs[]
+  simp[exit_result_def, stmt_exit_ptr_def] >> gvs[]
 QED
 

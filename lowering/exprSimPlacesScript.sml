@@ -228,9 +228,7 @@ QED
 
 (* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()):
    exprSimPopNested's pop_nested_sim, by the target's root, with the
-   target's fragment judgment from pop_nested_expr_target_frag and, for an
-   immutable root in the constructor, the compile-env premises from
-   pop_nested_immutable_root_ctor. *)
+   target's fragment judgment from pop_nested_expr_target_frag. *)
 Theorem compile_pop_nested_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ (!nid. tgt <> TopLevelNameTarget nid) /\
@@ -238,20 +236,8 @@ Theorem compile_pop_nested_sim:
     expr_vv_ok cenv (Pop ann tgt)
 Proof
   rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >>
-  irule pop_nested_sim >> conj_tac
-  >- (strip_tac >> qexists_tac `T` >>
-      `int_calls_target tgt = []` by
-        gvs[expr_sim_pre_def, int_calls_expr_def] >>
-      simp[] >> irule target_idx_case_ok >> rw[] >>
-      fs[expr_sim_below_def] >> first_x_assum irule >>
-      drule nested_pop_index_size >> simp[expr_size_def]) >>
-  qexists_tac `env` >> rpt conj_tac
-  >~ [`pop_target_frag`] >- metis_tac[pop_nested_expr_target_frag]
-  >~ [`cenv.ce_is_ctor`]
-  >- (strip_tac >> gvs[immutable_root_def, expr_sim_pre_body, expr_body_pre_def] >>
-      `!ts. get_module_code cx src = SOME ts ==>
-            find_var_decl_by_name id ts = NONE` by (rpt strip_tac >> gvs[]) >>
-      drule_all pop_nested_immutable_root_ctor >> simp[]) >>
+  irule pop_nested_sim >> qexists_tac `env` >> conj_tac
+  >~ [`pop_target_frag`] >- metis_tac[pop_nested_expr_target_frag] >>
   gvs[expr_sim_pre_body]
 QED
 

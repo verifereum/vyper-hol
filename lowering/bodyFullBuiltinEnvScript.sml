@@ -5,32 +5,18 @@
  * posts and pointer ghosts share one witness.  bodyFullCases'
  * env_builtin_expr_full_ok is this, with body_expr_full_ok unfolded.
  *
- * The first premise is bodyFullExprGeneric's expr_vv_sim_stack_full
- * taken in its exact statement until it lands; it gives the
- * vv judgment of the stack-valued members from their value judgment.
- *
  * TOP-LEVEL:
  *   env_builtin_sim_full
  *)
 Theory bodyFullBuiltinEnv
 Ancestors
-  bodyFullPreds bodySimFull exprSimHypsDefs exprLowering vyperAST list
+  bodyFullExprGeneric bodyFullPreds bodySimFull exprSimHypsDefs exprLowering
+  vyperAST list
 
 val _ = Parse.hide "body";
 
 Theorem env_builtin_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
-    (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
-       (~is_word_type (expr_type e) ==>
-        !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
-                SOME tvt ==>
-              type_memory_size tvt = 0) /\
-       expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-         cenv cx ty e es /\
-       (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
-       (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
-       expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-         cenv cx ty e es) /\
     (bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i /\ i <> MsgGas) \/
      (?i. bt = Acc i) \/ bt = BlockHash \/ bt = BlobHash \/ bt = MethodId) /\
     (builtin_args_length_ok bt (LENGTH args) /\ bt <> Len ==>

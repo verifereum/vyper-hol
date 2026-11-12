@@ -72,8 +72,8 @@ Proof
 QED
 
 Theorem stmt_state_rel_clear_obs[local]:
-  stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx (es with gas_obs := []) s
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s
 Proof
   strip_tac >> drule msg_gas_state_frame >>
   disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `[]`]
@@ -107,8 +107,8 @@ Theorem loop_jump_ptr[local]:
   stmt_env cenv (InLoop ex inc) ty st sa = (cenv', sb) /\
   (st = Break \/ st = Continue) /\
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome_ptr D tops (ctx, func) PG (eval_stmt cx st)
@@ -117,8 +117,8 @@ Theorem loop_jump_ptr[local]:
       stmt_lands (InLoop ex inc) sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel ctx func cenv'' cx ee t /\
-      ghost_inv d cenv'' cx ee G tn t /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      ghost_inv H d cenv'' cx ee G tn t /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!x. not_fresh_at sa x ==>

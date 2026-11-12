@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem immutable_assign_declared_region:
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
   evaluate_type (get_tenv cx) ty = SOME tv ==>

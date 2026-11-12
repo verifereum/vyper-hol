@@ -72,7 +72,7 @@ QED
 (* Buffer restriction does not need a positive value footprint.  In
    particular, a zero-sized trailing field is allowed. *)
 Theorem ptr_buf_ok_offset:
-  !cenv e field src dst G H s t w off.
+  !cenv e field src dst G HG s t w off.
     ptr_buf_ok cenv e src G s /\
     eval_operand src s = SOME w /\
     (!v. eval_operand dst t = SOME v ==> v = w + n2w off) /\
@@ -80,8 +80,8 @@ Theorem ptr_buf_ok_offset:
       type_memory_bytes cenv (lowered_value_type cenv e) /\
     w2n (w + n2w off) = w2n w + off /\
     (!x b sz. src = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
-      ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
-    ptr_buf_ok cenv field dst H t
+      ?y. dst = Var y /\ FLOOKUP HG y = SOME (b,sz)) ==>
+    ptr_buf_ok cenv field dst HG t
 Proof
   rpt gen_tac >> strip_tac >> simp[ptr_buf_ok_def] >> rpt strip_tac >>
   `type_memory_bytes cenv (lowered_value_type cenv e) <> 0` by decide_tac >>
@@ -116,7 +116,7 @@ Proof
 QED
 
 Theorem struct_ptr_mem_ok_field_buffer:
-  !cx cenv e ty vals fs src dst G H tn s t w off.
+  !cx cenv e ty vals fs src dst G HG tn s t w off.
     ptr_mem_ok cx ty (StructV vals) src G tn s /\
     evaluate_type (get_tenv cx) ty = SOME (StructTV fs) /\
     eval_operand src s = SOME w /\
@@ -125,8 +125,8 @@ Theorem struct_ptr_mem_ok_field_buffer:
       type_memory_size (StructTV fs) /\
     w2n (w + n2w off) = w2n w + off /\
     (!x b sz. src = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
-      ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
-    ptr_buf_ok cenv e dst H t
+      ?y. dst = Var y /\ FLOOKUP HG y = SOME (b,sz)) ==>
+    ptr_buf_ok cenv e dst HG t
 Proof
   rpt gen_tac >> strip_tac >> simp[ptr_buf_ok_def] >> rpt strip_tac >>
   `type_memory_size (StructTV fs) <> 0` by decide_tac >>
@@ -140,7 +140,7 @@ Proof
 QED
 
 Theorem struct_ptr_mem_ok_field:
-  !cx cenv e ty fty vals fs fields id fv ftv src dst G H tn tn' s t w.
+  !cx cenv e ty fty vals fs fields id fv ftv src dst G HG tn tn' s t w.
     ptr_mem_ok cx ty (StructV vals) src G tn s /\
     evaluate_type (get_tenv cx) ty = SOME (StructTV fs) /\
     eval_operand src s = SOME w /\
@@ -154,15 +154,15 @@ Theorem struct_ptr_mem_ok_field:
     w2n (w + n2w (struct_field_offset fields id)) =
       w2n w + struct_field_offset fields id /\
     (!x b sz. src = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
-      ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
-    ptr_mem_ok cx fty fv dst H tn' t
+      ?y. dst = Var y /\ FLOOKUP HG y = SOME (b,sz)) ==>
+    ptr_mem_ok cx fty fv dst HG tn' t
 Proof
   rpt gen_tac >> strip_tac >>
   `struct_field_offset fields id +
      type_memory_bytes cenv (lowered_value_type cenv e) <=
      type_memory_size (StructTV fs)` by
     (drule_all struct_field_offset_le >> simp[valueEncodingTheory.type_memory_size_def]) >>
-  `ptr_buf_ok cenv e dst H t` by
+  `ptr_buf_ok cenv e dst HG t` by
     (drule_all struct_ptr_mem_ok_field_buffer >> simp[]) >>
   irule ptr_mem_ok_of_buffer >> goal_assum (drule_at Any) >> simp[] >>
   rpt strip_tac >>

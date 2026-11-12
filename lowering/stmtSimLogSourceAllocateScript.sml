@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem log_allocated_arg[local]:
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce st /\
   abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s t /\
   (!z. FST arg = Var z ==> not_fresh_at st z) /\ (!l. FST arg <> Label l) /\
   supported_scalar_type (SND arg) /\ log_arg_rel ce cx sa st es s arg v ==>
@@ -44,7 +44,7 @@ QED
 Theorem log_allocated_data_sources[local]:
   !xs vs.
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
-  stmt_state_rel ctx func ce cx es s /\ stmt_state_rel ctx func ce cx es t /\
+  stmt_state_rel H ctx func ce cx es s /\ stmt_state_rel H ctx func ce cx es t /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
   abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s t /\
   FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,cap) /\
@@ -78,7 +78,7 @@ QED
 Theorem log_buffer_allocate_sources:
   compile_alloc_buffer cap source_st = (buf,start) /\
   fn_has_code source_st start func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce source_st /\ cap < dimword (:256) /\
   start.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   LIST_REL (\arg v. log_arg_rel ce cx sa source_st es s arg v /\
@@ -90,7 +90,7 @@ Theorem log_buffer_allocate_sources:
     eval_operand buf.buf_operand t = SOME (n2w p) /\ buf.buf_size = cap /\
     p + cap < dimword (:256) /\
     FLOOKUP t.vs_allocas source_st.cs_next_id = SOME (p,cap) /\
-    stmt_state_rel ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
+    stmt_state_rel H ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
     (!op. abi_decoder_operand_live source_st.cs_next_var op ==>
       eval_operand op t = eval_operand op s) /\
     t.vs_memory = s.vs_memory /\

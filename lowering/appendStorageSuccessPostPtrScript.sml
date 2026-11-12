@@ -8,20 +8,21 @@ Ancestors
   finite_map pred_set vyperScopePreservation
 
 Theorem append_storage_word_success_post:
-  !ctx func cenv cx es s u sb tr slot len w mid n tv cap v res es'.
+  !H ctx func cenv cx es s u sb tr slot len w mid n tv cap v res es'.
   state_frame u = state_frame
     (if tr then tstore slot (n2w len+1w) (tstore (slot+1w+n2w len) w s)
      else sstore slot (n2w len+1w) (sstore (slot+1w+n2w len) w s)) /\
   (!x a. not_fresh_at sb x /\ lookup_var x s = SOME a ==>
          lookup_var x u = SOME a) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap /\
   encode_value tv v = SOME [(0,w)] /\
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es =
     (res,es') ==>
-  res = INL () /\ stmt_state_rel ctx func cenv cx es' u /\
+  res = INL () /\ stmt_state_rel H ctx func cenv cx es' u /\
   u.vs_current_bb = s.vs_current_bb /\ u.vs_halted = s.vs_halted /\
   u.vs_allocas = s.vs_allocas
 Proof
@@ -34,8 +35,8 @@ Proof
        LET_THM, venom_state_component_equality]) >>
   qmatch_asmsub_abbrev_tac `state_frame u = state_frame su` >>
   drule_all stmt_state_rel_append_storage_word >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' su` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ es' _` mp_tac >>
+  `stmt_state_rel H ctx func cenv cx es' su` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ es' _` mp_tac >>
      simp_tac bool_ss [Abbr `su`, GSYM wordsTheory.word_add_n2w,
                       wordsTheory.WORD_ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
   simp[] >>
@@ -51,8 +52,9 @@ Proof
 QED
 
 Theorem append_storage_word_taint_post:
-  stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+  stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot
     (if tr then contract_transient s else contract_storage s)) /\ len < cap /\
@@ -66,7 +68,7 @@ Theorem append_storage_word_taint_post:
    else
      tn'.t_stor = key_update (key_update tn.t_stor (slot+1w+n2w len) {}) slot {} /\
      tn'.t_trans = tn.t_trans) ==>
-  stor_taint_ok cx tn' u
+  stor_taint_ok H cx tn' u
 Proof
   strip_tac >> drule_all append_clean_stores_taint_ok >>
   disch_then (qspec_then `w` mp_tac) >>
@@ -78,12 +80,13 @@ Proof
 QED
 
 Theorem append_storage_word_ghost_post:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sb /\ ret_pc_ok cenv sb s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at sb x) /\
   s.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot
     (if tr then contract_transient s else contract_storage s)) /\ len < cap /\
@@ -103,7 +106,7 @@ Theorem append_storage_word_ghost_post:
    else
      tn'.t_stor = key_update (key_update tn.t_stor (slot+1w+n2w len) {}) slot {} /\
      tn'.t_trans = tn.t_trans) ==>
-  ghost_inv d cenv cx es' G' tn' u /\
+  ghost_inv H d cenv cx es' G' tn' u /\
   ghost_kept cenv es sb G tn s G' tn' /\
   (!es0 sa G0 tn0 s0.
      ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
@@ -111,7 +114,7 @@ Theorem append_storage_word_ghost_post:
      ghost_kept cenv es0 sa G0 tn0 s0 G' tn')
 Proof
   strip_tac >>
-  `stor_taint_ok cx tn s` by metis_tac[ghost_inv_def] >>
+  `stor_taint_ok H cx tn s` by metis_tac[ghost_inv_def] >>
   drule_all append_storage_word_taint_post >> strip_tac >>
   `es'.scopes = es.scopes` by
     metis_tac[append_storage_place_scopes_immutables] >>

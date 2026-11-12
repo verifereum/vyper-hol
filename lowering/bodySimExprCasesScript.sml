@@ -30,7 +30,7 @@ Ancestors
   exprSimSource
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimMapDefs exprSimSubscriptMap exprSimPopNested bodyPopNestedTargetFrag exprSimPopImmutableTarget targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces exprSimMapDefs exprSimSubscriptMap exprSimPopNested bodyPopNestedTargetFrag targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* An expression naming a mapping is a top-level name or a subscript
@@ -374,15 +374,7 @@ Proof
   rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Pop v10 bt)` by
     (rw[expr_vv_case_def] >>
-     irule pop_nested_sim >> conj_tac
-     >- (strip_tac >> qexists_tac `F` >> simp[] >>
-         irule body_target_idx_case >> metis_tac[]) >>
-     qexists_tac `env` >> simp[] >> rpt conj_tac
-     >~ [`cenv.ce_is_ctor`]
-     >- (strip_tac >> gvs[] >> conj_tac >- gvs[body_inv_def] >>
-         `cenv.ce_module = NONE` by gvs[body_inv_def, cenv_module_pins_def] >>
-         rpt strip_tac >> irule body_imm_var_type >>
-         gvs[expr_body_pre_def] >> metis_tac[]) >>
+     irule pop_nested_sim >> qexists_tac `env` >> simp[] >>
      strip_tac >> irule body_pop_nested_target_frag >> metis_tac[]) >>
   simp[expr_sim_case_of_vv]
 QED

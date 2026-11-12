@@ -186,7 +186,7 @@ QED
 Theorem compile_name_topic_correct:
   !env cenv cx func ty ann id es ss cs arg_op mid topic_op cs' p region_size.
     well_typed_expr env (Name ann id) /\ env_consistent env cx es /\
-    state_well_typed es /\ state_rel_simple cenv cx es ss /\
+    state_well_typed es /\ state_rel_simple H cenv cx es ss /\
     local_ptrs_rel func cenv es.scopes ss /\ event_indexable_type ann /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) region_size) /\
     (is_bytestring_type ann ==> ss.vs_alloca_next <= dimword(:256)) /\
@@ -199,12 +199,12 @@ Theorem compile_name_topic_correct:
       run_inst_seq (emitted_insts cs cs') ss = OK out /\
       eval_operand topic_op out = encode_event_topic ann v /\
       same_blocks cs cs' /\ fresh_vars_wrt cs' out /\
-      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple H cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       (!old w. eval_operand old ss = SOME w ==> eval_operand old out = SOME w) /\
       out with vs_vars := ss.vs_vars = ss
 Proof
   rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`env`, `cenv`, `cx`, `func`, `ty`, `ann`, `id`, `es`, `ss`,
+  mp_tac (Q.SPECL [`H`, `env`, `cenv`, `cx`, `func`, `ty`, `ann`, `id`, `es`, `ss`,
     `cs`, `arg_op`, `mid`, `p`, `region_size`] compile_name_topic_value_correct) >>
   impl_tac >- simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts cs mid) ss = OK ss_mid` >>

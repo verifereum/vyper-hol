@@ -35,7 +35,7 @@ QED
 
 Theorem hash_literal_alloc_memory_taint:
   compile_alloc_buffer m sa = (buf,sm) /\
-  stmt_state_rel ctx fn cenv cx es s /\ m < dimword (:256) /\
+  stmt_state_rel H ctx fn cenv cx es s /\ m < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\
@@ -80,11 +80,11 @@ QED
 Theorem hash_literal_alloc_input_frame:
   !fn cenv cx es sa sm buf m s ctx d PG G tn p len w n.
   compile_alloc_buffer m sa = (buf,sm) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ m < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   eval_operand (Var p) s = SOME w /\ eval_operand len s = SOME n /\
@@ -98,7 +98,7 @@ Theorem hash_literal_alloc_input_frame:
       b <= w2n w /\ w2n w+w2n n <= b+k)) ==>
   ?t v q G1 tn1.
     run_inst_seq (emitted_insts sa sm) s = OK t /\
-    stmt_state_rel ctx fn cenv cx es t /\
+    stmt_state_rel H ctx fn cenv cx es t /\
     buf.buf_operand = Var q /\ eval_operand buf.buf_operand t = SOME v /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n v,m) /\
     w2n v+m < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -112,7 +112,7 @@ Theorem hash_literal_alloc_input_frame:
       regions_disjoint (w2n v) m b k) /\ not_fresh_at sm q /\
     G1 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)] [q]) t /\
     tn1 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)] [q]) s t tn /\
-    ghost_inv d cenv cx es G1 tn1 t /\ ghost_kept cenv es sa G tn s G1 tn1 /\
+    ghost_inv H d cenv cx es G1 tn1 t /\ ghost_kept cenv es sa G tn s G1 tn1 /\
     ptr_covers G1 tn1 q t m /\
     eval_operand (Var p) t = SOME w /\ eval_operand len t = SOME n /\
     ptr_covers G1 tn1 p t (w2n n) /\ op_taint tn1 len = {} /\

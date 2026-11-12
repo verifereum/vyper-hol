@@ -655,7 +655,7 @@ Proof
   metis_tac[finally_pop_function_then_scopes]
 QED
 
-Theorem finally_unless_halt_pop_function_scopes[local]:
+Theorem finally_unless_halt_pop_function_scopes:
   !f g prev st res st'.
   finally_unless_halt (finally f (pop_function prev)) g st = (res,st') /\
   (!s r s'. g s = (r,s') ==> s'.scopes = s.scopes) ==>
