@@ -153,14 +153,16 @@ fun dispatch_tac ths =
       end
   end
 
-fun fuel_auto2 ths =
+fun fuel_steps2 ths =
   let val leaves = dispatch_tac (leaf_thms ths) in
-    rpt (FIRST [pair_step, mon_step,
-                CHANGED_TAC (PURE_REWRITE_TAC [cond_return_eta]),
-                fuel_step, leaves,
-                first_assum MATCH_ACCEPT_TAC, eta_step, split_step,
-                pair_let_step])
+    FIRST [pair_step, mon_step,
+           CHANGED_TAC (PURE_REWRITE_TAC [cond_return_eta]),
+           fuel_step, leaves,
+           first_assum MATCH_ACCEPT_TAC, eta_step, split_step,
+           pair_let_step]
   end
+
+fun fuel_auto2 ths = rpt (fuel_steps2 ths)
 
 Theorem fuel_ok_invalid_expr_call:
   !ty Wv E. fuel_ok Wv {} E (invalid_expr_call ty)
@@ -282,6 +284,8 @@ Proof
 QED
 
 val ea = fuel_auto2 expr_lemmas >> simp[is_terminator_def];
+(* One round of ea, for unrolling it where a goal needs per-step budgets. *)
+val ea1 = TRY (fuel_steps2 expr_lemmas);
 
 (* The Builtin case of compile_expr_body is the builtin callback or one of
    the three modular-arithmetic special forms. *)
@@ -331,33 +335,82 @@ Proof
   >- (fs[] >> irule fuel_ok_compile_expr_body_builtin >> first_assum ACCEPT_TAC) >>
   irule fuel_ok_pointwise >> gen_tac >>
   PURE_REWRITE_TAC [compile_expr_body_def, LET_THM] >> BETA_TAC >>
-  BasicProvers.TOP_CASE_TAC >> pw_tac
-  >- ea
-  >- ea
-  >- ea
+  (* TOP_CASE_TAC, with its simplification run per goal under the step budget *)
+  BasicProvers.PURE_TOP_CASE_TAC >>
+  FIRST [ASM_REWRITE_TAC [] >> CONV_TAC BasicProvers.CASE_SIMP_CONV] >> pw_tac
+  >- (FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea])
+  >- (FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea])
+  >- (FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea])
   >- (fs[] >> metis_tac[])
-  >- ea
-  >- ea
-  >- ea
-  >- ea
+  >- (FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea])
+  >- (FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea])
+  >- (FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea])
+  >- (FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea])
   >- (fs[] >> metis_tac[])
-  >- ea
-  >- ea
-  >> ea
+  >- (FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea])
+  >- (FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+      FIRST [ea])
+  >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea]
 QED
-
-val dc_builtin =
-  irule fuel_ok_pointwise >> gen_tac >>
-  PURE_REWRITE_TAC [compile_builtin_dispatch_body_def, LET_THM,
-                    TypeBase.case_def_of ``:builtin``] >>
-  BETA_TAC >> pw_tac >> ea;
-
-(* Bop's array-membership branch cases on whether the right operand is a
-   list literal (Builtin _ (MakeArray _ _) _); split that operand first. *)
-val bopc =
-  PURE_REWRITE_TAC [TypeBase.case_def_of ``:expr``,
-                    TypeBase.case_def_of ``:builtin``] >>
-  BETA_TAC >> pw_tac >> ea;
 
 Theorem fuel_ok_builtin_dispatch_bop[local]:
   !f cenv ret_ty ty op args Wv E.
@@ -368,46 +421,19 @@ Proof
   rpt strip_tac >> irule fuel_ok_pointwise >> gen_tac >>
   PURE_REWRITE_TAC [compile_builtin_dispatch_body_def, LET_THM,
                     TypeBase.case_def_of ``:builtin``] >> BETA_TAC >>
-  qabbrev_tac `e2 = HD (TL args)` >> Cases_on `e2`
-  >- bopc
-  >- bopc
-  >- bopc
-  >- bopc
-  >- bopc
-  >- bopc
-  >- bopc
-  >- bopc
-  >- (rename1 `Builtin _ bb _` >> Cases_on `bb`
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >- bopc
-      >> bopc)
-  >- bopc
-  >- bopc
-  >> bopc
+  qabbrev_tac `e2 = HD (TL args)` >> Cases_on `e2` >>
+  TRY (qmatch_assum_rename_tac `Abbrev (Builtin _ bb _ = _)` >> Cases_on `bb`) >>
+  PURE_REWRITE_TAC [TypeBase.case_def_of ``:expr``,
+                    TypeBase.case_def_of ``:builtin``] >>
+  BETA_TAC >> pw_tac >>
+  (* ea per goal, one round per step *)
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea]
 QED
 
 Theorem fuel_ok_compile_builtin_dispatch_body:
@@ -418,39 +444,19 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `bi`
   >~ [`compile_builtin_dispatch_body _ _ _ _ (Bop _) _`]
   >- (irule fuel_ok_builtin_dispatch_bop >> first_assum ACCEPT_TAC)
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >- dc_builtin
-  >> dc_builtin
+  >> irule fuel_ok_pointwise >> gen_tac >>
+  PURE_REWRITE_TAC [compile_builtin_dispatch_body_def, LET_THM,
+                    TypeBase.case_def_of ``:builtin``] >>
+  BETA_TAC >> pw_tac >>
+  (* ea per goal, one round per step *)
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea]
 QED
-
-val dc_type_builtin =
-  irule fuel_ok_pointwise >> gen_tac >>
-  PURE_REWRITE_TAC [compile_type_builtin_dispatch_body_def, LET_THM,
-                    TypeBase.case_def_of ``:type_builtin``] >>
-  BETA_TAC >> pw_tac >> ea;
 
 Theorem fuel_ok_compile_type_builtin_dispatch_body:
   !f cenv vv_ty ty tb ret_ty args Wv E.
@@ -458,15 +464,19 @@ Theorem fuel_ok_compile_type_builtin_dispatch_body:
     fuel_ok Wv {} E
       (compile_type_builtin_dispatch_body f cenv vv_ty ty tb ret_ty args)
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `tb`
-  >- dc_type_builtin
-  >- dc_type_builtin
-  >- dc_type_builtin
-  >- dc_type_builtin
-  >- dc_type_builtin
-  >- dc_type_builtin
-  >- dc_type_builtin
-  >> dc_type_builtin
+  rpt gen_tac >> strip_tac >> Cases_on `tb` >>
+  irule fuel_ok_pointwise >> gen_tac >>
+  PURE_REWRITE_TAC [compile_type_builtin_dispatch_body_def, LET_THM,
+                    TypeBase.case_def_of ``:type_builtin``] >>
+  BETA_TAC >> pw_tac >>
+  (* ea per goal, one round per step *)
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >> FIRST [ea1] >>
+  FIRST [ea]
 QED
 
 Theorem fuel_ok_compile_expr:
