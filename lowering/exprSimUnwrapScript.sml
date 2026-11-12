@@ -261,7 +261,7 @@ Proof
          is_bytestring_word_type] >> metis_tac[]) >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   drule loweringSliceTheory.emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
                            `mload (w2n w) s1`, `R`] mp_tac) >>
   impl_tac
   >- (rpt conj_tac >- first_assum ACCEPT_TAC >- simp[]
@@ -358,7 +358,7 @@ Proof
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   drule_all immutable_holds_dload >> strip_tac >>
   drule loweringSliceTheory.emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
     `word_of_bytes T (0w:bytes32)
        (TAKE 32 (DROP (w2n w) s1.vs_data_section ++ REPLICATE 32 0w))`,
     `R`] mp_tac) >>
@@ -479,7 +479,7 @@ Proof
          typed_val_to_w256 tvt v` by (
     rpt strip_tac >> drule_all storage_holds_load >> simp[]) >>
   drule loweringSliceTheory.emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
     `if p.ptr_location = LocTransient then tload w s1 else sload w s1`,
     `R`] mp_tac) >>
   impl_tac
@@ -569,7 +569,7 @@ Proof
     (strip_assume_tac o MATCH_MP emitHelperPropsTheory.emitted_insts_emit_op) >>
   `local_ptrs_reserved cenv sm1` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[]) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `ADD`, `[pop; ib]`, `sm`,
+  qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `ADD`, `[pop; ib]`, `sm`,
                `addr`, `sm1`, `s0`, `w`, `R`] mp_tac
     loweringSliceTheory.emit_op_frag >>
   impl_tac
@@ -582,7 +582,7 @@ Proof
   qx_gen_tac `t` >> BETA_TAC >> strip_tac >>
   qpat_x_assum `emit_op ILOAD _ _ = _` assume_tac >>
   drule loweringSliceTheory.emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `t`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `t`,
     `mload (w2n w) t`, `R`] mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def] >> rpt strip_tac >>
@@ -618,7 +618,7 @@ Proof
   `compile_imm_load_word T cenv.ce_imm_alloca p.ptr_operand sm = (op, sb)` by
     gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >>
   drule_all compile_imm_load_word_ctor_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`, `R`] assume_tac) >>
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `es'`, `R`] assume_tac) >>
   irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
   simp[] >> rpt strip_tac
   >~ [`expr_post`] >- (
@@ -896,7 +896,7 @@ Proof
      [p.ptr_operand] sm = (op, sb)` by
     gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >>
   drule emit_op_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s`, `ld`]
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s`, `ld`]
     mp_tac) >>
   impl_tac
   >- (rw[is_terminator_def, Abbr `ld`] >>
@@ -930,7 +930,7 @@ Proof
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   drule_all immutable_holds_dload >> strip_tac >>
   drule emit_op_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s`,
     `typed_val_to_w256 tvt v`] mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def] >> gen_tac >>
@@ -965,7 +965,7 @@ Proof
   rpt strip_tac >> Cases_on `cenv.ce_imm_alloca` >>
   gvs[contextTheory.compile_imm_load_word_def]
   >- (drule emit_op_path >>
-      disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
+      disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
         `mload (w2n w) s0`] mp_tac) >>
       impl_tac
       >- (simp[is_terminator_def] >> rpt strip_tac >> irule step_ILOAD >>
@@ -985,7 +985,7 @@ Proof
          comp_ignore_bind_def, comp_return_def, emit_def]) >>
   qpat_x_assum `emit_op ADD _ _ = _` assume_tac >>
   drule emit_op_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `w`]
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `w`]
     mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def] >> rpt strip_tac >>
@@ -994,7 +994,7 @@ Proof
   `~s1.vs_halted` by metis_tac[gas_path_normal] >>
   qpat_x_assum `emit_op ILOAD _ _ = _` assume_tac >>
   drule emit_op_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s1`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s1`,
     `mload (w2n w) s1`] mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def] >> rpt strip_tac >> irule step_ILOAD >>
@@ -1035,7 +1035,7 @@ Proof
   `compile_imm_load_word T cenv.ce_imm_alloca p.ptr_operand sm = (op, sb)` by
     gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >>
   drule compile_imm_load_word_ctor_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`, `s`, `w`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `es'`, `s`, `w`] mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >> rename1 `gas_path _ _ s 0 (OK u)` >>
   qexists_tac `u` >> simp[] >>
@@ -1318,7 +1318,7 @@ Theorem storage_unwrap_typed_suffix_path[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   irule storage_unwrap_suffix_value_path >> simp[] >>
-  qexistsl_tac [`a`, `cenv`, `cx`, `es`, `loc`, `src`, `t`] >>
+  qexistsl_tac [`H`, `a`, `cenv`, `cx`, `es`, `loc`, `src`, `t`] >>
   simp[] >> first_assum ACCEPT_TAC
 QED
 
@@ -1502,7 +1502,7 @@ Proof
     val_footprint tv v <= type_memory_size tv /\
     eval_operand buf.buf_operand z = SOME w` by
     (irule storage_unwrap_typed_suffix_path >>
-     simp[] >> qexistsl_tac [`a`, `cenv`, `cx`, `es'`, `p.ptr_location`,
+     simp[] >> qexistsl_tac [`H`, `a`, `cenv`, `cx`, `es'`, `p.ptr_location`,
                             `p.ptr_operand`, `t`] >>
      simp[] >> conj_tac
      >- (qpat_x_assum `!x. p.ptr_operand = Var x \/ buf.buf_operand = Var x ==> _`
@@ -1639,7 +1639,7 @@ Proof
   `regions_disjoint (w2n a) (type_memory_size tv)
       (w2n w) (type_memory_size tv)` by
     (irule immutable_holds_alloca_disjoint >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >>
+     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es'`, `func`] >>
      goal_assum (drule_at Any) >> simp[mk_inst_def] >>
      qpat_assum `MEM (mk_inst _ _ _ _) _` (irule_at Any) >> gvs[mk_inst_def]) >>
   `w2n w + type_memory_size tv < dimword (:256)` by metis_tac[] >>
