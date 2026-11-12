@@ -1516,6 +1516,62 @@ Proof
   simp[static_gas_def, vfmConstantsTheory.warm_access_cost_def]
 QED
 
+Theorem asm_call_prepare_budget_success:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (name = "CALL" \/ name = "STATICCALL") /\
+  op = (if name = "CALL" then Call else StaticCall) /\
+  asm_inst_gas_ok H (AsmOp name) c.stack /\
+  B = 50000 + 8 * H + memory_cost H /\
+  B <= c.msgParams.gasLimit - c.gasUsed /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
+  ?p charge. u.contexts = (p,rb)::rest /\ p.msgParams = c.msgParams /\
+    p.gasUsed = c.gasUsed + charge /\ stipend <= charge /\
+    c.gasUsed + charge <= c.msgParams.gasLimit /\
+    (c.msgParams.gasLimit - c.gasUsed - B) DIV 64 <=
+      p.msgParams.gasLimit - p.gasUsed /\ charge <= stipend + B
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_prepare_success_view >> pure_rewrite_tac[LET_THM] >>
+  BETA_TAC >> strip_tac >>
+  map_every (fn q => qpat_x_assum q
+    (assume_tac o SIMP_RULE arith_ss [EL_TAKE]))
+    [`ao = _`, `az = _`, `ro = _`, `rs = _`] >>
+  Q.SUBGOAL_THEN `mc + oc + 6400 <= B /\ static_gas op <= 100`
+    strip_assume_tac
+  >- (rule_assum_tac (SIMP_RULE arith_ss []) >>
+      drule_all (SIMP_RULE arith_ss [] asm_call_prepare_overhead_budget) >> simp[]) >>
+  drule_all call_gas_refunded_overhead >> strip_tac >>
+  drule_all call_gas_budget_reserve >> strip_tac >>
+  `charge <= stipend + B` by
+    (qpat_x_assum `!sc. _` (qspec_then `static_gas op` mp_tac) >> decide_tac) >>
+  `(c.msgParams.gasLimit - c.gasUsed - B) DIV 64 <=
+    c.msgParams.gasLimit - (c.gasUsed + charge)` by decide_tac >>
+  qpat_x_assum `u = _` SUBST1_TAC >> simp_tac (srw_ss()) [] >>
+  simp[]
+QED
+
+Theorem asm_call_prepare_budget_no_failure:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (name = "CALL" \/ name = "STATICCALL") /\
+  op = (if name = "CALL" then Call else StaticCall) /\
+  asm_inst_gas_ok H (AsmOp name) c.stack /\
+  B = 50000 + 8 * H + memory_cost H /\
+  B <= c.msgParams.gasLimit - c.gasUsed /\
+  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack ==>
+  asm_call_prepare op s <> (INR e,t)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
+  >- (Cases_on `name = "CALL"` >> gvs[]) >>
+  drule_all asm_call_prepare_failure_view >> strip_tac >>
+  Q.SUBGOAL_THEN `mc + oc + 6400 <= B /\ static_gas op <= 100`
+    strip_assume_tac
+  >- (rule_assum_tac (SIMP_RULE arith_ss []) >>
+      drule_all (SIMP_RULE arith_ss [] asm_call_prepare_overhead_budget) >> simp[]) >>
+  drule_all call_gas_budget_reserve >> strip_tac >> decide_tac
+QED
+
 Theorem asm_run_call_stops_after_step:
   step s = (r,t) /\ (~ISL r \/ LENGTH t.contexts < LENGTH s.contexts) ==>
   run_call s = SOME (r,t)
