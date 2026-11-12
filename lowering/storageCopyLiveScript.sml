@@ -1335,7 +1335,7 @@ Proof
                metis_tac[]) >> fs[ranges_disjoint_def] >> decide_tac) >>
          qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
          simp_tac bool_ss [storage_dead_def] >> asm_rewrite_tac[] >>
-         qexistsl_tac [`k`, `tv`] >> asm_rewrite_tac[]) >>
+         qexistsl_tac [`k`, `tv`] >> gvs[]) >>
       `w2n k+(w2n q-w2n k) = w2n q` by decide_tac >>
       `w2n q-w2n k < type_slot_size tv` by decide_tac >>
       `ws (w2n q-w2n k) = mem_word_at (off+32*(w2n q-w2n k)) mem` by
