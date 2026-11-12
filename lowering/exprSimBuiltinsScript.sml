@@ -334,8 +334,10 @@ Proof
   rpt strip_tac >>
   simp[unop_result_def, evaluate_builtin_def] >>
   rw[unop_frag_def] >>
+  rename1 `valid_horizon cx st0 H0 es0.storage_trace` >>
   `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
-    (qpat_x_assum `stmt_state_rel H ctx func cenv cx es0 s0` mp_tac >>
+    (`stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
+     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, state_rel_def]) >>
   `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
   gvs[typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_pos] >>
@@ -406,8 +408,14 @@ Resume compile_blockhash_frag[window_ok]:
      drule tx_env_ok_hash_window >>
      disch_then (qspec_then `n` mp_tac) >> gvs[] >> strip_tac >>
      simp[word_of_bytes_be_to_bytes]) >>
-  `stmt_state_rel H ctx func cenv cx es0 (s0 with vs_vars := t.vs_vars)` by
-    (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  `!H. valid_horizon cx st0 H es0.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es0 (s0 with vs_vars := t.vs_vars) /\
+       storage_well_formed_on cx es0 (FST H)` by
+    (gen_tac >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es0 s0 /\
+      storage_well_formed_on cx es0 (FST H)` by metis_tac[] >>
+     simp[] >>
+     irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
      simp[lookup_var_def]) >>
   qpat_x_assum `t = s0 with vs_vars := _` SUBST_ALL_TAC >>
