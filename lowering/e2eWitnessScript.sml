@@ -695,7 +695,13 @@ Proof
   simp[loweringStateRelDefsTheory.accounts_agree_def,
        loweringStateRelDefsTheory.storage_agree_def,
        loweringStateRelDefsTheory.transient_agree_def,
-       call_requests_def, p23_dep_trace]
+       call_requests_def, p23_dep_trace] >>
+  simp[initial_evaluation_context_def, p23_deploy_tx_def,
+       vyperContextTheory.empty_call_txn_def, vfmStateTheory.lookup_storage_def,
+       vfmStateTheory.empty_accounts_def, vfmStateTheory.empty_account_state_def,
+       vfmContextTheory.empty_transient_storage_def, combinTheory.APPLY_UPDATE_THM,
+       vfmStateTheory.account_state_component_equality] >>
+  rw[] >> simp[vfmStateTheory.empty_storage_def]
 QED
 
 Theorem p23_call_result:
