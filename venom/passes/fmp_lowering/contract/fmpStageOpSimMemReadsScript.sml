@@ -3,8 +3,8 @@ Theory fmpStageOpSimMemReads
 Ancestors
   fmpStageOpSimMemSupport fmpStageOpBase fmpStageRel o1LowerDloadRangeTransport
   o1LowerDloadShared o1PassContract rich_list byte
-  ptrDiscipline contextCodegenRel unitShapeDefs venomExecSemantics
-  venomState venomInst memLocDefs words finite_map pred_set list
+  ptrDiscipline ptrStaticDiscipline contextCodegenRel unitShapeDefs venomExecSemantics
+  venomState venomInst memLocDefs pointerConfinedDefs words finite_map pred_set list
 
 Theorem fmp_mem_operand_non_retpc:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -57,4 +57,80 @@ Proof
   irule ld_memory_agree_slice_element >> simp[] >>
   qexistsl_tac [`eom`,`tn.t_mem`,`fmp_ld_sites sm`] >>
   gvs[fmp_stage_rel_def, mem_word_taint_def] >> metis_tac[]
+QED
+
+Theorem fmp_mem_sha3_size_prov[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  inst.inst_opcode = SHA3 /\ inst.inst_operands = [p;sz] ==>
+  op_prov G sz = NONE
+Proof
+  strip_tac >>
+  `MEM fn C.ctx_functions /\ MEM inst (fn_insts fn) /\
+   ?P. EVERY (fn_static_ptr_ok P) C.ctx_functions` by
+    metis_tac[fmp_stage_frame_facts] >>
+  `FDOM G SUBSET fn_pv P fn` by metis_tac[fmp_stage_prov_support] >>
+  `ptr_use_static_ok P (fn_pv P fn) inst` by
+    fs[EVERY_MEM, fn_static_ptr_ok_def] >>
+  Cases_on `sz` >> simp[op_prov_def] >>
+  rename1 `FLOOKUP G v` >> Cases_on `FLOOKUP G v` >> simp[] >>
+  `v IN fn_pv P fn` by (fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
+  gvs[ptr_use_static_ok_def, is_pointer_preserving_op_def,
+      mem_read_ops_def, mem_write_ops_def] >>
+  Cases_on `p = Var v` >> gvs[]
+QED
+
+Theorem fmp_mem_sha3_size[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  inst.inst_opcode = SHA3 /\ inst.inst_operands = [p;sz] /\
+  eval_operand sz s = SOME l ==> eval_operand sz t = SOME l
+Proof
+  strip_tac >>
+  `op_prov G sz = NONE` by metis_tac[fmp_mem_sha3_size_prov] >>
+  `taint_ok fn tn inst s` by metis_tac[fmp_stage_frame_facts] >>
+  `op_taint tn sz = {}` by (fs[taint_ok_def] >> gvs[] >> metis_tac[]) >>
+  `MEM sz inst.inst_operands /\ inst.inst_opcode <> PHI /\
+   (!v. ~retpc_use_ok inst v)` by simp[retpc_use_ok_def] >>
+  `!v. sz = Var v ==> ~retpc_var fn v` by
+    metis_tac[fmp_mem_operand_non_retpc] >>
+  drule_all fmp_mem_operand_clean >> simp[]
+QED
+
+Theorem fmp_mem_sha3_read:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  ~in_revert_forward fn s /\ inst.inst_opcode = SHA3 /\
+  inst.inst_operands = [p;sz] /\
+  eval_operand p s = SOME x /\ eval_operand sz s = SOME l ==>
+  ?y. eval_operand p t = SOME y /\ eval_operand sz t = SOME l /\
+    read_memory (w2n x) (w2n l) s = read_memory (w2n y) (w2n l) t
+Proof
+  strip_tac >>
+  `eval_operand sz t = SOME l` by metis_tac[fmp_mem_sha3_size] >>
+  `taint_ok fn tn inst s` by metis_tac[fmp_stage_frame_facts] >>
+  `op_taint tn p = {}` by (fs[taint_ok_def] >> gvs[] >> metis_tac[]) >>
+  `MEM p inst.inst_operands /\ inst.inst_opcode <> PHI /\
+   (!v. ~retpc_use_ok inst v)` by simp[retpc_use_ok_def] >>
+  `!v. p = Var v ==> ~retpc_var fn v` by
+    metis_tac[fmp_mem_operand_non_retpc] >>
+  `MEM (w2n x,w2n l) (source_memory_read_ranges inst s)` by
+    simp[source_memory_read_ranges_def, memory_range_of_operands_def] >>
+  `mem_read_ops inst = SOME <|iao_ofst := p; iao_size := SOME sz; iao_max_size := SOME sz|> /\
+   (<|iao_ofst := p; iao_size := SOME sz; iao_max_size := SOME sz|> : inst_access_ops).iao_ofst = p` by
+    simp[mem_read_ops_def] >>
+  drule_all fmp_mem_read_operand_range >> strip_tac >>
+  qexists_tac `y` >> simp[] >>
+  irule LIST_EQ >> simp[ld_read_memory_length] >> rpt strip_tac >>
+  `w2n x+x' NOTIN tn.t_mem` by
+    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+     gvs[taint_ok_def, about_to_revert_def] >>
+     strip_tac >>
+     qpat_x_assum `!off len i. _` (qspecl_then [`w2n x`,`w2n l`,`w2n x+x'`] mp_tac) >>
+     asm_simp_tac (srw_ss()) [arithmeticTheory.ADD_ASSOC] >> simp[]) >>
+  irule ld_memory_agree_slice_element >> simp[] >>
+  qexistsl_tac [`eom`,`tn.t_mem`,`fmp_ld_sites sm`] >>
+  gvs[fmp_stage_rel_def] >> metis_tac[]
 QED
