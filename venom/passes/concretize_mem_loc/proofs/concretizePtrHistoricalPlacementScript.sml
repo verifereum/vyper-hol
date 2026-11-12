@@ -11,7 +11,6 @@ Theorem ptr_transcript_birth_retained:
   !j R vs0 C Ct h a ht at done tokens registry births PT TG saved entries H
     i tsi ri bi PTi TGi si ei tsj rj bj PTj TGj sj ej key site.
   ptr_structural_transcript R vs0 C Ct h a ht at done tokens registry births PT TG saved entries H /\
-  EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   i <= j /\ j < LENGTH h /\
   EL i H = (tsi,ri,bi,PTi,TGi,si,ei) /\
   EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\

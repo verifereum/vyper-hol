@@ -74,7 +74,7 @@ QED
 
 Theorem ptr_owner_selected_read_seed:
   ptr_observation_reachable vs C obs /\ vs.vs_allocas = FEMPTY /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
+  ptr_discipline lo C vs /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -86,22 +86,25 @@ Theorem ptr_owner_selected_read_seed:
   ml_read_gen (Allocation aid)
     (bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d obs).cf_fn)
       (cfg_analyze (ptr_owner_view d obs).cf_fn) (ptr_owner_view d obs).cf_fn)
-    mems (ptr_owner_view d obs).cf_inst
+    mems (ptr_owner_view d obs).cf_inst \/
+  w2n vs.vs_initial_fmp <= b
 Proof
   simp[ptr_observation_reachable_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `w2n vs.vs_initial_fmp <= b` >- simp[] >> disj1_tac >>
   drule_all ptr_frame_alloc_geometry >> strip_tac >>
   irule (BETA_RULE (Q.INST [`Q` |-> `\f a. ml_read_gen (Allocation a)
     (bp_analyze_fuel (concretize_memloc_fuel f.cf_fn) (cfg_analyze f.cf_fn) f.cf_fn)
     mems f.cf_inst`] (SPEC_ALL ptr_owner_seed_identify))) >>
   goal_assum (drule_at (Pat `ptr_active_alloc_geometry _`)) >> simp[] >>
   qexistsl_tac [`b`,`sz`,`b`] >> simp[] >>
-  drule_all ptr_frame_selected_read_seed >> metis_tac[]
+  drule_all ptr_frame_selected_read_seed >> strip_tac >> TRY (gvs[] >> NO_TAC) >>
+  metis_tac[]
 QED
 
 Theorem ptr_owner_write_byte_seed:
   ptr_observation_reachable vs C obs /\ vs.vs_allocas = FEMPTY /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
+  ptr_discipline lo C vs /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -114,7 +117,20 @@ Theorem ptr_owner_write_byte_seed:
   ml_used_gen (Allocation aid)
     (bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d obs).cf_fn)
       (cfg_analyze (ptr_owner_view d obs).cf_fn) (ptr_owner_view d obs).cf_fn)
-    mems (ptr_owner_view d obs).cf_inst
+    mems (ptr_owner_view d obs).cf_inst \/
+  w2n vs.vs_initial_fmp <= x
 Proof
-  cheat
+  simp[ptr_observation_reachable_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `w2n vs.vs_initial_fmp <= x` >- simp[] >> disj1_tac >>
+  drule_all ptr_frame_alloc_geometry >> strip_tac >>
+  drule_all ptr_write_byte_selected_site >> strip_tac >>
+  rename1 `FLOOKUP obs.po_prov v = SOME (wb,ws)` >>
+  `MEM (Var v) obs.po_inst.inst_operands` by metis_tac[ptr_write_op_operand] >>
+  irule (BETA_RULE (Q.INST [`Q` |-> `\f a. ml_used_gen (Allocation a)
+    (bp_analyze_fuel (concretize_memloc_fuel f.cf_fn) (cfg_analyze f.cf_fn) f.cf_fn)
+    mems f.cf_inst`] (SPEC_ALL ptr_owner_seed_identify))) >>
+  goal_assum (drule_at (Pat `ptr_active_alloc_geometry _`)) >> simp[] >>
+  qexistsl_tac [`wb`,`ws`,`x`] >> simp[] >>
+  drule_all ptr_frame_operand_seed >> strip_tac >> TRY (gvs[] >> NO_TAC) >> metis_tac[]
 QED

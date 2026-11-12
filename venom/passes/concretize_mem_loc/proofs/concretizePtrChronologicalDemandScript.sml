@@ -65,8 +65,8 @@ Proof
   `ptr_call_ancestry h.cf_params stk` by metis_tac[ptr_call_ancestry_tail] >>
   gvs[listTheory.EVERY_DEF] >>
   first_x_assum (qspecl_then [`h`,`w`] mp_tac) >> simp[] >> strip_tac
-  >- (disj2_tac >> disj1_tac >> qexistsl [`0`,`w`] >> simp[])
-  >- (disj2_tac >> disj1_tac >> qexistsl [`SUC n`,`w'`] >> simp[]) >>
+  >- (TRY disj2_tac >> TRY disj1_tac >> qexistsl [`0`,`w`] >> simp[])
+  >- (TRY disj2_tac >> TRY disj1_tac >> qexistsl [`SUC n`,`w'`] >> simp[]) >>
   gvs[]
 QED
 
