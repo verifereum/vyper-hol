@@ -3687,6 +3687,7 @@ Proof
 QED
 
 Theorem const_subst_builtin_operands[local]:
+  (!id aty i. MEM (id, Literal aty (IntL i)) E ==> 0 <= i) /\
   MAP expr_type (subst_consts_exprs E es) = MAP expr_type es /\
   well_typed_builtin_app ty bt (MAP expr_type es) /\
   builtin_operands_ok ty bt es ==>
@@ -3696,9 +3697,25 @@ Proof
   Cases_on `bt = Bop Exp \/ bt = Bop ShL \/ bt = Bop ShR`
   >- (gvs[well_typed_builtin_app_def] >>
       Cases_on `es` >> gvs[] >> Cases_on `t` >> gvs[] >>
-      gvs[builtin_operands_ok_def, subst_consts_expr_def, shift_amount_ok_def] >>
+      gvs[builtin_operands_ok_def, subst_consts_expr_def, shift_amount_ok_def]
+      (* Exp additionally checks the sign of a newly exposed literal. *)
+      >~ [`power_operands_ok ty (subst_consts_expr E h) (subst_consts_expr E h')`]
+      >- (`IS_SOME (int_literal_value h) ==>
+             IS_SOME (int_literal_value (subst_consts_expr E h))` by
+            metis_tac[const_subst_literal_forms, optionTheory.IS_SOME_EXISTS] >>
+        drule power_operands_ok_literal >> strip_tac >>
+        Cases_on `h'` >>
+        gvs[subst_consts_expr_def, power_operands_ok_def,
+            power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def] >>
+        PairCases_on `p` >> Cases_on `p0` >>
+        gvs[subst_consts_expr_def, AllCaseEqs()] >>
+        Cases_on `ALOOKUP E p1` >> gvs[] >>
+        rename1 `ALOOKUP E p1 = SOME replacement` >>
+        Cases_on `replacement` >> gvs[] >>
+        Cases_on `l` >> gvs[] >> metis_tac[ALOOKUP_MEM]) >>
       metis_tac[const_subst_literal_forms, optionTheory.IS_SOME_EXISTS]) >>
-  gvs[builtin_operands_ok_def]
+  Cases_on `bt` >> gvs[builtin_operands_ok_def] >>
+  Cases_on `b` >> gvs[builtin_operands_ok_def]
 QED
 
 Theorem const_subscript_domain_type_ok:
@@ -3746,6 +3763,21 @@ Proof
   Cases_on `l` >> simp[fold_const_expr_def]
 QED
 
+Theorem fold_const_subscript_base_exact[local]:
+  !env e. subscript_base_type_exact env e ==>
+    subscript_base_type_exact env (fold_const_expr e)
+Proof
+  rpt gen_tac >> Cases_on `e` >>
+  simp[fold_const_expr_def, subscript_base_type_exact_def]
+  >~ [`fold_const_builtin ty bi es`] >-
+    (Cases_on `bi` >> simp[fold_const_builtin_def, subscript_base_type_exact_def] >>
+     Cases_on `es` >> simp[subscript_base_type_exact_def] >>
+     Cases_on `t` >> simp[subscript_base_type_exact_def] >>
+     Cases_on `h` >> simp[subscript_base_type_exact_def] >>
+     Cases_on `l` >> simp[subscript_base_type_exact_def]) >>
+  Cases_on `c` >> simp[subscript_base_type_exact_def]
+QED
+
 Theorem fold_const_builtin_operands[local]:
   well_typed_builtin_app ty bt (MAP expr_type es) /\
   builtin_operands_ok ty bt es ==>
@@ -3755,9 +3787,23 @@ Proof
   Cases_on `bt = Bop Exp \/ bt = Bop ShL \/ bt = Bop ShR`
   >- (gvs[well_typed_builtin_app_def] >>
       Cases_on `es` >> gvs[] >> Cases_on `t` >> gvs[] >>
-      gvs[builtin_operands_ok_def, fold_const_expr_def, shift_amount_ok_def] >>
+      gvs[builtin_operands_ok_def, fold_const_expr_def, shift_amount_ok_def]
+      >~ [`power_operands_ok ty (fold_const_expr h) (fold_const_expr h')`]
+      >- (`IS_SOME (int_literal_value h) ==>
+             IS_SOME (int_literal_value (fold_const_expr h))` by
+            metis_tac[fold_const_literal_forms, optionTheory.IS_SOME_EXISTS] >>
+          Cases_on `h'` >>
+          gvs[fold_const_expr_def, power_operands_ok_def, power_exponent_ok_def] >>
+          rename1 `fold_const_builtin aty bi args` >>
+          Cases_on `bi` >> gvs[fold_const_builtin_def] >>
+          Cases_on `args` >> gvs[] >>
+          rename1 `hd::tl` >> Cases_on `hd` >> gvs[]
+          >~ [`Literal a lit`] >-
+            (Cases_on `lit` >> gvs[] >> Cases_on `tl` >> gvs[]) >>
+          Cases_on `tl` >> gvs[]) >>
       metis_tac[fold_const_literal_forms, optionTheory.IS_SOME_EXISTS]) >>
-  gvs[builtin_operands_ok_def]
+  Cases_on `bt` >> gvs[builtin_operands_ok_def] >>
+  Cases_on `b` >> gvs[builtin_operands_ok_def]
 QED
 
 Theorem fold_const_builtin_typed[local]:
@@ -3813,7 +3859,8 @@ QED
 Resume fold_const_typing_aux[subscript]:
   rpt strip_tac >>
   gvs[fold_const_expr_def, well_typed_expr_def, AllCaseEqs()] >>
-  metis_tac[fold_const_subscript_form, fold_const_expr_type]
+  metis_tac[fold_const_subscript_form, fold_const_subscript_base_exact,
+            fold_const_expr_type]
 QED
 Resume fold_const_typing_aux[builtin]:
   strip_tac >> conj_tac
