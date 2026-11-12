@@ -12,8 +12,7 @@
  *
  * The target's indices are pure (supported_target_pure).  Admitted, each
  * waiting on a later change outside this theory:
- *   assign_place_effectful_index_case — an index with effects, as
- *     targetPlaceSimCases' pop_nested_storage_effectful_sim;
+ *   assign_place_effectful_index_case — an index with effects;
  *   immutable_deploy_assign_case — an immutable written by the
  *     constructor, until immutable_alloca_sep and body_inv relate the
  *     constructor's immutables buffer to the source's immutables.

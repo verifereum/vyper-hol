@@ -468,19 +468,8 @@ Proof
   qpat_x_assum `frag_exec_mem _ _ _ _ _ _` mp_tac >> simp[frag_exec_mem_def]
 QED
 
-(* A horizon valid for the trace a storage-trace frame ends with is valid for
-   the trace it started with, which is a prefix. *)
-Theorem valid_horizon_frame_prefix:
-  storage_trace_frame f /\ f st = (res, st') /\
-  valid_horizon cx st0 H st'.storage_trace ==>
-  valid_horizon cx st0 H st.storage_trace
-Proof
-  strip_tac >>
-  drule_all vyperStorageTraceTheory.storage_trace_frame_prefix >>
-  strip_tac >> gvs[vyperStorageFootprintTheory.valid_horizon_def]
-QED
-
-(* The same for a marked run of a storage-trace frame. *)
+(* A horizon valid for the trace a marked run of a storage-trace frame ends
+   with is valid for the trace it started with. *)
 Theorem gas_marked_exec_valid_prefix:
   gas_marked_exec memory (ctx,func) source (es,s0) marks res es_end r /\
   storage_trace_frame source ==>
@@ -489,5 +478,5 @@ Theorem gas_marked_exec_valid_prefix:
 Proof
   rw[gasSummaryTheory.gas_marked_exec_def] >>
   first_x_assum (qspec_then `[]` assume_tac) >>
-  drule_at (Pos (el 2)) valid_horizon_frame_prefix >> simp[]
+  drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >> simp[]
 QED
