@@ -7,22 +7,6 @@ Ancestors
   vyperABI vyperABIValid vyperTyping vyperValue valueEncoding loweringPosts
   contractABI list arithmetic
 
-Theorem abi_source_non_nominal_forms[local]:
-  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
-  val_footprint tv v <> type_memory_size tv ==>
-  (?n bs. ty = BaseT (BytesT (Dynamic n)) /\
-          tv = BaseTV (BytesT (Dynamic n)) /\ v = vyperValue$BytesV bs) \/
-  (?n str. ty = BaseT (StringT n) /\
-           tv = BaseTV (StringT n) /\ v = StringV str)
-Proof
-  Cases_on `v` >> simp[val_footprint_def] >>
-  Cases_on `tv` >> simp[] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >> simp[] >>
-  rpt strip_tac >> Cases_on `ty` >>
-  gvs[vyperValueTheory.evaluate_type_def,
-      vyperTypingTheory.value_has_type_def, AllCaseEqs()]
-QED
-
 Theorem abi_encoder_source_window_robust:
   abi_enc_plan env ty ei /\
   evaluate_type env ty = SOME tv /\ value_has_type tv v /\
