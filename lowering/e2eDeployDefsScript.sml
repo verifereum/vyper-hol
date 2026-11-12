@@ -123,7 +123,8 @@ Definition deploy_state_rel_def:
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\
       tx.function_name = "__init__" /\ ~tx.is_static /\
-      call_outcomes_ok am tx (MAP SND (call_trace es)) /\
+      call_outcomes_storage_ok am tx (MAP SND (call_trace es)) /\
+      balance_bounded (2 ** 256 - 1) es /\
       (* Under constructor_call_free the real call trace is empty, so this
        * clause is vacuous. It could be discharged by proving that a
        * call-free constructor compiles (through O1 and codegen) to code with
@@ -135,6 +136,23 @@ Definition deploy_state_rel_def:
         (MAP SND (call_trace es)) /\
       ALOOKUP am.sources tx.target = NONE /\ layouts_agree tops am tx
 End
+
+(* The constructor frame starts with empty return data, so returndata_bounded
+   holds of es without a premise; with the balance bound, the callee outcome
+   bounds follow as for the call relation. *)
+Theorem deploy_state_rel_call_outcomes_ok:
+  deploy_state_rel tops deploy_bc am tx es ==>
+  call_outcomes_ok am tx (MAP SND (call_trace es))
+Proof
+  strip_tac >>
+  `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es /\
+   call_outcomes_storage_ok am tx (MAP SND (call_trace es))` by
+    gvs[deploy_state_rel_def, vfmReturndataBoundTheory.returndata_bounded_def] >>
+  drule_all call_trace_outcomes_bounded >>
+  qpat_x_assum `call_outcomes_storage_ok _ _ _` mp_tac >>
+  simp[call_outcomes_ok_def, call_outcomes_storage_ok_def, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> res_tac
+QED
 
 (* ===== Creation result cases (no nested creation frame_outcome) ===== *)
 
