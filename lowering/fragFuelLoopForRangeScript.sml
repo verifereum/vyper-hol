@@ -813,6 +813,81 @@ Proof
   fs[at_point_def] >> metis_tac[])
 QED
 
+Theorem range_declare_continuation[local]:
+  !k ce id ty lc E Wv.
+    (!bc W. cenv_ptrs_in W bc /\ stmt_exits_in E bc lc ==>
+       fuel_okS (\st. cenv_ptrs_below st.cs_next_var bc) W {} E (k bc)) /\
+    cenv_ptrs_in Wv ce /\ stmt_exits_in E ce lc ==>
+    fuel_okS (\st. cenv_ptrs_below st.cs_next_var ce) Wv {} E
+      (do bc <- declare_local ce id ty; k bc od)
+Proof
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[declare_local_def, LET_THM] >> BETA_TAC >>
+  reverse (Cases_on `ce.ce_alloca_locals`)
+  >- (asm_rewrite_tac[] >> pure_rewrite_tac[comp_bind_return] >> BETA_TAC >>
+      irule fuel_okS_mono >>
+      qpat_assum `!bc W. _` (irule_at Any) >>
+      simp[cenv_ptrs_in_def, cenv_ptrs_below_def, stmt_exits_in_def] >>
+      qexists_tac `Wv` >> gvs[cenv_ptrs_in_def, stmt_exits_in_def] >>
+      metis_tac[]) >>
+  asm_rewrite_tac[] >>
+  pure_rewrite_tac[comp_bind_assoc, comp_bind_return] >> BETA_TAC >>
+  match_mp_tac fuel_okS_fresh_var >> gen_tac >> BETA_TAC >>
+  pure_rewrite_tac[comp_bind_return] >> BETA_TAC >>
+  irule fuel_okS_mono >>
+  qpat_assum `!bc W. _` (irule_at Any) >>
+  simp[cenv_ptrs_in_def, cenv_ptrs_below_def, stmt_exits_in_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  qexists_tac `STRING #"%" (toString n) INSERT Wv` >>
+  qpat_x_assum `!bc W. _` kall_tac >>
+  gvs[cenv_ptrs_in_def, stmt_exits_in_def] >>
+  rpt conj_tac
+  >- (rpt gen_tac >> Cases_on `id = id'` >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >> Cases_on `id = id'` >> gvs[]
+  >~ [`var_below _ (STRING #"%" _)`] >- simp[var_below_def]
+  >~ [`var_below _ x`]
+  >- (qpat_assum `!i v z. FLOOKUP _ i = SOME (PtrVar (Var v) z) ==> var_below n v`
+        (drule_then assume_tac) >>
+      gvs[var_below_def] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem range_prefix_join[local]:
+  (!n W Wb E counter endpoint cond bodylbl incr exit op ops (B:unit compiler).
+    Wb SUBSET {x | x IN W /\ var_below n x} /\
+    counter NOTIN Wb /\ endpoint NOTIN Wb /\ counter <> endpoint /\
+    counter IN W /\ (op = MSTORE \/ op = INVALID) /\
+    fuel_okS (\st. n <= st.cs_next_var) Wb {} (E UNION {exit;incr}) B ==>
+    fuel_okS (\st. n <= st.cs_next_var /\
+                   var_below st.cs_next_var counter /\
+                   var_below st.cs_next_var endpoint) W {} E
+      (do emit_inst JMP [Label cond] [];
+          new_block cond;
+          test <- emit_op EQ [Var counter; Var endpoint];
+          emit_inst JNZ [test; Label exit; Label bodylbl] [];
+          new_block bodylbl;
+          emit_void op ops;
+          B;
+          emit_jmp_if_not_terminated incr;
+          new_block incr;
+          tmp <- emit_op ADD [Var counter; Lit 1w];
+          emit_inst ASSIGN [tmp] [counter];
+          emit_inst JMP [Label cond] [];
+          new_block exit;
+          return () od)) ==>
+  !cenv lctx ty id fty start_e end_e bound body Wv E.
+    (!c t e Wv' E'. fuel_ok Wv' {} E' (lower_value compile_expr c t e)) /\
+    (!cenv' lc Wv' E'.
+       cenv_ptrs_in Wv' cenv' /\ stmt_exits_in E' cenv' lc ==>
+       fuel_okS (\st. cenv_ptrs_below st.cs_next_var cenv') Wv' {} E'
+         (compile_stmts cenv' lc ty body)) /\
+    cenv_ptrs_in Wv cenv /\ stmt_exits_in E cenv lctx ==>
+    fuel_okS (\st. cenv_ptrs_below st.cs_next_var cenv) Wv {} E
+      (compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body))
+Proof
+  cheat
+QED
+
 Theorem fuel_okS_compile_for_range:
   !cenv lctx ty id fty start_e end_e bound body Wv E.
     (!c t e Wv' E'. fuel_ok Wv' {} E' (lower_value compile_expr c t e)) /\
