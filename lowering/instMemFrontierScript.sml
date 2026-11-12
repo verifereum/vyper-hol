@@ -2,8 +2,9 @@
  * Frontier checks per opcode
  *
  * inst_mem_below_frontier inst s says that every source memory range of
- * inst in s lies below the allocation frontier s.vs_alloca_next.  Here it
- * is unfolded per opcode into a condition on the operands' values, so a
+ * inst in s lies below the allocation frontier s.vs_alloca_next, or inside
+ * the dynamic region [vs_initial_fmp, vs_fmp) that DALLOCA allocates from.
+ * Here it is unfolded per opcode into a condition on the operands' values, so a
  * leaf proof that knows where an instruction reads and writes discharges
  * it without the range tables.  DRET's ranges come from its parsed shape
  * (dret_memory_read_ranges), so it gets no per-opcode form.
@@ -82,7 +83,8 @@ QED
 Theorem below_frontier_MLOAD:
   !id op outs s.
     inst_mem_below_frontier (mk_inst id MLOAD [op] outs) s <=>
-    !off. eval_operand op s = SOME off ==> w2n off + 32 <= s.vs_alloca_next
+    !off. eval_operand op s = SOME off ==> w2n off + 32 <= s.vs_alloca_next \/
+      w2n s.vs_initial_fmp <= w2n off /\ w2n off + 32 <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, mk_inst_def] >>
@@ -92,7 +94,8 @@ QED
 Theorem below_frontier_ILOAD:
   !id op outs s.
     inst_mem_below_frontier (mk_inst id ILOAD [op] outs) s <=>
-    !off. eval_operand op s = SOME off ==> w2n off + 32 <= s.vs_alloca_next
+    !off. eval_operand op s = SOME off ==> w2n off + 32 <= s.vs_alloca_next \/
+      w2n s.vs_initial_fmp <= w2n off /\ w2n off + 32 <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, mk_inst_def] >>
@@ -103,7 +106,8 @@ Theorem below_frontier_MSTORE:
   !id dst v outs s.
     inst_mem_below_frontier (mk_inst id MSTORE [dst; v] outs) s <=>
     !d w. eval_operand dst s = SOME d /\ eval_operand v s = SOME w ==>
-          w2n d + 32 <= s.vs_alloca_next
+          w2n d + 32 <= s.vs_alloca_next \/
+            w2n s.vs_initial_fmp <= w2n d /\ w2n d + 32 <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, fixed_source_write_range_def,
@@ -115,7 +119,8 @@ Theorem below_frontier_MSTORE8:
   !id dst v outs s.
     inst_mem_below_frontier (mk_inst id MSTORE8 [dst; v] outs) s <=>
     !d w. eval_operand dst s = SOME d /\ eval_operand v s = SOME w ==>
-          w2n d + 1 <= s.vs_alloca_next
+          w2n d + 1 <= s.vs_alloca_next \/
+            w2n s.vs_initial_fmp <= w2n d /\ w2n d + 1 <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, fixed_source_write_range_def,
@@ -127,7 +132,8 @@ Theorem below_frontier_ISTORE:
   !id dst v outs s.
     inst_mem_below_frontier (mk_inst id ISTORE [dst; v] outs) s <=>
     !d w. eval_operand dst s = SOME d /\ eval_operand v s = SOME w ==>
-          w2n d + 32 <= s.vs_alloca_next
+          w2n d + 32 <= s.vs_alloca_next \/
+            w2n s.vs_initial_fmp <= w2n d /\ w2n d + 32 <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, fixed_source_write_range_def,
@@ -140,8 +146,10 @@ Theorem below_frontier_MCOPY:
     inst_mem_below_frontier (mk_inst id MCOPY [dst; src; len] outs) s <=>
     !d a n. eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
             eval_operand len s = SOME n ==>
-            (w2n n = 0 \/ w2n a + w2n n <= s.vs_alloca_next) /\
-            (w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next)
+            (w2n n = 0 \/ w2n a + w2n n <= s.vs_alloca_next \/
+              w2n s.vs_initial_fmp <= w2n a /\ w2n a + w2n n <= w2n s.vs_fmp) /\
+            (w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next \/
+              w2n s.vs_initial_fmp <= w2n d /\ w2n d + w2n n <= w2n s.vs_fmp)
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, sized_source_write_range_def,
@@ -155,7 +163,8 @@ Theorem below_frontier_CALLDATACOPY:
     inst_mem_below_frontier (mk_inst id CALLDATACOPY [dst; src; len] outs) s <=>
     !d a n. eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
             eval_operand len s = SOME n ==>
-            w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next
+            w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next \/
+              w2n s.vs_initial_fmp <= w2n d /\ w2n d + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, sized_source_write_range_def,
@@ -169,7 +178,8 @@ Theorem below_frontier_DLOADBYTES:
     inst_mem_below_frontier (mk_inst id DLOADBYTES [dst; src; len] outs) s <=>
     !d a n. eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
             eval_operand len s = SOME n ==>
-            w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next
+            w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next \/
+              w2n s.vs_initial_fmp <= w2n d /\ w2n d + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, sized_source_write_range_def,
@@ -183,7 +193,8 @@ Theorem below_frontier_RETURNDATACOPY:
     inst_mem_below_frontier (mk_inst id RETURNDATACOPY [dst; src; len] outs) s <=>
     !d a n. eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
             eval_operand len s = SOME n ==>
-            w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next
+            w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next \/
+              w2n s.vs_initial_fmp <= w2n d /\ w2n d + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, sized_source_write_range_def,
@@ -197,7 +208,8 @@ Theorem below_frontier_CODECOPY:
     inst_mem_below_frontier (mk_inst id CODECOPY [dst; src; len] outs) s <=>
     !d a n. eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
             eval_operand len s = SOME n ==>
-            w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next
+            w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next \/
+              w2n s.vs_initial_fmp <= w2n d /\ w2n d + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, sized_source_write_range_def,
@@ -211,7 +223,8 @@ Theorem below_frontier_EXTCODECOPY:
     inst_mem_below_frontier (mk_inst id EXTCODECOPY [addr; dst; src; len] outs) s <=>
     !x d a n. eval_operand addr s = SOME x /\ eval_operand dst s = SOME d /\
               eval_operand src s = SOME a /\ eval_operand len s = SOME n ==>
-              w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next
+              w2n n = 0 \/ w2n d + w2n n <= s.vs_alloca_next \/
+                w2n s.vs_initial_fmp <= w2n d /\ w2n d + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, sized_source_write_range_def,
@@ -225,7 +238,8 @@ Theorem below_frontier_SHA3:
   !id off len outs s.
     inst_mem_below_frontier (mk_inst id SHA3 [off; len] outs) s <=>
     !b n. eval_operand off s = SOME b /\ eval_operand len s = SOME n ==>
-          w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next
+          w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next \/
+            w2n s.vs_initial_fmp <= w2n b /\ w2n b + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, memory_range_of_operands_def,
@@ -237,7 +251,8 @@ Theorem below_frontier_RETURN:
   !id off len outs s.
     inst_mem_below_frontier (mk_inst id RETURN [off; len] outs) s <=>
     !b n. eval_operand off s = SOME b /\ eval_operand len s = SOME n ==>
-          w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next
+          w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next \/
+            w2n s.vs_initial_fmp <= w2n b /\ w2n b + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, memory_range_of_operands_def,
@@ -249,7 +264,8 @@ Theorem below_frontier_REVERT:
   !id off len outs s.
     inst_mem_below_frontier (mk_inst id REVERT [off; len] outs) s <=>
     !b n. eval_operand off s = SOME b /\ eval_operand len s = SOME n ==>
-          w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next
+          w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next \/
+            w2n s.vs_initial_fmp <= w2n b /\ w2n b + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, memory_range_of_operands_def,
@@ -262,7 +278,8 @@ Theorem below_frontier_CREATE:
     inst_mem_below_frontier (mk_inst id CREATE [vl; off; len] outs) s <=>
     !v b n. eval_operand vl s = SOME v /\ eval_operand off s = SOME b /\
             eval_operand len s = SOME n ==>
-            w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next
+            w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next \/
+              w2n s.vs_initial_fmp <= w2n b /\ w2n b + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, memory_range_of_operands_def,
@@ -276,7 +293,8 @@ Theorem below_frontier_CREATE2:
     inst_mem_below_frontier (mk_inst id CREATE2 [vl; off; len; salt] outs) s <=>
     !v b n x. eval_operand vl s = SOME v /\ eval_operand off s = SOME b /\
               eval_operand len s = SOME n /\ eval_operand salt s = SOME x ==>
-              w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next
+              w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next \/
+                w2n s.vs_initial_fmp <= w2n b /\ w2n b + w2n n <= w2n s.vs_fmp
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, memory_range_of_operands_def,
@@ -294,8 +312,10 @@ Theorem below_frontier_CALL:
       eval_operand vl s = SOME v /\ eval_operand off s = SOME b /\
       eval_operand len s = SOME n /\ eval_operand roff s = SOME ro /\
       eval_operand rlen s = SOME rn ==>
-      (w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next) /\
-      (w2n rn = 0 \/ w2n ro + w2n rn <= s.vs_alloca_next)
+      (w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next \/
+        w2n s.vs_initial_fmp <= w2n b /\ w2n b + w2n n <= w2n s.vs_fmp) /\
+      (w2n rn = 0 \/ w2n ro + w2n rn <= s.vs_alloca_next \/
+        w2n s.vs_initial_fmp <= w2n ro /\ w2n ro + w2n rn <= w2n s.vs_fmp)
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, memory_range_of_operands_def,
@@ -317,8 +337,10 @@ Theorem below_frontier_STATICCALL:
       eval_operand gas s = SOME g /\ eval_operand addr s = SOME x /\
       eval_operand off s = SOME b /\ eval_operand len s = SOME n /\
       eval_operand roff s = SOME ro /\ eval_operand rlen s = SOME rn ==>
-      (w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next) /\
-      (w2n rn = 0 \/ w2n ro + w2n rn <= s.vs_alloca_next)
+      (w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next \/
+        w2n s.vs_initial_fmp <= w2n b /\ w2n b + w2n n <= w2n s.vs_fmp) /\
+      (w2n rn = 0 \/ w2n ro + w2n rn <= s.vs_alloca_next \/
+        w2n s.vs_initial_fmp <= w2n ro /\ w2n ro + w2n rn <= w2n s.vs_fmp)
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, memory_range_of_operands_def,
@@ -339,8 +361,10 @@ Theorem below_frontier_DELEGATECALL:
       eval_operand gas s = SOME g /\ eval_operand addr s = SOME x /\
       eval_operand off s = SOME b /\ eval_operand len s = SOME n /\
       eval_operand roff s = SOME ro /\ eval_operand rlen s = SOME rn ==>
-      (w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next) /\
-      (w2n rn = 0 \/ w2n ro + w2n rn <= s.vs_alloca_next)
+      (w2n n = 0 \/ w2n b + w2n n <= s.vs_alloca_next \/
+        w2n s.vs_initial_fmp <= w2n b /\ w2n b + w2n n <= w2n s.vs_fmp) /\
+      (w2n rn = 0 \/ w2n ro + w2n rn <= s.vs_alloca_next \/
+        w2n s.vs_initial_fmp <= w2n ro /\ w2n ro + w2n rn <= w2n s.vs_fmp)
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, memory_range_of_operands_def,
@@ -362,7 +386,8 @@ Theorem below_frontier_LOG:
        (mk_inst id LOG (Lit (n2w n) :: topics ++ [len; buf]) outs) s <=>
      !ts b l. eval_operands (REVERSE topics) s = SOME ts /\
               eval_operand buf s = SOME b /\ eval_operand len s = SOME l ==>
-              w2n l = 0 \/ w2n b + w2n l <= s.vs_alloca_next)
+              w2n l = 0 \/ w2n b + w2n l <= s.vs_alloca_next \/
+                w2n s.vs_initial_fmp <= w2n b /\ w2n b + w2n l <= w2n s.vs_fmp)
 Proof
   rw[inst_mem_below_frontier_def, source_memory_read_ranges_def,
      source_memory_write_ranges_def, memory_range_of_operands_def,
