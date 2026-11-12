@@ -109,7 +109,7 @@ Proof
   simp[] >> strip_tac >>
   `joint_segment C q0 w qe` by metis_tac[cj 3 decorated_execution_segment] >>
   drule_all layout_stage_segment_annotations >> strip_tac >>
-  qexistsl [`w`, `qe`, `d`, `ass`] >> simp[]
+  qexistsl [`w`, `qe`, `d`, `ass`] >> fs[]
 QED
 
 (* Root entry: the target run terminates with the source's GAS events. *)
@@ -315,7 +315,7 @@ Proof
      gvs[TAKE_LENGTH_APPEND]) >>
   irule finite_run_prefix_realizable >>
   `finite_run_prefix C fn s es0` by
-    (simp[Abbr `es0`] >> irule gas_events_blocks_prefix >> simp[]) >>
+    (simp[Abbr `es0`] >> irule gas_events_blocks_prefix >> gvs[]) >>
   drule (cj 2 finite_prefix_entry) >> strip_tac >>
   rename1 `active_inst fn inst' p` >>
   qabbrev_tac `q0 = JointConfig [] [] FEMPTY entry_taint fn inst' p [] FEMPTY []
@@ -333,7 +333,7 @@ Proof
   `joint_segment C q0 w qe` by metis_tac[cj 2 decorated_prefix_segment] >>
   drule_all layout_stage_segment_annotations >> strip_tac >>
   `EVERY bb_well_formed fn.fn_blocks` by fs[wf_function_def, EVERY_MEM] >>
-  `s.vs_allocas = FEMPTY` by
+  `vs.vs_allocas = FEMPTY /\ s.vs_allocas = FEMPTY` by
     fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `?fn2 positions.
      lookup_function name C'.ctx_functions = SOME fn2 /\
@@ -372,7 +372,9 @@ Proof
     (events_OB C C' (layout_canonical_OB D lo vs C C' q0 (MAP FST w) (MAP SND w) ass qe))
     (events_OutR C C' (layout_canonical_OutR D lo vs C C' q0 (MAP FST w) (MAP SND w) ass qe))` by
     (irule layout_canonical_prefix_certificates >> metis_tac[]) >>
-  drule_all selected_prefix_simulation >> simp[]
+  `decorated_run_prefix C fn s q0 0 w qe es0` by
+    (qpat_x_assum `s = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  drule_all selected_prefix_simulation >> fs[]
 QED
 
 val _ = export_theory();
