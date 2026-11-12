@@ -336,7 +336,7 @@ Theorem bare_global_clause_immutable:
     ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) tops
 Proof
   rpt strip_tac
-  >- (irule bare_global_not_const_immutable >> qexists `[]` >>
+  >- (irule bare_global_not_const_immutable >> simp[] >> qexists `[]` >>
       `cx_tops cx = tops` by metis_tac[gasContextTheory.cx_tops_module] >>
       gvs[exprSimHypsDefsTheory.cx_const_name_def]) >>
   `?ts. get_module_code cx NONE = SOME ts /\ is_immutable_decl id ts` by
