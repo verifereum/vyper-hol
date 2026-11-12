@@ -68,8 +68,8 @@ Theorem emit_count_comparison_endpoint_ptr[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all emit_count_comparison_endpoint_ptr_core >>
-  disch_then (qspec_then `G` mp_tac) >>
-  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `G`] mp_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
 QED
 
@@ -90,7 +90,7 @@ Theorem emit_clamp_scalar_endpoint_ptr[local]:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all emit_clamp_scalar_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
 QED
 
@@ -104,7 +104,7 @@ Theorem emit_assert_endpoint_ptr[local]:
       v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\ t = s
 Proof
   strip_tac >> drule_all emit_assert_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >> simp[]
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >> simp[]
 QED
 
 Theorem emit_count_load_endpoint_ptr[local]:
@@ -125,7 +125,7 @@ Theorem emit_count_load_endpoint_ptr[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all emit_count_load_endpoint_ptr_core >>
-  disch_then (qspecl_then [`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
 QED
 
@@ -188,8 +188,8 @@ QED
 
 Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
   drule_all emit_count_load_endpoint_ptr_core >>
-  disch_then (qspec_then `G` mp_tac) >>
-  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `G`] mp_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u1 cnt = {}` >>
   rename1 `op_prov H1 cnt = NONE` >>
   `?b. eval_operand cnt s1 = SOME b` by
@@ -206,8 +206,8 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
     (Cases_on `cnt` >> gvs[eval_operand_def, lookup_var_def]) >>
   qpat_x_assum `run_inst_seq (emitted_insts c1 c2) s1 = _` kall_tac >>
   drule_all emit_count_comparison_endpoint_ptr_core >>
-  disch_then (qspec_then `H1` mp_tac) >> simp[NoAsms] >>
-  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `H1`] mp_tac) >> simp[NoAsms] >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u2 cmp = {}` >> rename1 `op_prov H2 cmp = NONE` >>
   `run_inst_seq (emitted_insts c2 c3)
     (s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
@@ -218,7 +218,7 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
   `MEM ISZERO [SIGNEXTEND; SHR; SHL; EQ; ISZERO] /\
     EVERY (\op. op_taint u2 op = {} /\ op_prov H2 op = NONE) [cmp]` by simp[] >>
   drule_all emit_clamp_scalar_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] mp_tac) >> simp[NoAsms] >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] mp_tac) >> simp[NoAsms] >>
   strip_tac >> rename1 `op_taint u3 ok = {}` >> rename1 `op_prov H3 ok = NONE` >>
   qpat_x_assum `emitted_insts sa sb = _` kall_tac >>
   qpat_x_assum `run_inst_seq (emitted_insts sa c1) _ = _` kall_tac >>
@@ -232,7 +232,7 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
      simp[run_inst_seq_inst_idx, mk_inst_def, is_terminator_def, exec_result_map_def]) >>
   qpat_x_assum `run_inst_seq (emitted_insts c3 sb) s3 = _` kall_tac >>
   drule_all emit_assert_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] mp_tac) >> simp[NoAsms] >> strip_tac >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] mp_tac) >> simp[NoAsms] >> strip_tac >>
   `t = s3` by
     (qpat_x_assum `t with vs_inst_idx := _ = _` mp_tac >>
      simp[venom_state_component_equality]) >>
@@ -334,7 +334,7 @@ Theorem calldata_count_guard_endpoint_ptr:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all calldata_count_guard_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`,`G`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
 QED
 
@@ -380,7 +380,7 @@ Proof
   disch_then (mp_then Any strip_assume_tac run_inst_seq_append_ok) >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
   drule_all emit_count_load_endpoint_ptr_core >>
-  disch_then (qspecl_then [`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   `lookup_var root s1 = SOME (n2w d) /\ ptr_covers HG u root s1 totalbytes` by
     (conj_tac >- metis_tac[] >> irule ptr_covers_frame >> metis_tac[]) >>
   `ptr_covers HG u root s1 32` by
@@ -577,7 +577,7 @@ Proof
     (mp_then Any strip_assume_tac run_inst_seq_append_ok) >>
   rename1 `run_inst_seq (emitted_insts guard_st header_st) s1 = OK s2` >>
   drule_all calldata_count_guard_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`,`G`] strip_assume_tac) >>
   rename1 `op_taint u1 guard_cnt = {}` >>
   rename1 `op_prov H1 guard_cnt = NONE` >>
   `eval_operand src s1 = SOME a /\ op_taint u1 src = {}` by
@@ -627,7 +627,7 @@ Resume actual_array_init_endpoint_ptr_core[joint_index]:
   qpat_x_assum `run_inst_seq (emitted_insts header_st sb) s2 = _` kall_tac >>
   drule_at (Pat `run_inst_seq _ _ = _`) actual_index_init_endpoint_ptr_core >>
   disch_then drule >>
-  disch_then (qspecl_then [`u2`,`cx`,`ctx`,`R`,`PG`,`H2`] mp_tac) >>
+  disch_then (qspecl_then [`u2`,`cx`,`ctx`,`R`,`PG`,`H`,`H2`] mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
   simp[NoAsms] >> strip_tac >>
   suspend "joint_finish"
@@ -778,7 +778,7 @@ Proof
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] mp_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] mp_tac) >>
   impl_tac
   >- (simp[] >> Cases_on `FLOOKUP s.vs_allocas (sb.cs_next_id - 2)` >> simp[]
       >- gvs[] >>
@@ -823,7 +823,7 @@ Theorem calldata_array_init_endpoint_ptr:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all calldata_array_init_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
 QED
 
@@ -881,7 +881,7 @@ Proof
   disch_then (qspecl_then [`srcpos`,`n`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
   drule_all calldata_array_init_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
   `p < dimword (:256)` by
     (drule abi_decoder_budget_word_bound >> decide_tac) >>
   `n2w p = (n2w p':bytes32)` by metis_tac[optionTheory.SOME_11] >>
@@ -949,7 +949,7 @@ Proof
      simp[ci_mono_def, cs_extends_def]) >>
   `sb.cs_next_id <= last` by decide_tac >>
   drule_all calldata_array_init_sequence_ptr >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
   qexistsl_tac [`setup`,`sb`,`t`,`p`,`HG`,`u`,`q`] >>
   simp[] >> fs[ptr_covers_def, lookup_var_def]
 QED
