@@ -1131,7 +1131,9 @@ Proof
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   `!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
      !a b op. lower_value compile_expr c (expr_type e) e a = (op, b) ==>
-              cs_extends a b` by metis_tac[] >>
+              cs_extends a b` by
+    (rpt strip_tac >> qpat_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
+     qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
   drule_all annassign_memory_code_parts >>
   disch_then (qx_choosel_then [`st`, `sA`, `sV`, `sB`, `vv`, `op`, `p`] strip_assume_tac) >>
   rename1 `declare_local cenv id vtyp sa = (c, st)` >>

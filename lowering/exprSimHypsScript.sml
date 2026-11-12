@@ -864,11 +864,7 @@ QED
 Theorem ifexp_arg_type_fits_refl:
   !t. arg_type_fits t t
 Proof
-  Induct >> simp[arg_type_fits_def]
-  >- (Cases >> simp[arg_type_fits_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >> simp[arg_type_fits_def])
-  >- (Induct_on `l` >> simp[arg_type_fits_def]) >>
-  Cases >> simp[arg_type_fits_def]
+  simp[vyperTypeSystemTheory.arg_type_fits_refl]
 QED
 
 (* Physical return facts used by the revised IfExp layout alternative. *)

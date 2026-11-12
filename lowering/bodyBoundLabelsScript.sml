@@ -604,13 +604,15 @@ Theorem bound_labels_make_tuple:
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks
       (SND (cfn ce (expr_type e) e t))))) ==>
-  !buf off s. (!l. compiler_label l ==> P l) /\
+  !tys buf off s. (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_make_tuple cfn ce es buf off s))))
+    (SND (compile_make_tuple cfn ce es tys buf off s))))
 Proof
   Induct >> simp[compile_make_tuple_def, comp_return_def] >>
-  rpt strip_tac >> irule bound_labels_bind >> conj_tac
+  rpt strip_tac >> Cases_on `tys` >>
+  gvs[compile_make_tuple_def, comp_return_def] >>
+  irule bound_labels_bind >> conj_tac
   >- (simp[] >> rpt strip_tac >>
       rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
         bound_labels_unwrap_value, bound_labels_store_memory]),
@@ -2462,7 +2464,8 @@ Proof
     bound_labels_alloc_buffer, bound_labels_store_memory, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC]) >>
-  irule bound_labels_lower_value >> simp[bound_labels_expr_mutual]
+  FIRST [irule bound_labels_get_target_ptr, irule bound_labels_lower_value] >>
+  simp[bound_labels_expr_mutual]
 QED
 
 Theorem bound_labels_stmt_tuple_assign[local]:
