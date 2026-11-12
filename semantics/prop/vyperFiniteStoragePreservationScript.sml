@@ -213,7 +213,7 @@ Proof
             `leaf`,`[]`,`0`] >> simp[storage_subregion_def]
 QED
 
-Theorem eval_base_place_observed_region[local]:
+Theorem eval_base_place_observed_region:
   !bt cx st b slot leaf st'.
   eval_base_place cx bt st = (INL (PlaceR (StoragePlace b slot leaf)),st') ==>
   ?offset tv path delta.
