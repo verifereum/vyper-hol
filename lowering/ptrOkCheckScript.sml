@@ -1,5 +1,5 @@
-(* Soundness of vyperCompiler's ptr_ok_check: a unit without DALLOCA that
- * passes it has every function pointer-confined (ptrDiscipline's fn_ptr_ok),
+(* Soundness of vyperCompiler's ptr_ok_check: a unit that passes
+ * it has every function pointer-confined (ptrDiscipline's fn_ptr_ok),
  * with the pointer parameters it computes.
  *
  * TOP-LEVEL:
@@ -312,7 +312,7 @@ Proof
 QED
 
 Theorem ptr_ok_check_sound:
-  !ctx. ptr_ok_check ctx /\ ~ctx_has_dalloca ctx ==>
+  !ctx. ptr_ok_check ctx ==>
         EVERY (\fn. fn_ptr_ok (\nm. set (ctx_ptr_param_list ctx nm)) fn /\
                     fn_ptr_ok (\nm. set (ctx_ptr_param_list ctx nm))
                       (reachable_fn fn))
@@ -324,9 +324,8 @@ Proof
                EVERY (\i. i.inst_opcode <> PHI) (fn_insts fn) /\
                fn_ptr_ok_check (ctx_ptr_param_list ctx)
                  (fn_reachable_blocks fn)) ctx.ctx_functions`
-    by gvs[ptr_ok_check_def, ctx_has_dalloca_def] >>
+    by gvs[ptr_ok_check_def] >>
   qpat_x_assum `ptr_ok_check _` kall_tac >>
-  qpat_x_assum `~ctx_has_dalloca _` kall_tac >>
   rw[EVERY_MEM] >> fs[EVERY_MEM] >> first_x_assum drule >> strip_tac >>
   `fn_reachable_blocks fn = reachable_fn fn` by
     simp[fn_reachable_blocks_reachable_fn, EVERY_MEM] >>
