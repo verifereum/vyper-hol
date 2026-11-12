@@ -399,7 +399,7 @@ Proof
   gvs[no_control_exc_def]
 QED
 
-Theorem checked_constructor_prefix_body_components:
+Theorem checked_constructor_prefix_input_ready:
   check_contract T layouts target mods = SOME deploy_art /\
   check_contract F layouts target mods = SOME runtime_art /\
   ALOOKUP sources target = SOME mods /\ tx.target = target /\
@@ -419,9 +419,11 @@ Theorem checked_constructor_prefix_body_components:
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot ((mut = View \/ mut = Pure) \/ cx.txn.is_static); if (mut = View \/ mut = Pure) then return () else check_not_static cx od
-   else return ()) (send_st with scopes := [scope]) = (INL (),body_st) /\
-  eval_stmts cx body body_st = (res,body_st') ==>
-  state_well_typed body_st' /\ accounts_well_typed body_st'.accounts
+   else return ()) (send_st with scopes := [scope]) = (INL (),body_st) ==>
+  body_st.scopes = [scope] /\ state_well_typed body_st /\
+  accounts_well_typed body_st.accounts /\
+  env_immutables_consistent (artifact_env deploy_art mods NONE) cx body_st /\
+  ALL_DISTINCT (MAP FST args)
 Proof
   strip_tac >>
   `machine_well_typed am_c` by
@@ -448,13 +450,41 @@ Proof
     (irule (iffLR env_immutables_consistent_immutables_cong) >>
      qexists `initial_state am_c [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>` >>
      simp[initial_state_def]) >>
-  `ALL_DISTINCT (MAP FST args)` by
-    (drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
-     `check_function_body layouts tx.target mods deploy_art NONE Deploy mut nr
-        args dflts ret body` by
-       (irule check_contract_deploy_function_body_MEM >> simp[] >>
-        qexistsl [`tx.function_name`,`raw`] >> simp[]) >>
-     gvs[check_function_body_def, params_ok_def]) >>
+  simp[] >>
+  drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
+  `check_function_body layouts tx.target mods deploy_art NONE Deploy mut nr
+     args dflts ret body` by
+    (irule check_contract_deploy_function_body_MEM >> simp[] >>
+     qexistsl [`tx.function_name`,`raw`] >> simp[]) >>
+  gvs[check_function_body_def, params_ok_def]
+QED
+
+Theorem checked_constructor_prefix_body_components:
+  check_contract T layouts target mods = SOME deploy_art /\
+  check_contract F layouts target mods = SOME runtime_art /\
+  ALOOKUP sources target = SOME mods /\ tx.target = target /\
+  cx = (initial_evaluation_context sources layouts tx NONE with in_deploy := T) /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  installed_am = (am with immutables updated_by CONS (target,imms)) /\
+  machine_well_typed installed_am /\ context_well_typed cx /\
+  checked_deployment_constants_ready cx installed_am target mods /\
+  evaluate_all_constants cx installed_am target mods = SOME am_c /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  send_call_value mut cx
+    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),send_st) /\
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot ((mut = View \/ mut = Pure) \/ cx.txn.is_static); if (mut = View \/ mut = Pure) then return () else check_not_static cx od
+   else return ()) (send_st with scopes := [scope]) = (INL (),body_st) /\
+  eval_stmts cx body body_st = (res,body_st') ==>
+  state_well_typed body_st' /\ accounts_well_typed body_st'.accounts
+Proof
+  strip_tac >>
+  drule_all checked_constructor_prefix_input_ready >> strip_tac >>
   irule checked_constructor_body_preserves_components >>
   qexistsl [`args`,`body`,`cx`,`deploy_art`,`dflts`,`layouts`,`mods`,`mut`,`nr`,
     `res`,`ret`,`runtime_art`,`scope`,`sources`,`body_st`,`ts`,`tx`,`vals`] >>
