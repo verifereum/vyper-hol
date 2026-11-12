@@ -87,6 +87,48 @@ fun address_fragment mul_fragment =
   irule fragExecPtrTheory.frag_exec_ptr_seq >>
   qexistsl_tac [`\g t v. g=g3 /\ t=tn3 /\ v=s3`, `c3`] >> simp[];
 
+(* Counted execution of the same four address instructions.  The path
+   interfaces are arguments to avoid a dependency on the header theory. *)
+fun address_path arith_path binop_path path_then =
+ `gas_path_ptr D 0 ctx fn PG G tn s 0 g1 tn1 (OK s1)` by
+  (simp[Abbr `g1`, Abbr `tn1`, Abbr `s1`, NoAsms] >>
+   irule arith_path >> simp[update_var_def] >>
+   qexistsl_tac [`id`, `MUL`, `[Var ctr;Lit (n2w ss)]`] >>
+   simp[update_var_def, get_instruction_def,
+     listTheory.EL_APPEND_EQN, op_taint_def,
+     venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
+     venomExecSemanticsTheory.exec_pure2_def, eval_operand_def,
+     word_mul_n2w, DISJ_IMP_THM, FORALL_AND_THM] >> gvs[op_taint_def]) >>
+ `gas_path_ptr D 0 ctx fn PG g1 tn1 s1 0 g2 tn2 (OK s2)` by
+  (simp[Abbr `g2`, Abbr `tn2`, Abbr `s2`, NoAsms] >>
+   irule arith_path >> simp[Abbr `s1`, update_var_def] >>
+   qexistsl_tac [`id+1`, `MUL`, `[Var ctr;Lit (n2w ds)]`] >>
+   simp[Abbr `tn1`, update_var_def, lookup_var_def,
+     get_instruction_def, listTheory.EL_APPEND_EQN,
+     op_taint_def, FLOOKUP_UPDATE,
+     venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
+     venomExecSemanticsTheory.exec_pure2_def, eval_operand_def,
+     word_mul_n2w, DISJ_IMP_THM, FORALL_AND_THM] >>
+   gvs[lookup_var_def, op_taint_def, FLOOKUP_UPDATE, word_mul_n2w]) >>
+ `op_taint tn (Var sr) = {} /\ op_taint tn (Var dr) = {}` by
+  gvs[ptr_covers_def] >>
+ `gas_path_ptr D 0 ctx fn PG g2 tn2 s2 0 g3 tn3 (OK s3)` by
+  (simp[Abbr `g3`, Abbr `tn3`, Abbr `s3`, Abbr `t3`, NoAsms] >>
+   irule binop_path >> simp[] >>
+   gvs[Abbr `s2`, Abbr `s1`, Abbr `tn2`, Abbr `tn1`,
+     get_instruction_def, listTheory.EL_APPEND_EQN,
+     update_var_def, lookup_var_def, eval_operand_def, op_taint_def,
+     FLOOKUP_UPDATE, arithmeticTheory.ADD1]) >>
+ `gas_path_ptr D 0 ctx fn PG g3 tn3 s3 0 g4 tn4 (OK s4)` by
+  (simp[Abbr `g4`, Abbr `tn4`, Abbr `s4`, Abbr `t4`, NoAsms] >>
+   irule binop_path >> simp[] >>
+   simp[Abbr `tn3`, Abbr `t3`, copy_len_binop_ghost_frame] >>
+   gvs[Abbr `s3`, Abbr `s2`, Abbr `s1`, Abbr `tn2`, Abbr `tn1`,
+     get_instruction_def, listTheory.EL_APPEND_EQN,
+     update_var_def, lookup_var_def, eval_operand_def, op_taint_def,
+     FLOOKUP_UPDATE, arithmeticTheory.ADD1]) >>
+ metis_tac[path_then, arithmeticTheory.ADD_CLAUSES];
+
 fun address_resources dynamic_covers =
   `lookup_var sp s4 = SOME (n2w (w2n a + i*ss)) /\
    lookup_var dp s4 = SOME (n2w (w2n b + i*ds)) /\

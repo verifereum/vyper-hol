@@ -49,44 +49,8 @@ Proof
 QED
 
 Resume typed_copy_loop_address_path_ptr[path]:
- `gas_path_ptr D 0 ctx fn PG G tn s 0 g1 tn1 (OK s1)` by
-  (simp[Abbr `g1`, Abbr `tn1`, Abbr `s1`, NoAsms] >>
-   irule typed_copy_control_arith_path_ptr >>
-   simp[update_var_def] >>
-   qexistsl [`id`, `MUL`, `[Var ctr;Lit (n2w ss)]`] >>
-   simp[update_var_def, get_instruction_def, EL_APPEND_EQN, op_taint_def,
-     step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
-     eval_operand_def, word_mul_n2w, DISJ_IMP_THM, FORALL_AND_THM] >>
-   gvs[op_taint_def]) >>
- `gas_path_ptr D 0 ctx fn PG g1 tn1 s1 0 g2 tn2 (OK s2)` by
-  (simp[Abbr `g2`, Abbr `tn2`, Abbr `s2`, NoAsms] >>
-   irule typed_copy_control_arith_path_ptr >>
-   simp[Abbr `s1`, update_var_def] >>
-   qexistsl [`id+1`, `MUL`, `[Var ctr;Lit (n2w ds)]`] >>
-   simp[Abbr `tn1`, update_var_def, lookup_var_def,
-     get_instruction_def, EL_APPEND_EQN, op_taint_def, FLOOKUP_UPDATE,
-     step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
-     eval_operand_def, word_mul_n2w, DISJ_IMP_THM, FORALL_AND_THM] >>
-   gvs[lookup_var_def, op_taint_def, FLOOKUP_UPDATE, word_mul_n2w]) >>
- `op_taint tn (Var sr) = {} /\ op_taint tn (Var dr) = {}` by
-  gvs[ptr_covers_def] >>
- `gas_path_ptr D 0 ctx fn PG g2 tn2 s2 0 g3 tn3 (OK s3)` by
-  (simp[Abbr `g3`, Abbr `tn3`, Abbr `s3`, Abbr `t3`, NoAsms] >>
-   irule annassign_copy_len_binop_path_ptr >>
-   simp[] >>
-   gvs[Abbr `s2`, Abbr `s1`, Abbr `tn2`, Abbr `tn1`,
-     get_instruction_def, EL_APPEND_EQN, update_var_def, lookup_var_def,
-     eval_operand_def, op_taint_def, FLOOKUP_UPDATE, ADD1]) >>
- `gas_path_ptr D 0 ctx fn PG g3 tn3 s3 0 g4 tn4 (OK s4)` by
-  (simp[Abbr `g4`, Abbr `tn4`, Abbr `s4`, Abbr `t4`, NoAsms] >>
-   irule annassign_copy_len_binop_path_ptr >>
-   simp[] >>
-   simp[Abbr `tn3`, Abbr `t3`, copy_len_binop_ghost_frame] >>
-   gvs[Abbr `s3`, Abbr `s2`, Abbr `s1`,
-     Abbr `tn2`, Abbr `tn1`, get_instruction_def, EL_APPEND_EQN,
-     update_var_def, lookup_var_def, eval_operand_def, op_taint_def,
-     FLOOKUP_UPDATE, ADD1]) >>
- metis_tac[gas_path_ptr_then, ADD_CLAUSES]
+ typedCopyLoopAmbientLib.address_path typed_copy_control_arith_path_ptr
+   annassign_copy_len_binop_path_ptr gas_path_ptr_then
 QED
 
 Resume typed_copy_loop_address_path_ptr[resources]:
