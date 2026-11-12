@@ -105,7 +105,9 @@ End
 
 (* The internal lowering boundary is independently checked: the function must
    be the current context member, unsealed, covered by current information,
-   canonically parameterized without an existing FMP parameter, and every
+   canonically parameterized without an existing FMP parameter, with fewer
+   user parameters than 2^256 (the root reads the hidden one at that index
+   as a word literal), and every
    instruction must have a supported exact envelope. *)
 Definition fmp_lower_input_def:
   fmp_lower_input infos ctx fn <=>
@@ -113,6 +115,7 @@ Definition fmp_lower_input_def:
     fn.fn_fmp_signature = NONE /\
     FLOOKUP infos fn.fn_name <> NONE /\
     canonical_param_prefix fn /\
+    LENGTH (fn_user_param_insts fn) < dimword (:256) /\
     fn_hidden_fmp_param fn = NONE /\
     IS_SOME (split_fmp_entry fn) /\
     fmp_lower_blocks_shape infos ctx fn.fn_blocks
