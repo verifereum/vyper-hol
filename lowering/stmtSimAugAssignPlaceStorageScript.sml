@@ -432,7 +432,8 @@ Proof
   >- (PairCases_on `id` >> gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
       metis_tac[])
   >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  >- (Cases_on `subscript_reads_base cx e e'` >>
+      gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
       imp_res_tac read_result_state >>
       imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
       qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
@@ -493,7 +494,8 @@ Proof
   >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
   >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
   >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  >- (Cases_on `subscript_reads_base cx e e'` >>
+      gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
       imp_res_tac read_result_state >>
       imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
       qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
