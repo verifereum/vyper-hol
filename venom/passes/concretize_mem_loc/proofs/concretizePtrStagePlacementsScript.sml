@@ -61,7 +61,7 @@ Theorem ptr_stage_placements_live_owner:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   FLOOKUP TG v = SOME (token,aid) /\
@@ -76,5 +76,28 @@ Theorem ptr_stage_placements_live_owner:
     MEM (Allocation aid,p,sz) output.fn_mems_used /\
     FLOOKUP positions (Allocation aid) = SOME (p,sz)
 Proof
-  cheat
+  strip_tac >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
+  drule_all ptr_source_ownership_live_cache >> strip_tac >>
+  `ptr_ledger_source_activations vs C h a tokens registry` by
+    metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations] >>
+  `FLOOKUP registry token = SOME (ptr_owner_view d a).cf_fn` by
+    metis_tac[ptr_source_activations_owner_lookup] >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+     a.po_fn a.po_inst a.po_state` by
+    metis_tac[ptr_source_activations_sound, ptr_chrono_history_reachable,
+      ptr_observation_reachable_def] >>
+  `?output p.
+    lookup_function (ptr_owner_view d a).cf_fn.fn_name C'.ctx_functions = SOME output /\
+    MEM (Allocation aid,p,sz) output.fn_mems_used` by
+    (Cases_on `d = LENGTH a.po_stack`
+     >- (gvs[ptr_owner_view_def] >> drule_all ptr_frame_current_mems >> simp[]) >>
+     `MEM (ptr_owner_view d a) a.po_stack` by
+       (simp[ptr_owner_view_def] >> irule EL_MEM >> decide_tac) >>
+     drule_all ptr_frame_saved_mems >> simp[]) >>
+  qexistsl [`d`,`(ptr_owner_view d a).cf_fn`,`output`,`p`] >> simp[] >>
+  gvs[ptr_stage_placements_def] >>
+  metis_tac[lookup_function_MEM]
 QED

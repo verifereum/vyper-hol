@@ -624,10 +624,10 @@ Proof
 QED
 
 Theorem ptr_ledger_probe_owner_erasure:
-  ptr_ledger_erases (ptr_ledger_probe_births s)
+  ptr_ledger_erases 0 (ptr_ledger_probe_births s)
     (FEMPTY |+ ("p",(0,10))) (ptr_ledger_o1 s).po_prov
 Proof
-  simp[ptr_ledger_erases_def, ptr_ledger_probe_births_def,
+  simp[ptr_ledger_erases_def, ptr_owner_erases_def, ptr_ledger_probe_births_def,
     ptr_ledger_o1_def, ptr_ledger_next_def, ptr_observe_def,
     ptr_ledger_source_entry_def, step_prov_def, mk_inst_def,
     ptr_ledger_s1_def, ptr_probe_allocated_state_def, update_var_def,
@@ -637,7 +637,7 @@ Proof
 QED
 
 Theorem ptr_ledger_probe_owner_read_erasure:
-  ptr_ledger_erases (ptr_ledger_probe_births s)
+  ptr_ledger_erases 0 (ptr_ledger_probe_births s)
     (FEMPTY |+ ("p",(0,10))) (ptr_ledger_o3 s).po_prov
 Proof
   ` (ptr_ledger_o3 s).po_prov = (ptr_ledger_o1 s).po_prov` by
@@ -686,7 +686,8 @@ Theorem ptr_ledger_read_vars[local]:
 Proof
   strip_tac >>
   qspec_then `s` mp_tac (GEN_ALL ptr_ledger_probe_owner_read_erasure) >>
-  simp[ptr_ledger_erases_def, ptr_ledger_probe_births_def, FLOOKUP_UPDATE] >>
+  simp[ptr_ledger_erases_def, ptr_owner_erases_def, ptr_ledger_probe_births_def,
+    FLOOKUP_UPDATE] >>
   strip_tac >> pure_rewrite_tac[ptr_prefix_vars_def] >> gen_tac >>
   pure_rewrite_tac[ptr_ledger_read_var_lookups] >>
   first_x_assum (qspec_then `v` assume_tac) >>
@@ -702,7 +703,7 @@ Definition ptr_ledger_root_read_ready_def:
   ptr_ledger_root_read_ready C Ct s R B G rho reloc <=>
     R = ptr_ledger_probe_registry /\ B = ptr_ledger_probe_births s /\
     G = (FEMPTY |+ ("p",(0,10))) /\
-    ptr_ledger_erases B G (ptr_ledger_o3 s).po_prov /\
+    ptr_ledger_erases 0 B G (ptr_ledger_o3 s).po_prov /\
     ptr_ledger_owned_site R B 0 10 s.vs_alloca_next 32 0 /\
     ptr_ledger_write_pair C Ct rho (ptr_ledger_o1 s) (ptr_ledger_o2 s)
       (ptr_ledger_q1 s) (ptr_ledger_q2 s) /\
