@@ -6,6 +6,7 @@ Ancestors
   abiEncoderRegisteredEffect loweringHalt emitHelperProps fragExec
   compileEnv venomState venomExecSemantics valueEncodingProps
   instIdxIndep finite_map words list pred_set arithmetic memContinuation exprLoweringProps freshWrites
+  abiEncoderWindowPhaseFrameMem abiEncoderWindowMemFrame
 
 Theorem abi_encode_word_stage_mem[local]:
   compile_alloc_buffer 32 st = (buf,allocated) /\
@@ -19,6 +20,8 @@ Theorem abi_encode_word_stage_mem[local]:
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t sb. window_phase ctx func st staged {st.cs_next_id} [] s t /\
     mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     eval_operand buf.buf_operand t = SOME (n2w sb) /\ mload sb t = w /\
     (!x. buf.buf_operand = Var x ==> not_fresh_at staged x) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (sb,32) /\
@@ -48,6 +51,11 @@ Proof
   >- (irule window_phase_chain >>
       qexistsl_tac [`{st.cs_next_id}`, `[]`, `allocated`, `{st.cs_next_id}`, `[]`, `u`] >> simp[]) >>
   conj_tac >- metis_tac[mem_cont_sim_trans] >>
+  conj_tac
+  >- (strip_tac >>
+      drule_all window_cursor_store_phase_mem_frame >> strip_tac >>
+      irule window_mem_frame_trans >> qexists `u` >> simp[]) >>
+  conj_tac >- simp[venomMemPropsTheory.LENGTH_mstore_eq] >>
   conj_tac
   >- (pure_rewrite_tac[eval_op_inst_idx] >> simp[]) >>
   conj_tac
@@ -84,6 +92,8 @@ Theorem abi_encode_word_source_window_mem:
     staged.cs_next_var <= final.cs_next_var /\ staged.cs_next_id <= final.cs_next_id /\
     window_phase ctx func arg_st staged {arg_st.cs_next_id} [] s t /\
     mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     eval_operand buf.buf_operand t = SOME (n2w sb) /\ mload sb t = w /\
     (!x. buf.buf_operand = Var x ==> not_fresh_at staged x) /\
     abi_encoder_window_input
