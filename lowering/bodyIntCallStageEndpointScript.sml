@@ -71,10 +71,10 @@ Resume intcall_stage_args_endpoint[word]:
     (irule staged_args_lower_frontier >> goal_assum (drule_at Any) >>
      gvs[ci_mono_def]) >>
   `wb_frame ce es es sm s t` by
-    (irule exprSimConvertBytesTheory.convert_wb_frame_trans >>
-     simp[] >> conj_tac
-     >- (qexistsl_tac [`es`,`z`,`sm'`] >> gvs[ci_mono_def]) >>
-     qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
+    (qspecl_then [`ctx`,`func`,`ce`,`cx`,`es`,`es`,`sm`,`sm'`,`s`,`z`,`t`] mp_tac
+       exprSimConvertBytesTheory.convert_wb_frame_trans >>
+     impl_tac >- (rpt conj_tac >> fs[ci_mono_def]) >>
+     simp[]) >>
   qexistsl_tac [`t`,`(vv_type vv,tv,v,T,op)::D`] >> simp[] >>
   metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0]
 QED
@@ -101,10 +101,10 @@ Resume intcall_stage_args_endpoint[memory]:
   `EVERY (staged_arg ce func es sm sn t) D` by
     (irule staged_args_lower_frontier >> goal_assum (drule_at Any) >> simp[]) >>
   `wb_frame ce es es sm s t` by
-    (irule exprSimConvertBytesTheory.convert_wb_frame_trans >>
-     simp[] >> conj_tac
-     >- (qexistsl_tac [`es`,`z`,`sj`] >> gvs[ci_mono_def] >> decide_tac) >>
-     qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
+    (qspecl_then [`ctx`,`func`,`ce`,`cx`,`es`,`es`,`sm`,`sj`,`s`,`z`,`t`] mp_tac
+       exprSimConvertBytesTheory.convert_wb_frame_trans >>
+     impl_tac >- (rpt conj_tac >> fs[ci_mono_def]) >>
+     simp[]) >>
   qexistsl_tac [`t`,`(vv_type vv,tv,v,F,buf.buf_operand)::D`] >> simp[] >>
   metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0]
 QED
