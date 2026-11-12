@@ -3337,7 +3337,9 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) live` >> gvs[] >>
   imp_res_tac deepResidualBudgetTheory.do_dup_spilled_eq >> gvs[] >>
-  metis_tac[fnPlanLineageInventoryTheory.popmany_plan_spilled_unchanged, pairTheory.SND,
+  qpat_x_assum `popmany_plan _ _ = _`
+    (mp_tac o AP_TERM ``\p : stack_op list # plan_state. (SND p).ps_spilled``) >>
+  simp[fnPlanLineageInventoryTheory.popmany_plan_spilled_unchanged,
     stackPlanTypesTheory.plan_state_accfupds]
 QED
 
