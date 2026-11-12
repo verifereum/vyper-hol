@@ -427,6 +427,9 @@ Resume prefix_loop_header_operand_path[path]:
     (simp[Abbr `u4`,Abbr `u3`,Abbr `u2`,Abbr `u1`,update_var_def,allocas_from_def,
        eval_operand_def,lookup_var_def,FLOOKUP_UPDATE] >>
      gvs[allocas_from_def] >> metis_tac[]) >>
+  `get_instruction <|bb_label := hdr; bb_instructions := ins|> 4 =
+     SOME (mk_inst (hid+4) JNZ [Var done; Label exit_lbl; Label body_lbl] [])` by
+    simp[get_instruction_def,Abbr `ins`,abi_decode_header_insts_def] >>
   `jump_to (if j<n then body_lbl else exit_lbl) u4 =
    jump_to (if bool_to_word (~(j<n)) <> 0w then exit_lbl else body_lbl)
      (u4 with vs_inst_idx := 4)` by
@@ -434,10 +437,14 @@ Resume prefix_loop_header_operand_path[path]:
      simp[bool_to_word_def,jump_to_def,venom_state_component_equality]) >>
   `gas_origin_ptr_path (D',lo,explicit,ctx,fn,PG) (u4 with vs_inst_idx := 4,g4,q4) []
      (OK (jump_to (if j<n then body_lbl else exit_lbl) u4),g4,q4)` by
-    (pop_assum SUBST1_TAC >> irule jnz_origin_ptr_path >>
-     simp[get_instruction_def,Abbr `ins`,abi_decode_header_insts_def,mk_inst_def]) >>
-  irule gas_origin_ptr_path_trans >>
-  qexistsl [`u4 with vs_inst_idx := 4`,`g4`,`q4`] >> simp[]
+    (pop_assum SUBST1_TAC >>
+     mp_tac (Q.INST [`s` |-> `u4 with vs_inst_idx := 4`,
+       `bb` |-> `<|bb_label := hdr; bb_instructions := ins|>`, `iid` |-> `hid+4`,
+       `cond` |-> `Var done`, `w` |-> `bool_to_word (~(j<n))`,
+       `l1` |-> `exit_lbl`, `l2` |-> `body_lbl`, `G` |-> `g4`, `tn` |-> `q4`,
+       `func` |-> `fn`, `D` |-> `D'`] jnz_origin_ptr_path) >>
+     simp[]) >>
+  drule_all gas_origin_ptr_path_trans >> simp[]
 QED
 
 Resume prefix_loop_header_operand_path[trace]:

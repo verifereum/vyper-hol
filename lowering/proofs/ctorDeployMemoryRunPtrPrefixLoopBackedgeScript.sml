@@ -270,13 +270,13 @@ Proof
   `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
      (t with vs_inst_idx := s.vs_inst_idx + 2, H, qt) []
      (OK (jump_to hdr (t with vs_inst_idx := s.vs_inst_idx + 2)), H, qt)` by
-    (irule jmp_origin_ptr_path >> qexistsl [`bb`,`iid+2`] >>
+    (mp_tac (Q.INST [`s` |-> `t with vs_inst_idx := s.vs_inst_idx + 2`,
+       `iid` |-> `iid+2`, `lbl` |-> `hdr`, `G` |-> `H`, `tn` |-> `qt`]
+       jmp_origin_ptr_path) >>
      simp[get_instruction_def,abi_decode_backedge_insts_def,EL_APPEND_EQN]) >>
   `jump_to hdr (t with vs_inst_idx := s.vs_inst_idx + 2) = jump_to hdr t` by
     simp[jump_to_def] >>
-  irule gas_origin_ptr_path_trans >>
-  qexistsl [`t with vs_inst_idx := s.vs_inst_idx + 2`,`H`,`qt`] >>
-  gvs[]
+  drule_all gas_origin_ptr_path_trans >> gvs[]
 QED
 
 Resume prefix_loop_increment_path[trace]:

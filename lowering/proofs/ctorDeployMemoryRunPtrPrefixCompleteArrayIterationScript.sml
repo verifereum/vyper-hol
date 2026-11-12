@@ -467,8 +467,7 @@ QED
 Resume prefix_complete_child_iteration_mode[finish]:
  rule_assum_tac BETA_RULE >>
  qexistsl [`t`,`H'`,`qt'`,`B UNION B'`] >>
- conj_tac >- (rpt strip_tac >> irule gas_origin_ptr_path_trans >>
-   qexistsl [`actual`,`H`,`qt`] >> metis_tac[]) >>
+ conj_tac >- (rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]) >>
  conj_tac >- (strip_tac >>
    `gas_path_mem ctx func prepared 0 (OK actual) /\
     gas_path_mem ctx func actual 0 (OK t) /\ alloca_history func t` by metis_tac[] >>

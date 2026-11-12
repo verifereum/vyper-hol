@@ -342,6 +342,8 @@ Theorem prefix_loop_element_setup_at_index_pair:
   allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
   ?t H qt.
     run_inst_seq (emitted_insts st st') s = OK t /\
+    (!D' k. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st')
+       (s with vs_inst_idx := k) H qt) /\
     eval_operand idx t = SOME (n2w j) /\
     eval_operand child_src t = SOME (n2w (sb + abi_array_child_offset NONE
       (vyper_to_abi_type env ty) avs j)) /\
