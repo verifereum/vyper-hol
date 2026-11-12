@@ -11,7 +11,7 @@ Theorem ifexp_lowered_type_evaluates[local]:
     IS_SOME (evaluate_type (get_tenv cx) (lowered_value_type cenv e))
 Proof
   recInduct lowered_value_type_ind >> rpt conj_tac >> rpt gen_tac >>
-  strip_tac >> gvs[lowered_value_type_def]
+  rpt strip_tac >> gvs[lowered_value_type_def]
   >- (simp[optionTheory.IS_SOME_EXISTS] >>
       irule bytestring_memory_bound_evaluates >>
       simp[compileEnvTheory.is_bytestring_type_def] >>
