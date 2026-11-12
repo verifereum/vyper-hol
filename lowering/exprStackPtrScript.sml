@@ -1,6 +1,6 @@
 Theory exprStackPtr
 Ancestors
-  exprSimStack bodyPtrDefs fragGasPathPtr gasSummaryComposePtr
+  exprSimStack bodyPtrDefs fragGasPathPtr gasSummaryComposePtr gasStorage
   gasOutcome gasContext gasSummary gasSummaryCompose gasExemptCert
   exprSimDefs loweringPosts exprLowering emitHelper compileEnv
   vyperInterpreter vyperState
