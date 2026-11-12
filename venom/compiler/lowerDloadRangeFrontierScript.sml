@@ -16,7 +16,8 @@ Theorem ld_classified_range_frontier:
   (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= frontier) ==>
   n=0 \/ w2n y+n <= frontier \/ y=x
 Proof
-  strip_tac >> Cases_on `n=0` >> simp[] >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  Cases_on `n=0` >> simp[] >>
   Cases_on `op_prov H ops.iao_ofst` >- metis_tac[] >>
   rename1 `op_prov H ops.iao_ofst = SOME a` >>
   `ld_wordrel A (SOME a) x y` by metis_tac[] >>

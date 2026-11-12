@@ -43,7 +43,8 @@ Proof
   >- (rpt strip_tac >> Cases_on `out = v` >> gvs[ld_env_agree_def]) >>
   rpt gen_tac >> Cases_on `out = v` >>
   gvs[ld_env_agree_def, ld_value_agree_scalar, word_agree_except_def] >>
-  rpt strip_tac >> first_x_assum drule_all >> simp[op_taint_def]
+  rpt strip_tac >> TRY (gvs[] >> NO_TAC) >>
+  first_x_assum drule_all >> simp[op_taint_def]
 QED
 
 Theorem ld_joint_dalloca_next[local]:
