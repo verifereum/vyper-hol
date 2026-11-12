@@ -28,7 +28,7 @@ QED
 (* Why: the step proofs read the target's code at the control map's index
    off the lowering's own walk; a point's restores come first, then its
    expansion. *)
-Theorem fmp_control_tidx_code_unique[local]:
+Theorem fmp_control_tidx_code_unique:
   fmp_stage_lowered infos ctx runner fn fn' /\ MEM bb fn.fn_blocks /\
   fn.fn_fmp_signature = NONE /\
   (?info. FLOOKUP infos fn.fn_name = SOME info /\
