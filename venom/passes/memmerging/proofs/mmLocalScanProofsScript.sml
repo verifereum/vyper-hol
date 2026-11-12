@@ -17744,6 +17744,43 @@ Proof
     venomStateTheory.lookup_var_def, venomStateTheory.venom_state_component_equality]
 QED
 
+Theorem mm_local_zero_nonvolatile_successor[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  n < LENGTH is /\ ~is_volatile_memory (EL n is) ==>
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n /\
+  mm_local_zero_capture dfg is (SUC n) = mm_local_zero_capture dfg is n
+Proof
+  strip_tac >>
+  `~is_zero_store (EL n is) /\ ~is_calldatasize_copy dfg (EL n is)` by
+    (Cases_on `(EL n is).inst_opcode` >>
+     gvs[is_volatile_memory_def, is_zero_store_def, is_calldatasize_copy_def,
+       venomEffectsTheory.read_effects_def, venomEffectsTheory.write_effects_def,
+       venomEffectsTheory.all_effects_def]) >>
+  `!g. MEM g gs ==> rep_of_group is g <> SOME ((EL n is).inst_id,g)` by
+    (rpt strip_tac >> drule mm_local_rep_member >> strip_tac >>
+     gvs[] >> drule_all mm_local_memzero_group_roles >> strip_tac >>
+     `i = EL n bb.bb_instructions` by
+       (gvs[] >> metis_tac[mmWfProofsTheory.all_distinct_map_inv, EL_MEM]) >>
+     metis_tac[]) >>
+  `~((EL n is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES})` by
+    (Cases_on `(EL n is).inst_opcode` >>
+     gvs[is_volatile_memory_def, venomEffectsTheory.read_effects_def,
+       venomEffectsTheory.write_effects_def, venomEffectsTheory.all_effects_def]) >>
+  conj_tac
+  >- (gvs[] >>
+      simp[mm_local_pending_indices_def, rich_listTheory.COUNT_LIST_SNOC,
+        rich_listTheory.SNOC_APPEND, FILTER_APPEND] >>
+      AP_THM_TAC >> AP_TERM_TAC >> rewrite_tac[FUN_EQ_THM] >>
+      qx_gen_tac `j` >>
+      eq_tac >> strip_tac >> gvs[]
+      >- (qexistsl [`g`,`r`] >> simp[] >> decide_tac) >>
+      `r <> n` by metis_tac[] >> qexistsl [`g`,`r`] >> simp[] >> decide_tac) >>
+  rewrite_tac[FUN_EQ_THM] >> qx_gen_tac `j` >>
+  (Cases_on `j = n` >- gvs[mm_local_zero_capture_def]) >>
+  `j < SUC n <=> j < n` by decide_tac >> simp[mm_local_zero_capture_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
