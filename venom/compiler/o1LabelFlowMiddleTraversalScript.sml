@@ -556,3 +556,102 @@ Proof
     (irule visit_blocks_codecopy_seed_at >> metis_tac[]) >>
   metis_tac[]
 QED
+
+Theorem fn_insts_lookup_index:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) f.fn_blocks) /\
+  MEM j (fn_insts f) ==>
+  ?q bb k. lookup_block q f.fn_blocks = SOME bb /\
+    k < LENGTH bb.bb_instructions /\ j = EL k bb.bb_instructions
+Proof
+  simp[fn_insts_def, fn_insts_blocks_MEM] >> strip_tac >>
+  `lookup_block bb.bb_label f.fn_blocks = SOME bb` by
+    metis_tac[venomExecProofsTheory.MEM_lookup_block] >>
+  metis_tac[MEM_EL]
+QED
+
+Theorem owned_function_label_flow:
+  label_flow_ok (ctx with ctx_functions := [f]) /\
+  (!j. MEM j (fn_insts g) ==> ?i. MEM i (fn_insts f) /\
+    j.inst_opcode = i.inst_opcode /\
+    LIST_REL (\v n. (n,v) IN H) i.inst_outputs j.inst_outputs /\
+    (i.inst_opcode <> PHI ==>
+      LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                       | _ => b = a) i.inst_operands j.inst_operands)) /\
+  (!j n x. MEM j (fn_insts g) /\ MEM (Var n) j.inst_operands /\
+    (n,x) IN H /\ code_end_var f x ==>
+    j.inst_opcode = CODECOPY /\ ?dst sz.
+      j.inst_operands = [dst; Var n; sz] /\ dst <> Var n /\ sz <> Var n) /\
+  (!j. MEM j (fn_insts g) /\ j.inst_opcode = CODECOPY ==>
+    ?dst src sz. j.inst_operands = [dst;src;sz] /\
+      (src = Label "runtime_begin" \/ ?n. src = Var n /\ code_end_var g n)) ==>
+  label_flow_ok (ctx with ctx_functions := [g])
+Proof
+  strip_tac >>
+  `!n. code_end_var g n ==> ?x. (n,x) IN H /\ code_end_var f x` by
+    (rpt strip_tac >> drule code_end_var_owned_bound >>
+     disch_then (qspecl_then [`f`,`H`] mp_tac) >>
+     (impl_tac >- (conj_tac >- (rpt strip_tac >>
+        qpat_x_assum `!j. MEM j (fn_insts g) ==> _` drule >>
+        strip_tac >> qexists `i` >> gvs[]) >>
+        metis_tac[])) >> simp[]) >>
+  gvs[label_flow_ok_def] >> rpt strip_tac
+  >- metis_tac[]
+  >- metis_tac[]
+  >> metis_tac[]
+QED
+
+Theorem visit_blocks_label_flow:
+  visit_blocks path s rs f.fn_blocks sm tree = ((ct,t,final),events) /\
+  ALL_DISTINCT (dom_tree_postorder tree) /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) f.fn_blocks) /\
+  (!q. MEM q (dom_tree_postorder tree) ==> IS_SOME (lookup_block q f.fn_blocks)) /\
+  (!l ss. ALOOKUP sm l = SOME ss ==> ALL_DISTINCT ss) /\
+  EVERY current_nondeg_block_shape f.fn_blocks /\
+  current_name_owner V H u /\
+  (!e. MEM e events ==> current_stack_owner V H (SND e.sve_in) /\
+    current_stack_owner V H (SND e.sve_out) /\
+    LIST_REL (\i j. LIST_REL (\v n. (n,v) IN H)
+      i.inst_outputs j.inst_outputs) e.sve_before e.sve_after) /\
+  (!bb i v. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions ==>
+    (MEM (Var v) i.inst_operands \/ MEM v i.inst_outputs ==> v IN V)) /\
+  wf_function f /\ label_flow_ok (ctx with ctx_functions := [f]) /\
+  (!x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
+    d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+    d.inst_outputs = [x] /\
+    (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+    (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+      MEM (Var x) j.inst_operands ==>
+      j.inst_opcode = CODECOPY /\
+      (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+        dst <> Var x /\ sz <> Var x) /\
+      ?a b. bb.bb_instructions = a ++ [d;j] ++ b)) ==>
+  label_flow_ok (ctx with ctx_functions := [f with fn_blocks := final])
+Proof
+  strip_tac >>
+  `rename_current_blocks s rs f.fn_blocks sm tree = (ct,t,final)` by
+    metis_tac[visit_erasure, FST] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) final)` by
+    metis_tac[cj 1 makeSsaCurrentPropsTheory.rename_current_blocks_labels] >>
+  irule owned_function_label_flow >> conj_tac
+  >- (rpt strip_tac >>
+      `?q bb k. lookup_block q final = SOME bb /\
+        k < LENGTH bb.bb_instructions /\ j = EL k bb.bb_instructions` by
+        (mp_tac (Q.INST [`f` |-> `f with fn_blocks := final`] fn_insts_lookup_index) >>
+         simp[] >> metis_tac[]) >>
+      drule visit_blocks_codecopy_sources >>
+      disch_then (qspecl_then [`u`,`ctx`,`V`,`H`,`q`,`bb`,`k`] mp_tac) >>
+      (impl_tac >- metis_tac[]) >> metis_tac[]) >>
+  qexistsl [`H`,`f`] >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `?q bb k. lookup_block q final = SOME bb /\
+        k < LENGTH bb.bb_instructions /\ j = EL k bb.bb_instructions` by
+        (mp_tac (Q.INST [`f` |-> `f with fn_blocks := final`] fn_insts_lookup_index) >>
+         simp[] >> metis_tac[]) >>
+      drule visit_blocks_protected_read >>
+      disch_then (qspecl_then [`x`,`u`,`n`,`V`,`H`,`q`,`bb`,`j`] mp_tac) >>
+      (impl_tac >- metis_tac[EL_MEM]) >>
+      metis_tac[]) >>
+  drule visit_blocks_owned_inst >>
+  disch_then (qspecl_then [`u`,`V`,`H`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
