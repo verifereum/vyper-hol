@@ -15,7 +15,6 @@ Theorem hash_ghost_kept_frame:
       off <= i /\ i < off + sz /\ i IN tn'.t_mem ==> i IN tn.t_mem) /\
     (!n b sz i. local_region cenv es.scopes s n b sz /\
       b <= i /\ i < b + sz /\
-      (!k. dynarray_len_at cenv n k ==> i < b+k \/ b+k+32 <= i) /\
       i IN tn'.t_mem ==> i IN tn.t_mem) ==>
     ghost_kept cenv es sa G tn s G' tn'
 Proof
@@ -24,7 +23,7 @@ QED
 
 Theorem hash_local_robust_exterior_frame:
   !ctx fn cenv cx es s tn t tn' writes name entry p sz w.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\
@@ -55,8 +54,8 @@ QED
 
 Theorem hash_ghost_inv_exterior_frame:
   !d cenv cx es G tn s ctx fn sa t G' tn' writes.
-    ghost_inv d cenv cx es G tn s /\
-    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x. not_fresh_at sa x ==>
@@ -66,14 +65,14 @@ Theorem hash_ghost_inv_exterior_frame:
       b <= i /\ i < b+k ==> i NOTIN writes) /\
     (!i. i NOTIN writes ==> mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
     (!i. i NOTIN writes ==> (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
-    stor_taint_ok cx tn' t ==>
-    ghost_inv d cenv cx es G' tn' t
+    stor_taint_ok H cx tn' t ==>
+    ghost_inv H d cenv cx es G' tn' t
 Proof
   rpt gen_tac >> strip_tac >>
   `!p k. not_fresh_at sa p /\ ptr_covers G tn p s k ==>
     ptr_covers G' tn' p t k` by
     (rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]) >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[ghost_inv_def] >> strip_tac >>
   conj_tac >- suspend "locals" >>
   conj_tac >- (Cases_on `d` >> gvs[return_buf_ptr_def] >>
@@ -100,8 +99,8 @@ Finalise hash_ghost_inv_exterior_frame
 
 Theorem hash_ghost_inv_inst_idx:
   !d cenv cx es G tn s k.
-    ghost_inv d cenv cx es G tn (s with vs_inst_idx := k) <=>
-    ghost_inv d cenv cx es G tn s
+    ghost_inv H d cenv cx es G tn (s with vs_inst_idx := k) <=>
+    ghost_inv H d cenv cx es G tn s
 Proof
   Cases_on `d` >>
   simp[ghost_inv_def, ptr_covers_def, lookup_var_def,
@@ -113,7 +112,7 @@ QED
 (* Read-only suffixes need no semantic local-value frame premise. *)
 Theorem hash_readonly_ghost_inv:
   !d cenv cx es G tn s t G' tn' sa.
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     (t with vs_vars := s.vs_vars) = s /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
@@ -123,7 +122,7 @@ Theorem hash_readonly_ghost_inv:
     (!p. not_fresh_at sa p ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
       op_taint tn' (Var p) = op_taint tn (Var p)) ==>
-    ghost_inv d cenv cx es G' tn' t
+    ghost_inv H d cenv cx es G' tn' t
 Proof
   rpt gen_tac >> strip_tac >>
   `t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
@@ -133,7 +132,7 @@ Proof
   `!p k. not_fresh_at sa p /\ ptr_covers G tn p s k ==>
     ptr_covers G' tn' p t k` by
     (rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]) >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[ghost_inv_def] >> strip_tac >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
     `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>

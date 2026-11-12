@@ -1,6 +1,6 @@
 (* Ghost frames for allocating hash prefixes and clean stores. *)
 Theory bodyPtrHashBuiltinsAllocFrame
-Ancestors bodyPtrHashBuiltinsGhostFrame bodyPtrHashBuiltinsKeccakFixed
+Ancestors wordLoadStorePtr bodyPtrHashBuiltinsGhostFrame bodyPtrHashBuiltinsKeccakFixed
   typedCopyPtr decoderGhostFramePtr exprSimAlloc allocationPtr
   bodyPtrDefs loweringHalt emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   ptrDiscipline venomState venomInst finite_map pred_set
@@ -8,13 +8,13 @@ Ancestors bodyPtrHashBuiltinsGhostFrame bodyPtrHashBuiltinsKeccakFixed
 Theorem hash_clean_mstore_frame:
   !PG G tn s id p value a w d cenv cx es ctx fn sa.
     lookup_var p s = SOME a /\ eval_operand value s = SOME w /\
-    op_taint tn value = {} /\ ghost_inv d cenv cx es G tn s /\
-    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    op_taint tn value = {} /\ ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!n b k i. local_region cenv es.scopes s n b k /\ b <= i /\ i < b+k ==>
       ~(w2n a <= i /\ i < w2n a + 32)) ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id MSTORE [Var p;value] []) (mstore (w2n a) w s))
       (step_taint (mk_inst id MSTORE [Var p;value] []) s (mstore (w2n a) w s) tn)
       (mstore (w2n a) w s) /\
@@ -32,7 +32,7 @@ Proof
 QED
 
 Resume hash_clean_mstore_frame[invariant]:
-  `stor_taint_ok cx (step_taint (mk_inst id MSTORE [Var p;value] []) s
+  `stor_taint_ok H cx (step_taint (mk_inst id MSTORE [Var p;value] []) s
     (mstore (w2n a) w s) tn) (mstore (w2n a) w s)` by
     (gvs[ghost_inv_def, stor_taint_ok_def, mstore_def, step_taint_def,
       imm_taint_def, adopt_reset_def, mk_inst_def]) >>
@@ -52,7 +52,7 @@ Finalise hash_clean_mstore_frame
 
 Theorem hash_alloca_exterior_effects:
   !ctx fn cenv cx es s id n out s1 b PG G tn.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
@@ -84,7 +84,7 @@ QED
 
 Theorem hash_alloca_old_operand:
   !ctx fn cenv cx es s id n out t b PG G tn value w.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -102,12 +102,12 @@ QED
 
 Theorem hash_alloca_step_frame:
   !ctx fn cenv cx es s id n out s1 b PG G tn d sa.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
     FLOOKUP s1.vs_allocas id = SOME (b,n) /\
-    ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+    ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x. not_fresh_at sa x ==> x <> out) /\
@@ -115,7 +115,7 @@ Theorem hash_alloca_step_frame:
       off <= i /\ i < off+sz ==> ~(b <= i /\ i < b+n)) /\
     (!aid off sz i. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
       aid < sa.cs_next_id /\ off <= i /\ i < off+sz ==> ~(b <= i /\ i < b+n)) ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1)
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn) s1 /\
     ghost_kept cenv es sa G tn s
@@ -126,7 +126,7 @@ Theorem hash_alloca_step_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all hash_alloca_exterior_effects >> strip_tac >>
-  `stor_taint_ok cx tn s` by metis_tac[ghost_inv_def] >>
+  `stor_taint_ok H cx tn s` by metis_tac[ghost_inv_def] >>
   drule_all alloca_step_stor_taint_ok >> strip_tac >>
   conj_tac >- suspend "invariant" >>
   conj_tac >- (irule hash_ghost_kept_frame >> rpt conj_tac >>
@@ -145,16 +145,16 @@ Finalise hash_alloca_step_frame
 Theorem hash_literal_alloc_buffer_frame:
   !fn cenv cx es sa sm buf n s ctx d PG G tn.
     compile_alloc_buffer n sa = (buf,sm) /\
-    stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+    stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) ==>
     ?t w p G1 tn1.
       run_inst_seq (emitted_insts sa sm) s = OK t /\
-      stmt_state_rel ctx fn cenv cx es t /\
+      stmt_state_rel H ctx fn cenv cx es t /\
       buf.buf_operand = Var p /\ eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
       w2n w+n < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -168,7 +168,7 @@ Theorem hash_literal_alloc_buffer_frame:
         regions_disjoint (w2n w) n b k) /\ not_fresh_at sm p /\
       G1 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [p]) t /\
       tn1 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [p]) s t tn /\
-      ghost_inv d cenv cx es G1 tn1 t /\ ghost_kept cenv es sa G tn s G1 tn1 /\
+      ghost_inv H d cenv cx es G1 tn1 t /\ ghost_kept cenv es sa G tn s G1 tn1 /\
       ptr_covers G1 tn1 p t n
 Proof
   rpt gen_tac >> strip_tac >>
@@ -228,11 +228,11 @@ QED
 Theorem hash_literal_alloc_store_frame:
   !fn cenv cx es sa sm buf s ctx d PG G tn sid value v.
     compile_alloc_buffer 32 sa = (buf,sm) /\
-    stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+    stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x. value = Var x ==> not_fresh_at sa x) /\
@@ -247,8 +247,8 @@ Theorem hash_literal_alloc_store_frame:
       tn1 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]) s t tn /\
       G2 = step_prov PG G1 (mk_inst sid MSTORE [Var p;value] []) (mstore (w2n a) v t) /\
       tn2 = step_taint (mk_inst sid MSTORE [Var p;value] []) t (mstore (w2n a) v t) tn1 /\
-      stmt_state_rel ctx fn cenv cx es (mstore (w2n a) v t) /\
-      ghost_inv d cenv cx es G2 tn2 (mstore (w2n a) v t) /\
+      stmt_state_rel H ctx fn cenv cx es (mstore (w2n a) v t) /\
+      ghost_inv H d cenv cx es G2 tn2 (mstore (w2n a) v t) /\
       ghost_kept cenv es sa G tn s G2 tn2 /\
       ptr_covers G2 tn2 p (mstore (w2n a) v t) 32 /\
       (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn2.t_mem) /\

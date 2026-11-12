@@ -175,12 +175,12 @@ Proof
 QED
 
 Theorem call_stor_taint_ok:
-  inst.inst_opcode = CALL /\ stor_taint_ok cx tn s /\
+  inst.inst_opcode = CALL /\ stor_taint_ok H cx tn s /\
   s'.vs_call_ctx = s.vs_call_ctx /\
   (~(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
       s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) ==>
    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient) ==>
-  stor_taint_ok cx (step_taint inst s s' tn) s'
+  stor_taint_ok H cx (step_taint inst s s' tn) s'
 Proof
   strip_tac >> drule call_step_storage_taint >> strip_tac >>
   gvs[stor_taint_ok_def] >>
@@ -201,15 +201,15 @@ QED
 
 Theorem call_ghost_inv:
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
-  ghost_inv d cenv cx es G tn s /\ es'.scopes = es.scopes /\
+  ghost_inv H d cenv cx es G tn s /\ es'.scopes = es.scopes /\
   s'.vs_memory = s.vs_memory /\
   (step_taint inst s s' tn).t_mem = tn.t_mem /\
   (!p. p <> out ==> lookup_var p s' = lookup_var p s) /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) /\
-  stor_taint_ok cx (step_taint inst s s' tn) s' ==>
-  ghost_inv d cenv cx es' (step_prov PG G inst s')
+  stor_taint_ok H cx (step_taint inst s s' tn) s' ==>
+  ghost_inv H d cenv cx es' (step_prov PG G inst s')
     (step_taint inst s s' tn) s'
 Proof
   strip_tac >>

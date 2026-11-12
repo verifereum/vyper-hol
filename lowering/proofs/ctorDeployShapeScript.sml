@@ -11,7 +11,7 @@
  *)
 Theory ctorDeployShape
 Ancestors
-  list ctorDeployDefs o1PassContract unitShapeDefs staticLayoutDefs
+  list ctorDeployDefs immSectionDead o1PassContract unitShapeDefs staticLayoutDefs
   ctorUnitShape deployUnitProducers loweringShapeProps loweringShapeSource
   supportedProgram supportedNames compileVyper vyperCompiler
   o1PipelineCorrect o1ComposeSupport fcgPruning stackPlanGen

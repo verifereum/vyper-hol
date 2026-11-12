@@ -426,8 +426,8 @@ Proof
   (* Unfold the step and the EQ case in separate steps: together they are
      too slow for one step. *)
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def] >>
-  simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
+       mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
+       eval_operand_def] >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
        mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs,
        eval_operand_def, lookup_var_def, update_var_def,

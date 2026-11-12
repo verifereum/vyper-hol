@@ -9,11 +9,14 @@ Ancestors bodyPtrHashBuiltinsShaCase bodyPtrHashBuiltinsShaStringInput
 (* Common concrete input preparation, without converting the source value. *)
 fun hash_string_sha256_input_tac semantic_run_tac g = (
   drule_all hash_string_post_view >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     simp[is_bytestring_type_def]) >>
   `~is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all hash_string_operand >> strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx ee s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx fn cenv cx ee s` by metis_tac[expr_post_state] >>
   semantic_run_tac >>
   drule_all hash_sha256_memory_alloca_code >> strip_tac >>
   `expr_val_at cenv cx (expr_type e) sa sm ee (StringV str) x s` by
@@ -33,7 +36,7 @@ fun hash_string_sha256_input_tac semantic_run_tac g = (
   simp[eval_operand_def] >> disch_tac) g;
 
 Theorem hash_string_sha256_ptr_post:
-  expr_post ctx fn cenv cx e es sa sm s0 ee (StringV str) x s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 ee (StringV str) x s /\
   expr_type e = BaseT (StringT cap) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT cap)) /\
   ptr_val_ok cx (expr_type e) (StringV str) x G tn s /\
@@ -42,7 +45,7 @@ Theorem hash_string_sha256_ptr_post:
   fn_has_code sm sb fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sm p) /\
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sm p) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -53,12 +56,12 @@ Theorem hash_string_sha256_ptr_post:
     run_inst_seq (emitted_insts sm sb) s = OK t /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+7)) /\
-    vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+    vv_post H ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
       es sa sb s0 (ee with outcomes := SOME rest)
       (Value (BytesV (word_to_bytes (SHA_256_bytes (MAP (n2w o ORD) str)) T)))
       (StackValue (BaseT (BytesT (Fixed 32))) op)
       (t with vs_inst_idx := s.vs_inst_idx+7) /\
-    ghost_inv d cenv cx (ee with outcomes := SOME rest) Gf tf
+    ghost_inv H d cenv cx (ee with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+7) /\
     ghost_kept cenv ee sm G tn s Gf tf /\ op_taint tf op = {} /\
     op_prov Gf op = NONE
@@ -76,7 +79,7 @@ Proof
 QED
 
 Theorem hash_string_sha256_ptr_abort:
-  expr_post ctx fn cenv cx e es sa sm s0 ee (StringV str) x s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 ee (StringV str) x s /\
   expr_type e = BaseT (StringT cap) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT cap)) /\
   ptr_val_ok cx (expr_type e) (StringV str) x G tn s /\
@@ -84,7 +87,7 @@ Theorem hash_string_sha256_ptr_abort:
   compile_sha256_bytes x sm = (op,sb) /\
   fn_has_code sm sb fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sm p) /\
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sm p) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
