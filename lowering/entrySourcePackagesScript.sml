@@ -10,16 +10,8 @@ Theorem selected_external_source_member[local]:
   ?rr. MEM (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)
     (FST (classify_functions tops))
 Proof
-  strip_tac >>
-  `EVERY (supported_declaration_header tops) tops` by
-    gvs[supported_program_def, supported_declaration_headers_def] >>
-  `!nr mut ty slot. ~MEM (VariableDecl (Public nr) mut tx.function_name ty slot) tops` by
-    (fs[EVERY_MEM] >> metis_tac[supported_public_variables_rejected]) >>
-  `!nr tr kt vt slot. ~MEM (HashMapDecl (Public nr) tr tx.function_name kt vt slot) tops` by
-    (rpt strip_tac >> fs[EVERY_MEM] >>
-     first_x_assum drule >> simp[supported_hashmap_header_contract]) >>
-  `tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
-  drule_all lookup_function_external_mem >> simp[]
+  strip_tac >> irule supported_headers_external_member >>
+  gvs[supported_program_def, valid_vyper_call_def]
 QED
 
 Theorem external_source_package_labels[local]:
@@ -74,7 +66,10 @@ Theorem lower_runtime_selected_source_packages:
     sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
     EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
-    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt) exts
+    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt) exts /\
+    exts = MAP (set_external_package_target rp.rpol_target o
+      package_external_fn tops T (K global_nonreentrant_slot))
+      (FST (classify_functions tops))
 Proof
   strip_tac >> drule_all selected_external_package_member >>
   disch_then (qspec_then `rp.rpol_target` strip_assume_tac) >>

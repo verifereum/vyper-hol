@@ -281,13 +281,32 @@ Definition account_item_type_def:
   account_item_type Code = BaseT (BytesT (Dynamic 24576))
 End
 
-(* Static capacities used by Vyper's concat result inference. *)
+(* Static capacities used by Vyper's concat and slice result inference. *)
 Definition bytelike_type_bound_def:
   bytelike_type_bound (BaseT (BytesT bd)) = bound_length bd /\
   bytelike_type_bound (BaseT (StringT n)) = n /\
   bytelike_type_bound _ = 0
 End
 
+(* Slice's result bound depends on its reduced length expression. Folded
+   names lose literal-start provenance, so start bounds stay runtime checks. *)
+Definition slice_operands_ok_def:
+  slice_operands_ok bi es <=>
+    case bi of
+    | Slice n =>
+      (case EL 0 es of
+       | Builtin _ (Acc Code) [addr] =>
+           (case EL 2 es of
+            | Literal _ (IntL len) => 1 <= len /\ len <= &n
+            | _ => F)
+       | _ =>
+        let src_bound = bytelike_type_bound (expr_type (EL 0 es)) in
+        (case EL 2 es of
+         | Literal _ (IntL len) =>
+             1 <= len /\ len <= &src_bound /\ len <= &n
+         | _ => src_bound <= n))
+    | _ => T
+End
 (* A value of type t fits a slot declared as u (a call argument, a struct
    literal field, a DynArray or static-array literal element), as in Vyper's
    compare_type (validate_expected_type): a bytestring or dynamic array may
@@ -884,7 +903,8 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
-     builtin_operands_ok ty blt es /\ well_formed_type env.type_defs ty) /\
+     slice_operands_ok blt es /\ builtin_operands_ok ty blt es /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
@@ -1450,3 +1470,24 @@ Termination
             | INR ts => list_size stmt_size ts)` >>
   simp[stmt_size_def]
 End
+
+(* Place typing carries the expression's annotation, including module names. *)
+Theorem type_place_expr_vtype_annotation:
+  !e env vt. type_place_expr env e = SOME vt ==>
+    vtype_annotation_ok vt (expr_type e)
+Proof
+  Cases_on `e` >> simp[expr_type_def] >> rpt strip_tac >>
+  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()]
+  >- (Cases_on `p` >>
+      simp[Once well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()]) >>
+  metis_tac[]
+QED
+
+Theorem type_place_expr_annotation:
+  !e env ty. type_place_expr env e = SOME (Type ty) ==>
+    expr_type e = ty
+Proof
+  rpt strip_tac >> drule type_place_expr_vtype_annotation >>
+  simp[vtype_annotation_ok_def]
+QED

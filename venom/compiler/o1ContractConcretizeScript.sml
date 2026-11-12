@@ -17,7 +17,7 @@ Theorem o1_contract_concretize_mem_loc:
 Proof
   simp[concretize_step_contract_at] >>
   `EL 2 o1_fn_passes = CFP_Simple VP_ConcretizeMemLoc` by EVAL_TAC >>
-  simp[o1_run_contract_def, o1_stage_contract_def] >>
+  simp[o1_run_contract_def, o1_stage_contract_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   gvs[o1_inv_def, o1_src_inv_def, o1_static_inv_def] >>
   `ctx_inst_ids_distinct C` by fs[o1_ctx_shape_def] >>
@@ -25,8 +25,8 @@ Proof
    EVERY fn_defs_reach_uses C.ctx_functions` by
     fs[listTheory.EVERY_MEM, make_ssa_input_ok_def] >>
   drule_all concretize_stage_shape >> strip_tac >>
-  `ctx_sim D C C' vs vs` by
-    (irule concretize_stage_sim >> simp[] >> metis_tac[]) >>
+  `ctx_sim_fuel I D C C' vs vs` by
+    (irule concretize_stage_sim_fuel >> simp[] >> metis_tac[]) >>
   `mem_inv (static_mem_ok eom) C' vs` by
     (irule concretize_stage_static_mem >> simp[] >> metis_tac[]) >>
   simp[] >> metis_tac[]

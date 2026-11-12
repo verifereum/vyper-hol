@@ -97,7 +97,7 @@ Theorem guarded_parallel_phis:
 Proof
   Induct >> simp[eval_phis_def, resolved_phis_def, phis_taint_def] >>
   rpt gen_tac >> strip_tac >> Cases_on `h.inst_opcode = PHI`
-  >- (gvs[] >> gvs[AllCaseEqs()] >>
+  >- (fs[] >> gvs[AllCaseEqs()] >>
       gvs[eval_one_phi_def, AllCaseEqs()] >>
       rename1 `eval_operand op s = SOME x` >>
       rename1 `h.inst_outputs = [v]` >>

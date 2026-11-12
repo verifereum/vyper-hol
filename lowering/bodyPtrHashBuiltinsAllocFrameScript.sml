@@ -1,6 +1,6 @@
 (* Ghost frames for allocating hash prefixes and clean stores. *)
 Theory bodyPtrHashBuiltinsAllocFrame
-Ancestors bodyPtrHashBuiltinsGhostFrame bodyPtrHashBuiltinsKeccakFixed
+Ancestors wordLoadStorePtr bodyPtrHashBuiltinsGhostFrame bodyPtrHashBuiltinsKeccakFixed
   typedCopyPtr decoderGhostFramePtr exprSimAlloc allocationPtr
   bodyPtrDefs loweringHalt emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   ptrDiscipline venomState venomInst finite_map pred_set

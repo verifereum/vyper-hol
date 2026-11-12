@@ -81,7 +81,7 @@ Proof
   gvs[w2n_n2w]
 QED
 
-Theorem log_operands_values[local]:
+Theorem log_operands_values:
   !ops ws. LIST_REL (\op w. eval_operand op s = SOME w) ops ws ==>
     eval_operands ops s = SOME ws
 Proof
