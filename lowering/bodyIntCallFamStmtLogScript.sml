@@ -79,6 +79,8 @@ Resume intcall_log_stmt_step[compose]:
   qpat_assum `intcall_joint_res _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [intcall_joint_res_def]) >>
   drule_all intcall_compile_log_eval_all >> strip_tac >>
+  qpat_x_assum `xs = ZIP _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
   `sa.cs_next_var <= sm.cs_next_var` by
     metis_tac[stmtSimLogArgsGrowthTheory.compile_log_eval_all_grows] >>
   `EVERY supported_scalar_type (MAP SND xs)` by fs[] >>
