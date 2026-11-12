@@ -148,7 +148,9 @@ Finalise pop_nested_storage_frame_sim_mem
 
 Theorem pop_nested_storage_sim_mem:
   !ctx func cenv cx env ann bt ty es src id ts d.
-    target_sim_mem ctx func cenv cx env bt es /\
+    (EVERY (storage_frame_expr cx) (target_indices bt) ==>
+       target_sim_mem ctx func cenv cx env bt es) /\
+    body_base_target_mem_ok cx bt /\ body_inv (cx_tops cx) ctx cenv cx /\
     expr_body_pre cenv cx env (Pop ann bt) es /\
     target_root bt = TopLevelNameTarget (src,id) /\
     get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d ==>
@@ -160,7 +162,5 @@ Proof
   `~EVERY pure_expr (target_indices bt)` by
     metis_tac[listTheory.EVERY_MONOTONIC, storage_frame_expr_pure] >>
   irule pop_nested_storage_effectful_dead_case_mem >>
-  asm_rewrite_tac[] >> conj_tac >- metis_tac[] >>
-  qexists_tac `env` >> asm_rewrite_tac[] >>
-  rpt strip_tac >> irule target_place_sim_mem >> metis_tac[]
+  asm_rewrite_tac[] >> metis_tac[]
 QED
