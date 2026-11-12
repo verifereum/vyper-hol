@@ -19,6 +19,9 @@
 Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
+  concretizeAnalysisRoots fmpAliasProps fmpAliasDefs livenessTransferProofs
+  ctxLookupAgreeHelpers pointerClosure pointerConfinedDefs ptrDiscipline o1PassContract
+  list finite_map pred_set venomInst
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -32,6 +35,122 @@ Theorem fmp_stage_frame_sites:
                b + z <= fmp_frame_base (w2n fmp) stk) PG
 Proof
   cheat
+QED
+
+Theorem reclaim_operand_origin[local]:
+  MEM id (fmp_operand_bases env op) ==>
+  ?u. op = Var u /\ MEM id (fmp_bases env u)
+Proof
+  Cases_on `op` >> simp[fmp_operand_bases_def]
+QED
+
+Theorem reclaim_generated_origin[local]:
+  ~MEM inst.inst_opcode [ALLOCA; DALLOCA; BUMP] /\
+  MEM id (fmp_generated_bases env inst) ==>
+  is_pointer_preserving_op inst.inst_opcode /\
+  ?u. MEM (Var u) inst.inst_operands /\ MEM id (fmp_bases env u)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = ASSIGN`
+  >- (gvs[fmp_generated_bases_def, is_pointer_preserving_op_def] >>
+      Cases_on `inst.inst_operands` >> gvs[] >>
+      rename1 `MEM id (case rest of [] => _ | _ => _)` >>
+      Cases_on `rest` >> gvs[] >> metis_tac[reclaim_operand_origin]) >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (gvs[fmp_generated_bases_def, is_pointer_preserving_op_def,
+          mem_foldl_list_union, MEM_MAP] >>
+      metis_tac[reclaim_operand_origin]) >>
+  Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB` >>
+  gvs[fmp_generated_bases_def] >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `inst.inst_operands = lhs::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = lhs::rhs::tail` >>
+  Cases_on `tail` >> gvs[] >>
+  Cases_on `fmp_operand_bases env lhs = []` >>
+  Cases_on `fmp_operand_bases env rhs = []` >>
+  gvs[fmp_arithmetic_bases_def, is_pointer_preserving_op_def] >>
+  metis_tac[reclaim_operand_origin]
+QED
+
+Theorem reclaim_transfer_support[local]:
+  MEM inst (fn_insts fn) /\
+  ~MEM inst.inst_opcode [ALLOCA; BUMP] /\
+  (!v id. MEM id (fmp_bases env v) ==> v IN fn_pv P fn) ==>
+  !v id. MEM id (fmp_bases (fmp_base_transfer inst env) v) ==>
+    v IN fn_pv P fn
+Proof
+  rpt strip_tac >>
+  Cases_on `fmp_base_output inst` >>
+  gvs[fmp_base_transfer_def, fmp_bases_accumulate]
+  >- metis_tac[]
+  >- metis_tac[] >>
+  rename1 `fmp_base_output inst = SOME out` >>
+  `inst.inst_outputs = [out]` by
+    (gvs[fmp_base_output_def, fmp_single_output_def, AllCaseEqs()]) >>
+  Cases_on `inst.inst_opcode = DALLOCA`
+  >- (`out IN ptr_roots P fn` by
+        (simp[ptr_roots_def] >> disj1_tac >> disj2_tac >>
+         qexists `inst` >> simp[inst_output_def]) >>
+      metis_tac[fn_pv_def, pointer_derived_vars_roots,
+                ptr_roots_finite, SUBSET_DEF]) >>
+  drule_at (Pos last) reclaim_generated_origin >> simp[] >> strip_tac >>
+  simp[fn_pv_def] >> irule pointer_derived_vars_closed >>
+  simp[ptr_roots_finite] >> qexistsl [`inst`, `u`] >>
+  simp[] >> metis_tac[fn_pv_def]
+QED
+
+Theorem reclaim_sweep_support[local]:
+  !insts env. EVERY (\i. MEM i (fn_insts fn) /\
+      ~MEM i.inst_opcode [ALLOCA; BUMP]) insts /\
+  (!v id. MEM id (fmp_bases env v) ==> v IN fn_pv P fn) ==>
+  !v id. MEM id (fmp_bases (fmp_base_sweep insts env) v) ==>
+    v IN fn_pv P fn
+Proof
+  Induct >> simp[fmp_base_sweep_def] >> rpt strip_tac >>
+  rename1 `MEM i (fn_insts fn)` >>
+  qpat_x_assum `!e. EVERY _ _ /\ _ ==> _`
+    (qspec_then `fmp_base_transfer i env` mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      drule_at (Pos last) reclaim_transfer_support >> simp[] >>
+      disch_then (qspecl_then [`fn`, `P`] mp_tac) >> simp[] >>
+      metis_tac[]) >>
+  disch_then irule >> goal_assum drule
+QED
+
+Theorem reclaim_iter_support[local]:
+  !n env. EVERY (\i. MEM i (fn_insts fn) /\
+      ~MEM i.inst_opcode [ALLOCA; BUMP]) insts /\
+  (!v id. MEM id (fmp_bases env v) ==> v IN fn_pv P fn) ==>
+  !v id. MEM id (fmp_bases (fmp_base_iter n insts env) v) ==>
+    v IN fn_pv P fn
+Proof
+  Induct >> simp[fmp_base_iter_def] >> rpt gen_tac >> strip_tac >>
+  IF_CASES_TAC >- gvs[] >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!e. EVERY _ _ /\ _ ==> _`
+    (qspec_then `fmp_base_sweep insts env` mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      drule_at (Pos last) reclaim_sweep_support >>
+      disch_then (qspecl_then [`fn`, `P`] mp_tac) >> simp[] >>
+      metis_tac[]) >>
+  disch_then irule >> goal_assum drule
+QED
+
+Theorem reclaim_analyze_support[local]:
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn) /\
+  pre_fmp_ops fn ==>
+  !v id. MEM id (fmp_bases env v) ==> v IN fn_pv P fn
+Proof
+  simp[fmp_base_analyze_def] >> strip_tac >> gvs[] >>
+  rpt strip_tac >>
+  drule_at (Pos last) reclaim_iter_support >>
+  disch_then (qspecl_then [`fn`, `P`] mp_tac) >>
+  impl_tac
+  >- (gvs[fmp_bases_def, pre_fmp_ops_def, pre_fmp_opcode_def,
+           EVERY_MEM] >> metis_tac[]) >> simp[]
 QED
 
 Theorem fmp_stage_covers_step:
