@@ -78,6 +78,7 @@ Proof
         qexistsl_tac [`cx`, `idx`, `sd`, `t'`, `iv`, `iop`, `ctx`] >> simp[]) >>
      match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`t`, `sb`, `u`] >> fs[wb_frame_def]) >>
+  `storage_well_formed_on cx t' (FST H)` by fs[expr_post_def] >>
   irule vv_post_frame_intro >> simp[vyperASTTheory.expr_type_def, expr_has_effect_thm] >>
   qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]
 QED
