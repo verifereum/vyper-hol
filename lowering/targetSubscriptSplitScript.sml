@@ -1254,7 +1254,9 @@ Proof
   simp[] >> reverse conj_tac >- metis_tac[] >>
   irule lower_compile_expr_not_label >>
   goal_assum (drule_at (Pat `lower_value`)) >>
-  qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
+  qexists_tac `env` >> conj_tac >- fs[expr_body_pre_def] >>
+  qpat_x_assum `expr_sim_inv _ _ env _` mp_tac >>
+  simp[expr_sim_inv_def] >> metis_tac[]
 QED
 
 Theorem target_subscript_base_continuation:

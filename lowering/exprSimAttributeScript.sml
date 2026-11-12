@@ -111,6 +111,9 @@ Proof
   rpt strip_tac >>
   TRY (qpat_x_assum `~supported_expr_exists _ (Attribute _ _ _)` mp_tac >>
        simp[supportedExprTraverseTheory.supported_expr_exists_def] >> NO_TAC) >>
+  TRY (qpat_x_assum `~supported_expr_exists (const_name_root _) (Attribute _ _ _)`
+         mp_tac >>
+       simp[supportedExprTraverseTheory.supported_expr_exists_def] >> NO_TAC) >>
   qpat_x_assum `!target. supported_expr_exists _ (Attribute _ _ _) ==> _`
     (qspec_then `target` irule) >>
   simp[supportedExprTraverseTheory.supported_expr_exists_def]

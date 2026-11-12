@@ -301,8 +301,8 @@ Theorem bare_global_not_const_immutable[local]:
     ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) ts
 Proof
   Induct >> simp[is_bare_global_decl_def] >> rpt gen_tac >>
-  Cases_on `h` >> simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def]
-  >- metis_tac[] >>
+  Cases_on `h` >> simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def] >>
+  TRY (metis_tac[] >> NO_TAC) >>
   rename1 `VariableDecl dvis dmut dname dty dslot` >>
   Cases_on `dmut` >>
   simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def] >>
