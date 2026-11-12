@@ -9,7 +9,7 @@ Ancestors
   bodyPtrBytestringBuiltinsExternalSlice instIdxIndep fragExec
   exprSimAlloc loweringHalt bodyPtrBytestringBuiltinsBuffer emitHelperProps
   bodyPtrBytestringBuiltinsWindowGhost bodyPtrDefs
-  bodyPtrBytestringBuiltinsCalldataRuntime
+  bodyPtrBytestringBuiltinsCalldataRuntime bodyPtrBytestringBuiltinsCalldataReserved
   exprSimMemoryTransport valueEncodingProofs valueEncodingProps vyperState
   venomMemProofs list loweringPosts context emitHelper exprSimHash vyperContext vyperValueOperation fragGasPathPtr
 
@@ -344,7 +344,7 @@ Proof
   `run_inst_seq (emitted_insts s1 s2) u =
     Abort Revert_abort (revert_state (set_returndata [] p))` by
     (qpat_x_assum `run_inst_seq (emitted_insts s1 s2) u = _` mp_tac >>
-     qpat_assum `dimword (:256) <= a + n \/ _` (fn th => simp[th])) >>
+     IF_CASES_TAC >> gvs[]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s1 s2)` by
     (drule compile_assert_slice_bounds_layout >> strip_tac >>
      simp[mk_inst_def, is_terminator_def]) >>

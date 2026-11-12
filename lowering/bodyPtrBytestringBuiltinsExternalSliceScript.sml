@@ -285,10 +285,11 @@ Proof
   simp[compile_slice_calldata_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
   strip_tac >> gvs[] >>
-  qpat_assum `compile_slice_out_buf _ _ = _`
-    (strip_assume_tac o MATCH_MP compile_slice_out_buf_compiler_parts) >>
-  metis_tac[cs_extends_trans, cs_appends_emit_helpers, cs_appends_def,
-    slice_bounds_extends]
+  `!n x y z. compile_slice_out_buf n y = (x,z) ==> cs_extends y z` by
+    (rpt strip_tac >> Cases_on `x` >>
+     drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+     metis_tac[cs_extends_trans]) >>
+  metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
 QED
 
 Theorem compile_slice_code_stages:
@@ -305,10 +306,11 @@ Proof
   simp[compile_slice_code_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
   strip_tac >> gvs[] >>
-  qpat_assum `compile_slice_out_buf _ _ = _`
-    (strip_assume_tac o MATCH_MP compile_slice_out_buf_compiler_parts) >>
-  metis_tac[cs_extends_trans, cs_appends_emit_helpers, cs_appends_def,
-    slice_bounds_extends]
+  `!n x y z. compile_slice_out_buf n y = (x,z) ==> cs_extends y z` by
+    (rpt strip_tac >> Cases_on `x` >>
+     drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+     metis_tac[cs_extends_trans]) >>
+  metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
 QED
 
 Theorem compile_slice_extcode_stages:
@@ -1073,7 +1075,8 @@ Proof
    (!arg. MEM arg ([]:operand list) ==> op_taint tn arg = {})` by simp[] >>
   qpat_assum `step_inst_base _ s = _`
     (mp_then Any mp_tac external_query_bounds_reserved_counted_abort) >>
-  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
+  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[] >>
+  strip_tac >> gvs[] >> qexistsl_tac [`H`,`tm`,`j`] >> gvs[]
 QED
 
 Theorem compile_slice_code_bounds_abort:
@@ -1117,5 +1120,6 @@ Proof
    (!arg. MEM arg ([]:operand list) ==> op_taint tn arg = {})` by simp[] >>
   qpat_assum `step_inst_base _ s = _`
     (mp_then Any mp_tac external_query_bounds_reserved_counted_abort) >>
-  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
+  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[] >>
+  strip_tac >> gvs[] >> qexistsl_tac [`H`,`tm`,`j`] >> gvs[]
 QED
