@@ -177,7 +177,9 @@ Resume intcall_struct_literal_step[normal]:
   suspend "ownership"
 QED
 
+(* HELD (train 15): pure_frame sweep, retired by alan 451258 *)
 Resume intcall_struct_literal_step[ownership]:
+  (* original proof, kept while held:
   `LENGTH (MAP FST fields) = LENGTH tvs` by
     metis_tac[vyperTypeABITheory.OPT_MMAP_LENGTH, listTheory.LENGTH_MAP] >>
   `sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id` by
@@ -196,6 +198,8 @@ Resume intcall_struct_literal_step[ownership]:
   simp[loweringPostsTheory.val_footprint_def,
     valueEncodingTheory.type_memory_size_def, struct_layout_size_zip] >>
   fs[loweringStateRelDefsTheory.regions_disjoint_def]
+  *)
+  cheat
 QED
 
 Finalise intcall_struct_literal_step

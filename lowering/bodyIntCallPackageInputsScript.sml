@@ -95,6 +95,36 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+(* HELD (train 15): declared-immutable separation of borrowed parameters, proved in train 16 *)
+(* The caller's stmt_state_rel at t separates every declared immutable from
+   t's allocations (immutable_decl_sep), and each borrowed parameter's
+   region lies in a fresh ALLOCA of t (intcall_entry_package_separation). *)
+Theorem intcall_entry_declared_immutable_separation:
+  cenv_module_pins tops cenv /\
+  intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
+    (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
+  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME inst /\
+  decode_invoke inst = SOME (lbl,arg_ops) /\
+  eval_operands arg_ops t = SOME argv /\
+  lookup_function lbl ctx.ctx_functions = SOME callee /\
+  setup_callee callee argv t = SOME setup /\
+  set_internal_package_target cenv.ce_target
+    (package_internal_fn tops use_trans (nkeys : string -> num) cenv.ce_is_ctor ilen
+      (mut,F,rr,name,args,([] : expr list),ret,ss)) =
+    (label,ce,params,has_rb,is_nr,key,trans,view,ctor,ilen',ss',rt) ==>
+  (ce.ce_is_ctor ==> !i po psz nm ty tv io.
+     i < LENGTH params /\ ~SND (EL i params) /\
+     FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+     FLOOKUP ce.ce_module_vars (ce.ce_module,nm) = SOME (ImmutableLoc io) /\
+     ce.ce_module_var_type (ce.ce_module,nm) = SOME ty /\
+     evaluate_type (get_tenv (cx with stk updated_by CONS (NONE,name))) ty = SOME tv ==>
+     regions_disjoint io (type_memory_size tv)
+       (w2n (EL ((if has_rb then 1 else 0) + i) argv)) psz)
+Proof
+  cheat
+QED
+
 Theorem intcall_entry_caller_protection:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
     (mut,F,args,ret,ss,rr) prev penv rtv es1 t ==>

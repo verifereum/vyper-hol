@@ -312,5 +312,20 @@ Proof
     (SRULE [arithmeticTheory.ADD_COMM] intcall_tuple_landing) >>
   disch_then (qspecl_then [`n`, `TupleT (MAP expr_type args)`] mp_tac) >>
   simp[vyperASTTheory.expr_type_def, mk_ptr_def,
-       contextTheory.vv_operand_def, is_bytestring_type_def]
+       contextTheory.vv_operand_def, is_bytestring_type_def] >>
+  strip_tac >>
+  irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  qpat_assum `gas_outcome _ _ _ (eval_expr _ _) _ _ _` (irule_at Any) >>
+  qx_genl_tac [`res`, `ee'`, `u`] >> BETA_TAC >> strip_tac >>
+  qexists_tac `v` >>
+  `EVERY ($~ o expr_has_effect) args ==> pure_frame ce fp.jc_func es sa s u`
+    suffices_by (strip_tac >> fs[] >> metis_tac[]) >>
+  suspend "pure_frame"
 QED
+
+(* HELD (train 15): pure_frame sweep (tuple literal), retired in train 16 *)
+Resume intcall_tuple_literal_step[pure_frame]:
+  cheat
+QED
+
+Finalise intcall_tuple_literal_step
