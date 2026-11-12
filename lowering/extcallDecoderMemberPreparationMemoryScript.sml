@@ -66,7 +66,7 @@ Theorem extcall_decoder_member_setup_success:
       abi_decoder_operand_live st'.cs_next_var (FST ops) /\
       abi_decoder_operand_live st'.cs_next_var (SND ops) /\
       fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var s t /\
-      inst_extends st st'
+      inst_extends st st' /\ t.vs_current_bb = s.vs_current_bb
 Proof
   strip_tac >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
@@ -80,5 +80,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st st')` by fs[EVERY_CONJ] >>
   drule_all run_inst_seq_gas_path_mem >> strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    metis_tac[fragExecTheory.exec_block_run_inst_seq] >>
   qexists_tac `t` >> simp[ADD_COMM]
 QED
