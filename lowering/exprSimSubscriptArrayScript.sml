@@ -7,8 +7,10 @@
  *     with the bounds-check abort, by two subcases:
  *     compile_subscript_array_framed_base_case for a base the index's frame
  *     keeps (a runtime immutable, or a static array of no dynamic array in
- *     memory), and compile_subscript_array_place_base_case, admitted, for
- *     the rest.
+ *     memory), and compile_subscript_array_place_base_case for the rest,
+ *     split on subscript_overlap into two admitted leaves:
+ *     compile_subscript_array_copied_base_case (the base read and copied
+ *     before the index) and compile_subscript_array_unframed_base_case.
  *)
 
 Theory exprSimSubscriptArray
@@ -301,8 +303,30 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
 QED
 Finalise compile_subscript_array_framed_base_case
 
-(* Every other array subscript: a base in storage or transient storage, an
-   immutable in the constructor, a dynamic array or one with a dynamic
+(* An array subscript whose index may write a variable its base reads
+   (subscript_overlap; vyperlang/vyper's _lower_array_subscript).  The
+   source reads the base's value before the index (subscript_reads_base),
+   and the lowering copies the base into a fresh memory buffer before
+   lowering the index (copies_subscript_base, compile_snapshot_vv cenv T),
+   so the element is selected from that copy, which the index's fragment
+   leaves as it is.  ADMITTED (cheat). *)
+Theorem compile_subscript_array_copied_base_case:
+  !nocalls ctx func cenv cx ann obj idx et bd.
+    expr_vv_case nocalls ctx func cenv cx obj /\
+    (!s tv t s' v t'. eval_expr cx obj s = (INL tv, t) /\
+       read_result cx tv s' = (INL v, t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
+    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
+    subscript_reads_base cx obj idx /\ copies_subscript_base cenv obj idx ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  cheat
+QED
+
+(* An array subscript whose index does not overlap its base, outside
+   compile_subscript_array_framed_base_case: a base in storage or
+   transient storage, an immutable in the constructor, a dynamic array or one with a dynamic
    array inside it in memory, a base whose source result is a storage
    place, or an index that changes the locals or the immutables.  ADMITTED (cheat).  NOT DERIVABLE from these hypotheses,
    though no miscompile is known: vv_post does not tie the base's pointer
@@ -340,6 +364,30 @@ Finalise compile_subscript_array_framed_base_case
    PHI carries the arm's pointer).  With it, and the base live at the
    index's end, the rest goes through but for popped snapshots, dead
    storage slots and the constructor immutable above. *)
+Theorem compile_subscript_array_unframed_base_case:
+  !nocalls ctx func cenv cx ann obj idx et bd.
+    expr_vv_case nocalls ctx func cenv cx obj /\
+    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+              expr_sim_case nocalls ctx func cenv cx idx) /\
+    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
+    ~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+    ~((!t r t'. eval_expr cx idx t = (INL r, t') ==>
+                t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+      (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
+      ((~cenv.ce_is_ctor /\
+        !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode) \/
+       ((?n. bd = Fixed n) /\
+        (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
+        !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory))) ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  cheat
+QED
+
+(* Every other array subscript, by whether its index overlaps its base:
+   compile_subscript_array_copied_base_case if it does,
+   compile_subscript_array_unframed_base_case if not. *)
 Theorem compile_subscript_array_place_base_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
@@ -361,8 +409,38 @@ Theorem compile_subscript_array_place_base_case:
         !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory))) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `subscript_reads_base cx obj idx <=> copies_subscript_base cenv obj idx`
+  >- suspend "agree" >>
+  simp[expr_vv_case_def] >> rpt strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  drule_then (qspecl_then [`obj`, `idx`] assume_tac)
+    expr_sim_inv_reads_base_copies >>
+  fs[]
 QED
+Resume compile_subscript_array_place_base_case[agree]:
+  Cases_on `copies_subscript_base cenv obj idx`
+  >- (irule compile_subscript_array_copied_base_case >> rpt conj_tac
+      >~ [`read_result`]
+      >- (rpt strip_tac >>
+          qpat_x_assum `!s tv t s' tv' t'. _`
+            (qspecl_then [`s`, `tv`, `t`, `s'`, `Value v`, `t'`] mp_tac) >>
+          fs[vyperStateTheory.bind_def, vyperStateTheory.return_def])
+      >~ [`ValPT`] >- (qexistsl [`bd`, `et`] >> fs[]) >>
+      fs[]) >>
+  `~subscript_reads_base cx obj idx` by fs[] >>
+  `!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+            expr_sim_case nocalls ctx func cenv cx idx` by
+    (rpt strip_tac >>
+     qpat_x_assum `!s tv t s' tv' t'. _`
+       (qspecl_then [`s`, `tv`, `t`, `t`, `tv`, `t`] mp_tac) >>
+     fs[vyperStateTheory.return_def]) >>
+  qpat_x_assum `!s tv t s' tv' t'. _` kall_tac >>
+  irule compile_subscript_array_unframed_base_case >> asm_rewrite_tac[] >>
+  qexistsl [`bd`, `et`] >> qpat_x_assum `~(_ /\ _)` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >> asm_rewrite_tac[]
+QED
+Finalise compile_subscript_array_place_base_case
 
 Theorem compile_subscript_array_case:
   !nocalls ctx func cenv cx ann obj idx et bd.

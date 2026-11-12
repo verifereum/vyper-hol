@@ -96,6 +96,7 @@ Definition body_inv_def:
         else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
        ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    ALOOKUP cx.sources cx.txn.target = SOME [(NONE, tops)] /\
     (cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env tops) target)) /\
@@ -140,10 +141,15 @@ Theorem body_inv_modules_aligned:
   !tops ctx cenv cx.
     body_inv tops ctx cenv cx ==>
     (!src. ALOOKUP cenv.ce_modules src = get_module_code cx src) /\
+    ALOOKUP cx.sources cx.txn.target = SOME cenv.ce_modules /\
     (!src ts. get_module_code cx src = SOME ts ==>
        ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
     ALL_DISTINCT (MAP FST cenv.ce_modules)
 Proof
+  rpt gen_tac >> strip_tac >>
+  `ALOOKUP cx.sources cx.txn.target = SOME cenv.ce_modules` by
+    fs[body_inv_def, cenv_module_pins_def] >>
+  asm_rewrite_tac[] >> pop_assum kall_tac >> pop_assum mp_tac >>
   rw[body_inv_def, cenv_module_pins_def]
   >- (Cases_on `src` >> simp[] >>
       Cases_on `get_module_code cx (SOME x)` >> gvs[] >> res_tac >> gvs[]) >>

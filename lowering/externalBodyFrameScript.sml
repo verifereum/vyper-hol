@@ -1362,6 +1362,8 @@ Proof
       qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
         drule >> simp[]) >>
   simp[bare_globals_layout_def] >> rpt conj_tac
+  >~ [`SOME cenv.ce_modules`]
+  >- (imp_res_tac body_inv_modules_aligned >> fs[])
   >~ [`ALOOKUP cenv.ce_modules`] >- metis_tac[body_inv_modules_aligned]
   >~ [`ALL_DISTINCT (MAP FST cenv.ce_modules)`]
   >- metis_tac[body_inv_modules_aligned]

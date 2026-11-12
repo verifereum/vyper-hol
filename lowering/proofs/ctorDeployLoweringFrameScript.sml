@@ -1512,6 +1512,8 @@ Proof
   simp[] >> disch_then drule >> simp[] >> strip_tac >>
   conj_tac >- metis_tac[] >>
   simp[exprSimHypsDefsTheory.bare_globals_layout_def] >> rpt conj_tac
+  >~ [`SOME cenv.ce_modules`]
+  >- (imp_res_tac body_inv_modules_aligned >> fs[])
   >~ [`ALOOKUP cenv.ce_modules`] >- metis_tac[body_inv_modules_aligned]
   >~ [`ALL_DISTINCT (MAP FST cenv.ce_modules)`]
   >- metis_tac[body_inv_modules_aligned]

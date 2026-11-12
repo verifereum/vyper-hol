@@ -39,9 +39,10 @@ End
    declared type in ce_module_var_type, where compile_get_target_ptr
    reads a place type; and distinct immutables' regions are disjoint,
    as the section layout places them.  The compile env's modules are the
-   source's, each listed once (so the overlap analysis and its call graph,
-   which scans every entry, see the source's code), and each module's
-   top-level names are distinct. *)
+   source's, each listed once, and are the target's whole source module
+   list (so the overlap analysis and its call graph, which scans every
+   entry, see the same code on both sides), and each module's top-level
+   names are distinct. *)
 Definition bare_globals_layout_def:
   bare_globals_layout is_ctor module_var_type
       (module_vars:nsid |-> var_location)
@@ -64,6 +65,7 @@ Definition bare_globals_layout_def:
        loweringStateRelDefs$regions_disjoint off1 (type_memory_size tv1)
          off2 (type_memory_size tv2)) /\
     (!src. ALOOKUP modules src = get_module_code cx src) /\
+    ALOOKUP cx.sources cx.txn.target = SOME modules /\
     (!src ts. get_module_code cx src = SOME ts ==>
        ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
     ALL_DISTINCT (MAP FST modules)
@@ -125,6 +127,21 @@ Definition expr_sim_inv_def:
       cenv.ce_module_vars cenv.ce_modules cx env.bare_globals
       env.bare_global_assignable
 End
+
+(* Under the invariant the source and the lowering agree on whether an
+   array subscript's index overlaps its base: both test subscript_overlap
+   on the same module list (bare_globals_layout). *)
+Theorem expr_sim_inv_reads_base_copies:
+  !cenv cx env es e1 e2.
+    expr_sim_inv cenv cx env es ==>
+    (subscript_reads_base cx e1 e2 <=> copies_subscript_base cenv e1 e2)
+Proof
+  rpt strip_tac >>
+  `ALOOKUP cx.sources cx.txn.target = SOME cenv.ce_modules` by
+    fs[expr_sim_inv_def, bare_globals_layout_def] >>
+  asm_simp_tac std_ss [vyperInterpreterTheory.subscript_reads_base_def,
+    exprLoweringTheory.copies_subscript_base_def, optionTheory.option_case_def]
+QED
 
 Theorem extend_local_bare_globals[simp]:
   (extend_local env id typ a).bare_globals = env.bare_globals /\
