@@ -4,7 +4,7 @@ Ancestors
   lowerDloadScratchOwnership lowerDloadExpansionGhost lowerDloadLiveAllocation
   lowerDloadSafetyAdvance lowerDloadSafetyUpdates
   lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadSafetyWriteBytes lowerDloadDefs
-  venomExecSemantics venomState venomInst unitShapeDefs ptrDiscipline memLocDefs codegenRel finite_map pred_set list words arithmetic
+  venomExecSemantics venomState venomInst unitShapeDefs ptrDiscipline memLocDefs codegenRel regularCallEmitSim finite_map pred_set list words arithmetic
 
 Theorem ld_private_source_member:
   ld_private f d ai ==>
@@ -100,6 +100,8 @@ Theorem ld_dload_scratch_tail_transport:
   step_inst fuel C (EL 3 X) t = OK u ==>
   ?v. step_inst 0 C (HD X) t0 = OK v /\
     u.vs_allocas = v.vs_allocas /\ u.vs_alloca_next = v.vs_alloca_next /\
+    (!dw i. FLOOKUP v.vs_vars a = SOME dw /\ ~(w2n dw <= i /\ i < w2n dw + 32) ==>
+      read_byte i u.vs_memory = read_byte i v.vs_memory) /\
     (!lo A tn s dw.
       FLOOKUP v.vs_vars a = SOME dw /\
       ld_memory lo A tn s v /\ lo <= w2n dw /\
@@ -125,11 +127,18 @@ Proof
   qpat_x_assum `step_inst fuel _ _ _ = OK u` mp_tac >>
   simp[step_inst_non_invoke, Once step_inst_base_def, exec_read1_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[update_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  gvs[update_var_def, FLOOKUP_UPDATE] >>
+  `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      qmatch_goalsub_abbrev_tac `write_memory_with_expansion _ bytes tv` >>
+      `LENGTH bytes = 32` by simp[Abbr `bytes`, dimword_def] >>
+      simp[regularCallEmitSimTheory.read_byte_write_memory_with_expansion,
+           Abbr `tv`]) >>
+  rpt strip_tac >>
   qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n dw) bytes tv` >>
   `ld_memory lo A tn s (write_memory_with_expansion (w2n dw) bytes tv)`
     suffices_by (simp[ld_memory_def] >> strip_tac >> asm_rewrite_tac[]) >>
-  `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
   `LENGTH bytes = 32` by simp[Abbr `bytes`, dimword_def] >>
   irule ld_memory_write_private >> simp[ADD_COMM] >>
   qpat_x_assum `ld_memory lo A tn s u0` mp_tac >>
@@ -234,6 +243,27 @@ Proof
   asm_rewrite_tac[] >> qexists_tac `c` >> asm_rewrite_tac[] >> metis_tac[]
 QED
 
+Theorem ld_scratch_slot_frame[local]:
+  exec_alloca inst t0 (32w:bytes32) = OK v /\ inst.inst_outputs = [a] /\
+  inst.inst_id = ai /\ FLOOKUP v.vs_allocas ai = SOME (c,32) /\
+  c < dimword (:256) /\
+  (!dw i. FLOOKUP v.vs_vars a = SOME dw /\ ~(w2n dw <= i /\ i < w2n dw + 32) ==>
+    read_byte i u.vs_memory = read_byte i v.vs_memory) ==>
+  !i. ~(c <= i /\ i < c + 32) ==>
+    read_byte i u.vs_memory = read_byte i t0.vs_memory
+Proof
+  strip_tac >>
+  `v.vs_memory = t0.vs_memory /\ FLOOKUP v.vs_vars a = SOME (n2w c)` by
+    (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+     qpat_x_assum `FLOOKUP v.vs_allocas _ = _` mp_tac >>
+     qpat_x_assum `inst.inst_outputs = _` mp_tac >>
+     qpat_x_assum `inst.inst_id = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[exec_alloca_def, AllCaseEqs(), update_var_def, FLOOKUP_UPDATE]) >>
+  `w2n (n2w c : bytes32) = c` by metis_tac[w2n_n2w, LESS_MOD] >>
+  metis_tac[]
+QED
+
 Theorem ld_dload_scratch_exit:
   X = [<|inst_id := ai; inst_opcode := ALLOCA;
          inst_operands := [Lit 32w]; inst_outputs := [a]|>;
@@ -298,7 +328,9 @@ Theorem ld_dload_scratch_exit:
     (?c. FLOOKUP u.vs_allocas ai = SOME (c,32) /\ lo <= c /\
       c+32 <= u.vs_alloca_next /\
       (!k b e n. FLOOKUP A k = SOME (b,e,n) /\ 0 < n ==>
-        e+n <= c \/ c+32 <= e))
+        e+n <= c \/ c+32 <= e) /\
+      (!i. ~(c <= i /\ i < c + 32) ==>
+        read_byte i u.vs_memory = read_byte i t0.vs_memory))
 Proof
   strip_tac >>
   drule_all ld_dload_expansion_ghost_exit >>
@@ -365,6 +397,28 @@ Proof
      simp[ld_intervals_def, Abbr `g`]) >>
   asm_rewrite_tac[] >>
   conj_tac >- metis_tac[] >>
+  `FLOOKUP v.vs_allocas ai = SOME (c,32)` by
+    (TRY (qunabbrev_tac `g`) >>
+     qpat_assum `FLOOKUP _ ai = SOME (c,32)` mp_tac >>
+     qpat_assum `u.vs_allocas = v.vs_allocas` mp_tac >>
+     simp_tac (srw_ss()) []) >>
+  `c < dimword (:256)` by
+    (TRY (qunabbrev_tac `g`) >>
+     qpat_assum `ld_charge _ <= ctx_dload_count C` mp_tac >>
+     qpat_assum `c + 32 <= _` mp_tac >>
+     qpat_assum `!j. j < LENGTH (_::fs) ==> _` (qspec_then `0` mp_tac) >>
+     qpat_assum `ss.vs_alloca_next = _` mp_tac >>
+     qpat_assum `dload_headroom_ok _ _ _ _` mp_tac >>
+     simp_tac (srw_ss()) [dload_headroom_ok_def] >> rpt strip_tac >>
+     decide_tac) >>
+  `(HD X).inst_outputs = [a] /\ (HD X).inst_id = ai` by
+    (qpat_assum `X = _` (fn th => simp[th])) >>
+  `!i. ~(c <= i /\ i < c + 32) ==>
+     read_byte i u.vs_memory = read_byte i t0.vs_memory` by
+    (mp_tac (Q.INST [`inst` |-> `HD X`, `t0` |-> `f.lf_tgt`]
+       ld_scratch_slot_frame) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `f.lf_tgt = t0` (fn th => simp[th])) >>
   qexists_tac `c` >>
   qpat_x_assum `FLOOKUP g.lf_tgt.vs_allocas ai = _` mp_tac >>
   qpat_x_assum `c+32 <= g.lf_tgt.vs_alloca_next` mp_tac >>
