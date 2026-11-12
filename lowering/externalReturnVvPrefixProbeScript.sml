@@ -20,15 +20,17 @@ Theorem return_vv_located_prefix:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
-  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
-    (\res ee s. ?tv. res = INL tv /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_expr cx e) (es,s0)
+    (\H res ee s. ?tv. res = INL tv /\
       vv_post H ctx func ce cx e es sa sb s0 ee tv (LocatedValue ty p) s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
@@ -53,17 +55,19 @@ Theorem return_intcall_vv_prefix:
   local_ptrs_reserved ce sa /\
   gas_admissible (eval_stmt cx (Return (SOME (Call ann (IntCall fid) args drv))))
     (stmt_res_ok lctx) es /\
-  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_expr cx (Call ann (IntCall fid) args drv)) (es,s0)
-    (\res ee s. ?tv. res = INL tv /\
+    (\H res ee s. ?tv. res = INL tv /\
       vv_post H ctx func ce cx (Call ann (IntCall fid) args drv) es sa sb s0 ee tv
         (LocatedValue (ce.ce_func_return_type (nsid_to_string fid)) p) s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >> drule return_site_vv_admissible >> strip_tac >>
   drule_all return_vv_located_prefix >> simp[expr_type_def]
