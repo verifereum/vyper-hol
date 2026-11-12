@@ -13,10 +13,6 @@
  *
  * TOP-LEVEL:
  *   gas_origin_ptr_focus_o1_safe_upto -- the bridge
- *   gas_origin_ptr_edge_ok_readings, gas_origin_ptr_edge_not_phi,
- *   gas_origin_ptr_focus_first -- a focus edge pops one reading per mark,
- *     runs no PHI, and a focus with marks starts with an edge or a call
- *     entry
  *)
 Theory fragGasOriginPtrSafeUpto
 Ancestors
@@ -26,87 +22,6 @@ Ancestors
   gasCount gasEvents gasOracleReplay unitMemInv unitTransformDefs
   lowerDloadDefs contextCodegenRelProps venomExecSemantics venomExecProofs
   venomInstProofs venomInst venomState finite_map list arithmetic
-
-(* ===== Focus edges ===== *)
-
-Theorem gas_origin_ptr_edge_ok_readings:
-  gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG)
-    (s, G, tn) marks (OK mid, G', tn') ==>
-  mid.vs_gas_readings = DROP (LENGTH marks) s.vs_gas_readings
-Proof
-  strip_tac >> drule gas_origin_ptr_edge_common_fuel >> strip_tac >>
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`] mp_tac (cj 1 gas_count_suffix) >>
-  Cases_on `step_inst fuel ctx inst s` >>
-  gvs[cj 1 gas_events_length, gas_count_suffix_def, exit_result_def] >>
-  imp_res_tac gas_count_phis_ok >> simp[]
-QED
-
-Theorem step_inst_phi_error[local]:
-  !fuel ctx inst s.
-    inst.inst_opcode = PHI ==> ?e. step_inst fuel ctx inst s = Error e
-Proof
-  rpt strip_tac >> simp[step_inst_non_invoke] >>
-  simp[step_inst_base_def]
-QED
-
-(* An edge runs a real instruction: a PHI outside the block's PHI prefix
-   errors, and an edge never errors. *)
-Theorem gas_origin_ptr_edge_not_phi:
-  gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG)
-    (s, G, tn) marks (r, G', tn') ==>
-  ?bb inst.
-    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    get_instruction bb s.vs_inst_idx = SOME inst /\
-    inst.inst_opcode <> PHI
-Proof
-  strip_tac >> drule gas_origin_ptr_edge_common_fuel >> strip_tac >>
-  qexistsl_tac [`bb`, `inst`] >> simp[] >> strip_tac >>
-  qspecl_then [`fuel`, `ctx`, `inst`, `s`] mp_tac step_inst_phi_error >>
-  simp[] >> strip_tac >> gvs[] >> imp_res_tac exit_result_not_error >> gvs[]
-QED
-
-(* A focus with marks left starts with an edge of its function, or enters
-   the callee of the INVOKE it stands at. *)
-Theorem gas_origin_ptr_focus_first:
-  !cx st m out.
-    gas_origin_ptr_focus cx st m out ==>
-    !D lo explicit ctx func PG s G tn.
-      cx = (D, lo, explicit, ctx, func, PG) /\ st = (s, G, tn) /\
-      m <> [] ==>
-      (?left mid G1 tn1 right.
-         gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG)
-           (s, G, tn) left (OK mid, G1, tn1) /\
-         gas_origin_ptr_focus (D, lo, explicit, ctx, func, PG)
-           (mid, G1, tn1) right out /\
-         m = left ++ right) \/
-      (?bb inst name ops callee entered.
-         lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-         get_instruction bb s.vs_inst_idx = SOME inst /\
-         inst.inst_opcode = INVOKE /\
-         decode_invoke inst = SOME (name, ops) /\
-         gas_invoke_entry (ctx, func) s callee entered /\
-         ptr_inst_ok D lo 0 ctx func G tn inst s /\
-         gas_origin_ptr_focus
-           (D, lo, explicit, ctx, callee, MAP (op_prov G) ops)
-           (entered, FEMPTY, tn with t_var := FEMPTY) m out)
-Proof
-  ho_match_mp_tac gas_origin_ptr_focus_strongind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[]
-  >- (qpat_x_assum `gas_origin_ptr_path _ _ _ _` mp_tac >>
-      simp[Once gas_origin_ptr_path_cases] >> rw[] >>
-      gvs[exit_result_def] >>
-      disj1_tac >> metis_tac[gas_origin_ptr_focus_rules])
-  >- (qpat_x_assum `gas_origin_ptr_path _ _ _ _` mp_tac >>
-      simp[Once gas_origin_ptr_path_cases] >> strip_tac >>
-      gvs[exit_result_def]
-      >~ [`gas_origin_ptr_path _ _ r1 (OK _, _, _)`]
-      >- (disj1_tac >>
-          rename1 `gas_origin_ptr_edge _ _ l1 (OK m1, G2, tn2)` >>
-          qexistsl_tac [`l1`, `m1`, `G2`, `tn2`, `r1 ++ m`] >> simp[] >>
-          irule (cj 2 gas_origin_ptr_focus_rules) >> metis_tac[]) >>
-      metis_tac[]) >>
-  disj2_tac >> metis_tac[]
-QED
 
 (* ===== Readings ===== *)
 
@@ -199,13 +114,10 @@ Theorem enters_block_run[local]:
              mem_safe_blocks fuel ctx fn s) ==>
      run_safe D lo ctx fn PG G tn s1)
 Proof
-  rw[enters_block_def] >>
-  `s_phi.vs_current_bb = s.vs_current_bb` by
-    metis_tac[eval_phis_preserves_current_bb] >>
-  simp[frame_run_def, ghost_run_def, run_safe_def, ptr_safe_run_def] >>
-  rpt strip_tac >>
-  metis_tac[run_blocks_block_run, ghost_blocks_block, ptr_safe_blocks_block,
-            mem_safe_blocks_run]
+  rpt gen_tac >> strip_tac >>
+  drule_then (fn th => simp[th]) frame_run_enters_block >>
+  rw[run_safe_def] >>
+  metis_tac[ptr_safe_enters_block, mem_safe_enters_block]
 QED
 
 (* An INVOKE whose callee run returns: at any larger fuel the step and its
@@ -396,18 +308,19 @@ Proof
       irule mem_safe_run_fuel_mono_down >>
       qexists_tac `MAX f (SUC fuel)` >> simp[]) >>
   drule_then irule frames_cont_transfer >>
-  rpt strip_tac >> qexists_tac `MAX fuel' (SUC fuel)` >>
-  qpat_x_assum `!M. _ ==> _` (qspec_then `MAX fuel' (SUC fuel)` mp_tac) >>
+  qx_gen_tac `f` >> rpt gen_tac >> strip_tac >>
+  qexists_tac `MAX f (SUC fuel)` >>
+  qpat_x_assum `!M. _ ==> _` (qspec_then `MAX f (SUC fuel)` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  `frame_run (MAX fuel' (SUC fuel)) ctx caller s2 =
-   frame_run fuel' ctx caller s2` by
+  `frame_run (MAX f (SUC fuel)) ctx caller s2 =
+   frame_run f ctx caller s2` by
     (irule frame_run_fuel_mono >> simp[]) >>
-  `ghost_run (MAX fuel' (SUC fuel)) ctx caller PG GR tnR s2 =
-   ghost_run fuel' ctx caller PG GR tnR s2` by
+  `ghost_run (MAX f (SUC fuel)) ctx caller PG GR tnR s2 =
+   ghost_run f ctx caller PG GR tnR s2` by
     (irule ghost_run_fuel_mono_up >> simp[]) >>
-  qspecl_then [`MAX fuel' (SUC fuel)`, `ctx`, `caller`, `bb`, `s`, `ivk`,
+  qspecl_then [`MAX f (SUC fuel)`, `ctx`, `caller`, `bb`, `s`, `ivk`,
                `s'`] mp_tac block_run_step >>
-  qspecl_then [`MAX fuel' (SUC fuel)`, `ctx`, `caller`, `PG`, `G`, `tn`, `bb`,
+  qspecl_then [`MAX f (SUC fuel)`, `ctx`, `caller`, `PG`, `G`, `tn`, `bb`,
                `s`, `ivk`, `s'`] mp_tac ghost_block_step >>
   gvs[frame_run_def, ghost_run_def, Abbr `s2`]
 QED
