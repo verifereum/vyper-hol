@@ -47,6 +47,8 @@ Theorem fmp_control_tidx_code_unique:
             (fmp_stage_root infos ctx fn) bb.bb_label
             bb.bb_instructions idx)
          bb'.bb_instructions = code /\
+    MEM runner sp.irs_used_vars /\
+    list_subset (fn_ir_vars fn) sp.irs_used_vars /\
     ALL_DISTINCT (MAP FST restores)
 Proof
   rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
@@ -56,6 +58,8 @@ Proof
   drule fmp_control_walk_suffix >> simp[] >>
   disch_then (qspecl_then [`fmp_stage_plan infos ctx fn`, `idx`] mp_tac) >>
   simp[] >> strip_tac >>
+  `MEM runner sn.irs_used_vars /\ list_subset (fn_ir_vars fn) sn.irs_used_vars` by
+    (simp[venomFnScheduleRunnerTheory.list_subset_def, EVERY_MEM] >> metis_tac[]) >>
   drule split_fmp_entry_reconstruct >> strip_tac >>
   drule_all fmp_control_root_layout >> strip_tac >>
   drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
@@ -119,7 +123,9 @@ Theorem fmp_stage_tidx_code:
     DROP (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
             (fmp_stage_root infos ctx fn) bb.bb_label
             bb.bb_instructions idx)
-         bb'.bb_instructions = code
+         bb'.bb_instructions = code /\
+    MEM runner sp.irs_used_vars /\
+    list_subset (fn_ir_vars fn) sp.irs_used_vars
 Proof
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
   drule_all fmp_control_tidx_code_unique >> strip_tac >>
