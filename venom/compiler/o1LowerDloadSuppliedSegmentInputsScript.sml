@@ -48,7 +48,7 @@ Proof
      metis_tac[MEM_EL]) >>
   `ptr_use_ok P (fn_pv P fn) inst` by
     (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
   `!op. MEM op [src;sz] ==> op_prov G op = NONE` by
     (rpt strip_tac >> Cases_on `op` >> simp[op_prov_def] >>

@@ -92,7 +92,7 @@ Proof
      Cases_on `FLOOKUP G vv` >> simp[] >>
      `vv IN fn_pv P fn` by (fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
      gvs[ptr_use_ok_def] >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
   drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
   Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]
@@ -137,7 +137,7 @@ Proof
      metis_tac[MEM_EL]) >>
   `ptr_use_ok P (fn_pv P fn) inst` by
     (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
   rpt strip_tac >>
   `op_prov G op = NONE` by (irule ld_scalar_no_provenance >> metis_tac[]) >>

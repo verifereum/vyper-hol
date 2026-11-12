@@ -29,7 +29,7 @@ Proof
     (irule ld_joint_operand_value >>
      metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc]) >>
   qexists_tac `y` >> simp[] >> Cases_on `len=0` >> simp[] >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G /\
    ld_joint_erasure sites B /\
    ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
@@ -126,7 +126,7 @@ Proof
      Cases_on `dst = Var vv` >> Cases_on `src = Var vv` >>
      Cases_on `sz = Var vv` >> simp[] >> rpt strip_tac >> gvs[]) >>
   `op_prov H op = NONE` by
-    (`occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+    (`occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
        fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
      drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
      Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]) >>

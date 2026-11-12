@@ -50,7 +50,7 @@ Proof
          Cases_on `src = Var vv` >> Cases_on `sz = Var vv` >>
          simp[] >> rpt strip_tac >> gvs[]) >>
       `op_prov H op = NONE` by
-        (`occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+        (`occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
            fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
          drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
          Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]) >>

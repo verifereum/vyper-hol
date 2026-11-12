@@ -56,7 +56,7 @@ Proof
   disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
   `affine_pointer_ops fn (ptr_roots P fn)` by
     (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
   drule occurrence_op_erasure >> disch_then (qspec_then `op1` assume_tac) >>
   drule occurrence_op_erasure >> disch_then (qspec_then `op2` assume_tac) >>

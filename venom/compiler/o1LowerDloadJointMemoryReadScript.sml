@@ -82,7 +82,7 @@ Proof
   `?y. eval_operand p t = SOME y /\
     ld_value_agree sites (op_prov H p) (op_taint tn p) x y` by
     (irule ld_joint_operand_value >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G /\
    ld_joint_erasure sites B /\
    ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U) /\
    ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory` by

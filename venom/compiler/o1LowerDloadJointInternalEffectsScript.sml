@@ -127,7 +127,7 @@ Proof
        (Cases_on `op` >> simp[op_prov_def] >>
         rename1 `FLOOKUP G vv` >> Cases_on `FLOOKUP G vv` >> simp[] >>
         fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
-     `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+     `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
        fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
      drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
      simp[occurrence_param_ok_def]) >>
@@ -236,7 +236,7 @@ Proof
      qpat_x_assum `_ = [Var vv]` (mp_tac o AP_TERM ``LENGTH : operand list -> num``) >>
      simp[] >> IF_CASES_TAC >> simp[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]) >>
   `op_prov H op = NONE` by
-    (`occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+    (`occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
        fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
      drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
      Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]) >>

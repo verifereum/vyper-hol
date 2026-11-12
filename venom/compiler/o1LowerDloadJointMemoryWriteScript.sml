@@ -116,7 +116,7 @@ Proof
   `?w. eval_operand vop t = SOME w /\
     ld_value_agree sites (op_prov H vop) (op_taint tn vop) v w` by
     (irule ld_joint_operand_value >> metis_tac[MEM]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G /\
    ld_joint_erasure sites B /\
    ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>

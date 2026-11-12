@@ -52,7 +52,7 @@ Proof
     (irule ld_joint_operand_value >>
      metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc, MEM]) >>
   qexistsl_tac [`x'`,`y'`] >> simp[] >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G /\
    ld_joint_erasure sites B /\
    ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
