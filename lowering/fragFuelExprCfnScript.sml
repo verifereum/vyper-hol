@@ -568,26 +568,30 @@ Proof
   >- (simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
       fa (lv :: extl @ base @ helpers) >> simp[is_terminator_def]) >>
   simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
-  fa1 (lv :: extl @ base @ helpers) >>
+  (* the wrapped return type only feeds pure arguments; generalize it so the
+     fuel steps don't case-split on needs_external_call_wrap *)
+  qspec_tac (`if needs_external_call_wrap rty then TupleT [rty] else rty`, `wr`) >>
+  gen_tac >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+  FIRST [fa1 (lv :: extl @ base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
