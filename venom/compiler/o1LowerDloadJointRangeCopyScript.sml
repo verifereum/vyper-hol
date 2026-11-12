@@ -213,7 +213,7 @@ fun ld_on_head name tac (g as (_, w)) =
 
 val ld_range_case_tac =
   let
-    val leaf = FIRST [simp[] >> NO_TAC, decide_tac,
+    val leaf = FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC, decide_tac,
                       res_tac >> decide_tac, metis_tac[]]
   in
     rpt conj_tac >>
@@ -259,32 +259,28 @@ Proof
   `lo <= dyn_floor C vs /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
      b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
     (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
-  (* the operand facts arrive split into cases, so each step below is
-     chosen per goal rather than by goal position *)
-  Cases_on `w2n l=0` >>
-  FIRST [
-    qpat_assum `w2n l = 0` (K ALL_TAC) >> gvs[mcopy_def] >> rpt conj_tac >>
-    FIRST [
-      irule ld_memory_agree_empty_write >> simp[] >> NO_TAC,
+  Cases_on `w2n l=0`
+  >- (gvs[mcopy_def] >> conj_tac
+      >- (irule ld_memory_agree_empty_write >> simp[]) >>
       simp[ptrDisciplineTheory.ld_dyn_agree_def,
            regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
-      fs[ptrDisciplineTheory.ld_dyn_agree_def] >> NO_TAC],
-    `l <> 0w` by (strip_tac >> gvs[]) >>
-    qpat_x_assum `eval_operand dop t = SOME d' /\ _` strip_assume_tac >>
-    (* no simplification here: it would reorder the mask's sums away from
-       the lemmas' syntactic form *)
-    rpt (qpat_x_assum `l = 0w` (fn th => fs[th])) >>
-    rpt (qpat_x_assum `d = d'` SUBST_ALL_TAC) >>
-    rpt (qpat_x_assum `r = r'` SUBST_ALL_TAC) >>
-    pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
-    rpt conj_tac >>
-    ld_on_head "ld_memory_agree"
-      (drule_at (Pat `ld_joint_geometry _ _ _ _`)
-         (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
-       disch_then irule >> ld_range_case_tac) >>
-    ld_on_head "ld_dyn_agree"
-      (drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
-       disch_then irule >> ld_range_case_tac)]
+      fs[ptrDisciplineTheory.ld_dyn_agree_def]) >>
+  `l <> 0w` by (strip_tac >> gvs[]) >>
+  (* split the operand cases; no simplification after this point, since it
+     would reorder the mask's sums away from the lemmas' syntactic form *)
+  qpat_x_assum `eval_operand dop t = SOME d' /\ _` strip_assume_tac >>
+  rpt (qpat_x_assum `l = 0w` (fn th => fs[th])) >>
+  rpt (qpat_x_assum `d = d'` SUBST_ALL_TAC) >>
+  rpt (qpat_x_assum `r = r'` SUBST_ALL_TAC) >>
+  pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
+  rpt conj_tac >>
+  ld_on_head "ld_memory_agree"
+    (drule_at (Pat `ld_joint_geometry _ _ _ _`)
+       (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
+     disch_then irule >> ld_range_case_tac) >>
+  ld_on_head "ld_dyn_agree"
+    (drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
+     disch_then irule >> ld_range_case_tac)
 QED
 
 Theorem ld_joint_mcopy_next:
