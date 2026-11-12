@@ -445,9 +445,8 @@ Proof
   metis_tac[]
 QED
 
-(* The tail's source suffix consumes no gas observations; this is
-   bodySimRawLogTails's raw_log_tail_summary, which sits downstream. *)
-Theorem raw_log_tail_summary[local]:
+(* The post-data source suffix consumes no gas observations. *)
+Theorem raw_log_tail_summary:
   dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
   gas_marked_path F ctx func s 0 (OK t) /\
   Q (INL NoneV)
@@ -613,6 +612,14 @@ Proof
      qpat_x_assum `run_inst_seq _ s = OK t1` (fn th => rewrite_tac[th]) >>
      simp[]) >>
   pop_assum SUBST_ALL_TAC >>
+  `storage_well_formed_on cx es2 (FST H)` by
+    (qpat_assum `!H. valid_horizon _ _ H es2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[expr_post_def]) >>
+  `storage_well_formed_on cx ((es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) with gas_obs := []) (FST H)` by
+    (`((es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) with gas_obs := []).accounts = es2.accounts /\
+      ((es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) with gas_obs := []).tStorage = es2.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   qexists_tac `NoneV` >> conj_tac >- REFL_TAC >>
   conj_tac
   >- (irule expr_post_none_intro >>
@@ -753,6 +760,14 @@ Proof
      qpat_x_assum `step_inst_base _ _ = OK t1` (fn th => rewrite_tac[th]) >>
      simp[]) >>
   pop_assum SUBST_ALL_TAC >>
+  `storage_well_formed_on cx es2 (FST H)` by
+    (qpat_assum `!H. valid_horizon _ _ H es2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[expr_post_def]) >>
+  `storage_well_formed_on cx ((es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) with gas_obs := []) (FST H)` by
+    (`((es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) with gas_obs := []).accounts = es2.accounts /\
+      ((es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) with gas_obs := []).tStorage = es2.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   qexists_tac `NoneV` >> conj_tac >- REFL_TAC >>
   conj_tac
   >- (irule expr_post_none_intro >>

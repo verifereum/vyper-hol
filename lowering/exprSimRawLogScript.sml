@@ -10,22 +10,6 @@ Ancestors
 Libs
   pairLib
 
-(* An event log or a gas observation list does not touch the storage
-   backends the finite regions are decoded from. *)
-Theorem storage_well_formed_on_logs[simp]:
-  storage_well_formed_on cx (st with logs := l) regions <=>
-  storage_well_formed_on cx st regions
-Proof
-  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
-QED
-
-Theorem storage_well_formed_on_gas_obs_tail[simp]:
-  storage_well_formed_on cx (st with gas_obs := gs) regions <=>
-  storage_well_formed_on cx st regions
-Proof
-  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
-QED
-
 Theorem raw_log_topic_word:
   value_has_type (BaseTV (BytesT (Fixed 32))) v ==>
   typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) v = event_value_to_word v

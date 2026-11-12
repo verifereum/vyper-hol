@@ -113,6 +113,10 @@ Proof
          simp[]) >>
       pop_assum SUBST_ALL_TAC >>
       `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+      `storage_well_formed_on cx (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H)` by
+        (`(es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).accounts = es.accounts /\
+          (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).tStorage = es.tStorage` by simp[] >>
+         metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
       irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx]) >>
   simp[]
 QED
@@ -226,31 +230,12 @@ Proof
          simp[]) >>
       pop_assum SUBST_ALL_TAC >>
       `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+      `storage_well_formed_on cx (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H)` by
+        (`(es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).accounts = es.accounts /\
+          (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).tStorage = es.tStorage` by simp[] >>
+         metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
       irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx]) >>
   simp[]
-QED
-
-(* The post-data source suffix consumes no gas observations. *)
-Theorem raw_log_tail_summary:
-  dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
-  gas_marked_path F ctx func s 0 (OK t) /\
-  Q (INL NoneV)
-    ((es with logs := es.logs ++
-       [encode_raw_event_values cx.txn.target vals bs]) with gas_obs := []) t ==>
-  gas_summary_at F (ctx,func) []
-    (do bs' <- lift_option_type (dest_BytesV dv) "raw_log data";
-        type_check (LENGTH vals <= 4) "raw_log too many topics";
-        push_log (encode_raw_event_values cx.txn.target vals bs');
-        return NoneV od) (es,s) Q R
-Proof
-  strip_tac >> rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
-  qexistsl_tac [`INL NoneV`,
-    `es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]`,
-    `OK t`] >>
-  simp[bind_def, ignore_bind_def, lift_option_type_def, type_check_def,
-       push_log_def, return_def, assert_def,
-       vyperStateTheory.evaluation_state_component_equality] >>
-  disj1_tac >> Cases_on `es` >> gvs[]
 QED
 
 Theorem raw_log_data_post_transport:

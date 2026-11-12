@@ -12,7 +12,7 @@ Ancestors
   exprSimWordArgs exprLowering compileEnv loweringStateRelDefs emitHelper venomExecSemantics
   exprLoweringProps venomState venomMemDefs exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource vyperEvent
   fragExec venomInst exprSimHash exprSimBuffer exprSimPrecompiles emitHelperProps
-  ASCIInumbers exprSimRawLog
+  ASCIInumbers exprSimRawLog exprSimCallRawLog
 Libs
   pairLib
 

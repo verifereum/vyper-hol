@@ -154,6 +154,10 @@ Proof
      simp[]) >>
   pop_assum SUBST_ALL_TAC >>
   `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  `storage_well_formed_on cx (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H)` by
+    (`(es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).accounts = es.accounts /\
+      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx]
 QED
 
@@ -308,5 +312,9 @@ Proof
      simp[]) >>
   pop_assum SUBST_ALL_TAC >>
   `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  `storage_well_formed_on cx (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H)` by
+    (`(es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).accounts = es.accounts /\
+      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx]
 QED

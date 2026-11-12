@@ -65,6 +65,10 @@ Theorem raw_log_dynamic_tail_frag:
 Proof
   strip_tac >>
   `LENGTH ops < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  `storage_well_formed_on cx (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H)` by
+    (`(es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).accounts = es.accounts /\
+      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   irule raw_log_dynamic_tail_core >>
   qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >>
   simp[] >> qexistsl_tac [`s1`, `data_op`, `b`] >> simp[]
@@ -99,6 +103,10 @@ Theorem raw_log_fixed_tail_frag:
 Proof
   strip_tac >>
   `LENGTH ops < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  `storage_well_formed_on cx (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) (FST H)` by
+    (`(es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).accounts = es.accounts /\
+      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   Cases_on `u` >> Cases_on `u'` >> fs[] >>
   irule raw_log_fixed_tail_core >> simp[] >>
   qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >>
