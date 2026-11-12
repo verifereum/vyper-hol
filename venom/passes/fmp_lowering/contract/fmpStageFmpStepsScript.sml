@@ -24,6 +24,9 @@ Ancestors
   fmpStageFmpStepsDallocaSaved fmpStageFmpStepsDallocaShared
   fmpStepAnalysis fmpStepStack fmpStepSupply
   fmpStageFmpStepsEntryLayout fmpStageFmpStepsEntryInitialization
+  fmpStageFmpStepsRetCaller fmpStageFmpStepsRetExec
+  fmpStageFmpStepsRetRestrict fmpStageFmpStepsRetSource
+  venomInstProofs1
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
   list
@@ -267,6 +270,63 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem fmp_return_saved_restrict[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\
+  fmp_saved_rel C' sm fmp0 raw0 stk ts /\
+  EVERY (\f. w2n f.cf_state.vs_fmp <= cut) stk ==>
+  fmp_saved_rel C' (DRESTRICT sm {key | FST key < cut}) fmp0 raw0 stk ts
+Proof
+  strip_tac >> irule fmp_saved_rel_drestrict >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `?pre rest. stk = pre ++ f::rest` by metis_tac[MEM_SPLIT] >>
+      gvs[] >> drule_all fmp_stage_saved_facts >> strip_tac >>
+      gvs[EVERY_MEM] >> res_tac >> decide_tac) >>
+  rpt strip_tac >>
+  `?pre rest. stk = pre ++ f::rest` by metis_tac[MEM_SPLIT] >>
+  gvs[] >> drule_all fmp_stage_saved_facts >> strip_tac >>
+  fs[EVERY_EL] >> first_x_assum (qspec_then `k` mp_tac) >>
+  simp[] >> strip_tac >> fs[EVERY_MEM] >> res_tac >> decide_tac
+QED
+
+Theorem fmp_return_block_context[local]:
+  enters_block fn s t ==> t.vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[contextCodegenRelTheory.enters_block_def] >> strip_tac >> gvs[] >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem fmp_return_terminator_context[local]:
+  is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK t ==>
+  t.vs_call_ctx = s.vs_call_ctx
+Proof
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  strip_tac >> gvs[Once step_inst_def, step_inst_base_opcode_eqs] >>
+  gvs[AllCaseEqs(), jump_to_def] >> pairarg_tac >> gvs[]
+QED
+
+Theorem fmp_return_stack_context[local]:
+  !vs C stk PG G tn fn inst s. frame_reachable vs C stk PG G tn fn inst s ==>
+  !f. MEM f stk ==> s.vs_call_ctx = f.cf_state.vs_call_ctx
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- simp[]
+  >- (rpt strip_tac >> drule_all venomInstProofsTheory.step_preserves_call_ctx >>
+      strip_tac >> simp[])
+  >- (rpt strip_tac >> drule_all fmp_return_terminator_context >>
+      drule fmp_return_block_context >> metis_tac[])
+  >- (rpt strip_tac >> drule fmp_return_block_context >>
+      qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
+      simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[])
+  >> rpt strip_tac >>
+  `s'.vs_call_ctx = f.cf_state.vs_call_ctx` by
+    (qspec_then `(\u. u.vs_call_ctx)` mp_tac bind_outputs_preserves >>
+     simp[update_var_def] >> disch_then drule >>
+     Cases_on `ret.iret_adopt_fmp` >> simp[adopt_return_fmp_def, merge_callee_state_def]) >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem fmp_stage_invoke_return:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
@@ -298,5 +358,40 @@ Theorem fmp_stage_invoke_return:
       f.cf_fn (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx) lc
       (t' with vs_inst_idx := SUC tc.vs_inst_idx) ts
 Proof
-  cheat
+  strip_tac >>
+  `s.vs_call_ctx = f.cf_state.vs_call_ctx` by
+    (drule fmp_return_stack_context >> simp[]) >>
+  drule_all fmp_stage_ret_exec >> strip_tac >> gvs[] >>
+  `?tn0. tn0.t_var = f.cf_tvar /\
+    frame_reachable vs C stk f.cf_params f.cf_prov tn0
+      f.cf_fn f.cf_inst f.cf_state /\
+    active_inst f.cf_fn f.cf_inst f.cf_state /\
+    f.cf_inst.inst_opcode = INVOKE /\
+    EVERY (\g. w2n g.cf_state.vs_fmp <= w2n f.cf_state.vs_fmp) stk` by
+    (mp_tac (Q.INST [`pre` |-> `[]`, `rest` |-> `stk`,
+                      `inst` |-> `rinst`] fmp_stage_saved_facts) >>
+     simp[] >> metis_tac[]) >>
+  `fmp_saved_rel C' (DRESTRICT sm {key | FST key < w2n f.cf_state.vs_fmp})
+      (w2n vs'.vs_initial_fmp) (w2n fmp) (f::stk) ((tc,lc)::ts)` by
+    (irule fmp_return_saved_restrict >> simp[] >>
+     conj_tac >- fs[fmp_stage_rel_def] >> metis_tac[]) >>
+  fs[fmp_saved_rel_def] >>
+  drule_at (Pos (el 2)) fmp_return_caller >> simp[] >>
+  disch_then drule_all >>
+  disch_then (qspec_then `t` strip_assume_tac) >>
+  qexistsl_tac [`j`,`t1`] >> simp[] >>
+  simp[fmp_stage_rel_def] >>
+  qspec_then `\u. u with vs_vars := FEMPTY` mp_tac bind_outputs_preserves >>
+  simp[update_var_def] >> disch_then imp_res_tac >>
+  gvs[venom_state_component_equality, adopt_return_fmp_def,
+     merge_callee_state_def] >>
+  fs[fmp_stage_rel_def] >>
+  conj_tac
+  >- (irule fmp_sites_ok_return_restrict >>
+      qpat_x_assum `fmp_frame_rel sm _ _ _ _ _ _ _ _ _ _ _ _ _`
+        mp_tac >>
+      simp[fmp_frame_rel_def, fmp_frame_base_def, fmp_frame_lo_def] >>
+      metis_tac[]) >>
+  conj_tac >- metis_tac[fmp_memory_agree_drestrict] >>
+  fs[o1LowerDloadSharedTheory.ld_shared_agree_def]
 QED
