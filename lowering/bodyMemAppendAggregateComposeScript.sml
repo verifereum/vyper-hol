@@ -17,12 +17,12 @@ Libs
 
 Theorem compile_append_storage_aggregate_stmt_frag_mem:
   eval_target_place cx (TopLevelNameTarget nid) es =
-    (INL (StoragePlace tr slot (ArrayTV tv (Dynamic cap))),
+    (INL (StoragePlace tr (n2w offset) (ArrayTV tv (Dynamic cap))),
      es with storage_trace := es.storage_trace ++
        [StorageRoot tr offset (ArrayTV tv (Dynamic cap))]) /\
-  declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  declared_storage_region cx mid name [] = SOME (tr,(n2w offset),ArrayTV tv (Dynamic cap)) /\
   FLOOKUP cenv.ce_module_vars nid =
-    SOME (if tr then TransientLoc slot else StorageLoc slot) /\
+    SOME (if tr then TransientLoc (n2w offset) else StorageLoc (n2w offset)) /\
   cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
   cenv.ce_hashmap_info nid = NONE /\
   cenv.ce_module_dynarray_capacity nid = cap /\
@@ -43,7 +43,8 @@ Theorem compile_append_storage_aggregate_stmt_frag_mem:
     (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
-  strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> qabbrev_tac `slot = (n2w offset : bytes32)` >>
+  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   drule_all append_storage_copy_code_parts >> strip_tac >> gvs[] >>
   rename1 `lower_value _ _ _ _ sa = (op,sB)` >>
   rename1 `compile_alloc_buffer _ sB = (buf,sc)` >>
@@ -120,7 +121,7 @@ Resume compile_append_storage_aggregate_stmt_frag_mem[suffix]:
        metis_tac[valid_horizon_frame] >>
      `MEM (tr,slot,ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid))) (FST H)` by
        fs[Abbr `es_rhs`, valid_horizon_def, storage_observations_ok_def,
-          storage_trace_regions_def, EVERY_MEM] >>
+          storage_trace_regions_def, EVERY_MEM, Abbr `slot`] >>
      `regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H)` by
        fs[valid_horizon_def] >>
      simp[] >> rpt strip_tac >>
