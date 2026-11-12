@@ -26,9 +26,7 @@ Theorem annassign_relayout_code_parts:
       lower_value compile_expr c (expr_type e) e sA = (op,sB) /\
       compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
         (lowered_value_type cenv e)
-        (case vtyp of ArrayT et (Dynamic _) =>
-           SOME ((type_memory_bytes c et + 31) DIV 32, type_memory_bytes c et)
-         | _ => NONE) (type_memory_bytes c vtyp) sB = ((),sf) /\
+        (type_memory_bytes c vtyp) sB = ((),sf) /\
       local_ptrs_reserved c st /\ local_ptrs_reserved c sA /\ not_fresh_at sA p /\
       ci_mono sA sB /\ ci_mono sB sf /\ cs_extends st sA /\
       fn_has_code st sA func /\ fn_has_code sA sB func /\ fn_has_code sB sf func /\
@@ -55,9 +53,7 @@ Proof
      lower_value compile_expr c (expr_type e) e sA = (op,sB) /\
      compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
        (lowered_value_type cenv e)
-       (case vtyp of ArrayT et (Dynamic _) =>
-          SOME ((type_memory_bytes c et + 31) DIV 32, type_memory_bytes c et)
-        | _ => NONE) (type_memory_bytes c vtyp) sB = ((),sf)` by
+       (type_memory_bytes c vtyp) sB = ((),sf)` by
     (qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
      simp[Once compile_stmt_def, emit_local_alloca_def, comp_bind_def,
           comp_ignore_bind_def, comp_return_def] >>
@@ -74,7 +70,7 @@ Proof
     metis_tac[fn_has_code_split, ci_mono_def] >>
   qexistsl_tac [`st`, `sA`, `sV`, `sB`, `vv`, `op`,
     `STRING #"%" (toString sa.cs_next_var)`] >> simp[] >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >> simp[]
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >> simp[]
 QED
 
 Theorem residual_call_compile_location:
@@ -221,6 +217,6 @@ Proof
   irule annassign_relayout_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[ci_mono_def] >>
   conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `ai` >> gvs[ci_mono_def] >> qexists_tac `sA` >> gvs[] >> first_assum ACCEPT_TAC)
 QED

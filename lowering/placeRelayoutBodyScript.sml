@@ -258,7 +258,7 @@ Proof
      strip_tac >> gvs[contextTheory.vv_location_def]) >>
   `~block_is_terminated sb` by
     (qpat_assum `~is_word_type dty` (fn th =>
-       qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+       qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
          (mp_tac o REWRITE_RULE [th])) >>
      disch_then (mp_then Any mp_tac compile_assign_place_endpoint_open) >>
      simp[]) >>

@@ -38,7 +38,7 @@ Theorem assign_relayout_normal_continuation:
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   type_memory_bytes cenv sty = type_memory_size stv /\
   type_memory_bytes cenv sty < dimword (:256) /\
-  compile_assign_value cenv (Var p) LocMemory op F loc dty sty info bytes sb = ((),sf) /\
+  compile_assign_value cenv (Var p) LocMemory op F loc dty sty bytes sb = ((),sf) /\
   (loc = NONE \/ loc = SOME LocMemory) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sf /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
@@ -81,7 +81,7 @@ Proof
   `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
     (irule expr_post_alloca_frame >> metis_tac[]) >>
   drule assign_relayout_store_post_path >>
-  disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> disch_then drule >>
   disch_then (qspecl_then [`id`, `cap`, `pre`, `env`, `entry`, `rest`] mp_tac) >>
   simp[] >>
@@ -181,9 +181,7 @@ Theorem assign_local_relayout_code_parts:
       lower_value compile_expr cenv (expr_type e) e sa = (op,sB) /\
       compile_assign_value cenv (Var p) LocMemory op F (vv_location vv)
         vtyp (lowered_value_type cenv e)
-        (case vtyp of ArrayT et (Dynamic _) =>
-          SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-         | _ => NONE) (type_memory_bytes cenv vtyp) sB = ((),sf) /\
+        (type_memory_bytes cenv vtyp) sB = ((),sf) /\
       cs_extends sa sB /\ cs_extends sB sf /\
       fn_has_code sa sB func /\ fn_has_code sB sf func
 Proof
@@ -279,7 +277,7 @@ Proof
   irule assign_relayout_normal_continuation >> simp[] >>
   (conj_tac >- first_assum ACCEPT_TAC) >>
   qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
     (irule_at Any) >> simp[] >> qexists_tac `marks` >>
   (conj_tac >- first_assum ACCEPT_TAC) >> simp[]
 QED
