@@ -14,7 +14,7 @@
 Theory fmpStageControl
 Ancestors
   fmpStageRel o1PassContract fmpLowerDefs fmpReclaimDefs fmpWfDefs venomInst
-  finite_map list rich_list
+  finite_map list rich_list fmpStepLayout fmpLowerProps
 
 (* Why: the step proofs read the target's code at the control map's index
    off the lowering's own walk; a point's restores come first, then its
@@ -128,5 +128,23 @@ Theorem fmp_stage_root_crossing:
   (fn_is_context_entry ctx fn ==> entry_fn_no_params fn) ==>
   (EL idx bb.bb_instructions).inst_opcode = RETPC_PARAM
 Proof
-  cheat
+  simp[fmp_stage_root_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[]
+  >- (drule split_fmp_entry_reconstruct >> strip_tac >>
+      drule split_fmp_entry_users >> strip_tac >>
+      Cases_on `retpc` >>
+      gvs[entry_fn_no_params_def, fn_insts_def, fn_insts_blocks_def,
+          EVERY_APPEND, callLayoutDefsTheory.OPTION_TO_LIST_def] >>
+      Cases_on `users` >> gvs[is_param_opcode_def] >>
+      imp_res_tac split_fmp_entry_retpc_opcode >>
+      gvs[is_param_opcode_def]) >>
+  gvs[lookup_block_def, FIND_def, INDEX_FIND_def] >>
+  `retpc <> NONE` by
+    (gvs[fmp_stage_lowered_def, fmp_lower_function_with_info_def,
+         fmp_make_root_layout_def, AllCaseEqs()] >>
+     Cases_on `retpc` >> gvs[]) >>
+  Cases_on `retpc` >> gvs[] >>
+  drule split_fmp_entry_retpc_opcode >> strip_tac >>
+  drule split_fmp_entry_reconstruct >> strip_tac >>
+  gvs[callLayoutDefsTheory.OPTION_TO_LIST_def, EL_APPEND_EQN]
 QED
