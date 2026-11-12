@@ -256,7 +256,7 @@ Proof
   `o1_run_state_ok vs` by metis_tac[gas_variant_run_state_ok] >>
   `ctx_sim D unit.cu_context pre.cu_context vs vs /\
    ctx_abort_rq D unit.cu_context pre.cu_context vs vs /\
-   o1_walk_src_inv D pre.cu_context vs` by metis_tac[] >>
+   o1_walk_src_inv D pre.cu_context vs` by metis_tac[ctx_sim_fuel_imp_ctx_sim] >>
   `(!fuel vs. run_context fuel pre.cu_context vs =
       run_context fuel (prune_unit_fcg_unreachable pre
         (fcg_analyze pre.cu_context)).cu_context vs) /\
@@ -272,7 +272,8 @@ Proof
      >> conj_tac >> irule o1_prune_every >> first_assum ACCEPT_TAC) >>
   `ctx_sim D unit.cu_context
       (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs vs` by
-    (irule ctx_sim_run_context_eq >> qexists_tac `pre.cu_context` >> simp[]) >>
+    (qpat_x_assum `ctx_sim D unit.cu_context pre.cu_context vs vs` mp_tac >>
+     rewrite_tac[ctx_sim_def] >> metis_tac[]) >>
   `ctx_abort_rq D unit.cu_context
       (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs vs` by
     (irule ctx_abort_rq_run_context_eq >> qexists_tac `pre.cu_context` >> simp[]) >>

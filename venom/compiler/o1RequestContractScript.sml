@@ -185,5 +185,5 @@ Theorem o1_stage_contract_rq_lift:
   o1_stage_rq_contract_gas rpolicy D pass view pre Inv Inv'
 Proof
   rw[o1_stage_contract_def, o1_stage_rq_contract_gas_def] >>
-  qexists_tac `vs'` >> simp[gas_variant_refl] >> metis_tac[]
+  qexists_tac `vs'` >> simp[gas_variant_refl] >> metis_tac[ctx_sim_fuel_imp_ctx_sim]
 QED
