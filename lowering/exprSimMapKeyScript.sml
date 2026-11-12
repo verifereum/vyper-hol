@@ -1,7 +1,7 @@
 (* Mapping-key representation and pure hashing boundaries. *)
 Theory exprSimMapKey
 Ancestors
-  exprSimHashBoundary mappingTailFrames
+  exprSimHashBoundary
   exprSimHash exprSimLeaves valueEncodingProofs exprLoweringProps
   vyperTypeSystem vyperValue vyperTyping vyperStorage valueEncoding valueEncodingDefs
   vyperInterpreter vyperState list rich_list compileEnv loweringStateRelDefs loweringPosts context venomState
@@ -1006,7 +1006,30 @@ Proof
   `gas_marked_path F ctx func t 0
      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all compile_hashmap_tail_zero_path >> simp[]) >>
-  drule_all mappingTailFramesTheory.expr_post_suffix_frames >> strip_tac >>
+  `wb_frame cenv em en sm s1 t` by
+    (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
+  `wb_frame cenv em en sm s1 u` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
+     reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
+     goal_assum (drule_at Any)) >>
+  `~expr_has_effect idx ==> pure_frame cenv func em sm s1 u` by
+    (strip_tac >>
+     `pure_frame cenv func em sm s1 t` by
+       (qpat_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _`
+          (mp_then Any mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
+        simp[]) >>
+     `!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+              FLOOKUP u.vs_allocas aid = SOME b` by
+       (qpat_assum `wb_frame cenv en _ sn t u` mp_tac >>
+        pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
+        strip_tac >> first_assum ACCEPT_TAC) >>
+     `!x w. not_fresh_at sm x /\ lookup_var x s1 = SOME w ==>
+            lookup_var x t = SOME w` by
+       (qpat_assum `wb_frame cenv em _ sm s1 t` mp_tac >>
+        pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
+        strip_tac >> first_assum ACCEPT_TAC) >>
+     match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+     qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
   qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac
