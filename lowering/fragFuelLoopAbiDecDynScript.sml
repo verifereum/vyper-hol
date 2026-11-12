@@ -1645,6 +1645,82 @@ Resume abi_dyn_decode_provenance[loop]:
 QED
 Finalise abi_dyn_decode_provenance
 
+(* The concrete middle, as metalevel notation only. *)
+val dyn_middle = ``\dst src lop base hi info asz msz i.
+  do data <- emit_op ADD [src; Lit 32w];
+     off <- emit_op MUL [i; Lit (n2w asz)];
+     elem_src <- emit_op ADD [data; off];
+     actual_src <- (if dec_info_needs_offset info then
+       compile_abi_decode_dyn_elem_ptr lop base elem_src data hi asz
+       else return elem_src);
+     dst_data <- emit_op ADD [dst; Lit 32w];
+     dst_off <- emit_op MUL [i; Lit (n2w msz)];
+     elem_dst <- emit_op ADD [dst_data; dst_off];
+     compile_abi_decode_to_buf elem_dst actual_src lop base hi info od``;
+
+Theorem abi_dyn_middle_code[local]:
+  !dst src lop base hi info asz msz i.
+    lop <> INVOKE /\ lop <> PHI ==>
+    code_action (\opc. opc <> INVOKE /\ opc <> PHI)
+      ((^dyn_middle) dst src lop base hi info asz msz i)
+Proof
+  rpt strip_tac >> simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+  rpt (FIRST [irule (CONJUNCT1 abi_dyn_decode_code),
+    CHANGED_TAC (ASM_SIMP_TAC std_ss [code_action_emit_op,
+      code_action_emit_void, code_action_return]),
+    irule code_action_bind, irule code_action_ignore_bind,
+    irule code_action_emit_op, irule code_action_emit_void,
+    IF_CASES_TAC, gen_tac, conj_tac]) >> simp[]
+QED
+
+Theorem abi_dyn_middle_provenance[local]:
+  !dst src lop base hi info asz msz i A.
+    (^(inst [alpha |-> ``:unit``] dyn_prov)) A
+      ((^dyn_middle) dst src lop base hi info asz msz i)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+  rpt (FIRST [MATCH_ACCEPT_TAC (BETA_RULE (CONJUNCT1 abi_dyn_decode_provenance)),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_prov_emit_op),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_prov_emit_void),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_prov_return),
+    ho_match_mp_tac (BETA_RULE abi_dyn_prov_bind),
+    ho_match_mp_tac (BETA_RULE abi_dyn_prov_ignore_bind),
+    IF_CASES_TAC, gen_tac, conj_tac])
+QED
+
+Theorem abi_dyn_fresh_step_frame[local]:
+  !N inst s t.
+    EVERY (\x. ~var_below N x) inst.inst_outputs /\
+    inst.inst_opcode <> INVOKE /\ step_inst_base inst s = OK t ==>
+    vars_kept N {} s t /\ t.vs_labels = s.vs_labels
+Proof
+  rpt gen_tac >> strip_tac >>
+  `step_inst 0 ARB inst s = OK t` by simp[step_inst_non_invoke] >>
+  reverse conj_tac
+  >- metis_tac[venomExecPropsTheory.step_inst_preserves_labels_always] >>
+  simp[vars_kept_def] >> rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[venomExecPropsTheory.step_terminator_preserves_vars] >>
+  `~MEM x inst.inst_outputs` by (gvs[EVERY_MEM] >> metis_tac[]) >>
+  metis_tac[step_preserves_non_output_vars]
+QED
+
+Theorem abi_dyn_middle_frame[local]:
+  !dst src lop base hi info asz msz i sa sb N inst s t.
+    ((^dyn_middle) dst src lop base hi info asz msz i) sa = ((),sb) /\
+    N <= sa.cs_next_var /\ lop <> INVOKE /\ lop <> PHI /\
+    MEM inst (frag_code sa sb) /\ step_inst_base inst s = OK t ==>
+    vars_kept N {} s t /\ t.vs_labels = s.vs_labels
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  drule_all (BETA_RULE abi_dyn_body_middle_fresh) >> strip_tac >>
+  drule_all (SRULE [code_action_def, code_step_def] abi_dyn_middle_code) >>
+  strip_tac >> irule abi_dyn_fresh_step_frame >>
+  qexists_tac `inst` >> gvs[EVERY_MEM] >> metis_tac[]
+QED
+
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
