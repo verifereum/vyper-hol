@@ -4,7 +4,7 @@ Ancestors
   tupleAssignImmutableDeployWord tupleAssignImmutableDeployAggregate
   tupleAssignImmutableDeployRestore tupleAssignImmutableDeploySource
   tuplePlaceHeadOpen immutableAssignMetadata immutableDeployAssignRanges
-  immutableDeployAssignAdmissible
+  immutableDeployAssignAdmissible immutableAssignOpen stmtLoweringMono
 
 Theorem tuple_immutable_loaded_head_step:
   tuple_place_head ctx func ce cx es lo sp tys ltys ltvs vs elems w i s0 /\
@@ -162,6 +162,68 @@ Proof
    ce.ce_module_var_type (ce.ce_module,id) = SOME ity` by simp[] >>
   drule_all immutableDeployAssignFactsTheory.immutable_assign_declared_region >> strip_tac >>
   `LENGTH ltvs = LENGTH ltys` by simp[] >>
-  drule_all tuplePlacePointerReadyTheory.tuple_place_snapshot_element_bounds >> strip_tac >>
-  FAIL_TAC "aggregate geometry"
+  `w2n sw + type_memory_size (EL i ltvs) < dimword (:256) /\
+   w2n sw + type_memory_size (EL i ltvs) <= s0.vs_alloca_next /\
+   regions_disjoint (w2n sw) (type_memory_size (EL i ltvs))
+     off (type_memory_size (EL i tvs)) /\
+   (ity <> EL i ltys /\ ~is_bytestring_type ity ==>
+    !b sz. FLOOKUP s0.vs_allocas sa.cs_next_id = SOME (b,sz) ==>
+     w2n sw + type_memory_size (EL i ltvs) <= b \/ b+sz <= w2n sw)` by
+    (drule_all tuplePlacePointerReadyTheory.tuple_place_snapshot_element_bounds >> strip_tac
+     >- (`b+sz <= s0.vs_alloca_next` by
+           (fs[exprLoweringPropsTheory.stmt_state_rel_def,
+               venomMemDefsTheory.alloca_inv_def,
+               venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+         `regions_disjoint off (type_memory_size (EL i tvs)) b sz` by metis_tac[] >>
+         simp[] >> conj_tac
+         >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+         rpt strip_tac >>
+         `alloca_inv s0` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+         fs[venomMemDefsTheory.alloca_inv_def,
+            venomMemDefsTheory.allocas_non_overlapping_def] >>
+         `aid <> sa.cs_next_id` by decide_tac >>
+         qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _` drule_all >>
+         gvs[] >> decide_tac) >>
+     `b+sz <= s0.vs_alloca_next` by
+       (irule bodyMemoryDefsTheory.body_local_region_frontier >> metis_tac[]) >>
+     `regions_disjoint off (type_memory_size (EL i tvs)) b sz` by metis_tac[] >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> gvs[] >> decide_tac) >>
+  `eval_operand (Lit (n2w off)) s0 = SOME (n2w off)` by
+    simp[venomStateTheory.eval_operand_def] >>
+  `!region x. ce.ce_imm_alloca = SOME region /\ region = Var x ==>
+     not_fresh_at sa x` by
+    (rpt strip_tac >> gvs[] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base]) >>
+  drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) tuple_immutable_aggregate_store >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ce.ce_module_var_type _ = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ dty = _`)) >>
+  disch_then (drule_at (Pat `eval_operand src _ = _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  simp[] >>
+  disch_then (qspecl_then [`type_slot_size (EL i tvs)`, `ltys`, `i`, `elems`] mp_tac) >>
+  (impl_tac >- gvs[valueEncodingPropsTheory.type_memory_size_slots]) >>
+  strip_tac >>
+  `compile_assign_value ce (Lit (n2w off)) LocCode (EL i elems)
+     (is_word_type ity) NONE ity (EL i ltys)
+     (case ity of ArrayT et (Dynamic _) =>
+       SOME ((type_memory_bytes ce et+31) DIV 32,type_memory_bytes ce et)
+       | _ => NONE) (type_memory_bytes ce ity) sa = ((),sb)` by gvs[] >>
+  `~block_is_terminated sb` by
+    metis_tac[immutable_assign_loccode_open] >>
+  `ci_mono sa sb` by
+    metis_tac[cj 1 ci_mono_stmt_helpers, pairTheory.SND] >>
+  `immutable_value_admissible (EL i tvs) (EL i vs)` by
+    metis_tac[immutableDeployAssignAdmissibleTheory.evaluated_immutable_admissible] >>
+  qexists `q` >> simp[] >>
+  `tuple_place_head ctx func ce cx ff lo sb tys ltys ltvs vs elems w (SUC i) q /\
+   (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s0) /\
+   (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+      FLOOKUP q.vs_allocas aid = SOME entry) /\
+   alloca_frame ce es sa s0 ce ff q` suffices_by simp[] >>
+  irule tuple_immutable_endpoint_restore >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qexistsl [`r`, `off`, `ity`, `EL i tvs`, `id`, `env`] >>
+  gvs[GSYM valueEncodingPropsTheory.type_memory_size_slots] >>
+  gvs[]
 QED
