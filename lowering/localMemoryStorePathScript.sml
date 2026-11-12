@@ -168,7 +168,7 @@ Proof
      gvs[FLOOKUP_DEF, pred_setTheory.ABSORPTION_RWT]) >>
   `alloca_frame cenv es sa s cenv es1 t` by
     (irule alloca_frame_local_store >>
-     simp[] >> conj_tac >- metis_tac[] >>
+     simp[] >> reverse conj_tac >- metis_tac[] >>
      qexistsl_tac [`w2n w`, `es`, `id`, `type_memory_size entry.type`, `s`, `sz`] >>
      simp[alloca_frame_def] >>
      rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
@@ -182,10 +182,12 @@ Proof
 QED
 
 Theorem alloc_copy_memory_framed_path:
-  !ctx func cenv cx es sa sm sb s0 p src sz sw tv v.
+  !cx st0 ctx func cenv es sa sm sb s0 p src sz sw tv v.
     emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
     emit_void MCOPY [Var p; src; Lit (n2w sz)] sm = ((), sb) /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\ fn_inst_ids_distinct func /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
     src <> Var p /\ eval_operand src s0 = SOME sw /\
@@ -196,7 +198,8 @@ Theorem alloc_copy_memory_framed_path:
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?s2 w. lookup_var p s2 = SOME w /\
       FLOOKUP s2.vs_allocas sa.cs_next_id = SOME (w2n w, sz) /\
-      stmt_state_rel H ctx func cenv cx es s2 /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s2) /\
       val_in_memory tv v (w2n w) s2.vs_memory /\
       (!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
          mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s0.vs_memory) /\
@@ -207,15 +210,19 @@ Theorem alloc_copy_memory_framed_path:
       s2.vs_inst_idx = LENGTH sb.cs_current_insts /\
       gas_marked_path F ctx func s0 0 (OK s2)
 Proof
-  rpt strip_tac >> drule_all annassign_alloca_operand_framed_path >>
+  rpt strip_tac >>
+  qspecl_then [`cx`, `st0`, `ctx`, `func`, `cenv`, `es`, `sa`, `sm`, `p`, `sz`, `s0`]
+    mp_tac annassign_alloca_operand_framed_path >>
+  impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
   `eval_operand src s1 = SOME sw` by simp[] >>
   `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
   qabbrev_tac `inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
   `inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
    inst.inst_id = sa.cs_next_id` by simp[Abbr `inst`, mk_inst_def] >>
-  `stmt_state_rel H ctx func cenv cx es (mcopy (w2n w) (w2n sw) sz s1)` by
-    (irule stmt_state_rel_mcopy_alloca >> simp[] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es (mcopy (w2n w) (w2n sw) sz s1)` by
+    (rpt strip_tac >> irule stmt_state_rel_mcopy_alloca >> simp[] >>
      qexistsl_tac [`sz`, `inst`, `p`] >> simp[]) >>
   `val_in_memory tv v (w2n w) (mcopy (w2n w) (w2n sw) sz s1).vs_memory` by
     (irule mcopy_val_in_memory >> simp[]) >>

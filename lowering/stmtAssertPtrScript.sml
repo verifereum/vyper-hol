@@ -121,7 +121,7 @@ Resume compile_assert_frag_ptr[normal]:
     gvs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
         typed_val_to_w256_def, val_to_w256_def] >>
   `op_taint tn op = {}` by gvs[ptr_val_ok_def] >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 G tn
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 G tn
      (OK (jump_to (if b then sb.cs_current_bb else s5.cs_current_bb) t))` by
     (imp_res_tac emit_inst_extends >>
      irule assert_jnz_zero_path_ptr >> simp[] >>
@@ -148,7 +148,7 @@ QED
 Resume compile_assert_frag_ptr[true]:
   markerLib.RESUME_TAC >> (
   gvs[] >>
-  `stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ())
+  `stmt_post H ctx func cx lctx cenv cenv sa sb es s0 (INL ())
      (es_end with gas_obs := []) (jump_to sb.cs_current_bb t)` by
     (irule assert_success_post >> simp[] >> conj_tac
      >- (qpat_x_assum `!tail. _` (qspec_then `[]` assume_tac) >>
@@ -177,7 +177,7 @@ Resume compile_assert_frag_ptr[false]:
         (Abort a u)` by
     (simp[Abbr `ak`, expr_exit_def] >>
      metis_tac[step_revert_zero, step_invalid]) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn
      (jump_to s5.cs_current_bb t) 0 G tn (Abort a u)` by
     (irule emit_abort_zero_path_ptr >> simp[jump_to_def] >>
      qexistsl_tac [`if ak = AssertBare then REVERT else INVALID`,
