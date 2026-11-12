@@ -106,8 +106,8 @@ Theorem asm_frame_gas_step_noncall:
     frame_op_gas H <= frame_gas_left es /\
     EL a.as_pc prog <> AsmOp "CALL" /\
     EL a.as_pc prog <> AsmOp "STATICCALL" /\
-    ~MEM (EL a.as_pc prog) [AsmOp "CREATE"; AsmOp "CREATE2";
-      AsmOp "DELEGATECALL"; AsmOp "SELFDESTRUCT"] ==>
+    ~MEM (EL a.as_pc prog) [AsmOp "DELEGATECALL"; AsmOp "CREATE";
+      AsmOp "CREATE2"; AsmOp "SELFDESTRUCT"] ==>
     (!op r s'.
        next_opcode (FST (HD es.contexts)) = SOME op /\
        step_inst op es = (r,s') /\
