@@ -7,6 +7,12 @@ Ancestors
   vyperFiniteStoragePreservation vyperStorageFootprint vyperTypeSelectedEntry
   vyperTypeExternalCallMachine vyperTypeExternalDefaults
   vyperTypeDeploymentMachine vyperTypeContractSoundness vyperLookupStorage
+  vyperStorage vyperStorageBackend vyperState vyperInterpreter vyperContext
+  vyperCall vyperStorageTrace vyperTypeInvariants vfmState
+  vyperCallFiniteStorageSupport vyperExternalDefaultsFiniteStorage
+  vyperGetterFiniteStorage vyperExternalBodyFiniteStorage
+
+val _ = Parse.hide "body";
 
 (* Intuition: storage_well_formed_on reads only cx.txn.target, so the
    NONE-module context and the selected module's context agree. Lookup and
@@ -39,7 +45,17 @@ Theorem call_external_storage_well_formed_on:
   storage_well_formed_on (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am' []) (FST H)
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `?exc. res = INR exc /\ exc <> HaltException`
+  >- (gvs[] >>
+      `call_external orc gobs am tx = (INR exc,am',rqs)` by
+        simp[call_external_def] >>
+      `am' = am` by metis_tac[call_external_error_rollback] >>
+      gvs[valid_horizon_def]) >>
+  qpat_x_assum `call_external_trace _ _ _ _ = _` mp_tac >>
+  simp[Once call_external_trace_def] >>
+  gvs[checked_contract_runtime_ready_def] >>
+  FAIL_TAC "selected wrapper"
 QED
 
 Theorem load_contract_storage_well_formed_on:
