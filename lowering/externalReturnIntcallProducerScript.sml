@@ -9,13 +9,14 @@ Theorem return_compile_intcall_output:
   compile_expr ce ct (Call ann (IntCall fid) args drv) sa = (vv,sm) ==>
   (?p. vv = LocatedValue (ce.ce_func_return_type (nsid_to_string fid)) p /\
        p.ptr_location = LocMemory) \/
-  (?pvs. vv = StackValue (ce.ce_func_return_type (nsid_to_string fid)) (Lit 0w) /\
-         ce.ce_func_info (nsid_to_string fid) = (0,0,pvs))
+  (?bs pvs. vv = StackValue (ce.ce_func_return_type (nsid_to_string fid)) (Lit 0w) /\
+            ce.ce_func_info (nsid_to_string fid) = (0,bs,pvs) /\
+            ce.ce_func_return_type (nsid_to_string fid) = NoneT)
 Proof
   namedCases_on `ce.ce_func_info (nsid_to_string fid)` ["nret bs pvs"] >>
   simp[Once compile_expr_def, expr_type_def, compile_call_def] >>
   Cases_on `nret > 0` >> simp[] >>
-  Cases_on `bs > 0` >> simp[] >>
+  Cases_on `ce.ce_func_return_type (nsid_to_string fid) = NoneT` >> simp[] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[base_ptr_def, mk_ptr_def] >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
