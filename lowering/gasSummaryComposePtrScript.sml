@@ -19,6 +19,7 @@
 Theory gasSummaryComposePtr
 Ancestors
   fragGasSeqPtr fragGasPathPtr gasOutcome gasStorage gasExemptCert stmtSimDeclGas
+  vyperStorageFootprint vyperStorageTrace
   gasSummaryCompose gasSummary fragGasMode fragGasPath gasCount
   vyperState vyperInterpreter list rich_list arithmetic
 
