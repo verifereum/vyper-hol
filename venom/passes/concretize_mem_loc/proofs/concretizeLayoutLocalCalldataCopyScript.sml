@@ -188,7 +188,7 @@ Proof
      mp_tac (Q.INST [`off:bytes32` |-> `dst`, `offT:num` |-> `w2n (dstT:bytes32)`,
         `len:num` |-> `cap`, `positions` |-> `concretize_positions C'`]
         access_geometry_relocation_pairs) >>
-     impl_tac >- fs[] >> disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >> disch_then (qspec_then `i` mp_tac) >> simp[]) >>
   (conj_tac >- suspend "written") >> suspend "retained"
 QED
 Resume concretize_clean_write_geometry[written]:
