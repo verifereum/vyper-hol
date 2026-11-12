@@ -3349,7 +3349,98 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
+Theorem abi_dyn_observer_no_phi[local]:
+  !sa sb fn id. fn_has_code sa sb fn /\ no_phi_fn fn ==>
+    no_phi_fn (frag_observer sa sb fn id)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+    IS_PREFIX bb.bb_instructions sb.cs_current_insts` by gvs[fn_has_code_def] >>
+  `phi_prefix_length bb.bb_instructions = 0` by
+    (drule venomExecProofsTheory.lookup_block_MEM >>
+     gvs[no_phi_fn_def, EVERY_MEM] >> metis_tac[]) >>
+  simp[frag_observer_def, no_phi_fn_def] >> conj_tac
+  >- (gvs[rich_listTheory.IS_PREFIX_APPEND] >>
+      Cases_on `sb.cs_current_insts` >>
+      gvs[phi_prefix_length_def, mk_inst_def, AllCaseEqs()]) >>
+  gvs[no_phi_fn_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem abi_dyn_observer_outcome_stable[local]:
+  !sa sb fn id ctx s j P.
+    (!t. P t ==> at_point sb t) /\
+    fuel_outcome 0 ctx (frag_observer sa sb fn id) s j P ==>
+    !f. j <= f ==> run_from f ctx (frag_observer sa sb fn id) s =
+      run_from j ctx (frag_observer sa sb fn id) s
+Proof
+  rpt gen_tac >> strip_tac >> gvs[fuel_outcome_def]
+  >- (`!f. run_from f ctx (frag_observer sa sb fn id) t =
+          Halt (halt_state (t with vs_returndata := []))` by
+        (gen_tac >> `at_point sb t` by metis_tac[] >>
+         gvs[at_point_def] >> irule fragExecTheory.run_from_halt >>
+         qexistsl_tac [`<|bb_label := sb.cs_current_bb;
+           bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>`,
+           `mk_inst id STOP [] []`] >>
+         simp[frag_observer_cut_lookup, step_inst_base_opcode_eqs, mk_inst_def] >>
+         simp[get_instruction_def, EL_APPEND_EQN]) >>
+      rpt strip_tac >>
+      `f = (f-j)+j` by simp[] >>
+      qpat_assum `!f. _ = run_from f _ _ t` (qspec_then `f-j` mp_tac) >>
+      qpat_x_assum `!f. _ = run_from f _ _ t` (qspec_then `0` mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!f. _` (qspec_then `f-j` mp_tac) >> simp[]
+QED
+
 (* Primitive footprint probe for the structural middle certificate. *)
+Theorem abi_dyn_middle_framed_bound[local]:
+  !dst src lop base hi info asz msz i sa sb.
+    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) /\
+    ~is_terminator lop /\ lop <> PHI /\ lop <> INVOKE /\ (^dyn_Old) sa /\
+    (!d s Wv E. fuel_ok Wv {} E
+      (compile_abi_decode_to_buf d s lop base hi info)) ==>
+    ?K. !G N ctx fn s.
+      N <= sa.cs_next_var /\ no_phi_fn fn /\ fn_has_code sa sb fn /\ at_point sa s ==>
+      ?j. j <= K /\ fuel_outcome G ctx fn s j
+        (\t. at_point sb t /\ vars_kept N {} s t /\ t.vs_labels = s.vs_labels)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `(^dyn_middle) dst src lop bop hi info asz msz i sa = ((),sb)` >>
+  `fuel_ok {} {} {} ((^dyn_middle) dst src lop bop hi info asz msz i)` by
+    (BETA_TAC >> irule fuel_ok_decode_dyn_body_middle >> simp[]) >>
+  qpat_x_assum `fuel_ok _ _ _ _` (mp_tac o REWRITE_RULE [fuel_ok_def]) >>
+  disch_then drule >> strip_tac >> qexists_tac `Kb` >>
+  rpt gen_tac >> strip_tac >>
+  `fn_has_code sa sb (frag_observer sa sb fn 0)` by
+    (irule abi_dyn_observer_has_code >> simp[] >>
+     metis_tac[BETA_RULE abi_dyn_middle_final_exclusion]) >>
+  `no_phi_fn (frag_observer sa sb fn 0)` by metis_tac[abi_dyn_observer_no_phi] >>
+  qpat_x_assum `frag_fuel _ _ _ _ _ _` (mp_tac o REWRITE_RULE [frag_fuel_def]) >>
+  disch_then (qspecl_then [`0`, `N`, `ctx with ctx_functions := []`,
+    `frag_observer sa sb fn 0`, `s`] mp_tac) >>
+  simp[abi_dyn_empty_context_stable] >> strip_tac >>
+  `!f. j <= f ==> run_from f (ctx with ctx_functions := [])
+      (frag_observer sa sb fn 0) s =
+      run_from j (ctx with ctx_functions := []) (frag_observer sa sb fn 0) s` by
+    (drule_at Any abi_dyn_observer_outcome_stable >> simp[]) >>
+  `(^abi_dyn_cut_hyp) ((^dyn_R) sa sb) (at_point sb)
+      (\t. vars_kept N {} s t /\ t.vs_labels = s.vs_labels)
+      ctx fn (ctx with ctx_functions := []) (frag_observer sa sb fn 0)` by
+    (irule abi_dyn_middle_cut_hyp >> rule_assum_tac BETA_RULE >>
+     simp_tac std_ss [] >> qpat_assum `comp_bind _ _ sa = _` (irule_at Any) >> simp[]) >>
+  `(^dyn_R) sa sb s` by
+    (irule abi_dyn_middle_entry >> rule_assum_tac BETA_RULE >>
+     simp_tac std_ss [] >> qpat_assum `comp_bind _ _ sa = _` (irule_at Any) >> simp[]) >>
+  `vars_kept N {} s s /\ s.vs_labels = s.vs_labels` by simp[vars_kept_def] >>
+  drule abi_dyn_cutoff_stable >>
+  disch_then (qspecl_then [`j`, `s`] mp_tac) >>
+  simp_tac std_ss [] >>
+  (impl_tac >- (rule_assum_tac BETA_RULE >> simp[])) >> strip_tac
+  >- (qexists_tac `j'` >> simp[fuel_outcome_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  qexists_tac `j` >> simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+  `j <= f+j /\ j <= G+j` by simp[] >> metis_tac[]
+QED
+
 Theorem abi_dyn_emit_op_footprint[local]:
   !opc ops st out st'.
     emit_op opc ops st = (out,st') ==>
