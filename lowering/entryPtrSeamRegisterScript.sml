@@ -61,6 +61,33 @@ Proof
   gvs[ptr_safe_run_def, Once ptr_safe_defs]
 QED
 
+Theorem registration_cursor_active_or_safe_if_terminal:
+  compile_register_positional_args ce args off st = (ce',sa) /\
+  fn_has_code st sa fn /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
+    bb.bb_instructions <> [] /\
+    is_terminator (LAST bb.bb_instructions).inst_opcode) ==>
+  (?bb inst. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sa.cs_current_insts) = SOME inst) \/
+  (!D lo fuel ctx PG G tn. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule registration_noop_or_open >> strip_tac
+  >- (gvs[] >>
+      Cases_on `?bb inst. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb (LENGTH sa.cs_current_insts) = SOME inst`
+      >- simp[] >>
+      disj2_tac >> irule registration_absent_cursor_safe >> metis_tac[]) >>
+  disj1_tac >> fs[fn_has_code_def] >>
+  first_x_assum drule >> strip_tac >>
+  `LENGTH sa.cs_current_insts < LENGTH bb.bb_instructions` by
+    (fs[IS_PREFIX_APPEND] >>
+     Cases_on `l` >> gvs[block_is_terminated_def] >>
+     Cases_on `sa.cs_current_insts` >> gvs[]) >>
+  simp[get_instruction_def]
+QED
+
 (* Source lookup selects a declaration whose original byte sizes were checked. *)
 Theorem registration_external_allocs_ok:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
