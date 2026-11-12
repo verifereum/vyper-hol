@@ -237,27 +237,27 @@ Proof
   `lo <= dyn_floor C vs /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
      b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
     (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
-  Cases_on `w2n l=0`
+  (* the operand facts may arrive split into cases; prove each alone *)
+  (Cases_on `w2n l=0`
   >- (gvs[mcopy_def] >> conj_tac
       >- (irule ld_memory_agree_empty_write >> simp[]) >>
-      fs[ptrDisciplineTheory.ld_dyn_agree_def,
-         regularCallEmitSimTheory.read_byte_write_memory_with_expansion]) >>
-  `(w2n d=w2n d' /\ (w2n d+w2n l<=lo \/
-      dyn_floor C vs<=w2n d /\ w2n d+w2n l<=dimword (:256))) \/
-   (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
-                  w2n d=b+j /\ w2n d'=c+j)` by metis_tac[] >>
+      simp[ptrDisciplineTheory.ld_dyn_agree_def,
+           regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
+      fs[ptrDisciplineTheory.ld_dyn_agree_def]) >>
   `w2n d = w2n d' \/
    (w2n d+w2n l <= dyn_floor C vs /\ w2n d'+w2n l <= dyn_floor C vs)` by
-    (qpat_x_assum `(w2n d = w2n d' /\ _) \/ _` strip_assume_tac >> simp[] >>
+    (Cases_on `w2n d = w2n d'` >> simp[] >>
+     `?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
+                   w2n d=b+j /\ w2n d'=c+j` by metis_tac[] >>
      `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
      decide_tac) >>
   pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
-  conj_tac
-  >- (drule_at (Pat `ld_joint_geometry _ _ _ _`)
-        (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
-      disch_then irule >> metis_tac[]) >>
-  drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
-  disch_then irule >> metis_tac[]
+  (conj_tac
+   >- (drule_at (Pat `ld_joint_geometry _ _ _ _`)
+         (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
+       disch_then irule >> metis_tac[]) >>
+   drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
+   disch_then irule >> metis_tac[]))
 QED
 
 Theorem ld_joint_mcopy_next:
