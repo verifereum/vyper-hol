@@ -74,6 +74,7 @@ Proof
      irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `s2` >> simp[] >>
      match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`es1`, `sm`, `s1`] >> fs[wb_frame_def]) >>
+  `storage_well_formed_on cx es2 (FST H)` by fs[expr_post_def] >>
   irule vv_post_word_intro >> simp[expr_type_def, expr_has_effect_thm] >>
   metis_tac[optionTheory.SOME_11]
 QED
