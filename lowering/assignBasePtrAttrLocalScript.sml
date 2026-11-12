@@ -109,9 +109,20 @@ Theorem assign_base_attr_local_store_runtime_ptr:
         <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) G tf u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ u.vs_allocas = s.vs_allocas /\
-    (!x. lookup_var x u = lookup_var x s /\ op_taint tf (Var x) = op_taint tn (Var x))
+    (!x. lookup_var x u = lookup_var x s /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    (!ad len. ad + len <= w2n rootw \/ w2n rootw + sz <= ad ==>
+       mem_bytes_at ad len u.vs_memory = mem_bytes_at ad len s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
+  `!ad len. ad + len <= w2n rootw \/ w2n rootw + sz <= ad ==>
+     mem_bytes_at ad len (mstore (w2n addr) (typed_val_to_w256 ftv v) s).vs_memory =
+     mem_bytes_at ad len s.vs_memory` by
+    (`struct_field_offset flds fld + 32 <= type_memory_size_fields fs` by
+       metis_tac[struct_field_offset_le] >>
+     qpat_x_assum `type_memory_size (StructTV fs) <= sz`
+       (assume_tac o SIMP_RULE (srw_ss()) [type_memory_size_def]) >>
+     rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+     decide_tac) >>
   drule_all assign_base_attr_local_store_ghost >>
   disch_then (qspecl_then [`PG`, `sa.cs_next_id`] assume_tac) >>
   `stmt_state_rel ctx fn cenv cx
@@ -136,6 +147,7 @@ Proof
      `mstore (w2n addr) (typed_val_to_w256 ftv v) s
         with vs_inst_idx := SUC s.vs_inst_idx`] >>
   gvs[] >> simp[stmt_state_rel_inst_idx, ghost_inv_inst_idx] >>
+  qpat_x_assum `!ad len. _` mp_tac >>
   simp[mstore_def, lookup_var_def, op_taint_def]
 QED
 
@@ -200,7 +212,9 @@ Theorem assign_base_attr_local_store_ptr:
         <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) G tf u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ u.vs_allocas = s.vs_allocas /\
-    (!x. lookup_var x u = lookup_var x s /\ op_taint tf (Var x) = op_taint tn (Var x))
+    (!x. lookup_var x u = lookup_var x s /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    (!ad len. ad + len <= w2n bw \/ w2n bw + sz <= ad ==>
+       mem_bytes_at ad len u.vs_memory = mem_bytes_at ad len s.vs_memory)
 Proof
   strip_tac >> drule_all assign_base_attr_local_endpoint >> strip_tac >>
   `type_memory_size ftv = 32` by fs[store_lays_out_def] >>
@@ -266,6 +280,7 @@ Theorem assign_base_attr_local_store_post_ptr:
   fn_has_code su sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = su.cs_current_bb /\ s.vs_inst_idx = LENGTH su.cs_current_insts /\
   expr_post ctx fn cenv cx e es sa su s0 ee v op s /\
+  alloca_frame cenv es sa s0 cenv ee s /\
   ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
   find_containing_scope id ee.scopes = SOME (pre,sc,entry,rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\ lookup_var p s = SOME bw /\
@@ -288,7 +303,7 @@ Theorem assign_base_attr_local_store_post_ptr:
     gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
       (write_place cx (MemoryPlace id [AttrSubscript fld]) v)
       (ee,s,G,tn) [] (INL ()) ff G tf (OK u) /\
-    stmt_post ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
     ghost_inv d cenv cx ff G tf u /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP G x = FLOOKUP Gi x /\ op_taint tf (Var x) = op_taint ti (Var x))
@@ -300,6 +315,23 @@ Proof
   `op_taint tn op = {}` by fs[ptr_val_ok_def] >>
   drule_all assign_base_attr_local_store_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
+  drule_all assign_base_attr_local_endpoint >> strip_tac >>
+  `ee.scopes = pre ++ sc :: rest /\ id IN FDOM sc` by
+    (drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  `!q. lookup_var q u = lookup_var q s` by metis_tac[] >>
+  `alloca_frame cenv es sa s0 cenv (ee with scopes := pre ++
+    (sc |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
+      popped := []|>)) :: rest) u` by
+    (`MAP FDOM (ee with scopes := pre ++
+        (sc |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
+          popped := []|>)) :: rest).scopes = MAP FDOM ee.scopes` by
+       simp[pred_setTheory.ABSORPTION_RWT] >>
+     qpat_assum `alloca_frame cenv es sa s0 cenv ee s` (fn th1 =>
+       qpat_assum `local_region cenv ee.scopes s id (w2n bw) sz` (fn th2 =>
+         irule (MATCH_MP (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+           alloca_frame_region_write) th1) th2))) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`ee with scopes := pre ++ (sc |+ (id,entry with
     <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest`,
     `tf`, `u`] >>
@@ -354,6 +386,7 @@ Theorem assign_base_attr_local_after_read_ptr:
     (vyperState$bind (eval_expr cx e) (read_result cx))
     (es,s0,Gi,ti) marks (INL v) ee G tn (OK s) /\
   expr_post ctx fn cenv cx e es sa su s0 (ee with gas_obs := []) v op s /\
+  alloca_frame cenv es sa s0 cenv ee s /\
   ghost_inv d cenv cx (ee with gas_obs := []) G tn s /\
   ghost_kept cenv es sa Gi ti s0 G tn /\
   emit_void MSTORE [Var dst; op] su = ((),sb) /\ fn_has_code su sb fn /\
@@ -370,7 +403,7 @@ Theorem assign_base_attr_local_after_read_ptr:
     gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
       (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
       (es,s0,Gi,ti) marks (INL ()) ff G tf (OK u) /\
-    stmt_post ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
     ghost_inv d cenv cx ff G tf u /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP G x = FLOOKUP Gi x /\ op_taint tf (Var x) = op_taint ti (Var x))
@@ -386,7 +419,7 @@ Proof
     gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
       (write_place cx (MemoryPlace id [AttrSubscript fld]) v)
       (ee with gas_obs := [],s,G,tn) [] (INL ()) ff G tf (OK u) /\
-    stmt_post ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
     ghost_inv d cenv cx ff G tf u /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP G x = FLOOKUP Gi x /\ op_taint tf (Var x) = op_taint ti (Var x))` by
@@ -441,7 +474,7 @@ Theorem assign_base_attr_local_normal_continuation_ptr:
     gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
       (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
       (es,s0,Gi,ti) marks (INL ()) ff H tf (OK u) /\
-    stmt_post ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
     ghost_inv d cenv cx ff H tf u /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP H x = FLOOKUP Gi x /\ op_taint tf (Var x) = op_taint ti (Var x))
@@ -468,6 +501,10 @@ Proof
     (drule_all gas_marked_exec_ptr_exec >>
      simp[gas_marked_exec_def] >> strip_tac >>
      drule gas_marked_path_exec >> strip_tac >> drule gas_path_normal >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv ee z` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ z`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] expr_post_alloca_frame)) >>
+     fs[]) >>
   qrefinel [`_`, `H`, `_`, `_`] >>
   irule assign_base_attr_local_after_read_ptr >> simp[] >>
   goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
@@ -568,7 +605,7 @@ Resume compile_assign_attr_local_case_ptr[normal]:
     gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
       (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
       (es,s0,G0,tn0) marks (INL ()) ff H tf (OK u) /\
-    stmt_post ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
     ghost_inv d cenv cx ff H tf u /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP H x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x))` by
