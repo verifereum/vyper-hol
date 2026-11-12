@@ -11,7 +11,7 @@ Ancestors
   concretizePtrReturnTransport concretizePtrTaggedSupport
   concretizePtrPairedNextAttach concretizePtrPairedPrefixProbe
   concretizePtrSourceOwnership concretizeStepStructure concretizeStepShape
-  concretizeStepCallChecks concretizeStepRetpc concretizeStageShape
+  concretizeStepRetpc concretizeStageShape
   concretizePtrOperationalOpcodes opcodeClass concretizePtrParamProducer
   concretizePtrOrdinaryNext concretizePtrPairedPrefix concretizePtrPairedFields
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
@@ -331,4 +331,3 @@ Proof
     `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws`] >>
   simp[APPEND_ASSOC, ptr_gap_scan_fields]
 QED
-

@@ -1,0 +1,154 @@
+(* Counted aggregate Append suffix and semantic postcondition. *)
+Theory bodyMemAppendAggregateValuePath
+Ancestors
+  bodyMemAppendAggregatePath appendStorageAggregateRel bodyMemAssignTopCopySem
+  stmtSimStoreCopy stmtSimAppendStorageCompose bodyMemAppendFacts
+  words list rich_list valueEncodingProps venomState venomExecSemantics
+  stmtSimDefs stmtSimProps exprSimProps loweringStateRelDefs compileEnv
+  placeStoreStorage allocaHistory fragExec emitHelper emitHelperProps venomInst
+  exprSimDefs loweringPosts appendStorageRel exprLoweringProps stmtSimAppendStorage
+
+Theorem append_aggregate_prefix_words[local]:
+  w2n b+32*n < dimword (:256) ==>
+  store_copy_prefix (if tr then LocTransient else LocStorage) b a s n =
+    FOLDL (\t i. (if tr then tstore else sstore) (a+n2w i)
+      (mem_word_at (w2n b+32*i) s.vs_memory) t) s (COUNT_LIST n)
+Proof
+  strip_tac >> simp[store_copy_prefix_def] >>
+  irule listTheory.FOLDL_CONG >> simp[MEM_COUNT_LIST] >>
+  rpt strip_tac >> rename1 `i < n` >>
+  `w2n (b+n2w i*32w) = w2n b+32*i` by
+    (irule topcopy_word_address >> qexists_tac `32*n` >> simp[]) >>
+  Cases_on `tr` >> simp[mem_word_at_eq_mload]
+QED
+
+Theorem append_storage_aggregate_success_post_mem[local]:
+  stmt_state_rel ctx func cenv cx es s /\
+  declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es = (res,es') /\
+  local_ptrs_reserved cenv sa /\
+  store_copy_normalize s t =
+    (if tr then tstore else sstore) slot
+      (n2w (w2n (lookup_storage slot (get_storage cx es tr)))+1w)
+      (store_copy_prefix (if tr then LocTransient else LocStorage)
+        b (slot+1w+n2w (w2n (lookup_storage slot (get_storage cx es tr)))*n2w (type_slot_size tv))
+        s (type_slot_size tv)) /\
+  (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
+  w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
+  (!mid' n' subs' slot' tv'.
+    declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
+    (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
+    ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
+                    (w2n slot') (type_slot_size tv')) /\
+  w2n (lookup_storage slot (get_storage cx es tr)) < cap /\
+  0 < type_slot_size tv /\ well_formed_type_value tv /\ value_has_type tv v /\
+  val_in_memory tv v (w2n b) s.vs_memory /\ encode_value tv v = SOME writes /\
+  w2n b + 32*type_slot_size tv < dimword (:256) ==>
+  res = INL () /\ stmt_state_rel ctx func cenv cx es' t
+Proof
+  strip_tac >>
+  `w2n (lookup_storage slot (get_storage cx es tr)) =
+   w2n (lookup_storage slot (get_storage cx es tr))` by simp[] >>
+  drule_all stmt_state_rel_append_storage_aggregate >> strip_tac >>
+  qpat_x_assum `w2n _ = w2n _` kall_tac >>
+  `stmt_state_rel ctx func cenv cx es' (store_copy_normalize s t)` by
+    (asm_rewrite_tac [] >>
+     drule append_aggregate_prefix_words >>
+     disch_then (qspec_then `tr` assume_tac) >>
+     gvs[GSYM word_add_n2w, GSYM word_mul_n2w, WORD_ADD_ASSOC]) >>
+  conj_tac >- asm_rewrite_tac [] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ (store_copy_normalize _ _)` mp_tac >>
+  pure_rewrite_tac [store_copy_normalize_def, topcopy_control_frame] >> strip_tac >>
+  irule stmt_state_rel_reserved_frame >>
+  qexistsl_tac [`t with vs_vars := s.vs_vars`, `sa`] >>
+  simp[stateFrameTheory.state_frame_vars, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem append_storage_aggregate_history[local]:
+  compile_dynarray_append cenv bop vop 1 n dt vt cap F
+    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+  fn_has_code sa sf func /\ alloca_history func s /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = sf.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
+  alloca_history func t
+Proof
+  strip_tac >> drule (iffLR append_storage_copy_suffix_parts) >>
+  disch_then (qx_choosel_then
+    [`len'`, `valid`, `data`, `offset`, `dst`, `fresh`, `u`,
+     `s1`, `s2`, `s3`, `s4`, `s5`, `s6`, `s7`, `s8`] strip_assume_tac) >>
+  drule place_store_copy_boundary >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> ALLOCA) sf.cs_current_insts` by
+    (qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
+     qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     simp[emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_def] >>
+     rpt strip_tac >> gvs[] >> Cases_on `tr` >> simp[mk_inst_def]) >>
+  fs[alloca_history_def, fn_has_code_def] >> rpt strip_tac >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >> simp[IS_PREFIX_APPEND] >>
+  strip_tac >> gvs[venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
+  fs[EVERY_EL] >> metis_tac[]
+QED
+
+Theorem append_storage_aggregate_value_path_mem:
+  compile_dynarray_append cenv (Lit slot) op 1 (type_slot_size tv) dt vt cap F
+    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  eval_operand op s = SOME b /\ cap < dimword (:256) /\
+  type_slot_size tv < dimword (:256) /\
+  w2n b + 32*type_slot_size tv <= s.vs_alloca_next /\
+  w2n b + 32*type_slot_size tv < dimword (:256) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
+  (!mid' n' subs' slot' tv'.
+    declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
+    (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
+    ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
+                    (w2n slot') (type_slot_size tv')) /\
+  0 < type_slot_size tv /\ well_formed_type_value tv /\ value_has_type tv v /\
+  val_in_memory tv v (w2n b) s.vs_memory /\ encode_value tv v = SOME writes /\
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es = (res,es') /\
+  fn_has_code sa sf func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  alloca_history func s ==>
+  ?r. gas_marked_path T ctx func s 0 r /\
+    ((?t. r = OK t /\ res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
+      stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
+      (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
+      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+      t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t) \/
+     (exit_result r /\ stmt_exit RetQ es' res r))
+Proof
+  strip_tac >>
+  drule_all append_storage_header_agree_mem >> strip_tac >>
+  `~s.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `eval_operand (Lit slot) s = SOME slot /\
+   (!x. Lit slot = Var x \/ op = Var x ==> not_fresh_at sa x)` by
+    simp[eval_operand_def] >>
+  drule_all append_storage_aggregate_suffix_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  Cases_on `w2n (lookup_storage slot (get_storage cx es tr)) < cap`
+  >- (`?t. gas_marked_path T ctx func s 0 (OK t) /\
+        store_copy_normalize s t =
+          (if tr then tstore else sstore) slot
+            (n2w (w2n (lookup_storage slot (get_storage cx es tr)))+1w)
+            (store_copy_prefix (if tr then LocTransient else LocStorage) b
+              (slot+1w+n2w (w2n (lookup_storage slot (get_storage cx es tr)))*n2w (type_slot_size tv))
+              s (type_slot_size tv)) /\
+        (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
+        t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+        ~t.vs_halted /\ t.vs_memory = s.vs_memory /\
+        t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+        (first_x_assum irule >> simp[]) >>
+      `res = INL () /\ stmt_state_rel ctx func cenv cx es' t` by
+        (drule_all append_storage_aggregate_success_post_mem >> simp[]) >>
+      `alloca_history func t` by (irule append_storage_aggregate_history >> metis_tac[]) >>
+      qexists_tac `OK t` >> simp[stmt_lands_def]) >>
+  `cap <= w2n (lookup_storage slot (get_storage cx es tr))` by decide_tac >>
+  drule append_storage_full >> strip_tac >>
+  `?a t. gas_marked_path T ctx func s 0 (Abort a t)` by
+    (first_x_assum irule >> metis_tac[]) >>
+  qexists_tac `Abort a t` >>
+  gvs[stmt_exit_def, exit_result_def, expr_exit_def]
+QED

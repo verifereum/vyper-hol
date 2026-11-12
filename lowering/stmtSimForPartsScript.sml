@@ -428,6 +428,7 @@ Theorem compile_for_range_parts:
       sb0.cs_current_insts =
         [mk_inst (st.cs_next_id + 7) MSTORE [Var p; Var cv] []] /\
       sb0.cs_next_var = st.cs_next_var + 4 /\ cs_extends st sb0 /\
+      st.cs_next_id <= sb0.cs_next_id /\
       compile_stmts bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = ((), sb1) /\
       fn_has_code sb0 sb1 func /\
       lookup_block st.cs_current_bb func.fn_blocks =
@@ -530,6 +531,7 @@ Proof
   >- simp[Abbr `sb0`]
   >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
+  >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- (qpat_assum `!l b. MEM b _ /\ _ ==> _` irule >>
@@ -594,6 +596,7 @@ Theorem compile_for_range_lit_parts:
       sb0.cs_current_insts =
         [mk_inst (st.cs_next_id + 7) MSTORE [Var p; Var cv] []] /\
       sb0.cs_next_var = st.cs_next_var + 4 /\ cs_extends st sb0 /\
+      st.cs_next_id <= sb0.cs_next_id /\
       compile_stmts bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = ((), sb1) /\
       fn_has_code sb0 sb1 func /\
       lookup_block st.cs_current_bb func.fn_blocks =

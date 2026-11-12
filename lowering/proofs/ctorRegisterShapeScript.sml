@@ -77,7 +77,23 @@ Resume compile_decode_constructor_arg_shape[dynamic]:
   rename1 `var_location_decode_operand loc = SOME dst` >>
   ctor_cenv_emit_bind `[]` `head`
     (ctor_cenv_emit_bind `[head]` `offv`
-      (ctor_cenv_emit_bind `[offv; head]` `src` ctor_decode_tail_tac))
+      (ctor_cenv_emit_bind `[offv; head]` `src` (suspend "dyn_guard")))
+QED
+Resume compile_decode_constructor_arg_shape[dyn_guard]:
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. cenv_shape_ok st cenv /\ (EVERY (plain_operand st) [src] /\ T)` >>
+  conj_tac >- (gen_tac >> BETA_TAC >> ctor_decode_tail_tac) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) [src]`,
+    `\u st. cenv_shape_ok st cenv /\ (EVERY (plain_operand st) [src] /\ T)`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  ho_match_mp_tac extbodies_cenv_frame >>
+  ho_match_mp_tac extbodies_frame >>
+  qexists_tac `\st. EVERY (plain_operand st) [src; Lit 0w]` >>
+  simp_tac bool_ss [shape_stable_plain_operands] >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       compile_abi_arg_ptr_guard_shape]
 QED
 Resume compile_decode_constructor_arg_shape[primitive]:
   ctor_cenv_emit_bind `[]` `src`
