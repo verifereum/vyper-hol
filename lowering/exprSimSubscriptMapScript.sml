@@ -417,8 +417,7 @@ Proof
   drule (cj 1 eval_expr_no_control) >>
   rename1 `INR exc` >> Cases_on `exc` >>
   gvs[no_control_exc_def, no_type_error_result_def]
-  >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
-  metis_tac[eval_expr_calls_no_halt, expr_map_pre_def]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[])
 QED
 
 Theorem expr_map_pre_checked_type:

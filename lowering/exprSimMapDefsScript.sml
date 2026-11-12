@@ -17,7 +17,8 @@ Definition expr_map_res_ok_def:
   expr_map_res_ok (res : eval_result + exception) <=>
     (?tv. res = INL tv) \/ (?m. res = INR (Error (RuntimeError m))) \/
     (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
+    (?str. res = INR (AssertException str)) \/
+    res = INR HaltException
 End
 
 (* expr_vv_sim for an expression naming a mapping: compile_expr's fragment

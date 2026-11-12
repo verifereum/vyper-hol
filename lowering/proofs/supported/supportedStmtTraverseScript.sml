@@ -236,3 +236,30 @@ Proof
        supported_assignment_exists_disj, supported_iterator_exists_disj,
        supported_assert_exists_disj, supported_raise_exists_disj] >> metis_tac[]
 QED
+
+(* No halt root means no evm-run root. *)
+Theorem no_halt_root_no_evm_run:
+  (!e. ~supported_expr_exists expr_halt_root e ==>
+       ~supported_expr_exists expr_evm_run_root e) /\
+  (!es. ~supported_exprs_exists expr_halt_root es ==>
+        ~supported_exprs_exists expr_evm_run_root es) /\
+  (!t. ~supported_target_exists expr_halt_root t ==>
+       ~supported_target_exists expr_evm_run_root t) /\
+  (!g. ~supported_assignment_exists expr_halt_root g ==>
+       ~supported_assignment_exists expr_evm_run_root g) /\
+  (!it. ~supported_iterator_exists expr_halt_root it ==>
+        ~supported_iterator_exists expr_evm_run_root it) /\
+  (!r. ~supported_assert_exists expr_halt_root r ==>
+       ~supported_assert_exists expr_evm_run_root r) /\
+  (!r. ~supported_raise_exists expr_halt_root r ==>
+       ~supported_raise_exists expr_evm_run_root r) /\
+  (!s. ~supported_stmt_expr_exists expr_halt_root s ==>
+       ~supported_stmt_expr_exists expr_evm_run_root s) /\
+  (!ss. ~supported_stmts_expr_exists expr_halt_root ss ==>
+        ~supported_stmts_expr_exists expr_evm_run_root ss)
+Proof
+  simp[expr_halt_root_split, supported_expr_exists_disj,
+       supported_assignment_exists_disj, supported_iterator_exists_disj,
+       supported_assert_exists_disj, supported_raise_exists_disj,
+       supported_stmt_expr_exists_disj]
+QED

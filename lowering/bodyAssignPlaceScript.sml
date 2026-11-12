@@ -203,6 +203,7 @@ Proof
   `supported_assignment tops bindings (BaseTarget t) e` by
     gvs[supported_stmt_def] >>
   drule_then strip_assume_tac supported_assignment_storage_syntax >>
+  imp_res_tac supportedStmtTraverseTheory.no_halt_root_no_evm_run >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops /\
    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by

@@ -732,6 +732,7 @@ Resume body_oracle_storage_mutual[intcall_start]:
   rename1 `lookup_callable_function cx.in_deploy fn tops =
              SOME (mut,nr,args,dflts,ret,ss)` >>
   drule_all supported_callable_storage_syntax >> strip_tac >> gvs[] >>
+  imp_res_tac supportedStmtTraverseTheory.no_halt_root_no_evm_run >>
   Cases_on `LENGTH es = LENGTH args`
   >- suspend "intcall_live" >>
   `~(LENGTH es <= LENGTH args /\ LENGTH args <= LENGTH es)` by decide_tac >>
@@ -920,7 +921,9 @@ Theorem eval_stmts_body_oracle_storage:
 Proof
   conj_tac >> rpt strip_tac
   >- (drule (cj 1 supported_stmts_storage_syntax) >> strip_tac >>
+      imp_res_tac supportedStmtTraverseTheory.no_halt_root_no_evm_run >>
       drule_all (cj 1 body_oracle_storage_mutual) >> simp[]) >>
   drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
+  imp_res_tac supportedStmtTraverseTheory.no_halt_root_no_evm_run >>
   drule_all (cj 2 body_oracle_storage_mutual) >> simp[]
 QED

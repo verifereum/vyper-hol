@@ -92,18 +92,31 @@ End
 
 (* The calls the source runs on the EVM even when it takes external calls
    from the outcome oracle: a delegate raw_call (eval_raw_call's
-   run_raw_call) and the creates (eval_create's run_create_evm).  Also
-   selfdestruct, which the expression simulation holds out until the
-   source's selfdestruct halts (supported_program excludes it). *)
+   run_raw_call) and the creates (eval_create's run_create_evm). *)
 Definition expr_evm_run_root_def:
   expr_evm_run_root (Call ty (RawCallTarget flags) es default) =
     flags.rcf_is_delegate /\
   expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) =
     flags.rcf_is_delegate /\
   expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
-  expr_evm_run_root (Call ty SelfDestructTarget es default) = T /\
   expr_evm_run_root _ = F
 End
+
+(* The roots evalNoHalt excludes: selfdestruct, the source's only halt,
+   and the evm-run calls. *)
+Definition expr_halt_root_def:
+  expr_halt_root e <=>
+    expr_evm_run_root e \/
+    ?ty es default. e = Call ty SelfDestructTarget es default
+End
+
+Theorem expr_halt_root_split:
+  expr_halt_root =
+    (\x. expr_evm_run_root x \/
+         ?ty es default. x = Call ty SelfDestructTarget es default)
+Proof
+  simp[FUN_EQ_THM, expr_halt_root_def]
+QED
 
 Definition call_operands_effect_root_def:
   call_operands_effect_root (Call ty (ExtCall s k sig opts) args d) =
@@ -323,41 +336,51 @@ Proof
     supported_effect_expr_has_effect]
 QED
 
-(* The supported subset has no raw_call or create, the calls the source
-   runs on the EVM even with the outcome oracle. *)
-Theorem supported_pure_no_evm_run[local]:
+(* The supported subset has no selfdestruct, raw_call or create. *)
+Theorem supported_pure_no_halt[local]:
   (!tops e. supported_pure_expr tops e ==>
-      ~supported_expr_exists expr_evm_run_root e) /\
+      ~supported_expr_exists expr_halt_root e) /\
   (!tops es. supported_pure_exprs tops es ==>
-      ~supported_exprs_exists expr_evm_run_root es) /\
+      ~supported_exprs_exists expr_halt_root es) /\
   (!tops fields. supported_pure_fields tops fields ==>
-      ~supported_fields_exists expr_evm_run_root fields) /\
+      ~supported_fields_exists expr_halt_root fields) /\
   (!tops e. supported_place_expr tops e ==>
-      ~supported_expr_exists expr_evm_run_root e)
+      ~supported_expr_exists expr_halt_root e)
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def, supported_expr_exists_def, expr_evm_run_root_def] >>
+  simp[supported_pure_expr_def, supported_expr_exists_def,
+       expr_halt_root_def, expr_evm_run_root_def] >>
   rpt conj_tac >> rpt gen_tac >>
   TRY (Cases_on `base`) >>
-  simp[supported_pure_expr_def, supported_expr_exists_def, expr_evm_run_root_def]
+  simp[supported_pure_expr_def, supported_expr_exists_def,
+       expr_halt_root_def, expr_evm_run_root_def]
 QED
 
-Theorem supported_effect_no_evm_run[local]:
+Theorem supported_effect_no_halt[local]:
   (!tops e. supported_effect_expr tops e ==>
-      ~supported_expr_exists expr_evm_run_root e) /\
+      ~supported_expr_exists expr_halt_root e) /\
   (!tops e. supported_effect_place_expr tops e ==>
-      ~supported_expr_exists expr_evm_run_root e)
+      ~supported_expr_exists expr_halt_root e)
 Proof
   ho_match_mp_tac supported_effect_expr_ind >>
   simp[supported_effect_expr_def, supported_expr_exists_def,
-       expr_evm_run_root_def] >>
+       expr_halt_root_def, expr_evm_run_root_def] >>
   rpt conj_tac >> rpt gen_tac >> simp[] >>
-  metis_tac[supported_pure_no_evm_run]
+  metis_tac[supported_pure_no_halt]
+QED
+
+Theorem supported_expr_no_halt:
+  supported_expr tops e ==> ~supported_expr_exists expr_halt_root e
+Proof
+  rw[supported_expr_def] >>
+  metis_tac[supported_pure_no_halt, supported_effect_no_halt]
 QED
 
 Theorem supported_expr_no_evm_run:
   supported_expr tops e ==> ~expr_has_evm_run e
 Proof
-  rw[supported_expr_def, expr_has_evm_run_def] >>
-  metis_tac[supported_pure_no_evm_run, supported_effect_no_evm_run]
+  rw[expr_has_evm_run_def] >> drule supported_expr_no_halt >>
+  CONV_TAC CONTRAPOS_CONV >> simp[] >> strip_tac >>
+  irule (cj 1 supported_expr_exists_mono) >>
+  qexists_tac `expr_evm_run_root` >> simp[expr_halt_root_def]
 QED

@@ -446,7 +446,37 @@ QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Call_SelfDestructTarget]:
   rpt gen_tac >> strip_tac >>
-  gvs[int_calls_expr_def, supported_expr_exists_def, expr_evm_run_root_def]
+  gvs[int_calls_expr_def, supported_expr_exists_def, expr_evm_run_root_def] >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `well_typed_expr env (Call _ SelfDestructTarget _ _)` mp_tac >>
+      rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+        type_check_def, assert_def, return_def, raise_def,
+        lift_option_type_def, get_accounts_def] >>
+      simp[] >>
+      Cases_on `eval_exprs cx es st` >>
+      rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+      first_x_assum drule_all >> strip_tac >>
+      Cases_on `args_res` >> gvs[]
+      >- (Cases_on `LENGTH x = 1` >>
+          gvs[type_check_def, assert_def, return_def, raise_def]
+          >- (Cases_on `dest_AddressV (HD x)` >> gvs[return_def, raise_def]
+              >- (rpt strip_tac >> gvs[]) >>
+              (* A static frame fails check_not_static before any effect. *)
+              Cases_on `cx.txn.is_static` >> simp[]
+              >- (rpt strip_tac >> gvs[]) >>
+              rpt strip_tac >>
+              qpat_assum `_ = (res,st')`
+                (assume_tac o SRULE [bind_def, ignore_bind_def, return_def,
+                                     raise_def]) >>
+              drule_all (selfdestruct_tail_preserves_contract_storage |>
+                SRULE [bind_def, ignore_bind_def, return_def, raise_def]) >>
+              simp[]) >>
+          rpt strip_tac >> gvs[]) >>
+      rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Subscript]:
