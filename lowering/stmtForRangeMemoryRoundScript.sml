@@ -142,7 +142,8 @@ Theorem for_round_outcome_mem:
                      handle_loop_exception) pop_scope od)
     (esk,s) H
     (\res ee r. ?ex. res = INR ex /\
-                 !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+                 (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+                 halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>

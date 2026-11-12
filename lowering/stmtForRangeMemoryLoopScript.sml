@@ -282,7 +282,8 @@ Theorem for_iteration_mem:
                      lookup_var ev t = SOME (i2w n2) /\
                      lookup_var p t = SOME w))
       (\res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   rpt gen_tac >> strip_tac >>
   `bc.ce_module_vars = cenv.ce_module_vars /\ bc.ce_module = cenv.ce_module /\

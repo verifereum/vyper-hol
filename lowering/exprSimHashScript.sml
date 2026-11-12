@@ -2574,7 +2574,8 @@ Proof
   `expr_res_ok (builtin_result cx ee.accounts ann bt [expr_type e] [v])` by
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
      Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
-     gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def] >> rpt strip_tac >>
+     gvs[exprSimWordArgsTheory.builtin_result_not_halt]) >>
   qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
   `ee with gas_obs := [] = ee` by
     simp[evaluation_state_component_equality] >>

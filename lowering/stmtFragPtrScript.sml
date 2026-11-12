@@ -270,7 +270,8 @@ Proof
       conj_tac
       >- (fs[gas_marked_exec_ptr_def] >> metis_tac[eval_expr_stmt_exception]) >>
       disj2_tac >> simp[stmt_exit_ptr_def] >>
-      metis_tac[expr_exit_INR_type]) >>
+      conj_tac >- metis_tac[expr_exit_INR_type] >>
+      fs[halt_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >>
   metis_tac[expr_stmt_exempt]
 QED

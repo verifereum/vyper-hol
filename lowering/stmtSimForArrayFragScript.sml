@@ -890,7 +890,8 @@ Proof
   drule_all (SRULE [] (INST [``n:num`` |-> ``LENGTH (vs0:value list)``,
                               ``vs:eval_result list`` |-> ``MAP Value (vs0:value list)``]
                           array_for_source_prefix)) >> strip_tac >>
-  irule array_outcome_stmt_post >> simp[] >> goal_assum (drule_at Any)
+  irule array_outcome_stmt_post >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC) >> simp[] >> goal_assum (drule_at Any)
 QED
 
 

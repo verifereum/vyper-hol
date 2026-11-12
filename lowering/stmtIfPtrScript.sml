@@ -70,7 +70,8 @@ Proof
       conj_tac
       >- (rewrite_tac[eval_stmt_if_forced] >>
           irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
-      disj2_tac >> simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]) >>
+      disj2_tac >> simp[stmt_exit_ptr_def] >>
+      conj_tac >- metis_tac[expr_exit_INR_type] >> fs[halt_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >>
   drule eval_stmt_if_condition_cert >> metis_tac[]
 QED

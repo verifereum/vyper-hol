@@ -698,7 +698,8 @@ Theorem array_code_loop_outcome_mem:
       (\res ee t. res = INL () /\
         array_round_done d ctx func cenv cx caller orig exit ee t)
       (\res ee rr. ?ex. res = INR ex /\
-        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
+        (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) /\
+        halt_exit cx ee (INR ex : unit + exception) rr)
 Proof
   strip_tac >>
   ho_match_mp_tac stmtSimForRoundsTheory.eval_for_value_rounds >>

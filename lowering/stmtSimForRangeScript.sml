@@ -1104,8 +1104,9 @@ Resume forced_endpoint_bind_outcome[exception]:
   qexistsl_tac [`INR ex`, `es_end`, `r`] >>
   conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[] >> gen_tac >>
-  irule expr_exit_stmt_exit >> qexists_tac `INR ex` >> simp[]
+  disj2_tac >> simp[] >> conj_tac
+  >- (gen_tac >> irule expr_exit_stmt_exit >> qexists_tac `INR ex` >> simp[]) >>
+  fs[halt_exit_def]
 QED
 
 Resume forced_endpoint_bind_outcome[bind_finish]:

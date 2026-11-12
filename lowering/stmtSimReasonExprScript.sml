@@ -150,31 +150,6 @@ Proof
   gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
 QED
 
-Theorem expr_res_ok_revert[local]:
-  !ex t. expr_res_ok (INR ex : value + exception) ==>
-         expr_exit (INR ex : unit + exception) (Abort Revert_abort t)
-Proof
-  rw[expr_res_ok_def] >> simp[expr_exit_def]
-QED
-
-(* The exits of a raise with a reason, as the reason's outcome gives them. *)
-Theorem raise_reason_exits:
-  !r1 res RetQ es'.
-    expr_res_ok r1 /\
-    ((?str. r1 = INL (StringV str) /\
-            res = INR (AssertException str)) \/
-     (?ex. r1 = INR ex /\ res = INR ex)) ==>
-    (!rr. expr_exit r1 rr ==> stmt_exit RetQ es' res rr) /\
-    (!t. stmt_exit RetQ es' res (Abort Revert_abort t))
-Proof
-  rpt gen_tac >> strip_tac >> gvs[stmt_exit_def, expr_exit_def] >>
-  `expr_res_ok (INR ex : value + exception)` by simp[] >>
-  simp[expr_res_ok_revert] >> rpt strip_tac >> disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
-                      expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
-QED
-
 Theorem compile_raise_reason_parts[local]:
   !cenv lctx ty r sa cenv' sb.
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
