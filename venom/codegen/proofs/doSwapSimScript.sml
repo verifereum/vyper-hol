@@ -1260,7 +1260,7 @@ Finalise restore_n_sim;
    --------------------------------------------------------------- *)
 (*  flookup_fupdate_list_el: after |++ ZIP(items, offsets),
     looking up EL idx items gives EL idx offsets *)
-Theorem flookup_fupdate_list_el[local]:
+Theorem flookup_fupdate_list_el:
   !items offsets sp idx.
     ALL_DISTINCT items /\
     LENGTH items = LENGTH offsets /\
@@ -1497,7 +1497,7 @@ Finalise spill_alloc_n_offset_props;
    --------------------------------------------------------------- *)
 
 (* The desired permutation indices are all < chunk *)
-Theorem desired_indices_bound[local]:
+Theorem desired_indices_bound:
   !(n:num) k.
     n >= 2 /\
     k < n ==>
@@ -1627,7 +1627,7 @@ Proof
 QED
 
 (* The two DUP restoration schedules visit every temporary slot once. *)
-Theorem dup_restore_indices_reverse[local]:
+Theorem dup_restore_indices_reverse:
   !k. 0 < k ==>
     GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1] =
     REVERSE (GENLIST I (k - 1)) ++ [k - 1] /\
@@ -1661,7 +1661,7 @@ Proof
        LUPDATE_APPEND1, APPEND_ASSOC, LUPDATE_def]
 QED
 
-Theorem map_el_reverse_indices[local]:
+Theorem map_el_reverse_indices:
   !xs:'a list.
     MAP (\i. EL i xs) (REVERSE (GENLIST I (LENGTH xs))) = REVERSE xs
 Proof
@@ -1669,7 +1669,7 @@ Proof
   irule GENLIST_EL >> simp[]
 QED
 
-Theorem dup_restore_small_values[local]:
+Theorem dup_restore_small_values:
   !h (tail:'a list).
     MAP (\i. EL i (REVERSE (h::tail)))
       (GENLIST (\i. LENGTH (h::tail) - 2 - i) (LENGTH (h::tail) - 1) ++
@@ -2093,7 +2093,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem top_n_suffix[local]:
+Theorem top_n_suffix:
   !n stk. n <= LENGTH stk ==>
     TAKE (LENGTH stk - n) stk ++ top_n n stk = stk
 Proof
@@ -2443,7 +2443,7 @@ Proof
 QED
 
 (* execute_plan initial_fmp length for spill ++ restore *)
-Theorem execute_plan_spill_restore_length[local]:
+Theorem execute_plan_spill_restore_length:
   !spill_offs restore_offs.
     LENGTH (execute_plan initial_fmp (MAP SOSpill spill_offs ++ MAP SORestore restore_offs)) =
       2 * LENGTH spill_offs + 2 * LENGTH restore_offs
@@ -2619,7 +2619,7 @@ QED
 (* Local raw SOSpill execution boundary.  Unlike spill_n_sim this theorem
    mentions only the assembly stack and memory, so duplicate operands are
    irrelevant. *)
-Theorem raw_spill_push_encode_num_roundtrip[local]:
+Theorem raw_spill_push_encode_num_roundtrip:
   n < dimword(:256) ==>
   word_of_bytes F (0w:bytes32)
     (REVERSE (encode_num_bytes n)) = n2w n
@@ -3263,7 +3263,7 @@ QED
 
 (* EL at a desired-permuted index in items equals EL at the
    reverse-permuted index in REVERSE items. *)
-Theorem el_desired_reverse_items[local]:
+Theorem el_desired_reverse_items:
   !(items:'a list) k.
     LENGTH items >= 2 /\ k < LENGTH items ==>
     EL (EL k ([LENGTH items - 1] ++ GENLIST (\i. i + 1)
@@ -4398,7 +4398,7 @@ Proof
   rpt IF_CASES_TAC >> gvs[] >> simp[PRE_SUB1]
 QED
 
-Theorem reverse_desired_values[local]:
+Theorem reverse_desired_values:
   !(items:'a list) dist.
     LENGTH items = dist + 1 /\ dist > 0 ==>
     REVERSE (MAP (\i. EL i items)
@@ -4650,7 +4650,7 @@ Proof
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem flat_map_singleton[local]:
+Theorem flat_map_singleton:
   !xs (f:'a -> 'b). FLAT (MAP (\x. [f x]) xs) = MAP f xs
 Proof
   Induct >> simp[]

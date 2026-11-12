@@ -2557,7 +2557,10 @@ Resume evaluate_finite_frame[expr_builtin]:
   qpat_x_assum `^callable_closed cx A R` (mk_asm "closure") >>
   qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==> _`
     (mk_asm "mem_ih") >>
-  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ _ /\ bt <> Env MsgGas ==> _` (mk_asm "args_ih") >>
+  qpat_x_assum `!s'' x t v ct a s3 tvs t'. _` (mk_asm "addr_ih") >>
+  qpat_x_assum `!s'' x t v ct a. _` (mk_asm "tail_ih") >>
+  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ _ /\ bt <> Env MsgGas /\
+                 code_slice_source bt es = NONE ==> _` (mk_asm "args_ih") >>
   qpat_x_assum `!s'' x t. _ /\ bt = Len ==> _` (mk_asm "len_ih") >>
   gvs[vyperTypeSystemTheory.well_typed_expr_def, accesses_expr_def, int_calls_expr_def] >>
   Cases_on `builtin_args_length_ok bt (LENGTH es)`
@@ -2565,41 +2568,130 @@ Resume evaluate_finite_frame[expr_builtin]:
       >- suspend "builtin_len" >>
       Cases_on `bt = Env MsgGas`
       >- suspend "builtin_gas" >>
-      Cases_on `eval_exprs cx es st` >>
-      rename1 `eval_exprs cx es st = (r1,s1)` >>
-      `^frame cx A st s1` by
-        (BETA_TAC >>
-         Cases_on `bt = Bop In \/ bt = Bop NotIn`
-         >- (asm "mem_ih" (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-             simp[type_check_def, assert_def, return_def] >>
-             disch_then (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
-             (conj_tac >- (qexists_tac `R` >> simp[] >>
-               asm "closure" (ACCEPT_TAC o SRULE []))) >>
-             qexists_tac `env` >> simp[]) >>
-         `bt <> Bop In /\ bt <> Bop NotIn` by fs[] >>
-         asm "args_ih" (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-         simp[type_check_def, assert_def, return_def] >>
-         disch_then (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
-         (conj_tac >- (qexists_tac `R` >> simp[] >>
-           asm "closure" (ACCEPT_TAC o SRULE []))) >>
-         qexists_tac `env` >> simp[]) >>
-      qpat_x_assum `^frame cx A st s1` (mk_asm "prefix") >>
-      asm_x "args_ih" kall_tac >> asm_x "mem_ih" kall_tac >> asm_x "len_ih" kall_tac >>
-      Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
-      gvs[Once evaluate_def, type_check_def, assert_def, return_def,
-          ignore_bind_def, bind_def, raise_def, get_accounts_def,
-          lift_option_type_def, AllCaseEqs()] >>
-      imp_res_tac precompile_call_success_state >>
-      imp_res_tac lift_sum_state >>
-      gvs[return_def, raise_def, bind_def, oneline get_storage_def] >>
-      asm "prefix" (ACCEPT_TAC o SRULE [oneline get_storage_def])) >>
+      Cases_on `bt = Bop In \/ bt = Bop NotIn`
+      >- suspend "builtin_mem" >>
+      `bt <> Bop In /\ bt <> Bop NotIn` by fs[] >>
+      asm_x "mem_ih" kall_tac >> asm_x "len_ih" kall_tac >>
+      Cases_on `code_slice_source bt es`
+      >- suspend "builtin_args" >>
+      suspend "builtin_slice") >>
   gvs[Once evaluate_def, type_check_def, assert_def, raise_def,
       ignore_bind_def, bind_def] >> qexists_tac `[]` >> simp[]
 QED
 
+Resume evaluate_finite_frame[builtin_mem]:
+  asm_x "args_ih" kall_tac >> asm_x "tail_ih" kall_tac >>
+  asm_x "addr_ih" kall_tac >> asm_x "len_ih" kall_tac >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (r1,s1)` >>
+  `^frame cx A st s1` by
+    (BETA_TAC >>
+     asm "mem_ih" (qspecl_then [`st`,`()`,`st`] mp_tac) >>
+     simp[type_check_def, assert_def, return_def] >>
+     disch_then (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
+     (conj_tac >- (qexists_tac `R` >> simp[] >>
+       asm "closure" (ACCEPT_TAC o SRULE []))) >>
+     qexists_tac `env` >> simp[]) >>
+  qpat_x_assum `^frame cx A st s1` (mk_asm "prefix") >>
+  asm_x "mem_ih" kall_tac >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+  gvs[Once evaluate_def, type_check_def, assert_def, return_def,
+      ignore_bind_def, bind_def, raise_def,
+      lift_option_type_def, AllCaseEqs()] >>
+  imp_res_tac lift_sum_state >>
+  gvs[return_def, raise_def, bind_def, oneline get_storage_def] >>
+  asm "prefix" (ACCEPT_TAC o SRULE [oneline get_storage_def])
+QED
+
+Resume evaluate_finite_frame[builtin_args]:
+  asm_x "tail_ih" kall_tac >> asm_x "addr_ih" kall_tac >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (r1,s1)` >>
+  `^frame cx A st s1` by
+    (BETA_TAC >>
+     asm "args_ih" (qspecl_then [`st`,`()`,`st`] mp_tac) >>
+     simp[type_check_def, assert_def, return_def] >>
+     disch_then (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
+     (conj_tac >- (qexists_tac `R` >> simp[] >>
+       asm "closure" (ACCEPT_TAC o SRULE []))) >>
+     qexists_tac `env` >> simp[]) >>
+  qpat_x_assum `^frame cx A st s1` (mk_asm "prefix") >>
+  asm_x "args_ih" kall_tac >>
+  gvs[Once evaluate_def, type_check_def, assert_def, return_def,
+      ignore_bind_def, bind_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+  imp_res_tac precompile_call_success_state >>
+  imp_res_tac lift_sum_state >>
+  gvs[return_def, raise_def, bind_def, oneline get_storage_def] >>
+  asm "prefix" (ACCEPT_TAC o SRULE [oneline get_storage_def])
+QED
+
+Resume evaluate_finite_frame[builtin_slice]:
+  asm_x "args_ih" kall_tac >>
+  rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+  drule_all code_slice_operand_typing >> strip_tac >>
+  drule_all code_slice_operand_call_safe >> strip_tac >>
+  `^safe_accesses A R (accesses_exprs (TL es)) (int_calls_exprs (TL es)) /\
+   ^safe_accesses A R (accesses_exprs [p1]) (int_calls_exprs [p1])` by
+    (asm_x "tail_ih" kall_tac >> asm_x "addr_ih" kall_tac >>
+     asm_x "closure" kall_tac >>
+     gvs[code_slice_source_SOME, accesses_expr_def, int_calls_expr_def,
+         risky_builtin_def] >>
+     rpt strip_tac >> metis_tac[]) >>
+  qpat_x_assum `_ A R (accesses_exprs (TL es)) _` (strip_assume_tac o BETA_RULE) >>
+  qpat_x_assum `_ A R (accesses_exprs [p1]) _` (strip_assume_tac o BETA_RULE) >>
+  Cases_on `eval_exprs cx (TL es) st` >>
+  rename1 `eval_exprs cx (TL es) st = (r1,s1)` >>
+  `^frame cx A st s1` by
+    (BETA_TAC >>
+     asm "tail_ih" (qspecl_then [`st`,`()`,`st`,`(p0,p1)`,`p0`,`p1`] mp_tac) >>
+     simp[type_check_def, assert_def, return_def] >>
+     disch_then (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
+     (conj_tac >- (qexists_tac `R` >> simp[] >>
+       asm "closure" (ACCEPT_TAC o SRULE []))) >>
+     qexists_tac `env` >> simp[]) >>
+  qpat_x_assum `^frame cx A st s1` (mk_asm "prefix") >>
+  asm_x "tail_ih" kall_tac >>
+  reverse (Cases_on `r1`)
+  >- (asm_x "addr_ih" kall_tac >>
+      qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, type_check_def, assert_def, return_def,
+           ignore_bind_def, bind_def, raise_def] >>
+      strip_tac >> gvs[] >> asm "prefix" (ACCEPT_TAC o SRULE [])) >>
+  rename1 `eval_exprs cx (TL es) st = (INL tvs,s1)` >>
+  qspecl_then [`cx`,`TL es`] (drule_all o CONJUNCT1)
+    (cj 6 eval_scc_type_sound_results_mutual) >> strip_tac >>
+  Cases_on `eval_exprs cx [p1] s1` >>
+  rename1 `eval_exprs cx [p1] s1 = (r2,s2)` >>
+  `^frame cx A s1 s2` by
+    (BETA_TAC >>
+     asm "addr_ih" (qspecl_then [`st`,`()`,`st`,`(p0,p1)`,`p0`,`p1`,
+                                  `st`,`tvs`,`s1`] mp_tac) >>
+     simp[type_check_def, assert_def, return_def] >>
+     disch_then (irule o BETA_RULE) >> goal_assum (drule_at Any) >> simp[] >>
+     (conj_tac >- (qexists_tac `R` >> simp[] >>
+       asm "closure" (ACCEPT_TAC o SRULE []))) >>
+     qexists_tac `env` >> simp[]) >>
+  qpat_x_assum `^frame cx A s1 s2` (mk_asm "suffix") >>
+  asm_x "addr_ih" kall_tac >>
+  `^frame cx A st s2` by
+    (BETA_TAC >> irule (SRULE [] finite_frame_trans) >> qexists_tac `s1` >>
+     (conj_tac >- asm "prefix" (ACCEPT_TAC o SRULE [])) >>
+     asm "suffix" (ACCEPT_TAC o SRULE [])) >>
+  qpat_x_assum `^frame cx A st s2` (mk_asm "whole") >>
+  asm_x "prefix" kall_tac >> asm_x "suffix" kall_tac >>
+  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, type_check_def, assert_def, return_def,
+       ignore_bind_def, bind_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac precompile_call_success_state >>
+  imp_res_tac lift_sum_state >>
+  gvs[return_def, raise_def, bind_def, oneline get_storage_def] >>
+  asm "whole" (ACCEPT_TAC o SRULE [oneline get_storage_def])
+QED
+
 Resume evaluate_finite_frame[builtin_len]:
   asm_x "args_ih" kall_tac >> asm_x "mem_ih" kall_tac >>
+  asm_x "tail_ih" kall_tac >> asm_x "addr_ih" kall_tac >>
   Cases_on `es` >>
   gvs[vyperTypeSystemTheory.well_typed_builtin_app_def,
       vyperTypeSystemTheory.well_typed_expr_def,
@@ -2625,6 +2717,7 @@ QED
 
 Resume evaluate_finite_frame[builtin_gas]:
   asm_x "args_ih" kall_tac >> asm_x "mem_ih" kall_tac >> asm_x "len_ih" kall_tac >>
+  asm_x "tail_ih" kall_tac >> asm_x "addr_ih" kall_tac >>
   gvs[Once evaluate_def, type_check_def, assert_def, return_def,
       ignore_bind_def, bind_def, raise_def, AllCaseEqs()] >>
   imp_res_tac next_gas_reading_state >>
