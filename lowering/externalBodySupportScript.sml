@@ -5,11 +5,27 @@
 Theory externalBodySupport
 Ancestors
   list pair finite_map
-  e2eDefs supportedProgram supportedDecls entryStateRel
+  e2eDefs supportedProgram supportedDecls
   vyperTypeSystem vyperTypeInvariants vyperTypeContract vyperTypeContractFunction
-  vyperTypeContractContext vyperTypeContractSoundness
-  vyperTypeExternalDefaults vyperTypeInitialState vyperTypeBindArguments
-  vyperInterpreter vyperState vyperContext
+  vyperTypeContractContext vyperTypeContractSoundness vyperTypeContractGetter
+  vyperTypeExternalDefaults vyperTypeInitialState vyperTypeBindArguments vyperTypeCallStackSoundness
+  vyperInterpreter vyperGetter vyperState vyperContext
+
+(* With no public variables, an external function lookup_function selects
+   is a declared function, not a getter. *)
+Theorem lookup_function_external_decl:
+  !tops tops0 name mut nr args dflts ret fbody.
+    EVERY (supported_declaration_header tops0) tops /\
+    lookup_function NONE name External tops =
+      SOME (mut, nr, args, dflts, ret, fbody) ==>
+    ?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops
+Proof
+  Induct >- simp[lookup_function_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
+  BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
 
 Theorem external_selected_body_typing:
   supported_program tops /\ source_typing_ok tops am tx /\
@@ -41,15 +57,16 @@ Theorem external_selected_body_typing:
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (int_calls_stmts fbody)
 Proof
-  strip_tac >>
-  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
-    (irule lookup_function_external_decl >> simp[] >>
-     qexists `tops` >> gvs[supported_program_def, supported_declaration_headers_def]) >>
-  gvs[source_typing_ok_def, source_deployment_rel_def] >>
+  strip_tac >> drule lookup_function_External_cases >> strip_tac
+  >- (
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+   layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  gvs[source_typing_ok_def] >>
   `module_allocated am.layouts tx.target NONE tops` by
     (drule check_contract_main_module_allocated >> simp[]) >>
   `External <> Deploy` by simp[] >>
-  `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
   drule checked_function_body_typing_package >>
   simp[] >> disch_then drule >> simp[] >>
   strip_tac >>
@@ -63,6 +80,41 @@ Proof
   conj_tac >- gvs[check_function_body_def] >>
   drule checked_explicit_external_body_call_evaluation_safe >>
   simp[] >> disch_then drule >> simp[]
+  ) >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+   layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  gvs[source_typing_ok_def] >>
+  `module_allocated am.layouts tx.target NONE tops` by
+    (drule check_contract_main_module_allocated >> simp[]) >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
+  drule_all checked_public_getter_body_typing_package >> strip_tac >>
+  `?exp. fbody = [Return (SOME exp)]` by
+    (Cases_on `decl` >>
+     gvs[is_public_getter_decl_def, external_getter_tuple_def] >>
+     Cases_on `v` >>
+     gvs[external_getter_tuple_def, getter_def, AllCaseEqs()] >>
+     rpt (pairarg_tac >> gvs[]) >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `int_calls_stmts fbody = []` by
+    metis_tac[selected_public_getter_body_int_calls_empty] >>
+  `call_evaluation_safe
+     (initial_evaluation_context am.sources am.layouts tx NONE) []` by
+    (`(initial_evaluation_context am.sources am.layouts tx NONE) =
+       ((initial_evaluation_context am.sources am.layouts tx NONE) with
+         stk := [(NONE,tx.function_name)])` by
+       simp[initial_evaluation_context_def] >>
+     pop_assum SUBST1_TAC >>
+     irule (INST_TYPE [``:'a`` |-> ``:num``]
+       checked_contract_call_evaluation_safe_singleton) >>
+     qexistsl [`art`, `am.layouts`, `[(NONE,tops)]`] >>
+     simp[initial_evaluation_context_def, calls_follow_call_graph_def]) >>
+  qexistsl [`function_entry_env art [(NONE,tops)] NONE External args`,
+            `env_after`] >>
+  gvs[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static,
+       get_tenv_def, initial_evaluation_context_def,
+       stmt_no_control_escape_def, stmt_no_fallthrough_def] >>
+  metis_tac[]
 QED
 
 Theorem external_send_call_value_frame:

@@ -9,7 +9,7 @@ Theorem tuple_place_flag_unpack_outcome_open:
   value_has_type (TupleTV ltvs) (ArrayV (TupleV vs)) /\
   evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
   LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
-  expr_post ctx func cenv cx e es sa su s0 ee (ArrayV (TupleV vs)) op sv /\
+  expr_post H ctx func cenv cx e es sa su s0 ee (ArrayV (TupleV vs)) op sv /\
   (!x. op = Var x ==> not_fresh_at su x) /\ sa.cs_next_id <= su.cs_next_id /\
   (EXISTS (\t. ~is_word_type t) ltys ==> cenv.ce_target CapMcopy) /\
   compile_tuple_unpack cenv (TupleT ltys) flag gs op su = ((),sf) /\
@@ -18,9 +18,11 @@ Theorem tuple_place_flag_unpack_outcome_open:
   sv.vs_inst_idx = LENGTH su.cs_current_insts /\
   expr_sim_inv cenv cx env ee /\
   LIST_REL (\g t. well_typed_atarget env g t) gs tys /\
-  EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
-    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
-    target_indices_pre cenv cx env bt /\ call_evaluation_safe cx (int_calls_target bt)) gs /\
+  EVERY (\g. ?bt. g = BaseTarget bt /\ EVERY (supported_expr tops) (target_indices bt) /\
+    (body_base_target_ok cx bt ==> target_case F ctx func cenv cx bt) /\
+    ~immutable_root cx bt /\ target_indices_pre cenv cx env bt /\
+    call_evaluation_safe cx (int_calls_target bt)) gs /\
+  body_tuple_targets_ok cx gs vs /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
   (!j. j < LENGTH tys /\ ~is_word_type (EL j tys) ==>
@@ -30,7 +32,7 @@ Theorem tuple_place_flag_unpack_outcome_open:
   gas_outcome F (cx_tops cx) (ctx,func)
     (assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs))) (ee,sv)
     (\res ff t. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
-      stmt_state_rel ctx func cenv cx ff t /\ ~t.vs_halted /\
+      stmt_state_rel H ctx func cenv cx ff t /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x v. not_fresh_at su x /\ lookup_var x sv = SOME v ==> lookup_var x t = SOME v) /\

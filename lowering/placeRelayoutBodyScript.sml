@@ -17,12 +17,12 @@ Theorem widened_place_raw_rhs_outcome:
   gas_admissible (eval_stmt cx (Assign (BaseTarget bt) e)) (stmt_res_ok lctx) es /\
   compile_expr cenv (expr_type e) e sa = (vv,sv) /\
   fn_has_code sa sv func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
     (\res ee t. ?v. res = INL (Value v) /\
-      vv_post ctx func cenv cx e es sa sv s0 ee (Value v) vv t /\
+      vv_post H ctx func cenv cx e es sa sv s0 ee (Value v) vv t /\
       t.vs_current_bb = sv.cs_current_bb /\
       t.vs_inst_idx = LENGTH sv.cs_current_insts)
     (\res ee r. expr_exit res r)
@@ -118,7 +118,7 @@ Proof
   rpt BasicProvers.VAR_EQ_TAC >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
     (\res ee t. ?v. res = INL (Value v) /\
-      vv_post ctx func cenv cx e es sa sv s0 ee (Value v) vv t /\
+      vv_post H ctx func cenv cx e es sa sv s0 ee (Value v) vv t /\
       t.vs_current_bb = sv.cs_current_bb /\
       t.vs_inst_idx = LENGTH sv.cs_current_insts)
     (\res ee r. expr_exit res r)` by
@@ -132,8 +132,10 @@ Proof
        Cases_on `res` >> simp[expr_exit_def]) >>
     qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
     pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
-    gvs[] >> Cases_on `ex` >> Cases_on `r` >>
-    gvs[expr_exit_def] >> Cases_on `e'` >> gvs[expr_exit_def]) >>
+    qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
+    qpat_x_assum `expr_exit _ _` mp_tac >>
+    rpt (pop_assum kall_tac) >>
+    simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
   reverse conj_tac >- (rpt strip_tac >> qexists_tac `v` >> asm_rewrite_tac[]) >>
   rpt strip_tac >>
   `!tail. eval_expr cx e
@@ -157,7 +159,7 @@ Proof
     (`sa.cs_next_var <= sv.cs_next_var /\ sa.cs_next_var <= st.cs_next_var` by
        fs[exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var]) >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t` by
     metis_tac[vv_post_def] >>
   `~t.vs_halted` by
     (irule stmtSimAugAssignPlaceMemoryTheory.aug_place_marked_path_not_halted >>
@@ -198,7 +200,7 @@ Proof
      first_assum ACCEPT_TAC) >>
   drule_all widened_place_semantic_endpoint >> strip_tac >>
   `?dst loc. tr = (dst,SOME loc,SOME (ValPT dty))` by
-    (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      PairCases_on `tr` >> Cases_on `p` >>
      simp[target_post_def, place_ptr_rel_def,
@@ -245,7 +247,7 @@ Proof
   `~block_is_terminated st` by
     metis_tac[compile_get_target_ptr_endpoint_open] >>
   `(loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient)` by
-    (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      Cases_on `p` >> simp[target_post_def, place_ptr_rel_def] >>
      rename1 `PlaceR pp` >> Cases_on `pp` >>
@@ -256,14 +258,14 @@ Proof
      strip_tac >> gvs[contextTheory.vv_location_def]) >>
   `~block_is_terminated sb` by
     (qpat_assum `~is_word_type dty` (fn th =>
-       qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+       qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
          (mp_tac o REWRITE_RULE [th])) >>
      disch_then (mp_then Any mp_tac compile_assign_place_endpoint_open) >>
      simp[]) >>
   irule widened_target_store_gas_outcome >> simp[] >>
   (conj_tac >- metis_tac[expr_sim_inv_gas_obs]) >>
-  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `assign_alloc_ok _ _ _`)) >>
   simp[] >>
   gvs[]

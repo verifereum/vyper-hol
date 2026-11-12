@@ -625,13 +625,11 @@ Theorem immutable_holds_memory:
   val_in_memory tv v (w2n a) uu.vs_memory
 Proof
   rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def, read_result_def, return_def]
-  >~ [`sub_layout`]
-  >- (gvs[] >> first_x_assum drule_all >> strip_tac >>
-      gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-      `off + k < dimword (:256)` by decide_tac >>
-      gvs[arithmeticTheory.ADD_COMM]) >>
-  `off + k < dimword (:256)` by decide_tac >> gvs[]
+     immutables_rel_def, read_result_def, return_def] >>
+  gvs[] >> first_x_assum drule_all >> strip_tac >>
+  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+  `off + k < dimword (:256)` by decide_tac >>
+  gvs[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem immutable_holds_alloca_disjoint:

@@ -37,7 +37,7 @@ QED
 
 Theorem tuple_place_head_pointer_operands:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   i <= j /\ j < LENGTH ltys ==>
   ?v. eval_operand (EL j elems) s = SOME v /\
     if is_word_type (EL j ltys) then
@@ -62,14 +62,14 @@ QED
 
 
 Theorem tuple_place_pointer_local_regions:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sp /\
-  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s ==>
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sp /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s ==>
   (!n b sz. local_region cenv ee.scopes s n b sz <=>
             local_region cenv es.scopes s0 n b sz)
 Proof
   strip_tac >>
-  drule_all tuplePlaceBorrowTheory.tuple_place_pure_target_scopes >> strip_tac >>
+  drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_scopes >> strip_tac >>
   drule tuplePlaceSnapshotTheory.tuple_place_target_frame >> strip_tac >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by simp[] >>
   drule_all wordArgsPtrTheory.wb_frame_local_regions >> metis_tac[]
@@ -77,8 +77,8 @@ QED
 
 Theorem tuple_place_pointer_snapshot:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) ==>
   tuple_place_snapshot cenv cx ee lo sa.cs_next_id tys ltys ltvs w s
 Proof
@@ -101,8 +101,8 @@ QED
 
 Theorem tuple_place_pointer_pending_memory:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
   val_in_memory (EL j ltvs) (EL j vs)
     (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) s.vs_memory
@@ -128,7 +128,7 @@ Proof
          strip_tac >> drule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
          disch_then (qspecl_then [`w2n w-b`, `type_memory_size_list ltvs`] mp_tac) >>
          simp[]) >>
-     drule_all tuplePlaceBorrowTheory.tuple_place_pure_target_borrow_bytes >>
+     drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_borrow_bytes >>
      strip_tac >> drule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
      disch_then (qspecl_then [`w2n w-b`, `type_memory_size_list ltvs`] mp_tac) >>
      simp[]) >>
@@ -187,7 +187,7 @@ QED
 
 Theorem tuple_place_snapshot_element_bounds:
   tuple_place_snapshot cenv cx es lo hi tys ltys ltvs w s /\
-  stmt_state_rel ctx func cenv cx es s /\ LENGTH ltvs = LENGTH ltys /\
+  stmt_state_rel H ctx func cenv cx es s /\ LENGTH ltvs = LENGTH ltys /\
   i < LENGTH ltys /\ ~is_word_type (EL i ltys) /\
   0 < type_memory_size (EL i ltvs) ==>
   w2n w + SUM (MAP type_memory_size (TAKE i ltvs)) +
@@ -229,7 +229,7 @@ Proof
 QED
 
 Theorem tuple_place_writable_borrow_destination_apart:
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
   local_region cenv ee.scopes s n b sz /\
   local_path_at cenv cx n k (TupleTV tvs) /\
   k + type_memory_size (TupleTV tvs) <= sz /\
@@ -271,8 +271,8 @@ QED
 (* Reassemble the value relation after pointer evaluation, at its actual endpoint. *)
 Theorem tuple_place_pointer_value_rel:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   evaluate_type (get_tenv cx) (EL i ltys) = SOME (EL i ltvs) /\
   i < LENGTH ltys ==>
   expr_val_rel cx (EL i ltys) (EL i vs) (EL i elems) s
@@ -295,7 +295,7 @@ Proof
 QED
 
 Theorem tuple_place_pointer_source_facts:
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) ==>
   expr_sim_inv cenv cx env ee /\ storage_place_region cx p /\
   (!id path entry t0. p = MemoryPlace id path /\
@@ -334,8 +334,8 @@ QED
 
 Theorem tuple_place_pointer_owned_region:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sp.cs_next_id /\
   (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>

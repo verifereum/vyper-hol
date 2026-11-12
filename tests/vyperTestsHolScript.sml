@@ -12,6 +12,7 @@ Ancestors
   vyperCallOutcomeTest
   vyperCalldataLenTest
   vyperCalldataSliceTest
+  vyperCodeSliceTest
   vyperCheckContractFrontendLibTest
   vyperCheckContractLibTest
   vyperPowerDomainTest

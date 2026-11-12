@@ -6,9 +6,9 @@ Ancestors
 
 Theorem tuple_place_pointer_word_store:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
   evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
@@ -19,7 +19,7 @@ Theorem tuple_place_pointer_word_store:
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -27,7 +27,7 @@ Theorem tuple_place_pointer_word_store:
   (loc = LocMemory ==> w2n w + type_memory_size_list ltvs <= w2n dw \/
     w2n dw + type_memory_size (EL i tvs) <= w2n w) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -66,26 +66,26 @@ QED
 
 Theorem tuple_place_pointer_equal_memory_store:
   tuple_place_head ctx func cenv cx es lo sp tys tys tvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
   i < LENGTH tys /\ ~is_word_type (EL i tys) /\
   0 < type_memory_size (EL i tvs) /\
   type_memory_size (EL i tvs)+64 < dimword (:256) /\
   compile_assign_value cenv dst LocMemory (EL i elems) F src_loc
-    (EL i tys) (EL i tys) arr (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i tys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -125,37 +125,34 @@ Proof
      gvs[] >> metis_tac[]) >>
   irule tuple_place_equal_memory_run_frame >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
   simp[] >> qexists `EL i vs` >> gvs[]
 QED
 
 Theorem tuple_place_pointer_equal_storage_store:
   tuple_place_head ctx func cenv cx es lo sp tys tys tvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit tys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
   i < LENGTH tys /\ ~is_word_type (EL i tys) /\ cenv.ce_target CapMcopy /\
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) src_loc
-    (EL i tys) (EL i tys)
-    (case EL i tys of ArrayT et (Dynamic _) =>
-      SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i tys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -187,24 +184,18 @@ Proof
     w2n sw + type_memory_size (EL i tvs) <= s.vs_alloca_next` by
     (rpt strip_tac >> `i <= i` by simp[] >>
      drule_all tuple_place_head_pointer_operands >> simp[] >> metis_tac[]) >>
-  Cases_on `?et n. EL i tys = ArrayT et (Dynamic n)`
-  >- (irule tuple_place_equal_dyn_run_memory >>
-      qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-      qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
-      qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
-      simp[] >> qexists `EL i vs` >> gvs[]) >>
   irule tuple_place_equal_storage_run_memory >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
   simp[] >> qexists `EL i vs` >> gvs[]
 QED
 
 Theorem tuple_place_pointer_owned_store:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sp.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size_list ltvs <= b+sz /\
@@ -219,21 +210,18 @@ Theorem tuple_place_pointer_owned_store:
   (EXISTS (\t. ~is_word_type t) ltys ==> cenv.ce_target CapMcopy) /\
   type_alloc_ok cenv (TupleT tys) /\ i < LENGTH tys /\ ~is_word_type (EL i ltys) /\
   compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) src_loc
-    (EL i tys) (EL i ltys)
-    (case EL i tys of ArrayT et (Dynamic _) =>
-      SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i ltys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -286,7 +274,7 @@ Proof
     (irule tuplePlaceBoundsTheory.tuple_place_element_alloc_ok >> metis_tac[]) >>
   irule tuple_place_owned_value_run_frame >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
   simp[] >> qexists `EL i vs` >> simp[] >> conj_tac
   >- metis_tac[arithmeticTheory.ADD_COMM] >> conj_tac

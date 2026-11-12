@@ -213,7 +213,7 @@ Proof
             `leaf`,`[]`,`0`] >> simp[storage_subregion_def]
 QED
 
-Theorem eval_base_place_observed_region[local]:
+Theorem eval_base_place_observed_region:
   !bt cx st b slot leaf st'.
   eval_base_place cx bt st = (INL (PlaceR (StoragePlace b slot leaf)),st') ==>
   ?offset tv path delta.
@@ -507,7 +507,7 @@ Proof
   metis_tac[storage_well_formed_on_backends]
 QED
 
-Theorem adopt_call_outcome_preserves_finite_storage[local]:
+Theorem adopt_call_outcome_preserves_finite_storage:
   storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H st'.storage_trace /\
   adopt_call_outcome rq outcome st = (res,st') ==>
@@ -519,7 +519,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem eval_raw_call_preserves_storage_well_formed_on[local]:
+Theorem eval_raw_call_preserves_storage_well_formed_on:
   storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H st'.storage_trace /\
   eval_raw_call cx flags target calldata amount gas st = (res,st') ==>
@@ -568,7 +568,7 @@ Proof
    goal_assum (drule_at Any) >> simp[])
 QED
 
-Theorem eval_send_preserves_storage_well_formed_on[local]:
+Theorem eval_send_preserves_storage_well_formed_on:
   storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H st'.storage_trace /\
   eval_send cx has_gas vs st = (res,st') ==>
@@ -3142,7 +3142,9 @@ Resume eval_storage_well_formed_on_mutual[Expr_Call_ExtCall]:
           qpat_x_assum `!s target t nargs s1 rs t1. _ ==> _`
             (drule o SIMP_RULE (srw_ss()) []) >>
           disch_then drule >> strip_tac >> first_x_assum drule_all >> simp[]) >>
-      strip_tac >> gvs[] >>
+      strip_tac >>
+      qpat_x_assum `INR _ = res` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `capture_st = st'` (SUBST_ALL_TAC o SYM) >>
       `storage_observations_ok cx H target_st.storage_trace` by
         metis_tac[storage_trace_frame_prefix, cj 11 evaluate_storage_trace_frame,
                   storage_observations_ok_prefix] >>
@@ -3151,10 +3153,13 @@ Resume eval_storage_well_formed_on_mutual[Expr_Call_ExtCall]:
            drule_all >> simp[]) >>
       `runtime_consistent env cx target_st` by
         metis_tac[eval_exprs_preserves_runtime_consistent] >>
-      qpat_x_assum `!s target t. _ ==> _`
+      qpat_x_assum `!s target t nargs. eval_exprs _ _ _ = _ /\ _ ==> _`
         (drule o SIMP_RULE (srw_ss()) []) >>
       strip_tac >> first_x_assum drule_all >> simp[]) >>
-  strip_tac >> gvs[] >> first_x_assum drule_all >> simp[]
+  strip_tac >>
+  qpat_x_assum `INR _ = res` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `target_st = st'` (SUBST_ALL_TAC o SYM) >>
+  first_x_assum drule_all >> simp[]
 QED
 
 Resume eval_storage_well_formed_on_mutual[Expr_Call_CreateTarget]:

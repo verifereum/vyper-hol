@@ -7,7 +7,7 @@ Ancestors e2eDefs externalReturnSelectedResources externalReturnSiteSemantics
   externalReturnConsumerProbe externalReturnCopyAlloc externalReturnSuffixResult
   externalReturnBufferlessAlloc externalReturnIntcallMetadata vyperTypeSystem
   externalReturnBufferlessNormalize vyperTypeContract supportedDecls supportedProgram
-  vyperInterpreter
+  vyperInterpreter entryStateRel
 
 Theorem selected_arg_fits_trans_mutual[local]:
   (!a b. !c. arg_type_fits a b /\ arg_type_fits b c ==> arg_type_fits a c) /\
@@ -804,30 +804,6 @@ Proof
   simp[check_toplevel_decl_def, function_header_ok_def]
 QED
 
-Theorem selected_lookup_external_raw[local]:
-  !ts ambient name mut nr args defaults ret body.
-  EVERY (supported_declaration_header ambient) ts /\
-  lookup_function (NONE : num option) name External ts =
-    SOME (mut,nr,args,defaults,ret,body) ==>
-  ?rr. MEM (FunctionDecl External mut nr rr name args defaults ret body) ts /\
-       lookup_raw_return (NONE : num option) name External ts = SOME rr
-Proof
-  Induct_on `ts` >- simp[lookup_function_def] >>
-  rpt gen_tac >> Cases_on `h`
-  >- (simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-           listTheory.MEM] >>
-      Cases_on `s = name /\ f = External` >> gvs[] >> metis_tac[])
-  >- (Cases_on `v` >>
-      simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-           listTheory.MEM, supported_public_variables_rejected] >>
-      metis_tac[])
-  >- (simp[listTheory.EVERY_DEF, supported_hashmap_header_contract] >>
-      strip_tac >> gvs[lookup_function_def, lookup_raw_return_def,
-                      listTheory.MEM] >> metis_tac[])
-  >> simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-          listTheory.MEM] >> metis_tac[]
-QED
-
 Theorem return_selected_raw_bytes:
   !tops am tx mut nr args defaults ret body.
   source_typing_ok tops am tx /\ supported_program tops /\
@@ -837,10 +813,8 @@ Theorem return_selected_raw_bytes:
   is_bytestring_type ret
 Proof
   rpt gen_tac >> strip_tac >>
-  `EVERY (supported_declaration_header tops) tops` by
-    gvs[supported_program_def, supported_declaration_headers_def] >>
-  drule_all selected_lookup_external_raw >> strip_tac >>
-  gvs[lookup_raw_return_or_F_def, e2eDefsTheory.source_typing_ok_def] >>
+  drule_all source_typing_ok_raw_external_decl >> strip_tac >>
+  fs[e2eDefsTheory.source_typing_ok_def] >>
   `?n. ret = BaseT (BytesT (Dynamic n))` by
     (drule selected_check_raw_bytes >> simp[listTheory.MEM] >> metis_tac[]) >>
   simp[is_bytestring_type_def]

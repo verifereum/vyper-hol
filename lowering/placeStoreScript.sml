@@ -19,7 +19,7 @@
 
 Theory placeStore
 Ancestors
-  placeStoreMemory placeStoreStorage placeStoreDyn
+  placeStoreMemory placeStoreSlots
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
   loweringPosts fragGasMode exprSimProps localPtrsProps stmtSimDeclPath
   emitHelper venomExecSemantics venomInst exprLoweringProps accountsRelProps vyperLookup vyperPlaceStatePreservation
@@ -680,14 +680,10 @@ Theorem place_store_read_cons[local]:
        INL child => evaluate_subscripts ctv child path | INR err => INR err)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule mem_step_offset_shape >> strip_tac >> gvs[] >>
-  TRY (drule mem_field_offset_sound >> strip_tac) >>
-  Cases_on `a` >>
-  simp[evaluate_subscripts_def, subscript_type_def] >>
-  BasicProvers.TOP_CASE_TAC >>
-  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def] >>
-  BasicProvers.TOP_CASE_TAC >>
-  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def]
+  irule vyperPlaceStatePreservationTheory.evaluate_subscripts_cons_typed >>
+  drule mem_step_offset_shape >> strip_tac >>
+  imp_res_tac mem_field_offset_sound >>
+  gvs[subscript_type_def, vyperASTTheory.bound_length_def]
 QED
 
 Theorem place_store_path_unread_frame:
@@ -895,7 +891,7 @@ QED
 
 Theorem place_store_local_immutables_frame:
   !ctx func cenv cx es s t id b sz.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     local_region cenv es.scopes s id b sz /\
     t.vs_data_section = s.vs_data_section /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
@@ -1149,13 +1145,13 @@ QED
 Finalise place_store_subregion_dead_bytes
 
 Theorem place_store_scalar_storage_dead:
-  !cx tr k leaf ty tenv u st.
-    storage_place_region cx (StoragePlace tr k leaf) /\
+  !H tr k leaf ty tenv u st.
+    storage_place_observed H (StoragePlace tr k leaf) /\
     is_word_type ty /\ evaluate_type tenv ty = SOME leaf ==>
-    storage_dead cx tr (update_storage k u st) = storage_dead cx tr st
+    storage_dead H tr (update_storage k u st) = storage_dead H tr st
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[storage_place_region_def] >>
+  gvs[storage_place_observed_def] >>
   irule storage_dead_update_in_region >>
   goal_assum (drule_at Any) >> strip_tac >>
   drule_all place_store_scalar_dead_bytes >> strip_tac >>
@@ -1173,7 +1169,7 @@ QED
 
 Theorem place_store_memory_state:
   !ctx func cenv cx ee ff s id path v entry p sz bw k tv mem'.
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
     lookup_scopes id ee.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -1184,7 +1180,7 @@ Theorem place_store_memory_state:
     LENGTH s.vs_memory <= LENGTH mem' /\
     (!q. q < w2n bw+k \/ w2n bw+k+type_memory_size tv <= q ==>
          mem_bytes_at q 1 s.vs_memory = mem_bytes_at q 1 mem') ==>
-    stmt_state_rel ctx func cenv cx ff (s with vs_memory := mem')
+    stmt_state_rel H ctx func cenv cx ff (s with vs_memory := mem')
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `find_containing_scope id ee.scopes` >>
@@ -1251,7 +1247,7 @@ QED
 
 Theorem place_store_pointer_memory_state:
   !ctx func cenv cx env ee ff s id path v w dty tv mem'.
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     expr_sim_inv cenv cx env ee /\
     place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
       (SOME LocMemory) (Type dty) /\
@@ -1264,7 +1260,7 @@ Theorem place_store_pointer_memory_state:
     LENGTH s.vs_memory <= LENGTH mem' /\
     (!q. q < w2n w \/ w2n w + type_memory_size tv <= q ==>
          mem_bytes_at q 1 s.vs_memory = mem_bytes_at q 1 mem') ==>
-    stmt_state_rel ctx func cenv cx ff (s with vs_memory := mem')
+    stmt_state_rel H ctx func cenv cx ff (s with vs_memory := mem')
 Proof
   rpt gen_tac >> strip_tac >>
   `?entry. lookup_scopes id ee.scopes = SOME entry` by
@@ -1301,7 +1297,7 @@ QED
 
 Theorem place_store_mstore_state:
   !ctx func cenv cx env ee ff s id path v w dty tv u.
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     expr_sim_inv cenv cx env ee /\
     place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
       (SOME LocMemory) (Type dty) /\
@@ -1312,7 +1308,7 @@ Theorem place_store_mstore_state:
     write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
     value_has_type tv v /\ 32 <= type_memory_size tv /\
     val_in_memory tv v (w2n w) (mstore (w2n w) u s).vs_memory ==>
-    stmt_state_rel ctx func cenv cx ff (mstore (w2n w) u s)
+    stmt_state_rel H ctx func cenv cx ff (mstore (w2n w) u s)
 Proof
   rpt gen_tac >> strip_tac >>
   `mstore (w2n w) u s = s with vs_memory := (mstore (w2n w) u s).vs_memory` by
@@ -1331,7 +1327,7 @@ QED
 
 Theorem place_store_word_memory_state:
   !ctx func cenv cx env ee ff s id path v w dty tv.
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     expr_sim_inv cenv cx env ee /\
     place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
       (SOME LocMemory) (Type dty) /\
@@ -1341,7 +1337,7 @@ Theorem place_store_word_memory_state:
     evaluate_type (get_tenv cx) dty = SOME tv /\ is_word_type dty /\
     write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
     value_has_type tv v ==>
-    stmt_state_rel ctx func cenv cx ff
+    stmt_state_rel H ctx func cenv cx ff
       (mstore (w2n w) (typed_val_to_w256 tv v) s)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1359,7 +1355,7 @@ QED
 
 Theorem place_store_empty_memory_state:
   !ctx func cenv cx env ee ff s id path w dty tv.
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     expr_sim_inv cenv cx env ee /\
     place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
       (SOME LocMemory) (Type dty) /\
@@ -1368,7 +1364,7 @@ Theorem place_store_empty_memory_state:
        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
     evaluate_type (get_tenv cx) dty = SOME tv /\ has_length_word dty /\
     write_place cx (MemoryPlace id path) (default_value tv) ee = (INL (),ff) ==>
-    stmt_state_rel ctx func cenv cx ff (mstore (w2n w) 0w s)
+    stmt_state_rel H ctx func cenv cx ff (mstore (w2n w) 0w s)
 Proof
   rpt gen_tac >> strip_tac >>
   `value_has_type tv (default_value tv)` by
@@ -1388,13 +1384,13 @@ QED
 
 Theorem place_store_backend_state:
   !ctx func cenv cx es s tr st k u es'.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     st = (if tr then es.tStorage cx.txn.target
           else (lookup_account cx.txn.target es.accounts).storage) /\
-    (!j b. storage_dead cx tr st j b /\ j <> w2n k ==>
-           storage_dead cx tr (update_storage k u st) j b) /\
+    (!j b. storage_dead H tr st j b /\ j <> w2n k ==>
+           storage_dead H tr (update_storage k u st) j b) /\
     set_storage_backend cx tr (update_storage k u st) es = (INL (),es') ==>
-    stmt_state_rel ctx func cenv cx es'
+    stmt_state_rel H ctx func cenv cx es'
       (if tr then tstore k u s else sstore k u s)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1432,12 +1428,12 @@ QED
 
 Theorem place_store_encoded_backend_state[local]:
   !ctx func cenv cx ee ff s tr k tv v u.
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     write_place cx (StoragePlace tr k tv) v ee = (INL (),ff) /\
     encode_value tv v = SOME [(0,u)] /\
-    (!st j b. storage_dead cx tr st j b /\ j <> w2n k ==>
-       storage_dead cx tr (update_storage k u st) j b) ==>
-    stmt_state_rel ctx func cenv cx ff (if tr then tstore k u s else sstore k u s)
+    (!st j b. storage_dead H tr st j b /\ j <> w2n k ==>
+       storage_dead H tr (update_storage k u st) j b) ==>
+    stmt_state_rel H ctx func cenv cx ff (if tr then tstore k u s else sstore k u s)
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[write_place_def, write_storage_slot_def, check_not_static_def,
@@ -1459,12 +1455,12 @@ QED
 
 Theorem place_store_word_backend_state:
   !ctx func cenv cx ee ff s tr k tv ty v.
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     write_place cx (StoragePlace tr k tv) v ee = (INL (),ff) /\
-    storage_place_region cx (StoragePlace tr k tv) /\
+    storage_place_observed H (StoragePlace tr k tv) /\
     is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
     value_has_type tv v ==>
-    stmt_state_rel ctx func cenv cx ff
+    stmt_state_rel H ctx func cenv cx ff
       (if tr then tstore k (typed_val_to_w256 tv v) s
              else sstore k (typed_val_to_w256 tv v) s)
 Proof
@@ -1497,10 +1493,10 @@ QED
 
 Theorem place_store_empty_backend_state:
   !ctx func cenv cx ee ff s tr k tv ty.
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     write_place cx (StoragePlace tr k tv) (default_value tv) ee = (INL (),ff) /\
     has_length_word ty /\ evaluate_type (get_tenv cx) ty = SOME tv ==>
-    stmt_state_rel ctx func cenv cx ff
+    stmt_state_rel H ctx func cenv cx ff
       (if tr then tstore k 0w s else sstore k 0w s)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1510,9 +1506,9 @@ Proof
   metis_tac[place_store_empty_encoding]
 QED
 
-Theorem place_store_write_location[local]:
+Theorem place_store_write_location:
   !ctx func cenv cx ee ff s p w loc dty v.
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
     write_place cx p v ee = (INL (),ff) ==>
     (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient) /\
@@ -1576,19 +1572,20 @@ Theorem place_store_word_run:
     is_word_type dty /\ expr_val_rel cx dty v op s /\
     expr_sim_inv cenv cx env ee /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    local_ptrs_reserved cenv sa /\ storage_place_observed H p /\
+    regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
     (!id path entry t0.
        p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\
        cenv.ce_var_type id = SOME t0 ==>
        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\ value_has_type dtv v /\
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-        stmt_state_rel ctx func cenv cx ff t /\
+        stmt_state_rel H ctx func cenv cx ff t /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -1602,7 +1599,7 @@ Proof
   qabbrev_tac `u = (case loc of LocStorage => sstore w (typed_val_to_w256 dtv v) s
                   | LocTransient => tstore w (typed_val_to_w256 dtv v) s
                   | _ => mstore (w2n w) (typed_val_to_w256 dtv v) s)` >>
-  `stmt_state_rel ctx func cenv cx ff u` by
+  `stmt_state_rel H ctx func cenv cx ff u` by
     (Cases_on `p`
      >- (gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
          drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[])
@@ -1638,11 +1635,6 @@ QED
 Theorem place_store_value_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
-      (case dty of
-         ArrayT et (Dynamic _) =>
-           SOME ((type_memory_bytes cenv et + 31) DIV 32,
-                 type_memory_bytes cenv et)
-       | _ => NONE)
       (type_memory_bytes cenv dty) sa = ((), sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
@@ -1661,7 +1653,8 @@ Theorem place_store_value_run:
               sw = w /\ stv = dtv) /\
     expr_sim_inv cenv cx env ee /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    local_ptrs_reserved cenv sa /\ storage_place_observed H p /\
+    regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
     (!id path entry t0.
        p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\
        cenv.ce_var_type id = SOME t0 ==>
@@ -1680,13 +1673,13 @@ Theorem place_store_value_run:
     (loc <> LocMemory /\ dty <> sty /\
      ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
      type_alloc_ok cenv dty) /\
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-        stmt_state_rel ctx func cenv cx ff t /\
+        stmt_state_rel H ctx func cenv cx ff t /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -1707,14 +1700,6 @@ Proof
   `dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
    type_alloc_ok cenv dty` by
     (strip_tac >> qpat_x_assum `loc <> LocMemory /\ _ ==> _` irule >> fs[]) >>
-  Cases_on `?et n. dty = ArrayT et (Dynamic n)`
-  >- (qspecl_then
-      [`ctx`, `func`, `cenv`, `cx`, `env`, `ee`, `ff`, `s`, `p`, `w`, `loc`, `dst_op`,
-       `op`, `src_loc`, `dty`, `sty`, `stv`, `v`, `sa`, `sb`]
-      mp_tac place_store_value_dyn_run >>
-    impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
-    simp[]) >>
-  `!et n. dty <> ArrayT et (Dynamic n)` by fs[] >>
   (qspecl_then
       [`ctx`, `func`, `cenv`, `cx`, `env`, `ee`, `ff`, `s`, `p`, `w`, `loc`, `dst_op`,
        `op`, `src_loc`, `dty`, `sty`, `stv`, `v`, `sa`, `sb`]
@@ -1735,18 +1720,19 @@ Theorem place_store_empty_run:
     has_length_word dty /\ evaluate_type (get_tenv cx) dty = SOME dtv /\
     expr_sim_inv cenv cx env ee /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    local_ptrs_reserved cenv sa /\ storage_place_observed H p /\
+    regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
     (!id path entry t0.
        p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\
        cenv.ce_var_type id = SOME t0 ==>
        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     write_place cx p (default_value dtv) ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-        stmt_state_rel ctx func cenv cx ff t /\
+        stmt_state_rel H ctx func cenv cx ff t /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -1757,7 +1743,7 @@ Proof
   qabbrev_tac `u = (case loc of LocStorage => sstore w 0w s
                   | LocTransient => tstore w 0w s
                   | _ => mstore (w2n w) 0w s)` >>
-  `stmt_state_rel ctx func cenv cx ff u` by
+  `stmt_state_rel H ctx func cenv cx ff u` by
     (Cases_on `p`
      >- (gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
          drule_all place_store_empty_backend_state >> Cases_on `b` >> gvs[])

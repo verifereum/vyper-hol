@@ -8,7 +8,7 @@ Ancestors
 
 Theorem tuple_place_local_path_extent:
   expr_sim_inv cenv cx env ee /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   local_region cenv ee.scopes s n b sz /\
   local_path_at cenv cx n k tv ==>
   k + type_memory_size tv <= sz
@@ -69,14 +69,6 @@ Proof
   gvs[] >> irule tuple_place_mutable_path_barrier >> metis_tac[]
 QED
 
-Theorem tuple_place_rhs_empty_call_safe:
-  expr_body_pre cenv cx env e es ==> call_evaluation_safe cx []
-Proof
-  simp[exprSimHypsDefsTheory.expr_body_pre_def] >> rpt strip_tac >>
-  irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-
 Theorem tuple_place_pure_target_no_calls:
   !bt tops. supported_target_pure tops bt ==> int_calls_target bt = []
 Proof
@@ -88,16 +80,9 @@ Proof
   metis_tac[bodyExprPreFactsTheory.supported_pure_int_calls]
 QED
 
-Theorem tuple_place_rhs_target_call_safe:
-  expr_body_pre cenv cx env e es /\ supported_target_pure tops bt ==>
-  call_evaluation_safe cx (int_calls_target bt)
-Proof
-  metis_tac[tuple_place_rhs_empty_call_safe, tuple_place_pure_target_no_calls]
-QED
-
 (* Coordinate interface for live memory places; no write is needed. *)
 Theorem tuple_place_memory_coordinates:
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
   lookup_scopes id ee.scopes = SOME entry /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) dw
     (SOME LocMemory) (Type ty) ==>
@@ -129,7 +114,7 @@ Proof
 QED
 
 Theorem tuple_place_borrow_destination_apart:
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
   local_region cenv ee.scopes s n b sz /\
   local_path_at cenv cx n k (TupleTV tvs) /\
   k + type_memory_size (TupleTV tvs) <= sz /\
