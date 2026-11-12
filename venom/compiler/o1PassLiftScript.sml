@@ -980,7 +980,9 @@ Theorem mem_corr_closed_rf_raw_mem_ok:
   mem_corr_closed_rf raw_mem_ok
 Proof
   `!inst s. inst_mem_below_frontier inst s <=>
-            EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next)
+            EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next \/
+                               w2n s.vs_initial_fmp <= off /\
+                               off + len <= w2n s.vs_fmp)
               (inst_mem_ranges inst s)`
     by simp_tac std_ss [inst_mem_below_frontier_def, inst_mem_ranges_def] >>
   pop_assum (fn th =>
