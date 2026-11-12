@@ -589,6 +589,8 @@ Resume intcall_array_value_producer[array_memory]:
 QED
 
 Resume intcall_array_value_producer[array_endpoint]:
+  `EVERY ($~ o expr_has_effect) args ==> pure_frame ce fp.jc_func es sa s t` by
+    suspend "pure_frame" >>
   `type_memory_bytes ce (ArrayT et bnd) = type_memory_size (ArrayTV tv bnd)` by
     (irule expr_sim_inv_memory_size >>
      fs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
@@ -598,6 +600,7 @@ Resume intcall_array_value_producer[array_endpoint]:
       qexists_tac `w` >> asm_rewrite_tac[]) >>
   reverse conj_tac
   >- (conj_tac >- metis_tac[compiler_ci_mono_not_fresh] >>
+      reverse conj_tac >- first_assum ACCEPT_TAC >>
       rpt strip_tac >>
       qexistsl [`w2n w`, `type_memory_bytes ce (ArrayT et bnd)`] >>
       qpat_x_assum `type_memory_bytes ce (ArrayT et bnd) = _`
@@ -630,6 +633,11 @@ Resume intcall_array_value_producer[array_endpoint]:
   fs[regions_disjoint_def] >> conj_tac
   >- first_assum ACCEPT_TAC >>
   irule valueTypingMemoryPropsTheory.value_has_type_memory_wf >> simp[]
+QED
+
+(* HELD (train 15): pure_frame sweep (array literal), retired in train 16 *)
+Resume intcall_array_value_producer[pure_frame]:
+  cheat
 QED
 
 Finalise intcall_array_value_producer

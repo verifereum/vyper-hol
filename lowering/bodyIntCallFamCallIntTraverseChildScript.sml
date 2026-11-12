@@ -33,15 +33,19 @@ Theorem intcall_expr_cont_initial_gas:
   intcall_expr_cont fp ce env (es with gas_obs := gs) a s ee b u <=>
   intcall_expr_cont fp ce env es a s ee b u
 Proof
-  simp[intcall_expr_cont_def, loweringPostsTheory.locals_kept_def]
+  simp[intcall_expr_cont_def, loweringPostsTheory.locals_kept_def,
+       loweringPostsTheory.popped_kept_def]
 QED
 
 Theorem intcall_expr_cont_final_gas:
   intcall_expr_cont fp ce env es a s (ee with gas_obs := gs) b u <=>
   intcall_expr_cont fp ce env es a s ee b u
 Proof
+  `intcall_expr_res fp ce env (ee with gas_obs := gs) b u <=>
+   intcall_expr_res fp ce env ee b u` by
+    simp[intcall_expr_res_def, loweringStateRelDefsTheory.local_region_def] >>
   simp[intcall_expr_cont_def, intcall_joint_res_gas_obs,
-       loweringPostsTheory.locals_kept_def]
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def]
 QED
 
 Theorem intcall_marked_prefix_step:
