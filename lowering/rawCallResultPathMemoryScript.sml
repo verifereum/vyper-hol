@@ -1,7 +1,7 @@
 (* Result execution with the counted memory path for nonreverting raw_call. *)
 Theory rawCallResultPathMemory
 Ancestors
-  rawCallSuffixMemory exprSimRawCall rawCallTupleMemory
+  vyperStorageFootprint rawCallSuffixMemory exprSimRawCall rawCallTupleMemory
   bodyMemAggregateBounds exprSimVVFrame exprSimMemDefs valueEncoding
   exprSimDefs exprLoweringProps venomState venomInst compileEnv context
   finite_map words
@@ -25,7 +25,8 @@ Theorem raw_call_nonrevert_positive_path_mem:
           emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
           return buf.buf_operand od
      else return ok) sa = (result,sb) /\ 0 < n /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sf s0 s /\
+  stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
+  wb_frame cenv es0 es sf s0 s /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
   alloc.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
@@ -43,7 +44,7 @@ Theorem raw_call_nonrevert_positive_path_mem:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t tw ti. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
     t.vs_fmp = s.vs_fmp /\
     (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s) /\
     sf.cs_next_id <= ti /\ ti < sb.cs_next_id /\
@@ -58,7 +59,7 @@ Theorem raw_call_nonrevert_positive_path_mem:
     gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     t.vs_current_bb = sb.cs_current_bb /\
-    vv_post ctx func cenv cx e es0 sf sb s0 es
+    vv_post H ctx func cenv cx e es0 sf sb s0 es
       (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
       (LocatedValue (expr_type e) (mk_ptr result LocMemory))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
@@ -72,7 +73,7 @@ Proof
   drule_all raw_call_nonrevert_positive_mem_ok >> strip_tac >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   drule_all raw_call_nonrevert_suffix_counted_mem >> strip_tac >>
-  `vv_post ctx func cenv cx e es0 sf sb s0 es
+  `vv_post H ctx func cenv cx e es0 sf sb s0 es
     (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
     (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
     (qpat_assum `lowered_value_type _ _ = _`
