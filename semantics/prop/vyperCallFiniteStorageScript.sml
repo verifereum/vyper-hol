@@ -11,6 +11,8 @@ Ancestors
   vyperCall vyperStorageTrace vyperTypeInvariants vfmState
   vyperCallFiniteStorageSupport vyperExternalDefaultsFiniteStorage
   vyperGetterFiniteStorage vyperExternalBodyFiniteStorage
+  vyperExternalEntryStorageFrame vyperExplicitEntryFiniteStorage
+  vyperGetterEntryFiniteStorage vyperTypeInitialState vyperTypeContractFunction
 
 val _ = Parse.hide "body";
 
@@ -52,11 +54,123 @@ Proof
         simp[call_external_def] >>
       `am' = am` by metis_tac[call_external_error_rollback] >>
       gvs[valid_horizon_def]) >>
-  qpat_x_assum `call_external_trace _ _ _ _ = _` mp_tac >>
-  simp[Once call_external_trace_def] >>
-  gvs[checked_contract_runtime_ready_def] >>
-  FAIL_TAC "selected wrapper"
+  `?sel. selected_entry am tx mods sel` by
+    (Cases_on `?ms sel. selected_entry am tx ms sel`
+     >- (gvs[selected_entry_def, checked_contract_runtime_ready_def] >> metis_tac[]) >>
+     drule call_external_not_selected_entry >> strip_tac >>
+     `call_external orc gobs am tx = (res,am',rqs)` by simp[call_external_def] >>
+     metis_tac[exception_distinct, sumTheory.INR_11, pairTheory.PAIR_EQ]) >>
+  PairCases_on `sel` >>
+  rename1 `selected_entry am tx mods (mut,nr,args,dflts,ret,body)` >>
+  qabbrev_tac `src = find_function_module am tx.target tx.function_name` >>
+  `?ts. ALOOKUP mods src = SOME ts /\
+    ((?raw. MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts) \/
+     (?decl. MEM decl ts /\ is_public_getter_decl tx.function_name decl /\
+       external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body)))` by
+    (irule selected_entry_checked_cases >> metis_tac[]) >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
+  `src = find_function_module am tx.target tx.function_name` by simp[Abbr `src`] >>
+  `cx = initial_evaluation_context am.sources am.layouts tx src` by simp[Abbr `cx`] >>
+  drule_all call_external_selected_entry_trace >>
+  disch_then (qspecl_then [`orc`,`gobs`] assume_tac) >>
+  qpat_x_assum `src = find_function_module _ _ _` kall_tac >>
+  qpat_x_assum `cx = initial_evaluation_context _ _ _ _` kall_tac >>
+  Cases_on `call_external_function_trace orc gobs am cx nr mut ts mods args dflts tx.args body ret` >>
+  rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (out,p)` >>
+  PairCases_on `p` >>
+  rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (out,am_run,rqs_run,obs_run)` >>
+  suspend "selected"
 QED
+
+Resume call_external_storage_well_formed_on[selected]:
+  markerLib.RESUME_TAC >>
+  `storage_well_formed_on cx (initial_state am_run []) (FST H)` suffices_by
+    (strip_tac >>
+     `!st (regions : (bool # bytes32 # type_value) list). storage_well_formed_on cx st regions <=>
+       storage_well_formed_on (initial_evaluation_context am.sources am.layouts tx NONE) st regions` by
+       (rpt gen_tac >> irule storage_well_formed_on_target >>
+        simp[Abbr `cx`, initial_evaluation_context_def]) >>
+     Cases_on `out` >> gvs[]
+     >- (irule finalize_pending_deletions_preserves_storage_well_formed_on >> metis_tac[]) >>
+     rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_)` >> Cases_on `exc` >> gvs[] >>
+     irule finalize_pending_deletions_preserves_storage_well_formed_on >> metis_tac[]) >>
+  `obs_run = obs` by
+    (Cases_on `out` >> gvs[] >>
+     rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_)` >>
+     Cases_on `exc` >> gvs[]) >>
+  `!st (regions : (bool # bytes32 # type_value) list).
+    storage_well_formed_on cx st regions <=>
+    storage_well_formed_on (initial_evaluation_context am.sources am.layouts tx NONE) st regions` by
+    (rpt gen_tac >> irule storage_well_formed_on_target >>
+     simp[Abbr `cx`, initial_evaluation_context_def]) >>
+  `storage_observations_ok cx H obs` by
+    (`storage_observations_ok cx H obs <=> storage_observations_ok
+       (initial_evaluation_context am.sources am.layouts tx NONE) H obs` by
+       (irule storage_observations_ok_target >> simp[Abbr `cx`, initial_evaluation_context_def]) >>
+     fs[valid_horizon_def]) >>
+  `regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
+   storage_well_formed_on cx (initial_state am []) (FST H)` by
+    (fs[valid_horizon_def] >> metis_tac[]) >>
+  `module_allocated am.layouts tx.target src ts` by
+    (simp[Abbr `src`] >> irule checked_contract_runtime_ready_module_allocated >>
+     metis_tac[]) >>
+  `~cx.in_deploy` by simp[Abbr `cx`, initial_evaluation_context_def] >>
+  drule_at (Pat `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = _`)
+    call_external_function_trace_storage_well_formed_on >>
+  disch_then (qspec_then `H` mp_tac) >>
+  simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
+  disch_then irule >> rpt gen_tac >> strip_tac >>
+  `storage_well_formed_on cx u (FST H)` suffices_by metis_tac[] >>
+  qpat_x_assum `!st regions. _` kall_tac >>
+  `storage_well_formed_on cx
+    (initial_state am [FEMPTY] with
+      <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>) (FST H)` by
+    (irule (iffRL storage_well_formed_on_backends) >>
+     goal_assum (drule_at Any) >> simp[initial_state_def])
+  >>~- ([`MEM (FunctionDecl External _ _ _ _ _ _ _ _) _`], suspend "explicit") >>
+  suspend "getter"
+QED
+
+Resume call_external_storage_well_formed_on[explicit]:
+  `context_well_typed cx` by
+    (fs[Abbr `cx`, call_tx_well_typed_def, context_well_typed_def,
+        initial_evaluation_context_def]) >>
+  `state_well_typed
+    (initial_state am [FEMPTY] with
+      <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>) /\
+   accounts_well_typed am.accounts` by
+    fs[machine_well_typed_def, initial_state_def, state_well_typed_def,
+       scope_well_typed_def] >>
+  `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables` by
+    (fs[checked_contract_runtime_ready_def, Abbr `cx`] >>
+     irule immutables_ready_initial_evaluation_context_source >> simp[]) >>
+  `ALOOKUP am.sources tx.target = SOME mods` by fs[checked_contract_runtime_ready_def] >>
+  `!s r t. storage_well_formed_on cx s (FST H) /\
+     storage_observations_ok cx H t.storage_trace /\
+     send_call_value mut cx s = (r,t) ==>
+     storage_well_formed_on cx t (FST H)` by
+    metis_tac[send_call_value_preserves_storage_well_formed_on] >>
+  `!s r t. storage_well_formed_on cx s (FST H) /\
+     storage_observations_ok cx H t.storage_trace /\
+     lock_if_nr cx nr (is_view_mut mut) s = (r,t) ==>
+     storage_well_formed_on cx t (FST H)` by
+    metis_tac[lock_if_nr_preserves_storage_well_formed_on] >>
+  `cx = initial_evaluation_context am.sources am.layouts tx src` by simp[Abbr `cx`] >>
+  `accounts_well_typed (initial_state am [FEMPTY] with
+      <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>).accounts /\
+   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx
+     (initial_state am [FEMPTY] with
+      <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>).immutables` by
+    (simp_tac (srw_ss()) [initial_state_def] >> metis_tac[]) >>
+  drule_all checked_explicit_entry_storage_well_formed_on >> simp_tac bool_ss []
+QED
+
+Resume call_external_storage_well_formed_on[getter]:
+  `cx = initial_evaluation_context am.sources am.layouts tx src` by simp[Abbr `cx`] >>
+  metis_tac[checked_getter_entry_storage_well_formed_on]
+QED
+
+Finalise call_external_storage_well_formed_on
 
 Theorem load_contract_storage_well_formed_on:
   machine_well_typed am /\
