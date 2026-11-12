@@ -12,7 +12,7 @@ Ancestors
   fragExec exprOperandVar vyperEvalExprPreservesScopesDom
   exprSimAlloc exprSimStorageCopy exprSimCopy storageCopyGasPath
   immutableCopyExecution bodyImmutableCopyMemory bodyStorageCopyMemory
-  bodyAllocMemory bodyDeclMemoryCounted valueEncodingProps abiBuiltinAllocation
+  bodyAllocMemory bodyDeclZeroGasPath valueEncodingProps abiBuiltinAllocation
   freshWrites allocaHistory immutableMemoryFrame venomMemDefs
   venomExecSemantics venomInst venomState list rich_list finite_map
   valueCopyBytes

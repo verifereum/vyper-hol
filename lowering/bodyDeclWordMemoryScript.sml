@@ -3,7 +3,7 @@
    twin of stmtSimDecl's compile_annassign_stmt_frag. *)
 Theory bodyDeclWordMemory
 Ancestors
-  bodyDeclMemoryCompose bodyDeclMemoryCounted bodyDeclMemoryCore
+  bodyDeclMemoryCompose bodyDeclMemoryCounted bodyDeclZeroGasPath bodyDeclMemoryCore
   stmtSimDeclCompose stmtSimDeclSource stmtSimDeclStore stmtSimDeclMem
   stmtSimDecl exprSimMemDefs bodyMemoryDefs instMemFrontier fragExecMem
   fragGasMode fragGasPathMem fragGasPath gasSummary gasOutcome
