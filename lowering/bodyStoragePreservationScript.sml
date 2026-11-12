@@ -903,11 +903,16 @@ Resume body_oracle_storage_mutual[intcall_args_success]:
         simp[supported_exprs_exists_DROP, int_calls_exprs_DROP_EVERY,
              get_scopes_def, set_scopes_def, type_check_def, assert_def,
              return_def] >>
+        `LENGTH dflts + LENGTH es - LENGTH args =
+         LENGTH dflts - (LENGTH args - LENGTH es)` by decide_tac >>
+        pop_assum SUBST1_TAC >>
+        conj_tac >- (goal_assum (drule_at Any)) >>
         conj_tac
         >- (qexists_tac `tops` >>
-            fs[vyperContextTheory.get_module_code_def,
-               int_calls_exprs_DROP_EVERY]) >>
-        conj_tac >- (goal_assum (drule_at Any)) >>
+            qpat_x_assum `get_module_code cx NONE = SOME tops` mp_tac >>
+            simp[vyperContextTheory.get_module_code_def,
+                 int_calls_exprs_DROP_EVERY]) >>
+        conj_tac >- simp[] >>
         qexistsl_tac [`defaults_env env_body`, `r1`,
                       `args_st with scopes := [FEMPTY]`] >>
         simp[vyperTypeEvalSoundnessTheory.well_typed_exprs_DROP]) >>
