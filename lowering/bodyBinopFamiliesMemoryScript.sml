@@ -68,7 +68,7 @@ Theorem compile_compare_words_sim_mem:
     (expr_res_ok (bop_result cx ann bop tys v1 v2 es0) ==>
      bop_result cx ann bop tys v1 v2 es0 =
        INL (BoolV (eval_compare bop ty w1 w2))) ==>
-    binop_frag_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
+    binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
 Proof
   rpt gen_tac >> strip_tac >> irule binop_frag_mem_straight >>
   conj_tac >- metis_tac[straight_fresh_compare] >>
@@ -376,7 +376,7 @@ Theorem compile_compare_bytes_sim_mem:
     (tv = BaseTV AddressT \/ ?m. tv = BaseTV (BytesT (Fixed m)) /\ m <= 32) /\
     (!t. oEL 1 tys = SOME t ==> evaluate_type (get_tenv cx) t = SOME tv) /\
     value_has_type tv (BytesV b1) /\ value_has_type tv (BytesV b2) ==>
-    binop_frag_mem H ctx func cenv cx bop ty ann bl el tys
+    binop_frag_mem ctx func cenv cx bop ty ann bl el tys
       (BytesV b1) (BytesV b2)
       (typed_val_to_w256 tv (BytesV b1)) (typed_val_to_w256 tv (BytesV b2)) es0
 Proof
