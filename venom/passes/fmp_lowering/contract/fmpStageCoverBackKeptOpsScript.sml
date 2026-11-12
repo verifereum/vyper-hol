@@ -243,10 +243,88 @@ Proof
   >~ [`inst.inst_opcode = INITIAL_FMP`] >- gvs[pre_fmp_opcode_def]
   >~ [`inst.inst_opcode = BUMP`] >- gvs[pre_fmp_opcode_def]
   >~ [`inst.inst_opcode = FMP_PARAM`] >- gvs[pre_fmp_opcode_def]
-  >~ [`inst.inst_opcode = DELEGATECALL`] >- gvs[inst_shape_ok_def]
-  >~ [`inst.inst_opcode = CREATE`] >- gvs[inst_shape_ok_def]
-  >~ [`inst.inst_opcode = CREATE2`] >- gvs[inst_shape_ok_def]
-  >~ [`inst.inst_opcode = SELFDESTRUCT`] >- gvs[inst_shape_ok_def]
+  >~ [`inst.inst_opcode = DELEGATECALL`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, exec_delegatecall_def,
+         AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b;c;d;e;f]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_assum (qspec_then `b` assume_tac) >>
+     first_assum (qspec_then `c` assume_tac) >>
+     first_assum (qspec_then `d` assume_tac) >>
+     first_assum (qspec_then `e` assume_tac) >>
+     first_x_assum (qspec_then `f` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operand c s` >> gvs[] >>
+     Cases_on `eval_operand d s` >> gvs[] >>
+     Cases_on `eval_operand e s` >> gvs[] >>
+     Cases_on `eval_operand f s` >> gvs[] >>
+     fs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
+     simp[exec_delegatecall_def] >> pairarg_tac >> simp[])
+  >~ [`inst.inst_opcode = CREATE`] >-
+    (`LENGTH inst.inst_operands = 3` by gvs[inst_wf_def] >>
+     gvs[LENGTH_EQ_NUM_compute] >>
+     rename1 `inst.inst_operands = [a;b;c]` >>
+     `IS_SOME (eval_operand a t) /\
+      IS_SOME (eval_operand b t) /\
+      IS_SOME (eval_operand c t)` by
+       (CCONTR_TAC >> qpat_x_assum `terminates _` mp_tac >>
+        Cases_on `eval_operand a t` >>
+        Cases_on `eval_operand b t` >>
+        Cases_on `eval_operand c t` >>
+        gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+            eval_operands_def, terminates_def]) >>
+     `?v0 v1 v2.
+        eval_operand a s = SOME v0 /\
+        eval_operand b s = SOME v1 /\
+        eval_operand c s = SOME v2` by
+       (gvs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+     gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+     gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+         eval_operands_def, terminates_def, exec_create_def] >>
+     rpt (IF_CASES_TAC >> gvs[]) >> rpt (pairarg_tac >> gvs[]))
+  >~ [`inst.inst_opcode = CREATE2`] >-
+    (`LENGTH inst.inst_operands = 4` by gvs[inst_wf_def] >>
+     gvs[LENGTH_EQ_NUM_compute] >>
+     rename1 `inst.inst_operands = [a;b;c;d]` >>
+     `IS_SOME (eval_operand a t) /\
+      IS_SOME (eval_operand b t) /\
+      IS_SOME (eval_operand c t) /\
+      IS_SOME (eval_operand d t)` by
+       (CCONTR_TAC >> qpat_x_assum `terminates _` mp_tac >>
+        Cases_on `eval_operand a t` >>
+        Cases_on `eval_operand b t` >>
+        Cases_on `eval_operand c t` >>
+        Cases_on `eval_operand d t` >>
+        gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+            eval_operands_def, terminates_def]) >>
+     `?v0 v1 v2 v3.
+        eval_operand a s = SOME v0 /\
+        eval_operand b s = SOME v1 /\
+        eval_operand c s = SOME v2 /\
+        eval_operand d s = SOME v3` by
+       (gvs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+     gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+     gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+         eval_operands_def, terminates_def, exec_create_def] >>
+     rpt (IF_CASES_TAC >> gvs[]) >> rpt (pairarg_tac >> gvs[]))
+  >~ [`inst.inst_opcode = SELFDESTRUCT`] >-
+    (`LENGTH inst.inst_operands = 1` by gvs[inst_wf_def] >>
+     gvs[LENGTH_EQ_NUM_compute] >>
+     rename1 `inst.inst_operands = [a]` >>
+     `IS_SOME (eval_operand a t)` by
+       (CCONTR_TAC >> qpat_x_assum `terminates _` mp_tac >>
+        Cases_on `eval_operand a t` >>
+        gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+            eval_operands_def, terminates_def]) >>
+     `?v0.
+        eval_operand a s = SOME v0` by
+       (gvs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+     gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+     gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+         eval_operands_def, terminates_def] >>
+     rpt (IF_CASES_TAC >> gvs[]) >> rpt (pairarg_tac >> gvs[]))
   >~ [`inst.inst_opcode = DJMP`] >- gvs[inst_shape_ok_def]
   >~ [`inst.inst_opcode = OFFSET`] >- gvs[inst_shape_ok_def]
   >~ [`inst.inst_opcode = NOP`] >-
