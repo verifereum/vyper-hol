@@ -8,7 +8,7 @@
 Theory fragFuelLoopWcopy
 Ancestors
   fragFuel fragFuelContextBase fragExec compileEnv emitHelper context venomInst
-  venomExecSemantics venomState
+  venomExecSemantics venomState venomInstProofs
 Libs
   fragFuelLib
 
@@ -306,12 +306,234 @@ Proof
   simp[is_terminator_def]
 QED
 
+(* Compiler-side code frames, keeping intermediate states abstract. *)
+Theorem wcopy_emit_op_frame[local]:
+  !opc ops sa v sb.
+    ~is_terminator opc /\ emit_op opc ops sa = (v,sb) ==>
+    sa.cs_next_var <= sb.cs_next_var /\
+    ?code. sb.cs_blocks = sa.cs_blocks /\
+      sb.cs_current_bb = sa.cs_current_bb /\
+      sb.cs_current_insts = sa.cs_current_insts ++ code /\
+      EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+        (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) code
+Proof
+  rpt gen_tac >>
+  simp[emit_op_def, emit_inst_def, fresh_var_def, fresh_id_def,
+       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[mk_inst_def, var_below_fresh]
+QED
+
+Theorem wcopy_emit_void_frame[local]:
+  !opc ops sa v sb.
+    (opc <> INVALID ==> ~is_terminator opc) /\
+    emit_void opc ops sa = (v,sb) ==>
+    sa.cs_next_var <= sb.cs_next_var /\
+    ?code. sb.cs_blocks = sa.cs_blocks /\
+      sb.cs_current_bb = sa.cs_current_bb /\
+      sb.cs_current_insts = sa.cs_current_insts ++ code /\
+      EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+        (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) code
+Proof
+  rpt gen_tac >>
+  simp[emit_void_def, emit_inst_def, fresh_id_def, emit_def, comp_bind_def] >>
+  rpt strip_tac >> gvs[] >> simp[mk_inst_def]
+QED
+
+Theorem wcopy_code_frame_append[local]:
+  !sa sb sc a b.
+    sa.cs_next_var <= sb.cs_next_var /\
+    sb.cs_next_var <= sc.cs_next_var /\
+    sb.cs_blocks = sa.cs_blocks /\ sc.cs_blocks = sb.cs_blocks /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sc.cs_current_bb = sb.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++ a /\
+    sc.cs_current_insts = sb.cs_current_insts ++ b /\
+    EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+      (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) a /\
+    EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+      (!x. MEM x i.inst_outputs ==> ~var_below sb.cs_next_var x)) b ==>
+    sa.cs_next_var <= sc.cs_next_var /\
+    sc.cs_blocks = sa.cs_blocks /\ sc.cs_current_bb = sa.cs_current_bb /\
+    sc.cs_current_insts = sa.cs_current_insts ++ (a ++ b) /\
+    EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+      (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) (a ++ b)
+Proof
+  rpt gen_tac >> strip_tac >> simp[listTheory.APPEND_ASSOC] >>
+  fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  fs[var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem wcopy_ptr_load_frame[local]:
+  !ctor imm loc op sa v sb.
+    compile_ptr_load ctor imm loc op sa = (v,sb) ==>
+    sa.cs_next_var <= sb.cs_next_var /\
+    ?code. sb.cs_blocks = sa.cs_blocks /\
+      sb.cs_current_bb = sa.cs_current_bb /\
+      sb.cs_current_insts = sa.cs_current_insts ++ code /\
+      EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+        (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) code
+Proof
+  rpt gen_tac >> Cases_on `ctor` >> Cases_on `imm` >> Cases_on `loc` >>
+  simp[compile_ptr_load_def, compile_imm_load_word_def] >>
+  simp[comp_bind_def] >> rpt strip_tac >>
+  TRY (pairarg_tac >> gvs[]) >>
+  imp_res_tac wcopy_emit_op_frame >> gvs[is_terminator_def] >>
+  fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  fs[var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem wcopy_ptr_store_frame[local]:
+  !ctor imm loc dst value sa v sb.
+    compile_ptr_store ctor imm loc dst value sa = (v,sb) ==>
+    sa.cs_next_var <= sb.cs_next_var /\
+    ?code. sb.cs_blocks = sa.cs_blocks /\
+      sb.cs_current_bb = sa.cs_current_bb /\
+      sb.cs_current_insts = sa.cs_current_insts ++ code /\
+      EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+        (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) code
+Proof
+  rpt gen_tac >> Cases_on `ctor` >> Cases_on `imm` >> Cases_on `loc` >>
+  simp[compile_ptr_store_def, compile_imm_store_word_def] >>
+  simp[comp_bind_def] >> rpt strip_tac >>
+  TRY (pairarg_tac >> gvs[]) >>
+  imp_res_tac wcopy_emit_op_frame >>
+  imp_res_tac wcopy_emit_void_frame >> gvs[is_terminator_def] >>
+  fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  fs[var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem wcopy_offset_frame[local]:
+  !scale op ctr sa v sb.
+    (if scale = 1 then emit_op ADD [op; Var ctr]
+     else do scaled <- emit_op MUL [Var ctr; Lit (n2w scale)];
+             emit_op ADD [op; scaled] od) sa = (v,sb) ==>
+    sa.cs_next_var <= sb.cs_next_var /\
+    ?code. sb.cs_blocks = sa.cs_blocks /\
+      sb.cs_current_bb = sa.cs_current_bb /\
+      sb.cs_current_insts = sa.cs_current_insts ++ code /\
+      EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+        (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) code
+Proof
+  rpt gen_tac >> Cases_on `scale = 1` >> simp[comp_bind_def] >>
+  rpt strip_tac >> TRY (pairarg_tac >> gvs[]) >>
+  imp_res_tac wcopy_emit_op_frame >> gvs[is_terminator_def] >>
+  fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  fs[var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem wcopy_body_code_frame[local]:
+  !ctr src dst ll sl ctor imm sa s1 s2 s3 sb so value d.
+    (if word_scale ll = 1 then emit_op ADD [src; Var ctr]
+     else do k <- emit_op MUL [Var ctr; Lit (n2w (word_scale ll))];
+             emit_op ADD [src; k] od) sa = (so,s1) /\
+    compile_ptr_load ctor imm ll so s1 = (value,s2) /\
+    (if word_scale sl = 1 then emit_op ADD [dst; Var ctr]
+     else do k <- emit_op MUL [Var ctr; Lit (n2w (word_scale sl))];
+             emit_op ADD [dst; k] od) s2 = (d,s3) /\
+    compile_ptr_store ctor imm sl d value s3 = ((),sb) ==>
+    sa.cs_next_var <= sb.cs_next_var /\
+    ?code. sb.cs_blocks = sa.cs_blocks /\
+      sb.cs_current_bb = sa.cs_current_bb /\
+      sb.cs_current_insts = sa.cs_current_insts ++ code /\
+      EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+        (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) code
+Proof
+  rpt gen_tac >> strip_tac >>
+  imp_res_tac wcopy_offset_frame >>
+  imp_res_tac wcopy_ptr_load_frame >>
+  imp_res_tac wcopy_ptr_store_frame >>
+  gvs[] >>
+  fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  fs[var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+(* Successful straight-line execution keeps the label map in the same
+   witness as its old-variable frame. *)
+Theorem wcopy_straight_framed[local]:
+  !code s G ctx fn N bb.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    callees_stable G ctx fn /\
+    EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
+      (!x. MEM x i.inst_outputs ==> ~var_below N x)) code ==>
+    fuel_outcome G ctx fn s 0
+      (\t. t.vs_current_bb = s.vs_current_bb /\
+        t.vs_inst_idx = s.vs_inst_idx + LENGTH code /\
+        vars_kept N {} s t /\ t.vs_labels = s.vs_labels)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- simp[fuel_outcome_refl] >>
+  fs[] >>
+  `?rest. DROP s.vs_inst_idx bb.bb_instructions = h :: rest /\
+          isPREFIX code rest` by
+    (Cases_on `DROP s.vs_inst_idx bb.bb_instructions` >> gvs[]) >>
+  drule DROP_EQ_CONS >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME h` by
+    simp[get_instruction_def] >>
+  Cases_on `h.inst_opcode = INVALID`
+  >- (simp[fuel_outcome_def] >> disj2_tac >> rpt strip_tac >>
+      simp[run_from_def, Once exec_block_def, step_inst_non_invoke,
+           step_inst_base_opcode_eqs] >>
+      simp[Once exec_block_def, step_inst_non_invoke,
+           step_inst_base_opcode_eqs]) >>
+  `~is_terminator h.inst_opcode` by simp[] >>
+  drule_all run_from_nonterm_stable >> strip_tac
+  >- (qabbrev_tac `u = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
+      `vars_kept N {} s u /\ u.vs_labels = s.vs_labels /\
+       u.vs_current_bb = s.vs_current_bb /\
+       u.vs_inst_idx = SUC s.vs_inst_idx` by
+        (simp[Abbr `u`, vars_kept_def] >> conj_tac
+         >- (rpt strip_tac >>
+             `~MEM x h.inst_outputs` by metis_tac[] >>
+             gvs[lookup_var_def]) >>
+         drule_all step_preserves_labels >> simp[]) >>
+      first_x_assum (qspecl_then [`u`, `G`, `ctx`, `fn`, `N`, `bb`] mp_tac) >>
+      simp[] >> strip_tac >>
+      fs[fuel_outcome_def] >>
+      disj1_tac >> goal_assum (drule_at Any) >>
+      gvs[vars_kept_trans, arithmeticTheory.ADD1] >>
+      metis_tac[vars_kept_trans]) >>
+  simp[fuel_outcome_def]
+QED
+
 (* The loop counts a fresh counter from 0 up to the value of count_op,
    leaving through the exit block when they are equal.  Each round runs
    the body's straight-line code and one JMP back to the condition block.
    count_op was allocated before the loop, and the body writes only the
    counter and variables it allocates itself, so the bound stays fixed and
    the number of rounds is below 2 ** 256. *)
+Theorem wcopy_body_framed_outcome[local]:
+  !ctr src dst ll sl ctor imm sa s1 s2 s3 sb so value d G ctx fn s.
+    (if word_scale ll = 1 then emit_op ADD [src; Var ctr]
+     else do k <- emit_op MUL [Var ctr; Lit (n2w (word_scale ll))];
+             emit_op ADD [src; k] od) sa = (so,s1) /\
+    compile_ptr_load ctor imm ll so s1 = (value,s2) /\
+    (if word_scale sl = 1 then emit_op ADD [dst; Var ctr]
+     else do k <- emit_op MUL [Var ctr; Lit (n2w (word_scale sl))];
+             emit_op ADD [dst; k] od) s2 = (d,s3) /\
+    compile_ptr_store ctor imm sl d value s3 = ((),sb) /\
+    fn_has_code sa sb fn /\ callees_stable G ctx fn /\ at_point sa s ==>
+    fuel_outcome G ctx fn s 0
+      (\t. at_point sb t /\ vars_kept sa.cs_next_var {} s t /\
+           t.vs_labels = s.vs_labels)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all wcopy_body_code_frame >> strip_tac >>
+  fs[fn_has_code_def, at_point_def] >>
+  `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[rich_listTheory.IS_PREFIX_APPEND] >> simp[listTheory.DROP_APPEND]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
+  drule_all wcopy_straight_framed >>
+  simp[fuel_outcome_def, at_point_def] >>
+  metis_tac[]
+QED
+
 Theorem fuel_okS_compile_word_copy_loop_base:
   !src_op dst_op count_op load_loc store_loc is_ctor imm Wv E.
     fuel_okS (\st. !x. count_op = Var x ==> var_below st.cs_next_var x) Wv {} E
