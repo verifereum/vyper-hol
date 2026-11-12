@@ -6,25 +6,23 @@ Ancestors
   bodyIntCallJointAggCore actualAllocExec bodyIntCallRestoreResults
   loweringPosts context compileEnv loweringStateRelDefs exprCallBounds
 
-(* Evaluated child layouts are small enough for the counted store interface. *)
-Theorem intcall_children_layout:
-  !args tvs.
-    EVERY (\e. expr_body_pre ce cx env e es) args /\
-    OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs ==>
-    LIST_REL (\e tv.
-      evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-      type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-      type_memory_size tv + 64 < dimword (:256)) args tvs
+(* Member layouts of a small tuple fit the counted store interface. *)
+Theorem intcall_members_layout:
+  !tys tvs.
+    expr_sim_inv ce cx env es /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
+    type_memory_size_list tvs < 2 ** 64 ==>
+    LIST_REL (\t tv.
+      evaluate_type (get_tenv cx) t = SOME tv /\
+      type_memory_bytes ce t = type_memory_size tv /\
+      type_memory_size tv + 64 < dimword (:256)) tys tvs
 Proof
   Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  gvs[AllCaseEqs()] >> conj_tac
-  >- (irule expr_sim_inv_memory_size >>
-      goal_assum (drule_at Any) >>
-      fs[expr_body_pre_def] >> metis_tac[]) >>
-  rename1 `expr_body_pre ce cx env child es` >>
-  Cases_on `is_word_type (expr_type child)`
-  >- (drule_all word_tv_memory_size >> simp[dimword_def]) >>
-  drule_all expr_body_pre_copy_ok >> simp[dimword_def]
+  gvs[AllCaseEqs(), valueEncodingTheory.type_memory_size_def] >>
+  rpt conj_tac
+  >- metis_tac[expr_sim_inv_memory_size]
+  >- simp[dimword_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* The allocated root is authorized and clear of both endpoint local sets. *)
@@ -64,8 +62,6 @@ Proof
   metis_tac[]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Theorem intcall_tuple_entry:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   (!e st. MEM e args /\ expr_sim_inv ce fp.jc_cx env st ==>
@@ -74,11 +70,12 @@ Theorem intcall_tuple_entry:
   EVERY (supportedExprs$supported_expr fp.jc_tops) args /\
   (!e. MEM e args ==>
     calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)) /\
-  LIST_REL (\e tv. evaluate_type (get_tenv fp.jc_cx) (expr_type e) = SOME tv /\
-    type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-    type_memory_size tv + 64 < dimword (:256)) args tvs /\
+  LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
+  LIST_REL (\t tv. evaluate_type (get_tenv fp.jc_cx) t = SOME tv /\
+    type_memory_bytes ce t = type_memory_size tv /\
+    type_memory_size tv + 64 < dimword (:256)) tys tvs /\
   compile_alloc_buffer (type_memory_size_list tvs) sa = (buf,sm) /\
-  compile_make_tuple compile_expr ce args buf.buf_operand 0 sm = (out,sb) /\
+  compile_make_tuple compile_expr ce args tys buf.buf_operand 0 sm = (out,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   type_memory_size_list tvs < dimword (:256) /\
   intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
@@ -104,16 +101,17 @@ Proof
     (qspec_then `sa` mp_tac
       (Q.SPEC `type_memory_size_list tvs` exprLoweringPropsTheory.ci_mono_compile_alloc_buffer) >> simp[]) >>
   `ci_mono sm sb` by
-    (qspecl_then [`compile_expr`, `ce`, `args`, `buf.buf_operand`, `0`, `sm`]
+    (qspecl_then [`compile_expr`, `ce`, `args`, `tys`, `buf.buf_operand`, `0`, `sm`]
        mp_tac exprLoweringPropsTheory.ci_mono_compile_make_tuple_cfn >>
      simp[exprLoweringPropsTheory.compile_expr_ci_mono]) >>
   `fn_has_code sa sm fp.jc_func /\ fn_has_code sm sb fp.jc_func` by
     metis_tac[exprLoweringPropsTheory.ci_mono_def, fragExecTheory.fn_has_code_split] >>
   drule_all intcall_tuple_alloc_root >> strip_tac >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) intcall_tuple_tail >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) intcall_tuple_tail >>
   disch_then (drule_at (Pat `intcall_expr_cont _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
-  disch_then (drule_at (Pat `LIST_REL _ _ _`)) >>
+  disch_then (drule_at (Pat `LIST_REL _ tys args`)) >>
+  disch_then (drule_at (Pat `LIST_REL _ tys tvs`)) >>
   disch_then (qspec_then `w` mp_tac) >>
   (impl_tac >- (fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[])) >>
   strip_tac >> simp[] >>
@@ -125,7 +123,6 @@ Proof
   fs[exprLoweringPropsTheory.ci_mono_def] >>
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
-*)
 
 (* Source well-formedness is attached only to successful Value executions. *)
 Theorem intcall_value_outcome_wf:
@@ -261,7 +258,6 @@ Proof
   simp[valueEncodingTheory.type_memory_size_def]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_tuple_literal_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
@@ -269,13 +265,13 @@ Theorem intcall_tuple_literal_step:
   (?a n args. e = Builtin a (MakeArray NONE n) args) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
-  (* original proof, kept while held:
   strip_tac >> gvs[] >>
   reverse conj_tac
   >- (irule bodyIntCallJointAggCoreTheory.intcall_map_producer_other >> simp[]) >>
   rewrite_tac[intcall_expr_producer_def] >> rpt gen_tac >> strip_tac >>
   drule exprSimAggregateLayoutTheory.make_tuple_evaluated_layout >> strip_tac >>
   drule exprSimAggregateLayoutTheory.compile_tuple_literal_inv >> strip_tac >>
+  gvs[exprLoweringTheory.tuple_literal_types_def] >>
   `!e st. MEM e args /\ expr_sim_inv ce fp.jc_cx env st ==>
       expr_body_pre ce fp.jc_cx env e st` by
     (rpt strip_tac >> irule exprSimSourceTheory.expr_body_pre_builtin_arg >>
@@ -297,16 +293,16 @@ Proof
         vyperTypeCallStackSoundnessTheory.calls_follow_call_graph_def] >>
      rpt strip_tac >> irule exprSimSourceTheory.int_calls_exprs_every_mem >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
-  `EVERY (\e. expr_body_pre ce fp.jc_cx env e es) args` by
-    (simp[EVERY_MEM] >> rpt strip_tac >> first_x_assum irule >>
-     fs[intcall_joint_res_def, intcall_expr_res_def]) >>
-  drule_all intcall_children_layout >> strip_tac >>
-  `~is_word_type a` by simp[is_word_type_def] >>
-  `type_memory_size_list tvs < dimword (:256)` by
-    (gvs[] >> drule expr_body_pre_copy_ok >>
+  `expr_sim_inv ce fp.jc_cx env es` by
+    fs[intcall_joint_res_def, intcall_expr_res_def] >>
+  `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>
+  `type_memory_size_list tvs < 2 ** 64` by
+    (drule expr_body_pre_copy_ok >>
      disch_then (qspec_then `TupleTV tvs` mp_tac) >>
      simp[vyperASTTheory.expr_type_def, is_word_type_def,
-          valueEncodingTheory.type_memory_size_def, dimword_def]) >>
+          valueEncodingTheory.type_memory_size_def]) >>
+  `type_memory_size_list tvs < dimword (:256)` by simp[dimword_def] >>
+  drule_all intcall_members_layout >> strip_tac >>
   qpat_x_assum `SUM _ = type_memory_size_list tvs` (fn th => fs[th]) >>
   drule_all intcall_tuple_entry >> strip_tac >>
   `compatible_bound n (LENGTH args)` by
@@ -315,7 +311,7 @@ Proof
   gvs[] >>
   drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)
     (SRULE [arithmeticTheory.ADD_COMM] intcall_tuple_landing) >>
-  disch_then (qspecl_then [`n`, `TupleT (MAP expr_type args)`] mp_tac) >>
+  disch_then (qspecl_then [`n`, `TupleT tys`] mp_tac) >>
   simp[vyperASTTheory.expr_type_def, mk_ptr_def,
        contextTheory.vv_operand_def, is_bytestring_type_def] >>
   strip_tac >>
@@ -326,16 +322,11 @@ Proof
   `EVERY ($~ o expr_has_effect) args ==> pure_frame ce fp.jc_func es sa s u`
     suffices_by (strip_tac >> fs[] >> metis_tac[]) >>
   suspend "pure_frame"
-  *)
-  cheat
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; these Resume blocks hang off a held proof, commented out with it *)
-(*
 (* HELD (train 15): pure_frame sweep (tuple literal), retired in train 16 *)
 Resume intcall_tuple_literal_step[pure_frame]:
   cheat
 QED
 
 Finalise intcall_tuple_literal_step
-*)
