@@ -35,7 +35,7 @@ End
 
 (* binop_frag_straight (exprBopStraight) for binop_frag_val_mem. *)
 Theorem binop_frag_val_mem_straight:
-  !H ctx func cenv cx bop ty ann bl el v1 v2 es0.
+  !ctx func cenv cx bop ty ann bl el v1 v2 es0.
     (!x y. straight_fresh (compile_binop bop x y ty bl el)) /\
     (expr_res_ok (bop_result cx ann bop tys v1 v2 es0) ==>
      (?v. bop_result cx ann bop tys v1 v2 es0 = INL v /\ word_value v /\
@@ -54,7 +54,7 @@ Theorem binop_frag_val_mem_straight:
             eval_operand y ss = SOME (val_to_w256 v2) ==>
             ?ss'. run_inst_seq (emitted_insts sa sb) ss =
                     Abort Revert_abort ss')) ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rewrite_tac[binop_frag_val_mem_def] >> rpt strip_tac >>
   irule binop_frag_mem_straight >> asm_rewrite_tac[]
@@ -63,7 +63,7 @@ QED
 (* From exprSimCompare: compile_compare_words_sim, through
    binop_frag_mem_straight. *)
 Theorem compile_compare_words_sim_mem:
-  !H ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0.
+  !ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0.
     MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE] /\
     (expr_res_ok (bop_result cx ann bop tys v1 v2 es0) ==>
      bop_result cx ann bop tys v1 v2 es0 =
@@ -89,7 +89,7 @@ QED
 (* binop_frag_val_mem for the wrapping operators on two integers of a type of b
    bits, b a multiple of 8, the second within the type's bound. *)
 Theorem compile_unsafe_sim_mem:
-  !H ctx func cenv cx bop ty ann bl el v1 v2 es0 i1 i2.
+  !ctx func cenv cx bop ty ann bl el v1 v2 es0 i1 i2.
     MEM bop [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv] /\
     v1 = IntV i1 /\ v2 = IntV i2 /\
     type_to_int_bound ann =
@@ -99,7 +99,7 @@ Theorem compile_unsafe_sim_mem:
     within_int_bound
       (if is_signed_type ty then Signed (type_bits ty)
        else Unsigned (type_bits ty)) i2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `ty`, `v1`, `v2`, `es0`, `i1`, `i2`,
@@ -122,12 +122,12 @@ QED
    type, within its bound: the result when it is within the bound, a revert
    when it is not. *)
 Theorem compile_checked_sim_mem:
-  !H ctx func cenv cx bop ty ann bl el v1 v2 es0 i1 i2 u.
+  !ctx func cenv cx bop ty ann bl el v1 v2 es0 i1 i2 u.
     MEM bop [Add; Sub; Mul] /\ v1 = IntV i1 /\ v2 = IntV i2 /\
     type_to_int_bound ty = SOME u /\ type_to_int_bound ann = SOME u /\
     0 < type_bits ty /\ type_bits ty <= 256 /\
     within_int_bound u i1 /\ within_int_bound u i2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qabbrev_tac `rr = if bop = Add then i1 + i2 else if bop = Sub then i1 - i2
@@ -164,12 +164,12 @@ QED
 (* Checked Div/Mod (non-decimal): both sides fail together on a zero divisor
    or signed INT_MIN / -1, and otherwise agree via the EVM safe_* ops. *)
 Theorem compile_divmod_sim_mem:
-  !H ctx func cenv cx bop ty ann bl el v1 v2 es0 i1 i2 u.
+  !ctx func cenv cx bop ty ann bl el v1 v2 es0 i1 i2 u.
     MEM bop [Div; Mod] /\ v1 = IntV i1 /\ v2 = IntV i2 /\
     type_to_int_bound ty = SOME u /\ type_to_int_bound ann = SOME u /\
     0 < type_bits ty /\ type_bits ty <= 256 /\
     within_int_bound u i1 /\ within_int_bound u i2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qspecl_then [`ty`, `u`] mp_tac type_to_int_bound_bits >> simp[] >>
@@ -216,8 +216,8 @@ QED
    int168 code and the source result differs only in DecimalV vs IntV (with
    runtime errors matched), the int168 operator fragment carries over. *)
 Theorem binop_frag_decimal_transfer_mem:
-  !H ctx func cenv cx bop ann ann' bl el d1 d2 es0.
-    binop_frag_val_mem H ctx func cenv cx bop (BaseT (IntT 168)) ann' bl el tys
+  !ctx func cenv cx bop ann ann' bl el d1 d2 es0.
+    binop_frag_val_mem ctx func cenv cx bop (BaseT (IntT 168)) ann' bl el tys
       (IntV d1) (IntV d2) es0 /\
     (!x y. compile_binop bop x y (BaseT DecimalT) bl el =
            compile_binop bop x y (BaseT (IntT 168)) bl el) /\
@@ -229,7 +229,7 @@ Theorem binop_frag_decimal_transfer_mem:
                INR (Error (RuntimeError m)) /\
              bop_result cx ann bop tys (DecimalV d1) (DecimalV d2) es0 =
                INR (Error (RuntimeError m')))) ==>
-    binop_frag_val_mem H ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
+    binop_frag_val_mem ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
       (DecimalV d1) (DecimalV d2) es0
 Proof
   rpt gen_tac >> simp[binop_frag_val_mem_def, binop_frag_mem_def] >> strip_tac >> rpt gen_tac >>
@@ -243,10 +243,10 @@ QED
 
 (* From exprSimArith. *)
 Theorem compile_decimal_add_sub_mod_sim_mem:
-  !H ctx func cenv cx bop ann bl el d1 d2 es0.
+  !ctx func cenv cx bop ann bl el d1 d2 es0.
     MEM bop [Add; Sub; Mod] /\
     within_int_bound (Signed 168) d1 /\ within_int_bound (Signed 168) d2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
+    binop_frag_val_mem ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
       (DecimalV d1) (DecimalV d2) es0
 Proof
   rpt strip_tac >> irule binop_frag_decimal_transfer_mem >>
@@ -268,10 +268,10 @@ QED
 
 (* From exprSimArith. *)
 Theorem compile_decimal_mul_div_sim_mem:
-  !H ctx func cenv cx bop ann bl el d1 d2 es0.
+  !ctx func cenv cx bop ann bl el d1 d2 es0.
     MEM bop [Mul; Div] /\
     within_int_bound (Signed 168) d1 /\ within_int_bound (Signed 168) d2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
+    binop_frag_val_mem ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
       (DecimalV d1) (DecimalV d2) es0
 Proof
   rpt strip_tac >> irule binop_frag_val_mem_straight >> conj_tac
@@ -325,13 +325,13 @@ QED
 (* From exprSimCompare. *)
 (* binop_frag_val_mem for the comparisons, on two word values of one type. *)
 Theorem compile_compare_sim_mem:
-  !H ctx func cenv cx bop ty ann bl el v1 v2 es0 tv.
+  !ctx func cenv cx bop ty ann bl el v1 v2 es0 tv.
     MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE] /\
     word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
     (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[binop_frag_val_mem_def] >>
   irule compile_compare_words_sim_mem >>
@@ -344,13 +344,13 @@ QED
 (* From exprSimCompare. *)
 (* binop_frag_val_mem for Min and Max, on two word values of one type. *)
 Theorem compile_minmax_sim_mem:
-  !H ctx func cenv cx mm ty ann bl el v1 v2 es0 tv.
+  !ctx func cenv cx mm ty ann bl el v1 v2 es0 tv.
     (mm = Min \/ mm = Max) /\
     word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
     (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
-    binop_frag_val_mem H ctx func cenv cx mm ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx mm ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   match_mp_tac binop_frag_val_mem_straight >> conj_tac
@@ -371,7 +371,7 @@ QED
    one type, held in their typed words: compile_compare's EQ on the words
    is the source's comparison of the bytes. *)
 Theorem compile_compare_bytes_sim_mem:
-  !H ctx func cenv cx bop ty ann bl el tys tv b1 b2 es0.
+  !ctx func cenv cx bop ty ann bl el tys tv b1 b2 es0.
     (bop = Eq \/ bop = NotEq) /\
     (tv = BaseTV AddressT \/ ?m. tv = BaseTV (BytesT (Fixed m)) /\ m <= 32) /\
     (!t. oEL 1 tys = SOME t ==> evaluate_type (get_tenv cx) t = SOME tv) /\
@@ -398,14 +398,14 @@ QED
 (* From exprBopBitwise. *)
 (* The lowering emits the word operation, one instruction. *)
 Theorem compile_bitwise_sim_mem:
-  !H ctx func cenv cx bop ty ann bl el v1 v2 es0.
+  !ctx func cenv cx bop ty ann bl el v1 v2 es0.
     (bop = And \/ bop = Or \/ bop = XOr) /\
     (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
        within_int_bound
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
        within_int_bound
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2) ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
@@ -422,11 +422,11 @@ QED
 (* binop_frag_val_mem for In and NotIn on two flags of a tys type with at most 256
    members. *)
 Theorem compile_flag_in_sim_mem:
-  !H ctx func cenv cx bop ty ann bl el v1 v2 es0 m.
+  !ctx func cenv cx bop ty ann bl el v1 v2 es0 m.
     (bop = In \/ bop = NotIn) /\
     value_has_type (FlagTV m) v1 /\ value_has_type (FlagTV m) v2 /\
     m <= 256 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   match_mp_tac binop_frag_val_mem_straight >> conj_tac
@@ -450,14 +450,14 @@ QED
 (* binop_frag_val_mem for ShL and ShR of a 256-bit integer by a uint256 amount:
    one instruction. *)
 Theorem compile_shift_sim_mem:
-  !H ctx func cenv cx bop ty ann bl el v1 v2 es0 i1 i2.
+  !ctx func cenv cx bop ty ann bl el v1 v2 es0 i1 i2.
     (bop = ShL \/ bop = ShR) /\ v1 = IntV i1 /\ v2 = IntV i2 /\
     within_int_bound (Unsigned 256) i2 /\
     type_to_int_bound ann =
       SOME (if is_signed_type ty then Signed 256 else Unsigned 256) /\
     within_int_bound (if is_signed_type ty then Signed 256 else Unsigned 256)
       i1 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   irule binop_frag_val_mem_straight >>
@@ -480,30 +480,30 @@ QED
 (* From exprSimBinopFrag. *)
 (* Checked + - * / % on two integers of one type. *)
 Theorem binop_frag_int_arith_mem:
-  !H ctx func cenv cx bop ty bl el tys v1 v2 es0 tenv tv.
+  !ctx func cenv cx bop ty bl el tys v1 v2 es0 tenv tv.
     MEM bop [Add; Sub; Mul; Div; Mod] /\ is_int_type ty /\
     evaluate_type tenv ty = SOME tv /\
     value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ty bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ty bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac int_type_value >>
   qspecl_then [`tenv`, `ty`, `tv`, `v2`] mp_tac int_type_value >>
   asm_rewrite_tac[] >> rpt strip_tac >>
   Cases_on `bop` >> fs[]
-  >~ [`binop_frag_val_mem _ _ _ _ _ Div`] >- (irule compile_divmod_sim_mem >> simp[])
-  >~ [`binop_frag_val_mem _ _ _ _ _ Mod`] >- (irule compile_divmod_sim_mem >> simp[]) >>
+  >~ [`binop_frag_val_mem _ _ _ _ Div`] >- (irule compile_divmod_sim_mem >> simp[])
+  >~ [`binop_frag_val_mem _ _ _ _ Mod`] >- (irule compile_divmod_sim_mem >> simp[]) >>
   irule compile_checked_sim_mem >> simp[]
 QED
 
 (* From exprSimBinopFrag. *)
 (* Checked + - * / % on two decimals. *)
 Theorem binop_frag_decimal_arith_mem:
-  !H ctx func cenv cx bop bl el tys v1 v2 es0 tenv tv.
+  !ctx func cenv cx bop bl el tys v1 v2 es0 tenv tv.
     MEM bop [Add; Sub; Mul; Div; Mod] /\
     evaluate_type tenv (BaseT DecimalT) = SOME tv /\
     value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop (BaseT DecimalT) (BaseT DecimalT) bl el
+    binop_frag_val_mem ctx func cenv cx bop (BaseT DecimalT) (BaseT DecimalT) bl el
       tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
@@ -520,12 +520,12 @@ QED
 (* The wrapping operators on two integers of one type of a whole number of
    bytes. *)
 Theorem binop_frag_unsafe_typed_mem:
-  !H ctx func cenv cx bop ty bl el tys v1 v2 es0 tenv tv.
+  !ctx func cenv cx bop ty bl el tys v1 v2 es0 tenv tv.
     MEM bop [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv] /\
     is_int_type ty /\ type_bits ty MOD 8 = 0 /\
     evaluate_type tenv ty = SOME tv /\
     value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ty bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ty bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac int_type_value >>
@@ -537,11 +537,11 @@ QED
 (* From exprSimBinopFrag. *)
 (* The comparisons, min and max on two word values of one type. *)
 Theorem binop_frag_compare_typed_mem:
-  !H ctx func cenv cx bop ty ann bl el tys v1 v2 es0 tenv tv.
+  !ctx func cenv cx bop ty ann bl el tys v1 v2 es0 tenv tv.
     MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE; Min; Max] /\ word_value_type ty /\
     evaluate_type tenv ty = SOME tv /\
     value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt strip_tac >>
   `word_value v1 /\ (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
@@ -559,11 +559,11 @@ QED
 (* From exprSimBinopFrag. *)
 (* & | ^ on two word values of one type. *)
 Theorem binop_frag_bitwise_typed_mem:
-  !H ctx func cenv cx bop ty bl el tys v1 v2 es0 tenv tv.
+  !ctx func cenv cx bop ty bl el tys v1 v2 es0 tenv tv.
     (bop = And \/ bop = Or \/ bop = XOr) /\ word_value_type ty /\
     evaluate_type tenv ty = SOME tv /\
     value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ty bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ty bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> irule compile_bitwise_sim_mem >>
   qspecl_then [`tenv`, `ty`, `tv`, `v1`] mp_tac word_value_type_value_cases >>
@@ -574,11 +574,11 @@ QED
 (* From exprSimBinopFrag. *)
 (* Flag membership on two flags of one type. *)
 Theorem binop_frag_flag_in_typed_mem:
-  !H ctx func cenv cx bop nsid ty ann bl el tys v1 v2 es0 tenv tv.
+  !ctx func cenv cx bop nsid ty ann bl el tys v1 v2 es0 tenv tv.
     (bop = In \/ bop = NotIn) /\
     evaluate_type tenv (FlagT nsid) = SOME tv /\
     value_has_type tv v1 /\ value_has_type tv v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
@@ -588,12 +588,12 @@ QED
 (* From exprSimBinopFrag. *)
 (* << and >> on a 256-bit integer by a non-negative amount. *)
 Theorem binop_frag_shift_typed_mem:
-  !H ctx func cenv cx bop ty t2 bl el tys v1 v2 es0 tenv tv1 tv2 i2.
+  !ctx func cenv cx bop ty t2 bl el tys v1 v2 es0 tenv tv1 tv2 i2.
     (bop = ShL \/ bop = ShR) /\ is_int_type ty /\ type_bits ty = 256 /\
     is_int_type t2 /\ v2 = IntV i2 /\ 0 <= i2 /\
     evaluate_type tenv ty = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop ty ty bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop ty ty bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`tenv`, `ty`, `tv1`, `v1`] mp_tac int_type_value >>
@@ -610,14 +610,14 @@ QED
    the typed operands.  A base literal or nonnegative exponent literal is
    required; the emitted ASSERT rejects negative exponents and overflow. *)
 Theorem binop_frag_pow_mem:
-  !H ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
+  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     bop = Exp /\ well_typed_binop ann bop t1 t2 /\
     (IS_SOME bl \/ ?n. el = SOME n /\ 0 <= n) /\
     (!n. bl = SOME n ==> v1 = IntV n) /\
     (!n. el = SOME n ==> v2 = IntV n) /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_tac >>
   `is_int_type t1 /\ is_int_type t2` by gvs[well_typed_binop_def] >>
@@ -626,7 +626,7 @@ Proof
   (impl_tac >- gvs[]) >> strip_tac >>
   (impl_tac >- gvs[]) >> strip_tac >>
   gvs[well_typed_binop_def] >>
-  (rename1 `binop_frag_val_mem _ _ _ _ _ Exp _ _ _ _ _ (IntV a) (IntV b) _` >>
+  (rename1 `binop_frag_val_mem _ _ _ _ Exp _ _ _ _ _ (IntV a) (IntV b) _` >>
   `type_bits ann MOD 8 = 0` by metis_tac[int_type_byte_width] >>
 
   drule_then assume_tac bop_result_power >>
@@ -654,12 +654,12 @@ QED
 (* Right-shift arithmetic at genuinely narrow widths, independent of any
    checker restriction: signed and unsigned encodings widen safely to 256 bits. *)
 Theorem binop_frag_shr_narrow_mem:
-  !H ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
+  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     bop = ShR /\ type_bits t1 < 256 /\ ~(?i. v2 = IntV i /\ i < 0) /\
     ann = t1 /\ is_int_type t1 /\ is_int_type t2 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   qspecl_then [`tenv`, `ann`, `tv1`, `v1`] mp_tac int_type_value >>
@@ -694,12 +694,12 @@ QED
 (* Accepted shifts retain the nonnegative evaluated amount.  ShL is
    full-width; ShR also uses the independently proved narrow arithmetic. *)
 Theorem binop_frag_shift_572_mem:
-  !H ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
+  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     (bop = ShL \/ bop = ShR) /\ (?i. v2 = IntV i /\ 0 <= i) /\
     well_typed_binop ann bop t1 t2 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> gvs[well_typed_binop_def]
   >- (irule binop_frag_shift_typed_mem >> simp[is_int_type_def, type_bits_def] >>
@@ -726,11 +726,11 @@ fun binop_dispatch_mem_tac th =
 (* From exprSimBinopFrag. *)
 (* Each operator on typed operands of word_value_types, by its group. *)
 Theorem binop_frag_arith_any_mem:
-  !H ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
+  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     MEM bop [Add; Sub; Mul; Div; Mod] /\ well_typed_binop ann bop t1 t2 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   `t1 = ann /\ t2 = ann /\ is_numeric_type ann` by
@@ -746,12 +746,12 @@ QED
 
 (* From exprSimBinopFrag. *)
 Theorem binop_frag_unsafe_any_mem:
-  !H ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
+  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     MEM bop [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv] /\
     well_typed_binop ann bop t1 t2 /\ type_bits t1 MOD 8 = 0 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   `t1 = ann /\ t2 = ann /\ is_int_type ann` by
@@ -764,12 +764,12 @@ QED
 
 (* From exprSimBinopFrag. *)
 Theorem binop_frag_shift_any_mem:
-  !H ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
+  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     (bop = ShL \/ bop = ShR) /\ well_typed_binop ann bop t1 t2 /\
     (?i. v2 = IntV i /\ 0 <= i) /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   binop_dispatch_mem_tac binop_frag_shift_572_mem
@@ -777,12 +777,12 @@ QED
 
 (* From exprSimBinopFrag. *)
 Theorem binop_frag_in_any_mem:
-  !H ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
+  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     (bop = In \/ bop = NotIn) /\ well_typed_binop ann bop t1 t2 /\
     word_value_type t2 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   `?nsid. t1 = FlagT nsid /\ t2 = FlagT nsid` by
@@ -792,12 +792,12 @@ QED
 
 (* From exprSimBinopFrag. *)
 Theorem binop_frag_rest_any_mem:
-  !H ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
+  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     MEM bop [And; Or; XOr; Lt; Gt; Eq; NotEq; LtE; GtE; Min; Max] /\
     well_typed_binop ann bop t1 t2 /\ word_value_type t1 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   `t2 = t1` by
@@ -821,7 +821,7 @@ QED
 
 (* From exprSimBinopFrag. *)
 Theorem binop_frag_word_typed_mem:
-  !H ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
+  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     well_typed_binop ann bop t1 t2 /\ type_bits t1 MOD 8 = 0 /\
     (bop = Exp ==>
       (IS_SOME bl \/ ?n. el = SOME n /\ 0 <= n) /\
@@ -831,7 +831,7 @@ Theorem binop_frag_word_typed_mem:
     word_value_type t1 /\ word_value_type t2 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
+    binop_frag_val_mem ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `bop = ExpMod` >- gvs[well_typed_binop_def] >>
@@ -850,7 +850,7 @@ QED
 
 (* From exprSimBinopFrag. *)
 Theorem binop_frag_typed_mem:
-  !H ctx func cenv cx bop ann e1 e2 v1 v2 es0 tv1 tv2.
+  !ctx func cenv cx bop ann e1 e2 v1 v2 es0 tv1 tv2.
     well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
     (bop = Exp ==>
       IS_SOME (expr_int_literal e1) \/
@@ -864,7 +864,7 @@ Theorem binop_frag_typed_mem:
     value_has_type tv1 v1 /\
     evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
     value_has_type tv2 v2 ==>
-    binop_frag_val_mem H ctx func cenv cx bop (expr_type e1) ann
+    binop_frag_val_mem ctx func cenv cx bop (expr_type e1) ann
       (if bop = Exp then expr_int_literal e1 else NONE)
       (if bop = Exp then expr_int_literal e2 else NONE)
       [expr_type e1; expr_type e2] v1 v2 es0
