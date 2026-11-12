@@ -295,10 +295,13 @@ Proof
 QED
 
 (* The source machine the next transaction starts from, after a transaction
-   or deployment that ended in EVM state es' with source machine am': it
-   adopts the EVM's committed accounts (pending deletions processed, the
-   target's installed code included), and starts the transaction with empty
-   transient storage, no logs and no pending deletions. *)
+   or deployment whose frame succeeded (r = INR NONE) in EVM state es' with
+   source machine am': it adopts the EVM's committed accounts (pending
+   deletions processed, the target's installed code included), and starts the
+   transaction with empty transient storage, no logs and no pending deletions.
+   After a failed top-level frame es'.rollback still holds the frame's writes
+   (the transaction's accounting discards them), so the next transaction
+   starts from the pre-transaction machine instead. *)
 Definition next_source_machine_def:
   next_source_machine (am' : abstract_machine) es' =
     am' with <| accounts := process_deletions es'.rollback.toDelete
