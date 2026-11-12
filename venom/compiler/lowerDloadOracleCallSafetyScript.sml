@@ -188,7 +188,7 @@ Proof
     (qpat_x_assum `MEM (getops,ranges) _`
        (strip_assume_tac o REWRITE_RULE [MEM, PAIR_EQ]) >>
      irule ld_classified_range_frontier >>
-     qexistsl_tac [`A`,`G`,`f.lf_H`,`dyn_floor C vs0`] >>
+     rpt conj_tac >> TRY (qexistsl_tac [`A`,`G`,`f.lf_H`,`dyn_floor C vs0`]) >>
      rpt conj_tac >> metis_tac[]) >>
   (* same address on both sides: the source's own raw check bounds it *)
   `y = x ==> r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next \/

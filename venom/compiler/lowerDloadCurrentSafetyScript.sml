@@ -126,7 +126,8 @@ Resume ld_sync_ordinary_raw[ranges]:
   gvs[] >>
   `r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next \/ y = x` by
     (irule ld_classified_range_frontier >>
-     qexistsl_tac [`A`,`G`,`f.lf_H`,`dyn_floor C vs0`] >> metis_tac[]) >>
+     rpt conj_tac >> TRY (qexistsl_tac [`A`,`G`,`f.lf_H`,`dyn_floor C vs0`]) >>
+     rpt conj_tac >> metis_tac[]) >>
   (* same address on both sides: the source's own raw check bounds it *)
   `y = x ==> r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next \/
      w2n f.lf_tgt.vs_initial_fmp <= w2n y /\ w2n y + r1 <= w2n f.lf_tgt.vs_fmp` by

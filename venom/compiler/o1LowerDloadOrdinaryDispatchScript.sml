@@ -118,8 +118,9 @@ Proof
   drule_all ld_joint_control_unchanged_next >> strip_tac >>
   qexists_tac `update_var out t.vs_fmp
     (t with vs_fmp := t.vs_fmp + n2w (ceil32 (w2n sz)))` >>
+  qexistsl_tac [`u`,`fn'`] >>
   conj_tac >- (simp[ld_dalloca_success_iff] >> metis_tac[]) >>
-  qexistsl_tac [`u`,`fn'`] >> simp[] >>
+  simp[] >>
   `ld_env_agree sites fn (occurrence_step a HP H inst s1)
      (entry_taint with t_var := (step_taint inst s s1 tn).t_var)
      (update_var out s.vs_fmp
