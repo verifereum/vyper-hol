@@ -1,0 +1,6 @@
+Theory fmpStageFmpStepsDallocaFrame
+Ancestors
+  fmpStageControl fmpStageOpBase fmpStageReclaimSound fmpStageRel
+  fmpLowerReclaimPlan fmpLowerSequenceExec fmpLedgerProps fmpAliasProps
+  fmpReclaimDefs fmpAnalysisDefs venomState finite_map words list
+  fmpStageFmpStepsDallocaData fmpStageFmpStepsDallocaLedger
