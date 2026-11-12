@@ -257,7 +257,7 @@ Theorem assign_base_ptr_source_bound_counterexample:
     ~(w2n w + off < dimword(:256))
 Proof
   strip_assume_tac (Q.INST
-    [`H` |-> `([],[]) : (bool # bytes32 # type_value) list # num list`]
+    [`H` |-> `(([]:(bool # 256 word # type_value) list), ([]:num list))`]
     assign_base_ptr_source_bound_state_exists) >>
   drule assign_base_ptr_source_bound_conditional >>
   impl_tac >- fs[storage_well_formed_on_def] >>

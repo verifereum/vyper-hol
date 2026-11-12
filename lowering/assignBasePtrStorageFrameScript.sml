@@ -57,7 +57,8 @@ Proof
      irule encoded_storage_lookup_outside >>
      conj_tac >- decide_tac >>
      qexistsl_tac [`tv`, `v`] >>
-     gvs[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
+     qpat_x_assum `ranges_disjoint _ _ _ _` mp_tac >>
+     simp[vyperStorageFrameTheory.ranges_disjoint_def]) >>
   simp[] >> qexistsl_tac [`slot`, `tv'`] >> simp[]
 QED
 
