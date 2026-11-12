@@ -92,6 +92,47 @@ Proof
   qexistsl_tac [`K k`, `f`, `n`] >> simp[]
 QED
 
+Theorem step_binop_gas_budget:
+  step_binop op g es = (r,s') ==>
+  !c rb rest B.
+  es.contexts = (c,rb)::rest /\ c.gasUsed <= c.msgParams.gasLimit /\
+  static_gas op <= B /\ B <= c.msgParams.gasLimit - c.gasUsed ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left es <= frame_gas_left s' + B
+Proof
+  rewrite_tac[step_binop_def] >> disch_tac >>
+  metis_tac[Q.INST [`f` |-> `\args. g (EL 0 args) (EL 1 args)`]
+         step_stack_fixed_gas_budget]
+QED
+
+Theorem step_monop_gas_budget:
+  step_monop op g es = (r,s') ==>
+  !c rb rest B.
+  es.contexts = (c,rb)::rest /\ c.gasUsed <= c.msgParams.gasLimit /\
+  static_gas op <= B /\ B <= c.msgParams.gasLimit - c.gasUsed ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left es <= frame_gas_left s' + B
+Proof
+  rewrite_tac[step_monop_def] >> disch_tac >>
+  metis_tac[Q.INST [`f` |-> `\args. g (EL 0 args)`]
+         step_stack_fixed_gas_budget]
+QED
+
+Theorem step_modop_gas_budget:
+  step_modop op g es = (r,s') ==>
+  !c rb rest B.
+  es.contexts = (c,rb)::rest /\ c.gasUsed <= c.msgParams.gasLimit /\
+  static_gas op <= B /\ B <= c.msgParams.gasLimit - c.gasUsed ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left es <= frame_gas_left s' + B
+Proof
+  rewrite_tac[step_modop_def, LET_THM] >> disch_tac >>
+  metis_tac[Q.INST [`f` |-> `\args. if w2n (EL 2 args) = 0 then 0w
+                 else n2w (g (w2n (EL 0 args)) (w2n (EL 1 args))
+                           MOD w2n (EL 2 args))`]
+         step_stack_fixed_gas_budget]
+QED
+
 (* PC handling never charges gas, including an invalid jump. *)
 Theorem frame_gas_left_inc_pc_or_jump:
   s.contexts <> [] /\ inc_pc_or_jump op s = (r,t) ==>
