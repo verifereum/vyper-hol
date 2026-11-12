@@ -1173,17 +1173,26 @@ Proof
   drule_all checked_callable_body_typing >> simp[]
 QED
 
+(* A key absent from the larger map is absent from the smaller one. *)
+Theorem submap_flookup_none[local]:
+  f SUBMAP g /\ FLOOKUP g k = NONE ==> FLOOKUP f k = NONE
+Proof
+  rpt strip_tac >> Cases_on `FLOOKUP f k` >> gvs[] >>
+  drule_all FLOOKUP_SUBMAP >> gvs[]
+QED
+
 Theorem checked_artifact_mutation_root:
   check_contract F layouts addr mods = SOME art /\
   declared_constant mods src id /\
-  env.bare_global_assignable = art.cta_bare_global_assignable /\
+  env.bare_global_assignable SUBMAP art.cta_bare_global_assignable /\
   env.bare_globals = art.cta_bare_globals /\
   IS_SOME (type_place_target env bt) ==>
   base_target_root bt <> TopLevelNameTarget (src,id)
 Proof
   strip_tac >> drule check_contract_artifact_fields >> strip_tac >>
   irule typed_mutation_root_excludes_constant >>
-  metis_tac[checked_constant_not_assignable, checked_constant_bare_global]
+  metis_tac[checked_constant_not_assignable, checked_constant_bare_global,
+    submap_flookup_none]
 QED
 
 Theorem checked_artifact_intcall_body:
@@ -1204,11 +1213,11 @@ QED
 
 Theorem function_entry_constant_maps:
   (function_entry_env art mods src Internal args).bare_globals = art.cta_bare_globals /\
-  (function_entry_env art mods src Internal args).bare_global_assignable =
+  (function_entry_env art mods src Internal args).bare_global_assignable SUBMAP
     art.cta_bare_global_assignable /\
   (function_entry_env art mods src Internal args).fn_sigs = art.cta_fn_sigs /\
   (defaults_env (function_entry_env art mods src Internal args)).bare_globals = art.cta_bare_globals /\
-  (defaults_env (function_entry_env art mods src Internal args)).bare_global_assignable =
+  (defaults_env (function_entry_env art mods src Internal args)).bare_global_assignable SUBMAP
     art.cta_bare_global_assignable /\
   (defaults_env (function_entry_env art mods src Internal args)).fn_sigs = art.cta_fn_sigs
 Proof
@@ -2014,8 +2023,8 @@ Theorem protected_cell_frame_typed_assign:
     (eval_stmt cx (Assign (BaseTarget bt) e))
 Proof
   strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
-  irule protected_cell_frame_bind >> simp[] >> rpt strip_tac >>
-  irule protected_cell_frame_bind >> simp[] >> rpt strip_tac >>
+  irule protected_cell_frame_bind >> simp[protected_cell_frame_reads] >> rpt strip_tac >>
+  irule protected_cell_frame_bind >> simp[protected_cell_frame_reads] >> rpt strip_tac >>
   irule protected_cell_frame_bind >>
   simp[protected_cell_frame_reads] >> rpt strip_tac >>
   irule (cj 1 protected_cell_frame_mutations) >>
@@ -2028,7 +2037,7 @@ QED
 Definition frame_maps_def:
   frame_maps env art <=>
     env.bare_globals = art.cta_bare_globals /\
-    env.bare_global_assignable = art.cta_bare_global_assignable /\
+    env.bare_global_assignable SUBMAP art.cta_bare_global_assignable /\
     env.fn_sigs = art.cta_fn_sigs
 End
 
@@ -2244,7 +2253,8 @@ Theorem checked_frame_context_constant_root:
 Proof
   simp[checked_frame_context_def, frame_maps_def] >> rpt strip_tac >>
   drule check_contract_artifact_fields >> strip_tac >> gvs[] >>
-  metis_tac[checked_constant_not_assignable, checked_constant_bare_global]
+  metis_tac[checked_constant_not_assignable, checked_constant_bare_global,
+    submap_flookup_none]
 QED
 
 Theorem writable_atarget_member:
@@ -2469,8 +2479,12 @@ Proof
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [ignore_bind_def] >>
+      (* The pinned evaluator checks arity and decodes bytes before raising. *)
       irule protected_cell_frame_bind >>
-      simp[state_rel_frame_locals_primitives, protected_cell_frame_locals])
+      simp[state_rel_frame_locals_primitives, protected_cell_frame_locals,
+        protected_cell_frame_pure_guards] >>
+      rpt strip_tac >> irule protected_cell_frame_bind >>
+      simp[protected_cell_frame_pure_guards])
   >~ [`well_typed_expr env (Call ty SelfDestructTarget es d)`]
   >- (`well_typed_exprs env es` by
         (qpat_x_assum `well_typed_expr env (Call ty SelfDestructTarget es d)` mp_tac >>
@@ -2481,7 +2495,11 @@ Proof
       rpt (irule protected_cell_frame_bind >>
         simp[state_rel_frame_locals_primitives, protected_cell_frame_locals,
           protected_cell_frame_primitives, protected_cell_frame_call_primitives] >>
-        rpt strip_tac >> simp_tac bool_ss []))
+        rpt strip_tac >> simp_tac bool_ss []) >>
+      Cases_on `cx.txn.created_in_tx` >>
+      simp[protected_cell_frame_call_primitives] >>
+      irule protected_cell_frame_bind >>
+      simp[protected_cell_frame_call_primitives, protected_cell_frame_primitives])
   >~ [`type_stmt env ret (Log ns es)`]
   >- (`well_typed_exprs env es` by
         (gvs[type_stmt_def, AllCaseEqs()] >>
@@ -2504,10 +2522,15 @@ Proof
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
+      (* Preserve the successful read equation for the target-place IH. *)
+      irule protected_cell_frame_bind >> reverse conj_tac
+      >- simp[protected_cell_frame_reads] >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_read_tail >> gen_tac >> simp_tac bool_ss [] >>
+      (* The read now precedes target evaluation, rather than following it:
+         irule protected_cell_frame_read_tail >> gen_tac >> simp_tac bool_ss [] *)
       irule (cj 1 protected_cell_frame_mutations) >>
       irule typed_target_place_excludes_constant >> metis_tac[])
   >~ [`type_stmt env ret (Assert e (AssertCustomError err))`]
@@ -2563,7 +2586,22 @@ Proof
       rpt strip_tac >> irule protected_cell_frame_bind >>
       simp[protected_cell_frame_pure_guards, protected_cell_frame_reads]) >>
   simp[] >> irule protected_cell_frame_bind >> reverse conj_tac
-  >- (simp[state_rel_frame_result] >> metis_tac[]) >>
+  >- (Cases_on `code_slice_source bt es`
+      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
+      rename1 `code_slice_source bt es = SOME operands` >>
+      PairCases_on `operands` >> simp[] >>
+      drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+      strip_tac >>
+      irule protected_cell_frame_bind >> reverse conj_tac
+      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
+      irule protected_cell_frame_bind >> reverse conj_tac
+      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
+      irule protected_cell_frame_bind >>
+      simp[protected_cell_frame_call_primitives] >>
+      rpt strip_tac >> irule protected_cell_frame_bind >>
+      simp[protected_cell_frame_reads, protected_cell_frame_call_primitives]) >>
   rpt strip_tac >> simp_tac bool_ss [] >>
   simp[state_rel_frame_result, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> imp_res_tac lift_sum_state >>
@@ -2671,8 +2709,6 @@ Proof
           qpat_x_assum `checked_frame_context cx mods art src id env` mp_tac >>
           simp[checked_frame_context_def]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_bind >> simp[protected_cell_frame_reads] >>
-      rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
@@ -2692,25 +2728,31 @@ Proof
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      qpat_x_assum `!a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23. _ ==> _`
-        (drule o REWRITE_RULE [ignore_bind_def]) >>
-      ntac 7 (disch_then drule) >>
       qmatch_asmsub_rename_tac `(if tup1 then _ else _) _ = (INL lockres,_)` >>
       Cases_on `lockres` >>
-      disch_then drule >> disch_then drule >> strip_tac >>
+      first_x_assum
+        (drule_at (Pat `push_function _ _ _ _ = _`) o
+         REWRITE_RULE [ignore_bind_def]) >>
+      disch_then (mp_tac o SRULE []) >>
+      ntac 8 (disch_then drule) >> strip_tac >>
       qpat_x_assum `!st res st' mods art src id env addr.
-        eval_expr_results _ _ _ = _ /\ _ ==> _` kall_tac >>
+        eval_exprs _ _ _ = _ /\ _ ==> _` kall_tac >>
       qpat_x_assum `!a b st res st' mods art src id env addr.
         set_scopes _ _ = _ /\ _ ==> _` kall_tac >>
       irule protected_cell_frame_bind >> conj_tac
       >- (rpt strip_tac >> simp_tac bool_ss [] >>
           irule protected_cell_frame_bind >>
           simp[protected_cell_frame_pure_guards, protected_cell_frame_return]) >>
-      irule protected_cell_frame_finally >> reverse conj_tac
-      >- (irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
-          rpt strip_tac >> Cases_on `tup1 /\ tup0 <> View /\ tup0 <> Pure` >>
+      (* Previously the pop and unlock were one finally cleanup bind.
+         The evaluator now skips unlocking on halt, but always pops. *)
+      irule state_rel_frame_finally_unless_halt >>
+      conj_tac >- metis_tac[protected_cell_frame_trans] >>
+      reverse conj_tac
+      >- (Cases_on `tup1 /\ tup0 <> View /\ tup0 <> Pure` >>
           simp[protected_cell_frame_return] >> Cases_on `cx.nonreentrant_slot` >>
           simp[protected_cell_frame_return, protected_cell_frame_primitives]) >>
+      irule protected_cell_frame_finally >>
+      simp[protected_cell_frame_primitives] >>
       irule state_rel_frame_try >> conj_tac
       >- metis_tac[protected_cell_frame_trans] >>
       conj_tac
@@ -2776,6 +2818,12 @@ Proof
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> reverse conj_tac
+      >- (Cases_on `subscript_reads_base cx e e'` >>
+          simp[protected_cell_frame_return] >>
+          irule protected_cell_frame_bind >>
+          simp[protected_cell_frame_reads, protected_cell_frame_return]) >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
+      irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_read_tail >> simp[protected_cell_frame_reads])
@@ -2784,6 +2832,12 @@ Proof
         (simp[state_rel_frame_result] >> metis_tac[frame_subscript_typing]) >>
       `well_typed_expr env e'` by metis_tac[frame_subscript_typing] >>
       irule protected_cell_frame_bind >> reverse conj_tac >- simp[] >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
+      irule protected_cell_frame_bind >> reverse conj_tac
+      >- (Cases_on `subscript_reads_base cx e e'` >>
+          simp[protected_cell_frame_return] >>
+          irule protected_cell_frame_bind >>
+          simp[protected_cell_frame_reads, protected_cell_frame_return]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
@@ -2954,9 +3008,14 @@ Proof
       qexistsl [`art`, `extend_local env nm typ F`, `mods`, `ret`] >> simp[])
   >~ [`eval_for cx tyv nm body' vs`]
   >- (rewrite_tac[ignore_bind_def] >>
+      (* Iterator results are read before installing the loop variable. *)
+      irule protected_cell_frame_bind >> simp[protected_cell_frame_reads] >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      qpat_x_assum `!a b c. push_scope_with_var _ _ _ _ = _ ==> _` drule >> strip_tac >>
+      (* Previously the body IH was guarded only by push_scope_with_var. *)
+      qpat_x_assum `!a b c d e f. _ /\ push_scope_with_var _ _ _ _ = _ ==> _`
+        drule >> disch_then drule >> strip_tac >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (irule protected_cell_frame_finally >> simp[protected_cell_frame_primitives] >>
           irule state_rel_frame_try >> conj_tac
@@ -2968,9 +3027,10 @@ Proof
           simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >> Cases_on `v'` >>
       simp[protected_cell_frame_return] >>
-      qpat_x_assum `!a b c d e. _ /\ _ ==> _`
+      (* The recursive IH additionally retains the iterator read. *)
+      qpat_x_assum `!a b c d e f g h. _ /\ _ /\ _ ==> _`
         (mp_tac o REWRITE_RULE [ignore_bind_def]) >>
-      disch_then drule >> strip_tac >>
+      disch_then drule >> disch_then drule >> disch_then drule >> strip_tac >>
       simp[state_rel_frame_result] >> metis_tac[])
   >~ [`well_typed_expr env (Call ty (ExtCall static skip sig opts) es drv)`]
   >- (PairCases_on `sig` >> gvs[] >>
@@ -2998,8 +3058,7 @@ Proof
       >- (simp[state_rel_frame_result] >> rpt strip_tac >>
           gvs[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_bind >>
-      simp[protected_cell_frame_reads, protected_cell_frame_ext_call])
+      simp[protected_cell_frame_ext_call])
   >~ [`IS_SOME (type_place_target env (NameTarget name))`]
   >- (rewrite_tac[ignore_bind_def] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
@@ -3054,11 +3113,15 @@ Proof
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
+      (* Old copy-only tail:
       irule protected_cell_frame_read_tail >> gen_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >>
-      simp[protected_cell_frame_pure_guards, protected_cell_frame_return])
+      simp[protected_cell_frame_pure_guards, protected_cell_frame_return]
+      *)
+      irule protected_cell_frame_eq_op >>
+      metis_tac[array_iterator_results_state])
   >~ [`IS_SOME (type_place_target env (SubscriptTarget bt e))`]
   >- (drule type_place_target_subscript_child >> strip_tac >>
       irule protected_cell_frame_bind >> reverse conj_tac
@@ -3323,6 +3386,50 @@ Proof
   simp[constant_roots_provenance_def, MEM_APPEND] >> metis_tac[]
 QED
 
+Theorem constant_expr_read_accesses_aux[local]:
+  (!e. constant_expr mods e /\ no_sha256_expr e ==>
+    int_calls_expr e = [] /\
+    EVERY (\a. ?r. a = vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_expr e)) /\
+  (!es. EVERY (constant_expr mods) es /\ no_sha256_exprs es ==>
+    int_calls_exprs es = [] /\
+    EVERY (\a. ?r. a = vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_exprs es)) /\
+  (!fs. EVERY (constant_expr mods) (MAP SND fs) /\ no_sha256_fields fs ==>
+    int_calls_named_exprs fs = [] /\
+    EVERY (\a. ?r. a = vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_named_exprs fs))
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, no_sha256_expr_def, vyperTypeCallGraphTheory.int_calls_expr_def,
+    vyperSubscriptOverlapTheory.accesses_expr_def, EVERY_APPEND, SF ETA_ss] >>
+  rpt strip_tac >> gvs[SF ETA_ss] >>
+  Cases_on `bi` >>
+  gvs[constant_builtin_def, vyperSubscriptOverlapTheory.risky_builtin_def]
+QED
+
+Theorem read_accesses_no_writes[local]:
+  !rs accs. EVERY (\a. ?r. a = vyperSubscriptOverlap$ReadAcc r) accs ==>
+    ~vyperSubscriptOverlap$any_written rs accs /\
+    ~MEM vyperSubscriptOverlap$RiskyAcc accs
+Proof
+  Induct >> simp[vyperSubscriptOverlapTheory.any_written_def] >>
+  rpt strip_tac >> gvs[EVERY_MEM] >>
+  metis_tac[vyperSubscriptOverlapTheory.var_access_distinct]
+QED
+
+Theorem constant_expr_no_subscript_read[local]:
+  constant_expr mods idx /\ no_sha256_expr idx ==>
+  ~subscript_reads_base cx base_expr idx
+Proof
+  strip_tac >> drule_all (cj 1 constant_expr_read_accesses_aux) >>
+  strip_tac >>
+  simp[subscript_reads_base_def, vyperSubscriptOverlapTheory.subscript_overlap_def,
+    vyperSubscriptOverlapTheory.expr_accesses_def,
+    vyperSubscriptOverlapTheory.reached_functions_def] >>
+  metis_tac[read_accesses_no_writes]
+QED
+
 Theorem constant_expr_replay_aux[local]:
   (!mods imms e v cx am sc artifact current_src.
     constant_value mods imms e = SOME v /\
@@ -3479,7 +3586,9 @@ Resume constant_expr_replay_aux[subscript]:
      simp[artifact_env_def] >>
      drule_all const_result_at_observe >> strip_tac >>
      first_x_assum irule >> simp[artifact_env_def]) >>
-  simp[Once evaluate_def, bind_def]
+  `~subscript_reads_base cx e e'` by
+    metis_tac[constant_expr_no_subscript_read] >>
+  simp[Once evaluate_def, bind_def, return_def]
 QED
 Resume constant_expr_replay_aux[attribute]:
   gvs[constant_value_def, constant_expr_def, AllCaseEqs()] >>
@@ -3559,6 +3668,11 @@ Resume constant_expr_replay_aux[builtin]:
     (strip_tac >> gvs[evaluate_builtin_def, AllCaseEqs()]) >>
   `~precompile_builtin bt` by
     (Cases_on `bt` >> gvs[constant_builtin_def]) >>
+  `code_slice_source bt es = NONE` by
+    (Cases_on `code_slice_source bt es` >> simp[] >>
+     rename1 `code_slice_source bt es = SOME operands` >>
+     PairCases_on `operands` >>
+     gvs[code_slice_source_SOME, constant_expr_def, constant_builtin_def]) >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        lift_sum_def, get_accounts_def, return_def,
        precompile_call_success_def]
@@ -3658,19 +3772,60 @@ Proof
   Cases_on `l` >> simp[subst_consts_expr_def]
 QED
 
+Theorem subst_consts_constant_expr:
+  (!e. !E. constant_expr mods e /\
+    (!ty id r. MEM (ty,id) (const_local_refs e) /\ ALOOKUP E id = SOME r ==>
+      constant_expr mods r) ==> constant_expr mods (subst_consts_expr E e)) /\
+  (!es. !E. EVERY (constant_expr mods) es /\
+    (!ty id r. MEM (ty,id) (const_local_exprs es) /\ ALOOKUP E id = SOME r ==>
+      constant_expr mods r) ==> EVERY (constant_expr mods) (subst_consts_exprs E es)) /\
+  (!fs. !E. EVERY (constant_expr mods) (MAP SND fs) /\
+    (!ty id r. MEM (ty,id) (const_local_fields fs) /\ ALOOKUP E id = SOME r ==>
+      constant_expr mods r) ==>
+    EVERY (constant_expr mods) (MAP SND (subst_consts_fields E fs)))
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, const_local_refs_def, subst_consts_expr_def] >>
+  rpt strip_tac >> gvs[]
+  >~ [`subst_consts_expr E (TopLevelName ty ns)`]
+  >- (PairCases_on `ns` >> Cases_on `ns0` >>
+      gvs[subst_consts_expr_def, constant_expr_def, const_local_refs_def] >>
+      Cases_on `ALOOKUP E ns1` >> gvs[constant_expr_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem const_subst_builtin_operands[local]:
+  (!aty id r. MEM (aty,id) (const_local_exprs es) /\ ALOOKUP E id = SOME r ==>
+    constant_expr mods r /\ (!n. int_literal_value r = SOME n ==> 0 <= n)) /\
   MAP expr_type (subst_consts_exprs E es) = MAP expr_type es /\
   well_typed_builtin_app ty bt (MAP expr_type es) /\
-  builtin_operands_ok bt es ==>
-  builtin_operands_ok bt (subst_consts_exprs E es)
+  builtin_operands_ok ty bt es ==>
+  builtin_operands_ok ty bt (subst_consts_exprs E es)
 Proof
   strip_tac >>
   Cases_on `bt = Bop Exp \/ bt = Bop ShL \/ bt = Bop ShR`
   >- (gvs[well_typed_builtin_app_def] >>
       Cases_on `es` >> gvs[] >> Cases_on `t` >> gvs[] >>
-      gvs[builtin_operands_ok_def, subst_consts_expr_def, shift_amount_ok_def] >>
+      gvs[builtin_operands_ok_def, subst_consts_expr_def, shift_amount_ok_def]
+      (* Exp additionally checks the sign of a newly exposed literal. *)
+      >~ [`power_operands_ok ty (subst_consts_expr E h) (subst_consts_expr E h')`]
+      >- (`IS_SOME (int_literal_value h) ==>
+             IS_SOME (int_literal_value (subst_consts_expr E h))` by
+            metis_tac[const_subst_literal_forms, optionTheory.IS_SOME_EXISTS] >>
+        drule power_operands_ok_literal >> strip_tac >>
+        Cases_on `h'` >>
+        gvs[subst_consts_expr_def, power_operands_ok_def,
+            power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def] >>
+        PairCases_on `p` >> Cases_on `p0` >>
+        gvs[subst_consts_expr_def, AllCaseEqs()] >>
+        Cases_on `ALOOKUP E p1` >> gvs[] >>
+        rename1 `ALOOKUP E p1 = SOME replacement` >>
+        Cases_on `replacement` >> gvs[] >>
+        Cases_on `l` >> gvs[const_local_refs_def, int_literal_value_def] >>
+        metis_tac[]) >>
       metis_tac[const_subst_literal_forms, optionTheory.IS_SOME_EXISTS]) >>
-  gvs[builtin_operands_ok_def]
+  Cases_on `bt` >> gvs[builtin_operands_ok_def] >>
+  Cases_on `b` >> gvs[builtin_operands_ok_def]
 QED
 
 Theorem const_subscript_domain_type_ok:
@@ -3718,18 +3873,86 @@ Proof
   Cases_on `l` >> simp[fold_const_expr_def]
 QED
 
+Theorem fold_const_subscript_base_exact[local]:
+  !env e. subscript_base_type_exact env e ==>
+    subscript_base_type_exact env (fold_const_expr e)
+Proof
+  rpt gen_tac >> Cases_on `e` >>
+  simp[fold_const_expr_def, subscript_base_type_exact_def]
+  >~ [`fold_const_builtin ty bi es`] >-
+    (Cases_on `bi` >> simp[fold_const_builtin_def, subscript_base_type_exact_def] >>
+     Cases_on `es` >> simp[subscript_base_type_exact_def] >>
+     Cases_on `t` >> simp[subscript_base_type_exact_def] >>
+     Cases_on `h` >> simp[subscript_base_type_exact_def] >>
+     Cases_on `l` >> simp[subscript_base_type_exact_def]) >>
+  Cases_on `c` >> simp[subscript_base_type_exact_def]
+QED
+
 Theorem fold_const_builtin_operands[local]:
   well_typed_builtin_app ty bt (MAP expr_type es) /\
-  builtin_operands_ok bt es ==>
-  builtin_operands_ok bt (fold_const_exprs es)
+  builtin_operands_ok ty bt es ==>
+  builtin_operands_ok ty bt (fold_const_exprs es)
 Proof
   strip_tac >>
   Cases_on `bt = Bop Exp \/ bt = Bop ShL \/ bt = Bop ShR`
   >- (gvs[well_typed_builtin_app_def] >>
       Cases_on `es` >> gvs[] >> Cases_on `t` >> gvs[] >>
-      gvs[builtin_operands_ok_def, fold_const_expr_def, shift_amount_ok_def] >>
+      gvs[builtin_operands_ok_def, fold_const_expr_def, shift_amount_ok_def]
+      >~ [`power_operands_ok ty (fold_const_expr h) (fold_const_expr h')`]
+      >- (`IS_SOME (int_literal_value h) ==>
+             IS_SOME (int_literal_value (fold_const_expr h))` by
+            metis_tac[fold_const_literal_forms, optionTheory.IS_SOME_EXISTS] >>
+          Cases_on `h'` >>
+          gvs[fold_const_expr_def, power_operands_ok_def, power_exponent_ok_def] >>
+          rename1 `fold_const_builtin aty bi args` >>
+          Cases_on `bi` >> gvs[fold_const_builtin_def] >>
+          Cases_on `args` >> gvs[] >>
+          rename1 `hd::tl` >> Cases_on `hd` >> gvs[]
+          >~ [`Literal a lit`] >-
+            (Cases_on `lit` >> gvs[] >> Cases_on `tl` >> gvs[]) >>
+          Cases_on `tl` >> gvs[]) >>
       metis_tac[fold_const_literal_forms, optionTheory.IS_SOME_EXISTS]) >>
-  gvs[builtin_operands_ok_def]
+  Cases_on `bt` >> gvs[builtin_operands_ok_def] >>
+  Cases_on `b` >> gvs[builtin_operands_ok_def]
+QED
+
+Theorem fold_const_int_case[local]:
+  (case fold_const_expr e of Literal ty (IntL n) => P n | _ => q) =
+  (case e of Literal ty (IntL n) => P n | _ => q)
+Proof
+  Cases_on `e` >> simp[fold_const_expr_def] >>
+  rename1 `fold_const_builtin ty bi args` >>
+  Cases_on `bi` >> simp[fold_const_builtin_def] >>
+  Cases_on `args` >> simp[] >> Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >> Cases_on `l` >> simp[]
+QED
+
+Theorem fold_const_code_case[local]:
+  (case fold_const_expr e of Builtin ty (Acc Code) [addr] => P | _ => q) =
+  (case e of Builtin ty (Acc Code) [addr] => P | _ => q)
+Proof
+  Cases_on `e` >> simp[fold_const_expr_def] >>
+  rename1 `fold_const_builtin ty bi (fold_const_exprs es)` >>
+  Cases_on `es` >> simp[fold_const_expr_def, fold_const_builtin_def] >>
+  Cases_on `t` >> simp[fold_const_expr_def, fold_const_builtin_def] >>
+  Cases_on `bi` >> simp[] >>
+  Cases_on `fold_const_expr h` >> simp[] >>
+  Cases_on `l` >> simp[]
+QED
+
+Theorem fold_const_slice_operands[local]:
+  well_typed_builtin_app ty bt (MAP expr_type es) /\ slice_operands_ok bt es ==>
+  slice_operands_ok bt (fold_const_exprs es)
+Proof
+  Cases_on `bt`
+  >~ [`Slice n`] >-
+    (strip_tac >>
+     `LENGTH es = 3` by gvs[well_typed_builtin_app_def] >>
+     Cases_on `es` >> gvs[] >> Cases_on `t` >> gvs[] >>
+     Cases_on `t'` >> gvs[] >> Cases_on `t` >> gvs[] >>
+     gvs[fold_const_expr_def, slice_operands_ok_def,
+         fold_const_int_case, fold_const_code_case, fold_const_expr_type]) >>
+  simp[slice_operands_ok_def]
 QED
 
 Theorem fold_const_builtin_typed[local]:
@@ -3785,7 +4008,8 @@ QED
 Resume fold_const_typing_aux[subscript]:
   rpt strip_tac >>
   gvs[fold_const_expr_def, well_typed_expr_def, AllCaseEqs()] >>
-  metis_tac[fold_const_subscript_form, fold_const_expr_type]
+  metis_tac[fold_const_subscript_form, fold_const_subscript_base_exact,
+            fold_const_expr_type]
 QED
 Resume fold_const_typing_aux[builtin]:
   strip_tac >> conj_tac
@@ -3793,7 +4017,8 @@ Resume fold_const_typing_aux[builtin]:
       irule fold_const_builtin_typed >>
       gvs[Once well_typed_expr_def] >>
       simp[Once well_typed_expr_def] >>
-      metis_tac[fold_const_builtin_operands, fold_const_collection_metadata]) >>
+      metis_tac[fold_const_builtin_operands, fold_const_slice_operands,
+                fold_const_collection_metadata]) >>
   simp[well_typed_expr_def]
 QED
 Resume fold_const_typing_aux[pop]:
@@ -3838,22 +4063,31 @@ Proof
   metis_tac[fold_const_typing_aux]
 QED
 
+Theorem constant_subscript_base_exact[local]:
+  constant_expr mods e ==> subscript_base_type_exact env e
+Proof
+  Cases_on `e` >> simp[subscript_base_type_exact_def, constant_expr_def]
+QED
+
 Theorem const_fragment_subst_typed:
   (!e ty ix. constant_expr mods e /\
     well_typed_expr env (Subscript ty e ix) ==> well_typed_expr env e) ==>
   (!e. constant_expr mods e /\ well_typed_expr env e /\
     (!ty id r. MEM (ty,id) (const_local_refs e) /\ ALOOKUP E id = SOME r ==>
-      expr_type r = ty /\ well_typed_expr env r) ==>
+      expr_type r = ty /\ well_typed_expr env r /\ constant_expr mods r /\
+      (!n. int_literal_value r = SOME n ==> 0 <= n)) ==>
     well_typed_expr env (subst_consts_expr E e) /\
     expr_type (subst_consts_expr E e) = expr_type e) /\
   (!es. EVERY (constant_expr mods) es /\ well_typed_exprs env es /\
     (!ty id r. MEM (ty,id) (const_local_exprs es) /\ ALOOKUP E id = SOME r ==>
-      expr_type r = ty /\ well_typed_expr env r) ==>
+      expr_type r = ty /\ well_typed_expr env r /\ constant_expr mods r /\
+      (!n. int_literal_value r = SOME n ==> 0 <= n)) ==>
     well_typed_exprs env (subst_consts_exprs E es) /\
     MAP expr_type (subst_consts_exprs E es) = MAP expr_type es) /\
   (!fs. EVERY (constant_expr mods) (MAP SND fs) /\ well_typed_named_exprs env fs /\
     (!ty id r. MEM (ty,id) (const_local_fields fs) /\ ALOOKUP E id = SOME r ==>
-      expr_type r = ty /\ well_typed_expr env r) ==>
+      expr_type r = ty /\ well_typed_expr env r /\ constant_expr mods r /\
+      (!n. int_literal_value r = SOME n ==> 0 <= n)) ==>
     well_typed_named_exprs env (subst_consts_fields E fs) /\
     MAP FST (subst_consts_fields E fs) = MAP FST fs /\
     MAP (expr_type o SND) (subst_consts_fields E fs) = MAP (expr_type o SND) fs)
@@ -3877,11 +4111,14 @@ Proof
       (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
        simp[Once well_typed_expr_def]) >>
     simp[Once well_typed_expr_def] >>
-    metis_tac[const_subst_subscript_form]) >>
+    metis_tac[const_subst_subscript_form, subst_consts_constant_expr,
+              constant_subscript_base_exact]) >>
   gvs[SF ETA_ss, Once well_typed_expr_def] >>
   rpt (qpat_x_assum `(_ ==> _ /\ _)` mp_tac >>
        (impl_tac >- metis_tac[]) >> strip_tac) >>
   simp[Once well_typed_expr_def] >>
+  conj_tac
+  >- (Cases_on `bi` >> gvs[constant_builtin_def, slice_operands_ok_def]) >>
   metis_tac[const_subst_builtin_operands]
 QED
 
@@ -3889,7 +4126,8 @@ Theorem checked_const_fragment_subst_typed[local]:
   check_contract mode layouts addr mods = SOME artifact /\
   constant_expr mods e /\ well_typed_expr (artifact_env artifact mods NONE) e /\
   (!ty id r. MEM (ty,id) (const_local_refs e) /\ ALOOKUP E id = SOME r ==>
-    expr_type r = ty /\ well_typed_expr (artifact_env artifact mods NONE) r) ==>
+    expr_type r = ty /\ well_typed_expr (artifact_env artifact mods NONE) r /\
+    constant_expr mods r /\ (!n. int_literal_value r = SOME n ==> 0 <= n)) ==>
   well_typed_expr (artifact_env artifact mods NONE) (subst_consts_expr E e) /\
   expr_type (subst_consts_expr E e) = expr_type e
 Proof
@@ -3910,13 +4148,16 @@ Theorem checked_const_prefix_subst_typed[local]:
   ALOOKUP mods NONE = SOME tops /\
   tops = pre ++ VariableDecl vis (Constant e) id ty slot :: rest /\
   const_prefix_syntax E pre /\
-  (!n r. ALOOKUP E n = SOME r ==> well_typed_expr (artifact_env artifact mods NONE) r) ==>
+  (!n r. ALOOKUP E n = SOME r ==>
+    well_typed_expr (artifact_env artifact mods NONE) r /\ constant_expr mods r /\
+    (!i. int_literal_value r = SOME i ==> 0 <= i)) ==>
   well_typed_expr (artifact_env artifact mods NONE) (subst_consts_expr E e) /\
   expr_type (subst_consts_expr E e) = ty
 Proof
   strip_tac >> drule_all checked_const_initializer_prefix >> strip_tac >>
   `!ann n r. MEM (ann,n) (const_local_refs e) /\ ALOOKUP E n = SOME r ==>
-    expr_type r = ann /\ well_typed_expr (artifact_env artifact mods NONE) r` by
+    expr_type r = ann /\ well_typed_expr (artifact_env artifact mods NONE) r /\
+    constant_expr mods r /\ (!i. int_literal_value r = SOME i ==> 0 <= i)` by
     (rpt strip_tac >> gvs[const_prefix_syntax_def] >>
      `?v init rt sl. MEM (VariableDecl v (Constant init) n rt sl) pre /\ expr_type r = rt`
        by metis_tac[] >>
@@ -3925,30 +4166,70 @@ Proof
   metis_tac[checked_const_fragment_subst_typed]
 QED
 
+Theorem const_subst_literal_nonneg[local]:
+  (!n. int_literal_value e = SOME n ==> 0 <= n) /\
+  (!ty id r. MEM (ty,id) (const_local_refs e) /\ ALOOKUP E id = SOME r ==>
+    !n. int_literal_value r = SOME n ==> 0 <= n) ==>
+  !n. int_literal_value (subst_consts_expr E e) = SOME n ==> 0 <= n
+Proof
+  Cases_on `e` >> simp[subst_consts_expr_def, int_literal_value_def] >>
+  rename1 `TopLevelName ty ns` >> PairCases_on `ns` >> Cases_on `ns0` >>
+  simp[subst_consts_expr_def, int_literal_value_def, const_local_refs_def] >>
+  rpt strip_tac >> Cases_on `ALOOKUP E ns1` >> gvs[int_literal_value_def] >> metis_tac[]
+QED
+
+Theorem fold_const_int_literal_origin[local]:
+  int_literal_value (fold_const_expr e) = SOME n ==> int_literal_value e = SOME n
+Proof
+  Cases_on `e` >> simp[fold_const_expr_def, int_literal_value_def] >>
+  rename1 `fold_const_builtin ty bi args` >>
+  Cases_on `bi` >> simp[fold_const_builtin_def, int_literal_value_def] >>
+  Cases_on `args` >> simp[int_literal_value_def] >>
+  Cases_on `t` >> simp[int_literal_value_def] >>
+  Cases_on `h` >> simp[int_literal_value_def] >>
+  Cases_on `l` >> simp[int_literal_value_def]
+QED
+
 Theorem checked_module_consts_env_typed_acc[local]:
   !ts pre E.
   check_contract mode layouts addr mods = SOME artifact /\
   ALOOKUP mods NONE = SOME tops /\ tops = pre ++ ts /\
   const_prefix_syntax E pre /\
-  (!n r. ALOOKUP E n = SOME r ==> well_typed_expr (artifact_env artifact mods NONE) r) ==>
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
+  (!n r. ALOOKUP E n = SOME r ==>
+    well_typed_expr (artifact_env artifact mods NONE) r /\ constant_expr mods r /\
+    (!i. int_literal_value r = SOME i ==> 0 <= i)) ==>
   const_prefix_syntax (module_consts_env ts E) tops /\
   (!n r. ALOOKUP (module_consts_env ts E) n = SOME r ==>
-    well_typed_expr (artifact_env artifact mods NONE) r)
+    well_typed_expr (artifact_env artifact mods NONE) r /\ constant_expr mods r /\
+    (!i. int_literal_value r = SOME i ==> 0 <= i))
 Proof
   Induct >- (simp[module_consts_env_def] >> metis_tac[]) >>
   rpt gen_tac >>
   qabbrev_tac `pre' = pre ++ [h]` >>
-  Cases_on `h` >> simp[module_consts_env_def] >> strip_tac
+  Cases_on `h` >> pure_rewrite_tac[module_consts_env_def] >> strip_tac
   >~ [`module_consts_env (VariableDecl vis mut id ty slot :: ts) E`]
-  >- (Cases_on `mut` >> gvs[module_consts_env_def]
+  >- (Cases_on `mut` >> pure_rewrite_tac[module_consts_env_def]
       >~ [`module_consts_env ts (E ++ [(id,fold_const_expr (subst_consts_expr E e))])`]
       >- (`well_typed_expr (artifact_env artifact mods NONE) (subst_consts_expr E e) /\
            expr_type (subst_consts_expr E e) = ty` by
             (`pre' ++ ts = pre ++ VariableDecl vis (Constant e) id ty slot :: ts` by
                simp[Abbr `pre'`, GSYM APPEND_ASSOC] >>
              drule_all checked_const_prefix_subst_typed >> simp[]) >>
-          first_x_assum irule >> reverse conj_tac
-          >- (simp[Abbr `pre'`] >> irule const_prefix_syntax_snoc >> simp[]) >>
+          `constant_expr mods e` by
+            (drule_all checked_const_initializer_prefix >> metis_tac[]) >>
+          `constant_expr mods (fold_const_expr (subst_consts_expr E e))` by
+            metis_tac[subst_consts_constant_expr, fold_const_expr_constant] >>
+          `!i. int_literal_value (fold_const_expr (subst_consts_expr E e)) = SOME i ==> 0 <= i` by
+            (`!i. int_literal_value (subst_consts_expr E e) = SOME i ==> 0 <= i` by
+               (mp_tac const_subst_literal_nonneg >>
+                (impl_tac >- metis_tac[MEM_APPEND, MEM]) >> simp[NoAsms]) >>
+             metis_tac[fold_const_int_literal_origin]) >>
+          first_x_assum (qspec_then `pre'` irule) >>
+          reverse conj_tac
+          >- (conj_tac >- metis_tac[] >>
+              simp[Abbr `pre'`] >> irule const_prefix_syntax_snoc >> simp[]) >>
           rpt strip_tac >> gvs[ALOOKUP_APPEND, AllCaseEqs()] >>
           metis_tac[fold_const_expr_typed]) >>
       first_x_assum irule >>
@@ -3956,7 +4237,7 @@ Proof
       simp[Abbr `pre'`] >>
       gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
       metis_tac[MEM_APPEND]) >>
-  gvs[] >> first_x_assum irule >> conj_tac >- metis_tac[] >>
+  first_x_assum irule >> conj_tac >- metis_tac[] >>
   simp[Abbr `pre'`] >>
   gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
   metis_tac[MEM_APPEND]
@@ -3965,16 +4246,49 @@ QED
 Theorem checked_module_consts_env_replacement_typed:
   check_contract mode layouts addr mods = SOME artifact /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   ALOOKUP (module_consts_env tops []) id = SOME r ==>
   well_typed_expr (artifact_env artifact mods NONE) r
 Proof
   strip_tac >>
   `const_prefix_syntax (module_consts_env tops []) tops /\
    (!n r. ALOOKUP (module_consts_env tops []) n = SOME r ==>
-     well_typed_expr (artifact_env artifact mods NONE) r)` by
+     well_typed_expr (artifact_env artifact mods NONE) r /\ constant_expr mods r /\
+     (!i. int_literal_value r = SOME i ==> 0 <= i))` by
     (irule checked_module_consts_env_typed_acc >>
      simp[const_prefix_syntax_def, const_decl_names_def] >> metis_tac[]) >>
   metis_tac[]
+QED
+
+Theorem checked_module_consts_env_syntax_acc[local]:
+  !ts pre E.
+  check_contract mode layouts addr mods = SOME artifact /\
+  ALOOKUP mods NONE = SOME tops /\ tops = pre ++ ts /\ const_prefix_syntax E pre ==>
+  const_prefix_syntax (module_consts_env ts E) tops
+Proof
+  Induct >- (simp[module_consts_env_def] >> metis_tac[]) >>
+  rpt gen_tac >> qabbrev_tac `pre' = pre ++ [h]` >>
+  Cases_on `h` >> pure_rewrite_tac[module_consts_env_def] >> strip_tac
+  >~ [`module_consts_env (VariableDecl vis mut id ty slot :: ts) E`]
+  >- (Cases_on `mut` >> pure_rewrite_tac[module_consts_env_def]
+      >~ [`module_consts_env ts (E ++ [(id,fold_const_expr (subst_consts_expr E e))])`]
+      >- (drule_all checked_const_initializer_prefix >> strip_tac >>
+          `expr_type (subst_consts_expr E e) = ty` by
+            (qsuff_tac `expr_type (subst_consts_expr E e) = expr_type e` >- simp[] >>
+             irule subst_consts_expr_type_constant >> reverse conj_tac
+             >- (qexists `mods` >> simp[]) >>
+             rpt strip_tac >> gvs[const_prefix_syntax_def] >>
+             metis_tac[checked_constant_reference_annotation, MEM_APPEND, MEM]) >>
+          first_x_assum (qspec_then `pre'` irule) >>
+          simp[Abbr `pre'`, GSYM APPEND_ASSOC] >>
+          irule const_prefix_syntax_snoc >> simp[]) >>
+      first_x_assum irule >> simp[Abbr `pre'`] >>
+      gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
+      metis_tac[MEM_APPEND]) >>
+  first_x_assum irule >> simp[Abbr `pre'`] >>
+  gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
+  metis_tac[MEM_APPEND]
 QED
 
 Theorem checked_module_consts_env_replacement_annotation:
@@ -3985,10 +4299,8 @@ Theorem checked_module_consts_env_replacement_annotation:
     expr_type r = ty
 Proof
   strip_tac >>
-  `const_prefix_syntax (module_consts_env tops []) tops /\
-   (!n r. ALOOKUP (module_consts_env tops []) n = SOME r ==>
-     well_typed_expr (artifact_env artifact mods NONE) r)` by
-    (irule checked_module_consts_env_typed_acc >>
+  `const_prefix_syntax (module_consts_env tops []) tops` by
+    (irule checked_module_consts_env_syntax_acc >>
      simp[const_prefix_syntax_def, const_decl_names_def] >> metis_tac[]) >>
   gvs[const_prefix_syntax_def] >> metis_tac[]
 QED
@@ -3997,6 +4309,8 @@ Theorem checked_module_consts_env_replacement_replay:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   ALOOKUP (module_consts_env tops []) id = SOME r /\
   no_sha256_expr r /\
@@ -4104,6 +4418,8 @@ Theorem checked_module_consts_env_replay_footprint:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   (!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
     no_sha256_expr r) /\
@@ -4130,7 +4446,8 @@ Proof
         (PlaceR (ImmutablePlace NONE id [])) pv /\
       (!st. const_cells_agree roots st ==> eval_expr cx r st = (INL pv,st))` by
     (rpt strip_tac >> irule checked_module_consts_env_replacement_replay >>
-     simp[] >> metis_tac[]) >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     qexistsl [`A`,`imms`] >> simp[] >> metis_tac[]) >>
   drule const_replacement_footprints_union >> strip_tac >>
   qexists `roots` >> simp[] >> rpt strip_tac >>
   first_x_assum irule >> simp[] >>
@@ -4550,6 +4867,7 @@ Definition const_subst_context_def:
     (!addr src id tv root. MEM (addr,src,id,tv,root) roots ==>
       checked_frame_context cx mods art src id env) /\
     (!id r. ALOOKUP E id = SOME r ==>
+      constant_expr mods r /\ const_local_refs r = [] /\
       FLOOKUP env.bare_globals (NONE,id) = SOME (expr_type r) /\
       FLOOKUP env.toplevel_vtypes (NONE,id) = SOME (Type (expr_type r)) /\
       (!st. const_cells_agree roots st ==>
@@ -4944,6 +5262,9 @@ Proof
           `const_computations_related $=
             (eval_expr cx (Subscript ty a b))
             (eval_expr cx (Subscript ty (subst_consts_expr env' a) (subst_consts_expr env' b))) st` by
+            ((* PORT_ADMISSION SEQ-3071: const_subst_structural Subscript HashMap.
+                Argon 2026-11-12 18:17: TRUE under cd0661984's
+                constant_expr and closed-replacement context. Original proof:
             (simp_tac bool_ss [Ntimes evaluate_def 2] >> simp[] >>
              irule const_computations_related_subscript_exact_base >>
              reverse conj_tac >- simp[] >>
@@ -4951,7 +5272,8 @@ Proof
              >- metis_tac[const_subst_context_expr_frame, frame_subscript_typing,
                           optionTheory.IS_SOME_EXISTS]
              >- metis_tac[const_subst_context_expr_frame]
-             >> gvs[const_subst_expr_ok_def]) >>
+             >> gvs[const_subst_expr_ok_def])
+             *) cheat) >>
           gvs[const_computations_related_eq, subst_consts_expr_def] >>
           irule const_computations_related_equal >>
           simp[const_results_related_def]) >>
@@ -4959,6 +5281,9 @@ Proof
         metis_tac[const_subscript_domain_type_ok] >>
       simp_tac bool_ss [subst_consts_expr_def, Ntimes evaluate_def 2, expr_type_def] >>
       simp[] >> conj_tac
+      >- ((* PORT_ADMISSION SEQ-3071: const_subst_structural Subscript non-HashMap.
+              Argon 2026-11-12 18:17: TRUE under cd0661984's
+              constant_expr and closed-replacement context. Original proof:
       >- (irule const_computations_related_subscript >>
           rpt conj_tac
           >- metis_tac[const_subst_context_expr_frame]
@@ -4971,8 +5296,15 @@ Proof
               gvs[Once evaluate_def, vyperValueOperationTheory.evaluate_literal_def,
                   return_def, read_result_def]) >>
           metis_tac[const_subst_expr_ok_def, frame_subscript_typing,
-                    optionTheory.IS_SOME_EXISTS]) >>
+                    optionTheory.IS_SOME_EXISTS])
+          *) cheat) >>
       metis_tac[const_subscript_hashmap_base])
+  >~ [`const_subst_expr_ok _ _ _ _ (Builtin ty bi es)`]
+  >- ((* PORT_ADMISSION SEQ-3071: const_subst_structural Builtin code_slice_source.
+          Argon 2026-11-12 18:17: this structural case is TRUE under
+          cd0661984's constant_expr and closed-replacement context.
+          This admits the semantic Builtin case, not syntactic equality
+          of code_slice_source operands. Original case proof retained:
   >~ [`const_subst_expr_ok _ _ _ _ (Builtin ty bi es)`]
   >- (simp[const_subst_expr_ok_def, well_typed_expr_def] >>
       rpt strip_tac >>
@@ -5029,6 +5361,7 @@ Proof
           rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
       rpt strip_tac >> irule const_computations_related_refl >>
       simp[const_results_related_def])
+       *) cheat)
   >~ [`const_subst_expr_ok _ _ _ _ (Call ty ct es d)`]
   >- (simp[const_subst_expr_ok_def] >> disch_tac >>
       `well_typed_expr env (Call ty ct es d)` by
@@ -5095,12 +5428,10 @@ Resume const_subst_structural[intcall]:
   qpat_x_assum `type_check _ "IntCall args length" _ = _` mp_tac >>
   simp[type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
-  `!ps t. eval_expr_results cx es s = (INL ps,t) ==> const_cells_agree roots t` by
-    metis_tac[const_subst_context_results_frame] >>
-  ho_match_mp_tac (GEN_ALL const_computations_related_intcall_results) >>
-  qexists `MAP expr_type es` >>
-  simp[GSYM subst_consts_exprs_map] >>
-  gvs[const_subst_context_def] >> metis_tac[]
+  irule const_computations_related_prefix >> reverse conj_tac
+  >- gvs[const_computations_related_eq, subst_consts_exprs_map] >>
+  rpt strip_tac >> irule const_computations_related_equal >>
+  simp[const_results_related_def]
 QED
 Resume const_subst_structural[extcall]:
   `!xs. EVERY (const_subst_expr_ok roots cx env env') xs /\
@@ -5116,9 +5447,7 @@ Resume const_subst_structural[extcall]:
   simp_tac bool_ss [Once evaluate_def] >>
   rewrite_tac[subst_consts_exprs_map, GSYM MAP_TAKE, GSYM MAP_DROP] >>
   PairCases_on `p` >> simp_tac bool_ss [LET_THM] >> BETA_TAC >>
-  ho_match_mp_tac (GEN_ALL const_computations_related_extcall) >>
-  qexists `MAP expr_type (TAKE (LENGTH p1) (DROP 1 es))` >>
-  simp[GSYM subst_consts_exprs_map, const_computations_related_eq] >>
+  simp_tac (srw_ss()) [] >>
   `well_typed_exprs env (TAKE 1 es) /\
    well_typed_exprs env (TAKE (LENGTH p1) (DROP 1 es)) /\
    well_typed_exprs env (DROP (1 + LENGTH p1) es)` by
@@ -5127,7 +5456,21 @@ Resume const_subst_structural[extcall]:
    const_subst_exprs_ok roots cx env env' (TAKE (LENGTH p1) (DROP 1 es)) /\
    const_subst_exprs_ok roots cx env env' (DROP (1 + LENGTH p1) es)` by
     metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP] >>
-  gvs[const_subst_exprs_ok_def] >> metis_tac[]
+  gvs[const_subst_exprs_ok_def] >>
+  irule const_computations_related_prefix >> reverse conj_tac
+  >- gvs[const_computations_related_eq, subst_consts_exprs_map] >>
+  rpt strip_tac >> BETA_TAC >>
+  `const_cells_agree roots s` by metis_tac[] >>
+  irule const_computations_related_prefix >> reverse conj_tac
+  >- gvs[const_computations_related_eq, subst_consts_exprs_map] >>
+  rpt strip_tac >> BETA_TAC >>
+  qmatch_asmsub_rename_tac
+    `eval_exprs cx (TAKE (LENGTH p1) (DROP 1 es)) s = (INL vs,mid)` >>
+  `const_cells_agree roots mid` by metis_tac[] >>
+  irule const_computations_related_prefix >> reverse conj_tac
+  >- gvs[const_computations_related_eq, subst_consts_exprs_map] >>
+  rpt strip_tac >> irule const_computations_related_equal >>
+  simp[const_results_related_def]
 QED
 Resume const_subst_structural[create]:
   `!xs. EVERY (const_subst_expr_ok roots cx env env') xs /\
@@ -5251,6 +5594,8 @@ Theorem checked_module_consts_lookup_footprint:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   (!src. IS_SOME src ==>
     get_source_immutables src (constant_machine_immutables am cx.txn.target) =
@@ -5277,7 +5622,7 @@ Proof
         gvs[ALOOKUP_FAILS, MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
      drule_all checked_module_consts_env_replacement_annotation >> strip_tac >>
      `well_typed_expr (artifact_env artifact mods NONE) r` by
-       metis_tac[checked_module_consts_env_replacement_typed] >>
+       (drule_all checked_module_consts_env_replacement_typed >> simp[]) >>
      `!tv v. FLOOKUP A id = SOME (tv,v) ==>
        FLOOKUP (get_source_immutables NONE
          (constant_machine_immutables am cx.txn.target)) id = SOME (tv,v)` by
@@ -5301,6 +5646,8 @@ Theorem checked_module_consts_subst_context:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   (!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
     no_sha256_expr r) /\
@@ -5328,8 +5675,10 @@ Proof
   >- (gvs[constant_roots_provenance_def, checked_frame_context_def,
           frame_maps_def, artifact_env_def] >> metis_tac[]) >>
   rpt strip_tac >>
+  `constant_expr mods r /\ const_local_refs r = []` by
+    (drule_all checked_module_consts_env_replacement >> metis_tac[]) >>
   drule_all checked_module_consts_env_replacement_annotation >> strip_tac >>
-  rpt conj_tac
+  simp[] >> rpt conj_tac
   >- (drule check_contract_artifact_fields >> strip_tac >>
       simp[artifact_env_def] >>
       irule build_contract_type_artifact_bare_globals_complete >> metis_tac[])
@@ -5339,7 +5688,8 @@ Proof
       goal_assum (drule_at Any) >> simp[])
   >> qpat_x_assum `!id r. _ ==> ?pv. _` drule >> strip_tac >> qexists `pv` >>
   conj_tac
-  >- (irule const_results_related_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  >- (irule const_results_related_mono >> qexists `roots` >>
+      simp[] >> metis_tac[]) >>
   simp[const_cells_agree_append] >> metis_tac[]
 QED
 
@@ -5347,6 +5697,8 @@ Theorem checked_module_consts_substitution:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   (!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
     no_sha256_expr r) /\
