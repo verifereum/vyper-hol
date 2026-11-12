@@ -971,9 +971,9 @@ Proof
      metis_tac[]) >>
   irule (Q.INST [`res` |-> `INR (ReturnException NoneV)`, `ee` |-> `es`]
            gas_outcome_full_exit) >>
+  conj_tac >- simp[Once evaluate_def, raise_def] >>
   qexistsl_tac [`G'`, `r`, `tn'`] >>
   simp[Abbr `r`, exit_result_def] >>
-  conj_tac >- simp[Once evaluate_def, raise_def] >>
   rpt strip_tac >> res_tac >> simp[stmt_exit_ptr_def] >>
   simp[intret_q_def, result_rel_def, intret_vals_match_def] >>
   qexists_tac `s0` >> simp[] >>
@@ -1134,7 +1134,8 @@ Proof
   `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s1, G', tn') []
      (IntRet <| iret_values := [w]; iret_adopt_fmp := NONE |> s1, G', tn')` by
     (irule (Q.INST [`ops` |-> `[op]`] emitted_ret_origin_ptr) >>
-     simp[eval_operands_def] >> metis_tac[]) >>
+     simp[eval_operands_def] >>
+     qexistsl_tac [`pc`, `rpc`, `su`, `sb`] >> fs[]) >>
   metis_tac[gas_origin_ptr_path_append, APPEND_NIL]
 QED
 
@@ -1232,6 +1233,7 @@ Proof
             `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] o SPEC_ALL) >>
   irule (Q.INST [`res` |-> `INR (ReturnException v)`, `ee` |-> `mid`]
            gas_outcome_full_exit) >>
+  conj_tac >- simp[raise_def] >>
   qexistsl_tac [`G'`,
     `IntRet <|iret_values := [typed_val_to_w256 tv v];
               iret_adopt_fmp := NONE|> (return_unlock_state cenv t)`,
