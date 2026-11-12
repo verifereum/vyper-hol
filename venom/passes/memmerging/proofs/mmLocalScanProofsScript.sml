@@ -17422,6 +17422,69 @@ Proof
   gvs[finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
+Theorem mm_local_zero_representative_transition[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  MEM g gs /\ r < LENGTH is /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  mm_local_history is H (SUC r) /\
+  (!j dst v len. j < SUC r /\ is_calldatasize_copy dfg (EL j is) /\
+    (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H j) = SOME (n2w (LENGTH (H j).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!j. j <= r ==> (H j).vs_current_bb = bb.bb_label /\
+    (H j).vs_inst_idx = j /\ static_mem_ok eom ctx fn (EL j is) (H j)) /\
+  eom < dimword (:256) /\
+  mm_local_zero_cut dfg is gs H r excluded pc t /\
+  LENGTH t.vs_call_ctx.cc_calldata < dimword (:256) /\
+  (!v. v NOTIN excluded ==> MEM v es.irs_used_vars) /\
+  apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+    (rep_map_of_groups is gs) es (EL r is) = (chunk,es') ==>
+  ?t'. mm_local_exec_prefix fuel ctx chunk t t' /\
+    mm_local_zero_cut dfg is gs H (SUC r) excluded (pc + LENGTH chunk) t'
+Proof
+  strip_tac >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by
+    metis_tac[mm_local_rep_member] >>
+  `(EL r is).inst_opcode IN {MSTORE; CALLDATACOPY} /\
+    ?d bs. mm_local_zero_capture dfg is (SUC r) r = SOME (d,bs)` by
+    (gnvs[] >> `r < SUC r` by simp[] >>
+     drule_all (Q.INST [`n` |-> `SUC r`] mm_local_zero_member_capture) >> simp[]) >>
+  `(H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory` by
+    (irule (cj 3 mm_local_zero_capture_sound) >>
+     qexistsl [`dfg`,`is`,`SUC r`] >> simp[]) >>
+  `step_inst fuel ctx (EL r is) (H r) = OK (H (SUC r))` by
+    (gvs[mm_local_history_def, pred_setTheory.IN_INSERT,
+       pred_setTheory.NOT_IN_EMPTY,
+       venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  `mm_local_nonmemory_frame (H (SUC r)) = mm_local_nonmemory_frame (H r) /\
+    (!v. lookup_var v (H (SUC r)) = lookup_var v (H r))` by
+    (irule mm_local_write_runtime_frame >>
+     metis_tac[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  `g.cg_dst < dimword (:256) /\ g.cg_length < dimword (:256)` by
+    (irule mm_local_zero_representative_finite >> metis_tac[]) >>
+  `ALOOKUP (rep_map_of_groups is gs) (EL r is).inst_id = SOME g /\
+    ~MEM (EL r is).inst_id (nop_ids_of_groups dfg Mem2Mem is gs)` by
+    (gvs[] >> irule mm_local_zero_selected_rep >> simp[]) >>
+  Cases_on `g.cg_length = 32`
+  >- (gvs[apply_memzero_inst_supply_def] >>
+      mp_tac (Q.INST [`is` |-> `bb.bb_instructions`,
+        `gs` |-> `(scan_block_memzero dfg bb).mz_flushed`]
+        mm_local_zero_store_cut_exec) >> simp[] >>
+      strip_tac >> goal_assum (drule_at Any) >> gvs[arithmeticTheory.ADD1]) >>
+  Cases_on `fresh_inst_id es` >> rename1 `fresh_inst_id es = (id,es1)` >>
+  Cases_on `fresh_ir_var es1` >> rename1 `fresh_ir_var es1 = (v,es2)` >>
+  `v IN excluded` by
+    (drule irSupplyTheory.fresh_ir_var_contract >>
+     gvs[irSupplyTheory.fresh_inst_id_def] >> metis_tac[]) >>
+  gvs[apply_memzero_inst_supply_def] >>
+  mp_tac (Q.INST [`is` |-> `bb.bb_instructions`,
+    `gs` |-> `(scan_block_memzero dfg bb).mz_flushed`]
+    mm_local_zero_copy_cut_exec) >> simp[] >>
+  strip_tac >> goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem mm_local_zero_erased_pending_suc[local]:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
   is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
