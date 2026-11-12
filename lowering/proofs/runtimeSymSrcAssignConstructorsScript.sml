@@ -45,8 +45,9 @@ Proof
   first_assum drule_all >> strip_tac >>
   Cases_on `FLOOKUP ce.ce_vars id` >> gvs[]
   >- (drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]) >>
-  Cases_on `x` >> gvs[] >>
-  TRY (drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[] >> NO_TAC) >>
+  (Cases_on `x` >> gvs[])
+  >>~- ([`emit_void INVALID [] _ = _`],
+        drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]) >>
   `~is_label_operand (Lit 0w)` by simp[is_label_operand_def] >>
   imp_res_tac runtime_sym_env_local >>
   fs[runtime_sym_loc_def, runtime_sym_env_def] >>
