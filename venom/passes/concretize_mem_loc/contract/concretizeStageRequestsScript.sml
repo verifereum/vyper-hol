@@ -11,6 +11,7 @@ Ancestors
   concretizeLayoutStageSimulation concretizeLayoutCorridorRequests
   concretizeLayoutRequestRelations concretizeLayoutRequestRun
   concretizeLayoutRequestBase concretizeLayoutRequestBlock
+  concretizeLayoutRequestControl
 
 Theorem concretize_stage_abort_rq:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
