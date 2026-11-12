@@ -182,7 +182,8 @@ Proof
       first_assum drule >> strip_tac >>
       drule gas_path_ptr_erase >> strip_tac >>
       simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def] >>
-      qexistsl_tac [`res`, `es_end`, `r`] >> gvs[] >> metis_tac[]) >>
+      qexistsl_tac [`res`, `es_end`, `r`] >>
+      Cases_on `r` >> gvs[fragExecTheory.exit_result_def] >> metis_tac[]) >>
   disj1_tac >> irule gas_bad_storage_at_no_horizon >> fs[] >>
   metis_tac[]
 QED
