@@ -17781,6 +17781,59 @@ Proof
   `j < SUC n <=> j < n` by decide_tac >> simp[mm_local_zero_capture_def]
 QED
 
+Theorem mm_local_zero_nonvolatile_transition[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  n < LENGTH is /\ ~is_volatile_memory (EL n is) /\
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  (!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator (EL n is).inst_opcode /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n ==>
+  ?t'. mm_local_exec_prefix fuel ctx [EL n is] t t' /\
+    mm_local_zero_cut dfg is gs H (SUC n) excluded (SUC pc) t'
+Proof
+  strip_tac >> drule mm_local_nonvolatile_effects >> strip_tac >>
+  `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n /\
+   mm_local_zero_capture dfg is (SUC n) = mm_local_zero_capture dfg is n` by
+    metis_tac[mm_local_zero_nonvolatile_successor] >>
+  `state_equiv excluded
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+    gvs[mm_local_zero_cut_def, state_equiv_frame, mm_local_nonmemory_frame_def,
+      stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+      venomStateTheory.venom_state_component_equality] >>
+  `step_inst fuel ctx (EL n is)
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) =
+    OK (u with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>)` by
+    (Cases_on `(EL n is).inst_opcode = ALLOCA`
+     >- (irule mm_local_alloca_memory_frame >>
+         simp[analysisSimProofsBaseTheory.step_inst_idx_indep,
+           instIdxIndepTheory.exec_result_map_def]) >>
+     `~is_alloca_op (EL n is).inst_opcode` by
+       (Cases_on `(EL n is).inst_opcode` >> fs[venomInstTheory.is_alloca_op_def]) >>
+     irule passSharedFieldTheory.step_inst_mem_frame >>
+     simp[analysisSimProofsBaseTheory.step_inst_idx_indep,
+       instIdxIndepTheory.exec_result_map_def]) >>
+  drule_all removeUnusedProofsTheory.step_inst_result_equiv_full >>
+  disch_then (qspecl_then [`fuel`,`ctx`] mp_tac) >>
+  Cases_on `step_inst fuel ctx (EL n is) t` >>
+  simp[result_equiv_def] >> strip_tac >>
+  `u.vs_memory = (H n).vs_memory /\ v.vs_memory = t.vs_memory` by
+    (Cases_on `(EL n is).inst_opcode = ALLOCA`
+     >- metis_tac[venomMemPropsTheory.step_inst_alloca_preserves_memory,
+          venomInstTheory.is_alloca_op_def] >>
+     `~is_alloca_op (EL n is).inst_opcode` by
+       (Cases_on `(EL n is).inst_opcode` >> fs[venomInstTheory.is_alloca_op_def]) >>
+     metis_tac[passSharedFieldTheory.step_inst_preserves_all]) >>
+  qexists_tac `v with vs_inst_idx := SUC pc` >> conj_tac
+  >- gvs[mm_local_exec_prefix_single, mm_local_zero_cut_def] >>
+  gvs[mm_local_zero_cut_def, state_equiv_frame, mm_local_nonmemory_frame_def,
+    stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.venom_state_component_equality] >>
+  gvs[mm_local_pending_def] >> qexists_tac `ws` >> simp[] >>
+  irule mm_local_write_log_memory_cong >> simp[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
