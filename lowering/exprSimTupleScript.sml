@@ -954,7 +954,7 @@ Proof
   rename1 `PlaceR pl` >>
   Cases_on `bvv` >>
   gvs[vv_loc_def, contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
-  rename1 `LocatedValue bt p0` >>
+  qmatch_asmsub_rename_tac `vv_place_ptr _ _ _ _ (PlaceR _) (LocatedValue bt p0)` >>
   Cases_on `?tr slot vt. pl = StoragePlace tr slot vt`
   >- (gvs[vyperTypeInvariantsTheory.eval_result_typed_def,
           vyperTypeInvariantsTheory.runtime_place_typed_def,
@@ -974,7 +974,7 @@ Proof
     (Induct >> simp[valueEncodingTheory.type_memory_size_def]) >>
   `tuple_offset cenv tys p0.ptr_location k =
    type_memory_size_list (TAKE k tvs)` by
-    (qpat_x_assum `_ \/ _` strip_assume_tac >> simp[MAP_TAKE] >>
+    (simp[MAP_TAKE] >>
      metis_tac[tuple_offset_memory, tuple_offset_code]) >>
   `mem_step_offset (TupleTV tvs) (ValueSubscript (IntV (&k))) =
    SOME (type_memory_size_list (TAKE k tvs), EL k tvs)` by
