@@ -181,7 +181,7 @@ Resume raw_call_allocated_oracle_mem[call]:
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ initial_es es initial s0 a`)) >>
   disch_then (qspecl_then [`val_word`,`if cap=0 then w else w+32w`,`gas`,`aw`] mp_tac) >>
-  (impl_tac >- (gs[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `r` (qx_choose_then `u` strip_assume_tac)) >>
   `safe_operand sc ov /\ safe_operand sc ok` by
     (conj_tac >- (irule safe_operand_mono >> qexists_tac `sm` >> fs[ci_mono_def]) >>
