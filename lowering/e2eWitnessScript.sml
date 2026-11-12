@@ -658,6 +658,9 @@ Proof
   qexists `[]` >> simp[]
 QED
 
+val p23_dep_sources_eval =
+  EVAL ``ALOOKUP p23_am_dep_post.sources p23_deploy_tx.target``;
+
 Theorem p23_deploy_result:
   deploy_call_result_rel p23_tops p23_runtime_bc initial_machine_state
     p23_deploy_tx p23_es_dep (INR NONE) p23_es_dep_post
@@ -665,7 +668,8 @@ Proof
   assume_tac p23_immutables_section >>
   simp[deploy_call_result_rel_def, p23_dep_trace] >>
   irule gas_readings_rel_empty >> simp[p23_load, deploy_result_rel_def] >>
-  rpt strip_tac >> qexists `word_to_bytes (42w:bytes32) T` >>
+  rpt strip_tac >> simp[p23_dep_sources_eval] >>
+  qexists `word_to_bytes (42w:bytes32) T` >>
   conj_tac >- simp[] >>
   conj_tac >- (
     simp[frame_outcome_def, p23_es_dep_def, p23_frame_def,
