@@ -2,6 +2,7 @@
 Theory targetStorageContinuationMemory
 Ancestors
   targetStorageArraySummaryMemory targetMappingSummaryMemory
+  exprSimPopNestedBase targetPlaceLive bodyAttributeMemory
   targetIndexCompositionMemory targetSubscriptSplit
   targetPlaceSimDefs loweringStateRelDefs loweringPosts
   gasOutcome gasSummary exprSimHypsDefs exprSimDefs exprReasonOperand
@@ -14,12 +15,17 @@ Libs
 
 Theorem target_pure_storage_result_ready_mem[local]:
   contract_storage_well_formed cx es /\
-  EVERY (supported_pure_expr tops) (target_indices bt) /\
+  EVERY pure_expr (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),ee) ==>
   slots_in_range (get_storage cx ee tr) (w2n slot) tv /\
   storage_read_live cx tr (get_storage cx ee tr) slot tv
 Proof
-  metis_tac[aug_place_pure_base_storage_range, aug_place_pure_base_storage_live]
+  strip_tac >>
+  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[] >>
+  drule_all nested_pop_eval_base_slots >>
+  drule_all nested_pop_eval_base_live >>
+  simp[nested_pop_result_slots_def, nested_pop_result_live_def,
+       vyperStorageBackendTheory.get_storage_backend_eq]
 QED
 
 Theorem target_storage_index_open_mem[local]:
@@ -334,4 +340,76 @@ Proof
   disch_then (qspecl_then [`sn`, `ix`, `e`] mp_tac) >> simp[] >>
   impl_tac >- metis_tac[] >> strip_tac >>
   irule target_storage_index_bind_mem >> metis_tac[])
+QED
+
+Theorem target_storage_continuation_source_mem[local]:
+  gas_marked_exec T (ctx,func) (eval_base_place cx bt)
+    (es,s0) left (INL pv) mid (OK t) /\
+  bind (bind (eval_expr cx e) (read_result cx))
+    (\key. extend_place cx pv (ValueSubscript key))
+    (mid with gas_obs := gs) = (res,ee) ==>
+  eval_base_place cx (SubscriptTarget bt e)
+    (es with gas_obs := gas_explicit left s0.vs_gas_readings ++ gs) = (res,ee)
+Proof
+  strip_tac >> drule target_subscript_marked_base_source >>
+  disch_then (qspec_then `gs` assume_tac) >>
+  simp[Once evaluate_def, bind_assoc] >>
+  simp[Once bind_def] >> fs[bind_assoc]
+QED
+
+Theorem target_subscript_storage_continuation_mem:
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
+  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  ((?tr slot tv. pv = PlaceR (StoragePlace tr slot tv)) \/
+   (?tr slot kt vty. pv = HashMapRef tr slot kt vty)) /\
+  type_place_target env bt = SOME bvt /\ subscript_vtype bvt (expr_type e) = SOME vt /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  ci_mono sa sm /\ ci_mono sm sn /\ fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ~block_is_terminated sm /\
+  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  gas_marked_exec T (ctx,func) (eval_base_place cx bt)
+    (es,s0) left (INL pv) mid (OK t) /\
+  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+  t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+  expr_sim_mem ctx func cenv cx (expr_type e) e (mid with gas_obs := []) ==>
+  gas_outcome T (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\key. extend_place cx pv (ValueSubscript key))) (mid with gas_obs := [],t)
+    (\res ee u. ?pv'. res = INL pv' /\
+      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+      (!tr slot tv. pv' = PlaceR (StoragePlace tr slot tv) ==>
+        slots_in_range (get_storage cx ee tr) (w2n slot) tv /\
+        storage_read_live cx tr (get_storage cx ee tr) slot tv) /\
+      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  `gas_outcome T (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\key. extend_place cx pv (ValueSubscript key))) (mid with gas_obs := [],t)
+    (\res ee u. ?pv'. res = INL pv' /\
+      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
+    (\res ee r. expr_exit res r)` by
+    metis_tac[target_subscript_storage_continuation_mem_core] >>
+  drule gas_outcome_link >>
+  strip_tac >> irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
+  rpt gen_tac >> simp[] >> strip_tac >> gvs[] >>
+  rpt gen_tac >> disch_tac >> gvs[] >>
+  drule_all target_storage_continuation_source_mem >> strip_tac >>
+  irule target_pure_storage_result_ready_mem >>
+  goal_assum (drule_at (Pat `eval_base_place _ _ _ = _`)) >> simp[] >>
+  irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_storage_frame >>
+  `contract_storage_well_formed cx es` by fs[target_pre_def, expr_sim_inv_def] >>
+  goal_assum (drule_at Any) >> Cases >>
+  simp[vyperStorageBackendTheory.get_storage_def]
 QED
