@@ -9,7 +9,6 @@ Ancestors concretizePtrProtectedHistory concretizePtrOwnerDemand
 Theorem ptr_endpoint_protected_livesets:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -33,9 +32,9 @@ Theorem ptr_endpoint_protected_livesets:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
   o1_walk_view rpolicy 2 C' fn observed /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions ==>
-  ?w. w + 1 < LENGTH h /\ ptr_chrono_write C x (EL w h) /\
+  (?w. w + 1 < LENGTH h /\ ptr_chrono_write C x (EL w h) /\
     (!k. w < k /\ k + 1 < LENGTH h ==> ~ptr_chrono_write C x (EL k h)) /\
     (!t. w < t /\ t < LENGTH h ==>
       ?xs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
@@ -47,13 +46,16 @@ Theorem ptr_endpoint_protected_livesets:
       FLOOKUP (ptr_owner_view d (EL k h)).cf_state.vs_allocas aid = SOME (b,sz) /\
       ~in_revert_forward (EL k h).po_fn (EL k h).po_state) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
-    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst
+    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
+  w2n vs.vs_initial_fmp <= x
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `w2n vs.vs_initial_fmp <= x` >- simp[] >> disj1_tac >>
   `bp = bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d endpoint).cf_fn)
     (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn` by metis_tac[] >>
-  drule_all ptr_endpoint_protected_history >>
-  disch_then (qspec_then `mems` strip_assume_tac) >>
+  qpat_assum `~(w2n vs.vs_initial_fmp <= x)` (fn th =>
+    drule_all ptr_endpoint_protected_history >>
+    disch_then (qspec_then `mems` (strip_assume_tac o REWRITE_RULE [th]))) >>
   drule ptr_chrono_history_end >> strip_tac >>
   `PRE (LENGTH h) < LENGTH h /\ EL (PRE (LENGTH h)) h = endpoint` by
     (Cases_on `h` >> gvs[LAST_EL]) >>
@@ -107,7 +109,6 @@ QED
 Theorem ptr_endpoint_actual_protected_livesets:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -131,9 +132,9 @@ Theorem ptr_endpoint_actual_protected_livesets:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
   o1_walk_view rpolicy 2 C' fn observed /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions ==>
-  ?w. w + 1 < LENGTH h /\
+  (?w. w + 1 < LENGTH h /\
     x IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
                                   (EL (SUC w) h).po_state) /\
     x NOTIN (EL (SUC w) h).po_taint.t_mem /\
@@ -150,13 +151,16 @@ Theorem ptr_endpoint_actual_protected_livesets:
       FLOOKUP (ptr_owner_view d (EL k h)).cf_state.vs_allocas aid = SOME (b,sz) /\
       ~in_revert_forward (EL k h).po_fn (EL k h).po_state) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
-    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst
+    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
+  w2n vs.vs_initial_fmp <= x
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `w2n vs.vs_initial_fmp <= x` >- simp[] >> disj1_tac >>
   `bp = bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d endpoint).cf_fn)
     (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn` by metis_tac[] >>
-  drule_all ptr_endpoint_actual_protected_history >>
-  disch_then (qspec_then `mems` strip_assume_tac) >>
+  qpat_assum `~(w2n vs.vs_initial_fmp <= x)` (fn th =>
+    drule_all ptr_endpoint_actual_protected_history >>
+    disch_then (qspec_then `mems` (strip_assume_tac o REWRITE_RULE [th]))) >>
   drule ptr_chrono_history_end >> strip_tac >>
   `PRE (LENGTH h) < LENGTH h /\ EL (PRE (LENGTH h)) h = endpoint` by
     (Cases_on `h` >> gvs[LAST_EL]) >>

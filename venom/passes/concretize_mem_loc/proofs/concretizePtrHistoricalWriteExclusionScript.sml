@@ -92,7 +92,7 @@ Theorem ptr_paired_historical_event:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -320,7 +320,7 @@ Proof
       (o1_walk_view rpolicy 2) C C' /\
    EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
    ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
    access_ok lo (EL j h).po_prov (EL j h).po_fn
       (EL j h).po_inst (EL j h).po_state /\
    ~in_revert_forward (EL j h).po_fn (EL j h).po_state /\
@@ -328,7 +328,7 @@ Proof
      (EL (SUC j) h).po_state)` by
     (fs[ptr_demand_interval_def] >>
      metis_tac[rich_listTheory.EL_MEM, LESS_IMP_LESS_OR_EQ]) >>
-  drule_all ptr_historical_write_classification >>
+  drule_all ptr_historical_write_classification_static >>
   disch_then assume_tac >>
   `MEM (EL j h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
     LENGTH (EL (SUC j) h).po_state.vs_returndata = LENGTH postt.vs_returndata` by simp[] >>
@@ -347,7 +347,7 @@ Theorem ptr_paired_historical_owned_write_exclusion:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\

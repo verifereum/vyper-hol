@@ -180,8 +180,8 @@ Theorem alloc_run_compile_store_slots:
        (\u s. fresh_outputs s))
 Proof
   ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >>
-  simp[Once compile_store_slots_def, LET_THM, comp_ignore_bind_def,
+  rpt gen_tac >> rpt strip_tac >> Cases_on `tr` >> (
+  simp[Once compile_store_slots_def, LET_THM, comp_ignore_bind_def, comp_bind_assoc,
        compile_bytestring_word_count_def, compile_word_copy_loop_op_def] >>
   rpt (IF_CASES_TAC >> simp[comp_ignore_bind_def]) >>
   TRY (CASE_TAC >> simp[comp_ignore_bind_def]) >>
@@ -197,17 +197,18 @@ Proof
           SRULE [SF ETA_ss] alloc_run_compile_word_copy_loop_base] >> NO_TAC,
         simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC,
         irule alloc_run_conseq >> first_x_assum (irule_at Any) >>
-        simp[] >> NO_TAC] >>
+        gvs[] >> NO_TAC] >>
     gen_tac >> simp[comp_ignore_bind_def]) >>
   TRY (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
          SRULE [SF ETA_ss] alloc_run_emit_empty_fresh] >> NO_TAC) >>
   TRY (simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC) >>
   TRY (irule alloc_run_conseq >> first_x_assum (irule_at Any) >>
-       simp[] >> NO_TAC) >>
+       gvs[] >> NO_TAC) >>
   (* element loop: the counter is fresh, so it stays reserved *)
   irule alloc_run_bind >>
   qexists `\x s. fresh_outputs s /\ not_fresh_at s x /\ ~alloc_owned s x` >>
-  reverse conj_tac >- simp[SF ETA_ss, alloc_run_fresh_var_fresh] >>
+  reverse conj_tac >>~- ([`alloc_run _ fresh_var _`],
+    simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_fresh_var_fresh]) >>
   qx_gen_tac `counter` >> simp[comp_ignore_bind_def] >>
   rpt (irule alloc_run_bind >>
     qexists `\v s. fresh_outputs s /\ not_fresh_at s counter /\
@@ -223,7 +224,7 @@ Proof
         irule alloc_run_conseq >> first_x_assum (irule_at Any) >>
         simp[] >> NO_TAC] >>
     gen_tac >> simp[comp_ignore_bind_def]) >>
-  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl])
 QED
 
 Theorem alloc_run_compile_store_immutable_bytestring:
@@ -445,7 +446,9 @@ Proof
       simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
         SRULE [SF ETA_ss] alloc_run_emit_void_fresh]) >>
   IF_CASES_TAC >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
-  IF_CASES_TAC >> simp[comp_ignore_bind_def] >>
+  IF_CASES_TAC >> simp[comp_ignore_bind_def]
+  >>~- ([`alloc_run _ (compile_store_slots _ _ _ _ _) _`],
+    MATCH_ACCEPT_TAC (SRULE [SF ETA_ss] (CONJUNCT1 alloc_run_compile_store_slots))) >>
   irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_memory,
     SRULE [SF ETA_ss] alloc_run_compile_word_copy_loop] >>

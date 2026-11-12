@@ -263,7 +263,9 @@ Theorem ptr_source_ownership_erasure_invariant[local]:
   (ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
     ptr_params_erases (w2n vs0.vs_initial_fmp) births PT a.po_params /\
     ptr_ledger_erases (w2n vs0.vs_initial_fmp) births TG a.po_prov /\
-    ptr_saved_erases (w2n vs0.vs_initial_fmp) births saved a.po_stack)
+    ptr_saved_erases (w2n vs0.vs_initial_fmp) births saved a.po_stack) /\
+  (~ctx_has_dalloca C /\ ptr_discipline lo C vs0 ==>
+    !dyn. ptr_ledger_erases dyn births TG a.po_prov)
 Proof
   cheat
 QED
@@ -280,6 +282,16 @@ Theorem ptr_source_ownership_prov_erases:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
   ptr_ledger_erases (w2n vs0.vs_initial_fmp) births TG a.po_prov
+Proof
+  metis_tac[ptr_source_ownership_erasure_invariant]
+QED
+
+(* Bridge for consumers that still assume no DALLOCA: no untagged variable
+   carries a site. Delete once they handle the DALLOCA case. *)
+Theorem ptr_source_ownership_static_prov_erases:
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ~ctx_has_dalloca C /\ ptr_discipline lo C vs0 ==>
+  !dyn. ptr_ledger_erases dyn births TG a.po_prov
 Proof
   metis_tac[ptr_source_ownership_erasure_invariant]
 QED

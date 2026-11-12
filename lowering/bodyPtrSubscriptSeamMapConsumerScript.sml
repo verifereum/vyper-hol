@@ -241,6 +241,8 @@ Proof
   irule (SRULE [] exprSimSubscriptMapTheory.subscript_result_index_admissible) >>
   first_assum (irule_at (Pat `gas_admissible _ _ _`)) >>
   simp[exprSimMapDefsTheory.expr_map_res_ok_def, exprSimDefsTheory.expr_vv_res_ok_def] >>
+  `~subscript_reads_base cx obj idx` by
+    metis_tac[exprSimSubscriptMapTheory.map_base_no_overlap] >>
   metis_tac[]
 QED
 

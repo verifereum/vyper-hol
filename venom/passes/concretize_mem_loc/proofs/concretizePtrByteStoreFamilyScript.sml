@@ -482,7 +482,7 @@ Resume ptr_byte_store_write_producer[classify]:
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n addr /\
     w2n addr + len <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule ptr_historical_write_classification >> simp[Abbr `ops`] >>
+    (irule ptr_historical_write_classification_static >> simp[Abbr `ops`] >>
      conj_tac >- (qexists_tac `a.po_fn` >> simp[]) >>
      rpt (goal_assum (drule_at Any)) >> simp[Abbr `len`])
   >- suspend "fixed" >> suspend "owned")
@@ -606,8 +606,8 @@ Resume ptr_byte_store_write_producer[mstore8_owned]:
   `MEM token tokens` by
     (drule_all ptr_source_ownership_live_prov >> simp[]) >>
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
-    (drule_all ptr_source_ownership_prov_erases >>
-     simp[ptr_ledger_erases_def] >> strip_tac >>
+    (drule_all ptr_source_ownership_static_prov_erases >>
+     simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
      first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
   drule ptr_structural_trace_embedding >> strip_tac >>
   drule ptr_structural_trace_target >> strip_tac >>

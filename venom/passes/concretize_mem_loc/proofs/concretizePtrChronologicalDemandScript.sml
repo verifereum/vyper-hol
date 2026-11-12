@@ -29,9 +29,16 @@ End
 Theorem ptr_activation_operand_seed:
   ptr_activation_ready dyn P site f /\
   MEM (Var v) f.cf_inst.inst_operands /\ FLOOKUP f.cf_prov v = SOME site ==>
-  ptr_activation_seed mems site f \/ MEM (SOME site) f.cf_params
+  ptr_activation_seed mems site f \/ MEM (SOME site) f.cf_params \/
+  dyn <= FST site
 Proof
-  cheat
+  simp[ptr_activation_ready_def] >> strip_tac >>
+  drule_all ptr_selected_origin >> strip_tac
+  >- (disj1_tac >> simp[ptr_activation_seed_def] >> qexists `aid` >> simp[] >>
+      irule ptr_production_operand_used_seed >> simp[] >>
+      metis_tac[bp_scan_production_complete])
+  >- (disj2_tac >> disj1_tac >> metis_tac[MEM_EL]) >>
+  simp[]
 QED
 
 Theorem ptr_ancestry_operand_seed:
@@ -40,23 +47,27 @@ Theorem ptr_ancestry_operand_seed:
   EVERY (ptr_activation_ready dyn P site) stk /\
   MEM (Var v) f.cf_inst.inst_operands /\ FLOOKUP f.cf_prov v = SOME site ==>
   ptr_activation_seed mems site f \/
-  ?n w. n < LENGTH stk /\
+  (?n w. n < LENGTH stk /\
     MEM (Var w) (EL n stk).cf_inst.inst_operands /\
     FLOOKUP (EL n stk).cf_prov w = SOME site /\
-    ptr_activation_seed mems site (EL n stk)
+    ptr_activation_seed mems site (EL n stk)) \/
+  dyn <= FST site
 Proof
-  Induct >> rpt gen_tac >> strip_tac
-  >- (drule_all ptr_activation_operand_seed >>
-      gvs[ptr_call_ancestry_def]) >>
-  drule_all ptr_activation_operand_seed >>
-  disch_then (qspec_then `mems` strip_assume_tac) >- simp[] >>
+  Induct >> rpt gen_tac >> strip_tac >>
+  (Cases_on `dyn <= FST site` >- simp[]) >>
+  (`ptr_activation_seed mems site f \/ MEM (SOME site) f.cf_params` by
+     (drule_all ptr_activation_operand_seed >>
+      disch_then (qspec_then `mems` mp_tac) >> gvs[])) >>
+  pop_assum strip_assume_tac >> TRY (gvs[] >> NO_TAC)
+  >- gvs[ptr_call_ancestry_def] >>
   `?w. MEM (Var w) h.cf_inst.inst_operands /\ FLOOKUP h.cf_prov w = SOME site` by
     metis_tac[ptr_call_ancestry_import] >>
   `ptr_call_ancestry h.cf_params stk` by metis_tac[ptr_call_ancestry_tail] >>
   gvs[listTheory.EVERY_DEF] >>
   first_x_assum (qspecl_then [`h`,`w`] mp_tac) >> simp[] >> strip_tac
-  >- (disj2_tac >> qexistsl [`0`,`w`] >> simp[]) >>
-  disj2_tac >> qexistsl [`SUC n`,`w'`] >> simp[]
+  >- (TRY disj2_tac >> TRY disj1_tac >> qexistsl [`0`,`w`] >> simp[])
+  >- (TRY disj2_tac >> TRY disj1_tac >> qexistsl [`SUC n`,`w'`] >> simp[]) >>
+  gvs[]
 QED
 
 Theorem ptr_frame_operand_instructions:
@@ -73,7 +84,7 @@ QED
 
 Theorem ptr_frame_operand_seed:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
+  ptr_discipline lo ctx vs0 /\
   EVERY wf_function ctx.ctx_functions /\
   EVERY all_reachable ctx.ctx_functions /\
   EVERY ssa_form ctx.ctx_functions /\
@@ -89,7 +100,8 @@ Theorem ptr_frame_operand_seed:
     FLOOKUP (EL n stk).cf_prov w = SOME site /\
     ml_used_gen (Allocation aid)
       (bp_analyze_fuel (concretize_memloc_fuel (EL n stk).cf_fn)
-        (cfg_analyze (EL n stk).cf_fn) (EL n stk).cf_fn) mems (EL n stk).cf_inst)
+        (cfg_analyze (EL n stk).cf_fn) (EL n stk).cf_fn) mems (EL n stk).cf_inst) \/
+  w2n vs0.vs_initial_fmp <= FST site
 Proof
   strip_tac >>
   drule_all ptr_frame_table_support_invariant >> strip_tac >>
@@ -97,7 +109,7 @@ Proof
   drule ptr_frame_call_ancestry >> strip_tac >>
   qspecl_then [`stk`, `<| cf_fn := fn; cf_inst := inst; cf_state := s;
     cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |>`, `v`]
-    mp_tac ptr_ancestry_operand_seed >>
+    mp_tac (Q.INST [`dyn` |-> `w2n vs0.vs_initial_fmp`] ptr_ancestry_operand_seed) >>
   simp[ptr_activation_ready_def, ptr_activation_seed_def] >>
   impl_tac >- (gvs[EVERY_MEM, ptr_activation_ready_def] >> metis_tac[]) >>
   metis_tac[]
@@ -111,7 +123,6 @@ Theorem ptr_chrono_initializing_writer_seed:
   x IN new_site_bytes a.po_state sa' /\ x NOTIN endpoint.po_taint.t_mem /\
   ptr_discipline lo ctx vs0 /\ lo <= x /\
   EVERY (\obs. ~in_revert_forward obs.po_fn obs.po_state) h /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
   EVERY wf_function ctx.ctx_functions /\
   EVERY all_reachable ctx.ctx_functions /\
   EVERY ssa_form ctx.ctx_functions /\
@@ -132,13 +143,15 @@ Theorem ptr_chrono_initializing_writer_seed:
       ml_used_gen (Allocation aid)
         (bp_analyze_fuel (concretize_memloc_fuel (EL n (EL k h).po_stack).cf_fn)
           (cfg_analyze (EL n (EL k h).po_stack).cf_fn)
-          (EL n (EL k h).po_stack).cf_fn) mems (EL n (EL k h).po_stack).cf_inst))
+          (EL n (EL k h).po_stack).cf_fn) mems (EL n (EL k h).po_stack).cf_inst) \/
+     w2n vs0.vs_initial_fmp <= b)
 Proof
   strip_tac >> drule_all ptr_chrono_fresh_write_index >> strip_tac >>
   qpat_x_assum `h = _` kall_tac >>
   `~in_revert_forward (EL k h).po_fn (EL k h).po_state` by
     (`k < LENGTH h` by decide_tac >> fs[EVERY_EL]) >>
-  fs[ptr_observation_reachable_def, ptr_discipline_def] >>
+  qpat_assum `ptr_discipline _ _ _` (strip_assume_tac o REWRITE_RULE [ptr_discipline_def]) >>
+  fs[ptr_observation_reachable_def] >>
   `access_ok lo (EL k h).po_prov (EL k h).po_fn (EL k h).po_inst (EL k h).po_state` by
     metis_tac[] >>
   `x IN range_bytes (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state)` by
@@ -149,7 +162,8 @@ Proof
     (drule ptr_write_op_operand >> simp[]) >>
   `EVERY (fn_ptr_ok P) ctx.ctx_functions` by
     (gvs[EVERY_MEM] >> metis_tac[]) >>
-  irule ptr_frame_operand_seed >>
+  irule (PURE_REWRITE_RULE [pairTheory.FST]
+    (Q.INST [`site` |-> `(b,sz)`] ptr_frame_operand_seed)) >>
   rpt (goal_assum (drule_at Any))
 QED
 

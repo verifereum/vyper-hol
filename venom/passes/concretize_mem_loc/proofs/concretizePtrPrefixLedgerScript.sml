@@ -61,12 +61,30 @@ Definition ptr_owner_erases_def:
     | SOME owner => numerical = FLOOKUP births owner
 End
 
+(* With no dynamic region (every floor), erasure is the plain projection. *)
+Theorem ptr_owner_erases_every_dyn:
+  (!dyn. ptr_owner_erases dyn births t n) <=>
+  n = case t of NONE => NONE | SOME owner => FLOOKUP births owner
+Proof
+  Cases_on `t` >> Cases_on `n` >> simp[ptr_owner_erases_def] >>
+  qexists `SUC (FST x)` >> simp[]
+QED
+
 Definition ptr_ledger_erases_def:
   ptr_ledger_erases dyn (births : (num # num,num # num) fmap)
     (tagged : (string,num # num) fmap) numerical <=>
     (!v. ptr_owner_erases dyn births (FLOOKUP tagged v) (FLOOKUP numerical v)) /\
     (!v owner. FLOOKUP tagged v = SOME owner ==> owner IN FDOM births)
 End
+
+Theorem ptr_ledger_erases_every_dyn:
+  (!dyn. ptr_ledger_erases dyn births tagged numerical) <=>
+  (!v. FLOOKUP numerical v =
+    case FLOOKUP tagged v of NONE => NONE | SOME owner => FLOOKUP births owner) /\
+  (!v owner. FLOOKUP tagged v = SOME owner ==> owner IN FDOM births)
+Proof
+  simp[ptr_ledger_erases_def, GSYM ptr_owner_erases_every_dyn] >> metis_tac[]
+QED
 
 Definition ptr_ledger_owned_byte_def:
   ptr_ledger_owned_byte registry births token aid k source target <=>
