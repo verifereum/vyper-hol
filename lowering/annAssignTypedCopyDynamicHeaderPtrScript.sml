@@ -6,6 +6,7 @@ Ancestors
   venomState venomExecSemantics venomInst ptrDiscipline finite_map
   words arithmetic list pred_set emitHelper compileEnv fragExec exprLoweringProps
   assignBasePtrStoragePath representationCleanPtr valueEncoding
+  wordLoadStorePtr bodyPtrMakeArrayWordStore valueEncodingProps
 
 Theorem annassign_dynamic_capacity_guard_counted:
   !s fn bb id len too_long ok n cap tn G ctx D PG.
@@ -126,4 +127,83 @@ Proof
   `SUC s.vs_inst_idx + 3 = s.vs_inst_idx + 4` by decide_tac >>
   gvs[Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
     FLOOKUP_DRESTRICT, op_taint_def, ALL_DISTINCT] >> metis_tac[]
+QED
+
+Theorem annassign_dynamic_header_copy_counted:
+  !s fn bb id src dst len too_long ok a b n cap tn G ctx D PG.
+    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id MLOAD [Var src] [len]) /\
+    isPREFIX
+      [mk_inst (id+1) GT [Var len;Lit (n2w cap)] [too_long];
+       mk_inst (id+2) ISZERO [Var too_long] [ok];
+       mk_inst (id+3) ASSERT [Var ok] []]
+      (DROP (SUC s.vs_inst_idx) bb.bb_instructions) /\
+    get_instruction bb (s.vs_inst_idx+4) =
+      SOME (mk_inst (id+4) MSTORE [Var dst;Var len] []) /\
+    ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
+    ptr_covers G tn dst s 32 /\ lookup_var dst s = SOME b /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      mem_word_at (w2n a) mem = n2w n) /\
+    n <= cap /\ cap < dimword (:256) /\ ALL_DISTINCT [len;too_long;ok] /\
+    ~MEM dst [len;too_long;ok] ==>
+    ?H tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 H tf (OK u) /\
+      u = (mstore (w2n b) (n2w n)
+         (update_var ok 1w (update_var too_long 0w (update_var len (n2w n) s)))
+         with vs_inst_idx := s.vs_inst_idx+5) /\
+      lookup_var len u = SOME (n2w n) /\
+      FLOOKUP H len = NONE /\ op_taint tf (Var len) = {} /\
+      tf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
+      tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+      (!mem. mem_agree_outside tf.t_mem u.vs_memory mem ==>
+        mem_word_at (w2n b) mem = n2w n) /\
+      (!x. ~MEM x [len;too_long;ok] ==>
+        FLOOKUP H x = FLOOKUP G x /\
+        op_taint tf (Var x) = op_taint tn (Var x)) /\
+      (!i. ~(w2n b <= i /\ i < w2n b+32) ==>
+        mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+        (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all annassign_dynamic_length_checked_counted >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  `lookup_var dst t = SOME b /\ ptr_covers H tm dst t 32 /\
+   ~t.vs_halted /\ lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb t.vs_inst_idx =
+     SOME (mk_inst (id+4) MSTORE [Var dst;Var len] [])` by
+    (gvs[ptr_covers_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     metis_tac[]) >>
+  `eval_operand (Var len) t = SOME (n2w n)` by simp[eval_operand_def] >>
+  `gas_path_ptr D 0 ctx fn PG H tm t 0
+    (step_prov PG H (mk_inst (id+4) MSTORE [Var dst;Var len] [])
+      (mstore (w2n b) (n2w n) t))
+    (step_taint (mk_inst (id+4) MSTORE [Var dst;Var len] []) t
+      (mstore (w2n b) (n2w n) t) tm)
+    (OK (mstore (w2n b) (n2w n) t with vs_inst_idx := SUC t.vs_inst_idx))` by
+    (irule annassign_mstore_path_ptr >> simp[] >> metis_tac[]) >>
+  drule_all mstore_ghost_frame >>
+  disch_then (qspecl_then [`PG`,`H`,`id+4`] strip_assume_tac) >>
+  qabbrev_tac `tf = step_taint (mk_inst (id+4) MSTORE [Var dst;Var len] []) t
+      (mstore (w2n b) (n2w n) t) tm` >>
+  qexistsl_tac [`H`,`tf`,`mstore (w2n b) (n2w n) t with vs_inst_idx := SUC t.vs_inst_idx`] >>
+  conj_tac >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+    goal_assum (drule_at Any) >> gvs[]) >>
+  `tf.t_imm = tm.t_imm` by
+    simp[Abbr `tf`, step_taint_def, mk_inst_def, set_var_taint_def, imm_taint_def] >>
+  `!mem. mem_agree_outside tf.t_mem (mstore (w2n b) (n2w n) t).vs_memory mem ==>
+    mem_word_at (w2n b) mem = n2w n` by
+    (rpt strip_tac >> irule mstore_raw_robust_word >>
+     goal_assum (drule_at Any) >> simp[Abbr `tf`] >>
+     qexistsl_tac [`dst`,`id+4`,`tm`,`Var len`] >> gvs[]) >>
+  `SUC (s.vs_inst_idx+4) = s.vs_inst_idx+5` by decide_tac >>
+  gvs[op_taint_def, Abbr `tf`] >>
+  conj_tac >- simp[mstore_def, update_var_def, write_memory_with_expansion_def,
+    venom_state_component_equality] >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  irule EQ_TRANS >>
+  irule_at Any mstore_mem_bytes_at_disjoint >>
+  simp[update_var_def] >> decide_tac
 QED
