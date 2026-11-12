@@ -185,7 +185,7 @@ Proof
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
     (rpt strip_tac >> `i < cap` by decide_tac >>
      `c <= LENGTH es` by decide_tac >>
-     mp_tac (Q.INST [`off:bytes32` |-> `dst`, `offT:num` |-> `w2n dstT`,
+     mp_tac (Q.INST [`off:bytes32` |-> `dst`, `offT:num` |-> `w2n (dstT:bytes32)`,
         `len:num` |-> `cap`, `positions` |-> `concretize_positions C'`]
         access_geometry_relocation_pairs) >>
      impl_tac >- fs[] >> disch_then (qspec_then `i` mp_tac) >> simp[]) >>

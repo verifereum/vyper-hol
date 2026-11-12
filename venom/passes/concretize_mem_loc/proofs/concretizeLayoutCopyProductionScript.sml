@@ -140,15 +140,15 @@ Proof
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
     (`c <= LENGTH es` by decide_tac >>
-     mp_tac (Q.INST [`off:bytes32` |-> `dst`, `offT:num` |-> `w2n dstT`,
-        `len:num` |-> `w2n sz`, `positions` |-> `concretize_positions C'`]
+     mp_tac (Q.INST [`off:bytes32` |-> `dst`, `offT:num` |-> `w2n (dstT:bytes32)`,
+        `len:num` |-> `w2n (sz:bytes32)`, `positions` |-> `concretize_positions C'`]
         access_geometry_relocation_pairs) >>
      impl_tac >- fs[] >> simp[]) >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n src+i) (w2n srcT+i)` by
     (`c <= LENGTH es` by decide_tac >>
-     mp_tac (Q.INST [`off:bytes32` |-> `src`, `offT:num` |-> `w2n srcT`,
-        `len:num` |-> `w2n sz`, `positions` |-> `concretize_positions C'`]
+     mp_tac (Q.INST [`off:bytes32` |-> `src`, `offT:num` |-> `w2n (srcT:bytes32)`,
+        `len:num` |-> `w2n (sz:bytes32)`, `positions` |-> `concretize_positions C'`]
         access_geometry_relocation_pairs) >>
      impl_tac >- fs[] >> simp[]) >>
   `post.vs_allocas = s.vs_allocas` by simp[mcopy_def, write_memory_with_expansion_def] >>
