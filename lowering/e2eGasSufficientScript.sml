@@ -386,6 +386,9 @@ Proof
    o1_lowered_inv dout.po_unit.cu_context vs` by metis_tac[] >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
+  `!obs. ~deploy_source_exempt tops
+     (load_contract NONE obs am tx [(NONE, tops)] [])`
+    by fs[deploy_gas_source_exempt_def] >>
   (* what the compiled constructor returns, as for e2e_deploy_correctness *)
   qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `dunit`,
                `dout`, `prog`, `cplan`, `am`, `tx`, `add_frame_gas g' es`, `vs_in`]
