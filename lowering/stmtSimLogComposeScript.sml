@@ -284,7 +284,8 @@ Resume compile_log_ready_stmt_frag[args_value]:
     (qspec_then `H1` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> ?vs. _`
     (qspec_then `H1` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
-  gvs[Excl "enc_def"] >>
+  (* No gvs here: the guarded args post would rewrite away its H1 instance. *)
+  rpt BasicProvers.VAR_EQ_TAC >>
   qabbrev_tac `xs = ZIP (MAP FST ys,MAP expr_type args)` >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -298,7 +299,8 @@ Resume compile_log_ready_stmt_frag[args_value]:
   `LIST_REL (\arg v. log_arg_rel cenv cx sa sm (es_end with gas_obs := []) t arg v /\
       supported_scalar_type (SND arg) /\
       ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs` by
-    (fs[log_args_post_def, LIST_REL_EL_EQN, EVERY_EL, EL_MAP,
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?vs. _` kall_tac >>
+     fs[log_args_post_def, LIST_REL_EL_EQN, EVERY_EL, EL_MAP,
         combinTheory.o_DEF, Excl "enc_def"] >>
      rpt strip_tac >>
      `SND (EL n xs) = expr_type (EL n args)` by
@@ -386,8 +388,10 @@ Resume compile_log_ready_stmt_frag[post]:
   (* Re-run the suffix under HH: the target run is the same u. *)
   qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ u` kall_tac >>
   qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ t` kall_tac >>
-  qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
-    (qspec_then `HH` mp_tac) >> simp[Excl "enc_def"] >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?vs. _`
+    (qspec_then `HH` mp_tac) >> (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `vs'` strip_assume_tac) >>
+  `vs' = vs` by fs[] >> pop_assum SUBST_ALL_TAC >>
   `stmt_state_rel HH ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[log_args_post_state] >>
   `storage_well_formed_on cx (es_end with gas_obs := []) (FST HH)` by
