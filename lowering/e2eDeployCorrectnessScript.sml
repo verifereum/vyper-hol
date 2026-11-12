@@ -69,55 +69,14 @@ Theorem e2e_deploy_correctness_identity:
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
-    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
+    deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
-         INL (am', rqs) =>
-           if ALOOKUP am'.sources tx.target = NONE then
-             let cx = initial_evaluation_context
-                        ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
-             ?lgs.
-               frame_outcome es r es' NONE [] lgs /\
-               (lookup_account tx.target es'.rollback.accounts).code = [] /\
-               accounts_agree cx am'.accounts
-                 (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-               transient_agree cx am'.tStorage es'.rollback.tStorage /\
-               logs_correspond (compiled_event_info tops) (type_env tops)
-                 tx.target am'.logs lgs
-           else
-           let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-            ?section lgs.
-              immutables_section_rel tops (account_immutables am' tx.target) section /\
-              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
-              (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
-             (!a. a <> tx.target ==>
-                  lookup_account a es'.rollback.accounts =
-                  lookup_account a am'.accounts) /\
-             (lookup_account tx.target es'.rollback.accounts) with code := [] =
-             (lookup_account tx.target am'.accounts) with
-               <| code := [];
-                  storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
-             storage_agree
-               (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
-               (lookup_account tx.target am'.accounts).storage
-               (lookup_account tx.target es'.rollback.accounts).storage /\
-             transient_agree cx am'.tStorage es'.rollback.tStorage /\
-             logs_correspond (compiled_event_info tops) (type_env tops)
-               tx.target am'.logs lgs
-       | INR (AssertException s) =>
-           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                         (exc = Reverted \/ s = "UNREACHABLE")
-       | INR (Error e) =>
-           unspecified_behaviour_exempt tops e \/
-           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
-       | INR BreakException => F
-       | INR ContinueException => F
-       | INR (ReturnException _) => F)
+       deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases >> strip_tac >>
@@ -197,43 +156,14 @@ Theorem e2e_deploy_correctness_asm_opt:
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
     ~program_reads_self_code tops /\
     supported_program tops /\ constructor_call_free tops /\
-    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
+    deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
-         INL (am', rqs) =>
-           let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-            ?section lgs.
-              immutables_section_rel tops (account_immutables am' tx.target) section /\
-              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
-              (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
-             (!a. a <> tx.target ==>
-                  lookup_account a es'.rollback.accounts =
-                  lookup_account a am'.accounts) /\
-             (lookup_account tx.target es'.rollback.accounts) with code := [] =
-             (lookup_account tx.target am'.accounts) with
-               <| code := [];
-                  storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
-             storage_agree
-               (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
-               (lookup_account tx.target am'.accounts).storage
-               (lookup_account tx.target es'.rollback.accounts).storage /\
-             transient_agree cx am'.tStorage es'.rollback.tStorage /\
-             logs_correspond (compiled_event_info tops) (type_env tops)
-               tx.target am'.logs lgs
-       | INR (AssertException s) =>
-           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                         (exc = Reverted \/ s = "UNREACHABLE")
-       | INR (Error e) =>
-           unspecified_behaviour_exempt tops e \/
-           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
-       | INR BreakException => F
-       | INR ContinueException => F
-       | INR (ReturnException _) => F)
+       deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   cheat
 QED
@@ -248,43 +178,14 @@ Theorem e2e_deploy_correctness:
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
-    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
+    deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
-         INL (am', rqs) =>
-           let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-            ?section lgs.
-              immutables_section_rel tops (account_immutables am' tx.target) section /\
-              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
-              (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
-             (!a. a <> tx.target ==>
-                  lookup_account a es'.rollback.accounts =
-                  lookup_account a am'.accounts) /\
-             (lookup_account tx.target es'.rollback.accounts) with code := [] =
-             (lookup_account tx.target am'.accounts) with
-               <| code := [];
-                  storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
-             storage_agree
-               (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
-               (lookup_account tx.target am'.accounts).storage
-               (lookup_account tx.target es'.rollback.accounts).storage /\
-             transient_agree cx am'.tStorage es'.rollback.tStorage /\
-             logs_correspond (compiled_event_info tops) (type_env tops)
-               tx.target am'.logs lgs
-       | INR (AssertException s) =>
-           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                         (exc = Reverted \/ s = "UNREACHABLE")
-       | INR (Error e) =>
-           unspecified_behaviour_exempt tops e \/
-           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
-       | INR BreakException => F
-       | INR ContinueException => F
-       | INR (ReturnException _) => F)
+       deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   rpt gen_tac >> strip_tac >>
   `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
@@ -309,14 +210,13 @@ val _ =
       compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc) /\
       supported_program tops /\ supported_program_deploy tops /\
       constructor_call_free tops /\
-      deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
+      deploy_typing_ok tops am tx /\
       deploy_state_rel tops deploy_bc am tx es /\
       ~(?t. runtime_bc = 0xEFw :: t) ==>
       ?r es'. run_call es = SOME (r,es') /\
         (frame_resource_starved es r es' \/
-         ?gobs. deploy_result_rel tops runtime_bc tx es r es'
-           (load_contract NONE gobs am tx [(NONE,tops)] []))``;
-    val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));
+         deploy_call_result_rel tops runtime_bc am tx es r es')``;
+    val expanded = concl (ASSUME expected);
   in
     if aconv expanded (concl savedDeploymentAdmission) andalso
        null (Thm.hyp savedDeploymentAdmission) then ()
