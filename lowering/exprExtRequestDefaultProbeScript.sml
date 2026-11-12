@@ -58,12 +58,16 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
+(* RESTATED (train 17): alloc_limits_expr alone does not bound the lowered
+   Bytes encoding of abi_encode over a literal; expr_body_pre does. *)
 Theorem extrequest_default_lowered_alloc_bound:
-  !cenv e. alloc_limits_expr cenv e /\ ~expr_has_effect e /\
+  !cenv e. expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\
     ~is_word_type (lowered_value_type cenv e) ==>
     type_memory_bytes cenv (lowered_value_type cenv e) < 2 ** 64
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `e` >>
+  rpt gen_tac >> strip_tac >>
+  `alloc_limits_expr cenv e` by gvs[expr_body_pre_def] >>
+  Cases_on `e` >>
   gvs[lowered_value_type_def, expr_type_def, alloc_limits_expr_def,
       type_alloc_ok_def]
   >- (Cases_on `t` >> Cases_on `l` >>
@@ -76,7 +80,7 @@ Proof
            gvs[lowered_value_type_def, expr_type_def, type_memory_bytes_def,
                is_word_type_def]) >>
       gvs[vfmConstantsTheory.word_size_def])
-  >- (rename1 `Builtin rt bi es` >> Cases_on `bi` >>
+  >- (rename1 `Builtin rt bi args` >> Cases_on `bi` >>
       gvs[lowered_value_type_def, expr_type_def] >>
       gvs[concat_buffer_type_def, AllCaseEqs(), type_memory_bytes_def,
         concat_alloc_size_def, vfmConstantsTheory.word_size_def,
@@ -85,9 +89,11 @@ Proof
         vfmConstantsTheory.word_size_def] >>
       Cases_on `b` >> gvs[type_memory_bytes_def,
         vfmConstantsTheory.word_size_def])
-  >- (rename1 `TypeBuiltin rt tb at es` >> Cases_on `tb` >>
+  >- (rename1 `TypeBuiltin rt tb at args` >> Cases_on `tb` >>
       gvs[lowered_value_type_def, expr_type_def, alloc_limits_expr_def,
-          type_alloc_ok_def] >> Cases_on `o'` >>
+          type_alloc_ok_def] >>
+      drule abiEncodeEndpointMetadataTheory.abi_encode_endpoint_output_size >>
+      Cases_on `o'` >>
       gvs[type_memory_bytes_def, vfmConstantsTheory.word_size_def]) >>
   metis_tac[extrequest_effect_free_not_call]
 QED
