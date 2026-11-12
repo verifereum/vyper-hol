@@ -1,6 +1,7 @@
 (* Compiler and execution composition for retained widened local assignments. *)
 Theory widenedAssignPtrContinuation
 Ancestors widenedAssignPtrTypedLocal widenedAssignPtrRhsInput
+  assignBasePtrAllocSeparate valueEncodingProps
   assignBasePtrLocalAssign externalEntryShape stmtLowering context
   abiBuiltinAllocation abiBuiltinEncodeAllocate emitHelper emitHelperProps
   compileEnv exprLoweringProps valueCopyBytes fragExec exprSimBufferStore
@@ -102,4 +103,63 @@ Proof
      simp[compile_store_memory_def]) >>
   `0 < type_memory_size stv ==> ptr_covers G tn src s (type_memory_size stv)` by simp[] >>
   drule_all widened_assign_typed_local_store_ptr >> metis_tac[]
+QED
+
+(* A zero-sized physical source need not be a pointer operand.  Only the
+   allocation runs; its fresh result is the source of the subsequent store. *)
+Theorem widened_assign_zero_scratch_staging_ptr:
+  compile_alloc_buffer 0 sa = (buf,sm) /\
+  compile_copy_memory buf.buf_operand op 0 sm = ((),sb) /\
+  fn_has_code sa sm fn /\
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ghost_inv d cenv cx es G tn s /\
+  not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var)) /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==>
+    x <> STRING #"%" (toString sa.cs_next_var)) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==>
+    x <> STRING #"%" (toString sa.cs_next_var)) /\
+  (!x. not_fresh_at frame_sa x ==>
+    x <> STRING #"%" (toString sa.cs_next_var)) /\
+  frame_sa.cs_next_id <= sa.cs_next_id /\
+  expr_val_at cenv cx ty va vb es v op s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  eval_operand op s = SOME w /\ op <> buf.buf_operand /\
+  val_wf tv v /\ type_memory_size tv = 0 /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n w) m) ==>
+  ?u a Gf tf dst.
+    buf.buf_operand = Var dst /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+    stmt_state_rel ctx fn cenv cx es u /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n a,0) /\
+    w2n a < dimword (:256) /\
+    lookup_var dst u = SOME a /\ ptr_covers Gf tf dst u 0 /\
+    (!m. mem_agree_outside tf.t_mem u.vs_memory m ==>
+      val_in_memory tv v (w2n a) m) /\
+    ghost_inv d cenv cx es Gf tf u /\
+    ghost_kept cenv es frame_sa G tn s Gf tf /\
+    (!q. q <> buf.buf_operand ==> eval_operand q u = eval_operand q s) /\
+    (!name b len. local_region cenv es.scopes u name b len ==>
+      regions_disjoint (w2n a) 0 b len)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `sb = sm` by fs[compile_copy_memory_def, comp_return_def] >>
+  qpat_x_assum `sb = sm` SUBST_ALL_TAC >>
+  `0 < dimword (:256)` by simp[] >>
+  drule_all assign_base_ptr_alloc_buffer_counted_separated >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `lookup_var p u = SOME a` by
+    metis_tac[eval_operand_def] >>
+  `!m. mem_agree_outside tn'.t_mem u.vs_memory m ==>
+    val_in_memory tv v (w2n a) m` by
+    (rpt strip_tac >>
+     irule valueEncodingPropsTheory.val_in_memory_relocate >>
+     simp[] >> qexistsl_tac [`m`,`0`,`w2n w`] >>
+     simp[mem_bytes_at_def]) >>
+  qexistsl_tac [`u`,`a`,`G'`,`tn'`,`p`] >> simp[] >> metis_tac[]
 QED
