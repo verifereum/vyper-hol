@@ -249,7 +249,10 @@ val Frame = ``\(s,G,tn,B) (t,H,qt,A).
 
 val FrameMode = ``\X Y. (^Frame) X Y /\
   (checked ==> gas_path_mem ctx func (FST X) 0 (OK (FST Y)) /\
-    alloca_history func (FST Y))``;
+    alloca_history func (FST Y) /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (FST X,FST (SND X),FST (SND (SND X))) []
+      (OK (FST Y),FST (SND Y),FST (SND (SND Y))))``;
 
 Theorem prefix_complete_array_frame_transitive_mode:
   transitive (^FrameMode)
@@ -257,8 +260,11 @@ Proof
   simp_tac bool_ss [transitive_def] >>
   map_every qx_gen_tac [`x`,`y`,`z`] >>
   PairCases_on `x` >> PairCases_on `y` >> PairCases_on `z` >>
-  simp_tac std_ss [] >> strip_tac >> rpt conj_tac >>
-  metis_tac[abi_decode_sim_trans,SUBSET_TRANS,SUBSET_DEF,gas_path_mem_then,ADD_0]
+  simp_tac std_ss [] >> strip_tac >> rpt conj_tac
+  >~ [`checked ==> _`]
+  >- (strip_tac >> fs[] >> rpt strip_tac >>
+      metis_tac[gas_path_mem_then,ADD_0,gas_origin_ptr_path_trans]) >>
+  metis_tac[abi_decode_sim_trans,SUBSET_TRANS,SUBSET_DEF]
 QED
 
 
@@ -407,7 +413,9 @@ Theorem prefix_complete_array_body_pair_mode:
     prepared.vs_memory = (FST X).vs_memory /\
     (^Frame) X (prepared,H,qt,SND (SND (SND X))) /\
     (checked ==> gas_path_mem ctx func (FST X) 0 (OK prepared) /\
-                 alloca_history func prepared)
+                 alloca_history func prepared /\
+                 !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+                   (FST X,FST (SND X),FST (SND (SND X))) [] (OK prepared,H,qt))
 Proof
   PairCases_on `X` >> simp_tac std_ss [] >> strip_tac >>
   drule abi_decoder_recursive_data_facts >> strip_tac >>
@@ -451,7 +459,9 @@ Proof
   drule_all prefix_loop_setup_execution_pair >> simp_tac std_ss [LET_THM] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `abi_decode_sim ctx func X0 prepared` >>
   `(checked ==> gas_path_mem ctx func X0 0 (OK prepared) /\
-                alloca_history func prepared)` by
+                alloca_history func prepared /\
+                !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+                  (X0,X1,X2) [] (OK prepared,H,qt))` by
     (strip_tac >> gvs[Excl "enc_def"] >>
      `run_inst_seq_mem_ok (emitted_insts st middle) X0` by
        (drule ctor_checked_array_setup_mem_ok_at_index >> disch_then irule >>
@@ -469,6 +479,9 @@ Proof
        (drule prefix_loop_element_setup_code >> simp[LET_THM] >>
         strip_tac >> Cases_on `dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` >>
         gvs[mk_inst_def,is_terminator_def]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+        i.inst_opcode <> GAS) (emitted_insts st middle)` by
+       (irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>
      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
         (emitted_insts st middle)` by
        (irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>
@@ -476,7 +489,16 @@ Proof
      drule_all abi_decode_array_element_setup_shape >> strip_tac >>
      `X0.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
      drule_all ctor_checked_emitted_endpoint >>
-     disch_then (qspec_then `ctx` mp_tac) >> simp[Abbr `prepared`]) >>
+     disch_then (qspec_then `ctx` strip_assume_tac) >>
+     `X0 with vs_inst_idx := LENGTH st.cs_current_insts = X0` by
+       simp[venom_state_component_equality] >>
+     `!D'. inst_seq_ptr D' lo ctx func PG X1 X2 (emitted_insts st middle) X0 H qt` by
+       (gen_tac >>
+        qpat_assum `!D' k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+          (qspecl_then [`D'`,`LENGTH st.cs_current_insts`] mp_tac) >>
+        pop_assum (fn th => rewrite_tac[th])) >>
+     simp[Abbr `prepared`] >> rpt strip_tac >>
+     irule emitted_origin_ptr_path >> qexists_tac `st` >> asm_rewrite_tac[]) >>
   drule_all prefix_complete_array_setup_ambient >> strip_tac >>
   `(^Ok) k ctx func site ids D N d
      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
@@ -756,7 +778,11 @@ Resume prefix_complete_array_body_iteration_pair_mode[compose]:
   strip_tac >>
   qpat_assum `checked ==> gas_path_mem _ _ X0 _ _ /\ _` drule >> strip_tac >>
   qpat_assum `checked ==> gas_path_mem _ _ prepared _ _ /\ _` drule >> strip_tac >>
-  metis_tac[gas_path_mem_then,ADD_0]
+  qpat_assum `checked ==> !D explicit. gas_origin_ptr_path _ (prepared,_,_) _ _` drule >>
+  strip_tac >> rpt conj_tac
+  >- metis_tac[gas_path_mem_then,ADD_0]
+  >- metis_tac[] >>
+  metis_tac[gas_origin_ptr_path_trans]
 QED
 
 Finalise prefix_complete_array_body_iteration_pair_mode
@@ -839,8 +865,14 @@ Proof
      disch_then (qspec_then `ctx` assume_tac) >>
      `get_instruction bb prepared.vs_inst_idx = SOME (mk_inst id JMP [Label hdr] [])` by
        simp[get_instruction_def,EL_APPEND_EQN] >>
+     `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (prepared,G,tn) []
+        (OK (jump_to hdr prepared),G,tn)` by
+       (rpt gen_tac >> match_mp_tac (Q.INST [`iid` |-> `id`] jmp_origin_ptr_path) >>
+        asm_rewrite_tac[]) >>
      `(checked ==> gas_path_mem ctx func prepared 0 (OK (jump_to hdr prepared)) /\
-       alloca_history func (jump_to hdr prepared))` by
+       alloca_history func (jump_to hdr prepared) /\
+       !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (prepared,G,tn) []
+         (OK (jump_to hdr prepared),G,tn))` by
        (strip_tac >> `alloca_history func prepared` by simp[] >>
         drule_all ctor_checked_jump_path >> simp[]) >>
      `(!fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn (jump_to hdr prepared)) ==>

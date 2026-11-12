@@ -10,7 +10,7 @@ Ancestors
   compileEnv venomState venomExecSemantics venomMemDefs valueEncoding valueEncodingProps
   ptrSafeRun ptrDiscipline words arithmetic list finite_map pred_set
   abiDecoderArrayLoopInit abiDecoderIndexInit fragGasPathMem
-  fragGasOriginPtr
+  fragGasOriginPtr fragGasOriginPtrLoop
 
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
@@ -206,15 +206,34 @@ val LoopAtMode = ``\label index j X. (^LoopAt) label index j X /\
 
 val FrameMode = ``\X Y. (^Frame) X Y /\
   (checked ==> gas_path_mem ctx func (FST X) 0 (OK (FST Y)) /\
-    alloca_history func (FST Y))``;
+    alloca_history func (FST Y) /\
+    !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (FST X,FST (SND X),FST (SND (SND X))) []
+      (OK (FST Y),FST (SND Y),FST (SND (SND Y))))``;
 
 val SetupPremMode = ``(^SetupPrem) /\ (checked ==>
   sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
     LENGTH initial.vs_data_section /\
   sb+32 <= LENGTH initial.vs_data_section /\ alloca_history func initial)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_complete_array_setup_exit_pair_mode_exact:
+  (^CshiftMode) checked ty tv ==> (^SetupPremMode) ==>
+  ?prepared slot H qt actual Hout qout A.
+    (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, Hout, qout)) /\
+    (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
+    (!x. abi_decoder_older_vars st.cs_next_var x ==>
+      lookup_var x prepared = lookup_var x initial) /\
+    (!x. abi_decoder_older_vars st.cs_next_var x ==>
+      lookup_var x actual = lookup_var x initial) /\ 
+    (^SetupResult) /\
+    (^LoopAt) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
+    (^Frame) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
+    (!mem. (!a. a IN A ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
+      val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d mem) /\
+    abi_decode_sim ctx func initial actual /\
+    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
+      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
 Proof
   disch_then (mk_asm "child") >>
   strip_tac >>
@@ -243,6 +262,7 @@ Proof
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
   simp_tac std_ss [] >> asm_simp_tac bool_ss [] >>
+  conj_tac >- (strip_tac >> fs[] >> metis_tac[gas_origin_ptr_path_trans]) >>
   conj_tac >-
     (strip_tac >> fs[] >>
      irule (gas_path_mem_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE std_ss []) >> qexists `prepared` >> simp[]) >>
@@ -261,28 +281,6 @@ Proof
     (conj_tac >- first_assum ACCEPT_TAC >>
      qexists `hdr_bb'` >> simp[]) >>
   irule abi_decode_sim_trans >> qexists `prepared` >> asm_rewrite_tac[]
-QED
-*)
-Theorem prefix_complete_array_setup_exit_pair_mode_exact:
-  (^CshiftMode) checked ty tv ==> (^SetupPremMode) ==>
-  ?prepared slot H qt actual Hout qout A.
-    (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, Hout, qout)) /\
-    (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
-    (!x. abi_decoder_older_vars st.cs_next_var x ==>
-      lookup_var x prepared = lookup_var x initial) /\
-    (!x. abi_decoder_older_vars st.cs_next_var x ==>
-      lookup_var x actual = lookup_var x initial) /\ 
-    (^SetupResult) /\
-    (^LoopAt) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
-    (^Frame) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
-    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
-    (!mem. (!a. a IN A ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
-      val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d mem) /\
-    abi_decode_sim ctx func initial actual /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
-      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
-Proof
-  cheat
 QED
 
 Theorem prefix_complete_array_setup_exit_pair_exact:

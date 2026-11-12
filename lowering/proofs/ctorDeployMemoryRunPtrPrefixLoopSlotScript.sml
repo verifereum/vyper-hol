@@ -9,7 +9,22 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixSequence
   abiDecoderArrayLoopInit abiDecoderFrame venomMemProps valueEncodingProps instIdxIndep exprLoweringProps
   ptrSafeRun ptrDiscipline venomState venomExecSemantics venomInst
-  finite_map words arithmetic pred_set list memLocDefs codegenRel
+  finite_map words arithmetic pred_set list memLocDefs codegenRel fragGasSeqPtr
+
+(* A certified non-INVOKE step, as the facts inst_seq_ptr unfolds to. *)
+Theorem prefix_loop_step_seq_facts:
+  step_inst_base inst s = OK t /\ inst.inst_opcode <> INVOKE /\
+  ptr_safe_step D lo 0 ctx fn PG G tn inst s /\
+  ghost_step 0 ctx PG G tn inst s = (H,qt) ==>
+  ptr_inst_ok D lo 0 ctx fn G tn inst s /\
+  step_prov PG G inst t = H /\ step_taint inst s t tn = qt
+Proof
+  strip_tac >> conj_tac >- metis_tac[ptr_safe_step_inst_ok] >>
+  `step_inst 0 ctx inst s = OK t` by simp[step_inst_non_invoke] >>
+  qspecl_then [`0`,`ctx`,`PG`,`G`,`tn`,`inst`,`s`,`t`] mp_tac
+    ghost_step_non_invoke >>
+  simp[]
+QED
 
 Theorem prefix_loop_slot_reuse_ghost:
   FLOOKUP s.vs_allocas aid = SOME (p,32) ==>
@@ -174,6 +189,8 @@ Theorem prefix_loop_index_slot_pair:
     mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []] s = OK t /\
   FLOOKUP t.vs_allocas aid = SOME (p,32) /\ p < dimword (:256) ==>
   ?H qt.
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn [mk_inst aid ALLOCA [Lit 32w] [ip];
+       mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []] s H qt) /\
     FLOOKUP H ip = SOME (p,32) /\
     eval_operand (Var ip) t = SOME (n2w p) /\ op_taint qt (Var ip) = {} /\
     DISJOINT qt.t_mem {b | p <= b /\ b < p+32} /\ qt.t_mem SUBSET tn.t_mem /\
@@ -207,9 +224,49 @@ Proof
   drule_all (SRULE [] prefix_loop_slot_zero_pair) >>
   disch_then (qspecl_then [`aid+1`,`fuel`,`fn`,`PG`,`D`] mp_tac) >>
   simp[] >> strip_tac >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn [mk_inst aid ALLOCA [Lit 32w] [ip];
+     mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []] s H
+     (step_taint (mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []) a t q)` by
+    suspend "forward" >>
   qexistsl_tac [`H`,`step_taint (mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []) a t q`] >>
   reverse conj_tac >- suspend "continuation" >>
   suspend "observations"
+QED
+
+Resume prefix_loop_index_slot_pair[forward]:
+  gen_tac >> unabbrev_all_tac >>
+  drule_all prefix_loop_slot_alloc_pair >>
+  disch_then (qspecl_then [`tn`,`0`,`fn`,`PG`,`G`,`D'`] mp_tac) >>
+  simp_tac std_ss [LET_THM] >> strip_tac >>
+  `(mk_inst aid ALLOCA [Lit 32w] [ip]).inst_opcode <> INVOKE /\
+   (mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []).inst_opcode <> INVOKE` by
+    simp[mk_inst_def] >>
+  mp_tac (Q.INST [`inst` |-> `mk_inst aid ALLOCA [Lit 32w] [ip]`, `t` |-> `a`,
+    `D` |-> `D'`, `H` |-> `G |+ (ip,(p,32))`,
+    `qt` |-> `step_taint (mk_inst aid ALLOCA [Lit 32w] [ip]) s a tn`]
+    prefix_loop_step_seq_facts) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  mp_tac (Q.INST [`a` |-> `a with vs_inst_idx := s.vs_inst_idx + 1`, `iid` |-> `aid+1`,
+    `H` |-> `G |+ (ip,(p,32))`,
+    `q` |-> `step_taint (mk_inst aid ALLOCA [Lit 32w] [ip]) s a tn`,
+    `fuel` |-> `0`, `D` |-> `D'`] prefix_loop_slot_zero_pair) >>
+  (impl_tac >- fs[eval_op_inst_idx, allocas_from_def, FLOOKUP_UPDATE]) >>
+  simp_tac std_ss [LET_THM] >> strip_tac >>
+  mp_tac (Q.INST [`inst` |-> `mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []`,
+    `s` |-> `a with vs_inst_idx := s.vs_inst_idx + 1`,
+    `t` |-> `mstore p 0w (a with vs_inst_idx := s.vs_inst_idx + 1)`,
+    `D` |-> `D'`, `G` |-> `G |+ (ip,(p,32))`,
+    `tn` |-> `step_taint (mk_inst aid ALLOCA [Lit 32w] [ip]) s a tn`,
+    `H` |-> `G |+ (ip,(p,32))`,
+    `qt` |-> `step_taint (mk_inst (aid+1) MSTORE [Var ip;Lit 0w] [])
+       (a with vs_inst_idx := s.vs_inst_idx + 1)
+       (mstore p 0w (a with vs_inst_idx := s.vs_inst_idx + 1))
+       (step_taint (mk_inst aid ALLOCA [Lit 32w] [ip]) s a tn)`]
+    prefix_loop_step_seq_facts) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
+  simp[inst_seq_ptr_def, mstore_idx, ghostPcTransportPtrTheory.step_taint_inst_idx_left,
+    ghostPcTransportPtrTheory.step_taint_inst_idx_right]
 QED
 
 Resume prefix_loop_index_slot_pair[allocation_lookup]:
@@ -293,6 +350,8 @@ Theorem prefix_loop_index_slot_run:
   get_instruction bb (SUC s.vs_inst_idx) =
     SOME (mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []) ==>
   ?H qt.
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn [mk_inst aid ALLOCA [Lit 32w] [ip];
+       mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []] s H qt) /\
     FLOOKUP H ip = SOME (p,32) /\
     eval_operand (Var ip) t = SOME (n2w p) /\ op_taint qt (Var ip) = {} /\
     DISJOINT qt.t_mem {b | p <= b /\ b < p+32} /\ qt.t_mem SUBSET tn.t_mem /\

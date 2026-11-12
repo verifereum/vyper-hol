@@ -14,21 +14,6 @@ Ancestors
   finite_map words list rich_list arithmetic pred_set codegenRel
   fragGasSeqPtr instSeqComposePtr emittedSeqComposePtr fragGasOriginPtrLoop
 
-(* A certified non-INVOKE step, as the facts inst_seq_ptr unfolds to. *)
-Theorem prefix_loop_element_step_seq_facts[local]:
-  step_inst_base inst s = OK t /\ inst.inst_opcode <> INVOKE /\
-  ptr_safe_step D lo 0 ctx fn PG G tn inst s /\
-  ghost_step 0 ctx PG G tn inst s = (H,qt) ==>
-  ptr_inst_ok D lo 0 ctx fn G tn inst s /\
-  step_prov PG G inst t = H /\ step_taint inst s t tn = qt
-Proof
-  strip_tac >> conj_tac >- metis_tac[ptr_safe_step_inst_ok] >>
-  `step_inst 0 ctx inst s = OK t` by simp[step_inst_non_invoke] >>
-  qspecl_then [`0`,`ctx`,`PG`,`G`,`tn`,`inst`,`s`,`t`] mp_tac
-    ghost_step_non_invoke >>
-  simp[]
-QED
-
 Theorem prefix_loop_element_taint_rules[local]:
   (!r m v. op_taint (r with t_var := m) (Var v) =
      case FLOOKUP m v of NONE => {} | SOME t => t) /\
@@ -770,7 +755,7 @@ Proof
      (impl_tac >- (fs[instIdxIndepTheory.eval_op_inst_idx,abi_decode_load_def,
         abi_decode_source_def,allocas_from_def] >> metis_tac[])) >>
      simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
-     drule_all prefix_loop_element_step_seq_facts >>
+     drule_all prefix_loop_step_seq_facts >>
      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
      mp_tac (Q.INST [
        `s` |-> `update_var x (abi_decode_load DLOAD a s) s with vs_inst_idx := SUC k`,
@@ -781,7 +766,7 @@ Proof
      (impl_tac >- gs[instIdxIndepTheory.eval_op_inst_idx,eval_operand_def,
         lookup_var_def,update_var_def,FLOOKUP_UPDATE,op_taint_def,allocas_from_def]) >>
      simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
-     drule_all prefix_loop_element_step_seq_facts >>
+     drule_all prefix_loop_step_seq_facts >>
      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
      simp[inst_seq_ptr_def,prefix_member_add_taint,prefix_loop_element_taint_rules,
        FLOOKUP_UPDATE]) >>
@@ -884,7 +869,7 @@ Proof
      (impl_tac >- fs[instIdxIndepTheory.eval_op_inst_idx,eval_operand_def,
         op_taint_def,allocas_from_def]) >>
      simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
-     drule_all prefix_loop_element_step_seq_facts >>
+     drule_all prefix_loop_step_seq_facts >>
      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
      mp_tac (Q.INST [
        `s` |-> `update_var x (d+32w) s with vs_inst_idx := SUC k`,
@@ -895,7 +880,7 @@ Proof
      (impl_tac >- gs[instIdxIndepTheory.eval_op_inst_idx,eval_operand_def,
         lookup_var_def,update_var_def,FLOOKUP_UPDATE,op_taint_def,allocas_from_def]) >>
      simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
-     drule_all prefix_loop_element_step_seq_facts >>
+     drule_all prefix_loop_step_seq_facts >>
      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
      mp_tac (Q.INST [
        `s` |-> `update_var y (j*stride) (update_var x (d+32w) s) with
@@ -908,7 +893,7 @@ Proof
      (impl_tac >- gs[instIdxIndepTheory.eval_op_inst_idx,eval_operand_def,
         lookup_var_def,update_var_def,FLOOKUP_UPDATE,op_taint_def,allocas_from_def]) >>
      simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
-     drule_all prefix_loop_element_step_seq_facts >>
+     drule_all prefix_loop_step_seq_facts >>
      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
      simp[inst_seq_ptr_def,prefix_member_add_taint,prefix_loop_element_mul_taint,
        prefix_loop_element_taint_rules,FLOOKUP_UPDATE]) >>
@@ -1136,7 +1121,7 @@ Proof
        `x` |-> `"%" ++ toString st.cs_next_var`] prefix_loop_element_mload_pair) >>
      (impl_tac >- fs[instIdxIndepTheory.eval_op_inst_idx,allocas_from_def]) >>
      simp[LET_THM,instIdxIndepTheory.update_var_idx] >> strip_tac >>
-     drule_all prefix_loop_element_step_seq_facts >>
+     drule_all prefix_loop_step_seq_facts >>
      disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
      simp[inst_seq_ptr_def]) >>
   qexistsl [`DRESTRICT G (COMPL {"%" ++ toString st.cs_next_var})`,

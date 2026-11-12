@@ -135,6 +135,63 @@ Proof
   fs[op_taint_def] >> SET_TAC[]
 QED
 
+(* The count header's forward pointer check, from the same step certificates. *)
+Theorem prefix_loop_count_header_seq_ptr[local]:
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
+  FLOOKUP G dst = SOME (rb,sz) /\ rb <= d /\ d+32 <= rb+sz /\ d < dimword (:256) /\ dst <> x /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  inst_seq_ptr D lo ctx fn PG G tn
+    [mk_inst iid DLOAD [src] [x]; mk_inst (iid+1) MSTORE [Var dst;Var x] []] s
+    (DRESTRICT G (COMPL {x}))
+    (step_taint (mk_inst (iid+1) MSTORE [Var dst;Var x] [])
+      (update_var x (abi_decode_load DLOAD a s) s)
+      (mstore d (abi_decode_load DLOAD a s) (update_var x (abi_decode_load DLOAD a s) s))
+      (tn with t_var := tn.t_var |+ (x,{})))
+Proof
+  strip_tac >>
+  `(mk_inst iid DLOAD [src] [x]).inst_opcode <> INVOKE /\
+   (mk_inst (iid+1) MSTORE [Var dst;Var x] []).inst_opcode <> INVOKE` by
+    simp[mk_inst_def] >>
+  `!n. abi_decode_load DLOAD a (s with vs_inst_idx := n) = abi_decode_load DLOAD a s` by
+    simp[abi_decode_load_def,abi_decode_source_def] >>
+  mp_tac (Q.INST [`fuel` |-> `0`] prefix_loop_count_header_steps_interior) >>
+  simp_tac std_ss [LET_THM] >> asm_rewrite_tac[] >> strip_tac >>
+  mp_tac (Q.INST [`inst` |-> `mk_inst iid DLOAD [src] [x]`,
+    `t` |-> `update_var x (abi_decode_load DLOAD a s) s`,
+    `H` |-> `DRESTRICT G (COMPL {x})`,
+    `qt` |-> `step_taint (mk_inst iid DLOAD [src] [x]) s
+       (update_var x (abi_decode_load DLOAD a s) s) tn`]
+    prefix_loop_step_seq_facts) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  qpat_x_assum `step_inst_base (mk_inst (iid+1) MSTORE _ _) _ = _` kall_tac >>
+  qpat_x_assum `ghost_step _ _ _ _ _ (mk_inst (iid+1) MSTORE _ _) _ = _` kall_tac >>
+  qpat_x_assum `ptr_safe_step _ _ _ _ _ _ _ _ (mk_inst (iid+1) MSTORE _ _) _` kall_tac >>
+  mp_tac (Q.INST [`fuel` |-> `0`, `s` |-> `s with vs_inst_idx := SUC s.vs_inst_idx`]
+    prefix_loop_count_header_steps_interior) >>
+  (impl_tac >- fs[eval_op_inst_idx,allocas_from_def]) >>
+  simp_tac std_ss [LET_THM] >> asm_rewrite_tac[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `step_inst_base (mk_inst (iid+1) MSTORE _ _) u2 = OK t2` >>
+  qmatch_asmsub_abbrev_tac `ghost_step 0 ctx PG _ q2 (mk_inst (iid+1) MSTORE _ _) _ = (_,qt2)` >>
+  mp_tac (Q.INST [`inst` |-> `mk_inst (iid+1) MSTORE [Var dst;Var x] []`,
+    `s` |-> `u2`, `t` |-> `t2`, `G` |-> `DRESTRICT G (COMPL {x})`, `tn` |-> `q2`,
+    `H` |-> `DRESTRICT G (COMPL {x})`, `qt` |-> `qt2`] prefix_loop_step_seq_facts) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  `u2 = update_var x (abi_decode_load DLOAD a s) s with vs_inst_idx := SUC s.vs_inst_idx /\
+   t2 = mstore d (abi_decode_load DLOAD a s) (update_var x (abi_decode_load DLOAD a s) s)
+     with vs_inst_idx := SUC s.vs_inst_idx /\
+   q2 = tn with t_var := tn.t_var |+ (x,{}) /\
+   qt2 = step_taint (mk_inst (iid+1) MSTORE [Var dst;Var x] [])
+     (update_var x (abi_decode_load DLOAD a s) s)
+     (mstore d (abi_decode_load DLOAD a s) (update_var x (abi_decode_load DLOAD a s) s))
+     (tn with t_var := tn.t_var |+ (x,{}))` by
+    simp[Abbr `u2`,Abbr `t2`,Abbr `q2`,Abbr `qt2`,update_var_idx,mstore_idx,
+      prefix_copy_pure_taint] >>
+  qpat_x_assum `u2 = _` SUBST_ALL_TAC >> qpat_x_assum `t2 = _` SUBST_ALL_TAC >>
+  qpat_x_assum `q2 = _` SUBST_ALL_TAC >> qpat_x_assum `qt2 = _` SUBST_ALL_TAC >>
+  fs[inst_seq_ptr_def,prefix_copy_pure_taint]
+QED
+
 Theorem prefix_loop_count_header_block_interior:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
@@ -283,6 +340,7 @@ Theorem prefix_loop_count_header_pair_interior:
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t H qt.
     run_inst_seq (emitted_insts st st') s = OK t /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt) /\
     eval_operand cnt t = SOME (abi_decode_load DLOAD a s) /\
     mem_word_at d t.vs_memory = abi_decode_load DLOAD a s /\
     fresh_vars_wrt limit_st t /\ abi_decode_frame d 32 s t /\
@@ -320,6 +378,14 @@ Proof
    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
     (irule prefix_loop_count_header_semantic >> simp[] >>
      qexistsl_tac [`Var dst`,`src`,`st'`] >> simp[]) >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s
+     (DRESTRICT G (COMPL {x}))
+     (step_taint (mk_inst (iid+1) MSTORE [Var dst;Var x] [])
+       (update_var x (abi_decode_load DLOAD a s) s) t
+       (tn with t_var := tn.t_var |+ (x,{})))` by
+    (qpat_x_assum `emitted_insts st st' = _` SUBST1_TAC >>
+     simp[Abbr `t`] >> gen_tac >> irule prefix_loop_count_header_seq_ptr >>
+     simp[] >> metis_tac[]) >>
   qexistsl_tac [`DRESTRICT G (COMPL {x})`,
     `step_taint (mk_inst (iid+1) MSTORE [Var dst;Var x] [])
       (update_var x (abi_decode_load DLOAD a s) s) t
@@ -520,6 +586,7 @@ Theorem prefix_loop_count_header_pair:
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t H qt.
     run_inst_seq (emitted_insts st st') s = OK t /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt) /\
     eval_operand cnt t = SOME (abi_decode_load DLOAD a s) /\
     mem_word_at d t.vs_memory = abi_decode_load DLOAD a s /\
     fresh_vars_wrt limit_st t /\ abi_decode_frame d 32 s t /\
