@@ -48,7 +48,7 @@ Theorem tuple_place_memory_forward_frame:
            w2n w + type_memory_size dtv + 64 < dimword (:256)) /\
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
            0 < type_slot_size dtv) /\
-    stmt_state_rel H ctx func cenv cx ee s /\
+    stmt_state_rel H0 ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -56,7 +56,8 @@ Theorem tuple_place_memory_forward_frame:
     ?dtv r t.
       evaluate_type (get_tenv cx) dty = SOME dtv /\
       val_in_memory dtv v (w2n w) t.vs_memory /\
-      stmt_state_rel H ctx func cenv cx ee r /\
+      (!H. stmt_state_rel H ctx func cenv cx ee s ==>
+           stmt_state_rel H ctx func cenv cx ee r) /\
       gas_marked_path F ctx func s 0 (OK t) /\
       (t with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
         vs_prev_bb := r.vs_prev_bb; vs_current_bb := r.vs_current_bb;
@@ -237,7 +238,7 @@ Resume tuple_place_memory_forward_frame[staged_post]:
        (irule abi_builtin_allocate_separate >>
         qexistsl_tac [`aid`, `s`, `sa.cs_next_id`] >>
         simp[] >>
-        qpat_x_assum `stmt_state_rel H ctx func cenv cx ee s` mp_tac >>
+        qpat_x_assum `stmt_state_rel H0 ctx func cenv cx ee s` mp_tac >>
         simp[stmt_state_rel_def]) >> decide_tac) >>
   pop_assum (mk_asm "old_scratch_sep") >>
   `cenv.ce_is_ctor ==> !nm tv iv off.
@@ -257,7 +258,15 @@ Resume tuple_place_memory_forward_frame[staged_post]:
   disch_then (qspecl_then [`ee.scopes`, `sa`, `cenv`] mp_tac) >>
   simp[] >> (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then strip_assume_tac >>
-  qexistsl_tac [`r`, `t`] >> simp[] >>
+  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+       stmt_state_rel H ctx func cenv cx ee r` by
+    (qpat_assum `(r with <|vs_vars := _; vs_inst_idx := _;
+       vs_allocas := _; vs_alloca_next := _|>) = s`
+       (strip_assume_tac o SRULE [venom_state_component_equality]) >>
+     rpt strip_tac >> irule tuplePlaceStagingTheory.stmt_state_rel_fields_transport >>
+     qexists_tac `H0` >> fs[]) >>
+  qexistsl_tac [`r`, `t`] >>
+  qpat_x_assum `!H. _ ==> stmt_state_rel H _ _ _ _ ee r` (fn th => simp[th]) >>
   (conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   map_every qx_gen_tac [`aid`, `ob`, `ol`, `oa`, `on`] >> strip_tac >>

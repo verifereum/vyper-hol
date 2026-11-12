@@ -8,8 +8,8 @@ Theorem tuple_place_pointer_word_store:
   tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
-  valid_horizon cx st0 H ee.storage_trace /\
+  target_post H0 ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
   evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
@@ -20,7 +20,7 @@ Theorem tuple_place_pointer_word_store:
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx ee s /\
+  stmt_state_rel H0 ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -28,7 +28,9 @@ Theorem tuple_place_pointer_word_store:
   (loc = LocMemory ==> w2n w + type_memory_size_list ltvs <= w2n dw \/
     w2n dw + type_memory_size (EL i tvs) <= w2n w) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel H ctx func cenv cx ff t /\
+    (!H. stmt_state_rel H ctx func cenv cx ee s /\ storage_place_observed H p /\
+         regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) ==>
+         stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -60,6 +62,7 @@ Proof
         listTheory.LIST_REL_EL_EQN] >>
      qpat_x_assum `!n. _ ==> value_has_type _ _` (qspec_then `i` mp_tac) >> simp[]) >>
   irule tuple_place_word_run_frame >>
+  qpat_assum `stmt_state_rel H0 _ _ _ _ ee s` (irule_at Any) >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
@@ -70,7 +73,7 @@ Theorem tuple_place_pointer_equal_memory_store:
   tuple_place_head ctx func cenv cx st0 es lo sp tys tys tvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H0 ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
   i < LENGTH tys /\ ~is_word_type (EL i tys) /\
@@ -81,13 +84,14 @@ Theorem tuple_place_pointer_equal_memory_store:
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H0 ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel H ctx func cenv cx ff t /\
+    (!H. stmt_state_rel H ctx func cenv cx ee s ==>
+         stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -126,6 +130,7 @@ Proof
         drule_all tuple_place_head_pointer_operands >> simp[]) >>
      gvs[] >> metis_tac[]) >>
   irule tuple_place_equal_memory_run_frame >>
+  qpat_assum `stmt_state_rel H0 _ _ _ _ ee s` (irule_at Any) >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
@@ -136,8 +141,8 @@ Theorem tuple_place_pointer_equal_storage_store:
   tuple_place_head ctx func cenv cx st0 es lo sp tys tys tvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
-  valid_horizon cx st0 H ee.storage_trace /\
+  target_post H0 ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit tys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -149,13 +154,15 @@ Theorem tuple_place_pointer_equal_storage_store:
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H0 ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel H ctx func cenv cx ff t /\
+    (!H. stmt_state_rel H ctx func cenv cx ee s /\ storage_place_observed H p /\
+         regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) ==>
+         stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -189,6 +196,7 @@ Proof
     (rpt strip_tac >> `i <= i` by simp[] >>
      drule_all tuple_place_head_pointer_operands >> simp[] >> metis_tac[]) >>
   irule tuple_place_equal_storage_run_memory >>
+  qpat_assum `stmt_state_rel H0 _ _ _ _ ee s` (irule_at Any) >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
@@ -199,8 +207,8 @@ Theorem tuple_place_pointer_owned_store:
   tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
-  valid_horizon cx st0 H ee.storage_trace /\
+  target_post H0 ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sp.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size_list ltvs <= b+sz /\
@@ -220,13 +228,15 @@ Theorem tuple_place_pointer_owned_store:
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H0 ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel H ctx func cenv cx ff t /\
+    (!H. stmt_state_rel H ctx func cenv cx ee s /\ storage_place_observed H p /\
+         regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) ==>
+         stmt_state_rel H ctx func cenv cx ff t) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -279,6 +289,7 @@ Proof
   `type_alloc_ok cenv (EL i tys)` by
     (irule tuplePlaceBoundsTheory.tuple_place_element_alloc_ok >> metis_tac[]) >>
   irule tuple_place_owned_value_run_frame >>
+  qpat_assum `stmt_state_rel H0 _ _ _ _ ee s` (irule_at Any) >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>

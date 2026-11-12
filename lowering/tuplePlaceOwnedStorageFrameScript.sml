@@ -6,7 +6,7 @@ Ancestors
   venomMemDefs
 
 Theorem tuple_place_owned_storage_run_frame:
-  !H ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
+  !H0 ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
@@ -26,8 +26,8 @@ Theorem tuple_place_owned_storage_run_frame:
     expr_sim_inv cenv cx env ee /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     local_ptrs_reserved cenv sa /\
-    storage_place_observed H p /\ regions_consistent (FST H) /\
-    storage_locks_separated (FST H) (SND H) /\
+    storage_place_observed H0 p /\ regions_consistent (FST H0) /\
+    storage_locks_separated (FST H0) (SND H0) /\
     (!id path entry t0. p = MemoryPlace id path /\
        lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
@@ -44,12 +44,14 @@ Theorem tuple_place_owned_storage_run_frame:
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==> 0 < type_slot_size dtv) /\
     (dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
        type_alloc_ok cenv dty) /\
-    stmt_state_rel H ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
+    stmt_state_rel H0 ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx ff t /\
+      (!H. stmt_state_rel H ctx func cenv cx ee s /\ storage_place_observed H p /\
+           regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) ==>
+           stmt_state_rel H ctx func cenv cx ff t) /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -71,7 +73,7 @@ Proof
      rpt strip_tac >> `aid <> aid'` by decide_tac >>
      `b + len <= b' \/ b' + sz <= b` by
        metis_tac[alloca_inv_def, allocas_non_overlapping_def] >> decide_tac) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `env`, `ee`, `ff`, `s`, `p`, `w`, `loc`,
+  qspecl_then [`H0`, `ctx`, `func`, `cenv`, `cx`, `env`, `ee`, `ff`, `s`, `p`, `w`, `loc`,
       `dst_op`, `op`, `src_loc`, `dty`, `sty`, `stv`, `v`, `sa`, `sb`] mp_tac
     tuple_place_value_storage_run_frame >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>

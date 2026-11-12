@@ -41,7 +41,10 @@ Theorem tuple_place_head_advance:
   (!n b sz. local_region cenv ff.scopes t n b sz <=>
             local_region cenv es.scopes s n b sz) /\
   (!x. not_fresh_at sp x ==> lookup_var x t = lookup_var x s) /\
-  stmt_state_rel H ctx func cenv cx ff t /\ ~t.vs_halted /\
+  (?H. valid_horizon cx st0 H ff.storage_trace) /\
+  (!H. valid_horizon cx st0 H ff.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ff t /\ storage_well_formed_on cx ff (FST H)) /\
+  ~t.vs_halted /\
   t.vs_current_bb = sb.cs_current_bb /\
   t.vs_inst_idx = LENGTH sb.cs_current_insts /\
   (!j. SUC i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
@@ -49,7 +52,7 @@ Theorem tuple_place_head_advance:
       (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) t.vs_memory) ==>
   tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `tuple_place_snapshot cenv cx ff lo sb.cs_next_id tys ltys ltvs w t` by
     (irule tuple_place_snapshot_endpoint >>
      fs[tuple_place_head_def] >> goal_assum (drule_at Any) >> simp[] >>

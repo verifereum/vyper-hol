@@ -61,8 +61,8 @@ Proof
   drule_all tuplePlacePointerReadyTheory.tuple_place_index_fit >> strip_tac >>
   irule tuple_place_head_step >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (irule_at Any) >>
+  qpat_assum `eval_base_place _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_get_target_ptr _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `valid_horizon _ _ H _` (irule_at Any) >>
   qpat_assum `eval_operand _ _ = SOME _` (irule_at Any) >>
   qpat_assum `target_pre _ _ _ _ _` (irule_at Any) >>
