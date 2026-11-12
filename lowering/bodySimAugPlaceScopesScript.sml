@@ -4,6 +4,13 @@ Ancestors
   vyperState vyperContext vyperMisc pair sum
   vyperStatePreservation vyperPlaceFrames vyperCallFrame
 
+(* select_result and lookup_global now append to the storage trace: read
+   the scopes equation off the result state's trace-update form. *)
+val trace_scopes_tac =
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (fn th => assume_tac (SIMP_RULE (srw_ss()) []
+      (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >> gvs[];
+
 Theorem aug_place_pure_scopes_mutual:
   (!tops e. supported_pure_expr tops e ==>
     !cx s r s'. eval_expr cx e s = (r,s') ==> s'.scopes = s.scopes) /\
@@ -57,12 +64,12 @@ Resume aug_place_pure_scopes_mutual[subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[]
+  trace_scopes_tac >> metis_tac[]
 QED
 Resume aug_place_pure_scopes_mutual[attribute]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> trace_scopes_tac >> metis_tac[]
 QED
 Resume aug_place_pure_scopes_mutual[builtin]:
   rpt strip_tac >>
@@ -115,12 +122,12 @@ Resume aug_place_pure_scopes_mutual[place_subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[]
+  trace_scopes_tac >> metis_tac[]
 QED
 Resume aug_place_pure_scopes_mutual[place_rest]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> trace_scopes_tac >> metis_tac[]
 QED
 Finalise aug_place_pure_scopes_mutual
 
@@ -168,7 +175,8 @@ Proof
   PairCases_on `x'` >> Cases_on `x'0` >>
   simp[lookup_global_def, lift_option_type_def, bind_def,
        return_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[option_CASE_rator, return_def, raise_def, AllCaseEqs()]
+  gvs[option_CASE_rator, return_def, raise_def, ignore_bind_def,
+      record_storage_event_def, bind_def, AllCaseEqs()]
 QED
 
 Theorem aug_place_top_level_pop_scopes:
@@ -179,7 +187,8 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
-  imp_res_tac lookup_global_state >> imp_res_tac get_place_state >> gvs[] >>
+  imp_res_tac lookup_global_state >> imp_res_tac get_place_state >>
+  trace_scopes_tac >>
   imp_res_tac aug_place_lookup_global_not_memory >>
   Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
   Cases_on `p` >> gvs[] >>
@@ -290,23 +299,23 @@ Resume aug_place_effect_scopes_mutual[subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
+  trace_scopes_tac >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
 QED
 Resume aug_place_effect_scopes_mutual[attribute]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> trace_scopes_tac >> metis_tac[]
 QED
 Resume aug_place_effect_scopes_mutual[place_subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
+  trace_scopes_tac >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
 QED
 Resume aug_place_effect_scopes_mutual[place_attribute]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> trace_scopes_tac >> metis_tac[]
 QED
 Resume aug_place_effect_scopes_mutual[send]:
   rpt strip_tac >>

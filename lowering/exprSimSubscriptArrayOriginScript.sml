@@ -20,7 +20,8 @@ Proof
   simp[extend_place_def, bind_def, lift_option_type_def, return_def,
        raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
-  gvs[value_type_CASE_rator, return_def, raise_def, bind_def, AllCaseEqs()]
+  gvs[value_type_CASE_rator, return_def, raise_def, bind_def, ignore_bind_def,
+      record_storage_event_def, AllCaseEqs()]
 QED
 
 Theorem select_result_memory_origin:
