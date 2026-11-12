@@ -185,12 +185,12 @@ Theorem deploy_establishes_call_ready:
   deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
   supported_program tops /\ balance_bounded (2 ** 256 - 1) es /\
   run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
-  load_contract NONE gs am tx [(NONE, tops)] [] = INL (am', rqs) /\
-  deploy_result_rel tops runtime_bc tx es r es' (INL (am', rqs)) ==>
+  load_contract orc gs am tx [(NONE, tops)] [] = INL (am', rqs) /\
+  deploy_result_rel H tops runtime_bc tx es r es' (INL (am', rqs)) ==>
   call_ready tops runtime_bc (next_source_machine am' es') tx.target
 Proof
   strip_tac >>
-  gvs[deploy_typing_ok_def] >>
+  gvs[deploy_typing_ok_constants_ready] >>
   `wf_state es /\ layouts_agree tops am tx` by fs[deploy_state_rel_def] >>
   drule_all load_contract_sources_layouts >> strip_tac >>
   `context_well_typed
@@ -240,9 +240,10 @@ Theorem deploy_call_result_establishes_call_ready:
   run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
   deploy_call_result_rel tops runtime_bc am tx es r es' ==>
   gas_readings_rel (gas_readings es)
-    (\gs. deploy_storage_ok tops am tx gs ==>
+    (\gs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) gs ==>
           !am' rqs.
-            load_contract NONE gs am tx [(NONE, tops)] [] = INL (am', rqs) ==>
+            load_contract (SOME (MAP SND (call_trace es))) gs am tx
+              [(NONE, tops)] [] = INL (am', rqs) ==>
             call_ready tops runtime_bc (next_source_machine am' es')
               tx.target) T
 Proof
