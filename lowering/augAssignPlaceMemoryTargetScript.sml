@@ -97,7 +97,9 @@ Theorem aug_place_storage_access_path:
     (!rp. not_fresh_at sa rp ==> lookup_var rp u = lookup_var rp s) /\
     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
     u.vs_memory = s.vs_memory /\ sa.cs_next_var <= sb.cs_next_var /\
-    (?out. op = Var out /\ not_fresh_at sb out)
+    (?out. op = Var out /\ not_fresh_at sb out) /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt strip_tac >>
   `step_inst_base
@@ -113,6 +115,9 @@ Proof
   disch_then drule >>
   (impl_tac >- (Cases_on `tr` >> simp[])) >> strip_tac >>
   `t.vs_memory = s.vs_memory` by
+    (qpat_assum `t = _` SUBST1_TAC >> simp[update_var_def]) >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_assum `t = _` SUBST1_TAC >> simp[update_var_def]) >>
   qexists_tac `t` >> simp[] >>
   `!x. arg = Var x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
@@ -149,7 +154,9 @@ Theorem aug_place_storage_read_path:
     (!rp. not_fresh_at sp rp ==> lookup_var rp u = lookup_var rp s) /\
     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
     u.vs_memory = s.vs_memory /\ sp.cs_next_var <= sb.cs_next_var /\
-    (?out. op = Var out /\ not_fresh_at sb out)
+    (?out. op = Var out /\ not_fresh_at sb out) /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt strip_tac >>
   drule_all aug_place_pure_target_storage_range >> strip_tac >>
