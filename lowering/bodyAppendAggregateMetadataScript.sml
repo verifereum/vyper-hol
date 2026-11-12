@@ -1,27 +1,10 @@
 (* Declaration and layout boundary for aggregate storage Append. *)
 Theory bodyAppendAggregateMetadata
 Ancestors
-  bodyAppendStorageFacts bodySim supportedStmts exprSimHyps exprSimHypsDefs
-  bodyStorageMetadata exprOpenCases compileEnv loweringStateRelDefs
-  vyperTypeSystem vyperTypeValues vyperTypeEnv vyperStorageLayoutSafety
-  placeDynLayout vyperValue valueEncodingProps supportedProgram supportedDecls
-  supportedTypes
+  bodyAppendStorageFacts exprSimHypsDefs vyperTypeEnv vyperValue
+  vyperStorageLayoutSafety vyperAST
 
-Theorem storage_element_nonword[local]:
-  supported_storage_type tops elem /\ ~supported_full_word_type elem ==>
-  ~is_word_type elem
-Proof
-  Cases_on `elem` >>
-  simp[is_word_type_def, supported_storage_type_def,
-       Once supported_nested_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_word_type_def, supported_full_word_type_def,
-       supported_storage_type_def, Once supported_nested_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[is_word_type_def]
-QED
-
-Theorem body_append_aggregate_metadata:
+Theorem body_append_aggregate_metadata_ptr:
   body_inv tops ctx cenv cx /\
   supported_variable_decl tops (src,id) =
     SOME (vis,mut,ArrayT elem (Dynamic dn),SOME declared_slot) /\
@@ -55,51 +38,20 @@ Theorem body_append_aggregate_metadata:
         SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot)))
 Proof
   strip_tac >>
-  `expr_type e = elem` by
-    (Cases_on `supported_storage_dynamic_array tops (src,id)`
-     >- (drule supported_append_storage_decl >> strip_tac >> gvs[]) >>
-     gvs[supported_stmt_def]) >>
-  drule_all body_append_root_metadata >> strip_tac >>
-  drule supported_variable_decl_mem >> strip_tac >>
-  `supported_program tops` by fs[body_inv_def] >>
-  `supported_declaration_header tops
-     (VariableDecl vis mut id (ArrayT elem (Dynamic dn)) (SOME declared_slot))` by
-    metis_tac[supported_program_def, supported_declaration_headers_def,
-              listTheory.EVERY_MEM] >>
-  `supported_storage_type tops elem` by
-    (Cases_on `vis` >> gvs[supported_declaration_header_def,
-                           supported_storage_array_depth]) >>
-  `~is_word_type elem` by metis_tac[storage_element_nonword] >>
-  gvs[] >>
-  drule supported_variable_decl_runtime_lookup >> simp[] >> strip_tac >>
-  `get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  mp_tac (Q.INST [`cap` |-> `dn`, `ast_slot` |-> `declared_slot`]
+    (SPEC_ALL bodyAppendStorageFactsTheory.body_append_aggregate_metadata)) >>
+  simp[] >> strip_tac >>
   drule append_typing_target >> strip_tac >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
   `find_var_decl_by_name id tops <> NONE` by simp[] >>
-  drule_all append_typed_storage_target >> strip_tac >>
-  drule find_var_decl_storage_mem >> strip_tac >>
-  `ALL_DISTINCT
-    (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))`
-    by fs[body_inv_def] >>
-  drule_all build_maps_variable >> strip_tac >>
-  gvs[] >>
-  `build_var_type_map tops (NONE,id) = cenv.ce_module_var_type (NONE,id)` by
-    gvs[body_inv_def] >>
+  drule_all append_typed_storage_target >> strip_tac >> gvs[] >>
+  `type_memory_bytes cenv (expr_type e) < 2 ** 64` by
+    (drule body_append_element_alloc_bound >> simp[]) >>
   gvs[evaluate_type_def, AllCaseEqs()] >>
-  (rpt conj_tac
-   >- (irule append_storage_target_eval >> simp[evaluate_type_def])
-   >- (drule_all expr_sim_inv_memory_size >> simp[type_memory_size_slots])
-   >- (drule body_append_element_alloc_bound >> simp[])
-   >- (rename1 `0 < type_slot_size etv` >>
-       fs[type_slot_size_def] >>
-       `cenv.ce_module_dynarray_capacity (NONE,id) <=
-        type_slot_size etv * cenv.ce_module_dynarray_capacity (NONE,id)`
-         by simp[] >> decide_tac)
-   >- simp[declared_storage_region_def, evaluate_type_def]
-   >- (`declared_storage_region cx NONE id [] =
-          SOME (tr,n2w slot,ArrayTV tv' (Dynamic (cenv.ce_module_dynarray_capacity (NONE,id))))`
-         by simp[declared_storage_region_def, evaluate_type_def] >>
-       `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
-       drule_all storage_layout_safe_region_nonoverflow >> simp[]) >>
-   strip_tac >> drule_all append_storage_compiler_location >> simp[])
+  `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
+  drule_all storage_layout_safe_region_nonoverflow >> strip_tac >>
+  gvs[type_slot_size_def, bound_length_def] >>
+  `cenv.ce_module_dynarray_capacity (NONE,id) <=
+   cenv.ce_module_dynarray_capacity (NONE,id) * type_slot_size tv` by simp[] >>
+  decide_tac
 QED

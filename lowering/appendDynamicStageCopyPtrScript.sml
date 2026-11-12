@@ -154,7 +154,7 @@ Proof
   `!i. i < n ==> (w2n b+32+i IN tf.t_mem <=> w2n a+32+i IN tn.t_mem)` by
     (rpt strip_tac >> simp[] >>
      `!j. w2n b+32+i = w2n b+32+j <=> i = j` by decide_tac >>
-     simp[] >> qpat_x_assum `!j. j < w2n b \/ _ <= j ==> _` 
+     simp[] >> qpat_x_assum `!j. j < w2n b \/ _ <= j ==> _`
        (qspec_then `w2n a+32+i` mp_tac) >>
      (impl_tac >- decide_tac) >> simp[]) >>
   (qexistsl_tac [`Gp`, `tf`, `u with vs_inst_idx := SUC sp.vs_inst_idx`] >>

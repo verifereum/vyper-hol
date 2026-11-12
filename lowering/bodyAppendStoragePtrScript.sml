@@ -5,7 +5,7 @@ Ancestors
   bodyAppendAggregateMetadata appendAggregateLayout appendDynamicPurePtr appendDynamicTransportPtr
   appendDynamicPointerAddPtr appendDynamicHeaderStorePtr appendDynamicPrefixPtr
   appendDynamicStageCopyPtr appendDynamicStagePathPtr appendAggregateAllocationPtr
-  appendDynamicLiveStagePtr appendAggregateLiveSeparationPtr
+  appendDynamicLiveStagePtr appendAggregateLiveSeparationPtr appendAggregateStagePtr
   bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs exprSimHyps
   bodyExprPreFacts supportedStmts supportedStmtTraverse supportedTypes
   supportedExprs supportedDecls bodyStorageMetadata stmtSimDefs exprLoweringProps
