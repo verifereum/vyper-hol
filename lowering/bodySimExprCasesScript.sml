@@ -47,6 +47,13 @@ Proof
   irule expr_map_case_other >> gvs[]
 QED
 
+Theorem body_inv_acyclic[local]:
+  !tops ctx cenv cx.
+    body_inv tops ctx cenv cx ==> acyclic_struct_metadata cenv.ce_struct_fields
+Proof
+  rw[body_inv_def]
+QED
+
 (* With no internal call in it, an expression simulates by
    compile_expr_sim; what is left is the case with one. *)
 Theorem body_expr_ok_intro:
@@ -70,7 +77,8 @@ Proof
   >- (drule body_expr_ok_map_other >>
       simp[expr_map_case_def] >> metis_tac[]) >>
   Cases_on `int_calls_expr e = []` >> gvs[] >>
-  metis_tac[compile_expr_sim, compile_expr_vv_sim, expr_sim_pre_body]
+  metis_tac[compile_expr_sim, compile_expr_vv_sim, expr_sim_pre_body,
+            body_inv_acyclic]
 QED
 
 Theorem body_expr_ok_case:
@@ -137,7 +145,7 @@ Proof
   rpt strip_tac >> match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   Cases_on `!e. MEM e (MAP SND kes) ==>
               int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
-  >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case]) >>
+  >- (irule compile_struct_lit_case >> metis_tac[body_exprs_ok_case, body_inv_acyclic]) >>
   rw[expr_sim_case_def, expr_vv_case_def] >>
   metis_tac[body_struct_lit_widened_call_elem]
 QED
@@ -249,7 +257,7 @@ Proof
       drule well_typed_builtin_app_length >> simp[]) >>
   Cases_on `!e. MEM e es ==>
               int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
-  >- (irule compile_make_array_case >> metis_tac[body_exprs_ok_case]) >>
+  >- (irule compile_make_array_case >> metis_tac[body_exprs_ok_case, body_inv_acyclic]) >>
   rw[expr_sim_case_def, expr_vv_case_def] >>
   metis_tac[body_make_array_widened_call_elem]
 QED

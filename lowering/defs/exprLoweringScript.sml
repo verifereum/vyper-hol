@@ -1593,27 +1593,6 @@ End
 
 (* NOTE: nsid_to_string moved to compileEnv *)
 
-(* ===== Target Base Address ===== *)
-(* Get the base operand for an assignment target.
-   Returns the memory/storage address. *)
-Definition compile_target_base_def:
-  compile_target_base cenv (NameTarget id) =
-    (case FLOOKUP cenv.ce_vars id of
-       SOME (MemLoc offset _) => Lit (n2w offset)
-     | SOME (PtrVar ptr_op _) => ptr_op
-     | _ => Lit 0w) ∧
-  compile_target_base cenv (TopLevelNameTarget nsid) =
-    (case FLOOKUP cenv.ce_module_vars nsid of
-       SOME (StorageLoc slot) => Lit slot
-     | SOME (TransientLoc slot) => Lit slot
-     | SOME (ImmutableLoc offset) => Lit (n2w offset)
-     | _ => Lit 0w) ∧
-  compile_target_base cenv (SubscriptTarget bt _) =
-    compile_target_base cenv bt ∧
-  compile_target_base cenv (AttributeTarget bt _) =
-    compile_target_base cenv bt
-End
-
 (* ===== Type Conversion ===== *)
 (* Conversion operation descriptor. Encodes what the conversion does.
    Mirrors Python: builtins/convert.py lower_convert dispatch.
@@ -2225,21 +2204,34 @@ Termination
 End
 
 (* Tuples may have heterogeneous memory widths.  Their JSON translation uses
-   MakeArray NONE, so compute each element's destination offset from its own
-   static type instead of using the homogeneous array stride. *)
+   MakeArray NONE, so each element goes at an offset computed from the
+   tuple's declared member types tys rather than a homogeneous array stride.
+   An element is stored at its member type, which may be wider than the
+   element's own type (a narrower String in a wider tuple slot).
+   Mirrors Python: expr.py lower_Tuple (store_vyper_value at
+   typ.member_types[i], offset += memory_bytes_required) *)
+(* The member types a tuple literal is laid out at: its own (contextual)
+   type's members, as Python's lower_Tuple allocates
+   new_temporary_value(typ). *)
+Definition tuple_literal_types_def:
+  tuple_literal_types ty es =
+    case ty of TupleT tys => tys | _ => MAP expr_type es
+End
+
 Definition compile_make_tuple_def:
-  compile_make_tuple cfn cenv [] buf_op cur_offset = return buf_op ∧
-  compile_make_tuple cfn cenv (e::es) buf_op cur_offset =
+  compile_make_tuple cfn cenv [] tys buf_op cur_offset = return buf_op ∧
+  compile_make_tuple cfn cenv (e::es) [] buf_op cur_offset = return buf_op ∧
+  compile_make_tuple cfn cenv (e::es) (m_ty::tys) buf_op cur_offset =
     let e_ty = expr_type e in
-    let elem_size = type_memory_bytes cenv e_ty in
+    let elem_size = type_memory_bytes cenv m_ty in
     do vv <- cfn cenv e_ty e;
        dst <- emit_op ADD [buf_op; Lit (n2w cur_offset)];
        v <- unwrap_value cenv vv;
-       compile_store_memory cenv v dst e_ty (lowered_value_type cenv e);
-       compile_make_tuple cfn cenv es buf_op (cur_offset + elem_size)
+       compile_store_memory cenv v dst m_ty (lowered_value_type cenv e);
+       compile_make_tuple cfn cenv es tys buf_op (cur_offset + elem_size)
     od
 Termination
-  WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
+  WF_REL_TAC `measure (LENGTH o (FST o SND o SND))` >> simp[]
 End
 
 Definition compile_make_array_elems_def:
@@ -2792,7 +2784,10 @@ Definition compile_call_def:
        return type even where the call is used at a wider type.
        Mirrors Python: _make_ptr_value(return_buf, MEMORY, func_t.return_type) *)
     let call_ty = cenv.ce_func_return_type name in
-    let arg_types = MAP expr_type args in
+    (* Each memory argument is staged in a buffer of its declared parameter
+       type, which may be wider than the argument's own type.
+       Mirrors Python: new_temporary_value(arg_t.typ) + store_vyper_value *)
+    let arg_types = TAKE (LENGTH args) (cenv.ce_func_param_types name) in
     let (arg_vals, st1) = compile_multi_vvs cfn cenv args st in
     let (return_buf, st2) =
       (if returns_count > 0 then
@@ -3483,12 +3478,12 @@ Definition compile_builtin_dispatch_body_def:
      | MakeArray elem_ty_opt bnd =>
          (case elem_ty_opt of
             NONE =>
-              let total_size = SUM
-                    (MAP (type_memory_bytes cenv o expr_type) args) in
+              let m_tys = tuple_literal_types ret_ty args in
+              let total_size = SUM (MAP (type_memory_bytes cenv) m_tys) in
               let (buf_op_alloc, st2) = compile_alloc_buffer total_size st in
               let buf_op = buf_op_alloc.buf_operand in
               as_ptr_val ret_ty LocMemory
-                (compile_make_tuple compile_expr cenv args buf_op 0 st2)
+                (compile_make_tuple compile_expr cenv args m_tys buf_op 0 st2)
           | SOME elem_ty =>
               let elem_sz = type_memory_bytes cenv elem_ty in
               let has_lw = (case bnd of Dynamic _ => T | _ => F) in
@@ -3723,7 +3718,7 @@ Theorem compile_make_tuple_word_order:
   MAP (\i. i.inst_opcode)
     (SND (compile_make_tuple
       (\c t x. comp_return (LocatedValue (BaseT BoolT) (mk_ptr src LocMemory)))
-      cenv [e] buf 0
+      cenv [e] [BaseT BoolT] buf 0
       (st with cs_current_insts := []))).cs_current_insts =
   [ADD; MLOAD; MSTORE]
 Proof
