@@ -497,13 +497,24 @@ Theorem asm_create_raw_same_depth:
     buffer_to_list p.memory = asm_call_memory (w2n (EL 1 c.stack))
       (w2n (EL 2 c.stack)) 0 0 (buffer_to_list c.memory) /\
     t.rollback.tStorage = s.rollback.tStorage /\
-    t.rollback.toDelete = s.rollback.toDelete
+    t.rollback.toDelete = s.rollback.toDelete /\
+    ?charge gas.
+      charge = static_gas (if two then Create2 else Create) +
+        init_code_word_cost * word_size (w2n (EL 2 c.stack)) +
+        (if two then keccak256_per_word_cost * word_size (w2n (EL 2 c.stack)) else 0) +
+        memory_expansion_cost (buffer_length c.memory)
+          (if 0 < w2n (EL 2 c.stack)
+           then word_size (w2n (EL 1 c.stack) + w2n (EL 2 c.stack)) * 32 else 0) /\
+      p.gasUsed <= c.gasUsed + charge + gas /\
+      gas = (c.msgParams.gasLimit - (c.gasUsed + charge)) -
+        (c.msgParams.gasLimit - (c.gasUsed + charge)) DIV 64
 Proof
+  qpat_abbrev_tac `upfront = static_gas _ + _ + _ + memory_expansion_cost _ _` >>
   strip_tac >> drule_all asm_create_success_prefix >> strip_tac >>
-  qpat_x_assum `charge = _` kall_tac >>
-  qpat_x_assum `gas = _` kall_tac >>
-  qpat_x_assum `p.gasUsed = _` kall_tac >>
-  drule_all asm_create_finish_view >> strip_tac >> gvs[]
+  `charge = upfront` by simp[Abbr `upfront`] >>
+  qpat_x_assum `charge = _ + memory_expansion_cost _ _` kall_tac >>
+  drule_all asm_create_finish_view >> strip_tac >>
+  gvs[ExclSF "ARITH"] >> decide_tac
 QED
 
 Theorem asm_create_raw_child_entry:
@@ -521,13 +532,26 @@ Theorem asm_create_raw_child_entry:
     child.msgParams.outputTo = Code address /\ child.logs = [] /\
     crb.toDelete = s.rollback.toDelete /\
     crb.tStorage = s.rollback.tStorage /\
-    t.rollback.toDelete = s.rollback.toDelete
+    t.rollback.toDelete = s.rollback.toDelete /\
+    ?charge gas.
+      charge = static_gas (if two then Create2 else Create) +
+        init_code_word_cost * word_size (w2n (EL 2 c.stack)) +
+        (if two then keccak256_per_word_cost * word_size (w2n (EL 2 c.stack)) else 0) +
+        memory_expansion_cost (buffer_length c.memory)
+          (if 0 < w2n (EL 2 c.stack)
+           then word_size (w2n (EL 1 c.stack) + w2n (EL 2 c.stack)) * 32 else 0) /\
+      parent.gasUsed = c.gasUsed + charge + gas /\
+      gas = (c.msgParams.gasLimit - (c.gasUsed + charge)) -
+        (c.msgParams.gasLimit - (c.gasUsed + charge)) DIV 64
 Proof
+  qpat_abbrev_tac `upfront = static_gas _ + _ + _ + memory_expansion_cost _ _` >>
   strip_tac >> drule_all asm_create_success_prefix >> strip_tac >>
-  qpat_x_assum `charge = _` kall_tac >>
-  qpat_x_assum `gas = _` kall_tac >>
-  qpat_x_assum `p.gasUsed = _` kall_tac >>
-  drule_all asm_create_finish_view >> strip_tac >> gvs[] >> metis_tac[]
+  `charge = upfront` by simp[Abbr `upfront`] >>
+  qpat_x_assum `charge = _ + memory_expansion_cost _ _` kall_tac >>
+  drule_all asm_create_finish_view >> strip_tac >>
+  gvs[ExclSF "ARITH"]
+  >- decide_tac >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 Theorem asm_frame_create_consume[local]:
   asm_evm_rel (prog ++ [AsmDataItem data]) a s /\
@@ -682,6 +706,9 @@ Proof
      qspec_then `s` mp_tac vfmTxParamsTheory.step_preserves_txParams >> simp[]) >>
   `observable_call c` by (Cases_on `salt_opt` >> gvs[observable_call_def]) >>
   drule_all asm_create_raw_same_depth >> strip_tac >>
+  qpat_x_assum `charge = _` kall_tac >>
+  qpat_x_assum `gas = _` kall_tac >>
+  qpat_x_assum `_.gasUsed <= _` kall_tac >>
   drule_all asm_create_raw_size >> disch_tac >>
   drule_at (Pat `step _ = _`) frame_obs_call_same_depth >> simp[] >> strip_tac >>
   `run_call t = run_call s` by (drule_all run_call_same_depth_step >> simp[]) >>
@@ -748,6 +775,9 @@ Proof
      qspec_then `s` mp_tac vfmTxParamsTheory.step_preserves_txParams >> simp[]) >>
   `observable_call c` by (Cases_on `salt_opt` >> gvs[observable_call_def]) >>
   drule_all asm_create_raw_child_entry >> strip_tac >>
+  qpat_x_assum `charge = _` kall_tac >>
+  qpat_x_assum `gas = _` kall_tac >>
+  qpat_x_assum `_.gasUsed = _` kall_tac >>
   drule_all asm_create_raw_size >> disch_tac >>
   `2 <= LENGTH v.contexts` by simp[] >>
   drule_at (Pat `wf_state v`) asm_call_child_run_normal >> simp[] >> strip_tac >>
