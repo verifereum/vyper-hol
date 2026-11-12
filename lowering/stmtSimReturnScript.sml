@@ -790,7 +790,6 @@ Proof
   gvs[return_unlock_insts_def, return_unlock_state_def] >>
   TRY (qexists_tac `tn` >> rw[] >>
        irule (cj 1 gas_origin_ptr_path_rules) >> simp[] >> NO_TAC) >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `get_instruction bb _ = SOME i` >>
   qmatch_goalsub_abbrev_tac `OK (u with vs_inst_idx := _)` >>
   `step_inst_base i s = OK u` by
