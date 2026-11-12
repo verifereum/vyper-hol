@@ -9,11 +9,32 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* STAGED HEADER: proof pending.  From the pinned start st, the shadow
-   chain runs the spine's per-step gas_shadow_compiles results (dispatch,
+(* From the pinned start st, the shadow chain runs the spine's per-step
+   gas_shadow_compiles results (fresh_label, dispatch,
    compile_external_fn_bodies of the prefix, new_block, entry checks,
-   registration, guarded body), and the shadow unit from
-   gas_shadow_run_lowering holds its code at the same labels. *)
+   registration, guarded body) from gas_shadow_state_refl, and the shadow
+   unit from gas_shadow_run_lowering holds its code at the same labels.
+
+   Intuition:
+   - The actual unit is run_lowering's (supported_program excludes
+     defaults; lowering_policy_ok forces Linear dispatch), so st, sa, sb,
+     st' are its compile states; source_selected_body_code's chain
+     (runtime_external_boundary, external_bodies_append/run_shape,
+     run_lowering_entry_interval, fn_has_code_split/mid) gives the actual
+     fn_has_code facts at these pinned states.
+   - gas_shadow_inst is a relation, not a function, so cs_extends does not
+     transfer from the actual to the shadow side: the same generic chain
+     has to run on the shadow packages, which needs their shapes
+     (expr_shape_root is invariant under gas_shadow_expr: Call targets are
+     kept and builtin_arity (Env _) = 0).
+   - The shadow body at type ret lands where the shadow guarded body's
+     compile at (case rt ...) does: stmts_env_ret_ty on the shadow body,
+     which needs supported_stmts preserved by gas_shadow_stmt (Env MsgGas
+     and Env GasPrice are both supported env builtins) and
+     ~stmts_valued_return preserved.
+   - The shadow stmts_env pairs with the actual one through a
+     gas_shadow_compiles result for stmts_env (FST equal: same cenv').
+   - gas_shadow_lookup_function gives the shadow partner of func. *)
 Theorem runtime_selected_body_shadow:
   !tops rpolicy unit lbl ce pos mincd pay key ut iv fbody rt st cenv sa st'
    bindings ctx cx env env' ret.
