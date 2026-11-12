@@ -47,6 +47,7 @@ Ancestors
   extcallReturnDefaultResources extcallReturnDefaultRouting extcallReturnDefaultStore
   extcallReturnDefaultDecode extcallReturnInterface extcallReturnDefaultOwnership
   extcallReturnDefaultTypes extcallReturnDefaultIntervals
+  extcallProtFrameOperand extcallProtFramePrefixJoint extcallProtFrameRaw
 
 (* A storage or transient pointer an effect-free operand leaves reads live
    slots at es': no byte of the slots it reads is dead but those its own
@@ -371,16 +372,25 @@ Proof
     `\target rs kwargs. vyperState$bind (read_results cx rs) (\vs.
        eval_ext_call cx is_static' skip (fname,arg_types,ret_type) opts
          (target::(vs ++ kwargs)))`]
-    exprExtRequestOperandCpsTheory.extrequest_operand_cps)) >>
+    extcallProtFrameOperandTheory.extcall_protframe_operand_cps)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   first_assum (irule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
   first_assum (irule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)) >>
-  qexistsl [`is_static'`, `nocalls`, `env`, `dflt`, `ann`] >>
+  qexistsl [`is_static'`, `prot`, `nocalls`, `env`, `dflt`, `ann`, `s0.vs_memory`] >>
   simp[vv_post_storage_live, vv_post_pure_memory_frame] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (rpt gen_tac >> disch_then strip_assume_tac >>
+     match_mp_tac (GEN_ALL extcallProtFrameRawTheory.pure_vv_marked_path_protected) >>
+     first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
+     simp[] >> conj_tac >- MATCH_ACCEPT_TAC vv_post_pure_memory_frame >>
+     rpt strip_tac >> metis_tac[]) >>
   conj_tac >- metis_tac[vv_post_storage_live] >>
-  conj_tac >- metis_tac[vv_post_pure_memory_frame] >>
+  conj_tac >- MATCH_ACCEPT_TAC vv_post_pure_memory_frame >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `?posvs. read_results cx rs ee = (INL posvs,ee)` by
     (qpat_assum `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -395,6 +405,16 @@ Proof
   disch_then (qspec_then `target` mp_tac) >>
   (impl_tac >- (qexists_tac `used` >> simp[])) >> strip_tac >>
   drule_all exprExtRequestGasSelectionsTheory.extrequest_kwargs_gas_endpoint >> strip_tac >>
+  `window_alloca_growth t t'` by
+    (irule extcallProtFramePathTheory.gas_marked_path_window_alloca_growth >>
+     goal_assum (drule_at Any)) >>
+  `!pa pk. prot pa pk ==> pa + pk <= t'.vs_alloca_next /\
+    mem_bytes_at pa pk t'.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
+    !i b n. FLOOKUP t'.vs_allocas i = SOME (b,n) ==>
+      compileEnv$regions_disjoint pa pk b n` by
+    (rpt gen_tac >> strip_tac >>
+     conj_tac >- metis_tac[abiEncoderWindowContractTheory.window_alloca_growth_frontier] >>
+     simp[] >> metis_tac[]) >>
   drule_at (Pat `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     exprExtRequestAbiFitsTheory.extrequest_call_positional_calldata >>
   disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
@@ -487,7 +507,11 @@ Proof
     w2n w + abi_size_bound cenv.ce_struct_fields
       (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type) < dimword (:256) /\
     local_ptrs_reserved cenv sp /\ safe_operand sp len /\ safe_operand sp off /\
-    eval_operand buf t'' = SOME w /\ safe_operand sp buf` by
+    eval_operand buf t'' = SOME w /\ safe_operand sp buf /\
+    (!pa pk. prot pa pk ==> pa + pk <= t''.vs_alloca_next /\
+      mem_bytes_at pa pk t''.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
+      !i b n. FLOOKUP t''.vs_allocas i = SOME (b,n) ==>
+        compileEnv$regions_disjoint pa pk b n)` by
    (Cases_on `arg_vals = []`
   >- (`arg_types = []` by
         (drule exprExtRequestShapeTheory.extrequest_body_typed >>
@@ -495,22 +519,26 @@ Proof
          fs[LENGTH_TAKE_EQ, LENGTH_NIL]) >>
       fs[valueEncodingTheory.type_memory_size_def] >>
       drule_at (Pat `extrequest_compile_prefix _ _ _ _ _ _ _ _ _ = _`)
-        exprExtRequestPrefixTheory.extrequest_empty_prefix_endpoint >>
+        extcallProtFramePrefixJointTheory.extcall_protframe_prefix_empty_joint >>
       disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-      disch_then (qspec_then `env` mp_tac) >>
-      (impl_tac >- (simp[] >> fs[wordsTheory.dimword_def] >> decide_tac)) >>
+      disch_then (qspecl_then [`prot`, `s0.vs_memory`, `env`] mp_tac) >>
+      (impl_tac >- (simp[] >> fs[wordsTheory.dimword_def] >> metis_tac[])) >>
       strip_tac >>
       qpat_x_assum `posvs = []` SUBST_ALL_TAC >>
-      gvs[vyperABITheory.vyper_to_abi_def] >>
-      qexistsl_tac [`t''`, `w`] >> simp[contractABITheory.enc_def, listTheory.REV_DEF, wordsTheory.dimword_def]) >>
+      qpat_x_assum `(case vyper_to_abi_list _ _ _ of NONE => NONE | SOME avs => SOME (ListV avs)) = SOME av` mp_tac >>
+      simp[vyperABITheory.vyper_to_abi_def] >> disch_then SUBST_ALL_TAC >>
+      qexistsl_tac [`t''`, `w`] >> simp[contractABITheory.enc_def, listTheory.REV_DEF, wordsTheory.dimword_def] >>
+      conj_tac >- fs[wordsTheory.dimword_def] >>
+      qpat_x_assum `!pa pk. prot pa pk ==> pa + pk <= t''.vs_alloca_next /\ _` mp_tac >>
+      metis_tac[]) >>
   `TAKE (LENGTH arg_types) rest <> []` by metis_tac[LENGTH_NIL] >>
   drule_at (Pat `extrequest_compile_prefix _ _ _ _ _ _ _ _ _ = _`)
-    exprExtRequestPrefixTheory.extrequest_tuple_prefix_endpoint >>
+    extcallProtFramePrefixJointTheory.extcall_protframe_prefix_tuple_joint >>
   disch_then (drule_at (Pat `EVERY _ cells`)) >>
-  disch_then (qspecl_then [`posvs`, `tvs`, `env`, `av`] mp_tac) >>
+  disch_then (qspecl_then [`posvs`, `tvs`, `prot`, `s0.vs_memory`, `env`, `av`] mp_tac) >>
   (impl_tac >- (simp[valueEncodingTheory.type_memory_size_def] >>
-    fs[wordsTheory.dimword_def] >> decide_tac)) >>
-  strip_tac >> qexistsl_tac [`t''`, `w`] >> simp[]) >>
+    fs[wordsTheory.dimword_def] >> metis_tac[])) >>
+  strip_tac >> qexistsl_tac [`t''`, `w`] >> simp[] >> metis_tac[]) >>
   `extrequest_history_frame cenv cx ee s3 t ee sp t''` by
     (irule exprExtRequestHistoryComposeTheory.extrequest_history_frame_trans >>
      conj_tac >- (qexistsl_tac [`ctx`, `func`] >>
@@ -775,9 +803,10 @@ Proof
         rpt strip_tac >>
         fs[arithmeticTheory.MOD_LESS, arithmeticTheory.ADD_COMM]) >>
      conj_tac >-
+      (conj_tac >-
        (qpat_assum `w2n w + abi_size_bound _ _ < dimword (:256)` mp_tac >>
         POP_ASSUM_LIST (K ALL_TAC) >> simp[wordsTheory.dimword_def]) >>
-     conj_tac >-
+       conj_tac >-
        (qexists_tac `s4.cs_next_id` >>
         qexists_tac `MAX
           (abi_size_bound cenv.ce_struct_fields
@@ -790,7 +819,9 @@ Proof
           (rpt gen_tac >> Cases_on `a <= b` >>
            simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
         metis_tac[]) >>
-     rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+       rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+     qpat_x_assum `!pa pk. prot pa pk ==> pa + pk <= t''.vs_alloca_next /\ _` mp_tac >>
+     metis_tac[]) >>
   qpat_x_assum `!sp sr u result_op' addr_op' value_op gas_op' buf_op call_offset call_len has_default' default_op' default_ty' target_v rest' target calldata ee t. _`
     (mp_tac o SRULE [GSYM exprExtRequestShapeTheory.extrequest_compile_step_def,
                      GSYM exprExtRequestShapeTheory.extrequest_compile_return_def]) >>
@@ -1030,6 +1061,21 @@ Resume extcall_call_step[call_success]:
      disch_then irule >>
      simp[vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
      first_assum ACCEPT_TAC) >>
+  `!pa pk. prot pa pk ==> pa + pk <= u'.vs_alloca_next /\
+    mem_bytes_at pa pk u'.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
+    !pid pb pz. FLOOKUP u'.vs_allocas pid = SOME (pb,pz) ==>
+      compileEnv$regions_disjoint pa pk pb pz` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!pa pk. prot pa pk ==> pa + pk <= t.vs_alloca_next /\ _`
+       (qspecl_then [`pa`, `pk`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> disch_then strip_assume_tac >>
+     conj_tac >- simp[] >> reverse conj_tac >- metis_tac[] >>
+     `compileEnv$regions_disjoint pa pk (w2n ro) buf_size` by metis_tac[] >>
+     `mem_bytes_at pa pk (write_memory_with_expansion (w2n ro)
+        (TAKE cap oc.co_returnData) t).vs_memory = mem_bytes_at pa pk t.vs_memory` by
+       (irule exprSimHashTheory.hash_write_memory_disjoint >>
+        fs[compileEnvTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+     metis_tac[]) >>
   `extcall_returned ctx func cenv cx ret_type es sa s0 prot sr addr_op buf_op cap target
       has_default default_op default_ty default_opt oc.co_returnData
       (SND (adopt_call_outcome rq oc consumed)) (jump_to sr.cs_current_bb u')` by
@@ -1268,16 +1314,28 @@ Resume extcall_return_default[default]:
      first_x_assum (qspec_then `dtv` mp_tac) >> simp[]) >>
   `w2n (n2w d : bytes32) = d` by
     (qpat_x_assum `d + _ < dimword _` mp_tac >> simp[]) >>
+  `!pa pk. prot pa pk ==> compileEnv$regions_disjoint pa pk d
+    (MIN (type_memory_size dtv) (type_memory_size rtv))` by
+    (drule extcallProtFramePathTheory.gas_marked_path_window_alloca_growth >> strip_tac >>
+     drule extcallProtFramePathTheory.gas_marked_path_allocas_preserved >> strip_tac >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!pa pk. prot pa pk ==> _ /\ _ /\ _` (drule_then strip_assume_tac) >>
+     drule_all extcallProtFramePrefixTheory.extcall_protframe_growth_geometry >> strip_tac >>
+     qpat_x_assum `abi_malformed_destination _ _ _ _ _ _ u` mp_tac >>
+     simp[abiMalformedRecursiveInterfaceTheory.abi_malformed_destination_def] >> strip_tac >>
+     qpat_x_assum `!i b n. FLOOKUP u.vs_allocas i = _ ==> _` drule >>
+     `MIN (type_memory_size dtv) (type_memory_size rtv) <= type_memory_size rtv` by simp[arithmeticTheory.MIN_LE] >>
+     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
   drule (Q.INST [`s` |-> `u`, `tv` |-> `rtv`, `v` |-> `dv`]
-    return_default_store_counted) >>
+    (Q.INST [`P` |-> `prot`] return_default_store_counted_frame)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand default_op u = _`)) >>
   disch_then (drule_at (Pat `eval_operand buf.buf_operand u = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ ann = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ default_ty = _`)) >>
-  disch_then (qspec_then `dv` mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  disch_then (qspecl_then [`prot`, `dv`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> metis_tac[])) >> strip_tac >>
   rename1 `gas_marked_path F ctx func u 0 (OK stored)` >>
   `ds.cs_next_var <= de.cs_next_var` by
     (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
@@ -1327,11 +1385,13 @@ Resume extcall_return_default[default_success]:
        exprLoweringPropsTheory.stmt_state_rel_jump_to] >>
   conj_tac >- suspend "default_holds" >>
   conj_tac >- suspend "default_at" >>
-  qpat_x_assum `wb_frame cenv es sa s0 checked` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  simp[wb_frame_def, locals_kept_def, venomStateTheory.jump_to_def,
-       local_region_def, venomStateTheory.lookup_var_def] >>
-  strip_tac >> conj_tac >> first_assum ACCEPT_TAC
+  conj_tac
+  >- (qpat_x_assum `wb_frame cenv es sa s0 checked` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp[wb_frame_def, locals_kept_def, venomStateTheory.jump_to_def,
+           local_region_def, venomStateTheory.lookup_var_def] >>
+      strip_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "default_bytes"
 QED
 Resume extcall_return_default[default_holds]:
   `safe_operand de buf.buf_operand` by
@@ -1429,9 +1489,21 @@ Resume extcall_return_default[decode]:
   suspend "decode_reject"
 QED
 Resume extcall_return_default[decode_success]:
+  `!pa pk. prot pa pk ==>
+    pa + pk <= u.vs_alloca_next /\
+    mem_bytes_at pa pk u.vs_memory = mem_bytes_at pa pk s0.vs_memory /\
+    !pid pb pz. FLOOKUP u.vs_allocas pid = SOME (pb,pz) ==>
+      compileEnv$regions_disjoint pa pk pb pz` by
+    (drule extcallProtFramePathTheory.gas_marked_path_window_alloca_growth >> strip_tac >>
+     drule extcallProtFramePathTheory.gas_marked_path_allocas_preserved >> strip_tac >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!pa pk. prot pa pk ==> _` (drule_then strip_assume_tac) >>
+     drule_all extcallProtFramePrefixTheory.extcall_protframe_growth_geometry >>
+     simp[]) >>
   drule_all return_default_source_success >> strip_tac >>
   `?z. gas_marked_path F ctx func u 0 (OK z) /\
     stmt_state_rel ctx func cenv cx ee z /\ wb_frame cenv es sa s0 z /\
+    (!pa pk. prot pa pk ==> mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s0.vs_memory) /\
     eval_operand buf.buf_operand z = SOME (n2w d) /\
     val_in_memory rtv x d z.vs_memory /\
     abi_malformed_destination func cenv ee.scopes sr.cs_next_id d
@@ -1443,7 +1515,10 @@ Resume extcall_return_default[decode_success]:
      first_assum (irule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `wb_frame _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `compile_return_value_decode _ _ _ = _`)) >>
-     simp[] >> qexists_tac `ann` >> simp[]) >>
+     simp[] >> qexists_tac `ann` >> simp[] >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!pa pk. prot pa pk ==> _ /\ _ /\ _` (drule_then strip_assume_tac) >>
+     simp[]) >>
   `gas_marked_path F ctx func t 0 (OK z)` by
     metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD] >>
   drule_all (Q.INST [`a` |-> `he`, `j` |-> `cj`, `b` |-> `sb`,
@@ -1456,10 +1531,12 @@ Resume extcall_return_default[decode_success]:
     (qpat_x_assum `ee.gas_obs = []` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[evaluation_state_component_equality]) >>
   simp[vv_post_def, post_value_type_def, expr_type_def] >>
-  conj_tac >- suspend "decode_holds" >>
-  conj_tac >- suspend "decode_at" >>
-  qpat_x_assum `wb_frame cenv es sa s0 (jump_to xl z)` mp_tac >>
-  simp[wb_frame_def] >> metis_tac[]
+  conj_tac >-
+    (conj_tac >- suspend "decode_holds" >>
+     conj_tac >- suspend "decode_at" >>
+     qpat_x_assum `wb_frame cenv es sa s0 (jump_to xl z)` mp_tac >>
+     simp[wb_frame_def] >> metis_tac[]) >>
+  simp[extCallSeamFinishTheory.extcall_jump_fields]
 QED
 Resume extcall_return_default[decode_holds]:
   `d < dimword (:256)` by
@@ -1515,6 +1592,14 @@ Resume extcall_return_default[decode_reject]:
        bind_def, return_def, raise_def] >>
   qexistsl_tac [`INR (Error (RuntimeError y))`, `ee`, `Abort Revert_abort z`] >>
   simp[fragExecTheory.exit_result_def, expr_exit_def]
+QED
+Resume extcall_return_default[default_bytes]:
+  qpat_x_assum `wb_frame cenv es sa s0 checked` mp_tac >>
+  simp[wb_frame_def, extCallSeamFinishTheory.extcall_jump_fields,
+       exprLoweringPropsTheory.stmt_state_rel_jump_to,
+       locals_kept_def, local_region_def, venomStateTheory.jump_to_def,
+       venomStateTheory.lookup_var_def] >> strip_tac >> simp[] >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise extcall_return_default
 
@@ -1699,6 +1784,7 @@ Resume extcall_return_values[decode_success]:
   drule_all return_default_source_success >> strip_tac >>
   `?z d. gas_marked_path F ctx func t 0 (OK z) /\ d < dimword (:256) /\
     stmt_state_rel ctx func cenv cx ee z /\ wb_frame cenv es sa s0 z /\
+    (!pa pk. prot pa pk ==> mem_bytes_at pa pk z.vs_memory = mem_bytes_at pa pk s0.vs_memory) /\
     eval_operand buf.buf_operand z = SOME (n2w d) /\
     val_in_memory rtv x d z.vs_memory /\
     abi_malformed_destination func cenv ee.scopes sr.cs_next_id d
@@ -1710,7 +1796,10 @@ Resume extcall_return_values[decode_success]:
      first_assum (irule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
      first_assum (irule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `FLOOKUP t.vs_allocas _ = SOME _`)) >>
-     simp[] >> qpat_x_assum `w2n ro + _ < dimword _` mp_tac >> simp[]) >>
+     simp[] >> qpat_x_assum `w2n ro + _ < dimword _` mp_tac >> simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `!pa pk. prot pa pk ==> _ /\ _ /\ _`
+       (drule_then strip_assume_tac) >> metis_tac[]) >>
   qexists_tac `[]` >>
   simp[gas_summary_at_def, gas_marked_exec_def, lift_sum_runtime_def,
        bind_def, return_def] >>
@@ -1886,9 +1975,12 @@ Proof
   rewrite_tac[expr_vv_case_def, expr_vv_sim_def] >> rpt strip_tac >>
   qspecl_then [`nocalls`, `ctx`, `func`, `cenv`, `cx`, `env`, `ann`, `stat`,
                 `skip`, `fname`, `arg_types`, `ret_type`, `opts`, `args`,
-                `dflt`, `ty`, `es`, `sa`, `sb`, `vv`, `s0`]
+                `dflt`, `ty`, `es`, `sa`, `sb`, `vv`, `s0`, `\pa pk. F`]
     MATCH_MP_TAC extcall_request_setup >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, ALL_TAC] >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  (conj_tac >- metis_tac[arithmeticTheory.ADD_COMM]) >>
+  ntac 11 (conj_tac >- first_assum ACCEPT_TAC) >>
+  ntac 2 (conj_tac >- simp[]) >>
   rpt strip_tac >>
   `stat <=> value_opt = NONE` by fs[extcall_request_ready_def] >>
   drule_all eval_ext_call_request >>
@@ -1899,11 +1991,11 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   rpt strip_tac >>
-  irule extcall_return_values >>
+  qpat_assum `vv = _` (fn th => rewrite_tac[th]) >>
+  irule (GEN_ALL (SIMP_RULE bool_ss []
+    (Q.INST [`prot` |-> `\pa pk. F`] (SPEC_ALL extcall_return_values)))) >>
   qpat_assum `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
-  qexists_tac `result_op` >>
-  rpt conj_tac >>
-  FIRST [first_assum ACCEPT_TAC, REFL_TAC,
-         DISJ2_TAC >> rpt strip_tac >> res_tac]
+  qexists_tac `vv` >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
 QED
