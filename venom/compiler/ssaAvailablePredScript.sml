@@ -2,6 +2,7 @@
 Theory ssaAvailablePred
 Ancestors
   venomWf venomWfProps venomExecProofs venomInst list
+  codegenReadyCompute dominatorAnalysisProps
 
 Definition dom_pred_def:
   dom_pred fn lbl P <=>
@@ -115,4 +116,70 @@ Theorem boundary_pred_index_le:
 Proof
   rw[boundary_pred_def, prefix_pred_def] >>
   first_x_assum irule >> qexists_tac `j` >> simp[] >> decide_tac
+QED
+
+(* Universal predicate availability exposes exactly the defining locations. *)
+Theorem boundary_pred_available_iff:
+  (!P. boundary_pred fn bb n P ==> P v) <=>
+  (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM v di.inst_outputs /\ fn_dominates fn db.bb_label bb.bb_label /\
+    db.bb_label <> bb.bb_label) \/
+  (?j. j < n /\ j < LENGTH bb.bb_instructions /\
+    MEM v (EL j bb.bb_instructions).inst_outputs)
+Proof
+  eq_tac
+  >- (disch_then (qspec_then
+        `\v. (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+          MEM v di.inst_outputs /\ fn_dominates fn db.bb_label bb.bb_label /\
+          db.bb_label <> bb.bb_label) \/
+          (?j. j < n /\ j < LENGTH bb.bb_instructions /\
+            MEM v (EL j bb.bb_instructions).inst_outputs)` mp_tac) >>
+      simp[boundary_pred_def, dom_pred_def, prefix_pred_def] >> metis_tac[]) >>
+  simp[boundary_pred_def, dom_pred_def, prefix_pred_def] >> metis_tac[]
+QED
+
+Theorem fn_dominates_transitive:
+  wf_function fn /\ fn_dominates fn a b /\ fn_dominates fn b c ==>
+  fn_dominates fn a c
+Proof
+  strip_tac >> gvs[fn_dominates_cfg_analyze] >> metis_tac[dominates_trans]
+QED
+
+Theorem fn_dominates_antisymmetric:
+  wf_function fn /\ fn_dominates fn a b /\ fn_dominates fn b a ==> a = b
+Proof
+  strip_tac >> gvs[fn_dominates_cfg_analyze] >> metis_tac[dominates_antisym]
+QED
+
+Theorem boundary_pred_definition_input_available:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  n <= LENGTH bb.bb_instructions /\ MEM di (fn_insts fn) /\
+  di.inst_opcode <> PHI /\ MEM out di.inst_outputs /\
+  MEM (Var v) di.inst_operands /\
+  (!P. boundary_pred fn bb n P ==> P out) ==>
+  (!P. boundary_pred fn bb n P ==> P v)
+Proof
+  strip_tac >>
+  `?db. MEM db fn.fn_blocks /\ MEM di db.bb_instructions` by
+    (gvs[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  `def_available_at fn db (SOME di) v` by
+    metis_tac[wf_ssa_def, def_dominates_uses_def] >>
+  qpat_x_assum `!P. _` mp_tac >> rewrite_tac[boundary_pred_available_iff] >>
+  strip_tac >>
+  `ssa_form fn` by gvs[wf_ssa_def] >>
+  fs[def_available_at_def]
+  >- (`db' = db` by metis_tac[ssa_unique_output_block] >> gvs[] >>
+      `fn_dominates fn def_bb.bb_label bb.bb_label` by
+        metis_tac[fn_dominates_transitive] >>
+      `def_bb.bb_label <> bb.bb_label` by
+        metis_tac[fn_dominates_antisymmetric] >> metis_tac[]) >>
+  `db = bb /\ di = EL j bb.bb_instructions` by
+    metis_tac[ssa_unique_output_block, EL_MEM] >> gvs[] >>
+  Cases_on `def_bb = bb`
+  >- (gvs[] >> `j < LENGTH bb.bb_instructions` by decide_tac >>
+      `j' = j` by metis_tac[inst_ids_el_eq, wf_function_def] >>
+      gvs[] >> disj2_tac >> qexists_tac `i` >> simp[] >> decide_tac) >>
+  `def_bb.bb_label <> bb.bb_label` by metis_tac[same_label_same_block] >>
+  metis_tac[]
 QED
