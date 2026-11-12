@@ -780,7 +780,7 @@ Proof
   simp[gas_marked_exec_def, lift_sum_def, bind_def, raise_def]
 QED
 
-Theorem augassign_rhs_trace_frame[local]:
+Theorem augassign_rhs_trace_frame:
   storage_trace_frame (bind (eval_expr cx e) (read_result cx))
 Proof
   irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
