@@ -146,57 +146,7 @@ Proof
 QED
 
 (* The judgment for eval_target_place: a target typed by a value type
-   evaluates to a place, at the pointer, a storage place in range and live. *)
-Theorem target_place_sim_mem_ready:
-  !ctx func cenv cx env bt es st0 ty sa sb r s0.
-    target_sim_mem ctx func cenv cx env bt es /\
-    type_place_target env bt = SOME (Type ty) /\
-    compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\
-    gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-      stmt_state_rel H ctx func cenv cx es s0 /\
-      storage_well_formed_on cx es (FST H)) /\
-    alloca_history func s0 /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sa.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome T (cx_tops cx) (ctx, func) cx st0 (eval_target_place cx bt) (es, s0)
-      (\H res ee t. ?p. res = INL p /\
-        target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty) r t /\
-        (!tr slot tv. p = StoragePlace tr slot tv ==>
-           slots_in_range (get_storage cx ee tr) (w2n slot) tv /\
-           storage_read_live H tr (get_storage cx ee tr) slot tv) /\
-        t.vs_current_bb = sb.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-      (\H res ee r. expr_exit res r)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `gas_admissible _ _ _`
-    (assume_tac o PURE_REWRITE_RULE [eval_target_place_as_bind]) >>
-  pure_rewrite_tac [eval_target_place_as_bind] >>
-  `gas_admissible (eval_base_place cx bt) target_res_ok es` by
-    (irule get_place_base_admissible >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `target_sim_mem _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [target_sim_mem_def]) >>
-  disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `sb`, `r`, `s0`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >>
-  mp_tac (BETA_RULE (Q.INST [`P` |->
-    `\H pv ee t. target_post H ctx func cenv cx es sa sb s0 ee pv (Type ty) r t /\
-        (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
-           slots_in_range (get_storage cx ee tr) (w2n slot) tv /\
-           storage_read_live H tr (get_storage cx ee tr) slot tv) /\
-        t.vs_current_bb = sb.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`]
-    gas_outcome_get_place_mem)) >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  irule gas_outcome_post_mono >>
-  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
-  rpt gen_tac >> strip_tac >> gvs[]
-QED
-
+   evaluates to a place, at the pointer. *)
 Theorem target_place_sim_mem:
   !ctx func cenv cx env bt es st0 ty sa sb r s0.
     target_sim_mem ctx func cenv cx env bt es /\
@@ -219,7 +169,23 @@ Theorem target_place_sim_mem:
         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
       (\H res ee r. expr_exit res r)
 Proof
-  rpt strip_tac >> drule_all target_place_sim_mem_ready >> strip_tac >>
+  rpt strip_tac >>
+  qpat_x_assum `gas_admissible _ _ _`
+    (assume_tac o PURE_REWRITE_RULE [eval_target_place_as_bind]) >>
+  pure_rewrite_tac [eval_target_place_as_bind] >>
+  `gas_admissible (eval_base_place cx bt) target_res_ok es` by
+    (irule get_place_base_admissible >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `target_sim_mem _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [target_sim_mem_def]) >>
+  disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `sb`, `r`, `s0`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  mp_tac (BETA_RULE (Q.INST [`P` |->
+    `\H pv ee t. target_post H ctx func cenv cx es sa sb s0 ee pv (Type ty) r t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`]
+    gas_outcome_get_place_mem)) >>
+  disch_then irule >> conj_tac >- first_assum ACCEPT_TAC >>
   irule gas_outcome_post_mono >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   rpt gen_tac >> strip_tac >> gvs[]
