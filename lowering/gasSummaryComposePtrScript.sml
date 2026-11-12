@@ -321,7 +321,7 @@ Proof
   `gas_explicit (REPLICATE n F ++ marks) s0.vs_gas_readings =
      gas_explicit marks s1.vs_gas_readings` by
     simp[gas_explicit_append] >>
-  asm_rewrite_tac[]
+  fs[]
 QED
 
 (* Generated reads in front (an allocation, say) keep an outcome: the
