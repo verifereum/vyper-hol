@@ -14,7 +14,7 @@ Ancestors
   abiEncoder abiEncoderRegisteredEffect allocaFrontierBound allocaBudgetProps
   exprLowering exprLoweringProps emitHelper venomInst venomState venomExecSemantics
   ptrDiscipline ptrSafeRun words list rich_list arithmetic finite_map pred_set
-  fragGasOriginPtr
+  fragGasOriginPtr fragGasOriginPtrLoop
 
 Theorem prefix_bytes_outputs_fresh[local]:
   compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') ==>
@@ -177,8 +177,8 @@ val CshiftCodeEvidence = ``\checked ty tv.
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\
     alloca_history func actual)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_bytestring_complete_mode_contract:
+  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) checked ty tv
 Proof
   strip_tac >> BETA_TAC >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -197,12 +197,6 @@ Proof
     (Q.INST [`hi` |-> `Lit (0w:bytes32)`]
       ctor_actual_bytestring_ceiling_sequence)) >> strip_tac >>
   suspend "package"
-QED
-*)
-Theorem prefix_bytestring_complete_mode_contract:
-  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) checked ty tv
-Proof
-  cheat
 QED
 
 Resume prefix_bytestring_complete_mode_contract[package]:
@@ -255,6 +249,26 @@ Resume prefix_bytestring_complete_mode_contract[package]:
      drule_all ctor_bytes_sequence_zero_path >> strip_tac >>
      `t.vs_current_bb = initial.vs_current_bb` by simp[] >>
      drule_all ctor_bytes_sequence_history >> simp[]) >>
+  (* The forward joint path runs on the same run and ghost witness. *)
+  `inst_extends st st' /\ st'.cs_current_bb = st.cs_current_bb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+              i.inst_opcode <> GAS) (emitted_insts st st')` by
+    (drule prefix_bytestring_sentinel_code >>
+     pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+     asm_rewrite_tac[inst_extends_def] >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  `checked ==> !D' explicit.
+     gas_origin_ptr_path (D', lo, explicit, ctx, func, PG) (initial, G, tn) []
+       (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts), H, qt)` by
+    (strip_tac >> gvs[] >>
+     `sb <= LENGTH initial.vs_data_section` by decide_tac >>
+     `d + abi_decode_bytes_copy_size n <= initial.vs_alloca_next` by simp[] >>
+     `run_inst_seq_mem_ok (emitted_insts st st') initial` by
+       (irule ctor_bytes_reentry_mem_ok >>
+        qexistsl [`LENGTH bs`, `d`, `Var dst`, `Lit 0w`, `n`, `sb`, `src`] >>
+        simp[] >> decide_tac) >>
+     rpt gen_tac >> irule emitted_origin_ptr_path >>
+     qexists_tac `st` >> simp[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,type_memory_bytes ce ty)]`] >>
   simp[SUBSET_REFL, op_taint_def] >>
@@ -286,14 +300,8 @@ Proof
   simp_tac bool_ss []
 QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  simp[prefix_bytestring_complete_mode_contract]
-QED
-*)
 Theorem prefix_bytestring_complete_checked_contract:
   type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) T ty tv
 Proof
-  cheat
+  simp[prefix_bytestring_complete_mode_contract]
 QED
