@@ -1200,6 +1200,49 @@ Resume abi_dyn_loop_closed[body]:
 QED
 Finalise abi_dyn_loop_closed
 
+(* A finite, action-head dispatch table for structural certificates.  Rules
+   are selected once per branch; there is no resolution or simplifier search
+   through the code being certified. *)
+fun dyn_certificate_tac g = ASSUM_LIST (fn ths =>
+  let
+    fun body t =
+      if boolSyntax.is_forall t then body (#2 (boolSyntax.dest_forall t))
+      else if boolSyntax.is_imp t then body (#2 (boolSyntax.dest_imp t))
+      else t
+    fun action_key t =
+      let val (_, args) = strip_comb (body t)
+          val action = List.last args
+          val (head, _) = strip_comb action
+      in fst (dest_const head) end
+    val rules = List.mapPartial (fn th =>
+      SOME (action_key (concl th), th) handle HOL_ERR _ => NONE)
+      ths
+    fun walk g =
+      if boolSyntax.is_forall (#2 g) then (gen_tac >> walk) g
+      else if boolSyntax.is_conj (#2 g) then (conj_tac >> walk) g
+      else if boolSyntax.is_neg (#2 g) then simp[] g
+      else
+        let val key = action_key (#2 g)
+            val matching = map #2 (List.filter (fn (k,_) => k = key) rules)
+        in (FIRST (map MATCH_MP_TAC matching) >> BETA_TAC >> walk) g end
+  in walk end) g;
+
+Theorem abi_dyn_closed_if[local]:
+  !T p m n. (^dyn_closed) T m /\ (^dyn_closed) T n ==>
+    (^dyn_closed) T (if p then m else n)
+Proof
+  Cases_on `p` >> simp[]
+QED
+
+Theorem abi_dyn_closed_copy_case[local]:
+  !T opc m n p. (^dyn_closed) T m /\ (^dyn_closed) T n /\ (^dyn_closed) T p ==>
+    (^dyn_closed) T (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)
+Proof
+  rpt gen_tac >> qmatch_goalsub_abbrev_tac `P m` >>
+  Cases_on `opc` >> pure_rewrite_tac[opcode_case_def] >>
+  metis_tac[]
+QED
+
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
