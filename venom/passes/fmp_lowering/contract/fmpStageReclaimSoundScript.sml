@@ -19,6 +19,9 @@
 Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
+  venomExecSemantics venomState finite_map fmpAliasProps ptrDiscipline
+  ctxLookupAgreeHelpers fmpAliasDefs contextCodegenRel venomInst list
+  o1PassContract
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -50,6 +53,16 @@ Proof
   cheat
 QED
 
+Theorem reclaim_dalloca_output[local]:
+  inst.inst_opcode = DALLOCA /\ step_inst k C inst s = OK s1 ==>
+  ?out. inst.inst_outputs = [out] /\ lookup_var out s1 = SOME s.vs_fmp
+Proof
+  strip_tac >>
+  gvs[step_inst_non_invoke] >>
+  gvs[Once step_inst_base_def, AllCaseEqs(), update_var_def,
+      lookup_var_def, FLOOKUP_UPDATE]
+QED
+
 Theorem fmp_stage_covers_dalloca:
   fmp_base_analyze (fn_insts fn) = SOME env /\ wf_function fn /\
   active_inst fn inst s /\ inst.inst_opcode = DALLOCA /\
@@ -65,7 +78,29 @@ Theorem fmp_stage_covers_dalloca:
     env eb (lo + (w2n s1.vs_fmp - w2n s.vs_fmp))
     (step_prov PG G inst s1)
 Proof
-  cheat
+  strip_tac >>
+  drule_all reclaim_dalloca_output >> strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  `MEM inst.inst_id (fmp_bases env out)` by
+    (irule fmp_base_analyze_propagates >>
+     qexistsl [`inst`, `fn_insts fn`] >>
+     simp[fmp_base_output_def, fmp_single_output_def,
+          fmp_generated_bases_def]) >>
+  gvs[step_prov_def, out_prov_def, set_prov_def] >>
+  simp[fmp_frame_covers_def] >> rpt gen_tac >> strip_tac >>
+  gvs[FLOOKUP_UPDATE, AllCaseEqs()]
+  >- (Cases_on `s1.vs_fmp = s.vs_fmp` >>
+      gvs[FLOOKUP_UPDATE] >>
+      first_x_assum drule >> simp[]) >>
+  Cases_on `s1.vs_fmp = s.vs_fmp`
+  >- (gvs[fmp_frame_covers_def] >> metis_tac[]) >>
+  gvs[FLOOKUP_UPDATE, AllCaseEqs()]
+  >- (qpat_x_assum `!v b z. _` drule >> simp[] >>
+      strip_tac >> gvs[]) >>
+  qpat_assum `!b z c id. _` drule >> strip_tac >>
+  gvs[fmp_frame_covers_def]
 QED
 
 Theorem fmp_stage_covers_phis:
