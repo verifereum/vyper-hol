@@ -1,11 +1,12 @@
 (* Conditional composite decoder replay: concrete guarded entry phases. *)
 Theory extcallDecoderCompositeMemory
 Ancestors
-  extcallDecoderPreparationMemory extcallDecoderHeadBounds
+  extcallDecoderPreparationMemory extcallDecoderMemberPreparationMemory extcallDecoderHeadBounds
   extcallDecoderMemberSemantics extcallDecoderArraySemantics extcallDecoderStaticSuffix
   extcallDecoderPrefixMemory extcallDecoderBulkMemory extcallDecoderLoopEdgesMemory
-  abiDecoderComplexGuard abiDecoderComplexHead freshWrites exprSimCalldataSlice
-  abiDecoderReentry abiDecoderVarSequence abiDecoderDynamicLoopSetup
+  abiDecoderComplexGuard abiDecoderComplexHead abiDecoderMemberBound
+  abiDecoderMemberSetup abiDecoderMemberCode freshWrites exprSimCalldataSlice
+  abiDecoderReentry abiDecoderReentryPointer abiDecoderReservation abiDecoderVarSequence abiDecoderDynamicLoopSetup
   loweringStateRelDefs varsExt
   fragGasSeqMem fragGasSeqAbort fragGasMode fragGasPathMem instMemFrontier
   abiDecoderGuard abiDecoderGuards abiDecoderRange abiDecoderBytesBound
@@ -123,4 +124,90 @@ Proof
   drule_all run_inst_seq_gas_path_mem >> strip_tac >>
   qexistsl_tac [`LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st fin))`,
     `actual`] >> simp[ADD_COMM]
+QED
+
+Theorem extcall_decoder_member_pointer_wrap_reentry[local]:
+  compile_getelemptr_abi src T ao MLOAD base_op hi st = (member_ptr,fin) /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off /\
+  sb < dimword(:256) /\ off < dimword(:256) /\ dimword(:256) <= sb+off /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var base_op ==>
+  ?t. run_inst_seq (emitted_insts st fin) s = Abort Revert_abort t /\
+      inst_extends st fin
+Proof
+  strip_tac >>
+  `(!z. src = Var z ==> not_fresh_at st z) /\
+   (!z. base_op = Var z ==> not_fresh_at st z)` by
+    (Cases_on `src` >> Cases_on `base_op` >>
+     gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `eval_operand src (drop_fresh st s) = SOME (n2w sb) /\
+   eval_operand base_op (drop_fresh st s) = SOME (n2w B)` by
+    asm_simp_tac bool_ss [eval_operand_drop_fresh] >>
+  `abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) (drop_fresh st s) = n2w off` by
+    gvs[abi_decode_load_def, mload_def, drop_fresh_def] >>
+  `fresh_vars_wrt st (drop_fresh st s)` by simp[fresh_vars_wrt_drop_fresh] >>
+  drule_all extcall_decoder_member_pointer_wrap_run >> strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_member_pointer_code >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss()) [] (Q.INST [`is_dyn` |-> `T`] abi_decode_member_pointer_allocation_shape)) >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    ~is_ext_call_op i.inst_opcode) (emitted_insts st fin)` by
+    (gvs[EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!ii. MEM ii _ ==> ~is_terminator _ /\ _`
+       (qspec_then `i` mp_tac) >>
+     qpat_x_assum `!ii. MEM ii _ ==> abi_decoder_reentry_opcode _`
+       (qspec_then `i` mp_tac) >>
+     Cases_on `i.inst_opcode` >>
+     gvs[abi_decoder_reentry_opcode_def, is_ext_call_op_def, is_terminator_def]) >>
+  `vars_ext (drop_fresh st s) s` by simp[vars_ext_drop_fresh] >>
+  drule_all run_inst_seq_vars_ext >> simp[vars_ext_result_def] >> metis_tac[]
+QED
+
+Theorem extcall_decoder_member_setup_wrap_reentry_run[local]:
+  abi_decode_member_setup dst src MLOAD base_op hi T ao vo st = (ops,fin) /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off /\
+  sb < dimword(:256) /\ off < dimword(:256) /\ dimword(:256) <= sb+off /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var base_op ==>
+  ?t. run_inst_seq (emitted_insts st fin) s = Abort Revert_abort t
+Proof
+  strip_tac >> qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_member_setup_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `compile_getelemptr_abi src T ao MLOAD base_op hi st = (mp,mid)` >>
+  rename1 `emit_op ADD [dst; Lit (n2w vo)] mid = (dp,last)` >>
+  `abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off` by simp[ADD_COMM] >>
+  `dimword(:256) <= sb+off` by simp[ADD_COMM] >>
+  drule_all extcall_decoder_member_pointer_wrap_reentry >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >>
+  `!u. run_inst_seq (emitted_insts st mid) s <> OK u` by simp[] >>
+  drule_all run_inst_seq_emit_extend_err >> metis_tac[]
+QED
+
+Theorem extcall_decoder_member_setup_wrap_reentry:
+  abi_decode_member_setup dst src MLOAD base_op hi T ao vo st = (ops,fin) /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off /\
+  sb < dimword(:256) /\ off < dimword(:256) /\ dimword(:256) <= sb+off /\
+  B+sb+ao < dimword(:256) /\ B+sb+ao+32 <= s.vs_alloca_next /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st fin) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?n t. gas_path_mem ctx func s n (Abort Revert_abort t)
+Proof
+  strip_tac >> drule_all extcall_decoder_member_setup_wrap_reentry_run >> strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_member_setup_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st fin)` by fs[EVERY_CONJ] >>
+  `run_inst_seq_mem_ok (emitted_insts st fin) s` by
+    (irule extcall_decoder_member_setup_mem_ok >> metis_tac[]) >>
+  drule_all (SIMP_RULE (srw_ss()) [] (Q.SPEC `T` run_inst_seq_abort_gas_path)) >>
+  simp[gas_marked_path_def] >> metis_tac[]
 QED

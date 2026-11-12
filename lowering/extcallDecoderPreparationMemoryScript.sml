@@ -218,7 +218,7 @@ Proof
   drule_all run_inst_seq_emit_extend >> metis_tac[]
 QED
 
-Theorem extcall_decoder_member_pointer_wrap_run[local]:
+Theorem extcall_decoder_member_pointer_wrap_run:
   compile_getelemptr_abi src T ao MLOAD base_op hi st = (member_ptr,fin) /\
   hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
   eval_operand base_op s = SOME (n2w B) /\
