@@ -460,6 +460,51 @@ Proof
 
 QED
 
+Theorem iter_body_slice_fuel[local]:
+  !bc Wb E xl il ty body ce id fty arr_elem_ty loc arr idx is_dynamic.
+  fuel_okS (\s. cenv_ptrs_below s.cs_next_var bc) Wb {} (E UNION {xl;il})
+    (compile_stmts bc (InLoop xl il) ty body) ==>
+  fuel_okS (\s. cenv_ptrs_below s.cs_next_var bc) Wb {} (E UNION {xl;il})
+    (do offset_base <- return (if is_dynamic then word_scale loc else 0);
+        idx_offset <- emit_op MUL [Var idx;
+          Lit (n2w (elem_size_in_location ce loc arr_elem_ty))];
+        total_offset <- (if offset_base > 0 then
+          emit_op ADD [Lit (n2w offset_base); idx_offset] else return idx_offset);
+        elem_ptr <- emit_op ADD [arr; total_offset];
+        (case FLOOKUP bc.ce_vars id of
+           SOME (MemLoc off _) =>
+             compile_iter_elem_copy ce elem_ptr (Lit (n2w off))
+               (elem_size_in_location ce loc arr_elem_ty)
+               loc (is_slot_addressed loc) fty arr_elem_ty
+         | SOME (PtrVar ptr_op _) =>
+             compile_iter_elem_copy ce elem_ptr ptr_op
+               (elem_size_in_location ce loc arr_elem_ty)
+               loc (is_slot_addressed loc) fty arr_elem_ty
+         | _ => emit_void INVALID []);
+        compile_stmts bc (InLoop xl il) ty body;
+        emit_jmp_if_not_terminated il
+     od)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp_tac std_ss [comp_bind_return] >>
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+       conj_tac,
+       match_mp_tac fuel_okS_bind_keep >> conj_tac >- simp[next_stable_cenv_ptrs_below],
+       match_mp_tac fuel_okS_ignore_bind_keep >> conj_tac >- simp[next_stable_cenv_ptrs_below],
+       irule fuel_okS_if >> conj_tac >> strip_tac,
+       gen_tac >> BETA_TAC]) >>
+  irule fuel_okS_of_ok >>
+  fuel_auto [fuel_ok_emit_op, fuel_ok_compile_iter_elem_copy,
+             fuel_ok_emit_void, fuel_ok_emit_jmp_if_not_terminated] >>
+  simp[venomInstTheory.is_terminator_def] >>
+  Cases_on `FLOOKUP bc.ce_vars id`
+  >- (simp[] >> irule fuel_ok_emit_void_halt >> simp[]) >>
+  simp[] >>
+  rename1 `SOME binding` >> Cases_on `binding` >>
+  simp[fuel_ok_compile_iter_elem_copy] >>
+  irule fuel_ok_emit_void_halt >> simp[]
+QED
+
 Theorem fuel_okS_compile_for_iter:
   !cenv lctx ty id fty arr_e bound body Wv E.
     (!c t e Wv' E'. fuel_ok Wv' {} E' (compile_expr c t e)) /\
