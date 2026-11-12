@@ -519,11 +519,12 @@ Theorem sue_assign_observations:
 Proof
   strip_tac >>
   `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
-   t.vs_initial_fmp = s.vs_initial_fmp` by
+   t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp` by
     (fs[sue_state_rel_def] >>
      drule stateFrameTheory.execution_frame_projection >>
      simp[stateFrameTheory.execution_frame_def]) >>
-  simp[mem_corr_def, call_corr_def, unitMemInvTheory.inst_mem_ranges_def,
+  simp[mem_corr_def, call_corr_def, unitMemInvTheory.dalloca_no_wrap_def,
+       unitMemInvTheory.inst_mem_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
        codegenRelTheory.source_memory_write_ranges_def]
 QED
@@ -654,10 +655,14 @@ Theorem sue_rewritten_mem_observation:
 Proof
   strip_tac >>
   `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
-   t.vs_initial_fmp = s.vs_initial_fmp /\
+   t.vs_initial_fmp = s.vs_initial_fmp /\ t.vs_fmp = s.vs_fmp /\
    s.vs_call_entry_fmp = t.vs_call_entry_fmp` by
     (fs[stateFrameTheory.execution_frame_def,
         venomStateTheory.venom_state_component_equality]) >>
+  `dalloca_no_wrap inst s ==>
+   dalloca_no_wrap (inst with inst_operands := ops) t` by
+    (simp[unitMemInvTheory.dalloca_no_wrap_def] >> rpt strip_tac >>
+     gvs[listTheory.LIST_REL_CONS2] >> metis_tac[]) >>
   simp[mem_corr_def] >> disj2_tac >>
   Cases_on `inst.inst_opcode = DRET`
   >- (irule sue_rewritten_dret_ranges >> simp[]) >>
