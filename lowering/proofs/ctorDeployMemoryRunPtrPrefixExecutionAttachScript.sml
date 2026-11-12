@@ -36,7 +36,11 @@ Proof
   drule_all abi_decoder_word_reentry_code >> strip_tac >>
   drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
   asm_rewrite_tac[] >>
-  irule prefix_scalar_checked_ghost >>
-  simp[] >> goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> metis_tac[]
+  `!v. src = Var v \/ dst = v ==> not_fresh_at st v` by metis_tac[] >>
+  drule_all (SRULE [] (Q.INST
+    [`left` |-> `F`, `n` |-> `(n2w (if signed then bits DIV 8-1 else bits)):bytes32`,
+     `clamp` |-> `IntClamp bits signed`, `m` |-> `0`]
+    (SPEC_ALL prefix_scalar_checked_ghost))) >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qexistsl [`H`,`qt`] >> asm_rewrite_tac[]
 QED
