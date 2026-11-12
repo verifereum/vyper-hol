@@ -187,6 +187,9 @@ Proof
   simp[fragExecTheory.run_inst_seq_inst_idx, exec_result_map_def]
 QED
 
+(* OLD-ORDER, removed for the 0.5.0b1 slice order: its conclusion steps the ALLOCA at
+   sa.cs_next_id from the entry state, which the new order no longer does.
+   New-order port pending (SEQ-3208).
 Theorem compile_slice_calldata_shared_success:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
@@ -303,6 +306,7 @@ Resume compile_slice_calldata_shared_success[protected]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise compile_slice_calldata_shared_success
+*)
 
 Theorem calldata_bytes_result_posts:
   evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic bound))) /\
@@ -328,26 +332,58 @@ Theorem compile_slice_calldata_id_range:
   sa.cs_next_id < sb.cs_next_id
 Proof
   strip_tac >> drule compile_slice_calldata_stages >> strip_tac >>
-  drule compile_slice_out_buf_compiler_parts >> strip_tac >>
   drule compile_assert_slice_bounds_layout >> strip_tac >>
-  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
-  qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
-  qpat_x_assum `emit_op CALLDATASIZE _ _ = _` mp_tac >>
-  qpat_x_assum `emit_void CALLDATACOPY _ _ = _` mp_tac >>
-  qpat_x_assum `emit_void MSTORE _ _ = _` mp_tac >>
-  simp[compile_alloc_buffer_def, emit_op_def, emit_void_def,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >>
-  qpat_x_assum `_ = sb` (SUBST1_TAC o SYM) >>
-  qpat_x_assum `_ = s4` (SUBST1_TAC o SYM) >>
-  simp_tac (srw_ss()) [] >>
-  qpat_x_assum `s3.cs_next_id = _` SUBST1_TAC >>
-  qpat_x_assum `_ = s2` (SUBST1_TAC o SYM) >>
-  qpat_x_assum `_ = s1` (SUBST1_TAC o SYM) >>
-  qpat_x_assum `_ = sm` (SUBST1_TAC o SYM) >>
-  simp_tac (srw_ss()) [] >> decide_tac
+  `s1.cs_next_id = sa.cs_next_id + 1` by
+    (qpat_x_assum `emit_op CALLDATASIZE _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[]) >>
+  `s3.cs_next_id = s2.cs_next_id + 2` by
+    (drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+     drule compile_alloc_buffer_parts >> strip_tac >>
+     qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[]) >>
+  `s4.cs_next_id = s3.cs_next_id + 1 /\ sb.cs_next_id = s4.cs_next_id + 1` by
+    (qpat_x_assum `emit_void CALLDATACOPY _ _ = _` mp_tac >>
+     qpat_x_assum `emit_void MSTORE _ _ = _` mp_tac >>
+     simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, emit_def] >> rpt strip_tac >> gvs[]) >>
+  decide_tac
 QED
 
+(* TEMPORARILY CHEATED - its proof went through compile_slice_calldata_shared_success,
+   whose old-order statement is false under 0.5.0b1; statement unchanged and true.
+Proof
+  strip_tac >> drule_all compile_slice_calldata_shared_success >>
+  disch_then (qspecl_then [`bound`,`PG`,`D`] strip_assume_tac) >>
+  `sa.cs_next_id < sb.cs_next_id` by
+    (drule compile_slice_calldata_id_range >> simp[]) >>
+  `wb_frame cenv es es sa s zf` by
+    (simp[wb_frame_def] >> metis_tac[]) >>
+  `~expr_has_effect e ==> pure_frame cenv fn es sa s zf` by
+    (strip_tac >> first_assum ACCEPT_TAC) >>
+  `LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) <= n` by simp[] >>
+  qpat_x_assum `out = Var root` SUBST_ALL_TAC >>
+  `!i. w2n w <= i /\ i < w2n w + 32 +
+    LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) ==> i NOTIN tm.t_mem` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!i. _ ==> i NOTIN _` irule >> decide_tac) >>
+  drule_all calldata_bytes_result_posts >> strip_tac >>
+  `val_footprint (BaseTV (BytesT (Dynamic bound)))
+    (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) <= N` by
+    (simp[val_footprint_def] >> decide_tac) >>
+  qexistsl_tac [`zf`,`H`,`tm`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (irule vv_post_allocated_memory_intro >> simp[] >>
+      qexistsl_tac [`sa.cs_next_id`,`w2n w`,`N`] >>
+      simp[] >> rpt gen_tac >> disch_tac >>
+      qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
+  simp[]
+QED
+*)
+(* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-train16-unit, built at fc54ea89e *)
 Theorem compile_slice_calldata_success_posts:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
@@ -384,53 +420,11 @@ Theorem compile_slice_calldata_success_posts:
     zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~zf.vs_halted
 Proof
-  strip_tac >> drule_all compile_slice_calldata_shared_success >>
-  disch_then (qspecl_then [`bound`,`PG`,`D`] strip_assume_tac) >>
-  `sa.cs_next_id < sb.cs_next_id` by
-    (drule compile_slice_calldata_id_range >> simp[]) >>
-  `wb_frame cenv es es sa s zf` by
-    (simp[wb_frame_def] >> metis_tac[]) >>
-  `~expr_has_effect e ==> pure_frame cenv fn es sa s zf` by
-    (strip_tac >> first_assum ACCEPT_TAC) >>
-  `LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) <= n` by simp[] >>
-  qpat_x_assum `out = Var root` SUBST_ALL_TAC >>
-  `!i. w2n w <= i /\ i < w2n w + 32 +
-    LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) ==> i NOTIN tm.t_mem` by
-    (rpt gen_tac >> disch_tac >>
-     qpat_x_assum `!i. _ ==> i NOTIN _` irule >> decide_tac) >>
-  drule_all calldata_bytes_result_posts >> strip_tac >>
-  `val_footprint (BaseTV (BytesT (Dynamic bound)))
-    (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) <= N` by
-    (simp[val_footprint_def] >> decide_tac) >>
-  qexistsl_tac [`zf`,`H`,`tm`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (irule vv_post_allocated_memory_intro >> simp[] >>
-      qexistsl_tac [`sa.cs_next_id`,`w2n w`,`N`] >>
-      simp[] >> rpt gen_tac >> disch_tac >>
-      qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
-      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
-  simp[]
+  cheat
 QED
 
-Theorem compile_slice_calldata_revert:
-  compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
-  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  32 <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
-  a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
-  (dimword (:256) <= a + n \/ LENGTH s.vs_call_ctx.cc_calldata < a + n) /\
-  eval_operand start s = SOME (n2w a) /\
-  (!x. start = Var x ==> not_fresh_at sa x) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  op_prov G start = NONE /\ op_taint tn start = {} ==>
-  ?zf H tm.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (Abort Revert_abort zf) /\
-    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+(* TEMPORARILY CHEATED - its proof went through compile_slice_calldata_runtime,
+   whose old-order statement is false under 0.5.0b1; statement unchanged and true.
 Proof
   strip_tac >>
   drule_all compile_slice_calldata_runtime >>
@@ -458,6 +452,29 @@ Proof
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (Abort _ _)`
     (irule_at Any) >> simp[]
+QED
+*)
+(* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-train16-unit, built at fc54ea89e *)
+Theorem compile_slice_calldata_revert:
+  compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
+  32 <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
+  a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  (dimword (:256) <= a + n \/ LENGTH s.vs_call_ctx.cc_calldata < a + n) /\
+  eval_operand start s = SOME (n2w a) /\
+  (!x. start = Var x ==> not_fresh_at sa x) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  op_prov G start = NONE /\ op_taint tn start = {} ==>
+  ?zf H tm.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (Abort Revert_abort zf) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
+Proof
+  cheat
 QED
 
 (* Source rejects zero length, even though the bounds-only suffix accepts it.

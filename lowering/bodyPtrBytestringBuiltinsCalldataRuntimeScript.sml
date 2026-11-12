@@ -126,6 +126,8 @@ Proof
 QED
 
 
+(* OLD-ORDER, removed for the 0.5.0b1 slice order: its conclusion fixes compile_slice_out_buf N sa as the first stage and the ALLOCA at sa.cs_next_id; both are false now.
+   New-order port pending (SEQ-3208).
 Theorem compile_slice_calldata_runtime:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
@@ -261,3 +263,4 @@ Resume compile_slice_calldata_runtime[bounds]:
   qpat_x_assum `!name b len. _` ACCEPT_TAC
 QED
 Finalise compile_slice_calldata_runtime
+*)

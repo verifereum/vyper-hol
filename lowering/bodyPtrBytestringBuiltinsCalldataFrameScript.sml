@@ -219,6 +219,8 @@ Resume calldata_size_bounds_semantic[frame]:
 QED
 Finalise calldata_size_bounds_semantic
 
+(* OLD-ORDER, removed for the 0.5.0b1 slice order: its conclusion fixes compile_slice_out_buf N sa as the first stage; false now.
+   New-order port pending (SEQ-3208).
 Theorem compile_slice_calldata_semantic:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
@@ -459,3 +461,4 @@ Resume compile_slice_calldata_semantic[finish]:
   metis_tac[eval_operand_def]
 QED
 Finalise compile_slice_calldata_semantic
+*)
