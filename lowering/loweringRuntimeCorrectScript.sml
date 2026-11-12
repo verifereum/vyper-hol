@@ -18,14 +18,19 @@
  *     (externalCallSelected), so a run outside every horizon violates the
  *     unit's storage guards.
  *
+ * lower_vyper_runtime_unit_correct splits on whether the call value
+ * moves: the body joint above, or externalEntryValueRevert's abort.
+ *
  * TOP-LEVEL:
+ *   lower_vyper_runtime_unit_correct -- S1
  *   lower_vyper_runtime_unit_body_joint -- S1 when the value moves
  *)
 
 Theory loweringRuntimeCorrect
 Ancestors
   sourceUnitExecution e2eDefs compileVyper vyperInterpreter vyperState
-  vyperStorageFootprint gasShadowUnit
+  vyperStorageFootprint gasShadowUnit vyperTypeSelectedEntrySoundness
+  externalEntryValueRevert
 
 val _ = Parse.hide "body";
 
@@ -132,8 +137,7 @@ Theorem lower_vyper_runtime_unit_body_joint:
                (unit.cu_context, func)
                (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                            vs_inst_idx := 0 |>) marks (leaf, finish)) \/
-          (~source_exempt tops (res, am', rqs) /\
-           ?r. exit_result r /\
+          (?r. exit_result r /\
              gas_origin_path T
                (gas_explicit_sites unit.cu_context shadow_ctx)
                unit.cu_context func
@@ -151,4 +155,36 @@ Theorem lower_vyper_runtime_unit_body_joint:
                              vs_inst_idx := 0 |>)))))
 Proof
   cheat
+QED
+
+Theorem lower_vyper_runtime_unit_correct:
+  !tops rpolicy unit am tx ret vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) ==>
+    source_unit_execution_correct tops ret am tx unit vs
+Proof
+  rpt strip_tac >>
+  `?mut args fbody.
+     lookup_function NONE tx.function_name External tops =
+       SOME (mut, F, args, [], ret, fbody) /\
+     IS_SOME (bind_arguments (type_env tops) args tx.args)` by
+    (fs[valid_vyper_call_def] >> metis_tac[]) >>
+  `?env. bind_arguments (type_env tops) args tx.args = SOME env` by
+    (Cases_on `bind_arguments (type_env tops) args tx.args` >> fs[]) >>
+  Cases_on `send_call_value mut
+              (initial_evaluation_context am.sources am.layouts tx NONE)
+              (initial_state am [env] with
+                 <| outcomes := SOME vs.vs_outcomes; requests := [] |>)` >>
+  rename1 `_ = (sres, es0)` >> Cases_on `sres`
+  >- (rename1 `INL u` >> Cases_on `u` >>
+      drule_all lower_vyper_runtime_unit_body_joint >> strip_tac >>
+      simp[source_unit_execution_correct_def,
+           source_unit_execution_correct_at_def] >>
+      qexists_tac `marks` >>
+      qexistsl_tac [`shadow_ctx`, `func`, `shadow_func`] >> simp[]) >>
+  irule external_entry_value_revert >> metis_tac[]
 QED

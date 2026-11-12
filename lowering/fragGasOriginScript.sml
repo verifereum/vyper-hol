@@ -191,6 +191,18 @@ Proof
   metis_tac[gas_path_zero_origin, gas_path_mem_zero_origin]
 QED
 
+(* An origin path to an OK state continues along any origin path from it. *)
+Theorem gas_origin_path_append:
+  !memory explicit ctx func s left r.
+    gas_origin_path memory explicit ctx func s left r ==>
+    !mid right r'.
+      r = OK mid /\ gas_origin_path memory explicit ctx func mid right r' ==>
+      gas_origin_path memory explicit ctx func s (left ++ right) r'
+Proof
+  ho_match_mp_tac gas_origin_path_ind >> rw[] >> gvs[exit_result_def] >>
+  metis_tac[gas_origin_path_rules, APPEND_ASSOC]
+QED
+
 Theorem gas_origin_events_extend[local]:
   n <= m /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   run_from n ctx func s = r /\ exit_result r ==>
