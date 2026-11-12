@@ -3782,7 +3782,7 @@ Proof
        rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.DROP_APPEND]
 QED
 
-Theorem raw_call_nonrevert_positive_run[local]:
+Theorem calldata_nonrevert_positive_run[local]:
   (do result <- (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
@@ -3954,14 +3954,14 @@ Proof
       irule frag_path_conseq >> goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
       simp[NoAsms] >> rpt strip_tac >> simp[]) >>
   `0 < n` by decide_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
-  drule_all raw_call_nonrevert_positive_run >> strip_tac >>
+  drule_all calldata_nonrevert_positive_run >> strip_tac >>
   (* The run is a function of s, so every horizon's run ends at t. *)
   `!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
         stmt_state_rel H' ctx func cenv cx es t` by
     (rpt strip_tac >>
      `raw_call_buffer_frame H' ctx func cenv cx es0 es sf s0 saved ai w n s` by
        fs[raw_call_buffer_frame_def] >>
-     drule_all (Q.INST [`H` |-> `H'`] raw_call_nonrevert_positive_run) >>
+     drule_all (Q.INST [`H` |-> `H'`] calldata_nonrevert_positive_run) >>
      strip_tac >> gvs[] >>
      qpat_x_assum `!i. _` (qspec_then `t.vs_inst_idx` mp_tac) >>
      simp[venomStateTheory.venom_state_component_equality]) >>
