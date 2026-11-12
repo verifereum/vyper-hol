@@ -223,7 +223,7 @@ Theorem gas_shadow_compile_group_dispatch_linear:
         (MAP (\(n,ty,e). (n,ty,gas_shadow_expr e)) specs) off) groups) fb t))
 Proof
   ntac 2 gen_tac >>
-  rewrite_tac[GSYM gas_shadow_compiles_map_result,
+  rewrite_tac[GSYM gas_shadow_compiles_mapped_result_iff,
     compile_group_dispatch_linear_def, comp_ignore_bind_def, comp_bind_assoc] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_emit_op_same, gas_shadow_compiles_fresh_label,
