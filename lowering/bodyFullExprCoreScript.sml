@@ -33,6 +33,9 @@ Proof
   cheat
 QED
 
+(* A flag member compiles to StackValue (Lit _) and emits no instruction
+   (compile_expr_def), in runtime and constructor frames alike; the source
+   side is exprSimFlagWord's. *)
 Theorem flag_member_expr_full_ok:
   !cx ann nsid mid. body_expr_full_ok cx (FlagMember ann nsid mid)
 Proof
