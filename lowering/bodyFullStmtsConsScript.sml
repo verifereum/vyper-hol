@@ -87,8 +87,7 @@ Proof
   simp[stmt_frag_full_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `shadow_sa`, `shadow_sm`, `s0`,
                            `G0`, `tn0`, `c`] mp_tac) >>
-  simp[] >>
-  disch_then (assume_tac o MATCH_MP gas_outcome_full_eval_evidence) >>
+  simp[] >> strip_tac >>
   simp[Once evaluate_def, ignore_bind_def] >>
   irule gas_outcome_full_bind_lands >> rpt conj_tac
   >~ [`gas_marked_exec`]
@@ -98,13 +97,13 @@ Proof
   >- (rpt strip_tac >> irule (cj 3 gas_exempt_cert_rules) >> simp[]) >>
   qpat_x_assum `gas_outcome_full _ _ (eval_stmt _ _) _ _ _`
     (irule o MATCH_MP
-       (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_outcome_full_post_mono)) >>
+       (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_outcome_full_post_source)) >>
   reverse conj_tac
   >- (rpt strip_tac >> fs[] >> Cases_on `res` >> simp[] >>
       qpat_x_assum `!tail. stmt_exit_ptr _ (_ with gas_obs := tail) _ _ _`
         (qspec_then `[]` mp_tac) >>
       simp[stmt_exit_ptr_def, expr_exit_def]) >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt strip_tac >> gvs[] >>
   Cases_on `res`
   >- (rename1 `INL u` >> Cases_on `u` >> gvs[] >> suspend "tail") >>
   rename1 `INR exc` >> gvs[] >>
@@ -116,13 +115,15 @@ QED
 Resume stmt_frag_full_cons_env[tail]:
   rename1 `!tail. eval_stmt cx stmt (es with gas_obs := xs ++ tail) =
              (INL (), ee0 with gas_obs := tail)` >>
-  `eval_stmt cx stmt (es with gas_obs := xs) =
-     (INL (), ee0 with gas_obs := [])` by
-    (qpat_assum `!tail. eval_stmt _ _ _ = _`
-       (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [APPEND_NIL]))) >>
-  `gas_admissible (eval_stmts cx ss) (stmt_res_ok lctx)
-     (ee0 with gas_obs := [])` by
-    (irule gas_admissible_stmts_tail >> metis_tac[]) >>
+  `ee0 with gas_obs := [] = ee0` by
+    gvs[evaluation_state_component_equality] >>
+  `eval_stmt cx stmt (es with gas_obs := xs) = (INL (), ee0)` by
+    (qpat_assum `!tail. eval_stmt _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     qpat_assum `ee0 with gas_obs := [] = ee0`
+       (fn th => rewrite_tac[APPEND_NIL, th])) >>
+  `gas_admissible (eval_stmts cx ss) (stmt_res_ok lctx) ee0` by
+    (qpat_assum `ee0 with gas_obs := [] = ee0` (SUBST1_TAC o SYM) >>
+     irule gas_admissible_stmts_tail >> metis_tac[]) >>
   `c.ce_return_pc = cenv.ce_return_pc /\
    c.ce_return_buf = cenv.ce_return_buf /\
    (c.ce_is_ctor <=> cenv.ce_is_ctor)` by
@@ -136,17 +137,17 @@ Resume stmt_frag_full_cons_env[tail]:
   `t.vs_current_bb = sm.cs_current_bb /\
    t.vs_inst_idx = LENGTH sm.cs_current_insts` by fs[stmt_lands_def] >>
   qpat_x_assum `!gs es1 c sa sm. _`
-    (qspecl_then [`xs`, `ee0 with gas_obs := []`, `c`, `sa`, `sm`] mp_tac) >>
+    (qspecl_then [`xs`, `ee0`, `c`, `sa`, `sm`] mp_tac) >>
   impl_tac >- simp[] >>
   simp[stmt_frag_full_def] >>
   disch_then (qspecl_then [`sm`, `sb`, `shadow_sm`, `shadow_sb`, `t`, `G'`,
                            `tn'`, `cenv'`] mp_tac) >>
   impl_tac >- simp[] >>
-  disch_then (assume_tac o MATCH_MP gas_outcome_full_eval_evidence) >>
+  strip_tac >>
   qpat_x_assum `gas_outcome_full _ _ (eval_stmts _ _) _ _ _`
     (irule o MATCH_MP
-       (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_outcome_full_post_mono)) >> simp[] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
+       (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_outcome_full_post_source)) >> simp[] >>
+  rpt strip_tac >> gvs[] >>
   rename1 `cenv_top_ext c cfin _` >>
   qpat_x_assum `!tail. eval_stmts _ _ _ = _`
     (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>

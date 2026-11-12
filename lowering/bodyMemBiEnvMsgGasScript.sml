@@ -245,7 +245,8 @@ Proof
   simp[gas_outcome_full_def] >> qexists_tac `[T]` >> disj1_tac >>
   qexistsl_tac [`INL (Value (IntV (&w2n w)))`, `es`, `OK t`, `G`, `tn`] >>
   simp[gas_explicit_def, expr_type_def, vv_store_bound_stack_word,
-       env_item_type_def, is_word_type_def, ptr_vv_ok_def] >>
+       env_item_type_def, is_word_type_def, ptr_vv_ok_def,
+       contextTheory.vv_location_def] >>
   conj_tac
   >- (gen_tac >>
       `!s tv s'. eval_expr cx (Builtin (BaseT (UintT 256)) (Env MsgGas) []) s =
