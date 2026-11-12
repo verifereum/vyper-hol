@@ -17,7 +17,7 @@
  * fmp_stage_entry starts the context entry's run past its root.
  *
  * fmp_stage_invoke_sim is the INVOKE case of the same simulation (the
- * run_defs_ind predicate), exported on its own because the coverage
+ * step_inst half of fmp_runner_sim's induction), exported on its own because the coverage
  * proof (fmpStageCoverage) closes its invariant over INVOKE steps.
  *
  * TOP-LEVEL:
@@ -367,11 +367,6 @@ Proof
   Cases_on `exec_block k' C' bb' t1` >> gvs[]
 QED
 
-(* Why: the context entry's first block is entered without PHIs, and the
-   root (fmp_stage_entry) is a straight-line prefix of the target's, so
-   the target's block run from its start is the run from the related
-   point.  A run of the entry never returns (entry_fn_no_return), and
-   run_blocks never ends OK. *)
 (* Why: the target's root is a straight-line prefix of its entry block
    (fmp_run_insts_straight), so its block run from the start is the run
    from past the root. *)
