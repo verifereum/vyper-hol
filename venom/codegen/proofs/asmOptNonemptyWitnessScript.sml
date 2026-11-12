@@ -1,7 +1,7 @@
 Theory asmOptNonemptyWitness
 Ancestors
   asmOptimizer codegenAsmProgOk codegen symbolResolve stackPlanGen
-  stackPlanOps planExec asmWf list rich_list
+  stackPlanOps planExec asmWf asmOptNonemptyJumps list rich_list
 
 Theorem terminal_encode_nonempty:
   asm_terminal_op t ==> encode_inst offsets t <> []
@@ -83,16 +83,6 @@ Proof
   Cases_on `P a` >> Cases_on `P b` >> Cases_on `P c` >> gvs[]
 QED
 
-Theorem terminal_witness_cons[local]:
-  (?pre t post. h::p = pre ++ t::post /\ asm_terminal_op t /\
-    EVERY (\i. !l. i <> AsmLabel l) post) <=>
-  (asm_terminal_op h /\ EVERY (\i. !l. i <> AsmLabel l) p) \/
-  (?pre t post. p = pre ++ t::post /\ asm_terminal_op t /\
-    EVERY (\i. !l. i <> AsmLabel l) post)
-Proof
-  simp[Once EQ_SYM_EQ, APPEND_EQ_CONS] >> metis_tac[]
-QED
-
 Theorem terminal_witness_filter:
   (!t. asm_terminal_op t ==> P t) /\ (!l. P (AsmLabel l)) ==>
   ((?pre t post. FILTER P p = pre ++ t::post /\ asm_terminal_op t /\
@@ -108,7 +98,7 @@ Proof
   qx_gen_tac `h` >>
   Cases_on `P h` >>
   pure_asm_rewrite_tac[FILTER, COND_CLAUSES, GSYM APPEND_ASSOC, APPEND,
-                       terminal_witness_cons] >>
+                       PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND] asmOptNonemptyJumpsTheory.trailing_terminal_cons] >>
   gvs[] >> metis_tac[]
 QED
 

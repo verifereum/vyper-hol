@@ -1,20 +1,6 @@
 Theory asmOptNonemptyScan
 Ancestors
-  asmOptimizer list rich_list
-
-Theorem trailing_terminal_cons[local]:
-  (?pre t post. h::p = pre ++ t::post /\ asm_terminal_op t /\
-     EVERY (\i. !l. i <> AsmLabel l) post) <=>
-  (asm_terminal_op h /\ EVERY (\i. !l. i <> AsmLabel l) p) \/
-  (?pre t post. p = pre ++ t::post /\ asm_terminal_op t /\
-     EVERY (\i. !l. i <> AsmLabel l) post)
-Proof
-  eq_tac
-  >- (strip_tac >> Cases_on `pre` >> gvs[] >> metis_tac[])
-  >> strip_tac
-  >- (qexistsl [`[]`, `h`, `p`] >> simp[])
-  >> qexistsl [`h::pre`, `t`, `post`] >> simp[]
-QED
+  asmOptimizer asmOptNonemptyJumps list rich_list
 
 
 Theorem prune_unreachable_walk_no_labels[local]:
@@ -34,7 +20,7 @@ Theorem prune_unreachable_walk_trailing[local]:
         (FST (prune_unreachable_walk d p)))
 Proof
   Induct >- simp[] >>
-  rpt gen_tac >> rewrite_tac[trailing_terminal_cons] >>
+  rpt gen_tac >> rewrite_tac[PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND] asmOptNonemptyJumpsTheory.trailing_terminal_cons] >>
   disch_then (DISJ_CASES_THEN2 strip_assume_tac assume_tac)
   >- (pure_rewrite_tac[prune_unreachable_walk_def, pairTheory.ELIM_UNCURRY,
                          pairTheory.FST, COND_RAND] >> BETA_TAC >> IF_CASES_TAC >> asm_rewrite_tac[]
