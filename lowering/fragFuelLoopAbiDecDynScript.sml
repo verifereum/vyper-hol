@@ -2404,6 +2404,283 @@ Proof
 QED
 
 
+(* Extract a loop layout through explicit prefixes, without exposing TAKE. *)
+Theorem abi_dyn_unique_layout[local]:
+  !a s4 s5 b xs bh be bt.
+    s4.cs_blocks = bh :: be :: a.cs_blocks /\
+    s5.cs_blocks = xs ++ s4.cs_blocks /\
+    b.cs_blocks = bt :: s5.cs_blocks ==>
+    emitted_blocks a b = bt :: (xs ++ [bh;be]) /\
+    emitted_blocks s4 s5 = xs
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac >>
+  irule emitted_blocks_append >> simp[APPEND_ASSOC]
+QED
+
+Theorem abi_dyn_unique_skeleton[local]:
+  !lh lb le p h q a b.
+    (^dyn_Old) a /\ ALL_DISTINCT [a.cs_current_bb;lh;lb;le] /\
+    (!l. MEM l [lh;lb;le] ==>
+      ?suffix k. l = fresh_label_output suffix k /\ k < a.cs_next_label) /\
+    (!s t. p s = ((),t) ==> t.cs_blocks = s.cs_blocks /\
+      t.cs_current_bb = s.cs_current_bb /\ t.cs_next_label = s.cs_next_label) /\
+    (!s t. h s = ((),t) ==> t.cs_blocks = s.cs_blocks /\
+      t.cs_current_bb = s.cs_current_bb /\ t.cs_next_label = s.cs_next_label) /\
+    (^(inst [alpha |-> ``:unit``] dyn_unique)) q /\ (^dyn_skel) lh lb le p h q a = ((),b) ==>
+    (^dyn_unique_span) a b
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(^dyn_skel) _ _ _ _ _ _ _ = _` mp_tac >>
+  simp_tac std_ss [comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
+  rename1 `q s4 = ((),s5)` >>
+  rpt (qpat_x_assum `!s t. _` (drule_then strip_assume_tac)) >>
+  imp_res_tac (cj 2 emitHelperPropsTheory.new_block_props) >>
+  imp_res_tac (cj 7 emitHelperPropsTheory.new_block_props) >>
+  `(^dyn_Old) s4` by (BETA_TAC >> gvs[] >> metis_tac[]) >>
+  qpat_x_assum `!a b. _ /\ q a = _ ==> _` (qspecl_then [`s4`,`s5`] mp_tac) >>
+  (impl_tac >- (rule_assum_tac BETA_RULE >> simp[])) >> strip_tac >>
+  `!l. MEM l [a.cs_current_bb;lh;le] ==> l NOTIN (^dyn_B) s4 s5`
+    by (gen_tac >> disch_tac >> BETA_TAC >>
+        gvs[] >> metis_tac[SRULE [] (BETA_RULE abi_dyn_unique_reserved_exclusion)]) >>
+  imp_res_tac (cj 4 emitHelperPropsTheory.new_block_props) >>
+  `?xs. s5.cs_blocks = xs ++ s4.cs_blocks`
+    by (qpat_x_assum `entry_shape s4 s5` mp_tac >>
+        simp[entry_shape_def] >> strip_tac
+        >- (qexists_tac `[]` >> simp[]) >>
+        qexists_tac `front ++ [<|bb_label := s4.cs_current_bb;
+          bb_instructions := s4.cs_current_insts ++ tail|>]` >>
+        simp[APPEND_ASSOC]) >>
+  `emitted_blocks a b =
+    <|bb_label := s5.cs_current_bb; bb_instructions := s5.cs_current_insts|> ::
+      (xs ++ [<|bb_label := lh; bb_instructions := cs'³'.cs_current_insts|>;
+              <|bb_label := a.cs_current_bb; bb_instructions := cs'.cs_current_insts|>]) /\
+   emitted_blocks s4 s5 = xs`
+    by (irule abi_dyn_unique_layout >> simp[]) >>
+  gvs[MAP_APPEND, ALL_DISTINCT_APPEND, ALL_DISTINCT] >>
+  qpat_x_assum `!l. _ ==> ( (!bb. _) /\ _)` mp_tac >>
+  simp[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem abi_dyn_unique_entry_blocks[local]:
+  !a a' b. a.cs_blocks = a'.cs_blocks ==>
+    ((^dyn_unique_span) a b <=> (^dyn_unique_span) a' b)
+Proof
+  simp[emitted_blocks_def]
+QED
+
+Theorem abi_dyn_unique_loop[local]:
+  !dst src lop base hi info asz msz ip cnt.
+    (!d s. (^(inst [alpha |-> ``:unit``] dyn_unique))
+      (compile_abi_decode_to_buf d s lop base hi info)) ==>
+    (^(inst [alpha |-> ``:unit``] dyn_unique))
+      (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt)
+Proof
+  rpt gen_tac >> strip_tac >> BETA_TAC >> rpt gen_tac >> strip_tac >>
+  `(^dyn_span) {} a b`
+    by (BETA_TAC >> irule (BETA_RULE (cj 3 abi_dyn_decode_provenance)) >>
+        metis_tac[]) >>
+  `(^dyn_Old) b` by (BETA_TAC >> rule_assum_tac BETA_RULE >>
+    metis_tac[BETA_RULE abi_dyn_span_old]) >>
+  conj_tac >- (rule_assum_tac BETA_RULE >> simp[]) >>
+  conj_tac >- (rule_assum_tac BETA_RULE >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `compile_abi_decode_dyn_loop _ _ _ _ _ _ _ _ _ _ a = _` mp_tac >>
+  pure_rewrite_tac [abi_dyn_loop_skeleton] >>
+  simp_tac std_ss [fresh_label_def, comp_bind_def, LET_THM] >> strip_tac >>
+  Cases_on `r` >> fs[] >>
+  `(^dyn_unique_span) (a with cs_next_label := a.cs_next_label + 3) b`
+    suffices_by (mp_tac (Q.SPECL [`a`, `a with cs_next_label := a.cs_next_label + 3`, `b`]
+      (BETA_RULE abi_dyn_unique_entry_blocks)) >> simp_tac std_ss [] >> simp[]) >>
+  BETA_TAC >> irule (BETA_RULE abi_dyn_unique_skeleton) >>
+  (conj_tac >- (simp[] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS,
+    DECIDE ``n <= n + 3``])) >>
+  goal_assum (drule_at Any) >>
+  conj_tac
+  >- (simp_tac std_ss [compile_abi_dec_addr_def] >>
+      Cases_on `base' = Lit 0w` >>
+      simp[emit_inst_def, emit_op_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+      rpt strip_tac >> gvs[]) >>
+  conj_tac
+  >- (simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+      rpt strip_tac >> gvs[]) >>
+  conj_tac >- suspend "body" >>
+  simp[ALL_DISTINCT] >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[DECIDE ``n < n + 3 /\ n + 1 < n + 3 /\ n + 2 < n + 3``]) >>
+  rpt conj_tac >> strip_tac >>
+  drule emitHelperPropsTheory.fresh_label_output_inj >> simp[]
+QED
+Resume abi_dyn_unique_loop[body]:
+  simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_getelemptr_abi_def, compile_abi_dec_addr_def,
+    compile_abi_decode_range_check_def] >>
+  rpt (FIRST [CHANGED_TAC BETA_TAC,
+    first_assum (MATCH_ACCEPT_TAC o BETA_RULE),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_return),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_emit_op),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_emit_inst),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_emit_void),
+    MATCH_MP_TAC (BETA_RULE abi_dyn_unique_bind),
+    MATCH_MP_TAC (BETA_RULE abi_dyn_unique_ignore_bind),
+    conj_tac, gen_tac, IF_CASES_TAC]) >>
+  Cases_on `r` >> simp[ALL_DISTINCT] >> metis_tac[]
+QED
+Finalise abi_dyn_unique_loop
+
+Theorem abi_dyn_unique_if[local]:
+  !p m n. (^dyn_unique) m /\ (^dyn_unique) n ==>
+    (^dyn_unique) (if p then m else n)
+Proof
+  rpt gen_tac >> qmatch_goalsub_abbrev_tac `P m` >>
+  Cases_on `p` >> simp[]
+QED
+
+Theorem abi_dyn_unique_copy_case[local]:
+  !opc m n p. (^dyn_unique) m /\ (^dyn_unique) n /\ (^dyn_unique) p ==>
+    (^dyn_unique) (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)
+Proof
+  rpt gen_tac >> qmatch_goalsub_abbrev_tac `P m` >>
+  Cases_on `opc` >> pure_rewrite_tac[opcode_case_def] >> metis_tac[]
+QED
+
+Theorem abi_dyn_decode_unique[local]:
+  (!dst src lop base hi info.
+    (^(inst [alpha |-> ``:unit``] dyn_unique))
+      (compile_abi_decode_to_buf dst src lop base hi info)) /\
+  (!dst src lop base hi elems ao vo.
+    (^(inst [alpha |-> ``:unit``] dyn_unique))
+      (compile_abi_decode_complex_elems dst src lop base hi elems ao vo)) /\
+  (!dst src lop base hi info asz msz ip cnt.
+    (^(inst [alpha |-> ``:unit``] dyn_unique))
+      (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt))
+Proof
+  qabbrev_tac `U = ^(inst [alpha |-> ``:unit``] dyn_unique)` >>
+  qabbrev_tac `FrO = ^(inst [alpha |-> ``:operand``] dyn_unique)` >>
+  qabbrev_tac `B = ^(inst [alpha |-> ``:buffer``] dyn_unique)` >>
+  qabbrev_tac `L = ^(inst [alpha |-> ``:string``] dyn_unique)` >>
+  `(!m f. FrO m /\ (!x. U (f x)) ==> U (comp_bind m f)) /\
+   (!m f. FrO m /\ (!x. FrO (f x)) ==> FrO (comp_bind m f)) /\
+   (!m f. FrO m /\ (!x. B (f x)) ==> B (comp_bind m f)) /\
+   (!m f. B m /\ (!x. U (f x)) ==> U (comp_bind m f)) /\
+   (!m f. L m /\ (!x. U (f x)) ==> U (comp_bind m f)) /\
+   (!m f. U m /\ (!x. U (f x)) ==> U (comp_bind m f))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`, Abbr `L`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_bind)) >>
+  `(!m n. U m /\ U n ==> U (comp_ignore_bind m n)) /\
+   (!m n. U m /\ FrO n ==> FrO (comp_ignore_bind m n)) /\
+   (!m n. L m /\ U n ==> U (comp_ignore_bind m n))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `L`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_ignore_bind)) >>
+  `(!opc ops. FrO (emit_op opc ops)) /\
+   (!opc ops. U (emit_void opc ops)) /\
+   (!l. L (fresh_label l)) /\ (!sz. B (compile_alloc_buffer sz)) /\
+   (!v. U (comp_return v)) /\ (!v. FrO (comp_return v)) /\
+   (!v. B (comp_return v)) /\ (!v. L (comp_return v))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`, Abbr `L`] >>
+        FIRST (map (MATCH_ACCEPT_TAC o BETA_RULE)
+          [abi_dyn_unique_emit_op, abi_dyn_unique_emit_void,
+           abi_dyn_unique_label, abi_dyn_unique_alloc, abi_dyn_unique_return])) >>
+  `(!p m n. U m /\ U n ==> U (if p then m else n)) /\
+   (!p m n. FrO m /\ FrO n ==> FrO (if p then m else n))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_if)) >>
+  `!opc m n p. U m /\ U n /\ U p ==>
+    U (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)`
+    by (simp_tac std_ss [Abbr `U`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_copy_case)) >>
+  `!dst src lop base hi info asz msz ip cnt.
+    (!d s. U (compile_abi_decode_to_buf d s lop base hi info)) ==>
+    U (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt)`
+    by (simp_tac std_ss [Abbr `U`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_loop)) >>
+  qpat_x_assum `Abbrev (U = _)` kall_tac >>
+  qpat_x_assum `Abbrev (FrO = _)` kall_tac >>
+  qpat_x_assum `Abbrev (B = _)` kall_tac >>
+  qpat_x_assum `Abbrev (L = _)` kall_tac >>
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "nil"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+Resume abi_dyn_decode_unique[word]:
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def,
+    compile_abi_dec_addr_def, compile_abi_decode_static_def] >>
+  Cases_on `clamp_info` >>
+  simp_tac std_ss [compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def] >> simp[] >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_unique[bytes]:
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def,
+    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_unique[array]:
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def,
+    compile_abi_decode_range_check_def, compile_abi_decode_static_def,
+    compile_getelemptr_abi_def, compile_abi_decode_dyn_elem_ptr_def] >>
+  Cases_on `~elem_is_dyn /\ ~dec_info_needs_clamp info`
+  >- (ASM_SIMP_TAC std_ss [LET_THM, compile_abi_dec_addr_def] >> dyn_certificate_tac) >>
+  `elem_is_dyn \/ dec_info_needs_clamp info` by metis_tac[] >>
+  qpat_x_assum `!can_bulk_copy ip i_ptr_alloc cnt. _` mp_tac >>
+  ASM_SIMP_TAC std_ss [LET_THM, compile_abi_dec_addr_def] >> disch_tac >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_unique[complex]:
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def] >>
+  Cases_on `hi = Lit 0w` >>
+  FULL_SIMP_TAC std_ss [LET_THM, compile_abi_dec_addr_def,
+    compile_abi_decode_range_check_def] >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_unique[nil]:
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def] >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_unique[cons]:
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def] >>
+  qpat_x_assum `!is_dyn dst src. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [] >> disch_tac >>
+  qpat_x_assum `!is_dyn. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [LET_THM, compile_abi_dec_addr_def,
+    compile_abi_decode_static_def, compile_getelemptr_abi_def,
+    compile_abi_decode_dyn_elem_ptr_def, compile_abi_decode_range_check_def] >>
+  disch_tac >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_unique[loop]:
+  qpat_x_assum `!is_dyn_elem dst src. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [] >> disch_tac >> dyn_certificate_tac
+QED
+Finalise abi_dyn_decode_unique
+
+Theorem abi_dyn_middle_unique[local]:
+  !dst src lop base hi info asz msz i.
+    (^(inst [alpha |-> ``:unit``] dyn_unique))
+      ((^dyn_middle) dst src lop base hi info asz msz i)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+  rpt (FIRST [MATCH_ACCEPT_TAC (BETA_RULE (CONJUNCT1 abi_dyn_decode_unique)),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_return),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_emit_op),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_emit_void),
+    ho_match_mp_tac (BETA_RULE abi_dyn_unique_bind),
+    ho_match_mp_tac (BETA_RULE abi_dyn_unique_ignore_bind),
+    IF_CASES_TAC, gen_tac, conj_tac])
+QED
+
+Theorem abi_dyn_middle_final_exclusion[local]:
+  !dst src lop base hi info asz msz i sa sb.
+    (^dyn_Old) sa /\
+    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) ==>
+    !bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb
+Proof
+  rpt gen_tac >> strip_tac >>
+  rule_assum_tac BETA_RULE >>
+  drule_all (BETA_RULE abi_dyn_middle_unique) >>
+  simp[ALL_DISTINCT, MEM_MAP] >> metis_tac[]
+QED
+
 (* Bounded emitted-code region.  Upper bounds rule out spurious off-cut
    states past the last instruction of either sort of block. *)
 val dyn_R = ``\sa sb s.
