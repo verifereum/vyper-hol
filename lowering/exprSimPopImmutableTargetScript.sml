@@ -136,13 +136,14 @@ Definition imm_place_at_def:
   (imm_place_at cenv cx (es:evaluation_state) pv w ty <=> F)
 End
 
-(* target_post with imm_place_at for place_ptr_rel: the pointer r's
+(* target_post H with imm_place_at for place_ptr_rel: the pointer r's
    operand is at the place, its location code, its place type ty's; and
    target_post's frame. *)
 Definition imm_target_post_def:
-  imm_target_post ctx func cenv cx es sa sb s0 es' pv ty
+  imm_target_post H ctx func cenv cx es sa sb s0 es' pv ty
     (r : operand # data_location option # place_ty option) s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
+    stmt_state_rel H ctx func cenv cx es' s /\
+    storage_well_formed_on cx es' (FST H) /\
     (?w. eval_operand (FST r) s = SOME w /\ imm_place_at cenv cx es' pv w ty) /\
     FST (SND r) = SOME LocCode /\
     SND (SND r) = SOME (ValPT ty) /\
@@ -183,8 +184,8 @@ QED
 
 Theorem imm_target_post_frame[local]:
   !ctx func cenv cx es sa sb s0 ee pv ty r s.
-    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r s <=>
-    stmt_state_rel ctx func cenv cx ee s /\
+    imm_target_post H ctx func cenv cx es sa sb s0 ee pv ty r s <=>
+    stmt_state_rel H ctx func cenv cx ee s /\
     (?w. eval_operand (FST r) s = SOME w /\ imm_place_at cenv cx ee pv w ty) /\
     FST (SND r) = SOME LocCode /\ SND (SND r) = SOME (ValPT ty) /\
     (!x. FST r = Var x ==> not_fresh_at sb x) /\
@@ -195,12 +196,12 @@ QED
 
 Theorem imm_target_post_trans[local]:
   !ctx func cenv cx es sa sm sb s0 em s1 ee s2 pv ty r pv0 ty0 r0.
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM em.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-    imm_target_post ctx func cenv cx es sa sm s0 em pv0 ty0 r0 s1 /\
-    imm_target_post ctx func cenv cx em sm sb s1 ee pv ty r s2 ==>
-    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r s2
+    imm_target_post H ctx func cenv cx es sa sm s0 em pv0 ty0 r0 s1 /\
+    imm_target_post H ctx func cenv cx em sm sb s1 ee pv ty r s2 ==>
+    imm_target_post H ctx func cenv cx es sa sb s0 ee pv ty r s2
 Proof
   simp[imm_target_post_frame] >> rpt strip_tac >>
   irule wb_frame_trans >> simp[] >> reverse conj_tac
@@ -214,7 +215,7 @@ Theorem imm_place_at_index_post[local]:
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (res,ee) /\
     imm_place_at cenv cx es pv w ty /\ eval_operand p s0 = SOME w /\
     (!x. p = Var x ==> not_fresh_at sa x) /\ (!l. p <> Label l) /\
-    expr_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s ==>
+    expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s ==>
     imm_place_at cenv cx (ee with gas_obs := []) pv w ty /\
     eval_operand p s = SOME w
 Proof
@@ -302,13 +303,13 @@ Theorem imm_target_root_walk[local]:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     gas_admissible (eval_base_place cx (TopLevelNameTarget (src,id))) target_res_ok es /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_base_place cx (TopLevelNameTarget (src,id))) (es,s0)
       (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
-         imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
+         imm_target_post H ctx func cenv cx es sa sb s0 ee pv ty r t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
@@ -442,7 +443,7 @@ QED
 Theorem imm_readable_path_memory[local]:
   !ctx func cenv cx env es s src id itv iv off path k tv v.
     cenv.ce_is_ctor /\ src = cenv.ce_module /\
-    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+    expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
     FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
        NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
@@ -466,7 +467,7 @@ QED
 Theorem imm_readable_dynarray_length:
   !ctx func cenv cx env es s src id itv iv off path k etv n vs.
     cenv.ce_is_ctor /\ src = cenv.ce_module /\
-    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+    expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
     FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
        NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
@@ -768,12 +769,12 @@ Theorem imm_array_ctor_counted[local]:
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
     (!x. p = Var x ==> not_fresh_at sb x) /\
     if idx_in_range sgn i len then
       ?t. gas_marked_path F ctx func s 0 (OK t) /\
         eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
-        stmt_state_rel ctx func cenv cx es t /\
+        stmt_state_rel H ctx func cenv cx es t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
@@ -789,7 +790,7 @@ Proof
   Cases_on `idx_in_range sgn i len` >> simp[] >> strip_tac
   >- (`!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
          lookup_var x t = SOME w` by simp[lookup_var_def] >>
-      `stmt_state_rel ctx func cenv cx es t` by
+      `stmt_state_rel H ctx func cenv cx es t` by
         (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
          irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
          conj_tac >> rpt strip_tac >>
@@ -913,12 +914,12 @@ Theorem imm_array_ctor_counted_optional[local]:
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
     (!x. p = Var x ==> not_fresh_at sb x) /\
     if idx_in_range sgn i len then
       ?t. gas_marked_path F ctx func s 0 (OK t) /\
         eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
-        stmt_state_rel ctx func cenv cx es t /\
+        stmt_state_rel H ctx func cenv cx es t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
@@ -936,7 +937,7 @@ Proof
       Cases_on `idx_in_range sgn i (if dyn then mload (w2n b) s else n2w cnt)` >> simp[] >> strip_tac
       >- (`!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
              lookup_var x t = SOME w` by simp[lookup_var_def] >>
-          `stmt_state_rel ctx func cenv cx es t` by
+          `stmt_state_rel H ctx func cenv cx es t` by
             (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
              irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
              conj_tac >> rpt strip_tac >>
@@ -1076,13 +1077,13 @@ QED
 
 Theorem imm_target_post_add[local]:
   !ctx func cenv cx es sa sm sb s0 ee pv ty rb s dst w0 off pv' ty'.
-    imm_target_post ctx func cenv cx es sa sm s0 ee pv ty rb s /\
+    imm_target_post H ctx func cenv cx es sa sm s0 ee pv ty rb s /\
     local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
     eval_operand (FST rb) s = SOME w0 /\
     imm_place_at cenv cx ee pv' (w0 + n2w off) ty' ==>
     ?q. run_inst_seq (emitted_insts sm sb) s = OK q /\
-        imm_target_post ctx func cenv cx es sa sb s0 ee pv' ty'
+        imm_target_post H ctx func cenv cx es sa sb s0 ee pv' ty'
           (dst, SOME LocCode, SOME (ValPT ty')) q
 Proof
   rpt strip_tac >> drule_all emitHelperPropsTheory.buffer_emit_add_run >> strip_tac >>
@@ -1099,7 +1100,7 @@ Proof
     (rw[not_local_ptr_def] >> strip_tac >>
      metis_tac[local_ptrs_reserved_def]) >>
   fs[imm_target_post_def] >>
-  `stmt_state_rel ctx func cenv cx ee (update_var x (w0 + n2w off) s)` by
+  `stmt_state_rel H ctx func cenv cx ee (update_var x (w0 + n2w off) s)` by
     metis_tac[stmt_state_rel_update_var] >>
   simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >> rpt conj_tac
   >~ [`not_fresh_at sb _`]
@@ -1111,9 +1112,9 @@ QED
 
 Theorem imm_target_post_inst_idx[local,simp]:
   !ctx func cenv cx es sa sb s0 ee pv ty r s n.
-    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r
+    imm_target_post H ctx func cenv cx es sa sb s0 ee pv ty r
       (s with vs_inst_idx := n) <=>
-    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r s
+    imm_target_post H ctx func cenv cx es sa sb s0 ee pv ty r s
 Proof
   rpt gen_tac >>
   `!q. eval_operand q (s with vs_inst_idx := n) = eval_operand q s` by
@@ -1124,7 +1125,7 @@ QED
 
 Theorem imm_attr_add_path[local]:
   !ctx func cenv cx es sa sm sb s0 ee pv ty rb dst off pv' ty' t w0.
-    imm_target_post ctx func cenv cx es sa sm s0 ee pv ty rb t /\
+    imm_target_post H ctx func cenv cx es sa sm s0 ee pv ty rb t /\
     local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
     fn_has_code sm sb func /\ ~t.vs_halted /\
@@ -1133,7 +1134,7 @@ Theorem imm_attr_add_path[local]:
     eval_operand (FST rb) t = SOME w0 /\
     imm_place_at cenv cx ee pv' (w0 + n2w off) ty' ==>
     ?q. gas_marked_path F ctx func t 0 (OK q) /\
-        imm_target_post ctx func cenv cx es sa sb s0 ee pv' ty'
+        imm_target_post H ctx func cenv cx es sa sb s0 ee pv' ty'
           (dst, SOME LocCode, SOME (ValPT ty')) q /\
         q.vs_current_bb = sb.cs_current_bb /\
         q.vs_inst_idx = LENGTH sb.cs_current_insts
@@ -1166,7 +1167,7 @@ Theorem imm_attr_walk_compose[local]:
       (\pv. extend_place cx pv (AttrSubscript fld))) target_res_ok es /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
       (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
-        imm_target_post ctx func cenv cx es sa sm s0 ee pv (StructT sid) rb t /\
+        imm_target_post H ctx func cenv cx es sa sm s0 ee pv (StructT sid) rb t /\
         t.vs_current_bb = sm.cs_current_bb /\
         t.vs_inst_idx = LENGTH sm.cs_current_insts)
       (\res ee r. expr_exit res r) ==>
@@ -1174,7 +1175,7 @@ Theorem imm_attr_walk_compose[local]:
       (bind (eval_base_place cx bt) (\pv. extend_place cx pv (AttrSubscript fld)))
       (es,s0)
       (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
-        imm_target_post ctx func cenv cx es sa sb s0 ee pv fty
+        imm_target_post H ctx func cenv cx es sa sb s0 ee pv fty
           (dst,FST (SND rb),target_field_type cenv (SND (SND rb)) fld) t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -1227,7 +1228,7 @@ Resume imm_attr_walk_compose[summary]:
   `expr_sim_inv cenv cx env (es with gas_obs := [])` by simp[] >>
   drule_all imm_attr_place_step >> strip_tac >> gvs[] >>
   drule_at (Pat `emit_op _ _ _ = _`) imm_attr_add_path >>
-  disch_then (drule_at (Pat `imm_target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `imm_target_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then drule_all >> strip_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL pv'`, `es_end`, `OK q`] >> simp[] >>
@@ -1260,14 +1261,14 @@ Theorem imm_target_attr_step[local]:
       gas_admissible (eval_base_place cx bt) target_res_ok es ==>
       gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
         (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
-          imm_target_post ctx func cenv cx es sa sm s0 ee pv bty rb t /\
+          imm_target_post H ctx func cenv cx es sa sm s0 ee pv bty rb t /\
           t.vs_current_bb = sm.cs_current_bb /\
           t.vs_inst_idx = LENGTH sm.cs_current_insts)
         (\res ee r. expr_exit res r)) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_base_place cx (AttributeTarget bt fld)) (es,s0)
       (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
-        imm_target_post ctx func cenv cx es sa sb s0 ee pv fty r t /\
+        imm_target_post H ctx func cenv cx es sa sb s0 ee pv fty r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
@@ -1550,16 +1551,16 @@ QED
 
 Theorem imm_target_post_after_index[local]:
   !ctx func cenv cx es sa sm sn s0 em pv ty rb t e gs res ee v op u.
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM em.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
     sm.cs_next_var <= sn.cs_next_var /\
-    imm_target_post ctx func cenv cx es sa sm s0 em pv ty rb t /\
+    imm_target_post H ctx func cenv cx es sa sm s0 em pv ty rb t /\
     pure_expr e /\
     bind (eval_expr cx e) (read_result cx) (em with gas_obs := gs) = (res,ee) /\
     (!l. FST rb <> Label l) /\
-    expr_post ctx func cenv cx e em sm sn t (ee with gas_obs := []) v op u ==>
-    imm_target_post ctx func cenv cx es sa sn s0 (ee with gas_obs := []) pv ty rb u
+    expr_post H ctx func cenv cx e em sm sn t (ee with gas_obs := []) v op u ==>
+    imm_target_post H ctx func cenv cx es sa sn s0 (ee with gas_obs := []) pv ty rb u
 Proof
   rpt gen_tac >> strip_tac >>
   `?w. eval_operand (FST rb) t = SOME w /\ imm_place_at cenv cx em pv w ty`
@@ -1581,17 +1582,17 @@ QED
 
 Theorem imm_target_post_after_index_reset[local]:
   !ctx func cenv cx es sa sm sn s0 pv ty rb t e gs res v op u.
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
     sm.cs_next_var <= sn.cs_next_var /\
-    imm_target_post ctx func cenv cx es sa sm s0 (es with gas_obs := []) pv ty rb t /\
+    imm_target_post H ctx func cenv cx es sa sm s0 (es with gas_obs := []) pv ty rb t /\
     pure_expr e /\
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
       (res,es with gas_obs := []) /\
     (!l. FST rb <> Label l) /\
-    expr_post ctx func cenv cx e (es with gas_obs := []) sm sn t
+    expr_post H ctx func cenv cx e (es with gas_obs := []) sm sn t
       (es with gas_obs := []) v op u ==>
-    imm_target_post ctx func cenv cx es sa sn s0 (es with gas_obs := []) pv ty rb u
+    imm_target_post H ctx func cenv cx es sa sn s0 (es with gas_obs := []) pv ty rb u
 Proof
   rpt gen_tac >> strip_tac >>
   irule (imm_target_post_after_index |> SPEC_ALL |>
@@ -1941,7 +1942,7 @@ Theorem imm_target_subscript_step[local]:
   !nocalls ctx func cenv cx env es sa sb s0 bt e ty r src id.
     cx.in_deploy /\ cenv.ce_is_ctor /\
     expr_sim_inv cenv cx env es /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
     target_root bt = TopLevelNameTarget (src,id) /\
     (!ts. get_module_code cx src = SOME ts ==>
           find_var_decl_by_name id ts = NONE) /\
@@ -1959,14 +1960,14 @@ Theorem imm_target_subscript_step[local]:
       gas_admissible (eval_base_place cx bt) target_res_ok es ==>
       gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
         (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
-          imm_target_post ctx func cenv cx es sa sm s0 ee pv bty rb t /\
+          imm_target_post H ctx func cenv cx es sa sm s0 ee pv bty rb t /\
           t.vs_current_bb = sm.cs_current_bb /\
           t.vs_inst_idx = LENGTH sm.cs_current_insts)
         (\res ee r. expr_exit res r)) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_base_place cx (SubscriptTarget bt e)) (es,s0)
       (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
-        imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
+        imm_target_post H ctx func cenv cx es sa sb s0 ee pv ty r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
@@ -1989,7 +1990,7 @@ Proof
      first_x_assum (qspec_then `gs` mp_tac) >> simp[target_res_ok_def]) >>
   irule imm_gas_outcome_bind_result >>
   qexists_tac `\pv ee t. ee = es with gas_obs := [] /\
-    imm_target_post ctx func cenv cx es sa sm s0 ee pv (ArrayT ty bd) rb t /\
+    imm_target_post H ctx func cenv cx es sa sm s0 ee pv (ArrayT ty bd) rb t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   reverse conj_tac
@@ -2054,7 +2055,7 @@ Proof
      Cases_on `e'` >> simp[expr_exit_def]) >>
   irule imm_gas_outcome_bind_value >>
   qexists_tac `\iv ee u.
-    expr_post ctx func cenv cx e (es with gas_obs := []) sm sn t ee iv op u /\
+    expr_post H ctx func cenv cx e (es with gas_obs := []) sm sn t ee iv op u /\
     u.vs_current_bb = sn.cs_current_bb /\
     u.vs_inst_idx = LENGTH sn.cs_current_insts` >>
   reverse conj_tac
@@ -2118,11 +2119,11 @@ Resume imm_target_subscript_step[suffix]:
   qpat_x_assum `eval_base_place _ _ _ = _` kall_tac >>
   qpat_x_assum `!gs. eval_base_place _ _ _ = _` kall_tac >>
   qpat_x_assum `!gs. mid with gas_obs := gs = _` kall_tac >>
-  qpat_x_assum `imm_target_post _ _ _ _ _ _ sm _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `imm_target_post H _ _ _ _ _ _ sm _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_sim_case _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_res_ok _` kall_tac >>
   qpat_x_assum `!exc r. _` kall_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t' /\
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t' /\
    ?bw. eval_operand (FST rb) t' = SOME bw /\
         imm_place_at cenv cx es v bw (ArrayT ty bd)` by
     fs[imm_target_post_frame] >>
@@ -2150,7 +2151,7 @@ Resume imm_target_subscript_step[suffix]:
     (drule exprSimSourceTheory.word_value_type_word >> strip_tac >>
      fs[expr_post_def, expr_val_rel_def, exprSimPropsTheory.typed_val_to_w256_word_value]) >>
   qpat_x_assum `monad_bind _ _ _ = _` kall_tac >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `imm_place_at _ _ mid' _ _ _` kall_tac >>
   qpat_x_assum `imm_place_at _ _ es v w _` kall_tac >>
   qpat_x_assum `mid' with gas_obs := [] = _` kall_tac >>
@@ -2283,12 +2284,12 @@ Theorem imm_target_walk:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     gas_admissible (eval_base_place cx bt) target_res_ok es /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
       (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
-         imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
+         imm_target_post H ctx func cenv cx es sa sb s0 ee pv ty r t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
@@ -2347,12 +2348,12 @@ Theorem imm_target_walk_place:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx,func) (eval_target_place cx bt) (es,s0)
       (\res ee t. ?p. res = INL p /\ ee = es with gas_obs := [] /\
-         imm_target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) ty r t /\
+         imm_target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) ty r t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
@@ -2366,7 +2367,7 @@ Proof
      simp[target_place_res_ok_def]) >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
       (\res ee t. ?pv. res = INL pv /\ ee = es with gas_obs := [] /\
-         imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
+         imm_target_post H ctx func cenv cx es sa sb s0 ee pv ty r t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)` by
@@ -2378,7 +2379,7 @@ Proof
   pop_assum SUBST1_TAC >>
   irule imm_gas_outcome_bind_result >>
   qexists `\pv ee t. ee = es with gas_obs := [] /\
-    imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r t /\
+    imm_target_post H ctx func cenv cx es sa sb s0 ee pv ty r t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts` >>
   reverse conj_tac
@@ -3023,7 +3024,7 @@ QED
 Theorem imm_place_pop_memory_root:
   !ctx func cenv cx env es s src id path w ann etv n vs.
     cenv.ce_is_ctor /\ expr_sim_inv cenv cx env es /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     imm_place_at cenv cx es (PlaceR (ImmutablePlace src id path)) w
       (ArrayT ann (Dynamic n)) /\
     writable_place_result cx es (PlaceR (ImmutablePlace src id path)) /\
@@ -3088,7 +3089,7 @@ QED
 Theorem imm_place_pop_memory:
   !ctx func cenv cx env es s src id path w ann etv n vs.
     cenv.ce_is_ctor /\ expr_sim_inv cenv cx env es /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     imm_place_at cenv cx es (PlaceR (ImmutablePlace src id path)) w
       (ArrayT ann (Dynamic n)) /\
     writable_place_result cx es (PlaceR (ImmutablePlace src id path)) /\

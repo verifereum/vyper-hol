@@ -90,16 +90,21 @@ Theorem toplevel_immutable_post:
   FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
   off + type_memory_size tv < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s0 ==>
-  vv_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  storage_well_formed_on cx es (FST H) ==>
+  vv_post H ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
     (es with gas_obs := []) (PlaceR (ImmutablePlace src id []))
     (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode)) s0
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   simp[vv_post_def, vv_holds_def, vv_at_def, immutable_holds_def,
        contextTheory.mk_ptr_def, eval_operand_def, locals_kept_mem,
        vyperASTTheory.expr_type_def] >>
@@ -120,10 +125,12 @@ Proof
   drule_all toplevel_immutable_lookup >> strip_tac >>
   drule compile_toplevel_immutable_ptr >>
   disch_then (qspecl_then [`ty`, `sa`, `ann`] assume_tac) >> gvs[] >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL (PlaceR (ImmutablePlace cenv.ce_module id []))`, `es`, `OK s0`] >>
   conj_tac >- (irule toplevel_immutable_marked_exec >> simp[] >> metis_tac[]) >>
-  disj1_tac >> simp[] >> irule toplevel_immutable_post >> simp[] >> metis_tac[]
+  disj1_tac >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  irule toplevel_immutable_post >> simp[] >> metis_tac[]
 QED
 

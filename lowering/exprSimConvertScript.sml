@@ -149,20 +149,24 @@ QED
    memory; on an error it exits as expr_exit allows. *)
 Definition convert_frag_def:
   convert_frag ctx func cenv cx src conv t v1 es0 <=>
-    !sa sb x op s0.
+    !st0 sa sb x op s0.
       compile_type_convert x conv sa = (op, sb) /\
       expr_res_ok (convert_result cx src t v1) /\
       (!z. x = Var z ==> not_fresh_at sa z) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel ctx func cenv cx es0 s0 /\
+      (!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0 s0 /\
+        storage_well_formed_on cx es0 (FST H)) /\
       eval_operand x s0 = SOME (val_to_w256 v1) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path F ctx func s0 0 r /\
         ((?s v. r = OK s /\ convert_result cx src t v1 = INL v /\
                 word_value v /\
-                stmt_state_rel ctx func cenv cx es0 s /\
+                (!H. valid_horizon cx st0 H es0.storage_trace ==>
+                  stmt_state_rel H ctx func cenv cx es0 s /\
+                  storage_well_formed_on cx es0 (FST H)) /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -194,8 +198,8 @@ QED
 
 Theorem expr_post_convert:
   !func cenv cx ann t e1 es es' sa s1 sb s0 t0 ss x op v1 v ctx.
-    expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
-    stmt_state_rel ctx func cenv cx es' ss /\
+    expr_post H ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
+    stmt_state_rel H ctx func cenv cx es' ss /\
     expr_val_rel cx ann v op ss /\
     (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
            lookup_var z ss = SOME w) /\
@@ -203,7 +207,7 @@ Theorem expr_post_convert:
              FLOOKUP ss.vs_allocas aid = SOME b) /\
     ss.vs_memory = t0.vs_memory /\
     is_word_type ann /\ sa.cs_next_var <= s1.cs_next_var ==>
-    expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 es'
+    expr_post H ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 es'
       v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
@@ -278,7 +282,7 @@ QED
 
 (* The conversion's code after the argument, as a counted summary. *)
 Theorem convert_continuation_summary:
-  expr_post ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
@@ -293,14 +297,14 @@ Theorem convert_continuation_summary:
     (\vs. (convert_result cx (expr_type e1) t v1,vs))
     (ee with gas_obs := [],t0)
     (\res fin t'. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
         fin v op t' /\
       t'.vs_current_bb = sb.cs_current_bb /\
       t'.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res fin r. expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
+  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
    eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
     gvs[expr_post_def, expr_val_rel_def] >>
   qpat_x_assum `unop_frag _ _ _ _ _ _ _ _ _`

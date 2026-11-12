@@ -41,7 +41,7 @@
  *     still stated over expr_sim_below, so for compile_expr_sim only
  *
  * Unprovable as the definitions stand, to be fixed in the lowering or in
- * state_rel before their PRs:
+ * state_rel H before their PRs:
  *   - compile_blockhash_case: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
@@ -148,7 +148,7 @@ QED
    - bytesN: the operand is the left-aligned word; it is MSTOREd to an
      ALLOCA'd 32-byte buffer and its first N bytes, the value's bytes, are
      hashed.
-   The buffers are fresh allocations, so the stores keep stmt_state_rel and
+   The buffers are fresh allocations, so the stores keep stmt_state_rel H and
    the memory expr_post's frame asks for (as exprSimLiteralBuffer's
    literal_mstore_state_rel). *)
 Theorem compile_keccak256_case:
@@ -335,7 +335,7 @@ Proof
   simp[unop_result_def, evaluate_builtin_def] >>
   rw[unop_frag_def] >>
   `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
-    (qpat_x_assum `stmt_state_rel ctx func cenv cx es0 s0` mp_tac >>
+    (qpat_x_assum `stmt_state_rel H ctx func cenv cx es0 s0` mp_tac >>
      simp[stmt_state_rel_def, state_rel_def]) >>
   `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
   gvs[typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_pos] >>
@@ -406,7 +406,7 @@ Resume compile_blockhash_frag[window_ok]:
      drule tx_env_ok_hash_window >>
      disch_then (qspec_then `n` mp_tac) >> gvs[] >> strip_tac >>
      simp[word_of_bytes_be_to_bytes]) >>
-  `stmt_state_rel ctx func cenv cx es0 (s0 with vs_vars := t.vs_vars)` by
+  `stmt_state_rel H ctx func cenv cx es0 (s0 with vs_vars := t.vs_vars)` by
     (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
      simp[lookup_var_def]) >>
@@ -662,7 +662,7 @@ Proof
        (es with gas_obs := gs)` >>
      drule_all eval_expr_method_id_literal >> strip_tac >>
      gvs[bind_def, read_result_def, return_def]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
        mp_tac) >> simp[NoAsms]) >>
