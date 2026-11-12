@@ -278,9 +278,8 @@ Proof
   Induct >> simp[constSubstTheory.module_consts_env_def] >> Cases >>
   simp[constSubstTheory.module_consts_env_def] >>
   rename1 `VariableDecl _ mut _ _ _` >> Cases_on `mut` >>
-  simp[constSubstTheory.module_consts_env_def] >> rpt gen_tac >>
-  first_x_assum (qspec_then `acc ++ [x]` strip_assume_tac) >>
-  simp[] >> metis_tac[APPEND_ASSOC]
+  simp[constSubstTheory.module_consts_env_def] >>
+  metis_tac[APPEND_ASSOC]
 QED
 
 Theorem bare_global_variable_decl:
