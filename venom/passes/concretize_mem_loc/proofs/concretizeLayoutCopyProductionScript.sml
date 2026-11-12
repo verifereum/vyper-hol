@@ -211,6 +211,9 @@ Resume concretize_mcopy_execution_geometry[size]:
            fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
      drule_all ptr_frame_current_static >> strip_tac >>
      qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
+     `!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)` by
+       (qpat_x_assum `SND o_f rv = G` (fn th => rewrite_tac[GSYM th]) >>
+        simp[FLOOKUP_o_f]) >>
      metis_tac[resolved_static_support]) >>
   `!v. opn = Var v ==> FLOOKUP rv v = NONE` by
     (metis_tac[mcopy_size_origin_free]) >>

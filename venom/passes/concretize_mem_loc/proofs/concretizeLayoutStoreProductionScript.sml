@@ -194,6 +194,9 @@ Resume concretize_mstore_execution_geometry[support]:
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
   drule_all ptr_frame_current_static >> strip_tac >>
   qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
+  `!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)` by
+    (qpat_x_assum `SND o_f rv = G` (fn th => rewrite_tac[GSYM th]) >>
+     simp[FLOOKUP_o_f]) >>
   metis_tac[resolved_static_support]
 QED
 Resume concretize_mstore_execution_geometry[value]:
