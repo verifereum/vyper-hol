@@ -11,7 +11,7 @@ Theorem external_return_raw_value_mem:
   compile_external_return (SOME op) prim T ei msz F nkey ut iv st =
     (x, st') /\
   (!y. op = Var y ==> not_fresh_at st y) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa st es v op s /\
   expr_val_rel cx ty v op s /\ is_bytestring_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v ==>
@@ -40,7 +40,7 @@ Theorem external_return_word_value_mem:
   compile_external_return (SOME op) T F ei msz F nkey ut iv st =
     (x, st') /\ fn_has_code st st' func /\
   (!y. op = Var y ==> not_fresh_at st y) /\
-  stmt_state_rel ctx func cenv cx es s /\ eval_operand op s = SOME w ==>
+  stmt_state_rel H ctx func cenv cx es s /\ eval_operand op s = SOME w ==>
   frag_exec_mem ctx st st' (\t. t = s) (\t. F) (\r. ?ss. r = Halt ss)
 Proof
   strip_tac >>
@@ -67,7 +67,7 @@ Theorem external_return_static_value_mem:
     (x, st') /\ fn_has_code st st' func /\
   (!y. op = Var y ==> not_fresh_at st y) /\
   m <= msz /\ msz < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa st es v op s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   val_footprint tv v = m ==>

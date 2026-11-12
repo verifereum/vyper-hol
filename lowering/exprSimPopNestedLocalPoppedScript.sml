@@ -58,7 +58,7 @@ Theorem pop_nested_local_popped_case:
     fn_has_code sa r func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     gas_admissible (eval_expr cx (Pop ann bt)) expr_vv_res_ok es /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
     compile_get_target_ptr compile_expr cenv bt sa = ((hdr,loc,pt),sm) /\
@@ -74,7 +74,7 @@ Theorem pop_nested_local_popped_case:
     gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
     gas_marked_exec F (ctx,func) (eval_target_place cx bt) (es,s0) marks
       (INL (MemoryPlace id path)) tend (OK t) /\
-    target_post ctx func cenv cx es sa sm s0 (tend with gas_obs := [])
+    target_post H ctx func cenv cx es sa sm s0 (tend with gas_obs := [])
       (PlaceR (MemoryPlace id path)) (Type (ArrayT ann (Dynamic n)))
       (hdr,loc,pt) t /\
     t.vs_current_bb = sm.cs_current_bb /\
@@ -88,7 +88,7 @@ Theorem pop_nested_local_popped_case:
         marks res es_end r' /\
       ((?u. r' = OK u /\
             ?tv. res = INL tv /\
-                 vv_post ctx func cenv cx (Pop ann bt) es sa r s0
+                 vv_post H ctx func cenv cx (Pop ann bt) es sa r s0
                    (es_end with gas_obs := []) tv
                    (LocatedValue ann (mk_ptr q lc)) u /\
                  u.vs_current_bb = r.cs_current_bb /\
