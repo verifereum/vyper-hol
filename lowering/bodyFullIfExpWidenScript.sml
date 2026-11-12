@@ -11,7 +11,7 @@ Ancestors
   emitHelper compileEnv allocaHistory stmtSimDefs vyperAST
   vyperInterpreter vyperState venomState fragGasSeqPtr fragGasEmitCtrl
   instMemFrontier memSafeRun ptrSafeRun ptrDiscipline venomInst
-  ctorDeployMemoryRunPtrMono
+  ctorDeployMemoryRunPtrMono exprSimIfExpWidenedArmCounted exprOperandVar
   venomExecSemantics loweringStateRelDefs finite_map robustCopyTransportPtr
 
 (* Conditional ghost boundary for the actual copy endpoint.  The window
@@ -342,5 +342,22 @@ Theorem ifexp_widen_arm_step_full:
             w2n w + type_memory_size rt <= z'.vs_alloca_next) /\
     ghost_kept_at lo cenv es1 sa G1 tn1 u Gz tf
 Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    gvs[storage_trace_domain_def] >>
+  `vv_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx e
+     es1 sa sm u ee tva vv z` by metis_tac[] >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    metis_tac[cj 1 compiler_compile_var] >>
+  `type_memory_bytes cenv t = type_memory_size rty /\
+   type_memory_size rty < 2 ** 64` by metis_tac[] >>
+  `type_memory_size rty < dimword (:256)` by
+    (simp[wordsTheory.dimword_def] >> decide_tac) >>
+  drule_all compile_ifexp_copy_parts >>
+  disch_then (qx_choose_then `buf` (qx_choose_then `sc`
+    (qx_choose_then `src` (qx_choose_then `sd` strip_assume_tac)))) >>
+  `compile_store_bytestring src buf.buf_operand sd = ((),sb)` by
+    gvs[compile_store_memory_def] >>
   cheat
 QED
