@@ -48,11 +48,14 @@ Proof
 QED
 
 Resume aggregate_body_cons_outcome[normal]:
-  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o BETA_RULE) >>
-  first_assum (drule_then strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-  gvs[] >> first_x_assum (drule_at (Pos (el 1))) >>
-  impl_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  strip_tac >>
+  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `?tv. res = INL tv` by
+    (first_assum (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `!marks tv mid t. _`
+    (qspecl_then [`marks`, `tv`, `es_end`, `t`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
