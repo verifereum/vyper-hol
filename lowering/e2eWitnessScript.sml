@@ -317,9 +317,10 @@ Proof
   Cases_on `rest` >> TRY (PairCases_on `h`) >> gvs[]
 QED
 
-(* The source deployment never reads its gas list (no msg.gas). *)
+(* The source deployment, on the deploy frame's (empty) callee outcomes,
+   never reads its gas list (no msg.gas). *)
 val p23_load_eval = EVAL
-  ``load_contract NONE gs initial_machine_state p23_deploy_tx
+  ``load_contract (SOME []) gs initial_machine_state p23_deploy_tx
       [(NONE, p23_tops)] []``;
 
 Definition p23_am_dep_post_def:
@@ -329,7 +330,7 @@ Definition p23_am_dep_post_def:
 End
 
 Theorem p23_load:
-  !gs. load_contract NONE gs initial_machine_state p23_deploy_tx
+  !gs. load_contract (SOME []) gs initial_machine_state p23_deploy_tx
          [(NONE, p23_tops)] [] = INL (p23_am_dep_post, [])
 Proof
   gen_tac >> PURE_REWRITE_TAC [p23_load_eval, p23_am_dep_post_def] >>
@@ -353,13 +354,15 @@ val p23_return_42 = EVAL
 
 val p23_no_self_code = EVAL ``program_reads_self_code p23_tops``;
 val p23_supported = EVAL ``supported_program p23_tops``;
-val p23_no_ef = EVAL ``?t. p23_runtime_bc = 0xEFw :: t``;
 
 
-val p23_no_ef_F = REWRITE_RULE [] p23_no_ef;
 
 val p23_dso_eval = REWRITE_RULE []
-  (EVAL ``deploy_storage_ok p23_tops initial_machine_state p23_deploy_tx []``);
+  (EVAL ``deploy_storage_ok p23_tops initial_machine_state p23_deploy_tx [] []``);
+
+val p23_call_guard_eval = REWRITE_RULE []
+  (EVAL ``source_storage_ok p23_am_call p23_call_tx [] [] /\
+          call_outcomes_storage_ok p23_am_call p23_call_tx [] []``);
 
 val p23_ccf_eval = SIMP_RULE (srw_ss())
   [supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
@@ -379,24 +382,19 @@ QED
 
 (* The premises of the two top theorems on one compiled program, its
  * deployment (am_dep, tx_dep, es_dep) and the call that follows it
- * (am_call, tx_call, es_call). Mirrors, at vyper-hol 12bc913ee (the M7
- * base: item-1 fa2772bde + deploy-trace e0dcaafba):
+ * (am_call, tx_call, es_call), in the final text the definitions of
+ * deploy-final a197306f0 state:
  *   deploy side: e2eDeployCorrectness.e2e_deploy_correctness;
  *   call side:   e2eCorrectness.vyper_call_correct.
- * Departures, each following the approved final text:
- *   - no supported_program / constructor_call_free (deploy) and no
- *     supported_program / immutable_free_program (call): removed by the
- *     whitelist sign-off (Ramana, 2026-11-06); trunk 58e0920c2 still
- *     states them on vyper_call_correct.
- *   - deploy: no deploy_storage_ok premise: it is the guard
- *     deploy_storage_ok tops am tx gs inside deploy_call_result_rel
- *     (Ramana's finite-storage ruling); the 3-argument premise on the
- *     base no longer typechecks.
- *   - deploy: call_outcomes_ok on the deploy frame's outcomes, as
- *     whitelistDeploy.e2e_deploy_correctness_full states it, without its
- *     EVERY contract_storage_well_formed clause (replaced by that guard).
- *   - call: source_storage_ok and call_result_rel in their base
- *     (pre-guard) form, until the call guards land. *)
+ * - no supported_program / constructor_call_free / immutable_free_program:
+ *   removed by the whitelist sign-off (Ramana, 2026-11-06).
+ * - no ~(?t. runtime_bc = 0xEFw :: t): compile_vyper_runtime_not_ef proves
+ *   it (seq-4132).
+ * - deploy_storage_ok and source_storage_ok / call_outcomes_storage_ok are
+ *   not premises: they are the finite-storage guards inside
+ *   deploy_call_result_rel and call_result_rel (Ramana's finite-storage
+ *   ruling); the witness shows they hold at the gas filling that matters.
+ * - call_outcomes_ok on both frames' outcomes, as the tops state it. *)
 Definition vyper_deploy_and_call_premises_def:
   vyper_deploy_and_call_premises fin policy tops deploy_bc runtime_bc
       am_dep tx_dep es_dep am_call tx_call ret es_call <=>
@@ -407,10 +405,8 @@ Definition vyper_deploy_and_call_premises_def:
     deploy_typing_ok tops am_dep tx_dep /\
     deploy_state_rel tops deploy_bc am_dep tx_dep es_dep /\
     call_outcomes_ok am_dep tx_dep (MAP SND (call_trace es_dep)) /\
-    ~(?t. runtime_bc = 0xEFw :: t) /\
     (* call *)
     source_typing_ok tops am_call tx_call /\
-    source_storage_ok tops am_call tx_call /\
     call_state_rel tops runtime_bc am_call tx_call es_call /\
     valid_vyper_call tops tx_call
       (buffer_to_list (FST (HD es_call.contexts)).msgParams.data) ret /\
@@ -438,7 +434,8 @@ val p23_constants_eval_expanded = SIMP_RULE (srw_ss())
 Theorem p23_deploy_typing:
   deploy_typing_ok p23_tops initial_machine_state p23_deploy_tx
 Proof
-  simp[deploy_typing_ok_def, vyperInterpreterTheory.initial_machine_state_def,
+  simp[deploy_typing_ok_constants_ready,
+       vyperInterpreterTheory.initial_machine_state_def,
        p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
        p23_check_dep, p23_check_run, p23_initial_imms] >>
   simp[vyperTypeInitialStateTheory.machine_well_typed_def,
@@ -534,20 +531,10 @@ val p23_call_context_eval = EVAL
       p23_call_tx NONE``;
 
 Theorem p23_source_storage:
-  source_storage_ok p23_tops p23_am_call p23_call_tx
+  source_storage_ok p23_am_call p23_call_tx [] [] /\
+  call_outcomes_storage_ok p23_am_call p23_call_tx [] []
 Proof
-  simp[source_storage_ok_def, p23_call_context_eval,
-       vyperStorageLayoutSafetyTheory.contract_storage_well_formed_def,
-       vyperStorageLayoutSafetyTheory.storage_layout_safe_def,
-       vyperLookupStorageTheory.well_formed_storage_def,
-       vyperLookupStorageTheory.well_formed_layout_def,
-       vyperLookupStorageTheory.storage_var_in_range_def,
-       vyperLookupStorageTheory.storage_var_info_def,
-       vyperStorageLayoutSafetyTheory.declared_storage_region_def,
-       vyperStorageLayoutSafetyTheory.nonreentrant_slot_separated_def,
-       vyperContextTheory.get_module_code_def,
-       vyperStateTheory.find_var_decl_by_name_def,
-       COND_RAND, COND_RATOR]
+  ACCEPT_TAC p23_call_guard_eval
 QED
 
 Theorem p23_immutables_section:
@@ -630,7 +617,7 @@ QED
 (* ===== Both conclusions on p23, and their guards ===== *)
 
 Theorem p23_deploy_storage_ok:
-  deploy_storage_ok p23_tops initial_machine_state p23_deploy_tx []
+  deploy_storage_ok p23_tops initial_machine_state p23_deploy_tx [] []
 Proof
   ACCEPT_TAC p23_dso_eval
 QED
@@ -691,8 +678,8 @@ QED
 
 (* One closed deploy-then-call run of p23_imm_uint256 in which every
  * premise of both top theorems holds at once, both conclusions hold, the
- * only gas filling that matters ([]: neither run reads GAS) meets the
- * deploy guard, and the call returns 42. *)
+ * only gas filling that matters ([]: neither run reads GAS) meets both
+ * runs' finite-storage guards, and the call returns 42. *)
 Theorem vyper_deploy_and_call_premises_jointly_satisfiable:
   ?fin policy tops deploy_bc runtime_bc am_dep tx_dep es_dep r_dep es_dep'
      am_dep' rqs_dep tx_call ret es_call r_call es_call'.
@@ -703,13 +690,17 @@ Theorem vyper_deploy_and_call_premises_jointly_satisfiable:
     run_call es_dep = SOME (r_dep, es_dep') /\
     ~frame_resource_starved es_dep r_dep es_dep' /\
     gas_readings es_dep = [] /\
-    deploy_storage_ok tops am_dep tx_dep [] /\
-    load_contract NONE [] am_dep tx_dep [(NONE, tops)] [] =
-      INL (am_dep', rqs_dep) /\
+    deploy_storage_ok tops am_dep tx_dep (MAP SND (call_trace es_dep)) [] /\
+    load_contract (SOME (MAP SND (call_trace es_dep))) [] am_dep tx_dep
+      [(NONE, tops)] [] = INL (am_dep', rqs_dep) /\
     deploy_call_result_rel tops runtime_bc am_dep tx_dep es_dep r_dep es_dep' /\
     run_call es_call = SOME (r_call, es_call') /\
     ~frame_resource_starved es_call r_call es_call' /\
     gas_readings es_call = [] /\
+    source_storage_ok (next_source_machine am_dep' es_dep') tx_call
+      (MAP SND (call_trace es_call)) [] /\
+    call_outcomes_storage_ok (next_source_machine am_dep' es_dep') tx_call
+      (MAP SND (call_trace es_call)) [] /\
     call_result_rel tops ret (next_source_machine am_dep' es_dep') tx_call
       es_call r_call es_call' /\
     FST (call_external (SOME []) [] (next_source_machine am_dep' es_dep')
@@ -728,7 +719,7 @@ Proof
     p23_call_result, p23_dep_run, p23_call_run, p23_load,
     not_starved_on_success, p23_dep_trace, p23_call_trace,
     EQT_ELIM p23_supported, EQT_ELIM p23_src_call_42,
-    EQT_ELIM p23_return_42, p23_no_ef_F,
+    EQT_ELIM p23_return_42,
     EQF_ELIM p23_no_self_code, call_outcomes_ok_def, listTheory.MAP, listTheory.EVERY_DEF] >>
   simp[accepted_finalizers_def]
 QED
