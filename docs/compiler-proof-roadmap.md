@@ -181,7 +181,7 @@ exhaustion. `unitShapeDefs.opaque_use_ok` restricts return-address uses. No equa
 GAS with EVM readings or `msg.gas`/`gas=` guarantee is claimed. The conclusion
 is actual `run_call` and frame OutOfGas / StackOverflow, or `call_result_rel`.
 Sufficient gas is the companion theorem `vyper_call_gas_sufficient`
-(`lowering/e2eGasSufficientScript.sml`): under the call theorem's hypotheses,
+(`lowering/e2eGasSufficientTopScript.sml`): under the call theorem's hypotheses,
 some gas `g` exists such that with any `g' >= g` more gas for the frame, the
 frame runs out of gas only after it has run a `RETURNDATACOPY` (forwarding a
 failed callee's revert data). It composes the planned stage bounds S1b

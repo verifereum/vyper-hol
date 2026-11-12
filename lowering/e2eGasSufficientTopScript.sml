@@ -88,23 +88,42 @@ Theorem vyper_call_gas_sufficient:
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?g. !g'.
-      g <= g' /\
-      call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~source_exempt tops
-         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx))
-      ==>
+      g <= g' ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+        (call_outcomes_storage_ok am tx
+           (MAP SND (call_trace (add_frame_gas g' es))) /\
+         (!obs. ~source_exempt tops
+            (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+               obs am tx)) /\
+         (?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
-  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
-  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
-  >- (drule_all vyper_call_gas_sufficient_identity >> simp[])
-  >> `~program_reads_self_code tops` by fs[] >>
-  drule_all vyper_call_gas_sufficient_asm_opt >> simp[]
+  `?g. !g'.
+     g <= g' /\
+     call_outcomes_storage_ok am tx
+       (MAP SND (call_trace (add_frame_gas g' es))) /\
+     (!obs. ~source_exempt tops
+        (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
+           obs am tx))
+     ==>
+     ?r es'.
+       run_call (add_frame_gas g' es) = SOME (r, es') /\
+       ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+        ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)` by
+    (`fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+     pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
+     >- (drule_all vyper_call_gas_sufficient_identity >> simp[])
+     >> `~program_reads_self_code tops` by fs[] >>
+     drule_all vyper_call_gas_sufficient_asm_opt >> simp[]) >>
+  (* run_call is total, so the run exists whatever the conditions *)
+  qexists_tac `g` >> rpt strip_tac >>
+  qspec_then `add_frame_gas g' es` strip_assume_tac run_call_total >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!g'. g <= g' /\ _ ==> _` (qspec_then `g'` mp_tac) >>
+  impl_tac >- simp[] >>
+  strip_tac >> metis_tac[]
 QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers, with
@@ -120,24 +139,48 @@ Theorem e2e_deploy_gas_sufficient:
     ~(?t. runtime_bc = 0xEFw :: t)
     ==>
     ?g. !g'.
-      g <= g' /\
-      call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
-                    (initial_state (am with <|accounts := co.co_accounts;
-                                              tStorage := co.co_tStorage|>) []))
-        (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~deploy_source_exempt tops
-         (load_contract NONE obs am tx [(NONE, tops)] []))
-      ==>
+      g <= g' ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        (r = INR (SOME OutOfGas) ==>
+        (call_outcomes_storage_ok am tx
+           (MAP SND (call_trace (add_frame_gas g' es))) /\
+         EVERY (\co. contract_storage_well_formed
+                       (deploy_evaluation_context tops am tx)
+                       (initial_state (am with <|accounts := co.co_accounts;
+                                                 tStorage := co.co_tStorage|>) []))
+           (MAP SND (call_trace (add_frame_gas g' es))) /\
+         (!obs. ~deploy_source_exempt tops
+            (load_contract NONE obs am tx [(NONE, tops)] [])) /\
+         r = INR (SOME OutOfGas) ==>
          max_code_size < LENGTH runtime_bc + imm_len tops)
 Proof
   rpt gen_tac >> strip_tac >>
-  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
-  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
-  >- (drule_all e2e_deploy_gas_sufficient_identity >> simp[])
-  >> `~program_reads_self_code tops` by fs[] >>
-  drule_all e2e_deploy_gas_sufficient_asm_opt >> simp[]
+  `?g. !g'.
+     g <= g' /\
+     call_outcomes_storage_ok am tx
+       (MAP SND (call_trace (add_frame_gas g' es))) /\
+     EVERY (\co. contract_storage_well_formed
+                   (deploy_evaluation_context tops am tx)
+                   (initial_state (am with <|accounts := co.co_accounts;
+                                             tStorage := co.co_tStorage|>) []))
+       (MAP SND (call_trace (add_frame_gas g' es))) /\
+     (!obs. ~deploy_source_exempt tops
+        (load_contract NONE obs am tx [(NONE, tops)] []))
+     ==>
+     ?r es'.
+       run_call (add_frame_gas g' es) = SOME (r, es') /\
+       (r = INR (SOME OutOfGas) ==>
+        max_code_size < LENGTH runtime_bc + imm_len tops)` by
+    (`fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+     pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
+     >- (drule_all e2e_deploy_gas_sufficient_identity >> simp[])
+     >> `~program_reads_self_code tops` by fs[] >>
+     drule_all e2e_deploy_gas_sufficient_asm_opt >> simp[]) >>
+  (* run_call is total, so the run exists whatever the conditions *)
+  qexists_tac `g` >> rpt strip_tac >>
+  qspec_then `add_frame_gas g' es` strip_assume_tac run_call_total >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!g'. g <= g' /\ _ ==> _` (qspec_then `g'` mp_tac) >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[]
 QED
