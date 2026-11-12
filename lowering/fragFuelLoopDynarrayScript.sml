@@ -135,12 +135,7 @@ QED
    can choose its measure without exposing execution details again. *)
 Theorem dynarray_round_outcome[local]:
   !G ctx fn N Wv entry ctr len lt done tmp n cond body_lbl exit
-   id1 id2 id3 id4 id5 id6 cb st st' Kbody H Q.
-    H = (\i s. s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
-                lookup_var ctr s = SOME (n2w i) /\
-                lookup_var len s = SOME (n2w n) /\ vars_kept N Wv entry s) /\
-    Q = (\s. s.vs_current_bb = exit /\ s.vs_inst_idx = 0 /\
-              vars_kept N Wv entry s) /\
+   id1 id2 id3 id4 id5 id6 cb st st' Kbody.
     no_phi_fn fn /\ callees_stable G ctx fn /\ n < dimword(:256) /\
     lookup_block cond fn.fn_blocks = SOME cb /\
     cb.bb_instructions =
@@ -163,11 +158,24 @@ Theorem dynarray_round_outcome[local]:
     len <> ctr /\ len <> tmp /\
     ~var_below N lt /\ ~var_below N done /\
     ~var_below N ctr /\ ~var_below N tmp ==>
-    !i s. i <= n /\ H i s ==>
+    !i s. i <= n /\
+      (s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
+       lookup_var ctr s = SOME (n2w i) /\
+       lookup_var len s = SOME (n2w n) /\ vars_kept N Wv entry s) ==>
       ?j. j <= Kbody + 2 /\
-        fuel_outcome G ctx fn s j (\t. Q t \/ (i < n /\ H (i + 1) t))
+        fuel_outcome G ctx fn s j
+          (\t. (t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\ vars_kept N Wv entry t) \/
+               (i < n /\ t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
+                lookup_var ctr t = SOME (n2w (i + 1)) /\
+                lookup_var len t = SOME (n2w n) /\ vars_kept N Wv entry t))
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `H = \i s. s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
+     lookup_var ctr s = SOME (n2w i) /\
+     lookup_var len s = SOME (n2w n) /\ vars_kept N Wv entry s` >>
+  qabbrev_tac `Q = \s. s.vs_current_bb = exit /\ s.vs_inst_idx = 0 /\
+     vars_kept N Wv entry s` >>
+  rpt gen_tac >> strip_tac >>
   `i < dimword(:256)` by decide_tac >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME cb /\ s.vs_inst_idx = 0 /\
    lookup_var ctr s = SOME (n2w i) /\ lookup_var len s = SOME (n2w n)` by
@@ -178,7 +186,7 @@ Proof
   `fuel_outcome G ctx fn s 1 (\t. Q t \/ (i < n /\ B t))` by
     (drule_at (Pos (el 3)) dynarray_condition_outcome >>
      disch_then irule >> simp[] >>
-     rpt strip_tac >> gvs[Abbr `B`, jump_to_def, lookup_var_def,
+     rpt strip_tac >> gvs[Abbr `B`, Abbr `Q`, jump_to_def, lookup_var_def,
        update_var_def, finite_mapTheory.FLOOKUP_UPDATE, w2n_n2w, LESS_MOD] >>
      Cases_on `i < n` >> gvs[vars_kept_def, lookup_var_def,
        update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
@@ -202,13 +210,13 @@ Proof
           drule_at (Pos (el 3)) dynarray_increment_outcome >>
           disch_then irule >> simp[mk_inst_def] >>
           rpt strip_tac >>
-          gvs[jump_to_def, lookup_var_def, update_var_def,
+          gvs[Abbr `H`, jump_to_def, lookup_var_def, update_var_def,
               finite_mapTheory.FLOOKUP_UPDATE, vars_kept_def] >>
           simp[GSYM word_add_n2w] >> metis_tac[]) >>
       disch_then (qx_choose_then `jtail` strip_assume_tac) >>
       qexists_tac `jtail` >> simp[] >> decide_tac) >>
   disch_then (qx_choose_then `jround` strip_assume_tac) >>
-  qexists_tac `jround` >> simp[] >> decide_tac
+  qexists_tac `jround` >> gvs[Abbr `Q`, Abbr `H`] >> decide_tac
 QED
 
 (* Convert the indexed round interface to the state measure expected by
@@ -775,5 +783,75 @@ Proof
   simp[fuel_ok_def] >> rpt gen_tac >> strip_tac >>
   drule_all dynarray_compile_structure >> strip_tac >> simp[] >>
   drule_all dynarray_counted_run >> strip_tac >>
-  cheat (* Remaining join: C1.3.3; prefix helpers above are kernel-closed. *)
+  drule_all dynarray_body_cut_bound >> strip_tac >>
+  drule_all dynarray_prefix_middle_bound >> strip_tac >>
+  drule_all dynarray_register_layout >> strip_tac >>
+  `cs_extends st a1` by
+    metis_tac[cs_appends_def, cs_appends_emit_helpers] >>
+  `cs_extends a11 a12` by metis_tac[cs_extends_emit_inst] >>
+  `cs_extends st a12` by metis_tac[cs_extends_trans] >>
+  qexists_tac `Kmid + 1 + dimword(:256) * (Kbody + 2)` >>
+  simp[frag_fuel_def] >> rpt gen_tac >> strip_tac >>
+  drule_all dynarray_loop_intervals >> strip_tac >>
+  drule_all dynarray_prefix_code >> strip_tac >>
+  drule_all dynarray_condition_code >> strip_tac >>
+  qpat_assum `fn_has_code a23 a26 fn`
+    (mp_then (Pos (el 4)) mp_tac dynarray_increment_code) >>
+  disch_then (qspecl_then [`a24`, `a25`, `ctr`, `next`, `hdr`] mp_tac) >>
+  simp[] >> disch_tac >>
+  `?j. j <= Kmid + 1 /\ fuel_outcome G ctx fn s j
+    (\t. ?n. n < dimword(:256) /\
+         t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+         lookup_var ctr t = SOME 0w /\ lookup_var lv t = SOME (n2w n) /\
+         vars_kept N Wv s t)` by
+    (irule dynarray_prefix_outcome >>
+     `~var_below N ctr /\ ~var_below N lv` by
+       metis_tac[var_below_def, LESS_EQ_TRANS] >>
+     simp[] >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\t. vars_kept N Wv s t /\
+          (at_point st' t \/ (t.vs_current_bb IN E /\ t.vs_inst_idx = 0))`,
+     `dimword(:256) * (Kbody + 2)`] mp_tac) >>
+  impl_tac
+  >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+      qabbrev_tac `H = \i u. u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 /\
+        lookup_var ctr u = SOME (n2w i) /\
+        lookup_var lv u = SOME (n2w n) /\ vars_kept N Wv s u` >>
+      qabbrev_tac `Q = \u. u.vs_current_bb = exit /\ u.vs_inst_idx = 0 /\
+        vars_kept N Wv s u` >>
+      `!i u. i <= n /\ H i u ==>
+        ?j. j <= Kbody + 2 /\ fuel_outcome G ctx fn u j
+          (\v. Q v \/ (i < n /\ H (i + 1) v))` by
+        (simp[Abbr `H`, Abbr `Q`] >>
+         match_mp_tac dynarray_round_outcome >> simp[] >>
+         qpat_assum `frag_fuel {} {} {} a18 a23 Kbody`
+           (irule_at Any) >> simp[] >>
+         simp[mk_inst_def] >>
+         qexists_tac `tmp` >> simp[] >>
+         `next = Var tmp` by
+           (qpat_x_assum `emit_op ADD [Var ctr; Lit 1w] a23 = _` mp_tac >>
+            simp[emit_op_def, comp_bind_def, comp_return_def, fresh_var_def,
+                 fresh_id_def, emit_def, emit_inst_def, comp_ignore_bind_def]) >>
+         `~var_below N ltv /\ ~var_below N donev /\
+          ~var_below N ctr /\ ~var_below N tmp` by
+           metis_tac[var_below_def, LESS_EQ_TRANS] >>
+         gvs[mk_inst_def] >>
+         metis_tac[]) >>
+      `!i u. H i u ==> lookup_var ctr u = SOME (n2w i)` by
+        simp[Abbr `H`] >>
+      qpat_assum `!i u. i <= n /\ H i u ==> _`
+        (mp_then (Pos (el 3)) mp_tac dynarray_counted_iteration) >>
+      disch_then (qspec_then `ctr` mp_tac) >>
+      simp[] >>
+      disch_then (qspec_then `t` mp_tac) >>
+      impl_tac >- (qexists_tac `0` >> gvs[Abbr `H`]) >>
+      disch_then (qx_choose_then `jloop` strip_assume_tac) >>
+      qexists_tac `jloop` >> simp[] >>
+      irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+      simp[Abbr `Q`]) >>
+  disch_then (qx_choose_then `jall` strip_assume_tac) >>
+  qexists_tac `jall` >> gvs[]
 QED
