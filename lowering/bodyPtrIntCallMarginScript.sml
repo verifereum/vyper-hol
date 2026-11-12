@@ -77,7 +77,7 @@ Theorem intcall_entry_return_bounds:
   body_inv tops ctx cenv cx /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+    (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
   cenv.ce_func_info (nsid_to_string (NONE,name)) = (0,rbs,pvs) /\
   0 < rbs /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
