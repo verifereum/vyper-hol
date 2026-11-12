@@ -446,7 +446,9 @@ Proof
       simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
         SRULE [SF ETA_ss] alloc_run_emit_void_fresh]) >>
   IF_CASES_TAC >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
-  IF_CASES_TAC >> simp[comp_ignore_bind_def] >>
+  IF_CASES_TAC >> simp[comp_ignore_bind_def]
+  >>~- ([`alloc_run _ (compile_store_slots _ _ _ _ _) _`],
+    MATCH_ACCEPT_TAC (SRULE [SF ETA_ss] (CONJUNCT1 alloc_run_compile_store_slots))) >>
   irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_memory,
     SRULE [SF ETA_ss] alloc_run_compile_word_copy_loop] >>
