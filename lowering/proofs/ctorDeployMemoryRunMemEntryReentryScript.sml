@@ -22,6 +22,11 @@ Theorem ctor_reentry_step_mem:
 Proof
   strip_tac >> drule_all abi_decoder_step_inputs_defined >> strip_tac >>
   drule abi_decoder_vars_extend_observations >> strip_tac >>
+  `t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp` by
+    (drule abi_decoder_vars_extend_restore >>
+     disch_then (mp_tac o AP_TERM
+       ``\u:venom_state. (u.vs_fmp, u.vs_initial_fmp)``) >>
+     simp[]) >>
   `!op. MEM op i.inst_operands ==> eval_operand op t = eval_operand op s` by
     (rpt strip_tac >> irule ctor_reentry_operand_agreement >> metis_tac[]) >>
   Cases_on `i.inst_opcode` >> gvs[abi_decoder_reentry_opcode_def] >>
