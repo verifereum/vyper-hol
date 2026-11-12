@@ -2,7 +2,7 @@
 Theory stmtSimAppendStorageCompose
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
-  appendStorageRel stmtSimAppendStorage stmtSimAssignStorage stmtSimForced fragExec
+  appendStorageRel stmtSimAppendStorage stmtSimAssignStorageFacts stmtSimForced fragExec
   gasOutcome gasStorage gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq fragGasSeqAbort list rich_list
   varsExt freshWrites stateFrame venomState finite_map 
@@ -215,7 +215,7 @@ Proof
   simp[bind_def, get_place_def, return_def, raise_def] >>
   rename1 `evaluate_type (get_tenv cx) vty` >>
   Cases_on `evaluate_type (get_tenv cx) vty` >>
-  simp[bind_def, get_place_def, return_def, raise_def,
+  simp[bind_def, get_place_def, record_storage_event_def, return_def, raise_def,
        evaluation_state_component_equality] >>
   rpt strip_tac >> gvs[]
 QED
@@ -234,7 +234,8 @@ Proof
     (x with storage_trace := x.storage_trace ++ [observation])` >>
   rename1 `_ = (raw, st1)` >>
   Cases_on `raw` >> simp[] >>
-  Cases_on `read_result cx x' st1` >> rename1 `_ = (r2, st2)` >>
+  rename1 `read_result cx forced st1` >>
+  Cases_on `read_result cx forced st1` >> rename1 `_ = (r2, st2)` >>
   Cases_on `r2` >> simp[]
 QED
 

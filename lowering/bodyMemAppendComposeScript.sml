@@ -119,7 +119,7 @@ Resume compile_append_storage_word_stmt_frag_mem[rhs]:
         (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v ee` >>
       rename1 `_ = (res,ee')` >>
       drule_all append_storage_word_value_path_mem >>
-      disch_then (qspecl_then [`lctx`, `RetQ`] mp_tac) >>
+      disch_then (qspecl_then [`lctx`, `\v st r. F`] mp_tac) >>
       disch_then (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
       `ee'.gas_obs = []` by
         (drule append_storage_place_preserves_gas >> simp[]) >>
@@ -160,7 +160,7 @@ Resume compile_append_storage_word_stmt_frag_mem[rhs]:
       conj_tac >- metis_tac[append_storage_place_gas_obs] >>
       conj_tac >- simp[] >>
       disj2_tac >> simp[] >> rpt strip_tac >>
-      drule_all append_storage_place_exit_transport >> simp[]) >>
+      fs[stmt_exit_def]) >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sB`, `op`, `s0`] mp_tac) >>

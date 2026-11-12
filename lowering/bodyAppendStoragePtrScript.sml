@@ -2,11 +2,12 @@
 Theory bodyAppendStoragePtr
 Ancestors
   stmtAppendStorageComposePtr bodyAppendStorageAdapter bodyAppendStorageFacts
-  bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs exprSimHyps
+  bodyPtrPreds bodyPtrDefs bodySim exprSimSource exprSimHypsDefs exprSimHyps
   bodyExprPreFacts supportedStmts supportedStmtTraverse supportedTypes
   supportedExprs supportedDecls bodyStorageMetadata stmtSimDefs exprLoweringProps
   compileEnv loweringStateRelDefs vyperTypeSystem vyperTypeValues vyperTypeCallGraph vyperState
   vyperInterpreter vyperValue vyperStorageLayoutSafety
+  vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   gasStorage gasSummary fragGasPathPtr vyperStorageTrace vyperStorageFootprint
 
 Theorem stmt_frag_ptr_storage_rel_discharge:

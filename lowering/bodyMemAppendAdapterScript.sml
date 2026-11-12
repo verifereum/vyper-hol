@@ -3,7 +3,7 @@ Theory bodyMemAppendAdapter
 Ancestors
   bodyMemAppendCompose bodyAppendStorageAdapter bodyMemoryPreds
   bodyAppendStorageFacts bodyExprPreFacts stmtSimDefs exprSimMemDefs
-  exprSimSource exprSimHypsDefs stmtSimAssignStorage bodySim exprSimHyps
+  exprSimSource exprSimHypsDefs stmtSimAssignStorageFacts bodySim exprSimHyps
   supportedStmts supportedStmtTraverse vyperStorageLayoutSafety
   vyperTypeSystem vyperTypeValues compileEnv loweringStateRelDefs vyperTypeCallGraph vyperState
   vyperInterpreter vyperTypeInvariants vyperTypeExprSoundness
