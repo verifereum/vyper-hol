@@ -1,6 +1,8 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalEntryReachesBody
 Ancestors
+  loweringStateRelDefs entryReachBodyStateAssembly entryReachBodyRootChecks entryReachBodySelectedCode
+  entryBodyRegistrationComposition entryLocals entryReachBodyExactArrayLoop
   stmtSimProps
   stmtSimDefs
   exprSimDefs
@@ -23,7 +25,30 @@ val _ = Parse.hide "body";
    result of run_context.  The code from sa on is compile_guarded_body's
    in cenv, in the function func that runs it; cenv0 is the compile env
    lower_vyper_runtime_unit packages for the function (supported_program
-   rules out raw returns). *)
+   rules out raw returns).  This includes that the guard on each dynamic
+   argument's calldata offset (compile_abi_arg_ptr_guard) falls through on
+   every call valid_vyper_call accepts.  valid_vyper_call admits no
+   functions with default arguments, so the same guard on a supplied
+   dynamic keyword argument (compile_init_kwargs) is an obligation for
+   whatever later covers those functions' entry. *)
+(* Notes for the proof (read, not built):
+   - alloca_room at s0: run_lowering checks lowering_context_ok, whose
+     alloca budget bounds the unit's static allocations;
+     allocaFrontierBound's alloca_frontier_inv_entry gives the bound at
+     __entry's entry (vs_alloca_next = 0, no allocas), and
+     step_inst_alloca_budget keeps it along the INVOKE-free dispatch,
+     checks and decode.
+   - fmp_room at s0: initial_venom_state_rel says nothing about vs_fmp, so
+     it must hold vacuously: DALLOCA is emitted only by
+     compile_alloc_dynamic (builtinCreate, and builtinSystem's raw_call of
+     msg.data), and supported_program excludes raw calls and every create
+     form (supported_raw_call_forms_excluded), so no function reachable from
+     __entry has a DALLOCA.
+   - The calldata decode passes hi_op = Lit 0w, so a canonical encoding
+     (valid_vyper_call) meets only the clamps: basetype clamps, bytestring
+     length <= max, dynamic array count <= max, which bind_arguments'
+     well-typed values satisfy.
+   - local_ptrs_reserved: entryLocals' external_entry_locals. *)
 Theorem external_entry_reaches_body:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -45,7 +70,7 @@ Theorem external_entry_reaches_body:
     ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' func
      s0.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, lookup_raw_return_or_F (NONE : num option)
                        tx.function_name External tops,
             tx.function_name, args, [], ret, fbody)) =
@@ -64,6 +89,19 @@ Theorem external_entry_reaches_body:
                (!e. r <> Error e) ==>
                ?fuel'. run_context fuel' unit.cu_context vs = r
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all entry_canonical_registration_reached >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions` by
+    metis_tac[venomInstTheory.lookup_function_MEM] >>
+  drule_all entry_body_state_assembly >> strip_tac >>
+  qexistsl_tac [`lbl`,`ce`,`pos`,`mincd`,`pay`,`key`,`ut`,`iv`,`rt`,
+    `start`,`cenv`,`registered`,`final`,`fn`,`t`] >>
+  simp[] >>
+  `t.vs_gas_readings = vs.vs_gas_readings` by
+    fs[entry_loop_fields_def] >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+      simp[package_external_fn_def]) >>
+  metis_tac[]
 QED
 

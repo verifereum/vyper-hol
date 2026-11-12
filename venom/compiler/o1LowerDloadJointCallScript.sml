@@ -3,24 +3,15 @@ Theory o1LowerDloadJointCall
 Ancestors
   o1LowerDloadJointEntry o1LowerDloadJointRelation o1LowerDloadOccurrence
   o1LowerDloadShared o1LowerDloadEnvironment o1ContractLowerDload
-  lowerDloadDefs venomExecSemantics contextCodegenRel venomState venomInst
+  lowerDloadDefs venomExecSemantics venomExecProofs contextCodegenRel venomState venomInst
   finite_map list pred_set
-
-Theorem ld_call_phi_entry[local]:
-  s.vs_prev_bb = NONE /\ eval_phis s ins = OK s1 ==>
-  s1 = s /\ phi_prefix_length ins = 0
-Proof
-  Cases_on `ins` >> simp[eval_phis_def, phi_prefix_length_def] >>
-  strip_tac >> Cases_on `h.inst_opcode = PHI` >>
-  gvs[eval_phis_def, eval_one_phi_def, phi_prefix_length_def, AllCaseEqs()]
-QED
 
 Theorem ld_call_entry_unchanged[local]:
   cs.vs_prev_bb = NONE /\ cs.vs_inst_idx = 0 /\ enters_block fn cs s1 ==>
   s1 = cs
 Proof
   simp[enters_block_def] >> strip_tac >>
-  drule_all ld_call_phi_entry >> strip_tac >> gvs[]
+  drule_all eval_phis_no_prev >> strip_tac >> gvs[]
 QED
 
 Theorem ld_call_entry_transport[local]:
@@ -29,7 +20,7 @@ Theorem ld_call_entry_transport[local]:
   enters_block fn s s1 ==> enters_block fn t t
 Proof
   simp[enters_block_def] >> strip_tac >>
-  drule_all ld_call_phi_entry >> strip_tac >>
+  drule_all eval_phis_no_prev >> strip_tac >>
   qexistsl_tac [`bb`, `t`] >> simp[] >>
   Cases_on `bb.bb_instructions` >>
   gvs[eval_phis_def, phi_prefix_length_def, AllCaseEqs()]

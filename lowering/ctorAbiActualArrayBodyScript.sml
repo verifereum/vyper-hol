@@ -3,7 +3,7 @@ Ancestors
   ctorAbiActualArrayInvariant ctorAbiActualArrayIteration ctorAbiActualFrame
   ctorAbiActualSites abiDecoderDynamicLoopSetup abiDecoderReentry
   abiEncoderRegisteredEffect abiDecoderTypedContract venomState valueEncoding
-  compileEnv finite_map words list arithmetic pred_set
+  compileEnv loweringStateRelDefs finite_map words list arithmetic pred_set
   abiDecoderArraySetupInputs abiDecoderContract abiDecoderLoop fragExec
   abiDecoderVarSequence abiDecoderDynamic abiEncoderProps instIdxIndep venomExecSemantics
   exprLoweringProps abiDecoderArrayInvariant rich_list abiDecoderArraySetupCode

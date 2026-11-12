@@ -1,6 +1,7 @@
 Theory o1MakeSsaCfg
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentProps makeSsaHelper makeSsaCurrentInduct venomInst venomState venomWf unitShapeDefs list makeSsaCurrentCfg
+  makeSsaDefs makeSsaCurrentProps makeSsaCurrentInduct venomInst venomState venomWf unitShapeDefs list makeSsaCurrentCfg
+  venomExecProofs
 
 Theorem rename_current_block_insts_length:
   !insts s rs rs' s' insts'.

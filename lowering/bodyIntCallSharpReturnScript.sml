@@ -58,7 +58,7 @@ Proof
       drule_all gas_path_then >> simp[]) >>
   conj_tac
   >- (rpt strip_tac >> irule typed_copy_effect_bytes >>
-      gvs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+      gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >> irule typed_copy_effect_operand_preserved >> metis_tac[]) >>
   gvs[typed_copy_effect_def, venom_state_component_equality]
@@ -111,7 +111,7 @@ Proof
     (irule compile_store_memory_typed_forward_sharp >> simp[] >>
      goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
      qexistsl_tac [`stv`, `sw`, `tenv`] >>
-     gvs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+     gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   qexists_tac `t` >> simp[] >>
   irule typed_copy_effect_ret_path >>
   goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>

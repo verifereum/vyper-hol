@@ -22,12 +22,10 @@
  *
  * TOP-LEVEL:
  *   lower_vyper_runtime_unit_correct -- S1
+ *   lower_vyper_runtime_unit_run_bounded -- S1b (sufficient gas), a
+ *     planned admission
  *   external_fallthrough_result_rel_any -- the fall-through halt, with
  *     state_rel at any compile env
- *   call_external_selected_body, call_external_selected_body_gas -- the
- *     source runs the selected body, at any gas observations
- *   type_stmts_none_valued_return -- a body typed at NoneT has no valued
- *     return
  *
  * The pieces S1 rests on, one per theory:
  *   externalBodySourceOk: external_body_source_ok -- the source side
@@ -41,6 +39,9 @@
  *     (#640)
  *   stmtsEnvRetTy: stmts_env_ret_ty -- a supported body without a valued
  *     return compiles the same at every return type
+ *   externalCallSelected: call_external_selected_body(_gas) -- the
+ *     source runs the selected body; guarded_body_code and
+ *     guarded_body_stmts_env -- the guarded body's code
  *
  * The body judgment is counted: its source run reads the gas observations
  * that the target path's GAS reads produce (gas_explicit), so S1's source
@@ -61,136 +62,10 @@ Ancestors
   venomState venomExecSemantics venomWf
   gasContext gasSummary gasOutcome gasExemptCert fragGasPath fragGasMode
   externalBodySourceOk externalEntryValueRevert externalEntryReachesBody externalBodyFrame externalFrameRetOk stmtsEnvRetTy
+  externalCallSelected fragFuelUnit passSimulationDefs
 
 val _ = Parse.hide "body";
 
-(* ===== The source side (#639) ===== *)
-
-(* send_call_value reads and writes only accounts, so it runs the same
-   under any scopes. *)
-Theorem send_call_value_with_scopes:
-  !mut cx s r s'.
-    send_call_value mut cx s = (r, s') ==>
-    s'.scopes = s.scopes /\
-    !sc. send_call_value mut cx (s with scopes := sc) =
-         (r, s' with scopes := sc)
-Proof
-  rw[send_call_value_def, transfer_value_def, vyperStateTheory.bind_def,
-     vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
-     vyperStateTheory.assert_def, vyperStateTheory.return_def,
-     vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
-     vyperStateTheory.update_accounts_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-(* Likewise under any gas observations. *)
-Theorem send_call_value_with_gas_obs:
-  !mut cx s r s'.
-    send_call_value mut cx s = (r, s') ==>
-    s'.gas_obs = s.gas_obs /\
-    !gs. send_call_value mut cx (s with gas_obs := gs) =
-         (r, s' with gas_obs := gs)
-Proof
-  rw[send_call_value_def, transfer_value_def, vyperStateTheory.bind_def,
-     vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
-     vyperStateTheory.assert_def, vyperStateTheory.return_def,
-     vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
-     vyperStateTheory.update_accounts_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-(* call_external_body sets the scopes before it reads them. *)
-Theorem call_external_body_scopes[local]:
-  !am cx nr mut tenv s sc env body ret.
-    call_external_body am cx nr mut tenv (s with scopes := sc) env body ret =
-    call_external_body am cx nr mut tenv s env body ret
-Proof
-  simp[call_external_body_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, vyperStateTheory.set_scopes_def]
-QED
-
-(* The call valid_vyper_call selects, at gas observations gobs, sends the
-   call value and then runs call_external_body from the bound arguments,
-   with pending deletions finalised on success.  es0 is the state after
-   the value moved, as external_entry_reaches_body starts the body from
-   it; the body starts from es0 with the call's observations. *)
-Theorem call_external_selected_body_gas:
-  !tops am tx ret mut args fbody env orc gobs es0.
-    source_deployment_rel tops am tx /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    LENGTH tx.args = LENGTH args /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
-      (INL (), es0) ==>
-    call_external orc gobs am tx =
-      case call_external_body am
-             (initial_evaluation_context am.sources am.layouts tx NONE)
-             F mut (type_env tops) (es0 with gas_obs := gobs) env fbody ret of
-        (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
-      | failure => failure
-Proof
-  rw[source_deployment_rel_def] >>
-  `type_env_all_modules [(NONE, tops)] = type_env tops` by
-    simp[type_env_all_modules_def, type_env_def] >>
-  simp[call_external_def, find_function_module_def,
-       lookup_exported_function_def, get_self_code_def, get_module_code_def,
-       initial_evaluation_context_def] >>
-  qmatch_goalsub_abbrev_tac `call_external_function orc gobs am cx` >>
-  qabbrev_tac `es1 = (es0 with gas_obs := gobs) with scopes := [FEMPTY]` >>
-  `send_call_value mut cx
-     (initial_state am [FEMPTY] with
-        <| outcomes := orc; requests := []; gas_obs := gobs |>) =
-   (INL (), es1)` by
-    (qpat_x_assum `send_call_value _ _ _ = _` mp_tac >>
-     simp[Abbr `cx`, initial_evaluation_context_def] >> strip_tac >>
-     drule send_call_value_with_gas_obs >> strip_tac >>
-     pop_assum (qspec_then `gobs` assume_tac) >>
-     drule send_call_value_with_scopes >> strip_tac >>
-     pop_assum (qspec_then `[FEMPTY]` mp_tac) >>
-     simp[Abbr `es1`, initial_state_def]) >>
-  `eval_external_defaults cx [] es1 = (INL [], es1)` by
-    simp[Abbr `es1`, eval_external_defaults_def, evaluate_def,
-         vyperStateTheory.bind_def,
-         vyperStateTheory.ignore_bind_def, vyperStateTheory.get_scopes_def,
-         vyperStateTheory.set_scopes_def, vyperStateTheory.finally_def,
-         vyperStateTheory.return_def] >>
-  `call_external_function orc gobs am cx F mut tops [(NONE, tops)] args []
-     tx.args fbody ret =
-   call_external_body am cx F mut (type_env tops) es1 env fbody ret` by
-    (qpat_assum `_ = type_env tops` (SUBST1_TAC o SYM) >>
-     irule call_external_function_body >> gvs[Abbr `cx`]) >>
-  gvs[Abbr `es1`, call_external_body_scopes]
-QED
-
-(* call_external_selected_body_gas without gas observations. *)
-Theorem call_external_selected_body:
-  !tops am tx ret mut args fbody env orc es0.
-    source_deployment_rel tops am tx /\
-    lookup_function NONE tx.function_name External tops =
-      SOME (mut, F, args, [], ret, fbody) /\
-    LENGTH tx.args = LENGTH args /\
-    bind_arguments (type_env tops) args tx.args = SOME env /\
-    send_call_value mut
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
-      (INL (), es0) ==>
-    call_external orc [] am tx =
-      case call_external_body am
-             (initial_evaluation_context am.sources am.layouts tx NONE)
-             F mut (type_env tops) es0 env fbody ret of
-        (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
-      | failure => failure
-Proof
-  rpt strip_tac >>
-  drule_all call_external_selected_body_gas >>
-  disch_then (qspec_then `[]` SUBST1_TAC) >>
-  `es0 with gas_obs := [] = es0` suffices_by simp[] >>
-  drule (cj 1 send_call_value_with_gas_obs) >>
-  simp[initial_state_def, vyperStateTheory.evaluation_state_component_equality]
-QED
 (* ADMITTED (typing soundness): the body of a checked external function
    ends in an outcome the statement judgment speaks of (no type error, no
    break or continue outside a loop), and it falls off its end only when
@@ -246,33 +121,12 @@ QED
 (* ===== The return type of a body without a valued return ===== *)
 
 
-(* type_stmt rejects Return (SOME e) at NoneT. *)
-Theorem type_stmt_none_valued_return[local]:
-  (!env ret_ty s.
-     ret_ty = NoneT /\ IS_SOME (type_stmt env ret_ty s) ==>
-     ~stmt_valued_return s) /\
-  (!env ret_ty ss.
-     ret_ty = NoneT /\ IS_SOME (type_stmts env ret_ty ss) ==>
-     ~stmts_valued_return ss)
-Proof
-  ho_match_mp_tac type_stmt_ind >>
-  rw[type_stmt_def, stmt_valued_return_def] >>
-  gvs[optionTheory.IS_SOME_EXISTS, AllCaseEqs()] >> metis_tac[]
-QED
-
-(* A body typed at NoneT has no valued return. *)
-Theorem type_stmts_none_valued_return:
-  !env ss env'.
-    type_stmts env NoneT ss = SOME env' ==> ~stmts_valued_return ss
-Proof
-  metis_tac[type_stmt_none_valued_return, optionTheory.IS_SOME_DEF]
-QED
 
 (* ===== The source's result ===== *)
 
 (* call_external_body without a lock, from es0 in the bound scope, where
    the body ran to es'. *)
-Theorem call_external_body_run[local]:
+Theorem call_external_body_run:
   !am cx mut tenv env fbody ret es0 res es'.
     es0.scopes = [env] /\
     eval_stmts cx fbody es0 = (res, es') ==>
@@ -293,7 +147,7 @@ Theorem call_external_body_run[local]:
                (INL v',
                 abstract_machine_from_state am.sources am.exports am.layouts
                   es', es'.requests)) /\
-    (!e. res = INR e /\ (!v. e <> ReturnException v) ==>
+    (!e. res = INR e /\ (!v. e <> ReturnException v) /\ e <> HaltException ==>
      call_external_body am cx F mut tenv es0 env fbody ret =
        (INR e, am, es'.requests))
 Proof
@@ -310,71 +164,12 @@ QED
 
 (* ===== The body's run ===== *)
 
-(* The guarded body's code from sa: the body's statements to sb, then (if
-   the block is still open) the end, to st'. *)
-Theorem guarded_body_code:
-  !cenv nkey ut iv fbody rt sa st'.
-    compile_guarded_body cenv F nkey ut iv fbody rt sa = ((), st') ==>
-    ?sb. compile_stmts cenv NoLoop
-           (case rt of SOME t => t | NONE => BaseT BoolT) fbody sa =
-           ((), sb) /\
-         cs_extends sa sb /\ cs_extends sb st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_guarded_body_def, comp_bind_def, comp_ignore_bind_def,
-       comp_get_def, comp_return_def] >>
-  Cases_on `compile_stmts cenv NoLoop
-              (case rt of SOME t => t | NONE => BaseT BoolT) fbody sa` >>
-  rename1 `_ = (u, sb)` >> Cases_on `u` >> simp[] >>
-  `cs_extends sa sb` by
-    (qspecl_then [`cenv`, `NoLoop`,
-                  `case rt of SOME t => t | NONE => BaseT BoolT`, `fbody`]
-       mp_tac (cj 2 compile_stmt_cs_mono) >>
-     simp[cs_mono_def] >> disch_then drule >> simp[]) >>
-  rw[] >>
-  gvs[comp_return_def, comp_ignore_bind_def, comp_bind_def,
-      cs_extends_refl] >>
-  Cases_on `rt` >> gvs[] >>
-  drule (SIMP_RULE std_ss [cs_appends_def] (cj 1 cs_appends_emit_helpers)) >>
-  simp[]
-QED
-
-(* The body's code at the typing's return type: body_stmts_sim compiles at
-   the return type the typing checks the body against, while
-   compile_guarded_body compiles a function without a return type at
-   BaseT BoolT. *)
-Theorem guarded_body_stmts_env:
-  !tops bindings ctx cx cenv fbody ret rt env_t env' sa sb.
-    supported_stmts tops bindings fbody /\ body_inv tops ctx cenv cx /\
-    rt = (if ret = NoneT then NONE else SOME ret) /\
-    type_stmts env_t ret fbody = SOME env' /\
-    compile_stmts cenv NoLoop
-      (case rt of SOME t => t | NONE => BaseT BoolT) fbody sa = ((), sb) ==>
-    ?cenv'. stmts_env cenv NoLoop ret fbody sa = (cenv', sb)
-Proof
-  rpt strip_tac >> qpat_x_assum `rt = _` SUBST_ALL_TAC >>
-  `stmts_env cenv NoLoop ret fbody sa =
-   stmts_env cenv NoLoop
-     (case (if ret = NoneT then NONE else SOME ret) of
-        SOME t => t | NONE => BaseT BoolT) fbody sa` by
-    (Cases_on `ret = NoneT` >> gvs[] >>
-     drule type_stmts_none_valued_return >> strip_tac >>
-     drule_all stmts_env_ret_ty >>
-     disch_then (qspecl_then [`NoLoop`, `NoneT`, `BaseT BoolT`]
-                   SUBST1_TAC) >> simp[]) >>
-  gvs[compile_stmts_env] >>
-  Cases_on `stmts_env cenv NoLoop
-              (case (if ret = NoneT then NONE else SOME ret) of
-                 SOME t => t | NONE => BaseT BoolT) fbody sa` >>
-  gvs[]
-QED
 
 (* A body outcome other than a return exits as external_call_result_rel
    asks of the call's failure, given that a RevertData exit reverts. *)
 Theorem expr_exit_external_result[local]:
   !e r tops ret tx am rqs.
-    expr_exit (INR e : unit + exception) r /\
+    e <> HaltException /\ expr_exit (INR e : unit + exception) r /\
     (!d a t. e = Error (RevertData d) /\ r = Abort a t ==> a = Revert_abort) ==>
     external_call_result_rel tops ret tx (INR e, am, rqs) r
 Proof
@@ -520,6 +315,7 @@ Proof
       simp[stmt_exit_def] >> strip_tac
       >- ((* an error or an assertion *)
           Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR e) _` >>
+          `e <> HaltException` by (strip_tac >> gvs[stmt_res_ok_def]) >>
           `!v. e <> ReturnException v` by
             (rpt strip_tac >> gvs[] >>
              qpat_x_assum `expr_exit _ _` mp_tac >>
@@ -530,8 +326,9 @@ Proof
             mp_tac expr_exit_external_result >>
           impl_tac
           >- (conj_tac >- first_assum ACCEPT_TAC >>
+              conj_tac >- first_assum ACCEPT_TAC >>
               rpt strip_tac >> gvs[expr_exit_def]) >>
-          simp[]) >>
+          Cases_on `e` >> gvs[]) >>
       (* a return *)
       gvs[Abbr`RetQ`, Abbr`es'`, abstract_machine_from_state_def]) >>
   (* the body fails with an exempt error *)
@@ -589,4 +386,53 @@ Proof
   rename1 `_ = (sres, es0)` >> Cases_on `sres`
   >- (rename1 `INL u` >> Cases_on `u` >> irule lower_vyper_runtime_unit_body >> metis_tac[]) >>
   irule external_entry_value_revert >> metis_tac[]
+QED
+
+(* A related run does not fail. *)
+Theorem external_call_result_rel_terminates[local]:
+  !tops ret tx r vres.
+    external_call_result_rel tops ret tx r vres ==> terminates vres
+Proof
+  rpt gen_tac >> PairCases_on `r` >> Cases_on `vres` >>
+  simp[terminates_def, external_call_result_rel_def] >>
+  BasicProvers.EVERY_CASE_TAC >> simp[]
+QED
+
+(* S1b, sufficient gas.  The lowered run ends within a fuel that does not
+   depend on the entry state, in particular not on the external-call
+   outcomes.  Every function of the unit is fuel-stable once its callees
+   are (fragFuelUnit), so from some fuel G on every run of the unit gives
+   the same result, and a run that ends at any fuel ends at G.  S1 says the
+   run ends at some fuel. *)
+Theorem lower_vyper_runtime_unit_run_bounded:
+  !tops rpolicy unit am tx ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx
+    ==>
+    ?fuel. !vs.
+      valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+      initial_venom_state_rel tops am tx vs /\
+      call_outcomes_ok am tx vs.vs_outcomes /\
+      (!marks. ~source_exempt tops
+         (call_external (SOME vs.vs_outcomes)
+            (gas_explicit marks vs.vs_gas_readings) am tx))
+      ==>
+      terminates (run_context fuel unit.cu_context vs)
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac
+    lower_vyper_runtime_unit_fns_stable >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule_all run_context_terminates_uniform >> strip_tac >>
+  qexists_tac `G` >> rpt strip_tac >> first_x_assum irule >>
+  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`] mp_tac
+    lower_vyper_runtime_unit_correct >>
+  simp[source_unit_execution_correct_def,
+       source_unit_execution_correct_at_def] >>
+  strip_tac >>
+  metis_tac[external_call_result_rel_terminates]
 QED

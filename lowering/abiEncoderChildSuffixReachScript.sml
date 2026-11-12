@@ -2,7 +2,7 @@
 Theory abiEncoderChildSuffixReach
 Ancestors
   abiEncoderChildSuffix abiEncoderChildCode abiDecoderReentry abiDecoderFrame abiDecoderContract
-  abiDecoderLoop fragExec instIdxIndep compileEnv emitHelperProps valueEncoding
+  abiDecoderLoop fragExec instIdxIndep compileEnv loweringStateRelDefs emitHelperProps valueEncoding
   venomExecSemantics venomState words list rich_list
 
 Definition abi_encoder_child_suffix_post_def:

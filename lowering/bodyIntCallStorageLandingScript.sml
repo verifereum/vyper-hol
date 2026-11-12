@@ -2,7 +2,7 @@
 Theory bodyIntCallStorageLanding
 Ancestors
   bodyIntCallMaterializeLanding storageCopyGasPath exprSimStorageCopy exprSimCopy
-  intCallFrame compileEnv finite_map list rich_list words exprSimMemUnwrap
+  intCallFrame compileEnv loweringStateRelDefs finite_map list rich_list words exprSimMemUnwrap
   emitHelperProps venomInst venomState placeMemoryPrimitiveForward exprLoweringProps
   loweringPosts context valueCopy fragGasMode exprSimAlloc
 

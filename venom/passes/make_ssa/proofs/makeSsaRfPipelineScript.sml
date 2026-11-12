@@ -1,10 +1,11 @@
 Theory makeSsaRfPipeline
 Ancestors makeSsaCurrentAllocation makeSsaCurrentCleanupShape makeSsaCurrentFinalBlock makeSsaCurrentRenameTrace makeSsaCurrentSourceCuts makeSsaCurrentTokens makeSsaCurrentTreeTrace
   makeSsaRfFinalBlock makeSsaRfLocalBridge makeSsaRfDomDistinct
-  makeSsaRfTreeTrace makeSsaRfWitness makeSsaCurrentDefs makeSsaRfEdgeShape
+  makeSsaRfTreeTrace makeSsaRfWitness makeSsaDefs makeSsaRfEdgeShape
   makeSsaRfShape makeSsaRfTransport makeSsaRfAnnotations makeSsaRfAllocation
-  makeSsaHelper makeSsaCurrentProps makeSsaRfAssign makeSsaRfRenameTrace
+   makeSsaCurrentProps makeSsaRfAssign makeSsaRfRenameTrace
   venomInst venomWf venomFnScheduleRunner irSupply list pair
+  venomExecProofs
 
 Theorem current_event_rf_trace:
   rf_current_event_valid A V ev /\ current_event_trace A finalH ev /\

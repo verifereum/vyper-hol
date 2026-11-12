@@ -3,7 +3,7 @@ Theory bodyIntCallReturnCopy
 Ancestors
   intCallReturnMem valueCopy intCallResult loweringSlice loweringPosts instIdxIndep
   stmtSimReturn fragExec exprLoweringProps stmtLowering exprLowering
-  emitHelper emitHelperProps compileEnv context valueEncoding
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs context valueEncoding
   vyperState vyperTyping venomExecSemantics venomInst venomState
   list rich_list
 
@@ -100,7 +100,7 @@ Theorem compile_internal_return_memory_size_bound_frag:
            eval_operand buf_op s = SOME bw /\
            ?pc. eval_operand rpc s = SOME pc)
       (\s. F)
-      (intret_mem_q func cenv cx tv bw v (es with scopes := []))
+      (intret_mem_q_raw func cenv cx tv bw v (es with scopes := []))
 Proof
   rpt gen_tac >> strip_tac >>
   reverse (Cases_on `?s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
@@ -127,6 +127,6 @@ Proof
   >- (irule internal_return_copy_frag >> simp[] >> metis_tac[]) >>
   irule emit_ret_pc_frag >> qexists_tac `rpc` >> simp[] >>
   rpt strip_tac >>
-  gvs[intret_mem_q_def, intret_q_def, result_rel_def,
+  gvs[intret_mem_q_raw_def, result_rel_def,
       intret_vals_match_def, stmt_state_rel_def]
 QED

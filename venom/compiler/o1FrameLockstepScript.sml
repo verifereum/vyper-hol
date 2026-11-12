@@ -716,7 +716,7 @@ Theorem step_inst_copy_not_intret:
   (!v e. step_inst fuel C inst' s' <> IntRet v e) /\
   (!h. step_inst fuel C inst' s' <> Halt h)
 Proof
-  strip_tac >> gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()]
+  strip_tac >> gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()]
 QED
 
 Theorem step_inst_invoke_not_intret:

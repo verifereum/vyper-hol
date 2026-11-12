@@ -12,12 +12,12 @@ Ancestors
   bodyIntCallJointContract stmtSimLogSuffixFrame stmtSimLogSuffixActual bodyIntCallFamStmtLogSuffixEncodeFrame
   bodyIntCallFamStmtLogSuffixResources bodyIntCallFamStmtLogSuffixFootprint
   bodyIntCallFamStmtLogSuffixStore bodyIntCallFamStmtLogSuffixMemory
-  bodyIntCallFamStmtLogSuffixPipeline bodyIntCallFamStmtLogSuffixCompose
+  bodyIntCallFamStmtLogSuffixPipeline bodyIntCallFamStmtLogSuffixCompose stmtSimLogTrace
 
 Theorem intcall_log_suffix_run:
-  !ce id h tys flags args sa xs sm ops st lctx ty sb ctx func cx es s vs
+  !ce id h flags args sa xs sm ops st lctx ty sb ctx func cx es s vs
    topics avs lo.
-    ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
+    ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
     compile_log_eval_all ce args sa = (xs,sm) /\
     compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
     compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
@@ -49,6 +49,8 @@ Theorem intcall_log_suffix_run:
       allocas_above lo t /\ s.vs_alloca_next <= t.vs_alloca_next
 Proof
   rpt strip_tac >>
+  `log_eval_view ce args sa xs sm` by
+    simp[stmtSimLogTraceTheory.log_eval_view_def, listTheory.LIST_REL_EL_EQN] >>
   drule_all log_success_suffix_actual_run >> strip_tac >>
   `EVERY (supported_scalar_type o SND) xs` by
     (gvs[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >> rpt strip_tac >>

@@ -4,7 +4,7 @@ Ancestors
   abiDecoderArraySetupInputs abiDecoderArraySlice abiDecoderPointed
   abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry
   abiDecoderDynamicLoopSetup abiDecoderLoop abiDecoderContract
-  fragExec instIdxIndep compileEnv valueEncoding vyperABI vyperValue
+  fragExec instIdxIndep compileEnv loweringStateRelDefs valueEncoding vyperABI vyperValue
   venomState venomExecSemantics emitHelperProps words list
 
 Theorem abi_decoder_prune_inst_idx:

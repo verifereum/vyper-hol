@@ -5,7 +5,7 @@ Ancestors
   stmtSimLogStoreContinue stmtSimLogAllocate stmtSimLogStoreEncode
   stmtSimLogDataInput stmtSimLogEncodeLayout stmtSimLogTrace stmtSimLogDataRun
   abiDecoderFrame abiDecoderReentry abiEncoderCounters abiEncoderInput
-  vyperTypeABI vyperABI compileEnv supportedTypes contractABI
+  vyperTypeABI vyperABI compileEnv loweringStateRelDefs supportedTypes contractABI
   exprLoweringProps localPtrsProps emitHelperProps venomExecSemantics
   venomState finite_map words list arithmetic
 
@@ -22,7 +22,7 @@ Theorem intcall_log_store_encode_footprint:
   LIST_REL (log_data_source cx b srccap initial) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at start x) xs /\
   abi_decoder_operand_live start.cs_next_var src /\
-  compile_log_store_data ce xs src 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) src 0 start = ((),stored_st) /\
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand src ei prepared = (out,end_st) /\

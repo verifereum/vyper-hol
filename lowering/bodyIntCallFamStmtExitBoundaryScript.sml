@@ -11,7 +11,8 @@ Theorem intcall_expr_endpoint_vv_post:
   vv_at ce fp.jc_cx (post_value_type ce e) sa sb ee tv vv u /\
   (post_value_type ce e <> expr_type e ==>
     vv_own ce fp.jc_cx (post_value_type ce e) sa sb ee tv vv u) /\
-  (~expr_has_effect e ==> vv_storage_live fp.jc_cx vv ee u) ==>
+  (~expr_has_effect e ==> vv_storage_live fp.jc_cx vv ee u) /\
+  (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) ==>
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee tv vv u
 Proof
   simp[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def, vv_post_def] >>

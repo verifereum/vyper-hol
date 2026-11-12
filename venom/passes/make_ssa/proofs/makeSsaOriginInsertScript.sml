@@ -1,7 +1,7 @@
 Theory makeSsaOriginInsert
 Ancestors
-  makeSsaOriginInvariant makeSsaCurrentDefs makeSsaCurrentProps
-  makeSsaDefs venomWf venomInst irSupply o1PassContract list alist
+  makeSsaOriginInvariant makeSsaDefs makeSsaCurrentProps
+   venomWf venomInst irSupply o1PassContract list alist
 
 Theorem origin_compute_defs_key:
   MEM v (MAP FST (compute_defs fn.fn_blocks)) ==>

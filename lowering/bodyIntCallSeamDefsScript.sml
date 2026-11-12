@@ -1,7 +1,7 @@
 (* The internal call's seam relations: intcall_rest and intcall_callee_src
    (the source after push_function and the callee's body as the INVOKE runs
    it), intcall_entry (the INVOKE boundary) and intcall_callee_exit (the
-   callee's return), with the held body_inv_module_pins.  Seams 1 and 3
+   callee's return), with body_inv_module_pins.  Seams 1 and 3
    (bodyIntCallSeamArgs, bodyIntCallSeamReturn) and the callee packaging
    (bodyIntCallJointPackage) sit on these; bodyIntCallSeams assembles them. *)
 
@@ -19,11 +19,33 @@ Libs
   monadsyntax
 
 (* The source of an internal call after push_function: the body, the
-   frame's cleanup, and the cast of the returned value.  A supported
-   callee is not nonreentrant and has no defaults
+   frame's cleanup with the nonreentrant lock's release, and the cast of
+   the returned value.  A supported callee has no defaults
    (body_intcall_source_selection). *)
 Definition intcall_rest_def:
-  intcall_rest cx name mut ss prev rtv =
+  intcall_rest cx name mut nr ss prev rtv =
+    do rv <- finally_unless_halt
+         (finally
+            (try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
+                     return NoneV
+                  od) handle_function)
+            (pop_function prev))
+         (unlock_if_nr cx nr (is_view_mut mut));
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+    od
+End
+
+Theorem ignore_bind_return_unit[local]:
+  ignore_bind f (return ()) = f
+Proof
+  simp[FUN_EQ_THM, ignore_bind_def, bind_def, return_def] >> gen_tac >>
+  Cases_on `f x` >> Cases_on `q` >> simp[oneTheory.one]
+QED
+
+(* Without the lock, the cleanup is the frame's pop alone. *)
+Theorem intcall_rest_F:
+  intcall_rest cx name mut F ss prev rtv =
     do rv <- finally
          (try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
                   return NoneV
@@ -34,7 +56,9 @@ Definition intcall_rest_def:
        crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
        return (Value crv)
     od
-End
+Proof
+  simp[intcall_rest_def, finally_unless_halt_return, ignore_bind_return_unit]
+QED
 
 (* The callee's body as the INVOKE runs it. *)
 Definition intcall_callee_src_def:
@@ -44,17 +68,18 @@ Definition intcall_callee_src_def:
          od) handle_function
 End
 
-(* The INVOKE of internal function name (mut,args,ret,ss, raw-return flag
-   rr), called with arguments es from the caller func, whose code for the
+(* The INVOKE of internal function name (mut, nonreentrancy flag nr,
+   args,ret,ss, raw-return flag rr), called with arguments es from the caller func, whose code for the
    call runs from sa to sb and gives vv, at the source state es0 and Venom
    state s0.  t is at the INVOKE, es1 is the source state push_function
    leaves, prev the caller's scopes it saved, penv the parameters' scope
    and rtv the evaluated return type.
-   - Source: the arguments evaluated and read to the values penv binds;
+   - Source: the arguments evaluated to the values penv binds;
      the callee's body is call-safe at the pushed context.
    - Code: the call's code as compile_call_intcall_shape gives it: the
-     arguments (sa to st1), the return buffer rbuf if any (st1 to st2),
-     the staging (st2 to st3), the INVOKE of the callee's label at st3
+     return buffer rbuf if any (sa to st2), each argument lowered and
+     staged at the callee's declared parameter type (st2 to st3),
+     the INVOKE of the callee's label at st3
      with the buffer's pointer first when the callee returns through it,
      and after it the results' store into rbuf, up to sb; vv is rbuf's
      located value, or the void call's literal.
@@ -77,17 +102,17 @@ End
      lies in an ALLOCA of the call's own code: the staging buffer. *)
 Definition intcall_entry_def:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-                (mut,args,ret,ss,rr) prev penv rtv es1 t <=>
+                (mut,nr,args,ret,ss,rr) prev penv rtv es1 t <=>
     ~MEM (NONE,name) cx.stk /\
-    (?s1 results t1 s2 vs t2.
-       eval_expr_results cx es s1 = (INL results,t1) /\
-       read_results cx results s2 = (INL vs,t2) /\
-       bind_arguments (get_tenv cx) args vs = SOME penv) /\
+    (?s1 vs t1 s3 u t3.
+       eval_exprs cx es s1 = (INL vs,t1) /\
+       bind_arguments (get_tenv cx) args vs = SOME penv /\
+       lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)) /\
     evaluate_type (get_tenv cx) ret = SOME rtv /\
     call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
       (int_calls_stmts ss) /\
     es1.scopes = [penv] /\
-    gas_admissible (intcall_rest cx name mut ss prev rtv) expr_vv_res_ok es1 /\
+    gas_admissible (intcall_rest cx name mut nr ss prev rtv) expr_vv_res_ok es1 /\
     stmt_state_rel ctx func cenv cx (es1 with scopes := prev) t /\
     expr_sim_inv cenv cx tenv (es1 with scopes := prev) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -99,38 +124,38 @@ Definition intcall_entry_def:
        (!n b sz'. local_region cenv es0.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es0 s0 t /\
+    locals_kept cenv es0 (es1 with scopes := prev) s0 t /\
     (!n lo sz aid off asz.
        local_region cenv prev t n lo sz /\
        FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
        sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
        regions_disjoint lo sz off asz) /\
-    ?arg_vals st1 st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
+    ?st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
       cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
-      compile_multi_vvs compile_expr cenv es sa = (arg_vals,st1) /\
-      compile_stage_intcall_args cenv arg_vals pvs (MAP expr_type es) st2 =
-        (invoke_args,st3) /\
+      compile_stage_intcall_args compile_expr cenv es pvs
+        (TAKE (LENGTH es) (cenv.ce_func_param_types (nsid_to_string (NONE,name))))
+        st2 = (invoke_args,st3) /\
       lbl = internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
               (nsid_to_string (NONE,name))
               (cenv.ce_func_param_types (nsid_to_string (NONE,name)))
               cenv.ce_is_ctor /\
       (rc = 0 /\
        cenv.ce_func_return_type (nsid_to_string (NONE,name)) = NoneT ==>
-       st2 = st1 /\ arg_ops = invoke_args /\
+       st2 = sa /\ arg_ops = invoke_args /\
        (?u. emit_void INVOKE (Label lbl :: invoke_args) st3 = (u,sb)) /\
        vv = StackValue (cenv.ce_func_return_type (nsid_to_string (NONE,name)))
               (Lit 0w)) /\
       (0 < rc \/
        cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT ==>
        ?rbuf aid off.
-         compile_alloc_buffer (if 0 < rc then 32 * rc else rbs) st1 =
+         compile_alloc_buffer (if 0 < rc then 32 * rc else rbs) sa =
            (rbuf,st2) /\
          vv = LocatedValue
                 (cenv.ce_func_return_type (nsid_to_string (NONE,name)))
                 (base_ptr rbuf) /\
          eval_operand rbuf.buf_operand t = SOME (n2w off) /\
          FLOOKUP t.vs_allocas aid = SOME (off,rbuf.buf_size) /\
-         aid = st1.cs_next_id /\
+         aid = sa.cs_next_id /\
          (?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
                 inst.inst_id = aid) /\
          sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -160,7 +185,7 @@ Definition intcall_entry_def:
         set_internal_package_target cenv.ce_target
           (package_internal_fn tops use_trans (nkeys : string -> num)
              cenv.ce_is_ctor imm_len
-             (mut,F,rr,name,args,([] : expr list),ret,ss)) =
+             (mut,nr,rr,name,args,([] : expr list),ret,ss)) =
           (lbl',ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len',ss',rt) ==>
         lbl' = lbl /\
         (has_rb <=>
@@ -182,6 +207,11 @@ Definition intcall_entry_def:
              off <= w2n (EL ((if has_rb then 1 else 0) + i) argv) /\
              w2n (EL ((if has_rb then 1 else 0) + i) argv) + psz <=
                off + asz) /\
+        (has_rb ==> !i po psz.
+           i < LENGTH params /\ ~SND (EL i params) /\
+           FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) ==>
+           regions_disjoint (w2n (HD argv)) (type_memory_size rtv)
+             (w2n (EL (1 + i) argv)) psz) /\
         (has_rb ==> !i po psz.
            i < LENGTH params /\ ~SND (EL i params) /\
            FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) ==>
@@ -240,24 +270,23 @@ Definition intcall_callee_exit_def:
       (!p. rb = SOME p ==> val_in_memory rtv v (w2n p) s'.vs_memory)
 End
 
-(* Held admission: the body_inv strengthening adds these pins to
-   body_inv, which then proves this.  Only intcall_body_expr_ok uses it. *)
+(* body_inv carries the module-level pins (cenv_module_pins, bodySim). *)
 Theorem body_inv_module_pins:
   body_inv tops ctx cenv cx ==> cenv_module_pins tops cenv
 Proof
-  cheat
+  simp[body_inv_def]
 QED
 
 (* The source facts an intcall_entry state carries. *)
 Theorem intcall_entry_source:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t ==>
+    (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
   ~MEM (NONE,name) cx.stk /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
-  ?s1 results t1 s2 vs t2.
-    eval_expr_results cx es s1 = (INL results,t1) /\
-    read_results cx results s2 = (INL vs,t2) /\
-    bind_arguments (get_tenv cx) args vs = SOME penv
+  ?s1 vs t1 s3 u t3.
+    eval_exprs cx es s1 = (INL vs,t1) /\
+    bind_arguments (get_tenv cx) args vs = SOME penv /\
+    lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)
 Proof
   rw[intcall_entry_def] >> metis_tac[]
 QED

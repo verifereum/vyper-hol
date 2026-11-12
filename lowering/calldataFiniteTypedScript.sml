@@ -1,7 +1,7 @@
 (* Typed reentrant finite decoder callbacks. *)
 Theory calldataFiniteTyped
 Ancestors
-  calldataFiniteTransport calldataWordLive calldataReconstruction abiCallerAllocation
+  valueEncodingDefs calldataFiniteTransport calldataWordLive calldataReconstruction abiCallerAllocation
   abiDecoderFrame abiDecoderCoherence exprLowering compileEnv contractABI
   calldataBytesLive abiDecoderBytes calldataBulkLive
 
@@ -76,7 +76,7 @@ Proof
   `d < dimword (:256)` by
     (qpat_x_assum `d + type_memory_size tv < _` mp_tac >>
      asm_rewrite_tac[] >> decide_tac) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   drule_all calldata_word_live_frag_mem >>
   disch_then (qspec_then `ctx` assume_tac) >>
@@ -90,7 +90,7 @@ Proof
      simp_tac (srw_ss()) []) >>
   qpat_x_assum `(\t. _) t` (strip_assume_tac o BETA_RULE) >>
   qpat_x_assum `frag_exec_mem _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` kall_tac >>
   qexistsl_tac [`t`,`x`,`[]`] >>
   asm_rewrite_tac[] >>
   `alloca_inv t` by (irule calldata_alloca_inv_fields >> asm_rewrite_tac[] >>
@@ -184,7 +184,7 @@ Proof
   `d+abi_decode_bytes_copy_size maxn < dimword (:256)` by
     (qpat_x_assum `d + type_memory_size tv < _` mp_tac >> asm_rewrite_tac[]) >>
   `maxn < dimword (:256)` by (drule abi_decode_bytes_extent_capacity_bound >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   drule_all calldata_bytes_live_frag_mem >> disch_then (qspec_then `ctx` assume_tac) >>
   drule fragExecMemTheory.frag_exec_mem_pre_exit >>
@@ -194,7 +194,7 @@ Proof
   disch_tac >> drule_all calldata_finite_fragment_run >> strip_tac
   >- metis_tac[] >>
   qpat_x_assum `(\t. _) t` (strip_assume_tac o BETA_RULE) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` kall_tac >>
   rpt (qpat_x_assum `frag_exec_mem _ _ _ _ _ _` kall_tac) >>
   `?x. value_has_type tv x /\ val_wf tv x /\ val_in_memory tv x d t.vs_memory` by
     (asm_rewrite_tac[] >> irule calldata_observed_bytes_typed >>
@@ -272,7 +272,7 @@ Proof
   `d+abi_decode_bytes_copy_size maxn < dimword (:256)` by
     (qpat_x_assum `d + type_memory_size tv < _` mp_tac >> asm_rewrite_tac[]) >>
   `maxn < dimword (:256)` by (drule abi_decode_bytes_extent_capacity_bound >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   drule_all calldata_bytes_live_frag_mem >> disch_then (qspec_then `ctx` assume_tac) >>
   drule fragExecMemTheory.frag_exec_mem_pre_exit >>
@@ -282,7 +282,7 @@ Proof
   disch_tac >> drule_all calldata_finite_fragment_run >> strip_tac
   >- metis_tac[] >>
   qpat_x_assum `(\t. _) t` (strip_assume_tac o BETA_RULE) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` kall_tac >>
   rpt (qpat_x_assum `frag_exec_mem _ _ _ _ _ _` kall_tac) >>
   `?x. value_has_type tv x /\ val_wf tv x /\ val_in_memory tv x d t.vs_memory` by
     (asm_rewrite_tac[] >> irule calldata_observed_string_typed >>
@@ -399,7 +399,7 @@ Proof
      first_assum ACCEPT_TAC) >>
   `d+(32+maxn*mem_sz) < dimword (:256)` by
     (qpat_x_assum `d + type_memory_size tv < _` mp_tac >> asm_rewrite_tac[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   qpat_assum `type_to_abi_dec_info _ _ _ = _` (fn th => pure_rewrite_tac [th]) >> disch_tac >>
   drule_all calldata_bulk_live_frag_mem_mod >> disch_then (qspec_then `ctx` assume_tac) >>
   drule fragExecMemTheory.frag_exec_mem_pre_exit >>
@@ -409,7 +409,7 @@ Proof
   disch_tac >> drule_all calldata_finite_fragment_run >> strip_tac
   >- metis_tac[] >>
   qpat_x_assum `(\t. _) t` (strip_assume_tac o BETA_RULE) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` kall_tac >>
   rpt (qpat_x_assum `frag_exec_mem _ _ _ _ _ _` kall_tac) >>
   `w2n (abi_decode_load CALLDATALOAD p initial) <= maxn` by
     (`maxn MOD dimword (:256) <= maxn` by simp[arithmeticTheory.MOD_LESS_EQ] >> decide_tac) >>

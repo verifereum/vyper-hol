@@ -1,6 +1,6 @@
 Theory abiEncoderSourceCorrect
 Ancestors
-  abiEncoderInput exprLowering valueEncoding vyperABI vyperTyping vyperMisc contractABI words
+  abiEncoderInput exprLowering valueEncoding valueEncodingDefs vyperABI vyperTyping vyperMisc contractABI words
   list arithmetic abiEncoderBytes abiDecoderReentry abiDecoderContract compileEnv emitHelper
   venomState venomExecSemantics
 

@@ -14,7 +14,7 @@ Ancestors
   bodyPtrDefs gasSummaryComposePtr fragGasPathPtr
   stmtSimDefs stmtSimSeqEnv stmtSimExpr stmtSimProps loweringPosts exprSimDefs
   gasOutcome gasSummary gasSummaryCompose gasContext gasExemptCert
-  fragGasMode fragGasPath fragExec compileEnv loweringSlice stmtLowering
+  fragGasMode fragGasPath fragExec compileEnv loweringStateRelDefs loweringSlice stmtLowering
   exprLoweringProps localPtrsProps vyperInterpreter vyperState
   vyperEvalPreservesScopes venomState list finite_map
 

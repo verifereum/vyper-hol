@@ -12,9 +12,30 @@ Theorem compound_lowered_post_type:
   ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) ==>
   lowered_value_type ce e = post_value_type ce e
 Proof
-  strip_tac >> drule_all ifexp_lowered_type_classify >> strip_tac
-  >- metis_tac[post_value_type_lowered] >>
-  gvs[post_value_type_def, vyperASTTheory.expr_type_def]
+  strip_tac >> Cases_on `e` >>
+  gvs[lowered_value_type_def, post_value_type_def,
+      vyperASTTheory.expr_type_def]
+  >~ [`Literal ty lit`] >-
+    (Cases_on `ty` >>
+     gvs[lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[lowered_value_type_def, vyperASTTheory.expr_type_def,
+         is_bytestring_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[lowered_value_type_def, vyperASTTheory.expr_type_def,
+         is_bytestring_type_def])
+  >~ [`Builtin ty blt es`] >-
+    (Cases_on `blt` >>
+     gvs[lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+     gvs[well_typed_expr_def, well_typed_builtin_app_def,
+         is_bytestring_type_def])
+  >~ [`TypeBuiltin ty tb target es`] >-
+    (Cases_on `tb` >>
+     gvs[lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+     gvs[well_typed_expr_def, type_builtin_result_ok_def,
+         is_bytestring_type_def]) >>
+  rename1 `Call ty tgt args drv` >> Cases_on `tgt` >>
+  gvs[lowered_value_type_def, post_value_type_def]
 QED
 
 Theorem type_widens_from_word:

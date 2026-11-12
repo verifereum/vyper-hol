@@ -1,9 +1,8 @@
 (* Bulk calldata copy retains wrapped source address arithmetic. *)
 Theory calldataBulkLeaf
 Ancestors
-  abiDecoderRange
-  fragExecMem safeSequence calldataWordLeaf abiDecoderReservation abiDecoderDynarrayPrefix abiDecoderArrayHeader abiDecoderFrameCompose calldataBytesLeaf abiDecoderBulk abiDecoderDynarrayBound abiDecoderBytesBound abiDecoderComposition
-  abiDecoderContract abiDecoderCopy abiDecoderGuards abiEncoder emitHelperProps
+  valueEncodingDefs loweringStateRelDefs fragExecMem safeSequence calldataWordLeaf abiDecoderReservation abiDecoderDynarrayPrefix abiDecoderArrayHeader abiDecoderFrameCompose calldataBytesLeaf abiDecoderBulk abiDecoderDynarrayBound abiDecoderBytesBound abiDecoderComposition
+  abiDecoderContract abiDecoderCopy abiDecoderGuards abiDecoderRange abiEncoder emitHelperProps
   exprLoweringProps compileEnv emitHelper valueEncoding venomExecSemantics
   venomState venomInst words arithmetic list rich_list
 
@@ -16,8 +15,8 @@ Theorem calldata_bulk_opcodes:
     (emitted_insts st st')
 Proof
   strip_tac >> Cases_on `hi = Lit 0w` >>
-  gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_zero, pairTheory.UNCURRY_DEF, compile_abi_decode_range_check_def] >>
-  gvs[compile_abi_dec_addr_zero, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+  gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
       emit_op_def, emit_void_def, fresh_var_def,
       fresh_id_def, emit_def, emitted_insts_def] >>
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
@@ -36,8 +35,7 @@ Theorem calldata_bulk_payload_sequence:
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     inst_extends st st'
 Proof
-  simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_zero,
-       comp_return_def, comp_bind_def] >>
+  simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_return_def, comp_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] st = (sz_op,c1)` >>
@@ -118,9 +116,8 @@ Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases] >>
-  simp[abi_decode_dynarray_position_prefix_zero_base,
-       abi_decode_bytes_head_def, abi_decode_dynarray_payload_guard_def,
-       abi_decode_dynarray_prefix_def, abi_decode_dynarray_end_guard_def,
+  simp[abi_decode_dynarray_prefix_def, abi_decode_dynarray_end_guard_def,
+       abi_decode_dynarray_position_prefix_unbounded, compile_abi_dec_addr_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, FUN_EQ_THM] >>
   rpt gen_tac >>
   Cases_on `abi_decode_count_guard CALLDATALOAD src maxn x` >> simp[]
@@ -147,7 +144,7 @@ Theorem calldata_bulk_accepted_sequence:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [calldata_bulk_sentinel, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>
@@ -173,8 +170,8 @@ Theorem calldata_bulk_allocation_shape:
               ~is_alloca_op i.inst_opcode) (emitted_insts st st')
 Proof
   strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_zero, pairTheory.UNCURRY_DEF, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def] >> rpt strip_tac >> gvs[] >>
   simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
@@ -190,7 +187,7 @@ Theorem calldata_bulk_rejected_sequence:
   ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t
 Proof
   strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [calldata_bulk_sentinel, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   drule_all calldata_count_guard_rejected_sequence >> strip_tac >>
@@ -199,8 +196,7 @@ Proof
   `inst_extends cs' st'` by
     (qpat_x_assum `abi_decode_bulk_body _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_bulk_body_def, abi_decode_array_header_def,
-          abi_decode_bulk_payload_def, compile_abi_dec_addr_zero,
-          comp_bind_def, comp_ignore_bind_def,
+          abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
           comp_return_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
      imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
      metis_tac[inst_extends_trans]) >>
@@ -303,8 +299,7 @@ Theorem calldata_bulk_payload_prefix_safe:
   !pre i post u. emitted_insts st st' = pre ++ i::post /\
     run_inst_seq pre s = OK u ==> inst_mem_below_frontier i u
 Proof
-  simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_zero,
-       comp_return_def, comp_bind_def] >>
+  simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_return_def, comp_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] st = (sz_op,c1)` >>
@@ -412,8 +407,7 @@ Theorem calldata_bulk_body_extends:
   inst_extends st st'
 Proof
   simp[abi_decode_bulk_body_def, abi_decode_array_header_def,
-       abi_decode_bulk_payload_def, compile_abi_dec_addr_zero,
-          comp_bind_def, comp_ignore_bind_def,
+       abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
   metis_tac[inst_extends_trans]
@@ -431,7 +425,7 @@ Theorem calldata_bulk_prefix_safe:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [calldata_bulk_sentinel, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>

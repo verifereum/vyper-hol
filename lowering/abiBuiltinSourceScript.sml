@@ -1,7 +1,7 @@
 Theory abiBuiltinSource
 Ancestors
   abiBuiltinCanonicalPre abiBuiltinAllocation abiBuiltinDecodeSetup abiDecoderCoherence
-  abiDecoderTypedContract abiDecoderAllocation abiDecoderFrame valueEncoding valueEncodingProps
+  abiDecoderTypedContract abiDecoderAllocation abiDecoderFrame valueEncoding valueEncodingDefs valueEncodingProps
   vyperABI vyperTypeABI contractABI compileEnv venomState finite_map words list arithmetic
   abiBuiltinUnwrapCorrect abiBuiltinDecodeEffect abiDecoderContract abiDecoderLoop builtinAbi
   fragExec vyperContext venomExecSemantics vyperABIValid

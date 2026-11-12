@@ -91,7 +91,8 @@ Resume effect_free_eval_expr_frame[attribute]:
   imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
 Resume effect_free_eval_expr_frame[subscript]:
-  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  Cases_on `subscript_reads_base cx ae idx` >>
+  gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
 QED
@@ -145,7 +146,6 @@ Resume effect_free_eval_expr_frame[builtin]:
      simp[expr_size_def] >> disch_then irule >>
      gvs[expr_has_effect_def, supported_exprs_exists_every, EXISTS_MEM] >>
      metis_tac[]) >>  drule eval_exprs_normalized_frame >> strip_tac >>
-  qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
   Cases_on `bt = Len`
   >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, AllCaseEqs()] >>
@@ -158,12 +158,46 @@ Resume effect_free_eval_expr_frame[builtin]:
   >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, AllCaseEqs()] >>
       imp_res_tac next_gas_reading_state >> gvs[]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, lift_sum_def, AllCaseEqs()] >>
+      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac lift_option_type_state >> gvs[] >>
+      qpat_x_assum `!e. MEM e args ==> _` kall_tac >> metis_tac[]) >>
+  suspend "builtin_code"
+QED
+Resume effect_free_eval_expr_frame[builtin_code]:
+  Cases_on `code_slice_source bt args`
+  >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
+          AllCaseEqs()] >>
+      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
+      imp_res_tac precompile_call_success_state >> gvs[] >>
+      qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
+      qpat_x_assum `!e. MEM e args ==> _` kall_tac >> metis_tac[]) >>
+  PairCases_on `x` >> gvs[code_slice_source_SOME] >>
+  rename1 `Builtin ct (Acc Code) [addr]` >>
+  `!st res st'. eval_exprs cx [start; len] st = (res,st') ==>
+    (st' with <|gas_obs := []; outcomes := NONE|>) =
+    (st with <|gas_obs := []; outcomes := NONE|>)` by
+    (match_mp_tac eval_exprs_normalized_frame >> simp[] >> metis_tac[]) >>
+  `!st res st'. eval_exprs cx [addr] st = (res,st') ==>
+    (st' with <|gas_obs := []; outcomes := NONE|>) =
+    (st with <|gas_obs := []; outcomes := NONE|>)` by
+    (match_mp_tac eval_exprs_normalized_frame >> simp[] >> rpt strip_tac >>
+     qpat_x_assum `!y. expr_size y < _ ==> _` (qspec_then `addr` mp_tac) >>
+     simp[] >> disch_then irule >> simp[] >>
+     gvs[expr_has_effect_def, supported_exprs_exists_every,
+         supported_expr_exists_def, expr_effect_root_def, EXISTS_MEM] >>
+     metis_tac[]) >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
+  qpat_x_assum `!e. _ \/ _ \/ _ ==> _` kall_tac >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
       AllCaseEqs()] >>
   gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
   imp_res_tac precompile_call_success_state >> gvs[] >>
-  qpat_x_assum `!e. MEM e args ==> _` kall_tac >> metis_tac[]
+  metis_tac[]
 QED
 Finalise effect_free_eval_expr_frame
 

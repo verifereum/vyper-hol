@@ -2,7 +2,7 @@
 Theory bodyIntCallForceLanding
 Ancestors
   bodyIntCallWordLanding loweringPosts exprLowering compileEnv
-  valueCopyBytes valueEncoding venomState fragGasPath
+  valueCopyBytes valueEncoding valueEncodingDefs venomState fragGasPath
 
 Theorem protected_memory_value_forcing:
   unwrap_value ce vv sa = (op,sb) /\

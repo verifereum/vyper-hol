@@ -94,8 +94,6 @@ No `save_thm`, `prove` or `mk_thm` re-export and no compatibility equivalence.
 
 ## Known clients and audits
 
-`e2eCompositionChecks` now checks the new top and real deployment as CLASSIFIED
-STAGES (Hyp=0/no axioms, admission tags honest), never clean certificates.
 `vyperOracleEntryTest` drops the unused deleted ancestor and uses full NONE/SOME
 entry results; all its original theorem statements/proofs remain unchanged.
 `configuredE2ECorrectness` retains only its two proved phase interfaces.

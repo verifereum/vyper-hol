@@ -1,8 +1,9 @@
 (* Structural and supply contracts for the configured MakeSSA adapter. *)
 Theory makeSsaCurrentProps
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentInduct makeSsaHelper
+  makeSsaDefs makeSsaCurrentInduct
   cfgTransformProps fcgDefs irSupply list alist cfgTransform venomInst
+  venomExecProofs
 
 val _ = Parse.hide "preds";
 

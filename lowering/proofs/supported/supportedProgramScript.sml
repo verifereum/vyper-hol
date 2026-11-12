@@ -1,0 +1,232 @@
+(* TOP-LEVEL: supported_program (on tops ALONE), supported_function_body,
+   supported_declaration_body; occurs_abi_decode_target for PLAN 5.5/D9.
+   Whitelist assembly, NOT check_contract/source_typing_ok or correctness.
+   Every non-function body branch is explicit and header admission is separate. *)
+Theory supportedProgram
+Ancestors
+  supportedStmts supportedStmtTraverse supportedExprTraverse supportedNames
+  supportedDecls supportedTypes vyperAST list
+
+(* Return lowering copies using the declared return layout. Equal nested
+   aggregate layouts are admitted; differing aggregate subtype layouts still
+   require the independent #560 repair. *)
+Definition supported_return_layout_def:
+  supported_return_layout ret (Return (SOME e)) =
+    supported_copy_types ret (expr_type e) /\
+  supported_return_layout ret (If c yes no) =
+    (supported_return_layouts ret yes /\ supported_return_layouts ret no) /\
+  supported_return_layout ret (For name ty iter n loop_body) =
+    supported_return_layouts ret loop_body /\
+  supported_return_layout ret stmt = T /\
+  supported_return_layouts ret [] = T /\
+  supported_return_layouts ret (s::ss) =
+    (supported_return_layout ret s /\ supported_return_layouts ret ss)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    INL (_,s) => stmt_size s | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[stmt_size_def, list_size_def]
+End
+
+Definition supported_function_body_def:
+  supported_function_body tops vis args body <=>
+    let locals = supported_stmts_bindings T body;
+        loops = supported_stmts_bindings F body;
+        bindings = args ++ locals ++ loops
+    in ALL_DISTINCT (MAP FST args) /\
+       EVERY (\n. ~MEM n (MAP FST args)) (MAP FST locals ++ MAP FST loops) /\
+       supported_stmts tops bindings body /\
+       body_stmts_safe tops body /\
+       (vis = Internal ==>
+         ~supported_stmts_expr_exists expr_internal_call_root body)
+End
+
+(* Defaults are lowered at external entry points, so they obey the same
+   expression and main-module restrictions as function bodies. *)
+Definition supported_default_expression_def:
+  supported_default_expression tops e <=>
+    supported_expr tops e /\
+    ~supported_expr_exists expr_nonmain_type_root e
+End
+
+(* The source-shape restriction on internal names. supported_declaration_names
+   also keeps every function name distinct for now. *)
+Definition supported_internal_function_names_def:
+  supported_internal_function_names [] = [] /\
+  supported_internal_function_names (top::rest) =
+    (case top of
+       FunctionDecl Internal mut nr rr name args defaults ret stmts => [name]
+     | _ => []) ++ supported_internal_function_names rest
+End
+
+Definition supported_declaration_body_def:
+  supported_declaration_body tops (FunctionDecl vis mut nr rr name args defaults ret body) =
+    (vis <> Deploy ==>
+       supported_function_body tops vis args body /\
+       EVERY (supported_default_expression tops) defaults /\
+       supported_return_layouts ret body) /\
+  supported_declaration_body tops (VariableDecl vis mut name ty slot) = T /\
+  supported_declaration_body tops (HashMapDecl vis trans name kt vt slot) = T /\
+  supported_declaration_body tops (StructDecl name fields) = T /\
+  supported_declaration_body tops (EventDecl name fields) = T /\
+  supported_declaration_body tops (InterfaceDecl name methods) = T /\
+  supported_declaration_body tops (FlagDecl name members) = T /\
+  supported_declaration_body tops (ErrorDecl name args) = T
+End
+
+Definition supported_program_def:
+  supported_program tops <=>
+    supported_declaration_headers tops /\ supported_declaration_names tops /\
+    ALL_DISTINCT (supported_internal_function_names tops) /\
+    EVERY (supported_declaration_body tops) tops
+End
+
+(* The constructor runs only at deployment; the runtime gate above says
+   nothing of its body.  Deployment theorems take this as well. *)
+Definition supported_deploy_declaration_def:
+  supported_deploy_declaration tops top <=>
+    case top of
+      FunctionDecl Deploy mut nr rr name args defaults ret stmts =>
+        EVERY (supported_value_type tops o SND) args /\
+        supported_function_body tops Deploy args stmts /\
+        supported_return_layouts ret stmts
+    | _ => T
+End
+
+Definition supported_program_deploy_def:
+  supported_program_deploy tops <=>
+    EVERY (supported_deploy_declaration tops) tops
+End
+
+(* Exact target-type occurrence (not just a dynamic boolean): needed by the
+   existential in unspecified_behaviour_exempt. Traverse unsupported expressions,
+   targets, iterators and reasons too. Only FUNCTION BODIES, as PLAN 5.5 says;
+   defaults/constants are not bodies. Internal defaults remain excluded until
+   their call-site expansion is implemented (#546). *)
+Definition expr_abi_decode_target_root_def:
+  expr_abi_decode_target_root target
+    (TypeBuiltin ty (AbiDecode unwrap) decoded es) = (decoded = target) /\
+  expr_abi_decode_target_root target _ = F
+End
+
+Definition declaration_abi_decode_target_def:
+  declaration_abi_decode_target target
+    (FunctionDecl vis mut nr rr name args defaults ret body) =
+      supported_stmts_expr_exists (expr_abi_decode_target_root target) body /\
+  declaration_abi_decode_target target (VariableDecl vis mut name ty slot) = F /\
+  declaration_abi_decode_target target (HashMapDecl vis trans name kt vt slot) = F /\
+  declaration_abi_decode_target target (StructDecl name fields) = F /\
+  declaration_abi_decode_target target (EventDecl name fields) = F /\
+  declaration_abi_decode_target target (InterfaceDecl name methods) = F /\
+  declaration_abi_decode_target target (FlagDecl name members) = F
+End
+
+Definition occurs_abi_decode_target_def:
+  occurs_abi_decode_target target tops <=>
+    EXISTS (declaration_abi_decode_target target) tops
+End
+
+(* ===== Boundary contracts ===== *)
+
+Theorem supported_program_declaration:
+  supported_program tops /\ MEM top tops ==>
+    supported_declaration_header tops top /\ supported_declaration_body tops top
+Proof
+  simp[supported_program_def, supported_declaration_headers_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem supported_program_function:
+  supported_program tops /\
+  MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops /\
+  vis <> Deploy ==>
+    supported_function_body tops vis args stmts
+Proof
+  strip_tac >> drule_all supported_program_declaration >>
+  simp[supported_declaration_body_def]
+QED
+
+Theorem supported_program_deploy_function:
+  supported_program_deploy tops /\
+  MEM (FunctionDecl Deploy mut nr rr name args defaults ret stmts) tops ==>
+    EVERY (supported_value_type tops o SND) args /\
+    supported_function_body tops Deploy args stmts /\
+    supported_return_layouts ret stmts
+Proof
+  simp[supported_program_deploy_def, EVERY_MEM] >> strip_tac >>
+  first_x_assum drule >> simp[supported_deploy_declaration_def, EVERY_MEM]
+QED
+
+(* The supported declaration rules out the synthetic deployment fallback. *)
+Theorem supported_internal_lookup:
+  !tops name mut nr rr args dflts ret ss.
+    supported_function_decl tops (NONE,name) Internal =
+      SOME (mut,nr,rr,args,dflts,ret,ss) ==>
+    lookup_function NONE name Internal tops =
+      SOME (mut,nr,args,dflts,ret,ss)
+Proof
+  Induct_on `tops` >- simp[supported_function_decl_def] >>
+  Cases_on `h` >>
+  simp[supported_function_decl_def, vyperInterpreterTheory.lookup_function_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()]
+  >~ [`lookup_function _ _ _ (VariableDecl _ _ _ _ _ :: _)`]
+    >- (rename1 `VariableDecl vis _ _ _ _` >> Cases_on `vis` >>
+        simp[vyperInterpreterTheory.lookup_function_def] >> metis_tac[])
+  >~ [`lookup_function _ _ _ (HashMapDecl _ _ _ _ _ _ :: _)`]
+    >- (rename1 `HashMapDecl vis _ _ _ _ _` >> Cases_on `vis` >>
+        simp[vyperInterpreterTheory.lookup_function_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem supported_program_defaults:
+  supported_program tops /\
+  MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops ==>
+    EVERY (supported_default_expression tops) defaults
+Proof
+  strip_tac >> drule_all supported_program_declaration >>
+  simp[supported_declaration_header_def, NULL_EQ]
+QED
+
+Theorem supported_program_internal_names:
+  supported_program tops ==>
+    ALL_DISTINCT (supported_internal_function_names tops)
+Proof
+  simp[supported_program_def]
+QED
+
+Theorem supported_internal_body_contract:
+  supported_function_body tops Internal args stmts ==>
+    ~supported_stmts_expr_exists expr_internal_call_root stmts
+Proof
+  simp[supported_function_body_def]
+QED
+
+Theorem supported_function_body_binding_contract:
+  supported_function_body tops vis args stmts ==>
+    ALL_DISTINCT (MAP FST args) /\
+    EVERY (\n. ~MEM n (MAP FST args))
+      (MAP FST (supported_stmts_bindings T stmts) ++
+       MAP FST (supported_stmts_bindings F stmts))
+Proof
+  simp[supported_function_body_def]
+QED
+
+Theorem supported_program_names:
+  supported_program tops ==> supported_declaration_names tops
+Proof
+  simp[supported_program_def]
+QED
+
+Theorem occurs_abi_decode_target_function:
+  occurs_abi_decode_target target
+    [FunctionDecl vis mut nr rr name args defaults ret stmts] <=>
+  supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts
+Proof
+  simp[occurs_abi_decode_target_def, declaration_abi_decode_target_def]
+QED
+
+Theorem occurs_abi_decode_target_append:
+  occurs_abi_decode_target target (xs ++ ys) <=>
+    occurs_abi_decode_target target xs \/ occurs_abi_decode_target target ys
+Proof
+  simp[occurs_abi_decode_target_def, EXISTS_APPEND]
+QED

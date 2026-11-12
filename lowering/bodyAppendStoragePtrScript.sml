@@ -5,7 +5,7 @@ Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs exprSimHyps
   bodyExprPreFacts supportedStmts supportedStmtTraverse supportedTypes
   supportedExprs supportedDecls bodyStorageMetadata stmtSimDefs exprLoweringProps
-  compileEnv vyperTypeSystem vyperTypeValues vyperTypeCallGraph vyperState
+  compileEnv loweringStateRelDefs vyperTypeSystem vyperTypeValues vyperTypeCallGraph vyperState
   vyperInterpreter vyperValue vyperStorageLayoutSafety
 
 Theorem stmt_frag_ptr_storage_rel_discharge:
@@ -22,6 +22,7 @@ Proof
 QED
 
 Theorem body_append_storage_fragment_ptr:
+  body_stmt_safe tops (Append (TopLevelNameTarget (src,id)) e) /\
   (!s p t. eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,t) ==>
              body_expr_ptr_ok cx e) /\
   body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops (src,id) /\
@@ -39,6 +40,9 @@ Proof
   strip_tac >> drule_all body_append_target_bounds >> strip_tac >>
   drule append_typing_target >> strip_tac >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `cenv.ce_hashmap_info (src,id) = NONE` by
+    (drule supported_append_storage_decl >> strip_tac >>
+     drule_all body_append_root_metadata >> simp[]) >>
   drule_all body_append_runtime_metadata >> strip_tac >> gvs[] >>
   drule supported_append_element_layout >>
   disch_then (qspec_then `get_tenv cx` strip_assume_tac) >>
@@ -64,17 +68,41 @@ Proof
   disch_then irule >> simp[] >> metis_tac[]
 QED
 
+Theorem body_append_storage_narrow_ptr:
+  !cx nid e tops ctx cenv vis mut elem dn slot.
+    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
+                body_expr_ptr_ok cx e) /\
+    body_inv tops ctx cenv cx /\
+    supported_variable_decl tops nid =
+      SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem /\
+    type_memory_bytes cenv elem < 2 ** 64 ==>
+    body_stmt_ptr_ok cx (Append (TopLevelNameTarget nid) e)
+Proof
+  cheat
+QED
+
 Theorem body_append_storage_other_ptr:
   !cx nid e.
     (!s p t. eval_target_place cx (TopLevelNameTarget nid) s = (INL p,t) ==>
                 body_expr_ptr_ok cx e) ==>
     body_stmt_ptr_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `nid` >>
-  rw[body_stmt_ptr_ok_def, supported_stmt_def, supported_append_target_def] >>
-  irule body_append_storage_fragment_ptr >> conj_tac
-  >- (first_assum ACCEPT_TAC) >>
-  simp[] >> conj_tac
-  >- (qexists_tac `tops` >> simp[supportedExprsTheory.supported_expr_def]) >>
-  qexistsl_tac [`env`, `env'`] >> simp[] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> rw[body_stmt_ptr_ok_def] >>
+  Cases_on `supported_storage_dynamic_array tops nid`
+  >- (Cases_on `nid` >>
+      irule body_append_storage_fragment_ptr >> conj_tac
+      >- (first_assum ACCEPT_TAC) >>
+      gvs[supported_stmt_def] >> conj_tac
+      >- (qexists_tac `tops` >> simp[supportedExprsTheory.supported_expr_def]) >>
+      qexistsl_tac [`env`, `env'`] >> simp[] >> metis_tac[]) >>
+  gvs[supported_stmt_def, supported_append_target_def] >>
+  `supported_stmt tops [] (Append (TopLevelNameTarget nid) e)` by
+    (simp[supported_stmt_def, supported_append_target_def] >> metis_tac[]) >>
+  drule body_append_element_alloc_bound >> strip_tac >>
+  drule_at (Pat `supported_variable_decl _ _ = _`)
+    body_append_storage_narrow_ptr >>
+  disch_then (qspecl_then [`cx`, `e`, `ctx`, `cenv`] mp_tac) >>
+  simp[] >>
+  rewrite_tac[body_stmt_ptr_ok_def] >> disch_then drule_all >> simp[]
 QED

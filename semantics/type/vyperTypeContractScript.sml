@@ -186,6 +186,15 @@ Definition external_name_keys_toplevel_def:
   external_name_keys_toplevel _ _ = []
 End
 
+(* Every function visibility and variable kind shares Vyper's self namespace. *)
+Definition self_member_keys_toplevel_def:
+  self_member_keys_toplevel src (FunctionDecl _ _ _ _ name _ _ _ _) =
+    [(src,name)] /\
+  self_member_keys_toplevel src (VariableDecl _ _ name _ _) = [(src,name)] /\
+  self_member_keys_toplevel src (HashMapDecl _ _ name _ _ _) = [(src,name)] /\
+  self_member_keys_toplevel _ _ = []
+End
+
 Definition contract_namespaces_ok_def:
   contract_namespaces_ok in_deploy mods <=>
     ALL_DISTINCT (MAP FST mods) /\
@@ -196,6 +205,7 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys type_def_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys event_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys external_name_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys self_member_keys_toplevel mods) /\
     EVERY (\(src,tls).
       ALL_DISTINCT (abi_external_method_ids (type_env_all_modules mods) tls)) mods
 End
@@ -406,6 +416,17 @@ Definition constant_value_def:
            if bt = Len then
              (case vs of
               | [v] => OPTION_MAP (\n. IntV (&n)) (constant_length v)
+              | _ => NONE)
+           else if bt = Bop In \/ bt = Bop NotIn then
+             (case vs of
+              | [v1;v2] =>
+                  (case evaluate_type (type_env_all_modules mods)
+                           (expr_type (EL 1 es)) of
+                   | NONE => NONE
+                   | SOME tv =>
+                       (case evaluate_membership tv (bt = Bop NotIn) v1 v2 of
+                        | INL v => SOME v
+                        | INR _ => NONE))
               | _ => NONE)
            else
              case evaluate_builtin (constant_context mods) empty_accounts
@@ -902,19 +923,94 @@ Definition function_header_ok_def:
       (dflts : expr list) ret <=>
     (rr ==> vis = External /\ (?n. ret = BaseT (BytesT (Dynamic n)))) /\
     (* Constructor code returns the deployed runtime, not an ABI value. *)
-    (vis = Deploy ==> NULL dflts /\ ret = NoneT) /\
+    (vis = Deploy ==> NULL dflts /\ ret = NoneT /\ ~nr) /\
     (* The source treats Pure as a read-only guard, while the compiler's
        guard packaging uses mut = View. Reject the explicit invalid header;
        the pragma frontend already leaves pure functions unguarded. *)
     (mut = Pure ==> ~nr) /\
-    (* The fallback has no ABI argument-decoding entry block. *)
-    (vis = External /\ name = "__default__" ==> NULL args)
+    (* The reserved names and their visibilities match: `@deploy` only on
+       `__init__`, `__init__` only `@deploy` (vyper/semantics/types/function.py,
+       "Only constructors can be marked as `@deploy`" and "Constructor must be
+       marked as `@deploy`"). *)
+    (vis = Deploy <=> name = "__init__") /\
+    (* The fallback must be external and has no ABI argument-decoding entry
+       block. *)
+    (name = "__default__" ==> vis = External /\ NULL args)
 End
 
 Definition event_indexable_type_def:
   event_indexable_type (BaseT _) = T /\
   event_indexable_type (FlagT _) = T /\
   event_indexable_type _ = F
+End
+
+(* ===== Loop iterables written by internal callees ===== *)
+
+(* Vyper counts as writes of an internal call the state variables its callee
+   writes, directly or through further internal calls (the
+   func_type.is_internal case of the call visitor in
+   vyper/semantics/analysis/local.py), so a for loop whose body calls a
+   function that writes the iterated place is rejected too ("Cannot modify
+   loop variable").  iterator_unmodified checks the body's own writes; these
+   check its calls. *)
+
+(* A callee's write w leaves place p alone.  Only writes to top-level
+   bindings count: a callee's locals are its own. *)
+Definition callee_write_ok_def:
+  callee_write_ok p w <=>
+    case FST (place_access w []) of
+    | TopLevelNameTarget _ => ~place_contains w p
+    | _ => T
+End
+
+(* No function reachable from callee, callee included, writes p, in its
+   body or in the default arguments a call evaluates. *)
+Definition callee_writes_ok_def:
+  callee_writes_ok mods p callee <=>
+    let reached = callee :: reachable_nodes (contract_call_edges mods)
+                              (LENGTH (contract_call_nodes mods)) callee in
+      EVERY (\(src,tls).
+        EVERY (\tl. case tl of
+          | FunctionDecl _ _ _ _ fn _ dflts _ body =>
+              MEM (src,fn) reached ==>
+              EVERY (expr_writes_ok (callee_write_ok p)) dflts /\
+              stmts_writes_ok (callee_write_ok p) body
+          | _ => T) tls) mods
+End
+
+(* The place an iterated array names: a variable, possibly under subscripts
+   and attributes.  Vyper registers no place for any other iterator (such as
+   an IfExp), so callee writes are checked only against this one. *)
+Definition loop_iterator_place_def:
+  loop_iterator_place (Name _ id) = SOME (NameTarget id) /\
+  loop_iterator_place (TopLevelName _ n) = SOME (TopLevelNameTarget n) /\
+  loop_iterator_place (Subscript _ e i) =
+    OPTION_MAP (\tgt. SubscriptTarget tgt i) (loop_iterator_place e) /\
+  loop_iterator_place (Attribute _ e a) =
+    OPTION_MAP (\tgt. AttributeTarget tgt a) (loop_iterator_place e) /\
+  loop_iterator_place _ = NONE
+End
+
+Definition stmt_loop_calls_ok_def:
+  stmt_loop_calls_ok mods (For _ _ it _ body) =
+    ((case it of
+      | Array e =>
+          (case loop_iterator_place e of
+           | SOME p => EVERY (callee_writes_ok mods p) (int_calls_stmts body)
+           | NONE => T)
+      | Range _ _ => T) /\
+     stmts_loop_calls_ok mods body) /\
+  stmt_loop_calls_ok mods (If _ yes no) =
+    (stmts_loop_calls_ok mods yes /\ stmts_loop_calls_ok mods no) /\
+  stmt_loop_calls_ok mods _ = T /\
+  stmts_loop_calls_ok mods [] = T /\
+  stmts_loop_calls_ok mods (s::ss) =
+    (stmt_loop_calls_ok mods s /\ stmts_loop_calls_ok mods ss)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,s) => stmt_size s
+    | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[]
 End
 
 Definition check_toplevel_decl_def:
@@ -934,20 +1030,23 @@ Definition check_toplevel_decl_def:
     | HashMapDecl _ is_transient id kt vt _ =>
         well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt
     | StructDecl id fields =>
-        ALL_DISTINCT (MAP FST fields) /\
+        fields <> [] /\ ALL_DISTINCT (MAP FST fields) /\
         EVERY (\(_,ty). assignable_type tenv ty) fields
     | FlagDecl id members => T
     | InterfaceDecl id funcs =>
         EVERY (\(fn,args,ret,mut).
-          params_ok tenv args /\ well_formed_type tenv ret) funcs
+          params_ok tenv args /\ (ret = NoneT \/ assignable_type tenv ret)) funcs
     | EventDecl id fields =>
+        LENGTH (FILTER SND fields) <= 3 /\
+        ALL_DISTINCT (MAP (FST o FST) fields) /\
         EVERY (\((_,ty),indexed). assignable_type tenv ty /\
                                   (indexed ==> event_indexable_type ty)) fields
     | ErrorDecl id args => params_ok tenv args
     | FunctionDecl vis mut nr rr name args dflts ret body =>
-        params_ok tenv args /\ well_formed_type tenv ret /\
+        params_ok tenv args /\ (ret = NoneT \/ assignable_type tenv ret) /\
         function_header_ok vis mut nr rr name args dflts ret /\
-        function_mutability_ok mods vis mut nr dflts body
+        function_mutability_ok mods vis mut nr dflts body /\
+        stmts_loop_calls_ok mods body
 End
 
 (* ===== Callable-body checks ===== *)
@@ -978,7 +1077,14 @@ Definition check_toplevel_body_def:
     | FunctionDecl vis mut nr _ fn args dflts ret body =>
         function_live layouts addr mods live (src,fn) /\
         check_function_body_in_mode in_deploy vis ==>
-        check_function_body layouts addr mods art src vis mut nr args dflts ret body
+        check_function_body layouts addr mods art src vis mut nr args dflts ret body /\
+        (* The pin permits immutable projections only in the constructor, not
+           in external/internal runtime functions, even during deploy checking.
+           Retain the ordinary body judgment for existing transport clients. *)
+        (vis <> Deploy ==>
+         check_function_body layouts addr mods
+           (art with cta_bare_global_assignable := FEMPTY)
+           src vis mut nr args dflts ret body)
     | VariableDecl (Public nr) _ fn _ _ =>
         function_live layouts addr mods live (src,fn) ==>
         (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0)
@@ -1023,15 +1129,18 @@ Definition check_contract_def:
       then SOME art else NONE
 End
 
-(* The exports map of load_contract names only functions of allocated
-   modules.  An external function is never an internal callee, so it is live
-   exactly when its module is allocated. *)
+(* Exports name allocated modules, and the combined deployed interface has
+   distinct selectors.  An external function is never an internal callee,
+   so it is live exactly when its module is allocated. *)
 Definition exports_ok_def:
   exports_ok layouts addr mods exps <=>
     EVERY (\(fn,src).
              case ALOOKUP mods (SOME src) of
              | NONE => T
-             | SOME tls => module_allocated layouts addr (SOME src) tls) exps
+             | SOME tls => module_allocated layouts addr (SOME src) tls) exps /\
+    ALL_DISTINCT
+      (MAP (\(name,tys). abi_method_id (type_env_all_modules mods) name tys)
+        (abi_deployed_signatures mods exps))
 End
 
 (* Successful checking guarantees distinct member names for every
@@ -1051,6 +1160,71 @@ Proof
   simp[check_toplevel_decl_def]
 QED
 
+Theorem check_contract_event_fields:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\ MEM (EventDecl id fields) tls ==>
+  EVERY (\((_,ty),indexed).
+    assignable_type (type_env_all_modules mods) ty /\
+    (indexed ==> event_indexable_type ty)) fields
+Proof
+  strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def, EVERY_MEM]
+QED
+
+Theorem module_event_key_MEM:
+  MEM (EventDecl name fields) tls ==>
+  MEM (src,name) (FLAT (MAP (event_keys_toplevel src) tls))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `event_keys_toplevel src (EventDecl name fields)` >>
+  simp[event_keys_toplevel_def] >>
+  qexists `EventDecl name fields` >> simp[event_keys_toplevel_def]
+QED
+
+Theorem module_event_keys_unique:
+  ALL_DISTINCT (FLAT (MAP (event_keys_toplevel src) tls)) ==>
+  event_decl_unique name tls
+Proof
+  Induct_on `tls` >- simp[event_decl_unique_def] >>
+  gen_tac >> Cases_on `h` >>
+  simp[event_keys_toplevel_def, event_decl_unique_def] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[module_event_key_MEM, event_decl_unique_def]
+QED
+
+Theorem contract_keys_module_distinct:
+  ALL_DISTINCT (contract_keys f mods) /\ MEM (src,tls) mods ==>
+  ALL_DISTINCT (FLAT (MAP (f src) tls))
+Proof
+  Induct_on `mods` >- simp[] >>
+  Cases_on `h` >>
+  fs[contract_keys_def] >>
+  simp[ALL_DISTINCT_APPEND] >> metis_tac[]
+QED
+
+Theorem contract_namespaces_ok_event_decl_unique:
+  contract_namespaces_ok in_deploy mods /\ MEM (src,tls) mods ==>
+  event_decl_unique name tls
+Proof
+  rw[contract_namespaces_ok_def] >>
+  `ALL_DISTINCT (FLAT (MAP (event_keys_toplevel src) tls))` by
+    (irule contract_keys_module_distinct >> qexists_tac `mods` >> simp[]) >>
+  drule module_event_keys_unique >> simp[]
+QED
+
+Theorem check_contract_event_decl_unique:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods ==> event_decl_unique name tls
+Proof
+  rw[check_contract_def] >>
+  metis_tac[contract_namespaces_ok_event_decl_unique]
+QED
+
 Theorem check_contract_function_header:
   check_contract in_deploy layouts addr mods = SOME art /\
   MEM (src,tls) mods /\
@@ -1064,6 +1238,31 @@ Proof
   simp[check_module_def, EVERY_MEM] >> strip_tac >>
   qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
   simp[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_function_return_type:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret body) tls ==>
+  ret = NoneT \/ assignable_type (type_env_all_modules mods) ret
+Proof
+  strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_deploy_nonreentrant:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (FunctionDecl Deploy mut nr rr name args dflts ret body) tls ==>
+  nr = F
+Proof
+  strip_tac >> drule_all check_contract_function_header >>
+  simp[function_header_ok_def]
 QED
 
 Theorem check_contract_external_method_ids_distinct:
@@ -1080,6 +1279,17 @@ Theorem check_contract_external_names_distinct:
   ALL_DISTINCT (contract_keys external_name_keys_toplevel mods)
 Proof
   rw[check_contract_def, contract_namespaces_ok_def]
+QED
+
+Theorem check_contract_single_module_exports_ok:
+  check_contract in_deploy layouts addr [(NONE,tops)] = SOME art ==>
+  exports_ok layouts addr [(NONE,tops)] []
+Proof
+  strip_tac >>
+  drule (check_contract_external_method_ids_distinct
+    |> Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`, `tls` |-> `tops`]) >>
+  simp[exports_ok_def, abi_deployed_signatures_def,
+       abi_external_method_ids_def]
 QED
 
 Theorem function_header_nonreentrant_view:

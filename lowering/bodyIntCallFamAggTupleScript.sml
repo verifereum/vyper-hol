@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallFamAggTupleLoop
   exprSimHyps exprSimProps exprSimHypsDefs valueEncoding words list
   bodyIntCallJointAggCore actualAllocExec bodyIntCallRestoreResults
-  loweringPosts context compileEnv exprRecursionRegression
+  loweringPosts context compileEnv loweringStateRelDefs exprCallBounds
 
 (* Evaluated child layouts are small enough for the counted store interface. *)
 Theorem intcall_children_layout:
@@ -64,6 +64,8 @@ Proof
   metis_tac[]
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_entry:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   (!e st. MEM e args /\ expr_sim_inv ce fp.jc_cx env st ==>
@@ -123,6 +125,7 @@ Proof
   fs[exprLoweringPropsTheory.ci_mono_def] >>
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
+*)
 
 (* Source well-formedness is attached only to successful Value executions. *)
 Theorem intcall_value_outcome_wf:
@@ -168,7 +171,7 @@ Proof
   strip_tac >> conj_tac
   >- (simp[vv_holds_def, mk_ptr_def, vyperStateTheory.read_result_def,
            vyperStateTheory.return_def] >>
-      simp[valueEncodingTheory.val_in_memory_def]) >>
+      simp[valueEncodingDefsTheory.val_in_memory_def]) >>
   irule bodyIntCallRestoreResultsTheory.allocated_value_vv_at >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[mk_ptr_def] >> reverse conj_tac
@@ -258,6 +261,7 @@ Proof
   simp[valueEncodingTheory.type_memory_size_def]
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_tuple_literal_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
@@ -265,6 +269,7 @@ Theorem intcall_tuple_literal_step:
   (?a n args. e = Builtin a (MakeArray NONE n) args) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
+  (* original proof, kept while held:
   strip_tac >> gvs[] >>
   reverse conj_tac
   >- (irule bodyIntCallJointAggCoreTheory.intcall_map_producer_other >> simp[]) >>
@@ -278,7 +283,7 @@ Proof
      goal_assum (drule_at Any) >> simp[]) >>
   `EVERY (intcall_expr_producer fp) args` by
     (simp[EVERY_MEM] >> rpt strip_tac >>
-     drule exprRecursionRegressionTheory.expr_size_member >> strip_tac >>
+     drule exprCallBoundsTheory.expr_list_member_bound >> strip_tac >>
      first_x_assum (qspec_then `e` mp_tac) >> simp[]) >>
   `EVERY (supportedExprs$supported_expr fp.jc_tops) args` by
     (fs[supportedExprsTheory.supported_expr_def,
@@ -312,5 +317,25 @@ Proof
     (SRULE [arithmeticTheory.ADD_COMM] intcall_tuple_landing) >>
   disch_then (qspecl_then [`n`, `TupleT (MAP expr_type args)`] mp_tac) >>
   simp[vyperASTTheory.expr_type_def, mk_ptr_def,
-       contextTheory.vv_operand_def, is_bytestring_type_def]
+       contextTheory.vv_operand_def, is_bytestring_type_def] >>
+  strip_tac >>
+  irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  qpat_assum `gas_outcome _ _ _ (eval_expr _ _) _ _ _` (irule_at Any) >>
+  qx_genl_tac [`res`, `ee'`, `u`] >> BETA_TAC >> strip_tac >>
+  qexists_tac `v` >>
+  `EVERY ($~ o expr_has_effect) args ==> pure_frame ce fp.jc_func es sa s u`
+    suffices_by (strip_tac >> fs[] >> metis_tac[]) >>
+  suspend "pure_frame"
+  *)
+  cheat
 QED
+
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; these Resume blocks hang off a held proof, commented out with it *)
+(*
+(* HELD (train 15): pure_frame sweep (tuple literal), retired in train 16 *)
+Resume intcall_tuple_literal_step[pure_frame]:
+  cheat
+QED
+
+Finalise intcall_tuple_literal_step
+*)

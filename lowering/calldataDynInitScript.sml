@@ -1,7 +1,7 @@
 (* Safe arbitrary-calldata dynamic count guard and initialization adapters. *)
 Theory calldataDynInit
 Ancestors
-  actualAllocExec actualAllocCredit allocaFrontierBound unitTransformDefs
+  valueEncodingDefs loweringStateRelDefs actualAllocExec actualAllocCredit allocaFrontierBound unitTransformDefs
   fragExec memSafeRun contextCodegenRel codegenRel abiDecoderExecution
   calldataBytesLeaf calldataWordLeaf abiDecoderContract calldataChildFrame safeSequence fragExecMem
   abiDecoderGuards abiDecoderIndexInit abiDecoderArrayHeader abiDecoderReservation
@@ -730,10 +730,10 @@ Proof
   gvs[] >>
   qpat_x_assum `fn_has_code _ _ _` mp_tac >>
   simp[fn_has_code_def, emitted_blocks_def,
-       abi_decode_loop_prefix_state_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+       abi_decode_loop_prefix_state_def, abi_decode_position_header_zero,
+       abi_decode_position_header_delta_def, DISJ_IMP_THM, FORALL_AND_THM] >>
   rpt strip_tac >>
-  simp[abi_decode_position_header_insts_def, abi_decode_header_insts_def,
-       phi_prefix_length_def, mk_inst_def]
+  simp[abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def]
 QED
 
 Theorem calldata_loop_prefix_entry_safe:

@@ -36,7 +36,8 @@ Theorem intcall_expr_cont_end_gas_obs[simp]:
   intcall_expr_cont fp ce env es sa s (ee with gas_obs := gs) sb u <=>
   intcall_expr_cont fp ce env es sa s ee sb u
 Proof
-  simp[bodyIntCallJointContractTheory.intcall_expr_cont_def]
+  simp[bodyIntCallJointContractTheory.intcall_expr_cont_def,
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def]
 QED
 
 Theorem intcall_struct_fields_nil:
@@ -55,9 +56,8 @@ Proof
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL []`, `es`, `OK s`] >>
   simp[gas_marked_exec_def, Once evaluate_def, return_def,
-       gas_marked_path_def, fragGasPathTheory.gas_path_rules,
-       bodyIntCallJointContractTheory.intcall_expr_cont_def] >>
-  gvs[bodyIntCallJointContractTheory.intcall_expr_cont_def] >> gvs[]
+       gas_marked_path_def, fragGasPathTheory.gas_path_rules] >>
+  fs[]
 QED
 
 (* Pure source result maps do not change the counted target segment. *)

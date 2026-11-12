@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallFamAggStructFields bodyIntCallFamAggStructSource bodyIntCallFamAggStructCode
   bodyIntCallJointAggCore stmtReasonVvMemory exprSimAggregateLoops
   exprSimHypsDefs exprSimHyps exprLowering compileEnv exprSimMemDefs
-  valueEncoding vyperValue
+  valueEncoding valueEncodingDefs vyperValue
 
 Theorem intcall_struct_fields_counted:
   !fields tvs off sa sb es s out.
@@ -57,7 +57,7 @@ Proof
       drule intcall_struct_fields_nil >>
       disch_tac >> irule gas_outcome_post_mono >>
       goal_assum (drule_at Any) >>
-      simp[valueEncodingTheory.val_in_memory_def] >>
+      simp[valueEncodingDefsTheory.val_in_memory_def] >>
       rpt strip_tac >> gvs[] >> metis_tac[]) >>
   qx_gen_tac `h` >> PairCases_on `h` >> rename1 `(name,e)::fields` >>
   rpt gen_tac >> strip_tac >>

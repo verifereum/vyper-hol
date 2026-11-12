@@ -4,7 +4,8 @@ Ancestors
   dftRunRel dftWf dftScheduleOrder o1PassContract passSimulationProofs
   venomWf venomExecSemantics venomInst venomState list
   unitLabelMapIdentity simplifyCfgDefs dftGasOracleDefs passSimulationDefs option
-  o1PassLift dftCorrectness dftDefs relation venomExecProofs venomExecProps sccpCorrectnessProofs
+  o1PassLift dftCorrectness dftDefs relation venomExecProofs venomExecProps
+  venomWfProps
 
 Theorem ev_frame_schedule:
   dft_fn_rel fn fn' /\ MEM fn C.ctx_functions /\

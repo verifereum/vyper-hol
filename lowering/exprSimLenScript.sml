@@ -26,8 +26,8 @@ Ancestors
   exprSimDefs
   loweringPosts
   list fragExec  exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
-  exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
-  valueEncoding
+  exprLoweringProps builtinSimple emitHelper compileEnv loweringStateRelDefs accountsRelProps
+  valueEncoding valueEncodingDefs
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeSystem vyperTypeBuiltins vyperValue vyperTyping vyperStorage
   builtinProps vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
@@ -37,7 +37,7 @@ Ancestors
 open gasContextTheory gasOutcomeTheory gasSummaryTheory gasSummaryComposeTheory
      gasExemptCertTheory fragGasModeTheory fragGasPathTheory;
 
-Theorem len_pre_args[local]:
+Theorem len_pre_args:
   !cenv cx env ann args es.
     expr_body_pre cenv cx env (Builtin ann Len args) es ==>
     ?e. args = [e] /\ ann = BaseT (UintT 256) /\
@@ -51,7 +51,7 @@ Proof
   Cases_on `rest` >> gvs[]
 QED
 
-Theorem names_builtin_len[local]:
+Theorem names_builtin_len:
   !args. ~names_builtin Len args
 Proof
   `!bt args. names_builtin bt args ==> bt <> Len` suffices_by
@@ -59,7 +59,7 @@ Proof
   ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
 QED
 
-Theorem compile_expr_len[local]:
+Theorem compile_expr_len:
   !cenv ty ann e st.
     compile_expr cenv ty (Builtin ann Len [e]) st =
     (let (vv, st1) = compile_expr cenv ty e st in
@@ -73,7 +73,7 @@ Proof
        compile_builtin_dispatch_body_def]
 QED
 
-Theorem eval_expr_len[local]:
+Theorem eval_expr_len:
   !cx ann e es.
     eval_expr cx (Builtin ann Len [e]) es =
     (do tv <- eval_expr cx e;
@@ -90,7 +90,7 @@ Proof
   rename1 `(res, es2)` >> Cases_on `res` >> simp[bind_def, return_def]
 QED
 
-Theorem sized_type_cases[local]:
+Theorem sized_type_cases:
   !t. is_sized_type t ==>
     (?et k. t = ArrayT et (Dynamic k)) \/
     (?k. t = BaseT (StringT k)) \/
@@ -327,7 +327,7 @@ Proof
   gvs[read_slot_def]
 QED
 
-Theorem sized_type_widens_source[local]:
+Theorem sized_type_widens_source:
   type_widens_to tenv pt t /\ is_sized_type t ==> is_sized_type pt
 Proof
   strip_tac >> gvs[type_widens_to_def] >>
@@ -388,13 +388,11 @@ Theorem immutable_holds_memory[local]:
             val_in_memory tvt v (w2n w) s.vs_memory
 Proof
   rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def]
-  >~ [`sub_layout`]
-  >- (gvs[] >> first_x_assum drule_all >> strip_tac >>
-      gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-      `off + k < dimword (:256)` by DECIDE_TAC >>
-      gvs[arithmeticTheory.ADD_COMM]) >>
-  `off + k < dimword (:256)` by DECIDE_TAC >> gvs[] >> metis_tac[]
+     immutables_rel_def] >>
+  gvs[] >> first_x_assum drule_all >> strip_tac >>
+  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+  `off + k < dimword (:256)` by DECIDE_TAC >>
+  gvs[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem vv_holds_len_header:
@@ -449,7 +447,7 @@ Proof
       vfmStateTheory.lookup_account_def]
 QED
 
-Theorem vv_holds_len_header_widens[local]:
+Theorem vv_holds_len_header_widens:
   !env func cenv cx es s pt t pvt tvt tv vv n ctx.
     stmt_state_rel ctx func cenv cx es s /\ vv_holds cenv cx pt tv vv es s /\
     type_widens_to env.type_defs pt t /\
@@ -517,7 +515,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem vv_holds_sized_length_success_widens[local]:
+Theorem vv_holds_sized_length_success_widens:
   !env cenv cx pt t r vv es s tvt.
     vv_holds cenv cx pt r vv es s /\ is_sized_type t /\
     evaluate_type (get_tenv cx) t = SOME tvt /\
@@ -536,7 +534,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem len_vv_post_load[local]:
+Theorem len_vv_post_load:
   !func cenv cx e es sa sm sb s0 es' tv vv s1 op s n ctx.
     vv_post ctx func cenv cx e es sa sm s0 es' tv vv s1 /\
     sa.cs_next_var <= sm.cs_next_var /\
@@ -559,7 +557,10 @@ Proof
   >- (fs[vv_post_def] >> metis_tac[not_fresh_at_mono])
   >~ [`FLOOKUP s.vs_allocas`] >- (fs[vv_post_def] >> metis_tac[])
   >~ [`locals_kept`]
-  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail]) >>
+  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail])
+  >~ [`pure_frame`]
+  >- (match_mp_tac pure_frame_mem_tail >> qexists_tac `s1` >>
+      fs[vv_post_def, expr_has_effect_thm]) >>
   fs[vv_post_def] >> metis_tac[]
 QED
 
@@ -635,7 +636,7 @@ Proof
   simp[] >> qexistsl [`s1`, `sm`, `tv`, `vv`] >> simp[]
 QED
 
-Theorem len_load_extends[local]:
+Theorem len_load_extends:
   !ctor imm pop loc sa op sb.
     compile_builtin_len ctor imm pop loc sa = (op,sb) ==> cs_extends sa sb
 Proof
@@ -725,73 +726,6 @@ Proof
   fs[cs_appends_def] >> first_x_assum drule >> simp[]
 QED
 
-Theorem len_imm_ctor_path[local]:
-  !ctx func cenv cx es pop sm op sb s0 w.
-    compile_imm_load_word T cenv.ce_imm_alloca pop sm = (op, sb) /\
-    local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sm.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    eval_operand pop s0 = SOME w ==>
-    ?s. gas_path ctx func s0 0 (OK s) /\
-        s.vs_current_bb = sb.cs_current_bb /\
-        s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        stmt_state_rel ctx func cenv cx es s /\
-        eval_operand op s = SOME (mload (w2n w) s0) /\
-        (!x w'. not_fresh_at sm x /\ lookup_var x s0 = SOME w' ==>
-                lookup_var x s = SOME w') /\
-        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                 FLOOKUP s.vs_allocas aid = SOME b) /\
-        s.vs_memory = s0.vs_memory
-Proof
-  rpt strip_tac >> Cases_on `cenv.ce_imm_alloca` >>
-  gvs[contextTheory.compile_imm_load_word_def]
-  >- (drule len_emit_op_path >>
-      disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
-        `mload (w2n w) s0`] mp_tac) >>
-      impl_tac
-      >- (simp[is_terminator_def] >> rpt strip_tac >> irule len_step_ILOAD >>
-          simp[]) >>
-      strip_tac >> goal_assum drule >> simp[]) >>
-  rename1 `cenv.ce_imm_alloca = SOME ib` >>
-  qpat_x_assum `comp_bind _ _ _ = _` mp_tac >>
-  simp[comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
-  rename1 `emit_op ADD [pop; ib] sm = (addr, sm1)` >>
-  `cs_extends sm sm1 /\ cs_extends sm1 sb` by metis_tac[len_emit_op_cs_extends] >>
-  `fn_has_code sm sm1 func /\ fn_has_code sm1 sb func` by
-    metis_tac[fn_has_code_split] >>
-  `local_ptrs_reserved cenv sm1` by
-    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-     qexists_tac `sm` >>
-     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
-         comp_ignore_bind_def, comp_return_def, emit_def]) >>
-  qpat_x_assum `emit_op ADD _ _ = _` assume_tac >>
-  drule len_emit_op_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `w`]
-    mp_tac) >>
-  impl_tac
-  >- (simp[is_terminator_def] >> rpt strip_tac >>
-      irule len_step_ADD_imm_base >> metis_tac[]) >>
-  strip_tac >> rename1 `gas_path _ _ s0 0 (OK s1)` >>
-  `~s1.vs_halted` by metis_tac[fragGasPathTheory.gas_path_normal] >>
-  qpat_x_assum `emit_op ILOAD _ _ = _` assume_tac >>
-  drule len_emit_op_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s1`,
-    `mload (w2n w) s1`] mp_tac) >>
-  impl_tac
-  >- (simp[is_terminator_def] >> rpt strip_tac >> irule len_step_ILOAD >>
-      simp[]) >>
-  strip_tac >> rename1 `gas_path _ _ s1 0 (OK s2)` >>
-  qexists_tac `s2` >> gvs[mload_def] >>
-  conj_tac
-  >- (`0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
-      irule fragGasPathTheory.gas_path_then >> metis_tac[]) >>
-  rpt strip_tac >> first_x_assum irule >> conj_tac
-  >- (first_x_assum irule >> simp[]) >>
-  gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
-      comp_ignore_bind_def, comp_return_def, emit_def, not_fresh_at_def]
-QED
-
 Theorem len_step_TLOAD[local]:
   !op1 v1 id out ss.
     eval_operand op1 ss = SOME v1 ==>
@@ -823,7 +757,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `loc = LocCode /\ is_ctor`
   >- (gvs[compile_builtin_len_def, compile_ptr_load_def, ptr_load_val_def] >>
-      drule_all len_imm_ctor_path >> simp[]) >>
+      drule_all compile_imm_load_word_ctor_path >> simp[]) >>
   Cases_on `loc` >>
   gvs[compile_builtin_len_def, compile_ptr_load_def,
       compile_imm_load_word_runtime, ptr_load_val_def] >>
@@ -862,7 +796,7 @@ Proof
   Cases_on `decode_value x (w2n sl) tv` >> simp[raise_def, return_def]
 QED
 
-Theorem len_rp_obs[local]:
+Theorem len_rp_obs:
   !cx p st g.
     read_place cx p (st with gas_obs := g) =
     (FST (read_place cx p st), SND (read_place cx p st) with gas_obs := g)
@@ -882,7 +816,7 @@ Proof
       Cases_on `evaluate_subscripts (FST x') (SND x') l` >> simp[return_def, raise_def])
 QED
 
-Theorem len_bind_obs[local]:
+Theorem len_bind_obs:
   !m f.
     (!st g. m (st with gas_obs := g) = (FST (m st), SND (m st) with gas_obs := g)) /\
     (!v st g. f v (st with gas_obs := g) = (FST (f v st), SND (f v st) with gas_obs := g)) ==>
@@ -893,7 +827,7 @@ Proof
   Cases_on `m st` >> Cases_on `q` >> simp[]
 QED
 
-Theorem len_rr_obs[local]:
+Theorem len_rr_obs:
   !cx res st g.
     read_result cx res (st with gas_obs := g) =
     (FST (read_result cx res st), SND (read_result cx res st) with gas_obs := g)
@@ -901,7 +835,7 @@ Proof
   Cases_on `res` >> simp[read_result_def, len_rp_obs, return_def, raise_def]
 QED
 
-Theorem len_tail_obs[local]:
+Theorem len_tail_obs:
   !v st g.
     (case v of
        ArrayV (DynArrayV vs) => return (LENGTH vs)
@@ -929,7 +863,7 @@ Proof
   simp[return_def, raise_def]
 QED
 
-Theorem len_ral_gas_obs0[local]:
+Theorem len_ral_gas_obs0:
   !cx tv st g.
     result_array_length cx tv (st with gas_obs := g) =
     (FST (result_array_length cx tv st),
@@ -945,7 +879,7 @@ Proof
   Cases_on `get_storage_backend cx tr st` >> Cases_on `q` >> simp[return_def]
 QED
 
-Theorem len_ral_gas_obs[local]:
+Theorem len_ral_gas_obs:
   !cx tv st g r.
     result_array_length cx tv st = (r, st) ==>
     result_array_length cx tv (st with gas_obs := g) = (r, st with gas_obs := g)
@@ -992,7 +926,7 @@ Proof
   simp[] >> qexistsl [`t`, `sm`, `tv`, `vv`] >> simp[]
 QED
 
-Theorem len_source[local]:
+Theorem len_source:
   !cx ann e.
     eval_expr cx (Builtin ann Len [e]) =
     bind (eval_expr cx e)
@@ -1001,7 +935,7 @@ Proof
   rpt gen_tac >> simp[FUN_EQ_THM, eval_expr_len]
 QED
 
-Theorem len_operand_admissible[local]:
+Theorem len_operand_admissible:
   !cenv cx env e es.
     expr_body_pre cenv cx env e es ==>
     gas_admissible (eval_expr cx e) expr_vv_res_ok es
@@ -1011,7 +945,7 @@ Proof
   metis_tac[expr_body_pre_vv_res_ok]
 QED
 
-Theorem len_exempt_cert[local]:
+Theorem len_exempt_cert:
   !memory tops p cx ann e start marks out endpoint.
     gas_exempt_cert memory tops p (ignore_bind (eval_expr cx e) (return ()))
       start marks out endpoint ==>

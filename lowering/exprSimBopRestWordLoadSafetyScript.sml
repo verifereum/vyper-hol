@@ -39,8 +39,8 @@ Proof
       rpt strip_tac >>
       qpat_x_assum `!name tv v off. _` drule_all >> strip_tac >> decide_tac) >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
-  simp[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def,
-       compileEnvTheory.immutables_rel_def] >> rpt strip_tac >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
+       loweringStateRelDefsTheory.immutables_rel_def] >> rpt strip_tac >>
   qpat_x_assum `!name tv v byte_offset. _` drule_all >> strip_tac >> decide_tac)
 QED
 
@@ -166,7 +166,7 @@ Proof
   `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
     eval_operand (THE cenv.ce_imm_alloca) s = SOME 0w)` by
     (fs[exprLoweringPropsTheory.stmt_state_rel_def,
-        compileEnvTheory.immutable_base_zero_def] >>
+        loweringStateRelDefsTheory.immutable_base_zero_def] >>
      Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
   irule (Q.INST [`loc` |-> `LocCode`] rest_word_ptr_load_mem_ok) >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >>
@@ -191,7 +191,7 @@ Proof
   `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
     eval_operand (THE cenv.ce_imm_alloca) s = SOME 0w)` by
     (fs[exprLoweringPropsTheory.stmt_state_rel_def,
-        compileEnvTheory.immutable_base_zero_def] >>
+        loweringStateRelDefsTheory.immutable_base_zero_def] >>
      Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
   irule (Q.INST [`loc` |-> `LocCode`] rest_word_ptr_load_mem_ok) >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >>

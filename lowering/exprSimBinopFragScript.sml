@@ -579,9 +579,9 @@ Proof
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM listTheory.APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once exprLoweringPropsTheory.run_inst_seq_def] >>
-  simp[Once venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def] >>
   simp[Once exprLoweringPropsTheory.run_inst_seq_def] >>
-  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_pure2_def] >>
   simp[exprLoweringPropsTheory.run_inst_seq_def,
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
@@ -611,13 +611,12 @@ Proof
   `step_inst_base (mk_inst sa.cs_next_id ASSERT [c] []) ss =
      if cv = 0w then Abort Revert_abort
        (revert_state (set_returndata [] ss)) else OK ss` by
-    (once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
-     simp_tac (srw_ss()) [venomInstTheory.mk_inst_def] >>
+    (simp_tac (srw_ss())[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def] >>
      Cases_on `cv = 0w` >> gvs[]) >>
   simp[Once exprLoweringPropsTheory.run_inst_seq_def] >>
   Cases_on `cv = 0w` >> simp[] >>
   simp[Once exprLoweringPropsTheory.run_inst_seq_def] >>
-  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_pure2_def] >>
   simp[exprLoweringPropsTheory.run_inst_seq_def,
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,

@@ -115,12 +115,19 @@ Proof
           qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
           qexists `n` >> irule local_region_frame >>
           conj_tac >- (qexists `func` >>
-            gvs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+            gvs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
           qexistsl [`sa`, `es1.scopes`, `t`] >> asm_rewrite_tac[])
       >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
           qexists `sa.cs_next_id` >> asm_rewrite_tac[]) >>
       metis_tac[]) >>
-  irule locals_kept_trans >> qexistsl [`es1`, `sa`, `t`] >>
+  conj_tac
+  >- (irule locals_kept_trans >> qexistsl [`es1`, `sa`, `t`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rewrite_tac[loweringPostsTheory.expr_has_effect_thm, listTheory.EXISTS_DEF,
+              boolTheory.OR_CLAUSES, DE_MORGAN_THM] >>
+  strip_tac >> res_tac >>
+  match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+  qexistsl_tac [`es1`, `s1`, `t`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -356,9 +363,9 @@ Resume compile_rest_word_membership_sim[tail_extends]:
     compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   gvs[compileEnvTheory.comp_return_def] >>
-  qpat_assum `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`
     (strip_assume_tac o REWRITE_RULE [exprSimBopRestWordLayoutTheory.rest_word_loop_factor_eq]) >>
-  rename1 `rest_word_loop_prefix _ _ _ _ _ loopst = (h,cl)` >>
+  rename1 `rest_word_loop_prefix _ _ _ _ _ _ loopst = (h,cl)` >>
   drule exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_shape >>
   rewrite_tac[exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_shape_def] >> strip_tac >>
   drule exprSimBopRestWordLayoutTheory.rest_word_ptr_load_shape >> strip_tac >>
@@ -368,7 +375,6 @@ Resume compile_rest_word_membership_sim[tail_extends]:
     (simp[compileEnvTheory.cs_extends_def] >> qexists `TAKE 6 sb.cs_blocks` >> simp[]) >>
   qpat_assum `compile_ptr_load _ _ _ (vv_operand arr_vv) st2 = _`
     (mp_tac o MATCH_MP exprSimBopRestWordLayoutTheory.rest_word_ptr_load_shape) >> strip_tac >>
-  drule_all rest_word_capacity_check_shape >> strip_tac >>
   `cs_extends st2 loopst` by
     simp[compileEnvTheory.cs_extends_def,
       rich_listTheory.IS_PREFIX_APPEND, listTheory.APPEND_ASSOC] >>
@@ -467,12 +473,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
   `?av. v2 = ArrayV av` by
     (Cases_on `v2` >> fs[vyperTypingTheory.value_has_type_def]) >>
   gnvs[] >>
-  `vv_post ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
-      (fin with gas_obs := []) (Value (ArrayV av)) arr_vv u` by
-    (qpat_assum `!tail. read_result _ _ _ = _`
-       (qspec_then `[]` assume_tac) >>
-     drule exprSimUnwrapPropsTheory.vv_post_read_result >>
-     simp[] >> metis_tac[]) >>
+  qpat_assum `!tail. read_result _ _ _ = _` (qspec_then `[]` assume_tac) >>
   `expr_body_pre cenv cx env e1
       (es with gas_obs := gas_explicit left s0.vs_gas_readings)` by simp[] >>
   `value_has_type et v1` by
@@ -513,7 +514,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
        q.vs_current_bb = sb.cs_current_bb /\
        q.vs_inst_idx = LENGTH sb.cs_current_insts /\
        vv_post ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
-         (fin with gas_obs := []) (Value (ArrayV av)) arr_vv q /\
+         (fin with gas_obs := []) tv arr_vv q /\
        eval_operand op q = SOME (bool_to_word
          (if bop = In then evaluate_in_array (ArrayTV et bd) v1 av
           else ~evaluate_in_array (ArrayTV et bd) v1 av))` by
@@ -540,16 +541,11 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
   qmatch_asmsub_abbrev_tac `eval_operand op q = SOME (bool_to_word answer)` >>
   `!ee. bop_result cx ann bop [expr_type e1; ArrayT (expr_type e1) bd]
           v1 (ArrayV av) ee = INL (BoolV answer)` by
-    (simp[exprBopSimDefsTheory.bop_result_def,
-          vyperContextTheory.evaluate_builtin_def] >>
-     Cases_on `bop = In` >>
-     fs[Abbr `answer`, vyperValueOperationTheory.evaluate_binop_def,
-        vyperValueOperationTheory.binop_negate_def]) >>
+    (Cases_on `bop = In` >>
+     gvs[exprBopSimDefsTheory.bop_result_def, Abbr `answer`,
+         vyperValueOperationTheory.evaluate_membership_array]) >>
   qexistsl [`[]`, `fin`, `q`, `BoolV answer`] >>
   simp[gasSummaryTheory.gas_marked_exec_def] >>
-  conj_tac
-  >- (qpat_assum `!tail. read_result _ _ _ = _` (qspec_then `[]` assume_tac) >>
-      drule exprSimUnwrapPropsTheory.vv_post_read_result >> simp[] >> metis_tac[]) >>
   simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
        compileEnvTheory.is_word_type_def, vyperValueTheory.evaluate_type_def,
        valueEncodingTheory.typed_val_to_w256_def, valueEncodingTheory.val_to_w256_def,

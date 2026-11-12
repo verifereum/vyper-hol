@@ -3,7 +3,7 @@ Theory bodyIntCallProtectedBuffer
 Ancestors
   bodyIntCallProtectedAlloc bodyIntCallProtectedLiteral exprSimAlloc
   exprSimLiteralBuffer context emitHelperProps freshWrites
-  exprLoweringProps compileEnv venomState venomInst valueEncodingProps
+  exprLoweringProps compileEnv loweringStateRelDefs venomState venomInst valueEncodingProps
   finite_map list words intCallFrame exprSimPrecompiles
 
 Theorem protected_alloc_header_run:

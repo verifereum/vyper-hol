@@ -22,7 +22,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps  loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
   vyperExprNoControl vyperValueOperation
   gasOutcome gasContext gasExemptCert gasSummary gasSummaryCompose stmtSimForRounds
@@ -229,7 +229,7 @@ QED
 
 Theorem for_body_gas_admissible[local]:
   !cx tyv id stmts v vs lctx es exit_lbl incr_lbl.
-    gas_admissible (eval_for cx tyv id stmts (v::vs))
+    gas_admissible (eval_for cx tyv id stmts (Value v::vs))
       (stmt_res_ok lctx) es /\ lookup_scopes id es.scopes = NONE ==>
     gas_admissible (eval_stmts cx stmts)
       (stmt_res_ok (InLoop exit_lbl incr_lbl))
@@ -241,7 +241,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[gas_admissible_def] >> rpt gen_tac >> strip_tac >>
   rename1 `eval_stmts cx stmts _ = (res, ee)` >>
-  Cases_on `eval_for cx tyv id stmts (v::vs) (es with gas_obs := gs)` >>
+  Cases_on `eval_for cx tyv id stmts (Value v::vs) (es with gas_obs := gs)` >>
   rename1 `_ = (lr, le)` >>
   `stmt_res_ok lctx lr` by
     (gvs[gas_admissible_def] >> metis_tac[]) >>
@@ -327,7 +327,8 @@ Theorem stmt_state_rel_declare_word_alloca[local]:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
+    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 /\
+    word_memory_type tyv ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
@@ -344,7 +345,7 @@ Proof
      simp[] >> qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >> simp[]) >>
   irule stmt_state_rel_declare_memory >>
   simp[word_value_wf] >> qexistsl_tac [`inst`, `s`, `w`] >>
-  simp[word_value_in_memory] >> conj_tac
+  simp[word_value_memory_rel] >> conj_tac
   >- (rpt strip_tac >>
       `regions_disjoint (w2n w) sz b sz'` by
         (irule local_ptrs_rel_alloca_disjoint >>
@@ -352,6 +353,41 @@ Proof
       irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >>
       fs[regions_disjoint_def] >> decide_tac) >>
   simp[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
+QED
+
+Theorem for_counter_entry_frame[local]:
+  !ctx func cenv bc cx es s t id entry p dv w sz counter sa value.
+  stmt_state_rel ctx func cenv cx es s /\
+  FLOOKUP s.vs_allocas counter = SOME (w2n w, sz) /\
+  sa.cs_next_id <= counter /\ 32 <= sz /\
+  lookup_scopes id es.scopes = NONE /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+  not_local_ptr cenv es.scopes dv /\ p <> dv /\
+  lookup_var p s = SOME w /\
+  (!q. q <> dv ==> lookup_var q t = lookup_var q s) /\
+  t.vs_memory = (mstore (w2n w) value s).vs_memory ==>
+  alloca_frame cenv es sa s bc (es with scopes := (FEMPTY |+ (id, entry)) :: es.scopes) t
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[alloca_frame_def] >>
+  rpt gen_tac >> strip_tac >>
+  `aid <> counter` by decide_tac >>
+  Q.SUBGOAL_THEN `off + sz' <= w2n w \/ w2n w + sz <= off` assume_tac
+  >- (`allocas_non_overlapping s` by
+       fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+     qpat_x_assum `allocas_non_overlapping s` mp_tac >>
+     rewrite_tac[venomMemDefsTheory.allocas_non_overlapping_def] >>
+     disch_then (qspecl_then [`aid`, `counter`, `off`, `sz'`, `w2n w`, `sz`] mp_tac) >>
+     simp[] >> decide_tac) >>
+  conj_tac
+  >- (asm_rewrite_tac[] >> irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `n = id`
+  >- (gvs[local_region_def] >> metis_tac[]) >>
+  `local_region cenv es.scopes s n b sz''` suffices_by metis_tac[] >>
+  gvs[local_region_def, lookup_scopes_def, FLOOKUP_UPDATE] >>
+  `p' <> dv` by (fs[not_local_ptr_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 (* ===== The range loop ===== *)
@@ -384,11 +420,12 @@ Theorem for_body_entry_alloca:
     bc.ce_module_vars = cenv.ce_module_vars /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
     bc.ce_imm_alloca = cenv.ce_imm_alloca /\
+    bc.ce_module_var_type = cenv.ce_module_var_type /\
     not_local_ptr cenv esk.scopes dv /\
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 ==>
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
          stmt_state_rel ctx func bc cx
@@ -399,6 +436,11 @@ Theorem for_body_entry_alloca:
          (!x. x <> dv ==> lookup_var x s2 = lookup_var x cc) /\
          s2.vs_allocas = cc.vs_allocas /\
          gas_marked_path F ctx func cc 0 (OK s2) /\
+         (!frame_start. frame_start.cs_next_id <= ainst.inst_id ==>
+           alloca_frame cenv esk frame_start cc bc
+             (esk with scopes :=
+               (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                  value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) s2) /\
          !fuel rr. run_from fuel ctx func s2 = rr /\ (!e. rr <> Error e) ==>
                    ?fuel'. run_from fuel' ctx func cc = rr
 Proof
@@ -450,7 +492,13 @@ Proof
   >- simp[mstore_def, LET_THM]
   >- simp[mstore_def, LET_THM]
   >- (rpt strip_tac >> fs[mstore_def, LET_THM, lookup_var_def])
-  >- simp[mstore_def, LET_THM] >>
+  >- simp[mstore_def, LET_THM]
+  >- (rpt strip_tac >> irule for_counter_entry_frame >>
+      simp[] >> conj_tac
+      >- (qexistsl_tac [`ainst.inst_id`, `dv`, `i2w (n1 + &k)`] >>
+          simp[Abbr `s1`, mstore_def, jump_to_def, update_var_def, LET_THM,
+               lookup_var_def, FLOOKUP_UPDATE]) >>
+      metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -478,11 +526,13 @@ Theorem for_body_entry:
     bc.ce_module_vars = cenv.ce_module_vars /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
     bc.ce_imm_alloca = cenv.ce_imm_alloca /\
+    bc.ce_module_var_type = cenv.ce_module_var_type /\
     not_local_ptr cenv esk.scopes dv /\
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 /\ cap <= w2n w /\
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
+    cap <= w2n w /\
     (cenv.ce_is_ctor ==>
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module esk cap) ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
@@ -523,7 +573,8 @@ QED
    ALLOCA ainst and its pointer p in bc, which is cenv with id bound; the
    counter cv, end ev, condition dv and next counter nv, distinct from p
    and from each other as the loop needs, and cv, dv and nv no local's
-   pointers. *)
+   pointers.  The loop variable has a scalar word layout, not merely a
+   32-byte footprint (which could also describe an aggregate). *)
 Definition for_code_def:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj <=>
@@ -562,7 +613,7 @@ Definition for_code_def:
     dv <> p /\ dv <> cv /\ dv <> ev /\ nv <> cv /\ nv <> ev /\ nv <> p /\
     cv <> ev /\ cv <> p /\ ev <> p /\
     not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p /\
-    32 <= sz /\ type_memory_size tyv = 32
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv
 End
 
 Theorem for_body_lands_path[local]:
@@ -659,7 +710,9 @@ Theorem for_incr_finish[local]:
       lookup_var cv t = SOME (c + 1w) /\ lookup_var ev t = SOME e /\
       lookup_var p t = SOME w /\
       (!x v. not_fresh_at st x /\ lookup_var x old = SOME v ==> lookup_var x t = SOME v) /\
-      (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)
+      (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b) /\
+      (!c0 e0 sa s0. alloca_frame c0 e0 sa s0 cenv ee s ==>
+         alloca_frame c0 e0 sa s0 cenv ee t)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_incr_zero_path >> strip_tac >>
   qexists_tac `jump_to cond_lbl (update_var cv (c + 1w) (update_var nv (c + 1w) s))` >>
@@ -667,6 +720,13 @@ Proof
      (update_var cv (c + 1w) (update_var nv (c + 1w) s))` by
     (irule stmt_state_rel_update_var >> simp[] >>
      irule stmt_state_rel_update_var >> simp[]) >>
+  `!c0 e0 sa s0. alloca_frame c0 e0 sa s0 cenv ee s ==>
+     alloca_frame c0 e0 sa s0 cenv ee
+       (jump_to cond_lbl (update_var cv (c + 1w) (update_var nv (c + 1w) s)))` by
+    (rpt strip_tac >> irule alloca_frame_same_state >>
+     qexists_tac `update_var cv (c + 1w) (update_var nv (c + 1w) s)` >>
+     simp[jump_to_def] >> irule alloca_frame_update_var >> simp[] >>
+     irule alloca_frame_update_var >> simp[]) >>
   simp[stmt_state_rel_jump_to] >>
   simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[] >> metis_tac[lookup_var_def]
@@ -693,7 +753,7 @@ QED
 
 Theorem for_body_post_pop[local]:
   !ctx func cx lctx bc bc' sa sb s0 res ee t cenv entry sc rest.
-    stmt_post ctx func cx lctx bc bc' sa sb s0 res ee t /\
+    stmt_post ctx func cx lctx bc bc' sa sb entry s0 res ee t /\
     cenv_top_ext cenv bc entry.scopes /\ entry.scopes = sc :: rest /\
     preserves_scopes_dom entry ee /\
     (!n. n IN FDOM (HD ee.scopes) ==> lookup_scopes n (TL ee.scopes) = NONE) ==>
@@ -727,7 +787,7 @@ Theorem for_round_prepare[local]:
     (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
     (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
       value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>) /\
-  gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+  gas_admissible (eval_for cx tyv id stmts (Value (IntV (n1 + &k)) :: vs))
     (stmt_res_ok lctx) esk ==>
   ?s2. gas_marked_exec F (ctx,func)
       (push_scope_with_var id tyv (IntV (n1 + &k))) (esk,cc) [] (INL ())
@@ -737,17 +797,25 @@ Theorem for_round_prepare[local]:
     lookup_var cv s2 = SOME (i2w (n1 + &k)) /\
     lookup_var ev s2 = SOME (i2w n2) /\ lookup_var p s2 = SOME w /\
     s2.vs_allocas = cc.vs_allocas /\
+    (!frame_start. frame_start.cs_next_id <= ainst.inst_id ==>
+      alloca_frame cenv esk frame_start cc bc
+        (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
+          value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>) s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts)
       (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
         value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>,s2)
       (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc
-        (FST (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0)) sb0 sb1 s2)
+        (FST (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0)) sb0 sb1
+        (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
+          value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>)
+        s2)
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> fs[for_code_def] >>
   `bc.ce_module_vars = cenv.ce_module_vars /\
    bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
-   bc.ce_imm_alloca = cenv.ce_imm_alloca` by
+   bc.ce_imm_alloca = cenv.ce_imm_alloca /\
+   bc.ce_module_var_type = cenv.ce_module_var_type` by
     (qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
   `not_local_ptr cenv esk.scopes dv` by metis_tac[] >>
   drule_all for_body_entry_alloca >> strip_tac >>
@@ -769,6 +837,10 @@ Proof
     evaluation_state_component_equality, combinTheory.o_DEF]) >>
   (conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[])) >>
   simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!frame_start. _ ==> alloca_frame _ _ _ _ _ _ _`
+        (qspec_then `frame_start` mp_tac) >> simp[alloca_frame_def]) >>
   qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [stmt_frag_def, stmt_framed_frag_def]) >>
   disch_then (qspecl_then [`sb0`, `sb1`, `s2`,
@@ -789,7 +861,7 @@ Theorem for_body_finish[local]:
   lookup_scopes id esk.scopes = NONE /\
   preserves_scopes_dom entry ee /\ ee.scopes = sc :: rest /\
   (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
-  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2 res ee t /\
+  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2 res ee t /\
   lookup_var cv s2 = SOME c /\ lookup_var ev s2 = SOME e /\ lookup_var p s2 = SOME w /\
   (!x z. not_fresh_at st x /\ lookup_var x old = SOME z ==> lookup_var x s2 = SOME z) /\
   (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP s2.vs_allocas a = SOME b) ==>
@@ -801,7 +873,11 @@ Theorem for_body_finish[local]:
     (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP u.vs_allocas a = SOME b) /\
     (broke ==> u.vs_current_bb = exit_lbl) /\
     (~broke ==> u.vs_current_bb = cond_lbl /\ lookup_var cv u = SOME (c + 1w) /\
-      lookup_var ev u = SOME e /\ lookup_var p u = SOME w)
+      lookup_var ev u = SOME e /\ lookup_var p u = SOME w) /\
+    (!c0 e0 sa s0. alloca_frame c0 e0 sa s0 bc entry s2 /\
+       sa.cs_next_id <= sb0.cs_next_id /\
+       (!a b. FLOOKUP s0.vs_allocas a = SOME b ==> FLOOKUP s2.vs_allocas a = SOME b) ==>
+       alloca_frame c0 e0 sa s0 cenv (ee with scopes := rest) u)
 Proof
   strip_tac >>
   `cenv_top_ext cenv bc entry.scopes` by
@@ -811,6 +887,18 @@ Proof
     by simp[] >>
   drule_all for_body_post_pop >> strip_tac >> gvs[] >>
   fs[for_code_def, stmt_post_def] >>
+  `cenv_top_ext cenv cenv'' ee.scopes` by
+    (irule cenv_top_ext_trans >> qexistsl_tac [`bc`, `entry.scopes`] >>
+     gvs[preserves_scopes_dom_def]) >>
+  `!c0 e0 sa s0. alloca_frame c0 e0 sa s0 bc entry s2 /\
+     sa.cs_next_id <= sb0.cs_next_id /\
+     (!a b. FLOOKUP s0.vs_allocas a = SOME b ==> FLOOKUP s2.vs_allocas a = SOME b) ==>
+     alloca_frame c0 e0 sa s0 cenv (ee with scopes := rest) t` by
+    (rpt strip_tac >> irule alloca_frame_pop >>
+     conj_tac >- (qexists_tac `sc` >> simp[]) >>
+     qexists_tac `cenv''` >> simp[] >>
+     irule alloca_frame_trans >>
+     qexistsl_tac [`bc`, `entry`, `s2`, `sb0`] >> simp[]) >>
   `(!x z. not_fresh_at st x /\ lookup_var x old = SOME z ==> lookup_var x t = SOME z) /\
    lookup_var cv t = SOME c /\ lookup_var ev t = SOME e /\ lookup_var p t = SOME w /\
    (!a b. FLOOKUP old.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)` by
@@ -841,7 +929,12 @@ Proof
   qexists_tac `t'` >> simp[] >>
   qpat_x_assum `gas_marked_path F ctx func t 0 (OK land)` mp_tac >>
   disch_then (mp_then Any mp_tac gas_marked_path_then) >>
-  disch_then drule >> simp[]
+  disch_then drule >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!c0 e0 sa s0. alloca_frame _ _ _ _ _ _ land ==> _` irule >>
+  irule alloca_frame_same_state >> qexists_tac `t` >>
+  `land.vs_vars = t.vs_vars /\ land.vs_memory = t.vs_memory` by
+    (Cases_on `res = INL ()` >> simp[Abbr `land`, jump_to_def]) >>
+  simp[] >> first_x_assum irule >> simp[]
 QED
 
 (* One iteration of a range loop, from the condition block with the counter
@@ -875,7 +968,7 @@ Theorem for_iteration_alloca[local]:
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
                             value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes;
                    gas_obs := [] |>) /\
-    gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+    gas_admissible (eval_for cx tyv id stmts (Value (IntV (n1 + &k)) :: vs))
       (stmt_res_ok lctx) esk ==>
     gas_outcome F (cx_tops cx) (ctx, func)
       (do push_scope_with_var id tyv (IntV (n1 + &k));
@@ -894,7 +987,10 @@ Theorem for_iteration_alloca[local]:
          (~broke ==> t.vs_current_bb = cond_lbl /\
                      lookup_var cv t = SOME (i2w (n1 + &(k + 1))) /\
                      lookup_var ev t = SOME (i2w n2) /\
-                     lookup_var p t = SOME w))
+                     lookup_var p t = SOME w) /\
+         (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+            frame_start.cs_next_id <= sb0.cs_next_id ==>
+            alloca_frame cenv esk frame_start cc cenv ee t))
       (\res ee r. ?ex. res = INR ex /\
          !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
 Proof
@@ -962,7 +1058,7 @@ Resume for_iteration_alloca[normal_finish]:
   `entry.scopes = (FEMPTY |+ (id, <| assignable := F; type := tyv;
     value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes` by simp[Abbr `entry`] >>
   `wrapped = INL (res = INR BreakException)` by
-    (qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[stmt_post_def, stmt_lands_def] >> strip_tac >>
      gvs[Abbr `wrapped`]) >>
   drule_all for_body_finish >> strip_tac >>
@@ -1003,7 +1099,7 @@ Theorem for_iteration:
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
                             value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes;
                    gas_obs := [] |>) /\
-    gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+    gas_admissible (eval_for cx tyv id stmts (Value (IntV (n1 + &k)) :: vs))
       (stmt_res_ok lctx) esk ==>
     gas_outcome F (cx_tops cx) (ctx, func)
       (do push_scope_with_var id tyv (IntV (n1 + &k));
@@ -1026,7 +1122,9 @@ Theorem for_iteration:
       (\res ee r. ?ex. res = INR ex /\
          !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
 Proof
-  rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >> simp[]
+  rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >>
+  disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>
+  disch_then irule >> simp[] >> rpt strip_tac >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem gas_outcome_exec_conseq:
@@ -1117,7 +1215,7 @@ Theorem for_loop_alloca:
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
     (* the loop from iteration k *)
     k + m = Num (n2 - n1) /\
-    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m))
       (stmt_res_ok lctx) esk /\
     P (esk with gas_obs := []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
@@ -1127,7 +1225,7 @@ Theorem for_loop_alloca:
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) ==>
     gas_outcome F (cx_tops cx) (ctx, func)
-      (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+      (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m))
       (esk, cc)
       (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
          s.vs_inst_idx = 0 /\ ~s.vs_halted /\
@@ -1135,7 +1233,10 @@ Theorem for_loop_alloca:
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
                 lookup_var x s = SOME v) /\
          (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
-                FLOOKUP s.vs_allocas a = SOME b))
+                FLOOKUP s.vs_allocas a = SOME b) /\
+         (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+            frame_start.cs_next_id <= sb0.cs_next_id ==>
+            alloca_frame cenv esk frame_start cc cenv ee s))
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1149,45 +1250,53 @@ Proof
     FLOOKUP t.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\
     (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
        lookup_var x t = SOME v) /\
-    (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)` >>
+    (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b) /\
+    (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+       frame_start.cs_next_id <= sb0.cs_next_id ==>
+       alloca_frame cenv esk frame_start cc cenv ee t)` >>
   qabbrev_tac `Done = \ee t.
     t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
     stmt_state_rel ctx func cenv cx ee t /\
     (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> lookup_var x t = SOME v) /\
-    (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)` >>
+    (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b) /\
+    (!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+       frame_start.cs_next_id <= sb0.cs_next_id ==>
+       alloca_frame cenv esk frame_start cc cenv ee t)` >>
   qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
   `(!j es s.
-      j < LENGTH (GENLIST (\j. IntV (n1 + &(k+j))) m) /\ Inv j es s /\
+      j < LENGTH (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m) /\ Inv j es s /\
       gas_admissible (eval_for cx tyv id stmts
-        (DROP j (GENLIST (\j. IntV (n1 + &(k+j))) m))) (stmt_res_ok lctx) es ==>
+        (DROP j (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m))) (stmt_res_ok lctx) es ==>
       gas_outcome F (cx_tops cx) (ctx,func)
-        (do push_scope_with_var id tyv (EL j (GENLIST (\j. IntV (n1 + &(k+j))) m));
+        (do v <- read_result cx (EL j (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m));
+            push_scope_with_var id tyv v;
             finally (try (do eval_stmts cx stmts; return F od)
               handle_loop_exception) pop_scope od) (es,s)
         (\res ee t. ?broke. res = INL broke /\
           (broke ==> Done ee t) /\ (~broke ==> Inv (SUC j) ee t))
         (\res ee r. ?ex. res = INR ex /\ R ex ee r)) /\
-    (!es s. Inv (LENGTH (GENLIST (\j. IntV (n1 + &(k+j))) m)) es s ==>
+    (!es s. Inv (LENGTH (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m)) es s ==>
       ?t. gas_marked_path F ctx func s 0 (OK t) /\ Done (es with gas_obs := []) t)` by
     (conj_tac >- suspend "round" >> suspend "last") >>
   drule eval_for_rounds >>
   disch_then (qspecl_then [`0`, `esk`, `cc`] mp_tac) >>
   simp[Abbr `Inv`] >>
-  (impl_tac >- (qpat_x_assum `gas_admissible _ _ esk` mp_tac >> simp[arithmeticTheory.ADD_COMM])) >>
+  (impl_tac >- (qpat_x_assum `gas_admissible _ _ esk` mp_tac >>
+     simp[arithmeticTheory.ADD_COMM] >> rpt strip_tac >> irule alloca_frame_same >> simp[])) >>
   strip_tac >> drule gas_outcome_exec_conseq >> disch_then irule >>
   simp[Abbr `Done`, Abbr `R`] >> metis_tac[]
 QED
 
 Resume for_loop_alloca[round]:
-  rpt gen_tac >> simp[EL_GENLIST] >> strip_tac >>
+  rpt gen_tac >> simp[EL_GENLIST, read_result_def, bind_return] >> strip_tac >>
   fs[Abbr `Inv`] >>
   `j + k < Num (n2 - n1)` by decide_tac >>
-  `DROP j (GENLIST (\h. IntV (n1 + &(h+k))) m) =
-    IntV (n1 + &(j+k)) :: DROP (SUC j) (GENLIST (\h. IntV (n1 + &(h+k))) m)` by
-    (qspecl_then [`j`, `GENLIST (\h. IntV (n1 + &(h+k))) m`] mp_tac
+  `DROP j (GENLIST (\h. Value (IntV (n1 + &(h+k)))) m) =
+    Value (IntV (n1 + &(j+k))) :: DROP (SUC j) (GENLIST (\h. Value (IntV (n1 + &(h+k)))) m)` by
+    (qspecl_then [`j`, `GENLIST (\h. Value (IntV (n1 + &(h+k)))) m`] mp_tac
        DROP_CONS_EL >> simp[EL_GENLIST]) >>
   `gas_admissible (eval_for cx tyv id stmts
-    (IntV (n1 + &(j+k)) :: DROP (SUC j) (GENLIST (\h. IntV (n1 + &(h+k))) m)))
+    (Value (IntV (n1 + &(j+k))) :: DROP (SUC j) (GENLIST (\h. Value (IntV (n1 + &(h+k)))) m)))
     (stmt_res_ok lctx) es` by metis_tac[] >>
   `not_local_ptr bc (FEMPTY :: es.scopes) p` by metis_tac[] >>
   `stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
@@ -1203,6 +1312,11 @@ Resume for_loop_alloca[round]:
   drule gas_outcome_exec_conseq >> disch_then irule >>
   reverse conj_tac >- simp[Abbr `R`] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
+  `!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+     frame_start.cs_next_id <= sb0.cs_next_id ==>
+     alloca_frame cenv esk frame_start cc cenv mid t` by
+    (rpt strip_tac >> irule alloca_frame_trans >>
+     qexistsl_tac [`cenv`, `es`, `s`, `frame_start`] >> simp[]) >>
   conj_tac
   >- (strip_tac >> simp[Abbr `Done`]) >>
   strip_tac >> gvs[] >>
@@ -1232,6 +1346,13 @@ Resume for_loop_alloca[last]:
   `stmt_state_rel ctx func cenv cx (es with gas_obs := [])
     (jump_to exit_lbl (update_var dv 1w s))` by
     (simp[stmt_state_rel_jump_to] >> irule stmt_state_rel_update_var >> simp[]) >>
+  `!frame_start. frame_start.cs_next_id <= ainst.inst_id /\
+     frame_start.cs_next_id <= sb0.cs_next_id ==>
+     alloca_frame cenv esk frame_start cc cenv es
+       (jump_to exit_lbl (update_var dv 1w s))` by
+    (rpt strip_tac >> irule alloca_frame_same_state >>
+     qexists_tac `update_var dv 1w s` >> simp[jump_to_def] >>
+     irule alloca_frame_update_var >> simp[]) >>
   qexists_tac `jump_to exit_lbl (update_var dv 1w s)` >>
   simp[Abbr `Done`] >>
   simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -1276,7 +1397,7 @@ Theorem for_loop:
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
     (* the loop from iteration k *)
     k + m = Num (n2 - n1) /\
-    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m))
       (stmt_res_ok lctx) esk /\
     P (esk with gas_obs := []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
@@ -1287,7 +1408,7 @@ Theorem for_loop:
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
     cap <= w2n w ==>
     gas_outcome F (cx_tops cx) (ctx, func)
-      (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+      (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m))
       (esk, cc)
       (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
          s.vs_inst_idx = 0 /\ ~s.vs_halted /\
@@ -1298,7 +1419,9 @@ Theorem for_loop:
                 FLOOKUP s.vs_allocas a = SOME b))
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
-  rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >> simp[]
+  rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >>
+  disch_then (mp_then Any mp_tac exprSimMemDefsTheory.gas_outcome_post_mono) >>
+  disch_then irule >> simp[]
 QED
 
 (* A pointer variable handed out at or after st is no local's pointer. *)

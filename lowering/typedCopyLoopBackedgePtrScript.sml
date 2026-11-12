@@ -42,20 +42,17 @@ Proof
   rpt strip_tac >>
   simp[fragExecTheory.run_from_def, Once exec_block_def, get_instruction_def,
        step_inst_non_invoke, listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, word_add_n2w] >>
   simp[Once exec_block_def, get_instruction_def, update_var_def,
        step_inst_non_invoke, is_terminator_def, listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
   simp[Once exec_block_def, get_instruction_def, update_var_def,
        step_inst_non_invoke, is_terminator_def, listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[eval_operand_def, jump_to_def]
 QED
@@ -124,8 +121,7 @@ Proof
   simp[ptrSafeRunTheory.ghost_run_def,
        Once ptrSafeRunTheory.ghost_block_def, get_instruction_def,
        step_inst_non_invoke, listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, word_add_n2w, is_terminator_def] >>
   simp[ptrSafeRunTheory.ghost_step_def, mk_inst_def,
@@ -135,8 +131,7 @@ Proof
   simp[Once ptrSafeRunTheory.ghost_block_def, get_instruction_def,
        ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke, update_var_def,
        listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, is_terminator_def,
        SRULE [update_var_def, mk_inst_def] scalar_backedge_ghost,
@@ -148,8 +143,7 @@ Proof
   simp[Once ptrSafeRunTheory.ghost_block_def, get_instruction_def,
        step_inst_non_invoke, update_var_def,
        listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[eval_operand_def, is_terminator_def, jump_to_def] >>
   gvs[update_var_def, jump_to_def] >>
@@ -207,16 +201,14 @@ Proof
        Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
        ptrSafeRunTheory.ptr_safe_step_def,
        step_inst_non_invoke, listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, word_add_n2w, is_terminator_def] >>
   conj_tac
   >- (irule (SRULE [mk_inst_def] scalar_backedge_check) >>
       simp[] >> conj_tac
       >- (rpt strip_tac >> gvs[ptrDisciplineTheory.op_taint_def]) >>
-      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+      asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
         combinTheory.K_THM, opcode_case_def] >>
       simp[exec_pure2_def, eval_operand_def, update_var_def]) >>
   simp[ptrSafeRunTheory.ghost_step_def, mk_inst_def,
@@ -227,8 +219,7 @@ Proof
        ptrSafeRunTheory.ptr_safe_step_def,
        ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke, update_var_def,
        listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, is_terminator_def,
        SRULE [update_var_def, mk_inst_def] scalar_backedge_ghost,
@@ -240,8 +231,7 @@ Proof
   conj_tac
   >- (irule (SRULE [mk_inst_def] scalar_backedge_check) >>
       simp[ptrDisciplineTheory.op_taint_def, FLOOKUP_UPDATE] >>
-      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+      asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
         combinTheory.K_THM, opcode_case_def] >>
       simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, update_var_def]) >>
   simp[exec_pure2_def, eval_operand_def, mk_inst_def, word_add_n2w,
@@ -252,16 +242,14 @@ Proof
        ptrSafeRunTheory.ptr_safe_step_def,
        step_inst_non_invoke, update_var_def,
        listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[eval_operand_def, is_terminator_def, jump_to_def] >>
   conj_tac
   >- (irule (SRULE [mk_inst_def] scalar_backedge_check) >>
       simp[] >> conj_tac
       >- (rpt strip_tac >> gvs[ptrDisciplineTheory.op_taint_def]) >>
-      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+      asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
         combinTheory.K_THM, opcode_case_def] >>
       simp[eval_operand_def, jump_to_def]) >>
   gvs[update_var_def, jump_to_def] >>

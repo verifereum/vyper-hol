@@ -12,7 +12,7 @@ Ancestors
   exprSimWordArgs exprSimSource exprSimHypsDefs exprSimProps exprSimDefs
   exprBopSimProps exprOperandVar loweringPosts gasOutcome gasSummary gasSummaryCompose
   gasExemptCert fragGasMode fragGasPath freshWrites fragExec exprLowering
-  exprLoweringProps compileEnv valueEncoding valueEncodingProps valueEncodingProofs venomState
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs venomState
   vyperValue vyperTyping vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   vyperInterpreter vyperState venomMemProps venomExecSemantics words arithmetic list rich_list
 Libs
@@ -292,7 +292,7 @@ QED
    arm's store (t to t2) and the tail's frames (t2 to u) give the loop's
    frames from s0 to u. *)
 Theorem concat_args_glue:
-  !ctx func cenv cx e es sa s1 s2 s0 es1 v op t t2 u B bsz ow k bv bvs.
+  !ctx func cenv cx e es sa s1 s2 s0 es1 es2 v op t t2 u B bsz ow k bv bvs.
     expr_post ctx func cenv cx e es sa s1 s0 es1 v op t /\
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -320,7 +320,7 @@ Theorem concat_args_glue:
        (!name lo sz. local_region cenv es1.scopes t2 name lo sz ==>
                      p + n <= lo \/ lo + sz <= p) ==>
        mem_bytes_at p n u.vs_memory = mem_bytes_at p n t2.vs_memory) /\
-    locals_kept cenv es1 t2 u ==>
+    locals_kept cenv es1 es2 t2 u ==>
     mem_bytes_at (B + 32) (k + LENGTH (bv ++ bvs)) u.vs_memory =
       mem_bytes_at (B + 32) k s0.vs_memory ++ (bv ++ bvs) /\
     (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -332,7 +332,7 @@ Theorem concat_args_glue:
        (!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
                      p + n <= lo \/ lo + sz <= p) ==>
        mem_bytes_at p n u.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-    locals_kept cenv es s0 u
+    locals_kept cenv es es2 s0 u
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -354,12 +354,12 @@ Proof
     (rpt strip_tac >> irule local_region_frame >>
      conj_tac >- (qexists_tac `func` >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`sa`, `es1.scopes`, `t2`] >> asm_rewrite_tac[]) >>
-  `locals_kept cenv es1 t t2` by
+  `locals_kept cenv es1 es1 t t2` by
     (irule locals_kept_regions >> rpt strip_tac >>
      first_x_assum irule >>
      `local_region cenv es.scopes s0 n b sz` by metis_tac[] >>
      metis_tac[]) >>
-  `locals_kept cenv es s0 t2` by
+  `locals_kept cenv es es1 s0 t2` by
     (irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
      asm_rewrite_tac[]) >>
   rpt conj_tac
@@ -471,7 +471,7 @@ Proof
   qexistsl_tac [`B`, `bsz`] >> asm_rewrite_tac[] >> decide_tac
 QED
 
-Theorem concat_fixed_value[local]:
+Theorem concat_fixed_value:
   !cx m v op s tv.
     expr_val_rel cx (BaseT (BytesT (Fixed m))) v op s /\
     evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed m))) = SOME tv /\
@@ -486,7 +486,7 @@ Proof
   gvs[expr_val_rel_def, is_word_type_def, typed_val_to_w256_def, evaluate_type_def]
 QED
 
-Theorem concat_bytes_value[local]:
+Theorem concat_bytes_value:
   !ctx func cenv cx ty v op s sa sb es tv.
     expr_val_rel cx ty v op s /\ expr_val_at cenv cx ty sa sb es v op s /\
     stmt_state_rel ctx func cenv cx es s /\ is_bytestring_type ty /\
@@ -520,7 +520,7 @@ Proof
   res_tac >> decide_tac
 QED
 
-Theorem concat_head_typed[local]:
+Theorem concat_head_typed:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
     bind (eval_expr cx e) (read_result cx) es = (INL v, es') ==>
@@ -552,7 +552,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem concat_fixed_step_mono[local]:
+Theorem concat_fixed_step_mono:
   !data_ptr off_ptr x m s1 s2.
     (do offset_op <- emit_op MLOAD [off_ptr];
         dst <- emit_op ADD [data_ptr; offset_op];
@@ -570,7 +570,7 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void]
 QED
 
-Theorem concat_bytes_step_mono[local]:
+Theorem concat_bytes_step_mono:
   !mem_ptr data_ptr off_ptr s1 s2.
     (do arg_len <- emit_op MLOAD [mem_ptr];
         arg_data <- emit_op ADD [mem_ptr; Lit 32w];
@@ -817,7 +817,7 @@ QED
 
 Finalise concat_head_arm
 
-Theorem concat_cons_mono[local]:
+Theorem concat_cons_mono:
   !cenv e args dv ov sa sb op s1.
     compile_concat compile_expr cenv (e::args) (Var dv) (MAP (\e. let ety = expr_type e in
                 if is_bytestring_type ety then (T, 0:num)
@@ -913,7 +913,16 @@ Theorem concat_args_sim:
             (!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
                           p + n <= lo \/ lo + sz <= p) ==>
             mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-         locals_kept cenv es s0 t)
+         locals_kept cenv es ee s0 t /\
+         (~EXISTS expr_has_effect args ==>
+            (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+               mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+            !p n. (p + n <= B \/ B + bsz <= p) /\ (p + n <= w2n ow \/ w2n ow + 64 <= p) /\
+              (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+                 sa.cs_next_id <= inst.inst_id /\
+                 FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
+                 regions_disjoint p n b sz) ==>
+              mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory))
       (\rr ee r. ?exc. rr = INR exc /\
          expr_exit (INR exc : eval_result + exception) r)
 Proof
@@ -997,13 +1006,24 @@ Resume concat_args_sim[head_normal]:
   `exprs_case nocalls ctx func cenv cx args` by metis_tac[] >>
   `!e' st. MEM e' args /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e' st /\ (nocalls ==> int_calls_expr e' = [])` by
-    metis_tac[MEM] >>
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!e' st. (e' = e \/ MEM e' args) /\ _ ==> _`
+       (qspecl_then [`e'`, `st`] mp_tac) >>
+     impl_tac
+     >- (conj_tac >- (disj2_tac >> first_assum ACCEPT_TAC) >>
+         first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
    sa.cs_next_id <= s2.cs_next_id` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv s2` by
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
   `not_fresh_at s2 dv /\ not_fresh_at s2 ov` by
-    metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
+    (conj_tac >> irule not_fresh_at_mono >>
+     qexists_tac `sa` >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            irule arithmeticTheory.LESS_EQ_TRANS >>
+            qexists_tac `s1.cs_next_var` >> conj_tac >>
+            first_assum ACCEPT_TAC]) >>
   `binst.inst_id < s2.cs_next_id /\ oinst.inst_id < s2.cs_next_id` by decide_tac >>
   `32 + (P + concat_payload_capacity (expr_type e)) +
      SUM (MAP concat_payload_capacity (MAP expr_type args)) <= bsz` by
@@ -1034,9 +1054,11 @@ Resume concat_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[] >>
-  qpat_x_assum `expr_exit _ r` mp_tac >>
-  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
+  disj2_tac >>
+  qpat_x_assum `(\res ee r. expr_exit res r) _ _ _` (mp_tac o BETA_RULE) >>
+  qpat_x_assum `exit_result r` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def, exit_result_def] >>
   TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
 QED
 
@@ -1073,7 +1095,8 @@ Resume concat_args_sim[tail_normal]:
      >- decide_tac >>
      decide_tac) >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `s1`, `s2`, `s0`,
-               `es_end with gas_obs := []`, `v`, `op`, `t`, `t2`, `tu`, `B`,
+               `es_end with gas_obs := []`, `es_end' with gas_obs := []`,
+               `v`, `op`, `t`, `t2`, `tu`, `B`,
                `bsz`, `ow`, `k`, `(case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => [])`, `FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs)`]
     mp_tac concat_args_glue >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
@@ -1092,18 +1115,79 @@ Resume concat_args_sim[post]:
   >- (rewrite_tac[listTheory.MAP, listTheory.FLAT] >> BETA_TAC >>
       first_assum ACCEPT_TAC)
   >- (qpat_x_assum `mload (w2n ow) tu = _` (fn th => rewrite_tac[th]) >>
+      simp[])
+  >- (rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+      qpat_x_assum `!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\ _ ==>
+                      mem_bytes_at _ _ tu.vs_memory = _` irule >>
+      rpt conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
+                          _ \/ _` drule >>
+          decide_tac)
+      >- (qexists_tac `aid` >> conj_tac >> first_assum ACCEPT_TAC)
+      >- decide_tac >>
+      decide_tac) >>
+  (* the pure frame, clear of the two concat buffers *)
+  strip_tac >>
+  `~expr_has_effect e /\ ~EXISTS expr_has_effect args` by fs[] >>
+  `pure_frame cenv func es sa s0 t` by
+    (drule_all expr_post_pure_frame >> disch_then ACCEPT_TAC) >>
+  qpat_x_assum `_ ==> (!n lb lsz. local_region _ _ t2 _ _ _ ==>
+                  mem_bytes_at _ _ tu.vs_memory = _) /\ _` mp_tac >>
+  impl_tac >- fs[] >> strip_tac >>
+  `wb_frame cenv es (es_end with gas_obs := []) sa s0 t` by
+    (drule expr_post_frame >> disch_then ACCEPT_TAC) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x t2 = SOME w` by
+    (rpt strip_tac >>
+     `not_fresh_at s1 x` by
+       (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     `lookup_var x t = SOME w` by fs[wb_frame_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `pure_frame _ _ _ _ _ t`
+    (strip_assume_tac o REWRITE_RULE [pure_frame_def]) >>
+  conj_tac
+  >- (qx_genl_tac [`nm`, `lb`, `lsz`] >> strip_tac >>
+      `local_region cenv (es_end with gas_obs := []).scopes t2 nm lb lsz` by
+        (match_mp_tac local_region_frame_fwd >>
+         qexistsl_tac [`es.scopes`, `sa`, `s0`] >> simp[]) >>
+      `mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
+        (qpat_x_assum `!n b sz. local_region cenv es.scopes s0 n b sz ==>
+                         mem_bytes_at b sz t.vs_memory = _`
+           (drule_then ACCEPT_TAC)) >>
+      `mem_bytes_at lb lsz t2.vs_memory = mem_bytes_at lb lsz t.vs_memory` by
+        (qpat_x_assum `!p n. _ /\ _ ==> mem_bytes_at p n t2.vs_memory = _` irule >>
+         qpat_x_assum `!name lb lsz. local_region cenv es.scopes s0 _ _ _ ==> _ /\ _`
+           drule >> decide_tac) >>
+      `mem_bytes_at lb lsz tu.vs_memory = mem_bytes_at lb lsz t2.vs_memory` by
+        (qpat_x_assum `!n lb lsz. local_region _ _ t2 _ _ _ ==>
+                         mem_bytes_at _ _ tu.vs_memory = _`
+           (drule_then ACCEPT_TAC)) >>
       simp[]) >>
-  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\ _ ==>
-                  mem_bytes_at _ _ tu.vs_memory = _` irule >>
-  rpt conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
-                      _ \/ _` drule >>
-      decide_tac)
-  >- (qexists_tac `aid` >> conj_tac >> first_assum ACCEPT_TAC)
-  >- decide_tac >>
-  decide_tac
+  qx_genl_tac [`off`, `len`] >> strip_tac >>
+  `mem_bytes_at off len tu.vs_memory = mem_bytes_at off len t2.vs_memory` by
+    (qpat_x_assum `!p n. _ /\ _ /\ (!inst b sz. _ ==> _) ==>
+                     mem_bytes_at p n tu.vs_memory = _` irule >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
+     rpt strip_tac >>
+     first_x_assum (qspecl_then [`inst`, `b`, `sz`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+     disch_then ACCEPT_TAC) >>
+  `mem_bytes_at off len t2.vs_memory = mem_bytes_at off len t.vs_memory` by
+    (qpat_x_assum `!p n. _ /\ _ ==> mem_bytes_at p n t2.vs_memory = _` irule >>
+     conj_tac >> decide_tac) >>
+  `mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory` by
+    (qpat_x_assum `!off len. (!inst b sz. _ ==> _) ==>
+                     mem_bytes_at off len t.vs_memory = _` irule >>
+     rpt strip_tac >>
+     first_x_assum (qspecl_then [`inst`, `b`, `sz`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+         qpat_x_assum `!aid a. FLOOKUP t2.vs_allocas aid = SOME a ==> _` irule >>
+         qpat_x_assum `t2.vs_allocas = t.vs_allocas` (fn th => rewrite_tac[th]) >>
+         first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  simp[]
 QED
 
 Resume concat_args_sim[tail_exit]:
@@ -1116,7 +1200,9 @@ Resume concat_args_sim[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[]
+  disj2_tac >>
+  qpat_x_assum `(\rr ee r. _) _ _ _` mp_tac >>
+  qpat_x_assum `exit_result r` mp_tac >> simp[]
 QED
 
 Resume concat_args_sim[tail_exempt]:

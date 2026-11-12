@@ -5,7 +5,7 @@ Theory bodyIntCallPrologueInit
 Ancestors
   bodyIntCallPrologueResource bodyIntCallSemanticEntry intCallFrame
   loweringPosts intCallCallee vyperTypeCallStackSoundness
-  exprLoweringProps compileEnv venomState venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs venomState venomExecSemantics
   list rich_list finite_map words fragExec
 
 (* Administrative room invariants at the fixed instruction endpoint. *)
@@ -51,6 +51,14 @@ Theorem protected_internal_prologue_run:
     FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name =
       SOME (tv,iv) ==>
+    regions_disjoint io (type_memory_size tv)
+      (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+  (ce.ce_is_ctor ==> !i po psz name ty tv io.
+    i < LENGTH params /\ ~SND (EL i params) /\
+    FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    ce.ce_module_var_type (ce.ce_module,name) = SOME ty /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
     regions_disjoint io (type_memory_size tv)
       (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
   caller.vs_alloca_next + internal_stack_size ce params < dimword (:256) /\

@@ -2,7 +2,7 @@
 Theory exprSimFieldLayout
 Ancestors
   valueEncodingProps
-  exprSimHypsDefs compileEnv valueEncoding
+  exprSimHypsDefs compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs
   vyperAST vyperInterpreter vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeExprSoundness
   list rich_list finite_map pair

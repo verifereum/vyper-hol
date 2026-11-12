@@ -11,10 +11,19 @@
  *                                          allocates for an expression
  *   alloc_limits_stmt(s) -- the same for every expression of a statement,
  *                           every local it declares, and a log's buffers
+ *
+ * alloc_limits_expr also carries more codegen-time rejections, checked
+ * up front the same way: two are Python's "risky overlap" panic,
+ * pop_subscript_overlap for a subscript of a pop() result
+ * (vyperlang/vyper#5350), and target_subscript_overlap for a target
+ * subscript whose base passes through a dynamic-array element
+ * (vyperlang/vyper#5280); target_in_immutables rejects a pop() of, and
+ * (in alloc_limits_stmt) an append() to, an immutable's member, where
+ * Python's Venom codegen panics.
  *)
 Theory allocLimits
 Ancestors
-  stmtLowering compileEnv vyperAST vfmConstants list pair
+  stmtLowering compileEnv vyperAST vyperSubscriptOverlap vfmConstants list pair
 
 (* The buffer the lowering allocates for a bytes or string literal, its
    length word and its data rounded up to whole words, is below 2 ** 64
@@ -69,6 +78,113 @@ Proof
        listTheory.list_size_def]
 QED
 
+(* Whether the expression is a pop() result, or a member or element of one.
+   Mirrors Python: expr.py _is_derived_from_pop (vyperlang/vyper#5350) *)
+Definition base_from_pop_def:
+  base_from_pop (Pop _ _) = T /\
+  base_from_pop (Subscript _ e _) = base_from_pop e /\
+  base_from_pop (Attribute _ e _) = base_from_pop e /\
+  base_from_pop _ = F
+End
+
+(* Whether array subscript base[idx] is rejected, in a contract whose
+   modules are mods: the base is derived from a pop() result, reads a
+   variable other than a constant, and the index writes a variable the base
+   reads or makes a risky call.  The popped element lies past the array's
+   new length, so the index could overwrite it before the base is read.
+   The same test as subscript_overlap, with base_from_pop in place of
+   base_through_dynarray.
+   Mirrors Python: expr.py _lower_array_subscript (vyperlang/vyper#5350) *)
+Definition pop_subscript_overlap_def:
+  pop_subscript_overlap mods base idx <=>
+    is_ArrayT (expr_type base) /\ base_from_pop base /\
+    let reads = nonconstant_reads mods (expr_accesses mods base) in
+      reads <> [] /\
+      let idx_as = expr_accesses mods idx in
+        any_written reads idx_as \/ MEM RiskyAcc idx_as
+End
+
+(* The place type of an assignment target: a local's from ce_var_type,
+   a module variable's from its hashmap or declared type, and an element
+   or member's from its base's.  NONE when a type is unknown. *)
+Definition target_place_type_def:
+  target_place_type cenv (NameTarget id) =
+    OPTION_MAP ValPT (cenv.ce_var_type id) /\
+  target_place_type cenv (TopLevelNameTarget nsid) =
+    (case cenv.ce_hashmap_info nsid of
+       SOME (_, kt, vt) => SOME (MapPT kt vt)
+     | NONE => OPTION_MAP ValPT (cenv.ce_module_var_type nsid)) /\
+  target_place_type cenv (SubscriptTarget bt _) =
+    OPTION_MAP (\pt. case pt of
+                       MapPT _ vt => value_type_place vt
+                     | ValPT (ArrayT t _) => ValPT t
+                     | _ => ValPT (BaseT (UintT 256)))
+      (target_place_type cenv bt) /\
+  target_place_type cenv (AttributeTarget bt fld) =
+    (case target_place_type cenv bt of
+       SOME (ValPT (StructT sn)) =>
+         (case ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                          (nsid_to_string sn)) fld of
+            SOME (fty, _) => SOME (ValPT fty)
+          | NONE => NONE)
+     | _ => NONE)
+End
+
+(* Whether the target passes through an element of a dynamic array, whose
+   resizing can leave a pointer to it stale.
+   Mirrors Python: expr.py _subscript_base_length_can_stale
+   (vyperlang/vyper#5280) *)
+Definition target_through_dynarray_def:
+  target_through_dynarray cenv (SubscriptTarget bt _) =
+    ((case target_place_type cenv bt of
+        SOME (ValPT (ArrayT _ (Dynamic _))) => T
+      | _ => F) \/
+     target_through_dynarray cenv bt) /\
+  target_through_dynarray cenv (AttributeTarget bt _) =
+    target_through_dynarray cenv bt /\
+  target_through_dynarray cenv _ = F
+End
+
+(* Whether target subscript bt[idx] is rejected: bt passes through a
+   dynamic-array element, reads a variable other than a constant, and the
+   index writes a variable bt reads or makes a risky call.  The write must
+   reach the live element, so bt cannot be snapshotted.  The same test as
+   pop_subscript_overlap, on a target.
+   Mirrors Python: expr.py check_target_overlap (vyperlang/vyper#5280) *)
+Definition target_subscript_overlap_def:
+  target_subscript_overlap cenv bt idx <=>
+    target_through_dynarray cenv bt /\
+    let mods = cenv.ce_modules;
+        reads = nonconstant_reads mods (expr_accesses mods (target_to_expr bt)) in
+      reads <> [] /\
+      let idx_as = expr_accesses mods idx in
+        any_written reads idx_as \/ MEM RiskyAcc idx_as
+End
+
+(* Whether the target lies in an immutable: its root is a module variable
+   that mvars (a compile env's ce_module_vars) places at an ImmutableLoc,
+   which compile_get_target_ptr gives LocCode.  A pop() of, or an
+   append() to, such a target is rejected.  A local root is never in one: compile_get_target_ptr's
+   ImmutableLoc case for a NameTarget is unreachable, since every
+   producer of ce_vars (allocate_args, declare_local, the parameter and
+   kwarg registrations) binds a MemLoc or PtrVar.
+   Mirrors Python: expr.py _lower_dynarray_pop and
+   _lower_dynarray_append, whose length load
+   builder.load(darray_ptr, data_loc) raises CompilerPanic ("Cannot load
+   from location: immutables", venom/builder.py) for an array in
+   IMMUTABLES *)
+Definition target_in_immutables_def:
+  target_in_immutables mvars (NameTarget _) = F /\
+  target_in_immutables mvars (TopLevelNameTarget nsid) =
+    (case FLOOKUP mvars nsid of
+       SOME (ImmutableLoc _) => T
+     | _ => F) /\
+  target_in_immutables mvars (SubscriptTarget bt _) =
+    target_in_immutables mvars bt /\
+  target_in_immutables mvars (AttributeTarget bt _) =
+    target_in_immutables mvars bt
+End
+
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
@@ -92,7 +208,10 @@ Definition alloc_limits_expr_def:
      alloc_limits_named_exprs cenv kes) /\
   alloc_limits_expr cenv (Subscript t x y) =
     (type_alloc_ok cenv t /\ alloc_limits_expr cenv x /\
-     alloc_limits_expr cenv y) /\
+     alloc_limits_expr cenv y /\
+     ~pop_subscript_overlap cenv.ce_modules x y /\
+     (copies_subscript_base cenv x y ==>
+      type_memory_bytes cenv (expr_type x) < 2 ** 64)) /\
   alloc_limits_expr cenv (Attribute t x _) =
     (type_alloc_ok cenv t /\ alloc_limits_expr cenv x) /\
   (* Python's codegen rejects an address's .code anywhere but as slice()'s
@@ -127,13 +246,21 @@ Definition alloc_limits_expr_def:
              (abi_size_bound cenv.ce_struct_fields enc_ty + mid_size) < 2 ** 64 /\
            (~single ==> type_memory_bytes cenv enc_ty < 2 ** 64))
       | AbiDecode unwrap =>
-          type_memory_bytes cenv
-            (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) <
-          2 ** 64
+          (let wty = if unwrap /\ needs_external_call_wrap ty then TupleT [ty]
+                     else ty in
+           type_memory_bytes cenv wty < 2 ** 64 /\
+           (case es of
+              e :: _ =>
+                (case expr_type e of
+                   BaseT (BytesT (Dynamic n)) =>
+                     abi_size_bound cenv.ce_struct_fields wty <= n
+                 | _ => F)
+            | [] => F))
       | _ => T) /\
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (Pop t tgt) =
-    (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt) /\
+    (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt /\
+     ~target_in_immutables cenv.ce_module_vars tgt) /\
   alloc_limits_expr cenv (Call t ct es dflt) =
     (type_alloc_ok cenv t /\ ext_call_alloc_ok cenv ct es /\
      alloc_limits_exprs cenv es /\ alloc_limits_opt cenv dflt) /\
@@ -141,7 +268,8 @@ Definition alloc_limits_expr_def:
   alloc_limits_target cenv (NameTarget _) = T /\
   alloc_limits_target cenv (TopLevelNameTarget _) = T /\
   alloc_limits_target cenv (SubscriptTarget tgt e) =
-    (alloc_limits_target cenv tgt /\ alloc_limits_expr cenv e) /\
+    (alloc_limits_target cenv tgt /\ alloc_limits_expr cenv e /\
+     ~target_subscript_overlap cenv tgt e) /\
   alloc_limits_target cenv (AttributeTarget tgt _) =
     alloc_limits_target cenv tgt /\
 
@@ -222,10 +350,25 @@ Definition log_alloc_ok_def:
   log_alloc_ok cenv id es ⇔
     case cenv.ce_event_info (nsid_to_string id) of
       NONE => T
-    | SOME (_, _, flags) =>
-        let tys = log_non_indexed_types flags (MAP expr_type es) in
+    | SOME (_, arg_types, flags) =>
+        let tys = log_non_indexed_types flags arg_types in
           SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64 ∧
           abi_size_bound cenv.ce_struct_fields (TupleT tys) < 2 ** 64
+End
+
+(* A custom error's two buffers are below Python's allocation limit, as
+   _revert_with_custom_error allocates them through allocate_buffer: the
+   arguments' tuple at the declared types, and its ABI encoding behind the
+   selector word.  An error the compile env doesn't know has none, since
+   compile_revert_with_custom_error emits INVALID for it. *)
+Definition custom_error_alloc_ok_def:
+  custom_error_alloc_ok cenv (CustomError id positional kwargs) ⇔
+    case cenv.ce_error_info (nsid_to_string id) of
+      NONE => T
+    | SOME params =>
+        let t = TupleT (MAP SND params) in
+          type_memory_bytes cenv t < 2 ** 64 ∧
+          abi_size_bound cenv.ce_struct_fields t + 32 < 2 ** 64
 End
 
 (* For a target in storage or transient storage, SOME of the place type
@@ -266,14 +409,30 @@ End
    No other assignment allocates it, so no other is checked. *)
 Definition assign_alloc_ok_def:
   assign_alloc_ok cenv bt e ⇔
-    case target_store_place cenv bt of
+    (case target_store_place cenv bt of
       SOME (SOME (ValPT dty)) =>
         (let sty = lowered_value_type cenv e in
            ¬is_word_type dty ∧ dty ≠ sty ∧
            ¬(is_bytestring_type dty ∧ is_bytestring_type sty) ∧
            ¬(has_length_word (expr_type e) ∧ is_empty_value_expr e) ⇒
            type_memory_bytes cenv dty < 2 ** 64)
-    | _ => T
+    | _ => T) ∧
+    (* The snapshot of the RHS taken before an effectful target's indices
+       (compile_snapshot_vv) copies a composite into a temporary of its
+       lowered type's size. *)
+    (expr_can_mutate cenv (target_to_expr bt) ∧
+     ¬(has_length_word (expr_type e) ∧ is_empty_value_expr e) ⇒
+     type_alloc_ok cenv (lowered_value_type cenv e))
+End
+
+(* The local types after statement s, as compile_stmts threads them
+   (declare_stmt_local): an AnnAssign declares its local, for the rest of
+   its block.  A name reused at another type in a sibling block keeps each
+   block's own type.  A For's loop variable is declared for its body only. *)
+Definition decl_var_type_def:
+  decl_var_type cenv (AnnAssign id ty _) =
+    cenv with ce_var_type updated_by (id =+ SOME ty) ∧
+  decl_var_type cenv _ = cenv
 End
 
 (* alloc_limits_expr of every expression of a statement, targets' keys
@@ -285,7 +444,14 @@ End
    Context.new_temporary_value), and a storage, transient or immutable source
    is read into one (compile_ensure_in_memory; Python's Context.unwrap).  The
    check covers both, so don't narrow it to the staging condition alone.
-   A log's two buffers are bounded by log_alloc_ok. *)
+   A log's two buffers are bounded by log_alloc_ok, a custom error's by
+   custom_error_alloc_ok.  Local types follow the declarations as
+   compile_stmt sees them: the statements after an AnnAssign see its local
+   (decl_var_type), a For's body sees its loop variable, and an AnnAssign's
+   value is lowered with its local declared.  The value is
+   checked without the local too: it cannot name the local it initialises,
+   so the two agree on any program the front end accepts, and the proofs
+   read the value both before and after the declaration. *)
 Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv Pass = T ∧
   alloc_limits_stmt cenv Break = T ∧
@@ -293,7 +459,8 @@ Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv (Expr e) = alloc_limits_expr cenv e ∧
   alloc_limits_stmt cenv (Return eo) = alloc_limits_opt cenv eo ∧
   alloc_limits_stmt cenv (AnnAssign id ty e) =
-    (type_memory_bytes cenv ty < 2 ** 64 ∧ alloc_limits_expr cenv e) ∧
+    (type_memory_bytes cenv ty < 2 ** 64 ∧ alloc_limits_expr cenv e ∧
+     alloc_limits_expr (cenv with ce_var_type updated_by (id =+ SOME ty)) e) ∧
   alloc_limits_stmt cenv (Assign g e) =
     (alloc_limits_assignment cenv g ∧ alloc_limits_expr cenv e ∧
      (case g of
@@ -303,21 +470,30 @@ Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv (AugAssign ty tgt op e) =
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
   alloc_limits_stmt cenv (Append tgt e) =
-    (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
+    (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e ∧
+     ¬target_in_immutables cenv.ce_module_vars tgt) ∧
   alloc_limits_stmt cenv (Log id es) =
     (alloc_limits_exprs cenv es ∧ log_alloc_ok cenv id es) ∧
   alloc_limits_stmt cenv (Assert c reason) =
-    (alloc_limits_expr cenv c ∧ alloc_limits_assert cenv reason) ∧
-  alloc_limits_stmt cenv (Raise reason) = alloc_limits_raise cenv reason ∧
+    (alloc_limits_expr cenv c ∧ alloc_limits_assert cenv reason ∧
+     case reason of
+       AssertCustomError err => custom_error_alloc_ok cenv err
+     | _ => T) ∧
+  alloc_limits_stmt cenv (Raise reason) =
+    (alloc_limits_raise cenv reason ∧
+     case reason of
+       RaiseCustomError err => custom_error_alloc_ok cenv err
+     | _ => T) ∧
   alloc_limits_stmt cenv (If c ss1 ss2) =
     (alloc_limits_expr cenv c ∧ alloc_limits_stmts cenv ss1 ∧
      alloc_limits_stmts cenv ss2) ∧
   alloc_limits_stmt cenv (For id ty it n body) =
     (type_memory_bytes cenv ty < 2 ** 64 ∧ alloc_limits_iterator cenv it ∧
-     alloc_limits_stmts cenv body) ∧
+     alloc_limits_stmts (cenv with ce_var_type updated_by (id =+ SOME ty))
+       body) ∧
   alloc_limits_stmts cenv [] = T ∧
   alloc_limits_stmts cenv (s::ss) =
-    (alloc_limits_stmt cenv s ∧ alloc_limits_stmts cenv ss)
+    (alloc_limits_stmt cenv s ∧ alloc_limits_stmts (decl_var_type cenv s) ss)
 Termination
   WF_REL_TAC `measure (λx. case x of
     INL (_,s) => stmt_size s | INR (_,ss) => list_size stmt_size ss)` >>
@@ -350,7 +526,19 @@ Theorem alloc_limits_abi_decode_output:
   type_memory_bytes ce
     (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) < 2 ** 64
 Proof
-  simp[Once alloc_limits_expr_def]
+  simp[Once alloc_limits_expr_def, LET_THM]
+QED
+
+(* Vyper rejects an abi_decode whose input Bytes[n] is shorter than the
+   decoded type's ABI size bound. *)
+Theorem alloc_limits_abi_decode_bound:
+  alloc_limits_expr ce (TypeBuiltin t (AbiDecode unwrap) ty (e :: rest)) /\
+  expr_type e = BaseT (BytesT (Dynamic n)) ==>
+  abi_size_bound ce.ce_struct_fields
+    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) <= n
+Proof
+  strip_tac >> qpat_x_assum `alloc_limits_expr _ _` mp_tac >>
+  simp[Once alloc_limits_expr_def, LET_THM]
 QED
 
 Theorem alloc_limits_abi_rounded_regressions:

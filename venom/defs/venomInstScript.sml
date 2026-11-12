@@ -319,10 +319,31 @@ Proof
   Induct_on `ops` >> simp[operand_vars_def] >>
   Cases_on `operand_var h` >> simp[operand_vars_def] >> metis_tac[]
 QED
+
+Theorem MEM_operand_vars_eq_Var:
+  !ops v. MEM v (operand_vars ops) <=> MEM (Var v) ops
+Proof
+  Induct >> simp[operand_vars_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[operand_var_def, operand_vars_def]
+QED
+
+Theorem mem_var_operand_vars:
+  !ops x. MEM (Var x) ops ==> MEM x (operand_vars ops)
+Proof
+  simp[MEM_operand_vars_eq_Var]
+QED
+
 (* Variables used (read) by an instruction. *)
 Definition inst_uses_def:
   inst_uses inst = operand_vars inst.inst_operands
 End
+
+Theorem operand_var_in_inst_uses:
+  !inst v. MEM (Var v) inst.inst_operands ==> MEM v (inst_uses inst)
+Proof
+  rw[inst_uses_def] >> irule mem_var_operand_vars >> gvs[]
+QED
 
 (* Variables defined (written) by an instruction. *)
 Definition inst_defs_def:
@@ -365,6 +386,12 @@ Definition is_terminator_def:
   is_terminator RETPC_PARAM = F /\
   is_terminator _ = F
 End
+
+Theorem is_terminator_not_phi:
+  !op. is_terminator op ==> op <> PHI
+Proof
+  Cases >> simp[is_terminator_def]
+QED
 
 (* Opcodes whose operands reference block labels (terminators + PHI).
    Used by subst_block_labels to restrict label substitution. *)
@@ -673,6 +700,18 @@ End
 (* --------------------------------------------------------------------------
    Lookup Functions
    -------------------------------------------------------------------------- *)
+
+Theorem FIND_MEM:
+  !P l x. FIND P l = SOME x ==> MEM x l
+Proof
+  Induct_on `l` >> simp[listTheory.FIND_thm] >> rw[] >> metis_tac[]
+QED
+
+Theorem FIND_P:
+  !P l x. FIND P l = SOME x ==> P x
+Proof
+  Induct_on `l` >> simp[listTheory.FIND_thm] >> rw[] >> metis_tac[]
+QED
 
 (* Find a basic block by label *)
 Definition lookup_block_def:

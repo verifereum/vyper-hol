@@ -4,7 +4,7 @@ Ancestors
   exprSimSubscriptArrayFrame exprSimSubscriptArrayOrigin exprSimArrayIndex exprSimLen exprSimCopy
   exprSimSubscriptArraySource vyperState vyperMisc
   exprSimAggregateEncoding exprSimProps loweringPosts vyperTypeSystem arithmetic
-  emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv
+  emitHelperProps exprLoweringProps venomExecSemantics exprLowering compileEnv loweringStateRelDefs
   exprSimHypsDefs supportedExprTraverse vyperTypeCallStackSoundness
   freshWrites fragGasFresh moduleLoweringProps venomState exprSimUnopProps
   fragExec fragGasSeq fragGasMode venomInst list rich_list finite_map
@@ -27,7 +27,7 @@ Proof
     (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))`]
     mp_tac emit_op_read1_correct >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-  simp[step_inst_base_def, exec_read1_def] >> strip_tac >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def] >> strip_tac >>
   first_x_assum (qspecl_then [`b`, `ss`] mp_tac) >> simp[] >>
   strip_tac >> metis_tac[]
 QED
@@ -49,7 +49,7 @@ Proof
      qexistsl_tac [`cx`, `env`, `es`, `r`, `ArrayT et (Dynamic bound)`] >>
      simp[]) >>
   drule array_len_ok_DLOAD >>
-  gvs[valueEncodingTheory.mem_word_at_def]
+  gvs[valueEncodingDefsTheory.mem_word_at_def]
 QED
 
 Theorem sub_layout_array_element:
@@ -61,7 +61,7 @@ Theorem sub_layout_array_element:
      Num i * type_memory_size et) et v
 Proof
   strip_tac >> Cases_on `av` >> Cases_on `bd` >>
-  gvs[valueEncodingTheory.val_wf_def, vyperValueOperationTheory.array_index_def,
+  gvs[valueEncodingDefsTheory.val_wf_def, vyperValueOperationTheory.array_index_def,
       AllCaseEqs(), listTheory.oEL_THM] >>
   gvs[sub_layout_def, valueEncodingTheory.type_memory_size_def]
   >~ [`ArrayV (DynArrayV vs)`]
@@ -82,15 +82,6 @@ Proof
   qpat_x_assum `!b mem. _` (qspecl_then [`b`, `mem`] mp_tac) >>
   simp[valueEncodingPropsTheory.val_in_memory_sarray] >> strip_tac >>
   metis_tac[valueEncodingProofsTheory.kvs_in_memory_lookup, ADD_ASSOC])
-QED
-
-Theorem local_path_at_step:
-  local_path_at cenv cx n k tv /\ mem_step_offset tv sb = SOME (j,et) ==>
-  local_path_at cenv cx n (k + j) et
-Proof
-  rw[local_path_at_def] >>
-  qexistsl_tac [`t0`, `tv0`, `path ++ [sb]`] >> simp[] >>
-  drule_all mem_path_offset_snoc >> simp[]
 QED
 
 Theorem local_val_at_array_element:
@@ -131,6 +122,8 @@ Theorem vv_at_fixed_array_element:
   evaluate_type (get_tenv cx) et = SOME etv /\
   read_result cx child es = (INL v,es) /\ val_wf etv v /\
   mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) = SOME (j,etv) /\
+  (!id path'. child = PlaceR (MemoryPlace id path') <=>
+     ?path. path' = path ++ [ValueSubscript (IntV i)] /\ r = PlaceR (MemoryPlace id path)) /\
   eval_operand dst s = SOME dw /\ w2n dw = w2n w + j ==>
   vv_at cenv cx et sa sb es child (LocatedValue et (mk_ptr dst LocMemory)) s
 Proof
@@ -153,9 +146,12 @@ Proof
   disj2_tac >> disj1_tac >> qexistsl_tac [`n'`, `b`, `sz`] >>
   simp[] >>
   `j + w2n w - b = (w2n w - b) + j` by decide_tac >>
-  drule_all local_val_at_array_element >>
-  disch_then (qspec_then `v` assume_tac) >>
-  qpat_x_assum `j + w2n w - b = _` SUBST1_TAC >> first_assum ACCEPT_TAC
+  qpat_x_assum `j + w2n w - b = _` SUBST1_TAC >>
+  conj_tac
+  >- (drule_all local_val_at_array_element >>
+      disch_then (qspec_then `v` ACCEPT_TAC)) >>
+  irule exprSimPropsTheory.local_place_at_step >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem vv_holds_array_element:
@@ -191,7 +187,8 @@ QED
 (* Expose the two child intervals and the bounds/element tail once. *)
 Theorem compile_expr_array_subscript:
   compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
-  place_type cenv obj = ValPT (ArrayT et bd) ==>
+  place_type cenv obj = ValPT (ArrayT et bd) /\
+  ~copies_subscript_base cenv obj idx ==>
   ?bvv st1 iop st2 dst loc.
     compile_expr cenv ty obj st = (bvv, st1) /\
     lower_value compile_expr cenv ty idx st1 = (iop, st2) /\
@@ -206,12 +203,13 @@ Theorem compile_expr_array_subscript:
     vv = LocatedValue ann (mk_ptr dst loc)
 Proof
   strip_tac >>
-  qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
-  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-       compile_subscript_def, lower_value_def,
-       exprCallBoundsTheory.expr_child_callback_def,
-       comp_bind_def, comp_return_def,
-       vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def] >>
+  qpat_x_assum `~copies_subscript_base _ _ _` (fn th =>
+    qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+    simp[th, Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+         compile_subscript_def, lower_value_def,
+         exprCallBoundsTheory.expr_child_callback_def,
+         comp_bind_def, comp_return_def,
+         vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
@@ -242,7 +240,7 @@ Theorem compile_imm_load_word_runtime_run:
 Proof
   simp[contextTheory.compile_imm_load_word_runtime] >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_read1_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_read1_def,
        venomInstTheory.mk_inst_def]
 QED
 
@@ -602,23 +600,6 @@ Proof
   irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]
 QED
 
-(* A dynamic memory parent needs provenance beyond the fixed-history rule:
-   both the parent and child keys can be dynamic-array pop keys. *)
-Theorem dynamic_memory_selection_snapshot_probe[local]:
-  let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 2)) (Dynamic 2);
-      path = [ValueSubscript (IntV 0)];
-      hist = [(path ++ [ValueSubscript (IntV 0)], IntV 9);
-              (path, ArrayV (DynArrayV [IntV 5; IntV 1]))]
-  in subscripts_type tv [] = SOME tv /\
-     subscripts_type tv path = SOME (ArrayTV (BaseTV (UintT 256)) (Dynamic 2)) /\
-     read_popped tv path hist = SOME (ArrayV (DynArrayV [IntV 5; IntV 1])) /\
-     read_popped tv (path ++ [ValueSubscript (IntV 0)]) hist = SOME (IntV 9) /\
-     evaluate_subscripts (ArrayTV (BaseTV (UintT 256)) (Dynamic 2))
-       (ArrayV (DynArrayV [IntV 5; IntV 1])) [ValueSubscript (IntV 0)] = INL (IntV 5)
-Proof
-  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
-QED
-
 (* Successful source selection after an index which preserves the captured
    non-storage base's source memory and immutable maps. *)
 Theorem framed_array_select_read:
@@ -670,8 +651,9 @@ Proof
 QED
 
 Theorem vv_post_array_element:
-  vv_post ctx func cenv cx obj es sa sb s0 es' r (LocatedValue ann p) s /\
-  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sb s0 es' r
+    (LocatedValue ann p) s /\
+  expr_type obj = ArrayT et bd /\
   (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) /\
   (p.ptr_location = LocMemory ==> ?n. bd = Fixed n) /\
   eval_operand p.ptr_operand s = SOME w /\
@@ -684,27 +666,33 @@ Theorem vv_post_array_element:
   read_result cx child es' = (INL v,es') /\
   j = (case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv /\
   eval_operand dst s = SOME (w + n2w j) /\
+  (!id path'. child = PlaceR (MemoryPlace id path') <=>
+     ?path. path' = path ++ [ValueSubscript (IntV i)] /\ r = PlaceR (MemoryPlace id path)) /\
   (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) ==>
   vv_post ctx func cenv cx (Subscript et obj idx) es sa sb s0 es' child
     (LocatedValue et (mk_ptr dst p.ptr_location)) s
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `vv_holds cenv cx (ArrayT et bd) r (LocatedValue ann p) es' s` by
-    gvs[vv_post_def] >>
+    gvs[vv_post_def, vyperASTTheory.expr_type_def] >>
   drule_all vv_holds_array_element >> strip_tac >>
   `vv_at cenv cx et sa sb es' child (LocatedValue et (mk_ptr dst p.ptr_location)) s` by
     (Cases_on `p.ptr_location = LocMemory`
      >- (fs[] >> gnvs[] >> rename1 `expr_type obj = ArrayT et (Fixed n)` >>
          `vv_at cenv cx (ArrayT et (Fixed n)) sa sb es' r (LocatedValue ann p) s`
-           by gvs[vv_post_def] >>
+           by gvs[vv_post_def, vyperASTTheory.expr_type_def] >>
          `mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) =
             SOME (Num i * type_memory_size etv,etv)` by
            (Cases_on `av` >>
             gvs[mem_step_offset_def, vyperValueOperationTheory.array_index_def,
-                valueEncodingTheory.val_wf_def, listTheory.oEL_THM,
+                valueEncodingDefsTheory.val_wf_def, listTheory.oEL_THM,
                 AllCaseEqs()]) >>
          drule_all vv_at_fixed_array_element >> simp[]) >>
-     simp[vv_at_def, contextTheory.mk_ptr_def]) >>
-  gvs[vv_post_def, vyperASTTheory.expr_type_def, contextTheory.mk_ptr_def] >>
+     `vv_at cenv cx (ArrayT et bd) sa sb es' r (LocatedValue ann p) s`
+       by gvs[vv_post_def, vyperASTTheory.expr_type_def] >>
+     pop_assum mp_tac >>
+     simp[vv_at_def, contextTheory.mk_ptr_def, compileEnvTheory.is_word_type_def] >>
+     metis_tac[]) >>
+  gvs[vv_post_def, vyperASTTheory.expr_type_def, expr_has_effect_thm, contextTheory.mk_ptr_def] >>
   first_assum ACCEPT_TAC
 QED

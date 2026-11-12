@@ -10,7 +10,8 @@
  *
  * Helper:
  *   expr_leq, mk_operand_expr, mk_inst_expr,
- *   expr_effects, root_effects, avail_remove_effect, avail_add,
+ *   expr_effects, root_effects, avail_nonidempotent,
+ *   avail_remove_effect, avail_add,
  *   avail_get_source, avail_empty, avail_meet_two, avail_meet_opt,
  *   avail_transfer_opt, avail_edge_transfer, avail_unwrap
  *)
@@ -27,6 +28,7 @@ Datatype:
   avail_expr =
     ExprVar string
   | ExprLit bytes32
+  | ExprLabel string
   | ExprOp opcode (avail_expr list)
 End
 
@@ -36,9 +38,15 @@ Definition expr_leq_def:
   (expr_leq (ExprVar _) _ = T) /\
   (expr_leq (ExprLit _) (ExprVar _) = F) /\
   (expr_leq (ExprLit l1) (ExprLit l2) = (w2n l1 <= w2n l2)) /\
+  (expr_leq (ExprLit _) (ExprLabel _) = T) /\
   (expr_leq (ExprLit _) (ExprOp _ _) = T) /\
+  (expr_leq (ExprLabel _) (ExprVar _) = F) /\
+  (expr_leq (ExprLabel _) (ExprLit _) = F) /\
+  (expr_leq (ExprLabel s1) (ExprLabel s2) = (s1 <= s2)) /\
+  (expr_leq (ExprLabel _) (ExprOp _ _) = T) /\
   (expr_leq (ExprOp _ _) (ExprVar _) = F) /\
   (expr_leq (ExprOp _ _) (ExprLit _) = F) /\
+  (expr_leq (ExprOp _ _) (ExprLabel _) = F) /\
   (expr_leq (ExprOp op1 args1) (ExprOp op2 args2) =
     if opcode2num op1 < opcode2num op2 then T
     else if opcode2num op1 > opcode2num op2 then F
@@ -70,7 +78,7 @@ End
  * has one def, PHI breaks cycles). visited set tracks seen variables. *)
 Definition mk_operand_expr_def:
   (mk_operand_expr dfg visited (Lit v) = ExprLit v) /\
-  (mk_operand_expr dfg visited (Label l) = ExprVar l) /\
+  (mk_operand_expr dfg visited (Label l) = ExprLabel l) /\
   (mk_operand_expr dfg visited (Var v) =
     if MEM v visited then ExprVar v
     else case dfg_get_def dfg v of
@@ -118,6 +126,7 @@ End
 Definition expr_effects_def:
   (expr_effects (ExprVar _) = empty_effects) /\
   (expr_effects (ExprLit _) = empty_effects) /\
+  (expr_effects (ExprLabel _) = empty_effects) /\
   (expr_effects (ExprOp op args) =
     (read_effects op UNION write_effects op) UNION
     BIGUNION (set (MAP expr_effects args)))
@@ -186,17 +195,28 @@ End
 
 (* ===== Transfer Function ===== *)
 
+(* Matches Python available_expression.py NONIDEMPOTENT_INSTRUCTIONS:
+   opcodes writing LOG/BALANCE/EXTCODE/FMP plus STATICCALL and GAS.
+   (Terminators such as SELFDESTRUCT are already excluded by is_terminator.) *)
+Definition avail_nonidempotent_def:
+  avail_nonidempotent op <=>
+    is_nonidempotent op \/ op = GAS \/ op = SETFMP \/ op = DALLOCA \/ op = BUMP
+End
+
 Definition avail_transfer_inst_def:
   avail_transfer_inst dfg inst (ae : avail_exprs) =
     if is_pseudo inst.inst_opcode ∨
        inst.inst_opcode = ASSIGN ∨
        is_terminator inst.inst_opcode then ae
-    else if LENGTH inst.inst_outputs > 1 then ae
+    else if LENGTH inst.inst_outputs > 1 then
+      (* No expression for multi-output instructions, but their writes
+         still invalidate available expressions (Python does the same) *)
+      avail_remove_effect ae (write_effects inst.inst_opcode)
     else
       let expr = mk_expr dfg inst in
       let we = write_effects inst.inst_opcode in
       let ae' = avail_remove_effect ae we in
-      if is_nonidempotent inst.inst_opcode then ae'
+      if avail_nonidempotent inst.inst_opcode then ae'
       else if has_conflicting_effects inst.inst_opcode then ae'
       else avail_add ae' expr inst
 End

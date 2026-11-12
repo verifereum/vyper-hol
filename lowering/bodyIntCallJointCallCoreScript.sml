@@ -1,7 +1,7 @@
 (* Helpers for the seam 2 joint induction call step and its family leaves. *)
 Theory bodyIntCallJointCallCore
 Ancestors
-  bodyIntCallJointContract supportedExprs bodyIntCallSemanticEntry
+  bodyIntCallJointContract bodySim supportedExprs bodyIntCallSemanticEntry
   bodySimAugPlaceScopes stmtSimAugAssignPlaceStorage bodyIntCallJointCallSource
   exprSimExtCallCase stmtSimAugAssignPlaceMemory abiStaticAggregateProps
   gasSummary gasSummaryCompose gasExemptCert vyperState
@@ -80,6 +80,7 @@ Theorem intcall_vv_post_intro:
   (post_value_type ce e <> expr_type e ==>
    vv_own ce fp.jc_cx (post_value_type ce e) sa sb ee tv vv u) /\
   (~expr_has_effect e ==> vv_storage_live fp.jc_cx vv ee u) /\
+  (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
   intcall_expr_cont fp ce env es sa s ee sb u ==>
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee tv vv u
 Proof
@@ -89,7 +90,7 @@ QED
 
 Theorem intcall_expr_cont_frame:
   intcall_expr_cont fp ce env es sa s ee sb u ==>
-  wb_frame ce es sa s u
+  wb_frame ce es ee sa s u
 Proof
   simp[intcall_expr_cont_def, loweringPostsTheory.wb_frame_def] >>
   metis_tac[]
@@ -104,14 +105,16 @@ Theorem intcall_expr_cont_trans:
   intcall_expr_cont fp ce env es a s ee d u
 Proof
   strip_tac >>
-  `wb_frame ce es a s t` by metis_tac[intcall_expr_cont_frame] >>
-  `wb_frame ce em b t u` by metis_tac[intcall_expr_cont_frame] >>
-  `wb_frame ce es a s u` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     conj_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
-     conj_tac >- (qexistsl [`em`, `b`, `t`] >> simp[]) >>
-     qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >>
-     fs[intcall_joint_res_def, intcall_expr_res_def]) >>
+  `wb_frame ce es em a s t` by metis_tac[intcall_expr_cont_frame] >>
+  `wb_frame ce em ee b t u` by metis_tac[intcall_expr_cont_frame] >>
+  `wb_frame ce es ee a s u` by
+    (`stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
+      local_ptrs_reserved ce a` by
+       fs[intcall_joint_res_def, intcall_expr_res_def] >>
+     mp_tac (Q.SPECL [`fp.jc_func`, `ce`, `fp.jc_cx`, `es`, `s`, `a`, `em`,
+                      `ee`, `b`, `t`, `u`, `fp.jc_ctx`]
+               exprSimWordArgsTheory.wb_frame_trans) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   fs[intcall_expr_cont_def, loweringPostsTheory.wb_frame_def] >>
   first_assum ACCEPT_TAC
 QED
@@ -123,7 +126,7 @@ Theorem intcall_effect_map_producer:
   intcall_map_producer fp e
 Proof
   strip_tac >> gvs[intcall_map_producer_def,
-    supported_pure_expr_def]
+    supported_pure_expr_def, supported_effect_expr_def]
 QED
 
 Theorem intcall_supported_call_forms:
@@ -246,7 +249,7 @@ Theorem intcall_pure_below_frontier_memory:
 Proof
   strip_tac >> drule_all vv_post_pure_memory_frame >> strip_tac >>
   first_x_assum irule >> rpt strip_tac >>
-  simp[compileEnvTheory.regions_disjoint_def] >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   first_x_assum drule_all >> decide_tac
 QED
 
@@ -283,7 +286,7 @@ Proof
          goal_assum (drule_at Any)) >>
       drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
       strip_tac >> sym_tac >> first_x_assum irule >> simp[]) >>
-  simp[valueEncodingTheory.mem_bytes_at_def]
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 (* Deferred reads depend only on the source places, not on gas observations. *)
@@ -443,8 +446,8 @@ Proof
   qexistsl [`cx`, `tr`] >> reverse conj_tac >- metis_tac[] >>
   Cases_on `tr` >>
   fs[exprLoweringPropsTheory.stmt_state_rel_def,
-     compileEnvTheory.state_rel_def, compileEnvTheory.storage_rel_def,
-     compileEnvTheory.transient_rel_def, vyperStorageBackendTheory.get_storage_def] >>
+     loweringStateRelDefsTheory.state_rel_def, loweringStateRelDefsTheory.storage_rel_def,
+     loweringStateRelDefsTheory.transient_rel_def, vyperStorageBackendTheory.get_storage_def] >>
   gvs[vfmStateTheory.lookup_account_def]
 QED
 
@@ -598,7 +601,8 @@ Proof
   `vv_at ce fp.jc_cx ty a b es r
      (LocatedValue ann (mk_ptr op LocMemory)) s` by
     (fs[loweringPostsTheory.vv_at_def,
-        loweringPostsTheory.expr_val_at_def, contextTheory.mk_ptr_def] >>
+        loweringPostsTheory.expr_val_at_def, contextTheory.mk_ptr_def,
+        loweringPostsTheory.local_place_at_def] >>
      metis_tac[]) >>
   irule intcall_pure_child_located_memory >>
   goal_assum (drule_at Any) >> simp[contextTheory.mk_ptr_def] >>
@@ -760,11 +764,11 @@ Proof
     (rpt gen_tac >> irule stmtSimLogArgsTheory.log_frame_local_region >>
      fs[intcall_joint_res_def, intcall_expr_res_def, intcall_expr_cont_def,
         loweringPostsTheory.wb_frame_def] >>
-     conj_tac >-
-       (qexists `c` >> simp[] >> rpt conj_tac >> rpt gen_tac >>
-        strip_tac >> first_x_assum irule >> simp[] >>
-        conj_tac >- (first_assum ACCEPT_TAC) >> qexists `aid` >> simp[]) >>
-     qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >> simp[]) >>
+     rpt conj_tac >>
+     TRY (qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >> simp[] >> NO_TAC) >>
+     qexistsl [`ee`, `c`] >> simp[] >> rpt conj_tac >> rpt gen_tac >>
+     strip_tac >> first_x_assum irule >> simp[] >>
+     conj_tac >- (first_assum ACCEPT_TAC) >> qexists `aid` >> simp[]) >>
   conj_tac
   >- (irule intcall_pure_child_vv_holds >> metis_tac[]) >>
   conj_tac

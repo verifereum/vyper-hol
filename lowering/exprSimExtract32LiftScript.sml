@@ -3,7 +3,7 @@ Theory exprSimExtract32Lift
 Ancestors
   exprSimExtract32Post exprSimExtract32Assembly exprSimExtract32Read
   exprSimProps freshWrites varsExt loweringPosts exprLoweringProps
-  compileEnv venomState venomExecSemantics finite_map list
+  compileEnv loweringStateRelDefs venomState venomExecSemantics finite_map list
   gasSummary fragGasMode vyperState
 
 Theorem extract32_post_drop_fresh:
@@ -41,7 +41,9 @@ Proof
       simp[lookup_var_drop_fresh] >> metis_tac[]) >>
   simp[drop_fresh_def] >> conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
-  irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]
+  conj_tac >- (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]) >>
+  strip_tac >> match_mp_tac exprSimPropsTheory.pure_frame_mem_tail >>
+  qexists_tac `s` >> simp[drop_fresh_def]
 QED
 
 Theorem extract32_post_vars_ext:
@@ -95,7 +97,9 @@ Proof
       disj1_tac >> qexistsl_tac [`aid`,`b`,`sz`] >> simp[] >>
       first_assum ACCEPT_TAC) >>
   conj_tac >- metis_tac[] >>
-  irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]
+  conj_tac >- (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]) >>
+  strip_tac >> match_mp_tac pure_frame_mem_tail >> qexists_tac `s` >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >- res_tac >> simp[]
 QED
 
 Theorem extract32_prepare_post_arbitrary:
@@ -175,6 +179,7 @@ Proof
   >- simp[gas_marked_exec_def, vyperStateTheory.return_def] >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ u` mp_tac >>
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-       expr_val_at_def, lookup_var_def, local_region_def, locals_kept_def] >>
-  strip_tac >> simp[] >> conj_tac >> first_assum MATCH_ACCEPT_TAC
+       expr_val_at_def, lookup_var_def, local_region_def, locals_kept_def,
+       popped_kept_def] >>
+  strip_tac >> simp[] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED

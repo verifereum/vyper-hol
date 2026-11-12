@@ -1,10 +1,10 @@
 (* Expression/suffix composition for pointer-safe storage append. *)
 Theory stmtAppendStorageComposePtr
 Ancestors
-  appendStorageComposeFactsPtr appendStorageSourcePtr appendStorageSuccessPostPtr
+  appendStorageComposeFactsPtr appendStorageSuccessPostPtr
   bodyPtrDefs stmtFragPtr stmtAbortPtr gasSummaryComposePtr stmtSimForced
   stmtSimAppendStorageCompose exprSimProps exprOperandVar exprLoweringProps
-  compileEnv loweringPosts stmtSimDefs stmtSimProps finite_map words
+  compileEnv loweringStateRelDefs loweringPosts stmtSimDefs stmtSimProps finite_map words
   vyperInterpreter vyperState vyperValue venomState fragGasPathPtr gasExemptCert
   gasSummary fragGasMode fragGasPath gasContext appendStorageGhostPtr ptrDiscipline
   vyperStorageBackend stmtAppendStoragePathPtr stmtSimAppendStorage
@@ -17,6 +17,7 @@ Theorem compile_append_storage_word_stmt_frag_ptr:
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
   cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
+  cenv.ce_hashmap_info nid = NONE /\
   cenv.ce_module_dynarray_capacity nid = cap /\
   is_word_type elem /\ type_memory_bytes cenv elem = 32 /\
   is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
@@ -106,7 +107,7 @@ Resume compile_append_storage_word_stmt_frag_ptr[operand]:
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!aid b. FLOOKUP _ _ = _ ==> _` kall_tac >>
   qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ _ = _` kall_tac >>
-  qpat_x_assum `locals_kept _ _ _ _` kall_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _` kall_tac >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `stmt_state_rel _ _ _ _ es s0` kall_tac >>
   qpat_x_assum `ghost_inv _ _ _ es _ _ _` kall_tac >>

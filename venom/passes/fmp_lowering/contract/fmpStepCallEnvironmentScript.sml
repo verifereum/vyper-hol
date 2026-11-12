@@ -179,7 +179,7 @@ Theorem fmp_install_checked_root_revert_witness:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
   MEM bb blocks /\ bb.bb_instructions <> [] /\
@@ -224,7 +224,7 @@ Theorem fmp_install_checked_root_revert_path:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) ==>
   !k l. revert_path blocks k l ==> revert_path out k l

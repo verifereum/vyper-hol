@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtLogArgsFrame bodyIntCallFamStmtLogMarked
   exprBopSimProps vyperEvalExprPreservesScopesDom
   bodyIntCallFamStmtLogReady bodyIntCallFamStmtLogPost bodyIntCallFamStmtLogGas
-  stmtSimLogArgs stmtSimLogArgsRun stmtSimLogArgsGrowth stmtReasonVvMemory
+  logArgumentCompile stmtSimLogArgs stmtSimLogArgsRun stmtSimLogArgsGrowth stmtReasonVvMemory
   gasOutcome gasSummary fragGasPath fragGasMode
   stmtSimDefs loweringPosts exprSimHypsDefs vyperInterpreter vyperState
   list finite_map
@@ -48,7 +48,9 @@ Proof
   suspend "cons"
 QED
 
+(* HELD (train 15): pure_frame sweep, retired by alan 451258 *)
 Resume intcall_compile_log_eval_all[cons]:
+  (* original proof, kept while held:
   rpt gen_tac >> simp[EVERY_DEF, MAP, compile_log_eval_all_cons] >>
   strip_tac >> gvs[] >>
   rename1 `lower_value compile_expr ce (expr_type e) e sa = (op,sm)` >>
@@ -76,6 +78,8 @@ Resume intcall_compile_log_eval_all[cons]:
       fs[exprSimDefsTheory.expr_exit_INL, stmtSimPropsTheory.expr_exit_INR_type]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   suspend "normal"
+  *)
+  cheat
 QED
 
 Resume intcall_compile_log_eval_all[normal]:

@@ -6,9 +6,9 @@ Theory abiEncoderResourceAdapter
 Ancestors
   abiEncoderProps abiEncoderOpenInput abiEncoderOpenInputFrame
   abiEncoderInput abiDecodeRanges abiDecoderAllocation abiDecoderFootprint
-  venomMemDefs abiDecoderReentry abiDecoderFrame compileEnv
+  venomMemDefs abiDecoderReentry abiDecoderFrame compileEnv loweringStateRelDefs
   finite_map pred_set valueEncodingProps contractABI
-  fragExec words list vyperTyping valueEncoding vyperValue vyperABI
+  fragExec words list vyperTyping valueEncoding valueEncodingDefs vyperValue vyperABI
 
 Theorem abi_encoder_zero_source_separation_diagnostic:
   evaluate_type FEMPTY

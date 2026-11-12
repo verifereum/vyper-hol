@@ -8,7 +8,7 @@ Theory ctorDeployEntry
 Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness o1PassContract
   e2eEntry immutableCodeLayout codegenEncodingWf contextPlanLayoutProps
-  e2eDefs e2eDeployDefs compileEnv vyperArith unitShapeDefs callTrace
+  e2eDefs e2eDeployDefs compileEnv loweringStateRelDefs vyperArith unitShapeDefs callTrace
   contextCodegenRel lowerDloadDefs venomState unitTransformDefs
   words list rich_list
 
@@ -18,7 +18,7 @@ Theorem deploy_entry_state_ok:
       (rpolicy, dunit, dout, prog, cplan) /\
     unit_shape_ok dout.po_unit /\
     deploy_state_rel tops deploy_bc am tx es /\
-    LENGTH (FST (HD es.contexts)).msgParams.code <= 24576
+    LENGTH (FST (HD es.contexts)).msgParams.code <= dimword(:256) DIV 2
     ==>
     initial_ctx_rel cplan prog dout.po_unit.cu_context
       (deploy_entry_state prog cplan tops es) (shadow_root es) /\

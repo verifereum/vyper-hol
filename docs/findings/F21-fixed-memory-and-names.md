@@ -60,16 +60,13 @@ be rejected by source/reference typing; syntax support and typing are separate.
 - [Function bodies](../../lowering/defs/moduleLoweringScript.sml):
   `reserve_local_ptrs`, `compile_external_function_body`, `compile_fallback_body`,
   `compile_internal_function`; [Return dispatch](../../lowering/defs/stmtLoweringScript.sml).
-- [Name whitelist](../../lowering/supported/supportedNamesScript.sml),
-  [program boundary](../../lowering/supported/supportedProgramScript.sml).
-- [Name regressions](../../lowering/supported/supportedNamePropsScript.sml):
-  `supported_binding_duplicates_reject`, `supported_compiler_slot_names_accept`,
-  `supported_module_binding_shadowing_accept`, `supported_fallback_header_names_contract`.
-- [Program regressions](../../lowering/supported/supportedProgramPropsScript.sml):
+- [Name whitelist](../../lowering/proofs/supported/supportedNamesScript.sml),
+  [program boundary](../../lowering/proofs/supported/supportedProgramScript.sml).
+- [Program regressions](../../lowering/proofs/supported/supportedProgramPropsScript.sml):
   `supported_internal_context_rejections`, `supported_loop_internal_call_rejections`,
   `supported_module_bindings_accepted`, `supported_binding_duplicates_rejected`.
 - All101 exact membership owners are not assumed: see the actual
-  [manifest](../../lowering/defs/bytecode/supported-fixtures.txt).
+  [manifest](../../bytecode/supported-fixtures.txt).
   No original fixture exercises the overlapping internal-local path; membership
   is a boundary check, not semantic testing of these excluded examples.
 

@@ -46,106 +46,6 @@ QED
 
 (* supported_function_decl finds only the main module's functions. *)
 
-(* An expression with no effect in it has no internal calls to make. *)
-Theorem no_effect_int_calls[local]:
-  (!e. ~supported_expr_exists expr_effect_root e ==> int_calls_expr e = []) /\
-  (!es. ~supported_exprs_exists expr_effect_root es ==>
-        int_calls_exprs es = [])
-Proof
-  `!x. expr_internal_call_root x ==> expr_effect_root x` by
-    (Cases >> simp[expr_internal_call_root_def, expr_effect_root_def]) >>
-  conj_tac >> rpt strip_tac
-  >- (irule (cj 1 no_internal_call_int_calls) >>
-      metis_tac[supported_expr_exists_mono]) >>
-  irule (cj 3 no_internal_call_int_calls) >>
-  metis_tac[supported_expr_exists_mono]
-QED
-
-Theorem supported_pure_forms_int_calls[local]:
-  (!tops e. supported_pure_expr tops e ==> int_calls_expr e = []) /\
-  (!tops es. supported_pure_exprs tops es ==> int_calls_exprs es = []) /\
-  (!tops e. supported_place_expr tops e ==> int_calls_expr e = [])
-Proof
-  metis_tac[no_effect_int_calls, supported_pure_no_effect]
-QED
-
-Theorem supported_effect_main_int_calls[local]:
-  (!tops e. supported_effect_expr tops e ==>
-      EVERY (\c. FST c = NONE /\
-                 IS_SOME (supported_function_decl tops c Internal))
-        (int_calls_expr e)) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-      EVERY (\c. FST c = NONE /\
-                 IS_SOME (supported_function_decl tops c Internal))
-        (int_calls_expr e))
-Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  rw[supported_effect_expr_def, int_calls_expr_def] >>
-  imp_res_tac supported_pure_forms_int_calls >>
-  imp_res_tac supported_function_decl_main >> gvs[]
-QED
-
-Theorem no_effect_call_operands:
-  !e. ~expr_has_effect e ==>
-      ~supported_expr_exists call_operands_effect_root e
-Proof
-  `!e. call_operands_effect_root e ==> expr_effect_root e` by
-    (Cases >> simp[call_operands_effect_root_def, expr_effect_root_def] >>
-     rename1 `Call ty target args dflt` >> Cases_on `target` >>
-     simp[call_operands_effect_root_def, expr_effect_root_def]) >>
-  rw[expr_has_effect_def] >>
-  metis_tac[supported_expr_exists_mono]
-QED
-
-Theorem supported_pure_list_call_operands[local]:
-  supported_pure_exprs tops args ==>
-  EVERY (\e. ~expr_has_effect e) args /\
-  EVERY (\e. ~supported_expr_exists call_operands_effect_root e) args
-Proof
-  simp[supported_pure_exprs_every, listTheory.EVERY_MEM] >> strip_tac >>
-  conj_tac >> rpt strip_tac >>
-  `supported_pure_expr tops e` by (first_x_assum irule >> simp[]) >>
-  drule supported_pure_expr_effect_free >>
-  metis_tac[no_effect_call_operands]
-QED
-
-Theorem effect_free_drop[local]:
-  EVERY (\e. ~expr_has_effect e) args ==>
-  ~EXISTS expr_has_effect (DROP n args)
-Proof
-  rw[listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
-  drule rich_listTheory.MEM_DROP_IMP >> metis_tac[]
-QED
-
-Theorem supported_effect_no_call_operand_effects[local]:
-  (!tops e. supported_effect_expr tops e ==>
-    ~supported_expr_exists call_operands_effect_root e) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-    ~supported_expr_exists call_operands_effect_root e)
-Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  simp[supported_effect_expr_def, supported_expr_exists_def,
-       call_operands_effect_root_def] >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
-  imp_res_tac supported_pure_no_effect >>
-  gvs[GSYM expr_has_effect_def] >>
-  imp_res_tac supported_pure_list_call_operands >>
-  imp_res_tac effect_free_drop >>
-  imp_res_tac supported_pure_expr_effect_free >>
-  imp_res_tac no_effect_call_operands >>
-  gvs[supported_exprs_exists_every, listTheory.EXISTS_MEM,
-      listTheory.EVERY_MEM] >> metis_tac[]
-QED
-
-Theorem supported_expr_no_call_operand_effects:
-  supported_expr tops e ==>
-  ~supported_expr_exists call_operands_effect_root e
-Proof
-  rw[supported_expr_def] >>
-  metis_tac[supported_pure_expr_effect_free, no_effect_call_operands,
-            supported_effect_no_call_operand_effects]
-QED
-
 (* A supported expression runs no EVM code, and its internal calls are to
    internal functions of the main module, as expr_body_pre asks. *)
 (* A supported expression is no bare .code: supported_builtin_form
@@ -168,6 +68,20 @@ Proof
       supportedExprFormsTheory.supported_builtin_form_def]
 QED
 
+Theorem supported_stmt_body_safe:
+  supported_stmt tops bindings s ==> body_stmt_safe tops s
+Proof
+  rw[body_stmt_safe_def] >>
+  drule (cj 1 supported_stmts_storage_syntax) >> simp[]
+QED
+
+Theorem supported_stmts_body_safe:
+  supported_stmts tops bindings ss ==> body_stmts_safe tops ss
+Proof
+  rw[body_stmts_safe_iff] >>
+  drule (cj 2 supported_stmts_storage_syntax) >> simp[]
+QED
+
 Theorem supported_expr_body_calls:
   !tops e. supported_expr tops e ==>
     ~expr_has_evm_run e /\
@@ -182,9 +96,7 @@ Proof
   conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
   PURE_ONCE_REWRITE_TAC[CONJ_ASSOC] >>
   reverse conj_tac >- metis_tac[supported_expr_not_extcode] >>
-  pop_assum mp_tac >> simp[supportedExprsTheory.supported_expr_def] >> strip_tac >>
-  imp_res_tac supported_pure_int_calls >>
-  imp_res_tac supported_effect_main_int_calls >>
+  imp_res_tac supported_expr_main_calls >>
   gvs[listTheory.EVERY_CONJ]
 QED
 
@@ -241,6 +153,38 @@ Proof
     metis_tac[call_evaluation_safe_append_left] >>
   simp[expr_body_pre_def] >>
   Cases_on `int_calls_expr e` >> gvs[listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+(* The same, from byte_widths_expr of every node and alloc_limits_expr of
+   the root, as alloc_limits_stmt gives a declaration's value. *)
+Theorem stmt_expr_body_pre_alloc:
+  !cenv cx env e es calls.
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    ~supported_expr_exists (\e. ~is_extcode e /\ ~byte_widths_expr e) e /\
+    alloc_limits_expr cenv e /\
+    ~is_extcode e /\
+    ~supported_expr_exists call_operands_effect_root e /\
+    call_evaluation_safe cx (int_calls_expr e ++ calls) /\
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    (int_calls_expr e <> [] ==>
+     ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops /\
+            EVERY (\c. IS_SOME (supported_function_decl tops c Internal))
+              (int_calls_expr e)) /\
+    (!target. supported_expr_exists
+       (expr_abi_decode_target_root target) e ==>
+       occurs_abi_decode_target target (cx_tops cx)) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)) ==>
+    expr_body_pre cenv cx env e es
+Proof
+  rpt gen_tac >> strip_tac >> irule stmt_expr_body_pre >> simp[] >>
+  reverse conj_tac >- (qexists_tac `calls` >> simp[]) >>
+  `(\e. ~is_extcode e /\ (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)) =
+   (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
+        (~is_extcode e /\ ~alloc_limits_expr cenv e))` by
+    (simp[FUN_EQ_THM] >> metis_tac[]) >>
+  pop_assum SUBST1_TAC >> simp[supported_expr_exists_disj] >>
+  imp_res_tac alloc_limits_expr_exists >> simp[]
 QED
 
 Theorem stmts_env_cs_mono:
@@ -301,7 +245,8 @@ Theorem body_inv_same_frame:
     body_inv tops ctx c cx
 Proof
   rpt strip_tac >>
-  fs[body_inv_def, same_frame_def, compile_env_component_equality] >>
+  fs[body_inv_def, cenv_module_pins_def, same_frame_def,
+     compile_env_component_equality] >>
   metis_tac[]
 QED
 
@@ -315,11 +260,16 @@ Proof
 QED
 
 Theorem stmt_exprs_ok_same_frame:
-  !cenv c. same_frame cenv c ==> stmt_exprs_ok c = stmt_exprs_ok cenv
+  !cenv c. same_frame cenv c /\ c.ce_var_type = cenv.ce_var_type ==>
+           stmt_exprs_ok c = stmt_exprs_ok cenv
 Proof
   rw[same_frame_def] >>
   `c.ce_struct_fields = cenv.ce_struct_fields /\
-   c.ce_func_return_type = cenv.ce_func_return_type` by
+   c.ce_func_return_type = cenv.ce_func_return_type /\
+   c.ce_modules = cenv.ce_modules /\
+   c.ce_hashmap_info = cenv.ce_hashmap_info /\
+   c.ce_module_var_type = cenv.ce_module_var_type /\
+   c.ce_module_vars = cenv.ce_module_vars` by
     (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `alloc_limits_expr c = alloc_limits_expr cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_struct_fields) >> simp[]) >>
@@ -337,18 +287,202 @@ Proof
   simp[FUN_EQ_THM, stmt_exprs_ok_def]
 QED
 
-Theorem stmts_exprs_ok_EVERY:
-  !cenv ss.
-    EVERY (stmt_exprs_ok cenv) ss <=>
+(* A statement's checks read the fields alloc_limits_stmt reads
+   (alloc_env_agree) and the return buffer's. *)
+Theorem stmt_exprs_ok_agree:
+  !cenv c.
+    alloc_env_agree cenv c /\ c.ce_is_external = cenv.ce_is_external /\
+    c.ce_raw_return = cenv.ce_raw_return /\
+    return_buffer_ok c = return_buffer_ok cenv ==>
+    stmt_exprs_ok c = stmt_exprs_ok cenv
+Proof
+  rpt strip_tac >> simp[FUN_EQ_THM, stmt_exprs_ok_def] >>
+  drule (cj 1 alloc_limits_stmt_struct_fields) >> simp[]
+QED
+
+Theorem return_buffer_ok_var_type[simp]:
+  !cenv f.
+    return_buffer_ok (cenv with ce_var_type updated_by f) = return_buffer_ok cenv
+Proof
+  simp[return_buffer_ok_def]
+QED
+
+Theorem decl_var_type_return_fields[simp]:
+  !cenv s.
+    (decl_var_type cenv s).ce_is_external = cenv.ce_is_external /\
+    (decl_var_type cenv s).ce_raw_return = cenv.ce_raw_return /\
+    return_buffer_ok (decl_var_type cenv s) = return_buffer_ok cenv
+Proof
+  gen_tac >> Cases >> simp[decl_var_type_def, return_buffer_ok_def]
+QED
+
+Theorem stmts_exprs_ok_agree:
+  !ss cenv c.
+    alloc_env_agree cenv c /\ c.ce_is_external = cenv.ce_is_external /\
+    c.ce_raw_return = cenv.ce_raw_return /\
+    return_buffer_ok c = return_buffer_ok cenv ==>
+    stmts_exprs_ok c ss = stmts_exprs_ok cenv ss
+Proof
+  Induct >> simp[stmts_exprs_ok_def] >> rpt strip_tac >>
+  `stmt_exprs_ok c h = stmt_exprs_ok cenv h` by
+    metis_tac[stmt_exprs_ok_agree] >>
+  `stmts_exprs_ok (decl_var_type c h) ss =
+   stmts_exprs_ok (decl_var_type cenv h) ss` by
+    (first_x_assum irule >> gvs[alloc_env_agree_decl_var_type]) >>
+  simp[]
+QED
+
+Theorem same_frame_alloc_env_agree:
+  !cenv c.
+    same_frame cenv c /\ c.ce_var_type = cenv.ce_var_type ==>
+    alloc_env_agree cenv c /\ c.ce_is_external = cenv.ce_is_external /\
+    c.ce_raw_return = cenv.ce_raw_return /\
+    return_buffer_ok c = return_buffer_ok cenv
+Proof
+  rw[same_frame_def] >> qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >>
+  simp[alloc_env_agree_def, return_buffer_ok_def]
+QED
+
+Theorem stmts_exprs_ok_same_frame:
+  !cenv c. same_frame cenv c /\ c.ce_var_type = cenv.ce_var_type ==>
+           stmts_exprs_ok c = stmts_exprs_ok cenv
+Proof
+  rpt strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  irule stmts_exprs_ok_agree >> metis_tac[same_frame_alloc_env_agree]
+QED
+
+Theorem same_frame_var_type:
+  !cenv c f. same_frame cenv c ==>
+             same_frame (cenv with ce_var_type updated_by f) c
+Proof
+  rw[same_frame_def] >> fs[compile_env_component_equality] >> metis_tac[]
+QED
+
+Theorem same_frame_decl_var_type:
+  !cenv c s. same_frame cenv c ==> same_frame (decl_var_type cenv s) c
+Proof
+  ntac 2 gen_tac >> Cases >> simp[decl_var_type_def, same_frame_var_type]
+QED
+
+Theorem declare_local_var_type:
+  !cenv id ty st c st1.
+    declare_local cenv id ty st = (c, st1) ==>
+    c.ce_var_type = (id =+ SOME ty) cenv.ce_var_type
+Proof
+  rw[declare_local_def, fresh_var_def, comp_bind_def, comp_return_def,
+     LET_THM] >> gvs[]
+QED
+
+(* A for body is checked under the loop variable's type, which the env
+   declaring the loop variable has. *)
+Theorem for_declare_stmts_exprs_ok:
+  !cenv id ty st c st1 ss.
+    declare_local cenv id ty st = (c, st1) /\ same_frame cenv c /\
+    stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME ty)) ss ==>
+    stmts_exprs_ok c ss
+Proof
+  rpt strip_tac >> drule declare_local_var_type >> strip_tac >>
+  `stmts_exprs_ok c =
+   stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME ty))` by
+    (irule stmts_exprs_ok_same_frame >> simp[same_frame_var_type]) >>
+  gvs[]
+QED
+
+(* A declaration's checks carry over to the env that declares its local:
+   that env reads the value as the declared check does. *)
+Theorem annassign_declare_exprs_ok:
+  !cenv id ty e st c st1.
+    declare_local cenv id ty st = (c, st1) /\ same_frame cenv c /\
+    stmt_exprs_ok cenv (AnnAssign id ty e) ==>
+    stmt_exprs_ok c (AnnAssign id ty e)
+Proof
+  rpt strip_tac >> drule declare_local_var_type >> strip_tac >>
+  `c.ce_struct_fields = cenv.ce_struct_fields /\
+   c.ce_func_return_type = cenv.ce_func_return_type /\
+   c.ce_modules = cenv.ce_modules /\
+   c.ce_hashmap_info = cenv.ce_hashmap_info /\
+   c.ce_module_var_type = cenv.ce_module_var_type /\
+   c.ce_module_vars = cenv.ce_module_vars` by
+    (gvs[same_frame_def] >> qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >>
+     simp[]) >>
+  qabbrev_tac `X = cenv with ce_var_type updated_by (id =+ SOME ty)` >>
+  `type_memory_bytes c = type_memory_bytes X /\
+   alloc_limits_expr c = alloc_limits_expr X` by
+    (qspecl_then [`X`, `c`] mp_tac alloc_limits_frame >>
+     impl_tac >- gvs[Abbr`X`] >> simp[]) >>
+  `alloc_limits_expr (c with ce_var_type updated_by (id =+ SOME ty)) =
+   alloc_limits_expr X` by
+    (qspecl_then [`X`, `c with ce_var_type updated_by (id =+ SOME ty)`]
+       mp_tac alloc_limits_frame >>
+     impl_tac >- gvs[Abbr`X`, combinTheory.UPDATE_EQ] >> simp[]) >>
+  `type_memory_bytes X = type_memory_bytes cenv` by
+    (irule type_memory_bytes_frame >> simp[Abbr`X`]) >>
+  gvs[stmt_exprs_ok_def, alloc_limits_stmt_def, stmt_valued_return_def]
+QED
+
+(* After a statement the compile env has the local types decl_var_type
+   gives, as compile_stmts threads them. *)
+Theorem stmt_env_var_type:
+  !cenv lctx ty s sa c sb.
+    stmt_env cenv lctx ty s sa = (c, sb) ==>
+    c.ce_var_type = (decl_var_type cenv s).ce_var_type
+Proof
+  rpt gen_tac >>
+  simp[stmt_env_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `declare_stmt_local cenv s sa` >> rename1 `_ = (c0, sm)` >>
+  simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `s` >>
+  gvs[declare_stmt_local_def, comp_return_def, decl_var_type_def] >>
+  metis_tac[declare_local_var_type]
+QED
+
+(* The rest of a block is checked under the local types the statement
+   before it leaves. *)
+Theorem stmt_env_stmts_exprs_ok:
+  !cenv lctx ty s sa c sb.
+    stmt_env cenv lctx ty s sa = (c, sb) /\ same_frame cenv c ==>
+    stmts_exprs_ok c = stmts_exprs_ok (decl_var_type cenv s)
+Proof
+  rpt strip_tac >> irule stmts_exprs_ok_same_frame >>
+  conj_tac >- metis_tac[stmt_env_var_type] >>
+  metis_tac[same_frame_decl_var_type]
+QED
+
+(* A statement that holds no block checks every expression under cenv
+   itself (alloc_limits_stmt_exists). *)
+Theorem stmt_exprs_ok_flat:
+  !cenv s.
+    (!c ss1 ss2. s <> If c ss1 ss2) /\
+    (!id ty it n body. s <> For id ty it n body) ==>
+    (stmt_exprs_ok cenv s <=>
+     ~supported_stmt_expr_exists
+        (\e. ~is_extcode e /\
+              ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
+     alloc_limits_stmt cenv s /\
+     (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
+        return_buffer_ok cenv))
+Proof
+  rpt strip_tac >>
+  `(\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) =
+   (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
+        (~is_extcode e /\ ~alloc_limits_expr cenv e))` by
+    (simp[FUN_EQ_THM] >> metis_tac[]) >>
+  pop_assum SUBST1_TAC >>
+  simp[stmt_exprs_ok_def, supported_stmt_expr_exists_disj] >>
+  metis_tac[alloc_limits_stmt_exists]
+QED
+
+Theorem stmts_exprs_ok_thm:
+  !ss cenv.
+    stmts_exprs_ok cenv ss <=>
     ~supported_stmts_expr_exists
-       (\e. ~is_extcode e /\
-             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) ss /\
+       (\e. ~is_extcode e /\ ~byte_widths_expr e) ss /\
     alloc_limits_stmts cenv ss /\
     (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
        return_buffer_ok cenv)
 Proof
-  gen_tac >> Induct >>
-  simp[supported_stmt_expr_exists_def, stmt_exprs_ok_def,
+  Induct >>
+  simp[stmts_exprs_ok_def, supported_stmt_expr_exists_def, stmt_exprs_ok_def,
        alloc_limits_stmt_def, stmt_valued_return_def] >>
   metis_tac[]
 QED
@@ -517,7 +651,7 @@ Proof
          simp[extend_local_def]) >>
       qpat_x_assum `expr_sim_inv _ _ _ es`
         (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-      ASM_REWRITE_TAC [expr_sim_inv_def]) >>
+      ASM_REWRITE_TAC [expr_sim_inv_def, extend_local_bare_globals]) >>
   drule_all declare_stmt_local_other >> strip_tac >>
   drule_all type_stmt_other >> strip_tac >> gvs[] >>
   qpat_x_assum `expr_sim_inv _ _ _ es`

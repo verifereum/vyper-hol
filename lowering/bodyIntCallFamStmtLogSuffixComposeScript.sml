@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem intcall_log_suffix_memory:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   compile_log_eval_all ce args sa = (xs,sm) /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
@@ -44,6 +44,7 @@ Theorem intcall_log_suffix_memory:
     mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory
 Proof
   strip_tac >>
+  `log_eval_view ce args sa xs sm` by simp[log_eval_view_def, LIST_REL_EL_EQN] >>
   drule_all compile_split_log_topics_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sm st) s = OK topic_state` >>
   `topic_state.vs_memory = s.vs_memory` by
@@ -75,7 +76,7 @@ Resume intcall_log_suffix_memory[branches]:
   simp[] >> disch_then (drule_at (Pat `compile_stmt _ _ _ _ _ = _`) o iffLR) >>
   disch_then drule_all >> strip_tac >>
   rename1 `compile_alloc_buffer _ st = (src,s1)` >>
-  rename1 `compile_log_store_data _ _ _ _ s1 = ((),s2)` >>
+  rename1 `compile_log_store_data _ _ _ _ _ s1 = ((),s2)` >>
   rename1 `compile_alloc_buffer _ s2 = (dst,s3)` >>
   rename1 `compile_abi_encode_to_buf _ _ _ s3 = (len,s4)` >>
   suspend "data"
@@ -112,7 +113,12 @@ Resume intcall_log_suffix_memory[data]:
     (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[]) >>
   drule_all split_log_ops_data_types >> strip_tac >>
   gvs[] >>
-  drule_at (Pat `compile_log_store_data _ _ _ _ _ = _`)
+  `compile_log_store_data ce (MAP FST (FILTER (\p. ~SND p) (ZIP (xs,flags))))
+     (MAP SND (MAP FST (FILTER (\p. ~SND p) (ZIP (xs,flags)))))
+     src.buf_operand 0 s1 = ((),s2)` by
+    (qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _` mp_tac >>
+     qspecl_then [`xs`, `flags`] mp_tac split_log_ops_data_types >> simp[]) >>
+  drule_at (Pat `compile_log_store_data _ _ _ _ _ _ = _`)
     intcall_log_data_pipeline_footprint >>
   simp[] >> disch_then drule_all >> strip_tac >>
   suspend "observe"

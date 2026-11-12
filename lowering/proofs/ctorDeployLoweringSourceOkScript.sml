@@ -2,9 +2,10 @@
    The constructor body never ends in a break, a continue or a type error. *)
 Theory ctorDeployLoweringSourceOk
 Ancestors
-  ctorDeployLoweringDefs stmtSimDefs vyperInterpreter vyperState finite_map
+  ctorDeployLoweringDefs ctorDeployLoweringSource stmtSimDefs vyperInterpreter vyperState finite_map
   ctorDeployDefs e2eDeployDefs vyperTypeDeploymentSoundness
   vyperTypeInvariants vyperTypeContractSoundness vyperContext alist
+  evalNoHalt
 
 Theorem deploy_ctor_prefix_replay:
   ignore_bind (send_call_value mut cx) (lock_if_nr cx nr (is_view_mut mut))
@@ -15,14 +16,7 @@ Theorem deploy_ctor_prefix_replay:
     (initial_state am_c [FEMPTY] with <|outcomes := oc; requests := []; gas_obs := gs|>)
   = (INL (), es0 with <|gas_obs := gs; outcomes := oc|>)
 Proof
-  Cases_on `cx.nonreentrant_slot` >>
-  simp[send_call_value_def, transfer_value_def, lock_if_nr_def,
-       acquire_nonreentrant_lock_def, initial_state_def,
-       ignore_bind_def, bind_def, return_def, raise_def, check_def,
-       assert_def, get_accounts_def, update_accounts_def,
-       get_transient_storage_def, update_transient_def, set_scopes_def,
-       COND_RATOR] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
+  MATCH_ACCEPT_TAC deploy_ctor_prefix_transport
 QED
 
 Theorem deploy_typing_context_well_typed[local]:
@@ -76,6 +70,16 @@ Proof
      qexistsl_tac [`am`, `args`, `deploy_art`, `[]`, `[]`, `imms`, `NoneT`,
                    `runtime_art`, `tops`, `tx`, `tx.args`] >>
      simp[]) >>
+  `res <> INR HaltException` by
+    (strip_tac >> gvs[] >>
+     rename1 `lookup_function NONE _ Deploy tops = SOME (_,_,_,_,_,cbody)` >>
+     `get_module_code (deploy_evaluation_context tops am tx) NONE = SOME tops` by
+       simp[deploy_evaluation_context_def, vyperInterpreterTheory.initial_evaluation_context_def,
+            vyperContextTheory.get_module_code_def] >>
+     `!st st'. eval_stmts (deploy_evaluation_context tops am tx) cbody st <>
+               (INR HaltException, st')` by
+       (rpt gen_tac >> irule deploy_body_no_halt >> metis_tac[]) >>
+     metis_tac[]) >>
   Cases_on `res` >> simp[stmt_res_ok_def] >>
   rename1 `INR exc` >>
   `exc <> BreakException /\ exc <> ContinueException` by

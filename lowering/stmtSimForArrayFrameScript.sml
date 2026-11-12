@@ -2,9 +2,9 @@
 Theory stmtSimForArrayFrame
 Ancestors
   list rich_list finite_map vyperState vyperLookup vyperScopePreservation
-  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter
+  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter vyperCallOutcomeFrame
   vyperStatePreservation supportedExprForms supportedExprTraverse
-  vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits
+  vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits vyperCreateFrame
 
 Theorem scope_projection_lookup:
   !a b name.
@@ -142,12 +142,14 @@ QED
 
 Resume supported_pure_scopes_mutual[subscript1]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[subscript2]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
 QED
@@ -165,10 +167,17 @@ QED
 Resume supported_pure_scopes_mutual[builtin]:
   `blt <> Len` by
     (Cases_on `blt = Len` >> gvs[supported_builtin_form_def, AllCaseEqs()]) >>
+  `code_slice_source blt exprs = NONE` by
+    (Cases_on `code_slice_source blt exprs` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[code_slice_source_SOME, supported_builtin_form_def]) >>
   Cases_on `blt = Env MsgGas` >>
+  Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
-      ignore_bind_def, return_def, raise_def, AllCaseEqs(), get_accounts_def] >>
+      ignore_bind_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
+      vfmTypesTheory.option_CASE_rator, AllCaseEqs(), get_accounts_def] >>
   imp_res_tac next_gas_reading_state >>
+  imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
 QED
@@ -224,6 +233,7 @@ Proof
        expr_internal_call_root_def] >> rpt strip_tac
   >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`],
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+    gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
     imp_res_tac read_result_state >> imp_res_tac select_result_state >>
     imp_res_tac supported_pure_scopes_mutual >> gvs[] >> metis_tac[])
   >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`],
@@ -241,7 +251,7 @@ Resume supported_effect_scopes_mutual[external]:
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE]) >>
   `!n. supported_pure_exprs tops (DROP n args)` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_DROP]) >>
-  `!n m. EVERY (supported_pure_expr tops) (TAKE n (DROP m args))` by
+  `!n m. supported_pure_exprs tops (TAKE n (DROP m args))` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE, EVERY_DROP]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac eval_ext_call_preserves_non_accounts >>
@@ -314,7 +324,7 @@ Theorem iterator_unmodified_rejects_element_write[local]:
     ~iterator_unmodified (Array (Name ty name))
       [Assign (BaseTarget (SubscriptTarget (NameTarget name) key)) rhs]
 Proof
-  simp[iterator_unmodified_def, expr_place_def, stmt_writes_ok_def,
+  simp[iterator_unmodified_def, expr_places_def, stmt_writes_ok_def,
        atarget_writes_ok_def, subscript_write_contains_name]
 QED
 
@@ -332,35 +342,43 @@ Proof
 QED
 
 Theorem typed_array_root_access[local]:
-  !target env name elem bound vt attrs.
-    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+  !target env root elem bound vt attrs.
+    ((?name. root = NameTarget name) \/
+     (?nsid. root = TopLevelNameTarget nsid)) /\
+    (type_place_target env root = NONE \/
+     type_place_target env root = SOME (Type (ArrayT elem bound))) /\
     type_place_target env target = SOME vt /\
-    FST (place_access target attrs) = NameTarget name ==>
-    target = NameTarget name \/
-    place_access target attrs = (NameTarget name,[])
+    FST (place_access target attrs) = root ==>
+    target = root \/ place_access target attrs = (root,[])
 Proof
   measureInduct_on `base_assignment_target_size target` >> Cases_on `target` >>
   simp[place_access_def, well_typed_expr_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
-  >~ [`subscript_vtype _ _ = SOME _`] >- suspend "subscript"
-  >> suspend "attribute"
-QED
-
-Resume typed_array_root_access[subscript]:
-  rename1 `type_place_target env inner = SOME inner_ty` >>
+  rpt strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `place_access inner access_attrs` >>
   first_x_assum (qspec_then `inner` mp_tac) >> simp[] >>
-  disch_then drule_all >>
-  strip_tac >> gvs[place_access_def]
-QED
-
-Resume typed_array_root_access[attribute]:
-  rename1 `type_place_target env inner = SOME (Type inner_ty)` >>
-  first_x_assum (qspec_then `inner` mp_tac) >> simp[] >>
-  disch_then drule_all >> strip_tac >> gvs[] >>
+  disch_then (qspecl_then
+    [`env`, `elem`, `bound`, `THE (type_place_target env inner)`, `access_attrs`]
+    mp_tac) >>
+  simp[Abbr `access_attrs`] >>
+  strip_tac >> gvs[place_access_def] >>
   gvs[well_typed_expr_def, AllCaseEqs(), attribute_type_def]
 QED
 
-Finalise typed_array_root_access
+Theorem typed_guarded_array_root:
+  !env root elem bound target vt.
+    ((?name. root = NameTarget name) \/
+     (?nsid. root = TopLevelNameTarget nsid)) /\
+    (type_place_target env root = NONE \/
+     type_place_target env root = SOME (Type (ArrayT elem bound))) /\
+    type_place_target env target = SOME vt /\
+    ~place_contains target root ==>
+    FST (place_access target []) <> root
+Proof
+  rpt strip_tac >>
+  qspecl_then [`target`, `env`, `root`, `elem`, `bound`, `vt`, `[]`]
+    assume_tac typed_array_root_access >>
+  gvs[place_contains_def, place_access_def]
+QED
 
 Theorem typed_guarded_array_target_root:
   !env name elem bound target vt.
@@ -369,9 +387,12 @@ Theorem typed_guarded_array_target_root:
     ~place_contains target (NameTarget name) ==>
     FST (place_access target []) <> NameTarget name
 Proof
-  rpt strip_tac >>
-  drule_all typed_array_root_access >>
-  strip_tac >> gvs[place_contains_def, place_access_def]
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.SPECL
+    [`env`, `NameTarget name`, `elem`, `bound`, `target`, `vt`]
+    typed_guarded_array_root) >> simp[] >>
+  Cases_on `FLOOKUP env.var_assignable name` >>
+  simp[well_typed_expr_def, AllCaseEqs()]
 QED
 
 Theorem place_access_root_attrs[local]:
@@ -445,6 +466,496 @@ Theorem typed_guarded_eval_target_root:
 Proof
   metis_tac[typed_guarded_array_target_root, eval_target_place_memory_root]
 QED
+
+(* Frames for the protected array name that need no supported_* premise:
+   evaluating an expression or a target leaves the name's projection alone
+   when no write goes through the name (expr_writes_ok / target_writes_ok). *)
+
+Theorem pop_place_name_projection:
+  !cx p es res es' name.
+    (!root path. p = MemoryPlace root path ==> root <> name) /\
+    pop_place cx p es = (res,es') ==>
+    MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?root path. p = MemoryPlace root path`
+  >- (gvs[] >> drule pop_memory_scope_trace_events >> strip_tac >>
+      gvs[scope_pop_trace_def, scope_pop_step_def] >>
+      drule find_containing_scope_structure >> strip_tac >>
+      gvs[FLOOKUP_UPDATE]) >>
+  drule_at (Pat `pop_place _ _ _ = _`) pop_nonmemory_scopes >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem writes_ok_typed_mono:
+  (!env e. well_typed_expr env e ==>
+     !ok1 ok2. (!w vt. type_place_target env w = SOME vt /\ ok1 w ==> ok2 w) /\
+     expr_writes_ok ok1 e ==> expr_writes_ok ok2 e) /\
+  (!env e. IS_SOME (type_place_expr env e) ==>
+     !ok1 ok2. (!w vt. type_place_target env w = SOME vt /\ ok1 w ==> ok2 w) /\
+     expr_writes_ok ok1 e ==> expr_writes_ok ok2 e) /\
+  (!env t. IS_SOME (type_place_target env t) ==>
+     !ok1 ok2. (!w vt. type_place_target env w = SOME vt /\ ok1 w ==> ok2 w) /\
+     target_writes_ok ok1 t ==> target_writes_ok ok2 t) /\
+  (!env es. well_typed_exprs env es ==>
+     !ok1 ok2. (!w vt. type_place_target env w = SOME vt /\ ok1 w ==> ok2 w) /\
+     EVERY (expr_writes_ok ok1) es ==> EVERY (expr_writes_ok ok2) es) /\
+  (!(env:typing_env) (opt:expr option). T) /\
+  (!env kes. well_typed_named_exprs env kes ==>
+     !ok1 ok2. (!w vt. type_place_target env w = SOME vt /\ ok1 w ==> ok2 w) /\
+     EVERY (expr_writes_ok ok1) (MAP SND kes) ==>
+     EVERY (expr_writes_ok ok2) (MAP SND kes))
+Proof
+  ho_match_mp_tac well_typed_expr_ind >> rpt conj_tac >> rpt gen_tac >>
+  rpt strip_tac >>
+  gvs[well_typed_expr_def, expr_writes_ok_def, AllCaseEqs(), SF ETA_ss,
+      optionTheory.IS_SOME_EXISTS] >>
+  metis_tac[]
+QED
+
+Theorem writes_ok_typed_root:
+  FLOOKUP env.var_types name = SOME (ArrayT elem bound) ==>
+  (!e. well_typed_expr env e /\
+       expr_writes_ok (\w. ~place_contains w (NameTarget name)) e ==>
+       expr_writes_ok (\w. FST (place_access w []) <> NameTarget name) e) /\
+  (!t. IS_SOME (type_place_target env t) /\
+       target_writes_ok (\w. ~place_contains w (NameTarget name)) t ==>
+       target_writes_ok (\w. FST (place_access w []) <> NameTarget name) t)
+Proof
+  strip_tac >>
+  `!w vt. type_place_target env w = SOME vt /\
+          ~place_contains w (NameTarget name) ==>
+          FST (place_access w []) <> NameTarget name`
+    by metis_tac[typed_guarded_array_target_root] >>
+  rpt strip_tac
+  >- (drule_then irule (cj 1 writes_ok_typed_mono) >>
+      qexists_tac `\w. ~place_contains w (NameTarget name)` >> simp[]) >>
+  drule_then irule (cj 3 writes_ok_typed_mono) >>
+  qexists_tac `\w. ~place_contains w (NameTarget name)` >> simp[]
+QED
+Theorem intcall_scopes_after_args[local]:
+  !cx ty src fn es drv st res st'.
+  eval_expr cx (Call ty (IntCall (src,fn)) es drv) st = (res,st') ==>
+  st'.scopes = st.scopes \/
+  ?ts tup r1 s1. ~MEM (src,fn) cx.stk /\ get_module_code cx src = SOME ts /\
+    lookup_callable_function cx.in_deploy fn ts = SOME tup /\
+    LENGTH es <= LENGTH (FST (SND (SND tup))) /\
+    LENGTH (FST (SND (SND tup))) <= LENGTH es + LENGTH (FST (SND (SND (SND tup)))) /\
+    eval_expr_results cx es st = (r1,s1) /\ st'.scopes = s1.scopes
+Proof
+  rpt gen_tac >>
+  rewrite_tac[Once evaluate_def, ignore_bind_def] >>
+  simp[bind_def, type_check_def, assert_def, lift_option_type_def,
+       return_def, raise_def, LET_THM, AllCaseEqs()] >>
+  rpt strip_tac >>
+  gvs[vyperMiscTheory.option_CASE_rator, AllCaseEqs(), return_def, raise_def,
+      get_scopes_def, bind_def] >>
+  imp_res_tac finally_set_scopes >> imp_res_tac read_results_state >>
+  imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >>
+  imp_res_tac (SRULE[ignore_bind_def] finally_unless_halt_conditional_lock_scopes) >>
+  gvs[lock_if_nr_def, push_function_def, ignore_bind_def, bind_def,
+      return_def, raise_def, COND_RATOR, vyperMiscTheory.option_CASE_rator,
+      AllCaseEqs()] >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
+QED
+
+Theorem eval_observation_frame_pred[local]:
+  !(obs:evaluation_context -> evaluation_state -> 'a) ok P.
+  (!c s t. s.scopes = t.scopes /\ s.immutables = t.immutables ==>
+     obs c s = obs c t) /\
+  ((!c s t. s.scopes = t.scopes ==> obs c s = obs c t) \/
+   (!e. expr_internal_call_root e ==> P e)) /\
+  (!c tgt s p s' res t. ok tgt /\ eval_target_place c tgt s = (INL p,s') /\
+     pop_place c p s' = (res,t) ==> obs c t = obs c s') ==>
+  (!(cx:evaluation_context) (s:stmt). T) /\
+  (!(cx:evaluation_context) (ss:stmt list). T) /\
+  (!(cx:evaluation_context) (it:iterator). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
+  (!cx e. expr_writes_ok ok e /\ ~supported_expr_exists P e ==>
+    !st res st'. eval_expr cx e st = (res,st') ==> obs cx st' = obs cx st) /\
+  (!cx es. EVERY (expr_writes_ok ok) es /\ ~supported_exprs_exists P es ==>
+    !st res st'. eval_exprs cx es st = (res,st') ==> obs cx st' = obs cx st) /\
+  (!cx bt. target_writes_ok ok bt /\ ~supported_target_exists P bt ==>
+    !st res st'. eval_base_place cx bt st = (res,st') ==> obs cx st' = obs cx st) /\
+  (!cx bt. target_writes_ok ok bt /\ ~supported_target_exists P bt ==>
+    !st res st'. eval_target_place cx bt st = (res,st') ==> obs cx st' = obs cx st) /\
+  (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
+  (!cx es. EVERY (expr_writes_ok ok) es /\ ~supported_exprs_exists P es ==>
+    !st res st'. eval_expr_results cx es st = (res,st') ==> obs cx st' = obs cx st)
+Proof
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `?f. !c s. obs c s = f c s.scopes s.immutables` by
+    (qexists_tac `\c sc im. obs c ((ARB:evaluation_state) with
+                    <|scopes := sc; immutables := im|>)` >>
+     rpt gen_tac >> simp[] >>
+     qpat_assum `!c s t. s.scopes = t.scopes /\ _ ==> _` irule >> simp[]) >>
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  simp[] >> rpt gen_tac >> rpt strip_tac >>
+  qpat_x_assum `!c s. obs c s = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
+  qpat_x_assum `!c s t. s.scopes = t.scopes /\ _ ==> _` kall_tac
+  >~ [`eval_expr _ (Call _ (IntCall _) _ _) _ = _`] >- suspend "IntCall"
+  >~ [`eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _`] >- suspend "ExtCall"
+  >~ [`eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _) _ = _`] >- suspend "Create"
+  >~ [`eval_expr _ (Builtin _ _ _) _ = _`] >- suspend "Builtin"
+  >~ [`eval_expr _ (Pop _ _) _ = _`] >- suspend "Pop"
+  >~ [`eval_expr _ (IfExp _ _ _ _) _ = _`] >- suspend "IfExp"
+  >~ [`eval_expr _ (TopLevelName _ _) _ = _`] >- suspend "TopLevelName"
+  >~ [`eval_expr _ (StructLit _ _ _) _ = _`] >- suspend "StructLit"
+  >~ [`eval_base_place _ (TopLevelNameTarget _) _ = _`] >- suspend "TopLevelNameTarget"
+  >>
+  (qpat_x_assum `_ \/ !e. _` kall_tac >>
+   qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
+   qpat_x_assum `_ _ _ st = (res,st')` mp_tac >>
+   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+        return_def, raise_def, type_check_def, assert_def, get_scopes_def,
+        check_def] >>
+   rpt strip_tac >>
+   gvs[expr_writes_ok_def, supported_expr_exists_def, SF ETA_ss,
+       type_check_def, assert_def, return_def, raise_def] >>
+   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+   imp_res_tac lookup_flag_mem_state >> imp_res_tac lift_option_type_state >>
+   imp_res_tac lift_sum_state >> imp_res_tac lift_option_state >>
+   imp_res_tac extend_place_state >> imp_res_tac get_place_state >>
+   imp_res_tac eval_send_preserves_non_accounts >>
+   imp_res_tac eval_raw_call_preserves_non_accounts >>
+   imp_res_tac push_log_scopes >> imp_res_tac push_log_immutables >>
+   imp_res_tac transfer_value_scopes >> imp_res_tac transfer_value_immutables >>
+   gvs[get_accounts_def, COND_RATOR, update_accounts_def,
+       update_pending_deletions_def, bind_def, ignore_bind_def,
+       return_def, AllCaseEqs()] >> res_tac >> gvs[])
+QED
+
+Resume eval_observation_frame_pred[TopLevelName]:
+  qpat_x_assum `_ \/ !e. _` kall_tac >>
+  qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
+  rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> simp[]
+QED
+
+Resume eval_observation_frame_pred[TopLevelNameTarget]:
+  qpat_x_assum `_ \/ !e. _` kall_tac >>
+  qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
+  rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> simp[]
+QED
+
+Resume eval_observation_frame_pred[StructLit]:
+  qpat_x_assum `_ \/ !e. _` kall_tac >>
+  qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
+  gvs[expr_writes_ok_def, supported_expr_exists_def, SF ETA_ss,
+      supported_fields_exists_every, supported_exprs_exists_every,
+      EXISTS_MAP, combinTheory.o_DEF] >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  res_tac >> gvs[]
+QED
+
+Resume eval_observation_frame_pred[IfExp]:
+  qpat_x_assum `_ \/ !e. _` kall_tac >>
+  qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
+  gvs[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(),
+      return_def, raise_def, expr_writes_ok_def, supported_expr_exists_def,
+      SF ETA_ss] >>
+  imp_res_tac read_result_state >> imp_res_tac conditional_result_state >>
+  gvs[COND_RATOR, AllCaseEqs(), raise_def] >> res_tac >> gvs[]
+QED
+
+Resume eval_observation_frame_pred[Pop]:
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  gvs[expr_writes_ok_def, supported_expr_exists_def] >>
+  res_tac >> metis_tac[]
+QED
+
+Resume eval_observation_frame_pred[IntCall]:
+  qpat_x_assum `(!c s t. _) \/ _` strip_assume_tac
+  >- (drule intcall_scopes_after_args >> strip_tac >>
+      gvs[expr_writes_ok_def, supported_expr_exists_def, SF ETA_ss,
+          type_check_def, assert_def, return_def] >>
+      res_tac >> metis_tac[]) >>
+  gvs[supported_expr_exists_def] >>
+  metis_tac[expr_internal_call_root_def]
+QED
+
+Resume eval_observation_frame_pred[ExtCall]:
+  qpat_x_assum `_ \/ !e. _` kall_tac >>
+  qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
+  rename1 `ExtCall _ _ sig _` >> PairCases_on `sig` >>
+  `!n m. EVERY (expr_writes_ok ok) (TAKE n es) /\
+         EVERY (expr_writes_ok ok) (DROP n es) /\
+         EVERY (expr_writes_ok ok) (TAKE n (DROP m es)) /\
+         EVERY (expr_writes_ok ok) (DROP n (DROP m es))` by
+    (gvs[expr_writes_ok_def, SF ETA_ss] >> simp[EVERY_TAKE, EVERY_DROP]) >>
+  `!n m. EVERY (\e. ~supported_expr_exists P e) (TAKE n es) /\
+         EVERY (\e. ~supported_expr_exists P e) (DROP n es) /\
+         EVERY (\e. ~supported_expr_exists P e) (TAKE n (DROP m es)) /\
+         EVERY (\e. ~supported_expr_exists P e) (DROP n (DROP m es))` by
+    (gvs[supported_expr_exists_def, supported_exprs_exists_every, NOT_EXISTS,
+         combinTheory.o_DEF] >>
+     simp[EVERY_TAKE, EVERY_DROP]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), LET_THM] >>
+  rpt strip_tac >>
+  gvs[SF ETA_ss, LET_THM, supported_exprs_exists_every, NOT_EXISTS,
+      combinTheory.o_DEF] >>
+  imp_res_tac read_results_state >>
+  imp_res_tac eval_ext_call_preserves_non_accounts >>
+  gvs[] >> res_tac >> gvs[]
+QED
+
+Resume eval_observation_frame_pred[Create]:
+  qpat_x_assum `_ \/ !e. _` kall_tac >>
+  qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
+  rename1 `CreateTarget kind has_salt rof _` >>
+  `!n m. EVERY (expr_writes_ok ok) (TAKE n es) /\
+         EVERY (expr_writes_ok ok) (DROP n es) /\
+         EVERY (expr_writes_ok ok) (TAKE n (DROP m es)) /\
+         EVERY (expr_writes_ok ok) (DROP n (DROP m es))` by
+    (gvs[expr_writes_ok_def, SF ETA_ss] >> simp[EVERY_TAKE, EVERY_DROP]) >>
+  `!n m. ~supported_exprs_exists P (TAKE n es) /\
+         ~supported_exprs_exists P (DROP n es) /\
+         ~supported_exprs_exists P (TAKE n (DROP m es)) /\
+         ~supported_exprs_exists P (DROP n (DROP m es))` by
+    (gvs[supported_expr_exists_def, supported_exprs_exists_every, NOT_EXISTS,
+         combinTheory.o_DEF] >>
+     simp[EVERY_TAKE, EVERY_DROP]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  Cases_on `kind` >> simp[Once evaluate_def, bind_def, AllCaseEqs(), LET_THM] >>
+  rpt strip_tac >> gvs[expr_writes_ok_def, supported_expr_exists_def, SF ETA_ss, LET_THM] >>
+  imp_res_tac read_results_state >>
+  imp_res_tac check_create_blueprint_result_state >>
+  imp_res_tac eval_create_preserves_scopes_immutables >>
+  gvs[] >> res_tac >> gvs[]
+QED
+
+Resume eval_observation_frame_pred[Builtin]:
+  qpat_x_assum `_ \/ !e. _` kall_tac >>
+  qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
+  rename1 `Builtin _ bt es` >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  Cases_on `bt = Env MsgGas` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+       return_def, raise_def, type_check_def, assert_def] >>
+  rpt strip_tac >>
+  gvs[expr_writes_ok_def, supported_expr_exists_def, SF ETA_ss, type_check_def,
+      assert_def, return_def, raise_def,
+      vyperContextTheory.builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
+  imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
+  imp_res_tac precompile_call_success_state >>
+  gvs[get_accounts_def, return_def] >> res_tac >> gvs[]
+QED
+
+Finalise eval_observation_frame_pred
+
+Theorem supported_exists_false[local]:
+  (!e. ~supported_expr_exists (\x. F) e) /\
+  (!t. ~supported_target_exists (\x. F) t) /\
+  (!es. ~supported_exprs_exists (\x. F) es)
+Proof
+  `(!p e. p = (\x. F) ==> ~supported_expr_exists p e) /\
+   (!p t. p = (\x. F) ==> ~supported_target_exists p t) /\
+   (!p es. p = (\x. F) ==> ~supported_exprs_exists p es) /\
+   (!p opt. p = (\x. F) ==> ~supported_opt_exists p opt) /\
+   (!p fields. p = (\x. F) ==> ~supported_fields_exists p fields)` by
+    (ho_match_mp_tac supported_expr_exists_ind >>
+     rw[supported_expr_exists_def]) >>
+  simp[]
+QED
+
+(* An observation of the state that reads only the scopes and the immutables
+   is kept by evaluating an expression or a target whose pops go only
+   through targets ok accepts, provided the observation reads only the
+   scopes or the expression has no internal call. *)
+Theorem eval_observation_frame_mutual:
+  !(obs:evaluation_context -> evaluation_state -> 'a) ok.
+  (!c s t. s.scopes = t.scopes /\ s.immutables = t.immutables ==>
+     obs c s = obs c t) /\
+  (!c tgt s p s' res t. ok tgt /\ eval_target_place c tgt s = (INL p,s') /\
+     pop_place c p s' = (res,t) ==> obs c t = obs c s') ==>
+  (!cx e. expr_writes_ok ok e /\
+     ((!c s t. s.scopes = t.scopes ==> obs c s = obs c t) \/
+      ~supported_expr_exists expr_internal_call_root e) ==>
+    !st res st'. eval_expr cx e st = (res,st') ==> obs cx st' = obs cx st) /\
+  (!cx es. EVERY (expr_writes_ok ok) es /\
+     ((!c s t. s.scopes = t.scopes ==> obs c s = obs c t) \/
+      ~supported_exprs_exists expr_internal_call_root es) ==>
+    !st res st'. eval_exprs cx es st = (res,st') ==> obs cx st' = obs cx st) /\
+  (!cx bt. target_writes_ok ok bt /\
+     ((!c s t. s.scopes = t.scopes ==> obs c s = obs c t) \/
+      ~supported_target_exists expr_internal_call_root bt) ==>
+    !st res st'. eval_base_place cx bt st = (res,st') ==> obs cx st' = obs cx st) /\
+  (!cx bt. target_writes_ok ok bt /\
+     ((!c s t. s.scopes = t.scopes ==> obs c s = obs c t) \/
+      ~supported_target_exists expr_internal_call_root bt) ==>
+    !st res st'. eval_target_place cx bt st = (res,st') ==> obs cx st' = obs cx st) /\
+  (!cx es. EVERY (expr_writes_ok ok) es /\
+     ((!c s t. s.scopes = t.scopes ==> obs c s = obs c t) \/
+      ~supported_exprs_exists expr_internal_call_root es) ==>
+    !st res st'. eval_expr_results cx es st = (res,st') ==> obs cx st' = obs cx st)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `!c s t. s.scopes = t.scopes ==> obs c s = obs c t`
+  >- (qspecl_then [`obs`,`ok`,`\x. F`] mp_tac eval_observation_frame_pred >>
+      impl_tac >- (rpt conj_tac >> TRY disj1_tac >> first_assum ACCEPT_TAC) >>
+      REWRITE_TAC [supported_exists_false] >> strip_tac >>
+      rpt conj_tac >> rpt strip_tac >> metis_tac[]) >>
+  qspecl_then [`obs`,`ok`,`expr_internal_call_root`] mp_tac
+    eval_observation_frame_pred >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (disj2_tac >> simp[NoAsms] >> NO_TAC) >>
+      first_assum ACCEPT_TAC) >>
+  strip_tac >> rpt conj_tac >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem eval_name_projection_mutual:
+  !name.
+  (!(cx:evaluation_context) (s:stmt). T) /\
+  (!(cx:evaluation_context) (ss:stmt list). T) /\
+  (!(cx:evaluation_context) (it:iterator). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
+  (!cx e. expr_writes_ok (\w. FST (place_access w []) <> NameTarget name) e ==>
+    !st res st'. eval_expr cx e st = (res,st') ==>
+      MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes) /\
+  (!cx es. EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) es ==>
+    !st res st'. eval_exprs cx es st = (res,st') ==>
+      MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes) /\
+  (!cx bt. target_writes_ok (\w. FST (place_access w []) <> NameTarget name) bt ==>
+    !st res st'. eval_base_place cx bt st = (res,st') ==>
+      MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes) /\
+  (!cx bt. target_writes_ok (\w. FST (place_access w []) <> NameTarget name) bt ==>
+    !st res st'. eval_target_place cx bt st = (res,st') ==>
+      MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes) /\
+  (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
+  (!cx es. EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) es ==>
+    !st res st'. eval_expr_results cx es st = (res,st') ==>
+      MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes)
+Proof
+  gen_tac >> ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  simp[] >> rpt gen_tac >> rpt strip_tac
+  >~ [`eval_expr _ (Call _ (IntCall _) _ _) _ = _`] >- suspend "IntCall"
+  >~ [`eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _`] >- suspend "ExtCall"
+  >~ [`eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _) _ = _`] >- suspend "Create"
+  >~ [`eval_expr _ (Builtin _ _ _) _ = _`] >- suspend "Builtin"
+  >~ [`eval_expr _ (Pop _ _) _ = _`] >- suspend "Pop"
+  >~ [`eval_expr _ (IfExp _ _ _ _) _ = _`] >- suspend "IfExp"
+  >~ [`eval_expr _ (TopLevelName _ _) _ = _`] >- suspend "TopLevelName"
+  >~ [`eval_expr _ (StructLit _ _ _) _ = _`] >- suspend "StructLit"
+  >~ [`eval_base_place _ (TopLevelNameTarget _) _ = _`] >- suspend "TopLevelNameTarget"
+  >>
+  (qpat_x_assum `_ _ _ st = (res,st')` mp_tac >>
+   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+        return_def, raise_def, type_check_def, assert_def, get_scopes_def,
+        check_def] >>
+   rpt strip_tac >>
+   gvs[expr_writes_ok_def, SF ETA_ss, type_check_def, assert_def, return_def, raise_def] >>
+   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+   imp_res_tac lookup_flag_mem_scopes >> imp_res_tac lift_option_type_state >>
+   imp_res_tac lift_sum_state >> imp_res_tac lift_option_state >>
+   imp_res_tac extend_place_state >> imp_res_tac get_place_state >>
+   imp_res_tac eval_send_preserves_non_accounts >>
+   imp_res_tac eval_raw_call_preserves_non_accounts >>
+   imp_res_tac push_log_scopes >> imp_res_tac transfer_value_scopes >>
+   imp_res_tac get_accounts_scopes >>
+   gvs[COND_RATOR, update_accounts_def, update_pending_deletions_def,
+       bind_def, ignore_bind_def, return_def, AllCaseEqs()] >> res_tac >> gvs[])
+QED
+
+Resume eval_name_projection_mutual[TopLevelName]:
+  rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def] >> imp_res_tac lookup_global_scopes >> simp[]
+QED
+
+Resume eval_name_projection_mutual[TopLevelNameTarget]:
+  rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def] >> imp_res_tac lookup_global_scopes >> simp[]
+QED
+
+Resume eval_name_projection_mutual[StructLit]:
+  rename1 `StructLit _ nsid _` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def,
+      expr_writes_ok_def, SF ETA_ss] >> res_tac >> gvs[]
+QED
+
+Resume eval_name_projection_mutual[IfExp]:
+  gvs[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(),
+      return_def, raise_def, expr_writes_ok_def, SF ETA_ss] >>
+  imp_res_tac read_result_state >> imp_res_tac conditional_result_state >>
+  gvs[COND_RATOR, AllCaseEqs(), raise_def] >> res_tac >> gvs[]
+QED
+
+Resume eval_name_projection_mutual[Pop]:
+  rename1 `Pop _ tgt` >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  gvs[expr_writes_ok_def] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  rename1 `pop_place cx p mid = (res,st')` >>
+  `!root path. p = MemoryPlace root path ==> root <> name` by
+    (rpt strip_tac >> gvs[] >> drule eval_target_place_memory_root >>
+     strip_tac >> gvs[]) >>
+  drule_all pop_place_name_projection >> simp[]
+QED
+
+Resume eval_name_projection_mutual[IntCall]:
+  drule intcall_scopes_after_args >> strip_tac >> gvs[] >>
+  gvs[expr_writes_ok_def, SF ETA_ss, type_check_def, assert_def,
+      lift_option_type_def, return_def, raise_def,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs(), LET_THM] >>
+  res_tac >> gvs[]
+QED
+
+Resume eval_name_projection_mutual[ExtCall]:
+  rename1 `ExtCall _ _ sig _` >> PairCases_on `sig` >>
+  `!n m. EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (TAKE n es) /\
+         EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (DROP n es) /\
+         EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (TAKE n (DROP m es)) /\
+         EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (DROP n (DROP m es))` by
+    (gvs[expr_writes_ok_def, SF ETA_ss] >> simp[EVERY_TAKE, EVERY_DROP]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), LET_THM] >>
+  rpt strip_tac >> gvs[SF ETA_ss, LET_THM] >>
+  imp_res_tac read_results_state >>
+  imp_res_tac eval_ext_call_preserves_non_accounts >>
+  gvs[] >> res_tac >> gvs[]
+QED
+
+Resume eval_name_projection_mutual[Create]:
+  rename1 `CreateTarget kind has_salt rof _` >>
+  `!n m. EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (TAKE n es) /\
+         EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (DROP n es) /\
+         EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (TAKE n (DROP m es)) /\
+         EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) (DROP n (DROP m es))` by
+    (gvs[expr_writes_ok_def, SF ETA_ss] >> simp[EVERY_TAKE, EVERY_DROP]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  Cases_on `kind` >> simp[Once evaluate_def, bind_def, AllCaseEqs(), LET_THM] >>
+  rpt strip_tac >> gvs[expr_writes_ok_def, SF ETA_ss, LET_THM] >>
+  imp_res_tac read_results_state >>
+  imp_res_tac check_create_blueprint_result_state >>
+  imp_res_tac eval_create_preserves_scopes_immutables >>
+  gvs[] >> res_tac >> gvs[]
+QED
+
+Resume eval_name_projection_mutual[Builtin]:
+  rename1 `Builtin _ bt es` >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  Cases_on `bt = Env MsgGas` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+       return_def, raise_def, type_check_def, assert_def] >>
+  rpt strip_tac >>
+  gvs[expr_writes_ok_def, SF ETA_ss, type_check_def, assert_def, return_def,
+      raise_def, vyperContextTheory.builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
+  imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
+  imp_res_tac get_accounts_scopes >> imp_res_tac precompile_call_success_state >>
+  gvs[] >> res_tac >> gvs[]
+QED
+
+Finalise eval_name_projection_mutual
 
 Theorem supported_target_eval_scopes:
   !target tops bindings pt cx es res es'.
@@ -556,35 +1067,106 @@ Proof
   metis_tac[supported_target_place_scopes]
 QED
 
+Theorem projection_length[local]:
+  !a b name.
+    MAP (\sc. FLOOKUP sc name) a = MAP (\sc. FLOOKUP sc name) b ==>
+    LENGTH a = LENGTH b
+Proof
+  metis_tac[LENGTH_MAP]
+QED
+
+Theorem typed_expr_name_projection[local]:
+  !env name elem bound e cx st res st'.
+    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+    well_typed_expr env e /\
+    expr_writes_ok (\w. ~place_contains w (NameTarget name)) e /\
+    eval_expr cx e st = (res,st') ==>
+    MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes
+Proof
+  rpt strip_tac >> drule writes_ok_typed_root >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all (cj 5 eval_name_projection_mutual) >> simp[]
+QED
+
+Theorem typed_exprs_name_projection[local]:
+  !env name elem bound es cx st res st'.
+    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+    well_typed_exprs env es /\
+    EVERY (expr_writes_ok (\w. ~place_contains w (NameTarget name))) es /\
+    eval_exprs cx es st = (res,st') ==>
+    MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes
+Proof
+  rpt strip_tac >>
+  `EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) es`
+    by (drule_then irule (cj 4 writes_ok_typed_mono) >>
+        qexists_tac `\w. ~place_contains w (NameTarget name)` >> simp[] >>
+        metis_tac[typed_guarded_array_target_root]) >>
+  drule_all (cj 6 eval_name_projection_mutual) >> simp[]
+QED
+
+Theorem typed_custom_error_name_projection[local]:
+  !env name elem bound err params es cx st res st'.
+    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+    well_typed_custom_error env err /\
+    EVERY (expr_writes_ok (\w. ~place_contains w (NameTarget name)))
+      (custom_error_exprs err) /\
+    order_custom_error_args params err = SOME es /\
+    eval_exprs cx es st = (res,st') ==>
+    MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes
+Proof
+  rpt strip_tac >>
+  `EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name))
+     (custom_error_exprs err)` by
+    (irule (cj 4 writes_ok_typed_mono) >>
+     qexistsl_tac [`env`, `\w. ~place_contains w (NameTarget name)`] >>
+     gvs[well_typed_custom_error_def] >>
+     metis_tac[typed_guarded_array_target_root]) >>
+  `EVERY (expr_writes_ok (\w. FST (place_access w []) <> NameTarget name)) es`
+    by metis_tac[sortingTheory.PERM_EVERY,
+                 vyperASTTheory.order_custom_error_args_perm] >>
+  drule_all (cj 6 eval_name_projection_mutual) >> simp[]
+QED
+
+Theorem typed_target_name_projection[local]:
+  !env name elem bound t vt cx st res st'.
+    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+    type_place_target env t = SOME vt /\
+    target_writes_ok (\w. ~place_contains w (NameTarget name)) t /\
+    eval_target_place cx t st = (res,st') ==>
+    MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes
+Proof
+  rpt strip_tac >> drule writes_ok_typed_root >> strip_tac >>
+  `target_writes_ok (\w. FST (place_access w []) <> NameTarget name) t`
+    by (first_x_assum irule >> simp[]) >>
+  drule_all (cj 8 eval_name_projection_mutual) >> simp[]
+QED
+
 Theorem typed_guarded_target_write_projection:
-  !env name elem bound target vt tops bindings cx v es res es'.
+  !env name elem bound target vt cx v es res es'.
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
     type_place_target env target = SOME vt /\
     ~place_contains target (NameTarget name) /\
-    (supported_target tops bindings target \/
-     (?pt. supported_target_info tops bindings target = SOME pt)) /\
-    ~supported_target_exists expr_internal_call_root target /\
+    target_writes_ok (\w. ~place_contains w (NameTarget name)) target /\
     (do p <- eval_target_place cx target; write_place cx p v od) es = (res,es') ==>
     MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
     LENGTH es'.scopes = LENGTH es.scopes
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[bind_def, AllCaseEqs(), raise_def] >>
-  imp_res_tac supported_any_target_place_scopes >> gvs[] >>
-  rename1 `write_place cx dest v mid = (res,es')` >>
-  `!root path. dest = MemoryPlace root path ==> root <> name` by
-    (rpt strip_tac >> gvs[] >> metis_tac[typed_guarded_eval_target_root]) >>
-  drule_all write_guarded_place_projection >> simp[]
+  drule_all typed_target_name_projection >> strip_tac
+  >- (rename1 `write_place cx dest v mid = (res,es')` >>
+      `!root path. dest = MemoryPlace root path ==> root <> name` by
+        (rpt strip_tac >> gvs[] >> metis_tac[typed_guarded_eval_target_root]) >>
+      drule_all write_guarded_place_projection >> strip_tac >>
+      simp[] >> metis_tac[projection_length]) >>
+  simp[] >> metis_tac[projection_length]
 QED
 
 Theorem typed_guarded_base_assignment_projection:
-  !env name elem bound bt ty tops bindings cx v es res es'.
+  !env name elem bound bt ty cx v es res es'.
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
     well_typed_atarget env (BaseTarget bt) ty /\
     atarget_writes_ok (\t. ~place_contains t (NameTarget name)) (BaseTarget bt) /\
-    (supported_target tops bindings bt \/
-     (?pt. supported_target_info tops bindings bt = SOME pt)) /\
-    ~supported_target_exists expr_internal_call_root bt /\
     assign_tuple_targets cx (BaseTarget bt) v es = (res,es') ==>
     MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
     LENGTH es'.scopes = LENGTH es.scopes
@@ -593,75 +1175,80 @@ Proof
   gvs[well_typed_atarget_def, well_typed_target_def, atarget_writes_ok_def] >>
   qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >>
-  irule typed_guarded_target_write_projection >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  drule_all typed_guarded_target_write_projection >> simp[]
 QED
 
-Theorem typed_guarded_flat_targets_projection:
-  !targets tys env name elem bound tops bindings cx vs es res es'.
-    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
-    LIST_REL (\tgt ty. well_typed_atarget env tgt ty) targets tys /\
-    EVERY (\g. case g of BaseTarget bt => supported_target tops bindings bt
-                         | TupleTarget _ => F) targets /\
-    EVERY (atarget_writes_ok (\t. ~place_contains t (NameTarget name))) targets /\
-    ~supported_assignments_exists expr_internal_call_root targets /\
-    assign_tuple_target_list cx targets vs es = (res,es') ==>
-    MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
-    LENGTH es'.scopes = LENGTH es.scopes
-Proof
-  Induct_on `targets` >> Cases_on `vs` >>
-  simp[Once evaluate_def, return_def, raise_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `tys` >> gvs[] >>
-  rename1 `well_typed_atarget env head head_ty` >>
-  Cases_on `head` >> gvs[supportedStmtTraverseTheory.supported_assignment_exists_def] >>
-  gvs[ignore_bind_def, bind_def, AllCaseEqs(), raise_def] >>
-  drule_at (Pat `assign_tuple_targets _ _ _ _ = _`)
-    typed_guarded_base_assignment_projection >>
-  disch_then drule >> disch_then drule >> disch_then drule >>
-  disch_then (qspecl_then [`tops`,`bindings`] mp_tac) >>
-  simp[] >> strip_tac >>
-  first_x_assum drule_all >> simp[]
-QED
-
-Theorem typed_guarded_assignment_projection:
-  !env name elem bound target ty tops bindings rhs cx v es res es'.
+Theorem typed_guarded_assignment_projection_mutual[local]:
+  (!(cx:evaluation_context) (s:stmt). T) /\
+  (!(cx:evaluation_context) (ss:stmt list). T) /\
+  (!(cx:evaluation_context) (it:iterator). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
+  (!(cx:evaluation_context) (e:expr). T) /\
+  (!(cx:evaluation_context) (es:expr list). T) /\
+  (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+  (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+  (!cx target v. !env name elem bound ty es res es'.
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
     well_typed_atarget env target ty /\
     atarget_writes_ok (\t. ~place_contains t (NameTarget name)) target /\
-    supported_assignment tops bindings target rhs /\
-    ~supported_assignment_exists expr_internal_call_root target /\
+    assign_tuple_targets cx target v es = (res,es') ==>
+    MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
+    LENGTH es'.scopes = LENGTH es.scopes) /\
+  (!cx targets vs. !env name elem bound tys es res es'.
+    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+    LIST_REL (\tgt ty. well_typed_atarget env tgt ty) targets tys /\
+    EVERY (atarget_writes_ok (\t. ~place_contains t (NameTarget name))) targets /\
+    assign_tuple_target_list cx targets vs es = (res,es') ==>
+    MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
+    LENGTH es'.scopes = LENGTH es.scopes) /\
+  (!(cx:evaluation_context) (es:expr list). T)
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >>
+  rpt gen_tac >> rpt strip_tac
+  >>~- ([`assign_tuple_targets _ (BaseTarget _) _ _ = _`],
+      gvs[well_typed_atarget_def, well_typed_target_def, atarget_writes_ok_def] >>
+      qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def] >> strip_tac >>
+      drule_all typed_guarded_target_write_projection >> simp[])
+  >>~- ([`assign_tuple_targets _ (TupleTarget _) _ _ = _`],
+      gvs[well_typed_atarget_def, atarget_writes_ok_def, SF ETA_ss] >>
+      qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, raise_def, vyperValueTheory.value_CASE_rator,
+           vyperValueTheory.array_value_CASE_rator, AllCaseEqs()] >>
+      strip_tac >> gvs[] >> res_tac >> gvs[]) >>
+  qpat_x_assum `assign_tuple_target_list _ _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  strip_tac >> gvs[LIST_REL_CONS1, SF ETA_ss] >> res_tac >> gvs[]
+QED
+
+Theorem typed_guarded_assignment_projection:
+  !env name elem bound target ty cx v es res es'.
+    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+    well_typed_atarget env target ty /\
+    atarget_writes_ok (\t. ~place_contains t (NameTarget name)) target /\
     assign_tuple_targets cx target v es = (res,es') ==>
     MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
     LENGTH es'.scopes = LENGTH es.scopes
 Proof
-  Cases_on `target` >> rpt gen_tac >> strip_tac
-  >~ [`assign_tuple_targets _ (BaseTarget _) _ _ = _`]
-  >- suspend "base"
-  >> suspend "tuple"
+  metis_tac[typed_guarded_assignment_projection_mutual]
 QED
 
-Resume typed_guarded_assignment_projection[base]:
-  rename1 `assign_tuple_targets cx (BaseTarget bt) v es = _` >>
-  gvs[supported_assignment_def, AllCaseEqs(),
-      supportedStmtTraverseTheory.supported_assignment_exists_def] >>
-  irule typed_guarded_base_assignment_projection >>
-  goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexistsl [`bindings`,`tops`] >> simp[] >>
-  Cases_on `supported_target_info tops bindings bt` >> gvs[]
+Theorem append_place_name_projection:
+  !cx p v es res es' name.
+    (!root path. p = MemoryPlace root path ==> root <> name) /\
+    append_place cx p v es = (res,es') ==>
+    MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes
+Proof
+  Cases_on `p` >> rpt gen_tac >> strip_tac
+  >~ [`append_place _ (StoragePlace _ _ _) _ _ = _`]
+  >- metis_tac[append_storage_place_scopes_immutables] >>
+  gvs[append_place_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
+  imp_res_tac lift_sum_state >> gvs[] >>
+  drule_at (Pat `write_place _ _ _ _ = _`) write_guarded_place_projection >>
+  simp[]
 QED
-
-Resume typed_guarded_assignment_projection[tuple]:
-  gvs[well_typed_atarget_def, supported_assignment_def, atarget_writes_ok_def,
-      supportedStmtTraverseTheory.supported_assignment_exists_def] >>
-  Cases_on `v` >>
-  gvs[Once evaluate_def, raise_def, vyperValueTheory.array_value_CASE_rator,
-      AllCaseEqs()] >>
-  irule typed_guarded_flat_targets_projection >>
-  goal_assum (drule_at Any) >> metis_tac[]
-QED
-
-Finalise typed_guarded_assignment_projection
 
 Theorem new_variable_other_projection:
   !id tv v es res es' name.
@@ -733,6 +1320,12 @@ Theorem eval_for_projection_frame:
 Proof
   Induct_on `vs` >> simp[Once evaluate_def, return_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `bind (read_result _ _) _ _ = _` mp_tac >>
+  simp[Once bind_def] >>
+  Cases_on `read_result cx h es` >> rename1 `read_result cx h es = (rr,es0)` >>
+  `es0 = es` by metis_tac[read_result_state] >> pop_assum SUBST_ALL_TAC >>
+  Cases_on `rr` >> simp[] >> TRY (strip_tac >> gvs[] >> NO_TAC) >>
+  strip_tac >>
   qmatch_asmsub_abbrev_tac `finally action pop_scope` >>
   qpat_x_assum `ignore_bind _ _ es = _` mp_tac >>
   pure_rewrite_tac [push_scope_with_var_def, ignore_bind_def, bind_def, return_def] >>
@@ -784,6 +1377,7 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac array_iterator_results_state >>
   gvs[return_def] >> metis_tac[]
 QED
 
@@ -805,14 +1399,21 @@ QED
 
 Theorem supported_iterator_scopes:
   !tops ty it n cx es res es'.
-    supported_iterator tops ty it n /\ eval_iterator cx it es = (res,es') ==>
+    supported_iterator tops ty it n /\
+    ~supported_iterator_exists expr_internal_call_root it /\
+    eval_iterator cx it es = (res,es') ==>
     es'.scopes = es.scopes
 Proof
   Cases_on `it` >> rpt gen_tac >> strip_tac
   >~ [`eval_iterator cx (Array arr) es = _`]
-  >- (drule supported_array_iterator_shape >> strip_tac >> gvs[] >>
-      irule array_iterator_scopes >> goal_assum (drule_at Any) >>
-      metis_tac[name_expr_scopes]) >>
+  >- (irule array_iterator_scopes >> goal_assum (drule_at Any) >>
+      Cases_on `arr`
+      >~ [`Name _ _`] >- metis_tac[name_expr_scopes]
+      >~ [`TopLevelName _ nid`]
+      >- (PairCases_on `nid` >> simp[Once evaluate_def] >>
+          metis_tac[lookup_global_scopes]) >>
+      gvs[supported_iterator_def, supportedStmtTraverseTheory.supported_iterator_exists_def] >>
+      metis_tac[supported_expr_scopes]) >>
   rename1 `eval_iterator cx (Range a b) es = _` >>
   irule range_iterator_scopes >> goal_assum (drule_at Any) >>
   Cases_on `a`
@@ -857,7 +1458,8 @@ QED
 
 Theorem if_projection_frame:
   !cx e ss1 ss2 name es res es'.
-    (!s r t. eval_expr cx e s = (r,t) ==> t.scopes = s.scopes) /\
+    (!s r t. eval_expr cx e s = (r,t) ==>
+      MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes) /\
     (!s r t. s.scopes <> [] /\ eval_stmts cx ss1 s = (r,t) ==>
       MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes /\
       LENGTH t.scopes = LENGTH s.scopes) /\
@@ -874,16 +1476,18 @@ Proof
        get_scopes_def, set_scopes_def, return_def, AllCaseEqs()] >> strip_tac >>
   first_x_assum drule >> strip_tac
   >~ [`v = INR exc`]
-  >- gvs[IgnAsm `!s r t. _`] >>
+  >- (gvs[IgnAsm `!s r t. _`] >> imp_res_tac projection_length >> gvs[]) >>
   drule_at (Pat `finally _ _ _ = _`) balanced_conditional_projection >>
   disch_then (qspec_then `name` mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[] >> strip_tac >>
+  imp_res_tac projection_length >> gvs[]
 QED
 
 Theorem annassign_projection_frame:
   !cx id typ e name es res es'.
     id <> name /\
-    (!s r t. eval_expr cx e s = (r,t) ==> t.scopes = s.scopes) /\
+    (!s r t. eval_expr cx e s = (r,t) ==>
+      MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes) /\
     eval_stmt cx (AnnAssign id typ e) es = (res,es') ==>
     MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
     LENGTH es'.scopes = LENGTH es.scopes
@@ -893,14 +1497,18 @@ Proof
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac lift_option_type_state >> imp_res_tac read_result_state >>
   gvs[IgnAsm `!s r t. _`] >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  drule_all new_variable_other_projection >> simp[]
+  first_x_assum drule >> strip_tac
+  >~ [`new_variable _ _ _ _ = _`]
+  >- (drule_all new_variable_other_projection >> strip_tac >>
+      metis_tac[projection_length]) >>
+  metis_tac[projection_length]
 QED
 
 Theorem for_projection_frame:
   !cx id typ it n stmts name es res es'.
     id <> name /\
-    (!s r t. eval_iterator cx it s = (r,t) ==> t.scopes = s.scopes) /\
+    (!s r t. eval_iterator cx it s = (r,t) ==>
+      MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes) /\
     (!s r t. s.scopes <> [] /\ eval_stmts cx stmts s = (r,t) ==>
       MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes /\
       LENGTH t.scopes = LENGTH s.scopes) /\
@@ -917,18 +1525,18 @@ Proof
   >~ [`eval_for _ _ _ _ _ _ = _`]
   >- (drule_at (Pat `eval_for _ _ _ _ _ _ = _`) eval_for_projection_frame >>
       disch_then (qspec_then `name` mp_tac) >>
-      (impl_tac >- metis_tac[]) >> simp[]) >>
-  gvs[IgnAsm `!s r t. _`]
+      (impl_tac >- metis_tac[]) >> strip_tac >>
+      imp_res_tac projection_length >> gvs[]) >>
+  gvs[IgnAsm `!s r t. _`] >> imp_res_tac projection_length >> gvs[]
 QED
 
 Theorem assign_projection_frame:
-  !env name elem bound target ty tops bindings rhs cx es res es'.
+  !env name elem bound target ty rhs cx es res es'.
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
     well_typed_atarget env target ty /\
     atarget_writes_ok (\t. ~place_contains t (NameTarget name)) target /\
-    supported_assignment tops bindings target rhs /\
-    ~supported_assignment_exists expr_internal_call_root target /\
-    (!s r t. eval_expr cx rhs s = (r,t) ==> t.scopes = s.scopes) /\
+    (!s r t. eval_expr cx rhs s = (r,t) ==>
+      MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes) /\
     eval_stmt cx (Assign target rhs) es = (res,es') ==>
     MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
     LENGTH es'.scopes = LENGTH es.scopes
@@ -943,38 +1551,39 @@ Resume assign_projection_frame[tuple]:
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> gvs[IgnAsm `!s r t. _`] >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  drule_all typed_guarded_assignment_projection >> simp[]
+  first_x_assum drule >> strip_tac
+  >~ [`assign_tuple_targets _ _ _ _ = _`]
+  >- (drule_all typed_guarded_assignment_projection >> strip_tac >>
+      metis_tac[projection_length]) >>
+  metis_tac[projection_length]
 QED
 
 Resume assign_projection_frame[base]:
   rename1 `eval_stmt cx (Assign (BaseTarget bt) rhs) es = _` >>
-  gvs[well_typed_atarget_def, well_typed_target_def, atarget_writes_ok_def,
-      supported_assignment_def,
-      supportedStmtTraverseTheory.supported_assignment_exists_def, AllCaseEqs()] >>
+  gvs[well_typed_atarget_def, well_typed_target_def, atarget_writes_ok_def] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> gvs[IgnAsm `!s r t. _`] >>
   first_x_assum drule >> strip_tac >>
-  imp_res_tac supported_any_target_place_scopes >>
-  Cases_on `supported_target_info tops bindings bt` >> gvs[] >>
-  imp_res_tac supported_target_place_scopes >> gvs[] >>
-  rename1 `write_place cx dest value mid = (res,es')` >>
-  `!root path. dest = MemoryPlace root path ==> root <> name` by
-    (rpt strip_tac >> gvs[] >> metis_tac[typed_guarded_eval_target_root]) >>
-  drule_all write_guarded_place_projection >> simp[]
+  imp_res_tac typed_target_name_projection >> gvs[]
+  >~ [`write_place _ _ _ _ = _`]
+  >- (rename1 `write_place cx dest value mid = (res,es')` >>
+      `!root path. dest = MemoryPlace root path ==> root <> name` by
+        (rpt strip_tac >> gvs[] >> metis_tac[typed_guarded_eval_target_root]) >>
+      drule_all write_guarded_place_projection >> strip_tac >>
+      metis_tac[projection_length]) >>
+  metis_tac[projection_length]
 QED
 
 Finalise assign_projection_frame
 
 Theorem augassign_projection_frame:
-  !env name elem bound bt ty bop rhs tops bindings cx es res es'.
+  !env name elem bound bt ty bop rhs cx es res es'.
     FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
     well_typed_target env bt ty /\ ~place_contains bt (NameTarget name) /\
-    (supported_target tops bindings bt \/
-     (?pt. supported_target_info tops bindings bt = SOME pt)) /\
-    ~supported_target_exists expr_internal_call_root bt /\
-    (!s r t. eval_expr cx rhs s = (r,t) ==> t.scopes = s.scopes) /\
+    target_writes_ok (\w. ~place_contains w (NameTarget name)) bt /\
+    (!s r t. eval_expr cx rhs s = (r,t) ==>
+      MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes) /\
     eval_stmt cx (AugAssign ty bt bop rhs) es = (res,es') ==>
     MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
     LENGTH es'.scopes = LENGTH es.scopes
@@ -985,296 +1594,316 @@ Proof
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
   imp_res_tac read_result_state >> imp_res_tac lift_sum_state >>
-  imp_res_tac supported_any_target_place_scopes >>
-  gvs[IgnAsm `!s r t. _`] >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  rename1 `write_place cx dest value mid = (res,es')` >>
-  `!root path. dest = MemoryPlace root path ==> root <> name` by
-    (rpt strip_tac >> gvs[] >> metis_tac[typed_guarded_eval_target_root]) >>
-  drule_all write_guarded_place_projection >> simp[]
-QED
-
-Theorem append_nonmemory_scopes[local]:
-  !cx p v es res es'.
-    (!root path. p <> MemoryPlace root path) /\
-    append_place cx p v es = (res,es') ==> es'.scopes = es.scopes
-Proof
-  Cases_on `p` >> rpt gen_tac >> strip_tac
-  >~ [`append_place _ (MemoryPlace _ _) _ _ = _`]
-  >- metis_tac[]
-  >~ [`append_place _ (StoragePlace _ _ _) _ _ = _`]
-  >- metis_tac[append_storage_place_scopes_immutables] >>
-  gvs[append_place_def, bind_def, AllCaseEqs()] >>
-  imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac write_immutable_place_scopes >> gvs[]
+  imp_res_tac typed_target_name_projection >>
+  gvs[IgnAsm `!s r t. _`] >> res_tac
+  >~ [`write_place _ _ _ _ = _`]
+  >- (rename1 `write_place cx dest value mid = (res,es')` >>
+      `!root path. dest = MemoryPlace root path ==> root <> name` by
+        (rpt strip_tac >> gvs[] >> metis_tac[typed_guarded_eval_target_root]) >>
+      drule_all write_guarded_place_projection >> strip_tac >>
+      metis_tac[projection_length]) >>
+  metis_tac[projection_length]
 QED
 
 Theorem append_projection_frame:
-  !cx bt rhs tops name es res es'.
-    supported_append_target tops bt /\
-    (!s r t. eval_expr cx rhs s = (r,t) ==> t.scopes = s.scopes) /\
+  !cx bt rhs name es res es'.
+    FST (place_access bt []) <> NameTarget name /\
+    target_writes_ok (\w. FST (place_access w []) <> NameTarget name) bt /\
+    (!s r t. eval_expr cx rhs s = (r,t) ==>
+      MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes) /\
     eval_stmt cx (Append bt rhs) es = (res,es') ==>
     MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
     LENGTH es'.scopes = LENGTH es.scopes
 Proof
-  Cases_on `bt` >> rpt gen_tac >> strip_tac >>
-  gvs[supported_append_target_def] >>
-  rename1 `eval_stmt cx (Append (TopLevelNameTarget nsid) rhs) es = _` >>
-  PairCases_on `nsid` >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  imp_res_tac lookup_global_scopes >> imp_res_tac read_result_state >>
-  gvs[IgnAsm `!s r t. _`] >>
-  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def, AllCaseEqs()] >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  imp_res_tac append_nonmemory_scopes >>
-  metis_tac[lookup_global_not_memory]
+  imp_res_tac read_result_state >>
+  imp_res_tac (cj 8 eval_name_projection_mutual) >>
+  gvs[IgnAsm `!s r t. _`] >> res_tac
+  >~ [`append_place _ _ _ _ = _`]
+  >- (rename1 `append_place cx dest value mid = (res,es')` >>
+      `!root path. dest = MemoryPlace root path ==> root <> name` by
+        (rpt strip_tac >> gvs[] >> metis_tac[eval_target_place_memory_root]) >>
+      drule_all append_place_name_projection >> strip_tac >>
+      metis_tac[projection_length]) >>
+  metis_tac[projection_length]
+QED
+
+Theorem typed_iterator_projection[local]:
+  !env typ it name elem bound cx st res st'.
+    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+    well_typed_iterator env typ it /\
+    (case it of
+     | Array e => expr_writes_ok (\w. ~place_contains w (NameTarget name)) e
+     | Range x y => expr_writes_ok (\w. ~place_contains w (NameTarget name)) x /\
+                    expr_writes_ok (\w. ~place_contains w (NameTarget name)) y) /\
+    eval_iterator cx it st = (res,st') ==>
+    MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes
+Proof
+  Cases_on `it` >> rpt gen_tac >> strip_tac >>
+  gvs[well_typed_iterator_def] >>
+  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac lift_sum_state >> imp_res_tac array_iterator_results_state >>
+  gvs[return_def] >>
+  imp_res_tac typed_expr_name_projection >> gvs[]
 QED
 
 Theorem typed_projection_frames_mutual:
-  (!tops bindings stmt. supported_stmt tops bindings stmt ==>
-    !env ret_ty env' name elem bound cx es res es'.
-      FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
-      type_stmt env ret_ty stmt = SOME env' /\
-      stmt_writes_ok (\w. ~place_contains w (NameTarget name)) stmt /\
-      ~supported_stmt_expr_exists expr_internal_call_root stmt /\
-      es.scopes <> [] /\ eval_stmt cx stmt es = (res,es') ==>
-      MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
-      LENGTH es'.scopes = LENGTH es.scopes) /\
-  (!tops bindings stmts. supported_stmts tops bindings stmts ==>
-    !env ret_ty env' name elem bound cx es res es'.
-      FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
-      type_stmts env ret_ty stmts = SOME env' /\
-      stmts_writes_ok (\w. ~place_contains w (NameTarget name)) stmts /\
-      ~supported_stmts_expr_exists expr_internal_call_root stmts /\
-      es.scopes <> [] /\ eval_stmts cx stmts es = (res,es') ==>
-      MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
-      LENGTH es'.scopes = LENGTH es.scopes)
+  (!env ret_ty stmt env' name elem bound cx es res es'.
+    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+    type_stmt env ret_ty stmt = SOME env' /\
+    stmt_writes_ok (\w. ~place_contains w (NameTarget name)) stmt /\
+    es.scopes <> [] /\ eval_stmt cx stmt es = (res,es') ==>
+    MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
+    LENGTH es'.scopes = LENGTH es.scopes) /\
+  (!env ret_ty stmts env' name elem bound cx es res es'.
+    FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+    type_stmts env ret_ty stmts = SOME env' /\
+    stmts_writes_ok (\w. ~place_contains w (NameTarget name)) stmts /\
+    es.scopes <> [] /\ eval_stmts cx stmts es = (res,es') ==>
+    MAP (\sc. FLOOKUP sc name) es'.scopes = MAP (\sc. FLOOKUP sc name) es.scopes /\
+    LENGTH es'.scopes = LENGTH es.scopes)
 Proof
-  ho_match_mp_tac supported_stmt_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
+  ho_match_mp_tac type_stmt_ind >> rpt conj_tac >>
+  rpt (gen_tac ORELSE disch_then strip_assume_tac)
   >~ [`eval_stmt _ Pass _ = _`] >- gvs[Once evaluate_def, return_def]
   >~ [`eval_stmt _ Break _ = _`] >- gvs[Once evaluate_def, raise_def]
   >~ [`eval_stmt _ Continue _ = _`] >- gvs[Once evaluate_def, raise_def]
   >~ [`eval_stmt _ (Return NONE) _ = _`] >- gvs[Once evaluate_def, raise_def]
+  >~ [`eval_stmt _ (Raise RaiseBare) _ = _`] >- gvs[Once evaluate_def, raise_def]
+  >~ [`eval_stmt _ (Raise RaiseUnreachable) _ = _`]
+  >- gvs[Once evaluate_def, raise_def]
   >~ [`eval_stmts _ [] _ = _`] >- gvs[Once evaluate_def, return_def]
   >~ [`eval_stmt _ (Expr _) _ = _`] >- suspend "expr"
   >~ [`eval_stmt _ (Return (SOME _)) _ = _`] >- suspend "return"
+  >~ [`eval_stmt _ (Raise (RaiseReason _)) _ = _`] >- suspend "raise_reason"
+  >~ [`eval_stmt _ (Raise (RaiseCustomError _)) _ = _`] >- suspend "raise_custom"
+  >~ [`eval_stmt _ (Assert _ AssertBare) _ = _`] >- suspend "assert_bare"
+  >~ [`eval_stmt _ (Assert _ AssertUnreachable) _ = _`]
+  >- suspend "assert_unreachable"
+  >~ [`eval_stmt _ (Assert _ (AssertReason _)) _ = _`] >- suspend "assert_reason"
+  >~ [`eval_stmt _ (Assert _ (AssertCustomError _)) _ = _`]
+  >- suspend "assert_custom"
+  >~ [`eval_stmt _ (Log _ _) _ = _`] >- suspend "log"
   >~ [`eval_stmt _ (AnnAssign _ _ _) _ = _`] >- suspend "annassign"
+  >~ [`eval_stmt _ (Append _ _) _ = _`] >- suspend "append"
   >~ [`eval_stmt _ (Assign _ _) _ = _`] >- suspend "assign"
   >~ [`eval_stmt _ (AugAssign _ _ _ _) _ = _`] >- suspend "augassign"
-  >~ [`eval_stmt _ (Append _ _) _ = _`] >- suspend "append"
   >~ [`eval_stmt _ (If _ _ _) _ = _`] >- suspend "if"
   >~ [`eval_stmt _ (For _ _ _ _ _) _ = _`] >- suspend "for"
-  >~ [`eval_stmt _ (Assert _ _) _ = _`] >- suspend "assert"
-  >~ [`eval_stmt _ (Raise _) _ = _`] >- suspend "raise"
-  >~ [`eval_stmt _ (Log _ _) _ = _`] >- suspend "log"
-  >> suspend "cons"
+  >~ [`eval_stmts _ (_::_) _ = _`] >- suspend "cons"
 QED
 
 Resume typed_projection_frames_mutual[expr]:
-  gvs[supported_stmt_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, type_check_def, assert_def,
        ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac supported_expr_scopes >> gvs[]
+  drule_all typed_expr_name_projection >> strip_tac >> gvs[] >>
+  metis_tac[projection_length]
 QED
 
 Resume typed_projection_frames_mutual[return]:
-  gvs[supported_stmt_def, supported_expr_exists_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac supported_expr_scopes >> imp_res_tac read_result_state >> gvs[]
+  imp_res_tac read_result_state >>
+  drule_all typed_expr_name_projection >> strip_tac >> gvs[] >>
+  metis_tac[projection_length]
+QED
+
+Resume typed_projection_frames_mutual[raise_reason]:
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  drule_all typed_expr_name_projection >> strip_tac >> gvs[] >>
+  metis_tac[projection_length]
+QED
+
+Resume typed_projection_frames_mutual[raise_custom]:
+  rename1 `Raise (RaiseCustomError err)` >>
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  Cases_on `err` >>
+  simp[Once evaluate_def, bind_def, raise_def,
+       vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >> strip_tac >>
+  gvs[] >> imp_res_tac lift_option_state >>
+  drule_all typed_custom_error_name_projection >> strip_tac >> gvs[] >>
+  metis_tac[projection_length]
+QED
+
+Resume typed_projection_frames_mutual[assert_bare]:
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
+  strip_tac >>
+  drule_all typed_expr_name_projection >> strip_tac >>
+  imp_res_tac read_result_state >>
+  gvs[return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+  metis_tac[projection_length]
+QED
+
+Resume typed_projection_frames_mutual[assert_unreachable]:
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
+  strip_tac >>
+  drule_all typed_expr_name_projection >> strip_tac >>
+  imp_res_tac read_result_state >>
+  gvs[return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+  metis_tac[projection_length]
+QED
+
+Resume typed_projection_frames_mutual[assert_reason]:
+  rename1 `Assert cond (AssertReason msg)` >>
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  `!s r t. eval_expr cx msg s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes` by
+    (rpt strip_tac >> drule_all typed_expr_name_projection >> simp[]) >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
+  strip_tac >>
+  drule_all typed_expr_name_projection >> strip_tac >>
+  imp_res_tac read_result_state >>
+  gvs[IgnAsm `!s r t. _`, return_def, raise_def, COND_RATOR, bind_def,
+      AllCaseEqs()] >>
+  imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  res_tac >> gvs[] >> metis_tac[projection_length]
+QED
+
+Resume typed_projection_frames_mutual[assert_custom]:
+  rename1 `Assert cond (AssertCustomError err)` >>
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  Cases_on `err` >>
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
+  strip_tac >>
+  drule_all typed_expr_name_projection >> strip_tac >>
+  imp_res_tac read_result_state >>
+  gvs[return_def, raise_def, COND_RATOR, bind_def,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+  imp_res_tac lift_option_state >> gvs[]
+  >>~- ([`eval_exprs _ _ _ = _`],
+        drule_all typed_custom_error_name_projection >> strip_tac >>
+        imp_res_tac projection_length >> gvs[]) >>
+  imp_res_tac projection_length >> gvs[]
+QED
+
+Resume typed_projection_frames_mutual[log]:
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  Cases_on `cx.txn.is_static` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  strip_tac >>
+  drule_all typed_exprs_name_projection >> strip_tac >>
+  imp_res_tac lift_option_state >> imp_res_tac push_log_scopes >>
+  gvs[] >> metis_tac[projection_length]
 QED
 
 Resume typed_projection_frames_mutual[annassign]:
   rename1 `eval_stmt cx (AnnAssign id typ rhs) es = (res,es')` >>
-  gvs[supported_stmt_def, type_stmt_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
-      AllCaseEqs()] >>
-  rename1 `FLOOKUP env.var_types protected = SOME (ArrayT elem bound)` >>
-  `id <> protected` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
-  irule annassign_projection_frame >> goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[supported_expr_scopes]
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  `id <> name` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
+  `!s r t. eval_expr cx rhs s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes` by
+    (rpt strip_tac >> drule_all typed_expr_name_projection >> simp[]) >>
+  drule_all annassign_projection_frame >> simp[]
 QED
 
 Resume typed_projection_frames_mutual[append]:
-  gvs[supported_stmt_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
-  irule append_projection_frame >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[cj 1 supported_pure_scopes_mutual]
+  rename1 `eval_stmt cx (Append bt rhs) es = (res,es')` >>
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  `FST (place_access bt []) <> NameTarget name` by
+    (drule_all typed_guarded_array_target_root >> simp[]) >>
+  `target_writes_ok (\w. FST (place_access w []) <> NameTarget name) bt` by
+    (drule writes_ok_typed_root >> strip_tac >> first_x_assum irule >> simp[]) >>
+  `!s r t. eval_expr cx rhs s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes` by
+    (rpt strip_tac >> drule_all typed_expr_name_projection >> simp[]) >>
+  drule_all append_projection_frame >> simp[]
 QED
 
 Resume typed_projection_frames_mutual[assign]:
-  gvs[supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  rename1 `eval_stmt cx (Assign target rhs) es = (res,es')` >>
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
   drule_all atarget_accepts_well_typed_atarget >> strip_tac >>
-  `supported_expr tops e` by
-    (Cases_on `target` >> gvs[supported_assignment_def]) >>
-  irule assign_projection_frame >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[supported_expr_scopes]
+  `!s r t. eval_expr cx rhs s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes` by
+    (rpt strip_tac >> drule_all typed_expr_name_projection >> simp[]) >>
+  drule_all assign_projection_frame >> simp[]
 QED
 
 Resume typed_projection_frames_mutual[augassign]:
-  gvs[supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def, AllCaseEqs()] >>
-  irule augassign_projection_frame >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexistsl [`bindings`,`tops`] >> simp[] >>
-  gvs[supported_aug_target_def, AllCaseEqs()] >>
-  Cases_on `supported_target_info tops bindings target` >> gvs[] >>
-  metis_tac[supported_expr_scopes]
+  rename1 `eval_stmt cx (AugAssign ty bt bop rhs) es = (res,es')` >>
+  gvs[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  `!s r t. eval_expr cx rhs s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes` by
+    (rpt strip_tac >> drule_all typed_expr_name_projection >> simp[]) >>
+  drule_all augassign_projection_frame >> simp[]
 QED
 
 Resume typed_projection_frames_mutual[if]:
-  rpt gen_tac >> strip_tac >>
-  gvs[IgnAsm `!env ret_ty env' name elem bound cx es res es'. _`,
-      supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def, AllCaseEqs()] >>
-  fs[IgnAsm `!env ret_ty env' name elem bound cx es res es'. _`,
-     optionTheory.IS_SOME_EXISTS] >>
-  irule if_projection_frame >> goal_assum (drule_at Any) >>
-  conj_tac >- metis_tac[cj 1 supported_pure_scopes_mutual] >>
-  conj_tac >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule_all >> simp[]
+  rename1 `eval_stmt cx (If e ss1 ss2) es = (res,es')` >>
+  gvs[type_stmt_def, stmt_writes_ok_def, optionTheory.IS_SOME_EXISTS,
+      AllCaseEqs()] >>
+  `!s r t. eval_expr cx e s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes` by
+    (rpt strip_tac >> drule_all typed_expr_name_projection >> simp[]) >>
+  `!s r t. s.scopes <> [] /\ eval_stmts cx ss1 s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes /\
+     LENGTH t.scopes = LENGTH s.scopes` by
+    (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+  `!s r t. s.scopes <> [] /\ eval_stmts cx ss2 s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes /\
+     LENGTH t.scopes = LENGTH s.scopes` by
+    (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+  drule_all if_projection_frame >> simp[]
 QED
 
 Resume typed_projection_frames_mutual[for]:
-  rpt gen_tac >> strip_tac >>
-  rename1 `eval_stmt cx (For id typ it n stmts) es = _` >>
-  gvs[IgnAsm `!env ret_ty env' name elem bound cx es res es'. _`,
-      supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def, AllCaseEqs()] >>
-  rename1 `FLOOKUP env.var_types protected = SOME (ArrayT elem bound)` >>
-  `id <> protected` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
-  irule for_projection_frame >> goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  conj_tac >- metis_tac[supported_iterator_scopes] >>
-  rpt gen_tac >> strip_tac >>
-  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
-  conj_tac >- (
-    `FLOOKUP (extend_local env id typ F).var_types protected =
-       SOME (ArrayT elem bound)` by simp[extend_local_def, FLOOKUP_UPDATE] >>
-    goal_assum (drule_at Any) >> simp[] >>
-    metis_tac[optionTheory.IS_SOME_EXISTS]) >>
-  metis_tac[]
-QED
-
-Resume typed_projection_frames_mutual[log]:
-  gvs[supported_stmt_def, supported_log_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  Cases_on `cx.txn.is_static` >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac supported_pure_exprs_scopes >> imp_res_tac read_results_state >>
-  imp_res_tac lift_option_state >> imp_res_tac push_log_scopes >> gvs[]
-QED
-
-Resume typed_projection_frames_mutual[assert]:
-  rename1 `eval_stmt cx (Assert cond reason) es = _` >>
-  Cases_on `reason` >> gvs[supported_stmt_def, supported_assert_reason_def]
-  >~ [`eval_stmt _ (Assert _ AssertBare) _ = _`]
-  >- suspend "assert_bare"
-  >~ [`eval_stmt _ (Assert _ AssertUnreachable) _ = _`]
-  >- suspend "assert_unreachable"
-  >> suspend "assert_reason"
-QED
-
-Resume typed_projection_frames_mutual[assert_bare]:
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac read_result_state >> imp_res_tac supported_pure_scopes_mutual >>
-  gvs[return_def, raise_def, AllCaseEqs()] >>
-  rename1 `(if v = BoolV T then _ else _) _ = _` >>
-  Cases_on `v = BoolV T` >> Cases_on `v = BoolV F` >>
-  gvs[return_def, raise_def]
-QED
-
-Resume typed_projection_frames_mutual[assert_unreachable]:
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac read_result_state >> imp_res_tac supported_pure_scopes_mutual >>
-  gvs[return_def, raise_def, AllCaseEqs()] >>
-  rename1 `(if v = BoolV T then _ else _) _ = _` >>
-  Cases_on `v = BoolV T` >> Cases_on `v = BoolV F` >>
-  gvs[return_def, raise_def]
-QED
-
-Resume typed_projection_frames_mutual[assert_reason]:
-  rename1 `supported_string_reason tops rhs` >>
-  `!s r t. eval_expr cx rhs s = (r,t) ==> t.scopes = s.scopes` by
-    (Cases_on `rhs` >> gvs[supported_string_reason_def] >>
-     metis_tac[literal_expr_scopes, cj 1 supported_pure_scopes_mutual]) >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
-  strip_tac >> imp_res_tac read_result_state >>
-  imp_res_tac supported_pure_scopes_mutual >>
-  gvs[IgnAsm `!s r t. _`, return_def, raise_def, AllCaseEqs()] >>
-  rename1 `(if v = BoolV T then _ else _) _ = _` >>
-  Cases_on `v = BoolV T`
-  >- (qpat_x_assum `!s r t. _` kall_tac >> gvs[return_def]) >>
-  Cases_on `v = BoolV F`
-  >- (gvs[IgnAsm `!s r t. _`, bind_def, AllCaseEqs()] >>
-      imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
-      gvs[IgnAsm `!s r t. _`, raise_def] >>
-      first_x_assum drule >> strip_tac >> gvs[]) >>
-  qpat_x_assum `!s r t. _` kall_tac >> gvs[raise_def]
-QED
-
-Resume typed_projection_frames_mutual[raise]:
-  rename1 `eval_stmt cx (Raise reason) es = _` >>
-  Cases_on `reason` >>
-  gvs[supported_stmt_def, supported_raise_reason_def]
-  >~ [`eval_stmt _ (Raise RaiseBare) _ = _`]
-  >- gvs[Once evaluate_def, raise_def]
-  >~ [`eval_stmt _ (Raise RaiseUnreachable) _ = _`]
-  >- gvs[Once evaluate_def, raise_def] >>
-  rename1 `supported_string_reason tops rhs` >>
-  `!s r t. eval_expr cx rhs s = (r,t) ==> t.scopes = s.scopes` by
-    (Cases_on `rhs` >> gvs[supported_string_reason_def] >>
-     metis_tac[literal_expr_scopes, cj 1 supported_pure_scopes_mutual]) >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
-  gvs[IgnAsm `!s r t. _`] >> first_x_assum drule >> strip_tac >> gvs[]
+  gvs[type_stmt_def, stmt_writes_ok_def, optionTheory.IS_SOME_EXISTS,
+      AllCaseEqs()] >>
+  `id <> name` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
+  `FLOOKUP (extend_local env id typ F).var_types name = SOME (ArrayT elem bound)`
+    by simp[extend_local_def, FLOOKUP_UPDATE] >>
+  `!s r t. eval_iterator cx it s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes` by
+    (rpt strip_tac >> drule_all typed_iterator_projection >> simp[]) >>
+  `!s r t. s.scopes <> [] /\ eval_stmts cx stmts s = (r,t) ==>
+     MAP (\sc. FLOOKUP sc name) t.scopes = MAP (\sc. FLOOKUP sc name) s.scopes /\
+     LENGTH t.scopes = LENGTH s.scopes` by
+    (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+  drule_all for_projection_frame >> simp[]
 QED
 
 Resume typed_projection_frames_mutual[cons]:
-  rpt gen_tac >> strip_tac >>
-  fs[supported_stmt_def] >>
-  gvs[IgnAsm `!env ret_ty env' name elem bound cx es res es'. _`,
-      stmt_writes_ok_def,
-      supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
-      Once type_stmt_def, AllCaseEqs()] >>
+  rename1 `eval_stmts cx (s::ss) es = (res,es')` >>
+  qpat_x_assum `type_stmts _ _ (_::_) = _` mp_tac >>
+  simp[Once type_stmt_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `stmts_writes_ok _ (_::_)` mp_tac >>
+  simp[stmt_writes_ok_def] >> strip_tac >>
   drule_all type_stmt_var_types_preserve >> strip_tac >>
   qpat_x_assum `eval_stmts _ (_::_) _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, ignore_bind_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  simp[NoAsms, Once evaluate_def, ignore_bind_def, bind_def, AllCaseEqs()] >>
+  strip_tac >>
   first_x_assum drule_all >> strip_tac
-  >~ [`_ = INR _`]
-  >- (qpat_x_assum `!env ret_ty env' name elem bound cx es res es'. _` kall_tac >>
-      gvs[]) >>
-  rename1 `eval_stmts cx stmts mid = _` >>
-  `mid.scopes <> []` by (Cases_on `mid.scopes` >> gvs[]) >>
-  first_x_assum drule_all >> strip_tac >> gvs[]
+  >~ [`eval_stmts _ ss _ = _`]
+  >- (rename1 `eval_stmts cx ss mid = _` >>
+      `mid.scopes <> []` by (Cases_on `mid.scopes` >> gvs[]) >>
+      first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  gvs[]
 QED
 
 Finalise typed_projection_frames_mutual
 
-
 Theorem typed_stmt_projection_frame:
-  supported_stmt tops bindings stmt /\
   FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
   type_stmt env ret_ty stmt = SOME env' /\
   stmt_writes_ok (\w. ~place_contains w (NameTarget name)) stmt /\
-  ~supported_stmt_expr_exists expr_internal_call_root stmt /\
   es.scopes <> [] /\ eval_stmt cx stmt es = (res,es') ==>
   MAP (\sc. FLOOKUP sc name) es'.scopes =
     MAP (\sc. FLOOKUP sc name) es.scopes /\
@@ -1284,11 +1913,9 @@ Proof
 QED
 
 Theorem typed_stmts_projection_frame:
-  supported_stmts tops bindings stmts /\
   FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
   type_stmts env ret_ty stmts = SOME env' /\
   stmts_writes_ok (\w. ~place_contains w (NameTarget name)) stmts /\
-  ~supported_stmts_expr_exists expr_internal_call_root stmts /\
   es.scopes <> [] /\ eval_stmts cx stmts es = (res,es') ==>
   MAP (\sc. FLOOKUP sc name) es'.scopes =
     MAP (\sc. FLOOKUP sc name) es.scopes /\
@@ -1300,12 +1927,10 @@ QED
 (* In the outer For, freshness of its binder preserves this protected lookup
    through extend_local.  The body typing premise is the existing For rule. *)
 Theorem array_body_pop_projection:
-  !tops bindings body env name elem bound ret_ty env' aty es tmp outer cx res es'.
-  supported_stmts tops bindings body /\
+  !body env name elem bound ret_ty env' aty es tmp outer cx res es'.
   FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
   type_stmts env ret_ty body = SOME env' /\
   iterator_unmodified (Array (Name aty name)) body /\
-  ~supported_stmts_expr_exists expr_internal_call_root body /\
   es.scopes = tmp::outer /\
   finally (eval_stmts cx body) pop_scope es = (res,es') ==>
   MAP (\sc. FLOOKUP sc name) es'.scopes =
@@ -1313,9 +1938,9 @@ Theorem array_body_pop_projection:
   LENGTH es'.scopes = LENGTH outer
 Proof
   rpt gen_tac >> strip_tac >>
-  rename1 `supported_stmts tops bindings stmts` >>
+  rename1 `type_stmts env ret_ty stmts = SOME env'` >>
   `stmts_writes_ok (\w. ~place_contains w (NameTarget name)) stmts` by
-    gvs[iterator_unmodified_def, expr_place_def] >>
+    gvs[iterator_unmodified_def, expr_places_def] >>
   `MAP (\sc. FLOOKUP sc name) es'.scopes =
      MAP (\sc. FLOOKUP sc name) (TL es.scopes) /\
    SUC (LENGTH es'.scopes) = LENGTH es.scopes` by
@@ -1329,12 +1954,10 @@ Proof
 QED
 
 Theorem array_body_pop_snapshot:
-  !tops bindings body env name elem bound ret_ty env' aty es tmp outer cx res es'.
-  supported_stmts tops bindings body /\
+  !body env name elem bound ret_ty env' aty es tmp outer cx res es'.
   FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
   type_stmts env ret_ty body = SOME env' /\
   iterator_unmodified (Array (Name aty name)) body /\
-  ~supported_stmts_expr_exists expr_internal_call_root body /\
   es.scopes = tmp::outer /\
   finally (eval_stmts cx body) pop_scope es = (res,es') ==>
   lookup_scopes name es'.scopes = lookup_scopes name outer

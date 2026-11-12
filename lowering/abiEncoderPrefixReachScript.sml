@@ -2,7 +2,7 @@
 Theory abiEncoderPrefixReach
 Ancestors
   abiEncoderSequence abiBuiltinPrefix abiDecoderReentryAddress abiDecoderDynamicLoopSetup
-  abiDecoderReentry abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv
+  abiDecoderReentry abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv loweringStateRelDefs
   emitHelperProps exprLoweringProps venomExecSemantics venomState venomInst words list
 
 Theorem abi_encoder_prefix_reach:

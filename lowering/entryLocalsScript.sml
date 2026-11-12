@@ -35,7 +35,7 @@
 Theory entryLocals
 Ancestors
   list finite_map
-  compileEnv compileVyper moduleLowering context abiEncoder emitHelper
+  compileEnv loweringStateRelDefs compileVyper moduleLowering context abiEncoder emitHelper
   exprLoweringProps loweringHalt intCallCallee
 Libs
   monadsyntax
@@ -83,6 +83,18 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem compile_abi_arg_ptr_guard_next_var[local]:
+  !opc a p st x st'.
+    compile_abi_arg_ptr_guard opc a p st = (x, st') ==>
+    st.cs_next_var <= st'.cs_next_var
+Proof
+  rpt gen_tac >> Cases_on `opc = CALLDATALOAD` >>
+  simp[compile_abi_arg_ptr_guard_def, emit_op_def, emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem compile_decode_args_next_var[local]:
   !args cenv off opc hi adj st x st'.
     compile_decode_args cenv args off opc hi adj st = (x, st') ==>
@@ -100,6 +112,7 @@ Proof
   imp_res_tac emit_op_next_var >> imp_res_tac emit_void_next_var >>
   imp_res_tac compile_abi_decode_to_buf_next_var >>
   imp_res_tac compile_abi_clamp_basetype_next_var >>
+  imp_res_tac compile_abi_arg_ptr_guard_next_var >>
   res_tac >> gvs[comp_return_def] >>
   qmatch_asmsub_rename_tac `var_location_decode_operand loc` >>
   Cases_on `var_location_decode_operand loc` >>
@@ -107,6 +120,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_next_var >> imp_res_tac emit_void_next_var >>
   imp_res_tac compile_abi_decode_to_buf_next_var >>
+  imp_res_tac compile_abi_arg_ptr_guard_next_var >>
   res_tac >> gvs[] >> decide_tac
 QED
 
@@ -327,7 +341,8 @@ Theorem fallback_entry_locals:
       SOME (cenv, rest) ==>
     local_ptrs_reserved cenv st
 Proof
-  rpt gen_tac >> simp[package_fallback_fn_def] >> strip_tac >>
+  rpt gen_tac >>
+  simp[package_fallback_fn_def, update_cenv_nonreentrant_def] >> strip_tac >>
   `cenv.ce_imm_alloca = NONE` by gvs[build_compile_env_imm_alloca] >>
   qspecl_then [`tops`, `External`, `mut`, `fname`, `[]`, `ret`, `fbody`,
                `use_trans`] strip_assume_tac build_compile_env_vars >>

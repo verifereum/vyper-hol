@@ -29,7 +29,7 @@ Ancestors
   allocLimits
    exprSimAggregateChildren exprSimHyps
   vyperInterpreter vyperValueOperation vyperState vyperTyping
-  valueEncoding valueEncodingProofs vyperStatePreservation
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperStatePreservation
   vyperTypeSystem vyperTypeCallGraph list exprCallBounds
   vyperTypeEvalSoundness vyperTypeInvariants vyperExprNoControl
   vyperTypeExprSoundness vyperTypeExprResult

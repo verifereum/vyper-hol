@@ -8,7 +8,7 @@ Ancestors
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph
   exprSimSend vyperTypeSystem exprSimAggregateSource vyperValue
-  exprSimWordArgs exprLowering compileEnv emitHelper venomExecSemantics
+  exprSimWordArgs exprLowering compileEnv loweringStateRelDefs emitHelper venomExecSemantics
   exprLoweringProps venomState venomMemDefs exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource vyperEvent
   fragExec venomInst exprSimHash exprSimBuffer exprSimPrecompiles emitHelperProps
   ASCIInumbers exprSimRawLog
@@ -60,7 +60,7 @@ Proof
   simp[ignore_bind_def, bind_assoc]
 QED
 
-Theorem raw_log_outcome_bind_values[local]:
+Theorem raw_log_outcome_bind_values:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> (value list) evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -81,7 +81,7 @@ Proof
   qexistsl_tac [`E`, `P`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_log_outcome_bind_value[local]:
+Theorem raw_log_outcome_bind_value:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -102,7 +102,7 @@ Proof
   qexistsl_tac [`E`, `P`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_log_outcome_bind_unit[local]:
+Theorem raw_log_outcome_bind_unit:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> unit evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -126,7 +126,7 @@ Proof
   gvs[]
 QED
 
-Theorem expr_body_pre_make_array_arg[local]:
+Theorem expr_body_pre_make_array_arg:
   expr_body_pre cenv cx env (Builtin ann (MakeArray t b) args) es /\
   MEM e args /\ expr_sim_inv cenv cx env es' ==>
   expr_body_pre cenv cx env e es'
@@ -286,6 +286,7 @@ Proof
     (fs[EVERY_MEM] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `LENGTH ops <= 4 /\ LENGTH vs <= 4 /\ sa.cs_next_var <= sn.cs_next_var` by decide_tac >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `expr_has_effect call` by simp[Abbr `call`, loweringPostsTheory.expr_has_effect_thm] >>
   `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   qpat_assum `LENGTH ops = LENGTH topics`
@@ -298,9 +299,9 @@ Proof
   qexists_tac `t''` >> gvs[]
 QED
 
-Theorem raw_log_alloc_args_post[local]:
+Theorem raw_log_alloc_args_post:
   wb_args_post ctx func cenv cx es0 sa s0 es ops vals t /\
-  stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 sa s0 u /\
+  stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 es sa s0 u /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
               (!l. op <> Label l)) ops /\
   (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x t) ==>
@@ -411,7 +412,7 @@ Proof
   drule_all raw_log_topics_marked_post >> strip_tac >>
   drule_all raw_log_marked_data_ready >> strip_tac >>
   `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
-   wb_frame cenv es sa s0 t` by fs[wb_args_post_def] >>
+   wb_frame cenv es (mid with gas_obs := []) sa s0 t` by fs[wb_args_post_def] >>
   `~t.vs_halted` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[gas_marked_exec_def, gas_marked_path_def] >>
@@ -490,6 +491,7 @@ Proof
      rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `LENGTH ops <= 4 /\ LENGTH vs <= 4` by decide_tac >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `expr_has_effect call` by simp[Abbr `call`, loweringPostsTheory.expr_has_effect_thm] >>
   `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   `LENGTH bs = 32` by fs[vyperTypingTheory.value_has_type_def] >>
@@ -534,8 +536,8 @@ Theorem raw_log_body_expr_ok:
   !cx v20 es v21.
     body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
 Proof
-  rpt gen_tac >> strip_tac >> irule body_expr_ok_intro >>
-  reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> match_mp_tac body_expr_ok_intro >> conj_tac >- gvs[] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
   `expr_sim ctx func cenv cx ty (Call v20 RawLog es v21) es'` by
     (simp[expr_sim_def] >> rpt strip_tac >>
      drule_all raw_log_body_lower_value >> strip_tac >> gvs[] >>

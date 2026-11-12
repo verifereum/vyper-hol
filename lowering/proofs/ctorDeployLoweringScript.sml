@@ -2,7 +2,8 @@
  * the raw deployment unit from the creation frame's entry state, up to the
  * gas readings the O1 pipeline may vary. The source reads msg.gas from the
  * readings the Venom run consumes (gas_explicit marks vs.vs_gas_readings).
- * TOP-LEVEL: deploy_unit_execution_correct (a piece of e2e_deploy_correctness; admitted until proved).
+ * TOP-LEVEL: deploy_unit_execution_correct (a piece of e2e_deploy_correctness; admitted until proved),
+ * deploy_unit_run_bounded (S1b-d, a piece of e2e_deploy_gas_sufficient; a planned admission).
  *)
 Theory ctorDeployLowering
 Ancestors
@@ -14,6 +15,7 @@ Ancestors
   ctorDeployLoweringFrameRet ctorReturnFrame bodySimMain bodyAbiDecodeTarget stmtSimDefs stmtSimProps
   loweringPosts gasOutcome gasContext gasExemptCert fragGasMode fragGasPath
   fragExec exprSimDefs compileEnv e2eDeployDefs vyperContext vyperInterpreter
+  ctorDeployRunBounded
 
 val _ = Parse.hide "body";
 
@@ -83,7 +85,7 @@ Proof
   drule_all deploy_ctor_entry_reaches_body >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
   `call_outcomes_ok am tx (MAP SND (call_trace es))` by
-    fs[deploy_state_rel_def] >>
+    metis_tac[deploy_state_rel_call_outcomes_ok] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
   drule deploy_ctor_code_facts >> strip_tac >>
   `?args. lookup_function NONE tx.function_name Deploy tops =
@@ -115,7 +117,8 @@ Proof
        (res, ee) ==> stmt_res_ok NoLoop res` by
     metis_tac[deploy_ctor_body_source_ok] >>
   `SND (stmts_env cenv NoLoop NoneT body sa) = sb` by
-    metis_tac[compile_stmts_env, pairTheory.PAIR_EQ] >>
+    (qpat_x_assum `compile_stmts _ _ _ _ _ = _` mp_tac >>
+     simp[compile_stmts_env]) >>
   Cases_on `stmts_env cenv NoLoop NoneT body sa` >> fs[] >>
   qpat_x_assum `_ = sb` SUBST_ALL_TAC >>
   rename1 `stmts_env _ _ _ _ _ = (cenv', sb)` >>
@@ -133,7 +136,8 @@ Proof
          (es0 with <| gas_obs := gx; outcomes := SOME vs.vs_outcomes |>) =
          (res, es_end with gas_obs := []) /\
        gas_path dunit.cu_context func s0 (LENGTH marks) r` by
-        (fs[gas_marked_exec_def] >>
+        (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
          conj_tac
          >- (qpat_x_assum `!tail. eval_stmts _ _ _ = _`
                (qspec_then `[]` mp_tac) >> simp[]) >>
@@ -158,7 +162,12 @@ Proof
                (qspec_then `fuel1` mp_tac) >> simp[]) >>
           drule run_from_halt_code >> strip_tac >>
           qexists_tac `fuel2` >> simp[] >>
-          qunabbrev_tac `cx` >> irule deploy_ctor_return >> simp[] >> metis_tac[]) >>
+          qunabbrev_tac `cx` >> irule deploy_ctor_return >> simp[] >>
+          qexistsl_tac [`body`, `cenv`, `cplan`, `deploy_bc`, `dout`, `dunit`,
+                        `es`, `es0`, `st_exit.cs_current_bb`, `func`, `gx`, `imm`,
+                        `nkey`, `policy`, `prog`, `rpolicy`, `sa`, `sb`, `sj`,
+                        `st_epilogue`, `st_exit`, `st_final`, `ut`, `vs`] >>
+          simp[]) >>
       (* the body exits *)
       drule_all gas_path_exit >> disch_then (qx_choose_then `fuel` assume_tac) >>
       `!e. r <> Error e` by metis_tac[exit_result_not_error] >>
@@ -209,4 +218,41 @@ Proof
   pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
   gvs[deploy_ctor_finish_def, deploy_source_exempt_def, Abbr `cx`,
       deploy_cx_tops]
+QED
+
+(* PLANNED ADMISSION S1b-d, sufficient gas for deployment: the deploy-side
+   counterpart of lower_vyper_runtime_unit_run_bounded.  The constructor
+   unit's run ends within a fuel that does not depend on the creation frame,
+   in particular not on its gas or the GAS readings.  Proof idea: the
+   constructor is call-free and total by stmt_bound, whose loop terms carry
+   each loop's static bound; the lowering spends a bounded number of blocks
+   and nested INVOKEs per source step. *)
+Theorem deploy_unit_run_bounded:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx
+    ==>
+    ?fuel. !es vs.
+      deploy_state_rel tops deploy_bc am tx es /\
+      gas_variant vs (deploy_entry_state prog cplan tops es) /\
+      (!marks. ~deploy_source_exempt tops
+                 (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
+                    [(NONE, tops)] []))
+      ==>
+      terminates (run_context fuel dunit.cu_context vs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  `!fn. MEM fn dunit.cu_context.ctx_functions ==>
+        ?Kf. !G. callees_stable G dunit.cu_context fn ==>
+                 fuel_stable (G + Kf) dunit.cu_context fn` by
+    metis_tac[deploy_unit_fns_fuel_stable] >>
+  drule (GEN_ALL deploy_unit_context_ok) >> strip_tac >>
+  drule_all run_context_uniform_fuel >> strip_tac >>
+  qexists_tac `fuel` >> rpt strip_tac >>
+  first_x_assum irule >>
+  drule_all deploy_unit_execution_correct >>
+  metis_tac[deploy_venom_result_rel_terminates]
 QED

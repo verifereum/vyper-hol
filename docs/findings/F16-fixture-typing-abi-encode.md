@@ -52,8 +52,8 @@ argument evaluation is not an `eval_args NONE` call.
   `abi_encode_dynamic_exact_bound`, `abi_encode_dynamic_wrapping_bounds`,
   `abi_encode_wrapping_lengths_eval` / `cv`,
   `abi_dynamic_fixture_runtime_checked` / `deployment_checked`.
-- [Actual HOL fixture](../../lowering/defs/bytecode/eval/evalCompilerSubsetAbiBuiltinsScript.sml),
-  [unchanged Vyper source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/abi_dynamic.vy).
+- [Actual HOL fixture](../../bytecode/eval/evalCompilerSubsetAbiBuiltinsScript.sml),
+  [unchanged Vyper source](../../bytecode/python-o1-no-asm-opt-sources/abi_dynamic.vy).
 - [Lowering encoder](../../lowering/defs/builtinAbiScript.sml),
   [sealed checker computation](../../semantics/type/vyperCheckContractLib.sml):
   ceil32 rewrite repaired computation, not typing assumptions.

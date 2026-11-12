@@ -1,3 +1,3 @@
 Theory branchOpt
 Ancestors
-  branchOptDefs branchOptCorrectness
+  branchOptDefs branchOptCorrectness branchOptCheck branchOptCheckProofs

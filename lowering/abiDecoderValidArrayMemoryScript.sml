@@ -2,7 +2,7 @@
 Theory abiDecoderValidArrayMemory
 Ancestors
   abiDecoderArrayInvariant abiValidMember abiCanonicalHeadSize abiCanonicalHeadSize abiDecodeRanges
-  abiDecoderContract valueEncodingProps valueEncoding vyperABI vyperValue venomState words list
+  abiDecoderContract valueEncodingProps valueEncoding valueEncodingDefs vyperABI vyperValue venomState words list
   rich_list arithmetic
 
 Definition abi_decoder_valid_array_memory_def:

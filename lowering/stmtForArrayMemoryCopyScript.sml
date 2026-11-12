@@ -4,7 +4,7 @@ Ancestors
   stmtSimForArray bodyDeclMemoryCore allocaFootprint fragExecMem
   stmtLowering emitHelper emitHelperProps exprLoweringProps stmtSimForArrayLoop
   words arithmetic venomInst memSafeRun
-  venomState venomExecSemantics compileEnv list instMemFrontier stmtSimReturn valueTypingMemoryProps exprSimProps
+  venomState venomExecSemantics compileEnv loweringStateRelDefs list instMemFrontier stmtSimReturn valueTypingMemoryProps exprSimProps
 
 Theorem array_iter_word_copy_mem_ok:
   is_word_type ty /\

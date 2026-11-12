@@ -3,7 +3,7 @@ Theory ctorAbiActualArrayClosure
 Ancestors
  ctorAbiActualArrayRun ctorAbiActualComplex abiDecoderFixedInputs
  abiDecoderFixedMemory abiDecoderMemberInfos rich_list
- vyperABI vyperTypeABI compileEnv abiCanonicalHeadSize
+ vyperABI vyperTypeABI compileEnv loweringStateRelDefs abiCanonicalHeadSize
  ctorAbiActualBulk ctorAbiActualNarrowWord abiDecoderBulkReentry
  abiDecoderCorrectPrimitiveArray
  abiDecoderLoop abiDecoderTypedContract abiDecoderContract

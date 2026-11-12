@@ -2,9 +2,10 @@
    position in a reordered prefix. *)
 Theory dftAvailability
 Ancestors
-  dftScheduleOrder dftCorrectness sccpCorrectnessProofs venomWf
+  dftScheduleOrder dftCorrectness venomWf
   venomExecSemantics venomExecProofs venomState list finite_map
   dftWf dftIdempotent dftTopoSort venomInst dftIndexedExec sorting dftDefs
+  venomWfProps
 
 Theorem dft_ready_operand_defined:
   wf_ssa fn /\ wf_function fn /\

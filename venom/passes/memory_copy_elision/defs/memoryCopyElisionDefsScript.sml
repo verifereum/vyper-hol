@@ -34,7 +34,7 @@
 
 Theory memoryCopyElisionDefs
 Ancestors
-  analysisSimDefs dfAnalyzeDefs dfgDefs passSharedDefs venomEffects
+  passTransform dfAnalyzeDefs dfgDefs passSharedDefs venomEffects
   memAliasDefs memLocDefs basePtrDefs
 
 (* normalize_operand and operand_equiv are in dfgDefs *)

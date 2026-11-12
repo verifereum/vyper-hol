@@ -5,7 +5,7 @@ Ancestors
   exprSimHypsDefs vyperTypeInvariants vyperTypeExtCallSoundness
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation
   exprSimProps exprLoweringProps stmtSimProps bodyMemoryDefs
-  compileEnv loweringPosts intCallFrame venomState list rich_list
+  compileEnv loweringStateRelDefs loweringPosts intCallFrame venomState list rich_list
   fragGasSeq entrySinkExtraction emitHelperProps loweringSlice fragExec
 
 Theorem log_expr_sim_inv:
@@ -82,7 +82,7 @@ Proof
 QED
 
 Theorem intcall_log_suffix_resource_run:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   compile_log_eval_all ce args sa = (xs,sm) /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\

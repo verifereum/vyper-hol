@@ -31,8 +31,33 @@ Ancestors
 Definition live_update_def:
   live_update defs uses live =
     let live' = FILTER (λv. ¬MEM v defs) live in
-    live' ++ FILTER (λv. ¬MEM v live') uses
+    FOLDL (λacc v. if MEM v acc then acc else acc ++ [v]) live' uses
 End
+
+(* Appending each use only when unseen keeps the first occurrence, like
+   Python's OrderedSet.update. *)
+Theorem MEM_FOLDL_append_unseen:
+  ∀uses acc v.
+    MEM v (FOLDL (λacc v. if MEM v acc then acc else acc ++ [v]) acc uses) ⇔
+    MEM v acc ∨ MEM v uses
+Proof
+  Induct >> rw[] >> metis_tac[]
+QED
+
+Theorem ALL_DISTINCT_FOLDL_append_unseen:
+  ∀uses acc.
+    ALL_DISTINCT acc ⇒
+    ALL_DISTINCT (FOLDL (λacc v. if MEM v acc then acc else acc ++ [v]) acc uses)
+Proof
+  Induct >> rw[] >> first_x_assum irule >> simp[ALL_DISTINCT_APPEND]
+QED
+
+Theorem live_update_ALL_DISTINCT:
+  ALL_DISTINCT live ⇒ ALL_DISTINCT (live_update defs uses live)
+Proof
+  rw[live_update_def] >> irule ALL_DISTINCT_FOLDL_append_unseen >>
+  simp[FILTER_ALL_DISTINCT]
+QED
 
 Definition ordered_inst_uses_def:
   ordered_inst_uses inst =

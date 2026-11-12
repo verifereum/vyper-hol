@@ -1,8 +1,8 @@
 (* Typed literal semantics and resources at one counted landing state. *)
 Theory bodyIntCallLiteralLanding
 Ancestors
-  bodyIntCallNormalResource exprLowering loweringPosts compileEnv context
-  vyperValue valueEncoding vyperAST venomState words list
+  bodyIntCallNormalResource exprLowering loweringPosts compileEnv loweringStateRelDefs context
+  vyperValue valueEncoding valueEncodingDefs vyperAST venomState words list
 
 Theorem protected_bytes_literal_landing:
   !ctx func ce cx es s origin sa sb op cap bs lo P reserved.

@@ -8,7 +8,7 @@ Ancestors
   externalEntryShape
   stmtSimProps stmtSimDefs exprSimDefs loweringPosts
   list pair fragExec bodySim bodySimMain loweringHalt stmtLoweringMono
-  exprLoweringProps compileEnv compileVyper moduleLowering stmtLowering
+  exprLoweringProps compileEnv loweringStateRelDefs compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
   entryChecksProps moduleLoweringProps entryDispatchProps supportedNames
   abiDecoderCounters context supportedDecls supportedExprForms
@@ -16,19 +16,12 @@ Ancestors
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
+Libs
+  monadsyntax
 
+val () = enable_monad "compilation";
+val () = enable_monadsyntax ();
 val _ = Parse.hide "body";
-
-Theorem supported_entry_no_getters:
-  supported_program tops ==>
-  (!nr mut ty x name. ~MEM (VariableDecl (Public nr) mut name ty x) tops) /\
-  (!nr b kt vt x name. ~MEM (HashMapDecl (Public nr) b name kt vt x) tops)
-Proof
-  simp[supported_program_def, supported_declaration_headers_def,
-       EVERY_MEM] >> rpt strip_tac >>
-  qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e`
-    drule >> simp[supported_declaration_header_def]
-QED
 
 Theorem selected_external_dispatch:
   supported_program tops /\ valid_vyper_call tops tx cd ret /\
@@ -42,10 +35,9 @@ Theorem selected_external_dispatch:
     "fn_" ++ tx.function_name)
 Proof
   strip_tac >>
-  drule supported_entry_no_getters >> strip_tac >>
   gvs[valid_vyper_call_def] >> conj_tac
-  >- (irule lookup_function_external_mem >> simp[] >>
-      qexists_tac `NONE` >> simp[]) >>
+  >- (irule supported_headers_external_member >>
+      gvs[supported_program_def]) >>
   gen_tac >>
   `ALL_DISTINCT (MAP FST (build_selectors (type_env tops)
      (FST (classify_functions tops))))` by
@@ -77,15 +69,14 @@ Proof
       simp[]) >>
   Cases_on `h2` >> simp[compile_decode_args_def] >>
   Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
-  Cases_on `var_location_decode_operand x` >> simp[]
-  >- (ntac 3 (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
-              >- simp[abi_decoder_vars_mono_prims] >> gen_tac) >>
-      ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >>
-      simp[abi_decoder_vars_mono_mutual]) >>
-  ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
-  >- simp[abi_decoder_vars_mono_prims] >>
-  gen_tac >> ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >>
-  simp[abi_decoder_vars_mono_mutual]
+  Cases_on `var_location_decode_operand x` >> simp[] >>
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+      cj 1 abi_decoder_vars_mono_mutual, compile_abi_arg_ptr_guard_def,
+      abi_decoder_vars_mono_return]), gen_tac,
+    ho_match_mp_tac abi_decoder_vars_mono_bind,
+    ho_match_mp_tac abi_decoder_vars_mono_ignore_bind, conj_tac,
+    IF_CASES_TAC])
 QED
 
 Theorem compile_register_positional_args_vars_mono:
@@ -295,7 +286,7 @@ Theorem selected_external_package:
   !tops target mut rr name args ret fbody.
   ?cenv pos_args min_cds is_payable nkey ut iv rt.
     set_external_package_target target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut, F, rr, name, args, ([] : expr list), ret, fbody)) =
     ("fn_" ++ name, cenv, pos_args, min_cds, is_payable, F,
      nkey, ut, iv, fbody, rt)
@@ -641,7 +632,7 @@ Proof
      Linear buckets metadata dense info (initial_compile_state "__entry") = ((),sf)` by
     (`compile_generate_runtime selectors external_fns internal_fns fallback_fn
         Linear buckets metadata dense info =
-      (do prefix; _ <- compile_internal_fn_bodies internal_fns; return () od)` by
+      (do prefix; _ <- compile_internal_fn_bodies internal_fns; comp_return () od)` by
        simp[Abbr `prefix`, compile_generate_runtime_def,
             comp_ignore_bind_def, comp_bind_assoc] >>
      asm_rewrite_tac[] >>
@@ -833,34 +824,92 @@ Proof
   qexistsl_tac [`func`, `fb`, `sa`, `sd`, `st`, `st'`] >> simp[]
 QED
 
+Theorem raw_external_name_key[local]:
+  !tops name.
+    MEM name (MAP (\p. FST (SND (SND (SND p))))
+      (FST (FOLDR classify_function ([],[],NONE,NONE) tops) ++
+       public_getters tops)) ==>
+    MEM (NONE:num option,name)
+      (FLAT (MAP (external_name_keys_toplevel NONE) tops))
+Proof
+  simp[MAP_APPEND, MEM_MAP, EXISTS_PROD] >> rpt strip_tac
+  >- (drule loweringShapePropsTheory.classify_fold_external_source >>
+      strip_tac >> simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+      goal_assum (drule_at Any) >> simp[vyperTypeContractTheory.external_name_keys_toplevel_def]) >>
+  gvs[MEM_public_getters] >>
+  drule public_getter_lookup_singleton >> strip_tac >>
+  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem raw_external_names_distinct[local]:
+  !tops.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) ==>
+    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+      (FST (FOLDR classify_function ([],[],NONE,NONE) tops) ++ public_getters tops))
+Proof
+  Induct >- simp[public_getters_def] >>
+  gen_tac >>
+  Cases_on `FOLDR classify_function ([],[],NONE,NONE) tops` >>
+  PairCases_on `r` >>
+  Cases_on `h` >>
+  gvs[classify_function_def, public_getters_def,
+      vyperTypeContractTheory.external_name_keys_toplevel_def]
+  >~ [`FunctionDecl vis`] >- (
+    Cases_on `vis` >>
+    simp[public_getter_def, vyperTypeContractTheory.external_name_keys_toplevel_def] >>
+    rpt strip_tac >> gvs[] >>
+    Cases_on `s = "__default__"` >> gvs[] >>
+    metis_tac[raw_external_name_key, MAP_APPEND, MEM_APPEND, FST])
+  >~ [`VariableDecl kind`] >- (
+    Cases_on `kind` >>
+    gvs[public_getter_def, vyperTypeContractTheory.external_name_keys_toplevel_def] >>
+    Cases_on `is_ArrayT t` >> gvs[]
+    >- (pairarg_tac >> gvs[] >> rpt strip_tac >>
+        qspecl_then [`tops`, `s`] mp_tac raw_external_name_key >>
+        gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+    rpt strip_tac >>
+    qspecl_then [`tops`, `s`] mp_tac raw_external_name_key >>
+    gvs[ALL_DISTINCT_APPEND] >> metis_tac[])
+  >~ [`HashMapDecl kind`] >- (
+    Cases_on `kind` >>
+    gvs[public_getter_def, vyperTypeContractTheory.external_name_keys_toplevel_def] >>
+    pairarg_tac >> gvs[] >> rpt strip_tac >>
+    qspecl_then [`tops`, `s`] mp_tac raw_external_name_key >>
+    gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  simp[public_getter_def]
+QED
+
 Theorem classified_external_labels_distinct:
-  !tops. ALL_DISTINCT (supported_function_names tops) ==>
+  !tops.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) ==>
     ALL_DISTINCT (MAP (\(mut,nr,rr,name,args,dflts,ret,fbody). "fn_" ++ name)
       (FST (classify_functions tops)))
 Proof
-  Induct >> simp[classify_functions_def] >> gen_tac >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  Cases_on `h` >>
-  gvs[Once classify_functions_def, classify_function_def, supported_function_names_def] >>
-  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vis` >> gvs[classify_function_def] >>
-  IF_CASES_TAC >> gvs[] >>
-  simp[MEM_MAP, FORALL_PROD] >> rpt strip_tac >>
-  rename1 `MEM (mut,nr,rr,name,args,dflts,ret,fbody) q` >>
-  `MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops))` by
-    simp[classify_functions_def] >>
-  drule loweringShapePropsTheory.classify_functions_external_source >>
-  strip_tac >>
-  metis_tac[loweringShapePropsTheory.MEM_supported_function_names]
+  gen_tac >> strip_tac >>
+  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+     (FST (classify_functions tops)))` by
+    (Cases_on `FOLDR classify_function ([],[],NONE,NONE) tops` >>
+     PairCases_on `r` >>
+     simp[classify_functions_def, loweringShapeSourceTheory.subst_consts_fn_names] >>
+     drule raw_external_names_distinct >> simp[]) >>
+  `MAP (\(mut,nr,rr,name,args,dflts,ret,fbody). "fn_" ++ name)
+      (FST (classify_functions tops)) =
+   MAP (\name. "fn_" ++ name)
+     (MAP (\p. FST (SND (SND (SND p))))
+       (FST (classify_functions tops)))` by
+    simp[MAP_MAP_o, combinTheory.o_DEF, LAMBDA_PROD] >>
+  pop_assum SUBST1_TAC >>
+  irule ALL_DISTINCT_MAP_INJ >> simp[]
 QED
 
 Theorem source_runtime_entry_checks_code:
   !tops rpolicy unit mut nr rr name args dflts ret fbody
    lbl ce pos_args min_cds pay nr' key ut iv rt.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
     MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,nr,rr,name,args,dflts,ret,fbody)) =
       (lbl,ce,pos_args,min_cds,pay,nr',key,ut,iv,fbody,rt) ==>
     ?func fb sa sd st st'.
@@ -877,14 +926,18 @@ Theorem source_runtime_entry_checks_code:
       sd.cs_next_var <= st.cs_next_var
 Proof
   rpt gen_tac >> strip_tac >>
-  `ALL_DISTINCT (supported_function_names tops)` by
-    gvs[supported_program_def, supported_declaration_names_def] >>
   drule classified_external_labels_distinct >> disch_tac >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fallback,ctor)` >>
   simp[] >> strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (drule loweringShapePropsTheory.supported_program_no_external_defaults >>
+     qpat_assum `classify_functions tops = _` (fn th => simp[th])) >>
+  qpat_x_assum `(if EXISTS external_has_defaults exts then _ else _) = _`
+    mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
      (build_selectors (type_env tops) exts)` by
     simp[loweringShapePropsTheory.build_selectors_fn_labels] >>
@@ -1042,7 +1095,7 @@ Theorem external_entry_reaches_checks:
     ?rr lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st st' func
      s0.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, rr, tx.function_name, args, ([] : expr list), ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\
@@ -1060,6 +1113,7 @@ Proof
   qspecl_then [`tops`, `rpolicy.rpol_target`, `mut`, `rr`,
                `tx.function_name`, `args`, `ret`, `fbody`]
     strip_assume_tac selected_external_package >>
+  drule entryStateRelTheory.source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all source_runtime_entry_checks_code >> strip_tac >>
   `fn_entry_label func = SOME "__entry"` by
     simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,

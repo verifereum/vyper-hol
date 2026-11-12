@@ -1,12 +1,13 @@
 (* Joint resource exit of a variable-only stack return. *)
 Theory bodyIntCallFamStmtReturnStackExit
 Ancestors
+  bodyIntCallReturnInactive
   bodyIntCallJointContract bodyIntCallFamStmtReturnStackRun
-  bodyIntCallForcingReadOnly ctorReturnFrame compileEnv exprLoweringProps
+  bodyIntCallForcingReadOnly ctorReturnFrame compileEnv loweringStateRelDefs exprLoweringProps
   loweringPosts fragExec stmtSimReturn venomExecSemantics venomState
 
 Theorem intcall_stack_exit_frame:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
   0 < fp.jc_root_ce.ce_returns_count /\
   t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -25,7 +26,8 @@ Proof
   `fp.jc_rb = NONE` by
     (fs[intcall_frame_ok_def] >> Cases_on `fp.jc_rb` >> gvs[]) >>
   simp[intcall_stmt_exit_def] >> disj2_tac >>
-  simp[intret_q_def, result_rel_def, state_rel_gas_obs] >>
+  qpat_assum `~FST _` (fn nr => simp[MATCH_MP return_unlock_state_inactive nr,
+    intret_q_def, result_rel_def, state_rel_gas_obs]) >>
   conj_tac
   >- (qpat_x_assum `t = _` SUBST1_TAC >> fs[intcall_joint_res_def, intcall_expr_res_def]) >>
   rpt strip_tac >>

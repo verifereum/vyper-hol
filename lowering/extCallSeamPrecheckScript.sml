@@ -3,7 +3,7 @@ Theory extCallSeamPrecheck
 Ancestors
   extCallSeamOracle exprSimDefs fragGasPath accountsRelProps vyperRuntimeAccounts
   exprLowering exprLoweringProps rawCallFragPath emitHelperProps venomExecSemantics venomInst
-  compileEnv emitHelper venomState exprSimProps loweringPosts vyperInterpreter vyperState vfmState list words
+  compileEnv emitHelper venomState exprSimProps loweringPosts vyperInterpreter vyperState vfmState list words loweringStateRelDefs
 
 Theorem extcall_precheck_code_word:
   stmt_state_rel ctx func cenv cx es s /\
@@ -163,7 +163,8 @@ Theorem extcall_take_outcome_obs[local]:
 Proof
   Cases_on `es.outcomes` >>
   simp[vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.call_outcome_request_def] >>
+       vyperCallOutcomeTheory.call_outcome_request_def,
+       vyperCallOutcomeTheory.take_request_outcome_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
   IF_CASES_TAC >> gvs[]
 QED
@@ -296,11 +297,11 @@ Theorem extcall_optional_precheck_wb:
   pre = (if ret_type = NoneT /\ ~skip then
     update_var (STRING #"%" (toString sp.cs_next_var)) w s else s)
     with vs_inst_idx := idx /\
-  wb_frame cenv es initial s0 s /\ initial.cs_next_var <= sp.cs_next_var ==>
-  wb_frame cenv es initial s0 pre
+  wb_frame cenv es es' initial s0 s /\ initial.cs_next_var <= sp.cs_next_var ==>
+  wb_frame cenv es es' initial s0 pre
 Proof
   strip_tac >> irule exprSimWordArgsTheory.wb_frame_readonly_tail >>
-  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   qexists_tac `sp` >> simp[] >>
   gvs[] >> Cases_on `ret_type = NoneT /\ ~skip` >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>

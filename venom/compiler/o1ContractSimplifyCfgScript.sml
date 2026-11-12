@@ -128,56 +128,7 @@ Proof
   irule run_blocks_no_return >> simp[]
 QED
 
-Theorem def_available_on_all_paths:
-  wf_function fn /\ MEM bb fn.fn_blocks /\ def_available_at fn bb point v ==>
-  def_on_all_paths fn bb point v
-Proof
-  simp[def_available_at_def] >> rpt strip_tac >>
-  simp[def_on_all_paths_def] >> rpt strip_tac >>
-  Cases_on `def_bb = bb`
-  >- (gvs[] >> disj2_tac >> Cases_on `point` >> gvs[]
-      >- metis_tac[MEM_EL] >>
-      qexists_tac `i` >> simp[] >> metis_tac[LESS_TRANS]) >>
-  disj1_tac >>
-  `MEM def_bb.bb_label path` by metis_tac[fn_dominates_def] >>
-  `def_bb.bb_label <> bb.bb_label` by metis_tac[same_label_same_block] >>
-  qpat_x_assum `MEM def_bb.bb_label path` mp_tac >>
-  disch_then (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
-  rename1 `k < LENGTH path` >>
-  qexistsl_tac [`k`, `def_bb`, `def_inst`] >> simp[] >>
-  `LAST path = EL (LENGTH path - 1) path` by
-    (qspec_then `path` mp_tac LAST_EL >> simp[PRE_SUB1]) >>
-  Cases_on `k = LENGTH path - 1` >> gvs[] >> decide_tac
-QED
-
-Theorem wf_ssa_defs_reach_uses:
-  wf_ssa fn /\ wf_function fn ==> fn_defs_reach_uses fn
-Proof
-  simp[wf_ssa_def, fn_defs_reach_uses_def, def_dominates_uses_def] >>
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = PHI` >> simp[]
-  >- (rpt strip_tac >>
-      `phi_edge_uses_wf fn bb inst` by metis_tac[] >>
-      qpat_x_assum `phi_edge_uses_wf _ _ _` mp_tac >>
-      pure_rewrite_tac[phi_edge_uses_wf_def] >> strip_tac >>
-      qpat_x_assum `!pred v. MEM (pred,v) _ ==> _` drule >>
-      strip_tac >> rename1 `def_available_at fn source NONE v` >>
-      `source = pred_bb` by metis_tac[same_label_same_block] >>
-      gvs[] >> irule def_available_on_all_paths >> metis_tac[]) >>
-  rpt strip_tac >> irule def_available_on_all_paths >> metis_tac[]
-QED
-
-Theorem phi_pairs_resolve_phi_some:
-  !ops l v. MEM (l,v) (phi_pairs ops) ==> ?op. resolve_phi l ops = SOME op
-Proof
-  recInduct phi_pairs_ind >> simp[phi_pairs_def, resolve_phi_def] >>
-  rpt strip_tac >> gvs[] >>
-  rpt CASE_TAC >> simp[]
-  >- metis_tac[] >>
-  rename1 `resolve_phi _ (head::_::_)` >>
-  Cases_on `head` >> gvs[resolve_phi_def] >>
-  rpt CASE_TAC >> simp[] >> metis_tac[]
-QED
+(* Generic availability/path facts live in venomWfProps. *)
 
 Theorem simplify_cfg_fn_ok_no_phi:
   wf_function fn /\ fn_defs_reach_uses fn /\
@@ -202,7 +153,7 @@ Theorem simplify_cfg_fn_ok_ssa:
   simplify_cfg_fn_ok fn
 Proof
   strip_tac >>
-  `fn_defs_reach_uses fn` by metis_tac[wf_ssa_defs_reach_uses] >>
+  `fn_defs_reach_uses fn` by metis_tac[venomWfPropsTheory.wf_ssa_defs_reach_uses] >>
   simp[simplify_cfg_fn_ok_def, GSYM first_block_no_phi_def] >>
   conj_tac
   >- (rpt strip_tac >> irule ssa_unique_output >>
@@ -219,7 +170,7 @@ Proof
   simp[phi_edge_uses_wf_def] >> strip_tac >>
   `?p. MEM p (phi_pairs inst.inst_operands) /\ FST p = pred_bb.bb_label` by
     metis_tac[] >>
-  PairCases_on `p` >> gvs[] >> irule phi_pairs_resolve_phi_some >> metis_tac[]
+  PairCases_on `p` >> gvs[] >> irule venomWfPropsTheory.phi_pairs_resolve_phi_some >> metis_tac[]
 QED
 
 Theorem simplify_cfg_pre_walk_structure:
@@ -289,6 +240,42 @@ Proof
   irule ctx_bisim_ctx_sim >>
   gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   metis_tac[o1_ctx_shape_no_intret, ctx_pass_stage_def]
+QED
+
+(* Gas sufficiency S6b fuel leaf: SimplifyCFG keeps the fuel.
+   No transform of the pass adds a block step or an INVOKE: unreachable
+   block removal and label substitution keep the steps, fix_all_phis and
+   canon_jnz act inside a block, a chain merge and a jump bypass each drop
+   a step.  So the output finishes within the input's fuel, and
+   run_blocks_terminates_mono / exec_block_terminates_mono lift a run that
+   finishes earlier (an INVOKE in a merged tail sees more callee fuel) to
+   the same fuel.  The existing forward chain (scfg_chain_runs_forward,
+   the restriction / fix-phis / bypass / round lemmas, scfg_bstep_continue
+   with SUC (MAX k n)) only gives an existential output fuel, so it needs
+   a bound k <= n carried through; scfg_bprefix_cancel_bounded already has
+   that shape.  The per-function target is fn_bisim_fuel I fn
+   (simplify_cfg_fn fn); the stage then follows as sue_stage_sim_fuel
+   does, via fn_bisim_fuel_run_context and lift_fuel_I. *)
+Theorem simplify_cfg_stage_sim_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  o1_run_state_ok vs ==> ctx_sim_fuel I D C C' vs vs
+Proof
+  strip_tac >>
+  `LIST_REL (fn_bisim_fuel I) C.ctx_functions C'.ctx_functions` by
+    (drule simplify_cfg_stage_functions >> strip_tac >>
+     simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >> rpt strip_tac >>
+     simp[EL_MAP] >> irule simplify_cfg_fn_correct_fuel >>
+     gvs[o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def, MEM_EL]) >>
+  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
+  `!fuel v t. run_context fuel C vs <> IntRet v t` by
+    metis_tac[o1_ctx_shape_no_intret] >>
+  `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
+    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  rw[ctx_sim_fuel_def] >>
+  mp_tac (Q.INST [`fm` |-> `I`] fn_bisim_fuel_run_context) >>
+  simp[lift_fuel_I]
 QED
 
 (* The raw memory fact exempts revert-forward pairs, so it transfers through
@@ -469,12 +456,13 @@ Theorem simplify_cfg_stage_pre_walk:
   !view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
            (o1_pre_walk_inv D) (o1_walk_src_inv D)
 Proof
-  simp[o1_stage_contract_def, no_pre_def] >> rpt gen_tac >> strip_tac >>
+  simp[o1_stage_contract_def, no_pre_def, pass_fuel_def] >>
+  rpt gen_tac >> strip_tac >>
   `EVERY simplify_cfg_fn_ok C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_pre_walk_inv_def, EVERY_MEM] >>
      rpt strip_tac >> irule simplify_cfg_fn_ok_no_phi >>
      simp[EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
-  conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
+  conj_tac >- metis_tac[simplify_cfg_stage_sim_fuel] >>
   simp[o1_walk_src_inv_def] >> conj_tac
   >- (`o1_src_inv D C vs` by gvs[o1_pre_walk_inv_def] >>
       `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
@@ -502,18 +490,19 @@ Theorem simplify_cfg_stage_walk:
   o1_run_contract rpolicy D 5
 Proof
   simp[o1_run_contract_def, o1_fn_passes_def, o1_inv_def,
-       o1_stage_contract_def, o1_pre_def] >> rpt gen_tac >> strip_tac >>
+       o1_stage_contract_def, o1_pre_def, pass_fuel_def] >>
+  rpt gen_tac >> strip_tac >>
   `EVERY simplify_cfg_fn_ok C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
      rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >>
      metis_tac[o1_fn_shape_def]) >>
-  conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
+  conj_tac >- metis_tac[simplify_cfg_stage_sim_fuel] >>
   simp[o1_ssa_inv_def, GSYM CONJ_ASSOC] >> conj_tac
   >- (gvs[o1_ssa_inv_def, o1_lowered_inv_def] >>
       qexists_tac `eom` >> conj_tac
       >- metis_tac[simplify_cfg_stage_max_live_eom] >>
       irule simplify_cfg_stage_mem_inv_rf >>
-      metis_tac[mem_corr_closed_rf_lowered_mem_fact]) >>
+      metis_tac[mem_corr_closed_rf_static_mem_ok]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
   simp[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> conj_tac >> rpt strip_tac
   >- (`simplify_cfg_fn_ok y` by gvs[EVERY_MEM] >>

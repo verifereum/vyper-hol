@@ -2,7 +2,7 @@ Theory abiValidBytesCaller
 Ancestors
   abiValidBytesUnwrap abiBuiltinDispatchCorrect abiBuiltinValidBytes abiDecoderContract
   abiDecoderLoop abiDecoderReentry exprLowering builtinAbi fragExec compileEnv context
-  valueEncoding vyperABI vyperContext venomState words list abiBuiltinDecodeSetup
+  valueEncoding valueEncodingDefs vyperABI vyperContext venomState words list abiBuiltinDecodeSetup
   abiDecoderBytes abiDecoderBytesTyped vyperABIValid contractABI finite_map arithmetic
 
 (* Actual source dispatcher composition for noncanonical Bytes/String decoding. *)
@@ -61,7 +61,8 @@ Proof
   gvs[needs_external_call_wrap_def, abi_static_size_def, abi_size_bound_def,
     is_abi_dynamic_def, abi_embedded_static_size_def, vyper_abi_size_bound_def,
     vyper_is_dynamic_def, vyper_to_abi_type_def,
-    vyper_base_to_abi_type_def, static_length_def, ceil32_def]
+    vyper_base_to_abi_type_def, static_length_def, ceil32_def,
+    abi_static_length_def, head_lengths_def]
 QED
 
 Theorem abi_valid_bytes_resources_from_source:

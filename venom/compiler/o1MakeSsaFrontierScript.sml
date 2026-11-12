@@ -1,7 +1,7 @@
 Theory o1MakeSsaFrontier
 Ancestors
   unitShapeDefs finite_map dominatorDefs cfgDefs cfgHelpers list
-  makeSsaCurrentDefs venomInst venomWf makeSsaCurrentFrontier makeSsaCurrentWfSsa makeSsaCurrentTraceCertificate
+  makeSsaDefs venomInst venomWf makeSsaCurrentFrontier makeSsaCurrentWfSsa makeSsaCurrentTraceCertificate
 
 (* Weak frontier support: no definite assignment or all_reachable premise.
    Adapted from the proved makeSsaCurrentFrontier reference theory. *)

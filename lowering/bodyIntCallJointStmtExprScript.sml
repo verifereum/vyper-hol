@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallJointStmtSeq stmtSimExpr bodySimStmtCases
   bodyExprPreFacts exprSimHypsDefs exprSimDefs exprSimSource loweringPosts
   stmtSimDefs stmtSimProps
-  stmtLowering exprLowering exprLoweringProps compileEnv vyperInterpreter vyperState
+  stmtLowering exprLowering exprLoweringProps compileEnv loweringStateRelDefs vyperInterpreter vyperState
   vyperTypeSystem vyperTypeCallStackSoundness supportedStmts supportedStmtTraverse
   supportedExprTraverse supportedExprs allocLimits gasOutcome gasSummary
   fragGasMode list finite_map bodySim vyperTypeCallGraph gasContext
@@ -23,7 +23,7 @@ Proof
   Cases_on `compile_expr ce (expr_type e) e sa` >>
   rename1 `_ = (vv,sm)` >> simp[] >> strip_tac >> gvs[] >>
   `expr_body_pre ce fp.jc_cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule stmt_expr_body_pre_alloc >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def] >>
      drule supported_expr_body_calls >> strip_tac >>

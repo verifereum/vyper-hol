@@ -167,7 +167,7 @@ Proof
   imp_res_tac emit_op_extends >>
   qspecl_then [`TLOAD`, `tload`] mp_tac emit_op_read1_correct >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-  simp[step_inst_base_def, exec_read1_def] >> strip_tac >>
+  simp[step_inst_base_opcode_eqs, exec_read1_def] >> strip_tac >>
   first_x_assum (qspecl_then [`b`, `ss`] mp_tac) >> simp[] >>
   strip_tac >> metis_tac[]
 QED

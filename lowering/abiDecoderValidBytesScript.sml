@@ -4,7 +4,7 @@ Theory abiDecoderValidBytes
 Ancestors
   abiCanonicalHeadSize abiValidBytes abiDecoderBytes abiDecoderBytesTyped abiDecoderBytesFrame
   abiDecoderString abiDecoderVarSequence abiDecoderContract abiDecoderFrame abiDecoderReservation
-  valueEncoding valueEncodingProps abiEncoder emitHelper compileEnv
+  valueEncoding valueEncodingDefs valueEncodingProps abiEncoder emitHelper compileEnv
   venomExecSemantics venomState contractABI words list arithmetic
 
 Theorem abi_decoder_bytes_runtime_value:

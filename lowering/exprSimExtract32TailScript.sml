@@ -1,6 +1,7 @@
 (* Final counted continuation, after both operand posts are established. *)
 Theory exprSimExtract32Tail
 Ancestors
+  exprSimHashBoundary
   exprSimExtract32Assembly exprSimExtract32Post exprSimExtract32Value
   exprSimHash exprSimVVFrame exprSimDefs loweringPosts gasOutcome gasSummary
   vyperState vyperContext vyperAST vyperTypeSystem valueEncoding

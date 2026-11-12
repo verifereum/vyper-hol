@@ -3,9 +3,9 @@ Theory bodyIntCallDeclarationStore
 Ancestors
   bodyIntCallDeclarationRegions bodyIntCallProtectedBuffer bodyIntCallLocalLanding
   stmtSimDeclStore valueCopy localMemoryStorePath localPtrsProps intCallFrame
-  compileEnv exprLoweringProps exprSimDefs loweringPosts valueEncoding
+  compileEnv loweringStateRelDefs exprLoweringProps exprSimDefs loweringPosts valueEncoding
   venomState venomInst venomExecSemantics finite_map list vyperState
-  entrySinkExtraction exprSimCopy tupleMemoryFrame fragGasPath fragGasMode fragExec fragGasSeq instIdxIndep rich_list
+  memoryValueEncoding entrySinkExtraction exprSimCopy tupleMemoryFrame fragGasPath fragGasMode fragExec fragGasSeq instIdxIndep rich_list
 
 Theorem declared_local_activate:
   stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
@@ -15,7 +15,7 @@ Theorem declared_local_activate:
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [p] /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
-  type_memory_size tv <= sz /\ val_wf tv v /\
+  type_memory_size tv <= sz /\ val_wf tv v /\ value_has_type tv v /\
   val_in_memory tv v (w2n w) s.vs_memory ==>
   stmt_state_rel ctx func ce cx
     (es with scopes := (sc |+ (id,
@@ -24,7 +24,8 @@ Proof
   strip_tac >> irule stmt_state_rel_declare_memory >>
   simp[] >> conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
   goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
-  qexistsl_tac [`s`, `w`] >> gvs[]
+  qexistsl_tac [`s`, `w`] >> gvs[] >>
+  metis_tac[memoryValueEncodingTheory.val_in_memory_memory_value_rel]
 QED
 
 Theorem protected_declared_local_store_run:

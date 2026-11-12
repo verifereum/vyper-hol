@@ -3,9 +3,9 @@ Theory bodyIntCallForcingCodeRun
 Ancestors
   bodyIntCallMaterializeLanding exprSimCopy exprSimStorageCopy
   immutableCopyExecution immutableConstructorRelation valueEncodingProps
-  valueEncoding valueCopy venomExecSemantics context intCallFrame
+  valueEncoding valueEncodingDefs valueCopy venomExecSemantics context intCallFrame
   fragGasMode entrySinkExtraction abiDecoderArrayInitExec stmtReasonMemory
-  finite_map list rich_list words placeMemoryStaging venomState compileEnv
+  finite_map list rich_list words placeMemoryStaging venomState compileEnv loweringStateRelDefs
   fragExec emitHelperProps exprLoweringProps venomInst instIdxIndep
   bodyIntCallProtectedAlloc placeMemoryPrimitiveForward
 

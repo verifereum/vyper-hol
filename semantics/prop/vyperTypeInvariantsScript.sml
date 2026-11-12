@@ -391,6 +391,7 @@ Definition functions_well_typed_def:
           env_body.toplevel_vtypes = toplevel_vtypes /\
           env_body.flag_members = flag_members /\
           evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+          (ret <> NoneT ==> assignable_type (get_tenv cx) ret) /\
           type_stmts env_body ret body = SOME env_after /\
           (* Only the constructor may write immutables (Vyper's
              "Immutable value cannot be written to"), so an internal
@@ -414,6 +415,7 @@ End
 Definition context_well_typed_def:
   context_well_typed cx <=>
     LENGTH cx.txn.calldata < 2 ** 256 /\
+    LENGTH cx.txn.code < 2 ** 256 /\
     cx.txn.value < 2 ** 256 /\
     cx.txn.time_stamp < 2 ** 256 /\
     cx.txn.block_number < 2 ** 256 /\

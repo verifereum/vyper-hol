@@ -45,7 +45,7 @@ Proof
   `32 + 32 * word_size len <= type_memory_size dtv` by
     metis_tac[val_store_size_le] >>
   `32 + 32 * word_size len < dimword (:256)` by decide_tac >>
-  `mem_word_at (w2n sw) s.vs_memory = n2w len` by gvs[mload_def, valueEncodingTheory.mem_word_at_def] >>
+  `mem_word_at (w2n sw) s.vs_memory = n2w len` by gvs[mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
   drule_all store_bytestring_run_exact >> strip_tac >>
   rename1 `run_inst_seq _ s = OK u` >>
   `EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)` by

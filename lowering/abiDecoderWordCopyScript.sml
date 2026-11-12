@@ -1,7 +1,7 @@
 (* An unclamped word decode preserves its exact canonical 32-byte window. *)
 Theory abiDecoderWordCopy
 Ancestors
-  abiDecoderContract abiCanonicalHeadSize valueEncoding valueEncodingProps
+  abiDecoderContract abiCanonicalHeadSize valueEncoding valueEncodingDefs valueEncodingProps
   venomState venomExecSemantics integer_word words
 
 Theorem abi_decode_load_mload:

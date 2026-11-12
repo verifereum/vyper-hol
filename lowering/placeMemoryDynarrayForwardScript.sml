@@ -1,9 +1,9 @@
 Theory placeMemoryDynarrayForward
 Ancestors
   placeMemoryTypedPrimitive placeMemoryTypedBase placeMemoryPrimitiveForward
-  context compileEnv exprLoweringProps emitHelper emitHelperProps
+  context compileEnv loweringStateRelDefs exprLoweringProps emitHelper emitHelperProps
   venomState venomInst venomExecSemantics venomExecProofs fragExec
-  valueEncodingProps valueEncoding fragGasMode immutableMemoryFrame ASCIInumbers list rich_list finite_map
+  valueEncodingProps valueEncoding valueEncodingDefs fragGasMode immutableMemoryFrame ASCIInumbers list rich_list finite_map
 
 Theorem typed_memory_fresh_operand:
   (!x. op = Var x ==> not_fresh_at sa x) /\ sa.cs_next_var <= k ==>

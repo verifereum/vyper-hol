@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallJointPurePath bodyIntCallJointPureSourceInv
   bodyIntCallJointPureSource exprSimExtCallCase exprSimAggregateChildren
   loweringPosts exprLoweringProps stmtSimProps bodyMemoryDefs
-  venomState compileEnv intCallFrame exprSimHypsDefs fragGasPath
+  venomState compileEnv loweringStateRelDefs intCallFrame exprSimHypsDefs fragGasPath
 
 Theorem pure_reserved_operand_frame:
   (!op. reserved op ==> ?x w. op = Var x /\ lookup_var x origin = SOME w) /\

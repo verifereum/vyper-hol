@@ -18,7 +18,7 @@ Ancestors
   list rich_list finite_map pair
   fragExec  exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
   vyperTypeExprSoundness vyperPlaceFrames vyperEvalMisc
@@ -296,7 +296,7 @@ Proof
   >- (irule place_ptr_rel_vars_frame >> metis_tac[])
   >~ [`not_fresh_at sb _`]
   >- simp[Abbr `x`, not_fresh_at_def, ASCIInumbersTheory.toString_11]
-  >~ [`locals_kept _ _ _ (update_var _ _ _)`]
+  >~ [`locals_kept _ _ _ _ (update_var _ _ _)`]
   >- (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[update_var_def]) >>
   simp[update_var_def] >> metis_tac[]
 QED

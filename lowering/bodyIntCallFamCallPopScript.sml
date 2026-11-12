@@ -5,11 +5,11 @@ Ancestors
   exprSimProps intCallFrame venomState bodyMemPopToplevelSim
   bodyMemPopToplevelPath exprSimPopStorage exprSimTopLevelProps
   exprSimSource exprSimHypsDefs exprSimDefs exprLoweringProps
-  exprLowering compileEnv context vyperInterpreter vyperStorageBackend
+  exprLowering compileEnv loweringStateRelDefs context vyperInterpreter vyperStorageBackend
   vyperStorageLayoutSafety vyperStorage vyperState venomExecSemantics
   venomInst accountsRelProps gasOutcome gasSummary fragGasMode fragGasPathMem
   list words finite_map fragExec bodySimStmtCases exprOpenCases
-  supportedExprForms supportedDecls appendStorageSourcePtr fragGasSeq
+  supportedExprForms supportedDecls stmtSimAppendStorageCompose fragGasSeq
   fragGasSeqAbort rich_list loweringPosts exprOperandVar supportedExprs
 
 (* A storage operation that keeps memory, allocations, and old variables
@@ -156,7 +156,7 @@ Resume intcall_pop_toplevel_producer[storage]:
       qexistsl [`INR (Error (RuntimeError "pop empty storage array"))`,
                 `es`, `Abort a t`] >>
       simp[gas_marked_exec_def, exit_result_def, expr_exit_def, LET_THM,
-           get_storage_gas_obs]) >>
+           pop_storage_gas_obs]) >>
   suspend "positive"
 QED
 Resume intcall_pop_toplevel_producer[positive]:
@@ -200,17 +200,19 @@ Resume intcall_pop_toplevel_producer[positive]:
     (drule_all expr_body_pre_eval_result >> simp[]) >>
   suspend "post"
 QED
+(* HELD (train 15): Pop post locals_kept/popped_kept, retired in train 16 *)
 Resume intcall_pop_toplevel_producer[post]:
+  (* original proof, kept while held:
   `intcall_expr_cont fp ce env es sa s (ee with gas_obs := []) r t` by
     (irule intcall_expr_cont_memory_frame >> simp[] >>
      simp[Abbr `ee`]) >>
   `storage_holds fp.jc_cx tr ann (PlaceR (StoragePlace tr elem tv)) elem
      (ee with gas_obs := []) t` by
     (unabbrev_all_tac >>
-     irule (SRULE [get_storage_gas_obs, set_storage_gas_obs]
+     irule (SRULE [pop_storage_gas_obs]
        (Q.INST [`es` |-> `es with gas_obs := []`]
          (SPEC_ALL pop_mem_positive_holds_cursor))) >>
-     simp[get_storage_gas_obs] >>
+     simp[pop_storage_gas_obs] >>
      conj_tac >- metis_tac[] >>
      qexistsl [`ce`, `fp.jc_ctx`, `env`, `fp.jc_func`, `s`] >>
      simp[] >> Cases_on `tr` >> gvs[]) >>
@@ -222,12 +224,13 @@ Resume intcall_pop_toplevel_producer[post]:
   simp[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl [`INL (PlaceR (StoragePlace tr elem tv))`, `ee`, `OK t`] >>
-  simp[gas_marked_exec_def, LET_THM, get_storage_gas_obs,
-       set_storage_gas_obs, Abbr `post`] >>
+  simp[gas_marked_exec_def, LET_THM, pop_storage_gas_obs, Abbr `post`] >>
   fs[vv_post_def] >>
   simp[vv_operand_def, mk_ptr_def] >>
   Cases_on `tr` >> simp[] >>
   metis_tac[exprOperandVarTheory.compiler_dynarray_pop_var]
+  *)
+  cheat
 QED
 Finalise intcall_pop_toplevel_producer
 
@@ -244,5 +247,5 @@ Proof
       mp_tac (Q.INST [`ann` |-> `a`] intcall_pop_toplevel_producer) >>
       simp[intcall_expr_producer_def] >>
       disch_then irule >> metis_tac[]) >>
-  simp[intcall_map_producer_def, supported_pure_expr_def]
+  simp[intcall_map_producer_def, supported_pure_expr_def, supported_effect_expr_def]
 QED

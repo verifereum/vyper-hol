@@ -1,9 +1,18 @@
 (* Source-state boundary for deferred pure call operands. *)
 Theory bodyIntCallJointCallSource
 Ancestors
-  supportedExprs vyperInterpreter vyperState vyperContext vyperMisc
+  supportedExprs supportedExprForms vyperInterpreter vyperState vyperContext vyperMisc
   vyperStatePreservation vyperPlaceFrames vyperCallFrame
   vyperImmutablesPreservation pair sum
+
+Theorem supported_pure_exprs_code_slice_source[local]:
+  supported_pure_exprs tops es ==> code_slice_source bt es = NONE
+Proof
+  strip_tac >> Cases_on `code_slice_source bt es` >> simp[] >>
+  PairCases_on `x` >>
+  gvs[code_slice_source_SOME, supported_pure_expr_def,
+      supported_builtin_form_def]
+QED
 
 Theorem intcall_pure_immutables_mutual:
   (!tops e. supported_pure_expr tops e ==>
@@ -56,6 +65,7 @@ Resume intcall_pure_immutables_mutual[structlit]:
 QED
 Resume intcall_pure_immutables_mutual[subscript]:
   rpt strip_tac >>
+  Cases_on `subscript_reads_base cx e e'` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
@@ -67,15 +77,26 @@ Resume intcall_pure_immutables_mutual[attribute]:
 QED
 Resume intcall_pure_immutables_mutual[builtin]:
   rpt strip_tac >>
-  Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
+  drule supported_pure_exprs_code_slice_source >>
+  disch_then (qspec_then `blt` assume_tac) >>
+  Cases_on `blt = Len`
+  >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, builtin_args_length_ok_def,
+          AllCaseEqs()] >>
+      imp_res_tac result_array_length_state >> gvs[] >>
+      Cases_on `es` >> gvs[] >> first_x_assum drule_all >> simp[]) >>
+  Cases_on `blt = Env MsgGas` >>
+  Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, AllCaseEqs()] >>
   imp_res_tac result_array_length_state >>
   imp_res_tac next_gas_reading_state >>
   imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+  imp_res_tac lift_option_type_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >>
   gvs[builtin_args_length_ok_def] >>
-  Cases_on `es` >> gvs[] >> first_x_assum drule_all >> simp[]
+  Cases_on `es` >> gvs[] >>
+  metis_tac[]
 QED
 Resume intcall_pure_immutables_mutual[typebuiltin]:
   rpt strip_tac >>
@@ -110,6 +131,7 @@ Resume intcall_pure_immutables_mutual[place_global]:
 QED
 Resume intcall_pure_immutables_mutual[place_subscript]:
   rpt strip_tac >>
+  Cases_on `subscript_reads_base cx e e'` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]

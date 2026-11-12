@@ -2,7 +2,7 @@
 Theory bodyIntCallJointStmtSeq
 Ancestors
   bodyIntCallJointContract bodyIntCallJointStmtBoundary bodyIntCallJointStmtZero
-  stmtSimSeqEnv stmtSimProps loweringPosts stmtLowering compileEnv
+  stmtSimSeqEnv stmtSimProps loweringPosts stmtLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperTypeSystem bodyExprPreFacts
   supportedStmts supportedStmtTraverse supportedExprTraverse vyperTypeCallGraph
   vyperTypeCallStackSoundness exprLoweringProps freshWrites
@@ -97,8 +97,8 @@ Resume intcall_stmts_producer_cons[normal]:
     metis_tac[bodySimTheory.cenv_top_ext_same_frame] >>
   `body_inv fp.jc_tops fp.jc_ctx c fp.jc_cx` by
     metis_tac[body_inv_same_frame] >>
-  `EVERY (stmt_exprs_ok c) ss` by
-    metis_tac[stmt_exprs_ok_same_frame] >>
+  `stmts_exprs_ok c ss` by
+    (drule_all stmt_env_stmts_exprs_ok >> simp[]) >>
   `!tail. eval_stmt fp.jc_cx stmt
       (es with gas_obs := gas_explicit left s.vs_gas_readings ++ tail) =
       (INL (), es_end with gas_obs := tail)` by

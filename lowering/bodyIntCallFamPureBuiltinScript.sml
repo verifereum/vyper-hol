@@ -32,7 +32,7 @@ Proof
      simp[vv_post_initial_gas] >>
      conj_tac >- metis_tac[] >>
      qexistsl [`e`, `res`, `tv`, `vv`] >> simp[]) >>
-  fs[intcall_expr_cont_def, locals_kept_def] >> metis_tac[]
+  fs[intcall_expr_cont_def, locals_kept_def, popped_kept_def] >> metis_tac[]
 QED
 
 Theorem intcall_builtin_value_producer:

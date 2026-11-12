@@ -3,7 +3,7 @@ Theory abiDecoderLoopRegisters
 Ancestors
   abiDecoderArrayInvariant abiDecoderArrayBackedge abiDecoderReentryAddress abiDecoderReentry
   abiDecoderExecution abiDecoderContract emitHelperProps exprLoweringProps
-  compileEnv venomState finite_map words arithmetic
+  compileEnv loweringStateRelDefs venomState finite_map words arithmetic
 
 Theorem abi_decoder_generated_update:
   next < limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>

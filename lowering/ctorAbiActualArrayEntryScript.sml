@@ -10,7 +10,7 @@ Ancestors
   venomInst venomExecSemantics finite_map pred_set
   abiDecoderPrimitiveLoopEntry abiDecoderLoop abiDecoderExecution abiDecoderReentry
   abiDecoderLoopRegisters abiDecoderContract abiDecoderDynamicLoopSetup abiEncoderRegisteredEffect
-  valueEncodingProps valueEncoding venomState compileEnv words list arithmetic
+  valueEncodingProps valueEncoding valueEncodingDefs venomState compileEnv loweringStateRelDefs words list arithmetic
 
 Theorem ctor_actual_array_observation_exit:
   ctor_actual_array_observation ctx func site ids D N d outsz next limit_st

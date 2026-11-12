@@ -13,7 +13,7 @@ Ancestors
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
+  stmtSimIf stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
@@ -75,7 +75,7 @@ Theorem aug_place_memory_read_typed:
 Proof
   strip_tac >> drule_all aug_place_target_memory_live >> strip_tac >>
   `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
-    metis_tac[aug_place_target_entry_typed] >>
+    (drule_all aug_place_target_entry_typed >> simp[]) >>
   `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
   gvs[place_ptr_rel_def] >>
   `tv0 = entry.type` by metis_tac[aug_place_entry_type_agrees, optionTheory.SOME_11] >>
@@ -115,6 +115,24 @@ Proof
   metis_tac[read_place_state, place_type_value_state]
 QED
 
+Triviality array_set_index_indexed_error:
+  !tv av i x vj err.
+    array_index tv av i = SOME x /\ array_set_index tv av i vj = INR err ==>
+    ?msg. err = TypeError msg
+Proof
+  rpt gen_tac >>
+  simp[vyperValueOperationTheory.array_index_def,
+       vyperValueOperationTheory.array_set_index_def, LET_THM] >>
+  Cases_on `0 <= i` >> simp[] >>
+  Cases_on `av`
+  >~ [`DynArrayV l`]
+  >- (simp[listTheory.oEL_THM] >> Cases_on `Num i < LENGTH l` >> simp[])
+  >~ [`TupleV l`] >- simp[] >>
+  Cases_on `tv` >> simp[] >>
+  Cases_on `b` >> simp[] >>
+  rename1 `Num i < n` >> Cases_on `Num i < n` >> simp[]
+QED
+
 Theorem aug_place_replace_read_error:
   !path tv a old v err.
     evaluate_subscripts tv a path = INL old /\
@@ -122,22 +140,35 @@ Theorem aug_place_replace_read_error:
     ?msg. err = TypeError msg
 Proof
   Induct_on `path` >- simp[assign_subscripts_def] >>
-  rpt gen_tac >> Cases_on `h`
-  >- (rename1 `ValueSubscript key` >>
-      reverse (Cases_on `?i. key = IntV i`)
-      >- (Cases_on `key` >> fs[] >> simp[Once evaluate_subscripts_def]) >>
-      fs[] >>
-      simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
-      simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
-      >~ [`array_set_index _ _ _ _ = INR _`]
-      >- (gvs[vyperValueOperationTheory.array_set_index_def,
-              vyperValueOperationTheory.array_index_def, AllCaseEqs(),
-              listTheory.oEL_THM] >> metis_tac[]) >>
-      first_x_assum drule_all >> simp[]) >>
-  Cases_on `a` >>
-  simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
-  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  rpt gen_tac >> strip_tac >> Cases_on `h`
+  >~ [`ValueSubscript key`]
+  >- (`?i av. key = IntV i /\ a = ArrayV av` by
+        (Cases_on `key` >> fs[evaluate_subscripts_def] >>
+         Cases_on `a` >> fs[]) >>
+      gvs[] >>
+      qpat_x_assum `evaluate_subscripts _ _ _ = _` mp_tac >>
+      qpat_x_assum `assign_subscripts _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_subscripts_def, Once assign_subscripts_def, LET_THM] >>
+      Cases_on `array_index tv av i` >> simp[] >>
+      rename1 `array_index tv av i = SOME elt` >>
+      qmatch_goalsub_abbrev_tac `assign_subscripts etv elt path` >>
+      Cases_on `assign_subscripts etv elt path (Replace v)` >> simp[]
+      >- metis_tac[array_set_index_indexed_error] >>
+      Cases_on `evaluate_subscripts etv elt path` >> simp[] >>
+      first_x_assum drule_all >> rpt strip_tac >> gvs[])
+  >~ [`AttrSubscript id`]
+  >- (`?al. a = StructV al` by (Cases_on `a` >> fs[evaluate_subscripts_def]) >>
+      gvs[] >>
+      qpat_x_assum `evaluate_subscripts _ _ _ = _` mp_tac >>
+      qpat_x_assum `assign_subscripts _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_subscripts_def, Once assign_subscripts_def, LET_THM] >>
+      Cases_on `ALOOKUP al id` >> simp[] >>
+      rename1 `ALOOKUP al id = SOME fld` >>
+      qmatch_goalsub_abbrev_tac `assign_subscripts ftv fld path` >>
+      Cases_on `assign_subscripts ftv fld path (Replace v)` >> simp[] >>
+      Cases_on `evaluate_subscripts ftv fld path` >> simp[] >>
+      first_x_assum drule_all >> rpt strip_tac >> gvs[]) >>
+  fs[evaluate_subscripts_def]
 QED
 
 Theorem aug_place_memory_write_success:
@@ -186,14 +217,9 @@ Theorem aug_place_bop_write_result_ok:
   expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty;expr_type e] cur rhs st =
-   case evaluate_binop
-     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-     NoneTV bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
-  Cases_on `evaluate_binop
-     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-     NoneTV bop cur rhs` >> gvs[expr_res_ok_def, stmt_res_ok_def]
+  Cases_on `bop_result cx ty bop [ty;expr_type e] cur rhs st` >>
+  gvs[expr_res_ok_def, stmt_res_ok_def] >>
+  gvs[exprBopSimDefsTheory.bop_result_def, AllCaseEqs()]
 QED
 
 
@@ -439,8 +465,100 @@ Proof
   Cases_on `dst` >> gvs[venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
 
+Theorem aug_place_memory_store_frame[local]:
+  alloca_frame c0 es0 sa0 s0 cenv ee s /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
+    (SOME LocMemory) (Type dty) /\
+  lookup_scopes id ee.scopes = SOME entry /\
+  evaluate_type (get_tenv cx) dty = SOME tv /\ is_word_type dty /\
+  (!t0. cenv.ce_var_type id = SOME t0 ==>
+        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  write_place cx (MemoryPlace id path) v ee = (INL (),ff) ==>
+  alloca_frame c0 es0 sa0 s0 cenv ff
+    ((mstore (w2n w) wd s) with vs_inst_idx := ix)
+Proof
+  strip_tac >> gvs[place_ptr_rel_def] >>
+  drule mem_path_offset_sound >> strip_tac >>
+  `local_region cenv ee.scopes s id (w2n b) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `local_ptrs_rel func cenv ee.scopes s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
+  `type_memory_size entry.type <= sz /\
+   w2n b + sz <= s.vs_alloca_next` by
+    (fs[local_ptrs_rel_def] >>
+     qpat_x_assum `!name ent p sz. _` drule >>
+     disch_then drule >> strip_tac >> gvs[]) >>
+  `type_memory_size tv = 32` by (drule_all word_tv_memory_size >> simp[]) >>
+  `w2n b + k < dimword (:256)` by decide_tac >>
+  `w2n (b + n2w k) = w2n b + k` by
+    (rewrite_tac[wordsTheory.word_add_def] >> simp[]) >>
+  `MAP FDOM ff.scopes = MAP FDOM ee.scopes` by
+    metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
+  irule alloca_frame_region_write >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+  simp[] >>
+  conj_tac >- simp[venomStateTheory.lookup_var_def, venomStateTheory.mstore_def] >>
+  rpt strip_tac >> simp[] >>
+  irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Theorem aug_place_memory_store_run[local]:
+  emit_void MSTORE [dst;op] sa = ((),sb) /\
+  eval_operand dst s = SOME w /\ expr_val_rel cx dty v op s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
+    (SOME LocMemory) (Type dty) /\
+  is_word_type dty /\ evaluate_type (get_tenv cx) dty = SOME tv /\
+  value_has_type tv v /\ expr_sim_inv cenv cx env ee /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  alloca_frame c0 es0 sa0 s0 cenv ee s /\
+  lookup_scopes id ee.scopes = SOME entry /\
+  (!t0. cenv.ce_var_type id = SOME t0 ==>
+        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx ff t /\
+      alloca_frame c0 es0 sa0 s0 cenv ff t /\
+      (!x. lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 tv v) s` >>
+  `stmt_state_rel ctx func cenv cx ff u` by
+    (simp[Abbr `u`] >> irule place_store_word_memory_state >>
+     qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
+     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+     simp[]) >>
+  `eval_operand op s = SOME (typed_val_to_w256 tv v)` by
+    (fs[expr_val_rel_def] >> metis_tac[]) >>
+  `gas_marked_path F ctx func s 0
+      (OK (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
+   (!x. lookup_var x u = lookup_var x s) /\
+   u.vs_allocas = s.vs_allocas /\ ~u.vs_halted /\
+   u.vs_current_bb = sb.cs_current_bb /\
+   SUC s.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (irule place_store_emit_run >> simp[] >>
+     qexistsl [`dst`, `LocMemory`, `op`, `sa`] >>
+     simp[Abbr `u`] >> goal_assum (drule_at Any) >> simp[]) >>
+  qexists `u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  simp[stmt_state_rel_inst_idx, venomStateTheory.lookup_var_def] >>
+  simp[Abbr `u`] >> irule aug_place_memory_store_frame >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem aug_place_binop_store_outcome:
   bop <> In /\ bop <> NotIn /\
+  ((bop = Eq \/ bop = NotEq) ==> !bs. cur <> BytesV bs) /\
   compile_binop bop x y ty NONE el s2 = (op,s3) /\
   emit_void MSTORE [dst;op] s3 = ((),sf) /\
   binop_frag ctx func cenv cx bop ty ty NONE el [ty;expr_type e] cur rhs ee /\
@@ -458,6 +576,8 @@ Theorem aug_place_binop_store_outcome:
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv s2 /\ local_ptrs_reserved cenv s3 /\
   stmt_state_rel ctx func cenv cx ee s /\
+  alloca_frame cenv es0 sa s_entry cenv ee s /\
+  sa.cs_next_id <= s2.cs_next_id /\
   eval_operand x s = SOME (val_to_w256 cur) /\
   eval_operand y s = SOME (val_to_w256 rhs) /\
   eval_operand dst s = SOME w /\
@@ -478,19 +598,20 @@ Theorem aug_place_binop_store_outcome:
            FLOOKUP s.vs_allocas aid = SOME b) /\
   (!v ff t. write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
     stmt_state_rel ctx func cenv cx ff t /\
+    alloca_frame cenv es0 sa s_entry cenv ff t /\
     (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
            lookup_var z t = SOME u) /\
     (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
     t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
-    stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
       (INL ()) (ff with gas_obs := []) t) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
       ptv bop cur rhs)) (write_place cx (MemoryPlace id path))) (ee,s)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s_entry)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -505,7 +626,7 @@ Proof
       case evaluate_binop
         (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
         ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> simp[]) >>
+       (irule bop_result_augassign >> metis_tac[]) >>
      simp[] >>
      qpat_x_assum `k ee = _` mp_tac >>
      simp[Abbr `k`, bind_def, lift_sum_def, return_def, raise_def] >>
@@ -542,11 +663,19 @@ Resume aug_place_binop_store_outcome[normal]:
      goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
   `!z. dst = Var z ==> not_fresh_at s3 z` by metis_tac[] >>
-  drule_all (place_store_word_run |> SPEC_ALL |> Q.INST [`loc` |-> `LocMemory`] |> SIMP_RULE (srw_ss()) []) >>
+  `alloca_frame cenv ee s2 s cenv ee t` by
+    (irule alloca_frame_of_mem_frame >> metis_tac[]) >>
+  `alloca_frame cenv es0 sa s_entry cenv ee t` by
+    (irule alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ s`)) >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ t`)) >> simp[]) >>
+  `!t0. cenv.ce_var_type id = SOME t0 ==>
+        evaluate_type (get_tenv cx) t0 = SOME entry.type` by metis_tac[] >>
+  drule_all aug_place_memory_store_run >>
   strip_tac >>
   `gas_marked_path F ctx func s 0 (OK t')` by
     (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+  `stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
      (INL ()) (ff with gas_obs := []) t'` by
     (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[]) >>
@@ -596,7 +725,8 @@ Proof
    case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      dtv bop cur rhs of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   pop_assum SUBST1_TAC >> simp[AllCaseEqs()] >> strip_tac >>
   irule well_typed_binop_success_type >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -605,15 +735,52 @@ Proof
   qexistsl_tac [`get_tenv cx`, `dtv`, `ty`] >> simp[]
 QED
 
+Theorem aug_place_prefix_frame[local]:
+  target_post ctx func cenv cx es sa sc s0 mid pv vt r t /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel ctx func cenv cx mid t /\
+  stmt_state_rel ctx func cenv cx mid u /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sc /\
+  local_ptrs_reserved cenv sd /\
+  sa.cs_next_id <= sc.cs_next_id /\ sc.cs_next_id <= sd.cs_next_id /\
+  MAP FDOM mid.scopes = MAP FDOM es.scopes /\
+  MAP FDOM fin.scopes = MAP FDOM mid.scopes /\
+  u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
+  (!z w. not_fresh_at sc z /\ lookup_var z t = SOME w ==>
+         lookup_var z u = SOME w) /\
+  expr_post ctx func cenv cx e mid sd se u fin v op q ==>
+  alloca_frame cenv es sa s0 cenv fin q
+Proof
+  strip_tac >>
+  `alloca_frame cenv es sa s0 cenv mid t` by
+    (irule target_post_alloca_frame >> metis_tac[]) >>
+  `alloca_frame cenv mid sc t cenv mid u` by
+    (irule alloca_frame_of_mem_frame >> metis_tac[]) >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP t.vs_allocas aid = SOME b` by
+    fs[target_post_def] >>
+  `alloca_frame cenv es sa s0 cenv mid u` by
+    (irule alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ t`)) >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ u`)) >> simp[]) >>
+  `alloca_frame cenv mid sd u cenv fin q` by
+    (irule expr_post_alloca_frame >> metis_tac[]) >>
+  irule alloca_frame_trans >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ u`)) >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ q`)) >>
+  simp[]
+QED
+
 Theorem aug_place_normal_post:
-  ~block_is_terminated sf /\ stmt_state_rel ctx func cenv cx ff t /\
+  alloca_frame cenv es0 sa s_entry cenv ff t /\
+  ~block_is_terminated sf /\ stmt_state_rel ctx func cenv cx ff t /\ 
   (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
          lookup_var z t = SOME u) /\
   (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
            FLOOKUP t.vs_allocas aid = SOME b) /\
   ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
   t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
-  stmt_post ctx func cx lctx cenv cenv sa sf s_entry (INL ()) ff t
+  stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry (INL ()) ff t
 Proof
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_def]
 QED
@@ -645,13 +812,14 @@ Theorem aug_place_store_post[local]:
   ~block_is_terminated sf ==>
   !v ff t. write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
     stmt_state_rel ctx func cenv cx ff t /\
+    alloca_frame cenv es0 sa s_entry cenv ff t /\
     (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
            lookup_var z t = SOME u) /\
     (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
     t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
-    stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
       (INL ()) (ff with gas_obs := []) t
 Proof
   rpt strip_tac >> irule aug_place_normal_post >>
@@ -874,7 +1042,7 @@ Proof
   goal_assum (drule_at Any) >> fs[ignore_bind_def]
 QED
 
-Theorem aug_place_memory_reads_outcome[local]:
+Theorem aug_place_memory_reads_outcome:
   read_place cx (MemoryPlace id path) st = (INL cur,st) /\
   place_type_value cx (MemoryPlace id path) st = (INL ptv,st) /\
   gas_outcome memory tops (ctx,func) (k cur ptv) (st,s) Q R ==>
@@ -1270,20 +1438,48 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
   `~block_is_terminated sb` by
     (irule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
      goal_assum (drule_at Any) >> simp[venomInstTheory.is_terminator_def]) >>
+  `sa.cs_next_id <= s0'.cs_next_id` by
+    (qspecl_then [`bt`, `cenv`, `sa`] mp_tac
+       stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     simp[ci_mono_def]) >>
+  `s0'.cs_next_id <= s1.cs_next_id` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
+  `sa.cs_next_id <= s2.cs_next_id` by decide_tac >>
+  `MAP FDOM raw.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. eval_target_place _ _ _ = _`
+       (qspec_then `[]` mp_tac) >>
+     disch_then (mp_tac o MATCH_MP
+       vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom) >>
+     simp[]) >>
+  `MAP FDOM raw'.scopes = MAP FDOM raw.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (raw' with gas_obs := []) t'` by
+    (irule aug_place_prefix_frame >>
+     qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+     metis_tac[]) >>
   drule aug_place_store_post >> disch_then assume_tac >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
       ptv bop v v'')) (write_place cx (MemoryPlace id path)))
     (raw' with gas_obs := [],t')
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)` by
     (irule aug_place_binop_store_outcome >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
      conj_tac >- (metis_tac[]) >>
      conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+     conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
      asm_simp_tac std_ss [] >>
      conj_tac >- (qexistsl_tac [`entry'`, `old`] >> simp[]) >>
+     conj_tac >-
+       (qpat_assum `word_value_type ty` mp_tac >>
+        qpat_assum `evaluate_type (get_tenv cx) ty = SOME ptv` mp_tac >>
+        qpat_assum `value_has_type ptv v` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        metis_tac[word_value_type_typed, word_value_not_bytes]) >>
      conj_tac >- simp[gasContextTheory.gas_admissible_gas_obs] >>
      conj_tac >- (qexists_tac `env` >> simp[]) >>
      conj_tac >- simp[] >>
@@ -1295,7 +1491,7 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
      metis_tac[]) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>
@@ -1317,7 +1513,7 @@ Resume compile_augassign_place_memory_case[rhs_exit]:
   markerLib.RESUME_TAC >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>
@@ -1340,7 +1536,7 @@ Resume compile_augassign_place_memory_case[rhs_exempt]:
   markerLib.RESUME_TAC >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>

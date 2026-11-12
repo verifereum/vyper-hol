@@ -4,7 +4,7 @@ Ancestors
   abiScratchDecoderContract abiScratchFootprint abiDecoderFootprint abiBuiltinValidInput abiBuiltinSource
   abiBuiltinDecodeSetup abiBuiltinAllocation abiBuiltinSetupReach abiDecoderReentry abiDecoderReadableTypes abiDecoderCoherence
   abiDecoderTypedContract abiDecoderContract abiDecoderAllocation abiDecodeRanges vyperABIValid
-  vyperABI contractABI compileEnv valueEncoding valueEncodingProps venomState words list
+  vyperABI contractABI compileEnv valueEncoding valueEncodingDefs valueEncodingProps venomState words list
 
 Definition abi_scratch_decode_resources_def:
   abi_scratch_decode_resources st first last min_size max_size outsz cnt p d b cap s <=>
@@ -58,7 +58,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_source_metadata >> strip_tac >>
   drule evaluate_abi_decode_vyper_valid_enc >> strip_tac >>
-  drule vyper_valid_enc_length_lower >> strip_tac >>
+  drule vyper_valid_enc_static_length_lower >> strip_tac >>
   asm_simp_tac bool_ss [abi_scratch_decode_pre_def] >>
   fs[vyper_valid_enc_def, val_in_memory_def, Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"]
 QED

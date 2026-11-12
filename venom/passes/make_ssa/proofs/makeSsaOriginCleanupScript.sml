@@ -1,6 +1,6 @@
 Theory makeSsaOriginCleanup
 Ancestors
-  makeSsaOriginInvariant makeSsaCurrentDefs venomInst list
+  makeSsaOriginInvariant makeSsaDefs venomInst list
 
 Theorem origin_before_after:
   origin_before_cleanup fn orig i ==> origin_after_cleanup fn orig i

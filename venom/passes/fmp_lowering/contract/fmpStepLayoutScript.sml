@@ -49,11 +49,11 @@ Theorem analyze_fmp_reclaims_parameter_prefix_absent:
   bb.bb_instructions = prefix ++ suffix /\
   EVERY (\i. MEM i.inst_opcode [PARAM; RETPC_PARAM; FMP_PARAM]) prefix ==>
   !n base. n < LENGTH prefix ==>
-    ~MEM ((label,n),base) (fmap_to_alist plan)
+    ~MEM ((label,n),base) (fmp_plan_to_alist fn plan)
 Proof
-  rpt strip_tac >> rename1 `MEM ((label,n),target) (fmap_to_alist plan)` >>
+  rpt strip_tac >> rename1 `MEM ((label,n),target) (fmp_plan_to_alist fn plan)` >>
   `FLOOKUP plan (label,n) = SOME target` by
-    gvs[alistTheory.MEM_fmap_to_alist_FLOOKUP] >>
+    gvs[MEM_fmp_plan_to_alist] >>
   drule_all analyze_fmp_reclaims_position >> simp[] >> strip_tac >> gvs[] >>
   drule fmp_reclaim_point_not_prefix >>
   `MEM (EL n prefix).inst_opcode [PARAM; RETPC_PARAM; FMP_PARAM]` by
@@ -75,7 +75,7 @@ QED
 Theorem fmp_lower_blocks_checked_entry_prefix:
   split_fmp_entry fn = SOME (FmpEntryLayout users retpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
-  fmp_lower_blocks infos ctx runner s (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult out leftover s') ==>
   ?entry rest tail.
     out = entry::rest /\
@@ -87,7 +87,7 @@ Proof
   `lookup_block entry.bb_label fn.fn_blocks = SOME entry` by
     simp[lookup_block_def, FIND_thm] >>
   `!n target. n < LENGTH (users ++ option_CASE retpc [] (\i. [i])) ==>
-    ~MEM ((entry.bb_label,n),target) (fmap_to_alist plan)` by
+    ~MEM ((entry.bb_label,n),target) (fmp_plan_to_alist fn plan)` by
     (rpt strip_tac >>
      drule_all analyze_fmp_reclaims_parameter_prefix_absent >>
      metis_tac[]) >>
@@ -215,7 +215,7 @@ Theorem fmp_install_checked_root_successors:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) ==>
   MAP (\bb. (bb.bb_label, FLAT (MAP get_successors bb.bb_instructions))) out =
@@ -290,7 +290,7 @@ Theorem fmp_install_checked_root_ids_distinct:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
   ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)) /\
@@ -357,7 +357,7 @@ Theorem fmp_install_checked_root_id_predicate:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
   EVERY (\bb. EVERY (\i. P i.inst_id) bb.bb_instructions) fn.fn_blocks /\

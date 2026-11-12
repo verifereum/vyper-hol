@@ -5,8 +5,11 @@ Ancestors
 
 (* The compiler's stronger, provenance-carrying branches are consumed here;
    the final source state is restored explicitly, not a matching parameter. *)
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem source_return_dispatch:
   !nret.
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
   compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
@@ -45,7 +48,7 @@ Theorem source_return_dispatch:
   stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
   state_rel other ce cx (ee with <|scopes := []; gas_obs := []|>) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 (es1 with scopes := prev) sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce prev t id b sz) /\
   (!id b sz aid off asz.
@@ -75,3 +78,4 @@ Proof
   qexistsl_tac [`buf`,`s1.cs_next_id`,`off`] >>
   asm_rewrite_tac[] >> metis_tac[]
 QED
+*)

@@ -69,7 +69,7 @@
 
 Theory exprSimOperators
 Ancestors
-  exprSimBopRestWord exprSimBopInLiteralWord exprSimBopHeld
+  exprSimBopRestWord exprSimBopInLiteralWord exprSimBopHeld exprSimBopBytestring
   exprSimUnopCompose
   exprSimBopTyped
   exprSimUnopProps
@@ -295,8 +295,8 @@ Theorem expr_body_pre_word_type_result:
         ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
               value_has_type tyv v
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (drule_all expr_body_pre_eval >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >> asm_rewrite_tac[] >>
   rw[] >> drule_all expr_body_pre_word_value >> simp[]
 QED
 
@@ -369,7 +369,8 @@ Proof
       qpat_x_assum `expr_type e1 = _ \/ _` strip_assume_tac >>
       gvs[vyperValueTheory.evaluate_type_def, optionTheory.IF_EQUALS_OPTION] >>
       Cases_on `v1` >> Cases_on `v2` >> gvs[value_has_type_def] >>
-      irule compile_compare_bytes_sim >> fs[value_has_type_def])
+      irule compile_compare_bytes_sim >>
+      fs[value_has_type_def, oEL_def, vyperValueTheory.evaluate_type_def])
   >~ [`compile_binop`]
   >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
   >~ [`lower_value`]

@@ -3,8 +3,8 @@ Theory bodyIntCallLocalLanding
 Ancestors
   localMemoryStorePath bodyIntCallProtectedReturn exprSimCopy tupleMemoryFrame
   stmtSimAssignStore exprSimDefs fragGasSeq fragGasMode localPtrsProps
-  vyperLookup finite_map pred_set rich_list venomState compileEnv exprLoweringProps
-  fragExec exprLowering emitHelperProps venomInst venomExecSemantics
+  vyperLookup finite_map pred_set rich_list venomState compileEnv loweringStateRelDefs exprLoweringProps
+  fragExec exprLowering emitHelperProps venomInst venomExecSemantics memoryValueEncoding
   valueEncoding vyperState vyperInterpreter loweringPosts valueCopy list instIdxIndep
 
 Theorem local_store_semantic_landing:
@@ -17,7 +17,8 @@ Theorem local_store_semantic_landing:
   (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
     mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
   LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-  val_wf entry.type v /\ val_in_memory entry.type v (w2n w) t.vs_memory ==>
+  val_wf entry.type v /\ value_has_type entry.type v /\
+  val_in_memory entry.type v (w2n w) t.vs_memory ==>
   stmt_state_rel ctx func cenv cx
     (es with scopes := pre ++
       (env |+ (id,entry with <|value := v; popped := []|>)) :: rest) t
@@ -45,7 +46,8 @@ Proof
       fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  gvs[venom_state_component_equality]
+  gvs[venom_state_component_equality] >>
+  metis_tac[memoryValueEncodingTheory.val_in_memory_memory_value_rel]
 QED
 
 Theorem protected_local_memory_store_run:

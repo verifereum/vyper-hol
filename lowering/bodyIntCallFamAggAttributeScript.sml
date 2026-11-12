@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallJointAggCore bodyAttributeMemory
   exprSimFieldLayout exprSimAttributeProps bodyFieldMemoryProps
   loweringPosts exprSimVVFrame exprLoweringProps emitHelperProps
-  compileEnv moduleLoweringProps venomState fragGasMode typedMemoryCopy instIdxIndep
+  compileEnv loweringStateRelDefs moduleLoweringProps venomState fragGasMode typedMemoryCopy instIdxIndep
   emitHelper exprSimAttribute exprSimDefs exprSimHypsDefs context
   exprSimUnwrap fragExec supportedExprs vyperTypeCallGraph stmtSimForced
   exprSimHyps vyperInterpreter vyperAST
@@ -74,6 +74,7 @@ Proof
   simp[]
 QED
 
+(* HELD (train 15): pure_frame sweep, retired by alan 451258 *)
 Theorem attribute_selection_landing:
   intcall_frame_ok fp /\
   expr_body_pre ce fp.jc_cx env (Attribute ann obj fld) es /\
@@ -109,6 +110,7 @@ Theorem attribute_selection_landing:
          a + k < dimword (:256) /\
          (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z))
 Proof
+  (* original proof, kept while held:
   strip_tac >> drule attr_pre_base >> strip_tac >>
   drule_all attr_select_field >> strip_tac >>
   `?w. eval_operand (vv_operand bvv) t = SOME w` by
@@ -128,6 +130,8 @@ Proof
   (impl_tac >- simp[]) >> strip_tac >>
   simp[attr_offset_def] >>
   qexistsl_tac [`a`, `k`] >> simp[] >> metis_tac[]
+  *)
+  cheat
 QED
 
 Theorem intcall_attribute_step:

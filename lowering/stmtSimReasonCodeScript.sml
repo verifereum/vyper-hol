@@ -39,7 +39,7 @@ Ancestors
   gasOutcome gasSummary gasCount fragGasPath fragGasMode fragGasSeq
   stmtSimReasonStorage exprReasonOperand immutableCopyExecution
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv moduleLoweringProps
+  context compileEnv loweringStateRelDefs moduleLoweringProps
   vyperInterpreter vyperState venomExecSemantics venomInst venomState
 Libs
   monadsyntax

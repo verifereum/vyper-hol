@@ -164,7 +164,7 @@ Theorem annassign_word_store_path:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ type_memory_size tyv <= sz /\
-    val_in_memory tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
+    memory_value_rel tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     val_wf tyv v ==>
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
@@ -172,6 +172,7 @@ Theorem annassign_word_store_path:
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
         t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. lookup_var x t = lookup_var x s) /\
+        t.vs_memory = (mstore (w2n w) wd s).vs_memory /\
         (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                      FLOOKUP t.vs_allocas aid = SOME entry) /\
         gas_marked_path F ctx func s 0 (OK t)
@@ -213,6 +214,8 @@ Theorem annassign_word_store_post_path:
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                lookup_var x t = SOME u) /\
+        (!x. lookup_var x t = lookup_var x s) /\
+        t.vs_memory = (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory /\
         (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                      FLOOKUP t.vs_allocas aid = SOME entry) /\
         gas_marked_path F ctx func s 0 (OK t)
@@ -227,6 +230,9 @@ Proof
   `val_in_memory tyv v (w2n w)
      (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory /\
    val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
+  `memory_value_rel tyv v (w2n w)
+     (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory` by
+    metis_tac[store_lays_out_def, word_memory_type_memory_value_rel] >>
   `type_memory_size tyv <= sz` by simp[] >>
   drule_all annassign_word_store_path >>
   disch_then (qspecl_then [`a`] mp_tac) >> strip_tac >>

@@ -65,7 +65,7 @@ Proof
      qexistsl_tac [`emitted_insts sa sb`, `sa`] >> simp[]) >>
   qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   Cases_on `n = 0`
-  >- (gvs[Abbr `u`, valueEncodingTheory.mem_bytes_at_def, lookup_var_def] >>
+  >- (gvs[Abbr `u`, valueEncodingDefsTheory.mem_bytes_at_def, lookup_var_def] >>
       simp[venom_state_component_equality]) >>
   gvs[Abbr `u`] >>
   simp[mcopy_mem_bytes_at_same, mcopy_memory_length] >>

@@ -2,7 +2,8 @@ Theory o1MakeSsaRetpcShape
 Ancestors
   o1MakeSsaRetpcTransport o1MakeSsaRequiredUses o1ContractMakeSsaPtrOk
   unitShapeDefs o1PassContract venomWf venomInst makeSsaCurrentNonDegenerate
-  removeUnusedProofs cfgNormBase cfgWf list
+  cfgNormBase cfgWf list
+  venomWfProps
 
 Theorem mssa_retpc_return_syntax:
   (!i. MEM i (fn_insts g) ==> mssa_inst_origin orig fn i) /\

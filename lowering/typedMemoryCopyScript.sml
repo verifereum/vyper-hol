@@ -5,7 +5,7 @@
 Theory typedMemoryCopy
 Ancestors
   exprSimProps loweringPosts exprSimStorageCopy
-  context typedCopyDomain compileEnv emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingProps
+  context typedCopyDomain compileEnv loweringStateRelDefs emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs valueCopy fragExec exprLoweringProps exprSimHyps
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
   venomExecSemantics venomState venomInst words list pair finite_map arithmetic vfmConstants
@@ -885,7 +885,7 @@ Theorem typed_copy_entries_lengths:
 Proof
   Induct >> simp[typed_copy_entries_def] >>
   Cases_on `stys` >> Cases_on `dtvs` >> Cases_on `stvs` >> Cases_on `vs` >>
-  simp[typed_copy_entries_def] >> metis_tac[]
+  simp[typed_copy_entries_def] >> rpt strip_tac >> res_tac >> simp[]
 QED
 
 Theorem typed_copy_state_frame_mono:
@@ -3010,10 +3010,10 @@ Resume typed_copy_dynarray_frag[slow_data]:
   qpat_assum `fresh_label "typed_dyn_cond" _ = _`
     (mp_then (Pat `fresh_label "typed_dyn_cond" _ = _`) mp_tac
       (GEN_ALL typed_copy_dynarray_slow_data_sizes_frag)) >>
-  disch_then (drule_at (Pat `fresh_label "typed_dyn_body" _ = _`)) >>
-  disch_then (drule_at (Pat `fresh_label "typed_dyn_exit" _ = _`)) >>
-  disch_then (drule_at (Pat `fresh_var _ = _`)) >>
-  disch_then (drule_at (Pat `emit_inst ASSIGN [Lit 0w] _ _ = _`)) >>
+  disch_then (qpat_assum `fresh_label "typed_dyn_body" _ = _` o mp_then (Pat `fresh_label "typed_dyn_body" _ = _`) mp_tac) >>
+  disch_then (qpat_assum `fresh_label "typed_dyn_exit" _ = _` o mp_then (Pat `fresh_label "typed_dyn_exit" _ = _`) mp_tac) >>
+  disch_then (qpat_assum `fresh_var _ = _` o mp_then (Pat `fresh_var _ = _`) mp_tac) >>
+  disch_then (qpat_assum `emit_inst ASSIGN [Lit 0w] _ _ = _` o mp_then (Pat `emit_inst ASSIGN [Lit 0w] _ _ = _`) mp_tac) >>
   disch_then (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
   disch_then (drule_at (Pat `new_block _ _ = _`)) >>
   disch_then (drule_at (Pat `emit_op LT _ _ = _`)) >>
@@ -3240,7 +3240,7 @@ Proof
   metis_tac[typed_copy_memory_size]
 QED
 
-Theorem typed_copy_tuple_children_widen[local]:
+Theorem typed_copy_tuple_children_widen:
   !stys dtys dtvs.
     (stys = dtys \/ arg_types_fit stys dtys) /\
     OPT_MMAP (evaluate_type tenv) dtys = SOME dtvs ==>
@@ -3304,7 +3304,7 @@ Proof
                  decide_tac)) >> simp[]
 QED
 
-Theorem typed_copy_struct_values[local]:
+Theorem typed_copy_struct_values:
   !names tvs fields.
     LENGTH names = LENGTH tvs /\
     struct_has_type (ZIP (names,tvs)) fields /\
@@ -3319,7 +3319,7 @@ Proof
   qexists_tac `h'1::vs` >> simp[value_has_type_def, val_wf_def]
 QED
 
-Theorem typed_copy_struct_field_bytes[local]:
+Theorem typed_copy_struct_field_bytes:
   !fields tvs.
     OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
     EVERY (\(fname,fty,sz). !tv. evaluate_type tenv fty = SOME tv ==>

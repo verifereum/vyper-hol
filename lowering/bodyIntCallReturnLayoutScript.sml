@@ -1,6 +1,6 @@
 Theory bodyIntCallReturnLayout
 Ancestors
-  compileEnv vyperValue vyperTypeABI vyperTypeExprSoundness
+  compileEnv loweringStateRelDefs vyperValue vyperTypeABI vyperTypeExprSoundness
   list rich_list finite_map
 
 (* Stack-return fields remain word fields after type evaluation. *)

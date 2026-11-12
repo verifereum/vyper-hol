@@ -2,7 +2,7 @@
 Theory bodyIntCallFamPureAtom
 Ancestors
   bodyIntCallJointContract bodyIntCallJointPureCont bodyIntCallJointPureSlot
-  exprSimWordArgs exprSimHypsDefs loweringPosts stmtSimProps compileEnv
+  exprSimWordArgs exprSimHypsDefs loweringPosts stmtSimProps compileEnv loweringStateRelDefs
   exprSimDefs exprSimAggregateSource exprLoweringProps exprOperandVar
   gasOutcome gasSummary fragGasMode exprSimNameValue exprSimTopLevel
   exprSimFlagWord exprSimLeaves exprSimHyps exprLowering supportedExprTraverse
@@ -31,10 +31,10 @@ Proof
   strip_tac >>
   `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e
      (es with gas_obs := gs) sa sb s ee tv vv u` by
-    (fs[vv_post_def, locals_kept_def] >> metis_tac[]) >>
+    (fs[vv_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]) >>
   `intcall_expr_res fp ce env (es with gas_obs := gs) sa s` by simp[] >>
   drule_all pure_vv_post_cont >>
-  simp[intcall_expr_cont_def, locals_kept_def] >> metis_tac[]
+  simp[intcall_expr_cont_def, locals_kept_def, popped_kept_def] >> metis_tac[]
 QED
 
 Theorem intcall_pure_nonconditional_producer:
@@ -107,7 +107,7 @@ QED
 Theorem intcall_toplevel_map_producer:
   intcall_map_producer fp (TopLevelName ann (src,id))
 Proof
-  rw[intcall_map_producer_def] >>
+  rw[intcall_map_producer_def, supported_effect_expr_def] >>
   `env_consistent env fp.jc_cx es /\
    ?kt vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt)` by
     gvs[expr_map_pre_def, expr_sim_inv_def, well_typed_expr_def, AllCaseEqs()] >>
@@ -132,7 +132,7 @@ Proof
   disj1_tac >> simp_tac std_ss [] >> qexists `s` >> simp_tac std_ss [] >>
   qexistsl [`tr`, `n2w slot`, `kt`, `vt`] >>
   simp[slot_loc_def, mk_ptr_def, venomStateTheory.eval_operand_def] >>
-  simp[intcall_expr_cont_def, locals_kept_def]
+  simp[intcall_expr_cont_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem intcall_pure_atom_map:

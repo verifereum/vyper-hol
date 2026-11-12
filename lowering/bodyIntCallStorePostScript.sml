@@ -3,12 +3,12 @@ Ancestors
   bodyIntCallRestoreResults bodyIntCallReturnLayout exprSimProps
   loweringPosts compileEnv exprLoweringProps intCallResult
   finite_map arithmetic list venomMemDefs exprSimHash valueTypingMemoryProps
-  fragExec venomState
+  fragExec venomState loweringStateRelDefs
 
 (* A write inside a fresh owned allocation preserves the original frame.
    Source scopes need not be identical: transport the original regions. *)
 Theorem wb_frame_owned_memory_tail:
-  wb_frame ce es0 sa s0 s /\ alloca_inv s /\
+  wb_frame ce es0 es' sa s0 s /\ alloca_inv s /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid /\
   sa.cs_next_var <= si.cs_next_var /\
   (!x. not_fresh_at si x ==> lookup_var x u = lookup_var x s) /\
@@ -17,7 +17,7 @@ Theorem wb_frame_owned_memory_tail:
     mem_bytes_at a len u.vs_memory = mem_bytes_at a len s.vs_memory) /\
   (!n lb lsz. local_region ce es0.scopes s0 n lb lsz ==>
     lb + lsz <= b \/ b + sz <= lb) ==>
-  wb_frame ce es0 sa s0 u
+  wb_frame ce es0 es' sa s0 u
 Proof
   strip_tac >> fs[wb_frame_def] >> rpt conj_tac
   >- (rpt strip_tac >>
@@ -36,6 +36,7 @@ Proof
 QED
 
 Theorem owned_buffer_result_post:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\
@@ -43,7 +44,7 @@ Theorem owned_buffer_result_post:
   stmt_state_rel ctx func ce cx es' u /\
   vv_holds ce cx (expr_type e) (Value v)
     (LocatedValue (expr_type e) (base_ptr buf)) es' u /\
-  wb_frame ce es0 sa s0 s /\
+  wb_frame ce es0 es' sa s0 s /\
   local_ptrs_reserved ce si /\ sa.cs_next_var <= si.cs_next_var /\
   (!x. not_fresh_at si x ==> lookup_var x u = lookup_var x s) /\
   u.vs_allocas = s.vs_allocas /\
@@ -61,7 +62,6 @@ Theorem owned_buffer_result_post:
     (LocatedValue (expr_type e) (base_ptr buf)) u
 Proof
   strip_tac >> irule vv_post_frame_intro >> simp[] >> rpt conj_tac
-  >~ [`storage_read_live`] >- simp[contextTheory.base_ptr_def]
   >~ [`vv_at`] >- (irule allocated_value_vv_at >>
       qexistsl_tac [`aid`,`b`,`sz`,`tv`,`w`] >>
       simp[contextTheory.base_ptr_def] >> reverse conj_tac
@@ -79,6 +79,7 @@ QED
 (* The result stores upgrade their representation post to an owned value
    post, retaining the frame from before the whole expression. *)
 Theorem stack_buffer_suffix_post:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   store_multi_results buf.buf_operand results 0 si = ((),sb) /\
   local_ptrs_reserved ce si /\
@@ -91,7 +92,7 @@ Theorem stack_buffer_suffix_post:
     (\name. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields name))
     (expr_type e) /\
   intret_vals_match tv v ws /\ ws <> [] /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 es' sa s0 s /\
   sa.cs_next_var <= si.cs_next_var /\
   eval_operand buf.buf_operand s = SOME w /\
   MAP (\op. eval_operand op s) results = MAP SOME ws /\
@@ -126,6 +127,7 @@ Proof
      qpat_x_assum `eval_operand _ s = SOME w` mp_tac >>
      simp[eval_operand_def]) >>
   irule owned_buffer_result_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`aid`,`w2n w`,`s`,`si`,`32 * LENGTH results`] >>
   simp[] >> metis_tac[ADD_COMM]

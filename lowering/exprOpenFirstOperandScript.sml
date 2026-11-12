@@ -3,7 +3,8 @@
  *
  * TOP-LEVEL:
  *   eval_builtin_head_success, eval_type_builtin_head_success — the
- *     first argument's evaluation succeeds
+ *     first argument's evaluation succeeds (but of a slice's .code
+ *     source, which is evaluated after the start and length)
  *   expr_body_pre_builtin_head, expr_body_pre_type_builtin_head —
  *     expr_body_pre holds of it (but of a slice's .code source)
  *)
@@ -60,17 +61,26 @@ QED
 
 Theorem eval_builtin_head_success:
   !cx ann bi arg args es tv es1.
-    eval_expr cx (Builtin ann bi (arg::args)) es = (INL tv,es1) ==>
+    eval_expr cx (Builtin ann bi (arg::args)) es = (INL tv,es1) /\
+    ((!n. bi <> Slice n) \/ ~is_extcode arg) ==>
     ?av esA. eval_expr cx arg es = (INL av,esA)
 Proof
-  rpt gen_tac >> simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 mp_tac assume_tac) >>
+  `code_slice_source bi (arg::args) = NONE` by
+    (Cases_on `code_slice_source bi (arg::args)` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[code_slice_source_SOME, exprLoweringTheory.is_extcode_def]) >>
+  qpat_x_assum `_ \/ _` kall_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
     assert_def, return_def, raise_def] >>
   IF_CASES_TAC >> simp[] >> IF_CASES_TAC
   >- (simp[bind_def] >> Cases_on `eval_expr cx arg es` >>
       rename1 `eval_expr cx arg es = (res,st)` >> Cases_on `res` >>
       simp[] >> metis_tac[]) >>
   `bi <> Env MsgGas` by (strip_tac >> gvs[vyperContextTheory.builtin_args_length_ok_def]) >>
-  simp[bind_def] >> Cases_on `eval_exprs cx (arg::args) es` >>
+  Cases_on `bi = Bop In \/ bi = Bop NotIn` >>
+  simp[bind_def, ignore_bind_def] >>
+  Cases_on `eval_exprs cx (arg::args) es` >>
   rename1 `eval_exprs cx (arg::args) es = (res,st)` >> Cases_on `res` >>
   simp[] >> strip_tac >> drule eval_exprs_head_success >> simp[]
 QED

@@ -1,6 +1,6 @@
 Theory callStepPtr
 Ancestors
-  bodyPtrDefs ptrDiscipline venomCallOracleDefs vyperValue valueEncoding
+  bodyPtrDefs ptrDiscipline venomCallOracleDefs vyperValue valueEncoding valueEncodingDefs
   loweringPosts compileEnv exprLowering vyperAST extCallOracle
   ptrSafeRun contextCodegenRel codegenRel memLocDefs opcodeClass
   venomExecProofs venomExecSemantics venomState

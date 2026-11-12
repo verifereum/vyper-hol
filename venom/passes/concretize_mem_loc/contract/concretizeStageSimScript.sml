@@ -10,7 +10,7 @@
 Theory concretizeStageSim
 Ancestors
   o1PassContract ptrDiscipline unitMemInv concretizeMemLocDefs
-  venomPassDispatcher cfgWf
+  venomPassDispatcher cfgWf concretizeLayoutStageSimulation
 
 (* Why it holds (intuition, not a prescribed proof).
 
@@ -48,5 +48,37 @@ Theorem concretize_stage_sim:
   EVERY fn_defs_reach_uses C.ctx_functions ==>
   ctx_sim D C C' vs vs
 Proof
-  cheat
+  simp[ctx_sim_def] >> rpt strip_tac >>
+  irule layout_stage_terminating_context >> metis_tac[]
+QED
+
+(* Gas sufficiency S6b fuel leaf: ConcretizeMemLoc keeps the fuel.
+   The pass only rewrites ALLOCA (to ASSIGN of its position, or NOP) and
+   drops NOPs inside each block; blocks, labels, terminators and INVOKEs
+   are unchanged, and no block becomes empty.  So the output runs on the
+   input's fuel.  The existing proof goes through the fuel-free
+   finite_step / finite_block / finite_run (frameFiniteExecution) and
+   recovers fuel only existentially, by finite_execution_realizable at
+   the end of layout_stage_terminating_context.  The selected-simulation
+   relations (selected_step_match, selected_block_match,
+   selected_run_match in frameSelectedSimulation, used only by
+   concretize) could carry the same-fuel fact, e.g. that the output's
+   step / block / run at fuel k gives the matching result whenever the
+   input's does; non-INVOKE steps don't depend on fuel. *)
+Theorem concretize_stage_sim_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  dead_wf D /\ taint_within D C vs /\ EVERY ssa_form C.ctx_functions /\
+  ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions ==>
+  ctx_sim_fuel I D C C' vs vs
+Proof
+  simp[ctx_sim_fuel_def] >> rpt strip_tac >>
+  irule layout_stage_terminating_context_fuel >> metis_tac[]
 QED

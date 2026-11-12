@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtIf
 Ancestors
   bodyIntCallJointContract bodyIntCallJointStmtJump
   bodyIntCallJointStmtBoundary bodyIntCallDeclarationRegions
-  bodyExprPreFacts exprLoweringProps intCallFrame compileEnv
+  bodyExprPreFacts exprLoweringProps intCallFrame compileEnv loweringStateRelDefs
   vyperState finite_map list exprSimHypsDefs vyperTypeEvalSoundness
   vyperTypeInvariants vyperTypeSystem vyperTypeCallGraph
   bodyStoragePreservation vyperTypeExprSoundness vyperTypeStoragePreservation
@@ -249,7 +249,7 @@ Proof
   `supported_expr fp.jc_tops e` by
     simp[supportedExprsTheory.supported_expr_def] >>
   `expr_body_pre ce fp.jc_cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule stmt_expr_body_pre_alloc >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def] >>
      drule supported_expr_body_calls >> strip_tac >>
@@ -358,8 +358,8 @@ Resume intcall_if_producer[branch_start]:
 QED
 
 Resume intcall_if_producer[branch_pre]:
-  `EVERY (stmt_exprs_ok ce) ss1 /\ EVERY (stmt_exprs_ok ce) ss2` by
-    fs[stmts_exprs_ok_EVERY, stmt_exprs_ok_def,
+  `stmts_exprs_ok ce ss1 /\ stmts_exprs_ok ce ss2` by
+    fs[stmts_exprs_ok_thm, stmt_exprs_ok_def,
        supported_stmt_expr_exists_def, alloc_limits_stmt_def,
        stmt_valued_return_def] >>
   fs[intcall_expr_cont_def] >>

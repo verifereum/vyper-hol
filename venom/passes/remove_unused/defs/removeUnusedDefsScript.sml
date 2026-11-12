@@ -32,7 +32,7 @@ Theory removeUnusedDefs
 Libs
   pred_setLib
 Ancestors
-  analysisSimDefs livenessDefs passSharedDefs venomEffects cfgDefs While
+  passTransform livenessDefs passSharedDefs venomEffects cfgDefs While
 
 (* ===== Per-instruction transform ===== *)
 

@@ -2,7 +2,7 @@
    assert a counterexample to the packaged-callee seam. *)
 Theory bodyIntCallReturnBoundary
 Ancestors
-  bodySim stmtSimDefs loweringPosts exprLoweringProps compileEnv
+  bodySim stmtSimDefs loweringPosts exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomMemDefs words finite_map
 
 Theorem ret_pc_ok_return_buf_independent:
@@ -38,6 +38,7 @@ Proof
   simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
        local_region_def, storage_vars_rel_def, transient_vars_rel_def,
        immutables_rel_def, logs_rel_def, immutable_alloca_sep_def,
-       immutable_base_zero_def, log_entry_equiv_def]
+       immutable_base_zero_def, log_entry_equiv_def,
+       exprLoweringPropsTheory.immutable_decl_sep_def]
 QED
 

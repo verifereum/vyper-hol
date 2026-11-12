@@ -1,9 +1,8 @@
 (* Operational member navigation for arbitrary calldata. *)
 Theory calldataMembers
 Ancestors
-  abiDecoderRange
-  calldataChildFrame valueEncodingProps abiDecoderReentry calldataDynOwned safeSequence fragExecMem abiDecoderMemberBound abiDecoderReservation
-  abiDecoderBytesBound abiDecoderGuards calldataWordLeaf abiDecoderClampedWord
+  valueEncodingDefs loweringStateRelDefs calldataChildFrame valueEncodingProps abiDecoderReentry calldataDynOwned safeSequence fragExecMem abiDecoderMemberBound abiDecoderReservation
+  abiDecoderBytesBound abiDecoderGuards abiDecoderRange calldataWordLeaf abiDecoderClampedWord
   abiDecoderAppend fragExec abiDecoderFrameCompose
   abiDecoderComposition abiDecoderContract abiEncoder emitHelperProps
   exprLoweringProps compileEnv emitHelper venomExecSemantics venomState
@@ -46,8 +45,7 @@ Theorem calldata_member_address_shape:
     (emitted_insts st mid)
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_zero,
-       comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   simp[inst_extends_def, IS_PREFIX_APPEND, emitted_insts_def] >>
@@ -121,7 +119,7 @@ Theorem calldata_members_cons_split[local]:
     compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       rest (ao+az) (vo+mz) mid = ((),final)
 Proof
-  simp[Once compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def] >>
+  simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
 QED
@@ -145,7 +143,7 @@ Theorem calldata_members_invariant_rule:
             (vo + SUM (MAP (\(ei,az,mz). mz) xs)) final) R
 Proof
   rpt gen_tac >> strip_tac >> Induct
-  >- (simp[compile_abi_decode_to_buf_def, comp_return_def] >>
+  >- (simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
       rpt strip_tac >> gvs[] >> irule frag_exec_mem_refl >> simp[]) >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
   drule calldata_members_cons_split >> strip_tac >>
@@ -198,8 +196,7 @@ Theorem calldata_unclamped_member_frag_mem:
       t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next /\
       (!op w. eval_operand op initial = SOME w ==> eval_operand op t = SOME w)) (K F)
 Proof
-  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_zero,
-       comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   pairarg_tac >> gvs[] >>
@@ -207,7 +204,7 @@ Proof
   rename1 `emit_op ADD [dst; Lit (n2w vo)] c1 = (dp,c2)` >>
   `(do ep <- compile_getelemptr_abi src (dec_info_needs_offset (DecPrimWord NoClamp)) ao CALLDATALOAD (Lit 0w) (Lit 0w);
        dp <- emit_op ADD [dst; Lit (n2w vo)]; return (ep,dp) od) st = ((ep,dp),c2)` by
-    simp[dec_info_needs_offset_def, compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
+    simp[dec_info_needs_offset_def, compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def] >>
   drule_all calldata_member_address_frag_mem >>
   disch_then (qspec_then `ctx` assume_tac) >>
   drule calldata_member_address_shape >> strip_tac >>
@@ -361,8 +358,7 @@ Theorem calldata_member_pointer_repeat:
     st.cs_next_var <= mid.cs_next_var
 Proof
   Cases_on `dyn`
-  >- (simp[compile_getelemptr_abi_def, compile_abi_dec_addr_zero,
-           comp_bind_def, comp_return_def] >>
+  >- (simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def] >>
       pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
       rename1 `emit_op ADD [src; Lit (n2w ao)] st = (head,c1)` >>
       rename1 `emit_op CALLDATALOAD [head] c1 = (off,c2)` >>
@@ -395,8 +391,7 @@ Proof
            qexists_tac `st.cs_next_var` >> simp[]) >> metis_tac[]) >>
       qexists_tac `t` >>
       gvs[abi_decode_load_def, abi_decode_source_def, update_var_def]) >>
-  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_zero,
-           comp_bind_def, comp_return_def] >>
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   `eval_operand (Lit (n2w ao)) s = SOME (n2w ao)` by simp[eval_operand_def] >>
   drule_all (SIMP_RULE (srw_ss()) []
@@ -541,7 +536,7 @@ Theorem calldata_members_fixed_fn_invariant_rule:
           (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)
 Proof
   rpt gen_tac >> strip_tac >> Induct
-  >- (simp[compile_abi_decode_to_buf_def, comp_return_def] >>
+  >- (simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
       rpt strip_tac >> gvs[] >> disj2_tac >> qexists_tac `s` >> simp[] >>
       rpt strip_tac >> qexists_tac `fuel` >> simp[]) >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
@@ -797,7 +792,7 @@ Resume calldata_members_owned_repeat[member_step]:
      qpat_x_assum `_::rest = DROP _ _` (fn th => rewrite_tac [GSYM th]) >>
      simp[]) >>
   drule calldata_members_cons_split >> strip_tac >> gnvs[] >>
-  qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ _ _; _ od) _ = ((),_)` mp_tac >>
+  qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ (Lit 0w) _; _ od) _ = ((),_)` mp_tac >>
   simp_tac (srw_ss() ++ boolSimps.LET_ss) [comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
   rename1 `compile_getelemptr_abi src (dec_info_needs_offset ei) (A n) CALLDATALOAD (Lit 0w) (Lit 0w) a = (ep,c1)` >>
@@ -825,14 +820,13 @@ Resume calldata_members_owned_repeat[member_step]:
     (drule_all calldata_alloca_invariants_fields >> simp[]) >>
   `cs_extends st addr /\ cs_extends b final` by
     (conj_tac >- metis_tac[cs_extends_trans] >>
-     qpat_assum `compile_abi_decode_complex_elems _ _ _ _ _ rest _ _ b = _`
+     qpat_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ rest _ _ b = _`
        mp_tac >> metis_tac[]) >>
   `a.cs_next_id <= addr.cs_next_id /\ a.cs_next_var <= addr.cs_next_var` by
-    (qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ _ _; _ od) a = ((ep,dp),addr)` mp_tac >>
+    (qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ (Lit 0w) _; _ od) a = ((ep,dp),addr)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      Cases_on `dec_info_needs_offset ei` >>
-     simp[compile_getelemptr_abi_def, compile_abi_dec_addr_zero,
-          comp_bind_def, comp_return_def,
+     simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
           comp_ignore_bind_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
      rpt strip_tac >> gvs[]) >>
   `ci_mono addr b /\ ci_mono b final` by
@@ -1231,7 +1225,7 @@ Resume calldata_members_owned_repeat_intervals[member_step]:
      qpat_x_assum `_::rest = DROP _ _` (fn th => rewrite_tac [GSYM th]) >>
      simp[]) >>
   drule calldata_members_cons_split >> strip_tac >> gnvs[] >>
-  qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ _ _; _ od) _ = ((),_)` mp_tac >>
+  qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ (Lit 0w) _; _ od) _ = ((),_)` mp_tac >>
   simp_tac (srw_ss() ++ boolSimps.LET_ss) [comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
   rename1 `compile_getelemptr_abi src (dec_info_needs_offset ei) (A n) CALLDATALOAD (Lit 0w) (Lit 0w) a = (ep,c1)` >>
@@ -1259,14 +1253,13 @@ Resume calldata_members_owned_repeat_intervals[member_step]:
     (drule_all calldata_alloca_invariants_fields >> simp[]) >>
   `cs_extends st addr /\ cs_extends b final` by
     (conj_tac >- metis_tac[cs_extends_trans] >>
-     qpat_assum `compile_abi_decode_complex_elems _ _ _ _ _ rest _ _ b = _`
+     qpat_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ rest _ _ b = _`
        mp_tac >> metis_tac[]) >>
   `a.cs_next_id <= addr.cs_next_id /\ a.cs_next_var <= addr.cs_next_var` by
-    (qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ _ _; _ od) a = ((ep,dp),addr)` mp_tac >>
+    (qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ (Lit 0w) _; _ od) a = ((ep,dp),addr)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      Cases_on `dec_info_needs_offset ei` >>
-     simp[compile_getelemptr_abi_def, compile_abi_dec_addr_zero,
-          comp_bind_def, comp_return_def,
+     simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
           comp_ignore_bind_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
      rpt strip_tac >> gvs[]) >>
   `ci_mono addr b /\ ci_mono b final` by
@@ -1672,7 +1665,7 @@ Resume calldata_members_owned_repeat_intervals_tail[member_step]:
     (qpat_assum `_::rest = DROP _ _` mp_tac >>
      rewrite_tac [DROP_SUC] >> disch_then (SUBST1_TAC o SYM) >> simp[]) >>
   drule calldata_members_cons_split >> strip_tac >> gnvs[] >>
-  qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ _ _; _ od) _ = ((),_)` mp_tac >>
+  qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ (Lit 0w) _; _ od) _ = ((),_)` mp_tac >>
   simp_tac (srw_ss() ++ boolSimps.LET_ss) [comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
   rename1 `compile_getelemptr_abi src (dec_info_needs_offset ei) (A n) CALLDATALOAD (Lit 0w) (Lit 0w) a = (ep,c1)` >>
@@ -1700,16 +1693,15 @@ Resume calldata_members_owned_repeat_intervals_tail[member_step]:
     (drule_all calldata_alloca_invariants_fields >> simp[]) >>
   `cs_extends st addr /\ cs_extends b final` by
     (conj_tac >- metis_tac[cs_extends_trans] >>
-     qpat_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ b = _`
+     qpat_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ _ _ _ b = _`
        mp_tac >> metis_tac[]) >>
   `fn_has_code b final fn` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   `a.cs_next_id <= addr.cs_next_id /\ a.cs_next_var <= addr.cs_next_var` by
-    (qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ _ _; _ od) a = ((ep,dp),addr)` mp_tac >>
+    (qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ (Lit 0w) _; _ od) a = ((ep,dp),addr)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      Cases_on `dec_info_needs_offset ei` >>
-     simp[compile_getelemptr_abi_def, compile_abi_dec_addr_zero,
-          comp_bind_def, comp_return_def,
+     simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
           comp_ignore_bind_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
      rpt strip_tac >> gvs[]) >>
   `ci_mono addr b /\ ci_mono b final` by

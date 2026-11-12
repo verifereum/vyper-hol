@@ -3,11 +3,11 @@ Ancestors
   abiDecoderRange
   abiBuiltinEncodeCode abiBuiltinEncodeCorrect abiBuiltinPrefix abiEncoderWrites
   abiDecoderReentry abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderFrameCompose
-  abiDecoderContract compileEnv emitHelper emitHelperProps exprLoweringProps venomInst
+  abiDecoderContract compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps venomInst
   venomState venomExecSemantics words list rich_list arithmetic abiEncoderMemory
   abiEncoderSequence abiDecoderTypedContract abiDecoderLoop fragExec instIdxIndep
   valueEncodingProps byte abiBuiltinEncodeAllocate abiBuiltinEncodeSetup abiBuiltinAllocation
-  finite_map valueEncoding abiBuiltinEncodeInput abiBuiltinEncodeEffect
+  finite_map valueEncoding valueEncodingDefs abiBuiltinEncodeInput abiBuiltinEncodeEffect
   abiBuiltinEncodeCorrect abiBuiltinEncodeCorrect abiBuiltinEncodeContext abiEncoderCorrect
   abiEncoderInput abiDecoderEffect abiDecoderAllocation builtinAbi exprLowering
 

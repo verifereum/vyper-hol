@@ -7,7 +7,7 @@ Ancestors
   exprSimWordArgs exprSimSubscriptArrayCompose exprSimAggregateSource
   stmtSimAugAssignPlaceMemory gasSummary gasContext vyperState exprSimSubscriptMap
   exprSimDefs gasOutcome exprSimOperators exprLoweringProps bodyIntCallJointStmtJump
-  stmtSimForLoop
+  stmtSimForLoop exprSimUnwrapProps fragGasMode
 
 (* Assemble the ordinary forced post at the chosen forcing endpoint. *)
 Theorem vv_post_forcing_frames:
@@ -25,12 +25,13 @@ Theorem vv_post_forcing_frames:
          lookup_var x q = SOME w) /\
   (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
            FLOOKUP q.vs_allocas aid = SOME b) /\
-  locals_kept ce ee s q /\
+  locals_kept ce ee ee s q /\
   (!aid off sz.
      FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < sm.cs_next_id /\
      (!n b sz'. local_region ce ee.scopes s n b sz' ==>
                 off + sz <= b \/ b + sz' <= off) ==>
-     mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s.vs_memory) ==>
+     mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s.vs_memory) /\
+  (~expr_has_effect e ==> pure_frame ce func ee sm s q) ==>
   expr_post ctx func ce cx e es sa sb s0 ee v op q
 Proof
   strip_tac >>
@@ -44,8 +45,11 @@ Proof
   >- (rpt strip_tac >>
       `mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s.vs_memory` by
         (first_x_assum irule >> metis_tac[LESS_LESS_EQ_TRANS]) >>
-      metis_tac[]) >>
-  irule locals_kept_trans >> metis_tac[]
+      metis_tac[])
+  >- (irule locals_kept_trans >> metis_tac[]) >>
+  strip_tac >> irule exprSimPropsTheory.pure_frame_trans >>
+  conj_tac >- fs[] >>
+  qexistsl [`ee`, `sm`, `s`] >> fs[]
 QED
 
 (* Protected forcing and its ordinary post share a single endpoint. *)
@@ -97,7 +101,7 @@ Proof
       aid < sm.cs_next_id /\
       (!n b z. local_region ce ee.scopes s n b z ==> p+k <= b \/ b+z <= p)`,
     `scopes` |-> `ee.scopes`]
-    bodyIntCallWindowForcingTheory.protected_value_window_forcing) >>
+    bodyIntCallWindowForcingTheory.protected_value_pure_forcing) >>
   impl_tac >- (simp[] >> rpt strip_tac >> qexistsl [`aid`,`p`,`k`] >> simp[]) >>
   strip_tac >> qexists `u` >> simp[] >>
   irule vv_post_forcing_frames >>
@@ -109,6 +113,38 @@ Proof
 QED
 
 (* Source observations select the raw execution; forcing uses its exact endpoint. *)
+(* Copies of exprSimIfExp's local conditional-result vv_at lemmas. *)
+Theorem pifexp_conditional_result_shape[local]:
+  conditional_result cx raw st = (INL tv,st') ==> tv = raw \/ ?v. tv = Value v
+Proof
+  Cases_on `raw` >>
+  rw[conditional_result_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  gvs[] >> pop_assum mp_tac >> IF_CASES_TAC >>
+  simp[bind_def, return_def, AllCaseEqs()] >> rw[] >> simp[]
+QED
+
+Theorem pifexp_vv_at_conditional[local]:
+  vv_at cenv cx t sa sb es raw vv s /\ read_result cx raw es = (INL v,es) /\
+  (tv = raw \/ tv = Value v) ==>
+  vv_at cenv cx t sa sb es tv vv s
+Proof
+  rpt strip_tac >> gvs[] >>
+  Cases_on `vv` >> gvs[vv_at_def, read_result_def, return_def] >>
+  rpt strip_tac >> first_x_assum drule_all >> metis_tac[]
+QED
+
+Theorem pifexp_vv_at_of_val_at[local]:
+  ~is_word_type t /\ expr_val_at cenv cx t sa sb es v op s /\
+  read_result cx tv es = (INL v,es) /\
+  (!id path. tv <> PlaceR (MemoryPlace id path)) ==>
+  vv_at cenv cx t sa sb es tv (LocatedValue t' (mk_ptr op LocMemory)) s
+Proof
+  strip_tac >>
+  `!n k ptv. local_place_at cenv cx n k ptv tv` by simp[local_place_at_def] >>
+  simp[vv_at_def, contextTheory.mk_ptr_def] >> rpt gen_tac >> strip_tac >>
+  gvs[expr_val_at_def] >> metis_tac[]
+QED
+
 Theorem ifexp_protected_marked_unwrap:
   post_value_type ce e = expr_type e /\
   gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0) marks (INL raw) ee (OK s) /\
@@ -146,7 +182,10 @@ Theorem ifexp_protected_marked_unwrap:
        w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
        (lo <= a \/ ?b z. staged b z /\ b <= a /\ a+k <= b+z)) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
-    q.vs_inst_idx = LENGTH sb.cs_current_insts
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (~is_word_type (expr_type e) ==>
+     vv_at ce cx (expr_type e) sa sb (ee with gas_obs := []) tr
+       (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q)
 Proof
   strip_tac >>
   drule vv_post_materialises >> strip_tac >>
@@ -167,15 +206,66 @@ Proof
     (qpat_x_assum `gas_admissible (conditional_result _ _) _ _` mp_tac >>
      simp[gas_admissible_def] >> metis_tac[evaluation_state_component_equality]) >>
   drule_all ifexp_arm_conditional_read >> strip_tac >> gvs[] >>
+  qspec_then `~is_word_type (expr_type e) /\
+            ?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory`
+    DISJ_CASES_TAC EXCLUDED_MIDDLE
+  >- (
+     gvs[] >>
+     `~is_word_type t` by
+       (gvs[vv_post_def, vv_holds_def] >>
+        metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
+     gvs[unwrap_value_def, compileEnvTheory.comp_return_def] >>
+     `vv_post ctx func ce cx e es sa sb s0 (ee with gas_obs := []) (Value v)
+        (LocatedValue t p) s` by metis_tac[exprSimUnwrapPropsTheory.vv_post_read_result] >>
+     `gas_marked_exec F (ctx,func) (conditional_result cx raw)
+        (ee with gas_obs := [],s) [] (INL tv') (ee with gas_obs := []) (OK s)` by
+       (simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
+        conj_tac >- (drule ifexp_arm_conditional_gas_obs >> simp[]) >>
+        irule (cj 1 fragGasPathTheory.gas_path_rules) >> simp[]) >>
+     `expr_post ctx func ce cx e es sa sb s0 (ee with gas_obs := []) v
+        p.ptr_operand s` by
+       (irule exprSimUnwrapPropsTheory.expr_post_of_vv_post_memory >> simp[] >>
+        qexists_tac `t` >> simp[]) >>
+     `vv_at ce cx (expr_type e) sa sb (ee with gas_obs := []) tv'
+        (LocatedValue (expr_type e) (mk_ptr p.ptr_operand LocMemory)) s` by
+       (irule pifexp_vv_at_conditional >>
+        qexistsl_tac [`raw`, `v`] >>
+        `tv' = raw \/ tv' = Value v` by
+          (drule pifexp_conditional_result_shape >> strip_tac >>
+           gvs[read_result_def, return_def]) >>
+        fs[] >>
+        qpat_x_assum `vv_post _ _ _ _ _ es _ _ _ _ raw _ _` mp_tac >>
+        simp[vv_post_def] >> strip_tac >>
+        qpat_x_assum `vv_at _ _ _ _ _ _ raw _ _` mp_tac >>
+        gvs[vv_at_def, contextTheory.mk_ptr_def]) >>
+     qexistsl [`tv'`,`v`,`s`] >> simp[] >>
+     fs[contextTheory.vv_operand_def] >> metis_tac[]) >>
   mp_tac (Q.INST [
     `es` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
     `ee` |-> `ee with gas_obs := []`]
     vv_post_protected_unwrap) >>
   (impl_tac >- simp[vv_post_initial_gas]) >> strip_tac >>
+  `~is_word_type (expr_type e) ==>
+   vv_at ce cx (expr_type e) sa sb (ee with gas_obs := []) tv'
+     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q` by
+    (strip_tac >>
+     `!t1 p1. vv = LocatedValue t1 p1 ==> p1.ptr_location <> LocMemory` by
+       (rpt strip_tac >> qpat_x_assum `~(~is_word_type _ /\ _)` mp_tac >>
+        gvs[]) >>
+     `!id path. raw <> PlaceR (MemoryPlace id path)` by
+       (rpt gen_tac >> CCONTR_TAC >> fs[] >>
+        qpat_x_assum `vv_post _ _ _ _ _ es _ _ _ _ _ _ _` mp_tac >>
+        Cases_on `vv` >> fs[vv_post_def, vv_at_def]) >>
+     `!id path. tv' <> PlaceR (MemoryPlace id path)` by
+       (rpt gen_tac >> drule pifexp_conditional_result_shape >>
+        strip_tac >> gvs[]) >>
+     irule pifexp_vv_at_of_val_at >> simp[] >>
+     fs[expr_post_def] >> metis_tac[]) >>
   qexistsl [`tv'`,`v`,`q`] >> gvs[expr_post_initial_gas] >>
   simp[gas_marked_exec_def] >>
   drule ifexp_arm_conditional_gas_obs >> simp[]
 QED
+
 
 (* The layout-copy alternative only arises for bytestrings. *)
 Theorem ifexp_arm_unwrap_nonbytes:
@@ -196,6 +286,9 @@ Theorem ifexp_finish_slot:
   expr_post ctx func ce cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func ce cx e es1 sc sd (jump_to lbl tt) ee v op u /\
   read_result cx tv ee = (INL v,ee) /\ expr_type e = t /\
+  (~is_word_type t ==>
+   vv_at ce cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   eval_operand op u = SOME w /\ slot_ok w /\
   (!x. not_fresh_at sa x ==> x <> rv) /\
   local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
@@ -231,6 +324,7 @@ Theorem ifexp_arm_finish_slot:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id /\ sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
   emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
@@ -239,7 +333,9 @@ Theorem ifexp_arm_finish_slot:
     (\res ee u. ?tv v w. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
       expr_post ctx func ce cx e es1 sc sd (jump_to lbl tt) ee v op u /\
       eval_operand op u = SOME w /\ slot_ok w /\
-      u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts) R ==>
+      u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+      (~is_word_type t ==>
+       vv_at ce cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u)) R ==>
   gas_outcome F tops (ctx,func) source (es1,jump_to lbl tt)
     (\res ee u. ?tv w. res = INL tv /\
       vv_post ctx func ce cx (IfExp t c a b) es sa sb s0 ee tv
@@ -253,8 +349,7 @@ Proof
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `(\res ee u. _) res ee u` (strip_assume_tac o BETA_RULE) >>
   BETA_TAC >>
-  drule_all ifexp_finish_slot >>
-  disch_then (qspecl_then [`b`, `a`] strip_assume_tac) >>
+  drule_all ifexp_finish_slot >> strip_tac >>
   qexists `q` >> simp[] >> metis_tac[]
 QED
 
@@ -306,7 +401,10 @@ Theorem ifexp_joint_arm_marked_suffix:
        ?a k. a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\
          a+k < dimword (:256) /\
          (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)) /\
-    q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts
+    q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (~is_word_type (expr_type e) ==>
+     vv_at ce fp.jc_cx (expr_type e) sa sb (ee with gas_obs := []) tr
+       (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q)
 Proof
   strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s0 /\
@@ -380,7 +478,10 @@ Theorem ifexp_joint_arm_outcome:
          ?a k. a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\
            a+k < dimword (:256) /\
            (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)) /\
-      q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts)
+      q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (~is_word_type (expr_type e) ==>
+       vv_at ce fp.jc_cx (expr_type e) sa sb ee tr
+         (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q))
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
@@ -469,7 +570,7 @@ Resume ifexp_joint_expr_producer[normal]:
        fs[intcall_expr_cont_def] >>
      pop_assum mp_tac >>
      simp[intcall_expr_res_def, stmt_state_rel_jump_to, stmtSimPropsTheory.ret_pc_ok_jump_to,
-          bodyMemoryDefsTheory.return_buf_frame_jump_to, intCallFrameTheory.allocas_above_def, compileEnvTheory.local_region_def,
+          bodyMemoryDefsTheory.return_buf_frame_jump_to, intCallFrameTheory.allocas_above_def, loweringStateRelDefsTheory.local_region_def,
           jump_to_def, eval_operand_def, lookup_var_def] >>
      strip_tac >>
      `local_ptrs_reserved ce se` by
@@ -536,6 +637,8 @@ Resume ifexp_joint_expr_producer[arm_hyps]:
 QED
 
 Resume ifexp_joint_expr_producer[arm_finish]:
+  `~expr_has_effect (if sel then a else b)` by
+    metis_tac[supportedExprTraverseTheory.supported_pure_expr_effect_free] >>
   drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)
     (ifexp_arm_finish_slot |> Q.INST
       [`slot_ok` |-> `\w:bytes32.
@@ -551,7 +654,7 @@ Resume ifexp_joint_expr_producer[arm_finish]:
   disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `emit_inst ASSIGN _ _ _ = _`)) >>
   disch_then (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
-  disch_then (qspecl_then [`expr_type a`, `sb`] mp_tac) >>
+  disch_then (qspec_then `sb` mp_tac) >>
   impl_tac >- (simp[] >> conj_tac
     >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
     drule (REWRITE_RULE [ETA_THM] bop_marked_scopes_dom) >> simp[]) >>
@@ -594,10 +697,10 @@ Resume ifexp_joint_expr_producer[lift_root]:
      simp[] >>
      conj_tac >- (first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_post_def, locals_kept_def] >> strip_tac >> metis_tac[]) >>
+     simp[vv_post_def, locals_kept_def, popped_kept_def] >> strip_tac >> metis_tac[]) >>
   `intcall_expr_cont fp ce env es sa s (mid with gas_obs := []) sb t` by
     (qpat_x_assum `intcall_expr_cont _ _ _ (_ with gas_obs := _) _ _ _ _ _` mp_tac >>
-     simp[intcall_expr_cont_def, locals_kept_def] >> strip_tac >> metis_tac[]) >>
+     simp[intcall_expr_cont_def, locals_kept_def, popped_kept_def] >> strip_tac >> metis_tac[]) >>
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[vv_post_def] >> strip_tac >>
   simp[] >> conj_tac

@@ -7,7 +7,7 @@ Ancestors
   exprSimSource vyperTypeInvariants
 
 Theorem intcall_return_endpoint:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env ee sm t /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\ intcall_joint_res fp ce env ee sm t /\
   body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   expr_body_pre ce fp.jc_cx env e es /\
   type_widens_to env.type_defs (expr_type e) fp.jc_ret_ty /\
@@ -42,6 +42,7 @@ Proof
   drule_all return_stack_post_type >> strip_tac >>
   `sfields_tenv_consistent ce.ce_struct_fields (get_tenv fp.jc_cx)` by
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  irule intcall_stack_return_endpoint >> goal_assum (drule_at Any) >>
+  qpat_assum `~FST _` (fn nr => irule (MATCH_MP
+    (CONV_RULE (STRIP_QUANT_CONV (REWR_CONV (GSYM AND_IMP_INTRO))) intcall_stack_return_endpoint) nr)) >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[]
 QED

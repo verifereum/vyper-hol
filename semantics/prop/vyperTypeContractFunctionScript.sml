@@ -121,6 +121,14 @@ Proof
   simp[]
 QED
 
+Theorem target_mutable_static_maps_transfer_env[local]:
+  target_mutable env1 tgt /\ static_maps_transfer_env env1 env2 ==>
+  target_mutable env2 tgt
+Proof
+  rw[static_maps_transfer_env_def] >>
+  drule_all target_mutable_static_maps_transfer >> simp[]
+QED
+
 Theorem type_place_expr_static_maps_transfer_env_reverse_SOME[local]:
   !e env1 env2 vt.
     well_typed_expr env1 e /\
@@ -254,6 +262,7 @@ Proof
   TRY (irule_at Any well_typed_exprs_static_maps_transfer_env >> simp[]) >>
   TRY (irule_at Any well_typed_custom_error_static_maps_transfer_env >> simp[]) >>
   TRY (irule_at Any type_place_target_static_maps_transfer_env >> simp[]) >>
+  TRY (irule_at Any target_mutable_static_maps_transfer_env >> simp[]) >>
   TRY (irule_at Any type_place_expr_no_hash_static_maps_transfer_env >> simp[]) >>
   TRY (rename1 `?env. static_maps_transfer_env env env2 /\ well_typed_expr env expr` >>
        qexists `env1` >> simp[]) >>
@@ -296,7 +305,17 @@ Proof
        qexists `env1` >> simp[] >>
        irule well_typed_custom_error_static_maps_transfer_env >>
        simp[] >> NO_TAC) >>
-  gvs[static_maps_transfer_env_def]
+  gvs[static_maps_transfer_env_def] >>
+  TRY (qexists `env1` >> simp[]) >>
+  metis_tac[static_maps_transfer_env_extend_local,
+            well_typed_expr_static_maps_transfer_env,
+            well_typed_exprs_static_maps_transfer_env,
+            well_typed_custom_error_static_maps_transfer_env,
+            well_typed_atarget_static_maps_transfer_env,
+            well_typed_iterator_static_maps_transfer_env,
+            type_place_target_static_maps_transfer_env,
+            target_mutable_static_maps_transfer_env,
+            type_place_expr_no_hash_static_maps_transfer_env]
 QED
 
 
@@ -636,6 +655,11 @@ Proof
          type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
          fn_sigs := fn_sigs; flag_members := flag_members; event_fields := art.cta_event_fields|>) args)` by
     (simp[] >> irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
+  `ret <> NoneT ==>
+   assignable_type (get_tenv (initial_evaluation_context sources layouts tx src)) ret` by
+    (gvs[get_tenv_def, initial_evaluation_context_def] >>
+     drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
+     metis_tac[check_contract_function_return_type, alistTheory.ALOOKUP_MEM]) >>
   `T <=> Internal = Internal` by simp[] >>
   drule_all check_function_body_static_maps_transfer_initial >>
   simp[] >> strip_tac >>
@@ -762,7 +786,9 @@ Proof
   `ALOOKUP mods src_id_opt = SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>
   drule lookup_callable_function_T_SOME_cases >> strip_tac >> gvs[]
-  >- (`check_function_body layouts tx.target mods deploy_art src_id_opt Internal fm nr
+  >- (`ret <> NoneT ==> assignable_type (type_env_all_modules mods) ret` by
+        metis_tac[check_contract_function_return_type, alistTheory.ALOOKUP_MEM] >>
+      `check_function_body layouts tx.target mods deploy_art src_id_opt Internal fm nr
          args dflts ret body` by
         (irule check_contract_live_deploy_function_body_MEM >>
          gvs[context_function_live_def, initial_evaluation_context_def] >> metis_tac[]) >>
@@ -838,6 +864,8 @@ Proof
            Once well_typed_expr_def, Once stmt_no_control_escape_def]) >>
   `lookup_function NONE fn Internal ts = NONE` by
     (drule_all checked_deploy_MEM_Internal_NONE >> simp[]) >>
+  `ret <> NoneT ==> assignable_type (type_env_all_modules mods) ret` by
+    metis_tac[check_contract_function_return_type, alistTheory.ALOOKUP_MEM] >>
   `check_function_body layouts tx.target mods deploy_art src_id_opt Deploy fm nr
      args dflts ret body` by
     (irule check_contract_live_deploy_function_body_MEM >>
@@ -1099,7 +1127,7 @@ Theorem checked_explicit_external_entry_establishes_type_soundness_preconditions
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   args_values_typed (type_env_all_modules mods) args vals ==>
   ?env_body env_after st.
-    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) /\
+    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) /\
     functions_well_typed
       ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
     accounts_well_typed st.accounts /\
@@ -1157,7 +1185,7 @@ Theorem check_contract_explicit_external_entry_no_type_error:
     (eval_stmts
       ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
       body
-      (initial_state am [scope] with <|outcomes := orc; requests := rqs|>))
+      (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>))
 Proof
   metis_tac[
     checked_explicit_external_entry_establishes_type_soundness_preconditions,

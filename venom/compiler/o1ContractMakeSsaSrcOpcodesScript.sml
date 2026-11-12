@@ -12,8 +12,9 @@
  *)
 Theory o1ContractMakeSsaSrcOpcodes
 Ancestors
-  makeSsaCurrentProps makeSsaCurrentInduct makeSsaHelper makeSsaCurrentDefs
-  makeSsaDefs cfgTransform venomInst list
+  makeSsaCurrentProps makeSsaCurrentInduct makeSsaDefs
+   cfgTransform venomInst list
+  venomExecProofs
 
 (* The opcodes MakeSSA neither adds nor removes. *)
 Definition kept_opcode_def:

@@ -8,7 +8,7 @@
  *)
 Theory o1ContractMakeSsaReplay
 Ancestors
-  o1PassContract makeSsaCurrentDefs venomPassSchedule irSupply
+  o1PassContract makeSsaDefs venomPassSchedule irSupply
   makeSsaCurrentUsedInstIds venomFnScheduleRunner venomFnScheduleRunnerProps
 
 Theorem make_ssa_pass_step_replay:

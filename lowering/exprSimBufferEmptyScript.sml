@@ -17,7 +17,7 @@
  *)
 Theory exprSimBufferEmpty
 Ancestors
-  valueEncodingProofs valueEncodingProps valueEncoding vyperValue builtinSimple
+  valueEncodingProofs valueEncodingProps valueEncoding valueEncodingDefs vyperValue builtinSimple
   list rich_list
 Libs
   wordsLib

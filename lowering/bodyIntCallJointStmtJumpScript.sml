@@ -2,7 +2,7 @@
 Theory bodyIntCallJointStmtJump
 Ancestors
   bodyIntCallJointContract bodyIntCallJointStmtBoundary exprLoweringProps
-  stmtSimProps bodyMemoryDefs intCallFrame compileEnv venomState venomExecSemantics
+  stmtSimProps bodyMemoryDefs intCallFrame compileEnv loweringStateRelDefs venomState venomExecSemantics
 
 Theorem intcall_joint_res_jump_to:
   intcall_joint_res fp ce env es sa (jump_to lbl s) <=>

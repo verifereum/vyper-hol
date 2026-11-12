@@ -1,13 +1,12 @@
 (* Safe execution of the actual dynamic calldata loop shell. *)
 Theory calldataDynStep
 Ancestors
-  abiDecoderRange
-  calldataDynInit calldataChildFrame calldataWordLeaf safeSequence calldataSafeIteration
+  valueEncodingDefs loweringStateRelDefs calldataDynInit calldataChildFrame calldataWordLeaf safeSequence calldataSafeIteration
   abiDecoderExecution abiDecoderContract abiDecoderLoopEmit abiDecoderFrame
   fragExec fragExecMem memSafeRun unitTransformDefs contextCodegenRel codegenRel
   emitHelperProps exprLoweringProps venomExecSemantics venomState venomInst
   words arithmetic list rich_list instIdxIndep abiDecoderIndexedAddress compileEnv emitHelper abiEncoder
-  abiDecoderReentryAddress abiDecoderReentry abiDecoderGuards
+  abiDecoderReentryAddress abiDecoderReentry abiDecoderGuards abiDecoderRange
   abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup abiDecoderLoopSetup
   abiDecoderArraySetupInputs valueEncodingProps valueEncodingProofs valueEncoding
 
@@ -22,8 +21,7 @@ Proof
   qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `dec_info_needs_offset di` >> Cases_on `hi = Lit 0w` >>
   asm_simp_tac bool_ss [abi_decode_array_element_setup_def,
-    abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def,
-    compile_abi_dec_addr_zero, compile_abi_decode_range_check_def,
+    abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
     comp_bind_def, comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
     fresh_id_def, emit_def, comp_ignore_bind_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -217,9 +215,8 @@ Theorem calldata_element_pointer_prefix_safe:
     inst_mem_below_frontier i u
 Proof
   rpt gen_tac >> strip_tac >> ho_match_mp_tac (GEN_ALL calldata_prefix_safe_every) >>
-  qpat_x_assum `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_zero,
-       comp_bind_def, comp_return_def,
+  qpat_x_assum `compile_abi_decode_dyn_elem_ptr _ (Lit 0w) _ _ _ _ _ = _` mp_tac >>
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   imp_res_tac emitted_insts_emit_op >>
@@ -248,8 +245,7 @@ Theorem calldata_element_pointer_reentry:
     t.vs_halted = s.vs_halted /\ inst_extends st st'
 Proof
   rpt gen_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_zero,
-       comp_bind_def, comp_return_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,c1)` >>
@@ -332,8 +328,7 @@ Proof
   qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `dec_info_needs_offset di` >>
   asm_simp_tac bool_ss [abi_decode_array_element_setup_def,
-    abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def,
-    compile_abi_dec_addr_zero, compile_abi_decode_range_check_def,
+    abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
     comp_bind_def, comp_return_def, comp_ignore_bind_def,
     emit_op_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>

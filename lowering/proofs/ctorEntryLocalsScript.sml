@@ -1,6 +1,6 @@
 Theory ctorEntryLocals
 Ancestors
-  entryLocals compileVyper compileEnv moduleLowering context
+  entryLocals compileVyper compileEnv loweringStateRelDefs moduleLowering context
   exprLoweringProps list finite_map
 Libs
   monadsyntax

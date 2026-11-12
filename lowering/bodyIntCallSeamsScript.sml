@@ -14,6 +14,12 @@ Theory bodyIntCallSeams
 Ancestors
   bodyIntCallSeamDefs bodyIntCallSeamArgs bodyIntCallSeamReturn
   bodyIntCallJointPackage bodyIntCallJointInd vyperTypeCallStackSoundness
+  bodyIntCallArgSequence bodyIntCallCompilerListTags bodyIntCallCompilerSeparation
+  bodyIntCallCopyFrame bodyIntCallDecoderCountedClosure bodyIntCallEncoderActualCopy
+  bodyIntCallEncoderCountedExport bodyIntCallLocalArrayProducer bodyIntCallMcopyFrame
+  bodyIntCallMemoryView bodyIntCallPackageEntryInterface bodyIntCallPureLayout
+  bodyIntCallScratchCreditProbe bodyIntCallStagingBuffer bodyIntCallStoreFrame
+  bodyIntCallTopLevelProducer bodyIntCallWordProducer
 Libs
   monadsyntax
 
@@ -35,7 +41,7 @@ Theorem intcall_return_widened = bodyIntCallSeamReturnTheory.intcall_return_wide
    frame below t's frontier is a fact of the callee's Venom code (it
    writes there only through rb and its memory parameters' pointers),
    which this seam proves on its own. *)
-Theorem intcall_callee_body_sim:
+Theorem intcall_callee_body_sim_F[local]:
   !tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut args ret ss rr
    prev penv rtv es1 t callee entered rc rbs pvs.
     body_inv tops ctx cenv cx /\
@@ -45,7 +51,7 @@ Theorem intcall_callee_body_sim:
     MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
     body_stmts_ok (cx with stk updated_by CONS (NONE,name)) ss /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-      (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+      (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
     gas_invoke_entry (ctx,func) t callee entered /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.
@@ -74,4 +80,65 @@ Proof
         intcall_stmts_producer fp ss` by simp[intcall_joint_producers] >>
   drule_all intcall_callee_packaging >>
   simp[]
+QED
+
+(* Held: the case of a nonreentrant callee. *)
+Theorem intcall_seam2_nonreentrant:
+  !tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut args ret ss rr
+   prev penv rtv es1 t callee entered rc rbs pvs.
+    body_inv tops ctx cenv cx /\
+    cenv_module_pins tops cenv /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,T,args,[],ret,ss) /\
+    MEM (FunctionDecl Internal mut T rr name args [] ret ss) tops /\
+    body_stmts_ok (cx with stk updated_by CONS (NONE,name)) ss /\
+    intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
+      (mut,T,args,ret,ss,rr) prev penv rtv es1 t /\
+    gas_invoke_entry (ctx,func) t callee entered /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
+    !bb inst lbl arg_ops argv.
+      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      decode_invoke inst = SOME (lbl,arg_ops) /\
+      eval_operands arg_ops t = SOME argv ==>
+      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+        (es1,entered) (\res ee r. F)
+        (intcall_callee_exit func cenv cx rtv rc
+           (if rc = 0 /\
+               cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
+            then SOME (HD argv) else NONE)
+           sa.cs_next_id sb.cs_next_id t)
+Proof
+  cheat
+QED
+
+Theorem intcall_callee_body_sim:
+  !tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut nr args ret ss rr
+   prev penv rtv es1 t callee entered rc rbs pvs.
+    body_inv tops ctx cenv cx /\
+    cenv_module_pins tops cenv /\
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,[],ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
+    body_stmts_ok (cx with stk updated_by CONS (NONE,name)) ss /\
+    intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
+      (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
+    gas_invoke_entry (ctx,func) t callee entered /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
+    !bb inst lbl arg_ops argv.
+      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      decode_invoke inst = SOME (lbl,arg_ops) /\
+      eval_operands arg_ops t = SOME argv ==>
+      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+        (es1,entered) (\res ee r. F)
+        (intcall_callee_exit func cenv cx rtv rc
+           (if rc = 0 /\
+               cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
+            then SOME (HD argv) else NONE)
+           sa.cs_next_id sb.cs_next_id t)
+Proof
+  rpt gen_tac >> Cases_on `nr`
+  >- MATCH_ACCEPT_TAC intcall_seam2_nonreentrant
+  >> MATCH_ACCEPT_TAC intcall_callee_body_sim_F
 QED

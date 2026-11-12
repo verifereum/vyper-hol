@@ -8,9 +8,9 @@ Ancestors
   stmtSimAssignAttrStorage stmtLowering exprLowering exprLoweringProps
   storageStoreFrame stmtSimDeclPath stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
-  emitHelper emitHelperProps compileEnv list finite_map
-  tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingProps vyperTyping stmtLoweringMono
-  vyperInterpreter freshWrites
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs list finite_map
+  tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingDefs valueEncodingProps vyperTyping stmtLoweringMono
+  vyperInterpreter freshWrites memoryValueEncoding
 
 Theorem tuple_store_word_step:
   !cenv ty tys bt gs op ops st sp sf dst loc vt.
@@ -63,8 +63,7 @@ Proof
      qexistsl [`[dst; op]`, `if tr then TSTORE else SSTORE`, `[]`, `st`, `st'`] >>
      Cases_on `tr` >> gvs[compile_store_at_loc_def, emit_void_def,
        emit_inst_def, is_terminator_def] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     fs[mk_inst_def, exec_write2_def]) >>
+     simp[mk_inst_def] >> simp[Once step_inst_base_def, exec_write2_def]) >>
   `st'.cs_current_bb = st.cs_current_bb /\
    LENGTH st'.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
     (Cases_on `tr` >> gvs[compile_store_at_loc_def, emit_void_def,
@@ -296,9 +295,12 @@ Proof
   `(if is_word_type ty then sw = typed_val_to_w256 entry.type v
     else val_in_memory entry.type v (w2n sw) s.vs_memory)` by simp[] >>
   drule_all compile_store_memory_run_frame_with_capacity >> strip_tac >>
+  `memory_value_rel entry.type v (w2n dw) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   qexistsl [`dw`, `t`] >> simp[] >>
   reverse conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   irule stmt_state_rel_write_local >>
+  qpat_assum `stmt_state_rel _ _ _ _ es s` (irule_at Any) >>
   first_assum (irule_at Any) >> simp[] >>
   reverse conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>
@@ -538,18 +540,57 @@ Theorem tuple_target_store_head_path:
         (!a len. a + len <= w2n dw \/
            w2n dw + (if is_word_type ty then 32 else type_memory_size tv) <= a ==>
            mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)) /\
-      gas_marked_path F ctx func s 0 (OK t)
+      gas_marked_path F ctx func s 0 (OK t) /\
+      (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+         alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   rpt strip_tac >> drule_all tuple_target_assignment_scope_frame >> strip_tac >>
   Cases_on `?id. g = BaseTarget (NameTarget id)`
   >- (pop_assum strip_assume_tac >> gvs[] >>
       drule_all tuple_target_local_head_path >> strip_tac >>
       first_assum (irule_at Any) >> simp[] >>
+      reverse conj_tac >- suspend "local_frame" >>
       disj2_tac >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
   `is_word_type ty` by metis_tac[tuple_target_aligned_nonlocal_word] >>
   gvs[] >> drule_all tuple_target_nonlocal_head_path >> strip_tac >>
-  first_assum (irule_at Any) >> simp[]
+  first_assum (irule_at Any) >> simp[] >> suspend "nonlocal_frame"
 QED
+
+Resume tuple_target_store_head_path[local_frame]:
+  rpt strip_tac >>
+  drule_all tuple_store_destination_region >> strip_tac >>
+  `entry.type = tv` by gvs[tuple_target_layout_local] >>
+  `(if is_word_type ty then 32 else type_memory_size tv) <= sz` by
+    (Cases_on `is_word_type ty` >> gvs[tuple_target_layout_local,
+       stmtSimDeclStoreTheory.store_lays_out_def] >> decide_tac) >>
+  irule tuple_local_region_write_frame >> goal_assum (drule_at Any) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      Cases_on `is_word_type ty` >> gvs[] >> decide_tac) >>
+  simp[]
+QED
+
+Resume tuple_target_store_head_path[nonlocal_frame]:
+  rpt strip_tac >>
+  `!id b z. local_region cenv es'.scopes t id b z ==>
+             local_region cenv es.scopes s id b z` by
+    (rpt gen_tac >> simp[local_region_def] >> strip_tac >>
+     `lookup_var p t = lookup_var p s` by
+       (first_x_assum irule >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     `IS_SOME (lookup_scopes id es.scopes)` by
+       metis_tac[vyperTypeEnvPreservationTheory.lookup_scopes_same_fdoms_some] >>
+     fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  fs[alloca_frame_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!aid off sz. _` drule_all >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >> first_x_assum irule >>
+  metis_tac[]
+QED
+
+Finalise tuple_target_store_head_path
 
 Theorem tuple_target_store_memory_tail:
   !ctx func cenv cx es s t st scopes' g ty tv tvs v vs b sz addr.
@@ -638,7 +679,9 @@ Theorem tuple_store_targets_path:
         t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
         (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
-        gas_marked_path F ctx func s 0 (OK t)
+        gas_marked_path F ctx func s 0 (OK t) /\
+        (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+           alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -784,6 +827,9 @@ Resume tuple_store_targets_path[compose]:
         (irule not_fresh_at_mono >> qexists `st` >> simp[]) >>
       metis_tac[]) >>
   conj_tac >- metis_tac[] >>
+  reverse conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      first_x_assum irule >> first_assum ACCEPT_TAC) >>
   irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
   first_assum (irule_at Any) >> simp[]
 QED

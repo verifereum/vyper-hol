@@ -2,7 +2,7 @@ Theory bodyIntCallStoreRun
 Ancestors
   bodyIntCallStorePost bodyIntCallReturnLayout intCallResult loweringSlice localPtrsProps
   exprSimProps compileEnv exprLoweringProps finite_map list valueEncodingProps
-  venomState venomMemDefs
+  venomState venomMemDefs loweringStateRelDefs
 
 Theorem owned_memory_tail_state_rel:
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce si /\
@@ -35,13 +35,14 @@ Proof
   Cases_on `ce.ce_is_ctor` >> gvs[] >>
   `mem_bytes_at byte_offset (type_memory_size tv) u.vs_memory =
    mem_bytes_at byte_offset (type_memory_size tv) s.vs_memory` by
-    (first_x_assum irule >> fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+    (first_x_assum irule >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   simp[] >> irule val_in_memory_mem_agree >>
   conj_tac >- metis_tac[immutable_admissible_val_wf] >>
   qexistsl_tac [`type_memory_size tv`,`s.vs_memory`] >> simp[]
 QED
 
 Theorem stack_buffer_run_post:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   store_multi_results buf.buf_operand results 0 si = ((),sb) /\
   local_ptrs_reserved ce si /\
@@ -54,7 +55,7 @@ Theorem stack_buffer_run_post:
     (\name. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields name))
     (expr_type e) /\
   intret_vals_match tv v ws /\ ws <> [] /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 es' sa s0 s /\
   sa.cs_next_var <= si.cs_next_var /\
   eval_operand buf.buf_operand s = SOME w /\
   MAP (\op. eval_operand op s) results = MAP SOME ws /\
@@ -104,10 +105,10 @@ Proof
          goal_assum (drule_at Any) >> simp[]) >>
      simp[] >> qexists_tac `ws` >> simp[] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
-  irule owned_buffer_result_post >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  reverse conj_tac
+  irule owned_buffer_result_post >> rpt conj_tac
+  >~ [`vv_holds`]
   >- (simp[] >> irule buffer_vv_holds >> goal_assum (drule_at Any) >> simp[]) >>
+  TRY (first_assum ACCEPT_TAC) >>
   qexistsl_tac [`aid`,`w2n w`,`s`,`si`,`32 * LENGTH results`,`tv`,`w`] >>
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED

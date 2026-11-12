@@ -1,7 +1,7 @@
 (* Protected regions and reserved operands across reachable Return suffixes. *)
 Theory bodyIntCallProtectedReturn
 Ancestors
-  bodyIntCallReachableReturn bodyIntCallReturnCopy valueCopy compileEnv exprLoweringProps
+  bodyIntCallReachableReturn bodyIntCallReturnCopy valueCopy compileEnv loweringStateRelDefs exprLoweringProps
   exprSimDefs intCallReturnMem fragExec emitHelper instIdxIndep rich_list
   fragGasPath vyperContext loweringPosts intCallResult
   stmtLowering stmtSimDefs context finite_map vyperState
@@ -128,7 +128,7 @@ Theorem protected_internal_memory_return_counted:
   (!b sz. P b sz ==> regions_disjoint b sz (w2n bw) (type_memory_size tv)) /\
   (!op x. reserved op /\ op = Var x ==> not_fresh_at sa x) ==>
   ?n ir u. gas_path ctx func s n (IntRet ir u) /\
-    intret_mem_q func ce cx tv bw v (es with scopes := []) (IntRet ir u) /\
+    intret_mem_q_raw func ce cx tv bw v (es with scopes := []) (IntRet ir u) /\
     (!b sz. P b sz ==> mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory) /\
     (!op. reserved op ==> eval_operand op u = eval_operand op s) /\
     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next

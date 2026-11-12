@@ -182,6 +182,16 @@ Definition first_prov_def:
     | NONE => first_prov G ops
 End
 
+Theorem first_prov_origin:
+  !ops G site. first_prov G ops = SOME site ==>
+    ?v. MEM (Var v) ops /\ FLOOKUP G v = SOME site
+Proof
+  Induct >> simp[first_prov_def] >> rpt gen_tac >>
+  Cases_on `op_prov G h` >> simp[]
+  >- metis_tac[] >>
+  Cases_on `h` >> gvs[op_prov_def] >> metis_tac[]
+QED
+
 (* The site a non-PHI instruction's output points into, after the step
    to s'.  Arithmetic keeps its pointer operand's site. *)
 Definition out_prov_def:
@@ -361,7 +371,10 @@ Definition out_taint_def:
              else {}
          | NONE => {})
     | [n; a] =>
-        (case eval_operand n s of
+        if inst.inst_opcode = MUL then
+          (if eval_operand n s = SOME 1w then op_taint tn a else {}) UNION
+          (if eval_operand a s = SOME 1w then op_taint tn n else {})
+        else (case eval_operand n s of
            SOME k =>
              if inst.inst_opcode = SHL \/ inst.inst_opcode = SHR \/
                 inst.inst_opcode = SAR
@@ -526,6 +539,7 @@ Inductive frame_reachable:
        f.cf_fn inst' (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx))
 End
 
+
 (* ===== The per-state part and the stage fact ===== *)
 
 (* A REVERT, or a RETURNDATACOPY right before one: both runs revert, with
@@ -577,7 +591,8 @@ End
 
 (* Tainted data is only copied around and stored: a tainted variable is
    only ASSIGNed, shifted by an untainted amount (shift_taint tracks where
-   its bytes go), or stored as the value of a store with an untainted
+   its bytes go), multiplied by an untainted zero/one selector, or stored
+   as the value of a store with an untainted
    address, and tainted memory is only loaded, copied or returned.  Code
    that runs on this contract's storage (DELEGATECALL, CREATE) sees none
    tainted. *)
@@ -585,6 +600,10 @@ Definition taint_ok_def:
   taint_ok fn tn inst s <=>
     (!op. MEM op inst.inst_operands /\ op_taint tn op <> {} ==>
           inst.inst_opcode = ASSIGN \/
+          (inst.inst_opcode = MUL /\
+           ?b. (inst.inst_operands = [op; b] \/
+                inst.inst_operands = [b; op]) /\ op_taint tn b = {} /\
+               (eval_operand b s = SOME 0w \/ eval_operand b s = SOME 1w)) \/
           ((inst.inst_opcode = SHL \/ inst.inst_opcode = SHR \/
             inst.inst_opcode = SAR) /\
            ?n. inst.inst_operands = [n; op] /\ op_taint tn n = {}) \/

@@ -11,7 +11,7 @@
 Theory o1ContractSueStep
 Ancestors
   o1PassContract singleUseExpansionSupplyProofs singleUseExpansionSupplySim singleUseExpansionDefs
-  venomPassDispatcher venomWf venomInst unitShapeDefs
+  venomPassDispatcher venomWf venomWfProps venomInst unitShapeDefs
 
 Theorem sue_label_projection_nonlabels:
   MAP get_label xs = MAP get_label ys ==>
@@ -653,109 +653,6 @@ Proof
   gvs[listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem sue_calls_flagged_prefix[local]:
-  !pre tail. EVERY (\i. i.inst_opcode <> CALL /\
-    i.inst_opcode <> STATICCALL) pre /\ calls_flagged bbs tail ==>
-  calls_flagged bbs (pre ++ tail)
-Proof
-  Induct >> simp[calls_flagged_def]
-QED
-
-Theorem sue_expand_insts_supply_calls_flagged:
-  !insts s out s'.
-  ir_supply_inst_ok s /\
-  sue_expand_insts_supply dfg s insts = (out,s') /\
-  EVERY (\i. EVERY (\v. MEM v s.irs_used_vars) i.inst_outputs) insts /\
-  LENGTH bbs = LENGTH bbs' /\
-  (!n l. revert_path bbs n l ==> revert_path bbs' n l) /\
-  calls_flagged bbs insts ==>
-  calls_flagged bbs' out
-Proof
-  Induct >- simp[sue_expand_insts_supply_def, calls_flagged_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `sue_expand_inst_supply dfg s h` >>
-  rename1 `sue_expand_inst_supply dfg s h = (head,s1)` >>
-  Cases_on `sue_expand_insts_supply dfg s1 insts` >>
-  rename1 `sue_expand_insts_supply dfg s1 insts = (rest,s2)` >>
-  gvs[sue_expand_insts_supply_def, calls_flagged_def] >>
-  drule_all sue_expand_inst_supply_extends >> strip_tac >>
-  drule sue_supply_extends_members >> strip_tac >>
-  `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
-  `calls_flagged bbs' rest` by
-    (first_x_assum irule >> goal_assum (drule_at Any) >>
-     gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  `!ops. calls_flagged bbs' ((h with inst_operands := ops) :: rest)` by
-    (gen_tac >> simp[calls_flagged_def] >> strip_tac >>
-     Cases_on `h.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[] >>
-     irule sue_expand_insts_supply_flags >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >>
-     gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  Cases_on `sue_should_skip h.inst_opcode`
-  >- (gvs[sue_expand_inst_supply_def] >>
-      first_x_assum (qspec_then `h.inst_operands` mp_tac) >> simp[]) >>
-  Cases_on `sue_expand_ops_supply dfg h s h.inst_operands 0` >>
-  PairCases_on `r` >> gvs[sue_expand_inst_supply_def] >>
-  drule sue_expand_ops_supply_copies >> strip_tac >>
-  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
-  irule sue_calls_flagged_prefix >> simp[] >>
-  gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[]
-QED
-
-Theorem sue_expand_blocks_supply_calls_flagged:
-  !blocks s blocks' s'.
-  ir_supply_inst_ok s /\
-  sue_expand_blocks_supply dfg s blocks = (blocks',s') /\
-  EVERY (\bb. EVERY (\i. EVERY (\v. MEM v s.irs_used_vars)
-    i.inst_outputs) bb.bb_instructions) blocks /\
-  EVERY (\bb. calls_flagged bbs bb.bb_instructions) blocks /\
-  LENGTH bbs = LENGTH bbs' /\
-  (!n l. revert_path bbs n l ==> revert_path bbs' n l) ==>
-  EVERY (\bb. calls_flagged bbs' bb.bb_instructions) blocks'
-Proof
-  Induct >- simp[sue_expand_blocks_supply_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `sue_expand_block_supply dfg s h` >>
-  rename1 `sue_expand_block_supply dfg s h = (bb,s1)` >>
-  Cases_on `sue_expand_blocks_supply dfg s1 blocks` >>
-  gvs[sue_expand_blocks_supply_def] >>
-  drule_all sue_expand_block_supply_extends >> strip_tac >>
-  drule sue_supply_extends_members >> strip_tac >>
-  `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
-  conj_tac
-  >- (qpat_x_assum `sue_expand_block_supply _ _ _ = _` mp_tac >>
-      simp[sue_expand_block_supply_def, AllCaseEqs()] >> strip_tac >>
-      gvs[] >> irule sue_expand_insts_supply_calls_flagged >>
-      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  first_x_assum irule >> goal_assum (drule_at Any) >>
-  gvs[listTheory.EVERY_MEM] >> metis_tac[]
-QED
-
-Theorem sue_supply_call_checks_ok:
-  ir_supply_inst_ok s /\ ir_supply_covers_fn s fn /\ call_checks_ok fn /\
-  sue_expand_function_supply s fn = (fn',s') ==> call_checks_ok fn'
-Proof
-  strip_tac >>
-  Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
-  gvs[sue_expand_function_supply_def] >>
-  drule sue_expand_blocks_supply_labels >> strip_tac >>
-  `LENGTH q = LENGTH fn.fn_blocks` by metis_tac[listTheory.LENGTH_MAP] >>
-  simp[call_checks_ok_def] >>
-  irule sue_expand_blocks_supply_calls_flagged >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexists_tac `fn.fn_blocks` >>
-  simp[GSYM call_checks_ok_def] >> reverse conj_tac
-  >- (gvs[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
-          venomFnScheduleRunnerTheory.list_subset_def,
-          irSupplyTheory.fn_ir_vars_def,
-          lambdify irSupplyTheory.block_ir_vars_def,
-          lambdify irSupplyTheory.inst_ir_vars_def, listTheory.EVERY_MEM,
-          listTheory.MEM_FLAT, listTheory.MEM_MAP, PULL_EXISTS] >>
-      metis_tac[]) >>
-  metis_tac[sue_expand_blocks_supply_revert_path]
-QED
 
 Theorem sue_supply_copy_phi_var_forward:
   !origin fn x. copy_phi_var origin fn x ==>
@@ -1153,8 +1050,7 @@ Proof
         simp[listTheory.EVERY_MAP] >>
       qpat_x_assum `MAP _ fn'.fn_blocks = _` (SUBST_ALL_TAC o SYM) >>
       gvs[listTheory.EVERY_MAP])
-  >- metis_tac[sue_expand_function_supply_inst_shape] >>
-  metis_tac[sue_supply_call_checks_ok]
+  >> metis_tac[sue_expand_function_supply_inst_shape]
 QED
 
 (* SUE's fresh copies don't make a DALLOCA output a gas or return-PC
@@ -1220,40 +1116,6 @@ QED
    of every other instruction.  So it keeps every block's pseudo-instruction
    prefix and adds no parameter instruction. *)
 
-Theorem every_prefix_split:
-  !P l. (!i j. i < j /\ j < LENGTH l /\ P (EL j l) ==> P (EL i l)) <=>
-        ?ps rs. l = ps ++ rs /\ EVERY P ps /\ EVERY (\x. ~P x) rs
-Proof
-  rpt gen_tac >> eq_tac
-  >- (qid_spec_tac `l` >> Induct >- simp[] >>
-      rpt strip_tac >>
-      `?ps rs. l = ps ++ rs /\ EVERY P ps /\ EVERY (\x. ~P x) rs` by
-        (first_x_assum irule >> rpt strip_tac >>
-         first_x_assum (qspecl_then [`SUC i`,`SUC j`] mp_tac) >> simp[]) >>
-      Cases_on `P h`
-      >- (qexistsl [`h::ps`,`rs`] >> simp[]) >>
-      qexistsl [`[]`,`h::l`] >> simp[listTheory.EVERY_EL] >>
-      rpt strip_tac >>
-      first_x_assum (qspecl_then [`0`,`SUC n`] mp_tac) >> simp[]) >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `j < LENGTH ps`
-  >- (`i < LENGTH ps` by simp[] >>
-      gvs[rich_listTheory.EL_APPEND1, listTheory.EVERY_EL]) >>
-  gvs[rich_listTheory.EL_APPEND2, listTheory.EVERY_EL, arithmeticTheory.NOT_LESS] >>
-  first_x_assum (qspec_then `j - LENGTH ps` mp_tac) >> simp[]
-QED
-
-Theorem pseudos_prefix_split:
-  pseudos_prefix bb <=>
-  ?ps rs. bb.bb_instructions = ps ++ rs /\
-    EVERY (\i. is_pseudo i.inst_opcode) ps /\
-    EVERY (\i. ~is_pseudo i.inst_opcode) rs
-Proof
-  simp[pseudos_prefix_def] >>
-  qspecl_then [`\i. is_pseudo i.inst_opcode`, `bb.bb_instructions`]
-    mp_tac every_prefix_split >>
-  simp[]
-QED
 
 Theorem is_pseudo_sue_should_skip:
   is_pseudo opc ==> sue_should_skip opc

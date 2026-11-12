@@ -4,7 +4,7 @@ Ancestors
   ptrSafeRun ptrDiscipline venomExecSemantics venomExecProofs
   venomInst venomInstProofs venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
   venomCallOracleDefs venomMemProps ghostPcTransportPtr
-  exprLoweringProps exprSimOperands exprSimWordArgs compileEnv localPtrsProps
+  exprLoweringProps exprSimOperands exprSimWordArgs compileEnv loweringStateRelDefs localPtrsProps
   sendSourceFrame typedWordArgsSimPtr exprSimHypsDefs exprSimPrecompiles bodyPtrDefs fragExec
   gasSummaryComposePtr gasExemptCert gasSummaryCompose vyperState typedWordArgsFactsPtr
   typedWordArgsPostPtr exprStackPtr
@@ -295,7 +295,7 @@ Theorem send_read_call_step:
 Proof
   strip_tac >> drule eval_send_read >> strip_tac >>
   `state_rel fn cenv cx es s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
-  `?os. es.outcomes = SOME os` by fs[compileEnvTheory.state_rel_def] >>
+  `?os. es.outcomes = SOME os` by fs[loweringStateRelDefsTheory.state_rel_def] >>
   drule_all eval_send_outcome_typed >> strip_tac >>
   drule_all extCallOracleStepTheory.send_call_oracle_step >>
   strip_tac >> gvs[] >> metis_tac[]
@@ -348,7 +348,8 @@ Proof
 QED
 
 Theorem send_tail_none_post:
-  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
+  expr_has_effect e /\
+  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   ~not_fresh_at sm out /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   es'.scopes = es1.scopes /\ es'.immutables = es1.immutables /\
@@ -366,7 +367,7 @@ Proof
    t.vs_vars = s.vs_vars /\ t.vs_labels = s.vs_labels` by
     (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  reverse conj_tac
+  conj_tac
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `immutable_alloca_sep fn cenv cx es' t` by
@@ -378,17 +379,24 @@ Proof
          fs[stmt_state_rel_def, lookup_var_def]) >>
       irule stmt_state_rel_allocas_frame >> simp[] >>
       qexistsl_tac [`es1`, `s`] >> simp[]) >>
+  `wb_frame cenv es es' sa s0 s` by
+    (qpat_x_assum `wb_frame cenv es es1 sa s0 s` mp_tac >>
+     pure_rewrite_tac[loweringPostsTheory.wb_frame_def,
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+     qpat_x_assum `es'.scopes = es1.scopes` (fn th => pure_rewrite_tac[th]) >>
+     disch_then ACCEPT_TAC) >>
   irule wb_frame_readonly_tail >> qexists_tac `sm` >>
-  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `wb_frame cenv es es' sa s0 s` (irule_at Any) >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
 
 Theorem send_tail_path_ptr:
+  expr_has_effect e /\
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
+  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
   ghost_inv d cenv cx es1 G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -427,7 +435,7 @@ Proof
   `stor_taint_ok cx tn s` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
   `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
     (drule eval_send_read >> strip_tac >>
-     drule vyperInterpreterTheory.eval_send_preserves_non_accounts >> simp[]) >>
+     drule vyperCallOutcomeFrameTheory.eval_send_preserves_non_accounts >> simp[]) >>
   drule_all send_read_checked_tail >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   qpat_x_assum `emit_op _ _ _ = _` kall_tac >>
@@ -488,10 +496,11 @@ QED
 Finalise send_tail_path_ptr
 
 Theorem send_tail_summary_ptr:
+  expr_has_effect e /\
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
+  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
   ghost_inv d cenv cx es1 G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -635,6 +644,7 @@ Resume send_expr_sim_ptr[tail_summary]:
   `!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt) = NoneT` by simp[vyperASTTheory.expr_type_def] >>
+  `expr_has_effect (Call NoneT (Send has_gas) (a::v::gs) dflt)` by simp[loweringPostsTheory.expr_has_effect_thm] >>
   `post_value_type cenv (Call NoneT (Send has_gas) (a::v::gs) dflt) =
    expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt)` by simp[] >>
   drule_all (Q.INST [`e` |-> `Call NoneT (Send has_gas) (a::v::gs) dflt`]
@@ -655,7 +665,8 @@ Resume send_expr_sim_ptr[tail_post]:
   irule wordArgsPtrTheory.ghost_kept_wb_trans >>
   goal_assum (drule_at Any) >>
   conj_tac >- metis_tac[] >>
-  goal_assum (drule_at Any) >> simp[]
+  goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `ee` >> first_assum ACCEPT_TAC
 QED
 
 Finalise send_expr_sim_ptr

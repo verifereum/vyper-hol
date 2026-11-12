@@ -216,6 +216,7 @@ Theorem packaged_internal_body_expr_inv:
     (package_internal_fn tops use_trans nkeys is_ctor imm_size
       (mut,nr,rr,name,args,dflts,ret,ss)) =
     (lbl,ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len,ss',rt) /\
+  (is_ctor <=> cx.in_deploy) /\
   compile_internal_prologue ce params has_rb rt st0 = ((ce2,pc),st1) ==>
   expr_sim_inv (ce2 with ce_alloca_locals := T)
     (cx with stk updated_by CONS (NONE,name)) env_body (st with scopes := [sc])
@@ -246,13 +247,15 @@ Proof
   gvs[package_internal_fn_def, set_internal_package_target_def,
       update_cenv_nonreentrant_def, build_compile_env_def, ELIM_UNCURRY] >>
   fs[get_module_code_def, get_tenv_def] >>
-  conj_tac >- (qpat_x_assum `!n fs. FLOOKUP (make_struct_fields_map tops) n = SOME fs ==> _`
-                ACCEPT_TAC) >>
-  reverse conj_tac >-
-    (rpt strip_tac >> qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
-       drule >> simp[]) >>
-  irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
-  qexistsl [`caller`, `env`] >> simp[]
+  rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (rpt strip_tac >>
+       qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
+         drule >> simp[] >> NO_TAC) >>
+  TRY (irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
+       qexistsl [`caller`, `env`] >> simp[] >> NO_TAC) >>
+  qpat_x_assum `bare_globals_layout _ _ _ _ _ _` mp_tac >>
+  fs[bare_globals_layout_def, get_tenv_def] >> rpt strip_tac >> fs[]
 QED
 
 Theorem internal_prologue_locals_declared:

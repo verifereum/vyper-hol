@@ -5,10 +5,11 @@
 Theory o1ContractMakeSsaPtrOk
 Ancestors
   ptrDiscipline pointerConfinedDefs pointerConfinedProps unitShapeDefs
-  venomInst venomWf cfgWf o1PassContract makeSsaCurrentDefs makeSsaCurrentProps
+  venomInst venomWf cfgWf o1PassContract makeSsaDefs makeSsaCurrentProps
   makeSsaCurrentCfg makeSsaCurrentOrigin makeSsaCurrentWfSsa
   makeSsaCurrentInputOk makeSsaCurrentNonDegenerate
-  removeUnusedProofs allocaRemapSSA mem2varBlockSimHelpers
+  allocaRemapSSA mem2varBlockSimHelpers
+  venomWfProps
 
 Definition mssa_inst_origin_def:
   mssa_inst_origin orig fn inst' <=>
@@ -113,32 +114,7 @@ Proof
   rename1 `LENGTH rest = 0` >> Cases_on `rest` >> gvs[]
 QED
 
-Theorem mssa_path_take:
-  !path n. is_fn_path fn path ==> is_fn_path fn (TAKE n path)
-Proof
-  Induct >> simp[] >> Cases_on `n` >> simp[] >>
-  Cases_on `path` >> simp[is_fn_path_def] >> rpt strip_tac >>
-  rename1 `is_fn_path fn (head::TAKE k (next::rest))` >>
-  Cases_on `k` >> simp[is_fn_path_def] >>
-  rename1 `is_fn_path fn (next::TAKE nn rest)` >>
-  first_x_assum (qspec_then `SUC nn` mp_tac) >>
-  simp[is_fn_path_def]
-QED
-
-Theorem mssa_path_prefix_at:
-  is_fn_path fn path /\ k < LENGTH path ==>
-  is_fn_path fn (TAKE (SUC k) path) /\
-  TAKE (SUC k) path <> [] /\
-  HD (TAKE (SUC k) path) = HD path /\
-  LAST (TAKE (SUC k) path) = EL k path /\
-  LENGTH (TAKE (SUC k) path) = SUC k
-Proof
-  strip_tac >> simp[mssa_path_take, listTheory.LENGTH_TAKE] >>
-  `TAKE (SUC k) path <> []` by
-    (Cases_on `path` >> gvs[]) >>
-  simp[listTheory.LAST_EL, listTheory.LENGTH_TAKE, listTheory.EL_TAKE] >>
-  Cases_on `path` >> gvs[]
-QED
+(* Generic path-prefix facts live in venomWfProps. *)
 
 Theorem mssa_def_on_path:
   def_on_all_paths fn bb point v /\
@@ -162,7 +138,7 @@ Proof
   >- (disj1_tac >> rename1 `kk < LENGTH path - 1` >>
       rename1 `MEM defining_inst defining_bb.bb_instructions` >>
       `kk < LENGTH path` by decide_tac >>
-      drule_all mssa_path_prefix_at >> strip_tac >>
+      drule_all venomWfPropsTheory.is_fn_path_prefix_at >> strip_tac >>
       qexistsl_tac [`TAKE (SUC kk) path`, `defining_bb`] >> gvs[] >>
       qpat_x_assum `MEM defining_inst defining_bb.bb_instructions` mp_tac >>
       simp[listTheory.MEM_EL] >> strip_tac >>

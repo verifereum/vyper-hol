@@ -1,11 +1,12 @@
 (* Stack return layout and terminal boundary. *)
 Theory bodyIntCallFamStmtReturnStackEndpoint
 Ancestors
+  bodyIntCallReturnInactive
   bodyIntCallJointContract bodyIntCallFamStmtReturnStackRun
   bodyIntCallFamStmtReturnStackExit bodyIntCallFamStmtReturnLayout
   exprSimTypedAlloc exprSimFieldLayout placeMemoryTypedBase
   stmtSimReturn stmtLowering compileEnv exprLoweringProps loweringPosts
-  vyperTyping vyperTypeABI vyperValue valueEncoding valueEncodingProofs
+  vyperTyping vyperTypeABI vyperValue valueEncoding valueEncodingDefs valueEncodingProofs
   valueEncodingTyping fragExec list rich_list
 
 Theorem stack_return_operand_layout:
@@ -70,7 +71,7 @@ Proof
 QED
 
 Theorem intcall_stack_return_endpoint:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
   0 < fp.jc_root_ce.ce_returns_count /\
   sfields_tenv_consistent ce.ce_struct_fields (get_tenv fp.jc_cx) /\
   value_has_type fp.jc_ret_tv v /\
@@ -97,8 +98,14 @@ Proof
    eval_operand fp.jc_rpc s = SOME fp.jc_pc` by
     (fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def] >> metis_tac[]) >>
   `?w. eval_operand op s = SOME w` by fs[expr_val_rel_def] >>
+  `~FST ce.ce_nonreentrant` by
+    fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def,
+       bodySimTheory.same_frame_def, compile_env_component_equality] >>
   qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_internal_return_from_env_def, comp_bind_def, comp_return_def] >>
+  qpat_assum `~FST ce.ce_nonreentrant` (fn nr =>
+    simp[MATCH_MP compile_return_unlock_inactive nr,
+       compile_internal_return_from_env_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def]) >>
   strip_tac >> drule_all compile_internal_return_stack_path >>
   disch_then (qspec_then `fp.jc_ctx` strip_assume_tac) >>
   `evaluate_type (get_tenv fp.jc_cx) fp.jc_ret_ty = SOME fp.jc_ret_tv /\
@@ -110,7 +117,8 @@ Proof
   simp[] >> strip_tac >>
   qexists_tac `k` >> goal_assum (drule_at Any) >>
   simp[exit_result_def] >>
-  irule intcall_stack_exit_frame >> goal_assum (drule_at Any) >>
+  qpat_assum `~FST _` (fn nr => irule (MATCH_MP
+    (CONV_RULE (STRIP_QUANT_CONV (REWR_CONV (GSYM AND_IMP_INTRO))) intcall_stack_exit_frame) nr)) >> goal_assum (drule_at Any) >>
   simp[] >> fs[intcall_frame_ok_def] >>
   qexistsl_tac [`ce`, `env`, `s`, `sa`] >> simp[]
 QED

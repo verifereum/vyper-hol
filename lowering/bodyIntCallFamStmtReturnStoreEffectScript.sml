@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtReturnStoreEffect
 Ancestors
   bodyIntCallAggregateStoreLanding bodyIntCallWidenCopy
   placeMemoryCopyEffect localMemoryStorePath entrySinkExtraction
-  instIdxIndep exprSimStorageCopy fragGasMode compileEnv
+  instIdxIndep exprSimStorageCopy fragGasMode compileEnv loweringStateRelDefs
   venomState venomExecSemantics list rich_list
   exprLoweringProps placeMemoryPrimitiveForward
 

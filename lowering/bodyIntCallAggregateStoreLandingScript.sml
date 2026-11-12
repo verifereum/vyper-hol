@@ -3,7 +3,7 @@ Theory bodyIntCallAggregateStoreLanding
 Ancestors
   bodyIntCallWidenCopy bodyIntCallLiteralLanding localMemoryStorePath
   placeMemoryPrimitiveForward entrySinkExtraction valueCopyBytes valueEncoding
-  exprLoweringProps compileEnv loweringPosts venomState venomExecSemantics
+  exprLoweringProps compileEnv loweringStateRelDefs loweringPosts venomState venomExecSemantics
   venomInst words list rich_list fragGasMode instIdxIndep finite_map
 
 Theorem compatible_store_no_gas:

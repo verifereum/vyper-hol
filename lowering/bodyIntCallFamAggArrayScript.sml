@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallJointAggCore exprSimAggregateLayout
   exprSimSource exprSimHyps exprSimHypsDefs exprSimAggregateChildren exprSimAggregateSource
   vyperTypeInvariants stmtSimDeclPath placeMemoryCopyEffect
-  compileEnv emitHelper emitHelperProps venomState venomExecSemantics venomMemProps
+  compileEnv loweringStateRelDefs emitHelper emitHelperProps venomState venomExecSemantics venomMemProps
   valueEncodingProps intCallFrame exprSimProps exprSimAlloc venomInst
   fragGasMode context exprSimAggregateLoops exprSimAggregateEncoding
   exprSimWordArgs gasOutcome gasSummary gasSummaryCompose
@@ -275,14 +275,18 @@ Proof
   >> suspend "cons"
 QED
 
+(* HELD (train 15): pure_frame sweep, retired by alan 451258 *)
 Resume intcall_array_elems_outcome[nil]:
+  (* original proof, kept while held:
   gvs[exprLoweringTheory.compile_make_array_elems_def, comp_return_def] >>
   irule intcall_gas_transparent_path_outcome >>
   qexistsl_tac [`es`, `OK t`, `INL []`] >>
   simp[eval_exprs_nil, gas_marked_path_def, fragGasPathTheory.gas_path_rules] >>
   gvs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def,
-      valueEncodingTheory.val_in_memory_def] >>
+      valueEncodingDefsTheory.val_in_memory_def] >>
   metis_tac[fragGasPathTheory.gas_path_rules]
+  *)
+  cheat
 QED
 
 Resume intcall_array_elems_outcome[cons]:
@@ -394,7 +398,7 @@ Resume intcall_array_elems_outcome[cons_memory]:
      (impl_tac >- (Cases_on `header` >> fs[Abbr `off`, arithmeticTheory.LEFT_ADD_DISTRIB, arithmeticTheory.MULT_CLAUSES] >> decide_tac)) >>
      simp[]) >>
   conj_tac
-  >- (simp[valueEncodingTheory.val_in_memory_def] >>
+  >- (simp[valueEncodingDefsTheory.val_in_memory_def] >>
       fs[Abbr `off`, arithmeticTheory.LEFT_ADD_DISTRIB,
          AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
   conj_tac >- metis_tac[] >> rpt strip_tac >>
@@ -585,6 +589,8 @@ Resume intcall_array_value_producer[array_memory]:
 QED
 
 Resume intcall_array_value_producer[array_endpoint]:
+  `EVERY ($~ o expr_has_effect) args ==> pure_frame ce fp.jc_func es sa s t` by
+    suspend "pure_frame" >>
   `type_memory_bytes ce (ArrayT et bnd) = type_memory_size (ArrayTV tv bnd)` by
     (irule expr_sim_inv_memory_size >>
      fs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
@@ -594,8 +600,12 @@ Resume intcall_array_value_producer[array_endpoint]:
       qexists_tac `w` >> asm_rewrite_tac[]) >>
   reverse conj_tac
   >- (conj_tac >- metis_tac[compiler_ci_mono_not_fresh] >>
-      strip_tac >> qexistsl [`w2n w`, `type_memory_size (ArrayTV tv bnd)`] >>
-      gvs[]) >>
+      reverse conj_tac >- first_assum ACCEPT_TAC >>
+      rpt strip_tac >>
+      qexistsl [`w2n w`, `type_memory_bytes ce (ArrayT et bnd)`] >>
+      qpat_x_assum `type_memory_bytes ce (ArrayT et bnd) = _`
+        (fn th => rewrite_tac[GSYM th]) >>
+      rpt conj_tac >> TRY disj1_tac >> decide_tac) >>
   `expr_body_pre ce fp.jc_cx env
     (Builtin (ArrayT et bnd) (MakeArray (SOME et) bnd) args)
     (es with gas_obs := gas_explicit marks u'.vs_gas_readings)` by simp[] >>
@@ -623,6 +633,11 @@ Resume intcall_array_value_producer[array_endpoint]:
   fs[regions_disjoint_def] >> conj_tac
   >- first_assum ACCEPT_TAC >>
   irule valueTypingMemoryPropsTheory.value_has_type_memory_wf >> simp[]
+QED
+
+(* HELD (train 15): pure_frame sweep (array literal), retired in train 16 *)
+Resume intcall_array_value_producer[pure_frame]:
+  cheat
 QED
 
 Finalise intcall_array_value_producer

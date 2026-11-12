@@ -1,8 +1,11 @@
 Theory o1MakeSsaCallAssembly
 Ancestors
   o1MakeSsaEventOwnership o1MakeSsaEventFrames o1ContractSueStep
-  o1MakeSsaVisitTrace o1MakeSsaCallBlockBridge venomWf venomExecProps
+  o1MakeSsaVisitTrace o1MakeSsaTraversalFrames o1MakeSsaFormats
+  o1MakeSsaCallOwnership o1MakeSsaCallPaths
+  o1ContractMakeSsaSrcOpcodes o1MakeSsaReaching venomWf venomExecProps
   unitShapeDefs fmpStepList list pred_set
+  venomWfProps
 
 Theorem mssa_well_formed_phi_split:
   bb_well_formed bb ==>

@@ -1,7 +1,7 @@
 (* Slot provenance for pure expression results, including zero-sized locals. *)
 Theory bodyIntCallJointPureSlot
 Ancestors
-  bodyIntCallJointContract exprLoweringProps compileEnv venomState
+  bodyIntCallJointContract exprLoweringProps compileEnv loweringStateRelDefs venomState
   exprSimHypsDefs exprLowering exprSimNameValue context vyperTypeSystem
   typedCopyMetadata placeMemoryTypedBase valueEncodingTyping vyperTypeABI
   structFieldsProps retAbiPlanProps

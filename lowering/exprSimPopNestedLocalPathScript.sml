@@ -70,3 +70,109 @@ Proof
   simp[evaluate_subscripts_def, array_index_def, listTheory.oEL_THM,
        rich_listTheory.LENGTH_FRONT]
 QED
+
+(* Popping a dynamic array kills no live path inside it and revives no dead
+   one: a path dead in the array is dead in the array without its last
+   element. *)
+Theorem evaluate_subscripts_front_dead:
+  !k tv vs e.
+    vs <> [] /\ evaluate_subscripts tv (ArrayV (DynArrayV vs)) k = INR e ==>
+    ?e'. evaluate_subscripts tv (ArrayV (DynArrayV (FRONT vs))) k = INR e'
+Proof
+  Cases >- simp[evaluate_subscripts_def] >>
+  rename1 `sb::k` >> rpt gen_tac >>
+  Cases_on `sb` >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
+  simp[evaluate_subscripts_def] >>
+  rename1 `IntV i` >>
+  simp[array_index_def] >> Cases_on `0 <= i` >> simp[] >>
+  Cases_on `Num i < LENGTH vs - 1` >>
+  gvs[listTheory.oEL_THM, rich_listTheory.LENGTH_FRONT] >>
+  strip_tac >>
+  `EL (Num i) (FRONT vs) = EL (Num i) vs` by
+    (irule rich_listTheory.EL_FRONT >>
+     gvs[listTheory.NULL_EQ, rich_listTheory.LENGTH_FRONT]) >>
+  `Num i < LENGTH vs` by decide_tac >>
+  gvs[AllCaseEqs()]
+QED
+
+(* Replacing the value at a live path by one with no more live paths keeps
+   every dead path of the whole value dead. *)
+Theorem assign_subscripts_replace_dead:
+  !path tv a old nv updated k e.
+    evaluate_subscripts tv a path = INL old /\
+    (!tv' k e. evaluate_subscripts tv' old k = INR e ==>
+               ?e'. evaluate_subscripts tv' nv k = INR e') /\
+    assign_subscripts tv a path (Replace nv) = INL updated /\
+    evaluate_subscripts tv a k = INR e ==>
+    ?e'. evaluate_subscripts tv updated k = INR e'
+Proof
+  Induct
+  >- (simp[evaluate_subscripts_def, assign_subscripts_def] >> metis_tac[]) >>
+  qx_gen_tac `sb` >> rpt gen_tac >>
+  Cases_on `k` >- simp[evaluate_subscripts_def] >>
+  rename1 `evaluate_subscripts _ _ (sb'::kt) = INR _` >>
+  Cases_on `sb` >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
+  simp[evaluate_subscripts_def, assign_subscripts_def]
+  >- (rename1 `IntV i` >> Cases_on `a` >>
+      simp[evaluate_subscripts_def, assign_subscripts_def] >>
+      rename1 `ArrayV av` >> strip_tac >> gvs[AllCaseEqs()] >>
+      `?av'. updated = ArrayV av'` by
+        (qpat_x_assum `array_set_index _ _ _ _ = _` mp_tac >>
+         simp[array_set_index_def, AllCaseEqs()] >> rw[] >> simp[]) >>
+      gvs[] >>
+      Cases_on `sb'` >> TRY (rename1 `ValueSubscript y` >> Cases_on `y`) >>
+      gvs[evaluate_subscripts_def] >>
+      rename1 `ValueSubscript (IntV j)` >>
+      Cases_on `j = i`
+      >- (gvs[] >> drule array_index_after_set_same >> strip_tac >>
+          gvs[AllCaseEqs()] >>
+          first_x_assum drule >> disch_then drule >>
+          disch_then drule >> disch_then drule >> strip_tac >> simp[]) >>
+      `array_index tv av' j = array_index tv av j` by
+        metis_tac[array_index_after_set_other] >>
+      gvs[AllCaseEqs()]) >>
+  rename1 `AttrSubscript id` >> Cases_on `a` >>
+  simp[evaluate_subscripts_def, assign_subscripts_def] >>
+  rename1 `StructV al` >> strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `sb'` >> TRY (rename1 `ValueSubscript y` >> Cases_on `y`) >>
+  gvs[evaluate_subscripts_def, AFUPDKEY_ALOOKUP] >>
+  rename1 `ALOOKUP al fld` >>
+  Cases_on `fld = id` >> gvs[]
+  >- (gvs[AllCaseEqs()] >>
+      first_x_assum drule >> disch_then drule >>
+      disch_then drule >> disch_then drule >> strip_tac >> simp[]) >>
+  Cases_on `ALOOKUP al fld` >> gvs[AllCaseEqs()]
+QED
+
+Theorem evaluate_subscripts_append_err:
+  !path tv a err sfx.
+    evaluate_subscripts tv a path = INR err ==>
+    evaluate_subscripts tv a (path ++ sfx) = INR err
+Proof
+  Induct >- simp[evaluate_subscripts_def] >>
+  Cases >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
+  rpt gen_tac >>
+  Cases_on `a` >>
+  simp[evaluate_subscripts_def] >> strip_tac >>
+  gvs[AllCaseEqs()] >> res_tac >> simp[]
+QED
+
+(* A replacement that succeeds is read back at its path. *)
+Theorem assign_subscripts_replace_read:
+  !path tv a nv u.
+    assign_subscripts tv a path (Replace nv) = INL u ==>
+    evaluate_subscripts tv u path = INL nv
+Proof
+  Induct >- simp[assign_subscripts_def, evaluate_subscripts_def] >>
+  rpt gen_tac >>
+  Cases_on `h` >> TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
+  Cases_on `a` >> simp[assign_subscripts_def] >> strip_tac >>
+  gvs[AllCaseEqs()]
+  >- (rename1 `array_set_index tv av i vj = INL u` >>
+      `?av'. u = ArrayV av'` by
+        (qpat_x_assum `array_set_index _ _ _ _ = _` mp_tac >>
+         simp[array_set_index_def, AllCaseEqs()] >> rw[] >> simp[]) >>
+      gvs[] >> drule array_index_after_set_same >> strip_tac >>
+      simp[evaluate_subscripts_def] >> res_tac >> simp[]) >>
+  simp[evaluate_subscripts_def, AFUPDKEY_ALOOKUP] >> res_tac >> simp[]
+QED

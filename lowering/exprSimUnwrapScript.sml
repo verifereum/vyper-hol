@@ -52,11 +52,11 @@ Ancestors
   exprSimDefs
   loweringPosts
   list finite_map
-   exprLowering compileEnv immutableEncoding vyperAST vyperInterpreter
+   exprLowering compileEnv loweringStateRelDefs immutableEncoding vyperAST vyperInterpreter
   vyperState
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
   exprSimCopy exprOperandVar vyperEvalExprPreservesScopesDom
-  valueEncoding valueEncodingProofs vyperTypeValues vyperStorage vyperValue
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperTypeValues vyperStorage vyperValue
   vyperLookupStorage valueCopyBytes
   exprSimMemorySource exprSimMemoryRead gasOutcome gasSummary
   gasSummaryCompose gasExemptCert fragGasMode fragGasPath emitHelperProps
@@ -171,7 +171,7 @@ Proof
      contextTheory.compile_storage_to_memory_def,
      contextTheory.compile_transient_to_memory_def,
      compile_imm_copy_to_memory_appends,
-     contextTheory.compile_word_copy_loop_def,
+     contextTheory.compile_word_copy_loop_def, contextTheory.compile_word_copy_loop_op_def, contextTheory.compile_word_copy_loop_base_def,
      contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
      word_scale_def] >>
   Cases_on `loc` >> rw[] >>
@@ -334,7 +334,7 @@ Proof
   `off + k < dimword (:256)` by DECIDE_TAC >>
   `mem_word_at (off + k) s.vs_data_section = typed_val_to_w256 tvt v` by
     (irule val_in_memory_word_type >> metis_tac[]) >>
-  gvs[valueEncodingTheory.mem_word_at_def]
+  gvs[valueEncodingDefsTheory.mem_word_at_def]
 QED
 
 (* A word immutable at runtime: a DLOAD. *)
@@ -512,7 +512,7 @@ Proof
   `off + k < dimword (:256)` by (fs[sub_layout_def] >> DECIDE_TAC) >>
   `mem_word_at (off + k) s.vs_memory = typed_val_to_w256 tvt v` by
     (irule val_in_memory_word_type >> metis_tac[]) >>
-  gvs[valueEncodingTheory.mem_word_at_def, mload_def]
+  gvs[valueEncodingDefsTheory.mem_word_at_def, mload_def]
 QED
 
 (* The ILOAD of a constructor immutable word reads memory. *)
@@ -1832,7 +1832,7 @@ Proof
   reverse (Cases_on `res`)
   >- metis_tac[vv_post_failed_read] >>
   rename1 `read_result cx tv ee = (INL v, ee)` >>
-  drule vv_post_read_result >> strip_tac >> gvs[] >> pop_assum kall_tac >>
+  drule_all vv_post_read_result >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>

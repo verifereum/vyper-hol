@@ -170,7 +170,7 @@ Theorem internal_memory_return_counted:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?n r. gas_path ctx func s n r /\ exit_result r /\
-    intret_mem_q func ce cx tv bw v (es with scopes := []) r
+    intret_mem_q_raw func ce cx tv bw v (es with scopes := []) r
 Proof
   strip_tac >>
   `?n r. gas_path ctx func s n r /\ exit_result r` by
@@ -222,6 +222,13 @@ Proof
   irule gas_exempt_cert_error_value >> simp[ignore_bind_def]
 QED
 
+Theorem intret_mem_q_raw_gas_obs[local]:
+  intret_mem_q_raw func cenv cx ret_tv buf v (es with gas_obs := readings) r =
+  intret_mem_q_raw func cenv cx ret_tv buf v es r
+Proof
+  simp[intret_mem_q_raw_def, loweringStateRelDefsTheory.result_rel_gas_obs]
+QED
+
 Theorem reachable_memory_return:
   expr_type e = ty /\
   compile_internal_return ce (SOME src) rpc 0 ty ty elems (SOME dst) sa = ((),sb) /\
@@ -251,7 +258,7 @@ Theorem reachable_memory_return:
       regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv))) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_stmt cx (Return (SOME e))) (es,s0)
     (\res ee t. F)
-    (\res ee r. stmt_exit (\v ee r. intret_mem_q func ce cx tv bw v ee r) ee res r)
+    (\res ee r. stmt_exit (\v ee r. intret_mem_q_raw func ce cx tv bw v ee r) ee res r)
 Proof
   strip_tac >>
   simp[Once evaluate_def, GSYM bind_assoc] >>
@@ -264,16 +271,16 @@ Proof
   qexists_tac `P` >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   `?n r. gas_path ctx func t n r /\ exit_result r /\
-    intret_mem_q func ce cx tv bw v (ee with scopes := []) r` by
+    intret_mem_q_raw func ce cx tv bw v (ee with scopes := []) r` by
     (irule internal_memory_return_counted >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   irule gas_summary_no_source_read >>
   qexistsl_tac [`ee`, `n`, `r`, `INR (ReturnException v)`] >>
   simp[raise_def, stmt_exit_def] >> disj2_tac >>
-  qpat_x_assum `intret_mem_q _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `intret_mem_q_raw _ _ _ _ _ _ _ _` mp_tac >>
   `ee with <|scopes := []; gas_obs := []|> =
      (ee with scopes := []) with gas_obs := []` by
     simp[evaluation_state_component_equality] >>
   pop_assum (fn th => pure_once_rewrite_tac[th]) >>
-  simp[intret_mem_q_gas_obs]
+  simp[intret_mem_q_raw_gas_obs]
 QED

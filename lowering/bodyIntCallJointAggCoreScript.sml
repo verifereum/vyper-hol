@@ -2,7 +2,7 @@
 Theory bodyIntCallJointAggCore
 Ancestors
   bodyIntCallJointContract loweringPosts exprSimWordArgs
-  compileEnv stmtSimProps bodyMemoryDefs freshWrites
+  compileEnv loweringStateRelDefs stmtSimProps bodyMemoryDefs freshWrites
   placeMemoryCopyEffect exprSimCopy bodyIntCallCopySharpDynamic
   venomState intCallFrame context emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomMemProps
@@ -10,6 +10,7 @@ Ancestors
   placeMemoryPrimitiveForward instIdxIndep exprSimProps exprSimUnwrap
   exprSimAggregateChildren bodyIntCallAggregateStoreFrame
   bodyIntCallCompletedModes intCallStep exprSimSend
+  memoryLayoutDefs memoryLayoutSource memoryLayoutRel memoryValueEncoding
   bodyIntCallWidenedChildStore typedMemoryCopy exprSimSubscriptMap
   memoryLocalRhsProps
 
@@ -21,7 +22,7 @@ Theorem intcall_expr_cont_frame:
   u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts /\
   s.vs_alloca_next <= u.vs_alloca_next /\
-  wb_frame ce es sa s u
+  wb_frame ce es ee sa s u
 Proof
   simp[intcall_expr_cont_def, wb_frame_def] >> metis_tac[]
 QED
@@ -36,7 +37,7 @@ Theorem intcall_expr_cont_trans:
   intcall_expr_cont fp ce env es sa s ee sb u
 Proof
   simp[intcall_expr_cont_frame] >> rpt strip_tac >>
-  `wb_frame ce es sa s u` by
+  `wb_frame ce es ee sa s u` by
     (irule wb_frame_trans >>
      gvs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
@@ -207,7 +208,7 @@ Proof
   rpt strip_tac >>
   `typed_copy_effect fp.jc_ctx fp.jc_func si sb s u b sz` by
     (irule typed_copy_effect_enlarge >> goal_assum (drule_at Any) >> simp[]) >>
-  `wb_frame ce es0 sa s0 u` by
+  `wb_frame ce es0 es sa s0 u` by
     (irule wb_frame_owned_memory_tail >> goal_assum (drule_at Any) >>
      qexistsl_tac [`aid`, `s`, `si`] >>
      fs[intcall_expr_cont_frame, typed_copy_effect_def] >> metis_tac[]) >>
@@ -329,7 +330,7 @@ Proof
     fs[venom_state_component_equality] >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `w`] >>
   simp[intcall_expr_cont_frame, eval_op_inst_idx, local_region_def,
-       lookup_var_def, wb_frame_def, locals_kept_def] >>
+       lookup_var_def, wb_frame_def, locals_kept_mem] >>
   fs[local_region_def, lookup_var_def] >> metis_tac[]
 QED
 
@@ -347,7 +348,7 @@ Theorem intcall_expr_cont_readonly:
   intcall_expr_cont fp ce env es0 sa s0 es sb u
 Proof
   rpt strip_tac >>
-  `intcall_expr_res fp ce env es si s /\ wb_frame ce es0 sa s0 s` by
+  `intcall_expr_res fp ce env es si s /\ wb_frame ce es0 es sa s0 s` by
     fs[intcall_expr_cont_frame] >>
   `local_ptrs_reserved ce si` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `!n b k. local_region ce es.scopes u n b k <=>
@@ -363,7 +364,7 @@ Proof
      qexistsl_tac [`s`, `si`] >> simp[] >>
      rpt strip_tac >> Cases_on `op` >>
      gvs[intcall_joint_res_def, intcall_expr_res_def, eval_operand_def, lookup_var_def] >> metis_tac[]) >>
-  `wb_frame ce es0 sa s0 u` by
+  `wb_frame ce es0 es sa s0 u` by
     (irule wb_frame_readonly_tail >>
      qexistsl_tac [`si`, `s`] >> simp[]) >>
   fs[intcall_expr_cont_frame]
@@ -755,14 +756,36 @@ Proof
    ~is_bytestring_type dty /\ ~is_bytestring_type sty` by
     metis_tac[type_widens_to_word, return_source_word_widens_eq,
               typed_copy_bytestring_source, type_widens_from_bytestring] >>
+  `val_wf dtv v /\ val_wf stv v` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  Cases_on `tuple_memory_layout_eq dty sty`
+  (* equal layouts are copied in bulk, as the same type is *)
+  >- (`compile_store_memory ce src dst dty dty sa = ((),sb)` by
+        (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+         simp[compile_store_memory_def]) >>
+      `memory_layout_key dty = memory_layout_key sty` by
+        (Cases_on `dty` >> Cases_on `sty` >>
+         gvs[tuple_memory_layout_eq_def, memory_layout_key_tuple]) >>
+      `memory_layout_rel dtv stv` by metis_tac[memory_layout_key_evaluated] >>
+      `val_in_memory stv v (w2n w) s.vs_memory` by fs[] >>
+      `val_in_memory dtv v (w2n w) s.vs_memory` by
+        (irule memory_value_rel_val_in_memory >> simp[] >>
+         irule memory_layout_rel_value >> qexists_tac `stv` >> simp[] >>
+         irule val_in_memory_memory_value_rel >> simp[]) >>
+      `!name a n. local_region ce es.scopes s name a n ==>
+         regions_disjoint a n (w2n dw) (type_memory_size dtv)` by
+        (fs[regions_disjoint_def] >> metis_tac[]) >>
+      mp_tac (Q.INST [`sty` |-> `dty`, `stv` |-> `dtv`, `sw` |-> `w`,
+                      `tenv` |-> `get_tenv fp.jc_cx`, `ctx` |-> `fp.jc_ctx`,
+                      `func` |-> `fp.jc_func`, `cx` |-> `fp.jc_cx`]
+                intcall_compatible_store_effect) >>
+      impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
   `w2n w + type_memory_size stv < dimword (:256) /\
    (w2n w + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n w)` by
     (irule aggregate_physical_source_slot_bounds >>
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  `val_wf dtv v /\ val_wf stv v` by
-    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
   `compile_store_memory_typed ce dst dty src sty sa = ((),sb)` by
     fs[compile_store_memory_def] >>
   `acyclic_struct_metadata ce.ce_struct_fields /\

@@ -8,15 +8,13 @@
  *
  * TOP-LEVEL:
  *   mem_liveness_analyze  — MemLiveness analysis (liveat ∩ used)
- *   compute_alloc_map     — first-fit allocator with liveness-aware reservation
- *   concretize_inst       — per-instruction transform
- *   concretize_function   — function-level transform (allocate + rewrite)
+ *   concretize_function_fuel_in_context — checked context-aware allocation
  *   concretize_context_eval — evaluator-friendly sequential allocation
  *)
 
 Theory concretizeMemLocDefs
 Ancestors
-  staticLayoutDefs passSimulationDefs passSharedDefs basePtrDefs cfgDefs enumeral toto
+  staticLayoutDefs passTransform passSharedDefs basePtrDefs cfgDefs enumeral toto
 
 (* ===== Allocation map ===== *)
 
@@ -137,14 +135,6 @@ Definition inst_write_size_def:
         case ops.iao_size of
           SOME (Lit n) => SOME (w2n n)
         | _ => NONE
-End
-
-(* Get alloca size from first operand *)
-Definition inst_alloca_size_def:
-  inst_alloca_size inst =
-    case inst.inst_operands of
-      Lit sz :: _ => SOME (w2n sz)
-    | _ => NONE
 End
 
 (* =========================================================================
@@ -350,22 +340,36 @@ End
 
 (* ===== Compute livesets from liveat ∩ used ===== *)
 
+(* Python BasePtrAnalysis.escaping_allocations: the allocations a pointer
+   escaping SSA tracking may point into.  Python's MemLiveness keeps only the
+   static ones; this base-pointer analysis only tracks ALLOCA pointers, so
+   every allocation it reports is static. *)
+Definition ml_escaped_allocas_def:
+  ml_escaped_allocas bpr fn =
+    FOLDL (smerge alloc_to) []
+      (MAP (\v. find_base_allocas bpr (Var v))
+        (FLAT (MAP fmp_escaping_operands (fn_insts fn))))
+End
+
+(* An escaped allocation is live at every instruction: accesses through the
+   re-entered pointer are invisible to the dataflow above. *)
 Definition ml_livesets_insts_def:
-  ml_livesets_insts bb_label liveat used ls [] = ls /\
-  ml_livesets_insts bb_label liveat used ls ((idx, inst) :: rest) =
+  ml_livesets_insts esc bb_label liveat used ls [] = ls /\
+  ml_livesets_insts esc bb_label liveat used ls ((idx, inst) :: rest) =
     let addr = (bb_label, idx) in
-    let both = sinter alloc_to (ml_lookup liveat addr) (ml_lookup used addr) in
+    let both = sinter alloc_to (smerge alloc_to esc (ml_lookup liveat addr))
+                 (ml_lookup used addr) in
     let ls' = FOLDL (\m alloc.
       let cur = case FLOOKUP m alloc of SOME s => s | NONE => [] in
       m |+ (alloc, smerge inst_addr_to [addr] cur))
       ls both in
-    ml_livesets_insts bb_label liveat used ls' rest
+    ml_livesets_insts esc bb_label liveat used ls' rest
 End
 
 Definition ml_compute_livesets_def:
-  ml_compute_livesets liveat used fn =
+  ml_compute_livesets esc liveat used fn =
     FOLDL (\ls bb.
-      ml_livesets_insts bb.bb_label liveat used ls
+      ml_livesets_insts esc bb.bb_label liveat used ls
         (MAPi (\i inst. (i, inst)) bb.bb_instructions))
       (FEMPTY : (allocation, inst_addr list) fmap)
       fn.fn_blocks
@@ -400,7 +404,7 @@ Definition mem_liveness_analyze_def:
            live_pallocas cfg fn of
       SOME (_, liveat, used) =>
         ml_mark_stores_live bpr fn
-          (ml_compute_livesets liveat used fn)
+          (ml_compute_livesets (ml_escaped_allocas bpr fn) liveat used fn)
     | NONE => FEMPTY
 End
 
@@ -442,7 +446,7 @@ Definition mem_liveness_analyze_fuel_def:
       ml_iterate_fuel fuel bpr mems_used alloca_sizes
         live_pallocas cfg fn FEMPTY FEMPTY in
     ml_mark_stores_live bpr fn
-      (ml_compute_livesets liveat used fn)
+      (ml_compute_livesets (ml_escaped_allocas bpr fn) liveat used fn)
 End
 
 (* =========================================================================
@@ -486,7 +490,7 @@ End
    Checked static-ALLOCA completion helpers
    ========================================================================= *)
 
-(* Unlike inst_alloca_size/get_alloca_size, this accepts only the exact source
+(* Unlike get_alloca_size, this accepts only the exact source
    shape consumed by checked concretization. *)
 Definition exact_static_alloca_size_def:
   exact_static_alloca_size inst =
@@ -698,7 +702,7 @@ End
 
 (* Liveness-aware allocation loop.
    already: (alloc, liveset, position, size) — pre-allocated
-   to_alloc: (alloc, liveset, size) — sorted by |liveset| ascending
+   to_alloc: (alloc, liveset, size) — sorted escaped first, then by |liveset| ascending
    For each: reserve only intersecting, then first-fit. *)
 Definition allocate_with_livesets_def:
   allocate_with_livesets global_reserved already [] result = result /\
@@ -714,31 +718,13 @@ Definition allocate_with_livesets_def:
       rest (result |+ (alloc, pos))
 End
 
-(* Full allocation pipeline *)
-Definition compute_alloc_map_def:
-  compute_alloc_map fn bpr mems_used live_pallocas cfg
-                    (pre_allocated : (allocation, num) fmap)
-                    (global_reserved : (num # num) list) =
-    let alloca_sz = get_alloca_size fn in
-    let alloca_sz_opt = \a. let sz = alloca_sz a in
-                            if sz = 0 then NONE else SOME sz in
-    let ls = mem_liveness_analyze bpr mems_used alloca_sz_opt
-               live_pallocas cfg fn in
-    let items = fmap_to_alist ls in
-    let pre_allocated_dom = FDOM pre_allocated in
-    let (already, to_alloc) = PARTITION (\(alloc, _). alloc IN pre_allocated_dom) items in
-    let sorted = QSORT (\(_, s1) (_, s2). LENGTH s1 <= LENGTH s2)
-                   to_alloc in
-    let already_info = MAP (\(alloc, live).
-      let pos = case FLOOKUP pre_allocated alloc of
-                  SOME p => p | NONE => 0 in
-      (alloc, live, pos, alloca_sz alloc)) already in
-    let sorted_info = MAP (\(alloc, live).
-      (alloc, live, alloca_sz alloc)) sorted in
-    allocate_with_livesets global_reserved already_info
-      sorted_info pre_allocated
+(* Python's allocation order key (alloc not in escaped, len(liveset)):
+   escaped allocations first, as they conflict with everything after their
+   first use, then shorter livesets. *)
+Definition alloc_liveset_item_le_def:
+  alloc_liveset_item_le esc ((a1:allocation), (l1:inst_addr list)) (a2, l2) <=>
+    if MEM a1 esc = MEM a2 esc then LENGTH l1 <= LENGTH l2 else MEM a1 esc
 End
-
 (* Order sidecar for memory liveness. Unlike the canonical sorted sets, these
    lists model OrderedSet insertion: union appends unseen keys; deletion keeps
    survivor order. Pointer may-sets use canonical order; singleton resolutions
@@ -811,9 +797,16 @@ Definition ml_ordered_keys_def:
   ml_ordered_keys fuel bpr mems sizes pallocas cfg fn =
     let (us,ola,keys) = ml_ordered_iter fuel bpr mems sizes pallocas cfg fn
       FEMPTY FEMPTY FEMPTY [] in
+    (* Python adds the escaped allocations to every instruction's liveat,
+       creating the entries of instructions the passes never reached. *)
+    let esc = ml_escaped_allocas bpr fn in
+    let keys' = if esc = [] then keys else
+      ml_ordered_union keys (FLAT (MAP (\bb.
+        MAPi (\i inst. (bb.bb_label,i)) bb.bb_instructions) fn.fn_blocks)) in
     let ks = FOLDL (\acc addr.
       ml_ordered_union acc
-        (FILTER (\a. MEM a (ml_lookup us addr)) (ml_lookup ola addr))) [] keys in
+        (FILTER (\a. MEM a (ml_lookup us addr))
+          (ml_ordered_union (ml_lookup ola addr) esc))) [] keys' in
     FOLDL (\acc inst. ml_ordered_union acc
       (find_base_allocas_opt bpr (inst_write_op inst))) ks (fn_insts fn)
 End
@@ -834,35 +827,20 @@ Definition alloc_liveset_items_ordered_def:
     MAP (\a. (a,THE (FLOOKUP ls a))) (ml_complete_order raw localkeys ls)
 End
 
-(* Allocation priority follows final ordered liveat values in dictionary-key
-   insertion order. Canonical liveset membership remains authoritative. *)
-Definition alloc_liveset_items_def:
-  alloc_liveset_items fn ls =
-    MAP THE (FILTER IS_SOME
-      (MAP
-        (\inst.
-           let alloc = Allocation inst.inst_id in
-           case FLOOKUP ls alloc of
-             SOME live => SOME (alloc, live)
-           | NONE => NONE)
-        (REVERSE
-          (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn)))))
-End
-
 (* Python's list.sort is stable.  HOL's generic QSORT does not expose that
    contract, so use a small stable insertion sort for the observable
-   equal-liveset tie order. *)
+   equal-key tie order. *)
 Definition insert_alloc_liveset_item_def:
-  insert_alloc_liveset_item item [] = [item] /\
-  insert_alloc_liveset_item item (x::xs) =
-    if LENGTH (SND item) <= LENGTH (SND x) then item::x::xs
-    else x::insert_alloc_liveset_item item xs
+  insert_alloc_liveset_item esc item [] = [item] /\
+  insert_alloc_liveset_item esc item (x::xs) =
+    if alloc_liveset_item_le esc item x then item::x::xs
+    else x::insert_alloc_liveset_item esc item xs
 End
 
 Definition sort_alloc_liveset_items_def:
-  sort_alloc_liveset_items [] = [] /\
-  sort_alloc_liveset_items (x::xs) =
-    insert_alloc_liveset_item x (sort_alloc_liveset_items xs)
+  sort_alloc_liveset_items esc [] = [] /\
+  sort_alloc_liveset_items esc (x::xs) =
+    insert_alloc_liveset_item esc x (sort_alloc_liveset_items esc xs)
 End
 
 Definition compute_alloc_map_fuel_def:
@@ -879,7 +857,7 @@ Definition compute_alloc_map_fuel_def:
     let pre_allocated_dom = FDOM pre_allocated in
     let already = FILTER (\(alloc, _). alloc IN pre_allocated_dom) items in
     let to_alloc = FILTER (\(alloc, _). alloc NOTIN pre_allocated_dom) items in
-    let sorted = sort_alloc_liveset_items to_alloc in
+    let sorted = sort_alloc_liveset_items (ml_escaped_allocas bpr fn) to_alloc in
     let already_info = MAP (\(alloc, live).
       let pos = case FLOOKUP pre_allocated alloc of
                   SOME p => p | NONE => 0 in
@@ -948,8 +926,10 @@ Definition imported_liveset_info_def:
       | SOME live => [(a,live,p,s)]) imports)
 End
 
-(* Context allocation uses imported fixed intervals at their own livesets,
-   rather than reserving an entire callee frame only at the INVOKE. *)
+(* Imported fixed intervals participate in backward liveat and forward used,
+   so they remain live between calls (including calls through different diamond
+   arms sharing an allocation). Do not also reserve synthetic [0,eom) frames:
+   those would hide reusable gaps and discard transitive allocation identity. *)
 
 Definition compute_alloc_map_fuel_in_context_def:
   compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg
@@ -966,7 +946,7 @@ Definition compute_alloc_map_fuel_in_context_def:
     let pre_allocated_dom = FDOM pre_allocated in
     let already = FILTER (\(alloc, _). alloc IN pre_allocated_dom) items in
     let to_alloc = FILTER (\(alloc, _). alloc NOTIN pre_allocated_dom) items in
-    let sorted = sort_alloc_liveset_items to_alloc in
+    let sorted = sort_alloc_liveset_items (ml_escaped_allocas bpr fn) to_alloc in
     let already_info = MAP (\(alloc, live).
       let pos = case FLOOKUP pre_allocated alloc of
                   SOME p => p | NONE => 0 in
@@ -976,38 +956,6 @@ Definition compute_alloc_map_fuel_in_context_def:
     allocate_with_livesets global_reserved
       (imported_liveset_info imports ls ++ already_info)
       sorted_info pre_allocated
-End
-
-Definition alloc_result_to_map_def:
-  alloc_result_to_map fn (result : (allocation, num) fmap) : alloc_map =
-    FOLDL (\amap bb.
-      FOLDL (\amap' inst.
-        if is_alloca_op inst.inst_opcode then
-          case inst.inst_outputs of
-            [out] =>
-              (case FLOOKUP result (Allocation inst.inst_id) of
-                 SOME pos => amap' |+ (out, n2w pos)
-               | NONE => amap')
-          | _ => amap'
-        else amap')
-        amap bb.bb_instructions)
-      FEMPTY fn.fn_blocks
-End
-
-(* =========================================================================
-   Per-Instruction Transform
-   ========================================================================= *)
-
-Definition concretize_inst_def:
-  concretize_inst (amap : alloc_map) inst =
-    if is_alloca_op inst.inst_opcode then
-      (case inst.inst_outputs of
-         [out] =>
-           (case FLOOKUP amap out of
-              SOME addr => mk_assign_inst inst (Lit addr)
-            | NONE => mk_nop_inst inst)
-       | _ => inst)
-    else inst
 End
 
 (* Canonical static-layout rewrite: consume allocation identities directly.
@@ -1029,16 +977,6 @@ End
    Function-Level Transform
    ========================================================================= *)
 
-(* Function-level: concretize all instructions + clear NOPs.
-   Post-sunset: no calloca orphan handling needed. *)
-Definition concretize_function_def:
-  concretize_function amap fn =
-    clear_nops_function
-      (function_map_transform
-        (block_map_transform (concretize_inst amap))
-        fn)
-End
-
 Definition concretize_function_with_positions_def:
   concretize_function_with_positions positions fn =
     clear_nops_function
@@ -1046,17 +984,6 @@ Definition concretize_function_with_positions_def:
         (block_map_transform (concretize_inst_with_positions positions))
         fn)
 End
-
-Definition compute_function_alloc_map_fuel_def:
-  compute_function_alloc_map_fuel fuel fn =
-    let cfg = cfg_analyze fn in
-    let bpr = bp_analyze_fuel fuel cfg fn in
-    let result =
-      compute_alloc_map_fuel fuel fn bpr (K ([] : allocation list))
-        ([] : allocation list) cfg FEMPTY ([] : (num # num) list) in
-    alloc_result_to_map fn result
-End
-
 
 (* Convert only source-known forced IDs to the allocation-keyed seed required
    by the liveness allocator.  complete_alloc_positions still validates the
@@ -1154,25 +1081,6 @@ Definition fn_has_alloca_def:
     EXISTS (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn)
 End
 
-(* Evaluator path: concrete non-overlapping offsets without MemLiveness. *)
-Definition compute_alloc_map_linear_def:
-  compute_alloc_map_linear ([] : instruction list) pos = FEMPTY ∧
-  compute_alloc_map_linear (inst :: rest) pos =
-    if is_alloca_op inst.inst_opcode then
-      let sz = case inst_alloca_size inst of SOME n => n | NONE => 0 in
-      let amap = compute_alloc_map_linear rest (pos + sz) in
-      case inst.inst_outputs of
-        [out] => amap |+ (out, n2w pos)
-      | _ => amap
-    else
-      compute_alloc_map_linear rest pos
-End
-
-Definition compute_function_alloc_map_eval_def:
-  compute_function_alloc_map_eval fn =
-    compute_alloc_map_linear (fn_insts fn) 0
-End
-
 Definition fn_has_static_layout_def:
   fn_has_static_layout fn = IS_SOME fn.fn_eom
 End
@@ -1210,13 +1118,14 @@ End
 
 Definition fn_needs_liveness_allocation_def:
   fn_needs_liveness_allocation fn =
-    insts_have_multiple_allocas (fn_insts fn)
+    (insts_have_multiple_allocas (fn_insts fn) \/
+     (fn_has_alloca fn /\
+      EXISTS (\inst. inst.inst_opcode = INVOKE) (fn_insts fn)))
 End
 
-(* Liveness can affect placement only when there is more than one allocation.
-   With zero or one ALLOCA, Python's allocation loop has no earlier local
-   interval whose liveset can conflict, so checked first-fit completion computes
-   the same layout without running both dataflow analyses to a fixpoint. *)
+(* A single local allocation may still conflict with a callee's frame when it
+   stays live across INVOKE. Only call-free single-allocation functions can
+   skip the interference analysis in the context-aware allocator below. *)
 Definition compute_function_layout_checked_def:
   compute_function_layout_checked fuel reserved fn =
     if fn_needs_liveness_allocation fn then

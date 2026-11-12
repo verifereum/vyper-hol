@@ -15,7 +15,7 @@ Ancestors
   allocLimits gasOutcome gasSummary gasSummaryCompose fragGasMode bodySim vyperTypeCallGraph gasContext
 
 Theorem intcall_valued_return_producer:
-  intcall_forced_producer fp e ==> intcall_stmts_producer fp [Return (SOME e)]
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_forced_producer fp e ==> intcall_stmts_producer fp [Return (SOME e)]
 Proof
   strip_tac >>
   simp[intcall_stmts_producer_def, eval_stmts_singleton] >>
@@ -31,7 +31,21 @@ Proof
   Cases_on `lower_value compile_expr ce fp.jc_ret_ty e sa` >>
   rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
   `expr_body_pre ce fp.jc_cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (`~supported_expr_exists
+        (\e'. ~is_extcode e' /\ (~byte_widths_expr e' \/ ~alloc_limits_expr ce e')) e` by
+       (`~supported_stmt_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr ce e)
+           (Return (SOME e))` by
+          (irule allocLimitsPropsTheory.alloc_limits_stmt_exists >>
+           fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def]) >>
+        `(\e'. ~is_extcode e' /\ (~byte_widths_expr e' \/ ~alloc_limits_expr ce e')) =
+         (\e'. (\x. ~is_extcode x /\ ~byte_widths_expr x) e' \/
+                (\x. ~is_extcode x /\ ~alloc_limits_expr ce x) e')` by
+          (simp[FUN_EQ_THM] >> metis_tac[]) >>
+        pop_assum SUBST1_TAC >>
+        rewrite_tac[supported_expr_exists_disj] >>
+        fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
+           supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
+     irule stmt_expr_body_pre >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def,
         supported_expr_exists_def] >>
@@ -113,7 +127,8 @@ Resume intcall_valued_return_producer[terminal]:
   imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT2 (UNDISCH
     (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
   imp_res_tac (GEN_ALL (iffRL (SPEC_ALL intcall_joint_res_def))) >>
-  irule intcall_return_endpoint >> simp[] >>
+  qpat_assum `~FST _` (fn nr => irule (MATCH_MP
+    (CONV_RULE (STRIP_QUANT_CONV (REWR_CONV (GSYM AND_IMP_INTRO))) intcall_return_endpoint) nr)) >> simp[] >>
   goal_assum (drule_at (Pat `compile_internal_return_from_env _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> goal_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>

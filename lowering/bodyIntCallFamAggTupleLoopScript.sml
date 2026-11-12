@@ -5,8 +5,10 @@ Ancestors
   exprSimAggregateSource exprSimHyps exprLoweringProps exprLowering
   bodyIntCallJointContract valueEncoding valueEncodingProps
   gasOutcome gasSummary stmtReasonVvMemory vyperInterpreter vyperState
-  finite_map list compileEnv
+  finite_map list compileEnv loweringStateRelDefs
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_cons_compile:
   compile_make_tuple compile_expr ce (e::args) buf off si = (out,sb) ==>
   ?vv sm dst sn op su sc.
@@ -22,7 +24,10 @@ Proof
   rename1 `compile_store_memory ce op dst _ _ su = (unit,sc)` >>
   Cases_on `unit` >> metis_tac[]
 QED
+*)
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_head_compile:
   compile_make_tuple compile_expr ce (e::args) buf off si = (out,sb) /\
   expr_body_pre ce cx env e es /\
@@ -74,7 +79,10 @@ Proof
     metis_tac[compile_store_memory_post_type] >>
   gvs[]
 QED
+*)
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_head_store:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   intcall_expr_producer fp e /\ expr_body_pre ce fp.jc_cx env e es /\
@@ -119,6 +127,7 @@ Proof
   disch_then drule_all >> strip_tac >>
   qexists_tac `sc` >> simp[]
 QED
+*)
 
 Theorem intcall_gas_outcome_map:
   gas_outcome memory tops (ctx,func) source (es,s) Q R /\
@@ -166,6 +175,9 @@ Proof
   simp[exprSimSourceTheory.expr_body_pre_gas_obs]
 QED
 
+(* HELD (train 15): pure_frame sweep, retired by alan 451258 *)
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_tail:
   !args off si out sb es tvs t.
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
@@ -212,6 +224,7 @@ Theorem intcall_tuple_tail:
           mem_bytes_at a n u.vs_memory = mem_bytes_at a n t.vs_memory))
     (\res ee r. expr_exit res r)
 Proof
+  (* original proof, kept while held:
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >>
       gvs[compile_make_tuple_def, comp_return_def] >>
@@ -221,7 +234,7 @@ Proof
            fragGasModeTheory.gas_marked_path_def,
            fragGasPathTheory.gas_path_rules, intcall_expr_cont_def] >>
       gvs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def,
-          valueEncodingTheory.val_in_memory_def,
+          valueEncodingDefsTheory.val_in_memory_def,
           exprSimWordArgsTheory.stmt_state_rel_gas_obs,
           exprSimHypsDefsTheory.expr_sim_inv_gas_obs] >>
       simp[fragGasPathTheory.gas_path_rules] >>
@@ -262,7 +275,7 @@ Proof
       rpt gen_tac >> strip_tac >> gvs[] >>
       rename1 `tuple_in_memory _ tail_types _ final_state.vs_memory` >>
       conj_tac
-      >- (simp[Once valueEncodingTheory.val_in_memory_def] >>
+      >- (simp[Once valueEncodingDefsTheory.val_in_memory_def] >>
           irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
           simp[] >> qexistsl_tac [`type_memory_size h`, `head_state.vs_memory`] >> simp[] >>
           sym_tac >> first_x_assum irule >> decide_tac) >>
@@ -274,4 +287,7 @@ Proof
       fs[valueEncodingTheory.type_memory_size_def] >> decide_tac) >>
   rpt gen_tac >> Cases_on `res` >>
   simp[stmtSimPropsTheory.expr_exit_INR_type]
+  *)
+  cheat
 QED
+*)

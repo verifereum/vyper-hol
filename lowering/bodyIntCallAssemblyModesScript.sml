@@ -3,9 +3,10 @@ Ancestors
   bodyIntCallAssemblyFrame bodyIntCallCompletedModes bodyIntCallCompletedFrame
   compileEnv exprLoweringProps loweringPosts venomExecSemantics venomState
   fragGasFocus fragGasPath finite_map list bodyIntCallEmitBoundary
-  localPtrsProps emitHelper emitHelperProps intCallFrame words
+  localPtrsProps emitHelper emitHelperProps intCallFrame words loweringStateRelDefs
 
 Theorem void_return_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -17,7 +18,7 @@ Theorem void_return_endpoint:
   stmt_state_rel ctx func ce cx es t /\
   state_rel other ce cx (ee with scopes := []) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := es.scopes) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 es sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce es.scopes t id b sz) /\
   (!id b sz aid off asz.
@@ -47,6 +48,7 @@ Proof
 QED
 
 Theorem memory_return_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -63,7 +65,7 @@ Theorem memory_return_endpoint:
   stmt_state_rel ctx func ce cx es t /\
   state_rel other ce cx (ee with scopes := []) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := es.scopes) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 es sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce es.scopes t id b sz) /\
   (!id b sz aid off asz.
@@ -117,6 +119,7 @@ Proof
 QED
 
 Theorem stack_return_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_multi_op INVOKE ops nret si = (results,sj) /\
   store_multi_results buf.buf_operand results 0 sj = ((),sb) /\
@@ -142,7 +145,7 @@ Theorem stack_return_endpoint:
   stmt_state_rel ctx func ce cx es t /\
   state_rel other ce cx (ee with scopes := []) cs /\
   immutable_alloca_sep func ce cx (ee with scopes := es.scopes) t /\
-  wb_frame ce es0 sa s0 t /\
+  wb_frame ce es0 es sa s0 t /\
   (!id b sz. local_region ce es0.scopes s0 id b sz ==>
     local_region ce es.scopes t id b sz) /\
   (!id b sz aid off asz.
@@ -195,6 +198,7 @@ Proof
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sj sb))` >>
   irule (ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] stack_completed_endpoint) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_multi_op _ _ _ _ = _`)) >>

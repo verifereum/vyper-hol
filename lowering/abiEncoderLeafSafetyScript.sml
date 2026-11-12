@@ -51,7 +51,7 @@ Theorem word_load_step_inv:
   ?w. eval_operand src s = SOME w /\
       middle = update_var tmp (mload (w2n w) s) s
 Proof
-  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
        exec_read1_def, AllCaseEqs()] >> metis_tac[]
 QED
 
@@ -98,7 +98,7 @@ Proof
       (middle with vs_inst_idx := SUC loaded.vs_inst_idx) t` by
     (irule local_prefix_nonterminator_inv >>
      simp[Abbr `cut`, mk_inst_def, is_terminator_def] >> metis_tac[]) >>
-  gvs[step_inst_non_invoke, mk_inst_def, step_inst_base_def, exec_write2_def] >>
+  gvs[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs, exec_write2_def] >>
   qpat_x_assum `local_prefix _ _ _ _ t` mp_tac >>
   simp[Once local_prefix_cases, abi_observer_step_def, Abbr `cut`,
        Abbr `loaded`, mstore_def, write_memory_with_expansion_def,

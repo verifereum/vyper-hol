@@ -1,24 +1,18 @@
 Theory stmtSimLogData
 Ancestors
   loweringPosts
-  stmtSimLogTopics exprSimBufferStore stmtLowering context compileEnv
+  stmtSimLogTopics exprSimBufferStore stmtLowering context compileEnv loweringStateRelDefs
   supportedTypes vyperValue valueEncoding words list abiEncoderInput
   emitHelper exprLoweringProps venomExecSemantics venomInst venomState emitHelperProps
 
-Theorem compile_log_store_data_cons:
-  supported_scalar_type ty ==>
-  compile_log_store_data cenv ((src,ty)::rest) buf off =
+Theorem compile_log_store_data_scalar_cons:
+  compile_log_store_data cenv ((src,ty)::rest) (ty::MAP SND rest) buf off =
     do dst <- emit_op ADD [buf; Lit (n2w off)];
        compile_store_memory cenv src dst ty ty;
-       compile_log_store_data cenv rest buf (off + type_memory_bytes cenv ty)
+       compile_log_store_data cenv rest (MAP SND rest) buf (off + type_memory_bytes cenv ty)
     od
 Proof
-  strip_tac >> simp[Once compile_log_store_data_def] >>
-  drule log_scalar_topic_shape >> strip_tac >>
-  Cases_on `is_bytestring_type ty`
-  >- simp[compile_store_memory_def] >>
-  `is_word_type ty` by metis_tac[] >>
-  simp[compile_store_memory_def]
+  simp[Once compile_log_store_data_def]
 QED
 
 Theorem log_scalar_memory_size:
@@ -60,7 +54,7 @@ Proof
   simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   strip_tac >> gvs[] >> simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[Once run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, eval_operand_def, bind_outputs_def] >>
   simp[run_inst_seq_def, word_add_n2w, lookup_var_update_var] >>
   conj_tac >- simp[update_var_def] >>

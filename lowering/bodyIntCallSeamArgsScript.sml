@@ -20,14 +20,14 @@ Libs
    the whole call. *)
 Theorem intcall_args_frame_setup:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
-   mut args ret ss rr Q R.
+   mut nr args ret ss rr Q R.
     body_inv tops ctx cenv cx /\
     cenv_module_pins tops cenv /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
-    (~MEM (NONE,name) cx.stk ==> body_results_ok cx es) /\
+      SOME (mut,nr,args,[],ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_ok cx es) /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -40,8 +40,8 @@ Theorem intcall_args_frame_setup:
     (!res ee r. expr_exit res r ==> R res ee r) /\
     (!prev penv rtv es1 t.
        intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-         (mut,args,ret,ss,rr) prev penv rtv es1 t ==>
-       gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut ss prev rtv)
+         (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
+       gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut nr ss prev rtv)
          (es1,t) Q R) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) (es0,s0) Q R

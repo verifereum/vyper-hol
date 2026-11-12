@@ -1,5 +1,7 @@
 (* End-to-End Vyper-to-EVM Correctness (PLAN §2.1/§8.1).
- * TOP-LEVEL: vyper_call_correct (exact §2.1, composed from S1-S7),
+ * TOP-LEVEL: vyper_call_correct (exact §2.1, composed from S1-S7, over the
+ * accepted finalizers; vyper_call_correct_identity and
+ * vyper_call_correct_asm_opt are its two cases),
  * e2e_vyper_to_evm (admission-free generic §8.1 composition),
  * e2e_venom_pipeline, compile_vyper_runtime_bytecode (preserved proved APIs).
  * e2e_deploy_correctness (the §5.11 admission) is in e2eDeployCorrectness.
@@ -17,14 +19,13 @@ Ancestors
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource vfmExecution
-  venomPipelineCorrect
   passSimulationDefs
-  codegenCorrectness immutableCodeLayout
+  codegenCorrectness immutableCodeLayout asmOptimizer
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
   vyperInterpreter
-  compileEnv compileVyper
+  compileEnv loweringStateRelDefs compileVyper
   venomInst
   list
 
@@ -626,32 +627,6 @@ Proof
   >> Cases_on `y` >> gvs[external_call_result_rel_legacy_def]
 QED
 
-(* Bridge from vyper_evm_correspondence to run_call + call_result_matches.
-
-   vyper_evm_correspondence is defined in terms of VFM's `run` which
-   executes all frames to completion. call_result_matches uses `run_call`
-   which stops when the current call frame completes.
-
-   For outermost calls (LENGTH es.contexts = 1): run_call = run because
-   step never empties the context stack (step_preserves_nonempty_contexts).
-   For inner calls (LENGTH es.contexts > 1): run_call stops when
-   handle_exception pops the callee frame; the postcondition includes
-   the frame-popping effects (stack push, account rollback on revert).
-
-   This encapsulates the EVM execution semantics reasoning about
-   context stack management, handle_exception, and the OWHILE loop. *)
-Theorem evm_correspondence_to_call_result[local]:
-  !tenv event_info am tx ret es.
-    vyper_evm_correspondence_legacy tenv event_info ret am tx es /\
-    ~NULL es.contexts
-    ==>
-    ?r es_final.
-      run_call_legacy es = SOME (r, es_final) /\
-      call_result_matches_legacy tenv event_info am tx ret r es es_final
-Proof
-  cheat
-QED
-
 (* ===== Main Correctness Theorem ===== *)
 
 (* LEGACY compiler correctness for a single external call.
@@ -666,8 +641,9 @@ QED
 
    Gas is existential: there exists a gas bound such that with enough
    gas, EVM execution produces the correct result. *)
-(* TASK049 original theorem statement/proof retained verbatim:
-Theorem vyper_call_correct:
+(* TASK049's original statement and proof of the legacy wrapper
+   (vyper_call_correct_legacy below), kept as text, not compiled:
+Theorem vyper_call_correct_legacy:
   !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
     resolve_o1_policy policy = SOME rpolicy /\
@@ -717,9 +693,10 @@ QED
 
 *)
 
-(* Preserved legacy public wrapper, STAGE-ADMITTED. Its existing admitted
-   dependencies remain classified as such; NOT a new-boundary certificate. *)
-Theorem vyper_call_correct:
+(* Preserved legacy wrapper, STAGE-ADMITTED. Its existing admitted
+   dependencies remain classified as such; NOT a new-boundary certificate.
+   Not the top theorem: that is vyper_call_correct at the end. *)
+Theorem vyper_call_correct_legacy:
   !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
     resolve_o1_policy policy = SOME rpolicy /\
@@ -771,19 +748,19 @@ QED
 
 *)
 
-Theorem gas_variant_outcomes[local]:
+Theorem gas_variant_outcomes:
   gas_variant si so ==> si.vs_outcomes = so.vs_outcomes
 Proof
   rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
 QED
 
-Theorem gas_variant_call_ctx[local]:
+Theorem gas_variant_call_ctx:
   gas_variant si so ==> si.vs_call_ctx = so.vs_call_ctx
 Proof
   rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
 QED
 
-Theorem gas_variant_initial_venom_state_rel[local]:
+Theorem gas_variant_initial_venom_state_rel:
   gas_variant si so /\ initial_venom_state_rel tops am tx so ==>
   initial_venom_state_rel tops am tx si
 Proof
@@ -793,18 +770,17 @@ Proof
 QED
 
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
-(* The raw O1 shape theorems no longer need immutable_free_program; it
-   remains in this statement, which is unchanged. *)
+(* The widened gate supplies the real stages' remaining source restrictions. *)
 
-Theorem vyper_call_correct:
+Theorem vyper_call_correct_identity:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ immutable_free_program tops /\
+    supported_program tops /\
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -812,6 +788,8 @@ Theorem vyper_call_correct:
        call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
+  drule_all call_state_rel_call_outcomes_ok >> strip_tac >>
+  qpat_x_assum `call_outcomes_storage_ok _ _ _` kall_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
@@ -820,7 +798,7 @@ Proof
     metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
+  drule lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all entry_venom_state_initial_venom_state_rel >>
   disch_then (qspec_then `cplan` assume_tac) >>
@@ -843,8 +821,8 @@ Proof
      gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def]) >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
-    (drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-     drule run_lowering_eom_none >> simp[fixed_region_reserved_def]) >>
+    (drule lower_vyper_runtime_unit_raw_defaults >>
+     simp[fixed_region_reserved_def]) >>
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
@@ -934,6 +912,56 @@ Proof
   >- metis_tac[external_call_dead_observations] >>
   gen_tac >> irule codegen_correct >> simp[] >>
   qexistsl_tac [`Inv`, `prog`, `rpolicy`] >> simp[]
+QED
+
+(* The final assembly optimizer's case: the program, compiled with Python's
+   O1 final assembly optimizer, under the same hypotheses plus the temporary
+   exclusion of programs that read their own code. *)
+Theorem vyper_call_correct_asm_opt:
+  !policy tops deploy_bc runtime_bc am tx ret es.
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    ~program_reads_self_code tops /\
+    supported_program tops /\ immutable_free_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       call_result_rel tops ret am tx es r es')
+Proof
+  cheat
+QED
+
+(* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
+   O1 final assembly).  The optimizer's case excludes, for now, programs that
+   read their own code. *)
+Theorem vyper_call_correct:
+  !fin policy tops deploy_bc runtime_bc am tx ret es.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\ immutable_free_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       call_result_rel tops ret am tx es r es')
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
+  >- (drule_all vyper_call_correct_identity >> simp[])
+  >> `~program_reads_self_code tops` by fs[] >>
+  drule_all vyper_call_correct_asm_opt >> simp[]
 QED
 
 (* ===== Component Theorems ===== *)

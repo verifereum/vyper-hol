@@ -1,13 +1,12 @@
 (* Allocator ownership for the actual dynamic calldata shell. *)
 Theory calldataDynOwned
 Ancestors
-  abiDecoderRange
-  calldataDynInit calldataDynStep calldataChildFrame actualAllocExec fragExecMem
+  valueEncodingDefs loweringStateRelDefs abiDecoderLoopRegisters calldataDynInit calldataDynStep calldataChildFrame actualAllocExec fragExecMem
   allocaFrontierBound allocaBudgetProps abiDecoderIndexInit abiDecoderContract
   compileEnv emitHelper venomState venomInst venomExecSemantics venomMemProps venomMemDefs
   valueEncodingProps finite_map words arithmetic list rich_list
   abiDecoderIndexedAddress abiDecoderReentryAddress abiDecoderReentry
-  abiDecoderGuards abiDecoderFrame emitHelperProps exprLoweringProps abiEncoder
+  abiDecoderGuards abiDecoderRange abiDecoderFrame emitHelperProps exprLoweringProps abiEncoder
   abiDecoderExecution valueEncoding safeSequence instIdxIndep
   abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup abiDecoderArraySetupInputs
   abiDecoderLoopEmit abiDecoderCounters abiDecoderDynarrayPrefix
@@ -234,7 +233,11 @@ Proof
   gvs[run_inst_seq_def, AllCaseEqs()] >>
   `abi_decoder_operand_live (st.cs_next_var + 1) op /\
    abi_decoder_operand_live (st.cs_next_var + 2) op` by
-    (Cases_on `op` >>
+    (Cases_on `op`
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac)
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   qpat_x_assum `step_inst_base _ s = _` mp_tac >>
@@ -371,7 +374,11 @@ Resume calldata_array_loop_init_safe_live[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (Cases_on `op` >>
+    (Cases_on `op`
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac)
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `eval_operand op g = eval_operand op initial` by
@@ -571,7 +578,9 @@ Theorem calldata_read_repeat:
     t.vs_data_section = s.vs_data_section /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
     t = update_var (STRING #"%" (toString st.cs_next_var))
-      (abi_decode_load CALLDATALOAD p s) s /\ inst_extends st st'
+      (abi_decode_load CALLDATALOAD p s) s /\ inst_extends st st' /\
+    (!limit_st. fresh_vars_wrt limit_st s /\ st'.cs_next_var <= limit_st.cs_next_var ==>
+      fresh_vars_wrt limit_st t)
 Proof
   strip_tac >> drule inst_extends_emit_op >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
@@ -581,6 +590,10 @@ Proof
     [STRING #"%" (toString st.cs_next_var)]) s = OK t` by
     (simp_tac bool_ss [Abbr `t`] >> irule abi_decode_read_step >>
      simp[abi_decode_source_opcode_def]) >>
+  `!limit_st. fresh_vars_wrt limit_st s /\ st'.cs_next_var <= limit_st.cs_next_var ==>
+     fresh_vars_wrt limit_st t` by
+    (simp_tac bool_ss [Abbr `t`] >> rpt strip_tac >>
+     irule abi_decoder_generated_update_fresh >> simp[] >> decide_tac) >>
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var,
        update_var_def] >>
@@ -652,8 +665,7 @@ Theorem calldata_element_pointer_repeat:
     t.vs_halted = s.vs_halted /\ inst_extends st st'
 Proof
   rpt gen_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_zero,
-       comp_bind_def, comp_return_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,c1)` >>
@@ -733,8 +745,8 @@ Proof
   strip_tac >>
   `st0.cs_next_var = loop_st.cs_next_var + 4` by
     (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def,
-          abi_decode_position_header_delta_def] >>
+     simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def, abi_decode_position_header_zero,
+       abi_decode_position_header_delta_def] >>
      strip_tac >> gvs[]) >>
   rpt gen_tac >> disch_tac >>
   `abi_decoder_operand_live loop_st.cs_next_var op` by
@@ -925,8 +937,7 @@ Theorem calldata_element_pointer_code_shape:
     (emitted_insts st st')
 Proof
   rpt gen_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_zero,
-       comp_bind_def, comp_return_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
@@ -1498,6 +1509,9 @@ Proof
   asm_rewrite_tac [] >> conj_tac >- decide_tac >>
   qexists_tac `ins` >> asm_rewrite_tac []
 QED
+
+Theorem calldata_owned_interval_replace_let[local] =
+  GEN_ALL (SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace)
 
 Theorem calldata_owned_counter_update:
   (!id q k. lo <= id /\ id < hi /\ FLOOKUP s.vs_allocas id = SOME (q,k) ==>
@@ -2588,7 +2602,7 @@ Resume calldata_owned_header_step[ownership_frame]:
   qpat_assum `Abbrev (Own = _)` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
   pure_rewrite_tac[markerTheory.Abbrev_def] >> disch_then SUBST1_TAC >> BETA_TAC >>
   ntac 8 disch_tac >>
-  ho_match_mp_tac (GEN_ALL (SIMP_RULE bool_ss [LET_THM] calldata_owned_interval_replace)) >>
+  ho_match_mp_tac calldata_owned_interval_replace_let >>
   qexistsl_tac [`u`,`st1.cs_next_id`,`middle.cs_next_id`] >>
   asm_rewrite_tac[] >> decide_tac
 QED
@@ -3018,8 +3032,8 @@ Theorem calldata_nonbulk_owned:
     ((hdr,body_lbl,exit_lbl),st0) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
-    (Lit 0w) (Lit 0w) di middle = ((),st1) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
   header_st.cs_next_id < middle.cs_next_id /\
@@ -3348,7 +3362,9 @@ Theorem calldata_gt_repeat:
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
-    inst_extends st st'
+    inst_extends st st' /\
+    (!limit_st. fresh_vars_wrt limit_st s /\ st'.cs_next_var <= limit_st.cs_next_var ==>
+      fresh_vars_wrt limit_st t)
 Proof
   strip_tac >> drule inst_extends_emit_op >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
@@ -3357,6 +3373,10 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id GT [lhs;rhs]
     [STRING #"%" (toString st.cs_next_var)]) s = OK t` by
     (simp_tac bool_ss [Abbr `t`] >> irule step_GT >> simp[]) >>
+  `!limit_st. fresh_vars_wrt limit_st s /\ st'.cs_next_var <= limit_st.cs_next_var ==>
+     fresh_vars_wrt limit_st t` by
+    (simp_tac bool_ss [Abbr `t`] >> rpt strip_tac >>
+     irule abi_decoder_generated_update_fresh >> simp[] >> decide_tac) >>
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var,
        update_var_def] >>
@@ -3372,7 +3392,9 @@ Theorem calldata_iszero_repeat:
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
-    inst_extends st st'
+    inst_extends st st' /\
+    (!limit_st. fresh_vars_wrt limit_st s /\ st'.cs_next_var <= limit_st.cs_next_var ==>
+      fresh_vars_wrt limit_st t)
 Proof
   strip_tac >> drule inst_extends_emit_op >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
@@ -3381,6 +3403,10 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id ISZERO [arg]
     [STRING #"%" (toString st.cs_next_var)]) s = OK t` by
     (simp_tac bool_ss [Abbr `t`] >> irule step_ISZERO >> simp[]) >>
+  `!limit_st. fresh_vars_wrt limit_st s /\ st'.cs_next_var <= limit_st.cs_next_var ==>
+     fresh_vars_wrt limit_st t` by
+    (simp_tac bool_ss [Abbr `t`] >> rpt strip_tac >>
+     irule abi_decoder_generated_update_fresh >> simp[] >> decide_tac) >>
   qexists_tac `t` >> gvs[Abbr `t`] >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var,
        update_var_def] >>
@@ -3397,7 +3423,9 @@ Theorem calldata_count_guard_repeat_sequence:
       eval_operand op t = eval_operand op s) /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\ t.vs_allocas = s.vs_allocas /\
-    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
+    (!limit_st. fresh_vars_wrt limit_st s /\ st'.cs_next_var <= limit_st.cs_next_var ==>
+      fresh_vars_wrt limit_st t)
 Proof
   simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >>
@@ -3438,12 +3466,29 @@ Proof
       `abi_decoder_operand_live c2.cs_next_var count_op` by
         metis_tac[abi_decoder_operand_live_mono] >>
       metis_tac[]) >>
-  rpt strip_tac >>
-  `abi_decoder_operand_live c1.cs_next_var op /\
-   abi_decoder_operand_live c2.cs_next_var op` by
-    metis_tac[abi_decoder_operand_live_mono] >>
-  metis_tac[]
+  conj_tac
+  >- (rpt strip_tac >>
+      `abi_decoder_operand_live c1.cs_next_var op /\
+       abi_decoder_operand_live c2.cs_next_var op` by
+        metis_tac[abi_decoder_operand_live_mono] >> metis_tac[]) >>
+  suspend "fresh"
 QED
+
+Resume calldata_count_guard_repeat_sequence[fresh]:
+  `c1.cs_next_var <= last_st.cs_next_var /\
+   c2.cs_next_var <= last_st.cs_next_var /\
+   c3.cs_next_var <= last_st.cs_next_var` by
+    (imp_res_tac emitted_insts_emit_op >>
+     imp_res_tac emitted_insts_emit_void >> decide_tac) >>
+  rpt strip_tac >>
+  qpat_x_assum `!lim. _ ==> fresh_vars_wrt lim s3` irule >>
+  conj_tac >- decide_tac >>
+  qpat_x_assum `!lim. _ ==> fresh_vars_wrt lim s2` irule >>
+  conj_tac >- decide_tac >>
+  first_x_assum irule >> simp[] >> decide_tac
+QED
+
+Finalise calldata_count_guard_repeat_sequence
 
 Theorem calldata_count_guard_repeat_rejected:
   abi_decode_count_guard CALLDATALOAD src limit st = (count_op,st') /\
@@ -3499,7 +3544,9 @@ Theorem calldata_array_header_repeat_sequence:
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op t = eval_operand op s) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    t.vs_halted = s.vs_halted /\ inst_extends st st'
+    t.vs_halted = s.vs_halted /\ inst_extends st st' /\
+    (!limit_st. fresh_vars_wrt limit_st s /\ st'.cs_next_var <= limit_st.cs_next_var ==>
+      fresh_vars_wrt limit_st t)
 Proof
   simp[abi_decode_array_header_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >>
@@ -3518,6 +3565,11 @@ Proof
      drule emitted_insts_emit_void >> strip_tac >>
      qpat_x_assum `loaded = _` kall_tac >> fs[run_inst_seq_def]) >>
   drule inst_extends_emit_void >> strip_tac >>
+  `!limit_st. fresh_vars_wrt limit_st s /\ last_st.cs_next_var <= limit_st.cs_next_var ==>
+     fresh_vars_wrt limit_st (mstore d (abi_decode_load CALLDATALOAD p s) loaded)` by
+    (rpt strip_tac >> irule fresh_vars_wrt_mstore >>
+     qpat_x_assum `!lim. _ ==> fresh_vars_wrt lim loaded` irule >>
+     drule emitted_insts_emit_void >> strip_tac >> simp[]) >>
   qexists_tac `mstore d (abi_decode_load CALLDATALOAD p s) loaded` >>
   conj_tac
   >- (irule run_inst_seq_compose_ok >> qexistsl_tac [`loaded`,`c1`] >> simp[]) >>
@@ -3778,9 +3830,8 @@ Resume calldata_array_loop_init_repeat_safe[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (conj_tac >>
-     irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
-     qexists_tac `st.cs_next_var` >> asm_rewrite_tac[] >> decide_tac) >>
+    (conj_tac >> irule abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> simp[]) >>
   `eval_operand op h = eval_operand op initial` by metis_tac[] >>
   drule_all calldata_index_init_live_frame >> simp[]
 QED
@@ -4077,6 +4128,7 @@ QED
 
 Finalise calldata_owned_header_initial_repeat
 
+Theorem calldata_owned_header_initial_repeat_simp[local] = SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat
 
 (* Composition from the owned header boundary, independently of register freshness. *)
 Theorem calldata_owned_after_initial_repeat[local]:
@@ -4414,8 +4466,8 @@ Theorem calldata_nonbulk_owned_repeat:
     ((hdr,body_lbl,exit_lbl),st0) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
-    (Lit 0w) (Lit 0w) di middle = ((),st1) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
   header_st.cs_next_id < middle.cs_next_id /\
@@ -4579,9 +4631,9 @@ Proof
   qpat_assum `lookup_block exit_lbl _ = _`
     (irule_at (Pat `lookup_block exit_lbl _ = _`)) >>
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
-  >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
-  irule (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat) >>
+  rpt conj_tac >>
+  FIRST [first_assum (ACCEPT_TAC o BETA_RULE), simp_tac bool_ss []] >>
+  irule calldata_owned_header_initial_repeat_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
   qpat_assum `abi_decode_loop_prefix _ _ _ _ _ = _`
@@ -4616,7 +4668,8 @@ Proof
   strip_tac >>
   `abi_decode_count_guard CALLDATALOAD src (limit MOD dimword (:256)) st =
     (count_op,st')` by simp[calldata_count_guard_mod_limit] >>
-  drule calldata_count_guard_repeat_sequence >> simp[]
+  drule calldata_count_guard_repeat_sequence >> simp[] >>
+  disch_then drule_all >> strip_tac >> qexists_tac `t` >> simp[]
 QED
 
 Theorem calldata_count_guard_repeat_rejected_mod:
@@ -4711,11 +4764,8 @@ Proof
   `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w)
      (maxn MOD dimword (:256)) abi_sz st = ((ip,cnt),loop_st)` by
     (qpat_assum `abi_decode_array_loop_init _ _ _ _ _ maxn _ _ = _` mp_tac >>
-     simp_tac bool_ss [abi_decode_array_loop_init_def,
-        abi_decode_dynarray_position_prefix_zero_base,
-        abiDecoderBytesBoundTheory.abi_decode_bytes_head_def,
-        abi_decode_dynarray_payload_guard_def,
-        abi_decode_dynarray_prefix_def,
+     simp_tac bool_ss [abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+        abi_decode_dynarray_position_prefix_def, compile_abi_dec_addr_def,
         comp_bind_def, comp_ignore_bind_def, calldata_count_guard_mod_limit]) >>
   `maxn MOD dimword (:256) < dimword (:256)` by simp[] >>
   drule_all calldata_array_loop_init_repeat_safe >>
@@ -5161,11 +5211,8 @@ Proof
   `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w)
      (maxn MOD dimword (:256)) abi_sz st = ((ip,cnt),loop_st)` by
     (qpat_assum `abi_decode_array_loop_init _ _ _ _ _ maxn _ _ = _` mp_tac >>
-     simp_tac bool_ss [abi_decode_array_loop_init_def,
-        abi_decode_dynarray_position_prefix_zero_base,
-        abiDecoderBytesBoundTheory.abi_decode_bytes_head_def,
-        abi_decode_dynarray_payload_guard_def,
-        abi_decode_dynarray_prefix_def,
+     simp_tac bool_ss [abi_decode_array_loop_init_def, abi_decode_dynarray_prefix_def,
+        abi_decode_dynarray_position_prefix_def, compile_abi_dec_addr_def,
         comp_bind_def, comp_ignore_bind_def, calldata_count_guard_mod_limit]) >>
   `maxn MOD dimword (:256) < dimword (:256)` by simp[] >>
   mp_tac (Q.INST [`maxn` |-> `maxn MOD dimword (:256)`]
@@ -5181,6 +5228,8 @@ Proof
      disch_then (ACCEPT_TAC o CONJUNCT2)) >>
   disj2_tac >> qexists_tac `u` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+Theorem calldata_owned_header_initial_repeat_observed_simp[local] = SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat_observed
 
 Theorem calldata_owned_header_step_apply_observed[local]:
   Own = (\lo hi s. !id q k.
@@ -5703,8 +5752,8 @@ Theorem calldata_nonbulk_owned_repeat_observed:
     ((hdr,body_lbl,exit_lbl),st0) /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
-    (Lit 0w) (Lit 0w) di middle = ((),st1) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    (Lit 0w) di middle = ((),st1) /\
   abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),end_st) /\
   st.cs_next_id <= header_st.cs_next_id /\
   header_st.cs_next_id < middle.cs_next_id /\
@@ -5868,9 +5917,10 @@ Proof
   qpat_assum `lookup_block exit_lbl _ = _`
     (irule_at (Pat `lookup_block exit_lbl _ = _`)) >>
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
-  >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
-  irule (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat_observed) >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, first_assum (ACCEPT_TAC o BETA_RULE),
+         simp_tac bool_ss []] >>
+  irule calldata_owned_header_initial_repeat_observed_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
   qpat_assum `abi_decode_loop_prefix _ _ _ _ _ = _`

@@ -1,7 +1,7 @@
 (* Spatial authorization only: provenance does not itself certify execution. *)
 Theory bodyIntCallWriteAuthorization
 Ancestors
-  bodyIntCallResourceSpans intCallCallee compileEnv
+  bodyIntCallResourceSpans intCallCallee compileEnv loweringStateRelDefs
 
 Theorem provenance_protected_regions:
   (!a k. P a k ==> a + k <= lo) /\

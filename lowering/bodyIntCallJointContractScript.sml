@@ -1,7 +1,7 @@
 (* The contract of the joint reachable induction over an internal callee's
    body (seam 2, intcall_callee_body_sim): the usual simulation carried
-   together with a resource invariant, I below.  DRAFT: definitions and
-   frozen leaf statements only; every leaf is cheated.
+   together with a resource invariant, I below: its definitions and the
+   frozen leaf statements.
 
    TOP-LEVEL definitions:
    - intcall_frame: the parameters fixed for one callee body;
@@ -58,43 +58,28 @@ Datatype:
   |>
 End
 
-(* The caller's compile env agrees with every function's
-   build_compile_env for tops on the module-level fields the callee's
-   package env takes from tops: the module, module-variable types and
-   locations (immutables included), flag metadata and method ids.  body_inv pins the other module-level
-   fields this way. *)
-Definition cenv_module_pins_def:
-  cenv_module_pins tops cenv <=>
-    cenv.ce_module = NONE /\
-    cenv.ce_module_var_type = build_var_type_map tops /\
-    cenv.ce_module_vars =
-      add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
-        tops 0 (add_module_var_locations tops FEMPTY) /\
-    cenv.ce_flag_member_id = FST (build_flag_info tops (K (K 0)) (K 0)) /\
-    cenv.ce_flag_n_members = SND (build_flag_info tops (K (K 0)) (K 0)) /\
-    cenv.ce_method_id =
-      (\s tys. w2n (calldata_method_id
-                     (function_selector s (vyper_to_abi_types (type_env tops) tys))))
-End
-
-Theorem build_compile_env_module_pins:
-  cenv_module_pins tops
-    (build_compile_env tops vis mut fname args ret fbody use_trans)
+(* A supported program declares no memberless struct (what Vyper rejects):
+   supported_declaration_header's StructDecl arm requires ~NULL fields, and
+   supported_struct_fields returns the fields of a StructDecl in tops. *)
+Triviality struct_fields_nonempty_headers:
+  !ts id fs.
+    EVERY (supported_declaration_header tops) ts /\
+    supported_struct_fields ts id = SOME fs ==> fs <> []
 Proof
-  simp[cenv_module_pins_def, compileVyperTheory.build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[])
+  Induct >> simp[supportedTypesTheory.supported_struct_fields_def] >>
+  rpt gen_tac >> PairCases_on `id` >>
+  simp[supportedTypesTheory.supported_struct_fields_def] >> strip_tac >>
+  gvs[AllCaseEqs(), listTheory.NULL_EQ, supportedDeclsTheory.supported_declaration_header_def] >>
+  metis_tac[]
 QED
 
-(* A supported program declares no memberless struct: the interim
-   condition trunk's supported_program carries until the checker's
-   rejection of memberless structs (what Vyper rejects) reaches it.  Held
-   here; it is proved once supported_declaration_headers' StructDecl clause
-   requires fields <> []. *)
 Theorem supported_program_struct_fields_nonempty:
   supported_program tops /\ supported_struct_fields tops id = SOME fs ==>
   fs <> []
 Proof
-  cheat
+  rw[supportedProgramTheory.supported_program_def,
+     supportedDeclsTheory.supported_declaration_headers_def] >>
+  metis_tac[struct_fields_nonempty_headers]
 QED
 
 (* The hypotheses on the fixed parameters alone: P lies below lo and clear
@@ -102,8 +87,8 @@ QED
    for owner; the return PC, the root return buffer's pointer and the
    immutable base are reserved, every reserved operand is a variable the
    prologue defined at the operand origin, and the return PC holds pc
-   there; no supported struct is memberless (the interim condition trunk's
-   supported_program carries until the checker's rejection reaches it); the return buffer's capacity is the return value's size and P
+   there; no supported struct is memberless (supported_program requires
+   it, supported_program_struct_fields_nonempty); the return buffer's capacity is the return value's size and P
    misses it; the source return type evaluates to ret_tv.  The root env
    returns internally (RET to the return PC, as the prologue sets it), with
    the stack-return count of the declared return type, and a return buffer
@@ -207,7 +192,7 @@ Definition intcall_expr_cont_def:
        (!n b sz'. local_region ce es.scopes s n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory) /\
-    locals_kept ce es s u
+    locals_kept ce es ee s u
 End
 
 (* ===== Expression producers ===== *)
@@ -251,6 +236,7 @@ Definition intcall_expr_producer_def:
                 a + k < dimword (:256) /\
                 (fp.jc_lo <= a \/
                  ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+           (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 End
@@ -289,18 +275,22 @@ Definition intcall_forced_producer_def:
                 a + k < dimword (:256) /\
                 (fp.jc_lo <= a \/
                  ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+           (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 End
 
 (* Mapping-place producer: an expression naming a mapping
-   (expr_map_pre, not well_typed_expr), with expr_map_sim's certificate. *)
+   (expr_map_pre, not well_typed_expr), with expr_map_sim's certificate.
+   It covers effectful mapping places too (nested[f()] in nested[f()][k]),
+   since supported_effect_expr's Subscript clause admits them as bases. *)
 Definition intcall_map_producer_def:
   intcall_map_producer fp e <=>
     !ce env es sa sb s ty vv.
       intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
       expr_map_pre ce fp.jc_cx env e es /\
-      supported_place_expr fp.jc_tops e /\
+      (supported_place_expr fp.jc_tops e \/
+       supported_effect_place_expr fp.jc_tops e) /\
       calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
       compile_expr ce ty e sa = (vv,sb) /\
       fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
@@ -316,6 +306,7 @@ Definition intcall_map_producer_def:
            vv = LocatedValue tp p /\ p.ptr_location = slot_loc tr /\
            eval_operand p.ptr_operand u = SOME slot /\
            (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
+           (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 End
@@ -360,7 +351,7 @@ Definition intcall_stmts_producer_def:
       type_stmts env fp.jc_ret_ty ss = SOME env' /\
       IS_SOME (type_stmts (env with bare_global_assignable := FEMPTY)
                  fp.jc_ret_ty ss) /\
-      EVERY (stmt_exprs_ok ce) ss /\
+      stmts_exprs_ok ce ss /\
       calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_stmts ss) /\
       stmts_env ce lctx
         (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty) ss sa =

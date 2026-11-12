@@ -55,15 +55,17 @@ Proof
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
   Cases_on `r1` >> simp[]
   >- (rename1 `eval_expr cx e es = (INL pv, es1)` >>
-      simp[Once evaluate_def, bind_def] >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-           type_check_def, assert_def, return_def, raise_def] >>
-      Cases_on `lookup_scopes id es1.scopes` >>
-      simp[raise_def, return_def, get_place_def]
-      >- (strip_tac >> gvs[]) >>
       Cases_on `read_result cx pv es1` >>
       rename1 `read_result cx pv es1 = (r2, es2)` >>
-      Cases_on `r2` >> simp[] >> strip_tac >> gvs[] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      Cases_on `r2` >> simp[]
+      >- (simp[Once evaluate_def, bind_def] >>
+          simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+               type_check_def, assert_def, return_def, raise_def] >>
+          Cases_on `lookup_scopes id es1.scopes` >>
+          simp[raise_def, return_def, get_place_def] >>
+          strip_tac >> gvs[]) >>
+      strip_tac >> gvs[] >>
       drule read_result_no_control >> simp[]) >>
   strip_tac >> gvs[] >>
   imp_res_tac (cj 1 eval_expr_no_control) >> simp[]
@@ -109,7 +111,8 @@ Proof
      emit_void MSTORE [Var p; op] sb = ((), sf) /\ c = cenv` by
     (qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
      asm_simp_tac (srw_ss())
-       [stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       [stmt_env_def, declare_stmt_local_def, compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def,
         compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
         comp_return_def, LET_THM] >>
      Cases_on `compile_expr cenv (expr_type e) e sa` >>

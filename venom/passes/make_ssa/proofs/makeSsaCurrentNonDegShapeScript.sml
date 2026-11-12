@@ -1,7 +1,8 @@
 Theory makeSsaCurrentNonDegShape
 Ancestors
-  makeSsaCurrentNonDegCleanup makeSsaCurrentDefs makeSsaDefs venomWf venomInst list
-  simplifyCfgStruct phiTransform
+  makeSsaCurrentNonDegCleanup makeSsaDefs venomWf venomInst list
+  simplifyCfgStruct
+  venomExecProps
 
 Theorem current_nondeg_canonical_operands:
   !preds. phi_well_formed (FLAT (MAP (\l. [Label l; Var v]) preds))

@@ -3,7 +3,7 @@ Theory entryDispatchMem
 Ancestors
   memSafeRun venomExecSemantics venomExecProofs venomState venomInst
   instMemFrontier fragExecMem list moduleLoweringProps emitHelperProps
-  compileEnv moduleLowering stateEquiv finite_map fragExec exprLoweringProps
+  compileEnv loweringStateRelDefs moduleLowering stateEquiv finite_map fragExec exprLoweringProps
   emitHelper rich_list freshWrites
 
 Theorem mem_safe_run_terminator_intro[local]:

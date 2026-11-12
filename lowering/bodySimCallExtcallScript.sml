@@ -6,35 +6,28 @@ Ancestors
   list bodySim exprSimHyps exprSimHypsDefs vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph
 
-Theorem body_results_ok_case[local]:
-  !cx es tops ctx func cenv.
-    body_results_ok cx es /\ body_inv tops ctx cenv cx ==>
-    results_case F ctx func cenv cx es
-Proof
-  gen_tac >> Induct >> rw[body_results_ok_def, results_case_def] >>
-  metis_tac[body_expr_ok_case]
-QED
-
 (* exprSimExtCallCase's compile_extcall_case, from the operands' judgments
-   in the order the source evaluates them. *)
+   in the order the source evaluates them, for a function with no PHI at
+   any block head. *)
 Theorem extcall_body_expr_ok:
   !cx v14 is_static skip_check sig opts es v15.
-    (!s'' target t nargs s'3' results t'.
+    (!s'' target t nargs s'3' vs t'.
        eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) /\
-       eval_expr_results cx (TAKE nargs (DROP 1 es)) s'3' = (INL results,t') ==>
+       eval_exprs cx (TAKE nargs (DROP 1 es)) s'3' = (INL vs,t') ==>
        body_exprs_ok cx (DROP (1 + nargs) es)) /\
     (!s'' target t nargs.
        eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) ==>
-       body_results_ok cx (TAKE nargs (DROP 1 es))) /\
+       body_exprs_ok cx (TAKE nargs (DROP 1 es))) /\
     body_exprs_ok cx (TAKE 1 es) ==>
-    body_expr_ok cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
+    !tops ctx func cenv.
+      body_inv tops ctx cenv cx /\
+      (!lbl bb. lookup_block lbl func.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0) ==>
+      expr_sim_case F ctx func cenv cx (Call v14 (ExtCall is_static skip_check sig opts) es v15) /\
+      expr_vv_case F ctx func cenv cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> reverse conj_tac >- simp[] >>
-  rpt gen_tac >> strip_tac >>
-  irule compile_extcall_case >> rpt conj_tac >> rpt strip_tac
-  >- metis_tac[body_exprs_ok_case]
-  >- metis_tac[body_results_ok_case] >>
-  metis_tac[body_exprs_ok_case]
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_then irule compile_extcall_case >> rpt conj_tac >> rpt strip_tac
+  >> metis_tac[body_exprs_ok_case]
 QED

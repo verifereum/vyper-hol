@@ -1,12 +1,13 @@
 (* The root-frame exit after a memory-return store. *)
 Theory bodyIntCallFamStmtReturnMemoryExit
 Ancestors
+  bodyIntCallReturnInactive
   bodyIntCallJointContract stmtSimReturnWiden ctorReturnFrame
-  exprLoweringProps loweringPosts compileEnv exprSimStorageCopy
+  exprLoweringProps loweringPosts compileEnv loweringStateRelDefs exprSimStorageCopy
   stmtSimReturn venomState venomExecSemantics vyperState bodySim
 
 Theorem intcall_memory_exit_frame:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
   fp.jc_rb = SOME (bw,cap) /\ fp.jc_root_ce.ce_returns_count = 0 /\
   copy_static t = copy_static s /\
   LENGTH s.vs_memory <= LENGTH t.vs_memory /\
@@ -22,7 +23,7 @@ Proof
      (es with scopes := []) s` by
     (fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def] >>
      conj_tac >- metis_tac[state_rel_scopes_nil] >>
-     fs[immutable_alloca_sep_def, local_region_def, lookup_scopes_def] >>
+     fs[immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def, lookup_scopes_def] >>
      metis_tac[]) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx
      (es with scopes := []) t` by
@@ -41,7 +42,8 @@ Proof
        constructor_exit_state_rel)) >> qexists_tac `ce` >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def]) >>
   simp[intcall_stmt_exit_def] >> disj2_tac >>
-  simp[intret_q_def, result_rel_def, intret_vals_match_def, state_rel_gas_obs] >>
+  qpat_assum `~FST _` (fn nr => simp[MATCH_MP return_unlock_state_inactive nr,
+    intret_q_def, result_rel_def, intret_vals_match_def, state_rel_gas_obs]) >>
   conj_tac
   >- (rpt strip_tac >>
       `regions_disjoint a k (w2n bw) cap` by

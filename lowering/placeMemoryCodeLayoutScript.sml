@@ -1,6 +1,6 @@
 Theory placeMemoryCodeLayout
 Ancestors
-  fragExec exprLoweringProps compileEnv exprLowering emitHelper
+  fragExec exprLoweringProps compileEnv loweringStateRelDefs exprLowering emitHelper
   venomInst venomState list rich_list pair freshWrites ASCIInumbers arithmetic
 
 (* Exact finished-block lookup, independent of runtime loop invariants. *)

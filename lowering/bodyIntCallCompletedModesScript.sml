@@ -6,7 +6,7 @@ Ancestors
   compileEnv loweringPosts exprLoweringProps venomExecSemantics venomState
   venomInst list rich_list loweringHalt venomMemDefs context
   bodyIntCallReturnLayout exprSimProps valueEncoding valueEncodingProofs
-  valueTypingMemoryProps vyperTyping
+  valueTypingMemoryProps vyperTyping loweringStateRelDefs
 
 Theorem emit_void_invoke_instruction:
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
@@ -40,6 +40,7 @@ Proof
 QED
 
 Theorem void_completed_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -50,7 +51,7 @@ Theorem void_completed_endpoint:
   expr_type e = NoneT /\ value_has_type NoneTV v /\
   stmt_state_rel ctx func ce cx es'
     (merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx) /\
-  wb_frame ce es0 sa s0
+  wb_frame ce es0 es' sa s0
     (merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?out. gas_path ctx func t n (OK out) /\
     vv_post ctx func ce cx e es0 sa sb s0 es' (Value v)
@@ -62,11 +63,13 @@ Proof
   qexists_tac `merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule void_invoke_return_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[merge_callee_state_def] >>
   qexistsl_tac [`ops`,`si`] >> simp[]
 QED
 
 Theorem memory_completed_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   emit_void INVOKE ops si = ((),sb) /\ fn_has_code si sb func /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -84,7 +87,7 @@ Theorem memory_completed_endpoint:
     w2n w + buf.buf_size <= lb \/ lb + lsz <= w2n w) /\
   stmt_state_rel ctx func ce cx es'
     (merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx) /\
-  wb_frame ce es0 sa s0
+  wb_frame ce es0 es' sa s0
     (merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?out. gas_path ctx func t n (OK out) /\
     vv_post ctx func ce cx e es0 sa sb s0 es' (Value v)
@@ -96,6 +99,7 @@ Proof
   qexists_tac `merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx` >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule memory_invoke_return_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -208,7 +212,7 @@ Proof
   qpat_x_assum `ce.ce_is_ctor ==> _` (mp_tac o UNDISCH) >>
   disch_then drule_all >> strip_tac >>
   qpat_x_assum `!inst b sz. _` drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def] >> metis_tac[]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
 QED
 
 Theorem uniform_type_memory_size_list:
@@ -252,6 +256,7 @@ QED
    bound-output state.  Buffer geometry and immutable separation are derived
    from its owned ALLOCA, not from a bound on constructor memory. *)
 Theorem stack_completed_endpoint:
+  expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   gas_invoke_entry (ctx,func) t callee entered /\
   gas_path ctx callee entered n (IntRet ir cs) /\
@@ -276,7 +281,7 @@ Theorem stack_completed_endpoint:
   value_has_type tv v /\ intret_vals_match tv v ir.iret_values /\
   LENGTH ir.iret_values = nret /\ 0 < nret /\
   MAP (\op. eval_operand op s) results = MAP SOME ir.iret_values /\
-  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 sa s0 s /\
+  stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es0 es' sa s0 s /\
   eval_operand buf.buf_operand s = SOME (n2w off) /\
   FLOOKUP s.vs_allocas aid = SOME (off,buf.buf_size) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
