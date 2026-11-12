@@ -391,6 +391,12 @@ Resume abi_decode_complex_static_reject[members]:
    SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys))` by
     (pure_rewrite_tac[static_length_Tuple_SUM] >> AP_TERM_TAC >> irule MAP_CONG >>
      fs[abi_member_head_size_def, EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  `abi_static_length (Tuple (MAP (vyper_to_abi_type env) tys)) =
+   static_length (Tuple (MAP (vyper_to_abi_type env) tys))` by
+    (irule vyperABIValidTheory.abi_static_length_static >>
+     simp[any_dynamic_EXISTS, listTheory.NOT_EXISTS, EVERY_MAP,
+          combinTheory.o_DEF] >>
+     fs[EVERY_MEM]) >>
   `~vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs` by
     (qpat_x_assum `~vyper_valid_enc _ _ _` mp_tac >>
      simp[vyper_valid_enc_def, vyper_strict_enc_def, vyper_to_abi_types_MAP,
