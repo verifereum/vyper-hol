@@ -319,6 +319,33 @@ Proof
   metis_tac[vars_kept_trans]
 QED
 
+Theorem uint2str_loop_outcome[local]:
+  no_phi_fn fn /\
+  lookup_block (u2s_label a 1) fn.fn_blocks = SOME cb /\
+  cb.bb_instructions = u2s_cond a /\
+  lookup_block (u2s_label a 2) fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = u2s_body a buf n /\
+  (!v. var_below N v /\ v NOTIN Wv ==>
+       v <> u2s_var a 4 /\
+       EVERY (\i. ~MEM v i.inst_outputs) (TAKE 9 (u2s_body a buf n))) /\
+  H = (\s. s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\
+           (?w. lookup_var (u2s_var a 0) s = SOME w) /\ vars_kept N Wv s0 s) /\
+  Q = (\s. s.vs_current_bb = u2s_label a 4 /\ s.vs_inst_idx = 0 /\
+           vars_kept N Wv s0 s) ==>
+  !s. H s ==> ?j. j <= (2 ** 256) * 2 /\ fuel_outcome G ctx fn s j Q
+Proof
+  strip_tac >>
+  ho_match_mp_tac (Q.INST [`M` |-> `2 ** 256`, `Kb` |-> `2`,
+      `mu` |-> `\s. w2n (THE (lookup_var (u2s_var a 0) s))`]
+      (SPEC_ALL fuel_outcome_iterate)) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qspec_then `THE (lookup_var (u2s_var a 0) s)` mp_tac wordsTheory.w2n_lt >>
+      simp[wordsTheory.dimword_def, venomLayoutTheory.dimindex_256]) >>
+  mp_tac (Q.INST [`mu` |-> `\s. w2n (THE (lookup_var (u2s_var a 0) s))`]
+          (SPEC_ALL uint2str_round)) >> simp[]
+QED
+
 (* The loop works on a fresh copy val_var of val_op, made before the loop
    (so no precondition on val_op is needed), and on a fresh counter i_var
    from 0.  Each round (cond -> body -> cond) runs straight-line code, sets
