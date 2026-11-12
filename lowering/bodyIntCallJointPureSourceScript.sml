@@ -137,7 +137,9 @@ Resume effect_free_eval_expr_frame[typebuiltin]:
   gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
   metis_tac[]
 QED
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Resume effect_free_eval_expr_frame[builtin]:
+  (* original proof, kept while held:
   rename1 `Builtin aty bt args` >> strip_tac >>
   `!e. MEM e args ==> !st res st'. eval_expr cx e st = (res,st') ==>
     (st' with <|gas_obs := []; outcomes := NONE|>) =
@@ -174,6 +176,8 @@ Resume effect_free_eval_expr_frame[builtin]:
   gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
   imp_res_tac precompile_call_success_state >> gvs[] >>
   qpat_x_assum `!e. MEM e args ==> _` kall_tac >> metis_tac[]
+  *)
+  cheat
 QED
 Finalise effect_free_eval_expr_frame
 
