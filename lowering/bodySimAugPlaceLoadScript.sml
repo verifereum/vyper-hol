@@ -48,6 +48,11 @@ Proof
   ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >> simp[]
 QED
 
+val trace_scopes_tac =
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (fn th => assume_tac (SIMP_RULE (srw_ss()) []
+      (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >> gvs[];
+
 Theorem aug_place_base_scopes:
   !t tops bindings info cx s r s'.
     supported_target_info tops bindings t = SOME info /\
@@ -68,14 +73,14 @@ Resume aug_place_base_scopes[subscript]:
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   strip_tac >> gvs[supported_target_info_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
-  imp_res_tac aug_place_supported_expr_scopes >> gvs[] >> metis_tac[]
+  imp_res_tac aug_place_supported_expr_scopes >> trace_scopes_tac >> metis_tac[]
 QED
 Resume aug_place_base_scopes[attribute]:
   rpt strip_tac >>
   qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   strip_tac >> gvs[supported_target_info_def, AllCaseEqs()] >>
-  imp_res_tac extend_place_state >> gvs[] >> metis_tac[]
+  imp_res_tac extend_place_state >> trace_scopes_tac >> metis_tac[]
 QED
 Finalise aug_place_base_scopes
 
@@ -84,7 +89,7 @@ Theorem aug_place_target_scopes:
   eval_target_place cx t s = (r,s') ==> s'.scopes = s.scopes
 Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  imp_res_tac get_place_state >> gvs[] >> metis_tac[aug_place_base_scopes]
+  imp_res_tac get_place_state >> trace_scopes_tac >> metis_tac[aug_place_base_scopes]
 QED
 
 Theorem aug_place_target_entry_typed:
@@ -348,7 +353,8 @@ Proof
            type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[])
   >- (PairCases_on `nsid` >> simp[Once evaluate_def] >>
-      rpt strip_tac >> imp_res_tac vyperStatePreservationTheory.lookup_global_state >> gvs[])
+      rpt strip_tac >> imp_res_tac vyperStatePreservationTheory.lookup_global_state >>
+      rpt (qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC) >> simp[])
   >- suspend "subscript"
   >> suspend "attribute"
 QED
@@ -357,7 +363,8 @@ Resume aug_place_base_inv[subscript]:
   qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   strip_tac >> gvs[target_indices_pre_def] >>
-  imp_res_tac read_result_state >> imp_res_tac extend_place_state >> gvs[] >>
+  imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC) >> gvs[] >>
   qpat_x_assum `!cenv cx env s r s'. _` drule_all >> strip_tac >>
   first_x_assum (drule_then assume_tac) >>
   drule_all expr_body_pre_eval_result >> simp[]
@@ -367,7 +374,8 @@ Resume aug_place_base_inv[attribute]:
   qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   strip_tac >> gvs[target_indices_pre_def] >>
-  imp_res_tac extend_place_state >> gvs[] >> metis_tac[]
+  imp_res_tac extend_place_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC) >> gvs[] >> metis_tac[]
 QED
 Finalise aug_place_base_inv
 
@@ -385,7 +393,7 @@ Theorem aug_place_rhs_scopes:
   st1.scopes = st.scopes
 Proof
   simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  imp_res_tac read_result_state >> gvs[] >>
+  imp_res_tac read_result_state >> trace_scopes_tac >>
   metis_tac[aug_place_supported_expr_scopes]
 QED
 
