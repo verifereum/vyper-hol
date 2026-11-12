@@ -101,36 +101,6 @@ Proof
     word_memory_range_bounds), arithmeticTheory.ADD_SYM])
 QED
 
-Theorem asm_inst_gas_ok_word_bound:
-  asm_inst_gas_ok (2 * dimword (:256)) inst stk <=>
-  (!name. inst = AsmOp name ==>
-    ~MEM name ["CREATE"; "CREATE2"; "DELEGATECALL"; "SELFDESTRUCT"])
-Proof
-  simp[asm_inst_gas_ok_def, asm_mem_ranges_bounded]
-QED
-
-Theorem asm_steps_run_bounded:
-  !n s t.
-    (!inst name. MEM inst prog /\ inst = AsmOp name ==>
-      ~MEM name ["CREATE"; "CREATE2"; "DELEGATECALL"; "SELFDESTRUCT"]) /\
-    (asm_steps lo o2pc prog n s = AsmHalt t \/
-     asm_steps lo o2pc prog n s = AsmRevert t \/
-     asm_steps lo o2pc prog n s = AsmFault t) ==>
-    asm_run_bounded lo o2pc prog (2 * dimword (:256)) (SUC n) s
-Proof
-  Induct_on `n` >- simp[asm_steps_def] >>
-  rpt gen_tac >>
-  simp[asm_steps_def] >> strip_tac >> (
-  `s.as_pc < LENGTH prog` by (spose_not_then assume_tac >> gvs[]) >>
-  simp[Once asm_run_bounded_def] >>
-  disj2_tac >> conj_tac
-  >- (simp[SRULE [] (CONV_RULE (DEPTH_CONV wordsLib.SIZES_CONV)
-        asm_inst_gas_ok_word_bound)] >>
-      metis_tac[listTheory.EL_MEM]) >>
-  Cases_on `asm_step lo o2pc (EL s.as_pc prog) s` >> gvs[] >>
-  first_x_assum irule >> metis_tac[])
-QED
-
 Theorem asm_run_bounded_mono:
   !k l s.
     asm_run_bounded lo o2pc prog H k s /\ k <= l ==>
