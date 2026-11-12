@@ -31,7 +31,8 @@ Theorem classify_external_signatures:
   FLAT (MAP (\(mut,nr,rr,name,args,dflts,ret,stmts).
       abi_function_signatures name args dflts)
     (FST (classify_functions tops))) =
-  FLAT (MAP abi_decl_signatures (FILTER explicit_external_decl tops))
+  FLAT (MAP abi_decl_signatures (FILTER explicit_external_decl tops)) ++
+  FLAT (MAP abi_decl_signatures (FILTER (IS_SOME o public_getter) tops))
 Proof
   Induct_on `tops` >> simp[classify_functions_def] >> qx_gen_tac `top` >>
   Cases_on `top` >>
@@ -63,7 +64,9 @@ Theorem grouped_selector_method_ids:
     (MAP (package_external_group tops target trans nkeys)
       (FST (classify_functions tops)))) =
   FLAT (MAP (\top. MAP (\(name,tys). abi_method_id (type_env tops) name tys)
-    (abi_decl_signatures top)) (FILTER explicit_external_decl tops))
+    (abi_decl_signatures top)) (FILTER explicit_external_decl tops)) ++
+  FLAT (MAP (\top. MAP (\(name,tys). abi_method_id (type_env tops) name tys)
+    (abi_decl_signatures top)) (FILTER (IS_SOME o public_getter) tops))
 Proof
   `(\func. MAP FST (external_group_selectors
       (package_external_group tops target trans nkeys func))) =
