@@ -32,7 +32,7 @@ Libs
   monadsyntax intLib
 
 (* Storage well-formedness reads only accounts and transient storage. *)
-Theorem storage_well_formed_on_scopes_gas_obs:
+Theorem storage_well_formed_on_scopes_gas_obs[local]:
   (storage_well_formed_on cx (es with scopes := scs) r <=>
    storage_well_formed_on cx es r) /\
   (storage_well_formed_on cx (es with gas_obs := gs) r <=>
