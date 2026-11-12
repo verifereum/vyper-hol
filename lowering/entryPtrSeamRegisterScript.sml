@@ -2913,7 +2913,7 @@ Theorem registration_actual_endpoint_relations:
     (INL (),es0) /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
        tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,mincd,pay,F,key,ut',iv,fbody,rt) /\
@@ -3109,7 +3109,7 @@ Theorem registration_positional_args_ptr_no_dalloca:
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
     fn_entry_label efn = SOME elbl /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
