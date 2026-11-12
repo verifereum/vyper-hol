@@ -291,7 +291,7 @@ Proof
 QED
 
 (* The actual entry run of a context, as its entry function's block run. *)
-Theorem run_context_entry_blocks[local]:
+Theorem run_context_entry_blocks:
   ctx.ctx_entry = SOME nm /\ lookup_function nm ctx.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==>
   run_context fuel ctx s =

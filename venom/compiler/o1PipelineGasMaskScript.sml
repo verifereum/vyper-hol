@@ -24,16 +24,6 @@ Ancestors
 
 (* ===== Runs at the entry ===== *)
 
-Theorem run_context_entry[local]:
-  ctx.ctx_entry = SOME nm /\ lookup_function nm ctx.ctx_functions = SOME fn /\
-  fn_entry_label fn = SOME lbl ==>
-  run_context fuel ctx s =
-  run_blocks fuel ctx fn
-    (s with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
-Proof
-  simp[run_context_def, run_function_def]
-QED
-
 Theorem run_context_terminates_entry[local]:
   terminates (run_context fuel ctx s) ==>
   ?nm fn lbl. ctx.ctx_entry = SOME nm /\
@@ -160,7 +150,7 @@ Proof
   `fn_entry_state fa st` by metis_tac[run_state_ok_entry_state] >>
   `run_context f A w = run_blocks f A fa st /\
    run_context f' B w = run_blocks f' B fb st` by
-    (simp[Abbr `st`] >> conj_tac >> irule run_context_entry >> gvs[]) >>
+    (simp[Abbr `st`] >> conj_tac >> irule run_context_entry_blocks >> gvs[]) >>
   `terminates (run_blocks f A fa st) /\ terminates (run_blocks f' B fb st)` by
     metis_tac[] >>
   `f <= f + f' /\ f' <= f + f'` by decide_tac >>
@@ -487,10 +477,10 @@ Proof
                                   vs_inst_idx := 0 |>` >>
   `fn_entry_state fn8 e` by metis_tac[run_state_ok_entry_state] >>
   `run_context fuel (stage 9) vs_out = run_blocks fuel (stage 9) fn e` by
-    (simp[Abbr `e`] >> irule run_context_entry >> simp[]) >>
+    (simp[Abbr `e`] >> irule run_context_entry_blocks >> simp[]) >>
   `?fuel8. terminates (run_blocks fuel8 (stage 8) fn8 e)` by metis_tac[] >>
   `run_context fuel8 (stage 8) vs_out = run_blocks fuel8 (stage 8) fn8 e` by
-    (simp[Abbr `e`] >> irule run_context_entry >> simp[]) >>
+    (simp[Abbr `e`] >> irule run_context_entry_blocks >> simp[]) >>
   mp_tac (Q.INST [`C` |-> `stage 8`, `C'` |-> `stage 9`, `name` |-> `nm`,
                   `fn` |-> `fn8`, `view` |-> `o1_walk_view rpolicy 8`]
             cfg_norm_stage_gas_events_prefix) >>
@@ -541,7 +531,7 @@ Proof
    run_context f' (stage 7) w =
      run_blocks f' (stage 7) fn7
        (w with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)` by
-    (conj_tac >> irule run_context_entry >> simp[]) >>
+    (conj_tac >> irule run_context_entry_blocks >> simp[]) >>
   `gas_events_blocks fuel8 (stage 7) fn7
      (w with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) =
    gas_events_blocks f' (stage 7) fn7

@@ -2,7 +2,7 @@
    the same fuel and machine states as gasCount, including INVOKE callees. *)
 Theory gasEvents
 Ancestors
-  gasCount venomExecSemantics venomInst venomState list arithmetic
+  gasCount venomExecSemantics venomInst venomState list rich_list arithmetic
 
 Definition gas_events_defs:
   ((gas_events_step fuel ctx owner inst s : (string # num) list) =
@@ -123,4 +123,36 @@ Proof
   simp[] >> disch_then irule >>
   gen_tac >> strip_tac >>
   first_x_assum (qspec_then `SUC j` mp_tac) >> simp[]
+QED
+
+Theorem gas_events_block_suffix_cong:
+  !xs s bb bb'.
+    DROP s.vs_inst_idx bb.bb_instructions = xs /\
+    DROP s.vs_inst_idx bb'.bb_instructions = xs ==>
+    gas_events_block fuel C owner bb s = gas_events_block fuel C owner bb' s
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (`LENGTH bb.bb_instructions <= s.vs_inst_idx /\
+       LENGTH bb'.bb_instructions <= s.vs_inst_idx` by
+        gvs[DROP_EQ_NIL] >>
+      simp[Once gas_events_block_def, venomInstTheory.get_instruction_def] >>
+      simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   s.vs_inst_idx < LENGTH bb'.bb_instructions` by
+    (qpat_x_assum `DROP _ bb.bb_instructions = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     qpat_x_assum `DROP _ bb'.bb_instructions = _`
+       (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >>
+     simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   EL s.vs_inst_idx bb'.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = xs /\
+   DROP (SUC s.vs_inst_idx) bb'.bb_instructions = xs` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  once_rewrite_tac[gas_events_block_def] >>
+  simp[venomInstTheory.get_instruction_def] >>
+  Cases_on `step_inst fuel C h s` >> simp[] >>
+  Cases_on `is_terminator h.inst_opcode` >> simp[] >>
+  first_x_assum irule >> simp[] >>
+  fs[rich_listTheory.DROP_CONS_EL]
 QED
