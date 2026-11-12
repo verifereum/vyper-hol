@@ -19,5 +19,5 @@ Theorem abi_encoder_source_window_robust:
     !mem. mem_agree_outside tainted initial_mem mem ==>
       abi_encoder_window_input ei ct rv sb (val_footprint tv v) mem
 Proof
-  cheat (* SEQ-4390 LOCAL STUB: SEQ-4024 producer *)
+  cheat
 QED
