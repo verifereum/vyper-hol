@@ -906,8 +906,8 @@ Proof
   `cs_extends su sb` by metis_tac[cs_extends_emit_inst] >>
   `fn_has_code sa su func /\ fn_has_code su sb func` by
     metis_tac[fn_has_code_split] >>
-  drule_all return_unlock_origin_ptr >>
-  disch_then (qspecl_then [`tn`, `PG`, `G`, `explicit`] strip_assume_tac) >>
+  mp_tac (SPEC_ALL return_unlock_origin_ptr) >>
+  impl_tac >- fs[] >> strip_tac >>
   qexistsl_tac [`G'`, `tn'`] >> gen_tac >>
   `?pc. lookup_var rpc s = SOME pc` by metis_tac[ret_pc_ok_def] >>
   qabbrev_tac `s1 = return_unlock_state cenv s` >>
@@ -1109,8 +1109,8 @@ Theorem return_word_suffix_origin_ptr[local]:
          (return_unlock_state cenv s), G', tn')
 Proof
   strip_tac >>
-  drule_all return_unlock_origin_ptr >>
-  disch_then (qspecl_then [`tn`, `PG`, `G`, `explicit`] strip_assume_tac) >>
+  mp_tac (Q.INST [`sa` |-> `sm`] (SPEC_ALL return_unlock_origin_ptr)) >>
+  impl_tac >- fs[] >> strip_tac >>
   qexistsl_tac [`G'`, `tn'`] >> gen_tac >>
   drule compile_return_unlock_shape >> strip_tac >>
   qabbrev_tac `s1 = return_unlock_state cenv s` >>
