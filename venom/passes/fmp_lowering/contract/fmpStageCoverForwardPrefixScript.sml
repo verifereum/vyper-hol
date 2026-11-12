@@ -123,3 +123,39 @@ Proof
   drule fmp_prefix_inst_vars_mono >> strip_tac >>
   first_x_assum drule >> metis_tac[]
 QED
+
+Theorem fmp_prefix_indexed_same_after[local]:
+  !xs k s restores out leftover s' tail a b.
+  fmp_lower_indexed infos ctx runner label k s restores xs = SOME (out,leftover,s') /\
+  EVERY (\i. pre_fmp_opcode i.inst_opcode) xs /\
+  (!i v. MEM i xs /\ MEM (Var v) i.inst_operands ==> v IN V) /\
+  (!v. v IN V ==> MEM v s.irs_used_vars /\ v <> runner) /\
+  (!v. a = Var v ==> v IN V) /\ (!v. b = Var v ==> v IN V) ==>
+  same_after_assigns (REVERSE out ++ tail) a b =
+  same_after_assigns (REVERSE xs ++ tail) a b
+Proof
+  Induct using SNOC_INDUCT
+  >- simp[fmp_lower_indexed_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[SNOC_APPEND] >>
+  drule fmp_lower_indexed_append >> strip_tac >>
+  gvs[fmpLowerIndexedPropsTheory.fmp_lower_indexed_cons,
+      fmp_lower_indexed_def] >>
+  `!v. v IN V ==> MEM v sp1.irs_used_vars /\ v <> runner` by
+    (drule fmp_prefix_indexed_vars_mono >> metis_tac[]) >>
+  `!v. v IN V ==> MEM v s0.irs_used_vars /\ v <> runner` by
+    (drule fmp_prefix_restores_vars >> metis_tac[]) >>
+  simp[REVERSE_APPEND, APPEND_ASSOC] >>
+  `same_after_assigns (REVERSE head ++ (REVERSE prefix ++ REVERSE c1 ++ tail)) a b =
+   same_after_assigns (x::(REVERSE prefix ++ REVERSE c1 ++ tail)) a b` by
+    (irule fmp_prefix_chunk_same_after >> simp[] >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  fs[APPEND_ASSOC] >>
+  irule (fmp_prefix_tail_cong |> Q.SPEC `[x]` |> SRULE [APPEND]) >>
+  qexists `V` >> simp[] >>
+  map_every qx_gen_tac [`a'`, `b'`] >> strip_tac >>
+  `same_after_assigns (REVERSE prefix ++ (REVERSE c1 ++ tail)) a' b' =
+   same_after_assigns (REVERSE c1 ++ tail) a' b'` by
+    (irule fmp_prefix_restores_same_after >> metis_tac[]) >>
+  fs[APPEND_ASSOC] >> first_x_assum irule >> metis_tac[]
+QED
