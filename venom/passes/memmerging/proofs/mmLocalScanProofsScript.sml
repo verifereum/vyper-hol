@@ -16887,6 +16887,65 @@ Proof
   irule mm_local_pending_indices_deferred_suc >> gvs[] >> metis_tac[]
 QED
 
+Theorem mm_local_zero_erased_transition[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  MEM g gs /\ n < LENGTH is /\ MEM (EL n is).inst_id g.cg_inst_ids /\
+  MEM (EL n is).inst_id (nop_ids_of_groups dfg Mem2Mem is gs) /\
+  mm_local_history is H (SUC n) /\
+  (!j dst v len. j < SUC n /\ is_calldatasize_copy dfg (EL j is) /\
+    (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H j) = SOME (n2w (LENGTH (H j).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  mm_local_zero_cut dfg is gs H n excluded pc t ==>
+  apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+    (rep_map_of_groups is gs) es (EL n is) = ([mk_nop_from (EL n is)],es) /\
+  mm_local_exec_prefix fuel ctx [mk_nop_from (EL n is)] t
+    (t with vs_inst_idx := SUC pc) /\
+  mm_local_zero_cut dfg is gs H (SUC n) excluded (SUC pc)
+    (t with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >> gnvs[] >>
+  SUBGOAL_THEN
+    ``is_zero_store (EL n bb.bb_instructions) \/
+      is_calldatasize_copy dfg (EL n bb.bb_instructions)`` assume_tac
+  >- (drule_all mm_local_memzero_group_roles >> strip_tac >>
+      `i = EL n bb.bb_instructions` by
+        metis_tac[mmWfProofsTheory.all_distinct_map_inv, EL_MEM] >> gvs[]) >>
+  `(EL n bb.bb_instructions).inst_opcode IN {MSTORE; CALLDATACOPY}` by
+    gvs[is_zero_store_def, is_calldatasize_copy_def] >>
+  conj_tac >- simp[apply_memzero_inst_supply_def] >>
+  conj_tac
+  >- (simp[mm_local_exec_prefix_single, venomInstPropsTheory.step_nop_identity,
+        mk_nop_from_def, venomInstTheory.is_terminator_def] >>
+      fs[mm_local_zero_cut_def]) >>
+  `?d bs. mm_local_zero_capture dfg bb.bb_instructions (SUC n) n = SOME (d,bs)` by
+    (simp[mm_local_zero_capture_def] >>
+     Cases_on `is_zero_store (EL n bb.bb_instructions)`
+     >- (fs[is_zero_store_def] >>
+         rpt (CASE_TAC >> gvs[operand_lit_val_def])) >>
+     fs[is_calldatasize_copy_def] >>
+     rpt (CASE_TAC >> gvs[operand_lit_val_def, operand_var_name_def]) >>
+     gvs[oneline operand_lit_val_def, oneline operand_var_name_def, AllCaseEqs()]) >>
+  `(H (SUC n)).vs_memory = (write_memory_with_expansion d bs (H n)).vs_memory` by
+    (irule (cj 3 mm_local_zero_capture_sound) >>
+     qexistsl [`dfg`,`bb.bb_instructions`,`SUC n`] >> simp[]) >>
+  `mm_local_pending_indices bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed (SUC n) =
+    mm_local_pending_indices bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed n ++ [n]` by
+    (irule mm_local_zero_erased_pending_suc >> metis_tac[]) >>
+  `step_inst fuel ctx (EL n bb.bb_instructions) (H n) = OK (H (SUC n))` by
+    (fs[mm_local_history_def] >>
+     simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+     gvs[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  `mm_local_nonmemory_frame (H (SUC n)) = mm_local_nonmemory_frame (H n) /\
+    (!v. lookup_var v (H (SUC n)) = lookup_var v (H n))` by
+    (irule mm_local_write_runtime_frame >>
+     metis_tac[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  irule mm_local_zero_cut_erased_write_stutter >> metis_tac[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
