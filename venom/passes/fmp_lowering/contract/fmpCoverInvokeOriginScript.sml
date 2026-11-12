@@ -90,11 +90,16 @@ Proof
      bb.bb_instructions) blocks` by
     (simp[EVERY_MEM] >> rpt strip_tac >>
      drule_all fmp_cover_blocks_origin >> strip_tac >>
-     qexists `i` >> simp[] >>
-     metis_tac[mem_fn_insts_blocks]) >>
+     rename1 `MEM src b.bb_instructions` >>
+     qexists `src` >> simp[] >>
+     simp[fn_insts_def, fn_insts_blocks_MEM] >>
+     qexists `b` >> simp[]) >>
   drule fmp_make_root_layout_restrictions >> strip_tac >>
-  drule_all fmp_install_root_every >>
-  simp[EVERY_MEM, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
+  drule fmp_install_root_every >>
+  disch_then (drule_at (Pat `fmp_install_root _ _ _ _ = _`)) >>
+  (impl_tac >- (gvs[EVERY_APPEND, EVERY_MEM] >> metis_tac[])) >>
+  gvs[EVERY_MEM, fn_insts_def, fn_insts_blocks_MEM] >>
+  metis_tac[]) >>
   simp[fmp_stage_lowered_def, fmp_lower_function_with_info_def,
        AllCaseEqs()] >> rpt strip_tac >> qexists `j` >> gvs[]
 QED
