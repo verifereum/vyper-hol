@@ -1,6 +1,7 @@
 (* Source and compiler premises for the storage aggregate pointer branch. *)
 Theory exprSimPtrTopLevelStorageBranch
 Ancestors
+  sourceUnitExecution
   exprSimPtrTopLevelStorageSemantic exprSimPtrTopLevelStorageFrame
   exprSimTopLevelStorage exprSimUnwrapProps exprSimPtrTopLevelStorageAlloc
   vyperTypeGlobalLookupSoundness vyperStorageLayoutSafety

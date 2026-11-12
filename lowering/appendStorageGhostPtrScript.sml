@@ -1,6 +1,7 @@
 (* Storage-bank boundary facts for pointer-safe word append. *)
 Theory appendStorageGhostPtr
 Ancestors
+  sourceUnitExecution
   bodyPtrDefs appendStorageRel accountsRelProps ptrDiscipline
   compileEnv loweringStateRelDefs venomState vyperStorage words pred_set stmtFragPtr loweringPosts
 
