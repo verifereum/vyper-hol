@@ -1,7 +1,7 @@
 (*
  * MakeSSA's first O1 run keeps the source rows of o1_inv besides the
- * memory, pointer and taint ones: no layout end, no DALLOCA, no FMP
- * convention or operation, the DLOAD offset bound and the alloca headroom
+ * memory, pointer and taint ones: no layout end, no FMP convention or
+ * operation except DALLOCA, the DLOAD offset bound and the alloca headroom
  * LowerDload needs, and the callee-first order.  The pass changes no
  * opcode of an existing instruction but PHIs it cleans up, adds only
  * PHIs and ASSIGNs, and renames variables, so a renamed DLOAD offset
@@ -67,21 +67,6 @@ QED
 
 (* ===== Static rows ===== *)
 
-Theorem make_ssa_src_stage_shape[local]:
-  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
-  o1_ctx_shape C /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C ==>
-  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C'
-Proof
-  strip_tac >> conj_tac
-  >- (rw[EVERY_MEM] >> drule_all make_ssa_src_stage_fn >> strip_tac >>
-      drule make_ssa_current_fn_metadata >>
-      fs[EVERY_MEM, fn_static_layout_eq_def]) >>
-  fs[ctx_has_dalloca_def, EXISTS_MEM] >> CCONTR_TAC >> gvs[] >>
-  drule_all make_ssa_src_stage_fn >> strip_tac >>
-  drule_all make_ssa_current_fn_no_dalloca >> metis_tac[]
-QED
-
 Theorem make_ssa_src_stage_fmp_free[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ fmp_free_ctx C ==> fmp_free_ctx C'
@@ -90,8 +75,14 @@ Proof
   drule_all make_ssa_src_stage_fn >> strip_tac >>
   first_x_assum drule >> strip_tac
   >- (drule make_ssa_current_fn_metadata >> simp[fn_fmp_convention_eq_def]) >>
-  drule_then (qspec_then `t` mp_tac) make_ssa_current_fn_no_raw_fmp_ops >>
-  simp[]
+  drule_all make_ssa_current_fn_kept_opcodes >> strip_tac >>
+  fs[pre_fmp_ops_def, EVERY_MEM] >> rpt strip_tac >>
+  Cases_on `kept_opcode inst.inst_opcode`
+  >- (`MEM inst.inst_opcode
+        (FILTER kept_opcode (MAP (\i. i.inst_opcode) (fn_insts fn')))` by
+        (simp[MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+      fs[MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+  gvs[kept_opcode_def, pre_fmp_opcode_def]
 QED
 
 Theorem make_ssa_src_stage_callee_first[local]:
@@ -275,7 +266,7 @@ Theorem make_ssa_stage_src_rows:
     dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
     o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
     callee_first names C.ctx_functions ==>
-    EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
+    EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\
     fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs /\
     mem_inv dload_headroom_ok C' vs /\ callee_first names C'.ctx_functions
 Proof
@@ -283,7 +274,11 @@ Proof
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
     gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   fs[o1_src_inv_def] >>
-  metis_tac[make_ssa_src_stage_shape, make_ssa_src_stage_fmp_free,
+  `EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions` by
+    (rw[EVERY_MEM] >> drule_all make_ssa_src_stage_fn >> strip_tac >>
+     drule make_ssa_current_fn_metadata >>
+     fs[EVERY_MEM, fn_static_layout_eq_def]) >>
+  metis_tac[make_ssa_src_stage_fmp_free,
             make_ssa_src_stage_callee_first, make_ssa_src_stage_headroom,
             make_ssa_src_stage_dload_ok]
 QED
