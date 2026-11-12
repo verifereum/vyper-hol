@@ -206,13 +206,11 @@ Proof
 QED
 
 Theorem fuel_ok_compile_assign_value:
-  !cenv dst dloc v pw sloc dty sty dinfo msz Wv E.
+  !cenv dst dloc v pw sloc dty sty msz Wv E.
     fuel_ok Wv {} E
-      (compile_assign_value cenv dst dloc v pw sloc dty sty dinfo msz)
+      (compile_assign_value cenv dst dloc v pw sloc dty sty msz)
 Proof
-  rpt gen_tac >> Cases_on `dinfo` >>
-  TRY (rename1 `SOME p` >> PairCases_on `p`) >>
-  Cases_on `dloc` >> simp_tac (srw_ss()) [compile_assign_value_def] >>
+  rpt gen_tac >> Cases_on `dloc` >> simp_tac (srw_ss()) [compile_assign_value_def] >>
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any, fuel_ok_emit_inst_any,
              fuel_ok_compile_alloc_buffer, fuel_ok_compile_copy_memory,
              fuel_ok_compile_store_memory, fuel_ok_typed_memory_family,
