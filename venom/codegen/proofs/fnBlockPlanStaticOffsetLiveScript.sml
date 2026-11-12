@@ -244,7 +244,7 @@ Proof
   Cases_on `w = v` >> simp[]
 QED
 
-Theorem phi_maps_fold_selected[local]:
+Theorem phi_maps_fold_selected:
   !items (om:string |-> num) (mm:num |-> string) pred v idx src.
     EVERY (\(i,phi).
       (MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> i = idx) /\
