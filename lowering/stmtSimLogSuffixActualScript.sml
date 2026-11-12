@@ -120,7 +120,7 @@ QED
 Theorem log_aggregate_data_stage_code:
   cs_extends sm st /\
   compile_alloc_buffer cap st = (src,s1) /\
-  compile_log_store_data ce xs src.buf_operand 0 s1 = ((),s2) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
   compile_alloc_buffer outcap s2 = (dst,s3) /\
   compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
   emit_inst LOG operands [] s4 = ((),sb) /\
@@ -154,7 +154,7 @@ QED
 Theorem log_aggregate_data_allocation_sites:
   cs_extends sm st /\
   compile_alloc_buffer cap st = (src,s1) /\
-  compile_log_store_data ce xs src.buf_operand 0 s1 = ((),s2) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
   compile_alloc_buffer outcap s2 = (dst,s3) /\
   compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
   emit_inst LOG operands [] s4 = ((),sb) /\
@@ -179,7 +179,7 @@ QED
 Theorem log_aggregate_data_encoder_sites:
   cs_extends sm st /\
   compile_alloc_buffer cap st = (src,s1) /\
-  compile_log_store_data ce xs src.buf_operand 0 s1 = ((),s2) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
   compile_alloc_buffer outcap s2 = (dst,s3) /\
   compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
   emit_inst LOG operands [] s4 = ((),sb) /\

@@ -444,7 +444,7 @@ QED
 
 Theorem compile_log_store_data_aggregate_shape:
   !xs buf off sa sb.
-    compile_log_store_data cenv xs buf off sa = ((),sb) ==>
+    compile_log_store_data cenv xs (MAP SND xs) buf off sa = ((),sb) ==>
     inst_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
     sa.cs_next_id <= sb.cs_next_id
 Proof
@@ -553,7 +553,7 @@ QED
 (* Actual types determine both the tuple stride and the captured source value.
    The whole destination window is disjoint from all nonword footprints. *)
 Theorem compile_log_store_data_aggregate_run:
-  compile_log_store_data cenv xs buf off sa = ((),sb) /\
+  compile_log_store_data cenv xs (MAP SND xs) buf off sa = ((),sb) /\
   LIST_REL (\(op,ty) v.
     (?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
       value_has_type tv v /\ val_wf tv v /\

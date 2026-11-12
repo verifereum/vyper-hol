@@ -454,7 +454,7 @@ Theorem compile_log_store_data_aggregate_mem_ok:
     ?q. run_inst_seq (emitted_insts start sn) s = OK q /\
       log_write_frame start (b+off) (type_memory_bytes ce ty) s q) ==>
   !xs vs off sa sb s.
-  compile_log_store_data ce xs buf off sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) /\
   LIST_REL (\(op,ty) v. ?tv.
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
     type_memory_bytes ce ty = type_memory_size tv /\
