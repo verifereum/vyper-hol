@@ -17258,7 +17258,8 @@ Theorem mm_local_zero_capture_finite[local]:
   s.vs_current_bb = bb.bb_label /\ s.vs_inst_idx = j /\
   static_mem_ok eom ctx fn (EL j is) s /\ eom < dimword (:256) /\
   step_inst fuel ctx (EL j is) s = OK u ==>
-  d + LENGTH bs < dimword (:256)
+  d + LENGTH bs < dimword (:256) /\
+  (LENGTH bs = 0 \/ d + LENGTH bs <= eom)
 Proof
   strip_tac >> drule mm_local_zero_capture_cases >> strip_tac >>
   `(EL j is).inst_opcode IN {MSTORE; CALLDATACOPY}` by
@@ -17321,6 +17322,47 @@ Proof
     (drule_all mm_local_zero_capture_finite >> simp[]) >> decide_tac
 QED
 
+Theorem mm_local_zero_representative_static_bound[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  MEM g gs /\ r < LENGTH is /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  mm_local_history is H (SUC r) /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!j. j <= r ==> (H j).vs_current_bb = bb.bb_label /\
+    (H j).vs_inst_idx = j /\ static_mem_ok eom ctx fn (EL j is) (H j)) /\
+  eom < dimword (:256) ==>
+  g.cg_length = 0 \/ g.cg_dst + g.cg_length <= eom
+Proof
+  strip_tac >> Cases_on `g.cg_length = 0` >- simp[] >> simp[] >>
+  `mm_local_group_coverage is (SUC r)
+    (mm_local_zero_capture dfg is (SUC r)) g` by
+    (gnvs[] >> drule_all mm_local_zero_representative_certificate >> simp[]) >>
+  `g.cg_dst <= g.cg_dst + g.cg_length - 1 /\
+    g.cg_dst + g.cg_length - 1 < g.cg_dst + g.cg_length` by decide_tac >>
+  `?j d bs. j < SUC r /\ j < LENGTH is /\
+    mm_local_zero_capture dfg is (SUC r) j = SOME (d,bs) /\
+    d <= g.cg_dst + g.cg_length - 1 /\
+    g.cg_dst + g.cg_length - 1 < d + LENGTH bs` by
+    (qpat_x_assum `mm_local_group_coverage _ _ _ _` mp_tac >>
+     pure_rewrite_tac[mm_local_group_coverage_def] >>
+     disch_then (qspec_then `g.cg_dst + g.cg_length - 1` mp_tac) >>
+     asm_simp_tac pure_ss [AND_CLAUSES, EQ_CLAUSES] >> strip_tac >>
+     qexistsl [`j`,`d`,`bs`] >> gvs[]) >>
+  `(EL j is).inst_opcode IN {MSTORE; CALLDATACOPY}` by
+    (drule mm_local_zero_capture_cases >>
+     gvs[is_calldatasize_copy_def, pred_setTheory.IN_INSERT,
+       pred_setTheory.NOT_IN_EMPTY] >> metis_tac[]) >>
+  `step_inst fuel ctx (EL j is) (H j) = OK (H (SUC j))` by
+    (gvs[mm_local_history_def, pred_setTheory.IN_INSERT,
+       pred_setTheory.NOT_IN_EMPTY, venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  `(H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j)` by
+    (first_x_assum irule >> decide_tac) >>
+  `LENGTH bs = 0 \/ d + LENGTH bs <= eom` by
+    (drule_all mm_local_zero_capture_finite >> simp[]) >> decide_tac
+QED
+
 Theorem mm_local_zero_cut_representative_write[local]:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
   is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
@@ -17351,6 +17393,33 @@ Proof
      conj_tac >- (qexistsl [`bb`,`dfg`] >> simp[]) >>
      qexistsl [`g`,`H r`,`t`] >> gvs[]) >>
   gvs[mm_local_zero_cut_def] >> metis_tac[]
+QED
+
+Theorem mm_local_zero_store_static[local]:
+  dst < dimword (:256) /\ dst + 32 <= eom ==>
+  static_mem_ok eom ctx fn (mk_zero_store_inst inst dst) t
+Proof
+  strip_tac >> simp[unitMemInvTheory.static_mem_ok_def,
+    unitMemInvTheory.inst_mem_ranges_def, mk_zero_store_inst_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    codegenRelTheory.fixed_source_write_range_def, venomStateTheory.eval_operand_def,
+    wordsTheory.w2n_n2w]
+QED
+
+Theorem mm_local_zero_copy_static[local]:
+  g.cg_dst < dimword (:256) /\ g.cg_length < dimword (:256) /\
+  (g.cg_length = 0 \/ g.cg_dst + g.cg_length <= eom) ==>
+  static_mem_ok eom ctx fn (mk_memzero_calldatacopy inst g v) u
+Proof
+  strip_tac >>
+  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+    mk_memzero_calldatacopy_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    codegenRelTheory.sized_source_write_range_def, venomStateTheory.eval_operand_def,
+    wordsTheory.w2n_n2w] >>
+  Cases_on `lookup_var v u` >> simp[]
 QED
 
 Theorem mm_local_zero_store_cut_exec[local]:
@@ -17441,6 +17510,7 @@ Theorem mm_local_zero_representative_transition[local]:
   (!v. v NOTIN excluded ==> MEM v es.irs_used_vars) /\
   apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
     (rep_map_of_groups is gs) es (EL r is) = (chunk,es') ==>
+  (!f u. EVERY (\i. static_mem_ok eom ctx f i u) chunk) /\
   ?t'. mm_local_exec_prefix fuel ctx chunk t t' /\
     mm_local_zero_cut dfg is gs H (SUC r) excluded (pc + LENGTH chunk) t'
 Proof
@@ -17467,6 +17537,20 @@ Proof
   `ALOOKUP (rep_map_of_groups is gs) (EL r is).inst_id = SOME g /\
     ~MEM (EL r is).inst_id (nop_ids_of_groups dfg Mem2Mem is gs)` by
     (gvs[] >> irule mm_local_zero_selected_rep >> simp[]) >>
+  `g.cg_length = 0 \/ g.cg_dst + g.cg_length <= eom` by
+    (irule mm_local_zero_representative_static_bound >> metis_tac[]) >>
+  (conj_tac
+  >- (Cases_on `g.cg_length = 32`
+      >- (gvs[apply_memzero_inst_supply_def] >> rpt gen_tac >>
+          irule mm_local_zero_store_static >> gvs[]) >>
+      Cases_on `fresh_inst_id es` >> rename1 `fresh_inst_id es = (lid,es1)` >>
+      Cases_on `fresh_ir_var es1` >>
+      gvs[apply_memzero_inst_supply_def] >> rpt gen_tac >>
+      simp[mm_local_zero_copy_static] >>
+      simp[unitMemInvTheory.static_mem_ok_def,
+           unitMemInvTheory.inst_mem_ranges_def,
+           contextCodegenRelTheory.source_memory_read_ranges_def,
+           codegenRelTheory.source_memory_write_ranges_def]) >>
   Cases_on `g.cg_length = 32`
   >- (gvs[apply_memzero_inst_supply_def] >>
       mp_tac (Q.INST [`is` |-> `bb.bb_instructions`,
@@ -17482,7 +17566,9 @@ Proof
   mp_tac (Q.INST [`is` |-> `bb.bb_instructions`,
     `gs` |-> `(scan_block_memzero dfg bb).mz_flushed`]
     mm_local_zero_copy_cut_exec) >> simp[] >>
-  strip_tac >> goal_assum (drule_at Any) >> simp[]
+  strip_tac >>
+  qmatch_asmsub_abbrev_tac `mm_local_exec_prefix fuel ctx chunk0 t out` >>
+  qexists_tac `out` >> simp[])
 QED
 
 Theorem mm_local_zero_erased_pending_suc[local]:
