@@ -283,7 +283,7 @@ Proof
   ld_on_head "ld_memory_agree"
     (drule_at (Pat `ld_joint_geometry _ _ _ _`)
        ld_memory_agree_snapshot_copy >>
-     disch_then irule >> TRY (qexists_tac `dyn_floor C vs`) >>
+     disch_then irule >> rpt conj_tac >> TRY (qexists_tac `dyn_floor C vs`) >>
      ld_range_case_tac) >>
   ld_on_head "ld_dyn_agree"
     (drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
