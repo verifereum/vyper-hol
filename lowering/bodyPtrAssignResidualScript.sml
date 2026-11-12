@@ -16,6 +16,9 @@ Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperTypeSystem list finite_map bodyPtrAugAssignEffectfulIndex
+  bodyPtrAugAssignNarrow bodyPtrAugAssignLocal bodyPtrAugAssignPureStorage
+  supportedTargetLocalLive bodyAugAssignOther bodyAugPlaceTarget
+  exprSimHypsDefs exprSimDefs vyperTypeInvariants
 
 val _ = Parse.hide "body";
 
@@ -186,7 +189,32 @@ Theorem body_augassign_other_ptr:
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e))
       (eval_stmt cx (AugAssign ty t bop e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `supported_expr tops e` by fs[supported_stmt_def] >>
+  Cases_on `t`
+  >- gvs[]
+  >- (rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      Cases_on `supported_aug_target tops bindings
+        (TopLevelNameTarget (nsid0,nsid1))`
+      >- (irule body_augassign_toplevel_aug_ptr >> metis_tac[]) >>
+      `?ity. supported_immutable_type tops (nsid0,nsid1) = SOME ity` by
+        gvs[supported_stmt_def, supported_target_def, optionTheory.IS_SOME_EXISTS] >>
+      simp[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
+      `~cx.in_deploy /\ env_context_consistent env cx /\
+       get_module_code cx NONE = SOME tops` by
+        fs[body_inv_def, expr_sim_inv_def, env_consistent_def] >>
+      drule_all augassign_immutable_runtime_untyped >> strip_tac >>
+      gvs[type_stmt_def, well_typed_target_def]) >>
+  (qmatch_goalsub_abbrev_tac `AugAssign ty bt bop e` >>
+   Cases_on `?id. target_root bt = NameTarget id`
+   >- (`?info. supported_target_info tops bindings bt = SOME info` by
+         metis_tac[aug_place_supported_stmt_target_info] >>
+       `!id. target_root bt = NameTarget id ==> local_target_live cx id bt` by
+         metis_tac[supported_target_local_live] >>
+       gvs[Abbr `bt`] >> irule body_augassign_local_place_ptr >> simp[] >> metis_tac[]) >>
+   Cases_on `supported_target_pure tops bt`
+   >- (gvs[Abbr `bt`] >> irule body_augassign_pure_storage_place_ptr >> simp[] >> metis_tac[]) >>
+   gvs[Abbr `bt`] >> irule augassign_place_effectful_index_case_ptr >> simp[] >> metis_tac[])
 QED
 
 (* RESIDUAL: the pointer twin of S1's bodySimDeclCases$body_annassign_widened_aggregate_call, stated as S1
