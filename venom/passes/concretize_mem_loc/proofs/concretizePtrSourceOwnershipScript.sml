@@ -261,9 +261,9 @@ Theorem ptr_source_ownership_erasure_invariant[local]:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   (ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
-    ptr_params_erases (w2n vs0.vs_initial_fmp) births PT a.po_params /\
-    ptr_ledger_erases (w2n vs0.vs_initial_fmp) births TG a.po_prov /\
-    ptr_saved_erases (w2n vs0.vs_initial_fmp) births saved a.po_stack) /\
+    ptr_params_erases (dyn_floor C vs0) births PT a.po_params /\
+    ptr_ledger_erases (dyn_floor C vs0) births TG a.po_prov /\
+    ptr_saved_erases (dyn_floor C vs0) births saved a.po_stack) /\
   (~ctx_has_dalloca C /\ ptr_discipline lo C vs0 ==>
     !dyn. ptr_ledger_erases dyn births TG a.po_prov)
 Proof
@@ -273,7 +273,7 @@ QED
 Theorem ptr_source_ownership_params_erases:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
-  ptr_params_erases (w2n vs0.vs_initial_fmp) births PT a.po_params
+  ptr_params_erases (dyn_floor C vs0) births PT a.po_params
 Proof
   metis_tac[ptr_source_ownership_erasure_invariant]
 QED
@@ -281,7 +281,7 @@ QED
 Theorem ptr_source_ownership_prov_erases:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
-  ptr_ledger_erases (w2n vs0.vs_initial_fmp) births TG a.po_prov
+  ptr_ledger_erases (dyn_floor C vs0) births TG a.po_prov
 Proof
   metis_tac[ptr_source_ownership_erasure_invariant]
 QED
@@ -299,7 +299,7 @@ QED
 Theorem ptr_source_ownership_saved_erases:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
-  ptr_saved_erases (w2n vs0.vs_initial_fmp) births saved a.po_stack
+  ptr_saved_erases (dyn_floor C vs0) births saved a.po_stack
 Proof
   metis_tac[ptr_source_ownership_erasure_invariant]
 QED
@@ -308,7 +308,7 @@ Theorem ptr_source_ownership_saved_params:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   n < LENGTH saved ==>
-  ptr_params_erases (w2n vs0.vs_initial_fmp) births (FST (EL n saved)) (EL n a.po_stack).cf_params
+  ptr_params_erases (dyn_floor C vs0) births (FST (EL n saved)) (EL n a.po_stack).cf_params
 Proof
   metis_tac[ptr_source_ownership_saved_erases, ptr_saved_erases_def]
 QED
@@ -317,7 +317,7 @@ Theorem ptr_source_ownership_saved_prov:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   n < LENGTH saved ==>
-  ptr_ledger_erases (w2n vs0.vs_initial_fmp) births (SND (EL n saved)) (EL n a.po_stack).cf_prov
+  ptr_ledger_erases (dyn_floor C vs0) births (SND (EL n saved)) (EL n a.po_stack).cf_prov
 Proof
   metis_tac[ptr_source_ownership_saved_erases, ptr_saved_erases_def]
 QED

@@ -37,10 +37,10 @@ Theorem ptr_endpoint_protected_history:
     (!k. w < k /\ k + 1 < LENGTH h ==> ~ptr_chrono_write C x (EL k h)) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
     ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
-  w2n vs.vs_initial_fmp <= x
+  dyn_floor C vs <= x
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `w2n vs.vs_initial_fmp <= x` >- simp[] >> disj1_tac >>
+  Cases_on `dyn_floor C vs <= x` >- simp[] >> disj1_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
   `PRE (LENGTH h) < LENGTH h /\ EL (PRE (LENGTH h)) h = endpoint` by
     (Cases_on `h` >> gvs[LAST_EL]) >>
@@ -87,16 +87,16 @@ Proof
       (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn)
     mems (ptr_owner_view d endpoint).cf_inst` by
     (irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
-     qexists `w2n vs.vs_initial_fmp <= b` >> conj_tac
+     qexists `dyn_floor C vs <= b` >> conj_tac
      >- (qpat_x_assum `b <= x` mp_tac >>
-         qpat_x_assum `~(w2n vs.vs_initial_fmp <= x)` mp_tac >>
+         qpat_x_assum `~(dyn_floor C vs <= x)` mp_tac >>
          rpt (pop_assum kall_tac) >> decide_tac) >>
      irule ptr_owner_selected_read_seed >> simp[] >> metis_tac[]) >>
   qexists `w` >> simp[] >>
   qpat_x_assum `(ptr_owner_view d (EL w h)).cf_fn = _` (fn th =>
     once_rewrite_tac[GSYM th]) >>
   irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
-  qexists `w2n vs.vs_initial_fmp <= x` >> conj_tac >- simp[] >>
+  qexists `dyn_floor C vs <= x` >> conj_tac >- simp[] >>
   irule ptr_owner_write_byte_seed >> simp[] >> rpt conj_tac >>
   TRY (qexistsl_tac [`C`,`P`,`lo`] >> simp[] >> rpt conj_tac) >>
   TRY (fs[ptr_chrono_write_def] >> NO_TAC) >>
@@ -136,10 +136,10 @@ Theorem ptr_endpoint_actual_protected_history:
                                        (EL (SUC k) h).po_state)) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
     ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
-  w2n vs.vs_initial_fmp <= x
+  dyn_floor C vs <= x
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `w2n vs.vs_initial_fmp <= x` >- simp[] >> disj1_tac >>
+  Cases_on `dyn_floor C vs <= x` >- simp[] >> disj1_tac >>
   drule_all ptr_endpoint_owned_actual_initializer >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
   `PRE (LENGTH h) < LENGTH h /\ EL (PRE (LENGTH h)) h = endpoint` by
@@ -159,16 +159,16 @@ Proof
       (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn)
     mems (ptr_owner_view d endpoint).cf_inst` by
     (irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
-     qexists `w2n vs.vs_initial_fmp <= b` >> conj_tac
+     qexists `dyn_floor C vs <= b` >> conj_tac
      >- (qpat_x_assum `b <= x` mp_tac >>
-         qpat_x_assum `~(w2n vs.vs_initial_fmp <= x)` mp_tac >>
+         qpat_x_assum `~(dyn_floor C vs <= x)` mp_tac >>
          rpt (pop_assum kall_tac) >> decide_tac) >>
      irule ptr_owner_selected_read_seed >> simp[] >> metis_tac[]) >>
   qexists `w` >> simp[arithmeticTheory.ADD1] >>
   qpat_x_assum `(ptr_owner_view d (EL w h)).cf_fn = _` (fn th =>
     once_rewrite_tac[GSYM th]) >>
   irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
-  qexists `w2n vs.vs_initial_fmp <= x` >> conj_tac >- simp[] >>
+  qexists `dyn_floor C vs <= x` >> conj_tac >- simp[] >>
   irule ptr_owner_write_byte_seed >> simp[] >> rpt conj_tac >>
   TRY (qexistsl_tac [`C`,`P`,`lo`] >> simp[] >> rpt conj_tac) >>
   TRY (fs[ptr_chrono_write_def] >> NO_TAC) >>

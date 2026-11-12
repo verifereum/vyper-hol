@@ -29,7 +29,7 @@ Theorem ptr_historical_write_classification:
   taint_ok fn (EL j h).po_taint (EL j h).po_inst (EL j h).po_state /\
   ~in_revert_forward fn (EL j h).po_state /\ len <> 0 ==>
   (op_prov TGj ops.iao_ofst = NONE /\ op_taint (EL j h).po_taint ops.iao_ofst = {} /\
-    (w2n d + len <= lo \/ w2n vs.vs_initial_fmp <= w2n d)) \/
+    (w2n d + len <= lo \/ dyn_floor C vs <= w2n d)) \/
   (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TGj dv = SOME (token,bid) /\
     FLOOKUP (EL j h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\

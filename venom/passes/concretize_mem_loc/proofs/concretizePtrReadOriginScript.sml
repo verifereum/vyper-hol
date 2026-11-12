@@ -119,7 +119,7 @@ Theorem ptr_frame_selected_read_seed:
     ml_read_gen (Allocation aid)
       (bp_analyze_fuel (concretize_memloc_fuel (EL n stk).cf_fn)
         (cfg_analyze (EL n stk).cf_fn) (EL n stk).cf_fn) mems (EL n stk).cf_inst) \/
-  w2n vs0.vs_initial_fmp <= FST site
+  dyn_floor ctx vs0 <= FST site
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ptr_frame_table_support_invariant >> strip_tac >>
@@ -127,7 +127,7 @@ Proof
   drule ptr_frame_call_ancestry >> strip_tac >>
   qspecl_then [`stk`, `<| cf_fn := fn; cf_inst := inst; cf_state := s;
     cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |>`, `v`]
-    mp_tac (Q.INST [`dyn` |-> `w2n vs0.vs_initial_fmp`] ptr_ancestry_selected_read_seed) >>
+    mp_tac (Q.INST [`dyn` |-> `dyn_floor ctx vs0`] ptr_ancestry_selected_read_seed) >>
   simp[ptr_activation_ready_def, ptr_activation_read_seed_def] >>
   (impl_tac >- (gvs[EVERY_MEM, ptr_activation_ready_def] >> metis_tac[])) >>
   metis_tac[]

@@ -188,7 +188,7 @@ Theorem ptr_buffer_copy_range_owner[local]:
   ptr_value_transport births positions (op_prov TG ops.iao_ofst) {} d dt /\
   (!aid pos sz. FLOOKUP positions (Allocation aid) = SOME (pos,sz) ==>
     pos + sz < dimword(:256)) ==>
-  ptr_paired_write_owner lo positions (\x. w2n dt + (x-w2n d))
+  ptr_paired_write_owner dyn lo positions (\x. w2n dt + (x-w2n d))
     {x | w2n d <= x /\ x < w2n d + len}
     (tokens,registry,births,PT,TG,saved,entries)
 Proof
@@ -220,7 +220,7 @@ Proof
   `w2n dt = pos + (w2n d - b)` by
     (irule ptr_closed_relocation_value >> simp[] >>
      qexists_tac `sz` >> simp[] >> decide_tac) >>
-  disj2_tac >> qexistsl_tac [`token`,`aid`,`b`,`sz`,`pos`,`x-b`] >>
+  disj2_tac >> disj1_tac >> qexistsl_tac [`token`,`aid`,`b`,`sz`,`pos`,`x-b`] >>
   simp[] >> decide_tac
 QED
 
@@ -258,10 +258,10 @@ Proof
      simp[] >> fs[MEM] >> metis_tac[]) >>
   `ptr_ledger_write_pair C Ct (\x. w2n dt + (x-w2n d)) a z at zt` by
     (irule ptr_buffer_copy_write_pair >> metis_tac[]) >>
-  `ptr_paired_write_owner lo positions (\x. w2n dt + (x-w2n d))
+  `!dyn. ptr_paired_write_owner dyn lo positions (\x. w2n dt + (x-w2n d))
     (range_bytes (step_writes a.po_inst a.po_state z.po_state))
     (tokens,registry,births,PT,TG,saved,entries)` by
-    (asm_rewrite_tac[] >> irule ptr_buffer_copy_range_owner >>
+    (gen_tac >> asm_rewrite_tac[] >> irule ptr_buffer_copy_range_owner >>
      conj_tac >- first_assum ACCEPT_TAC >>
      qpat_assum `ptr_source_ownership _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      qexists_tac `<|iao_ofst := dop; iao_size := SOME nop;

@@ -5,7 +5,7 @@ Ancestors
   concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape concretizeStepContract
   concretizePtrOpaqueRetpc
-  list rich_list arithmetic pair pred_set
+  ptrDiscipline list rich_list arithmetic pair pred_set
 
 (* The global map is for relocation only; production rewrites have their
    own per-function maps. Metadata is deliberately not equated. *)
@@ -79,13 +79,14 @@ Definition ptr_paired_callers_def:
 End
 
 Definition ptr_paired_write_owner_def:
-  ptr_paired_write_owner (lo:num) positions (rho:num -> num) xs
+  ptr_paired_write_owner (dyn:num) (lo:num) positions (rho:num -> num) xs
       (tokens,registry,births,PT,TG,saved,entries) <=>
     !x. x IN xs ==>
       (x < lo /\ rho x = x) \/
       (?token aid base sz pos k. MEM token tokens /\ k < sz /\ x = base + k /\ rho x = pos + k /\
         FLOOKUP births (token,aid) = SOME (base,sz) /\
-        FLOOKUP positions (Allocation aid) = SOME (pos,sz))
+        FLOOKUP positions (Allocation aid) = SOME (pos,sz)) \/
+      (dyn <= x /\ rho x = x)
 End
 
 Definition ptr_paired_write_def:
@@ -96,7 +97,7 @@ Definition ptr_paired_write_def:
       (EL (SUC n) h).po_state) <> {} /\
     ptr_ledger_write_pair C Ct rho (EL n h) (EL (SUC n) h)
       (EL j ht) (EL (SUC j) ht) /\
-    ptr_paired_write_owner lo positions rho
+    ptr_paired_write_owner (dyn_floor C (EL n h).po_state) lo positions rho
       (range_bytes (step_writes (EL n h).po_inst (EL n h).po_state
         (EL (SUC n) h).po_state)) (EL (SUC n) H)
 End
@@ -126,13 +127,14 @@ Proof
 QED
 
 Theorem ptr_paired_write_owner_byte:
-  !lo positions (rho:num -> num) xs tokens registry births PT TG saved entries x.
-  ptr_paired_write_owner lo positions rho xs
+  !dyn lo positions (rho:num -> num) xs tokens registry births PT TG saved entries x.
+  ptr_paired_write_owner dyn lo positions rho xs
     (tokens,registry,births,PT,TG,saved,entries) /\ x IN xs ==>
   (x < lo /\ rho x = x) \/
   (?token aid base sz pos k. MEM token tokens /\ k < sz /\ x = base + k /\ rho x = pos + k /\
     FLOOKUP births (token,aid) = SOME (base,sz) /\
-    FLOOKUP positions (Allocation aid) = SOME (pos,sz))
+    FLOOKUP positions (Allocation aid) = SOME (pos,sz)) \/
+  (dyn <= x /\ rho x = x)
 Proof
   simp[ptr_paired_write_owner_def]
 QED
@@ -264,7 +266,8 @@ Theorem ptr_paired_write_owned_byte:
   (x < lo /\ rho x = x) \/
   (?token aid base sz pos k. MEM token tokens /\ k < sz /\ x = base + k /\ rho x = pos + k /\
     FLOOKUP births (token,aid) = SOME (base,sz) /\
-    FLOOKUP positions (Allocation aid) = SOME (pos,sz))
+    FLOOKUP positions (Allocation aid) = SOME (pos,sz)) \/
+  (dyn_floor C (EL n h).po_state <= x /\ rho x = x)
 Proof
   rpt gen_tac >> strip_tac >> drule_all ptr_paired_write_event >>
   simp[ptr_paired_write_def] >> strip_tac >>

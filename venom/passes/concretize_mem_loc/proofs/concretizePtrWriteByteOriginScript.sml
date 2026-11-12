@@ -35,7 +35,7 @@ Theorem ptr_frame_write_byte_origin:
        w2n idx < LENGTH PG /\ EL (w2n idx) PG = SOME (b,sz) /\
        v IN pointer_derived_vars fn {r}) \/
      (?i r. MEM i (fn_insts fn) /\ i.inst_opcode = DALLOCA /\
-       MEM r i.inst_outputs /\ w2n vs0.vs_initial_fmp <= b /\
+       MEM r i.inst_outputs /\ dyn_floor ctx vs0 <= b /\
        v IN pointer_derived_vars fn {r}))
 Proof
   strip_tac >> drule_all ptr_write_byte_selected_site >> strip_tac >>

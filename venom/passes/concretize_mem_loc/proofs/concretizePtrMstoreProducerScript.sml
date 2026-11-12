@@ -372,7 +372,7 @@ Resume ptr_mstore_write_producer[owned]:
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def, step_writes_def,
         source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
-      rpt strip_tac >> disj2_tac >>
+      rpt strip_tac >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
   suspend "owned_ledger"
 QED

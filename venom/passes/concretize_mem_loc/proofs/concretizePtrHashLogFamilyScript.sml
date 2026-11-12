@@ -264,7 +264,7 @@ Theorem ptr_paired_hash_log_endpoint[local]:
   ~in_revert_forward a.po_fn a.po_state /\
   ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
     a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels /\
-  ptr_ledger_erases (w2n vs.vs_initial_fmp) births TG a.po_prov /\
+  ptr_ledger_erases (dyn_floor C vs) births TG a.po_prov /\
   ?P. fn_ptr_ok P a.po_fn /\ FDOM a.po_prov SUBSET fn_pv P a.po_fn
 Proof
   strip_tac >>

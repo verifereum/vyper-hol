@@ -490,7 +490,7 @@ Resume ptr_extcodecopy_write_certificate[owned]:
   simp[ptr_paired_write_def, EL_APPEND_EQN] >>
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def] >> rpt strip_tac >>
-      disj2_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
+      disj2_tac >> disj1_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
   simp[ptr_ledger_write_pair_def, is_terminator_def] >>
   simp[ptr_bytes_agree_def] >> rpt strip_tac >>
   `x = w2n dst + (x-w2n dst) /\ x-w2n dst < w2n sz /\

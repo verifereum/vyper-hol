@@ -22,7 +22,7 @@ Theorem ptr_source_write_owner_cases:
   (?ops v b sz.
     mem_write_ops a.po_inst = SOME ops /\ ops.iao_ofst = Var v /\
     FLOOKUP a.po_prov v = SOME (b,sz) /\ FLOOKUP TG v = NONE /\
-    w2n vs.vs_initial_fmp <= b /\ b <= off /\ off + len <= b + sz)
+    dyn_floor C vs <= b /\ b <= off /\ off + len <= b + sz)
 Proof
   strip_tac >>
   Cases_on `lo < off + len \/
@@ -70,7 +70,7 @@ Theorem ptr_source_step_write_owner_cases:
      (?ops v b sz.
        mem_write_ops a.po_inst = SOME ops /\ ops.iao_ofst = Var v /\
        FLOOKUP a.po_prov v = SOME (b,sz) /\ FLOOKUP TG v = NONE /\
-       w2n vs.vs_initial_fmp <= b /\ b <= off /\ off + len <= b + sz))
+       dyn_floor C vs <= b /\ b <= off /\ off + len <= b + sz))
 Proof
   strip_tac >>
   qpat_x_assum `x IN _` mp_tac >> simp[ptr_step_write_range] >> strip_tac >>
