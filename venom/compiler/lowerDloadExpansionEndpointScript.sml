@@ -41,19 +41,6 @@ Proof
     (Cases >> simp[]) >> simp[]
 QED
 
-(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
-   ghosts and the dynamic-region agreement of ld_sync.
-Proof
-  strip_tac >>
-  qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[ld_sync_def] >> strip_tac >> simp[] >>
-  conj_tac >- (gvs[EVERY_DEF] >> metis_tac[]) >>
-  gen_tac >> Cases_on `j`
-  >- (simp[] >> metis_tac[]) >>
-  qpat_x_assum `!j. _ ==> ?X. ld_envelope _ _ _ _ X _`
-    (qspec_then `SUC n` mp_tac) >> gvs[]
-QED
-*)
 Theorem ld_sync_scratch_reconstruct:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   g.lf_serial = f.lf_serial /\ g.lf_fn = f.lf_fn /\
@@ -73,55 +60,16 @@ Theorem ld_sync_scratch_reconstruct:
   ld_dyn_agree (dyn_floor C vs0) tn'.t_mem s'.vs_memory t'.vs_memory ==>
   ld_sync lo P C vs0 stk PG G' tn' fn next s' t' A (g::fs) N
 Proof
-  cheat
+  strip_tac >>
+  qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[ld_sync_def] >> strip_tac >> simp[] >>
+  conj_tac >- (gvs[EVERY_DEF] >> metis_tac[]) >>
+  gen_tac >> Cases_on `j`
+  >- (simp[] >> metis_tac[]) >>
+  qpat_x_assum `!j. _ ==> ?X. ld_envelope _ _ _ _ X _`
+    (qspec_then `SUC n` mp_tac) >> gvs[]
 QED
 
-(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
-   ghosts and the dynamic-region agreement of ld_sync.
-Proof
-  strip_tac >>
-  `active_inst fn inst s` by metis_tac[ld_sync_source] >>
-  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
-    (drule_all ld_sync_fn_shape >> strip_tac >>
-     gvs[o1_fn_shape_def, wf_function_def, fn_labels_def]) >>
-  drule_all ld_dloadbytes_envelope_temporary >> strip_tac >>
-  `h = 1` by gvs[] >> qpat_x_assum `h = 1` SUBST_ALL_TAC >>
-  drule_all ld_sync_dloadbytes_effect >>
-  disch_then (qx_choose_then `ss` (qx_choose_then `H'`
-    (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))) >>
-  `t0.vs_inst_idx = p` by (drule_all ld_sync_envelope_position >> simp[]) >>
-  `t.vs_inst_idx = p+1` by (irule ld_prefix_position >> metis_tac[]) >>
-  qpat_x_assum `tn' = _` SUBST_ALL_TAC >>
-  qpat_x_assum `G' = _` SUBST_ALL_TAC >>
-  `step_prov PG G inst ss = ld_erase A o_f H'` by metis_tac[] >>
-  qpat_x_assum `ld_erase A o_f H' = _` kall_tac >>
-  qabbrev_tac `g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
-    lf_tgt := u with vs_inst_idx := p + LENGTH X;
-    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>` >>
-  `g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
-    lf_tgt := u with vs_inst_idx := p + LENGTH X;
-    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>` by simp[Abbr `g`] >>
-  drule_all ld_nonallocating_endpoint >>
-  qpat_assum `g = _` (fn eq =>
-    disch_then (strip_assume_tac o SIMP_RULE std_ss [LET_THM, GSYM eq])) >>
-  `g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
-   g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\ g.lf_H = H' /\
-   g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
-   g.lf_tgt = (u with vs_inst_idx := p+LENGTH X) /\
-   g.lf_tv = (step_taint inst s ss tn).t_var` by
-    simp[NoAsms, Abbr `g`] >>
-  qpat_x_assum `g = _` kall_tac >> qpat_x_assum `Abbrev _` kall_tac >>
-  qexistsl_tac [`ss`, `A`, `g`] >>
-  asm_simp_tac std_ss [] >>
-  conj_tac >- simp[NoAsms] >>
-  conj_tac >- (qpat_x_assum `EVERY (\f. f.lf_supply = _) (f::fs)` mp_tac >>
-    asm_simp_tac std_ss [EVERY_DEF]) >>
-  conj_tac >- (qpat_x_assum `EVERY (\f. !j a. _) (f::fs)` mp_tac >>
-    asm_simp_tac std_ss [EVERY_DEF]) >>
-  drule ld_head_order_cong >> disch_then (fn th => rewrite_tac[th]) >>
-  qpat_x_assum `!j k. _` ACCEPT_TAC
-QED
-*)
 Theorem ld_dloadbytes_endpoint:
   o1_ctx_shape C /\ o1_run_state_ok vs0 /\
   reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
@@ -171,7 +119,45 @@ Theorem ld_dloadbytes_endpoint:
       ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
         (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N)
 Proof
-  cheat
+  strip_tac >>
+  `active_inst fn inst s` by metis_tac[ld_sync_source] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (drule_all ld_sync_fn_shape >> strip_tac >>
+     gvs[o1_fn_shape_def, wf_function_def, fn_labels_def]) >>
+  drule_all ld_dloadbytes_envelope_temporary >> strip_tac >>
+  `h = 1` by gvs[] >> qpat_x_assum `h = 1` SUBST_ALL_TAC >>
+  drule_all ld_sync_dloadbytes_effect >>
+  disch_then (qx_choose_then `ss` (qx_choose_then `H'`
+    (qx_choose_then `G'` (qx_choose_then `tn'` strip_assume_tac)))) >>
+  `t0.vs_inst_idx = p` by (drule_all ld_sync_envelope_position >> simp[]) >>
+  `t.vs_inst_idx = p+1` by (irule ld_prefix_position >> metis_tac[]) >>
+  qpat_x_assum `tn' = _` SUBST_ALL_TAC >>
+  qpat_x_assum `G' = _` SUBST_ALL_TAC >>
+  qabbrev_tac `g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := u with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>` >>
+  `g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := u with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>` by simp[Abbr `g`] >>
+  drule_all ld_nonallocating_endpoint >>
+  qpat_assum `g = _` (fn eq =>
+    disch_then (strip_assume_tac o SIMP_RULE std_ss [LET_THM, GSYM eq])) >>
+  `g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
+   g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\ g.lf_H = H' /\
+   g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
+   g.lf_tgt = (u with vs_inst_idx := p+LENGTH X) /\
+   g.lf_tv = (step_taint inst s ss tn).t_var` by
+    simp[NoAsms, Abbr `g`] >>
+  qpat_x_assum `g = _` kall_tac >> qpat_x_assum `Abbrev _` kall_tac >>
+  qexistsl_tac [`ss`, `A`, `g`] >>
+  asm_simp_tac std_ss [] >>
+  conj_tac >- simp[NoAsms] >>
+  conj_tac >- (qpat_x_assum `EVERY (\f. f.lf_supply = _) (f::fs)` mp_tac >>
+    asm_simp_tac std_ss [EVERY_DEF]) >>
+  conj_tac >- (qpat_x_assum `EVERY (\f. !j a. _) (f::fs)` mp_tac >>
+    asm_simp_tac std_ss [EVERY_DEF]) >>
+  drule ld_head_order_cong >> disch_then (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `!j k. _` ACCEPT_TAC
 QED
 
 (* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
