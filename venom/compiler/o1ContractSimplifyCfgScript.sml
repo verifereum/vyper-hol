@@ -337,7 +337,7 @@ Proof
    (!lo. fixed_region_reserved lo C ==> fixed_region_reserved lo C')` by
     (fs[o1_src_inv_def, fmp_free_ctx_def, EVERY_MAP, EVERY_MEM,
         fixed_region_reserved_def] >>
-     rpt conj_tac >> rpt strip_tac
+     rpt conj_tac >> rpt strip_tac >> gvs[MEM_MAP]
      >- metis_tac[simplify_cfg_fn_metadata, fn_static_layout_eq_def]
      >- metis_tac[simplify_cfg_fn_metadata, fn_fmp_convention_eq_def]
      >- (simp[pre_fmp_ops_def, simplify_cfg_fn_def] >>
