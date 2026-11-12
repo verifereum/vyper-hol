@@ -1,6 +1,7 @@
 Theory exprSimAggregateBodyCountedLoops
 Ancestors
-  aggregateCountedPureFramePrep exprSimAggregateBodyLoops
+  exprSimAggregateBodyLoops exprSimAggregateBodyHead valueEncodingTyping
+  exprSimHyps exprSimMemorySource valueEncodingProps exprBopSimProps
   exprSimAggregateBodyCountedChildren exprSimAggregateLoops exprLowering
   compileEnv loweringStateRelDefs exprLoweringProps emitHelper list exprSimSource exprSimHypsDefs exprSimDefs
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom gasSummary gasContext

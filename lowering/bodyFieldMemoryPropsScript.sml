@@ -808,7 +808,9 @@ Theorem body_unwrap_memory_counted_read:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
       (vv_store_bound cx t lt es' tv (LocatedValue t p) s ==>
-       expr_store_bound cx t v op u)
+       expr_store_bound cx t v op u) /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `vv_store_bound cx t lt es' tv (LocatedValue t p) s ==>
