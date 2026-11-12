@@ -15,7 +15,7 @@
  *)
 Theory bodyPtrIntCallFrameRet
 Ancestors
-  bodyPtrDefs intCallReturnMem bodyIntCallReturnCopy stmtSimReturn bodySim
+  bodyPtrDefs intCallReturnMem stmtSimReturn bodySim
   internalReturnStackPtr internalReturnStorePtr internalReturnCountedPtr
   internalReturnStackSuffixPtr internalReturnMemorySuffixPtr wordAggregateReturnSemantics
   compileEnv valueEncoding compileVyper loweringPosts ptrDiscipline
@@ -56,9 +56,8 @@ End
    headroom: the store never offsets the buffer address).
    Constructor frames are excluded by stmt_frag_ptr itself.  S1's pieces:
    stmtSimReturn (step_ret_values, compile_load_tuple_elements_run,
-   intret_vals_match_word/_tuple), bodyIntCallReturnCopy's
-   compile_internal_return_memory_size_bound_frag (the size-headroom form
-   of intCallReturnMem's compile_internal_return_memory_frag), and the
+   intret_vals_match_word/_tuple), intCallReturnMem's
+   compile_internal_return_memory_frag, and the
    bytestring branch of
    stmtSimReturnWiden's compile_internal_return_memory_widen_frag; the
    returned expression's expr_sim_ptr/expr_vv_sim_ptr for the ghost side
