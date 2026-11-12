@@ -5,7 +5,7 @@ Ancestors
   fragGasSeqPtr abiBuiltinAllocation abiBuiltinEncodeCode ptrDiscipline
   abiEncoderWindow bodyPtrDefs emitHelper emitHelperProps compileEnv context
   exprLoweringProps venomExecSemantics venomInstProofs venomInst venomState finite_map words
-  list rich_list arithmetic
+  list rich_list arithmetic revertReasonPrefixFramePtr loweringStateRelDefs
 
 Theorem setup_add_continuation[local]:
   IS_SOME (lookup_var src s) /\ IS_SOME (FLOOKUP G src) /\
@@ -50,7 +50,7 @@ Theorem setup_method_suffix[local]:
   lookup_var a s = SOME (n2w p) /\ FLOOKUP G a = SOME (p,sz) /\
   op_taint tn (Var a) = {} /\ a <> b /\ a <> c /\ b <> c /\
   p+sz < dimword (:256) /\ 64 <= sz /\ 36+n <= sz /\
-  ~ctx_has_dalloca ctx /\
+  ~ctx_has_dalloca ctx /\ tm = tn.t_mem /\
   run_inst_seq [mk_inst i ADD [Var a; Lit 36w] [b];
     mk_inst j ADD [Var a; Lit 32w] [c];
     mk_inst k MSTORE [Var c; Lit w] []] s = OK raw ==>
@@ -60,7 +60,8 @@ Theorem setup_method_suffix[local]:
        mk_inst j ADD [Var a; Lit 32w] [c];
        mk_inst k MSTORE [Var c; Lit w] []] (s with vs_inst_idx := idx) H tf /\
     ptr_covers H tf a raw sz /\ op_taint tf (Var b) = {} /\
-    ptr_covers H tf b raw n
+    ptr_covers H tf b raw n /\
+    tf.t_mem = tm DIFF {i | p+32 <= i /\ i < p+64}
 Proof
   strip_tac >>
   `step_inst_base (mk_inst i ADD [Var a; Lit 36w] [b]) s =
@@ -89,7 +90,7 @@ Proof
   simp[FLOOKUP_UPDATE] >> decide_tac
 QED
 
-Theorem abi_encode_setup_ptr_sequence:
+Theorem abi_encode_setup_ptr_sequence_mem:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
   run_inst_seq (emitted_insts st ready) initial = OK raw /\
   outsz = 32 + 32 * word_size
@@ -102,7 +103,12 @@ Theorem abi_encode_setup_ptr_sequence:
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st ready) initial H tf /\
     FST ops = Var x /\ ptr_covers H tf x raw outsz /\
     op_taint tf (SND ops) = {} /\
-    (0 < n ==> ?y. SND ops = Var y /\ ptr_covers H tf y raw n)
+    (0 < n ==> ?y. SND ops = Var y /\ ptr_covers H tf y raw n) /\
+    tf.t_mem =
+      (if FLOOKUP initial.vs_allocas st.cs_next_id = NONE then
+         tn.t_mem UNION {i | p <= i /\ i < p+outsz}
+       else tn.t_mem) DIFF
+      (case method_id of NONE => {} | SOME mid => {i | p+32 <= i /\ i < p+64})
 Proof
   Cases_on `method_id` >>
   simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
@@ -121,7 +127,7 @@ Proof
   >> suspend "some_reused"
 QED
 
-Resume abi_encode_setup_ptr_sequence[none_fresh]:
+Resume abi_encode_setup_ptr_sequence_mem[none_fresh]:
   qmatch_asmsub_abbrev_tac `Lit (n2w sz)` >>
   qmatch_goalsub_abbrev_tac `mk_inst _ ALLOCA [Lit (n2w sz)] [x]` >>
   qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var x; Lit 32w] [y]` >>
@@ -153,7 +159,7 @@ Resume abi_encode_setup_ptr_sequence[none_fresh]:
   simp[word_add_n2w, w2n_n2w] >> fs[Abbr `sz`] >> decide_tac
 QED
 
-Resume abi_encode_setup_ptr_sequence[none_reused]:
+Resume abi_encode_setup_ptr_sequence_mem[none_reused]:
   qmatch_asmsub_abbrev_tac `Lit (n2w sz)` >>
   qmatch_goalsub_abbrev_tac `mk_inst _ ALLOCA [Lit (n2w sz)] [x]` >>
   qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var x; Lit 32w] [y]` >>
@@ -184,7 +190,7 @@ Resume abi_encode_setup_ptr_sequence[none_reused]:
   fs[Abbr `sz`] >> decide_tac
 QED
 
-Resume abi_encode_setup_ptr_sequence[some_fresh]:
+Resume abi_encode_setup_ptr_sequence_mem[some_fresh]:
   qmatch_asmsub_abbrev_tac `Lit (n2w sz)` >>
   qmatch_goalsub_abbrev_tac `mk_inst _ ALLOCA [Lit (n2w sz)] [a]` >>
   qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var a; Lit 36w] [b]` >>
@@ -212,7 +218,11 @@ Resume abi_encode_setup_ptr_sequence[some_fresh]:
        mk_inst (st.cs_next_id+3) MSTORE [Var c; Lit (x << 224)] []]
       (u with vs_inst_idx := SUC initial.vs_inst_idx) H tf /\
       ptr_covers H tf a raw sz /\ op_taint tf (Var b) = {} /\
-      ptr_covers H tf b raw n` suffices_by (simp[ADD_COMM] >> metis_tac[]) >>
+      ptr_covers H tf b raw n /\
+      tf.t_mem = (tn.t_mem UNION
+        {i | initial.vs_alloca_next <= i /\ i < initial.vs_alloca_next+sz}) DIFF
+        {i | initial.vs_alloca_next+32 <= i /\ i < initial.vs_alloca_next+64}`
+      suffices_by (simp[ADD_COMM] >> metis_tac[]) >>
   irule setup_method_suffix >>
   simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE, op_taint_def] >>
   conj_tac >- (fs[Abbr `sz`] >>
@@ -223,7 +233,7 @@ Resume abi_encode_setup_ptr_sequence[some_fresh]:
   fs[run_inst_seq_def, update_var_def]
 QED
 
-Resume abi_encode_setup_ptr_sequence[some_reused]:
+Resume abi_encode_setup_ptr_sequence_mem[some_reused]:
   qmatch_asmsub_abbrev_tac `Lit (n2w sz)` >>
   qmatch_goalsub_abbrev_tac `mk_inst _ ALLOCA [Lit (n2w sz)] [a]` >>
   qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var a; Lit 36w] [b]` >>
@@ -243,7 +253,9 @@ Resume abi_encode_setup_ptr_sequence[some_reused]:
        mk_inst (st.cs_next_id+3) MSTORE [Var c; Lit (x << 224)] []]
       (u with vs_inst_idx := SUC initial.vs_inst_idx) H tf /\
       ptr_covers H tf a raw sz /\ op_taint tf (Var b) = {} /\
-      ptr_covers H tf b raw n` suffices_by metis_tac[] >>
+      ptr_covers H tf b raw n /\
+      tf.t_mem = tn.t_mem DIFF {i | p+32 <= i /\ i < p+64}`
+      suffices_by metis_tac[] >>
   irule setup_method_suffix >>
   simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE, op_taint_def] >>
   conj_tac >- (fs[Abbr `sz`] >>
@@ -253,4 +265,54 @@ Resume abi_encode_setup_ptr_sequence[some_reused]:
     qspec_then `maxlen+4` assume_tac abi_builtin_word_size_capacity >> decide_tac) >>
   fs[run_inst_seq_def, update_var_def]
 QED
-Finalise abi_encode_setup_ptr_sequence
+Finalise abi_encode_setup_ptr_sequence_mem
+
+(* Original sequence interface, projected from the memory-effect certificate. *)
+Theorem abi_encode_setup_ptr_sequence:
+  abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
+  run_inst_seq (emitted_insts st ready) initial = OK raw /\
+  outsz = 32 + 32 * word_size
+    (maxlen + (case method_id of NONE => 0 | SOME mid => 4)) /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  outsz < dimword (:256) /\ p+outsz < dimword (:256) /\
+  n <= maxlen /\ ~ctx_has_dalloca ctx ==>
+  ?H tf x.
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st ready) initial H tf /\
+    FST ops = Var x /\ ptr_covers H tf x raw outsz /\
+    op_taint tf (SND ops) = {} /\
+    (0 < n ==> ?y. SND ops = Var y /\ ptr_covers H tf y raw n)
+Proof
+  metis_tac[abi_encode_setup_ptr_sequence_mem]
+QED
+
+Theorem abi_encode_setup_ptr_ghost_frame:
+  abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
+  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st ready) initial H tf ==>
+  (!x. not_fresh_at st x ==>
+    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+  tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm
+Proof
+  strip_tac >> conj_tac
+  >- (gen_tac >> disch_tac >> irule inst_seq_ptr_other_output_frame >>
+      goal_assum (drule_at Any) >>
+      Cases_on `method_id` >>
+      gvs[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
+        compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+        fresh_id_def, emit_def] >>
+      simp[emitted_insts_def] >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+      simp[DROP_LENGTH_APPEND, mk_inst_def] >>
+      fs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL, arithmeticTheory.LESS_EQ_ADD]) >>
+  irule inst_seq_ptr_nonmemory_taint_frame >>
+  goal_assum (drule_at Any) >>
+  Cases_on `method_id` >>
+  gvs[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
+    compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+    fresh_id_def, emit_def] >>
+  simp[emitted_insts_def] >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+      simp[DROP_LENGTH_APPEND, mk_inst_def]
+QED
