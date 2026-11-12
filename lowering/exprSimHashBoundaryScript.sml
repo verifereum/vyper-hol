@@ -38,18 +38,6 @@ Proof
   rw[] >> metis_tac[]
 QED
 
-(* A trace-frame computation only appends to the storage trace, so a
-   horizon valid at its end is valid at its start. *)
-Theorem valid_horizon_frame_prefix:
-  !f st H. storage_trace_frame f ==>
-    valid_horizon cx st0 H (SND (f st)).storage_trace ==>
-    valid_horizon cx st0 H st.storage_trace
-Proof
-  rpt strip_tac >> Cases_on `f st` >>
-  drule_all storage_trace_frame_prefix >> strip_tac >>
-  fs[valid_horizon_def]
-QED
-
 Theorem expr_sim_suffix:
   expr_sim ctx func cenv cx ty e es /\
   lower_value compile_expr cenv ty e sa = (op, sm) /\

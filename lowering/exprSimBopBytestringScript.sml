@@ -520,9 +520,11 @@ Proof
         (drule_then assume_tac) >>
       `stmt_state_rel H ctx func cenv cx es s0` by
         (`valid_horizon cx st0 H es.storage_trace` by
-           (qspecl_then [`bind (eval_expr cx e1) (read_result cx)`,
-                         `es with gas_obs := gs`, `H`] mp_tac
-              valid_horizon_frame_prefix >> simp[]) >>
+           (qpat_assum `bind (eval_expr cx e1) (read_result cx) _ = _`
+              (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
+            simp[] >> strip_tac >>
+            qpat_x_assum `valid_horizon _ _ H ee.storage_trace` mp_tac >>
+            simp[valid_horizon_def]) >>
          metis_tac[]) >>
       `expr_body_pre cenv cx env e1 (es with gas_obs := gs)` by
         simp[expr_body_pre_gas_obs] >>

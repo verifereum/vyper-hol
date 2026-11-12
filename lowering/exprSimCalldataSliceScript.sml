@@ -1120,18 +1120,22 @@ Proof
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
-    (irule storage_trace_frame_bind_all >>
-     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
-  simp[storage_trace_frame_def] >> conj_tac
+    (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+          vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule slice_expr_exit_INR_cast >> simp[]) >>
   rpt strip_tac >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es s0` by
     (rpt strip_tac >>
      `valid_horizon cx st0 H' es.storage_trace` by
-       (qspecl_then [`bind (eval_expr cx e) (read_result cx)`,
-                     `es with gas_obs := gs`, `H'`] mp_tac
-          valid_horizon_frame_prefix >> simp[]) >>
+       (qpat_assum `bind (eval_expr cx e) (read_result cx) _ = _`
+          (mp_then (Pos last) mp_tac
+             vyperStorageTraceTheory.storage_trace_frame_prefix) >>
+        simp[] >> strip_tac >>
+        qpat_x_assum `valid_horizon _ _ H' ee.storage_trace` mp_tac >>
+        simp[vyperStorageFootprintTheory.valid_horizon_def]) >>
      metis_tac[]) >>
   drule_at (Pat `bind _ _ _ = _`)
     (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
