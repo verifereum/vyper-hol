@@ -4,7 +4,6 @@ Ancestors
   abiEncodePtrPhases exprPtrCleanBufferPost
   exprSimAbiEncodeNonwordResult exprLoweringProps valueEncodingProps
   bodyPtrDefs compileEnv venomState valueEncodingDefs
-  bodyPtrBytestringBuiltinsCalldataOutcome
 
 Theorem abi_encode_clean_bytes_memory:
   mload p actual = n2w (LENGTH payload) /\
@@ -45,12 +44,12 @@ Theorem abi_encode_bytes_pointer_posts:
   ptr_buf_ok cenv eout (Var x) G actual
 Proof
   strip_tac >>
-  `val_in_memory (BaseTV (BytesT (Dynamic N))) (BytesV payload) p actual.vs_memory` by
-    (drule_all abi_encode_clean_bytes_memory >>
-     disch_then (qspec_then `actual.vs_memory` mp_tac) >>
-     simp[mem_agree_outside_def]) >>
-  drule_at (Pat `ptr_covers _ _ _ _ _`) covered_clean_memory_result >>
-  disch_then (qspecl_then [`cx`, `ty`, `BaseTV (BytesT (Dynamic N))`,
-    `BytesV payload`, `n2w p`, `cenv`, `eout`, `es`] mp_tac) >>
-  simp[mk_ptr_def, val_footprint_def, val_wf_def]
+  `!mem. mem_agree_outside tn.t_mem actual.vs_memory mem ==>
+    val_in_memory (BaseTV (BytesT (Dynamic N))) (BytesV payload) p mem` by
+    metis_tac[abi_encode_clean_bytes_memory] >>
+  gvs[ptr_vv_ok_def, ptr_mem_ok_def, ptr_buf_ok_def, ptr_covers_def,
+      contextTheory.mk_ptr_def, vyperStateTheory.read_result_def,
+      vyperStateTheory.return_def, eval_operand_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+    arithmeticTheory.LESS_EQ_MONO_ADD_EQ]
 QED
