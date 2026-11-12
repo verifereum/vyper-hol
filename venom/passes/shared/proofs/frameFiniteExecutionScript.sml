@@ -228,7 +228,7 @@ Proof
 QED
 
 (* Two finite witnesses agree by realizing both at a common budget. *)
-Theorem finite_step_deterministic:
+Theorem finite_step_deterministic[local]:
   finite_step C i s r /\ finite_step C i s r' ==> r = r'
 Proof
   strip_tac >>
@@ -244,7 +244,8 @@ Proof
   dxrule (cj 2 finite_execution_realizable) >> strip_tac >>
   metis_tac[arithmeticTheory.LE_ADD, arithmeticTheory.ADD_COMM]
 QED
-Theorem finite_run_deterministic:
+
+Theorem finite_run_deterministic[local]:
   finite_run C fn s r /\ finite_run C fn s r' ==> r = r'
 Proof
   strip_tac >>
@@ -255,13 +256,6 @@ QED
 
 (* Boundary probes for consumers that keep an interpreter equation alongside
    a fuel-free derivation.  Calls keep k; run sequencing descends to k. *)
-Theorem finite_base_fuel:
-  i.inst_opcode <> INVOKE /\ step_inst_base i s = r /\ (!e. r <> Error e) ==>
-  step_inst k C i s = r /\ finite_step C i s r
-Proof
-  simp[step_inst_def] >> metis_tac[finite_step_base]
-QED
-
 Theorem finite_invoke_return_fuel_inv:
   i.inst_opcode = INVOKE /\ decode_invoke i = SOME (name,ops) /\
   lookup_function name C.ctx_functions = SOME fn /\

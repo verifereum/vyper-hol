@@ -150,65 +150,13 @@ Proof
   qpat_x_assum `Error _ = _` (SUBST_ALL_TAC o SYM) >> gvs[]
 QED
 
-val ldStepClause = fst (dest_conj (fst (dest_imp
-  (concl ld_runner_conditional_induction))));
-
 val ldPacket = fst (strip_comb (fst (dest_imp
   (concl ld_runner_packet_terminates))));
-
-Theorem ld_runner_step_clause:
-  ^ldStepClause
-Proof
-  qabbrev_tac `RR = ^ldPacket` >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[] >>
-  drule_at (Pat `terminates _`) ld_terminating_invoke_inversion >>
-  disch_then (qspecl_then [`s`, `fuel`, `inst`, `C`] mp_tac) >>
-  simp[] >> strip_tac >>
-  drule_all lower_dload_stage_invoke_entry >> strip_tac >>
-  first_x_assum (drule_all_then strip_assume_tac o
-    SIMP_RULE bool_ss [PULL_EXISTS]) >>
-  gvs[] >>
-  qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[Abbr `RR`] >> strip_tac
-  >- suspend "return"
-  >- suspend "halt"
-  >> suspend "abort"
-QED
-
-Resume ld_runner_step_clause[return]:
-  `wf_function fn` by
-    (drule ld_joint_source >>
-     disch_then (strip_assume_tac o MATCH_MP occ_frame_reachable_annotation) >>
-     fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
-  `cs.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
-    metis_tac[ld_setup_callee_call_ctx] >>
-  drule_at (Pat `ld_joint_boundary _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    (SIMP_RULE bool_ss [PULL_EXISTS] ld_return_endpoint_consume) >>
-  simp[] >> disch_then (drule_all_then strip_assume_tac) >>
-  `s1.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
-    (qpat_x_assum `bind_outputs _ jr.iret_values _ = _` kall_tac >>
-     qspec_then `\u. u.vs_call_ctx.cc_address` mp_tac
-       venomInstProofs1Theory.bind_outputs_preserves >>
-     simp[update_var_def] >> disch_then drule >>
-     simp[adopt_return_fmp_def, merge_callee_state_def]) >>
-  `step_inst m C' inst t = OK t1'` by simp[Once step_inst_def] >>
-  qexists_tac `m` >> goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-Resume ld_runner_step_clause[halt]:
-  qexists_tac `m` >> simp[Once step_inst_def] >> simp[Once step_inst_def] >> gvs[]
-QED
-Resume ld_runner_step_clause[abort]:
-  qexists_tac `m` >> simp[Once step_inst_def] >> simp[Once step_inst_def] >> gvs[]
-QED
-Finalise ld_runner_step_clause
 
 val ldStepClauseFuel = fst (dest_conj (fst (dest_imp
   (concl ld_runner_conditional_induction_fuel))));
 
-Theorem ld_runner_step_clause_fuel:
+Theorem ld_runner_step_clause_fuel[local]:
   ^ldStepClauseFuel
 Proof
   qabbrev_tac `RR = ^ldPacket` >>
@@ -356,25 +304,9 @@ QED
    shifted alloca sites from wrapping; the pointer discipline and the
    taint bound (in o1_src_inv) keep the shifted alloca addresses out of
    what the run observes. *)
-val ldMutualResult = snd (dest_imp (concl ld_runner_conditional_induction));
-
-Theorem ld_runner_simulation:
-  ^ldMutualResult
-Proof
-  mp_tac ld_runner_conditional_induction >>
-  (impl_tac >- (conj_tac
-    >- ACCEPT_TAC ld_runner_step_clause
-    >> ACCEPT_TAC ld_runner_exec_clause)) >>
-  simp[]
-QED
-
-val _ = if null (hyp ld_runner_simulation) andalso
-               aconv (concl ld_runner_simulation) ldMutualResult
-        then () else raise Fail "mutual runner audit failed";
-
 val ldMutualResultFuel = snd (dest_imp (concl ld_runner_conditional_induction_fuel));
 
-Theorem ld_runner_simulation_fuel:
+Theorem ld_runner_simulation_fuel[local]:
   ^ldMutualResultFuel
 Proof
   mp_tac ld_runner_conditional_induction_fuel >>
@@ -384,43 +316,11 @@ Proof
   simp[]
 QED
 
-Theorem lower_dload_stage_sim:
-  !rpolicy D view C C' vs names.
-    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
-    ctx_sim D C C' vs vs
-Proof
-  rpt strip_tac >> simp[ctx_sim_def] >> rpt strip_tac >>
-  `run_context fuel C vs = run_context fuel C vs` by simp[] >>
-  drule_all lower_dload_stage_root_entry >> strip_tac >>
-  `opaque_use_ok fn` by metis_tac[ld_ctx_shape_lookup_opaque] >>
-  `fn.fn_name = name` by
-    (qpat_assum `lookup_function name C.ctx_functions = SOME fn`
-       (mp_tac o REWRITE_RULE [lookup_function_def]) >>
-     disch_then (mp_tac o MATCH_MP venomExecPropsTheory.FIND_P) >> simp[]) >>
-  `terminates (run_blocks fuel C fn s0)` by metis_tac[] >>
-  drule_at (Pat `ld_joint_boundary`) (SIMP_RULE bool_ss [] (cj 3 ld_runner_simulation)) >>
-  simp[] >>
-  disch_then (drule_at (Pat `terminates (run_blocks _ _ _ _)`)) >>
-  simp[] >> disch_then (drule_all_then strip_assume_tac) >>
-  drule ld_root_result_shape >>
-  disch_then (qspecl_then [`vs`,`fuel`] strip_assume_tac) >>
-  gvs[terminates_def] >>
-  qexists_tac `m` >> metis_tac[]
-QED
-
-(* Gas sufficiency S6b fuel leaf: LowerDload keeps the fuel.
-   The pass expands DLOAD / DLOADBYTES inside a block (to ALLOCA, ADD,
-   CODECOPY, MLOAD) and adds no block, label, terminator or INVOKE, so
-   the output runs on the input's fuel.  The runner packets ldPexec,
-   ldPrun and ldPstep (o1LowerDloadRunner) state the output fuel as ?m;
-   the bound is lost at SUC (MAX m m') in ld_runner_run_clause and at
-   MAX m m' in the call_ok case of o1LowerDloadRunnerExec.  Every other
-   witness is already the input fuel (the endpoint cases of
-   ld_runner_exec_clause; ld_joint_noncall_continue is uniform in m).
-   With m fixed to the input's k the stage follows as lower_dload_stage_sim
-   does. *)
+(* LowerDload keeps the fuel.  The pass expands DLOAD / DLOADBYTES inside
+   a block (to ALLOCA, ADD, CODECOPY, MLOAD) and adds no block, label,
+   terminator or INVOKE, so the output runs on the input's fuel: the
+   runner packets of o1LowerDloadRunner fix the output fuel to the
+   input's k.  lower_dload_stage_sim below is its existential form. *)
 Theorem lower_dload_stage_sim_fuel:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -447,13 +347,19 @@ Proof
   gvs[terminates_def] >> metis_tac[]
 QED
 
+Theorem lower_dload_stage_sim:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    ctx_sim D C C' vs vs
+Proof
+  rpt strip_tac >> irule ctx_sim_fuel_imp_ctx_sim >>
+  qexists_tac `I` >> irule lower_dload_stage_sim_fuel >> metis_tac[]
+QED
+
 (* Kernel-level certification of the frozen contract. *)
 val _ = if null (hyp lower_dload_stage_sim) andalso
                null (List.filter (fn s => s <> "DISK_THM")
                        (#1 (Tag.dest_tag (Thm.tag lower_dload_stage_sim))))
         then () else raise Fail "lower_dload_stage_sim proof audit failed";
-
-val _ = if null (hyp lower_dload_stage_sim_fuel) andalso
-               null (List.filter (fn s => s <> "DISK_THM")
-                       (#1 (Tag.dest_tag (Thm.tag lower_dload_stage_sim_fuel))))
-        then () else raise Fail "lower_dload_stage_sim_fuel proof audit failed";

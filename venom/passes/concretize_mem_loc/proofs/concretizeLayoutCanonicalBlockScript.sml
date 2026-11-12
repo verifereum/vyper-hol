@@ -97,7 +97,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem layout_canonical_block_exit_execution:
+Theorem layout_canonical_block_exit_execution[local]:
   decoration_at fn i s q /\ get_instruction bb s.vs_inst_idx = SOME i /\
   decorated_step C i s r q n w qe ds /\ (!post. r <> OK post) /\
   selected_segment C q0 path n q w qe /\
@@ -138,7 +138,7 @@ Proof
   rpt strip_tac >> simp[Once exec_block_def] >> Cases_on `rs'` >> gvs[]
 QED
 
-Theorem layout_canonical_term_execution:
+Theorem layout_canonical_term_execution[local]:
   decoration_at fn i s q /\ get_instruction bb s.vs_inst_idx = SOME i /\
   decorated_step C i s (OK post) q n w qe ds /\ is_terminator i.inst_opcode /\
   selected_segment C q0 path n q w qe /\
@@ -184,28 +184,6 @@ Proof
       gvs[] >> qexistsl [`g'`, `i`, `j`, `s`, `t`] >>
       fs[layout_canonical_block_witness_def, layout_paired_ordinary_def]) >>
   rpt strip_tac >> simp[Once exec_block_def]
-QED
-
-Theorem layout_canonical_block_exit_certificate:
-  selected_block_exit_certificate C C' q0 path
-    (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-Proof
-  rw[selected_block_exit_certificate_def] >>
-  drule_all layout_canonical_block_exit_execution >> metis_tac[]
-QED
-
-Theorem layout_canonical_term_certificate:
-  selected_term_certificate C C' q0 path
-    (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-Proof
-  rw[selected_term_certificate_def] >>
-  drule_all layout_canonical_term_execution >> metis_tac[]
 QED
 
 Theorem layout_canonical_block_exit_certificate_fuel:
@@ -409,7 +387,7 @@ Proof
   Cases_on `a` >> gvs[layout_phase_origin_def] >> metis_tac[]
 QED
 
-Theorem layout_canonical_retained_next_execution:
+Theorem layout_canonical_retained_next_execution[local]:
   qs = MAP SND path /\ i.inst_opcode <> NOP /\
   decoration_at fn i s q /\ get_instruction bb s.vs_inst_idx = SOME i /\
   decorated_step C i s (OK post) q n ws qm ds /\
@@ -526,7 +504,7 @@ Proof
   simp[concretize_positions_nop]
 QED
 
-Theorem layout_canonical_nop_next_execution:
+Theorem layout_canonical_nop_next_execution[local]:
   o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -623,96 +601,6 @@ Proof
       irule layout_canonical_block_outcome_transport >>
       goal_assum (drule_at Any) >> fs[ADD1] >> metis_tac[]) >>
   simp[]
-QED
-
-Theorem layout_canonical_retained_next:
-  qs = MAP SND path /\ i.inst_opcode <> NOP /\
-  decoration_at fn i s q /\ get_instruction bb s.vs_inst_idx = SOME i /\
-  decorated_step C i s (OK post) q n ws qm ds /\
-  ~is_terminator i.inst_opcode /\ decoration_consumes C i q post qm ev qn /\
-  decoration_entry fn (post with vs_inst_idx := SUC s.vs_inst_idx) qn /\
-  decorated_block C bb (post with vs_inst_idx := SUC s.vs_inst_idx)
-    r qn (n+LENGTH ws+1) wb qe db /\
-  selected_segment C q0 path n q (ws++[(ev,qn)]++wb) qe /\
-  layout_canonical_EB D lo vs0 C C' q0 es qs ass qend q n bb s bb' t ==>
-  ?j. layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend q n i s j t /\
-    (!rs'. finite_step C' j t rs' /\
-      layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend
-        q n qm (n+LENGTH ws) i s j t (OK post) rs' ==>
-      ?tb. layout_canonical_EB D lo vs0 C C' q0 es qs ass qend qn
-          (n+LENGTH ws+1) bb (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb /\
-        (!rb'. finite_block C' bb' tb rb' /\
-          layout_canonical_OB D lo vs0 C C' q0 es qs ass qend qn
-            (n+LENGTH ws+1) qe (n+LENGTH ws+1+LENGTH wb) bb
-            (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb r rb' ==>
-          selected_block_match C'
-            (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-            q n (ws++[(ev,qn)]++wb) qe bb s bb' t r))
-Proof
-  strip_tac >> drule_all layout_canonical_retained_next_execution >>
-  metis_tac[]
-QED
-
-Theorem layout_canonical_nop_next:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
-  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
-  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  es = MAP FST path /\ qs = MAP SND path /\
-  (!k. k < LENGTH path ==>
-    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
-      (EL (SUC k) (q0::MAP SND path))
-      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
-      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
-  i.inst_opcode = NOP /\ decoration_at fn i s q /\
-  get_instruction bb s.vs_inst_idx = SOME i /\
-  decorated_step C i s (OK post) q n ws qm ds /\
-  ~is_terminator i.inst_opcode /\ decoration_consumes C i q post qm ev qn /\
-  decoration_entry fn (post with vs_inst_idx := SUC s.vs_inst_idx) qn /\
-  decorated_block C bb (post with vs_inst_idx := SUC s.vs_inst_idx)
-    r qn (n+LENGTH ws+1) wb qe db /\
-  selected_segment C q0 path n q (ws++[(ev,qn)]++wb) qe /\
-  layout_canonical_EB D lo vs0 C C' q0 es qs ass qend q n bb s bb' t ==>
-  ?j. layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend q n i s j t /\
-    (!rs'. finite_step C' j t rs' /\
-      layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend
-        q n qm (n+LENGTH ws) i s j t (OK post) rs' ==>
-      ?tb. layout_canonical_EB D lo vs0 C C' q0 es qs ass qend qn
-          (n+LENGTH ws+1) bb (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb /\
-        (!rb'. finite_block C' bb' tb rb' /\
-          layout_canonical_OB D lo vs0 C C' q0 es qs ass qend qn
-            (n+LENGTH ws+1) qe (n+LENGTH ws+1+LENGTH wb) bb
-            (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb r rb' ==>
-          selected_block_match C'
-            (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-            q n (ws++[(ev,qn)]++wb) qe bb s bb' t r))
-Proof
-  strip_tac >> drule_all layout_canonical_nop_next_execution >>
-  metis_tac[]
-QED
-
-Theorem layout_canonical_next_certificate:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
-  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
-  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  es = MAP FST path /\ qs = MAP SND path /\
-  (!k. k < LENGTH path ==>
-    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
-      (EL (SUC k) (q0::MAP SND path))
-      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
-      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) ==>
-  selected_next_certificate C C' q0 path
-    (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-Proof
-  strip_tac >> pure_rewrite_tac[selected_next_certificate_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `i.inst_opcode = NOP`
-  >- (irule layout_canonical_nop_next >>
-      goal_assum (drule_at Any) >> gvs[] >> metis_tac[]) >>
-  irule layout_canonical_retained_next >>
-  goal_assum (drule_at Any) >> gvs[] >> metis_tac[]
 QED
 
 Theorem layout_canonical_next_certificate_fuel:
