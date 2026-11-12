@@ -1112,6 +1112,6 @@ Proof
   qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
   strip_tac >> rpt conj_tac >>
-  FIRST [first_assum ACCEPT_TAC, Cases_on `tr` >> gvs[slot_loc_def] >> NO_TAC]
+  FIRST [first_assum ACCEPT_TAC, Cases_on `tr` >> gvs[slot_loc_def, vv_place_ptr_def] >> NO_TAC]
 
 QED
