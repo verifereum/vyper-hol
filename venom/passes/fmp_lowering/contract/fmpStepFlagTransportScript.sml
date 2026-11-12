@@ -1,6 +1,59 @@
 Theory fmpStepFlagTransport
 Ancestors
-  dftCallChecks unitShapeDefs venomEffects list
+  unitShapeDefs venomEffects list
+
+Theorem flag_fails_mono:
+  !bbs as bs i.
+    (!v. MEM v as ==> MEM v bs) /\ flag_fails bbs as i ==>
+    flag_fails bbs bs i
+Proof
+  rpt strip_tac >> Cases_on `i.inst_opcode` >> gvs[flag_fails_def]
+  >- (Cases_on `i.inst_operands` >> gvs[] >>
+      Cases_on `h` >> gvs[] >>
+      Cases_on `t` >> gvs[] >>
+      Cases_on `h` >> gvs[] >>
+      Cases_on `t'` >> gvs[] >>
+      Cases_on `h` >> gvs[] >>
+      Cases_on `t` >> gvs[] >> metis_tac[]) >>
+  Cases_on `i.inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> metis_tac[]
+QED
+
+Theorem flag_path_mono:
+  !is bbs as bs.
+    (!v. MEM v as ==> MEM v bs) /\ flag_path bbs as is ==>
+    flag_path bbs bs is
+Proof
+  Induct >- simp[flag_path_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `flag_path _ _ _` mp_tac >>
+  simp[flag_path_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  disch_then DISJ_CASES_TAC
+  >- metis_tac[flag_fails_mono] >>
+  simp[] >> disj2_tac >> first_x_assum irule >>
+  goal_assum (drule_at Any) >>
+  Cases_on `write_effects h.inst_opcode = empty_effects` >> simp[] >>
+  Cases_on `h.inst_opcode` >> simp[MEM_FILTER] >>
+  Cases_on `h.inst_operands` >> simp[MEM_FILTER] >>
+  Cases_on `h'` >> simp[MEM_FILTER] >>
+  Cases_on `t` >> simp[MEM_FILTER] >>
+  Cases_on `MEM s as` >> Cases_on `MEM s bs` >>
+  gvs[MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem flag_fails_revert_environment:
+  (!l. revert_path src (LENGTH src) l ==> revert_path dst (LENGTH dst) l) ==>
+  !vs i. flag_fails src vs i ==> flag_fails dst vs i
+Proof
+  strip_tac >> rpt gen_tac >>
+  Cases_on `i.inst_opcode` >> gvs[flag_fails_def] >>
+  Cases_on `i.inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >> metis_tac[]
+QED
 
 Definition flag_step_def:
   flag_step inst vs =

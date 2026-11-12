@@ -27,7 +27,7 @@ Theorem intcall_args_frame_setup:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,[],ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
-    (~MEM (NONE,name) cx.stk ==> body_results_ok cx es) /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_ok cx es) /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\

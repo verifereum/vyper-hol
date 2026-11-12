@@ -2,6 +2,8 @@
    (bodyMemAssign's dispatch): a word field of a storage or transient struct (S1's body_assign_attr_storage). *)
 Theory bodyMemAssignAttrStorage
 Ancestors
+  supportedExprTraverse allocLimits allocLimitsProps
+  bodySimStmtCases
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
   vyperStorageBackend loweringPosts exprSimProps compileEnv loweringStateRelDefs venomExecSemantics venomState
   exprSimMemUnwrap exprSimVVFrame bodyMemEmitOpFrame context emitHelperProps
@@ -50,7 +52,7 @@ Proof
   Cases_on `vv` >> simp[vv_at_def, expr_val_at_def]
 QED
 
-Theorem vv_post_rebase_mem_src[local]:
+Theorem vv_post_rebase_mem_src:
   vv_post ctx func ce cx e es sa sm s0 ee tv vv s ==>
   vv_post ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
     sm s ee tv vv s
@@ -58,7 +60,7 @@ Proof
   simp[vv_post_def, vv_at_start_var_mem_src, locals_kept_refl]
 QED
 
-Theorem expr_post_rebased_operand_mem_src[local]:
+Theorem expr_post_rebased_operand_mem_src:
   expr_post ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
     sb s ee v op u /\
   (?x. dst = Var x /\ not_fresh_at sm x) /\
@@ -112,7 +114,7 @@ Proof
   irule expr_post_rebased_operand_mem_src >> goal_assum (drule_at Any) >> gvs[]
 QED
 
-Theorem expr_post_rebased_compose_mem_src[local]:
+Theorem expr_post_rebased_compose_mem_src:
   vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
   local_ptrs_reserved ce sa /\ local_ptrs_rel func ce es.scopes s0 /\
   sa.cs_next_var <= sm.cs_next_var /\
@@ -454,6 +456,7 @@ Finalise compile_assign_attr_storage_mem
 
 Theorem body_assign_attr_storage_mem:
   !cx nsid fld e fty d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e) /\
     body_expr_mem_ok cx e /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings
       (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget nsid) fld)) e) /\
@@ -476,20 +479,7 @@ Theorem body_assign_attr_storage_mem:
 Proof
   Cases_on `nsid` >> rename1 `TopLevelNameTarget (src,id)` >> rpt strip_tac >>
   `supported_expr tops e` by gvs[supported_stmt_def, supported_assignment_def] >>
-  `!ts vis mut id ty init.
-     MEM (VariableDecl vis mut id ty init) ts /\
-     (mut = Storage \/ mut = Transient) ==>
-     find_var_decl_by_name id ts <> NONE` by
-    (Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]) >>
-  `src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-   ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops` by
-    (qpat_x_assum `supported_storage_field_write _ _ _` mp_tac >>
-     simp[supported_storage_field_write_def, supported_storage_fields_def] >>
-     Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
-     rename1 `SOME x` >> PairCases_on `x` >>
-     drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-     Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
-     simp[] >> metis_tac[]) >> gvs[] >>
+  drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\ supported_program tops /\
    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
    cenv.ce_hashmap_info = build_hashmap_info tops /\
@@ -524,7 +514,19 @@ Proof
   drule struct_field_slot_exists >> strip_tac >>
   rename1 `struct_field_slot fs fld = SOME (off,ftv)` >>
   drule_all struct_field_offset_slots_eq >> strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `well_typed_expr env e` by gvs[type_stmt_def, atarget_accepts_def] >>
   `expr_body_pre cenv cx env e es` by

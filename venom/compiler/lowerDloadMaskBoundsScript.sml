@@ -39,7 +39,7 @@ Proof
       irule ld_op_taint_bound >> simp[]) >>
   Cases_on `tail` >> simp[] >>
   Cases_on `eval_operand a s` >> simp[] >>
-  rpt IF_CASES_TAC >> simp[ld_shift_taint_bound]
+  rpt IF_CASES_TAC >> simp[ld_shift_taint_bound, ld_op_taint_bound]
 QED
 
 Theorem ld_set_var_taint_bound:

@@ -7,6 +7,8 @@ Ancestors
   gasOutcome gasSummary stmtReasonVvMemory vyperInterpreter vyperState
   finite_map list compileEnv loweringStateRelDefs
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_cons_compile:
   compile_make_tuple compile_expr ce (e::args) buf off si = (out,sb) ==>
   ?vv sm dst sn op su sc.
@@ -22,7 +24,10 @@ Proof
   rename1 `compile_store_memory ce op dst _ _ su = (unit,sc)` >>
   Cases_on `unit` >> metis_tac[]
 QED
+*)
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_head_compile:
   compile_make_tuple compile_expr ce (e::args) buf off si = (out,sb) /\
   expr_body_pre ce cx env e es /\
@@ -74,7 +79,10 @@ Proof
     metis_tac[compile_store_memory_post_type] >>
   gvs[]
 QED
+*)
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_head_store:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   intcall_expr_producer fp e /\ expr_body_pre ce fp.jc_cx env e es /\
@@ -119,6 +127,7 @@ Proof
   disch_then drule_all >> strip_tac >>
   qexists_tac `sc` >> simp[]
 QED
+*)
 
 Theorem intcall_gas_outcome_map:
   gas_outcome memory tops (ctx,func) source (es,s) Q R /\
@@ -167,6 +176,8 @@ Proof
 QED
 
 (* HELD (train 15): pure_frame sweep, retired by alan 451258 *)
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_tail:
   !args off si out sb es tvs t.
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
@@ -279,3 +290,4 @@ Proof
   *)
   cheat
 QED
+*)

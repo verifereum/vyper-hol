@@ -1,6 +1,6 @@
 Theory fmpAliasProps
 Ancestors
-  fmpAliasDefs arithmetic list finite_map dfHelperProofs
+  fmpAliasDefs basePtrDefs arithmetic list finite_map dfHelperProofs
 
 Theorem fmp_capture_step_preserves:
   !insts vars v. MEM v vars ==> MEM v (fmp_capture_step insts vars)
@@ -58,11 +58,12 @@ QED
 
 Theorem fmp_escaping_occurrence:
   MEM v (fmp_escaping_operands inst) <=>
-  ~fmp_pointer_propagation inst.inst_opcode /\ MEM v (inst_uses inst) /\
+  ~fmp_pointer_propagation inst.inst_opcode /\
+  ~fmp_comparison_opcode inst.inst_opcode /\ MEM v (inst_uses inst) /\
   LENGTH (FILTER ($= (Var v)) (fmp_safe_operands inst)) <
   LENGTH (FILTER ($= v) (inst_uses inst))
 Proof
-  simp[fmp_escaping_operands_def] >> IF_CASES_TAC >> simp[MEM_FILTER] >> metis_tac[]
+  simp[fmp_escaping_operands_def] >> IF_CASES_TAC >> gvs[MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem fmp_bases_accumulate:
