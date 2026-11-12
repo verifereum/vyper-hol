@@ -60,9 +60,17 @@ Proof
     qpat_x_assum `!src id ty. _ ==> ?tv v. _` drule >>
     strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `FLOOKUP art.cta_bare_globals (src,id)`
-  >- metis_tac[optionTheory.NOT_SOME_NONE, optionTheory.SOME_11] >>
-  metis_tac[optionTheory.NOT_SOME_NONE, optionTheory.SOME_11]
+  rename1 `FLOOKUP art.cta_toplevel_vtypes (NONE,id) = SOME (Type ty)` >>
+  Cases_on `FLOOKUP art.cta_bare_globals (NONE,id)`
+  >- (qpat_x_assum `!src id ty. _ /\ FLOOKUP art.cta_bare_globals (src,id) = NONE ==> _`
+        (qspecl_then [`NONE`,`id`,`ty`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[]) >>
+  rename1 `FLOOKUP art.cta_bare_globals (NONE,id) = SOME bare_ty` >>
+  qpat_x_assum `!src id ty. _ ==> ?ts. _ /\ FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ _`
+    (qspecl_then [`NONE`,`id`,`bare_ty`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  qpat_x_assum `!src id ty. _ ==> ?tv v. _` drule >>
+  strip_tac >> gvs[]
 QED
 
 Theorem vyper_call_correct_top:
