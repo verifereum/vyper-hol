@@ -1,6 +1,7 @@
 (* Counted mapping scratch and dynamic-key continuations. *)
 Theory popNestedMappingSuffixMemory
 Ancestors
+  bodyMemBiKeccakBounds exprSimMemDefs vyperTyping vyperTypeSystem vyperAST vyperValue vyperStorage vyperMisc
   targetSubscriptMapping bodyAllocMemory bodyDeclMemoryCore exprSimMemUnwrap exprSimMapKey exprSimHash exprSimHashBoundary loweringPosts builtinBytesMemory builtinHashing valueEncodingDefs
   allocaFootprint abiBuiltinAllocation venomMemDefs exprSimAlloc context emitHelper fragExec
   bodyMemTbExtract32MemoryTransfer bodyMemBiSha256Compose
@@ -323,4 +324,61 @@ Proof
   qexists_tac `t` >> simp[] >>
   `gas_marked_path T ctx func s (0+0) (OK t)` by
     (irule gas_marked_path_then >> qexists_tac `u` >> simp[]) >> gvs[]
+QED
+
+Theorem pop_nested_mapping_dynamic_typed_suffix_mem:
+  compile_keccak256_key keyop F sc = (hashop,sm) /\
+  compile_mapping_subscript bop hashop sm = (op,sb) /\
+  fn_has_code sc sm func /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func cenv cx es' s /\
+  local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\ wb_frame cenv es es' sa s0 s /\
+  (!x. bop = Var x ==> not_fresh_at sc x) /\
+  (!x. keyop = Var x ==> not_fresh_at sc x) /\
+  eval_operand bop s = SOME slot /\ alloca_history func s /\
+  expr_post ctx func cenv cx e ee si sc r es' key keyop s /\
+  expr_type e = kt /\ is_bytestring_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv key /\
+  expr_store_bound cx kt key keyop s /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es' =
+    (INL pv, es'') /\
+  ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  ?t. gas_marked_path T ctx func s 0 (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    target_post ctx func cenv cx es sa sb s0 es'' pv vt
+      (op,SOME (slot_loc tr),SOME (value_type_place vt)) t /\
+    alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next
+Proof
+  strip_tac >>
+  `?b bs. eval_operand keyop s = SOME (n2w b) /\
+    mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+    mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+    b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+    b+32 <= s.vs_alloca_next /\
+    (bs = [] \/ b+32+LENGTH bs <= s.vs_alloca_next) /\
+    encode_hashmap_key kt key = word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)` by
+    (Cases_on `kt` >> gvs[is_bytestring_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def]
+     >~ [`BytesT bd`]
+     >- (Cases_on `bd` >> gvs[is_bytestring_type_def] >>
+         Cases_on `key` >> gvs[evaluate_type_def, value_has_type_def] >>
+         drule keccak_dynamic_post_bounds >>
+         simp[evaluate_type_def] >> strip_tac >>
+         qexistsl_tac [`b`, `l`] >>
+         gvs[encode_hashmap_key_def, byteTheory.word_of_bytes_be_def,
+             n2w_o_ORD_eq] >> metis_tac[LENGTH_NIL]) >>
+     Cases_on `key` >> gvs[evaluate_type_def, value_has_type_def] >>
+     drule keccak_string_post_bounds >>
+     simp[evaluate_type_def] >> strip_tac >>
+     qexistsl_tac [`b`, `MAP (n2w o ORD) s'`] >>
+     gvs[encode_hashmap_key_def, byteTheory.word_of_bytes_be_def,
+             n2w_o_ORD_eq] >> metis_tac[LENGTH_NIL]) >>
+  drule_at (Pat `compile_keccak256_key _ _ _ = _`)
+    pop_nested_mapping_dynamic_counted_suffix_mem >>
+  disch_then (drule_at (Pat `mem_bytes_at _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `extend_place _ _ _ _ = _`)) >>
+  disch_then irule >> simp[] >> qexists_tac `bop` >> simp[]
 QED
