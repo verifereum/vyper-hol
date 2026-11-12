@@ -59,7 +59,9 @@ Theorem log_success_suffix_framed_run:
     fresh_vars_wrt limit_st t /\ inst_extends sm sb /\
     (!op w. (!z. op = Var z ==> not_fresh_at sm z) /\ (!l. op <> Label l) /\
       eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
-    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    (!aid a k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   strip_tac >>
   `EVERY (supported_scalar_type o SND) xs` by
@@ -68,6 +70,7 @@ Proof
   drule_all log_success_suffix_code >> strip_tac >>
   drule_all log_success_suffix_run >> disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexists_tac `t` >> simp[Excl "enc_def"] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   rpt strip_tac >> irule log_run_old_allocas >>
   qexists_tac `emitted_insts sm sb` >> simp[] >>
   fs[EVERY_MEM] >> metis_tac[]
