@@ -2692,6 +2692,137 @@ val dyn_R = ``\sa sb s.
      bb.bb_label = s.vs_current_bb /\
      s.vs_inst_idx < LENGTH bb.bb_instructions))``;
 
+Theorem abi_dyn_lookup_filter[local]:
+  !blocks lbl bb keep.
+    lookup_block lbl blocks = SOME bb /\ keep bb ==>
+    lookup_block lbl (FILTER keep blocks) = SOME bb
+Proof
+  Induct >> simp[lookup_block_def, FIND_thm] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.bb_label = lbl` >> gvs[] >>
+  Cases_on `keep h` >> gvs[FIND_thm, lookup_block_def]
+QED
+
+Theorem abi_dyn_observer_has_code[local]:
+  !sa sb fn id. fn_has_code sa sb fn /\
+    (!bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb) ==>
+    fn_has_code sa sb (frag_observer sa sb fn id)
+Proof
+  rpt gen_tac >> strip_tac >> rw[fn_has_code_def]
+  >- (rename1 `MEM emitted (emitted_blocks sa sb)` >>
+      `emitted.bb_label <> sb.cs_current_bb` by metis_tac[] >>
+      simp[frag_observer_def, lookup_block_def, FIND_thm] >>
+      rewrite_tac[GSYM lookup_block_def] >>
+      irule abi_dyn_lookup_filter >> gvs[fn_has_code_def]) >>
+  qexists_tac `<|bb_label := sb.cs_current_bb;
+    bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>` >>
+  simp[frag_observer_cut_lookup, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem abi_dyn_region_lookup[local]:
+  !sa sb fn s. fn_has_code sa sb fn /\ (^dyn_R) sa sb s /\
+    ~at_point sb s ==>
+    ?bb inst. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME inst
+Proof
+  rpt gen_tac >> simp_tac std_ss [fn_has_code_def, at_point_def] >>
+  strip_tac
+  >- (qexistsl_tac [`bb`, `EL s.vs_inst_idx sb.cs_current_insts`] >>
+      gvs[rich_listTheory.IS_PREFIX_APPEND, get_instruction_def, EL_APPEND_EQN]) >>
+  rename1 `MEM emitted (emitted_blocks sa sb)` >>
+  qexistsl_tac [`emitted`, `EL s.vs_inst_idx emitted.bb_instructions`] >>
+  gvs[get_instruction_def] >> metis_tac[]
+QED
+
+Theorem abi_dyn_region_agreement[local]:
+  !sa sb fn obs s. fn_has_code sa sb fn /\ fn_has_code sa sb obs /\
+    (^dyn_R) sa sb s /\ ~at_point sb s ==>
+    ?bb ob inst.
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      lookup_block s.vs_current_bb obs.fn_blocks = SOME ob /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\
+      get_instruction ob s.vs_inst_idx = SOME inst
+Proof
+  rpt gen_tac >> simp_tac std_ss [fn_has_code_def, at_point_def] >>
+  strip_tac
+  >- (qexistsl_tac [`bb`, `bb'`, `EL s.vs_inst_idx sb.cs_current_insts`] >>
+      gvs[rich_listTheory.IS_PREFIX_APPEND, get_instruction_def, EL_APPEND_EQN]) >>
+  rename1 `MEM emitted (emitted_blocks sa sb)` >>
+  qexistsl_tac [`emitted`, `emitted`, `EL s.vs_inst_idx emitted.bb_instructions`] >>
+  gvs[get_instruction_def] >> metis_tac[]
+QED
+
+Theorem abi_dyn_region_code[local]:
+  !sa sb fn s bb inst. cs_extends sa sb /\ fn_has_code sa sb fn /\
+    (^dyn_R) sa sb s /\ ~at_point sb s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst ==>
+    MEM inst (frag_code sa sb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!block n. get_instruction block s.vs_inst_idx = SOME inst /\
+       n <= s.vs_inst_idx ==> MEM inst (DROP n block.bb_instructions)` by
+    (simp[get_instruction_def] >> rpt strip_tac >> gvs[] >>
+     simp[MEM_EL] >> qexists_tac `s.vs_inst_idx - n` >> simp[EL_DROP]) >>
+  qpat_x_assum `(^dyn_R) sa sb s` mp_tac >>
+  simp_tac std_ss [] >> strip_tac
+  >- (`s.vs_inst_idx < LENGTH sb.cs_current_insts` by gvs[at_point_def] >>
+      `inst = EL s.vs_inst_idx sb.cs_current_insts` by
+        gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND,
+            get_instruction_def, EL_APPEND_EQN] >>
+      Cases_on `emitted_blocks sa sb = []`
+      >- (drule frag_extends_emitted_shape >> simp[] >> strip_tac >>
+          `LENGTH sa.cs_current_insts <= s.vs_inst_idx` by metis_tac[] >>
+          simp[frag_code_def, emitted_insts_def] >>
+          simp[MEM_EL] >> qexists_tac `s.vs_inst_idx - LENGTH sa.cs_current_insts` >>
+          simp[EL_DROP]) >>
+      simp[frag_code_def, NULL_EQ, MEM_APPEND] >> disj2_tac >> simp[MEM_EL] >> metis_tac[]) >>
+  rename1 `MEM emitted (emitted_blocks sa sb)` >>
+  `bb = emitted` by (gvs[fn_has_code_def] >> metis_tac[optionTheory.SOME_11]) >> gvs[] >>
+  `emitted_blocks sa sb <> []` by (strip_tac >> gvs[]) >>
+  Cases_on `bb = LAST (emitted_blocks sa sb)`
+  >- (drule frag_extends_emitted_shape >> simp[] >> strip_tac >>
+      simp[frag_code_def, NULL_EQ, MEM_APPEND] >> disj1_tac >> disj1_tac >>
+      first_x_assum irule >> gvs[]) >>
+  `MEM bb (FRONT (emitted_blocks sa sb))` by
+    metis_tac[listTheory.APPEND_FRONT_LAST, MEM_APPEND, MEM] >>
+  simp[frag_code_def, NULL_EQ, MEM_APPEND] >> disj1_tac >> disj2_tac >>
+  `MEM inst bb.bb_instructions` by metis_tac[DROP_0, arithmeticTheory.ZERO_LESS_EQ] >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem abi_dyn_region_step[local]:
+  !sa sb fn s bb inst t.
+    fn_has_code sa sb fn /\ (^dyn_R) sa sb s /\ ~at_point sb s /\
+    EVERY (\b. (^dyn_T) b.bb_instructions) (emitted_blocks sa sb) /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK t ==>
+    (^dyn_R) sa sb (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_control_flow, step_inst_non_invoke] >>
+  qpat_x_assum `(^dyn_R) sa sb s` mp_tac >>
+  simp_tac std_ss [] >> strip_tac
+  >- (simp_tac std_ss [venom_state_component_equality, venom_state_accfupds,
+        venom_state_accessors] >> conj_tac >- (strip_tac >> gvs[] >> decide_tac) >>
+      disj1_tac >> gvs[at_point_def]) >>
+  rename1 `MEM emitted (emitted_blocks sa sb)` >>
+  `bb = emitted` by (gvs[fn_has_code_def] >> metis_tac[optionTheory.SOME_11]) >>
+  gvs[] >>
+  `bb.bb_instructions <> [] /\ is_terminator (LAST bb.bb_instructions).inst_opcode` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `SUC s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (gvs[get_instruction_def] >>
+     `s.vs_inst_idx <> LENGTH bb.bb_instructions - 1` by
+       (strip_tac >> gvs[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1]) >> decide_tac) >>
+  simp_tac std_ss [venom_state_accfupds, venom_state_accessors] >>
+  conj_tac >- (strip_tac >> gvs[] >> decide_tac) >>
+  disj2_tac >> qexists_tac `bb` >> simp[]
+QED
+
 Theorem abi_dyn_region_cut_instruction[local]:
   !sa sb fn id s. at_point sb s ==>
     ?bb. lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME bb /\
