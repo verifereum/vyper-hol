@@ -306,3 +306,38 @@ Theorem entry_code_supported_expr:
 Proof
   simp[supported_expr_def] >> metis_tac[entry_code_supported_union]
 QED
+
+(* Unconditional forms for the shapes public getters synthesize. *)
+Theorem entry_code_name_expr:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_expr cenv ty (Name t n))
+Proof
+  pure_rewrite_tac[Once entry_code_expr_equation] >>
+  rw[entry_preserves_code_def, compile_expr_body_def] >>
+  metis_tac[entry_preserves_code_def, entry_code_name_vv]
+QED
+
+Theorem entry_code_toplevel_name_expr:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_expr cenv ty (TopLevelName t id))
+Proof
+  pure_rewrite_tac[Once entry_code_expr_equation] >>
+  rw[entry_preserves_code_def, compile_expr_body_def] >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac (SRULE [entry_preserves_code_def]
+    (Q.INST [`opc` |-> `INVALID`] entry_code_emit_inst))
+QED
+
+Theorem entry_code_subscript_expr:
+  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et b)) /\
+  (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce et i)) ==>
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_expr cenv ty (Subscript t b i))
+Proof
+  strip_tac >> pure_rewrite_tac[Once entry_code_expr_equation] >>
+  simp[entry_preserves_code_def, compile_expr_body_def] >>
+  pure_rewrite_tac[GSYM entry_preserves_code_def] >> irule entry_code_subscript >>
+  rpt strip_tac >> irule entry_code_expr_callback >> simp[]
+QED

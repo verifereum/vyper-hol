@@ -32,6 +32,7 @@
      type_stmts_int_calls_internal                   (L2: callee lookup) *)
 Theory whitelistCheckerDecls
 Ancestors
+  publicGetterProps
   list rich_list arithmetic finite_map pred_set pair option words
   vyperAST vyperValue vyperContext vyperInterpreter vyperTypeSystem
   vyperTypeContract vyperABIEntries
@@ -309,25 +310,7 @@ Proof
   BasicProvers.every_case_tac >> rw[]
 QED
 
-Theorem build_getter_arg_types_projection[local]:
-  !e kt vt n.
-    MAP SND (FST (build_getter e kt vt n)) = kt :: abi_getter_args vt
-Proof
-  recInduct build_getter_ind >> rpt strip_tac >>
-  simp[Once build_getter_def] >>
-  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-  gvs[abi_getter_args_def] >>
-  Cases_on `vt` >> gvs[is_ArrayT_def, ArrayT_type_def,
-                         abi_array_getter_args_def]
-QED
 
-Theorem build_getter_arg_types[local]:
-  !e kt vt n args ret exp.
-    build_getter e kt vt n = (args,ret,exp) ==>
-    MAP SND args = kt :: abi_getter_args vt
-Proof
-  metis_tac[build_getter_arg_types_projection, FST]
-QED
 
 Theorem selector_ids_append[local]:
   !fs gs. MAP FST (build_selectors tenv (fs ++ gs)) =
@@ -346,25 +329,6 @@ Proof
   simp[subst_consts_fn_def, build_selectors_def]
 QED
 
-Theorem public_getter_signature[local]:
-  !top m nr rr name args ds ret body.
-    public_getter top = SOME (m,nr,rr,name,args,ds,ret,body) ==>
-    abi_decl_signatures top = [(name,MAP SND args)]
-Proof
-  Cases >> simp[public_getter_def]
-  >- (rename1 `VariableDecl vis mut id ty slot` >> Cases_on `vis` >>
-      simp[public_getter_def] >> Cases_on `ty` >>
-      simp[is_ArrayT_def, abi_decl_signatures_def, abi_array_getter_args_def,
-           public_getter_def, ArrayT_type_def, getter_def] >>
-      rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >>
-      strip_tac >> gvs[] >>
-      imp_res_tac build_getter_arg_types >> gvs[abi_getter_args_def]) >>
-  rename1 `HashMapDecl vis tr id kt vt slot` >> Cases_on `vis` >>
-  simp[public_getter_def, getter_def] >>
-  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >>
-  strip_tac >> gvs[abi_decl_signatures_def] >>
-  imp_res_tac build_getter_arg_types >> gvs[]
-QED
 
 Theorem build_selectors_provenance[local]:
   !tops. ?xs.
