@@ -119,6 +119,43 @@ Proof
   strip_tac >> asm_rewrite_tac[]
 QED
 
+(* Private fold interface; no dependency on stmtSimStoreCopy's local facts. *)
+Theorem copy_prefix_eqs[local]:
+  store_copy_prefix loc b k s 0 = s /\
+  store_copy_prefix loc b k s (SUC i) =
+    (if loc = LocStorage then sstore else tstore)
+      (k + n2w i) (mload (w2n (b + n2w i * 32w)) s)
+      (store_copy_prefix loc b k s i)
+Proof
+  conj_tac >- simp[store_copy_prefix_def, COUNT_LIST_def] >>
+  simp[store_copy_prefix_def, COUNT_LIST_SNOC, FOLDL_SNOC]
+QED
+
+Theorem copy_prefix_fields[local]:
+  !i. (store_copy_prefix loc b k s i).vs_call_ctx = s.vs_call_ctx
+Proof
+  Induct >> simp[copy_prefix_eqs] >>
+  Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def]
+QED
+
+Theorem copy_prefix_backend[local]:
+  !i s b k tr.
+  (if tr then contract_transient else contract_storage)
+    (store_copy_prefix (if tr then LocTransient else LocStorage) b k s i) =
+  FOLDL (\t h. update_storage (k+n2w h)
+          (mload (w2n (b+n2w h*32w)) s) t)
+    ((if tr then contract_transient else contract_storage) s) (COUNT_LIST i)
+Proof
+  Induct_on `i` >- simp[copy_prefix_eqs, COUNT_LIST_def] >>
+  rpt gen_tac >>
+  simp[copy_prefix_eqs, COUNT_LIST_SNOC, FOLDL_SNOC] >>
+  first_x_assum (qspecl_then [`s`, `b`, `k`, `tr`] assume_tac) >>
+  Cases_on `tr` >>
+  gvs[contract_transient_def, contract_storage_def, tstore_def, sstore_def,
+       copy_prefix_fields, vfmStateTheory.lookup_account_def,
+       combinTheory.APPLY_UPDATE_THM]
+QED
+
 Theorem place_store_prefix_backend_natural:
   !tr. w2n b + 32*i <= dimword (:256) ==>
   (if tr then contract_transient else contract_storage)
@@ -127,7 +164,7 @@ Theorem place_store_prefix_backend_natural:
           (mem_word_at (32*h+w2n b) s.vs_memory) t)
     ((if tr then contract_transient else contract_storage) s) (COUNT_LIST i)
 Proof
-  gen_tac >> strip_tac >> rewrite_tac[place_store_prefix_backend] >>
+  gen_tac >> strip_tac >> rewrite_tac[copy_prefix_backend] >>
   irule FOLDL_CONG >> simp[MEM_COUNT_LIST] >> rpt strip_tac >>
   rename1 `h < i` >>
   `w2n b + 32*h < dimword (:256)` by decide_tac >>
@@ -151,14 +188,14 @@ Theorem place_store_prefix_state_patch:
 Proof
   Induct_on `i`
   >- (rpt gen_tac >> Cases_on `tr` >>
-      simp[place_store_prefix_eqs, contract_transient_def, contract_storage_def,
+      simp[copy_prefix_eqs, contract_transient_def, contract_storage_def,
            vfmStateTheory.lookup_account_def, combinTheory.UPDATE_def, SF ETA_ss]) >>
   rpt gen_tac >>
   first_x_assum (qspecl_then [`s`, `b`, `k`, `tr`] assume_tac) >>
   Cases_on `tr` >> gvs[] >>
-  once_rewrite_tac[place_store_prefix_eqs] >>
+  once_rewrite_tac[copy_prefix_eqs] >>
   simp[sstore_def, tstore_def, contract_transient_def, contract_storage_def,
-       place_store_prefix_fields, vfmStateTheory.lookup_account_def,
+       copy_prefix_fields, vfmStateTheory.lookup_account_def,
        combinTheory.APPLY_UPDATE_THM] >>
   qpat_assum `store_copy_prefix _ _ _ _ _ = _`
     (fn th => CONV_TAC (LAND_CONV (RAND_CONV (REWR_CONV th)))) >>
