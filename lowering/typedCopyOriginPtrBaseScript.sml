@@ -103,6 +103,71 @@ Proof
   asm_rewrite_tac[]
 QED
 
+Theorem typed_copy_origin_ptr_emit_op_path:
+  emit_op opc args a = (op,b) /\ fn_has_code a b func /\
+  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  (!out. step_inst_base (mk_inst a.cs_next_id opc args [out]) s =
+    OK (update_var out w s)) /\
+  (!out. ptr_inst_ok D lo 0 ctx func G tn
+    (mk_inst a.cs_next_id opc args [out]) s) /\
+  (!out. inst_mem_below_frontier (mk_inst a.cs_next_id opc args [out]) s /\
+    inst_dload_in_section (mk_inst a.cs_next_id opc args [out]) s) ==>
+  ?out t G' tn'.
+    op = Var out /\
+    t = (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    G' = step_prov PG G (mk_inst a.cs_next_id opc args [out])
+      (update_var out w s) /\
+    tn' = step_taint (mk_inst a.cs_next_id opc args [out]) s
+      (update_var out w s) tn /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
+    eval_operand op t = SOME w /\ t.vs_memory = s.vs_memory /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    typed_copy_state_frame a off len s t /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts
+Proof
+  strip_tac >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  `b.cs_current_bb = a.cs_current_bb` by
+    gvs[emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
+        compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_id_def,
+        compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
+        compileEnvTheory.emit_def] >>
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH a.cs_current_insts) =
+    SOME (mk_inst a.cs_next_id opc args
+      [STRING #"%" (toString a.cs_next_var)])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  qexists_tac `STRING #"%" (toString a.cs_next_var)` >>
+  simp[IgnAsm `s.vs_inst_idx = _`] >>
+  rpt (irule_at Any EQ_REFL) >>
+  conj_tac >-
+    (qmatch_goalsub_abbrev_tac `step_prov PG G inst u` >>
+     `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+       (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+        step_prov PG G inst u, step_taint inst s u tn)` by
+       (mp_tac (straight_line_origin_ptr_edge |> Q.INST [`i` |-> `inst`, `u` |-> `u`]) >>
+        simp[Abbr `inst`, Abbr `u`, venomInstTheory.mk_inst_def] >>
+        disch_then irule >> simp[]) >>
+     `~(u with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by
+       simp[Abbr `u`, venomStateTheory.update_var_def] >>
+     drule (cj 1 gas_origin_ptr_path_rules) >> strip_tac >>
+     drule (cj 2 gas_origin_ptr_path_rules) >>
+     disch_then (qspecl_then [`[]`,
+       `OK (u with vs_inst_idx := SUC s.vs_inst_idx)`,
+       `step_prov PG G inst u`, `step_taint inst s u tn`] mp_tac) >> simp[]) >>
+  simp[venomStateTheory.eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
+       venomStateTheory.update_var_def, typed_copy_state_frame_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.venom_state_component_equality,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  `x <> STRING #"%" (toString a.cs_next_var)` by
+    (gvs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 (* The counted loop that copies N elements from xs to xd, element i at
    offset i times the element size on each side (the joint twin of
    placeTypedCopyRecursivePath's typed_copy_forward_index_loop_path). *)
