@@ -88,7 +88,7 @@ Proof
   disch_then (qx_choose_then `a` (qx_choose_then `AG` (qx_choose_then `atn`
     (map_every assume_tac o CONJUNCTS)))) >>
   `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
-  drule_all prefix_register_alloc_semantic_frame >>
+  drule_all ctorRegisterArgsTheory.ctor_alloc_buffer_state_props >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decoder_coherent ce' env ce'.ce_struct_fields ty entry.type /\
    abi_decoder_metadata ce' env ty entry.type

@@ -45,7 +45,7 @@ Proof
 QED
 
 Theorem deploy_ctor_start_nr[local]:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==> ~nr
 Proof
@@ -55,7 +55,7 @@ Proof
 QED
 
 Theorem deploy_ctor_body_pending[local]:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   eval_stmts (deploy_evaluation_context tops am tx) stmts
@@ -110,7 +110,7 @@ Proof
 QED
 
 Theorem deploy_ctor_start_immutables[local]:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
   es0.immutables = am_c.immutables
@@ -147,7 +147,7 @@ QED
 
 Theorem deploy_ctor_initial_immutables_present[local]:
   !tops am tx deploy_bc es mut nr body am_c es0.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
   ?imms. ALOOKUP es0.immutables tx.target = SOME imms
@@ -161,7 +161,7 @@ QED
 
 Theorem deploy_ctor_final_immutables_present[local]:
   !tops am tx deploy_bc es mut nr body am_c es0 gs outcomes res st.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
   eval_stmts (deploy_evaluation_context tops am tx) body
@@ -178,7 +178,7 @@ QED
 
 Theorem deploy_ctor_initial_immutable_lookup[local]:
   !tops am tx deploy_bc es mut nr stmts am_c es0 vis name ty slot.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   MEM (VariableDecl vis Immutable name ty slot) tops ==>
@@ -231,7 +231,7 @@ QED
 
 Theorem deploy_ctor_final_immutable_lookup[local]:
   !tops am tx deploy_bc es mut nr stmts am_c es0 gs outcomes res st vis name ty slot.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   eval_stmts (deploy_evaluation_context tops am tx) stmts
@@ -276,7 +276,7 @@ QED
 
 Theorem deploy_constructor_prefix_typing[local]:
   !tops am tx deploy_bc es mut nr body am_c es0 gs outcomes.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
   context_well_typed (deploy_evaluation_context tops am tx) ==>
@@ -315,7 +315,7 @@ Proof
 QED
 
 Theorem deploy_context_well_typed[local]:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es ==>
   context_well_typed (deploy_evaluation_context tops am tx)
 Proof
@@ -327,7 +327,7 @@ QED
 
 Theorem deploy_ctor_final_state_well_typed[local]:
   !tops am tx deploy_bc es mut nr stmts am_c es0 gs outcomes res st.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   eval_stmts (deploy_evaluation_context tops am tx) stmts
@@ -435,7 +435,7 @@ QED
 Theorem deploy_ctor_immutable_offsets[local]:
   !tops am tx rpolicy runtime_bc dunit body cenv nr nkey ut imm exit_lbl
    sa sb sj st_exit st_epilogue st_final func.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_code tops rpolicy runtime_bc dunit
     (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) ==>
   cenv.ce_module = NONE /\ cenv.ce_is_ctor /\
@@ -542,7 +542,7 @@ Theorem deploy_ctor_immutable_section[local]:
   !tops am tx deploy_bc es mut nr body am_c es0 gs outcomes res st
    rpolicy runtime_bc dunit cenv nkey ut imm exit_lbl sa sb sj st_exit
    st_epilogue st_final func before.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
   deploy_ctor_code tops rpolicy runtime_bc dunit
@@ -935,7 +935,7 @@ Proof
 QED
 
 Theorem deploy_ctor_start_static[local]:
-  !tops am tx mut nr body am_c es0.
+  !tops am tx mut nr body am_c es0 deploy_bc es.
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
   am_c.sources = am.sources /\ am_c.layouts = am.layouts
 Proof

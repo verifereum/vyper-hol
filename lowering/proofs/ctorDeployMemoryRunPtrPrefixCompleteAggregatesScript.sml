@@ -9,7 +9,7 @@ Ancestors
   abiDecoderTypedContract abiDecoderContract abiDecoderTupleInputs abiDecoderStruct valueEncodingTyping
   abiStaticDynarrayLayout vyperTyping arithmetic list
 
-val CshiftCode = ``\ty tv.
+val CshiftMode = ``\checked ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -37,7 +37,9 @@ val CshiftCode = ``\ty tv.
  d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
- lo <= initial.vs_alloca_next /\ lo <= d ==>
+ lo <= initial.vs_alloca_next /\ lo <= d /\
+ (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
+   LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
  ?actual H qt B.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
  val_in_memory tv v d actual.vs_memory /\
@@ -64,13 +66,14 @@ val CshiftCode = ``\ty tv.
  (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
                            op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
-   !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
+   !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
+ (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-Theorem prefix_tuple_complete_code_contract:
-  LIST_REL (^CshiftCode) tys tvs ==>
-    (^CshiftCode) (TupleT tys) (TupleTV tvs)
+Theorem prefix_tuple_complete_mode_contract:
+  LIST_REL ((^CshiftMode) checked) tys tvs ==>
+    ((^CshiftMode) checked) (TupleT tys) (TupleTV tvs)
 Proof
-  strip_tac >> drule prefix_members_complete_code >>
+  strip_tac >> drule prefix_members_complete_mode >>
   disch_then (mk_asm "members") >>
   qpat_x_assum `LIST_REL _ tys tvs` kall_tac >>
   BETA_TAC >> rpt gen_tac >>
@@ -99,19 +102,19 @@ Proof
   asm_simp_tac bool_ss [val_in_memory_tuple]
 QED
 
-val CshiftCode_desc =
-  ``(\env sf. ^CshiftCode) (env \\ nsid) (sf \\ nsid_to_string nsid)``;
+val CshiftMode_desc =
+  ``(\env sf. (^CshiftMode) checked) (env \\ nsid) (sf \\ nsid_to_string nsid)``;
 
-Theorem prefix_struct_complete_code_contract:
+Theorem prefix_struct_complete_mode_contract:
   FLOOKUP env nsid = SOME (StructArgs args) /\
-  LIST_REL (^CshiftCode_desc) (MAP SND args) tvs ==>
-  (^CshiftCode) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
+  LIST_REL (^CshiftMode_desc) (MAP SND args) tvs ==>
+  ((^CshiftMode) checked) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `LENGTH tvs = LENGTH args` by (drule LIST_REL_LENGTH >> simp[]) >>
   qpat_x_assum `LIST_REL _ _ _` (assume_tac o BETA_RULE) >>
   drule (Q.INST [`env` |-> `env \\ nsid`, `sf` |-> `sf \\ nsid_to_string nsid`]
-    prefix_members_complete_code) >>
+    (BETA_RULE prefix_members_complete_mode)) >>
   disch_then (mk_asm "members") >>
   qpat_x_assum `LIST_REL _ _ _` kall_tac >>
   BETA_TAC >> rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -152,12 +155,12 @@ Proof
   metis_tac[]
 QED
 
-Theorem prefix_fixed_array_complete_code_contract:
-  (^CshiftCode) ty tv ==>
-  (^CshiftCode) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
+Theorem prefix_fixed_array_complete_mode_contract:
+  ((^CshiftMode) checked) ty tv ==>
+  ((^CshiftMode) checked) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
 Proof
   strip_tac >>
-  `!count. LIST_REL (^CshiftCode) (REPLICATE count ty)
+  `!count. LIST_REL ((^CshiftMode) checked) (REPLICATE count ty)
      (REPLICATE count tv)` by
     (gen_tac >> simp_tac bool_ss [LIST_REL_REPLICATE_same] >>
      BETA_TAC >> strip_tac >> first_assum (ACCEPT_TAC o BETA_RULE)) >>
@@ -171,11 +174,11 @@ Proof
      LENGTH vs * type_memory_bytes ce ty` by simp[Once type_memory_bytes_def] >>
   qpat_assum `type_memory_bytes ce (ArrayT ty (Fixed (LENGTH vs))) = _`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-  `LIST_REL (^CshiftCode) (REPLICATE (LENGTH vs) ty)
+  `LIST_REL ((^CshiftMode) checked) (REPLICATE (LENGTH vs) ty)
      (REPLICATE (LENGTH vs) tv)` by
     (qpat_x_assum `!k. LIST_REL _ _ _`
        (qspec_then `LENGTH vs` mp_tac) >> simp[]) >>
-  drule prefix_members_complete_code >> disch_then (mk_asm "members") >>
+  drule prefix_members_complete_mode >> disch_then (mk_asm "members") >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   drule abi_decoder_complex_trace >> strip_tac >>
@@ -194,4 +197,59 @@ Proof
   conj_tac >- (irule abi_decoder_fixed_array_memory >> simp[]) >>
   conj_tac >- simp[Once type_memory_bytes_def] >>
   rpt strip_tac >> irule abi_decoder_fixed_array_memory >> simp[]
+QED
+
+val CshiftCode = rhs (concl (SIMP_CONV bool_ss [] ``(^CshiftMode) F``));
+val CshiftChecked = ``(^CshiftMode) T``;
+val CshiftCode_desc =
+  ``(\env sf. ^CshiftCode) (env \\ nsid) (sf \\ nsid_to_string nsid)``;
+val CshiftChecked_desc =
+  ``(\env sf. ^CshiftChecked) (env \\ nsid) (sf \\ nsid_to_string nsid)``;
+
+Theorem prefix_tuple_complete_code_contract:
+  LIST_REL (^CshiftCode) tys tvs ==>
+    (^CshiftCode) (TupleT tys) (TupleTV tvs)
+Proof
+  mp_tac (Q.INST [`checked` |-> `F`] prefix_tuple_complete_mode_contract) >>
+  simp_tac bool_ss []
+QED
+
+Theorem prefix_tuple_complete_checked_contract:
+  LIST_REL (^CshiftChecked) tys tvs ==>
+    (^CshiftChecked) (TupleT tys) (TupleTV tvs)
+Proof
+  simp_tac bool_ss [prefix_tuple_complete_mode_contract]
+QED
+
+Theorem prefix_struct_complete_code_contract:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  LIST_REL (^CshiftCode_desc) (MAP SND args) tvs ==>
+  (^CshiftCode) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
+Proof
+  mp_tac (Q.INST [`checked` |-> `F`] prefix_struct_complete_mode_contract) >>
+  simp_tac bool_ss []
+QED
+
+Theorem prefix_struct_complete_checked_contract:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  LIST_REL (^CshiftChecked_desc) (MAP SND args) tvs ==>
+  (^CshiftChecked) (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
+Proof
+  simp_tac bool_ss [prefix_struct_complete_mode_contract]
+QED
+
+Theorem prefix_fixed_array_complete_code_contract:
+  (^CshiftCode) ty tv ==>
+  (^CshiftCode) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
+Proof
+  mp_tac (Q.INST [`checked` |-> `F`] prefix_fixed_array_complete_mode_contract) >>
+  simp_tac bool_ss []
+QED
+
+Theorem prefix_fixed_array_complete_checked_contract:
+  (^CshiftChecked) ty tv ==>
+  (^CshiftChecked) (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
+Proof
+  mp_tac (Q.INST [`checked` |-> `T`] prefix_fixed_array_complete_mode_contract) >>
+  simp_tac bool_ss []
 QED

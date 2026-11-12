@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixCompleteArrayContract
 Ancestors
   loweringStateRelDefs
+  ctorDeployLoweringEntryArrayRun compileEnv
   ctorDeployMemoryRunPtrPrefixCompleteArrayBaseline
   ctorDeployMemoryRunPtrPrefixCompleteCode
   ctorDeployLoweringEntryCompleteArray ctorDeployLoweringEntryArrayOps
@@ -14,9 +15,9 @@ Ancestors
   abiDecoderRecursiveLoopContext abiDecoderDynamicLoopSetup
   abiDecoderLoopSetup abiDecoderArraySetupCode abiDecoderArrayPrefix
   abiDecoderArrayInvariant abiDecoderRecursiveLoopLayout abiDecoderRecursiveLoopEntry
-  abiDecoderExecution abiEncoderRegisteredEffect abiDecoderLoop
+  abiDecoderExecution abiEncoderRegisteredEffect abiDecoderLoop abiDecoderRecursiveArray
   ctorDeployMemoryFrontier allocaFrontierBound valueEncoding valueEncodingProps
-  compileEnv venomState venomInst venomExecSemantics venomMemDefs
+  venomState venomInst venomExecSemantics venomMemDefs
   ptrDiscipline ptrSafeRun words list rich_list arithmetic finite_map pred_set
 
 val CshiftCode = ``\ty tv.
@@ -76,26 +77,6 @@ val CshiftCode = ``\ty tv.
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
-Theorem prefix_complete_array_scratch_enlarge[local]:
- small SUBSET ids /\ ctor_actual_scratch func small D N final /\
- abi_encoder_registered_effect (ctor_actual_sites func small) regions initial final /\
- ctor_actual_scratch func ids D N initial ==>
- ctor_actual_scratch func ids D N final
-Proof
- strip_tac >> simp_tac bool_ss [ctor_actual_scratch_def] >> rpt gen_tac >>
- disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
- Cases_on `inst.inst_id IN small`
- >- (qpat_x_assum `ctor_actual_scratch func small _ _ final` mp_tac >>
-     simp_tac bool_ss [ctor_actual_scratch_def] >>
-     disch_then (qspecl_then [`inst`, `b`, `sz`] mp_tac) >> asm_rewrite_tac[]) >>
- `inst.inst_id NOTIN ctor_actual_sites func small` by simp[ctor_actual_sites_def] >>
- qpat_x_assum `abi_encoder_registered_effect _ _ initial final` mp_tac >>
- simp_tac bool_ss [abi_encoder_registered_effect_def] >> strip_tac >>
- `FLOOKUP initial.vs_allocas inst.inst_id = SOME (b,sz)` by metis_tac[] >>
- qpat_x_assum `ctor_actual_scratch func ids _ _ initial` mp_tac >>
- simp_tac bool_ss [ctor_actual_scratch_def] >>
- disch_then (qspecl_then [`inst`, `b`, `sz`] mp_tac) >> asm_rewrite_tac[]
-QED
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot base prefix cursor s.
@@ -112,8 +93,11 @@ val Ok = ``\k ctx func site ids D N d outsz next limit_st
     abi_encoder_registered_effect (ctor_actual_sites func ids) [(d,outsz)] base s /\
     s.vs_gas_readings = base.vs_gas_readings /\ s.vs_code = base.vs_code``;
 
-Theorem prefix_complete_array_exit_staged[local]:
- (^CshiftCode) ty tv ==>
+val CshiftMode = ``\checked ty tv.
+  ^(rand (rator (concl prefix_complete_array_initial_exit_pair_mode_exact)))``;
+
+Theorem prefix_complete_array_exit_staged_mode[local]:
+ (^CshiftMode) checked ty tv ==>
  abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id ==>
  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) ==>
@@ -151,8 +135,12 @@ Theorem prefix_complete_array_exit_staged[local]:
  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs))) initial.vs_data_section =
    enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
  lo <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
- frag_ids body_st end_st SUBSET ids /\ header_st.cs_next_id NOTIN frag_ids middle end_st ==>
+ frag_ids body_st end_st SUBSET ids /\ header_st.cs_next_id NOTIN frag_ids middle end_st /\
+ (checked ==> sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
+    LENGTH initial.vs_data_section /\ sb+32 <= LENGTH initial.vs_data_section /\
+    alloca_history func initial) ==>
  ?actual Hout qout A slot.
+   (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
    (!x. abi_decoder_older_vars st.cs_next_var x ==>
      lookup_var x actual = lookup_var x initial) /\
    (^Ok) k ctx func site ids D N d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
@@ -176,15 +164,15 @@ Theorem prefix_complete_array_exit_staged[local]:
    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
 Proof
- disch_then (mp_tac o MATCH_MP prefix_complete_array_initial_exit_pair_exact) >>
- rpt strip_tac >> first_x_assum irule >> asm_rewrite_tac[]
+ disch_then (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_initial_exit_pair_mode_exact) o BETA_RULE) >>
+ rpt strip_tac >> BETA_TAC >> first_x_assum irule >> asm_rewrite_tac[]
 QED
 
-Theorem prefix_dynamic_array_loop_complete_code_contract:
- (^CshiftCode) ty tv /\
+Theorem prefix_dynamic_array_loop_complete_mode_contract:
+ (^CshiftMode) checked ty tv /\
  (is_abi_dynamic ce.ce_struct_fields ty \/
    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
- (^CshiftCode) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+ (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
  disch_then (CONJUNCTS_THEN2 (mk_asm "child") assume_tac) >>
  simp_tac bool_ss [] >> rpt gen_tac >>
@@ -228,7 +216,15 @@ Proof
    entry_bb.bb_instructions = loop_st.cs_current_insts ++
      [mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []]` by simp[] >>
  pop_assum strip_assume_tac >>
- asm "child" (drule o GEN_ALL o MATCH_MP prefix_complete_array_exit_staged) >>
+ `(checked ==> sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
+    LENGTH initial.vs_data_section /\ sb+32 <= LENGTH initial.vs_data_section /\
+    alloca_history func initial)` by
+   (strip_tac >> fs[Once vyperABITheory.vyper_to_abi_type_def, Excl "enc_def"] >>
+    `has_type (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
+      fs[abi_decoder_metadata_def,Once vyperABITheory.vyper_to_abi_type_def, Excl "enc_def"] >>
+    drule abi_decoder_array_encoding_head_bound >>
+    strip_tac >> decide_tac) >>
+ asm "child" (drule o GEN_ALL o MATCH_MP prefix_complete_array_exit_staged_mode) >>
  disch_then drule >> disch_then drule >> disch_then drule >>
  disch_then drule >> disch_then drule >>
  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
@@ -237,7 +233,7 @@ Proof
  qpat_assum `(^Ok) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
    (MAP_EVERY assume_tac o CONJUNCTS o BETA_RULE) >>
  `ctor_actual_scratch func ids D N actual` by
-   (irule prefix_complete_array_scratch_enlarge >> goal_assum (drule_at Any) >> simp[]) >>
+   (irule ctorDeployLoweringEntryArrayRunTheory.deploy_ctor_array_scratch_enlarge >> goal_assum (drule_at Any) >> simp[]) >>
  drule abi_decoder_array_setup_head >> strip_tac >>
  qpat_x_assum `abi_decode_loop_suffix _ _ _ _ _ = _` mp_tac >>
  asm_rewrite_tac[] >> disch_then (mp_tac o MATCH_MP abi_decoder_loop_suffix_facts) >> strip_tac >>
@@ -261,6 +257,28 @@ Proof
  simp_tac bool_ss [not_fresh_at_def] >>
  qpat_x_assum `!x. abi_decoder_older_vars _ x ==> lookup_var x actual = _` mp_tac >>
  simp[abi_decoder_older_vars_def]
+QED
+
+Theorem prefix_dynamic_array_loop_complete_code_contract:
+ (^CshiftCode) ty tv /\
+ (is_abi_dynamic ce.ce_struct_fields ty \/
+   dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
+ (^CshiftCode) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+Proof
+ mp_tac (Q.INST [`checked` |-> `F`] prefix_dynamic_array_loop_complete_mode_contract) >>
+ simp_tac bool_ss []
+QED
+
+val CshiftChecked = ``(^CshiftMode) T``;
+
+Theorem prefix_dynamic_array_loop_complete_checked_contract:
+ (^CshiftChecked) ty tv /\
+ (is_abi_dynamic ce.ce_struct_fields ty \/
+   dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
+ (^CshiftChecked) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+Proof
+ mp_tac (Q.INST [`checked` |-> `T`] prefix_dynamic_array_loop_complete_mode_contract) >>
+ simp_tac bool_ss []
 QED
 
 val _ = export_theory();

@@ -11,8 +11,9 @@ Ancestors
  localPtrsProps entryArgPtrs loweringHalt moduleLowering context venomInst venomExecSemantics
  allocaFrontierBound allocaBudgetProps venomMemDefs ctorAbiActualSites ctorDeployMemoryFrontier
  ptrSafeRun ptrDiscipline venomState finite_map words arithmetic pred_set list rich_list
+  ctorDeployMemoryRunMemEntryRegistration fragGasPathMem
 
-Theorem prefix_entry_register_decode_paired:
+val RegisterDecodeMode = ``\checked.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
  abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
@@ -36,7 +37,9 @@ Theorem prefix_entry_register_decode_paired:
  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d + type_memory_bytes ce ty <= b+sz /\
  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next /\ lo <= d ==>
+ allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next /\ lo <= d /\
+ (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
+   LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
  ?actual H qt B.
  allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
  val_in_memory tv v d actual.vs_memory /\
@@ -64,9 +67,13 @@ Theorem prefix_entry_register_decode_paired:
  (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
    op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt actual) ==>
-   !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+   !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+ (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
+
+Theorem prefix_entry_register_decode_paired_mode:
+ !checked. (^RegisterDecodeMode) checked
 Proof
- disch_then (map_every assume_tac o CONJUNCTS) >>
+ gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
  `st.cs_next_var <= last.cs_next_var` by
    (drule abi_decoder_variable_counter >> simp[]) >>
  `fresh_vars_wrt last initial` by
@@ -74,8 +81,14 @@ Proof
  `ctor_actual_scratch func (frag_ids st last) 0 initial.vs_alloca_next initial` by
    (simp_tac bool_ss [ctor_actual_scratch_def, frag_ids_def, GSPECIFICATION] >>
     rpt strip_tac >> res_tac >> gvs[]) >>
- drule (BETA_RULE prefix_canonical_coherent_complete_code) >>
- disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
+ Cases_on `checked`
+ >- (drule (BETA_RULE prefix_canonical_coherent_complete_checked) >> suspend "instantiate") >>
+ drule (BETA_RULE prefix_canonical_coherent_complete_code) >> suspend "instantiate"
+QED
+
+Resume prefix_entry_register_decode_paired_mode[instantiate]:
+ markerLib.RESUME_TAC >>
+ qpat_x_assum `_ ==> _ /\ alloca_history _ _` (strip_assume_tac o SRULE []) >> disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
  disch_then (drule_at (Pat `eval_operand (Var dst) initial = _`)) >>
  disch_then (drule_at (Pat `fresh_vars_wrt last initial`)) >>
@@ -89,18 +102,125 @@ Proof
  metis_tac[]
 QED
 
-Theorem prefix_entry_register_scratch_extend[local]:
- abi_encoder_registered_effect (ctor_actual_sites func child) outs s t /\
- ctor_actual_scratch func child d n t /\
- (!i. i IN full /\ i NOTIN child ==> FLOOKUP s.vs_allocas i = NONE) ==>
- ctor_actual_scratch func full d n t
+Finalise prefix_entry_register_decode_paired_mode
+
+
+
+Theorem prefix_entry_register_address_decode_paired_mode:
+ !checked ptr.
+ (checked ==> LENGTH encoded <= LENGTH initial.vs_data_section /\ alloca_history func initial) /\ i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
+ EL i atys = vyper_to_abi_type env ty /\ has_types atys avs /\
+ encoded = enc (Tuple atys) (ListV avs) /\
+ mem_bytes_at 0 (LENGTH encoded) initial.vs_data_section = encoded /\
+ LENGTH encoded < dimword (:256) /\
+ off = SUM (MAP abi_member_head_size (TAKE i atys)) /\
+ abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
+ abi_decoder_metadata ce env ty tv
+   (type_to_abi_dec_info ce.ce_struct_fields ce ty) (EL i avs) v /\
+ FLOOKUP ce.ce_vars name = SOME (PtrVar (Var ptr) (type_memory_bytes ce ty)) /\
+ lookup_var ptr initial = SOME (n2w d) /\ not_fresh_at st ptr /\
+ compile_decode_args ce [build_positional_arg ce (name,ty)] off
+   DLOAD (Lit 0w) 0 st = ((),last) /\
+ fresh_vars_wrt st initial /\ fn_has_code st last func /\ fn_inst_ids_distinct func /\
+ (st.cs_blocks = last.cs_blocks \/ !bb.
+   lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
+     phi_prefix_length bb.bb_instructions = 0) /\
+ alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
+ k + unit_alloca_budget ctx < dimword (:256) /\
+ d + type_memory_bytes ce ty <= initial.vs_alloca_next /\
+ (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
+ FLOOKUP G ptr = SOME (b,sz) /\ b <= d /\ d + type_memory_bytes ce ty <= b+sz /\
+ op_taint tn (Var ptr) = {} /\
+ allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next /\ lo <= d /\
+ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+ ?actual H qt B.
+ allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ val_in_memory tv v d actual.vs_memory /\
+ abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st last))
+   [(d,type_memory_bytes ce ty)] initial actual /\
+ ctor_actual_scratch func (frag_ids st last) 0 initial.vs_alloca_next actual /\
+ initial.vs_alloca_next <= actual.vs_alloca_next /\
+ alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
+ fresh_vars_wrt last actual /\
+ actual.vs_data_section = initial.vs_data_section /\
+ actual.vs_call_ctx = initial.vs_call_ctx /\ actual.vs_labels = initial.vs_labels /\
+ (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==> lookup_var x actual = SOME w) /\
+ ~actual.vs_halted /\ actual.vs_current_bb = last.cs_current_bb /\
+ actual.vs_inst_idx = LENGTH last.cs_current_insts /\ abi_decode_sim ctx func initial actual /\
+ actual.vs_code = initial.vs_code /\ actual.vs_outcomes = initial.vs_outcomes /\
+ actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
+ actual.vs_gas_readings = initial.vs_gas_readings /\
+ (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
+ FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\ DISJOINT B qt.t_mem /\
+ (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
+   val_in_memory tv v d mem) /\
+ qt.t_mem SUBSET tn.t_mem /\
+ qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
+ (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
+   op_taint qt (Var x) = op_taint tn (Var x)) /\
+ ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt actual) ==>
+   !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+ /\ (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)
 Proof
- simp_tac bool_ss [ctor_actual_scratch_def, abi_encoder_registered_effect_def] >>
- strip_tac >> rpt gen_tac >> strip_tac >> Cases_on `inst.inst_id IN child`
- >- metis_tac[] >>
- `inst.inst_id NOTIN ctor_actual_sites func child` by simp[ctor_actual_sites_def] >>
- metis_tac[optionTheory.NOT_NONE_SOME]
+ rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ drule_all (Q.SPEC `checked` prefix_entry_register_canonical_address_paired_mode) >>
+ disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
+ disch_then (qx_choose_then `src` (qx_choose_then `middle`
+   (qx_choose_then `prepared` (qx_choose_then `sb` (qx_choose_then `AG`
+     (qx_choose_then `atn` (map_every assume_tac o CONJUNCTS))))))) >>
+ `middle.cs_current_bb = st.cs_current_bb` by
+   (qpat_x_assum `cs_extends st middle` mp_tac >> simp[cs_extends_def]) >>
+ `alloca_inv prepared /\ alloca_frontier_inv_from k ctx func site prepared` by
+   (qpat_x_assum `alloca_inv initial` mp_tac >>
+    qpat_x_assum `alloca_frontier_inv_from k ctx func site initial` mp_tac >>
+    simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+         alloca_frontier_inv_from_def, remaining_alloca_budget_def]) >>
+ `!aid. middle.cs_next_id <= aid ==> FLOOKUP prepared.vs_allocas aid = NONE` by
+   (rpt strip_tac >> simp[] >> first_x_assum irule >> decide_tac) >>
+ `FLOOKUP AG ptr' = SOME (b,sz) /\ op_taint atn (Var ptr') = {}` by metis_tac[] >>
+ `d + type_memory_bytes ce ty <= prepared.vs_alloca_next /\
+  lo <= prepared.vs_alloca_next` by simp[] >>
+ `checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)) <=
+   LENGTH prepared.vs_data_section /\ alloca_history func prepared` by metis_tac[] >>
+ drule_all (BETA_RULE (Q.SPEC `checked` prefix_entry_register_decode_paired_mode)) >>
+ disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
+ disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`
+   (qx_choose_then `B` (map_every assume_tac o CONJUNCTS))))) >>
+ `!x. not_fresh_at st x ==> not_fresh_at middle x` by
+   (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+ `checked ==> gas_path_mem ctx func initial 0 (OK actual)` by
+   (strip_tac >>
+    irule (SRULE [ADD] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
+    qexists_tac `prepared` >> simp[]) >>
+ qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[] >>
+ conj_tac >- suspend "effect" >>
+ conj_tac >- suspend "scratch" >>
+ metis_tac[abi_decode_sim_trans]
 QED
+
+Resume prefix_entry_register_address_decode_paired_mode[effect]:
+ `abi_encoder_registered_effect (ctor_actual_sites func (frag_ids middle last))
+   [(d,type_memory_bytes ce ty)] initial prepared` by
+   (irule abi_encoder_registered_effect_enlarge >>
+    qexistsl [`{}`,`[]`] >> simp[]) >>
+ `abi_encoder_registered_effect (ctor_actual_sites func (frag_ids middle last))
+   [(d,type_memory_bytes ce ty)] initial actual` by
+   (irule abi_encoder_registered_effect_trans >> qexists `prepared` >> simp[]) >>
+ irule abi_encoder_registered_effect_enlarge >>
+ goal_assum (drule_at Any) >> simp[ctor_actual_sites_def, SUBSET_DEF] >> metis_tac[SUBSET_DEF]
+QED
+
+Resume prefix_entry_register_address_decode_paired_mode[scratch]:
+ `ctor_actual_scratch func (frag_ids middle last) 0 initial.vs_alloca_next actual` by
+   metis_tac[] >>
+ irule ctorDeployMemoryRunMemEntryRegistrationTheory.ctor_checked_scratch_extend >>
+ qexistsl [`frag_ids middle last`,`[(d,type_memory_bytes ce ty)]`,`prepared`] >>
+ asm_rewrite_tac[] >> simp[frag_ids_def] >> rpt strip_tac >>
+ simp[] >> qpat_x_assum `!aid. st.cs_next_id <= aid ==> _` irule >> simp[]
+QED
+
+Finalise prefix_entry_register_address_decode_paired_mode
 
 Theorem prefix_entry_register_address_decode_paired:
  !ptr. i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
@@ -157,57 +277,7 @@ Theorem prefix_entry_register_address_decode_paired:
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
 Proof
- gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- drule_all prefix_entry_register_canonical_address_paired >>
- disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
- disch_then (qx_choose_then `src` (qx_choose_then `middle`
-   (qx_choose_then `prepared` (qx_choose_then `sb` (qx_choose_then `AG`
-     (qx_choose_then `atn` (map_every assume_tac o CONJUNCTS))))))) >>
- `middle.cs_current_bb = st.cs_current_bb` by
-   (qpat_x_assum `cs_extends st middle` mp_tac >> simp[cs_extends_def]) >>
- `alloca_inv prepared /\ alloca_frontier_inv_from k ctx func site prepared` by
-   (asm_rewrite_tac[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
-       alloca_frontier_inv_from_def, remaining_alloca_budget_def] >>
-    metis_tac[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
-       alloca_frontier_inv_from_def, remaining_alloca_budget_def]) >>
- `!aid. middle.cs_next_id <= aid ==> FLOOKUP prepared.vs_allocas aid = NONE` by
-   (rpt strip_tac >> simp[] >> first_x_assum irule >> decide_tac) >>
- `FLOOKUP AG ptr' = SOME (b,sz) /\ op_taint atn (Var ptr') = {}` by metis_tac[] >>
- `d + type_memory_bytes ce ty <= prepared.vs_alloca_next /\
-  lo <= prepared.vs_alloca_next` by simp[] >>
- drule_all prefix_entry_register_decode_paired >>
- disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
- disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`
-   (qx_choose_then `B` (map_every assume_tac o CONJUNCTS))))) >>
- `!x. not_fresh_at st x ==> not_fresh_at middle x` by
-   (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
- qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[] >>
- conj_tac >- suspend "effect" >>
- conj_tac >- suspend "scratch" >>
- metis_tac[abi_decode_sim_trans]
+ mp_tac (Q.SPEC `F` prefix_entry_register_address_decode_paired_mode) >> simp[]
 QED
-
-Resume prefix_entry_register_address_decode_paired[effect]:
- `abi_encoder_registered_effect (ctor_actual_sites func (frag_ids middle last))
-   [(d,type_memory_bytes ce ty)] initial prepared` by
-   (irule abi_encoder_registered_effect_enlarge >>
-    qexistsl [`{}`,`[]`] >> simp[]) >>
- `abi_encoder_registered_effect (ctor_actual_sites func (frag_ids middle last))
-   [(d,type_memory_bytes ce ty)] initial actual` by
-   (irule abi_encoder_registered_effect_trans >> qexists `prepared` >> simp[]) >>
- irule abi_encoder_registered_effect_enlarge >>
- goal_assum (drule_at Any) >> simp[ctor_actual_sites_def, SUBSET_DEF] >> metis_tac[SUBSET_DEF]
-QED
-
-Resume prefix_entry_register_address_decode_paired[scratch]:
- `ctor_actual_scratch func (frag_ids middle last) 0 initial.vs_alloca_next actual` by
-   metis_tac[] >>
- irule prefix_entry_register_scratch_extend >>
- qexistsl [`frag_ids middle last`,`[(d,type_memory_bytes ce ty)]`,`prepared`] >>
- asm_rewrite_tac[] >> simp[frag_ids_def] >> rpt strip_tac >>
- simp[] >> qpat_x_assum `!aid. st.cs_next_id <= aid ==> _` irule >> simp[]
-QED
-
-Finalise prefix_entry_register_address_decode_paired
 
 val _ = export_theory();

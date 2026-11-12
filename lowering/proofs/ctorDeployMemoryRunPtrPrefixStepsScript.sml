@@ -1,19 +1,10 @@
 (* Local instruction boundaries for the constructor prefix. *)
 Theory ctorDeployMemoryRunPtrPrefixSteps
 Ancestors
+  venomExecProofs
+  exprSimUnwrap slotCopyExecution
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst memLocDefs codegenRel contextCodegenRel
 
-Theorem prefix_alloca_step:
-  !aid size x s.
-    FLOOKUP s.vs_allocas aid = NONE ==>
-    step_inst_base (mk_inst aid ALLOCA [Lit size] [x]) s =
-      OK (update_var x (n2w s.vs_alloca_next)
-        (s with <| vs_allocas := s.vs_allocas |+
-                      (aid, (s.vs_alloca_next, w2n size));
-                   vs_alloca_next := s.vs_alloca_next + w2n size |>))
-Proof
-  simp[step_inst_base_def, mk_inst_def, exec_alloca_def, eval_operand_def]
-QED
 
 Theorem prefix_alloca_prov:
   !aid size x s PG G.
@@ -110,16 +101,6 @@ Proof
   simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem prefix_dload_step:
-  !iid off x s w.
-    eval_operand off s = SOME w ==>
-    step_inst_base (mk_inst iid DLOAD [off] [x]) s =
-      OK (update_var x
-        (word_of_bytes T (0w:bytes32)
-          (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))) s)
-Proof
-  simp[step_inst_base_def, mk_inst_def, exec_read1_def]
-QED
 
 Theorem prefix_dload_output_taint:
   !iid off x s t tn.
@@ -131,15 +112,6 @@ Proof
   Cases_on `eval_operand off s` >> simp[]
 QED
 
-Theorem prefix_assert_step:
-  !iid cond s w.
-    eval_operand cond s = SOME w ==>
-    step_inst_base (mk_inst iid ASSERT [cond] []) s =
-      if w = 0w then Abort Revert_abort (revert_state (set_returndata [] s))
-      else OK s
-Proof
-  simp[step_inst_base_def, mk_inst_def]
-QED
 
 Theorem prefix_dload_ptr_step:
   !iid off x s lo ctx fn PG G tn D fuel.
@@ -191,7 +163,7 @@ Theorem prefix_dload_ghost_step:
          (DRESTRICT G (COMPL {x}), step_taint inst s t tn)
 Proof
   rpt strip_tac >> simp[] >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_dload_step,
+  simp[ghost_step_def, step_inst_non_invoke, exprSimUnwrapTheory.step_DLOAD,
        mk_inst_def, step_prov_def, set_prov_def, out_prov_def,
        step_inst_base_def, exec_read1_def]
 QED
@@ -202,7 +174,7 @@ Theorem prefix_assert_ghost_step:
     ghost_step fuel ctx PG G tn (mk_inst iid ASSERT [cond] []) s = (G, tn)
 Proof
   rpt strip_tac >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_assert_step, mk_inst_def,
+  simp[ghost_step_def, step_inst_non_invoke, (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior), mk_inst_def,
        step_inst_base_def] >>
   Cases_on `w = 0w` >> simp[] >>
   simp[step_prov_def, set_prov_def, step_taint_def, mem_taint_def,
@@ -406,14 +378,6 @@ Proof
   pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[]
 QED
 
-Theorem prefix_mstore_step:
-  !iid addr value s a w.
-    eval_operand addr s = SOME a /\ eval_operand value s = SOME w ==>
-    step_inst_base (mk_inst iid MSTORE [addr;value] []) s =
-      OK (mstore (w2n a) w s)
-Proof
-  simp[prefix_mstore_dispatch, exec_write2_def, mk_inst_def]
-QED
 
 Theorem prefix_mstore_frame:
   !iid addr value s t lo fuel ctx.
@@ -439,7 +403,7 @@ Theorem prefix_mstore_ptr_step:
 Proof
   rpt strip_tac >>
   simp[ptr_safe_step_def, ptr_inst_ok_def,
-       step_inst_non_invoke, prefix_mstore_step] >>
+       step_inst_non_invoke, slotCopyExecutionTheory.slot_copy_step_store] >>
   simp[access_ok_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, fixed_source_write_range_def,
        mem_write_ops_def, mk_inst_def, taint_ok_def,

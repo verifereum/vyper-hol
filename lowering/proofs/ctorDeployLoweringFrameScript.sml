@@ -2,6 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringFrame
 Ancestors
+  immSectionDead
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
   ctorDeployLoweringFramePayload ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
   vyperTypeStoragePreservation list supportedDecls supportedProgram
@@ -48,7 +49,7 @@ Theorem deploy_ctor_oracle_storage:
 Proof
   strip_tac >>
   `vs.vs_outcomes = MAP SND (call_trace es)` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >>
+    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
      simp[gas_variant_def] >>
      disch_then (mp_tac o Q.AP_TERM `\s. s.vs_outcomes`) >>
      simp[deploy_entry_state_def, entry_venom_state_def]) >>
@@ -493,7 +494,7 @@ QED
 
 Theorem deploy_frame_source_start_setup:
   !tops am tx mut nr body am_c es0 deploy_bc es.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
   ?deploy_art runtime_art args env_body env_after.
@@ -600,7 +601,7 @@ QED
 
 Theorem deploy_frame_semantic_setup:
   !tops am tx mut nr stmts am_c es0 deploy_bc es vs prog cplan.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   deploy_state_rel tops deploy_bc am tx es /\
   call_outcomes_ok am tx (MAP SND (call_trace es)) /\
@@ -647,7 +648,7 @@ Proof
   `supported_program_deploy tops` by gvs[deploy_source_ok_def] >>
   drule_all deploy_frame_supported_body >> strip_tac >>
   `vs.vs_outcomes = MAP SND (call_trace es)` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >>
+    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
      simp[gas_variant_def] >>
      disch_then (mp_tac o Q.AP_TERM `\s. s.vs_outcomes`) >>
      simp[deploy_entry_state_def, entry_venom_state_def]) >>

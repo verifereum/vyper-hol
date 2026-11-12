@@ -2,33 +2,14 @@
 Theory ctorDeployMemoryRunPtrPrefixScalarClamps
 Ancestors
   loweringStateRelDefs
+  emitHelperProps venomExecProofs exprSimUnwrap instIdxIndep slotCopyExecution compileEnv
   ctorDeployMemoryRunPtrPrefixScalarPackage ctorDeployMemoryRunPtrPrefixScalarBool
   ctorDeployMemoryRunPtrPrefixBoolWord ctorDeployMemoryRunPtrPrefixSteps
-  abiEncoder emitHelper compileEnv exprLoweringProps
+  abiEncoder emitHelper exprLoweringProps
   venomState venomInst venomExecSemantics ptrDiscipline ptrSafeRun
   finite_map words list pred_set memLocDefs codegenRel contextCodegenRel fragExec
 
-Theorem prefix_scalar_shift_step:
-  eval_operand a s = SOME w ==>
-  step_inst_base (mk_inst iid SHR [Lit k; a] [x]) s =
-    OK (update_var x (word_lsr w (w2n k)) s) /\
-  step_inst_base (mk_inst iid SHL [Lit k; a] [x]) s =
-    OK (update_var x (word_lsl w (w2n k)) s) /\
-  step_inst_base (mk_inst iid SIGNEXTEND [Lit k; a] [x]) s =
-    OK (update_var x (sign_extend k w) s)
-Proof
-  strip_tac >>
-  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
-       eval_operand_def]
-QED
 
-Theorem prefix_scalar_eq_step:
-  eval_operand a s = SOME w /\ eval_operand b s = SOME v ==>
-  step_inst_base (mk_inst iid EQ [a;b] [x]) s =
-    OK (update_var x (bool_to_word (w = v)) s)
-Proof
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def]
-QED
 
 Theorem prefix_scalar_shift_clean:
   op_taint tn a = {} ==>
@@ -183,7 +164,7 @@ Theorem prefix_scalar_shift_ghost:
        s (update_var x (sign_extend k w) s) tn)
 Proof
   strip_tac >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_scalar_shift_step,
+  simp[ghost_step_def, step_inst_non_invoke, emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL, emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def,
        mk_inst_def, step_prov_def, set_prov_def, out_prov_def,
        SRULE [mk_inst_def] prefix_scalar_pure_dispatch, exec_pure2_def,
        eval_operand_def]
@@ -196,7 +177,7 @@ Theorem prefix_scalar_eq_ghost:
        s (update_var x (bool_to_word (w = v)) s) tn)
 Proof
   strip_tac >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_scalar_eq_step,
+  simp[ghost_step_def, step_inst_non_invoke, emitHelperPropsTheory.step_EQ,
        mk_inst_def, step_prov_def, set_prov_def, out_prov_def,
        SRULE [mk_inst_def] prefix_scalar_pure_dispatch, exec_pure2_def]
 QED
@@ -224,13 +205,13 @@ Proof
          update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst iid (if left then SHL else SHR) [Lit k;Var v] [y]) s = OK s1` by
     (Cases_on `left` >> simp[Abbr `s1`, Abbr `a`] >>
-     metis_tac[prefix_scalar_shift_step]) >>
+     metis_tac[emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL, emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def]) >>
   `step_inst_base (mk_inst (iid+1) ISZERO [Var y] [z]) s1 = OK s2` by
-    (simp[Abbr `s2`] >> irule prefix_boolword_iszero_step >> simp[]) >>
+    (simp[Abbr `s2`] >> irule emitHelperPropsTheory.step_ISZERO >> simp[]) >>
   `step_inst_base (mk_inst (iid+2) ASSERT [Var z] []) s2 =
     if a = 0w then OK s2
     else Abort Revert_abort (revert_state (set_returndata [] s2))` by
-    (drule prefix_assert_step >>
+    (drule (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior) >>
      disch_then (qspec_then `iid+2` mp_tac) >>
      Cases_on `a = 0w` >> simp[bool_to_word_def]) >>
   asm_rewrite_tac[run_inst_seq_def] >> Cases_on `a = 0w` >> simp[]
@@ -257,13 +238,13 @@ Proof
     (gvs[Abbr `s1`, Abbr `s2`, eval_operand_def, lookup_var_def,
          update_var_def, FLOOKUP_UPDATE]) >>
   `step_inst_base (mk_inst iid SIGNEXTEND [Lit k;Var v] [y]) s = OK s1` by
-    (simp[Abbr `s1`] >> metis_tac[prefix_scalar_shift_step]) >>
+    (simp[Abbr `s1`] >> metis_tac[emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL, emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def]) >>
   `step_inst_base (mk_inst (iid+1) EQ [Var v;Var y] [z]) s1 = OK s2` by
-    (simp[Abbr `s2`] >> irule prefix_scalar_eq_step >> simp[]) >>
+    (simp[Abbr `s2`] >> irule emitHelperPropsTheory.step_EQ >> simp[]) >>
   `step_inst_base (mk_inst (iid+2) ASSERT [Var z] []) s2 =
     if w = sign_extend k w then OK s2
     else Abort Revert_abort (revert_state (set_returndata [] s2))` by
-    (drule prefix_assert_step >>
+    (drule (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior) >>
      disch_then (qspec_then `iid+2` mp_tac) >>
      Cases_on `w = sign_extend k w` >> simp[bool_to_word_def]) >>
   asm_rewrite_tac[run_inst_seq_def] >>
@@ -309,13 +290,13 @@ Proof
     (gvs[Abbr `s1`, Abbr `s2`, allocas_from_def, update_var_def] >> metis_tac[]) >>
   `step_inst_base (mk_inst iid (if left then SHL else SHR) [Lit n;Var v] [y]) s = OK s1` by
     (Cases_on `left` >> simp[Abbr `s1`, Abbr `a`] >>
-     metis_tac[prefix_scalar_shift_step]) >>
+     metis_tac[emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL, emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def]) >>
   `step_inst_base (mk_inst (iid+1) ISZERO [Var y] [z]) s1 = OK s2` by
-    (simp[Abbr `s2`] >> irule prefix_boolword_iszero_step >> simp[]) >>
+    (simp[Abbr `s2`] >> irule emitHelperPropsTheory.step_ISZERO >> simp[]) >>
   `step_inst_base (mk_inst (iid+2) ASSERT [Var z] []) s2 =
     if a = 0w then OK s2
     else Abort Revert_abort (revert_state (set_returndata [] s2))` by
-    (drule prefix_assert_step >>
+    (drule (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior) >>
      disch_then (qspec_then `iid+2` mp_tac) >>
      Cases_on `a = 0w` >> simp[bool_to_word_def]) >>
   `op_taint (step_taint (mk_inst iid (if left then SHL else SHR)
@@ -372,13 +353,13 @@ Proof
   `allocas_from lo s1 /\ allocas_from lo s2` by
     (gvs[Abbr `s1`, Abbr `s2`, allocas_from_def, update_var_def] >> metis_tac[]) >>
   `step_inst_base (mk_inst iid SIGNEXTEND [Lit n;Var v] [y]) s = OK s1` by
-    (simp[Abbr `s1`] >> metis_tac[prefix_scalar_shift_step]) >>
+    (simp[Abbr `s1`] >> metis_tac[emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL, emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def]) >>
   `step_inst_base (mk_inst (iid+1) EQ [Var v;Var y] [z]) s1 = OK s2` by
-    (simp[Abbr `s2`] >> irule prefix_scalar_eq_step >> simp[]) >>
+    (simp[Abbr `s2`] >> irule emitHelperPropsTheory.step_EQ >> simp[]) >>
   `step_inst_base (mk_inst (iid+2) ASSERT [Var z] []) s2 =
     if w = sign_extend n w then OK s2
     else Abort Revert_abort (revert_state (set_returndata [] s2))` by
-    (drule prefix_assert_step >>
+    (drule (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior) >>
      disch_then (qspec_then `iid+2` mp_tac) >>
      Cases_on `w = sign_extend n w` >> simp[bool_to_word_def]) >>
   qabbrev_tac `tn1 = step_taint (mk_inst iid SIGNEXTEND [Lit n;Var v] [y]) s s1 tn` >>
@@ -452,10 +433,10 @@ Proof
   `step_inst fuel ctx i s = OK s1` by
     (simp[step_inst_non_invoke] >>
      Cases_on `left` >> simp[Abbr `i`, Abbr `s1`, Abbr `a`] >>
-     metis_tac[prefix_scalar_shift_step]) >>
+     metis_tac[emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL, emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def]) >>
   `step_inst fuel ctx j t1 = OK s2` by
     (simp[step_inst_non_invoke] >>
-     simp[Abbr `j`, Abbr `s2`, prefix_boolword_iszero_step]) >>
+     simp[Abbr `j`, Abbr `s2`, emitHelperPropsTheory.step_ISZERO]) >>
   `ghost_step fuel ctx PG G tn i s = (DRESTRICT G (COMPL {y}),tn1)` by
     (Cases_on `left` >>
      qpat_assum `eval_operand (Var v) s = SOME w`
@@ -465,7 +446,7 @@ Proof
      (DRESTRICT G (COMPL {y} INTER COMPL {z}),step_taint j t1 s2 tn1)` by
     (simp[Abbr `j`] >> once_rewrite_tac[GSYM DRESTRICT_DRESTRICT] >>
      irule prefix_iszero_ghost_step >>
-     simp[Abbr `s2`, prefix_boolword_iszero_step]) >>
+     simp[Abbr `s2`, emitHelperPropsTheory.step_ISZERO]) >>
   `ptr_safe_step D lo fuel ctx fn PG G tn i s` by
     (simp[Abbr `i`] >> irule prefix_scalar_shift_ptr >>
      simp[] >> Cases_on `left` >> simp[]) >>
@@ -483,7 +464,7 @@ Proof
      simp[Abbr `t2`]) >>
   once_rewrite_tac[ptr_safe_block_def] >> simp[is_terminator_def] >>
   qpat_assum `eval_operand (Var z) t2 = SOME _`
-    (mp_then Any (qspec_then `iid+2` assume_tac) prefix_assert_step) >>
+    (mp_then Any (qspec_then `iid+2` assume_tac) (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior)) >>
   qpat_assum `eval_operand (Var z) t2 = SOME _`
     (mp_then Any mp_tac prefix_assert_ghost_step) >>
   disch_then (qspec_then `iid+2` assume_tac) >>
@@ -547,10 +528,10 @@ Proof
     simp[Abbr `i`, Abbr `j`, mk_inst_def, is_terminator_def] >>
   `step_inst fuel ctx i s = OK s1` by
     (simp[step_inst_non_invoke, Abbr `i`, Abbr `s1`] >>
-     metis_tac[prefix_scalar_shift_step]) >>
+     metis_tac[emitHelperPropsTheory.step_SHR, emitHelperPropsTheory.step_SHL, emitHelperPropsTheory.step_SIGNEXTEND, venomStateTheory.eval_operand_def]) >>
   `step_inst fuel ctx j t1 = OK s2` by
     (simp[step_inst_non_invoke, Abbr `j`, Abbr `s2`] >>
-     irule prefix_scalar_eq_step >> simp[]) >>
+     irule emitHelperPropsTheory.step_EQ >> simp[]) >>
   `ghost_step fuel ctx PG G tn i s = (DRESTRICT G (COMPL {y}),tn1)` by
     (qpat_assum `eval_operand (Var v) s = SOME w`
        (mp_then Any mp_tac prefix_scalar_shift_ghost) >>
@@ -578,7 +559,7 @@ Proof
      simp[Abbr `t2`]) >>
   once_rewrite_tac[ptr_safe_block_def] >> simp[is_terminator_def] >>
   qpat_assum `eval_operand (Var z) t2 = SOME _`
-    (mp_then Any (qspec_then `iid+2` assume_tac) prefix_assert_step) >>
+    (mp_then Any (qspec_then `iid+2` assume_tac) (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior)) >>
   qpat_assum `eval_operand (Var z) t2 = SOME _`
     (mp_then Any mp_tac prefix_assert_ghost_step) >>
   disch_then (qspec_then `iid+2` assume_tac) >>
@@ -653,7 +634,7 @@ Proof
     gvs[Abbr `l`, Abbr `s1`, Abbr `s2`, eval_operand_def, lookup_var_def,
         update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s = OK l` by
-    simp[prefix_dload_step, Abbr `l`, Abbr `w`] >>
+    simp[exprSimUnwrapTheory.step_DLOAD, Abbr `l`, Abbr `w`] >>
   once_rewrite_tac[run_inst_seq_def] >> asm_rewrite_tac[] >> simp[] >>
   qabbrev_tac `clamp =
     [mk_inst (iid+1) (if signed then SIGNEXTEND else if left then SHL else SHR)
@@ -678,39 +659,18 @@ Proof
      else Abort Revert_abort (revert_state (set_returndata [] s2))` suffices_by
     simp[Abbr `clamp`] >>
   `step_inst_base (mk_inst (iid+4) MSTORE [Var dst;Var x] []) s2 =
-     OK (mstore (w2n p) w s2)` by (irule prefix_mstore_step >> simp[]) >>
+     OK (mstore (w2n p) w s2)` by (irule slotCopyExecutionTheory.slot_copy_step_store >> simp[]) >>
   Cases_on `valid`
   >- (gvs[] >> drule run_inst_seq_append >> disch_then (qspec_then
         `[mk_inst (iid+4) MSTORE [Var dst;Var x] []]` mp_tac) >>
-      simp[run_inst_seq_def, prefix_mstore_step]) >>
+      simp[run_inst_seq_def, slotCopyExecutionTheory.slot_copy_step_store]) >>
   `!t. run_inst_seq clamp l <> OK t` by simp[] >>
   drule run_inst_seq_append_err >>
   disch_then (qspec_then `[mk_inst (iid+4) MSTORE [Var dst;Var x] []]` mp_tac) >>
   simp[]
 QED
 
-Theorem prefix_scalar_instruction[local]:
-  isPREFIX xs (DROP k bb.bb_instructions) /\ n < LENGTH xs ==>
-  get_instruction bb (k+n) = SOME (EL n xs)
-Proof
-  rpt strip_tac >> gvs[rich_listTheory.IS_PREFIX_APPEND] >>
-  `LENGTH (DROP k bb.bb_instructions) = LENGTH xs + LENGTH l` by
-    metis_tac[listTheory.LENGTH_APPEND] >>
-  `n < LENGTH (DROP k bb.bb_instructions)` by decide_tac >>
-  `k+n < LENGTH bb.bb_instructions` by gvs[listTheory.LENGTH_DROP] >>
-  simp[get_instruction_def] >>
-  qspecl_then [`n`,`k`,`bb.bb_instructions`] mp_tac listTheory.EL_DROP >>
-  simp[rich_listTheory.EL_APPEND1, arithmeticTheory.ADD_COMM]
-QED
 
-Theorem prefix_scalar_index_updates[local]:
-  update_var v w (s with vs_inst_idx := k) =
-    (update_var v w s) with vs_inst_idx := k /\
-  mstore off w (s with vs_inst_idx := k) =
-    (mstore off w s) with vs_inst_idx := k
-Proof
-  simp[update_var_def, mstore_def]
-QED
 
 Theorem prefix_scalar_word_ptr:
   eval_operand src s = SOME a /\ eval_operand (Var dst) s = SOME p /\
@@ -766,7 +726,7 @@ Proof
        else mk_inst (iid+2) ISZERO [Var y] [z]);
       mk_inst (iid+3) ASSERT [Var z] [];
       mk_inst (iid+4) MSTORE [Var dst;Var x] []])` by
-    (rpt strip_tac >> irule prefix_scalar_instruction >> simp[]) >>
+    (rpt strip_tac >> irule ctorDeployMemoryRunPtrPrefixBoolWordTheory.prefix_boolword_instruction >> simp[]) >>
   `get_instruction bb s.vs_inst_idx = SOME (mk_inst iid DLOAD [src] [x])` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   qpat_assum `Abbrev (w = _)` (assume_tac o GSYM o SRULE [markerTheory.Abbrev_def]) >>
@@ -807,13 +767,13 @@ Proof
          simp[LET_THM, arithmeticTheory.ADD1] >> disch_then irule >> simp[] >>
          qexistsl [`iid+1`,`n`,`y`,`z`] >>
          gvs[Abbr `l1`, Abbr `r`, Abbr `t`, Abbr `valid`, Abbr `shifted`,
-             prefix_scalar_index_updates, arithmeticTheory.ADD1]) >>
+             instIdxIndepTheory.update_var_idx, instIdxIndepTheory.mstore_idx, arithmeticTheory.ADD1]) >>
      qpat_assum `eval_operand (Var x) l1 = SOME w`
        (mp_then Any mp_tac prefix_scalar_shift_clamp_continuation) >>
      simp[LET_THM, arithmeticTheory.ADD1] >> disch_then irule >> simp[] >>
      qexistsl [`iid+1`,`left`,`n`,`y`,`z`] >>
      gvs[Abbr `l1`, Abbr `r`, Abbr `t`, Abbr `valid`, Abbr `shifted`,
-         prefix_scalar_index_updates, arithmeticTheory.ADD1]) >>
+         instIdxIndepTheory.update_var_idx, instIdxIndepTheory.mstore_idx, arithmeticTheory.ADD1]) >>
   first_x_assum irule >> strip_tac >>
   qabbrev_tac `q1 = step_taint
     (mk_inst (iid+1) (if signed then SIGNEXTEND else if left then SHL else SHR)
@@ -842,7 +802,7 @@ Proof
      simp[Abbr `q0`, prefix_dload_output_taint, prefix_guard_taint_other]) >>
   drule_all prefix_boolword_mstore_continuation >>
   simp[LET_THM] >> disch_then irule >>
-  simp[Abbr `t4`, prefix_scalar_index_updates, Abbr `u`, arithmeticTheory.ADD1]
+  simp[Abbr `t4`, instIdxIndepTheory.update_var_idx, instIdxIndepTheory.mstore_idx, Abbr `u`, arithmeticTheory.ADD1]
 QED
 
 Theorem prefix_scalar_word_frames:

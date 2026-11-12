@@ -3,6 +3,7 @@ Theory ctorDeployDeadSectionFrame
 Ancestors
   ctorDeployDeadSection ctorDeployDefs immSectionDead immutableSectionRel immutableValue
   immutableEncoding valueEncoding compileVyper structFieldsProps entryStateRel
+  valueEncodingDefs
   list rich_list
 
 Theorem imm_frame_size:

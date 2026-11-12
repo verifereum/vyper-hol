@@ -2,11 +2,12 @@
 Theory ctorDeployMemoryRunPtrPrefixRegisterOne
 Ancestors
   loweringStateRelDefs
+  ctorDeployMemoryRunMemEntryRegistration compileEnv
   ctorDeployMemoryRunPtrPrefixRegisterAddress ctorDeployMemoryRunPtrPrefixRecursive
   ctorDeployMemoryRunPtrPrefixRegisterAlloc
   ctorRegisterArgs abiDecoderCode abiDecoderContract abiEncoderRegisteredEffect
   abiDecoderCoherence abiDecoderCounters ctorAbiActualFrame abiDecoderLoop
-  abiEncoderProps emitHelperProps fragExec compileEnv
+  abiEncoderProps emitHelperProps fragExec
   localPtrsProps entryArgPtrs loweringHalt moduleLowering context venomInst venomExecSemantics
   allocaFrontierBound allocaBudgetProps venomMemDefs ctorAbiActualSites
   ptrSafeRun ptrDiscipline venomState finite_map words arithmetic pred_set list rich_list
@@ -106,18 +107,6 @@ Proof
   rpt strip_tac >> asm_rewrite_tac[] >> metis_tac[]
 QED
 
-Theorem prefix_register_scratch_extend[local]:
-  abi_encoder_registered_effect (ctor_actual_sites func child) outs s t /\
-  ctor_actual_scratch func child d n t /\
-  (!i. i IN full /\ i NOTIN child ==> FLOOKUP s.vs_allocas i = NONE) ==>
-  ctor_actual_scratch func full d n t
-Proof
-  simp_tac bool_ss [ctor_actual_scratch_def, abi_encoder_registered_effect_def] >>
-  strip_tac >> rpt gen_tac >> strip_tac >> Cases_on `inst.inst_id IN child`
-  >- metis_tac[] >>
-  `inst.inst_id NOTIN ctor_actual_sites func child` by simp[ctor_actual_sites_def] >>
-  metis_tac[optionTheory.NOT_NONE_SOME]
-QED
 
 Theorem prefix_register_address_decode_paired:
   !ptr. i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
@@ -217,7 +206,7 @@ QED
 Resume prefix_register_address_decode_paired[scratch]:
   `ctor_actual_scratch func (frag_ids middle last) 0 initial.vs_alloca_next actual` by
     metis_tac[] >>
-  irule prefix_register_scratch_extend >>
+  irule ctorDeployMemoryRunMemEntryRegistrationTheory.ctor_checked_scratch_extend >>
   qexistsl [`frag_ids middle last`,`[(d,type_memory_bytes ce ty)]`,`prepared`] >>
   asm_rewrite_tac[] >> simp[frag_ids_def] >> rpt strip_tac >>
   simp[] >> qpat_x_assum `!aid. st.cs_next_id <= aid ==> _` irule >> simp[]
@@ -225,62 +214,6 @@ QED
 
 Finalise prefix_register_address_decode_paired
 
-Theorem prefix_register_alloc_semantic_frame:
-  compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
-  n < dimword (:256) /\ initial.vs_alloca_next < dimword (:256) /\
-  local_ptrs_rel func ce scopes initial /\ fresh_vars_wrt st initial /\
-  (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
-  a = (update_var (STRING #"%" (toString st.cs_next_var))
-      (n2w initial.vs_alloca_next)
-      (initial with <|vs_allocas := initial.vs_allocas |+
-        (st.cs_next_id,(initial.vs_alloca_next,n));
-        vs_alloca_next := initial.vs_alloca_next+n|>))
-      with vs_inst_idx := LENGTH sa.cs_current_insts ==>
-  buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
-  local_ptrs_rel func ce scopes a /\
-  local_backed func (STRING #"%" (toString st.cs_next_var)) a initial.vs_alloca_next n /\
-  fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
-  (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
-  (!name b sz. local_region ce scopes a name b sz ==>
-    loweringStateRelDefs$regions_disjoint initial.vs_alloca_next n b sz) /\
-  (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==> lookup_var x a = SOME w) /\
-  abi_encoder_registered_effect (frag_ids st sa) [] initial a
-Proof
-  strip_tac >>
-  `not_scope_ptr ce scopes (STRING #"%" (toString st.cs_next_var))` by
-    (irule local_ptrs_rel_fresh_not_scope_ptr >>
-     qexistsl [`func`,`initial`,`st`] >> simp[GREATER_EQ]) >>
-  `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
-    [STRING #"%" (toString st.cs_next_var)]) initial (n2w n : bytes32) =
-    OK (a with vs_inst_idx := initial.vs_inst_idx)` by
-    gvs[exec_alloca_def, mk_inst_def, update_var_def, w2n_n2w,
-      venom_state_component_equality] >>
-  drule local_ptrs_rel_exec_alloca_fresh >> simp[mk_inst_def] >>
-  disch_then (qspecl_then [`func`,`ce`,`scopes`] mp_tac) >>
-  simp[local_ptrs_rel_inst_idx] >> strip_tac >>
-  drule compile_alloc_buffer_parts >> strip_tac >> simp[] >>
-  conj_tac >-
-    (simp[local_backed_def] >> disj1_tac >>
-     qexists `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
-       [STRING #"%" (toString st.cs_next_var)]` >>
-     drule_all entry_alloc_buffer_inst >> gvs[mk_inst_def]) >>
-  conj_tac >-
-    (fs[fresh_vars_wrt_def, update_var_def, GREATER_EQ] >>
-     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  conj_tac >-
-    (simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
-     IF_CASES_TAC >> gvs[] >> first_x_assum irule >> decide_tac) >>
-  conj_tac >-
-    (rpt strip_tac >> qpat_x_assum `!name b sz. local_region _ _ _ _ _ _ ==> _` mp_tac >>
-     fs[local_region_def, lookup_var_def] >> metis_tac[]) >>
-  conj_tac >-
-    (rpt strip_tac >> simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-     IF_CASES_TAC >> gvs[lookup_var_def]) >>
-  simp[abi_encoder_registered_effect_def, frag_ids_def, GSPECIFICATION,
-       update_var_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> IF_CASES_TAC >> gvs[] >>
-  `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >> gvs[]
-QED
 
 Theorem prefix_register_one_slot_paired:
   i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
@@ -355,7 +288,7 @@ Proof
   disch_then (qx_choose_then `a` (qx_choose_then `AG` (qx_choose_then `atn`
     (map_every assume_tac o CONJUNCTS)))) >>
   `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
-  drule_all prefix_register_alloc_semantic_frame >>
+  drule_all ctorRegisterArgsTheory.ctor_alloc_buffer_state_props >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decoder_coherent ce' env ce'.ce_struct_fields ty entry.type /\
    abi_decoder_metadata ce' env ty entry.type

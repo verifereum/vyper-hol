@@ -3,6 +3,7 @@
 Theory ctorDeployMemoryRunPtrPrefixCompleteBulk
 Ancestors
   loweringStateRelDefs
+  compileEnv ctorDeployMemoryRunMemEntryBulk
   ctorDeployMemoryRunPtrPrefixCompleteCopy
   ctorDeployMemoryRunPtrPrefixCompleteCode
   ctorDeployLoweringEntryCompleteNoAlloc abiDecoderBulkReentry abiDecoderBulk
@@ -14,7 +15,7 @@ Ancestors
   abiDecoderContract abiDecoderTypedContract abiDecoderCoherence abiDecoderLoop
   abiDecoderReentry abiDecoderReentryPointer abiDecoderBulkExecute
   abiEncoderRegisteredEffect fragExec allocaFrontierBound allocaBudgetProps
-  exprLowering exprLoweringProps emitHelper compileEnv venomInst venomState
+  exprLowering exprLoweringProps emitHelper venomInst venomState
   venomExecSemantics ptrDiscipline ptrSafeRun valueEncoding words list rich_list
   arithmetic finite_map pred_set
 
@@ -90,10 +91,71 @@ val CshiftCode = ``\ty tv.
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
-Theorem prefix_bulk_complete_code_contract:
+val CshiftMode = ``\checked ty tv.
+ !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
+  G tn b sz Ddead lo PG.
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
+   (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ abi_decoder_coherent ce env sf ty tv /\
+ abi_decoder_metadata ce env ty tv root_di av v /\
+ eval_operand src initial = SOME (n2w sb) /\
+ eval_operand (Var dst) initial = SOME (n2w d) /\
+ sb + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+ mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av))
+   initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
+ (!x. src = Var x \/ Var dst = Var x \/ Lit 0w = Var x ==> not_fresh_at st x) /\
+ st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+ fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+ (st.cs_blocks = st'.cs_blocks \/ !bb.
+    lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+ alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
+ k + unit_alloca_budget ctx < dimword (:256) /\
+ D <= d /\ d + type_memory_bytes ce ty <= D+N /\ D+N <= initial.vs_alloca_next /\
+ frag_ids st st' SUBSET ids /\ ctor_actual_scratch func ids D N initial /\
+ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+ initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+ FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
+ d + type_memory_bytes ce ty <= b+sz /\
+ op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
+ allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ lo <= initial.vs_alloca_next /\ lo <= d /\
+ (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
+    LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
+ ?actual H qt B.
+ allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ val_in_memory tv v d actual.vs_memory /\
+ abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
+   [(d,type_memory_bytes ce ty)] initial actual /\
+ alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
+ ctor_actual_scratch func ids D N actual /\ D+N <= actual.vs_alloca_next /\
+ actual.vs_data_section = initial.vs_data_section /\
+ actual.vs_call_ctx = initial.vs_call_ctx /\
+ (!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x initial) /\
+ ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
+ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+ abi_decode_sim ctx func initial actual /\ fresh_vars_wrt limit_st actual /\
+ actual.vs_labels = initial.vs_labels /\ actual.vs_code = initial.vs_code /\
+ actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+ actual.vs_block_ctx = initial.vs_block_ctx /\ actual.vs_gas_readings = initial.vs_gas_readings /\
+ (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
+ FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
+ DISJOINT B qt.t_mem /\
+ (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
+    val_in_memory tv v d mem) /\
+ qt.t_mem SUBSET tn.t_mem /\
+ qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
+ (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
+                           op_taint qt (Var x) = op_taint tn (Var x)) /\
+ ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
+   !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
+ (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\
+    alloca_history func actual)``;
+
+Theorem prefix_bulk_complete_mode_contract:
   ~(is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
-  (^CshiftCode) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+  (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
   disch_then (strip_assume_tac o SIMP_RULE bool_ss []) >>
   BETA_TAC >> rpt gen_tac >>
@@ -121,11 +183,15 @@ Proof
   qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
   gnvs[Excl "enc_def"] >>
+  `checked ==> run_inst_seq_mem_ok (emitted_insts st st') initial` by
+    (strip_tac >>
+     irule ctor_bulk_reentry_mem_ok >> goal_assum (drule_at Any) >>
+     gvs[Excl "enc_def"]) >>
   drule_all abi_decoder_bulk_reentry_sequence >> strip_tac >>
   suspend "package"
 QED
 
-Resume prefix_bulk_complete_code_contract[package]:
+Resume prefix_bulk_complete_mode_contract[package]:
   rename1 `run_inst_seq (emitted_insts st st') initial = OK t` >>
   drule_all abi_decoder_bulk_pre_facts >>
   simp[abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def,
@@ -147,7 +213,7 @@ Resume prefix_bulk_complete_code_contract[package]:
   disch_then (qspecl_then [`PG`,`Ddead`] strip_assume_tac) >>
   suspend "finish"
 QED
-Resume prefix_bulk_complete_code_contract[finish]:
+Resume prefix_bulk_complete_mode_contract[finish]:
   drule_all abi_decoder_bulk_shape >> strip_tac >>
   `frag_exec ctx st st' (\s. s = initial)
     (\s. s = t with vs_inst_idx := LENGTH st'.cs_current_insts) (K F)` by
@@ -168,6 +234,16 @@ Resume prefix_bulk_complete_code_contract[finish]:
      goal_assum (drule_at Any) >> metis_tac[]) >>
   `!a. a < lo ==> read_byte a t.vs_memory = read_byte a initial.vs_memory` by
     (drule prefix_copy_low_frame >> disch_then (qspec_then `lo` mp_tac) >> simp[]) >>
+  `checked ==> gas_path_mem ctx func initial 0
+     (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
+     alloca_history func (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (strip_tac >>
+     `alloca_history func initial` by fs[] >>
+     `run_inst_seq_mem_ok (emitted_insts st st') initial` by simp[] >>
+     drule_all ctor_bulk_sequence_zero_path >>
+     disch_then (qspec_then `ctx` strip_assume_tac) >>
+     `t.vs_current_bb = initial.vs_current_bb` by simp[] >>
+     drule_all ctor_bulk_sequence_history >> simp[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,32+LENGTH vs * type_memory_size tv)]`] >>
   simp[SUBSET_REFL, op_taint_def, Excl "enc_def"] >>
@@ -190,4 +266,21 @@ Resume prefix_bulk_complete_code_contract[finish]:
     simp_tac bool_ss [fresh_vars_wrt_def]) >>
   qpat_x_assum `DISJOINT _ qt.t_mem` mp_tac >> simp[]
 QED
-Finalise prefix_bulk_complete_code_contract
+Finalise prefix_bulk_complete_mode_contract
+
+Theorem prefix_bulk_complete_code_contract:
+  ~(is_abi_dynamic ce.ce_struct_fields ty \/
+    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
+  (^CshiftCode) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+Proof
+  mp_tac (Q.INST [`checked` |-> `F`] prefix_bulk_complete_mode_contract) >>
+  simp_tac bool_ss []
+QED
+
+Theorem prefix_bulk_complete_checked_contract:
+  ~(is_abi_dynamic ce.ce_struct_fields ty \/
+    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
+  (^CshiftMode) T (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+Proof
+  simp[prefix_bulk_complete_mode_contract]
+QED

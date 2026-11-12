@@ -1,6 +1,8 @@
 (* BoolClamp word decoder instruction boundaries. *)
 Theory ctorDeployMemoryRunPtrPrefixBoolWord
 Ancestors
+  emitHelperProps venomExecProofs
+  exprSimUnwrap instIdxIndep slotCopyExecution
   ctorDeployMemoryRunPtrPrefixWord ctorDeployMemoryRunPtrPrefixSequence
   ctorDeployMemoryRunPtrPrefixSteps
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
@@ -15,13 +17,6 @@ Proof
   pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[]
 QED
 
-Theorem prefix_shr_step:
-  eval_operand a s = SOME w ==>
-  step_inst_base (mk_inst iid SHR [Lit 1w; a] [x]) s =
-    OK (update_var x (word_lsr w 1) s)
-Proof
-  simp[prefix_shr_dispatch, exec_pure2_def, mk_inst_def, eval_operand_def]
-QED
 
 Theorem prefix_shr_ptr_step:
   op_taint tn a = {} /\ allocas_from lo s /\
@@ -45,7 +40,7 @@ Theorem prefix_shr_ghost_step:
     (DRESTRICT G (COMPL {x}), step_taint inst s t tn)
 Proof
   rpt strip_tac >> simp[] >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_shr_step,
+  simp[ghost_step_def, step_inst_non_invoke, (SRULE [venomStateTheory.eval_operand_def] (Q.SPEC `Lit (1w:bytes32)` emitHelperPropsTheory.step_SHR)),
        mk_inst_def, step_prov_def, set_prov_def, out_prov_def,
        prefix_shr_dispatch, exec_pure2_def, eval_operand_def]
 QED
@@ -87,13 +82,6 @@ Proof
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >> REFL_TAC
 QED
 
-Theorem prefix_boolword_iszero_step:
-  eval_operand a s = SOME w ==>
-  step_inst_base (mk_inst iid ISZERO [a] [x]) s =
-    OK (update_var x (bool_to_word (w = 0w)) s)
-Proof
-  simp[step_inst_base_def, mk_inst_def, exec_pure1_def]
-QED
 
 Theorem prefix_boolword_clamp_execution:
   eval_operand (Var v) s = SOME w /\ y <> z ==>
@@ -107,8 +95,8 @@ Theorem prefix_boolword_clamp_execution:
     if w2n w < 2 then OK s2
     else Abort Revert_abort (revert_state (set_returndata [] s2))
 Proof
-  rpt strip_tac >> drule prefix_shr_step >>
-  disch_then (qspecl_then [`y`,`iid`] assume_tac) >>
+  rpt strip_tac >> drule (SRULE [venomStateTheory.eval_operand_def] (Q.SPEC `Lit (1w:bytes32)` emitHelperPropsTheory.step_SHR)) >>
+  disch_then (qspecl_then [`iid`,`y`] assume_tac) >>
   simp[run_inst_seq_def] >>
   simp[step_inst_base_def, mk_inst_def, exec_pure1_def,
        eval_operand_def, lookup_var_def,
@@ -157,14 +145,14 @@ Proof
    allocas_from lo (update_var z (bool_to_word (word_lsr w 1 = 0w))
      (update_var y (word_lsr w 1) s))` by
     (gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
-  simp[prefix_shr_step, prefix_boolword_iszero_step,
-       prefix_assert_step,
+  simp[(SRULE [venomStateTheory.eval_operand_def] (Q.SPEC `Lit (1w:bytes32)` emitHelperPropsTheory.step_SHR)), emitHelperPropsTheory.step_ISZERO,
+       (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior),
        SRULE [] prefix_shr_ghost_step, prefix_iszero_ghost_step,
        prefix_assert_ghost_step, prefix_shr_ptr_step,
        prefix_iszero_ptr_step, prefix_assert_ptr_step,
        prefix_shr_output_clean, prefix_guard_output_taint] >>
   conj_tac
-  >- (drule prefix_assert_step >>
+  >- (drule (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior) >>
       disch_then (qspec_then `iid+2` mp_tac) >>
       simp[bool_to_word_def, prefix_bool_shr_guard] >>
       Cases_on `w2n w < 2` >> simp[bool_to_word_def]) >>
@@ -172,7 +160,7 @@ Proof
   >- (qpat_assum `eval_operand (Var v) s = SOME w`
         (mp_then Any mp_tac prefix_shr_ghost_step) >> simp[]) >>
   once_rewrite_tac[GSYM DRESTRICT_DRESTRICT] >>
-  irule prefix_iszero_ghost_step >> simp[prefix_boolword_iszero_step]
+  irule prefix_iszero_ghost_step >> simp[emitHelperPropsTheory.step_ISZERO]
 QED
 
 Theorem prefix_boolword_clamp_continuation:
@@ -221,10 +209,10 @@ Proof
   `i.inst_opcode = SHR /\ j.inst_opcode = ISZERO` by
     simp[Abbr `i`, Abbr `j`, mk_inst_def] >>
   `step_inst fuel ctx i s = OK s1` by
-    (simp[step_inst_non_invoke] >> simp[Abbr `i`, Abbr `s1`, prefix_shr_step]) >>
+    (simp[step_inst_non_invoke] >> simp[Abbr `i`, Abbr `s1`, (SRULE [venomStateTheory.eval_operand_def] (Q.SPEC `Lit (1w:bytes32)` emitHelperPropsTheory.step_SHR))]) >>
   `step_inst fuel ctx j t1 = OK s2` by
     (simp[step_inst_non_invoke] >>
-     simp[Abbr `j`, Abbr `s2`, prefix_boolword_iszero_step]) >>
+     simp[Abbr `j`, Abbr `s2`, emitHelperPropsTheory.step_ISZERO]) >>
   `ghost_step fuel ctx PG G tn i s = (DRESTRICT G (COMPL {y}),tn1)` by
     (qpat_assum `eval_operand (Var v) s = SOME w`
        (mp_then Any mp_tac prefix_shr_ghost_step) >>
@@ -233,7 +221,7 @@ Proof
      (DRESTRICT G (COMPL {y} INTER COMPL {z}),step_taint j t1 s2 tn1)` by
     (simp[Abbr `j`] >> once_rewrite_tac[GSYM DRESTRICT_DRESTRICT] >>
      irule prefix_iszero_ghost_step >>
-     simp[Abbr `s2`, prefix_boolword_iszero_step]) >>
+     simp[Abbr `s2`, emitHelperPropsTheory.step_ISZERO]) >>
   `ptr_safe_step D lo fuel ctx fn PG G tn i s /\
    ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y})) tn1 j t1 /\
    ptr_safe_step D lo fuel ctx fn PG (DRESTRICT G (COMPL {y} INTER COMPL {z}))
@@ -250,7 +238,7 @@ Proof
      simp[Abbr `t2`]) >>
   once_rewrite_tac[ptr_safe_block_def] >> simp[is_terminator_def] >>
   qpat_assum `eval_operand (Var z) t2 = SOME _`
-    (mp_then Any (qspec_then `iid+2` assume_tac) prefix_assert_step) >>
+    (mp_then Any (qspec_then `iid+2` assume_tac) (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior)) >>
   qpat_assum `eval_operand (Var z) t2 = SOME _`
     (mp_then Any mp_tac prefix_assert_ghost_step) >>
   disch_then (qspec_then `iid+2` assume_tac) >>
@@ -288,7 +276,7 @@ Proof
     gvs[Abbr `l`, Abbr `s1`, Abbr `s2`, eval_operand_def, lookup_var_def,
         update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s = OK l` by
-    simp[prefix_dload_step, Abbr `l`, Abbr `w`] >>
+    simp[exprSimUnwrapTheory.step_DLOAD, Abbr `l`, Abbr `w`] >>
   once_rewrite_tac[run_inst_seq_def] >> simp[] >>
   qabbrev_tac `clamp = [mk_inst (iid+1) SHR [Lit 1w; Var x] [y];
     mk_inst (iid+2) ISZERO [Var y] [z]; mk_inst (iid+3) ASSERT [Var z] []]` >>
@@ -304,11 +292,11 @@ Proof
      else Abort Revert_abort (revert_state (set_returndata [] s2))` suffices_by
     simp[Abbr `clamp`] >>
   `step_inst_base (mk_inst (iid+4) MSTORE [Var dst;Var x] []) s2 =
-     OK (mstore (w2n p) w s2)` by (irule prefix_mstore_step >> simp[]) >>
+     OK (mstore (w2n p) w s2)` by (irule slotCopyExecutionTheory.slot_copy_step_store >> simp[]) >>
   Cases_on `w2n w < 2`
   >- (gvs[] >> drule run_inst_seq_append >> disch_then (qspec_then
         `[mk_inst (iid+4) MSTORE [Var dst;Var x] []]` mp_tac) >>
-      simp[run_inst_seq_def, prefix_mstore_step]) >>
+      simp[run_inst_seq_def, slotCopyExecutionTheory.slot_copy_step_store]) >>
   `!t. run_inst_seq clamp l <> OK t` by simp[] >>
   drule run_inst_seq_append_err >>
   disch_then (qspec_then `[mk_inst (iid+4) MSTORE [Var dst;Var x] []]` mp_tac) >>
@@ -332,7 +320,7 @@ Proof
   rpt strip_tac >> simp[] >>
   qmatch_goalsub_abbrev_tac `step_taint i s l tn` >>
   `i.inst_opcode = DLOAD` by simp[Abbr `i`, mk_inst_def] >>
-  `step_inst_base i s = OK l` by simp[Abbr `i`, Abbr `l`, prefix_dload_step] >>
+  `step_inst_base i s = OK l` by simp[Abbr `i`, Abbr `l`, exprSimUnwrapTheory.step_DLOAD] >>
   `step_inst fuel ctx i s = OK l` by simp[step_inst_non_invoke] >>
   `ghost_step fuel ctx PG G tn i s =
      (DRESTRICT G (COMPL {x}), step_taint i s l tn)` by
@@ -359,7 +347,7 @@ Proof
   qmatch_goalsub_abbrev_tac `step_taint i s t tn` >>
   `i.inst_opcode = MSTORE` by simp[Abbr `i`, mk_inst_def] >>
   `step_inst_base i s = OK t` by
-    (simp[Abbr `i`, Abbr `t`] >> irule prefix_mstore_step >> simp[]) >>
+    (simp[Abbr `i`, Abbr `t`] >> irule slotCopyExecutionTheory.slot_copy_step_store >> simp[]) >>
   `step_inst fuel ctx i s = OK t` by simp[step_inst_non_invoke] >>
   `ghost_step fuel ctx PG G tn i s = (G,step_taint i s t tn)` by
     (simp[Abbr `i`] >> irule prefix_mstore_ghost_step >>
@@ -530,7 +518,7 @@ Proof
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED
 
-Theorem prefix_boolword_instruction[local]:
+Theorem prefix_boolword_instruction:
   isPREFIX xs (DROP k bb.bb_instructions) /\ n < LENGTH xs ==>
   get_instruction bb (k+n) = SOME (EL n xs)
 Proof
@@ -544,14 +532,6 @@ Proof
   simp[rich_listTheory.EL_APPEND1, arithmeticTheory.ADD_COMM]
 QED
 
-Theorem prefix_boolword_index_updates[local]:
-  update_var v w (s with vs_inst_idx := k) =
-    (update_var v w s) with vs_inst_idx := k /\
-  mstore off w (s with vs_inst_idx := k) =
-    (mstore off w s) with vs_inst_idx := k
-Proof
-  simp[update_var_def, mstore_def]
-QED
 
 Theorem prefix_boolword_ptr:
   eval_operand src s = SOME a /\ eval_operand (Var dst) s = SOME p /\
@@ -630,7 +610,7 @@ Proof
   simp[GSYM arithmeticTheory.ADD1] >>
   qpat_assum `Abbrev (r = _)` (assume_tac o GSYM o SRULE [markerTheory.Abbrev_def]) >>
   qpat_assum `Abbrev (t = _)` (assume_tac o GSYM o SRULE [markerTheory.Abbrev_def]) >>
-  simp[Abbr `l1`, prefix_boolword_index_updates, arithmeticTheory.ADD1] >>
+  simp[Abbr `l1`, instIdxIndepTheory.update_var_idx, instIdxIndepTheory.mstore_idx, arithmeticTheory.ADD1] >>
   strip_tac >>
   qabbrev_tac `q1 = step_taint (mk_inst (iid+1) SHR [Lit 1w;Var x] [y])
     (l with vs_inst_idx := s.vs_inst_idx+1)
@@ -653,7 +633,7 @@ Proof
      metis_tac[]) >>
   drule_all prefix_boolword_mstore_continuation >>
   simp[LET_THM] >> disch_then irule >>
-  simp[Abbr `t4`, prefix_boolword_index_updates, Abbr `u`, arithmeticTheory.ADD1]
+  simp[Abbr `t4`, instIdxIndepTheory.update_var_idx, instIdxIndepTheory.mstore_idx, Abbr `u`, arithmeticTheory.ADD1]
 QED
 
 Theorem prefix_decoder_boolword_ptr:

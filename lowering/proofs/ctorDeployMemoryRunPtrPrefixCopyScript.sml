@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixCopy
 Ancestors
   loweringStateRelDefs
+  compileEnv
   ctorDeployMemoryRunPtrPrefixCanonical ctorDeployMemoryRunPtrPrefixCopyRun
   ctorDeployMemoryRunPtrPrefixCopySupport ctorAbiActualLabelBytes
   ctorAbiActualBytes ctorAbiActualObservations ctorAbiActualWorld
@@ -12,7 +13,7 @@ Ancestors
   abiEncoder pred_set ctorAbiActualBulk abiDecoderBulkReentry abiDecoderBulk
   abiDecoderCorrectPrimitiveArray abiDecoderTypedContract exprLowering vyperABI
   abiDecoderBulkExecute
-  fragExec instIdxIndep venomState venomInst venomExecSemantics compileEnv
+  fragExec instIdxIndep venomState venomInst venomExecSemantics
   exprLoweringProps memLocDefs ptrDiscipline ptrSafeRun words list finite_map
 
 Theorem prefix_copy_bytes_sim[local]:

@@ -70,7 +70,7 @@ Proof
  `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >> gvs[]
 QED
 
-Theorem deploy_ctor_register_alloc_run[local]:
+Theorem deploy_ctor_register_alloc_run:
  compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
  n < dimword (:256) /\ alloca_inv initial /\
  alloca_frontier_inv_from k ctx func site initial /\ fn_inst_ids_distinct func /\

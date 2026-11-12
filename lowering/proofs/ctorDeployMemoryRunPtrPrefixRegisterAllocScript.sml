@@ -1,6 +1,7 @@
 (* Fresh constructor buffer allocation: identical concrete and ghost endpoints. *)
 Theory ctorDeployMemoryRunPtrPrefixRegisterAlloc
 Ancestors
+  loweringHalt
   ctorRegisterArgs moduleLowering context compileEnv emitHelper
   ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixAllocationFloor
@@ -62,7 +63,7 @@ Proof
     tn with <|t_var := tn.t_var |+ (x,{});
       t_mem := tn.t_mem UNION {j | s.vs_alloca_next <= j /\ j < n+s.vs_alloca_next}|>` by
     (drule_all prefix_register_alloc_taint >> simp[ADD_COMM]) >>
-  simp[prefix_alloca_step, SRULE [LET_THM] prefix_alloca_ghost_step,
+  simp[(SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh))), SRULE [LET_THM] prefix_alloca_ghost_step,
     prefix_alloca_ptr_step] >>
   conj_tac >-
     (simp[allocas_from_def, update_var_def, FLOOKUP_UPDATE] >>

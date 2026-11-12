@@ -2,9 +2,10 @@
 Theory ctorDeployMemoryRunPtrPrefixScalarBool
 Ancestors
   loweringStateRelDefs
+  compileEnv
   ctorDeployMemoryRunPtrPrefixScalarPackage
   ctorDeployMemoryRunPtrPrefixCanonical ctorDeployMemoryRunPtrPrefixBoolWord
-  abiEncoder abiDecoderContract abiDecoderClampedWord compileEnv exprLoweringProps
+  abiEncoder abiDecoderContract abiDecoderClampedWord exprLoweringProps
   venomState venomInst venomExecSemantics ptrDiscipline ptrSafeRun
   fragExec finite_map list rich_list words pred_set allocaFrontierBound
 

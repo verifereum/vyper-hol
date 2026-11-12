@@ -6,6 +6,7 @@ Ancestors
  exprLoweringProps ptrDiscipline immutableRelation immutableSectionRel
  ctorDeployLoweringEntrySourceFrame ctorDeployMemoryRunPtrPrefixEntryImmutable
  ctorDeployDefs e2eEntry e2eDeployDefs vyperInterpreter
+  ctorDeployLoweringEntryImmutableMemory ctorDeployLoweringNoCtor
 
 Theorem prefix_entry_local_region_unique:
   local_region ce scopes s name b sz /\

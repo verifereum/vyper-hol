@@ -1,12 +1,13 @@
 Theory ctorDeployMemoryRunMemEntryZeroImmutables
 Ancestors
   loweringStateRelDefs
+  immSectionDead
   ctorDeployMemoryRunMemEntrySourceDefaults
   ctorDeployLoweringEntryImmutableMemory immutableRelation compileVyper
   ctorDeployDefs immSectionDead e2eDeployDefs compileEnv
 
 Theorem ctor_source_zero_memory_immutables:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   immutable_section_layout cenv tops /\
@@ -22,7 +23,7 @@ Proof
 QED
 
 Theorem ctor_source_zero_memory_location:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   immutable_section_layout cenv tops /\

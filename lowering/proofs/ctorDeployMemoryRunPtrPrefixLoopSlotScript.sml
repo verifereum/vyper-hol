@@ -1,6 +1,9 @@
 (* Same-endpoint index-slot allocation and initialization boundaries. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopSlot
 Ancestors
+  loweringHalt
+  slotCopyExecution
+  ghostPcTransportPtr
   ctorDeployMemoryRunPtrPrefixAllocationFloor
   ctorDeployMemoryRunPtrPrefixSteps ctorDeployMemoryRunPtrPrefixBoolBody
   ctorDeployMemoryRunPtrPrefixSequence
@@ -73,7 +76,8 @@ Theorem prefix_loop_slot_zero_pair:
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid MSTORE [Var ip;Lit 0w] []) a = OK (mstore p 0w a)` by
-    (drule prefix_mstore_step >>
+    (drule (Q.GENL [`id`,`a`,`b`,`s`,`x`,`y`]
+    slotCopyExecutionTheory.slot_copy_step_store) >>
      disch_then (qspecl_then [`iid`,`Lit 0w`,`0w`] mp_tac) >>
      simp[eval_operand_def]) >>
   conj_tac >- asm_rewrite_tac[] >>
@@ -123,7 +127,7 @@ Proof
   conj_tac >- (irule prefix_alloca_ptr_step >> simp[]) >>
   Cases_on `FLOOKUP s.vs_allocas aid`
   >- (`32 < dimword (:256)` by (CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >> EVAL_TAC) >>
-      gvs[prefix_alloca_step] >>
+      gvs[(SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh)))] >>
       simp[SRULE [LET_THM] prefix_loop_slot_fresh_taint] >>
       gvs[update_var_def, FLOOKUP_UPDATE] >>
       simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
@@ -140,17 +144,6 @@ Proof
   fs[allocas_from_def] >> metis_tac[]
 QED
 
-Theorem prefix_loop_slot_taint_idx:
-  MEM i.inst_opcode [ALLOCA;MSTORE] ==>
-  step_taint i (s with vs_inst_idx := k) (t with vs_inst_idx := k) tn =
-  step_taint i s t tn
-Proof
-  strip_tac >>
-  simp[step_taint_def, mem_taint_def, new_site_bytes_def, step_writes_def,
-    written_taint_def, out_taint_def, store_taint_def, imm_taint_def,
-    source_memory_write_ranges_def, fixed_source_write_range_def,
-    eval_op_inst_idx]
-QED
 
 Theorem prefix_loop_slot_zero_block:
   eval_operand (Var ip) a = SOME (n2w p) /\ p < dimword (:256) /\
@@ -225,7 +218,7 @@ Resume prefix_loop_index_slot_pair[allocation_lookup]:
     eval_operand_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[mstore_def, write_memory_def] >>
   Cases_on `FLOOKUP s.vs_allocas aid`
-  >- gvs[prefix_alloca_step, update_var_def, FLOOKUP_UPDATE,
+  >- gvs[(SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh))), update_var_def, FLOOKUP_UPDATE,
           eval_operand_def, lookup_var_def] >>
   PairCases_on `x` >>
   gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, eval_operand_def,
@@ -233,7 +226,8 @@ Resume prefix_loop_index_slot_pair[allocation_lookup]:
 QED
 
 Resume prefix_loop_index_slot_pair[store_endpoint]:
-  drule prefix_mstore_step >>
+  drule (Q.GENL [`id`,`a`,`b`,`s`,`x`,`y`]
+    slotCopyExecutionTheory.slot_copy_step_store) >>
   disch_then (qspecl_then [`aid+1`,`Lit 0w`,`0w`] mp_tac) >>
   simp[eval_operand_def] >> strip_tac >> gvs[]
 QED
@@ -282,7 +276,7 @@ Resume prefix_loop_index_slot_pair[continuation]:
        (mstore p 0w a) with vs_inst_idx := k` by
     simp[mstore_def,write_memory_def] >>
   asm_rewrite_tac[] >>
-  simp[prefix_loop_slot_taint_idx,mk_inst_def,ADD1] >>
+  simp[ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def,ADD1] >>
   fs[mk_inst_def]
 QED
 

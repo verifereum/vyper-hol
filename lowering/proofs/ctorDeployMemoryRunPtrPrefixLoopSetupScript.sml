@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixLoopSetup
 Ancestors
   loweringStateRelDefs
+  exprSimUnwrap ghostPcTransportPtr ctorDeployMemoryRunPtrPrefixBoolWord compileEnv
   ctorDeployMemoryRunPtrPrefixLoopSlot ctorDeployMemoryRunPtrPrefixCopyRun
   ctorDeployMemoryRunPtrPrefixSteps ctorDeployMemoryRunPtrPrefixSequence
   abiDecoderContract abiDecoderArrayHeader abiDecoderArrayLoopInit
@@ -9,7 +10,7 @@ Ancestors
   ctorAbiActualArrayPrepare abiDecoderLoop abiEncoderRegisteredEffect
   abiDecoderDynamicLoopSetup abiDecoderReservation venomMemDefs
   allocaFrontierBound allocaBudgetProps ctorAbiActualFrame valueEncodingProps
-  compileEnv emitHelper emitHelperProps exprLowering venomMemProps
+  emitHelper emitHelperProps exprLowering venomMemProps
   ctorAbiActualArrayRun ctorAbiActualArrayEntry ctorAbiActualArrayInvariant
   ctorAbiActualAlloc abiDecoderIndexInit fragExec abiDecoderReentry ctorAbiActualObservations
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
@@ -97,7 +98,7 @@ Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s =
     OK (update_var x (abi_decode_load DLOAD a s) s)` by
-    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac prefix_dload_step) >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
+    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>
   `eval_operand (Var dst) (update_var x (abi_decode_load DLOAD a s) s) = SOME (n2w d)` by
     fs[eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE] >>
@@ -196,9 +197,11 @@ Resume prefix_loop_count_header_block_interior[trace]:
   `!v k. mstore d v (update_var x v (s with vs_inst_idx := k)) =
     (mstore d v (update_var x v s)) with vs_inst_idx := k` by
     simp[update_var_def,mstore_def] >>
-  fs[prefix_loop_slot_taint_idx,mk_inst_def] >>
+  fs[ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def] >>
   mp_tac prefix_loop_count_header_steps_interior >>
   simp[prefix_copy_pure_taint] >> strip_tac >>
+  gvs[GSYM mk_inst_def] >>
+  gvs[prefix_copy_pure_taint] >>
   gvs[step_inst_non_invoke,mk_inst_def,update_var_def,mstore_def]
 QED
 
@@ -541,7 +544,7 @@ Proof
   qpat_x_assum `isPREFIX _ _` mp_tac >> simp[]
 QED
 
-Theorem prefix_loop_guard_outputs[local]:
+Theorem prefix_loop_guard_outputs:
   abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
   emitted_insts st st' =
     [mk_inst st.cs_next_id DLOAD [src] [x];
@@ -593,19 +596,6 @@ Proof
   rewrite_tac[venom_state_accfupds]
 QED
 
-Theorem prefix_loop_instruction[local]:
-  isPREFIX xs (DROP k bb.bb_instructions) /\ n < LENGTH xs ==>
-  get_instruction bb (k+n) = SOME (EL n xs)
-Proof
-  rpt strip_tac >> gvs[rich_listTheory.IS_PREFIX_APPEND] >>
-  `LENGTH (DROP k bb.bb_instructions) = LENGTH xs + LENGTH l` by
-    metis_tac[LENGTH_APPEND] >>
-  `n < LENGTH (DROP k bb.bb_instructions)` by decide_tac >>
-  `k+n < LENGTH bb.bb_instructions` by gvs[LENGTH_DROP] >>
-  simp[get_instruction_def] >>
-  qspecl_then [`n`,`k`,`bb.bb_instructions`] mp_tac EL_DROP >>
-  simp[rich_listTheory.EL_APPEND1,ADD_COMM]
-QED
 
 Theorem prefix_loop_setup_pair:
   abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
@@ -849,9 +839,9 @@ Resume prefix_loop_setup_pair[index_lookup]:
      fs[inst_extends_def] >>
      asm_rewrite_tac[GSYM APPEND_ASSOC,rich_listTheory.DROP_LENGTH_APPEND] >>
      simp[rich_listTheory.IS_PREFIX_APPEND,DROP_APPEND,DROP_LENGTH_TOO_LONG]) >>
-  drule prefix_loop_instruction >>
+  drule ctorDeployMemoryRunPtrPrefixBoolWordTheory.prefix_boolword_instruction >>
   disch_then (qspec_then `0` mp_tac) >> simp[] >> disch_tac >>
-  drule prefix_loop_instruction >>
+  drule ctorDeployMemoryRunPtrPrefixBoolWordTheory.prefix_boolword_instruction >>
   disch_then (qspec_then `1` mp_tac) >> simp[ADD1] >> disch_tac >>
   qexists_tac `iblock` >> simp[]
 QED

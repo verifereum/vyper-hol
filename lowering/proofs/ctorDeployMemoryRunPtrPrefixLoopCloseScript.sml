@@ -3,15 +3,16 @@
 Theory ctorDeployMemoryRunPtrPrefixLoopClose
 Ancestors
   loweringStateRelDefs valueEncodingDefs
+  compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixLoopElement ctorDeployMemoryRunPtrPrefixLoopHeader
   ctorDeployMemoryRunPtrPrefixLoopIteration ctorAbiActualArrayFinite
   ctorAbiActualArrayRun ctorAbiActualArrayLayout ctorAbiActualArrayContext
   ctorDeployMemoryRunPtrPrefixLoopSetup abiDecoderCorrectPrimitiveArray exprLowering
-  ctorAbiActualSites ctorDeployMemoryRunPtrPrefixCanonical valueEncoding abiDecoderArrayLoopInit
+  ctorAbiActualSites ctorDeployMemoryRunPtrPrefixCanonical abiDecoderArrayLoopInit
   abiDecoderLoopEmit abiDecoderRecursiveLoopEntry abiDecoderIndexInit
   pred_set relation arithmetic abiDecoderArraySetupInputs abiDecoderTypedContract
   abiDecoderArraySetupCode abiDecoderContract abiDecoderReentry
-  compileEnv exprLoweringProps venomExecSemantics ptrSafeRun rich_list
+  exprLoweringProps venomExecSemantics ptrSafeRun rich_list
   fragExec venomInst venomInstProps list abiDecoderExecution abiDecoderLoop
   abiDecoderRecursiveLoopContext ctorAbiActualArrayInvariant abiCanonicalHeadSize
   ctorAbiActualObservations abiDecoderDynamicLoopSetup venomMemDefs allocaFrontierBound
@@ -145,7 +146,7 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   `eval_operand (Var slot_var) s = SOME (n2w slot) /\
    eval_operand src s = SOME (n2w sb)` by
-    (fs[abi_decoder_ranges_def,Excl "enc_def"] >>
+    (fs[abi_decoder_ranges_def, eval_operand_def,Excl "enc_def"] >>
      conj_tac >> irule ctor_actual_array_observation_operand >>
      metis_tac[]) >>
   `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))

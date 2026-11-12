@@ -52,7 +52,7 @@ Proof
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, build_compile_env_non_internal_no_return_pc] >>
   simp[cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem package_internal_fn_ctor_shape_ok:
@@ -76,7 +76,7 @@ Proof
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* ===== The lowered unit ===== *)

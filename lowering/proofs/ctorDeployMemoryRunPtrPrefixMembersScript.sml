@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixMembers
 Ancestors
   valueEncodingDefs
+  valueEncoding
   ctorDeployMemoryRunPtrPrefixMemberSetup ctorDeployMemoryRunPtrPrefixRecursiveSupport
   ctorAbiActualMemberRun ctorAbiActualMemberInputs ctorAbiActualMemberBoundary
   ctorAbiActualChildFrame ctorAbiActualMemory ctorAbiActualSites
@@ -11,7 +12,7 @@ Ancestors
   ctorAbiActualWorld instIdxIndep abiDecoderReentry abiDecoderDynamicLoopSetup
   abiDecoderEmpty abiDecoderEmptyMember
   abiDecoderCoherence abiDecoderContract abiDecoderTypedContract
-  abiEncoderRegisteredEffect abiDecoderLoop fragExec compileEnv valueEncoding
+  abiEncoderRegisteredEffect abiDecoderLoop fragExec compileEnv
   abiEncoder contractABI words list rich_list arithmetic
   allocaFrontierBound allocaBudgetProps abiDecoderReentryPointer
   ctorDeployMemoryRunPtrPrefixCanonical ptrDiscipline ptrSafeRun finite_map pred_set

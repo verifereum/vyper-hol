@@ -2,12 +2,13 @@
 Theory ctorDeployMemoryRunPtrPrefixCompleteArrayBaseline
 Ancestors
   valueEncodingDefs
+  valueEncoding
   ctorDeployMemoryRunPtrPrefixCompleteArrayCompose
   abiDecoderArraySetupCode abiDecoderIndexInit abiDecoderDynamicLoopSetup
   abiDecoderArrayLoopInit abiDecoderContract
   abiDecoderReentry abiEncoderRegisteredEffect
   ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryCompleteScalar
-  compileEnv venomState venomMemDefs valueEncoding valueEncodingProps
+  compileEnv venomState venomMemDefs valueEncodingProps
   ptrSafeRun ptrDiscipline words arithmetic list finite_map pred_set
 
 val CshiftCode = ``\ty tv.
@@ -144,16 +145,25 @@ val InitialResult = ``
     ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
       !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
-Theorem prefix_complete_array_initial_exit_pair_exact:
-  (^CshiftCode) ty tv ==> (^InitialPrem) ==>
+val CshiftMode = ``\checked ty tv.
+  ^(rand (rator (concl prefix_complete_array_setup_exit_pair_mode_exact)))``;
+
+val InitialPremMode = ``(^InitialPrem) /\ (checked ==>
+  sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
+    LENGTH initial.vs_data_section /\
+  sb+32 <= LENGTH initial.vs_data_section /\ alloca_history func initial)``;
+
+Theorem prefix_complete_array_initial_exit_pair_mode_exact:
+  (^CshiftMode) checked ty tv ==> (^InitialPremMode) ==>
   ?actual Hout qout A slot.
+    (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
       lookup_var x actual = lookup_var x initial) /\
     (^InitialResult)
 Proof
   disch_then (mk_asm "child") >>
   disch_then (fn th => assume_tac th >>
-    asm "child" (fn ch => mp_tac (MATCH_MP (MATCH_MP prefix_complete_array_setup_exit_pair_exact ch) th))) >>
+    asm "child" (fn ch => mp_tac (MATCH_MP (MATCH_MP (BETA_RULE prefix_complete_array_setup_exit_pair_mode_exact) (BETA_RULE ch)) th))) >>
   strip_tac >>
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
@@ -173,7 +183,7 @@ Proof
      [(d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)))] initial actual` by
     (irule abi_encoder_registered_effect_trans >> qexists `prepared` >> asm_rewrite_tac[]) >>
   qexistsl [`actual`,`Hout`,`qout`,`A`,`slot`] >>
-  simp_tac std_ss [] >> asm_rewrite_tac[] >>
+  simp_tac std_ss [] >> asm_simp_tac bool_ss [] >>
   conj_tac
   >- (rpt strip_tac >>
       `abi_decoder_older_vars loop_st.cs_next_var x` by res_tac >>
@@ -200,6 +210,17 @@ Proof
      simp[NoAsms, DECIDE ``0 < n-a <=> a<n``] >>
      rewrite_tac[ONE, rich_listTheory.REPLICATE, HD]) >>
   asm_simp_tac std_ss []
+QED
+
+Theorem prefix_complete_array_initial_exit_pair_exact:
+  (^CshiftCode) ty tv ==> (^InitialPrem) ==>
+  ?actual Hout qout A slot.
+    (!x. abi_decoder_older_vars st.cs_next_var x ==>
+      lookup_var x actual = lookup_var x initial) /\
+    (^InitialResult)
+Proof
+  mp_tac (prefix_complete_array_initial_exit_pair_mode_exact |> Q.INST [`checked` |-> `F`]) >>
+  simp_tac std_ss []
 QED
 
 Theorem prefix_complete_array_initial_exit_pair:

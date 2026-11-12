@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixCompleteMembers
 Ancestors
   loweringStateRelDefs valueEncodingDefs
+  compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixCompleteMemberSetup
   ctorDeployMemoryRunPtrPrefixCompleteScalar ctorDeployMemoryRunPtrPrefixMembersCons
   ctorDeployMemoryRunPtrPrefixEmptyFloor abiDecoderEmpty
@@ -10,10 +11,10 @@ Ancestors
   ctorAbiActualMemberInputs ctorAbiActualObservations abiEncoderProps
   ctorDeployMemoryRunPtrPrefixMembers ctorAbiActualChildFrame
   abiDecoderMembers abiDecoderMemberInfos abiDecoderContract abiDecoderTypedContract
-  abiEncoderRegisteredEffect abiEncoder abiDecoderLoop fragExec compileEnv exprLoweringProps
+  abiEncoderRegisteredEffect abiEncoder abiDecoderLoop fragExec exprLoweringProps
   ctorAbiActualSites ctorAbiActualAlloc allocaFrontierBound allocaBudgetProps
   abiDecoderWordTyped abiDecoderLayout abiDecoderReentry ctorDeployMemoryFrontier
-  valueEncoding contractABI venomState ptrDiscipline ptrSafeRun
+  contractABI venomState ptrDiscipline ptrSafeRun
   finite_map pred_set words list arithmetic
 
 val Cshift = ``\ty tv.

@@ -9,7 +9,7 @@ Ancestors
   ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryCompleteScalar
   compileEnv venomState venomExecSemantics venomMemDefs valueEncoding valueEncodingProps
   ptrSafeRun ptrDiscipline words arithmetic list finite_map pred_set
-  abiDecoderArrayLoopInit abiDecoderIndexInit
+  abiDecoderArrayLoopInit abiDecoderIndexInit fragGasPathMem
 
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
@@ -197,9 +197,25 @@ val SetupPrem = ``
   lookup_block loop_st.cs_current_bb func.fn_blocks = SOME entry_bb /\
   entry_bb.bb_instructions = loop_st.cs_current_insts ++ [mk_inst jump_id JMP [Label hdr] []]``;
 
-Theorem prefix_complete_array_setup_exit_pair_exact:
-  (^CshiftCode) ty tv ==> (^SetupPrem) ==>
+val CshiftMode = ``\checked ty tv.
+  ^(rand (rator (concl prefix_complete_array_prepared_pair_mode)))``;
+
+val LoopAtMode = ``\label index j X. (^LoopAt) label index j X /\
+  (checked ==> alloca_history func (FST X))``;
+
+val FrameMode = ``\X Y. (^Frame) X Y /\
+  (checked ==> gas_path_mem ctx func (FST X) 0 (OK (FST Y)) /\
+    alloca_history func (FST Y))``;
+
+val SetupPremMode = ``(^SetupPrem) /\ (checked ==>
+  sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
+    LENGTH initial.vs_data_section /\
+  sb+32 <= LENGTH initial.vs_data_section /\ alloca_history func initial)``;
+
+Theorem prefix_complete_array_setup_exit_pair_mode_exact:
+  (^CshiftMode) checked ty tv ==> (^SetupPremMode) ==>
   ?prepared slot H qt actual Hout qout A.
+    (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
       lookup_var x prepared = lookup_var x initial) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
@@ -215,22 +231,24 @@ Theorem prefix_complete_array_setup_exit_pair_exact:
       !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
 Proof
   disch_then (mk_asm "child") >>
-  disch_then (fn th => assume_tac th >>
-    mp_tac (MATCH_MP prefix_complete_array_setup_loop_pair_exact th)) >>
   strip_tac >>
+  mp_tac prefix_complete_array_setup_loop_mode_exact >>
+  (impl_tac >- simp[]) >> strip_tac >>
   rule_assum_tac BETA_RULE >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
   `(^SetupResult)` by (simp_tac std_ss [] >> asm_rewrite_tac[SUBSET_REFL] >> simp[]) >>
   `?actual Hout qout A.
-    (^LoopAt) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
-    (^Frame) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
+    (^LoopAtMode) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
+    (^FrameMode) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
     val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
     (!mem. (!a. a IN A ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
       val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d mem)` by
-    (BETA_TAC >> asm "child" (irule o MATCH_MP (BETA_RULE prefix_complete_array_prepared_pair)) >>
-     asm_rewrite_tac[] >> conj_tac
+    (BETA_TAC >> asm "child" (irule o MATCH_MP (BETA_RULE prefix_complete_array_prepared_pair_mode)) >>
+     asm_rewrite_tac[] >>
+     conj_tac >- (strip_tac >> fs[]) >>
+     conj_tac
      >- (qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-           (irule_at Any) >> asm_rewrite_tac[]) >>
+           (irule_at Any) >> simp[] >> rpt strip_tac >> fs[]) >>
      qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (irule_at Any) >>
      qexistsl [`loop_st.cs_current_insts`,`jump_id`,`hdr_bb'`,`entry_bb`] >>
@@ -239,6 +257,9 @@ Proof
   rule_assum_tac (SIMP_RULE std_ss []) >>
   rpt (first_x_assum (CONJUNCTS_THEN assume_tac)) >>
   simp_tac std_ss [] >> asm_simp_tac bool_ss [] >>
+  conj_tac >-
+    (strip_tac >> fs[] >>
+     irule (gas_path_mem_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE std_ss []) >> qexists `prepared` >> simp[]) >>
   conj_tac >-
     (rpt strip_tac >>
      `st.cs_next_var <= loop_st.cs_next_var` by
@@ -254,6 +275,27 @@ Proof
     (conj_tac >- first_assum ACCEPT_TAC >>
      qexists `hdr_bb'` >> simp[]) >>
   irule abi_decode_sim_trans >> qexists `prepared` >> asm_rewrite_tac[]
+QED
+
+Theorem prefix_complete_array_setup_exit_pair_exact:
+  (^CshiftCode) ty tv ==> (^SetupPrem) ==>
+  ?prepared slot H qt actual Hout qout A.
+    (!x. abi_decoder_older_vars st.cs_next_var x ==>
+      lookup_var x prepared = lookup_var x initial) /\
+    (!x. abi_decoder_older_vars st.cs_next_var x ==>
+      lookup_var x actual = lookup_var x initial) /\
+    (^SetupResult) /\
+    (^LoopAt) exit_lbl 0 (LENGTH vs) (actual,Hout,qout,A) /\
+    (^Frame) (prepared,H,qt,range_bytes [(d,32)]) (actual,Hout,qout,A) /\
+    val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
+    (!mem. (!a. a IN A ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
+      val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d mem) /\
+    abi_decode_sim ctx func initial actual /\
+    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
+      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
+Proof
+  mp_tac (prefix_complete_array_setup_exit_pair_mode_exact |> Q.INST [`checked` |-> `F`]) >>
+  simp_tac std_ss []
 QED
 
 Theorem prefix_complete_array_setup_exit_pair:

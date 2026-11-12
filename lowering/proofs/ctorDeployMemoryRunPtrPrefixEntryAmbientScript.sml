@@ -1,8 +1,9 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryAmbient
 Ancestors
   loweringStateRelDefs
+  ctorDeployMemoryRunMemEntryLanding compileEnv
   ctorDeployMemoryRunPtrPrefixEntrySemantic ctorDeployLoweringEntrySourceFrame
-  ctorDeployDefs e2eDeployDefs e2eDefs e2eEntry compileEnv o1PassContract
+  ctorDeployDefs e2eDeployDefs e2eDefs e2eEntry o1PassContract
   vyperInterpreter vyperState vyperContext accountsRelProps venomState
 
 Theorem deploy_ptr_entry_source_accounts:
@@ -40,12 +41,12 @@ Theorem deploy_ptr_entry_actual_state_rel:
     (es0 with outcomes := SOME vs.vs_outcomes) actual
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all deploy_ptr_ctor_storage_vars >> strip_tac >>
+  drule_all ctorDeployMemoryRunMemEntryLandingTheory.ctor_task_landing_layout >> strip_tac >>
   drule_all deploy_ctor_source_start_fields >> strip_tac >>
   drule_all deploy_ptr_entry_source_accounts >> strip_tac >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
       logs_rel_def, deploy_evaluation_context_def, initial_evaluation_context_def] >>
-  qpat_x_assum `gas_variant _ _` mp_tac >>
+  qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
   rewrite_tac[gas_variant_def] >>
   disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_accounts,s.vs_transient,s.vs_logs,
     s.vs_call_ctx,s.vs_tx_ctx,s.vs_block_ctx,s.vs_requests,s.vs_pending_deletions)`) >>

@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixCanonicalFloor
 Ancestors
   loweringStateRelDefs
+  compileEnv
   ctorDeployMemoryRunPtrPrefixAllocationFloor
   ctorDeployMemoryRunPtrPrefixScalar ctorDeployMemoryRunPtrPrefixCopy
   ctorDeployMemoryRunPtrPrefixScalarClamps ctorDeployMemoryRunPtrPrefixScalarPackage
@@ -15,7 +16,7 @@ Ancestors
   abiCanonicalBytes abiDecoderBytes abiDecoderBulkReentry abiDecoderBulk
   abiDecoderCorrectPrimitiveArray abiDecoderTypedContract exprLowering vyperABI
   abiDecoderBulkExecute instIdxIndep memLocDefs
-  abiEncoder abiDecoderContract abiDecoderClampedWord compileEnv exprLoweringProps
+  abiEncoder abiDecoderContract abiDecoderClampedWord exprLoweringProps
   venomState venomInst venomExecSemantics ptrDiscipline ptrSafeRun
   fragExec finite_map list rich_list words pred_set allocaFrontierBound
 

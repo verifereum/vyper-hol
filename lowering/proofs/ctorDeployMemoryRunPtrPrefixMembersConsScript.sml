@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixMembersCons
 Ancestors
   loweringStateRelDefs valueEncodingDefs
+  compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixCanonicalFloor ctorDeployMemoryRunPtrPrefixMembersFloor
   ctorDeployMemoryRunPtrPrefixMemberFloor ctorDeployMemoryRunPtrPrefixEmptyFloor
   ctorDeployMemoryRunPtrPrefixMemberInputs
@@ -15,7 +16,7 @@ Ancestors
   abiDecoderMembers abiDecoderMemberInfos abiDecoderDynamic abiDecoderOffset
   abiDecoderCoherence abiDecoderContract abiDecoderTypedContract
   abiDecoderReentry abiDecoderDynamicLoopSetup abiEncoderRegisteredEffect
-  abiDecoderLoop fragExec compileEnv valueEncoding abiEncoder contractABI
+  abiDecoderLoop fragExec abiEncoder contractABI
   allocaFrontierBound allocaBudgetProps abiDecoderReentryPointer
   venomState ptrDiscipline ptrSafeRun finite_map pred_set words list rich_list arithmetic
 

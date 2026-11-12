@@ -1,12 +1,13 @@
 Theory ctorDeployMemoryRunPtrPrefixChildShift
 Ancestors
   loweringStateRelDefs
+  compileEnv
   ctorDeployMemoryRunPtrPrefixScalarClamps
   ctorDeployMemoryRunPtrPrefixExecutionAttach ctorDeployMemoryRunPtrPrefixMemberShift
   ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryAllocation
   ctorDeployMemoryFrontier allocaFrontierBound allocaBudgetProps
   ptrDiscipline ctorAbiActualFrame
-  abiDecoderClampedWord abiDecoderContract abiDecoderReentry abiDecoderDynamicLoopSetup compileEnv
+  abiDecoderClampedWord abiDecoderContract abiDecoderReentry abiDecoderDynamicLoopSetup
   venomState venomExecSemantics venomMemDefs venomMemProps words list arithmetic finite_map
 
 Theorem prefix_read_byte_mstore_below[local]:

@@ -2,13 +2,14 @@
 Theory ctorDeployMemoryRunPtrPrefixRegisterAddress
 Ancestors
   loweringStateRelDefs
+  slotCopyExecution compileEnv
   ctorRegisterArgs ctorDeployMemoryRunPtrPrefixMemberSetup
   ctorDeployMemoryRunPtrPrefixBoolBody
   ctorDeployMemoryRunPtrPrefixRegisterAlloc
   abiDecoderCoherence abiDecoderMemberBody abiDecoderMemberSlice
   abiDecoderCode abiDecoderAppend abiEncoderProps
   abiDecoderContract abiDecoderLoop abiEncoder abiEncoderRegisteredEffect emitHelperProps exprLoweringProps
-  moduleLowering context compileEnv emitHelper fragExec
+  moduleLowering context emitHelper fragExec
   ptrSafeRun ptrDiscipline venomState venomExecSemantics venomInst
   finite_map words arithmetic pred_set list rich_list
 
@@ -173,7 +174,7 @@ Proof
      `step_inst_base (mk_inst st.cs_next_id ADD [a;b]
         [STRING #"%" (toString st.cs_next_var)]) initial =
         OK (update_var (STRING #"%" (toString st.cs_next_var)) (u+v) initial)` by
-       (irule prefix_bool_body_add_step >> simp[]) >>
+       (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[]) >>
      simp[run_inst_seq_def]) >>
   drule_all (SRULE [is_terminator_def]
     (Q.INST [`opc` |-> `ADD`] prefix_register_address_emit_finish)) >>
@@ -433,53 +434,8 @@ Proof
   strip_tac >> gvs[abi_decode_source_def, Excl "enc_def"]
 QED
 
-Theorem prefix_register_member_source[local]:
-  i < LENGTH atys /\ LENGTH avs = LENGTH atys /\ has_types atys avs /\
-  encoded = enc (Tuple atys) (ListV avs) /\
-  mem_bytes_at 0 (LENGTH encoded) initial.vs_data_section = encoded /\
-  LENGTH encoded < dimword (:256) ==>
-  has_type (EL i atys) (EL i avs) /\
-  mem_bytes_at (abi_tuple_child_offset atys avs i)
-    (LENGTH (enc (EL i atys) (EL i avs))) initial.vs_data_section = enc (EL i atys) (EL i avs) /\
-  abi_tuple_child_offset atys avs i + LENGTH (enc (EL i atys) (EL i avs)) <= LENGTH encoded /\
-  (is_dynamic (EL i atys) ==> abi_decode_load DLOAD
-    (n2w (SUM (MAP abi_member_head_size (TAKE i atys))) : bytes32) initial =
-      n2w (abi_tuple_child_offset atys avs i)) /\
-  (~is_dynamic (EL i atys) ==> abi_tuple_child_offset atys avs i =
-    SUM (MAP abi_member_head_size (TAKE i atys)))
-Proof
-  strip_tac >>
-  `atys = TAKE i atys ++ EL i atys :: DROP (SUC i) atys /\
-   avs = TAKE i avs ++ EL i avs :: DROP (SUC i) avs` by
-    (conj_tac >> sym_tac >>
-     irule (SIMP_RULE bool_ss [GSYM APPEND_ASSOC, APPEND] TAKE_DROP_SUC) >> simp[]) >>
-  mp_tac (Q.INST [`pre` |-> `TAKE i atys`, `post` |-> `DROP (SUC i) atys`,
-                 `pvs` |-> `TAKE i avs`, `rest` |-> `DROP (SUC i) avs`,
-                 `aty` |-> `EL i atys`, `av` |-> `EL i avs`]
-    prefix_register_member_source_split) >>
-  qpat_assum `atys = _` (fn th => pure_rewrite_tac[GSYM th]) >>
-  qpat_assum `avs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
-  `LENGTH (TAKE i atys) = i /\ LENGTH (TAKE i avs) = i` by simp[] >>
-  qpat_x_assum `encoded = _` SUBST_ALL_TAC >>
-  asm_simp_tac bool_ss []
-QED
 
-Theorem prefix_register_word_static[local]:
-  is_word_type ty ==> ~is_abi_dynamic sf ty
-Proof
-  Cases_on `ty` >> simp[is_word_type_def, is_abi_dynamic_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def, is_abi_dynamic_def] >>
-  rename1 `BytesT b` >> Cases_on `b` >> simp[is_word_type_def, is_abi_dynamic_def]
-QED
 
-Theorem prefix_register_operand_live[local]:
-  eval_operand op s = SOME w /\ fresh_vars_wrt st s ==>
-  !x. op = Var x ==> not_fresh_at st x
-Proof
-  simp[eval_operand_def, not_fresh_at_def, fresh_vars_wrt_def] >>
-  rpt strip_tac >> fs[eval_operand_def, lookup_var_def, GREATER_EQ, FLOOKUP_DEF] >>
-  metis_tac[]
-QED
 
 Theorem prefix_register_canonical_address_paired:
   !ptr. i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
@@ -534,7 +490,7 @@ Theorem prefix_register_canonical_address_paired:
       !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
 Proof
   gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all prefix_register_member_source >>
+  drule_all ctorRegisterArgsTheory.ctor_canonical_member_source >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule abi_decoder_coherent_header >>
   simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
@@ -549,9 +505,9 @@ Proof
   asm_rewrite_tac[] >>
   conj_tac
   >- (Cases_on `is_abi_dynamic ce.ce_struct_fields ty` >>
-      fs[prefix_register_word_static] >> metis_tac[prefix_register_word_static]) >>
+      fs[ctorRegisterArgsTheory.ctor_word_type_static] >> metis_tac[ctorRegisterArgsTheory.ctor_word_type_static]) >>
   conj_tac
-  >- metis_tac[prefix_register_operand_live, operand_distinct] >>
+  >- metis_tac[ctorRegisterArgsTheory.ctor_eval_operand_not_fresh, operand_distinct] >>
   qpat_assum `EL i atys = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
   asm_rewrite_tac[] >>
   conj_tac >- (gvs[Excl "enc_def"] >> decide_tac) >>

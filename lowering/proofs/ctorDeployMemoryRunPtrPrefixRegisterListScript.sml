@@ -1,13 +1,14 @@
 Theory ctorDeployMemoryRunPtrPrefixRegisterList
 Ancestors
   loweringStateRelDefs
+  compileEnv
   ctorDeployMemoryRunPtrPrefixRegisterOne ctorRegisterArgs
   abiEncoderRegisteredEffect abiEncoderProps venomMemDefs ptrDiscipline pred_set
-  compileVyper moduleLowering compileEnv abiDecoderLoop abiDecoderMembers abiDecoderCounters emitHelperProps loweringHalt list rich_list arithmetic finite_map
+  compileVyper moduleLowering abiDecoderLoop abiDecoderMembers abiDecoderCounters emitHelperProps loweringHalt list rich_list arithmetic finite_map
 
 (* A traversal only writes its new allocation sites.  A retained older slot
    therefore supplies a persistent semantic support for an earlier argument. *)
-Theorem prefix_register_retained_slot_bytes[local]:
+Theorem prefix_register_retained_slot_bytes:
   abi_encoder_registered_effect ids [] s t /\ alloca_inv t /\
   FLOOKUP s.vs_allocas aid = SOME (d,n) /\ aid NOTIN ids /\
   B SUBSET range_bytes [(d,n)] ==>
@@ -30,7 +31,7 @@ Proof
   `d+n <= b \/ b+sz <= d` by metis_tac[] >> decide_tac
 QED
 
-Theorem prefix_register_unmentioned_var[local]:
+Theorem prefix_register_unmentioned_var:
   !rest ce0 vars ce st st' off data_size name.
     ~MEM name (MAP FST rest) /\ ALL_DISTINCT (MAP FST rest) /\
     EVERY (\a. ?old. FLOOKUP vars (FST a) =

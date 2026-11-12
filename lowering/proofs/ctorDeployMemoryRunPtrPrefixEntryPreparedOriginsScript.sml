@@ -1,10 +1,9 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryPreparedOrigins
 Ancestors
   ctorDeployMemoryRunPtrPrefixEntryRegisterOrigins
-  ctorDeployMemoryRunPtrPrefixEntryPreparedSizes
   ctorDeployMemoryRunPtrPrefixEntryPrepared
 
-Theorem deploy_ptr_entry_register_prepared_origins:
+val PreparedOriginsMode = ``\checked.
   ALL_DISTINCT (MAP FST fargs) /\ LENGTH avs = LENGTH fargs /\
   has_types (vyper_to_abi_types (type_env tops) (MAP SND fargs)) avs /\
   t.vs_data_section = enc (Tuple (vyper_to_abi_types (type_env tops) (MAP SND fargs))) (ListV avs) /\
@@ -38,7 +37,8 @@ Theorem deploy_ptr_entry_register_prepared_origins:
   ~ctx_has_dalloca ctx /\
   (!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit n] /\
-    FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) ==>
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n n) /\
+  (checked ==> alloca_history func t) ==>
   ?actual H qt.
     (!inst b sz n. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
       inst.inst_operands = [Lit n] /\
@@ -80,13 +80,25 @@ Theorem deploy_ptr_entry_register_prepared_origins:
         lookup_scopes (FST (EL j fargs)) [scope] = SOME entry /\
         local_region ce [scope] actual (FST (EL j fargs)) d
           (type_memory_bytes ce0 (SND (EL j fargs))) /\
+        (?p. FLOOKUP ce.ce_vars (FST (EL j fargs)) =
+           SOME (PtrVar (Var p) (type_memory_bytes ce0 (SND (EL j fargs)))) /\
+           not_fresh_at st' p /\
+           ptr_covers H qt p actual (type_memory_bytes ce0 (SND (EL j fargs)))) /\
         FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce0 (SND (EL j fargs)))] /\
         DISJOINT B qt.t_mem /\ (!a. a IN B ==> a < actual.vs_alloca_next) /\
         (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
-          val_in_memory entry.type entry.value d mem))
+          val_in_memory entry.type entry.value d mem)) /\
+    ((!name p sz. FLOOKUP ce0.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+        not_fresh_at st p /\ ptr_covers G tn p t sz) ==>
+      !name p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+        not_fresh_at st' p /\ ptr_covers H qt p actual sz) /\
+    (checked ==> gas_path_mem ctx func t 0 (OK actual) /\ alloca_history func actual)``;
+
+Theorem deploy_ptr_entry_register_prepared_origins_coverage_mode:
+  !checked. (^PreparedOriginsMode) checked
 Proof
-  strip_tac >>
-  mp_tac (prefix_entry_register_suffix_origins |> Q.ISPEC `fargs:(string # type) list` |>
+  gen_tac >> BETA_TAC >> strip_tac >>
+  mp_tac (prefix_entry_register_suffix_origins_coverage_mode |> Q.SPEC `checked` |> BETA_RULE |> Q.ISPEC `fargs:(string # type) list` |>
     Q.SPECL [`ce0`,`ce0.ce_vars`,`type_env tops`,`fargs`,`avs`,
       `vyper_to_abi_types (type_env tops) (MAP SND (fargs:(string # type) list))`,
       `t.vs_data_section`,`scope`,`0`] |> SPEC_ALL |>
@@ -100,3 +112,5 @@ Proof
   (conj_tac >- (drule prefix_entry_frontier_all_sites >> simp[])) >>
   fs[]
 QED
+
+

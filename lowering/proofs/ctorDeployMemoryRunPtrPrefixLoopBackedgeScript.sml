@@ -1,6 +1,8 @@
 (* Same-state checked boundaries for the dynamic-array backedge. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopBackedge
 Ancestors
+  ghostPcTransportPtr
+  slotCopyExecution
   ctorDeployMemoryRunPtrPrefixLoopSetup ctorDeployMemoryRunPtrPrefixBoolBody
   ctorDeployMemoryRunPtrPrefixSteps exprLoweringProps instIdxIndep
   ctorAbiActualArrayBody ctorAbiActualArrayInvariant ctorAbiActualFrame
@@ -49,10 +51,10 @@ Proof
      gvs[allocas_from_def,update_var_def,eval_operand_def,lookup_var_def] >> metis_tac[]) >>
   `step_inst_base a s = OK u` by
     (simp[Abbr `a`,Abbr `u`,ADD1,GSYM word_add_n2w] >>
-     irule prefix_bool_body_add_step >> simp[eval_operand_lit_local]) >>
+     irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_lit_local]) >>
   `step_inst_base k u = OK t` by
     (qpat_assum `eval_operand (Var ip) u = SOME _`
-      (mp_then Any mp_tac prefix_mstore_step) >> disch_then drule >>
+      (mp_then Any mp_tac slotCopyExecutionTheory.slot_copy_step_store) >> disch_then drule >>
      disch_then (qspec_then `iid+1` mp_tac) >>
      simp[Abbr `k`,Abbr `t`,w2n_n2w]) >>
   `q.t_mem = tn.t_mem /\ q.t_stor = tn.t_stor /\
@@ -98,16 +100,6 @@ QED
 
 Finalise prefix_loop_increment_steps
 
-Theorem prefix_loop_backedge_taint_idx[local]:
-  MEM i.inst_opcode [ADD;MSTORE] ==>
-  step_taint i (s with vs_inst_idx := k) (t with vs_inst_idx := k) tn =
-    step_taint i s t tn
-Proof
-  strip_tac >>
-  simp[step_taint_def,mem_taint_def,new_site_bytes_def,step_writes_def,
-    written_taint_def,out_taint_def,store_taint_def,imm_taint_def,
-    source_memory_write_ranges_def,fixed_source_write_range_def,eval_op_inst_idx]
-QED
 
 Theorem prefix_loop_increment_run:
   ip <> fresh /\
@@ -184,7 +176,7 @@ Proof
   `ghost_step fuel ctx PG H q k u1 = (H,qt)` by
     (simp[Abbr `k`] >>
      drule_then mp_tac prefix_mstore_ghost_step >>
-     simp[Abbr `qt`,Abbr `u1`,prefix_loop_backedge_taint_idx,mk_inst_def]) >>
+     simp[Abbr `qt`,Abbr `u1`,ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def]) >>
   qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ _ _ t2`
     (qspec_then `fuel` mp_tac) >>
   simp[ptr_safe_run_def,Abbr `t2`] >> strip_tac >>
@@ -246,7 +238,7 @@ Proof
   drule_all abi_decode_backedge_sim >> disch_then (qspec_then `ctx` mp_tac) >>
   simp[w2n_n2w] >> disch_tac >>
   drule_all ctor_actual_array_observation_backedge >>
-  disch_then (qspec_then `hdr` assume_tac) >>
+  disch_then (qspec_then `hdr` (strip_assume_tac o BETA_RULE)) >>
   gvs[] >>
   qabbrev_tac `a = mk_inst id ADD [Var iv;Lit 1w] [fresh]` >>
   qabbrev_tac `k = mk_inst (id+1) MSTORE [Var slot_var;Var fresh] []` >>
@@ -268,7 +260,7 @@ Proof
     (simp[Abbr `t`,Abbr `raw`,Abbr `u`,jump_to_def,mstore_def,update_var_def,
       write_memory_with_expansion_def,allocas_from_def] >>
      gvs[allocas_from_def] >> metis_tac[]) >>
-  simp[] >> suspend "remaining"
+  asm_simp_tac bool_ss [] >> suspend "remaining"
 QED
 
 Resume prefix_loop_backedge_pair[remaining]:

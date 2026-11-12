@@ -2,15 +2,16 @@
 Theory ctorDeployMemoryRunPtrPrefixCompleteScalar
 Ancestors
   loweringStateRelDefs valueEncodingDefs
+  compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixChildShift
   ctorDeployMemoryRunPtrPrefixScalarPackage ctorDeployMemoryRunPtrPrefixScalarBool
   ctorAbiActualWordRun ctorAbiActualWorld ctorAbiActualObservations
   ctorDeployLoweringEntryCompleteScalar ctorDeployLoweringEntryRegistration
   abiDecoderReentryPointer abiDecoderReentry abiDecoderContract
-  abiEncoderRegisteredEffect ctorAbiActualFrame compileEnv fragExec
+  abiEncoderRegisteredEffect ctorAbiActualFrame fragExec
   ctorDeployMemoryRunPtrPrefixCanonical ctorDeployMemoryRunPtrPrefixScalarClamps
   exprLoweringProps arithmetic abiEncoder emitHelper venomInst ctorAbiActualAlloc
-  abiDecoderClampedWord valueEncoding ptrDiscipline allocaBudgetProps
+  abiDecoderClampedWord ptrDiscipline allocaBudgetProps
   ctorDeployLoweringEntryAllocation venomMemDefs
   venomState venomExecSemantics words list
 

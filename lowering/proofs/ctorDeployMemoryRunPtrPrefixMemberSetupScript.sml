@@ -2,12 +2,13 @@
 Theory ctorDeployMemoryRunPtrPrefixMemberSetup
 Ancestors
   loweringStateRelDefs
+  exprSimUnwrap slotCopyExecution compileEnv
   ctorDeployMemoryRunPtrPrefixBoolBody ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixSequence ctorDeployMemoryRunPtrPrefixCopyRun
   abiDecoderMemberCode
   abiDecoderMemberSetup abiDecoderReentryPointer abiDecoderReentry abiDecoderContract abiEncoder
   ASCIInumbers
-  compileEnv emitHelper exprLoweringProps words list rich_list arithmetic
+  emitHelper exprLoweringProps words list rich_list arithmetic
   venomState venomInst venomExecSemantics ptrDiscipline finite_map
   codegenRel pred_set ptrSafeRun fragExec
 
@@ -63,7 +64,7 @@ Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `((update_var x (u+v) s).vs_allocas = s.vs_allocas) /\
    ((update_var x (u+v) s).vs_fmp = s.vs_fmp)` by simp[update_var_def] >>
-  conj_tac >- (irule prefix_bool_body_add_step >> simp[]) >>
+  conj_tac >- (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[]) >>
   conj_tac >-
     (irule (SRULE [LET_THM] prefix_bool_body_add_ghost) >> simp[]) >>
   conj_tac >- (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
@@ -107,7 +108,7 @@ Theorem prefix_member_dload_pair:
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [off] [x]) s = OK (update_var x w s)` by
-    (drule prefix_dload_step >>
+    (drule exprSimUnwrapTheory.step_DLOAD >>
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def]) >>
   simp[step_inst_non_invoke, mk_inst_def, prefix_dload_ptr_step] >>
@@ -133,7 +134,7 @@ Proof
      OK (update_var x (u+v) s)` by
     (simp[step_inst_non_invoke, mk_inst_def] >>
      pure_rewrite_tac[GSYM mk_inst_def] >>
-     irule prefix_bool_body_add_step >> simp[]) >>
+     irule slotCopyExecutionTheory.slot_copy_step_add >> simp[]) >>
   `~is_terminator (mk_inst iid ADD [a;c] [x]).inst_opcode` by simp[mk_inst_def, is_terminator_def] >>
   drule_all ptr_safe_block_step >>
   `ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid ADD [a;c] [x]) s` by
@@ -215,7 +216,7 @@ Proof
          eval_operand_def, lookup_var_def] >> metis_tac[]) >>
   `step_inst_base (mk_inst iid ADD [src;off] [x]) s = OK s1 /\
    step_inst_base (mk_inst (iid+1) ADD [Var dst;Lit vo] [y]) s1 = OK s2` by
-    (unabbrev_all_tac >> conj_tac >> irule prefix_bool_body_add_step >>
+    (unabbrev_all_tac >> conj_tac >> irule slotCopyExecutionTheory.slot_copy_step_add >>
      simp[eval_operand_def]) >>
   `t = s2` by gvs[run_inst_seq_def] >>
   qexistsl_tac [`G2`,`q2`] >>
@@ -266,7 +267,7 @@ Proof
   qabbrev_tac `G1 = set_prov G [x] (first_prov G [src;Lit ao])` >>
   qabbrev_tac `q1 = tn with t_var := tn.t_var |+ (x,{})` >>
   `step_inst_base (mk_inst iid ADD [src;Lit ao] [x]) s = OK s1` by
-    (simp[Abbr `s1`] >> irule prefix_bool_body_add_step >> simp[eval_operand_def]) >>
+    (simp[Abbr `s1`] >> irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
   `eval_operand (Var x) s1 = SOME (a+ao) /\
    op_taint q1 (Var x) = {} /\ allocas_from lo s1` by
     (simp[Abbr `s1`, Abbr `q1`, eval_operand_def, lookup_var_def, update_var_def,
@@ -274,7 +275,7 @@ Proof
      fs[allocas_from_def] >> metis_tac[]) >>
   `step_inst_base (mk_inst (iid+1) DLOAD [Var x] [y]) s1 = OK s2` by
     (simp[Abbr `s2`, Abbr `w`] >>
-     drule prefix_dload_step >>
+     drule exprSimUnwrapTheory.step_DLOAD >>
      disch_then (qspecl_then [`iid+1`,`y`] mp_tac) >>
      simp[abi_decode_load_def, abi_decode_source_def]) >>
   `t = s2` by gvs[run_inst_seq_def] >>
@@ -511,7 +512,7 @@ Proof
     abi_decode_load DLOAD (n2w (0 + (sb + ao)) : bytes32) s = n2w payload_off /\
     sb + payload_off < dimword (:256)` by
     (Cases_on `dyn` >> gvs[eval_operand_def, ADD_COMM]) >>
-  drule_all abi_decode_member_setup_reentry >> strip_tac >>
+  drule_all prefix_member_setup_zero_base_reentry >> strip_tac >>
   gvs[] >>
   drule_all prefix_member_setup_ghost >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>

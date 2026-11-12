@@ -359,7 +359,7 @@ Proof
  simp[abi_member_head_size_def, Excl "enc_def"] >> strip_tac >> decide_tac
 QED
 
-Theorem ctor_checked_scratch_extend[local]:
+Theorem ctor_checked_scratch_extend:
  abi_encoder_registered_effect (ctor_actual_sites func child) outs s t /\
  ctor_actual_scratch func child d n t /\
  (!i. i IN full /\ i NOTIN child ==> FLOOKUP s.vs_allocas i = NONE) ==>

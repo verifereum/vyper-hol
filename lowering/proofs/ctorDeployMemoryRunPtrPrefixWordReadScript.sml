@@ -1,6 +1,7 @@
 (* Provenance-backed scratch-word reads. *)
 Theory ctorDeployMemoryRunPtrPrefixWordRead
 Ancestors
+  exprLoweringProps
   ctorDeployMemoryRunPtrPrefixSteps ptrSafeRun ptrDiscipline
   venomExecSemantics venomState venomInst memLocDefs codegenRel contextCodegenRel finite_map words
 
@@ -11,13 +12,6 @@ Proof
   pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[]
 QED
 
-Theorem prefix_mload_step:
-  eval_operand addr s = SOME w ==>
-  step_inst_base (mk_inst iid MLOAD [addr] [x]) s =
-    OK (update_var x (mload (w2n w) s) s)
-Proof
-  simp[prefix_mload_dispatch, exec_read1_def, mk_inst_def]
-QED
 
 Theorem prefix_mload_ghost_step:
   eval_operand addr s = SOME w ==>
@@ -27,7 +21,7 @@ Theorem prefix_mload_ghost_step:
     (DRESTRICT G (COMPL {x}), step_taint inst s t tn)
 Proof
   rpt strip_tac >> simp[] >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_mload_step,
+  simp[ghost_step_def, step_inst_non_invoke, exprLoweringPropsTheory.step_MLOAD_local,
        mk_inst_def, step_prov_def, set_prov_def, out_prov_def,
        prefix_mload_dispatch, exec_read1_def]
 QED
@@ -41,7 +35,7 @@ Theorem prefix_mload_ptr_step:
 Proof
   rpt strip_tac >>
   simp[ptr_safe_step_def, ptr_inst_ok_def, step_inst_non_invoke,
-       prefix_mload_step] >>
+       exprLoweringPropsTheory.step_MLOAD_local] >>
   simp[access_ok_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, mem_read_ops_def, mk_inst_def,
        taint_ok_def, REWRITE_RULE[mk_inst_def] prefix_mload_dispatch,

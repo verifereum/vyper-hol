@@ -139,7 +139,7 @@ Theorem prefix_bool_header_endpoint:
 Proof
   strip_tac >>
   mp_tac (Q.INST [`id` |-> `hid`]
-    (SRULE [LET_THM] prefix_bool_header_closed)) >>
+    (SIMP_RULE bool_ss [LET_THM, listTheory.MEM] prefix_bool_header_closed)) >>
   (impl_tac >- gvs[ALL_DISTINCT]) >>
   (impl_tac >- simp[]) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `exec_block _ _ _ _ = OK t` >>

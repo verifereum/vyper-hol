@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixCopyRun
 Ancestors
   loweringStateRelDefs
+  venomExecProofs exprSimUnwrap instIdxIndep slotCopyExecution ghostPcTransportPtr compileEnv
   ctorDeployMemoryRunPtrPrefixCopyStep ctorDeployMemoryRunPtrPrefixBoolPreheader
   ctorDeployMemoryRunPtrPrefixBoolWord ctorDeployMemoryRunPtrPrefixSequence
   abiDecoderBytes abiDecoderGuards abiDecoderContract abiDecoderComposition
@@ -9,7 +10,7 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixSteps ctorDeployMemoryRunPtrPrefixBoolBody arithmetic
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
   codegenRel contextCodegenRel memLocDefs finite_map words pred_set
-  abiEncoder emitHelper compileEnv exprLoweringProps fragExec list
+  abiEncoder emitHelper exprLoweringProps fragExec list
 
 Theorem prefix_copy_cnt_success_steps:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
@@ -47,7 +48,7 @@ Proof
   `cnt < dimword (:256)` by decide_tac >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s =
      OK (update_var x (n2w cnt) s)` by
-    (drule prefix_dload_step >>
+    (drule exprSimUnwrapTheory.step_DLOAD >>
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def]) >>
   `step_inst_base (mk_inst (iid+1) GT [Var x;Lit (n2w limit)] [y])
@@ -66,7 +67,7 @@ Proof
     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   asm_rewrite_tac[] >>
   conj_tac
-  >- (drule prefix_assert_step >> disch_then (qspec_then `iid+3` mp_tac) >> simp[]) >>
+  >- (drule (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior) >> disch_then (qspec_then `iid+3` mp_tac) >> simp[]) >>
   conj_tac
   >- (qpat_assum `eval_operand src s = SOME a`
         (mp_then Any mp_tac prefix_dload_ghost_step) >>
@@ -131,31 +132,8 @@ Proof
   Cases_on `tail3` >> simp[out_taint_def]
 QED
 
-Theorem prefix_copy_eval_index[local]:
-  eval_operand op (s with vs_inst_idx := k) = eval_operand op s
-Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
-QED
 
-Theorem prefix_copy_update_index[local]:
-  update_var x w (s with vs_inst_idx := m) =
-    (update_var x w s) with vs_inst_idx := m
-Proof
-  simp[update_var_def]
-QED
 
-Theorem prefix_copy_taint_index[local]:
-  i.inst_opcode IN {DLOAD;GT;ISZERO;DLOADBYTES} ==>
-  step_taint i (s with vs_inst_idx := k) (t with vs_inst_idx := j) tn =
-    step_taint i s t tn
-Proof
-  strip_tac >> gvs[] >>
-  simp[step_taint_def, mem_taint_def, new_site_bytes_def,
-       step_writes_def, source_memory_write_ranges_def,
-       sized_source_write_range_def, written_taint_def, out_taint_def,
-       adopt_reset_def, store_taint_def, imm_taint_def,
-       prefix_copy_eval_index]
-QED
 
 Theorem prefix_copy_count_success_block:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
@@ -201,7 +179,7 @@ Proof
   `!m. eval_operand src (s with vs_inst_idx := m) = SOME a /\
        abi_decode_load DLOAD a (s with vs_inst_idx := m) = n2w cnt /\
        allocas_from lo (s with vs_inst_idx := m)` by
-    (gvs[prefix_copy_eval_index, abi_decode_load_def, abi_decode_source_def,
+    (gvs[ghostPcTransportPtrTheory.eval_operand_inst_idx, abi_decode_load_def, abi_decode_source_def,
          allocas_from_def] >> metis_tac[]) >>
   `!j. j < LENGTH xs ==>
     step_inst_base (EL j xs) (u j) = OK (u (SUC j)) /\
@@ -384,13 +362,13 @@ Resume prefix_bytestring_success_ghost[copy]:
      OK (t with vs_inst_idx := m)` by
     (rpt gen_tac >>
      `eval_operand (Var dst) (s3 with vs_inst_idx := m) = SOME d` by
-       simp[prefix_copy_eval_index] >>
+       simp[ghostPcTransportPtrTheory.eval_operand_inst_idx] >>
      qpat_assum `eval_operand (Var dst) (s3 with vs_inst_idx := m) = SOME d`
        (mp_then (Pos hd) mp_tac prefix_dloadbytes_step) >>
      disch_then (qspecl_then [`src`,`a`,
        `Lit (n2w (abi_decode_bytes_copy_size n))`,
        `n2w (abi_decode_bytes_copy_size n)`] mp_tac) >>
-     simp[prefix_copy_eval_index, eval_operand_def] >>
+     simp[ghostPcTransportPtrTheory.eval_operand_inst_idx, eval_operand_def] >>
      disch_then (qspecl_then [`st.cs_next_id+4`,`fuel`,`ctx`] mp_tac) >>
      simp[Abbr `i`, w2n_n2w, write_memory_with_expansion_def]) >>
   `get_instruction bb (s.vs_inst_idx+4) = SOME i` by
@@ -415,7 +393,7 @@ Resume prefix_bytestring_success_ghost[finish]:
       SOME (n2w (abi_decode_bytes_copy_size n)) /\
    op_taint q3 (Lit (n2w (abi_decode_bytes_copy_size n))) = {} /\
    allocas_from lo u` by
-    (simp[Abbr `u`, Abbr `i`, prefix_copy_eval_index,
+    (simp[Abbr `u`, Abbr `i`, ghostPcTransportPtrTheory.eval_operand_inst_idx,
        eval_operand_def, op_taint_def, allocas_from_def] >>
      gvs[eval_operand_def, lookup_var_def, allocas_from_def] >> metis_tac[]) >>
   `!fuel. qt.t_mem SUBSET q3.t_mem /\
@@ -433,7 +411,7 @@ Resume prefix_bytestring_success_ghost[finish]:
        simp[w2n_n2w] >>
      drule_all prefix_copy_success_block >>
      simp[LET_THM, w2n_n2w, Abbr `u`, Abbr `qt`, Abbr `i`,
-       prefix_copy_taint_index, mk_inst_def, ADD1]) >>
+       ghostPcTransportPtrTheory.step_taint_inst_idx, mk_inst_def, ADD1]) >>
   qpat_assum `!fuel. qt.t_mem SUBSET _ /\ _` (qspec_then `0` strip_assume_tac) >>
   qexistsl_tac [`H`,`qt`] >>
   `q3.t_mem = tn.t_mem /\ q3.t_stor = tn.t_stor /\
@@ -533,7 +511,7 @@ Proof
   `step_inst_base (mk_inst iid opc [a;b] [x]) s =
      OK (update_var x (if opc = ADD then u+v else u*v) s)` by
     (Cases_on `opc = ADD` >> gvs[] >>
-     simp[prefix_bool_body_add_step, prefix_bool_body_mul_step]) >>
+     simp[slotCopyExecutionTheory.slot_copy_step_add, slotCopyExecutionTheory.slot_copy_step_mul]) >>
   asm_rewrite_tac[] >>
   `ghost_step fuel ctx PG G tn (mk_inst iid opc [a;b] [x]) s =
      (if opc = ADD then set_prov G [x] (first_prov G [a;b]) else DRESTRICT G (COMPL {x}),
@@ -596,7 +574,7 @@ Theorem prefix_bulk_reload_success_block:
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s = OK (update_var x w s)` by
-    (drule prefix_dload_step >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
+    (drule exprSimUnwrapTheory.step_DLOAD >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def]) >>
   `step_inst fuel ctx (mk_inst iid DLOAD [src] [x]) s = OK (update_var x w s)` by
     simp[step_inst_non_invoke, mk_inst_def] >>
@@ -637,7 +615,7 @@ Theorem prefix_bulk_body_raw:
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [src] [r]) s = OK (update_var r (n2w cnt) s)` by
-    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac prefix_dload_step) >>
+    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
      disch_then (qspecl_then [`iid`,`r`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def]) >>
   simp[run_inst_seq_def, comp_bind_def, comp_return_def] >>
@@ -648,7 +626,7 @@ Proof
   `step_inst_base (mk_inst (iid+1) MSTORE [Var dst;Var r] [])
      (update_var r (n2w cnt) s) =
      OK (mstore (w2n d) (n2w cnt) (update_var r (n2w cnt) s))` by
-    (irule prefix_mstore_step >> simp[]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_store >> simp[]) >>
   asm_rewrite_tac[] >>
   qmatch_goalsub_abbrev_tac `mstore (w2n d) (n2w cnt) s1` >>
   qabbrev_tac `s2 = mstore (w2n d) (n2w cnt) s1` >>
@@ -657,7 +635,7 @@ Proof
       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst (iid+2) MUL [Var r;Lit (n2w mem_sz)] [p]) s2 =
     OK (update_var p (n2w (cnt*mem_sz)) s2)` by
-    (rewrite_tac[GSYM word_mul_n2w] >> irule prefix_bool_body_mul_step >>
+    (rewrite_tac[GSYM word_mul_n2w] >> irule slotCopyExecutionTheory.slot_copy_step_mul >>
      simp[eval_operand_def]) >>
   simp[] >>
   qabbrev_tac `s3 = update_var p (n2w (cnt*mem_sz)) s2` >>
@@ -668,7 +646,7 @@ Proof
      metis_tac[MEM]) >>
   `step_inst_base (mk_inst (iid+3) ADD [src;Lit 32w] [q]) s3 =
      OK (update_var q (a+32w) s3)` by
-    (irule prefix_bool_body_add_step >> simp[eval_operand_def]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
   simp[] >>
   qabbrev_tac `s4 = update_var q (a+32w) s3` >>
   `eval_operand (Var dst) s4 = SOME d` by
@@ -676,7 +654,7 @@ Proof
       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base (mk_inst (iid+4) ADD [Var dst;Lit 32w] [z]) s4 =
      OK (update_var z (d+32w) s4)` by
-    (irule prefix_bool_body_add_step >> simp[eval_operand_def]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_def]) >>
   simp[] >>
   qabbrev_tac `s5 = update_var z (d+32w) s4` >>
   `eval_operand (Var z) s5 = SOME (d+32w) /\
@@ -694,18 +672,7 @@ Proof
   fs[step_inst_non_invoke, mk_inst_def] >> simp[]
 QED
 
-Theorem prefix_bulk_mstore_index[local]:
-  mstore a w (s with vs_inst_idx := k) = mstore a w s with vs_inst_idx := k
-Proof
-  simp[mstore_def]
-QED
 
-Theorem prefix_bulk_write_index[local]:
-  write_memory_with_expansion a bs (s with vs_inst_idx := k) =
-    write_memory_with_expansion a bs s with vs_inst_idx := k
-Proof
-  simp[write_memory_with_expansion_def]
-QED
 
 Theorem prefix_bulk_body_success_block:
   let ys =
@@ -918,7 +885,7 @@ Proof
          update_var_def, mstore_def] >>
      simp[Abbr `r6`, Abbr `s5`, Abbr `r5`, Abbr `s4`, Abbr `r4`,
        Abbr `s3`, Abbr `r3`, Abbr `s2`, Abbr `r2`, Abbr `s1`,
-       prefix_copy_update_index, prefix_bulk_mstore_index, prefix_bulk_write_index,
+       instIdxIndepTheory.update_var_idx, instIdxIndepTheory.mstore_idx, ghostPcTransportPtrTheory.write_memory_with_expansion_inst_idx,
        GSYM word_mul_n2w, LESS_MOD, ADD1]) >>
   gen_tac >> disch_tac >>
   qpat_x_assum `!fuel. _ ==> ptr_safe_block D lo fuel ctx fn PG G tn bb s` irule >>
@@ -1062,7 +1029,7 @@ Resume prefix_bulk_success_ghost[body]:
        Abbr `ys`, mk_inst_def, is_terminator_def]) >>
   `eval_operand src u3 = SOME a /\ eval_operand (Var dst) u3 = SOME d /\
    abi_decode_load DLOAD a u3 = n2w cnt /\ allocas_from lo u3` by
-    (fs[Abbr `u3`, prefix_copy_eval_index, abi_decode_load_def,
+    (fs[Abbr `u3`, ghostPcTransportPtrTheory.eval_operand_inst_idx, abi_decode_load_def,
       abi_decode_source_def, allocas_from_def] >> metis_tac[]) >>
   qpat_assum `isPREFIX ys (DROP u3.vs_inst_idx _)` mp_tac >>
   simp_tac (srw_ss()) [Abbr `ys`, GSYM ADD_ASSOC] >> strip_tac >>
