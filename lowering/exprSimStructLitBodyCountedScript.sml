@@ -154,7 +154,8 @@ Resume compile_struct_lit_body_case[at]:
   conj_tac >- fs[ci_mono_def] >>
   conj_tac >-
     (`LENGTH (MAP FST fields) = LENGTH tvs` by
-       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+       (imp_res_tac listTheory.LIST_REL_LENGTH >>
+        imp_res_tac vyperTypeABITheory.OPT_MMAP_LENGTH >> fs[]) >>
      simp[valueEncodingTypingTheory.type_memory_size_fields_zip]) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom >> simp[]) >>

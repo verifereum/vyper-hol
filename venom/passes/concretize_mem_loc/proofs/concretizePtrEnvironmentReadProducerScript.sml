@@ -7,7 +7,7 @@ Ancestors concretizePtrRequestHistory concretizePtrTaintContent concretizePtrOpe
   concretizePtrLedgerProbe concretizePtrLedgerAlignment concretizePtrPrefixLedger
   concretizePtrSharedFields concretizePtrStagePlacements concretizePtrDeletedGaps
   concretizePtrExecutedCoverage concretizeStepStructure concretizeStepShape
-  concretizeStepCallChecks concretizeStepRetpc concretizeStageShape
+  concretizeStepRetpc concretizeStageShape
   o1PassContract o1ScheduleDecomp unitShapeDefs venomWf cfgWf unitLabelMapIdentity
   contextCodegenRel codegenRel frameViewFacts ptrDiscipline venomExecSemantics
   venomState venomInst finite_map words list rich_list arithmetic

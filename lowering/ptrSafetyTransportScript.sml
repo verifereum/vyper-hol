@@ -16,8 +16,6 @@
  *     the check along a run
  *   gas_path_ptr_lower_bound_transport, gas_path_ptr_zero_to_lo -- counted
  *     paths
- *   gas_path_ptr_from_no_dead -- a path checked with nothing dead holds
- *     under every dead mask
  *)
 Theory ptrSafetyTransport
 Ancestors
@@ -277,17 +275,6 @@ Proof
   >> rpt strip_tac >>
   drule_all gas_path_ptr_edge_dead_mono >> strip_tac >>
   metis_tac[gas_path_ptr_rules]
-QED
-
-(* A path checked with nothing dead is a path under every dead mask, with
-   the same ghost and result. *)
-Theorem gas_path_ptr_from_no_dead:
-  gas_path_ptr <| d_stor := K (K {}); d_trans := K (K {});
-                  d_imm := K {}; d_ret := K {} |>
-    lo ctx fn PG G tn s n G' tn' r ==>
-  gas_path_ptr D lo ctx fn PG G tn s n G' tn' r
-Proof
-  strip_tac >> drule gas_path_ptr_dead_mono >> simp[]
 QED
 
 (* A runtime path, checked at (D0, 0), is a path at (D, lo) when D holds

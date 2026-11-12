@@ -10,23 +10,12 @@ puts its fixtures back and removes them from this list.
 
 The changes, as they appear in the pinned Python compiler:
 
-- P2 calldata argument guard: dynamic external arguments assert that their
-  calldata offset isn't below 4 (`_get_abi_arg_ptr`).
-- P3 escaping allocas: comparisons don't make an allocation escape; escaping
-  static allocations stay live everywhere; allocation order sorts escaping ones
-  first.
 - P4 direct ABI encoder: values are encoded straight into the destination
   buffer, and an external call sends exactly the encoded length plus 4 bytes.
   It also covers `_revert_with_custom_error`, which lowers each argument as
   a value (`snapshot_value_for_delayed_use`), keeps no declared-type
   argument tuple, and encodes with `abi_encode_values_to_buf`; the
   `custom-errors/` fixtures return to parity with that port.
-- P5 slice allocation order: a slice's output buffer is allocated after its
-  bounds check.
-- P6 eager call arguments: internal- and external-call arguments are read as
-  they are evaluated (also a source-semantics change).
-- P7 subscript overlap: a dynamic array's base is copied when the index
-  expression can modify it (also a source-semantics change).
 - P8 `raw_create` bytecode type: `raw_create` types its bytecode argument
   with the argument's own type rather than `Bytes[49152]`, which sizes its
   initcode buffer (the HOL lowering still snapshots 49152 bytes).
@@ -34,84 +23,36 @@ The changes, as they appear in the pinned Python compiler:
   copied before a later argument that can modify memory or storage is
   evaluated (also a source-semantics change).
 
-P1 (ceil32: `and(add(x, 31), not 31)`) is ported, so it no longer appears
-below. A fixture listed under several changes needs all of them. The
-attribution comes from reverting one change at a time in the pinned compiler
-and recompiling. The creation fixtures' P4 entries are by elimination: P4 can't
+P1 (ceil32: `and(add(x, 31), not 31)`), P2 (dynamic external arguments
+assert that their calldata offset isn't below 4, `_get_abi_arg_ptr`), P5 (a
+slice's output buffer allocated after its bounds check), P3 (escaping
+allocations: comparisons don't make an allocation escape, escaping static
+allocations stay live everywhere and are allocated first) and P6 (eager call
+arguments: internal- and external-call arguments are read as they are
+evaluated, also a source-semantics change) and P7 (subscript overlap: an
+array base derived through a dynamic-array element is copied before an index
+that writes a variable the base reads or makes a risky call, also a
+source-semantics change) are ported. P2 still heads sections below: two
+fixtures that differ for other reasons, and those that also need P4 or P8.
+A fixture listed under several changes needs all of them. The attribution
+comes from reverting one change at a time in the pinned compiler and
+recompiling. The creation fixtures' P4 entries are by elimination: P4 can't
 be reverted on its own, and no revert of the other changes restores those
 fixtures.
 
 ## P2 (calldata argument guard)
 
-- `abi-codegen/arr_dyn_of_fixed`
-- `abi-codegen/arr_string_arg`
-- `abi-codegen/arr_string_ret`
-- `abi-codegen/arr_struct_noclamp`
-- `abi-codegen/dec_bytes_unwrapT`
-- `abi-codegen/dec_uint_unwrapT`
-- `abi-codegen/flag256_array_arg`
-- `abi-codegen/st_string_field_arg`
-- `abi-codegen/tup_string_arg`
-- `builtin-forms/concat_bytes2`
-- `builtin-forms/concat_bytesn`
-- `builtin-forms/concat_one_bytes_arg`
-- `builtin-forms/concat_storage`
-- `builtin-forms/concat_string3`
-- `builtin-forms/concat_string3args`
+P2 is ported. These still differ from the oracle with it:
+
+- `raw-system/rl_const_topics`: the HOL checker rejects a constant
+  `DynArray` as `raw_log` topics (only a literal list is accepted), as
+  `raw_log_rejects_constant_topics` in `tests/vyperRawSystemTypingTestScript.sml`
+  records.
+- `raw-system/rr_local`: the HOL lowering sizes the `concat` result by its
+  target's bound (40) where Python sums the argument bounds (10 + 10), which
+  moves a later buffer from `0x40` to `0x60`. This isn't from #5127: main
+  without P1 or P2 shows it too.
 - `builtin-forms/concat_wide_local`
-- `builtin-forms/extract32_addr`
-- `builtin-forms/extract32_bytes4`
-- `builtin-forms/extract32_default`
-- `builtin-forms/extract32_int128`
-- `builtin-forms/extract32_uint`
-- `builtin-forms/len_bytes_arg`
-- `builtin-forms/len_concat`
-- `builtin-forms/p103_rbuf_control_word_ret_concat_arg`
-- `builtin-forms/p97_rbuf_stack_tuple_ret_concat_arg`
-- `builtin-forms/struct_code_slice`
-- `builtin-forms/struct_data_slice`
-- `conversions/bys16_to_dec`
-- `conversions/bys1_to_u8`
-- `conversions/bys20_to_addr`
-- `conversions/bys32_to_i8`
-- `conversions/bys32_to_u8`
-- `conversions/bys4_to_b4`
-- `conversions/str_to_bys`
-- `create-builtins/cb03_blueprint_rawargs`
-- `deep-dup/arr_dyn_of_dyn`
-- `deep-dup/arr_fixed_of_dyn`
-- `external-entries/dflt_bytes`
-- `main/external_arrays`
-- `main/external_dynamic`
-- `main/scalar_convert_bytes_dynamic`
-- `memory-stores/a02_bytes_local_from_arg`
-- `memory-stores/a12_local_dynarray_from_arg`
-- `memory-stores/c07_annassign_str_same_len`
-- `memory-stores/dec_from_memory2`
-- `memory-stores/e70_noData_live_mem2`
-- `memory-stores/p15_local_append_bytes`
-- `memory-stores/t03_tuple_assign_abi_decode`
-- `memory-stores/t11_tuple_onew_decode_mem`
-- `phi-pointers/ctl_ret_string_phi`
-- `phi-pointers/ifexp_bytes`
-- `phi-pointers/ifexp_dynarray`
-- `phi-pointers/ifexp_string`
-- `raw-calls/rc19_dyn_data`
-- `raw-calls/rc25_stmt_argdata`
-- `raw-calls/rc29_delegate`
-- `raw-system/rl03_4topics`
-- `raw-system/rl_const_topics`
-- `raw-system/rr02_dynamic`
-- `raw-system/rr04_terminus_ret`
-- `raw-system/rr_arg`
-- `raw-system/rr_local`
-- `raw-system/rr_nr`
-- `slice-buffers/slice_bytes_var`
-- `slice-buffers/slice_string_lit`
-
-## P3 (escaping allocas)
-
-- `memory-stores/a11_local_string_from_intcall`
 
 ## P4 (direct ABI encoder)
 
@@ -147,36 +88,29 @@ fixtures.
 - `memory-stores/enc_in_assign`
 - `raw-system/rr03_abi`
 
-## P5 (slice allocation order)
+## Internal function order (#546), not #5127
 
-- `builtin-forms/ext_code_slice`
-- `builtin-forms/self_code_slice`
-- `slice-buffers/slice_msg_data_var`
-- `slice-buffers/slice_msg_data`
+- `load_timing/call_storage_read`: matches once its internal functions are
+  emitted in Python's order; the function bodies already match.
 
-## P6 (eager call arguments)
+## Bytestring conversion (vyperlang/vyper#5322), not #5127
 
-- `load_timing/call_memory_pop`
-- `load_timing/call_storage_read`
+These oracles predate the bytestring conversion fix in vyperlang/vyper#5322.
+They remain out of parity until regenerated with that fix.
 
-## P7 (subscript overlap)
+- `conversions/bys16_to_dec`
+- `conversions/bys32_to_i8`
 
-- `load_timing/nested_retained_pop`
+## Pop receiver copy (vyperlang/vyper#5280), not #5127
+
+- `load_timing/nested_retained_pop`: the pinned compiler's
+  `_lower_dynarray_pop` copies a receiver whose index can resize it and pops
+  the copy, so the pop is lost; the source semantics pops the array itself.
+  Since vyperlang/vyper#5280, after the pin, the compiler rejects such a pop.
 
 ## P8 (`raw_create` bytecode type)
 
 - `create-builtins/rcr04_rawcreate_storage`
-
-## P2 (calldata argument guard) + P3 (escaping allocas)
-
-- `builtin-forms/p58_int_bytes_local`
-- `builtin-forms/p94_rbuf_bytes_ret_concat_arg`
-- `builtin-forms/p98_rbuf_mem_tuple_ret_concat_arg`
-- `builtin-forms/p99_rbuf_string_ret_concat_arg`
-- `internal-frames/p02_int_local_string`
-- `internal-frames/p47_len_of_string_call`
-- `main/internal_bytes_call`
-- `memory-stores/p64_string_annassign_call`
 
 ## P2 (calldata argument guard) + P4 (direct ABI encoder)
 
@@ -208,3 +142,5 @@ fixtures.
 ## Not yet attributed
 
 - `memory-stores/w01_return_intcall_dynarray_bytes_widen`
+- `narrow-elems/n05_intcall_dynarr_lit_wider_str`
+- `narrow-elems/n11_intcall_dynarr_lit_same_str`
