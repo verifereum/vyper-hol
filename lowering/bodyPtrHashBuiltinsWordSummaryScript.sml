@@ -34,7 +34,7 @@ Proof
   qexistsl_tac [`INL tv`, `ef`, `Gf`, `tf`, `OK u`] >>
   `ef with gas_obs := [] = ef` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
-  simp[gasSummaryTheory.gas_explicit_replicate_false] >> rpt strip_tac >>
+  simp[gasSummaryTheory.gas_explicit_replicate_false] >> gen_tac >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   conj_tac
   >- (irule gas_marked_exec_ptr_no_source_read >> simp[]) >>
