@@ -221,7 +221,10 @@ val ld_range_case_tac =
            disj1_tac >> rpt conj_tac >> leaf,
            disj2_tac >> rpt conj_tac >> leaf,
            disj2_tac >> disj1_tac >> rpt conj_tac >> leaf,
-           disj2_tac >> disj2_tac >> rpt conj_tac >> leaf]
+           disj2_tac >> disj2_tac >> rpt conj_tac >> leaf,
+           fn (g as (_, w)) =>
+             (print ("ld_range_case_tac: no case closes " ^
+                     term_to_string w ^ "\n"); NO_TAC g)]
   end
 
 Theorem ld_joint_mcopy_step:
@@ -279,8 +282,9 @@ Proof
   rpt conj_tac >>
   ld_on_head "ld_memory_agree"
     (drule_at (Pat `ld_joint_geometry _ _ _ _`)
-       (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
-     disch_then irule >> ld_range_case_tac) >>
+       ld_memory_agree_snapshot_copy >>
+     disch_then irule >> TRY (qexists_tac `dyn_floor C vs`) >>
+     ld_range_case_tac) >>
   ld_on_head "ld_dyn_agree"
     (drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
      disch_then irule >> ld_range_case_tac)
