@@ -886,6 +886,110 @@ Proof
     IF_CASES_TAC, gen_tac, conj_tac])
 QED
 
+(* Literal branch targets and the blocks available in a completed fragment. *)
+val dyn_J = ``\T i.
+  (i.inst_opcode = JMP ==> ?l. i.inst_operands = [Label l] /\ l IN T) /\
+  (i.inst_opcode = JNZ ==> ?v l r.
+    i.inst_operands = [v; Label l; Label r] /\ l IN T /\ r IN T)``;
+val dyn_B = ``\a b. {l | (?bb. MEM bb (emitted_blocks a b) /\ l = bb.bb_label) \/
+                            l = b.cs_current_bb}``;
+
+Theorem abi_dyn_emitted_compose[local]:
+  !a b c. cs_extends a b /\ cs_extends b c ==>
+    emitted_blocks a c = emitted_blocks b c ++ emitted_blocks a b
+Proof
+  simp_tac std_ss [cs_extends_def] >> rpt strip_tac >>
+  `emitted_blocks a b = new` by (irule emitted_blocks_append >> simp[]) >>
+  `emitted_blocks b c = new'` by (irule emitted_blocks_append >> simp[]) >>
+  simp[] >> irule emitted_blocks_append >> simp[APPEND_ASSOC]
+QED
+
+Theorem abi_dyn_current_available[local]:
+  !a b. cs_extends a b ==> a.cs_current_bb IN (^dyn_B) a b
+Proof
+  rpt strip_tac >> gvs[cs_extends_def] >>
+  `emitted_blocks a b = new` by (irule emitted_blocks_append >> simp[]) >>
+  Cases_on `new = []` >> gvs[] >>
+  simp[] >> disj1_tac >> qexists_tac `LAST (emitted_blocks a b)` >> simp[rich_listTheory.LAST_MEM]
+QED
+
+Theorem abi_dyn_available_compose[local]:
+  !a b c. cs_extends a b /\ cs_extends b c ==>
+    (^dyn_B) a b SUBSET (^dyn_B) a c /\
+    (^dyn_B) b c SUBSET (^dyn_B) a c
+Proof
+  rpt strip_tac >> drule_all abi_dyn_emitted_compose >> strip_tac >>
+  drule abi_dyn_current_available >>
+  ASM_SIMP_TAC std_ss [pred_setTheory.SUBSET_DEF, pred_setTheory.IN_GSPEC_IFF, MEM_APPEND] >>
+  metis_tac[]
+QED
+
+Theorem abi_dyn_targets_mono[local]:
+  !S T i. S SUBSET T /\ (^dyn_J) S i ==> (^dyn_J) T i
+Proof
+  simp_tac std_ss [pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem abi_dyn_closed_compose[local]:
+  !T a b c.
+    (^dyn_F) ((^dyn_J) (T UNION (^dyn_B) a b)) a b /\
+    (^dyn_F) ((^dyn_J) (T UNION (^dyn_B) b c)) b c ==>
+    (^dyn_F) ((^dyn_J) (T UNION (^dyn_B) a c)) a c
+Proof
+  simp_tac std_ss [] >> rpt strip_tac
+  >- metis_tac[entry_shape_trans] >>
+  `cs_extends a b /\ cs_extends b c` by metis_tac[entry_shape_extends] >>
+  drule_all abi_dyn_available_compose >> strip_tac >>
+  `T' UNION (^dyn_B) a b SUBSET T' UNION (^dyn_B) a c /\
+   T' UNION (^dyn_B) b c SUBSET T' UNION (^dyn_B) a c`
+    by (fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  drule_all frag_code_compose_perm >> strip_tac >>
+  drule PERM_EVERY >> disch_then (irule o iffRL) >> simp_tac std_ss [EVERY_APPEND] >>
+  conj_tac
+  >- (irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >>
+      gen_tac >> strip_tac >> simp_tac std_ss [] >>
+      irule (BETA_RULE abi_dyn_targets_mono) >>
+      metis_tac[]) >>
+  irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >>
+  gen_tac >> strip_tac >> simp_tac std_ss [] >>
+      irule (BETA_RULE abi_dyn_targets_mono) >>
+      metis_tac[]
+QED
+
+val dyn_closed = ``\T m. !a r b. m a = (r,b) ==>
+  (^dyn_F) ((^dyn_J) (T UNION (^dyn_B) a b)) a b``;
+
+Theorem abi_dyn_branchless_closed[local]:
+  !m. code_action (\opc. opc <> JMP /\ opc <> JNZ) m ==>
+    !T. (^dyn_closed) T m
+Proof
+  simp_tac std_ss [code_action_def, code_step_def] >> rpt gen_tac >>
+  strip_tac >> rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  simp[] >> irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem abi_dyn_closed_bind[local]:
+  !T m f. (^dyn_closed) T m /\
+    (!x. (^(inst [alpha |-> beta] dyn_closed)) T (f x)) ==>
+    (^(inst [alpha |-> beta] dyn_closed)) T (comp_bind m f)
+Proof
+  simp_tac std_ss [comp_bind_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> Cases_on `m a` >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  irule (SRULE [] (BETA_RULE abi_dyn_closed_compose)) >>
+  qexists_tac `r'` >> simp[]
+QED
+
+Theorem abi_dyn_closed_ignore_bind[local]:
+  !T m n. (^dyn_closed) T m /\
+    (^(inst [alpha |-> beta] dyn_closed)) T n ==>
+    (^(inst [alpha |-> beta] dyn_closed)) T (comp_ignore_bind m n)
+Proof
+  simp_tac std_ss [comp_ignore_bind_def] >> rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac (BETA_RULE abi_dyn_closed_bind) >> simp[]
+QED
+
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
