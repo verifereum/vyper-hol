@@ -9,7 +9,7 @@ Ancestors
   abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
   loweringStateRelDefs venomExecSemantics venomState venomInst words arithmetic list rich_list
 
-Theorem abi_decode_mem_member_shape[local]:
+Theorem abi_decode_mem_member_shape:
   compile_getelemptr_abi src dyn off MLOAD base_op hi st = (member_op,st') ==>
   inst_extends st st' /\ st'.cs_blocks = st.cs_blocks /\
   st'.cs_current_bb = st.cs_current_bb /\

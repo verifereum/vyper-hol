@@ -1,7 +1,7 @@
 (* Memory case of the body induction for abi_decode (admitted; its own piece). *)
 Theory bodyMemTbAbiDecode
 Ancestors
-  bodyMemoryPreds abiDecodeMemLoopControl abiDecodeMemElementPointer abiDecodeMemMemberPointer abiDecodeMemReentry abiDecodeMemScratch abiDecodeMemBulkExecution abiDecodeMemBulkBody abiDecodeMemBulkPrefix abiDecodeMemBulk abiDecodeMemRange abiDecodeMemOperand abiDecodeMemPrimitive abiDecodeMemBytes abiDecodeMemBytesGuards abiDecodeMemCountGuard
+  bodyMemoryPreds abiDecodeMemMembers abiDecodeMemLoopControl abiDecodeMemElementPointer abiDecodeMemMemberPointer abiDecodeMemReentry abiDecodeMemScratch abiDecodeMemBulkExecution abiDecodeMemBulkBody abiDecodeMemBulkPrefix abiDecodeMemBulk abiDecodeMemRange abiDecodeMemOperand abiDecodeMemPrimitive abiDecodeMemBytes abiDecodeMemBytesGuards abiDecodeMemCountGuard
 
 Theorem body_type_builtin_abi_decode_mem_case:
   !cx v11 unwrap typ es.
