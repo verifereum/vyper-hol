@@ -68,6 +68,32 @@ Proof
   gvs[] >> first_x_assum drule >> simp[]
 QED
 
+Theorem fn_chain_fn_steps_from:
+  !passes s fs obs k k0.
+    fn_chain rpolicy passes s fs obs /\ k <= LENGTH passes /\
+    (!m. m <= LENGTH passes ==> R (k0 + m) (EL m fs)) ==>
+    fn_steps_from R rpolicy (k0 + k) (DROP k passes) (EL k fs) (LAST fs)
+Proof
+  Induct
+  >- (simp[fn_chain_def, fn_steps_from_def] >> rw[] >> gvs[] >>
+      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  rpt gen_tac >> strip_tac >> fs[fn_chain_def] >> gvs[] >>
+  rename1 `fn_chain rpolicy passes out.fpo_supply (out.fpo_function::rest) obs'` >>
+  `!m. m <= LENGTH passes ==>
+       R (SUC k0 + m) (EL m (out.fpo_function::rest))` by
+    (rpt strip_tac >> first_x_assum (qspec_then `SUC m` mp_tac) >>
+     simp[arithmeticTheory.ADD_CLAUSES]) >>
+  Cases_on `k`
+  >- (simp[fn_steps_from_def] >> conj_tac
+      >- (qpat_x_assum `!m. m <= SUC _ ==> _` (qspec_then `0` mp_tac) >>
+          simp[]) >>
+      goal_assum drule >>
+      first_x_assum (drule_then (qspecl_then [`0`,`SUC k0`] mp_tac)) >>
+      simp[]) >>
+  first_x_assum (drule_then (qspecl_then [`n`,`SUC k0`] mp_tac)) >>
+  simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
 Theorem fn_chain_names:
   !passes s fs obs.
     fn_chain rpolicy passes s fs obs ==>

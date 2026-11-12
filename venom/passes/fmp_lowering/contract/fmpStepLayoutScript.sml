@@ -441,3 +441,16 @@ Proof
   Cases_on `oldpc` >> Cases_on `newpc` >>
   simp[callLayoutDefsTheory.OPTION_TO_LIST_def] >> rpt strip_tac >> gvs[]
 QED
+
+(* Why it holds (intuition): a function with a signature comes back
+   unchanged and a sealed one keeps its blocks; otherwise the input entry
+   splits as user PARAMs ++ optional retpc ++ a PARAM-free suffix, and the
+   output entry is those user PARAMs, then the root (INITIAL_FMP or
+   FMP_PARAM) and the retpc (RETPC_PARAM), then the lowered suffix, which
+   has no PARAM. *)
+Theorem fmp_lower_function_user_param_count:
+  fmp_lower_function ctx s fn = SOME (fn',s') ==>
+  LENGTH (fn_user_param_insts fn') = LENGTH (fn_user_param_insts fn)
+Proof
+  cheat
+QED

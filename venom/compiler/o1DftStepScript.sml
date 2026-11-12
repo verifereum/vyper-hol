@@ -337,6 +337,26 @@ QED
    - The call checks and the return-PC shape need SSA (o1DftCallChecks,
      o1DftRetpc): off SSA, a redefinition of a call's flag can be
      scheduled between the call and its check. *)
+Theorem dft_fn_user_param_count:
+  o1_fn_shape ctx fn ==>
+  LENGTH (fn_user_param_insts (dft_fn fn)) = LENGTH (fn_user_param_insts fn)
+Proof
+  strip_tac >>
+  `LIST_REL dftLifting$dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
+    (irule dftLiftingTheory.dft_fn_block_rel >>
+     gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[LIST_REL_NIL, LIST_REL_CONS1,
+      callLayoutDefsTheory.fn_user_param_insts_def,
+      callLayoutDefsTheory.fn_entry_insts_def, entry_block_def,
+      dftLiftingTheory.dft_block_rel_def] >>
+  `!l. FILTER (\i. i.inst_opcode = PARAM) l =
+       FILTER (\i. i.inst_opcode = PARAM)
+         (FILTER (\i. is_pseudo i.inst_opcode) l)` by
+    (Induct >> rw[] >> gvs[is_pseudo_def]) >>
+  pop_assum (fn th => ONCE_REWRITE_TAC [th]) >> simp[]
+QED
+
 Theorem dft_step_contract_ssa:
   fn_pass_step rpolicy (CFP_Simple VP_DFT) observed s fn out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\

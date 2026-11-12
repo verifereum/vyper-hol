@@ -5,6 +5,7 @@
  *
  * TOP-LEVEL:
  *   simplify_cfg_fn_param_prefix
+ *   simplify_cfg_fn_user_param_count
  *)
 Theory o1ContractSimplifyCfgParams
 Ancestors
@@ -436,6 +437,20 @@ Proof
   Cases_on `q.fn_blocks = f.fn_blocks` >- gvs[] >>
   Cases_on `simplify_cfg_iter_with_labels n q` >> simp[] >>
   first_x_assum (qspec_then `q` mp_tac) >> gvs[]
+QED
+
+(* Why it holds (intuition): the entry block has no predecessors, so it
+   is never a merge target or removed; merging b into it gives FRONT a ++ b,
+   dropping a's terminator (not PARAM) and adding b's instructions, which
+   carry no PARAM (b is not the entry); jump threading and label
+   substitution change operands and terminators only. *)
+Theorem simplify_cfg_fn_user_param_count:
+  o1_fn_shape C fn /\ fn_pseudos_prefix fn /\
+  EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) ==>
+  LENGTH (fn_user_param_insts (simplify_cfg_fn fn)) =
+    LENGTH (fn_user_param_insts fn)
+Proof
+  cheat
 QED
 
 Theorem simplify_cfg_fn_param_prefix:

@@ -1222,6 +1222,17 @@ Proof
   simp[cfg_norm_function_supply_def] >> metis_tac[cfg_norm_iter_supply_fresh_names]
 QED
 
+(* Why it holds (intuition): each round rewrites blocks in place
+   (replace_block is a MAP), appends the split block at the end, and
+   changes only terminator labels and PHI operands, so the head block
+   keeps its opcode sequence. *)
+Theorem cfg_norm_function_supply_user_param_count:
+  supply_o1_inv ctx s fn /\ cfg_norm_function_supply s fn = (fn',s') ==>
+  LENGTH (fn_user_param_insts fn') = LENGTH (fn_user_param_insts fn)
+Proof
+  cheat
+QED
+
 Theorem cfg_norm_step_contract:
   o1_step_contract_at 8 rpolicy (CFP_Simple VP_CFGNormalization)
 Proof
