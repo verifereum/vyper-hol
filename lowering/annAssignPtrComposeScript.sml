@@ -92,8 +92,8 @@ Theorem annassign_outcome_entry_prefix_ptr:
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel ctx func cenv'' cx ee t /\
-      ghost_inv d cenv'' cx ee G tn t /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      ghost_inv H d cenv'' cx ee G tn t /\
       (!x w. not_fresh_at sa x /\ lookup_var x salloc = SOME w ==>
          lookup_var x t = SOME w) /\
       (!x. not_fresh_at sa x ==>
@@ -104,8 +104,8 @@ Theorem annassign_outcome_entry_prefix_ptr:
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel ctx func cenv'' cx ee t /\
-      ghost_inv d cenv'' cx ee G tn t /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      ghost_inv H d cenv'' cx ee G tn t /\
       (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
          lookup_var x t = SOME w) /\
       (!x. not_fresh_at sa0 x ==>

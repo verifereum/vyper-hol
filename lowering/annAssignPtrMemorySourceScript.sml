@@ -23,7 +23,7 @@ QED
 Theorem annassign_memory_rhs_layout_ptr:
  !ctx func c cx e es ea eb s0 es1 v op s G tn etv typ tyv.
  post_value_type c e = expr_type e /\
- expr_post ctx func c cx e es ea eb s0 es1 v op s /\
+ expr_post H ctx func c cx e es ea eb s0 es1 v op s /\
  lower_value compile_expr c (expr_type e) e ea = (op,eb) /\
  local_ptrs_reserved c ea /\
  evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
@@ -41,7 +41,7 @@ Proof
  rpt gen_tac >> strip_tac >>
  drule compile_lower_value_var >> disch_then drule >> disch_tac >>
  `expr_val_at c cx (expr_type e) ea eb es1 v op s` by
-   (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+   (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
     qpat_x_assum `post_value_type _ _ = _`
       (fn th => rewrite_tac[expr_post_def, th]) >>
     strip_tac >> first_assum ACCEPT_TAC) >>

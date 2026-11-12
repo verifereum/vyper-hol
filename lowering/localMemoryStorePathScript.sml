@@ -15,7 +15,7 @@ Libs
   monadsyntax
 
 Theorem local_copy_immutables:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   local_region cenv es.scopes s id b sz /\ n <= sz /\
   t.vs_data_section = s.vs_data_section /\
   LENGTH s.vs_memory <= LENGTH t.vs_memory /\
@@ -27,7 +27,7 @@ Proof
   simp[] >> reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
   rpt strip_tac >>
   `regions_disjoint off (type_memory_size tv) b sz` by
-    (qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
      first_x_assum drule_all >> strip_tac >>
      qpat_x_assum `!id b sz. local_region _ _ _ id b sz ==> _` drule >> simp[]) >>
@@ -85,14 +85,14 @@ Theorem local_memory_store_path:
     (ty = sty \/ is_bytestring_type ty /\ is_bytestring_type sty) /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?dw t. lookup_var p s = SOME dw /\
-        stmt_state_rel ctx func cenv cx
+        stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -132,7 +132,7 @@ Proof
     (rpt strip_tac >> first_x_assum irule >>
      fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   qpat_x_assum `entry.type = tyv` (SUBST_ALL_TAC o SYM) >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx es1` >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx es1` >>
   `type_memory_size entry.type <= sz` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
   `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
@@ -142,13 +142,13 @@ Proof
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     (irule local_copy_immutables >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexists_tac `type_memory_size entry.type` >> simp[] >>
      rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
      decide_tac) >>
   `memory_value_rel entry.type v (w2n w) t.vs_memory` by
     (irule val_in_memory_memory_value_rel >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es1 t` by
+  `stmt_state_rel H ctx func cenv cx es1 t` by
     (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
@@ -185,7 +185,7 @@ Theorem alloc_copy_memory_framed_path:
   !ctx func cenv cx es sa sm sb s0 p src sz sw tv v.
     emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
     emit_void MCOPY [Var p; src; Lit (n2w sz)] sm = ((), sb) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
     src <> Var p /\ eval_operand src s0 = SOME sw /\
@@ -196,7 +196,7 @@ Theorem alloc_copy_memory_framed_path:
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?s2 w. lookup_var p s2 = SOME w /\
       FLOOKUP s2.vs_allocas sa.cs_next_id = SOME (w2n w, sz) /\
-      stmt_state_rel ctx func cenv cx es s2 /\
+      stmt_state_rel H ctx func cenv cx es s2 /\
       val_in_memory tv v (w2n w) s2.vs_memory /\
       (!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
          mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s0.vs_memory) /\
@@ -214,7 +214,7 @@ Proof
   qabbrev_tac `inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
   `inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
    inst.inst_id = sa.cs_next_id` by simp[Abbr `inst`, mk_inst_def] >>
-  `stmt_state_rel ctx func cenv cx es (mcopy (w2n w) (w2n sw) sz s1)` by
+  `stmt_state_rel H ctx func cenv cx es (mcopy (w2n w) (w2n sw) sz s1)` by
     (irule stmt_state_rel_mcopy_alloca >> simp[] >>
      qexistsl_tac [`sz`, `inst`, `p`] >> simp[]) >>
   `val_in_memory tv v (w2n w) (mcopy (w2n w) (w2n sw) sz s1).vs_memory` by
@@ -242,7 +242,7 @@ Proof
 QED
 
 Theorem alloca_frame_owned_copy:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
          lookup_var x t = SOME w) /\
   venomMemDefs$allocas_non_overlapping t /\

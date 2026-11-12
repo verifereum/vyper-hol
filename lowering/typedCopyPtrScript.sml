@@ -96,10 +96,10 @@ Theorem ptr_fragment_step:
        ?t. step_inst_base inst s = OK t /\
            t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
            (!fuel fn. ~ctx_has_dalloca ctx ==>
-             ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn inst s) /\
+             ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn inst s) /\
            Q (step_prov PG G inst t) (step_taint inst s t tn)
              (t with vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt gen_tac >> strip_tac >> simp[frag_exec_ptr_def] >> rpt strip_tac >>
   drule_all fn_has_code_same_block >> strip_tac >>
@@ -132,7 +132,7 @@ Theorem mload_frag_ptr:
               (update_var tmp (mload (w2n a) s) s) tn)
            ((update_var tmp (mload (w2n a) s) s) with
               vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt strip_tac >> irule ptr_fragment_step >> simp[] >>
   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
@@ -159,7 +159,7 @@ Theorem mstore_frag_ptr:
            (step_taint (mk_inst id MSTORE [Var dst; value] []) s
               (mstore (w2n a) w s) tn)
            ((mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt strip_tac >> irule ptr_fragment_step >> simp[is_terminator_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
@@ -247,7 +247,7 @@ Theorem compile_store_word_framed_frag_ptr:
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\
@@ -314,7 +314,7 @@ Theorem compile_store_word_frag_ptr:
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\
@@ -332,12 +332,12 @@ QED
    In particular no positive-footprint provenance assumption is needed. *)
 Theorem expr_post_ptr_return_inputs:
   !ctx fn cenv cx e es sa sb s0 es' v op s d G tn.
-    expr_post ctx fn cenv cx e es sa sb s0 es' v op s /\
-    ghost_inv d cenv cx es' G tn s /\
+    expr_post H ctx fn cenv cx e es sa sb s0 es' v op s /\
+    ghost_inv H d cenv cx es' G tn s /\
     ptr_val_ok cx (expr_type e) v op G tn s ==>
-    stmt_state_rel ctx fn cenv cx es' s /\
+    stmt_state_rel H ctx fn cenv cx es' s /\
     (?w. eval_operand op s = SOME w) /\ op_taint tn op = {} /\
-    stor_taint_ok cx tn s
+    stor_taint_ok H cx tn s
 Proof
   simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
        ghost_inv_def, ptr_val_ok_def] >> metis_tac[]
@@ -357,7 +357,7 @@ Theorem compile_store_word_field_ptr:
      (?x. v = FlagV x) \/ (?x. v = DecimalV x)) /\
     (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
            val_in_memory tv v (w2n a) mem) ==>
-    frag_exec_ptr cx ctx PG sa sb
+    frag_exec_ptr H cx ctx PG sa sb
       (\g t st. g = G /\ t = tn /\ st = s)
       (\g t st. !i. w2n b <= i /\ i < w2n b + 32 ==> i NOTIN t.t_mem) R
 Proof
@@ -468,7 +468,7 @@ QED
    possibly oversized incoming provenance site. *)
 Theorem expr_val_at_ptr_offset_read_covers:
   !ctx func cenv cx t sa sb es v p s tv w G tn off n G' tn' q s'.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v (Var p) s /\
     ptr_val_ok cx t v (Var p) G tn s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
@@ -499,7 +499,7 @@ QED
 
 Theorem alloca_step_offset_ptr_covers:
   !ctx func cenv cx es s id capacity out s1 PG G G1 w off n q s' G' tn'.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w capacity)] [out]) (fn_insts func) /\
     capacity < dimword(:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w capacity)] [out]) s = OK s1 /\
@@ -565,7 +565,7 @@ Theorem mcopy_operand_frag_ptr:
               (mcopy (w2n b) (w2n a) (w2n n) s) tn)
            ((mcopy (w2n b) (w2n a) (w2n n) s) with
               vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt strip_tac >> irule ptr_fragment_step >> simp[is_terminator_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
@@ -613,7 +613,7 @@ Theorem copy_len_binop_frag_ptr:
               (update_var tmp (f a b) s) tn)
            ((update_var tmp (f a b) s) with
               vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   irule ptr_fragment_step >> simp[] >>
@@ -689,7 +689,7 @@ Theorem copy_len_not_frag_ptr:
               (update_var tmp (~a) s) tn)
            ((update_var tmp (~a) s) with
               vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   irule ptr_fragment_step >> simp[] >>
@@ -739,7 +739,7 @@ Theorem emit_copy_len_binop_frag_ptr:
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
     op_taint tn left = {} /\ op_taint tn right = {} ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
@@ -758,7 +758,7 @@ Theorem emit_copy_len_not_frag_ptr:
     emit_op NOT [x] sa = (Var out,sb) /\
     eval_operand x s = SOME a /\ op_taint tn x = {} ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (~a) /\ op_taint tnf (Var out) = {} /\
@@ -778,7 +778,7 @@ Theorem emit_mload_clean_frag_ptr:
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (mload (w2n a) s) /\
@@ -800,7 +800,7 @@ Theorem compile_bytestring_copy_len_frag_ptr:
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       eval_operand count_op sf =
@@ -829,7 +829,7 @@ Theorem compile_store_bytestring_frag_ptr:
     ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\

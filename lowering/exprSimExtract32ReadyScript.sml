@@ -51,7 +51,7 @@ Proof
   disch_then drule_all >> strip_tac >>
   once_rewrite_tac[eval_expr_extract32_vv_bind] >>
   irule extract32_outcome_bind_marked >>
-  qexists_tac `\v ee t. expr_post ctx func cenv cx src es sa st1 s0 ee v src_op t /\
+  qexists_tac `\v ee t. expr_post H ctx func cenv cx src es sa st1 s0 ee v src_op t /\
      t.vs_current_bb = st1.cs_current_bb /\
      t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
   reverse conj_tac
@@ -92,13 +92,13 @@ Proof
   `gas_admissible (bind (eval_expr cx off) (read_result cx)) expr_res_ok ee` by
     (drule_all extract32_vv_second_admissible >> simp[] >>
      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx ee u` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ st2 _ _ _ _ u`
+  `stmt_state_rel H ctx func cenv cx ee u` by
+    (qpat_assum `expr_post H _ _ _ _ _ _ _ st2 _ _ _ _ u`
        (mp_tac o cj 1 o REWRITE_RULE [expr_post_def]) >> simp[]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ off _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then drule_all >> strip_tac >>
   irule extract32_outcome_bind_marked >>
-  qexists_tac `\v ee' t. expr_post ctx func cenv cx off ee st2 st3 u ee' v off_op t /\
+  qexists_tac `\v ee' t. expr_post H ctx func cenv cx off ee st2 st3 u ee' v off_op t /\
     t.vs_current_bb = st3.cs_current_bb /\ t.vs_inst_idx = LENGTH st3.cs_current_insts` >>
   reverse conj_tac
   >- (`(\(res:value+exception) (ee:evaluation_state) r.
@@ -131,10 +131,10 @@ Proof
   rename1 `emit_op MLOAD [src_op] st1 = (len,sy)` >>
   `expr_body_pre cenv cx env off
       (ee with gas_obs := gas_explicit marks' u.vs_gas_readings)` by simp[] >>
-  `expr_post ctx func cenv cx src es sa cs'' s0
+  `expr_post H ctx func cenv cx src es sa cs'' s0
       (ee with gas_obs := gas_explicit marks' u.vs_gas_readings) (BytesV bs) src_op u` by
     simp[extract32_expr_post_end_gas_obs] >>
-  `expr_post ctx func cenv cx off
+  `expr_post H ctx func cenv cx off
       (ee with gas_obs := gas_explicit marks' u.vs_gas_readings)
       cs'' st3 u ee' (IntV i) off_op t'` by
     simp[extract32_expr_post_start_gas_obs] >>

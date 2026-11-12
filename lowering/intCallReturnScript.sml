@@ -230,9 +230,9 @@ Theorem invoke_intret_state_rel:
     LENGTH inst.inst_outputs = LENGTH ret.iret_values /\
     ALL_DISTINCT inst.inst_outputs /\
     EVERY (not_local_ptr cenv es.scopes) inst.inst_outputs /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     immutable_alloca_sep func cenv cx (es2 with scopes := es.scopes) s /\
-    result_rel callee tv cenv' cx'
+    result_rel H callee tv cenv' cx'
       (INR (ReturnException v), es2 with scopes := []) (IntRet ret cs') /\
     cx'.txn = cx.txn /\ cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
@@ -244,7 +244,7 @@ Theorem invoke_intret_state_rel:
     (!n lo sz. local_region cenv es.scopes s n lo sz ==>
        EVERY (\(eb,esz). regions_disjoint lo sz eb esz) excl) ==>
     ?s'. step_inst fuel ctx inst s = OK s' /\
-         stmt_state_rel ctx func cenv cx (es2 with scopes := es.scopes) s' /\
+         stmt_state_rel H ctx func cenv cx (es2 with scopes := es.scopes) s' /\
          intret_vals_match tv v ret.iret_values /\
          (!i. i < LENGTH inst.inst_outputs ==>
               lookup_var (EL i inst.inst_outputs) s' =
@@ -256,9 +256,9 @@ Theorem invoke_intret_state_rel:
          s'.vs_halted = s.vs_halted
 Proof
   rpt strip_tac >>
-  `storage_dead cx' = storage_dead cx /\ accounts_agree cx' = accounts_agree cx /\
-   transient_agree cx' = transient_agree cx /\
-   request_agree cx' = request_agree cx` by
+  `storage_dead H' = storage_dead H /\ accounts_agree H cx' = accounts_agree H cx /\
+   transient_agree H cx' = transient_agree H cx /\
+   request_agree H cx' = request_agree H cx` by
     (qspecl_then [`cx`, `cx'`] mp_tac storage_dead_cx_cong >>
      qspecl_then [`cx`, `cx'`] mp_tac agree_cx_cong >> simp[]) >>
   `local_ptrs_rel func cenv es.scopes s` by gvs[stmt_state_rel_def, state_rel_def] >>
@@ -299,8 +299,8 @@ Proof
       qpat_x_assum `!x. ~MEM x inst.inst_outputs ==> _` drule >>
       gvs[lookup_var_def]) >>
   reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
-  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
-  qpat_x_assum `state_rel _ _ _ _ cs'` mp_tac >>
+  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
+  qpat_x_assum `state_rel H _ _ _ _ cs'` mp_tac >>
   simp[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
        accounts_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, log_entry_equiv_def] >>

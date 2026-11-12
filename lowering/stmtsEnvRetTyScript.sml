@@ -5,7 +5,7 @@ Ancestors
   stmtSimDefs
   exprSimDefs
   loweringPosts
-  list pair fragExec  bodySim bodySimMain loweringHalt stmtLoweringMono  exprLoweringProps
+  list pair fragExec bodySim loweringHalt stmtLoweringMono exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram supportedDecls supportedExprForms supportedStmts
   vyperLoweringCorrect rawReturnHeader

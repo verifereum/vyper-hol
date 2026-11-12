@@ -363,7 +363,7 @@ Theorem typed_copy_loop_mul_frag_ptr:
         Q (DRESTRICT G (COMPL {out}))
           (tn with t_var := tn.t_var |+ (out,{}))
           ((update_var out (a*b) s) with vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt gen_tac >> strip_tac >>
   irule typedCopyPtrTheory.ptr_fragment_step >>
@@ -433,7 +433,7 @@ Theorem typed_copy_loop_address_frag_ptr:
        mk_inst (id+2) ADD [Var sr;Var so] [sp];
        mk_inst (id+3) ADD [Var dr;Var doff] [dp]] ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sb si
+      frag_exec_ptr H cx ctx PG sb si
         (\g t v. g=G /\ t=tn /\ v=s)
         (\g t v. g=Gf /\ t=tnf /\ v=sf) R /\
       lookup_var sp sf = SOME (n2w (w2n a+i*ss)) /\

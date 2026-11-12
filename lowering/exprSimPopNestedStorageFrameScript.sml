@@ -123,7 +123,7 @@ Theorem nested_pop_eval_target_storage_frame:
   (!b. vyperStorageBackend$get_storage cx st' b =
        vyperStorageBackend$get_storage cx st b) /\
   slots_in_range (vyperStorageBackend$get_storage cx st' tr) (w2n slot) tv /\
-  storage_read_live cx tr (vyperStorageBackend$get_storage cx st' tr) slot tv
+  storage_read_live H tr (vyperStorageBackend$get_storage cx st' tr) slot tv
 Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
@@ -207,7 +207,7 @@ Resume pop_nested_storage_frame_sim[summary]:
 QED
 
 Resume pop_nested_storage_frame_sim[normal]:
-  rename1 `target_post _ _ _ _ _ _ _ _ _ (PlaceR p) _ _ t` >>
+  rename1 `target_post H _ _ _ _ _ _ _ _ _ (PlaceR p) _ _ t` >>
   `eval_target_place cx bt
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL p, tend with gas_obs := [])` by

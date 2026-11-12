@@ -6,7 +6,7 @@ Ancestors
   vyperAST vyperInterpreter vyperTyping valueEncoding
   vyperTypeSystem compileEnv context vyperState exprSimDefs
   vyperValueOperation venomState vyperValue loweringSlice
-  vyperTypeCallGraph
+  vyperTypeCallGraph gasSummary fragGasPathMem
 
 (* Prior successful uncounted proof and private tactic, retained for reference.
 val literal_word_mem_tac =
@@ -48,8 +48,11 @@ Proof
   irule expr_sim_mem_word_values >>
   reverse conj_tac >- simp[vyperASTTheory.expr_type_def] >>
   rpt gen_tac >> strip_tac >>
-  qexistsl_tac [`[]`, `evaluate_literal l`, `es`, `s0`] >>
-  irule body_literal_word_mem_prefix >> metis_tac[]
+  qexistsl_tac [`[]`, `evaluate_literal l`, `es`, `s0`] >> conj_tac
+  >- (simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def,
+           bind_def, read_result_def, return_def] >>
+      metis_tac[gas_path_mem_rules]) >>
+  rpt strip_tac >> irule body_literal_word_mem_prefix >> metis_tac[]
 QED
 
 Theorem body_literal_word_mem_case:

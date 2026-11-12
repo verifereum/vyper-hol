@@ -138,7 +138,7 @@ Proof
               `?v. read_result cx tv (es_end with gas_obs := []) =
                    (INL v,es_end with gas_obs := [])` by
                 gvs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
-              `vv_post ctx func cenv cx e es sa sb s0
+              `vv_post H ctx func cenv cx e es sa sb s0
                 (es_end with gas_obs := []) (Value v) (StackValue t' op) t` by
                 metis_tac[vv_post_read_result] >>
               qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK t`] >>

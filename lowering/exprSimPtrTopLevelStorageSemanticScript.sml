@@ -5,7 +5,7 @@ Ancestors
   exprLoweringProps compileEnv loweringStateRelDefs valueEncoding loweringPosts
 
 Theorem toplevel_copy_prefix_state_rel:
-  stmt_state_rel ctx fn cenv cx es u /\
+  stmt_state_rel H ctx fn cenv cx es u /\
   local_ptrs_reserved cenv st /\
   copy_prefix loc a b n u n t /\
   (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x u) /\
@@ -14,7 +14,7 @@ Theorem toplevel_copy_prefix_state_rel:
   FLOOKUP u.vs_allocas inst.inst_id = SOME (b,32*n) /\
   (!name lb len. local_region cenv es.scopes u name lb len ==>
     regions_disjoint b (32*n) lb len) ==>
-  stmt_state_rel ctx fn cenv cx es t
+  stmt_state_rel H ctx fn cenv cx es t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule copy_buffer_state_rel_frame >>
@@ -25,7 +25,7 @@ QED
 (* The semantic transport consumes the very endpoint chosen by Ensure. *)
 Theorem toplevel_storage_ensure_ptr_post_effects:
   post_value_type cenv e = expr_type e /\
-  vv_post ctx fn cenv cx e es sa sm s0 es' (Value v) vv s /\
+  vv_post H ctx fn cenv cx e es sa sm s0 es' (Value v) vv s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -45,9 +45,9 @@ Theorem toplevel_storage_ensure_ptr_post_effects:
     ptr_covers Gf tnf p t nb /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    expr_post ctx fn cenv cx e es sa sb s0 es' v op t /\
+    expr_post H ctx fn cenv cx e es sa sb s0 es' v op t /\
     ?u w.
-      stmt_state_rel ctx fn cenv cx es' u /\ u.vs_memory = s.vs_memory /\
+      stmt_state_rel H ctx fn cenv cx es' u /\ u.vs_memory = s.vs_memory /\
       lookup_var p u = SOME w /\ lookup_var p t = SOME w /\
       copy_prefix loc a (w2n w) n u n t /\ copy_static t = copy_static u /\
       (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s /\
@@ -75,7 +75,7 @@ Theorem toplevel_storage_ensure_ptr_post_effects:
         inst.inst_id = sm.cs_next_id)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `stmt_state_rel ctx fn cenv cx es' s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx es' s` by fs[vv_post_def] >>
   drule_all toplevel_storage_ensure_ptr_semantic_effects >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
   `storage_holds cx (loc = LocTransient) (expr_type e) (Value v) a es' u` by
@@ -88,7 +88,7 @@ Proof
      rpt (goal_assum (drule_at Any)) >> metis_tac[]) >>
   `!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x u` by
     metis_tac[] >>
-  `expr_post ctx fn cenv cx e es sa sb s0 es' v op t` by
+  `expr_post H ctx fn cenv cx e es sa sb s0 es' v op t` by
     (irule copy_buffer_post_transport >>
      simp[] >>
      qrefinel [`_`, `sm`, `_`, `_`, `nb`] >>
@@ -101,7 +101,7 @@ QED
 
 Theorem toplevel_storage_ensure_ptr_post:
   post_value_type cenv e = expr_type e /\
-  vv_post ctx fn cenv cx e es sa sm s0 es' (Value v) vv s /\
+  vv_post H ctx fn cenv cx e es sa sm s0 es' (Value v) vv s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -121,7 +121,7 @@ Theorem toplevel_storage_ensure_ptr_post:
     ptr_covers Gf tnf p t nb /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    expr_post ctx fn cenv cx e es sa sb s0 es' v op t
+    expr_post H ctx fn cenv cx e es sa sb s0 es' v op t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all toplevel_storage_ensure_ptr_post_effects >>

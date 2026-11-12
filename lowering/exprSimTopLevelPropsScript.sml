@@ -11,7 +11,8 @@ Ancestors
 
 val lookup_global_tac =
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, raise_def, LET_THM];
+       return_def, raise_def, LET_THM, ignore_bind_def,
+       record_storage_event_def];
 
 Theorem eval_expr_toplevel_storage:
   !cx ann src id es res es' ts tr typ id_str slot tvt v.
@@ -21,12 +22,14 @@ Theorem eval_expr_toplevel_storage:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     read_storage_slot cx tr (n2w slot) tvt es = (INL v, es) ==>
-    es' = es /\ ?tv. res = INL tv /\ read_result cx tv es = (INL v, es)
+    es' = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt] /\
+    ?tv. res = INL tv /\ read_result cx tv es = (INL v, es)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
   rpt strip_tac >>
-  gvs[read_result_def, read_place_def, return_def, bind_def]
+  gvs[read_result_def, read_place_def, return_def, bind_def,
+      ignore_bind_def, record_storage_event_def]
 QED
 
 Theorem toplevel_storage_ce_vars:
