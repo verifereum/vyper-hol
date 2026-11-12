@@ -6,6 +6,7 @@ Ancestors
   exprLoweringProps loweringStateRelDefs emitHelper emitHelperProps
   context venomExecSemantics venomState venomInst venomMemDefs
   finite_map words list rich_list compileEnv abiDecoderIndexInit dynCopyExec
+  freshWrites exprSimWordArgs
 
 Theorem mapping_slot_store_hash_mem[local]:
   eval_operand (Var x) s = SOME (n2w p) /\ eval_operand key s = SOME k /\
@@ -98,4 +99,78 @@ Proof
   Cases_on `key` >>
   gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
       abi_builtin_allocate_state_def]
+QED
+
+Theorem mapping_slot_body_seq_mem:
+  compile_mapping_subscript base_op key sa = (op,sb) /\
+  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+  (!v. base_op = Var v ==> not_fresh_at sa v) /\
+  (!v. key = Var v ==> not_fresh_at sa v) /\
+  eval_operand base_op s = SOME b /\ eval_operand key s = SOME k ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> drule_all mapping_alloca_code >> strip_tac >>
+  `?p. FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 64 s).vs_allocas
+        sa.cs_next_id = SOME (p,64)` by
+    (simp[alloca_site_cases] >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >- simp[] >>
+     PairCases_on `x` >> fs[stmt_state_rel_def] >>
+     qpat_x_assum `!inst n base sz. _` drule >> simp[mk_inst_def, dimword_def]) >>
+  `alloca_next_valid s /\ alloca_room ctx func s` by
+    fs[stmt_state_rel_def, alloca_inv_def] >>
+  `p+64 < dimword (:256)` by
+    (fs[alloca_site_cases] >-
+       (`sa.cs_next_id NOTIN FDOM s.vs_allocas` by fs[FLOOKUP_DEF] >>
+        drule alloca_room_fresh >> disch_then drule >>
+        simp[mk_inst_def, dimword_def]) >>
+     drule_all alloca_room_next_lt >> fs[alloca_next_valid_def] >>
+     first_x_assum drule >> decide_tac) >>
+  irule mapping_slot_seq_mem >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem compile_hashmap_tail_seq_mem:
+  expr_post ctx func cenv cx e es sa sn s0 en kv key s /\
+  expr_store_bound cx (expr_type e) kv key s /\
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript base_op hashed sp = (slot,sb) /\
+  (!x. key = Var x ==> not_fresh_at sn x) /\
+  (!x. base_op = Var x ==> not_fresh_at sn x) /\
+  eval_operand base_op s = SOME base_slot /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sn /\
+  fn_has_code sp sb func ==>
+  run_inst_seq_mem_ok (emitted_insts sn sb) s
+Proof
+  strip_tac >>
+  Cases_on `is_bytestring_type kt` >-
+    (gvs[] >>
+     drule compile_hashmap_dynamic_key_frame >>
+     disch_then (qspecl_then [`tv`, `sp`, `hashed`, `expr_type e`] mp_tac) >>
+     simp[] >> strip_tac >>
+     `run_inst_seq_mem_ok (emitted_insts sn sp) s` by
+       (irule compile_mapping_bytestring_key_mem_ok >>
+        goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     `sn.cs_next_var <= sp.cs_next_var /\
+      sp.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sp /\
+      (!x. hashed = Var x ==> not_fresh_at sp x)` by
+       (drule (cj 1 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >>
+        strip_tac >> gvs[]) >>
+     `sb.cs_current_insts = sp.cs_current_insts ++ emitted_insts sp sb` by
+       (drule (cj 2 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >> simp[]) >>
+     `emitted_insts sn sb = emitted_insts sn sp ++ emitted_insts sp sb` by
+       (irule emitted_insts_append >> simp[]) >>
+     asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >> simp[] >>
+     rpt strip_tac >> gvs[] >>
+     drule mapping_slot_body_seq_mem >> disch_then irule >> simp[] >>
+     conj_tac >- metis_tac[not_fresh_at_mono] >>
+     Cases_on `base_op` >> gvs[eval_operand_def] >>
+     qpat_assum `t with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_labels`) >> simp[] >> metis_tac[]) >>
+  gvs[] >>
+  drule mapping_slot_body_seq_mem >> disch_then irule >> simp[] >>
+  gvs[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def] >>
+  metis_tac[]
 QED
