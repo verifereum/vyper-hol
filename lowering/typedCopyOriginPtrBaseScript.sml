@@ -735,6 +735,148 @@ Proof
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac
 QED
 
+Theorem typed_copy_origin_ptr_index_addresses_path:
+  emit_op MUL [Var counter; Lit (n2w ss)] a = (so,b) /\
+  emit_op MUL [Var counter; Lit (n2w ds)] b = (doff,c) /\
+  emit_op ADD [Var xs;so] c = (sp,d) /\
+  emit_op ADD [Var xd;doff] d = (dp,e) /\
+  not_fresh_at a counter /\ not_fresh_at a xs /\ not_fresh_at a xd /\
+  lookup_var counter s = SOME (n2w j) /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  op_taint tn (Var counter) = {} /\ j < N /\
+  ptr_covers G tn xs s (N*ss) /\ ptr_covers G tn xd s (N*ds) /\
+  w2n sw + N*ss < dimword(:256) /\
+  w2n dw + N*ds < dimword(:256) /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a e func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?vsp vdp t Gf tnf.
+    sp = Var vsp /\ dp = Var vdp /\ vsp <> vdp /\
+    not_fresh_at e vsp /\ not_fresh_at e vdp /\
+    lookup_var vsp t = SOME (n2w (w2n sw + j*ss)) /\
+    lookup_var vdp t = SOME (n2w (w2n dw + j*ds)) /\
+    ptr_covers Gf tnf vsp t ss /\ ptr_covers Gf tnf vdp t ds /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+    typed_copy_state_frame a off len s t /\
+    ~t.vs_halted /\ t.vs_current_bb = e.cs_current_bb /\
+    t.vs_inst_idx = LENGTH e.cs_current_insts /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at a p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `op_taint tn (Var xs) = {} /\ op_taint tn (Var xd) = {}` by
+    fs[bodyPtrDefsTheory.ptr_covers_def] >>
+  `!opc left right id out w q tau.
+    (opc = MUL \/ opc = ADD) /\
+    op_taint tau left = {} /\ op_taint tau right = {} ==>
+    op_taint (step_taint (mk_inst id opc [left;right] [out]) q
+      (update_var out w q) tau) (Var out) = {} /\
+    (!p. p <> out ==>
+      op_taint (step_taint (mk_inst id opc [left;right] [out]) q
+        (update_var out w q) tau) (Var p) = op_taint tau (Var p))` by
+    metis_tac[typed_copy_origin_ptr_binop_ghost_frame] >>
+  drule_all typed_copy_origin_ptr_index_addresses_exact >>
+  disch_then (qspecl_then [`off`,`len`,`explicit`,`PG`,`G`,`D`] strip_assume_tac) >>
+  `vsp <> vdp` by fs[] >>
+  `!p. not_fresh_at a p ==>
+    p <> vso /\ p <> vdo /\ p <> vsp /\ p <> vdp` by metis_tac[listTheory.MEM] >>
+  `!p. not_fresh_at a p ==>
+    FLOOKUP G4 p = FLOOKUP G p /\ op_taint tn4 (Var p) = op_taint tn (Var p)` by
+    (gen_tac >> strip_tac >>
+     `p <> vso /\ p <> vdo /\ p <> vsp /\ p <> vdp` by metis_tac[] >>
+     metis_tac[typed_copy_origin_ptr_binop_ghost_frame]) >>
+  `tn4.t_mem = tn.t_mem /\ tn4.t_imm = tn.t_imm /\
+   tn4.t_stor = tn.t_stor /\ tn4.t_trans = tn.t_trans` by
+    simp[typed_copy_origin_ptr_binop_ghost_frame] >>
+  suspend "coverage"
+QED
+
+Resume typed_copy_origin_ptr_index_addresses_path[coverage]:
+  `!p. not_fresh_at a p ==>
+    lookup_var p q2 = lookup_var p s /\ lookup_var p q3 = lookup_var p s /\
+    lookup_var p t = lookup_var p s /\
+    FLOOKUP G2 p = FLOOKUP G p /\ FLOOKUP G3 p = FLOOKUP G p /\
+    op_taint tn2 (Var p) = op_taint tn (Var p) /\
+    op_taint tn3 (Var p) = op_taint tn (Var p)` by
+    (gen_tac >> strip_tac >>
+     `p <> vso /\ p <> vdo /\ p <> vsp /\ p <> vdp` by metis_tac[] >>
+     reverse (rpt conj_tac)
+     >- metis_tac[typed_copy_origin_ptr_binop_ghost_frame]
+     >- metis_tac[typed_copy_origin_ptr_binop_ghost_frame]
+     >- metis_tac[typed_copy_origin_ptr_binop_ghost_frame]
+     >- metis_tac[typed_copy_origin_ptr_binop_ghost_frame] >>
+     simp[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `ptr_covers G2 tn2 xs q2 (N*ss) /\ ptr_covers G3 tn3 xd q3 (N*ds)` by
+    (fs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[]) >>
+  `j*ss + ss <= N*ss /\ j*ds + ds <= N*ds` by
+    (`SUC j <= N` by decide_tac >>
+     conj_tac >>
+     metis_tac[arithmeticTheory.LESS_MONO_MULT, arithmeticTheory.MULT_CLAUSES]) >>
+  `w2n sw + j*ss < dimword(:256) /\
+   w2n dw + j*ds < dimword(:256)` by decide_tac >>
+  `lookup_var xs q2 = SOME sw /\ lookup_var xd q3 = SOME dw` by metis_tac[] >>
+  `xs <> vsp /\ xd <> vdp` by metis_tac[] >>
+  `eval_operand so q2 = SOME (n2w (j*ss)) /\
+   eval_operand doff q3 = SOME (n2w (j*ds))` by
+    (fs[listTheory.ALL_DISTINCT, listTheory.MEM] >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+          venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     metis_tac[]) >>
+  suspend "offsets"
+QED
+
+Resume typed_copy_origin_ptr_index_addresses_path[offsets]:
+  `ptr_covers G3 tn3 vsp (update_var vsp (sw+n2w (j*ss)) q2) ss` by
+    (qpat_assum `G3 = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `tn3 = _` (fn th => rewrite_tac[th]) >>
+     irule typed_copy_origin_ptr_offset_covers >> metis_tac[]) >>
+  `ptr_covers G4 tn4 vdp (update_var vdp (dw+n2w (j*ds)) q3) ds` by
+    (qpat_assum `G4 = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `tn4 = _` (fn th => rewrite_tac[th]) >>
+     irule typed_copy_origin_ptr_offset_covers >> metis_tac[]) >>
+  `ptr_covers G3 tn3 vsp q3 ss /\ ptr_covers G4 tn4 vdp t ds` by
+    (conj_tac
+     >- (qpat_assum `q3 = _` (fn th => pure_rewrite_tac[th]) >>
+         qpat_assum `ptr_covers G3 tn3 vsp _ ss` mp_tac >>
+         simp[NoAsms, bodyPtrDefsTheory.ptr_covers_def, venomStateTheory.lookup_var_def]) >>
+     qpat_assum `t = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `ptr_covers G4 tn4 vdp _ ds` mp_tac >>
+     simp[NoAsms, bodyPtrDefsTheory.ptr_covers_def, venomStateTheory.lookup_var_def]) >>
+  `FLOOKUP G4 vsp = FLOOKUP G3 vsp /\
+   op_taint tn4 (Var vsp) = op_taint tn3 (Var vsp)` by
+    metis_tac[typed_copy_origin_ptr_binop_ghost_frame] >>
+  `lookup_var vsp t = lookup_var vsp q3` by
+    (simp[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `ptr_covers G4 tn4 vsp t ss` by
+    (fs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[]) >>
+  suspend "finish"
+QED
+
+Resume typed_copy_origin_ptr_index_addresses_path[finish]:
+  `ci_mono d e` by metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono] >>
+  `not_fresh_at d vsp /\ not_fresh_at e vdp` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_fresh] >>
+  `not_fresh_at e vsp` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `sw + n2w (j*ss) = n2w (w2n sw + j*ss) /\
+   dw + n2w (j*ds) = n2w (w2n dw + j*ds)` by
+    simp[GSYM wordsTheory.word_add_n2w] >>
+  `lookup_var vsp t = SOME (n2w (w2n sw + j*ss)) /\
+   lookup_var vdp t = SOME (n2w (w2n dw + j*ds))` by
+    metis_tac[venomStateTheory.eval_operand_def] >>
+  qexistsl_tac [`vsp`,`vdp`,`t`,`G4`,`tn4`] >>
+  asm_rewrite_tac[] >> metis_tac[]
+QED
+
+Finalise typed_copy_origin_ptr_index_addresses_path
+
 (* Finite iteration is independent of the concrete header invariant. *)
 Theorem typed_copy_origin_ptr_counted_path:
   (!j q G tn. j < N /\ H j q G tn ==>
