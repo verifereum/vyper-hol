@@ -1,7 +1,7 @@
 Theory fmpStageBlockSimEntryShape
 Ancestors
   fmpStageControl fmpStageOpBase venomExecProofs venomWfProps
-  cfgWf cfgHelpers livenessProofs fmpStepRewrite
+  cfgWf cfgHelpers livenessProofs fmpStepRewrite makeSsaCurrentLiveTransport
   venomExecSemantics venomState venomInst frameCfgBoundary list
 
 Theorem fmp_entry_jump_successor:
@@ -90,4 +90,99 @@ Proof
   drule fmp_emit_restores_not_phi >> strip_tac >>
   Cases_on `prefix` >> Cases_on `head` >>
   gvs[livenessDefsTheory.collect_phis_def, phi_prefix_length_def]
+QED
+
+Theorem fmp_entry_root_label:
+  fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+  rl = (HD fn.fn_blocks).bb_label
+Proof
+  simp[fmpStageRelTheory.fmp_stage_root_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem fmp_entry_phi_plan_absent:
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  n < phi_prefix_length bb.bb_instructions ==>
+  ~((lbl,n) IN FDOM (fmp_stage_plan infos ctx fn))
+Proof
+  strip_tac >> strip_tac >>
+  drule_all fmp_stage_plan_point >> strip_tac >>
+  ` (EL n bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[phi_prefix_length_el_phi] >>
+  gvs[fmpReclaimDefsTheory.fmp_is_reclaim_point_def,
+      fmpReclaimDefsTheory.fmp_callee_info_def,
+      fmpAnalysisDefsTheory.fmp_invoke_target_def]
+QED
+
+Theorem fmp_entry_phi_tidx:
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lbl <> (HD fn.fn_blocks).bb_label /\
+  n <= phi_prefix_length bb.bb_instructions ==>
+  fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+    (fmp_stage_root infos ctx fn) lbl bb.bb_instructions n = n
+Proof
+  Induct_on `n`
+  >- (rpt strip_tac >>
+      `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) ==> lbl <> rl` by
+        metis_tac[fmp_entry_root_label] >>
+      Cases_on `fmp_stage_root infos ctx fn` >>
+      simp[fmpStageRelTheory.fmp_stage_tidx_def] >>
+      rename1 `SOME x` >> PairCases_on `x` >> gvs[]) >>
+  rpt strip_tac >>
+  `n < phi_prefix_length bb.bb_instructions` by decide_tac >>
+  `~((lbl,n) IN FDOM (fmp_stage_plan infos ctx fn))` by
+    metis_tac[fmp_entry_phi_plan_absent] >>
+  `(EL n bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[phi_prefix_length_el_phi] >>
+  `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\ lbl = rl ==>
+    rp <> SUC n` by metis_tac[fmp_entry_root_label] >>
+  `(EL n bb.bb_instructions).inst_opcode <> DALLOCA` by simp[] >>
+  drule_all fmp_stage_tidx_suc >> simp[]
+QED
+
+Theorem fmp_entry_block_phis:
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  MEM bb fn.fn_blocks /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  bb.bb_label <> (HD fn.fn_blocks).bb_label ==>
+  ?bb'. lookup_block bb.bb_label fn'.fn_blocks = SOME bb' /\
+    collect_phis bb'.bb_instructions = collect_phis bb.bb_instructions /\
+    phi_prefix_length bb'.bb_instructions = phi_prefix_length bb.bb_instructions
+Proof
+  strip_tac >>
+  Cases_on `fn.fn_fmp_signature = NONE /\
+    ?info. FLOOKUP infos fn.fn_name = SOME info /\
+      (info.fi_needs_fmp \/ info.fi_publishes_fmp)`
+  >- (`!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+        bb.bb_label = rl ==> rp <= 0` by metis_tac[fmp_entry_root_label] >>
+      `0 <= LENGTH bb.bb_instructions` by simp[] >>
+      drule fmp_stage_tidx_code >>
+      disch_then (qspecl_then [`0`, `bb`] mp_tac) >> simp[] >> strip_tac >>
+      `fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+        (fmp_stage_root infos ctx fn) bb.bb_label bb.bb_instructions 0 = 0` by
+        (irule fmp_entry_phi_tidx >> simp[]) >>
+      gvs[] >>
+      drule fmp_entry_indexed_phis >>
+      (impl_tac >- (rpt strip_tac >>
+        `~((bb.bb_label,n) IN FDOM (fmp_stage_plan infos ctx fn))` by
+          metis_tac[fmp_entry_phi_plan_absent] >>
+        gvs[finite_mapTheory.FLOOKUP_DEF])) >>
+      simp[]) >>
+  drule_all fmp_stage_unlowered >> strip_tac >>
+  qexists_tac `bb` >> simp[]
+QED
+
+Theorem fmp_entry_jump_dfs:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  active_inst fn bi s /\ MEM bi.inst_opcode [JMP; JNZ; DJMP] /\
+  step_inst k C bi s = OK (jump_to lbl s) ==>
+  MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre
+Proof
+  strip_tac >> drule_all fmp_entry_jump_edge >> strip_tac >>
+  `MEM s.vs_current_bb (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `MEM lbl (fn_labels fn)` by
+    metis_tac[venomWfTheory.wf_function_def, venomWfTheory.fn_succs_closed_def] >>
+  metis_tac[current_all_labels_dfs_pre]
 QED
