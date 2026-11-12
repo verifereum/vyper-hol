@@ -77,7 +77,7 @@ QED
 (* A site's region has the size its ALLOCA asks for. *)
 Theorem state_rel_site_size:
   !ctx func cenv cx es s id n outs.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] outs) (fn_insts func) /\
     n < dimword (:256) ==>
     !x. FLOOKUP s.vs_allocas id = SOME x ==> SND x = n
@@ -92,7 +92,7 @@ QED
    code, of the size its ALLOCA asks for. *)
 Theorem other_site_size[local]:
   !ctx func cenv cx es s0 t1 b id n outs.
-    stmt_state_rel ctx func cenv cx es s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
     (!a. a <> b ==> FLOOKUP t1.vs_allocas a = FLOOKUP s0.vs_allocas a) /\
     b < id /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] outs) (fn_insts func) /\
@@ -126,7 +126,7 @@ Theorem lit_reason_revert_path_mem:
       (32 + ((ml + 31) DIV 32) * 32) sm = ((), sb) /\
     fn_has_code sa sb func /\
     LENGTH str <= ml /\ 32 + ((ml + 31) DIV 32) * 32 < 2 ** 64 /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_path_mem ctx func s0 0 (Abort Revert_abort t)
