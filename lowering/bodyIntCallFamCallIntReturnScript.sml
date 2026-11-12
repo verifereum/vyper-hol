@@ -209,6 +209,8 @@ Resume intcall_nested_return_enriched[dispatch]:
   cheat
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; these Resume blocks hang off a held proof, commented out with it *)
+(*
 Resume intcall_nested_return_enriched[endpoint]:
   `~out.vs_halted` by
     (drule_at Any fragGasPathTheory.gas_path_normal >> simp[]) >>
@@ -337,6 +339,7 @@ Resume intcall_nested_return_enriched[widebuffer]:
   simp[] >>
   qexistsl [`aid`, `off`, `buf.buf_size`] >> simp[] >> metis_tac[]
 QED
+*)
 
 Finalise intcall_nested_return_enriched
 

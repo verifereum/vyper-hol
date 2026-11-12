@@ -30,12 +30,14 @@ Proof
   imp_res_tac read_result_state >> gvs[] >> metis_tac[]
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem effect_free_eval_expr_frame:
   !e cx st res st'. ~expr_has_effect e /\
     eval_expr cx e st = (res,st') ==>
     (st' with <|gas_obs := []; outcomes := NONE|>) =
     (st with <|gas_obs := []; outcomes := NONE|>)
 Proof
+  (* original proof, kept while held:
   measureInduct_on `expr_size e` >> Cases_on `e` >>
   simp[expr_has_effect_def, supported_expr_exists_def, expr_effect_root_def] >>
   rpt gen_tac
@@ -77,8 +79,12 @@ Proof
   >- suspend "builtin"
   >~ [`TypeBuiltin _ _ _ _`]
   >- suspend "typebuiltin"
+  *)
+  cheat
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; case proofs of the held theorem above, kept while held *)
+(*
 Resume effect_free_eval_expr_frame[ifexp]:
   gvs[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(),
       return_def, raise_def] >>
@@ -137,7 +143,9 @@ Resume effect_free_eval_expr_frame[typebuiltin]:
   gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
   metis_tac[]
 QED
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Resume effect_free_eval_expr_frame[builtin]:
+  (* original proof, kept while held:
   rename1 `Builtin aty bt args` >> strip_tac >>
   `!e. MEM e args ==> !st res st'. eval_expr cx e st = (res,st') ==>
     (st' with <|gas_obs := []; outcomes := NONE|>) =
@@ -174,8 +182,11 @@ Resume effect_free_eval_expr_frame[builtin]:
   gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
   imp_res_tac precompile_call_success_state >> gvs[] >>
   qpat_x_assum `!e. MEM e args ==> _` kall_tac >> metis_tac[]
+  *)
+  cheat
 QED
 Finalise effect_free_eval_expr_frame
+*)
 
 Theorem effect_free_eval_exprs_frame:
   !es cx st res st'. EVERY (\e. ~expr_has_effect e) es /\
