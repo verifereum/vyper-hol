@@ -1639,7 +1639,8 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac lift_sum_state >> gvs[return_def] >>
+  imp_res_tac lift_sum_state >> imp_res_tac array_iterator_results_state >>
+  gvs[return_def] >>
   imp_res_tac typed_expr_name_projection >> gvs[]
 QED
 
