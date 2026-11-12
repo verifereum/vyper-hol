@@ -34,7 +34,7 @@ Ancestors
   fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
   stmtSimDecl stmtSimDeclCompose stmtSimDeclPath stmtSimDeclSource
   gasSummary gasContext
-  fragGasSeq fragGasPath fragGasMode
+  fragGasSeq fragGasPath fragGasMode gasOutcome gasStorage vyperStorageTrace
   valueCopy valueCopyBytes intCallResult exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueTypingMemoryProps exprSimBufferStore memoryValueEncoding
@@ -839,15 +839,17 @@ Proof
   qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
   `!H. valid_horizon cx st0 H es1.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es1 s` by
-    (qx_gen_tac `HH` >> strip_tac >>
-     qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (qspec_then `HH` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
+    (gen_tac >> disch_then (fn vh =>
+       qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+         (fn th => mp_tac (MATCH_MP th vh))) >>
      simp[expr_post_def]) >>
-  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `H0` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  qpat_assum `valid_horizon cx st0 H0 _` (fn vh =>
+    qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (fn th => assume_tac (MATCH_MP th vh))) >>
   drule_then (drule_then assume_tac) compile_lower_value_var >>
-  qpat_x_assum `expr_post H0 ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_post_def] >> strip_tac >>
+  qpat_assum `post_value_type cenv e = expr_type e` (fn eq =>
+    qpat_x_assum `expr_post H0 ctx _ _ _ _ _ _ _ _ _ _ _ _`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_post_def, eq])) >>
   qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
   `val_wf tyv v` by simp[value_has_type_memory_wf] >>
   `~is_word_type (expr_type e)` by
@@ -1062,13 +1064,14 @@ Proof
     (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
      drule eval_read_preserves_scopes_dom >> simp[]) >>
   `alloca_frame c es sa salloc c (ee with gas_obs := []) s` by
-    (irule expr_post_alloca_frame >> metis_tac[]) >>
+    (drule expr_post_alloca_frame >> disch_then irule >> simp[]) >>
   `venomMemDefs$allocas_non_overlapping s /\ lookup_var p s = SOME w /\
    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
    (!aid b. FLOOKUP salloc.vs_allocas aid = SOME b ==>
             FLOOKUP s.vs_allocas aid = SOME b)` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o SIMP_RULE (srw_ss())
+          [expr_post_def, stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
      metis_tac[]) >>
   `sa.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sb.cs_next_var` by
     metis_tac[cj 2 compile_expr_grows] >>
@@ -1117,7 +1120,8 @@ Proof
        (qpat_assum `!H. valid_horizon _ _ H (ee with gas_obs := []).storage_trace ==>
                         expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
           (qspec_then `HH` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
-        simp[expr_post_def]) >>
+        disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) [expr_post_def]) >>
+        simp[]) >>
      `(ee with gas_obs := []).accounts = ee.accounts /\
       (ee with gas_obs := []).tStorage = ee.tStorage` by simp[] >>
      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
