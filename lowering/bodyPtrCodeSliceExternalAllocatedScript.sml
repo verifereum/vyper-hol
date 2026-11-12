@@ -4,7 +4,7 @@ Ancestors
   exprSimSliceExtcodeEntry exprSimSliceExtcodeContinue bodyPtrDefs
   fragExec venomState words finite_map compileEnv loweringPosts
   fragGasSeqPtr gasSummaryComposePtr rich_list list exprSimSource gasExemptCert
-  vyperState
+  vyperState exprLoweringProps pair loweringStateRelDefs bodyPtrHashBuiltinsGhostFrame
 
 (* The allocation is executed before the address operand.  Combine its
    semantic frame and pointer frame at the same deterministic endpoint. *)
@@ -114,4 +114,68 @@ Proof
     Cases_on `y` >> Cases_on `r` >> fs[exprSimDefsTheory.expr_exit_def] >>
     rename1 `Error err` >> Cases_on `err` >> fs[exprSimDefsTheory.expr_exit_def]) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem external_code_allocated_address_ptr:
+  compile_slice_out_buf sz sa = ((Var out,Var dst),sb) /\
+  lower_value compile_expr cenv ty a sb = (aop,sc) /\
+  fn_has_code sa sb fn /\ fn_has_code sb sc fn /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\
+  expr_sim_ptr d ctx PG fn cenv cx ty a es /\
+  expr_body_pre cenv cx env a es /\ expr_type a = BaseT AddressT /\
+  ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  32 <= sz /\ sz < dimword (:256) /\
+  (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G0 tn0 s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!u G1 tn1 p bs ee G tn t.
+    run_inst_seq (emitted_insts sa sb) s = OK u /\
+    ghost_inv d cenv cx es G1 tn1 u /\ ghost_kept cenv es sa G0 tn0 s G1 tn1 /\
+    ptr_covers G1 tn1 out u sz /\ ptr_covers G1 tn1 dst u (sz-32) /\
+    eval_operand (Var out) u = SOME p /\ eval_operand (Var dst) u = SOME (p+32w) /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n p,sz) /\
+    w2n p+sz < dimword (:256) /\ sa.cs_next_id < sb.cs_next_id /\
+    not_fresh_at sb out /\ not_fresh_at sb dst /\
+    (!name off len. local_region cenv es.scopes u name off len ==>
+      regions_disjoint (w2n p) sz off len) /\
+    stmt_state_rel ctx fn cenv cx es u /\ wb_frame cenv es es sa s u /\
+    LENGTH bs = 20 /\
+    expr_post ctx fn cenv cx a es sb sc
+      (u with vs_inst_idx := LENGTH sb.cs_current_insts) ee (BytesV bs) aop t /\
+    t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    ghost_inv d cenv cx ee G tn t /\
+    ghost_kept cenv es sb G1 tn1 (u with vs_inst_idx := LENGTH sb.cs_current_insts) G tn /\
+    ptr_val_ok cx (expr_type a) (BytesV bs) aop G tn t /\
+    expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+    eval_operand aop t = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
+    op_taint tn aop = {} /\ op_prov G aop = NONE /\ ee.gas_obs = [] ==>
+    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
+      (next (BytesV bs)) (ee,t,G,tn) Q (\res ee gt r. expr_exit res r)) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
+    (bind (bind (eval_expr cx a) (read_result cx)) next) (es,s,G0,tn0)
+    Q (\res ee gt r. expr_exit res r)
+Proof
+  strip_tac >> drule_all external_code_output_entry_ptr >>
+  disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac) >>
+  drule slice_extcode_out_control >> strip_tac >>
+  `ci_mono sa sb` by metis_tac[ci_mono_compile_slice_out_buf, SND] >>
+  `(!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sb x) /\
+   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sb x)` by
+    (metis_tac[ci_mono_def, freshWritesTheory.not_fresh_at_mono]) >>
+  `t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted` by
+    (drule_all slice_extcode_out_run_control >> simp[]) >>
+  irule external_code_output_prefix_ptr >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`Var dst`,`Var out`,`sz`] >> simp[] >>
+  `LENGTH sa.cs_current_insts + LENGTH (emitted_insts sa sb) =
+    LENGTH sb.cs_current_insts` by simp[] >>
+  qpat_x_assum `sb.cs_current_insts = _` kall_tac >> simp[] >>
+  irule external_code_address_continue_ptr >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`aop`,`cenv`,`d`,`env`,`sb`,`sc`,`ty`] >> simp[] >>
+  conj_tac >- (rpt strip_tac >> first_x_assum irule >>
+    goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  simp[stmt_state_rel_inst_idx, hash_ghost_inv_inst_idx]
 QED
