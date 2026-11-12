@@ -3,6 +3,7 @@ Ancestors
   ifJumpPtr bodyPtrDefs gasSummaryComposePtr fragGasPathPtr fragGasSeqPtr
   exprSimDefs loweringPosts exprSimIfExp emitHelperProps fragExec
   vyperInterpreter vyperState vyperAST valueEncoding compileEnv vyperValue gasExemptCert
+  gasContext
 
 Theorem ifexp_eval_forced:
   eval_expr cx (IfExp t c a b) =
@@ -93,4 +94,17 @@ Proof
   pure_once_rewrite_tac[ignore_bind_def] >>
   pure_once_rewrite_tac[bind_assoc] >>
   irule gas_exempt_cert_error_value >> simp[GSYM ignore_bind_def]
+QED
+
+(* The condition's run inherits admissibility from the ternary's. *)
+Theorem ifexp_condition_admissible:
+  gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es ==>
+  gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es
+Proof
+  rw[gas_admissible_def] >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
+  simp[ifexp_eval_forced, bind_def] >>
+  fs[expr_vv_res_ok_def, expr_res_ok_def] >> metis_tac[]
 QED
