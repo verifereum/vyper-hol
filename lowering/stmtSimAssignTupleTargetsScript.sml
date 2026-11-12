@@ -43,6 +43,8 @@ Theorem assign_tuple_targets_suffix[local]:
   !ctx func cx lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag.
     lowered_value_type cenv e = TupleT tys /\
     expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
+    stmt_state_rel ctx func cenv cx es s0 /\
+    MAP FDOM ee.scopes = MAP FDOM es.scopes /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts /\ ~sv.vs_halted /\
     ee.gas_obs = [] /\ value_has_type (TupleTV tvs) v /\
@@ -73,7 +75,7 @@ Theorem assign_tuple_targets_suffix[local]:
       (!tail. assign_tuple_targets cx (TupleTarget gs) v (ee with gas_obs := tail) =
         (INL (), ee' with gas_obs := tail)) /\
       gas_marked_path F ctx func sv 0 (OK t') /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
+      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
         (ee' with gas_obs := []) t'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -116,6 +118,11 @@ Resume assign_tuple_targets_suffix[prefix]:
     metis_tac[compile_lower_value_var] >>
   `local_ptrs_reserved cenv su` by
     (irule local_ptrs_reserved_next_var >> qexists `sa` >> fs[cs_extends_def]) >>
+  `sa.cs_next_id <= su.cs_next_id` by
+    (mp_tac (cj 2 stmtLoweringMonoTheory.ci_mono_compile_expr_sa) >>
+     disch_then (qspecl_then [`cenv`, `TupleT tys`, `e`, `sa`] mp_tac) >>
+     simp[ci_mono_def]) >>
+  drule_all expr_post_alloca_frame >> strip_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
@@ -168,6 +175,10 @@ Resume assign_tuple_targets_suffix[stores]:
 QED
 
 Resume assign_tuple_targets_suffix[frame]:
+  reverse conj_tac
+  >- (simp[] >> first_x_assum irule >>
+      irule alloca_frame_trans >>
+      qexistsl [`cenv`, `ee`, `sv`, `su`] >> simp[]) >>
   rpt strip_tac >>
   `not_fresh_at su x` by
     (irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
@@ -239,6 +250,8 @@ Proof
     (simp[Abbr `flag`] >> metis_tac[type_memory_size_def]) >>
   qpat_x_assum `(if flag then _ else _) su = _`
     (assume_tac o REWRITE_RULE [optional_tuple_stage_code]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
   drule_all assign_tuple_targets_suffix >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
   qexistsl [`INL ()`, `ee'`, `OK t'`] >> simp[]
