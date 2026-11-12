@@ -28,6 +28,7 @@ Theory fmpStageRunner
 Ancestors
   o1PassContract venomPassSchedule venomCompilerTypes fmpStageRel
   fmpStageRunnerFacts fmpStageFmpSteps fmpStageOpSteps fmpStageBlockSim
+  fmpStageBlockSimCode
   fmpStageOpBase o1LowerDloadSourceEntry o1PassLift runInstsProps
   dftGasToListReachBoundary ctxLookupAgreeHelpers ptrDiscipline
   contextCodegenRel passSimulationDefs venomExecProofs venomExecSemantics
@@ -71,13 +72,6 @@ Proof
   `wf_function fn` by fs[o1_fn_shape_def] >>
   drule fmp_stage_rel_lowered >> strip_tac >> gvs[] >>
   drule_all fmp_stage_lowered_shape >> gvs[wf_function_def]
-QED
-
-Theorem fmp_active_unique[local]:
-  ALL_DISTINCT (fn_labels f) /\ active_inst f i t /\ active_inst f j t ==>
-  i = j
-Proof
-  rpt strip_tac >> imp_res_tac active_inst_lookup_distinct >> gvs[]
 QED
 
 Theorem fmp_invoke_zero[local]:
@@ -164,7 +158,7 @@ Proof
   drule_all (unw fmp_stage_jump_step) >> strip_tac >> gvs[] >>
   `wf_function fn /\ ALL_DISTINCT (fn_labels fn')` by
     metis_tac[fmp_target_wf] >>
-  `inst' = bi'` by metis_tac[fmp_active_unique] >> gvs[] >>
+  `inst' = bi'` by metis_tac[active_inst_unique] >> gvs[] >>
   `is_terminator bi.inst_opcode` by simp[is_terminator_def] >>
   `~(jump_to lbl sb).vs_halted` by simp[jump_to_def] >>
   drule_all ld_terminating_run_entry >> strip_tac >>
@@ -282,7 +276,7 @@ Proof
              cf_params := pc0; cf_prov := gc0; cf_tvar := vc0 |>`]
     |> GEN_ALL |> SIMP_RULE (srw_ss()) []) >>
   strip_tac >> gvs[] >>
-  `ivk'' = ivk'` by metis_tac[fmp_active_unique] >> gvs[] >>
+  `ivk'' = ivk'` by metis_tac[active_inst_unique] >> gvs[] >>
   metis_tac[]
 QED
 
