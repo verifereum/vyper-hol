@@ -200,7 +200,7 @@ Proof
 QED
 
 
-Theorem typed_copy_dynarray_header_counted[local]:
+Theorem typed_copy_dynarray_scalar_header_counted[local]:
   emit_op MLOAD [Var src] sa = (Var len,sb) /\
   emit_op GT [Var len; Lit (n2w cap)] sb = (flag,sc) /\
   emit_op ISZERO [flag] sc = (valid,sd) /\
@@ -222,7 +222,7 @@ Theorem typed_copy_dynarray_header_counted[local]:
     gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
     t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
     ~t.vs_halted /\ lookup_var len t = SOME (n2w (LENGTH vs)) /\
-    op_taint tm (Var len) = {} /\
+    op_taint tm (Var len) = {} /\ FLOOKUP H len = NONE /\
     t = (mstore (w2n b) (n2w (LENGTH vs)) s) with
       <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
     tm.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
@@ -264,6 +264,7 @@ Proof
   simp[] >>
   conj_tac >- gvs[mstore_def,lookup_var_def] >>
   conj_tac >- gvs[op_taint_def] >>
+  conj_tac >- gvs[op_prov_def] >>
   conj_tac >- (qpat_x_assum `t' = _` SUBST1_TAC >>
     qpat_x_assum `t = _` SUBST1_TAC >> simp[mstore_def] >>
     gvs[emit_void_def,emit_inst_def,emit_def,comp_bind_def,
@@ -276,6 +277,7 @@ Proof
   qpat_x_assum `t' = _` SUBST1_TAC >> simp[mstore_def,lookup_var_def] >>
   fs[lookup_var_def,op_taint_def] >> metis_tac[])
 QED
+
 
 Theorem typed_copy_dynarray_shift_pair[local]:
   emit_op ADD [Var src; Lit 32w] sa = (Var sp,sb) /\
@@ -326,6 +328,95 @@ Proof
   qpat_x_assum `t = _` SUBST1_TAC >> simp[]
 QED
 
+Theorem typed_copy_dynarray_entry_scalar_counted:
+  emit_op MLOAD [Var src] sa = (Var len,sb) /\
+  emit_op GT [Var len; Lit (n2w cap)] sb = (flag,sc) /\
+  emit_op ISZERO [flag] sc = (valid,sd) /\
+  emit_inst ASSERT [valid] [] sd = ((),se) /\
+  emit_void MSTORE [Var dst; Var len] se = ((),sf) /\
+  emit_op ADD [Var src; Lit 32w] sf = (Var sp,sg) /\
+  emit_op ADD [Var dst; Lit 32w] sg = (Var dp,sh) /\
+  fn_has_code sa sb fn /\ fn_has_code sb se fn /\ fn_has_code se sf fn /\
+  fn_has_code sf sg fn /\ fn_has_code sg sh fn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  ptr_covers G tn src s (32+sn) /\ ptr_covers G tn dst s (32+dn) /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  w2n a+32 < dimword(:256) /\ w2n b+32 < dimword(:256) /\
+  LENGTH vs <= cap /\ cap < dimword(:256) /\
+  val_wf (ArrayTV tv (Dynamic oldcap)) (ArrayV (DynArrayV vs)) /\
+  (w2n a + type_memory_size (ArrayTV tv (Dynamic oldcap)) <= w2n b \/
+    w2n b+32 <= w2n a) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory (ArrayTV tv (Dynamic oldcap)) (ArrayV (DynArrayV vs)) (w2n a) mem) ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = sh.cs_current_bb /\ t.vs_inst_idx = LENGTH sh.cs_current_insts /\
+    ~t.vs_halted /\ lookup_var len t = SOME (n2w (LENGTH vs)) /\
+    op_taint tm (Var len) = {} /\ FLOOKUP H len = NONE /\
+    lookup_var sp t = SOME (a+32w) /\ op_taint tm (Var sp) = {} /\
+    lookup_var dp t = SOME (b+32w) /\ op_taint tm (Var dp) = {} /\
+    (0 < sn ==> ptr_covers H tm sp t sn) /\
+    (0 < dn ==> ptr_covers H tm dp t dn) /\
+    t = (mstore (w2n b) (n2w (LENGTH vs)) s) with
+      <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
+    tm.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!mem. mem_agree_outside tm.t_mem t.vs_memory mem ==>
+      mem_word_at (w2n b) mem = n2w (LENGTH vs)) /\
+    (!mem. mem_agree_outside tm.t_mem t.vs_memory mem ==>
+      val_in_memory (ArrayTV tv (Dynamic oldcap)) (ArrayV (DynArrayV vs)) (w2n a) mem) /\
+    (!i. ~(w2n b <= i /\ i < w2n b+32) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> (
+  `not_fresh_at sf len /\ (!p. not_fresh_at sa p ==> not_fresh_at sf p)` by
+    (gvs[emit_op_def,emit_inst_def,emit_void_def,comp_bind_def,
+      comp_ignore_bind_def,fresh_var_def,fresh_id_def,emit_def,
+      comp_return_def,not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  drule_at (Pat `emit_op MLOAD _ _ = _`) typed_copy_dynarray_scalar_header_counted >>
+  disch_then (drule_at (Pat `val_wf _ _`)) >>
+  disch_then (drule_at (Pat `ptr_covers G tn src s _`)) >>
+  disch_then (drule_at (Pat `ptr_covers G tn dst s _`)) >>
+  disch_then (drule_at (Pat `lookup_var src s = _`)) >>
+  disch_then (drule_at (Pat `lookup_var dst s = _`)) >>
+  disch_then (drule_at (Pat `emit_op GT _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_op ISZERO _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_inst ASSERT _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `ptr_covers H tm src t (32+sn) /\ ptr_covers H tm dst t (32+dn) /\
+   lookup_var src t = SOME a /\ lookup_var dst t = SOME b` by metis_tac[] >>
+  qpat_assum `emit_op ADD [Var src; Lit 32w] sf = _`
+    (mp_then (Pos hd) mp_tac typed_copy_dynarray_shift_pair) >>
+  disch_then (drule_at (Pat `ptr_covers H tm src t _`)) >>
+  disch_then (drule_at (Pat `lookup_var src t = _`)) >>
+  disch_then (drule_at (Pat `lookup_var dst t = _`)) >>
+  disch_then (drule_at (Pat `emit_op ADD [Var dst; Lit 32w] _ = _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (qspecl_then [`sn`,`PG`,`D`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`H'`,`tm'`,`t'`] >>
+  conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
+  `lookup_var len t' = SOME (n2w (LENGTH vs)) /\ op_taint tm' (Var len) = {} /\
+   FLOOKUP H' len = NONE` by metis_tac[] >>
+  `t.vs_memory = (mstore (w2n b) (n2w (LENGTH vs)) s).vs_memory` by
+    (qpat_x_assum `t = _` SUBST1_TAC >> simp[]) >>
+  simp[] >>
+  qpat_x_assum `t' = _` SUBST1_TAC >>
+  qpat_x_assum `t = _` SUBST1_TAC >> simp[] >> metis_tac[])
+QED
+
 Theorem typed_copy_dynarray_entry_counted:
   emit_op MLOAD [Var src] sa = (Var len,sb) /\
   emit_op GT [Var len; Lit (n2w cap)] sb = (flag,sc) /\
@@ -372,12 +463,7 @@ Theorem typed_copy_dynarray_entry_counted:
       FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> (
-  `not_fresh_at sf len /\ (!p. not_fresh_at sa p ==> not_fresh_at sf p)` by
-    (gvs[emit_op_def,emit_inst_def,emit_void_def,comp_bind_def,
-      comp_ignore_bind_def,fresh_var_def,fresh_id_def,emit_def,
-      comp_return_def,not_fresh_at_def] >>
-     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  drule_at (Pat `emit_op MLOAD _ _ = _`) typed_copy_dynarray_header_counted >>
+  drule_at (Pat `emit_op MLOAD _ _ = _`) typed_copy_dynarray_entry_scalar_counted >>
   disch_then (drule_at (Pat `val_wf _ _`)) >>
   disch_then (drule_at (Pat `ptr_covers G tn src s _`)) >>
   disch_then (drule_at (Pat `ptr_covers G tn dst s _`)) >>
@@ -387,29 +473,11 @@ Proof
   disch_then (drule_at (Pat `emit_op ISZERO _ _ = _`)) >>
   disch_then (drule_at (Pat `emit_inst ASSERT _ _ _ = _`)) >>
   disch_then (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_op ADD [Var src; Lit 32w] _ = _`)) >>
+  disch_then (drule_at (Pat `emit_op ADD [Var dst; Lit 32w] _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
   disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  `ptr_covers H tm src t (32+sn) /\ ptr_covers H tm dst t (32+dn) /\
-   lookup_var src t = SOME a /\ lookup_var dst t = SOME b` by metis_tac[] >>
-  qpat_assum `emit_op ADD [Var src; Lit 32w] sf = _`
-    (mp_then (Pos hd) mp_tac typed_copy_dynarray_shift_pair) >>
-  disch_then (drule_at (Pat `ptr_covers H tm src t _`)) >>
-  disch_then (drule_at (Pat `lookup_var src t = _`)) >>
-  disch_then (drule_at (Pat `lookup_var dst t = _`)) >>
-  disch_then (drule_at (Pat `emit_op ADD [Var dst; Lit 32w] _ = _`)) >>
-  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
-  disch_then (qspecl_then [`sn`,`PG`,`D`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  qexistsl_tac [`H'`,`tm'`,`t'`] >>
-  conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
-  `lookup_var len t' = SOME (n2w (LENGTH vs)) /\ op_taint tm' (Var len) = {}` by metis_tac[] >>
-  `t.vs_memory = (mstore (w2n b) (n2w (LENGTH vs)) s).vs_memory` by
-    (qpat_x_assum `t = _` SUBST1_TAC >> simp[]) >>
-  simp[] >>
-  qpat_x_assum `t' = _` SUBST1_TAC >>
-  qpat_x_assum `t = _` SUBST1_TAC >> simp[] >> metis_tac[])
+  goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[])
 QED
