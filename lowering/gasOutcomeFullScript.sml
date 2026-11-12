@@ -37,6 +37,27 @@ Proof
   rw[gas_outcome_full_def] >> qexists_tac `marks` >> metis_tac[]
 QED
 
+(* An outcome's normal post also knows the source run that reached it. *)
+Theorem gas_outcome_full_eval_evidence:
+  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
+    (es, s, G, tn) Q R ==>
+  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
+    (es, s, G, tn)
+    (\res ee G' tn' t. Q res ee G' tn' t /\
+       ?xs ee0. ee = ee0 with gas_obs := [] /\
+         !tail. source (es with gas_obs := xs ++ tail) =
+                (res, ee0 with gas_obs := tail)) R
+Proof
+  rw[gas_outcome_full_def] >> qexists_tac `marks`
+  >- (disj1_tac >> qexistsl_tac [`res`, `ee`, `OK t`, `G'`, `tn'`] >>
+      simp[] >>
+      disj1_tac >> qexistsl_tac [`gas_explicit marks s.vs_gas_readings`, `ee`] >>
+      simp[])
+  >- (disj1_tac >> qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >>
+      simp[]) >>
+  disj2_tac >> metis_tac[]
+QED
+
 Theorem gas_outcome_full_memory:
   gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
     (es, s, G, tn) Q R ==>

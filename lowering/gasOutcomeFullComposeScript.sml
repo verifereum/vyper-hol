@@ -8,12 +8,17 @@ Ancestors
 (* The certificate premises are the existing type-specific bind/error
    constructors, as in gas_outcome_ptr_bind. They do not add an oracle
    or execution premise to any source-language theorem. *)
-Theorem gas_outcome_full_bind:
+(* Composition where the source may also end in an exception that lands
+   at a normal target state (a loop's Break or Continue); that exception
+   passes straight to the composite's normal post. *)
+Theorem gas_outcome_full_bind_lands:
   gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
     (es, s, G, tn)
-    (\res mid G1 tn1 t. ?v. res = INL v /\
-       gas_outcome_full (D, lo, explicit, ctx, func, PG) tops (next v)
-         (mid, t, G1, tn1) Q R)
+    (\res mid G1 tn1 t.
+       (?v. res = INL v /\
+          gas_outcome_full (D, lo, explicit, ctx, func, PG) tops (next v)
+            (mid, t, G1, tn1) Q R) \/
+       (?exc. res = INR exc /\ Q (INR exc) mid G1 tn1 t))
     (\res ee gt r. ?exc. res = INR exc /\ R (INR exc) ee gt r) /\
   (!marks err ee leaf stop_state.
      gas_exempt_cert T tops (ctx, func) (ignore_bind source (return ()))
@@ -37,8 +42,8 @@ Proof
     simp[ignore_bind_def, bind_assoc] >>
   qpat_x_assum `gas_outcome_full _ _ source _ _ _`
     (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def])
-  >- (gvs[] >>
-      qpat_x_assum `gas_outcome_full _ _ (next _) _ _ _`
+  >- (gvs[]
+      >- (qpat_x_assum `gas_outcome_full _ _ (next _) _ _ _`
         (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def])
       >- (gvs[] >>
           `gas_path ctx func s (LENGTH marks) (OK t)` by
@@ -50,7 +55,8 @@ Proof
           qexists_tac `marks ++ marks'` >> disj1_tac >>
           qexistsl_tac [`res`, `ee'`, `OK t'`, `G''`, `tn''`] >>
           conj_tac
-          >- (asm_rewrite_tac[] >> irule gas_source_bind_normal >> simp[] >> metis_tac[]) >>
+          >- (asm_rewrite_tac[] >> irule gas_source_bind_normal >> simp[] >>
+              metis_tac[]) >>
           conj_tac
           >- (irule gas_origin_ptr_path_append >> metis_tac[]) >>
           metis_tac[])
@@ -74,12 +80,49 @@ Proof
          metis_tac[gas_origin_ptr_path_projections, gas_origin_path_erase]) >>
       asm_rewrite_tac[gas_outcome_full_def] >>
       qexists_tac `marks ++ marks'` >> disj2_tac >>
-      qexistsl_tac [`err`, `ee'`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `finish'`] >>
+      qexistsl_tac [`err`, `ee'`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`,
+                    `finish'`] >>
       conj_tac >- metis_tac[] >>
-      irule (cj 2 gas_origin_ptr_focus_rules) >> metis_tac[])
+      irule (cj 2 gas_origin_ptr_focus_rules) >> metis_tac[]) >>
+      rewrite_tac[gas_outcome_full_def] >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`INR exc`, `ee`, `OK t`, `G'`, `tn'`] >>
+      simp[] >> metis_tac[gas_source_bind_exception])
   >- (gvs[] >> rewrite_tac[gas_outcome_full_def] >>
       qexists_tac `marks` >> disj1_tac >>
       qexistsl_tac [`INR exc`, `ee`, `r`, `G'`, `tn'`] >>
       simp[] >> metis_tac[gas_source_bind_exception])
   >> asm_rewrite_tac[gas_outcome_full_def] >> metis_tac[]
+QED
+
+Theorem gas_outcome_full_bind:
+  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
+    (es, s, G, tn)
+    (\res mid G1 tn1 t. ?v. res = INL v /\
+       gas_outcome_full (D, lo, explicit, ctx, func, PG) tops (next v)
+         (mid, t, G1, tn1) Q R)
+    (\res ee gt r. ?exc. res = INR exc /\ R (INR exc) ee gt r) /\
+  (!marks err ee leaf stop_state.
+     gas_exempt_cert T tops (ctx, func) (ignore_bind source (return ()))
+       (es, s) marks (err, ee) (leaf, stop_state) ==>
+     gas_exempt_cert T tops (ctx, func)
+       (bind source (\v. ignore_bind (next v) (return ())))
+       (es, s) marks (err, ee) (leaf, stop_state)) /\
+  (!left v mid t right err ee leaf stop_state.
+     gas_marked_exec T (ctx, func) source (es, s) left (INL v) mid (OK t) /\
+     gas_exempt_cert T tops (ctx, func) (ignore_bind (next v) (return ()))
+       (mid with gas_obs := [], t) right (err, ee) (leaf, stop_state) ==>
+     gas_exempt_cert T tops (ctx, func)
+       (bind source (\v. ignore_bind (next v) (return ())))
+       (es, s) (left ++ right) (err, ee) (leaf, stop_state)) ==>
+  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops (bind source next)
+    (es, s, G, tn) Q R
+Proof
+  strip_tac >> irule gas_outcome_full_bind_lands >> rpt conj_tac
+  >~ [`gas_marked_exec`] >- (first_assum ACCEPT_TAC)
+  >~ [`gas_exempt_cert`] >- (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `gas_outcome_full _ _ source _ _ _`
+    (irule o MATCH_MP
+       (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_outcome_full_post_mono)) >>
+  simp[]
 QED
