@@ -208,9 +208,9 @@ QED
 (* The induction step: the source goes on at the next index, and the
    target reaches the related state by a fuel-monotone prefix. *)
 Theorem fmp_stage_block_succ[local]:
-  !s1 t2 K0.
-  (!kf q. K0 <= kf /\ exec_block kf C' bb' t2 = q /\ (!e. q <> Error e) ==>
-         exec_block kf C' bb' t = q) /\
+  !s1 t2.
+  (!q. exec_block k C' bb' t2 = q /\ (!e. q <> Error e) ==>
+       exec_block k C' bb' t = q) /\
   (?i2 G2 tn2 sm2 lo2.
      frame_reachable vs C stk PG G2 tn2 fn i2
        (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
@@ -226,7 +226,7 @@ Theorem fmp_stage_block_succ[local]:
      lookup_block s2.vs_current_bb fn.fn_blocks = SOME bb /\
      exec_block k C bb s2 = r2 /\ terminates r2 ==>
      ?bb2. lookup_block t2.vs_current_bb fn'.fn_blocks = SOME bb2 /\
-       ?k2 q2. exec_block k2 C' bb2 t2 = q2 /\
+       ?q2. exec_block k C' bb2 t2 = q2 /\
        fmp_stage_result D C C' vs fmp0 raw0 eom stk PG fn ts r2 q2) /\
   s.vs_inst_idx < LENGTH bb.bb_instructions /\
   s1.vs_current_bb = s.vs_current_bb /\ ~s1.vs_halted /\
@@ -234,8 +234,8 @@ Theorem fmp_stage_block_succ[local]:
   terminates r /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   lookup_block s.vs_current_bb fn'.fn_blocks = SOME bb' ==>
-  ?k' q. exec_block k' C' bb' t = q /\
-         fmp_stage_result D C C' vs fmp0 raw0 eom stk PG fn ts r q
+  ?q. exec_block k C' bb' t = q /\
+       fmp_stage_result D C C' vs fmp0 raw0 eom stk PG fn ts r q
 Proof
   rpt gen_tac >> strip_tac >>
   last_x_assum (qspecl_then [`s1 with vs_inst_idx := SUC s.vs_inst_idx`,
@@ -243,11 +243,7 @@ Proof
   simp[] >> strip_tac >>
   drule fmp_stage_rel_cur >> strip_tac >> gvs[] >>
   drule fmp_stage_result_not_error >> strip_tac >>
-  `exec_block (K0 + k2) C' bb' t2 = exec_block k2 C' bb' t2` by
-    (irule (CONJUNCT1 (CONJUNCT2 venomExecProofsTheory.fuel_mono)) >>
-     conj_tac >- first_assum ACCEPT_TAC >> qexists_tac `k2` >> simp[]) >>
-  qexists_tac `K0 + k2` >>
-  first_x_assum (qspec_then `K0 + k2` mp_tac) >> gvs[]
+  first_x_assum (qspec_then `q2` mp_tac) >> gvs[]
 QED
 
 (* Source: a step that doesn't continue ends the block with its result. *)
@@ -336,7 +332,7 @@ Theorem fmp_stage_block_sim_ind[local]:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     exec_block k C bb s = r /\ terminates r ==>
     ?bb'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
-      ?k' r'. exec_block k' C' bb' t = r' /\
+      ?r'. exec_block k C' bb' t = r' /\
       fmp_stage_result D C C' vs fmp0 raw0 eom stk PG fn ts r r'
 Proof
   completeInduct_on `m` >> rpt strip_tac >>
@@ -356,7 +352,7 @@ Proof
      lookup_block s2.vs_current_bb fn.fn_blocks = SOME bb /\
      exec_block k C bb s2 = r2 /\ terminates r2 ==>
      ?bb2. lookup_block t2.vs_current_bb fn'.fn_blocks = SOME bb2 /\
-       ?k2 q2. exec_block k2 C' bb2 t2 = q2 /\
+       ?q2. exec_block k C' bb2 t2 = q2 /\
        fmp_stage_result D C C' vs fmp0 raw0 eom stk PG fn ts r2 q2` by
     (rpt strip_tac >>
      qpat_x_assum `!m'. m' < _ ==> _`
@@ -403,7 +399,7 @@ Proof
              asm_simp_tac (srw_ss()) [jump_to_def]) >>
           `exec_block k C' bb' t = OK (jump_to lbl t1)` by
             (irule exec_block_target_run >> simp[] >> metis_tac[]) >>
-          qexists_tac `k` >> gvs[] >>
+          gvs[] >>
           irule jump_stage_result >> simp[] >> metis_tac[]) >>
       Cases_on `inst.inst_opcode = RET`
       >- (drule_all ret_step_intret >> strip_tac >> gvs[] >>
@@ -415,35 +411,38 @@ Proof
             (irule exec_block_source_stop >> simp[] >> metis_tac[]) >>
           `exec_block k C' bb' t = IntRet jr t1` by
             (irule exec_block_target_run >> simp[] >> metis_tac[]) >>
-          qexists_tac `k` >> gvs[] >>
+          gvs[] >>
           irule ret_stage_result >> simp[] >> metis_tac[]) >>
       `~MEM inst.inst_opcode [JMP; JNZ; DJMP; RET]` by gvs[] >>
       drule_all fmp_stage_halt_step >>
       disch_then (qx_choosel_then [`inst'`, `k1`, `r'`] strip_assume_tac) >>
       `inst' = inst` by metis_tac[active_inst_unique] >>
       pop_assum SUBST_ALL_TAC >>
+      `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[is_terminator_def]) >>
+      `step_inst k C' inst t1 = r'` by metis_tac[step_inst_non_invoke] >>
+      qpat_x_assum `step_inst k1 C' inst t1 = _` kall_tac >>
       reverse (Cases_on `?s1. q = OK s1`)
       >- (`exec_block k C bb s = q` by
             (irule exec_block_source_stop >> gvs[] >> metis_tac[]) >>
           `dead_result_rel D q r'` by (Cases_on `q` >> gvs[]) >>
-          `exec_block k1 C' bb' t1 = r'` by
+          `exec_block k C' bb' t1 = r'` by
             (irule exec_block_target_dead_rel >> metis_tac[]) >>
           `!e. r' <> Error e` by
             (Cases_on `q` >> Cases_on `r'` >> gvs[dead_result_rel_def]) >>
-          `exec_block k1 C' bb' t = r'` by
+          `exec_block k C' bb' t = r'` by
             (irule exec_block_target_run >> simp[] >> metis_tac[]) >>
-          qexists_tac `k1` >> gvs[] >>
+          gvs[] >>
           irule dead_result_stage_result >> simp[]) >>
-      gvs[] >> rename1 `step_inst k1 C' inst t1 = OK t3` >>
+      gvs[] >> rename1 `step_inst k C' inst t1 = OK t3` >>
       `exec_block k C bb s = Halt s1` by
          (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
              asm_simp_tac (srw_ss()) []) >>
-      `exec_block k1 C' bb' t1 = Halt t3` by
+      `exec_block k C' bb' t1 = Halt t3` by
          (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
              asm_simp_tac (srw_ss()) []) >>
-      `exec_block k1 C' bb' t = Halt t3` by
+      `exec_block k C' bb' t = Halt t3` by
         (irule exec_block_target_run >> simp[] >> metis_tac[]) >>
-      qexists_tac `k1` >> gvs[fmp_stage_result_def]) >>
+      gvs[fmp_stage_result_def]) >>
   Cases_on `in_revert_forward fn s`
   >- (drule_all revert_forward_rdc >> strip_tac >>
       drule_all fmp_stage_revert_forward >> strip_tac >> gvs[] >>
@@ -467,7 +466,7 @@ Proof
       `bb_well_formed bb'` by
         (imp_res_tac venomExecProofsTheory.lookup_block_MEM >> gvs[EVERY_MEM]) >>
       qexists_tac `bb'` >> conj_tac >- first_assum ACCEPT_TAC >>
-      qspecl_then [`s1`, `t1`, `0`] mp_tac fmp_stage_block_succ >>
+      qspecl_then [`s1`, `t1`] mp_tac fmp_stage_block_succ >>
       impl_tac
       >- (conj_tac
           >- (rpt strip_tac >> irule exec_block_target_run >> simp[] >>
@@ -495,11 +494,11 @@ Proof
       `bb_well_formed bb'` by
         (imp_res_tac venomExecProofsTheory.lookup_block_MEM >> gvs[EVERY_MEM]) >>
       qexists_tac `bb'` >> conj_tac >- first_assum ACCEPT_TAC >>
-      qspecl_then [`s1`, `t3`, `0`] mp_tac fmp_stage_block_succ >>
+      qspecl_then [`s1`, `t3`] mp_tac fmp_stage_block_succ >>
       impl_tac
       >- (conj_tac
           >- (rpt strip_tac >>
-              `exec_block kf C' bb' t1 = q` by
+              `exec_block k C' bb' t1 = q` by
                 (irule exec_block_target_run >> simp[] >> metis_tac[]) >>
               irule exec_block_target_run >> simp[] >> metis_tac[]) >>
           conj_tac >- metis_tac[] >>
@@ -529,24 +528,24 @@ Proof
         `DRESTRICT sm {key | key IN FDOM sm /\ FST (sm ' key) < lo1}`,
         `lo1`, `t1`, `ts`, `fn'`, `inv'`, `q`] mp_tac) >>
       impl_tac >- gvs[] >>
-      disch_then (qx_choosel_then [`m1`, `r'`] strip_assume_tac) >>
+      disch_then (qx_choose_then `r'` strip_assume_tac) >>
       reverse (Cases_on `?s1. q = OK s1`)
       >- (`exec_block k C bb s = q` by
             (irule exec_block_source_stop >> gvs[] >> metis_tac[]) >>
           `dead_result_rel D q r'` by (Cases_on `q` >> gvs[]) >>
-          `exec_block m1 C' bb' t1 = r'` by
+          `exec_block k C' bb' t1 = r'` by
             (irule exec_block_target_dead_rel >> metis_tac[]) >>
           `!e. r' <> Error e` by
             (Cases_on `q` >> Cases_on `r'` >> gvs[dead_result_rel_def]) >>
-          `exec_block m1 C' bb' t = r'` by
+          `exec_block k C' bb' t = r'` by
             (irule exec_block_target_run >> simp[] >> metis_tac[]) >>
-          qexists_tac `m1` >> gvs[] >>
+          gvs[] >>
           irule dead_result_stage_result >> simp[]) >>
       qpat_x_assum `?s1. q = OK s1` (qx_choose_then `s1` SUBST_ALL_TAC) >>
       qpat_x_assum `exec_result_CASE (OK s1) _ _ _ _ _`
         (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
       qpat_x_assum `r' = OK _` SUBST_ALL_TAC >>
-      rename1 `step_inst m1 C' inv' t1 = OK t3` >>
+      rename1 `step_inst k C' inv' t1 = OK t3` >>
       qspecl_then [`k`, `C`, `inst`, `s`, `s1`] mp_tac
         venomInstProofsTheory.step_preserves_control_flow >>
       impl_tac >- gvs[is_terminator_def] >> strip_tac >>
@@ -555,19 +554,26 @@ Proof
       impl_tac >- gvs[] >> strip_tac >>
       `exec_block k C bb (s1 with vs_inst_idx := SUC s.vs_inst_idx) = r` by
         metis_tac[exec_block_source_step] >>
-      qspecl_then [`s1`, `t3 with vs_inst_idx := SUC t1.vs_inst_idx`, `m1`] mp_tac fmp_stage_block_succ >>
+      qspecl_then [`s1`, `t3 with vs_inst_idx := SUC t1.vs_inst_idx`] mp_tac fmp_stage_block_succ >>
       impl_tac
       >- (conj_tac
           >- (rpt strip_tac >>
-              `exec_block kf C' bb' t1 = q` by
-                (irule exec_block_target_step >> simp[] >> metis_tac[]) >>
+              `exec_block k C' bb' t1 = q` by
+                (irule exec_block_target_step >> simp[] >>
+                 metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
               irule exec_block_target_run >> simp[] >> metis_tac[]) >>
           conj_tac >- metis_tac[] >>
           rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[get_instruction_def]) >>
       disch_then ACCEPT_TAC) >>
   (`~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; PHI]` by simp[] >>
       drule_all fmp_stage_op_step >> strip_tac >>
-      qspecl_then [`fn'`, `inst'`, `t`] mp_tac dftGasToListReachBoundaryTheory.active_inst_lookup_distinct >>
+      `active_inst fn' inst t` by
+        (irule fmp_stage_target_inst >> simp[] >> metis_tac[]) >>
+      `inst' = inst` by metis_tac[active_inst_unique] >>
+      pop_assum SUBST_ALL_TAC >>
+      `step_inst k C' inst t = r'` by metis_tac[step_inst_non_invoke] >>
+      qpat_x_assum `step_inst k' C' inst t = _` kall_tac >>
+      qspecl_then [`fn'`, `inst`, `t`] mp_tac dftGasToListReachBoundaryTheory.active_inst_lookup_distinct >>
       simp[] >> strip_tac >> rename1 `lookup_block _ fn'.fn_blocks = SOME bb'` >>
       `bb_well_formed bb'` by
         (imp_res_tac venomExecProofsTheory.lookup_block_MEM >> gvs[EVERY_MEM]) >>
@@ -576,9 +582,9 @@ Proof
       >- (`exec_block k C bb s = q` by
             (irule exec_block_source_stop >> gvs[] >> metis_tac[]) >>
           `dead_result_rel D q r'` by (Cases_on `q` >> gvs[]) >>
-          `exec_block k' C' bb' t = r'` by
+          `exec_block k C' bb' t = r'` by
             (irule exec_block_target_dead_rel >> metis_tac[]) >>
-          qexists_tac `k'` >> gvs[] >>
+          gvs[] >>
           irule dead_result_stage_result >> simp[]) >>
       (* OK *)
       qpat_x_assum `?s1. q = OK s1` (qx_choose_then `s1` SUBST_ALL_TAC) >>
@@ -590,15 +596,15 @@ Proof
          (step_taint inst s s1 tn) fn i2
          (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
         (irule frame_reachable_next >> simp[] >> metis_tac[]) >>
-      qspecl_then [`s1`, `t1 with vs_inst_idx := SUC t.vs_inst_idx`, `k'`] mp_tac fmp_stage_block_succ >>
+      qspecl_then [`s1`, `t1 with vs_inst_idx := SUC t.vs_inst_idx`] mp_tac fmp_stage_block_succ >>
       impl_tac
       >- (conj_tac
           >- (rpt strip_tac >> irule exec_block_target_step >> simp[] >>
-              metis_tac[]) >>
+              metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
           conj_tac >- metis_tac[] >>
           rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
-      disch_then (qx_choosel_then [`kz`, `qz`] strip_assume_tac) >>
-      qexists_tac `kz` >> gvs[])
+      disch_then (qx_choose_then `qz` strip_assume_tac) >>
+      gvs[])
 QED
 
 Theorem fmp_stage_block_sim:
@@ -610,10 +616,10 @@ Theorem fmp_stage_block_sim:
   fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   exec_block k C bb s = r /\ terminates r ==>
-  ?fn' bb' k' r'.
+  ?fn' bb' r'.
     lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
-    exec_block k' C' bb' t = r' /\
+    exec_block k C' bb' t = r' /\
     fmp_stage_result D C C' vs fmp0 raw0 eom stk PG fn ts r r'
 Proof
   strip_tac >>
