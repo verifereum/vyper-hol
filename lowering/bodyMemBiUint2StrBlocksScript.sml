@@ -53,11 +53,19 @@ Theorem u2s_final_address_run[local]:
       (update_var (u2s_var a 14) (bw+n2w n) s))
 Proof
   strip_tac >>
-  simp[u2s_final_def, u2s_inst_def, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operands_def, eval_operand_def,
-       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  gvs[eval_operand_def, lookup_var_def]
+  `step_inst_base (u2s_inst a 25 ADD [buf; Lit (n2w n)] [u2s_var a 14]) s =
+     OK (update_var (u2s_var a 14) (bw + n2w n) s)` by
+    (simp[u2s_inst_def] >> irule emitHelperPropsTheory.step_ADD >>
+     simp[emitHelperPropsTheory.eval_operand_lit]) >>
+  `step_inst_base (u2s_inst a 26 SUB
+      [Var (u2s_var a 14); Var (u2s_var a 1)] [u2s_var a 15])
+      (update_var (u2s_var a 14) (bw + n2w n) s) =
+     OK (update_var (u2s_var a 15) (bw + n2w n - iw)
+       (update_var (u2s_var a 14) (bw + n2w n) s))` by
+    (simp[u2s_inst_def] >> irule emitHelperPropsTheory.step_SUB >>
+     simp[emitHelperPropsTheory.eval_operand_update_var,
+          emitHelperPropsTheory.eval_operand_update_other]) >>
+  simp[u2s_final_def, exprLoweringPropsTheory.run_inst_seq_def]
 QED
 
 Theorem u2s_final_nonstore_mem_ok[local]:

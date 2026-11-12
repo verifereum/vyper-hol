@@ -261,7 +261,9 @@ Resume compile_extract32_sim_mem[suffix_entry]:
 QED
 Resume compile_extract32_sim_mem[suffix_success]:
   `Num i + 32 <= LENGTH bs` by
-    (fs[vyperContextTheory.evaluate_extract32_def, AllCaseEqs()]) >>
+    (qpat_x_assum `evaluate_extract32 _ _ _ = INL _` mp_tac >>
+     rewrite_tac[vyperContextTheory.evaluate_extract32_def] >>
+     IF_CASES_TAC >> simp_tac (srw_ss()) []) >>
   `stmt_state_rel ctx func cenv cx es_end' t'` by fs[expr_post_def] >>
   `is_word_type (BaseT bt)` by
     (Cases_on `bt` >> gvs[extract32_result_base_ok_def, is_word_type_def] >>
