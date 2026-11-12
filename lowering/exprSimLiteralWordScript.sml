@@ -72,6 +72,8 @@ Proof
   qexistsl_tac [`[]`, `evaluate_literal l`, `es`, `s0`] >> conj_tac
   >- (simp[gas_marked_exec_def, gas_marked_path_def, literal_read_all_tails] >>
       irule (cj 1 gas_path_rules) >> simp[]) >>
-  rpt strip_tac >> metis_tac[literal_word_prefix]
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+  irule literal_word_prefix >> fs[]
 QED
 

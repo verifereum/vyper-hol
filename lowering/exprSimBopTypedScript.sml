@@ -131,6 +131,8 @@ Resume compile_bop_typed_sim[left_normal]:
      `expr_post H ctx func cenv cx e1 es sa s1 s0
         (es_end with gas_obs := []) v1 x t` by metis_tac[] >>
      simp[gas_value_prefix_def] >> metis_tac[]) >>
+  qpat_x_assum `res = INL v1` SUBST_ALL_TAC >>
+  qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
   qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
   disch_then (mp_tac o CONJUNCT1) >>

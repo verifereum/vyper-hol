@@ -119,7 +119,8 @@ Proof
       rewrite_tac[gas_summary_at_def] >>
       qexistsl_tac [`INR ex`, `mid`, `r`] >>
       conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      BETA_TAC >> simp[] >> rpt strip_tac >>
+      BETA_TAC >> simp[] >> disj2_tac >>
+      conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >>
       `?ex'. INR ex = INR ex' /\ R H (INR ex') (mid with gas_obs := []) r` by
         metis_tac[] >>
       gvs[]) >>
