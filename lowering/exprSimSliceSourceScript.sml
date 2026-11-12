@@ -175,11 +175,10 @@ Theorem slice_dispatch_extcode:
     [Builtin ct (Acc Code) [a]; start; len] st =
   (let (start_op, st1) = lower_value cfn cenv ty start st in
    let (len_op, st2) = lower_value cfn cenv ty len st1 in
-   let ((out_buf, out_data), st3) =
-     compile_slice_out_buf (type_memory_bytes cenv ann) st2 in
-   let (addr_op, st4) = lower_value cfn cenv ty a st3 in
+   let (addr_op, st3) = lower_value cfn cenv ty a st2 in
    as_ptr_val ann LocMemory
-     (compile_slice_extcode addr_op start_op len_op out_buf out_data st4))
+     (compile_slice_extcode addr_op start_op len_op
+        (type_memory_bytes cenv ann) st3))
 Proof
   simp[compile_builtin_dispatch_body_def, is_self_code_def, is_extcode_def,
        extcode_addr_expr_def]

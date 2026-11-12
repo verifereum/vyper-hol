@@ -20,14 +20,6 @@ Definition ld_memory_agree_def:
        read_byte (b+j) sm = read_byte (c+j) tm)
 End
 
-(* The dynamic region [fl, 2^256) that DALLOCA allocates from holds the
-   same bytes on both sides: DALLOCA pointers are not relocated. *)
-Definition ld_dyn_agree_def:
-  ld_dyn_agree fl mask sm tm <=>
-    !i. fl <= i /\ i < dimword (:256) /\ i NOTIN mask ==>
-        read_byte i sm = read_byte i tm
-End
-
 Theorem ld_value_agree_scalar:
   ld_value_agree sites NONE m x y <=> word_agree_except m x y
 Proof

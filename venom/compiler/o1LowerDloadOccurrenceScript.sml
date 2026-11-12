@@ -113,14 +113,6 @@ Proof
   metis_tac[frame_reachable_rules]
 QED
 
-(* The floor of the dynamic region: DALLOCA allocates at or above the
-   initial free-memory pointer.  Without a DALLOCA it is 2^256, above
-   every site. *)
-Definition dyn_floor_def:
-  dyn_floor C (vs:venom_state) =
-    if ctx_has_dalloca C then w2n vs.vs_initial_fmp else dimword (:256)
-End
-
 (* Erasure: a tracked identity names G's site, and a dangling identity is
    no untracked value.  G's untracked entries are DALLOCA pointers, the
    same word on both sides, with sites at or above the floor fl. *)
