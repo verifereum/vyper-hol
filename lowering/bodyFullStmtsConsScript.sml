@@ -111,6 +111,8 @@ Proof
       qexistsl_tac [`mid`, `t`] >> Cases_on `v` >> fs[])
   >~ [`gas_exempt_cert _ _ _ (ignore_bind (eval_stmt _ _) _)`]
   >- (rpt strip_tac >> irule (cj 3 gas_exempt_cert_rules) >> simp[])
+  >~ [`storage_trace_frame (eval_stmt _ _)`]
+  >- simp[evaluate_storage_trace_frame]
   >~ [`storage_trace_frame _`]
   >- simp[evaluate_storage_trace_frame] >>
   qexists_tac `\H res ee G tn t. headQ H res ee G tn t /\
