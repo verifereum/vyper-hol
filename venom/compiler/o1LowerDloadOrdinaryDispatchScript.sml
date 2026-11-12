@@ -47,6 +47,13 @@ Proof
   first_x_assum drule_all >> simp[op_taint_def]
 QED
 
+(* Run tac only on a goal whose head constant is name ("?" for an
+   existential); fail otherwise, so FIRST tries the next case. *)
+fun ld_on_head name tac (g as (_, w)) =
+  let val hd = if is_exists w then "?"
+               else (#1 (dest_const (#1 (strip_comb w))) handle HOL_ERR _ => "")
+  in if hd = name then tac g else NO_TAC g end
+
 Theorem ld_joint_dalloca_next[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
@@ -120,7 +127,9 @@ Proof
     (t with vs_fmp := t.vs_fmp + n2w (ceil32 (w2n sz)))` >>
   qexistsl_tac [`u`,`fn'`] >>
   conj_tac >- (simp[ld_dalloca_success_iff] >> metis_tac[]) >>
-  simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   `ld_env_agree sites fn (occurrence_step a HP H inst s1)
      (entry_taint with t_var := (step_taint inst s s1 tn).t_var)
      (update_var out s.vs_fmp
@@ -130,16 +139,26 @@ Proof
     (irule ld_env_dalloca_update >> simp[] >>
      qexists_tac `entry_taint with t_var := tn.t_var` >> simp[]) >>
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
-  simp[ld_joint_boundary_def] >> rpt conj_tac
-  >- (qexists_tac `u` >>
-      gvs[ld_joint_frame_def, ld_params_agree_def, ld_joint_local_fields_def,
-          ld_joint_allocas_def, venomStateTheory.update_var_def] >>
-      qpat_x_assum `ld_joint_control _ _ _ (_ with vs_inst_idx := _) _` mp_tac >>
-      simp[NoAsms, ld_joint_control_def] >> strip_tac >> gvs[] >> metis_tac[])
-  >- (gvs[ld_memory_agree_def, venomStateTheory.update_var_def, SUBSET_DEF] >> metis_tac[])
-  >- (gvs[ld_dyn_agree_def, venomStateTheory.update_var_def, SUBSET_DEF] >> metis_tac[])
-  >- (gvs[ld_shared_agree_def, venomStateTheory.update_var_def] >> metis_tac[]) >>
-  gvs[venomStateTheory.update_var_def]
+  rewrite_tac[ld_joint_boundary_def] >> rpt conj_tac >>
+  FIRST [
+    first_assum ACCEPT_TAC,
+    ld_on_head "ld_memory_agree"
+      (gvs[ld_memory_agree_def, venomStateTheory.update_var_def, SUBSET_DEF] >>
+       metis_tac[]),
+    ld_on_head "ld_dyn_agree"
+      (gvs[ld_dyn_agree_def, venomStateTheory.update_var_def, SUBSET_DEF] >>
+       metis_tac[]),
+    ld_on_head "ld_shared_agree"
+      (gvs[ld_shared_agree_def, venomStateTheory.update_var_def] >> metis_tac[]),
+    ld_on_head "?"
+      (qexists_tac `u` >>
+       gvs[ld_joint_frame_def, ld_params_agree_def, ld_joint_local_fields_def,
+           ld_joint_allocas_def, venomStateTheory.update_var_def] >>
+       qpat_x_assum `ld_joint_control _ _ _ (_ with vs_inst_idx := _) _` mp_tac >>
+       simp[NoAsms, ld_joint_control_def] >> strip_tac >> gvs[] >> metis_tac[]),
+    gvs[venomStateTheory.update_var_def] >> NO_TAC,
+    fn (g as (_, w)) => (print ("ld_joint_dalloca_next: no case closes " ^
+        term_to_string w ^ "\n"); NO_TAC g)]
 QED
 
 Theorem ld_joint_ordinary_next:

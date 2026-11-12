@@ -139,7 +139,10 @@ Resume ld_sync_ordinary_raw[ranges]:
        (drule ld_sync_frontier >> simp[]) >>
      irule ld_source_range_frontier >>
      fs[raw_mem_ok_def, ld_nonghost_def] >> metis_tac[]) >>
-  Cases_on `y = x` >> fs[] >> decide_tac
+  `r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next \/
+   w2n f.lf_tgt.vs_initial_fmp <= w2n y /\ w2n y + r1 <= w2n f.lf_tgt.vs_fmp`
+    suffices_by (rpt strip_tac >> FIRST [decide_tac, fs[] >> decide_tac]) >>
+  metis_tac[]
 QED
 Finalise ld_sync_ordinary_raw
 
