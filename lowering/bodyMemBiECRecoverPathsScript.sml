@@ -38,7 +38,7 @@ Theorem ecrecover_failure_path_mem:
   compile_ecrecover h v r sig sm = (op,sb) /\
   eval_operand h t = SOME wh /\ eval_operand v t = SOME wv /\
   eval_operand r t = SOME wr /\ eval_operand sig t = SOME ws /\
-  stmt_state_rel ctx func cenv cx es t /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es t /\ fn_inst_ids_distinct func /\
   fn_has_code sm sb func /\
   ~(?co rest. t.vs_outcomes = co::rest /\ co.co_success) /\
   local_ptrs_reserved cenv sm /\
@@ -72,17 +72,17 @@ Theorem ecrecover_success_path_mem:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
   (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sm x) /\
   wb_frame cenv es es' sa s0 t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es' t /\ alloca_history func t /\
+  stmt_state_rel H ctx func cenv cx es' t /\ alloca_history func t /\
   eval_operand h t = SOME wh /\ eval_operand v t = SOME wv /\
   eval_operand r t = SOME wr /\ eval_operand sig t = SOME ws /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) ==>
   ?n u. gas_marked_path T ctx func t n (OK u) /\
-    expr_post ctx func cenv cx (Builtin (BaseT AddressT) ECRecover args)
+    expr_post H ctx func cenv cx (Builtin (BaseT AddressT) ECRecover args)
       es sa sb s0 (es' with outcomes := SOME rest)
       (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n ws) of
         NONE => 0w | SOME a => a)) op u /\
