@@ -1,5 +1,6 @@
 (* Memory case for struct literals with widened internal-call fields.
-   The body-aware tuple contract owns child execution and typed stores. *)
+   The body-aware tuple contract owns child execution and typed stores when
+   every field is flat against its declared type; a nested widening is held. *)
 Theory bodyMemStructLitWidened
 Ancestors
   bodyMemoryPreds typedCopyRankPathMem bodyMemStructFieldsBody
@@ -9,18 +10,18 @@ Ancestors
   exprSimAggregateSource exprSimBuffer bodyMemAggregateBounds valueEncoding
   loweringPosts exprSimSource exprSimAggregateChildren vyperAST vyperInterpreter vyperState
 
-(* TEMPORARILY CHEATED - as on the base: the ported field traversal needs
-   each field flat against its declared type (the flat/nested split of the
-   twin MakeArray leaf, bodyMemMakeArrayWidened), which is not yet threaded
-   through this proof.
-Theorem body_struct_lit_widened_call_elem_mem:
+Theorem body_struct_lit_widened_flat_mem[local]:
   !cx v7 src_id_opt id kes.
     (!ks. ks = MAP FST kes ==> body_exprs_mem_ok cx (MAP SND kes)) ==>
     !tops ctx func cenv env ty es.
       body_inv tops ctx cenv cx /\
       expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es /\
       (?e. MEM e (MAP SND kes) /\ int_calls_expr e <> [] /\
-           lowered_value_type cenv e <> expr_type e) ==>
+           lowered_value_type cenv e <> expr_type e) /\
+      LIST_REL (\t e. t = expr_type e \/
+        is_bytestring_type t /\ is_bytestring_type (expr_type e))
+        (MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+           (nsid_to_string (src_id_opt,id)))) (MAP SND kes) ==>
       expr_sim_mem ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es /\
       expr_vv_sim_mem ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
 Proof
@@ -52,7 +53,7 @@ Proof
   suspend "fields"
 QED
 
-Resume body_struct_lit_widened_call_elem_mem[fields]:
+Resume body_struct_lit_widened_flat_mem[fields]:
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)
@@ -81,7 +82,7 @@ Resume body_struct_lit_widened_call_elem_mem[fields]:
   suspend "value_post"
 QED
 
-Resume body_struct_lit_widened_call_elem_mem[value_post]:
+Resume body_struct_lit_widened_flat_mem[value_post]:
   `eval_expr cx (StructLit v7 (src_id_opt,id) kes) (es with gas_obs := gs) =
     (INL (Value (StructV (ZIP (MAP FST kes,vs)))),ee)` by
     (drule aggregate_eval_struct >> simp[]) >>
@@ -138,7 +139,7 @@ Resume body_struct_lit_widened_call_elem_mem[value_post]:
   suspend "buffer_post"
 QED
 
-Resume body_struct_lit_widened_call_elem_mem[buffer_post]:
+Resume body_struct_lit_widened_flat_mem[buffer_post]:
   conj_asm1_tac
   >- (irule buffer_loop_memory_vv_post >>
       simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
@@ -167,7 +168,28 @@ Resume body_struct_lit_widened_call_elem_mem[buffer_post]:
   metis_tac[]
 QED
 Finalise body_struct_lit_widened_call_elem_mem
-*)
+
+(* HELD, the twin of bodyMemAggregateLoops' aggregate_make_tuple_nested_sim_mem:
+   a field whose declared type it widens to other than as a bytestring (a
+   nested bound change), which needs a typed relayout store. *)
+Theorem body_struct_lit_widened_nested_mem[local]:
+  !cx v7 src_id_opt id kes.
+    (!ks. ks = MAP FST kes ==> body_exprs_mem_ok cx (MAP SND kes)) ==>
+    !tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es /\
+      (?e. MEM e (MAP SND kes) /\ int_calls_expr e <> [] /\
+           lowered_value_type cenv e <> expr_type e) /\
+      ~LIST_REL (\t e. t = expr_type e \/
+        is_bytestring_type t /\ is_bytestring_type (expr_type e))
+        (MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+           (nsid_to_string (src_id_opt,id)))) (MAP SND kes) ==>
+      expr_sim_mem ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es /\
+      expr_vv_sim_mem ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
+Proof
+  cheat
+QED
+
 Theorem body_struct_lit_widened_call_elem_mem:
   !cx v7 src_id_opt id kes.
     (!ks. ks = MAP FST kes ==> body_exprs_mem_ok cx (MAP SND kes)) ==>
@@ -179,5 +201,22 @@ Theorem body_struct_lit_widened_call_elem_mem:
       expr_sim_mem ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es /\
       expr_vv_sim_mem ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
 Proof
-  cheat
+  rpt gen_tac >> disch_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `LIST_REL (\t e. t = expr_type e \/
+        is_bytestring_type t /\ is_bytestring_type (expr_type e))
+        (MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+           (nsid_to_string (src_id_opt,id)))) (MAP SND kes)`
+  >- (mp_tac (SPEC_ALL body_struct_lit_widened_flat_mem) >>
+      impl_tac >- first_assum ACCEPT_TAC >>
+      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`, `es`]
+        mp_tac) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      simp[]) >>
+  mp_tac (SPEC_ALL body_struct_lit_widened_nested_mem) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`, `es`]
+    mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[]
 QED
