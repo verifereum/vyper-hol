@@ -5,6 +5,32 @@ Ancestors fragGasPathMem fragGasOriginPtr memSafeRun gasCount stmtForRangeMemory
   finite_map words contextCodegenRel codegenRel compileEnv loweringStateRelDefs emitHelperProps
   exprLoweringProps typedCopyArrayPtr
 
+(* Boundary probe: the raw-entry and PHI-entry taints are observably different. *)
+Theorem dispatch_phi_taint_probe[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME
+    <| bb_label := "fallback";
+       bb_instructions :=
+         [mk_inst 90 PHI [Label "entry"; Var "incoming"] ["copied"];
+          mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]] |> /\
+  s.vs_prev_bb = SOME "entry" ==>
+  let tn = entry_taint with t_var := FEMPTY |+ ("incoming", {0}) in
+    op_taint tn (Var "copied") = {} /\
+    op_taint (entry_taint_vars fn s tn) (Var "copied") = {0} /\
+    taint_ok fn tn (mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]) s /\
+    ~taint_ok fn (entry_taint_vars fn s tn)
+       (mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]) s
+Proof
+  strip_tac >>
+  simp[entry_taint_vars_def, phis_taint_def, phi_taint_def,
+       resolve_phi_def, set_var_taint_def, op_taint_def,
+       entry_taint_def, FLOOKUP_UPDATE, mk_inst_def, taint_ok_def,
+       source_memory_read_ranges_def] >>
+  conj_tac
+  >- (gen_tac >> Cases_on `op = Var "copied"` >> gvs[] >>
+      Cases_on `op = Lit 0w` >> gvs[]) >>
+  qexists_tac `Var "copied"` >> simp[]
+QED
+
 Theorem ptr_safe_jump_exact_continuation:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
