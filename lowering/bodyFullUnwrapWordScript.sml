@@ -109,7 +109,8 @@ Proof
   `w2n w + 32 <= s.vs_alloca_next` by
     (`val_store_size rty v = 32` by metis_tac[word_val_store_size] >>
      fs[vv_store_bound_def] >>
-     first_x_assum (qspecl_then [`t`, `Var src`, `v`, `rty`, `w`] mp_tac) >>
+     qpat_x_assum `!tvt. _ /\ _ ==> val_store_size tvt v = 0 \/ _`
+       (qspec_then `rty` mp_tac) >>
      simp[]) >>
   `run_inst_seq_mem_ok [inst] s` by
     metis_tac[body_word_load_prefix_mem_ok] >>
@@ -129,27 +130,39 @@ Proof
   `mem_word_taint tn.t_mem (w2n w) = {}` by
     (simp[mem_word_taint_def, EXTENSION] >> rpt strip_tac >>
      CCONTR_TAC >> fs[] >>
-     first_x_assum (qspec_then `w2n w + x` mp_tac) >> simp[]) >>
-  qexistsl [`v`, `Gf`, `tnf`, `u with vs_inst_idx := LENGTH sc.cs_current_insts`] >>
-  simp[expr_store_bound_word] >>
+     qpat_x_assum `!i. w2n w <= i /\ _ ==> _` (qspec_then `w2n w + x` mp_tac) >>
+     simp[]) >>
+  TRY (qunabbrev_tac `u`) >>
+  `is_word_type (post_value_type cenv e)` by gvs[] >>
+  qexistsl [`v`, `Gf`, `tnf`,
+            `update_var out (mload (w2n w) s) s with vs_inst_idx := LENGTH sc.cs_current_insts`] >>
   rpt conj_tac
-  >- simp[Abbr `u`, update_var_def]
-  >- simp[Abbr `u`, update_var_def]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- fs[expr_store_bound_word]
+  >- fs[update_var_def]
+  >- simp[]
+  >- first_assum ACCEPT_TAC
+  >- fs[update_var_def]
+  >- fs[update_var_def]
   >- (irule ghost_inv_at_register_transport >>
       qexistsl [`G`, `s`, `sa`, `tn`] >>
-      simp[Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
       rpt strip_tac >> res_tac >> res_tac >> simp[])
-  >- (irule ptr_val_ok_word >> simp[])
+  >- (irule ptr_val_ok_word >> fs[])
+  >- fs[]
+  >- fs[]
   >- (irule ghost_kept_at_clean_suffix >> simp[] >>
-      goal_assum drule >> metis_tac[SUBSET_REFL])
+      metis_tac[SUBSET_REFL])
   >- (rpt strip_tac >> res_tac >>
-      simp[Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE])
-  >- (simp[wb_frame_def, Abbr `u`, update_var_def, locals_kept_mem] >>
+      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE])
+  >- (simp[wb_frame_def, update_var_def, locals_kept_mem] >>
       rpt strip_tac >> res_tac >>
       fs[lookup_var_def, FLOOKUP_UPDATE])
-  >> irule ghost_kept_at_clean_suffix >>
+  >> (irule ghost_kept_at_clean_suffix >>
   qexistsl [`G`, `tn`] >> simp[ghost_kept_at_def] >>
-  metis_tac[SUBSET_REFL]
+  metis_tac[SUBSET_REFL])
 QED
 
 (* A storage or transient word is forced by one SLOAD or TLOAD. *)
@@ -216,11 +229,12 @@ Theorem unwrap_slot_word_origin_ptr:
     wb_frame cenv ee sb s z /\
     ghost_kept_at lo cenv ee sb G tn s H tf
 Proof
-  strip_tac >> qpat_x_assum `vv = _` SUBST_ALL_TAC >>
+  disch_then (fn th => MAP_EVERY assume_tac (CONJUNCTS th)) >>
+  qpat_x_assum `vv = _` SUBST_ALL_TAC >>
   `post_value_type cenv e = expr_type e` by
-    (CCONTR_TAC >> drule_all aggregate_unequal_post_result_location >> gvs[]) >>
-  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
-                      REWRITE_TAC [th] >> assume_tac th) >>
+    (CCONTR_TAC >> drule aggregate_unequal_post_result_location >>
+     disch_then drule >> gvs[]) >>
+  pop_assum (fn th => REWRITE_TAC [th] >> assume_tac th) >>
   `?tr. p.ptr_location = slot_loc tr` by
     (simp[slot_loc_def] >> metis_tac[]) >>
   `evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rty` by
@@ -245,10 +259,11 @@ Proof
     mp_tac (Q.GENL [`load`, `arg`, `key`, `id`, `out`, `fn`]
               copy_slot_load_segment) >>
   impl_tac >- (Cases_on `tr` >> simp[]) >>
-  strip_tac >> rename1 `run_inst_seq _ s = OK u` >>
+  disch_then (qx_choosel_then [`Gf`, `tnf`, `u`] strip_assume_tac) >>
   `step_inst_base inst s = OK u` by
-    (qpat_x_assum `run_inst_seq _ s = OK u` mp_tac >>
-     simp[run_inst_seq_def, Abbr `inst`] >> CASE_TAC >> simp[]) >>
+    (qpat_x_assum `run_inst_seq _ s = OK u` mp_tac >> qunabbrev_tac `inst` >>
+     qmatch_goalsub_abbrev_tac `run_inst_seq [i0] s` >>
+     simp[run_inst_seq_def] >> Cases_on `step_inst_base i0 s` >> simp[]) >>
   `Gf = step_prov PG G inst u /\ tnf = step_taint inst s u tn` by
     (qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[inst_seq_ptr_def, Abbr `inst`]) >>
@@ -276,11 +291,19 @@ Proof
     (drule unwrap_storage_word_post >>
      disch_then (qspecl_then [`v`, `tr`, `sc`, `op`, `a`] mp_tac) >>
      simp[Abbr `out`, ADD1]) >>
+  TRY (qunabbrev_tac `u`) >>
+  `is_word_type (expr_type e)` by gvs[] >>
   qexistsl [`v`, `Gf`, `tnf`, `u with vs_inst_idx := LENGTH sc.cs_current_insts`] >>
-  simp[expr_store_bound_word] >>
   rpt conj_tac
-  >- simp[update_var_def]
-  >- simp[update_var_def]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- fs[expr_store_bound_word]
+  >- fs[update_var_def]
+  >- simp[]
+  >- first_assum ACCEPT_TAC
+  >- fs[update_var_def]
+  >- fs[update_var_def]
   >- (irule ghost_inv_at_register_transport >>
       qexistsl [`G`, `s`, `sa`, `tn`] >>
       simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -290,16 +313,18 @@ Proof
       >> irule step_prov_out_none >>
       simp[Abbr `inst`, mk_inst_def] >>
       irule out_prov_other_none >> Cases_on `tr` >> simp[mk_inst_def])
+  >- fs[]
+  >- fs[]
   >- (irule ghost_kept_at_clean_suffix >> simp[] >>
-      goal_assum drule >> metis_tac[SUBSET_REFL])
+      metis_tac[SUBSET_REFL])
   >- (rpt strip_tac >> res_tac >>
       simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE])
   >- (simp[wb_frame_def, update_var_def, locals_kept_mem] >>
       rpt strip_tac >> res_tac >>
       fs[lookup_var_def, FLOOKUP_UPDATE])
-  >> irule ghost_kept_at_clean_suffix >>
+  >> (irule ghost_kept_at_clean_suffix >>
   qexistsl [`G`, `tn`] >> simp[ghost_kept_at_def] >>
-  metis_tac[SUBSET_REFL]
+  metis_tac[SUBSET_REFL])
 QED
 
 (* The constructor's word load binds only its fresh outputs. *)
@@ -401,9 +426,9 @@ Theorem unwrap_code_word_origin_ptr:
 Proof
   strip_tac >> qpat_x_assum `vv = _` SUBST_ALL_TAC >>
   `post_value_type cenv e = expr_type e` by
-    (CCONTR_TAC >> drule_all aggregate_unequal_post_result_location >> gvs[]) >>
-  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
-                      REWRITE_TAC [th] >> assume_tac th) >>
+    (CCONTR_TAC >> drule aggregate_unequal_post_result_location >>
+     disch_then drule >> gvs[]) >>
+  pop_assum (fn th => REWRITE_TAC [th] >> assume_tac th) >>
   reverse (Cases_on `cenv.ce_is_ctor`) >- suspend "runtime" >>
   drule_all vv_post_code_source >> strip_tac >>
   `stmt_state_rel ctx func cenv cx ee s` by fs[vv_post_def] >>
@@ -411,6 +436,7 @@ Proof
     gvs[unwrap_value_def, compile_ptr_load_def] >>
   `op_taint tn p.ptr_operand = {} /\ op_prov G p.ptr_operand = NONE` by
     fs[ptr_vv_ok_def] >>
+  TRY (qunabbrev_tac `u`) >>
   `is_word_type (expr_type e)` by metis_tac[] >>
   `type_memory_size rty = 32` by metis_tac[word_tv_memory_size] >>
   `w2n a + 32 <= lo /\
@@ -426,7 +452,8 @@ Proof
      drule robust_mem_word_at_clean >> strip_tac >>
      simp[mem_word_taint_def, EXTENSION] >> rpt strip_tac >>
      CCONTR_TAC >> fs[] >>
-     first_x_assum (qspec_then `w2n a + x` mp_tac) >> simp[]) >>
+     qpat_x_assum `!i. w2n a <= i /\ _ ==> _` (qspec_then `w2n a + x` mp_tac) >>
+     simp[]) >>
   `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
   `!region. cenv.ce_imm_alloca = SOME region ==>
      eval_operand region s = SOME 0w /\ copy_old_operand sb region /\
@@ -446,7 +473,7 @@ Proof
     mp_tac (Q.GENL [`imm`, `arg`, `sa`, `op`, `sb`, `D`, `lo`, `ctx`, `fn`,
                     `PG`, `G`, `tn`, `s`, `a`] code_copy_ctor_load) >>
   impl_tac >- fs[copy_old_operand_def, vv_operand_def] >>
-  strip_tac >> rename1 `copy_runtime_frame sb s sc u` >>
+  disch_then (qx_choosel_then [`Gf`, `tnf`, `u`] strip_assume_tac) >>
   `run_inst_seq (emitted_insts sb sc) s = OK u /\
    sc.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb sc /\
    (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s)` by
@@ -501,17 +528,25 @@ Proof
      impl_tac >- gvs[immutable_copy_read_def] >>
      simp[]) >>
   qexistsl [`v`, `Gf`, `tnf`, `u with vs_inst_idx := LENGTH sc.cs_current_insts`] >>
-  simp[expr_store_bound_word] >>
   rpt conj_tac
-  >~ [`ghost_inv_at`]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- fs[expr_store_bound_word]
+  >- fs[update_var_def]
+  >- simp[]
+  >- first_assum ACCEPT_TAC
+  >- fs[update_var_def]
+  >- fs[update_var_def]
   >- (irule ghost_inv_at_register_transport >>
       qexistsl [`G`, `s`, `sa`, `tn`] >> simp[] >> metis_tac[])
-  >~ [`ptr_val_ok`] >- (irule ptr_val_ok_word >> simp[])
-  >~ [`wb_frame`] >- (simp[wb_frame_def, locals_kept_mem] >> metis_tac[])
-  >~ [`ghost_kept_at _ _ _ sa`]
+  >- (irule ptr_val_ok_word >> fs[])
+  >- fs[]
+  >- fs[]
   >- (irule ghost_kept_at_clean_suffix >> simp[] >>
-      goal_assum drule >> metis_tac[SUBSET_REFL])
-  >~ [`lookup_var`] >- metis_tac[]
+      metis_tac[SUBSET_REFL])
+  >- metis_tac[]
+  >- (simp[wb_frame_def, locals_kept_mem] >> metis_tac[])
   >> irule ghost_kept_at_clean_suffix >>
   qexistsl [`G`, `tn`] >> simp[ghost_kept_at_def] >>
   metis_tac[SUBSET_REFL]
@@ -570,26 +605,37 @@ Resume unwrap_code_word_origin_ptr[runtime]:
     (drule unwrap_code_word_post >>
      disch_then (qspecl_then [`v`, `sc`, `op`, `a`] mp_tac) >>
      simp[Abbr `u`, Abbr `out`, ADD1, immutable_copy_read_def]) >>
-  qexistsl [`v`, `Gf`, `tnf`, `u with vs_inst_idx := LENGTH sc.cs_current_insts`] >>
-  simp[expr_store_bound_word] >>
+  TRY (qunabbrev_tac `u`) >>
+  `is_word_type (expr_type e)` by gvs[] >>
+  qexistsl [`v`, `Gf`, `tnf`,
+            `update_var out (immutable_copy_read F a s) s with vs_inst_idx := LENGTH sc.cs_current_insts`] >>
   rpt conj_tac
-  >- simp[Abbr `u`, update_var_def]
-  >- simp[Abbr `u`, update_var_def]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- fs[expr_store_bound_word]
+  >- fs[update_var_def]
+  >- simp[]
+  >- first_assum ACCEPT_TAC
+  >- fs[update_var_def]
+  >- fs[update_var_def]
   >- (irule ghost_inv_at_register_transport >>
       qexistsl [`G`, `s`, `sa`, `tn`] >>
-      simp[Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
       rpt strip_tac >> res_tac >> res_tac >> simp[])
-  >- (irule ptr_val_ok_word >> simp[])
+  >- (irule ptr_val_ok_word >> fs[])
+  >- fs[]
+  >- fs[]
   >- (irule ghost_kept_at_clean_suffix >> simp[] >>
-      goal_assum drule >> metis_tac[SUBSET_REFL])
+      metis_tac[SUBSET_REFL])
   >- (rpt strip_tac >> res_tac >>
-      simp[Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE])
-  >- (simp[wb_frame_def, Abbr `u`, update_var_def, locals_kept_mem] >>
+      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE])
+  >- (simp[wb_frame_def, update_var_def, locals_kept_mem] >>
       rpt strip_tac >> res_tac >>
       fs[lookup_var_def, FLOOKUP_UPDATE])
-  >> irule ghost_kept_at_clean_suffix >>
+  >> (irule ghost_kept_at_clean_suffix >>
   qexistsl [`G`, `tn`] >> simp[ghost_kept_at_def] >>
-  metis_tac[SUBSET_REFL]
+  metis_tac[SUBSET_REFL])
 QED
 
 Finalise unwrap_code_word_origin_ptr
