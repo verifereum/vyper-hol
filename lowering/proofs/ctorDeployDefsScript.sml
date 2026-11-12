@@ -142,6 +142,20 @@ Definition deploy_venom_result_rel_def:
     (src : (abstract_machine # call_request list) + exception) vres <=>
     case (src, vres) of
       (INL (am', rqs), Halt ss) =>
+        if ALOOKUP am'.sources tx.target = NONE then
+          (* The constructor halted (selfdestruct): no source installed, the
+           * unit halts with empty returndata, and the target is queued for
+           * deletion on both sides. *)
+          let cx = initial_evaluation_context
+                     ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+          ss.vs_returndata = [] /\
+          MEM tx.target ss.vs_pending_deletions /\
+          accounts_agree cx am'.accounts
+            (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+          transient_agree cx am'.tStorage ss.vs_transient /\
+          logs_correspond (compiled_event_info tops) (type_env tops)
+            tx.target am'.logs ss.vs_logs
+        else
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?section.
           ss.vs_returndata = runtime_bc ++ section /\
