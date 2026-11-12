@@ -39,7 +39,7 @@ Theorem ifexp_widened_call_arm_step_full:
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
        ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
-    vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
+    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -68,7 +68,7 @@ Theorem ifexp_widened_call_arm_step_full:
       (~is_word_type (post_value_type cenv e) ==>
        vv_at cenv cx (post_value_type cenv e) sa sc ee tv
          (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
-      expr_store_bound cx (post_value_type cenv e) v op z /\
+      expr_store_bound cx (expr_type e) v op z /\
       z.vs_current_bb = sc.cs_current_bb /\
       z.vs_inst_idx = LENGTH sc.cs_current_insts /\
       alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
@@ -122,8 +122,8 @@ Theorem ifexp_widened_call_arm_step_full:
       ghost_kept_at lo cenv es sa G0 tn0 s0
         (step_prov PG G (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) u)
         (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn)) /\
-  (* compile_store_memory_typed_origin_ptr_path (r2) *)
-  (!cenv xd dty xs sty sa sb tenv stv dtv v s sw dw G tn lo ctx func D explicit PG.
+  (* compile_store_memory_typed_origin_ptr_path (r3) *)
+  (!cenv xd dty xs sty sa sb tenv stv dtv v s sw dw G tn lo ctx func explicit PG.
     compile_store_memory_typed cenv (Var xd) dty (Var xs) sty sa = ((),sb) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     sfields_tenv_consistent cenv.ce_struct_fields tenv /\
@@ -136,30 +136,29 @@ Theorem ifexp_widened_call_arm_step_full:
     value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
     not_fresh_at sa xs /\ not_fresh_at sa xd /\
     lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
-    val_in_memory stv v (w2n sw) s.vs_memory /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+           val_in_memory stv v (w2n sw) mem) /\
     w2n sw + type_memory_size stv < dimword (:256) /\
     w2n dw + type_memory_size dtv < dimword (:256) /\
-    w2n sw + type_memory_size stv <= s.vs_alloca_next /\
-    w2n dw + type_memory_size dtv <= s.vs_alloca_next /\
+    (type_memory_size stv = 0 \/ w2n sw + type_memory_size stv <= s.vs_alloca_next) /\
+    (type_memory_size dtv = 0 \/ w2n dw + type_memory_size dtv <= s.vs_alloca_next) /\
     (w2n sw + type_memory_size stv <= w2n dw \/
      w2n dw + type_memory_size dtv <= w2n sw) /\
     ptr_covers G tn xs s (type_memory_size stv) /\
     ptr_covers G tn xd s (type_memory_size dtv) /\
-    (!i. w2n sw <= i /\ i < w2n sw + type_memory_size stv ==> i NOTIN tn.t_mem) /\
     allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t Gf tnf.
-      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+      (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
       val_in_memory dtv v (w2n dw) t.vs_memory /\
       typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-      tnf.t_mem SUBSET tn.t_mem /\
-      tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + type_memory_size dtv}
-        SUBSET tnf.t_mem /\
+      (!i. ~(w2n dw <= i /\ i < w2n dw + type_memory_size dtv) ==>
+           (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
       (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
              val_in_memory dtv v (w2n dw) mem) /\
       (!p. not_fresh_at sa p ==>
