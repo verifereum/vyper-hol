@@ -605,7 +605,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem stmt_frag_start_gas_obs[local]:
+Theorem stmt_frag_start_gas_obs:
   stmt_frag ctx func cx lctx RetQ cenv m source es ==>
   !gs. stmt_frag ctx func cx lctx RetQ cenv m source (es with gas_obs := gs)
 Proof
