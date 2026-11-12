@@ -519,7 +519,8 @@ Theorem sue_assign_observations:
 Proof
   strip_tac >>
   `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
-   t.vs_initial_fmp = s.vs_initial_fmp` by
+   t.vs_initial_fmp = s.vs_initial_fmp /\
+   t.vs_gas_readings = s.vs_gas_readings` by
     (fs[sue_state_rel_def] >>
      drule stateFrameTheory.execution_frame_projection >>
      simp[stateFrameTheory.execution_frame_def]) >>
@@ -646,6 +647,7 @@ Proof
   strip_tac >>
   `t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
    t.vs_initial_fmp = s.vs_initial_fmp /\
+   t.vs_gas_readings = s.vs_gas_readings /\
    s.vs_call_entry_fmp = t.vs_call_entry_fmp` by
     (fs[stateFrameTheory.execution_frame_def,
         venomStateTheory.venom_state_component_equality]) >>
