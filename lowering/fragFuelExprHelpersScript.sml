@@ -25,7 +25,7 @@
 Theory fragFuelExprHelpers
 Ancestors
   fragFuel fragFuelContextBase fragFuelContext compileEnv emitHelper context
-  venomInst exprLowering fragFuelLoopArrayMembership
+  venomInst exprLowering fragFuelLoopArrayMembership fragFuelLoopDynStorage
 Libs
   fragFuelLib
 
@@ -333,7 +333,8 @@ Theorem fuel_ok_compile_dynarray_append:
       (compile_dynarray_append cenv base v ws es dt st cap prim lo so)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_dynarray_append_def, LET_THM] >>
-  ft [fuel_ok_compile_store_memory, CONJUNCT2 fuel_ok_compile_word_copy_loop]
+  ft [fuel_ok_compile_store_memory, CONJUNCT2 fuel_ok_compile_word_copy_loop,
+      fuel_ok_compile_store_slots]
 QED
 
 (* The loop leaf needs the length operand allocated before it. *)
