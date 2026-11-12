@@ -308,3 +308,45 @@ Proof
        exec_delegatecall_def, venom_call_request_def, source_memory_write_ranges_def,
        Excl "consume_call_outcome_eq"] >> metis_tac[])
 QED
+
+Theorem fmp_mem_call_return_memory[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] /\
+  consume_call_outcome rq1 ro rs s = (w1,r1) /\
+  consume_call_outcome rq2 ro' rs t = (w2,r2) /\
+  r1.vs_returndata = r2.vs_returndata /\
+  source_memory_write_ranges inst s = [(ro,rs)] /\ written_taint tn inst s = {} /\
+  (rs=0 \/ (ro=ro' /\ ro+rs<=eom) \/
+     (?id b c z j. FLOOKUP (fmp_ld_sites sm) id = SOME (b,c,z) /\ j+rs<=z /\
+                    ro=b+j /\ ro'=c+j)) ==>
+  ld_memory_agree (fmp_ld_sites sm) eom
+    (step_taint inst s (update_var out w1 r1) tn).t_mem
+    (update_var out w1 r1).vs_memory (update_var out w2 r2).vs_memory
+Proof
+  strip_tac >> (
+  `r1.vs_allocas = s.vs_allocas /\ r1.vs_fmp = s.vs_fmp /\
+   r1.vs_memory = (write_memory_with_expansion ro (TAKE rs r1.vs_returndata) s).vs_memory` by
+    (qpat_x_assum `consume_call_outcome _ _ _ s = _` mp_tac >>
+     simp[consume_call_outcome_eq] >> strip_tac >> gvs[]) >>
+  `r2.vs_memory = (write_memory_with_expansion ro' (TAKE rs r2.vs_returndata) t).vs_memory` by
+    (qpat_x_assum `consume_call_outcome _ _ _ t = _` mp_tac >>
+     simp[consume_call_outcome_eq] >> strip_tac >> gvs[]) >>
+  `new_site_bytes s (update_var out w1 r1) = {}` by
+    (simp[new_site_bytes_def, update_var_def, EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
+  `ld_joint_geometry (fmp_ld_sites sm) FEMPTY eom
+    (MAP FST (SET_TO_LIST (FDOM (fmp_ld_sites sm))))` by metis_tac[fmp_mem_geometry] >>
+  `ld_memory_agree (fmp_ld_sites sm) eom
+    (tn.t_mem DIFF {i | ro<=i /\ i<ro+MIN rs (LENGTH r2.vs_returndata)})
+    (write_memory_with_expansion ro (TAKE rs r2.vs_returndata) s).vs_memory
+    (write_memory_with_expansion ro' (TAKE rs r2.vs_returndata) t).vs_memory` by
+    (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_return_buffer >>
+     disch_then irule >> simp[] >>
+     fs[fmp_stage_rel_def, Excl "consume_call_outcome_eq"] >>
+     simp[arithmeticTheory.MIN_DEF] >> rpt IF_CASES_TAC >>
+     gvs[Excl "consume_call_outcome_eq"] >>
+     disj2_tac >> disj2_tac >> qexistsl_tac [`id`,`b`,`c`,`z`,`j`] >> simp[] >> decide_tac) >>
+  gvs[step_taint_def, mem_taint_def, step_writes_def, range_bytes_def, update_var_def,
+      Excl "consume_call_outcome_eq"])
+QED
