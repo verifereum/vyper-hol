@@ -3653,6 +3653,40 @@ Proof
   gvs[]
 QED
 
+Theorem abi_dyn_ranked_round[local]:
+  !P (C:venom_state -> bytes32) hdr body_lbl exit Kh Kbody G ctx fn.
+    (!s. P s /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+      ?j. j <= Kh /\ fuel_outcome G ctx fn s j
+        (\t. P t /\ C t = C s /\ t.vs_inst_idx = 0 /\
+          (t.vs_current_bb = exit \/
+           (t.vs_current_bb = body_lbl /\ w2n (C s) < 2 ** 256 - 1)))) /\
+    (!s. P s /\ s.vs_current_bb = body_lbl /\ s.vs_inst_idx = 0 ==>
+      ?j. j <= Kbody /\ fuel_outcome G ctx fn s j
+        (\t. P t /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\ C t = C s + 1w)) ==>
+    let H = (\s. P s /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0);
+        Q = (\s. P s /\ s.vs_current_bb = exit /\ s.vs_inst_idx = 0);
+        mu = (\s. (2 ** 256 - 1) - w2n (C s))
+    in (!s. H s ==> mu s < 2 ** 256) /\
+       (!s. H s ==> ?j. j <= Kh + Kbody /\ fuel_outcome G ctx fn s j
+         (\t. Q t \/ (H t /\ mu t < mu s)))
+Proof
+  rpt gen_tac >> strip_tac >> simp_tac std_ss [LET_THM] >>
+  conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn s _ Qr` >>
+  qpat_x_assum `!s. P s /\ s.vs_current_bb = hdr /\ _ ==> _`
+    (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then [`Qr`, `Kbody`] mp_tac) >> impl_tac
+  >- (simp[] >> rpt strip_tac
+      >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >> simp[Abbr `Qr`]) >>
+      qpat_x_assum `!s. _` (qspec_then `t` mp_tac) >> simp[] >> strip_tac >>
+      qexists_tac `j'` >> simp[] >>
+      irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+      simp[Abbr `Qr`] >> rpt strip_tac >>
+      disj2_tac >> qspec_then `C s` mp_tac abi_dyn_counter_rank >> simp[]) >>
+  strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac
+QED
+
 (* The counter need not be disjoint from the element destination.  The
    final MSTORE overwrites any writes by the element decoder.  The bound
    is reloaded at every header and need not stay fixed. *)
