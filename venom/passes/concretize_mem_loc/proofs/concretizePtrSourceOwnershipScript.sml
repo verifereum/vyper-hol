@@ -181,7 +181,7 @@ Proof
   >- (simp[ptr_tagged_step_def, step_prov_def] >>
       irule ptr_owner_set_projection >>
       simp[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def, out_prov_def] >>
-      every_case_tac >> gvs[] >> metis_tac[]) >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
   simp[ptr_tagged_step_def] >> irule ptr_owner_step_projection >> simp[] >>
   metis_tac[]
 QED
