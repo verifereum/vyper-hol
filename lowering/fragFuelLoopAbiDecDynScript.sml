@@ -2258,6 +2258,138 @@ Proof
     IF_CASES_TAC, gen_tac, conj_tac])
 QED
 
+(* Uniqueness concerns the new block span, never the incoming blocks. *)
+val dyn_Old = ``\a. ?suffix k. a.cs_current_bb = fresh_label_output suffix k /\
+  k < a.cs_next_label``;
+val dyn_unique_span = ``\a b. ALL_DISTINCT
+  (b.cs_current_bb :: MAP (\bb. bb.bb_label) (emitted_blocks a b))``;
+
+Theorem abi_dyn_span_old_labels[local]:
+  !a b. (^dyn_span) {} a b /\ (^dyn_Old) a ==>
+    !l. l IN (^dyn_B) a b ==>
+      ?suffix k. l = fresh_label_output suffix k /\ k < b.cs_next_label
+Proof
+  simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+  fs[pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
+  qpat_x_assum `!x. _` (qspec_then `l` mp_tac) >>
+  impl_tac >- metis_tac[] >>
+  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
+Theorem abi_dyn_span_old[local]:
+  !a b. (^dyn_span) {} a b /\ (^dyn_Old) a ==> (^dyn_Old) b
+Proof
+  rpt gen_tac >> strip_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
+  qspecl_then [`a`, `b`] mp_tac (BETA_RULE abi_dyn_span_old_labels) >>
+  simp[] >> disch_then (qspec_then `b.cs_current_bb` mp_tac) >> simp[]
+QED
+
+Theorem abi_dyn_unique_compose[local]:
+  !a b c. (^dyn_span) {} a b /\ (^dyn_span) {} b c /\
+    (^dyn_Old) a /\ (^dyn_unique_span) a b /\ (^dyn_unique_span) b c ==>
+    (^dyn_unique_span) a c
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  `cs_extends a b /\ cs_extends b c` by metis_tac[entry_shape_extends] >>
+  drule_all abi_dyn_emitted_compose >> strip_tac >>
+  `!l. l IN (^dyn_B) a b ==>
+     ?suffix k. l = fresh_label_output suffix k /\ k < b.cs_next_label`
+    by (BETA_TAC >> MATCH_MP_TAC (BETA_RULE abi_dyn_span_old_labels) >> simp[]) >>
+  `!l. MEM l (MAP (\bb. bb.bb_label) (emitted_blocks a b)) ==>
+       l NOTIN (^dyn_B) b c`
+    by (rpt strip_tac >>
+        `l IN (^dyn_B) a b` by (simp[] >> gvs[MEM_MAP] >> metis_tac[]) >>
+        first_x_assum drule >> strip_tac >>
+        `l NOTIN (^dyn_I) b.cs_next_label c.cs_next_label`
+          by (BETA_TAC >> metis_tac[BETA_RULE abi_dyn_interval_excludes_old]) >>
+        gvs[ALL_DISTINCT, pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  simp_tac std_ss [] >> simp[MAP_APPEND, ALL_DISTINCT_APPEND, ALL_DISTINCT] >>
+  gvs[ALL_DISTINCT] >> conj_tac
+  >- (gvs[MEM_MAP] >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum drule >> simp[] >> gvs[MEM_MAP] >> metis_tac[]
+QED
+
+val dyn_unique = ``\m. !a r b. (^dyn_Old) a /\ m a = (r,b) ==>
+  (^dyn_span) {} a b /\ (^dyn_Old) b /\ (^dyn_unique_span) a b``;
+
+Theorem abi_dyn_unique_bind[local]:
+  !m f. (^dyn_unique) m /\ (!x. (^(inst [alpha |-> beta] dyn_unique)) (f x)) ==>
+    (^(inst [alpha |-> beta] dyn_unique)) (comp_bind m f)
+Proof
+  simp_tac std_ss [comp_bind_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> Cases_on `m a` >> gvs[] >>
+  qpat_x_assum `!a r b. _` (qspecl_then [`a`, `q`, `r'`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  qpat_x_assum `!x a r b. _` (qspecl_then [`q`, `r'`, `r`, `b`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  conj_tac
+  >- (qspecl_then [`{}`, `a`, `r'`, `b`] mp_tac
+        (BETA_RULE abi_dyn_span_compose) >> gvs[]) >>
+  conj_tac >- metis_tac[] >>
+  qspecl_then [`a`, `r'`, `b`] mp_tac (BETA_RULE abi_dyn_unique_compose) >>
+  gvs[ALL_DISTINCT] >> metis_tac[]
+QED
+
+Theorem abi_dyn_unique_ignore_bind[local]:
+  !m n. (^dyn_unique) m /\ (^(inst [alpha |-> beta] dyn_unique)) n ==>
+    (^(inst [alpha |-> beta] dyn_unique)) (comp_ignore_bind m n)
+Proof
+  simp_tac std_ss [comp_ignore_bind_def] >> rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac (BETA_RULE abi_dyn_unique_bind) >> gvs[] >> metis_tac[]
+QED
+
+Theorem abi_dyn_unique_return[local]:
+  !v. (^dyn_unique) (comp_return v)
+Proof
+  simp[comp_return_def, entry_shape_refl, emitted_blocks_def]
+QED
+
+Theorem abi_dyn_unique_emit_op[local]:
+  !opc ops. (^(inst [alpha |-> ``:operand``] dyn_unique)) (emit_op opc ops)
+Proof
+  rpt gen_tac >> BETA_TAC >> rpt gen_tac >> strip_tac >>
+  `(^dyn_span) {} a b`
+    by (BETA_TAC >> irule (BETA_RULE abi_dyn_prov_emit_op) >> metis_tac[]) >>
+  `(^dyn_Old) b` by (BETA_TAC >> rule_assum_tac BETA_RULE >>
+    metis_tac[BETA_RULE abi_dyn_span_old]) >> simp[] >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_var_def, fresh_id_def, emit_def, emitted_blocks_def] >> metis_tac[]
+QED
+
+Theorem abi_dyn_unique_emit_inst[local]:
+  !opc ops outs. (^(inst [alpha |-> ``:unit``] dyn_unique)) (emit_inst opc ops outs)
+Proof
+  rpt gen_tac >> BETA_TAC >> rpt gen_tac >> strip_tac >>
+  `(^dyn_span) {} a b`
+    by (BETA_TAC >> irule (BETA_RULE abi_dyn_prov_emit_inst) >> metis_tac[]) >>
+  `(^dyn_Old) b` by (BETA_TAC >> rule_assum_tac BETA_RULE >>
+    metis_tac[BETA_RULE abi_dyn_span_old]) >> simp[] >>
+  gvs[emit_inst_def, comp_bind_def, fresh_id_def, emit_def, emitted_blocks_def] >> metis_tac[]
+QED
+
+Theorem abi_dyn_unique_emit_void[local]:
+  !opc ops. (^(inst [alpha |-> ``:unit``] dyn_unique)) (emit_void opc ops)
+Proof
+  simp_tac std_ss [emit_void_def, GSYM emit_inst_def] >>
+  MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_emit_inst)
+QED
+
+Theorem abi_dyn_unique_label[local]:
+  !suffix. (^(inst [alpha |-> ``:string``] dyn_unique)) (fresh_label suffix)
+Proof
+  simp[fresh_label_def, entry_shape_def, emitted_blocks_def] >>
+  rpt strip_tac >> `k < a.cs_next_label + 1` by simp[] >> metis_tac[]
+QED
+
+Theorem abi_dyn_unique_alloc[local]:
+  !sz. (^(inst [alpha |-> ``:buffer``] dyn_unique)) (compile_alloc_buffer sz)
+Proof
+  gen_tac >> simp_tac std_ss [compile_alloc_buffer_def] >>
+  MATCH_MP_TAC (BETA_RULE abi_dyn_unique_bind) >> conj_tac
+  >- MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_emit_op) >>
+  gen_tac >> BETA_TAC >> MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_return)
+QED
+
 (* Bounded emitted-code region.  Upper bounds rule out spurious off-cut
    states past the last instruction of either sort of block. *)
 val dyn_R = ``\sa sb s.
