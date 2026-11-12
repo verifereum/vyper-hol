@@ -48,14 +48,32 @@ QED
 
 (* ===== The walk ===== *)
 
+Theorem make_ssa_run_abort_same_1:
+  ctx_pass_stage rpolicy (EL 0 o1_fn_passes) (o1_walk_view rpolicy 0) C C' /\
+  o1_pre 0 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_run_state_ok vs /\ o1_inv D 0 C vs ==> ctx_abort_rq D C C' vs vs
+Proof
+  simp[o1_fn_passes_def, o1_inv_def, o1_walk_src_inv_def] >> rpt strip_tac >>
+  irule bisim_stage_abort_rq >> metis_tac[make_ssa_stage_bisim]
+QED
+
 Theorem make_ssa_run_rq_1:
   o1_run_rq_contract_gas rpolicy D 0
 Proof
   rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
   reverse conj_tac >- metis_tac[make_ssa_run_contract_1, o1_run_contract_def] >>
-  `EL 0 o1_fn_passes = CFP_Simple VP_MakeSSA` by simp[o1_fn_passes_def] >>
-  simp[o1_inv_def, o1_walk_src_inv_def] >> rpt strip_tac >>
-  irule bisim_stage_abort_rq >> metis_tac[make_ssa_stage_bisim]
+  metis_tac[make_ssa_run_abort_same_1]
+QED
+
+Theorem fmp_lowering_run_abort_same:
+  ctx_pass_stage rpolicy (EL 3 o1_fn_passes) (o1_walk_view rpolicy 3) C C' /\
+  o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_run_state_ok vs /\ o1_inv D 3 C vs ==> ctx_abort_rq D C C' vs vs
+Proof
+  simp[o1_fn_passes_def, o1_inv_def, o1_pre_def, o1_static_inv_def,
+       fmp_free_ctx_def] >> rpt gen_tac >> strip_tac >>
+  drule_all fmp_lowering_stage_seal_only >> strip_tac >>
+  simp[ctx_abort_rq_def] >> metis_tac[request_prefix_rel_refl]
 QED
 
 Theorem fmp_lowering_run_rq:
@@ -63,11 +81,16 @@ Theorem fmp_lowering_run_rq:
 Proof
   rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
   reverse conj_tac >- metis_tac[fmp_lowering_run_contract, o1_run_contract_def] >>
-  `EL 3 o1_fn_passes = CFP_Simple VP_FmpLowering` by EVAL_TAC >>
-  simp[o1_inv_def, o1_pre_def, o1_static_inv_def, fmp_free_ctx_def] >>
-  rpt gen_tac >> strip_tac >>
-  drule_all fmp_lowering_stage_seal_only >> strip_tac >>
-  simp[ctx_abort_rq_def] >> metis_tac[request_prefix_rel_refl]
+  metis_tac[fmp_lowering_run_abort_same]
+QED
+
+Theorem make_ssa_run_abort_same_2:
+  ctx_pass_stage rpolicy (EL 4 o1_fn_passes) (o1_walk_view rpolicy 4) C C' /\
+  o1_pre 4 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_run_state_ok vs /\ o1_inv D 4 C vs ==> ctx_abort_rq D C C' vs vs
+Proof
+  simp[o1_fn_passes_def, o1_inv_def] >> rpt strip_tac >>
+  irule bisim_stage_abort_rq >> metis_tac[make_ssa_stage_bisim]
 QED
 
 Theorem make_ssa_run_rq_2:
@@ -75,16 +98,14 @@ Theorem make_ssa_run_rq_2:
 Proof
   rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
   reverse conj_tac >- metis_tac[make_ssa_run_contract_2, o1_run_contract_def] >>
-  `EL 4 o1_fn_passes = CFP_Simple VP_MakeSSA` by simp[o1_fn_passes_def] >>
-  simp[o1_inv_def] >> rpt strip_tac >>
-  irule bisim_stage_abort_rq >> metis_tac[make_ssa_stage_bisim]
+  metis_tac[make_ssa_run_abort_same_2]
 QED
 
-Theorem simplify_cfg_run_rq:
-  o1_run_rq_contract_gas rpolicy D 5
+Theorem simplify_cfg_run_abort_same:
+  ctx_pass_stage rpolicy (EL 5 o1_fn_passes) (o1_walk_view rpolicy 5) C C' /\
+  o1_pre 5 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_run_state_ok vs /\ o1_inv D 5 C vs ==> ctx_abort_rq D C C' vs vs
 Proof
-  rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
-  reverse conj_tac >- metis_tac[simplify_cfg_stage_walk, o1_run_contract_def] >>
   simp[o1_fn_passes_def, o1_inv_def] >> rpt strip_tac >>
   `EVERY simplify_cfg_fn_ok C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
@@ -93,14 +114,38 @@ Proof
   irule bisim_stage_abort_rq >> metis_tac[simplify_cfg_stage_bisim]
 QED
 
+Theorem simplify_cfg_run_rq:
+  o1_run_rq_contract_gas rpolicy D 5
+Proof
+  rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
+  reverse conj_tac >- metis_tac[simplify_cfg_stage_walk, o1_run_contract_def] >>
+  metis_tac[simplify_cfg_run_abort_same]
+QED
+
+Theorem sue_run_abort_same:
+  ctx_pass_stage rpolicy (EL 6 o1_fn_passes) (o1_walk_view rpolicy 6) C C' /\
+  o1_pre 6 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_run_state_ok vs /\ o1_inv D 6 C vs ==> ctx_abort_rq D C C' vs vs
+Proof
+  simp[o1_fn_passes_def, o1_inv_def, o1_pre_def, o1_ssa_inv_def] >>
+  rpt strip_tac >> irule bisim_stage_abort_rq >> metis_tac[sue_stage_bisim]
+QED
+
 Theorem sue_run_rq:
   o1_run_rq_contract_gas rpolicy D 6
 Proof
   rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
   reverse conj_tac >- metis_tac[sue_stage_walk, o1_run_contract_def] >>
-  simp[o1_fn_passes_def, o1_inv_def, o1_pre_def, o1_ssa_inv_def] >>
-  rpt strip_tac >>
-  irule bisim_stage_abort_rq >> metis_tac[sue_stage_bisim]
+  metis_tac[sue_run_abort_same]
+QED
+
+Theorem cfg_norm_run_abort_same:
+  ctx_pass_stage rpolicy (EL 8 o1_fn_passes) (o1_walk_view rpolicy 8) C C' /\
+  o1_pre 8 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+  o1_run_state_ok vs /\ o1_inv D 8 C vs ==> ctx_abort_rq D C C' vs vs
+Proof
+  simp[o1_fn_passes_def, o1_inv_def, o1_ssa_inv_def] >> rpt strip_tac >>
+  irule bisim_stage_abort_rq >> metis_tac[cfg_norm_stage_bisim]
 QED
 
 Theorem cfg_norm_run_rq:
@@ -108,6 +153,5 @@ Theorem cfg_norm_run_rq:
 Proof
   rewrite_tac[o1_run_rq_contract_gas_def] >> irule o1_stage_contract_rq_lift >>
   reverse conj_tac >- metis_tac[cfg_norm_stage_walk, o1_run_contract_def] >>
-  simp[o1_fn_passes_def, o1_inv_def, o1_ssa_inv_def] >> rpt strip_tac >>
-  irule bisim_stage_abort_rq >> metis_tac[cfg_norm_stage_bisim]
+  metis_tac[cfg_norm_run_abort_same]
 QED
