@@ -64,13 +64,8 @@ Proof
       >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
             (assume_tac o SIMP_RULE (srw_ss()) []) >>
           first_assum (drule_then strip_assume_tac) >> gvs[] >>
-          `~s.vs_halted` by
+          `~t.vs_halted` by
             metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-          `!H. valid_horizon cx st0 H es_end.storage_trace ==>
-             vv_post H ctx func ce cx (Call ann (IntCall fid) args drv) es sa sm s0
-               (es_end with gas_obs := []) tv
-               (LocatedValue (ce.ce_func_return_type (nsid_to_string fid)) p) s` by
-            metis_tac[] >>
           drule_all unwrap_memory_marked_read_horizons >> strip_tac >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u`] >>
           simp[expr_type_def] >>
