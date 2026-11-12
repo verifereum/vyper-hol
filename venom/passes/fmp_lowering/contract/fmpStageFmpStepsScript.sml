@@ -19,6 +19,7 @@ Ancestors
   fmpStageCallArity fmpStageRetStep
   fmpStageFmpStepsRetpcControl fmpStageFmpStepsRetpcFrame
   fmpStageFmpStepsRetpcPreservation fmpLowerDefs unitShapeDefs
+  fmpStageFmpStepsCallMatch fmpStageFmpStepsCallAssemble
   fmpStageFmpStepsEntryLayout fmpStageFmpStepsEntryInitialization
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
@@ -185,7 +186,11 @@ Theorem fmp_stage_invoke_call:
       (MAP (op_prov G) ops) FEMPTY (tn with t_var := FEMPTY) callee s1
       lo t1 ((t,lo)::ts)
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_call_match >> strip_tac >>
+  mp_tac fmp_stage_invoke_call_from_match >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem fmp_stage_invoke_return:
