@@ -2,7 +2,8 @@
    provenance.  The source is isolated by the original source-alloca check. *)
 Theory readonlyInvokeCopyFwdProtectionSelected
 Ancestors
-  readonlyInvokeCopyFwdProtectionProducers occurrenceOrigin
+  readonlyInvokeCopyFwdProtectionProducers occurrenceOrigin occurrenceGeometry
+  o1LowerDloadOccurrence
   o1LowerDloadClosure ptrDiscipline invokeCopyFwdCommonDefs readonlyInvokeCopyFwdPlan
   readonlyInvokeCopyFwdDefs readonlyMemoryArgsProps
   internalReturnCopyFwdPlan dfgAnalysisProps indexedLists list pred_set finite_map
@@ -138,11 +139,11 @@ Theorem ricf_event_source_alloca_name:
   e.rfe_source = SOME sv /\
   icf_assign_root_op e.rfe_ctx.icf_dfg (Var sv) = Var sv
 Proof
+  strip_tac >>
   `icf_assign_root (dfg_build_function fn) {} sv = sv` by
-    (rpt strip_tac >> simp[Once icf_assign_root_def]) >>
-  simp[ricf_event_ok_def, ricf_event_copy_def, ricf_try_forward_def,
-       icf_assign_root_op_def] >>
-  strip_tac >> gvs[AllCaseEqs()]
+    simp[Once icf_assign_root_def] >>
+  gvs[ricf_event_ok_def, ricf_event_copy_def, ricf_try_forward_def,
+      icf_assign_root_op_def, AllCaseEqs()]
 QED
 
 Theorem ricf_selected_call_source_inversion:
@@ -165,10 +166,53 @@ Proof
     metis_tac[ricf_event_copy_shape] >>
   `!inst. MEM inst (fn_insts fn) /\ MEM (Var sv) inst.inst_operands ==>
      ~is_pointer_preserving_op inst.inst_opcode` by
-    (irule ricf_source_copy_isolated >> simp[GSYM ricf_event_copy_def] >>
-     metis_tac[]) >>
+    (gen_tac >> disch_tac >> irule ricf_source_copy_isolated >>
+     gvs[ricf_event_copy_def] >> metis_tac[]) >>
   `EL k ops = Var sv` by
     (irule ricf_isolated_occurrence_operand >> metis_tac[]) >>
   drule_all ricf_event_source_alloca_name >> strip_tac >> simp[] >>
   irule ricf_selected_call_source_readonly >> metis_tac[]
+QED
+
+(* Consumer boundary for inherited_start: owner-local occurrence witnesses
+   identify both allocations and every numerically matching argument. *)
+Theorem ricf_selected_call_endpoints:
+  ricf_event_ok e bb /\ e.rfe_ctx.icf_dfg = dfg_build_function fn /\
+  ricf_src_alloca fn /\ MEM bb fn.fn_blocks /\
+  (ricf_event_copy e bb).inst_operands = [Var dst;Var sv;sz] /\
+  dfg_get_def (dfg_build_function fn)
+    (icf_assign_root (dfg_build_function fn) {} dst) = SOME di /\
+  icf_is_alloca di /\ MEM di (fn_insts fn) /\ di.inst_opcode = ALLOCA /\
+  di.inst_outputs = [icf_assign_root (dfg_build_function fn) {} dst] /\
+  dfg_get_def (dfg_build_function fn) sv = SOME ai /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [sv] /\
+  fn_inst_wf fn /\ fn_inst_ids_distinct fn /\ occurrence_syntax_origin fn a H /\
+  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_natural_geometry lo a U B stk s /\
+  FLOOKUP B (a,di.inst_id) = SOME (db,z) /\
+  FLOOKUP B (a,ai.inst_id) = SOME (sb,z) /\ 0 < z /\
+  MEM callinst (fn_insts fn) /\ MEM (callinst,p) e.rfe_sites /\
+  decode_invoke callinst = SOME (nm,ops) ==>
+  FLOOKUP s.vs_allocas di.inst_id = SOME (db,z) /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (sb,z) /\
+  (!k. k < LENGTH ops /\ op_prov G (EL k ops) = SOME (db,z) ==>
+     rma_is_readonly e.rfe_ctx.icf_rma nm k) /\
+  (!k. k < LENGTH ops /\ op_prov G (EL k ops) = SOME (sb,z) ==>
+     EL k ops = Var sv /\ rma_is_readonly e.rfe_ctx.icf_rma nm k)
+Proof
+  strip_tac >>
+  `occurrence_allocas_ok B a s /\
+   occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+    gvs[occurrence_annotation_ok_def] >>
+  conj_tac >- gvs[occurrence_allocas_ok_def] >>
+  conj_tac >- gvs[occurrence_allocas_ok_def] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `op_prov H (EL k ops) = SOME (a,di.inst_id)` by
+        (irule occurrence_geometry_op_positive_key >> metis_tac[]) >>
+      irule ricf_selected_call_destination_readonly >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `op_prov H (EL k ops) = SOME (a,ai.inst_id)` by
+    (irule occurrence_geometry_op_positive_key >> metis_tac[]) >>
+  irule ricf_selected_call_source_inversion >> metis_tac[]
 QED
