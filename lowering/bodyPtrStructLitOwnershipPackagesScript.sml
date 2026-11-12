@@ -69,20 +69,3 @@ Proof
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
-Theorem structlit_constructor_package_body:
-  !tops tr nk target mut nr rr name args defaults ret body.
-  supported_program tops /\ supported_program_deploy tops /\
-  SND (SND (SND (classify_functions tops))) =
-    SOME (mut,nr,rr,name,args,defaults,ret,body) ==>
-  (\(ce,a,p,n,k,t,stmts,r).
-    ~supported_stmts_expr_exists expr_shape_root stmts)
-    (set_constructor_package_target target
-      (package_constructor tops tr nk (mut,nr,rr,name,args,defaults,ret,body)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[set_constructor_package_target_def, package_constructor_def] >>
-  drule structlit_classify_constructor_source >> strip_tac >>
-  `~supported_stmts_expr_exists expr_shape_root body` by
-    (irule structlit_supported_function_body >> metis_tac[]) >>
-  simp[]
-QED
