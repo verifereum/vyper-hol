@@ -97,15 +97,20 @@ QED
 
 Theorem memory_fixed_frontier_checks:
   inst_mem_below_frontier (mk_inst 0 MLOAD [Lit 0w] ["x"])
-    (s with vs_alloca_next := 32) /\
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   ~inst_mem_below_frontier (mk_inst 0 MLOAD [Lit 1w] ["x"])
-    (s with vs_alloca_next := 32) /\
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   ~inst_mem_below_frontier (mk_inst 0 ILOAD [Lit 0w] ["x"])
-    (s with vs_alloca_next := 31) /\
+    (s with <| vs_alloca_next := 31; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   inst_mem_below_frontier (mk_inst 0 MSTORE [Lit 0w; Lit 1w] [])
-    (s with vs_alloca_next := 32) /\
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   ~inst_mem_below_frontier (mk_inst 0 MSTORE8 [Lit 32w; Lit 1w] [])
-    (s with vs_alloca_next := 32)
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>)
 Proof
   simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, fixed_source_write_range_def,
@@ -116,17 +121,23 @@ QED
  * natural-number addition, not wrapping word addition. LOG uses REVERSE. *)
 Theorem memory_sized_frontier_checks:
   inst_mem_below_frontier (mk_inst 0 RETURN [Lit (-1w); Lit 0w] [])
-    (s with vs_alloca_next := 0) /\
+    (s with <| vs_alloca_next := 0; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   ~inst_mem_below_frontier (mk_inst 0 RETURN [Lit (-1w); Lit 1w] [])
-    (s with vs_alloca_next := dimword (:256) - 1) /\
+    (s with <| vs_alloca_next := dimword (:256) - 1; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   inst_mem_below_frontier (mk_inst 0 LOG [Lit 1w; Lit 9w; Lit 1w; Lit 31w] [])
-    (s with vs_alloca_next := 32) /\
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   ~inst_mem_below_frontier (mk_inst 0 LOG [Lit 1w; Lit 9w; Lit 2w; Lit 31w] [])
-    (s with vs_alloca_next := 32) /\
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   ~inst_mem_below_frontier (mk_inst 0 MCOPY [Lit 0w; Lit 32w; Lit 1w] [])
-    (s with vs_alloca_next := 32) /\
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   ~inst_mem_below_frontier (mk_inst 0 MCOPY [Lit 32w; Lit 0w; Lit 1w] [])
-    (s with vs_alloca_next := 32)
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>)
 Proof
   simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, sized_source_write_range_def,
@@ -139,17 +150,35 @@ QED
 Theorem memory_call_frontier_checks:
   inst_mem_below_frontier
     (mk_inst 0 CALL [Lit 0w; Lit 1w; Lit 0w; Lit 0w; Lit 32w; Lit 0w; Lit 32w] ["r"])
-    (s with vs_alloca_next := 32) /\
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   ~inst_mem_below_frontier
     (mk_inst 0 CALL [Lit 0w; Lit 1w; Lit 0w; Lit 32w; Lit 1w; Lit 0w; Lit 0w] ["r"])
-    (s with vs_alloca_next := 32) /\
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>) /\
   ~inst_mem_below_frontier
     (mk_inst 0 STATICCALL [Lit 0w; Lit 1w; Lit 0w; Lit 0w; Lit 32w; Lit 1w] ["r"])
-    (s with vs_alloca_next := 32)
+    (s with <| vs_alloca_next := 32; vs_initial_fmp := 0w;
+             vs_fmp := 0w |>)
 Proof
   simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, memory_range_of_operands_def,
        mk_inst_def, eval_operand_def] >> EVAL_TAC
+QED
+
+(* An access inside the dynamic region [vs_initial_fmp, vs_fmp) passes above
+ * the alloca frontier; one byte past vs_fmp does not. *)
+Theorem memory_dynamic_region_check:
+  inst_mem_below_frontier (mk_inst 0 MLOAD [Lit 64w] ["x"])
+    (s with <| vs_alloca_next := 0; vs_initial_fmp := 64w;
+             vs_fmp := 96w |>) /\
+  ~inst_mem_below_frontier (mk_inst 0 MLOAD [Lit 65w] ["x"])
+    (s with <| vs_alloca_next := 0; vs_initial_fmp := 64w;
+             vs_fmp := 96w |>)
+Proof
+  simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def, mk_inst_def, eval_operand_def] >>
+  EVAL_TAC
 QED
 
 (* INVOKE's direct footprint is empty; callee accesses are NOT omitted from
