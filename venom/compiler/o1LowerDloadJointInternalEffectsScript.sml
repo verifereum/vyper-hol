@@ -196,7 +196,7 @@ Proof
       drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
       disch_then irule >> simp[]) >>
   conj_tac
-  >- (asm_rewrite_tac[] >> simp[istore_def] >>
+  >- (asm_rewrite_tac[venomExecSemanticsTheory.istore_memory] >>
       irule ld_dyn_agree_mstore_below >> simp[] >> decide_tac) >>
   `ld_shared_agree D s.vs_call_ctx.cc_address
      (tn with t_imm := key_update tn.t_imm (w2n x) (op_taint tn vop))
