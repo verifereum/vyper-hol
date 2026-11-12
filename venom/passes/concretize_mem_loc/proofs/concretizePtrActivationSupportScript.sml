@@ -54,10 +54,7 @@ Theorem ptr_frame_current_table_step:
     (pointer_derived_vars fn (ptr_frame_site_roots dyn fn s'.vs_allocas PG site))
     (step_prov PG G inst s') site
 Proof
-  cheat >>
-  strip_tac >> irule ptr_frame_site_step >> simp[] >>
-  irule ptr_frame_support_extend >>
-  goal_assum (drule_at Any) >> metis_tac[ptr_step_allocas_extend]
+  cheat
 QED
 
 Theorem ptr_frame_current_table_entry:
@@ -92,32 +89,7 @@ Theorem ptr_frame_table_support_invariant:
         (ptr_frame_site_roots (w2n vs0.vs_initial_fmp) f.cf_fn f.cf_state.vs_allocas f.cf_params site))
       f.cf_prov site) stk
 Proof
-  cheat >>
-  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
-  >- (rpt strip_tac >> simp[ptr_site_supported_def] >> metis_tac[lookup_function_MEM])
-  >- (rpt gen_tac >> strip_tac >> strip_tac >>
-      qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
-      `MEM inst (fn_insts fn)` by
-        (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
-          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
-         metis_tac[MEM_EL]) >>
-      simp[] >> gen_tac >> irule ptr_frame_current_table_step >>
-      fs[EVERY_MEM] >> metis_tac[])
-  >- (rpt gen_tac >> strip_tac >> strip_tac >>
-      qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
-      `~is_alloca_op inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
-        (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def, is_alloca_op_def]) >>
-      `s'.vs_allocas = s.vs_allocas` by
-        metis_tac[step_inst_non_alloca_preserves_allocas] >>
-      simp[] >> gen_tac >> irule ptr_frame_current_table_entry >> simp[])
-  >- (rpt gen_tac >> strip_tac >> strip_tac >>
-      qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
-      simp[ptr_site_supported_def] >> metis_tac[lookup_function_MEM])
-  >> rpt gen_tac >> strip_tac >> strip_tac >>
-  qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
-  `s'.vs_allocas = f.cf_state.vs_allocas` by metis_tac[ptr_return_allocas] >>
-  simp[] >> metis_tac[ptr_site_support_restrict]
-
+  cheat
 QED
 
 Theorem ptr_frame_current_table_support:

@@ -33,21 +33,7 @@ Theorem ptr_paired_read_range_masked_bytes:
     read_byte (w2n x + j) a.po_state.vs_memory =
       read_byte (w2n y + j) at.po_state.vs_memory
 Proof
-  cheat >>
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  `n <> 0` by decide_tac >>
-  drule_all ptr_paired_read_range_classification >> strip_tac
-  >- (gvs[] >>
-      `j + w2n x < lo` by decide_tac >>
-      drule ptr_paired_fixed_read_recovery >>
-      disch_then (qspec_then `j + w2n x` mp_tac) >> simp[] >> metis_tac[]) >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_ownership >> strip_tac >>
-  `ptr_stage_placements C' positions` by fs[ptr_paired_prefix_def] >>
-  drule_all ptr_stage_placements_live_owner >> strip_tac >>
-  `p = pa` by gvs[] >> gvs[] >>
-  suspend "owned"
+  cheat
 QED
 
 Resume ptr_paired_read_range_masked_bytes[owned]:

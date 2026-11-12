@@ -54,41 +54,7 @@ Theorem ptr_paired_fixed_read_recovery:
   endpoint.po_inst.inst_opcode <> ASSIGN ==>
   read_byte x endpoint.po_state.vs_memory = read_byte x at.po_state.vs_memory
 Proof
-  cheat >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_source >> strip_tac >>
-  drule ptr_structural_trace_target >> strip_tac >>
-  drule ptr_structural_trace_embedding >> strip_tac >>
-  drule_all ptr_chrono_ordinary_non_revert >> strip_tac >>
-  `!q. q < LENGTH done ==> SUC (EL q done) < LENGTH h /\
-    ~in_revert_forward (EL (EL q done) h).po_fn
-      (EL (EL q done) h).po_state` by
-    (rpt strip_tac >>
-     qpat_assum `ptr_event_embedding _ _ _` mp_tac >>
-     pure_rewrite_tac[ptr_event_embedding_def] >> strip_tac >>
-     `EL q done < LENGTH h - 1` by
-       (first_x_assum (qspecl_then [`q`,`LENGTH done`] mp_tac) >>
-        simp[EL_APPEND_EQN]) >>
-     fs[EVERY_EL] >>
-     `EL q done < LENGTH h` by decide_tac >> metis_tac[]) >>
-  `!q. q < LENGTH done /\
-    x NOTIN range_bytes (step_writes (EL (EL q done) h).po_inst
-      (EL (EL q done) h).po_state (EL (SUC (EL q done)) h).po_state) ==>
-    x NOTIN range_bytes (step_writes (EL q ht).po_inst
-      (EL q ht).po_state (EL (SUC q) ht).po_state)` by
-    (rpt strip_tac >> drule_all ptr_paired_fixed_actual_write_reflection >>
-     metis_tac[]) >>
-  drule_all ptr_chrono_last_actual_or_none >> strip_tac
-  >- (`read_byte x endpoint.po_state.vs_memory = read_byte x vs.vs_memory` by
-        (irule ptr_chrono_history_no_actual_write_byte >> simp[] >> metis_tac[]) >>
-      `read_byte x at.po_state.vs_memory = read_byte x vs.vs_memory` by
-        (irule ptr_chrono_history_no_actual_write_byte >>
-         qexistsl [`C'`,`ht`] >> simp[] >>
-         rpt strip_tac >> `k < LENGTH done` by decide_tac >> metis_tac[]) >>
-      metis_tac[]) >>
-  suspend "writer"
+  cheat
 QED
 
 Resume ptr_paired_fixed_read_recovery[writer]:

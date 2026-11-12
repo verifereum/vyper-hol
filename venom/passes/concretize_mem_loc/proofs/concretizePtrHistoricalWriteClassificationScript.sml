@@ -35,36 +35,5 @@ Theorem ptr_historical_write_classification:
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
     db <= w2n d /\ w2n d + len <= db+sb /\ pb+sb < dimword(:256))
 Proof
-  cheat >>
-  strip_tac >>
-  `op_taint (EL j h).po_taint ops.iao_ofst = {}` by
-    (drule_all ptr_write_offset_untainted >> simp[]) >>
-  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
-  drule ptr_structural_transcript_ownership >> disch_then (qspec_then `j` mp_tac) >>
-  simp[ptr_snapshot_ownership_def] >> strip_tac >>
-  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
-  Cases_on `op_prov (EL j h).po_prov ops.iao_ofst = NONE /\ w2n d + len <= lo`
-  >- (disj1_tac >> simp[] >>
-      Cases_on `ops.iao_ofst` >> gvs[op_prov_def] >>
-      fs[ptr_ledger_erases_def] >>
-      Cases_on `FLOOKUP TGj s` >> gvs[] >>
-      metis_tac[flookup_thm]) >>
-  disj2_tac >>
-  qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
-  simp[access_ok_def] >> strip_tac >>
-  qpat_x_assum `!off len. MEM _ (source_memory_write_ranges _ _) /\ _ ==> _`
-    (qspecl_then [`w2n d`,`len`] mp_tac) >>
-  simp[mem_write_ops_def] >>
-  (impl_tac >- (strip_tac >> gvs[] >> decide_tac)) >> strip_tac >>
-  rename1 `FLOOKUP (EL j h).po_prov dv = SOME (db,sb)` >>
-  `?token bid. FLOOKUP TGj dv = SOME (token,bid)` by
-    (fs[ptr_ledger_erases_def] >>
-     Cases_on `FLOOKUP TGj dv` >> gvs[] >> PairCases_on `x` >> metis_tac[]) >>
-  `?pb.
-    FLOOKUP positions (Allocation bid) = SOME (pb,sb)` by
-    (`j <= j` by simp[] >>
-     drule_all ptr_transcript_historical_placement >> metis_tac[]) >>
-  drule_all ptr_stage_placements_strict_bound >> strip_tac >>
-  metis_tac[]
+  cheat
 QED

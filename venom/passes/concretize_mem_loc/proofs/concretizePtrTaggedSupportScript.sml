@@ -42,12 +42,5 @@ Theorem ptr_source_tagged_param_support:
   k < LENGTH PT /\ EL k PT = SOME tag ==>
   k IN P a.po_fn.fn_name
 Proof
-  cheat >>
-  strip_tac >> drule_all ptr_owned_current_static >> strip_tac >>
-  drule_all ptr_source_ownership_params_erases >>
-  simp[ptr_params_erases_def, EVERY_EL] >> strip_tac >>
-  `tag IN FDOM births` by
-    (first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
-  `?site. FLOOKUP births tag = SOME site` by metis_tac[FLOOKUP_DEF] >>
-  gvs[ptr_params_ok_def, EL_MAP, ptr_owner_project_def] >> metis_tac[]
+  cheat
 QED

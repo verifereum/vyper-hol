@@ -39,29 +39,7 @@ Theorem ptr_paired_mload_endpoint_inputs:
       (SOME x) (SOME y) /\
     ~in_revert_forward a.po_fn a.po_state
 Proof
-  cheat >>
-  strip_tac >>
-  drule ptr_paired_prefix_endpoint >> strip_tac >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_ownership >> strip_tac >>
-  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
-    a.po_fn a.po_inst a.po_state` by
-    (drule ptr_gap_ownership_history >> strip_tac >>
-     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `MEM a.po_fn C.ctx_functions` by
-    (drule_all ptr_frame_sizes >> simp[]) >>
-  `active_inst a.po_fn a.po_inst a.po_state` by
-    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[Once frame_reachable_cases] >> metis_tac[]) >>
-  `MEM a.po_inst (fn_insts a.po_fn)` by
-    (fs[active_inst_def, fn_insts_MEM] >> metis_tac[lookup_block_MEM, MEM_EL]) >>
-  `inst_wf a.po_inst /\ fn_shape_ok a.po_fn` by
-    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
-     metis_tac[]) >>
-  `?op out. a.po_inst.inst_operands = [op] /\
-    a.po_inst.inst_outputs = [out]` by (gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
-  suspend "inputs"
+  cheat
 QED
 
 Resume ptr_paired_mload_endpoint_inputs[inputs]:
@@ -169,52 +147,7 @@ Theorem ptr_paired_current_range_classification:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
-  cheat >>
-  strip_tac >> (
-  drule ptr_paired_prefix_transcript >> strip_tac >>
-  drule ptr_structural_transcript_erasure >> strip_tac >>
-  drule ptr_structural_trace_ownership >> strip_tac >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
-  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
-  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
-    a.po_fn a.po_inst a.po_state` by
-    (drule ptr_gap_ownership_history >> strip_tac >>
-     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
-  `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
-  Cases_on `op_prov a.po_prov ops.iao_ofst = NONE /\ w2n x + n <= lo`
-  >- (disj1_tac >>
-      `op_prov TG ops.iao_ofst = NONE` by
-        (Cases_on `ops.iao_ofst` >> gvs[op_prov_def] >>
-         fs[ptr_ledger_erases_def] >>
-         Cases_on `FLOOKUP TG s` >> gvs[] >> metis_tac[flookup_thm]) >>
-      gvs[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]) >>
-  disj2_tac >>
-  `?v b sz. ops.iao_ofst = Var v /\ FLOOKUP a.po_prov v = SOME (b,sz) /\
-     b <= w2n x /\ w2n x + n <= b+sz` by
-    (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
-     simp[access_ok_def] >> strip_tac >>
-     `op_prov a.po_prov ops.iao_ofst = NONE ==> lo < w2n x+n` by
-       (rpt strip_tac >> gvs[] >> decide_tac) >>
-     Cases_on `mem_read_ops a.po_inst = SOME ops /\
-               MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)` >> gvs[]) >>
-  gvs[] >>
-  `?token aid. FLOOKUP TG v = SOME (token,aid)` by
-    (fs[ptr_ledger_erases_def] >>
-     Cases_on `FLOOKUP TG v` >> gvs[] >> PairCases_on `x'` >> metis_tac[]) >>
-  `FLOOKUP births (token,aid) = SOME (b,sz)` by
-    (fs[ptr_ledger_erases_def] >>
-     qpat_x_assum `!v. FLOOKUP a.po_prov v = _` (qspec_then `v` mp_tac) >> simp[]) >>
-  `?pa. FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
-    y = x - n2w b + n2w pa` by
-    gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
-  `ptr_stage_placements C' positions` by fs[ptr_paired_prefix_def] >>
-  drule_all ptr_stage_placements_strict_bound >> strip_tac >>
-  `w2n y = pa + (w2n x - b)` by
-    (irule ptr_closed_relocation_value >> simp[] >>
-     qexists_tac `sz` >> simp[]) >>
-  qexistsl_tac [`token`,`aid`,`pa`] >> simp[] >> decide_tac)
+  cheat
 QED
 
 Theorem ptr_paired_read_range_classification:

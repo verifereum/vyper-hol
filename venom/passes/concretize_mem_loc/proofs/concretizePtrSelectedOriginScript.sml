@@ -59,16 +59,7 @@ Theorem ptr_frame_write_selected_origin:
     MEM r i.inst_outputs /\ w2n vs0.vs_initial_fmp <= FST site /\
     v IN pointer_derived_vars fn {r})
 Proof
-  cheat >>
-  strip_tac >>
-  `ptr_site_supported
-    (pointer_derived_vars fn (ptr_frame_site_roots (w2n vs0.vs_initial_fmp) fn s.vs_allocas PG site)) G site` by
-    metis_tac[ptr_frame_current_table_support] >>
-  drule_all ptr_selected_origin >> strip_tac
-  >- (disj1_tac >> qexists `aid` >> simp[] >>
-      irule ptr_production_operand_used_seed >> simp[] >>
-      metis_tac[bp_scan_production_complete, ptr_write_op_operand]) >>
-  disj2_tac >> metis_tac[]
+  cheat
 QED
 
 (* This origin disjunction does not select provenance from a numeric byte

@@ -32,8 +32,8 @@ Theorem ptr_owner_op_projection:
   ptr_owner_erases dyn births (op_prov tagged op) (op_prov numerical op) /\
   (!owner. op_prov tagged op = SOME owner ==> owner IN FDOM births)
 Proof
-  Cases_on `op` >> simp[op_prov_def, ptr_owner_erases_def] >>
-  simp[ptr_ledger_erases_def] >> metis_tac[]
+  Cases_on `op` >> rw[op_prov_def, ptr_ledger_erases_def] >>
+  gvs[ptr_owner_erases_def] >> metis_tac[]
 QED
 
 Theorem ptr_owner_op_untagged[local]:

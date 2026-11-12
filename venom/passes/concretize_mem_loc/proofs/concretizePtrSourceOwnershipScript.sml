@@ -242,16 +242,7 @@ Theorem ptr_tagged_chrono_step_erasure[local]:
   ptr_ledger_erases dyn births TG' b.po_prov /\
   ptr_saved_erases dyn births saved' b.po_stack
 Proof
-  cheat >>
-  ho_match_mp_tac ptr_tagged_chrono_step_ind >> rpt conj_tac >>
-  rpt gen_tac >> strip_tac >> gen_tac >>
-  simp[ptr_observe_def] >> strip_tac
-  >- (simp[] >> irule ptr_tagged_step_projection >> simp[])
-  >- (simp[] >> irule ptr_owner_entry_projection >> simp[])
-  >- (`ptr_ledger_erases dyn births FEMPTY FEMPTY` by
-        simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >>
-      simp[ptr_saved_erases_cons] >> irule ptr_owner_call_params >> simp[]) >>
-  gvs[ptr_saved_erases_cons] >> irule ptr_owner_restrict_projection >> simp[]
+  cheat
 QED
 
 Theorem ptr_chrono_singleton_empty[local]:
@@ -273,35 +264,7 @@ Theorem ptr_source_ownership_erasure_invariant[local]:
     ptr_ledger_erases (w2n vs0.vs_initial_fmp) births TG a.po_prov /\
     ptr_saved_erases (w2n vs0.vs_initial_fmp) births saved a.po_stack)
 Proof
-  cheat >>
-  ho_match_mp_tac ptr_source_ownership_ind >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> conj_tac
-      >- metis_tac[ptr_source_ownership_rules] >>
-      drule ptr_chrono_singleton_empty >> strip_tac >>
-      simp[ptr_params_erases_def,
-        concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def, ptr_saved_erases_nil]) >>
-  rpt gen_tac >> strip_tac >> rename1 `ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PT' TG' saved'` >>
-  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >> strip_tac >>
-  `ptr_chrono_step C a b` by metis_tac[ptr_tagged_chrono_step_projection] >>
-  `ptr_source_birth_caches vs0 C h a tokens registry births` by
-    metis_tac[ptr_source_ownership_caches] >>
-  `a.po_inst.inst_opcode <> DALLOCA` by
-    metis_tac[ptr_source_birth_caches_activations, ptr_source_activations_sound,
-      ptr_birth_reachable_no_dalloca] >>
-  qmatch_goalsub_abbrev_tac `ptr_params_erases births' _ _` >>
-  `!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP births' owner = SOME site` by
-    (simp[Abbr `births'`] >> rpt strip_tac >>
-     irule ptr_source_birth_caches_snoc_retained >> metis_tac[]) >>
-  `ptr_params_erases births' PT a.po_params /\
-   ptr_ledger_erases births' TG a.po_prov /\ ptr_saved_erases births' saved a.po_stack` by
-    metis_tac[ptr_params_erases_extend, ptr_ledger_erases_extend, ptr_saved_erases_extend] >>
-  drule ptr_tagged_chrono_step_erasure >> disch_then (qspec_then `births'` mp_tac) >>
-  simp[] >> disch_then irule >> strip_tac >>
-  `ptr_source_birth_caches vs0 C (h ++ [b]) b
-    (ptr_activation_tokens h a b tokens) (ptr_activation_registry h a b registry) births'` by
-    metis_tac[ptr_source_ownership_caches] >>
-  drule_all ptr_source_birth_caches_active_lookup >>
-  simp[ptr_activation_tokens_def]
+  cheat
 QED
 
 Theorem ptr_source_ownership_params_erases:
