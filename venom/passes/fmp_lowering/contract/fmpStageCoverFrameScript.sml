@@ -13,6 +13,9 @@
  *)
 Theory fmpStageCoverFrame
 Ancestors
+  fmpStageCoverFramePoint fmpStageCoverFrameBlock
+  fmpStageCoverFrameCall fmpStageCoverFrameRet
+  o1ContractSimplifyCfgSrcFrame venomStepProps fnBlockBodyHelpers
   fmpStageCoverInv fmpStageCoverCall fmpStageCoverBack fmpStageCoverMem
   fmpStageBlockSim fmpStageFmpSteps fmpStageOpSteps fmpStageOpBase
   fmpStageControl fmpStageRel ptrDiscipline contextCodegenRel o1PassContract
@@ -27,7 +30,16 @@ Theorem fmp_cov_block:
   ~t2.vs_halted /\ enters_block fn' t2 t3 /\ active_inst fn' ti' t3 ==>
   fmp_cov D C C' vs vs' fmp eom stk' fn' t3
 Proof
-  cheat
+  strip_tac >>
+  `MEM ti.inst_opcode [JMP; JNZ; DJMP]` by
+    metis_tac[step_ok_terminator_jump, MEM] >>
+  `MEM ti.inst_opcode [JMP; JNZ; DJMP; INVOKE; RET; RETFMP; DRET]` by
+    metis_tac[MEM] >>
+  drule_all fmp_cov_control_point >> strip_tac >>
+  `inst = ti` by (fs[MEM] >> gvs[]) >>
+  qpat_x_assum `inst = ti` SUBST_ALL_TAC >>
+  drule_all fmp_cov_block_point >> strip_tac >>
+  irule fmp_cov_of_point >> metis_tac[]
 QED
 
 Theorem fmp_cov_call:
@@ -42,7 +54,12 @@ Theorem fmp_cov_call:
     (<| cf_fn := fn'; cf_inst := ti; cf_state := t; cf_params := PG';
         cf_prov := G'; cf_tvar := tn'.t_var |> :: stk') callee' t1
 Proof
-  cheat
+  strip_tac >>
+  `MEM ti.inst_opcode [JMP; JNZ; DJMP; INVOKE; RET; RETFMP; DRET]` by simp[] >>
+  drule_all fmp_cov_control_point >> strip_tac >>
+  `inst.inst_opcode = INVOKE` by metis_tac[] >>
+  drule_all fmp_cov_call_point >> strip_tac >>
+  irule fmp_cov_of_point >> metis_tac[]
 QED
 
 Theorem fmp_cov_ret:
@@ -57,5 +74,15 @@ Theorem fmp_cov_ret:
   fmp_cov D C C' vs vs' fmp eom stk' g.cf_fn
     (t' with vs_inst_idx := SUC g.cf_state.vs_inst_idx)
 Proof
-  cheat
+  strip_tac >>
+  `MEM ri.inst_opcode [RET; RETFMP; DRET]` by
+    metis_tac[step_inst_intret_opcodes] >>
+  `MEM ri.inst_opcode [JMP; JNZ; DJMP; INVOKE; RET; RETFMP; DRET]` by
+    metis_tac[MEM] >>
+  drule_all fmp_cov_control_point >> strip_tac >>
+  `inst = ri /\ ri.inst_opcode = RET` by
+    (fs[MEM, pre_fmp_opcode_def] >> gvs[]) >>
+  qpat_x_assum `inst = ri` SUBST_ALL_TAC >>
+  drule_all fmp_cov_ret_point >> strip_tac >>
+  irule fmp_cov_of_point >> metis_tac[]
 QED
