@@ -18,7 +18,7 @@
  *)
 Theory bodyFullExits
 Ancestors
-  bodyFullPreds bodySimFull gasOutcomeFull fragGasOriginPtr fragGasOriginPtrExec
+  bodyFullPreds bodySimFull gasOutcomeFull gasOutcomeFullCompose fragGasOriginPtr fragGasOriginPtrExec
   fragGasOrigin vyperContext vyperTypeCallGraph gasSummary
   fragGasPathPtr gasShadow gasShadowState bodyPtrDefs bodyMemoryDefs
   stmtSimAssertProps stmtSimIfProps
@@ -29,7 +29,8 @@ Ancestors
   unitTransformDefs allocaHistory bodySim rich_list exprSimHyps bodySimStmtCases
   bodyExprPreFacts supportedStmts supportedExprs supportedStmtTraverse
   supportedExprTraverse vyperTypeSystem vyperInterpreter vyperState
-  vyperAST venomInst venomState venomExecSemantics venomExecProps list
+  vyperAST vyperValue valueEncoding venomInst venomState venomExecSemantics
+  venomExecProps list
 Libs
   monadsyntax
 
@@ -179,6 +180,19 @@ Proof
   conj_tac >> qexists_tac `0` >> simp[exit_result_def]
 QED
 
+(* TEMP until gasOutcomeFullCompose has it. *)
+Theorem gas_outcome_full_exit[local]:
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+    (s, G, tn) [] (r, G', tn') /\
+  exit_result r /\ R res (ee with gas_obs := []) (G', tn') r ==>
+  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
+    (es, s, G, tn) Q R
+Proof
+  rw[gas_outcome_full_def] >> qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >> simp[gas_explicit_def]
+QED
+
 (* ===== Posts at a jump ===== *)
 
 Theorem ghost_inv_at_jump_to[local]:
@@ -223,21 +237,21 @@ Proof
   `allocas_from lo s0` by fs[ghost_inv_at_def] >>
   drule emit_inst_extends >> strip_tac >>
   `return_buf_frame d cenv sb s0` by
-    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `sa`, `s0`] >>
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s0`, `sa`] >>
      simp[]) >>
   `alloca_history func (jump_to lbl s0)` by
-    (irule alloca_history_jump >> qexists_tac `s0` >> simp[jump_to_def]) >>
+    (irule alloca_history_jump >> simp[jump_to_def] >> metis_tac[]) >>
   `stmt_state_rel ctx func cenv cx (es with gas_obs := []) (jump_to lbl s0)` by
     (simp[stmt_state_rel_jump_to] >> drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
        mp_tac) >>
      simp[stmt_state_rel_inst_idx]) >>
-  pure_rewrite_tac[gas_outcome_full_def] >>
-  qexists_tac `[]` >> disj1_tac >>
-  qexistsl_tac [`INR exc`, `es`, `OK (jump_to lbl s0)`, `G0`, `tn0`] >>
-  conj_tac >- simp[gas_explicit_def, raise_def] >>
-  conj_tac >- (irule emit_jmp_origin_ptr >> simp[] >> metis_tac[]) >>
-  disj1_tac >> simp[] >> qexists_tac `cenv` >>
+  `gas_origin_ptr_path (D, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+     (s0, G0, tn0) [] (OK (jump_to lbl s0), G0, tn0)` by
+    (irule emit_jmp_origin_ptr >> simp[] >> metis_tac[]) >>
+  irule gas_outcome_full_pure >>
+  qexistsl_tac [`G0`, `es`, `INR exc`, `jump_to lbl s0`, `tn0`] >>
+  simp[raise_def] >> qexists_tac `cenv` >>
   simp[stmt_lands_def, cenv_top_ext_refl, ghost_inv_at_jump_to,
        return_buf_frame_jump_to] >>
   gvs[Abbr `lbl`, Abbr `exc`, Abbr `st`, jump_to_def, lookup_var_def])
@@ -277,16 +291,19 @@ Proof
   Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
   fs[markerTheory.Abbrev_def] >>
   `allocas_from lo s0` by fs[ghost_inv_at_def] >>
-  pure_rewrite_tac[gas_outcome_full_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[Once evaluate_def, raise_def, gas_explicit_def] >>
-  qmatch_goalsub_abbrev_tac `AssertException msg` >>
-  fs[markerTheory.Abbrev_def] >>
+  qmatch_goalsub_abbrev_tac `eval_stmt cx (Raise rk)` >>
+  `?msg. !st. eval_stmt cx (Raise rk) st = (INR (AssertException msg), st) /\
+              (opc = INVALID ==> msg = "UNREACHABLE")` by
+    simp[Abbr `rk`, Once evaluate_def, raise_def] >>
   `?a t. step_inst_base (mk_inst sa.cs_next_id opc ops []) s0 = Abort a t /\
          expr_exit (INR (AssertException msg) : unit + exception) (Abort a t)` by
-    (simp[expr_exit_def] >> metis_tac[step_revert_zero, step_invalid]) >>
-  qexistsl_tac [`INR (AssertException msg)`, `es`, `Abort a t`, `G0`, `tn0`] >>
-  simp[exit_result_def, stmt_exit_ptr_def] >>
-  irule emit_abort_origin_ptr >> simp[] >> metis_tac[])
+    (gvs[expr_exit_def] >> metis_tac[step_revert_zero, step_invalid]) >>
+  `gas_origin_ptr_path (D, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
+     (s0, G0, tn0) [] (Abort a t, G0, tn0)` by
+    (irule emit_abort_origin_ptr >> simp[] >> metis_tac[]) >>
+  irule gas_outcome_full_exit >>
+  qexistsl_tac [`G0`, `es`, `Abort a t`, `INR (AssertException msg)`, `tn0`] >>
+  gvs[exit_result_def, stmt_exit_ptr_def])
 QED
 
 Theorem body_raise_bare_case_full:
@@ -327,8 +344,9 @@ Theorem assert_shadow_prefix[local]:
 Proof
   simp[fresh_label_def, emit_inst_def, comp_bind_def, fresh_id_def, emit_def,
        new_block_def] >>
-  strip_tac >> gvs[gas_shadow_state_def, gas_shadow_block_def,
-    gas_shadow_inst_def, mk_inst_def]
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  fs[gas_shadow_state_def, gas_shadow_block_def] >>
+  fs[gas_shadow_inst_def, mk_inst_def]
 QED
 
 Theorem compile_assert_frag_full:
@@ -356,9 +374,12 @@ Proof
   drule_all assert_shadow_prefix >> strip_tac >> gvs[] >>
   `cs_extends sa s1 /\ cs_extends shadow_sa t1` by
     metis_tac[compile_expr_grows] >>
-  drule_all assert_compiler_code >> strip_tac >>
-  qpat_x_assum `cs_extends shadow_sa t1` assume_tac >>
-  drule_all assert_compiler_code >> strip_tac >>
+  qpat_assum `cs_extends sa s1`
+    (mp_then (Pos hd) mp_tac assert_compiler_code) >>
+  disch_then (drule_all_then strip_assume_tac) >>
+  qpat_assum `cs_extends shadow_sa t1`
+    (mp_then (Pos hd) mp_tac assert_compiler_code) >>
+  disch_then (drule_all_then strip_assume_tac) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[assert_expr_admissible] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -368,37 +389,34 @@ Proof
   disch_then (qspecl_then [`sa`, `s1`, `shadow_sa`, `t1`, `op`, `s0`, `G0`,
     `tn0`] mp_tac) >>
   simp[] >> strip_tac >>
-  qpat_x_assum `gas_outcome_full _ _ (bind _ _) _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def])
-  >- suspend "normal"
-  >- suspend "exception" >>
-  simp[gas_outcome_full_def] >> qexists_tac `marks` >> disj2_tac >>
-  metis_tac[assert_expr_exempt])
-QED
-
-Resume compile_assert_frag_full[exception]:
-  markerLib.RESUME_TAC >> (
-  gvs[] >> Cases_on `res` >- gvs[expr_exit_def] >>
-  rename1 `expr_exit (INR err) r` >>
-  pure_rewrite_tac[gas_outcome_full_def] >>
-  qexists_tac `marks` >> disj1_tac >>
-  qexistsl_tac [`INR err`, `ee`, `r`, `G'`, `tn'`] >>
-  conj_tac
-  >- (gen_tac >> simp[eval_assert_bind] >>
-      asm_simp_tac (srw_ss()) [Once bind_def]) >>
-  simp[] >> disj2_tac >> simp[stmt_exit_ptr_def] >>
-  metis_tac[expr_exit_INR_type])
+  qmatch_goalsub_abbrev_tac `eval_stmt cx (Assert e ak)` >>
+  `eval_stmt cx (Assert e ak) =
+     bind (bind (eval_expr cx e) (read_result cx))
+       (\v. if v = BoolV T then return ()
+            else if v = BoolV F then
+              raise (AssertException
+                (if ak = AssertBare then "" else "UNREACHABLE"))
+            else raise (Error (TypeError "not BoolV")))` by
+    (irule eval_assert_bind >> simp[Abbr `ak`]) >>
+  pop_assum (fn th => PURE_REWRITE_TAC [th]) >>
+  irule gas_outcome_full_bind_lands >> rpt conj_tac >> rpt strip_tac
+  >~ [`gas_marked_exec`]
+  >- (irule gas_exempt_cert_bind_value >> simp[] >> metis_tac[])
+  >~ [`gas_exempt_cert`]
+  >- (irule gas_exempt_cert_error_value >> simp[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ (es, s0, G0, tn0) _ _`
+    (mp_then (Pos hd) mp_tac gas_outcome_full_post_source) >>
+  disch_then irule >> reverse conj_tac
+  >- (rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def] >>
+      simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]) >>
+  rpt strip_tac >> gvs[] >>
+  suspend "normal")
 QED
 
 Resume compile_assert_frag_full[normal]:
   markerLib.RESUME_TAC >> (
-  gvs[] >>
-  `~t.vs_halted` by
-    (drule gas_origin_ptr_path_exec >> simp[exit_result_def] >> metis_tac[]) >>
   `?b. v = BoolV b` by
-    (qmatch_asmsub_abbrev_tac `eval_stmt cx (Assert e ak)` >>
-     Cases_on `eval_stmt cx (Assert e ak)
-       (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` >>
+    (Cases_on `eval_stmt cx (Assert e ak) (es with gas_obs := xs)` >>
      drule_all gas_admissible_result >> strip_tac >>
      drule_at (Pat `eval_stmt _ _ _ = _`) eval_assert_forced_ok >>
      disch_then (qspec_then `lctx` mp_tac) >>
@@ -411,14 +429,9 @@ Resume compile_assert_frag_full[normal]:
   `op_taint tn' op = {}` by gvs[ptr_val_ok_def] >>
   `allocas_from lo t` by fs[ghost_inv_at_def] >>
   `gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (s0,G0,tn0) marks (OK (jump_to (if b then ok else fl) t),G',tn')` by
-    (`gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (t,G',tn') [] (OK (jump_to (if b then ok else fl) t),G',tn')` by
-       (irule emit_jnz_origin_ptr >> simp[] >>
-        qexistsl_tac [`op`, `s3`, `s4`] >> simp[]) >>
-     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` kall_tac >>
+     (t,G',tn') [] (OK (jump_to (if b then sb.cs_current_bb else s5.cs_current_bb) t),G',tn')` by
+    (irule emit_jnz_origin_ptr >> simp[] >>
+     qexistsl_tac [`op`, `s3`, `s4`] >> simp[]) >>
   Cases_on `b`
   >- suspend "true"
   >> suspend "false")
@@ -428,7 +441,10 @@ Resume compile_assert_frag_full[true]:
   markerLib.RESUME_TAC >> (
   gvs[] >>
   `sa.cs_next_var <= sb.cs_next_var` by
-    gvs[cs_extends_def] >>
+    (qpat_assum `lower_value _ _ _ e sa = _`
+       (strip_assume_tac o MATCH_MP (cj 2 compile_expr_grows)) >>
+     imp_res_tac fresh_label_props >> imp_res_tac new_block_props >>
+     imp_res_tac emit_inst_extends >> gvs[] >> decide_tac) >>
   drule assert_success_post_mem >> simp[] >>
   disch_then (qspecl_then [`sb`, `lctx`, `d`] mp_tac) >> simp[] >>
   strip_tac >>
@@ -439,44 +455,36 @@ Resume compile_assert_frag_full[true]:
        mp_tac) >>
      simp[stmt_state_rel_inst_idx]) >>
   qunabbrev_tac `t'` >>
-  pure_rewrite_tac[gas_outcome_full_def] >>
-  qexists_tac `marks` >> disj1_tac >>
-  qexistsl_tac [`INL ()`, `ee`, `OK (jump_to sb.cs_current_bb t)`, `G'`,
-                `tn'`] >>
-  conj_tac
-  >- (gen_tac >> simp[eval_assert_bind] >>
-      asm_simp_tac (srw_ss()) [Once bind_def, return_def]) >>
-  simp[] >> disj1_tac >> qexists_tac `cenv` >>
+  irule gas_outcome_full_pure >>
+  qexistsl_tac [`G'`, `ee`, `INL ()`, `jump_to sb.cs_current_bb t`, `tn'`] >>
+  simp[return_def] >>
   gvs[ghost_inv_at_jump_to, ghost_kept_at_def])
 QED
 
 Resume compile_assert_frag_full[false]:
   markerLib.RESUME_TAC >> (
   gvs[] >>
-  qmatch_goalsub_abbrev_tac `eval_stmt cx (Assert e ak)` >>
   qmatch_asmsub_abbrev_tac `emit_inst opc ops [] s5` >>
   `?a u. step_inst_base (mk_inst s5.cs_next_id opc ops [])
-      (jump_to fl t) = Abort a u /\
+      (jump_to s5.cs_current_bb t) = Abort a u /\
     expr_exit (INR (AssertException
       (if ak = AssertBare then "" else "UNREACHABLE")) : unit + exception)
       (Abort a u)` by
     (simp[Abbr `ak`, Abbr `opc`, Abbr `ops`, expr_exit_def] >>
      metis_tac[step_revert_zero, step_invalid]) >>
   `gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (jump_to fl t,G',tn') [] (Abort a u,G',tn')` by
+     (jump_to s5.cs_current_bb t,G',tn') [] (Abort a u,G',tn')` by
     (irule emit_abort_origin_ptr >>
      simp[jump_to_def, Abbr `opc`, Abbr `ops`] >>
      fs[allocas_from_def, jump_to_def] >> metis_tac[]) >>
-  pure_rewrite_tac[gas_outcome_full_def] >>
-  qexists_tac `marks` >> disj1_tac >>
-  qexistsl_tac [`INR (AssertException
-      (if ak = AssertBare then "" else "UNREACHABLE"))`, `ee`, `Abort a u`,
-      `G'`, `tn'`] >>
-  conj_tac
-  >- (gen_tac >> simp[Abbr `ak`, eval_assert_bind] >>
-      asm_simp_tac (srw_ss()) [Once bind_def, raise_def]) >>
-  conj_tac >- metis_tac[gas_origin_ptr_path_append, APPEND_NIL] >>
-  disj2_tac >> simp[exit_result_def, stmt_exit_ptr_def])
+  `gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (t,G',tn') [] (Abort a u,G',tn')` by
+    metis_tac[gas_origin_ptr_path_append, APPEND_NIL] >>
+  irule gas_outcome_full_exit >>
+  qexistsl_tac [`G'`, `ee`, `Abort a u`,
+    `INR (AssertException (if ak = AssertBare then "" else "UNREACHABLE"))`,
+    `tn'`] >>
+  gvs[Abbr `ak`, raise_def, exit_result_def, stmt_exit_ptr_def])
 QED
 
 Finalise compile_assert_frag_full
@@ -500,5 +508,6 @@ Proof
          int_calls_assert_reason_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
   irule compile_assert_frag_full >> gvs[type_stmt_def] >>
-  fs[body_expr_full_ok_def]
+  fs[body_expr_full_ok_def] >> first_x_assum (drule_all_then assume_tac) >>
+  simp[]
 QED
