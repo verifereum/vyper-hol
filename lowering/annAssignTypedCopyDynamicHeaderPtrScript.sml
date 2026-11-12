@@ -7,6 +7,7 @@ Ancestors
   words arithmetic list pred_set emitHelper compileEnv fragExec exprLoweringProps
   assignBasePtrStoragePath representationCleanPtr valueEncoding
   wordLoadStorePtr bodyPtrMakeArrayWordStore valueEncodingProps
+  augAssignPtrFieldLoad bodyPtrSubscriptCountedAdd typedCopyPtr
 
 Theorem annassign_dynamic_capacity_guard_counted:
   !s fn bb id len too_long ok n cap tn G ctx D PG.
@@ -206,4 +207,83 @@ Proof
   irule EQ_TRANS >>
   irule_at Any mstore_mem_bytes_at_disjoint >>
   simp[update_var_def] >> decide_tac
+QED
+
+Theorem annassign_dynamic_payload_addresses_counted:
+  !s fn bb id src dst sp dp a b S T G tn ctx D PG.
+    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id ADD [Var src;Lit 32w] [sp]) /\
+    get_instruction bb (s.vs_inst_idx+1) =
+      SOME (mk_inst (id+1) ADD [Var dst;Lit 32w] [dp]) /\
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    ptr_covers G tn src s (32+S) /\ ptr_covers G tn dst s (32+T) /\
+    w2n a+32 < dimword (:256) /\ w2n b+32 < dimword (:256) /\
+    sp <> dst /\ sp <> dp ==>
+    ?H tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 H tf (OK u) /\
+      u = (update_var dp (b+32w) (update_var sp (a+32w) s)
+        with vs_inst_idx := s.vs_inst_idx+2) /\
+      lookup_var sp u = SOME (a+32w) /\ lookup_var dp u = SOME (b+32w) /\
+      ptr_covers H tf sp u S /\ ptr_covers H tf dp u T /\
+      tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+      tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+      (!x. x <> sp /\ x <> dp ==>
+        FLOOKUP H x = FLOOKUP G x /\
+        op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `ptr_covers G tn src s (32+sspan)` >>
+  rename1 `ptr_covers G tn dst s (32+dspan)` >>
+  `op_taint tn (Var src) = {} /\ op_taint tn (Var dst) = {}` by
+    gvs[ptr_covers_def] >>
+  drule_all add_literal_path_ptr >>
+  disch_then (qspecl_then [`PG`,`G`,`D`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t)` >>
+  `lookup_var dst t = SOME b /\ ~t.vs_halted /\
+   lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb t.vs_inst_idx =
+     SOME (mk_inst (id+1) ADD [Var dst;Lit 32w] [dp])` by
+    gvs[Abbr `t`, update_var_def, lookup_var_def, FLOOKUP_UPDATE, ADD1] >>
+  `op_taint tm (Var dst) = {}` by
+    gvs[Abbr `tm`, step_taint_def, mk_inst_def, set_var_taint_def,
+      op_taint_def, FLOOKUP_UPDATE] >>
+  drule_all add_literal_path_ptr >>
+  disch_then (qspecl_then [`PG`,`H`,`D`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG H tm t 0 J tf (OK u)` >>
+  `ptr_covers H tm sp t sspan` by
+    (simp[Abbr `H`, Abbr `tm`, Abbr `t`] >>
+     irule (SRULE [] (Q.INST [`off` |-> `32`] add_displacement_coverage)) >> simp[] >>
+     qexists_tac `32+sspan` >> simp[]) >>
+  `ptr_covers H tm dst t (32+dspan)` by
+    (gvs[Abbr `H`, Abbr `tm`, Abbr `t`, ptr_covers_def,
+      step_prov_def, out_prov_def, set_prov_def, first_prov_def, op_prov_def, mk_inst_def,
+      lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+      step_taint_def, set_var_taint_def, op_taint_def] >> metis_tac[]) >>
+  `ptr_covers J tf dp u dspan` by
+    (simp[Abbr `J`, Abbr `tf`, Abbr `u`] >>
+     irule (SRULE [] (Q.INST [`off` |-> `32`] add_displacement_coverage)) >>
+     simp[] >> qexists_tac `32+dspan` >> simp[]) >>
+  `ptr_covers J tf sp u sspan` by
+    (gvs[Abbr `J`, Abbr `tf`, Abbr `u`, ptr_covers_def,
+      step_prov_def, out_prov_def, set_prov_def, first_prov_def, op_prov_def, mk_inst_def,
+      lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+      step_taint_def, set_var_taint_def, op_taint_def] >> metis_tac[]) >>
+  qexistsl_tac [`J`,`tf`,`u`] >>
+  conj_tac >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+    goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)) >>
+  `tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans` by
+    simp[Abbr `tf`, Abbr `tm`, copy_len_binop_ghost_frame] >>
+  simp[] >>
+  simp[Abbr `u`, Abbr `t`, update_var_def, lookup_var_def,
+    FLOOKUP_UPDATE, venom_state_component_equality] >>
+  simp[Abbr `tf`, Abbr `tm`, Abbr `J`, Abbr `H`,
+    step_taint_def, mem_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+    new_site_bytes_def, step_writes_def, written_taint_def, range_bytes_def,
+    update_var_def, out_taint_def,
+    step_prov_def, out_prov_def, set_prov_def, first_prov_def, op_prov_def,
+    mk_inst_def, set_var_taint_def, op_taint_def, FLOOKUP_UPDATE,
+    FLOOKUP_DRESTRICT] >> rpt strip_tac >>
+  gvs[ptr_covers_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED
