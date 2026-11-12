@@ -80,7 +80,8 @@ Proof
   fn_inst_ids_distinct func` by fs[deploy_ctor_code_def] >>
  drule_all deploy_ctor_registration_code >> strip_tac >>
  drule deploy_ctor_shifted_budget >> strip_tac >>
- `supported_program tops` by fs[deploy_source_ok_def] >>
+ `supported_program tops /\ supported_program_deploy tops` by
+   fs[deploy_source_ok_def] >>
  `!bb. lookup_block st2.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0` by
    (rpt strip_tac >> drule_all deploy_ctor_raw_blocks_no_phi >> simp[]) >>
