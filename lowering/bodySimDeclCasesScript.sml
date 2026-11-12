@@ -30,12 +30,12 @@ Theory bodySimDeclCases
 Ancestors
   supportedExprTraverse allocLimitsProps
   valueEncodingDefs exprSimSource
-  bodyExprPreFacts
+  bodyExprPreFacts exprOpenMain exprReasonOperand
   stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
   list finite_map bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
-  stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps
+  stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps stmtSimDeclTyped
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayFrame vyperTyping
   fragExec compileEnv supportedStmts supportedStmtTraverse vyperAST
@@ -262,6 +262,38 @@ Proof
   metis_tac[body_expr_ok_def]
 QED
 
+(* Semantic openness of the RHS in the environment containing the fresh local. *)
+Theorem body_annassign_declared_rhs_open[local]:
+  !cenv cx env e es tops id typ st c st1 ctx gs tv es1 sa vv sb.
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+    declare_local cenv id typ st = (c,st1) /\
+    storage_vars_rel c cx /\ transient_vars_rel c cx /\
+    eval_expr cx e (es with gas_obs := gs) = (INL tv,es1) /\
+    compile_expr c (expr_type e) e sa = (vv,sb) /\
+    ~block_is_terminated sa ==> ~block_is_terminated sb
+Proof
+  rpt strip_tac >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `same_frame cenv c` by
+    (drule_then irule declare_local_same_frame >> simp[]) >>
+  `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
+  `stmt_exprs_ok c (AnnAssign id typ e)` by
+    metis_tac[stmt_exprs_ok_same_frame] >>
+  `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
+  `expr_body_pre c cx env e es` by metis_tac[body_annassign_rhs_pre] >>
+  `expr_body_pre c cx env e (es with gas_obs := gs)` by
+    simp[expr_body_pre_gas_obs] >>
+  drule_all compile_expr_open_general >> simp[]
+QED
+
 (* A declaration of a type that is not a word, from a value of the type
    itself, a bytestring (a narrower one widens), or an empty value of a
    type with a length word: stmtSimDeclMem's
@@ -444,7 +476,63 @@ Theorem body_annassign_widened_aggregate:
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule declared_name_unbound >> metis_tac[]) >>
+  `well_typed_expr env e /\ assignable_type env.type_defs typ /\
+   type_widens_to env.type_defs (expr_type e) typ /\
+   id NOTIN FDOM env.var_types` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `expr_body_pre cenv cx env e es` by metis_tac[body_annassign_rhs_pre] >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     res_tac >> gvs[FLOOKUP_DEF]) >>
+  `type_memory_bytes cenv typ = type_memory_size tyv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  drule expr_body_pre_type_evaluates >>
+  disch_then (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  `type_memory_bytes cenv (expr_type e) = type_memory_size x` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `~is_word_type (expr_type e)` by
+    metis_tac[externalNormalizePremisesTheory.normalize_return_source_kinds] >>
+  `type_memory_bytes cenv (expr_type e) < 2 ** 64 /\
+   type_memory_bytes cenv typ < 2 ** 64` by
+    (fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+     drule alloc_limits_expr_type_alloc_ok >> simp[type_alloc_ok_def]) >>
+  `type_memory_size x < dimword (:256) /\
+   type_memory_size tyv < dimword (:256)` by
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+  irule compile_annassign_typed_widen_stmt_frag >>
+  gns[] >> rpt conj_tac
+  >- (rpt strip_tac >> metis_tac[body_annassign_declared_rhs_open])
+  >- (rpt gen_tac >> strip_tac >>
+      conj_tac >- metis_tac[body_annassign_declared_rhs] >>
+      `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
+      rpt gen_tac >> strip_tac >>
+      conj_tac >- metis_tac[compile_expr_grows] >>
+      irule lower_compile_expr_not_label >>
+      goal_assum (drule_at Any) >>
+      fs[expr_sim_inv_def] >> metis_tac[])
+  >- fs[expr_sim_inv_def]
+  >>~- ([`value_has_type _ _`], rpt gen_tac >> strip_tac >>
+      `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+      `value_runtime_typed env typ v /\
+       value_runtime_typed env (lowered_value_type cenv e) v` by
+        metis_tac[memory_rhs_read_destination_typed, memory_rhs_read_annotation_typed] >>
+      gvs[value_runtime_typed_def])
+  >>~- ([`sfields_tenv_consistent _ _`], fs[expr_sim_inv_def])
+  >>~- ([`acyclic_struct_metadata _`], fs[body_inv_def])
 QED
 
 Theorem body_annassign_case:
