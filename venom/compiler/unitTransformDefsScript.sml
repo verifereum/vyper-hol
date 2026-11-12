@@ -101,9 +101,13 @@ Definition o1_initial_state_ok_def:
     vs.vs_allocas = FEMPTY
 End
 
+(* Each range is empty, below the alloca frontier, or inside the dynamic
+   region [vs_initial_fmp, vs_fmp) that DALLOCA allocates from. *)
 Definition inst_mem_below_frontier_def:
   inst_mem_below_frontier inst s <=>
-    EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next)
+    EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next \/
+                       w2n s.vs_initial_fmp <= off /\
+                       off + len <= w2n s.vs_fmp)
       (source_memory_read_ranges inst s ++ source_memory_write_ranges inst s)
 End
 
