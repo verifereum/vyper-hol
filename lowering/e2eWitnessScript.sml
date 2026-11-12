@@ -497,7 +497,8 @@ Proof
        vyperInterpreterTheory.bind_arguments_def, listTheory.REV_DEF,
        tx_block_fields_rel_def, p23_tx_params_def,
        loweringStateRelDefsTheory.tx_env_ok_def,
-       vfmTotalBalanceTheory.balance_bounded_def, p23_total_balance_empty]
+       vfmTotalBalanceTheory.balance_bounded_def, p23_total_balance_empty,
+       vfmExecutionPropTheory.all_accounts_def]
 QED
 
 val p23_exports_eval = EVAL ``exports_ok [] 2w [(NONE,p23_tops)] []``;
