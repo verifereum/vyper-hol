@@ -6,71 +6,9 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem stmt_state_rel_start_gas_obs[local]:
-  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s =
-  stmt_state_rel H ctx func cenv cx es s
-Proof
-  simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
-       immutable_alloca_sep_def]
-QED
 
-Theorem gas_value_prefix_start_gas_obs:
-  gas_value_prefix H memory (ctx,func,cenv,cx) (ty,e) (sa,sb,op)
-    (es,s0) marks out ==>
-  gas_value_prefix H memory (ctx,func,cenv,cx) (ty,e) (sa,sb,op)
-    (es with gas_obs := gs,s0) marks out
-Proof
-  PairCases_on `out` >>
-  simp[gas_value_prefix_def, gas_marked_exec_def, expr_post_def,
-       locals_kept_def, popped_kept_def, stmt_state_rel_start_gas_obs] >>
-  strip_tac >>
-  `storage_well_formed_on cx (es with gas_obs := gs) (FST H)` by
-    (fs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
-     rpt strip_tac >> res_tac >>
-     Cases_on `b` >> fs[vyperStorageBackendTheory.get_storage_def]) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
 
-Theorem gas_marked_exec_start_gas_obs[local]:
-  gas_marked_exec memory (ctx,func) source (es with gas_obs := gs,s0)
-    marks res ee r =
-  gas_marked_exec memory (ctx,func) source (es,s0) marks res ee r
-Proof
-  simp[gas_marked_exec_def]
-QED
 
-Theorem gas_exempt_cert_start_gas_obs:
-  !memory tops env source start marks out endpoint.
-    gas_exempt_cert memory tops env source start marks out endpoint ==>
-    !gs. gas_exempt_cert memory tops env source
-      (FST start with gas_obs := gs, SND start) marks out endpoint
-Proof
-  ho_match_mp_tac gas_exempt_cert_ind >> rpt strip_tac >> simp[]
-  >- (irule gas_exempt_cert_origin >>
-      fs[gas_exempt_origin_def] >>
-      drule gas_value_prefix_start_gas_obs >>
-      disch_then (qspec_then `gs` assume_tac) >> metis_tac[]) >>
-  fs[]
-  >- metis_tac[gas_exempt_cert_bind_unit, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_unit]
-  >- metis_tac[gas_exempt_cert_bind_bool, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_bool]
-  >- metis_tac[gas_exempt_cert_bind_result, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_result]
-  >- metis_tac[gas_exempt_cert_bind_value, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_value]
-  >- metis_tac[gas_exempt_cert_bind_place, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_place]
-  >- metis_tac[gas_exempt_cert_bind_values, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_values]
-  >- metis_tac[gas_exempt_cert_bind_results, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_results]
-  >- (irule gas_exempt_cert_cleanup >> qexists `mid` >> simp[])
-  >- (irule gas_exempt_cert_handler >> qexists `mid` >> simp[])
-  >- (irule gas_exempt_cert_get_scopes >> simp[])
-  >- metis_tac[gas_exempt_cert_invoke]
-  >> metis_tac[gas_exempt_cert_unforce_result]
-QED
 
 Theorem gas_marked_return_prefix[local]:
   gas_marked_path F ctx func s0 0 (OK s1) ==>
