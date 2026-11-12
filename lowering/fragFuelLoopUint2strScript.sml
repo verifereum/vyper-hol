@@ -350,9 +350,9 @@ Theorem uint2str_setup_word[local]:
   run_inst_seq (TAKE 3 (u2s_setup a op buf)) s = OK t ==>
   ?w. lookup_var (u2s_var a 0) t = SOME w
 Proof
-  simp[u2s_setup_def, u2s_inst_def, mk_inst_def,
-       exprLoweringPropsTheory.run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_def] >>
+  simp[u2s_setup_def, u2s_inst_def, mk_inst_def] >>
+  pure_rewrite_tac[exprLoweringPropsTheory.run_inst_seq_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_def] >>
   Cases_on `eval_operand op s` >> simp[] >>
   rename1 `eval_operand op s = SOME w` >>
   simp[venomStateTheory.eval_operand_def] >>
@@ -467,17 +467,184 @@ Proof
        venomStateTheory.jump_to_def]
 QED
 
-(* The loop works on a fresh copy val_var of val_op, made before the loop
-   (so no precondition on val_op is needed), and on a fresh counter i_var
-   from 0.  Each round (cond -> body -> cond) runs straight-line code, sets
-   val_var to val_var / 10 and adds 1 to i_var, leaving through final_lbl
-   when val_var is 0.  The body writes only val_var, i_var and variables it
-   allocates itself, so the loop variable is the one that shrinks: a 256-bit
-   value reaches 0 after at most 78 divisions by 10, so i_var is at most 78
-   and never wraps, and the bound is independent of the runtime state. *)
+(* From the condition head through the final tail. *)
+Theorem uint2str_finish_outcome[local]:
+  no_phi_fn fn /\
+  (!bb. MEM bb (u2s_blocks a op buf n) ==>
+        lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
+  N <= a.cs_next_var /\
+  s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\
+  (?w. lookup_var (u2s_var a 0) s = SOME w) ==>
+  ?j. j <= (2 ** 256) * 2 + 1 /\
+    fuel_outcome G ctx fn s j
+      (\t. (t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0) /\
+           vars_kept N Wv s t)
+Proof
+  strip_tac >>
+  `lookup_block (u2s_label a 1) fn.fn_blocks =
+     SOME <|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|> /\
+   lookup_block (u2s_label a 2) fn.fn_blocks =
+     SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a buf n|> /\
+   lookup_block (u2s_label a 4) fn.fn_blocks =
+     SOME <|bb_label := u2s_label a 4; bb_instructions := u2s_final a buf n|>` by
+    (fs[u2s_blocks_def, boolTheory.DISJ_IMP_THM, boolTheory.FORALL_AND_THM]) >>
+  `!v k. var_below N v ==> v <> u2s_var a k` by
+    metis_tac[uint2str_var_not_below] >>
+  mp_tac (Q.INST [`s0` |-> `s`,
+    `cb` |-> `<|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|>`,
+    `bb` |-> `<|bb_label := u2s_label a 2; bb_instructions := u2s_body a buf n|>`,
+    `H` |-> `\t. t.vs_current_bb = u2s_label a 1 /\ t.vs_inst_idx = 0 /\
+                 (?w. lookup_var (u2s_var a 0) t = SOME w) /\ vars_kept N Wv s t`,
+    `Q` |-> `\t. t.vs_current_bb = u2s_label a 4 /\ t.vs_inst_idx = 0 /\
+                 vars_kept N Wv s t`] (SPEC_ALL uint2str_loop_outcome)) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >>
+      simp[u2s_body_def, u2s_inst_def, mk_inst_def])) >>
+  disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\t. (t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0) /\
+           vars_kept N Wv s t`, `1`] mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> fs[] >> qexists_tac `1` >> simp[] >>
+    `fuel_outcome G ctx fn t 1
+       (\u. (u.vs_current_bb = u2s_label a 5 /\ u.vs_inst_idx = 0) /\
+            vars_kept N Wv t u)` by
+      (irule (Q.INST [`buf` |-> `buf`, `n` |-> `n`] (SPEC_ALL uint2str_final_outcome)) >>
+       simp[] >> rpt strip_tac >>
+       simp[u2s_final_def, u2s_inst_def, mk_inst_def] >> metis_tac[]) >>
+    irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+    simp[] >> metis_tac[vars_kept_trans])) >>
+  strip_tac >> qexists_tac `j'` >> simp[]
+QED
+
+Theorem uint2str_checked_outcome[local]:
+  no_phi_fn fn /\
+  (!bb. MEM bb (u2s_blocks a op buf n) ==>
+        lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
+  N <= a.cs_next_var /\
+  s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\
+  (?w. lookup_var (u2s_var a 0) s = SOME w) ==>
+  ?j. j <= 1 + ((2 ** 256) * 2 + 1) /\
+    fuel_outcome G ctx fn s j
+      (\t. (t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0) /\
+           vars_kept N Wv s t)
+Proof
+  strip_tac >>
+  `lookup_block (u2s_label a 0) fn.fn_blocks =
+     SOME <|bb_label := u2s_label a 0; bb_instructions := u2s_check a|> /\
+   lookup_block (u2s_label a 3) fn.fn_blocks =
+     SOME <|bb_label := u2s_label a 3; bb_instructions := u2s_zero a buf n|>` by
+    fs[u2s_blocks_def, boolTheory.DISJ_IMP_THM, boolTheory.FORALL_AND_THM] >>
+  `!v k. var_below N v ==> v <> u2s_var a k` by
+    metis_tac[uint2str_var_not_below] >>
+  `fuel_outcome G ctx fn s 1
+    (\t. ((t.vs_current_bb = u2s_label a 3 \/ t.vs_current_bb = u2s_label a 1) /\
+          t.vs_inst_idx = 0 /\ (?w. lookup_var (u2s_var a 0) t = SOME w)) /\
+         vars_kept N Wv s t)` by
+    (irule uint2str_check_outcome >> simp[] >> metis_tac[]) >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\t. (t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0) /\
+           vars_kept N Wv s t`, `(2 ** 256) * 2 + 1`] mp_tac) >>
+  (impl_tac >- (rpt gen_tac >> simp[] >> strip_tac >>
+    `?j. j <= (2 ** 256) * 2 + 1 /\
+      fuel_outcome G ctx fn t j
+        (\u. (u.vs_current_bb = u2s_label a 5 /\ u.vs_inst_idx = 0) /\
+             vars_kept N Wv t u)` by suspend "branch" >>
+    qexists_tac `j` >> fs[] >>
+    irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+    simp[] >> metis_tac[vars_kept_trans])) >> simp[]
+QED
+
+Resume uint2str_checked_outcome[branch]:
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
+  Cases_on `t.vs_current_bb = u2s_label a 3` >> fs[]
+  >- (qexists_tac `1` >> simp[] >>
+      irule (Q.INST [`buf` |-> `buf`, `n` |-> `n`] (SPEC_ALL uint2str_zero_outcome)) >>
+      simp[] >> rpt strip_tac >>
+      simp[u2s_zero_def, u2s_inst_def, mk_inst_def] >> metis_tac[]) >>
+  irule (Q.INST [`op` |-> `op`, `buf` |-> `buf`, `n` |-> `n`]
+               (SPEC_ALL (SRULE [] uint2str_finish_outcome))) >> simp[] >>
+  qexistsl_tac [`buf`, `n`, `op`] >> simp[])
+QED
+
+Finalise uint2str_checked_outcome
+
+Theorem uint2str_tail_outcome[local]:
+  no_phi_fn fn /\
+  (!bb. MEM bb (u2s_blocks a op buf n) ==>
+        lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
+  N <= a.cs_next_var /\ at_point a s ==>
+  ?j. j <= 2 + ((2 ** 256) * 2 + 1) /\
+    fuel_outcome G ctx fn s j
+      (\t. (t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0) /\
+           vars_kept N Wv s t)
+Proof
+  strip_tac >>
+  `lookup_block a.cs_current_bb fn.fn_blocks =
+    SOME <|bb_label := a.cs_current_bb;
+      bb_instructions := a.cs_current_insts ++ u2s_setup a op buf|>` by
+    fs[u2s_blocks_def, boolTheory.DISJ_IMP_THM, boolTheory.FORALL_AND_THM] >>
+  `!v k. var_below N v ==> v <> u2s_var a k` by
+    metis_tac[uint2str_var_not_below] >>
+  `fuel_outcome G ctx fn s 1
+    (\t. (t.vs_current_bb = u2s_label a 0 /\ t.vs_inst_idx = 0 /\
+          (?w. lookup_var (u2s_var a 0) t = SOME w)) /\ vars_kept N Wv s t)` by
+    (irule (Q.INST [`op` |-> `op`, `buf` |-> `buf`, `a` |-> `a`]
+      (SPEC_ALL uint2str_setup_outcome)) >>
+     fs[at_point_def] >>
+     qexistsl_tac [`buf`, `op`] >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND] >> rpt strip_tac >>
+     simp[u2s_setup_def, u2s_inst_def, mk_inst_def] >> metis_tac[]) >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\t. (t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0) /\
+           vars_kept N Wv s t`, `1 + ((2 ** 256) * 2 + 1)`] mp_tac) >>
+  (impl_tac >- (rpt strip_tac >>
+    `?j. j <= 1 + ((2 ** 256) * 2 + 1) /\
+      fuel_outcome G ctx fn t j
+        (\u. (u.vs_current_bb = u2s_label a 5 /\ u.vs_inst_idx = 0) /\
+             vars_kept N Wv t u)` by
+      (irule uint2str_checked_outcome >> simp[] >>
+       metis_tac[]) >>
+    qexists_tac `j` >> fs[] >>
+    irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+    simp[] >> metis_tac[vars_kept_trans])) >> simp[]
+QED
+
 Theorem fuel_ok_compile_uint2str:
   !val_op n_digits buf_size Wv E.
     fuel_ok Wv {} E (compile_uint2str val_op n_digits buf_size)
 Proof
-  cheat
+  rpt gen_tac >> rewrite_tac[fuel_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule uint2str_structure >> strip_tac >> simp[] >>
+  drule compile_uint2str_layout >> strip_tac >>
+  mp_tac (Q.SPECL [`buf_size + n_digits`, `Wv`, `{}:string set`]
+    fuel_ok_compile_alloc_buffer) >>
+  rewrite_tac[fuel_ok_def] >> disch_then drule >> strip_tac >>
+  qexists_tac `Kb + (2 + ((2 ** 256) * 2 + 1))` >>
+  rewrite_tac[frag_fuel_def] >> rpt gen_tac >> strip_tac >>
+  drule_all u2s_alloc_layout_code >> strip_tac >>
+  `N <= a.cs_next_var` by decide_tac >>
+  qpat_x_assum `frag_fuel _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[frag_fuel_def] >>
+  disch_then (qspecl_then [`G`, `N`, `ctx`, `fn`, `s`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\u. vars_kept N Wv s u /\
+       (at_point st' u \/ (u.vs_current_bb IN E /\ u.vs_inst_idx = 0))`,
+     `2 + ((2 ** 256) * 2 + 1)`] mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> fs[] >>
+    `?j. j <= 2 + ((2 ** 256) * 2 + 1) /\
+       fuel_outcome G ctx fn t j
+        (\u. (u.vs_current_bb = u2s_label a 5 /\ u.vs_inst_idx = 0) /\
+             vars_kept N Wv t u)` by
+       (irule uint2str_tail_outcome >> simp[] >> metis_tac[]) >>
+    qexists_tac `j'` >> fs[] >>
+    irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+    fs[u2s_layout_def] >>
+    simp[u2s_end_def, at_point_def] >>
+    rpt strip_tac >> irule vars_kept_trans >>
+    goal_assum (drule_at Any) >> simp[])) >>
+  strip_tac >> qexists_tac `j'` >> simp[] >> gvs[]
 QED
