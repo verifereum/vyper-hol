@@ -307,7 +307,7 @@ Proof
      births PT TG saved entries H /\
    EVERY (fn_ptr_ok P) C.ctx_functions /\
    EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-   EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions`
+   ptr_discipline lo C vs`
     by fs[ptr_demand_interval_def] >>
   `!u. u IN FDOM TGj ==> u IN fn_pv P (EL j h).po_fn` by
     (rpt strip_tac >> irule ptr_transcript_tagged_domain_support >> simp[] >>
