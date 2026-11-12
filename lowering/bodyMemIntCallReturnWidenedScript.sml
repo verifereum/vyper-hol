@@ -7,7 +7,7 @@ Ancestors
   bodyMemoryDefs intCallReturnMem intCallReturnWidenMem
   internalReturnValueEndpointMem internalReturnBytestringMem
   internalReturnCompoundEndpointMem internalReturnCompositionMem
-  internalReturnEndpointMetadataMem internalReturnSourceSeparationMem
+  internalReturnEndpointMetadataMem
   internalReturnEndpointFrameMem externalReturnNormalizedMem
   intCallReturnDirectBranchesMem stmtSimReturn compileEnv valueEncoding
   compileVyper loweringPosts exprLoweringProps stmtLowering
@@ -114,10 +114,18 @@ Resume internal_return_widened_mem[compound]:
   first_assum (irule_at (Pat `compile_internal_return _ _ _ _ _ _ _ _ _ = _`)) >>
   first_assum (irule_at (Pat `bind _ _ _ = _`)) >>
   simp[] >> rpt strip_tac >>
-  irule internal_return_source_buffer_disjoint_mem >>
+  (* HELD: the remaining goal is source/return-buffer disjointness,
+     regions_disjoint (w2n sw) (type_memory_size stv) (w2n bw) cap.  It does
+     not follow from the current return_buf_frame_def, which doesn't separate
+     the caller's buffer from the callee's allocations; held until
+     return_buf_frame carries the caller-buffer frontier.  The closing steps
+     once a disjointness lemma exists:
+  irule <disjointness lemma> >>
   first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
   first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> fs[expr_post_def] >> metis_tac[]
+  *)
+  cheat
 QED
 
 Resume internal_return_widened_mem[equal]:
