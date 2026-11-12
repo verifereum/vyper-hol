@@ -1692,12 +1692,12 @@ Theorem runtime_code_copy_run_post:
     (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s ==>
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s ==>
     ?code z. same_blocks sm sb /\
       sb.cs_current_insts = sm.cs_current_insts ++ code /\
       EVERY (\i. MEM i.inst_opcode [ALLOCA; ADD; DLOAD; MSTORE]) code /\
       run_inst_seq code s = OK z /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op z
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op z
 Proof
   rpt gen_tac >> strip_tac >>
   `t = post_value_type cenv e` by gvs[vv_post_def, vv_holds_def] >>
