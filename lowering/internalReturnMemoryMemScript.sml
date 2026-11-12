@@ -582,6 +582,9 @@ Proof
      t.vs_current_bb = sm.cs_current_bb /\
      t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted` >>
   rpt conj_tac
+  >~ [`storage_trace_frame (bind _ _)`]
+  >- (irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result])
   >~ [`storage_trace_frame _`]
   >- simp[storage_trace_frame_raise]
   >~ [`gas_marked_exec`]
@@ -639,8 +642,9 @@ Proof
   impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
   irule (Q.INST [`res` |-> `INR (ReturnException v)`, `ee` |-> `mid`]
            gas_outcome_full_exit) >>
+  TRY (conj_tac >- (fs[] >> NO_TAC)) >>
   qexistsl_tac [`G'`, `r`, `tn'`] >>
-  simp[raise_def] >>
+  qpat_assum `~t.vs_halted` (fn th => simp[th, raise_def]) >>
   rpt strip_tac
   >- (first_x_assum irule >> simp[] >>
       fs[dead_lo_ok_def]) >>
