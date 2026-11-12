@@ -266,12 +266,14 @@ QED
 Definition log_args_post_def:
   log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s <=>
     stmt_state_rel H ctx func cenv cx es' s /\
+    storage_well_formed_on cx es' (FST H) /\
     LIST_REL (log_arg_rel cenv cx sa sb es' s) xs vs /\
     wb_frame cenv es es' sa s0 s
 End
 
 Theorem log_args_post_nil:
-  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) ==>
   log_args_post H ctx func cenv cx es sa sa s es [] [] s
 Proof
   simp[log_args_post_def, wb_frame_refl]
@@ -334,9 +336,10 @@ Proof
      irule log_arg_clear_base >> metis_tac[]) >>
   `log_arg_rel cenv cx sa sb es' u (x,expr_type e) v` by
     (irule log_arg_rel_frame >> simp[] >>
-     qexistsl_tac [`ctx`, `es'`, `es1`, `func`, `t`, `sm`] >> gvs[]) >>
+     qexistsl_tac [`H`, `ctx`, `es'`, `es1`, `func`, `t`, `sm`] >> gvs[]) >>
   simp[log_args_post_def] >> conj_tac
   >- (drule_all log_args_post_state >> simp[]) >>
+  conj_tac >- fs[log_args_post_def] >>
   conj_tac
   >- (gvs[log_args_post_def] >> irule listTheory.LIST_REL_mono >>
       goal_assum (drule_at Any) >> rpt strip_tac >>
