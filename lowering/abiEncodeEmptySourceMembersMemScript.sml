@@ -3,7 +3,7 @@ Theory abiEncodeEmptySourceMembersMem
 Ancestors
   abiEncodeEmptySourceMemberLayout abiEncodeEmptySourceMemberTransportMem
   abiEncodeEmptySourceChildMem abiEncodeEmptySourceInput abiEncoderInput abiEncoderBufferFrame
-  abiEncoderWindowPhaseFrameMem abiEncoderWindowMemFrame
+  abiEncoderWindowPhaseFrameMem abiEncoderWindowMemFrame memContinuation
   abiEncoderWindowMembersMem abiEncoderWindowStructuralMembers
   abiEncoderWindowPhase abiEncoderWindowContract abiEncoderWindowMembers
   compileEnv fragExec freshWrites venomState
@@ -551,3 +551,111 @@ Resume empty_source_member_step_envelope[dynamic]:
 QED
 
 Finalise empty_source_member_step_envelope
+
+Theorem empty_source_members_cons_run[local]:
+  ^empty_member_inv /\ DROP k infos = (ei,az,ms,dyn)::rest /\
+  ^empty_child_contract /\
+  compile_abi_encode_complex_elems dst src ((ei,az,ms,dyn)::rest)
+    (abi_encoder_member_span (TAKE k infos))
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
+  ?mid u. ^(Term.subst [``s:venom_state`` |-> ``u:venom_state``,
+      ``st:compile_state`` |-> ``mid:compile_state``, ``k:num`` |-> ``SUC k``] empty_member_inv) /\
+    DROP (SUC k) infos = rest /\
+    compile_abi_encode_complex_elems dst src rest
+      (abi_encoder_member_span (TAKE (SUC k) infos))
+      (SUM (MAP abi_member_head_size (TAKE (SUC k) ats))) dp mid = (out,en) /\
+    window_phase ctx func st mid
+      (window_alloca_sites func (frag_ids st en) UNION
+        (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+      [(d,LENGTH (enc at (ListV avs)))] s u /\
+    st.cs_next_var <= mid.cs_next_var /\
+    window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en) /\
+    (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+         !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    mem_cont_sim ctx func s u /\ window_mem_frame ctx func s u
+Proof
+  strip_tac >>
+  drule_all window_members_cons_context >> strip_tac >>
+  `cs_extends ready mid /\ cs_extends mid en` by
+    metis_tac[abiEncoderAppendTheory.cs_extends_abi_encode_child,
+      cj 3 abiEncoderAppendTheory.cs_appends_abi_encode_mutual, cs_appends_def] >>
+  `cs_extends st ready` by metis_tac[abiEncoderAddressReachTheory.abi_encoder_emit_address_shape] >>
+  `fn_has_code ready en func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
+  drule_all empty_source_member_source_prepare >> strip_tac >>
+  `k < LENGTH infos` by
+    (`LENGTH (DROP k infos) = SUC (LENGTH rest)` by
+       (pure_asm_rewrite_tac[] >> rewrite_tac[LENGTH]) >>
+     qpat_x_assum `LENGTH (DROP k infos) = _` mp_tac >>
+     pure_rewrite_tac[LENGTH_DROP] >> decide_tac) >>
+  `EL k infos = (ei,az,ms,dyn) /\ DROP (SUC k) infos = rest` by
+    (qspecl_then [`infos`, `k`] mp_tac DROP_EL_CONS >>
+     asm_rewrite_tac[] >> simp_tac bool_ss [CONS_11, ADD1] >> metis_tac[]) >>
+  qpat_x_assum `compile_abi_encode_complex_elems _ _ (_::_) _ _ _ _ = _` kall_tac >>
+  `abi_encoder_admissible ei` by
+    (qpat_assum `abi_encoder_admissible (AbiComplex infos)` mp_tac >>
+     simp_tac bool_ss [abiEncoderAdmissibleTheory.abi_encoder_admissible_def,
+       abiEncoderAdmissibleTheory.abi_encoder_members_admissible_every] >>
+     simp_tac (srw_ss()) [EVERY_MEM] >>
+     disch_then (qspec_then `(ei,az,ms,dyn)` mp_tac) >>
+     simp_tac (srw_ss()) [NoAsms] >> metis_tac[MEM_EL]) >>
+  suspend "step"
+QED
+
+Resume empty_source_members_cons_run[step]:
+  `EXISTS (\(_,_,_,dyn). dyn) infos ==> site < ready.cs_next_id` by
+    (qpat_assum `window_member_cursor _ _ _ _ _ _ _ _ ready t` mp_tac >>
+     simp_tac bool_ss [window_member_cursor_def] >> metis_tac[]) >>
+  `window_alloca_sites func (frag_ids ready mid) SUBSET window_alloca_sites func (frag_ids ready en) /\
+   DISJOINT (window_alloca_sites func (frag_ids ready mid)) (window_alloca_sites func (frag_ids mid en)) /\
+   (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+     site NOTIN window_alloca_sites func (frag_ids ready mid) /\
+     DISJOINT (window_alloca_sites func (frag_ids ready mid) UNION {site})
+       (window_alloca_sites func (frag_ids mid en)))` by
+    metis_tac[window_member_site_split] >>
+  drule_all empty_source_member_step_envelope >> strip_tac >>
+  suspend "package"
+QED
+
+Resume empty_source_members_cons_run[package]:
+  qpat_x_assum `!dst src st out st' ctx func s at av sb d. _` kall_tac >>
+  drule_all empty_source_complex_child >> strip_tac >>
+  `ats' = ats` by metis_tac[abi_encoder_tuple_type_unique] >>
+  qpat_x_assum `ats' = ats` SUBST_ALL_TAC >>
+  `abi_encoder_member_span (TAKE (SUC k) infos) = abi_encoder_member_span (TAKE k infos) + ms /\
+   SUM (MAP abi_member_head_size (TAKE (SUC k) ats)) =
+     SUM (MAP abi_member_head_size (TAKE k ats)) + az` by
+    (rpt (qpat_x_assum `!R. _` kall_tac) >>
+     gvs[abiEncoderInputTheory.abi_encoder_member_span_def] >>
+     simp[TAKE_SUC, TAKE1_DROP, MAP_APPEND, SUM_APPEND]) >>
+  `window_alloca_sites func (frag_ids ready en) SUBSET window_alloca_sites func (frag_ids st en) /\
+   window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en)` by
+    (simp_tac (srw_ss()) [window_alloca_sites_def, abiEncoderPropsTheory.frag_ids_def,
+       SUBSET_DEF] >> rpt strip_tac >> decide_tac) >>
+  `mem_cont_sim ctx func s t'` by metis_tac[mem_cont_sim_trans] >>
+  `window_mem_frame ctx func s t'` by metis_tac[window_mem_frame_trans] >>
+  `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+       !i b sz. i IN R /\ FLOOKUP t'.vs_allocas i = SOME (b,sz) ==> sz = 32` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!R. _` (qspec_then `R` mp_tac) >>
+     (impl_tac >- (first_x_assum (qspec_then `R` mp_tac) >> asm_rewrite_tac[])) >>
+     rewrite_tac[]) >>
+  `st.cs_next_var <= mid.cs_next_var` by decide_tac >>
+  qexistsl_tac [`mid`, `t'`] >> asm_rewrite_tac[] >>
+  (conj_tac >- (qpat_x_assum `compile_abi_encode_complex_elems _ _ rest _ _ _ _ = _` mp_tac >>
+    asm_rewrite_tac[])) >>
+  irule window_phase_chain >>
+  qexistsl_tac [`{}`, `[]`, `ready`, `ids`, `outs`, `t`] >>
+  simp_tac (srw_ss()) [NoAsms, EMPTY_SUBSET, EVERY_DEF] >>
+  asm_rewrite_tac[] >>
+  (conj_tac >-
+    (simp_tac (srw_ss()) [EVERY_MEM] >> rpt strip_tac >>
+     rename1 `MEM e outs` >> PairCases_on `e` >>
+     qpat_x_assum `EVERY _ outs` mp_tac >> simp_tac (srw_ss()) [EVERY_MEM] >>
+     disch_then (qspec_then `(e0,e1)` mp_tac) >>
+     simp_tac (srw_ss()) [NoAsms] >> asm_rewrite_tac[] >> decide_tac)) >>
+  qpat_x_assum `ids SUBSET _` mp_tac >>
+  qpat_x_assum `window_alloca_sites func (frag_ids ready en) SUBSET _` mp_tac >>
+  simp_tac (srw_ss()) [SUBSET_DEF] >> metis_tac[]
+QED
+
+Finalise empty_source_members_cons_run
