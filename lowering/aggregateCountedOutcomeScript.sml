@@ -101,7 +101,7 @@ Proof
           qexists_tac `marks` >> disj1_tac >>
           irule gas_bad_storage_at_bind_left >> simp[] >>
           irule gas_bad_storage_at_counted_prefix >>
-          goal_assum drule >> simp[]) >>
+          metis_tac[]) >>
       `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
          mid.storage_trace` by fs[storage_trace_domain_def] >>
       disch_then (DISJ_CASES_THEN strip_assume_tac)

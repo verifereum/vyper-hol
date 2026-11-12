@@ -31,7 +31,7 @@ val literal_prefix_tac =
        typed_val_to_w256_word_value, word_value_def, val_to_w256_def];
 
 Theorem literal_word_prefix[local]:
-  !ctx func cenv cx ty ann l es sa sb op s0.
+  !H ctx func cenv cx ty ann l es sa sb op s0.
     is_word_type ann /\
     ((?b. l = BoolL b) \/ (?i. l = IntL i) \/ (?i. l = DecimalL i)) /\
     lower_value compile_expr cenv ty (Literal ann l) sa = (op,sb) /\

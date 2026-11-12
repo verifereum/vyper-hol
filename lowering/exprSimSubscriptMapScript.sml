@@ -228,7 +228,7 @@ Proof
           qexists_tac `marks` >> disj1_tac >>
           irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
           irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
-          goal_assum drule >> simp[]) >>
+          metis_tac[]) >>
       `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
          mid.storage_trace` by
         fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
@@ -285,7 +285,7 @@ Proof
           qexists_tac `marks` >> disj1_tac >>
           irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
           irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
-          goal_assum drule >> simp[]) >>
+          metis_tac[]) >>
       `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
          mid.storage_trace` by
         fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>

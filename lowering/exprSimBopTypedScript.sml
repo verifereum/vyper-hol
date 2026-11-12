@@ -130,7 +130,7 @@ Resume compile_bop_typed_sim[left_normal]:
       storage_well_formed_on cx es (FST H)` by metis_tac[] >>
      `expr_post H ctx func cenv cx e1 es sa s1 s0
         (es_end with gas_obs := []) v1 x t` by metis_tac[] >>
-     simp[gas_value_prefix_def]) >>
+     simp[gas_value_prefix_def] >> metis_tac[]) >>
   qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
   disch_then (mp_tac o CONJUNCT1) >>

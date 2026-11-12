@@ -113,6 +113,7 @@ Proof
            >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                       |> REWRITE_RULE [APPEND_NIL]) >>
                qexistsl_tac [`es_end`,`t`,`v`] >> gvs[]) >>
+           TRY (disj2_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
            gvs[])) >>
       Cases_on `res`
       >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`

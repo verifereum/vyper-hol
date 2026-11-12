@@ -1001,7 +1001,7 @@ Resume compile_literal_other_vv_sim[bytes]:
   BETA_TAC >> rewrite_tac[] >> gen_tac >> strip_tac >>
   qexists_tac `Value (BytesV bs)` >> simp[] >>
   qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
-    (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+    (qspec_then `H` mp_tac) >> (impl_tac >- fs[]) >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
     (drule_all (Q.INST [`es` |-> `es with gas_obs := []`] (SPEC_ALL literal_bytelike_run)) >>
      strip_tac >> gvs[]) >>
@@ -1074,7 +1074,7 @@ Resume compile_literal_other_vv_sim[string]:
   BETA_TAC >> rewrite_tac[] >> gen_tac >> strip_tac >>
   qexists_tac `Value (StringV str)` >> simp[] >>
   qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
-    (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+    (qspec_then `H` mp_tac) >> (impl_tac >- fs[]) >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
     (drule (SRULE []
        (Q.INST [`bs` |-> `MAP (n2w o ORD) str : word8 list`,
