@@ -790,8 +790,10 @@ Proof
   qspecl_then [`cx`, `ann`, `n`, `args`] mp_tac eval_expr_concat_bind >>
   impl_tac >- first_assum ACCEPT_TAC >> disch_then SUBST1_TAC >>
   qpat_x_assum `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _`
-    (fn th => irule (INST_TYPE [alpha |-> ``:eval_result``]
+    (fn th => match_mp_tac (INST_TYPE [alpha |-> ``:eval_result``]
                        (MATCH_MP concat_values_then_outcome th))) >>
+  conj_tac >- (gen_tac >> simp[vyperStorageTraceTheory.storage_trace_frame_def]) >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
   reverse conj_tac >- simp[PULL_EXISTS] >>
   qx_genl_tac [`vs`, `ee`, `t5`, `gs`] >>
   disch_then (CONJUNCTS_THEN2 (qx_choose_then `H1` assume_tac)
@@ -842,12 +844,14 @@ Proof
   qpat_assum `evaluate_concat _ _ = _` (fn th1 =>
     qpat_assum `ee with gas_obs := [] = ee` (fn th2 =>
       simp[th1, th2, gas_marked_path_def])) >>
-  gen_tac >> disch_tac >>
+  disj1_tac >> gen_tac >> disch_tac >>
   `stmt_state_rel H ctx func cenv cx ee t5 /\
    storage_well_formed_on cx ee (FST H)` by
     (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
        (qspec_then `H` mp_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   (* numeric facts *)
   `sa.cs_next_var <= s4.cs_next_var /\ sa.cs_next_var <= s5.cs_next_var /\
    sa.cs_next_id < sb.cs_next_id /\ sa.cs_next_id <= s4.cs_next_id` by
@@ -885,7 +889,9 @@ Proof
      rpt (pop_assum kall_tac) >> metis_tac[]) >>
   (* local regions at the final state are those at the prefix state *)
   `local_ptrs_rel func cenv es.scopes t` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+    (qpat_x_assum `stmt_state_rel (storage_trace_horizon _) _ _ _ _ es t` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
   `!nm lb lsz. local_region cenv ee.scopes t6 nm lb lsz ==>
                local_region cenv es.scopes t nm lb lsz` by
     (rpt strip_tac >> irule local_region_frame >>
