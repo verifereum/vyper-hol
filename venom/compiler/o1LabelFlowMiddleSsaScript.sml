@@ -53,3 +53,38 @@ Proof
   drule_all (cj 1 visit_common_rename_owner) >> strip_tac >>
   qexists `Hf` >> fs[current_rename_owner_def]
 QED
+
+Theorem inserted_function_wf:
+  wf_function f /\ ir_supply_covers_fn s f /\ ir_supply_inst_ok s /\
+  set (MAP FST defs) SUBSET set (fn_ir_vars f) /\
+  add_phi_nodes_supply s df pm li f.fn_blocks defs = (bbs,t) ==>
+  wf_function (f with fn_blocks := bbs)
+Proof
+  strip_tac >>
+  `ssa_vars_covered s (fn_ir_vars f) /\
+   ssa_vars_covered s (MAP FST defs)` by
+    (gvs[ssa_vars_covered_def, ir_supply_covers_fn_def,
+         list_subset_def, EVERY_MEM, SUBSET_DEF] >> metis_tac[]) >>
+  drule add_phi_nodes_supply_ok >>
+  disch_then (qspecl_then [`defs`,`df`,`pm`,`li`,`f.fn_blocks`,`bbs`,`t`] mp_tac) >>
+  (impl_tac >- (gvs[wf_function_def, fn_labels_def, fn_ir_vars_def,
+    fn_inst_ids_distinct_def, fn_ir_inst_ids_def, block_ir_inst_ids_def,
+    ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+    fs[lambdify block_ir_inst_ids_def])) >> strip_tac >>
+  `EVERY bb_well_formed bbs` by
+    (irule o1MakeSsaFrontierTheory.add_phi_nodes_supply_well_formed >>
+     goal_assum $ drule_at Any >> fs[wf_function_def, EVERY_MEM]) >>
+  `MAP (\b. (b.bb_label,bb_succs b)) bbs =
+   MAP (\b. (b.bb_label,bb_succs b)) f.fn_blocks` by
+    metis_tac[o1MakeSsaCfgTheory.add_phi_nodes_supply_cfg] >>
+  gvs[wf_function_def, fn_labels_def, fn_has_entry_def,
+      fn_inst_ids_distinct_def, ssa_ids_supply_ok_def,
+      lambdify block_ir_inst_ids_def, EVERY_MEM] >>
+  conj_tac >- (Cases_on `bbs` >> gvs[]) >>
+  simp[fn_succs_closed_def] >> rpt strip_tac >>
+  `MEM (bb.bb_label,bb_succs bb)
+     (MAP (\b. (b.bb_label,bb_succs b)) f.fn_blocks)` by
+    (qpat_x_assum `block_succs_map bbs = _` (SUBST1_TAC o SYM) >>
+     simp[MEM_MAP] >> qexists `bb` >> simp[]) >>
+  fs[MEM_MAP, fn_succs_closed_def, fn_labels_def] >> metis_tac[]
+QED
