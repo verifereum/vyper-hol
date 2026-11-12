@@ -49,7 +49,8 @@ Proof
     (drule (iffLR MEM_classify_internal) >> strip_tac >>
      drule supported_program_runtime_bodies_shape_ok >>
      simp[runtime_bodies_shape_ok_def] >> strip_tac >>
-     first_x_assum drule >> simp[]) >>
+     first_x_assum (qspecl_then [`src0`,`src1`,`src2`,`src3`,`src4`,
+       `src5`,`src6`,`src7`] mp_tac) >> simp[]) >>
   simp[package_internal_fn_def, set_internal_package_target_def,
     update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
     cenv_static_ok_def] >>
