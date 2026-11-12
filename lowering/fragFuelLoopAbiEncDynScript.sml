@@ -912,7 +912,8 @@ Proof
 QED
 
 Theorem abi_encode_dyn_round_core[local]:
-  !G ctx fn H Q B P R (counter:venom_state -> bytes32) Kb.
+  !G ctx fn H Q (B:bytes32 -> bytes32 -> venom_state -> bool) P R
+   (counter:venom_state -> bytes32) Kb.
   (!s. H s ==> fuel_outcome G ctx fn s 1
      (\t. Q t \/ ?a c. B a c t /\ c = counter s /\ w2n c < 2**256-1)) /\
   (!a c s. B a c s ==> fuel_outcome G ctx fn s 0 (P a c)) /\
@@ -948,6 +949,107 @@ Proof
   `w2n (c+1w) = w2n c + 1` by
     (gvs[wordsTheory.dimword_def, GEN_ALL wordsTheory.w2n_add_2]) >>
   simp[Abbr `result`] >> disj2_tac >> gvs[]
+QED
+
+Theorem abi_encode_dyn_round_semantics[local]:
+  !hi pid si p hx hy hz x0 x1 x2 x3 x4 x5 x6 x7 x8 nd ni
+   len_op src dst dp cl msz asz hdr body exit ca cb Kb G ctx fn hb pb sb N origin.
+  let ip = Var p;
+      outputs = [x0;x1;x2;x3;x4;x5;x6;x7;x8];
+      hcode = [mk_inst hi MLOAD [ip] [hx];
+               mk_inst (hi+1) LT [Var hx; len_op] [hy];
+               mk_inst (hi+2) ISZERO [Var hy] [hz];
+               mk_inst (hi+3) JNZ [Var hz; Label exit; Label body] []];
+      pcode = [mk_inst pid MLOAD [ip] [x0];
+               mk_inst (pid+1) ADD [src; Lit 32w] [x1];
+               mk_inst (pid+2) MUL [Var x0; Lit (n2w msz)] [x2];
+               mk_inst (pid+3) ADD [Var x1; Var x2] [x3];
+               mk_inst (pid+4) ADD [dst; Lit 32w] [x4];
+               mk_inst (pid+5) MUL [Var x0; Lit (n2w asz)] [x5];
+               mk_inst (pid+6) ADD [Var x4; Var x5] [x6];
+               mk_inst (pid+7) MLOAD [dp] [x7];
+               mk_inst (pid+8) ADD [Var x4; Var x7] [x8]];
+      scode = [mk_inst si MSTORE [Var x6; Var x7] [];
+               mk_inst (si+1) ADD [Var x7; cl] [nd];
+               mk_inst (si+2) MSTORE [dp; Var nd] [];
+               mk_inst (si+3) ADD [Var x0; Lit 1w] [ni];
+               mk_inst (si+4) MSTORE [ip; Var ni] [];
+               mk_inst (si+5) JMP [Label hdr] []]
+  in
+  no_phi_fn fn /\ callees_stable G ctx fn /\
+  lookup_block hdr fn.fn_blocks = SOME hb /\
+  (!i. i < 4 ==> get_instruction hb i = SOME (EL i hcode)) /\
+  ALL_DISTINCT [hx;hy;hz] /\
+  EVERY (\v. ~var_below N v /\ ip <> Var v /\ len_op <> Var v) [hx;hy;hz] /\
+  lookup_block body fn.fn_blocks = SOME pb /\
+  (!i. i < 9 ==> get_instruction pb i = SOME (EL i pcode)) /\
+  ALL_DISTINCT outputs /\ EVERY (\v. ~var_below N v /\ ip <> Var v) outputs /\
+  ca.cs_current_bb = body /\ LENGTH ca.cs_current_insts = 9 /\
+  frag_fuel {} {} {} ca cb Kb /\ fn_has_code ca cb fn /\
+  N <= ca.cs_next_var /\ var_below ca.cs_next_var p /\ var_below ca.cs_next_var x0 /\
+  lookup_block cb.cs_current_bb fn.fn_blocks = SOME sb /\
+  (!i. i < 6 ==> get_instruction sb (LENGTH cb.cs_current_insts+i) = SOME (EL i scode)) /\
+  nd <> ni /\ EVERY (\v. ~var_below N v /\ ip <> Var v /\ Var x0 <> Var v) [nd;ni] ==>
+  let counter = (\s. mload (w2n (THE (eval_operand ip s))) s);
+      H = (\s. s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ vars_kept N {} origin s);
+      Q = (\s. s.vs_current_bb = exit /\ s.vs_inst_idx = 0 /\ vars_kept N {} origin s)
+  in
+  (!s. 2**256-1-w2n (counter s) < 2**256) /\
+  !s. H s ==> ?j. j <= Kb+2 /\ fuel_outcome G ctx fn s j
+    (\t. Q t \/ (H t /\ 2**256-1-w2n (counter t) < 2**256-1-w2n (counter s)))
+Proof
+  rpt gen_tac >> pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  BETA_TAC >> conj_tac >- simp[] >>
+  ho_match_mp_tac abi_encode_dyn_round_core >>
+  qexistsl_tac
+    [`\a c s. s.vs_current_bb = ca.cs_current_bb /\ s.vs_inst_idx = 0 /\
+        vars_kept N {} origin s /\ eval_operand (Var p) s = SOME a /\ mload (w2n a) s = c`,
+     `\a c s. at_point ca s /\ vars_kept N {} origin s /\
+        eval_operand (Var p) s = SOME a /\ eval_operand (Var x0) s = SOME c`,
+     `\a c s. at_point cb s /\ vars_kept N {} origin s /\
+        eval_operand (Var p) s = SOME a /\ eval_operand (Var x0) s = SOME c`] >>
+  BETA_TAC >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule fuel_outcome_weaken >>
+      irule_at Any (BETA_RULE (PURE_REWRITE_RULE [LET_THM] abi_encode_dyn_header_semantics)) >>
+      qexistsl_tac [`hz`,`hy`,`hx`,`len_op`,`Var p`,`hi`,`exit`,`ca.cs_current_bb`,`hb`,`N`] >>
+      asm_simp_tac bool_ss [] >>
+      ntac 4 (conj_tac >- (pure_rewrite_tac [arithmeticTheory.ADD] >> first_x_assum irule >> simp[])) >>
+      rpt strip_tac >>
+      `vars_kept N {} origin t` by metis_tac [vars_kept_trans] >>
+      simp[] >>
+      mp_tac (Q.ISPEC `b:bytes32` wordsTheory.w2n_lt) >>
+      simp[wordsTheory.dimword_def] ) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule fuel_outcome_weaken >>
+      irule_at Any (BETA_RULE (PURE_REWRITE_RULE [LET_THM] abi_encode_dyn_prefix_semantics)) >>
+      goal_assum (drule_at Any) >>
+      asm_simp_tac bool_ss [arithmeticTheory.ADD] >>
+      goal_assum (drule_at Any) >>
+      qexistsl_tac [`src`,`msz`,`pid`,`dst`,`dp`,`pb`,`asz`] >>
+      asm_simp_tac bool_ss [] >> rpt strip_tac >>
+      simp[at_point_def] >> metis_tac[vars_kept_trans]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `?j. j <= Kb /\ fuel_outcome G ctx fn s j
+        (\t. at_point cb t /\ vars_kept N {} s t /\
+             eval_operand (Var p) t = SOME a /\ eval_operand (Var x0) t = SOME c)`
+        by (irule abi_encode_dyn_child_transport >> simp[] >> qexists_tac `ca` >> simp[]) >>
+      qexists_tac `j` >> simp[] >>
+      irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+      BETA_TAC >> rpt strip_tac >> simp[] >> metis_tac[vars_kept_trans]) >>
+  rpt gen_tac >> strip_tac >>
+  irule fuel_outcome_weaken >>
+  irule_at Any (BETA_RULE (PURE_REWRITE_RULE [LET_THM] abi_encode_dyn_suffix_semantics)) >>
+  qpat_assum `EVERY _ [nd;ni]` (irule_at Any) >>
+  asm_simp_tac bool_ss [at_point_def] >>
+  qpat_x_assum `at_point cb s` mp_tac >>
+  pure_rewrite_tac [at_point_def] >> strip_tac >>
+  asm_simp_tac bool_ss [] >>
+  qexistsl_tac [`Var x7`,`si`,`Var x6`,`hdr`,`dp`,`cl`,`c`,`sb`,`a`] >>
+  asm_simp_tac bool_ss [] >> rpt strip_tac >>
+  simp[] >> metis_tac[vars_kept_trans]
 QED
 
 (* The body saves the counter in i2 before the recursive encoder.  Its last
