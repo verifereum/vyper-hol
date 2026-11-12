@@ -381,6 +381,85 @@ QED
 
 Finalise allocation_free_frame_reachable
 
+Theorem allocation_free_frame_fmp:
+  !vs ctx stk PG G tn fn inst s.
+  frame_reachable vs ctx stk PG G tn fn inst s ==>
+  EVERY (\f. EVERY (\i. allocation_free_opcode i.inst_opcode) (fn_insts f))
+    ctx.ctx_functions ==>
+  MEM fn ctx.ctx_functions /\ s.vs_fmp = vs.vs_fmp /\
+  EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\ f.cf_state.vs_fmp = vs.vs_fmp) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume allocation_free_frame_fmp[entry]:
+  rpt gen_tac >> strip_tac >> strip_tac >> simp[] >>
+  conj_tac
+  >- (gvs[venomInstTheory.lookup_function_def] >>
+      metis_tac[venomExecProofsTheory.FIND_MEM]) >>
+  gvs[contextCodegenRelTheory.enters_block_def] >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+  disch_then (mp_tac o AP_TERM ``\s:venom_state. s.vs_fmp``) >> simp[]
+QED
+
+Resume allocation_free_frame_fmp[next]:
+  rpt gen_tac >> strip_tac >> strip_tac >> fs[] >>
+  `allocation_free_opcode inst.inst_opcode` by
+    (`EVERY (\i. allocation_free_opcode i.inst_opcode) (fn_insts fn)` by
+       (fs[EVERY_MEM] >> metis_tac[]) >>
+     qpat_x_assum `active_inst fn inst' _` kall_tac >>
+     drule_all EVERY_active_inst >> simp[]) >>
+  drule_all allocation_free_step_fmp_ok >> simp[]
+QED
+
+Resume allocation_free_frame_fmp[block]:
+  rpt gen_tac >> strip_tac >> strip_tac >> fs[] >>
+  `allocation_free_opcode inst.inst_opcode` by
+    (`EVERY (\i. allocation_free_opcode i.inst_opcode) (fn_insts fn)` by
+       (fs[EVERY_MEM] >> metis_tac[]) >>
+     qpat_x_assum `active_inst fn inst' _` kall_tac >>
+     drule_all EVERY_active_inst >> simp[]) >>
+  `inst.inst_opcode <> INVOKE` by
+    (strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
+  drule_all allocation_free_step_fmp_ok >> strip_tac >>
+  gvs[contextCodegenRelTheory.enters_block_def] >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+  disch_then (mp_tac o AP_TERM ``\s:venom_state. s.vs_fmp``) >> simp[]
+QED
+
+Resume allocation_free_frame_fmp[call]:
+  rpt gen_tac >> strip_tac >> strip_tac >> fs[] >>
+  rename1 `lookup_function nm ctx.ctx_functions = SOME callee` >>
+  `MEM callee ctx.ctx_functions` by
+    (gvs[venomInstTheory.lookup_function_def] >>
+     metis_tac[venomExecProofsTheory.FIND_MEM]) >>
+  gvs[setup_callee_def, contextCodegenRelTheory.enters_block_def, AllCaseEqs()] >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+  disch_then (mp_tac o AP_TERM ``\s:venom_state. s.vs_fmp``) >> simp[]
+QED
+
+Resume allocation_free_frame_fmp[ret]:
+  rpt gen_tac >> strip_tac >> strip_tac >> fs[] >>
+  rename1 `step_inst fuel ctx rinst s = IntRet ret s_end` >>
+  `allocation_free_opcode rinst.inst_opcode` by
+    (`EVERY (\i. allocation_free_opcode i.inst_opcode) (fn_insts fn)` by
+       (fs[EVERY_MEM] >> metis_tac[]) >>
+     qpat_x_assum `active_inst f.cf_fn _ _` kall_tac >>
+     drule_all EVERY_active_inst >> simp[]) >>
+  `rinst.inst_opcode <> INVOKE` by
+    (strip_tac >> gvs[Once step_inst_def, AllCaseEqs()]) >>
+  drule_all allocation_free_step_intret >> strip_tac >>
+  drule bind_outputs_allocation_frame >>
+  simp[adopt_return_fmp_def, merge_callee_state_def]
+QED
+
+Finalise allocation_free_frame_fmp
+
 Theorem allocation_free_reachable_taint:
   EVERY (\fn. EVERY (\inst. allocation_free_opcode inst.inst_opcode)
                     (fn_insts fn)) ctx.ctx_functions /\
