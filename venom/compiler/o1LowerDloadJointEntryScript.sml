@@ -164,7 +164,7 @@ Proof
           (mp_tac o MATCH_MP ctxLookupAgreeHelpersTheory.enters_block_initial_fmp) >>
         simp[]) >>
      Cases_on `ctx_has_dalloca C` >>
-     gvs[o1LowerDloadOccurrenceTheory.dyn_floor_def,
+     gvs[ptrDisciplineTheory.dyn_floor_def,
          lowerDloadDefsTheory.dload_headroom_ok_def,
          ptrDisciplineTheory.ctx_has_dalloca_def] >>
      decide_tac) >>
@@ -174,7 +174,7 @@ Proof
   simp[ld_joint_boundary_def, ld_joint_erasure_def, ld_joint_geometry_def,
        ld_joint_saved_def, o1LowerDloadSharedTheory.ld_shared_agree_refl,
        ld_dyn_floor_ok_def,
-       o1LowerDloadRelocationKernelTheory.ld_dyn_agree_def] >>
+       ptrDisciplineTheory.ld_dyn_agree_def] >>
   reverse conj_tac
   >- simp[o1LowerDloadRelocationKernelTheory.ld_memory_agree_empty] >>
   qexists_tac `u` >>
