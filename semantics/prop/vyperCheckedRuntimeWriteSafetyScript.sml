@@ -6,6 +6,116 @@ Ancestors
   vyperTypeContractContext vyperContext vyperInterpreter vyperState alist
   vyperGetter vyperTypeContractGetter
 
+Theorem well_typed_write_roots[local]:
+  (!env e. well_typed_expr env e ==>
+    !R. (!sid id ty. FLOOKUP env.bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+      (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
+        FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
+      expr_writes_ok (runtime_write_root R) e) /\
+  (!env e. !vt. type_place_expr env e = SOME vt ==>
+    !R. (!sid id ty. FLOOKUP env.bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+      (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
+        FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
+      expr_writes_ok (runtime_write_root R) e) /\
+  (!env tgt. !vt. type_place_target env tgt = SOME vt ==>
+    !R. (!sid id ty. FLOOKUP env.bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+      (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
+        FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
+      runtime_write_root R tgt /\ target_writes_ok (runtime_write_root R) tgt) /\
+  (!env es. well_typed_exprs env es ==>
+    !R. (!sid id ty. FLOOKUP env.bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+      (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
+        FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
+      EVERY (expr_writes_ok (runtime_write_root R)) es) /\
+  (!env opt. well_typed_opt env opt ==> T) /\
+  (!env kes. well_typed_named_exprs env kes ==>
+    !R. (!sid id ty. FLOOKUP env.bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+      (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
+        FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
+      EVERY (expr_writes_ok (runtime_write_root R)) (MAP SND kes))
+Proof
+  ho_match_mp_tac well_typed_expr_ind >>
+  rw[well_typed_expr_def, expr_writes_ok_def, runtime_write_root_def] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem well_typed_atarget_write_roots[local]:
+  !env tgt ty. well_typed_atarget env tgt ty ==>
+    !R. (!sid id ty. FLOOKUP env.bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+      (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
+        FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
+      atarget_writes_ok (runtime_write_root R) tgt
+Proof
+  recInduct well_typed_atarget_ind >> conj_tac
+  >- (simp[well_typed_atarget_def, well_typed_target_def, atarget_writes_ok_def] >>
+      metis_tac[cj 3 well_typed_write_roots]) >>
+  rw[well_typed_atarget_def, atarget_writes_ok_def] >>
+  gvs[LIST_REL_EL_EQN, EVERY_EL] >> rpt strip_tac >>
+  first_x_assum irule >> simp[MEM_EL] >> metis_tac[]
+QED
+
+Theorem atarget_accepts_write_roots[local]:
+  atarget_accepts env tgt ty /\
+  (!sid id ty. FLOOKUP env.bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+  (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
+    FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
+  atarget_writes_ok (runtime_write_root R) tgt
+Proof
+  Cases_on `tgt`
+  >- (simp[atarget_accepts_def, atarget_writes_ok_def] >>
+      rpt strip_tac >> Cases_on `type_place_target env b` >> gvs[] >>
+      rename1 `type_place_target env b = SOME vt` >> Cases_on `vt` >> gvs[] >>
+      metis_tac[cj 3 well_typed_write_roots]) >>
+  simp[atarget_accepts_def] >> metis_tac[well_typed_atarget_write_roots]
+QED
+
+Theorem type_stmt_write_roots[local]:
+  (!env ret s env'. type_stmt env ret s = SOME env' ==>
+    !R. (!sid id ty. FLOOKUP env.bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+      (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
+        FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
+      stmt_writes_ok (runtime_write_root R) s) /\
+  (!env ret ss env'. type_stmts env ret ss = SOME env' ==>
+    !R. (!sid id ty. FLOOKUP env.bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+      (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
+        FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
+      stmts_writes_ok (runtime_write_root R) ss)
+Proof
+  ho_match_mp_tac type_stmt_ind >>
+  rw[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
+  gvs[IS_SOME_EXISTS, well_typed_target_def]
+  >~ [`well_typed_iterator env typ it`]
+  >- (Cases_on `it` >> gvs[well_typed_iterator_def] >>
+      metis_tac[cj 1 well_typed_write_roots]) >>
+  all_tac >>~- ([`expr_writes_ok _ _`],
+    metis_tac[cj 1 well_typed_write_roots]) >>
+  gvs[well_typed_custom_error_def] >>~- ([`EVERY (expr_writes_ok _) _`],
+    metis_tac[cj 4 well_typed_write_roots]) >>~- ([`runtime_write_root _ _`],
+    metis_tac[cj 3 well_typed_write_roots]) >>~- ([`target_writes_ok _ _`],
+    metis_tac[cj 3 well_typed_write_roots]) >>~- ([`atarget_writes_ok _ _`],
+    metis_tac[atarget_accepts_write_roots]) >>
+  gvs[extend_local_def] >> metis_tac[type_stmt_preserve_nonlocal_fields]
+QED
+
+Theorem check_function_body_write_roots:
+  !layouts addr mods art src vis mut nr args dflts ret body R.
+  check_function_body layouts addr mods art src vis mut nr args dflts ret body /\
+  (!sid id ty. FLOOKUP art.cta_bare_global_assignable (sid,id) = SOME ty ==> R sid id) /\
+  (!sid id vt. FLOOKUP art.cta_toplevel_vtypes (sid,id) = SOME vt /\
+    FLOOKUP art.cta_bare_globals (sid,id) = NONE ==> R sid id) ==>
+  EVERY (expr_writes_ok (runtime_write_root R)) dflts /\
+  stmts_writes_ok (runtime_write_root R) body
+Proof
+  simp[check_function_body_def, IS_SOME_EXISTS] >> rpt strip_tac >>
+  all_tac >>~- ([`EVERY (expr_writes_ok _) _`],
+    irule (cj 4 well_typed_write_roots) >> goal_assum (drule_at Any) >>
+    simp[defaults_env_def, function_entry_env_def,
+         FOLDL_extend_local_args_static, artifact_env_def]) >>
+  drule (CONJUNCT2 type_stmt_write_roots) >>
+  disch_then (qspec_then `R` mp_tac) >>
+  simp[function_entry_env_def, FOLDL_extend_local_args_static, artifact_env_def]
+QED
+
 Theorem well_typed_runtime_writes[local]:
   (!env e. well_typed_expr env e ==>
     !R. env.bare_global_assignable = FEMPTY /\
@@ -34,9 +144,18 @@ Theorem well_typed_runtime_writes[local]:
         FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
       EVERY (expr_writes_ok (runtime_write_root R)) (MAP SND kes))
 Proof
-  ho_match_mp_tac well_typed_expr_ind >>
-  rw[well_typed_expr_def, expr_writes_ok_def, runtime_write_root_def] >>
-  gvs[AllCaseEqs()] >> metis_tac[]
+  conj_tac >- (rpt strip_tac >> irule (cj 1 well_typed_write_roots) >>
+    goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> irule (cj 2 well_typed_write_roots) >>
+    goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+    irule (cj 3 well_typed_write_roots) >>
+    goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> irule (cj 4 well_typed_write_roots) >>
+    goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >- simp[] >>
+  rpt strip_tac >> irule (cj 6 well_typed_write_roots) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem well_typed_atarget_runtime_writes[local]:
@@ -46,13 +165,8 @@ Theorem well_typed_atarget_runtime_writes[local]:
         FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
       atarget_writes_ok (runtime_write_root R) tgt
 Proof
-  recInduct well_typed_atarget_ind >> conj_tac
-  >- (simp[well_typed_atarget_def, well_typed_target_def, atarget_writes_ok_def] >>
-      metis_tac[cj 3 well_typed_runtime_writes]) >>
-  rw[well_typed_atarget_def, atarget_writes_ok_def] >>
-  gvs[LIST_REL_EL_EQN, EVERY_EL] >> rpt strip_tac >>
-  first_x_assum irule >> simp[MEM_EL] >>
-  metis_tac[]
+  rpt strip_tac >> drule well_typed_atarget_write_roots >>
+  disch_then irule >> simp[]
 QED
 
 Theorem atarget_accepts_runtime_writes[local]:
@@ -61,13 +175,8 @@ Theorem atarget_accepts_runtime_writes[local]:
     FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
   atarget_writes_ok (runtime_write_root R) tgt
 Proof
-  Cases_on `tgt`
-  >- (simp[atarget_accepts_def, atarget_writes_ok_def] >>
-      rpt strip_tac >> Cases_on `type_place_target env b` >> gvs[] >>
-      rename1 `type_place_target env b = SOME vt` >> Cases_on `vt` >> gvs[] >>
-      metis_tac[cj 3 well_typed_runtime_writes]) >>
-  simp[atarget_accepts_def] >>
-  metis_tac[well_typed_atarget_runtime_writes]
+  strip_tac >> drule atarget_accepts_write_roots >>
+  disch_then irule >> simp[]
 QED
 
 Theorem type_stmt_runtime_writes[local]:
@@ -82,21 +191,11 @@ Theorem type_stmt_runtime_writes[local]:
         FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
       stmts_writes_ok (runtime_write_root R) ss)
 Proof
-  ho_match_mp_tac type_stmt_ind >>
-  rw[type_stmt_def, stmt_writes_ok_def, AllCaseEqs()] >>
-  gvs[IS_SOME_EXISTS, well_typed_target_def]
-  >~ [`well_typed_iterator env typ it`]
-  >- (Cases_on `it` >> gvs[well_typed_iterator_def] >>
-      metis_tac[cj 1 well_typed_runtime_writes]) >>
-  all_tac >>~- ([`expr_writes_ok _ _`],
-    metis_tac[cj 1 well_typed_runtime_writes]) >>
-  gvs[well_typed_custom_error_def] >>~- ([`EVERY (expr_writes_ok _) _`],
-    metis_tac[cj 4 well_typed_runtime_writes]) >>~- ([`runtime_write_root _ _`],
-    metis_tac[cj 3 well_typed_runtime_writes]) >>~- ([`target_writes_ok _ _`],
-    metis_tac[cj 3 well_typed_runtime_writes]) >>~- ([`atarget_writes_ok _ _`],
-    metis_tac[atarget_accepts_runtime_writes]) >>
-  gvs[extend_local_def] >>
-  metis_tac[type_stmt_preserve_nonlocal_fields]
+  conj_tac
+  >- (rpt strip_tac >> drule (cj 1 type_stmt_write_roots) >>
+      disch_then irule >> simp[]) >>
+  rpt strip_tac >> drule (cj 2 type_stmt_write_roots) >>
+  disch_then irule >> simp[]
 QED
 
 Theorem check_function_body_runtime_writes[local]:
@@ -109,15 +208,8 @@ Theorem check_function_body_runtime_writes[local]:
   EVERY (expr_writes_ok (runtime_write_root R)) dflts /\
   stmts_writes_ok (runtime_write_root R) body
 Proof
-  simp[check_function_body_def, IS_SOME_EXISTS] >> rpt strip_tac >>
-  all_tac >>~- ([`EVERY (expr_writes_ok _) _`],
-    irule (cj 4 well_typed_runtime_writes) >>
-    goal_assum (drule_at Any) >>
-    simp[defaults_env_def, function_entry_env_def,
-         FOLDL_extend_local_args_static, artifact_env_def]) >>
-  drule (CONJUNCT2 type_stmt_runtime_writes) >>
-  disch_then (qspec_then `R` mp_tac) >>
-  simp[function_entry_env_def, FOLDL_extend_local_args_static, artifact_env_def]
+  rpt gen_tac >> strip_tac >> drule check_function_body_write_roots >>
+  disch_then irule >> simp[]
 QED
 
 Theorem checked_runtime_function_writes[local]:
