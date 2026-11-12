@@ -24,7 +24,7 @@ Proof
   Cases_on `ty` >> simp[compile_invert_def, LET_THM]
 QED
 
-Theorem as_stack_val_action[local]:
+Theorem as_stack_val_action:
   (\s. as_stack_val ty (f s)) =
   (\s. let (x,s1) = f s in (StackValue ty x,s1))
 Proof

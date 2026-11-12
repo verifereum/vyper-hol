@@ -1047,6 +1047,24 @@ Proof
    irule gas_shadow_compiles_slice_data)
 QED
 
+Theorem gas_shadow_compiles_literal_or_hash[local]:
+  gas_shadow_compiles p q /\
+  bytestring_literal_hash e' = bytestring_literal_hash e ==>
+  gas_shadow_compiles
+    (\s. case bytestring_literal_hash e of
+       SOME h => (Lit h,s)
+     | NONE => comp_bind p compile_bytestring_hash s)
+    (\s. case bytestring_literal_hash e' of
+       SOME h => (Lit h,s)
+     | NONE => comp_bind q compile_bytestring_hash s)
+Proof
+  strip_tac >> simp[] >> Cases_on `bytestring_literal_hash e` >>
+  simp[GSYM comp_return_def, comp_bind_uncurry] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[gas_shadow_compiles_return, gas_shadow_compiles_bind,
+       gasShadowCompileMembershipTheory.gas_shadow_compiles_bytestring_hash]
+QED
+
 Theorem gas_shadow_compiles_builtin_body_bop[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
@@ -1096,18 +1114,18 @@ Proof
              gasShadowCompileMembershipTheory.gas_shadow_compiles_list_membership_notin,
              gasShadowCompileMembershipTheory.gas_shadow_compiles_var_array_membership])) >>
    Cases_on `is_bytestring_type (expr_type (HD args)) /\ (op = Eq \/ op = NotEq)` >> simp[]
-   >- (Cases_on `bytestring_literal_hash (HD args)` >>
-       Cases_on `bytestring_literal_hash (HD (TL args))` >>
-       gvs[GSYM comp_bind_def, GSYM comp_return_def, comp_bind_uncurry] >>
+   >- (simp[GSYM comp_bind_def, comp_bind_uncurry] >>
        CONV_TAC (DEPTH_CONV ETA_CONV) >>
-       rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-         >- (simp[gasShadowCompileMembershipTheory.gas_shadow_compiles_bytestring_hash] >>
+       ntac 2 (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+         >- (irule gas_shadow_compiles_literal_or_hash >>
+             simp[gas_shadow_bytestring_literal_hash] >>
              metis_tac[COND_CLAUSES]) >> gen_tac >> BETA_TAC) >>
-       (Cases_on `op = Eq` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV)
-        >- (irule gas_shadow_compiles_as_stack_val >> simp[gas_shadow_compiles_emit_op]) >>
-        match_mp_tac gas_shadow_compiles_bind >> conj_tac
-        >- simp[gas_shadow_compiles_emit_op] >> gen_tac >> BETA_TAC >>
-        irule gas_shadow_compiles_as_stack_val >> simp[gas_shadow_compiles_emit_op])) >>
+       Cases_on `op = Eq` >> simp[] >>
+       rewrite_tac[gasShadowCompileNamesTheory.as_stack_val_action] >>
+       simp[GSYM comp_return_def, comp_bind_uncurry] >>
+       CONV_TAC (DEPTH_CONV ETA_CONV) >>
+       simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_op,
+            gas_shadow_compiles_return]) >>
    CONV_TAC (DEPTH_CONV ETA_CONV) >>
    ntac 2 (match_mp_tac gas_shadow_compiles_bind >> conj_tac
      >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC) >>
