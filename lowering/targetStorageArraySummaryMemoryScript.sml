@@ -55,3 +55,46 @@ Proof
   qexistsl [`Error (RuntimeError msg)`, `es`, `Abort Revert_abort u`] >>
   simp[expr_exit_def, exit_result_def]
 QED
+
+Theorem target_storage_array_typed_summary_mem:
+  subscript_vtype (Type aty) (expr_type e) = SOME vt /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\ value_has_type itv key /\
+  target_post ctx func cenv cx es0 sa sn s0 es
+    (PlaceR (StoragePlace tr slot tv)) (Type aty) rb s /\
+  expr_post ctx func cenv cx e ee sm sn t es key ix s /\
+  expr_sim_inv cenv cx env es /\
+  storage_read_live cx tr (get_storage cx es tr) slot tv /\
+  w2n slot + type_slot_size tv <= dimword(:256) /\
+  (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
+    w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var /\
+  ~s.vs_halted /\ s.vs_current_bb = sn.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  (!x. ix = Var x ==> not_fresh_at sn x) /\
+  (!l. ix <> Label l) /\ (!l. FST rb <> Label l) /\
+  (!x. FST op = Var x ==> not_fresh_at sb x) /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next ==>
+  gas_summary_at T (ctx,func) []
+    (extend_place cx (PlaceR (StoragePlace tr slot tv)) (ValueSubscript key)) (es,s)
+    (\res ee u. ?pv'. res = INL pv' /\
+      target_post ctx func cenv cx es0 sa sb s0 ee pv' vt op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >>
+  `?w. place_ptr_rel cenv cx s (PlaceR (StoragePlace tr slot tv)) w (FST (SND rb)) (Type aty)` by
+    (fs[target_post_def] >> metis_tac[]) >>
+  gvs[place_ptr_rel_def] >> Cases_on `aty` >>
+  gvs[subscript_vtype_def, AllCaseEqs()] >>
+  rename1 `evaluate_type _ (ArrayT ety bd) = _` >> Cases_on `bd` >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  drule_all target_subscript_int_index_view >> strip_tac >> gvs[]
+  >- (drule (SRULE [] (Q.INST [`dyn` |-> `F`] target_storage_array_summary_mem)) >>
+      simp[] >> disch_then drule_all >> simp[]) >>
+  drule (SRULE [] (Q.INST [`dyn` |-> `T`] target_storage_array_summary_mem)) >>
+  simp[] >> disch_then drule_all >> simp[]
+QED
