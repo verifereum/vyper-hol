@@ -48,12 +48,13 @@ End
    above), so the buffer of an expression lowered before it (a loop's
    iterable) survives it. *)
 Definition stmt_post_def:
-  stmt_post ctx func cx lctx cenv cenv' sa sb es s0 res ee t <=>
+  stmt_post H ctx func cx lctx cenv cenv' sa sb es s0 res ee t <=>
     ?cenv''.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel ctx func cenv'' cx ee t /\
+      stmt_state_rel H ctx func cenv'' cx ee t ∧
+          storage_well_formed_on cx ee (FST H) ∧
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -64,17 +65,20 @@ End
 Definition stmt_framed_frag_def:
   stmt_framed_frag Frame ctx func cx lctx RetQ cenv
     (m : compile_env compiler) source es <=>
-    !sa sb s0 cenv'.
+    !st0 sa sb s0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
       ret_pc_ok cenv sa s0 /\ ~block_is_terminated sa /\
       gas_admissible source (stmt_res_ok lctx) es /\
-      Frame s0 /\ stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+      Frame s0 ∧
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 ∧
+        storage_well_formed_on cx es (FST H)) ∧ ~s0.vs_halted ∧
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome F (cx_tops cx) (ctx, func) source (es, s0)
-        (stmt_post ctx func cx lctx cenv cenv' sa sb es s0)
-        (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+      gas_outcome F (cx_tops cx) (ctx, func) cx st0 source (es, s0)
+        (\H. stmt_post H ctx func cx lctx cenv cenv' sa sb es s0)
+        (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
 End
 
 Definition stmt_frag_def:
@@ -85,28 +89,31 @@ End
 Definition stmt_frag_mem_def:
   stmt_frag_mem d ctx func cx lctx RetQ cenv
     (m : compile_env compiler) source es <=>
-    !sa sb s0 cenv'.
+    !st0 sa sb s0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
       ret_pc_ok cenv sa s0 /\ ~block_is_terminated sa /\
       gas_admissible source (stmt_res_ok lctx) es /\
       return_buf_frame d cenv sa s0 /\
-      stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 ∧
+        storage_well_formed_on cx es (FST H)) ∧ alloca_history func s0 ∧
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome T (cx_tops cx) (ctx, func) source (es, s0)
-        (\res ee t. ?cenv''.
+      gas_outcome T (cx_tops cx) (ctx, func) cx st0 source (es, s0)
+        (\H res ee t. ?cenv''.
           stmt_lands lctx sb res t /\ ~t.vs_halted /\
           (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
           cenv_top_ext cenv cenv'' ee.scopes /\
-          stmt_state_rel ctx func cenv'' cx ee t /\
+          stmt_state_rel H ctx func cenv'' cx ee t ∧
+          storage_well_formed_on cx ee (FST H) ∧
           (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                  lookup_var x t = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b) /\
           return_buf_frame d cenv'' sb t /\ alloca_history func t /\
           s0.vs_alloca_next <= t.vs_alloca_next)
-        (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+        (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
 End
 
 Definition alloca_prefix_def:
@@ -165,7 +172,7 @@ QED
    one live at es in s0 at the same region: its pointer variable is
    handed out before sa, so s keeps its value. *)
 Theorem local_region_kept:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es'.scopes = MAP FDOM es.scopes /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x s = SOME w) /\
@@ -188,7 +195,7 @@ QED
 (* The memory frame expr_post, vv_post and target_post give, over a
    fragment that keeps the scopes' names, is an alloca_frame. *)
 Theorem alloca_frame_of_mem_frame:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es'.scopes = MAP FDOM es.scopes /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x s = SOME w) /\
@@ -242,7 +249,7 @@ QED
 (* An expression's fragment from sa to sm, then a fragment that keeps the
    frame from sm, keeps it from sa. *)
 Theorem alloca_frame_expr_prefix:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM em.scopes = MAP FDOM es.scopes /\
   sa.cs_next_id <= sm.cs_next_id /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -283,8 +290,8 @@ Proof
 QED
 
 Theorem expr_post_alloca_frame:
-  expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM ee.scopes = MAP FDOM es.scopes ==>
   alloca_frame cenv es sa s0 cenv ee t
 Proof
@@ -292,8 +299,8 @@ Proof
 QED
 
 Theorem vv_post_alloca_frame:
-  vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM ee.scopes = MAP FDOM es.scopes ==>
   alloca_frame cenv es sa s0 cenv ee t
 Proof
@@ -301,8 +308,8 @@ Proof
 QED
 
 Theorem target_post_alloca_frame:
-  target_post ctx func cenv cx es sa sb s0 ee pv vt r t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  target_post H ctx func cenv cx es sa sb s0 ee pv vt r t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM ee.scopes = MAP FDOM es.scopes ==>
   alloca_frame cenv es sa s0 cenv ee t
 Proof
@@ -314,7 +321,7 @@ QED
    clear of es's locals is clear of the written bytes. *)
 Theorem alloca_frame_local_store:
   alloca_frame c es sa s0 c es1 s /\
-  stmt_state_rel ctx func c cx es s0 /\ local_ptrs_reserved c sa /\
+  stmt_state_rel H ctx func c cx es s0 /\ local_ptrs_reserved c sa /\
   MAP FDOM es1.scopes = MAP FDOM es.scopes /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x s = SOME w) /\

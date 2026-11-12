@@ -149,7 +149,7 @@ QED
    on an abort allowed by A it exits as R allows.  P must survive dropping
    the fresh variables, as facts about earlier operands do. *)
 Theorem frag_exec_run_frame:
-  !ctx func cenv cx es sa sb op w P A R s0.
+  !H ctx func cenv cx es sa sb op w P A R s0.
     sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
     isPREFIX sa.cs_current_insts sb.cs_current_insts /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -166,8 +166,8 @@ Theorem frag_exec_run_frame:
        (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
-      (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
+      (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss)
+      (\ss. stmt_state_rel H ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
             (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                     lookup_var x ss = SOME w') /\
             (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -237,7 +237,7 @@ Proof
 QED
 
 Theorem frag_exec_writes_fresh:
-  !ctx func cenv cx es sa sb op w P A R s0.
+  !H ctx func cenv cx es sa sb op w P A R s0.
     sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
     isPREFIX sa.cs_current_insts sb.cs_current_insts /\
     writes_fresh sa (emitted_insts sa sb) /\ local_ptrs_reserved cenv sa /\
@@ -248,8 +248,8 @@ Theorem frag_exec_writes_fresh:
        (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
-      (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
+      (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss)
+      (\ss. stmt_state_rel H ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
             (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                     lookup_var x ss = SOME w') /\
             (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -267,7 +267,7 @@ QED
 (* A run-level lemma by which the code always aborts, as A allows, gives a
    fragment that exits as R allows and never reaches its end. *)
 Theorem frag_exec_run_abort:
-  !ctx func cenv cx es sa sb P A Q R s0.
+  !H ctx func cenv cx es sa sb P A Q R s0.
     sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
     isPREFIX sa.cs_current_insts sb.cs_current_insts /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -277,7 +277,7 @@ Theorem frag_exec_run_abort:
        ?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss) Q R
+      (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss) Q R
 Proof
   rpt strip_tac >>
   irule frag_exec_run_inst_seq_drop_fresh >> simp[] >> rpt strip_tac >>
@@ -290,7 +290,7 @@ Proof
 QED
 
 Theorem frag_exec_writes_fresh_abort:
-  !ctx func cenv cx es sa sb P A Q R s0.
+  !H ctx func cenv cx es sa sb P A Q R s0.
     sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
     isPREFIX sa.cs_current_insts sb.cs_current_insts /\
     writes_fresh sa (emitted_insts sa sb) /\
@@ -299,7 +299,7 @@ Theorem frag_exec_writes_fresh_abort:
        ?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss) Q R
+      (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss) Q R
 Proof
   rpt strip_tac >> irule frag_exec_run_abort >> simp[] >>
   conj_tac >- (qexists_tac `A` >> simp[]) >>
@@ -366,7 +366,7 @@ QED
 
 (* frag_exec_writes_fresh for the code of a straight_fresh action. *)
 Theorem frag_exec_straight_fresh:
-  !ctx func cenv cx es m sa sb op w P A R s0.
+  !H ctx func cenv cx es m sa sb op w P A R s0.
     straight_fresh m /\ m sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
     (!ss. P ss ==> P (drop_fresh sa ss)) /\
     (!ss. fresh_vars_wrt sa ss /\ P ss ==>
@@ -375,8 +375,8 @@ Theorem frag_exec_straight_fresh:
        (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
-      (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
+      (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss)
+      (\ss. stmt_state_rel H ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
             (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                     lookup_var x ss = SOME w') /\
             (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -392,14 +392,14 @@ QED
 
 (* frag_exec_writes_fresh_abort for the code of a straight_fresh action. *)
 Theorem frag_exec_straight_fresh_abort:
-  !ctx func cenv cx es m sa sb op P A Q R s0.
+  !H ctx func cenv cx es m sa sb op P A Q R s0.
     straight_fresh m /\ m sa = (op, sb) /\
     (!ss. P ss ==> P (drop_fresh sa ss)) /\
     (!ss. fresh_vars_wrt sa ss /\ P ss ==>
        ?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a) /\
     (!a ss. A a ==> R (Abort a ss)) ==>
     frag_exec ctx sa sb
-      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss) Q R
+      (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss) Q R
 Proof
   rpt strip_tac >> irule frag_exec_writes_fresh_abort >>
   qpat_x_assum `straight_fresh _` (mp_tac o REWRITE_RULE [straight_fresh_def]) >>

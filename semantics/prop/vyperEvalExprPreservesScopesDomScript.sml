@@ -290,7 +290,8 @@ Theorem scope_pop_effect_place_primitives[simp]:
   scope_pop_effect (place_type_value cx p)
 Proof
   rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
-  FIRST (map (fn th => drule th >> simp[])
+  FIRST (map (fn th => drule th >>
+    disch_then (mp_tac o Q.AP_TERM `\s:evaluation_state. s.scopes`) >> simp[])
     [lookup_global_state, get_place_state, extend_place_state, read_place_state, place_type_value_state])
 QED
 

@@ -163,14 +163,17 @@ Proof
   >- (strip_tac >> drule take_delegate_outcome_error >> simp[])
   >- simp[adopt_call_outcome_equation]
   >- (simp[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+           record_storage_event_def,
            get_transient_storage_def, LET_THM, return_def] >>
       rw[raise_def, return_def, update_transient_def])
-  >> simp[release_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+  >> simp[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+          record_storage_event_def, get_transient_storage_def,
           update_transient_def, return_def]
 QED
 
 val nh_base = [bind_halt, ignore_bind_halt, return_nh, state_ops_nh,
                checks_nh, lifts_nh, storage_backend_nh, call_ops_nh,
+               record_storage_event_def, record_storage_backend_def,
                return_def, LET_THM, FORALL_PROD, EXISTS_PROD];
 
 Theorem lock_nh[local]:
