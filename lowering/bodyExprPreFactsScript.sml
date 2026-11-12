@@ -356,7 +356,8 @@ Proof
    c.ce_func_return_type = cenv.ce_func_return_type /\
    c.ce_modules = cenv.ce_modules /\
    c.ce_hashmap_info = cenv.ce_hashmap_info /\
-   c.ce_module_var_type = cenv.ce_module_var_type` by
+   c.ce_module_var_type = cenv.ce_module_var_type /\
+   c.ce_module_vars = cenv.ce_module_vars` by
     (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `alloc_limits_expr c = alloc_limits_expr cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_struct_fields) >> simp[]) >>
@@ -488,7 +489,8 @@ Proof
    c.ce_func_return_type = cenv.ce_func_return_type /\
    c.ce_modules = cenv.ce_modules /\
    c.ce_hashmap_info = cenv.ce_hashmap_info /\
-   c.ce_module_var_type = cenv.ce_module_var_type` by
+   c.ce_module_var_type = cenv.ce_module_var_type /\
+   c.ce_module_vars = cenv.ce_module_vars` by
     (gvs[same_frame_def] >> qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >>
      simp[]) >>
   qabbrev_tac `X = cenv with ce_var_type updated_by (id =+ SOME ty)` >>
@@ -685,7 +687,7 @@ Proof
   rpt strip_tac >>
   `IS_SOME es1.outcomes` by
     (drule (cj 1 eval_outcome_suffix_mutual) >>
-     rw[outcome_suffix_def] >> gvs[expr_sim_inv_def]) >>
+     rw[outcome_suffix_def] >> fs[expr_sim_inv_def]) >>
   drule stmt_env_declare >> strip_tac >>
   qspecl_then [`cx`, `s`, `env`, `ret_ty`, `env'`, `es`, `INL ()`, `es1`]
     mp_tac (cj 1 eval_scc_type_sound_mutual) >>
