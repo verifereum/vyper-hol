@@ -250,14 +250,17 @@ Proof
    ld_dyn_agree (dyn_floor C vs) (tn.t_mem DIFF {i | p<=i /\ i<p+LENGTH xs})
      (write_memory_with_expansion p xs s).vs_memory
      (write_memory_with_expansion q xs t).vs_memory` by
-    (qpat_x_assum `LENGTH xs = 0 \/ _` strip_assume_tac
-     >- (gvs[] >> conj_tac >- (irule ld_memory_agree_empty_write >> simp[]) >>
-         fs[ld_dyn_agree_def, regularCallEmitSimTheory.read_byte_write_memory_with_expansion])
-     >- (gvs[] >> conj_tac
+    (* the write's cases: empty, fixed, dynamic region, site.  fs, not gvs:
+       gvs would also case-split the opcode disjunction *)
+    (qpat_assum `s1 = _ /\ _` (strip_assume_tac o last o CONJUNCTS)
+     >- (fs[] >> conj_tac >- (irule ld_memory_agree_empty_write >> simp[]) >>
+         fs[ptrDisciplineTheory.ld_dyn_agree_def,
+            regularCallEmitSimTheory.read_byte_write_memory_with_expansion])
+     >- (fs[] >> conj_tac
          >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
              disch_then irule >> simp[]) >>
          irule ld_dyn_agree_clean_write_below >> simp[] >> decide_tac)
-     >- (gvs[] >> conj_tac
+     >- (fs[] >> conj_tac
          >- (drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_clean_write_dyn >>
           disch_then irule >> metis_tac[]) >>
          irule ld_dyn_agree_clean_write_same >> simp[]) >>

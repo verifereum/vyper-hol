@@ -59,6 +59,8 @@ Proof
   `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
    ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory` by
     fs[ld_joint_boundary_def] >>
+  (* the operand fact was split on use; its 32 = 0 case is absurd *)
+  TRY (fs[] >> NO_TAC) >>
   qexists_tac `y` >> simp[] >> irule ld_mload_range_masked >> metis_tac[]
 QED
 
