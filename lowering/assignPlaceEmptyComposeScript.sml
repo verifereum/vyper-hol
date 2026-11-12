@@ -33,8 +33,8 @@ QED
 
 
 Theorem assign_place_empty_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty env tops bt e es dty.
-    supported_target_pure tops bt /\
+  !ctx func cx lctx RetQ cenv ty env bt e es dty.
+    ~expr_can_mutate cenv (target_to_expr bt) /\
     type_place_target env bt = SOME (Type dty) /\
     type_widens_to env.type_defs (expr_type e) dty /\
     assignable_type env.type_defs (expr_type e) /\

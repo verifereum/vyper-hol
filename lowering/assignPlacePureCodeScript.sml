@@ -4,7 +4,7 @@ Ancestors
 
 Theorem assign_place_pure_code_parts:
   stmt_env ce lctx ty (Assign (BaseTarget bt) e) sa = (ce',sf) /\
-  supported_target_pure tops bt /\
+  ~expr_can_mutate ce (target_to_expr bt) /\
   ~(has_length_word (expr_type e) /\ is_empty_value_expr e) ==>
   ce' = ce /\
   ?vv sm tr st op su.
@@ -25,7 +25,6 @@ Theorem assign_place_pure_code_parts:
      | NONE => emit_void INVALID []) su = ((),sf)
 Proof
   strip_tac >> drule stmt_env_assign >> strip_tac >> gvs[] >>
-  drule supported_target_pure_not_mutate >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   simp[Once compile_stmt_def, comp_bind_def, comp_return_def] >>
   Cases_on `compile_expr ce (expr_type e) e sa` >>

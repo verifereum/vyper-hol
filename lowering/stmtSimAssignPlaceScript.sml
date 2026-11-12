@@ -10,10 +10,10 @@
  * it at the pointer's location (placeStore).  An empty value of a type
  * with a length word compiles no code for e and stores a zero length word.
  *
- * The target's indices are pure (supported_target_pure).  Admitted, each
+ * No index of the target can mutate (~expr_can_mutate).  Admitted, each
  * waiting on a later change outside this theory:
- *   assign_place_effectful_index_case — an index with effects, as
- *     targetPlaceSimCases' pop_nested_storage_effectful_sim;
+ *   assign_place_effectful_index_case — an index that isn't pure, for an
+ *     index that can mutate and for a widened RHS (bodySimStmtCases);
  *   immutable_deploy_assign_case — an immutable written by the
  *     constructor, until immutable_alloca_sep and body_inv relate the
  *     constructor's immutables buffer to the source's immutables.
@@ -31,15 +31,21 @@ Ancestors
   assignPlaceEmpty assignPlaceEmptyCompose assignPlaceContinuation
   assignPlaceCallerFacts assignPlaceGasCompose assignPlaceStoreReady
   bodySim supportedTargets supportedDecls
-  placeStore targetPureVvFrame targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
+  placeStore targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
   stmtSimDefs exprSimHypsDefs exprSimDefs typedCopyDomain loweringPosts
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperTypeSystem
   venomState
 
 Theorem compile_assign_place_case:
-  !ctx func cx lctx RetQ cenv ty env tops bt e es dty.
-    supported_target_pure tops bt /\
+  !ctx func cx lctx RetQ cenv ty env bt e es dty.
+    ~expr_can_mutate cenv (target_to_expr bt) /\
+    cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\
+    (!vis mut nr rr fn args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
+       function_mutability_ok [(NONE, cx_tops cx)] vis mut nr dflts body) /\
+    get_module_code cx NONE = SOME (cx_tops cx) /\
+    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
     type_place_target env bt = SOME (Type dty) /\
     type_widens_to env.type_defs (expr_type e) dty /\
     assignable_type env.type_defs (expr_type e) /\

@@ -1,7 +1,7 @@
 Theory assignPlaceTargetLive
 Ancestors
   bodySimAugPlaceLive bodySimAugPlaceMemory bodySimAugPlaceScopes
-  supportedTargets vyperInterpreter vyperState vyperMisc stmtSimAugAssignPlaceMemory
+  notMutateExprScopes stmtLowering exprLowering vyperInterpreter vyperState vyperMisc stmtSimAugAssignPlaceMemory
 Libs monadsyntax
 
 Theorem assign_place_target_induct[local]:
@@ -15,8 +15,8 @@ Proof
 QED
 
 Theorem assign_place_pure_base_memory_live:
-  !bt tops cx s id path ee.
-    supported_target_pure tops bt /\
+  !bt cenv cx s id path ee.
+    ~expr_can_mutate cenv (target_to_expr bt) /\
     eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),ee) ==>
     ?entry v. lookup_scopes id ee.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL v
@@ -31,24 +31,24 @@ Proof
   >- (rpt strip_tac >>
       qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      strip_tac >> gvs[supported_target_pure_def] >>
+      strip_tac >> gvs[target_to_expr_def, expr_can_mutate_def] >>
       drule aug_place_extend_memory_inversion >> strip_tac >> gvs[] >>
       imp_res_tac read_result_state >> gvs[] >>
-      imp_res_tac aug_place_pure_expr_scopes >>
+      imp_res_tac not_mutate_expr_scopes >>
       first_x_assum (drule_all_then strip_assume_tac) >>
       gvs[] >> metis_tac[aug_place_extend_memory_live]) >>
   rpt strip_tac >>
   qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  strip_tac >> gvs[supported_target_pure_def] >>
+  strip_tac >> gvs[target_to_expr_def, expr_can_mutate_def] >>
   drule aug_place_extend_memory_inversion >> strip_tac >> gvs[] >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   metis_tac[aug_place_extend_memory_live]
 QED
 
 Theorem assign_place_pure_target_memory_live:
-  !tops bt cx s id path ee.
-    supported_target_pure tops bt /\
+  !cenv bt cx s id path ee.
+    ~expr_can_mutate cenv (target_to_expr bt) /\
     eval_target_place cx bt s = (INL (MemoryPlace id path),ee) ==>
     ?entry v. lookup_scopes id ee.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL v
@@ -60,7 +60,7 @@ Proof
 QED
 
 Theorem assign_place_pure_memory_write_success:
-  supported_target_pure tops bt /\
+  ~expr_can_mutate cenv (target_to_expr bt) /\
   eval_target_place cx bt s = (INL (MemoryPlace id path),ee) /\
   write_place cx (MemoryPlace id path) v ee = (res,ff) /\
   stmt_res_ok lctx res ==> res = INL ()

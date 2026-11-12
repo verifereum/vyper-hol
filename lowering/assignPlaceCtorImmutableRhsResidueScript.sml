@@ -1,16 +1,16 @@
 Theory assignPlaceCtorImmutableRhsResidue
 Ancestors
   assignPlaceCallerFacts assignPlaceStoreReady assignPlaceGasCompose
-  assignPlaceOperandFacts targetPureVvFrame targetPlaceSimCases
+  assignPlaceOperandFacts targetPlaceSimCases
   stmtSimAugAssignPlaceMemory assignPlaceTargetLive exprSimHyps
   exprOperandVar exprSimAggregateSource exprSimSource
   stmtLoweringMono stmtSimDeclCompose targetPlaceSimDefs targetPlaceSim loweringPosts
-  compileEnv stmtSimDefs vyperExprNoControl
+  compileEnv stmtSimDefs vyperExprNoControl stmtLowering exprLowering
 Libs monadsyntax
 
 (* Owner-authorized constructor immutable-buffer framing residue. *)
 Theorem assign_place_ctor_immutable_rhs_residue:
-  supported_target_pure tops bt /\
+  ~expr_can_mutate cenv (target_to_expr bt) /\
   type_place_target env bt = SOME (Type dty) /\
   type_widens_to env.type_defs (expr_type e) dty /\
   assignable_type env.type_defs (expr_type e) /\

@@ -2,7 +2,7 @@ Theory assignPlaceContinuation
 Ancestors
   loweringStateRelDefs
   assignPlaceCallerFacts assignPlaceStoreReady assignPlaceGasCompose assignPlaceEndpoint
-  assignPlaceOperandFacts targetPureVvFrame targetPlaceSimCases
+  assignPlaceOperandFacts targetWalkVvFrame targetPlaceSimCases
   stmtSimAugAssignPlaceMemory assignPlaceTargetLive exprSimHyps
   exprOperandVar exprSimAggregateSource exprSimSource
   stmtLoweringMono stmtSimDeclCompose targetPlaceSimDefs targetPlaceSim loweringPosts
@@ -11,7 +11,13 @@ Ancestors
 Libs monadsyntax
 
 Theorem assign_place_pure_continuation:
-  supported_target_pure tops bt /\
+  ~expr_can_mutate cenv (target_to_expr bt) /\
+  cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\
+  (!vis mut nr rr fn args dflts ret body.
+     MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
+     function_mutability_ok [(NONE, cx_tops cx)] vis mut nr dflts body) /\
+  get_module_code cx NONE = SOME (cx_tops cx) /\
+  EVERY (\c. FST c = NONE) (int_calls_target bt) /\
   type_place_target env bt = SOME (Type dty) /\
   type_widens_to env.type_defs (expr_type e) dty /\
   assignable_type env.type_defs (expr_type e) /\
@@ -119,7 +125,7 @@ Proof
   `vv_post ctx func cenv cx e es sa sm s0 (mid with gas_obs := [])
       (Value v) vv t` by metis_tac[exprSimUnwrapPropsTheory.vv_post_read_result] >>
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ pv _ _` kall_tac >>
-  drule_all target_pure_vv_frame >>
+  drule_all target_walk_vv_frame >>
   disch_then assume_tac >>
   `gas_marked_exec F (ctx,func) (read_result cx pv)
       (mid with gas_obs := [],t) [] (INL v) mid (OK t)` by
@@ -159,8 +165,6 @@ Proof
   `read_result cx (Value v) (mid' with gas_obs := []) =
       (INL v,mid' with gas_obs := [])` by
     simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
-  drule_all exprSimAggregateBodyCountedTheory.unwrap_value_body_rebased_path >>
-  strip_tac >>
   `eval_base_place cx bt
       (mid with gas_obs := gas_explicit marks' t.vs_gas_readings) =
       (INL (PlaceR p),mid' with gas_obs := [])` by
@@ -176,6 +180,10 @@ Proof
     (irule bodySimAugPlaceLoadTheory.aug_place_target_inv >>
      qexistsl_tac [`INL p`, `mid with gas_obs := gas_explicit marks' t.vs_gas_readings`, `bt`] >>
      simp[]) >>
+  `expr_body_pre cenv cx env e (mid' with gas_obs := [])` by
+    fs[expr_body_pre_def] >>
+  drule_all exprSimAggregateBodyCountedTheory.unwrap_value_body_rebased_path >>
+  strip_tac >>
   `storage_place_region cx p` by metis_tac[eval_target_place_region] >>
   `?dst loc. tr = (dst,SOME loc,SOME (ValPT dty)) /\
        loc <> LocCode /\ loc <> LocCalldata` by
@@ -319,8 +327,11 @@ Proof
          drule vyperEvalExprPreservesScopesDomTheory.eval_base_place_preserves_scopes_dom >>
          simp[] >> metis_tac[]) >>
       `alloca_frame cenv es sa s0 cenv mid' t'` by
-        (drule_at (Pat `vv_post _ _ _ _ _ es sa st s0 _ _ _ t'`) vv_post_alloca_frame >>
-         simp[alloca_frame_def, local_region_def]) >>
+        (qpat_assum `wb_frame _ es _ sa s0 t'`
+           (strip_assume_tac o REWRITE_RULE [wb_frame_def]) >>
+         irule alloca_frame_of_mem_frame >>
+         qpat_assum `stmt_state_rel _ _ _ _ es s0` (irule_at Any) >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `alloca_frame cenv mid' (sa with cs_next_var := st.cs_next_var) t' cenv mid' u` by
         (`local_ptrs_reserved cenv (sa with cs_next_var := st.cs_next_var)` by
            (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
@@ -329,9 +340,9 @@ Proof
            fs[vv_post_def] >>
          drule_at (Pat `expr_post _ _ _ _ _ _ _ _ t' _ _ _ u`) expr_post_alloca_frame >>
          simp[alloca_frame_def, local_region_def]) >>
-      qpat_x_assum `vv_post _ _ _ _ _ es sa st s0 _ _ _ t'` mp_tac >>
+      qpat_x_assum `wb_frame _ es _ sa s0 t'` mp_tac >>
       qpat_x_assum `expr_post _ _ _ _ _ _ _ _ t' _ _ _ u` mp_tac >>
-      pure_rewrite_tac[expr_post_def, vv_post_def] >>
+      pure_rewrite_tac[expr_post_def, wb_frame_def] >>
       disch_then (map_every assume_tac o CONJUNCTS) >>
       disch_then (map_every assume_tac o CONJUNCTS) >>
       gnvs[] >>

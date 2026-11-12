@@ -4,7 +4,7 @@ Ancestors
   loweringStateRelDefs
   loweringPosts exprSimSubscriptArrayFrame exprBopSimProps compileEnv
   context arithmetic valueEncodingProofs valueEncoding targetPureSourceFrame
-  ctorDeployLoweringSource exprSimMemorySource vyperState vyperStorageBackend
+  exprSimMemorySource vyperState vyperStorageBackend
   exprSimWordArgs accountsRelProps
 
 Theorem target_saved_value_region_frame:
@@ -35,22 +35,34 @@ Proof
   disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >> gvs[]
 QED
 
-Theorem target_saved_read_oracles:
-  read_result cx r (es with <|gas_obs := gs; outcomes := os|>) =
-    (INL v, es with <|gas_obs := gs; outcomes := os|>) <=>
-  read_result cx r es = (INL v,es)
+Theorem target_saved_storage_oracles:
+  read_storage_slot cx tr w tv (es with <|gas_obs := gs; outcomes := os; requests := rq|>) =
+    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq|>) <=>
+  read_storage_slot cx tr w tv es = (INL v,es)
 Proof
-  `!ee gs. read_result cx r (ee with gas_obs := gs) =
-       (INL v, ee with gas_obs := gs) <=>
-       read_result cx r ee = (INL v,ee)` by
-    (rpt gen_tac >> eq_tac >> strip_tac
-     >- (drule read_result_gas_obs >>
-         disch_then (qspec_then `ee.gas_obs` mp_tac) >> simp[]) >>
-     drule read_result_gas_obs >> simp[]) >>
-  simp[outcomes_replace_read_result] >>
-  Cases_on `read_result cx r es` >> drule vyperStateTheory.read_result_state >> simp[]
+  Cases_on `tr` >> simp[read_storage_slot_def, get_storage_backend_eq, bind_def,
+       get_storage_def, lift_option_def] >>
+  CASE_TAC >> simp[return_def, raise_def]
 QED
 
+
+Theorem target_saved_read_oracles:
+  read_result cx r (es with <|gas_obs := gs; outcomes := os; requests := rq|>) =
+    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq|>) <=>
+  read_result cx r es = (INL v,es)
+Proof
+  Cases_on `r` >> simp[read_result_def, return_def, raise_def] >>
+  rename1 `read_place cx p` >> Cases_on `p` >> simp[read_place_def]
+  >~ [`read_storage_slot cx tr`]
+  >- (Cases_on `tr` >>
+      simp[vyperStorageBackendTheory.read_storage_slot_eq, get_storage_def] >>
+      rpt CASE_TAC >> simp[]) >>
+  simp[get_scopes_def, get_immutables_def, get_address_immutables_def,
+       bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def,
+       vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+       vyperMiscTheory.prod_CASE_rator, AllCaseEqs()] >>
+  metis_tac[]
+QED
 Theorem target_saved_value_region_bytes:
   vv_at cenv cx ty sa sm es r (LocatedValue carried_ty p) s /\
   p.ptr_location = LocMemory /\
@@ -76,11 +88,11 @@ Proof
 QED
 
 Theorem target_saved_regions_oracles:
-  (vv_at cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os|>) r vv s <=>
+  (vv_at cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq|>) r vv s <=>
    vv_at cenv cx ty sa sb es r vv s) /\
-  (vv_own cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os|>) r vv s <=>
+  (vv_own cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq|>) r vv s <=>
    vv_own cenv cx ty sa sb es r vv s) /\
-  (vv_storage_live cx vv (es with <|gas_obs := gs; outcomes := os|>) s <=>
+  (vv_storage_live cx vv (es with <|gas_obs := gs; outcomes := os; requests := rq|>) s <=>
    vv_storage_live cx vv es s)
 Proof
   Cases_on `vv` >>
@@ -88,18 +100,8 @@ Proof
        expr_val_at_def, expr_val_own_def, vyperStorageBackendTheory.get_storage_def]
 QED
 
-Theorem target_saved_storage_oracles:
-  read_storage_slot cx tr w tv (es with <|gas_obs := gs; outcomes := os|>) =
-    (INL v, es with <|gas_obs := gs; outcomes := os|>) <=>
-  read_storage_slot cx tr w tv es = (INL v,es)
-Proof
-  Cases_on `tr` >> simp[read_storage_slot_def, get_storage_backend_eq, bind_def,
-       get_storage_def, lift_option_def] >>
-  CASE_TAC >> simp[return_def, raise_def]
-QED
-
 Theorem target_saved_holds_oracles:
-  vv_holds cenv cx ty r vv (es with <|gas_obs := gs; outcomes := os|>) s <=>
+  vv_holds cenv cx ty r vv (es with <|gas_obs := gs; outcomes := os; requests := rq|>) s <=>
   vv_holds cenv cx ty r vv es s
 Proof
   Cases_on `vv` >>
@@ -230,8 +232,7 @@ QED
 Theorem target_saved_post_transport:
   vv_post ctx func cenv cx e es sa sm s0 es1 r vv s /\
   target_post ctx func cenv cx es1 sm sb s ee pv vt op u /\
-  pure_frame cenv func es1 sm s u /\
-  ee = es1 with <|gas_obs := gs; outcomes := os|> /\
+  ee = es1 with <|gas_obs := gs; outcomes := os; requests := rq|> /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!l. vv_operand vv <> Label l) /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -240,7 +241,8 @@ Theorem target_saved_post_transport:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   vv_storage_live cx vv es1 s /\
   (cenv.ce_is_ctor ==> vv_location vv <> SOME LocCode) ==>
-  vv_post ctx func cenv cx e es sa sb s0 ee r vv u
+  vv_post ctx func cenv cx e ee sa sb u ee r vv u /\
+  wb_frame cenv es ee sa s0 u
 Proof
   strip_tac >> gvs[] >>
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
@@ -256,16 +258,13 @@ Proof
    transient_rel cx cx.txn.target es1 u` by
     (gvs[target_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
          state_rel_def, storage_rel_def, transient_rel_def]) >>
-  `wb_frame cenv es (es1 with <|gas_obs := gs; outcomes := os|>) sa s0 u` by
+  `wb_frame cenv es (es1 with <|gas_obs := gs; outcomes := os; requests := rq|>) sa s0 u` by
     (irule wb_frame_trans >>
      simp[] >> conj_tac >- metis_tac[] >>
      qexistsl_tac [`es1`, `sm`, `s`] >>
      gvs[vv_post_def, target_post_def, wb_frame_def] >> metis_tac[]) >>
+  simp[] >>
   gvs[vv_post_def] >>
-  `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
-    (strip_tac >> irule exprSimPropsTheory.pure_frame_trans >>
-     conj_tac >- simp[] >>
-     qexistsl_tac [`es1`, `sm`, `s`] >> gvs[target_post_def]) >>
   simp[SRULE [] target_saved_holds_oracles,
        SRULE [] target_saved_regions_oracles] >>
   rpt conj_tac
@@ -278,5 +277,5 @@ Proof
       metis_tac[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def])
   >- (strip_tac >> irule target_saved_storage_live_frame >>
       metis_tac[target_saved_operand_exists]) >>
-  gvs[wb_frame_def]
+  simp[exprSimPropsTheory.locals_kept_refl]
 QED
