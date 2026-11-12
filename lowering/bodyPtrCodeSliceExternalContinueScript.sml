@@ -252,7 +252,7 @@ Theorem external_code_tail_success_checked:
   LENGTH (lookup_account (w2w av) s.vs_accounts).code < dimword (:256) /\
   w2n a+w2n n <= LENGTH (lookup_account (w2w av) s.vs_accounts).code /\
   w2n p+32 < dimword (:256) /\
-  ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn out s 32 /\
+  ptr_covers G tn dst s (w2n n) /\ ptr_covers G tn out s sz /\ 32 <= sz /\
   op_taint tn addr = {} /\ op_taint tn src = {} /\ op_taint tn len = {} /\
   op_prov G src = NONE /\ op_prov G len = NONE /\ ~ctx_has_dalloca ctx /\
   ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
@@ -263,7 +263,12 @@ Theorem external_code_tail_success_checked:
     off+sz <= w2n p \/ w2n p+32+w2n n <= off) ==>
   ?z Gf tnf. run_inst_seq (emitted_insts sa sf) s = OK z /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sf) s Gf tnf /\
-    ghost_inv d cenv cx es Gf tnf z /\ ghost_kept cenv es sa G tn s Gf tnf
+    ghost_inv d cenv cx es Gf tnf z /\ ghost_kept cenv es sa G tn s Gf tnf /\
+    lookup_var out z = SOME p /\
+    (?tn0. ptr_covers Gf tn0 out z sz /\
+      tnf = (tn0 with t_mem := (tn0.t_mem DIFF
+        {j | w2n p+32 <= j /\ j < w2n p+32+w2n n}) DIFF
+        {j | w2n p <= j /\ j < w2n p+32}))
 Proof
   strip_tac >> drule slice_extcode_shape >> strip_tac >>
   `(!x. MEM (Var x) [addr;src;len] ==> not_fresh_at sa x) /\
@@ -294,8 +299,10 @@ Proof
    eval_operand len u = SOME n /\ lookup_var out u = SOME p /\
    lookup_var dst u = SOME (p+32w) /\
    op_taint tnf addr = {} /\ op_taint tnf src = {} /\ op_taint tnf len = {} /\
-   ptr_covers Gf tnf out u 32 /\ ptr_covers Gf tnf dst u (w2n n)` by
+   ptr_covers Gf tnf out u sz /\ ptr_covers Gf tnf dst u (w2n n)` by
     (fs[eval_operand_def] >> metis_tac[MEM]) >>
+  `ptr_covers Gf tnf out u 32` by
+    (fs[ptr_covers_def] >> goal_assum (drule_at Any) >> simp[]) >>
   `u.vs_accounts = s.vs_accounts` by
     (qpat_x_assum `u = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `!name off sz. local_region cenv es.scopes u name off sz ==>
@@ -341,9 +348,15 @@ Resume external_code_tail_success_checked[compose]:
   >- (rewrite_tac[APPEND_ASSOC] >> irule inst_seq_ptr_append >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> gvs[]) >>
   conj_tac >- simp[] >>
-  irule ghost_kept_trans >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qpat_x_assum `u = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]
+  conj_tac
+  >- (irule ghost_kept_trans >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qpat_x_assum `u = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  conj_tac >- simp[] >>
+  qexists_tac `tnf` >> simp[] >>
+  qpat_x_assum `ptr_covers Gf tnf out u sz` mp_tac >>
+  simp[NoAsms, ptr_covers_def, lookup_var_def, mstore_def,
+    write_memory_with_expansion_def] >> metis_tac[]
 QED
 
 Finalise external_code_tail_success_checked
