@@ -129,7 +129,7 @@ Proof
   strip_tac >> Cases_on `prev` >> simp[phi_prov_def, ptr_owner_erases_def] >>
   Cases_on `resolve_phi x inst.inst_operands` >>
   simp[ptr_owner_erases_def] >> drule ptr_owner_op_projection >>
-  disch_then (qspec_then `x'` mp_tac) >> simp[]
+  disch_then (qspec_then `x'` mp_tac) >> simp[ptr_owner_erases_def]
 QED
 
 Theorem ptr_owner_phis_projection[local]:
