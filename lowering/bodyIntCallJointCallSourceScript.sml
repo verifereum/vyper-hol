@@ -1,11 +1,19 @@
 (* Source-state boundary for deferred pure call operands. *)
 Theory bodyIntCallJointCallSource
 Ancestors
-  supportedExprs vyperInterpreter vyperState vyperContext vyperMisc
+  supportedExprs supportedExprForms vyperInterpreter vyperState vyperContext vyperMisc
   vyperStatePreservation vyperPlaceFrames vyperCallFrame
   vyperImmutablesPreservation pair sum
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
+Theorem supported_pure_exprs_code_slice_source[local]:
+  supported_pure_exprs tops es ==> code_slice_source bt es = NONE
+Proof
+  strip_tac >> Cases_on `code_slice_source bt es` >> simp[] >>
+  PairCases_on `x` >>
+  gvs[code_slice_source_SOME, supported_pure_expr_def,
+      supported_builtin_form_def]
+QED
+
 Theorem intcall_pure_immutables_mutual:
   (!tops e. supported_pure_expr tops e ==>
     !cx s r t. eval_expr cx e s = (r,t) ==> t.immutables = s.immutables) /\
@@ -19,7 +27,6 @@ Theorem intcall_pure_immutables_mutual:
   (!tops e. supported_place_expr tops e ==>
     !cx s r t. eval_expr cx e s = (r,t) ==> t.immutables = s.immutables)
 Proof
-  (* original proof, kept while held:
   ho_match_mp_tac supported_pure_expr_ind >>
   rpt conj_tac >> rpt gen_tac >> simp[supported_pure_expr_def]
   >- (rpt strip_tac >>
@@ -42,12 +49,8 @@ Proof
   >- suspend "place_global"
   >- suspend "place_subscript"
   >> suspend "place_rest"
-  *)
-  cheat
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; case proofs of the held theorem above, kept while held *)
-(*
 Resume intcall_pure_immutables_mutual[ifexp]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(),
@@ -60,26 +63,29 @@ Resume intcall_pure_immutables_mutual[structlit]:
   PairCases_on `id` >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >> metis_tac[]
 QED
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Resume intcall_pure_immutables_mutual[subscript]:
-  (* original proof, kept while held:
   rpt strip_tac >>
+  Cases_on `subscript_reads_base cx e e'` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
-  *)
-  cheat
 QED
 Resume intcall_pure_immutables_mutual[attribute]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Resume intcall_pure_immutables_mutual[builtin]:
-  (* original proof, kept while held:
   rpt strip_tac >>
-  Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
+  drule supported_pure_exprs_code_slice_source >>
+  disch_then (qspec_then `blt` assume_tac) >>
+  Cases_on `blt = Len`
+  >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, builtin_args_length_ok_def,
+          AllCaseEqs()] >>
+      imp_res_tac result_array_length_state >> gvs[] >>
+      Cases_on `es` >> gvs[] >> first_x_assum drule_all >> simp[]) >>
+  Cases_on `blt = Env MsgGas` >>
   Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
       assert_def, return_def, raise_def, AllCaseEqs()] >>
@@ -90,9 +96,7 @@ Resume intcall_pure_immutables_mutual[builtin]:
   imp_res_tac precompile_call_success_state >> gvs[] >>
   gvs[builtin_args_length_ok_def] >>
   Cases_on `es` >> gvs[] >>
-  FIRST [first_x_assum drule_all >> simp[] >> NO_TAC, metis_tac[]]
-  *)
-  cheat
+  metis_tac[]
 QED
 Resume intcall_pure_immutables_mutual[typebuiltin]:
   rpt strip_tac >>
@@ -127,6 +131,7 @@ Resume intcall_pure_immutables_mutual[place_global]:
 QED
 Resume intcall_pure_immutables_mutual[place_subscript]:
   rpt strip_tac >>
+  Cases_on `subscript_reads_base cx e e'` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
@@ -137,7 +142,6 @@ Resume intcall_pure_immutables_mutual[place_rest]:
   imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
 Finalise intcall_pure_immutables_mutual
-*)
 
 Theorem intcall_pure_expr_immutables:
   supported_pure_expr tops e /\ eval_expr cx e es = (r,ee) ==>

@@ -4,6 +4,7 @@ Ancestors
   exprSimIfExpCompat loweringPosts exprLowering compileEnv context
   vyperTypeSystem typedMemoryCopy valueCopyBytes
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem compound_lowered_post_type:
   well_typed_expr env e /\
   (!id t. FLOOKUP env.var_types id = SOME t ==>
@@ -12,9 +13,12 @@ Theorem compound_lowered_post_type:
   ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) ==>
   lowered_value_type ce e = post_value_type ce e
 Proof
+  (* original proof, kept while held:
   strip_tac >> drule_all ifexp_lowered_type_classify >> strip_tac
   >- metis_tac[post_value_type_lowered] >>
   gvs[post_value_type_def, vyperASTTheory.expr_type_def]
+  *)
+  cheat
 QED
 
 Theorem type_widens_from_word:
