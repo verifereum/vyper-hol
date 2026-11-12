@@ -5,7 +5,7 @@ Ancestors
   vyperInterpreter vyperTypeSystem vyperRuntimeWriteSafety
   vyperMachineFrame vyperCallOutcomeFrame vyperStatePreservation
   vyperImmutablesPreservation vyperScopePreservation vyperCreateFrame
-  vyperStoragePlaceProvenance vyperEvalFrame
+  vyperStoragePlaceProvenance vyperEvalFrame vyperPlaceFrames
 Libs monadsyntax evalWalkLib
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -29,22 +29,33 @@ val imms_frame_net =
     fun leaf th = (subst [``machine_frame`` |-> imms_relation] (concl th),
       irule state_rel_frame_machine >> conj_tac
       >- simp[machine_frame_def] >> MATCH_ACCEPT_TAC th)
+    val log_leaf =
+      (``state_rel_frame ^imms_relation (push_log lg)``,
+       simp[state_rel_frame_def] >> metis_tac[push_log_immutables])
   in evalWalkLib.walk_net (map SPEC_ALL rules)
-       (map leaf (List.concat (map (CONJUNCTS o SPEC_ALL) leaves))) end;
+       (log_leaf :: map leaf (List.concat (map (CONJUNCTS o SPEC_ALL) leaves))) end;
 
 val imms_frame_result = BETA_RULE
   (ISPEC imms_relation (Q.GEN `R` state_rel_frame_result));
 val IMMS_IH_TAC =
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM imms_frame_result]) >>
-  evalWalkLib.IH_TAC {stop = K false, normalise = REWRITE_RULE []};
+  evalWalkLib.IH_TAC {stop = K false, normalise = SIMP_RULE bool_ss
+    [oneTheory.one, ignore_bind_def, FST, SND, pair_case_thm, UNCURRY,
+     lock_if_nr_def, unlock_if_nr_def]};
 val IMMS_STEP = evalWalkLib.STEP {net = imms_frame_net, at = RAND_CONV,
   unfolds = [switch_BoolV_def, ignore_bind_def],
   intros = [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
     CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
       (List.filter (is_eq o concl) (map (BETA_RULE o ASSUME) asl)) (asl,w))],
-  fallbacks = [IMMS_IH_TAC]};
+  fallbacks = [IMMS_IH_TAC, evalWalkLib.NORMALISE_IH_TAC IMMS_IH_TAC]};
 val IMMS_CASE = evalWalkLib.EVAL_CASE all_tac IMMS_STEP;
+val IMMS_WRITE =
+  qmatch_goalsub_rename_tac `write_place cx pl value` >>
+  `!sid id path. pl <> ImmutablePlace sid id path` by metis_tac[] >>
+  Cases_on `pl` >> fs[] >> simp[imms_frame_result] >> rpt strip_tac
+  >- metis_tac[write_storage_place_immutables] >>
+  drule write_memory_place_frame >> strip_tac >> gvs[];
 
 Theorem runtime_writes_frame_mutual:
   (!cx s. ~cx.in_deploy /\ runtime_write_roots_resolve cx R /\
@@ -158,6 +169,97 @@ Proof
   >~ [`eval_stmt cx (Return NONE)`] >- IMMS_CASE
   >~ [`eval_stmt cx (AnnAssign _ _ _)`] >- IMMS_CASE
   >~ [`eval_stmt cx (If _ _ _)`] >- IMMS_CASE
-  >~ [`eval_stmt cx (Log _ _)`] >- IMMS_CASE
+  >~ [`eval_stmt cx (Log _ _)`]
+  >- (IMMS_CASE >> simp[imms_frame_result] >> metis_tac[push_log_immutables])
+  >~ [`eval_stmt cx (Raise RaiseBare)`] >- IMMS_CASE
+  >~ [`eval_stmt cx (Raise RaiseUnreachable)`] >- IMMS_CASE
+  >~ [`eval_stmt cx (Raise (RaiseReason _))`] >- (fs[] >> IMMS_CASE)
+  >~ [`eval_stmt cx (Raise (RaiseCustomError _))`]
+  >- (fs[] >> IMMS_CASE >> first_x_assum irule >>
+      simp[] >> drule order_custom_error_args_perm >>
+      metis_tac[sortingTheory.PERM_EVERY])
+  >~ [`eval_stmt cx (Assert _ AssertBare)`] >- IMMS_CASE
+  >~ [`eval_stmt cx (Assert _ AssertUnreachable)`] >- IMMS_CASE
+  >~ [`eval_stmt cx (Assert _ (AssertReason _))`] >- (fs[] >> IMMS_CASE)
+  >~ [`eval_stmt cx (Assert _ (AssertCustomError _))`]
+  >- (fs[] >> IMMS_CASE >> first_x_assum irule >>
+      simp[] >> drule order_custom_error_args_perm >>
+      metis_tac[sortingTheory.PERM_EVERY])
+  >~ [`eval_stmts cx []`] >- IMMS_CASE
+  >~ [`eval_stmts cx (_::_)`] >- IMMS_CASE
+  >~ [`eval_iterator cx (Array _)`] >- (fs[] >> IMMS_CASE)
+  >~ [`eval_iterator cx (Range _ _)`] >- (fs[] >> IMMS_CASE)
+  >~ [`eval_expr cx (Literal _ _)`] >- IMMS_CASE
+  >~ [`eval_expr cx (Name _ _)`] >- IMMS_CASE
+  >~ [`eval_expr cx (TopLevelName _ _)`] >- IMMS_CASE
+  >~ [`eval_expr cx (FlagMember _ _ _)`] >- IMMS_CASE
+  >~ [`eval_expr cx (IfExp _ _ _ _)`] >- IMMS_CASE
+  >~ [`eval_expr cx (Subscript _ _ _)`] >- IMMS_CASE
+  >~ [`eval_expr cx (Attribute _ _ _)`] >- IMMS_CASE
+  >~ [`eval_expr cx (StructLit _ _ _)`] >- (IMMS_CASE >> metis_tac[])
+  >~ [`eval_exprs cx []`] >- IMMS_CASE
+  >~ [`eval_exprs cx (_::_)`] >- IMMS_CASE
+  >~ [`eval_expr_results cx []`] >- IMMS_CASE
+  >~ [`eval_expr_results cx (_::_)`] >- IMMS_CASE
+  >~ [`eval_for cx _ _ _ []`] >- IMMS_CASE
+  >~ [`eval_for cx _ _ _ (_::_)`] >- IMMS_CASE
+  >~ [`eval_stmt cx (For _ _ _ _ _)`] >- IMMS_CASE
+  >~ [`eval_stmt cx (Assign (TupleTarget _) _)`] >- IMMS_CASE
+  >~ [`assign_tuple_targets cx (TupleTarget _) _`] >- (IMMS_CASE >> metis_tac[])
+  >~ [`assign_tuple_target_list cx [] []`] >- IMMS_CASE
+  >~ [`assign_tuple_target_list cx (_::_) (_::_)`] >- IMMS_CASE
+  >~ [`assign_tuple_target_list cx _ _`] >- IMMS_CASE
+  >~ [`eval_expr cx (Builtin _ _ _)`]
+  >- (IMMS_CASE
+      >- (gvs[type_check_def, assert_def, check_def, return_def, raise_def] >>
+          Cases_on `es` >> fs[builtin_args_length_ok_def] >>
+          metis_tac[]) >> metis_tac[])
+  >~ [`eval_expr cx (TypeBuiltin _ _ _ _)`] >- (IMMS_CASE >> metis_tac[])
+  >~ [`eval_stmt cx (Assign (BaseTarget _) _)`]
+  >- (IMMS_CASE
+      >- (simp[imms_frame_result] >> metis_tac[]) >>
+      IMMS_WRITE)
+  >~ [`eval_stmt cx (AugAssign _ _ _ _)`]
+  >- (IMMS_CASE
+      >- (simp[imms_frame_result] >> metis_tac[]) >> IMMS_WRITE)
+  >~ [`assign_tuple_targets cx (BaseTarget _) _`]
+  >- (IMMS_CASE
+      >- (simp[imms_frame_result] >> metis_tac[]) >> IMMS_WRITE)
+  >~ [`eval_expr cx (Pop _ _)`]
+  >- (IMMS_CASE
+      >- (simp[imms_frame_result] >> metis_tac[]) >>
+      qmatch_goalsub_rename_tac `pop_place cx pl` >>
+      `!sid id path. pl <> ImmutablePlace sid id path` by metis_tac[] >>
+      Cases_on `pl` >> fs[]
+      >- (simp[imms_frame_result] >> metis_tac[pop_storage_place_scopes_immutables]) >>
+      simp[pop_place_def] >> rpt IMMS_STEP)
+  >~ [`eval_expr cx (Call _ (Send _) _ _)`]
+  >- (IMMS_CASE
+      >- metis_tac[] >> simp[imms_frame_result] >>
+      metis_tac[eval_send_preserves_non_accounts])
+  >~ [`eval_expr cx (Call _ (ExtCall _ _ _ _) _ _)`]
+  >- (IMMS_CASE
+      >- metis_tac[rich_listTheory.EVERY_TAKE]
+      >- metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]
+      >- metis_tac[rich_listTheory.EVERY_DROP] >>
+      simp[imms_frame_result] >> metis_tac[eval_ext_call_preserves_non_accounts])
+  >~ [`eval_expr cx (Call _ (RawCallTarget _) _ _)`]
+  >- (IMMS_CASE
+      >- metis_tac[] >> simp[imms_frame_result] >>
+      metis_tac[eval_raw_call_preserves_non_accounts])
+  >~ [`eval_expr cx (Call _ (RawCallCalldataTarget _) _ _)`]
+  >- (IMMS_CASE
+      >- metis_tac[] >> simp[imms_frame_result] >>
+      metis_tac[eval_raw_call_preserves_non_accounts])
+  >~ [`eval_expr cx (Call _ RawRevert _ _)`] >- (IMMS_CASE >> metis_tac[])
+  >~ [`eval_expr cx (Call _ RawLog _ _)`]
+  >- (simp_tac bool_ss [Once evaluate_def] >>
+      irule state_rel_frame_bind_guarded >> conj_tac
+      >- simp[] >> conj_tac
+      >- metis_tac[] >> rpt gen_tac >> strip_tac >>
+      simp[imms_frame_result, bind_def, ignore_bind_def, type_check_def,
+        assert_def, check_def, return_def, raise_def, lift_option_type_def,
+        lift_option_def, check_not_static_def, push_log_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[])
   >> FAIL_TAC "ordinary frames"
 QED
