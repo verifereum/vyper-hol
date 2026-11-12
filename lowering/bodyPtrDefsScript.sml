@@ -220,36 +220,6 @@ Proof
   simp[ghost_kept_zero, ghost_kept_at_def]
 QED
 
-(* The ghost reads only the source scopes, so a recorded storage
-   observation leaves it unchanged. *)
-Theorem ghost_inv_at_storage_trace[simp]:
-  ghost_inv_at D lo d cenv cx (es with storage_trace := obs) G tn s <=>
-  ghost_inv_at D lo d cenv cx es G tn s
-Proof
-  simp[ghost_inv_at_def]
-QED
-
-Theorem ghost_inv_storage_trace[simp]:
-  ghost_inv H d cenv cx (es with storage_trace := obs) G tn s <=>
-  ghost_inv H d cenv cx es G tn s
-Proof
-  simp[ghost_inv_cx_dead]
-QED
-
-Theorem ghost_kept_at_storage_trace[simp]:
-  ghost_kept_at lo cenv (es with storage_trace := obs) sa G0 tn0 s0 G tn <=>
-  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn
-Proof
-  simp[ghost_kept_at_def]
-QED
-
-Theorem ghost_kept_storage_trace[simp]:
-  ghost_kept cenv (es with storage_trace := obs) sa G0 tn0 s0 G tn <=>
-  ghost_kept cenv es sa G0 tn0 s0 G tn
-Proof
-  simp[ghost_kept_zero]
-QED
-
 (* v of type t is in memory at op's address whatever the tainted bytes
    hold, and op's pointer is covered for its word-padded footprint,
    val_store_size: copies of a bytestring read whole words. *)
