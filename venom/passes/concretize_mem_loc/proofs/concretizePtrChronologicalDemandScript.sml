@@ -55,11 +55,11 @@ Theorem ptr_ancestry_operand_seed:
 Proof
   Induct >> rpt gen_tac >> strip_tac >>
   (Cases_on `dyn <= FST site` >- simp[]) >>
-  `ptr_activation_seed mems site f \/ MEM (SOME site) f.cf_params` by
-    (drule_all ptr_activation_operand_seed >>
-     disch_then (qspec_then `mems` mp_tac) >> gvs[])
+  (`ptr_activation_seed mems site f \/ MEM (SOME site) f.cf_params` by
+     (drule_all ptr_activation_operand_seed >>
+      disch_then (qspec_then `mems` mp_tac) >> gvs[])) >>
+  pop_assum strip_assume_tac >> TRY (gvs[] >> NO_TAC)
   >- gvs[ptr_call_ancestry_def] >>
-  pop_assum strip_assume_tac >- simp[] >>
   `?w. MEM (Var w) h.cf_inst.inst_operands /\ FLOOKUP h.cf_prov w = SOME site` by
     metis_tac[ptr_call_ancestry_import] >>
   `ptr_call_ancestry h.cf_params stk` by metis_tac[ptr_call_ancestry_tail] >>

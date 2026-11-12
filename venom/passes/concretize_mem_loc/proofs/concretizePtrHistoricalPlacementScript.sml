@@ -93,7 +93,8 @@ Proof
   drule ptr_structural_transcript_ownership >> disch_then (qspec_then `i` mp_tac) >>
   simp[ptr_snapshot_ownership_def] >> strip_tac >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
-    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def,
+       venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
      metis_tac[]) >>
   `FLOOKUP bi (token,aid) = SOME (b,sz)` by
     (drule_all ptr_source_ownership_prov_erases >>

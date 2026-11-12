@@ -78,7 +78,8 @@ Theorem ptr_stage_placements_live_owner:
 Proof
   strip_tac >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
-    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def,
+       venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
      metis_tac[]) >>
   drule_all ptr_source_ownership_live_cache >> strip_tac >>
   `ptr_ledger_source_activations vs C h a tokens registry` by

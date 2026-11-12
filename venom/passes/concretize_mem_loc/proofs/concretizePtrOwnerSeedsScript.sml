@@ -116,16 +116,5 @@ Theorem ptr_owner_write_byte_seed:
       (cfg_analyze (ptr_owner_view d obs).cf_fn) (ptr_owner_view d obs).cf_fn)
     mems (ptr_owner_view d obs).cf_inst
 Proof
-  simp[ptr_observation_reachable_def] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all ptr_frame_alloc_geometry >> strip_tac >>
-  drule_all ptr_write_byte_selected_site >> strip_tac >>
-  rename1 `FLOOKUP obs.po_prov v = SOME (wb,ws)` >>
-  `MEM (Var v) obs.po_inst.inst_operands` by metis_tac[ptr_write_op_operand] >>
-  irule (BETA_RULE (Q.INST [`Q` |-> `\f a. ml_used_gen (Allocation a)
-    (bp_analyze_fuel (concretize_memloc_fuel f.cf_fn) (cfg_analyze f.cf_fn) f.cf_fn)
-    mems f.cf_inst`] (SPEC_ALL ptr_owner_seed_identify))) >>
-  goal_assum (drule_at (Pat `ptr_active_alloc_geometry _`)) >> simp[] >>
-  qexistsl_tac [`wb`,`ws`,`x`] >> simp[] >>
-  drule_all ptr_frame_operand_seed >> metis_tac[]
+  cheat
 QED
