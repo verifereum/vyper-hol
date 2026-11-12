@@ -15,6 +15,51 @@ Ancestors
   vyperInterpreter vyperState venomState fragGasSeqPtr fragGasEmitCtrl
   instMemFrontier memSafeRun ptrSafeRun ptrDiscipline venomInst
   venomExecSemantics loweringStateRelDefs finite_map typedCopyDomain vyperTypeSystem
+  context memoryLayoutSource memoryLayoutDefs typedMemoryCopy
+
+Theorem ifexp_widened_call_store_normalize:
+  compile_ifexp_arm cenv t sty vv sm = (op,sb) /\
+  ~is_word_type t /\ ~same_memory_layout cenv sty t /\
+  type_widens_to tenv sty t ==>
+  compile_store_memory cenv src dst t sty =
+  compile_store_memory_typed cenv dst t src sty
+Proof
+  strip_tac >>
+  `(!u. punnable cenv u u) /\ (!us. punnable_list cenv us us)` by
+    (ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
+     simp[punnable_def]) >>
+  `sty <> t` by (strip_tac >> gvs[same_memory_layout_def]) >>
+  `(!u v. memory_layout_key v = memory_layout_key u ==> punnable cenv v u) /\
+   (!us vs. MAP memory_layout_key vs = MAP memory_layout_key us ==>
+      punnable_list cenv vs us)` by
+    (`(!b u. punnable cenv u (BaseT b)) /\
+      (!n u. punnable cenv u (StructT n)) /\
+      (!n u. punnable cenv u (FlagT n)) /\
+      (!u. punnable cenv u NoneT)` by
+       (rpt strip_tac >> Cases_on `u` >> simp[punnable_def]) >>
+     ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
+     rpt strip_tac >>
+     gvs[memory_layout_key_tuple, memory_layout_key_array,
+       memory_layout_key_tuple_cases, memory_layout_key_array_cases,
+       listTheory.MAP_EQ_CONS, punnable_def] >>
+     metis_tac[memory_layout_key_bytes]) >>
+  `~tuple_memory_layout_eq t sty` by
+    (strip_tac >>
+     `type_memory_bytes cenv sty = type_memory_bytes cenv t` by
+       metis_tac[tuple_memory_layout_eq_bytes] >>
+     `punnable cenv sty t` by
+       (Cases_on `t` >> Cases_on `sty` >>
+        gvs[tuple_memory_layout_eq_def, punnable_def] >> metis_tac[]) >>
+     gvs[same_memory_layout_def]) >>
+  Cases_on `is_bytestring_type t`
+  >- (drule_all typedMemoryCopyTheory.typed_copy_bytestring_source >>
+      strip_tac >>
+      rewrite_tac[compile_store_memory_def] >>
+      simp[] >>
+      once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+      simp[]) >>
+  simp[compile_store_memory_def]
+QED
 
 Theorem ifexp_widened_call_arm_step_full:
   (* The shared joint unwrap_value lemma on H (r8, family form), here a
