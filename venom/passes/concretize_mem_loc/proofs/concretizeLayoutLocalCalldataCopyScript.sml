@@ -323,14 +323,6 @@ Resume concretize_calldatacopy_execution_geometry[geometry]:
 QED
 Finalise concretize_calldatacopy_execution_geometry
 
-Triviality written_taint_non_store:
-  inst.inst_opcode <> MSTORE /\ inst.inst_opcode <> ISTORE /\
-  inst.inst_opcode <> MCOPY ==>
-  written_taint tn inst s = {}
-Proof
-  rw[written_taint_def] >> rpt CASE_TAC >> simp[]
-QED
-
 Theorem clean_copy_ghosts:
   MEM inst.inst_opcode [CALLDATACOPY;CODECOPY;DLOADBYTES;EXTCODECOPY;RETURNDATACOPY] /\
   inst.inst_outputs = [] /\ step_writes inst s post = [(dst,len)] /\
@@ -342,7 +334,9 @@ Proof
   >- simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]) >>
   `new_site_bytes s post = {}` by
     (irule new_site_bytes_unchanged >> simp[write_memory_with_expansion_def]) >>
-  gvs[] >> simp[step_taint_def, mem_taint_def, written_taint_non_store,
+  `written_taint tn inst s = {}` by
+    (rw[written_taint_def] >> rpt CASE_TAC >> simp[]) >>
+  gvs[] >> simp[step_taint_def, mem_taint_def,
     set_var_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
     taint_component_equality, DRESTRICT_UNIV]
 QED
