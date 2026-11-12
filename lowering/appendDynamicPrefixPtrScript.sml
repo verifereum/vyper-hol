@@ -4,7 +4,73 @@ Ancestors appendDynamicPointerAddPtr appendDynamicHeaderStorePtr
   appendDynamicPurePtr typedCopyAmbientFramePtr fragExecPtr
   valueEncodingProps bodyPtrDefs loweringStateRelDefs contextCodegenRel
   compileEnv context emitHelper venomState venomInst words finite_map
-  abiDecodeStaticProps
+  abiDecodeStaticProps emitHelperProps exprLoweringProps list rich_list
+
+Theorem dynamic_emit_op_fields[local]:
+  !opc ops sa out sb.
+    emit_op opc ops sa = (Var out,sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ [mk_inst sa.cs_next_id opc ops [out]] /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sa.cs_next_var <= sb.cs_next_var /\ not_fresh_at sb out /\ cs_extends sa sb
+Proof
+  rpt strip_tac >>
+  drule loweringShapeRulesTheory.emit_op_facts >> strip_tac >> gvs[] >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+      fresh_id_def, emit_def, comp_return_def, cs_extends_def]
+QED
+
+Theorem dynamic_emit_void_fields[local]:
+  !opc ops sa sb.
+    emit_void opc ops sa = ((),sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ [mk_inst sa.cs_next_id opc ops []] /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_next_var = sa.cs_next_var /\ cs_extends sa sb
+Proof
+  rpt strip_tac >>
+  gvs[emit_void_def, comp_bind_def, fresh_id_def, emit_def,
+      comp_return_def, cs_extends_def]
+QED
+
+Theorem append_dynamic_prefix_shape:
+  !sa s1 s2 s3 s4 s5 s6 s7 sb src dst len gt ok sd dd cnt dn esz.
+    emit_op MLOAD [Var src] sa = (Var len,s1) /\
+    emit_op GT [Var len;Lit (n2w dn)] s1 = (Var gt,s2) /\
+    emit_op ISZERO [Var gt] s2 = (Var ok,s3) /\
+    emit_void ASSERT [Var ok] s3 = ((),s4) /\
+    emit_void MSTORE [Var dst;Var len] s4 = ((),s5) /\
+    emit_op ADD [Var src;Lit 32w] s5 = (Var sd,s6) /\
+    emit_op ADD [Var dst;Lit 32w] s6 = (Var dd,s7) /\
+    emit_op MUL [Var len;Lit (n2w esz)] s7 = (Var cnt,sb) ==>
+    emitted_insts sa sb =
+      [mk_inst sa.cs_next_id MLOAD [Var src] [len];
+       mk_inst s1.cs_next_id GT [Var len;Lit (n2w dn)] [gt];
+       mk_inst s2.cs_next_id ISZERO [Var gt] [ok];
+       mk_inst s3.cs_next_id ASSERT [Var ok] [];
+       mk_inst s4.cs_next_id MSTORE [Var dst;Var len] [];
+       mk_inst s5.cs_next_id ADD [Var src;Lit 32w] [sd];
+       mk_inst s6.cs_next_id ADD [Var dst;Lit 32w] [dd];
+       mk_inst s7.cs_next_id MUL [Var len;Lit (n2w esz)] [cnt]] /\
+    sb.cs_current_bb = sa.cs_current_bb /\ cs_extends sa sb /\
+    sa.cs_next_var <= s1.cs_next_var /\
+    s1.cs_next_var <= s2.cs_next_var /\
+    s2.cs_next_var <= s3.cs_next_var /\
+    s3.cs_next_var = s4.cs_next_var /\
+    s4.cs_next_var = s5.cs_next_var /\
+    s5.cs_next_var <= s6.cs_next_var /\
+    s6.cs_next_var <= s7.cs_next_var /\
+    s7.cs_next_var <= sb.cs_next_var /\ not_fresh_at s1 len /\
+    not_fresh_at s6 sd /\ not_fresh_at s7 dd /\ not_fresh_at sb cnt /\
+    cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
+    cs_extends s3 s4 /\ cs_extends s4 s5 /\ cs_extends s5 s6 /\
+    cs_extends s6 s7 /\ cs_extends s7 sb
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  imp_res_tac dynamic_emit_op_fields >>
+  imp_res_tac dynamic_emit_void_fields >>
+  conj_tac >-
+    simp[emitted_insts_def, APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[] >> metis_tac[cs_extends_trans]
+QED
 
 Theorem append_dynamic_prefix_ptr_conditional:
   !cx ctx PG R G tn s sa s1 s2 s3 s4 s5 s6 s7 sb
@@ -53,26 +119,10 @@ Theorem append_dynamic_prefix_ptr_conditional:
         lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  rpt gen_tac >> disch_tac >>
-  `sa.cs_next_var <= s1.cs_next_var /\
-   s1.cs_next_var <= s2.cs_next_var /\
-   s2.cs_next_var <= s3.cs_next_var /\
-   s3.cs_next_var = s4.cs_next_var /\
-   s4.cs_next_var = s5.cs_next_var /\
-   s5.cs_next_var <= s6.cs_next_var /\
-   s6.cs_next_var <= s7.cs_next_var /\
-   s7.cs_next_var <= sb.cs_next_var /\
-   not_fresh_at s1 len` by
-    (gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
-         fresh_var_def, fresh_id_def, emit_def, comp_return_def,
-         not_fresh_at_def] >> decide_tac) >>
-  `cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
-   cs_extends s3 s4 /\ cs_extends s4 s5 /\ cs_extends s5 s6 /\
-   cs_extends s6 s7 /\ cs_extends s7 sb` by
-    (gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
-         fresh_var_def, fresh_id_def, emit_def, comp_return_def,
-         cs_extends_def]) >>
-  qpat_x_assum `_ /\ _` strip_assume_tac >>
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all append_dynamic_prefix_shape >> strip_tac >>
+  qpat_x_assum `emitted_insts _ _ = _` kall_tac >>
+  qpat_x_assum `_ \/ _` strip_assume_tac >>
   `ptr_covers G tn src s 32` by
     (gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
       arithmeticTheory.LESS_EQ_ADD]) >>
@@ -189,6 +239,5 @@ Proof
     (irule mem_bytes_at_bytewise >> rpt strip_tac >>
      `i < w2n b \/ w2n b+32 <= i` by decide_tac >> metis_tac[])) >>
   (conj_tac >- metis_tac[]) >>
-  (conj_tac >- metis_tac[cs_extends_trans]) >>
   simp[lookup_var_def] >> metis_tac[lookup_var_def]
 QED
