@@ -427,7 +427,20 @@ Proof
 QED
 
 Theorem external_body_prefix_storage:
-  source_storage_ok tops am tx /\ call_outcomes_ok am tx os /\
+  !(tops : toplevel list) am tx os mut env es0.
+  contract_storage_well_formed
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am []) /\
+  storage_layout_safe
+    (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  EVERY (\outcome.
+    LENGTH outcome.co_returnData < dimword(:256) /\
+    accounts_runtime_well_typed outcome.co_accounts /\
+    contract_storage_well_formed
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state
+        (am with <|accounts := outcome.co_accounts;
+                   tStorage := outcome.co_tStorage|>) [])) os /\
   send_call_value mut
     (initial_evaluation_context am.sources am.layouts tx NONE)
     (initial_state am [env] with <|outcomes := SOME os; requests := []|>) =
@@ -440,20 +453,18 @@ Theorem external_body_prefix_storage:
     (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
   outcomes_accounts_typed es0.outcomes /\ IS_SOME es0.outcomes
 Proof
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `es0.outcomes = SOME os` by
     (drule external_send_call_value_frame >>
      simp[evaluation_state_component_equality, initial_state_def]) >>
   `contract_storage_well_formed
      (initial_evaluation_context am.sources am.layouts tx NONE)
      (initial_state am [env] with <|outcomes := SOME os; requests := []|>)` by
-    (gvs[source_storage_ok_def] >>
-     irule contract_storage_well_formed_storage_frame >>
+    (irule contract_storage_well_formed_storage_frame >>
      goal_assum (drule_at Any) >>
      Cases >> simp[get_storage_def, initial_state_def]) >>
   reverse conj_tac
-  >- (gvs[source_storage_ok_def, call_outcomes_ok_def,
-           oracle_storage_ok_def, outcomes_accounts_typed_def,
+  >- (gvs[oracle_storage_ok_def, outcomes_accounts_typed_def,
            EVERY_MEM] >>
       rpt strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
       irule contract_storage_well_formed_storage_frame >>
@@ -808,11 +819,10 @@ Theorem external_body_frame:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -849,7 +859,10 @@ Proof
   `machine_well_typed am` by gvs[source_typing_ok_def] >>
   drule_all external_body_prefix_state >> strip_tac >>
   drule_all external_selected_env_consistent >> strip_tac >>
-  drule_all external_body_prefix_storage >> strip_tac >>
+  `es0.outcomes = SOME vs.vs_outcomes` by
+    (drule external_send_call_value_frame >>
+     simp[evaluation_state_component_equality, initial_state_def]) >>
+  `outcomes_accounts_typed es0.outcomes /\ IS_SOME es0.outcomes` by fs[] >>
   drule external_source_context_typed >> strip_tac >>
   drule_all external_package_dec_metadata >> strip_tac >>
   drule_all external_package_global_maps >> strip_tac >>
