@@ -91,12 +91,7 @@ Resume alloc_run_builtin_slice[extcode]:
   gen_tac >> simp[] >> irule alloc_run_conseq >>
   irule_at Any alloc_run_lower_value_then >>
   simp[] >> qexists `internal` >> conj_tac >- metis_tac[] >>
-  gen_tac >> simp[] >> irule alloc_run_bind >>
-  qexists `\b s. shape_state s /\ cenv_shape_ok s ce /\
-    EVERY (plain_operand s) [FST b; SND b]` >> reverse conj_tac
-  >- (irule alloc_run_conseq >> irule_at Any alloc_run_slice_out_buf_frame >>
-      qexists `\s. cenv_shape_ok s ce` >> simp[cenv_shape_ok_stable]) >>
-  Cases >> simp[] >> irule alloc_run_conseq >>
+  gen_tac >> simp[] >> irule alloc_run_conseq >>
   irule_at Any alloc_run_lower_value_then >>
   simp[] >> qexists `internal` >> conj_tac >- metis_tac[] >>
   gen_tac >> ho_match_mp_tac alloc_run_as_ptr_tail >>
