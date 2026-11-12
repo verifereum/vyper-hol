@@ -130,6 +130,7 @@ Theorem code_slice_vv_post_ptr_rebase:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   wb_frame cenv es es1 sa s0 t /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   vv_post ctx func cenv cx e es1 sm sb t es2 tv vv u /\
   ghost_kept cenv es1 sm G1 tn1 t G tn ==>
@@ -137,7 +138,9 @@ Theorem code_slice_vv_post_ptr_rebase:
   ghost_kept cenv es sa G0 tn0 s0 G tn
 Proof
   strip_tac >> conj_tac
-  >- metis_tac[vv_post_prefix_frame] >>
+  >- (irule vv_post_prefix_frame >>
+      first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   metis_tac[ghost_kept_wb_trans]
 QED
 
@@ -202,6 +205,8 @@ Theorem code_slice_two_uint_outcome_ptr:
     stmt_state_rel ctx func cenv cx ee t /\ ghost_inv d cenv cx ee G tn t /\
     expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     wb_frame cenv es ee sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    (~expr_has_effect start /\ ~expr_has_effect len ==>
+     pure_frame cenv func es sa s0 t) /\
     ee.gas_obs = [] ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
       (next (IntV (&i)) (IntV (&k))) (ee,t,G,tn) Q R) ==>
@@ -249,5 +254,18 @@ Proof
   `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
     metis_tac[ghost_kept_wb_trans] >>
   `stmt_state_rel ctx func cenv cx ee' t'` by metis_tac[expr_post_def] >>
+  `~expr_has_effect start /\ ~expr_has_effect len ==>
+   pure_frame cenv func es sa s0 t'` by
+    (strip_tac >>
+     `pure_frame cenv func es sa s0 t /\ pure_frame cenv func ee sm t t'` by
+       metis_tac[expr_post_pure_frame] >>
+     match_mp_tac (Q.SPECL [`cenv`,`func`,`es`,`ee`,`sa`,`sm`,`s0`,`t`,`t'`]
+       exprSimPropsTheory.pure_frame_trans) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (qpat_x_assum `wb_frame cenv ee ee' sm t t'` mp_tac >>
+         rewrite_tac[wb_frame_def] >> strip_tac >> first_assum ACCEPT_TAC)
+     >- metis_tac[] >>
+     qpat_x_assum `wb_frame cenv es ee sa s0 t` mp_tac >>
+     rewrite_tac[wb_frame_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   first_x_assum irule >> simp[]
 QED
