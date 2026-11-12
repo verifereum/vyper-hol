@@ -16,28 +16,19 @@ Theorem intcall_interval_call_internal:
   intcall_compiler_interval k a
     (SND (compile_call cfn ce rt ty (IntCall fid) es dflt a))
 Proof
-  (* original proof, kept while held:
-  strip_tac >> Cases_on `ce.ce_func_info (nsid_to_string fid)` >>
-  rename1 `(_, finfo)` >> PairCases_on `finfo` >>
-  simp[compile_call_def, comp_ignore_bind_def] >>
-  irule intcall_interval_pair_bind_floor >> simp[intcall_interval_multi_vvs_floor] >>
-  rpt strip_tac >> rpt IF_CASES_TAC >> simp[] >>
-  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
-       simp[intcall_interval_alloc_buffer, intcall_interval_stage_intcall_args,
-            intcall_interval_emit_multi_op, intcall_interval_emit_void,
-            intcall_interval_store_multi_results] >>
-       rpt strip_tac >> simp[intcall_compiler_interval_refl]) >>
-  Cases_on `return_buf` >> simp[] >>
-  rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
-       simp[intcall_interval_alloc_buffer, intcall_interval_emit_op,
-            intcall_interval_emit_multi_op, intcall_interval_store_multi_results] >>
-       rpt strip_tac >> simp[intcall_compiler_interval_refl]) >>
-  simp[intcall_compiler_interval_refl]
-  *)
   strip_tac >> Cases_on `ce.ce_func_info (nsid_to_string fid)` >>
   rename1 `(_, finfo)` >> PairCases_on `finfo` >>
   simp[compile_call_def] >> rpt IF_CASES_TAC >> simp[] >>
-  goalStack.print_tac "PROBE" >> cheat
+  `!f m s. UNCURRY f (m s) = comp_bind m f s` by
+    (rw[comp_bind_def] >> Cases_on `m s` >> simp[]) >>
+  pop_assum (fn th => PURE_REWRITE_TAC [th]) >>
+  rpt (rpt strip_tac >> rpt CASE_TAC >>
+       irule intcall_interval_bind_floor >>
+       simp[intcall_interval_alloc_buffer, intcall_interval_stage_intcall_args,
+            intcall_interval_emit_multi_op, intcall_interval_emit_void,
+            intcall_interval_emit_op, intcall_interval_store_multi_results,
+            intcall_compiler_interval_refl]) >>
+  rpt strip_tac >> rpt CASE_TAC >> simp[intcall_compiler_interval_refl]
 QED
 
 Theorem intcall_interval_call_external:
