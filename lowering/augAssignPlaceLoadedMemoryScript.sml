@@ -42,7 +42,9 @@ Theorem aug_place_memory_loaded:
     u.vs_alloca_next = t.vs_alloca_next /\ u.vs_memory = t.vs_memory /\
     (!z. not_fresh_at sp z ==> lookup_var z u = lookup_var z t) /\
     (!z. FST r = Var z ==> not_fresh_at sl z) /\
-    (?out. cur = Var out /\ not_fresh_at sl out)
+    (?out. cur = Var out /\ not_fresh_at sl out) /\
+    u.vs_accounts = t.vs_accounts /\ u.vs_transient = t.vs_transient /\
+    u.vs_requests = t.vs_requests /\ u.vs_call_ctx = t.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_at (Pat `target_post`) aug_place_memory_target_ready >>

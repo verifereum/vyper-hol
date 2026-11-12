@@ -62,7 +62,9 @@ Theorem aug_place_memory_access_path:
     (!rp. not_fresh_at sa rp ==> lookup_var rp u = lookup_var rp s) /\
     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
     u.vs_memory = s.vs_memory /\ sa.cs_next_var <= sb.cs_next_var /\
-    (?out. cur = Var out /\ not_fresh_at sb out)
+    (?out. cur = Var out /\ not_fresh_at sb out) /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all aug_place_supported_stmt_target_info >> strip_tac >>

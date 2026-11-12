@@ -632,7 +632,9 @@ Theorem augassign_field_emit_path_mem[local]:
     t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
     t.vs_memory = s0.vs_memory /\
     sa.cs_next_var <= sb.cs_next_var /\
-    (?out. op = Var out /\ not_fresh_at sb out)
+    (?out. op = Var out /\ not_fresh_at sb out) /\
+    t.vs_accounts = s0.vs_accounts /\ t.vs_transient = s0.vs_transient /\
+    t.vs_requests = s0.vs_requests /\ t.vs_call_ctx = s0.vs_call_ctx
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   drule emit_op_same_blocks >> strip_tac >>
@@ -715,7 +717,9 @@ Theorem augassign_field_read_path_mem:
     t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
     t.vs_memory = s0.vs_memory /\
     sa.cs_next_var <= sb.cs_next_var /\
-    (?out. cur = Var out /\ not_fresh_at sb out)
+    (?out. cur = Var out /\ not_fresh_at sb out) /\
+    t.vs_accounts = s0.vs_accounts /\ t.vs_transient = s0.vs_transient /\
+    t.vs_requests = s0.vs_requests /\ t.vs_call_ctx = s0.vs_call_ctx
 Proof
   strip_tac >> irule augassign_field_emit_path_mem >>
   simp[] >> reverse conj_tac
