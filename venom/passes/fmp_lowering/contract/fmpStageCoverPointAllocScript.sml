@@ -26,7 +26,7 @@ Theorem fmp_cov_point_alloc:
         (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
       active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
       ~(s1 with vs_inst_idx := SUC s.vs_inst_idx).vs_halted) /\
-  (!D C C' vs vs' fmp eom stk' fn' ti t fuel t2 n u
+  (!D C C' vs vs' (fmp :256 word) eom stk' fn' ti t fuel t2 n u
       stk PG G tn fn inst s sm lo ts restored bb'.
     ALL_DISTINCT (fn_labels fn') /\
     lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
@@ -106,7 +106,12 @@ Proof
        Cases_on `(s.vs_current_bb,s.vs_inst_idx) IN FDOM (fmp_stage_plan infos ctx fn)` >>
        fs[])) >>
      strip_tac >> gvs[]) >>
-  qpat_x_assum `!D C C' vs vs' fmp eom stk' fn' ti t fuel t2 n u stk PG G tn fn inst s sm lo ts restored bb'. _`
-    (drule_at_then (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac) >>
-  FAIL_TAC "endpoint application"
+  first_x_assum irule >>
+  conj_tac >- simp[] >>
+  conj_tac >- metis_tac[] >>
+  qpat_assum `fmp_stage_rel _ _ _ _ _ _ F _ _ _ _ _ _ _ _ _`
+    (irule_at (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> qexistsl [`4`, `inst2`] >> fs[] >>
+  qpat_x_assum `frame_reachable _ _ _ _ _ _ _ inst2 _` mp_tac >>
+  simp[]
 QED
