@@ -99,14 +99,19 @@ Theorem intcall_readonly_cont:
   intcall_expr_cont fp ce env es sa s es sb u
 Proof
   strip_tac >>
-  `intcall_joint_res fp ce env es sb u` by
+  `intcall_expr_res fp ce env es sb u` by
     (irule intcall_joint_res_frame >> simp[] >>
      conj_tac
      >- (gvs[bodyIntCallJointContractTheory.intcall_joint_res_def,
+            bodyIntCallJointContractTheory.intcall_expr_res_def,
             intCallFrameTheory.allocas_above_def] >> metis_tac[]) >>
-     conj_tac >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+     conj_tac >- fs[bodyIntCallJointContractTheory.intcall_joint_res_def,
+                    bodyIntCallJointContractTheory.intcall_expr_res_def] >>
      qexistsl_tac [`es`, `s`, `sa`] >> simp[] >>
-     fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >> metis_tac[]) >>
+     fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+     `!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sa x` by
+       fs[bodyIntCallJointContractTheory.intcall_expr_res_def] >>
+     metis_tac[]) >>
   simp[bodyIntCallJointContractTheory.intcall_expr_cont_def]
 QED
 
@@ -158,7 +163,8 @@ Proof
   BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sa` by
-    fs[bodyIntCallJointContractTheory.intcall_joint_res_def] >>
+    fs[bodyIntCallJointContractTheory.intcall_joint_res_def,
+       bodyIntCallJointContractTheory.intcall_expr_res_def] >>
   `sa.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sb.cs_next_var` by
     (mp_tac (Q.SPECL [`ce`, `vv`, `sa`] ci_mono_unwrap_value) >>
      simp[ci_mono_def]) >>

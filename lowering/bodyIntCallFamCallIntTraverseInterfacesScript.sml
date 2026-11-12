@@ -26,8 +26,8 @@ Theorem intcall_expr_cont_gas_obs:
     (ee with gas_obs := hs) b u <=>
   intcall_expr_cont fp ce env es a s ee b u
 Proof
-  simp[intcall_expr_cont_def, intcall_joint_res_gas_obs,
-       loweringPostsTheory.locals_kept_def]
+  simp[intcall_expr_cont_def, intcall_expr_res_def,
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def]
 QED
 
 (* The producer's admissibility premise follows at the live endpoint
@@ -39,6 +39,6 @@ Theorem intcall_traverse_child_admissible:
 Proof
   strip_tac >> irule expr_body_pre_vv_gas_admissible >>
   qexistsl [`ce`, `env`] >> irule expr_body_pre_state_transport >>
-  conj_tac >- fs[intcall_joint_res_def] >>
+  conj_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
   qexists `es` >> simp[]
 QED

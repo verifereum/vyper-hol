@@ -183,7 +183,7 @@ Proof
   >- (rpt strip_tac >> first_x_assum irule >>
       gvs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
           venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
-  simp[locals_kept_def] >> rpt strip_tac >> first_x_assum irule >>
+  irule locals_kept_regions >> rpt strip_tac >> first_x_assum irule >>
   res_tac >> decide_tac
 QED
 

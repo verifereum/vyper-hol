@@ -7,6 +7,14 @@ Ancestors
   gasSummary gasOutcome gasContext stmtSimForRounds vyperInterpreter
   vyperState loweringPosts compileEnv exprLoweringProps exprLowering list pair
 
+(* A frame with no source step reads its environment only through its scopes. *)
+Theorem wb_frame_same_scopes[local]:
+  es1.scopes = es2.scopes ==>
+  (wb_frame ce es1 es1 sa s0 s <=> wb_frame ce es2 es2 sa s0 s)
+Proof
+  strip_tac >> fs[wb_frame_def, locals_kept_def, popped_kept_def]
+QED
+
 Theorem intcall_args_frame_accumulated:
   !args H a sm es s vals sn k initial_es sinitial_es.
   body_inv tops ctx ce cx /\ body_results_ok cx args /\
@@ -73,8 +81,15 @@ Resume intcall_args_frame_accumulated[tail]:
     (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[vv_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame ce es es sm s t` by
-    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[vv_post_def, wb_frame_def] >> strip_tac >>
+    (`mid.scopes = es.scopes` by
+       (qpat_assum `(_ with gas_obs := []) = _`
+          (mp_tac o Q.AP_TERM `\z. z.scopes`) >> simp[]) >>
+     `locals_kept ce es es s t <=>
+      locals_kept ce es (mid with gas_obs := []) s t` by
+       simp[locals_kept_def, popped_kept_def] >>
+     pop_assum (fn lk => rewrite_tac[wb_frame_def, lk]) >>
+     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[vv_post_def] >> strip_tac >>
      asm_rewrite_tac[]) >>
   `~t.vs_halted` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -83,10 +98,12 @@ Resume intcall_args_frame_accumulated[tail]:
      simp[]) >>
   `local_ptrs_reserved ce sh` by metis_tac[local_ptrs_reserved_next_var] >>
   `wb_frame ce initial_es initial_es a sinitial_es t` by
-    (irule wb_frame_trans >>
-     simp[] >> conj_tac
-     >- (qexistsl_tac [`es`,`sm`,`s`] >> asm_rewrite_tac[]) >>
-     metis_tac[]) >>
+    (`wb_frame ce initial_es initial_es sm s t` by
+       metis_tac[wb_frame_same_scopes] >>
+     mp_tac (Q.SPECL [`func`, `ce`, `cx`, `initial_es`, `sinitial_es`, `a`,
+                      `initial_es`, `initial_es`, `sm`, `s`, `t`, `ctx`]
+               wb_frame_trans) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >> simp[]) >>
   `EVERY (\e. expr_body_pre ce cx env e (mid with gas_obs := []) /\
               ~expr_has_effect e) args` by
     (fs[EVERY_MEM, expr_body_pre_def] >> metis_tac[]) >>

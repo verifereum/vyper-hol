@@ -95,7 +95,7 @@ Proof
    bind (lift_sum (get_range_limits v1 v2)) (\rl.
    bind (check (compatible_bound (Dynamic bound) (SND rl)) "For too long") (\u.
    eval_for fp.jc_cx tyv id stmts
-     (GENLIST (\j. IntV (FST rl + &j)) (SND rl))))))` by
+     (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl))))))` by
     (simp[Once evaluate_def, LET_THM, lift_option_type_def] >>
      simp[Once evaluate_def, ignore_bind_def, bind_assoc, bind_return, LENGTH_GENLIST]) >>
   pop_assum SUBST_ALL_TAC >>

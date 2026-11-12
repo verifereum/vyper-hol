@@ -1,7 +1,7 @@
 (* The contract of the joint reachable induction over an internal callee's
    body (seam 2, intcall_callee_body_sim): the usual simulation carried
-   together with a resource invariant, I below.  DRAFT: definitions and
-   frozen leaf statements only; every leaf is cheated.
+   together with a resource invariant, I below: its definitions and the
+   frozen leaf statements.
 
    TOP-LEVEL definitions:
    - intcall_frame: the parameters fixed for one callee body;
@@ -58,16 +58,28 @@ Datatype:
   |>
 End
 
-(* A supported program declares no memberless struct: the interim
-   condition trunk's supported_program carries until the checker's
-   rejection of memberless structs (what Vyper rejects) reaches it.  Held
-   here; it is proved once supported_declaration_headers' StructDecl clause
-   requires fields <> []. *)
+(* A supported program declares no memberless struct (what Vyper rejects):
+   supported_declaration_header's StructDecl arm requires ~NULL fields, and
+   supported_struct_fields returns the fields of a StructDecl in tops. *)
+Triviality struct_fields_nonempty_headers:
+  !ts id fs.
+    EVERY (supported_declaration_header tops) ts /\
+    supported_struct_fields ts id = SOME fs ==> fs <> []
+Proof
+  Induct >> simp[supportedTypesTheory.supported_struct_fields_def] >>
+  rpt gen_tac >> PairCases_on `id` >>
+  simp[supportedTypesTheory.supported_struct_fields_def] >> strip_tac >>
+  gvs[AllCaseEqs(), listTheory.NULL_EQ, supportedDeclsTheory.supported_declaration_header_def] >>
+  metis_tac[]
+QED
+
 Theorem supported_program_struct_fields_nonempty:
   supported_program tops /\ supported_struct_fields tops id = SOME fs ==>
   fs <> []
 Proof
-  cheat
+  rw[supportedProgramTheory.supported_program_def,
+     supportedDeclsTheory.supported_declaration_headers_def] >>
+  metis_tac[struct_fields_nonempty_headers]
 QED
 
 (* The hypotheses on the fixed parameters alone: P lies below lo and clear
@@ -75,8 +87,8 @@ QED
    for owner; the return PC, the root return buffer's pointer and the
    immutable base are reserved, every reserved operand is a variable the
    prologue defined at the operand origin, and the return PC holds pc
-   there; no supported struct is memberless (the interim condition trunk's
-   supported_program carries until the checker's rejection reaches it); the return buffer's capacity is the return value's size and P
+   there; no supported struct is memberless (supported_program requires
+   it, supported_program_struct_fields_nonempty); the return buffer's capacity is the return value's size and P
    misses it; the source return type evaluates to ret_tv.  The root env
    returns internally (RET to the return PC, as the prologue sets it), with
    the stack-return count of the declared return type, and a return buffer
@@ -224,6 +236,7 @@ Definition intcall_expr_producer_def:
                 a + k < dimword (:256) /\
                 (fp.jc_lo <= a \/
                  ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+           (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 End
@@ -262,6 +275,7 @@ Definition intcall_forced_producer_def:
                 a + k < dimword (:256) /\
                 (fp.jc_lo <= a \/
                  ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+           (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 End
@@ -292,6 +306,7 @@ Definition intcall_map_producer_def:
            vv = LocatedValue tp p /\ p.ptr_location = slot_loc tr /\
            eval_operand p.ptr_operand u = SOME slot /\
            (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
+           (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 End

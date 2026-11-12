@@ -1,7 +1,7 @@
 (* Transport metadata of a captured argument, without selecting another run. *)
 Theory bodyIntCallHeldFrame
 Ancestors
-  bodyIntCallProducerInterface bodyIntCallSourceFrame
+  exprSimHypsDefs bodyIntCallProducerInterface bodyIntCallSourceFrame
   bodyIntCallArgOwnedFrame bodyIntCallArgLocalFrame bodyIntCallStorageFrame
   exprSimSubscriptArrayFrame exprSimProps loweringPosts exprLoweringProps
   compileEnv loweringStateRelDefs context bodyMemAssignTopCopySem
@@ -100,11 +100,11 @@ Proof
       simp[valueEncodingDefsTheory.mem_bytes_at_def])
   >- (irule val_in_memory_footprint_agree >> simp[] >> qexists_tac `s.vs_memory` >>
       simp[valueEncodingDefsTheory.mem_bytes_at_def])
-  >- (`locals_kept ce es es s t` by gvs[vv_post_def] >>
+  >- (`locals_kept ce es ee s t` by gvs[vv_post_def] >>
       drule_all locals_kept_dynarray_free_value >> strip_tac >>
       irule val_in_memory_footprint_agree >> simp[] >>
       qexists_tac `s.vs_memory` >> simp[])
-  >- (`locals_kept ce es es s t` by gvs[vv_post_def] >>
+  >- (`locals_kept ce es ee s t` by gvs[vv_post_def] >>
       drule_all locals_kept_dynarray_free_value >> strip_tac >>
       irule val_in_memory_footprint_agree >> simp[] >>
       qexists_tac `s.vs_memory` >> simp[]) >>

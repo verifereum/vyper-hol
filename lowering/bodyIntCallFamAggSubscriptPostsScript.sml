@@ -14,8 +14,16 @@ Theorem intcall_mapping_leaf_post:
   eval_operand p.ptr_operand u =
     SOME (hashmap_slot slot (encode_hashmap_key kt kv)) /\
   intcall_expr_cont fp ce env es sa s0 ee sb u ==>
-  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript ann obj idx)
-    es sa sb s0 ee selected (LocatedValue ann p) u
+  vv_holds ce fp.jc_cx (post_value_type ce (Subscript ann obj idx))
+    selected (LocatedValue ann p) ee u /\
+  vv_at ce fp.jc_cx (post_value_type ce (Subscript ann obj idx)) sa sb ee
+    selected (LocatedValue ann p) u /\
+  (post_value_type ce (Subscript ann obj idx) <>
+   expr_type (Subscript ann obj idx) ==>
+   vv_own ce fp.jc_cx (post_value_type ce (Subscript ann obj idx)) sa sb ee
+     selected (LocatedValue ann p) u) /\
+  (~expr_has_effect (Subscript ann obj idx) ==>
+   vv_storage_live fp.jc_cx (LocatedValue ann p) ee u)
 Proof
   strip_tac >>
   qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
@@ -32,7 +40,7 @@ Proof
     fs[intcall_expr_cont_def, intcall_expr_res_def, expr_sim_inv_def] >>
   drule_all mapping_leaf_storage_valid >> strip_tac >>
   drule_all mapping_leaf_vv_holds >> strip_tac >>
-  simp[vv_post_def, expr_type_def, vv_at_def] >>
+  simp[expr_type_def, vv_at_def] >>
   conj_tac >- (Cases_on `tr` >> gvs[slot_loc_def]) >>
   fs[intcall_expr_cont_def] >>
   Cases_on `tr` >> gvs[slot_loc_def] >> gvs[]

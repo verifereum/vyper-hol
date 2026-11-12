@@ -180,9 +180,7 @@ Theorem body_subscript_case:
 Proof
   rpt strip_tac >> simp[Once body_expr_ok_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
-      >- (rw[expr_sim_case_def, expr_vv_case_def] >>
-          metis_tac[expr_body_pre_subscript_base_type]) >>
+      drule expr_body_pre_subscript_base_type >> strip_tac >>
       `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
         (irule exprSimPlacesTheory.compile_subscript_case >> rpt conj_tac
          >- metis_tac[body_expr_ok_case]
@@ -270,7 +268,7 @@ Theorem body_builtin_residual_case:
 Proof
   rpt strip_tac >> (match_mp_tac body_expr_ok_of_case >> conj_tac >- gvs[] >> simp[] >> rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Builtin ty bt es)`
-    suffices_by (strip_tac >> conj_tac >- (irule expr_sim_case_of_vv >> gvs[]) >> gvs[]) >>
+    suffices_by (strip_tac >> gvs[] >> irule expr_sim_case_of_vv >> gvs[]) >>
   reverse (Cases_on `builtin_args_length_ok bt (LENGTH es)`)
   >- (rw[expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>

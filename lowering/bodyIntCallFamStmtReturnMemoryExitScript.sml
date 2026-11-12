@@ -23,7 +23,7 @@ Proof
      (es with scopes := []) s` by
     (fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def] >>
      conj_tac >- metis_tac[state_rel_scopes_nil] >>
-     fs[immutable_alloca_sep_def, local_region_def, lookup_scopes_def] >>
+     fs[immutable_alloca_sep_def, immutable_decl_sep_def, local_region_def, lookup_scopes_def] >>
      metis_tac[]) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx
      (es with scopes := []) t` by

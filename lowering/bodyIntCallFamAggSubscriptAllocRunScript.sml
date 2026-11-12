@@ -32,6 +32,10 @@ Proof
   drule_all intcall_alloc_run_frame >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
     (drule loweringHaltTheory.compile_alloc_buffer_insts >> simp[]) >>
+  `popped_kept ce es es s t` by
+    (simp[popped_kept_def] >> rpt strip_tac >>
+     qpat_x_assum `t.vs_memory = s.vs_memory` SUBST1_TAC >>
+     first_x_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[intcall_expr_cont_frame, wb_frame_def, locals_kept_def,
        lookup_var_def, local_region_def] >>
   fs[venom_state_component_equality, local_region_def, lookup_var_def] >>

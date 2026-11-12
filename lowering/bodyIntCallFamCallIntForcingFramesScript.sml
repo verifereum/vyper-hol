@@ -83,10 +83,7 @@ Proof
        (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _` drule >>
         simp[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
   `locals_kept ce es es s u` by
-    (rw[locals_kept_def] >>
-     `regions_disjoint off len (w2n w) (type_memory_size tv)` by
-       (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _` drule >>
-        simp[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
+    (irule exprSimPropsTheory.locals_kept_regions >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`u`, `w`] >> simp[expr_val_rel_def] >> gvs[] >> metis_tac[]
 QED
 
@@ -168,9 +165,6 @@ Proof
        (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _` drule >>
         simp[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
   `locals_kept ce es es s u` by
-    (rw[locals_kept_def] >>
-     `regions_disjoint off len (w2n w) (type_memory_size tv)` by
-       (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _` drule >>
-        simp[regions_disjoint_def] >> decide_tac) >> metis_tac[]) >>
+    (irule exprSimPropsTheory.locals_kept_regions >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`u`, `w`] >> simp[expr_val_rel_def] >> gvs[] >> metis_tac[]
 QED
