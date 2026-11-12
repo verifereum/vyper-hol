@@ -4,7 +4,7 @@ Ancestors
   exprBopSimDefs gasContext gasNormalPrefix gasSummary gasExemptCert gasSummaryCompose fragGasMode fragGasPath
   exprSimProps
   exprSimDefs
-  loweringPosts
+  loweringPosts gasStorage vyperStorageTrace vyperStorageFootprint
   list rich_list finite_map pred_set
   fragExec varsExt  freshWrites exprBopLowering loweringSlice
   localPtrsProps vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
@@ -619,13 +619,14 @@ Proof
   strip_tac >>
   `?obs. fin.storage_trace = mid.storage_trace ++ obs` by
     (`storage_trace_frame (do r <- eval_expr cx e2; read_result cx r od)` by
-       (irule storage_trace_frame_bind >>
+       (irule storage_trace_frame_bind_all >>
         simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
-     drule storage_trace_frame_prefix >>
      qpat_assum `gas_marked_exec _ _ _ (mid with gas_obs := [], t) _ _ _ _`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
-     disch_then (qspec_then `[]` mp_tac) >> simp[] >> rpt strip_tac >>
-     first_x_assum drule >> simp[]) >>
+     disch_then (qspec_then `[]` assume_tac) >>
+     first_x_assum (fn th => drule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                                   storage_trace_frame_prefix) th)) >>
+     simp[]) >>
   `!H. valid_horizon cx st0 H fin.storage_trace ==>
        valid_horizon cx st0 H mid.storage_trace` by
     simp[valid_horizon_def] >>
