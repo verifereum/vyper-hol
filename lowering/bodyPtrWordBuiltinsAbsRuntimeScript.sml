@@ -71,7 +71,8 @@ Theorem word_abs_runtime_cenv_eval:
     ce_flag_member_id := K (K 0); ce_flag_n_members := K 0;
     ce_var_type := (\n. if "x" = n then SOME (BaseT (IntT 256)) else NONE);
     ce_module_var_type := K NONE; ce_hashmap_info := K NONE;
-    ce_event_info := K NONE; ce_type_env := FEMPTY; ce_returns_count := 0;
+    ce_event_info := K NONE;
+    ce_error_info := (\name. NONE); ce_type_env := FEMPTY; ce_returns_count := 0;
     ce_return_buf := NONE; ce_return_pc := NONE; ce_ctor_exit_label := NONE;
     ce_is_external := T; ce_ret_enc_info := AbiPrimWord;
     ce_ret_dec_info := DecPrimWord NoClamp; ce_max_return_size := 0;
