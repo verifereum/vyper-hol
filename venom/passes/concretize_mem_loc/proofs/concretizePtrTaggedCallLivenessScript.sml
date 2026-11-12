@@ -118,12 +118,9 @@ Proof
   drule_all ptr_source_tagged_owner_call_liveset >>
   disch_then (qspec_then `observed.cu_context` strip_assume_tac) >>
   irule ptr_output_suspended_descendant_separation >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- metis_tac[]) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  goal_assum (drule_at (Pat `ptr_chrono_history _ _ _ _`)) >>
-  asm_rewrite_tac[] >> metis_tac[]
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (qexists `P` >> first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (goal_assum (drule_at (Pat `ptr_chrono_history _ _ _ _`)) >>
+       asm_rewrite_tac[]) >>
+  metis_tac[]
 QED
