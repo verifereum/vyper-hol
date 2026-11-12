@@ -309,5 +309,10 @@ Theorem fmp_stage_out_not_kept:
   df_at NONE states bb.bb_label k = SOME st ==>
   ~MEM out st.frs_stack
 Proof
-  cheat
+  strip_tac >> irule fresh_out_conditional >>
+  qexistsl [`bb`, `fn`, `infos`, `k`, `states`] >> simp[] >>
+  rpt conj_tac >> rpt strip_tac
+  >- metis_tac[reclaim_fresh_edge]
+  >- metis_tac[reclaim_fresh_index_some]
+  >> metis_tac[reclaim_fresh_entry]
 QED
