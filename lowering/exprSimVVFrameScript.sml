@@ -140,6 +140,9 @@ Proof
     (irule pure_frame_state_cong >> conj_tac >> first_assum ACCEPT_TAC) >>
   `vv_storage_live cx vv es' s ==> vv_storage_live cx vv es' t` by
     (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
+  `vv_place_ptr cenv cx es' t tv vv` by
+    (irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[] >>
+     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   pure_rewrite_tac[vv_post_def] >> asm_rewrite_tac[] >>
   rpt strip_tac
   >~ [`vv_storage_live _ _ _ t`]

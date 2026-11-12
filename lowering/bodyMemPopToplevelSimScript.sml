@@ -119,7 +119,12 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
         (get_storage cx es tr)) with gas_obs := [])
     (PlaceR (StoragePlace tr elem tv))
     (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage))) t` by
-    (irule pop_storage_vv_post >> simp[] >>
+    (`!es1. vv_place_ptr cenv cx es1 t (PlaceR (StoragePlace tr elem tv))
+        (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage)))` by
+       (Cases_on `tr` >>
+        simp[loweringPostsTheory.vv_place_ptr_def, contextTheory.mk_ptr_def,
+             loweringPostsTheory.slot_loc_def, eval_operand_def]) >>
+     irule pop_storage_vv_post >> simp[] >>
      conj_tac
      >- (irule pop_mem_updated_state_rel_cursor >> metis_tac[]) >>
      irule pop_storage_holds_gas_obs >>

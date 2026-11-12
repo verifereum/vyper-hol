@@ -58,6 +58,7 @@ Proof
          vfmStateTheory.lookup_account_def]) >>
   Cases_on `tr` >>
   gvs[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
+      vv_place_ptr_def, slot_loc_def,
       mk_ptr_def, eval_operand_def, vyperASTTheory.expr_type_def,
       locals_kept_mem, read_result_def, read_place_def, vyperStorageBackendTheory.get_storage_def]
 QED

@@ -71,6 +71,8 @@ Theorem normalized_arm_join_outcome[local]:
         (jump_to lbl tt) ee v op u /\
       (~is_word_type ann ==> vv_at ce cx ann sc sd ee tv
         (LocatedValue ann (mk_ptr op LocMemory)) u) /\
+      (~is_word_type ann ==> vv_place_ptr ce cx ee u tv
+        (LocatedValue ann (mk_ptr op LocMemory))) /\
       u.vs_current_bb = sd.cs_current_bb /\
       u.vs_inst_idx = LENGTH sd.cs_current_insts)
     (\res ee r. expr_exit res r) /\

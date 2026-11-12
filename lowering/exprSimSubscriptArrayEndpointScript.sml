@@ -29,6 +29,20 @@ Proof
   metis_tac[]
 QED
 
+(* vv_place_ptr carries to a later state that keeps the operand's value
+   and the local pointer variables, where those are defined. *)
+Theorem vv_place_ptr_defined_frame[local]:
+  vv_place_ptr cenv cx es s tv vv /\
+  (!w. eval_operand (vv_operand vv) s = SOME w ==>
+       eval_operand (vv_operand vv) t = SOME w) /\
+  (!id q sz w. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz) /\
+               lookup_var q s = SOME w ==> lookup_var q t = SOME w) ==>
+  vv_place_ptr cenv cx es t tv vv
+Proof
+  Cases_on `vv` >> simp[vv_place_ptr_def, contextTheory.vv_operand_def] >>
+  BasicProvers.every_case_tac >> rw[] >> gvs[] >> metis_tac[]
+QED
+
 Theorem framed_array_base_endpoint:
   vv_post ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
   expr_post ctx func cenv cx idx t sb sc u t' iv iop v /\
@@ -78,6 +92,21 @@ Proof
         qexistsl_tac [`cx`, `idx`, `sd`, `t'`, `iv`, `iop`, `ctx`] >> simp[]) >>
      match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`t`, `sb`, `u`] >> fs[wb_frame_def]) >>
+  `vv_place_ptr cenv cx t' q r (LocatedValue (ArrayT et bd) p)` by
+    (`vv_place_ptr cenv cx t u r (LocatedValue (ArrayT et bd) p)` by
+       fs[vv_post_def] >>
+     `vv_place_ptr cenv cx t' u r (LocatedValue (ArrayT et bd) p)` by
+       (pop_assum mp_tac >> simp[vv_place_ptr_def]) >>
+     irule vv_place_ptr_defined_frame >> qexists_tac `u` >>
+     simp[contextTheory.vv_operand_def] >> conj_tac >> rpt strip_tac
+     >- (irule exprBopSimPropsTheory.eval_operand_frame >>
+         conj_tac >- simp[] >>
+         qexistsl_tac [`sb`,`u`] >> simp[] >>
+         qpat_x_assum `wb_frame cenv t t' sb u q` mp_tac >>
+         simp[wb_frame_def] >> metis_tac[]) >>
+     qpat_x_assum `wb_frame cenv t t' sb u q` mp_tac >>
+     simp[wb_frame_def] >> strip_tac >> first_x_assum irule >> simp[] >>
+     fs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]) >>
   irule vv_post_frame_intro >> simp[vyperASTTheory.expr_type_def, expr_has_effect_thm] >>
   qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]
 QED

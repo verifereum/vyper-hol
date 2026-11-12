@@ -241,6 +241,8 @@ Resume pop_nested_local_sim[nonempty]:
       irule gas_marked_exec_bind_normal >> goal_assum drule >>
       simp[Abbr `result`, Abbr `scopes'`]) >>
   disj1_tac >> simp[] >>
+  `PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])) = result` by
+    simp[Abbr `result`] >>
   irule (pop_memory_live_suffix_post |> Q.INST [`mid` |-> `tend with gas_obs := []`, `e` |-> `Pop ann bt`]
     |> SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def,
              loweringPostsTheory.expr_has_effect_thm]) >>

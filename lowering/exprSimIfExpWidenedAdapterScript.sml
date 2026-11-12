@@ -248,7 +248,7 @@ Theorem vv_post_alloc_mono_frame:
     FLOOKUP u.vs_allocas aid = SOME entry) /\
   (!n b sz. local_region ce ee.scopes u n b sz <=>
             local_region ce ee.scopes s n b sz) /\
-  sm.cs_next_id <= sn.cs_next_id ==>
+  sm.cs_next_id <= sn.cs_next_id /\ local_ptrs_reserved ce sa ==>
   vv_post ctx func ce cx e es sa sn s0 ee tv vv u
 Proof
   strip_tac >>
@@ -268,6 +268,9 @@ Proof
     (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
   `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
     (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
+  `vv_place_ptr ce cx ee u tv vv` by
+    (irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 

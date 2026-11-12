@@ -935,6 +935,73 @@ Proof
 QED
 
 (* The element's value_vv after the ADD, from the base's. *)
+(* The element's place pointer, from the base's: a storage base adds the
+   element's slot offset, a memory or immutable base its byte offset, and a
+   stack base is a value whose element is a value. *)
+Theorem tuple_place_ptr[local]:
+  !cenv cx ee q child bvv dst ann env t r tys tvs k ee' w.
+    expr_sim_inv cenv cx env t /\
+    eval_result_typed (env,cx,t) r (Type (TupleT tys)) /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
+    evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+    k < LENGTH tvs /\
+    ee.scopes = t.scopes /\ ee.immutables = t.immutables /\
+    (!t' op. bvv = StackValue t' op ==> !pl. r <> PlaceR pl) /\
+    select_result cx (TupleT tys) r (ValueSubscript (IntV (&k))) ee =
+      (INL child,ee') /\
+    vv_place_ptr cenv cx ee q r bvv /\
+    eval_operand (vv_operand bvv) q = SOME w /\
+    eval_operand dst q =
+      SOME (w + n2w (tuple_offset cenv tys (vv_loc bvv) k)) ==>
+    vv_place_ptr cenv cx ee q child (LocatedValue ann (mk_ptr dst (vv_loc bvv)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[exprSimHypsDefsTheory.expr_sim_inv_def,
+       vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  Cases_on `r`
+  >~ [`Value v`]
+  >- gvs[select_result_def, bind_def, return_def, lift_option_type_def,
+         lift_sum_def, raise_def, AllCaseEqs()]
+  >~ [`HashMapRef`]
+  >- gvs[vyperTypeInvariantsTheory.eval_result_typed_def] >>
+  rename1 `PlaceR pl` >>
+  Cases_on `bvv` >>
+  gvs[vv_loc_def, contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
+  qmatch_asmsub_rename_tac `vv_place_ptr _ _ _ _ (PlaceR _) (LocatedValue bt p0)` >>
+  Cases_on `?tr slot vt. pl = StoragePlace tr slot vt`
+  >- (gvs[vyperTypeInvariantsTheory.eval_result_typed_def,
+          vyperTypeInvariantsTheory.runtime_place_typed_def,
+          place_type_value_def, return_def] >>
+      gvs[select_result_def, extend_place_def, extend_storage_place_def,
+          bind_def, ignore_bind_def, check_def, assert_def, return_def,
+          lift_option_type_def, raise_def, AllCaseEqs()] >>
+      qpat_x_assum `vv_place_ptr _ _ _ _ (PlaceR _) _` mp_tac >>
+      simp[vv_place_ptr_def] >> strip_tac >>
+      `tuple_offset cenv tys (slot_loc tr) k = tuple_prefix_slot_size k tvs` by
+        (irule tuple_offset_slots >> Cases_on `tr` >> simp[slot_loc_def] >>
+         metis_tac[]) >>
+      gvs[contextTheory.mk_ptr_def, vv_place_ptr_def]) >>
+  `p0.ptr_location = LocMemory \/ p0.ptr_location = LocCode` by
+    (Cases_on `pl` >> gvs[vv_place_ptr_def]) >>
+  `!l. type_memory_size_list l = SUM (MAP type_memory_size l)` by
+    (Induct >> simp[valueEncodingTheory.type_memory_size_def]) >>
+  `tuple_offset cenv tys p0.ptr_location k =
+   type_memory_size_list (TAKE k tvs)` by
+    (simp[MAP_TAKE] >>
+     metis_tac[tuple_offset_memory, tuple_offset_code]) >>
+  `mem_step_offset (TupleTV tvs) (ValueSubscript (IntV (&k))) =
+   SOME (type_memory_size_list (TAKE k tvs), EL k tvs)` by
+    simp[mem_step_offset_def] >>
+  match_mp_tac exprSimHashTheory.vv_place_ptr_select_step >>
+  qexistsl_tac [`env`, `t`, `PlaceR pl`, `TupleT tys`, `TupleTV tvs`,
+                `ValueSubscript (IntV (&k))`,
+                `type_memory_size_list (TAKE k tvs)`,
+                `EL k tvs`, `ee'`, `bt`, `w`] >>
+  gvs[]
+QED
+
 Theorem tuple_vv_post[local]:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
@@ -951,7 +1018,8 @@ Theorem tuple_vv_post[local]:
     values_have_types tvs vs /\
     read_result cx tv' es1 = (INL (EL k vs), es1) /\
     (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
-       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
+       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) /\
+    vv_place_ptr cenv cx es1 q tv' (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) ==>
     vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -1234,6 +1302,26 @@ Proof
       qexistsl_tac [`fe`,`t`,`btv`] >> simp[] >>
       simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def]) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `eval_result_typed (env,cx,fe with gas_obs := []) btv (Type (TupleT tys)) /\
+   expr_sim_inv cenv cx env (fe with gas_obs := [])` by
+    (`expr_body_pre cenv cx env obj
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+     drule_all exprSimSourceTheory.expr_body_pre_eval_result >> strip_tac >>
+     metis_tac[]) >>
+  `!t' op. bvv = StackValue t' op ==> !pl. btv <> PlaceR pl` by
+    (rpt strip_tac >> gvs[] >>
+     qpat_x_assum `vv_post _ _ _ _ obj _ _ sb _ _ _ _ t1` mp_tac >>
+     simp[vv_post_def, vv_at_def, compileEnvTheory.is_word_type_def]) >>
+  `vv_place_ptr cenv cx (fe with gas_obs := []) t1 btv bvv` by
+    fs[vv_post_def] >>
+  `vv_place_ptr cenv cx (fe with gas_obs := []) t1 tv2
+     (LocatedValue (EL k tys) (mk_ptr p (vv_loc bvv)))` by
+    (match_mp_tac tuple_place_ptr >>
+     qexistsl_tac [`env`, `fe with gas_obs := []`, `btv`, `tys`, `tvs`, `k`,
+                   `fe with gas_obs := []`, `w`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  `vv_place_ptr cenv cx fe t1 tv2
+     (LocatedValue (EL k tys) (mk_ptr p (vv_loc bvv)))` by fs[] >>
   qpat_assum `select_result _ _ _ _ _ = (INL tv2, _)`
     (assume_tac o MATCH_MP select_result_memory_place) >>
   disj1_tac >> irule tuple_vv_post >> simp[] >>

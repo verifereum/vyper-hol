@@ -332,35 +332,8 @@ Finalise compile_subscript_array_framed_base_case
      RuntimeError, an immutable keeping no popped history, while the
      lowering ILOADs the stale length 2 and goes on, where expr_exit asks
      for an abort.
-   A place-pointer clause in vv_post replaces most of this lemma: a
-   conjunct vv_place_ptr cenv cx es' s tv vv, as place_ptr_rel says for
-   targets, with
-     vv_place_ptr cenv cx es s (PlaceR (MemoryPlace id path))
-                  (LocatedValue t p) <=>
-       p.ptr_location = LocMemory /\
-       ?q sz b t0 tv0 k tvk.
-         FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var q) sz) /\
-         lookup_var q s = SOME b /\ cenv.ce_var_type id = SOME t0 /\
-         evaluate_type (get_tenv cx) t0 = SOME tv0 /\
-         mem_path_offset tv0 path = SOME (k, tvk) /\
-         eval_operand p.ptr_operand s = SOME (b + n2w k)
-     vv_place_ptr cenv cx es s (PlaceR (StoragePlace tr slot tv))
-                  (LocatedValue t p) <=>
-       p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand s = SOME slot
-     (and the same for HashMapRef tr slot kt vt)
-     vv_place_ptr cenv cx es s (PlaceR (ImmutablePlace src id path))
-                  (LocatedValue t p) <=>
-       p.ptr_location = LocCode /\ src = cenv.ce_module /\
-       ?off itv iv k tvk.
-         FLOOKUP cenv.ce_module_vars (cenv.ce_module, id) =
-           SOME (ImmutableLoc off) /\
-         FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
-                    NONE => FEMPTY
-                  | SOME imms => get_source_immutables cenv.ce_module imms)
-                 id = SOME (itv, iv) /\
-         mem_path_offset itv path = SOME (k, tvk) /\
-         eval_operand p.ptr_operand s = SOME (n2w (off + k))
-     vv_place_ptr cenv cx es s _ _ <=> T
+   The vv_place_ptr conjunct of vv_post (loweringPosts) replaces most of
+   this lemma.
    Its producers are the expressions whose source result can be a place:
    Name, TopLevelName, Subscript (array, tuple, mapping), Attribute, Pop,
    and IfExp (conditional_result keeps a memory aggregate's place, and the

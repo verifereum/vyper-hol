@@ -83,7 +83,8 @@ Theorem pop_memory_live_suffix_post:
   eval_operand op u = SOME w /\
   w2n w = w2n b + k + 32 + (LENGTH vs - 1) * type_memory_size etv /\
   local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
-    etv result ==>
+    etv result /\
+  PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])) = result ==>
   vv_post ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) (u with vs_inst_idx := idx)
 Proof

@@ -93,7 +93,22 @@ Proof
     metis_tac[exprSimAttributeTheory.attr_post_value_type] >>
   qpat_assum `select_result _ _ _ _ _ = _`
     (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
+  qmatch_asmsub_rename_tac
+    `select_result _ _ _ (AttrSubscript _) _ = (INL ctv, _)` >>
+  `expr_sim_inv cenv cx env ee /\
+   eval_result_typed (env,cx,ee) btv (Type (StructT sid))` by
+    (qspecl_then [`cenv`,`cx`,`env`,`obj`,`es0`,`INL btv`,`ee`] mp_tac
+       exprSimSourceTheory.expr_body_pre_eval_result >> gvs[]) >>
+  `!t' op. bvv = StackValue t' op ==> !pl. btv <> PlaceR pl` by
+    (rpt strip_tac >>
+     gvs[vv_post_def, vv_at_def, compileEnvTheory.is_word_type_def]) >>
+  `vv_place_ptr cenv cx ee t btv bvv` by fs[vv_post_def] >>
+  `vv_place_ptr cenv cx ee t ctv (LocatedValue ann (mk_ptr dst (vv_loc bvv)))` by
+    (match_mp_tac exprSimAttributeTheory.attr_place_ptr >>
+     qexistsl_tac [`env`, `ee`, `btv`, `sid`, `fs`, `ftv`, `fld`, `ee`, `w`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
   irule attr_vv_post >> conj_tac >- gvs[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `btv` >> simp[] >> rpt strip_tac >> gvs[]
 QED

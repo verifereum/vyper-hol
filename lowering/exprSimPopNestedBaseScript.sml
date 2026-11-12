@@ -811,7 +811,8 @@ Theorem nested_pop_suffix_vv_post:
   storage_holds cx tr ann v slot es' u /\ lookup_var x u = SOME slot /\
   u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
   (!q. not_fresh_at sm q ==> lookup_var q u = lookup_var q t) /\
-  (!id path. v <> PlaceR (MemoryPlace id path)) ==>
+  vv_place_ptr cenv cx es' u v
+    (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) ==>
   vv_post ctx func cenv cx (Pop ann bt) es sa r s0 es' v
     (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) u
 Proof
@@ -825,6 +826,9 @@ Proof
      pure_rewrite_tac[locals_kept_def, popped_kept_def] >>
      qpat_x_assum `es'.scopes = mid.scopes` (fn th => pure_rewrite_tac[th]) >>
      disch_then ACCEPT_TAC) >>
+  `!id path. v <> PlaceR (MemoryPlace id path)` by
+    (rpt strip_tac >> Cases_on `tr` >>
+     gvs[loweringPostsTheory.vv_place_ptr_def, contextTheory.mk_ptr_def]) >>
   Cases_on `tr` >>
   (fs[target_post_def, vv_post_def, vv_holds_def, vv_at_def,
       contextTheory.mk_ptr_def, eval_operand_def, expr_type_def,
@@ -997,6 +1001,16 @@ Resume nested_pop_storage_live_suffix_sim[positive]:
   `fin.scopes = es.scopes` by
     (qunabbrev_tac `fin` >> Cases_on `tr` >>
      simp[vyperStorageBackendTheory.set_storage_def]) >>
+  `vv_place_ptr cenv cx fin u
+     (PlaceR (StoragePlace tr
+        (slot + n2w (type_slot_size tv * (w2n lenw - 1) + 1)) tv))
+     (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage)))` by
+    (`type_slot_size tv * (w2n lenw - 1) + 1 =
+      1 + (w2n lenw - 1) * type_slot_size tv` by
+       simp[arithmeticTheory.MULT_COMM] >>
+     pop_assum SUBST1_TAC >> Cases_on `tr` >>
+     simp[loweringPostsTheory.vv_place_ptr_def, contextTheory.mk_ptr_def,
+          loweringPostsTheory.slot_loc_def, eval_operand_def]) >>
   irule nested_pop_suffix_vv_post >>
   qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >>

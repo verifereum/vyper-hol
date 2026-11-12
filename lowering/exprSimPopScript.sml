@@ -844,6 +844,15 @@ Proof
       simp[] >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[] >>
       TRY (fs[local_region_def, lookup_var_inst_idx] >> metis_tac[]))
+  >~ [`vv_place_ptr`]
+  >- (`LENGTH vs - 1 < n` by decide_tac >>
+      `n2w (LENGTH vs) - 1w = n2w (LENGTH vs - 1) : bytes32` by
+        (irule (GSYM wordsTheory.n2w_sub) >> decide_tac) >>
+      simp[vv_place_ptr_def, contextTheory.mk_ptr_def, eval_operand_def,
+           mem_path_offset_def, mem_step_offset_def, lookup_var_inst_idx] >>
+      gvs[wordsTheory.word_mul_n2w, wordsTheory.word_add_n2w,
+          GSYM wordsTheory.WORD_ADD_ASSOC] >>
+      metis_tac[])
   >~ [`locals_kept`]
   >- (qspecl_then [`func`, `cenv`, `es`,
                    `es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest`,
