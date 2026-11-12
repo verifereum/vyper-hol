@@ -203,6 +203,7 @@ Theorem encoder_dynamic_outer_entry_counted_ptr:
       ((si.cs_next_id,r,32)::protected)
       ip cursor src dst cv p c a b scap dcap tv v N ns 0 Gf tnf sf /\
     encoder_dynamic_effect si sites b dcap G tn s Gf tnf sf /\
+    encoder_resource ctx fn sites a scap protected sf /\
     lookup_var parent sf = SOME (n2w r) /\ ptr_covers Gf tnf parent sf 32 /\
     mload r sf = 0w /\ (!i. r <= i /\ i < r+32 ==> i NOTIN tnf.t_mem) /\
     FLOOKUP sf.vs_allocas si.cs_next_id = SOME (r,32) /\
@@ -304,6 +305,29 @@ Proof
        (qpat_assum `encoder_dynamic_effect s1 _ _ _ Gf tnf sf Gf'' tnf'' sf''` mp_tac >>
         pure_rewrite_tac [encoder_dynamic_effect_def] >> strip_tac >>
         gvs[ptr_covers_def] >> metis_tac[]) >>
+     `encoder_resource ctx fn sites a scap protected sf''` by
+       (match_mp_tac encoder_resource_registered_intro >>
+        conj_tac >-
+          (qpat_assum `encoder_resource ctx fn (sites DELETE si.cs_next_id) a scap _ sf''` mp_tac >>
+           qpat_assum `FLOOKUP sf''.vs_allocas si.cs_next_id = SOME (r,32)` mp_tac >>
+           qpat_assum `regions_disjoint (a,scap) (r,32)` mp_tac >>
+           rpt (pop_assum kall_tac) >>
+           pure_rewrite_tac [encoder_resource_def, scratch_resource_def] >>
+           ntac 3 strip_tac >>
+           qpat_x_assum `!id b n. MEM (id,b,n) _ ==> _` kall_tac >>
+           conj_tac >- first_assum ACCEPT_TAC >>
+           conj_tac >- first_assum ACCEPT_TAC >>
+           conj_tac >- first_assum ACCEPT_TAC >>
+           rpt gen_tac >> strip_tac >>
+           Cases_on `id = si.cs_next_id`
+           >- (qpat_x_assum `!id b sz. _` kall_tac >> metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ]) >>
+           qpat_x_assum `!id b sz. _` irule >>
+           simp_tac std_ss [IN_DELETE] >> metis_tac[]) >>
+        rpt gen_tac >> strip_tac >>
+        qpat_assum `encoder_resource ctx fn sites a scap protected s` mp_tac >>
+        qpat_assum `encoder_resource ctx fn (sites DELETE si.cs_next_id) a scap _ sf''` mp_tac >>
+        pure_rewrite_tac [encoder_resource_def] >> rpt strip_tac >>
+        metis_tac[MEM]) >>
      `gas_path_ptr D 0 ctx fn PG G tn s 0 Gf' tnf' (OK sf')` by
        metis_tac[fragGasPathPtrTheory.gas_path_ptr_then, ADD_0] >>
      `gas_path_ptr D 0 ctx fn PG G tn s 0 Gf'' tnf'' (OK sf'')` by
