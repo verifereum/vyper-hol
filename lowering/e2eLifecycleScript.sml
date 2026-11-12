@@ -17,9 +17,9 @@ Ancestors
   vyperTypeDeploymentMachine vyperTypeExternalCallMachine
   vyperTypeInitialState vyperTypeInvariants
   vyperStorageFootprint vyperStorageBackend vyperLookupStorage vyperStorage
-  immutableSectionRel
+  immutableSectionRel vyperABIEntries
   vfmState vfmExecution vfmExecutionProp vfmRunCall vfmTotalBalance
-  vfmAccountFrame While
+  vfmAccountFrame vfmContext loweringStateRelDefs While
   e2eCodeFrame vyperRuntimeImmutables storageLiveAgree
 
 (* ===== The premises a later call needs from the machine ===== *)
@@ -107,10 +107,28 @@ Theorem call_external_static_fields:
   am'.sources = am.sources /\ am'.exports = am.exports /\
   am'.layouts = am.layouts
 Proof
-  simp[call_external_def, call_external_trace_def] >>
-  rpt (CASE_TAC >> simp[]) >> strip_tac >> gvs[] >>
-  drule call_external_function_trace_runtime_static_fields >>
-  simp[initial_evaluation_context_def]
+  simp_tac bool_ss [call_external_def] >>
+  Cases_on `call_external_trace orc gobs am tx` >>
+  rename1 `call_external_trace orc gobs am tx = (trace_res, trace_rest)` >>
+  PairCases_on `trace_rest` >> simp[] >> strip_tac >> gvs[] >>
+  qpat_x_assum `call_external_trace _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [call_external_trace_def, LET_THM] >>
+  Cases_on `ALOOKUP am.sources tx.target` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `option_CASE code_opt` >>
+  Cases_on `code_opt` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `lookup_exported_function cx am tx.function_name` >>
+  Cases_on `lookup_exported_function cx am tx.function_name` >> simp[] >>
+  rename1 `SOME func` >> PairCases_on `func` >> simp[] >>
+  qmatch_goalsub_rename_tac `call_external_function_trace orc gobs am cx nr mut ts mods argtys defaults vals stmts retty` >>
+  Cases_on `call_external_function_trace orc gobs am cx nr mut ts mods argtys defaults vals stmts retty` >>
+  rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (outcome, output_rest)` >>
+  PairCases_on `output_rest` >>
+  `~cx.in_deploy` by simp[Abbr `cx`, initial_evaluation_context_def] >>
+  drule_all call_external_function_trace_runtime_static_fields >>
+  strip_tac >>
+  namedCases_on `outcome` ["value", "exc"] >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  Cases_on `exc` >> simp[] >> strip_tac >> gvs[]
 QED
 
 (* ===== The machine after a transaction ===== *)
@@ -156,7 +174,7 @@ Theorem check_contract_exports_ok_empty[local]:
   exports_ok layouts2 addr2 [(NONE, tops)] []
 Proof
   strip_tac >> drule check_contract_external_method_ids_distinct >>
-  disch_then (qspecl_then [`NONE`, `tops`] mp_tac) >>
+  disch_then (qspecl_then [`tops`, `NONE`] mp_tac) >>
   simp[exports_ok_def, abi_deployed_signatures_def,
        abi_external_method_ids_def]
 QED
@@ -181,10 +199,12 @@ Proof
     gvs[context_well_typed_def, initial_evaluation_context_def,
         call_tx_well_typed_def] >>
   `machine_well_typed am'` by
-    (irule load_contract_establishes_machine_well_typed >> simp[] >>
-     metis_tac[]) >>
+    (irule load_contract_establishes_machine_well_typed >>
+     goal_assum $ drule_at Any >> simp[] >>
+     goal_assum $ drule_at Any >> simp[]) >>
   `accounts_well_typed es'.rollback.accounts` by
-    metis_tac[run_call_accounts_well_typed] >>
+    (irule run_call_accounts_well_typed >>
+     goal_assum $ drule_at Any >> simp[]) >>
   `ALOOKUP am'.exports tx.target = SOME []` by
     metis_tac[load_contract_deployed_exports] >>
   simp[call_ready_def] >> conj_tac
@@ -203,7 +223,7 @@ Proof
     metis_tac[layouts_agree_cong, next_source_machine_fields] >>
   fs[source_typing_ok_def, source_deployment_rel_def,
      checked_contract_runtime_ready_def] >>
-  metis_tac[]
+  gvs[]
 QED
 
 Theorem gas_readings_rel_mono:
@@ -227,7 +247,7 @@ Theorem deploy_call_result_establishes_call_ready:
               tx.target) T
 Proof
   rw[deploy_call_result_rel_def] >>
-  irule gas_readings_rel_mono >> goal_assum drule >>
+  irule gas_readings_rel_mono >> goal_assum (drule_at Any) >>
   rw[] >> irule deploy_establishes_call_ready >> gvs[] >> metis_tac[]
 QED
 
@@ -258,7 +278,8 @@ Proof
        ctxt.msgParams.code` by
     (fs[call_state_rel_def] >> metis_tac[]) >>
   `accounts_well_typed es'.rollback.accounts` by
-    metis_tac[run_call_accounts_well_typed] >>
+    (irule run_call_accounts_well_typed >>
+     goal_assum $ drule_at Any >> simp[]) >>
   `(lookup_account tx.target es'.rollback.accounts).code =
    (lookup_account tx.target es.rollback.accounts).code` by
     (irule run_call_preserves_installed_code >>
@@ -273,7 +294,7 @@ Proof
      fs[source_typing_ok_def, machine_well_typed_def]) >>
   fs[source_typing_ok_def, source_deployment_rel_def, layouts_agree_def,
      checked_contract_runtime_ready_def] >>
-  metis_tac[]
+  gvs[]
 QED
 
 (* ===== Initial storage ===== *)
@@ -297,7 +318,7 @@ Theorem deploy_empty_storage_well_formed_on:
 Proof
   strip_tac >> irule empty_storage_well_formed_on >>
   Cases >> gvs[get_storage_def, deploy_evaluation_context_def,
-               initial_evaluation_context_def, initial_state_def,
+               initial_evaluation_context_def, vyperInterpreterTheory.initial_state_def,
                lookup_account_def]
 QED
 
@@ -329,10 +350,10 @@ Theorem storage_well_formed_on_horizon_extension:
 Proof
   rw[storage_well_formed_on_def] >>
   rename1 `MEM (tr, slot, tv) R2` >> Cases_on `tr`
-  >- (simp[get_storage_def, initial_state_def, empty_transient_storage_def] >>
+  >- (simp[get_storage_def, vyperInterpreterTheory.initial_state_def, empty_transient_storage_def] >>
       irule (CONJUNCT1 slots_in_range_zero_reads) >>
       simp[read_slot_def, lookup_storage_def, empty_storage_def]) >>
-  simp[get_storage_def, initial_state_def] >>
+  simp[get_storage_def, vyperInterpreterTheory.initial_state_def] >>
   `(process_deletions es'.rollback.toDelete es'.rollback.accounts
       cx.txn.target).storage =
    (lookup_account cx.txn.target es'.rollback.accounts).storage` by
@@ -342,9 +363,16 @@ Proof
   irule slots_in_range_live_agree >>
   qexists `(lookup_account cx.txn.target am'.accounts).storage` >>
   first_x_assum drule >>
-  gvs[get_storage_def, initial_state_def, lookup_account_def,
+  gvs[get_storage_def, vyperInterpreterTheory.initial_state_def, lookup_account_def,
       regions_consistent_def, storage_agree_def] >>
+  reverse conj_tac
+  >- (qpat_x_assum `!b slot' tv'. _ ==> slots_in_range _ _ _`
+        (qspecl_then [`F`, `slot`, `tv`] mp_tac) >>
+      simp[get_storage_def]) >>
   rpt strip_tac >> gvs[] >>
-  metis_tac[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
-            arithmeticTheory.LESS_LESS_EQ_TRANS]
+  `~D j b` by metis_tac[] >>
+  `type_slot_size tv + w2n slot <= dimword (:256)` by metis_tac[] >>
+  `j < dimword (:256)` by decide_tac >>
+  first_x_assum (qspec_then `n2w j` mp_tac) >>
+  simp[wordsTheory.w2n_n2w]
 QED
