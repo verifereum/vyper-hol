@@ -41,7 +41,7 @@ Ancestors
 (* ===== Source side ===== *)
 
 (* vyperTypeABI has these two as local lemmas. *)
-Theorem vyper_to_abi_type_dynamic[local]:
+Theorem vyper_to_abi_type_dynamic:
   (!tenv ty tv.
      evaluate_type tenv ty = SOME tv ==>
      is_dynamic (vyper_to_abi_type tenv ty) = vyper_is_dynamic tenv ty) /\
@@ -54,7 +54,7 @@ Proof
   rpt strip_tac >> TRY (Cases_on `bd`) >> gvs[vyper_is_dynamic_def]
 QED
 
-Theorem vyper_to_abi_static_length[local]:
+Theorem vyper_to_abi_static_length:
   (!tenv ty tv.
      evaluate_type tenv ty = SOME tv /\ ~vyper_is_dynamic tenv ty ==>
      static_length (vyper_to_abi_type tenv ty) = vyper_abi_size_bound tenv ty) /\
