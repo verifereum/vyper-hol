@@ -69,7 +69,9 @@ Theorem call_premises_dispatch_invariant:
        (tx with <| function_name := f; args := vals |>) es
        <=> call_state_rel tops runtime_bc am tx es) /\
     (call_outcomes_ok am (tx with <| function_name := f; args := vals |>) os
-       <=> call_outcomes_ok am tx os)
+       <=> call_outcomes_ok am tx os) /\
+    (call_outcomes_storage_ok am (tx with <| function_name := f; args := vals |>) os
+       <=> call_outcomes_storage_ok am tx os)
 Proof
   rpt gen_tac >>
   qspecl_then [`am.sources`, `am.layouts`, `tx`, `f`, `vals`] assume_tac
@@ -77,6 +79,7 @@ Proof
   drule same_call_env_preds >> strip_tac >>
   simp[source_typing_ok_def, checked_contract_runtime_ready_def,
        call_tx_well_typed_def, source_storage_ok_def, call_outcomes_ok_def,
+       call_outcomes_storage_ok_def,
        call_state_rel_def, tx_block_fields_rel_def, value_transfer_ok_def,
        accounts_after_transfer_def, source_deployment_rel_def,
        layouts_agree_def, loweringStateRelDefsTheory.tx_env_ok_def] >>

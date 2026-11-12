@@ -780,7 +780,7 @@ Theorem vyper_call_correct_dispatched:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -788,6 +788,8 @@ Theorem vyper_call_correct_dispatched:
        call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
+  drule_all call_state_rel_call_outcomes_ok >> strip_tac >>
+  qpat_x_assum `call_outcomes_storage_ok _ _ _` kall_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
@@ -1007,6 +1009,18 @@ Definition external_return_type_def:
     | NONE => NoneT
 End
 
+(* What the call does for the calldata tx carries: revert with empty
+   returndata when it dispatches to nothing, else the source result of
+   the external call it dispatches to. *)
+Definition calldata_result_rel_def:
+  calldata_result_rel tops am tx es r es' <=>
+    case calldata_dispatch tops tx.calldata of
+      NONE => ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs
+    | SOME (f, vals) =>
+        call_result_rel tops (external_return_type tops f) am
+          (tx with <| function_name := f; args := vals |>) es r es'
+End
+
 Theorem vyper_call_correct:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
@@ -1014,7 +1028,7 @@ Theorem vyper_call_correct:
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    call_outcomes_ok am tx (MAP SND (call_trace es)) /\
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es)) /\
     (!f vals.
        calldata_dispatch tops
          (buffer_to_list (FST (HD es.contexts)).msgParams.data) =
@@ -1026,14 +1040,12 @@ Theorem vyper_call_correct:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       case calldata_dispatch tops
-              (buffer_to_list (FST (HD es.contexts)).msgParams.data) of
-         NONE => ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs
-       | SOME (f, vals) =>
-           call_result_rel tops (external_return_type tops f) am
-             (tx with <| function_name := f; args := vals |>) es r es')
+       calldata_result_rel tops am tx es r es')
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> simp[calldata_result_rel_def] >>
+  `tx.calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
+    gvs[call_state_rel_def] >>
+  pop_assum SUBST1_TAC >>
   Cases_on `calldata_dispatch tops
               (buffer_to_list (FST (HD es.contexts)).msgParams.data)` >>
   gvs[]

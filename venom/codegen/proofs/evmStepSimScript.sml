@@ -808,6 +808,16 @@ Proof
   rpt strip_tac >> gvs[asm_evm_rel_def]
 QED
 
+(* Rewrites the assembly's static check into the EVM's, so one case split
+   decides both. *)
+Theorem asm_evm_rel_static:
+  !prog as es ctxt rb rest.
+    asm_evm_rel prog as es /\ es.contexts = (ctxt, rb) :: rest ==>
+    (as.as_call_ctx.cc_static <=> ctxt.msgParams.static)
+Proof
+  rpt strip_tac >> gvs[asm_evm_rel_def]
+QED
+
 Triviality asm_evm_rel_code:
   !prog as es.
     asm_evm_rel prog as es ==> as.as_code = assemble prog
@@ -1494,6 +1504,7 @@ Proof
   (* === TSTORE === *)
   >- (
     identify_evm_op_tac >> gvs[] >>
+    drule_all asm_evm_rel_static >> strip_tac >>
     simp[asm_tstore_def, LET_THM] >>
     Cases_on `as.as_stack` >> gvs[] >>
     Cases_on `t` >> gvs[] >>
@@ -1659,6 +1670,7 @@ QED
 
 Resume asm_evm_step_memory_dispatch[sstore]:
   identify_evm_op_tac >> gvs[] >>
+  drule_all asm_evm_rel_static >> strip_tac >>
   simp[asm_sstore_def, LET_THM] >>
   Cases_on `as.as_stack` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
@@ -3431,6 +3443,7 @@ Proof
   simp[log_table_def] >>
   rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[] >>
   identify_evm_op_tac >> gvs[] >>
+  drule_all asm_evm_rel_static >> strip_tac >>
   simp[asm_log_def, LET_THM] >>
   IF_CASES_TAC >> gvs[] >>
   ALL_TAC >| [suspend "log_0", suspend "log_1", suspend "log_2",
