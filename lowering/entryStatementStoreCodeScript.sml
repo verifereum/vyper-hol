@@ -43,6 +43,9 @@ Proof
   >- (IF_CASES_TAC >- store_slots_code_tac >>
       IF_CASES_TAC >- store_slots_code_tac >>
       IF_CASES_TAC >- store_slots_code_tac >>
+      Cases_on `ty` >> simp[entry_code_emit_void]
+      >- store_slots_code_tac
+      >- (CASE_TAC >- store_slots_code_tac >> store_slots_code_tac) >>
       store_slots_code_tac) >>
   store_slots_code_tac
 QED
