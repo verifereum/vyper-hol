@@ -107,7 +107,8 @@ Theorem ptr_paired_read_range_classification:
 Proof
   strip_tac >> irule ptr_paired_current_range_classification >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  rpt conj_tac >> metis_tac[]
 QED
 
 Theorem ptr_paired_mload_address_classification:
@@ -147,5 +148,6 @@ Proof
     (SPEC_ALL ptr_paired_read_range_classification) |> SIMP_RULE (srw_ss()) []) >>
   rpt (goal_assum (drule_at Any)) >>
   simp[mem_read_ops_def, source_memory_read_ranges_def] >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  rpt conj_tac >> metis_tac[]
 QED
