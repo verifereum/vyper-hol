@@ -18,7 +18,7 @@ Ancestors
   valueCopyBytes
 
 (* A word's rounded footprint is its one word. *)
-Theorem word_val_store_size[local]:
+Theorem word_val_store_size:
   is_word_type t /\ evaluate_type tenv t = SOME tv ==> val_store_size tv v = 32
 Proof
   strip_tac >> drule_all word_tv_memory_size >> strip_tac >>
@@ -940,7 +940,7 @@ Proof
   qexists_tac `s' with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[]
 QED
 
-Theorem body_ctor_load_mem_ok[local]:
+Theorem body_ctor_load_mem_ok:
   compile_imm_load_word T imm op sa = (r,sb) /\
   eval_operand op s = SOME a /\ w2n a + 32 <= s.vs_alloca_next /\
   (!region. imm = SOME region ==> eval_operand region s = SOME 0w) ==>
