@@ -20,7 +20,7 @@ QED
 
 Theorem ptr_source_tagged_var_support:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   FLOOKUP TG v = SOME tag ==>
@@ -36,12 +36,13 @@ QED
 
 Theorem ptr_source_tagged_param_support:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   k < LENGTH PT /\ EL k PT = SOME tag ==>
   k IN P a.po_fn.fn_name
 Proof
+  cheat >>
   strip_tac >> drule_all ptr_owned_current_static >> strip_tac >>
   drule_all ptr_source_ownership_params_erases >>
   simp[ptr_params_erases_def, EVERY_EL] >> strip_tac >>

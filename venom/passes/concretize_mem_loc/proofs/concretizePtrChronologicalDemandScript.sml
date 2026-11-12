@@ -16,18 +16,18 @@ Definition ptr_activation_seed_def:
 End
 
 Definition ptr_activation_ready_def:
-  ptr_activation_ready P site f <=>
+  ptr_activation_ready dyn P site f <=>
     fn_ptr_ok P f.cf_fn /\ ssa_form f.cf_fn /\ wf_function f.cf_fn /\
     all_reachable f.cf_fn /\ EVERY inst_wf (fn_insts f.cf_fn) /\
     MEM f.cf_inst (fn_insts f.cf_fn) /\
     ptr_site_supported
       (pointer_derived_vars f.cf_fn
-        (ptr_frame_site_roots f.cf_fn f.cf_state.vs_allocas f.cf_params site))
+        (ptr_frame_site_roots dyn f.cf_fn f.cf_state.vs_allocas f.cf_params site))
       f.cf_prov site
 End
 
 Theorem ptr_activation_operand_seed:
-  ptr_activation_ready P site f /\
+  ptr_activation_ready dyn P site f /\
   MEM (Var v) f.cf_inst.inst_operands /\ FLOOKUP f.cf_prov v = SOME site ==>
   ptr_activation_seed mems site f \/ MEM (SOME site) f.cf_params
 Proof
@@ -42,8 +42,8 @@ QED
 
 Theorem ptr_ancestry_operand_seed:
   !stk f v.
-  ptr_call_ancestry f.cf_params stk /\ ptr_activation_ready P site f /\
-  EVERY (ptr_activation_ready P site) stk /\
+  ptr_call_ancestry f.cf_params stk /\ ptr_activation_ready dyn P site f /\
+  EVERY (ptr_activation_ready dyn P site) stk /\
   MEM (Var v) f.cf_inst.inst_operands /\ FLOOKUP f.cf_prov v = SOME site ==>
   ptr_activation_seed mems site f \/
   ?n w. n < LENGTH stk /\

@@ -121,7 +121,7 @@ Proof
     (gvs[origin_out_def, AllCaseEqs()] >> metis_tac[]) >>
   irule (pointer_derived_vars_roots |> REWRITE_RULE [SUBSET_DEF]) >>
   simp[FINITE_DIFF, ptr_roots_finite] >>
-  `out IN ptr_frame_site_roots fn FEMPTY PG site` by
+  `out IN ptr_frame_site_roots dyn fn FEMPTY PG site` by
     (simp[ptr_frame_site_roots_def] >> metis_tac[]) >>
   drule_all ptr_param_root_cover >> simp[]
 QED

@@ -49,14 +49,22 @@ Definition ptr_ledger_owned_site_def:
 End
 
 (* Erasure refers to a birth in the original owner's activation, including
-   for imported pointers. No numerical-site inverse lookup is used. *)
+   for imported pointers. An untagged variable carries no site or a dynamic
+   one, at or above dyn (the run's initial free memory pointer): DALLOCA
+   allocates there and concretization leaves that region in place. No
+   numerical-site inverse lookup is used. *)
+Definition ptr_owner_erases_def:
+  ptr_owner_erases (dyn:num) (births : (num # num,num # num) fmap)
+    (tagged : (num # num) option) (numerical : (num # num) option) <=>
+    case tagged of
+      NONE => (!site. numerical = SOME site ==> dyn <= FST site)
+    | SOME owner => numerical = FLOOKUP births owner
+End
+
 Definition ptr_ledger_erases_def:
-  ptr_ledger_erases (births : (num # num,num # num) fmap)
+  ptr_ledger_erases dyn (births : (num # num,num # num) fmap)
     (tagged : (string,num # num) fmap) numerical <=>
-    (!v. FLOOKUP numerical v =
-      case FLOOKUP tagged v of
-        NONE => NONE
-      | SOME owner => FLOOKUP births owner) /\
+    (!v. ptr_owner_erases dyn births (FLOOKUP tagged v) (FLOOKUP numerical v)) /\
     (!v owner. FLOOKUP tagged v = SOME owner ==> owner IN FDOM births)
 End
 

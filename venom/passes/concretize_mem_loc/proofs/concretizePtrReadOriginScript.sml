@@ -48,14 +48,14 @@ Definition ptr_activation_read_seed_def:
 End
 
 Theorem ptr_activation_selected_read_seed:
-  ptr_activation_ready P site f /\
+  ptr_activation_ready dyn P site f /\
   MEM (Var v) f.cf_inst.inst_operands /\
   (inst_read_op f.cf_inst = SOME (Var v) \/ f.cf_inst.inst_opcode = INVOKE) /\
   FLOOKUP f.cf_prov v = SOME site ==>
   ptr_activation_read_seed mems site f \/ MEM (SOME site) f.cf_params
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `ptr_activation_ready P site f` mp_tac >>
+  qpat_x_assum `ptr_activation_ready dyn P site f` mp_tac >>
   simp[ptr_activation_ready_def] >> strip_tac >>
   drule_all ptr_selected_origin >> strip_tac
   >- (disj1_tac >> simp[ptr_activation_read_seed_def] >>
@@ -66,8 +66,8 @@ QED
 
 Theorem ptr_ancestry_selected_read_seed:
   !stk f v.
-  ptr_call_ancestry f.cf_params stk /\ ptr_activation_ready P site f /\
-  EVERY (ptr_activation_ready P site) stk /\
+  ptr_call_ancestry f.cf_params stk /\ ptr_activation_ready dyn P site f /\
+  EVERY (ptr_activation_ready dyn P site) stk /\
   MEM (Var v) f.cf_inst.inst_operands /\
   (inst_read_op f.cf_inst = SOME (Var v) \/ f.cf_inst.inst_opcode = INVOKE) /\
   FLOOKUP f.cf_prov v = SOME site ==>

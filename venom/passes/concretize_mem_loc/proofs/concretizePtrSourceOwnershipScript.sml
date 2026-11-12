@@ -154,56 +154,61 @@ Proof
 QED
 
 Theorem ptr_owner_restrict_projection[local]:
-  ptr_ledger_erases births TG G ==>
-  ptr_ledger_erases births (DRESTRICT TG keep) (DRESTRICT G keep)
+  ptr_ledger_erases dyn births TG G ==>
+  ptr_ledger_erases dyn births (DRESTRICT TG keep) (DRESTRICT G keep)
 Proof
   simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def, FLOOKUP_DRESTRICT] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+  rpt strip_tac >> rw[] >> simp[ptr_owner_erases_def] >> metis_tac[]
 QED
 
 Theorem ptr_tagged_step_projection[local]:
-  ptr_ledger_erases births TG G /\ ptr_params_erases births PT PG /\
-  inst.inst_opcode <> DALLOCA /\
-  (!aid. FLOOKUP births (token,aid) = FLOOKUP s.vs_allocas aid) ==>
-  ptr_ledger_erases births (ptr_tagged_step token PT TG inst s) (step_prov PG G inst s)
+  ptr_ledger_erases dyn births TG G /\ ptr_params_erases dyn births PT PG /\
+  (!aid. FLOOKUP births (token,aid) = FLOOKUP s.vs_allocas aid) /\
+  (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
+    !u1 u2. MEM (Var u1) inst.inst_operands /\ MEM (Var u2) inst.inst_operands /\
+      FLOOKUP G u1 <> NONE /\ FLOOKUP TG u2 <> NONE ==> u1 = u2) /\
+  (inst.inst_opcode = DALLOCA ==>
+    !out b. inst.inst_outputs = [out] /\ lookup_var out s = SOME b ==> dyn <= w2n b) ==>
+  ptr_ledger_erases dyn births (ptr_tagged_step token PT TG inst s) (step_prov PG G inst s)
 Proof
   strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
   >- (simp[ptr_tagged_step_def, step_prov_def, out_prov_def] >>
-      Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
-      >- (simp[] >>
-          irule (SRULE [ptr_owner_project_def]
-            (Q.INST [`p` |-> `NONE`] ptr_owner_set_projection)) >> simp[]) >>
-      simp[] >>
-      `SOME x = ptr_owner_project births (SOME (token,inst.inst_id))` by
-        simp[ptr_owner_project_def] >>
-      pop_assum SUBST1_TAC >> irule ptr_owner_set_projection >> simp[] >>
+      irule ptr_owner_set_projection >> simp[] >>
+      Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >>
+      simp[ptr_owner_erases_def, FLOOKUP_DEF] >>
       metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME]) >>
-  simp[ptr_tagged_step_def] >> irule ptr_owner_step_projection >> simp[]
+  Cases_on `inst.inst_opcode = DALLOCA`
+  >- (simp[ptr_tagged_step_def, step_prov_def] >>
+      irule ptr_owner_set_projection >>
+      simp[ptr_owner_erases_def, out_prov_def] >>
+      every_case_tac >> gvs[] >> metis_tac[]) >>
+  simp[ptr_tagged_step_def] >> irule ptr_owner_step_projection >> simp[] >>
+  metis_tac[]
 QED
 
 Definition ptr_saved_erases_def:
-  ptr_saved_erases births saved stk <=>
+  ptr_saved_erases dyn births saved stk <=>
     LENGTH saved = LENGTH stk /\
     !n. n < LENGTH saved ==>
-      ptr_params_erases births (FST (EL n saved)) (EL n stk).cf_params /\
-      ptr_ledger_erases births (SND (EL n saved)) (EL n stk).cf_prov
+      ptr_params_erases dyn births (FST (EL n saved)) (EL n stk).cf_params /\
+      ptr_ledger_erases dyn births (SND (EL n saved)) (EL n stk).cf_prov
 End
 
 Theorem ptr_saved_erases_nil[local]:
-  ptr_saved_erases births [] []
+  ptr_saved_erases dyn births [] []
 Proof
   simp[ptr_saved_erases_def]
 QED
 
 Theorem ptr_saved_erases_cons[local]:
-  ptr_saved_erases births ((PT,TG)::saved) (f::stk) <=>
-  ptr_params_erases births PT f.cf_params /\
-  ptr_ledger_erases births TG f.cf_prov /\ ptr_saved_erases births saved stk
+  ptr_saved_erases dyn births ((PT,TG)::saved) (f::stk) <=>
+  ptr_params_erases dyn births PT f.cf_params /\
+  ptr_ledger_erases dyn births TG f.cf_prov /\ ptr_saved_erases dyn births saved stk
 Proof
   simp[ptr_saved_erases_def] >> eq_tac
   >- (strip_tac >>
-      `ptr_params_erases births PT f.cf_params /\
-       ptr_ledger_erases births TG f.cf_prov` by
+      `ptr_params_erases dyn births PT f.cf_params /\
+       ptr_ledger_erases dyn births TG f.cf_prov` by
         (qpat_assum `!n. n < SUC _ ==> _` (qspec_then `0` mp_tac) >> simp[NoAsms, EL]) >>
       simp[] >> rpt strip_tac >>
       first_x_assum (qspec_then `SUC n` mp_tac) >> simp[]) >>
@@ -211,9 +216,9 @@ Proof
 QED
 
 Theorem ptr_saved_erases_extend[local]:
-  ptr_saved_erases births saved stk /\
+  ptr_saved_erases dyn births saved stk /\
   (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP births' owner = SOME site) ==>
-  ptr_saved_erases births' saved stk
+  ptr_saved_erases dyn births' saved stk
 Proof
   simp[ptr_saved_erases_def] >> rpt strip_tac >>
   metis_tac[ptr_params_erases_extend, ptr_ledger_erases_extend]
@@ -222,23 +227,28 @@ QED
 Theorem ptr_tagged_chrono_step_erasure[local]:
   !C token a b PT TG saved PT' TG' saved'.
   ptr_tagged_chrono_step C token a b PT TG saved PT' TG' saved' ==>
-  !births.
-  a.po_inst.inst_opcode <> DALLOCA /\
-  ptr_params_erases births PT a.po_params /\
-  ptr_ledger_erases births TG a.po_prov /\
-  ptr_saved_erases births saved a.po_stack /\
+  !dyn births.
+  (a.po_inst.inst_opcode = ADD \/ a.po_inst.inst_opcode = SUB \/
+   a.po_inst.inst_opcode = ASSIGN ==>
+    !u1 u2. MEM (Var u1) a.po_inst.inst_operands /\ MEM (Var u2) a.po_inst.inst_operands /\
+      FLOOKUP a.po_prov u1 <> NONE /\ FLOOKUP TG u2 <> NONE ==> u1 = u2) /\
+  (a.po_inst.inst_opcode = DALLOCA ==> dyn <= w2n a.po_state.vs_fmp) /\
+  ptr_params_erases dyn births PT a.po_params /\
+  ptr_ledger_erases dyn births TG a.po_prov /\
+  ptr_saved_erases dyn births saved a.po_stack /\
   (LENGTH b.po_stack = LENGTH a.po_stack ==>
     !aid. FLOOKUP births (token,aid) = FLOOKUP b.po_state.vs_allocas aid) ==>
-  ptr_params_erases births PT' b.po_params /\
-  ptr_ledger_erases births TG' b.po_prov /\
-  ptr_saved_erases births saved' b.po_stack
+  ptr_params_erases dyn births PT' b.po_params /\
+  ptr_ledger_erases dyn births TG' b.po_prov /\
+  ptr_saved_erases dyn births saved' b.po_stack
 Proof
+  cheat >>
   ho_match_mp_tac ptr_tagged_chrono_step_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >> gen_tac >>
   simp[ptr_observe_def] >> strip_tac
   >- (simp[] >> irule ptr_tagged_step_projection >> simp[])
   >- (simp[] >> irule ptr_owner_entry_projection >> simp[])
-  >- (`ptr_ledger_erases births FEMPTY FEMPTY` by
+  >- (`ptr_ledger_erases dyn births FEMPTY FEMPTY` by
         simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >>
       simp[ptr_saved_erases_cons] >> irule ptr_owner_call_params >> simp[]) >>
   gvs[ptr_saved_erases_cons] >> irule ptr_owner_restrict_projection >> simp[]
@@ -258,10 +268,12 @@ Theorem ptr_source_ownership_erasure_invariant[local]:
   !vs0 C h a tokens registry births PT TG saved.
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  (EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
-    ptr_params_erases births PT a.po_params /\
-    ptr_ledger_erases births TG a.po_prov /\ ptr_saved_erases births saved a.po_stack)
+  (ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
+    ptr_params_erases (w2n vs0.vs_initial_fmp) births PT a.po_params /\
+    ptr_ledger_erases (w2n vs0.vs_initial_fmp) births TG a.po_prov /\
+    ptr_saved_erases (w2n vs0.vs_initial_fmp) births saved a.po_stack)
 Proof
+  cheat >>
   ho_match_mp_tac ptr_source_ownership_ind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
       >- metis_tac[ptr_source_ownership_rules] >>
@@ -294,42 +306,42 @@ QED
 
 Theorem ptr_source_ownership_params_erases:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
-  ptr_params_erases births PT a.po_params
+  ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
+  ptr_params_erases (w2n vs0.vs_initial_fmp) births PT a.po_params
 Proof
   metis_tac[ptr_source_ownership_erasure_invariant]
 QED
 
 Theorem ptr_source_ownership_prov_erases:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
-  ptr_ledger_erases births TG a.po_prov
+  ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
+  ptr_ledger_erases (w2n vs0.vs_initial_fmp) births TG a.po_prov
 Proof
   metis_tac[ptr_source_ownership_erasure_invariant]
 QED
 
 Theorem ptr_source_ownership_saved_erases:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
-  ptr_saved_erases births saved a.po_stack
+  ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
+  ptr_saved_erases (w2n vs0.vs_initial_fmp) births saved a.po_stack
 Proof
   metis_tac[ptr_source_ownership_erasure_invariant]
 QED
 
 Theorem ptr_source_ownership_saved_params:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   n < LENGTH saved ==>
-  ptr_params_erases births (FST (EL n saved)) (EL n a.po_stack).cf_params
+  ptr_params_erases (w2n vs0.vs_initial_fmp) births (FST (EL n saved)) (EL n a.po_stack).cf_params
 Proof
   metis_tac[ptr_source_ownership_saved_erases, ptr_saved_erases_def]
 QED
 
 Theorem ptr_source_ownership_saved_prov:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   n < LENGTH saved ==>
-  ptr_ledger_erases births (SND (EL n saved)) (EL n a.po_stack).cf_prov
+  ptr_ledger_erases (w2n vs0.vs_initial_fmp) births (SND (EL n saved)) (EL n a.po_stack).cf_prov
 Proof
   metis_tac[ptr_source_ownership_saved_erases, ptr_saved_erases_def]
 QED
@@ -387,14 +399,15 @@ Proof
 QED
 
 Theorem ptr_live_tagged_step[local]:
-  ptr_tags_live tokens PT TG /\ MEM token tokens /\
-  inst.inst_opcode <> DALLOCA ==>
+  ptr_tags_live tokens PT TG /\ MEM token tokens ==>
   ptr_tags_live tokens PT (ptr_tagged_step token PT TG inst s)
 Proof
   strip_tac >> gvs[ptr_tags_live_def] >>
   Cases_on `inst.inst_opcode = ALLOCA`
   >- (simp[ptr_tagged_step_def] >> irule ptr_live_set >> simp[] >>
       Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> simp[ptr_tag_live_def]) >>
+  Cases_on `inst.inst_opcode = DALLOCA`
+  >- (simp[ptr_tagged_step_def] >> irule ptr_live_set >> simp[ptr_tag_live_def]) >>
   simp[ptr_tagged_step_def, step_prov_def] >> irule ptr_live_set >> simp[] >>
   simp[out_prov_def] >>
   Cases_on `inst.inst_opcode = PARAM`
@@ -462,7 +475,6 @@ Theorem ptr_tagged_chrono_step_live[local]:
   ptr_tagged_chrono_step C token a b PT TG saved PT' TG' saved' ==>
   !(h:ptr_observation list) tokens.
   LENGTH tokens = SUC (LENGTH a.po_stack) /\ token = HD tokens /\
-  a.po_inst.inst_opcode <> DALLOCA /\
   ptr_tags_live tokens PT TG /\ ptr_saved_live tokens saved ==>
   ptr_tags_live (ptr_activation_tokens h a b tokens) PT' TG' /\
   ptr_saved_live (ptr_activation_tokens h a b tokens) saved'
@@ -484,37 +496,32 @@ Theorem ptr_source_ownership_live_invariant[local]:
   !vs0 C h a tokens registry births PT TG saved.
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  (EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
-    ptr_tags_live tokens PT TG /\ ptr_saved_live tokens saved)
+  ptr_tags_live tokens PT TG /\ ptr_saved_live tokens saved
 Proof
   ho_match_mp_tac ptr_source_ownership_ind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
       >- metis_tac[ptr_source_ownership_rules] >>
       simp[ptr_tags_live_def, ptr_saved_live_def, ptr_tag_live_def]) >>
   rpt gen_tac >> strip_tac >>
-  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >> strip_tac >>
+  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >>
   `ptr_source_birth_caches vs0 C h a tokens registry births` by
     metis_tac[ptr_source_ownership_caches] >>
   `ptr_ledger_source_activations vs0 C h a tokens registry` by
     metis_tac[ptr_source_birth_caches_activations] >>
-  `a.po_inst.inst_opcode <> DALLOCA` by
-    metis_tac[ptr_source_activations_sound, ptr_birth_reachable_no_dalloca] >>
   drule ptr_tagged_chrono_step_live >>
   disch_then (qspecl_then [`h`,`tokens`] mp_tac) >>
   simp[] >> metis_tac[ptr_source_activations_length]
 QED
 
 Theorem ptr_source_ownership_live:
-  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
   ptr_tags_live tokens PT TG
 Proof
   metis_tac[ptr_source_ownership_live_invariant]
 QED
 
 Theorem ptr_source_ownership_saved_live:
-  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+  ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
   ptr_saved_live tokens saved
 Proof
   metis_tac[ptr_source_ownership_live_invariant]
@@ -522,7 +529,6 @@ QED
 
 Theorem ptr_source_ownership_live_prov:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   FLOOKUP TG v = SOME (token,aid) ==> MEM token tokens
 Proof
   strip_tac >> drule_all ptr_source_ownership_live >>
@@ -532,7 +538,6 @@ QED
 
 Theorem ptr_source_ownership_live_param:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   MEM (SOME (token,aid)) PT ==> MEM token tokens
 Proof
   strip_tac >> drule_all ptr_source_ownership_live >>
@@ -543,7 +548,6 @@ QED
 
 Theorem ptr_source_ownership_saved_live_prov:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   n < LENGTH saved /\ FLOOKUP (SND (EL n saved)) v = SOME (token,aid) ==>
   MEM token (DROP (SUC n) tokens)
 Proof
@@ -555,7 +559,6 @@ QED
 
 Theorem ptr_source_ownership_saved_live_param:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   n < LENGTH saved /\ MEM (SOME (token,aid)) (FST (EL n saved)) ==>
   MEM token (DROP (SUC n) tokens)
 Proof
@@ -568,7 +571,7 @@ QED
 
 Theorem ptr_source_ownership_live_cache:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   FLOOKUP TG v = SOME (token,aid) /\
   FLOOKUP a.po_prov v = SOME (srcbase,sz) ==>
   ?d. d <= LENGTH a.po_stack /\
@@ -583,8 +586,8 @@ Proof
   `FLOOKUP births (token,aid) = SOME (srcbase,sz)` by
     (drule_all ptr_source_ownership_prov_erases >>
      simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >> strip_tac >>
-     qpat_x_assum `!v. FLOOKUP a.po_prov v = _`
-       (qspec_then `v` mp_tac) >> simp[ptr_owner_project_def]) >>
+     qpat_x_assum `!v. ptr_owner_erases _ _ (FLOOKUP TG v) _`
+       (qspec_then `v` mp_tac) >> simp[ptr_owner_erases_def]) >>
   `ptr_birth_slices a tokens births` by
     metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_slices] >>
   gvs[MEM_EL] >> rename1 `n < SUC (LENGTH a.po_stack)` >>
