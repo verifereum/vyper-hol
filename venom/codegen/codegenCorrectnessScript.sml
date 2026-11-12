@@ -218,7 +218,7 @@ Finalise initial_state_bridge
 (* run_blocks never returns OK — it always terminates with
    Halt/Abort/IntRet/Error. Induction on fuel: base returns Error,
    step either recurses (smaller fuel) or passes through non-OK. *)
-Theorem run_blocks_never_ok[local]:
+Theorem run_blocks_never_ok:
   !fuel ctx fn s vs1. run_blocks fuel ctx fn s <> OK vs1
 Proof
   Induct >- simp[Once run_blocks_def] >>
@@ -227,7 +227,7 @@ Proof
 QED
 
 (* run_function never returns OK — unfolds to run_blocks. *)
-Theorem run_function_never_ok[local]:
+Theorem run_function_never_ok:
   !fuel ctx fn vs vs1. run_function fuel ctx fn vs <> OK vs1
 Proof
   simp[run_function_def] >>
@@ -236,7 +236,7 @@ QED
 
 (* run_context also never returns OK — it either dispatches to
    run_function (which never returns OK) or returns Error. *)
-Theorem run_context_never_ok[local]:
+Theorem run_context_never_ok:
   !fuel ctx vs vs1. run_context fuel ctx vs <> OK vs1
 Proof
   rpt gen_tac >> simp[Once run_context_def] >>

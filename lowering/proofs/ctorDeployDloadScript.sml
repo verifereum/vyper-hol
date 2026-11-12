@@ -31,3 +31,28 @@ Proof
   >- (irule lowered_unit_dload_offset_ok >> metis_tac[]) >>
   irule lowered_unit_dload_headroom_ok_from >> metis_tac[]
 QED
+
+(* deploy_unit_dload_ok's source bound itself: every reachable DLOAD or
+   DLOADBYTES offset is within the unchanged data section. *)
+Theorem deploy_unit_dload_in_section:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
+    gas_variant vs (deploy_entry_state prog cplan tops es) /\
+    code_layout_valid vs /\
+    (!marks. ~deploy_source_exempt tops
+               (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
+                  [(NONE, tops)] []))
+    ==>
+    mem_inv (\c f inst s. inst_dload_in_section inst s /\
+                          s.vs_code = vs.vs_code /\
+                          s.vs_data_section = vs.vs_data_section)
+      dunit.cu_context vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all deploy_unit_run_entry >> strip_tac >>
+  drule_all deploy_unit_run_mem_safe >> strip_tac >>
+  irule lowered_unit_dload_in_section >> metis_tac[]
+QED

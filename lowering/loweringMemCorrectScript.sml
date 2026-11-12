@@ -218,7 +218,9 @@ QED
    section's length (inst_dload_in_section); the code and the data section
    never change, and code_layout_valid keeps the code within 2^255
    bytes. *)
-Theorem lower_vyper_runtime_unit_dload_offset_ok:
+(* Every reachable DLOAD/DLOADBYTES offset of the runtime unit is within
+   the data section, which never changes along the run. *)
+Theorem lower_vyper_runtime_unit_dload_in_section:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
@@ -232,7 +234,10 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok:
     (!marks. ~source_exempt tops
        (call_external (SOME vs.vs_outcomes)
           (gas_explicit marks vs.vs_gas_readings) am tx))
-    ==> mem_inv dload_offset_ok unit.cu_context vs
+    ==> mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                                 s.vs_code = vs.vs_code /\
+                                 s.vs_data_section = vs.vs_data_section)
+          unit.cu_context vs
 Proof
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
@@ -276,11 +281,35 @@ Proof
                       vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
         simp[]) >>
       simp[]) >>
-  rw[dload_offset_ok_def] >>
-  `inst_dload_in_section inst s` by metis_tac[mem_safe_point_dload] >>
-  `w2n off <= LENGTH s.vs_data_section` by
-    (fs[inst_dload_in_section_def] >> metis_tac[]) >>
-  gvs[code_layout_valid_def, wordsTheory.dimword_def]
+  rw[] >> metis_tac[mem_safe_point_dload]
+QED
+
+Theorem lower_vyper_runtime_unit_dload_offset_ok:
+  !tops rpolicy unit am tx ret vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    call_outcomes_ok am tx vs.vs_outcomes /\
+    code_layout_valid vs /\
+    (!marks. ~source_exempt tops
+       (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx))
+    ==> mem_inv dload_offset_ok unit.cu_context vs
+Proof
+  rpt strip_tac >> irule unitMemInvTheory.mem_inv_mono >>
+  qexists_tac `\ctx fn inst s. inst_dload_in_section inst s /\
+                               s.vs_code = vs.vs_code /\
+                               s.vs_data_section = vs.vs_data_section` >>
+  conj_tac
+  >- (rw[dload_offset_ok_def] >>
+      `w2n off <= LENGTH s.vs_data_section` by
+        (fs[inst_dload_in_section_def] >> metis_tac[]) >>
+      gvs[code_layout_valid_def, wordsTheory.dimword_def]) >>
+  irule lower_vyper_runtime_unit_dload_in_section >> metis_tac[]
 QED
 
 (* Every reachable alloca frontier, plus 32 bytes per DLOAD in the unit,
