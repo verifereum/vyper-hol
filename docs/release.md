@@ -31,12 +31,12 @@ commit and uploads those exact files to the GitHub Release.
 ## Manual archive build
 
 The CI artefact is the preferred release source. To build the same archive
-locally or from another CI system, use holbuild v0.12.0 or newer:
+locally or from another CI system, use CI's holbuild v0.14.21:
 
 ```bash
 holbuild buildhol
 holbuild -j"$(nproc)" build
-holbuild export \
+holbuild export --closure \
   -o vyper-hol.hbx \
   --metadata-out vyper-hol.hbx.json
 sha256sum vyper-hol.hbx > vyper-hol.hbx.sha256

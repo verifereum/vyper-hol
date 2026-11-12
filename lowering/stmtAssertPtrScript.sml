@@ -148,10 +148,12 @@ QED
 Resume compile_assert_frag_ptr[true]:
   markerLib.RESUME_TAC >> (
   gvs[] >>
-  `stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ())
+  `stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ())
      (es_end with gas_obs := []) (jump_to sb.cs_current_bb t)` by
-    (irule assert_success_post >> simp[] >>
-     qexistsl_tac [`e`, `es`, `op`, `s1`] >> simp[]) >>
+    (irule assert_success_post >> simp[] >> conj_tac
+     >- (qpat_x_assum `!tail. _` (qspec_then `[]` assume_tac) >>
+         drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+     qexistsl_tac [`e`, `op`, `s1`] >> simp[]) >>
   qexistsl_tac [`INL ()`, `es_end`, `G`, `tn`,
                 `OK (jump_to sb.cs_current_bb t)`] >>
   conj_tac
