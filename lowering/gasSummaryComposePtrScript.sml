@@ -195,8 +195,9 @@ Theorem gas_outcome_ptr_erase:
     (\H res ee r. ?gt. R H res ee gt r)
 Proof
   rewrite_tac[gas_outcome_ptr_def, gas_outcome_def] >> strip_tac >>
-  qexists_tac `marks` >> simp[] >>
-  drule gas_summary_ptr_at_erase >> strip_tac >> simp[]
+  qexists_tac `marks` >> simp[]
+  >- (drule gas_summary_ptr_at_erase >> strip_tac >> simp[]) >>
+  metis_tac[]
 QED
 
 (* A valid horizon of a later trace is valid on its prefix. *)
