@@ -825,15 +825,15 @@ Resume abi_image_compile_mutual[expr]:
   qexists_tac `l` >> simp[] >> conj_tac
   >- (rpt gen_tac >> simp[builtin_child_callback_def] >>
       IF_CASES_TAC
-      >- (`!x. x < cenv_defaults_size ce + expr_size e <=>
-              x < expr_size e + cenv_defaults_size ce` by simp[] >>
+      >- (`list_size expr_size args + cenv_defaults_size ce <
+           expr_size e + cenv_defaults_size ce` by fs[] >>
           metis_tac[]) >>
       simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
       rpt (pairarg_tac >> gvs[vv_operand_def])) >>
   rpt gen_tac >> simp[type_child_callback_def] >>
   IF_CASES_TAC
-  >- (`!x. x < cenv_defaults_size ce + expr_size e <=>
-          x < expr_size e + cenv_defaults_size ce` by simp[] >>
+  >- (`list_size expr_size args + cenv_defaults_size ce <
+       expr_size e + cenv_defaults_size ce` by fs[] >>
       metis_tac[]) >>
   simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
   rpt (pairarg_tac >> gvs[vv_operand_def])
