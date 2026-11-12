@@ -39,22 +39,25 @@ Theorem aug_place_loaded_memory_suffix:
   eval_operand dst u = SOME w /\
   place_ptr_rel cenv cx u (PlaceR (MemoryPlace id path)) w (SOME LocMemory) (Type ty) /\
   w2n w + 32 <= u.vs_alloca_next /\
-  stmt_state_rel ctx func cenv cx mid u /\ alloca_history func u /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx mid u /\
+       storage_well_formed_on cx mid (FST H)) /\
+  alloca_history func u /\
   alloca_frame cenv es0 sa s0 cenv mid u /\ sa.cs_next_id <= sl.cs_next_id /\
   s0.vs_alloca_next <= u.vs_alloca_next /\
   ~u.vs_halted /\ u.vs_current_bb = sl.cs_current_bb /\
   u.vs_inst_idx = LENGTH sl.cs_current_insts /\ ~block_is_terminated sf /\
   (!z v. not_fresh_at sa z /\ lookup_var z s0 = SOME v ==> lookup_var z u = SOME v) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\rhs. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop old rhs)) (write_place cx (MemoryPlace id path)))) (mid,u)
-    (\res ff v. res = INL () /\
-      stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 res ff v /\
+    (\H res ff v. res = INL () /\
+      stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ff v /\
       alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all aug_place_memory_reads_replay >> strip_tac >>
@@ -65,17 +68,35 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid` by
     metis_tac[expr_body_pre_gas_admissible] >>
   irule aug_place_rhs_operator_write_mem >>
-  simp[typed_val_to_w256_word_value, storage_place_region_def] >>
+  simp[typed_val_to_w256_word_value, storage_place_observed_def] >>
   goal_assum (drule_at (Pat `lower_value`)) >>
   goal_assum (drule_at (Pat `compile_binop`)) >>
   goal_assum (drule_at (Pat `place_ptr_rel`)) >>
   qexistsl_tac [`dst`, `env`] >>
-  simp[typed_val_to_w256_word_value] >> rpt strip_tac >>
+  simp[typed_val_to_w256_word_value] >> rpt gen_tac >> strip_tac >>
   `?entry old'. lookup_scopes id ee.scopes = SOME entry /\
     evaluate_subscripts entry.type entry.value path = INL old'` by
     (irule aug_place_rhs_memory_live >> goal_assum (drule_at (Pat `supported_stmt`)) >>
      goal_assum (drule_at (Pat `supported_target_info`)) >>
      goal_assum (drule_at (Pat `bind _ _ _ = _`)) >>
      qexists_tac `es with gas_obs := prefix ++ gs` >> simp[]) >>
-  drule_all aug_place_memory_rhs_callback >> simp[]
+  drule_all aug_place_memory_rhs_callback >> strip_tac >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  gen_tac >> strip_tac >>
+  qpat_assum `!v. bop_result _ _ _ _ _ _ _ = INL v ==> _`
+    (qspec_then `v` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `ff` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> strip_tac >>
+  drule aug_place_store_backends >> strip_tac >>
+  qpat_x_assum `!b. storage_well_formed_on cx ff b <=> _`
+    (fn th => REWRITE_TAC [th]) >>
+  first_assum ACCEPT_TAC
 QED

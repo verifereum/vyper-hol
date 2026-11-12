@@ -493,7 +493,7 @@ Proof
        vyperStorageTraceTheory.storage_trace_frame_write_place]
 QED
 
-Theorem aug_place_store_backends[local]:
+Theorem aug_place_store_backends:
   write_place cx (MemoryPlace id path) v ee = (res,ff) ==>
   ff.storage_trace = ee.storage_trace /\
   (!b. storage_well_formed_on cx ff b <=> storage_well_formed_on cx ee b) /\
