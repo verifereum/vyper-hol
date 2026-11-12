@@ -9,7 +9,7 @@ Ancestors
 
 Theorem state_rel_simple_inst_idx[simp]:
   !cenv cx es ss index.
-    state_rel_simple cenv cx es (ss with vs_inst_idx := index) = state_rel_simple cenv cx es ss
+    state_rel_simple H cenv cx es (ss with vs_inst_idx := index) = state_rel_simple H cenv cx es ss
 Proof
   simp[state_rel_simple_def, vars_rel_def, storage_rel_def, transient_rel_def,
     immutables_rel_simple_def, logs_rel_def, call_ctx_rel_def,
@@ -71,9 +71,9 @@ QED
 
 Theorem state_rel_simple_assignment_index_frame:
   !cenv cx es before after index.
-    state_rel_simple cenv cx es before /\
+    state_rel_simple H cenv cx es before /\
     after with vs_vars := before.vs_vars = before with vs_inst_idx := index ==>
-    state_rel_simple cenv cx es after
+    state_rel_simple H cenv cx es after
 Proof
   rpt gen_tac >> strip_tac >> irule state_rel_simple_assignment_frame >>
   qexists_tac `before with vs_inst_idx := index` >> simp[]
