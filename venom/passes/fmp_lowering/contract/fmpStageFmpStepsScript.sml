@@ -31,6 +31,11 @@ Theorem fmp_stage_restore:
   fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts ==>
   ?n t1 lo'.
     (!k. fmp_target_run k C' fn.fn_name t n t1) /\ lo' <= lo /\
+    n <= 1 /\
+    (n = 1 ==>
+     ?fn' bb'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+       lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+       (EL t.vs_inst_idx bb'.bb_instructions).inst_opcode = ASSIGN) /\
     fmp_stage_rel D C'
       (DRESTRICT sm {key | key IN FDOM sm /\ FST (sm ' key) < lo'})
       fmp0 raw0 eom T stk PG G tn fn s lo' t1 ts
