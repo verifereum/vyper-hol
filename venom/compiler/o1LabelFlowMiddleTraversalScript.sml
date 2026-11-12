@@ -1,9 +1,10 @@
 Theory o1LabelFlowMiddleTraversal
 Ancestors
   o1LabelFlowMiddleRenameLocal o1MakeSsaEventFrames o1MakeSsaActualNames
-  o1MakeSsaOwnership o1MakeSsaTraversalFrames
+  o1MakeSsaOwnership o1MakeSsaTraversalFrames o1MakeSsaVisitTrace
   o1LabelFlowMiddleOperandOwners o1LabelFlowMiddlePhiOwners
-  makeSsaDefs venomInst list rich_list pair
+  makeSsaDefs makeSsaCurrentLockstepShape codegenSymRel
+  venomInst list rich_list pair
 
 Theorem indexed_patch_frame_adjacent:
   indexed_patch_frame bb out /\
@@ -224,4 +225,86 @@ Proof
   conj_tac
   >- (simp[LIST_REL_EL_EQN] >> metis_tac[current_name_owner_identity, EL_MEM]) >>
   strip_tac >> irule owned_operands_identity >> metis_tac[]
+QED
+
+Theorem owned_operand_var_origin:
+  LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                   | _ => b = a) ops outs /\
+  current_name_owner V H u /\ (n,x) IN H /\
+  k < LENGTH outs /\ EL k outs = Var n ==>
+  k < LENGTH ops /\ EL k ops = Var x
+Proof
+  simp[LIST_REL_EL_EQN] >> strip_tac >>
+  first_x_assum (qspec_then `k` mp_tac) >> simp[] >>
+  Cases_on `EL k ops` >> simp[] >> strip_tac >>
+  metis_tac[current_name_owner_unique]
+QED
+
+Theorem owned_output_origin:
+  LIST_REL (\v n. (n,v) IN H) vs ns /\
+  current_name_owner V H u /\ (n,x) IN H /\ MEM n ns ==> MEM x vs
+Proof
+  simp[MEM_EL, LIST_REL_EL_EQN] >> rpt strip_tac >>
+  `EL n' vs = x` by metis_tac[current_name_owner_unique] >> metis_tac[]
+QED
+
+Theorem owned_codecopy_read:
+  LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                   | _ => b = a) ops outs /\
+  current_name_owner V H u /\ (n,x) IN H /\ MEM (Var n) outs /\
+  (!v. MEM (Var v) ops /\ v = x ==>
+     ?dst sz. ops = [dst; Var x; sz] /\ dst <> Var x /\ sz <> Var x) ==>
+  ?dst sz. outs = [dst; Var n; sz] /\ dst <> Var n /\ sz <> Var n
+Proof
+  strip_tac >>
+  `MEM (Var x) ops` by
+    (gvs[MEM_EL] >> metis_tac[owned_operand_var_origin]) >>
+  first_x_assum drule >> simp[] >> strip_tac >> gvs[] >>
+  Cases_on `dst` >> Cases_on `sz` >> gvs[] >>
+  metis_tac[current_name_owner_unique]
+QED
+
+Theorem visit_blocks_owned_origin:
+  visit_blocks path s rs bbs sm tree = ((ct,t,final),events) /\
+  ALL_DISTINCT (dom_tree_postorder tree) /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  (!q. MEM q (dom_tree_postorder tree) ==> IS_SOME (lookup_block q bbs)) /\
+  current_name_owner V H u /\
+  (!e. MEM e events ==> current_stack_owner V H (SND e.sve_in) /\
+    LIST_REL (\i j. LIST_REL (\v n. (n,v) IN H)
+      i.inst_outputs j.inst_outputs) e.sve_before e.sve_after) /\
+  (!bb i v. MEM bb bbs /\ MEM i bb.bb_instructions ==>
+    (MEM (Var v) i.inst_operands \/ MEM v i.inst_outputs ==> v IN V)) /\
+  lookup_block q final = SOME out /\ k < LENGTH out.bb_instructions ==>
+  ?bb. lookup_block q bbs = SOME bb /\ k < LENGTH bb.bb_instructions /\
+    (EL k out.bb_instructions).inst_opcode = (EL k bb.bb_instructions).inst_opcode /\
+    LIST_REL (\v n. (n,v) IN H) (EL k bb.bb_instructions).inst_outputs
+      (EL k out.bb_instructions).inst_outputs /\
+    ((EL k bb.bb_instructions).inst_opcode <> PHI ==>
+     LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                      | _ => b = a)
+       (EL k bb.bb_instructions).inst_operands (EL k out.bb_instructions).inst_operands)
+Proof
+  strip_tac >>
+  `IS_SOME (lookup_block q bbs)` by
+    metis_tac[cj 1 visit_lookup_domain, optionTheory.IS_SOME_DEF] >>
+  Cases_on `lookup_block q bbs` >> gvs[] >> rename1 `lookup_block q bbs = SOME bb` >>
+  `rename_current_blocks s rs bbs sm tree = (ct,t,final)` by
+    metis_tac[visit_erasure, FST] >>
+  `ALL_DISTINCT (MAP basic_block_bb_label bbs)` by
+    (qpat_x_assum `ALL_DISTINCT (MAP _ bbs)` mp_tac >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  drule_all rename_current_blocks_lookup_signatures >> strip_tac >> gvs[] >>
+  rename1 `lookup_block q final = SOME out` >>
+  `LENGTH out.bb_instructions = LENGTH bb.bb_instructions` by
+    metis_tac[LENGTH_MAP] >>
+  `MEM bb bbs /\ MEM (EL k bb.bb_instructions) bb.bb_instructions` by
+    metis_tac[livenessTransferProofsTheory.lookup_block_mem, EL_MEM] >>
+  `!v. MEM (Var v) (EL k bb.bb_instructions).inst_operands ==> v IN V` by
+    metis_tac[] >>
+  `!v. MEM v (EL k bb.bb_instructions).inst_outputs ==> v IN V` by
+    metis_tac[] >>
+  drule visit_blocks_owned_position >> simp[] >>
+  disch_then (qspecl_then [`u`,`q`,`k`,`bb`,`V`,`H`] mp_tac) >> simp[] >>
+  metis_tac[]
 QED
