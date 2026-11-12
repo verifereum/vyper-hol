@@ -18201,6 +18201,52 @@ Proof
   simp[rep_pin_id_def, AllCaseEqs()] >> metis_tac[]
 QED
 
+Theorem mm_local_zero_selected_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  bb = EL index fn0.fn_blocks /\ dfg = dfg_build_function fn0 /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  n < LENGTH is /\
+  (is_zero_store (EL n is) \/ is_calldatasize_copy dfg (EL n is)) /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n /\
+  (!dst v len. is_calldatasize_copy dfg (EL n is) /\
+    (EL n is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H n) = SOME (n2w (LENGTH (H n).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H n).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!j d bs. mm_local_zero_capture dfg is (SUC n) j = SOME (d,bs) ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u) /\
+  eom < dimword (:256) /\
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  LENGTH t.vs_call_ctx.cc_calldata < dimword (:256) /\
+  (!v. v NOTIN excluded ==> MEM v es.irs_used_vars) /\
+  apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+    (rep_map_of_groups is gs) es (EL n is) = (chunk,es') ==>
+  (!f u. EVERY (\i. static_mem_ok eom ctx f i u) chunk) /\
+  ?t'. mm_local_exec_prefix fuel ctx chunk t t' /\
+    mm_local_zero_cut dfg is gs H (SUC n) excluded (pc + LENGTH chunk) t'
+Proof
+  strip_tac >> (
+  Cases_on `MEM (EL n is).inst_id (nop_ids_of_groups dfg Mem2Mem is gs)`
+  >- (`?g. MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids` by
+        (gvs[] >> metis_tac[mm_local_zero_selected_member, EL_MEM]) >>
+      drule_all mm_local_zero_erased_actual_transition >>
+      disch_then (qspec_then `es` strip_assume_tac) >>
+      gvs[] >> simp[mk_nop_from_def, unitMemInvTheory.static_mem_ok_def,
+        unitMemInvTheory.inst_mem_ranges_def,
+        contextCodegenRelTheory.source_memory_read_ranges_def,
+        codegenRelTheory.source_memory_write_ranges_def, arithmeticTheory.ADD1] >>
+      metis_tac[mk_nop_from_def, arithmeticTheory.ADD1]) >>
+  `?g. MEM g gs /\ rep_of_group is g = SOME ((EL n is).inst_id,g)` by
+    (gvs[] >> irule mm_local_zero_retained_selected_dispatch >>
+     simp[EL_MEM] >> metis_tac[]) >>
+  drule_all mm_local_zero_representative_actual_transition >> simp[])
+QED
+
 Theorem mm_local_zero_noninvoke_stop[local]:
   mm_local_zero_cut dfg is gs H n excluded pc t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
