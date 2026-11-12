@@ -20,7 +20,7 @@ Ancestors
   concretizePtrFrameRetpcShape
   concretizeAllocationFree ptrStaticDiscipline pointerConfinedDefs
   pointerConfinedProps pointerClosure lowerDloadPtrClosure passSharedDefs
-  passSharedProps passTransform
+  passSharedProps passTransform venomInst list pred_set
 
 (* Why it holds (intuition, not a prescribed proof).
 
