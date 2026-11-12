@@ -103,8 +103,10 @@ Proof
   TRY (drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF] ptr_step_writes_subset) >>
        simp[] >> NO_TAC) >>
   TRY (first_x_assum irule >> simp[MEM_EL] >> qexists `w` >> simp[] >> NO_TAC) >>
-  TRY (qexists_tac `P` >> simp[] >> NO_TAC) >>
-  TRY (qexists_tac `lo` >> simp[] >> NO_TAC) >>
+  TRY (qexists_tac `P` >> fs[] >> NO_TAC) >>
+  TRY (qexists_tac `lo` >> fs[] >>
+       qpat_x_assum `!obs. MEM obs h ==> _` irule >>
+       simp[MEM_EL] >> qexists `w` >> simp[] >> NO_TAC) >>
   metis_tac[]
 QED
 
@@ -177,7 +179,9 @@ Proof
   TRY (drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF] ptr_step_writes_subset) >>
        simp[] >> NO_TAC) >>
   TRY (first_x_assum irule >> simp[MEM_EL] >> qexists `w` >> simp[] >> NO_TAC) >>
-  TRY (qexists_tac `P` >> simp[] >> NO_TAC) >>
-  TRY (qexists_tac `lo` >> simp[] >> NO_TAC) >>
+  TRY (qexists_tac `P` >> fs[] >> NO_TAC) >>
+  TRY (qexists_tac `lo` >> fs[] >>
+       qpat_x_assum `!obs. MEM obs h ==> _` irule >>
+       simp[MEM_EL] >> qexists `w` >> simp[] >> NO_TAC) >>
   metis_tac[]
 QED
