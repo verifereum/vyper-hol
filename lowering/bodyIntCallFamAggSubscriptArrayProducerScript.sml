@@ -11,6 +11,7 @@ Ancestors
 
 Theorem intcall_subscript_array_framed_producer:
   intcall_expr_producer fp obj /\ intcall_forced_producer fp idx /\
+  ~subscript_reads_base fp.jc_cx obj idx /\
   place_type ce obj = ValPT (ArrayT et bd) /\ 
     post_value_type ce obj = expr_type obj /\
     ((~ce.ce_is_ctor /\
@@ -81,7 +82,8 @@ Resume intcall_subscript_array_framed_producer[exit]:
   qexists_tac `marks` >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INR exc`,`es_end`,`r`] >> simp[] >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   conj_tac
   >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
       first_assum ACCEPT_TAC) >> fs[]
@@ -89,7 +91,8 @@ QED
 Resume intcall_subscript_array_framed_producer[exempt]:
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   pure_rewrite_tac[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule gasExemptCertTheory.gas_exempt_cert_error_result >>
   first_assum ACCEPT_TAC
