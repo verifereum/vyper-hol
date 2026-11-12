@@ -30,6 +30,22 @@ Ancestors
   valueEncoding entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
   ctorDeployMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen
 
+(* Supported checked source excludes all runtime DALLOCA producers.  This
+   rules out the proposed near-limit source family before budgeting it. *)
+Theorem registration_supported_no_dalloca:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx ==>
+  ~ctx_has_dalloca unit.cu_context
+Proof
+  strip_tac >>
+  `raw_shape_free_program tops` by
+    metis_tac[loweringShapeSourceTheory.supported_program_raw_shape_free_program] >>
+  `o1_source_unit_ok unit` by
+    (fs[e2eDefsTheory.source_typing_ok_def] >>
+     drule_all lower_vyper_runtime_unit_source_unit_ok >> simp[]) >>
+  metis_tac[o1PipelineCorrectTheory.o1_source_unit_ok_no_dalloca]
+QED
+
 Theorem registration_fmp_room_necessary:
   fmp_room ctx fn s /\
   (EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn) \/
