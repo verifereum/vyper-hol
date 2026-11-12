@@ -23,7 +23,6 @@ Proof
       metis_tac[expr_sim_inv_memory_size]) >>
   `value_runtime_typed env (lowered_value_type ce e) v` by
     (irule memory_rhs_read_lowered_typed_unwidened >>
-     conj_tac >- metis_tac[] >>
      qexistsl_tac [`cx`,`es`,`ee`] >> simp[]) >>
   drule_all memory_rhs_runtime_layout >> strip_tac >>
   goal_assum (drule_at Any) >> simp[value_has_type_memory_wf]
@@ -40,7 +39,9 @@ Proof
       well_formed_type env.type_defs t` by
     metis_tac[expr_body_pre_var_types_well_formed] >>
   `env.type_defs = get_tenv cx /\
-   sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
+   sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+      ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
   `well_formed_type env.type_defs (expr_type e)` by
@@ -86,7 +87,9 @@ Proof
   `well_typed_expr env e /\
    (!id t. FLOOKUP env.var_types id = SOME t ==>
      well_formed_type env.type_defs t) /\
-   sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
+   sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+      ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
     (conj_tac >- fs[expr_body_pre_def] >> conj_tac
      >- metis_tac[expr_body_pre_var_types_well_formed] >>
      fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,

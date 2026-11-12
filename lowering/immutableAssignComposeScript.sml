@@ -112,7 +112,7 @@ Proof
 QED
 
 Theorem immutable_assign_word_stmt_post:
-  compile_assign_value ce (Lit (n2w off)) LocCode op T loc ity sty da bytes su = ((),sb) /\
+  compile_assign_value ce (Lit (n2w off)) LocCode op T loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
   s.vs_inst_idx = LENGTH su.cs_current_insts /\
@@ -164,7 +164,7 @@ Proof
 QED
 
 Theorem immutable_assign_direct_stmt_post:
-  compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty da bytes su = ((),sb) /\
+  compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty bytes su = ((),sb) /\
   fn_has_code su sb func /\ ~block_is_terminated sb /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
   s.vs_inst_idx = LENGTH su.cs_current_insts /\
@@ -230,7 +230,7 @@ Proof
 QED
 
 Theorem immutable_assign_normalized_stmt_post:
-  compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty da L su = ((),sb) /\
+  compile_assign_value ce (Lit (n2w off)) LocCode op F loc ity sty L su = ((),sb) /\
   ity <> sty /\ ~is_bytestring_type ity /\
   fn_has_code su sb func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
   local_ptrs_reserved ce su /\ (!x. op = Var x ==> not_fresh_at su x) /\
@@ -270,7 +270,7 @@ Proof
     metis_tac[compile_alloc_buffer_extends, ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `cs_extends mid sm /\ ci_mono mid sm` by
     metis_tac[cj 1 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
-  `compile_assign_value ce (Lit (n2w off)) LocCode buf.buf_operand F loc ity ity da L sm = ((),sb)` by
+  `compile_assign_value ce (Lit (n2w off)) LocCode buf.buf_operand F loc ity ity L sm = ((),sb)` by
     (simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
      qpat_x_assum `(if _ then _ else _) sm = _` mp_tac >> simp[]) >>
   `cs_extends sm sb` by metis_tac[cj 1 ci_mono_stmt_helpers, ci_mono_def, pairTheory.SND] >>
@@ -301,7 +301,7 @@ Proof
     (Cases_on `L <= 32` >- (fs[] >> decide_tac) >>
      qpat_assum `L = 32*n` (fn th => rewrite_tac[th]) >>
      simp[arithmeticTheory.MULT_COMM, arithmeticTheory.ADD_DIV_ADD_DIV]) >>
-  qpat_assum `compile_assign_value _ _ _ buf.buf_operand _ _ ity ity _ _ _ = _`
+  qpat_assum `compile_assign_value _ _ _ buf.buf_operand _ _ ity ity _ _ = _`
     (mp_then Any mp_tac immutable_assign_direct_stmt_post) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ r`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ r.vs_memory`)) >>
@@ -335,7 +335,7 @@ Theorem immutable_assign_value_stmt_post:
   expr_sim_inv ce cx env ee /\
   expr_post H ctx func ce cx e ers si su s0 ee v op s /\
   compile_assign_value ce (Lit (n2w off)) LocCode op (is_word_type ity) loc
-    ity (lowered_value_type ce e) da (type_memory_bytes ce ity) su = ((),sb) /\
+    ity (lowered_value_type ce e) (type_memory_bytes ce ity) su = ((),sb) /\
   fn_has_code su sb func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
   local_ptrs_reserved ce su /\ (!x. op = Var x ==> not_fresh_at su x) /\
   ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
@@ -365,7 +365,7 @@ Proof
         fs[expr_post_def, expr_val_rel_def] >>
       irule immutable_assign_word_stmt_post >>
       simp[] >>
-      qexistsl_tac [`type_memory_bytes ce ity`,`da`,`env`,`id`,`itv`,`ity`,`loc`,`off`,
+      qexistsl_tac [`type_memory_bytes ce ity`,`env`,`id`,`itv`,`ity`,`loc`,`off`,
         `op`,`lowered_value_type ce e`,`v`] >>
       simp[] >> gvs[]) >>
   `~is_word_type (lowered_value_type ce e)` by
@@ -403,9 +403,9 @@ Proof
       `0 < val_footprint stv v` by
         (drule_all immutableBytestringFootprintTheory.immutable_bytestring_runtime_extent >>
          strip_tac >> simp[]) >>
-      qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       simp[] >> disch_tac >>
-      qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+      qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
         (mp_then Any mp_tac immutable_assign_bytestring_store) >>
       disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
       disch_then (drule_at (Pat `evaluate_type _ ity = _`)) >>
@@ -440,9 +440,9 @@ Proof
          metis_tac[]) >>
       `regions_disjoint off (32*n) (w2n w) (val_footprint stv v)` by
         (gvs[regions_disjoint_def] >> decide_tac) >>
-      qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
       simp[] >> disch_tac >>
-      qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+      qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
         (mp_then Any mp_tac immutable_assign_direct_stmt_post) >>
       disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
@@ -463,14 +463,14 @@ Proof
   `ity <> lowered_value_type ce e /\ ~is_bytestring_type ity /\
    ~is_bytestring_type (lowered_value_type ce e)` by
     metis_tac[typed_copy_bytestring_source, type_widens_from_bytestring] >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[] >> disch_tac >>
   `~(is_bytestring_type ity /\ is_bytestring_type (lowered_value_type ce e))` by simp[] >>
   drule_all immutable_assign_normalized_compile >> strip_tac >>
   `cs_extends su mid` by metis_tac[compile_alloc_buffer_extends] >>
   `cs_extends mid sm` by
     metis_tac[cj 1 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
-  `compile_assign_value ce (Lit (n2w off)) LocCode buf.buf_operand F loc ity ity da
+  `compile_assign_value ce (Lit (n2w off)) LocCode buf.buf_operand F loc ity ity
      (type_memory_size itv) sm = ((),sb)` by
     (simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
      qpat_x_assum `(if _ then _ else _) sm = _` mp_tac >> simp[]) >>
@@ -484,7 +484,7 @@ Proof
   `tu = itv /\ stv' = stv /\ sw = w` by metis_tac[optionTheory.SOME_11] >>
   `?n. type_memory_size itv = 32*n` by metis_tac[type_memory_size_slots] >>
   `val_wf itv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
-  qpat_assum `compile_assign_value _ _ _ op _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_assign_value _ _ _ op _ _ _ _ _ _ = _`
     (mp_then Any mp_tac immutable_assign_normalized_stmt_post) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
@@ -507,7 +507,7 @@ Theorem immutable_assign_normal_continuation:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   unwrap_value ce vv sm = (op,su) /\
   compile_assign_value ce (Lit (n2w off)) LocCode op (is_word_type ity)
-    (vv_location vv) ity (lowered_value_type ce e) da (type_memory_bytes ce ity) su = ((),sb) /\
+    (vv_location vv) ity (lowered_value_type ce e) (type_memory_bytes ce ity) su = ((),sb) /\
   fn_has_code sm su func /\ fn_has_code su sb func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated sb /\ local_ptrs_reserved ce sa /\
   stmt_state_rel H ctx func ce cx es s0 /\

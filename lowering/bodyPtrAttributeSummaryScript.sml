@@ -10,9 +10,8 @@ Ancestors
 (* Discharge storage address side conditions at the original endpoint, before
    changing the destination variable. Code locations need no slot bound. *)
 Theorem attribute_nonmemory_endpoint_ptr:
-  vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
-  post_value_type cenv obj = expr_type obj /\
-  expr_type obj = StructT sid /\ vv_loc bvv <> LocMemory /\
+  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
+  post_value_type cenv obj = StructT sid /\ vv_loc bvv <> LocMemory /\
   ptr_vv_ok cx (StructT sid) btv bvv ee G tn s /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
   evaluate_type (get_tenv cx) ann = SOME ftv /\
@@ -22,8 +21,8 @@ Theorem attribute_nonmemory_endpoint_ptr:
   t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
   t.vs_transient = s.vs_transient /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} ==>
-  ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee' HG tn' t
+  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov H dst = NONE) ==>
+  ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee' H tn' t
 Proof
   strip_tac >> drule struct_field_slot_exists >> strip_tac >>
   drule_all struct_field_offset_slots_eq >> strip_tac >>
@@ -45,24 +44,23 @@ QED
 Theorem attribute_selected_ptr:
   expr_body_pre cenv cx env (Attribute ann obj fld) es0 /\
   eval_expr cx obj es0 = (INL btv,ee) /\
-  vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
+  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
   ptr_vv_ok cx (expr_type obj) btv bvv ee G tn s /\
   eval_operand dst t = SOME (w + n2w (attr_offset cenv (expr_type obj) (vv_loc bvv) fld)) /\
   eval_operand (vv_operand bvv) s = SOME w /\
   t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_transient = s.vs_transient /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} /\
+  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov H dst = NONE) /\
   (!x b sz. vv_operand bvv = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
-     ?y. dst = Var y /\ FLOOKUP HG y = SOME (b,sz)) ==>
+     ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
   ?tv'. select_result cx (expr_type obj) btv (AttrSubscript fld) ee = (INL tv',ee) /\
-    ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee HG tn' t /\
-    (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Attribute ann obj fld) dst HG t)
+    ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee H tn' t /\
+    (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Attribute ann obj fld) dst H t)
 Proof
   strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
-  `post_value_type cenv obj = expr_type obj` by
-    (drule attr_pre_base >> strip_tac >>
-     metis_tac[exprSimAttributeTheory.attr_post_value_type]) >>
+  `post_value_type cenv obj = StructT sid` by
+    (drule attr_pre_base >> strip_tac >> drule_all attr_post_value_type >> gvs[]) >>
   Cases_on `vv_loc bvv = LocMemory`
   >- (`w2n (w + n2w (struct_field_offset
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)) =
@@ -79,21 +77,21 @@ QED
 Theorem attribute_selected_vv_post:
   expr_body_pre cenv cx env (Attribute ann obj fld) es0 /\
   eval_expr cx obj es0 = (INL btv,ee) /\
-  vv_post H ctx func cenv cx obj es sa sn s0 ee btv bvv t /\
+  vv_post ctx func cenv cx obj es sa sn s0 ee btv bvv t /\
   eval_operand (vv_operand bvv) t = SOME w /\
   eval_operand dst t = SOME (w + n2w (attr_offset cenv (expr_type obj) (vv_loc bvv) fld)) ==>
   ?tv'. select_result cx (expr_type obj) btv (AttrSubscript fld) ee = (INL tv',ee) /\
-    vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sn s0 ee tv'
+    vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 ee tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) t
 Proof
   strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
   drule attr_pre_base >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule_all attr_post_value_type >> simp[]) >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
-  `post_value_type cenv obj = StructT sid` by
-    metis_tac[exprSimAttributeTheory.attr_post_value_type] >>
   qpat_assum `select_result _ _ _ _ _ = _`
     (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
-  irule attr_vv_post >> conj_tac >- gvs[] >>
+  irule attr_vv_post >> conj_tac >- gs[] >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `btv` >> simp[] >> rpt strip_tac >> gvs[]
 QED
@@ -109,30 +107,27 @@ Theorem attribute_normal_endpoint_ptr:
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
-  vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
+  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
   ptr_vv_ok cx (expr_type obj) btv bvv ee G tn s /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+  ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
   ?tv' G' tn' t.
     select_result cx (expr_type obj) btv (AttrSubscript fld) ee = (INL tv',ee) /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
     t.vs_current_bb = sn.cs_current_bb /\ t.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sn s0 ee tv'
+    vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 ee tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) t /\
-    ghost_inv H d cenv cx ee G' tn' t /\
+    ghost_inv d cenv cx ee G' tn' t /\
     ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee G' tn' t /\
     (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Attribute ann obj fld) dst G' t) /\
     ghost_kept cenv es sa G0 tn0 s0 G' tn'
 Proof
   strip_tac >>
-  `post_value_type cenv obj = expr_type obj` by
-    (drule attr_pre_base >> strip_tac >>
-     metis_tac[exprSimAttributeTheory.attr_post_value_type]) >>
   `op_taint tn (vv_operand bvv) = {}` by
     (Cases_on `bvv` >> gvs[bodyPtrDefsTheory.ptr_vv_ok_def,
        bodyPtrDefsTheory.ptr_val_ok_def, vv_operand_def]) >>
   `?v w. read_result cx btv ee = (INL v,ee) /\
     eval_operand (vv_operand bvv) s = SOME w` by
-    (`vv_holds cenv cx (expr_type obj) btv bvv ee s` by fs[vv_post_def] >>
+    (`vv_holds cenv cx (post_value_type cenv obj) btv bvv ee s` by fs[vv_post_def] >>
      drule attribute_vv_holds_read_operand >> simp[]) >>
   drule_all attribute_add_path_post_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
@@ -151,6 +146,11 @@ Proof
      ?y. Var (STRING #"%" (toString sm.cs_next_var)) = Var y /\
          FLOOKUP G' y = SOME (b,sz)` by
     (rpt strip_tac >> simp[] >> gvs[op_prov_def]) >>
+  `vv_loc bvv = LocCode ==>
+     op_prov G' (Var (STRING #"%" (toString sm.cs_next_var))) = NONE` by
+    (Cases_on `bvv` >>
+     gvs[vv_loc_def, vv_location_def, vv_operand_def, op_prov_def,
+         bodyPtrDefsTheory.ptr_vv_ok_def]) >>
   `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) t =
     SOME (w + n2w (attr_offset cenv (expr_type obj) (vv_loc bvv) fld))` by
     simp[Abbr `t`, eval_operand_def, lookup_var_def, update_var_def,
@@ -176,21 +176,21 @@ Theorem attribute_summary_ok_ptr:
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   gas_marked_exec_ptr D (ctx,func) PG (eval_expr cx obj) (es,s0,G0,tn0)
     marks (INL btv) fe G tn (OK s) /\
-  vv_post H ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv s /\
+  vv_post ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv s /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ghost_inv H d cenv cx (fe with gas_obs := []) G tn s /\
+  ghost_inv d cenv cx (fe with gas_obs := []) G tn s /\
   ptr_vv_ok cx (expr_type obj) btv bvv (fe with gas_obs := []) G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
   gas_summary_ptr_at D (ctx,func) PG marks (eval_expr cx (Attribute ann obj fld))
     (es,s0,G0,tn0)
-    (\res ee HG tt t. ?tv. res = INL tv /\
-      vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sn s0 ee tv
+    (\res ee H tt t. ?tv. res = INL tv /\
+      vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 ee tv
         (LocatedValue ann (mk_ptr dst (vv_loc bvv))) t /\
       t.vs_current_bb = sn.cs_current_bb /\ t.vs_inst_idx = LENGTH sn.cs_current_insts /\
-      ghost_inv H d cenv cx ee HG tt t /\
-      ptr_vv_ok cx ann tv (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee HG tt t /\
-      (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Attribute ann obj fld) dst HG t) /\
-      ghost_kept cenv es sa G0 tn0 s0 HG tt) R
+      ghost_inv d cenv cx ee H tt t /\
+      ptr_vv_ok cx ann tv (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee H tt t /\
+      (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Attribute ann obj fld) dst H t) /\
+      ghost_kept cenv es sa G0 tn0 s0 H tt) R
 Proof
   strip_tac >>
   `eval_expr cx obj (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =

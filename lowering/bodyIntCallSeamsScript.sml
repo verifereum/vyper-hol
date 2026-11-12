@@ -51,12 +51,13 @@ End
    state s0.  t is at the INVOKE, es1 is the source state push_function
    leaves, prev the caller's scopes it saved, penv the parameters' scope
    and rtv the evaluated return type.
-   - Source: the arguments evaluated and read to the values penv binds,
+   - Source: the arguments evaluated to the values penv binds,
      and the lock taken when the callee is nonreentrant; the callee's
      body is call-safe at the pushed context.
    - Code: the call's code as compile_call_intcall_shape gives it: the
-     arguments (sa to st1), the return buffer rbuf if any (st1 to st2),
-     the staging (st2 to st3), the INVOKE of the callee's label at st3
+     return buffer rbuf if any (sa to st2), each argument lowered and
+     staged at the callee's declared parameter type (st2 to st3), the
+     INVOKE of the callee's label at st3
      with the buffer's pointer first when the callee returns through it,
      and after it the results' store into rbuf, up to sb; vv is rbuf's
      located value, or the void call's literal.
@@ -75,12 +76,11 @@ End
      flag matches the call's, the premises of
      compile_internal_prologue_entry hold for argv. *)
 Definition intcall_entry_def:
-  intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
+  intcall_entry H tops ctx func cenv cx tenv name es sa sb vv s0 es0
                 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t <=>
     ~MEM (NONE,name) cx.stk /\
-    (?s1 results t1 s2 vs t2 s3 u t3.
-       eval_expr_results cx es s1 = (INL results,t1) /\
-       read_results cx results s2 = (INL vs,t2) /\
+    (?s1 vs t1 s3 u t3.
+       eval_exprs cx es s1 = (INL vs,t1) /\
        bind_arguments (get_tenv cx) args vs = SOME penv /\
        lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)) /\
     evaluate_type (get_tenv cx) ret = SOME rtv /\
@@ -100,23 +100,23 @@ Definition intcall_entry_def:
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
     locals_kept cenv es0 (es1 with scopes := prev) s0 t /\
-    ?arg_vals st1 st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
+    ?st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
       cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
-      compile_multi_vvs compile_expr cenv es sa = (arg_vals,st1) /\
-      compile_stage_intcall_args cenv arg_vals pvs (MAP expr_type es) st2 =
-        (invoke_args,st3) /\
+      compile_stage_intcall_args compile_expr cenv es pvs
+        (TAKE (LENGTH es) (cenv.ce_func_param_types (nsid_to_string (NONE,name))))
+        st2 = (invoke_args,st3) /\
       lbl = internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
               (nsid_to_string (NONE,name))
               (cenv.ce_func_param_types (nsid_to_string (NONE,name)))
               cenv.ce_is_ctor /\
       (rc = 0 /\ rbs = 0 ==>
-       st2 = st1 /\ arg_ops = invoke_args /\
+       st2 = sa /\ arg_ops = invoke_args /\
        (?u. emit_void INVOKE (Label lbl :: invoke_args) st3 = (u,sb)) /\
        vv = StackValue (cenv.ce_func_return_type (nsid_to_string (NONE,name)))
               (Lit 0w)) /\
       (0 < rc \/ 0 < rbs ==>
        ?rbuf aid off.
-         compile_alloc_buffer (if 0 < rc then 32 * rc else rbs) st1 =
+         compile_alloc_buffer (if 0 < rc then 32 * rc else rbs) sa =
            (rbuf,st2) /\
          vv = LocatedValue
                 (cenv.ce_func_return_type (nsid_to_string (NONE,name)))
@@ -194,7 +194,7 @@ End
    its entry frontier only through the pointers it is passed), not of the
    body's simulation: stmt_frag's post carries no memory frame. *)
 Definition intcall_callee_exit_def:
-  intcall_callee_exit func cenv cx rtv rc (rb:bytes32 option) (n:num)
+  intcall_callee_exit H func cenv cx rtv rc (rb:bytes32 option) (n:num)
                       (t:venom_state) res (ee:evaluation_state) r <=>
     expr_exit res r \/
     ?v ir s'.
@@ -214,30 +214,34 @@ End
    push_function, so any continuation from an intcall_entry state gives
    the whole call. *)
 Theorem intcall_args_frame_setup:
-  !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
+  !tops ctx func cenv cx tenv ty ann name es dflt es0 st0 sa sb vv s0
    mut nr args ret ss rr Q R.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,[],ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
-    (~MEM (NONE,name) cx.stk ==> body_results_ok cx es) /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_ok cx es) /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     gas_admissible (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt))
       expr_vv_res_ok es0 /\
-    stmt_state_rel H ctx func cenv cx es0 s0 /\ ~s0.vs_halted /\
+    (!H. valid_horizon cx st0 H es0.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es0 s0 /\
+       storage_well_formed_on cx es0 (FST H)) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    (!res ee r. expr_exit res r ==> R res ee r) /\
+    (!H res ee r. expr_exit res r ==> R H res ee r) /\
     (!prev penv rtv es1 t.
-       intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-         (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
-       gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut nr ss prev rtv)
-         (es1,t) Q R) ==>
-    gas_outcome F (cx_tops cx) (ctx,func)
+       (!H. valid_horizon cx st0 H es1.storage_trace ==>
+          intcall_entry H tops ctx func cenv cx tenv name es sa sb vv s0 es0
+            (mut,nr,args,ret,ss,rr) prev penv rtv es1 t) /\
+       (?H. valid_horizon cx st0 H es1.storage_trace) ==>
+       gas_outcome F (cx_tops cx) (ctx,func) cx st0
+         (intcall_rest cx name mut nr ss prev rtv) (es1,t) Q R) ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) (es0,s0) Q R
 Proof
   cheat
@@ -252,15 +256,16 @@ QED
    writes there only through rb and its memory parameters' pointers),
    which this seam proves on its own. *)
 Theorem intcall_callee_body_sim:
-  !tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut nr args ret ss rr
-   prev penv rtv es1 t callee entered rc rbs pvs.
+  !tops ctx func cenv cx tenv name es st0 sa sb vv s0 es0 mut nr args ret ss
+   rr prev penv rtv es1 t callee entered rc rbs pvs.
     body_inv tops ctx cenv cx /\
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,[],ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
     body_stmts_ok (cx with stk updated_by CONS (NONE,name)) ss /\
-    intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-      (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       intcall_entry H tops ctx func cenv cx tenv name es sa sb vv s0 es0
+         (mut,nr,args,ret,ss,rr) prev penv rtv es1 t) /\
     gas_invoke_entry (ctx,func) t callee entered /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.
@@ -268,9 +273,9 @@ Theorem intcall_callee_body_sim:
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
-      gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
-        (es1,entered) (\res ee r. F)
-        (intcall_callee_exit func cenv cx rtv rc
+      gas_outcome F (cx_tops cx) (ctx,callee) cx st0
+        (intcall_callee_src cx name ss) (es1,entered) (\H res ee r. F)
+        (\H. intcall_callee_exit H func cenv cx rtv rc
            (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
            sa.cs_next_id t)
 Proof
@@ -282,7 +287,7 @@ QED
    caller's buffer, the frame's cleanup and the cast: the call's
    expr_vv_sim post, or an abort passed on. *)
 Theorem intcall_return_restore:
-  !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
+  !tops ctx func cenv cx tenv ty ann name es dflt es0 st0 sa sb vv s0
    mut nr args ret ss rr prev penv rtv es1 t rc rbs pvs.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
@@ -293,8 +298,9 @@ Theorem intcall_return_restore:
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-      (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       intcall_entry H tops ctx func cenv cx tenv name es sa sb vv s0 es0
+         (mut,nr,args,ret,ss,rr) prev penv rtv es1 t) /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (ctx,func) t callee entered /\
@@ -302,32 +308,31 @@ Theorem intcall_return_restore:
        get_instruction bb t.vs_inst_idx = SOME inst /\
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
-       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
-         (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx rtv rc
+       gas_outcome F (cx_tops cx) (ctx,callee) cx st0
+         (intcall_callee_src cx name ss) (es1,entered) (\H res ee r. F)
+         (\H. intcall_callee_exit H func cenv cx rtv rc
             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
             sa.cs_next_id t)) ==>
-    gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut nr ss prev rtv)
-      (es1,t)
-      (\res ee t'. ?tv. res = INL tv /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
+      (intcall_rest cx name mut nr ss prev rtv) (es1,t)
+      (\H res ee t'. ?tv. res = INL tv /\
          vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
            es0 sa sb s0 ee tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r)
 Proof
   cheat
 QED
 
 (* The source facts an intcall_entry state carries. *)
 Theorem intcall_entry_source:
-  intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
+  intcall_entry H tops ctx func cenv cx tenv name es sa sb vv s0 es0
     (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
   ~MEM (NONE,name) cx.stk /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
-  ?s1 results t1 s2 vs t2 s3 u t3.
-    eval_expr_results cx es s1 = (INL results,t1) /\
-    read_results cx results s2 = (INL vs,t2) /\
+  ?s1 vs t1 s3 u t3.
+    eval_exprs cx es s1 = (INL vs,t1) /\
     bind_arguments (get_tenv cx) args vs = SOME penv /\
     lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)
 Proof

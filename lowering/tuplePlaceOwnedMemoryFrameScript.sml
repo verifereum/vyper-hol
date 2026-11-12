@@ -114,10 +114,7 @@ Finalise tuple_place_nonword_size_effect
 Theorem tuple_place_owned_memory_forward_frame[local]:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     loc = LocMemory /\ ~is_word_type dty /\
-    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
-      (case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-       | _ => NONE) (type_memory_bytes cenv dty) sa = ((),sb) /\
+    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\
@@ -402,10 +399,7 @@ Finalise tuple_place_owned_memory_forward_frame
 Theorem tuple_place_owned_memory_run_frame:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     loc = LocMemory /\
-    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
-      (case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-       | _ => NONE) (type_memory_bytes cenv dty) sa = ((),sb) /\
+    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\
@@ -495,7 +489,9 @@ Resume tuple_place_owned_memory_run_frame[word]:
                     `typed_val_to_w256 stv v`] >> simp[]) >>
   qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[stmt_state_rel_inst_idx, lookup_var_def] >>
-  rpt strip_tac >> gvs[] >> simp[Abbr `u`] >>
+  rpt strip_tac >> gvs[] >> simp[Abbr `u`]
+  >~ [`FLOOKUP (mstore _ _ _).vs_vars _`]
+  >- simp[venomStateTheory.mstore_def] >>
   irule mstore_mem_bytes_at_disjoint >>
   drule_all abi_word_type_size >> simp[]
 QED
