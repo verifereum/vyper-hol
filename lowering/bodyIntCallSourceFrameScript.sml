@@ -77,6 +77,29 @@ Proof
   simp[evaluation_state_component_equality] >> metis_tac[]
 QED
 
+Theorem eval_exprs_frame_from_members[local]:
+  (!e. MEM e es ==> !s r t. eval_expr cx e s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) ==>
+  !s r t. eval_exprs cx es s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>
+Proof
+  Induct_on `es` >> simp[Once evaluate_def, return_def] >>
+  rpt gen_tac >> strip_tac >>
+  `!s r t. eval_expr cx h s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>` by
+    (first_x_assum (qspec_then `h` mp_tac) >> simp[]) >>
+  `!s r t. eval_exprs cx es s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>` by
+    (qpat_x_assum `_ ==> !s r t. eval_exprs _ _ _ = _ ==> _` match_mp_tac >>
+     rpt strip_tac >>
+     qpat_x_assum `!e. _` (qspec_then `e` mp_tac) >> simp[]) >>
+  qpat_x_assum `!e. e = h \/ MEM e es ==> _` kall_tac >>
+  qpat_x_assum `_ ==> !s r t. eval_exprs _ _ _ = _ ==> _` kall_tac >>
+  rpt strip_tac >> gvs[bind_def, AllCaseEqs(), return_def] >>
+  imp_res_tac read_result_state >> gvs[] >>
+  metis_tac[outcomes_frame_trans]
+QED
+
 Theorem outcomes_frame_precompile[local]:
   precompile_call_success bt s = (r,t) ==>
   t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>
