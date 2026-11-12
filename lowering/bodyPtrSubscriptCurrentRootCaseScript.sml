@@ -33,7 +33,8 @@ QED
 
 Theorem dynamic_array_subscript_compile:
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sc) /\
-  place_type cenv obj = ValPT (ArrayT et (Dynamic cap)) ==>
+  place_type cenv obj = ValPT (ArrayT et (Dynamic cap)) /\
+  ~copies_subscript_base cenv obj idx ==>
   ?bvv sb iop sk q.
     compile_expr cenv ty obj sa = (bvv,sb) /\
     lower_value compile_expr cenv ty idx sb = (iop,sk) /\
@@ -90,13 +91,14 @@ Proof
 QED
 
 Theorem subscript_source_sequence:
+  ~subscript_reads_base cx obj idx ==>
   eval_expr cx (Subscript ann obj idx) =
   bind (bind (eval_expr cx obj)
     (\base. bind (bind (eval_expr cx idx) (read_result cx))
       (\v. return (base,v))))
     (\bv. select_result cx (expr_type obj) (FST bv) (ValueSubscript (SND bv)))
 Proof
-  simp[FUN_EQ_THM, Once evaluate_def, bind_def, return_def] >>
+  strip_tac >> simp[FUN_EQ_THM, Once evaluate_def, bind_def, return_def] >>
   gen_tac >> Cases_on `eval_expr cx obj x` >> Cases_on `q` >> simp[] >>
   Cases_on `eval_expr cx idx r` >> Cases_on `q` >> simp[] >>
   Cases_on `read_result cx x'' r''` >> Cases_on `q` >> simp[]

@@ -131,7 +131,7 @@ QED
 
 
 Theorem literal_empty_tuple_loop:
-  compile_make_tuple compile_expr ce args (Var root) 0 sm = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) 0 sm = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
   literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
@@ -165,7 +165,7 @@ QED
 Theorem literal_allocated_tuple_outcome:
   compile_alloc_buffer (type_memory_size_list tvs) sa = (buf,sm) /\
   buf.buf_operand = Var root /\
-  compile_make_tuple compile_expr ce args (Var root) 0 sm = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) 0 sm = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
   stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
