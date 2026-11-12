@@ -2052,7 +2052,10 @@ Proof
     (rpt strip_tac >>
      `calldata_prepare_pre H' ctx func cenv cx es es1 sf s0 sa sg n go entry` by
        fs[calldata_prepare_pre_def] >>
-     drule_all (Q.INST [`H` |-> `H'`] calldata_prepare_run) >> strip_tac >>
+     qpat_x_assum `calldata_prepare_pre H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then (Pat `calldata_prepare_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+          calldata_prepare_run) >>
+     disch_then drule_all >> strip_tac >>
      gvs[calldata_prepared_def]) >>
   qexists_tac `t` >> simp[calldata_prepared_inst_idx, stmt_state_rel_inst_idx]
 QED
@@ -2742,7 +2745,10 @@ Proof
         (rpt strip_tac >>
          `raw_call_buffer_frame H' ctx func cenv cx es0 es sf s0 saved ai w n s` by
            fs[raw_call_buffer_frame_def] >>
-         drule_all (Q.INST [`H` |-> `H'`] (SRULE [] raw_call_oracle_framed_step)) >>
+         qpat_x_assum `raw_call_buffer_frame H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (mp_then (Pat `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+              (SRULE [] raw_call_oracle_framed_step)) >>
+         disch_then drule_all >>
          strip_tac >>
          gvs[raw_call_buffer_frame_def]) >>
       qexists_tac `u` >> simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
@@ -3961,7 +3967,10 @@ Proof
     (rpt strip_tac >>
      `raw_call_buffer_frame H' ctx func cenv cx es0 es sf s0 saved ai w n s` by
        fs[raw_call_buffer_frame_def] >>
-     drule_all (Q.INST [`H` |-> `H'`] calldata_nonrevert_positive_run) >>
+     qpat_x_assum `raw_call_buffer_frame H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then (Pat `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+          calldata_nonrevert_positive_run) >>
+     disch_then drule_all >>
      strip_tac >> gvs[] >>
      qpat_x_assum `!i. _` (qspec_then `t.vs_inst_idx` mp_tac) >>
      simp[venomStateTheory.venom_state_component_equality]) >>
