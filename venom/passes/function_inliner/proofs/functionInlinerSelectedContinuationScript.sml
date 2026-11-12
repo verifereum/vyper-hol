@@ -7,7 +7,9 @@ Ancestors
   functionInlinerSelectedParameterDescriptors functionInlinerParameterLocations
   functionInlinerOccurrences functionInlinerLocation functionInlinerActivation
   functionInlinerPairedSelection functionInlinerRoutedProvenance functionInlinerEnvelopes
-  functionInlinerRouteKeys
+  functionInlinerRouteKeys functionInlinerLiveInvariant functionInlinerOperationalCuts
+  functionInlinerParameterAncestry functionInlinerParameterSavedReads
+  functionInlinerFrame functionInlinerSimulation
   functionInlinerSiteLayout functionInlinerReachableCuts functionInlinerDefs venomInst list
 
 Theorem inline_parameter_boundary_path_append:
@@ -199,4 +201,22 @@ Proof
   simp[inline_parameter_boundary_path_def] >>
   irule inline_selected_site_successor_boundary >>
   metis_tac[inline_annotated_edit_fetch_facts]
+QED
+
+Theorem inline_live_stack_source_index:
+  inline_live_stack C cert root ((p,a,route,snap)::rest) frame ==>
+  inline_live_stack C cert root
+    ((p,a,route,snap with ils_state := snap.ils_state with vs_inst_idx := i)::rest) frame
+Proof
+  strip_tac >> fs[inline_live_stack_def] >>
+  `inline_owner_storage cert
+     ((p,a,route,snap with ils_state := snap.ils_state with vs_inst_idx := i)::rest)
+     (frame with ipf_state := frame.ipf_state with vs_inst_idx := frame.ipf_state.vs_inst_idx)` by
+    (irule inline_owner_storage_index >> simp[]) >>
+  gvs[inline_live_stack_def, inline_parameter_owners_cons,
+    inline_shared_frame_def, inline_caller_residual_def,
+    stateFrameTheory.execution_frame_def,
+    fetch "venomState" "venom_state_component_equality",
+    fetch "functionInlinerActivation" "inline_physical_frame_component_equality"] >>
+  metis_tac[inline_parameter_saved_reads_head_replace]
 QED
