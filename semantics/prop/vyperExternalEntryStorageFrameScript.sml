@@ -21,7 +21,7 @@ Proof
   metis_tac[transfer_value_preserves_storage_well_formed_on]
 QED
 
-Theorem unlock_if_nr_preserves_storage_well_formed_on:
+Theorem unlock_if_nr_preserves_storage_well_formed_on[local]:
   regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
   storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H u.storage_trace /\
@@ -65,7 +65,7 @@ Proof
   drule_all acquire_lock_preserves_storage_well_formed_on >> simp[]
 QED
 
-Theorem initial_state_abstract_machine_storage_well_formed_on:
+Theorem initial_state_abstract_machine_storage_well_formed_on[local]:
   storage_well_formed_on cx
     (initial_state (abstract_machine_from_state srcs exps layouts st) []) regions <=>
   storage_well_formed_on cx st regions

@@ -3,7 +3,7 @@ Theory vyperConstantsStorageFrame
 Ancestors
   vyperInterpreter vyperState
 
-Theorem evaluate_module_constants_trace_machine_frame:
+Theorem evaluate_module_constants_trace_machine_frame[local]:
   !mods cx am addr am' obs.
     evaluate_module_constants_trace cx am addr mods = (SOME am',obs) ==>
     am' = (am with immutables := am'.immutables)

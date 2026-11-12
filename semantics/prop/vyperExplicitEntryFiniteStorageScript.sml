@@ -8,7 +8,7 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem checked_explicit_locked_body_storage_well_formed_on:
+Theorem checked_explicit_locked_body_storage_well_formed_on[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
@@ -53,7 +53,7 @@ Proof
   strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem checked_explicit_defaults_body_storage_well_formed_on:
+Theorem checked_explicit_defaults_body_storage_well_formed_on[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\

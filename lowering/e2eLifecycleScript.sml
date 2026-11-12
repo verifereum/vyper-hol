@@ -299,8 +299,6 @@ QED
 
 (* ===== Initial storage ===== *)
 
-(* Zero storage decodes on every region. *)
-
 (* deploy_storage_ok's storage_well_formed_on conjunct at a fresh target. *)
 Theorem deploy_empty_storage_well_formed_on:
   (lookup_account tx.target am.accounts).storage = empty_storage /\
