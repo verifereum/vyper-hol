@@ -12,7 +12,7 @@ Ancestors
   bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
   augAssignPlaceMemoryTarget augAssignPlaceMemoryContinuation
   augAssignPlaceSuffixMemory augAssignPlaceRhsContinuation augAssignPlaceTopMemory
-  augAssignPlaceCompileMemory augAssignPlaceLoadContinuation
+  augAssignPlaceCompileMemory augAssignPlaceLoadContinuation bodyAugPlaceTarget
   augAssignPlaceSourceMemory augAssignPlaceCompositeMemory
 
 Theorem body_augassign_place_mem_case:
@@ -71,6 +71,12 @@ Proof
      simp[Abbr `bt`] >>
    `target_indices_pre cenv cx env bt` by
      metis_tac[bodyAugAssignOtherTheory.augassign_target_pre] >>
+   `?info. supported_target_info tops bindings bt = SOME info` by
+     metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_stmt_target_info] >>
+   `EVERY (supported_expr tops) (target_indices bt)` by
+     (`IS_SOME (supported_target_info tops bindings bt)` by simp[] >>
+      drule bodyAugPlaceTargetTheory.aug_place_supported_indices >>
+      strip_tac >> simp[listTheory.EVERY_MEM] >> first_assum ACCEPT_TAC) >>
    `target_sim_mem ctx func cenv cx env bt es` by
      (irule body_target_sim_mem >>
       simp[targetPlaceSimTheory.target_pre_def] >> metis_tac[]) >>
