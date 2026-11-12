@@ -74,7 +74,7 @@ QED
 Theorem compile_for_dynarray_frag_mem:
   !d ctx func cx cenv lctx RetQ ty id et c n name arr_ptr arr_sz stmts tv vs es P.
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Dynamic c)) name))
-          (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+          (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
   LENGTH vs <= c /\ c <= n /\ c < dimword (:256) /\
   evaluate_type (get_tenv cx) et = SOME tv /\
   type_memory_bytes cenv et = type_memory_size tv /\
@@ -184,7 +184,7 @@ Resume compile_for_dynarray_frag_mem[loop]:
      qpat_x_assum `!x. not_fresh_at st1 x ==> not_fresh_at sb0 x /\ _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   `gas_outcome T (cx_tops cx) (ctx,func)
-     (eval_for cx tv id stmts (DROP 0 vs)) (es,cc)
+     (eval_for cx tv id stmts (MAP Value (DROP 0 vs))) (es,cc)
      (\res ee t. res = INL () /\
        array_round_done d ctx func cenv cx st1 cc exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
@@ -231,7 +231,7 @@ Resume compile_for_dynarray_frag_mem[public]:
   `gas_marked_path T ctx func s0 0 (OK cc)` by
     (irule gas_marked_path_from_mem >> simp[]) >>
   `gas_outcome T (cx_tops cx) (ctx,func)
-     (eval_for cx tv id stmts vs) (es,s0)
+     (eval_for cx tv id stmts (MAP Value vs)) (es,s0)
      (\res ee t. res = INL () /\
        array_round_done d ctx func cenv cx st1 cc exit ee t)
      (\res ee rr. ?ex. res = INR ex /\

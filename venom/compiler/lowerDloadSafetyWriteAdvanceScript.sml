@@ -39,7 +39,7 @@ Proof
         pure_rewrite_tac[ld_sync_def] >> simp[] >> strip_tac >> simp[]) >> simp[]) >>
   drule_all (SRULE [GSYM arithmeticTheory.ADD1] (Q.INST [`X` |-> `[inst]`] ld_envelope_expansion_next)) >>
   strip_tac >>
-  `G = ld_erase A o_f f.lf_H` by
+  `ld_ghost_ok (dyn_floor C vs0) A f.lf_H G` by
     (drule ld_sync_ghosts >> simp[]) >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
     (qpat_x_assum `MEM inst.inst_opcode _` mp_tac >>
