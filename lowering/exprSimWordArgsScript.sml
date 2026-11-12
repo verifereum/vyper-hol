@@ -59,7 +59,8 @@ End
 
 Theorem eval_expr_builtin_cases:
   !cx ann bt args es res es'.
-    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ bt <> Bop In /\ bt <> Bop NotIn /\
+    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
+    bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\
     (do r <- eval_expr cx (Builtin ann bt args); read_result cx r od) es = (res, es') ==>
     (?exc. eval_exprs cx args es = (INR exc, es') /\ res = INR exc) \/
@@ -112,7 +113,7 @@ Proof
 QED
 
 Theorem eval_expr_builtin_action:
-  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
   bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) ==>
   bind (eval_expr cx (Builtin ann bt args)) (read_result cx) =
@@ -877,7 +878,7 @@ Proof
 QED
 
 Theorem word_builtin_marked_admissible:
-  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
   bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_admissible (bind (eval_expr cx (Builtin ann bt args)) (read_result cx))
@@ -897,7 +898,7 @@ Proof
 QED
 
 Theorem word_builtin_exempt_cert:
-  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
   bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_exempt_cert memory tops (ctx,func)
@@ -926,7 +927,8 @@ QED
 
 Theorem compile_word_builtin_sim:
   !ctx func cenv cx ty ann bt args arg_ty Inv es code.
-    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ bt <> Bop In /\ bt <> Bop NotIn /\
+    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
+    bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
     (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\

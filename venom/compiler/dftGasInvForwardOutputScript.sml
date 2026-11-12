@@ -1,6 +1,7 @@
 Theory dftGasInvForwardOutput
 Ancestors
-  dftGasInvForwardInterval dftNonSsa dftCallChecks
+  dftScheduleOrder
+  dftGasInvForwardInterval dftNonSsa
   dftGasInvStackLineage dftRunRel dftDefs dftStructural dftWf dftTopoSort
   dftCorrectness dftIdempotent venomWf venomInst contextCodegenRel passSharedDefs
   venomEffects arithmetic list

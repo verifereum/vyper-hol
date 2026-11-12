@@ -16,6 +16,7 @@ Ancestors
   (* branch_opt's output checker on a sample of the parity fixtures'
      compiled functions *)
   branchOptCheckCorpus
+  evalCompilerGettersConstantsParity evalCompilerGettersConstantsRegression
   (* contracts of the lowering's interfaces on concrete inputs *)
   targetPlaceTest
   abiEncodeSnapshotTest

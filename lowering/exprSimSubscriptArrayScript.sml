@@ -42,6 +42,7 @@ Theorem compile_subscript_array_framed_base_case:
               expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
+    ~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
     (!t r t'. eval_expr cx idx t = (INL r, t') ==>
               t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
     (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
@@ -106,7 +107,8 @@ Resume compile_subscript_array_framed_base_case[base_exit]:
   qexists_tac `marks` >> disj1_tac >>
   simp[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INR exc`,`es_end`,`r`] >> simp[] >>
-  pure_once_rewrite_tac[exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
   conj_tac
   >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
       first_assum ACCEPT_TAC) >> fs[]
@@ -114,7 +116,8 @@ QED
 Resume compile_subscript_array_framed_base_case[base_exempt]:
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
-  pure_once_rewrite_tac[exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
   pure_rewrite_tac[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule gasExemptCertTheory.gas_exempt_cert_error_result >>
   first_assum ACCEPT_TAC
@@ -133,7 +136,8 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
   qpat_x_assum `s0.vs_current_bb = _` kall_tac >>
   qpat_x_assum `s0.vs_inst_idx = _` kall_tac >>
   pure_rewrite_tac[GSYM gasOutcomeTheory.gas_outcome_def] >>
-  irule framed_array_after_base >> simp[] >>
+  qpat_assum `~subscript_reads_base _ _ _`
+    (irule o MATCH_MP framed_array_after_base) >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >> simp[] >>
   goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >>
   conj_tac >- suspend "base_suffix" >>
@@ -254,7 +258,7 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
      >>~- ([`is_int_type (expr_type idx)`], Cases_on `expr_type idx` >> gvs[vyperTypeSystemTheory.is_int_type_def] >>
          rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
          gvs[vyperTypeSystemTheory.is_int_type_def, compileEnvTheory.is_word_type_def]) >>
-     drule type_place_expr_vtype_annotation >> simp[] >> strip_tac >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >> simp[] >> strip_tac >>
      Cases_on `vt` >> gvs[vtype_annotation_ok_def, subscript_vtype_def] >>
      Cases_on `expr_type idx` >> gvs[vyperTypeSystemTheory.is_int_type_def] >>
          rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
@@ -366,11 +370,15 @@ Finalise compile_subscript_array_framed_base_case
 Theorem compile_subscript_array_place_base_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if subscript_reads_base cx obj idx
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
-    ~((!t r t'. eval_expr cx idx t = (INL r, t') ==>
+    ~(~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+      (!t r t'. eval_expr cx idx t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
       (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
       ((~cenv.ce_is_ctor /\
@@ -386,14 +394,18 @@ QED
 Theorem compile_subscript_array_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if subscript_reads_base cx obj idx
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt strip_tac >>
-  Cases_on `(!t r t'. eval_expr cx idx t = (INL r, t') ==>
+  Cases_on `~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+            (!t r t'. eval_expr cx idx t = (INL r, t') ==>
                       t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
             (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
             ((~cenv.ce_is_ctor /\
@@ -401,7 +413,14 @@ Proof
              ((?n. bd = Fixed n) /\
               (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
               !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory))`
-  >- (irule compile_subscript_array_framed_base_case >> asm_rewrite_tac[] >>
+  >- (`!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+                expr_sim_case nocalls ctx func cenv cx idx` by
+        (rpt strip_tac >>
+         qpat_x_assum `!s tv t s' tv' t'. _`
+           (qspecl_then [`s`, `tv`, `t`, `t`, `tv`, `t`] mp_tac) >>
+         fs[vyperStateTheory.return_def]) >>
+      qpat_x_assum `!s tv t s' tv' t'. _` kall_tac >>
+      irule compile_subscript_array_framed_base_case >> asm_rewrite_tac[] >>
       metis_tac[]) >>
   irule compile_subscript_array_place_base_case >> asm_rewrite_tac[] >>
   qexistsl [`bd`, `et`] >> asm_rewrite_tac[]

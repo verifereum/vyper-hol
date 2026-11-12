@@ -9,6 +9,9 @@ Ancestors bodyPtrHashBuiltinsShaCase bodyPtrHashBuiltinsShaStringInput
 (* Common concrete input preparation, without converting the source value. *)
 fun hash_string_sha256_input_tac semantic_run_tac g = (
   drule_all hash_string_post_view >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     simp[is_bytestring_type_def]) >>
   `~is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all hash_string_operand >> strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by

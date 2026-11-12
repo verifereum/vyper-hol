@@ -49,6 +49,20 @@
       "runtime_sha256": "707b4bad77aadfab040e92ae27ad96e3a8874610976963c96091c364e5e7a9c2",
       "source": "sources/pop_refill.vy",
       "source_sha256": "54d8d55c0a555b88bb0e87a11353e4a14aa2396e22b3e86d6931910a636ddc57"
+    },
+    "subscript_base_copy": {
+      "deploy_sha256": "44ff44b291b95bafbdb93e93d01eef8fafdf7cd2d00f32fba7dda2d66357ed83",
+      "frontend_sha256": "7cecfe81d31b61a77ad98584e9366797fe791304bebadb62b0647b19e09b007d",
+      "runtime_sha256": "7b42e69d3a3c4530af17909518bb1520ec1d8946b8a1992e6341e508aca4eeb9",
+      "source": "sources/subscript_base_copy.vy",
+      "source_sha256": "d67d81261609d1daf1a96b310a7acf5ca5ed1dea8ec18d51305a37f499a9db9f"
+    },
+    "subscript_base_live": {
+      "deploy_sha256": "6189009fe4991a0f04f91a9f7891882ea4b7dc6b9963f61c62c6a53034ccbad6",
+      "frontend_sha256": "c708e9fec7fba164c5355d39f269c61c018047989168a4adf4ff9b3c1e2f09ed",
+      "runtime_sha256": "19267fc303e55f2a03b2a0ea3d01e8f15e82f5abf64b72883901dc086a62e152",
+      "source": "sources/subscript_base_live.vy",
+      "source_sha256": "1f330f588e4ecfc0be5470a36946a994ad0187cfc74fb3c6abd7e664723778e5"
     }
   },
   "producer": "pinned Python Vyper",

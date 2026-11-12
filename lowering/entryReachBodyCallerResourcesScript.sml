@@ -8,18 +8,6 @@ Ancestors
   compileVyper compileEnv moduleLowering abiEncoderWindowContract fragExec
   finite_map words list arithmetic
 
-Theorem caller_address_extends[local]:
-  emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] allocated = (head,after_head) /\
-  (if dyn then ?offset after_load.
-    emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
-    emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
-   else src = head /\ first = after_head) ==>
-  cs_extends allocated first
-Proof
-  strip_tac >> Cases_on `dyn` >> gvs[] >>
-  imp_res_tac emit_op_extends_next_var >> metis_tac[cs_extends_trans]
-QED
-
 Theorem caller_singleton_compiler_shell:
   compile_register_positional_args ce [(name,prim,dyn,sz,info)] off st = (cef,last) /\
   FLOOKUP ce.ce_vars name = SOME loc /\ var_location_memory_size loc = SOME n /\
@@ -28,9 +16,10 @@ Theorem caller_singleton_compiler_shell:
     compile_alloc_buffer n st = (buf,allocated) /\
     FLOOKUP cef.ce_vars name = SOME (PtrVar buf.buf_operand n) /\
     emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] allocated = (head,after_head) /\
-    (if dyn /\ ~prim then ?offset after_load.
+    (if dyn /\ ~prim then ?offset after_load after_src.
       emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
-      emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
+      emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+      compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
      else src = head /\ first = after_head) /\
     compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     fn_has_code st allocated fn /\ fn_has_code allocated first fn /\ fn_has_code first last fn /\
@@ -43,7 +32,8 @@ Proof
     simp[var_location_decode_operand_def] >>
   drule_all registration_decoder_prelude >> strip_tac >>
   `cs_extends st allocated` by metis_tac[compile_alloc_buffer_extends] >>
-  `cs_extends allocated first` by (irule caller_address_extends >> metis_tac[]) >>
+  `cs_extends allocated first` by
+    (drule_all registration_address_prelude_bounds >> simp[]) >>
   `cs_extends first last` by
     metis_tac[cs_appends_def, cj 1 cs_appends_abi_decode_mutual] >>
   `abi_decoder_code first last` by

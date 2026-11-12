@@ -1,11 +1,11 @@
 (*
  * Augmented assignment to a field or an element of a storage or transient
- * variable with pure indices (#637).  The current word is loaded by SLOAD
- * or TLOAD at the place's slot, combined with the right-hand side, and
- * stored back.  With pure indices the target's evaluation leaves storage
- * unchanged, so the place's slots are in range and live
- * (aug_place_pure_target_storage_range, _live) and the load reads the
- * source's current value (aug_place_storage_load_ready).
+ * variable (#637), whatever the indices do.  The current word is loaded by
+ * SLOAD or TLOAD at the place's slot, combined with the right-hand side,
+ * and stored back.  The place's slots are in range and live in the storage
+ * after the target's evaluation (aug_place_target_storage_ready, from
+ * storage_layout_safe and contract_storage_well_formed in expr_sim_inv), and
+ * the load reads the source's current value (aug_place_storage_load_ready).
  *
  * TOP-LEVEL:
  *   compile_augassign_place_storage_case
@@ -14,7 +14,7 @@ Theory stmtSimAugAssignPlaceStorage
 Ancestors
   valueEncodingProps
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
-  vyperStorageLayoutSafety vyperLookupStorage
+  vyperStorageLayoutSafety vyperLookupStorage vyperScopePreservation
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
   stmtSimIf stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
@@ -28,6 +28,7 @@ Ancestors
   vyperTypeEnvPreservation bodySimExprCases bodyStoragePreservation
   vyperCallOutcomeStorage vyperTypeStoragePreservation
   stmtSimAssignStorage supportedDecls vyperTypeContractStaticMaps
+  vyperStoragePlaceProvenance vyperPlaceStoragePreservation accountsRelProps
   vyperTypeContract compileVyper supportedTypes stmtSimAssignAttr
   stmtSimAssignStorageCopy
   stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
@@ -365,448 +366,6 @@ Proof
   qexists_tac `tv` >> simp[]
 QED
 
-Theorem aug_place_precompile_storage:
-  precompile_call_success bt s = (r,s') ==>
-  get_storage cx s' tr = get_storage cx s tr
-Proof
-  simp[precompile_call_success_def] >>
-  Cases_on `precompile_builtin bt` >>
-  gvs[return_def, check_def, assert_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> Cases_on `tr` >> gvs[vyperStorageBackendTheory.get_storage_def]
-QED
-
-Theorem aug_place_singleton_storage:
-  (!r s'. eval_exprs cx [e] s = (r,s') ==>
-     get_storage cx s' tr = get_storage cx s tr) /\
-  eval_expr cx e s = (r,s') ==>
-  get_storage cx s' tr = get_storage cx s tr
-Proof
-  strip_tac >>
-  `?r'. eval_exprs cx [e] s = (r',s')` by
-    (Cases_on `r`
-     >- (rename1 `eval_expr cx e s = (INL tv,s')` >>
-         simp[evaluate_def, bind_def, return_def] >>
-         Cases_on `read_result cx tv s'` >>
-         drule read_result_state >> strip_tac >> gvs[] >>
-         rename1 `read_result cx tv s' = (rr,s')` >>
-         Cases_on `rr` >> simp[])
-     >> simp[evaluate_def, bind_def]) >>
-  metis_tac[]
-QED
-
-Theorem aug_place_pure_storage_mutual:
-  (!tops e. supported_pure_expr tops e ==>
-    !cx s r s' tr. eval_expr cx e s = (r,s') ==>
-      get_storage cx s' tr = get_storage cx s tr) /\
-  (!tops es. supported_pure_exprs tops es ==>
-    !cx s r s' tr. eval_exprs cx es s = (r,s') ==>
-      get_storage cx s' tr = get_storage cx s tr) /\
-  (!tops fs. supported_pure_fields tops fs ==>
-    !cx s r s' tr. eval_exprs cx (MAP SND fs) s = (r,s') ==>
-      get_storage cx s' tr = get_storage cx s tr) /\
-  (!tops e. supported_place_expr tops e ==>
-    !cx s r s' tr. eval_expr cx e s = (r,s') ==>
-      get_storage cx s' tr = get_storage cx s tr)
-Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def] >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac
-  >~ [`eval_expr cx (Name ty name) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
-  >~ [`eval_expr cx (Literal ty lit) s = (r,s')`]
-  >- (gvs[evaluate_def, return_def])
-  >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
-  >~ [`eval_expr cx (IfExp ty e e' e'') s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
-     imp_res_tac read_result_state >> imp_res_tac vyperStatePreservationTheory.conditional_result_state >>
-     gvs[return_def, raise_def] >>
-     rpt (CHANGED_TAC (gvs[AllCaseEqs(), COND_RATOR, raise_def])) >>
-     qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-       (drule_then assume_tac) >>
-     first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
-  >~ [`eval_expr cx (StructLit ty id fs) s = (r,s')`]
-  >- (PairCases_on `id` >> gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-      metis_tac[])
-  >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-      imp_res_tac read_result_state >>
-      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-        (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_expr cx (Attribute ty e fld) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_expr cx (Builtin ty blt es) s = (r,s')`]
-  >- (Cases_on `blt = Len`
-      >- (gvs[] >> Cases_on `es` >>
-          gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
-          rename1 `supported_pure_exprs tops (h::t)` >> Cases_on `t` >>
-          gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
-          `!cx s r s' tr. eval_expr cx h s = (r,s') ==>
-             get_storage cx s' tr = get_storage cx s tr` by
-            (rpt strip_tac >> irule aug_place_singleton_storage >>
-             goal_assum (drule_at Any) >> metis_tac[]) >>
-          gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
-              assert_def, return_def, raise_def, AllCaseEqs()] >>
-          imp_res_tac vyperStatePreservationTheory.result_array_length_state >>
-          gvs[] >> first_x_assum (drule_then assume_tac) >> simp[])
-      >> Cases_on `blt = Env MsgGas`
-      >- (Cases_on `es` >> gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
-          gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
-              assert_def, return_def, raise_def, AllCaseEqs()] >>
-          imp_res_tac vyperStatePreservationTheory.next_gas_reading_state >>
-          Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def])
-      >> Cases_on `blt = Bop In \/ blt = Bop NotIn`
-      >> gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
-             assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
-             lift_option_type_def, vyperMiscTheory.option_CASE_rator,
-             AllCaseEqs()] >>
-      gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac aug_place_precompile_storage >>
-      gvs[return_def, raise_def] >>
-      metis_tac[])
-  >~ [`eval_expr cx (TypeBuiltin ty blt target es) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
-          assert_def, return_def, raise_def, lift_sum_def, AllCaseEqs()] >>
-      gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_exprs cx (e::es) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-      imp_res_tac read_result_state >> gvs[] >>
-      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-        (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_exprs cx (e::es) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-      imp_res_tac read_result_state >> gvs[] >>
-      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-        (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_expr cx (Name ty name) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
-  >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
-  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
-  >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-      imp_res_tac read_result_state >>
-      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
-        (drule_then assume_tac) >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >~ [`eval_expr cx (Attribute ty e fld) s = (r,s')`]
-  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-      first_x_assum (drule_then assume_tac) >> simp[])
-  >> gvs[evaluate_def, return_def]
-QED
-
-Theorem aug_place_pure_eval_storage:
-  supported_pure_expr tops e /\ eval_expr cx e s = (r,s') ==>
-  get_storage cx s' tr = get_storage cx s tr
-Proof
-  metis_tac[aug_place_pure_storage_mutual]
-QED
-
-Theorem aug_place_pure_index_storage:
-  supported_pure_expr tops e /\
-  (do result <- eval_expr cx e; read_result cx result od) s = (r,s') ==>
-  get_storage cx s' tr = get_storage cx s tr
-Proof
-  strip_tac >>
-  gvs[bind_def, AllCaseEqs()] >>
-  metis_tac[aug_place_pure_eval_storage, read_result_state, raise_def]
-QED
-
-Theorem aug_place_dead_array_selected:
-  i < n /\ (dyn ==> i < w2n (lookup_storage (n2w bs) st)) /\
-  c = (if dyn then bs+1 else bs) + i * type_slot_size tv /\
-  c <= j /\ j < c + type_slot_size tv /\
-  dead_bytes st bs (ArrayTV tv (if dyn then Dynamic n else Fixed n)) j b ==>
-  dead_bytes st c tv j b
-Proof
-  Cases_on `dyn` >> simp[dead_bytes_def] >> rpt strip_tac >> gvs[] >>
-  rename1 `h < n` >>
-  `h = i` suffices_by (strip_tac >> gvs[]) >>
-  spose_not_then assume_tac >>
-  `bs + h * type_slot_size tv + type_slot_size tv <= bs + i * type_slot_size tv \/
-   bs + i * type_slot_size tv + type_slot_size tv <= bs + h * type_slot_size tv` by
-    metis_tac[aug_place_cells_disjoint] >>
-  gvs[AllCaseEqs()] >>
-  imp_res_tac accountsRelPropsTheory.dead_bytes_range >>
-  gvs[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac
-QED
-
-Theorem aug_place_storage_read_live_array:
-  storage_read_live cx tr st w (ArrayTV tv (if dyn then Dynamic n else Fixed n)) /\
-  i < n /\ (dyn ==> i < w2n (lookup_storage w st)) ==>
-  storage_read_live cx tr st
-    (w + n2w ((if dyn then 1 else 0) + i * type_slot_size tv)) tv
-Proof
-  strip_tac >> Cases_on `type_slot_size tv = 0`
-  >- (simp[storage_read_live_def] >> rpt strip_tac >>
-      qspec_then `w + n2w (if dyn then 1 else 0)` mp_tac wordsTheory.w2n_lt >>
-      decide_tac) >>
-  `i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
-    (`(i+1) * type_slot_size tv <= n * type_slot_size tv` by
-       simp[arithmeticTheory.LE_MULT_RCANCEL] >>
-     pop_assum mp_tac >>
-     pure_rewrite_tac[arithmeticTheory.RIGHT_ADD_DISTRIB,
-                      arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
-  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
-  rewrite_tac[storage_read_live_def] >> strip_tac >>
-  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
-  `w2n w + ((if dyn then 1 else 0) + i * type_slot_size tv) < dimword (:256)` by
-    (Cases_on `dyn` >> gvs[vyperValueTheory.type_slot_size_def]) >>
-  `w2n (w + n2w ((if dyn then 1 else 0) + i * type_slot_size tv)) =
-   w2n w + ((if dyn then 1 else 0) + i * type_slot_size tv)` by
-    (Cases_on `dyn` >> gvs[] >>
-     simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w,
-          arithmeticTheory.LESS_MOD] >> decide_tac) >>
-  conj_tac >- (Cases_on `dyn` >> gvs[vyperValueTheory.type_slot_size_def]) >>
-  strip_tac >> irule aug_place_dead_array_selected >>
-  conj_tac >- simp[] >> conj_tac >- simp[] >>
-  qexistsl_tac [`w2n w`, `dyn`, `i`, `n`] >>
-  Cases_on `dyn` >> gvs[vyperValueTheory.type_slot_size_def]
-QED
-
-Theorem aug_place_resolve_array_empty:
-  resolve_array_element cx tr slot tv [] st = (INL (slot,tv,[]),st)
-Proof
-  Cases_on `tv` >> simp[resolve_array_element_def, return_def]
-QED
-
-Theorem aug_place_storage_extend_live:
-  storage_read_live cx tr (get_storage cx st tr) slot tv /\
-  ((?fs. tv = StructTV fs) \/ (?et bd. tv = ArrayTV et bd)) /\
-  extend_storage_place cx tr slot tv sb st =
-    (INL (StoragePlace tr child leaf),st') ==>
-  storage_read_live cx tr (get_storage cx st' tr) child leaf
-Proof
-  reverse (strip_tac >> Cases_on `tv` >> gvs[])
-  >- (rename1 `ArrayTV et bd` >> Cases_on `sb` >>
-      gvs[extend_storage_place_def, raise_def] >>
-      rename1 `ValueSubscript key` >> Cases_on `key` >>
-      gvs[extend_storage_place_def, raise_def] >>
-      Cases_on `bd` >>
-      gvs[extend_storage_place_def, resolve_array_element_def, bind_def,
-          ignore_bind_def, check_def, assert_def, return_def, raise_def,
-          vyperStorageBackendTheory.get_storage_backend_eq,
-          aug_place_resolve_array_empty, AllCaseEqs()]
-      >- (irule (aug_place_storage_read_live_array |> Q.INST [`dyn` |-> `F`] |> SRULE []) >>
-          simp[] >> goal_assum (drule_at Any) >> simp[])
-      >> (drule_all (aug_place_storage_read_live_array |> Q.INST [`dyn` |-> `T`] |> SRULE []) >>
-          simp_tac pure_ss [arithmeticTheory.ADD_COMM] >> disch_then ACCEPT_TAC)) >>
-  Cases_on `sb` >>
-  gvs[extend_storage_place_def, bind_def, lift_option_type_def,
-      return_def, raise_def, AllCaseEqs()]
-  >- (Cases_on `v` >> gvs[extend_storage_place_def, raise_def]) >>
-  Cases_on `struct_field_slot fs s` >>
-  gvs[return_def, raise_def] >>
-  PairCases_on `x` >> gvs[return_def] >>
-  irule accountsRelPropsTheory.storage_read_live_field >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem aug_place_dead_tuple_selected:
-  !tvs i tv st bs j b.
-    oEL i tvs = SOME tv /\
-    bs + tuple_prefix_slot_size i tvs <= j /\
-    j < bs + tuple_prefix_slot_size i tvs + type_slot_size tv /\
-    dead_bytes_list st bs tvs j b ==>
-    dead_bytes st (bs + tuple_prefix_slot_size i tvs) tv j b
-Proof
-  Induct_on `tvs` >- simp[listTheory.oEL_def] >>
-  rpt gen_tac >> Cases_on `i` >>
-  simp[listTheory.oEL_def, tuple_prefix_slot_size_def] >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
-  simp[Once dead_bytes_def] >> strip_tac
-  >- (drule (cj 2 accountsRelPropsTheory.dead_bytes_range) >> simp[])
-  >- (drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >> simp[]) >>
-  first_x_assum drule >>
-  disch_then (qspecl_then [`st`, `bs + type_slot_size h`, `j`, `b`] mp_tac) >>
-  simp_tac bool_ss [GSYM arithmeticTheory.ADD_ASSOC] >>
-  disch_then irule >> asm_rewrite_tac []
-QED
-
-Theorem aug_place_storage_read_live_tuple:
-  storage_read_live cx tr st w (TupleTV tvs) /\ oEL i tvs = SOME tv ==>
-  storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size i tvs)) tv
-Proof
-  strip_tac >>
-  drule vyperStoragePlaceRegionTheory.tuple_component_slot_end_bound >> strip_tac >>
-  Cases_on `type_slot_size tv = 0`
-  >- (simp[storage_read_live_def] >> rpt strip_tac >>
-      qspec_then `w + n2w (tuple_prefix_slot_size i tvs)` mp_tac wordsTheory.w2n_lt >>
-      decide_tac) >>
-  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
-  rewrite_tac[storage_read_live_def] >> strip_tac >>
-  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
-  `w2n w + tuple_prefix_slot_size i tvs < dimword (:256)` by decide_tac >>
-  `w2n (w + n2w (tuple_prefix_slot_size i tvs)) =
-   w2n w + tuple_prefix_slot_size i tvs` by
-    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
-  simp[] >> strip_tac >>
-  `dead_bytes_list st (w2n w) tvs j b` by
-    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
-     simp[Once dead_bytes_def]) >>
-  irule aug_place_dead_tuple_selected >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem aug_place_storage_extend_live_all:
-  storage_read_live cx tr (get_storage cx st tr) slot tv /\
-  extend_storage_place cx tr slot tv sb st = (INL p,st') ==>
-  ?child leaf. p = StoragePlace tr child leaf /\
-    storage_read_live cx tr (get_storage cx st' tr) child leaf
-Proof
-  strip_tac >>
-  drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
-  strip_tac >> gvs[] >>
-  Cases_on `sb` >> Cases_on `tv` >>
-  gvs[extend_storage_place_def, raise_def]
-  >~ [`TupleTV tvs`, `ValueSubscript key`]
-  >- (Cases_on `key` >> gvs[extend_storage_place_def, raise_def] >>
-      gvs[extend_storage_place_def, bind_def, ignore_bind_def,
-          check_def, assert_def, lift_option_type_def, return_def,
-          vyperMiscTheory.option_CASE_rator, raise_def, AllCaseEqs(),
-          Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
-      gvs[Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
-      irule aug_place_storage_read_live_tuple >>
-      goal_assum (drule_at Any) >> simp[])
-  >>~- ([`ValueSubscript key`], Cases_on `key` >>
-    gvs[extend_storage_place_def, raise_def] >>
-    irule aug_place_storage_extend_live >>
-    goal_assum (drule_at Any) >> simp[] >>
-    qexists_tac `ValueSubscript (IntV i)` >>
-    asm_rewrite_tac [extend_storage_place_def]) >>
-  irule aug_place_storage_extend_live >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexists_tac `AttrSubscript s` >> asm_rewrite_tac [extend_storage_place_def]
-QED
-
-Theorem aug_place_pure_base_storage:
-  !t tops cx s r s' tr.
-    EVERY (supported_pure_expr tops) (target_indices t) /\
-    eval_base_place cx t s = (r,s') ==>
-    get_storage cx s' tr = get_storage cx s tr
-Proof
-  measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
-  rpt gen_tac
-  >~ [`TopLevelNameTarget p`]
-  >- (PairCases_on `p` >> simp[target_indices_def, Once evaluate_def] >>
-      rpt strip_tac >> metis_tac[vyperStatePreservationTheory.lookup_global_state]) >>
-  simp[target_indices_def, Once evaluate_def] >>
-  rpt strip_tac
-  >- (gvs[bind_def, get_scopes_def, type_check_def, assert_def,
-          ignore_bind_def, return_def, raise_def, AllCaseEqs()]) >>
-  gvs[bind_def, AllCaseEqs()] >>
-  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
-  simp[expr_size_def] >> strip_tac >>
-  metis_tac[aug_place_pure_eval_storage, read_result_state,
-            vyperPlaceFramesTheory.extend_place_state, raise_def]
-QED
-
-Theorem aug_place_pure_target_storage:
-  EVERY (supported_pure_expr tops) (target_indices t) /\
-  eval_target_place cx t s = (r,s') ==>
-  get_storage cx s' tr = get_storage cx s tr
-Proof
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  metis_tac[aug_place_pure_base_storage, vyperPlaceFramesTheory.get_place_state,
-            raise_def]
-QED
-
-Theorem aug_place_mapping_extend_live:
-  vyperStoragePlaceProvenance$storage_mapping_region cx tr slot (HashMapT kt vt) /\
-  extend_place cx (HashMapRef tr slot kt vt) sb s =
-    (INL (PlaceR (StoragePlace tr' child leaf)),s') ==>
-  storage_read_live cx tr' (get_storage cx s' tr') child leaf
-Proof
-  Cases_on `sb` >> Cases_on `vt` >>
-  simp[extend_place_def, raise_def, bind_def, lift_option_type_def,
-       vyperMiscTheory.option_CASE_rator, return_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  drule vyperStoragePlaceProvenanceTheory.storage_mapping_region_step >>
-  disch_then (qspec_then `v` mp_tac) >>
-  simp_tac (srw_ss()) [vyperStoragePlaceProvenanceTheory.storage_mapping_region_def] >>
-  strip_tac >>
-  qpat_x_assum `!subs leaf_slot leaf_tv. _`
-    (qspecl_then [`[]`, `hashmap_slot slot (encode_hashmap_key kt v)`, `leaf`] mp_tac) >>
-  simp[vyperStorageLayoutSafetyTheory.resolve_hashmap_leaf_def] >>
-  strip_tac >>
-  irule accountsRelPropsTheory.declared_storage_region_read_live >>
-  goal_assum (drule_at Any)
-QED
-
-Theorem aug_place_pure_base_storage_live:
-  !t tops cx s tr slot tv s'.
-    EVERY (supported_pure_expr tops) (target_indices t) /\
-    eval_base_place cx t s = (INL (PlaceR (StoragePlace tr slot tv)),s') ==>
-    storage_read_live cx tr (get_storage cx s' tr) slot tv
-Proof
-  measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
-  rpt gen_tac
-  >~ [`TopLevelNameTarget p`]
-  >- (PairCases_on `p` >>
-      simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
-           return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-      drule vyperStoragePlaceProvenanceTheory.lookup_global_storage_region >>
-      strip_tac >>
-      irule accountsRelPropsTheory.declared_storage_region_read_live >>
-      goal_assum (drule_at Any)) >>
-  simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
-       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
-       return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
-  simp[expr_size_def] >> strip_tac
-  >- (rename1 `eval_expr cx e s'' = (INL result,s3)` >>
-      `!tr. get_storage cx s3 tr = get_storage cx s'' tr` by
-        metis_tac[aug_place_pure_eval_storage] >>
-      drule read_result_state >> strip_tac >> gvs[] >>
-      drule vyperStoragePlaceProvenanceTheory.eval_base_place_region >> strip_tac >>
-      Cases_on `pv`
-      >- (qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
-          simp[extend_place_def, raise_def])
-      >- (Cases_on `p` >>
-          gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
-              extend_memory_place_def, AllCaseEqs()] >>
-          first_x_assum drule_all >> strip_tac >>
-          drule_at (Pat `extend_storage_place _ _ _ _ _ _ = _`)
-            aug_place_storage_extend_live_all >>
-          (impl_tac >- metis_tac[]) >> simp[]) >>
-      gvs[vyperStoragePlaceProvenanceTheory.storage_result_region_def] >>
-      irule aug_place_mapping_extend_live >>
-      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
-  drule vyperStoragePlaceProvenanceTheory.eval_base_place_region >> strip_tac >>
-  (Cases_on `pv`
-  >- (qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
-      simp[extend_place_def, raise_def])
-  >- (Cases_on `p` >>
-      gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
-          extend_memory_place_def, AllCaseEqs()]
-      >> first_x_assum drule_all >> strip_tac >>
-      drule_all aug_place_storage_extend_live_all >> simp[]) >>
-  gvs[vyperStoragePlaceProvenanceTheory.storage_result_region_def] >>
-  irule aug_place_mapping_extend_live >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any))
-QED
-
-Theorem aug_place_pure_target_storage_live:
-  EVERY (supported_pure_expr tops) (target_indices t) /\
-  eval_target_place cx t s = (INL (StoragePlace tr slot tv),s') ==>
-  storage_read_live cx tr (get_storage cx s' tr) slot tv
-Proof
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
-  drule_all aug_place_pure_base_storage_live >> simp[]
-QED
-
 Theorem aug_place_storage_load_ready:
   target_post ctx func cenv cx es sa sb s0 st
     (PlaceR (StoragePlace tr slot tv)) (Type ty) r vs /\
@@ -839,193 +398,6 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem aug_place_tuple_range_selected:
-  !tvs off i tv storage.
-    tuple_slots_in_range storage off tvs /\ oEL i tvs = SOME tv ==>
-    slots_in_range storage (off + tuple_prefix_slot_size i tvs) tv
-Proof
-  Induct >> simp[listTheory.oEL_def] >>
-  rpt gen_tac >> Cases_on `i` >>
-  simp[listTheory.oEL_def, tuple_prefix_slot_size_def,
-       Once vyperLookupStorageTheory.slots_in_range_def] >>
-  rpt strip_tac >> gvs[] >> first_x_assum drule_all >>
-  pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> simp[]
-QED
-
-Theorem aug_place_range_word_offset:
-  slots_in_range storage (w2n (w:bytes32) + off) tv ==>
-  slots_in_range storage (w2n (w + n2w off)) tv
-Proof
-  strip_tac >>
-  `slots_in_range storage (w2n w + off) tv =
-   slots_in_range storage (w2n (w + n2w off)) tv` by
-    (irule (cj 1 vyperLookupStorageTheory.slots_in_range_offset_cong) >>
-     `w + n2w off = n2w (w2n w + off)` by
-       simp[GSYM wordsTheory.word_add_n2w] >>
-     asm_rewrite_tac[wordsTheory.n2w_w2n]) >>
-  gvs[]
-QED
-
-Theorem aug_place_storage_extend_range:
-  slots_in_range (get_storage cx st tr) (w2n slot) tv /\
-  storage_read_live cx tr (get_storage cx st tr) slot tv /\
-  extend_storage_place cx tr slot tv sb st =
-    (INL (StoragePlace tr' child leaf),st') ==>
-  slots_in_range (get_storage cx st' tr') (w2n child) leaf
-Proof
-  strip_tac >> Cases_on `sb` >> Cases_on `tv` >>
-  gvs[extend_storage_place_def, raise_def]
-  >~ [`struct_field_slot fs s`]
-  >- (gvs[bind_def, ignore_bind_def, check_def, assert_def, lift_option_type_def,
-          return_def, raise_def, AllCaseEqs()] >>
-      Cases_on `struct_field_slot fs s` >>
-      gvs[raise_def, return_def] >> PairCases_on `x` >>
-      gvs[return_def] >>
-      irule vyperLookupStorageTheory.storage_field_slots_in_range >>
-      goal_assum (drule_at Any) >> simp[])
-  >~ [`TupleTV tvs`, `ValueSubscript key`]
-  >- (Cases_on `key` >> gvs[extend_storage_place_def, raise_def] >>
-      gvs[bind_def, ignore_bind_def, check_def, assert_def, lift_option_type_def,
-          return_def, raise_def, AllCaseEqs()] >>
-      Cases_on `oEL (Num i) tvs` >> gvs[return_def, raise_def] >>
-      irule aug_place_range_word_offset >>
-      irule aug_place_tuple_range_selected >>
-      gvs[Once vyperLookupStorageTheory.slots_in_range_def] >>
-      goal_assum (drule_at Any) >> simp[]) >>
-  rename1 `ValueSubscript key` >> Cases_on `key` >>
-  gvs[extend_storage_place_def, raise_def] >>
-  gvs[bind_def, ignore_bind_def, check_def, assert_def, lift_option_type_def,
-      return_def, raise_def, AllCaseEqs()] >>
-  Cases_on `b` >>
-  gvs[resolve_array_element_def, bind_def, ignore_bind_def, check_def,
-      assert_def, return_def, raise_def, AllCaseEqs(),
-      vyperStorageBackendTheory.get_storage_backend_eq] >>
-  gvs[aug_place_resolve_array_empty, return_def]
-  >- (irule aug_place_range_word_offset >>
-      gvs[Once vyperLookupStorageTheory.slots_in_range_def,
-          cj 1 vyperLookupStorageTheory.array_slots_in_range_indexed]) >>
-  irule aug_place_range_word_offset >>
-  gvs[Once vyperLookupStorageTheory.slots_in_range_def,
-      cj 2 vyperLookupStorageTheory.array_slots_in_range_indexed] >>
-  first_x_assum irule >> simp[vyperStorageTheory.read_slot_def]
-QED
-
-Theorem aug_place_contract_storage_frame:
-  contract_storage_well_formed cx s /\
-  (!tr. get_storage cx s' tr = get_storage cx s tr) ==>
-  contract_storage_well_formed cx s'
-Proof
-  simp[vyperStorageLayoutSafetyTheory.contract_storage_well_formed_def,
-       vyperLookupStorageTheory.well_formed_storage_def,
-       vyperLookupStorageTheory.storage_var_in_range_def,
-       vyperStorageBackendTheory.get_storage_backend_eq] >>
-  metis_tac[]
-QED
-
-Theorem aug_place_mapping_extend_range:
-  contract_storage_well_formed cx s /\
-  vyperStoragePlaceProvenance$storage_mapping_region cx tr slot (HashMapT kt vt) /\
-  extend_place cx (HashMapRef tr slot kt vt) sb s =
-    (INL (PlaceR (StoragePlace tr' child leaf)),s') ==>
-  slots_in_range (get_storage cx s' tr') (w2n child) leaf
-Proof
-  Cases_on `sb` >> Cases_on `vt` >>
-  simp[extend_place_def, raise_def, bind_def, lift_option_type_def,
-       vyperMiscTheory.option_CASE_rator, return_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  drule vyperStoragePlaceProvenanceTheory.storage_mapping_region_step >>
-  disch_then (qspec_then `v` mp_tac) >>
-  simp_tac (srw_ss()) [vyperStoragePlaceProvenanceTheory.storage_mapping_region_def] >>
-  strip_tac >>
-  qpat_x_assum `!subs leaf_slot leaf_tv. _`
-    (qspecl_then [`[]`, `hashmap_slot slot (encode_hashmap_key kt v)`, `leaf`] mp_tac) >>
-  simp[vyperStorageLayoutSafetyTheory.resolve_hashmap_leaf_def] >>
-  strip_tac >>
-  irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_region >>
-      goal_assum (drule_at Any) >>
-  simp[vyperStorageBackendTheory.get_storage_backend_eq] >>
-  qexists_tac `s` >> simp[]
-QED
-
-Theorem aug_place_pure_base_storage_range:
-  !t tops cx s tr slot tv s'.
-    contract_storage_well_formed cx s /\
-    EVERY (supported_pure_expr tops) (target_indices t) /\
-    eval_base_place cx t s = (INL (PlaceR (StoragePlace tr slot tv)),s') ==>
-    slots_in_range (get_storage cx s' tr) (w2n slot) tv
-Proof
-  measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
-  rpt gen_tac
-  >~ [`TopLevelNameTarget p`]
-  >- (PairCases_on `p` >>
-      simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
-           return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-      drule vyperStoragePlaceProvenanceTheory.lookup_global_storage_region >>
-      strip_tac >>
-      drule vyperStatePreservationTheory.lookup_global_state >> strip_tac >> gvs[] >>
-      irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_region >>
-      goal_assum (drule_at Any) >>
-      simp[vyperStorageBackendTheory.get_storage_backend_eq] >>
-      qexists_tac `s` >> simp[]) >>
-  simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
-       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
-       return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
-  simp[expr_size_def] >> strip_tac
-  >- (rename1 `eval_expr cx e s'' = (INL result,s3)` >>
-      `!tr. get_storage cx s3 tr = get_storage cx s'' tr` by
-        metis_tac[aug_place_pure_eval_storage] >>
-      drule read_result_state >> strip_tac >> gvs[] >>
-      rename1 `extend_place cx pv sb sx = _` >>
-      `contract_storage_well_formed cx sx` by
-        (irule aug_place_contract_storage_frame >> qexists_tac `s` >>
-         simp[] >> drule_all aug_place_pure_base_storage >> simp[]) >>
-      drule vyperStoragePlaceProvenanceTheory.eval_base_place_region >> strip_tac >>
-      Cases_on `pv`
-      >- (qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
-          simp[extend_place_def, raise_def])
-      >- (Cases_on `p` >>
-          gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
-              extend_memory_place_def, AllCaseEqs()] >>
-          first_x_assum drule_all >> strip_tac >>
-          drule_all aug_place_pure_base_storage_live >> strip_tac >>
-          drule_at (Pat `extend_storage_place _ _ _ _ _ _ = _`)
-            aug_place_storage_extend_range >>
-          (impl_tac >- simp[]) >> simp[]) >>
-      gvs[vyperStoragePlaceProvenanceTheory.storage_result_region_def] >>
-      drule_at (Pat `extend_place _ _ _ _ = _`) aug_place_mapping_extend_range >>
-      simp[]) >>
-  rename1 `extend_place cx pv sb sx = _` >>
-  `contract_storage_well_formed cx sx` by
-    (irule aug_place_contract_storage_frame >> goal_assum (drule_at Any) >>
-     drule_all aug_place_pure_base_storage >> simp[]) >>
-  drule vyperStoragePlaceProvenanceTheory.eval_base_place_region >> strip_tac >>
-  Cases_on `pv`
-  >- (qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
-      simp[extend_place_def, raise_def])
-  >- (Cases_on `p` >>
-      gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
-          extend_memory_place_def, AllCaseEqs()] >>
-      first_x_assum drule_all >> strip_tac >>
-      drule_all aug_place_pure_base_storage_live >> strip_tac >>
-      drule_at (Pat `extend_storage_place _ _ _ _ _ _ = _`)
-        aug_place_storage_extend_range >> simp[]) >>
-  gvs[vyperStoragePlaceProvenanceTheory.storage_result_region_def] >>
-  drule_at (Pat `extend_place _ _ _ _ = _`) aug_place_mapping_extend_range >> simp[]
-QED
-
-Theorem aug_place_pure_target_storage_range:
-  contract_storage_well_formed cx s /\
-  EVERY (supported_pure_expr tops) (target_indices t) /\
-  eval_target_place cx t s = (INL (StoragePlace tr slot tv),s') ==>
-  slots_in_range (get_storage cx s' tr) (w2n slot) tv
-Proof
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
-  drule_all aug_place_pure_base_storage_range >> simp[]
-QED
-
-
 Theorem aug_place_storage_entry_pre[local]:
   expr_body_pre cenv cx env e es ==>
   expr_body_pre cenv cx env e (es with gas_obs := gs)
@@ -1033,8 +405,6 @@ Proof
   simp[expr_body_pre_gas_obs]
 QED
 
-(* x op= e at a field or element of a storage or transient variable,
-   with pure indices. *)
 Theorem aug_place_base_memory_origin[local]:
   !t cx s id path st.
     eval_base_place cx t s = (INL (PlaceR (MemoryPlace id path)),st) ==>
@@ -1067,7 +437,7 @@ Proof
   metis_tac[aug_place_base_memory_origin]
 QED
 
-Theorem aug_place_supported_storage_kind[local]:
+Theorem aug_place_supported_storage_kind:
   body_inv tops ctx cenv cx /\
   supported_target_info tops bindings t = SOME pt /\
   (!id. target_root t <> NameTarget id) /\
@@ -1088,7 +458,7 @@ Proof
   gvs[expr_body_pre_def]
 QED
 
-Theorem aug_place_storage_read_ready[local]:
+Theorem aug_place_storage_read_ready:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   slots_in_range (get_storage cx st tr) (w2n slot) tv ==>
   ?cur. read_place cx (StoragePlace tr slot tv) st = (INL cur,st) /\
@@ -1132,12 +502,35 @@ Proof
   gvs[target_post_def, place_ptr_rel_def] >> metis_tac[]
 QED
 
+(* The target's place, in range and live in the storage after the target's
+   evaluation, whatever its indices did.  Where that comes from: its region
+   fits under the root's declared capacity, so storage_layout_safe and
+   contract_storage_well_formed, both in expr_sim_inv, give slots_in_range
+   (vyperPlaceStoragePreservation.storage_place_region_slots_in_range) and
+   liveness (accountsRelProps.storage_place_region_read_live).  No
+   slot-separation premise and no frame on the indices. *)
+Theorem aug_place_target_storage_ready[local]:
+  storage_layout_safe cx /\ contract_storage_well_formed cx st /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_target_place cx bt s = (INL (StoragePlace tr slot tv),st) ==>
+  slots_in_range (get_storage cx st tr) (w2n slot) tv /\
+  storage_read_live cx tr (get_storage cx st tr) slot tv
+Proof
+  strip_tac >>
+  `0 < type_slot_size tv` by
+    (drule_all exprSimUnwrapTheory.word_type_slot_size >> simp[]) >>
+  drule vyperStoragePlaceProvenanceTheory.eval_target_place_region >> strip_tac >>
+  conj_tac
+  >- (drule_all vyperPlaceStoragePreservationTheory.storage_place_region_slots_in_range >>
+      simp[]) >>
+  irule accountsRelPropsTheory.storage_place_region_read_live >> simp[]
+QED
+
 Theorem aug_place_storage_source_ready[local]:
   target_pre cenv cx env bt es /\
   expr_body_pre cenv cx env e es /\
-  EVERY (supported_pure_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),st) /\
-  evaluate_type (get_tenv cx) ty = SOME tv ==>
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv ==>
   ?cur.
     eval_target_place cx bt es = (INL (StoragePlace tr slot tv),st) /\
     read_place cx (StoragePlace tr slot tv) st = (INL cur,st) /\
@@ -1148,11 +541,11 @@ Proof
   strip_tac >>
   `eval_target_place cx bt es = (INL (StoragePlace tr slot tv),st)` by
     simp[Once evaluate_def, bind_def, get_place_def, return_def] >>
-  `contract_storage_well_formed cx es` by
-    gvs[target_pre_def, expr_sim_inv_def] >>
-  drule_all aug_place_pure_target_storage_range >> strip_tac >>
-  drule_all aug_place_storage_read_ready >> strip_tac >>
   drule_all aug_place_storage_rhs_pre >> strip_tac >>
+  `storage_layout_safe cx /\ contract_storage_well_formed cx st` by
+    gvs[expr_body_pre_def, expr_sim_inv_def] >>
+  drule_all aug_place_target_storage_ready >> strip_tac >>
+  drule_all aug_place_storage_read_ready >> strip_tac >>
   metis_tac[]
 QED
 
@@ -1169,10 +562,12 @@ Theorem aug_place_storage_load_path[local]:
 Proof
   strip_tac >> irule emitHelperPropsTheory.emit_op_zero_path >> simp[] >>
   qexistsl_tac [`[arg]`, `op`, `if tr then TLOAD else SLOAD`, `sb`] >>
-  Cases_on `tr` >>
-  simp[venomInstTheory.is_terminator_def,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def]
+  Cases_on `tr` >> full_simp_tac bool_ss [] >>
+  (conj_tac
+   >- (gen_tac >>
+       rw[venomExecSemanticsTheory.step_inst_base_def,
+          venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def]) >>
+   asm_simp_tac (srw_ss()) [venomInstTheory.is_terminator_def])
 QED
 
 Theorem aug_place_storage_load_endpoint[local]:
@@ -1288,7 +683,7 @@ Theorem aug_place_storage_load_counted_nofresh[local]:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
              lookup_var x u = SOME w) /\
-      u.vs_allocas = s.vs_allocas
+      u.vs_allocas = s.vs_allocas /\ u.vs_memory = s.vs_memory
 Proof
   strip_tac >>
   qexists_tac `(update_var (STRING #"%" (toString sa.cs_next_var))
@@ -1331,8 +726,9 @@ Proof
      (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
     (irule fragGasSeqAbortTheory.gas_marked_path_abort >>
      Cases_on `tr` >>
-     simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
-          venomExecSemanticsTheory.step_inst_base_def,
+     simp[venomInstTheory.mk_inst_def] >>
+     simp[venomInstTheory.is_terminator_def] >>
+     simp[venomExecSemanticsTheory.step_inst_base_def,
           venomStateTheory.eval_operands_def]) >>
   Cases_on `tr` >> gvs[venomInstTheory.mk_inst_def]
 QED
@@ -1384,7 +780,8 @@ Theorem aug_place_storage_store_outcome[local]:
           (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b) /\
           ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-          t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          t.vs_memory = s.vs_memory) \/
        (exit_result r /\ stmt_exit RetQ ff res r))
 Proof
   strip_tac >>
@@ -1392,7 +789,7 @@ Proof
   drule_all aug_place_storage_write_outcome >> strip_tac >> gvs[] >>
   drule_at (Pat `write_place _ _ _ _ = _`) place_store_word_run >>
   simp[] >> disch_then drule_all >> strip_tac >>
-  qexists_tac `OK t` >> simp[]
+  qexists_tac `OK t` >> Cases_on `tr` >> gvs[slot_loc_def]
 QED
 
 Theorem aug_place_storage_suffix_assoc[local]:
@@ -1408,7 +805,7 @@ Proof
   simp[bind_assoc]
 QED
 
-Theorem aug_place_storage_write_gas_obs[local]:
+Theorem aug_place_storage_write_gas_obs:
   write_place cx (StoragePlace tr slot tv) v ee = (res,fin) ==>
   !gs. write_place cx (StoragePlace tr slot tv) v (ee with gas_obs := gs) =
     (res,fin with gas_obs := gs)
@@ -1500,7 +897,7 @@ Proof
   Cases_on `y` >> gvs[vyperExprNoControlTheory.no_control_exc_def, stmt_res_ok_def, expr_res_ok_def]
 QED
 
-Theorem aug_place_storage_binop_admissible[local]:
+Theorem aug_place_storage_binop_admissible:
   gas_admissible
     (bind (eval_expr cx e) (\raw. bind (read_result cx raw)
       (\v. bind (lift_sum (evaluate_binop
@@ -1578,7 +975,7 @@ Theorem aug_place_storage_binop_store_nofresh[local]:
       tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))
     (ee,z) [] res fin r /\
     ((?last. r = OK last /\
-        stmt_post ctx func cx lctx cenv cenv s2 sf z res
+        stmt_post ctx func cx lctx cenv cenv s2 sf ee z res
           (fin with gas_obs := []) last) \/
      (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r))
 Proof
@@ -1633,9 +1030,27 @@ Resume aug_place_storage_binop_store_nofresh[normal]:
       `~block_is_terminated sf` by
         (drule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
          Cases_on `tr` >> simp[slot_loc_def, venomInstTheory.is_terminator_def]) >>
+      `!x w. not_fresh_at s2 x /\ lookup_var x z = SOME w ==>
+             lookup_var x t = SOME w` by
+        (rpt strip_tac >>
+         `not_fresh_at s3 x` by
+           metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+         metis_tac[]) >>
+      `alloca_frame cenv ee s2 z cenv r t` by
+        (mp_tac (Q.INST [`es` |-> `ee`, `es'` |-> `r`, `sa` |-> `s2`,
+                         `s0` |-> `z`, `s` |-> `t`]
+                   (SPEC_ALL alloca_frame_of_mem_frame)) >>
+         impl_tac
+         >- (rpt conj_tac
+             >- first_assum ACCEPT_TAC
+             >- first_assum ACCEPT_TAC
+             >- (drule vyperScopePreservationTheory.write_place_scopes_dom >>
+                 simp[])
+             >- first_assum ACCEPT_TAC >>
+             rpt strip_tac >> simp[]) >>
+         disch_then ACCEPT_TAC) >>
       simp[stmt_post_def, stmt_lands_def] >>
-      disj1_tac >> simp[cenv_top_ext_refl] >>
-      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+      disj1_tac >> simp[cenv_top_ext_refl]) >>
   drule_all aug_place_storage_write_outcome >> strip_tac >>
   gvs[stmt_exit_def, expr_exit_def] >>
   fs[stmt_state_rel_def, state_rel_def]
@@ -1688,7 +1103,7 @@ Theorem aug_place_storage_binop_store[local]:
       tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))
     (ee,z) [] res fin r /\
     ((?last. r = OK last /\
-        stmt_post ctx func cx lctx cenv cenv s2 sf z res
+        stmt_post ctx func cx lctx cenv cenv s2 sf ee z res
           (fin with gas_obs := []) last) \/
      (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r))
 Proof
@@ -1754,7 +1169,7 @@ Theorem aug_place_storage_suffix_outcome_nofresh[local]:
       (\v. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv))))) (st,u)
-    (stmt_post ctx func cx lctx cenv cenv s1 sf u)
+    (stmt_post ctx func cx lctx cenv cenv s1 sf st u)
     (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -1850,7 +1265,36 @@ Resume aug_place_storage_suffix_outcome_nofresh[store_normal]:
   goal_assum (drule_at Any) >> simp[] >>
   disj1_tac >>
   fs[stmt_post_def, expr_post_def] >>
-  metis_tac[freshWritesTheory.not_fresh_at_mono]
+  `MAP FDOM es_end.scopes = MAP FDOM st.scopes` by
+    (qpat_assum `_ (st with gas_obs := gas_explicit _ _) = (INL v, _)`
+       (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >>
+     simp[]) >>
+  `alloca_frame cenv st s1 u cenv es_end t` by
+    (mp_tac (Q.INST [`es` |-> `st`, `es'` |-> `es_end`, `sa` |-> `s1`,
+                     `s0` |-> `u`, `s` |-> `t`]
+               (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `alloca_frame cenv st s1 u cenv'' fin last` by
+    (irule alloca_frame_trans >>
+     qpat_assum `alloca_frame cenv st s1 u cenv es_end t` (irule_at Any) >>
+     qpat_assum `alloca_frame cenv es_end s2 t cenv'' fin last` (irule_at Any) >>
+     simp[]) >>
+  qexists_tac `cenv''` >> rpt conj_tac
+  >- (strip_tac >> fs[])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (rpt strip_tac >>
+      `not_fresh_at s2 x` by
+        (irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `s1` >> simp[]) >>
+      qpat_x_assum `!x w. not_fresh_at s2 x /\ lookup_var x t = SOME w ==> _`
+        irule >>
+      simp[] >>
+      qpat_x_assum `!x w. not_fresh_at s1 x /\ lookup_var x u = SOME w ==> _`
+        irule >>
+      simp[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume aug_place_storage_suffix_outcome_nofresh[store_exit]:
@@ -1905,7 +1349,7 @@ Theorem aug_place_storage_suffix_outcome[local]:
       (\v. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv))))) (st,u)
-    (stmt_post ctx func cx lctx cenv cenv s1 sf u)
+    (stmt_post ctx func cx lctx cenv cenv s1 sf st u)
     (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
 Proof
   strip_tac >> drule_all aug_place_storage_suffix_outcome_nofresh >> simp[]
@@ -2075,7 +1519,7 @@ Resume aug_place_result_bind_outcome_exec[exempt]:
 QED
 Finalise aug_place_result_bind_outcome_exec
 
-Theorem aug_place_result_bind_outcome_path[local]:
+Theorem aug_place_result_bind_outcome_path:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> eval_result evaluation_result) (es,s0) P E /\
   (!v mid t marks. P (INL v) mid t /\
@@ -2176,11 +1620,25 @@ Theorem aug_place_stmt_post_prefix[local]:
     lookup_var x u = SOME w) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
     FLOOKUP u.vs_allocas aid = SOME b) /\
-  stmt_post ctx func cx lctx cenv cenv' sp sf u res ee t ==>
-  stmt_post ctx func cx lctx cenv cenv' sa sf s0 res ee t
+  sa.cs_next_id <= sp.cs_next_id /\ alloca_frame cenv es0 sa s0 cenv eu u /\
+  stmt_post ctx func cx lctx cenv cenv' sp sf eu u res ee t ==>
+  stmt_post ctx func cx lctx cenv cenv' sa sf es0 s0 res ee t
 Proof
-  rw[stmt_post_def] >> qexists_tac `cenv''` >> simp[] >>
-  metis_tac[freshWritesTheory.not_fresh_at_mono]
+  rw[stmt_post_def] >>
+  `alloca_frame cenv es0 sa s0 cenv'' ee t` by
+    (irule alloca_frame_trans >>
+     qpat_assum `alloca_frame cenv es0 sa s0 cenv eu u` (irule_at Any) >>
+     qpat_assum `alloca_frame cenv eu sp u cenv'' ee t` (irule_at Any) >>
+     simp[]) >>
+  qexists_tac `cenv''` >> simp[] >> rpt strip_tac >>
+  `not_fresh_at sp x` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  qpat_x_assum `!x w. not_fresh_at sp x /\ lookup_var x u = SOME w ==> _`
+    irule >>
+  simp[] >>
+  qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`
+    irule >>
+  simp[]
 QED
 
 Theorem aug_place_bind_admissible_success[local]:
@@ -2229,7 +1687,7 @@ Theorem aug_place_storage_success_ready[local]:
   ((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k)) /\
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty bt bop e) /\
-  supported_target_pure tops bt /\
+  word_value_type ty /\
   (!id. target_root bt <> NameTarget id) /\
   target_pre cenv cx env bt es /\
   expr_body_pre cenv cx env e es /\
@@ -2269,12 +1727,7 @@ Proof
      metis_tac[target_pre_def, expr_sim_inv_gas_obs]) >>
   `expr_body_pre cenv cx env e start` by
     simp[Abbr `start`, expr_body_pre_gas_obs] >>
-  `EVERY (supported_pure_expr tops) (target_indices bt)` by
-    (qpat_x_assum `supported_target_pure tops bt` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-     fs[supported_target_pure_def, target_indices_def] >>
-     first_x_assum irule >> simp[]) >>
+  `is_word_type ty` by metis_tac[word_value_type_word] >>
   drule_all aug_place_storage_source_ready >> strip_tac >>
   qexistsl_tac [`tr`, `slot`, `tv`, `cur`] >> fs[Abbr `start`]
 QED
@@ -2283,7 +1736,6 @@ Theorem aug_place_storage_success_continue[local]:
   ((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k)) /\
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty bt bop e) /\
-  supported_target_pure tops bt /\
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
   expr_body_pre cenv cx env e es /\
   expr_body_pre cenv cx env e mid /\
@@ -2296,7 +1748,7 @@ Theorem aug_place_storage_success_continue[local]:
   stmt_env cenv lctx ret_ty (AugAssign ty bt bop e) sa = (cenv,sb) /\
   compile_get_target_ptr compile_expr cenv bt sa = (ptrout,sp) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
   (!tail. eval_base_place cx bt (es with gas_obs := prefix ++ tail) =
     (INL (PlaceR (StoragePlace tr slot tv)),mid with gas_obs := tail)) /\
   eval_target_place cx bt (es with gas_obs := prefix ++ mid.gas_obs) =
@@ -2319,31 +1771,21 @@ Theorem aug_place_storage_success_continue[local]:
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))))
     (mid with gas_obs := [],t)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!l. FST ptrout <> Label l` by
     (irule aug_place_target_ptr_not_label >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `_ \/ _` kall_tac >>
-  `EVERY (supported_pure_expr tops) (target_indices bt)` by
-    (qpat_x_assum `supported_target_pure tops bt` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-     fs[supported_target_pure_def, target_indices_def] >>
-     first_x_assum irule >> simp[]) >>
-  `contract_storage_well_formed cx
-    (es with gas_obs := prefix ++ mid.gas_obs)` by
-    (`expr_body_pre cenv cx env e
-       (es with gas_obs := prefix ++ mid.gas_obs)` by
-       simp[expr_body_pre_gas_obs] >>
-     pop_assum mp_tac >>
+  drule aug_place_typing >> strip_tac >>
+  `is_word_type ty` by metis_tac[word_value_type_word] >>
+  `storage_layout_safe cx /\ contract_storage_well_formed cx mid` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ mid` mp_tac >>
      pure_rewrite_tac[expr_body_pre_def, expr_sim_inv_def] >>
      rpt strip_tac >> simp[]) >>
-  drule_all aug_place_pure_target_storage_range >> strip_tac >>
-  drule_all aug_place_pure_target_storage_live >> strip_tac >>
+  drule_all aug_place_target_storage_ready >> strip_tac >>
   drule vyperStoragePlaceProvenanceTheory.eval_target_place_region >> strip_tac >>
-  drule aug_place_typing >> strip_tac >>
   `well_formed_type env.type_defs ty /\
    well_formed_type env.type_defs (expr_type e)` by
     metis_tac[assignable_type_well_formed] >>
@@ -2391,9 +1833,11 @@ Proof
   qpat_x_assum `gas_admissible (bind (eval_base_place _ _) _) _ _` kall_tac >>
   qpat_x_assum `gas_admissible (eval_stmt _ _) _ _` kall_tac >>
   qpat_x_assum `!tail. eval_base_place _ _ _ = _` kall_tac >>
-  qpat_x_assum `eval_target_place _ _ _ = _` kall_tac >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `eval_target_place _ _ _ = _`
+       (mp_tac o MATCH_MP vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom) >>
+     simp[]) >>
   qpat_x_assum `contract_storage_well_formed _ _` kall_tac >>
-  qpat_x_assum `EVERY (supported_pure_expr _) _` kall_tac >>
   qpat_x_assum `(?s p s1 s2 cur s3 s4 ptv s5. _) ==> _` kall_tac >>
   `gas_admissible
     (bind (eval_expr cx e) (\raw. bind (read_result cx raw)
@@ -2429,7 +1873,6 @@ Proof
               ci_mono_def, pairTheory.SND] >>
   `local_ptrs_reserved cenv sp` by metis_tac[local_ptrs_reserved_next_var] >>
   qpat_x_assum `supported_stmt _ _ _` kall_tac >>
-  qpat_x_assum `supported_target_pure _ _` kall_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `!gs. read_place _ _ _ = _` kall_tac >>
   qpat_x_assum `expr_sim_case _ _ _ _ _ _` kall_tac >>
@@ -2472,18 +1915,36 @@ Proof
   irule aug_place_zero_prefix_outcome >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >>
+  `sa.cs_next_id <= sp.cs_next_id` by
+    metis_tac[ci_mono_compile_get_target_ptr_cfn, compile_expr_ci_mono,
+              ci_mono_def, pairTheory.SND] >>
+  `sp.cs_next_id <= s1.cs_next_id` by
+    metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND] >>
+  `alloca_frame cenv es sa s0 cenv mid t` by
+    (mp_tac (Q.INST [`ee` |-> `mid`, `sb` |-> `sp`,
+                     `pv` |-> `PlaceR (StoragePlace tr slot tv)`, `vt` |-> `Type ty`,
+                     `r` |-> `ptrout`]
+               (SPEC_ALL target_post_alloca_frame)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `alloca_frame cenv mid sp t cenv mid u` by
+    (mp_tac (Q.INST [`es` |-> `mid`, `es'` |-> `mid`, `sa` |-> `sp`,
+                     `s0` |-> `t`, `s` |-> `u`]
+               (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac >- (rpt conj_tac >> fs[]) >>
+     disch_then ACCEPT_TAC) >>
   irule aug_place_stmt_post_prefix >>
-  qexists_tac `sp` >> qexists_tac `t` >>
-  simp[] >>
-  conj_tac >- fs[target_post_def] >>
-  conj_tac >- fs[target_post_def] >>
+  qexistsl_tac [`mid with gas_obs := []`, `sp`, `t`] >>
+  rpt conj_tac
+  >- fs[] >- fs[] >- fs[target_post_def] >- fs[target_post_def] >- fs[] >>
   irule aug_place_stmt_post_prefix >>
-  qexists_tac `s1` >> qexists_tac `u` >> simp[]
+  qexistsl_tac [`mid with gas_obs := []`, `s1`, `u`] >>
+  rpt conj_tac >> fs[]
 QED
 
 Theorem compile_augassign_place_storage_case:
   !ctx func cx lctx RetQ cenv ret_ty env env' tops bindings ty bt bop e es.
-    (!id. target_root bt <> NameTarget id) /\ supported_target_pure tops bt /\
+    (!id. target_root bt <> NameTarget id) /\
     ((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k)) /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AugAssign ty bt bop e) /\

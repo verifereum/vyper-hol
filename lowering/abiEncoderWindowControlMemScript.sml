@@ -5,6 +5,13 @@ Ancestors
   memControlFlow memSafeRun instMemFrontier emitHelperProps venomExecProofs venomExecSemantics
   venomState venomInst words arithmetic list rich_list
 
+Theorem exec_result_case_only_ok[local]:
+  (case r of OK s => P s | Halt v => T | Abort a b => T | IntRet c d => T
+   | Error e => T) <=> !s. r = OK s ==> P s
+Proof
+  Cases_on `r` >> simp[]
+QED
+
 Theorem array_header_mem_safe[local]:
   s.vs_inst_idx = 0 /\ eval_operand ip s = SOME p /\
   w2n p + 32 <= s.vs_alloca_next ==>
@@ -30,7 +37,7 @@ Proof
   simp[Once mem_safe_block_def, get_instruction_def,
     abi_encode_array_header_insts_def, mem_safe_step_def,
     below_frontier_no_ranges, mk_inst_def, is_terminator_def] >>
-  rpt CASE_TAC >> simp[]
+  simp[exec_result_case_only_ok]
 QED
 
 Theorem array_header_mem_cont:

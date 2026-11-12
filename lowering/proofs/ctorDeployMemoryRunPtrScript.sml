@@ -57,7 +57,7 @@ Proof
   rpt BasicProvers.VAR_EQ_TAC >>
   drule_all deploy_ctor_entry_run_ptr >> strip_tac >>
   `call_outcomes_ok am tx (MAP SND (call_trace es))` by
-    fs[deploy_state_rel_def] >>
+    metis_tac[deploy_state_rel_call_outcomes_ok] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
   `~ctx_has_dalloca dunit.cu_context` by
     (drule_all ctorDeployShapeTheory.deploy_unit_shape_ok >> strip_tac >>

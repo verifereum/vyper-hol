@@ -82,6 +82,7 @@ Theorem return_value_summary_mem[local]:
     (\res ee r. expr_exit res r) /\
   (!ee v t.
      expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+     expr_store_bound cx (expr_type e) v op t /\
      (?gs ee'. bind (eval_expr cx e) (read_result cx)
                  (es with gas_obs := gs) = (INL v, ee')) /\
      t.vs_current_bb = s1.cs_current_bb /\
@@ -133,6 +134,7 @@ Theorem return_value_counted_mem[local]:
      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
      expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+     expr_store_bound cx (expr_type e) v op t /\
      (?gs ee'. bind (eval_expr cx e) (read_result cx)
                  (es with gas_obs := gs) = (INL v, ee')) /\
      (!ty'. expr_sim_mem ctx func cenv cx ty' e es /\

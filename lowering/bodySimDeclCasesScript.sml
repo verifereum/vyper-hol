@@ -17,26 +17,28 @@
  *                                  the statement's expressions simulate
  *   expr_sim_inv_for_scope, expr_sim_inv_for_pop — expr_sim_inv into
  *                                  and out of a loop iteration's scope
- *   body_annassign_case, body_for_case — the cases
+ *   body_annassign_case          — the case
  *   body_annassign_memory        — the declarations in memory
- *   body_annassign_other         — the declarations it leaves, which are
- *                                  unsupported
- *   body_for_other               — dispatcher for computed ranges and arrays
+ *   body_annassign_widened_aggregate — a declaration whose non-call
+ *                                  right-hand side widens (RESIDUAL)
  *   body_for_array               — iteration over a fixed array
  *   body_for_range               — checked integer-range body simulation
  *)
 
 Theory bodySimDeclCases
 Ancestors
+  supportedExprTraverse allocLimitsProps
+  annassignRelayoutFrag annassignRelayoutSource
   valueEncodingDefs exprSimSource
-  bodyExprPreFacts
+  bodyExprPreFacts exprOpenMain exprReasonOperand
   stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
   list finite_map bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
-  stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps
+  stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps stmtSimDeclTyped
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayFrame vyperTyping
+  loweringPosts exprLowering
   fragExec compileEnv supportedStmts supportedStmtTraverse vyperAST
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeValues
@@ -95,9 +97,10 @@ Proof
    c.ce_hashmap_info = cenv.ce_hashmap_info /\
    c.ce_module_var_type = cenv.ce_module_var_type /\
    c.ce_module = cenv.ce_module /\
+   c.ce_modules = cenv.ce_modules /\
    c.ce_module_vars = cenv.ce_module_vars /\
-   c.ce_is_ctor = cenv.ce_is_ctor /\
    c.ce_func_return_type = cenv.ce_func_return_type /\
+   c.ce_is_ctor = cenv.ce_is_ctor /\
    c.ce_method_id = cenv.ce_method_id` by
     (qpat_x_assum `_ with <| ce_vars := _; ce_var_type := _;
                              ce_dynarray_capacity := _ |> = cenv`
@@ -126,12 +129,25 @@ Theorem body_annassign_rhs_pre[local]:
        (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
   irule stmt_expr_body_pre >>
   gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
@@ -156,6 +172,7 @@ Theorem body_annassign_word[local]:
        occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     is_word_type typ ==>
@@ -170,7 +187,19 @@ Proof
    id NOTIN FDOM env.var_types` by
     (gvs[type_stmt_def, AllCaseEqs()] >> metis_tac[type_widens_to_word]) >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by metis_tac[body_annassign_rhs_pre] >>
@@ -216,6 +245,7 @@ Theorem body_annassign_declared_rhs[local]:
        occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     body_expr_ok cx e /\ declare_local cenv id typ st = (c,st1) ==>
@@ -232,6 +262,38 @@ Proof
   `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
   `expr_body_pre c cx env e es` by metis_tac[body_annassign_rhs_pre] >>
   metis_tac[body_expr_ok_def]
+QED
+
+(* Semantic openness of the RHS in the environment containing the fresh local. *)
+Theorem body_annassign_declared_rhs_open[local]:
+  !cenv cx env e es tops id typ st c st1 ctx gs tv es1 sa vv sb.
+    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+    declare_local cenv id typ st = (c,st1) /\
+    storage_vars_rel c cx /\ transient_vars_rel c cx /\
+    eval_expr cx e (es with gas_obs := gs) = (INL tv,es1) /\
+    compile_expr c (expr_type e) e sa = (vv,sb) /\
+    ~block_is_terminated sa ==> ~block_is_terminated sb
+Proof
+  rpt strip_tac >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `same_frame cenv c` by
+    (drule_then irule declare_local_same_frame >> simp[]) >>
+  `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
+  `stmt_exprs_ok c (AnnAssign id typ e)` by
+    metis_tac[stmt_exprs_ok_same_frame] >>
+  `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
+  `expr_body_pre c cx env e es` by metis_tac[body_annassign_rhs_pre] >>
+  `expr_body_pre c cx env e (es with gas_obs := gs)` by
+    simp[expr_body_pre_gas_obs] >>
+  drule_all compile_expr_open_general >> simp[]
 QED
 
 (* A declaration of a type that is not a word, from a value of the type
@@ -255,6 +317,7 @@ Theorem body_annassign_memory:
        occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
@@ -356,49 +419,6 @@ Proof
   metis_tac[]
 QED
 
-(* A supported copy into a type other than the source's, and not a word,
-   is a bytestring copy. *)
-Theorem copy_types_not_word_bytestring[local]:
-  !dst src.
-    supported_copy_types dst src /\ dst <> src /\ ~is_word_type dst ==>
-    is_bytestring_type dst
-Proof
-  simp[supportedTypesTheory.supported_copy_types_def] >> rpt strip_tac
-  >- metis_tac[typedCopyMetadataTheory.supported_word_type_is_word] >>
-  BasicProvers.every_case_tac >> gvs[is_bytestring_type_def]
-QED
-
-(* The declarations body_annassign_memory leaves are not supported: a
-   supported declaration copies a value of the declared type itself, a
-   word, or a bytestring (supported_copy_types). *)
-Theorem body_annassign_other:
-  !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res
-   es'.
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_expr_ok cx e) /\
-    body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings (AnnAssign id typ e) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    ~is_word_type typ /\
-    ~(expr_type e = typ \/ is_bytestring_type typ \/
-      has_length_word typ /\ is_empty_value_expr e) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-      (eval_stmt cx (AnnAssign id typ e)) es
-Proof
-  rpt strip_tac >>
-  `supported_copy_types typ (expr_type e)` by
-    (qpat_x_assum `supported_stmt _ _ _` mp_tac >> simp[supported_stmt_def]) >>
-  metis_tac[copy_types_not_word_bytestring]
-QED
-
 (* RESIDUAL (#767): a memory-backed declaration of an internal call whose
    return type widens to the call's type other than as a bytestring
    (type_widens_to: a DynArray of a smaller bound, a tuple elementwise). *)
@@ -412,6 +432,9 @@ Theorem body_annassign_widened_aggregate_call:
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AnnAssign id typ e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
@@ -425,7 +448,150 @@ Theorem body_annassign_widened_aggregate_call:
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule declared_name_unbound >> metis_tac[]) >>
+  `well_typed_expr env e /\ assignable_type env.type_defs typ /\
+   type_widens_to env.type_defs (expr_type e) typ /\
+   id NOTIN FDOM env.var_types` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  `supported_expr tops e /\ supported_copy_types typ (expr_type e)` by
+    gvs[supported_stmt_def] >>
+  `expr_body_pre cenv cx env e es` by metis_tac[body_annassign_rhs_pre] >>
+  drule_all annassign_relayout_source_classify >> strip_tac >>
+  `cenv.ce_alloca_locals /\ supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops /\
+   acyclic_struct_metadata cenv.ce_struct_fields /\
+   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[body_inv_def, expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     res_tac >> gvs[FLOOKUP_DEF]) >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  drule_all widening_memory_layout_bound >> strip_tac >>
+  `type_memory_bytes cenv typ < dimword (:256)` by
+    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
+  `~(has_length_word typ /\ is_empty_value_expr e)` by
+    (Cases_on `e` >>
+     gvs[is_empty_value_expr_def, oneline exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
+  irule compile_annassign_relayout_stmt_frag >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      conj_tac
+      >- metis_tac[body_annassign_declared_rhs] >>
+      qexists_tac `env` >>
+      `same_frame cenv c` by
+        (drule_then irule declare_local_same_frame >> simp[]) >>
+      `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
+      `stmt_exprs_ok c (AnnAssign id typ e)` by metis_tac[annassign_declare_exprs_ok] >>
+      `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
+      metis_tac[body_annassign_rhs_pre]) >>
+  conj_tac >- fs[expr_sim_inv_def] >>
+  conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  irule annassign_relayout_read_layout >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
+
+(* RESIDUAL: a memory-backed declaration whose right-hand side, not an
+   internal call (its lowered type is its source type), widens to the
+   declared type other than as a bytestring (type_widens_to: a DynArray of a
+   smaller bound, a tuple or array elementwise).  The lowering copies it with
+   compile_store_memory_typed. *)
+Theorem body_annassign_widened_aggregate:
+  !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AnnAssign id typ e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+       occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
+    lowered_value_type cenv e = expr_type e /\ expr_type e <> typ /\
+    ~is_bytestring_type typ /\ ~(has_length_word typ /\ is_empty_value_expr e) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+      (eval_stmt cx (AnnAssign id typ e)) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule declared_name_unbound >> metis_tac[]) >>
+  `well_typed_expr env e /\ assignable_type env.type_defs typ /\
+   type_widens_to env.type_defs (expr_type e) typ /\
+   id NOTIN FDOM env.var_types` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_ok cx e` by
+    (first_x_assum irule >>
+     qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
+     simp[lift_option_type_def, return_def]) >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `expr_body_pre cenv cx env e es` by metis_tac[body_annassign_rhs_pre] >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     res_tac >> gvs[FLOOKUP_DEF]) >>
+  `type_memory_bytes cenv typ = type_memory_size tyv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  drule expr_body_pre_type_evaluates >>
+  disch_then (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
+  `type_memory_bytes cenv (expr_type e) = type_memory_size x` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `~is_word_type (expr_type e)` by
+    metis_tac[externalNormalizePremisesTheory.normalize_return_source_kinds] >>
+  `type_memory_bytes cenv (expr_type e) < 2 ** 64 /\
+   type_memory_bytes cenv typ < 2 ** 64` by
+    (fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+     drule alloc_limits_expr_type_alloc_ok >> simp[type_alloc_ok_def]) >>
+  `type_memory_size x < dimword (:256) /\
+   type_memory_size tyv < dimword (:256)` by
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+  irule compile_annassign_typed_widen_stmt_frag >>
+  gns[] >> rpt conj_tac
+  >- (rpt strip_tac >> metis_tac[body_annassign_declared_rhs_open])
+  >- (rpt gen_tac >> strip_tac >>
+      conj_tac >- metis_tac[body_annassign_declared_rhs] >>
+      `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
+      rpt gen_tac >> strip_tac >>
+      conj_tac >- metis_tac[compile_expr_grows] >>
+      irule lower_compile_expr_not_label >>
+      goal_assum (drule_at Any) >>
+      fs[expr_sim_inv_def] >> metis_tac[])
+  >- fs[expr_sim_inv_def]
+  >>~- ([`value_has_type _ _`], rpt gen_tac >> strip_tac >>
+      `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+      `value_runtime_typed env typ v /\
+       value_runtime_typed env (lowered_value_type cenv e) v` by
+        metis_tac[memory_rhs_read_destination_typed, memory_rhs_read_annotation_typed] >>
+      gvs[value_runtime_typed_def])
+  >>~- ([`sfields_tenv_consistent _ _`], fs[expr_sim_inv_def])
+  >>~- ([`acyclic_struct_metadata _`], fs[body_inv_def])
 QED
 
 Theorem body_annassign_case:
@@ -452,9 +618,19 @@ Proof
      arg_type_fits (lowered_value_type cenv e) (expr_type e))`
       >- (`lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
            has_length_word typ /\ is_empty_value_expr e` by metis_tac[] >>
-          irule body_annassign_memory >> simp[] >> metis_tac[]) >>
+          match_mp_tac (Q.SPECL
+            [`cx`, `id`, `typ`, `e`, `tops`, `bindings`, `ctx`, `func`,
+             `cenv`, `env`, `env'`, `ret_ty`, `lctx`, `RetQ`, `es`]
+            body_annassign_memory) >>
+          simp[] >> first_assum ACCEPT_TAC) >>
       irule body_annassign_widened_aggregate_call >> metis_tac[]) >>
-  irule body_annassign_other >> metis_tac[]
+  Cases_on `lowered_value_type cenv e = expr_type e`
+  >- (irule body_annassign_widened_aggregate >> metis_tac[]) >>
+  `type_widens_to env.type_defs (expr_type e) typ` by
+    gvs[type_stmt_def, AllCaseEqs()] >>
+  `~is_bytestring_type (expr_type e)` by
+    metis_tac[type_widens_to_def, arg_type_fits_bytestring_target] >>
+  irule body_annassign_widened_aggregate_call >> metis_tac[]
 QED
 
 (* ===== For ===== *)
@@ -681,9 +857,12 @@ Proof
   simp[supported_stmt_expr_exists_def]
 QED
 
-Theorem body_for_range_lit[local]:
+Theorem body_for_range_lit:
   !cx id typ a1 n1 a2 n2 n stmts tops bindings ctx func cenv env env'
    ret_ty lctx RetQ es res es'.
+    body_stmt_safe tops
+      (For id typ
+        (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n stmts) /\
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
@@ -721,6 +900,7 @@ Theorem body_for_range_lit[local]:
       (eval_stmt cx (For id typ (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) n stmts)) es
 Proof
   rpt strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >>
   `FLOOKUP cenv.ce_vars id = NONE` by
     (irule declared_name_unbound >> metis_tac[]) >>
   `id NOTIN FDOM env.var_types /\ is_int_type typ /\
@@ -780,10 +960,13 @@ Proof
       `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
       drule for_body_abi_targets >> strip_tac >>
       qpat_x_assum `body_stmts_ok _ _`
-        (irule o REWRITE_RULE [body_stmts_ok_def]) >>
+        (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
       simp[] >> rpt conj_tac
+      >- fs[body_stmts_safe_iff]
+      >- fs[body_stmts_safe_iff]
       >- metis_tac[for_declare_stmts_exprs_ok]
-      >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
+      >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
+          fs[body_stmts_safe_iff])
       >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
           `c.ce_struct_fields = cenv.ce_struct_fields` by
             metis_tac[same_frame_struct_fields] >>
@@ -824,7 +1007,8 @@ Proof
        Range (Literal _ (IntL n1)) (Literal _ (IntL n2)) =>
          n1 < n2 /\ bound = Num (n2 - n1)
      | Range _ _ => 0 < bound /\ well_typed_literal typ (IntL (&bound))
-     | Array _ => T) =
+     | Array e => expr_type e = ArrayT typ (Fixed bound) \/
+                  expr_type e = ArrayT typ (Dynamic bound)) =
     (0 < bound /\ well_typed_literal typ (IntL (&bound))))` by
     (Cases_on `e1` >> gvs[] >>
      rename1 `Literal a lit` >> Cases_on `lit` >> gvs[] >>
@@ -914,6 +1098,7 @@ fun range_tuple_forall th =
 Theorem body_for_range:
   !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
    es res es'.
+    body_stmt_safe tops (For id typ it n body) /\
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
@@ -941,7 +1126,8 @@ Theorem body_for_range:
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  rpt strip_tac >> gvs[] >>
+  rpt strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >> gvs[] >>
   Cases_on `?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)`
   >- (gvs[] >> irule body_for_range_lit >> simp[] >> metis_tac[]) >>
   drule (range_tuple_forall body_range_typing) >>
@@ -986,18 +1172,27 @@ Proof
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
             is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     fs[body_inv_def] >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `expr_body_pre cenv cx env e1 es` by
     (irule stmt_expr_body_pre_alloc >>
-     qpat_assum `supported_expr tops e1`
-       (strip_assume_tac o MATCH_MP supported_expr_body_calls) >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
      qexists_tac `int_calls_expr e2 ++ int_calls_stmts body'` >> simp[]) >>
   `!ei. expr_sim_inv cenv cx env ei ==> expr_body_pre cenv cx env e2 ei` by
     (rpt strip_tac >> irule stmt_expr_body_pre_alloc >>
-     qpat_assum `supported_expr tops e2`
-       (strip_assume_tac o MATCH_MP supported_expr_body_calls) >>
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_iterator_exists_def, int_calls_stmt_def, int_calls_iterator_def,
          allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_iterator_def] >>
@@ -1063,10 +1258,11 @@ Resume body_for_range[body]:
   `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
   drule for_body_abi_targets >> strip_tac >>
   qpat_x_assum `body_stmts_ok _ _`
-    (irule o REWRITE_RULE [body_stmts_ok_def]) >>
+    (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
   simp[] >> rpt conj_tac
   >- metis_tac[for_declare_stmts_exprs_ok]
-  >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
+  >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
+          fs[body_stmts_safe_iff])
   >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
       conj_tac
       >- (irule ce_locals_declared_declare_local >> metis_tac[]) >>
@@ -1119,7 +1315,8 @@ Theorem array_for_source_ready[local]:
     ==> body_for_ok cx tyv id stmts vs) /\
   supported_stmt tops bindings (For id typ (Array e) n stmts) /\
   expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' ==>
+  type_stmt env ret_ty (For id typ (Array e) n stmts) = SOME env' /\
+  e = Name (ArrayT typ (Fixed n)) arr ==>
   ?name env_b entry tv ptr sz al vs.
     e = Name (ArrayT typ (Fixed n)) name /\ env' = env /\
     well_typed_expr env (Name (ArrayT typ (Fixed n)) name) /\
@@ -1193,9 +1390,10 @@ Proof
   fs[wordsTheory.dimword_def] >> decide_tac
 QED
 
-Theorem array_body_fragment_callback[local]:
+Theorem array_body_fragment_callback:
   !cx stmts tops ctx cenv bindings env ei id typ tv v env_b ret_ty
    func RetQ st0 bc sd ex inc.
+    body_stmts_safe tops stmts /\
     body_stmts_ok cx stmts /\ body_inv tops ctx cenv cx /\
     supported_stmts tops bindings stmts /\
     (!target. supported_stmts_expr_exists
@@ -1227,10 +1425,13 @@ Proof
     (drule_then irule declare_local_same_frame >> simp[]) >>
   `body_inv tops ctx bc cx` by metis_tac[body_inv_same_frame] >>
   qpat_x_assum `body_stmts_ok _ _`
-    (irule o REWRITE_RULE [body_stmts_ok_def]) >>
+    (irule o REWRITE_RULE [body_stmts_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
   simp[] >> rpt conj_tac
+  >- fs[body_stmts_safe_iff]
+  >- fs[body_stmts_safe_iff]
   >- metis_tac[for_declare_stmts_exprs_ok]
-  >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
+  >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
+          fs[body_stmts_safe_iff])
   >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
       `bc.ce_struct_fields = cenv.ce_struct_fields` by
         metis_tac[same_frame_struct_fields] >>
@@ -1368,9 +1569,28 @@ Proof
   metis_tac[eval_stmts_preserves_tail_lookup_none]
 QED
 
+(* An expression whose top-level internal call, if any, is annotated with
+   its callee's declared return type is lowered at its annotated type. *)
+Theorem post_value_type_declared_return:
+  supported_program tops /\
+  cenv.ce_func_return_type = build_func_return_type tops /\
+  (!t fid args drv. e = Call t (IntCall fid) args drv ==>
+     ?m nr rr ps ds b.
+       supported_function_decl tops fid Internal = SOME (m,nr,rr,ps,ds,t,b)) ==>
+  post_value_type cenv e = expr_type e
+Proof
+  rpt strip_tac >>
+  Cases_on `?t fid args drv. e = Call t (IntCall fid) args drv`
+  >- (gvs[] >> drule_all supported_internal_return_type >>
+      simp[exprLoweringTheory.lowered_value_type_def,
+           vyperASTTheory.expr_type_def]) >>
+  irule loweringPostsTheory.post_value_type_not_int_call >> metis_tac[]
+QED
+
 Theorem body_for_array:
   !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es res es'.
+   es res es' e m arr.
+    body_stmt_safe tops (For id typ it n body) /\
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
        tenv = get_tenv cx /\
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
@@ -1393,12 +1613,13 @@ Theorem body_for_array:
     stmt_exprs_ok cenv (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    (?e. it = Array e) ==>
+    it = Array e /\ e = Name (ArrayT typ (Fixed n)) arr ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  rpt gen_tac >> strip_tac >> qpat_x_assum `it = Array _` SUBST_ALL_TAC >>
+  rpt gen_tac >> strip_tac >>
+  imp_res_tac body_stmt_safe_for_body >> qpat_x_assum `it = Array _` SUBST_ALL_TAC >>
   drule_all array_for_source_ready >> strip_tac >> gvs[] >>
   rename1 `lookup_scopes name es.scopes = SOME entry` >>
   rename1 `evaluate_type (get_tenv cx) typ = SOME tv` >>
@@ -1440,62 +1661,3 @@ Proof
   disch_then drule_all >> simp[] >> metis_tac[]
 QED
 
-Theorem body_for_other:
-  !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
-   es res es'.
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) /\
-    body_inv tops ctx cenv cx /\ supported_stmt tops bindings (For id typ it n body) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (For id typ it n body) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (For id typ it n body) = SOME env' /\
-    stmt_exprs_ok cenv (For id typ it n body) /\
-    call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-    ~(?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (For id typ it n body))
-      (eval_stmt cx (For id typ it n body)) es
-Proof
-  rpt strip_tac >> Cases_on `it`
-  >- (irule body_for_array >> simp[] >> metis_tac[]) >>
-  irule body_for_range >> simp[] >> metis_tac[]
-QED
-
-Theorem body_for_case:
-  !cx id typ it n body.
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) ==>
-    body_stmt_ok cx (For id typ it n body)
-Proof
-  rpt gen_tac >> strip_tac >> REWRITE_TAC [body_stmt_ok_def] >>
-  rpt strip_tac >>
-  Cases_on `?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))`
-  >- (qpat_x_assum `?a1 n1 a2 n2. _`
-        (REPEAT_TCL CHOOSE_THEN SUBST_ALL_TAC) >>
-      drule_all body_for_range_lit >> simp[]) >>
-  drule_all body_for_other >> simp[]
-QED

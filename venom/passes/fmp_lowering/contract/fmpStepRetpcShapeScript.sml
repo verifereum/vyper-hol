@@ -3,7 +3,7 @@
 Theory fmpStepRetpcShape
 Ancestors
   fmpStepStructural fmpStepLayout fmpStepOpaque fmpStepRestrictions
-  fmpStepCallChecks
+
   fmpLowerProps fmpWfDefs venomWf venomInst unitShapeDefs o1PassContract
   venomFnScheduleRunner irSupply list rich_list
 

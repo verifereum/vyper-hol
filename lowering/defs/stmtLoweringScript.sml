@@ -108,26 +108,6 @@ Termination
   WF_REL_TAC `measure (λ(cenv,ops,tys,buf,off). LENGTH ops)` >> simp[]
 End
 
-(* Declared type and DynArray capacity of the target's root variable: a
-   local's from the local tables, a module variable's from its own. *)
-Definition target_root_type_def:
-  target_root_type cenv (NameTarget id) = cenv.ce_var_type id ∧
-  target_root_type cenv (TopLevelNameTarget nsid) =
-    cenv.ce_module_var_type nsid ∧
-  target_root_type cenv (SubscriptTarget bt _) = target_root_type cenv bt ∧
-  target_root_type cenv (AttributeTarget bt _) = target_root_type cenv bt
-End
-
-Definition target_root_capacity_def:
-  target_root_capacity cenv (NameTarget id) = cenv.ce_dynarray_capacity id ∧
-  target_root_capacity cenv (TopLevelNameTarget nsid) =
-    cenv.ce_module_dynarray_capacity nsid ∧
-  target_root_capacity cenv (SubscriptTarget bt _) =
-    target_root_capacity cenv bt ∧
-  target_root_capacity cenv (AttributeTarget bt _) =
-    target_root_capacity cenv bt
-End
-
 (* Convert assignment target to expression for location inference *)
 Definition target_to_expr_def:
   target_to_expr (NameTarget id) = Name NoneT id ∧
@@ -208,6 +188,67 @@ Definition compile_reason_message_def:
     od /\
   compile_reason_message cenv reason_e =
     compile_expr cenv (expr_type reason_e) reason_e
+End
+
+(* ===== Revert with Custom Error ===== *)
+(* Store each argument at its declared type's offset in the argument tuple,
+   evaluating them in order: the first at the tuple's base, later ones at
+   base + offset.
+   Mirrors Python: vyper/codegen_venom/stmt.py:_store_custom_error_args *)
+Definition compile_custom_error_store_args_def:
+  compile_custom_error_store_args cenv [] _ dst offset = return () ∧
+  compile_custom_error_store_args cenv _ [] dst offset = return () ∧
+  compile_custom_error_store_args cenv (e::es) (ty::tys) dst offset =
+    do vv <- compile_expr cenv (expr_type e) e;
+       arg_ptr <- (if offset = 0 then return dst
+                   else emit_op ADD [dst; Lit (n2w offset)]);
+       v <- unwrap_value cenv vv;
+       compile_store_memory cenv v arg_ptr ty (lowered_value_type cenv e);
+       compile_custom_error_store_args cenv es tys dst
+         (offset + type_memory_bytes cenv ty)
+    od
+Termination
+  WF_REL_TAC `measure (λ(cenv,es,tys,dst,off). LENGTH es)` >> simp[]
+End
+
+(* Revert with selector || abi_encode(args) of a declared custom error.
+   The arguments are stored in a tuple buffer at their declared types, then
+   ABI-encoded behind the selector word; the revert starts at buf+28, so the
+   data begins with the 4-byte selector.  An error the compile env doesn't
+   know emits INVALID, as an unknown event does.
+   Mirrors Python: vyper/codegen_venom/stmt.py:_revert_with_custom_error *)
+Definition compile_revert_with_custom_error_def:
+  compile_revert_with_custom_error cenv (CustomError id positional kwargs) =
+    let err = CustomError id positional kwargs in
+    case cenv.ce_error_info (nsid_to_string id) of
+      NONE => emit_inst INVALID [] []
+    | SOME params =>
+        let arg_types = MAP SND params in
+        let args_tuple_t = TupleT arg_types in
+        let arg_es = custom_error_exprs err in
+        do args_alloc <- compile_alloc_buffer
+             (type_memory_bytes cenv args_tuple_t);
+           args_buf <- return args_alloc.buf_operand;
+           compile_custom_error_store_args cenv arg_es arg_types args_buf 0;
+           buf_alloc <- compile_alloc_buffer
+             (abi_size_bound cenv.ce_struct_fields args_tuple_t + 32);
+           buf <- return buf_alloc.buf_operand;
+           emit_void MSTORE
+             [buf; Lit (n2w (cenv.ce_method_id (SND id) arg_types))];
+           if NULL arg_es then
+             do revert_offset <- emit_op ADD [buf; Lit 28w];
+                emit_inst REVERT [revert_offset; Lit 4w] []
+             od
+           else
+             do payload_buf <- emit_op ADD [buf; Lit 32w];
+                encoded_len <- compile_abi_encode_to_buf payload_buf args_buf
+                  (type_to_abi_enc_info cenv.ce_struct_fields cenv
+                     args_tuple_t);
+                revert_offset <- emit_op ADD [buf; Lit 28w];
+                revert_len <- emit_op ADD [Lit 4w; encoded_len];
+                emit_inst REVERT [revert_offset; revert_len] []
+             od
+        od
 End
 
 (* ===== Internal Return ===== *)
@@ -397,22 +438,16 @@ End
    SOME LocMemory means source is in memory → may alias destination.
    NONE means stack/computed value → no aliasing possible.
    Mirrors Python: src_vv.location (None for stack, DataLocation.X for located).
-   dynarray_info: NONE for non-dynarray types, SOME (elem_words, elem_mem_size) for DynArray.
-   When SOME, uses dynarray_to_storage (copies only length + actual elems).
-   When NONE, uses bulk word copy (copies all words).
+   A complex value goes to storage or transient storage by compile_store_slots,
+   which writes only the live words of its DynArrays and bytestrings.
    Mirrors Python: vyper/codegen_venom/context.py:Context.store_variable *)
 Definition compile_assign_value_def:
   compile_assign_value cenv dst_op dst_loc val_op is_prim_word
                        (src_loc : data_location option)
-                       (dst_ty : type) (src_ty : type)
-                       (dynarray_info : (num # num) option) mem_size =
-    (* A bytestring source keeps its own, possibly narrower, buffer, so a
-       storage or transient target gets only the words it holds.
-       Immutable bytestring stores use their runtime length below.
-       Mirrors Python: stmt.py _store_complex_type with copy_typ
-       (vyperlang/vyper#5332). *)
-    let copy_size = (if is_bytestring_type dst_ty
-                     then type_memory_bytes cenv src_ty else mem_size) in
+                       (dst_ty : type) (src_ty : type) mem_size =
+    (* An immutable bytestring target gets only the words its runtime length
+       covers: compile_store_immutable_bytestring.
+       Mirrors Python: stmt.py _store_complex_type (vyperlang/vyper#5332). *)
     case dst_loc of
       LocMemory =>
         if is_prim_word then emit_void MSTORE [dst_op; val_op]
@@ -445,22 +480,7 @@ Definition compile_assign_value_def:
                 od
               else return val_op);
            if is_prim_word then emit_void SSTORE [dst_op; val_op']
-           else
-             (case dynarray_info of
-                SOME (ew, ems) =>
-                  (* DynArray→storage: copy only length + actual elements.
-                     Mirrors Python: vyper/codegen_venom/context.py:Context.copy_dynarray_to_storage *)
-                  compile_dynarray_to_storage val_op' dst_op ew ems F
-              | NONE =>
-                if copy_size ≤ 32 then
-                  do loaded <- emit_op MLOAD [val_op'];
-                     emit_void SSTORE [dst_op; loaded]
-                  od
-                else
-                  do compile_memory_to_storage val_op' dst_op
-                                               (copy_size DIV 32);
-                     return ()
-                  od)
+           else compile_store_slots cenv val_op' dst_op dst_ty F
         od
     | LocTransient =>
         do val_op' <-
@@ -473,20 +493,7 @@ Definition compile_assign_value_def:
                 od
               else return val_op);
            if is_prim_word then emit_void TSTORE [dst_op; val_op']
-           else
-             (case dynarray_info of
-                SOME (ew, ems) =>
-                  compile_dynarray_to_storage val_op' dst_op ew ems T
-              | NONE =>
-                if copy_size ≤ 32 then
-                  do loaded <- emit_op MLOAD [val_op'];
-                     emit_void TSTORE [dst_op; loaded]
-                  od
-                else
-                  do compile_memory_to_transient val_op' dst_op
-                                                 (copy_size DIV 32);
-                     return ()
-                  od)
+           else compile_store_slots cenv val_op' dst_op dst_ty T
         od
     | LocCode =>
         do val_op' <-
@@ -578,17 +585,12 @@ Definition compile_tuple_store_all_def:
        mem_sz <- return (type_memory_bytes cenv dst_ty);
        src_is_word <- return (is_word_type src_ty);
        dst_is_word <- return is_prim;
-       da_info <- return (case dst_ty of
-          ArrayT elem_ty (Dynamic _) =>
-            let ems = type_memory_bytes cenv elem_ty in
-            SOME ((ems + 31) DIV 32, ems)
-        | _ => NONE);
        (if src_is_word then
           if dst_is_word then compile_store_at_loc cenv.ce_imm_alloca dst_op val_op loc_opt
           else emit_void INVALID []
         else
           compile_assign_value cenv dst_op dst_loc val_op is_prim
-                        NONE dst_ty src_ty da_info mem_sz);
+                        NONE dst_ty src_ty mem_sz);
        compile_tuple_store_all cenv src_tys targets vals
     od ∧
   (* Non-BaseTarget element: emit INVALID (shouldn't occur in valid AST) *)
@@ -839,25 +841,15 @@ Definition compile_stmt_def:
              else
              let is_prim = is_word_type vtyp in
              let mem_size = type_memory_bytes cenv vtyp in
-             let da_info = (case vtyp of
-                ArrayT elem_ty (Dynamic _) =>
-                  let ems = type_memory_bytes cenv elem_ty in
-                  SOME ((ems + 31) DIV 32, ems)
-              | _ => NONE) in
              compile_assign_value cenv (Lit (n2w offset)) LocMemory val_op
-                                  is_prim src_loc vtyp src_ty da_info mem_size
+                                  is_prim src_loc vtyp src_ty mem_size
          | SOME (PtrVar ptr_op _) =>
              if empty_value then emit_void MSTORE [ptr_op; Lit 0w]
              else
              let is_prim = is_word_type vtyp in
              let mem_size = type_memory_bytes cenv vtyp in
-             let da_info = (case vtyp of
-                ArrayT elem_ty (Dynamic _) =>
-                  let ems = type_memory_bytes cenv elem_ty in
-                  SOME ((ems + 31) DIV 32, ems)
-              | _ => NONE) in
              compile_assign_value cenv ptr_op LocMemory val_op
-                                  is_prim src_loc vtyp src_ty da_info mem_size
+                                  is_prim src_loc vtyp src_ty mem_size
          | _ =>
              (* Unsupported: AnnAssign without its preallocated memory binding. *)
              emit_void INVALID [])
@@ -894,14 +886,9 @@ Definition compile_stmt_def:
         dst_ty <- return (case dst_ty_opt of SOME (ValPT t) => t | _ => src_ty);
         is_prim <- return (is_word_type dst_ty);
         mem_size <- return (type_memory_bytes cenv dst_ty);
-        da_info <- return (case dst_ty of
-           ArrayT elem_ty (Dynamic _) =>
-             let ems = type_memory_bytes cenv elem_ty in
-             SOME ((ems + 31) DIV 32, ems)
-         | _ => NONE);
         (case dst_loc_opt of
            SOME loc => compile_assign_value cenv dst_op loc val_op is_prim
-                        src_loc dst_ty src_ty da_info mem_size
+                        src_loc dst_ty src_ty mem_size
          | NONE =>
              (* Unsupported: unresolved assignment targets must not disappear. *)
              emit_void INVALID [])
@@ -937,7 +924,8 @@ Definition compile_stmt_def:
     od ∧
 
   (* Assert: evaluate condition, handle failure.
-     Three cases: bare assert, UNREACHABLE, or with reason string.
+     Four cases: bare assert, UNREACHABLE, with a reason string, or with a
+     custom error.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Assert, _assert_with_reason *)
   compile_stmt cenv lctx ty (Assert cond_e AssertBare) =
     (* Bare assert: revert 0,0 on failure *)
@@ -972,6 +960,18 @@ Definition compile_stmt_def:
        msg_mem_size <- return (type_memory_bytes cenv reason_ty);
        msg_op <- compile_reason_message cenv reason_e;
        compile_revert_with_reason cenv msg_op reason_ty msg_mem_size;
+       new_block ok_lbl;
+       return ()
+    od ∧
+  compile_stmt cenv lctx ty (Assert cond_e (AssertCustomError err)) =
+    (* Assert with a custom error: revert with its selector and ABI-encoded
+       arguments on failure *)
+    do cond_op <- lower_value compile_expr cenv (BaseT BoolT) cond_e;
+       ok_lbl <- fresh_label "assert_ok";
+       fail_lbl <- fresh_label "assert_fail";
+       emit_inst JNZ [cond_op; Label ok_lbl; Label fail_lbl] [];
+       new_block fail_lbl;
+       compile_revert_with_custom_error cenv err;
        new_block ok_lbl;
        return ()
     od ∧
@@ -1024,8 +1024,9 @@ Definition compile_stmt_def:
 
   (* Raise: revert with optional reason.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Raise
-     Three cases: bare raise (revert 0,0), UNREACHABLE (INVALID),
-     or with reason (Error(string) encoding). *)
+     Four cases: bare raise (revert 0,0), UNREACHABLE (INVALID),
+     with reason (Error(string) encoding), or a custom error (its selector
+     and ABI-encoded arguments). *)
   compile_stmt cenv lctx ty (Raise RaiseBare) =
     emit_inst REVERT [Lit 0w; Lit 0w] [] ∧
   compile_stmt cenv lctx ty (Raise RaiseUnreachable) =
@@ -1036,6 +1037,8 @@ Definition compile_stmt_def:
      do msg_op <- compile_reason_message cenv reason_e;
         compile_revert_with_reason cenv msg_op reason_ty msg_mem_size
      od) ∧
+  compile_stmt cenv lctx ty (Raise (RaiseCustomError err)) =
+    compile_revert_with_custom_error cenv err ∧
 
   (* Internal returns use RET; constructor returns jump to their epilogue;
      external returns unlock and STOP, as in Python's lower_Return. *)
@@ -1130,14 +1133,14 @@ Definition compile_stmt_def:
      Delegates to compile_dynarray_append for correct opcode dispatch.
      Mirrors Python: expr.py _lower_dynarray_append *)
   compile_stmt cenv lctx ty (Append target val_e) =
-    (let target_op = compile_target_base cenv target in
-     (* Use array element type, not threading ty.
-        Python: elem_typ = darray_typ.value_type *)
-     let elem_ty = (case target_root_type cenv target of
-                      SOME (ArrayT t _) => t | _ => ty) in
+    (do result <- compile_get_target_ptr compile_expr cenv target;
+     let target_op = FST result in
+     let loc = (case FST (SND result) of SOME l => l | NONE => LocMemory) in
+     let elem_ty = (case SND (SND result) of
+                      SOME (ValPT (ArrayT t _)) => t | _ => BaseT (UintT 256)) in
      let is_prim = is_word_type elem_ty in
-     let capacity = target_root_capacity cenv target in
-     let loc = infer_array_location cenv (target_to_expr target) in
+     let capacity = (case SND (SND result) of
+                        SOME (ValPT (ArrayT _ (Dynamic n))) => n | _ => 0) in
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc elem_ty in
      let load_opc = load_opc_for loc in
@@ -1161,7 +1164,7 @@ Definition compile_stmt_def:
                                      elem_ty src_elem_ty
                                      capacity is_prim
                                      load_opc store_opc
-     od) ∧
+     od od) ∧
 
   (* Assign with TupleTarget: tuple unpacking.
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_tuple_unpack

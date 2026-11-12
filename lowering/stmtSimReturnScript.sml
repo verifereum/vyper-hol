@@ -153,7 +153,7 @@ Proof
 QED
 
 (* Move a load-only variable/index frame across the exact release. *)
-Theorem return_unlock_load_frame[local]:
+Theorem return_unlock_load_frame:
   !cenv s vars n id.
     LENGTH (return_unlock_insts cenv id) <= n ==>
     (return_unlock_state cenv s) with <|vs_vars := vars; vs_inst_idx := n|> =
@@ -224,7 +224,7 @@ Proof
   Cases_on `eval_operand op s` >> Cases_on `eval_operand rpc s` >> simp[]
 QED
 
-Theorem step_persistent_return_unlock[local]:
+Theorem step_persistent_return_unlock:
   !id key s.
     ~s.vs_call_ctx.cc_static ==>
     step_inst_base (mk_inst id SSTORE [Lit key; Lit 3w] []) s =

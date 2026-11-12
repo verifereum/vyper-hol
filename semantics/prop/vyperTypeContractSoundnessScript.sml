@@ -30,6 +30,7 @@ val _ = Parse.hide "body";
 Definition call_tx_well_typed_def:
   call_tx_well_typed tx <=>
     LENGTH tx.calldata < 2 ** 256 /\
+    LENGTH tx.code < 2 ** 256 /\
     tx.value < 2 ** 256 /\
     tx.time_stamp < 2 ** 256 /\
     tx.block_number < 2 ** 256 /\
@@ -2886,6 +2887,8 @@ Proof
     metis_tac[getter_context_equiv_read_result] >>
   `!ty res sb. select_result cx1 ty res sb = select_result cx2 ty res sb` by
     metis_tac[getter_context_equiv_select_result] >>
+  `subscript_reads_base cx1 e1 e2 = subscript_reads_base cx2 e1 e2` by
+    gvs[getter_context_equiv_def, subscript_reads_base_def] >>
   simp[Ntimes evaluate_def 2]
 QED
 
