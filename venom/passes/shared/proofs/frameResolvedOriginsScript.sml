@@ -19,12 +19,14 @@ Definition resolve_tag_def:
     | OriginDynamic => NONE
 End
 
+(* A dynamic (DALLOCA-derived) pointer resolves to no entry: OriginDynamic
+   never resolves, and neither does a parameter whose actual was dynamic. *)
 Definition resolution_def:
   resolution ct rp om rv <=>
-    !v. case FLOOKUP om v of
-      NONE => FLOOKUP rv v = NONE
-    | SOME p => ?r. resolve_tag ct rp (FST p) (SND p) = SOME r /\
-                    FLOOKUP rv v = SOME r
+    !v. FLOOKUP rv v =
+      case FLOOKUP om v of
+        NONE => NONE
+      | SOME p => resolve_tag ct rp (FST p) (SND p)
 End
 
 Theorem resolve_tag_site:
@@ -42,7 +44,7 @@ QED
 
 Theorem resolution_lookup:
   resolution ct rp om rv /\ FLOOKUP om v = SOME (tag,site) ==>
-  ?r. resolve_tag ct rp tag site = SOME r /\ FLOOKUP rv v = SOME r
+  FLOOKUP rv v = resolve_tag ct rp tag site
 Proof
   simp[resolution_def] >> strip_tac >>
   first_x_assum (qspec_then `v` mp_tac) >> simp[]
@@ -63,6 +65,14 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
+Theorem resolution_unresolved_update[local]:
+  resolution ct rp om rv /\ resolve_tag ct rp tag site = NONE ==>
+  resolution ct rp (om |+ (v,(tag,site))) (DRESTRICT rv (COMPL {v}))
+Proof
+  simp[resolution_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >> rpt strip_tac >>
+  Cases_on `v' = v` >> simp[]
+QED
+
 Theorem resolution_update:
   resolution ct rp om rv /\ resolve_tag ct rp tag site = SOME r ==>
   resolution ct rp (om |+ (v,(tag,site))) (rv |+ (v,r))
@@ -72,13 +82,13 @@ Proof
 QED
 
 Theorem resolution_erasure:
-  resolution ct rp om rv ==> SND o_f rv = origin_erase om
+  resolution ct rp om rv /\ FLOOKUP rv v = SOME e ==>
+  FLOOKUP (origin_erase om) v = SOME (SND e)
 Proof
-  strip_tac >> simp[fmap_eq_flookup, origin_erase_lookup, FLOOKUP_o_f] >>
-  gen_tac >> Cases_on `FLOOKUP om x`
-  >- (drule_all resolution_none >> simp[]) >>
-  PairCases_on `x'` >> drule_all resolution_lookup >> strip_tac >>
-  drule resolve_tag_site >> simp[]
+  simp[resolution_def, origin_erase_lookup] >> strip_tac >>
+  first_x_assum (qspec_then `v` mp_tac) >>
+  Cases_on `FLOOKUP om v` >> simp[] >>
+  PairCases_on `x` >> simp[] >> metis_tac[resolve_tag_site]
 QED
 
 Definition resolved_op_def:
@@ -87,29 +97,25 @@ Definition resolved_op_def:
 End
 
 Theorem resolution_operand_erasure:
-  resolution ct rp om rv ==>
-  OPTION_MAP SND (resolved_op rv op) = op_prov (origin_erase om) op
+  resolution ct rp om rv /\ resolved_op rv op = SOME e ==>
+  op_prov (origin_erase om) op = SOME (SND e)
 Proof
-  strip_tac >> drule resolution_erasure >> strip_tac >>
   Cases_on `op` >> simp[resolved_op_def, op_prov_def] >>
-  fs[origin_erase_def, fmap_eq_flookup, FLOOKUP_o_f] >>
-  first_x_assum (qspec_then `s` mp_tac) >>
-  Cases_on `FLOOKUP rv s` >> simp[]
+  metis_tac[resolution_erasure]
 QED
 
 Theorem resolution_arguments_erasure:
-  resolution ct rp om rv ==>
-  MAP (OPTION_MAP SND) (MAP (resolved_op rv) ops) =
-    MAP (op_prov (origin_erase om)) ops
+  resolution ct rp om rv /\ k < LENGTH ops /\
+  EL k (MAP (resolved_op rv) ops) = SOME e ==>
+  EL k (MAP (op_prov (origin_erase om)) ops) = SOME (SND e)
 Proof
-  strip_tac >> simp[MAP_MAP_o, MAP_EQ_f] >>
-  metis_tac[resolution_operand_erasure]
+  simp[EL_MAP] >> metis_tac[resolution_operand_erasure]
 QED
 
 Theorem resolution_origin_set:
   resolution ct rp om rv /\
   (case p of NONE => r = NONE | SOME (tag,site) =>
-     ?entry. resolve_tag ct rp tag site = SOME entry /\ r = SOME entry) ==>
+     r = resolve_tag ct rp tag site) ==>
   resolution ct rp (origin_set om outs p) (origin_set rv outs r)
 Proof
   Cases_on `p` >> simp[]
@@ -118,7 +124,8 @@ Proof
   PairCases_on `x` >> simp[] >> strip_tac >> gvs[] >>
   Cases_on `outs` >> simp[origin_set_def, resolution_restrict] >>
   Cases_on `t` >> simp[origin_set_def, resolution_restrict] >>
-  metis_tac[resolution_update]
+  Cases_on `resolve_tag ct rp x0 x1` >> simp[] >>
+  metis_tac[resolution_update, resolution_unresolved_update]
 QED
 
 Theorem resolve_parameter_forward:
@@ -148,8 +155,7 @@ Theorem resolution_operand:
   resolution ct rp om rv ==>
   (case origin_op om op of
      NONE => resolved_op rv op = NONE
-   | SOME (tag,site) => ?r. resolve_tag ct rp tag site = SOME r /\
-                           resolved_op rv op = SOME r)
+   | SOME (tag,site) => resolved_op rv op = resolve_tag ct rp tag site)
 Proof
   strip_tac >> Cases_on `op` >> simp[origin_op_def, resolved_op_def] >>
   Cases_on `FLOOKUP om s`
@@ -161,8 +167,7 @@ Theorem resolution_phi:
   resolution ct rp om rv ==>
   (case origin_phi prev om inst of
      NONE => resolved_phi prev rv inst = NONE
-   | SOME (tag,site) => ?r. resolve_tag ct rp tag site = SOME r /\
-                           resolved_phi prev rv inst = SOME r)
+   | SOME (tag,site) => resolved_phi prev rv inst = resolve_tag ct rp tag site)
 Proof
   strip_tac >> Cases_on `prev` >> simp[origin_phi_def, resolved_phi_def] >>
   Cases_on `resolve_phi x inst.inst_operands` >> simp[] >>
@@ -187,7 +192,7 @@ Theorem resolved_parameter_to_parameter:
   resolve_tag ct' (MAP (resolved_op rv) [Var v]) (OriginParameter 0) site =
     SOME entry
 Proof
-  strip_tac >> drule_all resolution_lookup >> strip_tac >>
+  strip_tac >> drule_all resolution_lookup >>
   gvs[resolve_tag_def, resolved_op_def]
 QED
 
