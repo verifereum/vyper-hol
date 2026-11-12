@@ -6,6 +6,7 @@
 Theory o1DftStageSim
 Ancestors
   o1DftStageSsa dftContractGas o1PassContract venomPassSchedule venomWf
+  gasEvents gasCount
 
 Theorem dft_stage_sim_gas:
   ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' /\ o1_pre 7 C C' /\
@@ -18,4 +19,31 @@ Proof
   drule ctx_pass_stage_dft >> strip_tac >>
   irule dft_ctx_sim_gas >> simp[] >>
   irule dft_ctx_labels_bound >> gvs[o1_run_state_ok_def]
+QED
+
+Theorem dft_stage_gas_mask:
+  ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' /\ o1_pre 7 C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\ o1_run_state_ok vs' /\
+  C'.ctx_entry = SOME nm /\ lookup_function nm C'.ctx_functions = SOME fn' /\
+  fn_entry_label fn' = SOME lbl /\
+  terminates (run_context fuel C' vs') /\
+  gas_count_blocks fuel C' fn'
+    (vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) <=
+    LENGTH vs'.vs_gas_readings ==>
+  ?fn raw_slots sites unused.
+    C.ctx_entry = SOME nm /\
+    lookup_function nm C.ctx_functions = SOME fn /\ fn_entry_label fn = SOME lbl /\
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) vs'.vs_gas_readings /\
+    !gobs tail.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
+      (?extra. sites =
+         gas_events_blocks fuel C fn
+           (vs' with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                        vs_current_bb := lbl; vs_inst_idx := 0 |>) ++ extra) /\
+      ((?fr. terminates
+               (run_context fr C (vs' with vs_gas_readings := gobs ++ tail))) ==>
+       !D. ctx_sim D C C' (vs' with vs_gas_readings := gobs ++ tail) vs')
+Proof
+  cheat
 QED
