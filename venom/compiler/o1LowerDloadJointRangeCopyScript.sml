@@ -265,7 +265,9 @@ Proof
       fs[ptrDisciplineTheory.ld_dyn_agree_def] >> NO_TAC],
     `l <> 0w` by (strip_tac >> gvs[]) >>
     qpat_x_assum `eval_operand dop t = SOME d' /\ _` strip_assume_tac >>
-    gvs[] >>
+    (* no simplification here: it would reorder the mask's sums away from
+       the lemmas' syntactic form *)
+    rpt (qpat_x_assum `l = 0w` (fn th => fs[th])) >>
     pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
     rpt conj_tac >>
     FIRST [
