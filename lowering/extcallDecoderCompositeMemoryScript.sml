@@ -7,7 +7,7 @@ Ancestors
   abiDecoderComplexGuard abiDecoderComplexHead abiDecoderMemberBound
   abiDecoderMemberSetup abiDecoderMemberCode freshWrites exprSimCalldataSlice
   abiDecoderReentry abiDecoderReentryPointer abiDecoderReservation abiDecoderVarSequence abiDecoderDynamicLoopSetup
-  loweringStateRelDefs varsExt
+  loweringStateRelDefs varsExt abiScratchAddress abiScratchDecoderSubwindow abiEncoderArrayFrame
   fragGasSeqMem fragGasSeqAbort fragGasMode fragGasPathMem instMemFrontier
   abiDecoderGuard abiDecoderGuards abiDecoderRange abiDecoderBytesBound
   abiEncoder compileEnv emitHelper fragExecMem abiDecoderContract
@@ -255,4 +255,83 @@ Proof
   qexistsl_tac [`LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st fin))`,
     `OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st fin))`] >>
   conj_tac >- simp[] >> disj1_tac >> qexists_tac `t` >> simp[]
+QED
+
+(* The complete recursive Entry at a prepared member.  Physical subwindows
+   and executed head guards suffice; no validity of the child is assumed. *)
+Theorem extcall_decoder_member_entry[local]:
+  di = type_to_abi_dec_info sf ce ty /\ abi_decoder_coherent ce env sf ty tv /\
+  compile_abi_decode_to_buf (SND ops) (FST ops) MLOAD base_op hi di mid = ((),fin) /\
+  fn_has_code mid fin func /\ fn_inst_ids_distinct func /\
+  eval_operand base_op s = SOME (n2w B) /\ eval_operand hi s = SOME (n2w H) /\
+  hi <> Lit 0w /\ base_op <> Lit 0w /\
+  H <= P /\ B+P < dimword(:256) /\ B+P <= s.vs_alloca_next /\
+  sb+ao <= H /\
+  (dec_info_needs_offset di ==> sb+off < dimword(:256)) /\
+  (!clamp. di = DecPrimWord clamp ==> sb+ao+32 <= H) /\
+  vo+type_memory_bytes ce ty <= outsz /\
+  d+outsz < dimword(:256) /\ d+outsz <= s.vs_alloca_next /\
+  LENGTH snap = P /\ mem_bytes_at B P s.vs_memory = snap /\
+  abi_footprint_disjoint B P ((d,outsz)::abi_decoder_child_scratch
+    (abi_decoder_ids first last) b cap s) /\
+  abi_footprint_disjoint d outsz
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
+  (!id p n. FLOOKUP s.vs_allocas id = SOME (p,n) ==> p+n <= s.vs_alloca_next) /\
+  abi_decoder_budget first last b cap s /\ first <= abi_decoder_entry_floor mid /\
+  fin.cs_next_id <= last /\ fin.cs_next_var <= limit.cs_next_var /\
+  b+cap < dimword(:256) /\ s.vs_alloca_next <= b+cap /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  abi_decoder_operand_live st.cs_next_var hi /\
+  st.cs_next_var <= mid.cs_next_var /\
+  abi_decoder_operand_live mid.cs_next_var (FST ops) /\
+  abi_decoder_operand_live mid.cs_next_var (SND ops) /\
+  abi_decoder_address_frame st.cs_next_var s t /\ fresh_vars_wrt limit t /\
+  eval_operand (FST ops) t = SOME (n2w (sb + if dec_info_needs_offset di then off else ao)) /\
+  eval_operand (SND ops) t = SOME (n2w (d+vo)) /\
+  ~s.vs_halted /\ t.vs_current_bb = mid.cs_current_bb /\
+  t.vs_inst_idx = LENGTH mid.cs_current_insts ==>
+  di = type_to_abi_dec_info sf ce ty /\ abi_decoder_coherent ce env sf ty tv /\
+  compile_abi_decode_to_buf (SND ops) (FST ops) MLOAD base_op hi di mid = ((),fin) /\
+  fn_has_code mid fin func /\ fn_inst_ids_distinct func /\
+  eval_operand base_op t = SOME (n2w B) /\
+  eval_operand (FST ops) t = SOME (n2w (sb + if dec_info_needs_offset di then off else ao)) /\
+  eval_operand (SND ops) t = SOME (n2w (d+vo)) /\
+  eval_operand hi t = SOME (n2w H) /\ hi <> Lit 0w /\ base_op <> Lit 0w /\
+  H <= P /\ B+P < dimword(:256) /\ B+P <= t.vs_alloca_next /\
+  sb + (if dec_info_needs_offset di then off else ao) < dimword(:256) /\
+  d+vo+type_memory_bytes ce ty < dimword(:256) /\
+  d+vo+type_memory_bytes ce ty <= t.vs_alloca_next /\
+  LENGTH snap = P /\ mem_bytes_at B P t.vs_memory = snap /\
+  (!clamp. di = DecPrimWord clamp ==>
+    sb + (if dec_info_needs_offset di then off else ao) + 32 <= H) /\
+  abi_footprint_disjoint B P ((d+vo,type_memory_bytes ce ty)::abi_decoder_child_scratch
+    (abi_decoder_ids first last) b cap t) /\
+  abi_footprint_disjoint (d+vo) (type_memory_bytes ce ty)
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap t) /\
+  (!id p n. FLOOKUP t.vs_allocas id = SOME (p,n) ==> p+n <= t.vs_alloca_next) /\
+  abi_decoder_budget first last b cap t /\ first <= abi_decoder_entry_floor mid /\
+  fin.cs_next_id <= last /\ fin.cs_next_var <= limit.cs_next_var /\
+  fresh_vars_wrt limit t /\ b+cap < dimword(:256) /\ t.vs_alloca_next <= b+cap /\
+  EVERY (abi_decoder_operand_live mid.cs_next_var) [FST ops; SND ops; base_op; hi] /\
+  ~t.vs_halted /\ t.vs_current_bb = mid.cs_current_bb /\
+  t.vs_inst_idx = LENGTH mid.cs_current_insts
+Proof
+  strip_tac >>
+  drule_all abi_scratch_address >> strip_tac >>
+  `abi_footprint_disjoint B P ((d+vo,type_memory_bytes ce ty)::
+    abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+    (irule abi_scratch_disjoint_output_subwindow >> qexistsl_tac [`d`, `outsz`] >> simp[]) >>
+  `abi_footprint_disjoint (d+vo) (type_memory_bytes ce ty)
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+    (irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`d`, `outsz`] >> simp[]) >>
+  `abi_decoder_operand_live mid.cs_next_var base_op /\
+   abi_decoder_operand_live mid.cs_next_var hi` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  qpat_x_assum `abi_decoder_address_frame _ _ _` mp_tac >>
+  simp[abi_decoder_address_frame_def] >> strip_tac >>
+  simp[] >> rpt conj_tac
+  >- (Cases_on `dec_info_needs_offset di` >> gvs[] >> decide_tac)
+  >- (rpt strip_tac >> gvs[dec_info_needs_offset_def])
+  >- (rpt strip_tac >> qpat_x_assum `!id p n. FLOOKUP _ id = SOME (p,n) ==> _` drule >> decide_tac) >>
+  first_x_assum (qspecl_then [`abi_decoder_ids first last`, `[]:(num # num) list`] strip_assume_tac) >> simp[]
 QED
