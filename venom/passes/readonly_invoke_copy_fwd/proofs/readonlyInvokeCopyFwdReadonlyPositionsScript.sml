@@ -304,3 +304,23 @@ Proof
   simp[ricf_readonly_function_edit_def, LIST_REL_EL_EQN] >> strip_tac >>
   irule ricf_readonly_block_edit_decode >> simp[] >> metis_tac[]
 QED
+
+(* Invoke decoding is also invertible: edits never introduce a new call. *)
+Theorem ricf_readonly_inst_edit_decode_back:
+  ricf_readonly_inst_edit rma old cur /\ cur.inst_opcode = INVOKE /\
+  decode_invoke cur = SOME (nm,argsR) ==>
+  ?args. old.inst_opcode = INVOKE /\ decode_invoke old = SOME (nm,args) /\
+    LENGTH argsR = LENGTH args /\
+    (!k. k < LENGTH args ==> EL k argsR = EL k args \/ rma_is_readonly rma nm k)
+Proof
+  strip_tac >>
+  `old.inst_opcode = INVOKE` by
+    gvs[ricf_readonly_inst_edit_def, ricf_inst_edit_def] >>
+  `icf_get_callee_name old = SOME nm` by
+    (gvs[ricf_readonly_inst_edit_def, decode_invoke_def,
+         icf_get_callee_name_def, AllCaseEqs()]) >>
+  `?args. decode_invoke old = SOME (nm,args)` by
+    (Cases_on `old.inst_operands` >> gvs[icf_get_callee_name_def] >>
+     Cases_on `h` >> gvs[icf_get_callee_name_def, decode_invoke_def]) >>
+  drule_all ricf_readonly_inst_edit_decode >> strip_tac >> gvs[] >> metis_tac[]
+QED
