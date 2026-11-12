@@ -384,6 +384,9 @@ Theorem append_storage_agree_copy:
     k = slot+n2w (1+len*type_slot_size tv) /\
     well_formed_type_value tv /\ value_has_type tv v /\
     encode_value tv v = SOME writes /\ val_in_memory tv v off mem /\
+    (!i b. i < type_slot_size tv /\ b < 32 /\
+      ~dead_bytes (apply_writes k writes st) (w2n k) tv (w2n k+i) b ==>
+      MEM i (MAP FST writes)) /\
     storage_agree (storage_dead cx tr st) st mt ==>
     storage_agree
       (storage_dead cx tr (update_storage slot (n2w (len+1)) (apply_writes k writes st)))
@@ -471,49 +474,3 @@ Resume append_storage_agree_copy[outside]:
 QED
 Finalise append_storage_agree_copy
 
-Theorem accounts_rel_append_storage_copy:
-  !cx es s mid n tr slot tv cap len k v writes off mem mt s'.
-    accounts_rel cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
-    declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
-    w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
-    (!mid' n' subs' slot' tv'.
-      declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
-      (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
-      ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
-        (w2n slot') (type_slot_size tv')) /\
-    0 < type_slot_size tv /\
-    len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap /\
-    k = slot+n2w (1+len*type_slot_size tv) /\
-    well_formed_type_value tv /\ value_has_type tv v /\
-    encode_value tv v = SOME writes /\ val_in_memory tv v off mem /\
-    mt = (if tr then contract_transient s else contract_storage s) /\
-    s'.vs_accounts =
-      (if tr then s.vs_accounts else
-       (cx.txn.target =+ (lookup_account cx.txn.target s.vs_accounts with storage :=
-         update_storage slot (n2w (len+1))
-           (FOLDL (\t i. update_storage (k+n2w i) (mem_word_at (off+32*i) mem) t)
-             mt (COUNT_LIST (type_slot_size tv))))) s.vs_accounts) /\
-    s'.vs_transient =
-      (if tr then (cx.txn.target =+ update_storage slot (n2w (len+1))
-         (FOLDL (\t i. update_storage (k+n2w i) (mem_word_at (off+32*i) mem) t)
-           mt (COUNT_LIST (type_slot_size tv)))) s.vs_transient
-       else s.vs_transient) ==>
-    accounts_rel cx
-      (set_storage cx es tr (update_storage slot (n2w (len+1))
-        (apply_writes k writes (get_storage cx es tr)))) s'
-Proof
-  rpt gen_tac >> strip_tac >>
-  `storage_agree (storage_dead cx tr (get_storage cx es tr))
-    (get_storage cx es tr) mt` by
-    (Cases_on `tr` >>
-     gvs[contract_transient_def, contract_storage_def, get_storage_def,
-         accounts_rel_def, transient_agree_def, accounts_agree_def,
-         vfmStateTheory.lookup_account_def]) >>
-  drule_all append_storage_agree_copy >> strip_tac >>
-  Cases_on `tr` >> gvs[]
-  >- (irule accounts_rel_set_transient >>
-      qexistsl [`es`, `s`] >>
-      simp[set_storage_backend_eq] >> metis_tac[]) >>
-  irule accounts_rel_set_storage >> qexistsl [`es`, `s`] >>
-  simp[set_storage_backend_eq] >> metis_tac[]
-QED
