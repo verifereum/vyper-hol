@@ -4,13 +4,16 @@ Ancestors
   bodyMemAggregateAdapters bodyMemAggregateTraversal exprSimAggregateLoops
 
 Theorem aggregate_struct_fields_body_sim_mem:
-  !fields ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx tops.
-  EVERY (\(name,e).
+  !fields tys ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx tops.
+  LIST_REL (\t (name,e).
     ALOOKUP (get_struct_fields ce.ce_struct_fields
       (case ty of StructT nsid => nsid_to_string nsid | _ => "")) name =
-      SOME (expr_type e,type_memory_bytes ce (expr_type e))) fields /\
+      SOME (t,type_memory_bytes ce t)) tys fields /\
+  LIST_REL (\t e. arg_type_fits (expr_type e) t) tys (MAP SND fields) /\
+  LIST_REL (\t e. t = expr_type e \/
+    is_bytestring_type t /\ is_bytestring_type (expr_type e)) tys (MAP SND fields) /\
   compile_struct_lit compile_expr ce ty fields (Var x) off sa = (out,sb) /\
-  OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (MAP SND fields)) = SOME tvs /\
+  OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
@@ -69,12 +72,13 @@ Proof
   disch_then (qspecl_then [`compile_expr`, `Var x`, `off`] assume_tac) >>
   gvs[] >>
   drule aggregate_make_tuple_body_sim_mem >>
-  disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
   disch_then (qspecl_then [`es`, `func`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >> simp[] >>
+  imp_res_tac listTheory.LIST_REL_LENGTH >>
   drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >> strip_tac >>
   irule struct_gas_outcome_post >>
   goal_assum (drule_at Any) >>

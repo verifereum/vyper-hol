@@ -29,6 +29,12 @@ QED
 
 Theorem make_tuple_body_vv_mem[local]:
   (builtin_args_length_ok (MakeArray NONE n) (LENGTH es) ==> body_exprs_mem_ok cx es) /\
+  (case ty of
+     TupleT tys => LIST_REL (\m e. m = expr_type e \/
+       is_bytestring_type m /\ is_bytestring_type (expr_type e)) tys es
+   | ArrayT et' bd => EVERY (\e. et' = expr_type e \/
+       is_bytestring_type et' /\ is_bytestring_type (expr_type e)) es
+   | _ => T) /\
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ty (MakeArray NONE n) es) st ==>
   expr_vv_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray NONE n) es) st
@@ -37,8 +43,8 @@ Proof
   rw[expr_vv_sim_mem_def] >>
   drule_all tuple_body_allocation_layout >> strip_tac >> gvs[] >>
   drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >> gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) aggregate_make_tuple_body_sim_mem >>
-  disch_then drule >> disch_then drule >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_make_tuple_body_sim_mem >>
+  disch_then drule >> disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`ctx`,`tops`] mp_tac) >> simp[] >>
@@ -106,6 +112,12 @@ QED
 
 Theorem make_array_body_vv_mem[local]:
   (builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH es) ==> body_exprs_mem_ok cx es) /\
+  (case ty of
+     TupleT tys => LIST_REL (\m e. m = expr_type e \/
+       is_bytestring_type m /\ is_bytestring_type (expr_type e)) tys es
+   | ArrayT et' bd => EVERY (\e. et' = expr_type e \/
+       is_bytestring_type et' /\ is_bytestring_type (expr_type e)) es
+   | _ => T) /\
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ty (MakeArray (SOME et) n) es) st ==>
   expr_vv_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray (SOME et) n) es) st
@@ -115,7 +127,7 @@ Proof
   drule_all array_body_allocation_layout >> strip_tac >> gvs[] >>
   drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >> gvs[] >>
   drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) aggregate_make_array_body_sim_mem >>
-  disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`env`,`st`,`ctx`,`tops`] mp_tac) >> simp[] >>
@@ -189,6 +201,12 @@ Theorem body_make_array_sim_mem:
   !cx ty t n es tops ctx func cenv env ty' st.
     (builtin_args_length_ok (MakeArray t n) (LENGTH es) ==>
      body_exprs_mem_ok cx es) /\
+    (case ty of
+       TupleT tys => LIST_REL (\m e. m = expr_type e \/
+         is_bytestring_type m /\ is_bytestring_type (expr_type e)) tys es
+     | ArrayT et' bd => EVERY (\e. et' = expr_type e \/
+         is_bytestring_type et' /\ is_bytestring_type (expr_type e)) es
+     | _ => T) /\
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx env (Builtin ty (MakeArray t n) es) st ==>
     expr_sim_mem ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st /\
