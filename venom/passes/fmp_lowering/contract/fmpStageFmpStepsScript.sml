@@ -11,12 +11,14 @@
  *   fmp_stage_retpc_step     - RETPC_PARAM, with the root before it
  *   fmp_stage_entry          - the context entry's first related point
  *   fmp_stage_invoke_call    - INVOKE, into the callee's first point
+ *   fmp_stage_ret_step       - RET returns the same values on both sides
  *   fmp_stage_invoke_return  - RET, back to the caller past its INVOKE
  *)
 Theory fmpStageFmpSteps
 Ancestors
   fmpStageOpBase fmpStageControl fmpStageReclaimSound fmpStageRel
   fmpStageCallArity
+  fmpStageFmpStepsEntryLayout fmpStageFmpStepsEntryInitialization
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
   list
@@ -90,7 +92,26 @@ Theorem fmp_stage_entry:
     fmp_stage_rel D C' FEMPTY (w2n vs'.vs_initial_fmp) (w2n fmp) eom F
       [] [] FEMPTY entry_taint fn s1 (w2n vs'.vs_initial_fmp) t1 []
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_entry_source_shape >> strip_tac >> gvs[] >>
+  `wf_function fn` by
+    (gvs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def, lookup_function_MEM]) >>
+  `fn.fn_fmp_signature = NONE` by
+    (gvs[fmp_stage_ctx_def, o1_inv_def, o1_static_inv_def,
+         fmp_free_ctx_def, EVERY_MEM] >>
+     metis_tac[lookup_function_MEM]) >>
+  drule_all fmp_entry_actual_lowering >> strip_tac >>
+  `fn_is_context_entry ctx fn` by simp[fmpWfDefsTheory.fn_is_context_entry_def] >>
+  drule_all fmp_entry_root_position >> strip_tac >>
+  drule_all fmp_entry_target_block >> strip_tac >>
+  irule fmp_stage_entry_from_layout >>
+  simp[] >>
+  (reverse conj_tac >- metis_tac[]) >>
+  qexistsl_tac [`ctx`, `infos`, `runner`] >>
+  simp[] >> strip_tac >>
+  drule_all fmp_entry_initial_prefix >> strip_tac >> gvs[] >>
+  qexists_tac `id` >> simp[]
 QED
 
 Theorem fmp_stage_invoke_call:
@@ -106,7 +127,7 @@ Theorem fmp_stage_invoke_call:
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
   active_inst fn' ivk' t ==>
   ?ops' callee' args' cs' t1.
-    decode_invoke ivk' = SOME (nm,ops') /\
+    ivk'.inst_opcode = INVOKE /\ decode_invoke ivk' = SOME (nm,ops') /\
     lookup_function nm C'.ctx_functions = SOME callee' /\
     eval_operands ops' t = SOME args' /\
     setup_callee callee' args' t = SOME cs' /\
@@ -116,6 +137,19 @@ Theorem fmp_stage_invoke_call:
           cf_prov := G; cf_tvar := tn.t_var |> :: stk)
       (MAP (op_prov G) ops) FEMPTY (tn with t_var := FEMPTY) callee s1
       lo t1 ((t,lo)::ts)
+Proof
+  cheat
+QED
+
+Theorem fmp_stage_ret_step:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  inst.inst_opcode = RET /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  step_inst k C inst s = IntRet ir s1 ==>
+  s1 = s /\ ir.iret_adopt_fmp = NONE /\
+  ?jr. (!k'. step_inst k' C' inst t = IntRet jr t) /\
+       jr.iret_values = ir.iret_values /\ jr.iret_adopt_fmp = NONE
 Proof
   cheat
 QED
