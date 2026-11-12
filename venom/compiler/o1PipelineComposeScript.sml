@@ -469,7 +469,6 @@ Proof
   fs[o1_src_inv_def] >> rpt conj_tac
   >- fs[prune_unit_fcg_unreachable_fields]
   >- fs[EVERY_MEM]
-  >- (fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[])
   >- (qexists_tac `lo` >>
       simp[fixed_region_reserved_def, prune_unit_fcg_unreachable_fields] >>
       conj_tac >- fs[fixed_region_reserved_def] >>
@@ -639,14 +638,18 @@ Proof
      ?vi. gas_variant vi vo /\
        (o1_inv D 0 (stage 0) vi ==>
         ctx_sim_fuel I D (stage 0) (stage 3) vi vo /\ o1_inv D 3 (stage 3) vo)` by
-    (rpt strip_tac >> irule gas_stages_compose >> simp[] >> rpt strip_tac >>
-     first_x_assum irule >> simp[]) >>
+    (rpt strip_tac >>
+     irule (SIMP_RULE (srw_ss()) [o1_fn_passes_def, pass_fuel_def]
+              (Q.SPEC `3` gas_stages_compose)) >>
+     simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
   `!vo. o1_run_state_ok vo ==>
      ?vi. gas_variant vi vo /\
        (o1_inv D 4 (stage 4) vi ==>
         ctx_sim_fuel (cfg_norm_fuel (stage 9)) D (stage 4) (stage 9) vi vo /\ o1_inv D 9 (stage 9) vo)` by
-    (rpt strip_tac >> irule gas_stages_compose >> simp[] >> rpt strip_tac >>
-     first_x_assum irule >> simp[]) >>
+    (rpt strip_tac >>
+     irule (SIMP_RULE (srw_ss()) [o1_fn_passes_def, pass_fuel_def]
+              (Q.SPEC `9` gas_stages_compose)) >>
+     simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
   first_x_assum (qspec_then `vs_out` mp_tac) >> simp[] >>
   disch_then (qx_choose_then `v4` strip_assume_tac) >>
   `o1_run_state_ok v4` by metis_tac[gas_variant_run_state_ok] >>
