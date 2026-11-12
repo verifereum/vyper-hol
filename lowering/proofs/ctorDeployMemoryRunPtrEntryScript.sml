@@ -425,11 +425,11 @@ Theorem deploy_ptr_entry_prefix_related_checked:
       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) 0 (OK actual) /\
     alloca_history func actual /\
     actual.vs_code = vs.vs_code /\ actual.vs_labels = vs.vs_labels /\
-    ghost_inv_at (deploy_dead tops runtime_bc am tx) (imm_len tops) NONE ce
+    ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
       (deploy_evaluation_context tops am tx)
       (es0 with outcomes := SOME vs.vs_outcomes) H qt actual /\
     return_buf_frame NONE ce sa actual /\
-    stmt_state_rel unit.cu_context func ce (deploy_evaluation_context tops am tx)
+    stmt_state_rel HS unit.cu_context func ce (deploy_evaluation_context tops am tx)
       (es0 with outcomes := SOME vs.vs_outcomes) actual /\
     ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -487,7 +487,7 @@ Proof
      drule deploy_imm_budget_ok >> simp[]) >>
   `fmp_room unit.cu_context func actual` by
     (drule_all deploy_ctor_entry_fmp_room >> simp[]) >>
-  `ghost_inv_at (deploy_dead tops runtime_bc am tx) (imm_len tops) NONE ce
+  `ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
       (deploy_evaluation_context tops am tx)
       (es0 with outcomes := SOME vs.vs_outcomes) H qt actual` by
     (drule ctorDeployLoweringFrameTheory.deploy_ctor_return_metadata >> strip_tac >>
@@ -526,15 +526,15 @@ Theorem deploy_ptr_entry_prefix_related:
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==>
   ?actual H qt.
-    stmt_state_rel unit.cu_context func ce (deploy_evaluation_context tops am tx)
+    stmt_state_rel HS unit.cu_context func ce (deploy_evaluation_context tops am tx)
       (es0 with outcomes := SOME vs.vs_outcomes) actual /\
     ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
     actual.vs_gas_readings = vs.vs_gas_readings /\
-    deploy_ptr_inv tops runtime_bc am tx imm H qt actual /\
-    ((!fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+    deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
+    ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel unit.cu_context func [] H qt actual) ==>
-      !fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+      !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel unit.cu_context func [] FEMPTY entry_taint
         (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
 Proof
