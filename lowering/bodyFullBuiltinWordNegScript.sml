@@ -4,7 +4,8 @@ Ancestors
   bodyFullGhostFrame bodyFullShared bodyFullPreds bodySimFull
   gasOutcomeFullCompose gasOutcomeFullStmts fragGasSeqPtr fragGasEmitCtrl
   exprSimWordBuiltins exprSimUnopProps exprSimSource
-  fragExecMem unitTransformDefs memSafeRun
+  fragExecMem unitTransformDefs memSafeRun fragGasSeqAbort instIdxIndep
+  venomInstProofs fragGasOriginPtr fragGasOrigin fragGasPathPtr gasCount
   ptrSafeRun ptrDiscipline exprLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv venomExecSemantics venomInst venomState
   list rich_list finite_map codegenRel contextCodegenRel
@@ -170,4 +171,72 @@ Proof
   `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn'` by simp[] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by simp[] >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
+QED
+
+Theorem word_neg_abort_origin:
+  compile_neg x ty sa = (op,sb) /\
+  op_taint tn x = {} /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  run_inst_seq (emitted_insts sa sb) s = Abort a t ==>
+  ?G' tn'. !D.
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort a (t with vs_inst_idx := SUC s.vs_inst_idx),G',tn')
+Proof
+  strip_tac >> drule_all word_neg_inst_seq_ptr >>
+  disch_then (qspecl_then [`func`, `PG`, `G`] strip_assume_tac) >>
+  drule word_neg_emission >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emitted_insts sa sb = [i;j;k]` >>
+  `!t'. step_inst_base i s <> Abort a t'` by
+    (simp[Abbr `i`, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_pure2_def, AllCaseEqs()]) >>
+  `!u t'. step_inst_base k u <> Abort a t'` by
+    (simp[Abbr `k`, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_pure2_def, AllCaseEqs()]) >>
+  `isPREFIX [i;j;k] (DROP s.vs_inst_idx bb.bb_instructions)` by metis_tac[] >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base i s` >>
+  gvs[run_inst_seq_def, Once inst_seq_ptr_def] >>
+  Cases_on `step_inst_base j v` >>
+  gvs[AllCaseEqs()] >>
+  `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+   j.inst_opcode <> INVOKE /\ j.inst_opcode <> GAS /\
+   ~is_terminator j.inst_opcode` by
+    simp[Abbr `i`, Abbr `j`, mk_inst_def, is_terminator_def] >>
+  `~v.vs_halted /\ v.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_halted, step_preserves_control_flow,
+      step_inst_non_invoke] >>
+  qabbrev_tac `u = v with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `get_instruction bb u.vs_inst_idx = SOME j` by
+    (simp[Abbr `u`] >>
+     `isPREFIX [j;k] (DROP (SUC s.vs_inst_idx) bb.bb_instructions)` by simp[] >>
+     drule instruction_prefix_cursor >> simp[]) >>
+  `step_inst_base j u = Abort a (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[Abbr `u`, step_inst_inst_idx_indep, exec_result_map_def] >>
+  qexistsl [`G'`, `tn'`] >> gen_tac >>
+  first_x_assum (qspec_then `D` strip_assume_tac) >>
+  gvs[Once inst_seq_ptr_def] >>
+  `inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+   mem_safe_step 0 ctx j u` by
+    simp[Abbr `i`, Abbr `j`, mem_safe_step_non_invoke,
+      inst_mem_below_frontier_def, inst_dload_in_section_def,
+      source_memory_read_ranges_def, source_memory_write_ranges_def, mk_inst_def] >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK u,step_prov PG G i v,step_taint i s v tn)` by
+    (drule_all straight_line_origin_ptr_edge >>
+     simp[Abbr `i`, Abbr `u`, mk_inst_def]) >>
+  `!fuel. step_inst fuel ctx j u =
+     Abort a (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[step_inst_non_invoke] >>
+  `~u.vs_halted /\
+   lookup_block u.vs_current_bb func.fn_blocks = SOME bb` by simp[Abbr `u`] >>
+  `exit_result (Abort a (t with vs_inst_idx := SUC s.vs_inst_idx))` by
+    simp[fragExecTheory.exit_result_def] >>
+  `gas_events_step 0 ctx func.fn_name j u = [] /\
+   gas_count_step 0 ctx j u = 0` by
+    simp[gasEventsTheory.gas_events_step_def, gas_count_step_def] >>
+  drule_all exit_inst_origin_ptr >> strip_tac >>
+  drule (cj 2 gas_origin_ptr_path_rules) >> simp[]
 QED
