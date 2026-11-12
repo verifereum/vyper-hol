@@ -87,7 +87,9 @@ Theorem convert_unwrap_value_path_mem_window:
          !sw. eval_operand op u = SOME sw ==> w2n sw + 64 <= u.vs_alloca_next) /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+        u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+        u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   `~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
@@ -110,7 +112,9 @@ Proof
       w2n w + type_memory_size tv <= u.vs_alloca_next /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts` by
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
     (Cases_on `p.ptr_location = LocCode`
      >- (irule aggregate_code_materialise_post_capacity >> simp[] >> metis_tac[]) >>
      irule aggregate_storage_materialise_post_capacity >> simp[] >>
@@ -200,7 +204,9 @@ Theorem convert_unwrap_value_marked_read_mem_window:
        !sw. eval_operand op u = SOME sw ==> w2n sw + 64 <= u.vs_alloca_next) /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `read_result cx tv ee` >> rename1 `_ = (res, ee')` >>
