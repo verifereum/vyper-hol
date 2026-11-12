@@ -4,7 +4,61 @@
    calldata_coherent_owned_run with the source value pinned down. *)
 Theory calldataExact
 Ancestors
-  vyperCalldata calldataRecursiveExecution
+  vyperCalldata calldataRecursiveExecution calldataBulkLive
+  abiDecoderContract abiDecoderBulk calldataBulkLeaf abiDecoderFrameCompose
+  calldataDynOwned arithmetic list
+
+Theorem calldata_bulk_live_frag_mem_mod_guard:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
+  ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
+  eval_operand dst initial = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  d+(32+maxn*mem_sz) < dimword (:256) /\
+  d+(32+maxn*mem_sz) <= initial.vs_alloca_next ==>
+  frag_exec_mem ctx st st' (\s. s = initial)
+    (\t. w2n (abi_decode_load CALLDATALOAD p initial) <= maxn MOD dimword (:256) /\
+      mem_word_at d t.vs_memory = abi_decode_load CALLDATALOAD p initial /\
+      mem_bytes_at (d+32) (w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz) t.vs_memory =
+        mem_bytes_at (w2n (p+32w)) (w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz)
+          initial.vs_call_ctx.cc_calldata /\
+      abi_decode_frame d (32+maxn*mem_sz) initial t /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op initial) /\
+      t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
+    (\r. maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD p initial) /\
+      ?t. r = Abort Revert_abort t /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op initial) /\
+      t.vs_memory = initial.vs_memory /\ t.vs_call_ctx = initial.vs_call_ctx /\
+      t.vs_data_section = initial.vs_data_section /\
+      t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_bulk_shape >> strip_tac >>
+  drule_all calldata_bulk_opcodes >> strip_tac >>
+  irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
+  >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+      ho_match_mp_tac (GEN_ALL calldata_bulk_live_prefix_safe_mod) >>
+      qexistsl_tac [`src`,`p`,`mem_sz`,`maxn`,`ei`,`dst`,`d`,`abi_sz`] >> simp[]) >>
+  Cases_on `w2n (abi_decode_load CALLDATALOAD p initial) <= maxn MOD dimword (:256)`
+  >- (drule_all calldata_count_guard_accepted_bounds >> strip_tac >>
+      `w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz <= maxn*mem_sz` by
+        simp[LE_MULT_RCANCEL] >>
+      `d+32 < dimword (:256) /\
+       w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz < dimword (:256)` by decide_tac >>
+      drule_all calldata_bulk_accepted_live_mod >> strip_tac >>
+      `abi_decode_frame d (32+maxn*mem_sz) initial t` by
+        (irule abi_decode_frame_widen >> goal_assum (drule_at Any) >> simp[]) >>
+      disj1_tac >> qexists_tac `t` >>
+      gvs[instIdxIndepTheory.eval_op_inst_idx, abi_decode_frame_def] >> metis_tac[]) >>
+  `maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD p initial)` by decide_tac >>
+  drule_all calldata_bulk_rejected_live_mod >> strip_tac >>
+  disj2_tac >> qexists_tac `t` >>
+  simp[instIdxIndepTheory.eval_op_inst_idx]
+QED
 
 Theorem calldata_exact_owned_run:
   !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==>
