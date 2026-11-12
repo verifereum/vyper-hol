@@ -2218,7 +2218,7 @@ Proof
     drule_all eval_stmts_preserves_immutables_dom >> simp[]]
 QED
 
-Theorem actual_entry_prefix_preserves_immutables_dom[local]:
+Theorem actual_entry_prefix_preserves_immutables_dom:
   send_call_value mut cx st0 = (INL (),s1) /\
   eval_external_defaults cx es s1 = (INL dvs,s2) /\
   ignore_bind
