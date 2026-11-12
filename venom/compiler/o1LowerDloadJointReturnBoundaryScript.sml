@@ -1,6 +1,7 @@
 (* Internal return assembly: current callee effects, restored caller locals. *)
 Theory o1LowerDloadJointReturnBoundary
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointReturn o1LowerDloadJointRestore o1LowerDloadJointPop
   o1LowerDloadJointRelation o1LowerDloadOccurrence o1LowerDloadShared
   o1LowerDloadMapEvolution o1LowerDloadEnvironment o1LowerDloadOpaque
@@ -10,7 +11,7 @@ Ancestors
 Theorem ld_joint_boundary_return:
   ld_joint_boundary vs C C' lo D (f::stk) PG G tn fn rinst s t
     n a (ofr::U) B HP H sites X (caller'::ts) /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn rinst s /\ rinst.inst_opcode = RET /\
   step_inst fuel C rinst s = IntRet ir s_end /\
   bind_outputs f.cf_inst.inst_outputs ir.iret_values

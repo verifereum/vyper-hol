@@ -1,6 +1,8 @@
 Theory o1LowerDloadNonCallContinuation
 Ancestors
+  o1SafeUpto
   o1LowerDloadSegmentContinuation o1LowerDloadSuppliedSegmentNext
+  o1LowerDloadSuppliedSegmentResources
   o1LowerDloadUnchangedFetch o1LowerDloadOrdinaryDispatch
   o1LowerDloadFreshNext o1LowerDloadRepeatedNext
   o1LowerDloadJointRelation o1LowerDloadReadiness o1LowerDloadOccurrence
@@ -12,8 +14,8 @@ Theorem ld_joint_singleton_continue[local]:
   !bb.
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv D C vs /\
-  callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_safe_upto D lo ncut C vs /\
+  callee_first names C.ctx_functions /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
@@ -34,8 +36,11 @@ Theorem ld_joint_singleton_continue[local]:
          gas_events_block m C' fn'.fn_name bb' tnext)
 Proof
   rpt gen_tac >> strip_tac >>
-  `mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs` by
-    fs[o1_src_inv_def] >>
+  `o1_ptr_safe_upto D lo ncut C vs /\ ptr_discipline_upto lo ncut C vs /\
+   mem_inv dload_headroom_ok C vs` by
+    fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
+  `dload_offset_ok C fn inst s` by
+    (fs[o1_safe_upto_def] >> metis_tac[ld_joint_raw_reachable]) >>
   `MEM fn C.ctx_functions` by
     (drule ld_joint_source >> strip_tac >>
      drule occ_frame_reachable_annotation >> simp[]) >>
@@ -101,8 +106,8 @@ QED
 Theorem ld_joint_noncall_continue:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv D C vs /\
-  callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_safe_upto D lo ncut C vs /\
+  callee_first names C.ctx_functions /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
         get_instruction bb s.vs_inst_idx = SOME inst) /\
@@ -122,8 +127,11 @@ Theorem ld_joint_noncall_continue:
          gas_events_block m C' fn'.fn_name bb' tnext)
 Proof
   rpt gen_tac >> strip_tac >>
-  `mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs` by
-    fs[o1_src_inv_def] >>
+  `o1_ptr_safe_upto D lo ncut C vs /\ ptr_discipline_upto lo ncut C vs /\
+   mem_inv dload_headroom_ok C vs` by
+    fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
+  `dload_offset_ok C fn inst s` by
+    (fs[o1_safe_upto_def] >> metis_tac[ld_joint_raw_reachable]) >>
   `MEM fn C.ctx_functions` by
     (drule ld_joint_source >> strip_tac >>
      drule occ_frame_reachable_annotation >> simp[]) >>

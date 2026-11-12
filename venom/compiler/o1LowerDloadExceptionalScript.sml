@@ -1,6 +1,7 @@
 (* Exceptional branches depend on guards and availability, not payload memory. *)
 Theory o1LowerDloadExceptional
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointRangeCopy o1LowerDloadJointExternal
   o1LowerDloadJointInternalEffects
   o1LowerDloadJointScalar o1LowerDloadJointRelation
@@ -9,7 +10,7 @@ Ancestors
 
 Theorem ld_joint_copy_abort:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETURNDATACOPY /\
   step_inst fuel C inst s = Abort reason s1 ==>
@@ -22,9 +23,9 @@ Proof
   simp[AllCaseEqs()] >> strip_tac >>
   gvs[] >>
   `eval_operand op_offset s = eval_operand op_offset t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+    (drule ld_joint_copy_scalar_operand >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[]) >>
   `eval_operand op_size s = eval_operand op_size t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+    (drule ld_joint_copy_scalar_operand >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[]) >>
   `IS_SOME (eval_operand op_destOffset s) <=>
    IS_SOME (eval_operand op_destOffset t)` by
     (drule ld_joint_operand_defined >> disch_then irule >>
@@ -36,7 +37,7 @@ QED
 
 Theorem ld_joint_create_size:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   ((inst.inst_opcode = CREATE /\ inst.inst_operands = [value;off;sz]) \/
    (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [value;off;sz;salt])) ==>
@@ -44,7 +45,7 @@ Theorem ld_joint_create_size:
 Proof
   strip_tac >> (
   `op_prov H sz = NONE /\ op_taint tn sz = {}` by
-    (drule ld_joint_external_scalar_clean >> disch_then irule >>
+    (drule ld_joint_external_scalar_clean >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      gvs[MEM, mem_read_ops_def, mem_write_ops_def] >>
      rpt strip_tac >> gvs[FILTER, SF boolSimps.COND_elim_ss]) >>
   irule ld_joint_operand_clean >>
@@ -54,7 +55,7 @@ QED
 
 Theorem ld_joint_create_abort:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [CREATE;CREATE2] /\
   step_inst fuel C inst s = Abort reason s1 ==>
@@ -82,7 +83,7 @@ Proof
   simp[AllCaseEqs(), exec_create_abort_iff] >> strip_tac >>
   gvs[] >>
   `eval_operand sz_op s = eval_operand sz_op t` by
-    (drule ld_joint_create_size >> disch_then irule >> simp[] >> metis_tac[]) >>
+    (drule ld_joint_create_size >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >> metis_tac[]) >>
   `IS_SOME (eval_operand val_op t)` by
     (first_x_assum (qspec_then `val_op` mp_tac) >> simp[]) >>
   `IS_SOME (eval_operand off_op t)` by
@@ -95,20 +96,20 @@ QED
 
 Theorem ld_joint_ordinary_abort:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [RETURNDATACOPY;CREATE;CREATE2] /\
   step_inst fuel C inst s = Abort reason s1 ==>
   ?t1. step_inst fuel C' inst t = Abort reason t1
 Proof
   strip_tac >> Cases_on `inst.inst_opcode = RETURNDATACOPY`
-  >- (drule ld_joint_copy_abort >> disch_then irule >> simp[]) >>
-  drule ld_joint_create_abort >> disch_then irule >> gvs[MEM]
+  >- (drule ld_joint_copy_abort >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[]) >>
+  drule ld_joint_create_abort >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> gvs[MEM]
 QED
 
 Theorem ld_joint_static_abort:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   MEM inst.inst_opcode [SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL] /\
   step_inst fuel C inst s = Abort reason s1 ==>
@@ -139,7 +140,7 @@ Resume ld_joint_static_abort[call]:
   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
   simp[exec_ext_call_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   `op_prov H val_op = NONE /\ op_taint tn val_op = {}` by
-    (drule ld_joint_external_scalar_clean >> disch_then irule >>
+    (drule ld_joint_external_scalar_clean >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
      simp[Excl "FILTER"] >>
      gvs[Excl "FILTER", mem_read_ops_def, mem_write_ops_def] >>
      rpt strip_tac >> gvs[FILTER, SF boolSimps.COND_elim_ss]) >>

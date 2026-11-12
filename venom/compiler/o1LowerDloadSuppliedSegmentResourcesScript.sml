@@ -41,17 +41,15 @@ QED
 
 Theorem ld_joint_segment_offset:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  mem_inv dload_offset_ok C vs /\
+    n a U B HP H sites X ts /\
+  dload_offset_ok C fn inst s /\
   ((inst.inst_opcode = DLOAD /\ inst.inst_operands = [op]) \/
    (inst.inst_opcode = DLOADBYTES /\
     ?dst sz. inst.inst_operands = [dst;op;sz])) /\
   eval_operand op s = SOME off ==>
   w2n off + (LENGTH t.vs_code - LENGTH t.vs_data_section) < dimword (:256)
 Proof
-  strip_tac >> drule_all ld_joint_raw_reachable >> strip_tac >>
-  `dload_offset_ok C fn inst s` by
-    (fs[mem_inv_raw_reachable] >> metis_tac[]) >>
+  strip_tac >>
   `w2n off + (LENGTH s.vs_code - LENGTH s.vs_data_section) < dimword (:256)` by
     metis_tac[dload_offset_ok_def] >>
   gvs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def]

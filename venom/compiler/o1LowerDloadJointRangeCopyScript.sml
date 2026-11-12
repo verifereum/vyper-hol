@@ -1,6 +1,7 @@
 (* Relocated address ranges for ordinary copy instructions. *)
 Theory o1LowerDloadJointRangeCopy
 Ancestors
+  o1SafeUpto
   o1LowerDloadPtrDiscipline o1LowerDloadRangeTransport o1LowerDloadJointMemoryWrite
   o1LowerDloadJointRelation o1LowerDloadOccurrence o1LowerDloadJointScalar
   o1LowerDloadEnvironment o1LowerDloadRelocationKernel
@@ -51,7 +52,7 @@ QED
 
 Theorem ld_joint_write_operand_range:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   mem_write_ops inst = SOME ops /\ ops.iao_ofst = op /\
   MEM op inst.inst_operands /\ (!v. ~retpc_use_ok inst v) /\
@@ -66,13 +67,13 @@ Proof
   drule ld_joint_operand_range >> disch_then irule >> simp[] >> rpt strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_def] >>
+  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_upto_def] >>
   gvs[access_ok_def] >> metis_tac[]
 QED
 
 Theorem ld_joint_read_operand_range:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   mem_read_ops inst = SOME ops /\ ops.iao_ofst = op /\
   MEM op inst.inst_operands /\ (!v. ~retpc_use_ok inst v) /\
@@ -87,13 +88,13 @@ Proof
   drule ld_joint_operand_range >> disch_then irule >> simp[] >> rpt strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_def] >>
+  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_upto_def] >>
   gvs[access_ok_def] >> metis_tac[]
 QED
 
 Theorem ld_joint_copy_scalar_operand:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   (inst.inst_opcode = MCOPY \/ inst.inst_opcode = CALLDATACOPY \/
    inst.inst_opcode = CODECOPY \/ inst.inst_opcode = RETURNDATACOPY) /\
@@ -104,7 +105,7 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_fn_ptr_ok] >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_upto_fn_ptr_ok] >>
   `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
     metis_tac[o1LowerDloadGhostTheory.frame_reachable_prov_support] >>
   `ptr_use_ok P (fn_pv P fn) inst` by
@@ -127,7 +128,7 @@ Proof
        fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
      drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
      Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]) >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn op = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   irule ld_joint_operand_clean >>
@@ -138,7 +139,7 @@ QED
 
 Theorem ld_joint_mcopy_operands:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = MCOPY /\ inst.inst_operands = [dst;src;sz] /\
   eval_operand dst s = SOME d /\ eval_operand src s = SOME r /\
@@ -158,7 +159,7 @@ Proof
   `eval_operand sz t = SOME l` by metis_tac[] >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn dst = {} /\ op_taint tn src = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `!v. ~retpc_use_ok inst v` by simp[retpc_use_ok_def] >>
@@ -166,14 +167,14 @@ Proof
     (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n d=b+j /\ w2n d'=c+j))` by
-    (drule ld_joint_write_operand_range >> disch_then irule >> simp[] >>
+    (drule ld_joint_write_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >>
      simp[mem_write_ops_def, source_memory_write_ranges_def,
           fixed_source_write_range_def, sized_source_write_range_def, eval_operand_def] >> metis_tac[]) >>
   `?r'. eval_operand src t = SOME r' /\
     (w2n l=0 \/ (w2n r=w2n r' /\ w2n r+w2n l<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n r=b+j /\ w2n r'=c+j))` by
-    (drule ld_joint_read_operand_range >> disch_then irule >> simp[] >>
+    (drule ld_joint_read_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[] >>
      simp[mem_read_ops_def, source_memory_read_ranges_def,
           eval_operand_def] >> metis_tac[]) >>
   metis_tac[]
@@ -197,7 +198,7 @@ QED
 
 Theorem ld_joint_mcopy_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = MCOPY /\ step_inst fuel C inst s = OK s1 ==>
   ?t1. step_inst fuel C' inst t = OK t1 /\
@@ -233,7 +234,7 @@ QED
 Theorem ld_joint_mcopy_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode = MCOPY /\ ~in_revert_forward fn s /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>

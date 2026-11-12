@@ -1,6 +1,7 @@
 (* Terminal endpoints retain the runner's original boundary witnesses. *)
 Theory o1LowerDloadRunnerEndpoints
 Ancestors
+  o1SafeUpto
   o1LowerDloadRunner o1LowerDloadUnchangedFetch o1LowerDloadBranchExec
   o1LowerDloadForwardInversion contextCodegenRel
   o1LowerDloadJointReturn o1LowerDloadHaltResult o1LowerDloadAbortResult
@@ -14,7 +15,7 @@ val ldPacket = fst (strip_comb (fst (dest_imp
 Theorem ld_runner_branch_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ ~s.vs_halted /\
   is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK s1 ==>
   ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
@@ -42,7 +43,7 @@ QED
 Theorem ld_runner_ret_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode = RET /\
   step_inst fuel C inst s = IntRet ir s1 ==>
   ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
@@ -64,7 +65,7 @@ QED
 Theorem ld_runner_halt_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\ taint_within D C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ taint_within_upto D ncut C vs /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
         get_instruction bb s.vs_inst_idx = SOME inst) /\
@@ -89,7 +90,7 @@ QED
 Theorem ld_runner_abort_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
   step_inst fuel C inst s = Abort reason s1 ==>
   ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
@@ -127,7 +128,7 @@ QED
 Theorem ld_runner_forward_abort_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   exec_block fuel C bb s = Abort reason s1 ==>
@@ -145,7 +146,7 @@ QED
 Theorem ld_runner_forward_endpoint:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   exec_block fuel C bb s = r /\ terminates r ==>

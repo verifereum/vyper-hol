@@ -1,6 +1,7 @@
 (* Runner composition for the supplied finite LowerDload expansions. *)
 Theory o1LowerDloadSegmentContinuation
 Ancestors
+  o1SafeUpto
   o1LowerDloadSuppliedSegmentNext o1LowerDloadSuppliedSegmentExec
   o1LowerDloadSuppliedSegmentResources o1LowerDloadJointRelation o1PassContract
   venomExecSemantics venomState venomInst instIdxIndep lowerDloadDefs irSupply
@@ -218,7 +219,8 @@ QED
 Theorem ld_joint_dloadbytes_continue:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  mem_inv dload_offset_ok C vs /\ ptr_discipline lo C vs /\
+  dload_offset_ok C fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = DLOADBYTES /\ step_inst fuel C inst s = OK s1 ==>
   ?inst2 t' fn' bb'.
@@ -245,8 +247,9 @@ QED
 Theorem ld_joint_dload_continue:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs /\
-  callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
+  dload_offset_ok C fn inst s /\ mem_inv dload_headroom_ok C vs /\
+  callee_first names C.ctx_functions /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = DLOAD /\ step_inst fuel C inst s = OK s1 ==>
   ?inst2 t' fn' bb' X1.

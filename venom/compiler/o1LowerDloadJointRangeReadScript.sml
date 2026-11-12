@@ -1,6 +1,7 @@
 (* Relocated normal-path word and slice reads. *)
 Theory o1LowerDloadJointRangeRead
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointRangeCopy o1LowerDloadJointMemoryRead
   o1LowerDloadRangeTransport o1LowerDloadJointAssign
   o1LowerDloadJointShift o1LowerDloadEnvironment venomInst codegenRel
@@ -26,7 +27,7 @@ QED
 
 Theorem ld_joint_iload_read:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = ILOAD /\ inst.inst_operands = [p] /\
   eval_operand p s = SOME x ==>
@@ -37,14 +38,14 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn p = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `?y. eval_operand p t = SOME y /\
     (32=0 \/ (w2n x=w2n y /\ w2n x+32<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32<=z /\
                     w2n x=b+j /\ w2n y=c+j))` by
-    (drule ld_joint_read_operand_range >>
+    (drule ld_joint_read_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >>
      disch_then (qspecl_then [`x`,`<|iao_ofst := p; iao_size := SOME (Lit 32w); iao_max_size := SOME (Lit 32w)|>`,`p`,`32`] mp_tac) >>
      simp[mem_read_ops_def] >> disch_then irule >> simp[] >>
      simp[mem_read_ops_def, source_memory_read_ranges_def, eval_operand_def,
@@ -55,7 +56,7 @@ QED
 
 Theorem ld_joint_iload_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = ILOAD /\ step_inst fuel C inst s = OK s1 ==>
   ?out x y. s1 = update_var out x s /\
@@ -98,7 +99,7 @@ QED
 
 Theorem ld_joint_sha3_length:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = SHA3 /\ inst.inst_operands = [addr;sz] ==>
   eval_operand sz s = eval_operand sz t
@@ -106,10 +107,10 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn sz = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
-  drule ld_joint_nonaddress_operand >> disch_then irule >>
+  drule ld_joint_nonaddress_operand >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >>
   gvs[is_pointer_preserving_op_def, retpc_use_ok_def] >>
   Cases_on `addr = sz` >>
   simp[mem_read_ops_def, mem_write_ops_def]
@@ -117,7 +118,7 @@ QED
 
 Theorem ld_joint_sha3_read:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = SHA3 /\ inst.inst_operands = [p;sz] /\
   eval_operand p s = SOME x /\ eval_operand sz s = SOME l ==>
@@ -130,7 +131,7 @@ Proof
   `eval_operand sz t = SOME l` by metis_tac[] >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn p = {}` by
     (qpat_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `MEM (w2n x,w2n l) (source_memory_read_ranges inst s)` by
@@ -139,7 +140,7 @@ Proof
     (w2n l=0 \/ (w2n x=w2n y /\ w2n x+w2n l<=lo) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n x=b+j /\ w2n y=c+j))` by
-    (drule ld_joint_read_operand_range >>
+    (drule ld_joint_read_operand_range >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >>
      disch_then (qspecl_then [`x`,`<|iao_ofst := p; iao_size := SOME sz; iao_max_size := SOME sz|>`,`p`,`w2n l`] mp_tac) >>
      simp[mem_read_ops_def] >> disch_then irule >> simp[retpc_use_ok_def]) >>
   `!k. k<w2n l ==> w2n x+k NOTIN tn.t_mem` by
@@ -156,7 +157,7 @@ QED
 
 Theorem ld_joint_sha3_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = SHA3 /\ step_inst fuel C inst s = OK s1 ==>
   ?out x y. s1 = update_var out x s /\
@@ -189,7 +190,7 @@ QED
 Theorem ld_joint_range_read_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ MEM inst.inst_opcode [ILOAD;SHA3] /\ ~in_revert_forward fn s /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>
