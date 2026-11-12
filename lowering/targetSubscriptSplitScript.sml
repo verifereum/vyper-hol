@@ -1272,7 +1272,10 @@ Proof
   simp[] >> reverse conj_tac >- metis_tac[] >>
   irule lower_compile_expr_not_label >>
   goal_assum (drule_at (Pat `lower_value`)) >>
-  qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
+  qexists_tac `env` >>
+  qpat_assum `expr_body_pre _ _ env e _`
+    (strip_assume_tac o SIMP_RULE std_ss [expr_body_pre_def, expr_sim_inv_def]) >>
+  asm_simp_tac std_ss []
 QED
 
 (* target_subscript_continuation for a local root whose indices may

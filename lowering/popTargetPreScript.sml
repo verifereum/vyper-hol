@@ -125,7 +125,8 @@ Proof
   `FLOOKUP env.bare_globals (src,id) = SOME ty` by
     (fs[env_context_consistent_def] >> metis_tac[]) >>
   `?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off)` by
-    (fs[expr_sim_inv_def] >> metis_tac[]) >>
+    (`IS_SOME (FLOOKUP env.bare_global_assignable (src,id))` by fs[] >>
+     fs[expr_sim_inv_def] >> metis_tac[]) >>
   `target_in_immutables cenv.ce_module_vars bt` by
     (simp[target_in_immutables_root] >> metis_tac[]) >>
   fs[alloc_limits_expr_def]
