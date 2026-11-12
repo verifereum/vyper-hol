@@ -123,6 +123,7 @@ Proof
         (simp[] >> metis_tac[ADD_ASSOC, ADD_COMM]) >>
       drule_all raw_log_dynamic_log_joint >>
       disch_then (qspec_then `s2.cs_next_id` mp_tac) >>
+      disch_then (qspec_then `PG` mp_tac) >>
       simp[LET_THM] >> strip_tac >> FAIL_TAC "path join") >>
   gvs[]
 QED
