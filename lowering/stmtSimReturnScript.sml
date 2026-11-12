@@ -923,7 +923,7 @@ Proof
           return_unlock_state_frames, allocas_from_def] >>
      qspecl_then [`cenv`, `s`, `sa.cs_next_id`] mp_tac
        return_unlock_state_frames >> simp[] >>
-     rpt strip_tac >> fs[allocas_from_def, lookup_var_def]) >>
+     rpt strip_tac >> fs[allocas_from_def, lookup_var_def] >> metis_tac[]) >>
   `op_taint tn' (Var rpc) = {}` by fs[op_taint_def] >>
   `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s1, G', tn') []
      (IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s1, G', tn')` by
@@ -1127,7 +1127,7 @@ Proof
           eval_operand_return_unlock, allocas_from_def] >>
      qspecl_then [`cenv`, `s`, `sm.cs_next_id`] mp_tac
        return_unlock_state_frames >> simp[] >>
-     rpt strip_tac >> fs[allocas_from_def, lookup_var_def]) >>
+     rpt strip_tac >> fs[allocas_from_def, lookup_var_def] >> metis_tac[]) >>
   `op_taint tn' op = {} /\ op_taint tn' (Var rpc) = {}` by
     (Cases_on `op` >> fs[op_taint_def]) >>
   `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s1, G', tn') []
