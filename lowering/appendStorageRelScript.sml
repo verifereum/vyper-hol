@@ -80,31 +80,32 @@ Theorem append_storage_dead_mono:
     (update_storage slot (n2w (len+1))
       (update_storage (slot+n2w (1+len)) w st)) j b
 Proof
-  Cases_on `tr` >> strip_tac >>
-  qpat_x_assum `storage_dead _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [storage_dead_def]) >>
-  rename1 `dead_bytes st (w2n other) otv j b` >>
-  `w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256)` by
-    (Cases_on `(other,otv) = (slot,ArrayTV tv (Dynamic cap))` >- gvs[] >>
-     qpat_x_assum `!slot' tv'. _`
-       (qspecl_then [`slot`, `ArrayTV tv (Dynamic cap)`] mp_tac) >>
-     simp[ranges_disjoint_def]) >>
-  pure_rewrite_tac [storage_dead_def] >> asm_rewrite_tac[] >>
+  strip_tac >>
+  qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac [storage_dead_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `other` (qx_choose_then `otv` strip_assume_tac))) >>
+  pure_rewrite_tac [storage_dead_def] >>
+  conj_tac >- asm_rewrite_tac [] >>
   qexistsl_tac [`other`, `otv`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- asm_rewrite_tac [] >>
+  conj_tac >- asm_rewrite_tac [] >>
+  conj_tac >- asm_rewrite_tac [] >>
   Cases_on `(other,otv) = (slot,ArrayTV tv (Dynamic cap))`
-  >- (gvs[] >> qpat_x_assum `!slot' tv'. _` kall_tac >>
-      metis_tac[append_root_dead_mono, arithmeticTheory.ADD_COMM]) >>
+  >- (qpat_x_assum `(other,otv) = _` mp_tac >>
+      pure_rewrite_tac [pairTheory.PAIR_EQ] >>
+      disch_then (CONJUNCTS_THEN2 SUBST_ALL_TAC SUBST_ALL_TAC) >>
+      irule append_root_dead_mono >> asm_rewrite_tac []) >>
   `ranges_disjoint (w2n other) (type_slot_size otv) (w2n slot) (1+cap)` by
     (qpat_x_assum `!slot' tv'. _`
        (qspecl_then [`slot`, `ArrayTV tv (Dynamic cap)`] mp_tac) >>
      simp[type_slot_size_def]) >>
-  `w2n slot + (1+cap) <= dimword (:256)` by gvs[type_slot_size_def] >>
+  `w2n slot + (1+cap) <= dimword (:256)` by
+    gvs[ranges_disjoint_def] >>
   drule append_other_region_frame >>
   disch_then (qspecl_then [`w`, `otv`, `st`, `len`] mp_tac) >>
-  asm_rewrite_tac [] >> disch_then (qspecl_then [`j`, `b`] mp_tac) >>
+  asm_rewrite_tac [] >>
+  disch_then (qspecl_then [`j`, `b`] mp_tac) >>
   asm_rewrite_tac []
 QED
 
