@@ -2,6 +2,8 @@
 Theory widenedAssignPtrDynPrefix
 Ancestors
   bodyPtrBopInHeaderControl bodyPtrSubscriptLengthRead
+  bodyPtrBytestringBuiltinsSource bodyPtrPrecompileBuiltinsArithmeticValue
+  augAssignPtrFieldLoad pred_set
   assignTuplePtrLoadStep representationCleanPtr valueEncoding
   bodyPtrDefs contextProps valueEncodingProps freshWrites
   widenedAssignPtrIndexAdmin typedMemoryCopy emitHelperProps emitHelper
@@ -115,4 +117,70 @@ Proof
   qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
   qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >>
   simp[NoAsms] >> simp[]
+QED
+
+Theorem widened_assign_checked_header_store_counted:
+  emit_op MLOAD [Var src] a = (length,b) /\
+  emit_op GT [length; Lit (n2w C)] b = (Var flag,c) /\
+  emit_op ISZERO [Var flag] c = (Var valid,d) /\
+  emit_void ASSERT [Var valid] d = ((),e) /\
+  emit_void MSTORE [Var dst; length] e = ((),f) /\
+  ptr_covers G tn src s 32 /\ lookup_var src s = SOME sw /\
+  ptr_covers G tn dst s 32 /\ lookup_var dst s = SOME dw /\
+  not_fresh_at a dst /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    mem_word_at (w2n sw) m = n2w N) /\
+  N <= C /\ C < dimword (:256) /\ fn_has_code a f fn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = f.cs_current_bb /\
+    t.vs_inst_idx = LENGTH f.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand length t = SOME (n2w N) /\
+    op_taint tm length = {} /\ op_prov H length = NONE /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      mem_word_at (w2n dw) m = n2w N) /\
+    typed_copy_state_frame a (w2n dw) 32 s t /\
+    tm.t_mem = tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + 32} /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at a x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e /\ ci_mono e f` by
+    metis_tac[ci_mono_emit_op, ci_mono_emit_void, pairTheory.SND] >>
+  `cs_extends a e /\ cs_extends e f` by
+    metis_tac[ci_mono_def, cs_extends_trans] >>
+  `fn_has_code a e fn /\ fn_has_code e f fn` by
+    metis_tac[fn_has_code_split] >>
+  drule_all widened_assign_dyn_read_check_counted >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `lookup_var dst t = SOME dw /\ ptr_covers H tm dst t 32` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  drule_all emit_scratch_word_counted >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  qpat_assum `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t)`
+    (mp_then Any mp_tac gas_path_ptr_then) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qexistsl_tac [`H`,`tn'`,`t'`] >> simp[] >>
+  conj_tac >- (Cases_on `length` >> gvs[op_taint_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `mem_word_at (w2n dw) m = mem_word_at (w2n dw) t'.vs_memory` by
+        (sym_tac >> irule clean_word_mem_agree >>
+         qexists_tac `tn'.t_mem` >> simp[] >> gvs[]) >>
+      metis_tac[]) >>
+  conj_tac
+  >- (`typed_copy_state_frame a (w2n dw) 32 s t` by
+        (rewrite_tac[typed_copy_state_frame_def] >> conj_tac
+         >- (qpat_assum `t = s with <|vs_vars := _; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
+             simp[venom_state_component_equality]) >>
+         conj_tac >- metis_tac[] >>
+         qpat_assum `t = s with <|vs_vars := _; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
+         simp[typed_copy_frame_def]) >>
+      irule typed_copy_state_frame_trans >> qexists_tac `t` >>
+      simp[typed_copy_mstore_state_frame]) >>
+  gvs[op_taint_def]
 QED
