@@ -3,7 +3,7 @@
 Theory bodyMemExtCall
 Ancestors
   bodyMemoryPreds extcallRelabelMemory extcallDecoderHeadBounds
-  extcallDecoderStaticSuffix
+  extcallDecoderStaticSuffix extcallDecoderArraySemantics
 
 Theorem body_extcall_mem_case:
   !cx v14 is_static skip_check sig opts es v15.
