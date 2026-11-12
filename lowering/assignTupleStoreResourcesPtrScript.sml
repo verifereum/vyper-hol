@@ -4,6 +4,7 @@ Ancestors
   bodyPtrPopMemoryHeader typedCopyLayoutPtr valueEncodingProps
   representationCleanPtr exprSimTypedAlloc exprSimProps venomState
   loweringPosts valueEncoding valueEncodingDefs vyperTyping arithmetic
+  tuplePlacePrefixCert loweringStateRelDefs
 
 Theorem tuple_store_supported_array_layout:
   !tops et b dt.
@@ -107,4 +108,21 @@ Proof
   Induct >> gen_tac >> Cases_on `dts` >>
   simp[arg_type_fits_def] >> rpt strip_tac >>
   metis_tac[tuple_store_scalar_source_layout]
+QED
+
+(* The normalization allocation endpoint supplies both separation clauses.
+   Apply this to each loaded member's subwindow of the saved tuple. *)
+Theorem tuple_store_snapshot_scratch_separation:
+  tuple_place_snapshot cenv cx es lo hi ats tys tvs w s /\
+  ~EVERY is_word_type tys /\ type_memory_size_list tvs <> 0 /\ hi <= cut /\
+  (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ aid < cut ==>
+    regions_disjoint scratch capacity b sz) /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+    regions_disjoint scratch capacity b sz) /\
+  w2n w <= a /\ a+n <= w2n w+type_memory_size_list tvs ==>
+  regions_disjoint scratch capacity a n
+Proof
+  strip_tac >> gvs[tuple_place_snapshot_def] >>
+  `regions_disjoint scratch capacity b sz` by metis_tac[LESS_LESS_EQ_TRANS] >>
+  gvs[regions_disjoint_def] >> decide_tac
 QED
