@@ -36,7 +36,7 @@ Ancestors
   exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort
   exprOperandVar exprSimWordArgs exprBopSimProps
   bodySim targetPlaceSim targetPlaceSimCasesBase targetPlaceSimCases
-  targetPlaceSimDefs
+  targetPlaceSimDefs targetOverlapAccess vyperImmutableAccessFrame
   exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
   exprLowering exprLoweringProps compileEnv loweringStateRelDefs vyperAST vyperState
   vyperInterpreter vyperTypeSystem vyperTypeCallGraph venomState
@@ -165,6 +165,21 @@ Theorem imm_place_at_gas_obs[local,simp]:
     imm_place_at cenv cx es pv w ty
 Proof
   simp[oneline imm_place_at_def]
+QED
+
+(* The frame needs only the selected root lookup, not whole-state equality. *)
+Theorem imm_place_at_root_lookup[local]:
+  !cenv cx es ee src id path w ty.
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+               NONE => FEMPTY
+             | SOME imms => get_source_immutables src imms) id =
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY
+             | SOME imms => get_source_immutables src imms) id ==>
+    (imm_place_at cenv cx ee (PlaceR (ImmutablePlace src id path)) w ty <=>
+     imm_place_at cenv cx es (PlaceR (ImmutablePlace src id path)) w ty)
+Proof
+  rpt strip_tac >> simp[imm_place_at_def]
 QED
 
 Theorem imm_place_at_pure_index[local]:
@@ -355,6 +370,97 @@ Proof
             vyperPlaceStatePreservationTheory.subscripts_type_well_formed]
 QED
 
+
+Theorem imm_readable_path_nil[local]:
+  !tv v. value_has_type tv v /\ well_formed_type_value tv ==>
+    ?w. evaluate_subscripts tv v [] = INL w
+Proof
+  simp[evaluate_subscripts_def]
+QED
+
+Theorem imm_nondynamic_step_readable[local]:
+  !tv v sb d etv.
+    value_has_type tv v /\ well_formed_type_value tv /\
+    mem_step_offset tv sb = SOME (d,etv) /\
+    (!t n. tv <> ArrayTV t (Dynamic n)) ==>
+    ?w. evaluate_subscripts tv v [sb] = INL w
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `sb`
+  >- (rename1 `ValueSubscript idx` >> Cases_on `idx` >> Cases_on `tv` >>
+      gvs[mem_step_offset_def, AllCaseEqs()] >>
+      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >>
+      gvs[vyperTypingTheory.value_has_type_def, evaluate_subscripts_def,
+          vyperValueOperationTheory.array_index_def, AllCaseEqs()] >>
+      gvs[listTheory.oEL_EQ_EL, vyperTypingTheory.values_have_types_length]
+      >- metis_tac[vyperTypingTheory.values_have_types_length] >>
+      Cases_on `b` >>
+      gvs[vyperTypingTheory.value_has_type_def, mem_step_offset_def,
+          AllCaseEqs()] >>
+      Cases_on `ALOOKUP l (Num i)` >> simp[]) >>
+  `mem_path_offset tv [AttrSubscript s] = SOME (d,etv)` by
+    simp[mem_path_offset_def] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >>
+  simp[vyperStateTheory.subscripts_type_def, AllCaseEqs()] >>
+  metis_tac[vyperPlaceResultTypingTheory.evaluate_subscripts_attribute_ready]
+QED
+
+Theorem imm_readable_path_snoc[local]:
+  !itv path k tv sb d etv.
+    (!iv. value_has_type itv iv /\ well_formed_type_value itv ==>
+          ?v. evaluate_subscripts itv iv path = INL v) /\
+    mem_path_offset itv path = SOME (k,tv) /\
+    mem_step_offset tv sb = SOME (d,etv) /\
+    (!t n. tv <> ArrayTV t (Dynamic n)) ==>
+    !iv. value_has_type itv iv /\ well_formed_type_value itv ==>
+         ?v. evaluate_subscripts itv iv (path ++ [sb]) = INL v
+Proof
+  rpt strip_tac >>
+  `?v. evaluate_subscripts itv iv path = INL v` by metis_tac[] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  `value_has_type tv v /\ well_formed_type_value tv` by
+    metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_type,
+              vyperPlaceStatePreservationTheory.subscripts_type_well_formed] >>
+  drule_all imm_nondynamic_step_readable >> strip_tac >>
+  drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+  disch_then (qspec_then `[sb]` mp_tac) >> simp[]
+QED
+
+Theorem imm_place_at_readable_rebase[local]:
+  !cenv cx es ee env src id path w ty root_ty itv iv.
+    imm_place_at cenv cx es (PlaceR (ImmutablePlace src id path)) w ty /\
+    expr_sim_inv cenv cx env ee /\
+    FLOOKUP env.bare_globals (src,id) = SOME root_ty /\
+    evaluate_type (get_tenv cx) root_ty = SOME itv /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+      SOME (itv,iv) /\
+    (!v. value_has_type itv v /\ well_formed_type_value itv ==>
+         ?u. evaluate_subscripts itv v path = INL u) ==>
+    imm_place_at cenv cx ee (PlaceR (ImmutablePlace src id path)) w ty
+Proof
+  rpt strip_tac >>
+  `env_immutables_consistent env cx ee` by
+    fs[expr_sim_inv_def, env_consistent_def] >>
+  `?imms v. ALOOKUP ee.immutables cx.txn.target = SOME imms /\
+            FLOOKUP (get_source_immutables src imms) id = SOME (itv,v)` by
+    (Cases_on `ALOOKUP ee.immutables cx.txn.target` >>
+     gvs[env_immutables_consistent_def, get_source_immutables_def] >>
+     `IS_SOME (FLOOKUP (case ALOOKUP x src of
+                         NONE => FEMPTY | SOME imm => imm) id)` by metis_tac[] >>
+     Cases_on `FLOOKUP (case ALOOKUP x src of
+                        NONE => FEMPTY | SOME imm => imm) id` >> gvs[] >>
+     PairCases_on `x'` >>
+     `evaluate_type (get_tenv cx) root_ty = SOME x'0` by metis_tac[] >>
+     gvs[]) >>
+  `state_well_typed ee` by fs[expr_sim_inv_def] >>
+  drule_all vyperTypeEnvTheory.state_well_typed_immutables_ALOOKUP >>
+  strip_tac >>
+  drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >>
+  strip_tac >>
+  `?u. evaluate_subscripts itv v path = INL u` by metis_tac[] >>
+  gvs[imm_place_at_def] >> metis_tac[]
+QED
 
 Theorem imm_typed_step_memory[local]:
   !tv v sub d ptv pv b mem.
@@ -3006,8 +3112,12 @@ QED
    supported_program / target_pre, and in static target checking once
    supported_program is gone. *)
 Theorem pop_nested_immutable_deploy_impure_index_case:
-  !ctx func cenv cx env ann bt ty es src id.
-    cx.in_deploy /\
+  !ctx func cenv cx env ann bt ty es src id nocalls.
+    cx.in_deploy /\ cenv.ce_is_ctor /\
+    (!ty0. FLOOKUP env.bare_global_assignable (src,id) = SOME ty0 ==>
+           cenv.ce_module_var_type (src,id) = SOME ty0) /\
+    target_idx_case nocalls ctx func cenv cx bt /\
+    (nocalls ==> int_calls_target bt = []) /\
     ~EVERY pure_expr (target_indices bt) /\
     expr_body_pre cenv cx env (Pop ann bt) es /\
     target_root bt = TopLevelNameTarget (src,id) /\
