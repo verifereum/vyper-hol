@@ -163,7 +163,7 @@ Proof
       rpt strip_tac >>
       `valid_horizon cx st0 H es.storage_trace` by
         (qpat_x_assum `eval_expr cx e _ = (res,_)` assume_tac >>
-         drule_at (Pos (el 2)) valid_horizon_frame_prefix >>
+         drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >>
          gs[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?tv. _`
         (qspec_then `H` mp_tac) >>

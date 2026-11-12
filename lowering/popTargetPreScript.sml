@@ -4,14 +4,17 @@
  *
  * TOP-LEVEL:
  *   target_pre_of_pop       — target_pre from a pop's expr_body_pre
+ *   pop_immutable_root_rejected — no pop of a target rooted at an
+ *                             immutable meets expr_body_pre: allocLimits'
+ *                             target_in_immutables rejects it
  *)
 
 Theory popTargetPre
 Ancestors
   targetPlaceSim targetPlaceSimCasesBase exprSimHypsDefs
   vyperAST vyperTypeSystem vyperTypeEnv vyperTypeCallGraph
-  vyperTypeCallStackSoundness supportedExprTraverse supportedProgram
-  allocLimits list
+  vyperTypeCallStackSoundness vyperTypeInvariants vyperTypeAssignContext
+  supportedExprTraverse supportedProgram allocLimits list
 
 (* Every index of a typed target meets expr_body_pre wherever expr_sim_inv
    holds, from the target's part of an expression's expr_body_pre. *)
@@ -57,4 +60,71 @@ Proof
       expr_abi_decode_target_root_def, expr_evm_run_root_def,
       call_operands_effect_root_def] >>
   irule target_indices_pre_of_body >> simp[] >> metis_tac[]
+QED
+
+(* A target is in an immutable exactly when its root is a module variable
+   at an ImmutableLoc. *)
+Theorem target_in_immutables_root:
+  !bt mvars.
+    target_in_immutables mvars bt <=>
+    ?nsid off. target_root bt = TopLevelNameTarget nsid /\
+               FLOOKUP mvars nsid = SOME (ImmutableLoc off)
+Proof
+  `(!e:expr. T) /\
+   !bt mvars.
+     target_in_immutables mvars bt <=>
+     ?nsid off. target_root bt = TopLevelNameTarget nsid /\
+                FLOOKUP mvars nsid = SOME (ImmutableLoc off)`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  rw[target_root_def, target_in_immutables_def] >>
+  BasicProvers.every_case_tac >> simp[]
+QED
+
+Theorem target_root_untyped:
+  !env bt. type_place_target env (target_root bt) = NONE ==>
+    type_place_target env bt = NONE
+Proof
+  gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> simp[target_root_def] >> rpt strip_tac >>
+  first_x_assum (drule_at Any) >> simp[] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `type_place_target env tgt` >>
+  Cases_on `type_place_target env tgt` >> simp[] >>
+  gvs[Abbr `tgt`, type_place_target_AttributeTarget,
+      type_place_target_SubscriptTarget]
+QED
+
+(* A pop whose target is rooted at a module name with no storage declaration
+   (an immutable or a constant) never meets expr_body_pre: the target types
+   only through an assignable immutable, which expr_sim_inv places at an
+   ImmutableLoc, and alloc_limits_expr rejects a pop of a target in an
+   immutable (target_in_immutables, Venom's "Cannot load from location:
+   immutables"). *)
+Theorem pop_immutable_root_rejected:
+  !cenv cx env es ann bt src id.
+    expr_body_pre cenv cx env (Pop ann bt) es /\
+    target_root bt = TopLevelNameTarget (src,id) /\
+    (!ts. get_module_code cx src = SOME ts ==>
+          find_var_decl_by_name id ts = NONE) ==>
+    F
+Proof
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_inv cenv cx env es /\ well_typed_expr env (Pop ann bt) /\
+   alloc_limits_expr cenv (Pop ann bt)` by fs[expr_body_pre_def] >>
+  `env_context_consistent env cx` by
+    fs[expr_sim_inv_def, env_consistent_def] >>
+  `?ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty` by
+    (drule well_typed_expr_Pop_dynamic_target >> strip_tac >>
+     Cases_on `type_place_target env (TopLevelNameTarget (src,id))`
+     >- (qspecl_then [`env`, `bt`] mp_tac target_root_untyped >> simp[]) >>
+     gvs[type_place_target_TopLevelNameTarget] >>
+     rename1 `FLOOKUP env.toplevel_vtypes _ = SOME vt` >> Cases_on `vt` >>
+     fs[env_context_consistent_def] >> res_tac >> gvs[]) >>
+  `FLOOKUP env.bare_globals (src,id) = SOME ty` by
+    (fs[env_context_consistent_def] >> metis_tac[]) >>
+  `?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off)` by
+    (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  `target_in_immutables cenv.ce_module_vars bt` by
+    (simp[target_in_immutables_root] >> metis_tac[]) >>
+  fs[alloc_limits_expr_def]
 QED

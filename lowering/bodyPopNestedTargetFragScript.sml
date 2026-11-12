@@ -5,7 +5,7 @@
 
 Theory bodyPopNestedTargetFrag
 Ancestors
-  exprSimPopNestedBase popTargetPre exprSimPopImmutableTarget
+  exprSimPopNestedBase popTargetPre targetPlaceSimCasesBase exprSimHypsDefs
   loweringPosts bodySim
   list fragExec exprSimDefs exprSimProps exprSimHyps exprSimPop exprSimPopStorage
   targetPlaceSim targetPlaceSimCases vyperTypeEnv vyperTypeInvariants
@@ -15,6 +15,20 @@ Ancestors
   exprLoweringProps compileEnv finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
+
+(* In a body, the indices' judgments of a target, internal calls allowed:
+   body_base_target_ok gives body_expr_ok for each index whose base place
+   evaluates, and body_inv turns it into the index's cases. *)
+Theorem body_target_idx_case:
+  !bt cx tops ctx func cenv.
+    body_inv tops ctx cenv cx /\ body_base_target_ok cx bt ==>
+    target_idx_case F ctx func cenv cx bt
+Proof
+  recInduct base_assignment_target_induct >>
+  rw[target_idx_case_def, body_base_target_ok_def] >>
+  gvs[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[]
+QED
 
 (* The target's fragment judgment in the body, where an index may make an
    internal call: target_case_all gives target_sim from body_base_target_ok's

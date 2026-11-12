@@ -33,13 +33,13 @@ QED
 
 Theorem immutable_augassign_load_frame:
   emit_op MLOAD [Lit (n2w off)] sa = (op,sb) /\
-  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s0 /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\ off < dimword (:256) /\
   mload off s0 = word ==>
   ?t. gas_marked_path F ctx func s0 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx es t /\ eval_operand op t = SOME word /\
+      stmt_state_rel H ctx func cenv cx es t /\ eval_operand op t = SOME word /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ local_ptrs_reserved cenv sb /\
       (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
@@ -73,7 +73,7 @@ Theorem immutable_mstore_alloca_frame[local]:
   alloca_frame c0 e0 sa s0 cenv ee s /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
            FLOOKUP s.vs_allocas aid = SOME b) /\
-  stmt_state_rel ctx func cenv cx ee s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx ee s /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ type_memory_size tv = 32 /\
@@ -103,7 +103,8 @@ Theorem immutable_augassign_store_post_path:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   body_inv tops ctx cenv cx /\ cx.in_deploy /\
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
+  storage_well_formed_on cx ee (FST H) /\
   FLOOKUP env.bare_globals (cenv.ce_module,id) = SOME ty /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
@@ -118,7 +119,7 @@ Theorem immutable_augassign_store_post_path:
   ?fin last. write_place cx (ImmutablePlace cenv.ce_module id []) w ee =
       (INL (),fin) /\
     gas_marked_path F ctx func s 0 (OK last) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) fin last
+    stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) fin last
 Proof
   strip_tac >>
   drule_all immutable_augassign_entry >> strip_tac >> gvs[] >>
@@ -144,13 +145,17 @@ Proof
   `fin.scopes = ee.scopes` by
     (qpat_x_assum `write_place _ _ _ _ = (INL (),fin)` mp_tac >>
      asm_rewrite_tac[] >> rw[] >> simp[]) >>
+  `storage_well_formed_on cx fin (FST H)` by
+    (drule vyperPlaceFramesTheory.write_immutable_place_frame >> strip_tac >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends,
+               evaluation_state_accfupds]) >>
   `cenv.ce_is_ctor` by fs[body_inv_def] >>
   `type_memory_size tv = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
   `alloca_frame cenv es sa s0 cenv fin
      (mstore off (typed_val_to_w256 tv w) s with
         vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule immutable_mstore_alloca_frame >> simp[] >>
-     qpat_assum `stmt_state_rel _ _ _ _ ee s` (irule_at Any) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ ee s` (irule_at Any) >>
      simp[] >> metis_tac[]) >>
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>
