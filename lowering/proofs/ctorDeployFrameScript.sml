@@ -299,7 +299,6 @@ Proof
   >- (gvs[venom_frame_rel_def, frame_outcome_def] >>
       Cases_on `src` >> gvs[deploy_source_exempt_def]
       >- (PairCases_on `x` >> gvs[deploy_venom_result_rel_def] >>
-          drule immutables_section_rel_length >> strip_tac >>
           rename1 `es'.contexts = [(c1, rb1)]` >>
           `LENGTH s.contexts = 1` by
             (qpat_x_assum `frame_inst_at _ s op` mp_tac >>
@@ -312,7 +311,13 @@ Proof
           qspecl_then [`es`, `ctxt`, `rb`, `tx.target`, `es'`, `c1`, `rb1`] mp_tac
             (Q.GENL [`es`, `c0`, `rb0`, `target`, `es1`, `c1`, `rb1`]
                deploy_frame_halt_deposit) >>
-          impl_tac >- fs[Abbr `sh`] >> simp[imm_len_def]) >>
+          impl_tac >- fs[Abbr `sh`] >>
+          (* a halted constructor (selfdestruct) deposits no code *)
+          Cases_on `ALOOKUP x0.sources tx.target = NONE` >> gvs[]
+          >~ [`immutables_section_rel _ _ _`]
+          >- (drule immutables_section_rel_length >> strip_tac >>
+              simp[imm_len_def]) >>
+          metis_tac[]) >>
       Cases_on `y` >> gvs[deploy_venom_result_rel_def])
   (* an aborted run ends in an exception *)
   >~ [`Abort ab ss`]
