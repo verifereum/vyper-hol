@@ -262,7 +262,7 @@ Proof
   simp[]
 QED
 *)
-(* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-train16-unit, built at fc54ea89e *)
+(* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-t16-cdslice, built at fc54ea89e *)
 Theorem compile_slice_calldata_success_posts:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
