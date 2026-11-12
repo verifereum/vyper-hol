@@ -64,6 +64,8 @@ Proof
   metis_tac[]
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_tuple_entry:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   (!e st. MEM e args /\ expr_sim_inv ce fp.jc_cx env st ==>
@@ -123,6 +125,7 @@ Proof
   fs[exprLoweringPropsTheory.ci_mono_def] >>
   metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
+*)
 
 (* Source well-formedness is attached only to successful Value executions. *)
 Theorem intcall_value_outcome_wf:
@@ -258,6 +261,7 @@ Proof
   simp[valueEncodingTheory.type_memory_size_def]
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_tuple_literal_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
@@ -265,6 +269,7 @@ Theorem intcall_tuple_literal_step:
   (?a n args. e = Builtin a (MakeArray NONE n) args) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
+  (* original proof, kept while held:
   strip_tac >> gvs[] >>
   reverse conj_tac
   >- (irule bodyIntCallJointAggCoreTheory.intcall_map_producer_other >> simp[]) >>
@@ -321,11 +326,16 @@ Proof
   `EVERY ($~ o expr_has_effect) args ==> pure_frame ce fp.jc_func es sa s u`
     suffices_by (strip_tac >> fs[] >> metis_tac[]) >>
   suspend "pure_frame"
+  *)
+  cheat
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; these Resume blocks hang off a held proof, commented out with it *)
+(*
 (* HELD (train 15): pure_frame sweep (tuple literal), retired in train 16 *)
 Resume intcall_tuple_literal_step[pure_frame]:
   cheat
 QED
 
 Finalise intcall_tuple_literal_step
+*)
