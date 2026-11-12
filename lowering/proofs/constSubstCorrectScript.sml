@@ -2469,8 +2469,12 @@ Proof
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [ignore_bind_def] >>
+      (* The pinned evaluator checks arity and decodes bytes before raising. *)
       irule protected_cell_frame_bind >>
-      simp[state_rel_frame_locals_primitives, protected_cell_frame_locals])
+      simp[state_rel_frame_locals_primitives, protected_cell_frame_locals,
+        protected_cell_frame_pure_guards] >>
+      rpt strip_tac >> irule protected_cell_frame_bind >>
+      simp[protected_cell_frame_pure_guards])
   >~ [`well_typed_expr env (Call ty SelfDestructTarget es d)`]
   >- (`well_typed_exprs env es` by
         (qpat_x_assum `well_typed_expr env (Call ty SelfDestructTarget es d)` mp_tac >>
@@ -2481,7 +2485,11 @@ Proof
       rpt (irule protected_cell_frame_bind >>
         simp[state_rel_frame_locals_primitives, protected_cell_frame_locals,
           protected_cell_frame_primitives, protected_cell_frame_call_primitives] >>
-        rpt strip_tac >> simp_tac bool_ss []))
+        rpt strip_tac >> simp_tac bool_ss []) >>
+      Cases_on `cx.txn.created_in_tx` >>
+      simp[protected_cell_frame_call_primitives] >>
+      irule protected_cell_frame_bind >>
+      simp[protected_cell_frame_call_primitives, protected_cell_frame_primitives])
   >~ [`type_stmt env ret (Log ns es)`]
   >- (`well_typed_exprs env es` by
         (gvs[type_stmt_def, AllCaseEqs()] >>
@@ -2504,10 +2512,15 @@ Proof
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
+      (* Preserve the successful read equation for the target-place IH. *)
+      irule protected_cell_frame_bind >> reverse conj_tac
+      >- simp[protected_cell_frame_reads] >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_read_tail >> gen_tac >> simp_tac bool_ss [] >>
+      (* The read now precedes target evaluation, rather than following it:
+         irule protected_cell_frame_read_tail >> gen_tac >> simp_tac bool_ss [] *)
       irule (cj 1 protected_cell_frame_mutations) >>
       irule typed_target_place_excludes_constant >> metis_tac[])
   >~ [`type_stmt env ret (Assert e (AssertCustomError err))`]
@@ -2706,11 +2719,16 @@ Proof
       >- (rpt strip_tac >> simp_tac bool_ss [] >>
           irule protected_cell_frame_bind >>
           simp[protected_cell_frame_pure_guards, protected_cell_frame_return]) >>
-      irule protected_cell_frame_finally >> reverse conj_tac
-      >- (irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
-          rpt strip_tac >> Cases_on `tup1 /\ tup0 <> View /\ tup0 <> Pure` >>
+      (* Previously the pop and unlock were one finally cleanup bind.
+         The evaluator now skips unlocking on halt, but always pops. *)
+      irule state_rel_frame_finally_unless_halt >>
+      conj_tac >- metis_tac[protected_cell_frame_trans] >>
+      reverse conj_tac
+      >- (Cases_on `tup1 /\ tup0 <> View /\ tup0 <> Pure` >>
           simp[protected_cell_frame_return] >> Cases_on `cx.nonreentrant_slot` >>
           simp[protected_cell_frame_return, protected_cell_frame_primitives]) >>
+      irule protected_cell_frame_finally >>
+      simp[protected_cell_frame_primitives] >>
       irule state_rel_frame_try >> conj_tac
       >- metis_tac[protected_cell_frame_trans] >>
       conj_tac
@@ -2954,9 +2972,14 @@ Proof
       qexistsl [`art`, `extend_local env nm typ F`, `mods`, `ret`] >> simp[])
   >~ [`eval_for cx tyv nm body' vs`]
   >- (rewrite_tac[ignore_bind_def] >>
+      (* Iterator results are read before installing the loop variable. *)
+      irule protected_cell_frame_bind >> simp[protected_cell_frame_reads] >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      qpat_x_assum `!a b c. push_scope_with_var _ _ _ _ = _ ==> _` drule >> strip_tac >>
+      (* Previously the body IH was guarded only by push_scope_with_var. *)
+      qpat_x_assum `!a b c d e f. _ /\ push_scope_with_var _ _ _ _ = _ ==> _`
+        drule >> disch_then drule >> strip_tac >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (irule protected_cell_frame_finally >> simp[protected_cell_frame_primitives] >>
           irule state_rel_frame_try >> conj_tac
@@ -2968,9 +2991,10 @@ Proof
           simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >> Cases_on `v'` >>
       simp[protected_cell_frame_return] >>
-      qpat_x_assum `!a b c d e. _ /\ _ ==> _`
+      (* The recursive IH additionally retains the iterator read. *)
+      qpat_x_assum `!a b c d e f g h. _ /\ _ /\ _ ==> _`
         (mp_tac o REWRITE_RULE [ignore_bind_def]) >>
-      disch_then drule >> strip_tac >>
+      disch_then drule >> disch_then drule >> disch_then drule >> strip_tac >>
       simp[state_rel_frame_result] >> metis_tac[])
   >~ [`well_typed_expr env (Call ty (ExtCall static skip sig opts) es drv)`]
   >- (PairCases_on `sig` >> gvs[] >>
@@ -3054,11 +3078,15 @@ Proof
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
+      (* Old copy-only tail:
       irule protected_cell_frame_read_tail >> gen_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >>
-      simp[protected_cell_frame_pure_guards, protected_cell_frame_return])
+      simp[protected_cell_frame_pure_guards, protected_cell_frame_return]
+      *)
+      irule protected_cell_frame_eq_op >>
+      metis_tac[array_iterator_results_state])
   >~ [`IS_SOME (type_place_target env (SubscriptTarget bt e))`]
   >- (drule type_place_target_subscript_child >> strip_tac >>
       irule protected_cell_frame_bind >> reverse conj_tac
@@ -3661,8 +3689,8 @@ QED
 Theorem const_subst_builtin_operands[local]:
   MAP expr_type (subst_consts_exprs E es) = MAP expr_type es /\
   well_typed_builtin_app ty bt (MAP expr_type es) /\
-  builtin_operands_ok bt es ==>
-  builtin_operands_ok bt (subst_consts_exprs E es)
+  builtin_operands_ok ty bt es ==>
+  builtin_operands_ok ty bt (subst_consts_exprs E es)
 Proof
   strip_tac >>
   Cases_on `bt = Bop Exp \/ bt = Bop ShL \/ bt = Bop ShR`
@@ -3720,8 +3748,8 @@ QED
 
 Theorem fold_const_builtin_operands[local]:
   well_typed_builtin_app ty bt (MAP expr_type es) /\
-  builtin_operands_ok bt es ==>
-  builtin_operands_ok bt (fold_const_exprs es)
+  builtin_operands_ok ty bt es ==>
+  builtin_operands_ok ty bt (fold_const_exprs es)
 Proof
   strip_tac >>
   Cases_on `bt = Bop Exp \/ bt = Bop ShL \/ bt = Bop ShR`
