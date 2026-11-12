@@ -654,5 +654,8 @@ Theorem snapshot_vv_counted_mem:
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `is_word_type (expr_type e)`
+  >- (drule_all snapshot_word_counted_mem >> simp[]) >>
+  drule_all snapshot_nonword_counted_mem >> simp[]
 QED
