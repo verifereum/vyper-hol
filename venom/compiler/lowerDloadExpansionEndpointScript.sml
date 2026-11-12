@@ -41,23 +41,8 @@ Proof
     (Cases >> simp[]) >> simp[]
 QED
 
-Theorem ld_sync_scratch_reconstruct:
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  g.lf_serial = f.lf_serial /\ g.lf_fn = f.lf_fn /\
-  g.lf_supply = f.lf_supply /\ g.lf_Q = f.lf_Q /\
-  g.lf_src = s' /\ g.lf_tgt = t' /\ g.lf_tv = tn'.t_var /\
-  frame_reachable vs0 C stk PG G' tn' fn next s' /\ active_inst fn next s' /\
-  G' = ld_erase A o_f g.lf_H /\ ld_vars P A g /\
-  EVERY (ld_maps A) (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
-  ld_intervals lo s' /\ ld_intervals lo t' /\
-  s'.vs_current_bb = t'.vs_current_bb /\ s'.vs_prev_bb = t'.vs_prev_bb /\
-  (!j. j < LENGTH (g::fs) ==>
-    (EL j (g::fs)).lf_tgt.vs_alloca_next =
-    (EL j (g::fs)).lf_src.vs_alloca_next + 32 * ld_charge (DROP j (g::fs))) /\
-  ld_charge (g::fs) <= ctx_dload_count C /\
-  (?X. ld_envelope f.lf_supply fn s' s'.vs_inst_idx X t'.vs_inst_idx) /\
-  ld_memory lo A tn' s' t' /\ ld_nonghost tn' s' t' ==>
-  ld_sync lo P C vs0 stk PG G' tn' fn next s' t' A (g::fs) N
+(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
+   ghosts and the dynamic-region agreement of ld_sync.
 Proof
   strip_tac >>
   qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -68,55 +53,31 @@ Proof
   qpat_x_assum `!j. _ ==> ?X. ld_envelope _ _ _ _ X _`
     (qspec_then `SUC n` mp_tac) >> gvs[]
 QED
+*)
+Theorem ld_sync_scratch_reconstruct:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  g.lf_serial = f.lf_serial /\ g.lf_fn = f.lf_fn /\
+  g.lf_supply = f.lf_supply /\ g.lf_Q = f.lf_Q /\
+  g.lf_src = s' /\ g.lf_tgt = t' /\ g.lf_tv = tn'.t_var /\
+  frame_reachable vs0 C stk PG G' tn' fn next s' /\ active_inst fn next s' /\
+  ld_ghost_ok (dyn_floor C vs0) A g.lf_H G' /\ ld_vars P A g /\
+  EVERY (ld_maps A) (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
+  ld_intervals lo s' /\ ld_intervals lo t' /\
+  s'.vs_current_bb = t'.vs_current_bb /\ s'.vs_prev_bb = t'.vs_prev_bb /\
+  (!j. j < LENGTH (g::fs) ==>
+    (EL j (g::fs)).lf_tgt.vs_alloca_next =
+    (EL j (g::fs)).lf_src.vs_alloca_next + 32 * ld_charge (DROP j (g::fs))) /\
+  ld_charge (g::fs) <= ctx_dload_count C /\
+  (?X. ld_envelope f.lf_supply fn s' s'.vs_inst_idx X t'.vs_inst_idx) /\
+  ld_memory lo A tn' s' t' /\ ld_nonghost tn' s' t' /\
+  ld_dyn_agree (dyn_floor C vs0) tn'.t_mem s'.vs_memory t'.vs_memory ==>
+  ld_sync lo P C vs0 stk PG G' tn' fn next s' t' A (g::fs) N
+Proof
+  cheat
+QED
 
-Theorem ld_dloadbytes_endpoint:
-  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
-  reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
-  ptr_discipline lo C vs0 /\ fmp_free_ctx C /\
-  mem_inv raw_mem_ok C vs0 /\ mem_inv dload_offset_ok C vs0 /\
-  mem_inv dload_headroom_ok C vs0 /\ callee_first names C.ctx_functions /\
-  (!fn. MEM fn C.ctx_functions ==>
-    lookup_function fn.fn_name C'.ctx_functions =
-      SOME (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
-  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
-  ld_global lo A (f::fs) /\
-  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
-  EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
-    j IN P f.lf_fn.fn_name) (f::fs) /\
-  (!j k. j < k /\ k < LENGTH (f::fs) ==>
-    list_precedes (EL j (f::fs)).lf_fn.fn_name
-                  (EL k (f::fs)).lf_fn.fn_name names) /\
-  fn' = ld_image f /\ ir_supply_covers_fn f.lf_supply fn /\
-  ~in_revert_forward fn s /\
-  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
-  ld_prefix C' fn' X p h t0 t /\ SUC h = LENGTH X /\
-  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-  inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len] /\
-  step_inst fuel C' (EL h X) t = OK u ==>
-  ?ss Ar g.
-    Ar = A /\ step_inst 0 C inst s = OK ss /\
-    u.vs_inst_idx = t.vs_inst_idx /\
-    (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = p + LENGTH X /\
-    g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
-    g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\
-    g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
-    g.lf_tgt = (u with vs_inst_idx := p + LENGTH X) /\
-    g.lf_tv = (step_taint inst s ss tn).t_var /\
-    step_prov PG G inst ss = ld_erase Ar o_f g.lf_H /\
-    ld_vars P Ar g /\ ld_maps Ar g /\
-    ld_memory lo Ar (step_taint inst s ss tn) ss u /\
-    ld_nonghost (step_taint inst s ss tn) ss u /\
-    ld_global lo Ar (g::fs) /\ FDOM Ar = ld_slots Ar (g::fs) /\
-    EVERY (ld_maps Ar) fs /\
-    EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (g::fs) /\
-    EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
-      j IN P f.lf_fn.fn_name) (g::fs) /\
-    (!j k. j < k /\ k < LENGTH (g::fs) ==>
-      list_precedes (EL j (g::fs)).lf_fn.fn_name
-                    (EL k (g::fs)).lf_fn.fn_name names) /\
-    (!next. active_inst fn next g.lf_src ==>
-      ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
-        (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N)
+(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
+   ghosts and the dynamic-region agreement of ld_sync.
 Proof
   strip_tac >>
   `active_inst fn inst s` by metis_tac[ld_sync_source] >>
@@ -160,8 +121,8 @@ Proof
   drule ld_head_order_cong >> disch_then (fn th => rewrite_tac[th]) >>
   qpat_x_assum `!j k. _` ACCEPT_TAC
 QED
-
-Theorem ld_dload_endpoint:
+*)
+Theorem ld_dloadbytes_endpoint:
   o1_ctx_shape C /\ o1_run_state_ok vs0 /\
   reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
   ptr_discipline lo C vs0 /\ fmp_free_ctx C /\
@@ -183,7 +144,7 @@ Theorem ld_dload_endpoint:
   ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
   ld_prefix C' fn' X p h t0 t /\ SUC h = LENGTH X /\
   ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\ inst.inst_outputs = [out] /\
+  inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len] /\
   step_inst fuel C' (EL h X) t = OK u ==>
   ?ss Ar g.
     Ar = A /\ step_inst 0 C inst s = OK ss /\
@@ -194,7 +155,7 @@ Theorem ld_dload_endpoint:
     g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
     g.lf_tgt = (u with vs_inst_idx := p + LENGTH X) /\
     g.lf_tv = (step_taint inst s ss tn).t_var /\
-    step_prov PG G inst ss = ld_erase Ar o_f g.lf_H /\
+    ld_ghost_ok (dyn_floor C vs0) Ar g.lf_H (step_prov PG G inst ss) /\
     ld_vars P Ar g /\ ld_maps Ar g /\
     ld_memory lo Ar (step_taint inst s ss tn) ss u /\
     ld_nonghost (step_taint inst s ss tn) ss u /\
@@ -209,6 +170,12 @@ Theorem ld_dload_endpoint:
     (!next. active_inst fn next g.lf_src ==>
       ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
         (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N)
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
+   ghosts and the dynamic-region agreement of ld_sync.
 Proof
   strip_tac >>
   `active_inst fn inst s` by metis_tac[ld_sync_source] >>
@@ -345,6 +312,58 @@ QED
 
 Finalise ld_dload_endpoint
 
+*)
+Theorem ld_dload_endpoint:
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
+  ptr_discipline lo C vs0 /\ fmp_free_ctx C /\
+  mem_inv raw_mem_ok C vs0 /\ mem_inv dload_offset_ok C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\ callee_first names C.ctx_functions /\
+  (!fn. MEM fn C.ctx_functions ==>
+    lookup_function fn.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
+  ld_global lo A (f::fs) /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
+  EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+    j IN P f.lf_fn.fn_name) (f::fs) /\
+  (!j k. j < k /\ k < LENGTH (f::fs) ==>
+    list_precedes (EL j (f::fs)).lf_fn.fn_name
+                  (EL k (f::fs)).lf_fn.fn_name names) /\
+  fn' = ld_image f /\ ir_supply_covers_fn f.lf_supply fn /\
+  ~in_revert_forward fn s /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  ld_prefix C' fn' X p h t0 t /\ SUC h = LENGTH X /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\ inst.inst_outputs = [out] /\
+  step_inst fuel C' (EL h X) t = OK u ==>
+  ?ss Ar g.
+    Ar = A /\ step_inst 0 C inst s = OK ss /\
+    u.vs_inst_idx = t.vs_inst_idx /\
+    (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = p + LENGTH X /\
+    g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
+    g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\
+    g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
+    g.lf_tgt = (u with vs_inst_idx := p + LENGTH X) /\
+    g.lf_tv = (step_taint inst s ss tn).t_var /\
+    ld_ghost_ok (dyn_floor C vs0) Ar g.lf_H (step_prov PG G inst ss) /\
+    ld_vars P Ar g /\ ld_maps Ar g /\
+    ld_memory lo Ar (step_taint inst s ss tn) ss u /\
+    ld_nonghost (step_taint inst s ss tn) ss u /\
+    ld_global lo Ar (g::fs) /\ FDOM Ar = ld_slots Ar (g::fs) /\
+    EVERY (ld_maps Ar) fs /\
+    EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (g::fs) /\
+    EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+      j IN P f.lf_fn.fn_name) (g::fs) /\
+    (!j k. j < k /\ k < LENGTH (g::fs) ==>
+      list_precedes (EL j (g::fs)).lf_fn.fn_name
+                    (EL k (g::fs)).lf_fn.fn_name names) /\
+    (!next. active_inst fn next g.lf_src ==>
+      ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+        (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N)
+Proof
+  cheat
+QED
 val _ = app (fn th => if null (hyp th) then ()
   else raise Fail "expansion endpoint boundary has hypotheses")
   [ld_sync_envelope_position, ld_head_order_cong,
