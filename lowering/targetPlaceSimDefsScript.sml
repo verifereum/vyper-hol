@@ -9,7 +9,8 @@ Definition target_res_ok_def:
   target_res_ok (res : eval_result + exception) <=>
     (?pv. res = INL pv) \/ (?m. res = INR (Error (RuntimeError m))) \/
     (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
+    (?str. res = INR (AssertException str)) \/
+    res = INR HaltException
 End
 
 Definition target_sim_def:

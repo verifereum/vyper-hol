@@ -4054,6 +4054,21 @@ Proof
   qexistsl_tac [`amount`,`rq`,`outcome`,`es1'`] >> simp[]
 QED
 
+Theorem calldata_call_not_halt[local]:
+  exprs_case nocalls ctx func cenv cx (addr::kws) /\
+  (nocalls ==> int_calls_expr
+    (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) = []) /\
+  expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es /\
+  eval_exprs cx (addr::kws) es = (INL vs,es1) /\
+  typed_args_post ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry /\
+  eval_expr cx (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es = (res,es2) ==>
+  res <> INR HaltException
+Proof
+  strip_tac >> drule_all calldata_call_args_ready >> strip_tac >>
+  drule_all calldata_call_source_outcome >> strip_tac >>
+  gvs[] >> rw[]
+QED
+
 Theorem calldata_take_outcome_bound[local]:
   EVERY (\oc. LENGTH oc.co_returnData < dimword(:256)) os /\
   take_outcome rq os = (oc,rest) ==>
@@ -4731,7 +4746,15 @@ Proof
   simp[calldata_gas_explicit_false, gas_marked_path_def] >>
   `gas_path ctx func s0 (n + LENGTH marks) r` by
     metis_tac[gas_path_then, arithmeticTheory.ADD_COMM] >>
-  gvs[calldata_vv_post_gas_obs]
+  `res <> INR HaltException` by
+    (mp_tac (Q.INST [`es` |-> `es with gas_obs := xs`,
+                     `es1` |-> `es_end with gas_obs := []`,
+                     `ann` |-> `raw_call_return_type flags`,
+                     `aop` |-> `addr_op`]
+               calldata_call_not_halt) >>
+     impl_tac >- simp[calldata_typed_args_post_gas_obs] >>
+     simp[]) >>
+  gvs[calldata_vv_post_gas_obs, halt_exit_def]
 QED
 
 Theorem calldata_call_exempt_cert[local]:

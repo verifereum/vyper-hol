@@ -257,7 +257,9 @@ Proof
           qexistsl_tac [`INR HaltException`,
                         `selfdestruct_final cx a es_end`, `G`, `tn`,
                         `Halt s'`] >>
-          gvs[exit_result_def, expr_exit_def]) >>
+          qpat_assum `gas_marked_exec_ptr _ _ _ (vyperState$bind (vyperState$bind _ _) _) _ _ (INR _) _ _ _ _`
+            (fn th => rewrite_tac[th]) >>
+          simp[exit_result_def, expr_exit_def, halt_exit_def]) >>
       (* the operand exits *)
       Cases_on `res` >> gvs[] >>
       qexists_tac `marks` >> disj1_tac >>

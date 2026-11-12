@@ -88,7 +88,8 @@ Definition target_place_res_ok_def:
   target_place_res_ok (res : place + exception) <=>
     (?p. res = INL p) \/ (?m. res = INR (Error (RuntimeError m))) \/
     (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
+    (?str. res = INR (AssertException str)) \/
+    res = INR HaltException
 End
 
 (* eval_target_place reads the base's place. *)
