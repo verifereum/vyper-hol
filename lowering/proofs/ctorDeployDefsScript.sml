@@ -76,10 +76,11 @@ Definition deploy_source_exempt_def:
 End
 
 (* A successful constructor halts returning the runtime code followed by its
-   immutables section, with the source's accounts (the target modulo code,
-   its storage modulo storage_dead), transient storage (modulo storage_dead)
-   and logs. Failures abort; a source Error may also halt
-   only when it is exempt. *)
+   immutables section, with the source's accounts after the pending deletions
+   (the target's code masked to the source's, as deploy_result_rel reads the
+   deposited code before the deletions), transient storage, logs and call
+   requests, as external_call_result_rel. Failures abort; a source Error may
+   also halt only when it is exempt. *)
 Definition deploy_venom_result_rel_def:
   deploy_venom_result_rel H tops runtime_bc tx
     (src : (abstract_machine # call_request list) + exception) vres <=>
@@ -96,24 +97,22 @@ Definition deploy_venom_result_rel_def:
             (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
           transient_agree H cx am'.tStorage ss.vs_transient /\
           logs_correspond (compiled_event_info tops) (type_env tops)
-            tx.target am'.logs ss.vs_logs
+            tx.target am'.logs ss.vs_logs /\
+          LIST_REL (request_agree H cx) rqs ss.vs_requests
         else
         ?section.
           ss.vs_returndata = runtime_bc ++ section /\
           immutables_section_rel tops (account_immutables am' tx.target) section /\
-          (!a. a <> tx.target ==>
-               lookup_account a ss.vs_accounts = lookup_account a am'.accounts) /\
-          (lookup_account tx.target ss.vs_accounts) with code := [] =
-          (lookup_account tx.target am'.accounts) with
-            <| code := [];
-               storage := (lookup_account tx.target ss.vs_accounts).storage |> /\
-          storage_agree
-            (storage_dead H F (lookup_account tx.target am'.accounts).storage)
-            (lookup_account tx.target am'.accounts).storage
-            (lookup_account tx.target ss.vs_accounts).storage /\
+          accounts_agree H cx am'.accounts
+            (process_deletions ss.vs_pending_deletions
+               (update_account tx.target
+                  (lookup_account tx.target ss.vs_accounts with
+                     code := (lookup_account tx.target am'.accounts).code)
+                  ss.vs_accounts)) /\
           transient_agree H cx am'.tStorage ss.vs_transient /\
           logs_correspond (compiled_event_info tops) (type_env tops)
-            tx.target am'.logs ss.vs_logs
+            tx.target am'.logs ss.vs_logs /\
+          LIST_REL (request_agree H cx) rqs ss.vs_requests
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error e), Abort _ _) => T

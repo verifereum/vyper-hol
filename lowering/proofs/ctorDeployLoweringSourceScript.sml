@@ -741,7 +741,6 @@ Proof
   qpat_x_assum `supported_program _` kall_tac >>
   qpat_x_assum `constructor_call_free _` kall_tac >>
   qpat_x_assum `checked_deployment_constants_ready _ _ _ _` kall_tac >>
-  qpat_x_assum `deploy_storage_ok _ _ _` kall_tac >>
   drule_at (Pat `_ = (INR (ReturnException _),_)`)
     checked_constructor_prefix_return_typed >>
   disch_then drule >> simp[] >>
@@ -1003,4 +1002,151 @@ Proof
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
   gvs[deploy_ctor_finish_outcomes]
+QED
+
+(* ===== The call-free bridge: load_contract_trace ignores its outcome oracle
+   when the constructor makes no external calls ===== *)
+
+Theorem send_call_value_outcomes[local]:
+  send_call_value mut cx (s with outcomes := oc) =
+  (FST (send_call_value mut cx s),
+   SND (send_call_value mut cx s) with outcomes := oc)
+Proof
+  Cases_on `cx.txn.value = 0` >>
+  simp[send_call_value_def, transfer_value_def, COND_RATOR,
+    ignore_bind_def, bind_def, check_def, assert_def, get_accounts_def,
+    update_accounts_def, return_def, raise_def] >>
+  Cases_on `mut = Payable` >>
+  simp[bind_def, assert_def, get_accounts_def, update_accounts_def,
+    return_def, raise_def, COND_RATOR] >>
+  Cases_on `cx.txn.sender = cx.txn.target` >>
+  simp[bind_def, assert_def, get_accounts_def, update_accounts_def,
+    return_def, raise_def, COND_RATOR] >>
+  rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def, update_accounts_def]
+QED
+
+(* The setup-and-body block of call_external_function_trace for a
+   constructor without lock, defaults or external calls. *)
+Theorem ctor_call_block_outcomes[local]:
+  ~supported_stmts_expr_exists constructor_call_root body ==>
+  !s oc.
+    ignore_bind (send_call_value mut cx)
+      (bind (eval_external_defaults cx (DROP n []))
+         (\dflt_vs.
+            case bind_arguments tenv args (vals ++ dflt_vs) of
+              NONE => raise (Error (RuntimeError "call bind_arguments"))
+            | SOME env =>
+                ignore_bind (set_scopes [env])
+                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx body))))
+      (s with outcomes := oc) =
+    (FST (ignore_bind (send_call_value mut cx)
+      (bind (eval_external_defaults cx (DROP n []))
+         (\dflt_vs.
+            case bind_arguments tenv args (vals ++ dflt_vs) of
+              NONE => raise (Error (RuntimeError "call bind_arguments"))
+            | SOME env =>
+                ignore_bind (set_scopes [env])
+                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx body)))) s),
+     SND (ignore_bind (send_call_value mut cx)
+      (bind (eval_external_defaults cx (DROP n []))
+         (\dflt_vs.
+            case bind_arguments tenv args (vals ++ dflt_vs) of
+              NONE => raise (Error (RuntimeError "call bind_arguments"))
+            | SOME env =>
+                ignore_bind (set_scopes [env])
+                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx body)))) s)
+       with outcomes := oc)
+Proof
+  strip_tac >>
+  drule (cj 2 outcomes_replace_evaluate_call_free) >>
+  disch_then (qspec_then `cx` assume_tac) >>
+  `DROP n ([] : expr list) = []` by simp[] >> pop_assum SUBST1_TAC >>
+  irule outcomes_replace_ignore_bind >> conj_tac
+  >- simp[send_call_value_outcomes] >>
+  irule outcomes_replace_bind >> conj_tac
+  >- simp[eval_external_defaults_nil] >>
+  rpt gen_tac >> BETA_TAC >>
+  Cases_on `bind_arguments tenv args (vals ++ v)` >> simp_tac std_ss []
+  >- simp[raise_def] >>
+  map_every qid_spec_tac [`oc`, `s`] >>
+  irule outcomes_replace_ignore_bind >> conj_tac
+  >- simp[outcomes_replace_basic] >>
+  irule outcomes_replace_ignore_bind >> conj_tac
+  >- simp[lock_if_nr_def, return_def] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem call_external_function_trace_call_free[local]:
+  !orc gobs am cx mut ts mods args vals body ret.
+    ~supported_stmts_expr_exists constructor_call_root body ==>
+    call_external_function_trace orc gobs am cx F mut ts mods args [] vals body ret =
+    call_external_function_trace NONE gobs am cx F mut ts mods args [] vals body ret
+Proof
+  rpt strip_tac >>
+  drule ctor_call_block_outcomes >> strip_tac >>
+  `!am_c ct. initial_state am_c [FEMPTY] with
+       <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := ct|> =
+     (initial_state am_c [FEMPTY] with
+       <|outcomes := NONE; requests := []; gas_obs := gobs; storage_trace := ct|>)
+       with outcomes := orc` by simp[evaluation_state_component_equality] >>
+  rewrite_tac[call_external_function_trace_def] >>
+  simp_tac bool_ss [LET_THM] >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  pop_assum (fn th => rewrite_tac[th]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  every_case_tac >>
+  gvs[unlock_if_nr_def, return_def, abstract_machine_from_state_def]
+QED
+
+(* TOP-LEVEL bridge: a checked, call-free constructor's run, its result and
+   its storage observations, is the same at every callee-outcome oracle. *)
+Theorem load_contract_trace_call_free:
+  !tops am tx orc gobs.
+    deploy_source_ok tops am tx /\ tx.function_name = "__init__" ==>
+    load_contract_trace orc gobs am tx [(NONE,tops)] [] =
+    load_contract_trace NONE gobs am tx [(NONE,tops)] []
+Proof
+  rpt strip_tac >>
+  gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_def,
+      constructor_call_free_def] >>
+  `ALOOKUP [(NONE,tops)] NONE = SOME tops /\
+   MEM (NONE,tops) [(NONE,tops)]` by simp[] >>
+  simp[load_contract_trace_def] >>
+  Cases_on `initial_immutables (type_env_all_modules [(NONE,tops)])
+              [(NONE,tops)]` >> simp[] >>
+  Cases_on `lookup_function NONE "__init__" Deploy tops` >> simp[] >>
+  rename1 `_ = SOME fn` >> PairCases_on `fn` >>
+  `fn3 = []` by
+    metis_tac[vyperTypeDeploymentMachineTheory.check_contract_constructor_no_defaults] >>
+  `fn1 = F` by
+    (drule vyperTypeContractStaticMapsTheory.lookup_function_Deploy_SOME_cases >>
+     strip_tac >> gvs[] >>
+     metis_tac[vyperTypeContractTheory.check_contract_deploy_nonreentrant]) >>
+  `~supported_stmts_expr_exists constructor_call_root fn5` by metis_tac[] >>
+  gvs[] >>
+  drule call_external_function_trace_call_free >>
+  disch_then (qspec_then `orc` (fn th => once_rewrite_tac[th])) >>
+  simp[]
+QED
+
+Theorem load_contract_call_free:
+  !tops am tx orc gobs.
+    deploy_source_ok tops am tx /\ tx.function_name = "__init__" ==>
+    load_contract orc gobs am tx [(NONE,tops)] [] =
+    load_contract NONE gobs am tx [(NONE,tops)] []
+Proof
+  rpt strip_tac >> rewrite_tac[load_contract_def] >>
+  drule_all load_contract_trace_call_free >>
+  disch_then (qspecl_then [`orc`, `gobs`] SUBST1_TAC) >> rewrite_tac[]
+QED
+
+Theorem deploy_storage_trace_call_free:
+  !tops am tx orc gobs.
+    deploy_source_ok tops am tx /\ tx.function_name = "__init__" ==>
+    deploy_storage_trace orc gobs am tx tops =
+    deploy_storage_trace NONE gobs am tx tops
+Proof
+  rpt strip_tac >> rewrite_tac[deploy_storage_trace_def] >>
+  drule_all load_contract_trace_call_free >>
+  disch_then (qspecl_then [`orc`, `gobs`] SUBST1_TAC) >> rewrite_tac[]
 QED
