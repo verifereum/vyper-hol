@@ -102,3 +102,46 @@ Proof
   Cases_on `u` >> Cases_on `u'` >> gvs[] >>
   qexistsl_tac [`shadow_sc`, `shadow_sd`] >> simp[]
 QED
+
+(* Tail contract audit (the gadget proof is in FixedTail).
+ *
+ * Access/provenance: raw_log_fixed_scratch_post transports ptr_covers
+ * through the data child.  Its lookup, G lookup and interval conjuncts
+ * are exactly the witness required by access_ok for the MSTORE write
+ * and the subsequent LOG read of 32 bytes.  MSTORE has no output, so
+ * step_prov keeps the scratch variable's provenance.
+ *
+ * Taint: ptr_covers includes a clean scratch address.  The child's
+ * ptr_val_ok includes op_taint tn data_op = {}; hence MSTORE writes
+ * clean bytes, and LOG's read range is clean after that store.  Topic
+ * operands are older than the data entry and are kept clean by
+ * ghost_kept_at's first conjunct (their input cleanliness comes from
+ * the topic post).  Literals are clean.  No claim that untainted data
+ * alone supplies access permission is made.
+ *
+ * Allocation bounds: expr_post preserves every vs_allocas lookup;
+ * ghost_inv_at supplies allocas_from lo.  expr_sim_full assumes
+ * ~ctx_has_dalloca ctx, so the conditional allocas_below_fmp check is
+ * vacuous.  Both tail instructions leave the allocation map unchanged.
+ *
+ * Memory frame: use existing stmtSimDefs.local_region_kept, with the
+ * data entry stmt_state_rel/local_ptrs_reserved, source scope-domain
+ * preservation, and expr_post's old-variable lookup conjunct.  This
+ * transports every final local_region backwards to the allocation
+ * endpoint, where scratch/local disjointness was established.  It is
+ * not necessary to duplicate raw_log_scratch_transport (a local theorem
+ * in exprSimCallRawLog), or add another local_region frame theorem.
+ * Old allocation disjointness follows from alloca_history and the
+ * fresh ALLOCA site; expr_post preserves the scratch lookup.  These
+ * are the ordinary frame facts, not pointer-ghost preservation.
+ *
+ * Request/halt checks: MSTORE adds no request and does not halt.  LOG
+ * adds a request but leaves storage/transient storage unchanged;
+ * ghost_inv_at's stor_taint_ok_at supplies the two DF H subsets.
+ *
+ * All uses above are pointwise in H: instantiate them only inside a
+ * valid-horizon guarded full post.  Keep that child's single outcome
+ * witness and fix the MSTORE/LOG endpoint before quantifying H.  The
+ * layout and shadow boundaries make no additional H-free input
+ * demand and do not choose independent execution witnesses.
+ *)
