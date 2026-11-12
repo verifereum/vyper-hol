@@ -8,7 +8,7 @@ Ancestors
   finite_map pred_set vyperScopePreservation
 
 Theorem append_storage_word_success_post:
-  !ctx func cenv cx es s u sb tr slot len w mid n tv cap v res es'.
+  !H ctx func cenv cx es s u sb tr slot len w mid n tv cap v res es'.
   state_frame u = state_frame
     (if tr then tstore slot (n2w len+1w) (tstore (slot+1w+n2w len) w s)
      else sstore slot (n2w len+1w) (sstore (slot+1w+n2w len) w s)) /\
@@ -16,6 +16,7 @@ Theorem append_storage_word_success_post:
          lookup_var x u = SOME a) /\
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\ len < cap /\
   encode_value tv v = SOME [(0,w)] /\
@@ -53,6 +54,7 @@ QED
 Theorem append_storage_word_taint_post:
   stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot
     (if tr then contract_transient s else contract_storage s)) /\ len < cap /\
@@ -84,6 +86,7 @@ Theorem append_storage_word_ghost_post:
      not_fresh_at sb x) /\
   s.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot
     (if tr then contract_transient s else contract_storage s)) /\ len < cap /\

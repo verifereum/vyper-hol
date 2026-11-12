@@ -19,21 +19,23 @@ QED
 Theorem declared_header_key_taint_empty:
   stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid n subs = SOME (tr,slot,tv) /\
+  MEM (tr,slot,tv) (FST H) /\
   0 < type_slot_size tv ==>
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}
 Proof
   strip_tac >> irule storage_dead_key_taint_empty >>
-  qexistsl_tac [`cx`,
+  qexistsl_tac [`H`,
     `if tr then contract_transient s else contract_storage s`, `tr`, `tv`] >>
   simp[] >> conj_tac
   >- (Cases_on `tr` >>
       gvs[stor_taint_ok_def, cx_dead_def, contract_storage_def,
           contract_transient_def, vfmStateTheory.lookup_account_def]) >>
-  metis_tac[declared_storage_region_read_live]
+  metis_tac[observed_storage_region_read_live]
 QED
 
 Theorem append_clean_keys_dead_subset:
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   type_slot_size tv = 1 /\ len = w2n (lookup_storage slot st) /\ len < cap /\
   X SUBSET {(k,b) | storage_dead H tr st (w2n k) b} ==>
   key_update (key_update X (slot+n2w (1+len)) {}) slot {} SUBSET
@@ -54,6 +56,7 @@ QED
 Theorem append_clean_stores_taint_ok:
   stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   type_slot_size tv = 1 /\
   len = w2n (lookup_storage slot
     (if tr then contract_transient s else contract_storage s)) /\ len < cap ==>
