@@ -213,11 +213,19 @@ Definition encode_value_def:
   encode_value NoneTV v = SOME [] /\
   encode_value (TupleTV tvs) (ArrayV (TupleV vs)) =
     encode_tuple 0 tvs vs /\
+  (* Default missing members structurally: an empty dynamic array writes its
+     header, preserving inactive slots reachable through captured places. *)
   encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) =
-    (let zeros = GENLIST (λi. (i, 0w)) (n * type_slot_size tv) in
-     case encode_static_array tv 0 sparse of
-     | SOME nonzeros => SOME (zeros ++ nonzeros)
-     | NONE => NONE) /\
+    (case encode_value tv (default_value tv) of
+     | NONE => NONE
+     | SOME defaults =>
+         (case encode_static_array tv 0 sparse of
+          | NONE => NONE
+          | SOME nonzeros =>
+              SOME (FLAT (GENLIST (λk.
+                if MEM k (MAP FST sparse) then []
+                else MAP (λ(off,s). (off + k * type_slot_size tv, s)) defaults)
+                n) ++ nonzeros))) /\
   encode_value (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV vs)) =
     (case encode_dyn_array tv 1 vs of
      | SOME slots => SOME ((0, n2w (LENGTH vs)) :: slots)
@@ -270,21 +278,35 @@ Definition encode_value_def:
      else NONE) /\
   encode_struct offset _ _ = NONE
 Termination
-  WF_REL_TAC `measure (λx. case x of
-    | INL (_, v) => value_size v
-    | INR (INL (_, _, vs)) => list_size value_size vs
-    | INR (INR (INL (_, _, sparse))) => list_size (pair_size (λx.0) value_size) sparse
-    | INR (INR (INR (INL (_, _, vs)))) => list_size value_size vs
-    | INR (INR (INR (INR (_, _, fields)))) => list_size (pair_size (λx.0) value_size) fields)` >>
+  WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
+    | INL (tv, v) => (type_value_size tv, value_size v)
+    | INR (INL (_, tvs, vs)) =>
+        (list_size type_value_size tvs, list_size value_size vs)
+    | INR (INR (INL (tv, _, sparse))) =>
+        (type_value_size tv, list_size (pair_size (λx.0) value_size) sparse)
+    | INR (INR (INR (INL (tv, _, vs)))) =>
+        (type_value_size tv, list_size value_size vs)
+    | INR (INR (INR (INR (_, ftypes, fields)))) =>
+        (list_size (pair_size (list_size char_size) type_value_size) ftypes,
+         list_size (pair_size (λx.0) value_size) fields))` >>
   rw[struct_fields_size_lt, sparse_size_lt] >>
   irule LESS_EQ_LESS_TRANS >> qexists `list_size (pair_size (λx. x) value_size) sparse` >>
   rw[list_size_pair_0_le]
 End
 
 val encode_value_pre_def =
-  cv_auto_trans_pre
+  cv_auto_trans_pre_rec
     "encode_value_pre encode_tuple_pre encode_static_array_pre encode_dyn_array_pre encode_struct_pre"
-    encode_value_def;
+    encode_value_def
+    (WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
+       | INL (tv, v) => (cv_size tv, cv_size v)
+       | INR (INL (_, tvs, vs)) => (cv_size tvs, cv_size vs)
+       | INR (INR (INL (tv, _, sparse))) => (cv_size tv, cv_size sparse)
+       | INR (INR (INR (INL (tv, _, vs)))) => (cv_size tv, cv_size vs)
+       | INR (INR (INR (INR (_, ftypes, fields)))) =>
+           (cv_size ftypes, cv_size fields))` >>
+     rw[cv_termination_simp] >>
+     gvs[cv_termination_simp, cv_size_def, cv_snd_def, cv_fst_def]);
 
 (* Keep recursive precondition schemas out of the ambient simplifier. Unfold
    only the goal, then clean up with cached logical/constructor rules and IHs. *)
@@ -501,3 +523,115 @@ Definition encode_hashmap_key_def:
    encode_hashmap_key _ _ = (0w:bytes32)
 End
 val () = cv_auto_trans encode_hashmap_key_def;
+
+(* Coverage composition for successful encodings. *)
+Theorem MEM_shifted_write:
+  !ws (j:num) off. MEM j (MAP FST ws) ==>
+    MEM (j + off) (MAP FST (MAP (\(k,s). (off + k,s)) ws))
+Proof
+  Induct >> simp[] >> Cases_on `h` >> simp[]
+  >> rpt strip_tac >- simp[ADD_COMM]
+  >> disj2_tac >> gvs[]
+QED
+
+Theorem encode_tuple_coverage:
+  !tvs off vs writes i.
+    (!tv. MEM tv tvs ==> !v ws j.
+      encode_value tv v = SOME ws /\ j < type_slot_size tv ==>
+      MEM j (MAP FST ws)) /\
+    encode_tuple off tvs vs = SOME writes /\
+    i < type_slot_size_list tvs ==>
+    MEM (off + i) (MAP FST writes)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[type_slot_size_def]
+  >> Cases_on `vs` >> simp[Once encode_value_def]
+  >> rpt strip_tac >> gvs[AllCaseEqs(), type_slot_size_def]
+  >> Cases_on `i < type_slot_size h`
+  >- (disj1_tac >> irule MEM_shifted_write >> metis_tac[])
+  >> disj2_tac
+  >> qpat_x_assum `!off vs writes i. _`
+       (qspecl_then [`off + type_slot_size h`, `t`, `rest`,
+                     `i - type_slot_size h`] mp_tac)
+  >> impl_tac >- (conj_tac >- metis_tac[] >> simp[] >> decide_tac)
+  >> `i - type_slot_size h + (off + type_slot_size h) = i + off` by decide_tac
+  >> simp[]
+QED
+
+Theorem encode_struct_coverage:
+  !ftypes off fields writes i.
+    (!nm tv. MEM (nm,tv) ftypes ==> !v ws j.
+      encode_value tv v = SOME ws /\ j < type_slot_size tv ==>
+      MEM j (MAP FST ws)) /\
+    encode_struct off ftypes fields = SOME writes /\
+    i < type_slot_size_fields ftypes ==>
+    MEM (off + i) (MAP FST writes)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[type_slot_size_def]
+  >> PairCases_on `h` >> Cases_on `fields`
+  >- simp[Once encode_value_def]
+  >> PairCases_on `h` >> simp[Once encode_value_def]
+  >> rpt strip_tac >> gvs[AllCaseEqs(), type_slot_size_def]
+  >> Cases_on `i < type_slot_size h1`
+  >- (disj1_tac >> irule MEM_shifted_write >> metis_tac[])
+  >> disj2_tac
+  >> qpat_x_assum `!off fields writes i. _`
+       (qspecl_then [`off + type_slot_size h1`, `t`, `rest`,
+                     `i - type_slot_size h1`] mp_tac)
+  >> impl_tac >- (conj_tac >- metis_tac[] >> simp[] >> decide_tac)
+  >> `i - type_slot_size h1 + (off + type_slot_size h1) = i + off` by decide_tac
+  >> simp[]
+QED
+
+Theorem encode_static_array_coverage:
+  !sparse tv off writes k j.
+    (!v ws j. encode_value tv v = SOME ws /\ j < type_slot_size tv ==>
+      MEM j (MAP FST ws)) /\
+    encode_static_array tv off sparse = SOME writes /\
+    MEM k (MAP FST sparse) /\ j < type_slot_size tv ==>
+    MEM (off + k * type_slot_size tv + j) (MAP FST writes)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h`
+  >> simp[Once encode_value_def] >> rpt strip_tac
+  >> gvs[AllCaseEqs()]
+  >- (disj1_tac
+      >> `MEM j (MAP FST slots)` by metis_tac[]
+      >> gvs[listTheory.MEM_MAP] >> PairCases_on `y`
+      >> simp[listTheory.MEM_MAP]
+      >> qexists_tac `(off + (y0 + h0 * type_slot_size tv),y1)`
+      >> simp[] >> qexists_tac `(y0,y1)` >> simp[])
+  >> disj2_tac >> metis_tac[]
+QED
+
+Theorem encode_fixed_array_coverage:
+  !tv n v writes i.
+    (!v ws j. encode_value tv v = SOME ws /\ j < type_slot_size tv ==>
+      MEM j (MAP FST ws)) /\
+    encode_value (ArrayTV tv (Fixed n)) v = SOME writes /\
+    i < n * type_slot_size tv ==> MEM i (MAP FST writes)
+Proof
+  rpt gen_tac >> Cases_on `v` >> simp[Once encode_value_def]
+  >> rename1 `ArrayV av` >> Cases_on `av` >> simp[Once encode_value_def]
+  >> rpt strip_tac >> gvs[AllCaseEqs()]
+  >> `0 < type_slot_size tv` by (Cases_on `type_slot_size tv` >> gvs[])
+  >> qabbrev_tac `k = i DIV type_slot_size tv`
+  >> qabbrev_tac `j = i MOD type_slot_size tv`
+  >> `j < type_slot_size tv` by simp[Abbr `j`]
+  >> `i = k * type_slot_size tv + j` by simp[Abbr `k`, Abbr `j`, DIVISION]
+  >> `k < n` by (simp[Abbr `k`, DIV_LT_X] >> metis_tac[MULT_COMM])
+  >> Cases_on `MEM k (MAP FST l)`
+  >- (disj2_tac
+      >> drule_all encode_static_array_coverage
+      >> simp[])
+  >> disj1_tac
+  >> `MEM j (MAP FST defaults)` by metis_tac[]
+  >> gvs[listTheory.MEM_MAP] >> PairCases_on `y`
+  >> simp[listTheory.MEM_MAP, listTheory.MEM_FLAT]
+  >> qexists_tac `(y0 + k * type_slot_size tv,y1)` >> simp[]
+  >> qexists_tac `MAP (\(off,s). (off + k * type_slot_size tv,s)) defaults`
+  >> conj_tac
+  >- (simp[listTheory.MEM_GENLIST] >> qexists_tac `k` >> simp[]
+      >> `~(?y. k = FST y /\ MEM y l)` by metis_tac[] >> simp[])
+  >> simp[listTheory.MEM_MAP] >> qexists_tac `(y0,y1)` >> simp[]
+QED
