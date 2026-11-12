@@ -20,19 +20,6 @@ Ancestors
   fragGasOrigin fragGasMode fragExec memSafeRun venomExecProofs unitShapeDefs
   loweringShapeSource
 
-Theorem guarded_storage_horizon[local]:
-  source_storage_ok am tx os gs /\ call_outcomes_storage_ok am tx os gs ==>
-  valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am [])
-    (storage_trace_horizon (source_storage_trace am tx os gs))
-    (source_storage_trace am tx os gs)
-Proof
-  simp[source_storage_ok_def, call_outcomes_storage_ok_def,
-       valid_horizon_def, storage_observations_ok_def, storage_trace_horizon_def,
-       listTheory.EVERY_MEM] >>
-  rpt strip_tac >> simp[]
-QED
-
 Theorem call_at_horizon_composition[local]:
   run_call es = SOME (r, es') /\ ~frame_resource_starved es r es' /\
   external_call_result_rel
@@ -215,7 +202,8 @@ Proof
   >- (irule source_exempt_call_result_rel >> simp[]) >>
   gvs[] >>
   drule_all selected_run >> strip_tac >>
-  drule_all guarded_storage_horizon >> strip_tac >>
+  drule_all (REWRITE_RULE [storage_trace_domain_def] source_storage_guards_domain) >>
+  strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
   qmatch_asmsub_abbrev_tac `ptr_safe_blocks D` >>
   `raw_unit_memory_ok unit.cu_context vs /\
