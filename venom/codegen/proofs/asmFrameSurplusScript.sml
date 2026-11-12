@@ -39,3 +39,18 @@ Theorem asm_frame_gas_surplus:
 Proof
   cheat
 QED
+
+(* Lockstep corollary: a frame related to a bounded run of assembly with no
+   RETURNDATACOPY never reaches a ReturnDataCopy opcode at its own depth.
+   Generic in prog; codegen_no_returndatacopy is its codegen instance. *)
+Theorem asm_frame_no_returndatacopy:
+  !prog data es0 a e H N t.
+    asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a e /\
+    asm_run_bounded (SND (compute_label_offsets prog))
+      (build_offset_to_pc prog) prog H N a /\
+    ~MEM (AsmOp "RETURNDATACOPY") prog
+    ==>
+    ~frame_inst_at e t ReturnDataCopy
+Proof
+  cheat
+QED
