@@ -13,6 +13,7 @@ Ancestors
   instMemFrontier memSafeRun ptrSafeRun ptrDiscipline venomInst
   ctorDeployMemoryRunPtrMono exprOperandVar exprSimVVFrame exprSimProps
   venomExecSemantics loweringStateRelDefs finite_map robustCopyTransportPtr
+  exprSimUnwrap loweringHalt context exprSimAlloc
 
 (* Conditional ghost boundary for the actual copy endpoint.  The window
    premises are the bytewise consequences of the copy's memory/taint equations;
@@ -324,7 +325,8 @@ Theorem ifexp_widen_arm_step_full:
         (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn) u) /\
   (* compile_alloc_buffer_kept_frame_at *)
   (!H lo ctx fn cenv cx e es sa sb s0 es' tv vv s n buf sc out u PG G0 tn0 G tn.
-      vv_post H ctx fn cenv cx e es sa sb s0 es' tv vv s /\
+      vv_post (H:(bool # 256 word # type_value) list # num list)
+        ctx fn cenv cx e es sa sb s0 es' tv vv s /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
       lo <= s.vs_alloca_next /\
       local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -427,6 +429,67 @@ Theorem ifexp_widen_arm_step_full:
             w2n w + type_memory_size rt <= z'.vs_alloca_next) /\
     ghost_kept_at lo cenv es1 sa G1 tn1 u Gz tf
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  disch_then (CONJUNCTS_THEN2 (mk_asm "unwrap")
+    (CONJUNCTS_THEN2 (mk_asm "edge")
+      (CONJUNCTS_THEN2 (mk_asm "alloc_ghost")
+        (CONJUNCTS_THEN2 (mk_asm "alloc_kept")
+          (CONJUNCTS_THEN2 (mk_asm "copy")
+            (map_every assume_tac o CONJUNCTS)))))) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    gvs[storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee z` by
+    (first_x_assum drule >> simp[vv_post_def] >> metis_tac[]) >>
+  drule_all ifexp_widen_copy_parts >> strip_tac >>
+  rename1 `compile_alloc_buffer (type_memory_bytes cenv t) sm = (buf,salloc)` >>
+  `compile_store_bytestring src buf.buf_operand sn = ((),sb)` by
+    gvs[compile_store_memory_def] >>
+  `cs_extends sn sb` by
+    (qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
+     simp[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+     strip_tac >> gvs[cs_extends_def, same_blocks_def,
+       rich_listTheory.IS_PREFIX_APPEND]) >>
+  `cs_extends sm salloc /\ cs_extends salloc sn` by
+    (conj_tac >- (drule compile_alloc_buffer_extends >> simp[]) >>
+     drule unwrap_value_extends >> simp[]) >>
+  `fn_has_code sm salloc func /\ fn_has_code salloc sn func /\ fn_has_code sn sb func` by
+    (map_every (fn s => asm_x s kall_tac)
+       ["unwrap", "edge", "alloc_ghost", "alloc_kept", "copy"] >>
+     metis_tac[fn_has_code_split, cs_extends_trans]) >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[local_ptrs_reserved_next_var] >>
+  `type_memory_bytes cenv t = type_memory_size rty` by metis_tac[] >>
+  `type_memory_size rty < 2 ** 64` by metis_tac[] >>
+  `type_memory_bytes cenv t < dimword (:256)` by
+    (qpat_x_assum `type_memory_size rty < _` mp_tac >>
+     qpat_x_assum `type_memory_bytes cenv t = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[wordsTheory.dimword_def] >> decide_tac) >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm salloc) z = OK az` >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee az` by
+    (gen_tac >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx ee z` by
+       (first_x_assum drule >> simp[vv_post_def] >> metis_tac[]) >>
+     drule_all literal_alloc_buffer_run >> strip_tac >> gvs[]) >>
+  `emitted_insts sm salloc =
+     [mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv t))] [p]] /\
+   salloc.cs_current_bb = sm.cs_current_bb /\
+   salloc.cs_current_insts = sm.cs_current_insts ++
+     [mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv t))] [p]]` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def] >>
+     strip_tac >> gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1]) >>
+  `step_inst_base (mk_inst sm.cs_next_id ALLOCA
+     [Lit (n2w (type_memory_bytes cenv t))] [p]) z = OK az` by
+    gvs[run_inst_seq_def, AllCaseEqs()] >>
+  qabbrev_tac `ai = mk_inst sm.cs_next_id ALLOCA
+    [Lit (n2w (type_memory_bytes cenv t))] [p]` >>
+  qabbrev_tac `Ga = step_prov PG G ai az` >>
+  qabbrev_tac `ta = step_taint ai z az tn` >>
   cheat
 QED
