@@ -659,7 +659,7 @@ Proof
   qspec_then `n` mp_tac storage_copy_capacity_bound >> simp[]
 QED
 
-Theorem storage_copy_post_words[local]:
+Theorem storage_copy_post_words:
   !H ctx func cenv cx e es sa sm s0 es1 v op s tv w writes k st.
     expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
     post_value_type cenv e = expr_type e /\
