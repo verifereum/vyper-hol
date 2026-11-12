@@ -31,7 +31,8 @@ Libs
 (* ===== The source ===== *)
 
 (* A storage or transient variable's target place is a StoragePlace at its
-   layout slot, at its declared type. *)
+   layout slot, at its declared type; looking it up records the root it
+   observes. *)
 Theorem eval_target_place_toplevel:
   !cx src id es ts tr typ id_str slot tvt.
     get_module_code cx src = SOME ts /\
@@ -39,19 +40,37 @@ Theorem eval_target_place_toplevel:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt ==>
     eval_target_place cx (TopLevelNameTarget (src, id)) es =
-      (INL (StoragePlace tr (n2w slot) tvt), es) /\
+      (INL (StoragePlace tr (n2w slot) tvt),
+       es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) /\
     place_type_value cx (StoragePlace tr (n2w slot) tvt) es = (INL tvt, es)
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, LET_THM, get_place_def, place_type_value_def]
+       return_def, LET_THM, get_place_def, place_type_value_def,
+       ignore_bind_def, record_storage_event_def]
 QED
 
 Theorem read_storage_slot_gas_obs:
   read_storage_slot cx tr slot tv es = (res, ee) ==>
   read_storage_slot cx tr slot tv (es with gas_obs := gs) =
     (res, ee with gas_obs := gs)
+Proof
+  Cases_on `tr` >>
+  simp[read_storage_slot_def, get_storage_backend_def, bind_def,
+       get_accounts_def, get_transient_storage_def]
+  >- (Cases_on `decode_value (lookup_transient_storage cx.txn.target es.tStorage)
+        (w2n slot) tv` >>
+      simp[lift_option_def, return_def, raise_def] >> strip_tac >> gvs[return_def, raise_def]) >>
+  Cases_on `decode_value (lookup_account cx.txn.target es.accounts).storage
+    (w2n slot) tv` >>
+  simp[lift_option_def, return_def, raise_def] >> strip_tac >> gvs[return_def, raise_def]
+QED
+
+Theorem read_storage_slot_storage_trace:
+  read_storage_slot cx tr slot tv es = (res, ee) ==>
+  read_storage_slot cx tr slot tv (es with storage_trace := obs) =
+    (res, ee with storage_trace := obs)
 Proof
   Cases_on `tr` >>
   simp[read_storage_slot_def, get_storage_backend_def, bind_def,
@@ -77,13 +96,18 @@ Theorem eval_augassign_toplevel_forced:
       r <- lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tvt bop v0 v);
-      write_storage_slot cx tr (n2w slot) tvt r od) es
+      write_storage_slot cx tr (n2w slot) tvt r od)
+    (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt])
 Proof
   strip_tac >> drule_all eval_target_place_toplevel >>
   disch_then (qspec_then `es` strip_assume_tac) >>
+  drule read_storage_slot_storage_trace >>
+  disch_then (qspec_then `es.storage_trace ++ [StorageRoot tr slot tvt]`
+    assume_tac) >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, read_place_def,
        write_place_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, st)` >>
+  qmatch_goalsub_abbrev_tac `eval_expr cx e es1` >>
+  Cases_on `eval_expr cx e es1` >> rename1 `_ = (raw, st)` >>
   Cases_on `raw` >> simp[bind_def]
 QED
 
@@ -93,7 +117,8 @@ Theorem augassign_toplevel_rhs_exception:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tvt /\
   read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
-  bind (eval_expr cx e) (read_result cx) es = (INR ex, ee) ==>
+  bind (eval_expr cx e) (read_result cx) (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) =
+    (INR ex, ee) ==>
   eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e) es =
     (INR ex, ee)
 Proof
@@ -108,7 +133,8 @@ Theorem augassign_toplevel_rhs_normal:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tvt /\
   read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
-  bind (eval_expr cx e) (read_result cx) es = (INL v, ee) ==>
+  bind (eval_expr cx e) (read_result cx) (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) =
+    (INL v, ee) ==>
   eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e) es =
   bind (lift_sum (evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
@@ -127,7 +153,8 @@ Theorem augassign_toplevel_rhs_admissible:
   read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
   gas_admissible (eval_stmt cx
     (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (stmt_res_ok lctx) es ==>
-  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
+    (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt])
 Proof
   strip_tac >> rw[gas_admissible_def] >>
   Cases_on `res` >- simp[expr_res_ok_def] >>
@@ -135,6 +162,10 @@ Proof
   `read_storage_slot cx tr (n2w slot) tvt (es with gas_obs := gs) =
      (INL v0, es with gas_obs := gs)` by
     metis_tac[read_storage_slot_gas_obs] >>
+  `bind (eval_expr cx e) (read_result cx)
+     ((es with gas_obs := gs) with storage_trace :=
+        (es with gas_obs := gs).storage_trace ++ [StorageRoot tr slot tvt]) =
+   (INR ex, ee)` by fs[] >>
   `eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e)
      (es with gas_obs := gs) = (INR ex, ee)` by
     (irule augassign_toplevel_rhs_exception >> metis_tac[]) >>
@@ -156,7 +187,8 @@ Theorem augassign_toplevel_binop_admissible:
   bop <> In /\ bop <> NotIn /\
   gas_admissible (eval_stmt cx
     (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (stmt_res_ok lctx) es /\
-  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) ==>
+  bind (eval_expr cx e) (read_result cx)
+    ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) with gas_obs := gs) = (INL v, ee) ==>
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)
 Proof
   strip_tac >>
@@ -173,6 +205,10 @@ Proof
   `read_storage_slot cx tr (n2w slot) tvt (es with gas_obs := gs) =
      (INL v0, es with gas_obs := gs)` by
     metis_tac[read_storage_slot_gas_obs] >>
+  `bind (eval_expr cx e) (read_result cx)
+     ((es with gas_obs := gs) with storage_trace :=
+        (es with gas_obs := gs).storage_trace ++ [StorageRoot tr slot tvt]) =
+   (INL v, ee)` by fs[] >>
   `eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e)
      (es with gas_obs := gs) = (INR (Error err), ee)` by
     (drule_all augassign_toplevel_rhs_normal >>
@@ -288,21 +324,22 @@ Theorem augassign_toplevel_place_exec:
   gas_marked_path memory ctx func s0 0 (OK t) ==>
   gas_marked_exec memory (ctx,func)
     (eval_target_place cx (TopLevelNameTarget (src,id)))
-    (es,s0) [] (INL (StoragePlace tr (n2w slot) tvt)) es (OK t)
+    (es,s0) [] (INL (StoragePlace tr (n2w slot) tvt))
+    (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) (OK t)
 Proof
-  strip_tac >> simp[gas_marked_exec_def, gas_explicit_def] >>
-  gen_tac >> irule (cj 1 eval_target_place_toplevel) >> metis_tac[]
+  strip_tac >> drule_all eval_target_place_toplevel >>
+  simp[gas_marked_exec_def, gas_explicit_def]
 QED
 
 Theorem augassign_toplevel_rhs_exempt:
-  read_storage_slot cx tr slot tvt es = (INL v0, es) /\
+  read_storage_slot cx tr slot tvt es1 = (INL v0, es1) /\
   gas_marked_exec memory (ctx,func)
     (eval_target_place cx (TopLevelNameTarget (src,id)))
-    (es,s0) [] (INL (StoragePlace tr slot tvt)) es (OK t) /\
+    (es,s0) [] (INL (StoragePlace tr slot tvt)) es1 (OK t) /\
   ~t.vs_halted /\
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
-    (es with gas_obs := [],t) marks (err,ee) (leaf,fin) ==>
+    (es1 with gas_obs := [],t) marks (err,ee) (leaf,fin) ==>
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (eval_stmt cx
       (AugAssign ty (TopLevelNameTarget (src,id)) bop e)) (return ()))
@@ -323,8 +360,8 @@ Proof
   pop_assum SUBST1_TAC >>
   drule gas_exempt_cert_bind_place >> simp[] >> disch_then irule >>
   `gas_marked_exec memory (ctx,func) (read_place cx (StoragePlace tr slot tvt))
-     (es with gas_obs := [],t) [] (INL v0)
-     (es with gas_obs := []) (OK t)` by
+     (es1 with gas_obs := [],t) [] (INL v0)
+     (es1 with gas_obs := []) (OK t)` by
     (simp[gas_marked_exec_def, gas_explicit_def] >> conj_tac
      >- (gen_tac >> simp[read_place_def] >>
          metis_tac[read_storage_slot_gas_obs]) >>
@@ -457,7 +494,8 @@ Theorem augassign_toplevel_rhs_exception_exec:
   read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
   gas_marked_path F ctx func s0 0 (OK t) /\
   gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
-    (es with gas_obs := [],t) marks (INR ex) ee r ==>
+    ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) with gas_obs := [],t)
+    marks (INR ex) ee r ==>
   gas_marked_exec F (ctx,func)
     (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
     (es,s0) marks (INR ex) ee r
@@ -476,7 +514,8 @@ Theorem augassign_toplevel_rhs_normal_exec:
   read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
   gas_marked_path F ctx func s0 0 (OK t) /\
   gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
-    (es with gas_obs := [],t) marks (INL v) ee (OK u) /\
+    ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) with gas_obs := [],t)
+    marks (INL v) ee (OK u) /\
   gas_marked_exec F (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
@@ -495,6 +534,13 @@ Proof
          (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
          (INL v0, es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail)` by
         metis_tac[read_storage_slot_gas_obs] >>
+      `bind (eval_expr cx e) (read_result cx)
+         ((es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail)
+            with storage_trace :=
+              (es with gas_obs :=
+                 gas_explicit marks s0.vs_gas_readings ++ tail).storage_trace ++
+              [StorageRoot tr slot tvt]) =
+       (INL v, ee with gas_obs := tail)` by fs[] >>
       drule_all augassign_toplevel_rhs_normal >>
       disch_then (qspecl_then [`ty`, `bop`] mp_tac) >> simp[]) >>
   drule_all gas_marked_path_then >> simp[]

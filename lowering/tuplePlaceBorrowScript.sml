@@ -4,10 +4,11 @@ Ancestors
   tuplePlaceSnapshot tuplePlaceSource supportedTargets bodySimAugPlaceScopes
   vyperPlaceFrames vyperInterpreter vyperState vyperMisc vyperValue
   vyperScopePreservation vyperPlaceStatePreservation exprSimSource loweringPosts
+  targetPlaceLive
 
-Theorem tuple_place_pure_target_scopes:
+Theorem tuple_place_supported_target_scopes:
   !bt tops cx es res ee.
-    supported_target_pure tops bt /\
+    EVERY (supported_expr tops) (target_indices bt) /\
     eval_base_place cx bt es = (res,ee) ==> ee.scopes = es.scopes
 Proof
   measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >> rpt gen_tac
@@ -20,26 +21,26 @@ Proof
       simp[vyperASTTheory.expr_size_def] >> strip_tac >> rpt strip_tac >>
       qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      strip_tac >> gvs[supported_target_pure_def] >>
+      strip_tac >> gvs[target_indices_def] >>
       imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
-      imp_res_tac aug_place_pure_expr_scopes >> gvs[] >> metis_tac[])
+      imp_res_tac aug_place_supported_expr_scopes >> gvs[] >> metis_tac[])
   >> (qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
       simp[vyperASTTheory.expr_size_def] >> strip_tac >> rpt strip_tac >>
       qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      strip_tac >> gvs[supported_target_pure_def] >>
+      strip_tac >> gvs[target_indices_def] >>
       imp_res_tac extend_place_state >> gvs[] >> metis_tac[])
 QED
 
-Theorem tuple_place_pure_target_borrow_bytes:
-  supported_target_pure tops bt /\
+Theorem tuple_place_supported_target_borrow_bytes:
+  EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (res,ee) /\
   target_post ctx func cenv cx es sa sb s0 ee pv vt r s /\
   local_region cenv es.scopes s0 n b sz ==>
   mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory
 Proof
   rpt strip_tac >>
-  drule_all tuple_place_pure_target_scopes >> strip_tac >>
+  drule_all tuple_place_supported_target_scopes >> strip_tac >>
   irule tuple_place_target_unchanged_local >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[]
 QED
@@ -75,7 +76,7 @@ QED
      k + type_memory_size (TupleTV tvs) <= sz /\
      evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
      i < LENGTH tys /\ well_typed_target env bt (EL i tys) /\
-     supported_target_pure tops bt /\
+     EVERY (supported_expr tops) (target_indices bt) /\
      eval_base_place cx bt ee = (INL (PlaceR p),ee) /\
      place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys))
        ==> b+k+type_memory_size (TupleTV tvs) <= w2n dw \/
@@ -88,7 +89,7 @@ QED
    Actual source target reachability must be retained from target simulation.
 
    Premise ledger:
-   - LIST_REL and the root EVERY give typed BaseTargets and supported purity.
+   - LIST_REL and the root EVERY give typed BaseTargets with supported indices.
      EL specialization needs the equal lengths obtained from LIST_REL and
      evaluate_type. Success decomposition supplies the actual target equation.
    - expr_post supplies stmt_state_rel and expr_val_at at the RHS endpoint;
@@ -101,7 +102,7 @@ QED
      conditional expr_val_own supplies the OWNED alternative; do not claim
      borrowed witnesses are impossible. If equal, borrowed reasoning uses
      ltys=tys and consequently ltvs=tvs by evaluation uniqueness.
-   - Pure pointer evaluation preserves scopes and borrowed bytes by the two
+   - Supported-index pointer evaluation preserves scopes and borrowed bytes by the two
      boundaries above; target_post preserves old operands/allocations. These
      results do not apply to the following store.
 
