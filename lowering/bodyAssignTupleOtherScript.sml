@@ -410,7 +410,7 @@ Proof
   `get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
   drule_all tuple_places_member >> strip_tac >> gvs[] >>
   drule_all tuple_places_member_pre >> strip_tac >> fs[EVERY_MEM] >>
-  metis_tac[target_case_all, exprSimPopImmutableTargetTheory.body_target_idx_case]
+  metis_tac[target_case_all, bodyPopNestedTargetFragTheory.body_target_idx_case]
 QED
 
 Theorem tuple_other_arg_types_fit_refl[local]:
