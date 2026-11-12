@@ -10300,6 +10300,36 @@ Proof
   simp[arithmeticTheory.MAX_DEF] >> metis_tac[]
 QED
 
+Theorem mm_local_zero_prefix_endpoint[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) is) ==>
+  EVERY (mm_local_group_endpoint is n (mm_local_zero_capture dfg is n))
+    ((FOLDL (scan_inst_memzero dfg) empty_memzero_state (TAKE n is)).mz_flushed ++
+     (FOLDL (scan_inst_memzero dfg) empty_memzero_state (TAKE n is)).mz_copies)
+Proof
+  strip_tac >> irule (cj 2 mm_local_zero_fold_certificate) >>
+  simp[empty_memzero_state_def] >> conj_tac
+  >- (rpt strip_tac >> irule mm_local_add_every >>
+      metis_tac[mm_local_group_endpoint_merge]) >>
+  simp[EVERY_MEM] >> gen_tac >> strip_tac >>
+  `?j. j < n /\ j < LENGTH is /\ i = EL j is` by
+    (fs[MEM_EL, LENGTH_TAKE_EQ] >>
+     rename1 `j < if n <= LENGTH is then n else LENGTH is` >>
+     `j < n /\ j < LENGTH is` by (Cases_on `n <= LENGTH is` >> gvs[] >> decide_tac) >>
+     qexists `j` >> simp[EL_TAKE]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule mm_local_group_endpoint_birth_extra >> (conj_tac >- simp[]) >>
+      qexistsl [`REPLICATE 32 0w`,`[]`,`j`] >>
+      simp[copy_memzero_def] >>
+      irule mm_local_zero_capture_store >> gvs[is_zero_store_def]) >>
+  rpt gen_tac >> strip_tac >>
+  irule mm_local_group_endpoint_birth_extra >>
+  (conj_tac >- simp[]) >>
+  qexistsl [`REPLICATE (w2n len) 0w`,`[]`,`j`] >>
+  simp[copy_memzero_def] >>
+  irule mm_local_zero_capture_calldata >> metis_tac[]
+QED
+
 Theorem mm_local_footprint_store_endpoint[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -16824,8 +16854,8 @@ Proof
     venomExecSemanticsTheory.exec_read0_def,
     venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
     venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
-    calldatacopy_past_end_bytes,
-    venomStateTheory.write_memory_with_expansion_def,
+    calldatacopy_past_end_bytes] >>
+  simp[venomStateTheory.write_memory_with_expansion_def,
     venomStateTheory.write_memory_def,
     venomStateTheory.expand_memory_def, arithmeticTheory.ADD1]
 QED
