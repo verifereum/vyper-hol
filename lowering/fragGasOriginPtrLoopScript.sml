@@ -150,6 +150,91 @@ Proof
   gvs[]
 QED
 
+(* One pointer-checked step in front of a checked suffix. *)
+Theorem inst_seq_ptr_cons_step:
+  inst.inst_opcode <> INVOKE /\ step_inst 0 ctx inst s = OK t /\
+  ptr_safe_step D lo 0 ctx func PG G tn inst s /\
+  ghost_step 0 ctx PG G tn inst s = (H,qt) /\
+  inst_seq_ptr D lo ctx func PG H qt ys
+    (t with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+  inst_seq_ptr D lo ctx func PG G tn (inst::ys) s G' tn'
+Proof
+  strip_tac >>
+  `step_inst_base inst s = OK t` by gvs[step_inst_non_invoke] >>
+  qspecl_then [`0`,`ctx`,`PG`,`G`,`tn`,`inst`,`s`,`t`] mp_tac
+    ghost_step_non_invoke >>
+  simp[] >> strip_tac >> gvs[] >>
+  simp[inst_seq_ptr_def] >> metis_tac[ptr_safe_step_inst_ok]
+QED
+
+Theorem prefix_trace_inst_seq_ptr_indexed[local]:
+  !xs k u g q.
+    EVERY (\i. i.inst_opcode <> INVOKE) xs /\
+    (!j. j < LENGTH xs ==>
+      step_inst 0 ctx (EL j xs) ((u j) with vs_inst_idx := k + j) =
+        OK ((u (SUC j)) with vs_inst_idx := k + j) /\
+      ptr_safe_step D lo 0 ctx func PG (g j) (q j) (EL j xs)
+        ((u j) with vs_inst_idx := k + j) /\
+      ghost_step 0 ctx PG (g j) (q j) (EL j xs)
+        ((u j) with vs_inst_idx := k + j) = (g (SUC j), q (SUC j))) /\
+    inst_seq_ptr D lo ctx func PG (g (LENGTH xs)) (q (LENGTH xs)) ys
+      ((u (LENGTH xs)) with vs_inst_idx := k + LENGTH xs) G' tn' ==>
+    inst_seq_ptr D lo ctx func PG (g 0) (q 0) (xs ++ ys)
+      ((u 0) with vs_inst_idx := k) G' tn'
+Proof
+  Induct >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `!j. j < LENGTH _ ==> _`
+    (qspec_then `0` (strip_assume_tac o SRULE [])) >>
+  fs[EVERY_DEF, ADD_CLAUSES] >>
+  `step_inst_base h ((u 0) with vs_inst_idx := k) =
+     OK ((u 1) with vs_inst_idx := k)` by gvs[step_inst_non_invoke] >>
+  `ghost_step 0 ctx PG (g 0) (q 0) h ((u 0) with vs_inst_idx := k) =
+     (step_prov PG (g 0) h ((u 1) with vs_inst_idx := k),
+      step_taint h ((u 0) with vs_inst_idx := k)
+        ((u 1) with vs_inst_idx := k) (q 0))` by
+    (irule ghost_step_non_invoke >> simp[]) >>
+  `g 1 = step_prov PG (g 0) h ((u 1) with vs_inst_idx := k) /\
+   q 1 = step_taint h ((u 0) with vs_inst_idx := k)
+     ((u 1) with vs_inst_idx := k) (q 0)` by
+    (qpat_x_assum `ghost_step _ _ _ _ _ _ _ = (g 1, q 1)` mp_tac >> simp[]) >>
+  `ptr_inst_ok D lo 0 ctx func (g 0) (q 0) h ((u 0) with vs_inst_idx := k)` by
+    metis_tac[ptr_safe_step_inst_ok] >>
+  qpat_x_assum `!k u g q. _`
+    (qspecl_then [`SUC k`, `u o SUC`, `g o SUC`, `q o SUC`] mp_tac) >>
+  impl_tac
+  >- (simp[ADD_CLAUSES] >> rpt strip_tac >>
+      qpat_x_assum `!j. j < LENGTH _ ==> _` (qspec_then `SUC j` mp_tac) >>
+      simp[ADD_CLAUSES]) >>
+  simp[inst_seq_ptr_def]
+QED
+
+(* The trace a backward tower proves (prefix_trace_ptr_safe_block's facts at
+   fuel 0) is the pointer check inst_seq_ptr along the same run, followed by
+   any checked suffix. *)
+Theorem prefix_trace_inst_seq_ptr:
+  !xs s u g q.
+    u 0 = s /\
+    EVERY (\i. i.inst_opcode <> INVOKE) xs /\
+    (!j. j < LENGTH xs ==>
+      step_inst 0 ctx (EL j xs) ((u j) with vs_inst_idx := s.vs_inst_idx + j) =
+        OK ((u (SUC j)) with vs_inst_idx := s.vs_inst_idx + j) /\
+      ptr_safe_step D lo 0 ctx func PG (g j) (q j) (EL j xs)
+        ((u j) with vs_inst_idx := s.vs_inst_idx + j) /\
+      ghost_step 0 ctx PG (g j) (q j) (EL j xs)
+        ((u j) with vs_inst_idx := s.vs_inst_idx + j) = (g (SUC j), q (SUC j))) /\
+    inst_seq_ptr D lo ctx func PG (g (LENGTH xs)) (q (LENGTH xs)) ys
+      ((u (LENGTH xs)) with vs_inst_idx := s.vs_inst_idx + LENGTH xs) G' tn' ==>
+    inst_seq_ptr D lo ctx func PG (g 0) (q 0) (xs ++ ys) s G' tn'
+Proof
+  rpt strip_tac >>
+  `s with vs_inst_idx := s.vs_inst_idx = s` by
+    simp[venom_state_component_equality] >>
+  qspecl_then [`xs`, `s.vs_inst_idx`, `u`, `g`, `q`] mp_tac
+    prefix_trace_inst_seq_ptr_indexed >>
+  gvs[]
+QED
+
 (* The joint twin of ctor_checked_emitted_endpoint: code emitted in place
    between two codegen states runs as one zero-mark joint path. *)
 Theorem emitted_origin_ptr_path:
