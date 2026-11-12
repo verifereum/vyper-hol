@@ -161,7 +161,7 @@ QED
    source after it adopts the outcome (on failure adoption changes nothing, so this is the
    source state as taken). *)
 Theorem exec_ext_call_oracle_step:
-  !func cenv cx es s inst gas aw vw ao az ro rz stat out target
+  !H func cenv cx es s inst gas aw vw ao az ro rz stat out target
    value_opt rq outcome es1.
     state_rel H func cenv cx es s /\ inst.inst_outputs = [out] /\
     w2w aw = target /\
@@ -275,7 +275,7 @@ Proof
   Cases_on `tr` >> simp[]
   >- (rename1 `INL x` >> PairCases_on `x` >> rename1 `INL (rq, outcome)` >>
       simp[] >> strip_tac >> disj2_tac >>
-      qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `inst`,
+      qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `s`, `inst`,
                    `THE (eval_operand gas_op s)`, `aw`, `vw`, `0w`, `0w`,
                    `0w:bytes32`, `0w:bytes32`, `F`, `out`, `w2w aw`, `SOME (w2n vw)`, `rq`,
                    `outcome`, `es1`] mp_tac exec_ext_call_oracle_step >>
