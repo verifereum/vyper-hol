@@ -427,6 +427,46 @@ Proof
        arithmeticPropsTheory.bool_to_word_T, arithmeticPropsTheory.bool_to_word_F]
 QED
 
+Theorem uint2str_zero_outcome[local]:
+  no_phi_fn fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = u2s_zero a buf n /\ s.vs_inst_idx = 0 /\
+  (!v. var_below N v /\ v NOTIN Wv ==>
+       EVERY (\i. ~MEM v i.inst_outputs) (TAKE 6 (u2s_zero a buf n))) ==>
+  fuel_outcome G ctx fn s 1
+    (\t. (t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0) /\
+         vars_kept N Wv s t)
+Proof
+  strip_tac >>
+  ho_match_mp_tac (Q.INST [`is` |-> `TAKE 6 (u2s_zero a buf n)`,
+                          `inst` |-> `LAST (u2s_zero a buf n)`]
+                         uint2str_block_outcome) >>
+  simp[u2s_zero_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >> qexists_tac `u2s_label a 5` >>
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomStateTheory.jump_to_def]
+QED
+
+Theorem uint2str_final_outcome[local]:
+  no_phi_fn fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = u2s_final a buf n /\ s.vs_inst_idx = 0 /\
+  (!v. var_below N v /\ v NOTIN Wv ==>
+       EVERY (\i. ~MEM v i.inst_outputs) (TAKE 4 (u2s_final a buf n))) ==>
+  fuel_outcome G ctx fn s 1
+    (\t. (t.vs_current_bb = u2s_label a 5 /\ t.vs_inst_idx = 0) /\
+         vars_kept N Wv s t)
+Proof
+  strip_tac >>
+  ho_match_mp_tac (Q.INST [`is` |-> `TAKE 4 (u2s_final a buf n)`,
+                          `inst` |-> `LAST (u2s_final a buf n)`]
+                         uint2str_block_outcome) >>
+  simp[u2s_final_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >> qexists_tac `u2s_label a 5` >>
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomStateTheory.jump_to_def]
+QED
+
 (* The loop works on a fresh copy val_var of val_op, made before the loop
    (so no precondition on val_op is needed), and on a fresh counter i_var
    from 0.  Each round (cond -> body -> cond) runs straight-line code, sets
