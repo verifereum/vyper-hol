@@ -806,13 +806,20 @@ Proof
   >- simp[Abbr `i`, step_taint_def, set_var_taint_def, mk_inst_def,
           finite_mapTheory.DRESTRICT_UNIV] >>
   conj_tac
-  >- (simp[Abbr `i`, step_taint_def, mem_taint_def, new_site_bytes_def,
-           written_taint_def, step_writes_def, range_bytes_def, mk_inst_def,
-           codegenRelTheory.source_memory_write_ranges_def] >>
-      simp[pred_setTheory.EXTENSION, finite_mapTheory.FLOOKUP_DEF]) >>
+  >- (`new_site_bytes s u = {}` by
+        (simp[new_site_bytes_def, pred_setTheory.EXTENSION,
+              finite_mapTheory.FLOOKUP_DEF] >>
+         rw[] >> CCONTR_TAC >> fs[] >> decide_tac) >>
+      `range_bytes (step_writes i s u) = {}` by
+        simp[Abbr `i`, step_writes_def, mk_inst_def, range_bytes_def,
+             codegenRelTheory.source_memory_write_ranges_def,
+             pred_setTheory.EXTENSION] >>
+      `written_taint tn i s = {}` by
+        simp[Abbr `i`, written_taint_def, mk_inst_def] >>
+      simp[step_taint_def, mem_taint_def]) >>
   gen_tac >>
   `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn) []
-     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     (OK (u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)),
       step_prov PG G i u, step_taint i s u tn)` by
     (qspecl_then [`s`, `func`, `bb`, `i`, `D`, `lo`, `ctx`, `G`, `tn`, `u`,
                   `explicit`, `PG`] mp_tac
@@ -829,8 +836,8 @@ Proof
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
            (SPEC_ALL (cj 2 gas_origin_ptr_path_rules)))) >>
-  qexistsl_tac [`u with vs_inst_idx := SUC s.vs_inst_idx`, `G`,
-                `step_taint i s u tn`] >>
+  qexistsl_tac [`u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)`,
+                `G`, `step_taint i s u tn`] >>
   simp[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
 QED
 
