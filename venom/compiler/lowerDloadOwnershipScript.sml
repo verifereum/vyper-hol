@@ -77,14 +77,13 @@ Ancestors
   calleeTransport venomInstProofs1 o1SafeUpto
 
 Theorem ld_source_frame_raw_bound:
-  o1_safe_upto D lo ncut C vs /\ gas_cut ncut vs s /\ o1_ctx_shape C /\
+  mem_inv dload_headroom_ok C vs /\ o1_ctx_shape C /\
   frame_reachable vs C stk PG G tn fn inst s ==>
   s.vs_alloca_next < dimword (:256)
 Proof
   strip_tac >> drule_all ld_frame_reachable_raw >> strip_tac >>
-  qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
-  simp[o1_safe_upto_def] >> strip_tac >>
-  first_x_assum drule_all >> simp[raw_mem_ok_def]
+  fs[mem_inv_raw_reachable] >> first_x_assum drule >>
+  simp[lowerDloadDefsTheory.dload_headroom_ok_def]
 QED
 
 Theorem ld_source_frame_no_dalloca:
