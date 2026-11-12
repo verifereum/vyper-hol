@@ -66,6 +66,7 @@ Theorem ifexp_widened_call_arm_step_full:
      premise until it lands. *)
   (!ty e sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti st0.
     compile_expr cenv ty e sa = (vv,sm) /\
+    (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
     sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
     unwrap_value cenv vv sb = (op,sc) /\
     local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
@@ -143,7 +144,8 @@ Theorem ifexp_widened_call_arm_step_full:
        step_taint (mk_inst id ALLOCA [Lit n] [p]) s u tn)) /\
   (* compile_alloc_buffer_ghost_frame_at *)
   (!H D lo ctx fn cenv cx es sa sb n buf sc s out u d PG G tn.
-      stmt_state_rel H ctx fn cenv cx es s /\
+      stmt_state_rel (H:(bool # 256 word # type_value) list # num list)
+        ctx fn cenv cx es s /\
       ghost_inv_at D lo d cenv cx es G tn s /\
       local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sb.cs_next_var /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -209,6 +211,7 @@ Theorem ifexp_widened_call_arm_step_full:
       (!p. not_fresh_at sa p ==>
          FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))) /\
   compile_expr cenv ty e sa = (vv,sm) /\
+  (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   compile_ifexp_arm cenv t (lowered_value_type cenv e) vv sm = (op,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
