@@ -121,6 +121,33 @@ Proof
   simp[codegen_reachability_package_def]
 QED
 
+Theorem codegen_reachability_package_conj:
+  codegen_reachability_package Inv1 ctx vs /\
+  codegen_reachability_package Inv2 ctx vs ==>
+  codegen_reachability_package (\c f i s. Inv1 c f i s /\ Inv2 c f i s) ctx vs
+Proof
+  rw[codegen_reachability_package_def]
+  >- metis_tac[reachability_closed_conj]
+  >> metis_tac[fn_entry_inv_conj, optionTheory.SOME_11]
+QED
+
+Theorem codegen_context_obligations_mono:
+  (!fn inst s. Inv2 ctx fn inst s ==> Inv1 ctx fn inst s) /\
+  codegen_context_obligations Inv1 ctx cp ==>
+  codegen_context_obligations Inv2 ctx cp
+Proof
+  simp[codegen_context_obligations_def, codegen_memory_obligations_def] >>
+  metis_tac[]
+QED
+
+Theorem codegen_context_obligations_conj:
+  codegen_context_obligations Inv1 ctx cp ==>
+  codegen_context_obligations (\c f i s. Inv1 c f i s /\ Inv2 c f i s) ctx cp
+Proof
+  strip_tac >> irule codegen_context_obligations_mono >>
+  qexists_tac `Inv1` >> simp[]
+QED
+
 (* ===== Context spill boundaries ===== *)
 
 Theorem context_spill_byte_of_region:

@@ -1,7 +1,7 @@
 (* The EIP-6780 branch is selected by the executing account's creation flag. *)
 Theory asmFrameSelfdestructStep
 Ancestors
-  asmFrameRel asmFrameLocalStep frameObsStep evmStepTransplant asmEvmStepStarve
+  asmFrameRel asmFrameLocalStep frameStep frameObsStep evmStepTransplant asmEvmStepStarve
   evmStepSim asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
   callTrace frameOutcome vfmExecution vfmExecutionProp vfmOperation asmEncodeParse
 
@@ -86,7 +86,13 @@ QED
 Theorem asm_frame_selfdestruct_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp "SELFDESTRUCT" ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok prog data es0 as es /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+           (EL as.as_pc prog) as <> AsmError e) ==>
+   frame_last es \/ ?as1 es1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL as.as_pc prog) as = AsmOK as1 /\
+     frame_next es es1 /\ asm_frame_rel prog data es0 as1 es1)
 Proof
   strip_tac >>
   `as.as_call_ctx.cc_created_in_tx =
