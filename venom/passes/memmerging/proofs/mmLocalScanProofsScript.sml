@@ -10411,6 +10411,54 @@ Proof
   simp[] >> qexistsl [`g`,`r`] >> gvs[]
 QED
 
+Theorem mm_local_zero_representative_pending_suc[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block_memzero dfg bb).mz_flushed /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  mm_local_pending_indices is gs (SUC r) =
+    FILTER (\j. mm_local_rep_index is gs j <> r) (mm_local_pending_indices is gs r)
+Proof
+  strip_tac >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  `!j h q. j < LENGTH is /\ MEM h gs /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+      q < LENGTH is /\ rep_of_group is h = SOME ((EL q is).inst_id,h) ==>
+      mm_local_rep_index is gs j = q` by
+    (rpt strip_tac >> qpat_assum `is = _` SUBST1_TAC >>
+     irule mm_local_zero_rep_index_eq >> metis_tac[]) >>
+  `~MEM r (mm_local_pending_indices is gs (SUC r))` by
+    (strip_tac >>
+     qpat_x_assum `MEM r (mm_local_pending_indices _ _ _)`
+       (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+     rename1 `rep_of_group is h = SOME ((EL rr is).inst_id,h)` >>
+     `mm_local_rep_index is gs r = r` by metis_tac[] >>
+     `mm_local_rep_index is gs r = rr` by metis_tac[] >> decide_tac) >>
+  `mm_local_pending_indices is gs (SUC r) =
+    FILTER (\j. j < r) (mm_local_pending_indices is gs (SUC r))` by
+    (sym_tac >> rewrite_tac[FILTER_EQ_ID, EVERY_MEM] >> rpt strip_tac >>
+     rename1 `MEM j (mm_local_pending_indices is gs (SUC r))` >>
+     `j < SUC r` by (drule (iffLR mm_local_pending_indices_mem) >> simp[]) >>
+     `j <> r` by metis_tac[] >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  simp[NoAsms, mm_local_pending_indices_def, FILTER_FILTER,
+    rich_listTheory.COUNT_LIST_SNOC, rich_listTheory.SNOC_APPEND, FILTER_APPEND] >>
+  IF_CASES_TAC >> simp[NoAsms] >>
+  rewrite_tac[rich_listTheory.FILTER_EQ] >> qx_gen_tac `j` >>
+  simp[NoAsms, MEM_COUNT_LIST] >> strip_tac >>
+  `j < LENGTH is` by decide_tac >>
+  eq_tac
+  >- (strip_tac >>
+      rename1 `rep_of_group is h = SOME ((EL rr is).inst_id,h)` >>
+      `mm_local_rep_index is gs j = rr` by metis_tac[] >>
+      `mm_local_rep_index is gs j <> r` by decide_tac >>
+      simp[] >> qexistsl [`h`,`rr`] >> gvs[]) >>
+  strip_tac >>
+  rename1 `rep_of_group is h = SOME ((EL rr is).inst_id,h)` >>
+  `mm_local_rep_index is gs j = rr` by metis_tac[] >>
+  `SUC r <= rr` by decide_tac >>
+  simp[] >> qexistsl [`h`,`rr`] >> gvs[]
+QED
+
 Theorem mm_local_zero_due_members[local]:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
   gs = (scan_block_memzero dfg bb).mz_flushed /\
@@ -10546,6 +10594,23 @@ Proof
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   irule mm_local_write_log_endpoint >> metis_tac[]
+QED
+
+Theorem mm_local_zero_capture_payload[local]:
+  mm_local_zero_capture dfg is n j = SOME (d,bs) ==>
+  bs = REPLICATE (LENGTH bs) 0w
+Proof
+  strip_tac >> drule mm_local_zero_capture_cases >> strip_tac >> gvs[]
+QED
+
+Theorem mm_local_zero_capture_compatible[local]:
+  mm_local_zero_capture dfg is n j = SOME (d,bs) ==>
+  mm_local_write_compatible d bs a (REPLICATE l 0w)
+Proof
+  strip_tac >> drule mm_local_zero_capture_payload >> strip_tac >>
+  simp[mm_local_write_compatible_def] >> rpt strip_tac >>
+  `x - d < LENGTH bs /\ x - a < l` by (gvs[] >> decide_tac) >>
+  metis_tac[rich_listTheory.EL_REPLICATE]
 QED
 
 Theorem mm_local_zero_due_realize[local]:
