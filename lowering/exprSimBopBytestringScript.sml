@@ -420,6 +420,16 @@ QED
 
 Finalise comparison_operand_outcome_suffix
 
+Theorem valid_horizon_frame_prefix[local]:
+  !f st H. storage_trace_frame f ==>
+    valid_horizon cx st0 H (SND (f st)).storage_trace ==>
+    valid_horizon cx st0 H st.storage_trace
+Proof
+  rpt strip_tac >> Cases_on `f st` >>
+  drule_all storage_trace_frame_prefix >> strip_tac >>
+  fs[valid_horizon_def]
+QED
+
 Theorem compile_bop_bytestring_eqne_case:
   !nocalls ctx func cenv cx ann bop e1 e2.
     (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) ==>
@@ -493,6 +503,9 @@ Proof
   `!a tys v1 v2. storage_trace_frame
       (\es2. (bop_result cx a bop tys v1 v2 es2, es2))` by
     simp[storage_trace_frame_def, bop_result_def] >>
+  `storage_trace_frame (bind (eval_expr cx e1) (read_result cx))` by
+    (irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
   `!g. (!x. storage_trace_frame (g x)) ==>
        storage_trace_frame (bind (bind (eval_expr cx e2) (read_result cx)) g)` by
     (rpt strip_tac >> irule storage_trace_frame_bind_all >> simp[] >>
@@ -515,6 +528,12 @@ Proof
       rename1 `valid_horizon cx st0 H ee.storage_trace` >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _`
         (drule_then assume_tac) >>
+      `stmt_state_rel H ctx func cenv cx es s0` by
+        (`valid_horizon cx st0 H es.storage_trace` by
+           (qspecl_then [`bind (eval_expr cx e1) (read_result cx)`,
+                         `es with gas_obs := gs`, `H`] mp_tac
+              valid_horizon_frame_prefix >> simp[]) >>
+         metis_tac[]) >>
       `expr_body_pre cenv cx env e1 (es with gas_obs := gs)` by
         simp[expr_body_pre_gas_obs] >>
       drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> strip_tac >>
