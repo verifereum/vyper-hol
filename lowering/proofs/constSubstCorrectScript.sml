@@ -3686,7 +3686,7 @@ Proof
   Cases_on `l` >> simp[subst_consts_expr_def]
 QED
 
-Theorem const_subst_range_constant[local]:
+Theorem subst_consts_constant_expr:
   (!e. !E. constant_expr mods e /\
     (!ty id r. MEM (ty,id) (const_local_refs e) /\ ALOOKUP E id = SOME r ==>
       constant_expr mods r) ==> constant_expr mods (subst_consts_expr E e)) /\
@@ -3985,7 +3985,7 @@ Proof
       (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
        simp[Once well_typed_expr_def]) >>
     simp[Once well_typed_expr_def] >>
-    metis_tac[const_subst_subscript_form, const_subst_range_constant,
+    metis_tac[const_subst_subscript_form, subst_consts_constant_expr,
               constant_subscript_base_exact]) >>
   gvs[SF ETA_ss, Once well_typed_expr_def] >>
   rpt (qpat_x_assum `(_ ==> _ /\ _)` mp_tac >>
@@ -4092,7 +4092,7 @@ Proof
           `constant_expr mods e` by
             (drule_all checked_const_initializer_prefix >> metis_tac[]) >>
           `constant_expr mods (fold_const_expr (subst_consts_expr E e))` by
-            metis_tac[const_subst_range_constant, fold_const_expr_constant] >>
+            metis_tac[subst_consts_constant_expr, fold_const_expr_constant] >>
           `!i. int_literal_value (fold_const_expr (subst_consts_expr E e)) = SOME i ==> 0 <= i` by
             (`!i. int_literal_value (subst_consts_expr E e) = SOME i ==> 0 <= i` by
                (mp_tac const_subst_literal_nonneg >>

@@ -35,27 +35,6 @@ Definition raw_shape_free_program_def:
 End
 
 (* Constants cannot introduce the raw-call or msg.gas shape roots. *)
-Theorem subst_consts_constant_expr:
-  (!e. !E. constant_expr mods e /\
-    (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
-    constant_expr mods (subst_consts_expr E e)) /\
-  (!es. !E. EVERY (constant_expr mods) es /\
-    (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
-    EVERY (constant_expr mods) (subst_consts_exprs E es)) /\
-  (!fs. !E. EVERY (constant_expr mods) (MAP SND fs) /\
-    (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
-    EVERY (constant_expr mods) (MAP SND (subst_consts_fields E fs)))
-Proof
-  ho_match_mp_tac const_local_refs_ind >>
-  simp[constant_expr_def, const_local_refs_def, subst_consts_expr_def] >>
-  rpt strip_tac >> gvs[]
-  >~ [`subst_consts_expr E (TopLevelName ty ns)`]
-  >- (PairCases_on `ns` >> Cases_on `ns0` >>
-      gvs[subst_consts_expr_def, constant_expr_def] >>
-      Cases_on `ALOOKUP E ns1` >> gvs[constant_expr_def] >> metis_tac[]) >>
-  metis_tac[]
-QED
-
 Theorem constant_expr_raw_shape:
   (!e. constant_expr mods e ==> ~supported_expr_exists expr_raw_shape_root e) /\
   (!es. EVERY (constant_expr mods) es ==>
