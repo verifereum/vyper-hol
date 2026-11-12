@@ -17,6 +17,9 @@ Ancestors
   fmpStageOpBase fmpStageRel ptrStaticDiscipline ptrDiscipline o1PassContract
   contextCodegenRel venomWf fmpReclaimDefs fmpAnalysisDefs
   venomExecProofs venomExecSemantics venomState venomInst list
+  fmpStageOpFrameForwardAbort fmpStageOpFrameForwardFetch
+  fmpStageOpFrameForwardScalars o1LowerDloadForwardInversion
+  dftGasToListReachBoundary
 
 (* Why: the opcodes the five simulation classes cover are exactly the
    ordinary ones row 3 allows: no FMP ops (pre_fmp_opcode), no ALLOCA and
@@ -41,7 +44,7 @@ Proof
 QED
 
 (* Why: the row-3 facts the step proofs use about the active instruction. *)
-Theorem fmp_stage_active_facts[local]:
+Theorem fmp_stage_active_facts:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s ==>
   pre_fmp_opcode inst.inst_opcode /\ inst.inst_opcode <> ALLOCA /\
@@ -85,7 +88,7 @@ QED
 (* Why: a kept instruction runs at the control map's index on the target,
    past its point's restore when that has run; an unrestored point is no
    reclaim point (fmp_stage_plan_point), so it has no restore. *)
-Theorem fmp_stage_target_inst[local]:
+Theorem fmp_stage_target_inst:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   ~MEM inst.inst_opcode [DALLOCA; INVOKE; RETPC_PARAM] /\
@@ -285,5 +288,27 @@ Theorem fmp_stage_revert_forward:
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block k' C' bb' t = r' /\ dead_result_rel D r r'
 Proof
-  cheat
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[o1_fn_shape_def, wf_function_def] >>
+  `get_instruction bb s.vs_inst_idx = SOME inst` by
+    metis_tac[active_inst_lookup_distinct, optionTheory.SOME_11] >>
+  `revert_forward_at bb s.vs_inst_idx` by
+    gvs[in_revert_forward_def] >>
+  drule_all revert_forward_at_terminates_abort >> strip_tac >>
+  `?j. revert_forward_pair bb s.vs_inst_idx j` by
+    (gvs[revert_forward_at_def]
+     >- metis_tac[] >> gvs[revert_forward_pair_def]) >>
+  drule_all fmp_forward_fetch >> strip_tac >>
+  `?dst src sz. inst.inst_operands = [dst;src;sz]` by
+    (gvs[revert_forward_pair_def] >> metis_tac[]) >>
+  drule_all fmp_forward_copy_scalars >> strip_tac >>
+  `s.vs_labels = t.vs_labels /\ s.vs_returndata = t.vs_returndata /\
+   (!v x. FLOOKUP s.vs_vars v = SOME x ==>
+     ?y. FLOOKUP t.vs_vars v = SOME y)` by
+    (gvs[fmp_stage_rel_def, fmp_frame_rel_def, fmp_env_rel_def] >> metis_tac[]) >>
+  `exec_block k C bb s = Abort reason se` by gvs[] >>
+  drule_all fmp_forward_available_abort >>
+  disch_then (qspec_then `C'` strip_assume_tac) >>
+  qexistsl_tac [`fn'`, `bb'`, `k`, `Abort reason t1`] >>
+  gvs[dead_result_rel_def]
 QED
