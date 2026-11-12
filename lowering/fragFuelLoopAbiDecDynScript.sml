@@ -2862,6 +2862,24 @@ Proof
   qexistsl_tac [`bb`, `ob`, `inst`] >> gvs[EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem abi_dyn_middle_closed[local]:
+  !dst src lop base hi info asz msz i T.
+    lop <> JMP /\ lop <> JNZ ==>
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) T
+      ((^dyn_middle) dst src lop base hi info asz msz i)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+  rpt (FIRST [(MATCH_MP_TAC (BETA_RULE (CONJUNCT1 abi_dyn_decode_closed)) >> simp[]),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_return),
+    (MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_op) >> simp[]),
+    (MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_void) >> simp[mk_inst_def]),
+    ho_match_mp_tac (BETA_RULE abi_dyn_closed_bind),
+    ho_match_mp_tac (BETA_RULE abi_dyn_closed_ignore_bind),
+    IF_CASES_TAC, gen_tac, conj_tac]) >> simp[]
+QED
+
 Theorem abi_dyn_region_cut_instruction[local]:
   !sa sb fn id s. at_point sb s ==>
     ?bb. lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME bb /\
