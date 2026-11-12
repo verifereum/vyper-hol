@@ -3261,7 +3261,7 @@ Resume place_store_typed_rank_path[bytes]:
        valueEncodingTheory.type_memory_size_def] >>
    qmatch_goalsub_abbrev_tac `word_size len <= word_size capacity` >>
    `word_size len <= word_size capacity` by
-     (irule exprSimHypsTheory.word_size_monotone >> simp[Abbr `len`]) >>
+     (irule exprSimPropsTheory.word_size_monotone >> simp[Abbr `len`]) >>
    qspec_then `len` assume_tac exprSimPropsTheory.le_word_size_mul >> decide_tac)
 QED
 Finalise place_store_typed_rank_path

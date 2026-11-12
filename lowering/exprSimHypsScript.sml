@@ -1261,13 +1261,6 @@ Proof
   metis_tac[vyperTypingTheory.safe_cast_result_well_typed]
 QED
 
-Theorem word_size_monotone:
-  !n m. n <= m ==> word_size n <= word_size m
-Proof
-  rpt strip_tac >> simp[vfmConstantsTheory.word_size_def] >>
-  irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]
-QED
-
 Theorem abi_encode_lowered_well_typed_coherent:
   !cenv cx env ann ensure mid target args es.
     expr_body_pre cenv cx env
