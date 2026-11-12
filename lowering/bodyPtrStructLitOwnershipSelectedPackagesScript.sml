@@ -60,51 +60,6 @@ Proof
   irule structlit_fallback_package_alloca_mode
 QED
 
-Theorem structlit_selected_constructor_package:
-  !tops tr nk target mut nr rr name args defaults ret fbody.
-  supported_program tops /\ supported_program_deploy tops /\
-  SND (SND (SND (classify_functions tops))) =
-    SOME (mut,nr,rr,name,args,defaults,ret,fbody) ==>
-  (\(ce,a,p,n,k,t,stmts,r).
-    cenv_static_ok ce /\ ce.ce_return_pc = NONE /\ ce.ce_alloca_locals /\
-    ~supported_stmts_expr_exists expr_shape_root stmts)
-    (set_constructor_package_target target
-      (package_constructor tops tr nk (mut,nr,rr,name,args,defaults,ret,fbody)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `(\(ce,a,p,n,k,t,stmts,r).
-    cenv_static_ok ce /\ ce.ce_return_pc = NONE /\ ce.ce_alloca_locals)
-    (set_constructor_package_target target
-      (package_constructor tops tr nk (mut,nr,rr,name,args,defaults,ret,fbody)))`
-    by (irule structlit_constructor_package_environment) >>
-  drule_all structlit_constructor_package_body >>
-  disch_then (qspecl_then [`tr`, `nk`, `target`] mp_tac) >>
-  Cases_on `set_constructor_package_target target
-    (package_constructor tops tr nk (mut,nr,rr,name,args,defaults,ret,fbody))` >>
-  PairCases_on `r` >> gvs[]
-QED
-
-Theorem structlit_selected_deploy_packages:
-  !tops exts ints fb ctor tr nk target ilen.
-  supported_program tops /\ supported_program_deploy tops /\ classify_functions tops = (exts,ints,fb,ctor) ==>
-  (case ctor of NONE => T
-   | SOME cf =>
-     (\(ce,args,pay,nr,key,t,stmts,rt).
-       cenv_static_ok ce /\ ce.ce_return_pc = NONE /\ ce.ce_alloca_locals /\
-       ~supported_stmts_expr_exists expr_shape_root stmts)
-       (set_constructor_package_target target (package_constructor tops tr nk cf)) /\
-     EVERY (\(lbl,env,params,rb,n,k,t,view,c,sz,b,r).
-       internal_fn_shape_ok (lbl,env,params,rb,n,k,t,view,c,sz,b,r) /\
-       internal_label_ok lbl)
-       (MAP (set_internal_package_target target o
-         package_internal_fn tops tr nk T ilen) ints))
-Proof
-  rpt gen_tac >> strip_tac >> Cases_on `ctor` >> simp[] >>
-  conj_tac
-  >- (PairCases_on `x` >> irule structlit_selected_constructor_package >> gvs[]) >>
-  irule structlit_selected_internal_packages >> gvs[]
-QED
-
 Theorem structlit_selected_runtime_packages:
   !tops exts ints fb ctor tr nk target.
   supported_program tops /\ classify_functions tops = (exts,ints,fb,ctor) ==>

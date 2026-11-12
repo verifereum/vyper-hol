@@ -26,7 +26,7 @@ Proof
     simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_assert_slice_bounds] >>
   gen_tac >> simp[] >>
   irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
-  reverse conj_tac >- simp[alloc_run_compile_slice_out_buf] >>
+  reverse conj_tac >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_slice_out_buf] >>
   Cases >> simp[] >>
   rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
     reverse conj_tac >- simp[SF ETA_ss,
