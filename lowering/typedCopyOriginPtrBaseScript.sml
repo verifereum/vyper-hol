@@ -427,6 +427,248 @@ Proof
   metis_tac[typed_copy_origin_ptr_emit_op_path]
 QED
 
+Theorem typed_copy_origin_ptr_index_addresses_exact:
+  emit_op MUL [Var counter; Lit (n2w ss)] a = (so,b) /\
+  emit_op MUL [Var counter; Lit (n2w ds)] b = (doff,c) /\
+  emit_op ADD [Var xs;so] c = (sp,d) /\
+  emit_op ADD [Var xd;doff] d = (dp,e) /\
+  not_fresh_at a counter /\ not_fresh_at a xs /\ not_fresh_at a xd /\
+  lookup_var counter s = SOME (n2w j) /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  op_taint tn (Var counter) = {} /\
+  op_taint tn (Var xs) = {} /\ op_taint tn (Var xd) = {} /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a e func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  (!opc left right id out w q tau.
+    (opc = MUL \/ opc = ADD) /\
+    op_taint tau left = {} /\ op_taint tau right = {} ==>
+    op_taint (step_taint (mk_inst id opc [left;right] [out]) q
+      (update_var out w q) tau) (Var out) = {} /\
+    (!p. p <> out ==>
+      op_taint (step_taint (mk_inst id opc [left;right] [out]) q
+        (update_var out w q) tau) (Var p) = op_taint tau (Var p))) ==>
+  ?vso vdo vsp vdp q1 q2 q3 t G1 G2 G3 G4 tn1 tn2 tn3 tn4.
+    so = Var vso /\ doff = Var vdo /\ sp = Var vsp /\ dp = Var vdp /\
+    ALL_DISTINCT [vso;vdo;vsp;vdp] /\
+    (!p. not_fresh_at a p ==> ~MEM p [vso;vdo;vsp;vdp]) /\
+    vso = STRING #"%" (toString a.cs_next_var) /\
+    vdo = STRING #"%" (toString b.cs_next_var) /\
+    vsp = STRING #"%" (toString c.cs_next_var) /\
+    vdp = STRING #"%" (toString d.cs_next_var) /\
+    q1 = (update_var vso (n2w (j*ss)) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    q2 = (update_var vdo (n2w (j*ds)) q1 with vs_inst_idx := SUC q1.vs_inst_idx) /\
+    q3 = (update_var vsp (sw+n2w (j*ss)) q2 with vs_inst_idx := SUC q2.vs_inst_idx) /\
+    t = (update_var vdp (dw+n2w (j*ds)) q3 with vs_inst_idx := SUC q3.vs_inst_idx) /\
+    G1 = step_prov PG G (mk_inst a.cs_next_id MUL [Var counter;Lit (n2w ss)] [vso])
+      (update_var vso (n2w (j*ss)) s) /\
+    G2 = step_prov PG G1 (mk_inst b.cs_next_id MUL [Var counter;Lit (n2w ds)] [vdo])
+      (update_var vdo (n2w (j*ds)) q1) /\
+    G3 = step_prov PG G2 (mk_inst c.cs_next_id ADD [Var xs;so] [vsp])
+      (update_var vsp (sw+n2w (j*ss)) q2) /\
+    G4 = step_prov PG G3 (mk_inst d.cs_next_id ADD [Var xd;doff] [vdp])
+      (update_var vdp (dw+n2w (j*ds)) q3) /\
+    tn1 = step_taint (mk_inst a.cs_next_id MUL [Var counter;Lit (n2w ss)] [vso]) s
+      (update_var vso (n2w (j*ss)) s) tn /\
+    tn2 = step_taint (mk_inst b.cs_next_id MUL [Var counter;Lit (n2w ds)] [vdo]) q1
+      (update_var vdo (n2w (j*ds)) q1) tn1 /\
+    tn3 = step_taint (mk_inst c.cs_next_id ADD [Var xs;so] [vsp]) q2
+      (update_var vsp (sw+n2w (j*ss)) q2) tn2 /\
+    tn4 = step_taint (mk_inst d.cs_next_id ADD [Var xd;doff] [vdp]) q3
+      (update_var vdp (dw+n2w (j*ds)) q3) tn3 /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G4,tn4) /\
+    eval_operand sp t = SOME (sw+n2w (j*ss)) /\
+    eval_operand dp t = SOME (dw+n2w (j*ds)) /\
+    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+    typed_copy_state_frame a off len s t /\
+    ~t.vs_halted /\ t.vs_current_bb = e.cs_current_bb /\
+    t.vs_inst_idx = LENGTH e.cs_current_insts
+Proof
+  strip_tac >>
+  `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono] >>
+  `cs_extends a b /\ cs_extends b c /\ cs_extends c d /\ cs_extends d e` by
+    fs[exprLoweringPropsTheory.ci_mono_def] >>
+  `cs_extends b e /\ cs_extends c e` by metis_tac[compileEnvTheory.cs_extends_trans] >>
+  `fn_has_code a b func /\ fn_has_code b c func /\
+   fn_has_code c d func /\ fn_has_code d e func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  suspend "steps"
+QED
+
+Resume typed_copy_origin_ptr_index_addresses_exact[steps]:
+  `?vso q1 G1 tn1.
+    so = Var vso /\ not_fresh_at b vso /\
+    q1 = (update_var vso (n2w (j*ss)) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    G1 = step_prov PG G (mk_inst a.cs_next_id MUL [Var counter;Lit (n2w ss)] [vso])
+      (update_var vso (n2w (j*ss)) s) /\
+    tn1 = step_taint (mk_inst a.cs_next_id MUL [Var counter;Lit (n2w ss)] [vso]) s
+      (update_var vso (n2w (j*ss)) s) tn /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q1,G1,tn1) /\
+    eval_operand so q1 = SOME (n2w (j*ss)) /\ q1.vs_memory = s.vs_memory /\
+    q1.vs_alloca_next = s.vs_alloca_next /\ typed_copy_state_frame a off len s q1 /\
+    ~q1.vs_halted /\ q1.vs_current_bb = b.cs_current_bb /\
+    q1.vs_inst_idx = LENGTH b.cs_current_insts` by
+    (irule typed_copy_origin_ptr_binop_path >>
+     simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_taint_def,
+          wordsTheory.word_mul_n2w] >> metis_tac[]) >>
+  `vso = STRING #"%" (toString a.cs_next_var)` by
+    metis_tac[emitHelperPropsTheory.emitted_insts_emit_op, venomStateTheory.operand_11] >>
+  `counter <> vso /\ xs <> vso /\ xd <> vso` by
+    metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LESS_EQ_REFL] >>
+  `lookup_var counter q1 = SOME (n2w j) /\
+   lookup_var xs q1 = SOME sw /\ lookup_var xd q1 = SOME dw /\ allocas_from lo q1` by
+    (gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE, ptrDisciplineTheory.allocas_from_def] >>
+     metis_tac[]) >>
+  `op_taint tn1 (Var counter) = {} /\ op_taint tn1 (Var xs) = {} /\
+   op_taint tn1 (Var xd) = {} /\ op_taint tn1 so = {}` by
+    (qpat_x_assum `tn1 = _` (fn th => rewrite_tac[th]) >>
+     `op_taint tn (Lit (n2w ss)) = {}` by simp[ptrDisciplineTheory.op_taint_def] >>
+     metis_tac[]) >>
+  suspend "second"
+QED
+
+Resume typed_copy_origin_ptr_index_addresses_exact[second]:
+  `?vdo q2 G2 tn2.
+    doff = Var vdo /\ not_fresh_at c vdo /\
+    q2 = (update_var vdo (n2w (j*ds)) q1 with vs_inst_idx := SUC q1.vs_inst_idx) /\
+    G2 = step_prov PG G1 (mk_inst b.cs_next_id MUL [Var counter;Lit (n2w ds)] [vdo])
+      (update_var vdo (n2w (j*ds)) q1) /\
+    tn2 = step_taint (mk_inst b.cs_next_id MUL [Var counter;Lit (n2w ds)] [vdo]) q1
+      (update_var vdo (n2w (j*ds)) q1) tn1 /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q1,G1,tn1) [] (OK q2,G2,tn2) /\
+    eval_operand doff q2 = SOME (n2w (j*ds)) /\ q2.vs_memory = q1.vs_memory /\
+    q2.vs_alloca_next = q1.vs_alloca_next /\ typed_copy_state_frame b off len q1 q2 /\
+    ~q2.vs_halted /\ q2.vs_current_bb = c.cs_current_bb /\
+    q2.vs_inst_idx = LENGTH c.cs_current_insts` by
+    (irule typed_copy_origin_ptr_binop_path >>
+     simp[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_taint_def,
+          wordsTheory.word_mul_n2w] >> metis_tac[]) >>
+  `vdo = STRING #"%" (toString b.cs_next_var)` by
+    metis_tac[emitHelperPropsTheory.emitted_insts_emit_op, venomStateTheory.operand_11] >>
+  `not_fresh_at b counter /\ not_fresh_at b xs /\ not_fresh_at b xd` by
+    (fs[exprLoweringPropsTheory.ci_mono_def, loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `counter <> vdo /\ xs <> vdo /\ xd <> vdo /\ vso <> vdo` by
+    metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LESS_EQ_REFL] >>
+  `lookup_var xs q2 = SOME sw /\ lookup_var xd q2 = SOME dw /\
+   eval_operand so q2 = SOME (n2w (j*ss)) /\ allocas_from lo q2` by
+    (gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+         venomStateTheory.eval_operand_def, finite_mapTheory.FLOOKUP_UPDATE,
+         ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
+  `op_taint tn2 (Var xs) = {} /\ op_taint tn2 (Var xd) = {} /\
+   op_taint tn2 so = {} /\ op_taint tn2 doff = {}` by
+    (qpat_x_assum `tn2 = _` (fn th => rewrite_tac[th]) >>
+     `op_taint tn1 (Lit (n2w ds)) = {}` by simp[ptrDisciplineTheory.op_taint_def] >>
+     metis_tac[]) >>
+  suspend "third"
+QED
+
+Resume typed_copy_origin_ptr_index_addresses_exact[third]:
+  `?vsp q3 G3 tn3.
+    sp = Var vsp /\ not_fresh_at d vsp /\
+    q3 = (update_var vsp (sw+n2w (j*ss)) q2 with vs_inst_idx := SUC q2.vs_inst_idx) /\
+    G3 = step_prov PG G2 (mk_inst c.cs_next_id ADD [Var xs;so] [vsp])
+      (update_var vsp (sw+n2w (j*ss)) q2) /\
+    tn3 = step_taint (mk_inst c.cs_next_id ADD [Var xs;so] [vsp]) q2
+      (update_var vsp (sw+n2w (j*ss)) q2) tn2 /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q2,G2,tn2) [] (OK q3,G3,tn3) /\
+    eval_operand sp q3 = SOME (sw+n2w (j*ss)) /\ q3.vs_memory = q2.vs_memory /\
+    q3.vs_alloca_next = q2.vs_alloca_next /\ typed_copy_state_frame c off len q2 q3 /\
+    ~q3.vs_halted /\ q3.vs_current_bb = d.cs_current_bb /\
+    q3.vs_inst_idx = LENGTH d.cs_current_insts` by
+    (irule typed_copy_origin_ptr_binop_path >>
+     simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+  `vsp = STRING #"%" (toString c.cs_next_var)` by
+    metis_tac[emitHelperPropsTheory.emitted_insts_emit_op, venomStateTheory.operand_11] >>
+  `not_fresh_at c xs /\ not_fresh_at c xd /\ not_fresh_at c vso` by
+    (fs[exprLoweringPropsTheory.ci_mono_def, loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `xs <> vsp /\ xd <> vsp /\ vso <> vsp /\ vdo <> vsp` by
+    metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LESS_EQ_REFL] >>
+  `lookup_var xd q3 = SOME dw /\ eval_operand doff q3 = SOME (n2w (j*ds)) /\
+   allocas_from lo q3` by
+    (gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+         venomStateTheory.eval_operand_def, finite_mapTheory.FLOOKUP_UPDATE,
+         ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
+  `op_taint tn3 (Var xd) = {} /\ op_taint tn3 doff = {}` by
+    (qpat_x_assum `tn3 = _` (fn th => rewrite_tac[th]) >> metis_tac[]) >>
+  suspend "fourth"
+QED
+
+Resume typed_copy_origin_ptr_index_addresses_exact[fourth]:
+  `?vdp t G4 tn4.
+    dp = Var vdp /\ not_fresh_at e vdp /\
+    t = (update_var vdp (dw+n2w (j*ds)) q3 with vs_inst_idx := SUC q3.vs_inst_idx) /\
+    G4 = step_prov PG G3 (mk_inst d.cs_next_id ADD [Var xd;doff] [vdp])
+      (update_var vdp (dw+n2w (j*ds)) q3) /\
+    tn4 = step_taint (mk_inst d.cs_next_id ADD [Var xd;doff] [vdp]) q3
+      (update_var vdp (dw+n2w (j*ds)) q3) tn3 /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q3,G3,tn3) [] (OK t,G4,tn4) /\
+    eval_operand dp t = SOME (dw+n2w (j*ds)) /\ t.vs_memory = q3.vs_memory /\
+    t.vs_alloca_next = q3.vs_alloca_next /\ typed_copy_state_frame d off len q3 t /\
+    ~t.vs_halted /\ t.vs_current_bb = e.cs_current_bb /\
+    t.vs_inst_idx = LENGTH e.cs_current_insts` by
+    (irule typed_copy_origin_ptr_binop_path >>
+     simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+  `vdp = STRING #"%" (toString d.cs_next_var)` by
+    metis_tac[emitHelperPropsTheory.emitted_insts_emit_op, venomStateTheory.operand_11] >>
+  suspend "join"
+QED
+
+Resume typed_copy_origin_ptr_index_addresses_exact[join]:
+  `!p. not_fresh_at a p ==>
+    not_fresh_at b p /\ not_fresh_at c p /\ not_fresh_at d p` by
+    (fs[exprLoweringPropsTheory.ci_mono_def, loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `not_fresh_at c vso` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `not_fresh_at d vso /\ not_fresh_at d vdo` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `vso <> vdp /\ vdo <> vdp /\ vsp <> vdp` by
+    metis_tac[loweringStateRelDefsTheory.not_fresh_at_def, arithmeticTheory.LESS_EQ_REFL] >>
+  `ALL_DISTINCT [vso;vdo;vsp;vdp]` by simp[] >>
+  `!p. not_fresh_at a p ==> ~MEM p [vso;vdo;vsp;vdp]` by
+    (simp[] >> metis_tac[loweringStateRelDefsTheory.not_fresh_at_def,
+                        arithmeticTheory.LESS_EQ_REFL]) >>
+  `eval_operand sp t = SOME (sw+n2w (j*ss))` by
+    (gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+         venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `ci_mono a c /\ ci_mono a d` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[compileEnvTheory.cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `typed_copy_state_frame a off len q1 q2 /\
+   typed_copy_state_frame a off len q2 q3 /\
+   typed_copy_state_frame a off len q3 t` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_mono] >>
+  `typed_copy_state_frame a off len s q3` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_trans] >>
+  `typed_copy_state_frame a off len s t` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_trans] >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q2,G2,tn2)` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) [] (OK q1,G1,tn1)`
+       (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`q1`,`G1`,`tn1`,`[]`,`OK q2`,`G2`,`tn2`] mp_tac) >>
+     simp[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q3,G3,tn3)` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) [] (OK q2,G2,tn2)`
+       (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`q2`,`G2`,`tn2`,`[]`,`OK q3`,`G3`,`tn3`] mp_tac) >>
+     simp[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G4,tn4)` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) [] (OK q3,G3,tn3)`
+       (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`q3`,`G3`,`tn3`,`[]`,`OK t`,`G4`,`tn4`] mp_tac) >>
+     simp[]) >>
+  qexistsl_tac [`vso`,`vdo`,`vsp`,`vdp`,`q1`,`q2`,`q3`,`t`,
+               `G1`,`G2`,`G3`,`G4`,`tn1`,`tn2`,`tn3`,`tn4`] >>
+  simp[]
+QED
+
+Finalise typed_copy_origin_ptr_index_addresses_exact
+
 Theorem typed_copy_origin_ptr_binop_ghost_frame:
   (opc = MUL \/ opc = ADD) ==>
   op_taint (step_taint (mk_inst id opc [left;right] [out]) s
@@ -577,6 +819,140 @@ Proof
        venomStateTheory.update_var_def, wordsTheory.w2n_add_2,
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac
 QED
+
+(* The header's two scalar instructions and its conditional transfer. *)
+Theorem typed_copy_origin_ptr_header_branch_path:
+  emit_op LT [Var counter; length] a = (lt,b) /\
+  emit_op ISZERO [lt] b = (done,c) /\
+  emit_inst JNZ [done; Label exit; Label blabel] [] c = ((),d) /\
+  lookup_var counter s = SOME (n2w k) /\
+  eval_operand length s = SOME (n2w N) /\ k <= N /\ N < dimword(:256) /\
+  FLOOKUP G counter = NONE /\ op_prov G length = NONE /\
+  op_taint tn (Var counter) = {} /\ op_taint tn length = {} /\
+  fn_has_code a d func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  ?x y t Gf tnf.
+    lt = Var x /\ done = Var y /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    t = jump_to (if k = N then exit else blabel)
+      (update_var y (if k = N then 1w else 0w)
+        (update_var x (if k < N then 1w else 0w) s)) /\
+    Gf = DRESTRICT (DRESTRICT G (COMPL {x})) (COMPL {y}) /\
+    tnf = (tn with t_var := (tn.t_var |+ (x,{})) |+ (y,{})) /\
+    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    ~t.vs_halted /\ t.vs_inst_idx = 0 /\
+    t.vs_current_bb = (if k = N then exit else blabel) /\
+    (!p. p <> x /\ p <> y ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `cs_extends a b /\ cs_extends b c /\ cs_extends c d` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono,
+      exprLoweringPropsTheory.ci_mono_def, cs_extends_emit_inst] >>
+  `fn_has_code a b func /\ fn_has_code b c func /\ fn_has_code c d func` by
+    metis_tac[fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
+  `!out. step_inst_base (mk_inst a.cs_next_id LT [Var counter;length] [out]) s =
+    OK (update_var out (if k < N then 1w else 0w) s)` by
+    (simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def,
+          wordsTheory.WORD_LO, wordsTheory.w2n_n2w] >>
+     `k < dimword(:256)` by decide_tac >>
+     Cases_on `k < N` >> simp[arithmeticTheory.LESS_MOD, bool_to_word_def]) >>
+  `!out. ptr_inst_ok D lo 0 ctx func G tn
+      (mk_inst a.cs_next_id LT [Var counter;length] [out]) s` by
+    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+          source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+     conj_tac >- (Cases_on `length` >> gvs[op_prov_def, finite_mapTheory.FLOOKUP_DEF]) >>
+     simp[update_var_def] >> metis_tac[]) >>
+  `!out. inst_mem_below_frontier (mk_inst a.cs_next_id LT [Var counter;length] [out]) s /\
+    inst_dload_in_section (mk_inst a.cs_next_id LT [Var counter;length] [out]) s` by
+    simp[inst_mem_below_frontier_def, memSafeRunTheory.inst_dload_in_section_def,
+         mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  `LT <> INVOKE /\ LT <> GAS /\ ~is_terminator LT` by simp[is_terminator_def] >>
+  drule_all typed_copy_origin_ptr_emit_op_path >>
+  disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`] strip_assume_tac) >>
+  rename1 `lt = Var x` >>
+  rename1 `gas_origin_ptr_path _ (s,G,tn) [] (OK q,G1,tn1)` >>
+  `G1 = DRESTRICT G (COMPL {x}) /\
+   tn1 = (tn with t_var := tn.t_var |+ (x,{}))` by
+    (simp[step_prov_def, out_prov_def, set_prov_def, mk_inst_def] >>
+     simp[step_taint_def, mem_taint_def, step_writes_def, written_taint_def,
+       store_taint_def, imm_taint_def, adopt_reset_def, out_taint_def,
+       range_bytes_def, set_var_taint_def, new_site_bytes_def, update_var_def,
+       source_memory_write_ranges_def, taint_component_equality,
+       FLOOKUP_DEF, pred_setTheory.EXTENSION, eval_operand_def, SF CONJ_ss]) >>
+  `op_taint tn1 lt = {}` by simp[op_taint_def, FLOOKUP_UPDATE] >>
+  `allocas_from lo q` by (gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  suspend "iszero"
+QED
+
+Resume typed_copy_origin_ptr_header_branch_path[iszero]:
+  `!out. step_inst_base (mk_inst b.cs_next_id ISZERO [lt] [out]) q =
+    OK (update_var out (if k = N then 1w else 0w) q)` by
+    (simp[step_inst_base_def, mk_inst_def, exec_pure1_def] >>
+     Cases_on `k < N` >>
+     simp[bool_to_word_def, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `!out. ptr_inst_ok D lo 0 ctx func G1 tn1
+      (mk_inst b.cs_next_id ISZERO [lt] [out]) q` by
+    (gen_tac >>
+     qpat_assum `!out. step_inst_base (mk_inst b.cs_next_id ISZERO _ _) q = _`
+       (qspec_then `out` assume_tac) >>
+     simp[NoAsms, ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+          source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+     gvs[update_var_def, op_taint_def, FLOOKUP_UPDATE]) >>
+  `!out. inst_mem_below_frontier (mk_inst b.cs_next_id ISZERO [lt] [out]) q /\
+    inst_dload_in_section (mk_inst b.cs_next_id ISZERO [lt] [out]) q` by
+    simp[inst_mem_below_frontier_def, memSafeRunTheory.inst_dload_in_section_def,
+         mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  `ISZERO <> INVOKE /\ ISZERO <> GAS /\ ~is_terminator ISZERO` by simp[is_terminator_def] >>
+  qpat_x_assum `emit_op LT _ _ = _` kall_tac >>
+  drule_all typed_copy_origin_ptr_emit_op_path >>
+  disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`] strip_assume_tac) >>
+  suspend "branch"
+QED
+
+Resume typed_copy_origin_ptr_header_branch_path[branch]:
+  rename1 `done = Var y` >>
+  rename1 `gas_origin_ptr_path _ (q,G1,tn1) [] (OK r,G2,tn2)` >>
+  `G2 = DRESTRICT G1 (COMPL {y}) /\
+   tn2 = (tn1 with t_var := tn1.t_var |+ (y,{}))` by
+    (simp[step_prov_def, out_prov_def, set_prov_def, mk_inst_def] >>
+     simp[step_taint_def, mem_taint_def, step_writes_def, written_taint_def,
+       store_taint_def, imm_taint_def, adopt_reset_def, out_taint_def,
+       range_bytes_def, set_var_taint_def, new_site_bytes_def, update_var_def,
+       source_memory_write_ranges_def, taint_component_equality,
+       FLOOKUP_DEF, pred_setTheory.EXTENSION, eval_operand_def, lookup_var_def,
+       FLOOKUP_UPDATE, SF CONJ_ss]) >>
+  `op_taint tn2 done = {}` by simp[op_taint_def, FLOOKUP_UPDATE] >>
+  `allocas_from lo r` by
+    (simp[allocas_from_def, update_var_def] >> rpt strip_tac >>
+     qpat_x_assum `allocas_from lo s` (mp_tac o REWRITE_RULE [allocas_from_def]) >>
+     disch_then drule >> simp[]) >>
+  drule_all emit_jnz_origin_ptr >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G2`,`D`] assume_tac) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK r,G2,tn2)` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
+       (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`q`,`G1`,`tn1`,`[]`,`OK r`,`G2`,`tn2`] mp_tac) >> simp[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (jump_to (if k = N then exit else blabel) r),G2,tn2)` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) [] (OK r,G2,tn2)`
+       (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`r`,`G2`,`tn2`,`[]`,
+       `OK (jump_to (if k = N then exit else blabel) r)`,`G2`,`tn2`] mp_tac) >> simp[]) >>
+  qexistsl_tac [`x`,`y`,`jump_to (if k = N then exit else blabel) r`,`G2`,`tn2`] >>
+  simp[jump_to_def, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def] >>
+  gvs[update_var_def]
+QED
+
+Finalise typed_copy_origin_ptr_header_branch_path
 
 (* Finite iteration is independent of the concrete header invariant. *)
 Theorem typed_copy_origin_ptr_counted_path:
