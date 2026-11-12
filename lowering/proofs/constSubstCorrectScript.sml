@@ -1173,17 +1173,26 @@ Proof
   drule_all checked_callable_body_typing >> simp[]
 QED
 
+(* A key absent from the larger map is absent from the smaller one. *)
+Theorem submap_flookup_none[local]:
+  f SUBMAP g /\ FLOOKUP g k = NONE ==> FLOOKUP f k = NONE
+Proof
+  rpt strip_tac >> Cases_on `FLOOKUP f k` >> gvs[] >>
+  drule_all FLOOKUP_SUBMAP >> gvs[]
+QED
+
 Theorem checked_artifact_mutation_root:
   check_contract F layouts addr mods = SOME art /\
   declared_constant mods src id /\
-  env.bare_global_assignable = art.cta_bare_global_assignable /\
+  env.bare_global_assignable SUBMAP art.cta_bare_global_assignable /\
   env.bare_globals = art.cta_bare_globals /\
   IS_SOME (type_place_target env bt) ==>
   base_target_root bt <> TopLevelNameTarget (src,id)
 Proof
   strip_tac >> drule check_contract_artifact_fields >> strip_tac >>
   irule typed_mutation_root_excludes_constant >>
-  metis_tac[checked_constant_not_assignable, checked_constant_bare_global]
+  metis_tac[checked_constant_not_assignable, checked_constant_bare_global,
+    submap_flookup_none]
 QED
 
 Theorem checked_artifact_intcall_body:
@@ -1204,11 +1213,11 @@ QED
 
 Theorem function_entry_constant_maps:
   (function_entry_env art mods src Internal args).bare_globals = art.cta_bare_globals /\
-  (function_entry_env art mods src Internal args).bare_global_assignable =
+  (function_entry_env art mods src Internal args).bare_global_assignable SUBMAP
     art.cta_bare_global_assignable /\
   (function_entry_env art mods src Internal args).fn_sigs = art.cta_fn_sigs /\
   (defaults_env (function_entry_env art mods src Internal args)).bare_globals = art.cta_bare_globals /\
-  (defaults_env (function_entry_env art mods src Internal args)).bare_global_assignable =
+  (defaults_env (function_entry_env art mods src Internal args)).bare_global_assignable SUBMAP
     art.cta_bare_global_assignable /\
   (defaults_env (function_entry_env art mods src Internal args)).fn_sigs = art.cta_fn_sigs
 Proof
@@ -2028,7 +2037,7 @@ QED
 Definition frame_maps_def:
   frame_maps env art <=>
     env.bare_globals = art.cta_bare_globals /\
-    env.bare_global_assignable = art.cta_bare_global_assignable /\
+    env.bare_global_assignable SUBMAP art.cta_bare_global_assignable /\
     env.fn_sigs = art.cta_fn_sigs
 End
 
@@ -2244,7 +2253,8 @@ Theorem checked_frame_context_constant_root:
 Proof
   simp[checked_frame_context_def, frame_maps_def] >> rpt strip_tac >>
   drule check_contract_artifact_fields >> strip_tac >> gvs[] >>
-  metis_tac[checked_constant_not_assignable, checked_constant_bare_global]
+  metis_tac[checked_constant_not_assignable, checked_constant_bare_global,
+    submap_flookup_none]
 QED
 
 Theorem writable_atarget_member:
