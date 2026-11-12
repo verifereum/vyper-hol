@@ -18,9 +18,8 @@ Theorem same_frame_valued_return_capacity_bound:
   cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
   cenv.ce_max_return_size < 2 ** 64
 Proof
-  rpt strip_tac >>
-  drule stmt_exprs_ok_same_frame >> strip_tac >>
-  gvs[] >> drule_all frame_valued_return_capacity_bound >> simp[]
+  rw[same_frame_def] >> gvs[] >>
+  drule_all frame_valued_return_capacity_bound >> simp[]
 QED
 
 Theorem huge_capacity_frame_return_excluded:

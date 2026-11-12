@@ -96,7 +96,7 @@ Proof
       ntac 4 (scratch_db abi_decoder_code_emit_op) >>
       scratch_dib abi_decoder_code_emit_void >> scratch_db abi_decoder_code_emit_op >>
       scratch_dib abi_decoder_code_emit_void >>
-      ntac 2 (scratch_db abi_decoder_code_emit_op) >> simp[abi_decoder_code_emit_op])
+      ntac 3 (scratch_db abi_decoder_code_emit_op) >> simp[abi_decoder_code_emit_op])
   >- (rewrite_tac[Once compile_abi_encode_child_def] >>
       scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_return])
   >- (rewrite_tac[Once compile_abi_encode_child_def] >>

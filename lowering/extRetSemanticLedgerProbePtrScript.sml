@@ -2,7 +2,7 @@ Theory extRetSemanticLedgerProbePtr
 Ancestors
   extRetRecursiveLayoutPtr abiEncoderSourceAggregate abiEncoderSourceTransport
   abiTypeBoundProps abiEncoderInput vyperTypeABI vyperABI vyperTyping
-  vyperValue valueEncoding contractABI dfHelperProps list rich_list arithmetic
+  vyperValue valueEncoding contractABI dfHelperProps dfAnalyzeProofs list rich_list arithmetic
   retAbiPlanProps compileEnv finite_map
 
 (* Totality is an existing checked semantic interface, not a new premise on
@@ -39,7 +39,7 @@ Proof
   conj_tac >- simp[EL_MAP] >>
   `SUM (MAP (\av. LENGTH (enc (vyper_to_abi_type env ty) av)) avs) <=
      vyper_abi_size_bound env ty * LENGTH avs` by
-    (irule sum_map_bounded >> simp[EVERY_EL]) >>
+    (irule sum_map_le_bound >> simp[EVERY_EL]) >>
   `LENGTH vs * (32 + vyper_abi_size_bound env ty) <=
      cap * (32 + vyper_abi_size_bound env ty)` by simp[] >>
   simp[vyper_abi_size_bound_def] >>
