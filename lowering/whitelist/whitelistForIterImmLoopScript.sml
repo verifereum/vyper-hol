@@ -475,7 +475,7 @@ Theorem counted_array_body_finish:
   p <> idx /\ p <> nv /\
   (!x. saved_base = Var x ==> x <> idx /\ x <> nv) /\
   gas_marked_exec F (ctx,func) (eval_stmts cx stmts) (entry,s2) marks res ee (OK t) /\
-  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
     res (ee with gas_obs := []) t /\
   cenv_top_ext cenv bc entry.scopes /\
   (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
@@ -542,7 +542,7 @@ Theorem counted_array_round_from_body:
       <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)
     (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
-    (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2)
+    (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
   (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
     stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
@@ -553,7 +553,7 @@ Theorem counted_array_round_from_body:
   (!marks res ee t.
     gas_marked_exec F (ctx,func) (eval_stmts cx stmts)
       (entry,s2) marks res ee (OK t) /\
-    stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+    stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
       res (ee with gas_obs := []) t ==>
     ?rest u. ee.scopes <> [] /\ rest = TL ee.scopes /\
       gas_marked_path F ctx func t 0 (OK u) /\ array_caller_frame caller cc u /\
@@ -668,7 +668,7 @@ Theorem immutable_round_prepare:
       <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes)
     (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
-    (stmt_post ctx func cx lctx bc bc' sb0 sb1 s2)
+    (stmt_post ctx func cx lctx bc bc' sb0 sb1 ei s2)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>
