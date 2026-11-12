@@ -6,7 +6,7 @@ Ancestors
   loweringPosts exprLoweringProps compileEnv freshWrites
   gasSummary fragGasMode fragGasPath venomState venomExecSemantics
   valueEncodingProps emitHelperProps emitHelper venomInst context
-  exprSimUnwrap vyperInterpreter vyperState exprSimProps exprLowering exprSimMemorySource
+  exprSimUnwrap vyperInterpreter vyperState exprSimProps exprLowering exprSimMemorySource loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_protframe_code_joint_copy:
   unwrap_value cenv (LocatedValue ty p) sn = (op,sb) /\

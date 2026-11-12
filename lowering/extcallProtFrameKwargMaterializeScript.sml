@@ -6,7 +6,7 @@ Ancestors
   exprExtRequestHistoryCompose exprExtRequestHistory exprExtRequestMaterialize
   exprOperandVar exprSafeOperand exprLoweringProps exprSimProps exprSimDefs loweringPosts
   freshWrites compileEnv exprLowering emitHelper valueCopy valueEncodingProps
-  exprSimBufferStore placeMemoryPrimitiveForward
+  exprSimBufferStore placeMemoryPrimitiveForward loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_materialize_store_finalize[local]:
   gas_marked_exec F (ctx,func) (read_result cx r) (ee,t)

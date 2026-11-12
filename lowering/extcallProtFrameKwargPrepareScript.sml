@@ -3,7 +3,7 @@ Ancestors
   exprExtRequestDefaultProbe exprExtRequestTyping exprExtRequestRetained
   memoryLocalRhsProps exprSimHypsDefs exprSimHyps loweringPosts
   exprLoweringProps exprLowering compileEnv valueEncodingTyping exprSimProps
-  vyperInterpreter vyperTypeSystem
+  vyperInterpreter vyperTypeSystem loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_default_read_conversion:
   expr_body_pre cenv cx env e es /\ ~expr_has_effect e /\

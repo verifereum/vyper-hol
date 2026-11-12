@@ -8,7 +8,7 @@ Ancestors
   exprExtRequestKwargSuffix exprSimAggregateSource gasOutcome exprSimSource
   exprSimWordArgs valueEncodingTyping valueEncoding vyperValue vyperTyping
   pair exprSimHypsDefs exprSimDefs fragExec exprOperandVar stmtSimProps
-  exprExtRequestHistory exprSafeOperand
+  exprExtRequestHistory exprSafeOperand loweringStateRelDefs valueEncodingDefs
 
 Theorem word_unwrap_readonly_post:
   post_value_type ce e = expr_type e /\ is_word_type (expr_type e) /\

@@ -6,7 +6,7 @@ Ancestors
   exprSafeOperand exprExtRequestTupleFold exprExtRequestAllocationEndpoint
   extcallProtFramePrefix loweringHalt compileEnv emitHelperProps exprLoweringProps
   valueEncoding valueEncodingProps valueEncodingProofs venomState venomExecSemantics
-  vyperABI selectorDispatch list arithmetic fragGasMode
+  vyperABI selectorDispatch list arithmetic fragGasMode loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_protframe_tuple_payload_endpoint:
   (!cells sz sa src sm sn s.

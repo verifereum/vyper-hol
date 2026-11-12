@@ -7,7 +7,7 @@ Ancestors
   exprSimWordArgs exprSimSource exprSimHypsDefs exprSimDefs compileEnv
   vyperCallOutcomeFrame vyperInterpreter vyperState gasSummary fragGasMode
   fragGasPath exprExtRequestGasBind stmtSimProps pair finite_map context
-  exprLowering gasOutcome stmtSimDeclGas fragExec
+  exprLowering gasOutcome stmtSimDeclGas fragExec loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_protframe_unread_head:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\

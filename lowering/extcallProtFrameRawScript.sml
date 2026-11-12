@@ -2,7 +2,7 @@
 Theory extcallProtFrameRaw
 Ancestors
   extcallProtFramePath loweringPosts supportedExprTraverse compileEnv
-  abiEncoderWindowContract finite_map pred_set
+  abiEncoderWindowContract finite_map pred_set loweringStateRelDefs valueEncodingDefs
 
 Theorem pure_vv_window_growth_protected:
   vv_post ctx func cenv cx e es sa sb s ee v vv t /\

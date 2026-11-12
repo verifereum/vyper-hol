@@ -7,7 +7,7 @@ Ancestors
   exprSimHyps exprSimWordArgs exprSimDefs loweringPosts exprLoweringProps
   exprSafeOperand vyperState vyperInterpreter supportedExprTraverse
   vyperTyping compileEnv exprSimHypsDefs vyperTypeSystem vyperTypeCallGraph
-  exprExtRequestGasBind stmtSimForRounds list rich_list pair arithmetic venomState
+  exprExtRequestGasBind stmtSimForRounds list rich_list pair arithmetic venomState loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_protframe_operand_cps:
   exprs_case nocalls ctx func cenv cx [a] /\

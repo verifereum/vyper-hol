@@ -5,7 +5,7 @@ Ancestors
   exprExtRequestJointUnwrap exprExtRequestHistory exprExtRequestUnwrapAdapter exprSafeOperand
   loweringPosts exprLoweringProps compileEnv freshWrites
   gasSummary fragGasMode fragGasPath venomState exprLowering
-  valueEncodingProps vyperInterpreter vyperState exprSimMemorySource
+  valueEncodingProps vyperInterpreter vyperState exprSimMemorySource loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_joint_unwrap_read_protected:
   unwrap_value cenv vv sn = (op,sb) /\

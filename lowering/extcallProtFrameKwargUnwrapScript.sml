@@ -2,7 +2,7 @@
 Theory extcallProtFrameKwargUnwrap
 Ancestors
   extcallProtFramePrefix extcallProtFramePath exprExtRequestJointUnwrap
-  compileEnv finite_map
+  compileEnv finite_map loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_protframe_allocated_write_path:
   gas_marked_path memory ctx func s marks (OK t) /\
