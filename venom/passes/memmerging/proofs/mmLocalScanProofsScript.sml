@@ -15122,7 +15122,7 @@ Theorem mm_local_alloca_memory_frame[local]:
 Proof
   strip_tac >>
   gvs[venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.step_inst_base_opcode_eqs,
     venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()] >>
   gvs[venomStateTheory.update_var_def]
 QED
@@ -15208,7 +15208,7 @@ Proof
   `u = update_var out (mload (w2n w) t) (H n) /\
    step_inst fuel ctx (EL n is) t = OK (update_var out (mload (w2n w) t) t)` by
     gvs[venomExecSemanticsTheory.step_inst_non_invoke,
-      venomExecSemanticsTheory.step_inst_base_def, venomExecSemanticsTheory.exec_read1_def,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomExecSemanticsTheory.exec_read1_def,
       venomStateTheory.eval_operand_def] >>
   `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n /\
    mm_local_write_capture is H (SUC n) = mm_local_write_capture is H n` by
@@ -16296,6 +16296,46 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem mm_local_source_history_label[local]:
+  (!q. h <= q /\ q < n ==>
+    ~is_terminator (EL q is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+      H (SUC q) = u with vs_inst_idx := SUC q) ==>
+  !q. h <= q /\ q <= n ==> (H q).vs_current_bb = (H h).vs_current_bb
+Proof
+  strip_tac >> Induct >> rpt strip_tac
+  >- (`h = 0` by decide_tac >> gvs[]) >>
+  Cases_on `SUC q = h` >- simp[] >>
+  `h <= q /\ q < n` by decide_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all venomInstProofsTheory.step_preserves_control_flow >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_cut_noninvoke_abort[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel ctx i (H n) = Abort a u ==>
+  ?v. step_inst fuel ctx i t = Abort a v /\ revert_equiv u v
+Proof
+  strip_tac >>
+  `state_equiv excluded
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+    metis_tac[mm_local_cut_memory_state_equiv] >>
+  `(!v. MEM (Var v) i.inst_operands ==> lookup_var v (H n) = lookup_var v t) /\
+   (H n).vs_returndata = t.vs_returndata /\
+   (H n).vs_labels = t.vs_labels /\
+   (H n).vs_call_ctx.cc_static = t.vs_call_ctx.cc_static` by
+    (gvs[state_equiv_def, execution_equiv_def, venomStateTheory.lookup_var_def] >>
+     metis_tac[]) >>
+  `step_inst_base i (H n) = Abort a u` by
+    gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  drule_all passSharedFrameTheory.step_inst_base_abort_input_equiv >> strip_tac >>
+  qexists `s2'` >>
+  conj_tac >- gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  metis_tac[passSharedFrameTheory.step_inst_base_abort_returndata, revert_equiv_def]
+QED
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
