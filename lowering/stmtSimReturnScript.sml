@@ -1079,6 +1079,8 @@ Proof
   gvs[stmt_env_def, declare_stmt_local_def, comp_bind_def,
       comp_ignore_bind_def, comp_return_def, Once compile_stmt_def] >>
   rpt (pairarg_tac >> gvs[]) >>
+  rename1 `lower_value compile_expr cenv ty e sa = (_, sm)` >>
+  rename1 `fn_has_code sa sb func` >>
   drule_all compile_internal_word_return_parts >> strip_tac >>
   qexists_tac `su` >> simp[] >>
   drule compile_return_unlock_shape >> strip_tac >>
