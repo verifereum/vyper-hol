@@ -151,11 +151,35 @@ Proof
     ld_on_head "ld_shared_agree"
       (gvs[ld_shared_agree_def, venomStateTheory.update_var_def] >> metis_tac[]),
     ld_on_head "?"
-      (qexists_tac `u` >>
-       gvs[ld_joint_frame_def, ld_params_agree_def, ld_joint_local_fields_def,
-           ld_joint_allocas_def, venomStateTheory.update_var_def] >>
-       qpat_x_assum `ld_joint_control _ _ _ (_ with vs_inst_idx := _) _` mp_tac >>
-       simp[NoAsms, ld_joint_control_def] >> strip_tac >> gvs[] >> metis_tac[]),
+      (qexistsl_tac [`u`,`fn'`] >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       rewrite_tac[ld_joint_frame_def] >> rpt conj_tac >>
+       (* DALLOCA moves only the output variable and the FMP, by the same
+          amount on both sides *)
+       FIRST [
+         first_assum ACCEPT_TAC,
+         rewrite_tac[venomStateTheory.update_var_def,
+                     venomStateTheory.venom_state_accfupds,
+                     combinTheory.K_THM] >> first_assum ACCEPT_TAC,
+         ld_on_head "ld_env_agree"
+           (qpat_x_assum `ld_env_agree _ _ (occurrence_step _ _ _ _ _) _ _ _` mp_tac >>
+            qpat_x_assum `s.vs_fmp = t.vs_fmp` (fn th => rewrite_tac[th]) >>
+            simp[NoAsms, ld_env_agree_def, venomStateTheory.update_var_def]),
+         ld_on_head "ld_params_agree"
+           (qpat_x_assum `ld_params_agree _ _ s t` mp_tac >>
+            simp[NoAsms, ld_params_agree_def, venomStateTheory.update_var_def]),
+         ld_on_head "ld_joint_local_fields"
+           (qpat_x_assum `ld_joint_local_fields s t` mp_tac >>
+            simp[NoAsms, ld_joint_local_fields_def, venomStateTheory.update_var_def]),
+         ld_on_head "ld_joint_control"
+           (qpat_x_assum `ld_joint_control _ _ _ (_ with vs_inst_idx := _) _` mp_tac >>
+            simp[NoAsms, ld_joint_control_def, venomStateTheory.update_var_def]),
+         ld_on_head "ld_joint_allocas"
+           (qpat_x_assum `ld_joint_allocas _ _ _ _ t` mp_tac >>
+            simp[NoAsms, ld_joint_allocas_def, venomStateTheory.update_var_def]),
+         fn (g as (_, w)) =>
+           (print ("ld_joint_dalloca_next: no frame case closes " ^
+                   term_to_string w ^ "\n"); NO_TAC g)]),
     gvs[venomStateTheory.update_var_def] >> NO_TAC,
     fn (g as (_, w)) => (print ("ld_joint_dalloca_next: no case closes " ^
         term_to_string w ^ "\n"); NO_TAC g)]

@@ -197,9 +197,10 @@ Proof
      `s.vs_alloca_next <= t.vs_alloca_next` by
        (drule ld_sync_frontier >> simp[]) >>
      irule ld_source_range_frontier >>
+     qexistsl_tac [`fn`,`inst`,`ranges`,`s`] >>
      fs[raw_mem_ok_def, ld_nonghost_def] >>
-     qpat_x_assum `MEM (getops,ranges) _`
-       (strip_assume_tac o REWRITE_RULE [MEM, PAIR_EQ]) >>
+     TRY (qpat_x_assum `MEM (getops,ranges) _`
+            (strip_assume_tac o REWRITE_RULE [MEM, PAIR_EQ])) >>
      metis_tac[]) >>
   qpat_x_assum `r0 = w2n y` SUBST_ALL_TAC >>
   `r1 = 0 \/ w2n y + r1 <= t.vs_alloca_next \/
