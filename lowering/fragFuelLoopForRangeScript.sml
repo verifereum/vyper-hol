@@ -576,6 +576,243 @@ Proof
   first_x_assum (qspec_then `s` mp_tac) >> simp[Abbr `H`, Abbr `Q`]
 QED
 
+Theorem range_compiled_tail[local]:
+  !n W Wb E counter endpoint cond bodylbl incr exit op ops (B:unit compiler).
+    Wb SUBSET {x | x IN W /\ var_below n x} /\
+    counter NOTIN Wb /\ endpoint NOTIN Wb /\ counter <> endpoint /\
+    counter IN W /\ (op = MSTORE \/ op = INVALID) /\
+    fuel_okS (\st. n <= st.cs_next_var) Wb {} (E UNION {exit;incr}) B ==>
+    fuel_okS (\st. n <= st.cs_next_var /\
+                   var_below st.cs_next_var counter /\
+                   var_below st.cs_next_var endpoint) W {} E
+      (do emit_inst JMP [Label cond] [];
+          new_block cond;
+          test <- emit_op EQ [Var counter; Var endpoint];
+          emit_inst JNZ [test; Label exit; Label bodylbl] [];
+          new_block bodylbl;
+          emit_void op ops;
+          B;
+          emit_jmp_if_not_terminated incr;
+          new_block incr;
+          tmp <- emit_op ADD [Var counter; Lit 1w];
+          emit_inst ASSIGN [tmp] [counter];
+          emit_inst JMP [Label cond] [];
+          new_block exit;
+          return () od)
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  simp_tac std_ss [fuel_okS_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `_ st = _` mp_tac >>
+  simp_tac (srw_ss()) [comp_bind_def, comp_ignore_bind_def,
+    emit_inst_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
+    emit_def, new_block_def, comp_return_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `B bs` >>
+  Cases_on `B bs` >> rename1 `B bs = (u,be)` >> Cases_on `u` >>
+  `n <= bs.cs_next_var` by simp[Abbr `bs`] >>
+  `cs_extends bs be /\ bs.cs_next_var <= be.cs_next_var /\
+   (cs_no_phi bs ==> cs_no_phi be) /\
+   ?Kb. frag_fuel Wb {} (E UNION {exit;incr}) bs be Kb` by
+    (qpat_x_assum `fuel_okS _ _ _ _ B` mp_tac >>
+     simp_tac std_ss [fuel_okS_def] >> disch_then drule >> simp[]) >>
+  Cases_on `emit_jmp_if_not_terminated incr be` >>
+  rename1 `emit_jmp_if_not_terminated incr be = (u,ae)` >>
+  simp_tac (srw_ss()) [] >> strip_tac >> gnvs[] >>
+  `cs_extends st bs` by
+    (rewrite_tac[cs_extends_def] >> qexists_tac `TAKE 2 bs.cs_blocks` >>
+     simp[Abbr `bs`]) >>
+  qmatch_goalsub_abbrev_tac `cs_extends st sf` >>
+  `cs_extends ae sf` by
+    (rewrite_tac[cs_extends_def] >> qexists_tac `TAKE 2 sf.cs_blocks` >>
+     simp[Abbr `sf`]) >>
+  `cs_extends be ae /\ ae.cs_next_var = be.cs_next_var /\
+   (cs_no_phi be ==> cs_no_phi ae)` by
+    (qpat_x_assum `emit_jmp_if_not_terminated _ _ = _` mp_tac >>
+     simp[emit_jmp_if_not_terminated_def, comp_bind_def, comp_get_def,
+          LET_THM] >> Cases_on `block_is_terminated be` >>
+     simp[emit_inst_def, comp_return_def, comp_bind_def, fresh_id_def,
+          emit_def, LET_THM] >> strip_tac >> gvs[cs_extends_def,
+          cs_no_phi_def, mk_inst_def] >> qexists_tac `[]` >> simp[]) >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  conj_tac >- (gvs[Abbr `bs`] >> decide_tac) >>
+  conj_tac
+  >- (strip_tac >>
+      `cs_no_phi bs` by
+        (qpat_x_assum `cs_no_phi st` mp_tac >>
+         simp[Abbr `bs`, cs_no_phi_def, mk_inst_def] >> gvs[]) >>
+      `cs_no_phi ae` by metis_tac[] >>
+      gvs[Abbr `sf`, cs_no_phi_def, mk_inst_def]) >>
+  qexists_tac `1 + (2 ** 256) * (Kb + 8)` >>
+  simp_tac std_ss [frag_fuel_def] >> rpt gen_tac >> strip_tac >>
+  fs[] >>
+  `cs_extends st be /\ cs_extends be sf /\ cs_extends bs sf` by
+    metis_tac[cs_extends_trans] >>
+  `fn_has_code st bs fn /\ fn_has_code bs be fn /\
+   fn_has_code bs sf fn /\ fn_has_code ae sf fn` by
+    metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
+  `!bb. MEM bb (TAKE 2 bs.cs_blocks) ==>
+        lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (qpat_x_assum `fn_has_code st bs fn` mp_tac >>
+     simp[fragExecTheory.fn_has_code_def,
+          fragExecTheory.emitted_blocks_def, Abbr `bs`] >> metis_tac[]) >>
+  `!bb. MEM bb (TAKE 2 sf.cs_blocks) ==>
+        lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (qpat_x_assum `fn_has_code ae sf fn` mp_tac >>
+     simp[fragExecTheory.fn_has_code_def,
+          fragExecTheory.emitted_blocks_def, Abbr `sf`] >> metis_tac[]) >>
+  `?bc. lookup_block bodylbl fn.fn_blocks = SOME bc /\
+        isPREFIX bs.cs_current_insts bc.bb_instructions` by
+    (drule_all fragExecTheory.fn_has_code_start >> simp[Abbr `bs`]) >>
+  `lookup_block ae.cs_current_bb fn.fn_blocks =
+     SOME <|bb_label := ae.cs_current_bb;
+            bb_instructions := ae.cs_current_insts|>` by
+    (qpat_x_assum `!bb. MEM bb (TAKE 2 sf.cs_blocks) ==> _`
+       (qspec_then `<|bb_label := ae.cs_current_bb;
+                     bb_instructions := ae.cs_current_insts|>` mp_tac) >>
+     simp[Abbr `sf`]) >>
+  `ae.cs_current_bb = be.cs_current_bb /\
+   (get_instruction <|bb_label := ae.cs_current_bb;
+                      bb_instructions := ae.cs_current_insts|>
+        (LENGTH be.cs_current_insts) = NONE \/
+    ?ij. get_instruction <|bb_label := ae.cs_current_bb;
+                           bb_instructions := ae.cs_current_insts|>
+        (LENGTH be.cs_current_insts) = SOME ij /\
+         ij.inst_opcode = JMP /\ ij.inst_operands = [Label incr])` by
+    (qpat_x_assum `emit_jmp_if_not_terminated _ _ = _` mp_tac >>
+     simp[emit_jmp_if_not_terminated_def, comp_bind_def, comp_get_def, LET_THM] >>
+     Cases_on `block_is_terminated be` >>
+     simp[emit_inst_def, comp_return_def, comp_bind_def, fresh_id_def,
+          emit_def, LET_THM] >> strip_tac >> simp[get_instruction_def] >>
+     qpat_x_assum `_ with <|cs_next_id := _; cs_current_insts := _|> = ae`
+       (SUBST1_TAC o SYM) >>
+     simp[mk_inst_def, rich_listTheory.EL_APPEND2]) >>
+  qabbrev_tac `hc = HD bs.cs_blocks` >>
+  qabbrev_tac `ec = EL 1 bs.cs_blocks` >>
+  qabbrev_tac `ic = HD sf.cs_blocks` >>
+  `bs.cs_blocks = hc::ec::st.cs_blocks /\ hc.bb_label = cond /\
+   ec.bb_label = st.cs_current_bb` by
+    simp[Abbr `hc`, Abbr `ec`, Abbr `bs`] >>
+  `sf.cs_blocks = ic ::
+       <|bb_label := ae.cs_current_bb; bb_instructions := ae.cs_current_insts|> ::
+       ae.cs_blocks /\ ic.bb_label = incr` by
+    simp[Abbr `ic`, Abbr `sf`] >>
+  `lookup_block cond fn.fn_blocks = SOME hc` by
+    (qpat_x_assum `!bb. MEM bb (TAKE 2 bs.cs_blocks) ==> _`
+       (qspec_then `hc` mp_tac) >> simp[]) >>
+  `lookup_block incr fn.fn_blocks = SOME ic` by
+    (qpat_x_assum `!bb. MEM bb (TAKE 2 sf.cs_blocks) ==> _`
+       (qspec_then `ic` mp_tac) >> simp[]) >>
+  `lookup_block st.cs_current_bb fn.fn_blocks = SOME ec` by
+    (qpat_x_assum `!bb. MEM bb (TAKE 2 bs.cs_blocks) ==> _`
+       (qspec_then `ec` mp_tac) >> simp[]) >>
+  `ec.bb_instructions = st.cs_current_insts ++
+       [mk_inst st.cs_next_id JMP [Label cond] []]` by
+    simp[Abbr `ec`, Abbr `bs`] >>
+  `fuel_outcome G ctx fn s 1
+     (\t. vars_kept st.cs_next_var W' s t /\
+          t.vs_current_bb = cond /\ t.vs_inst_idx = 0)` by
+    (irule fuel_outcome_jump >> conj_tac >- simp[] >>
+     qexistsl_tac [`ec`, `mk_inst st.cs_next_id JMP [Label cond] []`, `cond`] >>
+     simp[at_point_def, get_instruction_def,
+          rich_listTheory.EL_APPEND2, mk_inst_def, is_terminator_def,
+          step_inst_base_opcode_eqs, eval_operand_def, jump_to_def,
+          vars_kept_def] >>
+     qpat_x_assum `at_point st s` mp_tac >>
+     simp[at_point_def, rich_listTheory.EL_APPEND2]) >>
+  `hc.bb_instructions =
+     [mk_inst (st.cs_next_id + 1) EQ [Var counter; Var endpoint]
+        [STRING #"%" (toString st.cs_next_var)];
+      mk_inst (st.cs_next_id + 2) JNZ
+        [Var (STRING #"%" (toString st.cs_next_var)); Label exit; Label bodylbl] []]` by
+    simp[Abbr `hc`, Abbr `bs`] >>
+  `ic.bb_instructions =
+     [mk_inst ae.cs_next_id ADD [Var counter; Lit 1w]
+        [STRING #"%" (toString ae.cs_next_var)];
+      mk_inst (ae.cs_next_id + 1) ASSIGN
+        [Var (STRING #"%" (toString ae.cs_next_var))] [counter];
+      mk_inst (ae.cs_next_id + 2) JMP [Label cond] []]` by
+    simp[Abbr `ic`, Abbr `sf`] >>
+  `bs.cs_next_var = st.cs_next_var + 1 /\
+   bs.cs_current_bb = bodylbl /\
+   bs.cs_current_insts = [mk_inst (st.cs_next_id + 3) op ops []]` by
+    simp[Abbr `bs`] >>
+  `sf.cs_current_bb = exit /\ sf.cs_current_insts = []` by
+    simp[Abbr `sf`] >>
+  `get_instruction hc 0 = SOME
+       (mk_inst (st.cs_next_id + 1) EQ [Var counter; Var endpoint]
+         [STRING #"%" (toString st.cs_next_var)]) /\
+   get_instruction hc 1 = SOME
+       (mk_inst (st.cs_next_id + 2) JNZ
+         [Var (STRING #"%" (toString st.cs_next_var)); Label exit; Label bodylbl] []) /\
+   get_instruction ic 0 = SOME
+       (mk_inst ae.cs_next_id ADD [Var counter; Lit 1w]
+         [STRING #"%" (toString ae.cs_next_var)]) /\
+   get_instruction ic 1 = SOME
+       (mk_inst (ae.cs_next_id + 1) ASSIGN
+         [Var (STRING #"%" (toString ae.cs_next_var))] [counter]) /\
+   get_instruction ic 2 = SOME
+       (mk_inst (ae.cs_next_id + 2) JMP [Label cond] [])` by
+    simp[get_instruction_def] >>
+  `get_instruction bc 0 = SOME (mk_inst (st.cs_next_id + 3) op ops [])` by
+    (qpat_x_assum `isPREFIX _ bc.bb_instructions` mp_tac >>
+     simp[get_instruction_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     strip_tac >> simp[]) >>
+  `st.cs_next_var <= ae.cs_next_var` by simp[] >>
+  `STRING #"%" (toString st.cs_next_var) <> counter /\
+   STRING #"%" (toString st.cs_next_var) <> endpoint /\
+   STRING #"%" (toString ae.cs_next_var) <> counter /\
+   STRING #"%" (toString ae.cs_next_var) <> endpoint` by
+    (qpat_x_assum `var_below st.cs_next_var counter` mp_tac >>
+     qpat_x_assum `var_below st.cs_next_var endpoint` mp_tac >>
+     simp_tac std_ss [var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `~var_below st.cs_next_var (STRING #"%" (toString st.cs_next_var)) /\
+   ~var_below st.cs_next_var (STRING #"%" (toString ae.cs_next_var))` by
+    metis_tac[var_below_fresh, arithmeticTheory.LESS_EQ_REFL] >>
+  `var_below bs.cs_next_var counter /\ var_below bs.cs_next_var endpoint` by
+    gvs[var_below_def, arithmeticTheory.LESS_EQ_TRANS,
+        arithmeticTheory.LESS_EQ_SUC_REFL] >>
+  `Wb SUBSET (STRING #"%" (toString st.cs_next_var) INSERT
+       {x | x IN W' /\ var_below st.cs_next_var x})` by
+    (qpat_x_assum `Wb SUBSET _` mp_tac >>
+     simp[pred_setTheory.SUBSET_DEF, var_below_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  (drule fuel_outcome_compose >>
+  disch_then (qspec_then
+    `\t. vars_kept st.cs_next_var W' s t /\
+         t.vs_current_bb IN (E UNION {exit}) /\ t.vs_inst_idx = 0` mp_tac) >>
+  disch_then (qspec_then `(2 ** 256) * (Kb + 8)` mp_tac) >>
+  impl_tac
+  >- (gen_tac >> BETA_TAC >> strip_tac >>
+      irule (SPEC_ALL range_cycle_outcome |>
+        Q.INST [`cond` |-> `cond`, `bodylbl` |-> `bodylbl`,
+                `incr` |-> `incr`, `exit` |-> `exit`] |>
+        Q.INST [`counter` |-> `counter`, `endpoint` |-> `endpoint`,
+                `p` |-> `st.cs_next_var`]) >>
+      qpat_assum `frag_fuel _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `lookup_block cond fn.fn_blocks = SOME hc` (irule_at Any) >>
+      qpat_assum `lookup_block incr fn.fn_blocks = SOME ic` (irule_at Any) >>
+      qpat_assum `lookup_block bodylbl fn.fn_blocks = SOME bc` (irule_at Any) >>
+      `lookup_block be.cs_current_bb fn.fn_blocks =
+         SOME <|bb_label := ae.cs_current_bb;
+                bb_instructions := ae.cs_current_insts|>` by metis_tac[] >>
+      qpat_assum `lookup_block be.cs_current_bb fn.fn_blocks = SOME _`
+        (irule_at Any) >>
+      qpat_assum `get_instruction hc 0 = SOME _` (irule_at Any) >>
+      qpat_assum `get_instruction hc 1 = SOME _` (irule_at Any) >>
+      qpat_assum `get_instruction ic 0 = SOME _` (irule_at Any) >>
+      qpat_assum `get_instruction ic 1 = SOME _` (irule_at Any) >>
+      qpat_assum `get_instruction ic 2 = SOME _` (irule_at Any) >>
+      qpat_assum `get_instruction bc 0 = SOME _` (irule_at Any) >>
+      simp[mk_inst_def] >> qexists_tac `st` >>
+      fs[var_below_def] >> metis_tac[]) >>
+  strip_tac >> qexists_tac `j` >> conj_tac >- gvs[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  gen_tac >> BETA_TAC >> strip_tac >> conj_tac
+  >- (fs[vars_kept_def, var_below_def] >> metis_tac[]) >>
+  `sf.cs_current_bb = exit /\ sf.cs_current_insts = []` by
+    simp[Abbr `sf`] >>
+  fs[at_point_def] >> metis_tac[])
+QED
+
 Theorem fuel_okS_compile_for_range:
   !cenv lctx ty id fty start_e end_e bound body Wv E.
     (!c t e Wv' E'. fuel_ok Wv' {} E' (lower_value compile_expr c t e)) /\
