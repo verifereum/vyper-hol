@@ -2,6 +2,7 @@
 Theory sourceOwnedArrayConstructorPtr
 Ancestors
   sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence abiEncoderSequence
+  fragGasSeqMem fragExecMem stmtForRangeMemoryParts calldataDynInit calldataBytesLeaf
   decoderCalldataShell abiDecoderRange abiDecoderBytesBound abiEncoder sourceEncodingWindows sourceEncodingLayout abiDecoderCoherence
   ctorAbiActualArrayRun entrySinkExtraction fragExec
   abiDecoderRecursiveArray abiDecoderLoop abiDecoderArraySetupCode abiDecoderLoopRegisters
@@ -61,6 +62,26 @@ Proof
 QED
 
 
+Theorem array_loop_init_memory_opcodes[local]:
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w)
+    maxn abi_sz st = (setup,en) ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    i.inst_opcode <> GAS /\ i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (emitted_insts st en)
+Proof
+  simp[abi_decode_array_loop_init_def, abi_decode_dynarray_position_prefix_def,
+    abi_decode_bytes_head_def, compile_abi_dec_addr_def,
+    abi_decode_dynarray_payload_guard_def, compile_abi_decode_range_check_def,
+    abi_decode_dynarray_prefix_def, abi_decode_dynarray_end_guard_def,
+    abi_decode_count_guard_def, abi_decode_array_header_def,
+    abi_decode_index_init_def, compile_alloc_buffer_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, emit_inst_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  pure_rewrite_tac[emitted_insts_def, GSYM APPEND_ASSOC, APPEND] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]
+QED
+
 Theorem physical_index_init_repeat[local]:
   abi_decode_index_init st = (ip,en) /\
   ((FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
@@ -76,7 +97,8 @@ Theorem physical_index_init_repeat[local]:
     (!id. id <> st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
     t.vs_alloca_next = (if FLOOKUP s.vs_allocas st.cs_next_id = NONE
       then s.vs_alloca_next+32 else s.vs_alloca_next) /\
-    t.vs_halted = s.vs_halted
+    t.vs_halted = s.vs_halted /\
+    run_inst_seq_mem_ok (emitted_insts st en) s
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule calldata_index_init_instructions >> strip_tac >>
@@ -111,6 +133,12 @@ Proof
   `!op. abi_decoder_operand_live st.cs_next_var op ==>
     eval_operand op (mstore p 0w allocated) = eval_operand op s` by
     metis_tac[calldata_index_init_live_frame] >>
+  `p+32 <= allocated.vs_alloca_next` by (gvs[] >> decide_tac) >>
+  `run_inst_seq_mem_ok (emitted_insts st en) s` by
+    (irule run_inst_seq_mem_ok_of_prefix_safe >>
+     reverse conj_tac >- simp[mk_inst_def] >>
+     ho_match_mp_tac (GEN_ALL calldata_index_init_prefix_safe) >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
   qexists_tac `mstore p 0w allocated` >>
   gvs[mstore_def, write_memory_with_expansion_def]
 QED
@@ -120,6 +148,7 @@ Theorem calldata_array_loop_init_repeat_physical_sequence:
     (setup,loop_st) /\
   eval_operand src s = SOME (n2w cdsbase) /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
+  d+32 <= s.vs_alloca_next /\
   abi_decode_load CALLDATALOAD (n2w cdsbase:bytes32) s = n2w n /\
   n <= maxn /\ maxn < dimword (:256) /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -143,7 +172,8 @@ Theorem calldata_array_loop_init_repeat_physical_sequence:
       FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
     t.vs_alloca_next = (if FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) = NONE
       then s.vs_alloca_next+32 else s.vs_alloca_next) /\
-    t.vs_halted = s.vs_halted /\ inst_extends st loop_st
+    t.vs_halted = s.vs_halted /\ inst_extends st loop_st /\
+    run_inst_seq_mem_ok (emitted_insts st loop_st) s
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule calldata_array_loop_init_trace >> strip_tac >>
@@ -166,6 +196,18 @@ Proof
     metis_tac[abi_decoder_operand_live_mono] >>
   drule_all calldata_array_header_repeat_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts guard_st header_st) guarded = OK prepared` >>
+  `run_inst_seq_mem_ok (emitted_insts st guard_st) s` by
+    (irule run_inst_seq_mem_ok_of_prefix_safe >>
+     reverse conj_tac >-
+       (drule calldata_count_guard_code_shape >> simp[EVERY_MEM]) >>
+     ho_match_mp_tac calldataWordLeafTheory.calldata_prefix_safe_every >>
+     drule calldata_count_guard_instruction_safe >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts guard_st header_st) guarded` by
+    (irule run_inst_seq_mem_ok_of_prefix_safe >>
+     reverse conj_tac >-
+       (drule calldata_array_header_opcodes >> simp[EVERY_MEM]) >>
+     ho_match_mp_tac (GEN_ALL calldataDynOwnedTheory.calldata_array_header_repeat_prefix_safe) >>
+     metis_tac[]) >>
   `abi_decode_load CALLDATALOAD (n2w cdsbase:bytes32) guarded = n2w n` by
     gvs[abi_decode_load_def, abi_decode_source_def] >>
   `abi_decode_frame d 32 s prepared` by
@@ -220,6 +262,18 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      `st.cs_next_var <= header_st.cs_next_var` by decide_tac >>
      metis_tac[abi_decoder_operand_live_mono]) >>
+  `emitted_insts st header_st = emitted_insts st guard_st ++
+      emitted_insts guard_st header_st /\
+   emitted_insts st loop_st = emitted_insts st header_st ++
+      emitted_insts header_st loop_st` by
+    (conj_tac >> irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts st header_st) s` by
+    (asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >>
+     simp[] >> rpt strip_tac >> gvs[]) >>
+  `run_inst_seq_mem_ok (emitted_insts st loop_st) s` by
+    (asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >>
+     conj_tac >- gvs[] >>
+     rpt strip_tac >> gvs[]) >>
   qexists_tac `actual` >> gvs[]
 QED
 
@@ -266,7 +320,8 @@ Theorem source_array_init_owned_sequence:
       FLOOKUP t.vs_allocas id = SOME (b,k)) /\
     (!id. id <> index_st.cs_next_id ==>
       FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
-    t.vs_halted = s.vs_halted /\ inst_extends st loop_st
+    t.vs_halted = s.vs_halted /\ inst_extends st loop_st /\
+    run_inst_seq_mem_ok (emitted_insts st loop_st) s
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule actual_index_init_literal_site >> strip_tac >>
@@ -319,7 +374,7 @@ Resume source_array_init_owned_sequence[physical_run]:
   `d < dimword (:256) /\ (d+32 <= p \/ p+32 <= d)` by decide_tac >>
   mp_tac (Q.INST [`p` |-> `p`, `limit` |-> `limit`, `s` |-> `s`, `setup` |-> `(ip,cnt)`]
     calldata_array_loop_init_repeat_physical_sequence) >>
-  (impl_tac >- (asm_simp_tac bool_ss [] >> metis_tac[])) >>
+  (impl_tac >- (rpt conj_tac >> metis_tac[LESS_EQ_TRANS])) >>
   strip_tac >>
   `((FLOOKUP s.vs_allocas index_st.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
     (FLOOKUP s.vs_allocas index_st.cs_next_id = SOME (p,32) /\
@@ -354,7 +409,8 @@ Resume source_array_init_owned_sequence[physical_run]:
      `FLOOKUP t.vs_allocas index_st.cs_next_id = _`,
      `p+32 < dimword (:256)`,
      `!id. id <> index_st.cs_next_id ==> _`,
-     `t.vs_halted = s.vs_halted`, `inst_extends st loop_st`] >>
+     `t.vs_halted = s.vs_halted`, `inst_extends st loop_st`,
+     `run_inst_seq_mem_ok (emitted_insts st loop_st) s`] >>
   (Q.SUBGOAL_THEN `p+32 <= base_addr \/ base_addr+owner_cap <= p` mp_tac
     >- metis_tac[]) >>
   POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
@@ -581,7 +637,8 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
      rpt strip_tac >> simp[alloca_size_def, dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
   `!entry. FLOOKUP s.vs_allocas inst.inst_id = SOME entry ==>
     ?b. entry = (b,32) /\ b+32 <= s.vs_alloca_next` by
-    (rpt strip_tac >> PairCases_on `entry` >>
+    (qpat_x_assum `!middle end_st i r G tn child childsrc e srcpos. _` kall_tac >>
+     rpt strip_tac >> PairCases_on `entry` >>
      qpat_assum `!id p k. st.cs_next_id <= id /\ _ ==> _` (qspecl_then [`inst.inst_id`,`entry0`,`entry1`] mp_tac) >>
      impl_tac >- metis_tac[] >> simp_tac (srw_ss()) [] >> metis_tac[]) >>
   drule_all actual_word_alloca_physical_credit >> disch_tac >>
@@ -638,6 +695,41 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
      `LENGTH st.cs_current_insts <= LENGTH loop_st.cs_current_insts` by
        (qpat_x_assum `loop_st.cs_current_insts = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[] >> decide_tac) >>
      simp[]) >>
+  `gas_path_mem ctx fn s 0 (OK init)` by
+    (qpat_x_assum `!middle end_st i r G tn child childsrc e srcpos. _` kall_tac >>
+     drule array_loop_init_memory_opcodes >> disch_tac >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      isPREFIX (emitted_insts st loop_st) (DROP s.vs_inst_idx bb.bb_instructions)` by
+       (qpat_assum `bb.bb_instructions = _` mp_tac >>
+        map_every (fn pat => qpat_assum pat mp_tac)
+          [`s.vs_current_bb = _`, `s.vs_inst_idx = _`,
+           `loop_st.cs_current_bb = st.cs_current_bb`,
+           `lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb`] >>
+        qpat_assum `inst_extends st loop_st` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp_tac std_ss [inst_extends_def] >> rpt gen_tac >>
+        ntac 6 disch_tac >>
+        conj_tac >- metis_tac[] >>
+        qpat_x_assum `bb.bb_instructions = _` SUBST1_TAC >>
+        qpat_x_assum `s.vs_inst_idx = _` SUBST1_TAC >>
+        simp_tac std_ss [GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+        simp[]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+       (emitted_insts st loop_st)` by simp[EVERY_MEM] >>
+     drule_all run_inst_seq_gas_path_mem >>
+     `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st loop_st) = []` by
+       (qpat_assum `EVERY (\i. _ /\ _ /\ _) (emitted_insts st loop_st)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+     `s.vs_inst_idx + LENGTH (emitted_insts st loop_st) =
+        LENGTH loop_st.cs_current_insts` by
+       (qpat_assum `inst_extends st loop_st` mp_tac >>
+        qpat_assum `s.vs_inst_idx = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp_tac std_ss [inst_extends_def] >> rpt strip_tac >>
+        qpat_x_assum `loop_st.cs_current_insts = _`
+          (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+        simp[]) >>
+     simp[]) >>
   (* Jump from the exact initialized state to the loop header. *)
   `init.vs_current_bb = loop_st.cs_current_bb /\
    init.vs_inst_idx = LENGTH loop_st.cs_current_insts /\ ~init.vs_halted` by
@@ -657,6 +749,19 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
      conj_tac >- first_assum ACCEPT_TAC >>
      qpat_assum `init.vs_current_bb = _` (fn th => rewrite_tac [th]) >>
      first_assum ACCEPT_TAC) >>
+  `gas_path_mem ctx fn init 0 (OK (jump_to (FST labels) init))` by
+    (irule for_range_jump_at_zero_path_mem >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`bb`, `mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []`] >>
+     qpat_assum `bb.bb_instructions = _` mp_tac >>
+     qpat_assum `lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb` mp_tac >>
+     qpat_assum `init.vs_current_bb = _` mp_tac >>
+     qpat_assum `init.vs_inst_idx = _` mp_tac >>
+     qpat_assum `~init.vs_halted` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     gvs[get_instruction_def, EL_APPEND_EQN, mk_inst_def, is_terminator_def,
+          memSafeRunTheory.inst_dload_in_section_def, step_inst_base_opcode_eqs] >>
+     irule instMemFrontierTheory.below_frontier_no_ranges >> simp[mk_inst_def]) >>
   (* Robust initialized array count. *)
   qpat_x_assum `labels = (FST labels,_)` kall_tac >>
   `!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
@@ -1403,6 +1508,13 @@ Resume source_owned_nonbulk_array_ptr[constructor_packaging]:
      qpat_assum `init = t with vs_inst_idx := _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[markerTheory.Abbrev_def, jump_to_def]) >>
+  `gas_path_mem ctx fn s 0 (OK t')` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_path_mem ctx fn s 0 (OK init)`,
+        `gas_path_mem ctx fn init 0 (OK h)`,
+        `gas_path_mem ctx fn h 0 (OK t')`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp_tac bool_ss [markerTheory.Abbrev_def] >>
+     metis_tac[fragGasPathMemTheory.gas_path_mem_then, ADD_CLAUSES]) >>
   (qexistsl [`t'`,`H'`,`u'`,`(p,32)::fp`] >>
    rpt conj_tac >> first_assum ACCEPT_TAC)
 QED
