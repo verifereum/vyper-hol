@@ -14,6 +14,7 @@ Ancestors
   concretizeMemLoc
   (* FmpLowering stage proof *)
   fmpStageReclaimSound
+  fmpStageOpSteps
   fmpStageFmpSteps
   (* lower dload/dloadbytes *)
   lowerDload
