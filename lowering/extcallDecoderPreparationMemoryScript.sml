@@ -4,7 +4,7 @@ Ancestors
   abiDecoderRange abiDecoderMemberCode abiDecoderMemberSetup abiDecoderReentry
   abiEncoder compileEnv emitHelper ssaOperandFrame abiDecoderMemberBound abiDecoderContract
   exprLoweringProps fragExecMem instMemFrontier fragGasSeqMem fragGasPathMem
-  fragGasSeqAbort abiDecoderBytesBound exprSimCalldataSlice freshWrites
+  fragGasSeqAbort abiDecoderBytesBound abiDecoderDynarrayBound abiDecoderDynarrayPrefix abiDecoderGuards abiDecoderArrayInitExec exprSimCalldataSlice freshWrites
   extcallDecoderMemberPreparationMemory extcallDecoderArrayPreparationMemory
   venomExecSemantics venomState venomInst memSafeRun emitHelperProps
   words arithmetic list rich_list
@@ -301,6 +301,334 @@ Proof
     (emitted_insts st fin)` by fs[EVERY_CONJ] >>
   `run_inst_seq_mem_ok (emitted_insts st fin) s` by
     (irule extcall_decoder_member_setup_mem_ok >> metis_tac[]) >>
+  drule_all (SIMP_RULE (srw_ss()) [] (Q.SPEC `T` run_inst_seq_abort_gas_path)) >>
+  simp[fragGasModeTheory.gas_marked_path_def] >> metis_tac[]
+QED
+
+Theorem extcall_decoder_bytes_payload_reject_run[local]:
+  abi_decode_bytes_payload_guard head len hi st = ((),st') /\ hi <> Lit 0w /\
+  eval_operand head s = SOME (n2w a) /\ eval_operand len s = SOME (n2w z) /\
+  eval_operand hi s = SOME (n2w h) /\ a < dimword(:256) /\
+  z < dimword(:256) /\ h < dimword(:256) /\ h < a+z /\ fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_bytes_payload_guard _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_bytes_payload_guard_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  rename1 `emit_op ADD [head;len] st = (e,c1)` >>
+  drule_all abi_decode_add_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  gvs[word_add_n2w] >>
+  `eval_operand head s1 = SOME (n2w a) /\
+   eval_operand hi s1 = SOME (n2w h)` by metis_tac[] >>
+  `~(w2n (n2w a : bytes32) <= w2n (n2w (a+z) : bytes32) /\
+      w2n (n2w (a+z) : bytes32) <= w2n (n2w h : bytes32))` by
+    (mp_tac (Q.INST [`modulus` |-> `dimword(:256)`, `a` |-> `a`,
+      `n` |-> `z`, `limit` |-> `h`] slice_bounds_mod) >>
+     simp[w2n_n2w, dimword_def] >> decide_tac) >>
+  `eval_operand e s1 = SOME (n2w (a+z))` by simp[ADD_COMM] >>
+  drule_all extcall_decoder_range_check_reject_run >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >>
+  imp_res_tac compile_abi_decode_range_check_shape >>
+  `emitted_insts st st' = emitted_insts st c1 ++ emitted_insts c1 st'` by
+    (irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  drule run_inst_seq_append >>
+  disch_then (qspec_then `emitted_insts c1 st'` assume_tac) >>
+  qexists_tac `t` >> asm_rewrite_tac[]
+QED
+
+Theorem extcall_decoder_array_payload_success_run[local]:
+  abi_decode_dynarray_payload_guard head cnt asz hi st = ((),st') /\ hi <> Lit 0w /\
+  eval_operand head s = SOME (n2w a) /\ eval_operand cnt s = SOME c /\
+  eval_operand hi s = SOME (n2w h) /\
+  a + w2n (c * n2w asz) <= h /\ h < dimword(:256) /\ fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\ fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\ inst_extends st st'
+Proof
+  strip_tac >>
+  `?payload c1. emit_op MUL [cnt; Lit (n2w asz)] st = (payload,c1) /\
+     abi_decode_bytes_payload_guard head payload hi c1 = ((),st')` by
+    (qpat_x_assum `abi_decode_dynarray_payload_guard _ _ _ _ _ = _` mp_tac >>
+     simp[abi_decode_dynarray_payload_guard_def, abi_decode_bytes_payload_guard_def,
+          comp_bind_def] >> pairarg_tac >> simp[] >> metis_tac[]) >>
+  `eval_operand (Lit (n2w asz)) s = SOME (n2w asz)` by simp[eval_operand_def] >>
+  drule_all abi_decode_mul_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  `eval_operand head s1 = SOME (n2w a) /\
+   eval_operand hi s1 = SOME (n2w h)` by metis_tac[] >>
+  `eval_operand payload s1 = SOME (n2w (w2n (c * n2w asz)))` by simp[] >>
+  drule abi_decode_bytes_payload_guard_sequence >>
+  disch_then (qspecl_then [`s1`,`a`,`w2n (c * n2w asz)`] mp_tac) >>
+  (impl_tac >- (simp[] >> qexists_tac `h` >> simp[])) >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >>
+  drule_all abi_decode_sequence_chain >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem extcall_decoder_array_payload_reject_run[local]:
+  abi_decode_dynarray_payload_guard head cnt asz hi st = ((),st') /\ hi <> Lit 0w /\
+  eval_operand head s = SOME (n2w a) /\ eval_operand cnt s = SOME c /\
+  eval_operand hi s = SOME (n2w h) /\ a < dimword(:256) /\
+  h < dimword(:256) /\ h < a + w2n (c * n2w asz) /\ fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  `?payload c1. emit_op MUL [cnt; Lit (n2w asz)] st = (payload,c1) /\
+     abi_decode_bytes_payload_guard head payload hi c1 = ((),st')` by
+    (qpat_x_assum `abi_decode_dynarray_payload_guard _ _ _ _ _ = _` mp_tac >>
+     simp[abi_decode_dynarray_payload_guard_def, abi_decode_bytes_payload_guard_def,
+          comp_bind_def] >> pairarg_tac >> simp[] >> metis_tac[]) >>
+  `eval_operand (Lit (n2w asz)) s = SOME (n2w asz)` by simp[eval_operand_def] >>
+  drule_all abi_decode_mul_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  `eval_operand head s1 = SOME (n2w a) /\
+   eval_operand hi s1 = SOME (n2w h)` by metis_tac[] >>
+  `eval_operand payload s1 = SOME (n2w (w2n (c * n2w asz)))` by simp[] >>
+  `w2n (c * n2w asz : bytes32) < dimword(:256)` by simp[w2n_lt] >>
+  drule_all extcall_decoder_bytes_payload_reject_run >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >>
+  imp_res_tac abi_decode_bytes_payload_guard_shape >>
+  `emitted_insts st st' = emitted_insts st c1 ++ emitted_insts c1 st'` by
+    (irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  drule run_inst_seq_append >>
+  disch_then (qspec_then `emitted_insts c1 st'` assume_tac) >>
+  qexists_tac `t` >> asm_rewrite_tac[]
+QED
+
+Theorem extcall_decoder_array_prefix_success_run[local]:
+  abi_decode_dynarray_position_prefix src MLOAD base_op hi maxn asz st = (addr,st') /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\ eval_operand hi s = SOME (n2w h) /\
+  abi_decode_load MLOAD (n2w (B+sb) : bytes32) s = n2w c /\
+  sb+32 <= h /\ c <= maxn /\ maxn < dimword(:256) /\
+  sb+32+w2n ((n2w c : bytes32)*n2w asz) <= h /\ h < dimword(:256) /\
+  fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+    eval_operand addr t = SOME (n2w (B+sb)) /\ fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\ inst_extends st st'
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[abi_decode_dynarray_position_prefix_trace] >> strip_tac >>
+  drule_all abi_decode_bytes_head_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st head_st) s = OK s1` >>
+  `eval_operand base_op s1 = SOME (n2w B) /\
+   eval_operand src s1 = SOME (n2w sb)` by metis_tac[] >>
+  drule_all compile_abi_dec_addr_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts head_st addr_st) s1 = OK s2` >>
+  `abi_decode_load MLOAD (n2w (B+sb) : bytes32) s2 = n2w c` by
+    gvs[abi_decode_load_def, abi_decode_source_def, mload_def] >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_count_guard_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts addr_st count_st) s2 = OK s3` >>
+  `eval_operand head s3 = SOME (n2w (sb+32)) /\
+   eval_operand hi s3 = SOME (n2w h)` by metis_tac[] >>
+  drule_all extcall_decoder_array_payload_success_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts count_st st') s3 = OK t` >>
+  `inst_extends head_st addr_st` by
+    (Cases_on `base_op = Lit 0w` >>
+     gvs[compile_abi_dec_addr_def, comp_return_def, inst_extends_refl] >>
+     metis_tac[inst_extends_emit_op]) >>
+  drule abi_decode_count_guard_shape >> strip_tac >>
+  `run_inst_seq (emitted_insts st addr_st) s = OK s2 /\
+   inst_extends st addr_st` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`s1`,`head_st`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st count_st) s = OK s3 /\
+   inst_extends st count_st` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`s2`,`addr_st`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st st') s = OK t /\ inst_extends st st'` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`s3`,`count_st`] >> simp[]) >>
+  qexists_tac `t` >> simp[] >> metis_tac[]
+QED
+
+Theorem extcall_decoder_array_tail_reject_run[local]:
+  compile_abi_dec_addr base_op src st = (addr,addr_st) /\
+  abi_decode_count_guard MLOAD addr maxn addr_st = (cnt,count_st) /\
+  abi_decode_dynarray_payload_guard head cnt asz hi count_st = ((),fin) /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\ eval_operand hi s = SOME (n2w h) /\
+  eval_operand head s = SOME (n2w (sb+32)) /\
+  abi_decode_load MLOAD (n2w (B+sb) : bytes32) s = n2w c /\ c < dimword(:256) /\
+  sb+32 <= h /\ h < dimword(:256) /\ maxn < dimword(:256) /\
+  ~(c <= maxn /\ sb+32+w2n ((n2w c : bytes32)*n2w asz) <= h) /\
+  fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st fin) s = Abort Revert_abort t
+Proof
+  strip_tac >> drule_all compile_abi_dec_addr_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st addr_st) s = OK s1` >>
+  `inst_extends st addr_st` by
+    (Cases_on `base_op = Lit 0w` >>
+     gvs[compile_abi_dec_addr_def, comp_return_def, inst_extends_refl] >>
+     metis_tac[inst_extends_emit_op]) >>
+  `abi_decode_load MLOAD (n2w (B+sb) : bytes32) s1 = n2w c` by
+    gvs[abi_decode_load_def, abi_decode_source_def, mload_def] >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule abi_decode_count_guard_shape >> strip_tac >>
+  drule abi_decode_dynarray_payload_guard_shape >> strip_tac >>
+  Cases_on `c <= maxn`
+  >- suspend "payload"
+  >> suspend "count"
+QED
+
+Resume extcall_decoder_array_tail_reject_run[count]:
+  `maxn < w2n (abi_decode_load MLOAD (n2w (B+sb) : bytes32) s1)` by
+    simp[w2n_n2w] >>
+  drule_all extcall_decoder_count_guard_reject_run >> strip_tac >>
+  `!u. run_inst_seq (emitted_insts addr_st count_st) s1 <> OK u` by simp[] >>
+  `run_inst_seq (emitted_insts addr_st fin) s1 = Abort Revert_abort t` by
+    (drule_all run_inst_seq_emit_extend_err >> simp[]) >>
+  `inst_extends addr_st fin` by metis_tac[inst_extends_trans] >>
+  drule_all (Q.SPECL [`st`,`addr_st`,`fin`] run_inst_seq_emit_extend) >>
+  simp[] >> metis_tac[]
+QED
+
+Resume extcall_decoder_array_tail_reject_run[payload]:
+  drule_all abi_decode_count_guard_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts addr_st count_st) s1 = OK s2` >>
+  `eval_operand head s2 = SOME (n2w (sb+32)) /\
+   eval_operand hi s2 = SOME (n2w h)` by metis_tac[] >>
+  `sb+32 < dimword(:256) /\ h < sb+32+w2n ((n2w c : bytes32)*n2w asz)` by
+    decide_tac >>
+  drule_all extcall_decoder_array_payload_reject_run >> strip_tac >>
+  `run_inst_seq (emitted_insts st count_st) s = OK s2 /\ inst_extends st count_st` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`s1`,`addr_st`] >> simp[]) >>
+  drule_all run_inst_seq_emit_extend >> simp[] >> metis_tac[]
+QED
+
+Finalise extcall_decoder_array_tail_reject_run
+
+Theorem extcall_decoder_array_prefix_reject_run[local]:
+  abi_decode_dynarray_position_prefix src MLOAD base_op hi maxn asz st = (addr,st') /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\ eval_operand hi s = SOME (n2w h) /\
+  abi_decode_load MLOAD (n2w (B+sb) : bytes32) s = n2w c /\ c < dimword(:256) /\
+  sb < dimword(:256) /\ h < dimword(:256) /\ maxn < dimword(:256) /\
+  ~(sb+32 <= h /\ c <= maxn /\ sb+32+w2n ((n2w c : bytes32)*n2w asz) <= h) /\
+  fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[abi_decode_dynarray_position_prefix_trace] >> strip_tac >>
+  `inst_extends head_st addr_st` by
+    (Cases_on `base_op = Lit 0w` >>
+     gvs[compile_abi_dec_addr_def, comp_return_def, inst_extends_refl] >>
+     metis_tac[inst_extends_emit_op]) >>
+  drule abi_decode_bytes_head_shape >> strip_tac >>
+  drule abi_decode_count_guard_shape >> strip_tac >>
+  drule abi_decode_dynarray_payload_guard_shape >> strip_tac >>
+  `inst_extends head_st st'` by metis_tac[inst_extends_trans] >>
+  Cases_on `sb+32 <= h`
+  >- (drule_all abi_decode_bytes_head_sequence >> strip_tac >>
+      rename1 `run_inst_seq (emitted_insts st head_st) s = OK s1` >>
+      `eval_operand src s1 = SOME (n2w sb) /\
+       eval_operand base_op s1 = SOME (n2w B) /\
+       eval_operand hi s1 = SOME (n2w h)` by metis_tac[] >>
+      `abi_decode_load MLOAD (n2w (B+sb) : bytes32) s1 = n2w c` by
+        gvs[abi_decode_load_def, abi_decode_source_def, mload_def] >>
+      `~(c <= maxn /\ sb+32+w2n ((n2w c : bytes32)*n2w asz) <= h)` by simp[] >>
+      drule_all extcall_decoder_array_tail_reject_run >> strip_tac >>
+      drule_all (Q.SPECL [`st`,`head_st`,`st'`] run_inst_seq_emit_extend) >>
+      simp[] >> metis_tac[]) >>
+  `h < sb+32` by decide_tac >>
+  drule_all extcall_decoder_bytes_head_reject_run >> strip_tac >>
+  `!u. run_inst_seq (emitted_insts st head_st) s <> OK u` by simp[] >>
+  drule_all run_inst_seq_emit_extend_err >> simp[] >> metis_tac[]
+QED
+
+Theorem extcall_decoder_array_prefix_bounded_mem_ok[local]:
+  abi_decode_dynarray_position_prefix src MLOAD base_op hi maxn asz st = (addr,st') /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\ eval_operand hi s = SOME (n2w h) /\
+  sb < dimword(:256) /\ h <= P /\ B+P < dimword(:256) /\
+  B+P <= s.vs_alloca_next /\ fresh_vars_wrt st s ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  strip_tac >> Cases_on `sb+32 <= h`
+  >- (`B+sb < dimword(:256) /\ B+sb+32 <= s.vs_alloca_next` by decide_tac >>
+      drule_all extcall_decoder_array_guard_mem_ok >> simp[]) >>
+  qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[abi_decode_dynarray_position_prefix_trace] >> strip_tac >>
+  drule abi_decode_bytes_head_shape >> strip_tac >>
+  drule abi_decode_count_guard_shape >> strip_tac >>
+  drule abi_decode_dynarray_payload_guard_shape >> strip_tac >>
+  `inst_extends head_st addr_st` by
+    (Cases_on `base_op = Lit 0w` >>
+     gvs[compile_abi_dec_addr_def, comp_return_def, inst_extends_refl] >>
+     metis_tac[inst_extends_emit_op]) >>
+  `inst_extends head_st st'` by metis_tac[inst_extends_trans] >>
+  `emitted_insts st st' = emitted_insts st head_st ++ emitted_insts head_st st'` by
+    (irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  `h < dimword(:256) /\ h < sb+32` by decide_tac >>
+  drule_all extcall_decoder_bytes_head_reject_run >> strip_tac >>
+  asm_rewrite_tac[] >> match_mp_tac run_inst_seq_mem_ok_append >>
+  simp[] >> metis_tac[extcall_decoder_bytes_head_mem_ok]
+QED
+
+Theorem extcall_decoder_array_prefix_bounded_success:
+  abi_decode_dynarray_position_prefix src MLOAD base_op hi maxn asz st = (addr,st') /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\ eval_operand hi s = SOME (n2w h) /\
+  sb < dimword(:256) /\ h <= P /\ B+P < dimword(:256) /\
+  B+P <= s.vs_alloca_next /\ maxn < dimword(:256) /\
+  c = w2n (abi_decode_load MLOAD (n2w (B+sb) : bytes32) s) /\
+  sb+32 <= h /\ c <= maxn /\ sb+32+w2n ((n2w c : bytes32)*n2w asz) <= h /\
+  fresh_vars_wrt st s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t. gas_path_mem ctx func s
+        (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st')))
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st st'))) /\
+    eval_operand addr t = SOME (n2w (B+sb)) /\ fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted
+Proof
+  strip_tac >>
+  `h < dimword(:256)` by decide_tac >>
+  `abi_decode_load MLOAD (n2w (B+sb) : bytes32) s = n2w c` by simp[] >>
+  drule_all extcall_decoder_array_prefix_success_run >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts st st') s` by
+    (drule_all extcall_decoder_array_prefix_bounded_mem_ok >> simp[]) >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+  drule_all abi_decoder_guard_sequence_fields >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')` by fs[EVERY_CONJ] >>
+  drule_all run_inst_seq_gas_path_mem >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem extcall_decoder_array_prefix_bounded_reject:
+  abi_decode_dynarray_position_prefix src MLOAD base_op hi maxn asz st = (addr,st') /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\ eval_operand hi s = SOME (n2w h) /\
+  sb < dimword(:256) /\ h <= P /\ B+P < dimword(:256) /\
+  B+P <= s.vs_alloca_next /\ maxn < dimword(:256) /\
+  c = w2n (abi_decode_load MLOAD (n2w (B+sb) : bytes32) s) /\
+  ~(sb+32 <= h /\ c <= maxn /\ sb+32+w2n ((n2w c : bytes32)*n2w asz) <= h) /\
+  fresh_vars_wrt st s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?n t. gas_path_mem ctx func s n (Abort Revert_abort t)
+Proof
+  strip_tac >>
+  `h < dimword(:256)` by decide_tac >>
+  `c < dimword(:256) /\ abi_decode_load MLOAD (n2w (B+sb) : bytes32) s = n2w c`
+    by simp[w2n_lt] >>
+  drule_all extcall_decoder_array_prefix_reject_run >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts st st') s` by
+    (drule_all extcall_decoder_array_prefix_bounded_mem_ok >> simp[]) >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st')` by fs[EVERY_CONJ] >>
   drule_all (SIMP_RULE (srw_ss()) [] (Q.SPEC `T` run_inst_seq_abort_gas_path)) >>
   simp[fragGasModeTheory.gas_marked_path_def] >> metis_tac[]
 QED

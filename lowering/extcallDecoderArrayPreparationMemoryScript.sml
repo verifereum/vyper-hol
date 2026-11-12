@@ -64,6 +64,34 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem extcall_decoder_count_guard_reject_run:
+  abi_decode_count_guard MLOAD src limit st = (count_op,st') /\
+  eval_operand src s = SOME p /\ limit < dimword(:256) /\
+  limit < w2n (abi_decode_load MLOAD p s) /\ fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  qpat_x_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op GT [count_op; Lit (n2w limit)] c1 = (too_many,c2)` >>
+  rename1 `emit_op ISZERO [too_many] c2 = (ok,c3)` >>
+  drule_all abi_decode_read >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  `eval_operand (Lit (n2w limit)) s1 = SOME (n2w limit)` by simp[eval_operand_def] >>
+  drule_all emit_op_GT_correct >> strip_tac >>
+  gvs[w2n_n2w, bool_to_word_def] >>
+  drule_all emit_op_ISZERO_correct >> strip_tac >>
+  gvs[bool_to_word_def] >>
+  drule_all emit_void_ASSERT_revert_full >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  drule_all abi_decode_sequence_chain >> strip_tac >>
+  drule_all abi_decode_sequence_chain >> strip_tac >>
+  drule_all run_inst_seq_emit_extend >> simp[] >> metis_tac[]
+QED
+
 Theorem extcall_decoder_count_guard_reject:
   abi_decode_count_guard MLOAD src limit st = (count_op,st') /\
   eval_operand src s = SOME (n2w p) /\ p < dimword(:256) /\
@@ -79,25 +107,7 @@ Proof
     metis_tac[extcall_decoder_count_guard_mem_ok] >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_count_guard_fragment_shape >> strip_tac >>
-  `?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t` by
-    (qpat_x_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
-          comp_return_def] >>
-     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-     rename1 `emit_op GT [count_op; Lit (n2w limit)] c1 = (too_many,c2)` >>
-     rename1 `emit_op ISZERO [too_many] c2 = (ok,c3)` >>
-     drule_all abi_decode_read >> strip_tac >>
-     rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
-     `eval_operand (Lit (n2w limit)) s1 = SOME (n2w limit)` by simp[eval_operand_def] >>
-     drule_all emit_op_GT_correct >> strip_tac >>
-     gvs[w2n_n2w, bool_to_word_def] >>
-     drule_all emit_op_ISZERO_correct >> strip_tac >>
-     gvs[bool_to_word_def] >>
-     drule_all emit_void_ASSERT_revert_full >> strip_tac >>
-     imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
-     drule_all abi_decode_sequence_chain >> strip_tac >>
-     drule_all abi_decode_sequence_chain >> strip_tac >>
-     drule_all run_inst_seq_emit_extend >> simp[] >> metis_tac[]) >>
+  drule_all extcall_decoder_count_guard_reject_run >> strip_tac >>
   drule_all (SIMP_RULE (srw_ss()) [] (Q.SPEC `T` run_inst_seq_abort_gas_path)) >>
   simp[fragGasModeTheory.gas_marked_path_def] >> metis_tac[]
 QED
