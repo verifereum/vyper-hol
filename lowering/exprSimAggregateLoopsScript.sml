@@ -1599,7 +1599,7 @@ Proof
   disch_then (drule_at (Pat `exprs_case _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
-  disch_then (qspec_then `es` mp_tac) >>
+  disch_then (qspecl_then [`es`, `st0`] mp_tac) >>
   (impl_tac >- (simp[] >> conj_tac >- metis_tac[] >>
     first_assum ACCEPT_TAC)) >>
   strip_tac >> simp[] >>
@@ -1793,11 +1793,12 @@ Proof
   drule_all aggregate_make_tuple_fits_sim >>
   pure_rewrite_tac [type_memory_size_list_replicate] >>
   disch_then strip_assume_tac >> conj_tac >- asm_rewrite_tac[] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
   rpt (pop_assum kall_tac) >>
   pure_rewrite_tac [gas_outcome_def, gas_summary_at_def] >>
   strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >>
       gvs[] >>
       qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -1993,7 +1994,7 @@ Proof
      metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
   `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
   drule_all fn_has_code_split >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `gas_outcome F _ _ _ _ post exitrel` >>
+  qmatch_goalsub_abbrev_tac `gas_outcome F _ _ _ _ _ _ post exitrel` >>
   qabbrev_tac `sh = mstore b (n2w (LENGTH args)) s0 with
     vs_inst_idx := SUC s0.vs_inst_idx` >>
   `gas_marked_path F ctx func s0 0 (OK sh)` by
@@ -2001,13 +2002,14 @@ Proof
      drule emit_mstore_marked_path >>
      disch_then (qspecl_then [`n2w (LENGTH args)`, `n2w b`, `s0`, `func`, `ctx`] mp_tac) >>
      simp[eval_operand_def, Abbr `sh`]) >>
-  `stmt_state_rel H ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
+  `!H. stmt_state_rel H ctx func ce cx es s0 ==>
+   stmt_state_rel H ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
    locals_kept ce es es s0 (mstore b (n2w (LENGTH args)) s0) /\
    mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args) /\
    (!p n. p+n <= b \/ b+32 <= p ==>
      mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
      mem_bytes_at p n s0.vs_memory)` by
-    (irule array_header_store_boundary >>
+    (gen_tac >> strip_tac >> irule array_header_store_boundary >>
      simp[] >> conj_tac
      >- (rpt strip_tac >> first_x_assum drule_all >>
          simp[regions_disjoint_def] >> decide_tac) >>
@@ -2017,10 +2019,18 @@ Proof
    sm.cs_next_id = SUC sa.cs_next_id /\ sm.cs_next_var = sa.cs_next_var` by
     gvs[emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
-  `stmt_state_rel H ctx func ce cx es sh /\ ~sh.vs_halted /\
-   sh.vs_current_bb = sm.cs_current_bb /\
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es sh /\
+       storage_well_formed_on cx es (FST H)` by
+    (gen_tac >> strip_tac >>
+     `stmt_state_rel H ctx func ce cx es s0 /\
+      storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+     `stmt_state_rel H ctx func ce cx es (mstore b (n2w (LENGTH args)) s0)` by
+       metis_tac[] >>
+     asm_simp_tac std_ss [Abbr `sh`, stmt_state_rel_inst_idx]) >>
+  `~sh.vs_halted /\ sh.vs_current_bb = sm.cs_current_bb /\
    sh.vs_inst_idx = LENGTH sm.cs_current_insts` by
-    simp[Abbr `sh`, stmt_state_rel_inst_idx, mstore_def] >>
+    simp[Abbr `sh`, mstore_def] >>
   `local_ptrs_reserved ce sm /\ not_fresh_at sm x /\
    inst.inst_id < sm.cs_next_id` by
     (conj_tac
@@ -2047,10 +2057,11 @@ Proof
      metis_tac[])) >>
   strip_tac >> conj_tac >- simp[] >>
   irule gas_outcome_zero_prefix >> qexists_tac `sh` >> simp[] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
   strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       disj1_tac >> suspend "array_post_transport") >>
   metis_tac[]
@@ -2065,7 +2076,27 @@ Resume aggregate_make_array_sim[array_post_transport]:
   qpat_x_assum `exprs_case _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `~nocalls ==> _` kall_tac >>
   qpat_x_assum `ce.ce_is_ctor ==> _` kall_tac >>
-  gvs[Abbr `post`] >>
+  gvs[Abbr `post`] >> rpt strip_tac >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (`?obs. es_end.storage_trace = es.storage_trace ++ obs` by
+       (qpat_assum `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _`
+          (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+        disch_then (qspec_then `[]` assume_tac) >>
+        drule_at (Pos last) storage_trace_frame_prefix >>
+        simp[evaluate_storage_trace_frame]) >>
+     `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+          valid_horizon cx st0 H es.storage_trace` by
+       simp[valid_horizon_def] >>
+     metis_tac[]) >>
+  `stmt_state_rel H ctx func ce cx es s0` by metis_tac[] >>
+  `locals_kept ce es es s0 (mstore b (n2w (LENGTH args)) s0) /\
+   mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args) /\
+   (!p n. p+n <= b \/ b+32 <= p ==>
+     mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
+     mem_bytes_at p n s0.vs_memory)` by metis_tac[] >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  gvs[] >>
   conj_tac >- suspend "header_word" >>
   conj_tac >- suspend "variables" >>
   conj_tac >- suspend "allocas" >>
