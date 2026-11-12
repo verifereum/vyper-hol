@@ -172,8 +172,8 @@ Theorem outcomes_free_builtin_generators[local]:
       (?vt. type_place_expr env e = SOME vt)) /\
     ~supported_expr_exists constructor_call_root e /\ Q s ==>
     Q (SND (f ce ty e s))) ==>
-  !env args ce rt ty bi s. well_typed_expr env (Builtin ty bi args) /\
-    ~supported_expr_exists constructor_call_root (Builtin ty bi args) /\ Q s ==>
+  !env args ce rt ty bi ety s. well_typed_expr env (Builtin ety bi args) /\
+    ~supported_expr_exists constructor_call_root (Builtin ety bi args) /\ Q s ==>
     Q (SND (compile_builtin_dispatch_body f ce rt ty bi args s))
 Proof
   strip_tac >> gvs[] >> rpt gen_tac >> strip_tac >>
@@ -273,9 +273,9 @@ Theorem outcomes_free_type_generators[local]:
       (?vt. type_place_expr env e = SOME vt)) /\
     ~supported_expr_exists constructor_call_root e /\ Q s ==>
     Q (SND (f ce ty e s))) ==>
-  !env args ce rt ty tb target_ty s.
-    well_typed_expr env (TypeBuiltin ty tb target_ty args) /\
-    ~supported_expr_exists constructor_call_root (TypeBuiltin ty tb target_ty args) /\ Q s ==>
+  !env args ce rt ty tb target_ty ety s.
+    well_typed_expr env (TypeBuiltin ety tb target_ty args) /\
+    ~supported_expr_exists constructor_call_root (TypeBuiltin ety tb target_ty args) /\ Q s ==>
     Q (SND (compile_type_builtin_dispatch_body f ce rt ty tb target_ty args s))
 Proof
   strip_tac >> gvs[] >> rpt gen_tac >> strip_tac >>
@@ -304,3 +304,90 @@ Resume outcomes_free_type_generators[encode]:
   metis_tac[outcomes_free_typed_children]
 QED
 Finalise outcomes_free_type_generators
+
+Theorem outcomes_free_expr_rank[local]:
+  Q = (\s. EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
+    i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\
+    i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE) (state_insts s)) ==>
+  !n.
+  (!e env ce ty s. 2 * expr_size e + 2 = n /\
+    (well_typed_expr env e \/ (?vt. type_place_expr env e = SOME vt)) /\
+    ~supported_expr_exists constructor_call_root e /\ Q s ==>
+    Q (SND (compile_expr ce ty e s))) /\
+  (!args env ce rt ty bi ety s. 2 * list_size expr_size args + 1 = n /\
+    well_typed_expr env (Builtin ety bi args) /\
+    ~supported_expr_exists constructor_call_root (Builtin ety bi args) /\ Q s ==>
+    Q (SND (compile_builtin_dispatch ce rt ty bi args s))) /\
+  (!args env ce rt ty tb target_ty ety s. 2 * list_size expr_size args + 1 = n /\
+    well_typed_expr env (TypeBuiltin ety tb target_ty args) /\
+    ~supported_expr_exists constructor_call_root (TypeBuiltin ety tb target_ty args) /\ Q s ==>
+    Q (SND (compile_type_builtin_dispatch ce rt ty tb target_ty args s)))
+Proof
+  disch_tac >> completeInduct_on `n` >> conj_tac
+  >- suspend "expr" >> conj_tac
+  >- suspend "builtin" >> suspend "type"
+QED
+
+Resume outcomes_free_expr_rank[expr]:
+  rpt gen_tac >> disch_tac >> pure_once_rewrite_tac [cj 1 compile_expr_raw_def] >>
+  irule outcomes_free_expr_generators >>
+  conj_tac >- (metis_tac[]) >>
+  conj_tac >- suspend "expr_callback" >>
+  conj_tac >- suspend "builtin_callback" >>
+  conj_tac >- suspend "type_callback" >> metis_tac[]
+QED
+
+Resume outcomes_free_expr_rank[builtin]:
+  rpt gen_tac >> strip_tac >> pure_once_rewrite_tac [cj 2 compile_expr_raw_def] >>
+  irule outcomes_free_builtin_generators >>
+  conj_tac >- (metis_tac[]) >>
+  conj_tac >- suspend "builtin_expr_callback" >> metis_tac[]
+QED
+
+Resume outcomes_free_expr_rank[type]:
+  rpt gen_tac >> strip_tac >> pure_once_rewrite_tac [cj 3 compile_expr_raw_def] >>
+  pure_rewrite_tac [COND_CLAUSES] >> irule outcomes_free_type_generators >>
+  conj_tac >- (metis_tac[]) >>
+  conj_tac >- suspend "type_expr_callback" >> metis_tac[]
+QED
+
+Resume outcomes_free_expr_rank[expr_callback]:
+  rpt gen_tac >> disch_tac >>
+  pure_rewrite_tac [expr_child_callback_def] >> BETA_TAC >> IF_CASES_TAC
+  >- (qpat_x_assum `!m. _` (qspec_then `2 * expr_size e' + 2` mp_tac) >>
+      (impl_tac >- (gvs[])) >> disch_then (mp_tac o cj 1) >> metis_tac[]) >>
+  gvs[] >> simp[outcomes_free_invalid_expr_call]
+QED
+Resume outcomes_free_expr_rank[builtin_callback]:
+  rpt gen_tac >> disch_tac >>
+  pure_rewrite_tac [builtin_child_callback_def] >> BETA_TAC >> IF_CASES_TAC
+  >- (qpat_x_assum `!m. _`
+        (qspec_then `2 * list_size expr_size args + 1` mp_tac) >>
+      (impl_tac >- (gvs[])) >> disch_then (mp_tac o cj 2) >> metis_tac[]) >>
+  gvs[] >> simp[outcomes_free_invalid_expr_call]
+QED
+Resume outcomes_free_expr_rank[type_callback]:
+  rpt gen_tac >> disch_tac >>
+  pure_rewrite_tac [type_child_callback_def] >> BETA_TAC >> IF_CASES_TAC
+  >- (qpat_x_assum `!m. _`
+        (qspec_then `2 * list_size expr_size args + 1` mp_tac) >>
+      (impl_tac >- (gvs[])) >> disch_then (mp_tac o cj 3) >> metis_tac[]) >>
+  gvs[] >> simp[outcomes_free_invalid_expr_call]
+QED
+Resume outcomes_free_expr_rank[builtin_expr_callback]:
+  rpt gen_tac >> disch_tac >>
+  pure_rewrite_tac [expr_child_callback_def] >> BETA_TAC >> IF_CASES_TAC
+  >- (rename1 `compile_expr ce ty e st` >>
+      qpat_x_assum `!m. _` (qspec_then `2 * expr_size e + 2` mp_tac) >>
+      (impl_tac >- (gvs[])) >> disch_then (mp_tac o cj 1) >> metis_tac[]) >>
+  gvs[] >> simp[outcomes_free_invalid_expr_call]
+QED
+Resume outcomes_free_expr_rank[type_expr_callback]:
+  rpt gen_tac >> disch_tac >>
+  pure_rewrite_tac [expr_child_callback_def] >> BETA_TAC >> IF_CASES_TAC
+  >- (rename1 `compile_expr ce ty e st` >>
+      qpat_x_assum `!m. _` (qspec_then `2 * expr_size e + 2` mp_tac) >>
+      (impl_tac >- (gvs[])) >> disch_then (mp_tac o cj 1) >> metis_tac[]) >>
+  gvs[] >> simp[outcomes_free_invalid_expr_call]
+QED
+Finalise outcomes_free_expr_rank
