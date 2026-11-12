@@ -423,38 +423,6 @@ Proof
   cheat
 QED
 
-(* TEMPORARILY CHEATED - its proof went through compile_slice_calldata_runtime,
-   whose old-order statement is false under 0.5.0b1; statement unchanged and true.
-Proof
-  strip_tac >>
-  drule_all compile_slice_calldata_runtime >>
-  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
-  qpat_x_assum `out = Var r` SUBST_ALL_TAC >>
-  qpat_x_assum `data = Var p` SUBST_ALL_TAC >>
-  `run_inst_seq (emitted_insts s2 s3) v =
-    Abort Revert_abort (revert_state (set_returndata [] q))` by simp[] >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s2 s3)` by
-    (drule compile_assert_slice_bounds_layout >> strip_tac >>
-     simp[mk_inst_def, is_terminator_def]) >>
-  `run_inst_seq (emitted_insts s2 s3) (v with vs_inst_idx := SUC t.vs_inst_idx) =
-    Abort Revert_abort ((revert_state (set_returndata [] q)) with
-      vs_inst_idx := SUC t.vs_inst_idx)` by
-    simp[fragExecTheory.run_inst_seq_inst_idx, exec_result_map_def] >>
-  `!op. MEM op [start;Lit (n2w n)] ==>
-    op_prov G op = NONE /\ op_taint tn op = {}` by
-    (rpt gen_tac >> simp[] >>
-     strip_tac >> gvs[] >> simp[op_prov_def, op_taint_def]) >>
-  `eval_operand (Lit (n2w n)) s = SOME (n2w n)` by simp[eval_operand_def] >>
-  qpat_x_assum `v = _` SUBST_ALL_TAC >>
-  `!op z. MEM op [start;Lit (n2w n)] /\ op = Var z ==> not_fresh_at sa z` by
-    (rpt strip_tac >> gvs[MEM] >> metis_tac[]) >>
-  drule_all compile_slice_calldata_bounds_abort >>
-  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (Abort _ _)`
-    (irule_at Any) >> simp[]
-QED
-*)
-(* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-train16-unit, built at fc54ea89e *)
 Theorem compile_slice_calldata_revert:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
@@ -474,7 +442,49 @@ Theorem compile_slice_calldata_revert:
       op_taint tm (Var x) = op_taint tn (Var x)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
-  cheat
+  strip_tac >> drule compile_slice_calldata_stages >> strip_tac >>
+  `!z. start = Var z ==> not_fresh_at sa z` by metis_tac[] >>
+  drule_all calldata_size_reserved_runtime >>
+  disch_then (qspec_then `s` strip_assume_tac) >>
+  `limit = Var (STRING #"%" (toString sa.cs_next_var)) /\
+   s1.cs_next_var = SUC sa.cs_next_var` by
+    (qpat_x_assum `emit_op CALLDATASIZE _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >> gvs[]) >>
+  `!z. start = Var z ==> not_fresh_at s1 z` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[]) >>
+  `not_fresh_at s1 (STRING #"%" (toString sa.cs_next_var))` by
+    simp[not_fresh_at_def] >>
+  `!op z. MEM op [start;Lit (n2w n);limit] /\ op = Var z ==> not_fresh_at s1 z` by
+    (rw[] >> gvs[]) >>
+  `eval_operand start u = SOME (n2w a)` by simp[] >>
+  `eval_operand (Lit (n2w n)) u = SOME (n2w n)` by simp[eval_operand_def] >>
+  drule_all slice_bounds_reserved_natural_runtime >> strip_tac >>
+  `run_inst_seq (emitted_insts s1 s2) u =
+    Abort Revert_abort (revert_state (set_returndata [] p))` by
+    (qpat_x_assum `run_inst_seq (emitted_insts s1 s2) u = _` mp_tac >>
+     qpat_assum `dimword (:256) <= a + n \/ _` (fn th => simp[th])) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts s1 s2)` by
+    (drule compile_assert_slice_bounds_layout >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  `run_inst_seq (emitted_insts s1 s2) (u with vs_inst_idx := SUC s.vs_inst_idx) =
+    Abort Revert_abort ((revert_state (set_returndata [] p)) with
+      vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[fragExecTheory.run_inst_seq_inst_idx, exec_result_map_def] >>
+  qpat_x_assum `u = _` SUBST_ALL_TAC >>
+  `!op. MEM op [start;Lit (n2w n)] ==>
+    op_prov G op = NONE /\ op_taint tn op = {}` by
+    (rpt gen_tac >> simp[] >>
+     strip_tac >> gvs[] >> simp[op_prov_def, op_taint_def]) >>
+  `eval_operand (Lit (n2w n)) s = SOME (n2w n)` by simp[eval_operand_def] >>
+  `!op z. MEM op [start;Lit (n2w n)] /\ op = Var z ==> not_fresh_at sa z` by
+    (rpt strip_tac >> gvs[MEM] >> metis_tac[]) >>
+  drule_all compile_slice_calldata_bounds_abort >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (Abort _ _)`
+    (irule_at Any) >> simp[]
 QED
 
 (* Source rejects zero length, even though the bounds-only suffix accepts it.
