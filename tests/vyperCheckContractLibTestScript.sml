@@ -1219,7 +1219,7 @@ fun mutability_modules vis mut nr dflts ret body =
        EventDecl "E" [];
        ^(helper ``Pure`` "pure_h"); ^(helper ``View`` "view_h");
        ^(helper ``Nonpayable`` "np_h"); ^(helper ``Payable`` "pay_h");
-       FunctionDecl ^vis ^mut ^nr F "f"
+       FunctionDecl ^vis ^mut ^nr F ^(if aconv vis ``Deploy`` then ``"__init__"`` else ``"f"``)
          [("a", BaseT AddressT); ("n", BaseT (UintT 256))] ^dflts ^ret
          ^body])] : (num option # toplevel list) list``
 
@@ -1844,7 +1844,8 @@ val () = List.app (fn in_deploy =>
 
 (* Vyper reports NamespaceCollision for repeated self members, independently
    of function visibility, variable visibility, declaration order or mode.
-   Renaming only the second member makes each control acceptable. *)
+   Renaming only the second member makes each control acceptable. A `@deploy`
+   function is always `__init__`, so deploy visibility is not varied here. *)
 fun self_member_function vis name =
   ``FunctionDecl ^vis Nonpayable F F ^name [] [] NoneT []``
 
@@ -1876,7 +1877,7 @@ val () = List.app (fn in_deploy =>
        (self_member_function vis, variable))
        [self_member_variable ``Private``, self_member_variable ``Public F``,
         self_member_hashmap ``Private``, self_member_hashmap ``Public F``])
-       [``Internal``, ``External``, ``Deploy``]))) [false, true]
+       [``Internal``, ``External``]))) [false, true]
 
 val () = cv_auto_trans contract_namespaces_ok_def;
 
