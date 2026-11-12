@@ -41,10 +41,10 @@ End
 
 (* Why: FmpLowering moves DALLOCA addresses, so no pointer may become
    observable (MEMTOP, storing, hashing or combining it with a label), and
-   the FMP opcodes must be absent.  fn_ptr_ok's phi_pv_all_var, ALLOCA
-   store disjointness, forced positions and definition classification
-   are dropped: ConcretizeMemLoc can't keep them, and FmpLowering doesn't
-   need them. *)
+   the FMP opcodes must be absent.  fn_ptr_ok's phi_pv_all_var and
+   definition classification are dropped because ConcretizeMemLoc can't
+   keep them; its forced positions and ALLOCA store disjointness because
+   FmpLowering doesn't need them. *)
 Definition fn_static_ptr_ok_def:
   fn_static_ptr_ok P fn <=>
     (!inst. MEM inst (fn_insts fn) ==>

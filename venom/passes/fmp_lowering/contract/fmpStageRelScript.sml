@@ -1,6 +1,8 @@
 (*
  * FmpLowering's stage simulation relation, between a source state of the
- * raw context (run at fmp, never reclaims) and a target state of the
+ * raw context (run at fmp; it never reclaims within a frame, but a
+ * caller's later DALLOCA reuses a returned callee's addresses, since the
+ * caller keeps its own vs_fmp) and a target state of the
  * lowered context (threads a runner through BUMP and INVOKE, reclaims at
  * the restores).  Definitions only: establishing and preserving the
  * relation are the later pieces' obligations.
@@ -112,9 +114,11 @@ Definition fmp_params_rel_def:
 End
 
 (* Why: fmp_restore_contract needs fmp_base_covers for the provenance "v
-   points into an own site of sm made by DALLOCA id"; argon's change 2
-   scopes it to the frame's own sites, at or above its entry fmp eb, and
-   below its runner lo (a callee's sites are above its caller's lo). *)
+   points into an own site of sm made by DALLOCA id".  Only the frame's
+   own sites are covered, those at or above its entry fmp eb and below
+   its runner lo: a callee receives its caller's pointers through PARAM,
+   which its own analysis doesn't trace, and its sites lie above its
+   caller's lo. *)
 Definition fmp_frame_covers_def:
   fmp_frame_covers (sm : (num # num) |-> (num # num)) env (eb:num) (lo:num) G <=>
     !v b z c id.
