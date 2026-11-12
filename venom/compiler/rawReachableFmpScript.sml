@@ -17,13 +17,6 @@ Ancestors
   frameAllocationEffects ctxLookupAgreeHelpers ptrDiscipline
   o1PassContract list
 
-Theorem enters_block_fmp[local]:
-  enters_block fn s t ==> t.vs_fmp = s.vs_fmp
-Proof
-  rw[enters_block_def] >> drule eval_phis_only_updates_vs_vars >>
-  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
-QED
-
 Theorem step_inst_base_terminator_fmp[local]:
   is_terminator inst.inst_opcode /\ step_inst_base inst s = OK t ==>
   t.vs_fmp = s.vs_fmp
@@ -118,7 +111,11 @@ Theorem raw_reachable_fmp_fixed:
 Proof
   ho_match_mp_tac raw_reachable_ind >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >> strip_tac >>
-      drule enters_block_fmp >> simp[] >> metis_tac[lookup_function_MEM])
+      qpat_x_assum `enters_block _ _ _`
+        (strip_assume_tac o REWRITE_RULE [enters_block_def]) >>
+      drule eval_phis_only_updates_vs_vars >>
+      disch_then (mp_tac o AP_TERM (Term `\u:venom_state. u.vs_fmp`)) >>
+      simp[] >> strip_tac >> simp[] >> metis_tac[lookup_function_MEM])
   >- (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
       `pre_fmp_ops fn` by gvs[EVERY_MEM] >>
       `EVERY (\i. pre_fmp_opcode i.inst_opcode) (fn_insts fn) /\
@@ -130,12 +127,20 @@ Proof
       >- (drule_all invoke_fmp_fixed >> simp[]) >>
       gvs[step_inst_non_invoke] >> drule_all step_inst_base_fmp_fixed >> simp[])
   >- (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-      drule enters_block_fmp >>
+      qpat_x_assum `enters_block _ _ _`
+        (strip_assume_tac o REWRITE_RULE [enters_block_def]) >>
+      drule eval_phis_only_updates_vs_vars >>
+      disch_then (mp_tac o AP_TERM (Term `\u:venom_state. u.vs_fmp`)) >>
+      simp[] >> strip_tac >>
       `inst.inst_opcode <> INVOKE` by
         (strip_tac >> gvs[is_terminator_def]) >>
       gvs[step_inst_non_invoke] >>
       drule_all step_inst_base_terminator_fmp >> simp[])
   >> rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  drule enters_block_fmp >> drule setup_callee_frame >> simp[] >>
+  qpat_x_assum `enters_block _ _ _`
+        (strip_assume_tac o REWRITE_RULE [enters_block_def]) >>
+      drule eval_phis_only_updates_vs_vars >>
+      disch_then (mp_tac o AP_TERM (Term `\u:venom_state. u.vs_fmp`)) >>
+      simp[] >> strip_tac >> drule setup_callee_frame >> simp[] >>
   metis_tac[lookup_function_MEM]
 QED
