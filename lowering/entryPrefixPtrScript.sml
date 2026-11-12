@@ -103,6 +103,26 @@ Proof
        phi_prefix_length_def, FIND_thm] >> gvs[FIND_thm]
 QED
 
+Theorem dispatch_ptr_path_invariant[local]:
+  !D lo ctx fn PG G tn s n G' tn' r.
+    gas_path_ptr D lo ctx fn PG G tn s n G' tn' r ==>
+    !P t. r = OK t /\ P s G tn /\
+      (!a A atn b B btn k.
+        P a A atn /\
+        gas_path_ptr_edge D lo ctx fn PG A atn a k B btn (OK b) ==>
+        P b B btn) ==>
+      P t G' tn'
+Proof
+  ho_match_mp_tac fragGasPathPtrTheory.gas_path_ptr_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[]) 
+  >- (rpt strip_tac >>
+      qpat_x_assum `!Q z. r = OK z /\ _ ==> _`
+        (qspec_then `P` mp_tac) >>
+      disch_then (qspec_then `t` irule) >>
+      simp[] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[exit_result_def]
+QED
+
 Theorem ptr_safe_jump_exact_continuation:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
