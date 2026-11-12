@@ -24,7 +24,7 @@ Ancestors
   contextPlanLayoutProps unitMemInv stepWriteFootprint o1PassContract
   contextRawReachable codegenEncodingWf spillWordBounds symbolResolve asmWf
   memSafeRun lowerDloadDefs
-  frameRel codegenRel
+  frameRel codegenRel asmOptNonemptyFinalizer
 
 (* L1 for the optimizer: the runtime is the optimized assembly of the O1
    output's generated assembly. *)
@@ -62,7 +62,9 @@ Theorem compile_vyper_runtime_nonempty_asm_opt:
   compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
   runtime_bc <> []
 Proof
-  cheat
+  strip_tac >> drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
+  gvs[] >> irule codegen_assembly_finalizer_nonempty >>
+  goal_assum (drule_at Any) >> metis_tac[]
 QED
 
 (* es's entry state with prog's code and labels: prog's code followed by
