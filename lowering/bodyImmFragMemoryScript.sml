@@ -159,7 +159,7 @@ Resume compile_for_immutable_frag_mem_from_outcome[source_prefix]:
        [] (INL (MAP Value vs)) es (OK s0)` by
        (simp[gas_marked_exec_def, gas_marked_path_def] >>
         irule (cj 1 gas_path_mem_rules) >> simp[]) >>
-     drule gas_exempt_cert_bind_values >>
+     drule gas_exempt_cert_bind_results >>
      simp[] >> disch_then irule >>
      simp[check_def, compatible_bound_def, vyperStateTheory.assert_def, bind_return,
        GSYM ignore_bind_def] >>

@@ -365,7 +365,7 @@ Theorem immutable_prepared_loop_outcome_mem:
         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
 Proof
   strip_tac >>
-  ho_match_mp_tac stmtSimForRoundsTheory.eval_for_rounds >>
+  ho_match_mp_tac stmtSimForRoundsTheory.eval_for_value_rounds >>
   conj_tac >- suspend "round" >> suspend "last"
 QED
 
