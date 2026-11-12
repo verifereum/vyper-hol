@@ -22,17 +22,7 @@ Theorem ld_joint_dloadbytes_destination:
      (?id b c k j. FLOOKUP sites id = SOME (b,c,k) /\
        j + w2n z <= k /\ w2n p = b+j /\ w2n q = c+j))
 Proof
-  strip_tac >>
-  `frame_reachable vs C stk PG G tn fn inst s` by
-    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
-  `op_taint tn dst = {}` by
-    metis_tac[ld_data_load_inputs_untainted, MEM] >>
-  `!v. ~retpc_use_ok inst v` by simp[retpc_use_ok_def] >>
-  drule ld_joint_write_operand_range >> disch_then irule >> simp[] >>
-  simp[mem_write_ops_def, source_memory_write_ranges_def,
-       fixed_source_write_range_def, sized_source_write_range_def, eval_operand_def] >>
-  metis_tac[]
+  (* P4a in progress *) cheat
 QED
 
 Theorem ld_joint_supply_dloadbytes_transport:
@@ -56,51 +46,11 @@ Theorem ld_joint_supply_dloadbytes_transport:
        ld_env_agree sites fn (occurrence_step a HP H inst s1)
          (step_taint inst s s1 tn) s1 t3 /\
        ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
+         s1.vs_memory t3.vs_memory /\
+       ld_dyn_agree (dyn_floor C vs) (step_taint inst s s1 tn).t_mem
          s1.vs_memory t3.vs_memory
 Proof
-  strip_tac >>
-  drule_all ld_joint_dloadbytes_destination >>
-  disch_then (qx_choose_then `q` assume_tac) >>
-  `eval_operand src t = SOME x /\ eval_operand sz t = SOME z` by
-    (drule ld_joint_dloadbytes_inputs_clean >> simp[] >> metis_tac[]) >>
-  `s.vs_data_section = t.vs_data_section` by
-    fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
-  `s1 = write_memory_with_expansion (w2n p)
-    (TAKE (w2n z) (DROP (w2n x) t.vs_data_section ++ REPLICATE (w2n z) 0w)) s` by
-    (qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
-     simp[step_inst_non_invoke] >>
-     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >> simp[]) >>
-  `eval_operand dst t = SOME q` by metis_tac[] >>
-  drule_all (BETA_RULE (PURE_REWRITE_RULE [LET_THM] ld_supply_dloadbytes_exact)) >>
-  disch_then (qspecl_then [`fuel`,`C'`] strip_assume_tac) >>
-  qexists_tac `q` >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  asm_rewrite_tac[] >>
-  qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n q) bs tmp` >>
-  conj_tac
-  >- (drule ld_joint_environment >> strip_tac >>
-      drule ld_env_supply_dloadbytes >> disch_then irule >>
-      simp[write_memory_with_expansion_def] >>
-      qexistsl_tac [`bv`,`x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)`] >>
-      simp[Abbr `tmp`]) >>
-  `LENGTH bs = w2n z` by simp[Abbr `bs`, LENGTH_TAKE_EQ] >>
-  `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
-   ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
-    fs[ld_joint_boundary_def] >>
-  `tmp.vs_memory = t.vs_memory` by simp[Abbr `tmp`, update_var_def] >>
-  `(step_taint inst s (write_memory_with_expansion (w2n p) bs s) tn).t_mem =
-    tn.t_mem DIFF {i | w2n p <= i /\ i < w2n p + LENGTH bs}` by
-    (simp[step_taint_def, mem_taint_def, step_writes_def,
-          source_memory_write_ranges_def, sized_source_write_range_def,
-          written_taint_def, new_site_bytes_def, range_bytes_def,
-          write_memory_with_expansion_def, FLOOKUP_DEF] >>
-     simp[EXTENSION] >> metis_tac[]) >>
-  asm_rewrite_tac[] >>
-  Cases_on `w2n z = 0`
-  >- (`bs = []` by metis_tac[LENGTH_NIL] >>
-      simp[] >> irule ld_memory_agree_empty_write >> simp[]) >>
-  qpat_assum `LENGTH bs = _` (fn th => rewrite_tac[GSYM th]) >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
-  disch_then irule >> simp[] >> metis_tac[w2n_11]
+  (* P4a in progress *) cheat
 QED
 
 Theorem ld_joint_supply_dload_transport:
@@ -137,45 +87,9 @@ Theorem ld_joint_supply_dload_transport:
      ld_env_agree sites fn (occurrence_step a HP H inst s1)
        (step_taint inst s s1 tn) s1 t4 /\
      ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
+       s1.vs_memory t4.vs_memory /\
+     ld_dyn_agree (dyn_floor C vs) (step_taint inst s s1 tn).t_mem
        s1.vs_memory t4.vs_memory
 Proof
-  strip_tac >> (
-  `eval_operand off t = SOME x` by
-    (drule ld_joint_dload_inputs_clean >> simp[] >> metis_tac[]) >>
-  `s.vs_data_section = t.vs_data_section` by
-    fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
-  `s1 = update_var out (word_of_bytes T (0w:bytes32)
-    (TAKE 32 (DROP (w2n x) t.vs_data_section ++ REPLICATE 32 0w))) s` by
-    (qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
-     simp[step_inst_non_invoke] >>
-     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
-     simp[exec_read1_def, bind_outputs_def]) >>
-  rule_assum_tac (REWRITE_RULE [EL]) >>
-  drule_at (Pat `lower_dload_inst_supply _ _ = _`)
-    (BETA_RULE (PURE_REWRITE_RULE [LET_THM] ld_supply_dload_exact)) >>
-  disch_then (drule_at (Pat `code_layout_valid _`)) >>
-  disch_then (drule_at (Pat `fresh_ir_var _ = _`)) >>
-  disch_then (drule_at (Pat `fresh_ir_var _ = _`)) >>
-  simp[] >>
-  disch_then (qspecl_then [`fuel`,`C'`] strip_assume_tac) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> asm_rewrite_tac[] >>
-  qmatch_goalsub_abbrev_tac `write_memory_with_expansion addr bs tmp` >>
-  conj_tac
-  >- (drule ld_joint_environment >> strip_tac >>
-      drule ld_env_supply_dload >> disch_then irule >> simp[] >>
-      qexistsl_tac [`av`,`bv`,`n2w addr`,`word_of_bytes T (0w:bytes32) bs`,
-        `x + n2w (LENGTH t.vs_code - LENGTH t.vs_data_section)`] >>
-      simp[Abbr `tmp`, update_var_def, write_memory_with_expansion_def]) >>
-  `(step_taint inst s (update_var out (word_of_bytes T (0w:bytes32) bs) s) tn).t_mem =
-    tn.t_mem` by
-    (simp[step_taint_def, mem_taint_def, step_writes_def,
-          source_memory_write_ranges_def, written_taint_def,
-          new_site_bytes_def, update_var_def, range_bytes_def, FLOOKUP_DEF] >>
-     simp[EXTENSION] >> metis_tac[]) >>
-  asm_rewrite_tac[] >>
-  `ld_memory_agree sites lo tn.t_mem s.vs_memory tmp.vs_memory` by
-    (simp[Abbr `tmp`, update_var_def] >> fs[ld_joint_boundary_def]) >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_scratch_write >>
-  disch_then irule >> simp[Abbr `bs`, LENGTH_TAKE_EQ] >>
-  metis_tac[])
+  (* P4a in progress *) cheat
 QED

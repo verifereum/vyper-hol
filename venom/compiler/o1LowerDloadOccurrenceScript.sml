@@ -196,10 +196,14 @@ Proof
   strip_tac >> Cases_on `op` >>
   simp[op_prov_def, occurrence_param_ok_def] >>
   rename1 `FLOOKUP H v` >>
-  Cases_on `FLOOKUP H v` >>
-  gvs[occurrence_env_ok_def, occurrence_param_ok_def]
-  >- gvs[FLOOKUP_DEF] >>
-  metis_tac[]
+  Cases_on `FLOOKUP H v` >> gvs[occurrence_env_ok_def] >> metis_tac[]
+QED
+
+Theorem first_prov_all_none[local]:
+  !ops. (!op. MEM op ops ==> op_prov H op = NONE) ==> first_prov H ops = NONE
+Proof
+  Induct >> simp[first_prov_def] >> rpt strip_tac >>
+  gvs[DISJ_IMP_THM, FORALL_AND_THM]
 QED
 
 (* At most one operand is a pointer: affine_pointer_ops rules out a
@@ -210,11 +214,20 @@ Theorem occurrence_first_erasure:
              op_prov G o2 <> NONE ==> o1 = o2) ==>
     occurrence_param_ok fl B owners (first_prov H ops) (first_prov G ops)
 Proof
-  Induct >> simp[first_prov_def, occurrence_param_ok_def] >>
-  rpt strip_tac >>
-  drule occurrence_op_erasure >> disch_then (qspec_then `h` mp_tac) >>
-  simp[occurrence_param_ok_def] >> rpt strip_tac >>
-  gvs[occurrence_param_ok_def]
+  Induct >- simp[first_prov_def, occurrence_param_ok_def] >>
+  rpt strip_tac >> simp[first_prov_def] >>
+  `occurrence_param_ok fl B owners (op_prov H h) (op_prov G h)` by
+    metis_tac[occurrence_op_erasure] >>
+  Cases_on `op_prov G h` >> Cases_on `op_prov H h` >> gvs[] >>
+  TRY (gvs[occurrence_param_ok_def] >> NO_TAC) >>
+  TRY (first_x_assum irule >> metis_tac[MEM] >> NO_TAC) >>
+  (`first_prov H ops = NONE` suffices_by (strip_tac >> gvs[]) >>
+      irule first_prov_all_none >> rpt strip_tac >> CCONTR_TAC >>
+      `occurrence_param_ok fl B owners (op_prov H op) (op_prov G op)` by
+        metis_tac[occurrence_op_erasure] >>
+      Cases_on `op_prov H op` >> gvs[occurrence_param_ok_def] >>
+      `op = h` by (qpat_x_assum `!o1 o2. _` irule >> simp[]) >>
+      gvs[])
 QED
 
 Theorem occurrence_set_erasure:
@@ -222,15 +235,19 @@ Theorem occurrence_set_erasure:
   occurrence_env_ok fl B owners (set_prov H outs p) (set_prov G outs q)
 Proof
   rpt strip_tac >>
-  Cases_on `outs`
-  >- (gvs[occurrence_param_ok_def, set_prov_def, occurrence_env_ok_def,
-          FDOM_DRESTRICT, FLOOKUP_DRESTRICT] >> metis_tac[]) >>
-  Cases_on `t` >>
-  gvs[occurrence_param_ok_def, set_prov_def, occurrence_env_ok_def,
-      FDOM_DRESTRICT, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  rename1 `FLOOKUP H key = SOME ident` >>
-  qpat_x_assum `!v id. _` (qspecl_then [`key`, `ident`] mp_tac) >> simp[]
+  `(?out. outs = [out]) \/ !out. outs <> [out]` by metis_tac[] >>
+  gvs[set_prov_def]
+  >- (Cases_on `q` >> TRY (PairCases_on `x`) >> Cases_on `p` >>
+      gvs[occurrence_param_ok_def] >>
+      gvs[occurrence_env_ok_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
+  `(case (outs,p) of ([out],SOME site) => H |+ (out,site)
+      | _ => DRESTRICT H (COMPL (set outs))) = DRESTRICT H (COMPL (set outs)) /\
+   (case (outs,q) of ([out],SOME site) => G |+ (out,site)
+      | _ => DRESTRICT G (COMPL (set outs))) = DRESTRICT G (COMPL (set outs))` by
+    (Cases_on `outs` >> simp[] >> Cases_on `t` >> gvs[] >>
+     Cases_on `p` >> Cases_on `q` >> simp[]) >>
+  gvs[occurrence_env_ok_def, FLOOKUP_DRESTRICT] >> metis_tac[]
 QED
 
 (* The annotation records a history for every derivation, independent of
@@ -283,9 +300,9 @@ QED
 
 Theorem occurrence_out_nonalloca_erasure:
   inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> DALLOCA /\
-  ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
-   !o1 o2. inst.inst_operands = [o1; o2] ==>
-     op_prov G o1 = NONE \/ op_prov G o2 = NONE) /\
+  (MEM inst.inst_opcode [ADD; SUB; ASSIGN] ==>
+   !o1 o2. MEM o1 inst.inst_operands /\ MEM o2 inst.inst_operands /\
+     op_prov G o1 <> NONE /\ op_prov G o2 <> NONE ==> o1 = o2) /\
   occurrence_env_ok fl B owners H G /\
   LIST_REL (occurrence_param_ok fl B owners) HP PG ==>
   occurrence_param_ok fl B owners
@@ -298,17 +315,15 @@ Proof
       >- simp[occurrence_param_ok_def] >>
       Cases_on `h` >> simp[occurrence_param_ok_def] >>
       Cases_on `t` >> simp[occurrence_param_ok_def] >>
-      gvs[LIST_REL_EL_EQN] >>
+      gvs[LIST_REL_EL_EQN] >> rw[] >>
       rename1 `inst.inst_operands = [Lit idx]` >>
-      IF_CASES_TAC
-      >- (qpat_x_assum `!n. _` (qspec_then `w2n idx` mp_tac) >>
-          simp[occurrence_param_ok_def]) >>
+      qpat_x_assum `!n. _` (qspec_then `w2n idx` mp_tac) >>
       simp[occurrence_param_ok_def]) >>
   simp[] >>
   Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
             inst.inst_opcode = ASSIGN` >>
   simp[]
-  >- (irule occurrence_first_erasure >> simp[]) >>
+  >- (irule occurrence_first_erasure >> gvs[]) >>
   simp[occurrence_param_ok_def]
 QED
 
@@ -327,9 +342,7 @@ Theorem occurrence_env_transport:
      MEM (FST id) owners' /\ FLOOKUP B' id = SOME site) ==>
   occurrence_env_ok fl B' owners' H G
 Proof
-  simp[occurrence_env_ok_def] >> rpt strip_tac >>
-  qpat_x_assum `!v id. _` (qspecl_then [`v`, `id`] mp_tac) >>
-  simp[] >> metis_tac[]
+  simp[occurrence_env_ok_def] >> metis_tac[]
 QED
 
 Theorem occurrence_params_transport:
@@ -344,17 +357,17 @@ QED
 
 Theorem occurrence_step_nonalloca_erasure:
   inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> DALLOCA /\
-  ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
-   !o1 o2. inst.inst_operands = [o1; o2] ==>
-     op_prov G o1 = NONE \/ op_prov G o2 = NONE) /\
+  (MEM inst.inst_opcode [ADD; SUB; ASSIGN] ==>
+   !o1 o2. MEM o1 inst.inst_operands /\ MEM o2 inst.inst_operands /\
+     op_prov G o1 <> NONE /\ op_prov G o2 <> NONE ==> o1 = o2) /\
   occurrence_env_ok fl B owners H G /\
   LIST_REL (occurrence_param_ok fl B owners) HP PG ==>
   occurrence_env_ok fl B owners
     (occurrence_step a HP H inst s') (step_prov PG G inst s')
 Proof
   strip_tac >> simp[occurrence_step_def, step_prov_def] >>
-  irule occurrence_set_erasure >>
-  simp[occurrence_out_nonalloca_erasure]
+  irule occurrence_set_erasure >> simp[] >>
+  irule occurrence_out_nonalloca_erasure >> simp[]
 QED
 
 (* A DALLOCA output is untracked in H, and G's new site starts at the old
@@ -365,7 +378,18 @@ Theorem occurrence_step_dalloca_erasure:
   occurrence_env_ok fl B owners
     (occurrence_step a HP H inst s') (step_prov PG G inst s')
 Proof
-  cheat
+  strip_tac >>
+  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  simp[occurrence_step_def, step_prov_def, occurrence_out_def, out_prov_def,
+       set_prov_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, FLOOKUP_UPDATE] >>
+  gvs[occurrence_env_ok_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> TRY (metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `w2n xx + (w2n yy - w2n xx)` >>
+  `w2n xx < dimword (:256) /\ w2n yy < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
+  decide_tac
 QED
 
 Theorem occurrence_alloca_metadata:
@@ -461,6 +485,15 @@ Theorem occurrence_annotation_next:
     (s' with vs_inst_idx := idx)
 Proof
   strip_tac >>
+  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+  `MEM inst.inst_opcode [ADD; SUB; ASSIGN] ==>
+   !o1 o2. MEM o1 inst.inst_operands /\ MEM o2 inst.inst_operands /\
+     op_prov G o1 <> NONE /\ op_prov G o2 <> NONE ==> o1 = o2` by
+    (rpt strip_tac >>
+     qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     gvs[] >>
+     simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()] >>
+     strip_tac >> gvs[] >> metis_tac[]) >>
   `occurrence_allocas_ok B a s` by gvs[occurrence_annotation_ok_def] >>
   `!id site. FLOOKUP B id = SOME site ==>
      FLOOKUP (occurrence_sites_step a B inst s') id = SOME site` by
@@ -472,7 +505,7 @@ Proof
      >- (irule occurrence_sites_step_allocas >> metis_tac[]) >>
      `s'.vs_allocas = s.vs_allocas` by
        (irule step_inst_base_preserves_allocas >> qexists_tac `inst` >>
-        gvs[step_inst_non_invoke]) >>
+        gvs[]) >>
      gvs[occurrence_sites_step_def, occurrence_allocas_ok_def]) >>
   gvs[occurrence_annotation_ok_def] >>
   rpt conj_tac
@@ -484,6 +517,8 @@ Proof
   >- (Cases_on `inst.inst_opcode = ALLOCA`
       >- (irule occurrence_step_alloca_erasure >> simp[] >> metis_tac[]) >>
       simp[occurrence_sites_step_def] >>
+      Cases_on `inst.inst_opcode = DALLOCA`
+      >- (irule occurrence_step_dalloca_erasure >> simp[] >> metis_tac[]) >>
       irule occurrence_step_nonalloca_erasure >> simp[])
   >- (irule occurrence_params_transport >>
       qexistsl_tac [`B`, `a::MAP (\u. u.of_owner) U`] >> simp[]) >>
@@ -586,10 +621,8 @@ Proof
   >- (rpt strip_tac >>
       qpat_x_assum `!id. id IN FDOM B ==> _` (qspec_then `id` mp_tac) >> simp[]) >>
   qpat_x_assum `occurrence_env_ok fl (DRESTRICT B _) _ u.of_prov f.cf_prov` mp_tac >>
-  simp[occurrence_env_ok_def, FDOM_DRESTRICT, FLOOKUP_DRESTRICT] >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!v id. FLOOKUP u.of_prov v = SOME id ==> _`
-    (qspecl_then [`v`, `id`] mp_tac) >> simp[]
+  simp[occurrence_env_ok_def, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem frame_reachable_initial_fmp:
@@ -633,13 +666,35 @@ QED
 
 Resume occ_frame_reachable_annotation[next]:
   rpt gen_tac >> strip_tac >> gvs[] >> strip_tac >>
-  `inst.inst_opcode <> DALLOCA` by
-    (gvs[ctx_has_dalloca_def, EXISTS_MEM] >>
-     `MEM inst (fn_insts fn)` by
-       (qpat_x_assum `active_inst fn inst s` mp_tac >>
-        rw[contextCodegenRelTheory.active_inst_def, venomInstTheory.fn_insts_def,
-           o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
-     metis_tac[]) >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[occ_frame_reachable_projection] >>
+  `MEM inst (fn_insts fn)` by
+    (qpat_x_assum `active_inst fn inst s` mp_tac >>
+     rw[contextCodegenRelTheory.active_inst_def, venomInstTheory.fn_insts_def,
+        o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+  `inst.inst_opcode = DALLOCA ==> dyn_floor C vs <= w2n s.vs_fmp` by
+    (strip_tac >>
+     `ctx_has_dalloca C` by (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+     `allocas_below_fmp s` by metis_tac[ptr_discipline_def] >>
+     `s.vs_initial_fmp = vs.vs_initial_fmp` by metis_tac[frame_reachable_initial_fmp] >>
+     gvs[dyn_floor_def, allocas_below_fmp_def]) >>
+  `(inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
+   !o1 o2. inst.inst_operands = [o1; o2] ==>
+     op_prov G o1 = NONE \/ op_prov G o2 = NONE` by
+    (rpt strip_tac >>
+     `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+       (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+     drule o1LowerDloadGhostTheory.frame_reachable_prov_support >>
+     disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+     `affine_pointer_ops fn (ptr_roots P fn)` by
+       (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
+     `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+       (fs[contextCodegenRelTheory.active_inst_def] >> metis_tac[MEM_EL]) >>
+     qpat_x_assum `affine_pointer_ops _ _`
+       (mp_tac o SRULE [pointerConfinedDefsTheory.affine_pointer_ops_def, LET_THM]) >>
+     disch_then (qspecl_then [`bb`,`inst`,`o1`,`o2`] mp_tac) >> simp[] >>
+     Cases_on `o1` >> Cases_on `o2` >> simp[op_prov_def] >>
+     gvs[FLOOKUP_DEF, SUBSET_DEF, fn_pv_def] >> metis_tac[]) >>
   irule occurrence_annotation_next >> metis_tac[]
 QED
 
@@ -671,6 +726,5 @@ Theorem frame_reachable_occurrence_annotation:
     occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s
 Proof
   strip_tac >> drule frame_reachable_occurrence_lift >> strip_tac >>
-  drule occ_frame_reachable_annotation >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  metis_tac[occ_frame_reachable_annotation]
 QED
