@@ -46,7 +46,8 @@ QED
 
 (* Why it holds: restores sit only at reclaim points (DALLOCA, jumps,
    needs-FMP INVOKEs), none of which lies between p and j, and the root
-   never sits at a RETURNDATACOPY; so the ASSIGNs map one-to-one.
+   never sits at a RETURNDATACOPY; so the ASSIGNs map one-to-one and
+   the target pair is tidx p, tidx j = tidx p + (j - p).
    same_after_assigns is unchanged since the inserted instructions write
    only the runner, fresh temps (the real fn' pins their names) and the
    DALLOCA's own output. *)
@@ -60,7 +61,7 @@ Theorem fmp_stage_forward_lift:
       (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
          (fmp_stage_root infos ctx fn) lbl bb.bb_instructions p)
       (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
-         (fmp_stage_root infos ctx fn) lbl bb.bb_instructions p + (j - p))
+         (fmp_stage_root infos ctx fn) lbl bb.bb_instructions j)
 Proof
   cheat
 QED
