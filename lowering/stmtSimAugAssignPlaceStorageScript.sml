@@ -432,6 +432,8 @@ Proof
       metis_tac[])
   >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
   >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+      qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+      IF_CASES_TAC >> simp[return_def, bind_def, AllCaseEqs()] >> strip_tac >>
       imp_res_tac read_result_state >>
       imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
       qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
@@ -493,6 +495,8 @@ Proof
   >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
   >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
   >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+      qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+      IF_CASES_TAC >> simp[return_def, bind_def, AllCaseEqs()] >> strip_tac >>
       imp_res_tac read_result_state >>
       imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
       qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
