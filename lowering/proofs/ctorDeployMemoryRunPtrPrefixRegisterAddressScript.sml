@@ -12,7 +12,7 @@ Ancestors
   moduleLowering context emitHelper fragExec
   ptrSafeRun ptrDiscipline venomState venomExecSemantics venomInst
   finite_map words arithmetic pred_set list rich_list
-  fragExecMem fragGasOriginPtrLoop
+  fragGasOriginPtrLoop unitTransformDefs memSafeRun
 
 Theorem prefix_register_address_emit_shape:
   emit_op opc ops st = (out,middle) ==>
@@ -108,8 +108,10 @@ Theorem prefix_register_address_emit_origin:
   ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   opc <> INVOKE /\ ~is_terminator opc /\ opc <> GAS /\
-  run_inst_seq_mem_ok
-    [mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]] s /\
+  inst_mem_below_frontier
+    (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]) s /\
+  inst_dload_in_section
+    (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]) s /\
   ptr_safe_step D lo 0 ctx fn PG G tn
     (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]) s /\
   run_inst_seq
@@ -128,8 +130,6 @@ Proof
   `get_instruction bb s.vs_inst_idx =
       SOME (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)])` by
     (gvs[IS_PREFIX_APPEND] >> simp[get_instruction_def, EL_APPEND_EQN]) >>
-  qpat_x_assum `run_inst_seq_mem_ok _ _`
-    (strip_assume_tac o SRULE [run_inst_seq_mem_ok_def]) >>
   `step_inst 0 ctx
      (mk_inst st.cs_next_id opc ops [STRING #"%" (toString st.cs_next_var)]) s =
      OK t` by
