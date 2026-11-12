@@ -10,7 +10,7 @@ Ancestors
 Libs monadsyntax
 
 Theorem annassign_relayout_effect_path[local]:
-  !ctx func cenv cx es s id p sz w inst v stv dtv sc rest a src sty dty sa sb sw.
+  !ctx func cenv cx es s id p sz w inst v stv dtv sc rest a src sty dty sa sb sw st0.
     compile_store_memory cenv src (Var p) dty sty sa = ((),sb) /\
     ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -30,7 +30,9 @@ Theorem annassign_relayout_effect_path[local]:
     w2n w + type_memory_size dtv < dimword (:256) /\
     (w2n sw + type_memory_size stv <= w2n w \/
      w2n w + type_memory_size dtv <= w2n sw) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
@@ -40,9 +42,10 @@ Theorem annassign_relayout_effect_path[local]:
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx
-          (es with scopes :=
-            (sc |+ (id, <|assignable := a; type := dtv; value := v; popped := []|>)) :: rest) t /\
+    ?t. (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx
+             (es with scopes :=
+               (sc |+ (id, <|assignable := a; type := dtv; value := v; popped := []|>)) :: rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -54,6 +57,8 @@ Theorem annassign_relayout_effect_path[local]:
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
   `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
   `!x. Var p = Var x ==> not_fresh_at sa x` by simp[] >>
   drule_all compile_store_memory_relayout_effect >>
@@ -61,7 +66,9 @@ Proof
   `typed_copy_effect ctx func sa sb s t (w2n w) sz` by
     (irule typed_copy_effect_enlarge >> goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `t` >> conj_tac
-  >- (irule stmt_state_rel_declare_copy_effect >> simp[] >>
+  >- (rpt strip_tac >>
+      `stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
+      irule stmt_state_rel_declare_copy_effect >> simp[] >>
       goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
       simp[] >> goal_assum (drule_at (Pat `MEM _ _`)) >> simp[] >>
       fs[local_ptrs_reserved_def, not_local_ptr_def] >> metis_tac[]) >>
@@ -71,7 +78,7 @@ Proof
   reverse conj_tac >- metis_tac[typed_copy_effect_path] >>
   rpt strip_tac >>
   `venomMemDefs$allocas_non_overlapping s` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ s` (strip_assume_tac o
+    (qpat_assum `stmt_state_rel H0 _ _ _ _ _ s` (strip_assume_tac o
        REWRITE_RULE [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
      first_assum ACCEPT_TAC) >>
   `off + z <= w2n w \/ w2n w + sz <= off` by
@@ -85,8 +92,10 @@ QED
 
 Theorem annassign_relayout_store_post_path:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v stv dtv sty dty
-   sc rest a loc bytes.
-    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+   sc rest a loc bytes st0.
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa sb s0 es1 v op s) /\
     post_value_type cenv e = sty /\ sty <> expr_type e /\
     type_widens_to (get_tenv cx) sty (expr_type e) /\
     ~is_word_type sty /\ val_footprint stv v = type_memory_size stv /\
@@ -119,9 +128,10 @@ Theorem annassign_relayout_store_post_path:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
     inst.inst_id < sa.cs_next_id ==>
-    ?t. stmt_state_rel ctx func cenv cx
-          (es1 with scopes :=
-            (sc |+ (id, <|assignable := a; type := dtv; value := v; popped := []|>)) :: rest) t /\
+    ?t. (!H. valid_horizon cx st0 H es1.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx
+             (es1 with scopes :=
+               (sc |+ (id, <|assignable := a; type := dtv; value := v; popped := []|>)) :: rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
@@ -135,6 +145,8 @@ Theorem annassign_relayout_store_post_path:
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `expr_post H0 ctx func cenv cx e es sa sb s0 es1 v op s` by metis_tac[] >>
   `?sw. eval_operand op s = SOME sw /\
       val_in_memory stv v (w2n sw) s.vs_memory /\
       lookup_var p s = SOME w /\
@@ -144,9 +156,13 @@ Proof
       (w2n sw + type_memory_size stv <= w2n w \/
        w2n w + type_memory_size dtv <= w2n sw)` by
     (irule expr_post_reserved_destination_source >> simp[] >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es1 s` by fs[expr_post_def] >>
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es1 s` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       drule >> simp[expr_post_def]) >>
   `not_fresh_at sb p` by
     (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
@@ -161,7 +177,7 @@ Resume annassign_relayout_store_post_path[direct]:
   `compile_store_memory cenv op (Var p) dty sty sb = ((),sf)` by
     gvs[compile_assign_value_def] >>
   drule annassign_relayout_effect_path >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (PtrVar _ _)`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ dty = SOME _`)) >>
@@ -176,9 +192,11 @@ Resume annassign_relayout_store_post_path[direct]:
   >- (rpt strip_tac >>
       `not_fresh_at sb x` by
         (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-      fs[expr_post_def] >> metis_tac[]) >>
+      qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[expr_post_def] >> metis_tac[]) >>
   conj_tac
-  >- (fs[expr_post_def] >> metis_tac[]) >>
+  >- (qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[expr_post_def] >> metis_tac[]) >>
   rpt strip_tac >>
   qpat_assum `!aid off z. _ ==> mem_bytes_at off z t.vs_memory = _`
     (qspecl_then [`aid`, `off`, `z`] mp_tac) >> simp[])
@@ -209,7 +227,7 @@ Resume annassign_relayout_store_post_path[staged]:
    s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
   `type_memory_bytes cenv sty <= type_memory_bytes cenv sty /\
    val_footprint stv v <= type_memory_bytes cenv sty` by simp[] >>
-  drule_all alloc_copy_memory_framed_capacity_path >>
+  drule_all (SRULE [PULL_EXISTS] alloc_copy_memory_framed_capacity_path) >>
   disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
   `lookup_var p u = SOME w /\
    FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n w,sz)` by simp[] >>
@@ -219,7 +237,8 @@ Resume annassign_relayout_store_post_path[staged]:
    (w2n uw + type_memory_size stv <= w2n w \/
     w2n w + type_memory_size dtv <= w2n uw)` by
     (irule aggregate_allocated_source_bounds >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     `stmt_state_rel H0 ctx func cenv cx es1 u` by metis_tac[] >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexistsl_tac [`w2n uw`, `sx.cs_next_id`, `w2n w`, `inst.inst_id`, `sz`, `type_memory_bytes cenv sty`] >> simp[]) >>
   `cs_extends sb ss /\ sb.cs_next_var <= ss.cs_next_var` by
     (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
@@ -232,7 +251,8 @@ Resume annassign_relayout_store_post_path[staged]:
   `!x. Var q = Var x ==> not_fresh_at ss x` by simp[] >>
   `eval_operand (Var q) u = SOME uw` by simp[eval_operand_def] >>
   `compile_store_memory cenv (Var q) (Var p) dty sty ss = ((),sf)` by metis_tac[] >>
-  drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) annassign_relayout_effect_path >>
+  drule_at (Pat `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _`)
+    annassign_relayout_effect_path >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ ss = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (PtrVar _ _)`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
@@ -258,7 +278,8 @@ Resume annassign_relayout_store_post_path[staged]:
      `FLOOKUP u.vs_allocas aid = SOME (off,z)` by metis_tac[] >>
      `aid <> sx.cs_next_id` by simp[] >>
      `venomMemDefs$allocas_non_overlapping u` by
-       (qpat_assum `stmt_state_rel _ _ _ _ _ u` (strip_assume_tac o
+       (`stmt_state_rel H0 ctx func cenv cx es1 u` by metis_tac[] >>
+        qpat_assum `stmt_state_rel H0 _ _ _ _ _ u` (strip_assume_tac o
           REWRITE_RULE [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
         first_assum ACCEPT_TAC) >>
      `off + z <= w2n uw \/ w2n uw + type_memory_bytes cenv sty <= off` by
@@ -283,8 +304,8 @@ Resume annassign_relayout_store_post_path[staged]:
        (qpat_assum `!x. not_fresh_at ss x ==> _` (qspec_then `x` mp_tac) >> simp[]) >>
      simp[]) >>
   qexists_tac `t` >> simp[] >>
-  gnvs[expr_post_def] >> RULE_L_ASSUM_TAC CONJUNCTS >>
-  rpt strip_tac >> metis_tac[]
+  qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 
 Finalise annassign_relayout_store_post_path
