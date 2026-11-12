@@ -475,6 +475,22 @@ QED
 
 Finalise framed_array_represented_suffix_summary
 
+Theorem select_result_summary_no_halt[local]:
+  gas_summary_at F (ctx,func) [] (select_result cx ty pv sb) (ee,s) Q
+    (\res ee' out. expr_exit res out) ==>
+  gas_summary_at F (ctx,func) [] (select_result cx ty pv sb) (ee,s) Q
+    (\res ee' out. expr_exit res out /\ halt_exit cx ee' res out)
+Proof
+  rw[gas_summary_at_def] >>
+  `res <> INR HaltException` by
+    (strip_tac >>
+     qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     gvs[evalNoHaltTheory.select_result_nh]) >>
+  qexistsl_tac [`res`, `es_end`, `r`] >> gvs[halt_exit_def]
+QED
+
 Theorem framed_array_suffix_summary:
   ((?ty. vv_location (FST (compile_expr cenv ty obj sa)) = SOME LocCode) \/
    (?n. bd = Fixed n)) /\
@@ -512,9 +528,10 @@ Theorem framed_array_suffix_summary:
       vv_post ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
         (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
-    (\res ee' outcome. expr_exit res outcome)
+    (\res ee' outcome. expr_exit res outcome /\ halt_exit cx ee' res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule select_result_summary_no_halt >>
   drule_all_then assume_tac expr_body_pre_array_subscript_base >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
   drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>

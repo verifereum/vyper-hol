@@ -832,7 +832,9 @@ Proof
   disch_then assume_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ (start,t)` >>
   irule forced_then_outcome_exec >>
-  conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+  conj_tac
+  >- (rpt strip_tac >> fs[halt_exit_def] >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   qexists_tac `\kv ee u. expr_post ctx func cenv cx idx
     (mid with gas_obs := []) sm sn t ee kv key u /\
     u.vs_current_bb = sn.cs_current_bb /\

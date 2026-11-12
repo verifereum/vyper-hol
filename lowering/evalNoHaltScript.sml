@@ -267,7 +267,7 @@ Proof
   CASE_TAC >> simp nh_base
 QED
 
-Theorem select_result_nh[local]:
+Theorem select_result_nh:
   select_result cx ty pv sb s = (INR HaltException, s') ==> F
 Proof
   Cases_on `pv` >> simp([select_result_def, extend_place_nh] @ nh_base)
