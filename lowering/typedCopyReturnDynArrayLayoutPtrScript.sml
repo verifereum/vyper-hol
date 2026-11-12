@@ -88,3 +88,27 @@ Proof
   `fn_has_code sa sm fn` by metis_tac[fn_has_code_split] >>
   rpt conj_tac >> metis_tac[fn_has_code_split,cs_extends_trans]
 QED
+
+(* Child-entry preservation eligibility, including length and shifted roots. *)
+Theorem typed_copy_dynarray_slow_child_freshness:
+  ~(type_memory_bytes ce de = type_memory_bytes ce se /\ de = se) /\
+  compile_copy_dynarray_typed ce (Var dst) de N (Var src) se sa = ((),sz) /\
+  fn_has_code sa sz fn ==>
+  ?si sj.
+    compile_store_memory_typed ce
+      (Var ("%" ++ toString (sa.cs_next_var+11))) de
+      (Var ("%" ++ toString (sa.cs_next_var+10))) se si = ((),sj) /\
+    (!x. not_fresh_at sa x ==> not_fresh_at si x) /\
+    (!k. k < 12 ==> not_fresh_at si ("%" ++ toString (sa.cs_next_var+k))) /\
+    ALL_DISTINCT ["%" ++ toString (sa.cs_next_var+8);
+                  "%" ++ toString (sa.cs_next_var+9);
+                  "%" ++ toString (sa.cs_next_var+10);
+                  "%" ++ toString (sa.cs_next_var+11)] /\
+    (!x k. not_fresh_at sa x /\ k < 12 ==>
+       x <> "%" ++ toString (sa.cs_next_var+k))
+Proof
+  strip_tac >> drule_all typed_dynarray_child_states >> strip_tac >>
+  qexistsl_tac [`sc`,`ec`] >> simp[] >>
+  rpt strip_tac >> gvs[not_fresh_at_def,ASCIInumbersTheory.toString_inj] >>
+  decide_tac
+QED
