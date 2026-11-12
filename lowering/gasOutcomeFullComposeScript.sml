@@ -408,3 +408,23 @@ Proof
   qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
+
+(* A leaf may assume its input trace has an intrinsic horizon: otherwise the
+   empty-marks bad-storage arm holds, since a framed source keeps a bad
+   prefix bad. *)
+Theorem gas_outcome_full_initial_domain:
+  storage_trace_frame source /\
+  (storage_trace_domain cx st0 es.storage_trace ==>
+   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+     (es, s, G, tn) Q R) ==>
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q R
+Proof
+  strip_tac >>
+  Cases_on `storage_trace_domain cx st0 es.storage_trace` >- fs[] >>
+  rewrite_tac[gas_outcome_full_def] >> qexists_tac `[]` >> disj1_tac >>
+  rw[gas_bad_storage_at_def] >>
+  Cases_on `source (es with gas_obs := tail)` >> simp[] >>
+  `(es with gas_obs := tail).storage_trace = es.storage_trace` by simp[] >>
+  metis_tac[storage_trace_frame_preserves_bad_domain]
+QED
