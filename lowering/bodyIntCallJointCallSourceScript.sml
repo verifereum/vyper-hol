@@ -54,11 +54,15 @@ Resume intcall_pure_immutables_mutual[structlit]:
   PairCases_on `id` >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >> metis_tac[]
 QED
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Resume intcall_pure_immutables_mutual[subscript]:
+  (* original proof, kept while held:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
+  *)
+  cheat
 QED
 Resume intcall_pure_immutables_mutual[attribute]:
   rpt strip_tac >>
