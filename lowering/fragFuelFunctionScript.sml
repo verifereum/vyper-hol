@@ -19,18 +19,6 @@ Ancestors
 Libs
   fragFuelLib
 
-Theorem var_below_le[local]:
-  !n n' x. var_below n x /\ n <= n' ==> var_below n' x
-Proof
-  rw[var_below_def]
-QED
-
-Theorem cenv_ptrs_below_le[local]:
-  !n n' c. cenv_ptrs_below n c /\ n <= n' ==> cenv_ptrs_below n' c
-Proof
-  rw[cenv_ptrs_below_def] >> metis_tac[var_below_le]
-QED
-
 Theorem caps_below_le[local]:
   !n n' caps.
     EVERY (\p. !x. SND (SND p) = Var x ==> var_below n x) caps /\ n <= n' ==>
@@ -48,25 +36,6 @@ Proof
   strip_tac >> conj_tac
   >- (irule cenv_ptrs_below_le >> qexists_tac `st.cs_next_var` >> fs[]) >>
   irule caps_below_le >> qexists_tac `st.cs_next_var` >> fs[]
-QED
-
-Theorem cenv_ptrs_below_update[local]:
-  !n n' cenv name op sz.
-    cenv_ptrs_below n cenv /\ n <= n' /\ (!x. op = Var x ==> var_below n' x) ==>
-    cenv_ptrs_below n'
-      (cenv with ce_vars updated_by (\m. m |+ (name, PtrVar op sz)))
-Proof
-  rw[cenv_ptrs_below_def, FLOOKUP_UPDATE] >> gvs[AllCaseEqs()] >>
-  metis_tac[var_below_le]
-QED
-
-Theorem emit_op_next[local]:
-  !opc ops st x st'.
-    emit_op opc ops st = (x, st') ==> st'.cs_next_var = st.cs_next_var + 1
-Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[]
 QED
 
 Theorem emit_void_next[local]:

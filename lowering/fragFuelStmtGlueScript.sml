@@ -179,12 +179,6 @@ Proof
   Cases_on `s` >> simp[declare_stmt_local_def]
 QED
 
-Theorem var_below_le[local]:
-  !n n' x. var_below n x /\ n <= n' ==> var_below n' x
-Proof
-  rw[var_below_def]
-QED
-
 Theorem cenv_ptrs_below_declare[local]:
   !n cenv cenv2 id sz.
     cenv_ptrs_below n cenv /\

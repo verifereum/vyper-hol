@@ -9,7 +9,8 @@
  *
  * TOP-LEVEL:
  *   cenv_ptrs_below_def, cenv_ptrs_in_def, stmt_exits_in_def,
- *   next_stable_cenv_ptrs_below,
+ *   next_stable_cenv_ptrs_below, var_below_le, cenv_ptrs_below_le,
+ *   cenv_ptrs_below_update, emit_op_next,
  *   fuel_ok_emit_local_alloca, fuel_ok_compile_range_bound_checks,
  *   fuel_ok_compile_iter_elem_copy
  *)
@@ -17,7 +18,7 @@
 Theory fragFuelStmtBase
 Ancestors
   fragFuel fragFuelContextBase fragFuelContext stmtLowering exprLowering
-  compileEnv emitHelper context venomInst
+  compileEnv emitHelper context venomInst finite_map
 Libs
   fragFuelLib
 
@@ -42,6 +43,37 @@ Definition stmt_exits_in_def:
     (!l. cenv.ce_ctor_exit_label = SOME l ==> l IN E) /\
     (!b c. lc = InLoop b c ==> b IN E /\ c IN E)
 End
+
+Theorem var_below_le:
+  !n n' x. var_below n x /\ n <= n' ==> var_below n' x
+Proof
+  rw[var_below_def]
+QED
+
+Theorem cenv_ptrs_below_le:
+  !n n' c. cenv_ptrs_below n c /\ n <= n' ==> cenv_ptrs_below n' c
+Proof
+  rw[cenv_ptrs_below_def] >> metis_tac[var_below_le]
+QED
+
+Theorem cenv_ptrs_below_update:
+  !n n' cenv name op sz.
+    cenv_ptrs_below n cenv /\ n <= n' /\ (!x. op = Var x ==> var_below n' x) ==>
+    cenv_ptrs_below n'
+      (cenv with ce_vars updated_by (\m. m |+ (name, PtrVar op sz)))
+Proof
+  rw[cenv_ptrs_below_def, FLOOKUP_UPDATE] >> gvs[AllCaseEqs()] >>
+  metis_tac[var_below_le]
+QED
+
+Theorem emit_op_next:
+  !opc ops st x st'.
+    emit_op opc ops st = (x, st') ==> st'.cs_next_var = st.cs_next_var + 1
+Proof
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
 
 Theorem next_stable_cenv_ptrs_below:
   !cenv. next_stable (\st. cenv_ptrs_below st.cs_next_var cenv)

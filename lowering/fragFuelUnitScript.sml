@@ -11,7 +11,7 @@
  *
  * TOP-LEVEL:
  *   run_context_terminates_uniform
- *   package_internal_fn_cenv_ptrs_below
+ *   allocate_args_vars, package_internal_fn_cenv_ptrs_below
  *   generated_ctx_fns_stable    - a unit generated as entry code then internal
  *                                 functions has every function stable
  *)
@@ -48,7 +48,7 @@ QED
 
 (* ===== The packaged internal functions' environments ===== *)
 
-Theorem allocate_args_vars[local]:
+Theorem allocate_args_vars:
   !args sft off vars vars' off' id v.
     allocate_args sft args off vars = (vars', off') /\
     FLOOKUP vars' id = SOME v ==>

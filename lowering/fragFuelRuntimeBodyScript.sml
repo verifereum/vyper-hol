@@ -17,7 +17,7 @@
  *   fuel_ok_compile_init_kwargs, fuel_ok_compile_create_kwarg_allocas,
  *   compile_create_kwarg_allocas_ptrs, compile_register_kwarg_vars_ptrs,
  *   fuel_okS_compile_common_function_body,
- *   var_below_le, cenv_ptrs_below_le, fuel_ok_next
+ *   fuel_ok_next, compile_alloc_buffer_var
  *)
 
 Theory fragFuelRuntimeBody
@@ -38,18 +38,6 @@ val hexpr = ``!c t e Wv E. fuel_ok Wv {} E (compile_expr c t e)``
 
 (* ===== Helpers ===== *)
 
-Theorem var_below_le:
-  !n n' x. var_below n x /\ n <= n' ==> var_below n' x
-Proof
-  rw[var_below_def]
-QED
-
-Theorem cenv_ptrs_below_le:
-  !n n' c. cenv_ptrs_below n c /\ n <= n' ==> cenv_ptrs_below n' c
-Proof
-  rw[cenv_ptrs_below_def] >> metis_tac[var_below_le]
-QED
-
 Theorem fuel_ok_next:
   !Wv L E m st x st'.
     fuel_ok Wv L E m /\ m st = (x, st') ==> st.cs_next_var <= st'.cs_next_var
@@ -57,16 +45,7 @@ Proof
   metis_tac[fuel_ok_def]
 QED
 
-Theorem emit_op_next[local]:
-  !opc ops st x st'.
-    emit_op opc ops st = (x, st') ==> st'.cs_next_var = st.cs_next_var + 1
-Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
-Theorem compile_alloc_buffer_var[local]:
+Theorem compile_alloc_buffer_var:
   !n st b st'.
     compile_alloc_buffer n st = (b, st') ==>
     st.cs_next_var <= st'.cs_next_var /\
@@ -75,16 +54,6 @@ Proof
   simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
   rpt gen_tac >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   imp_res_tac emit_op_next >> imp_res_tac emit_op_var >> simp[]
-QED
-
-Theorem cenv_ptrs_below_update[local]:
-  !n n' cenv name op sz.
-    cenv_ptrs_below n cenv /\ n <= n' /\ (!x. op = Var x ==> var_below n' x) ==>
-    cenv_ptrs_below n'
-      (cenv with ce_vars updated_by (\m. m |+ (name, PtrVar op sz)))
-Proof
-  rw[cenv_ptrs_below_def, FLOOKUP_UPDATE] >> gvs[AllCaseEqs()] >>
-  metis_tac[var_below_le]
 QED
 
 (* m starts under P; the rest runs under Q of m's result. *)

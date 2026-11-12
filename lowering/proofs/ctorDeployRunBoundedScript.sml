@@ -357,39 +357,6 @@ QED
 
 (* ===== Constructor argument registration ===== *)
 
-(* Local in fragFuelRuntimeBody. *)
-Theorem emit_op_next[local]:
-  !opc ops st x st'.
-    emit_op opc ops st = (x, st') ==> st'.cs_next_var = st.cs_next_var + 1
-Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
-(* Local in fragFuelRuntimeBody. *)
-Theorem compile_alloc_buffer_var[local]:
-  !n st b st'.
-    compile_alloc_buffer n st = (b, st') ==>
-    st.cs_next_var <= st'.cs_next_var /\
-    !x. b.buf_operand = Var x ==> var_below st'.cs_next_var x
-Proof
-  simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
-  rpt gen_tac >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  imp_res_tac emit_op_next >> imp_res_tac emit_op_var >> simp[]
-QED
-
-(* Local in fragFuelRuntimeBody. *)
-Theorem cenv_ptrs_below_update[local]:
-  !n n' cenv name op sz.
-    cenv_ptrs_below n cenv /\ n <= n' /\ (!x. op = Var x ==> var_below n' x) ==>
-    cenv_ptrs_below n'
-      (cenv with ce_vars updated_by (\m. m |+ (name, PtrVar op sz)))
-Proof
-  rw[cenv_ptrs_below_def, FLOOKUP_UPDATE] >> gvs[AllCaseEqs()] >>
-  metis_tac[var_below_le]
-QED
-
 Theorem fuel_ok_decode_dload[local]:
   !cenv args off hi adj Wv E.
     fuel_ok Wv {} E (compile_decode_args cenv args off DLOAD hi adj)
@@ -443,18 +410,6 @@ Proof
 QED
 
 (* ===== The packaged environments ===== *)
-
-(* Local in fragFuelUnit. *)
-Theorem allocate_args_vars[local]:
-  !args sft off vars vars' off' id v.
-    allocate_args sft args off vars = (vars', off') /\
-    FLOOKUP vars' id = SOME v ==>
-    FLOOKUP vars id = SOME v \/ ?off2 sz. v = MemLoc off2 sz
-Proof
-  Induct >- simp[allocate_args_def] >>
-  Cases >> simp[allocate_args_def] >> rpt strip_tac >>
-  first_x_assum drule_all >> rw[FLOOKUP_UPDATE] >> gvs[]
-QED
 
 (* The constructor's packaged locals are its parameters, at fixed memory
    locations: no local is a pointer variable. *)
