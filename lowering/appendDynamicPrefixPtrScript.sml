@@ -76,19 +76,20 @@ Proof
   `ptr_covers G tn src s 32` by
     (gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
       arithmeticTheory.LESS_EQ_ADD]) >>
-  drule_all emit_mload_clean_ambient_frag_ptr >>
+  drule_all emit_mload_clean_ambient_core >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `v1` strip_assume_tac)))) >>
   `eval_operand (Var len) v1 = SOME (n2w l)` by simp[eval_operand_def] >>
-  drule_all (SRULE[] (Q.SPECL [`GT`, `(\a b. bool_to_word (w2n a > w2n b))`]
-    emit_dynamic_binop_clean_ptr)) >>
+  drule_all (CONV_RULE (STRIP_QUANT_CONV (LAND_CONV (SIMP_CONV (srw_ss()) [])))
+    (Q.SPECL [`GT`, `(\a b. bool_to_word (w2n a > w2n b))`]
+      emit_dynamic_binop_clean_core)) >>
   disch_then (qspec_then `G1` mp_tac) >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `v2` strip_assume_tac)))) >>
   `l < dimword(:256)` by decide_tac >>
   `eval_operand (Var gt) v2 = SOME 0w` by
     (simp[eval_operand_def, arithmeticPropsTheory.bool_to_word_eq_0w] >> decide_tac) >>
-  drule_all emit_dynamic_iszero_clean_ptr >>
+  drule_all emit_dynamic_iszero_clean_core >>
   disch_then (qspec_then `G2` mp_tac) >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G3` (qx_choose_then `tn3` (qx_choose_then `v3` strip_assume_tac)))) >>
@@ -112,7 +113,7 @@ Proof
   `ptr_covers G3 tn3 dst v4 32` by
     (gvs[ptr_covers_def, Abbr `v4`, lookup_var_def] >>
      metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>
-  drule_all emit_dynamic_header_store_ptr >>
+  drule_all emit_dynamic_header_store_core >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `tn5` (qx_choose_then `v5` strip_assume_tac))) >>
   `lookup_var src v5 = SOME a /\ lookup_var dst v5 = SOME b /\
@@ -124,8 +125,8 @@ Proof
   `not_fresh_at s5 src /\ not_fresh_at s6 dst` by metis_tac[] >>
   qpat_x_assum `emit_op ADD _ s6 = _` mp_tac >>
   drule_all (Q.GENL [`cx`, `ctx`, `PG`, `R`]
-    (SRULE[] (Q.INST [`n` |-> `l*esz`, `off` |-> `32`]
-      (SPEC_ALL emit_dynamic_pointer_add_ptr)))) >>
+    (CONV_RULE (STRIP_QUANT_CONV (LAND_CONV (SIMP_CONV (srw_ss()) []))) (Q.INST [`n` |-> `l*esz`, `off` |-> `32`]
+      (SPEC_ALL emit_dynamic_pointer_add_core)))) >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G6` (qx_choose_then `tn6` (qx_choose_then `v6` strip_assume_tac)))) >>
   disch_tac >>
@@ -133,14 +134,15 @@ Proof
   `lookup_var dst v6 = SOME b /\ ptr_covers G6 tn6 dst v6 (32+dn*esz)` by
     (gvs[ptr_covers_def] >> metis_tac[]) >>
   drule_all (Q.GENL [`cx`, `ctx`, `PG`, `R`]
-    (SRULE[] (Q.INST [`n` |-> `l*esz`, `off` |-> `32`, `root` |-> `dst`,
-      `s` |-> `v6`] (SPEC_ALL emit_dynamic_pointer_add_ptr)))) >>
+    (CONV_RULE (STRIP_QUANT_CONV (LAND_CONV (SIMP_CONV (srw_ss()) []))) (Q.INST [`n` |-> `l*esz`, `off` |-> `32`, `root` |-> `dst`,
+      `s` |-> `v6`] (SPEC_ALL emit_dynamic_pointer_add_core)))) >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G7` (qx_choose_then `tn7` (qx_choose_then `v7` strip_assume_tac)))) >>
   disch_tac >>
   `eval_operand (Var len) v7 = SOME (n2w l) /\ op_taint tn7 (Var len) = {}` by
     (gvs[eval_operand_def] >> metis_tac[]) >>
-  drule_all (SRULE[] (Q.SPECL [`MUL`, `word_mul`] emit_dynamic_binop_clean_ptr)) >>
+  drule_all (CONV_RULE (STRIP_QUANT_CONV (LAND_CONV (SIMP_CONV (srw_ss()) [])))
+    (Q.SPECL [`MUL`, `word_mul`] emit_dynamic_binop_clean_core)) >>
   disch_then (qspec_then `G7` mp_tac) >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G8` (qx_choose_then `tn8` (qx_choose_then `v8` strip_assume_tac)))) >>
@@ -170,11 +172,16 @@ Proof
     (gvs[not_fresh_at_def] >> decide_tac) >>
   rename1 `emit_op MUL _ s7 = (Var bytecount,sb)` >>
   `not_fresh_at sb bytecount` by
-    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
-       fresh_id_def, emit_def, comp_return_def, not_fresh_at_def]) >>
+    (qpat_assum `emit_op MUL _ s7 = _`
+       (mp_then Any mp_tac loweringShapeRulesTheory.emit_op_facts) >> simp[]) >>
   rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac) >>
   rpt (qpat_x_assum `emit_op _ _ _ = _` kall_tac) >>
   rpt (qpat_x_assum `emit_void _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `step_inst_base _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `step_prov _ _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `step_taint _ _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `!D fuel ctx fn. _` kall_tac) >>
+  rpt (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|> = _` kall_tac) >>
   gvs[Abbr `v4`, GSYM word_mul_n2w] >>
   (conj_tac >- (gvs[ptr_covers_def] >> metis_tac[])) >>
   (conj_tac >- (gvs[ptr_covers_def] >> metis_tac[])) >>

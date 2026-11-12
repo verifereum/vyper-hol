@@ -55,13 +55,25 @@ Proof
   simp[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem emit_dynamic_pointer_add_ptr:
+Theorem emit_dynamic_pointer_add_core:
   !G cx ctx PG R sa sb root out off n total tn s a.
     emit_op ADD [Var root; Lit (n2w off)] sa = (Var out,sb) /\
     not_fresh_at sa root /\ lookup_var root s = SOME a /\
     ptr_covers G tn root s total /\ off+n <= total /\
     w2n a+off < dimword(:256) ==>
     ?Gf tnf sf.
+      (sf.vs_inst_idx = SUC s.vs_inst_idx /\
+       step_inst_base (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [out]) s =
+         OK (sf with vs_inst_idx := s.vs_inst_idx) /\
+       step_prov PG G (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [out])
+         (sf with vs_inst_idx := s.vs_inst_idx) = Gf /\
+       step_taint (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [out]) s
+         (sf with vs_inst_idx := s.vs_inst_idx) tn = tnf /\
+       (!D fuel ctx fn. ~ctx_has_dalloca ctx ==>
+         ptr_inst_ok D 0 fuel ctx fn G tn
+           (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [out]) s) /\
+       (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+                  vs_inst_idx := s.vs_inst_idx|>) = s) /\
       frag_exec_ptr cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
@@ -87,10 +99,36 @@ Proof
   drule_all dynamic_pointer_add_step_ptr >>
   disch_then (qspecl_then [`out`, `sa.cs_next_id`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tf`, `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac >- gvs[update_var_def] >>
   conj_tac >-
     (irule ptr_fragment_step >> simp[is_terminator_def] >>
      rpt strip_tac >> gvs[update_var_def]) >>
   simp[lookup_var_def] >> gvs[update_var_def] >>
   simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
   `p <> out` by metis_tac[] >> simp[]
+QED
+
+Theorem emit_dynamic_pointer_add_ptr:
+  !G cx ctx PG R sa sb root out off n total tn s a.
+    emit_op ADD [Var root; Lit (n2w off)] sa = (Var out,sb) /\
+    not_fresh_at sa root /\ lookup_var root s = SOME a /\
+    ptr_covers G tn root s total /\ off+n <= total /\
+    w2n a+off < dimword(:256) ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var out sf = SOME (n2w (w2n a+off)) /\
+      ptr_covers Gf tnf out sf n /\ not_fresh_at sb out /\ cs_extends sa sb /\
+      sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> strip_tac >> drule_all emit_dynamic_pointer_add_core >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED

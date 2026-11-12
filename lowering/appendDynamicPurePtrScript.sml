@@ -95,13 +95,25 @@ Proof
   qexists_tac `u` >> gvs[update_var_def]
 QED
 
-Theorem emit_dynamic_binop_clean_ptr:
+Theorem emit_dynamic_binop_clean_core:
   !opc f G cx ctx PG R sa sb left k out tn s a.
     (opc = GT /\ f = (\a b. bool_to_word (w2n a > w2n b)) \/
      opc = MUL /\ f = word_mul) /\
     emit_op opc [left; Lit k] sa = (Var out,sb) /\
     eval_operand left s = SOME a /\ op_taint tn left = {} ==>
     ?Gf tnf sf.
+      (sf.vs_inst_idx = SUC s.vs_inst_idx /\
+       step_inst_base (mk_inst sa.cs_next_id opc [left;Lit k] [out]) s =
+         OK (sf with vs_inst_idx := s.vs_inst_idx) /\
+       step_prov PG G (mk_inst sa.cs_next_id opc [left;Lit k] [out])
+         (sf with vs_inst_idx := s.vs_inst_idx) = Gf /\
+       step_taint (mk_inst sa.cs_next_id opc [left;Lit k] [out]) s
+         (sf with vs_inst_idx := s.vs_inst_idx) tn = tnf /\
+       (!D fuel ctx fn. ~ctx_has_dalloca ctx ==>
+         ptr_inst_ok D 0 fuel ctx fn G tn
+           (mk_inst sa.cs_next_id opc [left;Lit k] [out]) s) /\
+       (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+                  vs_inst_idx := s.vs_inst_idx|>) = s) /\
       frag_exec_ptr cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
@@ -126,12 +138,38 @@ Proof
   disch_then (qspec_then `G` mp_tac) >>
   disch_then (qspecl_then [`sa.cs_next_id`, `k`, `out`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tf`, `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac >- gvs[update_var_def] >>
   conj_tac >-
     (irule dynamic_binop_fragment >> simp[mk_inst_def] >>
      gvs[mk_inst_def, eval_operand_def, op_taint_def]) >>
   simp[lookup_var_def] >> gvs[update_var_def] >>
   simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
   `p <> out` by metis_tac[] >> simp[]
+QED
+
+Theorem emit_dynamic_binop_clean_ptr:
+  !opc f G cx ctx PG R sa sb left k out tn s a.
+    (opc = GT /\ f = (\a b. bool_to_word (w2n a > w2n b)) \/
+     opc = MUL /\ f = word_mul) /\
+    emit_op opc [left; Lit k] sa = (Var out,sb) /\
+    eval_operand left s = SOME a /\ op_taint tn left = {} ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var out sf = SOME (f a k) /\ op_taint tnf (Var out) = {} /\
+      sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all emit_dynamic_binop_clean_core >>
+  disch_then (qspecl_then [`G`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED
 
 Theorem dynamic_unary_ok[local]:
@@ -211,11 +249,23 @@ Proof
   qexists_tac `u` >> gvs[update_var_def]
 QED
 
-Theorem emit_dynamic_iszero_clean_ptr:
+Theorem emit_dynamic_iszero_clean_core:
   !G cx ctx PG R sa sb arg out tn s a.
     emit_op ISZERO [arg] sa = (Var out,sb) /\
     eval_operand arg s = SOME a /\ op_taint tn arg = {} ==>
     ?Gf tnf sf.
+      (sf.vs_inst_idx = SUC s.vs_inst_idx /\
+       step_inst_base (mk_inst sa.cs_next_id ISZERO [arg] [out]) s =
+         OK (sf with vs_inst_idx := s.vs_inst_idx) /\
+       step_prov PG G (mk_inst sa.cs_next_id ISZERO [arg] [out])
+         (sf with vs_inst_idx := s.vs_inst_idx) = Gf /\
+       step_taint (mk_inst sa.cs_next_id ISZERO [arg] [out]) s
+         (sf with vs_inst_idx := s.vs_inst_idx) tn = tnf /\
+       (!D fuel ctx fn. ~ctx_has_dalloca ctx ==>
+         ptr_inst_ok D 0 fuel ctx fn G tn
+           (mk_inst sa.cs_next_id ISZERO [arg] [out]) s) /\
+       (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+                  vs_inst_idx := s.vs_inst_idx|>) = s) /\
       frag_exec_ptr cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
@@ -240,11 +290,35 @@ Proof
   drule_all dynamic_iszero_step_ptr >>
   disch_then (qspecl_then [`G`, `sa.cs_next_id`, `out`, `PG`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tf`, `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac >- gvs[update_var_def] >>
   conj_tac >-
     (irule dynamic_iszero_fragment >> gvs[mk_inst_def]) >>
   simp[lookup_var_def] >> gvs[update_var_def] >>
   simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
   `p <> out` by metis_tac[] >> simp[]
+QED
+
+Theorem emit_dynamic_iszero_clean_ptr:
+  !G cx ctx PG R sa sb arg out tn s a.
+    emit_op ISZERO [arg] sa = (Var out,sb) /\
+    eval_operand arg s = SOME a /\ op_taint tn arg = {} ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var out sf = SOME (bool_to_word (a = 0w)) /\
+      op_taint tnf (Var out) = {} /\
+      sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> strip_tac >> drule_all emit_dynamic_iszero_clean_core >>
+  disch_then (qspecl_then [`G`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED
 
 Theorem dynamic_assert_true_step_ptr:
