@@ -8,6 +8,8 @@ Ancestors
   abiDecoderMemberSetup abiDecoderMemberCode freshWrites exprSimCalldataSlice
   abiDecoderReentry abiDecoderReentryPointer abiDecoderReservation abiDecoderVarSequence abiDecoderDynamicLoopSetup
   loweringStateRelDefs varsExt abiScratchAddress abiScratchDecoderSubwindow abiEncoderArrayFrame
+  abiScratchEffect abiScratchDecoderMemberFrames abiEncoderInput
+  abiDecoderFrame abiDecoderMemberFrames abiScratchFootprint
   fragGasSeqMem fragGasSeqAbort fragGasMode fragGasPathMem instMemFrontier
   abiDecoderGuard abiDecoderGuards abiDecoderRange abiDecoderBytesBound
   abiEncoder compileEnv emitHelper fragExecMem abiDecoderContract
@@ -334,4 +336,60 @@ Proof
   >- (rpt strip_tac >> gvs[dec_info_needs_offset_def])
   >- (rpt strip_tac >> qpat_x_assum `!id p n. FLOOKUP _ id = SOME (p,n) ==> _` drule >> decide_tac) >>
   first_x_assum (qspecl_then [`abi_decoder_ids first last`, `[]:(num # num) list`] strip_assume_tac) >> simp[]
+QED
+
+(* An indexed discovered prefix survives exactly the next child's footprint.
+   The earlier cells lie before its output, even for zero-sized members. *)
+Theorem extcall_decoder_member_prefix_advance[local]:
+  LENGTH ps = j /\ j < LENGTH tvs /\
+  (!i. i < j ==> value_has_type (EL i tvs) (EL i ps) /\
+    val_in_memory (EL i tvs) (EL i ps)
+      (d + SUM (MAP type_memory_size (TAKE i tvs))) s.vs_memory) /\
+  value_has_type (EL j tvs) v /\
+  val_in_memory (EL j tvs) v
+    (d + SUM (MAP type_memory_size (TAKE j tvs))) t.vs_memory /\
+  abi_scratch_effect first last lo hi next limit
+    (d + SUM (MAP type_memory_size (TAKE j tvs))) (type_memory_size (EL j tvs)) b cap s t /\
+  first <= lo /\ hi <= last /\
+  abi_footprint_disjoint d (SUM (MAP type_memory_size tvs))
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
+  abi_footprint_disjoint B P
+    ((d,SUM (MAP type_memory_size tvs))::
+      abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
+  mem_bytes_at B P s.vs_memory = snap ==>
+  LENGTH (ps ++ [v]) = SUC j /\ mem_bytes_at B P t.vs_memory = snap /\
+  (!i. i < SUC j ==> value_has_type (EL i tvs) (EL i (ps ++ [v])) /\
+    val_in_memory (EL i tvs) (EL i (ps ++ [v]))
+      (d + SUM (MAP type_memory_size (TAKE i tvs))) t.vs_memory)
+Proof
+  strip_tac >> drule_all abi_scratch_effect_frame >> strip_tac >>
+  `SUM (MAP type_memory_size (TAKE j tvs)) + type_memory_size (EL j tvs) <=
+    SUM (MAP type_memory_size tvs)` by
+    (irule abi_encoder_prefix_sum_bound >> simp[]) >>
+  `abi_footprint_disjoint B P
+    ((d + SUM (MAP type_memory_size (TAKE j tvs)),type_memory_size (EL j tvs))::
+      abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+    (irule abi_scratch_disjoint_output_subwindow >>
+     qexistsl_tac [`d`, `SUM (MAP type_memory_size tvs)`] >> simp[]) >>
+  drule_all abi_decode_footprint_frame_slice >> strip_tac >> simp[] >>
+  qx_gen_tac `i` >> disch_tac >> Cases_on `i = j`
+  >- gvs[EL_APPEND2] >>
+  `i < j` by decide_tac >> simp[EL_APPEND1] >>
+  `SUM (MAP type_memory_size (TAKE i tvs)) + type_memory_size (EL i tvs) <=
+    SUM (MAP type_memory_size (TAKE j tvs))` by
+    (qspecl_then [`type_memory_size`, `TAKE j tvs`, `i`] mp_tac abi_encoder_prefix_sum_bound >>
+     simp[LENGTH_TAKE, EL_TAKE, TAKE_TAKE] >> decide_tac) >>
+  `abi_footprint_disjoint (d + SUM (MAP type_memory_size (TAKE i tvs)))
+    (type_memory_size (EL i tvs))
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+    (irule abi_footprint_disjoint_subwindow >>
+     qexistsl_tac [`d`, `SUM (MAP type_memory_size tvs)`] >> simp[] >> decide_tac) >>
+  `abi_footprint_disjoint (d + SUM (MAP type_memory_size (TAKE i tvs)))
+    (type_memory_size (EL i tvs))
+    ((d + SUM (MAP type_memory_size (TAKE j tvs)),type_memory_size (EL j tvs))::
+      abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+    (simp[abi_scratch_disjoint_cons] >> decide_tac) >>
+  irule abi_decoder_value_frame >>
+  conj_tac >- simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `s` >> simp[]
 QED
