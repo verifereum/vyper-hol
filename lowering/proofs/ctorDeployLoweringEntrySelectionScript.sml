@@ -16,7 +16,7 @@ Proof
   drule_all lower_vyper_deploy_unit_ctor_named_init >> strip_tac >>
   PairCases_on `cf` >> gvs[ctor_named_init_def] >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
-    classify_functions_ctor_lookup >>
+    ctorDeployDefsTheory.classify_functions_ctor_lookup >>
   simp[] >> strip_tac >>
   gvs[package_constructor_def, set_constructor_package_target_def]
 QED
