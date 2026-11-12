@@ -33,13 +33,13 @@ Theorem comparison_hash_counted[local]:
   mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     eval_operand op t = SOME
       (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -48,7 +48,7 @@ Proof
   strip_tac >> drule_all (SIMP_RULE std_ss [byteTheory.word_of_bytes_be_def] compile_bytestring_hash_run_nofresh) >> strip_tac >>
   drule (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >> strip_tac >>
   drule_all hash_run_path >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   gvs[eval_operand_def, lookup_var_def, stmt_state_rel_inst_idx] >>
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem comparison_hash_dynamic[local]:
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) ptr_op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) ptr_op s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -69,7 +69,7 @@ Theorem comparison_hash_dynamic[local]:
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     eval_operand op t = SOME
       (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-    stmt_state_rel ctx func cenv cx es' t /\
+    stmt_state_rel H ctx func cenv cx es' t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
@@ -81,7 +81,7 @@ Proof
 QED
 
 Theorem comparison_hash_string[local]:
-  expr_post ctx func cenv cx e es sa sm s0 es' (StringV str) ptr_op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (StringV str) ptr_op s /\
   expr_type e = BaseT (StringT cap) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT cap)) /\
   compile_bytestring_hash ptr_op sm = (op, sb) /\
@@ -92,7 +92,7 @@ Theorem comparison_hash_string[local]:
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     eval_operand op t = SOME
       (word_of_bytes T (0w:bytes32) (Keccak_256_w64 (MAP (n2w o ORD) str))) /\
-    stmt_state_rel ctx func cenv cx es' t /\
+    stmt_state_rel H ctx func cenv cx es' t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
@@ -104,7 +104,7 @@ Proof
 QED
 
 Theorem comparison_hash_typed[local]:
-  expr_post ctx func cenv cx e es sa sm s0 ee v p t /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v p t /\
   (?cap. expr_type e = BaseT (BytesT (Dynamic cap)) \/
          expr_type e = BaseT (StringT cap)) /\
   (?tv. evaluate_type tenv (expr_type e) = SOME tv /\ value_has_type tv v) /\
@@ -119,7 +119,7 @@ Theorem comparison_hash_typed[local]:
      (?str. v = StringV str /\
        d = word_of_bytes T (0w:bytes32) (Keccak_256_w64 (MAP (n2w o ORD) str)))) /\
     gas_marked_path F ctx func t 0 (OK u) /\ eval_operand h u = SOME d /\
-    stmt_state_rel ctx func cenv cx ee u /\ ~u.vs_halted /\
+    stmt_state_rel H ctx func cenv cx ee u /\ ~u.vs_halted /\
     u.vs_current_bb = sh.cs_current_bb /\
     u.vs_inst_idx = LENGTH sh.cs_current_insts /\
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x t) /\
@@ -135,17 +135,17 @@ Proof
     simp[vyperValueTheory.evaluate_type_def] >>
   gvs[vyperValueTheory.evaluate_type_def]
   >- (irule comparison_hash_dynamic >>
-      qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
       simp[vyperValueTheory.evaluate_type_def]) >>
   irule comparison_hash_string >>
-  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[vyperValueTheory.evaluate_type_def]
 QED
 
 (* A read-only hash after a pure operand keeps its pure frame. *)
 Theorem comparison_hash_pure_frame[local]:
   !ctx func cenv cx e es sa sm s0 ee v p t.
-    expr_post ctx func cenv cx e es sa sm s0 ee v p t ==>
+    expr_post H ctx func cenv cx e es sa sm s0 ee v p t ==>
     !u. u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
         ~expr_has_effect e ==> pure_frame cenv func es sa s0 u
 Proof
@@ -178,13 +178,13 @@ Theorem comparison_digest_counted[local]:
                emit_op ISZERO [q] sq = (op, sb)) /\
   eval_operand h1 s = SOME d1 /\ eval_operand h2 s = SOME d2 /\
   fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     eval_operand op t = SOME
       (val_to_w256 (BoolV (if bop = Eq then d1 = d2 else d1 <> d2))) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -197,7 +197,7 @@ Proof
   drule_all comparison_digest_run >> strip_tac >>
   drule_all (SIMP_RULE std_ss [ci_mono_def] comparison_digest_shape) >> strip_tac >>
   drule_all hash_run_path >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   gvs[eval_operand_def, lookup_var_def, stmt_state_rel_inst_idx,
@@ -214,14 +214,14 @@ Theorem comparison_finish_post[local]:
                emit_op ISZERO [q] sq = (op, sb)) /\
   eval_operand h1 u = SOME d1 /\ eval_operand h2 u = SOME d2 /\
   fn_has_code sh sb func /\
-  stmt_state_rel ctx func cenv cx ee u /\ local_ptrs_reserved cenv sh /\
+  stmt_state_rel H ctx func cenv cx ee u /\ local_ptrs_reserved cenv sh /\
   ~u.vs_halted /\ u.vs_current_bb = sh.cs_current_bb /\
   u.vs_inst_idx = LENGTH sh.cs_current_insts /\
   wb_frame cenv es ee sa s0 u /\ sa.cs_next_var <= sh.cs_next_var /\
   (~expr_has_effect e1 /\ ~expr_has_effect e2 ==>
    pure_frame cenv func es sa s0 u) ==>
   ?z. gas_marked_path F ctx func u 0 (OK z) /\
-    expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+    expr_post H ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
       es sa sb s0 ee (BoolV (if bop = Eq then d1 = d2 else d1 <> d2)) op z /\
     ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
     z.vs_inst_idx = LENGTH sb.cs_current_insts
@@ -251,14 +251,14 @@ Theorem comparison_terminal_summary[local]:
   (!ss. bop_result cx (BaseT BoolT) bop [ty;ty] v1 v2 ss = INL bv) /\
   ee.gas_obs = [] /\
   gas_marked_path F ctx func t 0 (OK z) /\
-  expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+  expr_post H ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
     es sa sb s0 ee bv op z /\
   z.vs_current_bb = sh.cs_current_bb /\
   z.vs_inst_idx = LENGTH sh.cs_current_insts + LENGTH (emitted_insts sh sb) ==>
   ?marks. gas_summary_at F (ctx,func) marks
     (\ss. (bop_result cx (BaseT BoolT) bop [ty;ty] v1 v2 ss,ss)) (ee,t)
     (\res ee z. ?v. res = INL v /\
-      expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+      expr_post H ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
         es sa sb s0 ee v op z /\
       z.vs_current_bb = sh.cs_current_bb /\
       z.vs_inst_idx = LENGTH sh.cs_current_insts + LENGTH (emitted_insts sh sb))
@@ -278,14 +278,14 @@ Theorem comparison_operand_outcome_suffix[local]:
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!gs v ee t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
        (INL v, ee) /\ ee.gas_obs = [] /\
-     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\ ~t.vs_halted /\
+     expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\ ~t.vs_halted /\
      t.vs_current_bb = sm.cs_current_bb /\
      t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
      ?u. gas_marked_path F ctx func t 0 (OK u) /\
@@ -539,7 +539,7 @@ Proof
                      comp_ignore_bind_def, comp_return_def, fresh_id_def,
                      fresh_var_def, emit_def] >> metis_tac[]) >>
              gnvs[eval_operand_def] >>
-             qpat_x_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+             qpat_x_assum `expr_post H _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
              simp[loweringPostsTheory.expr_post_def] >> strip_tac >>
              first_x_assum irule >> simp[]) >>
           `wb_frame cenv es ee2 sa s0 t2` by
@@ -562,16 +562,16 @@ Proof
             (strip_tac >>
              match_mp_tac exprSimPropsTheory.pure_frame_trans >>
              qexistsl_tac [`ee`, `sh1`, `t'`] >> rpt conj_tac
-             >- (qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
+             >- (qpat_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _`
                    (mp_tac o MATCH_MP comparison_hash_pure_frame) >>
                  disch_then (qspec_then `t'` mp_tac) >> simp[])
-             >- (qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`
+             >- (qpat_assum `expr_post H _ _ _ _ e2 _ _ _ _ _ _ _ _`
                    (mp_tac o MATCH_MP comparison_hash_pure_frame) >>
                  disch_then (qspec_then `u` mp_tac) >> simp[])
              >- (imp_res_tac (cj 2 compile_expr_grows) >>
                  imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >>
                  decide_tac)
-             >- (qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`
+             >- (qpat_assum `expr_post H _ _ _ _ e2 _ _ _ _ _ _ _ _`
                    (strip_assume_tac o
                     REWRITE_RULE [loweringPostsTheory.wb_frame_def] o
                     MATCH_MP exprSimWordArgsTheory.expr_post_frame) >>
@@ -609,7 +609,7 @@ Proof
       `~expr_has_effect e1 /\ ~expr_has_effect e2 ==>
        pure_frame cenv func es sa s0 t'` by
         (strip_tac >>
-         qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
+         qpat_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _`
            (mp_tac o MATCH_MP comparison_hash_pure_frame) >>
          disch_then (qspec_then `t'` mp_tac) >> simp[]) >>
       drule_all comparison_finish_post >>
@@ -708,7 +708,7 @@ Proof
       `~expr_has_effect e1 /\ ~expr_has_effect e2 ==>
        pure_frame cenv func es sa s0 u` by
         (strip_tac >>
-         qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`
+         qpat_assum `expr_post H _ _ _ _ e2 _ _ _ _ _ _ _ _`
            (mp_tac o MATCH_MP comparison_hash_pure_frame) >>
          disch_then (qspec_then `u` mp_tac) >> simp[]) >>
       drule_all comparison_finish_post >>
@@ -739,10 +739,10 @@ Proof
           value_result_typed_def] >> metis_tac[optionTheory.SOME_11]) >>
   `eval_operand (Lit x) s0 = SOME x /\ eval_operand (Lit x') s0 = SOME x'` by
     simp[eval_operand_def] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by simp[] >>
   `wb_frame cenv es (es with gas_obs := []) sa s0 s0` by simp[exprSimWordArgsTheory.wb_frame_refl] >>
   `?z. gas_marked_path F ctx func s0 0 (OK z) /\
-    expr_post ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+    expr_post H ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
       es sa sb s0 (es with gas_obs := [])
       (BoolV (if bop = Eq then x = x' else x <> x')) op z /\
     ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
