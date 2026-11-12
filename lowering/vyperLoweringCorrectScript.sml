@@ -1149,8 +1149,7 @@ End
 (* The lowered unit's functions and their reachable parts are
    pointer-confined (fn_ptr_ok), with P each function's pointer parameters:
    the return buffer, if any, and the arguments passed in memory:
-   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound for a
-   unit without DALLOCA. *)
+   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound. *)
 Theorem lower_vyper_runtime_unit_fn_ptr_ok:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

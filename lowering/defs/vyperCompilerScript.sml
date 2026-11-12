@@ -277,7 +277,7 @@ End
 
 (* ===== Checked pointer confinement ===== *)
 
-(* For a unit without DALLOCA, ptr_ok_check decides ptrDiscipline's
+(* ptr_ok_check decides ptrDiscipline's
    fn_ptr_ok for every function and its reachable part, with the pointer
    parameters it computes (ctx_ptr_param_list); ptrOkCheck proves it sound.
    It is executable as the rest of the lowering is: no quantifiers and no
