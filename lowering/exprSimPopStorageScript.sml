@@ -22,22 +22,30 @@ Theorem eval_pop_storage:
   evaluate_type (get_tenv cx) (ArrayT et (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) /\
   ~cx.txn.is_static ==>
   eval_expr cx (Pop ann (TopLevelNameTarget (src,id))) es =
-    let len = w2n (lookup_storage (n2w slot) (get_storage cx es tr)) in
+    let len = w2n (lookup_storage (n2w slot) (get_storage cx es tr));
+        obs = es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))] in
     if len = 0 then
-      (INR (Error (RuntimeError "pop empty storage array")), es)
+      (INR (Error (RuntimeError "pop empty storage array")),
+       es with storage_trace := obs)
     else
       (INL (PlaceR (StoragePlace tr
         (n2w slot + n2w (1 + (len - 1) * type_slot_size tv)) tv)),
        set_storage cx es tr
-         (apply_writes (n2w slot) [(0,n2w (len - 1))] (get_storage cx es tr)))
+         (apply_writes (n2w slot) [(0,n2w (len - 1))] (get_storage cx es tr))
+       with storage_trace := obs)
 Proof
   strip_tac >>
   simp[evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, get_place_def, pop_place_def, get_storage_backend_eq,
        ignore_bind_def, check_def, assert_def, raise_def,
+       record_storage_event_def,
        write_storage_slot_eq, encode_value_def, encode_base_to_slot_def,
        integer_wordTheory.i2w_def] >>
-  IF_CASES_TAC >> gvs[] >> IF_CASES_TAC >> gvs[]
+  `get_storage cx (es with storage_trace := es.storage_trace ++
+      [StorageRoot tr slot (ArrayTV tv (Dynamic n))]) tr = get_storage cx es tr` by
+    (Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  IF_CASES_TAC >> gvs[] >> IF_CASES_TAC >> gvs[] >>
+  Cases_on `tr` >> simp[vyperStorageBackendTheory.set_storage_def]
 QED
 
 Theorem pop_storage_target_facts:

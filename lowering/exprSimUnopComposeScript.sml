@@ -105,7 +105,7 @@ Proof
              simp[bind_def, unop_result_gas_obs] >>
              disch_then irule >> simp[]) >>
           fs[unop_result_gas_obs] >>
-          drule_all unop_continuation_summary >>
+          drule_all (SIMP_RULE bool_ss [PULL_EXISTS] unop_continuation_summary) >>
           simp[unop_result_gas_obs] >>
           rewrite_tac[gas_summary_at_def] >> strip_tac >>
           qexistsl_tac [`res`,`es_end'`,`r`] >>
