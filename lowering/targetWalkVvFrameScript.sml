@@ -30,7 +30,10 @@ Theorem target_walk_vv_frame:
        MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
        function_mutability_ok [(NONE, cx_tops cx)] vis mut nr dflts body) /\
     get_module_code cx NONE = SOME (cx_tops cx) /\
-    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+    EVERY (\c. FST c = NONE /\
+               supported_program (cx_tops cx) /\
+               IS_SOME (supported_function_decl (cx_tops cx) c Internal))
+      (int_calls_target bt) /\
     target_sim ctx func cenv cx env bt es1 /\
     type_place_target env bt = SOME vt /\
     vv_post ctx func cenv cx e es sa sm s0 es1 tv vv s1 /\
