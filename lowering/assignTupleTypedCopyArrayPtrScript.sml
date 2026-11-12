@@ -239,3 +239,49 @@ Proof
    Cases_on `h.inst_opcode = PHI` >>
    gvs[phi_prefix_length_def, eval_phis_def])
 QED
+
+Theorem typed_copy_operand_loop_test_continuation:
+  !D ctx fn PG G tn s ctr bound lt done id i n body_lbl exit_lbl bb target
+    Gf tnf sf.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions =
+      [mk_inst id LT [Var ctr; bound] [lt];
+       mk_inst (id+1) ISZERO [Var lt] [done];
+       mk_inst (id+2) JNZ [Var done; Label exit_lbl; Label body_lbl] []] /\
+    lookup_block (if i < n then body_lbl else exit_lbl) fn.fn_blocks =
+      SOME target /\ phi_prefix_length target.bb_instructions = 0 /\
+    s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+    lookup_var ctr s = SOME (n2w i) /\
+    eval_operand bound s = SOME (n2w n) /\
+    op_taint tn (Var ctr) = {} /\ op_taint tn bound = {} /\
+    op_prov G (Var ctr) = NONE /\ op_prov G bound = NONE /\
+    ~ctx_has_dalloca ctx /\
+    i <= n /\ n < dimword(:256) /\ ctr <> lt /\ ctr <> done /\
+    Gf = DRESTRICT (DRESTRICT G (COMPL {lt})) (COMPL {done}) /\
+    tnf = (tn with t_var := (tn.t_var |+ (lt,{})) |+ (done,{})) /\
+    sf = jump_to (if i < n then body_lbl else exit_lbl)
+      (update_var done (bool_to_word (~(i < n)))
+        (update_var lt (bool_to_word (i < n)) s)) ==>
+    !fuel r. run_from fuel ctx fn sf = r /\ (!e. r <> Error e) ==>
+      run_from (SUC fuel) ctx fn s = r /\
+      ghost_run (SUC fuel) ctx fn PG G tn s =
+        ghost_run fuel ctx fn PG Gf tnf sf /\
+      (ptr_safe_run D 0 fuel ctx fn PG Gf tnf sf ==>
+       ptr_safe_run D 0 (SUC fuel) ctx fn PG G tn s)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `!fuel. run_from (SUC fuel) ctx fn s = run_blocks (SUC fuel) ctx fn sf` by
+    (gvs[] >> irule typed_copy_operand_loop_test_run >> metis_tac[]) >>
+  `!fuel. run_blocks (SUC fuel) ctx fn sf = run_from fuel ctx fn sf` by
+    (gen_tac >>
+     `lookup_block sf.vs_current_bb fn.fn_blocks = SOME target` by
+       simp[jump_to_def] >>
+     drule_all fragExecTheory.run_blocks_run_from_no_phi >>
+     simp[jump_to_def] >> gvs[jump_to_def]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (gvs[] >> irule (SRULE [] typed_copy_operand_loop_test_ghost_run) >>
+      metis_tac[]) >>
+  strip_tac >> gvs[] >>
+  irule (SRULE [] typed_copy_operand_loop_test_ptr_safe) >> metis_tac[]
+QED
