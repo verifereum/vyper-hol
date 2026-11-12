@@ -28,6 +28,18 @@ Proof
   drule emit_void_terminated >> simp[is_terminator_def]
 QED
 
+Theorem abi_arg_ptr_guard_open[local]:
+  !opc actual parent a x b. ~block_is_terminated a /\
+    compile_abi_arg_ptr_guard opc actual parent a = (x,b) ==>
+    ~block_is_terminated b
+Proof
+  rpt gen_tac >> Cases_on `opc = CALLDATALOAD` >>
+  simp[compile_abi_arg_ptr_guard_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac emit_void_terminated >> gvs[is_terminator_def]
+QED
+
 Theorem compile_decode_args_open:
   !args cenv off load hi base sa u sb.
     ~is_terminator load /\ ~block_is_terminated sa /\
@@ -46,6 +58,7 @@ Proof
   last_x_assum irule >> goal_assum $ drule_at Any >> simp[] >>
   imp_res_tac emit_op_nonterminator_open >> gvs[is_terminator_def] >>
   imp_res_tac emit_void_terminated >> gvs[is_terminator_def] >>
+  imp_res_tac abi_arg_ptr_guard_open >>
   FIRST
     [irule compile_abi_clamp_basetype_open >>
        goal_assum $ drule_at (Pat `compile_abi_clamp_basetype _ _ _ = _`) >> simp[],

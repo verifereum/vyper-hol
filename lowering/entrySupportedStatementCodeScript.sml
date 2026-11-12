@@ -204,6 +204,25 @@ Proof
   external_return_value_tac
 QED
 
+Theorem entry_code_return_some_stmts:
+  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce' et e)) ==>
+  !ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_stmts ce lc rt [Return (SOME e)])
+Proof
+  rpt strip_tac >>
+  `!ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_stmt ce lc rt (Return (SOME e)))` by
+    metis_tac[entry_code_return_some_stmt] >>
+  `!ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_stmts ce lc rt [])` by simp[compile_stmt_def, entry_code_return] >>
+  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
+  irule entry_code_bind >> simp[entry_code_get] >> gen_tac >>
+  IF_CASES_TAC >> simp[entry_code_return] >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_declare_stmt_local] >> rpt gen_tac >> BETA_TAC) >> simp[]
+QED
+
 Theorem entry_code_log_stmt[local]:
   (!e ce' et. MEM e es ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
