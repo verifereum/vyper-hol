@@ -30,6 +30,21 @@ Ancestors
   valueEncoding entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
   ctorDeployMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen
 
+Theorem registration_fmp_room_necessary:
+  fmp_room ctx fn s /\
+  (EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts fn) \/
+   (?g f. TC (fn_directly_calls ctx) fn.fn_name g /\
+     MEM f ctx.ctx_functions /\ f.fn_name = g /\
+     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts f))) ==>
+  s.vs_alloca_next + pending_alloca_size fn s +
+    CARD {g | TC (fn_directly_calls ctx) fn.fn_name g} *
+      unit_alloca_frame ctx + 2 ** 65 < dimword (:256)
+Proof
+  simp[fmp_room_def] >> rpt strip_tac >>
+  qpat_x_assum `_ ==> _` mp_tac >>
+  (impl_tac >- metis_tac[]) >> strip_tac >> decide_tac
+QED
+
 Theorem registration_noop_or_open:
   !args ce off st ce' sa.
     compile_register_positional_args ce args off st = (ce',sa) ==>
