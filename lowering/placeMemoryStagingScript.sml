@@ -167,7 +167,7 @@ Proof
      conj_tac >- simp[] >> qexistsl_tac [`w2n tw`, `s.vs_memory`, `n`] >>
      metis_tac[]) >>
   qexistsl_tac [`r`, `t`, `tw`] >> simp[] >>
-  rpt conj_tac >> rpt strip_tac >>
   gvs[regions_disjoint_def, eval_operand_def, lookup_var_def] >>
+  rpt conj_tac >> rpt strip_tac >>
   metis_tac[]
 QED
