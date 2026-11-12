@@ -132,3 +132,15 @@ Proof
   disch_then (qspec_then `fuel` mp_tac) >>
   metis_tac[frame_result_rel_terminates]
 QED
+
+(* A terminating normalized run has a terminating original run. *)
+Theorem cfg_norm_stage_terminates_back:
+  ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  lookup_function name C.ctx_functions = SOME fn /\
+  lookup_function name C'.ctx_functions = SOME fn' /\
+  fn_entry_state fn s /\ terminates (run_blocks fuel' C' fn' s) ==>
+  ?fuel. terminates (run_blocks fuel C fn s)
+Proof
+  cheat
+QED
