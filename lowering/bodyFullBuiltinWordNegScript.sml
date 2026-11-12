@@ -8,7 +8,7 @@ Ancestors
   venomInstProofs fragGasOriginPtr fragGasOrigin fragGasPathPtr gasCount
   ptrSafeRun ptrDiscipline exprLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv venomExecSemantics venomInst venomState
-  list rich_list finite_map codegenRel contextCodegenRel
+  list rich_list finite_map codegenRel contextCodegenRel decoderGhostFramePtr
 
 Theorem word_neg_emission:
   !x ty sa op sb.
@@ -239,4 +239,48 @@ Proof
     simp[gasEventsTheory.gas_events_step_def, gas_count_step_def] >>
   drule_all exit_inst_origin_ptr >> strip_tac >>
   drule (cj 2 gas_origin_ptr_path_rules) >> simp[]
+QED
+
+Theorem word_neg_ghost_register_frame:
+  compile_neg x ty sa = (op,sb) /\
+  inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn' ==>
+  !z. not_fresh_at sa z ==>
+    FLOOKUP G' z = FLOOKUP G z /\
+    op_taint tn' (Var z) = op_taint tn (Var z)
+Proof
+  strip_tac >> drule word_neg_emission >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emitted_insts sa sb = [i;j;k]` >>
+  gen_tac >> strip_tac >>
+  `~MEM z i.inst_outputs /\ ~MEM z j.inst_outputs /\
+   ~MEM z k.inst_outputs` by
+    (gvs[Abbr `i`, Abbr `j`, Abbr `k`, mk_inst_def,
+       loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
+  gvs[Once inst_seq_ptr_def] >>
+  Cases_on `step_inst_base i s` >>
+  gvs[step_prov_other_output, step_taint_other_output] >>
+  gvs[Once inst_seq_ptr_def] >>
+  Cases_on `step_inst_base j (v with vs_inst_idx := SUC s.vs_inst_idx)` >>
+  gvs[step_prov_other_output, step_taint_other_output] >>
+  gvs[Once inst_seq_ptr_def] >>
+  Cases_on `step_inst_base k (v' with vs_inst_idx := SUC (SUC s.vs_inst_idx))` >>
+  gvs[inst_seq_ptr_def, step_prov_other_output, step_taint_other_output]
+QED
+
+Theorem word_neg_step_exterior:
+  compile_neg x ty sa = (op,sb) /\
+  MEM i (emitted_insts sa sb) /\ step_inst_base i s = OK t ==>
+  t = s with vs_vars := t.vs_vars /\
+  (step_taint i s t tn).t_mem = tn.t_mem /\
+  (step_taint i s t tn).t_stor = tn.t_stor /\
+  (step_taint i s t tn).t_trans = tn.t_trans /\
+  (step_taint i s t tn).t_imm = tn.t_imm
+Proof
+  strip_tac >> drule word_neg_emission >> strip_tac >> gvs[] >>
+  gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+    AllCaseEqs(), update_var_def] >>
+  simp[step_taint_def, mem_taint_def, new_site_bytes_def,
+    step_writes_def, source_memory_write_ranges_def, range_bytes_def,
+    written_taint_def, adopt_reset_def, store_taint_def, imm_taint_def,
+    mk_inst_def, finite_mapTheory.FLOOKUP_DEF] >>
+  SET_TAC[]
 QED
