@@ -19,6 +19,265 @@
 Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
+  ptrDisciplineEmptyTaint lowerDloadPtrSourceInv lowerDloadPtrRawReachable
+  o1PassContract unitMemInv venomExecSemantics venomState contextCodegenRel
+  list venomInst opcodeClass words finite_map arithmetic
+  frameAllocationOwnership ptrDiscipline
+
+Theorem fmp_source_memory[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp
+Proof
+  strip_tac >>
+  `mem_inv (static_mem_ok eom) C vs /\ o1_ctx_shape C` by
+    gvs[fmp_stage_ctx_def, o1_inv_def, o1_static_inv_def] >>
+  drule_all mem_inv_frame_reachable >> simp[static_mem_ok_def]
+QED
+
+Theorem fmp_source_opcodes[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s ==>
+  inst.inst_opcode <> ALLOCA /\ pre_fmp_opcode inst.inst_opcode
+Proof
+  strip_tac >>
+  `o1_ctx_shape C /\ EVERY (o1_fn_row 3) C.ctx_functions` by
+    gvs[fmp_stage_ctx_def, o1_pre_def] >>
+  drule_all lowerDloadPtrRawReachableTheory.frame_reachable_raw_certificate >>
+  strip_tac >>
+  `o1_fn_row 3 fn` by gvs[EVERY_MEM] >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  gvs[o1_fn_row_def, pre_fmp_ops_def, EVERY_MEM]
+QED
+
+Theorem fmp_eval_phis_frontier[local]:
+  !s t. eval_phis s insts = OK t ==> t.vs_fmp = s.vs_fmp
+Proof
+  Induct_on `insts` >- simp[eval_phis_def] >>
+  qx_gen_tac `inst` >> rpt gen_tac >> simp[Once eval_phis_def] >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[] >>
+  gvs[AllCaseEqs(), update_var_def] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem fmp_enters_block_frontier[local]:
+  enters_block fn s t ==> t.vs_fmp = s.vs_fmp
+Proof
+  rw[enters_block_def] >> drule fmp_eval_phis_frontier >> simp[]
+QED
+
+Theorem fmp_source_return[local]:
+  inst.inst_opcode <> INVOKE /\ pre_fmp_opcode inst.inst_opcode /\
+  step_inst fuel C inst s = IntRet ret t ==>
+  t = s /\ ret.iret_adopt_fmp = NONE
+Proof
+  strip_tac >> gvs[step_inst_non_invoke] >>
+  drule step_inst_base_intret_opcodes >>
+  gvs[pre_fmp_opcode_def] >> strip_tac >>
+  gvs[step_inst_base_def, AllCaseEqs()]
+QED
+
+Theorem fmp_return_caller_frontier[local]:
+  ret.iret_adopt_fmp = NONE /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller callee)) = SOME t ==>
+  t.vs_fmp = caller.vs_fmp
+Proof
+  strip_tac >> drule bind_outputs_allocation_frame >>
+  simp[adopt_return_fmp_def, merge_callee_state_def]
+QED
+
+Theorem fmp_source_nonalloc_frontier[local]:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA /\
+  inst.inst_opcode <> DALLOCA /\ pre_fmp_opcode inst.inst_opcode /\
+  step_inst fuel C inst s = OK t ==>
+  t.vs_fmp = s.vs_fmp
+Proof
+  strip_tac >> irule allocation_free_step_fmp_ok >>
+  gvs[allocation_free_opcode_def, pre_fmp_opcode_def] >> metis_tac[]
+QED
+
+Theorem fmp_source_dalloca[local]:
+  inst.inst_opcode = DALLOCA /\ dalloca_no_wrap inst s /\
+  step_inst fuel C inst s = OK t ==>
+  ?size_op sz out.
+    inst.inst_operands = [size_op] /\ inst.inst_outputs = [out] /\
+    eval_operand size_op s = SOME sz /\
+    lookup_var out t = SOME s.vs_fmp /\
+    w2n t.vs_fmp = w2n s.vs_fmp + ceil32 (w2n sz)
+Proof
+  strip_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  gvs[dalloca_no_wrap_def] >>
+  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE, word_add_n2w,
+       w2n_n2w] >>
+  simp[w2n_add_2]
+QED
+
+Theorem fmp_source_step_frontier[local]:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA /\
+  pre_fmp_opcode inst.inst_opcode /\ dalloca_no_wrap inst s /\
+  step_inst fuel C inst s = OK t ==>
+  w2n s.vs_fmp <= w2n t.vs_fmp
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = DALLOCA`
+  >- (drule_all fmp_source_dalloca >> strip_tac >> simp[]) >>
+  drule_all fmp_source_nonalloc_frontier >> simp[]
+QED
+
+Theorem fmp_sites_out[local]:
+  prov_sites P G /\ param_sites P PG /\
+  inst.inst_opcode <> ALLOCA /\
+  (inst.inst_opcode = DALLOCA ==>
+    !site. out_prov PG G inst s' = SOME site ==> P site) /\
+  out_prov PG G inst s' = SOME site ==> P site
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = DALLOCA`
+  >- metis_tac[] >>
+  qpat_x_assum `out_prov _ _ _ _ = _` mp_tac >>
+  simp[out_prov_def] >>
+  Cases_on `inst.inst_opcode = PARAM` >> simp[]
+  >- (gvs[AllCaseEqs(), param_sites_def] >> metis_tac[MEM_EL]) >>
+  Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
+            inst.inst_opcode = ASSIGN` >> simp[] >>
+  metis_tac[prov_sites_first]
+QED
+
+Theorem fmp_sites_step[local]:
+  prov_sites P G /\ param_sites P PG /\
+  inst.inst_opcode <> ALLOCA /\
+  (inst.inst_opcode = DALLOCA ==>
+    !site. out_prov PG G inst s' = SOME site ==> P site) ==>
+  prov_sites P (step_prov PG G inst s')
+Proof
+  strip_tac >> simp[step_prov_def] >> irule prov_sites_set >>
+  simp[] >> metis_tac[fmp_sites_out]
+QED
+
+Theorem fmp_sites_params[local]:
+  prov_sites P G ==> param_sites P (MAP (op_prov G) ops)
+Proof
+  simp[param_sites_def, MEM_MAP] >> rpt strip_tac >>
+  metis_tac[prov_sites_op]
+QED
+
+Theorem fmp_frame_sites_invariant[local]:
+  !vs C stk PG G tn fn inst s.
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  !rpolicy D C' vs' fmp eom.
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom ==>
+  (w2n fmp <= fmp_frame_base (w2n fmp) stk /\
+   fmp_frame_base (w2n fmp) stk <= w2n s.vs_fmp /\
+   EVERY (\f. w2n f.cf_state.vs_fmp <= w2n s.vs_fmp) stk /\
+   prov_sites (\(b,z). 0 < z ==> w2n fmp <= b /\ b + z <= w2n s.vs_fmp) G /\
+   param_sites (\(b,z). 0 < z ==> w2n fmp <= b /\
+                  b + z <= fmp_frame_base (w2n fmp) stk) PG) /\
+  (!pre f rest. stk = pre ++ f::rest ==>
+   w2n fmp <= fmp_frame_base (w2n fmp) rest /\
+   fmp_frame_base (w2n fmp) rest <= w2n f.cf_state.vs_fmp /\
+   EVERY (\g. w2n g.cf_state.vs_fmp <= w2n f.cf_state.vs_fmp) rest /\
+   prov_sites (\(b,z). 0 < z ==> w2n fmp <= b /\
+                     b + z <= w2n f.cf_state.vs_fmp) f.cf_prov /\
+   param_sites (\(b,z). 0 < z ==> w2n fmp <= b /\
+                  b + z <= fmp_frame_base (w2n fmp) rest) f.cf_params)
+Proof
+  ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume fmp_frame_sites_invariant[entry]:
+  rpt strip_tac >>
+  imp_res_tac fmp_enters_block_frontier >>
+  gvs[fmp_stage_ctx_def, fmp_frame_base_def, prov_sites_def,
+      param_sites_def]
+QED
+
+Resume fmp_frame_sites_invariant[next]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `inst.inst_opcode <> ALLOCA /\ pre_fmp_opcode inst.inst_opcode` by
+    (drule_all fmp_source_opcodes >> simp[]) >>
+  `dalloca_no_wrap inst s` by
+    (drule_all fmp_source_memory >> simp[]) >>
+  `w2n s.vs_fmp <= w2n s'.vs_fmp` by
+    (irule fmp_source_step_frontier >> metis_tac[]) >>
+  reverse conj_tac >- (qpat_x_assum `!pre f rest. _` ACCEPT_TAC) >>
+  pure_rewrite_tac [venom_state_accfupds, venom_state_accessors] >>
+  rpt conj_tac
+  >- simp[]
+  >- decide_tac
+  >- (gvs[EVERY_MEM] >> metis_tac[LESS_EQ_TRANS])
+  >- (irule fmp_sites_step >> conj_tac >- simp[] >>
+      conj_tac
+      >- (strip_tac >> rpt strip_tac >>
+          drule_all fmp_source_dalloca >> strip_tac >>
+          gvs[out_prov_def, AllCaseEqs()] >> decide_tac) >>
+      conj_tac
+      >- (gvs[param_sites_def] >> rpt strip_tac >>
+          first_x_assum drule >> Cases_on `site` >> simp[] >> decide_tac) >>
+      irule prov_sites_mono >> goal_assum (drule_at Any) >>
+      Cases >> simp[] >> decide_tac)
+  >> simp[]
+QED
+
+Resume fmp_frame_sites_invariant[block]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `inst.inst_opcode <> ALLOCA /\ pre_fmp_opcode inst.inst_opcode` by
+    (drule_all fmp_source_opcodes >> simp[]) >>
+  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA` by
+    metis_tac[is_terminator_def] >>
+  `s'.vs_fmp = s.vs_fmp` by
+    (irule fmp_source_nonalloc_frontier >> metis_tac[]) >>
+  drule fmp_enters_block_frontier >> strip_tac >>
+  reverse conj_tac >- (qpat_x_assum `!pre f rest. _` ACCEPT_TAC) >>
+  simp[] >> irule prov_sites_entry >> simp[]
+QED
+
+Resume fmp_frame_sites_invariant[call]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule setup_callee_frame >> strip_tac >>
+  drule fmp_enters_block_frontier >> strip_tac >>
+  conj_tac
+  >- (simp[fmp_frame_base_def, prov_sites_def] >>
+      irule fmp_sites_params >> simp[]) >>
+  rpt gen_tac >> namedCases_on `pre` ["", "head tail"]
+  >- (simp[] >> strip_tac >> gvs[] >> simp[]) >>
+  pure_rewrite_tac [APPEND, CONS_11] >> strip_tac >>
+  qpat_x_assum `!pre f rest. _`
+    (qspecl_then [`tail`, `f`, `rest`] mp_tac) >>
+  simp[]
+QED
+
+Resume fmp_frame_sites_invariant[ret]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `inst.inst_opcode <> ALLOCA /\ pre_fmp_opcode inst.inst_opcode` by
+    (drule_all fmp_source_opcodes >> simp[]) >>
+  `inst.inst_opcode <> INVOKE` by
+    metis_tac[ptrSafeRunTheory.step_inst_intret_not_invoke] >>
+  `ret.iret_adopt_fmp = NONE` by
+    (drule_all fmp_source_return >> simp[]) >>
+  `s'.vs_fmp = f.cf_state.vs_fmp` by
+    (irule fmp_return_caller_frontier >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_assum `!pre f rest. _`
+        (qspecl_then [`[]`, `f`, `stk`] mp_tac) >>
+      simp[] >> strip_tac >> simp[] >>
+      irule prov_sites_restrict >> simp[]) >>
+  map_every qx_gen_tac [`pre`, `saved`, `rest`] >> strip_tac >>
+  qpat_x_assum `!pre f rest. _`
+    (qspecl_then [`f::pre`, `saved`, `rest`] mp_tac) >> simp[]
+QED
+
+Finalise fmp_frame_sites_invariant
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -31,7 +290,14 @@ Theorem fmp_stage_frame_sites:
   EVERY (\h. !b z. h = SOME (b,z) /\ 0 < z ==>
                b + z <= fmp_frame_base (w2n fmp) stk) PG
 Proof
-  cheat
+  strip_tac >> drule fmp_frame_sites_invariant >>
+  disch_then drule >> strip_tac >>
+  qpat_x_assum `!pre f rest. _` kall_tac >>
+  gvs[prov_sites_def, param_sites_def, EVERY_MEM] >>
+  conj_tac >> rpt strip_tac
+  >- (qpat_x_assum `!v site. _` drule >> simp[])
+  >- (qpat_x_assum `!v site. _` drule >> simp[])
+  >> gvs[] >> first_x_assum drule >> simp[]
 QED
 
 Theorem fmp_stage_covers_step:
