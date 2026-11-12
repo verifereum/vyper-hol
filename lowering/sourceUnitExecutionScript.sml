@@ -20,6 +20,20 @@ Definition cx_dead_def:
        d_imm := K {}; d_ret := K {} |>
 End
 
+(* Storage guards that hold of the source call's observations put them in
+   their own horizon's domain. *)
+Theorem source_storage_guards_domain:
+  source_storage_ok am tx os gs /\ call_outcomes_storage_ok am tx os gs ==>
+  storage_trace_domain
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am []) (source_storage_trace am tx os gs)
+Proof
+  simp[source_storage_ok_def, call_outcomes_storage_ok_def,
+       storage_trace_domain_def, valid_horizon_def,
+       storage_observations_ok_def, storage_trace_horizon_def,
+       listTheory.EVERY_MEM]
+QED
+
 (* Exact selected-run certificate from UNIT-H-r4; fixed Boolean marks. *)
 Definition source_unit_execution_correct_at_def:
   source_unit_execution_correct_at marks tops ret am tx unit vs <=>
