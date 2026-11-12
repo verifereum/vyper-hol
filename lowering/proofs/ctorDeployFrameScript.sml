@@ -322,6 +322,20 @@ Proof
   gvs[venom_frame_rel_def]
 QED
 
+(* PLANNED ADMISSION: the constructor unit's Venom run makes no oversized
+   CREATE. constructor_call_free excludes CreateTarget; the proof is the
+   call-free lowering's opcode absence carried through O1. *)
+Theorem o1_deploy_unit_create_size_ok:
+  !tops rpolicy runtime_bc dunit dout am tx vs.
+    constructor_call_free tops /\ deploy_typing_ok tops am tx /\
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+    o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout
+    ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) dout.po_unit.cu_context vs
+Proof
+  cheat
+QED
+
 (* PLANNED ADMISSION S7g-d, sufficient gas for deployment: the deploy-side
    counterpart of codegen_gas_sufficient together with deploy_venom_frame.
    Given the constructor unit's resource bound, some gas g, independent of
@@ -376,6 +390,9 @@ Proof
                `code_deposit_cost * max_code_size`] mp_tac codegen_gas_surplus >>
   impl_tac >- fs[] >> disch_then (qx_choose_then `g` assume_tac) >>
   qexists_tac `g` >> rpt strip_tac >>
+  `!vs. mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+          dout.po_unit.cu_context vs` by
+    (drule_all o1_deploy_unit_create_size_ok >> simp[]) >>
   (* no RETURNDATACOPY anywhere in the creation code *)
   drule_all lower_vyper_deploy_unit_call_free_entry >> strip_tac >>
   `!fn inst. MEM fn dout.po_unit.cu_context.ctx_functions /\

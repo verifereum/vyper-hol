@@ -288,6 +288,9 @@ Proof
     codegen_gas_surplus_asm_opt >>
   impl_tac >- simp[] >> disch_then (qx_choose_then `g` assume_tac) >>
   qexists_tac `g` >> rpt strip_tac >>
+  `!vs. mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+          dout.po_unit.cu_context vs` by
+    (drule_all o1_deploy_unit_create_size_ok >> simp[]) >>
   (* the creation frame at the new gas, and its root-shadowed frame *)
   `?c0 rb0. es.contexts = [(c0, rb0)] /\ wf_state es` by
     fs[deploy_state_rel_def] >>
