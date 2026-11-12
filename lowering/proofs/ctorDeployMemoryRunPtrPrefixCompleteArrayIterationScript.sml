@@ -11,7 +11,7 @@ Ancestors
   valueEncoding valueEncodingProps venomMemDefs spillSim
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
   words arithmetic list finite_map pred_set
-  fragGasOriginPtr
+  fragGasOriginPtr fragGasOriginPtrLoop
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot base prefix cursor s.
@@ -28,50 +28,6 @@ val Ok = ``\k ctx func site ids D N d outsz next limit_st
     abi_encoder_registered_effect (ctor_actual_sites func ids) [(d,outsz)] base s /\
     s.vs_gas_readings = base.vs_gas_readings /\ s.vs_code = base.vs_code``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  strip_tac >>
-  qabbrev_tac `fresh = STRING #"%" (toString nv)` >>
-  `ip <> Var fresh /\ Var dst <> Var fresh` by
-    metis_tac[abi_decoder_live_excludes_output] >>
-  drule_all deploy_ctor_array_observation_backedge >>
-  disch_then (qspec_then `hdr` (strip_assume_tac o BETA_RULE)) >>
-  drule_all abi_decode_backedge_sim >> disch_then (qspec_then `ctx` mp_tac) >>
-  simp[w2n_n2w] >> disch_tac >>
-  qpat_x_assum `ip = Var slot_var` SUBST_ALL_TAC >>
-  `slot_var <> fresh` by metis_tac[] >>
-  qpat_assum `eval_operand (Var iv) s = SOME (n2w j)`
-    (mp_then (Pos (el 3)) mp_tac prefix_loop_increment_steps) >>
-  disch_then drule_all >>
-  disch_then (qspecl_then [`id`,`func`,`PG`,`Ddead`] mp_tac) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `step_inst_base _ _ = OK raw` >>
-  qmatch_asmsub_abbrev_tac `ghost_step _ _ _ _ _ _ _ = (H,q)` >>
-  qmatch_asmsub_abbrev_tac `op_taint qt (Var fresh) = {}` >>
-  qexistsl [`jump_to hdr raw`,`H`,`qt`] >>
-  `!x. abi_decoder_older_vars next x ==> x <> fresh` by
-    (simp[Abbr `fresh`,abi_decoder_older_vars_def] >> metis_tac[]) >>
-  `~(jump_to hdr raw).vs_halted /\ (jump_to hdr raw).vs_current_bb = hdr /\
-   (jump_to hdr raw).vs_inst_idx = 0 /\ allocas_from lo (jump_to hdr raw) /\
-   lo <= (jump_to hdr raw).vs_alloca_next` by
-    (simp[Abbr `raw`,jump_to_def,mstore_def,update_var_def,
-       write_memory_with_expansion_def,allocas_from_def] >>
-     gvs[allocas_from_def] >> metis_tac[]) >>
-  `checked ==> gas_path_mem ctx func s 0 (OK (jump_to hdr raw)) /\
-    alloca_history func (jump_to hdr raw)` by
-    (strip_tac >>
-     `slot+32 <= s.vs_alloca_next` by
-       (qpat_assum `(^Ok) k ctx func site ids D N d outsz next limit_st tv vs slot_id slot initial (SUC j) j s`
-         (strip_assume_tac o BETA_RULE) >>
-        fs[alloca_inv_def,alloca_next_valid_def] >> metis_tac[]) >>
-     `alloca_history func s` by metis_tac[] >>
-     drule_all ctor_checked_backedge_path >>
-     simp[Abbr `raw`]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  asm_simp_tac bool_ss [] >> suspend "remaining"
-QED
-*)
 Theorem prefix_complete_backedge_support_mode:
   (checked ==> alloca_history func s) /\
   (^Ok) k ctx func site ids D N d outsz next limit_st
@@ -121,7 +77,54 @@ Theorem prefix_complete_backedge_support_mode:
     ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
 Proof
-  cheat
+  strip_tac >>
+  qabbrev_tac `fresh = STRING #"%" (toString nv)` >>
+  `ip <> Var fresh /\ Var dst <> Var fresh` by
+    metis_tac[abi_decoder_live_excludes_output] >>
+  drule_all deploy_ctor_array_observation_backedge >>
+  disch_then (qspec_then `hdr` (strip_assume_tac o BETA_RULE)) >>
+  drule_all abi_decode_backedge_sim >> disch_then (qspec_then `ctx` mp_tac) >>
+  simp[w2n_n2w] >> disch_tac >>
+  qpat_x_assum `ip = Var slot_var` SUBST_ALL_TAC >>
+  `slot_var <> fresh` by metis_tac[] >>
+  qpat_assum `eval_operand (Var iv) s = SOME (n2w j)`
+    (mp_then (Pos (el 3)) mp_tac prefix_loop_increment_steps) >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`id`,`func`,`PG`,`Ddead`] mp_tac) >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `step_inst_base _ _ = OK raw` >>
+  qmatch_asmsub_abbrev_tac `ghost_step _ _ _ _ _ _ _ = (H,q)` >>
+  qmatch_asmsub_abbrev_tac `op_taint qt (Var fresh) = {}` >>
+  qexistsl [`jump_to hdr raw`,`H`,`qt`] >>
+  `!x. abi_decoder_older_vars next x ==> x <> fresh` by
+    (simp[Abbr `fresh`,abi_decoder_older_vars_def] >> metis_tac[]) >>
+  `~(jump_to hdr raw).vs_halted /\ (jump_to hdr raw).vs_current_bb = hdr /\
+   (jump_to hdr raw).vs_inst_idx = 0 /\ allocas_from lo (jump_to hdr raw) /\
+   lo <= (jump_to hdr raw).vs_alloca_next` by
+    (simp[Abbr `raw`,jump_to_def,mstore_def,update_var_def,
+       write_memory_with_expansion_def,allocas_from_def] >>
+     gvs[allocas_from_def] >> metis_tac[]) >>
+  `slot+32 <= s.vs_alloca_next` by
+    (qpat_assum `(^Ok) k ctx func site ids D N d outsz next limit_st tv vs slot_id slot initial (SUC j) j s`
+       (strip_assume_tac o BETA_RULE) >>
+     fs[alloca_inv_def,alloca_next_valid_def] >> metis_tac[]) >>
+  `checked ==> gas_path_mem ctx func s 0 (OK (jump_to hdr raw)) /\
+    alloca_history func (jump_to hdr raw)` by
+    (strip_tac >>
+     `alloca_history func s` by metis_tac[] >>
+     drule_all ctor_checked_backedge_path >>
+     simp[Abbr `raw`]) >>
+  `run_inst_seq_mem_ok
+     (TAKE 2 (abi_decode_backedge_insts id iv fresh (Var slot_var) hdr)) s` by
+    (irule ctor_checked_increment_mem_ok >> conj_tac >- simp[] >>
+     qexists `slot` >> simp[]) >>
+  `checked ==> !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (s,G,tn) [] (OK (jump_to hdr raw),H,qt)` by
+    (rpt strip_tac >> qunabbrevl_tac [`qt`,`q`,`H`,`raw`] >>
+     irule prefix_loop_increment_path >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  asm_simp_tac bool_ss [] >> suspend "remaining"
 QED
 
 Resume prefix_complete_backedge_support_mode[remaining]:
@@ -298,37 +301,6 @@ val CshiftCode = ``\ty tv.
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
- disch_then (mk_asm "child") >> rpt gen_tac >>
- disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
- `alloca_inv prepared /\ alloca_frontier_inv_from k ctx func site prepared /\
-  ctor_actual_scratch func ids D N prepared /\ D+N <= prepared.vs_alloca_next /\
-  fresh_vars_wrt limit_st prepared` by
-   (qpat_assum `_ k ctx func site ids D N d outsz next limit_st tv vs slot_id slot initial j j prepared`
-     (mp_tac o BETA_RULE) >> simp[]) >>
- `d+32+SUC j*type_memory_size tv <= D+N` by
-   (`SUC j * type_memory_size tv <= LENGTH vs * type_memory_size tv` by
-     simp[LE_MULT_RCANCEL] >> decide_tac) >>
- asm "child" (fn th =>
-   qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ _ = _`
-     (mp_then Any mp_tac (BETA_RULE th))) >>
- disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
- disch_then (drule_at (Pat `alloca_frontier_inv_from _ _ _ _ prepared`)) >>
- disch_then (drule_at (Pat `fresh_vars_wrt _ prepared`)) >>
- disch_then (drule_at (Pat `FLOOKUP G child_dst = _`)) >>
- disch_then (drule_at (Pat `op_taint tn child_src = _`)) >>
- disch_then (drule_at (Pat `eval_operand child_src prepared = _`)) >>
- disch_then (drule_at (Pat `ctor_actual_scratch _ _ _ _ prepared`)) >>
- disch_then (qspecl_then [`sb`,`Ddead`,`lo`,`PG`] mp_tac) >>
- (impl_tac >- (asm_x "child" kall_tac >>
-   asm_simp_tac (srw_ss()) [MULT_CLAUSES] >>
-   conj_tac >- metis_tac[operand_distinct,operand_11] >>
-   gvs[MULT_CLAUSES] >> decide_tac)) >>
- asm_x "child" kall_tac >> strip_tac >> suspend "compose"
-QED
-*)
 Theorem prefix_complete_child_iteration_mode:
  (^CshiftMode) checked ty tv ==>
  !middle end_st child_dst child_src prepared ctx func site limit_st
@@ -414,7 +386,32 @@ Theorem prefix_complete_child_iteration_mode:
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn prepared)
 Proof
-  cheat
+ disch_then (mk_asm "child") >> rpt gen_tac >>
+ disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+ `alloca_inv prepared /\ alloca_frontier_inv_from k ctx func site prepared /\
+  ctor_actual_scratch func ids D N prepared /\ D+N <= prepared.vs_alloca_next /\
+  fresh_vars_wrt limit_st prepared` by
+   (qpat_assum `_ k ctx func site ids D N d outsz next limit_st tv vs slot_id slot initial j j prepared`
+     (mp_tac o BETA_RULE) >> simp[]) >>
+ `d+32+SUC j*type_memory_size tv <= D+N` by
+   (`SUC j * type_memory_size tv <= LENGTH vs * type_memory_size tv` by
+     simp[LE_MULT_RCANCEL] >> decide_tac) >>
+ asm "child" (fn th =>
+   qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ _ = _`
+     (mp_then Any mp_tac (BETA_RULE th))) >>
+ disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
+ disch_then (drule_at (Pat `alloca_frontier_inv_from _ _ _ _ prepared`)) >>
+ disch_then (drule_at (Pat `fresh_vars_wrt _ prepared`)) >>
+ disch_then (drule_at (Pat `FLOOKUP G child_dst = _`)) >>
+ disch_then (drule_at (Pat `op_taint tn child_src = _`)) >>
+ disch_then (drule_at (Pat `eval_operand child_src prepared = _`)) >>
+ disch_then (drule_at (Pat `ctor_actual_scratch _ _ _ _ prepared`)) >>
+ disch_then (qspecl_then [`sb`,`Ddead`,`lo`,`PG`] mp_tac) >>
+ (impl_tac >- (asm_x "child" kall_tac >>
+   asm_simp_tac (srw_ss()) [MULT_CLAUSES] >>
+   conj_tac >- metis_tac[operand_distinct,operand_11] >>
+   gvs[MULT_CLAUSES] >> decide_tac)) >>
+ asm_x "child" kall_tac >> strip_tac >> suspend "compose"
 QED
 
 Resume prefix_complete_child_iteration_mode[compose]:
@@ -470,6 +467,8 @@ QED
 Resume prefix_complete_child_iteration_mode[finish]:
  rule_assum_tac BETA_RULE >>
  qexistsl [`t`,`H'`,`qt'`,`B UNION B'`] >>
+ conj_tac >- (rpt strip_tac >> irule gas_origin_ptr_path_trans >>
+   qexistsl [`actual`,`H`,`qt`] >> metis_tac[]) >>
  conj_tac >- (strip_tac >>
    `gas_path_mem ctx func prepared 0 (OK actual) /\
     gas_path_mem ctx func actual 0 (OK t) /\ alloca_history func t` by metis_tac[] >>

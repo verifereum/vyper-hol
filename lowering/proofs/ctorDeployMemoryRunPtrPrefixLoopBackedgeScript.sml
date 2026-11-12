@@ -9,7 +9,7 @@ Ancestors
   abiDecoderExecution abiDecoderContract abiDecoderArrayBackedge abiDecoderReentry
   venomMemDefs valueEncodingProps
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
-  emitHelper codegenRel contextCodegenRel memLocDefs
+  emitHelper codegenRel contextCodegenRel memLocDefs fragGasOriginPtrLoop
   words arithmetic list finite_map pred_set
 
 Theorem prefix_loop_increment_steps:
@@ -188,6 +188,111 @@ Proof
   simp[ptr_safe_run_def,Once ptr_safe_block_def] >>
   gs[Abbr `u1`] >> metis_tac[]
 QED
+
+(* Forward twin of prefix_loop_increment_run: the ADD/MSTORE/JMP backedge is
+   one zero-mark joint gas-origin pointer path from the same ghost. *)
+Theorem prefix_loop_increment_path:
+  ip <> fresh /\
+  eval_operand (Var ip) s = SOME (n2w slot) /\
+  eval_operand (Var iv) s = SOME (n2w j) /\
+  FLOOKUP G ip = SOME (slot,32) /\
+  op_taint tn (Var ip) = {} /\ op_taint tn (Var iv) = {} /\
+  slot < dimword(:256) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ abi_decode_backedge_insts iid iv fresh (Var ip) hdr /\
+  s.vs_inst_idx = LENGTH prefix /\
+  run_inst_seq_mem_ok (TAKE 2 (abi_decode_backedge_insts iid iv fresh (Var ip) hdr)) s ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (jump_to hdr (mstore slot (n2w (SUC j)) (update_var fresh (n2w (SUC j)) s))),
+     set_prov G [fresh] (first_prov G [Var iv;Lit 1w]),
+     step_taint (mk_inst (iid+1) MSTORE [Var ip;Var fresh] [])
+       (update_var fresh (n2w (SUC j)) s)
+       (mstore slot (n2w (SUC j)) (update_var fresh (n2w (SUC j)) s))
+       (step_taint (mk_inst iid ADD [Var iv;Lit 1w] [fresh]) s
+          (update_var fresh (n2w (SUC j)) s) tn))
+Proof
+  strip_tac >>
+  drule_all (Q.INST [`iv` |-> `iv`, `j` |-> `j`] prefix_loop_increment_steps) >>
+  disch_then (qspecl_then [`iid`,`func`,`PG`,`D`] mp_tac) >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qabbrev_tac `a = mk_inst iid ADD [Var iv;Lit 1w] [fresh]` >>
+  qabbrev_tac `k = mk_inst (iid+1) MSTORE [Var ip;Var fresh] []` >>
+  qabbrev_tac `u = update_var fresh (n2w (SUC j)) s` >>
+  qabbrev_tac `t = mstore slot (n2w (SUC j)) u` >>
+  qabbrev_tac `H = set_prov G [fresh] (first_prov G [Var iv;Lit 1w])` >>
+  qabbrev_tac `q = step_taint a s u tn` >>
+  qabbrev_tac `qt = step_taint k u t q` >>
+  `s with vs_inst_idx := s.vs_inst_idx = s` by
+    simp[venom_state_component_equality] >>
+  `u with vs_inst_idx := s.vs_inst_idx = u` by
+    simp[Abbr `u`,update_var_def,venom_state_component_equality] >>
+  `t.vs_current_bb = s.vs_current_bb /\ ~t.vs_halted /\
+   allocas_from lo (u with vs_inst_idx := s.vs_inst_idx + 1) /\
+   allocas_from lo (t with vs_inst_idx := s.vs_inst_idx + 2)` by
+    (simp[Abbr `u`,Abbr `t`,update_var_def,mstore_def,
+      allocas_from_def,write_memory_with_expansion_def] >>
+     gvs[allocas_from_def] >> metis_tac[]) >>
+  `eval_operand (Var ip) (u with vs_inst_idx := s.vs_inst_idx + 1) = SOME (n2w slot) /\
+   eval_operand (Var fresh) (u with vs_inst_idx := s.vs_inst_idx + 1) =
+     SOME (n2w (SUC j))` by
+    (simp[Abbr `u`,eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE] >>
+     gvs[eval_operand_def,lookup_var_def]) >>
+  `FLOOKUP H ip = SOME (slot,32) /\ op_taint q (Var ip) = {} /\
+   op_taint q (Var fresh) = {}` by
+    (simp[Abbr `q`,Abbr `a`,Abbr `u`,SRULE [LET_THM] prefix_bool_body_arith_taint_frame,
+      update_var_def,op_taint_def] >>
+     simp[step_taint_def,mk_inst_def,set_var_taint_def,adopt_reset_def,
+       out_taint_def,op_taint_def,FLOOKUP_UPDATE,Abbr `H`,set_prov_def] >>
+     Cases_on `first_prov G [Var iv;Lit 1w]` >> simp[FLOOKUP_DRESTRICT,FLOOKUP_UPDATE]) >>
+  `step_inst 0 ctx a s = OK u` by
+    (simp[Abbr `a`,step_inst_non_invoke] >> asm_rewrite_tac[]) >>
+  `step_inst 0 ctx k (u with vs_inst_idx := s.vs_inst_idx + 1) =
+     OK (t with vs_inst_idx := s.vs_inst_idx + 1)` by
+    (qspecl_then [`iid+1`,`Var ip`,`Var fresh`,
+       `u with vs_inst_idx := s.vs_inst_idx + 1`,`n2w slot`,`n2w (SUC j)`,`0`,`ctx`]
+       mp_tac prefix_mstore_endpoint >>
+     simp[Abbr `k`,Abbr `t`,w2n_n2w,mstore_idx]) >>
+  `ptr_safe_step D lo 0 ctx func PG H q k (u with vs_inst_idx := s.vs_inst_idx + 1)` by
+    (simp[Abbr `k`] >> irule prefix_mstore_ptr_step >> simp[] >>
+     qexistsl [`n2w slot:bytes32`,`slot`,`32`] >> simp[w2n_n2w]) >>
+  `ghost_step 0 ctx PG H q k (u with vs_inst_idx := s.vs_inst_idx + 1) = (H,qt)` by
+    (qpat_x_assum `step_inst 0 ctx k _ = _` mp_tac >>
+     simp[Abbr `k`,Abbr `qt`] >> strip_tac >>
+     drule prefix_mstore_ghost_step >> simp[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (t with vs_inst_idx := s.vs_inst_idx + 2), H, qt)` by
+    (qspecl_then [`[a;k]`,`bb`,`s`,`G`,`tn`,
+        `\n. if n = 0 then s else if n = 1 then u else t`,
+        `\n. if n = 0 then G else H`,
+        `\n. if n = 0 then tn else if n = 1 then q else qt`]
+       mp_tac prefix_trace_origin_ptr_path >>
+     impl_tac >- suspend "trace" >> simp[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+     (t with vs_inst_idx := s.vs_inst_idx + 2, H, qt) []
+     (OK (jump_to hdr (t with vs_inst_idx := s.vs_inst_idx + 2)), H, qt)` by
+    (irule jmp_origin_ptr_path >> qexistsl [`bb`,`iid+2`] >>
+     simp[get_instruction_def,abi_decode_backedge_insts_def,EL_APPEND_EQN]) >>
+  `jump_to hdr (t with vs_inst_idx := s.vs_inst_idx + 2) = jump_to hdr t` by
+    simp[jump_to_def] >>
+  irule gas_origin_ptr_path_trans >>
+  qexistsl [`t with vs_inst_idx := s.vs_inst_idx + 2`,`H`,`qt`] >>
+  gvs[]
+QED
+
+Resume prefix_loop_increment_path[trace]:
+  rpt conj_tac
+  >- simp[]
+  >- simp[]
+  >- simp[Abbr `a`,Abbr `k`,abi_decode_backedge_insts_def,DROP_LENGTH_APPEND,
+       listTheory.isPREFIX_THM]
+  >- simp[] >- simp[] >- simp[]
+  >- simp[Abbr `a`,Abbr `k`,mk_inst_def,is_terminator_def]
+  >- (qpat_x_assum `run_inst_seq_mem_ok _ s` mp_tac >>
+      simp_tac (srw_ss()) [Abbr `a`,Abbr `k`,abi_decode_backedge_insts_def,TAKE_def]) >>
+  Cases >> simp[] >> Cases_on `n` >> simp[]
+QED
+
+Finalise prefix_loop_increment_path
 
 Theorem prefix_loop_backedge_pair:
   ctor_actual_array_observation ctx func site ids D N d outsz next limit_st
