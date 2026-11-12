@@ -154,6 +154,328 @@ Proof
   once_rewrite_tac[ptr_safe_block_def] >> simp[get_instruction_def]
 QED
 
+Theorem dispatch_entered_target_unsafe_probe[local]:
+  lookup_block "fallback" fn.fn_blocks = SOME
+    <|bb_label := "fallback"; bb_instructions :=
+      [mk_inst 90 PHI [Label "@match_0"; Var "incoming"] ["copied"];
+       mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]]|> ==>
+  let t = jump_to "fallback" (jump_to "@match_0"
+    (update_var "%0" 1w
+      (update_var "incoming" 0w (init_venom_state "entry")))) in
+  let tn = entry_taint with t_var :=
+    FEMPTY |+ ("incoming", {0}) |+ ("%0", {}) in
+  !D ctx G. ~ptr_safe_blocks D 0 1 ctx fn [] G
+    (entry_taint_vars fn t tn) t
+Proof
+  strip_tac >> simp[] >> rpt gen_tac >>
+  simp[ptr_safe_blocks_def, jump_to_def, init_venom_state_def,
+       update_var_def, eval_phis_def, eval_one_phi_def, resolve_phi_def,
+       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, mk_inst_def,
+       phi_prefix_length_def, entry_taint_vars_def, phis_taint_def,
+       phi_taint_def, set_var_taint_def] >>
+  once_rewrite_tac[ptr_safe_block_def] >>
+  simp[get_instruction_def] >> disj1_tac >>
+  simp[ptr_safe_step_def, ptr_inst_ok_def, taint_ok_def,
+       mk_inst_def, op_taint_def, FLOOKUP_UPDATE] >>
+  disj2_tac >> disj1_tac >> disj1_tac >>
+  qexists_tac `Var "copied"` >> simp[]
+QED
+
+Theorem dispatch_initial_unsafe_probe[local]:
+  lookup_block "entry" fn.fn_blocks = SOME
+    <|bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"];
+       mk_inst 1 JNZ [Var "%0"; Label "@match_0"; Label "@next_1"] []]|> /\
+  lookup_block "@match_0" fn.fn_blocks = SOME
+    <|bb_label := "@match_0";
+      bb_instructions := [mk_inst 2 JMP [Label "fallback"] []]|> /\
+  lookup_block "fallback" fn.fn_blocks = SOME
+    <|bb_label := "fallback"; bb_instructions :=
+      [mk_inst 90 PHI [Label "@match_0"; Var "incoming"] ["copied"];
+       mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]]|> ==>
+  !D ctx. ~ptr_safe_run D 0 3 ctx fn [] FEMPTY
+    (entry_taint with t_var := FEMPTY |+ ("incoming", {0}))
+    (update_var "incoming" 0w (init_venom_state "entry"))
+Proof
+  strip_tac >> rpt gen_tac >>
+  simp[ptr_safe_run_def, update_var_def, init_venom_state_def] >>
+  once_rewrite_tac[ptr_safe_block_def] >>
+  simp[get_instruction_def, mk_inst_def, step_inst_non_invoke,
+       step_inst_base_opcode_eqs, exec_pure2_def, eval_operands_def,
+       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+       update_var_def, is_terminator_def] >>
+  disj2_tac >>
+  once_rewrite_tac[ptr_safe_block_def] >>
+  simp[get_instruction_def, mk_inst_def, step_inst_non_invoke,
+       step_inst_base_opcode_eqs, eval_operand_def, lookup_var_def,
+       FLOOKUP_UPDATE, jump_to_def, is_terminator_def] >>
+  disj2_tac >>
+  simp[ptr_safe_blocks_def, eval_phis_def, eval_one_phi_def,
+       resolve_phi_def, phi_prefix_length_def] >>
+  once_rewrite_tac[ptr_safe_block_def] >>
+  simp[get_instruction_def, mk_inst_def, step_inst_non_invoke,
+       step_inst_base_opcode_eqs, jump_to_def, is_terminator_def] >>
+  disj2_tac >>
+  simp[ptr_safe_blocks_def, eval_phis_def, eval_one_phi_def,
+       resolve_phi_def, phi_prefix_length_def, mk_inst_def,
+       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, update_var_def] >>
+  once_rewrite_tac[ptr_safe_block_def] >>
+  simp[get_instruction_def] >> disj1_tac >>
+  simp[ptr_safe_step_def, ptr_inst_ok_def, taint_ok_def] >>
+  disj2_tac >> disj1_tac >> disj1_tac >>
+  qexists_tac `Var "copied"` >>
+  simp[op_taint_def, entry_taint_vars_def, phis_taint_def,
+       phi_taint_def, resolve_phi_def, set_var_taint_def,
+       ghost_step_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+       exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
+       step_taint_def, out_taint_def, FLOOKUP_UPDATE, mk_inst_def]
+QED
+
+Theorem dispatch_region_closed_probe[local]:
+  lookup_block "entry" fn.fn_blocks = SOME
+    <|bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"];
+       mk_inst 1 JNZ [Var "%0"; Label "@match_0"; Label "@next_1"] []]|> /\
+  lookup_block "@match_0" fn.fn_blocks = SOME
+    <|bb_label := "@match_0";
+      bb_instructions := [mk_inst 2 JMP [Label "fallback"] []]|> /\
+  lookup_block "fallback" fn.fn_blocks = SOME
+    <|bb_label := "fallback"; bb_instructions :=
+      [mk_inst 90 PHI [Label "@match_0"; Var "incoming"] ["copied"];
+       mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]]|> ==>
+  let ss = update_var "incoming" 0w (init_venom_state "entry") in
+  let u = update_var "%0" 1w ss with vs_inst_idx := 1 in
+  let v = jump_to "@match_0" u in
+  let t = jump_to "fallback" v in
+  let tn = entry_taint with t_var := FEMPTY |+ ("incoming", {0}) in
+  let G1 = step_prov [] FEMPTY (mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"])
+             (update_var "%0" 1w ss) in
+  let tn1 = step_taint (mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"]) ss
+             (update_var "%0" 1w ss) tn in
+  let P = \a A atn.
+    (a = ss /\ A = FEMPTY /\ atn = tn) \/
+    (a = u /\ A = G1 /\ atn = tn1) \/
+    (a = v /\ A = G1 /\ atn = tn1) \/
+    (a = t /\ A = G1 /\ atn = tn1) \/
+    (a.vs_current_bb = "fallback" /\ 0 < a.vs_inst_idx) in
+  !D ctx a A atn b B btn k.
+    P a A atn /\ gas_path_ptr_edge D 0 ctx fn [] A atn a k B btn (OK b) ==>
+    P b B btn
+Proof
+  strip_tac >> simp_tac bool_ss [LET_THM] >> rpt gen_tac >>
+  strip_tac
+  >- (disj2_tac >> disj1_tac >>
+      gvs[fragGasPathPtrTheory.gas_path_ptr_edge_def, update_var_def,
+          init_venom_state_def, get_instruction_def, mk_inst_def,
+          step_inst_non_invoke, step_inst_base_opcode_eqs,
+          exec_pure2_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+          is_terminator_def, exit_result_def] >>
+      gvs[ghost_step_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+           exec_pure2_def, eval_operand_def, update_var_def, mk_inst_def])
+  >- (disj2_tac >> disj2_tac >> disj1_tac >>
+      qmatch_goalsub_abbrev_tac `B = G1` >>
+      qmatch_goalsub_abbrev_tac `btn = tn1` >>
+      gvs[fragGasPathPtrTheory.gas_path_ptr_edge_def, update_var_def,
+          init_venom_state_def, jump_to_def, get_instruction_def, mk_inst_def,
+          step_inst_non_invoke, step_inst_base_opcode_eqs,
+          eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+          is_terminator_def, exit_result_def] >>
+      gvs[eval_phis_def, eval_one_phi_def, phi_prefix_length_def,
+          entry_prov_def, phis_prov_def, entry_taint_vars_def,
+          phis_taint_def])
+  >- (ntac 3 disj2_tac >>
+      qmatch_goalsub_abbrev_tac `B = G1` >>
+      qmatch_goalsub_abbrev_tac `btn = tn1` >>
+      gvs[fragGasPathPtrTheory.gas_path_ptr_edge_def, update_var_def,
+          init_venom_state_def, jump_to_def, get_instruction_def, mk_inst_def,
+          step_inst_non_invoke, step_inst_base_opcode_eqs,
+          is_terminator_def, exit_result_def] >>
+      gvs[eval_phis_def, eval_one_phi_def, resolve_phi_def,
+          eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+          phi_prefix_length_def, update_var_def])
+  >- (ntac 4 disj2_tac >>
+      gvs[fragGasPathPtrTheory.gas_path_ptr_edge_def, update_var_def,
+          init_venom_state_def, jump_to_def, get_instruction_def, mk_inst_def,
+          step_inst_non_invoke, step_inst_base_opcode_eqs,
+          is_terminator_def, exit_result_def]) >>
+  ntac 4 disj2_tac >>
+  gvs[fragGasPathPtrTheory.gas_path_ptr_edge_def, get_instruction_def] >>
+  Cases_on `a.vs_inst_idx` >> gvs[] >>
+  Cases_on `n` >> gvs[mk_inst_def, is_terminator_def, exit_result_def] >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+      exec_pure2_def, eval_operand_def, AllCaseEqs(), update_var_def]
+QED
+
+Theorem dispatch_region_path_probe[local]:
+  lookup_block "entry" fn.fn_blocks = SOME
+    <|bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"];
+       mk_inst 1 JNZ [Var "%0"; Label "@match_0"; Label "@next_1"] []]|> /\
+  lookup_block "@match_0" fn.fn_blocks = SOME
+    <|bb_label := "@match_0";
+      bb_instructions := [mk_inst 2 JMP [Label "fallback"] []]|> /\
+  lookup_block "fallback" fn.fn_blocks = SOME
+    <|bb_label := "fallback"; bb_instructions :=
+      [mk_inst 90 PHI [Label "@match_0"; Var "incoming"] ["copied"];
+       mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]]|> ==>
+  let ss = update_var "incoming" 0w (init_venom_state "entry") in
+  let u = update_var "%0" 1w ss with vs_inst_idx := 1 in
+  let v = jump_to "@match_0" u in
+  let t = jump_to "fallback" v in
+  let tn = entry_taint with t_var := FEMPTY |+ ("incoming", {0}) in
+  let G1 = step_prov [] FEMPTY (mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"])
+             (update_var "%0" 1w ss) in
+  let tn1 = step_taint (mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"]) ss
+             (update_var "%0" 1w ss) tn in
+  !D ctx n G' tn' b.
+    gas_path_ptr D 0 ctx fn [] FEMPTY tn ss n G' tn' (OK b) /\
+    b.vs_current_bb = "fallback" /\ b.vs_inst_idx = 0 ==>
+    b = t /\ G' = G1 /\ tn' = tn1
+Proof
+  strip_tac >> simp_tac bool_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn [] FEMPTY tn ss n G' tn' (OK b)` >>
+  qmatch_goalsub_abbrev_tac `b = t` >>
+  qmatch_goalsub_abbrev_tac `G' = G1` >>
+  qmatch_goalsub_abbrev_tac `tn' = tn1` >>
+  qabbrev_tac `u = update_var "%0" 1w ss with vs_inst_idx := 1` >>
+  qabbrev_tac `v = jump_to "@match_0" u` >>
+  qabbrev_tac `P = \a A atn.
+    (a = ss /\ A = FEMPTY /\ atn = tn) \/
+    (a = u /\ A = G1 /\ atn = tn1) \/
+    (a = v /\ A = G1 /\ atn = tn1) \/
+    (a = t /\ A = G1 /\ atn = tn1) \/
+    (a.vs_current_bb = "fallback" /\ 0 < a.vs_inst_idx)` >>
+  `P b G' tn'` suffices_by
+    (simp[Abbr `P`] >> rpt strip_tac >> gvs[] >>
+     unabbrev_all_tac >> gvs[update_var_def, init_venom_state_def, jump_to_def]) >>
+  drule dispatch_ptr_path_invariant >>
+  disch_then (qspec_then `P` irule) >>
+  simp[Abbr `P`] >>
+  unabbrev_all_tac >>
+  drule_all dispatch_region_closed_probe >>
+  simp_tac bool_ss [LET_THM] >>
+  disch_then (qspecl_then [`D`, `ctx`] mp_tac) >> simp[]
+QED
+
+Theorem dispatch_eq_taint_probe[local]:
+  let ss = update_var "incoming" 0w (init_venom_state "entry") in
+  step_taint (mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"]) ss
+    (update_var "%0" 1w ss)
+    (entry_taint with t_var := FEMPTY |+ ("incoming", {0})) =
+  (entry_taint with t_var := FEMPTY |+ ("incoming", {0}) |+ ("%0", {}))
+Proof
+  simp[step_taint_def, out_taint_def, set_var_taint_def,
+       mem_taint_def, new_site_bytes_def, step_writes_def,
+       written_taint_def, source_memory_write_ranges_def, range_bytes_def,
+       store_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def,
+       update_var_def, init_venom_state_def, entry_taint_def,
+       eval_operand_def, FLOOKUP_UPDATE, pred_setTheory.EXTENSION] 
+QED
+
+Theorem dispatch_frozen_contract_false_probe[local]:
+  ~(!sels mid st st'.
+    compile_selector_checks mid sels st = ((), st') ==>
+    !ctx fn ss m lo PG G tn.
+      fn_has_code st st' fn /\ eval_operand mid ss = SOME m /\
+      fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+      ss.vs_current_bb = st.cs_current_bb /\
+      ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+      allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) /\
+      op_taint tn mid = {} /\
+      (st'.cs_current_insts = [] ==>
+        ?bb. lookup_block st'.cs_current_bb fn.fn_blocks = SOME bb /\
+             phi_prefix_length bb.bb_instructions = 0) ==>
+      ?tt G' tn'.
+        gas_path_mem ctx fn ss 0 (OK tt) /\
+        (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (ss, G, tn) [] (OK tt, G', tn')) /\
+        vars_pc_only ss tt /\ fresh_vars_wrt st' tt /\ ~tt.vs_halted /\
+        tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+        tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+        (case selector_hit m sels of
+           SOME lbl => tt.vs_current_bb = lbl /\ tt.vs_inst_idx = 0
+         | NONE => tt.vs_current_bb = st'.cs_current_bb /\
+                   tt.vs_inst_idx = LENGTH st'.cs_current_insts) /\
+        !D. (!fuel. case selector_hit m sels of
+           SOME lbl => ptr_safe_blocks D lo fuel ctx fn PG G' tn' tt
+         | NONE => ptr_safe_run D lo fuel ctx fn PG G' tn' tt) ==>
+          !fuel. ptr_safe_run D lo fuel ctx fn PG G tn ss)
+Proof
+  strip_tac >>
+  qabbrev_tac `st = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+    cs_current_bb := "entry"; cs_current_insts := [];
+    cs_blocks := []; cs_data_sections := []|>` >>
+  qabbrev_tac `st' = SND (compile_selector_checks (Lit 0w) [(0,"fallback")] st)` >>
+  qabbrev_tac `fn = ARB with fn_blocks := REVERSE st'.cs_blocks ++
+    [<|bb_label := "@next_1"; bb_instructions := []|>;
+     <|bb_label := "fallback"; bb_instructions :=
+       [mk_inst 90 PHI [Label "@match_0"; Var "incoming"] ["copied"];
+        mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]]|>]` >>
+  qabbrev_tac `ss = update_var "incoming" 0w (init_venom_state "entry")` >>
+  qabbrev_tac `tn = entry_taint with t_var := FEMPTY |+ ("incoming", {0})` >>
+  `compile_selector_checks (Lit 0w) [(0,"fallback")] st = ((),st')` by
+    simp[Abbr `st`, Abbr `st'`, dispatch_singleton_compile_probe] >>
+  `fn_has_code st st' fn /\
+   (?bb. lookup_block st'.cs_current_bb fn.fn_blocks = SOME bb /\
+         phi_prefix_length bb.bb_instructions = 0)` by
+    (mp_tac dispatch_singleton_layout_probe >>
+     simp_tac bool_ss [LET_THM] >>
+     disch_then (qspec_then `fn` mp_tac) >>
+     simp[Abbr `st`, Abbr `st'`, Abbr `fn`, dispatch_singleton_compile_probe,
+          phi_prefix_length_def]) >>
+  qpat_x_assum `!sels mid st st'. _`
+    (qspecl_then [`[(0,"fallback")]`, `Lit 0w`, `st`, `st'`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qspecl_then [`ARB`, `fn`, `ss`, `0w`, `0`, `[]`, `FEMPTY`, `tn`] mp_tac) >>
+  (impl_tac >-
+    (mp_tac dispatch_singleton_state_probe >>
+     simp[Abbr `st`, Abbr `ss`, Abbr `tn`] >> metis_tac[])) >>
+  simp_tac bool_ss [selector_hit_def, optionTheory.option_case_def] >>
+  rpt strip_tac >> spose_not_then strip_assume_tac >>
+  mp_tac dispatch_singleton_layout_probe >>
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+  disch_then (qspec_then `fn` mp_tac) >>
+  (impl_tac >- simp[Abbr `fn`, Abbr `st'`, Abbr `st`, dispatch_singleton_compile_probe]) >>
+  strip_tac >>
+  qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+    (qspecl_then [`ARB`, `ARB`] mp_tac) >>
+  disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_projections) >>
+  pure_rewrite_tac [LENGTH] >> strip_tac >>
+  drule_all dispatch_region_path_probe >>
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+  disch_then (qspecl_then [`ARB`, `ARB`] mp_tac) >>
+  disch_then (qspecl_then [`0`, `G'`, `tn'`, `tt`] mp_tac) >>
+  (impl_tac >- simp[Abbr `ss`, Abbr `tn`]) >>
+  strip_tac >> gvs[dispatch_eq_taint_probe] >>
+  drule dispatch_raw_target_safe_probe >>
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+  disch_then (qspecl_then [`ARB`, `ARB`,
+    `step_prov [] FEMPTY (mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"])
+      (update_var "%0" 1w (update_var "incoming" 0w (init_venom_state "entry")))`] mp_tac) >>
+  strip_tac >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_blocks _ _ _ _ _ _ _ _ _) ==> _`
+    (qspec_then `ARB` mp_tac) >>
+  (impl_tac >-
+    gvs[Abbr `ss`, Abbr `tn`,
+        SRULE [LET_THM] dispatch_eq_taint_probe, jump_to_def]) >>
+  strip_tac >>
+  drule_all dispatch_initial_unsafe_probe >>
+  disch_then (qspecl_then [`ARB`, `ARB`] mp_tac) >>
+  gvs[Abbr `ss`, Abbr `tn`]
+QED
+
+(* Diagnostic audit of the checked local counterexample, before the unchanged
+   endpoint proofs. This inspects a theorem; it creates no theorem or axiom. *)
+val _ = let
+  val th = dispatch_frozen_contract_false_probe
+  val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+in
+  print "CHECKED dispatch_frozen_contract_false_probe\n";
+  print ("hypotheses=" ^ Int.toString (length (Thm.hyp th)) ^ "\n");
+  print ("oracles=[" ^ String.concatWith "," oracles ^ "]\n");
+  print ("axioms=[" ^ String.concatWith "," axioms ^ "]\n");
+  print (Parse.thm_to_string th ^ "\nEND CHECKED PROBE\n")
+end;
+
 Theorem ptr_safe_jump_exact_continuation:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
