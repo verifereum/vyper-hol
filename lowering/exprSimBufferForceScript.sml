@@ -37,16 +37,16 @@ Proof
   >- (rewrite_tac[gas_summary_at_def] >>
       disch_then (qx_choose_then `res` (qx_choose_then `es_end`
         (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
-      qexists_tac `marks` >>
       reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
-      >- (disch_then kall_tac >> disj1_tac >>
+      >- (disch_then kall_tac >> qexists_tac `marks` >> disj1_tac >>
           irule gas_bad_storage_at_bind_left >>
           simp[storage_trace_frame_read_result] >>
           irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
       `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
          es_end.storage_trace` by fs[storage_trace_domain_def] >>
-      disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
-      disch_then (DISJ_CASES_THEN strip_assume_tac)
+      disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >> BETA_TAC
       >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
             (assume_tac o SIMP_RULE (srw_ss()) []) >>
           first_assum (drule_then strip_assume_tac) >> gvs[] >>
