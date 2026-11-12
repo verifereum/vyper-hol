@@ -406,7 +406,7 @@ Theorem checked_log_packing_canonical:
   vyper_to_abi (type_env tops) (TupleT (log_non_indexed_types flags fts))
     (ArrayV (TupleV (select_log_args F flags values))) = SOME av /\
   fn_has_code cs packed_cut func /\ fn_has_code packed_cut encoder_start func /\
-  state_well_typed es /\ state_rel_simple cenv cx es ss /\
+  state_well_typed es /\ state_rel_simple H cenv cx es ss /\
   local_ptrs_rel func cenv es.scopes ss /\
   source_memory_separated cenv es.scopes ss (w2n root_addr)
     (type_memory_size (TupleTV (select_log_args F flags ftvs))) /\
@@ -432,7 +432,7 @@ Theorem checked_log_packing_canonical:
     fragment_path ctx func ss packed /\ copy_state_frame ss packed /\
     (!op. abi_operand_before cs.cs_next_var op ==>
       eval_operand op packed = eval_operand op ss) /\
-    state_rel_simple cenv cx es packed /\ local_ptrs_rel func cenv es.scopes packed /\
+    state_rel_simple H cenv cx es packed /\ local_ptrs_rel func cenv es.scopes packed /\
     packed.vs_current_bb = packed_cut.cs_current_bb /\
     packed.vs_inst_idx = LENGTH packed_cut.cs_current_insts /\ ~packed.vs_halted /\
     frag_exec ctx packed_cut final (\s. s = packed)
