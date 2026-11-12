@@ -111,7 +111,7 @@ Proof
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def] >> metis_tac[]) >>
   `SND o_f rv = G` by
-    (qpat_x_assum `~ctx_has_dalloca C ==> resolved_complete _ _` mp_tac >>
+    (qpat_x_assum `resolved_complete _ _` mp_tac >>
      fs[resolved_complete_def]) >>
   `eval_operand opn t = SOME sz` by suspend "size" >>
   Cases_on `w2n sz = 0` >- suspend "zero" >>

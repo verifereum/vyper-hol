@@ -153,7 +153,7 @@ Proof
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
   `SND o_f rv = G` by
-    (qpat_x_assum `~ctx_has_dalloca C ==> resolved_complete _ _` mp_tac >>
+    (qpat_x_assum `resolved_complete _ _` mp_tac >>
      fs[resolved_complete_def]) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
   `post = mstore (w2n dst) value s` by

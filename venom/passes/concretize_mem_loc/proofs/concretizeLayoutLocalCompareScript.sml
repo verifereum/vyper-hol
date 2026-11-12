@@ -159,15 +159,15 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `taint_ok fn tn inst s /\ access_ok lo G fn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `(!k aid b sz.
+  Q.SUBGOAL_THEN `(!k aid b sz.
       k < LENGTH ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) /\
       FLOOKUP (SND (EL k ((fn,s.vs_allocas)::
         MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk))) aid = SOME (b,sz) ==>
       b + sz <= w2n s.vs_initial_fmp) \/
-   SND o_f rv = G` by
-    (Cases_on `ctx_has_dalloca C`
-     >- (disj1_tac >> rpt strip_tac >> irule frame_reachable_caches_below >> metis_tac[]) >>
-     fs[]) >>
+   SND o_f rv = G` assume_tac
+  >- (Cases_on `ctx_has_dalloca C`
+      >- (disj1_tac >> rpt strip_tac >> irule frame_reachable_caches_below >> metis_tac[]) >>
+      fs[]) >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
