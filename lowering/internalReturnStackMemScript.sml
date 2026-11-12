@@ -22,7 +22,7 @@ Proof
   irule (Q.INST [`ops` |-> `[op]`] internal_return_values_path_mem) >>
   simp[eval_operands_def] >>
   qexistsl_tac [`op`, `pc`, `rpc`, `st`, `st'`] >>
-  ONCE_REWRITE_TAC [arithmeticTheory.ADD_COMM] >> metis_tac[]
+  ONCE_REWRITE_TAC [arithmeticTheory.ADD_COMM] >> simp[]
 QED
 
 Theorem compile_internal_word_return_intret_mem:
