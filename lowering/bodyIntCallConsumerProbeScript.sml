@@ -42,29 +42,6 @@ Proof
 QED
 
 (* Actual storage unwrap followed by the compiler's memory staging branch. *)
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
-Theorem storage_pair_stage_path_probe:
-  let sa = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
-             cs_current_bb := "entry"; cs_current_insts := [];
-             cs_blocks := []; cs_data_sections := []|> in
-  let sb = SND (compile_stage_intcall_args ce
-    [LocatedValue (ArrayT (BaseT (UintT 256)) (Fixed 2))
-      <|ptr_location := LocStorage; ptr_operand := Lit 0w;
-        ptr_buf := NONE|>] [F]
-    [ArrayT (BaseT (UintT 256)) (Fixed 2)] sa) in
-  let code = FLAT (MAP (\bb. bb.bb_instructions) sb.cs_blocks) ++
-             sb.cs_current_insts in
-    MAP (\i. i.inst_operands)
-      (FILTER (\i. i.inst_opcode = ALLOCA) code) =
-        [[Lit 64w]; [Lit 64w]] /\
-    LENGTH (FILTER (\i. i.inst_opcode = MCOPY) code) = 1
-Proof
-  EVAL_TAC >> simp[wordsTheory.dimword_def,
-    fcpLib.INDEX_CONV ``dimindex (:256)``]
-QED
-*)
-
 Theorem storage_pair_unwrap_allocation:
   unwrap_value ce
     (LocatedValue (ArrayT (BaseT (UintT 256)) (Fixed 2))

@@ -93,19 +93,17 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
 Theorem physical_source_return_dispatch:
   !nret.
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   (nret = 0 /\ cty = NoneT ==>
-    s2 = s1 /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
+    s2 = sa /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
     vv = StackValue cty (Lit 0w)) /\
   (0 < nret \/ cty <> NoneT ==>
     ?buf aid off.
-      compile_alloc_buffer (if 0 < nret then 32 * nret else rbs) s1 = (buf,s2) /\
+      compile_alloc_buffer (if 0 < nret then 32 * nret else rbs) sa = (buf,s2) /\
       vv = LocatedValue cty (base_ptr buf) /\
       eval_operand buf.buf_operand t = SOME (n2w off) /\
       FLOOKUP t.vs_allocas aid = SOME (off,buf.buf_size) /\
@@ -156,14 +154,16 @@ Theorem physical_source_return_dispatch:
        (!id lb lsz. local_region ce prev out id lb lsz ==>
          off + buf.buf_size <= lb \/ lb + lsz <= off)))
 Proof
+  (* batch-shape proof, kept while porting:
   gen_tac >> strip_tac >> Cases_on `nret = 0`
   >- (`ir.iret_values = []` by (Cases_on `ir.iret_values` >> fs[]) >>
       Cases_on `cty = NoneT`
       >- suspend "void" >>
       suspend "memory") >>
   suspend "stack"
+  *)
+  cheat
 QED
-*)
 
 (* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
 (*

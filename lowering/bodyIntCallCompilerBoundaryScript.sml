@@ -15,16 +15,15 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
 Theorem intcall_compiler_prefix:
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
-  ci_mono s1 s2 /\
-  compile_stage_intcall_args ce vals flags tys s2 = (ops,si) /\
+  ci_mono sa s2 /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (ops,si) /\
   local_ptrs_reserved ce sa ==>
   cs_extends sa si /\ local_ptrs_reserved ce si /\
   sa.cs_next_var <= si.cs_next_var /\ s2.cs_next_var <= si.cs_next_var
 Proof
+  (* batch-shape proof, kept while porting:
   strip_tac >>
   `ci_mono sa s1` by
     (qspecl_then [`compile_expr`,`ce`,`es`,`sa`] mp_tac
@@ -38,32 +37,31 @@ Proof
   conj_tac >- metis_tac[cs_extends_trans] >>
   simp[] >> irule local_ptrs_reserved_next_var >>
   goal_assum (drule_at Any) >> simp[]
+  *)
+  cheat
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
 Theorem intcall_void_compiler_boundary:
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
-  ci_mono s1 s2 /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  ci_mono sa s2 /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   emit_void opc ops si = (u,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa ==>
   fn_has_code si sb func
 Proof
+  (* batch-shape proof, kept while porting:
   strip_tac >> drule_all intcall_compiler_prefix >> strip_tac >>
   `ci_mono si sb` by
     (qspecl_then [`opc`,`ops`,`si`] mp_tac ci_mono_emit_void >> simp[]) >>
   fs[ci_mono_def] >> drule_all fn_has_code_split >> simp[]
+  *)
+  cheat
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
 Theorem intcall_stack_compiler_boundary:
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
-  ci_mono s1 s2 /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  ci_mono sa s2 /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   emit_multi_op opc ops n si = (results,sj) /\
   store_multi_results buf results off sj = (u,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa ==>
@@ -71,6 +69,7 @@ Theorem intcall_stack_compiler_boundary:
   local_ptrs_reserved ce si /\
   sa.cs_next_var <= si.cs_next_var /\ s2.cs_next_var <= si.cs_next_var
 Proof
+  (* batch-shape proof, kept while porting:
   strip_tac >> drule_all intcall_compiler_prefix >> strip_tac >>
   `ci_mono si sj` by
     (qspecl_then [`opc`,`ops`,`n`,`si`] mp_tac ci_mono_emit_multi_op >> simp[]) >>
@@ -80,5 +79,6 @@ Proof
   `cs_extends si sb` by metis_tac[cs_extends_trans] >>
   drule_all fn_has_code_split >> strip_tac >>
   drule_all fn_has_code_split >> simp[]
+  *)
+  cheat
 QED
-*)

@@ -8,12 +8,10 @@ Ancestors
   emitHelperProps emitHelper exprLoweringProps compileEnv loweringStateRelDefs venomState
   venomExecSemantics loweringPosts exprSimDefs intCallFrame list finite_map
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
 Theorem intcall_stack_return_prepare:
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
-  ci_mono s1 s2 /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  ci_mono sa s2 /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   emit_multi_op INVOKE ops nret si = (results,sj) /\
   store_multi_results buf results 0 sj = ((),sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
@@ -37,6 +35,7 @@ Theorem intcall_stack_return_prepare:
     (u with vs_inst_idx := SUC t.vs_inst_idx).vs_inst_idx = LENGTH sj.cs_current_insts /\
     (!x. MEM (Var x) results ==> not_fresh_at sj x)
 Proof
+  (* batch-shape proof, kept while porting:
   strip_tac >> drule_all intcall_stack_compiler_boundary >> strip_tac >>
   drule_all emit_multi_invoke_instruction >> strip_tac >>
   gvs[] >>
@@ -67,8 +66,9 @@ Proof
   qexistsl [`outs`,`u`] >>
   simp[eval_operand_def, lookup_var_def] >>
   gvs[]
+  *)
+  cheat
 QED
-*)
 
 (* Geometry at the restored successor, independent of the way it was reached. *)
 Theorem intcall_return_buffer_prepare:
@@ -155,11 +155,10 @@ Proof
 QED
 
 (* Both zero-count modes land at the same explicit merge successor. *)
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
 Theorem intcall_zero_return_prepare:
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\ ci_mono s1 s2 /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  ci_mono sa s2 /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   emit_void INVOKE ops si = ((),sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -188,6 +187,7 @@ Theorem intcall_zero_return_prepare:
     (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x t) /\
     (!a k. P a k ==> mem_bytes_at a k s.vs_memory = mem_bytes_at a k t.vs_memory)
 Proof
+  (* batch-shape proof, kept while porting:
   strip_tac >> drule_all intcall_void_compiler_boundary >> strip_tac >>
   `ir.iret_adopt_fmp = NONE` by
     fs[intcall_callee_exit_def, expr_exit_def] >>
@@ -206,22 +206,21 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
      disch_then (SUBST1_TAC o SYM) >> simp[]) >>
   gvs[merge_callee_state_def]
+  *)
+  cheat
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
 Theorem intcall_physical_return_resources:
   !nret.
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   (nret = 0 /\ cty = NoneT ==>
-    s2 = s1 /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
+    s2 = sa /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
     vv = StackValue cty (Lit 0w)) /\
   (0 < nret \/ cty <> NoneT ==>
     ?buf aid off.
-      compile_alloc_buffer (if 0 < nret then 32 * nret else rbs) s1 = (buf,s2) /\
+      compile_alloc_buffer (if 0 < nret then 32 * nret else rbs) sa = (buf,s2) /\
       vv = LocatedValue cty (base_ptr buf) /\
       eval_operand buf.buf_operand t = SOME (n2w off) /\
       FLOOKUP t.vs_allocas aid = SOME (off,buf.buf_size) /\
@@ -278,6 +277,7 @@ Theorem intcall_physical_return_resources:
        (!id lb lsz. local_region ce prev out id lb lsz ==>
          off + buf.buf_size <= lb \/ lb + lsz <= off)))
 Proof
+  (* batch-shape proof, kept while porting:
   gen_tac >> strip_tac >>
   `intcall_callee_exit other ce cx tv nret NONE sa.cs_next_id sb.cs_next_id t
     (INL v) (ee with gas_obs := []) (IntRet ir cs)` by
@@ -289,8 +289,9 @@ Proof
   >- (`ir.iret_values = []` by (Cases_on `ir.iret_values` >> fs[]) >>
       Cases_on `cty = NoneT` >- suspend "void" >> suspend "memory") >>
   suspend "stack"
+  *)
+  cheat
 QED
-*)
 
 (* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
 (*
