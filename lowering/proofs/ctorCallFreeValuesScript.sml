@@ -302,3 +302,53 @@ Proof
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     CHANGED_TAC (simp[call_free_with_byte_offset]), gen_tac])
 QED
+
+Theorem call_free_store_memory:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_store_memory ce src dst dty sty st)))
+Proof
+  simp[compile_store_memory_def] >> rpt IF_CASES_TAC >>
+  simp[call_free_emit_void, call_free_store_bytestring,
+       cj 1 call_free_typed_copy, call_free_copy_memory]
+QED
+
+Theorem call_free_ifexp_arm:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_ifexp_arm ce rty aty vv st)))
+Proof
+  qid_spec_tac `st` >> simp[compile_ifexp_arm_def] >> IF_CASES_TAC >>
+  simp[call_free_unwrap_value] >>
+  rpt (FIRST [
+    ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[call_free_alloc_buffer,
+      call_free_unwrap_value, call_free_store_memory, every_state_insts_return])])
+QED
+
+Theorem call_free_materialize_vv:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_materialize_vv ce ty vv st)))
+Proof
+  qid_spec_tac `st` >> simp[compile_materialize_vv_def] >>
+  rpt (FIRST [
+    ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[call_free_alloc_buffer,
+      call_free_unwrap_value, call_free_store_memory, every_state_insts_return])])
+QED
+
+Theorem call_free_dynarray_pop:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_dynarray_pop ptr_op scale esz ctor imm loc st)))
+Proof
+  qid_spec_tac `st` >> simp[compile_dynarray_pop_def] >>
+  rpt (FIRST [
+    ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[call_free_ptr_load, call_free_ptr_store,
+      call_free_emit_op, call_free_emit_void])])
+QED
