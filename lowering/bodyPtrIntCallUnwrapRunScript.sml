@@ -4,7 +4,8 @@ Ancestors
   bodyPtrDefs gasSummaryComposePtr logGhostFramePtr exprPtrUnwrapCode exprPtrUnwrapCodeCopyMarked
   exprPtrUnwrapStorage exprPtrUnwrapStorageMarked exprPtrUnwrapLoad
   exprSimPtrProps exprLowering emitHelper venomState finite_map exprSimMemorySource
-  exprSimMemoryPath context
+  exprSimMemoryPath context bodyPtrIfExpNoopPost exprSimUnwrapProps
+  exprSimUnwrap fragGasPathPtr compileEnv
 
 (* A delayed operand retains its original allocation lower bound. *)
 Theorem intcall_delayed_vv_post:
@@ -180,3 +181,110 @@ Proof
   rpt strip_tac >> `x <> out` by metis_tac[] >>
   simp[lookup_var_def, FLOOKUP_UPDATE]
 QED
+
+(* The execution cursor is independent of the interval witnessing the delayed
+   value.  The output frame protects all values already present at sc. *)
+Theorem intcall_delayed_unwrap_run:
+  unwrap_value ce vv sc = (op,sb) /\
+  post_value_type ce e = expr_type e /\ vv_type vv = expr_type e /\
+  (!t p. vv = LocatedValue t p /\ p.ptr_location <> LocMemory ==>
+     lowered_value_type ce e = expr_type e) /\
+  ~expr_has_effect e /\
+  stmt_state_rel ctx fn ce cx ee s /\
+  vv_holds ce cx (expr_type e) raw vv ee s /\
+  vv_at ce cx (expr_type e) si sm ee raw vv s /\
+  vv_storage_live cx vv ee s /\ sm.cs_next_id <= sc.cs_next_id /\
+  local_ptrs_reserved ce si /\ si.cs_next_var <= sc.cs_next_var /\
+  local_ptrs_reserved ce sc /\ fn_has_code sc sb fn /\
+  fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sc x) /\
+  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
+  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
+  (!rt. evaluate_type (get_tenv cx) (expr_type e) = SOME rt /\
+    ~is_word_type (expr_type e) ==>
+    type_memory_bytes ce (expr_type e) = type_memory_size rt /\
+    type_memory_size rt < 2**64) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME rty /\
+  read_result cx raw ee = (INL v,ee) /\ value_has_type rty v /\
+  ptr_vv_ok cx (expr_type e) raw vv ee G tn s /\
+  (!t op. vv = StackValue t op /\ ~is_word_type (expr_type e) ==>
+     ptr_buf_ok ce e op G s) /\
+  (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
+     ptr_buf_ok ce e p.ptr_operand G s) /\
+  ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ghost_inv d ce cx ee G tn s ==>
+  ?H un q.
+    gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 H un (OK q) /\
+    q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    stmt_state_rel ctx fn ce cx ee q /\
+    expr_val_rel cx (expr_type e) v op q /\
+    ghost_inv d ce cx ee H un q /\
+    ptr_val_ok cx (expr_type e) v op H un q /\
+    (~is_word_type (expr_type e) ==> ptr_buf_ok ce e op H q) /\
+    ghost_kept ce ee sc G tn s H un /\ pure_frame ce fn ee sc s q /\
+    (!x w. not_fresh_at sc x /\ lookup_var x s = SOME w ==>
+      lookup_var x q = SOME w) /\
+    (!aid site. FLOOKUP s.vs_allocas aid = SOME site ==>
+      FLOOKUP q.vs_allocas aid = SOME site)
+Proof
+  strip_tac >>
+  `vv_post ctx fn ce cx e ee si sc s ee raw vv s` by
+    (irule intcall_delayed_vv_post >> metis_tac[]) >>
+  Cases_on `vv`
+  >- suspend "stack" >>
+  rename1 `LocatedValue t p` >>
+  Cases_on `p.ptr_location = LocMemory`
+  >- (Cases_on `is_word_type t`
+      >- suspend "memory_word"
+      >> suspend "memory_value") >>
+  suspend "external"
+QED
+
+Resume intcall_delayed_unwrap_run[stack]:
+  gvs[unwrap_value_def, comp_return_def, vv_operand_def] >>
+  drule_all vv_post_read_result >> strip_tac >>
+  drule expr_post_of_vv_post_stack >> strip_tac >>
+  qexistsl [`G`, `tn`, `s`] >>
+  simp[ghost_kept_refl, pure_frame_def] >>
+  conj_tac >- (irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
+  gvs[ptr_vv_ok_def, expr_post_def]
+QED
+
+Resume intcall_delayed_unwrap_run[memory_word]:
+  `ptr_vv_ok cx (post_value_type ce e) raw (LocatedValue t p) ee G tn s` by simp[] >>
+  `evaluate_type (get_tenv cx) (post_value_type ce e) = SOME rty` by simp[] >>
+  `!v. read_result cx raw ee = (INL v,ee) ==> value_has_type rty v` by simp[] >>
+  drule_all intcall_delayed_memory_word_unwrap >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl [`H`, `un`, `q`] >> gvs[expr_post_def, vv_type_def]
+QED
+
+Resume intcall_delayed_unwrap_run[memory_value]:
+  `~is_word_type (expr_type e)` by gvs[vv_type_def] >>
+  gvs[unwrap_value_def, comp_return_def] >>
+  drule_all vv_post_read_result >> strip_tac >>
+  drule_all expr_post_of_vv_post_memory >> strip_tac >>
+  `ptr_val_ok cx (expr_type e) v p.ptr_operand G tn s` by
+    gvs[ptr_vv_ok_def, ptr_val_ok_def] >>
+  qexistsl [`G`, `tn`, `s`] >>
+  simp[ghost_kept_refl, pure_frame_def] >>
+  conj_tac >- (irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
+  gvs[expr_post_def]
+QED
+
+Resume intcall_delayed_unwrap_run[external]:
+  `lowered_value_type ce e = expr_type e` by metis_tac[] >>
+  `!x. p.ptr_operand = Var x ==> not_fresh_at sc x` by
+    gvs[vv_operand_def] >>
+  drule_all intcall_delayed_external_unwrap >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `v' = v` by
+    (qpat_x_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_ptr_def] >> strip_tac >>
+     first_x_assum (qspec_then `ee.gas_obs` mp_tac) >> simp[]) >>
+  qexistsl [`H`, `un`, `q`] >>
+  gvs[gas_marked_exec_ptr_def, expr_post_def]
+QED
+
+Finalise intcall_delayed_unwrap_run
