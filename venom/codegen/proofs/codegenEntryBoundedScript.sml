@@ -13,7 +13,7 @@ Theory codegenEntryBounded
 Ancestors
   codegenEntrySim asmRunBounded codegenEntryRel contextCodegenRel unitMemInv
   codegen asmSem venomExecSemantics venomState unitShapeDefs
-  passSimulationDefs frameRel venomInst codegenRel venomRunBounded
+  passSimulationDefs codegenOpcodeExclusion frameRel venomInst codegenRel venomRunBounded
   contextCodegenRelProps
 
 (* The assembly state as starts codegen's program prog for the Venom

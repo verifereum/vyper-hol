@@ -139,7 +139,7 @@ Theorem gen_inst_revert_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
     venom_asm_terminal_rel vs' out
 Proof
   rpt gen_tac >> strip_tac >>
@@ -218,6 +218,7 @@ Resume gen_inst_revert_frame_sim_deep[prepared]:
          metis_tac[APPEND_ASSOC, APPEND]) >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 1`, `out`] >>
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   simp[] >> irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]
 QED
 
@@ -256,7 +257,7 @@ Theorem gen_inst_assert_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
     venom_asm_terminal_rel vs' out
 Proof
   rpt gen_tac >> strip_tac >>
@@ -320,6 +321,7 @@ Resume gen_inst_assert_frame_sim_deep[prepared]:
      >- (qexists `cplan.cp_initial_fmp` >> simp[]) >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 7`, `out`] >>
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   simp[] >> irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]
 QED
 
@@ -359,7 +361,7 @@ Theorem gen_inst_assert_unreachable_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
     venom_asm_terminal_rel vs' out
 Proof
   rpt gen_tac >> strip_tac >>
@@ -431,6 +433,7 @@ Resume gen_inst_assert_unreachable_frame_sim_deep[prepared]:
      qexistsl_tac [`endlabel`, `off`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3`, `out`] >>
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   simp[halt_state_def, set_returndata_def] >>
   irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
 QED
@@ -464,7 +467,7 @@ Theorem gen_inst_invalid_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
     venom_asm_terminal_rel vs' out
 Proof
   rpt gen_tac >> strip_tac >>
@@ -522,6 +525,7 @@ Resume gen_inst_invalid_frame_sim_deep[decomposed]:
     venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out` by
     (irule terminal_invalid_step >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 1`, `out`] >>
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   simp[halt_state_def, set_returndata_def] >>
   irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
 QED
@@ -558,6 +562,8 @@ Theorem regular_abort_frame_prefix_deep:
   fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) ==>
   ?pre arranged mid.
+    LENGTH (execute_plan cplan.cp_initial_fmp pre) <=
+      LENGTH (execute_plan cplan.cp_initial_fmp ops) /\
     arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
       compute_operands inst /\
     asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp pre)) st =
@@ -605,7 +611,8 @@ Resume regular_abort_frame_prefix_deep[decomposed]:
      goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
      gvs[sortingTheory.PERM_REFL, APPEND_ASSOC] >> metis_tac[]) >>
-  qexistsl_tac [`iops ++ rops`, `arranged`, `mid`] >> simp[] >>
+  qexistsl_tac [`iops ++ rops`, `arranged`, `mid`] >>
+  conj_tac >- simp[execute_plan_append] >> simp[] >>
   qpat_x_assum `ops = _` SUBST_ALL_TAC >>
   qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, execute_plan_append, asm_block_at_append] >>
@@ -693,7 +700,7 @@ Theorem gen_inst_ext_fault_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
     venom_asm_terminal_rel vs' out
 Proof
   rpt gen_tac >> strip_tac >>
@@ -723,6 +730,7 @@ Proof
           (strip_assume_tac o MATCH_MP step_inst_abort_opcodes) >> gvs[]) >>
      suspend "returndatacopy") >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp pre) + 1`, `out`] >>
+  conj_tac >- simp[] >>
   simp[] >> irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
 QED
 
@@ -1016,6 +1024,7 @@ Theorem gen_inst_abort_frame_sim_deep:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
     !a vs'. step_inst fuel ctx inst vs = Abort a vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan cp.cp_initial_fmp ops) + 7 /\
         ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
         venom_asm_terminal_rel vs' as'

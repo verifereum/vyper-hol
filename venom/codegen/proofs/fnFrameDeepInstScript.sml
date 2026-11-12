@@ -215,6 +215,7 @@ Theorem gen_inst_frame_sim_deep:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
     !vs'. step_inst fuel ctx inst vs = OK vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
         as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops)

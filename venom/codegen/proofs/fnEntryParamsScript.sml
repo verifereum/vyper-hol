@@ -442,6 +442,8 @@ Theorem entry_prefix_frame_sim:
          (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))
     ==>
     ?n as' vs_p.
+      n = LENGTH (execute_plan cp.cp_initial_fmp
+        (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
       asm_steps lo o2pc prog n as = AsmOK as' /\
       as'.as_pc = as.as_pc +
         LENGTH (execute_plan cp.cp_initial_fmp

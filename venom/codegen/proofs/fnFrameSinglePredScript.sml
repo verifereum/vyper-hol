@@ -198,6 +198,7 @@ Theorem single_pred_prefix_frame_sim:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp (clean_ops ++ ops))
     ==>
     ?phi_ops ps1 body_ops n as'.
+      n = LENGTH (execute_plan cp.cp_initial_fmp (clean_ops ++ phi_ops)) /\
       ops = phi_ops ++ body_ops /\
       generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))

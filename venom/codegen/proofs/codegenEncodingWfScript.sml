@@ -12,7 +12,8 @@
 Theory codegenEncodingWf
 Ancestors
   codegen asmWf asmTargetSafety symbolResolve planExec asmIR stackPlanGen
-  stackPlanTypes stackPlanOps unitShapeDefs venomInst list rich_list arithmetic finite_map
+  stackPlanTypes stackPlanOps planEmissionProps contextPlanEmissionProps
+  unitShapeDefs venomInst list rich_list arithmetic finite_map
 
 (* ===== Encoded sizes ===== *)
 
@@ -85,23 +86,16 @@ Theorem spill_fold_no_push_ofst[local]:
   ~MEM (SOPushOfst lbl d) acc_ops ==>
   ~MEM (SOPushOfst lbl d) ops
 Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  Cases_on `alloc_spill_slot al` >> simp[] >>
-  strip_tac >>
-  first_x_assum (qspec_then `acc_ops ++ [SOSpill q]` mp_tac) >>
-  simp[] >> disch_then drule >> simp[]
+  rpt gen_tac >> strip_tac >> drule spill_fold_preserves >>
+  disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
+  simp[EVERY_MEM]
 QED
 
 Theorem do_swap_no_push_ofst:
   do_swap dist ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[do_swap_def] >>
-  Cases_on `dist = 0` >- simp[] >>
-  Cases_on `dist <= 16` >- (rw[] >> simp[]) >>
-  simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  simp[MEM_MAP, PULL_EXISTS] >>
-  rpt gen_tac >> drule spill_fold_no_push_ofst >> simp[]
+  strip_tac >> drule do_swap_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem popmany_fold_no_push_ofst[local]:
@@ -115,94 +109,65 @@ Theorem popmany_fold_no_push_ofst[local]:
            ps' with ps_stack := stack_pop 1 ps'.ps_stack))
         (if dist = 0 then ([], ps) else do_swap dist ps))
     (acc_ops, ps) xs = (ops, ps') /\
-  ~MEM (SOPushOfst lbl d) acc_ops ==>
-  ~MEM (SOPushOfst lbl d) ops
+  ~MEM (SOPushOfst lbl d) acc_ops ==> ~MEM (SOPushOfst lbl d) ops
 Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  Cases_on `stack_get_depth h ps.ps_stack` >> simp[]
-  >- metis_tac[] >>
-  Cases_on `x = 0` >> simp[]
-  >- (strip_tac >>
-      first_x_assum (qspec_then `acc_ops ++ [SOPop 1]` mp_tac) >>
-      simp[] >> disch_then drule >> simp[]) >>
-  Cases_on `do_swap x ps` >> simp[] >> strip_tac >>
-  first_x_assum (qspec_then `acc_ops ++ q ++ [SOPop 1]` mp_tac) >>
-  simp[] >> disch_then drule >>
-  drule do_swap_no_push_ofst >> simp[]
+  rpt gen_tac >> strip_tac >> drule popmany_fold_preserves >>
+  disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
+  simp[EVERY_MEM] >> metis_tac[do_swap_no_push_ofst]
 QED
 
 Theorem popmany_individual_no_push_ofst[local]:
   popmany_individual to_pop ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[popmany_individual_def] >> strip_tac >> rpt gen_tac >>
-  drule popmany_fold_no_push_ofst >> simp[]
+  strip_tac >> drule popmany_individual_admin >>
+  metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem popmany_plan_no_push_ofst[local]:
-  popmany_plan to_pop ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
+  popmany_plan to_pop ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  Cases_on `to_pop` >> simp[popmany_plan_def] >>
-  rpt IF_CASES_TAC >> simp[]
-  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-      drule do_swap_no_push_ofst >> simp[])
-  >> metis_tac[popmany_individual_no_push_ofst]
+  strip_tac >> drule popmany_plan_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem optimistic_swap_plan_no_push_ofst[local]:
   optimistic_swap_plan dfg inst live term ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[optimistic_swap_plan_def] >> rpt IF_CASES_TAC >> simp[] >>
-  Cases_on `stack_get_depth (Var (LAST live)) ps.ps_stack` >> simp[] >>
-  metis_tac[do_swap_no_push_ofst]
+  strip_tac >> drule optimistic_swap_plan_admin >>
+  metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem do_spill_tos_no_push_ofst[local]:
-  do_spill_tos ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
+  do_spill_tos ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[do_spill_tos_def] >> pairarg_tac >> simp[] >> rw[] >> simp[]
+  strip_tac >> drule do_spill_tos_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem do_spill_at_no_push_ofst[local]:
-  do_spill_at dist ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
+  do_spill_at dist ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[do_spill_at_def] >> IF_CASES_TAC >> simp[]
-  >- metis_tac[do_spill_tos_no_push_ofst] >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  drule do_spill_tos_no_push_ofst >> simp[]
+  strip_tac >> drule do_spill_at_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem do_restore_no_push_ofst[local]:
-  do_restore op ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
+  do_restore op ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[do_restore_def] >>
-  Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >> rw[] >> simp[]
+  strip_tac >> drule do_restore_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem restore_spilled_plan_no_push_ofst[local]:
-  !ops0 ps ops ps'.
-    restore_spilled_plan ops0 ps = (ops, ps') ==>
-    !lbl d. ~MEM (SOPushOfst lbl d) ops
+  !ops0 ps ops ps'. restore_spilled_plan ops0 ps = (ops, ps') ==>
+  !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  imp_res_tac do_restore_no_push_ofst >> metis_tac[]
+  rpt gen_tac >> strip_tac >> drule restore_spilled_plan_admin >>
+  metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem do_dup_no_push_ofst[local]:
-  do_dup dist ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
+  do_dup dist ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[do_dup_def] >> IF_CASES_TAC >- (rw[] >> simp[]) >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-  rpt IF_CASES_TAC >> simp[] >> rpt gen_tac >>
-  drule spill_fold_no_push_ofst >> simp[]
+  strip_tac >> drule do_dup_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem reduce_depth_plan_no_push_ofst[local]:
@@ -210,37 +175,15 @@ Theorem reduce_depth_plan_no_push_ofst[local]:
   reduce_depth_plan fuel target_ops target_op f n ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  Induct >> simp[reduce_depth_plan_def] >> rpt gen_tac >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `stack_get_unfixed_depth target_op f n ps.ps_stack` >> simp[] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `select_spill_candidate ps.ps_stack target_ops x n` >> simp[] >>
-  pairarg_tac >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >> metis_tac[do_spill_at_no_push_ofst]
+  rpt gen_tac >> strip_tac >> drule reduce_depth_plan_admin >>
+  metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem reorder_one_no_push_ofst[local]:
   reorder_one dfg target_ops idx op ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[reorder_one_def] >> pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) restore_ops` by
-    (gvs[AllCaseEqs()] >> metis_tac[do_restore_no_push_ofst]) >>
-  gvs[] >> qpat_x_assum `_ = (restore_ops, ps1)` kall_tac >>
-  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - (idx + 1))
-              (LENGTH target_ops) ps1.ps_stack` >> simp[]
-  >- (rw[] >> gvs[]) >>
-  pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) reduce_ops` by
-    (gvs[AllCaseEqs()] >> metis_tac[reduce_depth_plan_no_push_ofst]) >>
-  gvs[] >> qpat_x_assum `_ = (reduce_ops, ps2)` kall_tac >>
-  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - (idx + 1))
-              (LENGTH target_ops) ps2.ps_stack` >> simp[]
-  >- (rw[] >> gvs[]) >>
-  rpt IF_CASES_TAC >> simp[] >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  strip_tac >> gvs[] >>
-  metis_tac[do_swap_no_push_ofst, MEM_APPEND]
+  strip_tac >> drule reorder_one_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem reorder_fold_no_push_ofst[local]:
@@ -251,31 +194,23 @@ Theorem reorder_fold_no_push_ofst[local]:
     (ops, ps') /\ ~MEM (SOPushOfst lbl d) acc_ops ==>
   ~MEM (SOPushOfst lbl d) ops
 Proof
-  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[] >>
-  Cases_on `reorder_one dfg target_ops h0 h1 ps` >> simp[] >> strip_tac >>
-  first_x_assum (qspec_then `acc_ops ++ q` mp_tac) >> simp[] >>
-  disch_then drule >> drule reorder_one_no_push_ofst >> simp[]
+  rpt gen_tac >> strip_tac >> drule reorder_fold_preserves >>
+  disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
+  simp[EVERY_MEM] >> metis_tac[reorder_one_no_push_ofst]
 QED
 
 Theorem reorder_plan_no_push_ofst:
   reorder_plan dfg target_ops ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[reorder_plan_def] >> strip_tac >> rpt gen_tac >>
-  drule reorder_fold_no_push_ofst >> simp[]
+  strip_tac >> drule reorder_plan_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem emit_one_input_no_push_ofst[local]:
   emit_one_input opc live op ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[emit_one_input_def] >> pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) restore_ops` by
-    (gvs[AllCaseEqs()] >> metis_tac[do_restore_no_push_ofst]) >>
-  gvs[] >> qpat_x_assum `_ = (restore_ops, ps1)` kall_tac >>
-  Cases_on `op` >> simp[] >> rpt IF_CASES_TAC >> simp[] >>
-  gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >> metis_tac[do_dup_no_push_ofst]
+  strip_tac >> drule emit_one_input_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem emit_input_plan_no_push_ofst:
@@ -283,66 +218,36 @@ Theorem emit_input_plan_no_push_ofst:
   emit_input_plan opc operands live ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  Induct >> simp[emit_input_plan_def] >> rpt gen_tac >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  metis_tac[emit_one_input_no_push_ofst, MEM_APPEND]
+  rpt gen_tac >> strip_tac >> drule emit_input_plan_admin >>
+  metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem generate_emit_ops_no_push_ofst[local]:
   generate_emit_ops inst topics ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[generate_emit_ops_def] >> rpt IF_CASES_TAC >>
-  gvs[AllCaseEqs(), bump_emit_ops_def] >>
-  rpt strip_tac >> gvs[] >> pairarg_tac >> gvs[]
+  strip_tac >> drule generate_emit_ops_origin >>
+  rpt strip_tac >> first_x_assum (qspec_then `SOPushOfst lbl d` mp_tac) >>
+  simp[plan_admin_op_def]
 QED
 
 Theorem generate_phi_plan_no_push_ofst[local]:
   generate_phi_plan inst live halting ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[generate_phi_plan_def] >>
-  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
-              ps.ps_stack` >> simp[] >>
-  Cases_on `MEM (operand_to_string (stack_peek x ps.ps_stack)) live` >>
-  simp[] >> rpt (pairarg_tac >> gvs[]) >>
-  rw[] >> rpt (pairarg_tac >> gvs[]) >>
-  imp_res_tac do_dup_no_push_ofst >> imp_res_tac popmany_plan_no_push_ofst >>
-  gvs[]
+  metis_tac[generate_phi_plan_admin, plan_admin_no_push_ofst]
 QED
 
 Theorem generate_regular_inst_plan_no_push_ofst[local]:
   generate_regular_inst_plan liveness dfg cfg fn inst live halting term cur ps =
     (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[generate_regular_inst_plan_def] >> pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) input_ops` by
-    metis_tac[emit_input_plan_no_push_ofst] >>
-  gvs[] >> qpat_x_assum `_ = (input_ops, ps1)` kall_tac >>
-  pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) join_ops` by
-    (gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
-     metis_tac[reorder_plan_no_push_ofst,
-               restore_spilled_plan_no_push_ofst]) >>
-  gvs[] >> qpat_x_assum `_ = (join_ops, ps2)` kall_tac >>
-  pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) reorder_ops` by
-    (gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
-     gvs[AllCaseEqs()] >> metis_tac[reorder_plan_no_push_ofst]) >>
-  gvs[] >> qpat_x_assum `_ = (reorder_ops, ps4)` kall_tac >>
-  pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) emit_ops` by
-    metis_tac[generate_emit_ops_no_push_ofst] >>
-  gvs[] >> qpat_x_assum `_ = (emit_ops, ps7)` kall_tac >>
-  IF_CASES_TAC >> simp[] >- (rw[] >> gvs[]) >>
-  pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) pop_ops` by
-    (gvs[AllCaseEqs()] >> metis_tac[popmany_plan_no_push_ofst]) >>
-  gvs[] >> qpat_x_assum `_ = (pop_ops, ps8)` kall_tac >>
-  pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) opt_ops` by
-    (gvs[AllCaseEqs()] >> metis_tac[optimistic_swap_plan_no_push_ofst]) >>
-  gvs[] >> rw[] >> gvs[]
+  strip_tac >> rpt gen_tac >> drule generate_regular_inst_plan_preserves >>
+  disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
+  impl_tac
+  >- (conj_tac >- (Cases >> simp[plan_admin_op_def]) >>
+      simp[EVERY_MEM] >> metis_tac[generate_emit_ops_no_push_ofst]) >>
+  simp[EVERY_MEM]
 QED
 
 Theorem generate_inst_plan_no_push_ofst[local]:
@@ -359,21 +264,14 @@ Theorem prepare_params_plan_no_push_ofst[local]:
   prepare_params_plan liveness fn ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[prepare_params_plan_def] >> IF_CASES_TAC >> simp[] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  metis_tac[popmany_plan_no_push_ofst, optimistic_swap_plan_no_push_ofst,
-            MEM_APPEND]
+  metis_tac[prepare_params_plan_admin, plan_admin_no_push_ofst]
 QED
 
 Theorem clean_stack_plan_no_push_ofst[local]:
   clean_stack_plan liveness cfg fn bb ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[clean_stack_plan_def] >> gvs[AllCaseEqs()] >>
-  rpt IF_CASES_TAC >> simp[] >>
-  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[popmany_plan_no_push_ofst]
+  metis_tac[clean_stack_plan_admin, plan_admin_no_push_ofst]
 QED
 
 Theorem generate_block_insts_plan_no_push_ofst[local]:
@@ -383,9 +281,12 @@ Theorem generate_block_insts_plan_no_push_ofst[local]:
   EVERY (\inst. inst.inst_opcode <> OFFSET) insts ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  Induct >> simp[generate_block_insts_plan_def] >> rpt gen_tac >>
-  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
-  metis_tac[generate_inst_plan_no_push_ofst, MEM_APPEND]
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+    generate_block_insts_plan_preserves >>
+  disch_then (qspecl_then [`\inst. inst.inst_opcode <> OFFSET`,
+                           `\op. op <> SOPushOfst lbl d`] mp_tac) >>
+  simp[EVERY_MEM] >> metis_tac[generate_inst_plan_no_push_ofst]
 QED
 
 Theorem generate_block_plan_no_push_ofst[local]:
@@ -393,18 +294,14 @@ Theorem generate_block_plan_no_push_ofst[local]:
   EVERY (\inst. inst.inst_opcode <> OFFSET) bb.bb_instructions ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
-  simp[generate_block_plan_def] >> pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) param_ops` by
-    (gvs[AllCaseEqs()] >> metis_tac[prepare_params_plan_no_push_ofst]) >>
-  gvs[] >> qpat_x_assum `_ = (param_ops, ps1)` kall_tac >>
-  pairarg_tac >>
-  `!lbl d. ~MEM (SOPushOfst lbl d) clean_ops` by
-    (gvs[AllCaseEqs()] >> metis_tac[clean_stack_plan_no_push_ofst]) >>
-  gvs[] >> qpat_x_assum `_ = (clean_ops, ps2)` kall_tac >>
-  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
-  `EVERY (\inst. inst.inst_opcode <> OFFSET) (non_param_insts bb)` by
-    (gvs[non_param_insts_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
-  drule_all generate_block_insts_plan_no_push_ofst >> simp[]
+  strip_tac >> rpt gen_tac >>
+  drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)
+    generate_block_plan_preserves >>
+  disch_then (qspecl_then [`\inst. inst.inst_opcode <> OFFSET`,
+                           `\op. op <> SOPushOfst lbl d`] mp_tac) >>
+  simp[EVERY_MEM] >>
+  metis_tac[generate_inst_plan_no_push_ofst,
+            prepare_params_plan_no_push_ofst, clean_stack_plan_no_push_ofst]
 QED
 
 Theorem lookup_block_offset_free[local]:
@@ -413,8 +310,7 @@ Theorem lookup_block_offset_free[local]:
   lookup_block lbl bbs = SOME bb ==>
   EVERY (\inst. inst.inst_opcode <> OFFSET) bb.bb_instructions
 Proof
-  Induct >> simp[fn_insts_blocks_def, lookup_block_def, FIND_thm] >>
-  rpt gen_tac >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[lookup_block_def]
+  metis_tac[lookup_block_insts_every]
 QED
 
 Theorem fn_plan_aux_no_push_ofst[local]:
@@ -429,24 +325,18 @@ Theorem fn_plan_aux_no_push_ofst[local]:
     EVERY (\inst. inst.inst_opcode <> OFFSET) (fn_insts fn) ==>
     !lbl d. ~MEM (SOPushOfst lbl d) ops)
 Proof
-  ho_match_mp_tac generate_fn_plan_aux_ind >> rpt conj_tac
-  >- (rpt gen_tac >> simp[Once generate_fn_plan_aux_def] >> rw[] >> simp[])
-  >- (rpt gen_tac >> strip_tac >>
-      simp[Once generate_fn_plan_aux_def] >>
-      Cases_on `MEM lbl visited` >- (gvs[] >> metis_tac[]) >>
-      gvs[] >> Cases_on `lookup_block lbl fn.fn_blocks`
-      >- (gvs[] >> metis_tac[]) >>
-      simp[AllCaseEqs()] >> rpt gen_tac >> strip_tac >> gvs[] >>
-      `EVERY (\inst. inst.inst_opcode <> OFFSET) x.bb_instructions` by
-        (irule lookup_block_offset_free >>
-         gvs[fn_insts_def] >> metis_tac[]) >>
-      drule_all generate_block_plan_no_push_ofst >> strip_tac >>
-      metis_tac[MEM_APPEND])
-  >- (rpt gen_tac >> simp[Once generate_fn_plan_aux_def] >> rw[] >> simp[])
-  >> rpt gen_tac >> strip_tac >>
-  simp[Once generate_fn_plan_aux_def, AllCaseEqs()] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  metis_tac[MEM_APPEND]
+  conj_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac
+  >- (drule_at Any (cj 1 fn_plan_aux_preserves) >>
+      disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
+      simp[EVERY_MEM] >> impl_tac
+      >- (rpt strip_tac >>
+          drule generate_block_plan_no_push_ofst >>
+          metis_tac[lookup_block_offset_free, fn_insts_def]) >> simp[])
+  >> drule_at Any (cj 2 fn_plan_aux_preserves) >>
+  disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
+  simp[EVERY_MEM] >> impl_tac
+  >- (rpt strip_tac >> drule generate_block_plan_no_push_ofst >>
+      metis_tac[lookup_block_offset_free, fn_insts_def]) >> simp[]
 QED
 
 (* SOPushOfst is emitted only by generate_offset_plan, for OFFSET. *)
@@ -471,11 +361,10 @@ Theorem generate_context_regions_no_push_ofst[local]:
     (!r lbl d. MEM r acc.cpa_regions ==> ~MEM (SOPushOfst lbl d) r.sr_plan) ==>
     !r lbl d. MEM r acc'.cpa_regions ==> ~MEM (SOPushOfst lbl d) r.sr_plan
 Proof
-  Induct >> simp[generate_context_regions_def] >>
-  rpt gen_tac >> simp[AllCaseEqs()] >> rpt strip_tac >>
-  first_x_assum (drule_then (qspecl_then [`r`, `lbl`, `d`] mp_tac)) >>
-  impl_tac >- (rw[MEM_SNOC] >> gvs[] >> metis_tac[]) >>
-  simp[]
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  drule generate_context_regions_preserves >>
+  disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
+  simp[EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem generate_context_plan_no_push_ofst:

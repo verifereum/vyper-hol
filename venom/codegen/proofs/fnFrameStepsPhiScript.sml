@@ -2575,6 +2575,7 @@ Theorem phi_prefix_hits_frame_sim:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops)
     ==>
     ?phi_ops ps1 body_ops n as'.
+      n = LENGTH (execute_plan cp.cp_initial_fmp phi_ops) /\
       ops = phi_ops ++ body_ops /\
       generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
@@ -2706,6 +2707,7 @@ Resume phi_prefix_hits_frame_sim[lift]:
   qexistsl_tac [`phi_ops`, `ps1`, `body_ops`,
     `LENGTH (execute_plan cplan.cp_initial_fmp phi_ops)`,
     `endpoint with as_stack := endpoint.as_stack ++ rest`] >>
+  conj_tac >- simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>

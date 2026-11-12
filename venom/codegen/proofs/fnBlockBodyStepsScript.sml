@@ -158,6 +158,60 @@ Proof
   qexistsl_tac [`n' + n`, `as'`] >> imp_res_tac asm_steps_add_ok >> fs[]
 QED
 
+(* Optional budgets constrain each original execution witness. *)
+Definition body_result_cost_def:
+  body_result_cost b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
+    (!vs'. res = Halt vs' ==>
+       ?n as'. cost_le b n /\
+               asm_steps lo o2pc prog n as = AsmHalt as' /\
+               venom_asm_terminal_rel vs' as') /\
+    (!a vs'. res = Abort a vs' ==>
+       ?n as'. cost_le b n /\
+               ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+                (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+               venom_asm_terminal_rel vs' as') /\
+    (!ret vs'. res = IntRet ret vs' ==>
+       ?n as'. cost_le b n /\
+               asm_steps lo o2pc prog n as = AsmOK as' /\
+               as'.as_pc = pc_ret /\
+               as'.as_stack = REVERSE ret.iret_values ++ rest /\
+               context_memory_rel cpl vs'.vs_memory as'.as_memory /\
+               (!b. context_spill_byte cpl b /\
+                    ~closure_spill_byte ctx cpl fn.fn_name b ==>
+                    read_byte b as'.as_memory = read_byte b mem0) /\
+               shared_state_rel vs' as')
+End
+
+Theorem body_result_cost_none[simp]:
+  body_result_cost NONE lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
+  body_result lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+Proof
+  simp[body_result_cost_def, body_result_def, cost_le_def]
+QED
+
+Theorem body_result_cost_mono:
+  body_result_cost b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res /\
+  (c = NONE \/ ?B C. b = SOME B /\ c = SOME C /\ B <= C) ==>
+  body_result_cost c lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+Proof
+  simp[body_result_cost_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qexistsl_tac [`n`, `as'`] >> simp[] >> irule cost_le_mono >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem body_result_cost_prefix:
+  asm_steps lo o2pc prog n as = AsmOK as1 /\
+  body_result_cost b lo o2pc prog cpl ctx fn mem0 pc_ret rest as1 res ==>
+  body_result_cost (OPTION_MAP (\B. n + B) b)
+    lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+Proof
+  rw[body_result_cost_def] >> gvs[] >>
+  qexistsl_tac [`n + n'`, `as'`] >>
+  imp_res_tac asm_steps_add_ok >> simp[] >>
+  Cases_on `b` >> gvs[cost_le_def]
+QED
+
 (* ===== Generic facts ===== *)
 
 Theorem body_insts_plan_spill_base:
@@ -427,7 +481,9 @@ Theorem body_inv_facts:
     (?roff rpc. FLOOKUP lo "revert" = SOME roff /\ roff < dimword (:256) /\
        FLOOKUP o2pc roff = SOME rpc /\
        asm_block_at prog rpc
-         (execute_plan cpl.cp_initial_fmp revert_postamble))
+         (execute_plan cpl.cp_initial_fmp revert_postamble)) /\
+    LENGTH bb.bb_instructions <= context_inst_count ctx /\
+    LENGTH (execute_plan cpl.cp_initial_fmp rest_ops) <= LENGTH prog
 Proof
   strip_tac >> unpack_inv >>
   qspecl_then [`ctx`, `unit`, `Inv`, `cpl`, `i`, `fn`] mp_tac body_fn_shape >>
@@ -467,6 +523,9 @@ Proof
   >- metis_tac[]
   >- fs[]
   >- metis_tac[]
+  >- (irule context_inst_count_block >> metis_tac[EL_MEM])
+  >- (qpat_x_assum `asm_block_at prog pc0 _` mp_tac >>
+      simp[asm_block_at_def, execute_plan_def, execute_plan_append])
 QED
 
 Theorem body_inv_inst:
@@ -536,6 +595,7 @@ Theorem body_inv_step:
         | SORestore off => off < dimword(:256) | _ => T) ops /\
       (!off. MEM (SORestore off) ops ==> off < dimword (:256)) /\
       asm_block_at prog as.as_pc (execute_plan cpl.cp_initial_fmp ops) /\
+      LENGTH (execute_plan cpl.cp_initial_fmp ops) <= LENGTH prog /\
       (!lbl j. j < LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
                EL j (execute_plan cpl.cp_initial_fmp ops) = AsmLabel lbl ==>
                ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
@@ -569,6 +629,7 @@ Proof
   >- (rw[EVERY_MEM] >> Cases_on `s` >> simp[] >> metis_tac[])
   >- metis_tac[]
   >- gvs[]
+  >- (irule asm_block_at_length >> metis_tac[])
   >- (qspecl_then [`prog`, `lo`, `o2pc`, `as.as_pc`,
                    `execute_plan cpl.cp_initial_fmp ops`] mp_tac
         asm_block_labels >>

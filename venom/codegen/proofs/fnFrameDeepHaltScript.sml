@@ -55,6 +55,7 @@ Theorem frame_terminal_prefix_setup_marked:
   generate_inst_plan liveness dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
   asm_block_at prog st.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
   ?n mid name.
+    n + 1 <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
     asm_steps lo o2pc prog n st = AsmOK mid /\
     asm_block_at prog mid.as_pc [AsmOp name] /\
     venom_to_evm_name inst.inst_opcode = SOME name /\
@@ -138,6 +139,7 @@ Resume frame_terminal_prefix_setup_marked[lift]:
     simp[asm_state_component_equality] >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))`,
     `endpoint with as_stack := endpoint.as_stack ++ rest`, `name`] >>
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   conj_tac >- gvs[] >>
   conj_tac
   >- (gvs[execute_plan_append, asm_block_at_append, execute_plan_def,
@@ -245,6 +247,7 @@ Theorem gen_inst_halt_frame_sim_deep:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
     !vs'. step_inst fuel ctx inst vs = Halt vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmHalt as' /\
         venom_asm_terminal_rel vs' as'
 Proof
@@ -271,7 +274,8 @@ Resume gen_inst_halt_frame_sim_deep[stop]:
   `asm_block_at prog mid.as_pc [AsmOp "STOP"]` by metis_tac[] >>
   drule_all terminal_stop_step >>
   disch_then (qspecl_then [`lo`, `o2pc`] strip_assume_tac) >>
-  qexistsl_tac [`n + 1`, `st'`] >> conj_tac
+  qexistsl_tac [`n + 1`, `st'`] >>
+  conj_tac >- simp[] >> conj_tac
   >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
   gvs[]
 QED
@@ -292,7 +296,8 @@ Resume gen_inst_halt_frame_sim_deep[return]:
   drule_all context_source_payload_agree >> disch_tac >>
   drule_all terminal_return_payload_step >>
   disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
-  qexistsl_tac [`n + 1`, `st'`] >> conj_tac
+  qexistsl_tac [`n + 1`, `st'`] >>
+  conj_tac >- simp[] >> conj_tac
   >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
   gvs[]
 QED
@@ -312,7 +317,8 @@ Resume gen_inst_halt_frame_sim_deep[selfdestruct]:
        ir_specific_operand_order_def, eval_operands_def]) >>
   drule_all terminal_selfdestruct_rel_step >>
   disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
-  qexistsl_tac [`n + 1`, `st'`] >> conj_tac
+  qexistsl_tac [`n + 1`, `st'`] >>
+  conj_tac >- simp[] >> conj_tac
   >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
   gvs[COND_RATOR]
 QED

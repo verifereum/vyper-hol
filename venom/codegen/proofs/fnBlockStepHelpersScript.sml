@@ -365,6 +365,7 @@ Theorem block_prefix_step:
       (execute_plan cpl.cp_initial_fmp (clean_ops ++ ops))
     ==>
     ?phi_ops ps1 body_ops n as'.
+      n = LENGTH (execute_plan cpl.cp_initial_fmp (clean_ops ++ phi_ops)) /\
       ops = phi_ops ++ body_ops /\
       generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
@@ -481,6 +482,7 @@ Theorem block_step_prefix:
     eval_phis vs bb.bb_instructions = OK s_phi
     ==>
     ?h promised ps_after prefix_ops rest_ops ps1 n as1.
+      n = LENGTH (execute_plan cpl.cp_initial_fmp (SOLabel bb.bb_label :: prefix_ops)) /\
       generate_block_plan liveness dfg cfg fn bb
         (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
         SOME (block_ops, ps_after) /\

@@ -3822,7 +3822,8 @@ Theorem rf_strict_suffix_abort:
   asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
   exec_block fuel ctx bb s = Abort a s_end ==>
   a = Revert_abort /\
-  ?n out. asm_steps lo o2pc prog n st = AsmRevert out /\
+  ?n out. n <= LENGTH (execute_plan initial_fmp ops) /\
+    asm_steps lo o2pc prog n st = AsmRevert out /\
     venom_asm_terminal_rel s_end out
 Proof
   measureInduct_on `j - k` >> rpt gen_tac >> strip_tac >> disch_tac >>
@@ -3877,7 +3878,8 @@ Resume rf_strict_suffix_abort[revert]:
      gvs[Once exec_block_def, is_terminator_def, AllCaseEqs()]) >>
   drule_all rf_suffix_revert_abort >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
-  simp[] >> qexistsl_tac [`LENGTH (execute_plan initial_fmp step_ops)`,`out`] >> simp[]
+  simp[] >> qexistsl_tac [`LENGTH (execute_plan initial_fmp step_ops)`,`out`] >>
+  simp[execute_plan_append]
 QED
 
 Resume rf_strict_suffix_abort[assign]:
@@ -3946,6 +3948,7 @@ Resume rf_strict_suffix_abort[assign]:
     simp[Abbr `mid`] >>
   simp[] >> strip_tac >> simp[] >>
   qexistsl_tac [`LENGTH (execute_plan initial_fmp step_ops) + n`, `out'`] >>
+  conj_tac >- simp[execute_plan_append] >>
   simp[] >>
   qpat_x_assum `asm_steps _ _ _ _ st = AsmOK _`
     (mp_then Any (qspec_then `n` mp_tac) asm_steps_add_ok) >>
@@ -4148,6 +4151,7 @@ Theorem rf_entry_forward_abort:
     asm_block_at prog ast.as_pc (execute_plan cp.cp_initial_fmp ops) /\
     exec_block fuel ctx bb vs = Abort a vs_end ==>
     ?n ast_end.
+      n <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
       ((a = Revert_abort /\ asm_steps lo o2pc prog n ast = AsmRevert ast_end) \/
        (a = ExHalt_abort /\ asm_steps lo o2pc prog n ast = AsmFault ast_end)) /\
       venom_asm_terminal_rel vs_end ast_end
@@ -4187,7 +4191,8 @@ Proof
          qpat_x_assum `!fuel ctx. _ = step_inst _ _ _ _`
            (assume_tac o GSYM) >>
          gvs[Once exec_block_def]) >>
-      metis_tac[]) >>
+      qexistsl_tac [`LENGTH (execute_plan cp'.cp_initial_fmp step_ops)`, `st'`] >>
+      simp[execute_plan_append]) >>
   `step_inst fuel ctx inst vs = OK copy` by
     (qpat_x_assum `!fuel ctx. _ = step_inst _ _ _ _` mp_tac >>
      qpat_x_assum `w2n src + w2n sz <= _` mp_tac >>
@@ -4246,6 +4251,7 @@ Proof
   drule_all rf_strict_suffix_abort >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qexistsl_tac [`LENGTH (execute_plan cp'.cp_initial_fmp step_ops) + n`, `out`] >>
+  conj_tac >- simp[execute_plan_append] >>
   simp[] >>
   qpat_x_assum `asm_steps _ _ _ _ ast = AsmOK _`
     (mp_then Any (qspec_then `n` mp_tac) asm_steps_add_ok) >>

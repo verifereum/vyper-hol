@@ -354,6 +354,9 @@ Resume regular_inst_ok_sim_marked_count[postfix_done]:
   qexistsl_tac [`LENGTH (execute_plan initial_fmp (iops ++ rops)) +
     (1 + LENGTH (execute_plan initial_fmp (popops ++ optops)))`, `endpoint`] >>
   conj_tac
+  >- (qpat_x_assum `ops = _` SUBST1_TAC >>
+      simp[execute_plan_append, execute_plan_def, exec_stack_op_def]) >>
+  conj_tac
   >- (irule asm_steps_compose_ok >> qexists `mid` >> conj_tac
       >- asm_rewrite_tac[] >>
       irule asm_steps_compose_ok >> qexists `after_emit` >> asm_rewrite_tac[]) >>
@@ -743,6 +746,7 @@ Theorem assign_inst_ok_sim_marked_count:
     !vs'. step_inst fuel ctx inst vs = OK vs' /\
           inst_memory_safe ps'.ps_alloc inst vs vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
@@ -832,6 +836,7 @@ Proof
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qexistsl [`LENGTH (execute_plan initial_fmp (iops ++ rops)) +
              LENGTH (execute_plan initial_fmp (pops ++ opts))`, `st9`] >>
+  conj_tac >- simp[execute_plan_append] >>
   conj_tac >- (irule asm_steps_compose_ok >> goal_assum drule >> simp[]) >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   pure_rewrite_tac[execute_plan_append, LENGTH_APPEND] >>
@@ -1001,6 +1006,7 @@ Theorem log_inst_ok_sim_marked_count:
     !vs'. step_inst fuel ctx inst vs = OK vs' /\
           inst_memory_safe ps'.ps_alloc inst vs vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
@@ -1040,6 +1046,7 @@ Proof
   disch_then (qspecl_then [`o2pc`, `next_liveness`] strip_assume_tac) >>
   qpat_x_assum `ps4.ps_stack = _` kall_tac >>
   qexistsl_tac [`LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops)) + 1`, `st'`] >>
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   conj_tac >- simp[asm_steps_add] >>
   conj_tac >- (qpat_x_assum `venom_asm_rel lo (release_dead_spills _ _) _ st'`
                  mp_tac >> simp[]) >>
@@ -1207,6 +1214,7 @@ Theorem assert_inst_ok_sim_marked_count:
     !vs'. step_inst fuel ctx inst vs = OK vs' /\
           inst_memory_safe ps'.ps_alloc inst vs vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
@@ -1412,6 +1420,7 @@ Theorem assert_unreachable_inst_ok_sim_marked_count:
     !vs'. step_inst fuel ctx inst vs = OK vs' /\
           inst_memory_safe ps'.ps_alloc inst vs vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
@@ -1673,6 +1682,7 @@ Theorem phi_inst_ok_sim_marked_count:
     !vs'. step_inst fuel ctx inst vs = OK vs' /\
           inst_memory_safe ps'.ps_alloc inst vs vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
@@ -1815,6 +1825,7 @@ Resume phi_inst_ok_sim_marked_count[phi_live_pop_finish]:
   strip_tac >>
   qexistsl [`LENGTH (execute_plan initial_fmp dup_ops) +
               LENGTH (execute_plan initial_fmp [SOPop 1])`, `st'`] >>
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   conj_tac
   >- (irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
   gvs[apply_simple_ops_def, apply_simple_op_def, stack_pop_def,
@@ -1984,6 +1995,7 @@ Theorem initial_fmp_inst_ok_sim_marked_count:
     !vs'. step_inst fuel ctx inst vs = OK vs' /\
           inst_memory_safe ps'.ps_alloc inst vs vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
@@ -2028,6 +2040,7 @@ Proof
             `initial_fmp`, `out`] mp_tac initial_fmp_emit_update_var_bridge >>
           (impl_tac >- ASM_REWRITE_TAC[]) >> strip_tac >>
           qexistsl [`1`, `as'`] >> ASM_REWRITE_TAC[] >>
+          conj_tac >- simp[execute_plan_def, exec_stack_op_def] >>
           conj_tac
           >- (irule venom_asm_rel_release_dead_spills >>
               simp[stack_push_def, stack_pop_def]) >>
@@ -2280,6 +2293,7 @@ Theorem bump_inst_ok_sim_marked_count:
     !vs'. step_inst fuel ctx inst vs = OK vs' /\
           inst_memory_safe ps'.ps_alloc inst vs vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
@@ -2422,6 +2436,7 @@ Proof
      qpat_assum `as''.as_pc = as'.as_pc + _`
        (fn th => rewrite_tac[GSYM th])) >>
   `?npop as8.
+     npop = LENGTH (execute_plan initial_fmp pop_ops) /\
      asm_steps lo o2pc prog npop as'' = AsmOK as8 /\
      venom_asm_rel lo ps8
        (update_var h'³' (x + x')
@@ -2443,6 +2458,7 @@ Proof
      simp[]) >>
   strip_tac >> gvs[] >>
   `?nopt st'.
+     nopt = LENGTH (execute_plan initial_fmp opt_ops) /\
      asm_steps lo o2pc prog nopt as8 = AsmOK st' /\
      venom_asm_rel lo ps9
        (update_var h'³' (x + x') (update_var h'' x vs)) st' /\
@@ -2629,6 +2645,7 @@ Theorem istore_inst_ok_sim_marked_count:
     !vs'. step_inst fuel ctx inst vs = OK vs' /\
           inst_memory_safe ps'.ps_alloc inst vs vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
@@ -2976,6 +2993,7 @@ Theorem gen_inst_ok_sim_marked:
     !vs'. step_inst fuel ctx inst vs = OK vs' /\
           inst_memory_safe ps'.ps_alloc inst vs vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
