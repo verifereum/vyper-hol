@@ -69,14 +69,6 @@ Proof
   gvs[] >> irule tuple_place_mutable_path_barrier >> metis_tac[]
 QED
 
-Theorem tuple_place_rhs_empty_call_safe:
-  expr_body_pre cenv cx env e es ==> call_evaluation_safe cx []
-Proof
-  simp[exprSimHypsDefsTheory.expr_body_pre_def] >> rpt strip_tac >>
-  irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-
 Theorem tuple_place_pure_target_no_calls:
   !bt tops. supported_target_pure tops bt ==> int_calls_target bt = []
 Proof
@@ -86,13 +78,6 @@ Proof
   first_x_assum (qspec_then `b` mp_tac) >>
   simp[vyperASTTheory.expr_size_def] >>
   metis_tac[bodyExprPreFactsTheory.supported_pure_int_calls]
-QED
-
-Theorem tuple_place_rhs_target_call_safe:
-  expr_body_pre cenv cx env e es /\ supported_target_pure tops bt ==>
-  call_evaluation_safe cx (int_calls_target bt)
-Proof
-  metis_tac[tuple_place_rhs_empty_call_safe, tuple_place_pure_target_no_calls]
 QED
 
 (* Coordinate interface for live memory places; no write is needed. *)
