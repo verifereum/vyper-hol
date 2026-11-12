@@ -1,7 +1,11 @@
 (* The entry projection does not inspect uncalled internal functions. *)
 Theory deployOutcomesFreeEntry
 Ancestors
-  vyperCompiler list venomInst
+  vyperCompiler list venomInst deployOutcomesFreeArgs deployOutcomesFreeScaffold
+  ctorGeneratorShape moduleLowering deployOutcomesFreeLowering loweringShapeDefs
+  context emitHelper compileEnv
+Libs
+  monadsyntax
 
 Theorem split_blocks_at_partition:
   !blocks label pre suf.
@@ -41,4 +45,47 @@ Proof
   qexists_tac `mk_raw_function label entry_blocks` >>
   simp[mk_venom_context_def, lookup_function_def, mk_raw_function_def,
        fn_insts_def, EVERY_fn_insts_blocks, FIND_thm]
+QED
+
+Theorem compile_generate_deploy_prefix_excludes_outcomes:
+  (!env s.
+    EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      bb.bb_instructions) (all_blocks s) ==>
+    EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      bb.bb_instructions)
+      (all_blocks (SND (compile_stmts env NoLoop NoneT ss s)))) ==>
+  !s. EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      bb.bb_instructions) (all_blocks s) ==>
+    EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      bb.bb_instructions)
+      (all_blocks (SND (compile_generate_deploy has rt imm args sz [] env ss
+        pay nr key trans s)))
+Proof
+  strip_tac >>
+  gvs[GSYM outcomes_free_all_blocks] >>
+  Cases_on `has` >> simp[compile_generate_deploy_def, compile_internal_fn_bodies_def]
+  >- (Cases_on `env.ce_nonreentrant` >> rename1 `env.ce_nonreentrant = (g,rest)` >>
+      PairCases_on `rest` >> Cases_on `trans` >> Cases_on `rest2` >>
+      asm_rewrite_tac [] >> Cases_on `imm > 0` >>
+      rpt (FIRST [gen_tac, strip_tac,
+        CHANGED_TAC (simp[outcomes_free_return, outcomes_free_fresh,
+          outcomes_free_get, outcomes_free_new_block, outcomes_free_emit_ops,
+          outcomes_free_register_constructor_args_state]),
+        irule outcomes_free_bind, irule outcomes_free_ignore_bind, conj_tac,
+        first_assum irule, IF_CASES_TAC]) >>
+      rpt IF_CASES_TAC >>
+      gvs[compile_fixed_region_with_id_def, compile_nonreentrant_lock_def,
+        compile_nonreentrant_unlock_def, compile_constructor_epilogue_def,
+        compile_alloc_buffer_def, emit_op_def, emit_void_def, emit_inst_def,
+        fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+        comp_ignore_bind_def, comp_return_def, outcomes_free_state_insts,
+        mk_inst_def])
+  >> simp[compile_simple_deploy_def, compile_alloc_buffer_def,
+       emit_op_def, emit_void_def, emit_inst_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       outcomes_free_state_insts, mk_inst_def]
 QED
