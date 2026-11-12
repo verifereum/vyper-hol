@@ -63,9 +63,9 @@ Theorem sym_steps_singleton:
   asm_block_at p ss.sym_base.as_pc [inst] ==>
   sym_steps p env 1 ss = sym_step p env inst ss
 Proof
-  simp[asm_block_at_def, codegenSymRelTheory.sym_steps_compute] >>
+  simp[asm_block_at_def, asmSpliceTheory.sym_steps_compute] >>
   Cases_on `sym_step p env inst ss` >>
-  simp[codegenSymRelTheory.sym_steps_compute]
+  simp[asmSpliceTheory.sym_steps_compute]
 QED
 
 Theorem sym_kinds_ok_base_change:
@@ -152,7 +152,7 @@ Theorem sym_do_swap_small:
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   Cases_on `d = 0`
-  >- (simp[do_swap_def, execute_plan_def, sym_steps_def] >> metis_tac[]) >>
+  >- (simp[do_swap_def, execute_plan_def, asmSpliceTheory.sym_steps_def] >> metis_tac[]) >>
   strip_tac >> gvs[do_swap_def] >>
   metis_tac[sym_exec_swap, arithmeticTheory.NOT_ZERO_LT_ZERO, arithmeticTheory.ADD_COMM]
 QED
@@ -284,7 +284,7 @@ Theorem sym_do_restore:
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   Cases_on `FLOOKUP ps.ps_spilled op`
-  >- (simp[do_restore_def, execute_plan_def, sym_steps_def] >> metis_tac[]) >>
+  >- (simp[do_restore_def, execute_plan_def, asmSpliceTheory.sym_steps_def] >> metis_tac[]) >>
   strip_tac >> gvs[do_restore_def, execute_plan_restore_length] >>
   metis_tac[sym_do_restore_present, arithmeticTheory.ADD_COMM]
 QED
@@ -959,7 +959,7 @@ Theorem sym_steps_unchanged_mem_compose[local]:
   last.sym_mem_labels = ss.sym_mem_labels /\
   last.sym_base.as_pc = ss.sym_base.as_pc + (m+n)
 Proof
-  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
+  strip_tac >> drule_all_then assume_tac sym_steps_compose >>
   asm_simp_tac bool_ss [arithmeticTheory.ADD_ASSOC]
 QED
 
@@ -1203,7 +1203,7 @@ Theorem sym_restore_scratch_carried:
     last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
       (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) indices)))
 Proof
-  Induct >- simp[execute_plan_def, codegenSymRelTheory.sym_steps_compute] >>
+  Induct >- simp[execute_plan_def, asmSpliceTheory.sym_steps_compute] >>
   rw_tac bool_ss [EVERY_DEF, asm_block_at_restore_swap_cons] >>
   drule_all_then (qspec_then `env` strip_assume_tac) sym_restore_swap_one >>
   simp[sym_restore_carried_continue]
@@ -1755,7 +1755,7 @@ Theorem sym_dup_save_finish[local]:
     scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
     last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (saves ++ loads))
 Proof
-  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
+  strip_tac >> drule_all_then assume_tac sym_steps_compose >>
   gvs[execute_plan_append, LENGTH_APPEND, APPEND,
     LIST_REL_def, SF SFY_ss]
 QED
@@ -2051,7 +2051,7 @@ Theorem sym_steps_same_mem_frame_compose:
     last.sym_base.as_pc = ss.sym_base.as_pc + (m+n) /\
     (!b. ~P b ==> FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
+  strip_tac >> drule_all_then assume_tac sym_steps_compose >>
   metis_tac[arithmeticTheory.ADD_ASSOC]
 QED
 
@@ -2335,7 +2335,7 @@ Theorem sym_plan_append_runs[local]:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  rw[execute_plan_append] >> drule_all_then assume_tac sym_steps_compose_ok >>
+  rw[execute_plan_append] >> drule_all_then assume_tac sym_steps_compose >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
@@ -2509,9 +2509,9 @@ Theorem sym_reduce_depth_plan:
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   Induct >> simp_tac pure_ss [GSYM AND_IMP_INTRO, RIGHT_FORALL_IMP_THM]
-  >- simp[Once reduce_depth_plan_def, execute_plan_def, sym_steps_compute] >>
+  >- simp[Once reduce_depth_plan_def, execute_plan_def, asmSpliceTheory.sym_steps_compute] >>
   ntac 5 gen_tac >> ho_match_mp_tac reduce_depth_plan_step_elim >> conj_tac
-  >- simp[execute_plan_def, sym_steps_compute] >>
+  >- simp[execute_plan_def, asmSpliceTheory.sym_steps_compute] >>
   rpt strip_tac >>
   first_x_assum (qspecl_then [`targets`, `op`, `f`, `n`] assume_tac) >>
   drule_all_then MATCH_ACCEPT_TAC sym_reduce_depth_spill_tail

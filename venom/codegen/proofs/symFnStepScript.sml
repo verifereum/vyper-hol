@@ -51,27 +51,10 @@ Proof
   gvs[execute_plan_def, exec_stack_op_def, asm_block_at_cons] >>
   conj_tac
   >- (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [numLib.num_CONV ``1:num``])) >>
-      simp[sym_steps_def, sym_step_def, sym_lift_def,
+      simp[asmSpliceTheory.sym_steps_def, sym_step_def, sym_lift_def,
            asmSemTheory.asm_step_def, asmSemTheory.asm_next_def,
            sym_state_component_equality]) >>
   simp[sym_kinds_ok_def] >> gvs[sym_kinds_ok_def] >> metis_tac[]
-QED
-
-Theorem sym_body_result_prefix:
-  !lo o2pc prog env cp ctx fn mem0 pc_ret rest srest labs0 as ss res n as1 ss1.
-    asm_steps lo o2pc prog n as = AsmOK as1 /\
-    sym_steps prog env n ss = SymOK ss1 /\
-    sym_body_result lo o2pc prog env cp ctx fn mem0 pc_ret rest srest labs0
-      as1 ss1 res ==>
-    sym_body_result lo o2pc prog env cp ctx fn mem0 pc_ret rest srest labs0
-      as ss res
-Proof
-  rpt gen_tac >> simp[sym_body_result_def] >> strip_tac >> rpt conj_tac
-  >> rpt gen_tac >> strip_tac
-  >> first_x_assum drule >> strip_tac
-  >> qexists_tac `n + n'`
-  >> simp[stackOpSimTheory.asm_steps_add, sym_steps_add]
-  >> metis_tac[]
 QED
 
 Theorem sym_block_prefix_step:
@@ -878,7 +861,11 @@ Resume sym_fn_entry_block_step[entry_body_index]:
 QED
 
 Resume sym_fn_entry_block_step[entry_body_finish]:
-  strip_tac >> drule_all sym_block_body_frame_sim >>
+  strip_tac >>
+  `~vs_p.vs_call_ctx.cc_static` by
+    (qpat_assum `~vs.vs_call_ctx.cc_static` mp_tac >>
+     qpat_assum `vs_p.vs_call_ctx = _` (fn th => rewrite_tac[th])) >>
+  drule_all sym_block_body_frame_sim >>
   suspend "entry_body_result"
 QED
 
@@ -947,7 +934,14 @@ Resume sym_fn_block_frame_step[frame_body]:
 QED
 
 Resume sym_fn_block_frame_step[frame_body_match]:
-  strip_tac >> drule_all sym_block_body_frame_sim >>
+  strip_tac >>
+  `~(s' with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_call_ctx.cc_static` by
+    (qpat_assum `~vs.vs_call_ctx.cc_static` mp_tac >>
+     qpat_assum `eval_phis _ _ = OK _`
+       (mp_tac o AP_TERM ``\st:venom_state. st.vs_call_ctx`` o
+        MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
+     simp[]) >>
+  drule_all sym_block_body_frame_sim >>
   suspend "frame_result"
 QED
 

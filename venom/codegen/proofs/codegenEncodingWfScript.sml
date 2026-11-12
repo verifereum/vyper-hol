@@ -92,7 +92,7 @@ Proof
   simp[] >> disch_then drule >> simp[]
 QED
 
-Theorem do_swap_no_push_ofst[local]:
+Theorem do_swap_no_push_ofst:
   do_swap dist ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof

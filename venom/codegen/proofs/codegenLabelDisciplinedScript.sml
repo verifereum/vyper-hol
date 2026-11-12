@@ -17,7 +17,7 @@
  * from the code (asm_data_env_ok; asm_data_env gives one), and a run that
  * ends (Halt or Abort).  The symbolic run then ends with it
  * (symFnStep's sym_fn_sims_all), so it never misuses a label at any fuel
- * (sym_run_terminal_never_bad).
+ * (finalizerContract's sym_terminal_disciplined).
  *
  * TOP-LEVEL:
  *   codegen_asm_entry_rel         - the assembly entry state of codegen's
