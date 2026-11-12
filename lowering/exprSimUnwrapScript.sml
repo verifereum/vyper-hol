@@ -1773,7 +1773,7 @@ Finalise unwrap_ctor_code_copy_path
    unchanged, so expr_post at one valid horizon transports to every other
    (expr_post_fields_transport). *)
 
-Theorem expr_post_fields_transport[local]:
+Theorem expr_post_fields_transport:
   expr_post H0 ctx func cenv cx e es sa sb s0 es' v op u /\
   stmt_state_rel H ctx func cenv cx es' s /\
   storage_well_formed_on cx es' (FST H) /\
