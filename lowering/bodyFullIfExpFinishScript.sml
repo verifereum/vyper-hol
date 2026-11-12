@@ -61,7 +61,14 @@ Theorem ifexp_arm_finish_full:
   emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
   fn_has_code sd sy func /\ fn_has_code sy sz func ==>
+  ?w. eval_operand op u = SOME w /\
   ?z Gz tf.
+    (z = jump_to xl (update_var rv w u with
+           vs_inst_idx := LENGTH sy.cs_current_insts) /\
+     Gz = step_prov PG G (mk_inst sd.cs_next_id ASSIGN [op] [rv])
+            (update_var rv w u) /\
+     tf = step_taint (mk_inst sd.cs_next_id ASSIGN [op] [rv]) u
+            (update_var rv w u) tn) /\
     gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
       (u, G, tn) [] (OK z, Gz, tf) /\
     vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
@@ -83,6 +90,7 @@ Theorem ifexp_arm_finish_full:
 Proof
   strip_tac >>
   `?w. eval_operand op u = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
+  qexists_tac `w` >> conj_tac >- first_assum ACCEPT_TAC >>
   `allocas_from lo u` by fs[ghost_inv_at_def] >>
   `(!name x sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var x) sz) ==> x <> rv) /\
    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> rv) /\
@@ -136,6 +144,7 @@ Proof
      qexistsl_tac [`sy`, `sz`] >> gvs[]) >>
   qexistsl_tac [`jump_to xl (u1 with vs_inst_idx := k)`,
                 `step_prov PG G i0 u1`, `step_taint i0 u u1 tn`] >>
+  conj_tac >- REWRITE_TAC [] >>
   conj_tac
   >- (drule (cj 2 gas_origin_ptr_path_rules) >> simp[]) >>
   (* the root's value post *)
@@ -269,4 +278,100 @@ Proof
      metis_tac[]) >>
   simp[Abbr `i0`, Abbr `u1`] >> irule assign_ghost_kept_at >> simp[] >>
   metis_tac[]
+QED
+
+(* The same finish in family form: one endpoint for every horizon valid
+   for the trace tr, with the H-dependent premises and posts under the
+   guard.  The endpoint is the ASSIGN/JMP state, which is H-free. *)
+Theorem ifexp_arm_finish_full_family:
+  (* the root's premises *)
+  return_buf_frame d cenv sa s0 /\ alloca_history func s0 /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (* the posts at every valid horizon: the root's, the condition's at tt,
+     and the selected arm's at u *)
+  (!H. valid_horizon cx st0 H tr ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0 /\
+     expr_post H ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
+     stmt_state_rel H ctx func cenv cx es1 (jump_to lbl tt) /\
+     expr_post H ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
+     ghost_inv_at (DF H) lo d cenv cx ee G tn u) /\
+  (* the condition's H-free posts at tt *)
+  s0.vs_alloca_next <= tt.vs_alloca_next /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  (* the selected arm's posts at u, from the jump to its block *)
+  read_result cx tv ee = (INL v,ee) /\
+  MAP FDOM es1.scopes = MAP FDOM ee.scopes /\
+  (~is_word_type t ==>
+   vv_at cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
+  expr_store_bound cx t v op u /\
+  u.vs_current_bb = sd.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~u.vs_halted /\
+  alloca_history func u /\ tt.vs_alloca_next <= u.vs_alloca_next /\
+  ptr_val_ok cx t v op G tn u /\
+  (~is_word_type t ==>
+   !e'. lowered_value_type cenv e' = t ==> ptr_buf_ok cenv e' op G u) /\
+  (~is_word_type t ==>
+   !rt w. evaluate_type (get_tenv cx) t = SOME rt /\
+          eval_operand op u = SOME w ==>
+          type_memory_size rt = 0 \/
+          w2n w + type_memory_size rt <= u.vs_alloca_next) /\
+  ghost_kept_at lo cenv es1 sc G1 tn1 (jump_to lbl tt) G tn /\
+  (* the layout *)
+  expr_type e = t /\ post_value_type cenv e = t /\
+  (!x. not_fresh_at sa x ==> x <> rv) /\
+  sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
+  sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  sd.cs_next_id <= sb.cs_next_id /\
+  sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
+  emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
+  emit_inst JMP [Label xl] [] sy = ((),sz) /\
+  fn_has_code sd sy func /\ fn_has_code sy sz func ==>
+  ?z Gz tf.
+    !H. valid_horizon cx st0 H tr ==>
+        gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+          (u, G, tn) [] (OK z, Gz, tf) /\
+        vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
+          (if is_word_type t then StackValue t (Var rv)
+           else LocatedValue t (mk_ptr (Var rv) LocMemory)) z /\
+        vv_store_bound cx (expr_type (IfExp t c a b))
+          (lowered_value_type cenv (IfExp t c a b)) ee tv
+          (if is_word_type t then StackValue t (Var rv)
+           else LocatedValue t (mk_ptr (Var rv) LocMemory)) z /\
+        z.vs_current_bb = sb.cs_current_bb /\
+        z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func z /\ s0.vs_alloca_next <= z.vs_alloca_next /\
+        ghost_inv_at (DF H) lo d cenv cx ee Gz tf z /\
+        ptr_vv_ok cx (post_value_type cenv (IfExp t c a b)) tv
+          (if is_word_type t then StackValue t (Var rv)
+           else LocatedValue t (mk_ptr (Var rv) LocMemory)) ee Gz tf z /\
+        (~is_word_type t ==> ptr_buf_ok cenv (IfExp t c a b) (Var rv) Gz z) /\
+        ghost_kept_at lo cenv es sa G0 tn0 s0 Gz tf
+Proof
+  rpt strip_tac >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 tr`)
+  >- (fs[] >> qexistsl_tac [`ARB`, `ARB`, `ARB`] >> simp[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >>
+  `?w. eval_operand op u = SOME w` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[expr_post_def, expr_val_rel_def] >>
+     metis_tac[]) >>
+  qexistsl_tac
+    [`jump_to xl (update_var rv w u with
+        vs_inst_idx := LENGTH sy.cs_current_insts)`,
+     `step_prov PG G (mk_inst sd.cs_next_id ASSIGN [op] [rv]) (update_var rv w u)`,
+     `step_taint (mk_inst sd.cs_next_id ASSIGN [op] [rv]) u (update_var rv w u) tn`] >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `dead_lo_ok H (DF H) lo cenv cx` by first_assum (qspec_then `H` ACCEPT_TAC) >>
+  drule_all (Q.INST [`D` |-> `DF H`] ifexp_arm_finish_full) >>
+  strip_tac >> gvs[]
 QED
