@@ -414,3 +414,41 @@ Proof
     simp[ignore_bind_def, bind_assoc] >>
   asm_rewrite_tac[gas_outcome_ptr_def] >> metis_tac[]
 QED
+
+(* Recording a storage event before source: the run is source's from the
+   extended trace, and no instruction is spent on the event. *)
+Theorem record_storage_event_then[local]:
+  ignore_bind (record_storage_event ev) source (es with gas_obs := g) =
+    source ((es with storage_trace := es.storage_trace ++ [ev])
+              with gas_obs := g)
+Proof
+  simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+       vyperStateTheory.record_storage_event_def,
+       vyperStateTheory.return_def]
+QED
+
+Theorem gas_outcome_ptr_record_storage_event:
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source
+    (es with storage_trace := es.storage_trace ++ [ev], s0, G0, tn0) Q R /\
+  ~s0.vs_halted ==>
+  gas_outcome_ptr D tops (ctx,func) PG cx st0
+    (ignore_bind (record_storage_event ev) source) (es, s0, G0, tn0) Q R
+Proof
+  rewrite_tac[gas_outcome_ptr_def] >> strip_tac >> qexists_tac `marks`
+  >- (disj1_tac >> fs[gas_bad_storage_at_def, record_storage_event_then])
+  >- (disj2_tac >> disj1_tac >>
+      fs[gas_summary_ptr_at_def, record_storage_event_then] >>
+      metis_tac[]) >>
+  disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish`] >>
+  `ignore_bind (ignore_bind (record_storage_event ev) source) (return ()) =
+   bind (record_storage_event ev) (\u. ignore_bind source (return ()))` by
+    simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  pop_assum SUBST1_TAC >>
+  `marks = [] ++ marks` by simp[] >> pop_assum SUBST1_TAC >>
+  irule gas_exempt_cert_bind_unit >>
+  qexistsl_tac [`()`, `es with storage_trace := es.storage_trace ++ [ev]`, `s0`] >>
+  simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules,
+       vyperStateTheory.record_storage_event_def, vyperStateTheory.return_def] >>
+  drule gas_exempt_cert_start_gas_obs >> simp[]
+QED
