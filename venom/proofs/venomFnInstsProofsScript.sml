@@ -61,6 +61,29 @@ Proof
   `n = n'` by metis_tac[ALL_DISTINCT_EL_IMP] >> gvs[]
 QED
 
+(* Global instruction IDs identify instructions across functions. *)
+Theorem source_instruction_unique:
+  ctx_inst_ids_distinct C /\ MEM f C.ctx_functions /\ MEM g C.ctx_functions /\
+  MEM i (fn_insts f) /\ MEM j (fn_insts g) /\ i.inst_id = j.inst_id ==>
+  i = j
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `insts = FLAT (MAP fn_insts C.ctx_functions)` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) insts)` by
+    gvs[Abbr `insts`, MAP_FLAT, MAP_COMPOSE, combinTheory.o_DEF,
+        fn_insts_def, fn_insts_blocks_map_id, ctx_inst_ids_distinct_def] >>
+  `MEM i insts /\ MEM j insts` by
+    (simp[Abbr `insts`, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  qpat_x_assum `MEM f C.ctx_functions` kall_tac >>
+  qpat_x_assum `MEM g C.ctx_functions` kall_tac >>
+  qpat_x_assum `MEM i (fn_insts f)` kall_tac >>
+  qpat_x_assum `MEM j (fn_insts g)` kall_tac >>
+  fs[MEM_EL] >> rename1 `j = EL m _` >>
+  `EL n (MAP (\i. i.inst_id) insts) =
+   EL m (MAP (\i. i.inst_id) insts)` by gvs[EL_MAP] >>
+  `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]
+QED
+
 Theorem all_distinct_flat_map_unique:
   !(l:'a list) (f:'a -> 'b list) a b v.
     ALL_DISTINCT (FLAT (MAP f l)) /\ MEM a l /\ MEM b l /\

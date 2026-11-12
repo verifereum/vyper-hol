@@ -2,7 +2,7 @@
    This static classification does not assert a selected source execution. *)
 Theory gasExplicitSites
 Ancestors
-  gasShadowUnitObservations gasShadowUnit gasShadowState venomInst venomWf
+  gasShadowUnitObservations gasShadowUnit gasShadowState venomFnInstsProofs venomInst venomWf
   list pred_set
 
 (* The set is determined by the original and shadow raw contexts. *)
@@ -15,33 +15,6 @@ Definition gas_explicit_sites_def:
       f.fn_name = g.fn_name /\ i.inst_id = j.inst_id /\
       i.inst_opcode = GAS /\ j.inst_opcode = GASPRICE}
 End
-
-(* Global instruction IDs identify instructions even across functions. *)
-Theorem ctx_inst_ids_distinct_inj:
-  ctx_inst_ids_distinct ctx /\
-  MEM f ctx.ctx_functions /\ MEM g ctx.ctx_functions /\
-  MEM i (fn_insts f) /\ MEM j (fn_insts g) /\
-  i.inst_id = j.inst_id ==> i = j
-Proof
-  rpt strip_tac >>
-  `!bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
-         FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)` by
-    (Induct >> simp[fn_insts_blocks_def, MAP_APPEND]) >>
-  qabbrev_tac `insts = FLAT (MAP fn_insts ctx.ctx_functions)` >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) insts)` by
-    gvs[Abbr `insts`, MAP_FLAT, MAP_COMPOSE, combinTheory.o_DEF,
-        fn_insts_def, ctx_inst_ids_distinct_def] >>
-  `MEM i insts /\ MEM j insts` by
-    (simp[Abbr `insts`, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
-  qpat_x_assum `MEM f ctx.ctx_functions` kall_tac >>
-  qpat_x_assum `MEM g ctx.ctx_functions` kall_tac >>
-  qpat_x_assum `MEM i (fn_insts f)` kall_tac >>
-  qpat_x_assum `MEM j (fn_insts g)` kall_tac >>
-  fs[MEM_EL] >> rename1 `j = EL m _` >>
-  `EL n (MAP (\i. i.inst_id) insts) =
-   EL m (MAP (\i. i.inst_id) insts)` by gvs[EL_MAP] >>
-  `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]
-QED
 
 Theorem gas_explicit_sites_classify:
   gas_shadow_context c d /\ ctx_inst_ids_distinct c /\
@@ -60,7 +33,7 @@ Proof
   simp[gas_explicit_sites_def] >> eq_tac
   >- (strip_tac >>
       rename1 `MEM j' (fn_insts g')` >>
-      `j' = j` by (irule ctx_inst_ids_distinct_inj >>
+      `j' = j` by (irule venomFnInstsProofsTheory.source_instruction_unique >>
                    conj_tac >- simp[] >>
                    qexistsl [`d`, `g'`, `g`] >> simp[]) >>
       qpat_x_assum `j' = j` (SUBST_ALL_TAC) >>
