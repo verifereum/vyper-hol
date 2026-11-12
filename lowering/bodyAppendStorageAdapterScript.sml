@@ -125,7 +125,7 @@ Proof
   disch_then irule >> simp[] >> metis_tac[]
 QED
 
-Theorem append_aggregate_lowered_type[local]:
+Theorem append_aggregate_lowered_type:
   !cenv e env. ~is_bytestring_type (expr_type e) /\ int_calls_expr e = [] /\
     well_typed_expr env e ==> lowered_value_type cenv e = expr_type e
 Proof
