@@ -174,54 +174,6 @@ Proof
   simp[] >> irule gas_path_ptr_abort >> simp[] >> metis_tac[]
 QED
 
-(* The ghost a straight-line run carries does not depend on the check. *)
-Theorem inst_seq_ptr_ghost_det:
-  !is s G tn g1 t1 g2 t2.
-  inst_seq_ptr D1 lo1 ctx fn PG G tn is s g1 t1 /\
-  inst_seq_ptr D2 lo2 ctx fn PG G tn is s g2 t2 ==>
-  g1 = g2 /\ t1 = t2
-Proof
-  Induct >> simp[inst_seq_ptr_def] >> rpt gen_tac >>
-  Cases_on `step_inst_base h s` >> simp[] >> metis_tac[]
-QED
-
-(* A GAS-free straight-line run that aborts stops at one instruction,
-   whatever the check: one Venom result serves every dead mask. *)
-Theorem run_inst_seq_abort_zero_path_ptr_uniform:
-  !code s t a ctx fn bb.
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               ~is_terminator i.inst_opcode) code /\
-    run_inst_seq code s = Abort a t ==>
-    ?j. !D lo PG G tn G' tn'.
-      inst_seq_ptr D lo ctx fn PG G tn code s G' tn' ==>
-      gas_path_ptr D lo ctx fn PG G tn s 0 G' tn'
-        (Abort a (t with vs_inst_idx := j))
-Proof
-  Induct >- simp[run_inst_seq_def] >>
-  rpt gen_tac >> strip_tac >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[run_inst_seq_def]
-  >~ [`step_inst_base h s = OK u`]
-  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
-      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
-      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
-      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
-        `t with vs_inst_idx := SUC s.vs_inst_idx`, `a`, `ctx`, `fn`, `bb`]
-        mp_tac) >>
-      simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
-      qexists_tac `j` >> rpt strip_tac >> fs[inst_seq_ptr_def] >>
-      first_x_assum drule >> strip_tac >>
-      drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)
-        gas_path_ptr_step >> simp[]) >>
-  qexists_tac `t.vs_inst_idx` >> rpt strip_tac >> fs[inst_seq_ptr_def] >>
-  drule_at (Pat `step_inst_base _ _ = _`) gas_path_ptr_abort >> simp[] >>
-  disch_then (qspec_then `PG` mp_tac) >> simp[]
-QED
-
 (* The raw jump a break, continue or constructor return emits: a
    pointer-checked edge that keeps the ghost, above any bound lo the
    allocas respect. *)
