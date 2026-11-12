@@ -276,7 +276,7 @@ QED
    fn_ptr_ok of each function and its reachable part.  The pass keeps
    every reachable non-terminator instruction and makes no block
    unreachable, so the pointer variables of the output's reachable part
-   are those of the input's.  Admitted for now. *)
+   are those of the input's. *)
 Theorem simplify_cfg_stage_src_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
@@ -376,7 +376,7 @@ QED
    and taint at each reachable state, taint only in the dead bytes D, and
    DLOAD offsets that fit after the code.  Each state the output's frames
    reach has one the input's reach with the same ghosts, instruction and
-   values; the input only adds jumps.  Admitted for now. *)
+   values; the input only adds jumps. *)
 Theorem simplify_cfg_stage_src_frame:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
@@ -436,7 +436,7 @@ QED
 
 (* LowerDload's alloca headroom: the pass drops jumps and dead blocks, so
    the output has no more DLOADs than the input, and its frames reach no
-   alloca frontier the input's don't.  Admitted for now. *)
+   alloca frontier the input's don't. *)
 Theorem simplify_cfg_stage_headroom:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\

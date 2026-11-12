@@ -4524,17 +4524,6 @@ Proof
   fs[dload_offset_ok_def]
 QED
 
-Theorem scfg_payload_gas_cut:
-  gas_cut n vs t /\ scfg_payload s t ==> gas_cut n vs s
-Proof
-  strip_tac >>
-  `t.vs_gas_readings = s.vs_gas_readings` by
-    (qpat_x_assum `scfg_payload s t` mp_tac >>
-     simp[scfg_payload_def, scfg_ctrl_def] >>
-     disch_then SUBST1_TAC >> simp[]) >>
-  fs[gas_cut_def]
-QED
-
 (* The DLOAD offset bound before the cut. *)
 Theorem scfg_trace_dload_offset_upto:
   ctx_bisim C C' /\
@@ -4554,7 +4543,8 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = DLOAD \/ inst.inst_opcode = DLOADBYTES`
   >- (drule_all scfg_raw_dload_payload >> strip_tac >>
-      drule_all scfg_payload_gas_cut >> strip_tac >>
+      drule_all (iffRL scfg_data_agree_payload) >> strip_tac >>
+      drule_all scfg_data_agree_gas_cut >> strip_tac >>
       metis_tac[scfg_payload_dload_offset_ok]) >>
   fs[dload_offset_ok_def]
 QED

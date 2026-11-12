@@ -78,7 +78,7 @@ QED
 
 (* The guarded raw memory fact moves through a stage like the whole one:
    mem_corr keeps the gas readings. *)
-Theorem raw_mem_ok_upto_closed[local]:
+Theorem raw_mem_ok_upto_closed:
   mem_corr_closed_rf
     (\ctx fn inst s. gas_cut n vs s ==> raw_mem_ok ctx fn inst s)
 Proof

@@ -71,7 +71,7 @@ Proof
   drule_all scfg_assign_interval_opcode >> simp[]
 QED
 
-Theorem scfg_assign_interval_corr:
+Theorem scfg_assign_interval_corr[local]:
   bb.bb_instructions = pre ++ assigns ++ tail /\
   EVERY (\i. i.inst_opcode = ASSIGN) assigns /\
   a.vs_inst_idx = LENGTH pre /\ scfg_iprefix C bb a t /\
@@ -155,11 +155,14 @@ Theorem scfg_assign_tail_observe:
   MEM bb fn.fn_blocks /\ bb.bb_label = u.vs_current_bb /\
   (!n. u.vs_inst_idx <= n ==> get_instruction bb n = get_instruction fb n) /\
   u.vs_alloca_next = a.vs_alloca_next /\ u.vs_allocas = a.vs_allocas /\
-  u.vs_initial_fmp = a.vs_initial_fmp /\
-  u.vs_gas_readings = a.vs_gas_readings /\ fn_inst_wf fn ==>
+  u.vs_initial_fmp = a.vs_initial_fmp /\ fn_inst_wf fn ==>
   ?i' u'. frame_reach C fn s0 i' u' /\ mem_corr i' u' j t /\ call_corr i' u' j t
 Proof
-  strip_tac >> Cases_on `t.vs_inst_idx < u.vs_inst_idx`
+  strip_tac >>
+  `u.vs_gas_readings = a.vs_gas_readings` by
+    (mp_tac (Q.INST [`t` |-> `u`, `bb` |-> `fb`] scfg_assign_interval_alloca) >>
+     simp[]) >>
+  Cases_on `t.vs_inst_idx < u.vs_inst_idx`
   >- (qexistsl_tac [`i`, `u`] >> simp[] >>
       `t.vs_inst_idx < LENGTH pre + LENGTH assigns` by decide_tac >>
       drule_all scfg_assign_interval_corr >> simp[]) >>
