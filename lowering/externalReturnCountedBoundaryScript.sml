@@ -37,6 +37,26 @@ Proof
   simp[expr_post_def, locals_kept_def, popped_kept_def]
 QED
 
+(* A gas path's exit result is unique: both runs reach it under run_from,
+   and run_from agrees on non-Error results at any larger fuel. *)
+Theorem gas_path_exit_unique:
+  gas_path ctx fn s n r /\ exit_result r /\
+  gas_path ctx fn s n' r' /\ exit_result r' ==> r' = r
+Proof
+  strip_tac >>
+  `?f. run_from f ctx fn s = r` by metis_tac[gas_path_exit] >>
+  `?f'. run_from f' ctx fn s = r'` by metis_tac[gas_path_exit] >>
+  `run_from (MAX f f') ctx fn s = r` by
+    (irule gas_run_from_fuel_mono >> conj_tac
+     >- (Cases_on `r` >> fs[fragExecTheory.exit_result_def]) >>
+     qexists_tac `f` >> simp[]) >>
+  `run_from (MAX f f') ctx fn s = r'` by
+    (irule gas_run_from_fuel_mono >> conj_tac
+     >- (Cases_on `r'` >> fs[fragExecTheory.exit_result_def]) >>
+     qexists_tac `f'` >> simp[]) >>
+  gvs[]
+QED
+
 Theorem return_counted_continuation:
   gas_outcome F tops (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0)

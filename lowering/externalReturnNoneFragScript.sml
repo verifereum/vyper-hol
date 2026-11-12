@@ -6,7 +6,7 @@ Ancestors externalReturnSimpleSuffix externalReturnValuedFrag
   stmtSimDefs loweringPosts bodySim exprSimHypsDefs vyperTypeSystem
   vyperInterpreter vyperState vyperValueOperation compileEnv stmtLowering
   exprLoweringProps externalReturnCountedBoundary externalReturnPackage
-  compileVyper entryStateRel
+  compileVyper entryStateRel gasStorage vyperStorageFootprint
 
 Theorem return_selected_none_frag:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
@@ -21,7 +21,7 @@ Theorem return_selected_none_frag:
   IS_SOME (type_stmt env ret (Return NONE)) /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target ==>
   stmt_frag ctx func cx lctx
-    (\v ee r. ?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
+    (\H v ee r. ?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
       external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
@@ -49,15 +49,41 @@ Proof
        build_compile_env_def] >>
      rpt (pairarg_tac >> gvs[]) >>
      simp[compile_env_component_equality] >> strip_tac >> gvs[]) >>
-  `state_rel H func ce cx es s0` by fs[stmt_state_rel_def] >>
-  drule_all return_none_suffix_path >>
-  disch_then (qspecl_then [`am.exports`,`ctx`] strip_assume_tac) >>
-  simp[gas_outcome_def] >> qexists_tac `REPLICATE n F` >> disj1_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      simp[gas_bad_storage_at_def, Once evaluate_def, raise_def]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
+     es.storage_trace` by fs[storage_trace_domain_def] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     ?n r. gas_path ctx func s0 n r /\ exit_result r /\
+       external_call_result_rel H tops NoneT tx
+         (INL NoneV, finalize_pending_deletions
+           (abstract_machine_from_state am.sources am.exports am.layouts es),
+          es.requests) r` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     `state_rel H func ce cx es s0` by fs[stmt_state_rel_def] >>
+     drule_all return_none_suffix_path >>
+     disch_then (qspecl_then [`am.exports`,`ctx`] strip_assume_tac) >>
+     metis_tac[]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?n r. _`
+    (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`n`, `r`] strip_assume_tac) >>
+  simp[gas_outcome_def] >> qexists_tac `REPLICATE n F` >>
+  disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `r`] >>
   conj_tac
   >- (irule gas_marked_exec_no_source_read >>
       simp[Once evaluate_def, raise_def, gas_marked_path_def]) >>
-  disj2_tac >> simp[stmt_exit_def, return_result_gas_obs, return_result_scopes,
+  disj2_tac >> simp[] >> rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?n r. _`
+    (qspec_then `H` mp_tac) >>
+  impl_tac >- fs[] >>
+  disch_then (qx_choosel_then [`n1`, `r1`] strip_assume_tac) >>
+  `r1 = r` by metis_tac[gas_path_exit_unique] >> gvs[] >>
+  simp[stmt_exit_def, return_result_gas_obs, return_result_scopes,
     vyperValueTheory.evaluate_type_def, safe_cast_def]
 QED
