@@ -89,9 +89,11 @@ Theorem emit_ADD_frame:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) (u + v) s` >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
-       bind_outputs_def, eval_operand_def, lookup_var_update_var,
-       update_var_def] >>
+  conj_tac >-
+    (simp[run_inst_seq_def, mk_inst_def] >>
+     simp_tac (srw_ss()) [Once step_inst_base_def] >>
+     simp[exec_pure2_def, bind_outputs_def]) >>
+  simp[eval_operand_def, lookup_var_update_var, update_var_def] >>
   rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
                        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
@@ -561,7 +563,8 @@ QED
 
 Theorem compile_expr_mapping_subscript_parts:
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
-  place_type cenv obj = MapPT kt vt ==>
+  place_type cenv obj = MapPT kt vt /\
+  ~copies_subscript_base cenv obj idx ==>
   ?bvv sm key sn hashed sp slot.
     compile_expr cenv ty obj sa = (bvv,sm) /\
     lower_value compile_expr cenv (expr_type idx) idx sm = (key,sn) /\
@@ -572,10 +575,11 @@ Theorem compile_expr_mapping_subscript_parts:
       (case vv_location bvv of SOME loc => loc | NONE => LocMemory))
 Proof
   strip_tac >>
-  qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
-  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-       compile_subscript_def, comp_bind_def, comp_return_def,
-       vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def] >>
+  qpat_x_assum `~copies_subscript_base _ _ _` (fn th =>
+    qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+    simp[th, Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+         compile_subscript_def, comp_bind_def, comp_return_def,
+         vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   qpat_x_assum `lower_value cb cenv ity idx sm = _` mp_tac >>
   `lower_value

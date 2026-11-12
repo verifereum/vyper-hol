@@ -6,7 +6,8 @@
  * ghost (bodyPtrPreds's predicates), internal calls included.  Each case
  * is a case lemma of the bodyPtr*Cases theories, or a short tactic below,
  * as in bodySimMain.  The leaf expressions come from exprSimPtr's
- * leaf_expr_sim_ptr, through body_expr_ptr_ok_leaf.
+ * leaf_expr_sim_ptr, through body_expr_ptr_ok_leaf, and a top-level
+ * mapping's mapping judgment from exprSimPtrTopLevelMap.
  *
  * TOP-LEVEL:
  *   body_sim_ptr_mutual -- the eleven predicates, by evaluate_ind
@@ -16,7 +17,8 @@
 Theory bodySimPtrMain
 Ancestors
   bodyPtrCtrlCases bodyPtrExitCases bodyPtrAssignCases bodyPtrLogCases bodyPtrExprCases bodyPtrIntCallCase bodyPtrCallCases exprSimPtr
-  bodyPtrPreds bodyPtrDefs bodySim exprSimSource supportedStmts
+  bodyPtrPreds bodyPtrDefs bodySim bodyExprPreFacts exprSimSource supportedStmts
+  exprSimPtrTopLevelMap
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
@@ -27,12 +29,16 @@ Theorem body_expr_ptr_ok_leaf:
     (?a nsid mid. e = FlagMember a nsid mid) \/ (?a l. e = Literal a l) ==>
     body_expr_ptr_ok cx e
 Proof
-  rpt gen_tac >> disch_tac >> simp[body_expr_ptr_ok_def] >>
-  reverse conj_tac >- (rpt strip_tac >> gvs[]) >> rpt gen_tac >> strip_tac >>
-  `expr_sim_pre cenv cx env e es` by
-    (simp[expr_sim_pre_body] >>
-     qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[int_calls_expr_def]) >>
-  metis_tac[leaf_expr_sim_ptr]
+  rpt gen_tac >> disch_tac >> simp[body_expr_ptr_ok_def] >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `expr_sim_pre cenv cx env e es` by
+        (simp[expr_sim_pre_body] >>
+         qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[int_calls_expr_def]) >>
+      metis_tac[leaf_expr_sim_ptr])
+  >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule expr_map_pre_shape >> strip_tac >> gvs[] >>
+  irule compile_toplevel_map_sim_ptr >> metis_tac[]
 QED
 
 val body_ind = evaluate_ind
@@ -90,9 +96,9 @@ Proof
     (* 33 *) MATCH_ACCEPT_TAC body_structlit_case_ptr,
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_case_ptr,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_case_ptr,
-    (* 36 *) rpt strip_tac >> irule body_builtin_case_ptr >> conj_tac
-               >- (rpt strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-                   metis_tac[]) >> metis_tac[],
+    (* 36 *) rpt strip_tac >> irule body_builtin_case_ptr >> rpt conj_tac >> rpt strip_tac >>
+               (Cases_on `bt = Bop In \/ bt = Bop NotIn`
+                >- (gvs[] >> metis_tac[]) >> metis_tac[]),
     (* 37 *) MATCH_ACCEPT_TAC body_pop_case_ptr,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_case_ptr,
     (* 39 *) MATCH_ACCEPT_TAC body_send_case_ptr,
@@ -138,5 +144,5 @@ Theorem body_stmts_ptr_ok_sim:
     stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
       (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
 Proof
-  metis_tac[body_sim_ptr_mutual, body_stmts_ptr_ok_def]
+  metis_tac[body_sim_ptr_mutual, body_stmts_ptr_ok_def, supported_stmts_body_safe]
 QED

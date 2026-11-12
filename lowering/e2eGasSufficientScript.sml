@@ -49,6 +49,23 @@ Ancestors
 
 (* ===== add_frame_gas keeps the call's state relation ===== *)
 
+(* Only gas fields change, so the account maps and the return data the
+   two bounds range over are the same. *)
+Theorem add_frame_gas_bounded:
+  !B g es.
+    (balance_bounded B (add_frame_gas g es) <=> balance_bounded B es) /\
+    (returndata_bounded (add_frame_gas g es) <=> returndata_bounded es)
+Proof
+  rpt gen_tac >> Cases_on `es.contexts`
+  >- simp[add_frame_gas_def]
+  >> PairCases_on `h` >>
+  drule add_frame_gas_contexts >> disch_then (qspec_then `g` assume_tac) >>
+  simp[vfmTotalBalanceTheory.balance_bounded_def,
+       vfmExecutionPropTheory.all_accounts_def,
+       vfmReturndataBoundTheory.returndata_bounded_def,
+       add_frame_gas_fields, MAP_MAP_o, combinTheory.o_DEF, EVERY_MAP]
+QED
+
 Theorem call_state_rel_add_frame_gas:
   !tops bc am tx g es.
     call_state_rel tops bc am tx es ==>
@@ -56,7 +73,8 @@ Theorem call_state_rel_add_frame_gas:
 Proof
   rw[call_state_rel_def] >>
   drule add_frame_gas_contexts >> disch_then (qspec_then `g` assume_tac) >>
-  simp[add_frame_gas_wf_state, add_frame_gas_fields] >> fs[]
+  simp[add_frame_gas_wf_state, add_frame_gas_fields, add_frame_gas_bounded] >>
+  fs[]
 QED
 
 (* The creation frame's relation, at the new gas, from the old one and its
@@ -78,7 +96,7 @@ Proof
                 `rb`, `args_bytes`] >>
   `(add_frame_gas g es).originalAccounts = es.originalAccounts` by
     (simp[add_frame_gas_def] >> CASE_TAC >> simp[] >> CASE_TAC >> simp[]) >>
-  fs[add_frame_gas_wf_state, add_frame_gas_fields]
+  fs[add_frame_gas_wf_state, add_frame_gas_fields, add_frame_gas_bounded]
 QED
 
 (* ===== The call cases ===== *)

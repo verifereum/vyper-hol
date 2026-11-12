@@ -51,34 +51,6 @@ Proof
   metis_tac[mem_label_at_cong]
 QED
 
-Theorem mem_sval_at_store_label:
-  mem_sval_at (labs |++ GENLIST (\i. (off+i,(l,d,i))) 32) off (Lab l d)
-Proof
-  simp[mem_sval_at_def, mem_label_at_def, mstore_labels_lookup,
-       EVERY_MEM, MEM_COUNT_LIST]
-QED
-
-Theorem mem_sval_at_clear:
-  mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
-Proof
-  simp[mem_sval_at_def, mem_labels_clear_def, finite_mapTheory.FDOM_DRESTRICT]
-QED
-
-Theorem sym_steps_compose_ok:
-  sym_steps p env m ss = SymOK mid /\
-  sym_steps p env n mid = SymOK last ==>
-  sym_steps p env (m+n) ss = SymOK last
-Proof
-  simp[sym_steps_add]
-QED
-
-Theorem store_label_lookup_outside:
-  ~in_mem_range off 32 i ==>
-  FLOOKUP (labs |++ GENLIST (\j. (off+j,(l,d,j))) 32) i = FLOOKUP labs i
-Proof
-  simp[mstore_labels_lookup, in_mem_range_def]
-QED
-
 Theorem clear_lookup_outside:
   ~in_mem_range off 32 i ==>
   FLOOKUP (mem_labels_clear labs (in_mem_range off 32)) i = FLOOKUP labs i
@@ -250,7 +222,10 @@ Theorem LIST_REL_stack_dup:
   LIST_REL R (REVERSE stk) top /\ d < LENGTH stk ==>
   LIST_REL R (REVERSE (stack_dup d stk)) (EL d top :: top)
 Proof
-  simp[stack_dup_def, stack_peek_eq_EL_REVERSE] >>
+  `!k l. k < LENGTH l ==> stack_peek k l = EL k (REVERSE l)` by
+    (rpt strip_tac >> simp[stackModelTheory.stack_peek_def, EL_REVERSE] >>
+     AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
+  pop_assum (fn th => simp[stack_dup_def, th]) >>
   simp[LIST_REL_EL_EQN]
 QED
 
@@ -285,7 +260,10 @@ Theorem LIST_REL_stack_poke_equiv:
   LIST_REL R (REVERSE (stack_poke d op stk)) top
 Proof
   rpt strip_tac >> simp[reverse_stack_poke] >>
-  metis_tac[LIST_REL_replace_equiv, stack_peek_eq_EL_REVERSE, LENGTH_REVERSE]
+  `!k l. k < LENGTH l ==> stack_peek k l = EL k (REVERSE l)` by
+    (rpt strip_tac >> simp[stackModelTheory.stack_peek_def, EL_REVERSE] >>
+     AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
+  metis_tac[LIST_REL_replace_equiv, LENGTH_REVERSE]
 QED
 
 Theorem sym_kinds_ok_poke_equiv:
@@ -304,7 +282,24 @@ Theorem LIST_REL_stack_swap:
   LIST_REL R (REVERSE (stack_swap d stk))
     (LUPDATE (HD top) d (LUPDATE (EL d top) 0 top))
 Proof
-  rpt strip_tac >> simp[reverse_stack_swap, lupdate_commutes, EL] >>
+  rpt strip_tac >>
+  `!k l. 0 < k /\ k < LENGTH l ==>
+     REVERSE (stack_swap k l) =
+     LUPDATE (HD (REVERSE l)) k
+       (LUPDATE (EL k (REVERSE l)) 0 (REVERSE l))` by
+    (rpt strip_tac >>
+     `stack_swap k l =
+      stack_poke k (stack_peek 0 l) (stack_poke 0 (stack_peek k l) l)` by
+       simp[stackModelTheory.stack_swap_def, stackModelTheory.stack_poke_def,
+            stackModelTheory.stack_peek_def, LET_THM] >>
+     `LENGTH (stack_poke 0 (stack_peek k l) l) = LENGTH l` by
+       simp[stackModelTheory.stack_poke_def] >>
+     simp[reverse_stack_poke] >>
+     `!j. j < LENGTH l ==> stack_peek j l = EL j (REVERSE l)` by
+       (rpt strip_tac >> simp[stackModelTheory.stack_peek_def, EL_REVERSE] >>
+        AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
+     simp[EL]) >>
+  simp[] >>
   metis_tac[LIST_REL_swap, LENGTH_REVERSE]
 QED
 
@@ -355,5 +350,5 @@ Theorem sym_steps_frame_empty:
   ss.sym_base.as_pc = ss.sym_base.as_pc + 0 /\
   (!b. ~P b ==> FLOOKUP ss.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  simp[sym_steps_def]
+  simp[asmSpliceTheory.sym_steps_def]
 QED

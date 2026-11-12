@@ -134,15 +134,6 @@ Proof
     listTheory.EL_REVERSE] >> metis_tac[]
 QED
 
-(* Scratch memory is indexed by byte offset, not by operand identity. *)
-Theorem mem_sval_at_store_label:
-  !labs off l d.
-  mem_sval_at (labs |++ GENLIST (\i. (off+i,(l,d,i))) 32) off (Lab l d)
-Proof
-  simp[mem_sval_at_def, mem_label_at_def, mstore_labels_lookup,
-       listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
-QED
-
 Theorem sym_mload_mem_sval_label:
   !ss off l d stk.
   ss.sym_stack = Val off :: stk /\
@@ -201,7 +192,9 @@ Proof
   simp[sym_mload_def, sym_step_concrete_def, asm_op_arity_def,
        asm_op_arity_table_def, sval_val_def, asm_op_mem_reads_def,
        asm_op_mem_writes_def, sym_lift_def,
-       asmOpSimTheory.asm_step_op_mload, asmSemTheory.asm_mload_def,
+       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, asmSemTheory.asm_mload_def,
        asmSemTheory.asm_next_def, mem_labels_clear_def,
        GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV]
 QED
@@ -224,7 +217,9 @@ Proof
   simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
        sval_val_def, asm_op_arity_table_def, asmSemTheory.log_table_def,
        asm_op_mem_reads_def, asm_op_mem_writes_def,
-       mem_labels_hit_def, sym_lift_def, asmOpSimTheory.asm_step_op_mstore,
+       mem_labels_hit_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def,
        asmSemTheory.asm_mstore_def, asmSemTheory.asm_next_def,
        scratch_labels_write_def, Excl "GENLIST_NUMERALS"]
 QED
@@ -359,7 +354,7 @@ Theorem sym_steps_two:
     sym_steps p env 2 ss = SymOK s2
 Proof
   simp[stackOpSimTheory.asm_block_at_cons] >> rpt strip_tac >>
-  simp[sym_steps_compute]
+  simp[asmSpliceTheory.sym_steps_compute]
 QED
 
 Theorem sym_push_offset_then:
@@ -454,14 +449,6 @@ Proof
   rpt strip_tac >> metis_tac[sym_pushed_mload, sym_push_offset_then]
 QED
 
-Theorem sym_steps_ok_append:
-  sym_steps p env m ss = SymOK mid /\
-  sym_steps p env n mid = SymOK out ==>
-  sym_steps p env (m + n) ss = SymOK out
-Proof
-  simp[sym_steps_add]
-QED
-
 Theorem sym_spill_offsets_cons_result:
   !p env ss mid out off sv xs stk.
     sym_steps p env 2 ss = SymOK mid /\
@@ -476,7 +463,7 @@ Theorem sym_spill_offsets_cons_result:
       result.sym_mem_labels = scratch_labels_store ss.sym_mem_labels ((off,sv)::xs) /\
       result.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
 Proof
-  rpt strip_tac >> drule_all sym_steps_ok_append >>
+  rpt strip_tac >> drule_all sym_steps_compose >>
   gvs[scratch_labels_store_def, arithmeticTheory.MULT_CLAUSES]
 QED
 
@@ -530,7 +517,7 @@ Theorem sym_spill_offsets_steps:
       out.sym_mem_labels = scratch_labels_store ss.sym_mem_labels xs /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs
 Proof
-  Induct >- simp[sym_steps_def, scratch_labels_store_def] >>
+  Induct >- simp[asmSpliceTheory.sym_steps_def, scratch_labels_store_def] >>
   Cases >> drule sym_spill_offsets_cons_step >> metis_tac[]
 QED
 
@@ -556,7 +543,7 @@ Theorem sym_restore_offsets_cons_result:
       result.sym_mem_labels = ss.sym_mem_labels /\
       result.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
 Proof
-  rpt strip_tac >> drule_all sym_steps_ok_append >>
+  rpt strip_tac >> drule_all sym_steps_compose >>
   gvs[arithmeticTheory.MULT_CLAUSES] >> strip_tac >>
   qexists_tac `sv' :: vals` >> simp[]
 QED
@@ -619,7 +606,7 @@ Theorem sym_restore_offsets_steps:
       out.sym_mem_labels = ss.sym_mem_labels /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH xs
 Proof
-  Induct >- simp[sym_steps_def] >>
+  Induct >- simp[asmSpliceTheory.sym_steps_def] >>
   Cases >> drule sym_restore_offsets_cons_step >> metis_tac[]
 QED
 
@@ -669,7 +656,7 @@ Proof
   drule_all sym_restore_offsets_steps >>
   disch_then (qspec_then `env` strip_assume_tac) >>
   qexistsl_tac [`out`, `vals`] >>
-  drule_all sym_steps_ok_append >> simp[]
+  drule_all sym_steps_compose >> simp[]
 QED
 
 Theorem scratch_ranges_outside:
@@ -1094,7 +1081,7 @@ Proof
   qpat_x_assum `!s. sym_kinds_ok _ _ _ _ ps s /\ _ ==> _`
     (qspec_then `ss` mp_tac) >> simp[] >> strip_tac >>
   first_x_assum (qspec_then `t` mp_tac) >> simp[] >> strip_tac >>
-  qexists `t'` >> simp[] >> metis_tac[sym_steps_ok_append, arithmeticTheory.ADD_ASSOC]
+  qexists `t'` >> simp[] >> metis_tac[sym_steps_compose, arithmeticTheory.ADD_ASSOC]
 QED
 
 Theorem sym_swap_pop_numeric:
@@ -1236,7 +1223,7 @@ Theorem sym_pop_one_numeric:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `stack_get_depth item ps.ps_stack`
   >- (gvs[cleanOpsSimTheory.pop_one_step_def] >> qexists `ss` >>
-      simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+      simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   drule_all sym_pop_one_some_numeric >> simp[]
 QED
 
@@ -1295,7 +1282,7 @@ Theorem sym_pop_steps_numeric:
 Proof
   Induct
   >- (rw[foldlSimTheory.plan_steps_def] >> qexists `ss` >>
-      simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+      simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   rw[] >> drule_all (SRULE [] sym_pop_steps_cons_numeric) >> simp[]
 QED
 
@@ -1373,7 +1360,7 @@ Theorem sym_popmany_numeric:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `items = []`
   >- (gvs[stackPlanOpsTheory.popmany_plan_def] >> qexists `ss` >>
-      simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+      simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
     is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items))`
   >- (irule sym_popmany_contiguous_numeric >> metis_tac[]) >>
@@ -1421,7 +1408,7 @@ Theorem sym_poke_numeric:
 Proof
   rpt gen_tac >> strip_tac >> drule_all sym_kinds_stack_poke >> strip_tac >>
   qexists `ss` >> simp[planExecTheory.execute_plan_def,
-    planExecTheory.exec_stack_op_def, sym_steps_def]
+    planExecTheory.exec_stack_op_def, asmSpliceTheory.sym_steps_def]
 QED
 
 Theorem sym_phi_plan_hit_no_dup_numeric:
@@ -1472,7 +1459,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
   >- (drule fnFrameStepsPhiTheory.phi_plan_no_hit >> strip_tac >>
-      gvs[planExecTheory.execute_plan_def, sym_steps_def]) >>
+      gvs[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   irule sym_phi_plan_hit_no_dup_numeric >> metis_tac[]
 QED
 
@@ -1766,7 +1753,7 @@ Theorem paired_phi_run_prefix:
 Proof
   Induct >- (rpt gen_tac >> simp[fnPlanPrefixTheory.generate_block_insts_prefix_def] >>
     strip_tac >> gvs[] >> qexistsl [`st`, `ss`] >>
-    simp[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+    simp[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
   drule paired_phi_run_prefix_cons >> simp[]
 QED
 
@@ -1965,7 +1952,7 @@ Theorem sym_empty_forget_numeric:
     (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   rpt gen_tac >> strip_tac >> qexists `ss` >>
-  simp[execute_plan_def, sym_steps_def] >>
+  simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >>
   gvs[] >> irule sym_kinds_forget_promised >> simp[]
 QED
 
@@ -2036,23 +2023,23 @@ Proof
   qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
   simp[clean_stack_plan_def] >>
   Cases_on `cfg_preds_of cfg bb.bb_label`
-  >- (simp[execute_plan_def, sym_steps_def] >> metis_tac[]) >>
+  >- (simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >> metis_tac[]) >>
   rename1 `cfg_preds_of _ _ = pred_label::other_preds` >>
   Cases_on `other_preds`
   >- (simp[] >> IF_CASES_TAC
-      >- (simp[execute_plan_def, sym_steps_def] >> metis_tac[]) >>
+      >- (simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >> metis_tac[]) >>
       Cases_on `lookup_block pred_label fn.fn_blocks`
-      >- (simp[execute_plan_def, sym_steps_def] >> metis_tac[]) >>
+      >- (simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >> metis_tac[]) >>
       simp[] >> qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
       IF_CASES_TAC
-      >- (disch_then (strip_assume_tac o GSYM) >> gvs[execute_plan_def, sym_steps_def] >>
+      >- (disch_then (strip_assume_tac o GSYM) >> gvs[execute_plan_def, asmSpliceTheory.sym_steps_def] >>
           metis_tac[sym_kinds_forget_promised, combinTheory.K_THM]) >>
       IF_CASES_TAC
       >- (strip_tac >> drule_all sym_popmany_mark_numeric >>
           disch_then (qspec_then `env` (fn th => metis_tac[th, arithmeticTheory.ADD_COMM]))) >>
       strip_tac >> drule_all sym_popmany_numeric >>
       disch_then (qspec_then `env` (fn th => metis_tac[th, arithmeticTheory.ADD_COMM]))) >>
-  simp[execute_plan_def, sym_steps_def] >> metis_tac[]
+  simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >> metis_tac[]
 QED
 
 Theorem clean_stack_plan_frame_sim_exact:
@@ -2338,11 +2325,11 @@ Theorem sym_optimistic_swap_numeric:
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[stackPlanGenTheory.optimistic_swap_plan_def, AllCaseEqs()]
-  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def])
-  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def])
-  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def])
-  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def])
-  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def])
+  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def])
+  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def])
+  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def])
+  >- (qexists `ss` >> simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   drule_all sym_depth_swap_numeric >> simp[]
 QED
 
@@ -2421,7 +2408,7 @@ Proof
   drule_all fnFrameBoundaryEntryParamsTheory.entry_installed_structural >> strip_tac >>
   Cases_on `params = []`
   >- (gvs[stackPlanGenTheory.prepare_params_plan_def] >> qexists `ss` >>
-      gvs[planExecTheory.execute_plan_def, sym_steps_def,
+      gvs[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def,
         stackPlanGenTheory.init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def]) >>
   drule_all prepare_params_nonempty_decompose >> strip_tac >> gvs[] >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
@@ -2444,7 +2431,7 @@ Proof
     stackOpSimTheory.asm_block_at_cons] >>
   qexists `ss with sym_base := (asm_next ss.sym_base) with as_stack := []` >>
   pure_once_rewrite_tac[arithmeticTheory.ONE] >>
-  gvs[sym_steps_def, asmSymSemTheory.sym_step_def, asmSymSemTheory.sym_lift_def,
+  gvs[asmSpliceTheory.sym_steps_def, asmSymSemTheory.sym_step_def, asmSymSemTheory.sym_lift_def,
     asmSemTheory.asm_step_def, asmSemTheory.asm_next_def, sym_kinds_ok_def,
     asmSymSemTheory.sym_state_component_equality]
 QED

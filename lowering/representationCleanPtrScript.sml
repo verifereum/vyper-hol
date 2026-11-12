@@ -1,8 +1,9 @@
 (* Robust memory representations constrain only the bytes they read. *)
 Theory representationCleanPtr
 Ancestors
-  bodyPtrDefs valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
+  bodyPtrDefs valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs allocationPtr
   venomState venomMemProofs words list arithmetic vyperTypeABI loweringPosts exprSimProps
+
 Theorem mem_agree_outside_write_byte:
   !m mem i b s.
     s.vs_memory = mem /\ i IN m ==>
@@ -207,4 +208,85 @@ Proof
   Cases_on `b` >>
   gvs[vyperABITheory.vyper_base_to_abi_type_def, loweringPostsTheory.val_footprint_def,
       contractABITheory.is_dynamic_def, vyperTypingTheory.value_has_type_def, AllCaseEqs()]
+QED
+
+(* Positive semantic reads are bounded by the actual allocation frontier. *)
+Theorem expr_val_at_read_bound:
+  !ctx func cenv cx ty sa sb es v op s tv w n.
+    stmt_state_rel ctx func cenv cx es s /\
+    expr_val_at cenv cx ty sa sb es v op s /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+    eval_operand op s = SOME w /\ 0 < n /\ n <= val_footprint tv v ==>
+    w2n w + n <= dimword (:256)
+Proof
+  rpt strip_tac >>
+  `w2n w <= w2n w + n - 1 /\
+   w2n w + n - 1 < w2n w + val_footprint tv v` by decide_tac >>
+  `w2n w + n - 1 < s.vs_alloca_next` by
+    (drule_all expr_val_at_below_frontier >> simp[]) >>
+  `s.vs_alloca_next < dimword (:256)` by
+    (irule exprLoweringPropsTheory.alloca_room_next_lt >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def] >> metis_tac[]) >>
+  decide_tac
+QED
+
+Theorem raw_val_footprint_covers:
+  !tv v n.
+    val_wf tv v /\
+    ((?bs. v = BytesV bs /\ n = LENGTH bs /\
+           tv <> BaseTV AddressT /\ (!k. tv <> BaseTV (BytesT (Fixed k)))) \/
+     (?str. v = StringV str /\ n = LENGTH str)) ==>
+    32 + n <= val_footprint tv v
+Proof
+  rpt strip_tac >> gvs[val_wf_def, loweringPostsTheory.val_footprint_def] >>
+  Cases_on `tv` >> gvs[] >> Cases_on `b` >> gvs[] >>
+  Cases_on `b'` >> gvs[] >> Cases_on `b` >> gvs[]
+QED
+
+Theorem expr_val_at_raw_return_resources:
+  !ctx func cenv cx ty sa sb es v op s tv w G tn n.
+    stmt_state_rel ctx func cenv cx es s /\
+    expr_val_at cenv cx ty sa sb es v op s /\
+    ptr_val_ok cx ty v op G tn s /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+    eval_operand op s = SOME w /\
+    ((?bs. v = BytesV bs /\ n = LENGTH bs /\
+           tv <> BaseTV AddressT /\ (!k. tv <> BaseTV (BytesT (Fixed k)))) \/
+     (?str. v = StringV str /\ n = LENGTH str)) ==>
+    ?src. op = Var src /\ lookup_var src s = SOME w /\
+      ptr_covers G tn src s (32+n) /\ n < dimword (:256) /\
+      w2n w + 32 + n <= dimword (:256) /\
+      mem_word_at (w2n w) s.vs_memory = n2w n /\
+      (!i. w2n w <= i /\ i < w2n w+32+n ==> i NOTIN tn.t_mem)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `val_wf tv v` by (fs[loweringPostsTheory.expr_val_at_def] >> metis_tac[]) >>
+  `32 + n <= val_footprint tv v` by metis_tac[raw_val_footprint_covers] >>
+  `0 < 32 + n /\ val_footprint tv v <> 0` by decide_tac >>
+  `w2n w + (32+n) <= dimword (:256)` by
+    (drule_all expr_val_at_read_bound >> simp[]) >>
+  `?src. op = Var src /\ ptr_covers G tn src s (32+n)` by
+    (drule_all ptr_val_ok_read_covers >> simp[]) >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      val_in_memory tv v (w2n w) mem` by
+    (fs[ptr_val_ok_def, ptr_mem_ok_def] >> metis_tac[]) >>
+  `val_in_memory tv v (w2n w) s.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  qexists_tac `src` >>
+  `lookup_var src s = SOME w` by gvs[eval_operand_def] >>
+  `n < dimword (:256) /\ w2n w + 32 + n <= dimword (:256)` by decide_tac >>
+  gvs[]
+  >- (conj_tac
+      >- (drule val_in_memory_bytes_word >> simp[]) >>
+      drule robust_val_in_memory_bytes_clean >> simp[] >>
+      rpt strip_tac >> Cases_on `i < w2n w + 32` >> metis_tac[NOT_LESS]) >>
+  conj_tac >- fs[val_in_memory_def] >>
+  drule robust_val_in_memory_string_clean >>
+  rpt strip_tac >>
+  Cases_on `i < w2n w + 32`
+  >- (qpat_x_assum `!i. w2n w <= i /\ i < w2n w + 32 ==> _`
+        (qspec_then `i` mp_tac) >> simp[]) >>
+  `w2n w + 32 <= i /\ i < w2n w + 32 + LENGTH str` by decide_tac >>
+  qpat_x_assum `!i. w2n w + 32 <= i /\ _ ==> _`
+    (qspec_then `i` mp_tac) >> simp[]
 QED

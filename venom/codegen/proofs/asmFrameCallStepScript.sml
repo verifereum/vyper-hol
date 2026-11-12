@@ -1397,7 +1397,8 @@ Theorem asm_step_oog_starved:
   t.contexts = (c with stack := DROP n c.stack,rb)::rest /\
   t.txParams = s.txParams ==>
   frame_last s /\
-  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s' /\
+         call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `c.gasUsed <= c.msgParams.gasLimit` by
@@ -1425,8 +1426,10 @@ Resume asm_step_oog_starved[single]:
     by metis_tac[] >>
   `frame_last s` by (simp[frame_last_def] >> rpt strip_tac >> gvs[] >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  `call_trace s = []` by
+    (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_resource_starved_def, frame_outcome_def] >>
+  simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
   qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]
 QED
 
@@ -1437,8 +1440,10 @@ Resume asm_step_oog_starved[nested]:
     by simp[] >>
   `frame_last s` by (simp[frame_last_def] >> rpt strip_tac >> gvs[] >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  `call_trace s = []` by
+    (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_resource_starved_def, frame_outcome_def] >>
+  simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
   metis_tac[]
 QED
 Finalise asm_step_oog_starved
@@ -1451,7 +1456,8 @@ Theorem asm_call_prepare_failure_starved:
   (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
   asm_call_prepare op s = (INR e,t) ==>
   frame_last s /\
-  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s' /\
+         call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_failure_step >> disch_tac >>
@@ -1466,7 +1472,8 @@ Theorem asm_frame_call_prepare_failure_starved:
   (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
   asm_call_prepare op s = (INR e,t) ==>
   frame_last s /\
-  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved es0 r s'
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved es0 r s' /\
+         call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>

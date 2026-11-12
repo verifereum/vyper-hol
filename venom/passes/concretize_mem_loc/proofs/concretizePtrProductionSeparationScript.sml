@@ -6,7 +6,7 @@ Ancestors venomWfProps
   concretizePtrCompletionSeparation staticLayoutCompletionProofs staticLayoutDefs
 
 Theorem ptr_insert_liveset_perm[local]:
-  !xs x. PERM (insert_alloc_liveset_item x xs) (x::xs)
+  !xs x. PERM (insert_alloc_liveset_item esc x xs) (x::xs)
 Proof
   Induct >> simp[insert_alloc_liveset_item_def] >> rpt gen_tac >>
   IF_CASES_TAC >> simp[] >>
@@ -15,7 +15,7 @@ Proof
 QED
 
 Theorem ptr_sort_liveset_perm[local]:
-  !xs. PERM (sort_alloc_liveset_items xs) xs
+  !xs. PERM (sort_alloc_liveset_items esc xs) xs
 Proof
   Induct >> simp[sort_alloc_liveset_items_def] >>
   metis_tac[ptr_insert_liveset_perm, PERM_CONS_IFF, PERM_TRANS]
@@ -31,21 +31,21 @@ QED
 Theorem ptr_sort_keys_preserves[local]:
   !xs : (allocation # inst_addr list) list.
   ALL_DISTINCT (MAP FST xs) ==>
-  ALL_DISTINCT (MAP FST (sort_alloc_liveset_items xs))
+  ALL_DISTINCT (MAP FST (sort_alloc_liveset_items esc xs))
 Proof
   metis_tac[ALL_DISTINCT_PERM, PERM_MAP, ptr_sort_liveset_perm]
 QED
 
 Theorem ptr_sorted_items_keys_distinct[local]:
   !raw fn ls. ALL_DISTINCT (MAP FST
-    (sort_alloc_liveset_items (alloc_liveset_items_ordered raw fn ls)))
+    (sort_alloc_liveset_items esc (alloc_liveset_items_ordered raw fn ls)))
 Proof
   rpt gen_tac >> irule ptr_sort_keys_preserves >>
   simp[ptr_ordered_items_keys_distinct]
 QED
 
 Theorem ptr_sorted_items_mem[local]:
-  MEM (a,live) (sort_alloc_liveset_items (alloc_liveset_items_ordered raw fn ls)) <=>
+  MEM (a,live) (sort_alloc_liveset_items esc (alloc_liveset_items_ordered raw fn ls)) <=>
   MEM (a,live) (alloc_liveset_items_ordered raw fn ls)
 Proof
   metis_tac[ptr_sort_liveset_perm, PERM_MEM_EQ]

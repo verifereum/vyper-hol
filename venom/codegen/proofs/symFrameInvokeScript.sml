@@ -161,7 +161,7 @@ Theorem sym_invoke_call_packet:
 Proof
   rpt strip_tac >>
   gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_steps_compute, sym_step_def, sym_set_stack_def,
+  simp[asmSpliceTheory.sym_steps_compute, sym_step_def, sym_set_stack_def,
        sym_step_op_def, sym_jump_def, sym_jump_dest_def, asm_next_def]
 QED
 
@@ -436,25 +436,6 @@ Proof
   rw[sym_kinds_ok_def, REVERSE_APPEND] >> metis_tac[LIST_REL_APPEND]
 QED
 
-Theorem mem_sval_at_store_label:
-  mem_sval_at (labs |++ GENLIST (\i. (off + i, (l,d,i))) 32) off (Lab l d)
-Proof
-  simp[mem_sval_at_def, mem_label_at_def, mstore_labels_lookup,
-       EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
-QED
-
-Theorem mem_labels_clear_lookup:
-  FLOOKUP (mem_labels_clear labs P) b = if P b then NONE else FLOOKUP labs b
-Proof
-  Cases_on `P b` >> simp[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT]
-QED
-
-Theorem mem_sval_at_store_word:
-  mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
-Proof
-  simp[mem_sval_at_def, mem_labels_clear_def, finite_mapTheory.FDOM_DRESTRICT]
-QED
-
 Theorem sym_mstore_slot:
   ss.sym_stack = Val (n2w off) :: sv :: stk /\ off < dimword (:256) ==>
   ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
@@ -465,11 +446,13 @@ Theorem sym_mstore_slot:
 Proof
   strip_tac >> Cases_on `sv` >>
   simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
-       sval_val_def, sym_lift_def, asmOpSimTheory.asm_step_op_mstore, asm_mstore_def,
+       sval_val_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, asm_mstore_def,
        asm_op_arity_table_def, log_table_def,
        asm_next_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
        mem_labels_hit_def, Excl "GENLIST_NUMERALS", mem_sval_at_store_label,
-       mem_sval_at_store_word, mem_labels_clear_lookup, mstore_labels_lookup,
+       mem_sval_at_clear, mem_labels_clear_lookup, mstore_labels_lookup,
        in_mem_range_def] >>
   pure_once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   simp[mem_sval_at_store_label, mstore_labels_lookup, Excl "GENLIST_NUMERALS"]
@@ -503,7 +486,9 @@ Proof
   strip_tac >> drule mem_sval_at_word_no_label >> strip_tac >>
   simp[sym_mload_def, sym_step_concrete_def, asm_op_arity_def,
        asm_op_arity_table_def, sval_val_def, sym_lift_def,
-       asmOpSimTheory.asm_step_op_mload, asm_mload_def, asm_next_def,
+       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, asm_mload_def, asm_next_def,
        asm_op_mem_reads_def, asm_op_mem_writes_def, mem_labels_hit_def,
        mem_labels_clear_def, finite_mapTheory.DRESTRICT_UNIV] >>
   gvs[mem_sval_at_def] >>
@@ -536,7 +521,7 @@ Theorem sym_scratch_spill:
          FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   strip_tac >> gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_steps_compute, sym_scratch_push, asm_next_def] >>
+  simp[asmSpliceTheory.sym_steps_compute, sym_scratch_push, asm_next_def] >>
   simp[sym_step_def, sym_step_op_def] >>
   qmatch_goalsub_abbrev_tac `sym_mstore mid` >>
   `?ss'. sym_mstore mid = SymOK ss' /\ ss'.sym_stack = stk /\
@@ -559,7 +544,7 @@ Theorem sym_scratch_restore_label:
     ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
   strip_tac >> gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_steps_compute, sym_scratch_push, asm_next_def] >>
+  simp[asmSpliceTheory.sym_steps_compute, sym_scratch_push, asm_next_def] >>
   simp[sym_step_def, sym_step_op_def] >>
   qmatch_goalsub_abbrev_tac `sym_mload mid` >>
   mp_tac (Q.INST [`ss` |-> `mid`, `stk` |-> `ss.sym_stack`]
@@ -577,7 +562,7 @@ Theorem sym_scratch_restore_word:
     ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
   strip_tac >> gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_steps_compute, sym_scratch_push, asm_next_def] >>
+  simp[asmSpliceTheory.sym_steps_compute, sym_scratch_push, asm_next_def] >>
   simp[sym_step_def, sym_step_op_def] >>
   qmatch_goalsub_abbrev_tac `sym_mload mid` >>
   mp_tac (Q.INST [`ss` |-> `mid`, `stk` |-> `ss.sym_stack`]
@@ -669,7 +654,7 @@ Theorem sym_scratch_spills:
     (!b. (!off. MEM off offs ==> ~in_mem_range off 32 b) ==>
        FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  Induct >- simp[execute_plan_def, sym_steps_def] >>
+  Induct >- simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >>
   drule sym_scratch_spills_cons >> simp[]
 QED
 
@@ -771,7 +756,7 @@ Theorem sym_scratch_restores_kinds:
     ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
   Induct
-  >- (rpt gen_tac >> Cases_on `operands` >> simp[execute_plan_def, sym_steps_def]) >>
+  >- (rpt gen_tac >> Cases_on `operands` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   drule sym_scratch_restores_cons >> simp[]
 QED
 
@@ -1240,7 +1225,7 @@ Theorem sym_pop_one_numeric:
 Proof
   strip_tac >> Cases_on `stack_get_depth item ps.ps_stack`
   >- (gvs[cleanOpsSimTheory.pop_one_step_def] >> qexists_tac `ss` >>
-      simp[execute_plan_def, sym_steps_def]) >>
+      simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   rename1 `stack_get_depth item ps.ps_stack = SOME dist` >>
   `dist < LENGTH ps.ps_stack` by metis_tac[planAlignTheory.stack_get_depth_bound] >>
   drule fnFrameBoundaryEntryParamsTheory.entry_pop_one_step_some >> strip_tac >>
@@ -1272,7 +1257,7 @@ Theorem sym_pop_steps_numeric:
 Proof
   Induct
   >- (rpt gen_tac >> simp[foldlSimTheory.plan_steps_def] >> strip_tac >>
-      gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+      gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   rpt gen_tac >> strip_tac >>
   Cases_on `pop_one_step h ps` >> rename1 `pop_one_step h ps = (ops1, ps1)` >>
   Cases_on `plan_steps pop_one_step items ps1` >>
@@ -1343,7 +1328,7 @@ Theorem sym_popmany_numeric:
 Proof
   strip_tac >> Cases_on `items = []`
   >- (gvs[stackPlanOpsTheory.popmany_plan_def] >> qexists_tac `ss` >>
-      simp[execute_plan_def, sym_steps_def]) >>
+      simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
     is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items))`
   >- (qpat_x_assum `_ /\ _` strip_assume_tac >>
@@ -1372,7 +1357,7 @@ Theorem sym_optimistic_swap_numeric:
     (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   strip_tac >> drule gasFrameSimTheory.gas_optimistic_cases >> strip_tac
-  >- (gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+  >- (gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   irule sym_do_swap_numeric >> simp[] >> metis_tac[planAlignTheory.stack_get_depth_bound]
 QED
 
@@ -1403,10 +1388,10 @@ Theorem sym_invoke_cleanup_pops_numeric:
     spill_alloc_layout_wf popped.ps_alloc popped.ps_spilled
 Proof
   strip_tac >> Cases_on `outs = []`
-  >- (gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+  >- (gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   Cases_on `~halting \/ LENGTH outs > 1`
   >- (gvs[] >> drule_all sym_popmany_numeric >> simp[]) >>
-  gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, sym_steps_def]
+  gvs[] >> qexists_tac `ss` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]
 QED
 
 Theorem sym_invoke_cleanup_opts_numeric:
@@ -1425,7 +1410,7 @@ Theorem sym_invoke_cleanup_opts_numeric:
     (!b. ~R b ==> FLOOKUP fin.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b)
 Proof
   strip_tac >> Cases_on `outs = [] \/ FILTER (\out. MEM out nl) outs = []`
-  >- (gvs[] >> qexists_tac `mid` >> simp[execute_plan_def, sym_steps_def]) >>
+  >- (gvs[] >> qexists_tac `mid` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   gvs[] >> drule_all sym_optimistic_swap_numeric >> simp[]
 QED
 
@@ -1597,7 +1582,7 @@ Theorem sym_invoke_return_label_step:
       <|as_stack := []; as_pc := ss.sym_base.as_pc + 1|>)
 Proof
   strip_tac >> gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_steps_compute, sym_step_def, asm_step_def, asm_next_def,
+  simp[asmSpliceTheory.sym_steps_compute, sym_step_def, asm_step_def, asm_next_def,
        sym_lift_def, sym_set_stack_def, sym_state_component_equality]
 QED
 
@@ -2246,7 +2231,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_source_halt >> strip_tac >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    sym_invoke_enter_callee_paired >> disch_then drule_all >> strip_tac >>
+    sym_invoke_enter_callee_paired >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
+  disch_then (drule_at (Pat `setup_callee _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  disch_then (drule_at (Pat `sym_fn_sim_at _`)) >>
+  disch_then drule_all >> strip_tac >>
   qpat_x_assum `!v. run_blocks _ _ _ _ = Halt v ==> _` drule >> strip_tac >>
   drule_all sym_invoke_halt_compose >> simp[]
 QED
@@ -2312,7 +2305,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_source_abort >> strip_tac >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    sym_invoke_enter_callee_paired >> disch_then drule_all >> strip_tac >>
+    sym_invoke_enter_callee_paired >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
+  disch_then (drule_at (Pat `setup_callee _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  disch_then (drule_at (Pat `sym_fn_sim_at _`)) >>
+  disch_then drule_all >> strip_tac >>
   qpat_x_assum `!a v. run_blocks _ _ _ _ = Abort a v ==> _` drule >>
   disch_then (qx_choose_then `n` (qx_choose_then `fin`
     (CONJUNCTS_THEN2 assume_tac strip_assume_tac))) >>
@@ -2386,7 +2387,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_source_ok >> strip_tac >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    sym_invoke_enter_callee_paired >> disch_then drule_all >> strip_tac >>
+    sym_invoke_enter_callee_paired >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
+  disch_then (drule_at (Pat `setup_callee _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  disch_then (drule_at (Pat `sym_fn_sim_at _`)) >>
+  disch_then drule_all >> strip_tac >>
   qpat_x_assum `!rv v. run_blocks _ _ _ _ = IntRet rv v ==> _` drule >> strip_tac >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_plan_decompose >> strip_tac >>
   rename1 `codegen_context_obligations Inv ctx cplan` >>

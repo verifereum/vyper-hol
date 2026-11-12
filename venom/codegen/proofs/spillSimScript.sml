@@ -465,7 +465,7 @@ val push_encode_256 =
       val leq_thm = numLib.REDUCE_CONV ``(8:num) <= 256``
   in REWRITE_RULE [div_thm, leq_thm] r1 end;
 
-Theorem push_encode_num_roundtrip:
+Theorem push_encode_num_roundtrip[local]:
   !n. n < dimword(:256) ==>
       word_of_bytes F (0w:bytes32)
         (REVERSE (encode_num_bytes n)) = n2w n
@@ -569,10 +569,6 @@ Proof
   simp[asm_step_def, asm_step_op_mload, asm_mload_def,
        asm_next_def, asm_steps_def]
 QED
-
-(* =========================================================================
-   memory_rel through MSTORE in spill region
-   ========================================================================= *)
 
 (* =========================================================================
    SOSpill preserves venom_asm_rel

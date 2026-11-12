@@ -1,7 +1,7 @@
 # O1 bytecode parity fixtures
 
 This directory contains the independent Python oracle for the frozen 101-fixture
-HOL-supported-subset corpus (10 of them not parity-checked; see [`pending-5127-port.md`](pending-5127-port.md)). It includes the original 23-fixture milestone and
+HOL-supported-subset corpus (6 of them not parity-checked; see [`pending-5127-port.md`](pending-5127-port.md)). It includes the original 23-fixture milestone and
 78 subset/interaction fixtures.
 
 - `python-o1-no-asm-opt-sources/` contains Vyper source counterparts to the HOL
@@ -62,6 +62,15 @@ current series contains:
 - `5344-uint2str-buffer.patch`, vyperlang/vyper#5344: `uint2str` allocates
   `n_digits` bytes beyond its result type's size, since its result starts up
   to `n_digits` bytes into the buffer and consumers copy the full type size.
+- `5345-create-memory-effects.patch`, vyperlang/vyper#5345 (closed): temporary
+  CREATE/CREATE2 memory-write effects matching the HOL effects table, retained
+  until the compiler proof admits reads scheduled above a faulting creation.
+- `5347-sparse-storage-copy.patch`, vyperlang/vyper#5347 (with the storage
+  part of #5332): a value stored to storage or transient storage writes only
+  the words that hold it. A bytestring writes its length word and the words
+  holding its bytes; a DynArray, its length and its first `length` elements; a
+  struct, tuple or static array containing either, each member by these rules.
+  The slots past them keep their contents, as in legacy codegen.
 - `5349-dft-effectless-roots.patch`, vyperlang/vyper#5349: an instruction with
   no outputs and no effects (an `assert`) stays a scheduling root even when a
   later abort depends on it, so nothing is hoisted above it.

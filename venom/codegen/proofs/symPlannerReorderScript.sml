@@ -62,7 +62,7 @@ Theorem sym_reorder_restore_run[local]:
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   strip_tac >> drule_then strip_assume_tac reorder_restore_alternatives
-  >- gvs[planExecTheory.execute_plan_def, codegenSymRelTheory.sym_steps_def] >>
+  >- gvs[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def] >>
   metis_tac[sym_do_restore, spill_restore_bounds_restore_only]
 QED
 
@@ -138,7 +138,7 @@ Theorem sym_reorder_reduce_run[local]:
 Proof
   Cases_on `dist > 16`
   >- (pure_asm_rewrite_tac[COND_CLAUSES] >> MATCH_ACCEPT_TAC sym_reduce_depth_plan) >>
-  rw[planExecTheory.execute_plan_def, codegenSymRelTheory.sym_steps_def] >> simp[]
+  rw[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def] >> simp[]
 QED
 
 Theorem reorder_restore_spill_base[local]:
@@ -417,9 +417,9 @@ Proof
   map_every qid_spec_tac [`out`, `ops`] >>
   ho_match_mp_tac reorder_place_cases >> conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
-  >- simp[planExecTheory.execute_plan_def, codegenSymRelTheory.sym_steps_def] >>
+  >- simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def] >>
   conj_tac
-  >- (simp[planExecTheory.execute_plan_def, codegenSymRelTheory.sym_steps_def] >>
+  >- (simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def] >>
       metis_tac[stack_get_unfixed_depth_props, sym_kinds_ok_poke_exchange]) >>
   rpt strip_tac >> irule sym_two_swaps >>
   metis_tac[stack_get_unfixed_depth_props]
@@ -919,7 +919,7 @@ Theorem sym_plan_steps_reorder[local]:
 Proof
   Induct
   >- (simp[foldlSimTheory.plan_steps_def] >> rpt strip_tac >>
-      gvs[planExecTheory.execute_plan_def, codegenSymRelTheory.sym_steps_def]) >>
+      gvs[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   Cases_on `h` >> drule_then MATCH_ACCEPT_TAC sym_reorder_fold_cons
 QED
 

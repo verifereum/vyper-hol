@@ -1,8 +1,8 @@
 {
   "producer": "independent pinned Python Vyper",
-  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_commit": "577d2534356903076bb79b5b15ebd4d772994693",
   "python_version": "3.11.11",
-  "compiler_version": "0.5.0a4+cd74ce4f",
+  "compiler_version": "0.5.0b1+577d2534",
   "compiler_module": "/tmp/issue-548-vyper-oracle/venv/lib/python3.11/site-packages/vyper",
   "dependencies": {
     "cbor2": "5.9.0",
@@ -99,12 +99,12 @@
       },
       "outputs": {
         "deploy": {
-          "bytes": 166,
-          "sha256": "928157d6fac0d3b7f7c54fbbf9b67e82b5b8d8da86bfad296b8992a2d3559085"
+          "bytes": 176,
+          "sha256": "23955cf6ec1296931628e00027c350f85fe59159c1c078ebbcb1af00da67b656"
         },
         "runtime": {
-          "bytes": 147,
-          "sha256": "8e10276245c0f68f3f12b686e0d7806efda8edbd9c98e6f14e04298b50467737"
+          "bytes": 157,
+          "sha256": "e5026024f7a5c0c4efd51e33e86c29e60c106d5d2ebce1effad6ae9b1bb7efac"
         }
       }
     },
@@ -271,12 +271,12 @@
       },
       "outputs": {
         "deploy": {
-          "bytes": 229,
-          "sha256": "b7161854195d7406662c03316fecd00f2e95728ae20ed27cb1a5b90766608218"
+          "bytes": 239,
+          "sha256": "8a4aff906df79ad8c78534b43b73d7948bdf73f236a7c3a2d24a32acc9da15a7"
         },
         "runtime": {
-          "bytes": 210,
-          "sha256": "dee2d5fedbd4f5558a4990b3a9ff36a01654b4e27d90d5f7fb80883f4bb176d1"
+          "bytes": 220,
+          "sha256": "365284cbacc79285f0eb77ec37336756828a48e6d277fd74a0e8aec4f5523f18"
         }
       }
     },
@@ -390,12 +390,12 @@
       },
       "outputs": {
         "deploy": {
-          "bytes": 172,
-          "sha256": "b6b3bab99d2188b31bd9b690f9ddd760a0d7f3cbf73665483e7004f4868fe11c"
+          "bytes": 192,
+          "sha256": "a90fdd18a19b0a06e50256b3c0974269077985d00b863d1f21eaf3b189268f52"
         },
         "runtime": {
-          "bytes": 153,
-          "sha256": "51f70ac7a90b3140c1a7a1fd09b6d9e7892d9571fdd5df6155be2db919a6b18e"
+          "bytes": 173,
+          "sha256": "b92d113ad1bd28b54aa4cb9f0c090bcd51843fd82ecd7399ed73ddc8cff1f9d4"
         }
       }
     },

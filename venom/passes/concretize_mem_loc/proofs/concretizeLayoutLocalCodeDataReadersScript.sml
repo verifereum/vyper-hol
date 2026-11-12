@@ -171,7 +171,7 @@ Proof
     (rpt strip_tac >>
      `MEM (Var x) inst.inst_operands` by simp[] >>
      `~is_pointer_preserving_op inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-      ~MEM inst.inst_opcode [EQ; LT; GT; ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
+      ~MEM inst.inst_opcode [EQ; LT; GT; ASSIGN; PHI; RET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
       mem_write_ops inst = NONE /\ mem_read_ops inst = NONE` by
        simp[is_pointer_preserving_op_def, mem_write_ops_def, mem_read_ops_def] >>
      drule_all nonpointer_operand_clean >> simp[]) >>

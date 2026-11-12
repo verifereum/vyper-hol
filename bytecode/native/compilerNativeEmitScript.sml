@@ -34,9 +34,11 @@ val () = holbuild_extra_deps
    "../internal-labels/oracle",
    "../memory-stores/oracle",
    "../name-collisions/oracle",
+   "../narrow-elems/oracle",
    "../phi-pointers/oracle",
    "../raw-calls/oracle",
-   "../slice-buffers/oracle"];
+   "../slice-buffers/oracle",
+   "../../tests/fixtures/load_timing/oracle"];
 
 val module_name = "compilerNative";
 fun pr s = TextIO.print s;
@@ -92,6 +94,7 @@ val fixtures = [
   ("scalar_convert_bytes32_to_address_program", "scalar_convert_bytes32_to_address.hex"),
   ("scalar_convert_bytes32_to_bytes4_program", "scalar_convert_bytes32_to_bytes4.hex"),
   ("scalar_convert_bytes32_to_decimal_program", "scalar_convert_bytes32_to_decimal.hex"),
+  ("scalar_convert_bytes_dynamic_program", "scalar_convert_bytes_dynamic.hex"),
   ("scalar_convert_bytes_fixed_program", "scalar_convert_bytes_fixed.hex"),
   ("scalar_convert_decimal_program", "scalar_convert_decimal.hex"),
   ("scalar_convert_int_to_decimal_program", "scalar_convert_int_to_decimal.hex"),
@@ -128,8 +131,11 @@ val fixtures = [
   ("storage_scalar_loop_program", "storage_scalar_loop.hex"),
   ("storage_struct_program", "storage_struct.hex"),
   ("storage_write_program", "storage_write.hex"),
+  ("task090_external_arrays_program", "external_arrays.hex"),
+  ("task090_external_dynamic_program", "external_dynamic.hex"),
   ("task090_external_scalars_program", "external_scalars.hex"),
   ("task090_external_struct_program", "external_struct.hex"),
+  ("task090_internal_bytes_call_program", "internal_bytes_call.hex"),
   ("task090_internal_struct_call_program", "internal_struct_call.hex"),
   ("task090_internal_tuple_call_program", "internal_tuple_call.hex"),
   ("task090_send_value_program", "send_value.hex"),
@@ -138,7 +144,7 @@ val fixtures = [
 fun program_term "EMPTY" = ``[] : toplevel list``
   | program_term p = Term [QUOTE p];
 
-(* ---------- feature suites: each oracle directory bytecode/SUITE/oracle holds
+(* ---------- feature suites: each oracle directory SUITE/oracle relative to bytecode/ holds
    NAME.json (the annotated AST and storage layout Python compiled) beside
    NAME.hex; the program is the frontend's translation of the JSON, which the
    HOL checker must accept in runtime and deployment mode ---------- *)
@@ -217,6 +223,9 @@ val suite_fixtures = [
     "long_bytes_literal", "long_string_literal", "method_id_lit",
     "p06_local_append_struct", "p15_local_append_bytes",
     "p16_return_tuple_bytes_widen", "p20_nested_pop",
+    "p21_storage_field_append", "p22_memory_field_append",
+    "p23_subscript_append", "p24_transient_field_append",
+    "p25_complex_field_append", "p26_root_append",
     "p64_string_annassign_call", "r07_assert_storage_string_reason",
     "st_empty_ret", "st_forward_ref_lit", "st_nested_lit",
     "storage_one_word_array", "t01_tuple_assign_intcall",
@@ -225,6 +234,13 @@ val suite_fixtures = [
     "t07_tuple_assign_string_elems", "t08_tuple_assign_ret_type_mismatch",
     "t11_tuple_onew_decode_mem", "tup_nested_ret",
     "w01_return_intcall_dynarray_bytes_widen"]),
+  ("narrow-elems", [
+    "n01_intcall_tuple_narrow_str", "n02_intcall_dynarr_lit_narrow_str",
+    "n03_struct_lit_narrow_str", "n04_intcall_tuple_wider_str",
+    "n05_intcall_dynarr_lit_wider_str", "n06_struct_lit_wider_str",
+    "n07_intcall_str_arg_wider", "n08_annassign_tuple_lit_wider_str",
+    "n09_intcall_two_str_args_wider", "n10_intcall_dynarr_lit_wider_str_len",
+    "n11_intcall_dynarr_lit_same_str"]),
   ("name-collisions", [
     "ctl_local_internal", "nm_arg_return_pc", "nm_arg_storage",
     "nm_ext_arg_return_pc", "nm_local_return_buf", "nm_local_storage_types",
@@ -238,6 +254,10 @@ val suite_fixtures = [
     "rc06_rof_false_bool", "rc07_rof_false_tuple", "rc17_nested_len",
     "rc19_dyn_data", "rc20_storage_data", "rc21_internal_value_gas_order",
     "rc22_bool_in_if", "rc25_stmt_argdata", "rc29_delegate"]),
+  ("../tests/fixtures/load_timing", [
+    "builtin_eager_read", "call_memory_pop", "call_storage_read",
+    "conditional_memory_view", "conditional_snapshot", "pop_refill",
+    "subscript_base_copy", "subscript_base_live"]),
   ("slice-buffers", [
     "slice_bytes_var", "slice_msg_data", "slice_msg_data_var",
     "slice_storage_bytes", "slice_string_lit"])];

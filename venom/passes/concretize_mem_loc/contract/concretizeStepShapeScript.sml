@@ -1,6 +1,6 @@
 Theory concretizeStepShape
 Ancestors
-  concretizeStepRetpc concretizeStepCallChecks concretizeStepStructure
+  concretizeStepRetpc concretizeStepStructure
   concretizeMemLocDefs unitShapeDefs venomInst venomWf passSharedDefs
   o1PassContract irSupply list stackPlanTypes passSimulationDefs dretDesugarDefs
   passTransform
@@ -38,8 +38,7 @@ Theorem concretize_positions_fn_shape:
 Proof
   strip_tac >> fs[fn_shape_ok_def] >>
   simp[fn_shape_ok_def, concretize_positions_entry_label,
-       concretize_positions_opaque_use, concretize_positions_retpc_shape,
-       concretize_positions_call_checks] >> conj_tac
+       concretize_positions_opaque_use, concretize_positions_retpc_shape] >> conj_tac
   >- simp[concretize_positions_blocks, EVERY_MAP,
           concretize_positions_block_label] >>
   irule concretize_positions_every >> simp[concretize_positions_inst_shape]

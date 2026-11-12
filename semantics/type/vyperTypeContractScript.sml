@@ -924,8 +924,14 @@ Definition function_header_ok_def:
        guard packaging uses mut = View. Reject the explicit invalid header;
        the pragma frontend already leaves pure functions unguarded. *)
     (mut = Pure ==> ~nr) /\
-    (* The fallback has no ABI argument-decoding entry block. *)
-    (vis = External /\ name = "__default__" ==> NULL args)
+    (* The reserved names and their visibilities match: `@deploy` only on
+       `__init__`, `__init__` only `@deploy` (vyper/semantics/types/function.py,
+       "Only constructors can be marked as `@deploy`" and "Constructor must be
+       marked as `@deploy`"). *)
+    (vis = Deploy <=> name = "__init__") /\
+    (* The fallback must be external and has no ABI argument-decoding entry
+       block. *)
+    (name = "__default__" ==> vis = External /\ NULL args)
 End
 
 Definition event_indexable_type_def:

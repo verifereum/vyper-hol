@@ -490,7 +490,9 @@ Proof
 QED
 
 (* TOP-LEVEL: one theorem over the accepted finalizers, with
-   e2e_deploy_correctness's finalizer premises. *)
+   e2e_deploy_correctness's finalizer premises.  The RETURNDATACOPY escape is
+   for constructors that call out; with today's call-free constructors only
+   the code-size escape is taken. *)
 Theorem e2e_deploy_gas_sufficient:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
@@ -515,7 +517,8 @@ Theorem e2e_deploy_gas_sufficient:
          (!obs. ~deploy_source_exempt tops
             (load_contract NONE obs am tx [(NONE, tops)] [])) /\
          r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops)
+         max_code_size < LENGTH runtime_bc + imm_len tops \/
+         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
   `?g. !g'.

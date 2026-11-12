@@ -50,7 +50,7 @@ QED
 
 Theorem tuple_place_pointer_store_alloca_frame:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
   target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   alloca_frame cenv ee sa s cenv ff t ==>
@@ -58,7 +58,7 @@ Theorem tuple_place_pointer_store_alloca_frame:
 Proof
   strip_tac >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
-    (drule_all tuplePlaceBorrowTheory.tuple_place_pure_target_scopes >> simp[]) >>
+    (drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_scopes >> simp[]) >>
   `alloca_frame cenv es sp s0 cenv ee s` by
     (irule stmtSimDefsTheory.target_post_alloca_frame >>
      fs[tuplePlaceHeadTheory.tuple_place_head_def] >> metis_tac[]) >>
@@ -112,7 +112,7 @@ QED
 
 Theorem tuple_place_pointer_head_advance:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
   target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   ci_mono sa sb /\ i < LENGTH ltys /\
@@ -136,7 +136,7 @@ Proof
    sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
     gvs[exprLoweringPropsTheory.ci_mono_def] >>
   `MAP FDOM es.scopes = MAP FDOM ff.scopes` by
-    (drule_all tuplePlaceBorrowTheory.tuple_place_pure_target_scopes >> strip_tac >>
+    (drule_all tuplePlaceBorrowTheory.tuple_place_supported_target_scopes >> strip_tac >>
      drule vyperScopePreservationTheory.write_place_scopes_dom >> simp[]) >>
   `!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==>
     lookup_var x t = SOME v` by
@@ -157,7 +157,7 @@ QED
 
 Theorem tuple_place_equal_storage_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys tys tvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
@@ -166,10 +166,7 @@ Theorem tuple_place_equal_storage_head_step:
   i < LENGTH tys /\ ~is_word_type (EL i tys) /\ cenv.ce_target CapMcopy /\
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) src_loc
-    (EL i tys) (EL i tys)
-    (case EL i tys of ArrayT et (Dynamic _) =>
-      SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i tys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -215,7 +212,7 @@ QED
    not imposed on callers of the eventual successful-head step. *)
 Theorem tuple_place_pointer_snapshot_apart:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
@@ -265,7 +262,7 @@ QED
 
 Theorem tuple_place_pointer_window_transport:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
   target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
   mem_bytes_at (w2n w) (type_memory_size_list ltvs) t.vs_memory =
     mem_bytes_at (w2n w) (type_memory_size_list ltvs) s.vs_memory /\
@@ -298,7 +295,7 @@ QED
 
 Theorem tuple_place_word_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
@@ -358,7 +355,7 @@ QED
 
 Theorem tuple_place_pointer_slice_transport:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
+  EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
   target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   (w2n w + type_memory_size_list ltvs <= d \/ d+len <= w2n w) /\
@@ -407,7 +404,7 @@ QED
 
 Theorem tuple_place_equal_memory_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys tys tvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
@@ -418,7 +415,7 @@ Theorem tuple_place_equal_memory_head_step:
   i < LENGTH tys /\ ~is_word_type (EL i tys) /\
   type_memory_size (EL i tvs)+64 < dimword (:256) /\
   compile_assign_value cenv dst LocMemory (EL i elems) F src_loc
-    (EL i tys) (EL i tys) arr (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i tys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -477,7 +474,7 @@ QED
 
 Theorem tuple_place_owned_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
@@ -496,10 +493,7 @@ Theorem tuple_place_owned_head_step:
   (EXISTS (\t. ~is_word_type t) ltys ==> cenv.ce_target CapMcopy) /\
   type_alloc_ok cenv (TupleT tys) /\ i < LENGTH tys /\ ~is_word_type (EL i ltys) /\
   compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) src_loc
-    (EL i tys) (EL i ltys)
-    (case EL i tys of ArrayT et (Dynamic _) =>
-      SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i ltys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -562,7 +556,7 @@ QED
 
 Theorem tuple_place_allword_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
@@ -640,7 +634,7 @@ QED
 
 Theorem tuple_place_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
@@ -658,10 +652,7 @@ Theorem tuple_place_head_step:
      emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE
        | _ => MSTORE) [dst; EL i elems] sa
    else compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) src_loc
-     (EL i tys) (EL i ltys)
-     (case EL i tys of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-      | _ => NONE) (type_memory_bytes cenv (EL i tys)) sa) = ((),sb) /\
+     (EL i tys) (EL i ltys) (type_memory_bytes cenv (EL i tys)) sa) = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -715,7 +706,8 @@ Proof
       simp[] >> metis_tac[]) >>
   gvs[] >>
   Cases_on `loc = LocMemory`
-  >- (gvs[] >> irule tuple_place_equal_memory_head_step >> metis_tac[]) >>
+  >- (gvs[] >> irule tuple_place_equal_memory_head_step >>
+      metis_tac[vyperTypeSystemTheory.arg_type_fits_refl]) >>
   `loc = LocStorage \/ loc = LocTransient` by
     (Cases_on `p` >> fs[loweringPostsTheory.place_ptr_rel_def] >>
      Cases_on `b'` >> fs[loweringPostsTheory.slot_loc_def]) >>
