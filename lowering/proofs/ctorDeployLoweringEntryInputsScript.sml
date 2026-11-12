@@ -207,12 +207,18 @@ Theorem deploy_ctor_decoder_inputs:
  local_ptrs_rel func ce0 [scope] initial
 Proof
  rpt gen_tac >> strip_tac >>
+ `supported_program tops` by fs[deploy_source_ok_def] >>
+ `module_consts_env tops [] = []` by
+   metis_tac[supportedDeclsTheory.supported_headers_module_consts_env,
+             supportedProgramTheory.supported_program_def,
+             supportedDeclsTheory.supported_declaration_headers_def] >>
  drule_all deploy_ctor_entry_selection_agrees >> strip_tac >> gvs[] >>
  drule_all deploy_ctor_entry_data_section >> strip_tac >>
  `constructor_args_encode tops tx initial.vs_data_section` by metis_tac[] >>
  drule_all deploy_ctor_common_source_witness >> strip_tac >>
  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
- simp[] >> strip_tac >> gvs[] >>
+ simp[] >> strip_tac >>
+ gvs[constSubstTheory.subst_consts_fn_empty] >> gvs[] >>
  `supported_program tops /\ ?art.
    check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
    fs[deploy_source_ok_def, deploy_typing_ok_def] >>
