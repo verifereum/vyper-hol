@@ -124,8 +124,10 @@ Theorem step_TSTORE:
       else OK (tstore v1 v2 s)
 Proof
   rpt strip_tac >>
+  rewrite_tac[mk_inst_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_write2_def, eval_operands_def]
+  simp_tac (srw_ss()) [] >>
+  simp[exec_write2_def, eval_operands_def]
 QED
 
 (* ===== Return bytes ===== *)
@@ -1680,8 +1682,8 @@ QED
    the accounts only at the success boundary, just as the source does
    after releasing the lock at the same key. *)
 Theorem external_halt_success_unlock_helper[local]:
-  !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
-    state_rel func cenv cx es s /\
+  !H func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
+    state_rel H func cenv cx es s /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     ss.vs_accounts = s.vs_accounts /\
@@ -1690,11 +1692,11 @@ Theorem external_halt_success_unlock_helper[local]:
        else s.vs_transient) /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
     ss.vs_pending_deletions = s.vs_pending_deletions ==>
-    accounts_agree cx
+    accounts_agree H cx
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).accounts
       (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-    transient_agree cx
+    transient_agree H cx
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).tStorage
       ss.vs_transient /\
@@ -1702,7 +1704,7 @@ Theorem external_halt_success_unlock_helper[local]:
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).logs
       ss.vs_logs /\
-    LIST_REL (request_agree cx) es'.requests ss.vs_requests
+    LIST_REL (request_agree H cx) es'.requests ss.vs_requests
 Proof
   rpt gen_tac >> strip_tac >>
   drule state_rel_accounts >> strip_tac >>
@@ -1723,10 +1725,10 @@ Proof
          evaluation_state_component_equality]) >>
   qpat_x_assum `es' = _`
     (strip_assume_tac o SRULE [evaluation_state_component_equality]) >>
-  `transient_agree cx es'.tStorage ss.vs_transient` by
+  `transient_agree H cx es'.tStorage ss.vs_transient` by
     (Cases_on `nr /\ ~iv` >> gvs[tstore_def] >>
      irule transient_agree_update >> simp[storage_dead_update_zero]) >>
-  `accounts_agree cx
+  `accounts_agree H cx
      (process_deletions es.pending_deletions es.accounts)
      (process_deletions es.pending_deletions s.vs_accounts)` by
     (irule accounts_agree_process_deletions >> simp[]) >>
@@ -1742,8 +1744,8 @@ QED
 (* The same, with the agreements at the context the external call result
    relation uses, which has cx's sources, layouts and running contract. *)
 Theorem external_halt_success_unlock:
-  !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
-    state_rel func cenv cx es s /\
+  !H func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
+    state_rel H func cenv cx es s /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
@@ -1753,11 +1755,11 @@ Theorem external_halt_success_unlock:
        else s.vs_transient) /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
     ss.vs_pending_deletions = s.vs_pending_deletions ==>
-    accounts_agree (initial_evaluation_context srcs layouts tx NONE)
+    accounts_agree H (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).accounts
       (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-    transient_agree (initial_evaluation_context srcs layouts tx NONE)
+    transient_agree H (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).tStorage
       ss.vs_transient /\
@@ -1765,19 +1767,19 @@ Theorem external_halt_success_unlock:
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).logs
       ss.vs_logs /\
-    LIST_REL (request_agree (initial_evaluation_context srcs layouts tx NONE))
+    LIST_REL (request_agree H (initial_evaluation_context srcs layouts tx NONE))
       es'.requests ss.vs_requests
 Proof
   rpt strip_tac >> gvs[] >>
-  `accounts_agree (initial_evaluation_context cx.sources cx.layouts tx NONE) =
-     accounts_agree cx /\
-   transient_agree (initial_evaluation_context cx.sources cx.layouts tx NONE) =
-     transient_agree cx /\
-   request_agree (initial_evaluation_context cx.sources cx.layouts tx NONE) =
-     request_agree cx` by
+  `accounts_agree H (initial_evaluation_context cx.sources cx.layouts tx NONE) =
+     accounts_agree H cx /\
+   transient_agree H (initial_evaluation_context cx.sources cx.layouts tx NONE) =
+     transient_agree H cx /\
+   request_agree H (initial_evaluation_context cx.sources cx.layouts tx NONE) =
+     request_agree H cx` by
     (irule agree_cx_cong >> simp[initial_evaluation_context_def]) >>
   asm_rewrite_tac[] >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
                `iv`, `tops`, `tx`, `cx.sources`, `exps`, `cx.layouts`] mp_tac
     external_halt_success_unlock_helper >>
   simp[]
@@ -1786,17 +1788,17 @@ QED
 (* With state_rel at the return, a Halt that leaves the effects and pending
    deletions unchanged gives the finalized effects compared on success. *)
 Theorem external_halt_success:
-  !func cenv cx es s ss tops tx srcs exps layouts.
-    state_rel func cenv cx es s /\
+  !H func cenv cx es s ss tops tx srcs exps layouts.
+    state_rel H func cenv cx es s /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
     ss.vs_pending_deletions = s.vs_pending_deletions ==>
-    accounts_agree (initial_evaluation_context srcs layouts tx NONE)
+    accounts_agree H (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).accounts
       (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-    transient_agree (initial_evaluation_context srcs layouts tx NONE)
+    transient_agree H (initial_evaluation_context srcs layouts tx NONE)
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).tStorage
       ss.vs_transient /\
@@ -1804,11 +1806,11 @@ Theorem external_halt_success:
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).logs
       ss.vs_logs /\
-    LIST_REL (request_agree (initial_evaluation_context srcs layouts tx NONE))
+    LIST_REL (request_agree H (initial_evaluation_context srcs layouts tx NONE))
       es.requests ss.vs_requests
 Proof
   rpt strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `es`, `s`, `ss`, `F`, `0`, `F`,
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es`, `s`, `ss`, `F`, `0`, `F`,
                `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   simp[vyperStateTheory.return_def]

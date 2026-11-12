@@ -26,25 +26,11 @@
  *)
 Theory bodyPtrDefs
 Ancestors
+  sourceUnitExecution
   fragGasPathPtr gasContext bodySim immSectionDead stmtSimDefs exprSimDefs exprSimProps exprSimHypsDefs fragExec ptrSafeRun ptrDiscipline
   compileEnv valueEncoding exprLowering exprLoweringProps context
   venomState venomExecSemantics vyperInterpreter vyperTypeSystem list
   finite_map words
-
-(* The dead bytes the body's run may leave taint in: those storage_dead
-   gives in the running contract's storage and transient storage, as
-   external_call_dead does for the source call that cx is the context of.
-   The return data may hold no taint. *)
-Definition cx_dead_def:
-  cx_dead H cx =
-    <| d_stor := (\a st. if a = cx.txn.target
-                         then {(k,b) | storage_dead H F st (w2n k) b}
-                         else {});
-       d_trans := (\a st. if a = cx.txn.target
-                          then {(k,b) | storage_dead H T st (w2n k) b}
-                          else {});
-       d_imm := K {}; d_ret := K {} |>
-End
 
 (* D holds every dead byte D0 does. *)
 Definition dead_sub_def:
@@ -232,36 +218,6 @@ Theorem ghost_kept_def:
        i IN tn0.t_mem)
 Proof
   simp[ghost_kept_zero, ghost_kept_at_def]
-QED
-
-(* The ghost reads only the source scopes, so a recorded storage
-   observation leaves it unchanged. *)
-Theorem ghost_inv_at_storage_trace[simp]:
-  ghost_inv_at D lo d cenv cx (es with storage_trace := obs) G tn s <=>
-  ghost_inv_at D lo d cenv cx es G tn s
-Proof
-  simp[ghost_inv_at_def]
-QED
-
-Theorem ghost_inv_storage_trace[simp]:
-  ghost_inv H d cenv cx (es with storage_trace := obs) G tn s <=>
-  ghost_inv H d cenv cx es G tn s
-Proof
-  simp[ghost_inv_cx_dead]
-QED
-
-Theorem ghost_kept_at_storage_trace[simp]:
-  ghost_kept_at lo cenv (es with storage_trace := obs) sa G0 tn0 s0 G tn <=>
-  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn
-Proof
-  simp[ghost_kept_at_def]
-QED
-
-Theorem ghost_kept_storage_trace[simp]:
-  ghost_kept cenv (es with storage_trace := obs) sa G0 tn0 s0 G tn <=>
-  ghost_kept cenv es sa G0 tn0 s0 G tn
-Proof
-  simp[ghost_kept_zero]
 QED
 
 (* v of type t is in memory at op's address whatever the tainted bytes

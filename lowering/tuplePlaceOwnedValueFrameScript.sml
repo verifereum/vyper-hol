@@ -1,16 +1,13 @@
 (* Positive owned aggregate store correctness and frame at one endpoint. *)
 Theory tuplePlaceOwnedValueFrame
 Ancestors
-  tuplePlaceOwnedMemoryFrame tuplePlaceOwnedStorageFrame tuplePlaceOwnedDynFrame
+  tuplePlaceOwnedMemoryFrame tuplePlaceOwnedStorageFrame
   stmtLowering exprLowering compileEnv loweringPosts stmtSimDefs venomState
   vyperInterpreter vyperState vyperValue vyperTypeSystem exprSimHypsDefs
 
 Theorem tuple_place_owned_value_run_frame:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
-    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
-      (case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-       | _ => NONE) (type_memory_bytes cenv dty) sa = ((),sb) /\
+    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\
@@ -68,10 +65,6 @@ Proof
       rename1 `slot_loc tr` >> Cases_on `tr` >> gvs[slot_loc_def]) >>
   `dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
    type_alloc_ok cenv dty` by metis_tac[] >>
-  Cases_on `?et n. dty = ArrayT et (Dynamic n)`
-  >- (drule_all tuple_place_owned_dyn_run_frame >> strip_tac >>
-      qexists_tac `t` >> simp[] >> metis_tac[]) >>
-  `!et n. dty <> ArrayT et (Dynamic n)` by metis_tac[] >>
   drule_all tuple_place_owned_storage_run_frame >> strip_tac >>
   qexists_tac `t` >> simp[] >> metis_tac[]
 QED
