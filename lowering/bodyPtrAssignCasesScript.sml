@@ -42,9 +42,10 @@ Proof
                  has_length_word typ /\ is_empty_value_expr e`
       >- (irule body_annassign_memory_ptr >> metis_tac[]) >>
       `type_widens_to env.type_defs (expr_type e) typ` by
-        gvs[type_stmt_def, AllCaseEqs()] >>
+        gvs[vyperTypeSystemTheory.type_stmt_def, AllCaseEqs()] >>
       `lowered_value_type cenv e = expr_type e` by
-        metis_tac[type_widens_to_def, arg_type_fits_bytestring_target] >>
+        metis_tac[vyperTypeSystemTheory.type_widens_to_def,
+                  memoryLocalRhsPropsTheory.arg_type_fits_bytestring_target] >>
       irule body_annassign_widened_aggregate_ptr >> gvs[] >> metis_tac[]) >>
   irule body_annassign_widened_aggregate_call_ptr >> metis_tac[]
 QED
