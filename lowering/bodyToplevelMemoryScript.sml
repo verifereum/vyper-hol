@@ -7,7 +7,7 @@ Ancestors
   exprSimTopLevelMissing exprSimTopLevelProps exprSimProps exprSimHypsDefs
   exprSimMemDefs gasOutcome gasSummary fragGasMode fragGasPathMem context
   loweringPosts
-  bodyMemoryDefs exprSimLeaves exprSimHyps exprSimDefs exprLowering
+  bodyMemoryDefs exprSimHyps exprSimDefs exprLowering
   compileEnv loweringStateRelDefs fragExecMem venomState loweringSlice valueEncoding
   exprLoweringProps accountsRelProps
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTyping
@@ -104,8 +104,8 @@ Proof
   drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >> strip_tac >>
   drule_all decode_value_from_slots_in_range >> strip_tac >>
   qpat_x_assum `!slot tvt v. _` (qspecl_then [`slot`, `tvt`, `v`] mp_tac) >>
-  simp[read_storage_slot_def, get_storage_backend_eq,
-       bind_def, lift_option_def, return_def]
+  gvs[read_storage_slot_def, get_storage_backend_eq,
+      bind_def, lift_option_def, return_def, wordsTheory.w2n_n2w]
 QED
 
 Theorem compile_toplevel_immutable_sim_mem:
