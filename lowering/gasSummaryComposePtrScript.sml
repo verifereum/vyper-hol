@@ -335,11 +335,11 @@ Theorem gas_summary_ptr_at_prefix:
 Proof
   rewrite_tac[gas_summary_ptr_at_def] >> strip_tac >>
   qexistsl_tac [`res`, `es_end`, `G`, `tn`, `r`] >>
-  `s1.vs_gas_readings = DROP n s0.vs_gas_readings` by
-    metis_tac[gas_path_ptr_ok_suffix] >>
   `gas_explicit (REPLICATE n F ++ marks) s0.vs_gas_readings =
      gas_explicit marks s1.vs_gas_readings` by
-    simp[gas_explicit_append] >>
+    (`s1.vs_gas_readings = DROP n s0.vs_gas_readings` by
+       metis_tac[gas_path_ptr_ok_suffix] >>
+     simp[gas_explicit_append]) >>
   asm_rewrite_tac[LENGTH_APPEND, LENGTH_REPLICATE] >>
   gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
   asm_rewrite_tac[] >> metis_tac[gas_path_ptr_then]
