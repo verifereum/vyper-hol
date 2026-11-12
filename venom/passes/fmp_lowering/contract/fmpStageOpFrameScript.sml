@@ -137,6 +137,35 @@ Proof
   gvs[op_taint_def] >> metis_tac[]
 QED
 
+Theorem fmp_ordinary_control_suc[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  MEM fn C.ctx_functions /\ o1_fn_shape C fn /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  active_inst fn inst s /\ ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM] ==>
+  fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+    s.vs_current_bb
+    (case lookup_block s.vs_current_bb fn.fn_blocks of
+       NONE => [] | SOME bb => bb.bb_instructions) (SUC s.vs_inst_idx) =
+  SUC (fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+    s.vs_current_bb
+    (case lookup_block s.vs_current_bb fn.fn_blocks of
+       NONE => [] | SOME bb => bb.bb_instructions) s.vs_inst_idx)
+Proof
+  strip_tac >> fs[] >>
+  `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+      s.vs_current_bb = rl ==> rp <> SUC s.vs_inst_idx` by
+    metis_tac[fmp_ordinary_root_boundary] >>
+  gvs[active_inst_def] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    metis_tac[venomExecProofsTheory.wf_lookup_block, o1_fn_shape_def] >>
+  simp[] >> irule fmp_stage_tidx_suc >> simp[] >>
+  spose_not_then assume_tac >>
+  drule_all fmp_stage_plan_point >> strip_tac >>
+  gvs[fmp_ordinary_not_reclaim]
+QED
+
 (* Why: an ordinary instruction is no reclaim point and changes no
    analysis stack, so the next index has no restore and the same stack;
    the control map moves by one (no DALLOCA, and the only step reaching
