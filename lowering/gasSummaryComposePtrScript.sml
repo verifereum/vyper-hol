@@ -267,6 +267,8 @@ Proof
   gen_tac >> strip_tac >>
   `valid_horizon cx st0 H mid.storage_trace` by
     (qpat_assum `!tail. next v _ = _` (qspec_then `[]` assume_tac) >>
+     `valid_horizon cx st0 H (es_end with gas_obs := []).storage_trace` by
+       simp[] >>
      drule_all valid_horizon_frame >> simp[]) >>
   last_x_assum drule >> strip_tac >>
   first_x_assum drule >> strip_tac >>
@@ -429,15 +431,29 @@ Proof
       >- (pop_assum strip_assume_tac >>
           first_assum drule >> strip_tac >> gvs[]
           >- (drule gas_path_ptr_erase >> strip_tac >>
-              irule gas_outcome_ptr_bind_normal >>
-              qexistsl_tac [`G`, `tn`, `marks`, `es_end`, `t`, `v`] >>
-              simp[gas_marked_exec_def, gas_marked_path_def] >>
-              rpt strip_tac >> first_x_assum drule >> simp[]) >>
+              mp_tac (Q.INST [`left` |-> `marks`, `mid` |-> `es_end`,
+                              `G1` |-> `G`, `tn1` |-> `tn`]
+                        gas_outcome_ptr_bind_normal) >>
+              impl_tac
+              >- (rpt conj_tac
+                  >- simp[gas_marked_exec_def, gas_marked_path_def]
+                  >- (rpt strip_tac >> first_x_assum drule >> simp[])
+                  >- simp[]
+                  >- simp[] >>
+                  rpt strip_tac >>
+                  qpat_x_assum `!left v mid t right err ee leaf fstate. _`
+                    (qspecl_then [`marks`, `v`, `es_end`, `t`, `right`,
+                                  `err`, `ee`, `leaf`, `fstate`] mp_tac) >>
+                  simp[gas_marked_exec_def, gas_marked_path_def]) >>
+              simp[]) >>
           rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >>
           disj2_tac >> disj1_tac >>
-          irule gas_summary_ptr_at_bind_exception >>
-          qexistsl_tac [`G`, `tn`, `exc`, `es_end`, `r`] >> simp[] >>
-          rpt strip_tac >> first_x_assum drule >> simp[]) >>
+          mp_tac (Q.INST [`fin` |-> `es_end`]
+                    gas_summary_ptr_at_bind_exception) >>
+          impl_tac
+          >- (simp[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+              gvs[fragExecTheory.exit_result_def]) >>
+          simp[]) >>
       rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >>
       disj1_tac >> irule gas_bad_storage_at_bind_left >> simp[] >>
       irule gas_bad_storage_at_no_horizon >> fs[] >> metis_tac[]) >>
@@ -472,15 +488,20 @@ Proof
       fs[gas_summary_ptr_at_def, record_storage_event_then] >>
       metis_tac[]) >>
   disj2_tac >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish`] >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   `ignore_bind (ignore_bind (record_storage_event ev) source) (return ()) =
    bind (record_storage_event ev) (\u. ignore_bind source (return ()))` by
     simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
   pop_assum SUBST1_TAC >>
-  `marks = [] ++ marks` by simp[] >> pop_assum SUBST1_TAC >>
-  irule gas_exempt_cert_bind_unit >>
-  qexistsl_tac [`()`, `es with storage_trace := es.storage_trace ++ [ev]`, `s0`] >>
-  simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules,
-       vyperStateTheory.record_storage_event_def, vyperStateTheory.return_def] >>
-  drule gas_exempt_cert_start_gas_obs >> simp[]
+  qspecl_then [`F`, `tops`, `ctx`, `func`, `record_storage_event ev`,
+    `\u. ignore_bind source (return ())`, `es`, `s0`, `[]`, `()`,
+    `es with storage_trace := es.storage_trace ++ [ev]`, `s0`, `marks`,
+    `err`, `ee`, `leaf`, `finish'`] mp_tac gas_exempt_cert_bind_unit >>
+  impl_tac
+  >- (conj_tac
+      >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules,
+              vyperStateTheory.record_storage_event_def,
+              vyperStateTheory.return_def] >>
+      drule gas_exempt_cert_start_gas_obs >> simp[]) >>
+  simp[]
 QED
