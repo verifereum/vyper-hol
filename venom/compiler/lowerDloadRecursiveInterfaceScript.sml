@@ -5155,7 +5155,8 @@ Proof
   `j' = HD nextcode` by
     (qpat_assum `active_inst tf.lf_fn j' _`
        (mp_then Any mp_tac ld_active_lookup_el) >>
-     simp[] >> Cases_on `nextcode` >- fs[] >>
+     simp[] >> Cases_on `nextcode`
+     >- (qpat_x_assum `[] <> []` mp_tac >> simp_tac bool_ss []) >>
      pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[NoAsms, EL_APPEND2]) >>
   `active_inst sf.lf_fn ni (s' with vs_inst_idx := SUC sf.lf_state.vs_inst_idx)` by
     (rewrite_tac[active_inst_def] >> qexists_tac `bs` >>
