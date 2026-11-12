@@ -97,7 +97,7 @@ Resume type_builtin_unary_vv_sim_ptr_origin[origin]:
   irule_at Any gas_exempt_cert_origin >>
   rewrite_tac[gas_exempt_origin_def] >>
   first_assum (irule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-  simp[] >> qexistsl_tac [`v`, `t`, `sm`, `x`, `es_end`, `cx`] >>
+  simp[] >> qexistsl_tac [`v`, `target_ty`, `t`, `sm`, `x`, `es_end`, `cx`] >>
   gvs[gas_value_prefix_def] >>
   metis_tac[gas_marked_exec_ptr_exec]
 QED

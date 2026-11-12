@@ -77,14 +77,14 @@ Proof
       simp[] >> qexistsl_tac [`k`, `a`, `s`, `sa`, `u`] >> simp[] >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- simp[] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (rpt strip_tac >> qpat_x_assum `v.vs_allocas = _` SUBST1_TAC >>
       first_x_assum irule >> first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
   qpat_x_assum `abi_decode_frame _ _ _ _` mp_tac >>
   simp[abi_decode_frame_def] >> strip_tac >>
-  qpat_x_assum `u.vs_memory = s.vs_memory` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `u.vs_memory = s.vs_memory` (fn th => rewrite_tac[th]) >>
   first_x_assum irule >>
   fs[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
@@ -159,12 +159,22 @@ Proof
        (rpt strip_tac >>
         `local_region cenv es.scopes v n lb lsz` by
           (irule local_region_frame_fwd >>
-           qexistsl_tac [`es0.scopes`, `sc`, `s0`] >> fs[wb_frame_def]) >>
+           qexistsl_tac [`s0`, `sc`, `es0.scopes`] >> fs[wb_frame_def]) >>
         qpat_x_assum `!name b n. local_region cenv es.scopes v _ _ _ ==> _` drule >>
         simp[]) >>
-     irule (pure_frame_buffer_tail |> Q.SPECL [`cenv`, `func`, `es0`, `sc`, `s0`,
+     `(mk_inst sh.cs_next_id ALLOCA [Lit (n2w outsz)]
+         [STRING #"%" (toString sh.cs_next_var)]).inst_opcode = ALLOCA /\
+      (mk_inst sh.cs_next_id ALLOCA [Lit (n2w outsz)]
+         [STRING #"%" (toString sh.cs_next_var)]).inst_id = sh.cs_next_id` by
+       simp[venomInstTheory.mk_inst_def] >>
+     qpat_x_assum `outsz = SUM _` kall_tac >>
+     mp_tac (pure_frame_buffer_tail |> Q.SPECL [`cenv`, `func`, `es0`, `sc`, `s0`,
        `s`, `v`, `mk_inst sh.cs_next_id ALLOCA [Lit (n2w outsz)]
-         [STRING #"%" (toString sh.cs_next_var)]`, `w2n d`, `outsz`]) >>
-     simp[mk_inst_def]) >>
+         [STRING #"%" (toString sh.cs_next_var)]`, `w2n (d:256 word)`, `outsz`]) >>
+     impl_tac
+     >- (rpt conj_tac >|
+         [first_assum ACCEPT_TAC, first_assum ACCEPT_TAC, first_assum ACCEPT_TAC,
+          simp[], simp[], simp[], first_assum ACCEPT_TAC, first_assum ACCEPT_TAC]) >>
+     simp[]) >>
   qexistsl_tac [`v`, `H`, `tf`, `dst`, `d`] >> simp[] >> gvs[]
 QED
