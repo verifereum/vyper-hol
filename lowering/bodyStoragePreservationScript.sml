@@ -899,6 +899,10 @@ Resume body_oracle_storage_mutual[intcall_args_success]:
         simp[supported_exprs_exists_DROP, int_calls_exprs_DROP_EVERY,
              get_scopes_def, set_scopes_def, type_check_def, assert_def,
              return_def] >>
+        conj_tac
+        >- (qexists_tac `tops` >>
+            fs[vyperContextTheory.get_module_code_def,
+               int_calls_exprs_DROP_EVERY]) >>
         conj_tac >- (goal_assum (drule_at Any)) >>
         qexistsl_tac [`defaults_env env_body`, `r1`,
                       `args_st with scopes := [FEMPTY]`] >>
