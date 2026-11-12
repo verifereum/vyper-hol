@@ -655,8 +655,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    deployment/runtime artifacts and **pre-constant deployment readiness**, an
    uninstalled source target, an empty target account in `es.originalAccounts`,
    and exactly one fresh nonstatic Code frame with
-   `deploy_bc ++ args_bytes`, empty calldata/memory, live transfer and no0xEF
-   runtime prefix. Prove constructor CODECOPY/ABI/body, epilogue, runtime embedding
+   `deploy_bc ++ args_bytes`, empty calldata/memory and live transfer (that the
+   runtime has no 0xEF prefix is proved, `compile_vyper_runtime_not_ef`). Prove constructor CODECOPY/ABI/body, epilogue, runtime embedding
    and creation completion: returned **and installed** `runtime_bc ++ section`
    satisfying `immutables_section_rel`, other accounts equal, target modulo code
    and dead storage, transient storage
