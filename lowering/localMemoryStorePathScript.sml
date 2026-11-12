@@ -168,7 +168,7 @@ Proof
      gvs[FLOOKUP_DEF, pred_setTheory.ABSORPTION_RWT]) >>
   `alloca_frame cenv es sa s cenv es1 t` by
     (irule alloca_frame_local_store >>
-     simp[] >> conj_tac >- metis_tac[] >>
+     simp[] >> reverse conj_tac >- metis_tac[] >>
      qexistsl_tac [`w2n w`, `es`, `id`, `type_memory_size entry.type`, `s`, `sz`] >>
      simp[alloca_frame_def] >>
      rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
@@ -210,7 +210,10 @@ Theorem alloc_copy_memory_framed_path:
       s2.vs_inst_idx = LENGTH sb.cs_current_insts /\
       gas_marked_path F ctx func s0 0 (OK s2)
 Proof
-  rpt strip_tac >> drule_all annassign_alloca_operand_framed_path >>
+  rpt strip_tac >>
+  qspecl_then [`cx`, `st0`, `ctx`, `func`, `cenv`, `es`, `sa`, `sm`, `p`, `sz`, `s0`]
+    mp_tac annassign_alloca_operand_framed_path >>
+  impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
   `eval_operand src s1 = SOME sw` by simp[] >>
   `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
