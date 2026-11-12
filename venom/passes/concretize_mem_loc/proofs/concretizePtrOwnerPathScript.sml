@@ -155,7 +155,6 @@ QED
 Theorem ptr_owner_view_lookup_interval:
   ptr_chrono_history vs0 ctx h endpoint /\ i <= j /\ j < LENGTH h /\
   (!k. i <= k /\ k <= j ==> d <= LENGTH (EL k h).po_stack) /\
-  (!k. i <= k /\ k < j ==> (EL k h).po_inst.inst_opcode <> DALLOCA) /\
   FLOOKUP (ptr_owner_view d (EL i h)).cf_state.vs_allocas aid = SOME site ==>
   FLOOKUP (ptr_owner_view d (EL j h)).cf_state.vs_allocas aid = SOME site
 Proof

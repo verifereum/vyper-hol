@@ -9,7 +9,6 @@ Ancestors
 
 Theorem ptr_chrono_owner_allocation_inst:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
-  (!k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA) /\
   j < LENGTH h /\ d <= LENGTH (EL j h).po_stack /\
   FLOOKUP (ptr_owner_view d (EL j h)).cf_state.vs_allocas aid = SOME site ==>
   ?inst. MEM inst (fn_insts (ptr_owner_view d (EL j h)).cf_fn) /\
@@ -90,7 +89,7 @@ Proof
        suffices_by gvs[] >>
      irule ptr_owner_view_lookup_interval >>
      conj_tac >- decide_tac >> conj_tac
-     >- (qexists `i` >> simp[] >> conj_tac >> rpt strip_tac >>
+     >- (qexists `i` >> simp[] >> rpt strip_tac >>
          first_x_assum irule >> decide_tac) >> metis_tac[]) >>
   simp[] >> strip_tac >>
   `?n. inst_write_size (EL k h).po_inst = SOME n` by
