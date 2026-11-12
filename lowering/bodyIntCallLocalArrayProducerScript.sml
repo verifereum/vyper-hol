@@ -633,6 +633,8 @@ Theorem local_subscript_exempt:
     (es,s0) marks (err,ee) (leaf,tfinal)
 Proof
   strip_tac >>
+  `~subscript_reads_base cx (Name arrty id) idx` by
+    metis_tac[subscript_reads_base_through_dynarray, base_through_dynarray_def] >>
   once_rewrite_tac[ignore_bind_def] >>
   once_rewrite_tac[evaluate_def] >>
   rewrite_tac[bind_assoc] >> BETA_TAC >>
