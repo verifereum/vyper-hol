@@ -392,8 +392,9 @@ Theorem call_external_function_nonpayable_value[local]:
           stmts ret = (INR (Error (RuntimeError msg)), am, [])
 Proof
   strip_tac >>
-  gvs[call_external_function_def, bind_def, ignore_bind_def, return_def,
-      send_call_value_def, check_def, assert_def, LET_THM] >>
+  simp[call_external_function_def, call_external_function_trace_def,
+       bind_def, ignore_bind_def, return_def,
+       send_call_value_def, check_def, assert_def, LET_THM] >>
   rpt (BasicProvers.TOP_CASE_TAC >> simp[])
 QED
 

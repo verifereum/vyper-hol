@@ -66,7 +66,7 @@ Proof
   `?t. abi_encoder_window_result ctx func mid en out at av (w2n w) u t` by
     (irule return_output_window_run >> goal_assum (drule_at Any) >>
      asm_rewrite_tac[] >>
-     qexistsl_tac [`cap`, `cenv`, `cx`, `buf.buf_operand`, `ei`, `es`,
+     qexistsl_tac [`H`, `cap`, `cenv`, `cx`, `buf.buf_operand`, `ei`, `es`,
                    `msz`, `st.cs_next_id`, `sb`, `src`] >>
      asm_rewrite_tac[n2w_w2n]) >>
   qexists_tac `t` >> simp[] >>
