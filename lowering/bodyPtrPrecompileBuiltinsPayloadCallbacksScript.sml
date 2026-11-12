@@ -141,7 +141,7 @@ Proof
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
   `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t` by
-    (mp_tac (Q.INST [`scratch_base` |-> `w2n p`, `scratch_len` |-> `128`]
+    (mp_tac (Q.INST [`scratch_base` |-> `w2n (p:256 word)`, `scratch_len` |-> `128`]
                scratch_memory_frame) >>
      impl_tac >-
        (rpt conj_tac
