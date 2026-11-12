@@ -16,7 +16,8 @@
 Theory fmpStageFmpSteps
 Ancestors
   fmpStageOpBase fmpStageControl fmpStageReclaimSound fmpStageRel
-  fmpStageCallArity
+  fmpStageCallArity fmpStageRetStep
+  fmpStageFmpStepsEntryLayout fmpStageFmpStepsEntryInitialization
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
   list
@@ -29,6 +30,11 @@ Theorem fmp_stage_restore:
   fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts ==>
   ?n t1 lo'.
     (!k. fmp_target_run k C' fn.fn_name t n t1) /\ lo' <= lo /\
+    n <= 1 /\
+    (n = 1 ==>
+     ?fn' bb'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+       lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+       (EL t.vs_inst_idx bb'.bb_instructions).inst_opcode = ASSIGN) /\
     fmp_stage_rel D C'
       (DRESTRICT sm {key | key IN FDOM sm /\ FST (sm ' key) < lo'})
       fmp0 raw0 eom T stk PG G tn fn s lo' t1 ts
@@ -90,7 +96,26 @@ Theorem fmp_stage_entry:
     fmp_stage_rel D C' FEMPTY (w2n vs'.vs_initial_fmp) (w2n fmp) eom F
       [] [] FEMPTY entry_taint fn s1 (w2n vs'.vs_initial_fmp) t1 []
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_entry_source_shape >> strip_tac >> gvs[] >>
+  `wf_function fn` by
+    (gvs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def, lookup_function_MEM]) >>
+  `fn.fn_fmp_signature = NONE` by
+    (gvs[fmp_stage_ctx_def, o1_inv_def, o1_static_inv_def,
+         fmp_free_ctx_def, EVERY_MEM] >>
+     metis_tac[lookup_function_MEM]) >>
+  drule_all fmp_entry_actual_lowering >> strip_tac >>
+  `fn_is_context_entry ctx fn` by simp[fmpWfDefsTheory.fn_is_context_entry_def] >>
+  drule_all fmp_entry_root_position >> strip_tac >>
+  drule_all fmp_entry_target_block >> strip_tac >>
+  irule fmp_stage_entry_from_layout >>
+  simp[] >>
+  (reverse conj_tac >- metis_tac[]) >>
+  qexistsl_tac [`ctx`, `infos`, `runner`] >>
+  simp[] >> strip_tac >>
+  drule_all fmp_entry_initial_prefix >> strip_tac >> gvs[] >>
+  qexists_tac `id` >> simp[]
 QED
 
 Theorem fmp_stage_invoke_call:
@@ -106,7 +131,7 @@ Theorem fmp_stage_invoke_call:
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
   active_inst fn' ivk' t ==>
   ?ops' callee' args' cs' t1.
-    decode_invoke ivk' = SOME (nm,ops') /\
+    ivk'.inst_opcode = INVOKE /\ decode_invoke ivk' = SOME (nm,ops') /\
     lookup_function nm C'.ctx_functions = SOME callee' /\
     eval_operands ops' t = SOME args' /\
     setup_callee callee' args' t = SOME cs' /\
