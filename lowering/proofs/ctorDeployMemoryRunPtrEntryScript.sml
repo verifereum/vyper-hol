@@ -249,10 +249,10 @@ Theorem deploy_ptr_entry_prefix:
     abi_decode_sim unit.cu_context func
       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) actual /\
     eval_operand imm actual = SOME 0w /\ op_taint qt imm = {} /\ op_prov H imm = NONE /\
-    deploy_ptr_inv tops runtime_bc am tx imm H qt actual /\
-    ((!fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+    deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
+    ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel unit.cu_context func [] H qt actual) ==>
-      !fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+      !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel unit.cu_context func [] FEMPTY entry_taint
         (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)) /\
     (!j. j < LENGTH fargs ==>
@@ -284,7 +284,7 @@ Proof
       simp[Abbr `initial`, deploy_entry_state_def, entry_venom_state_def] >> gvs[]) >>
   drule_all prefix_entry_prepare_actual >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
-    `deploy_dead tops runtime_bc am tx`] strip_assume_tac) >>
+    `deploy_dead HS tops runtime_bc am tx`] strip_assume_tac) >>
   qpat_x_assum `is_payable \/ tx.value = 0` kall_tac >>
   qpat_x_assum `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` kall_tac >>
   drule_all deploy_ctor_entry_data_section >> strip_tac >>
@@ -430,10 +430,10 @@ Theorem deploy_ptr_entry_prefix_source:
     abi_decode_sim unit.cu_context func
       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) actual /\
     eval_operand imm actual = SOME 0w /\ op_taint qt imm = {} /\ op_prov H imm = NONE /\
-    deploy_ptr_inv tops runtime_bc am tx imm H qt actual /\
-    ((!fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+    deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
+    ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel unit.cu_context func [] H qt actual) ==>
-      !fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+      !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel unit.cu_context func [] FEMPTY entry_taint
         (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)) /\
     (!j. j < LENGTH fargs ==>
@@ -465,7 +465,7 @@ Proof
       simp[Abbr `initial`, deploy_entry_state_def, entry_venom_state_def] >> gvs[]) >>
   drule_all prefix_entry_prepare_actual >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
-    `deploy_dead tops runtime_bc am tx`] strip_assume_tac) >>
+    `deploy_dead HS tops runtime_bc am tx`] strip_assume_tac) >>
   qpat_x_assum `is_payable \/ tx.value = 0` kall_tac >>
   qpat_x_assum `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` kall_tac >>
   drule_all deploy_ctor_entry_data_section >> strip_tac >>
@@ -604,10 +604,10 @@ Theorem deploy_ptr_entry_prefix_related:
     ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
     actual.vs_gas_readings = vs.vs_gas_readings /\
-    deploy_ptr_inv tops runtime_bc am tx imm H qt actual /\
-    ((!fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+    deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
+    ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel unit.cu_context func [] H qt actual) ==>
-      !fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+      !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel unit.cu_context func [] FEMPTY entry_taint
         (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
 Proof
@@ -686,10 +686,10 @@ Theorem deploy_ctor_entry_run_ptr:
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
       s0.vs_gas_readings = vs.vs_gas_readings /\
-      deploy_ptr_inv tops runtime_bc am tx imm G0 tn0 s0 /\
-      ((!fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+      deploy_ptr_inv HS tops runtime_bc am tx imm G0 tn0 s0 /\
+      ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
                  fuel dunit.cu_context func [] G0 tn0 s0) ==>
-       !fuel. ptr_safe_blocks (deploy_dead tops runtime_bc am tx) (imm_len tops)
+       !fuel. ptr_safe_blocks (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
                 fuel dunit.cu_context fn [] FEMPTY entry_taint
                 (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                             vs_inst_idx := 0 |>))
