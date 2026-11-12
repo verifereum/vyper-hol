@@ -8,7 +8,7 @@ Ancestors
   abiEncoderArrayCode abiEncoderArrayHeader abiEncoder
   emitHelperProps exprLoweringProps compileEnv emitHelper fragExec
   bodyPtrDefs ptrDiscipline venomState venomMemDefs venomMemProps
-  robustCopyTransportPtr valueEncoding words finite_map pred_set arithmetic list
+  robustCopyTransportPtr augAssignPtrStore wordLoadStorePtr valueEncoding words finite_map pred_set arithmetic list
 
 Theorem encoder_dynamic_outer_prefix_trace[local]:
   abi_encode_array_prefix src dst si = (ops,sl) ==>
@@ -83,4 +83,52 @@ Proof
      qexistsl [`si.cs_next_id`,`addr`,`32`] >> simp[]) >>
   qexistsl [`ip`,`addr`,`Gf`,`tnf`,`sf`] >> simp[] >>
   gvs[]
+QED
+
+(* Count load/store, at the resource boundary used by the outer join. *)
+Theorem encoder_dynamic_count_resource_counted_ptr:
+  emit_op MLOAD [Var src] sa = (Var cv,sb) /\
+  emit_void MSTORE [Var dst;Var cv] sb = ((),sc) /\
+  fn_has_code sa sb fn /\ fn_has_code sb sc fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME (n2w a) /\ a < dimword(:256) /\
+  ptr_covers G tn src s 32 /\
+  (!i. a <= i /\ i < a+32 ==> i NOTIN tn.t_mem) /\
+  mload a s = n2w N /\ lookup_var dst s = SOME (n2w b) /\
+  ptr_covers G tn dst s 32 /\ b < dimword(:256) /\ 32 <= dcap /\
+  encoder_resource ctx fn sites a scap protected s /\
+  val_wf tv v /\ (a+val_footprint tv v <= b \/ b+32 <= a) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v a mem) ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sc.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var cv sf = SOME (n2w N) /\ op_taint tnf (Var cv) = {} /\
+    op_prov Gf (Var cv) = NONE /\
+    encoder_resource ctx fn sites a scap protected sf /\
+    encoder_dynamic_effect sa sites b dcap G tn s Gf tnf sf /\
+    (!mem. mem_agree_outside tnf.t_mem sf.vs_memory mem ==> val_in_memory tv v a mem) /\
+    sf.vs_allocas = s.vs_allocas /\
+    (!i. b <= i /\ i < b+32 ==> i NOTIN tnf.t_mem) /\
+    sf.vs_memory = (mstore b (n2w N) s).vs_memory /\
+    (!i. i < b \/ b+32 <= i ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v sf = lookup_var v s /\ FLOOKUP Gf v = FLOOKUP G v /\
+      op_taint tnf (Var v) = op_taint tn (Var v))
+Proof
+  strip_tac >> drule_all encoder_dynamic_count_header_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `encoder_resource ctx fn sites a scap protected sf` by
+    (irule encoder_resource_fields >> qexists_tac `s` >> simp[]) >>
+  `encoder_dynamic_effect sa sites b dcap G tn s Gf tnf sf` by
+    (irule encoder_dynamic_effect_from_footprint >> simp[] >>
+     qexists_tac `{i | b <= i /\ i < b+32}` >>
+     simp[SUBSET_DEF, encoder_write_envelope_def] >>
+     irule mstore_memory_frame) >>
+  `!mem. mem_agree_outside tnf.t_mem sf.vs_memory mem ==> val_in_memory tv v a mem` by
+    (gvs[] >> match_mp_tac mstore_robust_exterior >> simp[] >>
+     rpt strip_tac >> decide_tac) >>
+  qexistsl [`Gf`,`tnf`,`sf`] >> simp[]
 QED
