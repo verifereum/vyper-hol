@@ -672,7 +672,8 @@ Theorem p23_deploy_result:
   deploy_call_result_rel p23_tops p23_runtime_bc initial_machine_state
     p23_deploy_tx p23_es_dep (INR NONE) p23_es_dep_post
 Proof
-  cheat
+  irule p23_deploy_result_from_immutables >>
+  ACCEPT_TAC p23_immutables_section
 QED
 
 Theorem p23_call_result:
