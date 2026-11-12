@@ -86,6 +86,14 @@ val IMMS_WRITE =
   >- metis_tac[write_storage_place_immutables] >>
   drule write_memory_place_frame >> strip_tac >> gvs[];
 
+(* Shared place-constructor exclusion after a safe base-place result. *)
+val IMMS_EXT_PLACE_EXCLUDE =
+  rename1 `!sid id path. pl <> ImmutablePlace sid id path` >>
+  Cases_on `pl` >> fs[] >>
+  fs[extend_place_def, extend_memory_place_def, bind_def,
+     ignore_bind_def, return_def, raise_def, lift_sum_def, AllCaseEqs()] >>
+  gvs[] >> drule extend_storage_place_subregion >> strip_tac >> gvs[];
+
 Theorem runtime_writes_frame_mutual:
   (!cx s. ~cx.in_deploy /\ runtime_write_roots_resolve cx R /\
      runtime_callable_writes_ok (get_module_code cx) R /\
@@ -173,19 +181,14 @@ Proof
       Cases_on `operand` >> fs[] >>
       fs[extend_place_def, bind_def, ignore_bind_def, return_def,
          raise_def, AllCaseEqs()] >>
-      rename1 `extend_place _ (PlaceR pl) _ _ = _` >>
-      Cases_on `pl` >> fs[] >>
-      fs[extend_place_def, extend_memory_place_def, bind_def,
-         ignore_bind_def, return_def, raise_def, lift_sum_def, AllCaseEqs()] >>
-      gvs[] >> drule extend_storage_place_subregion >>
-      strip_tac >> gvs[])
+      IMMS_EXT_PLACE_EXCLUDE)
   >~ [`eval_stmt cx (Return (SOME _))`]
   >- (strip_tac >> simp[stmt_writes_ok_def] >> strip_tac >>
       PURE_REWRITE_TAC[GSYM imms_frame_result] >> IMMS_CASE)
   >~ [`eval_base_place cx (SubscriptTarget _ _)`]
   >- suspend "subscript_target"
-  >~ [`eval_target_place cx t`]
-  >- suspend "target_place"
+  >~ [`eval_stmt cx (Append _ _)`]
+  >- suspend "append"
   >> PURE_REWRITE_TAC[GSYM imms_frame_result,
        stmt_writes_ok_def, expr_writes_ok_def, atarget_writes_ok_def,
        runtime_write_root_def, EVERY_DEF] >>
@@ -386,5 +389,50 @@ Proof
     rename1 `get_place operand mid = _` >> Cases_on `operand` >>
     gvs[get_place_def, return_def, raise_def])
   >~ [`assign_tuple_target_list cx (_::_) []`] >- IMMS_CASE
-  >> FAIL_TAC "ordinary frames"
 QED
+
+Resume runtime_writes_frame_mutual[subscript_target]:
+  strip_tac >> simp[runtime_write_root_def, expr_writes_ok_def] >>
+  strip_tac >> fs[] >> rpt gen_tac >> simp[Once evaluate_def] >>
+  Cases_on `eval_base_place cx t st` >>
+  rename1 `eval_base_place cx t st = (answer,mid)` >>
+  Cases_on `answer` >> simp[bind_def, raise_def] >> rpt strip_tac >> fs[] >>
+  qpat_x_assum `!st res st'. eval_base_place _ _ _ = _ ==> _` drule >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  Cases_on `eval_expr cx e mid` >>
+  rename1 `eval_expr cx e mid = (ea,emid)` >>
+  qpat_x_assum `!st res st'. eval_expr _ _ _ = _ ==> _` drule >>
+  strip_tac >> Cases_on `ea` >> gvs[] >>
+  rename1 `eval_expr cx e mid = (INL expr_value,emid)` >>
+  Cases_on `read_result cx expr_value emid` >>
+  rename1 `read_result cx _ emid = (ra,rmid)` >>
+  `rmid.immutables = emid.immutables` by
+    metis_tac[machine_frame_read_result, state_rel_frame_result, machine_frame_def] >>
+  Cases_on `ra` >> gvs[]
+  >~ [`st'.immutables = st.immutables`]
+  >- metis_tac[machine_frame_extend_place, state_rel_frame_result, machine_frame_def] >>
+  rename1 `eval_base_place _ _ _ = (INL operand,_)` >>
+  Cases_on `operand` >> fs[] >>
+  fs[extend_place_def, bind_def, ignore_bind_def, return_def,
+     raise_def, AllCaseEqs()]
+  >~ [`eval_base_place _ _ _ = (INL (HashMapRef _ _ _ value_ty),_)`]
+  >- (Cases_on `value_ty` >>
+      gvs[bind_def, ignore_bind_def, return_def, raise_def,
+          lift_option_type_def, record_storage_event_def, AllCaseEqs()]) >>
+  IMMS_EXT_PLACE_EXCLUDE
+QED
+
+Resume runtime_writes_frame_mutual[append]:
+  strip_tac >> simp[stmt_writes_ok_def] >> strip_tac >>
+  PURE_REWRITE_TAC[GSYM imms_frame_result] >> IMMS_CASE
+  >- (simp[imms_frame_result] >> metis_tac[]) >>
+  qmatch_goalsub_rename_tac `append_place cx pl value` >>
+  `!sid id path. pl <> ImmutablePlace sid id path` by metis_tac[] >>
+  Cases_on `pl` >> fs[]
+  >- (simp[imms_frame_result] >> metis_tac[append_storage_place_scopes_immutables]) >>
+  simp[append_place_def] >> rpt IMMS_STEP >>
+  simp[imms_frame_result] >> rpt strip_tac >>
+  drule write_memory_place_frame >> strip_tac >> gvs[]
+QED
+
+Finalise runtime_writes_frame_mutual
