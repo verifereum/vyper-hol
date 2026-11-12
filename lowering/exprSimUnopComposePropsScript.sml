@@ -102,8 +102,7 @@ Proof
        (drule_then strip_assume_tac) >>
      gvs[expr_post_def]) >>
   `eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
-    (qpat_x_assum `?H. _` strip_assume_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (drule_then strip_assume_tac) >>
      gvs[expr_post_def, expr_val_rel_def]) >>
   qpat_x_assum `unop_frag _ _ _ _ _ _ _ _ _`

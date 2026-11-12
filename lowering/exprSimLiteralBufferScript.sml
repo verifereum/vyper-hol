@@ -900,6 +900,7 @@ Theorem literal_memory_vv_post:
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
     stmt_state_rel H ctx func cenv cx es t /\
+    storage_well_formed_on cx es (FST H) /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -963,21 +964,45 @@ Resume compile_literal_other_vv_sim[bytes]:
   drule_all literal_bytelike_alloca_mem >> strip_tac >>
   `32 + 32 * word_size (LENGTH bs) < dimword (:256)` by
     (simp[wordsTheory.dimword_def] >> decide_tac) >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[NoAsms]) >>
-  drule_all (Q.INST [`es` |-> `es with gas_obs := []`] (SPEC_ALL literal_bytelike_run)) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
+       storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     `(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     conj_tac
+     >- (drule msg_gas_state_frame >>
+         disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+         simp[NoAsms]) >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  reverse (Cases_on `vyperStorageFootprint$storage_trace_domain cx st0 es.storage_trace`)
+  >- (PURE_REWRITE_TAC[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      rw[gasStorageTheory.gas_bad_storage_at_def] >>
+      simp[Once evaluate_def, return_def, evaluate_literal_def]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
+    (qspec_then `H0` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+  drule_all (Q.INST [`es` |-> `es with gas_obs := []`, `H` |-> `H0`] (SPEC_ALL literal_bytelike_run)) >>
   strip_tac >>
   drule_all literal_bytelike_gas_path >> strip_tac >>
-  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
+  qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
+  qpat_x_assum `valid_horizon _ _ H0 _` kall_tac >>
+  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INL (Value (BytesV bs))`, `es`,
     `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
   conj_tac
   >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
           Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[] >>
+  simp[] >> rpt strip_tac >>
+  qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
+    (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
+    (drule_all (Q.INST [`es` |-> `es with gas_obs := []`] (SPEC_ALL literal_bytelike_run)) >>
+     strip_tac >> gvs[]) >>
   once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`]
@@ -1007,24 +1032,51 @@ Resume compile_literal_other_vv_sim[string]:
   `32 + 32 * word_size (LENGTH (MAP (n2w o ORD) str : word8 list)) < dimword (:256)` by
     (simp[wordsTheory.dimword_def] >> decide_tac) >>
   gvs[] >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[NoAsms]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
+       storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     `(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     conj_tac
+     >- (drule msg_gas_state_frame >>
+         disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+         simp[NoAsms]) >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  reverse (Cases_on `vyperStorageFootprint$storage_trace_domain cx st0 es.storage_trace`)
+  >- (PURE_REWRITE_TAC[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      rw[gasStorageTheory.gas_bad_storage_at_def] >>
+      simp[Once evaluate_def, return_def, evaluate_literal_def]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
+    (qspec_then `H0` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
   drule (SRULE []
     (Q.INST [`bs` |-> `MAP (n2w o ORD) str : word8 list`,
-             `es` |-> `es with gas_obs := []`]
+             `es` |-> `es with gas_obs := []`, `H` |-> `H0`]
       (SPEC_ALL literal_bytelike_run))) >>
   disch_then drule >> (impl_tac >- simp[]) >> strip_tac >>
   drule_all literal_bytelike_gas_path >> strip_tac >>
-  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
+  qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
+  qpat_x_assum `valid_horizon _ _ H0 _` kall_tac >>
+  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INL (Value (StringV str))`, `es`,
     `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
   conj_tac
   >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
           Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[] >>
+  simp[] >> rpt strip_tac >>
+  qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
+    (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
+    (drule (SRULE []
+       (Q.INST [`bs` |-> `MAP (n2w o ORD) str : word8 list`,
+                `es` |-> `es with gas_obs := []`]
+         (SPEC_ALL literal_bytelike_run))) >>
+     disch_then drule >> (impl_tac >- simp[]) >> strip_tac >> gvs[]) >>
   once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `Literal (BaseT (StringT n)) (StringL str)`]

@@ -41,7 +41,8 @@ Proof
      qpat_x_assum `s0.vs_inst_idx = _` kall_tac >> simp[]) >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def, locals_kept_def,
        vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
-       typed_val_to_w256_word_value, word_value_def, val_to_w256_def]
+       typed_val_to_w256_word_value, word_value_def, val_to_w256_def,
+       gas_marked_exec_def, gas_marked_path_def, gas_path_rules]
 QED
 
 Theorem compile_flag_member_case_sim:

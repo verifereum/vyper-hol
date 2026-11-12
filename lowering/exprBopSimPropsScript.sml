@@ -648,8 +648,7 @@ Proof
        (irule expr_val_rel_typed >> metis_tac[]) >>
      irule eval_operand_frame >> conj_tac >- simp[] >>
      qexistsl_tac [`s1`, `t`] >> simp[]) >>
-  qpat_x_assum `?H. valid_horizon cx st0 H fin.storage_trace`
-    (qx_choose_then `H0` assume_tac) >>
+  rename1 `valid_horizon cx st0 H0 fin.storage_trace` >>
   `eval_operand x u = SOME (typed_val_to_w256 tv1 v1) /\
    eval_operand y u = SOME (typed_val_to_w256 tv2 v2) /\
    local_ptrs_reserved cenv s1 /\ fn_inst_ids_distinct func /\

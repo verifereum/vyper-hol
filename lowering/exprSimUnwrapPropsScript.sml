@@ -63,7 +63,8 @@ Proof
   >~ [`locals_kept`]
   >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail])
   >~ [`pure_frame`]
-  >- (fs[vv_post_def] >> metis_tac[pure_frame_mem_tail]) >>
+  >- (fs[vv_post_def] >> metis_tac[pure_frame_mem_tail])
+  >~ [`storage_well_formed_on`] >- fs[vv_post_def] >>
   qpat_x_assum `s.vs_memory = s1.vs_memory` SUBST1_TAC >>
   qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
