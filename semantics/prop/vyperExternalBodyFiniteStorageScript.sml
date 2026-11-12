@@ -34,32 +34,3 @@ Proof
   qexistsl [`env_body`, `env_after`, `res`, `ret`, `body`, `st`] >>
   gvs[runtime_consistent_def]
 QED
-
-(* Compatibility specialization: all preservation is delegated above. *)
-Theorem checked_explicit_external_body_storage_well_formed_on:
-  check_contract F am.layouts tx.target mods = SOME art /\
-  checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ call_tx_well_typed tx /\
-  ALOOKUP mods src = SOME ts /\
-  module_allocated am.layouts tx.target src ts /\
-  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
-  cx = initial_evaluation_context am.sources am.layouts tx src /\
-  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP FST args) /\
-  st.scopes = [scope] /\ st.immutables = am.immutables /\
-  state_well_typed st /\ accounts_well_typed st.accounts /\
-  regions_consistent (FST H) /\
-  storage_locks_separated (FST H) (SND H) /\
-  storage_well_formed_on cx st (FST H) /\
-  storage_observations_ok cx H st'.storage_trace /\
-  eval_stmts cx body st = (res,st') ==>
-  storage_well_formed_on cx st' (FST H)
-Proof
-  strip_tac >>
-  drule_all checked_explicit_external_body_setup >> strip_tac >>
-  `body_entry_ready art cx scope st` by
-    (gvs[body_entry_ready_def, checked_contract_runtime_ready_def] >>
-     metis_tac[vyperTypeContractFunctionTheory.immutables_ready_initial_evaluation_context_source]) >>
-  gvs[checked_contract_runtime_ready_def] >>
-  metis_tac[checked_explicit_external_body_storage_well_formed_on_current]
-QED

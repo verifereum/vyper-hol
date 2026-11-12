@@ -118,7 +118,7 @@ Resume call_external_storage_well_formed_on[selected]:
      metis_tac[]) >>
   `~cx.in_deploy` by simp[Abbr `cx`, initial_evaluation_context_def] >>
   drule_at (Pat `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = _`)
-    call_external_function_trace_storage_well_formed_on >>
+    call_external_function_trace_storage_well_formed_on_general >>
   disch_then (qspec_then `H` mp_tac) >>
   simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
   disch_then irule >> rpt gen_tac >> strip_tac >>

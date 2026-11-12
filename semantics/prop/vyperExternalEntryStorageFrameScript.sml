@@ -153,31 +153,3 @@ Proof
       strip_tac >> gvs[]) >>
   strip_tac >> gvs[initial_state_abstract_machine_storage_well_formed_on]
 QED
-
-Theorem call_external_function_trace_storage_well_formed_on:
-  ~cx.in_deploy /\
-  regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
-  storage_well_formed_on cx (initial_state am []) (FST H) /\
-  (!r u.
-    (do send_call_value mut cx;
-        dvs <- eval_external_defaults cx (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts);
-        case bind_arguments (type_env_all_modules mods) args (vals ++ dvs) of
-          NONE => raise (Error (RuntimeError "call bind_arguments"))
-        | SOME env => do
-            set_scopes [env]; lock_if_nr cx nr (is_view_mut mut); eval_stmts cx body
-          od
-     od) (initial_state am [FEMPTY] with
-       <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>) = (r,u) /\
-    storage_observations_ok cx H u.storage_trace ==>
-    storage_well_formed_on cx u (FST H)) /\
-  storage_observations_ok cx H obs /\
-  call_external_function_trace orc gobs am cx nr mut ts mods args dflts vals body ret =
-    (res,am_out,rqs,obs) ==>
-  storage_well_formed_on cx (initial_state am_out []) (FST H)
-Proof
-  strip_tac >>
-  drule_at (Pat `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = _`)
-    call_external_function_trace_storage_well_formed_on_general >>
-  disch_then (qspec_then `H` mp_tac) >>
-  simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"]
-QED
