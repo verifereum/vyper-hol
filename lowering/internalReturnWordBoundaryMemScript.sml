@@ -5,21 +5,8 @@ Ancestors
   stmtLowering loweringPosts compileEnv exprSimHypsDefs vyperTypeSystem
   stmtSimProps bodySim ctorReturnFrame vyperTypeInvariants exprLoweringProps
   fragExec venomExecSemantics loweringStateRelDefs stmtSimReturn stmtSimDefs
-  stmtLoweringMono venomState
+  stmtLoweringMono venomState internalReturnBoundaryCommonMem
 
-Theorem internal_return_value_compile:
-  cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
-  stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv',sb) /\
-  lower_value compile_expr cenv ty e sa = (op,s1) ==>
-  compile_internal_return_from_env cenv ty (lowered_value_type cenv e)
-    op (Var rpc) s1 = ((),sb)
-Proof
-  strip_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  pairarg_tac >> simp[]
-QED
 
 Theorem internal_return_word_count[local]:
   is_word_type ty ==> returns_stack_count sft ty = 1
