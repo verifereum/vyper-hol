@@ -291,6 +291,7 @@ Theorem raw_call_prefix_sim_mem:
       mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
       b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
       stmt_state_rel H ctx func cenv cx esK t /\
+      stmt_state_rel H ctx func cenv cx es s0 /\
       storage_well_formed_on cx esK (FST H) /\ wb_frame cenv es esK sa s0 t /\
       ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
       t.vs_inst_idx = LENGTH s6.cs_current_insts /\
@@ -671,6 +672,11 @@ Resume raw_call_prefix_sim_mem[continuation]:
           metis_tac[raw_call_horizon_back] >>
         `valid_horizon cx st0 Hn esA.storage_trace` by
           metis_tac[raw_call_horizon_back] >>
+        `valid_horizon cx st0 Hn es.storage_trace` by
+          metis_tac[raw_call_horizon_back] >>
+        `stmt_state_rel Hn ctx func cenv cx es s0` by
+          (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+             (drule_then (ACCEPT_TAC o CONJUNCT1))) >>
         qpat_assum `!H. valid_horizon cx st0 H esD.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
           (drule_then strip_assume_tac) >>
         qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
