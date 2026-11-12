@@ -13,33 +13,6 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem compile_append_storage_aggregate_stmt_frag_mem:
-  eval_target_place cx (TopLevelNameTarget nid) es =
-    (INL (StoragePlace tr slot (ArrayTV tv (Dynamic cap))),es) /\
-  declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
-  w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
-  (!mid' n' subs' slot' tv'.
-    declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
-    (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
-    ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
-                    (w2n slot') (type_slot_size tv')) /\
-  FLOOKUP cenv.ce_module_vars nid =
-    SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-  cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
-  cenv.ce_module_dynarray_capacity nid = cap /\
-  ~is_word_type elem /\ ~is_bytestring_type elem /\ expr_type e = elem /\
-  lowered_value_type cenv e = elem /\ supported_pure_expr tops e /\
-  evaluate_type (get_tenv cx) elem = SOME tv /\
-  type_memory_bytes cenv elem = 32*type_slot_size tv /\
-  type_memory_bytes cenv elem < 2**64 /\
-  0 < type_slot_size tv /\ well_formed_type_value tv /\ cap < dimword (:256) /\
-  (!gs v es1. (do result <- eval_expr cx e; read_result cx result od)
-      (es with gas_obs := gs) = (INL v,es1) ==>
-    value_has_type tv v /\ ?writes. encode_value tv v = SOME writes) /\
-  expr_sim_mem ctx func cenv cx elem e es ==>
-  stmt_frag_mem d ctx func cx lctx RetQ cenv
-    (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e))
-    (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 (* PORT_ADMISSION SEQ-4381: whole aggregate Append lemma, including static
    types: the old path uses dense FOLDL and the one-word direct store still
    needs a separate proof. Sparse Append repair remains owned separately.
@@ -150,6 +123,33 @@ QED
 Finalise compile_append_storage_aggregate_stmt_frag_mem
 
 *)
+Theorem compile_append_storage_aggregate_stmt_frag_mem:
+  eval_target_place cx (TopLevelNameTarget nid) es =
+    (INL (StoragePlace tr slot (ArrayTV tv (Dynamic cap))),es) /\
+  declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
+  (!mid' n' subs' slot' tv'.
+    declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
+    (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
+    ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
+                    (w2n slot') (type_slot_size tv')) /\
+  FLOOKUP cenv.ce_module_vars nid =
+    SOME (if tr then TransientLoc slot else StorageLoc slot) /\
+  cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
+  cenv.ce_module_dynarray_capacity nid = cap /\
+  ~is_word_type elem /\ ~is_bytestring_type elem /\ expr_type e = elem /\
+  lowered_value_type cenv e = elem /\ supported_pure_expr tops e /\
+  evaluate_type (get_tenv cx) elem = SOME tv /\
+  type_memory_bytes cenv elem = 32*type_slot_size tv /\
+  type_memory_bytes cenv elem < 2**64 /\
+  0 < type_slot_size tv /\ well_formed_type_value tv /\ cap < dimword (:256) /\
+  (!gs v es1. (do result <- eval_expr cx e; read_result cx result od)
+      (es with gas_obs := gs) = (INL v,es1) ==>
+    value_has_type tv v /\ ?writes. encode_value tv v = SOME writes) /\
+  expr_sim_mem ctx func cenv cx elem e es ==>
+  stmt_frag_mem d ctx func cx lctx RetQ cenv
+    (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e))
+    (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   cheat
 QED
