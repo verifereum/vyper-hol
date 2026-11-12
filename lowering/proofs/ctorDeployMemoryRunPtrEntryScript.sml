@@ -599,7 +599,7 @@ Theorem deploy_ptr_entry_prefix_related:
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==>
   ?actual H qt.
-    stmt_state_rel unit.cu_context func ce (deploy_evaluation_context tops am tx)
+    stmt_state_rel HS unit.cu_context func ce (deploy_evaluation_context tops am tx)
       (es0 with outcomes := SOME vs.vs_outcomes) actual /\
     ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -627,7 +627,7 @@ Proof
      rpt strip_tac >>
      rewrite_tac[GSYM listTheory.EL] >>
      simp[valueEncodingProofsTheory.EL_mem_bytes_at] >> fs[read_byte_def]) >>
-  `state_rel func ce (deploy_evaluation_context tops am tx)
+  `state_rel HS func ce (deploy_evaluation_context tops am tx)
      (es0 with outcomes := SOME vs.vs_outcomes) actual` by
     (`local_ptrs_rel func ce es0.scopes actual` by simp[] >>
      drule_all deploy_ptr_entry_actual_state_rel >> simp[]) >>
@@ -680,7 +680,7 @@ Theorem deploy_ctor_entry_run_ptr:
     fn_entry_label fn = SOME lbl
     ==>
     ?s0 G0 tn0.
-      stmt_state_rel dunit.cu_context func cenv
+      stmt_state_rel HS dunit.cu_context func cenv
         (deploy_evaluation_context tops am tx)
         (es0 with outcomes := SOME vs.vs_outcomes) s0 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\

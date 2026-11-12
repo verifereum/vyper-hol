@@ -83,7 +83,7 @@ Theorem deploy_ctor_fallthrough_ptr:
        cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
     ~ctx_has_dalloca dunit.cu_context /\
-    stmt_state_rel dunit.cu_context func cenv'
+    stmt_state_rel H dunit.cu_context func cenv'
       (deploy_evaluation_context tops am tx) ee t /\ ~t.vs_halted /\
     ~block_is_terminated sb /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\

@@ -105,7 +105,7 @@ Resume compile_assign_tuple_targets_stmt_frag_mem[normal]:
     (assume_tac o REWRITE_RULE [optional_tuple_stage_code]) >>
   `post_value_type cenv e = expr_type e` by
     metis_tac[loweringPostsTheory.post_value_type_lowered] >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) assign_tuple_targets_suffix_mem >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) assign_tuple_targets_suffix_mem >>
   simp[] >>
   disch_then (drule_at (Pat `compile_tuple_store_all _ _ _ _ _ = _`)) >>
   simp[] >>

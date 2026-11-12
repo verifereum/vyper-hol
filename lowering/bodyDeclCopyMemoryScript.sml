@@ -91,7 +91,7 @@ QED
 Theorem annassign_copy_post_path_mem:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v tyv vtyp
    sc rest a loc info bytes d.
-    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es1 v op s /\
     post_value_type cenv e = expr_type e /\
     expr_store_bound cx vtyp v op s /\
     (loc = SOME LocMemory ==>
@@ -122,7 +122,7 @@ Theorem annassign_copy_post_path_mem:
     ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-      stmt_state_rel ctx func cenv cx
+      stmt_state_rel H ctx func cenv cx
         (es1 with scopes :=
           (sc |+ (id, <|assignable := a; type := tyv; value := v;
                         popped := []|>)) :: rest) t /\
@@ -135,7 +135,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `!x. op = Var x ==> not_fresh_at sb x` by
     (rpt strip_tac >> drule_all (GEN_ALL compile_lower_value_var) >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   `val_wf tyv v` by simp[value_has_type_memory_wf] >>
   `?sw. eval_operand op s = SOME sw /\
@@ -237,7 +237,7 @@ Proof
   `gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,salloc)
     (\res ee t. ?v. res = INL v /\
-      expr_post ctx func c cx e es sA sB salloc ee v op t /\
+      expr_post H ctx func c cx e es sA sB salloc ee v op t /\
       expr_store_bound cx (expr_type e) v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts /\
@@ -278,12 +278,12 @@ Proof
    FLOOKUP t.vs_allocas st.cs_next_id =
      SOME (w2n w, type_memory_bytes cenv (expr_type e)) /\
    salloc.vs_alloca_next <= t.vs_alloca_next` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def] >> metis_tac[]) >>
   `return_buf_frame d c sB t` by
     (irule return_buf_frame_frame >>
      qexistsl_tac [`c`, `salloc`, `sA`] >>
-     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def] >> strip_tac >> simp[] >>
      metis_tac[cj 2 compile_expr_grows]) >>
   `not_local_ptr c ee.scopes p` by
@@ -321,7 +321,7 @@ Proof
   >- (simp[gas_marked_exec_def, gas_explicit_def, gas_marked_path_def] >>
       simp[Abbr `ee'`]) >>
   `sA.cs_next_var <= sB.cs_next_var` by metis_tac[cj 2 compile_expr_grows] >>
-  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
           lookup_var x tf = SOME w'` by
@@ -338,9 +338,9 @@ Proof
                    `expr_type e`] >>
      gvs[lookup_scopes_def, AllCaseEqs()]) >>
   `return_buf_frame d c sb tf` by simp[] >>
-  `stmt_state_rel ctx func c cx ee' tf` by
+  `stmt_state_rel H ctx func c cx ee' tf` by
     (qunabbrev_tac `ee'` >>
-     qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ _ (ee with scopes := scs) _` >>
+     qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ _ _ (ee with scopes := scs) _` >>
      `ee with <|scopes := scs; gas_obs := []|> =
       (ee with scopes := scs) with gas_obs := []`
        by simp[evaluation_state_component_equality] >>

@@ -27,7 +27,7 @@ Theorem deploy_ctor_body_ptr:
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
     deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) /\
-    stmt_state_rel dunit.cu_context func cenv
+    stmt_state_rel H dunit.cu_context func cenv
       (deploy_evaluation_context tops am tx)
       (es0 with outcomes := SOME vs.vs_outcomes) s0 /\
     s0.vs_gas_readings = vs.vs_gas_readings /\
@@ -36,7 +36,7 @@ Theorem deploy_ctor_body_ptr:
     deploy_ptr_inv HS tops runtime_bc am tx imm G0 tn0 s0 /\
     (!body_cenv ee s G tn.
        same_frame cenv body_cenv /\
-       stmt_state_rel dunit.cu_context func body_cenv
+       stmt_state_rel H dunit.cu_context func body_cenv
          (deploy_evaluation_context tops am tx) ee s /\
        ~s.vs_halted /\ s.vs_current_bb = st_exit.cs_current_bb /\
        s.vs_inst_idx = 0 /\
@@ -50,7 +50,7 @@ Theorem deploy_ctor_body_ptr:
        s.vs_current_bb = sb.cs_current_bb /\
        s.vs_inst_idx = LENGTH sb.cs_current_insts /\
        cenv_top_ext cenv cenv' ee.scopes /\
-       stmt_state_rel dunit.cu_context func cenv'
+       stmt_state_rel H dunit.cu_context func cenv'
          (deploy_evaluation_context tops am tx) ee s /\
        deploy_ptr_inv HS tops runtime_bc am tx imm G tn s /\
        !fuel r. run_from fuel dunit.cu_context func s = r /\

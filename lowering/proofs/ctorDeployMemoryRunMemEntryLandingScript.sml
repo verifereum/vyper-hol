@@ -73,7 +73,7 @@ Proof
  `supported_declaration_headers tops` by
    gvs[deploy_source_ok_def, supported_program_def] >>
  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-   (gvs[deploy_source_ok_def, deploy_typing_ok_def] >>
+   (gvs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
     drule check_contract_namespaces_ok >>
     simp[contract_namespaces_ok_def, contract_keys_def]) >>
  irule ctor_landing_storage_layout >>
@@ -110,7 +110,7 @@ Theorem ctor_task_landing_state_rel:
  actual.vs_logs = [] /\ actual.vs_requests = [] /\ actual.vs_pending_deletions = [] /\
  call_ctx_rel tx actual.vs_call_ctx actual.vs_tx_ctx actual.vs_block_ctx /\
  ~actual.vs_call_ctx.cc_static /\ ~tx.is_static /\ actual.vs_outcomes = os ==>
- state_rel func cenv (deploy_evaluation_context tops am tx)
+ state_rel H func cenv (deploy_evaluation_context tops am tx)
    (es0 with outcomes := SOME os) actual
 Proof
  rpt gen_tac >> strip_tac >>

@@ -29,7 +29,7 @@ Ancestors
    lowering reads a dynamic array's length with compile_ptr_load's
    compile_imm_load_word (DLOAD).  A memory base's bytes lie in one of the
    base's own allocations or in a live local's region (vv_at), and
-   contain no length word, so the index's expr_post keeps them (its
+   contain no length word, so the index's expr_post H keeps them (its
    allocation frame, locals_kept); a static array needs no length load.
    With the source locals unchanged, the base's place reads at the index's
    end what it read before.  The bounds check itself, a source RuntimeError
@@ -158,7 +158,7 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
       `expr_body_pre cenv cx env idx (es_end with gas_obs := gs)` by fs[] >>
       drule_all (REWRITE_RULE [ETA_THM] expr_body_pre_res_ok) >> simp[]) >>
   conj_tac
-  >- (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  >- (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
         (mp_tac o CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
       simp[exprLoweringPropsTheory.stmt_state_rel_def,
            loweringStateRelDefsTheory.state_rel_gas_obs,
@@ -207,7 +207,7 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
         metis_tac[pairTheory.FST] >>
       Cases_on `bvv` >>
       gvs[contextTheory.vv_location_def] >>
-      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+      qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
         (mp_tac o CONJUNCT1 o CONJUNCT2 o
          REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
       simp[loweringPostsTheory.vv_holds_def, compileEnvTheory.is_bytestring_type_def] >> rpt strip_tac >>
@@ -301,15 +301,15 @@ Finalise compile_subscript_array_framed_base_case
    immutable in the constructor, a dynamic array or one with a dynamic
    array inside it in memory, a base whose source result is a storage
    place, or an index that changes the locals or the immutables.  ADMITTED (cheat).  NOT DERIVABLE from these hypotheses,
-   though no miscompile is known: vv_post does not tie the base's pointer
+   though no miscompile is known: vv_post H does not tie the base's pointer
    to its source place.  vv_at and local_val_at pick the local's path by
    its type alone, immutable_holds' constructor form takes any offset of
    the staged buffer that holds the value, and storage_holds pins the slot
    only by what it reads; so the base's pointer may lie in dead bytes that
    hold an equal value (past a dynamic array's length, in the staged
    buffer, in dead slots), which nothing keeps across the index's
-   fragment: state_rel and immutables_rel relate only the live parts,
-   locals_kept exempts every dynamic array's length word, and expr_post
+   fragment: state_rel H and immutables_rel relate only the live parts,
+   locals_kept exempts every dynamic array's length word, and expr_post H
    has no frame on Venom storage.  Witness: x : DynArray[DynArray[uint256,
    2], 2] holding [[5, 1]], with [5, 1] and its length word 2 left at
    x[1]'s bytes by an earlier pop; for x[0][i], with i a local, a pointer
@@ -328,7 +328,7 @@ Finalise compile_subscript_array_framed_base_case
      RuntimeError, an immutable keeping no popped history, while the
      lowering ILOADs the stale length 2 and goes on, where expr_exit asks
      for an abort.
-   A place-pointer clause in vv_post replaces most of this lemma: a
+   A place-pointer clause in vv_post H replaces most of this lemma: a
    conjunct vv_place_ptr cenv cx es' s tv vv, as place_ptr_rel says for
    targets, with
      vv_place_ptr cenv cx es s (PlaceR (MemoryPlace id path))
