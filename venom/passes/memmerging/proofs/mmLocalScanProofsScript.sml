@@ -17706,6 +17706,44 @@ Proof
   fs[listTheory.LENGTH_TAKE] >> decide_tac
 QED
 
+Theorem mm_local_zero_barrier_transition[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  n < LENGTH is /\ is_volatile_memory (EL n is) /\
+  ~is_zero_store (EL n is) /\ ~is_calldatasize_copy dfg (EL n is) /\
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  (!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator (EL n is).inst_opcode /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n ==>
+  ?t'. mm_local_exec_prefix fuel ctx [EL n is] t t' /\
+    mm_local_zero_cut dfg is gs H (SUC n) excluded (SUC pc) t'
+Proof
+  strip_tac >>
+  `mm_local_pending_indices is gs n = [] /\
+   mm_local_pending_indices is gs (SUC n) = []` by
+    (conj_tac >> irule mm_local_zero_barrier_pending_empty >>
+     qexistsl [`bb`,`dfg`,`n`] >> gvs[]) >>
+  `state_equiv excluded ((H n) with vs_inst_idx := pc) t` by
+    metis_tac[mm_local_zero_cut_empty] >>
+  `step_inst fuel ctx (EL n is) ((H n) with vs_inst_idx := pc) =
+   OK (u with vs_inst_idx := pc)` by
+    (Cases_on `(EL n is).inst_opcode = INVOKE`
+     >- simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+     simp[analysisSimProofsBaseTheory.step_inst_idx_indep,
+       instIdxIndepTheory.exec_result_map_def]) >>
+  drule_all removeUnusedProofsTheory.step_inst_result_equiv_full >>
+  disch_then (qspecl_then [`fuel`,`ctx`] mp_tac) >>
+  Cases_on `step_inst fuel ctx (EL n is) t` >>
+  simp[result_equiv_def] >> strip_tac >>
+  qexists_tac `v with vs_inst_idx := SUC pc` >>
+  conj_tac
+  >- gvs[mm_local_exec_prefix_single, mm_local_zero_cut_def] >>
+  gvs[mm_local_zero_cut_def, mm_local_pending_empty, state_equiv_frame,
+    mm_local_nonmemory_frame_def, stateFrameTheory.state_frame_def,
+    venomStateTheory.lookup_var_def, venomStateTheory.venom_state_component_equality]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
