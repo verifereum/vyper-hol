@@ -6,7 +6,8 @@ Theory concretizeLayoutCanonicalPrefix
 Ancestors concretizeLayoutCanonicalContract concretizeLayoutCanonicalRunNext
   concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalBlock
   concretizeLayoutCanonicalDriver concretizeLayoutSelectedBaseInterface
-  concretizeStepStructure frameSelectedPrefix frameSelectedSimulation
+  concretizeLayoutCanonicalBaseCertificate concretizeStepStructure
+  frameSelectedPrefix frameSelectedSimulation
   frameSelectedDecoration frameFiniteJointDecoration
 
 Theorem layout_canonical_run_entry_certificate:
@@ -59,11 +60,7 @@ Proof
   `get_instruction bb' t.vs_inst_idx = SOME j` by metis_tac[] >>
   qexists `j` >> rpt conj_tac
   >- first_assum ACCEPT_TAC
-  >- (strip_tac >> `j = i` suffices_by simp[] >>
-      Cases_on `a`
-      >- gvs[layout_canonical_step_witness_def, concretize_positions_unchanged] >>
-      gvs[layout_canonical_block_witness_def] >>
-      drule_all layout_canonical_corridor_instruction >> gvs[]) >>
+  >- (strip_tac >> drule layout_canonical_step_witness_gas >> gvs[]) >>
   strip_tac >> simp[layout_canonical_ES_def, layout_base_lookahead_def] >>
   metis_tac[]
 QED

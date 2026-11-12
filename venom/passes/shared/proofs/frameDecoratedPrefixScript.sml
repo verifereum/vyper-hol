@@ -219,8 +219,9 @@ Resume finite_prefix_decoration_complete[next]:
   drule_all (cj 1 finite_decoration_complete) >>
   disch_then (qspec_then `n` strip_assume_tac) >>
   drule_all finite_step_nonterminator_control >> strip_tac >>
-  drule (cj 1 finite_prefix_entry) >> strip_tac >>
-  `active_inst fn i' (post with vs_inst_idx := SUC s.vs_inst_idx)` by
+  drule (cj 1 finite_prefix_entry) >>
+  disch_then (qx_choose_then `inext` assume_tac) >>
+  `active_inst fn inext (post with vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule lookup_instruction_active >> qexists `bb` >> gvs[]) >>
   drule_all decorated_success_consumable >> strip_tac >>
   first_x_assum (qspecl_then [`fn`, `qn`, `n+LENGTH w+1`] mp_tac) >>
@@ -254,17 +255,18 @@ Resume finite_prefix_decoration_complete[run_next]:
   disch_then (qspec_then `n` strip_assume_tac) >>
   drule (cj 2 decorated_execution_ok_endpoint) >>
   fs[decoration_entry_def] >> disch_then drule >> strip_tac >>
-  drule (cj 2 finite_prefix_entry) >> strip_tac >>
+  drule (cj 2 finite_prefix_entry) >>
+  disch_then (qx_choosel_then [`pn`, `inext`] strip_assume_tac) >>
   gvs[local_pending_def] >>
   drule (cj 1 finite_execution_realizable) >> strip_tac >>
   rename1 `!k. m <= k ==> step_inst k C ti si = OK post` >>
   `step_inst m C ti si = OK post` by simp[] >>
   `?qn. joint_transition C
     (JointConfig stk PG G tn fn ti si oms om hs h)
-    (SOME (OriginBlock m post)) qn /\ decoration_entry fn p' qn` by
+    (SOME (OriginBlock m post)) qn /\ decoration_entry fn pn qn` by
     (irule_at (Pos hd) joint_transition_block >>
      simp[decoration_entry_def, decoration_at_def] >> metis_tac[]) >>
-  first_x_assum (qspecl_then [`qn`, `n+LENGTH w+1`, `p'`] mp_tac) >>
+  first_x_assum (qspecl_then [`qn`, `n+LENGTH w+1`, `pn`] mp_tac) >>
   (impl_tac >- (fs[decoration_entry_def] >> metis_tac[])) >> strip_tac >>
   qunabbrev_tac `p` >>
   irule_at Any decorated_prefix_run_next >>
