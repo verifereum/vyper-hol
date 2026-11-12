@@ -52,14 +52,18 @@ Theorem ptr_paired_owned_read_recovery:
   max_live_eom C' = SOME eom /\
   FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
   read_byte (b+k) endpoint.po_state.vs_memory =
-    read_byte (pa+k) at.po_state.vs_memory
+    read_byte (pa+k) at.po_state.vs_memory \/
+  w2n vs.vs_initial_fmp <= b+k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `w2n vs.vs_initial_fmp <= b+k` >- simp[] >> disj1_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_source >> strip_tac >>
   `b <= b+k /\ b+k < b+sz` by decide_tac >>
-  drule_all ptr_endpoint_actual_protected_livesets >> strip_tac >>
+  qpat_assum `~(w2n vs.vs_initial_fmp <= b+k)` (fn th =>
+    drule_all ptr_endpoint_actual_protected_livesets >>
+    disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
   `SUC w < LENGTH h` by decide_tac >>
   drule ptr_structural_trace_actual_writer_retained >>
   disch_then (qspecl_then [`w`,`b+k`] mp_tac) >>
