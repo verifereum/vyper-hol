@@ -259,7 +259,8 @@ Theorem frame_starved_lift:
     ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
   step (es with contexts := [(c,rb)]) = (INR (SOME exc),t) /\
   (exc = OutOfGas \/ exc = StackOverflow) ==>
-  ?r es'. run_call es = SOME (r,es') /\ frame_resource_starved es0 r es'
+  ?r es'. run_call es = SOME (r,es') /\ frame_resource_starved es0 r es' /\
+          call_requests es = []
 Proof
   strip_tac >>
   `wf_state es /\ (!addr. c.msgParams.outputTo <> Code addr)` by
