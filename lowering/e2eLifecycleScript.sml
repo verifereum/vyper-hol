@@ -8,7 +8,7 @@
  * deploy_establishes_call_ready / deploy_call_result_establishes_call_ready:
  *   deployment to call handoff.
  * call_preserves_call_ready: call to call handoff, for every call result.
- * empty_storage_well_formed_on: zero storage decodes on every region.
+ * deploy_empty_storage_well_formed_on: zero storage decodes on every region.
  *)
 Theory e2eLifecycle
 Ancestors
@@ -20,7 +20,7 @@ Ancestors
   immutableSectionRel vyperABIEntries
   vfmState vfmExecution vfmExecutionProp vfmRunCall vfmTotalBalance
   vfmAccountFrame vfmContext loweringStateRelDefs While
-  e2eCodeFrame vyperRuntimeImmutables storageLiveAgree
+  e2eCodeFrame vyperRuntimeImmutables storageLiveAgree vyperCallFiniteStorage
 
 (* ===== The premises a later call needs from the machine ===== *)
 
@@ -300,14 +300,6 @@ QED
 (* ===== Initial storage ===== *)
 
 (* Zero storage decodes on every region. *)
-Theorem empty_storage_well_formed_on:
-  (!b. get_storage cx st b = empty_storage) ==>
-  storage_well_formed_on cx st regions
-Proof
-  rw[storage_well_formed_on_def] >>
-  irule (CONJUNCT1 slots_in_range_zero_reads) >>
-  simp[read_slot_def, lookup_storage_def, empty_storage_def]
-QED
 
 (* deploy_storage_ok's storage_well_formed_on conjunct at a fresh target. *)
 Theorem deploy_empty_storage_well_formed_on:

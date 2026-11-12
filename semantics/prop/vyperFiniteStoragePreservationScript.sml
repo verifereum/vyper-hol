@@ -752,7 +752,7 @@ Proof
      vfmExecutionTheory.lookup_transient_storage_def]
 QED
 
-Theorem acquire_lock_preserves_storage_well_formed_on[local]:
+Theorem acquire_lock_preserves_storage_well_formed_on:
   regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
   storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H observations /\ MEM (StorageLock lock) observations /\
@@ -766,7 +766,7 @@ Proof
   qexistsl [`lock`,`SND H`,`st`] >> fs[]
 QED
 
-Theorem release_lock_preserves_storage_well_formed_on[local]:
+Theorem release_lock_preserves_storage_well_formed_on:
   regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
   storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H observations /\ MEM (StorageLock lock) observations /\
@@ -901,7 +901,7 @@ Proof
   strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem transfer_value_preserves_storage_well_formed_on[local]:
+Theorem transfer_value_preserves_storage_well_formed_on:
   storage_well_formed_on cx st regions /\
   vyperInterpreter$transfer_value fromAddr toAddr amount st = (res,st') ==>
   storage_well_formed_on cx st' regions
