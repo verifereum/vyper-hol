@@ -36,6 +36,7 @@ Theorem buffer_memory_vv_post_general:
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
     stmt_state_rel H ctx func cenv cx es' t /\
+    storage_well_formed_on cx es' (FST H) /\
     eval_operand p.ptr_operand t = SOME w /\ p.ptr_location = LocMemory /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -73,6 +74,7 @@ Theorem buffer_memory_vv_post:
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
     stmt_state_rel H ctx func cenv cx es t /\
+    storage_well_formed_on cx es (FST H) /\
     eval_operand p.ptr_operand t = SOME w /\ p.ptr_location = LocMemory /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\

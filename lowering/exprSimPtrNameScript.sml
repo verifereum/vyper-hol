@@ -50,7 +50,7 @@ QED
 
 (* The local's pointer, from ghost_inv's locals clause and local_ptrs_rel. *)
 Theorem name_ptr_mem_ok[local]:
-  ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx func cenv cx es s /\
   lookup_scopes id es.scopes = SOME entry /\
   evaluate_type (get_tenv cx) ann = SOME entry.type /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
@@ -173,7 +173,7 @@ Proof
   gvs[] >>
   drule_all name_ptr_mem_ok >> strip_tac >>
   drule name_source >> strip_tac >>
-  `vv_post ctx func cenv cx (Name ann id) es sa sa s0 (es with gas_obs := [])
+  `vv_post H ctx func cenv cx (Name ann id) es sa sa s0 (es with gas_obs := [])
      (Value entry.value) (LocatedValue ann (mk_ptr (Var p) LocMemory)) s0` by
     (`read_result cx (PlaceR (MemoryPlace id [])) (es with gas_obs := []) =
        (INL entry.value, es with gas_obs := [])` by simp[] >>
@@ -215,33 +215,33 @@ Proof
     (`type_memory_size entry.type = 32` by metis_tac[word_type_memory_size] >>
      gvs[ptr_covers_def]) >>
   drule_all emit_mload_ptr_path >>
-  disch_then (qspecl_then [`cx_dead cx`, `PG`] strip_assume_tac) >> gvs[] >>
+  disch_then (qspecl_then [`cx_dead H cx`, `PG`] strip_assume_tac) >> gvs[] >>
   qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
   qabbrev_tac `u = update_var out (typed_val_to_w256 entry.type entry.value) s0
                    with vs_inst_idx := SUC s0.vs_inst_idx` >>
   `eval_operand (Var p) s0 = SOME w` by simp[eval_operand_def] >>
   drule_all emit_mload_endpoint >> strip_tac >>
   drule name_source >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) u` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) u` by
     (simp[Abbr `u`] >>
      `not_local_ptr cenv (es with gas_obs := []).scopes out` by
        (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
         qexists_tac `sa` >> simp[]) >>
-     `stmt_state_rel ctx func cenv cx (es with gas_obs := [])
+     `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
         (s0 with vs_inst_idx := SUC s0.vs_inst_idx)` by
        (drule msg_gas_state_frame >>
         disch_then (qspecl_then [`s0.vs_gas_readings`,
                                  `SUC s0.vs_inst_idx`, `[]`] mp_tac) >>
         simp[]) >>
      drule_all stmt_state_rel_update_var >> simp[update_var_def]) >>
-  `vv_post ctx func cenv cx (Name ann id) es sa sa s0 (es with gas_obs := [])
+  `vv_post H ctx func cenv cx (Name ann id) es sa sa s0 (es with gas_obs := [])
      (Value entry.value) (LocatedValue ann (mk_ptr (Var p) LocMemory)) s0` by
     (`read_result cx (PlaceR (MemoryPlace id [])) (es with gas_obs := []) =
        (INL entry.value, es with gas_obs := [])` by simp[] >>
      irule vv_post_read_result >>
      qexists_tac `PlaceR (MemoryPlace id [])` >> simp[] >>
      irule name_value_post >> simp[]) >>
-  `expr_post ctx func cenv cx (Name ann id) es sa sb s0 (es with gas_obs := [])
+  `expr_post H ctx func cenv cx (Name ann id) es sa sb s0 (es with gas_obs := [])
      entry.value (Var out) u` by
     (`eval_operand (Var out) u =
         SOME (typed_val_to_w256 entry.type entry.value)` by

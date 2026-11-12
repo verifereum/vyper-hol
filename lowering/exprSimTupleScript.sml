@@ -31,7 +31,7 @@
  *   eval_expr_tuple_subscript, base_vv_holds_loc, base_vv_at_mem,
  *   tuple_elem_ptr, tuple_vv_at_elem, sub_layout_tuple_elem,
  *   immutable_holds_tuple_elem, tuple_slots_in_range_el,
- *   tuple_elem_slots_in_range, tuple_prefix_el_bound, dead_bytes_list_el,
+ *   tuple_elem_slots_in_range, tuple_prefix_el_bound,
  *   storage_range_agree_tuple_elem, tuple_vv_holds_elem, tuple_base_read,
  *   tuple_vv_post, lookup_scopes_popped_keys_indexed,
  *   tuple_memory_no_snapshot
@@ -762,22 +762,6 @@ Proof
   simp[vyperValueTheory.type_slot_size_def]
 QED
 
-Theorem dead_bytes_list_el[local]:
-  !tvs k st base j b.
-    dead_bytes_list st base tvs j b /\ k < LENGTH tvs /\
-    base + tuple_prefix_slot_size k tvs <= j /\
-    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
-    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
-  simp[Once dead_bytes_def] >> strip_tac >>
-  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
-  imp_res_tac (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
-  imp_res_tac (cj 2 accountsRelPropsTheory.dead_bytes_range) >> gvs[] >>
-  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
-  impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
-QED
 
 (* A tuple element of a value whose slots agree has its slots agree. *)
 Theorem storage_range_agree_tuple_elem[local]:
@@ -807,7 +791,7 @@ Proof
   `dead_bytes_list st (w2n w) tvs (w2n k) b` by
     (qpat_x_assum `dead_bytes _ _ (TupleTV _) _ _` mp_tac >>
      simp[Once dead_bytes_def]) >>
-  drule dead_bytes_list_el >>
+  drule accountsRelPropsTheory.dead_bytes_list_el >>
   disch_then (qspec_then `i` mp_tac) >> simp[]
 QED
 
@@ -837,7 +821,7 @@ Proof
   `dead_bytes_list st (w2n w) tvs j b` by
     (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
      simp[Once dead_bytes_def]) >>
-  drule dead_bytes_list_el >>
+  drule accountsRelPropsTheory.dead_bytes_list_el >>
   disch_then (qspec_then `i` mp_tac) >> simp[]
 QED
 

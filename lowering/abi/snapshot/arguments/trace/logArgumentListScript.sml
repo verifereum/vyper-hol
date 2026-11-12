@@ -42,16 +42,16 @@ Theorem checked_compile_log_eval_all_reserved:
     cs cut args es values es' total_charge before credit prefix ptvs pvs.
     check_contract dep layouts addr [(NONE,tops)] = SOME art /\
     cenv.ce_struct_fields = make_struct_fields_map tops /\ fn_inst_ids_distinct func /\
-    EVERY (log_argument_lowering tops env ctx func cenv cx ids reserved requests final_cut charge) es_list /\
+    EVERY (log_argument_lowering H tops env ctx func cenv cx ids reserved requests final_cut charge) es_list /\
     log_argument_plan tops cenv func ids requests final_cut es_list cs cut /\
     compile_log_eval_all cenv es_list cs = (args,cut) /\
     log_argument_charges charge cx es_list es values es' total_charge /\ total_charge <= credit /\
-    log_prefix_ready env cx cenv func ids reserved requests final_cut es_list cs es before credit prefix ptvs pvs ==>
+    log_prefix_ready H env cx cenv func ids reserved requests final_cut es_list cs es before credit prefix ptvs pvs ==>
     ?out tvs. fragment_path ctx func before out /\ out.vs_halted = before.vs_halted /\
       LIST_REL (\arg tv. evaluate_type (type_env tops) (SND arg) = SOME tv) args tvs /\
       allocation_growth before out /\ cs.cs_next_var <= cut.cs_next_var /\
       (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op out = eval_operand arg_op before) /\
-      log_prefix_ready env cx cenv func ids reserved requests final_cut [] cut es' out
+      log_prefix_ready H env cx cenv func ids reserved requests final_cut [] cut es' out
         (credit - total_charge) (prefix ++ args) (ptvs ++ tvs) (pvs ++ values)
 Proof
   Induct_on `es_list`
@@ -92,7 +92,7 @@ Proof
   `credit - charge e es - rest_charge = credit - total_charge` by decide_tac >>
   qexistsl_tac [`out`, `tv::tvs`] >> asm_simp_tac (srw_ss()) [GSYM APPEND_ASSOC] >>
   rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, decide_tac,
-    qpat_x_assum `log_prefix_ready env cx cenv func ids reserved requests final_cut [] cut es' out _ _ _ _`
+    qpat_x_assum `log_prefix_ready H env cx cenv func ids reserved requests final_cut [] cut es' out _ _ _ _`
       (MATCH_ACCEPT_TAC o PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND, SUB_RIGHT_SUB])]
 QED
 
@@ -101,15 +101,15 @@ Theorem checked_compile_log_arguments:
     cs cut args es values es' total_charge before credit.
     check_contract dep layouts addr [(NONE,tops)] = SOME art /\
     cenv.ce_struct_fields = make_struct_fields_map tops /\ fn_inst_ids_distinct func /\
-    EVERY (log_argument_lowering tops env ctx func cenv cx ids reserved requests final_cut charge) es_list /\
+    EVERY (log_argument_lowering H tops env ctx func cenv cx ids reserved requests final_cut charge) es_list /\
     log_argument_plan tops cenv func ids requests final_cut es_list cs cut /\
     compile_log_eval_all cenv es_list cs = (args,cut) /\
     log_argument_charges charge cx es_list es values es' total_charge /\ total_charge <= credit /\
-    log_prefix_ready env cx cenv func ids reserved requests final_cut es_list cs es before credit [] [] [] ==>
+    log_prefix_ready H env cx cenv func ids reserved requests final_cut es_list cs es before credit [] [] [] ==>
     ?out tvs. fragment_path ctx func before out /\ out.vs_halted = before.vs_halted /\
       LIST_REL (\arg tv. evaluate_type (type_env tops) (SND arg) = SOME tv) args tvs /\
       log_args_rel args tvs values out /\
-      log_prefix_ready env cx cenv func ids reserved requests final_cut [] cut es' out
+      log_prefix_ready H env cx cenv func ids reserved requests final_cut [] cut es' out
         (credit - total_charge) args tvs values
 Proof
   rpt gen_tac >> strip_tac >>

@@ -5,7 +5,7 @@ Ancestors
   gasSummaryCompose gasExemptCert vyperState list
 
 Theorem if_condition_stmt_post_ptr:
-  expr_post ctx func cenv cx c es sa cond s0 mid v op t /\
+  expr_post H ctx func cenv cx c es sa cond s0 mid v op t /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   sa.cs_next_var <= entry.cs_next_var /\
   stmt_post_ptr d ctx func cx lctx cenv cenv entry sb
@@ -22,7 +22,7 @@ Theorem if_selected_outcome_prefix_ptr:
   gas_marked_exec_ptr D (ctx,func) PG (bind (eval_expr cx c) (read_result cx))
     (es,s0,G0,tn0) marks (INL (BoolV b)) mid G1 tn1 (OK t) /\
   gas_path_ptr D 0 ctx func PG G1 tn1 t 0 G1 tn1 (OK (jump_to label t)) /\
-  expr_post ctx func cenv cx c es sa cond s0 (mid with gas_obs := []) (BoolV b) op t /\
+  expr_post H ctx func cenv cx c es sa cond s0 (mid with gas_obs := []) (BoolV b) op t /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   sa.cs_next_var <= entry.cs_next_var /\
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG

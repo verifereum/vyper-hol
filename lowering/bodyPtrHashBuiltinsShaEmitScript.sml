@@ -93,7 +93,7 @@ Theorem hash_emit_sha256_tail_frame:
     mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
     s.vs_outcomes = outcome::rest /\ outcome.co_success /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+    ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
     local_ptrs_reserved cenv sa /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
@@ -106,7 +106,7 @@ Theorem hash_emit_sha256_tail_frame:
       (STRING #"%" (toString (sa.cs_next_var+1)),{}) |+
       (STRING #"%" (toString (sa.cs_next_var+2)),{});
       t_mem := tn.t_mem DIFF range_bytes [(w2n r,32)]|> ==>
-    ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
+    ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+4) /\
     ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
     op_prov Gf op = NONE

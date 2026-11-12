@@ -31,7 +31,7 @@ val literal_prefix_tac =
        typed_val_to_w256_word_value, word_value_def, val_to_w256_def];
 
 Theorem literal_word_prefix[local]:
-  !ctx func cenv cx ty ann l es sa sb op s0.
+  !H ctx func cenv cx ty ann l es sa sb op s0.
     is_word_type ann /\
     ((?b. l = BoolL b) \/ (?i. l = IntL i) \/ (?i. l = DecimalL i)) /\
     lower_value compile_expr cenv ty (Literal ann l) sa = (op,sb) /\
@@ -69,9 +69,12 @@ Theorem compile_literal_word_sim:
 Proof
   rpt gen_tac >> strip_tac >> irule expr_sim_values >>
   rpt gen_tac >> strip_tac >>
-  qexistsl_tac [`[]`, `evaluate_literal l`, `es`, `s0`] >> conj_tac
-  >- (simp[gas_marked_exec_def, gas_marked_path_def, literal_read_all_tails] >>
-      irule (cj 1 gas_path_rules) >> simp[]) >>
-  rpt strip_tac >> metis_tac[literal_word_prefix]
+  qexistsl_tac [`[]`, `evaluate_literal l`, `es`, `s0`] >>
+  (conj_tac
+   >- (simp[gas_marked_exec_def, gas_marked_path_def, literal_read_all_tails] >>
+       irule (cj 1 gas_path_rules) >> simp[])) >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+  irule literal_word_prefix >> fs[]
 QED
 

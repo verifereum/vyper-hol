@@ -19,7 +19,7 @@ Theorem compile_store_bytestring_robust_ambient_frag_ptr:
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
          val_in_memory stv v (w2n a) m) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
@@ -28,7 +28,7 @@ Theorem compile_store_bytestring_robust_ambient_frag_ptr:
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
       tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
       sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
-      (stor_taint_ok cx tn s ==> stor_taint_ok cx tnf sf) /\
+      (stor_taint_ok H cx tn s ==> stor_taint_ok H cx tnf sf) /\
       (!i. i < n ==> (w2n b+i IN tnf.t_mem <=> w2n a+i IN tn.t_mem)) /\
       (!i. ~(w2n b <= i /\ i < w2n b+n) ==>
         (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
@@ -48,7 +48,7 @@ Proof
   typedCopyRobustLib.execute
     (compile_store_bytestring_ambient_frag_ptr,
      robust_representation_exterior_frame) >>
-  `stor_taint_ok cx tn s ==> stor_taint_ok cx tnf sf` by
+  `stor_taint_ok H cx tn s ==> stor_taint_ok H cx tnf sf` by
     simp[bodyPtrDefsTheory.stor_taint_ok_def] >>
   typedCopyRobustLib.witness >>
   typedCopyRobustLib.conclude clean_copied_window
