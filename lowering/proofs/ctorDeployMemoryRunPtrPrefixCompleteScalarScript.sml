@@ -76,7 +76,8 @@ Theorem prefix_scalar_noclamp_ghost:
       op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >>
   drule prefix_canonical_noclamp_shape >> strip_tac >>
@@ -107,6 +108,10 @@ Proof
   qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts st st') s = OK endpoint` >>
   `t = endpoint` by metis_tac[exec_result_11] >>
   qmatch_asmsub_abbrev_tac `ghost.t_mem = _` >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s
+          (DRESTRICT G (COMPL {x})) ghost` by
+    (gen_tac >> qunabbrev_tac `ghost` >>
+     irule prefix_decoder_noclamp_inst_seq_ptr >> metis_tac[]) >>
   qexistsl [`DRESTRICT G (COMPL {x})`,`ghost`] >>
   `w2n (n2w d:bytes32) = d` by simp[w2n_n2w] >>
   `LENGTH st'.cs_current_insts = s.vs_inst_idx + 2` by
@@ -117,7 +122,7 @@ Proof
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
-  reverse conj_tac >- metis_tac[] >>
+  reverse conj_tac >- (conj_tac >- metis_tac[] >> first_assum ACCEPT_TAC) >>
   gen_tac >> disch_tac >>
   `v <> x` by
     (qpat_x_assum `not_fresh_at st v` mp_tac >>
@@ -145,7 +150,8 @@ Theorem prefix_scalar_complete_ghost:
       op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >> Cases_on `clamp`
   >- (irule prefix_scalar_noclamp_ghost >> goal_assum (drule_at Any) >> metis_tac[])
@@ -256,7 +262,8 @@ Theorem prefix_scalar_complete_shift:
       (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 final.vs_memory) ==>
         val_in_memory tv v d mem)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt final) ==>
-     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+    (!D'. inst_seq_ptr D' lo ctx func PG G tn (emitted_insts st st') initial H qt)
 Proof
   strip_tac >>
   drule_all prefix_scalar_complete_execution >>
