@@ -790,7 +790,7 @@ Proof
   gvs[return_unlock_insts_def, return_unlock_state_def] >>
   TRY (qexists_tac `tn` >> rw[] >>
        irule (cj 1 gas_origin_ptr_path_rules) >> simp[] >> NO_TAC) >>
-  qmatch_asmsub_abbrev_tac `get_instruction bb _ = SOME i` >>
+  (qmatch_asmsub_abbrev_tac `get_instruction bb _ = SOME i` >>
   qmatch_goalsub_abbrev_tac `OK (u with vs_inst_idx := _)` >>
   `step_inst_base i s = OK u` by
     simp[Abbr `i`, Abbr `u`, step_persistent_return_unlock,
@@ -839,7 +839,7 @@ Proof
            (SPEC_ALL (cj 2 gas_origin_ptr_path_rules)))) >>
   qexistsl_tac [`u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)`,
                 `G`, `step_taint i s u tn`] >>
-  simp[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
+  simp[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[])
 QED
 
 (* RET of words already on hand, with untainted operands. *)
