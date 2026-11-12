@@ -28,6 +28,14 @@ Theorem internal_entry_source_joint_res_init:
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,iv) ==>
     regions_disjoint io (type_memory_size tv)
       (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+  (ce.ce_is_ctor ==> !i po psz name ty tv io.
+    i < LENGTH params /\ ~SND (EL i params) /\
+    FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    ce.ce_module_var_type (ce.ce_module,name) = SOME ty /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
+    regions_disjoint io (type_memory_size tv)
+      (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
   expr_sim_inv fp.jc_root_ce cx env vs /\
   ce_locals_declared fp.jc_root_ce env /\ locals_alloc_ok fp.jc_root_ce env /\
   local_ptrs_reserved fp.jc_root_ce st1 /\

@@ -68,6 +68,14 @@ Theorem internal_entry_landing_immutable_sep:
       | SOME imms => get_source_immutables ce.ce_module imms) name =
       SOME (tv,iv) ==>
     regions_disjoint io (type_memory_size tv)
+      (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+  (ce.ce_is_ctor ==> !i po psz name ty tv io.
+    i < LENGTH params /\ ~SND (EL i params) /\
+    FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    ce.ce_module_var_type (ce.ce_module,name) = SOME ty /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
+    regions_disjoint io (type_memory_size tv)
       (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) ==>
   immutable_alloca_sep func
     (ce2 with <|ce_imm_alloca := imm; ce_alloca_locals := T|>)
@@ -77,10 +85,10 @@ Proof
   drule compile_internal_entry_fields >>
   simp[compile_env_component_equality] >> strip_tac >>
   fs[mat_inv_def, internal_immutable_regions_def] >>
-  simp[immutable_alloca_sep_def] >> strip_tac >> fs[] >>
+  simp[immutable_alloca_sep_def, immutable_decl_sep_alt] >>
+  conj_tac >> strip_tac >> fs[] >> (
   rpt gen_tac >> strip_tac >>
-  `off + type_memory_size tv <= caller.vs_alloca_next` by
-    (qpat_x_assum `!name tv v off. _ ==> _` drule_all >> simp[]) >>
+  `off + type_memory_size tv <= caller.vs_alloca_next` by (res_tac >> fs[]) >>
   conj_tac >- decide_tac >>
   conj_tac
   >- (rpt strip_tac >>
@@ -91,8 +99,13 @@ Proof
   qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule >>
   strip_tac >- simp[regions_disjoint_def] >>
   gvs[] >>
-  qpat_x_assum `!i po psz name tv iv io. _` irule >>
-  simp[] >> qexistsl_tac [`v`, `name`] >> simp[]
+  FIRST [
+    qpat_x_assum `!i po psz name tv iv io.
+       _ /\ _ /\ _ /\ _ /\ FLOOKUP _ _ = SOME (tv,iv) ==> _` irule >>
+    simp[] >> qexistsl_tac [`v`, `name`] >> simp[] >> NO_TAC,
+    qpat_x_assum `!i po psz name ty tv io.
+       _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` irule >>
+    simp[] >> metis_tac[]])
 QED
 
 Theorem internal_entry_landing_base_zero:
@@ -142,6 +155,14 @@ Theorem internal_entry_landing_stmt_state_rel:
     FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name =
       SOME (tv,iv) ==>
+    regions_disjoint io (type_memory_size tv)
+      (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+  (ce.ce_is_ctor ==> !i po psz name ty tv io.
+    i < LENGTH params /\ ~SND (EL i params) /\
+    FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    ce.ce_module_var_type (ce.ce_module,name) = SOME ty /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
     regions_disjoint io (type_memory_size tv)
       (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) ==>
   stmt_state_rel ctx func

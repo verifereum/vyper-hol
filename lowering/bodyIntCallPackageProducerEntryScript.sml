@@ -124,6 +124,8 @@ Proof
     (qx_choose_then `bindings` (fn th => map_every assume_tac (CONJUNCTS th))))) >>
   drule_all bodyIntCallPackageInputsTheory.intcall_entry_package_inputs >> strip_tac >>
   drule_all bodyIntCallPackageInputsTheory.intcall_entry_package_separation >> strip_tac >>
+  drule_all bodyIntCallPackageInputsTheory.intcall_entry_declared_immutable_separation >>
+  strip_tac >>
   drule_all bodyIntCallPackageGeometryTheory.intcall_entry_root_geometry >> strip_tac >>
   drule_all bodyIntCallPackageRootResourceTheory.packaged_internal_entry_return_fields >> strip_tac >>
   drule_all intcall_entry_root_expr_inv >> strip_tac >>
