@@ -47,13 +47,13 @@ Theorem ptr_endpoint_protected_livesets:
       ~in_revert_forward (EL k h).po_fn (EL k h).po_state) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
     ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
-  w2n vs.vs_initial_fmp <= x
+  dyn_floor C vs <= x
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `w2n vs.vs_initial_fmp <= x` >- simp[] >> disj1_tac >>
+  Cases_on `dyn_floor C vs <= x` >- simp[] >> disj1_tac >>
   `bp = bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d endpoint).cf_fn)
     (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn` by metis_tac[] >>
-  qpat_assum `~(w2n vs.vs_initial_fmp <= x)` (fn th =>
+  qpat_assum `~(dyn_floor C vs <= x)` (fn th =>
     drule_all ptr_endpoint_protected_history >>
     disch_then (qspec_then `mems` (strip_assume_tac o REWRITE_RULE [th]))) >>
   drule ptr_chrono_history_end >> strip_tac >>
@@ -152,13 +152,13 @@ Theorem ptr_endpoint_actual_protected_livesets:
       ~in_revert_forward (EL k h).po_fn (EL k h).po_state) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
     ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
-  w2n vs.vs_initial_fmp <= x
+  dyn_floor C vs <= x
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `w2n vs.vs_initial_fmp <= x` >- simp[] >> disj1_tac >>
+  Cases_on `dyn_floor C vs <= x` >- simp[] >> disj1_tac >>
   `bp = bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d endpoint).cf_fn)
     (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn` by metis_tac[] >>
-  qpat_assum `~(w2n vs.vs_initial_fmp <= x)` (fn th =>
+  qpat_assum `~(dyn_floor C vs <= x)` (fn th =>
     drule_all ptr_endpoint_actual_protected_history >>
     disch_then (qspec_then `mems` (strip_assume_tac o REWRITE_RULE [th]))) >>
   drule ptr_chrono_history_end >> strip_tac >>

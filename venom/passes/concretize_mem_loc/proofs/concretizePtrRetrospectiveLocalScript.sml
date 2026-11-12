@@ -66,13 +66,13 @@ Theorem ptr_endpoint_local_interval_exclusion:
       start = pb + delta /\ delta + len <= sb /\
       (!x. x IN footprint ==> start <= x /\ x < start + len) ==>
       pa + k NOTIN footprint)) \/
-  w2n vs.vs_initial_fmp <= b + k
+  dyn_floor C vs <= b + k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `w2n vs.vs_initial_fmp <= b + k` >- simp[] >> disj1_tac >>
+  Cases_on `dyn_floor C vs <= b + k` >- simp[] >> disj1_tac >>
   `b <= b+k /\ b+k < b+sz` by decide_tac >>
   drule_all ptr_endpoint_protected_livesets >>
-  qpat_assum `~(w2n vs.vs_initial_fmp <= b + k)` (fn th => disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
+  qpat_assum `~(dyn_floor C vs <= b + k)` (fn th => disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
   qpat_x_assum `fn = _` (assume_tac o SYM) >>
   qpat_x_assum `bp = _` (assume_tac o SYM) >>
   qexists `w` >> simp[] >> rpt strip_tac >>
@@ -159,12 +159,12 @@ Theorem ptr_endpoint_local_mstore_exclusion:
       eval_operand ta ts = SOME y /\ eval_operand tv ts = SOME value /\
       w2n y = pb + delta /\ delta + 32 <= sb ==>
       pa + k NOTIN range_bytes (step_writes ti ts post))) \/
-  w2n vs.vs_initial_fmp <= b + k
+  dyn_floor C vs <= b + k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `w2n vs.vs_initial_fmp <= b + k` >- simp[] >> disj1_tac >>
+  Cases_on `dyn_floor C vs <= b + k` >- simp[] >> disj1_tac >>
   drule_all ptr_endpoint_local_interval_exclusion >>
-  qpat_assum `~(w2n vs.vs_initial_fmp <= b + k)` (fn th => disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
+  qpat_assum `~(dyn_floor C vs <= b + k)` (fn th => disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
   qpat_x_assum `fn = _` (assume_tac o SYM) >>
   qpat_x_assum `bp = _` (assume_tac o SYM) >>
   qexists `w` >> asm_rewrite_tac[] >> rpt gen_tac >>

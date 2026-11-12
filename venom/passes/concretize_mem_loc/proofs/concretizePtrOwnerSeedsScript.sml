@@ -87,11 +87,11 @@ Theorem ptr_owner_selected_read_seed:
     (bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d obs).cf_fn)
       (cfg_analyze (ptr_owner_view d obs).cf_fn) (ptr_owner_view d obs).cf_fn)
     mems (ptr_owner_view d obs).cf_inst \/
-  w2n vs.vs_initial_fmp <= b
+  dyn_floor C vs <= b
 Proof
   simp[ptr_observation_reachable_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `w2n vs.vs_initial_fmp <= b` >- simp[] >> disj1_tac >>
+  Cases_on `dyn_floor C vs <= b` >- simp[] >> disj1_tac >>
   drule_all ptr_frame_alloc_geometry >> strip_tac >>
   irule (BETA_RULE (Q.INST [`Q` |-> `\f a. ml_read_gen (Allocation a)
     (bp_analyze_fuel (concretize_memloc_fuel f.cf_fn) (cfg_analyze f.cf_fn) f.cf_fn)
@@ -119,11 +119,11 @@ Theorem ptr_owner_write_byte_seed:
     (bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d obs).cf_fn)
       (cfg_analyze (ptr_owner_view d obs).cf_fn) (ptr_owner_view d obs).cf_fn)
     mems (ptr_owner_view d obs).cf_inst \/
-  w2n vs.vs_initial_fmp <= x
+  dyn_floor C vs <= x
 Proof
   simp[ptr_observation_reachable_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `w2n vs.vs_initial_fmp <= x` >- simp[] >> disj1_tac >>
+  Cases_on `dyn_floor C vs <= x` >- simp[] >> disj1_tac >>
   drule_all ptr_frame_alloc_geometry >> strip_tac >>
   drule_all ptr_write_byte_selected_site >> strip_tac >>
   rename1 `FLOOKUP obs.po_prov v = SOME (wb,ws)` >>

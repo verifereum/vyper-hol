@@ -1090,7 +1090,7 @@ Resume ptr_create_family_delegate_write_certificate[owned]:
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def, step_writes_def,
         codegenRelTheory.source_memory_write_ranges_def, range_bytes_def] >>
-      rpt strip_tac >> disj2_tac >>
+      rpt strip_tac >> disj2_tac >> disj1_tac >>
       rename1 `b < w2n r + _` >>
       qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`b-db`] >> simp[] >>
       fs[MIN_DEF] >> decide_tac) >>

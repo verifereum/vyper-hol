@@ -83,10 +83,10 @@ Theorem ptr_frame_table_support_invariant:
     ptr_discipline lo ctx vs0 ==>
     MEM fn ctx.ctx_functions /\
     (!site. ptr_site_supported
-      (pointer_derived_vars fn (ptr_frame_site_roots (w2n vs0.vs_initial_fmp) fn s.vs_allocas PG site)) G site) /\
+      (pointer_derived_vars fn (ptr_frame_site_roots (dyn_floor ctx vs0) fn s.vs_allocas PG site)) G site) /\
     EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\ !site. ptr_site_supported
       (pointer_derived_vars f.cf_fn
-        (ptr_frame_site_roots (w2n vs0.vs_initial_fmp) f.cf_fn f.cf_state.vs_allocas f.cf_params site))
+        (ptr_frame_site_roots (dyn_floor ctx vs0) f.cf_fn f.cf_state.vs_allocas f.cf_params site))
       f.cf_prov site) stk
 Proof
   cheat
@@ -96,7 +96,7 @@ Theorem ptr_frame_current_table_support:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
   ptr_discipline lo ctx vs0 ==>
   !site. ptr_site_supported
-    (pointer_derived_vars fn (ptr_frame_site_roots (w2n vs0.vs_initial_fmp) fn s.vs_allocas PG site)) G site
+    (pointer_derived_vars fn (ptr_frame_site_roots (dyn_floor ctx vs0) fn s.vs_allocas PG site)) G site
 Proof metis_tac[ptr_frame_table_support_invariant]
 QED
 
@@ -106,7 +106,7 @@ Theorem ptr_frame_saved_table_support:
   n < LENGTH stk ==>
   !site. ptr_site_supported
     (pointer_derived_vars (EL n stk).cf_fn
-      (ptr_frame_site_roots (w2n vs0.vs_initial_fmp) (EL n stk).cf_fn (EL n stk).cf_state.vs_allocas
+      (ptr_frame_site_roots (dyn_floor ctx vs0) (EL n stk).cf_fn (EL n stk).cf_state.vs_allocas
         (EL n stk).cf_params site)) (EL n stk).cf_prov site
 Proof
   strip_tac >> drule ptr_frame_table_support_invariant >> simp[EVERY_EL] >>
@@ -129,7 +129,7 @@ Proof
   `MEM fn ctx.ctx_functions /\ ptr_params_ok P fn PG` by
     metis_tac[concretizePtrParamSupportTheory.ptr_frame_current_static] >>
   `ptr_site_supported
-    (pointer_derived_vars fn (ptr_frame_site_roots (w2n vs0.vs_initial_fmp) fn s.vs_allocas PG site)) G site` by
+    (pointer_derived_vars fn (ptr_frame_site_roots (dyn_floor ctx vs0) fn s.vs_allocas PG site)) G site` by
     metis_tac[ptr_frame_current_table_support] >>
   irule ptr_param_supported_production_singleton_write_site >>
   fs[EVERY_MEM] >> metis_tac[]

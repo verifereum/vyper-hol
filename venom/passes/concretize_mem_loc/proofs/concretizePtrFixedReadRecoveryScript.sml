@@ -49,7 +49,7 @@ Theorem ptr_paired_fixed_read_recovery:
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
   max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
-  (x < lo \/ w2n vs.vs_initial_fmp <= x) /\ x NOTIN endpoint.po_taint.t_mem /\
+  (x < lo \/ dyn_floor C vs <= x) /\ x NOTIN endpoint.po_taint.t_mem /\
   ~in_revert_forward endpoint.po_fn endpoint.po_state /\
   endpoint.po_inst.inst_opcode <> ASSIGN ==>
   read_byte x endpoint.po_state.vs_memory = read_byte x at.po_state.vs_memory
