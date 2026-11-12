@@ -13,7 +13,7 @@ Ancestors
   abiEncoderArrayCode abiEncoderArrayBodyCode fragExec rich_list
   venomExecSemantics emitHelperProps list arithmetic exprSimAbiEncodeObliviousFacts
   exprSimAbiEncodeObliviousCode exprSimAbiEncodeObliviousContext
-  abiStaticLoopBody eventTopicCode
+  abiStaticLoopBody abiStaticLoopCodeProps abiStaticLoopEntry eventTopicCode
 Libs
   fragFuelLib
 
@@ -639,13 +639,164 @@ Finalise encode_static_round_outcome
    parameter: when it is a variable it was allocated before the call, and
    the body writes only variables it allocates itself, so the bound stays
    fixed.  The counter is at most len_op < 2 ** 256, so it does not wrap
-   and the loop leaves within 2 ** 256 rounds.  (The body's memory writes
-   go to the destination buffer, disjoint from the counter's buffer.) *)
+   and the loop leaves within 2 ** 256 rounds. The final counter store
+   repairs any intervening aliasing writes by the element encoder. *)
 Theorem fuel_okS_compile_abi_encode_dyn_static_loop:
   !dst src elem_info elem_abi_sz elem_mem_sz len_op Wv E.
     fuel_okS (\st. !x. len_op = Var x ==> var_below st.cs_next_var x) Wv {} E
       (compile_abi_encode_dyn_static_loop dst src elem_info elem_abi_sz
          elem_mem_sz len_op)
 Proof
-  cheat
+  rpt gen_tac >> simp_tac bool_ss [fuel_okS_def] >> rpt gen_tac >> strip_tac >>
+  `cs_extends st st' /\ st.cs_next_var <= st'.cs_next_var` by
+    (drule (abiEncoderArrayContextTheory.abi_encode_array_loop_bounds |>
+       Q.INST [`active` |-> `F`] |> SIMP_RULE bool_ss []) >> simp[]) >>
+  simp[] >> conj_tac >- metis_tac[encode_static_loop_no_phi] >>
+  qexists_tac `1 + dimword (:256) * 2` >>
+  simp_tac bool_ss [frag_fuel_def] >> rpt gen_tac >> strip_tac >>
+  drule_all compile_abi_encode_dyn_static_loop_contains >> strip_tac >>
+  fs[pred_setTheory.NOT_IN_EMPTY] >>
+  suspend "runtime"
 QED
+Resume fuel_okS_compile_abi_encode_dyn_static_loop[runtime]:
+  qabbrev_tac `es = abi_static_loop_entry_state st.cs_next_id st.cs_next_var s
+    with vs_inst_idx := s.vs_inst_idx + 2` >>
+  `fuel_outcome G ctx fn s 0 (\t. t = es)` by
+    (irule encode_static_sequence_outcome >>
+     qexistsl_tac [
+       `<|bb_label := st.cs_current_bb; bb_instructions := st.cs_current_insts ++
+          abi_static_loop_entry st.cs_next_id st.cs_next_var st.cs_next_label|>`,
+       `TAKE 2 (abi_static_loop_entry st.cs_next_id st.cs_next_var st.cs_next_label)`,
+       `[mk_inst (st.cs_next_id + 2) JMP
+         [Label (fresh_label_output "enc_dyn_hdr" st.cs_next_label)] []]`] >>
+     fs[at_point_def] >>
+     simp[abi_static_loop_entry_execution, Abbr `es`] >>
+     simp[abiStaticLoopCodeTheory.abi_static_loop_entry_def, mk_inst_def, is_terminator_def,
+       DROP_LENGTH_APPEND]) >>
+  qpat_assum `fuel_outcome G ctx fn s 0 _`
+    (mp_then Any mp_tac fuel_outcome_compose) >>
+  disch_then (qspec_then
+    `\t. vars_kept N Wv s t /\ (at_point st' t \/
+      t.vs_current_bb IN E /\ t.vs_inst_idx = 0)` mp_tac) >>
+  disch_then (qspec_then `1 + dimword (:256) * 2` mp_tac) >> simp[] >>
+  impl_tac >- suspend "entry_jump" >> simp[]
+QED
+Resume fuel_okS_compile_abi_encode_dyn_static_loop[entry_jump]:
+  qabbrev_tac `hs = jump_to (fresh_label_output "enc_dyn_hdr" st.cs_next_label) es` >>
+  `fuel_outcome G ctx fn es 1 (\t. t = hs)` by
+    (irule fuel_outcome_jump >> conj_tac >- simp[] >>
+     qexistsl_tac [
+       `<|bb_label := st.cs_current_bb; bb_instructions := st.cs_current_insts ++
+          abi_static_loop_entry st.cs_next_id st.cs_next_var st.cs_next_label|>`,
+       `mk_inst (st.cs_next_id+2) JMP
+         [Label (fresh_label_output "enc_dyn_hdr" st.cs_next_label)] []`,
+       `fresh_label_output "enc_dyn_hdr" st.cs_next_label`] >>
+     simp[Abbr `es`, Abbr `hs`, abi_static_loop_entry_state_def,
+       abi_static_loop_alloc_frame_def, venomStateTheory.mstore_def,
+       venomStateTheory.update_var_def] >>
+     fs[at_point_def] >> Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
+     simp[abiStaticLoopCodeTheory.abi_static_loop_entry_def, get_instruction_def,
+       EL_APPEND_EQN, mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
+       venomStateTheory.eval_operand_def]) >>
+  qpat_assum `fuel_outcome G ctx fn es 1 _`
+    (mp_then Any mp_tac fuel_outcome_compose) >>
+  disch_then (qspecl_then [
+    `\t. vars_kept N Wv s t /\ (at_point st' t \/
+      t.vs_current_bb IN E /\ t.vs_inst_idx = 0)`, `dimword (:256) * 2`] mp_tac) >>
+  simp[] >> impl_tac >- suspend "iterate" >> simp[]
+QED
+Resume fuel_okS_compile_abi_encode_dyn_static_loop[iterate]:
+  qabbrev_tac `p = abi_static_loop_counter_addr st.cs_next_id s` >>
+  qabbrev_tac `H = \t. t.vs_current_bb = fresh_label_output "enc_dyn_hdr" st.cs_next_label /\
+    t.vs_inst_idx = 0 /\ eval_operand (Var (compiler_var_name st.cs_next_var 0)) t = SOME p /\
+    vars_kept N {} s t` >>
+  qabbrev_tac `Q = \t. t.vs_current_bb = fresh_label_output "enc_dyn_exit" (st.cs_next_label+2) /\
+    t.vs_inst_idx = 0 /\ vars_kept N {} s t` >>
+  qabbrev_tac `mu = \t. dimword (:256) - 1 - w2n (mload (w2n p) t)` >>
+  `!t. H t ==> ?j. j <= 2 /\ fuel_outcome G ctx fn t j
+    (\u. Q u \/ (H u /\ mu u < mu t))` by
+    suspend "round" >>
+  `H hs` by suspend "initial" >>
+  `?j. j <= dimword (:256) * 2 /\ fuel_outcome G ctx fn hs j Q` by
+    (irule fuel_outcome_iterate >>
+     qexistsl_tac [`H`, `mu`] >> simp[] >>
+     simp[Abbr `mu`, encode_static_countdown_range]) >>
+  qpat_assum `fuel_outcome G ctx fn hs j Q`
+    (mp_then Any mp_tac fuel_outcome_compose) >>
+  disch_then (qspecl_then [
+    `\t. vars_kept N Wv s t /\ (at_point st' t \/
+      t.vs_current_bb IN E /\ t.vs_inst_idx = 0)`, `0`] mp_tac) >>
+  simp[] >> impl_tac >- suspend "exit_suffix" >> strip_tac >>
+  qexists_tac `j'` >> simp[] >> decide_tac
+QED
+Resume fuel_okS_compile_abi_encode_dyn_static_loop[round]:
+  `len_op <> Var (compiler_var_name st.cs_next_var 1) /\
+   EVERY (\name. ~var_below N name)
+     ([compiler_var_name st.cs_next_var 1; compiler_var_name st.cs_next_var 2;
+       compiler_var_name st.cs_next_var 3] ++ abi_static_loop_body_names st.cs_next_var elem_info)` by
+    suspend "freshness" >>
+  drule_all encode_static_round_outcome >>
+  disch_then (qspecl_then [`G`, `ctx`, `s`, `p`] mp_tac) >>
+  simp[Abbr `H`, Abbr `Q`, Abbr `mu`]
+QED
+Resume fuel_okS_compile_abi_encode_dyn_static_loop[initial]:
+  simp[Abbr `H`, Abbr `hs`, Abbr `es`, Abbr `p`,
+    venomStateTheory.jump_to_def, abi_static_loop_entry_state_def,
+    ssaOperandFrameTheory.eval_operand_mstore_eq,
+    emitHelperPropsTheory.eval_operand_update_var,
+    vars_kept_def] >>
+  rpt strip_tac >> rename1 `var_below N name` >>
+  `name <> compiler_var_name st.cs_next_var 0` by
+    (fs[var_below_def, abiStaticLoopCodeTheory.compiler_var_name_def] >> metis_tac[]) >>
+  simp[venomStateTheory.lookup_var_def, venomStateTheory.mstore_def,
+    venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+    abi_static_loop_alloc_frame_def] >> IF_CASES_TAC >> simp[]
+QED
+Resume fuel_okS_compile_abi_encode_dyn_static_loop[exit_suffix]:
+  gen_tac >> simp[Abbr `Q`] >> strip_tac >>
+  irule encode_static_sequence_outcome >>
+  fs[IS_PREFIX_APPEND] >>
+  qexistsl_tac [
+    `abi_static_loop_exit st.cs_next_id st.cs_next_var src elem_info elem_abi_sz`, `l`] >>
+  simp[abi_static_loop_exit_straight] >> rpt strip_tac >>
+  suspend "exit_post"
+QED
+Resume fuel_okS_compile_abi_encode_dyn_static_loop[freshness]:
+  simp[EVERY_APPEND, abi_static_loop_body_names_def,
+    abiStaticLoopCodeTheory.compiler_var_name_add,
+    abiStaticLoopCodeTheory.compiler_var_name_def, var_below_def] >>
+  conj_tac >- (strip_tac >> first_x_assum (qspec_then
+    `STRING #"%" (toString (st.cs_next_var+1))` mp_tac) >>
+    simp[var_below_def] >> metis_tac[arithmeticTheory.LE_ADD]) >>
+  Cases_on `elem_info` >> simp[] >> rpt conj_tac >>
+  qexists_tac `st.cs_next_var + 1` >> simp[] >> decide_tac
+QED
+Resume fuel_okS_compile_abi_encode_dyn_static_loop[exit_post]:
+  markerLib.RESUME_TAC
+  >- (disj1_tac >>
+      `t'.vs_current_bb = t.vs_current_bb` by
+        (irule exprLoweringPropsTheory.run_inst_seq_preserves_field >>
+         goal_assum (drule_at Any) >> rpt strip_tac >>
+         irule (cj 1 venomInstPropsTheory.step_preserves_control_flow) >>
+         qexistsl_tac [`ctx`, `G`, `i`] >>
+         fs[abiStaticLoopCodeTheory.abi_static_loop_exit_def, mk_inst_def,
+           is_terminator_def, step_inst_non_invoke] >> metis_tac[]) >>
+      qpat_x_assum `compile_abi_encode_dyn_static_loop _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[abiStaticLoopCodeTheory.compile_abi_encode_dyn_static_loop_result] >>
+      strip_tac >> gvs[at_point_def]) >>
+  suspend "exit_frame"
+QED
+Resume fuel_okS_compile_abi_encode_dyn_static_loop[exit_frame]:
+  simp[vars_kept_def] >> rpt strip_tac >> rename1 `var_below N name` >>
+  `eval_operand (Var name) t' = eval_operand (Var name) t` by
+    (drule run_inst_seq_operand_frame >>
+     disch_then (qspec_then `Var name` mp_tac) >>
+     impl_tac
+     >- (simp[abiStaticLoopCodeTheory.abi_static_loop_exit_def, mk_inst_def,
+           is_terminator_def, abiStaticLoopCodeTheory.compiler_var_name_def] >>
+         fs[var_below_def] >> metis_tac[arithmeticTheory.LE_ADD,
+           arithmeticTheory.LESS_EQ_TRANS]) >> simp[]) >>
+  fs[vars_kept_def, venomStateTheory.eval_operand_def,
+    venomStateTheory.lookup_var_def]
+QED
+Finalise fuel_okS_compile_abi_encode_dyn_static_loop
