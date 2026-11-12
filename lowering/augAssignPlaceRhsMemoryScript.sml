@@ -10,7 +10,7 @@ Theorem aug_place_rhs_suffix_ready_mem:
   type_bits ty MOD 8 = 0 /\ evaluate_type (get_tenv cx) ty = SOME dtv /\
   value_has_type dtv cur /\
   bind (eval_expr cx e) (read_result cx) st = (INL rhs,ee) ==>
-  binop_frag_val_mem H ctx func cenv cx bop ty ty NONE
+  binop_frag_val_mem ctx func cenv cx bop ty ty NONE
     (if bop = Exp then expr_int_literal e else NONE)
     [ty;expr_type e] cur rhs ee
 Proof
@@ -25,7 +25,7 @@ Proof
     (disch_tac >>
      `shift_amount_ok e` by metis_tac[] >>
      drule_all eval_expr_shift_amount >> simp[]) >>
-  qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `bop`, `ty`, `Name ty id`, `e`,
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ty`, `Name ty id`, `e`,
     `cur`, `rhs`, `ee`, `dtv`, `etv`] mp_tac binop_frag_typed_mem >>
   simp[vyperASTTheory.expr_type_def, expr_int_literal_def] >>
   disch_then irule >>
