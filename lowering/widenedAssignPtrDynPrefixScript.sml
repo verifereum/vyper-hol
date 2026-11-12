@@ -184,3 +184,90 @@ Proof
       simp[typed_copy_mstore_state_frame]) >>
   gvs[op_taint_def]
 QED
+
+Theorem widened_assign_checked_header_prefix_counted:
+  emit_op MLOAD [Var src] a = (length,b) /\
+  emit_op GT [length; Lit (n2w C)] b = (Var flag,c) /\
+  emit_op ISZERO [Var flag] c = (Var valid,d) /\
+  emit_void ASSERT [Var valid] d = ((),e) /\
+  emit_void MSTORE [Var dst; length] e = ((),f) /\
+  emit_op ADD [Var src; Lit 32w] f = (Var sd,g) /\
+  emit_op ADD [Var dst; Lit 32w] g = (Var dd,h) /\
+  ptr_covers G tn src s (32+sn) /\ lookup_var src s = SOME sw /\
+  ptr_covers G tn dst s (32+dn) /\ lookup_var dst s = SOME dw /\
+  not_fresh_at a src /\ not_fresh_at a dst /\
+  w2n sw + 32 < dimword (:256) /\ w2n dw + 32 < dimword (:256) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    mem_word_at (w2n sw) m = n2w N) /\
+  N <= C /\ C < dimword (:256) /\ fn_has_code a h fn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = h.cs_current_bb /\
+    t.vs_inst_idx = LENGTH h.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand length t = SOME (n2w N) /\
+    op_taint tm length = {} /\ op_prov H length = NONE /\
+    lookup_var sd t = SOME (sw+32w) /\ ptr_covers H tm sd t sn /\
+    lookup_var dd t = SOME (dw+32w) /\ ptr_covers H tm dd t dn /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      mem_word_at (w2n dw) m = n2w N) /\
+    typed_copy_state_frame a (w2n dw) 32 s t /\
+    tm.t_mem = tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + 32} /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at a x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e /\
+   ci_mono e f /\ ci_mono f g /\ ci_mono g h` by
+    metis_tac[ci_mono_emit_op, ci_mono_emit_void, pairTheory.SND] >>
+  `ci_mono a f /\ ci_mono a g` by (gvs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
+  `fn_has_code a f fn /\ fn_has_code f g fn /\ fn_has_code g h fn` by
+    metis_tac[fn_has_code_split, ci_mono_def, cs_extends_trans] >>
+  `ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32` by
+    (gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_ADD]) >>
+  drule_all widened_assign_checked_header_store_counted >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `lookup_var src t = SOME sw /\ lookup_var dst t = SOME dw /\
+   ptr_covers H tm src t (32+sn) /\ ptr_covers H tm dst t (32+dn)` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `?site. FLOOKUP H src = SOME site` by gvs[ptr_covers_def] >>
+  `op_taint tm (Var src) = {}` by gvs[ptr_covers_def] >>
+  drule_all emit_add_member_path_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >> gvs[] >>
+  `!x. not_fresh_at a x ==> not_fresh_at f x /\ not_fresh_at g x` by
+    metis_tac[not_fresh_at_mono, ci_mono_def] >>
+  `lookup_var dst t' = SOME dw /\ op_taint tn' (Var dst) = {} /\
+   ?site'. FLOOKUP G' dst = SOME site'` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `t'.vs_current_bb = g.cs_current_bb` by simp[] >>
+  qpat_assum `emit_op ADD _ g = _` (mp_then Any mp_tac emit_add_member_path_ptr) >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >> gvs[] >>
+  `!x. length = Var x ==> not_fresh_at b x` by
+    metis_tac[typed_copy_emit_op_fresh] >>
+  `!x. length = Var x ==> not_fresh_at f x /\ not_fresh_at g x` by
+    (gvs[ci_mono_def] >> metis_tac[not_fresh_at_mono, LESS_EQ_TRANS]) >>
+  `eval_operand length t'' = SOME (n2w N) /\
+   op_taint tn'' length = {} /\ op_prov G'' length = NONE` by
+    (Cases_on `length` >> gvs[eval_operand_def, op_prov_def, op_taint_def] >> metis_tac[]) >>
+  `lookup_var out t'' = SOME (sw+32w) /\ op_taint tn'' (Var out) = {} /\
+   FLOOKUP G'' out = SOME site` by metis_tac[] >>
+  `w2n (sw+32w) = w2n sw + 32 /\ w2n (dw+32w) = w2n dw + 32` by
+    (gvs[wordsTheory.dimword_def] >>
+     simp[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w,
+          wordsTheory.dimword_def]) >>
+  `ptr_covers G'' tn'' out t'' sn /\ ptr_covers G'' tn'' dd t'' dn` by
+    (gvs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
+  `typed_copy_state_frame a (w2n dw) 32 t t''` by
+    (simp[typed_copy_state_frame_def, venom_state_component_equality,
+          typed_copy_frame_def] >> metis_tac[]) >>
+  qpat_assum `gas_path_ptr D 0 ctx fn PG H tm t 0 G' tn' (OK t')`
+    (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[] >> strip_tac >>
+  qpat_assum `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t)`
+    (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[] >> strip_tac >>
+  qexistsl_tac [`G''`,`tn''`,`t''`] >> simp[] >>
+  metis_tac[typed_copy_state_frame_trans]
+QED
