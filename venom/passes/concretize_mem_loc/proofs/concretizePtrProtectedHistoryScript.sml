@@ -87,7 +87,7 @@ Proof
       (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn)
     mems (ptr_owner_view d endpoint).cf_inst` by
     (irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
-     qexists `w2n vs.vs_initial_fmp <= b` >> reverse conj_tac
+     qexists `w2n vs.vs_initial_fmp <= b` >> conj_tac
      >- (qpat_x_assum `b <= x` mp_tac >>
          qpat_x_assum `~(w2n vs.vs_initial_fmp <= x)` mp_tac >>
          rpt (pop_assum kall_tac) >> decide_tac) >>
@@ -96,7 +96,7 @@ Proof
   qpat_x_assum `(ptr_owner_view d (EL w h)).cf_fn = _` (fn th =>
     once_rewrite_tac[GSYM th]) >>
   irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
-  qexists `w2n vs.vs_initial_fmp <= x` >> reverse conj_tac >- simp[] >>
+  qexists `w2n vs.vs_initial_fmp <= x` >> conj_tac >- simp[] >>
   irule ptr_owner_write_byte_seed >> simp[] >> rpt conj_tac >>
   TRY (qexists_tac `lo` >> simp[] >> rpt conj_tac) >>
   TRY (fs[ptr_chrono_write_def] >> NO_TAC) >>
@@ -159,7 +159,7 @@ Proof
       (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn)
     mems (ptr_owner_view d endpoint).cf_inst` by
     (irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
-     qexists `w2n vs.vs_initial_fmp <= b` >> reverse conj_tac
+     qexists `w2n vs.vs_initial_fmp <= b` >> conj_tac
      >- (qpat_x_assum `b <= x` mp_tac >>
          qpat_x_assum `~(w2n vs.vs_initial_fmp <= x)` mp_tac >>
          rpt (pop_assum kall_tac) >> decide_tac) >>
@@ -168,7 +168,7 @@ Proof
   qpat_x_assum `(ptr_owner_view d (EL w h)).cf_fn = _` (fn th =>
     once_rewrite_tac[GSYM th]) >>
   irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
-  qexists `w2n vs.vs_initial_fmp <= x` >> reverse conj_tac >- simp[] >>
+  qexists `w2n vs.vs_initial_fmp <= x` >> conj_tac >- simp[] >>
   irule ptr_owner_write_byte_seed >> simp[] >> rpt conj_tac >>
   TRY (qexists_tac `lo` >> simp[] >> rpt conj_tac) >>
   TRY (fs[ptr_chrono_write_def] >> NO_TAC) >>
