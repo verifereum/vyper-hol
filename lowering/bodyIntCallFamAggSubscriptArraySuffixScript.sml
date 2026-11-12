@@ -103,7 +103,8 @@ Resume intcall_framed_array_valid_suffix[dynamic]:
   fs[Excl "valid_index_def"] >>
   `immutable_holds ce fp.jc_cx (ArrayT et (Dynamic n)) r w ee s` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def]) >>
+     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
+          vyperASTTheory.expr_type_def]) >>
   drule_all_then assume_tac framed_array_code_length_view >>
   `compile_ptr_load F ce.ce_imm_alloca LocCode = compile_imm_load_word F ce.ce_imm_alloca` by
     simp[FUN_EQ_THM, contextTheory.compile_ptr_load_def] >>
@@ -189,7 +190,8 @@ Resume intcall_framed_array_invalid_suffix[dynamic]:
   fs[Excl "valid_index_def"] >>
   `immutable_holds ce cx (ArrayT et (Dynamic n)) r w ee s` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def]) >>
+     simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
+          vyperASTTheory.expr_type_def]) >>
   drule_all_then assume_tac framed_array_code_length_view >>
   `compile_ptr_load F ce.ce_imm_alloca LocCode = compile_imm_load_word F ce.ce_imm_alloca` by
     simp[FUN_EQ_THM, contextTheory.compile_ptr_load_def] >>
