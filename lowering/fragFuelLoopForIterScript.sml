@@ -406,6 +406,7 @@ Theorem iter_prefix_protected[local]:
   ?Wb. cenv_ptrs_in Wb bc /\ cenv_ptrs_below p.cs_next_var bc /\
        stmt_exits_in (E UNION {xl;il}) bc (InLoop xl il) /\
        var_below p.cs_next_var idx /\ idx NOTIN Wb /\
+       ~var_below s.cs_next_var idx /\
        (case lenop of Lit w => T
         | Var v => var_below p.cs_next_var v /\ v NOTIN Wb /\ v <> idx
         | _ => F) /\
@@ -684,6 +685,7 @@ Theorem iter_slice_contract[local]:
     cenv_ptrs_in Wb bc /\ cenv_ptrs_below p.cs_next_var bc /\
     stmt_exits_in (E UNION {xl;il}) bc (InLoop xl il) /\
     var_below p.cs_next_var idx /\ idx NOTIN Wb /\
+       ~var_below s.cs_next_var idx /\
     (case lenop of Lit w => T
      | Var v => var_below p.cs_next_var v /\ v NOTIN Wb /\ v <> idx
      | _ => F) /\
@@ -764,5 +766,16 @@ Theorem fuel_okS_compile_for_iter:
     fuel_okS (\st. cenv_ptrs_below st.cs_next_var cenv) Wv {} E
       (compile_stmt cenv lctx ty (For id fty (Array arr_e) bound body))
 Proof
+  rpt gen_tac >> strip_tac >>
+  simp_tac bool_ss [fuel_okS_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule iter_compile_layout >> strip_tac >>
+  drule_all iter_control_contract >> strip_tac >>
+  `p.cs_next_var <= b0.cs_next_var` by decide_tac >>
+  drule_all iter_slice_contract >> strip_tac >>
+  drule_all iter_layout_structure >> strip_tac >>
+  simp[] >>
+  rename1 `frag_fuel Wv {} E st p Kpre` >>
+  rename1 `frag_fuel Wb {} (E UNION {xl;il}) b0 b1 Kbody` >>
   cheat
 QED
