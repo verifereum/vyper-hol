@@ -165,18 +165,18 @@ Proof
   pop_assum strip_assume_tac >>
   `?valueT. eval_operand opv t = SOME valueT` by suspend "value" >>
   pop_assum strip_assume_tac >>
-  `?dstT. eval_operand opd t = SOME dstT /\
-    (((w2n dst+32 <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
-     (?d owner aid b sz.
-       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
-       w2n dst+32 <= b+sz /\
-       w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
-    suspend "address" >>
   `~(dyn_floor C s <= w2n dst)` by
     fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
-  qpat_x_assum `~(dyn_floor C s <= w2n dst)` (fn th =>
-    qpat_x_assum `?dstT. _` (strip_assume_tac o REWRITE_RULE [th])) >>
+  qpat_assum `~(dyn_floor C s <= w2n dst)` (fn nd =>
+    Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+      (((w2n dst+32 <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
+       (?d owner aid b sz.
+         activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+           d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
+         w2n dst+32 <= b+sz /\
+         w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
+      (strip_assume_tac o REWRITE_RULE [nd]))
+  >- suspend "address" >>
   `(!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
       w2n dst <= a /\ a < w2n dst+32 ==>
       w2n dstT <= z /\ z < w2n dstT+32 /\ a-w2n dst = z-w2n dstT) /\
