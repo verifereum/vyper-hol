@@ -14,10 +14,10 @@ Proof
 QED
 
 Theorem deploy_exception_out_of_gas[local]:
-  s.contexts = [(c,rb)] /\ c.msgParams.outputTo = Code target /\
+  s.contexts = [(c,rb)] /\
   t.contexts = [(d,rb')] /\ t.txParams = s.txParams /\
   handle_exception (SOME OutOfGas) t = (r,u) ==>
-  frame_resource_starved s r u
+  creation_resource_starved s r u
 Proof
   strip_tac >>
   gvs[handle_exception_def, get_gas_left_def, bind_def,
@@ -27,7 +27,7 @@ Proof
             d.msgParams.gasLimit` >>
   gvs[set_return_data_def, bind_def, get_current_context_def,
       return_def, set_current_context_def, get_num_contexts_def,
-      reraise_def, frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def]
+      reraise_def, creation_resource_starved_def, frame_outcome_def]
 QED
 
 Theorem deploy_create[local]:
@@ -60,7 +60,7 @@ Proof
 QED
 
 (* Gas deposit and the runtime size limit can fail with OutOfGas, already
-   covered by frame_resource_starved. The prefix guard concerns all returned
+   covered by creation_resource_starved. The prefix guard concerns all returned
    bytes, including the immutable suffix. No gas or size bound is assumed. *)
 Theorem deploy_frame_complete:
   !es ctxt rb target.
@@ -69,7 +69,7 @@ Theorem deploy_frame_complete:
     (case ctxt.returnData of h::_ => h <> n2w 0xef | [] => T) ==>
     ?r es'.
       handle_step NONE es = (r, es') /\
-      (frame_resource_starved es r es' \/
+      (creation_resource_starved es r es' \/
        (frame_outcome es r es' NONE ctxt.returnData [] /\
         es'.rollback.accounts =
           update_account target

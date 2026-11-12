@@ -112,9 +112,7 @@ Theorem frame_resource_starved_mid:
 Proof
   simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >> strip_tac >>
   drule_all frame_outcome_mid >> strip_tac >>
-  qexistsl_tac [`exc`, `out`, `c.logs ++ lgs`] >> simp[] >> strip_tac >>
-  `?op. frame_inst_raises es exc op` by
-    (qpat_x_assum `_ ==> ?op. _` irule >> gvs[]) >>
+  qexistsl_tac [`exc`, `out`, `c.logs ++ lgs`] >> simp[] >>
   qexists_tac `op` >> irule frame_inst_raises_mid >>
   qexists_tac `es` >> gvs[]
 QED
