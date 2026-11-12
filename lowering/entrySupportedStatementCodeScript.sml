@@ -124,11 +124,12 @@ QED
 Theorem entry_code_assert_stmt[local]:
   (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_expr ce' et e)) /\
-  (!reason. why = AssertReason reason ==> supported_string_reason tops reason) ==>
+  (!reason. why = AssertReason reason ==> supported_string_reason tops reason) /\
+  ~(?err. why = AssertCustomError err) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Assert e why))
 Proof
-  strip_tac >> Cases_on `why` >>
+  strip_tac >> Cases_on `why` >> fs[] >>
   simp[Once compile_stmt_def, comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- (simp[entry_code_lower_value, entry_code_fresh_label,
@@ -139,11 +140,12 @@ Proof
 QED
 
 Theorem entry_code_raise_stmt[local]:
-  (!reason. why = RaiseReason reason ==> supported_string_reason tops reason) ==>
+  (!reason. why = RaiseReason reason ==> supported_string_reason tops reason) /\
+  ~(?err. why = RaiseCustomError err) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Raise why))
 Proof
-  strip_tac >> Cases_on `why` >>
+  strip_tac >> Cases_on `why` >> fs[] >>
   simp[Once compile_stmt_def, entry_code_emit_inst, comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_emit_inst] >> rpt gen_tac >> BETA_TAC) >>
