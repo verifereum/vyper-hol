@@ -2075,9 +2075,12 @@ Proof
      asm_rewrite_tac [] >> simp[]) >>
   `z.vs_accounts = u.vs_accounts /\ z.vs_transient = u.vs_transient /\
    z.vs_requests = u.vs_requests /\ z.vs_call_ctx = u.vs_call_ctx` by
-    (qpat_assum `copy_static z = copy_static u` mp_tac >>
-     simp[exprSimStorageCopyTheory.copy_static_def,
-          venom_state_component_equality]) >>
+    (qpat_assum `copy_static z = copy_static u`
+       (fn th => MAP_EVERY (fn f => assume_tac (SIMP_RULE (srw_ss())
+                   [exprSimStorageCopyTheory.copy_static_def] (AP_TERM f th)))
+          [``venom_state_vs_accounts``, ``venom_state_vs_transient``,
+           ``venom_state_vs_requests``, ``venom_state_vs_call_ctx``]) >>
+     asm_rewrite_tac[]) >>
   qexists_tac `z` >> conj_tac
   >- (`gas_path ctx func s (0+0) (OK z)` suffices_by simp[] >>
       irule gas_path_then >> qexists_tac `u` >> simp[]) >>
@@ -2190,9 +2193,12 @@ Proof
   rename1 `gas_path ctx func u 0 (OK z)` >>
   `z.vs_accounts = u.vs_accounts /\ z.vs_transient = u.vs_transient /\
    z.vs_requests = u.vs_requests /\ z.vs_call_ctx = u.vs_call_ctx` by
-    (qpat_assum `copy_static z = copy_static u` mp_tac >>
-     simp[exprSimStorageCopyTheory.copy_static_def,
-          venom_state_component_equality]) >>
+    (qpat_assum `copy_static z = copy_static u`
+       (fn th => MAP_EVERY (fn f => assume_tac (SIMP_RULE (srw_ss())
+                   [exprSimStorageCopyTheory.copy_static_def] (AP_TERM f th)))
+          [``venom_state_vs_accounts``, ``venom_state_vs_transient``,
+           ``venom_state_vs_requests``, ``venom_state_vs_call_ctx``]) >>
+     asm_rewrite_tac[]) >>
   qexists_tac `z` >> simp[] >> conj_tac
   >- metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES] >>
   `z.vs_memory = (immutable_transfers F T a w (type_slot_size tv) 0 u).vs_memory` by
