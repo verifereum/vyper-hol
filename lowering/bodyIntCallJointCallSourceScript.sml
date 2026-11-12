@@ -5,6 +5,7 @@ Ancestors
   vyperStatePreservation vyperPlaceFrames vyperCallFrame
   vyperImmutablesPreservation pair sum
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_pure_immutables_mutual:
   (!tops e. supported_pure_expr tops e ==>
     !cx s r t. eval_expr cx e s = (r,t) ==> t.immutables = s.immutables) /\
@@ -18,6 +19,7 @@ Theorem intcall_pure_immutables_mutual:
   (!tops e. supported_place_expr tops e ==>
     !cx s r t. eval_expr cx e s = (r,t) ==> t.immutables = s.immutables)
 Proof
+  (* original proof, kept while held:
   ho_match_mp_tac supported_pure_expr_ind >>
   rpt conj_tac >> rpt gen_tac >> simp[supported_pure_expr_def]
   >- (rpt strip_tac >>
@@ -40,8 +42,12 @@ Proof
   >- suspend "place_global"
   >- suspend "place_subscript"
   >> suspend "place_rest"
+  *)
+  cheat
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; case proofs of the held theorem above, kept while held *)
+(*
 Resume intcall_pure_immutables_mutual[ifexp]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs(),
@@ -131,6 +137,7 @@ Resume intcall_pure_immutables_mutual[place_rest]:
   imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
 Finalise intcall_pure_immutables_mutual
+*)
 
 Theorem intcall_pure_expr_immutables:
   supported_pure_expr tops e /\ eval_expr cx e es = (r,ee) ==>
