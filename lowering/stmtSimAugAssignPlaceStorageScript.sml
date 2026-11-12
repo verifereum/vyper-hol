@@ -1337,8 +1337,9 @@ Proof
      (Abort ExHalt_abort (halt_state (set_returndata [] s)))` by
     (irule fragGasSeqAbortTheory.gas_marked_path_abort >>
      Cases_on `tr` >>
-     simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
-          venomExecSemanticsTheory.step_inst_base_def,
+     simp[venomInstTheory.mk_inst_def] >>
+     simp[venomInstTheory.is_terminator_def] >>
+     simp[venomExecSemanticsTheory.step_inst_base_def,
           venomStateTheory.eval_operands_def]) >>
   Cases_on `tr` >> gvs[venomInstTheory.mk_inst_def]
 QED
