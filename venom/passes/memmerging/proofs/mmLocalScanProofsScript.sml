@@ -10510,6 +10510,65 @@ Proof
   simp[MEM_MAP] >> qexists `j` >> gvs[]
 QED
 
+Theorem mm_local_zero_due_geometry[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block_memzero dfg bb).mz_flushed /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r) /\
+  cap = mm_local_zero_capture dfg is (SUC r) /\
+  ws = MAP (THE o cap) (due ++ [r]) ==>
+  (!d bs. MEM (d,bs) ws ==> g.cg_dst <= d /\
+    d + LENGTH bs <= g.cg_dst + g.cg_length /\ bs = REPLICATE (LENGTH bs) 0w) /\
+  (!a. (g.cg_dst <= a /\ a < g.cg_dst + g.cg_length) <=>
+    ?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs) /\
+  MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = g.cg_dst + g.cg_length
+Proof
+  strip_tac >>
+  `!d bs. MEM (d,bs) ws <=> ?j. j < LENGTH is /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\ cap j = SOME (d,bs)` by
+    (irule mm_local_zero_due_records >> metis_tac[]) >>
+  `mm_local_group_captures is cap (\a. 0w) g /\
+   mm_local_group_coverage is (SUC r) cap g` by
+    (map_every (fn q => qpat_assum q SUBST1_TAC) [`cap = _`, `is = _`] >>
+     irule mm_local_zero_representative_certificate >> metis_tac[]) >>
+  `mm_local_group_endpoint is (SUC r) cap g` by
+    (map_every (fn q => qpat_assum q SUBST1_TAC) [`cap = _`, `is = _`] >>
+     irule mm_local_zero_representative_endpoint >> metis_tac[]) >>
+  `!p. p < LENGTH is /\ MEM (EL p is).inst_id g.cg_inst_ids ==> p < SUC r` by
+    (rpt strip_tac >> `p <= r` by metis_tac[mm_local_rep_position_max] >> decide_tac) >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`is = _`, `gs = _`, `cap = _`, `due = _`, `ws = _`] >>
+  fs[mm_local_group_captures_def, mm_local_group_coverage_def,
+    mm_local_group_endpoint_def, mm_local_bytes_def, REPLICATE_GENLIST,
+    combinTheory.K_DEF] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  irule mm_local_write_log_endpoint >> metis_tac[]
+QED
+
+Theorem mm_local_zero_due_realize[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block_memzero dfg bb).mz_flushed /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r) /\
+  cap = mm_local_zero_capture dfg is (SUC r) /\
+  ws = MAP (THE o cap) (due ++ [r]) ==>
+  FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws =
+    write_memory_with_expansion g.cg_dst (REPLICATE g.cg_length 0w) v
+Proof
+  strip_tac >> drule_all mm_local_zero_due_geometry >> strip_tac >>
+  `REPLICATE g.cg_length (0w:word8) = mm_local_bytes (\a. 0w) 0 g.cg_length` by
+    simp[mm_local_bytes_def, REPLICATE_GENLIST, combinTheory.K_DEF] >>
+  pop_assum SUBST1_TAC >> irule mm_local_write_log_realize >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`is = _`, `gs = _`, `cap = _`, `due = _`, `ws = _`] >>
+  fs[mm_local_bytes_def, REPLICATE_GENLIST, combinTheory.K_DEF] >> metis_tac[]
+QED
+
 Theorem mm_local_footprint_store_endpoint[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
