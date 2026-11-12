@@ -207,7 +207,8 @@ Proof
   (* element loop: the counter is fresh, so it stays reserved *)
   irule alloc_run_bind >>
   qexists `\x s. fresh_outputs s /\ not_fresh_at s x /\ ~alloc_owned s x` >>
-  reverse conj_tac >- simp[SF ETA_ss, alloc_run_fresh_var_fresh] >>
+  reverse conj_tac >>~- ([`alloc_run _ fresh_var _`],
+    simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_fresh_var_fresh]) >>
   qx_gen_tac `counter` >> simp[comp_ignore_bind_def] >>
   rpt (irule alloc_run_bind >>
     qexists `\v s. fresh_outputs s /\ not_fresh_at s counter /\
