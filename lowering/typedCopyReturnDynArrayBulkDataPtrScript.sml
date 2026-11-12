@@ -1,7 +1,7 @@
 (* Live-data dynamic array copying: zero payloads need clean roots, not provenance. *)
 Theory typedCopyReturnDynArrayBulkDataPtr
 Ancestors
-  bodyPtrPopLocalRootFrame assignTuplePtrPrefix annAssignPtrCopy
+  bodyPtrPopLocalRootFrame assignTuplePtrPrefix annAssignPtrCopy fragGasSeqPtr
   assignBasePtrMcopyTransport typedMemoryCopy forPtrBulk
   fragExecPtr ptrSafeRun ptrDiscipline codegenRel contextCodegenRel venomExecSemantics
   venomInst venomState context emitHelper compileEnv words finite_map pred_set
@@ -163,4 +163,131 @@ Proof
      qexistsl_tac [`tn.t_mem`,`tf.t_mem`,`s.vs_memory`,`w2n a`,`u.vs_memory`] >>
      simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_same]) >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem typed_copy_dynarray_operand_endpoint[local]:
+  compile_copy_memory_dynamic (Var dst) (Var src) count_op sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  eval_operand count_op s = SOME (n2w (LENGTH vs * type_memory_size tv)) /\
+  op_taint tn count_op = {} /\ op_taint tn (Var src) = {} /\ op_taint tn (Var dst) = {} /\
+  LENGTH vs * type_memory_size tv < dimword(:256) /\
+  (LENGTH vs * type_memory_size tv <> 0 ==>
+    ptr_covers G tn src s (LENGTH vs * type_memory_size tv) /\
+    ptr_covers G tn dst s (LENGTH vs * type_memory_size tv)) /\
+  w2n b = dbase+32 /\ EVERY (val_wf tv) vs /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    mem_word_at dbase m = n2w (LENGTH vs)) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    elems_in_memory vs (w2n a) tv m) ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\ typed_copy_state_frame sa (w2n b) (LENGTH vs * type_memory_size tv) s t /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) dbase m) /\
+    (!i. i < w2n b \/ w2n b + LENGTH vs * type_memory_size tv <= i ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `n2w (LENGTH vs * type_memory_size tv) <> (0w:256 word) ==>
+   ptr_covers G tn src s (w2n ((n2w (LENGTH vs * type_memory_size tv)):256 word)) /\
+   ptr_covers G tn dst s (w2n ((n2w (LENGTH vs * type_memory_size tv)):256 word))` by simp[] >>
+  drule_all (GEN_ALL typed_copy_dynamic_operand_counted) >>
+  disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `OK u` >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK u)` >>
+  qmatch_asmsub_abbrev_tac `tm = step_taint inst s copied tn` >>
+  `eval_operand (Var dst) s = SOME b /\ eval_operand (Var src) s = SOME a` by
+    simp[eval_operand_def] >>
+  mp_tac (Q.INST [`id` |-> `sa.cs_next_id`, `n` |-> `LENGTH vs * type_memory_size tv`,
+    `u` |-> `copied`, `tf` |-> `tm`] typed_copy_dynarray_mcopy_post) >>
+  simp[Abbr `copied`, Abbr `tm`, Abbr `inst`] >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[compile_copy_memory_dynamic_def,emit_void_def,emit_inst_def,comp_bind_def,
+        fresh_id_def,emit_def] >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK u)` >>
+  qexistsl_tac [`H`,`tm`,`u`] >>
+  simp[Abbr `u`, typed_copy_mcopy_state_frame] >>
+  conj_tac >- simp[mcopy_def,write_memory_with_expansion_def] >>
+  conj_tac >- metis_tac[] >>
+  simp[mcopy_def,write_memory_with_expansion_def,lookup_var_def,op_taint_def]
+QED
+
+Theorem typed_copy_dynarray_bulk_data_counted:
+  emit_op MUL [lenop; Lit (n2w (type_memory_size tv))] sa = (count_op,sb) /\
+  compile_copy_memory_dynamic (Var dst) (Var src) count_op sb = ((),sc) /\
+  fn_has_code sa sb fn /\ fn_has_code sb sc fn /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  eval_operand lenop s = SOME (n2w (LENGTH vs)) /\ op_taint tn lenop = {} /\
+  op_taint tn (Var src) = {} /\ op_taint tn (Var dst) = {} /\
+  LENGTH vs * type_memory_size tv < dimword(:256) /\
+  (LENGTH vs * type_memory_size tv <> 0 ==>
+    ptr_covers G tn src s (LENGTH vs * type_memory_size tv) /\
+    ptr_covers G tn dst s (LENGTH vs * type_memory_size tv)) /\
+  w2n b = dbase+32 /\ EVERY (val_wf tv) vs /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    mem_word_at dbase m = n2w (LENGTH vs)) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    elems_in_memory vs (w2n a) tv m) ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = sc.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted /\
+    typed_copy_state_frame sa (w2n b) (LENGTH vs * type_memory_size tv) s t /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) dbase m) /\
+    (!i. i < w2n b \/ w2n b + LENGTH vs * type_memory_size tv <= i ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `eval_operand (Lit (n2w (type_memory_size tv))) s =
+     SOME (n2w (type_memory_size tv)) /\
+   op_taint tn (Lit (n2w (type_memory_size tv))) = {}` by
+    simp[eval_operand_def,op_taint_def] >>
+  drule_all pop_local_mul_exact >>
+  disch_then (qspecl_then [`PG`,`G`,`D`] strip_assume_tac) >>
+  `lookup_var src t = SOME a /\ lookup_var dst t = SOME b /\
+   op_taint tn' (Var src) = {} /\ op_taint tn' (Var dst) = {}` by metis_tac[] >>
+  `eval_operand count_op t = SOME (n2w (LENGTH vs * type_memory_size tv))` by
+    gvs[wordsTheory.word_mul_n2w] >>
+  `LENGTH vs * type_memory_size tv <> 0 ==>
+   ptr_covers G' tn' src t (LENGTH vs * type_memory_size tv) /\
+   ptr_covers G' tn' dst t (LENGTH vs * type_memory_size tv)` by
+    (strip_tac >> fs[] >> metis_tac[assignTuplePtrCopyLenTheory.ptr_covers_lookup_frame]) >>
+  `(!m. mem_agree_outside tn'.t_mem t.vs_memory m ==>
+      mem_word_at dbase m = n2w (LENGTH vs)) /\
+   (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==>
+      elems_in_memory vs (w2n a) tv m)` by gvs[] >>
+  drule_all (GEN_ALL typed_copy_dynarray_operand_endpoint) >>
+  disch_then (qspecl_then [`cap`,`PG`,`D`] strip_assume_tac) >>
+  drule_all fragGasPathPtrTheory.gas_path_ptr_then >> strip_tac >>
+  qexistsl_tac [`H`,`tm`,`t'`] >> simp[] >>
+  `ci_mono sa sb` by metis_tac[typed_copy_emit_op_mono] >>
+  `!p. not_fresh_at sa p ==> not_fresh_at sb p` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_def,freshWritesTheory.not_fresh_at_mono] >>
+  conj_tac >- gvs[] >>
+  conj_tac
+  >- (irule typed_copy_state_frame_trans >> qexists_tac `t` >> conj_tac
+      >- (rw[typed_copy_state_frame_def,typed_copy_frame_def]
+          >- (qpat_x_assum `t = s with <|vs_vars := _; vs_inst_idx := _|>`
+                (fn th => once_rewrite_tac[th]) >>
+              qpat_x_assum `s.vs_current_bb = _` (fn th => rewrite_tac[GSYM th]) >>
+              qpat_x_assum `s.vs_inst_idx = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+          metis_tac[]) >>
+      metis_tac[typed_copy_state_frame_mono]) >>
+  conj_tac >- (gvs[] >> metis_tac[]) >>
+  metis_tac[]
 QED
