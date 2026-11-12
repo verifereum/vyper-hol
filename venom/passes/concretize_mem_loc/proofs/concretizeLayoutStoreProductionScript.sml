@@ -55,37 +55,48 @@ Proof
      goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
      qexists_tac `a` >> simp[] >> qexists_tac `SUC c` >>
      gvs[joint_observed_read_def]) >>
-  qpat_x_assum `relocation_pair _ _ (EL c _) _ _` mp_tac >>
-  qpat_x_assum `relocation_pair _ _ (EL j _) _ _` mp_tac >>
-  rewrite_tac[relocation_pair_def] >>
-  disch_then strip_assume_tac
-  >- fs[]
-  >- (`activation_cache (EL c (q0::qs)) d owner aid (b,sz)` by metis_tac[] >>
-      disch_then strip_assume_tac
-      >- fs[]
-      >- (`d = d' /\ owner = owner' /\ aid = aid' /\ b = b' /\ sz = sz'` by
-            (irule joint_activation_cache_byte_unique >>
-             conj_tac >- (qexists_tac `a` >> simp[]) >>
-             qexistsl_tac [`C`, `EL c (q0::qs)`, `vs0`] >> metis_tac[]) >>
-          gvs[]) >>
-      `b + sz <= joint_initial_fmp (EL c (q0::qs))` by metis_tac[] >>
-      decide_tac) >>
-  disch_then strip_assume_tac
-  >- fs[]
-  >- (Cases_on `ctx_has_dalloca C`
-      >- (`EVERY wf_function C.ctx_functions` by
-            fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
-          `b + sz <= w2n vs0.vs_initial_fmp` by
-            (irule joint_cache_below_initial_fmp >> metis_tac[]) >>
-          `joint_initial_fmp (EL j (q0::qs)) = w2n vs0.vs_initial_fmp` by
-            (irule joint_initial_fmp_trace >> metis_tac[]) >>
-          decide_tac) >>
-      `?d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
-         b <= a /\ a < b + sz` by
-        (irule joint_observed_read_cached >> metis_tac[]) >>
-      `b' + sz' <= joint_initial_fmp (EL j (q0::qs))` by metis_tac[] >>
-      decide_tac) >>
-  simp[]
+  `!d owner aid b sz. activation_cache (EL c (q0::qs)) d owner aid (b,sz) /\
+     b <= a /\ a < b + sz ==> w = positions owner aid + (a - b)` by
+    (rpt strip_tac >>
+     qpat_x_assum `relocation_pair _ _ (EL c _) _ _`
+       (DISJ_CASES_THEN2 (fn th => strip_assume_tac th >> decide_tac)
+          (DISJ_CASES_THEN2
+             (fn th => strip_assume_tac th >>
+                metis_tac[joint_activation_cache_byte_unique])
+             (fn th => strip_assume_tac th >>
+                `b + sz <= joint_initial_fmp (EL c (q0::qs))` by metis_tac[] >>
+                decide_tac))
+        o REWRITE_RULE [relocation_pair_def])) >>
+  `!d owner aid b sz. activation_cache (EL c (q0::qs)) d owner aid (b,sz) /\
+     b <= a /\ a < b + sz ==>
+     ~(joint_initial_fmp (EL j (q0::qs)) <= a /\
+       !d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) ==>
+         b + sz <= joint_initial_fmp (EL j (q0::qs)))` by
+    (rpt strip_tac >> Cases_on `ctx_has_dalloca C`
+     >- (`EVERY wf_function C.ctx_functions` by
+           fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+         `b + sz <= w2n vs0.vs_initial_fmp` by
+           (irule joint_cache_below_initial_fmp >> metis_tac[]) >>
+         `joint_initial_fmp (EL j (q0::qs)) = w2n vs0.vs_initial_fmp` by
+           (irule joint_initial_fmp_trace >> metis_tac[]) >>
+         decide_tac) >>
+     `?d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
+        b <= a /\ a < b + sz` by
+       (irule joint_observed_read_cached >> metis_tac[]) >>
+     `b' + sz' <= joint_initial_fmp (EL j (q0::qs))` by metis_tac[] >>
+     decide_tac) >>
+  qpat_x_assum `relocation_pair _ _ (EL j _) _ _`
+    (DISJ_CASES_THEN2 (fn th => strip_assume_tac th >> decide_tac)
+       (DISJ_CASES_THEN2
+          (fn th => strip_assume_tac th >> metis_tac[])
+          (fn th => strip_assume_tac th >>
+             qpat_x_assum `relocation_pair _ _ (EL c _) _ _`
+               (DISJ_CASES_THEN2 (fn th => strip_assume_tac th >> decide_tac)
+                  (DISJ_CASES_THEN2
+                     (fn th => strip_assume_tac th >> metis_tac[])
+                     (fn th => strip_assume_tac th >> fs[]))
+                o REWRITE_RULE [relocation_pair_def])))
+     o REWRITE_RULE [relocation_pair_def])
 QED
 
 val _ = if null (hyp joint_mstore_demand_address_coherence) then ()
