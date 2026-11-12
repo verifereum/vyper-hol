@@ -2,7 +2,7 @@
 Theory stmtSimAppendStorageCompose
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
-  appendStorageRel appendStorageAggregateRel stmtSimAppendStorage stmtSimStoreCopy placeStoreStorage fragExec
+  appendStorageRel appendStorageAggregateRel stmtSimAppendStorage stmtSimAssignStorageCopy stmtSimStoreCopy placeStoreStorage fragExec
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq fragGasSeqAbort list rich_list
   varsExt freshWrites stateFrame venomState finite_map 

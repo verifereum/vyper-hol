@@ -5,7 +5,7 @@ Ancestors
   vyperTyping valueEncodingTyping exprSimProps
   stmtSimDefs exprSimSource exprSimHypsDefs
   bodyAppendStorageFacts bodyExprPreFacts stmtSimAppendStorageCompose
-  bodySim supportedStmts supportedStmtTraverse
+  bodySim exprSimHyps supportedStmts supportedStmtTraverse
   vyperStorageLayoutSafety vyperTypeSystem vyperTypeValues compileEnv loweringStateRelDefs
   vyperTypeCallGraph vyperState vyperInterpreter
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult

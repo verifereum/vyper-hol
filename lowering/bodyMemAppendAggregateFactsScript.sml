@@ -4,7 +4,7 @@ Ancestors
   bodyAppendStorageAdapter bodyAppendStorageFacts bodyMemAssignTopCopyFacts
   supportedStmts supportedExprs loweringPosts exprSimMemDefs
   valueEncodingProps vyperAST bodySim bodyStorageMetadata supportedProgram
-  supportedDecls supportedTypes compileEnv exprSimHypsDefs whitelistVisibility
+  supportedDecls supportedTypes compileEnv exprSimHyps exprSimHypsDefs whitelistVisibility
   vyperValue vyperTypeValues
 
 Theorem append_narrow_annotation:
