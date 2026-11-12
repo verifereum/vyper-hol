@@ -5,33 +5,66 @@ Ancestors
   bodyMemoryPreds bodyMemEcArithSafe bodyMemEcArithOperands exprSimWordArgs
   exprSimHyps exprLoweringProps exprSimMemorySource exprSimHypsDefs
   exprSimSource compileEnv exprSafeOperand exprSimMemDefs fragExec exprSimOperands
+  stmtSimDeclCompose gasOutcome gasStorage vyperStorageTrace vyperStorageFootprint
 
 (* Adapter for private exprSimECArith.ec_outcome_then, using the exported
    memory-polymorphic gas_outcome_bind_value rather than duplicating its
-   normal/exception/exemption composition proof. *)
+   normal/exception/exemption composition proof.  The continuation is given
+   the step's end state and its domain, and P at every valid horizon. *)
 Theorem ec_mem_outcome_then:
-  gas_outcome T tops (ctx,func)
+  gas_outcome T tops (ctx,func) cx st0
     (m : evaluation_state -> value evaluation_result) (es,s0)
-    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r) /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==>
-     R (INR exc) ee r) /\
-  (!gs v ee t. m (es with gas_obs := gs) = (INL v, ee) /\ ee.gas_obs = [] /\
-     P v ee t /\ ~t.vs_halted ==>
-     gas_outcome T tops (ctx,func) (k v) (ee,t) Q R) ==>
-  gas_outcome T tops (ctx,func) (bind m k) (es,s0) Q R
+    (\H res ee t. ?v. res = INL v /\ P H v ee t)
+    (\H res ee r. expr_exit res r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+     R H (INR exc) ee r) /\
+  (!v. storage_trace_frame (k v)) /\
+  (!marks v ee t.
+     gas_marked_exec T (ctx,func) m (es,s0) marks (INL v) ee (OK t) /\
+     ee.gas_obs = [] /\ ~t.vs_halted /\
+     storage_trace_domain cx st0 ee.storage_trace /\
+     (!H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t) ==>
+     gas_outcome T tops (ctx,func) cx st0 (k v) (ee,t) Q R) ==>
+  gas_outcome T tops (ctx,func) cx st0 (bind m k) (es,s0) Q R
 Proof
-  strip_tac >> irule gas_outcome_bind_value >>
-  first_assum (irule_at Any) >> conj_tac
-  >- (rpt strip_tac >> gvs[] >>
-      `~t.vs_halted` by
-        metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
-        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
-      strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
-      strip_tac >> first_x_assum irule >> simp[] >>
-      goal_assum (drule_at Any)) >>
-  rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def] >>
-  metis_tac[]
+  strip_tac >>
+  match_mp_tac
+    (Q.SPECL [`\H res ee t. ?v. res = INL v /\ P H v ee t`,
+              `\H res ee r. expr_exit res r`]
+       (Q.GENL [`Qa`, `Ra`] gas_outcome_bind_value)) >>
+  BETA_TAC >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (rpt gen_tac >> strip_tac >>
+      `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+         mid.storage_trace` by fs[storage_trace_domain_def] >>
+      Cases_on `res`
+      >- (rename1 `INL v` >>
+          `!H. valid_horizon cx st0 H mid.storage_trace ==>
+               P H v (mid with gas_obs := []) t` by
+            (qx_gen_tac `H` >> strip_tac >>
+             qpat_assum `!H'. valid_horizon cx st0 H' mid.storage_trace ==>
+                              ?v. _`
+               (qspec_then `H` mp_tac) >>
+             (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
+          qexists_tac `v` >> conj_tac >- REFL_TAC >>
+          qpat_x_assum `!marks v ee t. _`
+            (qspecl_then [`marks`, `v`, `mid with gas_obs := []`, `t`]
+               mp_tac) >>
+          (impl_tac
+           >- (rpt conj_tac
+               >- (irule stmtSimDeclComposeTheory.gas_marked_exec_end_gas_obs >>
+                   first_assum ACCEPT_TAC)
+               >- simp[]
+               >- metis_tac[gas_marked_exec_def, gas_marked_path_exec,
+                            gas_path_normal]
+               >- (simp[] >> first_assum ACCEPT_TAC)
+               >- (simp[] >> first_assum ACCEPT_TAC))) >>
+          strip_tac >> first_assum ACCEPT_TAC)
+      >- (qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+            (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+          (impl_tac >- first_assum ACCEPT_TAC) >> simp[]))
+  >- (rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def] >> metis_tac[])
+  >- first_assum ACCEPT_TAC
 QED
 
 Theorem ec_mem_operands_then:
