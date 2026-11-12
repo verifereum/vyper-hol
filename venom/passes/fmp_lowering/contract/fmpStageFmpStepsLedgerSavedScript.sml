@@ -129,7 +129,7 @@ Proof
 QED
 
 Theorem fmp_caller_lookup_restrict:
-  (!b z c id. FLOOKUP sm (b,z) = SOME (c,id) /\ b < eb ==>
+  (!b z c id. FLOOKUP sm ((b:num),z) = SOME ((c:num),id) /\ b < eb ==>
     c + z <= elo) /\ elo <= cut /\ 0 < z /\ b + z <= eb ==>
   FLOOKUP (DRESTRICT sm {key | key IN FDOM sm /\ FST (sm ' key) < cut}) (b,z) =
     FLOOKUP sm (b,z)
@@ -152,12 +152,19 @@ Theorem fmp_restore_saved_rel:
     (DRESTRICT sm {key | key IN FDOM sm /\ FST (sm ' key) < cut})
     fmp0 (w2n fmp) stk ts
 Proof
-  strip_tac >> drule_all fmp_saved_source_bounds >> strip_tac >>
+  strip_tac >>
+  `!f. MEM f stk ==>
+    (!v b z. FLOOKUP f.cf_prov v = SOME (b,z) /\ 0 < z ==>
+      b + z <= fmp_frame_base (w2n fmp) stk) /\
+    (!b z. MEM (SOME (b,z)) f.cf_params /\ 0 < z ==>
+      b + z <= fmp_frame_base (w2n fmp) stk)` by
+    metis_tac[fmp_saved_source_bounds] >>
   `!b z c id. FLOOKUP sm (b,z) = SOME (c,id) /\
     b < fmp_frame_base (w2n fmp) stk ==> c + z <= fmp_frame_lo fmp0 ts` by
     (fs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
   irule fmp_saved_rel_restrict_provenance >>
-  rpt conj_tac
+  qexistsl [`{key | key IN FDOM sm /\ FST (sm ' key) < cut}`, `sm`] >>
+  simp[] >> rpt conj_tac
   >- (rpt strip_tac >> irule fmp_caller_lookup_restrict >> metis_tac[])
   >- (rpt strip_tac >> irule fmp_caller_lookup_restrict >> metis_tac[]) >>
   fs[fmp_stage_rel_def] >> metis_tac[]
