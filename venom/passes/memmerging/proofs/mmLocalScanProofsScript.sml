@@ -10634,6 +10634,65 @@ Proof
   fs[mm_local_bytes_def, REPLICATE_GENLIST, combinTheory.K_DEF] >> metis_tac[]
 QED
 
+Theorem mm_local_zero_representative_discharge[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block_memzero dfg bb).mz_flushed /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  cap = mm_local_zero_capture dfg is (SUC r) /\
+  js = mm_local_pending_indices is gs r /\
+  cap r = SOME (d,bs) /\ mm_local_pending cap js s t /\
+  s'.vs_memory = (write_memory_with_expansion d bs s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (REPLICATE g.cg_length 0w) t).vs_memory ==>
+  mm_local_pending cap (mm_local_pending_indices is gs (SUC r)) s' t'
+Proof
+  strip_tac >>
+  `!j a cs. cap j = SOME (a,cs) ==> cs = REPLICATE (LENGTH cs) 0w` by
+    metis_tac[mm_local_zero_capture_payload] >>
+  `!j k a cs b ds. cap j = SOME (a,cs) /\ cap k = SOME (b,ds) ==>
+      mm_local_write_compatible a cs b ds` by
+    (rpt strip_tac >> `ds = REPLICATE (LENGTH ds) 0w` by metis_tac[] >>
+     pop_assum SUBST1_TAC >> metis_tac[mm_local_zero_capture_compatible]) >>
+  `EVERY (\j. IS_SOME (cap j)) js` by
+    (gvs[mm_local_pending_def] >> metis_tac[mm_local_capture_log_canonical]) >>
+  `!P. LIST_REL (\j w. cap j = SOME w) (FILTER P js)
+      (MAP (THE o cap) (FILTER P js))` by
+    (gen_tac >> simp[LIST_REL_MAP2] >> irule EVERY2_refl >>
+     simp[EVERY_MEM, MEM_FILTER] >> qx_gen_tac `j` >> strip_tac >>
+     `IS_SOME (cap j)` by
+       (qpat_x_assum `EVERY _ js` mp_tac >>
+        gvs[EVERY_MEM] >> metis_tac[]) >>
+     Cases_on `cap j` >> gvs[]) >>
+  `mm_local_pending_indices is gs (SUC r) =
+      FILTER (\j. mm_local_rep_index is gs j <> r) js` by
+    metis_tac[mm_local_zero_representative_pending_suc] >>
+  pop_assum SUBST1_TAC >>
+  irule (BETA_RULE (Q.INST [`P` |-> `\j. mm_local_rep_index is gs j = r`]
+    (INST_TYPE [alpha |-> ``:num``] mm_local_pending_compatible_discharge_filter))) >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  qexistsl [`d`,`g.cg_dst`,`REPLICATE g.cg_length 0w`,
+    `MAP (THE o cap) (FILTER (\j. mm_local_rep_index is gs j = r) js)`,
+    `bs`,
+    `MAP (THE o cap) (FILTER (\j. mm_local_rep_index is gs j <> r) js)`,
+    `s`,`t`] >>
+  simp[] >> conj_tac
+  >- (gen_tac >>
+      `FOLDL (\st (a,cs). write_memory_with_expansion a cs st) v
+        (MAP (THE o cap)
+          (FILTER (\j. mm_local_rep_index is gs j = r) js ++ [r])) =
+        write_memory_with_expansion g.cg_dst (REPLICATE g.cg_length 0w) v` by
+        (irule mm_local_zero_due_realize >> simp[] >>
+         qexistsl [`bb`,`dfg`,`r`] >> gvs[]) >>
+      gvs[MAP_APPEND, FOLDL_APPEND]) >>
+  simp[EVERY_MAP, EVERY_MEM] >> qx_gen_tac `j` >> strip_tac >>
+  `IS_SOME (cap j)` by
+    (qpat_x_assum `EVERY _ js` mp_tac >>
+     gvs[EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
+  Cases_on `cap j` >> gvs[] >> PairCases_on `x` >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem mm_local_footprint_store_endpoint[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
