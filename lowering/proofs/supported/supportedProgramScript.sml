@@ -185,7 +185,8 @@ Theorem supported_program_defaults:
     EVERY (supported_default_expression tops) defaults
 Proof
   strip_tac >> drule_all supported_program_declaration >>
-  simp[supported_declaration_header_def, NULL_EQ]
+  Cases_on `vis = Internal` >>
+  simp[supported_declaration_header_def, supported_declaration_body_def, NULL_EQ]
 QED
 
 Theorem supported_program_internal_names:
