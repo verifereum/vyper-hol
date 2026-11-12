@@ -1,6 +1,6 @@
 (* Actual endpoint transport for the external entry prefix. *)
 Theory entryPrefixPtr
-Ancestors fragGasPathMem fragGasOriginPtr memSafeRun gasCount stmtForRangeMemoryParts instMemFrontier fragGasSeqMem entryDispatchCounters entryDispatchPtr ptrSafeRun ptrDiscipline moduleLoweringProps
+Ancestors fragGasPathPtr fragGasOrigin fragGasSeqPtr fragGasPathMem fragGasOriginPtr memSafeRun gasCount stmtForRangeMemoryParts instMemFrontier fragGasSeqMem entryDispatchCounters entryDispatchPtr ptrSafeRun ptrDiscipline moduleLoweringProps
   moduleLowering fragExec venomExecSemantics venomInst venomState list
   finite_map words contextCodegenRel codegenRel compileEnv loweringStateRelDefs emitHelperProps
   exprLoweringProps typedCopyArrayPtr
@@ -54,6 +54,143 @@ Proof
   namedCases_on `rest` ["", "b more"] >> simp[] >>
   namedCases_on `more` ["", "c tail"] >> simp[] >>
   Cases_on `tail` >> simp[]
+QED
+
+Theorem dispatch_joint_edge_path[local]:
+  gas_path_mem_edge ctx fn s 0 (OK t) /\
+  gas_path_ptr_edge D lo ctx fn PG G tn s 0 G' tn' (OK t) /\
+  ~t.vs_halted ==>
+  gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG)
+    (s, G, tn) [] (OK t, G', tn')
+Proof
+  strip_tac >>
+  `gas_origin_ptr_edge (D, lo, explicit, ctx, fn, PG)
+    (s, G, tn) [] (OK t, G', tn')` by
+    (simp[gas_origin_ptr_edge_def] >>
+     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
+  metis_tac[gas_origin_ptr_path_rules, APPEND]
+QED
+
+Theorem dispatch_scalar_edge_mem[local]:
+  (!fuel. step_inst fuel ctx (mk_inst id opc ops [out]) s =
+     OK (update_var out value s)) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
+  ~s.vs_halted /\ MEM opc [CALLDATASIZE; CALLDATALOAD; LT; EQ; ISZERO; SHR] ==>
+  gas_path_mem_edge ctx fn s 0
+    (OK (update_var out value s with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >> irule for_range_straight_line_mem_edge >> conj_tac >- simp[] >>
+  qexistsl_tac [`bb`, `mk_inst id opc ops [out]`, `update_var out value s`] >>
+  gvs[MEM, mk_inst_def, is_terminator_def, step_inst_non_invoke] >>
+  irule below_frontier_no_ranges >> simp[]
+QED
+
+Theorem dispatch_scalar_joint[local]:
+  (!fuel. step_inst fuel ctx (mk_inst id opc ops [out]) s =
+     OK (update_var out value s)) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
+  ~s.vs_halted /\ MEM opc [CALLDATASIZE; CALLDATALOAD; LT; EQ; ISZERO; SHR] /\
+  EVERY (\op. op_taint tn op = {}) ops /\
+  (!a b. ops <> [Var a; Var b]) /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (s,G,tn) []
+    (OK (update_var out value s with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G (mk_inst id opc ops [out]) (update_var out value s),
+     step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn)
+Proof
+  strip_tac >> irule dispatch_joint_edge_path >> conj_tac
+  >- simp[update_var_def] >>
+  conj_tac
+  >- (irule dispatch_scalar_edge_mem >> simp[] >>
+      qexistsl_tac [`id`, `opc`, `ops`] >> gvs[MEM]) >>
+  simp[gas_path_ptr_edge_def] >>
+  qexists_tac `0` >>
+  simp[gas_count_step_def, mk_inst_def] >>
+  `opc <> GAS /\ opc <> INVOKE /\ ~is_terminator opc` by gvs[MEM, is_terminator_def] >>
+  simp[] >> conj_tac
+  >- (irule (REWRITE_RULE [mk_inst_def] ptr_safe_dispatch_scalar_step) >> simp[] >>
+      qexists_tac `update_var out value s` >> simp[update_var_def, GSYM mk_inst_def]) >>
+  simp[GSYM mk_inst_def, ghost_step_non_invoke] >>
+  gvs[MEM, mk_inst_def, is_terminator_def, update_var_def]
+QED
+
+Theorem dispatch_raw_jump_joint[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\ ~s.vs_halted /\
+  is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  step_inst_base i s = OK (jump_to lbl s) /\
+  ptr_safe_step D lo 0 ctx fn PG G tn i s ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (jump_to lbl s),G,tn)
+Proof
+  strip_tac >> irule dispatch_joint_edge_path >> conj_tac
+  >- simp[jump_to_def] >> conj_tac
+  >- (rewrite_tac[gas_path_mem_edge_def] >> simp[] >> qexists_tac `0` >>
+      simp[step_inst_non_invoke, gas_count_step_def, mem_safe_step_non_invoke] >>
+      metis_tac[]) >>
+  rewrite_tac[gas_path_ptr_edge_def] >> simp[] >> qexists_tac `0` >>
+  simp[step_inst_non_invoke, gas_count_step_def] >> metis_tac[]
+QED
+
+Theorem dispatch_jmp_joint[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
+  ~s.vs_halted /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (jump_to lbl s),G,tn)
+Proof
+  strip_tac >> irule dispatch_raw_jump_joint >> simp[] >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
+       inst_dload_in_section_def] >> conj_tac
+  >- (irule below_frontier_no_ranges >> simp[]) >>
+  simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       source_memory_write_ranges_def, source_memory_read_ranges_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+       jump_to_def, op_taint_def]
+QED
+
+Theorem dispatch_jnz_joint[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst id JNZ [op; Label yes; Label no] []) /\
+  ~s.vs_halted /\ eval_operand op s = SOME v /\ op_taint tn op = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (jump_to (if v <> 0w then yes else no) s),G,tn)
+Proof
+  strip_tac >> irule dispatch_raw_jump_joint >> simp[] >>
+  simp[mk_inst_def, is_terminator_def, inst_dload_in_section_def,
+       step_inst_base_opcode_eqs] >> conj_tac
+  >- (Cases_on `v = 0w` >> simp[]) >> conj_tac
+  >- (irule below_frontier_no_ranges >> simp[]) >>
+  simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       source_memory_write_ranges_def, source_memory_read_ranges_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
+       jump_to_def, op_taint_def] >>
+  Cases_on `v = 0w` >> simp[jump_to_def] >>
+  rpt strip_tac >> Cases_on `op'` >> gvs[op_taint_def] >> strip_tac >> gvs[]
+QED
+
+Theorem dispatch_entry_ghost[local]:
+  (!bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) ==>
+  entry_prov fn s G = G /\ entry_taint_vars fn s tn = tn
+Proof
+  strip_tac >> Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- simp[entry_prov_def, entry_taint_vars_def] >>
+  irule entry_ghost_no_phi >> metis_tac[]
+QED
+
+Theorem dispatch_joint_then[local]:
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G1,tn1)) /\
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G1,tn1) [] (OK t,G2,tn2)) ==>
+  !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G2,tn2)
+Proof
+  metis_tac[gas_origin_ptr_path_append, APPEND]
 QED
 
 Theorem dispatch_scalar_path_mem[local]:
@@ -111,7 +248,7 @@ Proof
   Induct
   >- (simp[compile_selector_checks_def, comp_return_def, selector_hit_def] >>
       rpt strip_tac >> qexistsl_tac [`ss`, `G`, `tn`] >>
-      simp[vars_pc_only_refl, cj 1 gas_path_mem_rules]) >>
+      simp[vars_pc_only_refl, cj 1 gas_path_mem_rules, cj 1 gas_origin_ptr_path_rules]) >>
   Cases >> rename1 `(sel, lbl)` >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
   drule_all compile_selector_checks_cons_layout >> strip_tac >>
@@ -165,6 +302,19 @@ Proof
      qexistsl_tac [`bb`, `st.cs_next_id`, `EQ`, `[mid; Lit (n2w sel)]`] >>
      simp[MEM, Abbr `eqi`, Abbr `v`, step_inst_non_invoke, mk_inst_def,
           step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+     (ss,G,tn) [] (OK u,G1,tn1)` by
+    (rpt gen_tac >> simp[NoAsms, Abbr `u`, Abbr `G1`, Abbr `tn1`, Abbr `eqi`] >>
+     irule dispatch_scalar_joint >> simp[] >>
+     simp[MEM, op_taint_def, Abbr `v`, step_inst_non_invoke, mk_inst_def,
+          step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+     (u,G1,tn1) [] (OK (jump_to (if v <> 0w then match else next) u),G1,tn1)` by
+    (rpt gen_tac >> irule dispatch_jnz_joint >> simp[] >>
+     qexistsl_tac [`st.cs_next_id + 1`, `Var out`] >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+     (ss,G,tn) [] (OK (jump_to (if v <> 0w then match else next) u),G1,tn1)` by
+    (irule dispatch_joint_then >> metis_tac[]) >>
   `gas_path_mem ctx fn u 0
      (OK (jump_to (if v <> 0w then match else next) u))` by
     (irule for_range_jnz_zero_path_mem >> simp[] >>
@@ -215,6 +365,19 @@ Resume compile_selector_checks_ptr_endpoint[hit]:
     (qpat_x_assum `gas_path_mem ctx fn ss 0 (OK (jump_to _ u))` mp_tac >>
      simp[Abbr `v`, bool_to_word_def] >>
      metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
+  `entry_prov fn tt G1 = G1 /\ entry_taint_vars fn tt tn1 = tn1` by
+    (irule dispatch_entry_ghost >> simp[Abbr `tt`, jump_to_def] >>
+     rpt strip_tac >> first_x_assum irule >> simp[selector_hit_def]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+     (jump_to match u,G1,tn1) [] (OK tt,G1,tn1)` by
+    (rpt gen_tac >> simp[NoAsms, Abbr `tt`] >> irule dispatch_jmp_joint >>
+     simp[jump_to_def, get_instruction_def] >>
+     conj_tac >- (qexists_tac `st.cs_next_id + 2` >> simp[]) >>
+     fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+     (ss,G,tn) [] (OK tt,G1,tn1)` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G1`, `tn1`, `jump_to match u`] >>
+     fs[Abbr `v`, bool_to_word_def]) >>
   qexistsl_tac [`tt`, `entry_prov fn tt G1`, `entry_taint_vars fn tt tn1`] >>
   simp[entry_taint_vars_frame, selector_hit_def] >>
   `vars_pc_only ss tt` by
@@ -235,7 +398,7 @@ Resume compile_selector_checks_ptr_endpoint[hit]:
   conj_tac >- (rpt strip_tac >> fs[allocas_below_fmp_def] >> metis_tac[]) >>
   conj_tac >- (fs[allocas_from_def] >> metis_tac[]) >>
   qexistsl_tac [`st.cs_next_id + 2`, `lbl`] >>
-  simp[get_instruction_def]
+  fs[get_instruction_def, jump_to_def]
 QED
 
 Resume compile_selector_checks_ptr_endpoint[miss]:
@@ -246,7 +409,7 @@ Resume compile_selector_checks_ptr_endpoint[miss]:
   disch_then (qspecl_then [`ctx`, `fn`, `jump_to next u`, `m`, `lo`, `PG`, `G1`, `tn1`] mp_tac) >>
   impl_tac
   >- (simp[jump_to_def, control_moves_keep_vars] >>
-      fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+      fs[allocas_from_def, allocas_below_fmp_def, selector_hit_def] >> metis_tac[]) >>
   strip_tac >>
   qexistsl_tac [`tt`, `G'`, `tn'`] >>
   `vars_pc_only ss tt` by
@@ -256,6 +419,10 @@ Resume compile_selector_checks_ptr_endpoint[miss]:
     (qpat_x_assum `gas_path_mem ctx fn ss 0 (OK (jump_to _ u))` mp_tac >>
      simp[Abbr `v`, bool_to_word_def] >>
      metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+     (ss,G,tn) [] (OK tt,G',tn')` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G1`, `tn1`, `jump_to next u`] >>
+     fs[Abbr `v`, bool_to_word_def]) >>
   simp[selector_hit_def] >>
   rpt strip_tac >>
   qpat_x_assum `!D fuel. _ ==> ptr_safe_run _ _ _ _ _ _ _ _ ss`
@@ -317,6 +484,11 @@ Proof
     (OK (update_var out value s with vs_inst_idx := SUC s.vs_inst_idx))` by
     (irule dispatch_scalar_path_mem >> simp[] >>
      qexistsl_tac [`id`, `opc`, `ops`] >> gvs[MEM]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (update_var out value s with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G (mk_inst id opc ops [out]) (update_var out value s),
+     step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn)` by
+    (rpt gen_tac >> irule dispatch_scalar_joint >> simp[]) >>
   simp[vars_pc_only_inst_idx, control_moves_keep_vars, update_var_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        allocas_from_def, allocas_below_fmp_def] >>
@@ -429,6 +601,10 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[iszero]:
     (qpat_assum `gas_path_mem ctx fn ss 0 (OK u2)`
        (mp_then Any mp_tac gas_path_mem_then) >>
      disch_then drule >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss,G,tn) [] (OK u2,G2,tn2)` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G1`, `tn1`, `u1`] >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss,G,tn) [] (OK u3,G3,tn3)` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G2`, `tn2`, `u2`] >> simp[]) >>
   `vars_pc_only ss u3` by metis_tac[vars_pc_only_trans] >>
   suspend "branch"
 QED
@@ -439,6 +615,11 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[branch]:
   `gas_path_mem ctx fn u3 0
      (OK (jump_to (if bool_to_word (4 <= LENGTH cd) <> 0w then d else fallback) u3))` by
     (irule for_range_jnz_zero_path_mem >> simp[] >>
+     qexistsl_tac [`st.cs_next_id + 3`,
+       `Var (STRING #"%" (toString (st.cs_next_var + 2)))`] >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u3,G3,tn3) []
+     (OK (jump_to (if bool_to_word (4 <= LENGTH cd) <> 0w then d else fallback) u3),G3,tn3)` by
+    (rpt gen_tac >> irule dispatch_jnz_joint >> simp[] >>
      qexistsl_tac [`st.cs_next_id + 3`,
        `Var (STRING #"%" (toString (st.cs_next_var + 2)))`] >> simp[]) >>
   Cases_on `4 <= LENGTH cd`
@@ -454,6 +635,12 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[short]:
      qpat_assum `gas_path_mem ctx fn ss 0 (OK u3)`
        (mp_then Any mp_tac gas_path_mem_then) >>
      disch_then drule >> simp[]) >>
+  `entry_prov fn tt G3 = G3 /\ entry_taint_vars fn tt tn3 = tn3` by
+    (irule dispatch_entry_ghost >>
+     fs[Abbr `tt`, jump_to_def, linear_dispatch_target_short, Abbr `cd`]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss,G,tn) [] (OK tt,G3,tn3)` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G3`, `tn3`, `u3`] >>
+     fs[Abbr `tt`, bool_to_word_def]) >>
   qexistsl_tac [`tt`, `entry_prov fn tt G3`, `entry_taint_vars fn tt tn3`] >>
   `fresh_vars_wrt st' tt` by
     (simp[Abbr `tt`, control_moves_keep_vars] >>
@@ -469,7 +656,7 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[short]:
   qexistsl_tac [`st.cs_next_id + 3`, `fallback`,
     `Var (STRING #"%" (toString (st.cs_next_var + 2)))`,
     `bool_to_word (4 <= LENGTH ss.vs_call_ctx.cc_calldata)`, `d`] >>
-  simp[bool_to_word_def, jump_to_def]
+  gvs[bool_to_word_def, jump_to_def]
 QED
 
 Resume compile_selector_dispatch_linear_ptr_endpoint[load]:
@@ -480,6 +667,9 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[load]:
      qpat_assum `gas_path_mem ctx fn ss 0 (OK u3)`
        (mp_then Any mp_tac gas_path_mem_then) >>
      disch_then drule >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss,G,tn) [] (OK s4,G3,tn3)` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G3`, `tn3`, `u3`] >>
+     fs[Abbr `s4`, bool_to_word_def]) >>
   `entry_prov fn s4 G3 = G3 /\ entry_taint_vars fn s4 tn3 = tn3` by
     (irule entry_ghost_no_phi >> simp[Abbr `s4`, jump_to_def]) >>
   `vars_pc_only ss s4` by simp[Abbr `s4`, vars_pc_only_jump_to] >>
@@ -544,6 +734,10 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[shift]:
     (qpat_assum `gas_path_mem ctx fn ss 0 (OK u5)`
        (mp_then Any mp_tac gas_path_mem_then) >>
      disch_then drule >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss,G,tn) [] (OK u5,G5,tn5)` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G3`, `tn3`, `s4`] >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss,G,tn) [] (OK u6,G6,tn6)` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G5`, `tn5`, `u5`] >> simp[]) >>
   `vars_pc_only ss u6` by metis_tac[vars_pc_only_trans] >>
   suspend "checks"
 QED
@@ -566,6 +760,10 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[checks]:
      fs[Abbr `s4`]) >>
   drule compile_selector_checks_next_var_exact >> strip_tac >>
   `r.cs_next_var = st'.cs_next_var` by simp[] >>
+  `linear_dispatch_target cd selectors fallback =
+     case selector_hit (calldata_method_id cd) selectors of
+       SOME l => l | NONE => fallback` by
+    (irule linear_dispatch_target_selector_hit >> simp[]) >>
   drule compile_selector_checks_ptr_endpoint >>
   disch_then (qspecl_then [`ctx`, `fn`, `u6`, `calldata_method_id cd`,
     `lo`, `PG`, `G6`, `tn6`] mp_tac) >>
@@ -576,13 +774,11 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[checks]:
     (qpat_assum `gas_path_mem ctx fn ss 0 (OK u6)`
        (mp_then Any mp_tac gas_path_mem_then) >>
      disch_then drule >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss,G,tn) [] (OK t7,G',tn7)` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G6`, `tn6`, `u6`] >> simp[]) >>
   `vars_pc_only ss t7` by metis_tac[vars_pc_only_trans] >>
   `fresh_vars_wrt st' t7` by
     (irule fresh_vars_wrt_mono >> qexists_tac `r` >> simp[]) >>
-  `linear_dispatch_target cd selectors fallback =
-     case selector_hit (calldata_method_id cd) selectors of
-       SOME l => l | NONE => fallback` by
-    (irule linear_dispatch_target_selector_hit >> simp[]) >>
   Cases_on `selector_hit (calldata_method_id cd) selectors`
   >- suspend "fallback"
   >> suspend "hit"
@@ -613,10 +809,17 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[fallback]:
     (qpat_assum `gas_path_mem ctx fn ss 0 (OK t7)`
        (mp_then Any mp_tac gas_path_mem_then) >>
      disch_then drule >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (t7,G',tn7) [] (OK tt,G',tn7)` by
+    (rpt gen_tac >> simp[NoAsms, Abbr `tt`] >> irule dispatch_jmp_joint >> simp[] >>
+     qexists_tac `r.cs_next_id` >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (ss,G,tn) [] (OK tt,G',tn7)` by
+    (irule dispatch_joint_then >> qexistsl_tac [`G'`, `tn7`, `t7`] >> simp[]) >>
+  `entry_prov fn tt G' = G' /\ entry_taint_vars fn tt tn7 = tn7` by
+    (irule dispatch_entry_ghost >> fs[Abbr `tt`, jump_to_def]) >>
   qexistsl_tac [`tt`, `entry_prov fn tt G'`, `entry_taint_vars fn tt tn7`] >>
   `vars_pc_only ss tt` by simp[Abbr `tt`, vars_pc_only_jump_to] >>
   `fresh_vars_wrt st' tt` by simp[Abbr `tt`, control_moves_keep_vars] >>
-  simp[Abbr `tt`, jump_to_def, entry_taint_vars_frame, Abbr `cd`] >>
+  gvs[Abbr `tt`, jump_to_def, entry_taint_vars_frame, Abbr `cd`] >>
   rpt strip_tac >>
   qpat_x_assum `!D. (!fuel. ptr_safe_run _ _ _ _ _ _ _ _ u6) ==> _`
     (qspec_then `D` irule) >>
