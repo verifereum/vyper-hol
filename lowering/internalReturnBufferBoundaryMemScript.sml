@@ -64,7 +64,7 @@ Proof
   Cases_on `ALOOKUP ee.immutables cx.txn.target` >> gvs[] >> metis_tac[]
 QED
 
-Theorem internal_return_buffer_value_types[local]:
+Theorem internal_return_buffer_value_types:
   expr_sim_inv cenv cx env es /\
   IS_SOME (type_stmt env ty (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
