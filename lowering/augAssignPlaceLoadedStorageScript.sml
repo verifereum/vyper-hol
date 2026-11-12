@@ -11,6 +11,7 @@ Theorem aug_place_storage_loaded:
   EVERY (supported_pure_expr tops) (target_indices bt) /\
   eval_target_place cx bt (es with gas_obs := gs) =
     (INL (StoragePlace tr slot tv),mid) /\
+  valid_horizon cx st0 H mid.storage_trace /\
   target_post H ctx func cenv cx es sa sp s0 mid
     (PlaceR (StoragePlace tr slot tv)) (Type ty) r t /\
   is_word_type ty /\

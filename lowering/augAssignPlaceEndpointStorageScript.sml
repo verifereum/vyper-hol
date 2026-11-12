@@ -1,6 +1,7 @@
 (* Storage-place continuation after a counted target traversal. *)
 Theory augAssignPlaceEndpointStorage
 Ancestors
+  vyperFiniteStoragePreservation
   augAssignPlaceEndpointMemory augAssignPlaceLoadedStorage
   augAssignPlaceStorageContinuation augAssignPlaceLoadContinuation
   augAssignPlaceSourceMemory bodyAugAssignOther bodyMemoryDefs
