@@ -51,7 +51,7 @@ Theorem aggregate_bytestring_rebased_store_path_mem:
   post_value_type ce e = expr_type e /\
   is_bytestring_type (expr_type e) /\ ~is_word_type (expr_type e) /\
   compile_store_memory ce op dst (expr_type e) sty su = ((),sb) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   sm.cs_next_var <= su.cs_next_var /\
   local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
@@ -74,7 +74,7 @@ Theorem aggregate_bytestring_rebased_store_path_mem:
   s.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?q. gas_path_mem ctx func s 0 (OK q) /\
     val_in_memory tv v (w2n dw) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
@@ -90,11 +90,13 @@ Theorem aggregate_bytestring_rebased_store_path_mem:
     q.vs_alloca_next = s.vs_alloca_next /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
     (!a len. a+len <= w2n dw \/ w2n dw+type_memory_size tv <= a ==>
-      mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory)
+      mem_bytes_at a len q.vs_memory = mem_bytes_at a len s.vs_memory) /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_val_rel cx (expr_type e) v op s` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_assum `post_value_type ce e = _`
        (fn th => rewrite_tac[expr_post_def, th]) >>
      rpt strip_tac >> first_assum ACCEPT_TAC) >>
