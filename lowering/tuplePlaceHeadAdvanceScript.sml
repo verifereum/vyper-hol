@@ -41,7 +41,7 @@ Theorem tuple_place_head_advance:
   (!n b sz. local_region cenv ff.scopes t n b sz <=>
             local_region cenv es.scopes s n b sz) /\
   (!x. not_fresh_at sp x ==> lookup_var x t = lookup_var x s) /\
-  stmt_state_rel ctx func cenv cx ff t /\ ~t.vs_halted /\
+  stmt_state_rel H ctx func cenv cx ff t /\ ~t.vs_halted /\
   t.vs_current_bb = sb.cs_current_bb /\
   t.vs_inst_idx = LENGTH sb.cs_current_insts /\
   (!j. SUC i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>

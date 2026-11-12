@@ -35,7 +35,7 @@ QED
 Theorem tuple_place_supported_target_borrow_bytes:
   EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sa sb s0 ee pv vt r s /\
+  target_post H ctx func cenv cx es sa sb s0 ee pv vt r s /\
   local_region cenv es.scopes s0 n b sz ==>
   mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory
 Proof

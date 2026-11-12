@@ -25,13 +25,13 @@ Theorem tuple_place_local_relayout_snapshot:
   w2n dw + type_memory_size dtv < dimword (:256) /\
   (w2n sw + type_memory_size stv <= w2n dw \/
    w2n dw + type_memory_size dtv <= w2n sw) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   find_containing_scope id es.scopes = SOME (pre,scope,entry,rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. stmt_state_rel ctx func cenv cx
+  ?t. stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
     typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size dtv) /\
@@ -58,13 +58,13 @@ Theorem tuple_place_word_slot_snapshot:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME k /\
   eval_operand src s = SOME (typed_val_to_w256 tv v) /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx (StoragePlace tr k tv) v ee = (INL (),ff) /\
   storage_place_region cx (StoragePlace tr k tv) /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    stmt_state_rel H ctx func cenv cx ff t /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     (!x. lookup_var x t = lookup_var x s) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -81,7 +81,7 @@ QED
 (* Allocation and typed normalization retain bytes of every old allocation.
    Both frames refer to the endpoint used for the source-state relation. *)
 Theorem tuple_place_normalize_frame:
-  !cenv cx ctx func es sa sm sc buf dty sty dtv stv v src sw s.
+  !H cenv cx ctx func es sa sm sc buf dty sty dtv stv v src sw s.
     compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm) /\
     compile_store_memory_typed cenv buf.buf_operand dty src sty sm = ((),sc) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
@@ -101,12 +101,12 @@ Theorem tuple_place_normalize_frame:
     w2n sw + type_memory_size stv <= s.vs_alloca_next /\
     (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid ==>
       w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     fn_has_code sa sm func /\ fn_has_code sm sc func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t dw. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME dw /\
       val_in_memory dtv v (w2n dw) t.vs_memory /\
       w2n dw + type_memory_size dtv < dimword (:256) /\
@@ -159,7 +159,7 @@ Proof
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _;
        vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = u` mp_tac >>
      simp[venom_state_component_equality]) >>
-  `stmt_state_rel ctx func cenv cx es t` by suspend "state" >>
+  `stmt_state_rel H ctx func cenv cx es t` by suspend "state" >>
   `!aid b len a n. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
      aid < sa.cs_next_id /\ b <= a /\ a + n <= b + len ==>
      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory` by
