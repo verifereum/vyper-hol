@@ -13,7 +13,7 @@
  *)
 Theory frameStep
 Ancestors
-  frameObsStep vfmDecreasesGas vfmExecution vfmExecutionProp vfmContext list
+  frameGas frameObsStep vfmDecreasesGas vfmExecution vfmExecutionProp vfmContext list
   relation vfmSameFrame vfmRunCall callTrace
 
 (* es1 is the next state of es's frame: its step, or a call's step and
@@ -169,4 +169,61 @@ Proof
   gvs[frame_last_def] >>
   qpat_x_assum `RTC _ _ _` mp_tac >> simp[Once RTC_CASES1] >>
   strip_tac >> gvs[]
+QED
+
+(* add_frame_gas g gives a well-formed frame at least g gas left. *)
+Theorem wf_state_frame_gas_left:
+  !g es. wf_state es ==> g <= frame_gas_left (add_frame_gas g es)
+Proof
+  rw[wf_state_def, add_frame_gas_def] >>
+  Cases_on `es.contexts` >> gvs[] >>
+  PairCases_on `h` >> gvs[frame_gas_left_def, wf_context_def]
+QED
+
+Theorem run_call_tr_forward[local]:
+  !n r s t d.
+    run_call_tr n (r,s) = (INL (),t) /\ ISL r /\ d <= n ==>
+    RTC (\a b. LENGTH a.contexts >= d /\ step a = (INL (),b)) s t
+Proof
+  recInduct run_call_tr_ind >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> Cases_on `r` >> gvs[] >>
+  qpat_x_assum `run_call_tr _ _ = _` mp_tac >>
+  simp[Once run_call_tr_def] >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  strip_tac >> Cases_on `step s` >> rename1 `(q,v)` >>
+  Cases_on `q` >> gvs[]
+  >- simp[RTC_RULES] >>
+  gvs[Once run_call_tr_def]
+QED
+
+Theorem frame_next_reaches:
+  !es es1. frame_next es es1 ==>
+    RTC (\a b. LENGTH a.contexts >= LENGTH es.contexts /\
+               step a = (INL (),b)) es es1
+Proof
+  rw[frame_next_def]
+  >- simp[RTC_RULES] >>
+  gvs[run_call_eq_tr] >>
+  `run_call_tr (SUC (LENGTH es.contexts)) (INL (),v) = (INL (),es1)` by
+    simp[Once run_call_tr_def] >>
+  drule run_call_tr_forward >>
+  disch_then (qspec_then `LENGTH es.contexts` mp_tac) >>
+  simp[] >> strip_tac >> simp[RTC_RULES]
+QED
+
+Theorem frame_next_inst_at:
+  frame_next es es1 /\ frame_inst_at es s op ==>
+  s = es \/ frame_inst_at es1 s op
+Proof
+  strip_tac >>
+  `LENGTH es1.contexts = LENGTH es.contexts` by fs[frame_next_def] >>
+  drule frame_reaches_next >>
+  fs[frame_inst_at_def] >> metis_tac[]
+QED
+
+Theorem frame_next_inst_at_prefix:
+  frame_next es es1 /\ frame_inst_at es1 s op ==> frame_inst_at es s op
+Proof
+  strip_tac >> drule frame_next_reaches >> strip_tac >>
+  irule frame_inst_at_prefix >> qexists_tac `es1` >> fs[frame_next_def]
 QED
