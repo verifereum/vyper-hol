@@ -78,10 +78,10 @@ Proof
   drule_all run_call_balance_bounded >> strip_tac >>
   drule_all run_call_preserves_wf_state >> strip_tac >>
   rw[accounts_well_typed_def, account_well_typed_def]
-  >- (drule balance_bounded_rollback >>
-      qspecl_then [`addr`, `es'.rollback.accounts`] assume_tac
-        lookup_balance_le_total_balance >>
-      decide_tac) >>
+  >- (drule balance_bounded_rollback >> strip_tac >>
+      irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+      irule_at Any lookup_balance_le_total_balance >>
+      fs[] >> decide_tac) >>
   gvs[wf_state_def, all_accounts_def, wf_accounts_def, wf_account_state_def,
       lookup_account_def]
 QED
