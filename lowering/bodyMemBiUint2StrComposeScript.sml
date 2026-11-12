@@ -14,16 +14,16 @@ Theorem uint2str_typed_mem_path[local]:
     (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm) = (vv,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,es') /\
   value_has_type (BaseTV (UintT k)) v /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\ alloca_history func s ==>
   ?t rv. gas_path_mem ctx func s 0 (OK t) /\
     builtin_result cx es'.accounts (BaseT (StringT n)) (Uint2Str n)
       [expr_type e] [v] = INL rv /\
-    vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
       es sa sb s0 es' (Value rv) vv t /\
     vv_store_bound cx (BaseT (StringT n)) (BaseT (StringT n)) es'
       (Value rv) vv t /\
