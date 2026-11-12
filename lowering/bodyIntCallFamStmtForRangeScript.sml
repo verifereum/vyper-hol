@@ -817,7 +817,7 @@ Resume intcall_stmts_producer_for_range_lit[layout]:
     (simp[for_code_def, Abbr `A`] >>
      conj_tac >- simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
                       venomInstTheory.is_terminator_def] >>
-     simp[not_fresh_at_def] >> metis_tac[]) >>
+     simp[not_fresh_at_def] >> rpt conj_tac >> metis_tac[]) >>
   suspend "start"
 QED
 
