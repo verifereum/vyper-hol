@@ -5,7 +5,9 @@ Ancestors
   o1MakeSsaCallAssembly o1MakeSsaCalls o1MakeSsaRootedTree
   o1MakeSsaActualMaps makeSsaCurrentProps o1PassContract
   o1MakeSsaOwnership o1MakeSsaEventOwnership irSupply venomInst
-  venomFnScheduleRunner venomWf list pred_set
+  venomFnScheduleRunner venomWf makeSsaDefs makeSsaCurrentAnalysis
+  venomExecProofs makeSsaRfPipeline makeSsaCurrentNonDegCleanup
+  makeSsaCurrentTraceCertificate list pred_set
 
 Theorem prepared_rename_owner_init:
   ir_supply_covers_fn s f /\
@@ -87,4 +89,84 @@ Proof
     (qpat_x_assum `block_succs_map bbs = _` (SUBST1_TAC o SYM) >>
      simp[MEM_MAP] >> qexists `bb` >> simp[]) >>
   fs[MEM_MAP, fn_succs_closed_def, fn_labels_def] >> metis_tac[]
+QED
+
+Theorem prepared_actual_tree:
+  wf_function f /\ make_ssa_input_ok f /\ fn_entry_label f = SOME entry /\
+  add_phi_nodes_supply s df pm li f.fn_blocks defs = (bbs,t) ==>
+  ALL_DISTINCT (dom_tree_postorder (current_dom_tree f)) /\
+  (!q. MEM q (dom_tree_postorder (current_dom_tree f)) ==>
+    IS_SOME (lookup_block q bbs))
+Proof
+  strip_tac >> conj_tac
+  >- metis_tac[actual_rooted_tree_distinct] >>
+  drule add_phi_nodes_supply_labels >> strip_tac >>
+  `?eb. entry_block f = SOME eb` by fs[fn_entry_label_def, AllCaseEqs()] >>
+  `PERM (dom_tree_postorder (current_dom_tree f)) (fn_labels f)` by
+    (rewrite_tac[GSYM current_dom_postorder_def] >>
+     irule current_dom_postorder_perm >> fs[make_ssa_input_ok_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM q (MAP (\bb. bb.bb_label) bbs)` by
+    metis_tac[sortingTheory.PERM_MEM_EQ, fn_labels_def] >>
+  `?b. MEM b bbs /\ b.bb_label = q` by (fs[MEM_MAP] >> metis_tac[]) >>
+  `lookup_block q bbs = SOME b` by
+    (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >> simp[]
+QED
+
+Theorem insert_phis_operand_domain:
+  insert_phis_for_var_supply s var df pm li bbs wl hp = (bbs',s') /\
+  var IN V /\ EVERY (\bb. EVERY (\i. !v. MEM (Var v) i.inst_operands ==>
+    v IN V) bb.bb_instructions) bbs ==>
+  EVERY (\bb. EVERY (\i. !v. MEM (Var v) i.inst_operands ==>
+    v IN V) bb.bb_instructions) bbs'
+Proof
+  strip_tac >> drule o1MakeSsaFrontierTheory.insert_phis_for_var_supply_invariant >>
+  disch_then irule >> simp[] >> rpt strip_tac >> IF_CASES_TAC >>
+  gvs[insert_phi_at_block_def, build_phi_inst_supply_def, EVERY_MEM,
+      MEM_FLAT, MEM_MAP] >> rpt strip_tac >> gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem add_phi_nodes_operand_domain:
+  !defs s df pm li bbs bbs' s' V.
+  add_phi_nodes_supply s df pm li bbs defs = (bbs',s') /\
+  set (MAP FST defs) SUBSET V /\
+  EVERY (\bb. EVERY (\i. !v. MEM (Var v) i.inst_operands ==>
+    v IN V) bb.bb_instructions) bbs ==>
+  EVERY (\bb. EVERY (\i. !v. MEM (Var v) i.inst_operands ==>
+    v IN V) bb.bb_instructions) bbs'
+Proof
+  Induct >- simp[add_phi_nodes_supply_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> simp[add_phi_nodes_supply_def] >>
+  pairarg_tac >> gvs[] >> strip_tac >>
+  drule_all insert_phis_operand_domain >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem function_original_operand_domain:
+  EVERY (\bb. EVERY (\i. !v. MEM (Var v) i.inst_operands ==>
+    v IN set (fn_ir_vars f)) bb.bb_instructions) f.fn_blocks
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  simp[fn_ir_vars_def, MEM_FLAT, MEM_MAP] >>
+  qexists `block_ir_vars bb` >> conj_tac >- metis_tac[] >>
+  simp[block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
+  qexists `inst_ir_vars i` >> simp[inst_ir_vars_def, inst_uses_def,
+    MEM_operand_vars_eq_Var] >> metis_tac[]
+QED
+
+Theorem prepared_original_variable_domain:
+  add_phi_nodes_supply s df pm li f.fn_blocks
+    (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl f.fn_blocks) labels)))) = (bbs,t) ==>
+  !bb i v. MEM bb bbs /\ MEM i bb.bb_instructions ==>
+    (MEM (Var v) i.inst_operands \/ MEM v i.inst_outputs ==>
+      v IN set (fn_ir_vars f))
+Proof
+  strip_tac >>
+  `EVERY (\bb. EVERY (\i. !v. MEM (Var v) i.inst_operands ==>
+    v IN set (fn_ir_vars f)) bb.bb_instructions) bbs` by
+    (drule add_phi_nodes_operand_domain >> disch_then irule >>
+     simp[compute_defs_original_key_domain, function_original_operand_domain]) >>
+  drule prepared_original_output_domain >>
+  gvs[EVERY_MEM, SUBSET_DEF] >> metis_tac[]
 QED
