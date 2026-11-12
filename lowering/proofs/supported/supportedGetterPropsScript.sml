@@ -266,7 +266,6 @@ Theorem supported_selected_external_body:
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,[],ret,fbody) ==>
   supported_function_body tops External args fbody /\
-  EVERY (supported_place_type tops) (MAP SND args) /\
   (ret = NoneT \/ supported_place_type tops ret)
 Proof
   strip_tac >> drule lookup_function_External_cases >> strip_tac

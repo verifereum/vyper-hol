@@ -104,7 +104,6 @@ Proof
   strip_tac >>
   `supported_declaration_headers tops` by fs[supported_program_def] >>
   drule_all source_typing_ok_params_ok >> strip_tac >>
-  drule_all supported_selected_external_body >> strip_tac >>
   gvs[params_ok_def, EVERY_MEM, MEM_MAP, PULL_EXISTS, pairTheory.FORALL_PROD] >>
   fs[source_typing_ok_def] >> metis_tac[check_contract_namespaces_ok,
     entryReachBodyConversionSupportTheory.assignable_type_entry_abi_support]
