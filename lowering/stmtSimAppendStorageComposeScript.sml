@@ -86,8 +86,7 @@ Theorem append_storage_copy_suffix_parts:
     emit_op ADD [bop; Lit 1w] s3 = (dop,s4) /\
     emit_op MUL [lop; Lit (n2w stride)] s4 = (off,s5) /\
     emit_op ADD [dop; off] s5 = (pop,s6) /\
-    compile_word_copy_loop vop pop stride LocMemory
-      (if tr then LocTransient else LocStorage) F s6 = (u,s7) /\
+    compile_store_slots cenv vop pop dt tr s6 = ((),s7) /\
     emit_op ADD [lop; Lit 1w] s7 = (nop,s8) /\
     emit_void (if tr then TSTORE else SSTORE) [bop; nop] s8 = ((),s9)
 Proof
