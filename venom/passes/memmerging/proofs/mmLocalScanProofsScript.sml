@@ -17284,6 +17284,46 @@ Proof
   irule mm_local_write_log_memory_cong >> simp[]
 QED
 
+Theorem mm_local_zero_capture_actual_step[local]:
+  mm_local_zero_capture dfg is n j = SOME (d,bs) /\
+  step_inst fuel ctx (EL j is) s = OK u /\
+  (!dst v len. is_calldatasize_copy dfg (EL j is) /\
+    (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v s = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
+    LENGTH s.vs_call_ctx.cc_calldata < dimword (:256)) ==>
+  (u with vs_inst_idx := SUC j).vs_memory =
+    (write_memory_with_expansion d bs s).vs_memory /\
+  mm_local_nonmemory_frame (u with vs_inst_idx := SUC j) =
+    mm_local_nonmemory_frame s /\
+  (!v. lookup_var v (u with vs_inst_idx := SUC j) = lookup_var v s)
+Proof
+  strip_tac >>
+  `(EL j is).inst_opcode IN {MSTORE; CALLDATACOPY}` by
+    (drule mm_local_zero_capture_cases >>
+     gvs[is_calldatasize_copy_def] >> metis_tac[]) >>
+  `mm_local_nonmemory_frame u = mm_local_nonmemory_frame s /\
+    (!v. lookup_var v u = lookup_var v s)` by
+    (drule_at Any mm_local_write_runtime_frame >>
+     gvs[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  reverse conj_tac
+  >- gvs[venomStateTheory.lookup_var_def] >>
+  simp[] >> drule mm_local_zero_capture_cases >> strip_tac >> gvs[]
+  >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[venomExecSemanticsTheory.step_inst_non_invoke,
+        venomExecSemanticsTheory.step_inst_base_def,
+        venomExecSemanticsTheory.exec_write2_def,
+        venomStateTheory.eval_operand_def] >>
+      strip_tac >> gvs[mstore_0w_eq_write]) >>
+  `lookup_var v s = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
+    LENGTH s.vs_call_ctx.cc_calldata < dimword (:256)` by simp[] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  gvs[is_calldatasize_copy_def] >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomStateTheory.eval_operand_def] >>
+  strip_tac >> gvs[calldatacopy_past_end_bytes, TAKE_LENGTH_ID_rwt]
+QED
+
 Theorem mm_local_zero_capture_finite[local]:
   is = bb.bb_instructions /\
   mm_local_zero_capture dfg is n j = SOME (d,bs) /\
@@ -17318,6 +17358,52 @@ Proof
   Cases_on `lookup_var v s` >> gvs[] >> strip_tac >>
   mp_tac (Q.ISPEC `dst:256 word` wordsTheory.w2n_lt) >>
   simp[] >> decide_tac
+QED
+
+Theorem mm_local_zero_representative_selected_bounds[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  MEM g gs /\ r < LENGTH is /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!j d bs. mm_local_zero_capture dfg is (SUC r) j = SOME (d,bs) ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u) /\
+  eom < dimword (:256) ==>
+  g.cg_dst < dimword (:256) /\ g.cg_length < dimword (:256) /\
+  (g.cg_length = 0 \/ g.cg_dst + g.cg_length <= eom)
+Proof
+  strip_tac >>
+  `mm_local_group_endpoint is (SUC r)
+    (mm_local_zero_capture dfg is (SUC r)) g` by
+    (gvs[] >> irule mm_local_zero_representative_endpoint >> simp[]) >>
+  `!j d bs. mm_local_zero_capture dfg is (SUC r) j = SOME (d,bs) ==>
+    d + LENGTH bs < dimword (:256) /\
+    (LENGTH bs = 0 \/ d + LENGTH bs <= eom)` by
+    (rpt strip_tac >>
+     first_x_assum drule >> strip_tac >>
+     drule_all mm_local_zero_capture_finite >> simp[]) >>
+  `g.cg_dst + g.cg_length < dimword (:256)` by
+    (fs[mm_local_group_endpoint_def] >> metis_tac[]) >>
+  conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+  Cases_on `g.cg_length = 0` >- simp[] >> simp[] >>
+  `mm_local_group_coverage is (SUC r)
+    (mm_local_zero_capture dfg is (SUC r)) g` by
+    (gnvs[] >> drule_all mm_local_zero_representative_certificate >> simp[]) >>
+  `?j d bs. j < SUC r /\ j < LENGTH is /\
+    mm_local_zero_capture dfg is (SUC r) j = SOME (d,bs) /\
+    d <= g.cg_dst + g.cg_length - 1 /\
+    g.cg_dst + g.cg_length - 1 < d + LENGTH bs` by
+    (qpat_x_assum `mm_local_group_coverage _ _ _ _` mp_tac >>
+     pure_rewrite_tac[mm_local_group_coverage_def] >>
+     disch_then (qspec_then `g.cg_dst + g.cg_length - 1` mp_tac) >>
+     asm_simp_tac pure_ss [AND_CLAUSES, EQ_CLAUSES] >>
+     strip_tac >>
+     `g.cg_dst <= g.cg_dst + g.cg_length - 1 /\
+       g.cg_dst + g.cg_length - 1 < g.cg_dst + g.cg_length` by decide_tac >>
+     gvs[] >> qexistsl [`j`,`d`,`bs`] >> gvs[]) >>
+  `LENGTH bs = 0 \/ d + LENGTH bs <= eom` by metis_tac[] >> decide_tac
 QED
 
 Theorem mm_local_zero_representative_finite[local]:
