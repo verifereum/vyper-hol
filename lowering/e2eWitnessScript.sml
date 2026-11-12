@@ -501,10 +501,25 @@ Proof
                        vyperTypingTheory.well_formed_type_value_def]
 QED
 
+val p23_call_context_eval = EVAL
+  ``initial_evaluation_context p23_am_call.sources p23_am_call.layouts
+      p23_call_tx NONE``;
+
 Theorem p23_source_storage:
   source_storage_ok p23_tops p23_am_call p23_call_tx
 Proof
-  cheat
+  simp[source_storage_ok_def, p23_call_context_eval,
+       vyperStorageLayoutSafetyTheory.contract_storage_well_formed_def,
+       vyperStorageLayoutSafetyTheory.storage_layout_safe_def,
+       vyperLookupStorageTheory.well_formed_storage_def,
+       vyperLookupStorageTheory.well_formed_layout_def,
+       vyperLookupStorageTheory.storage_var_in_range_def,
+       vyperLookupStorageTheory.storage_var_info_def,
+       vyperStorageLayoutSafetyTheory.declared_storage_region_def,
+       vyperStorageLayoutSafetyTheory.nonreentrant_slot_separated_def,
+       vyperContextTheory.get_module_code_def,
+       vyperStateTheory.find_var_decl_by_name_def,
+       COND_RAND, COND_RATOR]
 QED
 
 Theorem p23_call_state:
@@ -513,10 +528,17 @@ Proof
   cheat
 QED
 
+val p23_get_lookup_eval = EVAL
+  ``vyperInterpreter$lookup_function NONE "get" External p23_tops``;
+
 Theorem p23_valid_call:
   valid_vyper_call p23_tops p23_call_tx p23_get_calldata (BaseT (UintT 256))
 Proof
-  cheat
+  simp[valid_vyper_call_def, p23_call_tx_def,
+       vyperContextTheory.empty_call_txn_def, p23_get_lookup_eval,
+       vyperInterpreterTheory.bind_arguments_def,
+       selectorDispatchTheory.calldata_encodes_def,
+       p23_get_calldata_encodes]
 QED
 
 Theorem p23_constructor_call_free:
