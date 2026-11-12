@@ -2025,6 +2025,12 @@ Proof
   simp[cs_appends_return]
 QED
 
+Theorem ctor_slice_out_buf_appends[local]:
+  !size. cs_appends (compile_slice_out_buf size)
+Proof
+  rw[cs_appends_def] >> metis_tac[ctor_slice_out_buf_first_emission_strong]
+QED
+
 Theorem ctor_slice_data_first_emission_strong:
   !n p s l size a x b. compile_slice_data n p s l size a = (x,b) ==>
     cs_extends a b /\
@@ -2043,21 +2049,23 @@ Proof
 QED
 
 Theorem ctor_slice_extcode_first_emission_strong:
-  !addr s l p d a x b. compile_slice_extcode addr s l p d a = (x,b) ==>
+  !addr s l size a x b. compile_slice_extcode addr s l size a = (x,b) ==>
     cs_extends a b /\
     (!fn. fn_has_code a b fn ==> ?bb i.
       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\
       i.inst_opcode <> PHI)
 Proof
-  ntac 5 gen_tac >> rewrite_tac[compile_slice_extcode_def] >>
+  ntac 4 gen_tac >> rewrite_tac[compile_slice_extcode_def] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
       goal_assum $ drule_at Any >> simp[]) >>
   rewrite_tac[GSYM cs_appends_def] >> gen_tac >>
   rpt (FIRST [ho_match_mp_tac cs_appends_bind,
               ho_match_mp_tac cs_appends_ignore_bind] >>
-       rw[cs_appends_emit_helpers, cs_appends_return, ctor_assert_slice_bounds_appends]) >>
+       rw[cs_appends_emit_helpers, cs_appends_return,
+          ctor_assert_slice_bounds_appends, ctor_slice_out_buf_appends] >>
+       TRY (pairarg_tac >> simp[])) >>
   simp[cs_appends_emit_helpers, cs_appends_return]
 QED
 
@@ -2086,12 +2094,14 @@ Theorem ctor_slice_calldata_first_emission_strong:
 Proof
   ntac 3 gen_tac >> rewrite_tac[compile_slice_calldata_def] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- metis_tac[ctor_slice_out_buf_first_emission_strong] >>
+  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
+      goal_assum $ drule_at Any >> simp[]) >>
   rewrite_tac[GSYM cs_appends_def] >> gen_tac >>
-  pairarg_tac >> simp[] >>
   rpt (FIRST [ho_match_mp_tac cs_appends_bind,
               ho_match_mp_tac cs_appends_ignore_bind] >>
-       rw[cs_appends_emit_helpers, cs_appends_return, ctor_assert_slice_bounds_appends]) >>
+       rw[cs_appends_emit_helpers, cs_appends_return,
+          ctor_assert_slice_bounds_appends, ctor_slice_out_buf_appends] >>
+       TRY (pairarg_tac >> simp[])) >>
   simp[cs_appends_emit_helpers, cs_appends_return]
 QED
 
@@ -2105,12 +2115,14 @@ Theorem ctor_slice_code_first_emission_strong:
 Proof
   ntac 3 gen_tac >> rewrite_tac[compile_slice_code_def] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- metis_tac[ctor_slice_out_buf_first_emission_strong] >>
+  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
+      goal_assum $ drule_at Any >> simp[]) >>
   rewrite_tac[GSYM cs_appends_def] >> gen_tac >>
-  pairarg_tac >> simp[] >>
   rpt (FIRST [ho_match_mp_tac cs_appends_bind,
               ho_match_mp_tac cs_appends_ignore_bind] >>
-       rw[cs_appends_emit_helpers, cs_appends_return, ctor_assert_slice_bounds_appends]) >>
+       rw[cs_appends_emit_helpers, cs_appends_return,
+          ctor_assert_slice_bounds_appends, ctor_slice_out_buf_appends] >>
+       TRY (pairarg_tac >> simp[])) >>
   simp[cs_appends_emit_helpers, cs_appends_return]
 QED
 
@@ -2771,15 +2783,6 @@ QED
 
 Resume ctor_bytes_precompile_dispatch_first_emission[slice]:
   simp_tac (srw_ss()) [Once compile_builtin_dispatch_body_def, LET_THM] >>
-  Cases_on `is_msg_data (HD args)`
-  >- (simp[] >> rewrite_tac[state_pair_let_bind] >>
-      ho_match_mp_tac first_emission_bind >> conj_tac
-      >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-      gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-      >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
-      gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
-      ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
-      drule ctor_slice_calldata_first_emission_strong >> simp[]) >>
   Cases_on `is_self_code (HD args)`
   >- (simp[] >> rewrite_tac[state_pair_let_bind] >>
       ho_match_mp_tac first_emission_bind >> conj_tac
@@ -2806,10 +2809,6 @@ Resume ctor_bytes_precompile_dispatch_first_emission[slice_ext]:
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac first_emission_strong >>
-      metis_tac[ctor_slice_out_buf_first_emission_strong]) >>
-  gen_tac >> pairarg_tac >> simp[] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
   >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac ctor_as_ptr_val_first_emission >>
   ho_match_mp_tac first_emission_strong >> rpt gen_tac >> disch_tac >>
@@ -3092,7 +3091,7 @@ QED
 
 Theorem ctor_make_tuple_cfn_appends:
   (!env ty e a. ci_mono a (SND (cfn env ty e a))) ==>
-  !env es ptr off. cs_appends (compile_make_tuple cfn env es ptr off)
+  !env es tys ptr off. cs_appends (compile_make_tuple cfn env es tys ptr off)
 Proof
   strip_tac >> rpt gen_tac >> irule ctor_ci_mono_appends >>
   simp[ci_mono_compile_make_tuple_cfn]
@@ -3448,6 +3447,45 @@ Proof
   ho_match_mp_tac ctor_attribute_body_first_emission >> metis_tac[]
 QED
 
+Theorem ctor_materialize_vv_first_emission:
+  !env ty vv a x b. compile_materialize_vv env ty vv a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==> ?bb i.
+      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  ntac 3 gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[ctor_alloc_buffer_first_emission] >>
+  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+  ho_match_mp_tac cs_appends_bind >> conj_tac
+  >- (irule ctor_ci_mono_appends >> simp[ci_mono_unwrap_value]) >>
+  gen_tac >> ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
+  >- (irule ctor_ci_mono_appends >> simp[ci_mono_compile_store_memory]) >>
+  simp[cs_appends_return]
+QED
+
+Theorem ctor_snapshot_vv_first_emission[local]:
+  !ce copy vv a x b. compile_snapshot_vv ce copy vv a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  rpt IF_CASES_TAC
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- metis_tac[ctor_unwrap_value_first_emission] >>
+      metis_tac[first_emission_return])
+  >- (ho_match_mp_tac first_emission_bind >> conj_tac
+      >- metis_tac[ctor_materialize_vv_first_emission] >>
+      metis_tac[first_emission_return]) >>
+  metis_tac[first_emission_return]
+QED
+
 Theorem ctor_subscript_first_emission:
   (!a x b. cfn env ty base_e a = (x,b) ==>
     cs_extends a b /\
@@ -3473,6 +3511,9 @@ Theorem ctor_subscript_first_emission:
 Proof
   strip_tac >> rewrite_tac[compile_subscript_def, LET_THM] >>
   ho_match_mp_tac first_emission_bind >> conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (IF_CASES_TAC >- metis_tac[ctor_snapshot_vv_first_emission] >>
+      simp[comp_return_def, cs_extends_refl]) >>
   gen_tac >> BETA_TAC >> Cases_on `place_type env base_e`
   >- suspend "map_place"
   >> suspend "value_place"
@@ -4074,24 +4115,6 @@ Proof
   gen_tac >> ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[cs_appends_emit_helpers] >>
       ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]) >>
-  simp[cs_appends_return]
-QED
-
-Theorem ctor_materialize_vv_first_emission:
-  !env ty vv a x b. compile_materialize_vv env ty vv a = (x,b) ==>
-    cs_extends a b /\
-    (!fn. fn_has_code a b fn ==> ?bb i.
-      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
-Proof
-  ntac 3 gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
-  ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- metis_tac[ctor_alloc_buffer_first_emission] >>
-  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
-  ho_match_mp_tac cs_appends_bind >> conj_tac
-  >- (irule ctor_ci_mono_appends >> simp[ci_mono_unwrap_value]) >>
-  gen_tac >> ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
-  >- (irule ctor_ci_mono_appends >> simp[ci_mono_compile_store_memory]) >>
   simp[cs_appends_return]
 QED
 
