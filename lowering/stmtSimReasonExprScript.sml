@@ -373,7 +373,7 @@ Theorem compile_raise_reason_path_frag:
   !ctx func cx lctx RetQ cenv ty r es.
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_vv_sim ctx func cenv cx (expr_type r) r es /\
-    (!H sa vv sm sb s0 ee tv t.
+    (!(H:(bool # bytes32 # type_value) list # num list) sa vv sm sb s0 ee tv t.
        compile_expr cenv (expr_type r) r sa = (vv, sm) /\
        compile_revert_with_reason cenv vv (expr_type r)
          (type_memory_bytes cenv (expr_type r)) sm = ((), sb) /\
@@ -405,7 +405,7 @@ Proof
       `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
         metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
       qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?tv. _`
-        (drule_then strip_assume_tac) >> gvs[] >>
+        (drule_then strip_assume_tac) >> rpt BasicProvers.VAR_EQ_TAC >>
       `~t.vs_halted` by
         (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
          simp[gas_marked_exec_def, gas_marked_path_def] >>
@@ -420,9 +420,8 @@ Proof
       >- (qexists_tac `marks` >> disj1_tac >> raise_out_of_domain_tac) >>
       `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
         metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-      `expr_exit res r` by
-        (qpat_x_assum `!H. _ ==> expr_exit _ _` (qspec_then `H0` mp_tac) >>
-         simp[]) >>
+      qpat_x_assum `!H. _ ==> expr_exit _ _` (qspec_then `H0` mp_tac) >>
+      simp[] >> strip_tac >>
       Cases_on `res` >> gvs[expr_exit_def] >>
       drule_all raise_reason_counted_exception >> strip_tac >>
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
@@ -468,7 +467,8 @@ Theorem compile_raise_reason_frag:
       (eval_stmt cx (Raise (RaiseReason r))) es
 Proof
   rpt strip_tac >> irule compile_raise_reason_path_frag >> simp[] >>
-  rpt strip_tac >> irule reason_vv_revert_path >> metis_tac[]
+  rpt strip_tac >> `reason_vv_ok vv` by metis_tac[] >>
+  drule_all reason_vv_revert_path >> simp[]
 QED
 
 (* ===== assert ===== *)
