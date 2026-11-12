@@ -366,7 +366,22 @@ Theorem gas_shadow_ptr_ok_check:
   gas_shadow_context c d ==> (ptr_ok_check c <=> ptr_ok_check d)
 Proof
   strip_tac >> drule gas_shadow_ctx_ptr_param_list >> strip_tac >>
-  simp[ptr_ok_check_def] >> irule gas_shadow_list_every >>
+  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+     c.ctx_functions <=>
+   EVERY (\fn. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts fn))
+     d.ctx_functions`
+    by (irule gas_shadow_list_every >> qexists_tac `gas_shadow_function` >>
+        reverse conj_tac >- fs[gas_shadow_context_def] >>
+        rpt strip_tac >> simp[] >> irule gas_shadow_list_every >>
+        qexists_tac `gas_shadow_inst` >>
+        simp[gas_shadow_function_insts] >>
+        rw[gas_shadow_inst_def] >> simp[]) >>
+  qpat_x_assum `EVERY _ _ <=> EVERY _ _` mp_tac >>
+  pure_rewrite_tac[EVERY_NOT_EXISTS] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  pure_rewrite_tac[NOT_CLAUSES] >> strip_tac >>
+  fs[] >> simp[ptr_ok_check_def] >> AP_TERM_TAC >>
+  irule gas_shadow_list_every >>
   qexists_tac `gas_shadow_function` >>
   reverse conj_tac >- fs[gas_shadow_context_def] >>
   rpt strip_tac >> rename1 `gas_shadow_function f1 g1` >>
