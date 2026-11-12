@@ -215,6 +215,35 @@ Proof
   fs[] >> metis_tac[valid_horizon_prefix]
 QED
 
+(* How a pointer outcome is proved: with no valid horizon where it starts
+   the storage is bad; otherwise one valid horizon gives the facts that fix
+   the endpoint, and one valid where it ends fixes the ghost and the Venom
+   result that every horizon valid there checks. *)
+Theorem gas_outcome_ptr_lo_intro:
+  storage_trace_frame source /\
+  ((?H1. valid_horizon cx st0 H1 es.storage_trace) ==>
+   ?marks res es_end.
+     (!tail.
+        source (es with gas_obs :=
+                  gas_explicit marks s0.vs_gas_readings ++ tail) =
+          (res,es_end with gas_obs := tail)) /\
+     !H2. valid_horizon cx st0 H2 es_end.storage_trace ==>
+       ?G tn r. !H. valid_horizon cx st0 H es_end.storage_trace ==>
+         gas_path_ptr (D H) lo ctx func PG G0 tn0 s0 (LENGTH marks) G tn r /\
+         ((?t. r = OK t /\ Q H res (es_end with gas_obs := []) G tn t) \/
+          (exit_result r /\ R H res (es_end with gas_obs := []) (G,tn) r))) ==>
+  gas_outcome_ptr_lo D lo tops (ctx,func) PG cx st0 source (es,s0,G0,tn0) Q R
+Proof
+  rewrite_tac[gas_outcome_ptr_lo_def, gas_summary_ptr_lo_def] >> strip_tac >>
+  Cases_on `?H1. valid_horizon cx st0 H1 es.storage_trace`
+  >- (fs[] >> qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`] >> simp[] >>
+      Cases_on `?H2. valid_horizon cx st0 H2 es_end.storage_trace` >> fs[] >>
+      metis_tac[]) >>
+  qexists_tac `[]` >> disj1_tac >> irule gas_bad_storage_at_initial >>
+  fs[storage_trace_domain_def] >> metis_tac[]
+QED
+
 Theorem gas_summary_ptr_at_bind_normal:
   gas_marked_exec F (ctx, func) source (es, s0) left (INL v) mid (OK t) /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
