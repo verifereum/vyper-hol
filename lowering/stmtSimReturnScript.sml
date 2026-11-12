@@ -1228,12 +1228,18 @@ Proof
       rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
   (* the value is on hand: release and RET *)
   rpt strip_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
-     mid.storage_trace` by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
-    (drule_then strip_assume_tac) >> gvs[] >>
-  disj1_tac >> qexists_tac `v` >> simp[] >>
   qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
+  `valid_horizon cx st0 H0 mid.storage_trace` by
+    fs[Abbr `H0`, storage_trace_domain_def] >>
+  `?v. res = INL v /\
+       expr_post H0 ctx func cenv cx e es sa sm s0 mid v shadow_op t /\
+       ghost_inv_at (DF H0) lo d cenv cx mid G1 tn1 t /\
+       ptr_val_ok cx (post_value_type cenv e) v shadow_op G1 tn1 t /\
+       t.vs_current_bb = sm.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted` by
+    metis_tac[] >>
+  gvs[] >>
+  disj1_tac >> qexists_tac `v` >> simp[] >>
   `eval_operand shadow_op t = SOME (typed_val_to_w256 tv v)` by
     metis_tac[return_word_operand] >>
   `lookup_var rpc t = SOME pc` by metis_tac[expr_post_def] >>
