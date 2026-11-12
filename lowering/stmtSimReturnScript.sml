@@ -136,10 +136,10 @@ Proof
       return_unlock_state_def, comp_return_def, emit_void_def,
       comp_bind_def, fresh_id_def, emit_def, emitted_insts_def,
       DROP_LENGTH_APPEND, IS_PREFIX_APPEND] >>
-  simp[mk_inst_def, is_terminator_def, run_inst_seq_def,
-       step_inst_base_def, exec_write2_def, eval_operand_def,
-       arithmeticTheory.ADD1] >>
-  simp[venom_state_component_equality]
+  simp[run_inst_seq_def, is_terminator_def, venom_state_component_equality] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def, exec_write2_def, eval_operands_def, eval_operand_def,
+       arithmeticTheory.ADD1, venom_state_component_equality]
 QED
 
 Theorem return_unlock_frames[simp]:
