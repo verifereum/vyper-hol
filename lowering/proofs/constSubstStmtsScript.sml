@@ -6,7 +6,9 @@ Theory constSubstStmts
 Ancestors
   constSubstCorrect constSubst vyperAST vyperState vyperContext
   vyperInterpreter vyperTypeSystem vyperTypeEnvExtension
-  vyperTypeContract finite_map alist list
+  vyperTypeContract vyperCallOutcomeFrame vyperLookupStorage
+  vyperTypeContractStaticMaps vyperTypeConstantFold vyperTypeContractContext
+  finite_map alist list
 
 (* ===== Typing environments ===== *)
 
@@ -51,7 +53,7 @@ Theorem const_subst_context_frames[local]:
   !addr src id tv root. MEM (addr,src,id,tv,root) roots ==>
     checked_frame_context cx mods art src id env
 Proof
-  simp[const_subst_context_def]
+  rw[const_subst_context_def]
 QED
 
 Theorem const_subst_context_target_frame[local]:
@@ -118,7 +120,7 @@ QED
 
 (* ===== Composition helpers ===== *)
 
-Theorem const_subst_expr_then[local]:
+Theorem const_subst_expr_or_place_then[local]:
   const_subst_context roots cx env E mods art /\
   (well_typed_expr env e \/ IS_SOME (type_place_expr env e)) /\
   const_cells_agree roots st /\
@@ -128,13 +130,29 @@ Theorem const_subst_expr_then[local]:
   const_computations_related Rel (bind (eval_expr cx e) k)
     (bind (eval_expr cx (subst_consts_expr E e)) l) st
 Proof
-  strip_tac >> irule const_computations_related_bind >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule const_computations_related_bind >>
   qexists `const_results_related roots cx (expr_type e)` >>
   `const_subst_expr_ok roots cx env E e` by
     metis_tac[cj 1 const_subst_structural] >>
-  conj_tac >- gvs[const_subst_expr_ok_def] >>
-  rpt strip_tac >> first_x_assum irule >> simp[] >>
-  metis_tac[const_subst_context_expr_frame]
+  reverse conj_tac >- gvs[const_subst_expr_ok_def] >>
+  rpt strip_tac >> drule_all const_subst_context_expr_frame >> strip_tac >>
+  qpat_x_assum `!p q s. _` (qspecl_then [`x`,`y`,`s`] mp_tac) >> simp[]
+QED
+
+(* irule cannot use the disjunctive premise above *)
+Theorem const_subst_expr_then[local]:
+  const_subst_context roots cx env E mods art /\ well_typed_expr env e /\
+  const_cells_agree roots st /\
+  (!p q s. const_results_related roots cx (expr_type e) p q /\
+     const_cells_agree roots s ==>
+     const_computations_related Rel (k p) (l q) s) ==>
+  const_computations_related Rel (bind (eval_expr cx e) k)
+    (bind (eval_expr cx (subst_consts_expr E e)) l) st
+Proof
+  strip_tac >> drule const_subst_expr_or_place_then >>
+  disch_then (qspecl_then [`st`,`l`,`k`,`e`,`Rel`] mp_tac) >>
+  impl_tac >- gvs[] >> simp[]
 QED
 
 Theorem const_subst_read_then[local]:
@@ -143,7 +161,7 @@ Theorem const_subst_read_then[local]:
   const_computations_related Rel (bind (read_result cx p) k)
     (bind (read_result cx q) l) s
 Proof
-  strip_tac >> irule const_computations_related_prefix >>
+  strip_tac >> match_mp_tac const_computations_related_prefix >>
   conj_tac >- (irule const_computations_related_read >> metis_tac[]) >>
   rpt strip_tac >> drule read_result_state >> strip_tac >> gvs[]
 QED
@@ -210,10 +228,13 @@ Theorem order_custom_error_kwargs_subst[local]:
     order_custom_error_kwargs params (subst_consts_fields E kw) =
     OPTION_MAP (subst_consts_exprs E) (order_custom_error_kwargs params kw)
 Proof
-  ho_match_mp_tac order_custom_error_kwargs_ind >>
-  simp[order_custom_error_kwargs_def, subst_consts_expr_def] >>
-  rw[] >> Cases_on `order_custom_error_kwargs params kwargs` >>
-  gvs[subst_consts_expr_def]
+  Induct_on `kw`
+  >- (Cases >> simp[order_custom_error_kwargs_def, subst_consts_expr_def]) >>
+  rpt gen_tac >> PairCases_on `h` >>
+  Cases_on `params` >- simp[order_custom_error_kwargs_def, subst_consts_expr_def] >>
+  rename1 `order_custom_error_kwargs (p::ps)` >> PairCases_on `p` >>
+  rw[order_custom_error_kwargs_def, subst_consts_expr_def] >>
+  gvs[optionTheory.OPTION_MAP_COMPOSE, combinTheory.o_DEF, subst_consts_expr_def]
 QED
 
 Theorem order_custom_error_args_subst[local]:
@@ -226,7 +247,7 @@ Proof
     (Cases_on `kw` >> TRY (PairCases_on `h`) >> simp[subst_consts_expr_def]) >>
   simp[order_custom_error_args_def, order_custom_error_kwargs_subst,
        subst_consts_exprs_map] >>
-  rw[]
+  rw[subst_consts_exprs_map]
 QED
 
 Theorem const_subst_raise[local]:
@@ -238,20 +259,20 @@ Proof
   strip_tac >> Cases_on `r` >>
   simp[subst_consts_rreason_def]
   >~ [`RaiseReason e`]
-  >- (simp[evaluate_def] >> drule const_subst_expr_then >>
-      disch_then irule >> gvs[type_stmt_def, AllCaseEqs()] >>
-      rpt strip_tac >> irule const_subst_read_then >> simp[] >>
-      metis_tac[const_computations_related_refl])
+  >- (simp[evaluate_def] >> drule_then irule const_subst_expr_then >>
+      gvs[type_stmt_def, AllCaseEqs()] >>
+      rpt strip_tac >> drule_then (drule_then irule) const_subst_read_then >>
+      simp[const_computations_related_eq])
   >~ [`RaiseCustomError err`]
   >- (Cases_on `err` >> rename1 `CustomError ns pos kw` >>
       simp[subst_consts_error_def, evaluate_def, order_custom_error_args_subst] >>
       rpt (CASE_TAC >> simp[const_computations_related_refl]) >>
-      irule const_computations_related_prefix >> conj_tac
+      match_mp_tac const_computations_related_prefix >> conj_tac
       >- (simp[const_computations_related_eq] >>
           irule const_subst_exprs_eq >> simp[] >>
-          goal_assum (drule_at Any) >>
-          irule frame_ordered_custom_error_typing >>
-          gvs[type_stmt_def, AllCaseEqs()] >> metis_tac[]) >>
+          qexistsl [`art`,`env`,`mods`,`roots`] >> asm_rewrite_tac[] >>
+          gvs[type_stmt_def, AllCaseEqs()] >>
+          drule_all frame_ordered_custom_error_typing >> simp[]) >>
       rpt strip_tac >> simp[const_computations_related_refl]) >>
   simp[const_computations_related_refl]
 QED
@@ -280,6 +301,7 @@ Theorem const_subst_assert[local]:
     (eval_stmt cx (subst_consts_stmt E (Assert e r))) st
 Proof
   strip_tac >>
+  `well_typed_expr env e` by (Cases_on `r` >> gvs[type_stmt_def, AllCaseEqs()]) >>
   `?r'. IS_SOME (type_stmt env ret (Raise r')) /\
      subst_consts_rreason E r' = (case subst_consts_areason E r of
        AssertBare => RaiseBare | AssertUnreachable => RaiseUnreachable
@@ -299,12 +321,13 @@ Proof
          (return ()) (eval_stmt cx (Raise r'')))` by
     (Cases_on `r` >> gvs[subst_consts_stmt_def, subst_consts_areason_def,
        eval_stmt_assert_raise]) >>
-  gvs[] >> drule const_subst_expr_then >> disch_then irule >>
-  gvs[type_stmt_def, AllCaseEqs()] >> conj_tac
-  >- (Cases_on `r` >> gvs[type_stmt_def, AllCaseEqs()]) >>
-  rpt strip_tac >> irule const_computations_related_switch >>
-  simp[const_computations_related_refl] >> goal_assum (drule_at Any) >>
-  simp[] >> irule const_subst_raise >> metis_tac[]
+  gvs[] >> drule_then irule const_subst_expr_then >>
+  gvs[type_stmt_def, AllCaseEqs()] >> rpt strip_tac >>
+  `const_computations_related $= (eval_stmt cx (Raise r'))
+     (eval_stmt cx (Raise (subst_consts_rreason E r'))) s` by
+    (irule const_subst_raise >> metis_tac[]) >>
+  gvs[] >> irule const_computations_related_switch >>
+  simp[const_computations_related_refl] >> metis_tac[]
 QED
 
 (* ===== Tuple assignment ===== *)
@@ -325,7 +348,7 @@ Proof
   rpt conj_tac >> rpt gen_tac >> rpt strip_tac
   >- (simp[subst_consts_target_def, evaluate_def, bind_def] >>
       drule_all writable_atarget_base >> strip_tac >>
-      drule_all const_subst_target_place_eq >> simp[])
+      drule_all const_subst_target_place_eq >> simp[evaluate_def, bind_def])
   >- (simp[subst_consts_target_def, evaluate_def] >>
       CASE_TAC >> simp[] >> CASE_TAC >> simp[] >>
       first_x_assum irule >> metis_tac[writable_atarget_tuple])
@@ -351,14 +374,15 @@ Proof
   simp[evaluate_def]
   >- (`expr_type (subst_consts_expr E e) = expr_type e` by
         metis_tac[const_subst_typed_annotation] >>
-      simp[] >> drule const_subst_expr_then >> disch_then irule >> simp[] >>
+      simp[] >> drule_then irule const_subst_expr_then >> simp[] >>
       rpt strip_tac >> simp[const_computations_related_eq] >>
       metis_tac[const_results_related_array_iterator]) >>
-  drule const_subst_expr_then >> disch_then irule >> simp[] >>
-  rpt strip_tac >> irule const_subst_read_then >> goal_assum (drule_at Any) >>
-  simp[] >> gen_tac >> drule const_subst_expr_then >> disch_then irule >>
-  simp[] >> rpt strip_tac >> irule const_subst_read_then >>
-  goal_assum (drule_at Any) >> simp[const_computations_related_refl]
+  drule_then irule const_subst_expr_then >> simp[] >>
+  rpt strip_tac >> drule_then (drule_then irule) const_subst_read_then >>
+  simp[] >> gen_tac >> drule_then irule const_subst_expr_then >>
+  simp[] >> rpt strip_tac >>
+  drule_then (drule_then irule) const_subst_read_then >>
+  simp[const_computations_related_refl]
 QED
 
 Theorem const_subst_eval_for[local]:
@@ -412,7 +436,7 @@ Proof
   >~ [`Raise r`] >- (simp[subst_consts_stmt_def] >> metis_tac[const_subst_raise])
   >~ [`Expr e`]
   >- (simp[subst_consts_stmt_def, evaluate_def] >>
-      drule const_subst_expr_then >> disch_then irule >>
+      drule_then irule const_subst_expr_then >>
       gvs[type_stmt_def, AllCaseEqs()] >> rpt strip_tac >>
       drule const_results_related_hashmap_ref >>
       simp[const_computations_related_refl])
@@ -420,66 +444,66 @@ Proof
   >- (Cases_on `opt` >>
       simp[subst_consts_stmt_def, subst_consts_expr_def, evaluate_def,
            const_computations_related_refl] >>
-      drule const_subst_expr_then >> disch_then irule >>
+      drule_then irule const_subst_expr_then >>
       gvs[type_stmt_def, AllCaseEqs()] >> rpt strip_tac >>
-      irule const_subst_read_then >> goal_assum (drule_at Any) >>
+      drule_then (drule_then irule) const_subst_read_then >>
       simp[const_computations_related_refl])
   >~ [`Log ns es`]
   >- (simp[subst_consts_stmt_def, evaluate_def] >>
-      irule const_computations_related_prefix >>
+      match_mp_tac const_computations_related_prefix >>
       simp[const_computations_related_refl, const_computations_related_eq] >>
-      irule const_subst_exprs_eq >> goal_assum (drule_at Any) >>
+      drule_then irule const_subst_exprs_eq >>
       gvs[type_stmt_def, AllCaseEqs()])
   >~ [`AnnAssign nm ty e`]
   >- (simp[subst_consts_stmt_def, evaluate_def] >>
-      irule const_computations_related_prefix >>
+      match_mp_tac const_computations_related_prefix >>
       simp[const_computations_related_refl] >> rpt strip_tac >>
       `s = st` by gvs[lift_option_type_def, AllCaseEqs(), return_def] >>
-      gvs[] >> drule const_subst_expr_then >> disch_then irule >>
+      gvs[] >> drule_then irule const_subst_expr_then >>
       gvs[type_stmt_def, AllCaseEqs()] >> rpt strip_tac >>
-      irule const_subst_read_then >> goal_assum (drule_at Any) >>
+      drule_then (drule_then irule) const_subst_read_then >>
       simp[const_computations_related_refl])
   >~ [`Append bt e`]
   >- (simp[subst_consts_stmt_def, evaluate_def] >>
       drule_all typed_append_target >> strip_tac >>
-      irule const_computations_related_prefix >> conj_tac
+      match_mp_tac const_computations_related_prefix >> conj_tac
       >- (simp[const_computations_related_eq] >>
           metis_tac[const_subst_target_place_eq]) >>
       rpt strip_tac >>
       `const_cells_agree roots s` by
         metis_tac[const_subst_context_target_frame] >>
-      drule const_subst_expr_then >> disch_then irule >>
+      drule_then irule const_subst_expr_then >>
       gvs[type_stmt_def, AllCaseEqs()] >> rpt strip_tac >>
-      irule const_subst_read_then >> goal_assum (drule_at Any) >>
+      drule_then (drule_then irule) const_subst_read_then >>
       simp[const_computations_related_refl])
   >~ [`AugAssign ty bt bop e`]
   >- (simp[subst_consts_stmt_def, evaluate_def] >>
       drule_all typed_augassign_target >> strip_tac >>
-      irule const_computations_related_prefix >> conj_tac
+      match_mp_tac const_computations_related_prefix >> conj_tac
       >- (simp[const_computations_related_eq] >>
           metis_tac[const_subst_target_place_eq]) >>
       rpt strip_tac >>
       `const_cells_agree roots s` by
         metis_tac[const_subst_context_target_frame] >>
-      irule const_computations_related_prefix >>
+      match_mp_tac const_computations_related_prefix >>
       simp[const_computations_related_refl] >> rpt strip_tac >>
       drule read_place_state >> strip_tac >> gvs[] >>
-      irule const_computations_related_prefix >>
+      match_mp_tac const_computations_related_prefix >>
       simp[const_computations_related_refl] >> rpt strip_tac >>
       drule place_type_value_state >> strip_tac >> gvs[] >>
-      drule const_subst_expr_then >> disch_then irule >>
+      drule_then irule const_subst_expr_then >>
       gvs[type_stmt_def, AllCaseEqs()] >> rpt strip_tac >>
-      irule const_subst_read_then >> goal_assum (drule_at Any) >>
+      drule_then (drule_then irule) const_subst_read_then >>
       simp[const_computations_related_refl])
   >~ [`Assign tgt e`]
   >- (drule_all typed_assign_target >> strip_tac >>
       `well_typed_expr env e` by gvs[type_stmt_def, AllCaseEqs()] >>
       Cases_on `tgt` >>
       simp[subst_consts_stmt_def, subst_consts_target_def, evaluate_def] >>
-      drule const_subst_expr_then >> disch_then irule >> simp[] >>
-      rpt strip_tac >> irule const_subst_read_then >>
-      goal_assum (drule_at Any) >> simp[] >> gen_tac
-      >- (irule const_computations_related_prefix >>
+      drule_then irule const_subst_expr_then >> simp[] >>
+      rpt strip_tac >>
+      drule_then (drule_then irule) const_subst_read_then >> simp[] >> gen_tac
+      >- (match_mp_tac const_computations_related_prefix >>
           simp[const_computations_related_refl, const_computations_related_eq] >>
           drule typed_base_atarget >> strip_tac >>
           metis_tac[const_subst_target_place_eq]) >>
@@ -492,7 +516,7 @@ Proof
       gvs[subst_consts_target_def])
   >~ [`If e ss1 ss2`]
   >- (simp[subst_consts_stmt_def, evaluate_def] >>
-      drule const_subst_expr_then >> disch_then irule >>
+      drule_then irule const_subst_expr_then >>
       gvs[type_stmt_def, AllCaseEqs()] >> rpt strip_tac >>
       simp[const_computations_related_eq, bind_def, ignore_bind_def,
            push_scope_def, return_def] >>
@@ -500,18 +524,17 @@ Proof
       qmatch_goalsub_abbrev_tac `switch_BoolV cx p _ _ s2` >>
       `const_cells_agree roots s2` by gvs[Abbr `s2`, const_cells_agree_def] >>
       rewrite_tac[GSYM const_computations_related_eq] >>
-      irule const_computations_related_switch >> goal_assum (drule_at Any) >>
-      simp[] >> metis_tac[])
+      irule const_computations_related_switch >> simp[] >> metis_tac[])
   >~ [`For nm ty it n body`]
   >- (simp[subst_consts_stmt_def, evaluate_def] >>
       `well_typed_iterator env ty it /\
        IS_SOME (type_stmts (extend_local env nm ty F) ret body)` by
         gvs[type_stmt_def, AllCaseEqs()] >>
-      irule const_computations_related_prefix >>
+      match_mp_tac const_computations_related_prefix >>
       simp[const_computations_related_refl] >> rpt strip_tac >>
       `s = st` by gvs[lift_option_type_def, AllCaseEqs(), return_def] >>
       gvs[] >>
-      irule const_computations_related_prefix >> conj_tac
+      match_mp_tac const_computations_related_prefix >> conj_tac
       >- (simp[const_computations_related_eq] >>
           metis_tac[const_subst_eval_iterator]) >>
       rpt strip_tac >>
@@ -531,7 +554,7 @@ Proof
   >~ [`eval_stmts cx (s::ss)`]
   >- (simp[subst_consts_stmt_def, evaluate_def] >>
       gvs[type_stmt_def, AllCaseEqs()] >> simp[ignore_bind_def] >>
-      irule const_computations_related_prefix >> conj_tac
+      match_mp_tac const_computations_related_prefix >> conj_tac
       >- (first_x_assum irule >> simp[] >> metis_tac[]) >>
       rpt strip_tac >> first_x_assum irule >> simp[] >>
       qexistsl [`art`,`env'`,`mods`,`ret`] >>
@@ -580,43 +603,50 @@ QED
 
 (* ===== Internal calls: the callee frame ===== *)
 
+Theorem stk_state_funs[local]:
+  get_storage_backend (cx with stk := s) = get_storage_backend cx /\
+  get_immutables (cx with stk := s) = get_immutables cx /\
+  read_storage_slot (cx with stk := s) = read_storage_slot cx
+Proof
+  simp[FUN_EQ_THM, get_storage_backend_stk, get_immutables_stk,
+       read_storage_slot_stk]
+QED
+
 Theorem resolve_array_element_stk[local]:
   !cx tr slot tv subs.
     resolve_array_element (cx with stk := s) tr slot tv subs =
     resolve_array_element cx tr slot tv subs
 Proof
   ho_match_mp_tac resolve_array_element_ind >>
-  rw[resolve_array_element_def, FUN_EQ_THM, bind_def, get_storage_backend_stk]
+  rw[resolve_array_element_def, stk_state_funs]
+QED
+
+Theorem resolve_array_element_stk_fun[local]:
+  resolve_array_element (cx with stk := s) = resolve_array_element cx
+Proof
+  simp[FUN_EQ_THM, resolve_array_element_stk]
 QED
 
 Theorem read_result_stk[local]:
   read_result (cx with stk := s) = read_result cx
 Proof
-  simp[FUN_EQ_THM] >> Cases >> TRY (Cases_on `p`) >>
-  simp[read_result_def, read_place_def, bind_def, read_storage_slot_stk,
-       get_immutables_stk]
+  simp[FUN_EQ_THM, oneline read_result_def, oneline read_place_def,
+       stk_state_funs]
 QED
 
 Theorem select_result_stk[local]:
   select_result (cx with stk := s) = select_result cx
 Proof
-  simp[FUN_EQ_THM] >> rpt gen_tac >>
-  Cases_on `x'` >> TRY (Cases_on `p`) >>
-  simp[select_result_def, extend_place_def, bind_def, get_tenv_stk,
-       read_result_stk] >>
-  TRY (Cases_on `x'''`) >> TRY (Cases_on `t`) >>
-  simp[extend_storage_place_def, place_type_value_def, read_place_def,
-       bind_def, get_tenv_stk, get_immutables_stk, resolve_array_element_stk,
-       read_storage_slot_stk] >>
-  rpt (CASE_TAC >> simp[bind_def, get_tenv_stk, get_immutables_stk,
-         resolve_array_element_stk, read_storage_slot_stk])
+  simp[FUN_EQ_THM, oneline select_result_def, oneline extend_place_def,
+       oneline extend_storage_place_def, oneline place_type_value_def,
+       oneline read_place_def, get_tenv_stk, stk_state_funs,
+       resolve_array_element_stk_fun]
 QED
 
 Theorem result_array_length_stk[local]:
   result_array_length (cx with stk := s) = result_array_length cx
 Proof
-  simp[FUN_EQ_THM] >> ho_match_mp_tac result_array_length_ind >>
-  simp[result_array_length_def, bind_def, get_storage_backend_stk,
+  simp[FUN_EQ_THM, oneline result_array_length_def, stk_state_funs,
        read_result_stk]
 QED
 
@@ -629,8 +659,7 @@ QED
 Theorem evaluate_type_builtin_stk[local]:
   evaluate_type_builtin (cx with stk := s) = evaluate_type_builtin cx
 Proof
-  simp[FUN_EQ_THM] >> ho_match_mp_tac evaluate_type_builtin_ind >>
-  simp[evaluate_type_builtin_def, get_tenv_stk]
+  simp[FUN_EQ_THM, oneline evaluate_type_builtin_def, get_tenv_stk]
 QED
 
 Theorem eval_exprs_stk_from_elements[local]:
@@ -737,4 +766,34 @@ Proof
   irule const_subst_eval_stmts >> goal_assum (drule_at Any) >>
   simp[] >> irule const_subst_context_stk >> simp[] >>
   irule const_subst_context_function_entry >> metis_tac[]
+QED
+
+Theorem module_consts_env_constant_expr:
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\
+  constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
+  ALOOKUP (module_consts_env tops []) id = SOME r ==>
+  constant_expr mods r
+Proof
+  strip_tac >> drule_all checked_module_consts_env_agrees >>
+  simp[const_acc_agrees_def] >> metis_tac[]
+QED
+
+Theorem module_consts_intcall_body:
+  const_subst_context roots cx env (module_consts_env tops []) mods art /\
+  check_contract F cx.layouts cx.txn.target mods = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  ALOOKUP mods NONE = SOME tops /\
+  constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
+  frame_maps env art /\
+  well_typed_expr env (Call ty (IntCall (NONE,fn)) es drv) /\
+  get_module_code cx NONE = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) /\
+  const_cells_agree roots st ==>
+  eval_stmts (cx with stk updated_by CONS (NONE,fn))
+    (subst_consts_stmts (module_consts_env tops []) ss) st =
+  eval_stmts (cx with stk updated_by CONS (NONE,fn)) ss st
+Proof
+  strip_tac >> irule const_subst_intcall_body >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[module_consts_env_constant_expr]
 QED
