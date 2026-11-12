@@ -137,10 +137,9 @@ Proof
     (irule o1LowerDloadOccurrenceTheory.occ_frame_reachable_entry >> metis_tac[]) >>
   `vs.vs_allocas = FEMPTY` by
     gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
-  `occurrence_annotation_ok (dyn_floor C vs) 1 0 [] FEMPTY [] FEMPTY [] []
-     FEMPTY s1` by
-    (drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation >>
-     disch_then (qspec_then `lo` strip_assume_tac) >> metis_tac[]) >>
+  drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation >>
+  disch_then (qspec_then `lo` strip_assume_tac) >>
+  pop_assum mp_tac >> impl_tac >- simp[] >> strip_tac >>
   `raw_reachable vs C fn inst s1` by
     (irule contextRawReachableTheory.raw_reachable_entry >> metis_tac[]) >>
   `s1.vs_alloca_next < dimword (:256)` by
