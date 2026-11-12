@@ -265,15 +265,28 @@ Proof
   first_x_assum (qspec_then `st` mp_tac) >> simp[]
 QED
 
+Theorem pending_module_constants_trace[local]:
+  !mods am am_c obs.
+  evaluate_module_constants_trace cx am addr mods = (SOME am_c, obs) ==>
+  am_c.pending_deletions = am.pending_deletions
+Proof
+  Induct >> simp[evaluate_module_constants_trace_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[evaluate_module_constants_trace_def] >> strip_tac >>
+  pairarg_tac >> gvs[AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >>
+  first_x_assum drule >> simp[merge_constants_def]
+QED
+
 Theorem pending_module_constants:
   !mods am am_c.
   evaluate_module_constants cx am addr mods = SOME am_c ==>
   am_c.pending_deletions = am.pending_deletions
 Proof
-  Induct >> simp[evaluate_module_constants_def] >>
-  rpt gen_tac >> PairCases_on `h` >>
-  simp[evaluate_module_constants_def, AllCaseEqs()] >> strip_tac >>
-  first_x_assum drule >> simp[merge_constants_def]
+  rpt gen_tac >> simp[evaluate_module_constants_def] >>
+  Cases_on `evaluate_module_constants_trace cx am addr mods` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule pending_module_constants_trace >> simp[]
 QED
 
 Theorem pending_all_constants:
