@@ -1788,7 +1788,8 @@ Proof
       loweringStateRelDefsTheory.transient_rel_def,
       loweringStateRelDefsTheory.accounts_rel_def,
       venomStateTheory.contract_storage_def,
-      venomStateTheory.contract_transient_def]
+      venomStateTheory.contract_transient_def] >>
+  metis_tac[]
 QED
 
 Theorem unwrap_copy_step_fields[local]:
