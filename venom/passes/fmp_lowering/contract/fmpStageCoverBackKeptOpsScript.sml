@@ -96,6 +96,18 @@ Proof
   simp[eval_operands_IS_SOME_EVERY, EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem kept_write2_defined[local]:
+  LENGTH inst.inst_operands = 2 /\ IS_SOME (eval_operands inst.inst_operands s) ==>
+  terminates (exec_write2 f inst s)
+Proof
+  strip_tac >> Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `inst.inst_operands = a::rest` >>
+  Cases_on `rest` >> gvs[eval_operands_IS_SOME_EVERY] >>
+  rename1 `inst.inst_operands = [a;b]` >>
+  Cases_on `eval_operand a s` >> gvs[exec_write2_def, terminates_def] >>
+  Cases_on `eval_operand b s` >> gvs[exec_write2_def, terminates_def]
+QED
+
 Theorem kept_base_terminates[local]:
   inst_wf inst /\ inst_shape_ok inst /\ pre_fmp_opcode inst.inst_opcode /\
   ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; PHI; PARAM] /\
@@ -248,12 +260,220 @@ Proof
   >~ [`inst.inst_opcode = MCOPY`] >-
     (fs[step_inst_non_invoke] >>
      Cases_on `step_inst_base inst t` >> gvs[terminates_def] >>
-     gvs[step_inst_base_def, AllCaseEqs()] >>
+     gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
      rename1 `inst.inst_operands = [a;b;c]` >>
      `IS_SOME (eval_operand a s) /\ IS_SOME (eval_operand b s) /\
       IS_SOME (eval_operand c s)` by metis_tac[MEM, optionTheory.IS_SOME_DEF] >>
-     gvs[optionTheory.IS_SOME_EXISTS])
-  >> FAIL_TAC "remaining opcode"
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operand c s` >> gvs[] >> metis_tac[optionTheory.IS_SOME_DEF])
+  >~ [`inst.inst_opcode = SSTORE`] >-
+    (fs[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+     Cases_on `s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)` >>
+     simp[terminates_def] >>
+     Cases_on `t.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands t)`
+     >- (rewrite_tac[GSYM terminates_def] >> irule kept_write2_defined >>
+         fs[inst_wf_def, eval_operands_IS_SOME_EVERY, EVERY_MEM] >> metis_tac[]) >>
+     gvs[] >> rewrite_tac[GSYM terminates_def] >> metis_tac[kept_write2])
+  >~ [`inst.inst_opcode = TSTORE`] >-
+    (fs[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+     Cases_on `s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)` >>
+     simp[terminates_def] >>
+     Cases_on `t.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands t)`
+     >- (rewrite_tac[GSYM terminates_def] >> irule kept_write2_defined >>
+         fs[inst_wf_def, eval_operands_IS_SOME_EVERY, EVERY_MEM] >> metis_tac[]) >>
+     gvs[] >> rewrite_tac[GSYM terminates_def] >> metis_tac[kept_write2])
+  >~ [`inst.inst_opcode = ISTORE`] >-
+    (fs[step_inst_non_invoke] >>
+     Cases_on `step_inst_base inst t` >> gvs[terminates_def] >>
+     gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b]` >>
+     `IS_SOME (eval_operand a s) /\ IS_SOME (eval_operand b s)` by
+       metis_tac[MEM, optionTheory.IS_SOME_DEF] >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >> metis_tac[optionTheory.IS_SOME_DEF])
+  >~ [`inst.inst_opcode = JMP`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()])
+  >~ [`inst.inst_opcode = JNZ`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;Label l;Label r]` >>
+     first_x_assum (qspec_then `a` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >> IF_CASES_TAC >> simp[])
+  >~ [`inst.inst_opcode = ASSERT`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a]` >>
+     Cases_on `eval_operand a s` >> gvs[] >> IF_CASES_TAC >> simp[])
+  >~ [`inst.inst_opcode = ASSERT_UNREACHABLE`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a]` >>
+     Cases_on `eval_operand a s` >> gvs[] >> IF_CASES_TAC >> simp[])
+  >~ [`inst.inst_opcode = ASSIGN`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a]` >>
+     Cases_on `eval_operand a s` >> gvs[])
+  >~ [`inst.inst_opcode = RET`] >-
+    (fs[step_inst_non_invoke] >>
+     `IS_SOME (eval_operands inst.inst_operands t)` by
+       (Cases_on `eval_operands inst.inst_operands t` >>
+        gvs[step_inst_base_opcode_eqs, terminates_def]) >>
+     `IS_SOME (eval_operands inst.inst_operands s)` by
+       (fs[eval_operands_IS_SOME_EVERY, EVERY_MEM] >> metis_tac[]) >>
+     Cases_on `inst.inst_operands` >-
+       gvs[step_inst_base_opcode_eqs, eval_operands_def, terminates_def] >>
+     rename1 `inst.inst_operands = h::rest` >>
+     Cases_on `eval_operand h s` >> gvs[eval_operands_def] >>
+     Cases_on `eval_operands rest s` >>
+     gvs[step_inst_base_opcode_eqs, eval_operands_def, terminates_def])
+  >~ [`inst.inst_opcode = RETURN`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_x_assum (qspec_then `b` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[])
+  >~ [`inst.inst_opcode = REVERT`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_x_assum (qspec_then `b` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[])
+  >~ [`inst.inst_opcode = ALLOCA`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs()] >>
+     Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >> simp[] >>
+     rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME p` >> Cases_on `p` >> simp[])
+  >~ [`inst.inst_opcode = CALLDATACOPY`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b;c]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_assum (qspec_then `b` assume_tac) >>
+     first_x_assum (qspec_then `c` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operand c s` >> gvs[])
+  >~ [`inst.inst_opcode = DLOADBYTES`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b;c]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_assum (qspec_then `b` assume_tac) >>
+     first_x_assum (qspec_then `c` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operand c s` >> gvs[])
+  >~ [`inst.inst_opcode = CODECOPY`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b;c]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_assum (qspec_then `b` assume_tac) >>
+     first_x_assum (qspec_then `c` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operand c s` >> gvs[])
+  >~ [`inst.inst_opcode = EXTCODECOPY`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b;c;d]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_assum (qspec_then `b` assume_tac) >>
+     first_assum (qspec_then `c` assume_tac) >>
+     first_x_assum (qspec_then `d` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operand c s` >> gvs[] >>
+     Cases_on `eval_operand d s` >> gvs[])
+  >~ [`inst.inst_opcode = RETURNDATACOPY`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b;c]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_assum (qspec_then `b` assume_tac) >>
+     first_x_assum (qspec_then `c` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operand c s` >> gvs[] >> IF_CASES_TAC >> simp[])
+  >~ [`inst.inst_opcode = SHA3`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_x_assum (qspec_then `b` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[])
+  >~ [`inst.inst_opcode = CALL`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, exec_ext_call_def, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b;c;d;e;f;g]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_assum (qspec_then `b` assume_tac) >>
+     first_assum (qspec_then `c` assume_tac) >>
+     first_assum (qspec_then `d` assume_tac) >>
+     first_assum (qspec_then `e` assume_tac) >>
+     first_assum (qspec_then `f` assume_tac) >>
+     first_x_assum (qspec_then `g` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operand c s` >> gvs[] >>
+     Cases_on `eval_operand d s` >> gvs[] >>
+     Cases_on `eval_operand e s` >> gvs[] >>
+     Cases_on `eval_operand f s` >> gvs[] >>
+     Cases_on `eval_operand g s` >> gvs[] >>
+     IF_CASES_TAC >> simp[] >>
+     fs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
+     simp[exec_ext_call_def] >> pairarg_tac >> simp[])
+  >~ [`inst.inst_opcode = STATICCALL`] >-
+    (fs[step_inst_non_invoke] >> Cases_on `step_inst_base inst t` >>
+     gvs[terminates_def, step_inst_base_opcode_eqs, exec_ext_call_def, AllCaseEqs()] >>
+     rename1 `inst.inst_operands = [a;b;c;d;e;f]` >>
+     first_assum (qspec_then `a` assume_tac) >>
+     first_assum (qspec_then `b` assume_tac) >>
+     first_assum (qspec_then `c` assume_tac) >>
+     first_assum (qspec_then `d` assume_tac) >>
+     first_assum (qspec_then `e` assume_tac) >>
+     first_x_assum (qspec_then `f` mp_tac) >> simp[] >> strip_tac >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operand c s` >> gvs[] >>
+     Cases_on `eval_operand d s` >> gvs[] >>
+     Cases_on `eval_operand e s` >> gvs[] >>
+     Cases_on `eval_operand f s` >> gvs[] >>
+     fs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[] >>
+     simp[exec_ext_call_def] >> pairarg_tac >> simp[])
+  >~ [`inst.inst_opcode = LOG`] >-
+    (fs[step_inst_non_invoke, inst_wf_def] >>
+     rename1 `inst.inst_operands = Lit tc :: rest` >>
+     `?a b ops. REVERSE rest = a::b::ops` by
+       (`LENGTH (REVERSE rest) = w2n tc + 2` by simp[] >>
+        Cases_on `REVERSE rest` >> fs[] >>
+        rename1 `REVERSE rest = a::tail` >> Cases_on `tail` >> fs[]) >>
+     `rest = REVERSE (a::b::ops)` by metis_tac[REVERSE_REVERSE] >>
+     gvs[] >>
+     `IS_SOME (eval_operand a t) /\ IS_SOME (eval_operand b t) /\
+      IS_SOME (eval_operands ops t)` by
+       (Cases_on `step_inst_base inst t` >>
+        gvs[step_inst_base_opcode_eqs, terminates_def, AllCaseEqs(),
+            eval_operands_IS_SOME_EVERY, EVERY_MEM, REVERSE_APPEND, REVERSE_REVERSE] >>
+        `IS_SOME (eval_operands ops t)` by simp[] >>
+        fs[eval_operands_IS_SOME_EVERY, EVERY_MEM]) >>
+     `IS_SOME (eval_operand a s) /\ IS_SOME (eval_operand b s) /\
+      IS_SOME (eval_operands ops s)` by
+       (fs[eval_operands_IS_SOME_EVERY, EVERY_MEM] >> metis_tac[]) >>
+     Cases_on `eval_operand a s` >> gvs[] >>
+     Cases_on `eval_operand b s` >> gvs[] >>
+     Cases_on `eval_operands ops s` >> gvs[] >>
+     simp[step_inst_base_opcode_eqs, REVERSE_APPEND, REVERSE_REVERSE] >>
+     IF_CASES_TAC >> simp[terminates_def] >>
+     first_assum (qspec_then `b` mp_tac) >> simp[])
 QED
 
 Theorem fmp_stage_back_kept_nonparam:
