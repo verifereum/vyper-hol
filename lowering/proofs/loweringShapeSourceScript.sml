@@ -291,7 +291,7 @@ Proof
   metis_tac[type_stmt_raw_shape, well_typed_exprs_raw_shape]
 QED
 
-Theorem checked_runtime_function_defaults_shape:
+Theorem checked_runtime_function_defaults_shape[local]:
   !layouts addr tops art vis mut nr rr name args dflts ret body.
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   raw_shape_free_program tops /\
