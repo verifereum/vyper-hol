@@ -2,7 +2,7 @@ Theory fmpCoverObservedPublish
 Ancestors
   fmpStageOpBaseActual fmpStageRel fmpStepBridge fmpAnalysisProps fmpAnalysisDefs fmpLowerDefs
   o1PassContract venomPassDispatcher venomPassSchedule venomInst list finite_map
-  concretizeStageLookup fmpLowerProps venomWf venomFnScheduleRunner fcgBridge
+  concretizeStageLookup fmpLowerProps venomWf venomFnScheduleRunner venomFnScheduleRunnerProps fcgBridge
 
 Theorem fmp_cover_step_signature[local]:
   fn_pass_step rpolicy pass observed s fn out /\
@@ -89,6 +89,10 @@ Proof
       (o1_walk_view rpolicy 3) C C'` by gvs[fmp_stage_ctx_def] >>
   drule_all ctx_pass_stage_lookup >> strip_tac >> gvs[] >>
   drule fmp_fn_pass_step_result >> strip_tac >>
+  `ir_supply_covers_fn s fn` by
+    (irule ir_supply_covers_unit_member >> qexists `observed` >>
+     gvs[fn_pass_step_def] >>
+     metis_tac[lookup_unique_function_member]) >>
   gvs[fmp_lower_function_def, AllCaseEqs()] >>
   qexistsl [`infos`, `observed.cu_context`, `FST (fresh_ir_var s)`] >>
   conj_tac >- (simp[fmp_stage_lowered_def] >> metis_tac[]) >>
