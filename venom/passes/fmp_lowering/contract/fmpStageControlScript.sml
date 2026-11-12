@@ -176,6 +176,114 @@ Proof
   gvs[fmp_reclaim_step_def, fmp_pop_at_def, fmp_pop_target_def]
 QED
 
+Theorem fmp_control_width_one[local]:
+  (!j. j < n ==> ~((lbl,j) IN FDOM plan) /\
+    (EL j xs).inst_opcode <> DALLOCA) ==>
+  SUM (GENLIST (\j. (if (lbl,j) IN FDOM plan then 1 else 0) +
+    (if (EL j xs).inst_opcode = DALLOCA then 4 else 1)) n) = n
+Proof
+  Induct_on `n` >> simp[GENLIST, SUM_SNOC] >>
+  rpt strip_tac >>
+  `SUM (GENLIST (\j. (if (lbl,j) IN FDOM plan then 1 else 0) +
+    (if (EL j xs).inst_opcode = DALLOCA then 4 else 1)) n) = n` by
+    (first_x_assum irule >> simp[]) >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
+  gvs[]
+QED
+
+Theorem fmp_control_unlowered_no_raw[local]:
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  ~(fn.fn_fmp_signature = NONE /\
+    ?info. FLOOKUP infos fn.fn_name = SOME info /\
+      (info.fi_needs_fmp \/ info.fi_publishes_fmp)) ==>
+  no_raw_fmp_ops fn
+Proof
+  simp[fmp_stage_lowered_def] >> strip_tac >>
+  gvs[fmp_lower_function_with_info_def, AllCaseEqs()] >>
+  irule fmp_no_need_input_no_raw >> metis_tac[]
+QED
+
+Theorem fmp_control_kept_prefix[local]:
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  fn.fn_fmp_signature = NONE /\
+  FLOOKUP infos fn.fn_name = SOME info /\
+  (info.fi_needs_fmp \/ info.fi_publishes_fmp) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  fmp_stage_root infos ctx fn = SOME (lbl,rp) /\ idx < rp /\
+  (EL idx bb.bb_instructions).inst_opcode <> RETPC_PARAM ==>
+  ?bb'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+    idx < LENGTH bb'.bb_instructions /\
+    EL idx bb'.bb_instructions = EL idx bb.bb_instructions /\
+    (!j. j <= idx ==> ~((lbl,j) IN FDOM (fmp_stage_plan infos ctx fn)) /\
+      (EL j bb.bb_instructions).inst_opcode <> DALLOCA)
+Proof
+  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  drule_all fmp_control_rewrite >> strip_tac >>
+  drule split_fmp_entry_reconstruct >> strip_tac >>
+  drule_all fmp_control_root_layout >> strip_tac >>
+  drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
+  drule fmp_lower_blocks_preserves_labels >> simp[] >> strip_tac >>
+  `root <> NONE` by gvs[] >>
+  `lbl = entry.bb_label /\ rp = LENGTH users + LENGTH (OPTION_TO_LIST oldpc)` by
+    gvs[] >>
+  `bb = entry` by gvs[lookup_block_def, FIND_thm] >>
+  `idx < LENGTH users` by
+    (Cases_on `oldpc` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def] >>
+     drule split_fmp_entry_retpc_opcode >> strip_tac >>
+     Cases_on `idx < LENGTH users` >> gvs[EL_APPEND_EQN] >>
+     `idx = LENGTH users` by decide_tac >> gvs[]) >>
+  `!j. j < LENGTH users + LENGTH (OPTION_TO_LIST oldpc) ==>
+    FLOOKUP plan (entry.bb_label,j) = NONE` by
+    metis_tac[fmp_control_prefix_plan_absent] >>
+  drule split_fmp_entry_users >> strip_tac >>
+  qpat_x_assum `blocks = _` SUBST_ALL_TAC >>
+  `entry'.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
+    (Cases_on `oldpc` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
+  drule_all fmp_control_install_users >> strip_tac >>
+  qexists_tac `entry''` >>
+  simp[lookup_block_def, FIND_thm, EL_APPEND1] >>
+  rpt strip_tac >>
+  `j < LENGTH users` by decide_tac >>
+  `FLOOKUP plan (entry.bb_label,j) = NONE` by simp[] >>
+  gvs[flookup_thm, EL_APPEND1] >>
+  fs[EVERY_EL] >> first_x_assum drule >> simp[is_param_opcode_def] >> gvs[]
+QED
+
+Theorem fmp_control_kept_suffix[local]:
+  fmp_stage_lowered infos ctx runner fn fn' /\ MEM bb fn.fn_blocks /\
+  fn.fn_fmp_signature = NONE /\
+  (?info. FLOOKUP infos fn.fn_name = SOME info /\
+          (info.fi_needs_fmp \/ info.fi_publishes_fmp)) /\
+  idx < LENGTH bb.bb_instructions /\
+  ~MEM (EL idx bb.bb_instructions).inst_opcode
+    [DALLOCA; DRET; GETFMP; SETFMP; RETFMP; INVOKE] /\
+  (!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+           bb.bb_label = rl ==> rp <= idx) ==>
+  ?bb'. lookup_block bb.bb_label fn'.fn_blocks = SOME bb' /\
+    fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+      bb.bb_label bb.bb_instructions idx +
+      (if (bb.bb_label,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0)
+      < LENGTH bb'.bb_instructions /\
+    EL (fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+      bb.bb_label bb.bb_instructions idx +
+      (if (bb.bb_label,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0))
+      bb'.bb_instructions = EL idx bb.bb_instructions
+Proof
+  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `idx <= LENGTH bb.bb_instructions` by decide_tac >>
+  drule_all fmp_control_tidx_code_unique >> strip_tac >>
+  `DROP idx bb.bb_instructions =
+    EL idx bb.bb_instructions :: DROP (SUC idx) bb.bb_instructions` by
+    simp[DROP_CONS_EL] >>
+  qpat_x_assum `DROP idx bb.bb_instructions = _` SUBST_ALL_TAC >>
+  drule_all fmp_control_walk_kept_head >> strip_tac >>
+  qexists_tac `bb'` >> simp[] >>
+  qpat_x_assum `DROP _ bb'.bb_instructions = code` (SUBST_ALL_TAC o GSYM) >>
+  qmatch_asmsub_abbrev_tac `offset < LENGTH (DROP pos bb'.bb_instructions)` >>
+  `offset + pos < LENGTH bb'.bb_instructions` by fs[LENGTH_DROP] >>
+  fs[EL_DROP] >> simp[arithmeticTheory.ADD_COMM]
+QED
+
 (* Why: an instruction the lowering keeps as itself (every opcode but
    DALLOCA, INVOKE and RETPC_PARAM, which it rewrites, and the raw FMP
    ones, which row 3 has none of) sits in the target block at the control
@@ -197,7 +305,52 @@ Theorem fmp_stage_kept_inst:
         (if (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0))
        bb'.bb_instructions = inst
 Proof
-  cheat
+  rpt strip_tac >> gvs[] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    (fs[lookup_block_def] >> imp_res_tac stackPlanGenTheory.FIND_SOME_MEM >> gvs[]) >>
+  Cases_on `fn.fn_fmp_signature = NONE /\
+    ?info. FLOOKUP infos fn.fn_name = SOME info /\
+      (info.fi_needs_fmp \/ info.fi_publishes_fmp)`
+  >- (Cases_on `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+        bb.bb_label = rl ==> rp <= idx`
+      >- (drule fmp_control_kept_suffix >>
+          simp[pre_fmp_opcode_def] >>
+          disch_then (qspecl_then [`idx`, `bb`] mp_tac) >>
+          gvs[pre_fmp_opcode_def]) >>
+      gvs[NOT_FORALL_THM] >>
+      `idx < rp` by decide_tac >>
+      drule fmp_control_kept_prefix >>
+      disch_then (qspec_then `rp` mp_tac) >>
+      disch_then drule >> simp[] >>
+      disch_then (qspec_then `idx` mp_tac) >>
+      simp[] >> disch_then (qx_choose_then `target` strip_assume_tac) >>
+      qexists_tac `target` >>
+      `SUM (GENLIST (\j. (if (bb.bb_label,j) IN FDOM (fmp_stage_plan infos ctx fn)
+          then 1 else 0) +
+        (if (EL j bb.bb_instructions).inst_opcode = DALLOCA then 4 else 1)) idx)
+        = idx` by
+        (irule fmp_control_width_one >> rpt strip_tac >>
+         `j <= idx` by decide_tac >>
+         qpat_x_assum `!j. j <= idx ==> _` drule >> simp[]) >>
+      `~((bb.bb_label,idx) IN FDOM (fmp_stage_plan infos ctx fn))` by
+        (qpat_x_assum `!j. j <= idx ==> _` (qspec_then `idx` mp_tac) >> simp[]) >>
+      simp[fmp_stage_tidx_def]) >>
+  drule_all fmp_stage_unlowered >> strip_tac >>
+  drule_all fmp_control_unlowered_no_raw >> strip_tac >>
+  `!j. j < idx ==> (EL j bb.bb_instructions).inst_opcode <> DALLOCA` by
+    (rpt strip_tac >>
+     gvs[no_raw_fmp_ops_def, fn_insts_def, fn_insts_blocks_def,
+         MEM_FLAT, MEM_MAP, is_raw_fmp_opcode_def] >>
+     `j < LENGTH bb.bb_instructions` by decide_tac >>
+     `MEM (EL j bb.bb_instructions) (fn_insts_blocks fn.fn_blocks)` by
+       (irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
+        qexists_tac `bb` >> simp[EL_MEM]) >>
+     first_x_assum drule >> simp[is_raw_fmp_opcode_def]) >>
+  qexists_tac `bb` >> simp[fmp_stage_tidx_def] >>
+  `SUM (GENLIST (\j. (if (lbl,j) IN FDOM (FEMPTY:fmp_reclaim_plan) then 1 else 0) +
+    (if (EL j bb.bb_instructions).inst_opcode = DALLOCA then 4 else 1)) idx) = idx` by
+    (irule fmp_control_width_one >> simp[]) >>
+  gvs[]
 QED
 
 (* Why: the root counts from rp on, so the source step that reaches rp
