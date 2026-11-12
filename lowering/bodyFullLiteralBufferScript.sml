@@ -11,7 +11,7 @@
  *)
 Theory bodyFullLiteralBuffer
 Ancestors
-  exprSimPtrLiteralBuffer fragGasSeqPtr bodyPtrDefs vyperStorageFootprint
+  exprSimPtrLiteralBuffer fragGasSeqPtr instSeqPtrLo bodyPtrDefs vyperStorageFootprint
   exprLowering compileEnv loweringStateRelDefs venomState finite_map words
 
 (* The pointer twin is exprSimPtrLiteralBuffer's literal_bytelike_ptr_run at
