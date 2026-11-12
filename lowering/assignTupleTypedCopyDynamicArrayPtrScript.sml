@@ -81,3 +81,66 @@ Proof
   qexistsl_tac [`H`, `tm`] >>
   gvs[Abbr `code`, mk_inst_def, op_prov_def] >> metis_tac[]
 QED
+
+(* The checked prefix chooses a single semantic/ghost endpoint. *)
+Triviality typed_dynarray_load_check_ptr:
+  code =
+    [mk_inst id MLOAD [Var src] [len];
+     mk_inst (id+1) GT [Var len; Lit (n2w cap)] [long];
+     mk_inst (id+2) ISZERO [Var long] [ok];
+     mk_inst (id+3) ASSERT [Var ok] []] /\
+  ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+  lookup_var src s = SOME a /\ LENGTH vs <= cap /\ cap < dimword(:256) /\
+  len <> long /\ len <> ok /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory (ArrayTV tv (Dynamic source_cap))
+      (ArrayV (DynArrayV vs)) (w2n a) m) ==>
+  ?H tm u.
+    inst_seq_ptr D 0 ctx fn PG G tn code s H tm /\
+    run_inst_seq code s = OK u /\
+    u = update_var ok 1w (update_var long 0w
+      (update_var len (n2w (LENGTH vs)) s)) /\
+    lookup_var len u = SOME (n2w (LENGTH vs)) /\
+    op_prov H (Var len) = NONE /\ op_taint tm (Var len) = {} /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!p. p <> len /\ p <> long /\ p <> ok ==>
+      lookup_var p u = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+      op_taint tm (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  drule_all typed_dynarray_load_length_ptr >>
+  disch_then (qspecl_then [`len`, `id`, `fn`, `PG`, `D`]
+    (qx_choose_then `g1` (qx_choose_then `t1`
+      (qx_choose_then `s1` strip_assume_tac)))) >>
+  qabbrev_tac `s2 = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `lookup_var len s2 = SOME (n2w (LENGTH vs))` by simp[Abbr `s2`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  mp_tac (Q.INST [`s` |-> `s2`, `G` |-> `g1`, `tn` |-> `t1`,
+    `n` |-> `LENGTH (vs:value list)`, `id` |-> `id+1`] typed_dynarray_check_length_ptr) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `g2` (qx_choose_then `t2` strip_assume_tac)) >>
+  qexistsl_tac [`g2`, `t2`,
+    `update_var ok 1w (update_var long 0w s1)`] >>
+  conj_tac >- suspend "checked_prefix" >>
+  conj_tac >- suspend "checked_run" >>
+  gvs[Abbr `s2`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+Resume typed_dynarray_load_check_ptr[checked_prefix]:
+  qpat_x_assum `code = _` SUBST1_TAC >>
+  qpat_x_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `s.vs_inst_idx` mp_tac) >>
+  qpat_x_assum `run_inst_seq [_] s = OK s1` mp_tac >>
+  simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
+  simp[inst_seq_ptr_def] >> strip_tac >>
+  gvs[Abbr `s2`, ADD_ASSOC, inst_seq_ptr_def]
+QED
+Resume typed_dynarray_load_check_ptr[checked_run]:
+  `LENGTH vs < dimword(:256)` by decide_tac >>
+  qpat_x_assum `run_inst_seq [_] s = OK s1` mp_tac >>
+  simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
+  gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+      exec_pure2_def, exec_pure1_def, eval_operand_def,
+      lookup_var_def, update_var_def, FLOOKUP_UPDATE, bool_to_word_def]
+QED
+Finalise typed_dynarray_load_check_ptr
