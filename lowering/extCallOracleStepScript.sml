@@ -92,6 +92,15 @@ Proof
   simp[local_ptrs_rel_def, local_region_def, local_backed_def, lookup_var_def]
 QED
 
+Theorem state_rel_storage_trace:
+  state_rel func cenv cx (es with storage_trace := tr) s <=>
+  state_rel func cenv cx es s
+Proof
+  simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+       immutables_rel_def, logs_rel_def, contract_storage_def,
+       contract_transient_def]
+QED
+
 (* ===== The shared step ===== *)
 
 (* The adopted source state against Venom's state after consuming the
@@ -191,7 +200,8 @@ Proof
                  value_opt es /\
           take_outcome rq s.vs_outcomes = (outcome, rest) /\
           es1 = es with <| outcomes := SOME rest;
-                           requests := record_request rq es.requests |>` by
+                           requests := record_request rq es.requests;
+                           storage_trace := es.storage_trace ++ [StorageOutcome rq outcome] |>` by
     (qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
      simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
      qexists_tac `rest` >> simp[]) >>
@@ -212,7 +222,12 @@ Proof
   >- simp[]
   >- simp[] >>
   strip_tac >> qpat_x_assum `es1 = _` SUBST1_TAC >>
-  irule state_rel_adopt_consume >> simp[]
+  irule (state_rel_adopt_consume |> Q.SPECL
+    [`func`, `cenv`, `cx`,
+     `es with storage_trace := es.storage_trace ++ [StorageOutcome rq outcome]`]
+    |> PURE_REWRITE_RULE [evaluation_state_accfupds]) >>
+  simp[state_rel_storage_trace] >>
+  gvs[immutables_rel_def] >> gvs[]
 QED
 
 (* ===== send ===== *)

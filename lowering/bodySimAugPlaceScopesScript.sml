@@ -57,12 +57,16 @@ Resume aug_place_pure_scopes_mutual[subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (mp_tac o AP_TERM ``\s:evaluation_state. s.scopes``)) >> simp[] >>
   gvs[] >> metis_tac[]
 QED
 Resume aug_place_pure_scopes_mutual[attribute]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (mp_tac o AP_TERM ``\s:evaluation_state. s.scopes``)) >> simp[] >> gvs[] >> metis_tac[]
 QED
 Resume aug_place_pure_scopes_mutual[builtin]:
   rpt strip_tac >>
@@ -115,12 +119,16 @@ Resume aug_place_pure_scopes_mutual[place_subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (mp_tac o AP_TERM ``\s:evaluation_state. s.scopes``)) >> simp[] >>
   gvs[] >> metis_tac[]
 QED
 Resume aug_place_pure_scopes_mutual[place_rest]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (mp_tac o AP_TERM ``\s:evaluation_state. s.scopes``)) >> simp[] >> gvs[] >> metis_tac[]
 QED
 Finalise aug_place_pure_scopes_mutual
 
@@ -168,7 +176,8 @@ Proof
   PairCases_on `x'` >> Cases_on `x'0` >>
   simp[lookup_global_def, lift_option_type_def, bind_def,
        return_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[option_CASE_rator, return_def, raise_def, AllCaseEqs()]
+  gvs[option_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  gvs[ignore_bind_def, bind_def, record_storage_event_def, return_def]
 QED
 
 Theorem aug_place_top_level_pop_scopes:
@@ -179,7 +188,10 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac lookup_global_scopes >>
   imp_res_tac lookup_global_state >> imp_res_tac get_place_state >> gvs[] >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (mp_tac o AP_TERM ``\s:evaluation_state. s.scopes``)) >> simp[] >>
   imp_res_tac aug_place_lookup_global_not_memory >>
   Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
   Cases_on `p` >> gvs[] >>
@@ -290,23 +302,31 @@ Resume aug_place_effect_scopes_mutual[subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (mp_tac o AP_TERM ``\s:evaluation_state. s.scopes``)) >> simp[] >>
   gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
 QED
 Resume aug_place_effect_scopes_mutual[attribute]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (mp_tac o AP_TERM ``\s:evaluation_state. s.scopes``)) >> simp[] >> gvs[] >> metis_tac[]
 QED
 Resume aug_place_effect_scopes_mutual[place_subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (mp_tac o AP_TERM ``\s:evaluation_state. s.scopes``)) >> simp[] >>
   gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
 QED
 Resume aug_place_effect_scopes_mutual[place_attribute]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (mp_tac o AP_TERM ``\s:evaluation_state. s.scopes``)) >> simp[] >> gvs[] >> metis_tac[]
 QED
 Resume aug_place_effect_scopes_mutual[send]:
   rpt strip_tac >>
