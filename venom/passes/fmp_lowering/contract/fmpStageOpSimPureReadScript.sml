@@ -25,7 +25,7 @@ Proof
   `ptr_use_static_ok P (fn_pv P fn) inst` by
     metis_tac[fn_static_ptr_ok_def] >>
   `op_prov G op = NONE /\ op_taint tn op = {}` by
-    (Cases_on `op` >>
+    (Cases_on `op` >> simp[op_prov_def] >>
      gvs[op_prov_def, FLOOKUP_DEF, SUBSET_DEF, ptr_use_static_ok_def,
          mem_read_ops_def, mem_write_ops_def, is_pointer_preserving_op_def,
          taint_ok_def, MEM] >> metis_tac[]) >>
@@ -115,7 +115,8 @@ Theorem fmp_read_update_ghosts[local]:
     tn with t_var := tn.t_var |+ (out,{})
 Proof
   strip_tac >>
-  `~MEM inst.inst_opcode [MLOAD; ILOAD; SLOAD; TLOAD; ASSIGN; SHL; SHR; SAR] /\
+  `~MEM inst.inst_opcode [MLOAD; ILOAD; SLOAD; TLOAD; ASSIGN; SHL; SHR; SAR;
+     MUL] /\
    ~MEM inst.inst_opcode [MSTORE; ISTORE; MCOPY]` by gvs[MEM] >>
   `out_taint tn inst s = {} /\ written_taint tn inst s = {}` by
     (qpat_x_assum `MEM _ _` kall_tac >> fs[MEM] >>

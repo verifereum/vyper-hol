@@ -2,8 +2,16 @@
 Theory fmpStageControlLayout
 Ancestors
   fmpStageRel fmpStepLayout fmpLowerIndexedProps fmpLowerProps fmpLowerDefs
-  fmpStageControlWalk
+  fmpStageControlWalk fmpStepOpaque
   fmpReclaimDefs fmpWfDefs venomInst venomWf list rich_list finite_map
+
+Theorem fmp_control_fresh_runner[local]:
+  fresh_ir_var s = (v,s') ==>
+  MEM v s'.irs_used_vars /\
+  !x. MEM x s.irs_used_vars ==> MEM x s'.irs_used_vars
+Proof
+  strip_tac >> drule irSupplyTheory.fresh_ir_var_contract >> simp[]
+QED
 
 Theorem fmp_control_rewrite:
   fmp_stage_lowered infos ctx runner fn fn' /\
@@ -21,16 +29,24 @@ Theorem fmp_control_rewrite:
       SOME (FmpBlocksResult blocks [] s2) /\
     fmp_install_root ctx fn (FmpRootLayout (LENGTH users) root newpc s2) blocks =
       SOME (out,s2) /\
-    fn'.fn_blocks = out /\ (newpc = NONE <=> oldpc = NONE)
+    fn'.fn_blocks = out /\ (newpc = NONE <=> oldpc = NONE) /\
+    MEM runner s1.irs_used_vars /\
+    (!v. MEM v (fn_ir_vars fn) ==> MEM v s1.irs_used_vars)
 Proof
   simp[fmp_stage_lowered_def] >> rpt strip_tac >>
   gvs[fmp_lower_function_with_info_def, AllCaseEqs()] >>
+  qpat_x_assum `fresh_ir_var _ = _`
+    (fn th => assume_tac th >>
+              strip_assume_tac (MATCH_MP fmp_control_fresh_runner th)) >>
   Cases_on `root_layout` >> gvs[] >>
   drule fmp_checked_seal_some >> strip_tac >> gvs[fmp_seal_def] >>
   `?users oldpc suffix. split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix)` by
     (gvs[fmp_make_root_layout_def, AllCaseEqs()] >> metis_tac[]) >>
   drule_all fmp_make_root_layout_prefix >> strip_tac >> gvs[] >>
   drule fmp_install_root_supply >> strip_tac >> gvs[] >>
+  drule fmp_make_root_layout_used_vars >> strip_tac >>
+  gvs[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
+      venomFnScheduleRunnerTheory.list_subset_def, EVERY_MEM] >>
   simp[fmp_stage_plan_def] >> metis_tac[]
 QED
 
@@ -73,6 +89,7 @@ Theorem fmp_control_blocks_walk:
   ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
   ALL_DISTINCT (MAP FST rs) /\ MEM bb bbs ==>
   ?code rs0 s0 left0 s1.
+    (!v. MEM v s.irs_used_vars ==> MEM v s0.irs_used_vars) /\
     lookup_block bb.bb_label out = SOME (bb with bb_instructions := code) /\
     ALL_DISTINCT (MAP FST rs0) /\
     (!j b. MEM ((bb.bb_label,j),b) rs0 <=> MEM ((bb.bb_label,j),b) rs) /\
@@ -86,6 +103,7 @@ Proof
   drule_all fmp_control_leftover_keys >> strip_tac >>
   first_x_assum drule >> simp[] >> disch_then drule >> strip_tac >>
   qexistsl [`code`, `rs0`, `s0`, `left0`, `s1`] >> simp[] >>
+  conj_tac >- metis_tac[fmp_control_indexed_vars_mono] >>
   conj_tac
   >- (gvs[lookup_block_def, FIND_thm, MEM_MAP] >> metis_tac[]) >>
   qpat_assum `fmp_lower_indexed _ _ _ h.bb_label _ _ _ _ = _`
@@ -109,6 +127,7 @@ Theorem fmp_control_checked_walk:
   fmp_lower_blocks infos ctx runner s (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks left s') /\ MEM bb fn.fn_blocks ==>
   ?code rs0 s0 left0 s1.
+    (!v. MEM v s.irs_used_vars ==> MEM v s0.irs_used_vars) /\
     lookup_block bb.bb_label blocks = SOME (bb with bb_instructions := code) /\
     ALL_DISTINCT (MAP FST rs0) /\
     (!j b. MEM ((bb.bb_label,j),b) rs0 <=> FLOOKUP plan (bb.bb_label,j) = SOME b) /\

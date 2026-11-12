@@ -4,7 +4,7 @@
 Theory logArgumentTypes
 Ancestors
   vyperEventArgCompat
-  typedCopyCompatibility abiTypeBounds abiTypeShape
+  typedCopyCompatibility abiTypeBounds abiTypeShape exprSimAbiEncodeArgsPhysicalCapacity
   vyperTypeSystem vyperAST vyperValue vyperABI exprLowering compileEnv list arithmetic
 
 Theorem event_arg_compatible_bytes_bound:
@@ -130,10 +130,26 @@ Proof
   impl_tac >- simp[LIST_REL_MAP1, combinTheory.o_DEF] >> simp[]
 QED
 
+Theorem lowered_abi_encode_size_bound[local]:
+  !sf cenv ensure args.
+    EVERY (\e. arg_type_fits (lowered_value_type cenv e) (expr_type e)) args ==>
+    abi_size_bound sf
+      (if LENGTH args = 1 /\ ~ensure then lowered_value_type cenv (HD args)
+       else TupleT (MAP (lowered_value_type cenv) args)) <=
+    abi_size_bound sf
+      (if LENGTH args = 1 /\ ~ensure then expr_type (HD args) else TupleT (MAP expr_type args))
+Proof
+  rpt gen_tac >> strip_tac >> IF_CASES_TAC
+  >- (Cases_on `args` >> gvs[] >> irule (cj 1 abi_args_fits_size_bound) >> simp[]) >>
+  REWRITE_TAC [] >> irule (cj 2 abi_args_fits_size_bound) >> pop_assum kall_tac >>
+  Induct_on `args` >> simp[arg_type_fits_def]
+QED
+
 Theorem abi_encode_event_arg_compatible:
   !tenv cenv fty ann ensure method_id target_ty args tvs.
     abi_struct_env_rel tenv cenv.ce_struct_fields /\
     LIST_REL (\e tv. evaluate_type tenv (expr_type e) = SOME tv) args tvs /\
+    EVERY (\e. arg_type_fits (lowered_value_type cenv e) (expr_type e)) args /\
     well_typed_type_builtin_args (AbiEncode ensure method_id) target_ty (MAP expr_type args) /\
     type_builtin_result_ok tenv (AbiEncode ensure method_id) ann target_ty (MAP expr_type args) /\
     event_arg_compatible fty ann ==>
@@ -153,10 +169,19 @@ Proof
     (qpat_x_assum `vyper_abi_size_bound tenv _ + _ <= annotation_bound` mp_tac >>
      asm_simp_tac bool_ss [abi_encode_source_argument_type,
        SIMP_RULE (srw_ss()) [] abi_encode_source_argument_type]) >>
-  simp_tac bool_ss [lowered_value_type_def, LET_THM] >>
+  qspecl_then [`cenv.ce_struct_fields`, `cenv`, `ensure`, `args`] mp_tac lowered_abi_encode_size_bound >>
+  impl_tac >- first_assum ACCEPT_TAC >> DISCH_TAC >>
+  simp_tac bool_ss [lowered_value_type_def, LET_THM] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   qspecl_then [`fty`, `annotation_bound`,
     `abi_size_bound cenv.ce_struct_fields
-      (if LENGTH args = 1 /\ ~ensure then expr_type (HD args) else TupleT (MAP expr_type args)) +
+      (if LENGTH args = 1 /\ ~ensure then lowered_value_type cenv (HD args)
+       else TupleT (MAP (lowered_value_type cenv) args)) +
       (if IS_SOME method_id then 4 else 0)`] mp_tac (CONJUNCT2 event_arg_compatible_bytestring_narrow) >>
-  impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> DISCH_TAC >> first_assum MATCH_ACCEPT_TAC
+  impl_tac >-
+   (conj_tac >- first_assum ACCEPT_TAC >>
+    irule arithmeticTheory.LESS_EQ_TRANS >>
+    qpat_x_assum `abi_size_bound _ (if _ then expr_type _ else _) + _ <= annotation_bound`
+      (irule_at Any) >>
+    simp[]) >>
+  DISCH_TAC >> first_assum MATCH_ACCEPT_TAC
 QED

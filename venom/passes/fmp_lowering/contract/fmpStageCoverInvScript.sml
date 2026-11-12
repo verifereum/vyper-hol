@@ -98,7 +98,7 @@ Theorem fmp_cov_invoke_suffix[local]:
 Proof
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
   `idx <= LENGTH bb.bb_instructions` by decide_tac >>
-  drule_all fmp_control_tidx_code_unique >> strip_tac >>
+  drule_all fmp_stage_tidx_code >> strip_tac >>
   `DROP idx bb.bb_instructions =
     EL idx bb.bb_instructions :: DROP (SUC idx) bb.bb_instructions` by
     simp[DROP_CONS_EL] >>
