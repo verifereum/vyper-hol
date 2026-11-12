@@ -215,7 +215,7 @@ Theorem asm_log_pc_add[local]:
   asm_log k (s with as_pc := s.as_pc + n) =
   asm_result_pc_add n (asm_log k s)
 Proof
-  simp[asm_log_def] >> IF_CASES_TAC >>
+  simp[asm_log_def] >> rpt IF_CASES_TAC >>
   simp[asm_result_pc_add_def, asm_next_def]
 QED
 
@@ -351,7 +351,8 @@ QED
 
 Theorem sym_with_pc_fields[simp]:
   (sym_with_pc q ss).sym_stack = ss.sym_stack ∧
-  (sym_with_pc q ss).sym_mem_labels = ss.sym_mem_labels
+  (sym_with_pc q ss).sym_mem_labels = ss.sym_mem_labels ∧
+  (sym_with_pc q ss).sym_own_code = ss.sym_own_code
 Proof
   simp[sym_with_pc_def]
 QED
@@ -441,7 +442,8 @@ Proof
   rename1 `ss.sym_stack = x1 :: t1` >>
   Cases_on `t1` >- simp[sym_result_pc_add_def] >>
   rename1 `ss.sym_stack = x1 :: x2 :: t2` >>
-  Cases_on `t2` >- (Cases_on `x2` >> simp[sym_result_pc_add_def]) >>
+  Cases_on `t2`
+  >- (Cases_on `x1` >> Cases_on `x2` >> simp[sym_result_pc_add_def]) >>
   rename1 `ss.sym_stack = x1 :: x2 :: x3 :: t3` >>
   Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
   rw[sym_result_pc_add_def] >>

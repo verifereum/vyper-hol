@@ -112,7 +112,8 @@ fun check_body in_deploy vis ty body =
     (vyperCheckContractLib.mk_check_contract
       {in_deploy = in_deploy, address = ``0w : address``,
        layouts = ``[] : (address # (storage_layout # storage_layout)) list``,
-       modules = ``[(NONE, [FunctionDecl ^vis Nonpayable F F "test"
+       modules = ``[(NONE, [FunctionDecl ^vis Nonpayable F F
+         ^(if aconv vis ``Deploy`` then ``"__init__"`` else ``"test"``)
          [("x", ^ty); ("y", ^ty)] [] NoneT ^body])]
          : (num option # toplevel list) list``});
 fun expect label accepted th = let
