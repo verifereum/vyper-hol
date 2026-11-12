@@ -1,6 +1,6 @@
 (* Successful-read external return consumers. *)
 Theory externalReturnSelectedSuffix
-Ancestors externalReturnSelectedResources externalReturnSiteSemantics
+Ancestors e2eDefs externalReturnSelectedResources externalReturnSiteSemantics
   externalReturnConsumerFit externalReturnSimpleSuffix vyperLoweringCorrect
   typedMemoryCopy loweringPosts exprLoweringProps fragExec compileEnv
   valueCopyBytes valueTypingMemoryProps exprSimProps stmtSimReturn
