@@ -40,7 +40,6 @@ Proof
   goalStack.print_tac "PROBE" >> cheat
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_interval_call_external:
   (!ce ty e a. k <= a.cs_next_var ==>
     intcall_compiler_interval k a (SND (cfn ce ty e a))) /\
@@ -48,12 +47,12 @@ Theorem intcall_interval_call_external:
   intcall_compiler_interval k a
     (SND (compile_call cfn ce rt ty (ExtCall sta skip sig opts) es dflt a))
 Proof
-  (* original proof, kept while held:
   strip_tac >> PairCases_on `sig` >> Cases_on `es` >>
   simp[compile_call_def, intcall_interval_emit_inst] >>
   rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
        simp[intcall_interval_emit_inst, intcall_compiler_interval_refl,
-            intcall_interval_lower_value, intcall_interval_multi_vvs_floor,
+            intcall_interval_lower_value,
+            bodyIntCallCompilerExtOperandsTheory.intcall_interval_ext_call_args,
             bodyIntCallCompilerExtOperandsTheory.intcall_interval_ext_call_kwargs,
             pairTheory.FORALL_PROD] >> rpt strip_tac >> simp[]) >>
   rename1 `case default_opt of NONE => (F,Lit 0w,_) | SOME (d,dt) => (T,d,dt)` >>
@@ -72,8 +71,6 @@ Proof
        simp[intcall_interval_emit_op, intcall_interval_external_call_kwargs] >>
        rpt strip_tac >> simp[]) >>
   IF_CASES_TAC >> simp[intcall_compiler_interval_refl]
-  *)
-  cheat
 QED
 
 Theorem intcall_interval_call_raw:
