@@ -594,7 +594,7 @@ Proof
 QED
 
 Theorem copied_storage_live_memory:
-  !cx tr st rt w tv dst mem.
+  !H tr st rt w tv dst mem.
     storage_read_live H tr st w tv /\
     storage_agree (storage_dead H tr st) st rt /\
     (!i. i < type_slot_size tv ==>
@@ -622,7 +622,7 @@ Proof
 QED
 
 Theorem copied_storage_decode_in_memory:
-  !cx tr st rt w tv v dst mem.
+  !H tr st rt w tv v dst mem.
     well_formed_type_value tv /\ slots_in_range st (w2n w) tv /\
     decode_value st (w2n w) tv = SOME v /\
     storage_read_live H tr st w tv /\
@@ -634,5 +634,5 @@ Proof
   rpt strip_tac >> irule decode_value_live_memory >> simp[] >>
   qexistsl_tac [`w2n w`, `st`] >> simp[] >>
   irule copied_storage_live_memory >>
-  qexistsl_tac [`cx`, `rt`, `tr`] >> simp[]
+  qexistsl_tac [`H`, `rt`, `tr`] >> simp[]
 QED
