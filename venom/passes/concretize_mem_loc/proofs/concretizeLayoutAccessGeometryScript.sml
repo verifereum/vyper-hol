@@ -137,7 +137,10 @@ Proof
          `SND o_f rv = G` by
            (qpat_x_assum `~ctx_has_dalloca C ==> _` mp_tac >>
             simp[resolved_complete_def]) >>
-         irule access_ok_complete_static >> metis_tac[]) >>
+         irule (INST_TYPE [alpha |-> ``:num # num``] access_ok_complete_static) >>
+         conj_tac >- fs[] >>
+         qexistsl_tac [`G`, `fn`, `inst`, `ops`, `rv`, `s`] >>
+         asm_rewrite_tac[]) >>
       `op_taint tn ops.iao_ofst = {}` by
         (irule memory_offset_taint_empty >> metis_tac[]) >>
       `!v. ops.iao_ofst = Var v ==> ~retpc_var fn v /\ FLOOKUP rv v = NONE` by
@@ -195,11 +198,12 @@ Proof
       Cases_on `w2n off + i < lo`
       >- (gvs[] >> irule relocation_pair_static >> decide_tac) >>
       gvs[] >> irule relocation_pair_dynamic >> rpt conj_tac
-      >- decide_tac >- decide_tac >>
-      rpt strip_tac >> irule arithmeticTheory.LESS_EQ_TRANS >>
-      qexists_tac `w2n vs0.vs_initial_fmp` >> conj_tac
-      >- (irule joint_cache_below_initial_fmp >> metis_tac[]) >>
-      fs[]) >>
+      >~ [`activation_cache _ _ _ _ _`]
+      >- (rpt strip_tac >> irule arithmeticTheory.LESS_EQ_TRANS >>
+          qexists_tac `w2n vs0.vs_initial_fmp` >> conj_tac
+          >- (irule joint_cache_below_initial_fmp >> metis_tac[]) >>
+          fs[]) >>
+      decide_tac) >>
   gvs[] >> irule relocation_pair_cached >> conj_tac >- decide_tac >>
   qexistsl_tac [`aid`, `b`, `d`, `owner`, `sz`] >> simp[]
 QED

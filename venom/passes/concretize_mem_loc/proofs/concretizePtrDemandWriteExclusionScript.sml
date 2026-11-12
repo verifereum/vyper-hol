@@ -72,14 +72,14 @@ Theorem ptr_demand_protected_token_interval:
       EL (LENGTH (EL j h).po_stack-d) (FST (EL j H)) = token) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
     ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
-  w2n vs.vs_initial_fmp <= b+k
+  dyn_floor C vs <= b+k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `w2n vs.vs_initial_fmp <= b+k` >- simp[] >> disj1_tac >>
+  Cases_on `dyn_floor C vs <= b+k` >- simp[] >> disj1_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_source >> strip_tac >>
   `b <= b+k /\ b+k < b+sz` by decide_tac >>
-  qpat_assum `~(w2n vs.vs_initial_fmp <= b+k)` (fn th =>
+  qpat_assum `~(dyn_floor C vs <= b+k)` (fn th =>
     drule_all ptr_endpoint_actual_protected_livesets >>
     disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
   drule ptr_chrono_history_end >> strip_tac >>
@@ -192,7 +192,7 @@ Theorem ptr_demand_interval_exists:
   (?w. ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
     rpolicy s out names w) \/
-  w2n vs.vs_initial_fmp <= b+k
+  dyn_floor C vs <= b+k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ptr_demand_protected_token_interval >> strip_tac
