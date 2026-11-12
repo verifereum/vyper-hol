@@ -84,7 +84,7 @@ Proof
   drule_all deploy_ctor_entry_reaches_body >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
   `call_outcomes_ok am tx (MAP SND (call_trace es))` by
-    fs[deploy_state_rel_def] >>
+    metis_tac[deploy_state_rel_call_outcomes_ok] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
   drule deploy_ctor_code_facts >> strip_tac >>
   `?args. lookup_function NONE tx.function_name Deploy tops =

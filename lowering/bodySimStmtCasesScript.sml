@@ -48,7 +48,8 @@
 
 Theory bodySimStmtCases
 Ancestors
-  loweringStateRelDefs valueEncodingProps
+  bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
+  loweringStateRelDefs valueEncodingProps bodyAssignTupleOther assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
@@ -71,7 +72,7 @@ Ancestors
   stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
   stmtSimAssignTupleTargets
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
-  bodyAugAssignOther
+  bodyAugAssignOther placeRelayoutBody bodyPlacePremises
 Libs
   monadsyntax
 
@@ -1308,7 +1309,15 @@ Theorem body_assign_place_widened_aggregate_call:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `immutable_root cx t`
+  >- (drule_all body_assignment_place_premises >>
+      disch_then (qspec_then `func` strip_assume_tac) >>
+      gvs[] >> irule stmtSimAssignPlaceTheory.immutable_deploy_assign_case >>
+      metis_tac[]) >>
+  Cases_on `supported_target_pure tops t`
+  >- (irule body_assign_nonimmutable_widened_place >> metis_tac[]) >>
+  irule bodyAssignPlaceTheory.body_assign_place_effectful_case >> metis_tac[]
 QED
 
 (* The other base targets, by bodyAssignPlace's general place root (the
@@ -1373,6 +1382,9 @@ Theorem body_assign_widened_aggregate_call:
    ty.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+                (Assign (BaseTarget (NameTarget id)) e) ==>
+              occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
@@ -1388,7 +1400,40 @@ Theorem body_assign_widened_aggregate_call:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all body_assign_local_rhs_pre >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  drule_all assign_relayout_source_classify >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  drule_all widening_memory_layout_bound >> strip_tac >>
+  `supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops /\
+   acyclic_struct_metadata cenv.ce_struct_fields /\
+   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[body_inv_def, expr_sim_inv_def] >>
+  `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by
+    (Cases_on `e` >>
+     gvs[is_empty_value_expr_def, oneline exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
+  `expr_sim ctx func cenv cx (expr_type e) e es` by metis_tac[body_expr_ok_def] >>
+  irule compile_assign_local_relayout_stmt_frag >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- fs[expr_sim_inv_def] >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (irule memory_rhs_read_local_type >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qpat_assum `FLOOKUP env.var_types id = SOME ty` (irule_at Any) >> simp[] >>
+      `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+      pop_assum (irule_at Any) >> simp[] >> metis_tac[]) >>
+  irule annassign_relayout_read_layout >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem body_assign_case:
@@ -1940,11 +1985,15 @@ Theorem body_assign_tuple_other:
        body_tuple_target_ok cx (TupleTarget gs) v) /\ body_expr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    lowered_value_type cenv e = expr_type e /\
     ~(?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
             EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
     ~EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
@@ -1962,25 +2011,73 @@ Theorem body_assign_tuple_other:
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  qspecl_then [`cx`, `gs`, `e`, `tops`, `bindings`, `ctx`, `func`, `cenv`,
+               `env`, `env'`, `ret_ty`, `lctx`, `RetQ`, `es`] mp_tac
+    bodyAssignTupleOtherTheory.body_assign_tuple_places >>
+  impl_tac >- (
+    rpt conj_tac
+    >~ [`cenv.ce_target CapMcopy`] >- metis_tac[body_inv_mcopy]
+    >~ [`expr_body_pre _ _ _ _ _`]
+    >- (irule body_assign_tuple_rhs_pre >> metis_tac[])
+    >~ [`type_memory_size _ < _`]
+    >- (rpt strip_tac >> irule tuple_staging_bound >> metis_tac[])
+    >> metis_tac[]) >>
+  simp[]
 QED
 
 (* RESIDUAL (#767): a tuple target assigned an internal call whose return
    type widens to the call's type (type_widens_to: a tuple elementwise), so
    the tuple is unpacked at the callee's return type. *)
 Theorem body_assign_tuple_widened_call[local]:
-  !cx gs e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
+  !cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_ok cx (TupleTarget gs) v) /\
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     lowered_value_type cenv e <> expr_type e ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `EXISTS (\g. ?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+    cx.in_deploy /\ IS_SOME (supported_immutable_type tops nsid)) gs`
+  >- (irule immutable_deploy_tuple_assign >> metis_tac[]) >>
+  Cases_on `EXISTS (\g. ?nsid key.
+    g = BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key) /\
+    ~supported_pure_expr tops key) gs`
+  >- (irule tuple_assign_effectful_index >> metis_tac[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule body_assign_tuple_rhs_pre >> metis_tac[]) >>
+  drule_all tuple_places_typing >> strip_tac >>
+  drule_all tuple_widened_physical_layout >> strip_tac >>
+  `cenv.ce_target CapMcopy` by metis_tac[body_inv_mcopy] >>
+  `get_module_code cx NONE = SOME tops /\
+   acyclic_struct_metadata cenv.ce_struct_fields` by gvs[body_inv_def] >>
+  `expr_sim ctx func cenv cx (TupleT tys) e es` by
+    (drule_all body_expr_ok_case >>
+     disch_then (qspec_then `func` strip_assume_tac) >>
+     gvs[expr_sim_case_def] >> metis_tac[]) >>
+  `EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
+    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
+    target_indices_pre cenv cx env bt) gs` by
+    (rw[EVERY_MEM] >>
+     drule_all tuple_places_member >> strip_tac >> gvs[] >>
+     conj_tac >- metis_tac[tuple_places_target_case] >>
+     metis_tac[tuple_places_indices_pre]) >>
+  irule compile_assign_tuple_places_stmt_frag >> simp[] >>
+  qexistsl_tac [`env`, `tops`] >> simp[] >>
+  metis_tac[tuple_places_component_bound, tuple_widened_component_bound]
 QED
 
 Theorem body_assign_tuple_case:
