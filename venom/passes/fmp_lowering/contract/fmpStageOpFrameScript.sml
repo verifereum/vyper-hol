@@ -11,6 +11,131 @@ Ancestors
   fmpStageControl fmpStageOpBase fmpStageReclaimSound fmpStageRel
   fmpLowerReclaimPlan fmpLedgerProps livenessProofs ptrDiscipline
   o1PassContract venomExecSemantics venomState venomInst
+  decoderGhostFramePtr venomFnInstsProofs fmpStepAnalysis fmpStepStack
+  list venomWf fmpReclaimDefs fmpAnalysisDefs fmpStepReclaim contextCodegenRel
+
+Theorem fmp_ordinary_not_reclaim[local]:
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA] ==>
+  ~fmp_is_reclaim_point infos inst
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  drule fmp_reclaim_point_opcodes >>
+  gvs[] >> metis_tac[is_terminator_def]
+QED
+
+Theorem fmp_ordinary_analysis_suc[local]:
+  fmp_reclaim_states infos fn = SOME states /\
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  MEM bb fn.fn_blocks /\ idx < LENGTH bb.bb_instructions /\
+  inst = EL idx bb.bb_instructions /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; SETFMP] /\
+  df_at NONE states bb.bb_label idx = SOME st ==>
+  ?st'. df_at NONE states bb.bb_label (SUC idx) = SOME st' /\
+    st'.frs_stack = st.frs_stack
+Proof
+  strip_tac >>
+  `~fmp_is_reclaim_point infos inst` by
+    (irule fmp_ordinary_not_reclaim >> gvs[]) >>
+  `~fmp_clears_marks infos inst` by
+    gvs[fmp_clears_marks_def, fmp_callee_info_def, fmp_invoke_target_def] >>
+  drule_all fmp_reclaim_states_df_at_suc >>
+  simp[fmp_transfer_def, fmp_reclaim_step_def, fmp_pop_at_def,
+       fmp_apply_effect_def] >> gvs[]
+QED
+
+Theorem fmp_frame_covers_ordinary_step[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; PHI] /\
+  step_inst k C inst s = OK s1 /\
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  fmp_frame_covers sm env (fmp_frame_base (w2n fmp) stk) lo G /\
+  fmp_sites_ok sm fmp0 (w2n fmp) lo s.vs_fmp ==>
+  fmp_frame_covers sm env (fmp_frame_base (w2n fmp) stk) lo
+    (step_prov PG G inst s1)
+Proof
+  strip_tac >>
+  drule_all fmp_stage_frame_facts >> strip_tac >>
+  drule_all fmp_stage_frame_sites >> strip_tac >>
+  irule fmp_stage_covers_step >>
+  gvs[o1_fn_shape_def, fmp_sites_ok_def, EVERY_MEM] >>
+  reverse (rpt conj_tac)
+  >- (qexistsl_tac [`C`, `P`, `fn`, `k`, `s`] >> simp[]) 
+  >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem fmp_ordinary_root_boundary[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  MEM fn C.ctx_functions /\ o1_fn_shape C fn /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  active_inst fn inst s /\ inst.inst_opcode <> RETPC_PARAM ==>
+  !rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+    s.vs_current_bb = rl ==> rp <> SUC s.vs_inst_idx
+Proof
+  rpt strip_tac >>
+  drule_all fmp_stage_witness_pin >> strip_tac >>
+  gvs[active_inst_def] >>
+  `fn_is_context_entry ctx fn ==> entry_fn_no_params fn` by
+    gvs[o1_fn_shape_def] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    metis_tac[venomExecProofsTheory.wf_lookup_block, o1_fn_shape_def] >>
+  metis_tac[fmp_stage_root_crossing]
+QED
+
+Theorem fmp_ledger_step_frame[local]:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode <> DALLOCA /\
+  fmp_reclaim_states infos fn = SOME states /\
+  df_at NONE states lbl idx = SOME st /\
+  MAP (\r. r.fr_mark) regions = st.frs_stack /\
+  fmp_ledger_ok (fn_insts fn) env t lo regions /\
+  (!v. ~MEM v inst.inst_outputs ==>
+    FLOOKUP t1.vs_vars v = FLOOKUP t.vs_vars v) ==>
+  fmp_ledger_ok (fn_insts fn) env (t1 with vs_inst_idx := j) lo regions
+Proof
+  strip_tac >> irule fmp_ledger_frame >>
+  qexists_tac `t` >> simp[] >> rpt strip_tac >>
+  `EVERY (fmp_dalloca_output fn) st.frs_stack` by
+    metis_tac[fmp_reclaim_states_stack] >>
+  `fmp_dalloca_output fn r.fr_mark` by
+    (`MEM r.fr_mark (MAP (\r. r.fr_mark) regions)` by
+       (simp[MEM_MAP] >> metis_tac[]) >>
+     gvs[EVERY_MEM]) >>
+  `~MEM r.fr_mark inst.inst_outputs` by
+    (gvs[fmp_dalloca_output_def, ssa_form_def] >>
+     metis_tac[all_distinct_flat_map_unique]) >>
+  simp[lookup_var_def]
+QED
+
+Theorem fmp_env_rel_step[local]:
+  fmp_env_rel sm fn live G tn.t_var s t /\
+  (!v. MEM v live' /\ ~MEM v inst.inst_outputs ==> MEM v live) /\
+  (!v. ~MEM v inst.inst_outputs ==>
+    FLOOKUP s1.vs_vars v = FLOOKUP s.vs_vars v /\
+    FLOOKUP t1.vs_vars v = FLOOKUP t.vs_vars v) /\
+  (!v x. MEM v inst.inst_outputs /\ FLOOKUP s1.vs_vars v = SOME x ==>
+    ?y. FLOOKUP t1.vs_vars v = SOME y /\
+      (~retpc_var fn v ==> fmp_value_rel sm
+        (FLOOKUP (step_prov PG G inst s1) v)
+        (op_taint (step_taint inst s s1 tn) (Var v)) x y)) ==>
+  fmp_env_rel sm fn live' (step_prov PG G inst s1)
+    (step_taint inst s s1 tn).t_var
+    (s1 with vs_inst_idx := i) (t1 with vs_inst_idx := j)
+Proof
+  simp[fmp_env_rel_def] >> rpt strip_tac >>
+  Cases_on `MEM v inst.inst_outputs`
+  >- (gvs[op_taint_def] >> metis_tac[]) >>
+  `FLOOKUP (step_prov PG G inst s1) v = FLOOKUP G v` by
+    simp[step_prov_other_output] >>
+  `op_taint (step_taint inst s s1 tn) (Var v) = op_taint tn (Var v)` by
+    simp[step_taint_other_output] >>
+  gvs[op_taint_def] >> metis_tac[]
+QED
 
 (* Why: an ordinary instruction is no reclaim point and changes no
    analysis stack, so the next index has no restore and the same stack;
