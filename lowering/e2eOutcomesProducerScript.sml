@@ -87,15 +87,22 @@ End
    pending deletions), on the caller's sources and layouts, whose source
    call H covers and that never ends in an exempt error.  Static frames
    write nothing.  A delegatecall or callcode from the contract runs other
-   code as tx.target, so the re-entry clause excludes it. *)
+   code as tx.target, so the re-entry clause excludes it.  The contract
+   existed before the transaction, so no frame's self-destruct deletes it
+   (run_call_to_delete), and the caller's call never ends in an exempt
+   error either: the source adopts callee outcomes before it decodes. *)
 Definition vyper_closed_world_def:
   vyper_closed_world policy tops runtime_bc am tx H es <=>
     regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
     storage_well_formed_on (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state am []) (FST H) /\
     horizon_covers H am tx (MAP SND (call_trace es)) /\
+    ~account_empty (lookup_account tx.target es.originalAccounts) /\
+    (!gobs. ~source_exempt tops
+              (call_external (SOME (MAP SND (call_trace es))) gobs am tx)) /\
     !s u e.
-      run_call_reaches es s /\ step s = (INL u, e) /\
+      run_call_reaches es s /\ LENGTH es.contexts <= LENGTH s.contexts /\
+      step s = (INL u, e) /\
       LENGTH s.contexts < LENGTH e.contexts /\
       (FST (HD e.contexts)).msgParams.callee = tx.target /\
       ~(FST (HD e.contexts)).msgParams.static ==>
