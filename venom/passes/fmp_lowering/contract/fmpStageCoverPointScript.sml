@@ -10,12 +10,17 @@ Ancestors
   venomState venomInst finite_map words list
 
 Theorem fmp_cov_point_restored_next[local]:
-  (!fn' C' name ti t fuel t2 n u.
+  (!fn' C' name bb' ti t fuel t2 n u.
     ALL_DISTINCT (fn_labels fn') /\
-    lookup_function name C'.ctx_functions = SOME fn' /\ active_inst fn' ti t /\
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    active_inst fn' ti t /\
     ~is_terminator ti.inst_opcode /\ ti.inst_opcode <> INVOKE /\
     step_inst fuel C' ti t = OK t2 /\ 0 < n /\
-    (!k. fmp_target_run k C' name t n u) ==>
+    (!k. fmp_target_run k C' name t n u) /\
+    (!i. t.vs_inst_idx < i /\ i < t.vs_inst_idx + n ==>
+      ~is_terminator (EL i bb'.bb_instructions).inst_opcode /\
+      (EL i bb'.bb_instructions).inst_opcode <> INVOKE) ==>
     !k. fmp_target_run k C' name
       (t2 with vs_inst_idx := SUC t.vs_inst_idx) (n-1) u) /\
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -63,12 +68,17 @@ Proof
 QED
 
 Theorem fmp_cov_point_next:
-  (!fn' C' name ti t fuel t2 n u.
+  (!fn' C' name bb' ti t fuel t2 n u.
     ALL_DISTINCT (fn_labels fn') /\
-    lookup_function name C'.ctx_functions = SOME fn' /\ active_inst fn' ti t /\
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    active_inst fn' ti t /\
     ~is_terminator ti.inst_opcode /\ ti.inst_opcode <> INVOKE /\
     step_inst fuel C' ti t = OK t2 /\ 0 < n /\
-    (!k. fmp_target_run k C' name t n u) ==>
+    (!k. fmp_target_run k C' name t n u) /\
+    (!i. t.vs_inst_idx < i /\ i < t.vs_inst_idx + n ==>
+      ~is_terminator (EL i bb'.bb_instructions).inst_opcode /\
+      (EL i bb'.bb_instructions).inst_opcode <> INVOKE) ==>
     !k. fmp_target_run k C' name
       (t2 with vs_inst_idx := SUC t.vs_inst_idx) (n-1) u) /\
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -111,7 +121,7 @@ Proof
        (?sm1 lo1. fmp_stage_rel D C' sm1 (w2n vs'.vs_initial_fmp)
           (w2n fmp) eom T stk PG G tn fn s lo1 t ts)` by
         (irule fmp_cov_point_restore >> simp[] >>
-         conj_tac >- first_assum ACCEPT_TAC >>
+         conj_tac >- gvs[] >>
          conj_tac >- (qexists_tac `ti'` >> fs[]) >>
          conj_tac >- metis_tac[] >>
          conj_tac >- (qexists_tac `inst` >> fs[]) >>

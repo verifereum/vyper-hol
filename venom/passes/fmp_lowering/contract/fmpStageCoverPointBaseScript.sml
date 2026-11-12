@@ -30,12 +30,17 @@ Proof
 QED
 
 Theorem fmp_cov_endpoint_next:
-  (!fn' C' name ti t fuel t2 n u.
+  (!fn' C' name bb' ti t fuel t2 n u.
     ALL_DISTINCT (fn_labels fn') /\
-    lookup_function name C'.ctx_functions = SOME fn' /\ active_inst fn' ti t /\
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    active_inst fn' ti t /\
     ~is_terminator ti.inst_opcode /\ ti.inst_opcode <> INVOKE /\
     step_inst fuel C' ti t = OK t2 /\ 0 < n /\
-    (!k. fmp_target_run k C' name t n u) ==>
+    (!k. fmp_target_run k C' name t n u) /\
+    (!i. t.vs_inst_idx < i /\ i < t.vs_inst_idx + n ==>
+      ~is_terminator (EL i bb'.bb_instructions).inst_opcode /\
+      (EL i bb'.bb_instructions).inst_opcode <> INVOKE) ==>
     !k. fmp_target_run k C' name
       (t2 with vs_inst_idx := SUC t.vs_inst_idx) (n-1) u) /\
   ALL_DISTINCT (fn_labels fn') /\
@@ -61,6 +66,15 @@ Proof
   rpt strip_tac >>
   `t2.vs_current_bb = t.vs_current_bb` by
     metis_tac[step_preserves_control_flow] >>
+  `!i. t.vs_inst_idx < i /\ i < t.vs_inst_idx + n ==>
+    ~is_terminator (EL i bb'.bb_instructions).inst_opcode /\
+    (EL i bb'.bb_instructions).inst_opcode <> INVOKE` by
+    (gen_tac >> strip_tac >>
+     `SUC t.vs_inst_idx <= i /\ i < u.vs_inst_idx` by decide_tac >>
+     qpat_x_assum `!i. SUC t.vs_inst_idx <= i /\ _ ==> _`
+       (qspec_then `i` mp_tac) >>
+     simp[] >> strip_tac >>
+     gvs[fmpStageCoverMemTheory.fmp_inserted_op_def, is_terminator_def]) >>
   `!k. fmp_target_run k C' fn.fn_name
       (t2 with vs_inst_idx := SUC t.vs_inst_idx) (n-1) u` by
     (first_x_assum irule >> metis_tac[]) >>
