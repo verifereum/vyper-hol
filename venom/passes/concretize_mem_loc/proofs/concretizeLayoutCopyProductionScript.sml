@@ -115,24 +115,30 @@ Proof
      fs[resolved_complete_def]) >>
   `eval_operand opn t = SOME sz` by suspend "size" >>
   Cases_on `w2n sz = 0` >- suspend "zero" >>
-  `?dstT. eval_operand opd t = SOME dstT /\
-    (((w2n dst+w2n sz <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
-     (?d owner aid b len.
-       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,len) /\ lo <= b /\ b <= w2n dst /\
-       w2n dst+w2n sz <= b+len /\
-       w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
-    suspend "destination" >>
-  pop_assum strip_assume_tac >>
-  `?srcT. eval_operand ops t = SOME srcT /\
-    (((w2n src+w2n sz <= lo \/ dyn_floor C s <= w2n src) /\ w2n srcT = w2n src) \/
-     (?d owner aid b len.
-       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,len) /\ lo <= b /\ b <= w2n src /\
-       w2n src+w2n sz <= b+len /\
-       w2n srcT = concretize_positions C' owner aid + (w2n src-b)))` by
-    suspend "source" >>
-  pop_assum strip_assume_tac >>
+  `~(dyn_floor C s <= w2n dst)` by
+    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
+  (qpat_assum `~(dyn_floor C s <= w2n dst)` (fn nd =>
+    Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+      (((w2n dst+w2n sz <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
+       (?d owner aid b len.
+         activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+           d owner aid (b,len) /\ lo <= b /\ b <= w2n dst /\
+         w2n dst+w2n sz <= b+len /\
+         w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
+      (strip_assume_tac o REWRITE_RULE [nd]))
+   >- suspend "destination") >>
+  `~(dyn_floor C s <= w2n src)` by
+    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
+  (qpat_assum `~(dyn_floor C s <= w2n src)` (fn nd =>
+    Q.SUBGOAL_THEN `?srcT. eval_operand ops t = SOME srcT /\
+      (((w2n src+w2n sz <= lo \/ dyn_floor C s <= w2n src) /\ w2n srcT = w2n src) \/
+       (?d owner aid b len.
+         activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+           d owner aid (b,len) /\ lo <= b /\ b <= w2n src /\
+         w2n src+w2n sz <= b+len /\
+         w2n srcT = concretize_positions C' owner aid + (w2n src-b)))`
+      (strip_assume_tac o REWRITE_RULE [nd]))
+   >- suspend "source") >>
   qexistsl_tac [`dstT`, `srcT`] >>
   `step_inst_base inst t = OK (mcopy (w2n dstT) (w2n srcT) (w2n sz) t)` by
     simp[step_inst_base_def] >>
