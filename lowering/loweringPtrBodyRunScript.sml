@@ -19,6 +19,7 @@
  *)
 Theory loweringPtrBodyRun
 Ancestors
+  sourceUnitExecution
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv e2eDefs supportedProgram compileVyper fragExec
