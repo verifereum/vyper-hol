@@ -1,7 +1,7 @@
 Theory o1LabelFlowMiddleCleanup
 Ancestors
   makeSsaCurrentCleanupBoundary makeSsaCurrentLockstepShape venomExecProofs
-  makeSsaDefs venomInst list
+  makeSsaDefs venomInst irSupply list
 
 Theorem cleanup_suffix_content:
   EVERY (\i. i.inst_opcode = PHI) pre /\
@@ -62,7 +62,7 @@ Theorem cleanup_if_lookup_content:
       (EL k b'.bb_instructions).inst_outputs = (EL k b.bb_instructions).inst_outputs)
 Proof
   strip_tac >> simp[simplify_current_phis_if_def, simplify_current_phis_def] >>
-  Cases_on `enabled /\ blocks_have_leading_phi bs` >> gvs[]
+  Cases_on `enabled /\ blocks_have_leading_phi bs` >> fs[]
   >- (drule_at (Pos last) lookup_block_map_relation >>
       disch_then (qspec_then `simplify_current_phi_block` mp_tac) >> simp[] >>
       strip_tac >>
@@ -88,7 +88,7 @@ Proof
   simp[] >> conj_tac
   >- (drule current_phi_prefix_parts_length >> simp[]) >>
   gvs[EVERY_MEM, MEM_FILTER, MEM_MAP] >> rpt strip_tac >>
-  drule simplify_current_phi_vars >> metis_tac[]
+  metis_tac[simplify_current_phi_vars]
 QED
 
 Theorem cleanup_prefix_protected:
@@ -108,8 +108,10 @@ Proof
   disch_then (qspec_then `MAP (\i. i.inst_id) (pre ++ rest)` strip_assume_tac) >>
   `EL k (ps ++ cs ++ rest) = EL k (ps ++ cs)` by simp[EL_APPEND_EQN] >>
   `~MEM v (inst_ir_vars (EL k (ps ++ cs)))` by
-    (gvs[EVERY_EL] >> metis_tac[]) >>
-  gvs[inst_ir_vars_def, inst_uses_def]
+    (fs[EVERY_EL] >> Cases_on `k < LENGTH ps` >>
+     simp[EL_APPEND_EQN] >>
+     `k - LENGTH ps < LENGTH cs` by decide_tac >> metis_tac[]) >>
+  gvs[simplify_current_phi_prefix_def, inst_ir_vars_def, inst_uses_def]
 QED
 
 Theorem cleanup_adjacent_content:
@@ -125,4 +127,41 @@ Proof
   conj_tac >- (irule (cj 2 cleanup_index_content) >> simp[]) >>
   conj_tac >- (irule (cj 3 cleanup_index_content) >> simp[]) >>
   irule cleanup_index_content >> simp[]
+QED
+
+Theorem cleanup_block_prefix_protected:
+  b.bb_instructions = pre ++ rest /\
+  EVERY (\i. i.inst_opcode = PHI) pre /\
+  EVERY (\i. !v. P v ==> ~MEM v (inst_ir_vars i)) pre /\
+  (rest = [] \/ (HD rest).inst_opcode <> PHI) /\ k < LENGTH pre /\ P v ==>
+  ~MEM v (inst_ir_vars (EL k (simplify_current_phi_block b).bb_instructions))
+Proof
+  strip_tac >>
+  `~MEM v (inst_ir_vars (EL k (simplify_current_phi_prefix (pre ++ rest))))` by
+    metis_tac[cleanup_prefix_protected] >>
+  Cases_on `pre` >> gvs[EVERY_DEF, simplify_current_phi_block_def]
+QED
+
+Theorem cleanup_if_lookup_prefix_protected:
+  lookup_block l bs = SOME b /\ b.bb_instructions = pre ++ rest /\
+  EVERY (\i. i.inst_opcode = PHI) pre /\
+  EVERY (\i. !v. P v ==> ~MEM v (inst_ir_vars i)) pre /\
+  (rest = [] \/ (HD rest).inst_opcode <> PHI) ==>
+  ?b'. lookup_block l (simplify_current_phis_if enabled bs) = SOME b' /\
+    b'.bb_label = b.bb_label /\ LENGTH b'.bb_instructions = LENGTH b.bb_instructions /\
+    (!k v. k < LENGTH pre /\ P v ==> ~MEM v (inst_ir_vars (EL k b'.bb_instructions)))
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  simp[simplify_current_phis_if_def, simplify_current_phis_def] >>
+  Cases_on `enabled /\ blocks_have_leading_phi bs` >> gns[]
+  >- (drule_at (Pos last) lookup_block_map_relation >>
+      disch_then (qspec_then `simplify_current_phi_block` mp_tac) >> simp[] >>
+      strip_tac >> simp[simplify_current_phi_block_layout] >>
+      rpt gen_tac >> disch_tac >> irule cleanup_block_prefix_protected >>
+      qexistsl [`P`, `pre`, `rest`] >> simp[]) >>
+  qexists `b` >>
+  `~enabled \/ ~blocks_have_leading_phi bs` by metis_tac[] >>
+  simp[] >> rpt strip_tac >>
+  `EL k (pre ++ rest) = EL k pre` by simp[EL_APPEND_EQN] >>
+  fs[EVERY_EL] >> metis_tac[]
 QED
