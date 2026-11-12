@@ -261,7 +261,7 @@ Proof
          is_bytestring_word_type] >> metis_tac[]) >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   drule loweringSliceTheory.emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
                            `mload (w2n w) s1`, `R`] mp_tac) >>
   impl_tac
   >- (rpt conj_tac >- first_assum ACCEPT_TAC >- simp[]
@@ -358,7 +358,7 @@ Proof
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   drule_all immutable_holds_dload >> strip_tac >>
   drule loweringSliceTheory.emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
     `word_of_bytes T (0w:bytes32)
        (TAKE 32 (DROP (w2n w) s1.vs_data_section ++ REPLICATE 32 0w))`,
     `R`] mp_tac) >>
@@ -479,7 +479,7 @@ Proof
          typed_val_to_w256 tvt v` by (
     rpt strip_tac >> drule_all storage_holds_load >> simp[]) >>
   drule loweringSliceTheory.emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
     `if p.ptr_location = LocTransient then tload w s1 else sload w s1`,
     `R`] mp_tac) >>
   impl_tac
@@ -569,7 +569,7 @@ Proof
     (strip_assume_tac o MATCH_MP emitHelperPropsTheory.emitted_insts_emit_op) >>
   `local_ptrs_reserved cenv sm1` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[]) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `ADD`, `[pop; ib]`, `sm`,
+  qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `ADD`, `[pop; ib]`, `sm`,
                `addr`, `sm1`, `s0`, `w`, `R`] mp_tac
     loweringSliceTheory.emit_op_frag >>
   impl_tac
@@ -582,7 +582,7 @@ Proof
   qx_gen_tac `t` >> BETA_TAC >> strip_tac >>
   qpat_x_assum `emit_op ILOAD _ _ = _` assume_tac >>
   drule loweringSliceTheory.emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `t`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `t`,
     `mload (w2n w) t`, `R`] mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def] >> rpt strip_tac >>
@@ -1639,7 +1639,7 @@ Proof
   `regions_disjoint (w2n a) (type_memory_size tv)
       (w2n w) (type_memory_size tv)` by
     (irule immutable_holds_alloca_disjoint >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >>
+     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es'`, `func`] >>
      goal_assum (drule_at Any) >> simp[mk_inst_def] >>
      qpat_assum `MEM (mk_inst _ _ _ _) _` (irule_at Any) >> gvs[mk_inst_def]) >>
   `w2n w + type_memory_size tv < dimword (:256)` by metis_tac[] >>
