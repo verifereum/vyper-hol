@@ -990,5 +990,70 @@ Proof
   `frag_fuel Wv {} E st c0 (Kpre + Kentry)` by
     (irule (Q.SPECL [`Wv`, `{}`, `{}`] frag_fuel_seq |> SIMP_RULE (srw_ss()) []) >>
      qexistsl_tac [`E`, `E`, `p`] >> simp[]) >>
-  cheat
+  qexists_tac `Kpre + Kentry + (2 ** 256) * (Kroute + 2) + 1` >>
+  simp_tac bool_ss [frag_fuel_def] >> rpt gen_tac >> strip_tac >>
+  gvs[pred_setTheory.NOT_IN_EMPTY] >>
+  `fn_has_code c0 c1 fn /\ fn_has_code i0 i1 fn /\ fn_has_code b0 b1 fn` by metis_tac[] >>
+  `cs_extends st c0` by metis_tac[cs_extends_trans] >>
+  `cs_extends st c1` by metis_tac[cs_extends_trans] >>
+  `cs_extends st b0` by metis_tac[cs_extends_trans] >>
+  `cs_extends b0 i0` by metis_tac[cs_extends_trans] >>
+  `cs_extends i0 st'` by metis_tac[cs_extends_trans] >>
+  `cs_extends b0 st'` by metis_tac[cs_extends_trans] >>
+  `cs_extends c1 st'` by metis_tac[cs_extends_trans] >>
+  `cs_extends c0 st'` by metis_tac[cs_extends_trans] >>
+  `fn_has_code st c0 fn /\ fn_has_code b0 i0 fn` by
+    metis_tac[fragExecTheory.fn_has_code_mid, cs_extends_refl] >>
+  `c0.cs_current_bb = cl /\ c0.cs_current_insts = [] /\
+   b0.cs_current_bb = bl /\ b0.cs_current_insts = [] /\
+   st'.cs_current_bb = xl /\ st'.cs_current_insts = []` by
+    (qpat_x_assum `_ p = ((),c0)` mp_tac >>
+     qpat_x_assum `_ c1 = ((),b0)` mp_tac >>
+     qpat_x_assum `_ i1 = ((),st')` mp_tac >>
+     simp[comp_ignore_bind_def, comp_bind_def, comp_return_def,
+          new_block_def, emit_inst_def, emit_def, fresh_id_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `N <= p.cs_next_var /\ p.cs_next_var <= i0.cs_next_var` by decide_tac >>
+  `~var_below N idx` by
+    (gvs[var_below_def] >> decide_tac) >>
+  `!x. var_below N x /\ x IN Wb ==> x IN Wv` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >>
+     gvs[var_below_def] >> decide_tac) >>
+  `!u i l. at_point c0 u /\ lookup_var idx u = SOME i /\
+      eval_operand lenop u = SOME l ==>
+    ?j. j <= Kroute + 2 /\ fuel_outcome G ctx fn u j
+      (\v. vars_kept N Wv u v /\
+        ((v.vs_current_bb IN (E UNION {xl}) /\ v.vs_inst_idx = 0) \/
+         (at_point c0 v /\ i <> l /\ lookup_var idx v = SOME (i + 1w) /\
+          eval_operand lenop v = SOME l)))` by
+    (rpt gen_tac >> strip_tac >> irule iter_round_outcome >> simp[] >>
+     qexistsl_tac [`p.cs_next_var`, `Wb`, `b0`, `c1`, `i0`, `i1`, `il`] >> simp[]) >>
+  drule iter_round_cycle >> strip_tac >>
+  qpat_x_assum `frag_fuel Wv {} E st c0 _`
+    (mp_tac o PURE_REWRITE_RULE [frag_fuel_def]) >>
+  disch_then (qspecl_then [`G`, `N`, `ctx`, `fn`, `s`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\t. vars_kept N Wv s t /\
+       (at_point st' t \/ (t.vs_current_bb IN E /\ t.vs_inst_idx = 0))`,
+     `(2 ** 256) * (Kroute + 2) + 1`] mp_tac) >>
+  (impl_tac >- (
+    qx_gen_tac `v` >> BETA_TAC >> disch_tac >>
+    Cases_on `v.vs_current_bb IN E /\ v.vs_inst_idx = 0`
+    >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >> gvs[]) >>
+    `at_point c0 v` by metis_tac[] >>
+    Cases_on `lookup_var idx v = NONE \/ eval_operand lenop v = NONE`
+    >- (drule_all iter_cond_missing >>
+        disch_then (qspecl_then [`ctx`, `G`] strip_assume_tac) >>
+        qexists_tac `j'` >> conj_tac >- decide_tac >>
+        irule fuel_outcome_weaken >> goal_assum (drule_at Any) >> simp[]) >>
+    Cases_on `lookup_var idx v` >> Cases_on `eval_operand lenop v` >> gvs[] >>
+    first_x_assum (drule_all_then strip_assume_tac) >>
+    qexists_tac `j'` >> conj_tac >- decide_tac >>
+    irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+    qx_gen_tac `t` >> BETA_TAC >> strip_tac >>
+    `vars_kept N Wv s t` by metis_tac[vars_kept_trans] >>
+    simp[at_point_def] >> gvs[])) >>
+  strip_tac >> qexists_tac `j'` >> gvs[] >> decide_tac
 QED
