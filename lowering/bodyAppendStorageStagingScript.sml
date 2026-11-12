@@ -23,6 +23,7 @@ Theorem append_storage_aggregate_staging_bounded_path:
        stmt_state_rel H ctx func cenv cx ee u) /\
     eval_operand buf.buf_operand u = SOME w /\
     val_in_memory tv v (w2n w) u.vs_memory /\
+    alloca_frame cenv ee sb s cenv ee u /\
     (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                  FLOOKUP u.vs_allocas aid = SOME entry) /\
@@ -64,6 +65,20 @@ Proof
     mp_tac alloc_copy_memory_framed_bounded_path >>
   impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ee s` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ s`
+       (qspec_then `H` mp_tac) >> asm_rewrite_tac[]) >>
+  `stmt_state_rel H ctx func cenv cx ee s2` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ s2`
+       (qspec_then `H` mp_tac) >> asm_rewrite_tac[]) >>
+  `venomMemDefs$allocas_non_overlapping s2` by
+    fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+  `!x sw. not_fresh_at sb x /\ lookup_var x s = SOME sw ==>
+      lookup_var x s2 = SOME sw` by
+    (rpt strip_tac >> metis_tac[]) >>
+  `sb.cs_next_id <= pre.cs_next_id` by simp[Abbr `pre`] >>
+  `alloca_frame cenv ee sb s cenv ee s2` by
+    (drule_all (INST_TYPE [alpha |-> ``:256``] alloca_frame_owned_copy) >> simp[]) >>
   `not_fresh_at sd p` by
     (qpat_x_assum `emit_inst ALLOCA _ _ _ = _` mp_tac >>
      simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def,
@@ -95,6 +110,7 @@ Theorem append_storage_aggregate_staging_path:
        stmt_state_rel H ctx func cenv cx ee u) /\
     eval_operand buf.buf_operand u = SOME w /\
     val_in_memory tv v (w2n w) u.vs_memory /\
+    alloca_frame cenv ee sb s cenv ee u /\
     (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                  FLOOKUP u.vs_allocas aid = SOME entry) /\
