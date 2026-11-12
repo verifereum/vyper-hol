@@ -1200,31 +1200,39 @@ Resume abi_dyn_loop_closed[body]:
 QED
 Finalise abi_dyn_loop_closed
 
-(* A finite, action-head dispatch table for structural certificates.  Rules
-   are selected once per branch; there is no resolution or simplifier search
-   through the code being certified. *)
+(* Typed structural dispatch: the output predicate and bound-action type
+   distinguish all composition rules before any rule is applied. *)
 fun dyn_certificate_tac g = ASSUM_LIST (fn ths =>
   let
     fun body t =
       if boolSyntax.is_forall t then body (#2 (boolSyntax.dest_forall t))
       else if boolSyntax.is_imp t then body (#2 (boolSyntax.dest_imp t))
       else t
-    fun action_key t =
-      let val (_, args) = strip_comb (body t)
-          val action = List.last args
-          val (head, _) = strip_comb action
-      in fst (dest_const head) end
+    fun key t =
+      let val (pred,args) = strip_comb (body t)
+          val (h,acts) = strip_comb (List.last args)
+          val name = fst (dest_const h)
+          val input = if name = "monad_bind" orelse name = "comp_bind"
+                         orelse name = "comp_ignore_bind"
+                      then type_to_string (type_of (hd acts)) else ""
+      in (fst (dest_var pred), name, input) end
     val rules = List.mapPartial (fn th =>
-      SOME (action_key (concl th), th) handle HOL_ERR _ => NONE)
-      ths
+      SOME (key (concl th), th) handle HOL_ERR _ => NONE | Empty => NONE) ths
     fun walk g =
-      if boolSyntax.is_forall (#2 g) then (gen_tac >> walk) g
+      (if boolSyntax.is_forall (#2 g) then (gen_tac >> walk) g
       else if boolSyntax.is_conj (#2 g) then (conj_tac >> walk) g
       else if boolSyntax.is_neg (#2 g) then simp[] g
       else
-        let val key = action_key (#2 g)
-            val matching = map #2 (List.filter (fn (k,_) => k = key) rules)
-        in (FIRST (map MATCH_MP_TAC matching) >> BETA_TAC >> walk) g end
+        let val k = key (#2 g) handle HOL_ERR e =>
+              (print "Cannot key certificate: "; print_term (#2 g); raise HOL_ERR e)
+            val matching = map #2 (List.filter (fn (k',_) => k' = k) rules)
+            val _ = if null matching then
+              (print "No typed certificate rule: "; print_term (#2 g)) else ()
+            fun apply g = FIRST (map MATCH_ACCEPT_TAC matching @ map MATCH_MP_TAC matching) g
+              handle HOL_ERR e => (print ("Typed rule failed (" ^ Int.toString (length matching) ^ "): ");
+                                   print_term (#2 g); raise HOL_ERR e)
+        in if #2 k = "LET" then (pure_rewrite_tac [LET_THM] >> BETA_TAC >> walk) g
+           else (apply >> BETA_TAC >> walk) g end)
   in walk end) g;
 
 Theorem abi_dyn_closed_if[local]:
@@ -1242,6 +1250,133 @@ Proof
   Cases_on `opc` >> pure_rewrite_tac[opcode_case_def] >>
   metis_tac[]
 QED
+
+Theorem abi_dyn_decode_closed[local]:
+  (!dst src lop base hi info.
+    lop <> JMP /\ lop <> JNZ ==> !T.
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) T
+      (compile_abi_decode_to_buf dst src lop base hi info)) /\
+  (!dst src lop base hi elems ao vo.
+    lop <> JMP /\ lop <> JNZ ==> !T.
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) T
+      (compile_abi_decode_complex_elems dst src lop base hi elems ao vo)) /\
+  (!dst src lop base hi info asz msz ip cnt.
+    lop <> JMP /\ lop <> JNZ ==> !T.
+    (^(inst [alpha |-> ``:unit``] dyn_closed)) T
+      (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt))
+Proof
+  qabbrev_tac `U = ^(inst [alpha |-> ``:unit``] dyn_closed)` >>
+  qabbrev_tac `FrO = ^(inst [alpha |-> ``:operand``] dyn_closed)` >>
+  qabbrev_tac `B = ^(inst [alpha |-> ``:buffer``] dyn_closed)` >>
+  qabbrev_tac `L = ^(inst [alpha |-> ``:string``] dyn_closed)` >>
+  `(!T m f. FrO T m /\ (!x. U T (f x)) ==> U T (comp_bind m f)) /\
+   (!T m f. FrO T m /\ (!x. FrO T (f x)) ==> FrO T (comp_bind m f)) /\
+   (!T m f. FrO T m /\ (!x. B T (f x)) ==> B T (comp_bind m f)) /\
+   (!T m f. B T m /\ (!x. U T (f x)) ==> U T (comp_bind m f)) /\
+   (!T m f. L T m /\ (!x. U T (f x)) ==> U T (comp_bind m f)) /\
+   (!T m f. U T m /\ (!x. U T (f x)) ==> U T (comp_bind m f))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`, Abbr `L`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_bind)) >>
+  `(!T m n. U T m /\ U T n ==> U T (comp_ignore_bind m n)) /\
+   (!T m n. U T m /\ FrO T n ==> FrO T (comp_ignore_bind m n)) /\
+   (!T m n. L T m /\ U T n ==> U T (comp_ignore_bind m n))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `L`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_ignore_bind)) >>
+  `(!T opc ops. opc <> JMP /\ opc <> JNZ ==> FrO T (emit_op opc ops)) /\
+   (!T opc ops. opc <> JMP /\ opc <> JNZ ==> U T (emit_void opc ops)) /\
+   (!T l. L T (fresh_label l)) /\ (!T l. L T (new_block l)) /\
+   (!T sz. B T (compile_alloc_buffer sz)) /\
+   (!T v. U T (comp_return v)) /\ (!T v. FrO T (comp_return v)) /\
+   (!T v. B T (comp_return v)) /\ (!T v. L T (comp_return v))`
+    by (rpt conj_tac >>
+        simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`, Abbr `L`] >>
+        FIRST (map (MATCH_ACCEPT_TAC o BETA_RULE)
+          [abi_dyn_closed_label, abi_dyn_closed_block,
+           abi_dyn_closed_alloc, abi_dyn_closed_return] @
+          [ntac 3 gen_tac >> strip_tac >>
+           FIRST [MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_op),
+                  MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_void)] >>
+           simp[mk_inst_def]])) >>
+  `(!T p m n. U T m /\ U T n ==> U T (if p then m else n)) /\
+   (!T p m n. FrO T m /\ FrO T n ==> FrO T (if p then m else n))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_if)) >>
+  `!T opc m n p. U T m /\ U T n /\ U T p ==>
+    U T (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)`
+    by (simp_tac std_ss [Abbr `U`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_copy_case)) >>
+  `!dst src lop base hi info asz msz ip cnt.
+    lop <> JMP /\ lop <> JNZ /\
+    (!T d s. U T (compile_abi_decode_to_buf d s lop base hi info)) ==>
+    !T. U T (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt)`
+    by (simp_tac std_ss [Abbr `U`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_loop_closed)) >>
+  qpat_x_assum `Abbrev (U = _)` kall_tac >>
+  qpat_x_assum `Abbrev (FrO = _)` kall_tac >>
+  qpat_x_assum `Abbrev (B = _)` kall_tac >>
+  qpat_x_assum `Abbrev (L = _)` kall_tac >>
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def,
+    compile_abi_dec_addr_def, compile_abi_decode_static_def,
+    compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def, compile_abi_decode_range_check_def,
+    compile_getelemptr_abi_def, compile_abi_decode_dyn_elem_ptr_def] >>
+  ASM_SIMP_TAC std_ss []
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+Resume abi_dyn_decode_closed[word]:
+  qpat_assum `!T m f. FrO T m /\ (!x. U T (f x)) ==> U T (monad_bind m f)` MATCH_MP_TAC >>
+  conj_tac
+  >- (qpat_assum `!T p m n. FrO T m /\ FrO T n ==> FrO T (if p then m else n)` MATCH_MP_TAC >>
+      conj_tac
+      >- (qpat_assum `!T v. FrO T (comp_return v)` MATCH_ACCEPT_TAC) >>
+      qpat_assum `!T opc ops. opc <> JMP /\ opc <> JNZ ==> FrO T (emit_op opc ops)` MATCH_MP_TAC >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  qpat_assum `!T m f. FrO T m /\ (!x. U T (f x)) ==> U T (monad_bind m f)` MATCH_MP_TAC >>
+  conj_tac
+  >- (qpat_assum `!T opc ops. opc <> JMP /\ opc <> JNZ ==> FrO T (emit_op opc ops)` MATCH_MP_TAC >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  qpat_assum `!T m n. U T m /\ U T n ==> U T (comp_ignore_bind m n)` MATCH_MP_TAC >>
+  reverse conj_tac
+  >- (qpat_assum `!T opc ops. opc <> JMP /\ opc <> JNZ ==> U T (emit_void opc ops)` MATCH_MP_TAC >> simp[]) >>
+  Cases_on `clamp_info` >>
+  simp_tac std_ss [compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def] >> simp[]
+QED
+Resume abi_dyn_decode_closed[bytes]:
+  dyn_certificate_tac
+QED
+Resume abi_dyn_decode_closed[array]:
+  Cases_on `~elem_is_dyn /\ ~dec_info_needs_clamp info`
+  >- (ASM_SIMP_TAC std_ss [LET_THM] >> dyn_certificate_tac) >>
+  `elem_is_dyn \/ dec_info_needs_clamp info` by metis_tac[] >>
+  qpat_x_assum `!can_bulk_copy ip i_ptr_alloc cnt. _` mp_tac >>
+  ASM_SIMP_TAC std_ss [LET_THM] >> disch_tac >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_closed[complex]:
+  Cases_on `hi = Lit 0w` >>
+  FULL_SIMP_TAC std_ss [LET_THM] >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_closed[cons]:
+  qpat_x_assum `!is_dyn dst src. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [] >> disch_tac >>
+  qpat_x_assum `!is_dyn. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [LET_THM] >> disch_tac >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_closed[loop]:
+  `U T' (compile_abi_decode_dyn_loop dst src lop base' hi info asz msz ip cnt)`
+    suffices_by (simp_tac std_ss [Once compile_abi_decode_to_buf_def,
+      compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
+      compile_abi_decode_dyn_elem_ptr_def]) >>
+  qpat_x_assum `!is_dyn_elem dst src. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [] >> disch_tac >> dyn_certificate_tac
+QED
+Finalise abi_dyn_decode_closed
 
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
