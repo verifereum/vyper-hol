@@ -183,11 +183,29 @@ Proof
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
      (occurrence_step a HP H inst s1)` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
+  `!o1 o2. inst.inst_operands = [o1; o2] ==>
+     op_prov G o1 = NONE \/ op_prov G o2 = NONE` by
+    (rpt strip_tac >>
+     `frame_reachable vs C stk PG G tn fn inst s` by
+       metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+     qpat_assum `ptr_discipline _ _ _`
+       (strip_assume_tac o MATCH_MP ptr_discipline_fn_ptr_ok) >>
+     drule frame_reachable_prov_support >>
+     disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+     `affine_pointer_ops fn (ptr_roots P fn)` by
+       (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
+     `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+       (fs[active_inst_def] >> metis_tac[MEM_EL]) >>
+     qpat_x_assum `affine_pointer_ops _ _`
+       (mp_tac o SRULE [affine_pointer_ops_def, LET_THM]) >>
+     disch_then (qspecl_then [`bb`,`inst`,`o1`,`o2`] mp_tac) >> simp[] >>
+     Cases_on `o1` >> Cases_on `o2` >> simp[op_prov_def] >>
+     gvs[FLOOKUP_DEF, SUBSET_DEF, fn_pv_def] >> metis_tac[]) >>
   `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s1)
      stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
-     simp[occurrence_sites_step_def] >> gvs[]) >>
+     simp[occurrence_sites_step_def] >> gvs[] >> metis_tac[]) >>
   qexists_tac `update_var out y t` >> simp[] >>
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
   irule ld_joint_var_update_next >> simp[] >>

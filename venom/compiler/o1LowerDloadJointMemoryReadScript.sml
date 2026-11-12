@@ -98,11 +98,19 @@ Proof
   Cases_on `op_prov H p`
   >- (gvs[occurrence_param_ok_def] >>
       `x = y` by metis_tac[ld_value_agree_clean] >> gvs[] >>
-      `w2n x+32 <= lo` by
-        (Cases_on `lo < w2n x+32` >> gvs[op_prov_def]) >>
+      `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory` by
+        fs[ld_joint_boundary_def] >>
+      `w2n x+32 <= lo \/
+       dyn_floor C vs <= w2n x /\ w2n x+32 < dimword (:256)` by
+        (Cases_on `lo < w2n x+32` >> gvs[op_prov_def] >> decide_tac) >>
+      pop_assum strip_assume_tac
+      >- (irule ld_mload_masked_bytes >> rpt strip_tac >>
+          irule ld_memory_agree_fixed_byte >>
+          qexistsl_tac [`lo`, `tn.t_mem`, `sites`] >>
+          gvs[mem_word_taint_def] >> decide_tac) >>
       irule ld_mload_masked_bytes >> rpt strip_tac >>
-      irule ld_memory_agree_fixed_byte >>
-      qexistsl_tac [`lo`, `tn.t_mem`, `sites`] >>
+      qpat_x_assum `ld_dyn_agree _ _ _ _`
+        (irule o REWRITE_RULE [ptrDisciplineTheory.ld_dyn_agree_def]) >>
       gvs[mem_word_taint_def] >> decide_tac) >>
   gvs[occurrence_param_ok_def, ld_value_agree_pointer] >>
   gvs[op_prov_def] >>
