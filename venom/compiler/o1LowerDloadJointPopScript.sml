@@ -83,5 +83,17 @@ Theorem ld_joint_saved_drop_owner:
   ld_joint_saved C' (DRESTRICT sites {id | FST id <> a})
     (DRESTRICT X {id | FST id <> a}) lo U stk ts
 Proof
-  (* P4a in progress *) cheat
+  Induct_on `U` >> simp[ld_joint_saved_def, occurrence_saved_ok_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[ld_joint_saved_def] >>
+  qexists_tac `u` >> simp[] >>
+  irule ld_joint_frame_drop_owner >>
+  fs[occurrence_env_ok_def] >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  gvs[LIST_REL_EL_EQN] >>
+  qpat_x_assum `MEM (SOME id) _` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  qpat_x_assum `!n. n < LENGTH _ ==> occurrence_param_ok _ _ _ _`
+    (qspec_then `n` mp_tac) >>
+  strip_tac >> gvs[occurrence_param_ok_def]
 QED

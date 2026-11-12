@@ -44,7 +44,11 @@ Theorem ld_joint_segment_layout:
     n a U B HP H sites X ts /\ o1_ctx_shape C /\ o1_run_state_ok vs ==>
   code_layout_valid t
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> drule_all ld_joint_raw_reachable >> strip_tac >>
+  `code_layout_valid s` by
+    (fs[o1_run_state_ok_def] >> drule_all ld_raw_code_layout >> simp[]) >>
+  gvs[ld_joint_boundary_def, ld_joint_frame_def,
+      ld_joint_local_fields_def, code_layout_valid_def]
 QED
 
 Theorem ld_joint_segment_offset:
@@ -57,7 +61,12 @@ Theorem ld_joint_segment_offset:
   eval_operand op s = SOME off ==>
   w2n off + (LENGTH t.vs_code - LENGTH t.vs_data_section) < dimword (:256)
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> drule_all ld_joint_raw_reachable >> strip_tac >>
+  `dload_offset_ok C fn inst s` by
+    (fs[mem_inv_raw_reachable] >> metis_tac[]) >>
+  `w2n off + (LENGTH s.vs_code - LENGTH s.vs_data_section) < dimword (:256)` by
+    metis_tac[dload_offset_ok_def] >>
+  gvs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def]
 QED
 
 Theorem ld_joint_segment_control:
@@ -87,5 +96,24 @@ Theorem ld_joint_segment_control:
         (s with vs_inst_idx := SUC s.vs_inst_idx)
         (t with vs_inst_idx := t.vs_inst_idx + LENGTH es))
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >>
+  `wf_function fn` by
+    (drule ld_joint_source >> strip_tac >>
+     drule occ_frame_reachable_projection >> strip_tac >>
+     drule ld_frame_raw_stack >>
+     impl_tac >- metis_tac[ld_ctx_shape_lookup_wf] >> simp[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    fs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def] >>
+  qpat_x_assum `ld_joint_boundary _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
+  fs[ld_joint_frame_def] >>
+  drule_all ld_joint_control_segment >> strip_tac >>
+  drule_at (Pat `lower_dload_inst_supply _ _ = _`)
+    ld_supply_expansion_source_fresh >>
+  disch_then (drule_at (Pat `EVERY _ _`)) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qexistsl_tac [`u`,`v`,`es`,`v'`] >>
+  simp[arithmeticTheory.ADD_COMM] >>
+  rpt strip_tac >> first_x_assum drule >>
+  simp[arithmeticTheory.ADD_COMM]
 QED

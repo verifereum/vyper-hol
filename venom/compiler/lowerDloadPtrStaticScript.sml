@@ -75,18 +75,15 @@ Theorem lower_dload_stage_no_dalloca:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   ~ctx_has_dalloca C ==> ~ctx_has_dalloca C'
 Proof
-  (* P4a in progress *) cheat
-QED
-
-(* The full source contract excludes DALLOCA; the target conditional is
-   therefore vacuous, rather than a bound on relocated alloca sites. *)
-Theorem lower_dload_src_inv_below_fmp:
-  !rpolicy view C C' D vs t.
-    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    o1_src_inv D C vs ==>
-    (ctx_has_dalloca C' ==> allocas_below_fmp t)
-Proof
-  (* P4a in progress *) cheat
+  simp[ctx_has_dalloca_def, GSYM EVERY_NOT_EXISTS] >> strip_tac >>
+  irule lower_dload_stage_every >>
+  qexistsl [`C`,`\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)`,
+            `rpolicy`,`view`] >>
+  pure_rewrite_tac[combinTheory.o_DEF, GSYM EVERY_NOT_EXISTS] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all lower_dload_function_no_dalloca >>
+      simp[combinTheory.o_DEF]) >>
+  fs[EVERY_MEM, EXISTS_MEM, combinTheory.o_DEF] >> metis_tac[]
 QED
 
 (* Code offsets are not pointers, even when an operand is repeated in the

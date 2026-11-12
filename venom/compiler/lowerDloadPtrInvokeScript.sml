@@ -1,13 +1,13 @@
 Theory lowerDloadPtrInvoke
-Ancestors lowerDloadPtrJointEntry o1ContractLowerDload lowerDloadDefs
+Ancestors lowerDloadPtrJointEntry o1LowerDloadSourceEntry o1ContractLowerDload lowerDloadDefs
   lowerDloadPtrAggregate lowerDloadPtrAlloc lowerDloadPtrCall lowerDloadPtrRel ptrDiscipline
   venomWf
   venomExecSemantics venomState venomInst list rich_list pred_set
 
 Theorem dload_param_values_cons:
   LENGTH PG = LENGTH xs /\ LENGTH PH = LENGTH ys /\
-  dload_value_word fs {} p q x y /\ dload_param_values fs PG PH xs ys ==>
-  dload_param_values fs (p::PG) (q::PH) (x::xs) (y::ys)
+  dload_value_word fl fs {} p q x y /\ dload_param_values fl fs PG PH xs ys ==>
+  dload_param_values fl fs (p::PG) (q::PH) (x::xs) (y::ys)
 Proof
   simp[dload_param_values_def, LIST_REL_EL_EQN] >> strip_tac >>
   gen_tac >> Cases_on `n` >> simp[EL_GENLIST] >>
@@ -16,13 +16,13 @@ QED
 
 Theorem dload_matched_operands_backwards:
   !ops ys.
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) ops ==> v IN V) /\
   (!op. MEM op ops ==> op_taint tn op = {}) /\
   eval_operands ops t = SOME ys ==>
   ?xs. eval_operands ops s = SOME xs /\
     LENGTH xs = LENGTH ops /\ LENGTH ys = LENGTH ops /\
-    dload_param_values fs (MAP (op_prov G) ops) (MAP (op_prov H) ops) xs ys
+    dload_param_values fl fs (MAP (op_prov G) ops) (MAP (op_prov H) ops) xs ys
 Proof
   Induct_on `ops`
   >- simp[eval_operands_def, dload_param_values_def] >>
@@ -33,7 +33,7 @@ Proof
   drule_all dload_matched_operand_defined >> strip_tac >>
   Cases_on `eval_operand h s` >- gvs[] >>
   rename1 `eval_operand h s = SOME x` >>
-  `dload_value_word fs {} (op_prov G h) (op_prov H h) x y` by
+  `dload_value_word fl fs {} (op_prov G h) (op_prov H h) x y` by
     (drule_all dload_matched_operand >> simp[]) >>
   qexists_tac `x::xs` >>
   simp[eval_operands_def] >>
@@ -41,14 +41,14 @@ Proof
 QED
 
 Theorem dload_invoke_setup_backwards:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   decode_invoke i = SOME (name,ops) /\ i.inst_opcode = INVOKE /\
   taint_ok caller tn i s /\ (!v. MEM (Var v) ops ==> v IN V) /\
   eval_operands ops t = SOME ys /\ ~NULL fn.fn_blocks /\
   setup_callee gn ys t = SOME ct ==>
   ?xs cs. eval_operands ops s = SOME xs /\
     setup_callee fn xs s = SOME cs /\
-    dload_param_values fs (MAP (op_prov G) ops) (MAP (op_prov H) ops)
+    dload_param_values fl fs (MAP (op_prov G) ops) (MAP (op_prov H) ops)
       cs.vs_params ct.vs_params
 Proof
   rpt strip_tac >>
@@ -81,26 +81,26 @@ Proof
 QED
 
 Theorem dload_value_word_empty_push:
-  dload_value_word
+  dload_value_word fl
     (<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|> :: fs)
-    mask p q x y <=> dload_value_word fs mask p q x y
+    mask p q x y <=> dload_value_word fl fs mask p q x y
 Proof
   Cases_on `p` >> Cases_on `q` >>
   simp[dload_value_word_def, dload_pointer_word_empty_push]
 QED
 
 Theorem dload_param_values_empty_push:
-  dload_param_values
+  dload_param_values fl
     (<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|> :: fs)
-    PG PH xs ys <=> dload_param_values fs PG PH xs ys
+    PG PH xs ys <=> dload_param_values fl fs PG PH xs ys
 Proof
   simp[dload_param_values_def, dload_value_word_empty_push]
 QED
 
 Theorem dload_memory_match_setup_push:
-  dload_memory_match lo fs tn un s t /\
+  dload_memory_match fl lo fs tn un s t /\
   setup_callee fn xs s = SOME u /\ setup_callee gn ys t = SOME v ==>
-  dload_memory_match lo
+  dload_memory_match fl lo
     (<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|> :: fs)
     (tn with t_var := FEMPTY) (un with t_var := FEMPTY) u v
 Proof
@@ -110,7 +110,7 @@ QED
 
 Theorem dload_vars_match_setup:
   setup_callee fn xs s = SOME u /\ setup_callee gn ys t = SOME v ==>
-  dload_vars_match fs V FEMPTY FEMPTY
+  dload_vars_match fl fs V FEMPTY FEMPTY
     (tn with t_var := FEMPTY) (un with t_var := FEMPTY) u v
 Proof
   simp[setup_callee_def] >> rpt strip_tac >> gvs[] >>
@@ -118,9 +118,9 @@ Proof
 QED
 
 Theorem dload_saved_metadata_push_head:
-  dload_vars_match fs V G H tn un s t /\
-  dload_param_values fs PG PH s.vs_params t.vs_params ==>
-  dload_saved_metadata fs V
+  dload_vars_match fl fs V G H tn un s t /\
+  dload_param_values fl fs PG PH s.vs_params t.vs_params ==>
+  dload_saved_metadata fl fs V
     <|cf_fn := caller; cf_inst := i; cf_state := s;
       cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>
     <|cf_fn := gcaller; cf_inst := i; cf_state := t;
@@ -131,14 +131,14 @@ Proof
 QED
 
 Theorem dload_invoke_push_boundary:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   decode_invoke i = SOME (name,ops) /\ i.inst_opcode = INVOKE /\
   taint_ok caller tn i s /\ (!v. MEM (Var v) ops ==> v IN V) /\
   eval_operands ops t = SOME ys /\ ~NULL fn.fn_blocks /\
   setup_callee gn ys t = SOME v /\
   (HD fn.fn_blocks).bb_label = (HD gn.fn_blocks).bb_label ==>
   ?xs u. eval_operands ops s = SOME xs /\ setup_callee fn xs s = SOME u /\
-    dload_boundary_core lo
+    dload_boundary_core fl lo
       (<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|> :: fs)
       Vcallee (V::Ws) (MAP (op_prov G) ops) (MAP (op_prov H) ops)
       FEMPTY FEMPTY (tn with t_var := FEMPTY) (un with t_var := FEMPTY) u v
@@ -148,17 +148,17 @@ Theorem dload_invoke_push_boundary:
          cf_params := PH; cf_prov := H; cf_tvar := un.t_var|> :: ds)
 Proof
   rpt strip_tac >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `dload_equal_environment s t` by metis_tac[dload_boundary_environment] >>
   `s.vs_labels = t.vs_labels` by metis_tac[dload_equal_environment_code] >>
   drule_all dload_invoke_setup_backwards >> strip_tac >>
   qexistsl_tac [`xs`, `cs'`] >> simp[] >>
-  `dload_memory_match lo
+  `dload_memory_match fl lo
      (<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|> :: fs)
      (tn with t_var := FEMPTY) (un with t_var := FEMPTY) cs' v` by
     metis_tac[dload_memory_match_setup_push, dload_boundary_memory] >>
-  `dload_vars_match
+  `dload_vars_match fl
      (<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|> :: fs)
      Vcallee FEMPTY FEMPTY (tn with t_var := FEMPTY) (un with t_var := FEMPTY) cs' v` by
     metis_tac[dload_vars_match_setup] >>
@@ -202,7 +202,7 @@ QED
    the entry state, so call-rule ghosts are exactly FEMPTY and cleared t_var.
    The target call uses the same unchanged INVOKE record callinst. *)
 Theorem dload_actual_invoke_call:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   frame_reachable vs0 C cs PG G tn caller callinst s /\ active_inst caller callinst s /\
   callinst.inst_opcode = INVOKE /\ decode_invoke callinst = SOME (name,ops) /\
   taint_ok caller tn callinst s /\ (!a. MEM (Var a) ops ==> a IN V) /\
@@ -220,7 +220,7 @@ Theorem dload_actual_invoke_call:
          cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> :: cs)
       (MAP (op_prov G) ops) FEMPTY (tn with t_var := FEMPTY) callee i u /\
     (!a. lookup_var a u = NONE <=> lookup_var a t1 = NONE) /\
-    dload_boundary_core lo
+    dload_boundary_core fl lo
       (<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|> :: fs)
       {a | ~retpc_var callee a} (V::Ws)
       (MAP (op_prov G) ops) (MAP (op_prov H) ops)

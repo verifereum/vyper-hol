@@ -66,7 +66,12 @@ Theorem ld_joint_boundary_saved_frontiers:
   (!jd aid c. MEM (FST jd) (MAP (\x. x.of_owner) U) /\
      FLOOKUP X jd = SOME (aid,c) ==> c+32 <= t.vs_alloca_next)
 Proof
-  (* P4a in progress *) cheat
+  rewrite_tac[ld_joint_boundary_def] >> strip_tac >>
+  drule ld_occ_saved_frontiers >> strip_tac >>
+  drule ld_joint_saved_frontiers >>
+  disch_then (qspecl_then [`a::MAP (\x. x.of_owner) U`, `s.vs_alloca_next`] mp_tac) >>
+  simp[] >> strip_tac >> drule ld_joint_frame_frontiers >> strip_tac >>
+  gvs[] >> conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 
 Theorem ld_joint_boundary_site_frontiers:
@@ -75,7 +80,18 @@ Theorem ld_joint_boundary_site_frontiers:
   !jd d e w. FLOOKUP sites jd = SOME (d,e,w) ==>
     d+w <= s.vs_alloca_next /\ e+w <= t.vs_alloca_next
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> drule ld_joint_boundary_saved_frontiers >> strip_tac >>
+  qhdtm_x_assum `ld_joint_boundary` mp_tac >> rewrite_tac[ld_joint_boundary_def] >> strip_tac >>
+  drule ld_joint_frame_frontiers >> strip_tac >>
+  qx_gen_tac `jd` >> PairCases_on `jd` >> rpt gen_tac >> disch_tac >>
+  Cases_on `jd0 = a`
+  >- (gvs[] >> qpat_x_assum `!aid b c z. FLOOKUP sites (a,aid) = _ ==> _` drule >> simp[]) >>
+  `MEM jd0 (MAP (\x. x.of_owner) U)` by
+    (fs[ld_joint_geometry_def] >>
+     qpat_x_assum `!id. id IN FDOM sites \/ id IN FDOM X ==> _` (qspec_then `(jd0,jd1)` mp_tac) >>
+     gvs[FLOOKUP_DEF]) >>
+  qpat_x_assum `!jd b c z. MEM _ _ /\ _ ==> _`
+    (qspecl_then [`(jd0,jd1)`, `d`, `e`, `w`] mp_tac) >> simp[]
 QED
 
 Theorem ld_joint_boundary_scratch_frontier:
@@ -83,5 +99,16 @@ Theorem ld_joint_boundary_scratch_frontier:
     n a U B HP H sites X ts ==>
   !jd aid e. FLOOKUP X jd = SOME (aid,e) ==> e+32 <= t.vs_alloca_next
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> drule ld_joint_boundary_saved_frontiers >> strip_tac >>
+  qhdtm_x_assum `ld_joint_boundary` mp_tac >> rewrite_tac[ld_joint_boundary_def] >> strip_tac >>
+  drule ld_joint_frame_frontiers >> strip_tac >>
+  qx_gen_tac `jd` >> PairCases_on `jd` >> rpt gen_tac >> disch_tac >>
+  Cases_on `jd0 = a`
+  >- (gvs[] >> qpat_x_assum `!did aid c. FLOOKUP X (a,did) = _ ==> _` drule >> simp[]) >>
+  `MEM jd0 (MAP (\x. x.of_owner) U)` by
+    (fs[ld_joint_geometry_def] >>
+     qpat_x_assum `!id. id IN FDOM sites \/ id IN FDOM X ==> _` (qspec_then `(jd0,jd1)` mp_tac) >>
+     gvs[FLOOKUP_DEF]) >>
+  qpat_x_assum `!jd aid c. MEM _ _ /\ _ ==> _`
+    (qspecl_then [`(jd0,jd1)`, `aid`, `e`] mp_tac) >> simp[]
 QED

@@ -57,12 +57,13 @@ Theorem external_copy_destination_region:
   (i.inst_opcode = EXTCODECOPY ==> eval_operand addr s <> NONE) /\
   access_ok lo G fn i s /\ ~in_revert_forward fn s /\
   dload_live_layout lo sf tf fs /\
-  dload_value_word fs {} (op_prov G dst) q x y ==>
+  dload_value_word fl fs {} (op_prov G dst) q x y ==>
   w2n z = 0 \/
   (w2n x = w2n y /\ w2n x + w2n z <= lo) \/
   (?owner id b c n d.
     dload_live_site fs owner id b c n /\
-    w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n)
+    w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n) \/
+  (w2n x = w2n y /\ fl <= w2n x /\ w2n x + w2n z < dimword (:256))
 Proof
   strip_tac >>
   `access_ok lo G fn (i with <| inst_opcode := DLOADBYTES; inst_operands := [dst;off;sz] |>) s` by
@@ -131,10 +132,10 @@ Proof
 QED
 
 Theorem dload_clean_write_reconstruct[local]:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
-  dload_memory_match lo fs (tn with t_mem := A) (un with t_mem := B)
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_memory_match fl lo fs (tn with t_mem := A) (un with t_mem := B)
     (write_memory_with_expansion x bs s) (write_memory_with_expansion y bs t) ==>
-  dload_boundary_core lo fs V Ws PG PH G H
+  dload_boundary_core fl lo fs V Ws PG PH G H
     (tn with t_mem := A) (un with t_mem := B)
     (write_memory_with_expansion x bs s) (write_memory_with_expansion y bs t) cs ds
 Proof
@@ -160,11 +161,11 @@ Theorem dload_boundary_core_external_copy:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s'.vs_current_bb = s.vs_current_bb /\ s'.vs_prev_bb = s.vs_prev_bb /\
@@ -178,7 +179,7 @@ Proof
   simp[] >> strip_tac >> gnvs[] >>
   `!v. MEM (Var v) [dst;off;sz] ==> v IN V /\ v IN U` by
     (Cases_on `i.inst_opcode = EXTCODECOPY` >> gvs[] >> metis_tac[MEM]) >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `op_prov G off = NONE /\ op_prov G sz = NONE /\
    op_taint tn dst = {} /\ op_taint tn off = {} /\ op_taint tn sz = {} /\
@@ -200,10 +201,10 @@ Proof
      (impl_tac >- metis_tac[MEM]) >> simp[]) >>
   Cases_on `eval_operand dst s` >- gvs[] >>
   rename1 `eval_operand dst s = SOME xs` >>
-  `dload_value_word fs (op_taint tn dst) (op_prov G dst) (op_prov H dst) xs x` by
+  `dload_value_word fl fs (op_taint tn dst) (op_prov G dst) (op_prov H dst) xs x` by
     (irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[MEM]) >>
-  `dload_value_word fs {} (op_prov G dst) (op_prov H dst) xs x` by metis_tac[] >>
+  `dload_value_word fl fs {} (op_prov G dst) (op_prov H dst) xs x` by metis_tac[] >>
   `s.vs_code = t.vs_code /\ s.vs_call_ctx = t.vs_call_ctx /\
    s.vs_returndata = t.vs_returndata` by
     (drule dload_boundary_environment >>
@@ -232,24 +233,26 @@ Resume dload_boundary_core_external_copy[copy_write]:
     (simp[Abbr `bs`] >> Cases_on `i.inst_opcode = RETURNDATACOPY` >>
      simp[LENGTH_TAKE_EQ] >> gvs[]) >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
-   dload_memory_match lo fs tn un s t` by
+   dload_memory_match fl lo fs tn un s t` by
     metis_tac[dload_boundary_core_def] >>
   `w2n z = 0 \/
    (w2n xs = w2n x /\ w2n xs + w2n z <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     w2n xs = b+d /\ w2n x = c+d /\ d+w2n z <= n)` by
+     w2n xs = b+d /\ w2n x = c+d /\ d+w2n z <= n) \/
+   (w2n xs = w2n x /\ fl <= w2n xs /\ w2n xs + w2n z < dimword (:256))` by
     (irule external_copy_destination_region >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      first_assum (irule_at (Pat `access_ok _ _ _ _ _`)) >>
-     first_assum (irule_at (Pat `dload_value_word _ _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `dload_value_word _ _ _ _ _ _ _`)) >>
      qexistsl [`sz`,`off`,`addr`,`a`] >> simp[] >> metis_tac[]) >>
-  `dload_memory_match lo fs
+  `dload_memory_match fl lo fs
     (tn with t_mem := tn.t_mem DIFF {p | w2n xs <= p /\ p < w2n xs + LENGTH bs})
     (un with t_mem := un.t_mem DIFF {p | w2n x <= p /\ p < w2n x + LENGTH bs})
     (write_memory_with_expansion (w2n xs) bs s)
     (write_memory_with_expansion (w2n x) bs t)` by
     (Cases_on `w2n z = 0`
      >- (irule dload_memory_match_clean_write >> simp[]) >>
+     `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
      irule dload_memory_match_clean_write_region >> gvs[] >> metis_tac[]) >>
   (qexists `write_memory_with_expansion (w2n xs) bs s` >>
   conj_tac
@@ -266,7 +269,7 @@ Resume dload_boundary_core_external_copy[copy_write]:
      un with t_mem := un.t_mem DIFF {p | w2n x <= p /\ p < w2n x + w2n z}` by
     (irule external_copy_ghosts >> simp[] >>
      qexistsl [`a`,`addr`,`dst`,`off`,`sz`] >> simp[]) >>
-  `dload_boundary_core lo fs V Ws PG PH G H
+  `dload_boundary_core fl lo fs V Ws PG PH G H
     (tn with t_mem := tn.t_mem DIFF {p | w2n xs <= p /\ p < w2n xs + w2n z})
     (un with t_mem := un.t_mem DIFF {p | w2n x <= p /\ p < w2n x + w2n z})
     (write_memory_with_expansion (w2n xs) bs s)
@@ -296,7 +299,7 @@ Theorem dload_actual_external_copy_next:
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
   (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v) /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\
@@ -309,7 +312,7 @@ Theorem dload_actual_external_copy_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)

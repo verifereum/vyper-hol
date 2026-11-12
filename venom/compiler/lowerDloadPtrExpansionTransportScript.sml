@@ -157,13 +157,13 @@ Proof
 QED
 
 Theorem dload_boundary_core_target_temporary:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\ tmp NOTIN V ==>
-  dload_boundary_core lo fs V Ws PG PH G (set_prov H [tmp] p)
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\ tmp NOTIN V ==>
+  dload_boundary_core fl lo fs V Ws PG PH G (set_prov H [tmp] p)
     tn (un with t_var := set_var_taint un.t_var [tmp] mask)
     s (update_var tmp value t) cs ds
 Proof
   strip_tac >>
-  `dload_vars_match fs V G (set_prov H [tmp] p)
+  `dload_vars_match fl fs V G (set_prov H [tmp] p)
     tn (un with t_var := set_var_taint un.t_var [tmp] mask)
     s (update_var tmp value t)` by
     (drule dload_boundary_vars >>
@@ -294,15 +294,32 @@ Proof
   simp[DRESTRICT_UNIV, taint_component_equality]
 QED
 
+(* A target-only write to bytes outside the fixed region, the live sites
+   and the dynamic region keeps the memory relation. *)
+Theorem dload_memory_match_target_frame[local]:
+  dload_memory_match fl lo fs tn un s t /\
+  (!x. x < lo ==> x NOTIN R) /\
+  (!owner id a c m k. dload_live_site fs owner id a c m /\ k < m ==>
+    c + k NOTIN R) /\
+  (!x. fl <= x ==> x NOTIN R) /\
+  (!x. x NOTIN R ==> read_byte x u.vs_memory = read_byte x t.vs_memory) /\
+  u.vs_alloca_next = t.vs_alloca_next ==>
+  dload_memory_match fl lo fs tn (un with t_mem := un.t_mem DIFF R) s u
+Proof
+  simp[dload_memory_match_def, ld_dyn_agree_def] >> rpt strip_tac >>
+  metis_tac[]
+QED
+
 Theorem dload_scratch_codecopy_memory:
-  dload_memory_match lo fs tn un s t /\
+  dload_memory_match fl lo fs tn un s t /\
   (!x. x < lo ==> ~(w2n b <= x /\ x < w2n b+w2n n)) /\
   (!owner id a c m k. dload_live_site fs owner id a c m /\ k < m ==>
     ~(w2n b <= c+k /\ c+k < w2n b+w2n n)) /\
   i.inst_opcode = CODECOPY /\ i.inst_operands = [dst;src;sz] /\
   eval_operand dst t = SOME b /\ eval_operand src t = SOME off /\
-  eval_operand sz t = SOME n /\ step_inst_base i t = OK u ==>
-  dload_memory_match lo fs tn
+  eval_operand sz t = SOME n /\ step_inst_base i t = OK u /\
+  w2n b + w2n n <= fl ==>
+  dload_memory_match fl lo fs tn
     (un with t_mem := un.t_mem DIFF {j | w2n b <= j /\ j < w2n b+w2n n}) s u
 Proof
   strip_tac >>
@@ -310,27 +327,34 @@ Proof
     read_byte x u.vs_memory = read_byte x t.vs_memory` by
     (rpt strip_tac >> irule codecopy_byte_outside >>
      qexistsl [`off`,`b`,`dst`,`i`,`n`,`sz`,`src`] >> simp[]) >>
-  fs[dload_memory_match_def] >> conj_tac >> rpt strip_tac >>
-  simp[] >> metis_tac[]
+  `!x. fl <= x ==> ~(w2n b <= x /\ x < w2n b+w2n n)` by
+    (rpt strip_tac >> decide_tac) >>
+  `u.vs_alloca_next = t.vs_alloca_next` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_def, AllCaseEqs()] >> rpt strip_tac >>
+     gvs[write_memory_with_expansion_def]) >>
+  drule_at (Pos hd) dload_memory_match_target_frame >>
+  disch_then irule >> simp[] >> metis_tac[]
 QED
 
 Theorem dload_boundary_core_scratch_codecopy:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   (!x. x < lo ==> ~(w2n b <= x /\ x < w2n b+w2n n)) /\
   (!owner id a c m k. dload_live_site fs owner id a c m /\ k < m ==>
     ~(w2n b <= c+k /\ c+k < w2n b+w2n n)) /\
   i.inst_opcode = CODECOPY /\ i.inst_operands = [dst;src;sz] /\
   i.inst_outputs = [] /\ eval_operand dst t = SOME b /\
   eval_operand src t = SOME off /\ eval_operand sz t = SOME n /\
-  step_inst_base i t = OK u ==>
-  dload_boundary_core lo fs V Ws PG PH G (step_prov PH H i u)
+  step_inst_base i t = OK u /\ w2n b + w2n n <= fl ==>
+  dload_boundary_core fl lo fs V Ws PG PH G (step_prov PH H i u)
     tn (step_taint i t u un) s u cs ds
 Proof
   strip_tac >> drule_all dload_codecopy_state_ghost >> strip_tac >>
-  `dload_memory_match lo fs tn
+  `dload_memory_match fl lo fs tn
     (un with t_mem := un.t_mem DIFF {j | w2n b <= j /\ j < w2n b+w2n n}) s u` by
     (irule dload_scratch_codecopy_memory >>
      conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+     conj_tac >- simp[] >>
      qexistsl [`dst`,`i`,`off`,`src`,`sz`,`t`] >>
      fs[dload_boundary_core_def]) >>
   `dload_table_stack fs (s::MAP (\c. c.cf_state) cs)
@@ -374,11 +398,11 @@ Proof
 QED
 
 Theorem dload_boundary_core_read_pair:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   i.inst_opcode = DLOAD /\ j.inst_opcode = MLOAD /\
   i.inst_outputs = [out] /\ j.inst_outputs = [out] /\
   out_taint tn i s = {} /\ out_taint un j t = {} ==>
-  dload_boundary_core lo fs V Ws PG PH
+  dload_boundary_core fl lo fs V Ws PG PH
     (step_prov PG G i (update_var out value s))
     (step_prov PH H j (update_var out value t))
     (step_taint i s (update_var out value s) tn)
@@ -386,7 +410,7 @@ Theorem dload_boundary_core_read_pair:
     (update_var out value s) (update_var out value t) cs ds
 Proof
   strip_tac >>
-  `dload_vars_match fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
+  `dload_vars_match fl fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
      (tn with t_var := set_var_taint tn.t_var [out] {})
      (un with t_var := set_var_taint un.t_var [out] {})
      (update_var out value s) (update_var out value t)` by
@@ -404,10 +428,10 @@ Proof
 QED
 
 Theorem dload_boundary_core_add_temporary:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   i.inst_opcode = ADD /\ i.inst_outputs = [tmp] /\ tmp NOTIN V /\
   step_inst_base i t = OK u ==>
-  dload_boundary_core lo fs V Ws PG PH G (step_prov PH H i u)
+  dload_boundary_core fl lo fs V Ws PG PH G (step_prov PH H i u)
     tn (step_taint i t u un) s u cs ds
 Proof
   strip_tac >>
@@ -467,10 +491,11 @@ Proof
 QED
 
 Theorem dload_four_step_boundary_fresh:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ a.inst_id NOTIN orig /\
-  (FLOOKUP t.vs_allocas a.inst_id = NONE ==> t.vs_alloca_next + 32 < dimword (:256)) /\
+  (FLOOKUP t.vs_allocas a.inst_id = NONE ==>
+     t.vs_alloca_next + 32 < dimword (:256) /\ t.vs_alloca_next + 32 <= fl) /\
   i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
   a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\ a.inst_outputs = [av] /\
   b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\ b.inst_outputs = [cv] /\
@@ -483,7 +508,7 @@ Theorem dload_four_step_boundary_fresh:
   ?s1 r1.
     step_inst fuel C i s = OK s1 /\
     r1.dr_source = r.dr_source /\ r1.dr_scratch = a.inst_id INSERT r.dr_scratch /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds
 Proof
@@ -496,25 +521,31 @@ Proof
   `v1.vs_alloca_next < dimword (:256)` by
     (irule dload_alloca_conditional_frontier >>
      qexistsl [`a`,`a.inst_id`,`(32w:bytes32)`,`t`] >> fs[dimword_def]) >>
+  `v1.vs_alloca_next <= fl` by
+    (`t.vs_alloca_next <= fl` by
+       gvs[dload_boundary_core_def, dload_memory_match_def] >>
+     qpat_x_assum `exec_alloca _ _ _ = OK v1` mp_tac >>
+     simp[exec_alloca_def, AllCaseEqs()] >> rpt strip_tac >>
+     gvs[update_var_def]) >>
   drule_all dload_boundary_core_scratch_alloca >> strip_tac >>
   suspend "after_alloca"
 QED
 
 Resume dload_four_step_boundary_fresh[after_alloca]:
-  `dload_boundary_core lo (r1::rs) V Ws PG PH G H1 tn un1 s t1 cs ds` by
-    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s v1 _ _`
+  `dload_boundary_core fl lo (r1::rs) V Ws PG PH G H1 tn un1 s t1 cs ds` by
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s v1 _ _`
        (mp_then Any mp_tac dload_boundary_core_index_update) >>
      disch_then (qspecl_then [`SUC t.vs_inst_idx`,`s.vs_inst_idx`] mp_tac) >>
      simp[]) >>
   `step_inst_base b t1 = OK v2` by
     (qpat_x_assum `step_inst fuel Ct b t1 = OK v2` mp_tac >>
      simp[step_inst_non_invoke]) >>
-  `dload_boundary_core lo (r1::rs) V Ws PG PH G H2 tn un2 s v2 cs ds` by
+  `dload_boundary_core fl lo (r1::rs) V Ws PG PH G H2 tn un2 s v2 cs ds` by
     (qpat_assum `H2 = _` SUBST1_TAC >>
      qpat_assum `un2 = _` SUBST1_TAC >>
      irule dload_boundary_core_add_temporary >> metis_tac[]) >>
-  `dload_boundary_core lo (r1::rs) V Ws PG PH G H2 tn un2 s t2 cs ds` by
-    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s v2 _ _`
+  `dload_boundary_core fl lo (r1::rs) V Ws PG PH G H2 tn un2 s t2 cs ds` by
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s v2 _ _`
        (mp_then Any mp_tac dload_boundary_core_index_update) >>
      disch_then (qspecl_then [`SUC t1.vs_inst_idx`,`s.vs_inst_idx`] mp_tac) >>
      simp[]) >>
@@ -551,16 +582,21 @@ Resume dload_four_step_boundary_fresh[copy_fields]:
      conj_tac
      >- (qexistsl [`a.inst_id`,`0`] >> simp[] >> fs[FLOOKUP_DEF]) >>
      metis_tac[]) >>
+  `bb + 32 <= fl` by
+    (`t2.vs_alloca_next <= fl` by
+       (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s t2 _ _` mp_tac >>
+        simp[dload_boundary_core_def, dload_memory_match_def]) >>
+     decide_tac) >>
   `step_inst_base c t2 = OK v3` by
     (qpat_x_assum `step_inst fuel Ct c t2 = OK v3` mp_tac >>
      simp[step_inst_non_invoke]) >>
-  `dload_boundary_core lo (r1::rs) V Ws PG PH G H3 tn un3 s v3 cs ds` by
+  `dload_boundary_core fl lo (r1::rs) V Ws PG PH G H3 tn un3 s v3 cs ds` by
     (qpat_assum `H3 = _` SUBST1_TAC >> qpat_assum `un3 = _` SUBST1_TAC >>
      irule dload_boundary_core_scratch_codecopy >>
      simp[IgnAsm `t2 = _`, IgnAsm `H2 = _`, IgnAsm `un2 = _`,
           w2n_n2w, LESS_MOD] >> metis_tac[]) >>
-  `dload_boundary_core lo (r1::rs) V Ws PG PH G H3 tn un3 s t3 cs ds` by
-    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s v3 _ _`
+  `dload_boundary_core fl lo (r1::rs) V Ws PG PH G H3 tn un3 s t3 cs ds` by
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s v3 _ _`
        (mp_then Any mp_tac dload_boundary_core_index_update) >>
      disch_then (qspecl_then [`SUC t2.vs_inst_idx`,`s.vs_inst_idx`] mp_tac) >>
      simp[]) >>
@@ -601,7 +637,7 @@ Resume dload_four_step_boundary_fresh[paired_read]:
   `step_inst fuel C i s = OK (update_var out value s)` by
     (qpat_x_assum `s.vs_data_section = t.vs_data_section` kall_tac >>
      simp[Abbr `value`] >> irule dload_source_read_step >> metis_tac[]) >>
-  `dload_boundary_core lo (r1::rs) V Ws PG PH
+  `dload_boundary_core fl lo (r1::rs) V Ws PG PH
      (step_prov PG G i (update_var out value s))
      (step_prov PH H3 d (update_var out value t3))
      (step_taint i s (update_var out value s) tn)
@@ -622,10 +658,10 @@ QED
 Finalise dload_four_step_boundary_fresh
 
 Theorem dload_four_step_boundary:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ a.inst_id NOTIN orig /\
-  t.vs_alloca_next + 32 < dimword (:256) /\
+  t.vs_alloca_next + 32 < dimword (:256) /\ t.vs_alloca_next + 32 <= fl /\
   i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
   a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\ a.inst_outputs = [av] /\
   b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\ b.inst_outputs = [cv] /\
@@ -638,7 +674,7 @@ Theorem dload_four_step_boundary:
   ?s1 r1.
     step_inst fuel C i s = OK s1 /\
     r1.dr_source = r.dr_source /\ r1.dr_scratch = a.inst_id INSERT r.dr_scratch /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds
 Proof
@@ -646,10 +682,11 @@ Proof
 QED
 
 Theorem dload_supply_replay_boundary_fresh:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ (EL 0 xs).inst_id NOTIN orig /\
-  (FLOOKUP t.vs_allocas (EL 0 xs).inst_id = NONE ==> t.vs_alloca_next + 32 < dimword (:256)) /\
+  (FLOOKUP t.vs_allocas (EL 0 xs).inst_id = NONE ==>
+     t.vs_alloca_next + 32 < dimword (:256) /\ t.vs_alloca_next + 32 <= fl) /\
   i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
   lower_dload_inst_supply supply i = (xs,next) /\
   (EL 0 xs).inst_outputs = [av] /\ (EL 1 xs).inst_outputs = [cv] /\
@@ -660,7 +697,7 @@ Theorem dload_supply_replay_boundary_fresh:
   ?s1 r1. step_inst fuel C i s = OK s1 /\
     r1.dr_source = r.dr_source /\
     r1.dr_scratch = (EL 0 xs).inst_id INSERT r.dr_scratch /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds
 Proof
@@ -683,10 +720,10 @@ Proof
 QED
 
 Theorem dload_supply_replay_boundary:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ (EL 0 xs).inst_id NOTIN orig /\
-  t.vs_alloca_next + 32 < dimword (:256) /\
+  t.vs_alloca_next + 32 < dimword (:256) /\ t.vs_alloca_next + 32 <= fl /\
   i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
   lower_dload_inst_supply supply i = (xs,next) /\
   (EL 0 xs).inst_outputs = [av] /\ (EL 1 xs).inst_outputs = [cv] /\
@@ -697,7 +734,7 @@ Theorem dload_supply_replay_boundary:
   ?s1 r1. step_inst fuel C i s = OK s1 /\
     r1.dr_source = r.dr_source /\
     r1.dr_scratch = (EL 0 xs).inst_id INSERT r.dr_scratch /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds
 Proof

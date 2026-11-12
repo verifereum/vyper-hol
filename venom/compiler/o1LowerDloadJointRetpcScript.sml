@@ -85,5 +85,37 @@ Theorem ld_joint_retpc_next:
       (t1 with vs_inst_idx := SUC t.vs_inst_idx)
       n a U B HP (occurrence_step a HP H inst s1) sites X ts
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >>
+  `?idx. inst.inst_operands = [Lit idx]` by
+    metis_tac[ld_retpc_success_iff] >>
+  drule_all ld_joint_retpc_step >> strip_tac >>
+  `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
+    metis_tac[ld_joint_source] >>
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
+    gvs[ld_joint_boundary_def] >>
+  `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+    simp[is_terminator_def] >>
+  `occ_frame_reachable vs C stk PG (step_prov PG G inst s1)
+     (step_taint inst s s1 tn) fn inst2
+     (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
+     (occurrence_step a HP H inst s1)` by
+    (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def]) >>
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s1)
+     stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (drule occurrence_annotation_next >>
+     disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
+     simp[occurrence_sites_step_def]) >>
+  qexists_tac `update_var out t.vs_return_pc_token t` >> simp[] >>
+  qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
+  irule ld_joint_var_update_next >> simp[] >>
+  conj_tac
+  >- (qexistsl [`out`,`s.vs_gas_readings`,`s.vs_return_pc_token`,`t.vs_return_pc_token`] >>
+      fs[update_var_def, venom_state_component_equality,
+         ld_joint_boundary_def, o1LowerDloadSharedTheory.ld_shared_agree_def]) >>
+  qexistsl_tac [`G`,`H`,`tn`] >> simp[] >>
+  simp[step_taint_def, mem_taint_def, store_taint_def, adopt_reset_def,
+       imm_taint_def, update_var_def, new_site_bytes_def, written_taint_def,
+       step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+       range_bytes_def, FLOOKUP_DEF, SF CONJ_ss]
 QED
