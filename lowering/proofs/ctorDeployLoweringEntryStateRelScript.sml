@@ -83,7 +83,7 @@ Proof
  rpt gen_tac >> strip_tac >>
  `supported_declaration_headers tops` by fs[deploy_source_ok_def, supported_program_def] >>
  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
-  (fs[deploy_source_ok_def, deploy_typing_ok_def, check_contract_def] >>
+  (fs[deploy_source_ok_def, deploy_typing_ok_constants_ready, check_contract_def] >>
    drule contract_namespaces_ok_module_toplevel_vtype_keys >> simp[]) >>
  `layouts_agree tops am tx` by fs[deploy_state_rel_def] >>
  `storage_vars_rel (cenv with ce_module_vars := add_module_var_locations tops FEMPTY)

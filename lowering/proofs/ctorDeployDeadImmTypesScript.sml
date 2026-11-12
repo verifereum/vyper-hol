@@ -49,7 +49,7 @@ Proof
     (qpat_x_assum `deploy_source_ok _ _ _` mp_tac >>
      simp[deploy_source_ok_def]) >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by
-    metis_tac[deploy_source_ok_def, deploy_typing_ok_def] >>
+    metis_tac[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
   drule_all load_contract_sources_layouts >> strip_tac >>
   `FLOOKUP art.cta_bare_globals (NONE,name) = SOME ty` by
     (irule checked_singleton_immutable_lookup >>
