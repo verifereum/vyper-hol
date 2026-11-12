@@ -4,7 +4,7 @@ Ancestors
   tuplePlaceHeadAdvance vyperScopePreservation
 
 Theorem tuple_place_endpoint_local_regions_some:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv cs /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv cs /\
   (!x v. not_fresh_at cs x /\ lookup_var x s = SOME v ==>
     lookup_var x t = SOME v) /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
@@ -21,7 +21,7 @@ QED
 (* Convert the store runners' protected-allocation byte frame into the
    statement frame, without choosing another execution endpoint. *)
 Theorem tuple_place_store_alloca_frame:
-  stmt_state_rel ctx func cenv cx ee s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx ee s /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
   MAP FDOM ee.scopes = MAP FDOM ff.scopes /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
@@ -51,7 +51,7 @@ QED
 Theorem tuple_place_pointer_store_alloca_frame:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   alloca_frame cenv ee sa s cenv ff t ==>
   alloca_frame cenv es sp s0 cenv ff t
@@ -81,7 +81,7 @@ Theorem tuple_place_head_advance_some:
             local_region cenv es.scopes s n b sz) /\
   (!x v. not_fresh_at sp x /\ lookup_var x s = SOME v ==>
     lookup_var x t = SOME v) /\
-  stmt_state_rel ctx func cenv cx ff t /\ ~t.vs_halted /\
+  stmt_state_rel H ctx func cenv cx ff t /\ ~t.vs_halted /\
   t.vs_current_bb = sb.cs_current_bb /\
   t.vs_inst_idx = LENGTH sb.cs_current_insts /\
   (!j. SUC i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
@@ -113,11 +113,11 @@ QED
 Theorem tuple_place_pointer_head_advance:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   ci_mono sa sb /\ i < LENGTH ltys /\
   write_place cx p v ee = (INL (),ff) /\
-  stmt_state_rel ctx func cenv cx ff t /\ ~t.vs_halted /\
+  stmt_state_rel H ctx func cenv cx ff t /\ ~t.vs_halted /\
   t.vs_current_bb = sb.cs_current_bb /\
   t.vs_inst_idx = LENGTH sb.cs_current_insts /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -159,7 +159,7 @@ Theorem tuple_place_equal_storage_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys tys tvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit tys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -171,7 +171,7 @@ Theorem tuple_place_equal_storage_head_step:
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -188,7 +188,7 @@ Proof
   strip_tac >>
   `alloca_frame cenv ee sa s cenv ff t` by
     (irule stmtSimDefsTheory.alloca_frame_of_mem_frame >>
-     qpat_assum `stmt_state_rel _ _ _ _ ee s` (irule_at Any) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ ee s` (irule_at Any) >>
      simp[] >> metis_tac[vyperScopePreservationTheory.write_place_scopes_dom]) >>
   `alloca_frame cenv es sp s0 cenv ff t` by
     (irule tuple_place_pointer_store_alloca_frame >> metis_tac[]) >>
@@ -197,14 +197,14 @@ Proof
     (metis_tac[cj 1 stmtLoweringMonoTheory.ci_mono_stmt_helpers, pairTheory.SND]) >>
   irule tuple_place_pointer_head_advance >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
   qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >> rpt strip_tac >>
   `i <= j` by simp[] >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule tuplePlacePointerReadyTheory.tuple_place_pointer_pending_memory >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[]
 QED
 
@@ -216,7 +216,7 @@ Theorem tuple_place_pointer_snapshot_apart:
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -233,7 +233,7 @@ Proof
   `evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs)` by metis_tac[] >>
   qpat_x_assum `!j. j < LENGTH tys ==> _` kall_tac >>
   drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_source_facts >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[loweringPostsTheory.target_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[loweringPostsTheory.target_post_def] >>
   `tuple_place_snapshot cenv cx ee lo sa.cs_next_id tys ltys ltvs w s` by
     (irule tuplePlacePointerReadyTheory.tuple_place_pointer_snapshot >> metis_tac[]) >>
   `0 < type_memory_size_list ltvs` by
@@ -263,7 +263,7 @@ QED
 Theorem tuple_place_pointer_window_transport:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   mem_bytes_at (w2n w) (type_memory_size_list ltvs) t.vs_memory =
     mem_bytes_at (w2n w) (type_memory_size_list ltvs) s.vs_memory /\
   i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
@@ -297,7 +297,7 @@ Theorem tuple_place_word_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -309,7 +309,7 @@ Theorem tuple_place_word_head_step:
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -343,20 +343,20 @@ Proof
   `LENGTH ltys = LENGTH tys` by metis_tac[vyperTypeArgFitsTheory.arg_types_fit_LENGTH] >>
   irule tuple_place_pointer_head_advance >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
   qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >> rpt strip_tac >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule tuple_place_pointer_window_transport >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_SUC_REFL]
 QED
 
 Theorem tuple_place_pointer_slice_transport:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   (w2n w + type_memory_size_list ltvs <= d \/ d+len <= w2n w) /\
   (!name b sz a n. local_region cenv ee.scopes s name b sz /\ b <= a /\
@@ -374,7 +374,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `tuple_place_snapshot cenv cx ee lo sa.cs_next_id tys ltys ltvs w s` by
     (irule tuplePlacePointerReadyTheory.tuple_place_pointer_snapshot >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ee s /\ LENGTH ltvs = LENGTH ltys` by
+  `stmt_state_rel H ctx func cenv cx ee s /\ LENGTH ltvs = LENGTH ltys` by
     fs[loweringPostsTheory.target_post_def, tuplePlaceHeadTheory.tuple_place_head_def] >>
   `SUM (MAP type_memory_size (TAKE j ltvs)) + type_memory_size (EL j ltvs)
     <= type_memory_size_list ltvs` by
@@ -408,7 +408,7 @@ Theorem tuple_place_equal_memory_head_step:
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit tys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -419,7 +419,7 @@ Theorem tuple_place_equal_memory_head_step:
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -459,7 +459,7 @@ Proof
     (metis_tac[cj 1 stmtLoweringMonoTheory.ci_mono_stmt_helpers, pairTheory.SND]) >>
   irule tuple_place_pointer_head_advance >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
   qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >> rpt strip_tac >>
   `0 < type_memory_size (EL j tvs)` by
@@ -467,7 +467,7 @@ Proof
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule tuple_place_pointer_slice_transport >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
   qexistsl [`tops`, `INL (PlaceR p)`, `type_memory_size (EL i tvs)`, `w2n dw`, `bt`] >>
   gvs[] >> conj_tac >> first_assum ACCEPT_TAC
 QED
@@ -478,7 +478,7 @@ Theorem tuple_place_owned_head_step:
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sp.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size_list ltvs <= b+sz /\
@@ -498,7 +498,7 @@ Theorem tuple_place_owned_head_step:
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -544,13 +544,13 @@ Proof
     (metis_tac[cj 1 stmtLoweringMonoTheory.ci_mono_stmt_helpers, pairTheory.SND]) >>
   irule tuple_place_pointer_head_advance >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
   qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >> rpt strip_tac >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule tuple_place_pointer_window_transport >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_SUC_REFL]
 QED
 
@@ -558,7 +558,7 @@ Theorem tuple_place_allword_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -570,7 +570,7 @@ Theorem tuple_place_allword_head_step:
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -602,7 +602,7 @@ Proof
      qpat_x_assum `!n. _ ==> value_has_type _ _` (qspec_then `i` mp_tac) >> simp[]) >>
   `expr_val_rel cx (EL i tys) (EL i vs) (EL i elems) s` by metis_tac[] >>
   `?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -626,7 +626,7 @@ Proof
     (metis_tac[exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND]) >>
   irule tuple_place_pointer_head_advance >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >> simp[] >>
   qexistsl [`tops`, `INL (PlaceR p)`, `bt`] >> simp[] >>
   metis_tac[listTheory.EVERY_EL]
@@ -638,7 +638,7 @@ Theorem tuple_place_head_step:
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -657,7 +657,7 @@ Theorem tuple_place_head_step:
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx ee s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -675,7 +675,7 @@ Proof
   >- (gvs[] >> Cases_on `EVERY is_word_type ltys`
       >- (irule tuple_place_allword_head_step >> metis_tac[]) >>
       irule tuple_place_word_head_step >>
-      qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
       qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
       simp[] >> qexistsl [`tops`, `loc`, `env`, `dw`, `dst`, `bt`] >>
       simp[] >> strip_tac >> qpat_x_assum `loc = LocMemory` SUBST_ALL_TAC >>
@@ -702,11 +702,12 @@ Proof
   >- (gvs[]) 
   >- (irule tuple_place_owned_head_step >>
       qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-      qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
       simp[] >> metis_tac[]) >>
   gvs[] >>
   Cases_on `loc = LocMemory`
-  >- (gvs[] >> irule tuple_place_equal_memory_head_step >> metis_tac[]) >>
+  >- (gvs[] >> irule tuple_place_equal_memory_head_step >>
+      metis_tac[vyperTypeSystemTheory.arg_type_fits_refl]) >>
   `loc = LocStorage \/ loc = LocTransient` by
     (Cases_on `p` >> fs[loweringPostsTheory.place_ptr_rel_def] >>
      Cases_on `b'` >> fs[loweringPostsTheory.slot_loc_def]) >>
@@ -716,6 +717,6 @@ Proof
      simp[listTheory.EL_MEM]) >>
   irule tuple_place_equal_storage_head_step >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[]
 QED

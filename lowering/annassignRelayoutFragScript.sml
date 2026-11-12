@@ -45,7 +45,8 @@ Proof
   `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
    (!e. lowered_value_type c e = lowered_value_type cenv e)` by
     (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
-     simp[oneline lowered_value_type_def]) >>
+     rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `?sA sV sB vv op.
      emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv vtyp))] [p] st = ((),sA) /\
      compile_expr c (expr_type e) e sA = (vv,sV) /\
@@ -87,7 +88,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule expr_body_pre_var_types_well_formed >> strip_tac >>
   `well_typed_expr env e /\
-   sfields_tenv_consistent cenv.ce_struct_fields env.type_defs` by
+   sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
+   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+      cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
   drule ifexp_lowered_type_classify >>
@@ -106,6 +109,8 @@ Theorem relayout_post_value_type[local]:
     (!id t. FLOOKUP env.var_types id = SOME t ==>
             well_formed_type env.type_defs t) /\
     sfields_tenv_consistent c.ce_struct_fields env.type_defs /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+       c.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     (!e. lowered_value_type c e = lowered_value_type cenv e) /\
     expr_type e = typ /\ ~is_word_type typ /\ ~is_bytestring_type typ /\
     lowered_value_type cenv e <> typ ==>
@@ -151,6 +156,12 @@ Theorem compile_annassign_relayout_stmt_frag:
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   drule_all annassign_relayout_code_parts >>
   disch_then (qx_choosel_then [`st`, `sA`, `sV`, `sB`, `vv`, `op`, `p`] strip_assume_tac) >>
   rename1 `declare_local cenv id typ sa = (c,st)` >>
@@ -164,26 +175,28 @@ Proof
   `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
    (!e. lowered_value_type c e = lowered_value_type cenv e)` by
     (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
-     simp[oneline lowered_value_type_def]) >>
-  `stmt_state_rel ctx func c cx es s0` by
-    (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
+     rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func c cx es s0` by
+    (rpt strip_tac >> irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
   `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
   `s0.vs_current_bb = st.cs_current_bb /\
    s0.vs_inst_idx = LENGTH st.cs_current_insts` by
     (drule_all declare_local_ptr >> simp[] >> strip_tac >> gvs[]) >>
-  drule_all annassign_alloca_operand_framed_path >>
+  drule_all (SRULE [PULL_EXISTS] annassign_alloca_operand_framed_path) >>
   disch_then (qx_choosel_then [`salloc`, `w`] strip_assume_tac) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (irule annassign_admissible_rhs >> metis_tac[]) >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,salloc)
-    (\res ee t. ?v. res = INL v /\
-      expr_post ctx func c cx e es sA sB salloc ee v op t /\
+    (\H res ee t. ?v. res = INL v /\
+      expr_post H ctx func c cx e es sA sB salloc ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_sim_def] >> disch_then irule >> gvs[]) >>
+     simp[expr_sim_def] >> disch_then irule >> gvs[] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `MEM ai (fn_insts func)` >>
   `ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [p] /\
    FLOOKUP salloc.vs_allocas ai.inst_id =
@@ -202,7 +215,9 @@ Proof
   `!x. op = Var x ==> not_fresh_at sB x` by metis_tac[compile_lower_value_var] >>
   `post_value_type c e = lowered_value_type cenv e` by
     (`well_typed_expr env e /\
-      sfields_tenv_consistent c.ce_struct_fields env.type_defs` by
+      sfields_tenv_consistent c.ce_struct_fields env.type_defs /\
+      (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+         c.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
        fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
           env_context_consistent_def] >>
      match_mp_tac relayout_post_value_type >> qexistsl_tac [`env`, `typ`] >>
@@ -212,7 +227,8 @@ Proof
     (drule_all declare_local_ptr >> strip_tac >>
      drule emit_inst_extends >> simp[Abbr `ai`, venomInstTheory.mk_inst_def] >>
      strip_tac >> gvs[]) >>
-  (irule annassign_outcome_entry_prefix >> simp[] >>
+  (irule annassign_outcome_entry_prefix >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   qexists_tac `salloc` >> simp[] >>
   irule annassign_relayout_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[ci_mono_def] >>

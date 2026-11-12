@@ -9,7 +9,7 @@ Libs monadsyntax
 Definition tuple_place_head_def:
   tuple_place_head ctx func cenv cx es lo cs tys ltys ltvs vs elems
       (w:256 word) i s <=>
-    stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
     s.vs_current_bb = cs.cs_current_bb /\
     s.vs_inst_idx = LENGTH cs.cs_current_insts /\
     LENGTH elems = LENGTH ltys /\ LENGTH ltvs = LENGTH ltys /\
@@ -28,7 +28,7 @@ Definition tuple_place_head_def:
 End
 
 Theorem tuple_place_head_intro:
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = cs.cs_current_bb /\ s.vs_inst_idx = LENGTH cs.cs_current_insts /\
   LENGTH elems = LENGTH ltys /\ LENGTH ltvs = LENGTH ltys /\
   EVERY (\op. ?x. op = Var x) elems /\
@@ -48,12 +48,12 @@ Proof
 QED
 
 Theorem tuple_place_assignment_prefix_head:
-  !ctx func cenv cx es es1 tys ltys ltvs vs sa su sl ss op staged elems sv s0 e.
+  !H ctx func cenv cx es es1 tys ltys ltvs vs sa su sl ss op staged elems sv s0 e.
     expr_type e = TupleT tys /\ lowered_value_type cenv e = TupleT ltys /\
     value_has_type (TupleTV ltvs) (ArrayV (TupleV vs)) /\
     evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
-    expr_post ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv /\
+    expr_post H ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv /\
     (!x. op = Var x ==> not_fresh_at su x) /\ sa.cs_next_id <= su.cs_next_id /\
     (if is_memory_view e /\ EXISTS (\t. ~is_word_type t) ltys /\
         0 < type_memory_size_list ltvs then

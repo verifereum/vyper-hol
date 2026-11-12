@@ -5,9 +5,9 @@ Ancestors
   compileEnv loweringStateRelDefs
 
 Theorem expr_post_live_destination_source:
-  !ctx func cenv cx e es sa sb s0 es' v op s sty stv
+  !H ctx func cenv cx e es sa sb s0 es' v op s sty stv
    id entry p cap dw dlen.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     post_value_type cenv e = sty /\ sty <> expr_type e /\
     evaluate_type (get_tenv cx) sty = SOME stv /\ ~is_word_type sty /\
     val_footprint stv v = type_memory_size stv /\ 0 < type_memory_size stv /\

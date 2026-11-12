@@ -437,7 +437,7 @@ Proof
   metis_tac[aug_place_base_memory_origin]
 QED
 
-Theorem aug_place_supported_storage_kind[local]:
+Theorem aug_place_supported_storage_kind:
   body_inv tops ctx cenv cx /\
   supported_target_info tops bindings t = SOME pt /\
   (!id. target_root t <> NameTarget id) /\
@@ -458,7 +458,7 @@ Proof
   gvs[expr_body_pre_def]
 QED
 
-Theorem aug_place_storage_read_ready[local]:
+Theorem aug_place_storage_read_ready:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   slots_in_range (get_storage cx st tr) (w2n slot) tv ==>
   ?cur. read_place cx (StoragePlace tr slot tv) st = (INL cur,st) /\
@@ -507,7 +507,7 @@ QED
    fits under the root's declared capacity, so storage_layout_safe and
    contract_storage_well_formed, both in expr_sim_inv, give slots_in_range
    (vyperPlaceStoragePreservation.storage_place_region_slots_in_range) and
-   liveness (accountsRelProps.storage_place_region_read_live).  No
+   liveness (accountsRelProps.storage_place_observed_read_live).  No
    slot-separation premise and no frame on the indices. *)
 Theorem aug_place_target_storage_ready[local]:
   storage_layout_safe cx /\ contract_storage_well_formed cx st /\
@@ -523,7 +523,7 @@ Proof
   conj_tac
   >- (drule_all vyperPlaceStoragePreservationTheory.storage_place_region_slots_in_range >>
       simp[]) >>
-  irule accountsRelPropsTheory.storage_place_region_read_live >> simp[]
+  irule accountsRelPropsTheory.storage_place_observed_read_live >> simp[]
 QED
 
 Theorem aug_place_storage_source_ready[local]:
@@ -805,7 +805,7 @@ Proof
   simp[bind_assoc]
 QED
 
-Theorem aug_place_storage_write_gas_obs[local]:
+Theorem aug_place_storage_write_gas_obs:
   write_place cx (StoragePlace tr slot tv) v ee = (res,fin) ==>
   !gs. write_place cx (StoragePlace tr slot tv) v (ee with gas_obs := gs) =
     (res,fin with gas_obs := gs)
@@ -897,7 +897,7 @@ Proof
   Cases_on `y` >> gvs[vyperExprNoControlTheory.no_control_exc_def, stmt_res_ok_def, expr_res_ok_def]
 QED
 
-Theorem aug_place_storage_binop_admissible[local]:
+Theorem aug_place_storage_binop_admissible:
   gas_admissible
     (bind (eval_expr cx e) (\raw. bind (read_result cx raw)
       (\v. bind (lift_sum (evaluate_binop
@@ -1519,7 +1519,7 @@ Resume aug_place_result_bind_outcome_exec[exempt]:
 QED
 Finalise aug_place_result_bind_outcome_exec
 
-Theorem aug_place_result_bind_outcome_path[local]:
+Theorem aug_place_result_bind_outcome_path:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> eval_result evaluation_result) (es,s0) P E /\
   (!v mid t marks. P (INL v) mid t /\
