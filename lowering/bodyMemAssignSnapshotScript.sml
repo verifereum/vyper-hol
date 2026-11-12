@@ -9,6 +9,54 @@ Theory bodyMemAssignSnapshot
 Ancestors
   exprSimMemUnwrap exprSimMemDefs loweringPosts allocaHistory fragGasMode
   exprLowering context compileEnv vyperInterpreter vyperState venomState
+  exprSimUnwrap exprSimUnwrapProps exprSimDefs venomInst venomExecSemantics
+  instMemFrontier fragGasPathMem emitHelper valueCopyBytes memSafeRun
+
+Theorem snapshot_storage_word_readonly[local]:
+  !ctx func cenv cx e es sa sm sb s0 ee v t p op s.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+    is_word_type t /\ local_ptrs_reserved cenv sm /\
+    sa.cs_next_var <= sm.cs_next_var /\ fn_has_code sm sb func /\
+    fn_inst_ids_distinct func /\
+    vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+    alloca_history func s /\ ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?u. gas_path_mem ctx func s 0 (OK u) /\
+        expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+        u.vs_memory = s.vs_memory /\
+        u.vs_alloca_next = s.vs_alloca_next /\ alloca_history func u /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >> (
+  `t = post_value_type cenv e /\
+   ?w. eval_operand p.ptr_operand s = SOME w /\
+       storage_holds cx (p.ptr_location = LocTransient) (post_value_type cenv e)
+         (Value v) w ee s /\
+       stmt_state_rel ctx func cenv cx ee s` by
+    gvs[vv_post_def, vv_holds_def] >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  qabbrev_tac `ld = if p.ptr_location = LocTransient then tload w s
+                    else sload w s` >>
+  `!tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt ==>
+         ld = typed_val_to_w256 tvt v` by
+    (rpt strip_tac >> qunabbrev_tac `ld` >>
+     drule_all storage_holds_load >> simp[]) >>
+  `emit_op (if p.ptr_location = LocTransient then TLOAD else SLOAD)
+     [p.ptr_operand] sm = (op, sb)` by
+    gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >>
+  drule emit_op_path_mem >>
+  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `s`, `ld`] mp_tac) >>
+  impl_tac
+  >- (rw[is_terminator_def, Abbr `ld`] >>
+      simp[below_frontier_no_ranges, inst_dload_in_section_def,
+           step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]) >>
+  strip_tac >> goal_assum drule >> simp[] >>
+  irule exprSimUnwrapPropsTheory.expr_post_of_vv_post_load_physical >> simp[] >>
+  qexistsl_tac [`p`, `s`, `sm`, `post_value_type cenv e`] >> simp[])
+QED
 
 Theorem snapshot_vv_counted_mem:
   !ctx func cenv cx e es sa sm sb s0 ee tv v vv saved s.
