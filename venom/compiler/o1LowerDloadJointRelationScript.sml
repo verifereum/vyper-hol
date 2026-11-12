@@ -119,7 +119,7 @@ End
 (* Relocated sites and scratch slots on both sides, and lo, lie at or
    below the floor fl of the dynamic region. *)
 Definition ld_dyn_floor_ok_def:
-  ld_dyn_floor_ok fl lo sites X <=>
+  ld_dyn_floor_ok (fl:num) (lo:num) sites X <=>
     lo <= fl /\
     (!id b c z. FLOOKUP sites id = SOME (b,c,z) ==> b+z <= fl /\ c+z <= fl) /\
     (!id aid c. FLOOKUP X id = SOME (aid,c) ==> c+32 <= fl)

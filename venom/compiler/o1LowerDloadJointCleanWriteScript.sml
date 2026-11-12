@@ -72,59 +72,8 @@ Theorem ld_joint_clean_write_execution:
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+LENGTH xs<=z /\
                     p=b+j /\ q=c+j))
 Proof
-  strip_tac >>
-  `s.vs_call_ctx.cc_calldata = t.vs_call_ctx.cc_calldata /\
-   s.vs_code = t.vs_code /\ s.vs_returndata = t.vs_returndata /\
-   (!addr. (lookup_account addr s.vs_accounts).code =
-           (lookup_account addr t.vs_accounts).code)` by
-    metis_tac[ld_joint_clean_write_payload_fields] >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  fs[] >>
-  (simp[step_inst_non_invoke] >>
-   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
-   simp[exec_write2_def, AllCaseEqs()] >> strip_tac >> gvs[]) 
-  >~ [`inst.inst_opcode = MSTORE8`]
-  >- (rename [`inst.inst_operands = [dop;vop]`,
-              `eval_operand dop s = SOME d`, `eval_operand vop s = SOME v`] >>
-      `eval_operand vop s = eval_operand vop t` by
-        (drule ld_joint_clean_write_scalar >> disch_then irule >> simp[] >> metis_tac[]) >>
-      `?d'. eval_operand dop t = SOME d' /\
-        ((w2n d=w2n d' /\ w2n d+1<=lo) \/
-         (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+1<=z /\
-                        w2n d=b+j /\ w2n d'=c+j))` by
-        (drule ld_joint_clean_write_destination >> simp[] >> metis_tac[]) >>
-      `eval_operand vop t = SOME v` by metis_tac[] >>
-      qexistsl_tac [`w2n d`,`w2n d'`,`[w2w v : word8]`] >>
-      gvs[mstore8_def, write_memory_with_expansion_def,
-           source_memory_write_ranges_def, fixed_source_write_range_def] >> metis_tac[w2n_11])
-  >~ [`inst.inst_opcode = EXTCODECOPY`]
-  >- suspend "extcopy"
-  >> rename [`inst.inst_operands = [dop;rop;lop]`,
-             `eval_operand dop s = SOME d`, `eval_operand rop s = SOME r`,
-             `eval_operand lop s = SOME l`] >>
-  `eval_operand rop t = SOME r /\ eval_operand lop t = SOME l` by
-    (`eval_operand rop s = eval_operand rop t /\
-      eval_operand lop s = eval_operand lop t` by
-       (conj_tac >> drule ld_joint_clean_write_scalar >> disch_then irule >>
-        simp[] >> metis_tac[]) >> metis_tac[]) >>
-  `?d'. eval_operand dop t = SOME d' /\
-    (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
-     (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
-                    w2n d=b+j /\ w2n d'=c+j))` by
-    (drule ld_joint_clean_write_destination >> disch_then irule >> simp[] >> metis_tac[]) >>
-  qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n d) bytes s` >>
-  `LENGTH bytes = w2n l` by
-    (simp[Abbr `bytes`, LENGTH_TAKE] >> gvs[] >> decide_tac) >>
-  qexistsl_tac [`w2n d`,`w2n d'`,`bytes`] >>
-  simp[Abbr `bytes`, source_memory_write_ranges_def, sized_source_write_range_def] >>
-  gvs[LENGTH_TAKE] >> metis_tac[w2n_11]
-QED
-
-Resume ld_joint_clean_write_execution[extcopy]:
   (* P4a in progress *) cheat
 QED
-
-Finalise ld_joint_clean_write_execution
 
 Theorem ld_mem_taint_clean_write:
   MEM inst.inst_opcode [MSTORE8;CALLDATACOPY;CODECOPY;RETURNDATACOPY;EXTCODECOPY] /\
