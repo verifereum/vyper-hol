@@ -1,7 +1,7 @@
 Theory stmtSimLogArgsRun
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimProps exprLowering
-  stmtSimLogArgs stmtSimLogArgsGrowth exprReasonOperand exprOperandVar vyperTypeSystem
+  logArgumentCompile stmtSimLogArgs stmtSimLogArgsGrowth exprReasonOperand exprOperandVar vyperTypeSystem
   exprSimWordArgs supportedTypes  exprSimOps
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath list
@@ -290,7 +290,7 @@ Finalise compile_log_eval_all_gas
 
 (* Pure aggregate capture, with the componentwise cons boundary explicit. *)
 Theorem compile_log_eval_all_pure_gas:
-  !args ctx func cenv cx R es sa xs sb s0 env env0 es0.
+  !args ctx func cenv cx R es sa xs sb s0 env env0 es0 ops.
     (!e tail es. R (e::tail) es ==>
        expr_sim ctx func cenv cx (expr_type e) e es /\
        post_value_type cenv e = expr_type e /\
@@ -318,7 +318,9 @@ Theorem compile_log_eval_all_pure_gas:
          expr_val_at cenv cx (SND arg) sa sb es' v (FST arg) u)
          ((x,expr_type e)::ys) (v::vs) /\
        wb_frame cenv es es' sa s0 u) /\
-    R args es /\ compile_log_eval_all cenv args sa = (xs,sb) /\
+    R args es /\ ~exprs_can_mutate cenv args /\
+    compile_log_eval_all cenv args sa = (ops,sb) /\
+    xs = ZIP (MAP FST ops, MAP expr_type args) /\
     gas_admissible (eval_exprs cx args) log_args_res_ok es /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     expr_sim_inv cenv cx env0 es0 /\ well_typed_exprs env args /\
@@ -351,7 +353,7 @@ Proof
       simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def,
            return_def, wb_frame_refl, stmt_state_rel_any_gas_obs]) >>
   rpt gen_tac >> strip_tac >>
-  gvs[compile_log_eval_all_cons] >>
+  gvs[logArgumentCompileTheory.compile_log_eval_all_cons] >>
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x,sm)` >>
   rename1 `compile_log_eval_all cenv args sm = (ys,sb)` >>
   `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\

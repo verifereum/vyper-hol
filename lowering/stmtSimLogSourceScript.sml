@@ -2,7 +2,7 @@ Theory stmtSimLogSource
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
    supportedTypes e2eDefs vyperTyping vyperValue vyperABI
-  vyperEvent valueEncoding vyperInterpreter vyperState  vyperExprNoControl
+  vyperEventArgCompat vyperEvent valueEncoding vyperInterpreter vyperState  vyperExprNoControl
 
 (* Source-only scalar conversion boundary. No compiler execution is unfolded. *)
 Theorem log_scalar_abi_exists:
@@ -198,7 +198,7 @@ Theorem event_arg_compatible_abi_types:
   (!fts ats. event_arg_compatible_list fts ats ==>
      vyper_to_abi_types tenv ats = vyper_to_abi_types tenv fts)
 Proof
-  ho_match_mp_tac vyperTypeSystemTheory.event_arg_compatible_ind >>
-  simp[vyperTypeSystemTheory.event_arg_compatible_def,
+  ho_match_mp_tac vyperEventArgCompatTheory.event_arg_compatible_ind >>
+  simp[vyperEventArgCompatTheory.event_arg_compatible_def,
        vyper_base_to_abi_type_def]
 QED
