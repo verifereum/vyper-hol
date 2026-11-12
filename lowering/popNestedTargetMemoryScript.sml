@@ -5,6 +5,7 @@ Ancestors
   targetPlaceSim targetPlaceSimCasesBase
   exprSimMemDefs popNestedTargetRootsMemory popNestedTargetAttributeMemory
   popNestedTargetIndexMemory popNestedTargetSuffixMemory
+  popNestedStorageIndexReadiness popNestedLocalReadinessMemory
 
 Theorem pop_nested_subscript_index_mem:
   body_inv tops ctx cenv cx /\
