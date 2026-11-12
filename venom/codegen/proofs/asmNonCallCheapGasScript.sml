@@ -292,3 +292,29 @@ Resume asm_noncall_cheap_gas_conditional[non_asmop]:
 QED
 
 Finalise asm_noncall_cheap_gas_conditional
+
+Theorem asm_noncall_cheap_gas:
+  !prog data es0 a es H.
+    asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+    a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+    EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
+    asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
+    50000 + 8 * H + memory_cost H <= frame_gas_left es /\
+    EL a.as_pc prog <> AsmOp "CALL" /\
+    EL a.as_pc prog <> AsmOp "STATICCALL" /\
+    ~(?name. EL a.as_pc prog = AsmOp name /\
+       MEM name ["SLOAD";"SSTORE";"TLOAD";"TSTORE";"MLOAD";"MSTORE";
+         "MSTORE8";"SHA3";"RETURN";"REVERT";"CALLDATACOPY";"CODECOPY";
+         "EXTCODECOPY";"MCOPY";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]) ==>
+    !op r s'.
+      next_opcode (FST (HD es.contexts)) = SOME op /\
+      step_inst op es = (r,s') /\
+      LENGTH s'.contexts = LENGTH es.contexts ==>
+      r <> INR (SOME OutOfGas) /\
+      frame_gas_left es <= frame_gas_left s' +
+        (50000 + 8 * H + memory_cost H)
+Proof
+  mp_tac asm_noncall_cheap_gas_conditional >>
+  (impl_tac >- metis_tac[step_inst_access_gas_budget]) >>
+  simp[]
+QED
