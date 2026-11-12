@@ -42,80 +42,6 @@ Proof
   cheat
 QED
 
-Resume ptr_paired_mload_endpoint_inputs[inputs]:
-  `~retpc_var a.po_fn out` by
-    (fs[fn_shape_ok_def, retpc_shape_ok_def] >>
-     spose_not_then assume_tac >>
-     qpat_x_assum `!inst x. MEM inst (fn_insts a.po_fn) /\ MEM x inst.inst_outputs /\ retpc_var a.po_fn x ==> _`
-       (qspecl_then [`a.po_inst`,`out`] mp_tac) >> simp[]) >>
-  `ptr_nonopaque_operand a.po_fn op` by
-    (`EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
-       (irule ptr_nonopaque_instruction_operands >> fs[fn_shape_ok_def]) >> gvs[]) >>
-  `~is_label_operand op` by
-    (`label_positions_ok a.po_inst` by
-        (fs[fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def] >> metis_tac[]) >>
-     gvs[label_positions_ok_def]) >>
-  `ptrDiscipline$op_taint a.po_taint op = {}` by
-    (`taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
-       (fs[ptr_discipline_def] >> metis_tac[]) >>
-     fs[taint_ok_def] >>
-     qpat_x_assum `!op. MEM op _ /\ _ ==> _`
-       (qspec_then `op` mp_tac) >> gvs[]) >>
-  suspend "evaluations"
-QED
-
-Resume ptr_paired_mload_endpoint_inputs[evaluations]:
-  `~in_revert_forward a.po_fn a.po_state` by suspend "nonrevert" >>
-  `at.po_inst = a.po_inst` by
-    (qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
-     simp[ptr_paired_cursor_def] >> strip_tac >>
-     `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices` by
-       (spose_not_then assume_tac >>
-        `a.po_state.vs_inst_idx < EL at.po_state.vs_inst_idx indices` by decide_tac >>
-        qpat_x_assum `!k. _ ==> _.inst_opcode = NOP`
-          (qspec_then `a.po_state.vs_inst_idx` mp_tac) >> simp[] >>
-        qpat_x_assum `a.po_inst = _` SUBST_ALL_TAC >> gvs[]) >>
-     drule ptr_ledger_alignment_cursor >> strip_tac >>
-     first_x_assum (qspec_then `at.po_state.vs_inst_idx` mp_tac) >> simp[] >>
-     strip_tac >> gvs[concretize_positions_unchanged]) >>
-  qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
-  once_rewrite_tac[ptr_chrono_step_cases] >>
-  simp[ptr_observe_def, ptr_observation_component_equality] >>
-  strip_tac >> gvs[is_terminator_def] >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, exec_read1_def, AllCaseEqs()] >>
-  strip_tac >> suspend "transport"
-QED
-
-Resume ptr_paired_mload_endpoint_inputs[nonrevert]:
-  `ALL_DISTINCT (fn_labels a.po_fn)` by
-    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
-  qpat_x_assum `active_inst a.po_fn a.po_inst a.po_state` mp_tac >>
-  simp[active_inst_def] >> strip_tac >>
-  `lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb` by
-    (irule MEM_lookup_block >> fs[fn_labels_def]) >>
-  `get_instruction bb a.po_state.vs_inst_idx = SOME a.po_inst` by
-    simp[get_instruction_def] >>
-  simp[in_revert_forward_def] >> strip_tac >>
-  drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]
-QED
-
-Resume ptr_paired_mload_endpoint_inputs[transport]:
-  `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
-     a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
-    (fs[ptr_paired_sample_def] >> metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
-  drule_all ptr_mixed_vars_eval_presence >>
-  disch_then (qspec_then `op` mp_tac) >> simp[] >> strip_tac >>
-  Cases_on `eval_operand op a.po_state` >> gvs[] >>
-  `ptr_lookup_transport births positions (op_prov TG op) {}
-     (eval_operand op a.po_state) (eval_operand op at.po_state)` by
-    (drule_all ptr_mixed_vars_eval >> simp[]) >>
-  gvs[] >>
-  Cases_on `op` >> gvs[is_label_operand_def]
-QED
-
-Finalise ptr_paired_mload_endpoint_inputs
-
 Theorem ptr_paired_current_range_classification:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -223,5 +149,3 @@ Proof
   simp[mem_read_ops_def, source_memory_read_ranges_def] >>
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
-
-Finalise ptr_paired_mload_address_classification
