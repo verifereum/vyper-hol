@@ -15,37 +15,7 @@ Ancestors
   loweringPosts bodyMemoryDefs bodyPtrDefs bodyExprPreFacts
   stmtLoweringMono fragExec gasSummaryCompose gasExemptCert exprSimDefs
   compileEnv stmtLowering vyperInterpreter vyperState
-  vyperEvalPreservesScopes venomInst list
-
-(* TEMPORARY: gasShadowCompileStmtBase's terminator lemmas, until the
-   restored shadow spine is in this branch's base. *)
-Theorem gas_shadow_inst_terminator_tmp[local]:
-  gas_shadow_inst i j ==>
-  is_terminator i.inst_opcode = is_terminator j.inst_opcode
-Proof
-  rw[gas_shadow_inst_def] >> simp[is_terminator_def]
-QED
-
-Theorem gas_shadow_insts_terminated_tmp[local]:
-  !xs ys. LIST_REL gas_shadow_inst xs ys ==>
-  (case xs of [] => F | _ => is_terminator (LAST xs).inst_opcode) =
-  (case ys of [] => F | _ => is_terminator (LAST ys).inst_opcode)
-Proof
-  Induct >> Cases_on `ys` >> simp[] >> rpt strip_tac >>
-  Cases_on `xs`
-  >- (gvs[] >> irule gas_shadow_inst_terminator_tmp >> simp[]) >>
-  Cases_on `t` >> gvs[] >>
-  first_x_assum (qspec_then `h'''::t''` mp_tac) >> simp[]
-QED
-
-Theorem gas_shadow_state_terminated_tmp[local]:
-  gas_shadow_state s t ==> block_is_terminated s = block_is_terminated t
-Proof
-  strip_tac >> fs[gas_shadow_state_def] >>
-  drule gas_shadow_insts_terminated_tmp >>
-  Cases_on `s.cs_current_insts` >> Cases_on `t.cs_current_insts` >>
-  simp[block_is_terminated_def]
-QED
+  vyperEvalPreservesScopes list
 
 (* An outcome's normal post also knows the source run that reached it. *)
 Theorem gas_outcome_full_eval_evidence:
@@ -154,9 +124,16 @@ Proof
   >> asm_rewrite_tac[gas_outcome_full_def] >> metis_tac[]
 QED
 
+(* The first two premises are the shadow compiler facts the cons case
+   needs: termination agrees across shadow states, and the head's
+   stmt_env commutes with gas_shadow_stmt. They are instances of
+   gas_shadow_state_terminated and of gas_shadow_compile_stmt with
+   gas_shadow_compiles_declare_stmt_local, which this base lacks. *)
 Theorem stmt_frag_full_cons_env:
   !D lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty
    stmt shadow_stmt ss shadow_ss es.
+    (!s t. gas_shadow_state s t ==>
+           (block_is_terminated s <=> block_is_terminated t)) /\
     gas_shadow_compiles (stmt_env cenv lctx ty stmt)
       (stmt_env cenv lctx ty shadow_stmt) /\
     stmt_frag_full (D, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -182,8 +159,7 @@ Proof
   qpat_x_assum `stmts_env _ _ _ (stmt::ss) _ = _` mp_tac >>
   simp[stmts_env_cons, comp_bind_def] >> pairarg_tac >> simp[] >>
   strip_tac >> rename1 `stmt_env cenv lctx ty stmt sa = (c, sm)` >>
-  `~block_is_terminated shadow_sa` by
-    metis_tac[gas_shadow_state_terminated_tmp] >>
+  `~block_is_terminated shadow_sa` by metis_tac[] >>
   qpat_x_assum `stmts_env _ _ _ (shadow_stmt::shadow_ss) _ = _` mp_tac >>
   simp[stmts_env_cons, comp_bind_def] >> pairarg_tac >> simp[] >>
   strip_tac >>
