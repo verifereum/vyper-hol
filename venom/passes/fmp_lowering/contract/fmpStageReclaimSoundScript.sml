@@ -19,6 +19,112 @@
 Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
+  ptrDisciplineEmptyTaint lowerDloadPtrSourceInv lowerDloadPtrRawReachable
+  o1PassContract unitMemInv venomExecSemantics venomState contextCodegenRel
+  list venomInst opcodeClass words finite_map arithmetic
+
+Theorem fmp_source_memory[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp
+Proof
+  strip_tac >>
+  `mem_inv (static_mem_ok eom) C vs /\ o1_ctx_shape C` by
+    gvs[fmp_stage_ctx_def, o1_inv_def, o1_static_inv_def] >>
+  drule_all mem_inv_frame_reachable >> simp[static_mem_ok_def]
+QED
+
+Theorem fmp_source_opcodes[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s ==>
+  inst.inst_opcode <> ALLOCA /\ pre_fmp_opcode inst.inst_opcode
+Proof
+  strip_tac >>
+  `o1_ctx_shape C /\ EVERY (o1_fn_row 3) C.ctx_functions` by
+    gvs[fmp_stage_ctx_def, o1_pre_def] >>
+  drule_all lowerDloadPtrRawReachableTheory.frame_reachable_raw_certificate >>
+  strip_tac >>
+  `o1_fn_row 3 fn` by gvs[EVERY_MEM] >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  gvs[o1_fn_row_def, pre_fmp_ops_def, EVERY_MEM]
+QED
+
+Theorem fmp_eval_phis_frontier[local]:
+  !s t. eval_phis s insts = OK t ==> t.vs_fmp = s.vs_fmp
+Proof
+  Induct_on `insts` >- simp[eval_phis_def] >>
+  qx_gen_tac `inst` >> rpt gen_tac >> simp[Once eval_phis_def] >>
+  Cases_on `inst.inst_opcode = PHI` >> simp[] >>
+  gvs[AllCaseEqs(), update_var_def] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem fmp_enters_block_frontier[local]:
+  enters_block fn s t ==> t.vs_fmp = s.vs_fmp
+Proof
+  rw[enters_block_def] >> drule fmp_eval_phis_frontier >> simp[]
+QED
+
+Theorem fmp_source_return[local]:
+  inst.inst_opcode <> INVOKE /\ pre_fmp_opcode inst.inst_opcode /\
+  step_inst fuel C inst s = IntRet ret t ==>
+  t = s /\ ret.iret_adopt_fmp = NONE
+Proof
+  strip_tac >> gvs[step_inst_non_invoke] >>
+  drule step_inst_base_intret_opcodes >>
+  gvs[pre_fmp_opcode_def] >> strip_tac >>
+  gvs[step_inst_base_def, AllCaseEqs()]
+QED
+
+Theorem fmp_return_caller_frontier[local]:
+  ret.iret_adopt_fmp = NONE /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller callee)) = SOME t ==>
+  t.vs_fmp = caller.vs_fmp
+Proof
+  strip_tac >> drule bind_outputs_allocation_frame >>
+  simp[adopt_return_fmp_def, merge_callee_state_def]
+QED
+
+Theorem fmp_source_nonalloc_frontier[local]:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA /\
+  inst.inst_opcode <> DALLOCA /\ pre_fmp_opcode inst.inst_opcode /\
+  step_inst fuel C inst s = OK t ==>
+  t.vs_fmp = s.vs_fmp
+Proof
+  strip_tac >> irule allocation_free_step_fmp_ok >>
+  gvs[allocation_free_opcode_def, pre_fmp_opcode_def] >> metis_tac[]
+QED
+
+Theorem fmp_source_dalloca[local]:
+  inst.inst_opcode = DALLOCA /\ dalloca_no_wrap inst s /\
+  step_inst fuel C inst s = OK t ==>
+  ?size_op sz out.
+    inst.inst_operands = [size_op] /\ inst.inst_outputs = [out] /\
+    eval_operand size_op s = SOME sz /\
+    lookup_var out t = SOME s.vs_fmp /\
+    w2n t.vs_fmp = w2n s.vs_fmp + ceil32 (w2n sz)
+Proof
+  strip_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  gvs[dalloca_no_wrap_def] >>
+  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE, word_add_n2w,
+       w2n_n2w] >>
+  simp[w2n_add_2]
+QED
+
+Theorem fmp_source_step_frontier[local]:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA /\
+  pre_fmp_opcode inst.inst_opcode /\ dalloca_no_wrap inst s /\
+  step_inst fuel C inst s = OK t ==>
+  w2n s.vs_fmp <= w2n t.vs_fmp
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = DALLOCA`
+  >- (drule_all fmp_source_dalloca >> strip_tac >> simp[]) >>
+  drule_all fmp_source_nonalloc_frontier >> simp[]
+QED
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
