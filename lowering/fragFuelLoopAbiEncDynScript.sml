@@ -887,6 +887,69 @@ Proof
   simp[Abbr `u5`, eval_operand_def, lookup_var_def, mstore_vars]
 QED
 
+(* round_semantics: the child's frame is used at its own allocation frontier. *)
+Theorem abi_encode_dyn_child_transport[local]:
+  !ca cb K fn G ctx s N p q a c.
+  frag_fuel {} {} {} ca cb K /\ fn_has_code ca cb fn /\
+  no_phi_fn fn /\ callees_stable G ctx fn /\ at_point ca s /\
+  N <= ca.cs_next_var /\
+  eval_operand (Var p) s = SOME a /\ eval_operand (Var q) s = SOME c /\
+  var_below ca.cs_next_var p /\ var_below ca.cs_next_var q ==>
+  ?j. j <= K /\ fuel_outcome G ctx fn s j
+    (\t. at_point cb t /\ vars_kept N {} s t /\
+         eval_operand (Var p) t = SOME a /\ eval_operand (Var q) t = SOME c)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `frag_fuel _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[frag_fuel_def] >>
+  disch_then (qspecl_then [`G`, `ca.cs_next_var`, `ctx`, `fn`, `s`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `j` >> simp[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac
+  >- (fs[vars_kept_def] >> rpt strip_tac >> first_x_assum irule >>
+      fs[var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+  >> gvs[eval_operand_def, vars_kept_def]
+QED
+
+Theorem abi_encode_dyn_round_core[local]:
+  !G ctx fn H Q B P R (counter:venom_state -> bytes32) Kb.
+  (!s. H s ==> fuel_outcome G ctx fn s 1
+     (\t. Q t \/ ?a c. B a c t /\ c = counter s /\ w2n c < 2**256-1)) /\
+  (!a c s. B a c s ==> fuel_outcome G ctx fn s 0 (P a c)) /\
+  (!a c s. P a c s ==> ?j. j <= Kb /\ fuel_outcome G ctx fn s j (R a c)) /\
+  (!a c s. R a c s ==> fuel_outcome G ctx fn s 1
+     (\t. H t /\ counter t = c+1w)) ==>
+  !s. H s ==> ?j. j <= Kb+2 /\ fuel_outcome G ctx fn s j
+    (\t. Q t \/ (H t /\ 2**256-1-w2n (counter t) < 2**256-1-w2n (counter s)))
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `?j. j <= Kb+2 /\ fuel_outcome G ctx fn s j result` >>
+  `1+(Kb+1) = Kb+2` by decide_tac >>
+  pop_assum (fn th => PURE_ONCE_REWRITE_TAC [GSYM th]) >>
+  qpat_x_assum `!s. H s ==> _` drule >> strip_tac >>
+  irule fuel_outcome_compose >> goal_assum (drule_at Any) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac
+  >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >> simp[Abbr `result`]) >>
+  rename1 `B a c t` >>
+  qpat_x_assum `!a c s. B a c s ==> _` drule >> strip_tac >>
+  `0+(Kb+1) = Kb+1` by simp[] >>
+  pop_assum (fn th => PURE_ONCE_REWRITE_TAC [GSYM th]) >>
+  irule fuel_outcome_compose >> goal_assum (drule_at Any) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `!a c s. P a c s ==> _` drule >> strip_tac >>
+  `?jj. jj <= j+1 /\ fuel_outcome G ctx fn t' jj result` suffices_by
+    (strip_tac >> qexists_tac `jj` >> simp[] >> decide_tac) >>
+  irule fuel_outcome_compose >> goal_assum (drule_at Any) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!a c s. R a c s ==> _` drule >> strip_tac >>
+  qexists_tac `1` >> simp[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  `w2n (c+1w) = w2n c + 1` by
+    (gvs[wordsTheory.dimword_def, GEN_ALL wordsTheory.w2n_add_2]) >>
+  simp[Abbr `result`] >> disj2_tac >> gvs[]
+QED
+
 (* The body saves the counter in i2 before the recursive encoder.  Its last
    memory write restores i2+1, even if the child overwrites the counter's
    memory.  A continuing round has i2 < len_op and thus cannot wrap. *)
