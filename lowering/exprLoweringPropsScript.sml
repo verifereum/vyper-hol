@@ -5318,3 +5318,11 @@ Proof
   rename1 `BytesT bound` >>
   Cases_on `bound` >> gvs[compile_literal_vv_def, comp_return_def]
 QED
+
+Theorem stmt_state_rel_start_gas_obs:
+  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s =
+  stmt_state_rel H ctx func cenv cx es s
+Proof
+  simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
+       immutable_alloca_sep_def]
+QED
