@@ -137,8 +137,7 @@ Theorem lower_vyper_runtime_unit_body_joint:
                (unit.cu_context, func)
                (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                            vs_inst_idx := 0 |>) marks (leaf, finish)) \/
-          (~source_exempt tops (res, am', rqs) /\
-           ?r. exit_result r /\
+          (?r. exit_result r /\
              gas_origin_path T
                (gas_explicit_sites unit.cu_context shadow_ctx)
                unit.cu_context func
