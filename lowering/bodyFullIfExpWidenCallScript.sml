@@ -85,7 +85,7 @@ Theorem ifexp_widened_call_arm_step_full:
   expr_type e = t /\ expr_type e0 = t /\ post_value_type cenv e0 = t /\
   ~is_word_type t /\ post_value_type cenv e = lowered_value_type cenv e /\
   type_widens_to (get_tenv cx) (lowered_value_type cenv e) t /\
-  (?stv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv) /\
+  evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
   (!name fields.
@@ -103,7 +103,7 @@ Theorem ifexp_widened_call_arm_step_full:
   (!v ptv. read_result cx tva ee = (INL v,ee) /\
           evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv ==>
           value_has_type ptv v) /\
-  (?ptv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv /\
   MAP FDOM es1.scopes = MAP FDOM ee.scopes /\
   vv_post ctx func cenv cx e es1 sa sm u ee tva vv z /\
   vv_store_bound cx t (lowered_value_type cenv e) ee tva vv z /\

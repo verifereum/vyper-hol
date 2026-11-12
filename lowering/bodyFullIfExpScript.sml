@@ -10,8 +10,8 @@ Ancestors
   logArgsRunPtr fragGasOrigin fragGasMode fragGasPath
   bodyPtrIfExpWordPrefix freshWrites bodyMemoryDefs
   bodyFullIfExpWiden bodyFullIfExpFinish bodyFullIfExpShadow
-  bodyFullIfExpWidenCall typedCopyDomain vyperTypeSystem bodyFullPreds bodySimFull gasOutcomeFullPath
-  gasOutcomeFullCompose gasOutcomeFull fragGasOriginJump fragGasOriginPtr
+  bodyFullIfExpWidenCall typedCopyDomain vyperTypeSystem bodyFullPreds bodySimFull
+  gasOutcomeFullCompose gasOutcomeFull exprSimUnwrap emitHelperProps vyperValue fragGasOriginJump fragGasOriginPtr
   exprOperandVar exprLoweringProps bodyPtrIfExpConditionalSource
   bodyPtrIfExpConditionSource stmtSimForRounds gasContext gasExemptCert
   exprSimIfExp exprSimOperators exprSimSource exprSimHyps exprSimDefs
@@ -67,7 +67,7 @@ Theorem expr_post_same_types[local]:
   expr_post ctx func cenv cx e es sa sb s0 es' v op s ==>
   expr_post ctx func cenv cx e0 es sa sb s0 es' v op s
 Proof
-  simp[expr_post_def] >> strip_tac >> gvs[]
+  simp[expr_post_def] >> strip_tac >> gvs[] >> first_assum ACCEPT_TAC
 QED
 
 (* The shared unwrap lemma's statement at post_value_type implies its
@@ -300,7 +300,7 @@ Theorem ifexp_arm_step_full:
   (!v ptv. read_result cx tva ee = (INL v,ee) /\
           evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv ==>
           value_has_type ptv v) /\
-  (?ptv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv /\
   MAP FDOM es1.scopes = MAP FDOM ee.scopes /\
   vv_post ctx func cenv cx e es1 sa sm u ee tva vv z /\
   vv_store_bound cx t (lowered_value_type cenv e) ee tva vv z /\
@@ -341,8 +341,7 @@ Theorem ifexp_arm_step_full:
             w2n w + type_memory_size rt <= z'.vs_alloca_next) /\
     ghost_kept_at lo cenv es1 sa G1 tn1 u H tf
 Proof
-  strip_tac >>
-  qpat_x_assum `_ \/ _ /\ _ /\ type_widens_to _ _ _ /\ _` strip_assume_tac
+  strip_tac
   >~ [`type_widens_to _ _ _`]
   >- (drule_all ifexp_widened_call_arm_step_full >> disch_then ACCEPT_TAC) >>
   qpat_x_assum `post_value_type cenv e = t`
@@ -378,7 +377,8 @@ Resume ifexp_arm_step_full[conv]:
   `?rtl. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rtl` by
     (Cases_on `is_bytestring_type (lowered_value_type cenv e)` >> gvs[] >>
      metis_tac[bytestring_fits_evaluate_type]) >>
-  `type_memory_size rty = type_memory_size rtl` by
+  `!r. evaluate_type (get_tenv cx) (expr_type e) = SOME r ==>
+       type_memory_size r = type_memory_size rtl` by
     (fs[same_memory_layout_def] >> metis_tac[]) >>
   metis_tac[]
 QED
@@ -524,7 +524,10 @@ Theorem ifexp_arm_outcome_full:
        ghost_kept_at lo cenv es1 sa G1 tn1 u G tn)
     (\res ee gt r. expr_exit res r)
 Proof
-  strip_tac >>
+  (* keep the arm-shape disjunction whole: the arm step takes it as one premise *)
+  disch_then (fn th => MAP_EVERY
+    (fn c => if is_disj (concl c) then assume_tac c else strip_assume_tac c)
+    (CONJUNCTS th)) >>
   `gas_admissible (eval_expr cx e) expr_vv_res_ok es1` by
     (rw[gas_admissible_def] >>
      qpat_x_assum `gas_admissible (bind _ _) _ _`
@@ -553,8 +556,7 @@ Resume ifexp_arm_outcome_full[arm]:
   qmatch_goalsub_rename_tac `gas_outcome_full _ _ _ (ee, z, Gz, tnz) _ _` >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
   `eval_expr cx e (es1 with gas_obs := xs) = (INL tv,ee)` by
-    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     simp[]) >>
+    metis_tac[listTheory.APPEND_NIL] >>
   `MAP FDOM es1.scopes = MAP FDOM ee.scopes` by
     (drule eval_expr_preserves_scopes_dom >> simp[]) >>
   `!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v` by
@@ -565,8 +567,9 @@ Resume ifexp_arm_outcome_full[arm]:
            evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv ==>
            value_has_type ptv v` by
     (rpt strip_tac >>
-     qpat_x_assum `!gs v es2 ptv. _` irule >>
-     qexistsl_tac [`ee`,`xs`] >> simp[bind_def]) >>
+     qpat_x_assum `!gs v es2 ptv. _`
+       (qspecl_then [`xs`,`v`,`ee`,`ptv`] mp_tac) >>
+     simp[bind_def]) >>
   `?ptv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv` by
     (qpat_assum `_ \/ _ /\ _ /\ type_widens_to _ _ _ /\ _` strip_assume_tac >>
      metis_tac[]) >>
@@ -574,15 +577,6 @@ Resume ifexp_arm_outcome_full[arm]:
     (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >> simp[]) >>
   qpat_assum `compile_expr cenv ty e sa = _`
     (strip_assume_tac o MATCH_MP compile_expr_extends) >>
-  (* TEMPORARY until expr_vv_sim_full's post carries the constructor LocCode
-     clause (manager branch). *)
-  `cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-   ?val. read_result cx tv ee = (INL val,ee) /\
-         !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
-                eval_operand (vv_operand vv) z = SOME w ==>
-                w2n w + type_memory_size rt <= lo /\
-                (!mem. mem_agree_outside tnz.t_mem z.vs_memory mem ==>
-                       val_in_memory rt val (w2n w) mem)` by cheat >>
   drule_all ifexp_arm_step_full >> strip_tac >>
   `gas_admissible (conditional_result cx tv) expr_vv_res_ok (ee with gas_obs := [])` by
     (irule gas_admissible_bind_tail >> metis_tac[]) >>
@@ -597,7 +591,7 @@ Resume ifexp_arm_outcome_full[arm]:
   first_assum (irule_at Any) >>
   qexistsl_tac [`INL tc`,`ee`] >>
   conj_tac >- first_assum MATCH_ACCEPT_TAC >>
-  BETA_TAC >> simp[]
+  BETA_TAC >> simp[] >> rpt strip_tac >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Finalise ifexp_arm_outcome_full
@@ -622,7 +616,8 @@ Proof
   drule emit_inst_extends >> strip_tac >> simp[] >>
   fs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
      valueEncodingTheory.typed_val_to_w256_def,
-     valueEncodingTheory.val_to_w256_def]
+     valueEncodingTheory.val_to_w256_def] >>
+  qexistsl_tac [`cop`,`sj`,`sn`] >> gvs[]
 QED
 
 (* The ghost invariant ignores the control position. *)
@@ -786,7 +781,7 @@ Resume ifexp_vv_full_root[selected]:
     simp[evaluation_state_component_equality] >>
   `bind (eval_expr cx c) (read_result cx) (es with gas_obs := xs) =
      (INL v,mid)` by
-    (first_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+    metis_tac[listTheory.APPEND_NIL] >>
   drule_all ifexp_condition_bool >>
   disch_then (qx_choose_then `sel` SUBST_ALL_TAC) >>
   qexists_tac `BoolV sel` >> conj_tac >- simp[] >>

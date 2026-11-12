@@ -8,7 +8,7 @@
 Theory bodyFullOfVv
 Ancestors
   logArgsRunPtr fragGasOrigin fragGasMode fragGasPath
-  bodySimFull exprLowering compileEnv gasOutcomeFullCompose gasOutcomeFullPath gasOutcomeFull
+  bodySimFull exprLowering compileEnv gasOutcomeFullCompose gasOutcomeFull
   gasShadowState exprSimMemorySource exprSimUnwrap exprOperandVar
   exprLoweringProps gasExemptCert gasContext exprSimDefs fragExec
   vyperEvalExprPreservesScopesDom vyperState
@@ -149,15 +149,6 @@ Resume expr_sim_full_of_vv[read]:
     (drule eval_expr_preserves_scopes_dom >> simp[]) >>
   `!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v` by
     metis_tac[] >>
-  (* TEMPORARY until expr_vv_sim_full's post carries the constructor LocCode
-     clause (manager branch). *)
-  `cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
-   ?val. read_result cx tv ee = (INL val, ee) /\
-         !rt w. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME rt /\
-                eval_operand (vv_operand vv) t = SOME w ==>
-                w2n w + type_memory_size rt <= lo /\
-                (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
-                       val_in_memory rt val (w2n w) mem)` by cheat >>
   qpat_x_assum `!e ty sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti.
                   compile_expr _ _ _ _ = _ /\ _ ==> _`
     (qspecl_then [`e`,`ty`,`sa`,`vv`,`sm`,`sm`,`op`,`sb`,`es`,`ee`,`s0`,`t`,
