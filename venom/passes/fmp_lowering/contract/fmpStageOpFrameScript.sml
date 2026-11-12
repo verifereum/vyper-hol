@@ -201,6 +201,78 @@ Proof
   gvs[fmp_ordinary_not_reclaim]
 QED
 
+Theorem fmp_ordinary_root_transport[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; PHI] /\
+  step_inst k C inst s = OK s1 /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+  fmp_sites_ok sm fmp0 (w2n fmp) lo s.vs_fmp /\
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  fmp_reclaim_states infos fn = SOME states /\
+  df_at NONE states s.vs_current_bb s.vs_inst_idx = SOME st /\
+  fmp_frame_covers sm env (fmp_frame_base (w2n fmp) stk) lo G /\
+  (if s.vs_current_bb = rl /\ s.vs_inst_idx < rp then
+     lo = fmp_frame_lo fmp0 ts /\ st.frs_stack = [] /\
+     (fn_is_context_entry ctx fn ==> fmp0 = fmp_frame_lo fmp0 ts) /\
+     (~fn_is_context_entry ctx fn ==>
+       LENGTH s.vs_params < LENGTH t.vs_params /\
+       EL (LENGTH s.vs_params) t.vs_params = n2w (fmp_frame_lo fmp0 ts))
+   else lookup_var runner t = SOME (n2w lo) /\
+     ?regions. fmp_ledger_ok (fn_insts fn) env t lo regions /\
+       MAP (\r. r.fr_mark) regions = st.frs_stack /\
+       EVERY (\r. fmp_frame_lo fmp0 ts <= r.fr_lo) regions /\
+       fmp_ledger_link sm (fmp_frame_base (w2n fmp) stk) lo regions) /\
+  s1.vs_current_bb = s.vs_current_bb /\ s1.vs_params = s.vs_params /\
+  t1.vs_params = t.vs_params /\
+  (!v. ~MEM v inst.inst_outputs ==>
+    FLOOKUP t1.vs_vars v = FLOOKUP t.vs_vars v) ==>
+  ?st'. df_at NONE states s1.vs_current_bb (SUC s.vs_inst_idx) = SOME st' /\
+    fmp_frame_covers sm env (fmp_frame_base (w2n fmp) stk) lo
+      (step_prov PG G inst s1) /\
+    (if s1.vs_current_bb = rl /\ SUC s.vs_inst_idx < rp then
+       lo = fmp_frame_lo fmp0 ts /\ st'.frs_stack = [] /\
+       (fn_is_context_entry ctx fn ==> fmp0 = fmp_frame_lo fmp0 ts) /\
+       (~fn_is_context_entry ctx fn ==>
+         LENGTH s1.vs_params < LENGTH t1.vs_params /\
+         EL (LENGTH s1.vs_params) t1.vs_params = n2w (fmp_frame_lo fmp0 ts))
+     else lookup_var runner (t1 with vs_inst_idx := j) = SOME (n2w lo) /\
+       ?regions. fmp_ledger_ok (fn_insts fn) env
+           (t1 with vs_inst_idx := j) lo regions /\
+         MAP (\r. r.fr_mark) regions = st'.frs_stack /\
+         EVERY (\r. fmp_frame_lo fmp0 ts <= r.fr_lo) regions /\
+         fmp_ledger_link sm (fmp_frame_base (w2n fmp) stk) lo regions)
+Proof
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >> fs[] >>
+  `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+      s.vs_current_bb = rl ==> rp <> SUC s.vs_inst_idx` by
+    metis_tac[fmp_ordinary_root_boundary] >>
+  `s.vs_current_bb = rl /\ SUC s.vs_inst_idx < rp <=>
+    s.vs_current_bb = rl /\ s.vs_inst_idx < rp` by metis_tac[DECIDE ``a <> SUC b ==> (SUC b < a <=> b < a)``] >>
+  `fmp_frame_covers sm env (fmp_frame_base (w2n fmp) stk) lo
+      (step_prov PG G inst s1)` by
+    (irule fmp_frame_covers_ordinary_step >> simp[] >> metis_tac[]) >>
+  `?st'. df_at NONE states s.vs_current_bb (SUC s.vs_inst_idx) = SOME st' /\
+      st'.frs_stack = st.frs_stack` by
+    (gvs[active_inst_def] >>
+     qpat_x_assum `bb.bb_label = s.vs_current_bb` (SUBST_ALL_TAC o SYM) >>
+     irule fmp_ordinary_analysis_suc >>
+     gvs[o1_fn_shape_def, wf_function_def, fn_labels_def,
+         pre_fmp_ops_def, EVERY_MEM, pre_fmp_opcode_def] >>
+     metis_tac[]) >>
+  qexists_tac `st'` >> simp[] >>
+  Cases_on `s.vs_current_bb = rl /\ s.vs_inst_idx < rp`
+  >- gvs[] >>
+  gvs[] >> IF_CASES_TAC >- metis_tac[] >> conj_tac
+  >- (drule_all fmp_stage_witness_pin >> strip_tac >>
+      gvs[lookup_var_def] >> metis_tac[]) >>
+  qexists_tac `regions` >> simp[] >>
+  irule fmp_ledger_step_frame >> metis_tac[]
+QED
+
 (* Why: an ordinary instruction is no reclaim point and changes no
    analysis stack, so the next index has no restore and the same stack;
    the control map moves by one (no DALLOCA, and the only step reaching
