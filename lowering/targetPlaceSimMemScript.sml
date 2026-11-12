@@ -46,6 +46,7 @@ End
 Theorem body_target_sim_mem:
   !t cx tops ctx func cenv env es.
     body_base_target_mem_ok cx t /\ body_inv tops ctx cenv cx /\
+    EVERY (supported_expr tops) (target_indices t) /\
     target_pre cenv cx env t es ==>
     target_sim_mem ctx func cenv cx env t es
 Proof
