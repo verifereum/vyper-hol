@@ -379,7 +379,8 @@ End
 (* Why: the INVOKE case of the runner induction (run_defs_ind's step_inst
    predicate): from a related point past the INVOKE's restores, the target
    INVOKE matches the source one, returning to a related point with the
-   same runner; the site map may change across the call. *)
+   same runner, on the source's fuel; the site map may change across the
+   call. *)
 Definition fmp_invoke_sim_def:
   fmp_invoke_sim rpolicy D C C' vs vs' fmp eom k inv s <=>
     !stk PG G tn fn sm lo t ts fn' inv' r.
@@ -391,8 +392,8 @@ Definition fmp_invoke_sim_def:
       lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
       active_inst fn' inv' t /\
       step_inst k C inv s = r /\ terminates r ==>
-      ?m r'.
-        step_inst m C' inv' t = r' /\
+      ?r'.
+        step_inst k C' inv' t = r' /\
         case r of
           OK s1 =>
             ?t1 tn1 next sm1.
