@@ -2823,6 +2823,16 @@ Proof
   disj2_tac >> qexists_tac `bb` >> simp[]
 QED
 
+Theorem abi_dyn_literal_jump_target[local]:
+  !T inst s t. (^dyn_J) T inst /\
+    MEM inst.inst_opcode [JMP; JNZ] /\ step_inst_base inst s = OK t ==>
+    t.vs_current_bb IN T
+Proof
+  rpt gen_tac >> simp_tac std_ss [] >> strip_tac >>
+  gvs[] >> gvs[step_inst_base_opcode_eqs,
+    AllCaseEqs(), jump_to_def] >> metis_tac[]
+QED
+
 Theorem abi_dyn_region_cut_instruction[local]:
   !sa sb fn id s. at_point sb s ==>
     ?bb. lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME bb /\
