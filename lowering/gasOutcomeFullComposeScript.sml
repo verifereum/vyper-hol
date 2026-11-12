@@ -20,14 +20,19 @@ Proof
   strip_tac >> gvs[] >> metis_tac[valid_horizon_append]
 QED
 
-(* The certificate premises are the existing type-specific bind/error
+(* The continuation sees the left run's own source equation and its post on
+   every valid horizon of one endpoint.
+   The certificate premises are the existing type-specific bind/error
    constructors, as in gas_outcome_ptr_bind. They do not add an oracle
    or execution premise to any source-language theorem. *)
 Theorem gas_outcome_full_bind_all:
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
     (es, s, G, tn)
     Q1 (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
-  (!res mid G1 tn1 t.
+  (!marks res mid G1 tn1 t.
+     (!tail. source (es with gas_obs :=
+                       gas_explicit marks s.vs_gas_readings ++ tail) =
+             (res, mid with gas_obs := tail)) /\
      storage_trace_domain cx st0 mid.storage_trace /\
      (!H. valid_horizon cx st0 H mid.storage_trace ==>
           Q1 H res mid G1 tn1 t) ==>
@@ -99,9 +104,10 @@ Proof
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        Q1 H res (ee with gas_obs := []) G' tn' t` by
     (rpt strip_tac >> res_tac >> fs[fragExecTheory.exit_result_def]) >>
-  qpat_x_assum `!res mid G1 tn1 t. storage_trace_domain _ _ _ /\ _ ==> _`
-    (qspecl_then [`res`, `ee with gas_obs := []`, `G'`, `tn'`, `t`] mp_tac) >>
-  impl_tac >- simp[] >> reverse strip_tac >> gvs[]
+  qpat_x_assum `!marks res mid G1 tn1 t. _ /\ _ /\ _ ==> _`
+    (qspecl_then [`marks`, `res`, `ee with gas_obs := []`, `G'`, `tn'`, `t`]
+       mp_tac) >>
+  impl_tac >- fs[] >> reverse strip_tac >> gvs[]
   (* the left lands with an abrupt source result: so does the bind *)
   >- (rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks` >>
       disj2_tac >> disj1_tac >>
