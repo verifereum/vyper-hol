@@ -4,7 +4,8 @@ Ancestors
   targetSubscriptMapping bodyAllocMemory bodyMemTbExtract32MemoryTransfer
   bodyMemBiMethodIdSuffix bodyMemBiSha256Compose entrySinkExtraction
   bodyDeclMemoryCounted entryDecoderHistoryFrame allocaHistoryFragment
-  exprSimHash exprSimProps freshWrites varsExt fragExec fragExecMem memSafeRun instMemFrontier
+  exprSimHashBoundary exprSimHash exprSimMapKey exprOperandVar exprSimOperators
+  valueEncodingProps words ASCIInumbers exprSimProps freshWrites varsExt fragExec fragExecMem memSafeRun instMemFrontier
   venomMemDefs exprLowering exprLoweringProps emitHelper emitHelperProps
   context compileEnv loweringPosts loweringStateRelDefs fragGasMode
   venomExecSemantics venomState venomInst list rich_list finite_map
@@ -141,4 +142,90 @@ Proof
   simp[] >> irule target_mapping_post >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`es'`, `key`, `kt`, `slot`] >> simp[]
+QED
+
+Theorem target_keccak_key_mem_safe[local]:
+  compile_keccak256_key key F sa = (op,sb) /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  eval_operand key s = SOME (n2w b) /\ mload b s = n2w len /\
+  b+32 < dimword(:256) /\ len < dimword(:256) /\
+  b+32 <= s.vs_alloca_next /\
+  (len = 0 \/ b+32+len <= s.vs_alloca_next) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  simp[compile_keccak256_key_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> gnvs[] >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
+    by decide_tac >>
+  simp[emitted_insts_def, DROP_APPEND] >>
+  rewrite_tac[run_inst_seq_mem_ok_cons] >> conj_tac
+  >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  drule step_ADD >> disch_then (qspec_then `Lit 32w` mp_tac) >>
+  simp[eval_operand_def] >>
+  disch_then (qspecl_then [`sa.cs_next_id`,
+    `STRING #"%" (toString sa.cs_next_var)`] assume_tac) >> simp[] >>
+  `eval_operand key (update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w b + 32w) s) = SOME (n2w b)` by
+    (irule eval_operand_update_other_local >> simp[] >>
+     rpt strip_tac >> first_x_assum drule >> simp[not_fresh_at_def]) >>
+  conj_tac >- simp[below_frontier_MLOAD, update_var_def] >>
+  drule step_MLOAD_local >>
+  disch_then (qspecl_then [`STRING #"%" (toString (sa.cs_next_var+1))`,
+                          `sa.cs_next_id+1`] assume_tac) >> simp[] >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_SHA3,
+       eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE, toString_inj, GSYM word_add_n2w] >>
+  gvs[mload_def, GSYM word_add_n2w] >>
+  Cases_on `len = 0` >> simp[] >>
+  `n2w b + 32w = (n2w (b+32):bytes32)` by simp[word_add_n2w] >>
+  simp[] >> decide_tac
+QED
+
+Theorem target_keccak_key_prefix_mem[local]:
+  compile_keccak256_key key F sa = (op,sb) /\ fn_has_code sa sb func /\
+  (!x. key = Var x ==> not_fresh_at sa x) /\
+  eval_operand key s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  b+32 < dimword(:256) /\ LENGTH bs < dimword(:256) /\
+  b+32 <= s.vs_alloca_next /\
+  (bs = [] \/ b+32+LENGTH bs <= s.vs_alloca_next) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fn_inst_ids_distinct func /\ alloca_history func s ==>
+  ?t. gas_marked_path T ctx func s 0 (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand op t = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+    alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    (irule target_keccak_key_mem_safe >> goal_assum (drule_at Any) >>
+     simp[GSYM mem_word_at_eq_mload] >>
+     qexistsl [`key`, `LENGTH bs`, `op`] >> simp[]) >>
+  drule_all compile_keccak256_key_run >> strip_tac >>
+  drule target_keccak_key_suffix_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    fs[FILTER_EQ_NIL, EVERY_MEM] >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  drule_all method_id_run_path_mem >> strip_tac >>
+  drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
+  `t.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `t with vs_vars := _ = s`
+       (mp_tac o Q.AP_TERM `\z. z.vs_alloca_next`) >> simp[]) >>
+  qpat_x_assum `!ctx. _` (qspec_then `ctx` strip_assume_tac) >>
+  qexists `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  fs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def] >>
+  qpat_x_assum `t with vs_vars := _ = s`
+    (mp_tac o Q.AP_TERM `\z. z with vs_inst_idx := s.vs_inst_idx`) >> gvs[]
 QED
