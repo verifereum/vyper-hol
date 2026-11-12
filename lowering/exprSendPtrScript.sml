@@ -1,5 +1,6 @@
 Theory exprSendPtr
 Ancestors
+  sourceUnitExecution
   callStepPtr wordArgsPtr exprSimSend fragGasSeqPtr fragGasPathPtr stmtAssertPtr
   ptrSafeRun ptrDiscipline venomExecSemantics venomExecProofs
   venomInst venomInstProofs venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
@@ -92,7 +93,7 @@ Theorem ptr_inst_ok_send_call:
   ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn inst s
 Proof
   strip_tac >> irule ptr_inst_ok_call >> simp[allocas_from_def] >>
-  gvs[bodyPtrDefsTheory.stor_taint_ok_def, bodyPtrDefsTheory.cx_dead_def] >>
+  gvs[bodyPtrDefsTheory.stor_taint_ok_def, sourceUnitExecutionTheory.cx_dead_def] >>
   conj_tac
   >- (irule taint_ok_call >>
       gvs[op_taint_def, source_memory_read_ranges_def,
