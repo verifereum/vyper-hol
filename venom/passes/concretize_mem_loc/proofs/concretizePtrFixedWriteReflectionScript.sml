@@ -107,7 +107,7 @@ Proof
   disch_then (qspec_then `EL q done` mp_tac) >>
   simp[ptr_snapshot_ownership_def] >> strip_tac >>
   drule_all ptr_source_ownership_static_prov_erases >>
-  simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
+  simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_every_dyn] >> strip_tac >>
   `FLOOKUP bj (token,bid) = SOME (db,sb)` by
     (qpat_x_assum `!v. FLOOKUP (EL (EL q done) h).po_prov v = _`
        (qspec_then `dv` mp_tac) >>
