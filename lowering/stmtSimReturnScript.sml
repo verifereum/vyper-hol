@@ -1260,10 +1260,13 @@ Proof
   rpt strip_tac >> simp[stmt_exit_ptr_def] >>
   simp[intret_q_def, result_rel_def] >>
   TRY disj2_tac >> qexists_tac `t` >> simp[] >>
-  conj_tac >- metis_tac[intret_vals_match_word] >>
-  first_x_assum (drule_then strip_assume_tac) >>
+  `expr_post H ctx func cenv cx e es sa sm s0 mid v shadow_op t` by
+    (qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+       drule >> simp[]) >>
   `state_rel H func cenv cx mid t` by
     fs[expr_post_def, stmt_state_rel_def] >>
+  rpt conj_tac >>
+  TRY (metis_tac[intret_vals_match_word] >> NO_TAC) >>
   drule state_rel_scopes_nil >>
   strip_tac >>
   `mid with <|scopes := []; gas_obs := tail|> =
