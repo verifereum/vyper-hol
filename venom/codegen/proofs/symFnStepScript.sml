@@ -878,7 +878,11 @@ Resume sym_fn_entry_block_step[entry_body_index]:
 QED
 
 Resume sym_fn_entry_block_step[entry_body_finish]:
-  strip_tac >> drule_all sym_block_body_frame_sim >>
+  strip_tac >>
+  `~vs_p.vs_call_ctx.cc_static` by
+    (qpat_assum `~vs.vs_call_ctx.cc_static` mp_tac >>
+     qpat_assum `vs_p.vs_call_ctx = _` (fn th => rewrite_tac[th])) >>
+  drule_all sym_block_body_frame_sim >>
   suspend "entry_body_result"
 QED
 
@@ -947,7 +951,14 @@ Resume sym_fn_block_frame_step[frame_body]:
 QED
 
 Resume sym_fn_block_frame_step[frame_body_match]:
-  strip_tac >> drule_all sym_block_body_frame_sim >>
+  strip_tac >>
+  `~(s' with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_call_ctx.cc_static` by
+    (qpat_assum `~vs.vs_call_ctx.cc_static` mp_tac >>
+     qpat_assum `eval_phis _ _ = OK _`
+       (mp_tac o AP_TERM ``\st:venom_state. st.vs_call_ctx`` o
+        MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
+     simp[]) >>
+  drule_all sym_block_body_frame_sim >>
   suspend "frame_result"
 QED
 
