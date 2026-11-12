@@ -1376,7 +1376,7 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
-Theorem send_call_value_preserves_immutables[local]:
+Theorem send_call_value_preserves_immutables:
   send_call_value mut cx st = (res,st') ==>
   st'.immutables = st.immutables
 Proof
@@ -1387,7 +1387,7 @@ Proof
   gvs[]
 QED
 
-Theorem call_lock_action_preserves_immutables[local]:
+Theorem call_lock_action_preserves_immutables:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
