@@ -134,7 +134,8 @@ Theorem prefix_scalar_complete_shift_code:
       (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 final.vs_memory) ==>
         val_in_memory tv v d mem)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt final) ==>
-     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+     !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+    (!D'. inst_seq_ptr D' lo ctx func PG G tn (emitted_insts st st') initial H qt)
 Proof
   strip_tac >> drule_all prefix_scalar_complete_shift >>
   disch_then (qspecl_then [`site'`,`PG`,`D`] mp_tac) >>
@@ -187,7 +188,8 @@ Theorem prefix_member_setup_complete_shift_code:
     scratch_base+N <= prepared.vs_alloca_next /\
     prepared.vs_outcomes = s.vs_outcomes /\ prepared.vs_tx_ctx = s.vs_tx_ctx /\
     prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings /\
-    prepared.vs_code = s.vs_code
+    prepared.vs_code = s.vs_code /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >> drule_all prefix_member_setup_complete_shift >>
   disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[LET_THM] >> strip_tac >>
@@ -251,7 +253,8 @@ Theorem prefix_canonical_member_setup_complete_shift_code:
     scratch_base+N <= prepared.vs_alloca_next /\
     prepared.vs_outcomes = s.vs_outcomes /\ prepared.vs_tx_ctx = s.vs_tx_ctx /\
     prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings /\
-    prepared.vs_code = s.vs_code
+    prepared.vs_code = s.vs_code /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >> drule_all prefix_canonical_member_setup_complete_shift >>
   disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[LET_THM] >> strip_tac >>

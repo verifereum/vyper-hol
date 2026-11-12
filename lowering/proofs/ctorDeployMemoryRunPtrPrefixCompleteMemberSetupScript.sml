@@ -69,7 +69,8 @@ Theorem prefix_member_setup_complete_shift:
     ctor_actual_scratch fn ids scratch_base N prepared /\
     scratch_base+N <= prepared.vs_alloca_next /\
     prepared.vs_outcomes = s.vs_outcomes /\ prepared.vs_tx_ctx = s.vs_tx_ctx /\
-    prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings
+    prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
@@ -192,7 +193,8 @@ Theorem prefix_canonical_member_setup_complete_shift:
     ctor_actual_scratch fn ids scratch_base N prepared /\
     scratch_base+N <= prepared.vs_alloca_next /\
     prepared.vs_outcomes = s.vs_outcomes /\ prepared.vs_tx_ctx = s.vs_tx_ctx /\
-    prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings
+    prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >>
   drule_all prefix_canonical_member_setup_inputs >> strip_tac >>
