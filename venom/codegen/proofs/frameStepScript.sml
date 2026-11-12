@@ -40,6 +40,28 @@ Definition frame_gas_left_def:
     | [] => 0
 End
 
+Theorem write_storage_frame_gas:
+  write_storage address key value es = (r,s') ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left s' = frame_gas_left es
+Proof
+  simp[write_storage_def, update_accounts_def, return_def] >>
+  strip_tac >> gvs[frame_gas_left_def]
+QED
+
+Theorem update_gas_refund_frame_gas:
+  update_gas_refund updates es = (r,s') ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left s' = frame_gas_left es
+Proof
+  PairCases_on `updates` >>
+  namedCases_on `es.contexts` ["", "head tail"] >>
+  simp[update_gas_refund_def, get_current_context_def,
+       set_current_context_def, bind_def, return_def, fail_def] >>
+  rpt strip_tac >> gvs[frame_gas_left_def] >>
+  PairCases_on `head` >> gvs[frame_gas_left_def]
+QED
+
 Theorem step_stack_gas_budget:
   es.contexts = (c,rb)::rest /\ c.gasUsed <= c.msgParams.gasLimit /\
   (!args. cost args <= B) /\ B <= c.msgParams.gasLimit - c.gasUsed /\
