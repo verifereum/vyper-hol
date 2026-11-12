@@ -451,10 +451,10 @@ Theorem fmp_lowering_stage_sim:
   o1_pre 3 C C' /\ dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs' /\
   o1_inv D 3 C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
   fmp_variant_room (SOME fmp) C' vs' ==>
-  ctx_sim D C C' (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs'
+  ctx_sim_fuel I D C C'
+    (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs'
 Proof
-  rpt strip_tac >> simp[ctx_sim_def] >> rpt strip_tac >>
-  qexists_tac `fuel` >>
+  rpt strip_tac >> simp[ctx_sim_fuel_def] >> rpt strip_tac >>
   `?eom. max_live_eom C = SOME eom` by
     (qpat_x_assum `o1_inv D 3 C _` mp_tac >>
      simp[o1_inv_def, o1_static_inv_def] >> metis_tac[]) >>
