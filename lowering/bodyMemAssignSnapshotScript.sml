@@ -11,7 +11,7 @@ Ancestors
   exprLowering context compileEnv vyperInterpreter vyperState venomState
   exprSimUnwrap exprSimUnwrapProps exprSimDefs venomInst venomExecSemantics
   instMemFrontier fragGasPathMem emitHelper valueCopyBytes memSafeRun
-  bodyImmutableUnwrapMemory bodyMemSnapshotStoreRoom
+  bodyImmutableUnwrapMemory bodyMemSnapshotStoreRoom bodyMemSnapshotStages
 
 Theorem snapshot_storage_word_readonly[local]:
   !ctx func cenv cx e es sa sm sb s0 ee v t p op s.
