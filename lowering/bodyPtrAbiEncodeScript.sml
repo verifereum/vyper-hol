@@ -8,7 +8,7 @@
  *)
 Theory bodyPtrAbiEncode
 Ancestors
-  exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
+  bodyPtrAbiEncodeSingle bodyPtrAbiEncodeTuple exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
@@ -19,5 +19,13 @@ Theorem abi_encode_expr_ptr_ok:
      body_exprs_ptr_ok cx es) ==>
     body_expr_ptr_ok cx (TypeBuiltin v11 (AbiEncode b m) typ es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[Once body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `LENGTH es = 1 /\ ~b`
+  >- (gvs[LENGTH_EQ_NUM_compute] >>
+      `body_exprs_ptr_ok cx [h]` by
+        (first_x_assum irule >> simp[type_builtin_args_length_ok_def]) >>
+      `body_expr_ptr_ok cx h` by fs[body_exprs_ptr_ok_def] >>
+      irule abi_encode_single_sim_ptr >> metis_tac[]) >>
+  irule abi_encode_tuple_sim_ptr >> metis_tac[]
 QED
