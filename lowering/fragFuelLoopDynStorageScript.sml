@@ -38,10 +38,10 @@ QED
 Theorem copy_elements_run[local]:
   !cenv src slot elem cnt tr s0 x sz.
     compile_copy_elements_to_slots cenv src slot elem cnt tr s0 = (x, sz) ==>
-    ?hdr body exit ctr ltv donev tmp so se lo le
+    ?hdr blbl exit ctr ltv donev tmp so se lo le
      a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19.
       fresh_label "dyn_cond" s0 = (hdr,a1) /\
-      fresh_label "dyn_body" a1 = (body,a2) /\
+      fresh_label "dyn_body" a1 = (blbl,a2) /\
       fresh_label "dyn_exit" a2 = (exit,a3) /\
       fresh_var a3 = (ctr,a4) /\
       emit_inst ASSIGN [Lit 0w] [ctr] a4 = ((),a5) /\
@@ -49,8 +49,8 @@ Theorem copy_elements_run[local]:
       new_block hdr a6 = (a6.cs_current_bb,a7) /\
       emit_op LT [Var ctr; cnt] a7 = (Var ltv,a8) /\
       emit_op ISZERO [Var ltv] a8 = (Var donev,a9) /\
-      emit_inst JNZ [Var donev; Label exit; Label body] [] a9 = ((),a10) /\
-      new_block body a10 = (a10.cs_current_bb,a11) /\
+      emit_inst JNZ [Var donev; Label exit; Label blbl] [] a9 = ((),a10) /\
+      new_block blbl a10 = (a10.cs_current_bb,a11) /\
       emit_op MUL [Var ctr; Lit (n2w (type_memory_bytes cenv elem))] a11 =
         (so,a12) /\
       emit_op ADD [src; so] a12 = (se,a13) /\
@@ -128,7 +128,8 @@ Proof
   qspecl_then [`0`, `ctx`, `fn`, `s`, `bb`,
     `mk_inst id1 LT [Var ctr; cnt] [lt]`] mp_tac run_from_nonterm >>
   simp[mk_inst_def, is_terminator_def, step_inst_non_invoke] >>
-  simp[GSYM mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def]
+  simp[GSYM mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def] >>
+  Cases_on `eval_operand (Var ctr) s` >> simp[]
 QED
 
 (* The element loop runs at most 2 ** 256 rounds: the counter counts up
@@ -161,10 +162,7 @@ Proof
    !M. M <= st.cs_next_var ==>
        ~var_below M ltv /\ ~var_below M donev /\ ~var_below M ctr /\
        ~var_below M tmp` by
-    (simp[var_below_def, ASCIInumbersTheory.toString_inj] >>
-     rpt strip_tac
-     >- decide_tac >>
-     metis_tac[LESS_EQ_TRANS, DECIDE ``!a:num. a <= a + 1 /\ a <= a + 2``]) >>
+    simp[var_below_def, ASCIInumbersTheory.toString_inj] >>
   `!x. cnt = Var x ==>
        var_below a11.cs_next_var x /\ x <> ltv /\ x <> donev /\ x <> ctr /\
        x <> tmp` by
@@ -173,15 +171,15 @@ Proof
   qexists_tac `1 + dimword(:256) * (Kbody + 2)` >>
   simp[frag_fuel_def] >> rpt gen_tac >> strip_tac >>
   qspecl_then [`st`, `a5`, `a6`, `a7`, `a8`, `a9`, `a10`, `a11`, `a16`, `a17`,
-    `a18`, `a19`, `st'`, `hdr`, `body`, `exit`, `ctr`, `cnt`, `Var ltv`,
+    `a18`, `a19`, `st'`, `hdr`, `blbl`, `exit`, `ctr`, `cnt`, `Var ltv`,
     `Var donev`, `Var tmp`, `fn`] mp_tac dynarray_loop_intervals >>
   impl_tac >- simp[] >> strip_tac >>
   `?cb. lookup_block hdr fn.fn_blocks = SOME cb /\
         cb.bb_instructions =
           [mk_inst a7.cs_next_id LT [Var ctr; cnt] [ltv];
            mk_inst a8.cs_next_id ISZERO [Var ltv] [donev];
-           mk_inst a9.cs_next_id JNZ [Var donev; Label exit; Label body] []]`
-    by (qspecl_then [`a6`, `a7`, `a8`, `a9`, `a10`, `a11`, `hdr`, `body`,
+           mk_inst a9.cs_next_id JNZ [Var donev; Label exit; Label blbl] []]`
+    by (qspecl_then [`a6`, `a7`, `a8`, `a9`, `a10`, `a11`, `hdr`, `blbl`,
           `exit`, `ctr`, `cnt`, `Var ltv`, `Var donev`, `fn`] mp_tac
           dynarray_condition_code >> simp[]) >>
   `!u. at_point a16 u ==>
@@ -197,7 +195,6 @@ Proof
   `fn_has_code a4 a6 fn` by metis_tac[fn_has_code_split] >>
   `at_point a4 s` by fs[at_point_def] >>
   drule_all dynarray_init_code >> strip_tac >>
-  qpat_x_assum `!s. at_point a4 s ==> _` drule >> strip_tac >>
   `~var_below N ltv /\ ~var_below N donev /\ ~var_below N ctr /\
    ~var_below N tmp` by metis_tac[] >>
   qpat_x_assum `ctr = _` kall_tac >> qpat_x_assum `ltv = _` kall_tac >>
@@ -208,8 +205,7 @@ Proof
      (\t. t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
           lookup_var ctr t = SOME 0w /\
           eval_operand cnt t = eval_operand cnt s /\ vars_kept N Wv s t)` by
-    (irule dynarray_initialize_outcome >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    (irule dynarray_initialize_outcome >> simp[] >> metis_tac[]) >>
   drule fuel_outcome_compose >>
   disch_then (qspecl_then [`Out`, `dimword(:256) * (Kbody + 2)`] mp_tac) >>
   reverse impl_tac
@@ -218,14 +214,14 @@ Proof
   Cases_on `eval_operand cnt s`
   >- (qexists_tac `0` >> simp[] >>
       irule copy_elements_undefined_count >>
-      qexistsl_tac [`cb`, `ctr`, `cnt`, `a7.cs_next_id`, `ltv`] >>
+      qexistsl_tac [`cb`, `cnt`, `ctr`, `a7.cs_next_id`, `ltv`] >>
       gvs[get_instruction_def]) >>
   rename1 `eval_operand cnt s = SOME w` >>
   `?n. n < dimword(:256) /\ w = n2w n` by
     (qexists_tac `w2n w` >> simp[w2n_lt]) >>
   qpat_x_assum `w = _` SUBST_ALL_TAC >>
   qspecl_then [`G`, `ctx`, `fn`, `N`, `Wv`, `s`, `ctr`, `cnt`, `ltv`, `donev`,
-    `tmp`, `n`, `hdr`, `body`, `exit`, `a7.cs_next_id`, `a8.cs_next_id`,
+    `tmp`, `n`, `hdr`, `blbl`, `exit`, `a7.cs_next_id`, `a8.cs_next_id`,
     `a9.cs_next_id`, `a16.cs_next_id`, `a17.cs_next_id`, `a18.cs_next_id`,
     `cb`, `a11`, `a16`, `Kbody`] mp_tac dynarray_round_outcome >>
   impl_tac >- (simp[] >> metis_tac[]) >>
@@ -246,6 +242,76 @@ QED
 
 (* ===== The store, by its mutual recursion ===== *)
 
+val fuel_okS_bind_nolabels =
+  fuel_okS_bind |> Q.SPECL [`P`, `Q`, `m`, `f`, `Wv`, `{}`, `{}`]
+                |> SIMP_RULE std_ss [pred_setTheory.UNION_EMPTY]
+                |> Q.GENL [`P`, `Q`, `m`, `f`, `Wv`];
+
+(* The count precondition of the element loop survives later emission. *)
+Theorem count_pre_stable[local]:
+  !c. next_stable (\st. (!x. c = Var x ==> var_below st.cs_next_var x) /\
+                        !l. c <> Label l)
+Proof
+  rw[next_stable_def, var_below_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+(* A bytestring: its word count bounds the copy loop. *)
+Theorem store_slots_bytestring_fuel[local]:
+  !src slot loc Wv E.
+    fuel_ok Wv {} E
+      (comp_bind (compile_bytestring_word_count src) (\count_op.
+         comp_ignore_bind
+           (compile_word_copy_loop_op src slot count_op LocMemory loc F)
+           (comp_return ())))
+Proof
+  rpt gen_tac >> irule fuel_ok_of_okS >> qexists_tac `\st. T` >> simp[] >>
+  match_mp_tac fuel_okS_bind_nolabels >>
+  qexistsl_tac [`\c st. !x. c = Var x ==> var_below st.cs_next_var x`,
+                `E`, `E`] >>
+  simp[pred_setTheory.SUBSET_DEF] >> rpt conj_tac
+  >- simp[fuel_okS_of_ok, fuel_ok_context_copies]
+  >- metis_tac[compile_bytestring_word_count_var] >>
+  gen_tac >> BETA_TAC >> match_mp_tac fuel_okS_ignore_bind_keep >>
+  simp[fuel_ok_compile_word_copy_loop, fuel_okS_of_ok, fuel_ok_return] >>
+  rw[next_stable_def, var_below_def]
+QED
+
+(* A dynamic array: the loaded length is the loop count and is stored
+   after the elements. *)
+Theorem store_slots_dynamic_fuel[local]:
+  !cenv src slot elem tr.
+    (!s sl c Wv E.
+       fuel_okS (\st. (!x. c = Var x ==> var_below st.cs_next_var x) /\
+                      !l. c <> Label l) Wv {} E
+         (compile_copy_elements_to_slots cenv s sl elem c tr)) ==>
+    !Wv E.
+      fuel_ok Wv {} E
+        (comp_bind (emit_op MLOAD [src]) (\len_op.
+           comp_bind (emit_op ADD [src; Lit 32w]) (\src_data.
+             comp_bind (emit_op ADD [slot; Lit 1w]) (\slot_data.
+               comp_ignore_bind
+                 (compile_copy_elements_to_slots cenv src_data slot_data elem
+                    len_op tr)
+                 (emit_void (if tr then TSTORE else SSTORE) [slot; len_op])))))
+Proof
+  rpt strip_tac >> irule fuel_ok_of_okS >> qexists_tac `\st. T` >> simp[] >>
+  match_mp_tac fuel_okS_bind_nolabels >>
+  qexistsl_tac [`\c st. (!x. c = Var x ==> var_below st.cs_next_var x) /\
+                         !l. c <> Label l`, `E`, `E`] >>
+  simp[pred_setTheory.SUBSET_DEF] >> rpt conj_tac
+  >- simp[fuel_okS_of_ok, fuel_ok_emit_op, is_terminator_def]
+  >- metis_tac[emit_op_var, emit_op_not_label] >>
+  gen_tac >> BETA_TAC >>
+  rpt (match_mp_tac fuel_okS_bind_keep >>
+       simp[count_pre_stable, fuel_okS_of_ok, fuel_ok_emit_op,
+            is_terminator_def] >> gen_tac) >>
+  match_mp_tac fuel_okS_ignore_bind_keep >>
+  simp[count_pre_stable] >> Cases_on `tr` >>
+  simp[fuel_okS_of_ok, fuel_ok_emit_void, is_terminator_def]
+QED
+
+
 Theorem store_slots_fuel[local]:
   (!cenv src slot ty tr.
      !Wv E. fuel_ok Wv {} E (compile_store_slots cenv src slot ty tr)) /\
@@ -257,8 +323,26 @@ Theorem store_slots_fuel[local]:
                            !l. cnt <> Label l) Wv {} E
        (compile_copy_elements_to_slots cenv src slot elem cnt tr))
 Proof
-  ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac >>
-  goalStack.print_tac "PROBE" >> cheat
+  ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp_tac std_ss [Once compile_store_slots_def, LET_THM] >>
+      IF_CASES_TAC
+      >- (IF_CASES_TAC >> Cases_on `tr` >> simp_tac std_ss [] >>
+          fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void,
+                     fuel_ok_context_copies] >>
+          simp[is_terminator_def]) >>
+      IF_CASES_TAC >- simp[store_slots_bytestring_fuel] >>
+      IF_CASES_TAC >- simp[fuel_ok_emit_void_any] >>
+      Cases_on `ty` >> TRY (rename1 `ArrayT _ bd` >> Cases_on `bd`) >>
+      gvs[fuel_ok_emit_void_any]
+      >~ [`compile_copy_elements_to_slots _ _ _ _ (Lit _)`]
+      >- (irule fuel_ok_of_okS >> qexists_tac `\st. T` >> simp[]) >>
+      irule store_slots_dynamic_fuel >> simp[])
+  >- simp[Once compile_store_slots_def, fuel_ok_return]
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp_tac std_ss [Once compile_store_slots_def] >>
+      fuel_auto [fuel_ok_compile_lit_byte_offset]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >> irule copy_elements_fuel >> simp[]
 QED
 
 Theorem fuel_ok_compile_store_slots:
