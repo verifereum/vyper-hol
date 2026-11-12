@@ -6,14 +6,16 @@ Ancestors
   exprSimArrayIndex fragGasFresh freshWrites varsExt sourceValueFrames
   emitHelper fragExec loweringStateRelDefs finite_map
 
-Theorem simulation_probe_invoke_count:
-  !s id. gas_count_step 1 simulation_probe_context
-    (mk_inst id INVOKE [Label simulation_probe_label] []) s = 0
+Theorem simulation_probe_invoke_count_lookup:
+  !ctx s id.
+    lookup_function simulation_probe_label ctx.ctx_functions =
+      SOME simulation_probe_callee ==>
+    gas_count_step 1 ctx
+      (mk_inst id INVOKE [Label simulation_probe_label] []) s = 0
 Proof
-  rpt gen_tac >>
+  rpt strip_tac >>
   simp[Once gas_count_step_def, mk_inst_def, decode_invoke_def,
-       simulation_probe_context_def, simulation_probe_callee_def,
-       mk_venom_context_def, mk_raw_function_def, lookup_function_def,
+       simulation_probe_callee_def, mk_raw_function_def,
        FIND_thm, eval_operands_def, setup_callee_def] >>
   simp[Once gas_count_blocks_def, lookup_block_def, FIND_thm,
        eval_phis_def, phi_prefix_length_def] >>
@@ -27,18 +29,20 @@ Proof
   Cases_on `rr` >> simp[Once gas_count_blocks_def]
 QED
 
-Theorem simulation_probe_invoke_edge:
-  !fn s bb id.
+Theorem simulation_probe_invoke_edge_lookup:
+  !ctx fn s bb id.
+    lookup_function simulation_probe_label ctx.ctx_functions =
+      SOME simulation_probe_callee /\
     ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id INVOKE [Label simulation_probe_label] []) ==>
-    gas_path_edge simulation_probe_context fn s 0
+    gas_path_edge ctx fn s 0
       (OK (s with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   rpt strip_tac >> simp[gas_path_edge_def] >>
   qexists_tac `1` >>
-  simp[simulation_probe_invoke_restores, simulation_probe_invoke_count,
+  simp[simulation_probe_invoke_restores_lookup, simulation_probe_invoke_count_lookup,
        mk_inst_def, is_terminator_def]
 QED
 
@@ -81,13 +85,15 @@ Proof
   simp[wordsTheory.WORD_MULT_CLAUSES]
 QED
 
-Theorem simulation_probe_emit_path:
-  !sa sm fn s.
+Theorem simulation_probe_emit_path_lookup:
+  !ctx sa sm fn s.
+    lookup_function simulation_probe_label ctx.ctx_functions =
+      SOME simulation_probe_callee /\
     emit_void INVOKE [Label simulation_probe_label] sa = ((),sm) /\
     fn_has_code sa sm fn /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_marked_path F simulation_probe_context fn s 0
+    gas_marked_path F ctx fn s 0
       (OK (s with vs_inst_idx := LENGTH sm.cs_current_insts))
 Proof
   rpt strip_tac >>
@@ -97,30 +103,32 @@ Proof
     (gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def]) >>
   drule_all fn_has_code_same_block >> strip_tac >>
   first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-  `gas_path_edge simulation_probe_context fn s 0
+  `gas_path_edge ctx fn s 0
       (OK (s with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (irule simulation_probe_invoke_edge >> simp[] >> metis_tac[]) >>
+    (irule simulation_probe_invoke_edge_lookup >> simp[] >> metis_tac[]) >>
   simp[gas_marked_path_def] >>
-  `gas_path simulation_probe_context fn
+  `gas_path ctx fn
       (s with vs_inst_idx := SUC s.vs_inst_idx) 0
       (OK (s with vs_inst_idx := SUC s.vs_inst_idx))` by
     (irule (cj 1 gas_path_rules) >> simp[]) >>
   drule (cj 2 gas_path_rules) >> disch_then drule >> simp[arithmeticTheory.ADD1]
 QED
 
-Theorem simulation_probe_counted_split:
-  !sa sm sb p loader fn cx es s w.
+Theorem simulation_probe_counted_split_lookup:
+  !ctx sa sm sb p loader fn cx es s w.
+    lookup_function simulation_probe_label ctx.ctx_functions =
+      SOME simulation_probe_callee /\
     emit_void INVOKE [Label simulation_probe_label] sa = ((),sm) /\
     compile_array_subscript (Var "a_ptr") (Lit 0w) F 1 32 32 F loader sm = (p,sb) /\
     fn_has_code sa sm fn /\ fn_has_code sm sb fn /\
     local_ptrs_reserved simulation_probe_cenv sm /\
-    stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es s /\
+    stmt_state_rel ctx fn simulation_probe_cenv cx es s /\
     not_fresh_at sm "a_ptr" /\ eval_operand (Var "a_ptr") s = SOME w /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. gas_marked_path F simulation_probe_context fn s 0 (OK t) /\
+    ?t. gas_marked_path F ctx fn s 0 (OK t) /\
       eval_operand p t = SOME w /\
-      stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es t /\
+      stmt_state_rel ctx fn simulation_probe_cenv cx es t /\
       (!z v. not_fresh_at sm z /\ lookup_var z s = SOME v ==>
         lookup_var z t = SOME v) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
@@ -130,10 +138,10 @@ Theorem simulation_probe_counted_split:
       t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   rpt strip_tac >>
-  drule_all simulation_probe_emit_path >> strip_tac >>
+  drule_all simulation_probe_emit_path_lookup >> strip_tac >>
   `sm.cs_current_bb = sa.cs_current_bb` by
     gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def] >>
-  `stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es
+  `stmt_state_rel ctx fn simulation_probe_cenv cx es
     (s with vs_inst_idx := LENGTH sm.cs_current_insts)` by
     simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
   `eval_operand (Var "a_ptr")
@@ -149,20 +157,22 @@ Proof
   drule_all gas_marked_path_then >> simp[]
 QED
 
-Theorem simulation_probe_counted_target:
-  !sa sb op fn cx env es s entry.
+Theorem simulation_probe_counted_target_lookup:
+  !ctx sa sb op fn cx env es s entry.
+    lookup_function simulation_probe_label ctx.ctx_functions =
+      SOME simulation_probe_callee /\
     compile_get_target_ptr compile_expr simulation_probe_cenv
       module_probe_target sa = (op,sb) /\
     fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved simulation_probe_cenv sa /\
-    stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es s /\
+    stmt_state_rel ctx fn simulation_probe_cenv cx es s /\
     lookup_scopes "a" es.scopes = SOME entry /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t p w. op = (p,SOME LocMemory,SOME (ValPT (BaseT (UintT 256)))) /\
       eval_operand (Var "a_ptr") s = SOME w /\ eval_operand p t = SOME w /\
-      gas_marked_path F simulation_probe_context fn s 0 (OK t) /\
-      stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es t /\
+      gas_marked_path F ctx fn s 0 (OK t) /\
+      stmt_state_rel ctx fn simulation_probe_cenv cx es t /\
       (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==>
         lookup_var z t = SOME v) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
@@ -205,7 +215,92 @@ Proof
     (fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
         local_ptrs_rel_def, simulation_probe_cenv_def, FLOOKUP_UPDATE] >>
      res_tac >> fs[eval_operand_def]) >>
-  drule_all simulation_probe_counted_split >> strip_tac >>
+  drule_all simulation_probe_counted_split_lookup >> strip_tac >>
   qexistsl_tac [`t`, `w`] >> simp[] >>
   fs[not_fresh_at_def]
+QED
+
+(* Preserve the singleton interfaces as specializations of the lookup boundary. *)
+Theorem simulation_probe_invoke_count:
+  !s id. gas_count_step 1 simulation_probe_context
+    (mk_inst id INVOKE [Label simulation_probe_label] []) s = 0
+Proof
+  simp[simulation_probe_invoke_count_lookup, simulation_probe_context_lookup]
+QED
+
+Theorem simulation_probe_invoke_edge:
+  !fn s bb id.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id INVOKE [Label simulation_probe_label] []) ==>
+    gas_path_edge simulation_probe_context fn s 0
+      (OK (s with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  rpt strip_tac >> irule simulation_probe_invoke_edge_lookup >>
+  simp[simulation_probe_context_lookup] >> metis_tac[]
+QED
+
+Theorem simulation_probe_emit_path:
+  !sa sm fn s.
+    emit_void INVOKE [Label simulation_probe_label] sa = ((),sm) /\
+    fn_has_code sa sm fn /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_marked_path F simulation_probe_context fn s 0
+      (OK (s with vs_inst_idx := LENGTH sm.cs_current_insts))
+Proof
+  rpt strip_tac >> irule simulation_probe_emit_path_lookup >>
+  simp[simulation_probe_context_lookup] >> metis_tac[]
+QED
+
+Theorem simulation_probe_counted_split:
+  !sa sm sb p loader fn cx es s w.
+    emit_void INVOKE [Label simulation_probe_label] sa = ((),sm) /\
+    compile_array_subscript (Var "a_ptr") (Lit 0w) F 1 32 32 F loader sm = (p,sb) /\
+    fn_has_code sa sm fn /\ fn_has_code sm sb fn /\
+    local_ptrs_reserved simulation_probe_cenv sm /\
+    stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es s /\
+    not_fresh_at sm "a_ptr" /\ eval_operand (Var "a_ptr") s = SOME w /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_marked_path F simulation_probe_context fn s 0 (OK t) /\
+      eval_operand p t = SOME w /\
+      stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es t /\
+      (!z v. not_fresh_at sm z /\ lookup_var z s = SOME v ==>
+        lookup_var z t = SOME v) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+        FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >> irule simulation_probe_counted_split_lookup >>
+  simp[simulation_probe_context_lookup] >> metis_tac[]
+QED
+
+Theorem simulation_probe_counted_target:
+  !sa sb op fn cx env es s entry.
+    compile_get_target_ptr compile_expr simulation_probe_cenv
+      module_probe_target sa = (op,sb) /\
+    fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+    local_ptrs_reserved simulation_probe_cenv sa /\
+    stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es s /\
+    lookup_scopes "a" es.scopes = SOME entry /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t p w. op = (p,SOME LocMemory,SOME (ValPT (BaseT (UintT 256)))) /\
+      eval_operand (Var "a_ptr") s = SOME w /\ eval_operand p t = SOME w /\
+      gas_marked_path F simulation_probe_context fn s 0 (OK t) /\
+      stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es t /\
+      (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==>
+        lookup_var z t = SOME v) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+        FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >> irule simulation_probe_counted_target_lookup >>
+  simp[simulation_probe_context_lookup] >> metis_tac[]
 QED

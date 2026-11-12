@@ -1,7 +1,7 @@
 (* Initial witness diagnostics; no full-contract falsehood asserted. *)
 Theory targetPureWalkWitnessProbe
 Ancestors
-  targetPureWalkConditionalSim targetPureWalkOracleProbe
+  targetPureWalkConditionalSim targetPureWalkOracleProbe targetPureWalkCallerProbe
   targetPureWalkSimulationProbe exprLoweringProps venomInst venomExecSemantics
 
 Theorem witness_context_forces_callee:

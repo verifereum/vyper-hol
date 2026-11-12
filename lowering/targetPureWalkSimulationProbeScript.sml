@@ -40,13 +40,41 @@ Definition simulation_probe_context_def:
   simulation_probe_context = mk_venom_context [simulation_probe_callee] NONE
 End
 
-Theorem simulation_probe_invoke_restores:
-  !s id. step_inst 1 simulation_probe_context
-    (mk_inst id INVOKE [Label simulation_probe_label] []) s = OK s
+Definition simulation_probe_context_with_caller_def:
+  simulation_probe_context_with_caller caller =
+    mk_venom_context [caller; simulation_probe_callee] NONE
+End
+
+Theorem simulation_probe_context_lookup:
+  lookup_function simulation_probe_label simulation_probe_context.ctx_functions =
+    SOME simulation_probe_callee
 Proof
-  rpt gen_tac >> simp[mk_inst_def] >>
-  simp[Once step_inst_def, decode_invoke_def, simulation_probe_context_def,
-       mk_venom_context_def, lookup_function_def, simulation_probe_callee_def,
+  simp[simulation_probe_context_def, mk_venom_context_def, lookup_function_def,
+       simulation_probe_callee_def, mk_raw_function_def, FIND_thm]
+QED
+
+Theorem simulation_probe_context_with_caller_lookup:
+  !caller. caller.fn_name <> simulation_probe_label ==>
+    lookup_function simulation_probe_label
+      (simulation_probe_context_with_caller caller).ctx_functions =
+      SOME simulation_probe_callee /\
+    lookup_function caller.fn_name
+      (simulation_probe_context_with_caller caller).ctx_functions = SOME caller
+Proof
+  simp[simulation_probe_context_with_caller_def, mk_venom_context_def,
+       lookup_function_def, simulation_probe_callee_def, mk_raw_function_def,
+       FIND_thm]
+QED
+
+Theorem simulation_probe_invoke_restores_lookup:
+  !ctx s id.
+    lookup_function simulation_probe_label ctx.ctx_functions =
+      SOME simulation_probe_callee ==>
+    step_inst 1 ctx
+      (mk_inst id INVOKE [Label simulation_probe_label] []) s = OK s
+Proof
+  rpt strip_tac >> simp[mk_inst_def] >>
+  simp[Once step_inst_def, decode_invoke_def, simulation_probe_callee_def,
        mk_raw_function_def, FIND_thm, eval_operands_def, setup_callee_def] >>
   simp[Once run_blocks_def, lookup_block_def, FIND_thm, eval_phis_def,
        phi_prefix_length_def] >>
@@ -54,6 +82,13 @@ Proof
        step_inst_base_opcode_eqs, eval_operands_def, eval_operand_def,
        bind_outputs_def, adopt_return_fmp_def, merge_callee_state_def,
        venom_state_component_equality]
+QED
+
+Theorem simulation_probe_invoke_restores:
+  !s id. step_inst 1 simulation_probe_context
+    (mk_inst id INVOKE [Label simulation_probe_label] []) s = OK s
+Proof
+  simp[simulation_probe_invoke_restores_lookup, simulation_probe_context_lookup]
 QED
 
 Theorem simulation_probe_compile_call:

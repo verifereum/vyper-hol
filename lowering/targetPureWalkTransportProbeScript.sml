@@ -21,9 +21,9 @@ Proof
      simulation_probe_cenv_def] >> first_assum ACCEPT_TAC
 QED
 
-Theorem simulation_probe_target_post_transport:
-  !fn cx es ee sa sb s0 t pv vt p w.
-    stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es t /\
+Theorem simulation_probe_target_post_transport_ctx:
+  !ctx fn cx es ee sa sb s0 t pv vt p w.
+    stmt_state_rel ctx fn simulation_probe_cenv cx es t /\
     local_ptrs_reserved simulation_probe_cenv sa /\
     place_ptr_rel simulation_probe_cenv cx s0 pv w (SOME LocMemory) vt /\
     eval_operand p t = SOME w /\
@@ -38,11 +38,11 @@ Theorem simulation_probe_target_post_transport:
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
        FLOOKUP t.vs_allocas aid = SOME b) /\
     t.vs_memory = s0.vs_memory ==>
-    target_post simulation_probe_context fn simulation_probe_cenv cx es sa sb
+    target_post ctx fn simulation_probe_cenv cx es sa sb
       s0 ee pv vt (p,SOME LocMemory,SOME (value_type_place vt)) t
 Proof
   rpt strip_tac >>
-  `stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx ee t` by
+  `stmt_state_rel ctx fn simulation_probe_cenv cx ee t` by
     (irule simulation_probe_source_transport >> qexists_tac `es` >> simp[]) >>
   `place_ptr_rel simulation_probe_cenv cx t pv w (SOME LocMemory) vt` by
     (Cases_on `pv` >> gvs[place_ptr_rel_def] >>
@@ -78,4 +78,27 @@ Proof
   qexistsl_tac [`ArrayTV (BaseTV (UintT 256)) (Fixed 1)`, `0`,
                  `BaseTV (UintT 256)`] >> EVAL_TAC >>
   simp[wordsTheory.dimword_def, wordsTheory.WORD_ADD_0]
+QED
+
+Theorem simulation_probe_target_post_transport:
+  !fn cx es ee sa sb s0 t pv vt p w.
+    stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es t /\
+    local_ptrs_reserved simulation_probe_cenv sa /\
+    place_ptr_rel simulation_probe_cenv cx s0 pv w (SOME LocMemory) vt /\
+    eval_operand p t = SOME w /\
+    (!x. p = Var x ==> not_fresh_at sb x) /\
+    place_readable cx ee pv /\
+    ee.scopes = es.scopes /\ ee.accounts = es.accounts /\
+    ee.tStorage = es.tStorage /\ ee.logs = es.logs /\
+    ee.outcomes = es.outcomes /\ ee.requests = es.requests /\
+    ee.pending_deletions = es.pending_deletions /\
+    (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
+       lookup_var x t = SOME v) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+       FLOOKUP t.vs_allocas aid = SOME b) /\
+    t.vs_memory = s0.vs_memory ==>
+    target_post simulation_probe_context fn simulation_probe_cenv cx es sa sb
+      s0 ee pv vt (p,SOME LocMemory,SOME (value_type_place vt)) t
+Proof
+  simp[simulation_probe_target_post_transport_ctx]
 QED
