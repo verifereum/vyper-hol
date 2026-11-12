@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalContract
-Ancestors concretizeLayoutCanonicalBaseCertificate concretizeLayoutCanonicalBlock
+Ancestors frameGasEvents concretizeLayoutCanonicalBaseCertificate concretizeLayoutCanonicalBlock
   concretizeLayoutCanonicalCallReturn concretizeLayoutCanonicalDeferredExit
   concretizeLayoutCanonicalRunNext concretizeLayoutCanonicalRunHalt
   concretizeLayoutCanonicalRunExit frameSelectedSimulation
@@ -30,9 +30,9 @@ Theorem layout_canonical_simulation_contract:
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> rewrite_tac[selected_simulation_contract_def] >>
   rpt conj_tac

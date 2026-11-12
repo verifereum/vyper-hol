@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalCallExit
-Ancestors concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalDriver frameSelectedSimulation
+Ancestors frameGasEvents concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalDriver frameSelectedSimulation
   frameFiniteJointDecoration frameFiniteExecution list arithmetic
 
 Theorem layout_canonical_call_exit_certificate:
@@ -17,8 +17,8 @@ Theorem layout_canonical_call_exit_certificate:
   selected_call_exit_certificate C C' q0 path
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OS D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_canonical_OS D lo vs0 C C' q0 es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> rewrite_tac[selected_call_exit_certificate_def] >>
   rpt gen_tac >> strip_tac >>
@@ -27,6 +27,8 @@ Proof
   (qexistsl [`out`, `ct`] >>
    conj_tac >- simp[] >>
    rpt strip_tac >>
+   qpat_x_assum `events_OutR _ _ _ _ _ _ _ _ _ _ _ _ _`
+     (strip_assume_tac o REWRITE_RULE [events_OutR_def]) >>
    rename1 `finite_run _ _ _ result` >>
    simp[selected_step_match_def] >>
    qexists `result` >>
@@ -34,7 +36,9 @@ Proof
    gvs[layout_canonical_OutR_def, layout_canonical_result_def] >>
    (conj_tac
     >- (irule finite_step_invoke_exit >> simp[] >> metis_tac[]) >>
-    simp[layout_canonical_OS_def, layout_canonical_result_def]))
+    simp[events_OS_def, layout_canonical_OS_def, layout_canonical_result_def] >>
+    irule step_events_agree_invoke >> simp[] >>
+    metis_tac[cj 3 decorated_execution_erases]))
 QED
 
 val _ = export_theory();

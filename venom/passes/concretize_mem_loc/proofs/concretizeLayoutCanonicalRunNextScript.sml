@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalRunNext
-Ancestors concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
+Ancestors frameGasEvents concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
   concretizeLayoutCanonicalDeferred frameSelectedSimulation
   concretizeLayoutScopedPhase concretizeLayoutPhaseOrigin concretizeLayoutPairedEntry
   concretizeLayoutStagePairing concretizeLayoutBlockPairing concretizeMemLocDefs
@@ -132,13 +132,16 @@ Theorem layout_canonical_run_next_certificate:
   selected_run_next_certificate C C' q0 path
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> simp[selected_run_next_certificate_def] >> rpt gen_tac >> strip_tac >>
   drule_all layout_canonical_run_block_entry >> strip_tac >>
   qexistsl [`bb'`, `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
   simp[] >> gen_tac >> strip_tac >>
+  qpat_x_assum `events_OB _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OB_def]) >>
+  `fn'.fn_name = fn.fn_name` by metis_tac[layout_canonical_run_fn_name] >>
   Cases_on `rb'` >> gvs[layout_canonical_OB_def, layout_canonical_result_def] >>
   qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_canonical_EB_def] >> strip_tac >>
@@ -174,7 +177,17 @@ Proof
     `FST (EL (n + LENGTH wb) path) = SOME (OriginBlock fuel post)` by
       metis_tac[EL_MAP] >> metis_tac[]) >>
   gen_tac >> strip_tac >>
-  simp[selected_run_match_def, layout_canonical_OutR_def] >>
+  qpat_x_assum `events_OutR _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OutR_def]) >>
+  `run_events_agree C C' fn s fn' t r rr'` by
+    (irule run_events_agree_next >>
+     `finite_block C bb
+        (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) (OK post)` by
+       metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_erases] >>
+     `~v.vs_halted` by
+       metis_tac[frameFiniteControlTheory.finite_execution_block_endpoint] >>
+     metis_tac[]) >>
+  simp[selected_run_match_def, events_OutR_def, layout_canonical_OutR_def] >>
   qexists `rr'` >> conj_tac
   >- (irule finite_step_run_next >> goal_assum (drule_at Any) >>
       metis_tac[frameFiniteControlTheory.finite_execution_block_endpoint]) >>

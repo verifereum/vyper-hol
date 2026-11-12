@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalRunExit
-Ancestors concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
+Ancestors frameGasEvents concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
   concretizeLayoutCanonicalDeferred frameSelectedSimulation
   concretizeLayoutStagePairing concretizeLayoutScopedPhase
   concretizeLayoutPhaseOrigin concretizeLayoutPairedEntry
@@ -74,20 +74,29 @@ Theorem layout_canonical_run_exit_certificate:
   selected_run_exit_certificate C C' q0 path
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> rewrite_tac[selected_run_exit_certificate_def] >>
   rpt gen_tac >> strip_tac >>
   drule_all layout_run_exit_phi_entry >> strip_tac >>
   qexistsl [`bb'`, `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
   simp[] >> rpt strip_tac >>
+  qpat_x_assum `events_OB _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OB_def]) >>
   `layout_canonical_result D lo vs0 C C' q0 es qs ass qend qe
     (n + LENGTH w) r rb'` by
     (Cases_on `r` >> Cases_on `rb'` >> gvs[layout_canonical_OB_def]) >>
   `!p. rb' <> OK p` by
     (Cases_on `r` >> Cases_on `rb'` >> gvs[layout_canonical_result_def]) >>
-  simp[selected_run_match_def, layout_canonical_OutR_def] >>
+  `run_events_agree C C' fn s fn' t r rb'` by
+    (irule run_events_agree_exit >>
+     `finite_block C bb
+        (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) r` by
+       metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_erases] >>
+     `fn'.fn_name = fn.fn_name` by metis_tac[layout_canonical_run_fn_name] >>
+     metis_tac[]) >>
+  simp[selected_run_match_def, events_OutR_def, layout_canonical_OutR_def] >>
   qexists `rb'` >> simp[] >>
   gvs[frameFiniteExecutionTheory.finite_step_run_exit]
 QED
