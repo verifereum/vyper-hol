@@ -2,7 +2,7 @@
 Theory bodyMemAggregateBodyCons
 Ancestors
   bodyMemAggregateConsContinuation bodyMemAggregateSliceContinuation
-  bodyMemAggregateCons words
+  words
 
 Theorem aggregate_body_cons_continuation_mem_cursor:
   acyclic_struct_metadata ce.ce_struct_fields /\
@@ -22,7 +22,7 @@ Theorem aggregate_body_cons_continuation_mem_cursor:
   expr_body_pre ce cx env e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
   alloca_history func r /\ alloca_inv r /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
@@ -51,7 +51,7 @@ Theorem aggregate_body_cons_continuation_mem_cursor:
     gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!i a. FLOOKUP r.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
@@ -66,7 +66,9 @@ Theorem aggregate_body_cons_continuation_mem_cursor:
     q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
-    lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz)
+    lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz) /\
+    q.vs_accounts = r.vs_accounts /\ q.vs_transient = r.vs_transient /\
+    q.vs_requests = r.vs_requests /\ q.vs_call_ctx = r.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`P` |-> `\u. FLOOKUP u.vs_allocas aid = SOME (b,asz)`]
@@ -78,7 +80,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     drule_at (Pat `compile_store_memory _ _ (Var _) _ _ _ = _`)
       aggregate_body_unwrap_store_slice_mem_cursor >>
-    disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
     disch_then (drule_at (Pat `FLOOKUP _ aid = SOME (b,asz)`)) >>
     disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
     disch_then (drule_at (Pat `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`)) >>
