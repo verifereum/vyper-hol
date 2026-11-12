@@ -4,7 +4,8 @@ Ancestors
   fmpLowerReclaimPlan fmpLedgerProps livenessProofs ptrDiscipline
   o1PassContract venomExecSemantics venomState venomInst rich_list
   fmpStageFmpStepsRetInvokeCode fmpStageFmpStepsRetBind
-  fmpStageFmpStepsRetAnalysis frameHistoryCfg simplifyCfgPhiSemantics
+  fmpStageFmpStepsRetAnalysis fmpStageFmpStepsRetFresh
+  dftGasInvCallPartner frameHistoryCfg simplifyCfgPhiSemantics
   venomWfProps contextCodegenRel fmpReclaimDefs fmpAnalysisDefs list finite_map
 
 (* The saved target frame is already past the current point's restore. *)
@@ -37,6 +38,32 @@ Proof
   simp[] >> metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
 QED
 
+Theorem fmp_return_caller_source_facts[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s ==>
+  wf_function fn /\ ALL_DISTINCT inst.inst_outputs /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
+  ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
+    s.vs_inst_idx < LENGTH bb.bb_instructions /\
+    EL s.vs_inst_idx bb.bb_instructions = inst
+Proof
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
+  `EVERY wf_function C.ctx_functions` by
+    gvs[fmp_stage_ctx_def, o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+  `MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[fmp_return_reachable_dfs] >>
+  `wf_function fn /\ ALL_DISTINCT inst.inst_outputs` by
+    (conj_tac >- gvs[o1_fn_shape_def] >>
+     irule all_distinct_flat_map_member >>
+     qexists_tac `fn_insts fn` >> gvs[venomWfTheory.ssa_form_def, SF ETA_ss]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    gvs[venomWfTheory.wf_function_def, fn_labels_def] >>
+  simp[] >> gvs[active_inst_def] >>
+  metis_tac[venomExecProofsTheory.wf_lookup_block]
+QED
+
 Theorem fmp_return_caller:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\
@@ -58,19 +85,18 @@ Theorem fmp_return_caller:
       (t1 with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
   strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
-  `EVERY wf_function C.ctx_functions` by
-    gvs[fmp_stage_ctx_def, o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
-  `MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[fmp_return_reachable_dfs] >>
-  `wf_function fn /\ ALL_DISTINCT inst.inst_outputs` by
-    (conj_tac >- gvs[o1_fn_shape_def] >>
-     irule all_distinct_flat_map_member >>
-     qexists_tac `fn_insts fn` >> gvs[venomWfTheory.ssa_form_def, SF ETA_ss]) >>
+  drule_all fmp_return_caller_source_facts >> strip_tac >>
   qpat_assum `fmp_frame_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [fmp_frame_rel_def, LET_THM]) >>
   drule_all fmp_return_saved_invoke_boundary >> strip_tac >>
   drule_all fmp_return_bind_caller >>
   disch_then (qspec_then `te` strip_assume_tac) >>
+
+  `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) ==>
+     ~fmp_clears_marks infos inst` by
+    (rpt gen_tac >> disch_tac >> irule fmp_return_saved_invoke_nonclearing >>
+     simp[] >> goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`bb`,`fn'`,`s.vs_inst_idx`,`j`,`runner`,`t`] >> gvs[]) >>
   qexistsl_tac [`j`,`t1`] >> simp[] >>
   simp[fmp_frame_rel_def, LET_THM] >>
   qexistsl_tac [`infos`,`ctx`,`runner`] >>
@@ -79,11 +105,6 @@ Proof
   simp[] >>
   `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
       s.vs_current_bb = rl ==> rp <> SUC s.vs_inst_idx` by metis_tac[] >>
-  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
-    s.vs_inst_idx < LENGTH bb.bb_instructions /\
-    EL s.vs_inst_idx bb.bb_instructions = inst` by
-    (gvs[active_inst_def] >> metis_tac[venomExecProofsTheory.wf_lookup_block]) >>
   `fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
      s.vs_current_bb bb.bb_instructions (SUC s.vs_inst_idx) = SUC t.vs_inst_idx` by
     (irule EQ_TRANS >> irule_at (Pos hd) fmp_return_tidx_suc >> simp[] >>
@@ -92,17 +113,25 @@ Proof
   gvs[venom_state_component_equality, merge_callee_state_def] >>
   conj_tac >- gvs[fmp_params_rel_def] >>
   conj_tac >- (qpat_x_assum `!b z c id. _` mp_tac >> metis_tac[]) >>
-  Cases_on `fmp_stage_root infos ctx fn` >> gvs[] >>
-  PairCases_on `x` >> gvs[] >> suspend "root"
+  Cases_on `fmp_stage_root infos ctx fn` >> gvs[] >> PairCases_on `x` >> gvs[] >>
+  drule fmp_return_analysis_suc >> simp[] >>
+  disch_then (qspecl_then [`st`,`s.vs_inst_idx`,`bb`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `st'` >> simp[] >>
+  conj_tac >- metis_tac[fmp_return_covers] >>
+  `t.vs_current_bb = x0 /\ SUC s.vs_inst_idx < x1 <=>
+   t.vs_current_bb = x0 /\ s.vs_inst_idx < x1` by
+    (Cases_on `t.vs_current_bb = x0` >> gvs[] >> decide_tac) >>
+  Cases_on `t.vs_current_bb = x0 /\ s.vs_inst_idx < x1` >> gvs[] >>
+  csimp[] >> conj_tac
+  >- (drule_all inv_bind_outputs_lookup_outside >>
+      gvs[lookup_var_def, adopt_return_fmp_def]) >>
+  qexists_tac `regions` >> simp[] >>
+  irule fmp_return_ledger_bind >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`te`,`j.inst_outputs`,`ret'`,`ret'.iret_values`] >>
+  simp[merge_callee_state_def] >> rpt strip_tac >>
+  `MEM r.fr_mark (MAP (\r. r.fr_mark) regions)` by
+    (simp[MEM_MAP] >> qexists_tac `r` >> simp[]) >>
+  metis_tac[fmp_return_popped_outputs_fresh]
 QED
 
-Resume fmp_return_caller[root]:
-  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
-    gvs[venomWfTheory.wf_function_def, fn_labels_def] >>
-  `~fmp_clears_marks infos (EL s.vs_inst_idx bb.bb_instructions)` by
-    (drule_all (SRULE [arithmeticTheory.ADD_COMM]
-       fmp_return_saved_invoke_nonclearing) >> simp[]) >>
-  FAIL_TAC "root interface"
-QED
-
-Finalise fmp_return_caller
