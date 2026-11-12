@@ -274,7 +274,7 @@ Theorem ld_annotated_residual_read_operands:
   ptr_discipline lo CS vs0 /\ opaque_use_ok fn /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
-  MEM i.inst_opcode [BYTE; SIGNEXTEND; BUMP;
+  MEM i.inst_opcode [BYTE; SIGNEXTEND; BUMP; DALLOCA;
     CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID; COINBASE;
     TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE; BLOBBASEFEE;
     BLOCKHASH; BLOBHASH; CALLDATASIZE; CALLDATALOAD; RETURNDATASIZE; CODESIZE;
