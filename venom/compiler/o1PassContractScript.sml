@@ -48,7 +48,7 @@ Ancestors
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
-  lowerDloadDefs ptrDiscipline staticLayoutDefs venomState stateEquiv
+  lowerDloadDefs ptrDiscipline ptrStaticDiscipline staticLayoutDefs venomState stateEquiv
   passSimulationDefs vfmState extCallOracle finite_map cfgWf dretDesugarDefs
   fcgDefs list
 
@@ -733,12 +733,13 @@ End
    bound is the context's, not existential over any upper bound, so it is
    not satisfiable by a large eom.  FmpLowering, which relocates the
    dynamic allocations, also needs their pointers used only as addresses
-   within their site (ptr_discipline's facts at eom, without its ALLOCA
-   ones: no ALLOCA is left) and taint reaching only the dead bytes D. *)
+   within their site (ptr_discipline's facts at eom, with the syntactic
+   part weakened to fn_static_ptr_ok, which survives ALLOCA becoming a
+   literal) and taint reaching only the dead bytes D. *)
 Definition o1_static_inv_def:
   o1_static_inv D C vs <=>
     (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs /\
-           ?P. EVERY (fn_ptr_ok P) C.ctx_functions /\
+           ?P. EVERY (fn_static_ptr_ok P) C.ctx_functions /\
                !stk PG G tn fn inst s.
                  frame_reachable vs C stk PG G tn fn inst s ==>
                  access_ok eom G fn inst s /\ taint_ok fn tn inst s) /\
