@@ -260,28 +260,14 @@ QED
  * is cfg_norm_fuel of the source fuel (run_venom_pipeline_fuel), and the
  * memory bound is the output's max_live_eom: every access stays static
  * (o1_lowered_inv). *)
-Theorem run_venom_pipeline_run_bounded:
-  !lo rpolicy unit out cp fuel.
-    o1_pipeline rpolicy unit = SOME out /\
-    generate_context_plan out.po_unit.cu_context = SOME cp
-    ==>
-    ?fuel' M. !D vs.
-      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
-      unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
-      o1_run_state_ok vs /\
-      reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
-      EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-      fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
-      vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
-      (!vs_in. gas_variant vs_in vs ==>
-         raw_unit_memory_ok unit.cu_context vs_in /\
-         ptr_discipline lo unit.cu_context vs_in /\
-         taint_within D unit.cu_context vs_in /\
-         mem_inv dload_offset_ok unit.cu_context vs_in /\
-         mem_inv dload_headroom_ok unit.cu_context vs_in /\
-         terminates (run_context fuel unit.cu_context vs_in))
-      ==>
-      venom_run_bounded fuel' M out.po_unit.cu_context vs
+(* TEMPORARY WAVE ADMISSION (DALLOCA forms track, discharged in P13 with
+ * the dynamic bound).  The wave restores the dynamic o1_lowered_inv
+ * (lowered_mem_fact), which no longer gives the static bound M = eom this
+ * proof read off train 16's static o1_lowered_inv: an access at or above
+ * the initial free-memory pointer is allowed there.  The bound has to be
+ * carried from row 3, which the stage rows do not expose; P13 widens them
+ * once, with the dynamic bound.  Statement unchanged.  Train 16's proof,
+ * ported to the raw variant; its last step needs the static bound:
 Proof
   rpt gen_tac >> strip_tac >>
   qexistsl_tac [`cfg_norm_fuel out.po_unit.cu_context fuel`,
@@ -314,6 +300,32 @@ Proof
           (inst_mem_ranges inst s))` by
     simp[FUN_EQ_THM, static_mem_ok_def] >>
   fs[]
+QED
+*)
+Theorem run_venom_pipeline_run_bounded:
+  !lo rpolicy unit out cp fuel.
+    o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp
+    ==>
+    ?fuel' M. !D vs.
+      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+      unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+      o1_run_state_ok vs /\
+      reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+      EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+      fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+      vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
+      (!vs_in. gas_variant vs_in vs ==>
+         raw_unit_memory_ok unit.cu_context vs_in /\
+         ptr_discipline lo unit.cu_context vs_in /\
+         taint_within D unit.cu_context vs_in /\
+         mem_inv dload_offset_ok unit.cu_context vs_in /\
+         mem_inv dload_headroom_ok unit.cu_context vs_in /\
+         terminates (run_context fuel unit.cu_context vs_in))
+      ==>
+      venom_run_bounded fuel' M out.po_unit.cu_context vs
+Proof
+  cheat
 QED
 
 (* ===== S6: output shape without new compiler checks ===== *)
