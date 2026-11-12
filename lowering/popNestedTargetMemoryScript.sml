@@ -4,6 +4,7 @@ Ancestors
   bodyMemoryPreds targetPlaceSimMem targetSubscriptSplit
   targetPlaceSim targetPlaceSimCasesBase
   exprSimMemDefs popNestedTargetRootsMemory popNestedTargetAttributeMemory
+  popNestedTargetIndexMemory
 
 Theorem pop_nested_subscript_index_mem:
   body_inv tops ctx cenv cx /\
