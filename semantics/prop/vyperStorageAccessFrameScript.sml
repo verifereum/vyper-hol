@@ -374,18 +374,18 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), get_scopes_def,
        type_check_def, assert_def, ignore_bind_def, return_def, raise_def,
        accesses_expr_def] >>
-  rpt strip_tac >> gvs[] >>
-  FIRST [simp[] >> NO_TAC,
-         drule lookup_global_labelled_result >>
-         disch_then (qspec_then `[ReadAcc (StateRef (p0,p1)); WriteAcc (StateRef (p0,p1))]` mp_tac) >>
-         simp[] >> NO_TAC,
-         qmatch_assum_rename_tac `eval_base_place cx child st = (INL child_pv,child_st)` >>
-         qpat_x_assum `!y. _` (qspec_then `child` mp_tac) >>
-         simp[vyperASTTheory.expr_size_def] >> strip_tac >>
-         first_x_assum drule >> strip_tac >>
-         drule_at Any (SRULE [] extend_labelled_result) >>
-         disch_then drule >> strip_tac >>
-         rpt CASE_TAC >> gvs[] >> metis_tac[]]
+  rpt strip_tac >> gvs[]
+  >~ [`lookup_global _ _ _ _`]
+  >- (drule lookup_global_labelled_result >>
+      disch_then (qspec_then `[ReadAcc (StateRef (p0,p1)); WriteAcc (StateRef (p0,p1))]` mp_tac) >>
+      simp[]) >>
+  qmatch_assum_rename_tac `eval_base_place cx child st = (INL child_pv,child_st)` >>
+  qpat_x_assum `!y. _` (qspec_then `child` mp_tac) >>
+  simp[vyperASTTheory.expr_size_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_at Any (SRULE [] extend_labelled_result) >>
+  disch_then drule >> strip_tac >>
+  rpt CASE_TAC >> gvs[] >> metis_tac[]
 QED
 
 Theorem eval_target_place_labelled_region:
