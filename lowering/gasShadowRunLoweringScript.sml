@@ -54,5 +54,25 @@ Theorem gas_shadow_run_grouped_lowering:
       (MAP gas_shadow_internal_package ints)
       (OPTION_MAP gas_shadow_fallback_package fb) rp entry)
 Proof
-  rewrite_tac[run_grouped_lowering_def]
+  rpt gen_tac >>
+  qspecl_then [`groups`, `ints`, `fb`] mp_tac
+    gas_shadow_compile_generate_grouped_runtime >>
+  rewrite_tac[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`initial_compile_state entry`,
+                           `initial_compile_state entry`] mp_tac) >>
+  simp[gas_shadow_state_refl] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_shadow_state s t` >>
+  `OPTREL (\(c,data) (d,data'). gas_shadow_context c d /\ data = data')
+     (extract_context_with_internals entry ints s)
+     (extract_context_with_internals entry (MAP gas_shadow_internal_package ints) t)`
+    by metis_tac[gas_shadow_extract_context_with_internals] >>
+  Cases_on `lowering_policy_ok rp` >> simp[run_grouped_lowering_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `gas_shadow_state s t` >>
+  Cases_on `extract_context_with_internals entry ints s` >>
+  Cases_on `extract_context_with_internals entry (MAP gas_shadow_internal_package ints) t` >>
+  gvs[] >> PairCases_on `x` >> PairCases_on `x'` >> gvs[] >>
+  `lowering_context_ok x0 <=> lowering_context_ok x'0`
+    by metis_tac[gas_shadow_lowering_context_ok] >>
+  simp[] >> IF_CASES_TAC >> simp[gas_shadow_unit_def]
 QED

@@ -15,7 +15,9 @@ Theorem gas_shadow_compile_generate_deploy:
         (MAP gas_shadow_internal_package ints)
         ce (MAP gas_shadow_stmt body) pay nr key trans)
 Proof
-  rpt gen_tac >> reverse (Cases_on `has_ctor`) >>
+  rpt gen_tac >>
+  qabbrev_tac `nrinfo = ce.ce_nonreentrant` >> PairCases_on `nrinfo` >>
+  reverse (Cases_on `has_ctor`) >>
   simp[compile_generate_deploy_def, comp_ignore_bind_def]
   >- simp[gas_shadow_compiles_bind, gas_shadow_compiles_simple_deploy,
           gas_shadow_compiles_return] >>
