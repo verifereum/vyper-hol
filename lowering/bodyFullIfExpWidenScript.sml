@@ -11,7 +11,105 @@ Ancestors
   emitHelper compileEnv allocaHistory stmtSimDefs vyperAST
   vyperInterpreter vyperState venomState fragGasSeqPtr fragGasEmitCtrl
   instMemFrontier memSafeRun ptrSafeRun ptrDiscipline venomInst
-  venomExecSemantics loweringStateRelDefs finite_map
+  venomExecSemantics loweringStateRelDefs finite_map robustCopyTransportPtr
+
+(* Conditional ghost boundary for the actual copy endpoint.  The window
+   premises are the bytewise consequences of the copy's memory/taint equations;
+   separation is required only for protected footprints and kept regions. *)
+Theorem ifexp_widen_copy_ghost_finish:
+  compile_ifexp_arm cenv t armty vv sm = (op,sb) /\
+  ~is_word_type t /\ is_bytestring_type t /\
+  evaluate_type (get_tenv cx) t = SOME rt /\
+  val_wf rt v /\ val_footprint rt v <= n /\
+  val_store_size rt v <= cap /\ type_memory_bytes cenv t <= cap /\
+  op = Var dst /\ lookup_var dst s' = SOME dw /\
+  FLOOKUP G' dst = SOME (w2n dw,cap) /\ op_taint tn' (Var dst) = {} /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+       val_in_memory rt v src m) /\
+  mem_bytes_at (w2n dw) n s'.vs_memory = mem_bytes_at src n s.vs_memory /\
+  (!i. i < n ==> (w2n dw+i IN tn'.t_mem <=> src+i IN tn.t_mem)) /\
+  ghost_inv_at D lo d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> lookup_var x s' = lookup_var x s /\
+       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+  (!name entry p sz w. lookup_scopes name es.scopes = SOME entry /\
+       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+       lookup_var p s = SOME w ==>
+       val_wf entry.type entry.value /\
+       (!i. w2n w <= i /\ i < w2n w + val_footprint entry.type entry.value ==>
+            i NOTIN writes)) /\
+  (!i. i NOTIN writes ==> mem_bytes_at i 1 s'.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+       (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+  (!i. i < lo ==> i NOTIN writes) /\
+  mem_bytes_at 0 lo s'.vs_memory = mem_bytes_at 0 lo s.vs_memory /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+  s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_accounts = s.vs_accounts /\
+  s'.vs_transient = s.vs_transient /\ s'.vs_immutables = s.vs_immutables /\
+  s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+  ghost_kept_at lo cenv es0 sa0 G0 tn0 s0 G tn /\
+  (!x. not_fresh_at sa0 x ==> not_fresh_at sa x) /\
+  (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa0.cs_next_id /\
+       (!name b k. local_region cenv es0.scopes s0 name b k ==>
+            off+sz <= b \/ b+k <= off) /\ off <= i /\ i < off+sz ==> i NOTIN writes) /\
+  (!name b k i. local_region cenv es0.scopes s0 name b k /\
+       b <= i /\ i < b+k ==> i NOTIN writes) ==>
+  ghost_inv_at D lo d cenv cx es G' tn' s' /\
+  ptr_val_ok cx t v op G' tn' s' /\
+  (!e'. lowered_value_type cenv e' = t ==> ptr_buf_ok cenv e' op G' s') /\
+  ghost_kept_at lo cenv es0 sa0 G0 tn0 s0 G' tn'
+Proof
+  strip_tac >>
+  `!p k. not_fresh_at sa p /\ ptr_covers G tn p s k ==>
+          ptr_covers G' tn' p s' k` by
+    (rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]) >>
+  conj_tac >- suspend "inv" >>
+  conj_tac >- suspend "value" >>
+  conj_tac >- (rpt strip_tac >> simp[ptr_buf_ok_def, eval_operand_def] >> metis_tac[]) >>
+  suspend "kept"
+QED
+
+Resume ifexp_widen_copy_ghost_finish[inv]:
+  qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ghost_inv_at_def] >> strip_tac >>
+  conj_tac >- suspend "locals" >>
+  conj_tac >- (Cases_on `d` >> gvs[return_buf_ptr_def] >>
+    PairCases_on `x` >> gvs[return_buf_ptr_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- gvs[stor_taint_ok_at_def] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  gvs[allocas_from_def] >> metis_tac[]
+QED
+
+Resume ifexp_widen_copy_ghost_finish[locals]:
+  rpt gen_tac >> strip_tac >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  `lookup_var p s = SOME w` by metis_tac[] >>
+  irule robust_val_in_memory_exterior_frame >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`s.vs_memory`, `s'.vs_memory`, `tn.t_mem`, `tn'.t_mem`, `writes`] >>
+  metis_tac[]
+QED
+
+Resume ifexp_widen_copy_ghost_finish[value]:
+  simp[ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def] >>
+  rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`s.vs_memory`, `s'.vs_memory`, `n`, `src`, `tn.t_mem`, `tn'.t_mem`] >>
+  simp[]
+QED
+
+Resume ifexp_widen_copy_ghost_finish[kept]:
+  qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ghost_kept_at_def] >> metis_tac[]
+QED
+
+Finalise ifexp_widen_copy_ghost_finish
 
 Theorem ifexp_widen_arm_step_full:
   (* The shared joint unwrap_value lemma at one horizon (r7 on H), here a
