@@ -19,6 +19,7 @@ Ancestors
   contextCodegenRel unitMemInv venomExecSemantics venomState venomInst
   finite_map words list
   fmpStageCoverForwardAssemble fmpStageCoverForwardBoundary
+  fmpStageCoverMemAssemble fmpStageCoverMemRoot
 
 (* Each of these has no memory range and is neither a terminator nor an
    INVOKE. *)
@@ -92,5 +93,12 @@ Theorem fmp_stage_inserted_at:
     i < LENGTH bb'.bb_instructions /\
     fmp_inserted_op (EL i bb'.bb_instructions).inst_opcode
 Proof
-  cheat
+  strip_tac >> irule fmp_cover_inserted_from_root >>
+  conj_tac >- (rpt gen_tac >> strip_tac >>
+    irule fmp_cover_root_middle >> metis_tac[]) >>
+  simp[fmp_inserted_op_def] >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  gvs[] >> metis_tac[]
 QED
