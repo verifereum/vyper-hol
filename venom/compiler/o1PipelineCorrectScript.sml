@@ -14,7 +14,7 @@ Ancestors
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
   ptrDiscipline contextPlanLayoutProps stepWriteFootprint
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
-  gasEvents gasCount
+  gasEvents gasCount o1PipelineGasMask
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
  * Naming it does not change compile_vyper or its literal pipeline hooks. *)
@@ -137,7 +137,35 @@ Theorem run_venom_pipeline_gas_mask:
         ctx_sim D unit.cu_context out.po_unit.cu_context
           (vs_out with vs_gas_readings := gobs ++ tail) vs_out
 Proof
-  cheat
+  rpt strip_tac >>
+  `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
+  `!D vi. raw_unit_memory_ok unit.cu_context vi /\
+        ptr_discipline lo unit.cu_context vi /\
+        taint_within D unit.cu_context vi /\
+        mem_inv dload_offset_ok unit.cu_context vi /\
+        mem_inv dload_headroom_ok unit.cu_context vi ==>
+        o1_pre_walk_inv D unit.cu_context vi` by
+    (rpt strip_tac >>
+     `o1_src_inv D unit.cu_context vi` by
+       (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
+           o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
+     irule o1_source_pre_walk_inv >> simp[]) >>
+  fs[o1_pipeline_def] >>
+  drule_all o1_pipeline_gas_mask >>
+  disch_then (qx_choosel_then [`raw_slots`, `sites`, `unused`] strip_assume_tac) >>
+  qexistsl [`raw_slots`, `sites`, `unused`] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`gobs`, `tail`, `D`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  strip_tac >> TRY (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`fn0`, `lbl0`] >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> qexists_tac `extra` >>
+  `vs_out with <|vs_prev_bb := NONE; vs_current_bb := lbl0; vs_inst_idx := 0;
+                 vs_gas_readings := gobs ++ tail|> =
+   vs_out with <|vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                 vs_current_bb := lbl0; vs_inst_idx := 0|>` by
+    simp[venomStateTheory.venom_state_component_equality] >>
+  asm_rewrite_tac[]
 QED
 
 Theorem run_venom_pipeline_correct:
