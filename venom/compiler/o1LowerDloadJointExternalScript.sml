@@ -418,12 +418,12 @@ Resume ld_joint_delegatecall_next[dyn]:
    lo <= dyn_floor C vs /\
    !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
      b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
-    fs[ld_joint_boundary_def, ld_dyn_floor_ok_def] >>
+    (fs[ld_joint_boundary_def, ld_dyn_floor_ok_def] >> metis_tac[]) >>
   irule ld_dyn_agree_return_buffer >> simp[] >>
   qpat_x_assum `rs = 0 \/ _` strip_assume_tac
-  >- simp[]
-  >- simp[]
-  >- simp[] >>
+  >- fs[]
+  >- fs[]
+  >- fs[] >>
   `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
   rpt disj2_tac >> simp[arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
 QED
@@ -1077,7 +1077,8 @@ Resume ld_joint_call_next[dyn]:
    lo <= dyn_floor C vs /\
    !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
      b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
-    fs[ld_joint_boundary_def, ld_dyn_floor_ok_def, Excl "consume_call_outcome_eq"] >>
+    (fs[ld_joint_boundary_def, ld_dyn_floor_ok_def, Excl "consume_call_outcome_eq"] >>
+     metis_tac[]) >>
   irule ld_dyn_agree_return_buffer >> simp[] >>
   qpat_x_assum `w2n rs = 0 \/ _` strip_assume_tac
   >- gvs[Excl "consume_call_outcome_eq"]
