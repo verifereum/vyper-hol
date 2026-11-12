@@ -201,20 +201,8 @@ Theorem asm_frame_opcode_decode:
     (EL a.as_pc prog) = opcode expected /\ wf_opname expected ==>
   next_opcode (FST (HD es.contexts)) = SOME expected
 Proof
-  strip_tac >>
-  `asm_encoding_wf (prog ++ [AsmDataItem data])` by
-    gvs[asm_frame_prog_ok_def, data_suffix_encoding_wf] >>
-  `a.as_pc < LENGTH (prog ++ [AsmDataItem data])` by simp[] >>
-  `!j. j <= a.as_pc ==> ~is_data_inst (EL j (prog ++ [AsmDataItem data]))` by
-    (rpt strip_tac >> `j < LENGTH prog` by decide_tac >>
-     gvs[EL_APPEND1, asm_frame_prog_ok_def] >> metis_tac[]) >>
-  drule_all assemble_parse_exact >> strip_tac >>
-  `asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc <
-     LENGTH (assemble (prog ++ [AsmDataItem data]))` by
-    (irule offset_in_bounds >> simp[]) >>
-  `op = expected` by (irule opcode_wf_inj >> gvs[EL_APPEND1]) >>
-  Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
-  PairCases_on `h` >> gvs[asm_evm_rel_def, next_opcode_def]
+  strip_tac >> drule_all asm_frame_decode_setup >> strip_tac >>
+  `op = expected` by (irule opcode_wf_inj >> simp[]) >> gvs[]
 QED
 
 Theorem asm_frame_call_decode:

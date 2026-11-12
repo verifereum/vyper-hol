@@ -12,7 +12,7 @@
 
 Theory asmRunBounded
 Ancestors
-  asmSem words list
+  asmSem asmWf words list
 
 (* The memory ranges (offset, size) an assembly instruction reads or
    writes, from its operands on the stack (top first, as the EVM pops
@@ -71,3 +71,20 @@ Definition asm_run_bounded_def:
       | AsmError _ => F
       | _ => T))
 End
+
+Theorem asm_run_bounded_step:
+  asm_run_bounded lo o2pc prog H (SUC k) s ==>
+  s.as_pc < LENGTH prog /\ ~is_data_inst (EL s.as_pc prog) /\
+  (EL s.as_pc prog <> AsmOp "RETURNDATACOPY" ==>
+    asm_inst_gas_ok H (EL s.as_pc prog) s.as_stack /\
+    (!e. asm_step lo o2pc (EL s.as_pc prog) s <> AsmError e) /\
+    (!s1. asm_step lo o2pc (EL s.as_pc prog) s = AsmOK s1 ==>
+           asm_run_bounded lo o2pc prog H k s1))
+Proof
+  simp[asm_run_bounded_def] >> strip_tac >> simp[is_data_inst_def] >>
+  conj_tac
+  >- (Cases_on `EL s.as_pc prog` >>
+      gvs[is_data_inst_def, asm_step_def]) >>
+  strip_tac >> gvs[] >>
+  Cases_on `asm_step lo o2pc (EL s.as_pc prog) s` >> gvs[]
+QED
