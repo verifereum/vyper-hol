@@ -36,8 +36,8 @@ Proof
 QED
 
 Theorem target_saved_storage_oracles:
-  read_storage_slot cx tr w tv (es with <|gas_obs := gs; outcomes := os; requests := rq|>) =
-    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq|>) <=>
+  read_storage_slot cx tr w tv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) =
+    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) <=>
   read_storage_slot cx tr w tv es = (INL v,es)
 Proof
   Cases_on `tr` >> simp[read_storage_slot_def, get_storage_backend_eq, bind_def,
@@ -47,8 +47,8 @@ QED
 
 
 Theorem target_saved_read_oracles:
-  read_result cx r (es with <|gas_obs := gs; outcomes := os; requests := rq|>) =
-    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq|>) <=>
+  read_result cx r (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) =
+    (INL v, es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) <=>
   read_result cx r es = (INL v,es)
 Proof
   Cases_on `r` >> simp[read_result_def, return_def, raise_def] >>
@@ -88,11 +88,11 @@ Proof
 QED
 
 Theorem target_saved_regions_oracles:
-  (vv_at cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq|>) r vv s <=>
+  (vv_at cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) r vv s <=>
    vv_at cenv cx ty sa sb es r vv s) /\
-  (vv_own cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq|>) r vv s <=>
+  (vv_own cenv cx ty sa sb (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) r vv s <=>
    vv_own cenv cx ty sa sb es r vv s) /\
-  (vv_storage_live cx vv (es with <|gas_obs := gs; outcomes := os; requests := rq|>) s <=>
+  (vv_storage_live cx vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) s <=>
    vv_storage_live cx vv es s)
 Proof
   Cases_on `vv` >>
@@ -101,7 +101,7 @@ Proof
 QED
 
 Theorem target_saved_holds_oracles:
-  vv_holds cenv cx ty r vv (es with <|gas_obs := gs; outcomes := os; requests := rq|>) s <=>
+  vv_holds cenv cx ty r vv (es with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) s <=>
   vv_holds cenv cx ty r vv es s
 Proof
   Cases_on `vv` >>
@@ -231,7 +231,7 @@ QED
 Theorem target_saved_post_transport:
   vv_post ctx func cenv cx e es sa sm s0 es1 r vv s /\
   target_post ctx func cenv cx es1 sm sb s ee pv vt op u /\
-  ee = es1 with <|gas_obs := gs; outcomes := os; requests := rq|> /\
+  ee = es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|> /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!l. vv_operand vv <> Label l) /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -256,7 +256,7 @@ Proof
    transient_rel cx cx.txn.target es1 u` by
     (gvs[target_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
          state_rel_def, storage_rel_def, transient_rel_def]) >>
-  `wb_frame cenv es (es1 with <|gas_obs := gs; outcomes := os; requests := rq|>) sa s0 u` by
+  `wb_frame cenv es (es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>) sa s0 u` by
     (irule wb_frame_trans >>
      simp[] >> conj_tac >- metis_tac[] >>
      qexistsl_tac [`es1`, `sm`, `s`] >>

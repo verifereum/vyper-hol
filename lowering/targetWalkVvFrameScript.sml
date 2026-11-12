@@ -73,8 +73,8 @@ QED
 
 Resume target_walk_vv_frame[normal]:
   gvs[] >>
-  `?gs os rq. es_end with gas_obs := [] =
-      es1 with <|gas_obs := gs; outcomes := os; requests := rq|>` by
+  `?gs os rq lg. es_end with gas_obs := [] =
+      es1 with <|gas_obs := gs; outcomes := os; requests := rq; logs := lg|>` by
     fs[machine_frame_def, evaluation_state_component_equality] >>
   `vv_post ctx func cenv cx e (es_end with gas_obs := []) sa sb t
       (es_end with gas_obs := []) tv vv t /\

@@ -5,9 +5,10 @@
  * (eval_base_place, compiled by compile_get_target_ptr).  When no index of
  * the target can mutate (~expr_can_mutate: internal calls only to view or
  * pure functions, external calls only static), the walk leaves the
- * accounts, transient storage, immutables, logs and pending deletions
- * (machine_frame) and the scopes as they were, next to the walk's own
- * target_post from target_sim.  Internal calls are tied to the module's
+ * accounts, transient storage, immutables and pending deletions
+ * (machine_frame up to logs) and the scopes as they were, next to the
+ * walk's own target_post from target_sim.  Logs may grow: a raw_log in
+ * an index counts as non-mutating.  Internal calls are tied to the module's
  * declared mutability by ce_func_mutability and function_mutability_ok.
  *
  * TOP-LEVEL:
@@ -40,7 +41,7 @@ Theorem target_walk_frame:
     gas_outcome F (cx_tops cx) (ctx, func) (eval_base_place cx bt) (es, s0)
       (\res ee t. ?pv. res = INL pv /\
          target_post ctx func cenv cx es sa sb s0 ee pv vt op t /\
-         machine_frame es ee /\ ee.scopes = es.scopes /\
+         machine_frame (es with logs := ee.logs) ee /\ ee.scopes = es.scopes /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
