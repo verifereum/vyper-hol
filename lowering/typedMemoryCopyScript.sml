@@ -885,7 +885,7 @@ Theorem typed_copy_entries_lengths:
 Proof
   Induct >> simp[typed_copy_entries_def] >>
   Cases_on `stys` >> Cases_on `dtvs` >> Cases_on `stvs` >> Cases_on `vs` >>
-  simp[typed_copy_entries_def] >> metis_tac[]
+  simp[typed_copy_entries_def] >> rpt strip_tac >> res_tac >> simp[]
 QED
 
 Theorem typed_copy_state_frame_mono:

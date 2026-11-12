@@ -139,7 +139,7 @@ Theorem asm_sstore_frame:
   asm_sstore (s with as_stack := top ++ rest) =
     AsmOK (t with as_stack := t.as_stack ++ rest)
 Proof
-  namedCases_on `top` ["", "a tail"] >> simp[asm_sstore_def] >>
+  Cases_on `s.as_call_ctx.cc_static` >> namedCases_on `top` ["", "a tail"] >> simp[asm_sstore_def] >>
   Cases_on `tail` >> simp[asm_sstore_def, asm_next_def] >> strip_tac >> gvs[]
 QED
 
@@ -156,7 +156,7 @@ Theorem asm_tstore_frame:
   asm_tstore (s with as_stack := top ++ rest) =
     AsmOK (t with as_stack := t.as_stack ++ rest)
 Proof
-  namedCases_on `top` ["", "a tail"] >> simp[asm_tstore_def] >>
+  Cases_on `s.as_call_ctx.cc_static` >> namedCases_on `top` ["", "a tail"] >> simp[asm_tstore_def] >>
   Cases_on `tail` >> simp[asm_tstore_def, asm_next_def] >> strip_tac >> gvs[]
 QED
 
@@ -195,7 +195,7 @@ QED
 Theorem asm_selfdestruct_not_ok:
   asm_selfdestruct s <> AsmOK t
 Proof
-  Cases_on `s.as_stack` >> simp[asm_selfdestruct_def]
+  Cases_on `s.as_call_ctx.cc_static` >> Cases_on `s.as_stack` >> simp[asm_selfdestruct_def]
 QED
 
 Theorem asm_sha3_frame:
@@ -254,7 +254,7 @@ Theorem asm_log_frame:
   asm_log n (s with as_stack := top ++ rest) =
     AsmOK (t with as_stack := t.as_stack ++ rest)
 Proof
-  namedCases_on `top` ["", "a tail"] >> simp[asm_log_def] >>
+  Cases_on `s.as_call_ctx.cc_static` >> namedCases_on `top` ["", "a tail"] >> simp[asm_log_def] >>
   namedCases_on `tail` ["", "b stk"] >> simp[asm_log_def, AllCaseEqs()] >>
   strip_tac >> gvs[asm_next_def, TAKE_APPEND1, DROP_APPEND1]
 QED
@@ -336,7 +336,7 @@ Proof
   namedCases_on `tail` ["", "b tail2"] >> simp[asm_exec_create_def] >>
   namedCases_on `tail2` ["", "sz stk"] >>
   simp[asm_exec_create_def] >>
-  Cases_on `w2n sz > 2 * max_code_size` >>
+  Cases_on `s.as_call_ctx.cc_static \/ w2n sz > 2 * max_code_size` >>
   simp[asm_exec_create_def, asm_create_request_stack] >>
   strip_tac >> drule asm_consume_create_outcome_frame >>
   disch_then (qspecl_then [`a::b::sz::(stk ++ rest)`, `rest`] mp_tac) >>
@@ -353,7 +353,7 @@ Proof
   namedCases_on `tail2` ["", "c tail3"] >> simp[asm_exec_create2_def] >>
   namedCases_on `tail3` ["", "salt stk"] >>
   simp[asm_exec_create2_def] >>
-  Cases_on `w2n c > 2 * max_code_size` >>
+  Cases_on `s.as_call_ctx.cc_static \/ w2n c > 2 * max_code_size` >>
   simp[asm_exec_create2_def, asm_create_request_stack] >>
   strip_tac >> drule asm_consume_create_outcome_frame >>
   disch_then (qspecl_then [`a::b::c::salt::(stk ++ rest)`, `rest`] mp_tac) >>
@@ -387,6 +387,7 @@ Proof
   namedCases_on `tail3` ["", "d tail4"] >> simp[asm_exec_call_def] >>
   namedCases_on `tail4` ["", "e tail5"] >> simp[asm_exec_call_def] >>
   namedCases_on `tail5` ["", "f tail6"] >> simp[asm_exec_call_def] >>
+  Cases_on `s.as_call_ctx.cc_static /\ c <> 0w` >>
   Cases_on `tail6` >> simp[asm_exec_call_def, asm_call_request_stack] >>
   strip_tac >> drule asm_consume_call_outcome_frame >>
   disch_then (qspecl_then [`a::b::c::d::e::f::h::(t' ++ rest)`, `rest`] mp_tac) >>
