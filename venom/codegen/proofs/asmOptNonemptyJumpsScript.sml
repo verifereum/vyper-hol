@@ -2,7 +2,7 @@ Theory asmOptNonemptyJumps
 Ancestors
   asmOptimizer
 
-Theorem trailing_terminal_cons[local]:
+Theorem trailing_terminal_cons:
   (?pre t post. x::xs = pre ++ [t] ++ post /\ asm_terminal_op t /\
      EVERY (\i. !l. i <> AsmLabel l) post) <=>
   (asm_terminal_op x /\ EVERY (\i. !l. i <> AsmLabel l) xs) \/
@@ -16,7 +16,7 @@ Proof
   >> qexistsl [`x::pre`, `t`, `post`] >> simp[]
 QED
 
-Theorem nonterminal_items[local,simp]:
+Theorem nonterminal_items[simp]:
   ~asm_terminal_op (AsmOp "ISZERO") /\
   ~asm_terminal_op (AsmOp "JUMPI") /\
   ~asm_terminal_op (AsmPushLabel l) /\
@@ -71,20 +71,17 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> IF_CASES_TAC >> gvs[]
 QED
 
-
-Theorem merge_iszero_pairs_trailing_terminal:
-  !p. (?pre t post. p = pre ++ [t] ++ post /\ asm_terminal_op t /\
-         EVERY (\i. !l. i <> AsmLabel l) post) ==>
-      (?pre t post. FST (merge_iszero_pairs p) = pre ++ [t] ++ post /\
-         asm_terminal_op t /\ EVERY (\i. !l. i <> AsmLabel l) post)
+Theorem trailing_terminal_cons_transport:
+  (((?pre t post. p = pre ++ [t] ++ post /\ asm_terminal_op t /\
+       EVERY (\i. !l. i <> AsmLabel l) post) ==>
+    (?pre t post. q = pre ++ [t] ++ post /\ asm_terminal_op t /\
+       EVERY (\i. !l. i <> AsmLabel l) post)) /\
+   (EVERY (\i. !l. i <> AsmLabel l) p ==>
+    EVERY (\i. !l. i <> AsmLabel l) q)) ==>
+  ((?pre t post. x::p = pre ++ [t] ++ post /\ asm_terminal_op t /\
+       EVERY (\i. !l. i <> AsmLabel l) post) ==>
+   (?pre t post. x::q = pre ++ [t] ++ post /\ asm_terminal_op t /\
+       EVERY (\i. !l. i <> AsmLabel l) post))
 Proof
-  recInduct merge_iszero_pairs_ind >> conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      simp[Once merge_iszero_pairs_def] >>
-      rpt (pairarg_tac >> gvs[]) >> IF_CASES_TAC
-      >- (gvs[trailing_terminal_zero_window] >> first_x_assum irule)
-      >> gvs[trailing_terminal_cons] >>
-      qspec_then `y::z::rest` mp_tac merge_iszero_pairs_no_labels >>
-      gvs[] >> metis_tac[])
-  >> simp[merge_iszero_pairs_def]
+  simp[trailing_terminal_cons] >> metis_tac[]
 QED
