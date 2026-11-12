@@ -193,9 +193,9 @@ Definition deploy_result_rel_def:
             logs_correspond (compiled_event_info tops) (type_env tops)
               tx.target am'.logs lgs
         else
-        ?section.
+        ?section lgs.
           immutables_section_rel tops (account_immutables am' tx.target) section /\
-          frame_outcome es r es' NONE (runtime_bc ++ section) am'.logs /\
+          frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
           (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
           (!a. a <> tx.target ==>
                lookup_account a es'.rollback.accounts =
@@ -208,7 +208,9 @@ Definition deploy_result_rel_def:
             (storage_dead H F (lookup_account tx.target am'.accounts).storage)
             (lookup_account tx.target am'.accounts).storage
             (lookup_account tx.target es'.rollback.accounts).storage /\
-          transient_agree H cx am'.tStorage es'.rollback.tStorage
+          transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+          logs_correspond (compiled_event_info tops) (type_env tops)
+            tx.target am'.logs lgs
     | INR (AssertException s) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")
