@@ -804,7 +804,7 @@ Proof
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)
       (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
-      (\res ee t. stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+      (\res ee t. stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
         res ee t /\ Q t)
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (irule mem_round_body_prepare_keep >>
@@ -941,7 +941,7 @@ Proof
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)
       (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
-      (\res ee t. stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+      (\res ee t. stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
         res ee t /\ Q t)
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (irule mem_round_body_prepare_keep >>
