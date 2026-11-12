@@ -396,9 +396,20 @@ Theorem asm_create_success_prefix[local]:
        access_address address; ensure_storage_in_domain address;
        if collision then abort_create_exists sender
        else proceed_create sender address value code gas
-     od) u = (INL (),t)
+     od) u = (INL (),t) /\
+    ?charge.
+      charge = static_gas (if two then Create2 else Create) +
+        init_code_word_cost * word_size (w2n (EL 2 c.stack)) +
+        (if two then keccak256_per_word_cost * word_size (w2n (EL 2 c.stack)) else 0) +
+        memory_expansion_cost (buffer_length c.memory)
+          (if 0 < w2n (EL 2 c.stack)
+           then word_size (w2n (EL 1 c.stack) + w2n (EL 2 c.stack)) * 32 else 0) /\
+      p.gasUsed = c.gasUsed + charge + gas /\
+      gas = (c.msgParams.gasLimit - (c.gasUsed + charge)) -
+        (c.msgParams.gasLimit - (c.gasUsed + charge)) DIV 64
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 4 disch_tac >>
+  qpat_abbrev_tac `upfront = static_gas _ + _ + _ + memory_expansion_cost _ _` >>
   simp[step_create_def, pop_stack_def, memory_expansion_info_def,
        get_current_context_def, set_current_context_def,
        bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
@@ -425,7 +436,13 @@ Proof
   qmatch_goalsub_abbrev_tac `if paid2 then _ else _` >>
   Cases_on `paid2` >> simp[] >>
   strip_tac >> pure_rewrite_tac[ignore_bind_def] >>
-  goal_assum (drule_at Any) >> simp[] >>
+  `charge = upfront` by
+    (Cases_on `two` >>
+     gvs[Abbr `charge`, Abbr `upfront`, listTheory.EL_TAKE]) >>
+  gvs[Abbr `gas`] >>
+  qmatch_asmsub_abbrev_tac `(if _ then _ else _) prepared` >>
+  qexistsl_tac [`prepared`, `FST (HD prepared.contexts)`] >>
+  goal_assum (drule_at Any) >> simp[Abbr `prepared`] >>
   Cases_on `two` >> gvs[Abbr `expansion`, listTheory.EL_TAKE] >>
   irule asm_call_memory_buffer_extend >>
   simp[max_expansion_range_def] >>
@@ -442,7 +459,7 @@ Theorem asm_create_finish_view[local]:
   (?p. t.contexts = (p,rb)::rest /\ p.msgParams = c.msgParams /\
     p.jumpDest = c.jumpDest /\ p.pc = SUC c.pc /\
     p.stack = 0w::c.stack /\ p.returnData = c.returnData /\
-    p.logs = c.logs /\ p.memory = c.memory /\
+    p.logs = c.logs /\ p.memory = c.memory /\ p.gasUsed <= c.gasUsed /\
     t.rollback.tStorage = s.rollback.tStorage /\
     t.rollback.toDelete = s.rollback.toDelete) \/
   (?child crb. t.contexts = (child,crb)::(c,rb)::rest /\
@@ -483,8 +500,10 @@ Theorem asm_create_raw_same_depth:
     t.rollback.toDelete = s.rollback.toDelete
 Proof
   strip_tac >> drule_all asm_create_success_prefix >> strip_tac >>
-  drule_at (Pat `_ = (INL (),t)`) asm_create_finish_view >>
-  simp[] >> strip_tac >> gvs[]
+  qpat_x_assum `charge = _` kall_tac >>
+  qpat_x_assum `gas = _` kall_tac >>
+  qpat_x_assum `p.gasUsed = _` kall_tac >>
+  drule_all asm_create_finish_view >> strip_tac >> gvs[]
 QED
 
 Theorem asm_create_raw_child_entry:
@@ -505,8 +524,10 @@ Theorem asm_create_raw_child_entry:
     t.rollback.toDelete = s.rollback.toDelete
 Proof
   strip_tac >> drule_all asm_create_success_prefix >> strip_tac >>
-  drule_at (Pat `_ = (INL (),t)`) asm_create_finish_view >>
-  simp[] >> strip_tac >> gvs[] >> metis_tac[]
+  qpat_x_assum `charge = _` kall_tac >>
+  qpat_x_assum `gas = _` kall_tac >>
+  qpat_x_assum `p.gasUsed = _` kall_tac >>
+  drule_all asm_create_finish_view >> strip_tac >> gvs[] >> metis_tac[]
 QED
 Theorem asm_frame_create_consume[local]:
   asm_evm_rel (prog ++ [AsmDataItem data]) a s /\
@@ -787,8 +808,10 @@ Proof
   `LENGTH v.contexts = LENGTH s.contexts \/
    LENGTH v.contexts = SUC (LENGTH s.contexts)` by
     (drule_all asm_create_success_prefix >> strip_tac >>
-     drule_at (Pat `_ = (INL (),v)`) asm_create_finish_view >>
-     simp[] >> strip_tac >> gvs[])
+     qpat_x_assum `charge = _` kall_tac >>
+     qpat_x_assum `gas = _` kall_tac >>
+     qpat_x_assum `p.gasUsed = _` kall_tac >>
+     drule_all asm_create_finish_view >> strip_tac >> gvs[])
   >- (drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_same_depth_step_ok >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_child_step_ok >>
