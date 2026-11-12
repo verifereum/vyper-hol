@@ -15,6 +15,7 @@ Ancestors
   (* FmpLowering stage proof *)
   fmpStageReclaimSound
   fmpStageOpSteps
+  fmpStageFmpSteps
   (* lower dload/dloadbytes *)
   lowerDload
   (* branch optimization *)
