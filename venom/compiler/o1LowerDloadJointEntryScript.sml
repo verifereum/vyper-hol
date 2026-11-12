@@ -164,10 +164,15 @@ Proof
           (mp_tac o MATCH_MP ctxLookupAgreeHelpersTheory.enters_block_initial_fmp) >>
         simp[]) >>
      Cases_on `ctx_has_dalloca C` >>
-     gvs[ptrDisciplineTheory.dyn_floor_def,
-         lowerDloadDefsTheory.dload_headroom_ok_def,
-         ptrDisciplineTheory.ctx_has_dalloca_def] >>
-     decide_tac) >>
+     asm_rewrite_tac[ptrDisciplineTheory.dyn_floor_def] >>
+     qpat_x_assum `dload_headroom_ok _ _ _ _`
+       (strip_assume_tac o
+        REWRITE_RULE [lowerDloadDefsTheory.dload_headroom_ok_def]) >>
+     TRY (qpat_x_assum `ctx_has_dalloca C`
+            (assume_tac o
+             REWRITE_RULE [ptrDisciplineTheory.ctx_has_dalloca_def]) >>
+          res_tac) >>
+     gvs[] >> decide_tac) >>
   `fn.fn_name = name` by
     (qpat_x_assum `lookup_function name C.ctx_functions = SOME fn` mp_tac >>
      simp[lookup_function_def] >> strip_tac >> drule FIND_P >> simp[]) >>
