@@ -176,7 +176,7 @@ Theorem concretize_istore_demand_execution:
   ?valueT. eval_operand opd t = SOME dst /\
     eval_operand opv t = SOME valueT /\
     step_inst_base inst t = OK (istore (w2n dst) valueT t) /\
-    post = istore (w2n dst) value s /\ SND o_f rv = G /\
+    post = istore (w2n dst) value s /\
     op_prov G opd = NONE /\ w2n dst+32 <= lo /\
     word_agree_except (op_taint tn opv) value valueT /\
     demand_agree (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
@@ -190,12 +190,15 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
-  `?Q. fn_ptr_ok Q fn /\ (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv Q fn)` by
+  `!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)` by
+    (drule resolved_config_current >> simp[] >> strip_tac >>
+     drule resolved_frame_erasure >> simp[]) >>
+  `?Q. fn_ptr_ok Q fn /\ ptr_static_support Q fn G /\
+       (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv Q fn)` by
     suspend "support" >> pop_assum strip_assume_tac >>
   `!op v. MEM op inst.inst_operands /\ op = Var v ==>
-      ~retpc_var fn v /\ FLOOKUP rv v = NONE` by suspend "origins" >>
+      ~retpc_var fn v /\ v NOTIN fn_pv Q fn /\ FLOOKUP rv v = NONE` by
+    suspend "origins" >>
   `op_prov G opd = NONE` by suspend "erasure" >>
   `eval_operand opd t = SOME dst` by suspend "address" >>
   `?valueT. eval_operand opv t = SOME valueT /\
@@ -229,6 +232,7 @@ Resume concretize_istore_demand_execution[support]:
         fn_insts_def, fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
   drule_all ptr_frame_current_static >> strip_tac >>
   qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
+  conj_tac >- simp[] >>
   metis_tac[resolved_static_support]
 QED
 Resume concretize_istore_demand_execution[origins]:
@@ -239,9 +243,9 @@ Resume concretize_istore_demand_execution[origins]:
   `v NOTIN fn_pv Q fn` by (fs[fn_ptr_ok_def] >> metis_tac[]) >> metis_tac[]
 QED
 Resume concretize_istore_demand_execution[erasure]:
-  Cases_on `opd` >> gvs[op_prov_def] >>
-  `FLOOKUP rv s' = NONE` by metis_tac[listTheory.MEM] >>
-  simp[finite_mapTheory.FLOOKUP_o_f]
+  Cases_on `opd` >> gvs[op_prov_def] >> rename1 `FLOOKUP G u` >>
+  `u NOTIN fn_pv Q fn` by metis_tac[listTheory.MEM] >>
+  Cases_on `FLOOKUP G u` >> fs[ptr_static_support_def] >> metis_tac[]
 QED
 Resume concretize_istore_demand_execution[address]:
   `op_taint tn opd = {}` by

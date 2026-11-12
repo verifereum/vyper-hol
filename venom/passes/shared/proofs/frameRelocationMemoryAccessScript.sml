@@ -28,11 +28,11 @@ Proof
   >- (first_x_assum drule >> strip_tac >> gvs[] >>
       Cases_on `FLOOKUP rv v`
       >- (disj1_tac >>
-          qpat_x_assum `!v site. _` (qspecl_then [`v`, `(b,sz)`] mp_tac) >>
+          qpat_x_assum `!v site. FLOOKUP G v = SOME site /\ _ ==> _` (qspecl_then [`v`, `(b,sz)`] mp_tac) >>
           simp[]) >>
       disj2_tac >> PairCases_on `x` >>
-      qpat_x_assum `!v e. _` drule >> simp[]) >>
+      qpat_x_assum `!v e. FLOOKUP rv v = SOME e ==> _` drule >> strip_tac >> gvs[]) >>
   disj1_tac >> gvs[] >> rpt strip_tac >>
   Cases_on `FLOOKUP rv v` >> gvs[op_prov_def] >>
-  qpat_x_assum `!v e. _` drule >> simp[])
+  qpat_x_assum `!v e. FLOOKUP rv v = SOME e ==> _` drule >> simp[])
 QED

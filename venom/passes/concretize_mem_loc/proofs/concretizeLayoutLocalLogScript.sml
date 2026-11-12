@@ -263,16 +263,12 @@ Theorem concretize_log_local_complete:
       (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
-    step_prov PG G inst post = SND o_f rv /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
   strip_tac >>
   `s.vs_labels = t.vs_labels /\ s.vs_call_ctx = t.vs_call_ctx` by
     fs[relocation_env_def] >>
   drule_all concretize_log_demand_execution >> strip_tac >>
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >>
-     metis_tac[resolved_frame_erasure]) >>
   `inst_wf inst` by
     (fs[o1_fn_shape_def, venomWfTheory.fn_inst_wf_def,
         venomInstTheory.fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>

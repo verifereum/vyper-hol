@@ -98,7 +98,7 @@ Proof
   simp[resolution_def, origin_erase_lookup] >> strip_tac >>
   first_x_assum (qspec_then `v` mp_tac) >>
   Cases_on `FLOOKUP om v` >> simp[] >>
-  PairCases_on `x` >> simp[] >> metis_tac[resolve_tag_site, NOT_NONE_SOME]
+  PairCases_on `x` >> simp[] >> rpt strip_tac >> metis_tac[resolve_tag_site]
 QED
 
 Definition resolved_op_def:

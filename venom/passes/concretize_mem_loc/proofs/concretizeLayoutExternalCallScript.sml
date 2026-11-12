@@ -488,17 +488,6 @@ Proof
   qexists_tac `inst` >> simp[] >> fs[] >> metis_tac[]
 QED
 
-Theorem ext_call_prov[local]:
-  MEM inst.inst_opcode [CALL; STATICCALL] /\ inst.inst_outputs = [v] ==>
-  step_prov PG (SND o_f rv) inst post =
-    SND o_f (origin_set rv inst.inst_outputs NONE)
-Proof
-  strip_tac >> fs[MEM] >>
-  simp[step_prov_def, out_prov_def, set_prov_def, origin_set_def,
-       fmap_eq_flookup, FLOOKUP_o_f, FLOOKUP_DRESTRICT] >>
-  rpt gen_tac >> Cases_on `x = v` >> simp[]
-QED
-
 (* Pure transport for clean output prefixes and synchronized snapshot reset. *)
 Theorem concretize_reset_write_taint_order[local]:
   relocation_taint_le R tn un /\
@@ -667,7 +656,6 @@ Theorem concretize_ext_call_local_complete:
       (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       concretize_local_obs post tpost /\
     concretize_supplement D (step_taint inst s post tn) post tpost /\
-    step_prov PG G inst post = SND o_f (origin_set rv inst.inst_outputs NONE) /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
@@ -806,19 +794,6 @@ Proof
       simp[Excl "consume_call_outcome_eq"] >>
       qpat_x_assum `exec_ext_call inst t _ _ _ _ _ _ _ _ = OK post'` mp_tac >>
       asm_rewrite_tac[] >> simp[]))) >>
-  (conj_tac >- ((
-      `SND o_f rv = G` by
-        (drule resolved_config_current >> simp[] >>
-         metis_tac[resolved_frame_erasure]) >>
-      `inst_wf inst` by
-        (fs[o1_fn_shape_def, venomWfTheory.fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
-         metis_tac[]) >>
-      `?v. inst.inst_outputs = [v]` by
-        (qpat_x_assum `inst_wf inst` mp_tac >>
-         asm_rewrite_tac[venomWfTheory.inst_wf_def, venomInstTheory.opcode_case_def] >>
-         simp[LENGTH_EQ_NUM_compute]) >>
-      qpat_x_assum `SND o_f rv = G` (SUBST_ALL_TAC o SYM) >>
-      irule ext_call_prov >> simp[] >> metis_tac[]))) >>
   (conj_tac >- ((
       `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
       qpat_assum `exec_ext_call inst s _ _ _ _ _ _ _ _ = OK post`

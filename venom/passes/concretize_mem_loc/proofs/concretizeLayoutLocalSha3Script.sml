@@ -257,15 +257,11 @@ Theorem concretize_sha3_local_complete:
       (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
-    step_prov PG G inst post = SND o_f (origin_set rv [v] NONE) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
   strip_tac >>
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
   drule_all concretize_sha3_demand_execution >> strip_tac >>
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >>
-     metis_tac[resolved_frame_erasure]) >>
   `!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b ==>
          joint_relocation_demand lo (concretize_positions C') q0 es qs c a b` by
     (rpt strip_tac >> irule joint_relocation_demand_retained >>
