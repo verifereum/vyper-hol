@@ -72,13 +72,13 @@ Proof
  drule_all fmp_dalloca_env_updates >> strip_tac >>
  drule_all fmp_dalloca_params_updates >> strip_tac >>
  simp[fmp_frame_rel_def] >> qexistsl [`infos`,`ctx`,`runner`] >>
- fs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+ gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
  rpt conj_tac
  >- (gvs[fmp_frontier_rel_def] >> simp[wordsTheory.w2n_n2w] >> decide_tac)
- >- cheat >>
- qexists_tac `st'` >> simp[] >>
- `~(t.vs_current_bb = rl /\ SUC s.vs_inst_idx < rp)` by decide_tac >>
- simp[] >>
- qexists_tac `<|fr_mark := out; fr_site := inst.inst_id;
+ >- (rpt gen_tac >> Cases_on `z=0` >- (simp[] >> metis_tac[]) >>
+     simp[FLOOKUP_UPDATE] >> IF_CASES_TAC >> gvs[] >> metis_tac[])
+ >- (strip_tac >> gvs[] >> decide_tac) >>
+ qexists_tac `<|fr_mark := out;
+                fr_site := (EL s.vs_inst_idx bb.bb_instructions).inst_id;
                 fr_lo := lo; fr_hi := lo+z|> :: regions` >> simp[]
 QED
