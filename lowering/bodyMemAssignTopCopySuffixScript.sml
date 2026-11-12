@@ -207,7 +207,7 @@ Proof
 QED
 
 Theorem storage_copy_success_run_mem:
-  !ctx func cenv cx e es es1 es' v tv tr mid id slot sa sm sf op loc s0 s1.
+  !H ctx func cenv cx e es es1 es' v tv tr slot sa sm sf op loc s0 s1.
     expr_post H ctx func cenv cx e es sa sm s0 es1 v op s1 /\
     expr_store_bound cx (expr_type e) v op s1 /\ alloca_history func s1 /\
     ~s1.vs_halted /\ s1.vs_current_bb = sm.cs_current_bb /\
@@ -218,12 +218,9 @@ Theorem storage_copy_success_run_mem:
     ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
     value_has_type tv v /\ lowered_value_type cenv e = expr_type e /\
     type_memory_bytes cenv (expr_type e) = type_memory_size tv /\
-    declared_storage_region cx mid id [] = SOME (tr,n2w slot,tv) /\
+    MEM (tr,n2w slot,tv) (FST H) /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H) /\
     0 < type_slot_size tv /\ slot + type_slot_size tv <= dimword (:256) /\
-    (!mid' id' subs' k' tv'.
-       declared_storage_region cx mid' id' subs' = SOME (tr,k',tv') /\
-       (k',tv') <> (n2w slot,tv) ==>
-       ranges_disjoint slot (type_slot_size tv) (w2n k') (type_slot_size tv')) /\
     write_storage_slot cx tr (n2w slot) tv v es1 = (INL (),es') /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
     compile_assign_value cenv (Lit (n2w slot))
