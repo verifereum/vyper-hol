@@ -30,7 +30,7 @@ Ancestors
   fnBlockPlanStaticOffsetLive fnPlanLineageLiveness fnBlockPlanStatic
   pair indexedLists livenessDefs venomFnInstsProofs fnLineageStatic
   fmpLowerReclaimPlan venomWfProps removeUnusedProofs
-  fnFrameSinglePred fmpStageReclaimFresh
+  fnFrameSinglePred fmpStageReclaimFresh fnFrameStepsPhi
 
 Theorem fmp_source_memory[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -753,56 +753,6 @@ Proof
   first_x_assum (qspec_then `k` mp_tac) >> simp[]
 QED
 
-(* First occurrence selection, without distinct predecessor labels. *)
-Theorem fmp_resolve_find_pairs[local]:
-  !ops pred. phi_well_formed ops ==>
-    resolve_phi pred ops =
-      case FIND (\(l,w). l = pred) (phi_pairs ops) of
-        NONE => NONE | SOME (_,w) => SOME (Var w)
-Proof
-  ho_match_mp_tac venomInstTheory.phi_pairs_ind >>
-  rw[phi_pairs_def, phi_well_formed_def, resolve_phi_def, FIND_thm] >> rw[]
-QED
-
-Theorem fmp_maps_fold_selected[local]:
-  !items (om:string |-> num) (mm:num |-> string) pred v idx src.
-    EVERY (\(i,phi).
-      (MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> i = idx) /\
-      (i = idx ==> MEM v (MAP SND (phi_pairs phi.inst_operands)) /\
-        FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) =
-                    SOME (pred,src))) items /\
-    (MEM idx (MAP FST items) \/
-     (FLOOKUP om v = SOME idx /\ FLOOKUP mm idx = SOME src)) ==>
-    FLOOKUP (FST (FOLDL (\(op_map,matching) (i,phi).
-      (FOLDL (\m (l,w). m |+ (w,i)) op_map (phi_pairs phi.inst_operands),
-       case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
-         NONE => matching | SOME (_,w) => matching |+ (i,w)))
-      (om,mm) items)) v = SOME idx /\
-    FLOOKUP (SND (FOLDL (\(op_map,matching) (i,phi).
-      (FOLDL (\m (l,w). m |+ (w,i)) op_map (phi_pairs phi.inst_operands),
-       case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
-         NONE => matching | SOME (_,w) => matching |+ (i,w)))
-      (om,mm) items)) idx = SOME src
-Proof
-  Induct >- simp[] >> rpt gen_tac >> Cases_on `h` >>
-  rename1 `(i,phi) :: items` >> simp[NoAsms] >>
-  disch_then (CONJUNCTS_THEN2 strip_assume_tac assume_tac) >>
-  first_x_assum irule >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  qpat_x_assum `EVERY _ items` kall_tac >>
-  Cases_on `i = idx`
-  >- (qpat_x_assum `i = idx ==> _` drule >> strip_tac >>
-      qpat_x_assum `MEM _ _ ==> _` kall_tac >>
-      gvs[fnLineageStaticTheory.phi_pair_updates_lookup, FLOOKUP_UPDATE]) >>
-  `~MEM v (MAP SND (phi_pairs phi.inst_operands))` by metis_tac[] >>
-  qpat_x_assum `MEM _ _ ==> _` kall_tac >>
-  qpat_x_assum `i = idx ==> _` kall_tac >>
-  Cases_on `FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands)` >>
-  gvs[fnLineageStaticTheory.phi_pair_updates_lookup, FLOOKUP_UPDATE, AllCaseEqs()] >>
-  rename1 `FIND _ _ = SOME found` >> Cases_on `found` >>
-  simp[FLOOKUP_UPDATE]
-QED
-
 Theorem fmp_phi_index_unique[local]:
   wf_function fn /\ MEM bb fn.fn_blocks /\
   i < LENGTH (collect_phis bb.bb_instructions) /\
@@ -858,7 +808,7 @@ Proof
     by metis_tac[collect_phis_mem] >>
   `inst_wf phi` by metis_tac[fn_inst_wf_def] >>
   `phi_well_formed phi.inst_operands` by gvs[inst_wf_def] >>
-  drule fmp_resolve_find_pairs >>
+  drule phi_resolve_find_pairs >>
   disch_then (qspec_then `pred` mp_tac) >>
   Cases_on `FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands)` >>
   gvs[] >> rename1 `FIND _ _ = SOME found` >> Cases_on `found` >> gvs[] >> strip_tac >> gvs[] >>
@@ -874,7 +824,7 @@ Proof
     by metis_tac[fmp_ready_source_index] >>
   rename1 `resolve_phi pred _ = _` >>
   mp_tac (Q.SPECL [`MAPi (\i phi. (i,phi)) (collect_phis bb.bb_instructions)`,
-    `FEMPTY`, `FEMPTY`, `pred`, `u`, `idx`, `u`] fmp_maps_fold_selected) >>
+    `FEMPTY`, `FEMPTY`, `pred`, `u`, `idx`, `u`] phi_maps_fold_selected) >>
   impl_tac
   >- (conj_tac
       >- (simp[EVERY_MEM, MEM_MAPi, FORALL_PROD] >> rpt strip_tac >> gvs[])

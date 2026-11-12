@@ -1,65 +1,20 @@
+(*
+ * Freshness of a DALLOCA's output on the reclaim analysis stack: the
+ * accepted reclaim analysis has a state at the entry block's start, at
+ * every point of a block whose entry has one, and at the entry of every
+ * successor of a block with an exit state.
+ *
+ * TOP-LEVEL:
+ *   reclaim_fresh_entry       - the entry block starts with an empty stack
+ *   reclaim_fresh_index_some  - a state at a block's entry gives one at each
+ *                               point of the block
+ *   reclaim_fresh_edge        - a predecessor's exit state gives the
+ *                               successor an entry state
+ *)
 Theory fmpStageReclaimFresh
 Ancestors
   fmpLowerReclaimPlan fmpReclaimDefs dfAnalyzeDefs cfgAnalysisProps
   venomWf venomWfProps venomExecProps venomInst cfgDefs list arithmetic
-
-(* These join facts are local interfaces of fmpStepReclaimDefined and are
-   restated here because that theory deliberately does not export them. *)
-Theorem fmp_join_fold_none[local]:
-  !vs acc. FOLDL fmp_reclaim_option_join acc vs = NONE ==>
-    acc = NONE /\ EVERY IS_NONE vs
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule >> Cases_on `acc` >> Cases_on `h` >>
-  simp[fmp_reclaim_option_join_def]
-QED
-
-Theorem fmp_option_join_some[local]:
-  y <> NONE ==> ?st. fmp_reclaim_option_join x y = SOME st
-Proof
-  Cases_on `x` >> Cases_on `y` >> simp[fmp_reclaim_option_join_def]
-QED
-
-Theorem fmp_case_foldl[local]:
-  (case xs of [] => NONE | v2::v3 => FOLDL fmp_reclaim_option_join NONE xs) =
-  FOLDL fmp_reclaim_option_join NONE xs
-Proof
-  Cases_on `xs` >> simp[]
-QED
-
-Theorem fmp_joined_some[local]:
-  FOLDL fmp_reclaim_option_join NONE
-    (MAP (\nbr. df_boundary NONE states nbr) (cfg_preds_of cfg lbl)) <> NONE ==>
-  ?st. fmp_joined entry cfg states lbl = SOME st
-Proof
-  strip_tac >> Cases_on `entry` >>
-  simp[fmp_joined_def, df_joined_val_def, fmp_case_foldl]
-  >- metis_tac[optionTheory.option_CASES] >>
-  PairCases_on `x` >> rw[] >>
-  metis_tac[fmp_option_join_some, optionTheory.option_CASES]
-QED
-
-Theorem fmp_joined_entry_some[local]:
-  ?st. fmp_joined (SOME (lbl,SOME fmp_empty_reclaim_state)) cfg states lbl =
-       SOME st
-Proof
-  simp[fmp_joined_def, df_joined_val_def, fmp_case_foldl] >>
-  qmatch_goalsub_abbrev_tac `fmp_reclaim_option_join _ b` >>
-  Cases_on `b` >> simp[fmp_reclaim_option_join_def]
-QED
-
-Theorem fmp_joined_pred_some[local]:
-  fmp_process_block transfer entry cfg bbs pred states = states /\
-  MEM pred (cfg_preds_of cfg succ) /\
-  FST (fmp_fold_at transfer entry cfg bbs states pred) = SOME exit_st ==>
-  ?entry_st. fmp_joined entry cfg states succ = SOME entry_st
-Proof
-  strip_tac >> drule_all fmp_process_block_stable >> strip_tac >>
-  irule fmp_joined_some >> strip_tac >>
-  drule fmp_join_fold_none >>
-  simp[EXISTS_MEM, MEM_MAP, PULL_EXISTS] >>
-  qexists `pred` >> simp[]
-QED
 
 Theorem reclaim_fresh_entry:
   wf_function fn /\ fmp_reclaim_states infos fn = SOME states /\
