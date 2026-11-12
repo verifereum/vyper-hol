@@ -38,7 +38,7 @@ Theorem log_allocated_arg[local]:
 Proof
   strip_tac >> drule log_allocation_wb_frame >> strip_tac >>
   irule log_arg_rel_frame >> simp[] >> goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`ctx`, `es`, `func`] >> simp[]
+  qexistsl_tac [`H`, `ctx`, `es`, `func`] >> simp[]
 QED
 
 Theorem log_allocated_data_sources[local]:
@@ -59,7 +59,7 @@ Proof
   rpt strip_tac
   >- (`log_arg_rel ce cx sa st es t (h0,h1) h` by
         (irule log_allocated_arg >> simp[] >>
-         qexistsl_tac [`cap`,`ctx`,`func`,`s`] >> simp[]) >>
+         qexistsl_tac [`H`,`cap`,`ctx`,`func`,`s`] >> simp[]) >>
       `expr_val_at ce cx h1 sa st es h h0 t` by gvs[log_arg_rel_def] >>
       `allocas_non_overlapping t` by gvs[stmt_state_rel_def, alloca_inv_def] >>
       `!name a k. local_region ce es.scopes t name a k ==>
