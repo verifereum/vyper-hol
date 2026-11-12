@@ -32,7 +32,7 @@ Proof
    q.vs_call_ctx = s.vs_call_ctx /\ q.vs_tx_ctx = s.vs_tx_ctx /\
    q.vs_block_ctx = s.vs_block_ctx /\ q.vs_logs = s.vs_logs /\
    q.vs_outcomes = s.vs_outcomes /\ q.vs_requests = s.vs_requests /\
-   q.vs_pending_deletions = s.vs_pending_deletions` by
+   q.vs_pending_deletions = s.vs_pending_deletions /\ q.vs_code = s.vs_code` by
     (qpat_x_assum `_ = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `?imms. es' = es with immutables := imms` by

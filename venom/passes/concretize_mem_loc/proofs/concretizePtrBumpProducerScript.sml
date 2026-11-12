@@ -1,7 +1,7 @@
 Theory concretizePtrBumpProducer
 Ancestors concretizePtrRequestHistory
   concretizePtrPairedNextAttach concretizePtrPairedPrefixProbe
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape concretizePtrOperationalOpcodes opcodeClass
   concretizePtrOrdinaryNext concretizePtrPairedPrefix concretizePtrPairedFields
   concretizePtrStructuralTranscript concretizePtrStructuralTrace

@@ -14,6 +14,12 @@ Theory exprPtrUnwrap
 Ancestors
   bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs exprSimHyps loweringPosts
   gasExemptCert exprLowering emitHelper compileEnv vyperInterpreter vyperState
+  exprPtrUnwrapMarked exprPtrUnwrapIdentity gasOutcomeMarkedPtr exprSimSource exprLoweringProps
+  exprOperandVar exprSimUnwrap fragExec pair gasSummaryComposePtr
+  fragGasSeqPtr vyperEvalExprPreservesScopesDom
+  exprSimAggregateChildren typedMemoryCopy exprSimHypsDefs valueCopyBytes
+Libs
+  pairLib
 
 (* exprSimStack's expr_stack_outcome with the ghost: a raw value's outcome
    is its forced value's, the post read through Value. *)
@@ -26,8 +32,8 @@ Theorem expr_stack_outcome_ptr:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx ee G tn u /\
-      ptr_val_ok cx (expr_type e) v op G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ptr_val_ok cx (post_value_type cenv e) v op G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r) ==>
   gas_outcome_ptr D tops (ctx,func) PG (eval_expr cx e) (es,s0,G0,tn0)
@@ -36,8 +42,8 @@ Theorem expr_stack_outcome_ptr:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx ee G tn u /\
-      ptr_vv_ok cx (expr_type e) tv (StackValue t op) ee G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ptr_vv_ok cx (post_value_type cenv e) tv (StackValue t op) ee G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -68,6 +74,15 @@ QED
    evaluates (exprSimSource's expr_body_pre_runtime_typed), which the
    loaded word's taint needs: ptr_vv_ok's memory clause says nothing about
    a type that doesn't evaluate. *)
+Theorem expr_exit_exception_exists[local]:
+  (?exc. res = INR exc /\ expr_exit (INR exc : 'b + exception) r) <=>
+  expr_exit (res : 'a + exception) r
+Proof
+  Cases_on `res` >- simp[] >> simp[] >>
+  qspecl_then [`(\x:'a. ARB:'b)`, `INR y : 'a + exception`]
+    mp_tac expr_exit_success_map >> simp[FUN_EQ_THM]
+QED
+
 Theorem expr_sim_ptr_of_vv:
   !d ctx PG func cenv cx env ty e es.
     expr_body_pre cenv cx env e es /\

@@ -45,7 +45,8 @@ Proof
   `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
    (!e. lowered_value_type c e = lowered_value_type cenv e)` by
     (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
-     simp[oneline lowered_value_type_def]) >>
+     rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `?sA sV sB vv op.
      emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv vtyp))] [p] st = ((),sA) /\
      compile_expr c (expr_type e) e sA = (vv,sV) /\
@@ -87,7 +88,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule expr_body_pre_var_types_well_formed >> strip_tac >>
   `well_typed_expr env e /\
-   sfields_tenv_consistent cenv.ce_struct_fields env.type_defs` by
+   sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
+   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+      cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
   drule ifexp_lowered_type_classify >>
@@ -106,6 +109,8 @@ Theorem relayout_post_value_type[local]:
     (!id t. FLOOKUP env.var_types id = SOME t ==>
             well_formed_type env.type_defs t) /\
     sfields_tenv_consistent c.ce_struct_fields env.type_defs /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+       c.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     (!e. lowered_value_type c e = lowered_value_type cenv e) /\
     expr_type e = typ /\ ~is_word_type typ /\ ~is_bytestring_type typ /\
     lowered_value_type cenv e <> typ ==>
@@ -170,7 +175,8 @@ Proof
   `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
    (!e. lowered_value_type c e = lowered_value_type cenv e)` by
     (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
-     simp[oneline lowered_value_type_def]) >>
+     rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func c cx es s0` by
     (rpt strip_tac >> irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
@@ -209,7 +215,9 @@ Proof
   `!x. op = Var x ==> not_fresh_at sB x` by metis_tac[compile_lower_value_var] >>
   `post_value_type c e = lowered_value_type cenv e` by
     (`well_typed_expr env e /\
-      sfields_tenv_consistent c.ce_struct_fields env.type_defs` by
+      sfields_tenv_consistent c.ce_struct_fields env.type_defs /\
+      (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+         c.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
        fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
           env_context_consistent_def] >>
      match_mp_tac relayout_post_value_type >> qexistsl_tac [`env`, `typ`] >>
