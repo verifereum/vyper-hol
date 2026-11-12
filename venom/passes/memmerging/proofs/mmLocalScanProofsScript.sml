@@ -4952,6 +4952,63 @@ Proof
   qexistsl [`r`,`pre`,`chunk`,`post`,`u`,`v`] >> simp[]
 QED
 
+Theorem mm_local_zero_inst_ids[local]:
+  MEM id (mm_local_group_ids (scan_inst_memzero dfg mz i).mz_flushed ++
+          mm_local_group_ids (scan_inst_memzero dfg mz i).mz_copies) <=>
+  MEM id (mm_local_group_ids mz.mz_flushed ++ mm_local_group_ids mz.mz_copies) \/
+  (id = i.inst_id /\ (is_zero_store i \/ is_calldatasize_copy dfg i))
+Proof
+  `!cs cg. MEM id (mm_local_group_ids (add_copy cs cg)) =
+    MEM id (cg.cg_inst_ids ++ mm_local_group_ids cs)` by
+    metis_tac[mm_local_add_ids_perm, PERM_MEM_EQ] >>
+  Cases_on `i.inst_operands`
+  >- (simp[scan_inst_memzero_def, is_zero_store_def, is_calldatasize_copy_def] >>
+      IF_CASES_TAC >> simp[memzero_barrier_def, mm_local_group_ids_append,
+        mm_local_group_ids_def]) >>
+  rename1 `i.inst_operands = dst::ops` >> Cases_on `ops`
+  >- (simp[scan_inst_memzero_def, is_zero_store_def, is_calldatasize_copy_def] >>
+      IF_CASES_TAC >> simp[memzero_barrier_def, mm_local_group_ids_append,
+        mm_local_group_ids_def]) >>
+  rename1 `i.inst_operands = dst::src::ops` >> Cases_on `ops`
+  >- (simp[scan_inst_memzero_def, is_zero_store_def, is_calldatasize_copy_def] >>
+      Cases_on `operand_lit_val dst` >> simp[] >>
+      rpt IF_CASES_TAC >> gvs[memzero_barrier_def, mm_local_group_ids_append,
+        copy_memzero_def, mm_local_group_ids_def] >> metis_tac[]) >>
+  rename1 `i.inst_operands = dst::src::len::ops` >> Cases_on `ops` >>
+  simp[scan_inst_memzero_def, is_zero_store_def, is_calldatasize_copy_def] >>
+  Cases_on `operand_lit_val dst` >> Cases_on `operand_lit_val len` >> simp[] >>
+  rpt IF_CASES_TAC >> gvs[memzero_barrier_def, mm_local_group_ids_append,
+    copy_memzero_def, mm_local_group_ids_def] >> metis_tac[]
+QED
+
+Theorem mm_local_zero_fold_ids[local]:
+  !xs mz. MEM id
+    (mm_local_group_ids (FOLDL (scan_inst_memzero dfg) mz xs).mz_flushed ++
+     mm_local_group_ids (FOLDL (scan_inst_memzero dfg) mz xs).mz_copies) <=>
+    MEM id (mm_local_group_ids mz.mz_flushed ++ mm_local_group_ids mz.mz_copies) \/
+    ?i. MEM i xs /\ id = i.inst_id /\
+      (is_zero_store i \/ is_calldatasize_copy dfg i)
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  pure_rewrite_tac[FOLDL] >>
+  first_x_assum (qspec_then `scan_inst_memzero dfg mz h` SUBST1_TAC) >>
+  pure_rewrite_tac[mm_local_zero_inst_ids] >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_zero_selected_member[local]:
+  MEM i bb.bb_instructions /\
+  (is_zero_store i \/ is_calldatasize_copy dfg i) ==>
+  ?g. MEM g (scan_block_memzero dfg bb).mz_flushed /\ MEM i.inst_id g.cg_inst_ids
+Proof
+  strip_tac >>
+  `MEM i.inst_id (mm_local_group_ids (scan_block_memzero dfg bb).mz_flushed)` by
+    (mp_tac (Q.SPECL [`bb.bb_instructions`,`empty_memzero_state`]
+       (Q.INST [`id` |-> `i.inst_id`] mm_local_zero_fold_ids)) >>
+     simp[scan_block_memzero_def, memzero_barrier_def, mm_local_group_ids_append,
+       empty_memzero_state_def, mm_local_group_ids_def] >> metis_tac[]) >>
+  gvs[mm_local_group_ids_def, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
 Theorem mm_local_zero_add_unique[local]:
   ALL_DISTINCT (mm_local_group_ids mz.mz_flushed ++
     mm_local_group_ids mz.mz_copies ++ id::todo) /\ cg.cg_inst_ids = [id] ==>
