@@ -49,7 +49,7 @@ Proof
   simp[lookup_account_def] >> Induct >>
   gvs[process_deletions_def, update_account_def,
       combinTheory.APPLY_UPDATE_THM] >>
-  rw[]
+  rw[] >> gvs[]
 QED
 
 Theorem run_call_balance_bounded:
