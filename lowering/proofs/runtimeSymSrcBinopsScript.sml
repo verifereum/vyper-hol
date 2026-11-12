@@ -240,11 +240,15 @@ Proof
      FIRST [MATCH_ACCEPT_TAC runtime_sym_safe_decimal_div,
             MATCH_ACCEPT_TAC runtime_sym_safe_div])
   >>~- ([`compile_compare _ _ _ _ _ = _`],
-    rpt strip_tac >> drule_all runtime_sym_compare >> simp[]) >>
+    rpt strip_tac >> drule_all runtime_sym_compare >> simp[])
+  >>~- ([`wrap_truncate`],
+    Cases_on `is_signed_type ty` >>
+    simp[comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
+    drule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >>
+    simp[] >> strip_tac >> drule_all runtime_sym_wrap_truncate >> simp[]) >>
   rpt strip_tac >>
-  Cases_on `type_bits ty < 256` >> Cases_on `is_signed_type ty` >>
-  Cases_on `is_uint256 ty` >>
-  gvs[builtinSimpleTheory.compile_select_def, wrap_truncate_def] >>
+  Cases_on `is_signed_type ty` >> Cases_on `is_uint256 ty` >>
+  gvs[builtinSimpleTheory.compile_select_def] >>
   rpt IF_CASES_TAC >>
   gvs[comp_bind_def, comp_ignore_bind_def, emit_op_def, emit_inst_def,
       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
