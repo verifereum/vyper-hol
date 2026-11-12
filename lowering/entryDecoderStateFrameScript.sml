@@ -14,7 +14,8 @@ Definition entry_decoder_obs_def:
     t.vs_pending_deletions = s.vs_pending_deletions /\
     t.vs_data_section = s.vs_data_section /\
     t.vs_gas_readings = s.vs_gas_readings /\
-    t.vs_labels = s.vs_labels /\ t.vs_fmp = s.vs_fmp
+    t.vs_labels = s.vs_labels /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_code = s.vs_code
 End
 
 Theorem entry_decoder_obs_refl[simp]:
@@ -54,7 +55,7 @@ Proof
      `\s:venom_state. s.vs_outcomes`, `\s:venom_state. s.vs_requests`,
      `\s:venom_state. s.vs_pending_deletions`, `\s:venom_state. s.vs_data_section`,
      `\s:venom_state. s.vs_gas_readings`, `\s:venom_state. s.vs_labels`,
-     `\s:venom_state. s.vs_fmp`]) >>
+     `\s:venom_state. s.vs_fmp`, `\s:venom_state. s.vs_code`]) >>
   simp[entry_decoder_obs_def]
 QED
 
