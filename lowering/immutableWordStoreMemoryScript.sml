@@ -71,7 +71,9 @@ Theorem immutable_word_write_mem:
     t.vs_allocas = s.vs_allocas /\ (!x. lookup_var x t = lookup_var x s) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    gas_marked_path T ctx func s 0 (OK t)
+    gas_marked_path T ctx func s 0 (OK t) /\
+    t = (mstore (off+k) (typed_val_to_w256 etv v) s with
+           vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
   strip_tac >>
   drule_all immutable_replace_write_replay >> strip_tac >>

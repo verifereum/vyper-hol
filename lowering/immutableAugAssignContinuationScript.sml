@@ -27,7 +27,7 @@ Theorem immutable_augassign_operator_mem[local]:
     word_value v /\ stmt_state_rel ctx func cenv cx ee t /\
     eval_operand op t = SOME (val_to_w256 v) /\ eval_operand dst t = SOME w /\
     w2n w + 32 <= t.vs_alloca_next /\ alloca_history func t /\
-    s.vs_alloca_next <= t.vs_alloca_next /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ t.vs_memory = s.vs_memory /\
     (!z u. not_fresh_at s2 z /\ lookup_var z s = SOME u ==> lookup_var z t = SOME u) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = s3.cs_current_bb /\
@@ -35,7 +35,7 @@ Theorem immutable_augassign_operator_mem[local]:
     ?ff u. (!tail. write_place cx (ImmutablePlace mid id path) v
                     (ee with gas_obs := tail) = (INL (),ff with gas_obs := tail)) /\
       gas_marked_path T ctx func t 0 (OK u) /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s_entry (INL ())
+      stmt_post ctx func cx lctx cenv cenv sa sf es_entry s_entry (INL ())
         (ff with gas_obs := []) u /\ alloca_history func u /\
       s_entry.vs_alloca_next <= u.vs_alloca_next) ==>
   ?res ff r.
@@ -45,7 +45,7 @@ Theorem immutable_augassign_operator_mem[local]:
       (ee with gas_obs := tail) = (res,ff with gas_obs := tail)) /\
     gas_marked_path T ctx func s 0 r /\
     ((?u. r = OK u /\ res = INL () /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s_entry res
+      stmt_post ctx func cx lctx cenv cenv sa sf es_entry s_entry res
         (ff with gas_obs := []) u /\ alloca_history func u /\
       s_entry.vs_alloca_next <= u.vs_alloca_next) \/
      (exit_result r /\ !tail. stmt_exit RetQ (ff with gas_obs := tail) res r))
@@ -123,7 +123,7 @@ Theorem immutable_augassign_rhs_mem:
     word_value v /\ stmt_state_rel ctx func cenv cx ee t /\
     eval_operand op t = SOME (val_to_w256 v) /\ eval_operand dst t = SOME w /\
     w2n w + 32 <= t.vs_alloca_next /\ alloca_history func t /\
-    s.vs_alloca_next <= t.vs_alloca_next /\
+    s.vs_alloca_next <= t.vs_alloca_next /\ t.vs_memory = s.vs_memory /\
     (!z u. not_fresh_at s2 z /\ lookup_var z s = SOME u ==> lookup_var z t = SOME u) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = s3.cs_current_bb /\
@@ -131,7 +131,7 @@ Theorem immutable_augassign_rhs_mem:
     ?ff u. (!tail. write_place cx (ImmutablePlace mid id path) v
                     (ee with gas_obs := tail) = (INL (),ff with gas_obs := tail)) /\
       gas_marked_path T ctx func t 0 (OK u) /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s_entry (INL ())
+      stmt_post ctx func cx lctx cenv cenv sa sf es_entry s_entry (INL ())
         (ff with gas_obs := []) u /\ alloca_history func u /\
       s_entry.vs_alloca_next <= u.vs_alloca_next) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
@@ -140,7 +140,7 @@ Theorem immutable_augassign_rhs_mem:
         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
         ptv bop cur rhs)) (write_place cx (ImmutablePlace mid id path)))) (es,s0)
     (\res ff u. res = INL () /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s_entry res ff u /\
+      stmt_post ctx func cx lctx cenv cenv sa sf es_entry s_entry res ff u /\
       alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof

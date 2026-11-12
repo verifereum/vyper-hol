@@ -69,7 +69,7 @@ QED
 
 (* An MSTORE into a constructor immutable's word keeps every alloca's
    bytes: immutable_decl_sep separates the immutable from every alloca. *)
-Theorem immutable_mstore_alloca_frame[local]:
+Theorem immutable_mstore_alloca_frame:
   alloca_frame c0 e0 sa s0 cenv ee s /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
            FLOOKUP s.vs_allocas aid = SOME b) /\

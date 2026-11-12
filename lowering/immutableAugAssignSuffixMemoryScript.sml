@@ -14,6 +14,10 @@ Theorem immutable_augassign_scalar_suffix_mem:
   FLOOKUP env.bare_global_assignable (cenv.ce_module,id) = SOME ty /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   off < dimword (:256) /\ ~block_is_terminated sf /\
+  cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
+  type_memory_size tv = 32 /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_id <= s1.cs_next_id /\
+  alloca_frame cenv es_entry sa s_entry cenv es s0 /\
   lower_value compile_expr cenv ty e s1 = (y,s2) /\
   compile_binop bop x y ty NONE
     (if bop = Exp then expr_int_literal e else NONE) s2 = (op,s3) /\
@@ -49,7 +53,7 @@ Theorem immutable_augassign_scalar_suffix_mem:
         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
         tv bop cur rhs)) (write_place cx (ImmutablePlace cenv.ce_module id [])))) (es,s0)
     (\res ff u. res = INL () /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s_entry res ff u /\
+      stmt_post ctx func cx lctx cenv cenv sa sf es_entry s_entry res ff u /\
       alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof
@@ -77,6 +81,20 @@ Proof
             FLOOKUP t.vs_allocas aid = SOME b)` by
     (fs[loweringPostsTheory.expr_post_def] >> metis_tac[]) >>
   `s_entry.vs_alloca_next <= t.vs_alloca_next` by decide_tac >>
+  `alloca_frame cenv es s1 s0 cenv ee s` by
+    (drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >>
+     simp[] >> strip_tac >>
+     irule stmtSimDefsTheory.expr_post_alloca_frame >>
+     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[]) >>
+  `alloca_frame cenv es_entry sa s_entry cenv ee s` by
+    (irule stmtSimDefsTheory.alloca_frame_trans >>
+     goal_assum (drule_at Any) >> simp[] >>
+     fs[loweringPostsTheory.expr_post_def] >> metis_tac[]) >>
+  `alloca_frame cenv es_entry sa s_entry cenv ee t` by
+    (irule augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl [`ctx`, `cx`, `func`, `s2`] >>
+     fs[loweringPostsTheory.expr_post_def]) >>
   irule immutable_augassign_root_write_callback >>
   goal_assum (drule_at Any) >> simp[] >>
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >> simp[] >>
