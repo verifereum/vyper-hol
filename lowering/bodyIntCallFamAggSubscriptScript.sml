@@ -60,7 +60,7 @@ QED
 Resume intcall_subscript_step[place]:
   drule_all placeTypingPropsTheory.place_type_checked_place_on_defined >>
   strip_tac >>
-  drule placeTypingPropsTheory.type_place_expr_vtype_annotation >> strip_tac >>
+  drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >> strip_tac >>
   Cases_on `vt` >>
   gvs[vyperTypeSystemTheory.subscript_vtype_def, exprLoweringTheory.value_type_place_def,
       vyperTypeSystemTheory.vtype_annotation_ok_def]
