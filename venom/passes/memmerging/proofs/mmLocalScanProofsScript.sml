@@ -16706,6 +16706,74 @@ Proof
   gvs[venomExecSemanticsTheory.run_block_def]
 QED
 
+Theorem mm_local_pending_indices_endpoints[local]:
+  mm_local_pending_indices is gs 0 = [] /\
+  mm_local_pending_indices is gs (LENGTH is) = []
+Proof
+  simp[mm_local_pending_indices_def, listTheory.FILTER_EQ_NIL, EVERY_MEM,
+    MEM_COUNT_LIST]
+QED
+
+Definition mm_local_zero_cut_def:
+  mm_local_zero_cut dfg is gs H n excluded pc t <=>
+    t.vs_inst_idx = pc /\
+    mm_local_nonmemory_frame (H n) = mm_local_nonmemory_frame t /\
+    (!v. v NOTIN excluded ==> lookup_var v (H n) = lookup_var v t) /\
+    mm_local_pending (mm_local_zero_capture dfg is n)
+      (mm_local_pending_indices is gs n) (H n) t
+End
+
+Theorem mm_local_zero_cut_init[local]:
+  mm_local_zero_cut dfg is gs H 0 excluded pc
+    ((H 0) with vs_inst_idx := pc)
+Proof
+  simp[mm_local_zero_cut_def, mm_local_pending_indices_endpoints,
+    mm_local_pending_empty, venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_zero_cut_empty[local]:
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] ==>
+  state_equiv excluded ((H n) with vs_inst_idx := pc) t
+Proof
+  strip_tac >> gvs[mm_local_zero_cut_def, mm_local_pending_empty] >>
+  gvs[state_equiv_frame, mm_local_nonmemory_frame_def,
+    stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_zero_cut_operands[local]:
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) ==>
+  MAP (\op. eval_operand op (H n)) i.inst_operands =
+  MAP (\op. eval_operand op t) i.inst_operands
+Proof
+  strip_tac >> irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+  `MEM (EL x i.inst_operands) i.inst_operands` by simp[EL_MEM] >>
+  Cases_on `EL x i.inst_operands` >>
+  gvs[venomStateTheory.eval_operand_def, mm_local_zero_cut_def,
+    mm_local_nonmemory_frame_def, stateFrameTheory.state_frame_def,
+    venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_zero_cut_calldata[local]:
+  mm_local_zero_cut dfg is gs H n excluded pc t ==>
+  t.vs_call_ctx = (H n).vs_call_ctx
+Proof
+  simp[mm_local_zero_cut_def, mm_local_nonmemory_frame_def,
+    stateFrameTheory.state_frame_def,
+    venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_zero_cut_end[local]:
+  mm_local_zero_cut dfg is gs H (LENGTH is) excluded pc t ==>
+  state_equiv excluded ((H (LENGTH is)) with vs_inst_idx := pc) t
+Proof
+  strip_tac >> irule mm_local_zero_cut_empty >>
+  qexistsl [`dfg`,`gs`,`is`] >>
+  simp[mm_local_pending_indices_endpoints] >> metis_tac[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
