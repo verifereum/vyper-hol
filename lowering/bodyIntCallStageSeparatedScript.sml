@@ -1,14 +1,14 @@
 (* Separation of staged memory descriptors from ordered allocation intervals. *)
 Theory bodyIntCallStageSeparated
 Ancestors
-  bodyIntCallStageOwned venomMemDefs compileEnv
+  bodyIntCallStageOwned venomMemDefs compileEnv loweringStateRelDefs
 
 Theorem staged_arg_intervals_disjoint:
   staged_arg ce func es a mid t (ty,tv,v,F,op) /\
   staged_arg ce func es mid sn t (ty',tv',v',F,op') /\
   alloca_inv t /\ eval_operand op t = SOME w /\
   eval_operand op' t = SOME w' ==>
-  compileEnv$regions_disjoint (w2n w) (type_memory_size tv)
+  loweringStateRelDefs$regions_disjoint (w2n w) (type_memory_size tv)
     (w2n w') (type_memory_size tv')
 Proof
   simp[staged_arg_def] >> strip_tac >>

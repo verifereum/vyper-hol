@@ -2,7 +2,7 @@
 Theory bodyIntCallStagePackage
 Ancestors
   bodyIntCallStageOwned intCallCallee exprSimProps abiCallerAllocation
-  tupleLoadProps venomExecProofs list pair finite_map
+  tupleLoadProps venomExecProofs memoryValueEncoding list pair finite_map
 
 Theorem staged_args_operands_defined:
   EVERY (staged_arg ce func es a sm s) D ==>
@@ -10,7 +10,7 @@ Theorem staged_args_operands_defined:
 Proof
   strip_tac >>
   `IS_SOME (eval_operands (MAP (\(ty,tv,v,flag,op). op) D) s)` by
-    (simp[eval_operands_IS_SOME_EVERY, EVERY_MAP, EVERY_MEM] >>
+    (simp[venomStateTheory.eval_operands_IS_SOME_EVERY, EVERY_MAP, EVERY_MEM] >>
      rpt strip_tac >> rename1 `MEM d D` >> PairCases_on `d` >>
      fs[EVERY_MEM] >> first_x_assum drule >> simp[staged_arg_def] >>
      metis_tac[optionTheory.IS_SOME_DEF]) >>
@@ -75,7 +75,9 @@ Proof
       `eval_operand rest3 s = SOME (EL i ws)` by
         (drule_at (Pat `eval_operands _ _ = _`) eval_operands_index >>
          disch_then (qspec_then `i` mp_tac) >> simp[EL_MAP]) >>
-      drule_all staged_arg_parameter >> simp[EL_APPEND_EQN]) >>
+      `value_has_type rest0 rest1` by fs[staged_arg_def] >>
+      drule_all staged_arg_parameter >> simp[EL_APPEND_EQN] >>
+      rw[] >> metis_tac[memoryValueEncodingTheory.val_in_memory_memory_value_rel]) >>
   rpt strip_tac >>
   qpat_assum `!i j. _` (qspecl_then [`i`,`j`] mp_tac) >> simp[] >>
   qpat_assum `!i. i < LENGTH D ==> _` (qspec_then `i` mp_tac) >>
