@@ -2,6 +2,7 @@
    lower_value here includes storage/code conversion as well as memory VVs. *)
 Theory bodyAbiEncodeMemorySource
 Ancestors
+  bodyAbiEncodePlan
   abiBuiltinEncodeWord abiBuiltinDispatchCorrect externalReturnLiveWindowResources exprSimMemDefs
   exprSimUnwrapProps abiEncoderLiveSource loweringPosts exprSimProps
   exprLowering compileEnv context vyperAST venomState words exprOperandVar gasOutcome

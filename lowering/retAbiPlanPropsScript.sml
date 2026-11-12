@@ -242,7 +242,7 @@ Proof
   irule abi_enc_plan_copy >> fs[]
 QED
 
-Theorem map_struct_field_types[local]:
+Theorem map_struct_field_types:
   !fields. MAP (\(fn, fty, sz). g fty) fields = MAP g (MAP (FST o SND) fields)
 Proof
   Induct >> simp[FORALL_PROD]
