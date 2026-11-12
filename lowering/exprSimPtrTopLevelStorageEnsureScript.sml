@@ -20,7 +20,7 @@ QED
 Theorem toplevel_storage_ensure_ptr_semantic_effects:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_ensure_in_memory (Lit a) loc nb n ctor imm sa = (op,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   nb = 32*n /\ nb < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -32,7 +32,7 @@ Theorem toplevel_storage_ensure_ptr_semantic_effects:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ?u w.
-      stmt_state_rel ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
+      stmt_state_rel H ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
       lookup_var p u = SOME w /\ lookup_var p t = SOME w /\
       copy_prefix loc a (w2n w) n u n t /\ copy_static t = copy_static u /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
@@ -147,7 +147,7 @@ QED
 Theorem toplevel_storage_ensure_ptr_effects:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_ensure_in_memory (Lit a) loc nb n ctor imm sa = (op,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   nb = 32*n /\ nb < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -159,7 +159,7 @@ Theorem toplevel_storage_ensure_ptr_effects:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ?u w.
-      stmt_state_rel ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
+      stmt_state_rel H ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
       lookup_var p u = SOME w /\ lookup_var p t = SOME w /\
       copy_prefix loc a (w2n w) n u n t /\ copy_static t = copy_static u /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
@@ -190,7 +190,7 @@ QED
 Theorem toplevel_storage_ensure_ptr_path:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_ensure_in_memory (Lit a) loc nb n ctor imm sa = (op,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   nb = 32*n /\ nb < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -202,7 +202,7 @@ Theorem toplevel_storage_ensure_ptr_path:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ?u w.
-      stmt_state_rel ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
+      stmt_state_rel H ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
       lookup_var p u = SOME w /\ lookup_var p t = SOME w /\
       copy_prefix loc a (w2n w) n u n t /\ copy_static t = copy_static u /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
