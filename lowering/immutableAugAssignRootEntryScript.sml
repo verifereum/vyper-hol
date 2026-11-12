@@ -2,7 +2,7 @@
 Theory immutableAugAssignRootEntry
 Ancestors
   bodyAugAssignOther bodyAugPlaceTarget immutableWordReadMemory
-  exprSimPopImmutableTarget augAssignPlaceCompileMemory
+  exprSimPopImmutableTarget augAssignPlaceCompileMemory immutableAugAssignRootSource
   supportedStmts supportedExprForms supportedTypes vyperTypeSystem vyperTypeInvariants
 
 Theorem immutable_augassign_root_metadata:
