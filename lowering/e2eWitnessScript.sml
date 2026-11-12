@@ -537,6 +537,15 @@ Proof
                        vyperTypingTheory.well_formed_type_value_def]
 QED
 
+(* p23 declares no constant, so the runtime constants fold is empty at any
+   immutables: the pair the constants premise of source_typing_ok asks for. *)
+Theorem p23_constants_fold[local]:
+  !imms. constants_fold_module [(NONE, p23_tops)] imms NONE p23_tops FEMPTY =
+         SOME FEMPTY
+Proof
+  simp[p23_tops_def, vyperTypeContractTheory.constants_fold_module_def]
+QED
+
 val p23_call_context_eval = EVAL
   ``initial_evaluation_context p23_am_call.sources p23_am_call.layouts
       p23_call_tx NONE``;
