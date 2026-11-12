@@ -710,6 +710,8 @@ Theorem p23_call_result:
 Proof
   simp[call_result_rel_def, p23_call_trace] >>
   irule gas_readings_rel_empty >>
+  rpt strip_tac >>
+  simp[call_result_rel_at_def, p23_call_trace, LET_THM] >>
   simp[p23_src_call_eval, call_success_rel_def] >>
   qexists `word_to_bytes (42w:bytes32) T` >>
   conj_tac >- (
