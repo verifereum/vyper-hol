@@ -10,7 +10,7 @@ Ancestors
   vyperExprNoControl vyperInterpreter vyperState loweringStateRelDefs
 
 Theorem aug_place_memory_word_frontier[local]:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_sim_inv cenv cx env es /\
   lookup_scopes id es.scopes = SOME entry /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
@@ -42,7 +42,7 @@ Theorem aug_place_memory_access_path:
   eval_target_place cx bt es = (INL (MemoryPlace id path),st) /\
   read_place cx (MemoryPlace id path) st = (INL old,stc) /\
   place_type_value cx (MemoryPlace id path) stc = (INL ptv,stt) /\
-  stmt_state_rel ctx func cenv cx st s /\
+  stmt_state_rel H ctx func cenv cx st s /\
   expr_sim_inv cenv cx env st /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
   emit_op MLOAD [dst] sa = (cur,sb) /\ eval_operand dst s = SOME w /\
@@ -55,7 +55,7 @@ Theorem aug_place_memory_access_path:
   ?tv u. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv old /\
     gas_marked_path T ctx func s 0 (OK u) /\
     eval_operand cur u = SOME (typed_val_to_w256 tv old) /\
-    stmt_state_rel ctx func cenv cx st u /\
+    stmt_state_rel H ctx func cenv cx st u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ alloca_history func u /\
@@ -82,13 +82,13 @@ Theorem aug_place_storage_access_path:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx st s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx st s /\
   alloca_history func s /\ eval_operand arg s = SOME slot /\
   (!x. arg = Var x ==> not_fresh_at sa x) /\
   (if tr then tload slot s else sload slot s) = typed_val_to_w256 tv cur ==>
   ?u. gas_marked_path T ctx func s 0 (OK u) /\
     eval_operand op u = SOME (typed_val_to_w256 tv cur) /\
-    stmt_state_rel ctx func cenv cx st u /\ eval_operand arg u = SOME slot /\
+    stmt_state_rel H ctx func cenv cx st u /\ eval_operand arg u = SOME slot /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ alloca_history func u /\
@@ -107,7 +107,7 @@ Proof
      qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
      simp[mk_inst_def, step_inst_base_def, exec_read1_def]) >>
   drule_at (Pat `step_inst_base _ _ = _`) emit_op_word_path_frame_mem >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then drule >>
   (impl_tac >- (Cases_on `tr` >> simp[])) >> strip_tac >>
   `t.vs_memory = s.vs_memory` by
@@ -126,7 +126,7 @@ Theorem aug_place_storage_read_path:
   contract_storage_well_formed cx es /\
   EVERY (supported_pure_expr tops) (target_indices bt) /\
   eval_target_place cx bt es = (INL (StoragePlace tr slot tv),st) /\
-  target_post ctx func cenv cx es sa sp s0 st
+  target_post H ctx func cenv cx es sa sp s0 st
     (PlaceR (StoragePlace tr slot tv)) (Type ty) r s /\
   is_word_type ty /\
   emit_op (if tr then TLOAD else SLOAD) [FST r] sp = (op,sb) /\
@@ -140,7 +140,7 @@ Theorem aug_place_storage_read_path:
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur /\
     gas_marked_path T ctx func s 0 (OK u) /\
     eval_operand op u = SOME (typed_val_to_w256 tv cur) /\
-    stmt_state_rel ctx func cenv cx st u /\ eval_operand (FST r) u = SOME slot /\
+    stmt_state_rel H ctx func cenv cx st u /\ eval_operand (FST r) u = SOME slot /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ alloca_history func u /\
@@ -153,7 +153,7 @@ Proof
   drule_all aug_place_pure_target_storage_range >> strip_tac >>
   drule_all aug_place_pure_target_storage_live >> strip_tac >>
   `evaluate_type (get_tenv cx) ty = SOME tv /\
-   stmt_state_rel ctx func cenv cx st s /\
+   stmt_state_rel H ctx func cenv cx st s /\
    eval_operand (FST r) s = SOME slot /\
    (!x. FST r = Var x ==> not_fresh_at sp x)` by
     gvs[target_post_def, place_ptr_rel_def] >>
@@ -184,7 +184,7 @@ Theorem aug_place_memory_source_ready:
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
   eval_target_place cx bt es = (INL (MemoryPlace id path),st) /\
   expr_sim_inv cenv cx env st /\
-  target_post ctx func cenv cx es sa sp s0 st
+  target_post H ctx func cenv cx es sa sp s0 st
     (PlaceR (MemoryPlace id path)) (Type ty) r s ==>
   ?cur tv.
     read_place cx (MemoryPlace id path) st = (INL cur,st) /\
@@ -195,7 +195,7 @@ Proof
   drule_all aug_place_supported_stmt_target_info >> strip_tac >>
   drule_all aug_place_target_memory_live >> strip_tac >>
   `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
-  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[target_post_def, place_readable_def] >> strip_tac >>
   drule_all aug_place_memory_type_read >> strip_tac >>
   `is_word_type ty` by
