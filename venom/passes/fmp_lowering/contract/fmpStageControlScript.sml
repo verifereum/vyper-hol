@@ -28,7 +28,7 @@ QED
 (* Why: the step proofs read the target's code at the control map's index
    off the lowering's own walk; a point's restores come first, then its
    expansion. *)
-Theorem fmp_stage_tidx_code:
+Theorem fmp_control_tidx_code_unique[local]:
   fmp_stage_lowered infos ctx runner fn fn' /\ MEM bb fn.fn_blocks /\
   fn.fn_fmp_signature = NONE /\
   (?info. FLOOKUP infos fn.fn_name = SOME info /\
@@ -46,7 +46,8 @@ Theorem fmp_stage_tidx_code:
     DROP (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
             (fmp_stage_root infos ctx fn) bb.bb_label
             bb.bb_instructions idx)
-         bb'.bb_instructions = code
+         bb'.bb_instructions = code /\
+    ALL_DISTINCT (MAP FST restores)
 Proof
   rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
   qpat_x_assum `?info. _` (qx_choose_then `info` (CONJUNCTS_THEN assume_tac)) >>
@@ -98,6 +99,31 @@ Proof
   simp[fmp_stage_tidx_def, lookup_block_def, FIND_thm] >>
   Cases_on `root` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def] >>
   Cases_on `oldpc` >> simp[callLayoutDefsTheory.OPTION_TO_LIST_def]
+QED
+
+Theorem fmp_stage_tidx_code:
+  fmp_stage_lowered infos ctx runner fn fn' /\ MEM bb fn.fn_blocks /\
+  fn.fn_fmp_signature = NONE /\
+  (?info. FLOOKUP infos fn.fn_name = SOME info /\
+          (info.fi_needs_fmp \/ info.fi_publishes_fmp)) /\
+  idx <= LENGTH bb.bb_instructions /\
+  (!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+           bb.bb_label = rl ==> rp <= idx) ==>
+  ?bb' restores sp code leftover sp'.
+    lookup_block bb.bb_label fn'.fn_blocks = SOME bb' /\
+    (!j b. MEM ((bb.bb_label,j),b) restores <=>
+           idx <= j /\
+           FLOOKUP (fmp_stage_plan infos ctx fn) (bb.bb_label,j) = SOME b) /\
+    fmp_lower_indexed infos ctx runner bb.bb_label idx sp restores
+      (DROP idx bb.bb_instructions) = SOME (code,leftover,sp') /\
+    DROP (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+            (fmp_stage_root infos ctx fn) bb.bb_label
+            bb.bb_instructions idx)
+         bb'.bb_instructions = code
+Proof
+  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  drule_all fmp_control_tidx_code_unique >> strip_tac >>
+  qexistsl [`bb'`, `restores`, `sp`, `code`, `leftover`, `sp'`] >> simp[]
 QED
 
 (* Why: the other branches of the lowering keep the blocks (a sealed
