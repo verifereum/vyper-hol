@@ -521,7 +521,9 @@ Proof
   `?next. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
      ainst cond_lbl st (k+1) (ee with <|scopes := rest; gas_obs := []|>) next /\
      (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x t) /\
-     next.vs_allocas = t.vs_allocas /\ gas_marked_path F ctx func t 0 (OK next)` by
+     next.vs_allocas = t.vs_allocas /\ gas_marked_path F ctx func t 0 (OK next) /\
+     alloca_frame cenv (ee with <|scopes := rest; gas_obs := []|>) st t
+       cenv (ee with <|scopes := rest; gas_obs := []|>) next` by
     (irule array_body_continue_iteration_framed >> simp[] >>
      goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
      goal_assum (drule_at (Pat `stmt_lands _ _ _ _`)) >>
@@ -1369,7 +1371,7 @@ Proof
   >- (irule (SRULE [] counted_array_body_finish) >>
       simp[eval_operand_def] >> goal_assum (drule_at Any) >>
       simp[] >>
-      qexistsl_tac [`entry`, `i1`, `i2`, `i3`, `marks`, `nv`, `sj`, `stmts`] >>
+      qexistsl_tac [`i1`, `i2`, `i3`, `marks`, `nv`, `sj`, `stmts`] >>
       simp[] >>
       `~not_fresh_at caller nv` by metis_tac[] >>
       gvs[] >> metis_tac[]) >>
@@ -1435,9 +1437,9 @@ Theorem immutable_for_loop_counted:
   k <= LENGTH vs /\
   array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
     p dst sz ainst cond_lbl st k es cc /\ array_caller_frame caller old cc /\
-  gas_admissible (eval_for cx tv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
   gas_outcome F (cx_tops cx) (ctx,func)
-    (eval_for cx tv id stmts (DROP k vs)) (es,cc)
+    (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame caller old t)
@@ -1457,7 +1459,7 @@ Proof
     array_caller_frame caller old s` >>
   qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
   `(!j ei s. j < LENGTH vs /\ Inv j ei s /\
-      gas_admissible (eval_for cx tv id stmts (DROP j vs)) (stmt_res_ok lctx) ei ==>
+      gas_admissible (eval_for cx tv id stmts (MAP Value (DROP j vs))) (stmt_res_ok lctx) ei ==>
       gas_outcome F (cx_tops cx) (ctx,func)
         (do push_scope_with_var id tv (EL j vs);
             finally (try (do eval_stmts cx stmts; return F od)
@@ -1468,7 +1470,10 @@ Proof
     (!ei s. Inv (LENGTH vs) ei s ==>
       ?t. gas_marked_path F ctx func s 0 (OK t) /\ Done (ei with gas_obs := []) t)` by
     (conj_tac >- suspend "round" >> suspend "last") >>
-  drule eval_for_rounds >>
+  drule (Q.SPECL [`F`, `cx_tops cx`, `ctx`, `func`, `cx`, `tv`, `id`,
+    `stmts`, `MAP Value vs`, `stmt_res_ok lctx`, `Inv`, `Done`, `R`]
+    eval_for_rounds |> SIMP_RULE (srw_ss())
+      [LENGTH_MAP, GSYM MAP_DROP, EL_MAP, read_result_def, bind_return]) >>
   disch_then (qspecl_then [`k`, `es`, `cc`] mp_tac) >>
   simp[Abbr `Inv`, Abbr `Done`, Abbr `R`]
 QED
