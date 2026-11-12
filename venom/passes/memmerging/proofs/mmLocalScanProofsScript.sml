@@ -16526,9 +16526,8 @@ Proof
   qexists `t` >> simp[] >> metis_tac[mm_local_exec_prefix_suffix]
 QED
 
-Theorem mm_local_cut_empty_non_ok[local]:
-  mm_local_cut is gs H n excluded pc t /\
-  mm_local_pending_indices is gs n = [] /\
+Theorem mm_local_state_non_ok[local]:
+  state_equiv excluded ((H n) with vs_inst_idx := pc) t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
   ~is_terminator i.inst_opcode /\
   ~(?u. step_inst fuel ctx i (H n) = OK u) ==>
@@ -16536,8 +16535,6 @@ Theorem mm_local_cut_empty_non_ok[local]:
     (step_inst fuel ctx i (H n)) (step_inst fuel ctx i t)
 Proof
   strip_tac >>
-  `state_equiv excluded ((H n) with vs_inst_idx := pc) t` by
-    metis_tac[mm_local_cut_empty_state_equiv] >>
   `result_equiv excluded
     (step_inst fuel ctx i ((H n) with vs_inst_idx := pc))
     (step_inst fuel ctx i t)` by
@@ -16554,6 +16551,19 @@ Proof
   gvs[instIdxIndepTheory.exec_result_map_def, result_equiv_def,
     lift_result_def, execution_equiv_def, revert_equiv_def,
     stateFrameTheory.execution_frame_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_cut_empty_non_ok[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\
+  ~(?u. step_inst fuel ctx i (H n) = OK u) ==>
+  lift_result (\_ _. F) (execution_equiv excluded) revert_equiv
+    (step_inst fuel ctx i (H n)) (step_inst fuel ctx i t)
+Proof
+  strip_tac >> irule mm_local_state_non_ok >>
+  metis_tac[mm_local_cut_empty_state_equiv]
 QED
 
 Theorem mm_local_mem2mem_phi_emission[local]:
@@ -16721,17 +16731,15 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem mm_local_cut_noninvoke_abort[local]:
-  mm_local_cut is gs H n excluded pc t /\
+Theorem mm_local_state_noninvoke_abort[local]:
+  state_equiv excluded
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
   ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
   step_inst fuel ctx i (H n) = Abort a u ==>
   ?v. step_inst fuel ctx i t = Abort a v /\ revert_equiv u v
 Proof
   strip_tac >>
-  `state_equiv excluded
-    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
-    metis_tac[mm_local_cut_memory_state_equiv] >>
   `(!v. MEM (Var v) i.inst_operands ==> lookup_var v (H n) = lookup_var v t) /\
    (H n).vs_returndata = t.vs_returndata /\
    (H n).vs_labels = t.vs_labels /\
@@ -16745,6 +16753,20 @@ Proof
   conj_tac >- gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
   metis_tac[passSharedFrameTheory.step_inst_base_abort_returndata, revert_equiv_def]
 QED
+Theorem mm_local_cut_noninvoke_abort[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel ctx i (H n) = Abort a u ==>
+  ?v. step_inst fuel ctx i t = Abort a v /\ revert_equiv u v
+Proof
+  strip_tac >>
+  `state_equiv excluded
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+    metis_tac[mm_local_cut_memory_state_equiv] >>
+  drule_all mm_local_state_noninvoke_abort >> simp[]
+QED
+
 Theorem mm_local_cut_nonterminator_stop[local]:
   mm_local_cut is gs H n excluded pc t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
@@ -16881,9 +16903,8 @@ Proof
     venomEffectsTheory.write_effects_def, venomEffectsTheory.all_effects_def]
 QED
 
-Theorem mm_local_cut_terminator_result[local]:
-  mm_local_cut is gs H n excluded pc t /\
-  mm_local_pending_indices is gs n = [] /\
+Theorem mm_local_state_terminator_result[local]:
+  state_equiv excluded ((H n) with vs_inst_idx := pc) t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
   is_terminator i.inst_opcode ==>
   lift_result
@@ -16892,8 +16913,6 @@ Theorem mm_local_cut_terminator_result[local]:
     (dft_exec_suffix fuel ctx [i] (H n)) (dft_exec_suffix fuel ctx [i] t)
 Proof
   strip_tac >>
-  `state_equiv excluded ((H n) with vs_inst_idx := pc) t` by
-    metis_tac[mm_local_cut_empty_state_equiv] >>
   `i.inst_opcode <> INVOKE` by
     (Cases_on `i.inst_opcode` >> gvs[venomInstTheory.is_terminator_def]) >>
   `result_equiv excluded
@@ -16919,6 +16938,20 @@ Proof
     venomStateTheory.lookup_var_def] >>
   IF_CASES_TAC >> gvs[lift_result_def, execution_equiv_def,
     stateFrameTheory.execution_frame_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_cut_terminator_result[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  is_terminator i.inst_opcode ==>
+  lift_result
+    (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (execution_equiv excluded) revert_equiv
+    (dft_exec_suffix fuel ctx [i] (H n)) (dft_exec_suffix fuel ctx [i] t)
+Proof
+  strip_tac >> irule mm_local_state_terminator_result >>
+  metis_tac[mm_local_cut_empty_state_equiv]
 QED
 
 Theorem mm_local_mem2mem_post_phi_result[local]:
@@ -17832,6 +17865,94 @@ Proof
     venomStateTheory.venom_state_component_equality] >>
   gvs[mm_local_pending_def] >> qexists_tac `ws` >> simp[] >>
   irule mm_local_write_log_memory_cong >> simp[]
+QED
+
+Theorem mm_local_zero_noninvoke_stop[local]:
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+  ~(?err. step_inst fuel ctx i (H n) = Error err) /\
+  ~(?u. step_inst fuel ctx i (H n) = OK u) ==>
+  lift_result (\_ _. F) (execution_equiv excluded) revert_equiv
+    (step_inst fuel ctx i (H n)) (step_inst fuel ctx i t)
+Proof
+  strip_tac >>
+  `state_equiv excluded
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+    gvs[mm_local_zero_cut_def, state_equiv_frame, mm_local_nonmemory_frame_def,
+      stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+      venomStateTheory.venom_state_component_equality] >>
+  Cases_on `step_inst fuel ctx i (H n)` >> gvs[lift_result_def]
+  >- (drule opcodeClassTheory.step_inst_halt_opcodes >> strip_tac >>
+      gvs[venomInstTheory.is_terminator_def])
+  >- (drule_all mm_local_state_noninvoke_abort >>
+      strip_tac >> simp[lift_result_def])
+  >- (gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+      drule opcodeClassTheory.step_inst_base_intret_opcodes >> strip_tac >>
+      gvs[venomInstTheory.is_terminator_def])
+QED
+
+Theorem mm_local_zero_terminator_result[local]:
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  is_terminator i.inst_opcode ==>
+  lift_result
+    (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (execution_equiv excluded) revert_equiv
+    (dft_exec_suffix fuel ctx [i] (H n)) (dft_exec_suffix fuel ctx [i] t)
+Proof
+  strip_tac >> irule mm_local_state_terminator_result >>
+  metis_tac[mm_local_zero_cut_empty]
+QED
+
+Theorem mm_local_zero_nonterminator_stop[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  n < LENGTH is /\ mm_local_zero_cut dfg is gs H n excluded pc t /\
+  (!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator (EL n is).inst_opcode /\
+  ~(?err. step_inst fuel ctx (EL n is) (H n) = Error err) /\
+  ~(?u. step_inst fuel ctx (EL n is) (H n) = OK u) ==>
+  lift_result (\_ _. F) (execution_equiv excluded) revert_equiv
+    (step_inst fuel ctx (EL n is) (H n)) (step_inst fuel ctx (EL n is) t)
+Proof
+  strip_tac >> Cases_on `(EL n is).inst_opcode = INVOKE`
+  >- (`is_volatile_memory (EL n is) /\ ~is_zero_store (EL n is) /\
+       ~is_calldatasize_copy dfg (EL n is)` by
+        simp[is_volatile_memory_def, is_zero_store_def, is_calldatasize_copy_def,
+          venomEffectsTheory.read_effects_def, venomEffectsTheory.write_effects_def,
+          venomEffectsTheory.all_effects_def] >>
+      `mm_local_pending_indices is gs n = []` by
+        (irule mm_local_zero_barrier_pending_empty >>
+         qexistsl [`bb`,`dfg`,`n`] >> gvs[]) >>
+      irule mm_local_state_non_ok >> metis_tac[mm_local_zero_cut_empty]) >>
+  irule mm_local_zero_noninvoke_stop >> metis_tac[]
+QED
+
+Theorem mm_local_zero_terminal_pending_empty[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  n < LENGTH is /\ SUC n = LENGTH is /\
+  is_terminator (EL n is).inst_opcode ==>
+  mm_local_pending_indices is gs n = []
+Proof
+  strip_tac >>
+  `~is_zero_store (EL n is) /\ ~is_calldatasize_copy dfg (EL n is)` by
+    (Cases_on `(EL n is).inst_opcode` >>
+     gvs[venomInstTheory.is_terminator_def, is_zero_store_def,
+       is_calldatasize_copy_def]) >>
+  `!j. ~MEM j (mm_local_pending_indices is gs n)` suffices_by
+    (Cases_on `mm_local_pending_indices is gs n` >> simp[] >> metis_tac[]) >>
+  qx_gen_tac `j` >> rewrite_tac[mm_local_pending_indices_mem] >> strip_tac >>
+  `r = n` by decide_tac >> gvs[] >>
+  `MEM (EL n bb.bb_instructions) bb.bb_instructions` by
+    (irule EL_MEM >> decide_tac) >>
+  drule mm_local_rep_member >> strip_tac >>
+  drule_all mm_local_memzero_group_roles >> strip_tac >>
+  `i = EL n bb.bb_instructions` by
+    metis_tac[mmWfProofsTheory.all_distinct_map_inv, EL_MEM] >>
+  metis_tac[]
 QED
 
 Theorem mm_local_stage_correct:
