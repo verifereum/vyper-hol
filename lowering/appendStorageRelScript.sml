@@ -455,10 +455,11 @@ Resume append_storage_agree_copy[child]:
     simp[Abbr `st'`, lookup_storage_def, update_storage_def,
          combinTheory.APPLY_UPDATE_THM, EQ_SYM_EQ] >>
   `w2n k+(w2n q-w2n k) = w2n q /\ w2n q-w2n k < type_slot_size tv` by decide_tac >>
-  drule encode_value_memory_live >> disch_then drule >> disch_then drule >>
-  disch_then drule >>
-  disch_then (qspecl_then [`k`, `st`, `w2n q-w2n k`, `b`] mp_tac) >>
-  gvs[]
+  `MEM (w2n q-w2n k) (MAP FST writes)` by
+    (first_x_assum irule >> simp[] >> qexists_tac `b` >> gvs[]) >>
+  `~dead_bytes (apply_writes k writes st) (w2n k) tv
+     (w2n k+(w2n q-w2n k)) b` by gvs[] >>
+  drule_all encode_value_memory_live >> simp[]
 QED
 Resume append_storage_agree_copy[outside]:
   `~storage_dead cx tr st (w2n q) b` by
