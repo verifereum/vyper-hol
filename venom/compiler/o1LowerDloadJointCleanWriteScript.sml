@@ -239,7 +239,7 @@ Proof
     fs[ld_joint_boundary_def] >>
   `lo <= dyn_floor C vs /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
      b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
-    fs[ld_dyn_floor_ok_def] >>
+    (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
   `mem_taint tn inst s (write_memory_with_expansion p xs s) =
     tn.t_mem DIFF {i | p<=i /\ i<p+LENGTH xs}` by
     (irule ld_mem_taint_clean_write >> simp[]) >>

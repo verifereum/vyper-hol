@@ -238,7 +238,7 @@ Proof
     fs[ld_joint_boundary_def] >>
   `lo <= dyn_floor C vs /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
      b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
-    fs[ld_dyn_floor_ok_def] >>
+    (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
   qpat_x_assum `(w2n x = w2n y /\ _) \/ _` strip_assume_tac
   >- (conj_tac
       >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>

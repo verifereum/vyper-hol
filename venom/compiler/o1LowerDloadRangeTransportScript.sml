@@ -174,8 +174,7 @@ Theorem ld_dyn_agree_clean_write_same:
 Proof
   rewrite_tac[ptrDisciplineTheory.ld_dyn_agree_def] >> rpt strip_tac >>
   rewrite_tac[read_byte_write_memory_with_expansion] >>
-  IF_CASES_TAC >- rewrite_tac[] >>
-  first_x_assum irule >> gvs[]
+  rw[] >> first_x_assum irule >> gvs[]
 QED
 
 

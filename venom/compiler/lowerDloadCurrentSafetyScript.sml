@@ -5,6 +5,7 @@ Ancestors lowerDloadDescriptorObservation lowerDloadRangeFrontier
   lowerDloadSafetyAssemblyPremises lowerDloadSafetyWriteAssembly
   lowerDloadSafetyValues lowerDloadOracleCallAssembly lowerDloadRangeTransport
   unitMemInv unitTransformDefs memLocDefs ptrDiscipline codegenRel contextCodegenRel
+  pointerConfinedDefs
   venomInst venomState finite_map pred_set list words arithmetic venomWf pair
   lowerDloadPublicTrace lowerDloadSafetyLocations lowerDloadSafetyKernel
   lowerDloadExpansionExit irSupply venomExecSemantics
