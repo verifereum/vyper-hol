@@ -11,7 +11,7 @@
 Theory typedCopyOriginPtrBase
 Ancestors
   placeTypedCopyRecursivePath fragGasOriginPtr fragGasSeqPtr bodyPtrDefs
-  ptrSafeRun ptrDiscipline typedMemoryCopy
+  ptrSafeRun ptrDiscipline typedMemoryCopy robustCopyTransportPtr
 
 (* Every joint copy of type sty into type dty of the value v (evaluated at
    stv and dtv) through compile_store_memory_typed, between two pointer
@@ -101,6 +101,91 @@ Proof
   first_x_assum (qspecl_then [`lo`,`explicit`,`func`,`PG`,`xd`,`xs`,
     `sa`,`sb`,`s`,`G`,`tn`,`dw`,`sw`] mp_tac) >>
   asm_rewrite_tac[]
+QED
+
+(* Robust values survive a child write outside their representation. *)
+Theorem typed_copy_origin_ptr_index_robust_step:
+  k < N /\
+  (so + N * type_memory_size stv <= dst \/
+   dst + N * type_memory_size dtv <= so) /\
+  (!i. i < N ==> val_wf stv (f i) /\ val_wf dtv (f i)) /\
+  (!i mem. i < N /\ mem_agree_outside tnq q.vs_memory mem ==>
+    val_in_memory stv (f i) (so + i * type_memory_size stv) mem) /\
+  (!i mem. i < k /\ mem_agree_outside tnq q.vs_memory mem ==>
+    val_in_memory dtv (f i) (dst + i * type_memory_size dtv) mem) /\
+  typed_copy_state_frame sa (dst + k * type_memory_size dtv)
+    (type_memory_size dtv) q r /\
+  (!i. ~(dst + k * type_memory_size dtv <= i /\
+          i < dst + k * type_memory_size dtv + type_memory_size dtv) ==>
+    (i IN tnr <=> i IN tnq)) /\
+  (!mem. mem_agree_outside tnr r.vs_memory mem ==>
+    val_in_memory dtv (f k) (dst + k * type_memory_size dtv) mem) ==>
+  (!i mem. i < N /\ mem_agree_outside tnr r.vs_memory mem ==>
+    val_in_memory stv (f i) (so + i * type_memory_size stv) mem) /\
+  (!i mem. i < SUC k /\ mem_agree_outside tnr r.vs_memory mem ==>
+    val_in_memory dtv (f i) (dst + i * type_memory_size dtv) mem)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `!a. ~(dst + k * type_memory_size dtv <= a /\
+          a < dst + k * type_memory_size dtv + type_memory_size dtv) ==>
+       mem_bytes_at a 1 r.vs_memory = mem_bytes_at a 1 q.vs_memory` by
+    (fs[typed_copy_state_frame_def, typed_copy_frame_def] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  conj_tac
+  >- (map_every qx_gen_tac [`i`, `mem`] >> strip_tac >>
+      `val_wf stv (f i)` by metis_tac[] >>
+      `so <= so + i * type_memory_size stv /\
+       so + i * type_memory_size stv + type_memory_size stv <=
+       so + N * type_memory_size stv` by
+        metis_tac[typed_copy_array_subinterval] >>
+      `dst <= dst + k * type_memory_size dtv /\
+       dst + k * type_memory_size dtv + type_memory_size dtv <=
+       dst + N * type_memory_size dtv` by
+        metis_tac[typed_copy_array_subinterval] >>
+      drule exprSimPropsTheory.val_footprint_le >> disch_tac >>
+      irule robust_val_in_memory_exterior_frame >> conj_tac >- simp[] >>
+      qexistsl_tac [`q.vs_memory`, `r.vs_memory`, `tnq`, `tnr`,
+        `{a | dst + k * type_memory_size dtv <= a /\
+               a < dst + k * type_memory_size dtv + type_memory_size dtv}`] >>
+      simp[] >> rpt strip_tac >> decide_tac) >>
+  map_every qx_gen_tac [`i`, `mem`] >> strip_tac >>
+  Cases_on `i = k` >- metis_tac[] >>
+  `i < k /\ i < N` by decide_tac >>
+  `val_wf dtv (f i)` by metis_tac[] >>
+  `dst + i * type_memory_size dtv + type_memory_size dtv <=
+   dst + k * type_memory_size dtv` by
+    metis_tac[typed_copy_array_subinterval] >>
+  drule exprSimPropsTheory.val_footprint_le >> disch_tac >>
+  irule robust_val_in_memory_exterior_frame >> conj_tac >- simp[] >>
+  qexistsl_tac [`q.vs_memory`, `r.vs_memory`, `tnq`, `tnr`,
+    `{a | dst + k * type_memory_size dtv <= a /\
+           a < dst + k * type_memory_size dtv + type_memory_size dtv}`] >>
+  simp[] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem typed_copy_origin_ptr_index_prefix_frame_step:
+  typed_copy_state_frame sa dst (k * stride) s q /\
+  typed_copy_state_frame sa (dst + k * stride) stride q r /\
+  (!i. ~(dst <= i /\ i < dst + k * stride) ==>
+    (i IN tnq <=> i IN tn)) /\
+  (!i. ~(dst + k * stride <= i /\ i < dst + k * stride + stride) ==>
+    (i IN tnr <=> i IN tnq)) ==>
+  typed_copy_state_frame sa dst (SUC k * stride) s r /\
+  (!i. ~(dst <= i /\ i < dst + SUC k * stride) ==>
+    (i IN tnr <=> i IN tn))
+Proof
+  strip_tac >> conj_tac
+  >- (irule typed_copy_state_frame_trans >> qexists_tac `q` >>
+      conj_tac
+      >- (irule typed_copy_state_frame_subinterval >>
+          qexistsl_tac [`dst`, `k * stride`] >> simp[arithmeticTheory.MULT_CLAUSES]) >>
+      irule typed_copy_state_frame_subinterval >>
+      qexistsl_tac [`dst + k * stride`, `stride`] >> simp[arithmeticTheory.MULT_CLAUSES]) >>
+  rpt strip_tac >>
+  `~(dst <= i /\ i < dst + k * stride) /\
+   ~(dst + k * stride <= i /\ i < dst + k * stride + stride)` by
+    (fs[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  metis_tac[]
 QED
 
 Theorem typed_copy_origin_ptr_emit_op_path:
