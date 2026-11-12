@@ -167,6 +167,73 @@ Proof
   simp[] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem builtin_snapshot_frame[local]:
+  (!s r t. eval_exprs cx es s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
+  (!e. MEM e es ==> !s r t. eval_expr cx e s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
+  (!ct addr. code_slice_source bt es = SOME (ct,addr) ==>
+    (!s r t. eval_exprs cx (TL es) s = (r,t) ==>
+      t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
+    (!s r t. eval_exprs cx [addr] s = (r,t) ==>
+      t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>)) ==>
+  !s r t. eval_expr cx (Builtin ty bt es) s = (r,t) ==>
+    t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>
+Proof
+  rpt strip_tac >> Cases_on `bt = Len`
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def, AllCaseEqs()] >>
+      strip_tac >> Cases_on `es` >> gvs[builtin_args_length_ok_def] >>
+      imp_res_tac result_array_length_state >> gvs[] >> metis_tac[]) >>
+  Cases_on `bt = Env MsgGas`
+  >- (qpat_x_assum `!s r t. eval_exprs _ _ _ = _ ==> _` kall_tac >>
+      qpat_x_assum `!e. MEM _ _ ==> _` kall_tac >>
+      qpat_x_assum `!ct addr. code_slice_source _ _ = _ ==> _` kall_tac >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def, next_gas_reading_def,
+           AllCaseEqs(), evaluation_state_component_equality] >>
+      rpt strip_tac >> gvs[evaluation_state_component_equality]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def, lift_option_type_def] >>
+      simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+      gvs[raise_def, return_def] >>
+      imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]) >>
+  Cases_on `code_slice_source bt es`
+  >- suspend "ordinary" >>
+  PairCases_on `x` >> gvs[] >>
+  suspend "snapshot"
+QED
+
+Resume builtin_snapshot_frame[ordinary]:
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac lift_sum_state >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  imp_res_tac outcomes_frame_precompile >>
+  metis_tac[outcomes_frame_trans]
+QED
+
+Resume builtin_snapshot_frame[snapshot]:
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac lift_sum_state >> gvs[] >>
+  rpt (first_x_assum (drule_then assume_tac)) >>
+  imp_res_tac outcomes_frame_precompile >>
+  metis_tac[outcomes_frame_trans]
+QED
+
+Finalise builtin_snapshot_frame
+
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem outcomes_frame_builtin[local]:
   (!cx s r t. eval_exprs cx es s = (r,t) ==>
     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
