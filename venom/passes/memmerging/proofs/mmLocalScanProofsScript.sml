@@ -17284,6 +17284,52 @@ Proof
   irule mm_local_write_log_memory_cong >> simp[]
 QED
 
+Theorem mm_local_zero_capture_after_phis[local]:
+  mm_local_zero_capture dfg is n j = SOME (d,bs) ==>
+  phi_prefix_length is <= j
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `j < phi_prefix_length is` by decide_tac >>
+  drule rangeAnalysisProofsTheory.phi_prefix_length_el_phi >> strip_tac >>
+  drule mm_local_zero_capture_cases >> strip_tac >> gvs[is_calldatasize_copy_def]
+QED
+
+Theorem mm_local_zero_cut_post_phi_init[local]:
+  h = phi_prefix_length is /\
+  state_equiv excluded (H h with vs_inst_idx := pc) t ==>
+  mm_local_zero_cut dfg is gs H h excluded pc t
+Proof
+  strip_tac >>
+  `mm_local_pending_indices is gs h = []` by
+    (Cases_on `mm_local_pending_indices is gs h` >> simp[] >>
+     rename1 `mm_local_pending_indices is gs h = j::js` >>
+     `MEM j (mm_local_pending_indices is gs h)` by simp[] >>
+     drule mm_local_pending_indices_after_phis >>
+     gvs[mm_local_pending_indices_mem]) >>
+  gvs[mm_local_zero_cut_def, mm_local_pending_empty, state_equiv_frame,
+    mm_local_nonmemory_frame_def, stateFrameTheory.state_frame_def,
+    venomStateTheory.lookup_var_def, venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_zero_selected_actual_prefix[local]:
+  h = phi_prefix_length is /\ n <= N /\
+  (!j. h <= j /\ j < N ==>
+    (H j).vs_current_bb = lbl /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u /\
+      H (SUC j) = u with vs_inst_idx := SUC j) ==>
+  !j d bs. mm_local_zero_capture dfg is n j = SOME (d,bs) ==>
+    (H j).vs_current_bb = lbl /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u /\
+      H (SUC j) = u with vs_inst_idx := SUC j
+Proof
+  rpt strip_tac >>
+  `phi_prefix_length is <= j` by metis_tac[mm_local_zero_capture_after_phis] >>
+  `j < n` by metis_tac[mm_local_zero_capture_cases] >>
+  `h <= j /\ j < N` by (gvs[] >> decide_tac) >> metis_tac[]
+QED
+
 Theorem mm_local_zero_capture_actual_step[local]:
   mm_local_zero_capture dfg is n j = SOME (d,bs) /\
   step_inst fuel ctx (EL j is) s = OK u /\
