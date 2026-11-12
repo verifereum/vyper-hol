@@ -23,14 +23,17 @@ Theorem call_external_metadata:
     am'.sources = am.sources /\ am'.layouts = am.layouts
 Proof
   rpt gen_tac >>
-  `!cx nr mut ts all_mods args dflts vals body ret result am_out requests obs.
+  `!cx nr mut (ts : toplevel list) all_mods args dflts vals body ret result am_out requests obs.
      call_external_function_trace orc gobs am cx nr mut ts all_mods args dflts vals body ret =
-       (result,am_out,requests,obs) ==>
-     call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
-       (result,am_out,requests)` by simp[call_external_function_def] >>
+       (result,am_out,requests,obs) ==> ~cx.in_deploy ==>
+     am_out.sources = am.sources /\ am_out.layouts = am.layouts` by
+    (rpt gen_tac >> disch_tac >> disch_tac >>
+     `call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+        (result,am_out,requests)` by simp[call_external_function_def] >>
+     drule_all call_external_function_nondeploy_metadata >> simp[]) >>
   pure_rewrite_tac[call_external_def, call_external_trace_def, LET_THM] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  res_tac >>
-  imp_res_tac call_external_function_nondeploy_metadata >>
-  gvs[initial_evaluation_context_def]
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >>
+  simp[initial_evaluation_context_def]
 QED
