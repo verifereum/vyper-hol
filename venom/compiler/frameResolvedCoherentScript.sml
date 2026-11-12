@@ -53,14 +53,19 @@ Theorem resolved_config_call_exact:
 Proof
   simp[joint_transition_call_iff, resolved_config_ok_def] >>
   rpt strip_tac >> gvs[] >>
-  simp[resolved_stack_ok_def] >> metis_tac[resolved_frame_callee]
+  simp[resolved_stack_ok_def] >>
+  `s1.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[ctxLookupAgreeHelpersTheory.enters_block_initial_fmp,
+              ctxLookupAgreeHelpersTheory.setup_callee_initial_fmp] >>
+  simp[] >> metis_tac[resolved_frame_callee]
 QED
 
 Theorem resolved_config_ordinary_exact:
   joint_transition C (JointConfig stk PG G tn fn inst s oms om hs h)
     (SOME (OriginOrdinary fuel post)) q' /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
-    (birth::ids) (ann::saved) /\ inst.inst_opcode <> DALLOCA ==>
+    (birth::ids) (ann::saved) /\
+  (inst.inst_opcode = DALLOCA ==> w2n s.vs_initial_fmp <= w2n s.vs_fmp) ==>
   resolved_config_ok q' (birth::ids)
     ((FST ann,origin_set (SND ann) inst.inst_outputs
       (resolved_out birth post.vs_allocas (FST ann)
@@ -68,12 +73,16 @@ Theorem resolved_config_ordinary_exact:
 Proof
   simp[joint_transition_ordinary] >> rpt strip_tac >> gvs[] >>
   gvs[resolved_config_ok_def] >>
-  `resolved_frame_ok birth post.vs_allocas PG G om (FST ann) (SND ann)
-    (birth::ids)
+  `post.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[step_inst_non_invoke, ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp] >>
+  `resolved_frame_ok (w2n s.vs_initial_fmp) birth post.vs_allocas PG G om
+    (FST ann) (SND ann) (birth::ids)
     ((fn,post.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk)` by
     (irule resolved_frame_cache_transport >> goal_assum (drule_at Any) >>
      metis_tac[step_inst_cache_preserved]) >>
-  simp[] >> metis_tac[resolved_frame_step]
+  simp[] >> irule resolved_frame_step >> simp[] >> rpt strip_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem resolved_config_block_exact:
@@ -88,6 +97,10 @@ Proof
   rpt strip_tac >> gvs[] >>
   `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA` by
     (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
+  `post.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[step_inst_non_invoke, ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp] >>
+  `s1.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[ctxLookupAgreeHelpersTheory.enters_block_initial_fmp] >>
   `post.vs_allocas = s.vs_allocas` by
     (gvs[step_inst_non_invoke] >> metis_tac[step_inst_base_preserves_allocas]) >>
   `s1.vs_allocas = s.vs_allocas` by metis_tac[enters_block_allocas] >>
@@ -97,7 +110,7 @@ QED
 Theorem resolved_annotation_transition:
   joint_transition C q ev q' /\ resolved_config_ok q ids anns /\
   (case q of JointConfig stk PG G tn fn inst s oms om hs h =>
-    inst.inst_opcode <> DALLOCA) ==>
+    inst.inst_opcode = DALLOCA ==> w2n s.vs_initial_fmp <= w2n s.vs_fmp) ==>
   ?anns'. resolved_config_ok q' (lifetime_step n ev ids) anns' /\
     resolved_annotation_edge C n q ev q' ids anns
       (lifetime_step n ev ids) anns'
@@ -141,7 +154,7 @@ Proof
 QED
 
 Theorem resolved_annotation_reachable_transition:
-  joint_config_reachable vs0 C q /\ ~ctx_has_dalloca C /\
+  joint_config_reachable vs0 C q /\ ptr_discipline lo C vs0 /\
   joint_transition C q ev q' /\ resolved_config_ok q ids anns ==>
   ?anns'. resolved_config_ok q' (lifetime_step n ev ids) anns' /\
     resolved_annotation_edge C n q ev q' ids anns
@@ -153,13 +166,17 @@ Proof
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
-  `inst.inst_opcode <> DALLOCA` by
-    (gvs[ctx_has_dalloca_def, EXISTS_MEM] >>
-     `active_inst fn inst s` by
-       (fs[joint_config_reachable_def] >>
-        metis_tac[joint_origin_history_projection, frame_history_active]) >>
-     gvs[active_inst_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
-     metis_tac[MEM_EL]) >>
+  `inst.inst_opcode = DALLOCA ==> w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (strip_tac >>
+     `ctx_has_dalloca C` by
+       (simp[ctx_has_dalloca_def, EXISTS_MEM] >>
+        `active_inst fn inst s` by
+          (fs[joint_config_reachable_def] >>
+           metis_tac[joint_origin_history_projection, frame_history_active]) >>
+        qexists_tac `fn` >> simp[] >>
+        gvs[active_inst_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+        metis_tac[MEM_EL]) >>
+     fs[ptr_discipline_def, allocas_below_fmp_def] >> metis_tac[]) >>
   irule resolved_annotation_transition >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
 QED
@@ -167,7 +184,7 @@ QED
 Theorem resolved_chain_coherent_annotations:
   !es n ids anns q qs r.
   joint_chain C q es qs r /\ joint_config_reachable vs0 C q /\
-  ~ctx_has_dalloca C /\ resolved_config_ok q ids anns ==>
+  ptr_discipline lo C vs0 /\ resolved_config_ok q ids anns ==>
   ?ass. HD ass = anns /\ LENGTH ass = SUC (LENGTH es) /\
     (!k. k <= LENGTH es ==>
       resolved_config_ok (EL k (q::qs))
@@ -200,7 +217,7 @@ Proof
 QED
 
 Theorem joint_trace_coherent_annotations:
-  joint_trace vs0 C q0 es qs q /\ ~ctx_has_dalloca C ==>
+  joint_trace vs0 C q0 es qs q /\ ptr_discipline lo C vs0 ==>
   ?ass. HD ass = [([],FEMPTY)] /\ LENGTH ass = SUC (LENGTH es) /\
     (!k. k <= LENGTH es ==>
       resolved_config_ok (EL k (q0::qs))

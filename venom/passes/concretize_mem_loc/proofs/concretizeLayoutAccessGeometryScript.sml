@@ -79,7 +79,9 @@ Theorem concretize_memory_access_geometry:
    (MEM (w2n off,len) (source_memory_read_ranges inst s) /\
     mem_read_ops inst = SOME ops)) ==>
   ?offT. eval_operand opd t = SOME offT /\
-    ((w2n off+len <= lo /\ w2n offT = w2n off) \/
+    (((w2n off+len <= lo \/
+       (w2n s.vs_initial_fmp <= w2n off /\ w2n off+len <= w2n s.vs_fmp)) /\
+      w2n offT = w2n off) \/
      (?d owner aid b sz.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
          d owner aid (b,sz) /\ lo <= b /\ b <= w2n off /\
@@ -97,10 +99,15 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
+  `(!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)) /\
+   (!v site. FLOOKUP G v = SOME site /\ FLOOKUP rv v = NONE ==>
+      w2n s.vs_initial_fmp <= FST site)` by
+    (drule resolved_config_current >> simp[] >> strip_tac >>
+     drule resolved_frame_erasure >> simp[]) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
-  `((w2n off+len <= lo /\ (!u. ops.iao_ofst = Var u ==> FLOOKUP rv u = NONE)) \/
+  `(((w2n off+len <= lo \/
+      (w2n s.vs_initial_fmp <= w2n off /\ w2n off+len <= w2n s.vs_fmp)) /\
+     (!u. ops.iao_ofst = Var u ==> FLOOKUP rv u = NONE)) \/
     (?u tok b sz. ops.iao_ofst = Var u /\ FLOOKUP rv u = SOME (tok,(b,sz)) /\
       b <= w2n off /\ w2n off+len <= b+sz))` by
     (irule resolved_memory_access >> metis_tac[]) >>
@@ -123,7 +130,7 @@ Proof
   drule_at (Pat `FLOOKUP _ _ = SOME _`) concretize_guarded_pointer_range >>
   disch_then drule_all >> strip_tac >>
   `?d owner.
-    activation_cache (JointConfig stk PG (SND o_f rv) tn fn inst s oms om hs h)
+    activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
       d owner tok1 (b,sz) /\
     activation_lookup (0:num) (concretize_positions C') (birth::ids)
       (fn::MAP (\f. f.cf_fn) stk) (tok0,tok1) =
