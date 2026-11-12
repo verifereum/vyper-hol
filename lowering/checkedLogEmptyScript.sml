@@ -25,7 +25,7 @@ Theorem checked_compile_saved_log_empty:
     compile_stmt cenv lctx ret (Log event_id exprs) cs = ((),cs') /\
     fn_has_code eval_cut topic_cut func /\ fn_has_code topic_cut cs' func /\
     LIST_REL (\arg tv. evaluate_type (type_env tops) (SND arg) = SOME tv) args atvs /\
-    log_prefix_ready env cx cenv func ids reserved requests final_cut [] eval_cut es ss credit args atvs values /\
+    log_prefix_ready H env cx cenv func ids reserved requests final_cut [] eval_cut es ss credit args atvs values /\
     LENGTH (Lit (n2w sig_hash)::topic_ops) < dimword(:256) /\ ~ss.vs_halted /\
     (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     ~ss.vs_call_ctx.cc_static ==>
@@ -34,12 +34,12 @@ Theorem checked_compile_saved_log_empty:
       fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
       out.vs_logs = ss.vs_logs ++ [ev] /\
-      state_rel_simple cenv cx (es with logs := es.logs ++ [ev]) out /\
+      state_rel_simple H cenv cx (es with logs := es.logs ++ [ev]) out /\
       local_ptrs_rel func cenv es.scopes out
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
   `log_args_safe args atvs ss 0 0` by (drule_all log_ready_arguments_empty_safe >> simp[]) >>
-  qpat_x_assum `log_prefix_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `log_prefix_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
   `env_consistent env cx es` by fs[runtime_consistent_def] >>
   `abi_struct_env_rel env.type_defs cenv.ce_struct_fields` by
@@ -51,8 +51,8 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   disch_then (qx_choose_then `out` (qx_choose_then `topics` strip_assume_tac)) >>
   qabbrev_tac `ev = <|logger := w2w ss.vs_call_ctx.cc_address; topics := n2w sig_hash::topics; data := []|>` >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `ss`, `out`, `[ev]`, `eval_cut.cs_next_var`]
-    mp_tac source_relations_log_memory_frame >>
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `ss`, `out`, `[ev]`, `eval_cut.cs_next_var`]
+    mp_tac (Q.GEN `H` source_relations_log_memory_frame) >>
   impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[Abbr`ev`]]) >> strip_tac >>
   `env.type_defs = get_tenv cx /\ ss.vs_call_ctx.cc_address = cx.txn.target` by
     (drule_all source_log_context >> simp[]) >>
