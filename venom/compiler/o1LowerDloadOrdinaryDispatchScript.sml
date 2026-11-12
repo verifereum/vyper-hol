@@ -114,6 +114,7 @@ Proof
   `active_inst fn inst2 (s with vs_inst_idx := SUC s.vs_inst_idx)` by
     (qpat_x_assum `active_inst fn inst2 _` mp_tac >>
      simp[active_inst_def, venomStateTheory.update_var_def]) >>
+  `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
   drule_all ld_joint_control_unchanged_next >> strip_tac >>
   qexists_tac `update_var out t.vs_fmp
     (t with vs_fmp := t.vs_fmp + n2w (ceil32 (w2n sz)))` >>
