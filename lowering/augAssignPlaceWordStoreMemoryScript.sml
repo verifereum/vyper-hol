@@ -127,6 +127,37 @@ Proof
   irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
+(* The stored state satisfies the relation at every horizon that observes the
+   place: the proof does not look at the horizon, so one witness serves all. *)
+Theorem place_store_word_state_any[local]:
+  place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
+  is_word_type dty /\ expr_sim_inv cenv cx env ee /\
+  storage_place_observed H p /\
+  (!id path entry t0.
+     p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\
+     cenv.ce_var_type id = SOME t0 ==>
+     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\ value_has_type dtv v /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  write_place cx p v ee = (INL (), ff) ==>
+  stmt_state_rel H ctx func cenv cx ff
+    (case loc of LocStorage => sstore w (typed_val_to_w256 dtv v) s
+               | LocTransient => tstore w (typed_val_to_w256 dtv v) s
+               | _ => mstore (w2n w) (typed_val_to_w256 dtv v) s)
+Proof
+  strip_tac >> Cases_on `p`
+  >- (gvs[place_ptr_rel_def, slot_loc_def] >>
+      drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[])
+  >- (rename1 `MemoryPlace id path` >>
+      `loc = LocMemory` by fs[place_ptr_rel_def] >>
+      gvs[] >> irule place_store_word_memory_state >>
+      qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
+      qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `evaluate_type _ dty = _` (irule_at Any) >> simp[])
+  >> gvs[place_ptr_rel_def, slot_loc_def] >>
+  drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[]
+QED
+
 Theorem place_store_word_run_mem:
   emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE
                        | _ => MSTORE) [dst_op; op] sa = ((), sb) /\
@@ -136,7 +167,7 @@ Theorem place_store_word_run_mem:
   is_word_type dty /\ expr_val_rel cx dty v op s /\
   expr_sim_inv cenv cx env ee /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ storage_place_observed H p /\
+  local_ptrs_reserved cenv sa /\
   (!id path entry t0.
      p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\
      cenv.ce_var_type id = SOME t0 ==>
@@ -150,7 +181,9 @@ Theorem place_store_word_run_mem:
   alloca_history func s /\
   (loc = LocMemory ==> w2n w + 32 <= s.vs_alloca_next) ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx ff t /\
+      (!H'. storage_place_observed H' p /\
+            stmt_state_rel H' ctx func cenv cx ee s ==>
+            stmt_state_rel H' ctx func cenv cx ff t) /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -166,18 +199,12 @@ Proof
   qabbrev_tac `u = (case loc of LocStorage => sstore w (typed_val_to_w256 dtv v) s
                   | LocTransient => tstore w (typed_val_to_w256 dtv v) s
                   | _ => mstore (w2n w) (typed_val_to_w256 dtv v) s)` >>
-  `stmt_state_rel H ctx func cenv cx ff u` by
-    (Cases_on `p`
-     >- (gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
-         drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[])
-     >- (rename1 `MemoryPlace id path` >>
-         `loc = LocMemory` by fs[place_ptr_rel_def] >>
-         gvs[Abbr `u`] >> irule place_store_word_memory_state >>
-         qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
-         qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-         qpat_assum `evaluate_type _ dty = _` (irule_at Any) >> simp[])
-     >> gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
-     drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[]) >>
+  `!H'. storage_place_observed H' p /\
+        stmt_state_rel H' ctx func cenv cx ee s ==>
+        stmt_state_rel H' ctx func cenv cx ff u` by
+    (gen_tac >> strip_tac >> simp[Abbr `u`] >>
+     mp_tac (Q.INST [`H` |-> `H'`] place_store_word_state_any) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   drule_all place_store_write_location >> strip_tac >>
   `alloca_inv s` by fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `gas_marked_path T ctx func s 0
