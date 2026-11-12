@@ -7,10 +7,10 @@ Ancestors
   freshWrites finite_map venomInst
 
 Theorem compile_assign_value_typed_open:
-  !cenv dst src loc dty sty info bytes sa sb.
+  !cenv dst src loc dty sty bytes sa sb.
     acyclic_struct_metadata cenv.ce_struct_fields /\
     ~block_is_terminated sa /\
-    compile_assign_value cenv dst LocMemory src F loc dty sty info bytes sa = ((),sb) ==>
+    compile_assign_value cenv dst LocMemory src F loc dty sty bytes sa = ((),sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> strip_tac >>
@@ -47,9 +47,6 @@ Theorem annassign_typed_code_parts:
       lower_value compile_expr c (expr_type e) e sA = (op, sB) /\
       compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
         (lowered_value_type cenv e)
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes c elem_ty + 31) DIV 32,
-                 type_memory_bytes c elem_ty) | _ => NONE)
         (type_memory_bytes c vtyp) sB = ((), sf) /\
       local_ptrs_reserved c st /\ local_ptrs_reserved c sA /\ not_fresh_at sA p /\
       cs_extends st sA /\ cs_extends sA sB /\ cs_extends sB sf /\

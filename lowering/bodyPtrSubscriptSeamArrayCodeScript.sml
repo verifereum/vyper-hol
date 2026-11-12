@@ -47,6 +47,7 @@ Theorem subscript_array_framed_code_ptr:
   !cx ann e1 e2 d PG tops ctx func cenv env ty es et bd.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_ptr_ok cx e2) /\
     body_expr_ptr_ok cx e1 /\ body_inv tops ctx cenv cx /\
+    ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\
     place_type cenv e1 = ValPT (ArrayT et bd) /\
@@ -97,7 +98,8 @@ Resume subscript_array_framed_code_ptr[base_exit]:
   qexists `marks` >> disj1_tac >>
   simp[gas_summary_ptr_at_marked] >>
   qexistsl [`INR exc`,`es_end`,`G`,`tn`,`r`] >> simp[] >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   conj_tac
   >- (irule gas_marked_exec_ptr_bind_exception >> first_assum ACCEPT_TAC) >> fs[]
 QED
@@ -105,7 +107,8 @@ QED
 Resume subscript_array_framed_code_ptr[base_exempt]:
   qexists `marks` >> disj2_tac >>
   qexistsl [`err`,`ee`,`leaf`,`finish'`] >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   pure_rewrite_tac[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule gasExemptCertTheory.gas_exempt_cert_error_result >> first_assum ACCEPT_TAC
 QED
@@ -114,7 +117,8 @@ Resume subscript_array_framed_code_ptr[base_normal]:
   qpat_x_assum `(\res ee G tn t. _) _ _ _ _ _`
     (strip_assume_tac o BETA_RULE) >> gnvs[] >>
   pure_rewrite_tac[GSYM gas_outcome_ptr_def] >>
-  irule code_array_after_base_ptr >> simp[] >>
+  qpat_assum `~subscript_reads_base _ _ _`
+    (irule o MATCH_MP code_array_after_base_ptr) >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >>
   `eval_expr cx e1 (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
