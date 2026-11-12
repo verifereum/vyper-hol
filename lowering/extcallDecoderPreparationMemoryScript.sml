@@ -48,7 +48,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem extcall_decoder_range_check_reject_run[local]:
+Theorem extcall_decoder_range_check_reject_run:
   compile_abi_decode_range_check src e hi st = ((),st') /\
   fresh_vars_wrt st s /\ eval_operand src s = SOME p /\
   eval_operand e s = SOME q /\ eval_operand hi s = SOME h /\
