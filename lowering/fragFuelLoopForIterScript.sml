@@ -923,6 +923,40 @@ Proof
   strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac
 QED
 
+Theorem iter_round_cycle[local]:
+  !K. (!u i l. at_point c0 u /\ lookup_var idx u = SOME i /\
+      eval_operand lenop u = SOME l ==>
+    ?j. j <= K /\ fuel_outcome G ctx fn u j
+      (\v. vars_kept N Wv u v /\
+        ((v.vs_current_bb IN X /\ v.vs_inst_idx = 0) \/
+         (at_point c0 v /\ i <> l /\ lookup_var idx v = SOME (i + 1w) /\
+          eval_operand lenop v = SOME l)))) ==>
+  !u i l. at_point c0 u /\ lookup_var idx u = SOME i /\
+      eval_operand lenop u = SOME l ==>
+    ?j. j <= (2 ** 256) * K /\ fuel_outcome G ctx fn u j
+      (\v. vars_kept N Wv u v /\ v.vs_current_bb IN X /\ v.vs_inst_idx = 0)
+Proof
+  qx_gen_tac `Kround` >> disch_tac >> rpt gen_tac >> strip_tac >>
+  qspecl_then [`G`, `ctx`, `fn`,
+    `\v. at_point c0 v /\ IS_SOME (lookup_var idx v) /\
+         IS_SOME (eval_operand lenop v) /\ vars_kept N Wv u v`,
+    `\v. vars_kept N Wv u v /\ v.vs_current_bb IN X /\ v.vs_inst_idx = 0`,
+    `\v. THE (lookup_var idx v)`, `\v. THE (eval_operand lenop v)`, `Kround`]
+    mp_tac iter_equality_cycle >> BETA_TAC >>
+  (impl_tac >- (
+    qx_gen_tac `v` >> strip_tac >>
+    Cases_on `lookup_var idx v` >> gvs[] >>
+    Cases_on `eval_operand lenop v` >> gvs[] >>
+    first_x_assum (drule_all_then strip_assume_tac) >>
+    qexists_tac `j` >> simp[] >>
+    irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+    gen_tac >> strip_tac >>
+    `vars_kept N Wv u t` by metis_tac[vars_kept_trans] >>
+    gvs[])) >>
+  disch_then (qspec_then `u` mp_tac) >>
+  simp[vars_kept_refl]
+QED
+
 Theorem fuel_okS_compile_for_iter:
   !cenv lctx ty id fty arr_e bound body Wv E.
     (!c t e Wv' E'. fuel_ok Wv' {} E' (compile_expr c t e)) /\
@@ -945,5 +979,6 @@ Proof
   simp[] >>
   rename1 `frag_fuel Wv {} E st p Kpre` >>
   rename1 `frag_fuel Wb {} (E UNION {xl;il}) b0 b1 Kbody` >>
+  drule_all iter_body_route >> strip_tac >>
   cheat
 QED
