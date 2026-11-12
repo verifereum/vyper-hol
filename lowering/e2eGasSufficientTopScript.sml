@@ -29,7 +29,7 @@ Theorem vyper_call_gas_sufficient_asm_opt:
     ?g. !g'.
       g <= g' /\
       call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~source_exempt tops
+      (!obs. ~gas_source_exempt tops
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
             obs am tx))
       ==>
@@ -61,7 +61,7 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
                     (initial_state (am with <|accounts := co.co_accounts;
                                               tStorage := co.co_tStorage|>) []))
         (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~deploy_source_exempt tops
+      (!obs. ~deploy_gas_source_exempt tops
          (load_contract NONE obs am tx [(NONE, tops)] []))
       ==>
       ?r es'.
@@ -94,7 +94,7 @@ Theorem vyper_call_gas_sufficient:
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         (call_outcomes_storage_ok am tx
            (MAP SND (call_trace (add_frame_gas g' es))) /\
-         (!obs. ~source_exempt tops
+         (!obs. ~gas_source_exempt tops
             (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
                obs am tx)) /\
          (?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
@@ -105,7 +105,7 @@ Proof
      g <= g' /\
      call_outcomes_storage_ok am tx
        (MAP SND (call_trace (add_frame_gas g' es))) /\
-     (!obs. ~source_exempt tops
+     (!obs. ~gas_source_exempt tops
         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
            obs am tx))
      ==>
@@ -153,7 +153,7 @@ Theorem e2e_deploy_gas_sufficient:
                        (initial_state (am with <|accounts := co.co_accounts;
                                                  tStorage := co.co_tStorage|>) []))
            (MAP SND (call_trace (add_frame_gas g' es))) /\
-         (!obs. ~deploy_source_exempt tops
+         (!obs. ~deploy_gas_source_exempt tops
             (load_contract NONE obs am tx [(NONE, tops)] [])) /\
          r = INR (SOME OutOfGas) ==>
          max_code_size < LENGTH runtime_bc + imm_len tops \/
@@ -169,7 +169,7 @@ Proof
                    (initial_state (am with <|accounts := co.co_accounts;
                                              tStorage := co.co_tStorage|>) []))
        (MAP SND (call_trace (add_frame_gas g' es))) /\
-     (!obs. ~deploy_source_exempt tops
+     (!obs. ~deploy_gas_source_exempt tops
         (load_contract NONE obs am tx [(NONE, tops)] []))
      ==>
      ?r es'.

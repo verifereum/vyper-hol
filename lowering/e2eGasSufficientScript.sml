@@ -99,13 +99,33 @@ Proof
   fs[add_frame_gas_wf_state, add_frame_gas_fields, add_frame_gas_bounded]
 QED
 
+(* ===== The gas theorems' exemptions ===== *)
+
+(* The correctness exemptions, plus a source run that stops on an oversized
+   CREATE initcode: the EVM answers that CREATE with OutOfGas at every gas
+   limit (EIP-3860), so no gas is enough. *)
+Definition gas_source_exempt_def:
+  gas_source_exempt tops
+    (src : (value + exception) # abstract_machine # call_request list) <=>
+    source_exempt tops src \/
+    FST src = INR (Error (RuntimeError "create initcode too large"))
+End
+
+Definition deploy_gas_source_exempt_def:
+  deploy_gas_source_exempt tops
+    (src : (abstract_machine # call_request list) + exception) <=>
+    deploy_source_exempt tops src \/
+    src = INR (Error (RuntimeError "create initcode too large"))
+End
+
 (* ===== The call cases ===== *)
 
 (* vyper_call_correct's hypotheses.  The two that range over the call
    trace, and so over what the callees do with the gas they get, are
-   stated at the new gas.  ~source_exempt is S3's: on the exempt inputs
-   (malformed data to a dynamic abi_decode) the compiled code may read at
-   any offset, so no gas is enough.  It is stated for every list of GAS
+   stated at the new gas.  ~gas_source_exempt is S3's ~source_exempt (on
+   the exempt inputs, malformed data to a dynamic abi_decode, the compiled
+   code may read at any offset, so no gas is enough) plus no oversized
+   CREATE initcode.  It is stated for every list of GAS
    observations, since the source run S4 relates the compiled run to may
    read other GAS values than the EVM run does. *)
 Theorem vyper_call_gas_sufficient_identity:
@@ -121,7 +141,7 @@ Theorem vyper_call_gas_sufficient_identity:
     ?g. !g'.
       g <= g' /\
       call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~source_exempt tops
+      (!obs. ~gas_source_exempt tops
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
             obs am tx))
       ==>
@@ -212,7 +232,7 @@ Proof
       call_outcomes_ok am tx vi.vs_outcomes /\
       !marks. ~source_exempt tops
         (call_external (SOME vi.vs_outcomes)
-           (gas_explicit marks vi.vs_gas_readings) am tx)` by simp[] >>
+           (gas_explicit marks vi.vs_gas_readings) am tx)` by fs[gas_source_exempt_def] >>
      `code_layout_valid vi` by
        (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
         fs[o1_run_state_ok_def]) >>
@@ -266,7 +286,7 @@ Theorem e2e_deploy_gas_sufficient_identity:
                     (initial_state (am with <|accounts := co.co_accounts;
                                               tStorage := co.co_tStorage|>) []))
         (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~deploy_source_exempt tops
+      (!obs. ~deploy_gas_source_exempt tops
          (load_contract NONE obs am tx [(NONE, tops)] []))
       ==>
       ?r es'.
@@ -318,7 +338,7 @@ Proof
     (gen_tac >> strip_tac >>
      `!marks. ~deploy_source_exempt tops
         (load_contract NONE (gas_explicit marks vi.vs_gas_readings) am tx
-           [(NONE, tops)] [])` by fs[] >>
+           [(NONE, tops)] [])` by fs[deploy_gas_source_exempt_def] >>
      `code_layout_valid vi` by
        (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
         fs[o1_run_state_ok_def]) >>
@@ -361,7 +381,7 @@ Proof
     metis_tac[ctx_sim_def] >>
   `~deploy_source_exempt tops
       (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
-         [(NONE, tops)] [])` by fs[] >>
+         [(NONE, tops)] [])` by fs[deploy_gas_source_exempt_def] >>
   qspecl_then [`tops`, `runtime_bc`, `am`, `tx`,
                `gas_explicit marks vs_in.vs_gas_readings`] mp_tac
     deploy_venom_result_rel_dead >>
