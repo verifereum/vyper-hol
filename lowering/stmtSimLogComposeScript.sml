@@ -372,11 +372,16 @@ Resume compile_log_ready_stmt_frag[post]:
   `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
     (drule log_args_scopes_dom >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv (es_end with gas_obs := []) t` by
-    (irule log_wb_alloca_frame >> simp[] >> metis_tac[log_args_post_frame]) >>
+    (irule log_wb_alloca_frame >>
+     qpat_assum `log_args_post H1 _ _ _ _ _ _ _ _ _ _ _ _`
+       (irule_at Any o MATCH_MP log_args_post_frame) >>
+     qpat_assum `stmt_state_rel H1 _ _ _ _ es s0` (irule_at Any) >>
+     simp[]) >>
   `alloca_frame cenv (es_end with gas_obs := []) sm t cenv
      (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) u` by
-    (irule log_suffix_alloca_frame >> simp[Excl "enc_def"] >>
-     metis_tac[stmt_state_rel_gas_obs]) >>
+    (irule log_suffix_alloca_frame >>
+     qpat_assum `stmt_state_rel H1 _ _ _ _ _ t` (irule_at Any) >>
+     simp[Excl "enc_def"]) >>
   `sa.cs_next_id <= sm.cs_next_id` by
     (drule compile_log_eval_all_grows >> simp[]) >>
   drule log_args_post_frame >> simp[wb_frame_def, Excl "enc_def"] >> strip_tac >>
@@ -393,7 +398,8 @@ Resume compile_log_ready_stmt_frag[post]:
   disch_then (qx_choose_then `vs'` strip_assume_tac) >>
   `vs' = vs` by fs[] >> pop_assum SUBST_ALL_TAC >>
   `stmt_state_rel HH ctx func cenv cx (es_end with gas_obs := []) t` by
-    metis_tac[log_args_post_state] >>
+    (qpat_assum `log_args_post HH _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o MATCH_MP log_args_post_state) >> simp[]) >>
   `storage_well_formed_on cx (es_end with gas_obs := []) (FST HH)` by
     fs[log_args_post_def] >>
   `storage_well_formed_on cx
