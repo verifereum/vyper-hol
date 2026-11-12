@@ -4,6 +4,7 @@ Ancestors
   targetPureWalkSimulationProbe fragGasMode fragGasPath gasCount
   venomExecSemantics venomInst venomState compileEnv list
   exprSimArrayIndex fragGasFresh freshWrites varsExt sourceValueFrames
+  emitHelper fragExec loweringStateRelDefs finite_map
 
 Theorem simulation_probe_invoke_count:
   !s id. gas_count_step 1 simulation_probe_context
@@ -62,15 +63,9 @@ Proof
   rpt strip_tac >>
   `straight_fresh (compile_array_subscript (Var "a_ptr") (Lit 0w)
       F 1 32 32 F loader)` by
-    (rewrite_tac[compile_array_subscript_split] >>
-     simp[] >>
-     `(comp_bind (comp_return (Lit 1w))
-       (\len_op. comp_ignore_bind (array_bounds_check (Lit 0w) len_op F)
-         (array_elem_ptr (Var "a_ptr") (Lit 0w) F 32 32))) =
-       comp_ignore_bind (array_bounds_check (Lit 0w) (Lit 1w) F)
-         (array_elem_ptr (Var "a_ptr") (Lit 0w) F 32 32)` by
-       simp[FUN_EQ_THM, comp_bind_def, comp_return_def] >>
-     simp[straight_fresh_array_check_ptr]) >>
+    (rewrite_tac[compile_array_subscript_split] >> simp[] >>
+     irule straight_fresh_bind >> simp[straight_fresh_return] >>
+     gen_tac >> irule straight_fresh_array_check_ptr) >>
   `eval_operand (Var "a_ptr") (drop_fresh sa s) = SOME w` by
     simp[eval_operand_drop_fresh] >>
   drule compile_array_subscript_ok >>
@@ -84,4 +79,133 @@ Proof
   drule_all straight_fresh_run_post >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[wordsTheory.WORD_MULT_CLAUSES]
+QED
+
+Theorem simulation_probe_emit_path:
+  !sa sm fn s.
+    emit_void INVOKE [Label simulation_probe_label] sa = ((),sm) /\
+    fn_has_code sa sm fn /\ ~s.vs_halted /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_marked_path F simulation_probe_context fn s 0
+      (OK (s with vs_inst_idx := LENGTH sm.cs_current_insts))
+Proof
+  rpt strip_tac >>
+  `sm.cs_current_bb = sa.cs_current_bb /\
+   sm.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id INVOKE [Label simulation_probe_label] []]` by
+    (gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def]) >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  `gas_path_edge simulation_probe_context fn s 0
+      (OK (s with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule simulation_probe_invoke_edge >> simp[] >> metis_tac[]) >>
+  simp[gas_marked_path_def] >>
+  `gas_path simulation_probe_context fn
+      (s with vs_inst_idx := SUC s.vs_inst_idx) 0
+      (OK (s with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule (cj 1 gas_path_rules) >> simp[]) >>
+  drule (cj 2 gas_path_rules) >> disch_then drule >> simp[arithmeticTheory.ADD1]
+QED
+
+Theorem simulation_probe_counted_split:
+  !sa sm sb p loader fn cx es s w.
+    emit_void INVOKE [Label simulation_probe_label] sa = ((),sm) /\
+    compile_array_subscript (Var "a_ptr") (Lit 0w) F 1 32 32 F loader sm = (p,sb) /\
+    fn_has_code sa sm fn /\ fn_has_code sm sb fn /\
+    local_ptrs_reserved simulation_probe_cenv sm /\
+    stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es s /\
+    not_fresh_at sm "a_ptr" /\ eval_operand (Var "a_ptr") s = SOME w /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_marked_path F simulation_probe_context fn s 0 (OK t) /\
+      eval_operand p t = SOME w /\
+      stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es t /\
+      (!z v. not_fresh_at sm z /\ lookup_var z s = SOME v ==>
+        lookup_var z t = SOME v) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+        FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >>
+  drule_all simulation_probe_emit_path >> strip_tac >>
+  `sm.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def] >>
+  `stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es
+    (s with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+    simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
+  `eval_operand (Var "a_ptr")
+     (s with vs_inst_idx := LENGTH sm.cs_current_insts) = SOME w` by
+    fs[eval_operand_def, lookup_var_def] >>
+  `~(s with vs_inst_idx := LENGTH sm.cs_current_insts).vs_halted /\
+   (s with vs_inst_idx := LENGTH sm.cs_current_insts).vs_current_bb = sm.cs_current_bb /\
+   (s with vs_inst_idx := LENGTH sm.cs_current_insts).vs_inst_idx = LENGTH sm.cs_current_insts` by simp[] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ s` kall_tac >>
+  qpat_x_assum `eval_operand _ s = _` kall_tac >>
+  drule_all simulation_probe_array_path >>
+  strip_tac >> qexists_tac `t` >> simp[lookup_var_def] >>
+  drule_all gas_marked_path_then >> simp[]
+QED
+
+Theorem simulation_probe_counted_target:
+  !sa sb op fn cx env es s entry.
+    compile_get_target_ptr compile_expr simulation_probe_cenv
+      module_probe_target sa = (op,sb) /\
+    fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+    local_ptrs_reserved simulation_probe_cenv sa /\
+    stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es s /\
+    lookup_scopes "a" es.scopes = SOME entry /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t p w. op = (p,SOME LocMemory,SOME (ValPT (BaseT (UintT 256)))) /\
+      eval_operand (Var "a_ptr") s = SOME w /\ eval_operand p t = SOME w /\
+      gas_marked_path F simulation_probe_context fn s 0 (OK t) /\
+      stmt_state_rel simulation_probe_context fn simulation_probe_cenv cx es t /\
+      (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==>
+        lookup_var z t = SOME v) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+        FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac >>
+  rewrite_tac[simulation_probe_compile_target, comp_ignore_bind_def, comp_bind_def] >>
+  Cases_on `emit_void INVOKE [Label simulation_probe_label] sa` >>
+  rename1 `emit_void INVOKE _ sa = (u,sm)` >>
+  Cases_on `compile_array_subscript (Var "a_ptr") (Lit 0w) F 1 32 32 F
+    (compile_ptr_load F simulation_probe_cenv.ce_imm_alloca LocMemory) sm` >>
+  simp[comp_return_def] >> strip_tac >> gvs[] >>
+  rename1 `compile_array_subscript _ _ _ _ _ _ _ _ sm = (p,sb)` >>
+  `sm.cs_next_var = sa.cs_next_var /\ sm.cs_current_bb = sa.cs_current_bb /\
+   cs_extends sa sm` by
+    gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def,
+        cs_extends_def, emitted_blocks_def] >>
+  `straight_fresh (compile_array_subscript (Var "a_ptr") (Lit 0w) F 1 32 32 F
+      (compile_ptr_load F simulation_probe_cenv.ce_imm_alloca LocMemory))` by
+    (rewrite_tac[compile_array_subscript_split] >> simp[] >>
+     irule straight_fresh_bind >> simp[straight_fresh_return] >>
+     gen_tac >> irule straight_fresh_array_check_ptr) >>
+  `cs_extends sm sb` by
+    (qpat_assum `straight_fresh _` mp_tac >>
+     rewrite_tac[straight_fresh_def] >>
+     disch_then drule >> strip_tac >>
+     simp[cs_extends_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `local_ptrs_reserved simulation_probe_cenv sm` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sa` >> simp[]) >>
+  `not_fresh_at sm "a_ptr"` by
+    (fs[local_ptrs_reserved_def, simulation_probe_cenv_def, FLOOKUP_UPDATE] >>
+     metis_tac[]) >>
+  `?w. eval_operand (Var "a_ptr") s = SOME w` by
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+        local_ptrs_rel_def, simulation_probe_cenv_def, FLOOKUP_UPDATE] >>
+     res_tac >> fs[eval_operand_def]) >>
+  drule_all simulation_probe_counted_split >> strip_tac >>
+  qexistsl_tac [`t`, `w`] >> simp[] >>
+  fs[not_fresh_at_def]
 QED
