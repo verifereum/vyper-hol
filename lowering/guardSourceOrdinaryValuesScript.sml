@@ -110,3 +110,49 @@ Proof
     (qspecl_then [`initial_st`, `selected`] mp_tac) >>
   disch_then (irule o cj 1) >> metis_tac[]
 QED
+
+Theorem finite_prefix_AssertBare:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "AssertBare")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e AssertBare))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def, APPEND_NIL] >>
+  strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
+  Cases_on `eval_expr cx e st` >> rename1 `eval_expr cx e st = (er,s1)` >>
+  Cases_on `er` >> simp_tac(srw_ss())[bind_def, raise_def] >> strip_tac >>
+  `st' = s1` by
+    (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+     imp_res_tac switch_BoolV_state >> gvs[return_def, raise_def]) >>
+  pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `!initial_st selected env st res st0. _`
+    (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+  disch_then (irule o cj 1) >> metis_tac[]
+QED
+
+Theorem finite_prefix_AssertUnreachable:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "AssertUnreachable")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e AssertUnreachable))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def, APPEND_NIL] >>
+  strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
+  Cases_on `eval_expr cx e st` >> rename1 `eval_expr cx e st = (er,s1)` >>
+  Cases_on `er` >> simp_tac(srw_ss())[bind_def, raise_def] >> strip_tac >>
+  `st' = s1` by
+    (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+     imp_res_tac switch_BoolV_state >> gvs[return_def, raise_def]) >>
+  pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `!initial_st selected env st res st0. _`
+    (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+  disch_then (irule o cj 1) >> metis_tac[]
+QED
