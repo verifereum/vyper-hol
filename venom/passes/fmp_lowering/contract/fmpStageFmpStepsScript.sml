@@ -17,6 +17,9 @@ Theory fmpStageFmpSteps
 Ancestors
   fmpStageOpBase fmpStageControl fmpStageReclaimSound fmpStageRel
   fmpStageCallArity fmpStageRetStep
+  fmpStageFmpStepsDallocaExec fmpStageFmpStepsDallocaFrame
+  fmpStageFmpStepsDallocaSaved fmpStageFmpStepsDallocaShared
+  fmpStepAnalysis fmpStepStack fmpStepSupply
   fmpStageFmpStepsEntryLayout fmpStageFmpStepsEntryInitialization
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
@@ -42,6 +45,32 @@ Proof
   cheat
 QED
 
+Theorem fmp_dalloca_retained_marks_fresh[local]:
+  wf_function fn /\ ssa_form fn /\ all_reachable fn /\
+  fmp_reclaim_states infos fn = SOME states /\
+  MEM bb fn.fn_blocks /\ k < LENGTH bb.bb_instructions /\
+  (EL k bb.bb_instructions).inst_opcode = DALLOCA /\
+  (EL k bb.bb_instructions).inst_outputs = [out] /\
+  df_at NONE states bb.bb_label k = SOME st /\
+  MAP (\r. r.fr_mark) regions = SND (fmp_pop_at infos fn live env
+    (bb.bb_label,k) (EL k bb.bb_instructions) st) /\
+  EVERY (\v. ~MEM v (fn_ir_vars fn)) fresh ==>
+  EVERY (\v. ~MEM v (MAP (\r. r.fr_mark) regions)) (fresh ++ [out])
+Proof
+  strip_tac >>
+  drule_all fmp_stage_out_not_kept >> strip_tac >>
+  drule_all fmp_reclaim_states_stack >> strip_tac >>
+  `EVERY (\v. v <> out) st.frs_stack` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule fmp_pop_at_every >> strip_tac >>
+  `EVERY (fmp_dalloca_output fn) (SND (fmp_pop_at infos fn live env
+    (bb.bb_label,k) (EL k bb.bb_instructions) st))` by
+    (irule (cj 2 fmp_pop_at_every) >> simp[]) >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  `fmp_dalloca_output fn v` by metis_tac[] >>
+  gvs[fmp_dalloca_output_def, fn_ir_vars_member, venomInstTheory.fn_insts_def,
+      fn_insts_blocks_MEM, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
 Theorem fmp_stage_dalloca_step:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
@@ -60,7 +89,52 @@ Theorem fmp_stage_dalloca_step:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (lo + (w2n s1.vs_fmp - w2n s.vs_fmp)) t1 ts
 Proof
-  cheat
+  strip_tac >> drule_all fmp_dalloca_execution >> strip_tac >>
+  drule_all fmp_stage_frame_facts >> strip_tac >>
+  `wf_function fn` by fs[o1_fn_shape_def] >>
+  `all_reachable fn` by fs[make_ssa_input_ok_def] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb` by
+    metis_tac[simplifyCfgDefsTheory.lookup_block_member_label] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   inst = EL s.vs_inst_idx bb.bb_instructions` by
+    (fs[contextCodegenRelTheory.active_inst_def] >>
+     imp_res_tac venomExecProofsTheory.wf_lookup_block >> gvs[]) >>
+  `EVERY (\v. ~MEM v (MAP (\r. r.fr_mark) regions))
+    ([plus31;mask;aligned;runner] ++ [out])` by
+    (irule fmp_dalloca_retained_marks_fresh >> metis_tac[]) >>
+  `fmp_sites_ok sm fmp0 raw0 lo s.vs_fmp /\
+   fmp_frame_rel sm fmp0 raw0 (fmp_frame_base raw0 stk)
+    (fmp_frame_lo fmp0 ts) lo T fn fn' PG G tn.t_var s t` by
+    fs[fmp_stage_rel_def] >>
+  `raw0 <= w2n s.vs_fmp /\ fmp0 <= lo` by
+    (fs[fmp_frame_rel_def, fmpLowerSequenceExecTheory.fmp_frontier_rel_def]) >>
+  qabbrev_tac `sm1 = if z=0 then sm else
+    sm |+ ((w2n s.vs_fmp,z),(lo,inst.inst_id))` >>
+  `fmp_frame_rel sm1 fmp0 raw0 (fmp_frame_base raw0 stk)
+    (fmp_frame_lo fmp0 ts) (lo+z) F fn fn' PG
+    (step_prov PG G inst s1) (step_taint inst s s1 tn).t_var
+    (s1 with vs_inst_idx := SUC s.vs_inst_idx) t1` by
+    (drule fmp_dalloca_frame >> disch_then irule >>
+     rpt conj_tac >> rpt (goal_assum (drule_at Any)) >>
+     gvs[Abbr `sm1`] >> metis_tac[]) >>
+  `fmp_saved_rel C' sm1 fmp0 raw0 stk ts` by
+    (simp[Abbr `sm1`] >> irule fmp_dalloca_saved >> metis_tac[]) >>
+  `fmp_sites_ok sm1 fmp0 raw0 (lo+z) s1.vs_fmp /\
+   ld_memory_agree (fmp_ld_sites sm1) eom
+    (step_taint inst s s1 tn).t_mem s1.vs_memory t1.vs_memory /\
+   ld_shared_agree D s1.vs_call_ctx.cc_address (step_taint inst s s1 tn)
+    (s1 with vs_inst_idx := SUC s.vs_inst_idx) t1 /\
+   s1.vs_returndata = t1.vs_returndata /\ s1.vs_halted = t1.vs_halted` by
+    (drule fmp_dalloca_shared >> disch_then irule >>
+     rpt conj_tac >> rpt (goal_assum (drule_at Any)) >>
+     gvs[Abbr `sm1`] >> metis_tac[]) >>
+  `w2n s1.vs_fmp = w2n s.vs_fmp + z` by
+    simp[update_var_def, w2n_n2w] >>
+  `w2n s1.vs_fmp - w2n s.vs_fmp = z /\
+   ((w2n s1.vs_fmp = w2n s.vs_fmp) <=> (z=0))` by decide_tac >>
+  qexistsl [`s1`,`t1`] >>
+  pure_asm_rewrite_tac[] >>
+  fs[fmp_stage_rel_def, Abbr `sm1`, update_var_def] >> gvs[]
 QED
 
 Theorem fmp_stage_retpc_step:
