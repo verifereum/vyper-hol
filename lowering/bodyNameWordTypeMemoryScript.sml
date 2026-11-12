@@ -15,7 +15,7 @@ Ancestors
 
 Theorem body_wordtype_name_region[local]:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
-  stmt_state_rel ctx func ce cx es s ==>
+  stmt_state_rel H ctx func ce cx es s ==>
   ?entry p sz w.
     lookup_scopes id es.scopes = SOME entry /\
     evaluate_type (get_tenv cx) ann = SOME entry.type /\
@@ -33,7 +33,7 @@ QED
 
 Theorem body_wordtype_name_MLOAD_frontier[local]:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) ==>
   inst_mem_below_frontier (mk_inst iid MLOAD [Var p] outs) s
 Proof
@@ -46,7 +46,7 @@ Theorem body_name_wordtype_counted[local]:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
   lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?entry p sz out.
@@ -98,9 +98,9 @@ QED
 
 Theorem body_name_wordtype_post[local]:
   emit_op MLOAD [Var p] sa = (Var out,sb) /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s0 /\
   is_word_type ann /\ evaluate_type (get_tenv cx) ann = SOME tv ==>
-  expr_post ctx func ce cx (Name ann id) es sa sb s0
+  expr_post H ctx func ce cx (Name ann id) es sa sb s0
     (es with gas_obs := []) v (Var out)
     (update_var out (typed_val_to_w256 tv v)
       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))
@@ -111,7 +111,7 @@ Proof
         fresh_id_def, fresh_var_def, emit_def] >>
   `not_local_ptr ce (es with gas_obs := []).scopes out` by
     (gvs[] >> irule local_ptrs_reserved_fresh >> qexists `sa` >> simp[]) >>
-  `stmt_state_rel ctx func ce cx (es with gas_obs := [])
+  `stmt_state_rel H ctx func ce cx (es with gas_obs := [])
     (update_var out (typed_val_to_w256 tv v)
       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (irule stmt_state_rel_update_var >> simp[] >>
@@ -130,10 +130,10 @@ Theorem body_name_wordtype_mem_prefix[local]:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
   lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?v t. gas_value_prefix T (ctx,func,ce,cx) (ty,Name ann id)
+  ?v t. gas_value_prefix H T (ctx,func,ce,cx) (ty,Name ann id)
     (sa,sb,op) (es,s0) [] (v,es,t)
 Proof
   strip_tac >> drule_all body_name_wordtype_counted >> strip_tac >> gvs[] >>

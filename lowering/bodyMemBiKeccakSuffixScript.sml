@@ -11,7 +11,7 @@ Libs
 Theorem keccak_fixed_suffix_mem_ok:
   compile_keccak256_bytesm x m sa = (op,sb) /\ m <= 32 /\
   eval_operand x s = SOME w /\ fresh_vars_wrt sa s /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
   ~block_is_terminated sa ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
