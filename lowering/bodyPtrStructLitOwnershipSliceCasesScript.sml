@@ -56,21 +56,9 @@ Proof
      Cases_on `t'` >> gvs[]) >>
   GEN_REWRITE_TAC (RATOR_CONV o RAND_CONV) empty_rewrites [GSYM ETA_AX] >>
   simp[compile_builtin_dispatch_body_def] >>
-  Cases_on `is_msg_data (HD args)` >- suspend "calldata" >>
   Cases_on `is_self_code (HD args)` >- suspend "code" >>
   Cases_on `is_extcode (HD args)` >- suspend "extcode" >>
   suspend "data"
-QED
-
-Resume alloc_run_builtin_slice[calldata]:
-  simp[comp_bind_uncurry, SF ETA_ss] >>
-  irule (Q.INST [`internal` |-> `internal`] alloc_run_lower_value_then) >>
-  reverse conj_tac >- metis_tac[] >>
-  gen_tac >> simp[] >> irule alloc_run_conseq >>
-  irule_at Any alloc_run_lower_value_then >>
-  simp[] >> qexists `internal` >> conj_tac >- metis_tac[] >>
-  gen_tac >> ho_match_mp_tac alloc_run_as_ptr_tail >>
-  simp[SF ETA_ss, alloc_run_compile_slice_calldata]
 QED
 
 Resume alloc_run_builtin_slice[code]:
