@@ -100,7 +100,9 @@ Theorem ec_mem_operands_then:
        expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
        expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
        stmt_state_rel H ctx func cenv cx es2 u) /\
-    (?H. valid_horizon cx st0 H es2.storage_trace) /\
+    (?H0. valid_horizon cx st0 H0 es2.storage_trace) /\
+    (!H. valid_horizon cx st0 H es2.storage_trace ==>
+         valid_horizon cx st0 H es.storage_trace) /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     MAP FDOM es1.scopes = MAP FDOM es2.scopes /\
     expr_store_bound cx (expr_type b) v2 q u /\
@@ -262,6 +264,12 @@ Resume ec_mem_operands_then[second_success]:
        (mp_then Any mp_tac
          (CONV_RULE (DEPTH_CONV ETA_CONV)
             exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >> simp[]) >>
+  `!H. valid_horizon cx st0 H es2.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (qx_gen_tac `H` >> strip_tac >>
+     `valid_horizon cx st0 H es1.storage_trace` by
+       first_assum (drule_then ACCEPT_TAC) >>
+     first_assum (drule_then ACCEPT_TAC)) >>
   `!H. valid_horizon cx st0 H es2.storage_trace ==>
        expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
        expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
