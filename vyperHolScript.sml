@@ -28,6 +28,8 @@ Ancestors
   o1PassLift
   (* codegen and compiler units: frame simulation, stack planning, unit checks *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
+  (* M7: closed-world producer of the callee-outcome storage guard *)
+  e2eOutcomesProducer
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
