@@ -62,6 +62,8 @@ Theorem ld_create_effect:
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
     step_prov PG (ld_erase A o_f f.lf_H) inst ss =
       ld_erase A o_f set_prov f.lf_H inst.inst_outputs NONE /\
+    ss.vs_memory = f.lf_src.vs_memory /\ ts.vs_memory = f.lf_tgt.vs_memory /\
+    (step_taint inst f.lf_src ss tn).t_mem = tn.t_mem /\
     ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
     ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
     ss.vs_current_bb = f.lf_src.vs_current_bb /\ ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
@@ -79,7 +81,8 @@ Proof
    rs.vs_prev_bb = f.lf_src.vs_prev_bb /\ rt.vs_prev_bb = f.lf_tgt.vs_prev_bb /\
    rs.vs_inst_idx = f.lf_src.vs_inst_idx /\ rt.vs_inst_idx = f.lf_tgt.vs_inst_idx` by
     (irule ld_consume_create_effect >> metis_tac[]) >>
-  `rs.vs_fmp = f.lf_src.vs_fmp` by gvs[consume_create_outcome_eq] >>
+  `rs.vs_fmp = f.lf_src.vs_fmp /\ rs.vs_memory = f.lf_src.vs_memory /\
+   rt.vs_memory = f.lf_tgt.vs_memory` by gvs[consume_create_outcome_eq] >>
   `step_taint inst f.lf_src (update_var out w rs) tn =
    tn with t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst f.lf_src)` by
     (irule ld_create_taint >> simp[update_var_def]) >>
@@ -97,7 +100,8 @@ QED
 
 Theorem ld_create_observed_bytes:
   ld_memory lo A tn s t /\
-  access_ok lo (ld_erase A o_f H) fn inst s /\
+  access_ok lo G fn inst s /\ ld_ghost_ok fl A H G /\
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
   taint_ok fn tn inst s /\ ~about_to_revert fn inst s /\
   ~in_revert_forward fn s /\
   ((inst.inst_opcode = CREATE /\ inst.inst_operands = [value;off;len]) \/
@@ -116,11 +120,10 @@ Proof
     simp[mem_read_ops_def] >>
   `MEM (w2n x,w2n n) (source_memory_read_ranges inst s)` by
     simp[source_memory_read_ranges_def, memory_range_of_operands_def] >>
-  irule ld_observed_memory_read >> simp[] >>
-  goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexistsl [`H`,`fn`,`lo`,`tn`] >> simp[])
+  irule ld_observed_memory_read >>
+  qexistsl_tac [`A`,`G`,`H`,`fl`,`fn`,`inst`,`lo`,
+    `<|iao_ofst := off; iao_size := SOME len; iao_max_size := SOME len|>`,`tn`] >>
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, fs[]])
 QED
 
 Theorem ld_create_scalar_nonpointer:
@@ -236,7 +239,8 @@ Theorem ld_create_step:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
   taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   ~in_revert_forward f.lf_fn f.lf_src /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt /\
   (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)) /\
@@ -250,6 +254,8 @@ Theorem ld_create_step:
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
     step_prov PG (ld_erase A o_f f.lf_H) inst ss =
       ld_erase A o_f set_prov f.lf_H inst.inst_outputs NONE /\
+    ss.vs_memory = f.lf_src.vs_memory /\ ts.vs_memory = f.lf_tgt.vs_memory /\
+    (step_taint inst f.lf_src ss tn).t_mem = tn.t_mem /\
     ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
     ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
     ss.vs_current_bb = f.lf_src.vs_current_bb /\ ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
@@ -276,42 +282,6 @@ Proof
   gvs[] >> simp[eval_operands_def]
 QED
 
-(* TEMPORARILY CHEATED - P4d: dynamic-region memory case (DALLOCA pointers are
-   in G but not in H, so access_ok no longer reaches the erased sites).
-Proof
-  strip_tac >>
-  `fn_shape_ok fn` by
-    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
-  `MEM inst (fn_insts fn)` by
-    (drule ld_sync_source >> metis_tac[ld_active_inst_member]) >>
-  `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
-  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
-  `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
-    metis_tac[ld_sync_access_ok, ld_sync_taint_ok] >>
-  `t.vs_alloca_next < dimword(:256)` by metis_tac[ld_sync_ambient_headroom] >>
-  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
-    metis_tac[ld_sync_slots, ld_sync_maps] >>
-  `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
-    (drule ld_sync_active >> simp[] >> strip_tac >>
-     metis_tac[ld_alloc_target_no_wrap, HD]) >>
-  `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
-    metis_tac[ld_global_selected, MEM] >>
-  drule ld_sync_active >> simp[] >> strip_tac >>
-  drule ld_sync_ghosts >> simp[] >> strip_tac >>
-  drule ld_sync_memory >> strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (fs[MEM] >> gvs[]) >>
-  gvs[step_inst_non_invoke] >>
-  `tn.t_var = f.lf_tv` by simp[] >>
-  `MEM inst.inst_opcode [CREATE;CREATE2]` by simp[] >>
-  drule_all ld_create_step >>
-  disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
-  qexistsl [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
-  simp[] >>
-  qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
-  gen_tac >> strip_tac >> irule ld_set_prov_selected >>
-  qexistsl [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]
-QED
-*)
 Theorem ld_sync_create_effect:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\
@@ -334,7 +304,38 @@ Theorem ld_sync_create_effect:
     ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
     ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
 Proof
-  cheat
+  strip_tac >>
+  `fn_shape_ok fn` by
+    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  `MEM inst (fn_insts fn)` by
+    (drule ld_sync_source >> metis_tac[ld_active_inst_member]) >>
+  `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
+  `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
+    metis_tac[ld_sync_access_ok, ld_sync_taint_ok] >>
+  `t.vs_alloca_next < dimword(:256)` by metis_tac[ld_sync_ambient_headroom] >>
+  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
+    metis_tac[ld_sync_slots, ld_sync_maps] >>
+  `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
+    (drule ld_sync_active >> simp[] >> strip_tac >>
+     metis_tac[ld_alloc_target_no_wrap, HD]) >>
+  `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
+    metis_tac[ld_global_selected, MEM] >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  drule ld_sync_ghosts >> simp[] >> strip_tac >>
+  drule ld_sync_memory >> strip_tac >>
+  drule ld_sync_dyn_agree >> strip_tac >>
+  `inst.inst_opcode <> INVOKE` by (fs[MEM] >> gvs[]) >>
+  gvs[step_inst_non_invoke] >>
+  `tn.t_var = f.lf_tv` by simp[] >>
+  `MEM inst.inst_opcode [CREATE;CREATE2]` by simp[] >>
+  drule_all ld_create_step >>
+  disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
+  qexistsl [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
+  simp[] >>
+  qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
+  gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+  qexistsl [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]
 QED
 
 val _ = if null (hyp ld_sync_create_effect) then ()
