@@ -76,13 +76,20 @@ Theorem ec_mem_operands_then:
   lower_value compile_expr cenv (expr_type b) b s1 = (q,sm) /\
   cs_extends sm sb /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+     R H (INR exc) ee r) /\
+  (!v1 v2. storage_trace_frame (k v1 v2)) /\
   (!es1 es2 v1 v2 t u.
-    expr_post ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
-    expr_post ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
+    (!H. valid_horizon cx st0 H es2.storage_trace ==>
+       expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
+       expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
+       stmt_state_rel H ctx func cenv cx es2 u) /\
+    (?H. valid_horizon cx st0 H es2.storage_trace) /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     MAP FDOM es1.scopes = MAP FDOM es2.scopes /\
     expr_store_bound cx (expr_type b) v2 q u /\
@@ -90,14 +97,14 @@ Theorem ec_mem_operands_then:
     expr_val_at cenv cx (expr_type a) sa sm es2 v1 p u /\
     (?w. eval_operand p u = SOME w /\ w2n w + 64 <= u.vs_alloca_next) /\
     expr_result_typed env a (Value v1) /\ expr_result_typed env b (Value v2) /\
-    stmt_state_rel ctx func cenv cx es2 u /\ local_ptrs_reserved cenv sm /\
+    local_ptrs_reserved cenv sm /\
     fn_has_code sm sb func /\ ~u.vs_halted /\
     u.vs_current_bb = sm.cs_current_bb /\
     u.vs_inst_idx = LENGTH sm.cs_current_insts /\
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
     (!z. MEM (Var z) [p;q] ==> not_fresh_at sm z) ==>
-    gas_outcome T (cx_tops cx) (ctx,func) (k v1 v2) (es2,u) Q R) ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+    gas_outcome T (cx_tops cx) (ctx,func) cx st0 (k v1 v2) (es2,u) Q R) ==>
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx a) (read_result cx))
       (\v1. bind (bind (eval_expr cx b) (read_result cx)) (k v1)))
     (es,s0) Q R
@@ -125,23 +132,54 @@ Proof
   `!l. p <> Label l` by gvs[safe_operand_def] >>
   `expr_sim_mem ctx func cenv cx (expr_type a) a es` by
     (gvs[body_exprs_mem_ok_def, body_expr_mem_ok_def] >> metis_tac[]) >>
-  irule ec_mem_outcome_then >>
-  conj_tac >- simp[] >>
-  qexists_tac `\v1 ee t. expr_post ctx func cenv cx a es sa s1 s0 ee v1 p t /\
-    expr_store_bound cx (expr_type a) v1 p t /\
-    t.vs_current_bb = s1.cs_current_bb /\
-    t.vs_inst_idx = LENGTH s1.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
-  BETA_TAC >> reverse conj_tac
+  `storage_trace_frame (bind (eval_expr cx a) (read_result cx))` by
+    (match_mp_tac storage_trace_frame_bind_all >>
+     simp[storage_trace_frame_read_result, evaluate_storage_trace_frame]) >>
+  `storage_trace_frame (bind (eval_expr cx b) (read_result cx))` by
+    (match_mp_tac storage_trace_frame_bind_all >>
+     simp[storage_trace_frame_read_result, evaluate_storage_trace_frame]) >>
+  `!v1. storage_trace_frame
+          (bind (bind (eval_expr cx b) (read_result cx)) (k v1))` by
+    (gen_tac >> match_mp_tac storage_trace_frame_bind_all >> metis_tac[]) >>
+  match_mp_tac
+    (Q.SPEC `\H v1 ee t. expr_post H ctx func cenv cx a es sa s1 s0 ee v1 p t /\
+       expr_store_bound cx (expr_type a) v1 p t /\
+       t.vs_current_bb = s1.cs_current_bb /\
+       t.vs_inst_idx = LENGTH s1.cs_current_insts /\
+       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`
+     (Q.GEN `P` ec_mem_outcome_then)) >>
+  BETA_TAC >> rpt conj_tac
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ a _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
       disch_then irule >> simp[] >>
-      metis_tac[expr_body_pre_gas_admissible]) >>
-  suspend "first_success"
+      metis_tac[expr_body_pre_gas_admissible])
+  >- first_assum ACCEPT_TAC
+  >- (rpt strip_tac >> first_assum ACCEPT_TAC)
+  >- suspend "first_success"
 QED
 
 Resume ec_mem_operands_then[first_success]:
-  qx_genl_tac [`gs1`, `v1`, `es1`, `t`] >> strip_tac >>
+  qx_genl_tac [`m1`, `v1`, `es1`, `t`] >> strip_tac >>
+  `es1 with gas_obs := [] = es1` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `?gs1. bind (eval_expr cx a) (read_result cx) (es with gas_obs := gs1) =
+         (INL v1, es1)` by
+    (qexists_tac `gas_explicit m1 s0.vs_gas_readings` >>
+     qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
+     qpat_assum `es1 with gas_obs := [] = es1` (fn th => rewrite_tac[th]) >>
+     simp[]) >>
+  `?obs. es1.storage_trace = es.storage_trace ++ obs` by
+    (qpat_assum `bind (eval_expr cx a) _ _ = _`
+       (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
+     simp[]) >>
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by simp[valid_horizon_def] >>
+  `?H0. valid_horizon cx st0 H0 es1.storage_trace` by
+    (qexists_tac `storage_trace_horizon es1.storage_trace` >>
+     qpat_x_assum `storage_trace_domain _ _ _`
+       (fn th => ACCEPT_TAC (REWRITE_RULE [storage_trace_domain_def] th))) >>
   qspecl_then [`cenv`, `cx`, `env`, `a`, `es with gas_obs := gs1`, `INL v1`, `es1`]
     mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_eval) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -163,34 +201,90 @@ Resume ec_mem_operands_then[first_success]:
        (qpat_x_assum `bind (eval_expr cx a) _ _ = _` mp_tac >>
         simp[vyperStateTheory.bind_def, AllCaseEqs()] >> metis_tac[]) >>
      gvs[body_expr_mem_ok_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es1 t` by
-    metis_tac[exprSimWordArgsTheory.expr_post_state] >>
-  irule ec_mem_outcome_then >> conj_tac >- simp[] >>
-  qexists_tac `\v2 ee u. expr_post ctx func cenv cx b es1 s1 sm t ee v2 q u /\
-    expr_store_bound cx (expr_type b) v2 q u /\
-    u.vs_current_bb = sm.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next` >>
-  BETA_TAC >> reverse conj_tac
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es1 t /\
+       storage_well_formed_on cx es1 (FST H)` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==> _`
+       (drule_then strip_assume_tac) >>
+     fs[expr_post_def]) >>
+  match_mp_tac
+    (Q.SPEC `\H v2 ee u. expr_post H ctx func cenv cx b es1 s1 sm t ee v2 q u /\
+       expr_store_bound cx (expr_type b) v2 q u /\
+       u.vs_current_bb = sm.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sm.cs_current_insts /\
+       alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next`
+     (Q.GEN `P` ec_mem_outcome_then)) >>
+  BETA_TAC >> rpt conj_tac
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ b _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
-      disch_then irule >> simp[] >> metis_tac[expr_body_pre_gas_admissible]) >>
-  suspend "second_success"
+      disch_then irule >> simp[] >>
+      metis_tac[expr_body_pre_gas_admissible])
+  >- first_assum ACCEPT_TAC
+  >- (rpt strip_tac >> first_assum ACCEPT_TAC)
+  >- suspend "second_success"
 QED
 
 Resume ec_mem_operands_then[second_success]:
-  qx_genl_tac [`gs2`, `v2`, `es2`, `u`] >> strip_tac >>
+  qx_genl_tac [`m2`, `v2`, `es2`, `u`] >> strip_tac >>
+  `es2 with gas_obs := [] = es2` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `?gs2. bind (eval_expr cx b) (read_result cx) (es1 with gas_obs := gs2) =
+         (INL v2, es2)` by
+    (qexists_tac `gas_explicit m2 t.vs_gas_readings` >>
+     qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
+     qpat_assum `es2 with gas_obs := [] = es2` (fn th => rewrite_tac[th]) >>
+     simp[]) >>
+  `?obs. es2.storage_trace = es1.storage_trace ++ obs` by
+    (qpat_assum `bind (eval_expr cx b) _ _ = _`
+       (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
+     simp[]) >>
+  `!H. valid_horizon cx st0 H es2.storage_trace ==>
+       valid_horizon cx st0 H es1.storage_trace` by simp[valid_horizon_def] >>
+  `?H0. valid_horizon cx st0 H0 es2.storage_trace` by
+    (qexists_tac `storage_trace_horizon es2.storage_trace` >>
+     qpat_x_assum `storage_trace_domain _ _ es2.storage_trace`
+       (fn th => ACCEPT_TAC (REWRITE_RULE [storage_trace_domain_def] th))) >>
+  `valid_horizon cx st0 H0 es1.storage_trace` by metis_tac[] >>
   qspecl_then [`cenv`, `cx`, `env`, `b`, `es1 with gas_obs := gs2`, `INL v2`, `es2`]
     mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_eval) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `expr_result_typed env b (Value v2)` by simp[] >>
-  `stmt_state_rel ctx func cenv cx es2 u` by
-    metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `MAP FDOM es1.scopes = MAP FDOM es2.scopes` by
     (qpat_assum `bind (eval_expr cx b) _ _ = _`
        (mp_then Any mp_tac
          (CONV_RULE (DEPTH_CONV ETA_CONV)
             exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >> simp[]) >>
+  `expr_post H0 ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
+   expr_store_bound cx (expr_type a) v1 p t /\
+   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
+    (qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==>
+                     expr_post H _ _ _ _ a _ _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  `expr_post H0 ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
+   expr_store_bound cx (expr_type b) v2 q u /\
+   u.vs_current_bb = sm.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sm.cs_current_insts /\
+   alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next` by
+    (qpat_assum `!H. valid_horizon cx st0 H es2.storage_trace ==>
+                     expr_post H _ _ _ _ b _ _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  `!H. valid_horizon cx st0 H es2.storage_trace ==>
+       expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
+       expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
+       stmt_state_rel H ctx func cenv cx es2 u` by
+    (qx_gen_tac `H` >> strip_tac >>
+     `valid_horizon cx st0 H es1.storage_trace` by metis_tac[] >>
+     qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==>
+                     expr_post H _ _ _ _ a _ _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `!H. valid_horizon cx st0 H es2.storage_trace ==>
+                     expr_post H _ _ _ _ b _ _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     simp[] >> irule exprSimWordArgsTheory.expr_post_state >>
+     first_assum (irule_at Any)) >>
   `?w. eval_operand p t = SOME w /\ eval_operand p u = SOME w` by
     metis_tac[expr_post_operand_word] >>
   `!w. eval_operand p t = SOME w ==> eval_operand p u = SOME w` by
@@ -205,7 +299,8 @@ Resume ec_mem_operands_then[second_success]:
    expr_val_at cenv cx (expr_type a) sa sm es2 v1 p u` by
     metis_tac[ec_point_operand_kept] >>
   `w2n w + 64 <= u.vs_alloca_next` by
-    (metis_tac[ec_point_read_capacity]) >>
+    (qpat_assum `expr_type a = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+     metis_tac[ec_point_read_capacity]) >>
   `!z. MEM (Var z) [p;q] ==> not_fresh_at sm z` by
     (simp[] >> metis_tac[exprOperandVarTheory.compile_lower_value_var,
                          freshWritesTheory.not_fresh_at_mono]) >>
