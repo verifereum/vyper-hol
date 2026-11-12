@@ -2580,7 +2580,7 @@ Theorem no_ctor_source_halt:
   ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\
   ss.vs_accounts = vs.vs_accounts /\
   ss.vs_transient = vs.vs_transient /\ ss.vs_logs = vs.vs_logs ==>
-  ?marks. deploy_venom_result_rel tops runtime_bc tx
+  ?marks. deploy_venom_result_rel HS tops runtime_bc tx
     (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx [(NONE,tops)] [])
     (Halt ss)
 Proof
@@ -2614,7 +2614,7 @@ Theorem deploy_no_ctor_correct:
       deploy_source_exempt tops
         (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
            [(NONE, tops)] []) \/
-      ?fuel. deploy_venom_result_rel tops runtime_bc tx
+      ?fuel. deploy_venom_result_rel HS tops runtime_bc tx
                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
                   [(NONE, tops)] [])
                (run_context fuel dunit.cu_context vs)

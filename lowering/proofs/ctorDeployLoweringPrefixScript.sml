@@ -512,7 +512,7 @@ Theorem deploy_ctor_prefix_fail:
     (!mut nr body am_c es0.
        ~deploy_ctor_start tops am tx (mut, nr, body, am_c, es0)) ==>
     ?fuel. !gobs.
-      deploy_venom_result_rel tops runtime_bc tx
+      deploy_venom_result_rel HS tops runtime_bc tx
         (load_contract NONE gobs am tx [(NONE, tops)] [])
         (run_context fuel dunit.cu_context vs)
 Proof
