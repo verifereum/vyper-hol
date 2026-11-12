@@ -16336,6 +16336,95 @@ Proof
   conj_tac >- gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
   metis_tac[passSharedFrameTheory.step_inst_base_abort_returndata, revert_equiv_def]
 QED
+Theorem mm_local_cut_nonterminator_stop[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\
+  (i.inst_opcode = INVOKE ==> mm_local_pending_indices is gs n = []) /\
+  ~(?err. step_inst fuel ctx i (H n) = Error err) /\
+  ~(?u. step_inst fuel ctx i (H n) = OK u) ==>
+  lift_result (\_ _. F) (execution_equiv excluded) revert_equiv
+    (step_inst fuel ctx i (H n)) (step_inst fuel ctx i t)
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = INVOKE`
+  >- (irule mm_local_cut_empty_non_ok >> metis_tac[]) >>
+  Cases_on `step_inst fuel ctx i (H n)` >> gvs[lift_result_def]
+  >- (drule opcodeClassTheory.step_inst_halt_opcodes >> strip_tac >>
+      gvs[venomInstTheory.is_terminator_def])
+  >- (drule_all mm_local_cut_noninvoke_abort >>
+      strip_tac >> simp[lift_result_def])
+  >- (gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+      drule opcodeClassTheory.step_inst_base_intret_opcodes >> strip_tac >>
+      gvs[venomInstTheory.is_terminator_def])
+QED
+
+Theorem mm_local_mem2mem_stopping_cut[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  h = phi_prefix_length is /\ h <= LENGTH is /\ s.vs_inst_idx = h /\
+  s.vs_current_bb = bb.bb_label /\
+  fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks /\
+  eom < dimword (:256) /\
+  EVERY (\((p,d',id),f,i,t). p = [] ==> static_mem_ok eom ctx f i t)
+    (trace_block [] d fuel ctx fn bb s) /\
+  ~(?err. exec_block fuel ctx bb s = Error err) /\
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE h is) = (pre,esh) ==>
+  ?n H out esn t. h <= n /\ n < LENGTH is /\ H h = s /\
+    (!q. h <= q /\ q <= n ==>
+      (H q).vs_inst_idx = q /\ (H q).vs_current_bb = bb.bb_label /\
+      static_mem_ok eom ctx fn (EL q is) (H q)) /\
+    (is_terminator (EL n is).inst_opcode \/
+      ~(?u. step_inst fuel ctx (EL n is) (H n) = OK u)) /\
+    exec_block fuel ctx bb s = dft_exec_suffix fuel ctx [EL n is] (H n) /\
+    mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
+      (TAKE (n-h) (DROP h is)) = (out,esn) /\
+    mm_local_exec_prefix fuel ctx out (s with vs_inst_idx := LENGTH pre) t /\
+    mm_local_cut is gs H n excluded (LENGTH pre + LENGTH out) t /\
+    mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE n is) =
+      (pre ++ out,esn) /\ t.vs_inst_idx = LENGTH pre + LENGTH out
+Proof
+  strip_tac >>
+  `?n H. h <= n /\ n < LENGTH bb.bb_instructions /\ H h = s /\
+    (!q. h <= q /\ q <= n ==> (H q).vs_inst_idx = q) /\
+    (!q. h <= q /\ q < n ==>
+      ~is_terminator (EL q bb.bb_instructions).inst_opcode /\
+      ?u. step_inst fuel ctx (EL q bb.bb_instructions) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC q) /\
+    (!q. h <= q /\ q <= n ==> static_mem_ok eom ctx fn (EL q bb.bb_instructions) (H q)) /\
+    (is_terminator (EL n bb.bb_instructions).inst_opcode \/
+      ~(?u. step_inst fuel ctx (EL n bb.bb_instructions) (H n) = OK u)) /\
+    exec_block fuel ctx bb s = dft_exec_suffix fuel ctx [EL n bb.bb_instructions] (H n)` by
+    (irule mm_local_source_stopping_history >> simp[] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `!q. h <= q /\ q <= n ==> (H q).vs_current_bb = bb.bb_label` by
+    metis_tac[mm_local_source_history_label] >>
+  Cases_on `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
+    (TAKE (n-h) (DROP h is))` >>
+  rename1 `mm_flat_map_supply _ esh _ = (out,esn)` >>
+  `n <= LENGTH is` by simp[] >>
+  `!q. h <= q /\ q < n ==>
+    (H q).vs_inst_idx = q /\ (H q).vs_current_bb = bb.bb_label /\
+    ~is_terminator (EL q is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+      H (SUC q) = u with vs_inst_idx := SUC q` by
+    (rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+  `!q. h <= q /\ q < n ==>
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL q is) (H q)` by
+    (rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+  drule_all mm_local_mem2mem_prefix_execution >> strip_tac >>
+  qexistsl [`n`,`H`,`out`,`esn`,`t`] >> simp[] >>
+  metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
