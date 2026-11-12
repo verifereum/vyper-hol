@@ -372,6 +372,18 @@ val _ = if null (hyp ld_runner_simulation) andalso
                aconv (concl ld_runner_simulation) ldMutualResult
         then () else raise Fail "mutual runner audit failed";
 
+val ldMutualResultFuel = snd (dest_imp (concl ld_runner_conditional_induction_fuel));
+
+Theorem ld_runner_simulation_fuel:
+  ^ldMutualResultFuel
+Proof
+  mp_tac ld_runner_conditional_induction_fuel >>
+  (impl_tac >- (conj_tac
+    >- ACCEPT_TAC ld_runner_step_clause_fuel
+    >> ACCEPT_TAC ld_runner_exec_clause_fuel)) >>
+  simp[]
+QED
+
 Theorem lower_dload_stage_sim:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -416,7 +428,23 @@ Theorem lower_dload_stage_sim_fuel:
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     ctx_sim_fuel I D C C' vs vs
 Proof
-  cheat
+  rpt strip_tac >> simp[ctx_sim_fuel_def] >> rpt strip_tac >>
+  `run_context fuel C vs = run_context fuel C vs` by simp[] >>
+  drule_all lower_dload_stage_root_entry >> strip_tac >>
+  `opaque_use_ok fn` by metis_tac[ld_ctx_shape_lookup_opaque] >>
+  `fn.fn_name = name` by
+    (qpat_assum `lookup_function name C.ctx_functions = SOME fn`
+       (mp_tac o REWRITE_RULE [lookup_function_def]) >>
+     disch_then (mp_tac o MATCH_MP venomExecPropsTheory.FIND_P) >> simp[]) >>
+  `terminates (run_blocks fuel C fn s0)` by metis_tac[] >>
+  drule_at (Pat `ld_joint_boundary`)
+    (SIMP_RULE bool_ss [] (cj 3 ld_runner_simulation_fuel)) >>
+  simp[] >>
+  disch_then (drule_at (Pat `terminates (run_blocks _ _ _ _)`)) >>
+  simp[] >> disch_then (drule_all_then strip_assume_tac) >>
+  drule ld_root_result_shape >>
+  disch_then (qspecl_then [`vs`,`fuel`] strip_assume_tac) >>
+  gvs[terminates_def] >> metis_tac[]
 QED
 
 (* Kernel-level certification of the frozen contract. *)
@@ -424,3 +452,8 @@ val _ = if null (hyp lower_dload_stage_sim) andalso
                null (List.filter (fn s => s <> "DISK_THM")
                        (#1 (Tag.dest_tag (Thm.tag lower_dload_stage_sim))))
         then () else raise Fail "lower_dload_stage_sim proof audit failed";
+
+val _ = if null (hyp lower_dload_stage_sim_fuel) andalso
+               null (List.filter (fn s => s <> "DISK_THM")
+                       (#1 (Tag.dest_tag (Thm.tag lower_dload_stage_sim_fuel))))
+        then () else raise Fail "lower_dload_stage_sim_fuel proof audit failed";
