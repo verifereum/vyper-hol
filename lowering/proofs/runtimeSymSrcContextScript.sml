@@ -164,3 +164,54 @@ Proof
   qexistsl [`ctor`, `dst`, `imm`, `off + 32`] >>
   goal_assum (drule_at Any) >> simp[] >> qexists `src` >> simp[]
 QED
+
+Theorem runtime_sym_imm_store_words:
+  !n s s' src dst off imm u.
+  ~is_label_operand src /\ ~is_label_operand dst /\
+  (!b. imm = SOME b ==> ~is_label_operand b) /\
+  EVERY runtime_sym_inst (state_insts s) /\
+  compile_imm_store_words imm src dst n off s = (u,s') ==>
+  EVERY runtime_sym_inst (state_insts s')
+Proof
+  Induct >- (simp[compile_imm_store_words_def, comp_return_def] >>
+    rpt strip_tac >> gvs[]) >>
+  simp[compile_imm_store_words_def] >> rpt gen_tac >>
+  simp[comp_bind_def, comp_ignore_bind_def] >>
+  ntac 4 (pairarg_tac >> simp[]) >> strip_tac >>
+  qpat_assum `compile_lit_byte_offset src _ _ = _`
+    (mp_then Any mp_tac runtime_sym_lit_byte_offset) >> simp[] >> strip_tac >>
+  qpat_assum `emit_op _ _ _ = _`
+    (mp_then Any mp_tac runtime_sym_emit_op) >> simp[] >> strip_tac >>
+  qpat_assum `compile_lit_byte_offset dst _ _ = _`
+    (mp_then Any mp_tac runtime_sym_lit_byte_offset) >> simp[] >> strip_tac >>
+  qpat_assum `compile_imm_store_word _ _ _ _ = _`
+    (mp_then Any mp_tac runtime_sym_imm_store_word) >> simp[] >> strip_tac >>
+  first_x_assum irule >>
+  qexistsl [`dst`, `imm`, `off + 32`] >>
+  goal_assum (drule_at Any) >> simp[] >> qexists `src` >> simp[]
+QED
+
+Theorem runtime_sym_load_memory:
+  ~is_label_operand op /\ EVERY runtime_sym_inst (state_insts s) /\
+  compile_load_memory op prim s = (v,s') ==>
+  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand v
+Proof
+  Cases_on `prim` >> simp[compile_load_memory_def, comp_return_def] >>
+  strip_tac >> gvs[] >>
+  qpat_assum `emit_op _ _ _ = _` (mp_then Any mp_tac runtime_sym_emit_op) >> simp[]
+QED
+
+Theorem runtime_sym_bytestring_word_count:
+  ~is_label_operand src /\ EVERY runtime_sym_inst (state_insts s) /\
+  compile_bytestring_word_count src s = (v,s') ==>
+  EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand v
+Proof
+  simp[compile_bytestring_word_count_def, comp_bind_def] >>
+  ntac 2 (pairarg_tac >> simp[]) >> strip_tac >>
+  qpat_assum `emit_op MLOAD _ _ = _`
+    (mp_then Any mp_tac runtime_sym_emit_op) >> simp[] >> strip_tac >>
+  qpat_assum `emit_op ADD _ _ = _`
+    (mp_then Any mp_tac runtime_sym_emit_op) >> simp[is_label_operand_def] >> strip_tac >>
+  qpat_assum `emit_op SHR _ _ = _`
+    (mp_then Any mp_tac runtime_sym_emit_op) >> simp[is_label_operand_def]
+QED
