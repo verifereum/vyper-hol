@@ -16,7 +16,7 @@
  *)
 Theory bodyPtrCtrlCases
 Ancestors
-  bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
+  fragGasSeqPtr bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
   bodySimStmtCases bodyExprPreFacts supportedStmts supportedExprs
   stmtLoweringMono vyperTypeSystem vyperTypeCallStackSoundness
@@ -25,7 +25,7 @@ Ancestors
   emitHelperProps exprLoweringProps fragExec ptrSafeRun ptrDiscipline
   codegenRel contextCodegenRel venomInst venomState venomExecSemantics
   venomExecProofs stmtIfPtr exprSimSource supportedExprTraverse
-  supportedStmtTraverse
+  supportedStmtTraverse bodyForRangePtr bodyForArrayPtr
 
 val _ = Parse.hide "body";
 
@@ -50,25 +50,8 @@ Theorem emit_jump_zero_path_ptr:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
   gas_path_ptr D 0 ctx func PG G tn s 0 G tn (OK (jump_to lbl s))
 Proof
-  strip_tac >> drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb (LENGTH sa.cs_current_insts) =
-    SOME (mk_inst sa.cs_next_id JMP [Label lbl] [])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `ptr_safe_step D 0 0 ctx func PG G tn
-     (mk_inst sa.cs_next_id JMP [Label lbl] []) s` by
-    (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-          allocas_from_def, mk_inst_def, source_memory_write_ranges_def,
-          source_memory_read_ranges_def, op_taint_def] >>
-     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-     simp[mk_inst_def, step_jmp_behavior, jump_to_def]) >>
-  `gas_path_ptr_edge D 0 ctx func PG G tn s 0 G tn (OK (jump_to lbl s))` by
-    (rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
-     qexists_tac `0:num` >>
-     simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
-          step_jmp_behavior, is_terminator_def] >>
-     fs[mk_inst_def] >> metis_tac[]) >>
-  `~(jump_to lbl s).vs_halted` by simp[jump_to_def] >>
-  metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
+  strip_tac >> irule emit_jump_path_ptr >> simp[allocas_from_def] >>
+  qexistsl_tac [`sa`, `sb`] >> simp[]
 QED
 
 Theorem stmt_state_rel_clear_obs[local]:
@@ -269,7 +252,9 @@ Theorem body_for_case_ptr:
        body_iterator_ptr_ok cx it) ==>
     body_stmt_ptr_ok cx (For id typ it n body)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> Cases_on `it`
+  >- (irule body_for_array_ptr >> simp[] >> metis_tac[])
+  >> irule body_for_range_ptr >> simp[] >> metis_tac[]
 QED
 
 Theorem body_expr_stmt_case_ptr:

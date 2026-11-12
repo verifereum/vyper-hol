@@ -157,7 +157,7 @@ Resume external_frame_ret_value_normalized_run_mem[resources]:
   qpat_x_assum `cenv' = cenv''` (SUBST_ALL_TAC o SYM) >>
   (* the statement's [] has a free element type; package_external_fn ignores it *)
   `set_external_package_target rpolicy.rpol_target
-     (package_external_fn tops F (assign_nkeys tops 0)
+     (package_external_fn tops T (K global_nonreentrant_slot)
         (mut, F, lookup_raw_return_or_F (NONE : num option)
                     tx.function_name External tops,
          tx.function_name, args, ([] : expr list), ret, fbody)) =
