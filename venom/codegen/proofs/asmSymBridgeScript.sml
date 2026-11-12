@@ -518,6 +518,7 @@ Theorem sym_step_create_sim[local]:
     (asm_step_op otp name cs)
 Proof
   strip_tac >> gvs[MEM] >>
+  `ss.sym_base.as_call_ctx = cs.as_call_ctx` by gvs[asm_sym_rel_def] >>
   irule sym_step_concrete_good >> simp[concrete_underflow] >>
   simp[create_arities] >> rpt strip_tac >>
   Cases_on `cs.as_stack` >> gvs[] >>
@@ -532,7 +533,8 @@ Proof
       simp[asm_step_op_create, asm_exec_create_def, asm_op_mem_writes_def,
            mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
            finite_mapTheory.DRESTRICT_UNIV] >>
-      (* an oversized initcode faults before the create on both sides *)
+      (* a static frame or an oversized initcode faults before the create
+         on both sides *)
       IF_CASES_TAC
       >- (gvs[asm_sym_rel_def] >>
           simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
@@ -548,7 +550,8 @@ Proof
   simp[asm_step_op_create, asm_exec_create2_def, asm_op_mem_writes_def,
        mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
-  (* an oversized initcode faults before the create on both sides *)
+  (* a static frame or an oversized initcode faults before the create on
+     both sides *)
   IF_CASES_TAC
   >- (gvs[asm_sym_rel_def] >>
       simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
@@ -593,6 +596,11 @@ Proof
   simp[asm_step_op_call, asm_exec_call_def, asm_op_mem_writes_def,
        mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
+  (* a static frame's CALL with value faults on both sides *)
+  IF_CASES_TAC
+  >- (gvs[asm_sym_rel_def] >>
+      simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
+  rewrite_tac[COND_CLAUSES] >>
   irule related_call_completion >> simp[] >>
   gvs[asm_op_mem_reads_def, log_table_def, mem_labels_hit_def, in_mem_range_def] >>
   metis_tac[]
@@ -849,10 +857,12 @@ Proof
   gvs[MEM] >> simp[asm_step_op_def, asm_step_arith_def] >>
   simp[asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def] >>
   gvs[asm_sym_rel_def] >>
+  (* a static frame faults on both sides, closed by the simp *)
+  Cases_on `cs.as_call_ctx.cc_static` >>
   simp[asm_sstore_def, asm_tstore_def, sym_lift_def, asm_next_def,
        asm_op_mem_writes_def, mem_labels_clear_def,
        GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV,
-       asm_sym_step_rel_def, asm_sym_rel_def] >>
+       asm_sym_step_rel_def, asm_sym_rel_def, sym_obs_def, sym_init_def] >>
   conj_tac >- (qexists_tac `m` >> simp[]) >> metis_tac[]
 QED
 
@@ -905,6 +915,7 @@ Proof
   simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
   simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
   simp[asm_step_extcall_def] >> gvs[asm_sym_rel_def] >>
+  Cases_on `cs.as_call_ctx.cc_static` >>
   simp[asm_selfdestruct_def, sym_lift_def, asm_sym_step_rel_def,
        sym_obs_def, sym_init_def]
 QED
@@ -1242,6 +1253,11 @@ Proof
   drule_all related_memory_read >>
   disch_then (qspec_then `w2n off + w2n sz` assume_tac) >>
   `ss.sym_base.as_call_ctx = cs.as_call_ctx` by gvs[asm_sym_rel_def] >>
+  (* a static frame faults on both sides *)
+  Cases_on `cs.as_call_ctx.cc_static`
+  >- (gvs[asm_sym_rel_def] >>
+      simp[asm_log_def, sym_lift_def, asm_sym_step_rel_def, sym_obs_def,
+           sym_init_def]) >>
   simp[asm_log_def, listTheory.DROP_TAKE, listTheory.TAKE_TAKE_MIN] >>
   simp[mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>

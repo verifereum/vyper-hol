@@ -100,6 +100,8 @@ Proof
   `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) as es` by
     gvs[asm_frame_rel_def] >>
+  `~as.as_call_ctx.cc_static` by
+    (drule_all asm_evm_rel_static >> gvs[asm_frame_rel_def]) >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   drule_all frame_next_opcode >> strip_tac >>
   `op = SelfDestruct` by
