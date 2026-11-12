@@ -46,7 +46,7 @@ Theorem internal_return_summary_bind_mem[local]:
   (!v ee gs r. RetQ v (ee with gas_obs := gs) r = RetQ v ee r) /\
   (!ee v t.
      P (INL v) ee t /\
-     (?gs ee'. source (es with gas_obs := gs) = (INL v, ee')) /\
+     (?gs. source (es with gas_obs := gs) = (INL v, ee with gas_obs := [])) /\
      ~t.vs_halted ==>
      ?n r. gas_path_mem ctx func t n r /\ RetQ v (ee with scopes := []) r) ==>
   !Q. ?marks'. gas_summary_at T (ctx,func) marks'
@@ -61,8 +61,13 @@ Proof
         (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
          simp[gas_marked_exec_def] >>
          metis_tac[gas_marked_path_exec, gas_path_normal]) >>
-      drule marked_exec_source_eq >> strip_tac >>
-      first_x_assum (drule_all o Ho_Rewrite.PURE_REWRITE_RULE [PULL_EXISTS]) >>
+      `?gs. source (es with gas_obs := gs) =
+              (INL v, es_end with gas_obs := [])` by
+        (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+         simp[gas_marked_exec_def] >> metis_tac[]) >>
+      qpat_x_assum `!ee v t. _`
+        (qspecl_then [`es_end with gas_obs := []`, `v`, `t`] mp_tac) >>
+      simp[] >> impl_tac >- metis_tac[] >>
       strip_tac >> qexists_tac `marks ++ REPLICATE n F` >>
       qexistsl_tac [`INR (ReturnException v)`, `es_end`, `r`] >>
       conj_tac
@@ -101,8 +106,8 @@ Theorem internal_return_value_counted_mem:
      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
      expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
      expr_store_bound cx (expr_type e) v op t /\
-     (?gs ee'. bind (eval_expr cx e) (read_result cx)
-                 (es with gas_obs := gs) = (INL v, ee')) /\
+     (?gs. bind (eval_expr cx e) (read_result cx)
+                 (es with gas_obs := gs) = (INL v, ee with gas_obs := [])) /\
      t.vs_current_bb = s1.cs_current_bb /\
      t.vs_inst_idx = LENGTH s1.cs_current_insts /\
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
