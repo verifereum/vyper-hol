@@ -14722,11 +14722,8 @@ Proof
      MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j`
     by (fs[shape_state_def, shape_base_state_def, state_insts_def] >>
         metis_tac[]) >>
-  `raw_checked_blocks (entry_blocks ++ FLAT segs)`
-    by fs[shape_state_def, raw_checked_state_def] >>
   `rets_scoped (entry_blocks ++ FLAT segs)`
     by fs[shape_state_def, shape_base_state_def] >>
-  drule_all raw_checked_internal_segments >> strip_tac >>
   `package_internal_blocks (internal_fn_descriptors internal_fns)
      (entry_blocks ++ FLAT segs) =
    SOME (entry_blocks,

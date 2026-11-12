@@ -9,7 +9,7 @@ Theory whitelistCheckerTypes
 Ancestors
   vyperTypeContract
   supportedStmts supportedDecls supportedExprs whitelistCheckerDecls
-  supportedExprForms supportedTypes vyperTypeSystem vyperContext vyperValue
+  supportedExprForms supportedTypes vyperTypeSystem vyperEventArgCompat vyperContext vyperValue
   vyperAST vyperMisc exprLowering placeTypingProps abiCallerStructSize
   alist finite_map list pred_set pair arithmetic
 
@@ -282,13 +282,14 @@ QED
 Theorem well_typed_binop_exp_supported:
   well_typed_binop ty (Exp) (expr_type a) (expr_type b) /\
   well_formed_type tenv (expr_type a) /\
-  builtin_operands_ok (Bop Exp) [a; b] ==>
+  builtin_operands_ok ty (Bop Exp) [a; b] ==>
   supported_binop Exp (expr_type a) (expr_type b)
     (supported_integer_literal a) (supported_nonnegative_literal b)
 Proof
   rw[well_typed_binop_def, builtin_operands_ok_def, supported_binop_def,
      int_literal_value_supported, nonneg_int_literal_supported] >>
-  metis_tac[well_formed_integer_type]
+  metis_tac[well_formed_integer_type, power_operands_ok_literal,
+            int_literal_value_supported, nonneg_int_literal_supported]
 QED
 
 (* Row 31. *)
@@ -306,7 +307,7 @@ QED
 Theorem well_typed_binop_shift_supported:
   well_typed_binop ty op (expr_type a) (expr_type b) /\
   well_formed_type tenv (expr_type a) /\ well_formed_type tenv (expr_type b) /\
-  builtin_operands_ok (Bop op) [a; b] /\ (op = ShL \/ op = ShR) ==>
+  builtin_operands_ok ty (Bop op) [a; b] /\ (op = ShL \/ op = ShR) ==>
   supported_binop op (expr_type a) (expr_type b) lb ne \/
   (supported_nonnegative_literal b /\ ~is_uint_type (expr_type b))
 Proof
@@ -605,7 +606,7 @@ Theorem type_stmt_log_supported:
   supported_log tops id es
 Proof
   strip_tac >> drule_all check_contract_log_event_fields >> strip_tac >>
-  gvs[type_stmt_def, supported_log_def, AllCaseEqs()]
+  gvs[type_stmt_def, supported_log_def, event_arg_compatible_alias_def, AllCaseEqs()]
 QED
 
 (* The target residual excludes locals, subscripts and attributes. Full-word

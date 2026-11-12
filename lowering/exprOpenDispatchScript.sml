@@ -150,7 +150,7 @@ Proof
   >- (rpt (pairarg_tac >> simp[]) >>
       Cases_on `b` >>
       TRY (rename1 `Builtin ann bi elems` >> Cases_on `bi`) >>
-      simp[oneline as_stack_val_def, AllCaseEqs()] >>
+      simp[oneline as_stack_val_def] >>
       rpt (pairarg_tac >> simp[]) >>
       rpt IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
       strip_tac >> gvs[AllCaseEqs()] >>

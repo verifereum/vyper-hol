@@ -665,7 +665,7 @@ Proof
   imp_res_tac finally_pop_function_scopes >> gvs[] >> metis_tac[]
 QED
 
-Theorem finally_unless_halt_conditional_lock_scopes[local]:
+Theorem finally_unless_halt_conditional_lock_scopes:
   finally_unless_halt (finally f (pop_function prev))
     (if guard then case slot of NONE => return ()
        | SOME s => release_nonreentrant_lock addr s else return ())
