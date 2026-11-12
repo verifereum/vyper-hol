@@ -188,5 +188,11 @@ Theorem asm_frame_gas_step:
        then (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left es1
        else frame_gas_left es <= frame_gas_left es1 + frame_op_gas H)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `EL a.as_pc prog = AsmOp "CALL" \/
+            EL a.as_pc prog = AsmOp "STATICCALL"`
+  >- (drule_all asm_frame_gas_step_call >> simp[]) >>
+  `EL a.as_pc prog <> AsmOp "CALL" /\
+   EL a.as_pc prog <> AsmOp "STATICCALL"` by gvs[] >>
+  drule_all asm_frame_gas_step_noncall >> simp[]
 QED
