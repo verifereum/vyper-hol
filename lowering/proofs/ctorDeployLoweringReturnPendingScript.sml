@@ -213,12 +213,12 @@ Theorem pending_frame_transfer_lock:
 Proof
   simp[state_rel_frame_def, transfer_value_def,
     acquire_nonreentrant_lock_def, get_accounts_def, update_accounts_def,
-    get_transient_storage_def, update_transient_def,
+    get_transient_storage_def, update_transient_def, record_storage_event_def,
     bind_def, ignore_bind_def, return_def, raise_def, check_def,
     type_check_def, assert_def, AllCaseEqs()] >> rpt strip_tac >>
   rpt (BasicProvers.PURE_CASE_TAC >>
     gvs[return_def, raise_def, update_accounts_def, update_transient_def,
-        get_accounts_def, get_transient_storage_def,
+        get_accounts_def, get_transient_storage_def, record_storage_event_def,
         bind_def, ignore_bind_def, check_def, assert_def, AllCaseEqs()])
 QED
 
