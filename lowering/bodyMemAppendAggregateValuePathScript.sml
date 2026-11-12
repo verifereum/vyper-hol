@@ -5,8 +5,31 @@ Ancestors
   stmtSimStoreCopy stmtSimAppendStorageCompose bodyMemAppendFacts
   words list rich_list valueEncodingProps venomState venomExecSemantics
   stmtSimDefs stmtSimProps exprSimProps loweringStateRelDefs compileEnv
-  placeStoreStorage allocaHistory fragExec emitHelper emitHelperProps venomInst
+  placeStoreStorage allocaHistory fragExec bodyMemAssignTopCopyCompiler emitHelper emitHelperProps venomInst
   exprSimDefs loweringPosts appendStorageRel exprLoweringProps stmtSimAppendStorage
+
+Theorem append_aggregate_control_frame[local]:
+  !H ctx func cenv cx es s V bb ix prev.
+    stmt_state_rel H ctx func cenv cx es
+      (s with <|vs_vars := V; vs_current_bb := bb;
+                vs_inst_idx := ix; vs_prev_bb := prev|>) =
+    stmt_state_rel H ctx func cenv cx es (s with vs_vars := V)
+Proof
+  rpt gen_tac >>
+  `fmp_room ctx func
+     (s with <|vs_vars := V; vs_current_bb := bb;
+               vs_inst_idx := ix; vs_prev_bb := prev|>) =
+   fmp_room ctx func (s with vs_vars := V)` by
+    (irule fmp_room_fields_cong >> simp[]) >>
+  simp[stmt_state_rel_def, state_rel_def, accounts_rel_def, local_ptrs_rel_def,
+       local_region_def, local_backed_def, immutable_base_zero_alt,
+       lookup_var_def, storage_rel_def,
+       transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+       contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def, alloca_room_def,
+       pending_alloca_size_def, immutable_alloca_sep_def]
+QED
 
 Theorem append_aggregate_prefix_words[local]:
   w2n b+32*n < dimword (:256) ==>
@@ -18,13 +41,18 @@ Proof
   irule listTheory.FOLDL_CONG >> simp[MEM_COUNT_LIST] >>
   rpt strip_tac >> rename1 `i < n` >>
   `w2n (b+n2w i*32w) = w2n b+32*i` by
-    (irule topcopy_word_address >> qexists_tac `32*n` >> simp[]) >>
+    (`b + n2w i * 32w = n2w (w2n b + 32*i)` by
+       simp[GSYM word_add_n2w, GSYM word_mul_n2w,
+            arithmeticTheory.MULT_COMM, WORD_MULT_COMM] >>
+     asm_rewrite_tac[] >>
+     `w2n b + 32*i < dimword (:256)` by decide_tac >> simp[w2n_n2w]) >>
   Cases_on `tr` >> simp[mem_word_at_eq_mload]
 QED
 
 Theorem append_storage_aggregate_success_post_mem[local]:
-  stmt_state_rel ctx func cenv cx es s /\
-  declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
   append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es = (res,es') /\
   local_ptrs_reserved cenv sa /\
   store_copy_normalize s t =
@@ -35,8 +63,8 @@ Theorem append_storage_aggregate_success_post_mem[local]:
         s (type_slot_size tv)) /\
   (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
   w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
-  (!mid' n' subs' slot' tv'.
-    declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
+  (!slot' tv'.
+    MEM (tr,slot',tv') (FST H) /\
     (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
     ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
                     (w2n slot') (type_slot_size tv')) /\
@@ -44,21 +72,21 @@ Theorem append_storage_aggregate_success_post_mem[local]:
   0 < type_slot_size tv /\ well_formed_type_value tv /\ value_has_type tv v /\
   val_in_memory tv v (w2n b) s.vs_memory /\ encode_value tv v = SOME writes /\
   w2n b + 32*type_slot_size tv < dimword (:256) ==>
-  res = INL () /\ stmt_state_rel ctx func cenv cx es' t
+  res = INL () /\ stmt_state_rel H ctx func cenv cx es' t
 Proof
   strip_tac >>
   `w2n (lookup_storage slot (get_storage cx es tr)) =
    w2n (lookup_storage slot (get_storage cx es tr))` by simp[] >>
   drule_all stmt_state_rel_append_storage_aggregate >> strip_tac >>
   qpat_x_assum `w2n _ = w2n _` kall_tac >>
-  `stmt_state_rel ctx func cenv cx es' (store_copy_normalize s t)` by
+  `stmt_state_rel H ctx func cenv cx es' (store_copy_normalize s t)` by
     (asm_rewrite_tac [] >>
      drule append_aggregate_prefix_words >>
      disch_then (qspec_then `tr` assume_tac) >>
      gvs[GSYM word_add_n2w, GSYM word_mul_n2w, WORD_ADD_ASSOC]) >>
   conj_tac >- asm_rewrite_tac [] >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ (store_copy_normalize _ _)` mp_tac >>
-  pure_rewrite_tac [store_copy_normalize_def, topcopy_control_frame] >> strip_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ (store_copy_normalize _ _)` mp_tac >>
+  pure_rewrite_tac [store_copy_normalize_def, append_aggregate_control_frame] >> strip_tac >>
   irule stmt_state_rel_reserved_frame >>
   qexistsl_tac [`t with vs_vars := s.vs_vars`, `sa`] >>
   simp[stateFrameTheory.state_frame_vars, lookup_var_def] >> metis_tac[]
@@ -76,7 +104,12 @@ Proof
   disch_then (qx_choosel_then
     [`len'`, `valid`, `data`, `offset`, `dst`, `fresh`, `u`,
      `s1`, `s2`, `s3`, `s4`, `s5`, `s6`, `s7`, `s8`] strip_assume_tac) >>
-  drule place_store_copy_boundary >> strip_tac >>
+  `s7.cs_current_insts = []` by
+    (drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)
+       topcopy_compile_certificate >>
+     impl_tac >- (Cases_on `tr` >> simp[]) >> strip_tac >>
+     qpat_x_assum `new_block _ _ = (_,s7)` mp_tac >>
+     simp[new_block_def] >> strip_tac >> gvs[]) >>
   `EVERY (\i. i.inst_opcode <> ALLOCA) sf.cs_current_insts` by
     (qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
      qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
@@ -97,11 +130,13 @@ Theorem append_storage_aggregate_value_path_mem:
   type_slot_size tv < dimword (:256) /\
   w2n b + 32*type_slot_size tv <= s.vs_alloca_next /\
   w2n b + 32*type_slot_size tv < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
   w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
-  (!mid' n' subs' slot' tv'.
-    declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
+  (!slot' tv'.
+    MEM (tr,slot',tv') (FST H) /\
     (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
     ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
                     (w2n slot') (type_slot_size tv')) /\
@@ -112,7 +147,7 @@ Theorem append_storage_aggregate_value_path_mem:
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   alloca_history func s ==>
   ?r. gas_marked_path T ctx func s 0 r /\
-    ((?t. r = OK t /\ res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
+    ((?t. r = OK t /\ res = INL () /\ stmt_state_rel H ctx func cenv cx es' t /\
       stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
       (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
       t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
@@ -141,7 +176,7 @@ Proof
         ~t.vs_halted /\ t.vs_memory = s.vs_memory /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
         (first_x_assum irule >> simp[]) >>
-      `res = INL () /\ stmt_state_rel ctx func cenv cx es' t` by
+      `res = INL () /\ stmt_state_rel H ctx func cenv cx es' t` by
         (drule_all append_storage_aggregate_success_post_mem >> simp[]) >>
       `alloca_history func t` by (irule append_storage_aggregate_history >> metis_tac[]) >>
       qexists_tac `OK t` >> simp[stmt_lands_def]) >>

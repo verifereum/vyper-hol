@@ -1,7 +1,7 @@
 (* Body boundaries for aggregate storage Append. *)
 Theory bodyMemAppendAggregateFacts
 Ancestors
-  bodyAppendStorageAdapter bodyAppendStorageFacts bodyMemAssignTopCopyFacts placeDynLayout
+  bodyAppendStorageAdapter bodyAppendStorageFacts bodyMemAssignTopCopyFacts
   supportedStmts supportedExprs loweringPosts exprSimMemDefs
   valueEncodingProps vyperAST bodySim bodyStorageMetadata supportedProgram
   supportedDecls supportedTypes compileEnv exprSimHyps whitelistVisibility
@@ -61,7 +61,15 @@ Proof
   `supported_storage_type tops elem` by
     (Cases_on `vis` >>
      gvs[supported_declaration_header_def, supported_storage_array_depth]) >>
-  simp[] >> conj_tac >- metis_tac[topcopy_not_bytestring] >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `supported_storage_type _ _` mp_tac >>
+      Cases_on `elem` >> simp[is_bytestring_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      simp[is_bytestring_type_def, supported_storage_type_def,
+           Once supported_nested_type_def, supported_full_word_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      simp[is_bytestring_type_def, supported_storage_type_def,
+           Once supported_nested_type_def, supported_full_word_type_def]) >>
   Cases_on `elem` >>
   gvs[supported_storage_type_def, Once supported_nested_type_def,
       supported_full_word_type_def, is_word_type_def, is_bytestring_type_def]
@@ -84,7 +92,9 @@ Theorem append_aggregate_target_layout:
     lookup_var_slot_from_layout cx (mut = Transient) src id = SOME rslot /\
     eval_target_place cx (TopLevelNameTarget (src,id)) es =
       (INL (StoragePlace (mut = Transient) (n2w rslot)
-        (ArrayTV tv (Dynamic dn))),es)
+        (ArrayTV tv (Dynamic dn))),
+       es with storage_trace := es.storage_trace ++
+         [StorageRoot (mut = Transient) rslot (ArrayTV tv (Dynamic dn))])
 Proof
   strip_tac >>
   `ALL_DISTINCT

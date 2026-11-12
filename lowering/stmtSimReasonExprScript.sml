@@ -279,7 +279,7 @@ Theorem raise_reason_continuation[local]:
     (stmt_res_ok lctx) es /\
   gas_marked_exec F (ctx,func) (eval_expr cx r)
     (es,s0) marks (INL tv) ee (OK t) /\
-  vv_post ctx func cenv cx r es sa sm s0 (ee with gas_obs := []) tv vv t ==>
+  vv_post H ctx func cenv cx r es sa sm s0 (ee with gas_obs := []) tv vv t ==>
   ?str. !tail.
     (do v <- read_result cx tv;
         msg <- lift_option_type (dest_StringV v) "not StringV";
@@ -314,11 +314,11 @@ Theorem raise_reason_counted_success[local]:
     (stmt_res_ok lctx) es /\
   gas_marked_exec F (ctx,func) (eval_expr cx r)
     (es,s0) marks (INL tv) ee (OK t) /\
-  vv_post ctx func cenv cx r es sa sm s0 (ee with gas_obs := []) tv vv t /\
+  vv_post H ctx func cenv cx r es sa sm s0 (ee with gas_obs := []) tv vv t /\
   gas_path ctx func t 0 (Abort Revert_abort u) ==>
   ?str. gas_marked_exec F (ctx,func) (eval_stmt cx (Raise (RaiseReason r)))
     (es,s0) marks (INR (AssertException str)) ee (Abort Revert_abort u) /\
-    !tail. stmt_exit RetQ (ee with gas_obs := tail)
+    !RQ tail. stmt_exit RQ (ee with gas_obs := tail)
       (INR (AssertException str)) (Abort Revert_abort u)
 Proof
   rpt strip_tac >> drule_all raise_reason_continuation >> strip_tac >>
@@ -337,12 +337,12 @@ Theorem raise_reason_counted_exception[local]:
   expr_exit (INR ex : eval_result + exception) rr ==>
   gas_marked_exec F (ctx,func) (eval_stmt cx (Raise (RaiseReason r)))
     (es,s0) marks (INR ex) ee rr /\
-  !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr
+  !RQ tail. stmt_exit RQ (ee with gas_obs := tail) (INR ex) rr
 Proof
   strip_tac >> conj_tac
   >- (rewrite_tac[eval_raise_reason_bind] >>
       irule gas_marked_exec_bind_exception >> simp[]) >>
-  simp[stmt_exit_def] >> gen_tac >> disj1_tac >>
+  simp[stmt_exit_def] >> rpt gen_tac >> disj1_tac >>
   ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:eval_result``] expr_exit_INR_type] >>
   first_assum ACCEPT_TAC
 QED
@@ -354,16 +354,31 @@ QED
    gas.  The encoder's path is a premise over r's success post, so each
    form of r's value (on the stack or in memory, in storage, in code)
    supplies its own. *)
+(* After the reason's value, raise only appends storage observations. *)
+val raise_cont_frame_tac =
+  simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       vyperStorageTraceTheory.storage_trace_frame_read_result,
+       vyperStorageTraceTheory.storage_trace_frame_lifts,
+       vyperStorageTraceTheory.storage_trace_frame_raise];
+
+val raise_out_of_domain_tac =
+  rewrite_tac[eval_raise_reason_bind] >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+  raise_cont_frame_tac >>
+  irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+  qpat_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` (irule_at Any) >>
+  simp[];
+
 Theorem compile_raise_reason_path_frag:
   !ctx func cx lctx RetQ cenv ty r es.
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_vv_sim ctx func cenv cx (expr_type r) r es /\
-    (!sa vv sm sb s0 ee tv t.
+    (!(H:(bool # bytes32 # type_value) list # num list) sa vv sm sb s0 ee tv t.
        compile_expr cenv (expr_type r) r sa = (vv, sm) /\
        compile_revert_with_reason cenv vv (expr_type r)
          (type_memory_bytes cenv (expr_type r)) sm = ((), sb) /\
        fn_has_code sm sb func /\ local_ptrs_reserved cenv sa /\
-       vv_post ctx func cenv cx r es sa sm s0 ee tv vv t /\ ~t.vs_halted /\
+       vv_post H ctx func cenv cx r es sa sm s0 ee tv vv t /\ ~t.vs_halted /\
        t.vs_current_bb = sm.cs_current_bb /\
        t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
        ?u. gas_path ctx func t 0 (Abort Revert_abort u)) ==>
@@ -376,41 +391,53 @@ Proof
   drule_all compile_raise_reason_parts >> strip_tac >> gvs[] >>
   drule_all raise_reason_compiler_code >> strip_tac >>
   drule raise_reason_raw_admissible >> strip_tac >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
-  disch_then drule >> simp[] >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >>
-  simp[gas_outcome_def, gas_summary_at_def] >>
-  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN assume_tac))
-  >- (qpat_x_assum `?res ee rr. _` strip_assume_tac >> gvs[]
-      >- (`~t.vs_halted` by
-            (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-             simp[gas_marked_exec_def, gas_marked_path_def] >>
-             metis_tac[gas_path_normal]) >>
-          first_x_assum (drule_all_then strip_assume_tac) >>
-          drule_all raise_reason_counted_success >>
-          disch_then (qspec_then `RetQ` strip_assume_tac) >>
-          qexists_tac `marks` >> disj1_tac >>
-          qexistsl_tac [`INR (AssertException str)`, `es_end`,
-                       `Abort Revert_abort u`] >> simp[exit_result_def]) >>
-      Cases_on `res` >> gvs[] >>
-      drule_all raise_reason_counted_exception >>
-      disch_then (qspec_then `RetQ` strip_assume_tac) >>
-      qexists_tac `marks` >> disj1_tac >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_vv_sim_def] >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `vv`, `s0`] mp_tac) >>
+  impl_tac >- simp[] >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >> rewrite_tac[eval_raise_reason_bind] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      raise_cont_frame_tac >> first_assum ACCEPT_TAC)
+  >- (gvs[] >>
+      reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (qexists_tac `marks` >> disj1_tac >> raise_out_of_domain_tac) >>
+      `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+        metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?tv. _`
+        (drule_then strip_assume_tac) >> rpt BasicProvers.VAR_EQ_TAC >>
+      `~t.vs_halted` by
+        (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+         simp[gas_marked_exec_def, gas_marked_path_def] >>
+         metis_tac[gas_path_normal]) >>
+      qpat_x_assum `!H sa vv sm sb s0 ee tv t. _`
+        (drule_all_then strip_assume_tac) >>
+      drule_all raise_reason_counted_success >> strip_tac >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      qexistsl_tac [`INR (AssertException str)`, `es_end`,
+                   `Abort Revert_abort u`] >> simp[exit_result_def])
+  >- (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (qexists_tac `marks` >> disj1_tac >> raise_out_of_domain_tac) >>
+      `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+        metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      qpat_x_assum `!H. _ ==> expr_exit _ _` (qspec_then `H0` mp_tac) >>
+      simp[] >> strip_tac >>
+      Cases_on `res` >> gvs[expr_exit_def] >>
+      drule_all raise_reason_counted_exception >> strip_tac >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       goal_assum (drule_at Any) >> simp[]) >>
-  qexists_tac `marks` >> disj2_tac >>
-  qpat_x_assum `?err ee leaf finish. _` strip_assume_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   drule raise_reason_raw_exempt >> metis_tac[]
 QED
 
 (* The encoder's path for a value on the stack or a string in memory. *)
 Theorem reason_vv_revert_path[local]:
-  !ctx func cenv cx r es sa vv sm sb s0 ee tv t.
+  !H ctx func cenv cx r es sa vv sm sb s0 ee tv t.
     reason_vv_ok vv /\
     compile_revert_with_reason cenv vv (expr_type r)
       (type_memory_bytes cenv (expr_type r)) sm = ((), sb) /\
     fn_has_code sm sb func /\
-    vv_post ctx func cenv cx r es sa sm s0 ee tv vv t /\ ~t.vs_halted /\
+    vv_post H ctx func cenv cx r es sa sm s0 ee tv vv t /\ ~t.vs_halted /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path ctx func t 0 (Abort Revert_abort u)
@@ -440,7 +467,8 @@ Theorem compile_raise_reason_frag:
       (eval_stmt cx (Raise (RaiseReason r))) es
 Proof
   rpt strip_tac >> irule compile_raise_reason_path_frag >> simp[] >>
-  rpt strip_tac >> irule reason_vv_revert_path >> metis_tac[]
+  rpt strip_tac >> `reason_vv_ok vv` by metis_tac[] >>
+  drule_all reason_vv_revert_path >> simp[]
 QED
 
 (* ===== assert ===== *)

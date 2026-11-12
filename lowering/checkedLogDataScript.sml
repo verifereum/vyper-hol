@@ -92,7 +92,7 @@ Theorem checked_compile_saved_log_data:
   LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) fts ftvs /\
   LIST_REL (\arg tv. evaluate_type (type_env tops) (SND arg) = SOME tv) args atvs /\
   values_have_types ftvs values /\ env_consistent env cx es /\ state_well_typed es /\
-  state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+  state_rel_simple H cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
   fn_has_code cs packed_cut func /\ fn_has_code packed_cut encoder_start func /\
   fn_has_code packed_cut final func /\
   source_memory_separated cenv es.scopes ss (w2n root_addr)
@@ -120,7 +120,7 @@ Theorem checked_compile_saved_log_data:
     encode_source_event (get_tenv cx) cx.sources cx.txn.target event_id values = SOME ev /\
     out.vs_logs = ss.vs_logs ++ [ev] /\
     frag_exec ctx cs final (\s. s = ss) (\s. s.vs_logs = ss.vs_logs ++ [ev]) (\r. F) /\
-    state_rel_simple cenv cx (es with logs := es.logs ++ [ev]) out /\
+    state_rel_simple H cenv cx (es with logs := es.logs ++ [ev]) out /\
     local_ptrs_rel func cenv es.scopes out /\
     out.vs_current_bb = final.cs_current_bb /\
     out.vs_inst_idx = LENGTH final.cs_current_insts /\ ~out.vs_halted /\
@@ -168,7 +168,7 @@ Resume checked_compile_saved_log_data[packing]:
      simp[Abbr`bytes`, Once vyper_to_abi_type_def, source_abi_types_map]) >>
   qabbrev_tac `allocated = memory_snapshot_allocated packed_cut.cs_next_id packed_cut.cs_next_var capacity packed` >>
   drule compile_log_store_data_next_var >> strip_tac >>
-  `state_rel_simple cenv cx es allocated /\ local_ptrs_rel func cenv es.scopes allocated` by
+  `state_rel_simple H cenv cx es allocated /\ local_ptrs_rel func cenv es.scopes allocated` by
     (simp[Abbr`allocated`] >>
      irule (Q.INST [`st` |-> `packed_cut`] log_buffer_source_relations) >> simp[] >>
      rpt strip_tac >> irule abi_operand_before_mono >>
@@ -191,7 +191,7 @@ QED
 
 Resume checked_compile_saved_log_data[source_result]:
   `env.type_defs = get_tenv cx /\ ss.vs_call_ctx.cc_address = cx.txn.target` by
-    (qspecl_then [`env`,`cenv`,`cx`,`es`,`ss`] mp_tac source_log_context >>
+    (qspecl_then [`H`,`env`,`cenv`,`cx`,`es`,`ss`] mp_tac (Q.GEN `H` source_log_context) >>
      impl_tac >- (conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]) >>
   drule_all checked_log_metadata_source_encoding >>
   disch_then (qspec_then `values` assume_tac) >>
@@ -213,7 +213,7 @@ Resume checked_compile_saved_log_data[source_result]:
     (qpat_x_assum `abi_state_frame packed allocated` mp_tac >>
      simp_tac (srw_ss()) [abi_state_frame_def, abi_state_context_def,
        venom_state_component_equality] >> strip_tac >> simp[]) >>
-  `state_rel_simple cenv cx (es with logs := es.logs ++ [ev]) out /\
+  `state_rel_simple H cenv cx (es with logs := es.logs ++ [ev]) out /\
    local_ptrs_rel func cenv es.scopes out` by
     (irule log_public_source_relations >>
      conj_tac >- first_assum MATCH_ACCEPT_TAC >>
