@@ -398,6 +398,8 @@ Theorem body_assign_place_effectful_case:
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `body_stmt_safe tops (Assign (BaseTarget t) e)` by
+    metis_tac[supported_stmt_body_safe] >>
   drule_then strip_assume_tac assign_place_typing >>
   `expr_body_pre cenv cx env e es` by metis_tac[body_assign_place_rhs_pre] >>
   `target_indices_pre cenv cx env t` by metis_tac[body_assign_place_indices_pre] >>

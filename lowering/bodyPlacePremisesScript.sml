@@ -94,6 +94,16 @@ Resume body_assignment_place_premises[rhs]:
 QED
 
 Resume body_assignment_place_premises[indices]:
+  `body_stmt_safe tops (Assign (BaseTarget t) e)` by
+    metis_tac[supported_stmt_body_safe] >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      listTheory.EVERY_APPEND, DE_MORGAN_THM]) >>
+  `EVERY (\e. ~is_extcode e) (target_indices t)` by
+    (irule targetPlaceLiveTheory.alloc_limits_target_indices_not_extcode >>
+     qexists_tac `cenv` >>
+     fs[stmt_exprs_ok_def, alloc_limits_stmt_def, alloc_limits_assignment_def]) >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops /\
    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by gvs[body_inv_def] >>

@@ -16,7 +16,7 @@ val irule_body_pre = bodyConstNameLib.irule_body_pre;
 Theorem augassign_supported_storage_field_write_decl:
   supported_storage_field_write tops (src,id) fld ==>
   src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-  ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops
+  ?vis mut sid slot. MEM (VariableDecl vis mut id (StructT sid) slot) tops
 Proof
   simp[supported_storage_field_write_def, supported_storage_fields_def] >>
   Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
