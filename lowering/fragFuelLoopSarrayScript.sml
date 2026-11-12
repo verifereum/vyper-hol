@@ -391,6 +391,141 @@ Proof
   asm_rewrite_tac[] >> decide_tac
 QED
 
+Theorem sa_slow_semantics[local]:
+  (!d s Wv E. fuel_ok Wv {} E
+    (compile_store_memory_typed ce d dt s st)) /\
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
+    ~is_abi_dynamic ce.ce_struct_fields dt) /\
+  compile_copy_sarray_typed ce dst dt src st n sa = ((),sz) ==>
+  ?lc c Kb. !G ctx fn N r.
+    fn_has_code sa sz fn /\ no_phi_fn fn /\ callees_stable G ctx fn /\
+    N <= sa.cs_next_var /\ at_point sa r ==>
+    fuel_outcome G ctx fn r 1
+      (\s. s.vs_current_bb = lc /\ s.vs_inst_idx = 0 /\
+        vars_kept N {} r s /\ lookup_var c s = SOME 0w) /\
+    (!s k. s.vs_current_bb = lc /\ s.vs_inst_idx = 0 /\
+      vars_kept N {} r s /\ lookup_var c s = SOME (n2w k) /\
+      k <= w2n (n2w n : 256 word) ==>
+      ?j. j <= Kb+2 /\ fuel_outcome G ctx fn s j
+        (\t. vars_kept N {} r t /\
+          (at_point sz t \/
+           (t.vs_current_bb = lc /\ t.vs_inst_idx = 0 /\
+            ?k'. k' <= w2n (n2w n : 256 word) /\
+              lookup_var c t = SOME (n2w k') /\
+              w2n (n2w n : 256 word) - w2n (THE (lookup_var c t)) <
+              w2n (n2w n : 256 word) - w2n (THE (lookup_var c s))))))
+Proof
+  strip_tac >>
+  drule_all compile_copy_sarray_typed_loop_layout >> strip_tac >>
+  `cs_extends si se /\ si.cs_next_var <= se.cs_next_var /\
+   ?Kb. frag_fuel {} {} {} si se Kb` by
+    (qpat_x_assum `!d s Wv E. _`
+       (qspecl_then [`Var dp`, `Var sp`, `{}`, `{}`] mp_tac) >>
+     gvs[fuel_ok_def]) >>
+  qpat_x_assum `!d s Wv E. _` kall_tac >>
+  qpat_x_assum `compile_copy_sarray_typed _ _ _ _ _ _ _ = _` kall_tac >>
+  qexistsl_tac [`cond`, `ctr`, `Kb`] >> rpt gen_tac >> strip_tac >>
+  `?entry test back.
+    lookup_block sa.cs_current_bb fn.fn_blocks = SOME entry /\
+    entry.bb_instructions = sa.cs_current_insts ++
+      [mk_inst sa.cs_next_id ASSIGN [Lit 0w] [ctr];
+       mk_inst (sa.cs_next_id+1) JMP [Label cond] []] /\
+    lookup_block cond fn.fn_blocks = SOME test /\
+    test = HD si.cs_blocks /\
+    lookup_block se.cs_current_bb fn.fn_blocks = SOME back /\
+    back.bb_instructions = tail.cs_current_insts /\
+    fn_has_code si se fn /\
+    (?bb. lookup_block body' fn.fn_blocks = SOME bb /\
+          isPREFIX si.cs_current_insts bb.bb_instructions)` by
+    (mp_tac typed_copy_loop_slice_locations >>
+     disch_then (qspecl_then [`ce`, `Var dp`, `dt`, `Var sp`, `st`,
+       `sa`, `si`, `se`, `sz`, `HD (TL si.cs_blocks)`,
+       `HD si.cs_blocks`, `HD sz.cs_blocks`, `fn`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac >> asm_rewrite_tac[] >>
+         qpat_assum `si = _` (fn th => simp_tac (srw_ss()) [th]) >>
+         qpat_assum `sb = _` (fn th => simp_tac (srw_ss()) [th]) >>
+         qpat_assum `sc = _` (fn th => simp_tac (srw_ss()) [th]) >>
+         qpat_assum `sz = _` (fn th => simp_tac (srw_ss()) [th]) >>
+         qpat_assum `tail = _` (fn th => simp_tac (srw_ss()) [th]) >>
+         simp[]) >> strip_tac >>
+     qexistsl_tac [`HD (TL si.cs_blocks)`, `HD si.cs_blocks`, `HD sz.cs_blocks`] >>
+     `(HD (TL si.cs_blocks)).bb_label = sa.cs_current_bb /\
+      (HD si.cs_blocks).bb_label = cond /\
+      (HD sz.cs_blocks).bb_label = se.cs_current_bb /\
+      si.cs_current_bb = body'` by
+       (rpt conj_tac >>
+        qpat_assum `si = _` (fn th => simp_tac (srw_ss()) [th]) >>
+        qpat_assum `sb = _` (fn th => simp_tac (srw_ss()) [th]) >>
+        qpat_assum `sc = _` (fn th => simp_tac (srw_ss()) [th]) >>
+        qpat_assum `sz = _` (fn th => simp_tac (srw_ss()) [th])) >>
+     gvs[IgnAsm `sc = _`, IgnAsm `sb = _`, IgnAsm `si = _`,
+         IgnAsm `sz = _`, IgnAsm `tail = _`] >>
+     rpt conj_tac >>
+     qpat_assum `si = _` (fn th => simp_tac (srw_ss()) [th]) >>
+     qpat_assum `sb = _` (fn th => simp_tac (srw_ss()) [th]) >>
+     qpat_assum `sc = _` (fn th => simp_tac (srw_ss()) [th]) >>
+     qpat_assum `sz = _` (fn th => simp_tac (srw_ss()) [th])) >>
+  `test.bb_instructions =
+     [mk_inst sc.cs_next_id LT [Var ctr; Lit (n2w n)] [lt];
+      mk_inst (sc.cs_next_id+1) ISZERO [Var lt] [done];
+      mk_inst (sc.cs_next_id+2) JNZ [Var done; Label exit; Label body'] []] /\
+   si.cs_current_bb = body' /\ si.cs_next_var = sa.cs_next_var+7 /\
+   si.cs_current_insts =
+     [mk_inst sb.cs_next_id MUL [Var ctr; Lit (n2w (type_memory_bytes ce st))] [so];
+      mk_inst (sb.cs_next_id+1) MUL [Var ctr; Lit (n2w (type_memory_bytes ce dt))] [doff];
+      mk_inst (sb.cs_next_id+2) ADD [src; Var so] [sp];
+      mk_inst (sb.cs_next_id+3) ADD [dst; Var doff] [dp]] /\
+   sz.cs_current_bb = exit /\ sz.cs_current_insts = [] /\
+   back.bb_instructions = se.cs_current_insts ++
+     [mk_inst se.cs_next_id ADD [Var ctr; Lit 1w] ["%" ++ toString se.cs_next_var];
+      mk_inst (se.cs_next_id+1) ASSIGN [Var ("%" ++ toString se.cs_next_var)] [ctr];
+      mk_inst (se.cs_next_id+2) JMP [Label cond] []]` by
+    (rpt conj_tac >> asm_rewrite_tac[] >>
+     qpat_assum `test = _` (fn th => simp_tac (srw_ss()) [th]) >>
+     qpat_assum `back.bb_instructions = _` (fn th => simp_tac (srw_ss()) [th]) >>
+     qpat_assum `sz = _` (fn th => simp_tac (srw_ss()) [th]) >>
+     qpat_assum `tail = _` (fn th => simp_tac (srw_ss()) [th]) >>
+     qpat_assum `si = _` (fn th => simp_tac (srw_ss()) [th]) >>
+     qpat_assum `sb = _` (fn th => simp_tac (srw_ss()) [th]) >>
+     qpat_assum `sc = _` (fn th => simp_tac (srw_ss()) [th]) >> simp[]) >>
+  map_every (fn p => qpat_x_assum p kall_tac)
+    [`sc = _`, `sb = _`, `si = _`, `tail = _`, `sz = _`, `test = _`,
+     `back.bb_instructions = tail.cs_current_insts`] >>
+  conj_tac
+  >- (irule sa_initialize >> simp[] >>
+      conj_tac >- (irule var_below_fresh >> simp[]) >>
+      qexistsl_tac [`mk_inst sa.cs_next_id ASSIGN [Lit 0w] [ctr]`, `entry`,
+        `mk_inst (sa.cs_next_id+1) JMP [Label cond] []`] >>
+      gvs[at_point_def, get_instruction_def, listTheory.EL_APPEND_EQN, mk_inst_def]) >>
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[at_point_def] >>
+  qpat_assum `sz.cs_current_bb = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `sz.cs_current_insts = _` (fn th => pure_rewrite_tac[th]) >>
+  pure_rewrite_tac[listTheory.LENGTH] >> irule sa_round >>
+  `~var_below N ctr` by (simp[] >> irule var_below_fresh >> simp[]) >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (qexists_tac `k` >> asm_rewrite_tac[]) >>
+  qpat_assum `frag_fuel _ _ _ si se Kb` (irule_at Any) >>
+  qpat_assum `lookup_block se.cs_current_bb _ = _` (irule_at Any) >>
+  qpat_assum `lookup_block body' _ = _` (irule_at Any) >>
+  simp_tac pure_ss [optionTheory.SOME_11, boolTheory.UNWIND_THM2] >>
+  qexistsl_tac [`so`, `"%" ++ toString se.cs_next_var`, `lt`, `done`, `doff`,
+    `n2w (type_memory_bytes ce st)`, `src`, `sp`, `dp`,
+    `se.cs_next_id+2`, `se.cs_next_id+1`, `se.cs_next_id`,
+    `sb.cs_next_id+3`, `sb.cs_next_id+2`, `sb.cs_next_id+1`, `sb.cs_next_id`,
+    `sc.cs_next_id+2`, `sc.cs_next_id+1`, `sc.cs_next_id`,
+    `dst`, `n2w (type_memory_bytes ce dt)`] >>
+  qexists_tac `test` >>
+  gvs[rich_listTheory.IS_PREFIX_APPEND] >>
+  simp[get_instruction_def, listTheory.EL_APPEND_EQN,
+       ASCIInumbersTheory.STRCAT_toString_inj] >>
+  simp[arithmeticTheory.ADD_CLAUSES, var_below_def,
+       ASCIInumbersTheory.toString_inj] >>
+  `SUC (SUC (LENGTH se.cs_current_insts)) - LENGTH se.cs_current_insts = 2` by decide_tac >>
+  asm_rewrite_tac[] >> simp[]
+QED
+
 (* Given a bound for the element copy (the recursive call), the copy of a
    static array of n elements is bounded.  The slow path counts a fresh
    counter from 0 while it is below the literal n2w n; each round copies one
