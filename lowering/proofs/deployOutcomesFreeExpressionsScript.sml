@@ -3,6 +3,7 @@ Ancestors
   deployOutcomesFreeLowering deployOutcomesFreeGenerators
   exprLowering exprCallBounds e2eDeployDefs supportedExprTraverse vyperTypeSystem
   deployOutcomesFreeExprBody deployOutcomesFreeBuiltinBody
+  deployOutcomesFreeGeneralBuiltinBody
   deployOutcomesFreeExprGenerators deployOutcomesFreeBuiltinGenerators
   deployOutcomesFreeAggregateGenerators deployOutcomesFreeAbiGenerators
   deployOutcomesFreeTypeBuiltinBody deployOutcomesFreeSelectors compileEnv
@@ -177,13 +178,16 @@ Theorem outcomes_free_builtin_generators[local]:
     Q (SND (compile_builtin_dispatch_body f ce rt ty bi args s))
 Proof
   strip_tac >> gvs[] >> rpt gen_tac >> strip_tac >>
-  irule (SRULE [] (Q.INST [`Q` |-> `\s. EVERY (\i.
+  irule (SRULE [] (Q.INST [`ann` |-> `ety`, `Q` |-> `\s. EVERY (\i.
     i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
     i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\
     i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE) (state_insts s)`]
-    outcomes_free_builtin_body)) >>
+    outcomes_free_builtin_body_general)) >>
   gvs[well_typed_expr_def, supported_expr_exists_def, constructor_call_root_def] >>
-  safe_simp >> qexists_tac `env` >>
+  safe_simp >> conj_tac >- suspend "generators" >> metis_tac[]
+QED
+Resume outcomes_free_builtin_generators[generators]:
+  qexists_tac `env` >>
   `!env e ty st. well_typed_expr env e /\
      ~supported_expr_exists constructor_call_root e /\
      EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
@@ -202,6 +206,7 @@ Proof
   conj_tac >- (metis_tac[List.nth (safe_aggregates, 0)]) >>
   conj_tac >- (metis_tac[List.nth (safe_aggregates, 1)]) >> simp[]
 QED
+Finalise outcomes_free_builtin_generators
 
 (* The dispatch only emits MSTORE; arbitrary emit_void preservation is not
    valid for the concrete invariant. This narrows that callback boundary. *)
@@ -314,13 +319,13 @@ Theorem outcomes_free_expr_rank[local]:
     (well_typed_expr env e \/ (?vt. type_place_expr env e = SOME vt)) /\
     ~supported_expr_exists constructor_call_root e /\ Q s ==>
     Q (SND (compile_expr ce ty e s))) /\
-  (!args env ce rt ty bi ety s. 2 * list_size expr_size args + 1 = n /\
-    well_typed_expr env (Builtin ety bi args) /\
-    ~supported_expr_exists constructor_call_root (Builtin ety bi args) /\ Q s ==>
+  (!args env ce rt ty bi s. 2 * list_size expr_size args + 1 = n /\
+    well_typed_expr env (Builtin rt bi args) /\
+    ~supported_expr_exists constructor_call_root (Builtin rt bi args) /\ Q s ==>
     Q (SND (compile_builtin_dispatch ce rt ty bi args s))) /\
-  (!args env ce rt ty tb target_ty ety s. 2 * list_size expr_size args + 1 = n /\
-    well_typed_expr env (TypeBuiltin ety tb target_ty args) /\
-    ~supported_expr_exists constructor_call_root (TypeBuiltin ety tb target_ty args) /\ Q s ==>
+  (!args env ce rt ty tb target_ty s. 2 * list_size expr_size args + 1 = n /\
+    well_typed_expr env (TypeBuiltin rt tb target_ty args) /\
+    ~supported_expr_exists constructor_call_root (TypeBuiltin rt tb target_ty args) /\ Q s ==>
     Q (SND (compile_type_builtin_dispatch ce rt ty tb target_ty args s)))
 Proof
   disch_tac >> completeInduct_on `n` >> conj_tac
@@ -391,3 +396,44 @@ Resume outcomes_free_expr_rank[type_expr_callback]:
   gvs[] >> simp[outcomes_free_invalid_expr_call]
 QED
 Finalise outcomes_free_expr_rank
+
+(* The rank is internal; consumers only need the typed source boundary. *)
+Theorem outcomes_free_compile_expr:
+  !env ce ty e s.
+    ~supported_expr_exists constructor_call_root e /\
+    (well_typed_expr env e \/ (?vt. type_place_expr env e = SOME vt)) /\
+    EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (state_insts s) ==>
+    EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      (state_insts (SND (compile_expr ce ty e s)))
+Proof
+  rpt strip_tac >>
+  mp_tac (SRULE [] (Q.INST [`Q` |-> `\s. EVERY (\i.
+    i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
+    i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\
+    i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE) (state_insts s)`]
+    outcomes_free_expr_rank)) >>
+  disch_then (qspec_then `2 * expr_size e + 2` (mp_tac o cj 1)) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem outcomes_free_compile_get_target_ptr:
+  !env ce t vt s.
+    type_place_target env t = SOME vt /\
+    ~supported_target_exists constructor_call_root t /\
+    EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (state_insts s) ==>
+    EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      (state_insts (SND (compile_get_target_ptr compile_expr ce t s)))
+Proof
+  rpt strip_tac >> gvs[] >>
+  irule (SRULE [] (Q.INST [`Q` |-> `\s. EVERY (\i.
+    i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL /\
+    i.inst_opcode <> DELEGATECALL /\ i.inst_opcode <> CREATE /\
+    i.inst_opcode <> CREATE2 /\ i.inst_opcode <> INVOKE) (state_insts s)`]
+    outcomes_free_target_generators)) >>
+  simp[] >> conj_tac
+  >- (metis_tac[SRULE [] outcomes_free_compile_expr]) >> metis_tac[]
+QED
