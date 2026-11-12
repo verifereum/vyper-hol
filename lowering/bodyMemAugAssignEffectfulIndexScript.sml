@@ -54,6 +54,10 @@ Proof
      metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_stmt_target_info] >>
    `~immutable_root cx bt` by
      metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
+   `EVERY (supported_expr tops) (target_indices bt)` by
+     (`IS_SOME (supported_target_info tops bindings bt)` by simp[] >>
+      drule bodyAugPlaceTargetTheory.aug_place_supported_indices >>
+      strip_tac >> simp[listTheory.EVERY_MEM] >> first_assum ACCEPT_TAC) >>
    `target_sim_mem ctx func cenv cx env bt es` by
      (irule body_target_sim_mem >>
       simp[targetPlaceSimTheory.target_pre_def] >> metis_tac[]) >>
