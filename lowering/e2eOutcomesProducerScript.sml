@@ -22,7 +22,7 @@ Ancestors
   supportedProgram callTrace frameOutcome extCallOracle vyperStorageFootprint
   vyperRuntimeAccounts vyperInterpreter venomExecSemantics vyperRequestTrace
   vfmAccountFrame vfmExecution callTraceFrame unitTransformDefs ptrDiscipline
-  unitMemInv lowerDloadDefs
+  unitMemInv lowerDloadDefs vyperCallStorageFootprint
 
 (* The call theorem's premises other than its storage guards, for one call
    frame es of the compiled contract.  Re-entries meet the same premises. *)
