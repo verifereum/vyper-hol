@@ -2014,8 +2014,8 @@ Theorem protected_cell_frame_typed_assign:
     (eval_stmt cx (Assign (BaseTarget bt) e))
 Proof
   strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
-  irule protected_cell_frame_bind >> simp[] >> rpt strip_tac >>
-  irule protected_cell_frame_bind >> simp[] >> rpt strip_tac >>
+  irule protected_cell_frame_bind >> simp[protected_cell_frame_reads] >> rpt strip_tac >>
+  irule protected_cell_frame_bind >> simp[protected_cell_frame_reads] >> rpt strip_tac >>
   irule protected_cell_frame_bind >>
   simp[protected_cell_frame_reads] >> rpt strip_tac >>
   irule (cj 1 protected_cell_frame_mutations) >>
