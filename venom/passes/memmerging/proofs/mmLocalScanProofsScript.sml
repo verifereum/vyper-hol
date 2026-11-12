@@ -811,7 +811,7 @@ Proof
 QED
 
 Theorem mm_local_retained_store_rep_or_pin[local]:
-  MEM st xs /\ st.inst_opcode = MSTORE /\
+  MEM st xs /\ st.inst_opcode NOTIN {MLOAD; CALLDATALOAD; DLOAD} /\
   dfg_get_inst_by_id dfg st.inst_id = SOME st /\
   MEM cg groups /\ MEM st.inst_id cg.cg_inst_ids /\
   ~MEM st.inst_id (nop_ids_of_groups dfg mode xs groups) ==>
@@ -835,7 +835,7 @@ Proof
 QED
 
 Theorem mm_local_retained_store_rep[local]:
-  MEM st xs /\ st.inst_opcode = MSTORE /\
+  MEM st xs /\ st.inst_opcode NOTIN {MLOAD; CALLDATALOAD; DLOAD} /\
   dfg_get_inst_by_id dfg st.inst_id = SOME st /\
   MEM cg groups /\ MEM st.inst_id cg.cg_inst_ids /\
   ~MEM st.inst_id (nop_ids_of_groups dfg mode xs groups) /\
@@ -18166,6 +18166,39 @@ Proof
     venomStateTheory.venom_state_component_equality] >>
   gvs[mm_local_pending_def] >> qexists_tac `ws` >> simp[] >>
   irule mm_local_write_log_memory_cong >> simp[]
+QED
+
+Theorem mm_local_zero_retained_selected_dispatch[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  bb = EL index fn0.fn_blocks /\ MEM i bb.bb_instructions /\
+  (is_zero_store i \/ is_calldatasize_copy (dfg_build_function fn0) i) /\
+  ~MEM i.inst_id (nop_ids_of_groups (dfg_build_function fn0) Mem2Mem
+    bb.bb_instructions (scan_block_memzero (dfg_build_function fn0) bb).mz_flushed) ==>
+  ?g. MEM g (scan_block_memzero (dfg_build_function fn0) bb).mz_flushed /\
+    rep_of_group bb.bb_instructions g = SOME (i.inst_id,g)
+Proof
+  strip_tac >>
+  `mm_local_prefix fn0 supply index 0 = (bb,supply)` by
+    gvs[mm_local_prefix_def] >>
+  `i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    gvs[is_zero_store_def, is_calldatasize_copy_def] >>
+  `i.inst_opcode NOTIN {MLOAD; CALLDATALOAD; DLOAD}` by gvs[] >>
+  `dfg_get_inst_by_id (dfg_build_function fn0) i.inst_id = SOME i` by
+    (irule mm_local_function_ids_exact >> simp[] >>
+     irule mmWfProofsTheory.fn_insts_mem_block >> qexists `bb` >> gvs[EL_MEM]) >>
+  `!v li. dfg_get_def (dfg_build_function fn0) v = SOME li ==>
+    li.inst_id <> i.inst_id` by
+    (rpt gen_tac >> disch_tac >>
+     irule mm_local_prefix_write_not_def >>
+     simp[] >> qexistsl [`bb`,`fn0`,`index`,`0`,`supply`,`supply`,`v`] >> simp[]) >>
+  `?g. MEM g (scan_block_memzero (dfg_build_function fn0) bb).mz_flushed /\
+    MEM i.inst_id g.cg_inst_ids` by metis_tac[mm_local_zero_selected_member] >>
+  qexists `g` >> simp[] >> irule mm_local_retained_store_rep >>
+  simp[] >> (reverse conj_tac >- metis_tac[]) >>
+  qexistsl [`dfg_build_function fn0`,
+    `(scan_block_memzero (dfg_build_function fn0) bb).mz_flushed`,`Mem2Mem`] >>
+  simp[rep_pin_id_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem mm_local_zero_noninvoke_stop[local]:
