@@ -301,18 +301,18 @@ Theorem bare_global_not_const_immutable[local]:
     ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) ts
 Proof
   Induct >> simp[is_bare_global_decl_def] >> rpt gen_tac >>
-  Cases_on `h` >> simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def]
-  >- metis_tac[] >>
+  Cases_on `h` >> simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def] >>
+  TRY (metis_tac[] >> NO_TAC) >>
   rename1 `VariableDecl dvis dmut dname dty dslot` >>
   Cases_on `dmut` >>
   simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def] >>
   TRY (metis_tac[]) >>
-  rename1 `Constant ce` >> strip_tac >>
-  Cases_on `dname = id`
-  >- (gvs[] >>
-      qspecl_then [`ts`, `acc ++ [(id, fold_const_expr (subst_consts_expr acc ce))]`]
-        strip_assume_tac module_consts_env_acc_prefix >> gvs[]) >>
-  gvs[] >> metis_tac[]
+  rename1 `subst_consts_expr acc ce` >>
+  `MEM dname (MAP FST (module_consts_env ts
+     (acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))])))` by
+    (qspecl_then [`ts`, `acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))]`]
+       strip_assume_tac module_consts_env_acc_prefix >> simp[]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem is_immutable_decl_variable_decl[local]:
@@ -336,12 +336,13 @@ Theorem bare_global_clause_immutable:
     ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) tops
 Proof
   rpt strip_tac
-  >- (irule bare_global_not_const_immutable >> qexists `[]` >>
+  >- (irule bare_global_not_const_immutable >> simp[] >> qexists `[]` >>
       `cx_tops cx = tops` by metis_tac[gasContextTheory.cx_tops_module] >>
       gvs[exprSimHypsDefsTheory.cx_const_name_def]) >>
   `?ts. get_module_code cx NONE = SOME ts /\ is_immutable_decl id ts` by
     (gvs[IS_SOME_EXISTS, env_consistent_def, env_context_consistent_def] >>
-     metis_tac[]) >>
+     qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable _ = SOME _ ==> _`
+       drule >> strip_tac >> gvs[]) >>
   gvs[] >> metis_tac[is_immutable_decl_variable_decl]
 QED
 
