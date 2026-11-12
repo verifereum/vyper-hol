@@ -428,7 +428,7 @@ Theorem dynarray_round_body_prepare:
       (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
         :: es.scopes) (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
-    (stmt_post ctx func cx lctx bc bc' sb0 sb1 s2)
+    (stmt_post ctx func cx lctx bc bc' sb0 sb1 ei s2)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -552,7 +552,7 @@ Theorem dynarray_body_finish_counted:
     p sz ainst idx dv ov tot ep nv lv cond_lbl exit_lbl stmts_lbl incr_lbl
     j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\ k < LENGTH vs /\
   gas_marked_exec F (ctx,func) (eval_stmts cx stmts) (entry,s2) marks res ee (OK t) /\
-  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
     res (ee with gas_obs := []) t /\
   cenv_top_ext cenv bc entry.scopes /\
   (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
@@ -654,7 +654,7 @@ Theorem dynarray_round_prepare:
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)
       (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
-      (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2)
+      (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2)
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>

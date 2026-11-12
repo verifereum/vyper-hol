@@ -64,7 +64,7 @@ Definition stmt_frag_keep_def:
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_outcome F (cx_tops cx) (ctx, func) source (es, s0)
-        (\res ee t. stmt_post ctx func cx lctx cenv cenv' sa sb s0 res ee t /\
+        (\res ee t. stmt_post ctx func cx lctx cenv cenv' sa sb es s0 res ee t /\
                     Q t)
         (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 End
@@ -558,7 +558,7 @@ Theorem mem_round_body_prepare_keep[local]:
       (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
         :: es.scopes) (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
-    (\res ee t. stmt_post ctx func cx lctx bc bc' sb0 sb1 s2 res ee t /\ Q t)
+    (\res ee t. stmt_post ctx func cx lctx bc bc' sb0 sb1 ei s2 res ee t /\ Q t)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -680,7 +680,7 @@ Theorem dynarray_round_prepare_keep[local]:
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)
       (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
-      (\res ee t. stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+      (\res ee t. stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
         res ee t /\ Q t)
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
@@ -817,7 +817,7 @@ Theorem array_round_prepare_keep[local]:
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)
       (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
-      (\res ee t. stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+      (\res ee t. stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
         res ee t /\ Q t)
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
@@ -1020,7 +1020,7 @@ Theorem mem_body_finish_counted_keep[local]:
       [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb1 sj func) /\
   k < LENGTH vs /\
   gas_marked_exec F (ctx,func) (eval_stmts cx stmts) (entry,s2) marks res ee (OK t) /\
-  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 s2
+  stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2
     res (ee with gas_obs := []) t /\ Q t /\
   cenv_top_ext cenv bc entry.scopes /\
   (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
@@ -4825,7 +4825,7 @@ Proof
       `eval_stmts cx stmts (ei with gas_obs := gs) = (res,ee)` by
         (qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
          simp[Abbr `ee`]) >>
-      qpat_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _`
+      qpat_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _`
       (strip_assume_tac o SIMP_RULE std_ss [stmt_post_def]) >>
       `not_fresh_at sa q` by metis_tac[local_ptrs_reserved_def] >>
       `lookup_var q t = SOME bw` by metis_tac[] >>
