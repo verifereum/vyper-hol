@@ -4,6 +4,7 @@ Ancestors
   bodyFullRawLogDynamicPrepare bodyFullRawLogDynamicLog bodyFullRawLogDynamicData
   exprSimHashBoundary fragGasSeqPtr bodyFullGhostFrame
   exprLoweringProps loweringPosts bodyPtrDefs
+  bodyFullRawLogDynamicSequenceFrame bodyFullRawLogDynamicSequence
   words list rich_list finite_map arithmetic emitHelper compileEnv exprLowering
   venomState venomExecSemantics exprSimProps loweringStateRelDefs
 
@@ -61,6 +62,8 @@ Theorem raw_log_dynamic_tail_path:
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK u,G1,tn1) /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func u /\ tn1.t_mem = tn.t_mem /\
+    (u with <|vs_logs := t.vs_logs; vs_inst_idx := t.vs_inst_idx|>) = t /\
     (t with vs_vars := s.vs_vars) = s /\
     (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
     ghost_kept_at lo cenv ee sm G tn s G1 tn1 /\
@@ -124,6 +127,33 @@ Proof
       drule_all raw_log_dynamic_log_joint >>
       disch_then (qspec_then `s2.cs_next_id` mp_tac) >>
       disch_then (qspec_then `PG` mp_tac) >>
-      simp[LET_THM] >> strip_tac >> FAIL_TAC "path join") >>
+      simp[LET_THM] >> strip_tac >>
+      `tn1.t_mem = tn.t_mem` by
+        (irule raw_log_dynamic_prepare_memory_taint >> metis_tac[]) >>
+      `((t with <|vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs];
+                 vs_inst_idx := LENGTH sb.cs_current_insts|>) with
+         <|vs_logs := t.vs_logs; vs_inst_idx := t.vs_inst_idx|>) = t` by simp[] >>
+      `alloca_history func
+        (t with <|vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs];
+                  vs_inst_idx := LENGTH sb.cs_current_insts|>)` by
+        (irule raw_log_dynamic_sequence_history >> simp[] >>
+         rpt (goal_assum $ drule_at Any) >>
+         qpat_assum `t = s with vs_vars := _` SUBST1_TAC >> simp[]) >>
+      `ghost_inv_at (DF H) lo d cenv cx
+        (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vals bs]) G1 tn1
+        (t with <|vs_logs := t.vs_logs ++ [encode_raw_event_values cx.txn.target vals bs];
+                  vs_inst_idx := LENGTH sb.cs_current_insts|>)` by
+        (qpat_x_assum `ghost_inv_at (DF H) _ _ _ _ (_ with logs := _) _ _ _` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         Cases_on `d`
+         >- (simp[ghost_inv_at_def, ptr_covers_def, return_buf_ptr_def,
+                  stor_taint_ok_at_def, lookup_var_def, ptrDisciplineTheory.allocas_from_def] >> strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+         rename1 `SOME rb` >> PairCases_on `rb` >>
+         simp[ghost_inv_at_def, ptr_covers_def, return_buf_ptr_def,
+              stor_taint_ok_at_def, lookup_var_def, ptrDisciplineTheory.allocas_from_def] >> strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+      simp[stmt_state_rel_inst_idx] >>
+      drule_all (SRULE [LET_THM] raw_log_dynamic_sequence_path) >>
+      simp[LET_THM, venom_state_fupdfupds] >> strip_tac >>
+      fs[venom_state_fupdfupds]) >>
   gvs[]
 QED
