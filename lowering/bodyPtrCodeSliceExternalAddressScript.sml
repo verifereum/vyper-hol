@@ -66,56 +66,6 @@ Proof
   qexists_tac `bs` >> gvs[]
 QED
 
-Theorem code_slice_address_covers_frame:
-  expr_post ctx func cenv cx a es sa sb s ee v addr t /\
-  ghost_kept cenv es sa G0 tn0 s G tn /\
-  not_fresh_at sa p /\ ptr_covers G0 tn0 p s sz ==>
-  ptr_covers G tn p t sz
-Proof
-  strip_tac >> fs[ptr_covers_def] >>
-  `wb_frame cenv es ee sa s t` by metis_tac[expr_post_frame] >>
-  `eval_operand (Var p) t = SOME w /\
-   op_taint tn (Var p) = op_taint tn0 (Var p) /\
-   op_prov G (Var p) = op_prov G0 (Var p)` by
-    (irule code_slice_word_operand_frame >> simp[eval_operand_def] >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
-  gvs[eval_operand_def, op_prov_def] >> metis_tac[]
-QED
-
-Theorem code_slice_address_output_ptr_post:
-  expr_post ctx func cenv cx a es sa sb s ee v addr t /\
-  ghost_kept cenv es sa G0 tn0 s G tn /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
-  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-  eval_operand (Var out) s = SOME p /\ eval_operand (Var data) s = SOME (p+32w) /\
-  not_fresh_at sa out /\ not_fresh_at sa data /\
-  ptr_covers G0 tn0 out s cap /\ ptr_covers G0 tn0 data s n /\
-  FLOOKUP s.vs_allocas aid = SOME (w2n p,cap) /\
-  (!nm off sz. local_region cenv es.scopes s nm off sz ==>
-    regions_disjoint (w2n p) cap off sz) /\ sbase.cs_next_id <= aid ==>
-  stmt_state_rel ctx func cenv cx ee t /\
-  eval_operand (Var out) t = SOME p /\ eval_operand (Var data) t = SOME (p+32w) /\
-  ptr_covers G tn out t cap /\ ptr_covers G tn data t n /\
-  FLOOKUP t.vs_allocas aid = SOME (w2n p,cap) /\
-  (!nm off sz. local_region cenv ee.scopes t nm off sz ==>
-    regions_disjoint (w2n p) cap off sz) /\
-  (!j off sz. FLOOKUP t.vs_allocas j = SOME (off,sz) /\ j < sbase.cs_next_id ==>
-    regions_disjoint (w2n p) cap off sz)
-Proof
-  strip_tac >>
-  `ptr_covers G tn out t cap /\ ptr_covers G tn data t n` by
-    metis_tac[code_slice_address_covers_frame] >>
-  `stmt_state_rel ctx func cenv cx ee t /\
-   eval_operand (Var out) t = SOME p /\ eval_operand (Var data) t = SOME (p+32w) /\
-   FLOOKUP t.vs_allocas aid = SOME (w2n p,cap) /\
-   (!nm off sz. local_region cenv ee.scopes t nm off sz ==>
-      regions_disjoint (w2n p) cap off sz) /\
-   (!j off sz. FLOOKUP t.vs_allocas j = SOME (off,sz) /\ j < sbase.cs_next_id ==>
-      regions_disjoint (w2n p) cap off sz)` suffices_by metis_tac[] >>
-  irule slice_extcode_output_post >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
-
 Theorem code_slice_address_bind_ptr:
   expr_body_pre cenv cx env e es /\ expr_type e = BaseT AddressT /\
   gas_outcome_ptr D tops (ctx,func) PG

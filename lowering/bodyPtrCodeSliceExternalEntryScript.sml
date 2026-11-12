@@ -46,14 +46,13 @@ Theorem code_slice_external_lowering:
   compile_expr cenv ty
     (Builtin (BaseT (BytesT (Dynamic n))) (Slice n)
       [Builtin ct (Acc Code) [a]; start; len]) sa = (vv,sb) ==>
-  ?sop lop sm sn out dst sp aop sq r.
+  ?sop lop sm sn aop sq r.
     lower_value compile_expr cenv ty start sa = (sop,sm) /\
     lower_value compile_expr cenv ty len sm = (lop,sn) /\
-    compile_slice_out_buf (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sn =
-      ((out,dst),sp) /\
-    lower_value compile_expr cenv ty a sp = (aop,sq) /\
-    compile_slice_extcode aop sop lop out dst sq = (r,sb) /\
-    vv = LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)
+    lower_value compile_expr cenv ty a sn = (aop,sq) /\
+    compile_slice_extcode aop sop lop
+      (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sq = (r,sb) /\
+    vv = LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr r LocMemory)
 Proof
   strip_tac >>
   `!bt xs. names_builtin bt xs ==> bt <> Slice n` by
@@ -64,8 +63,9 @@ Proof
   simp[compile_expr_builtin_dispatch, compile_builtin_dispatch_component_eq,
        lower_value_child_call, is_self_code_def, is_extcode_def, extcode_addr_expr_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  Cases_on `compile_slice_extcode addr_op start_op len_op out_buf out_data st4` >>
-  gvs[as_ptr_val_def] >> metis_tac[exprSimSliceExtcodeTheory.slice_extcode_shape]
+  Cases_on `compile_slice_extcode addr_op start_op len_op
+    (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) st3` >>
+  gvs[as_ptr_val_def]
 QED
 
 (* Retain source replay while strengthening a pointer outcome's success post. *)
