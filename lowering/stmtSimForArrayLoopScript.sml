@@ -1722,7 +1722,7 @@ QED
 
 (* The handler and the scope pop record no storage event, so a body whose
    storage trace left the domain leaves the whole cleanup outside it. *)
-Theorem array_body_cleanup_bad[local]:
+Theorem array_body_cleanup_bad:
   gas_bad_storage_at cx st0 src es s marks ==>
   gas_bad_storage_at cx st0
     (finally (try (do src; return F od) handle_loop_exception) pop_scope)
@@ -1943,7 +1943,7 @@ Proof
   fs[array_caller_frame_def] >> metis_tac[]
 QED
 
-Theorem array_round_storage_frame[local]:
+Theorem array_round_storage_frame:
   storage_trace_frame
     (do push_scope_with_var id tv v;
         finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
