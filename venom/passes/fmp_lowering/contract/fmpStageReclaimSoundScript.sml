@@ -19,6 +19,8 @@
 Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
+  fmpAliasProps fmpAliasDefs dftCommutation ptrDiscipline
+  livenessTransferProofs list finite_map pred_set
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -68,13 +70,67 @@ Proof
   cheat
 QED
 
+Theorem covers_phi_bases[local]:
+  fmp_base_analyze insts = SOME env /\ MEM inst insts /\
+  inst.inst_opcode = PHI /\ inst.inst_outputs = [out] /\
+  phi_prov prev G inst = SOME (b,z) /\
+  fmp_frame_covers sm env eb lo G /\
+  FLOOKUP sm (b,z) = SOME (c,id) /\ eb <= b /\ c < lo ==>
+  MEM id (fmp_bases env out)
+Proof
+  rpt strip_tac >>
+  gvs[phi_prov_def, AllCaseEqs()] >>
+  rename1 `resolve_phi lbl inst.inst_operands = SOME op` >>
+  Cases_on `op` >> gvs[op_prov_def] >>
+  rename1 `FLOOKUP G u = SOME (b,z)` >>
+  `MEM id (fmp_bases env u)` by metis_tac[fmp_frame_covers_def] >>
+  `MEM (Var u) inst.inst_operands` by metis_tac[resolve_phi_MEM] >>
+  irule fmp_base_analyze_propagates >>
+  qexistsl [`inst`, `insts`] >>
+  simp[fmp_base_output_def, fmp_single_output_def,
+       fmp_generated_bases_def, mem_foldl_list_union, MEM_MAP] >>
+  metis_tac[fmp_operand_bases_def]
+QED
+
+Theorem covers_phis_list[local]:
+  !insts. fmp_base_analyze allinsts = SOME env /\
+  EVERY (\i. MEM i allinsts) insts /\
+  fmp_frame_covers sm env eb lo G ==>
+  fmp_frame_covers sm env eb lo (phis_prov prev G insts)
+Proof
+  Induct >> simp[phis_prov_def] >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[phis_prov_def] >>
+  `fmp_frame_covers sm env eb lo (phis_prov prev G insts)` by gvs[] >>
+  Cases_on `h.inst_outputs`
+  >- (gvs[set_prov_def, fmp_frame_covers_def, FLOOKUP_DRESTRICT] >>
+      metis_tac[]) >>
+  rename1 `h.inst_outputs = out::outs` >>
+  Cases_on `outs`
+  >- (Cases_on `phi_prov prev G h`
+      >- (gvs[set_prov_def, fmp_frame_covers_def, FLOOKUP_DRESTRICT] >>
+          metis_tac[]) >>
+      simp[set_prov_def, fmp_frame_covers_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> Cases_on `out = v` >> gvs[]
+      >- (irule covers_phi_bases >> metis_tac[]) >>
+      metis_tac[fmp_frame_covers_def]) >>
+  Cases_on `phi_prov prev G h` >>
+  gvs[set_prov_def, fmp_frame_covers_def, FLOOKUP_DRESTRICT] >>
+  metis_tac[]
+QED
+
 Theorem fmp_stage_covers_phis:
   fmp_base_analyze (fn_insts fn) = SOME env /\ wf_function fn /\
   fmp_frame_covers sm env eb lo G /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
   fmp_frame_covers sm env eb lo (entry_prov fn s G)
 Proof
-  cheat
+  rpt strip_tac >> simp[entry_prov_def] >>
+  irule covers_phis_list >>
+  reverse conj_tac >- simp[] >>
+  qexists_tac `fn_insts fn` >> simp[EVERY_MEM] >>
+  drule lookup_block_mem >> strip_tac >>
+  simp[venomInstTheory.fn_insts_def] >>
+  metis_tac[venomInstTheory.fmp_fn_insts_blocks_intro]
 QED
 
 Theorem fmp_stage_live_edge:
