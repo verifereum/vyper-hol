@@ -52,3 +52,16 @@ Proof
   Induct >> simp[tv_abi_dynamic_def] >>
   Cases_on `h` >> simp[tv_abi_dynamic_def]
 QED
+
+Theorem tv_needs_clamp_list_exists:
+  !ts. tv_needs_clamp_list ts = EXISTS tv_needs_clamp ts
+Proof
+  Induct >> simp[tv_needs_clamp_def]
+QED
+
+Theorem tv_needs_clamp_fields_map:
+  !fs. tv_needs_clamp_fields fs = tv_needs_clamp_list (MAP SND fs)
+Proof
+  Induct >> simp[tv_needs_clamp_def] >>
+  Cases_on `h` >> simp[tv_needs_clamp_def]
+QED
