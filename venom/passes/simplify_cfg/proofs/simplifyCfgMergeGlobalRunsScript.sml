@@ -463,3 +463,18 @@ Resume scfg_chain_runs_forward_fuel[pair_continue]:
 QED
 
 Finalise scfg_chain_runs_forward_fuel
+
+Theorem scfg_chain_fn_bisim_fuel:
+  scfg_chain_hyp fn a b ==> fn_bisim_fuel I fn (scfg_chain fn a b)
+Proof
+  strip_tac >> rewrite_tac[fn_bisim_fuel_def] >>
+  `fn_entry_label (scfg_chain fn a b) = fn_entry_label fn` by
+    metis_tac[scfg_chain_entry_eq] >>
+  conj_tac >- simp[scfg_chain_def] >> conj_tac >- simp[] >>
+  rpt strip_tac >> simp[] >>
+  `scfg_chain_exit a b s s` by metis_tac[scfg_chain_initial_exit] >>
+  `scfg_bprefix ctx fn s s /\ ~s.vs_halted` by
+    fs[scfg_bprefix_rules, fn_entry_state_def] >>
+  irule scfg_chain_runs_forward_fuel >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
