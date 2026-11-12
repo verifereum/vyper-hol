@@ -73,11 +73,11 @@ Theorem word_neg_inst_seq_ptr:
   compile_neg x ty sa = (op,sb) /\
   op_taint tn x = {} /\ allocas_from lo s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
-  ?G' tn'. inst_seq_ptr D lo ctx fn PG G tn
+  ?G' tn'. !D. inst_seq_ptr D lo ctx fn PG G tn
     (emitted_insts sa sb) s G' tn'
 Proof
   strip_tac >> drule word_neg_emission >> strip_tac >>
-  `ptr_inst_ok D lo 0 ctx fn G tn
+  `!D. ptr_inst_ok D lo 0 ctx fn G tn
      (mk_inst sa.cs_next_id SGT [x; Lit (FST (type_bounds ty))]
        [STRING #"%" (toString sa.cs_next_var)]) s` by
     (irule word_neg_arithmetic_ptr >> metis_tac[listTheory.MEM]) >>
@@ -87,7 +87,8 @@ Proof
     opcode_case_def] >>
   Cases_on `eval_operand x s` >>
   simp[exec_pure2_def, eval_operand_def] >>
-  qmatch_goalsub_abbrev_tac `inst_seq_ptr D lo ctx fn PG G1 tn1 code s1` >>
+  qmatch_goalsub_abbrev_tac `?G' tn'. !D.
+    inst_seq_ptr D lo ctx fn PG G1 tn1 code s1 G' tn'` >>
   `op_taint tn1 x = {} /\
    op_taint tn1 (Var (STRING #"%" (toString sa.cs_next_var))) = {}` by
     (simp[Abbr `tn1`, step_taint_def, op_taint_def, set_var_taint_def,
@@ -98,7 +99,7 @@ Proof
    (ctx_has_dalloca ctx ==> allocas_below_fmp s1)` by
     (gvs[Abbr `s1`, allocas_from_def, allocas_below_fmp_def, update_var_def] >>
      metis_tac[]) >>
-  `ptr_inst_ok D lo 0 ctx fn G1 tn1
+  `!D. ptr_inst_ok D lo 0 ctx fn G1 tn1
      (mk_inst (sa.cs_next_id+1) ASSERT
        [Var (STRING #"%" (toString sa.cs_next_var))] []) s1` by
     (irule word_neg_assert_ptr >> metis_tac[]) >>
@@ -108,7 +109,8 @@ Proof
     opcode_case_def] >>
   namedCases_on `eval_operand (Var (STRING #"%" (toString sa.cs_next_var))) s1`
     ["", "cond"] >> simp[] >> Cases_on `cond = 0w` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `inst_seq_ptr D lo ctx fn PG G2 tn2 code2 s2` >>
+  qmatch_goalsub_abbrev_tac `?G' tn'. !D.
+    inst_seq_ptr D lo ctx fn PG G2 tn2 code2 s2 G' tn'` >>
   `op_taint tn2 x = {}` by
     (Cases_on `x` >>
      gvs[Abbr `tn2`, step_taint_def, op_taint_def, set_var_taint_def,
@@ -116,7 +118,7 @@ Proof
   `allocas_from lo s2 /\
    (ctx_has_dalloca ctx ==> allocas_below_fmp s2)` by
     (gvs[Abbr `s2`, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
-  `ptr_inst_ok D lo 0 ctx fn G2 tn2
+  `!D. ptr_inst_ok D lo 0 ctx fn G2 tn2
      (mk_inst (sa.cs_next_id+2) SUB [Lit 0w; x]
        [STRING #"%" (toString (sa.cs_next_var+1))]) s2` by
     (irule word_neg_arithmetic_ptr >> metis_tac[listTheory.MEM]) >>
