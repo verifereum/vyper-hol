@@ -2,7 +2,8 @@
 Theory targetPureWalkOracleProbe
 Ancestors
   targetPureWalkModuleProbe gasOutcome gasSummary gasExemptCert exprSimDefs
-  vyperState
+  vyperState vyperMachineFrame targetPlaceSimDefs exprLoweringProps
+  loweringStateRelDefs
 
 Definition oracle_probe_state_def:
   oracle_probe_state = module_probe_state with outcomes := SOME []
@@ -24,7 +25,7 @@ Theorem oracle_probe_admissible:
     target_res_ok oracle_probe_state
 Proof
   simp[gasContextTheory.gas_admissible_def, oracle_probe_source_execution,
-       target_res_ok_def]
+       targetPlaceSimDefsTheory.target_res_ok_def]
 QED
 
 Theorem oracle_probe_source_not_frame:
