@@ -7,7 +7,7 @@ Theory ctorDeployCallFree
 Ancestors
   compileVyper vyperCompiler e2eDeployDefs venomInst ctorCallFreeEntry
   ctorCallFreeBodies ctorCallFreeExpr ctorCallFreeStmtReturns ctorCallFreeStmtStorage
-  ctorCallFreeStmtLogs ctorCallFreeStmtTargets
+  ctorCallFreeStmtLogs ctorCallFreeStmtTargets ctorCallFreeWrapper
 
 (* The lowering emits INVOKE only for an internal call and RETURNDATACOPY
    only on the external-call, raw_call and create paths, all of which
