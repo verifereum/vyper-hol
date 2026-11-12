@@ -34,7 +34,7 @@ Proof
      simp[supported_declaration_names_def]) >>
   `build_func_return_type tops name = ret` by
     (irule build_func_return_type_distinct >> simp[] >>
-     qexistsl_tac [`args`,`[]`,`mut`,`F`,`rr`,`ss`,`Internal`] >> simp[]) >>
+     qexistsl_tac [`args`,`dflts`,`mut`,`F`,`rr`,`ss`,`Internal`] >> simp[]) >>
   fs[body_inv_def, nsid_to_string_def]
 QED
 
