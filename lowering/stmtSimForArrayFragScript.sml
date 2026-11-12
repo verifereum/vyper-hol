@@ -891,7 +891,8 @@ Proof
                               ``vs:eval_result list`` |-> ``MAP Value (vs0:value list)``]
                           array_for_source_prefix)) >> strip_tac >>
   irule array_outcome_stmt_post >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC) >> simp[] >> goal_assum (drule_at Any)
+  TRY (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `gas_outcome _ _ _ (eval_stmt _ _) _ _ _` mp_tac >> simp[]
 QED
 
 
