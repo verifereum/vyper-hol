@@ -381,6 +381,7 @@ Resume compile_log_ready_stmt_frag[post]:
      (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) u` by
     (qpat_assum `stmt_state_rel H1 _ _ _ _ _ t`
        (mp_then (Pos hd) irule log_suffix_alloca_frame) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      simp[Excl "enc_def"]) >>
   `sa.cs_next_id <= sm.cs_next_id` by
     (drule compile_log_eval_all_grows >> simp[]) >>
