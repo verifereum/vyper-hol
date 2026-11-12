@@ -59,9 +59,8 @@ Theorem compile_alloc_buffer_expr_resources_separated:
     (!p. op = Var p ==> p <> STRING #"%" (toString sb.cs_next_var)) /\
     fn_inst_ids_distinct func /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
-    val_wf tv v /\ n < dimword (:256) /\
+    evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
+    ~is_word_type (post_value_type cenv e) /\ val_wf tv v /\ n < dimword (:256) /\
     eval_operand op s = SOME w /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n w) m) ==>
@@ -88,8 +87,7 @@ Proof
     (drule_all fn_has_code_split >> strip_tac >>
      drule_all emit_inst_fn_member >> simp[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  qpat_assum `post_value_type cenv e = _`
-    (fn th => rewrite_tac[expr_post_def, th]) >>
+  rewrite_tac[expr_post_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `p = STRING #"%" (toString sb.cs_next_var)` by
     (drule compile_alloc_buffer_parts >> strip_tac >> gvs[]) >>
@@ -150,9 +148,8 @@ Theorem compile_alloc_buffer_expr_resources:
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     fresh_vars_wrt sb s /\ fn_inst_ids_distinct func /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
-    val_wf tv v /\ n < dimword (:256) /\
+    evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
+    ~is_word_type (post_value_type cenv e) /\ val_wf tv v /\ n < dimword (:256) /\
     eval_operand op s = SOME w /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n w) m) ==>

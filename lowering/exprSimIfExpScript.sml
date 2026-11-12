@@ -54,7 +54,7 @@ Proof
   simp[punnable_def]
 QED
 
-Theorem ifexp_copy_types[local]:
+Theorem ifexp_copy_types:
   !cenv rt at.
     (at = rt \/
      is_bytestring_type rt /\ is_bytestring_type at /\ arg_type_fits at rt \/
@@ -104,7 +104,7 @@ Proof
   rpt strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   `step_inst_base (mk_inst sa.cs_next_id MCOPY [dst; src; sz] []) s =
      OK (mcopy (w2n d) (w2n w) (w2n n) s)` by
-    simp[step_inst_base_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[run_inst_seq_def]
 QED
 
@@ -256,7 +256,7 @@ Proof
   qexists_tac `LENGTH s'` >> simp[exprSimPropsTheory.val_store_size_def]
 QED
 
-Theorem ifexp_copy_source_bounds[local]:
+Theorem ifexp_copy_source_bounds:
   !cx ty tv v op s.
     is_bytestring_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
     value_has_type tv v /\ expr_val_rel cx ty v op s ==>
@@ -333,7 +333,7 @@ Proof
   qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]
 QED
 
-Theorem ifexp_bytestring_adapter_parts[local]:
+Theorem ifexp_bytestring_adapter_parts:
   !cenv t arm_ty vv sa op sb.
     ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
     is_bytestring_type t /\ compile_ifexp_arm cenv t arm_ty vv sa = (op,sb) ==>
@@ -604,7 +604,7 @@ Proof
 QED
 
 (* The same destination as the place of any source result reading to v. *)
-Theorem ifexp_destination_vv_at[local]:
+Theorem ifexp_destination_vv_at:
   !cenv cx ty tvt v sa sb es op s w aid tv t'.
     evaluate_type (get_tenv cx) ty = SOME tvt /\ val_wf tvt v /\
     read_result cx tv es = (INL v,es) /\ eval_operand op s = SOME w /\
@@ -623,7 +623,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ifexp_alloc_preserves_post[local]:
+Theorem ifexp_alloc_preserves_post:
   !ctx func cenv cx e es origin sa sm buf sz s0 es' raw vv s.
     compile_alloc_buffer sz sa = (buf,sm) /\
     vv_post H ctx func cenv cx e es origin sa s0 es' raw vv s /\
@@ -1134,7 +1134,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[vyperASTTheory.expr_type_def]
 QED
 
-Theorem conditional_read_cases[local]:
+Theorem conditional_read_cases:
   !cx raw st res st'.
     (do r <- conditional_result cx raw; read_result cx r od) st = (res,st') ==>
     read_result cx raw st = (res,st') \/
@@ -1358,7 +1358,7 @@ Proof
     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[venomInstTheory.mk_inst_def, is_terminator_def] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >> disj1_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_pure1_def, comp_bind_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure1_def, comp_bind_def,
        comp_return_def] >> gvs[]
 QED
 
@@ -1400,7 +1400,7 @@ Proof
     (mp_tac (Q.INST [`i` |-> `mk_inst sa.cs_next_id ASSIGN [op] [rv]`,
                         `u` |-> `update_var rv w s`]
        tuple_straight_line_edge) >>
-     simp[venomInstTheory.mk_inst_def, is_terminator_def, step_inst_base_def,
+     simp[venomInstTheory.mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
           exec_pure1_def] >> metis_tac[]) >>
   `~((update_var rv w s) with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by
     simp[update_var_def] >>
@@ -1412,7 +1412,7 @@ Proof
   metis_tac[cj 2 gas_path_rules, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem ifexp_root_eval_forced[local]:
+Theorem ifexp_root_eval_forced:
   eval_expr cx (IfExp t c a b) =
   vyperState$bind (vyperState$bind (eval_expr cx c) (read_result cx))
     (\v. if v = BoolV T then vyperState$bind (eval_expr cx a) (conditional_result cx)
@@ -1429,7 +1429,7 @@ Proof
   simp[raise_def, vyperStateTheory.bind_def]
 QED
 
-Theorem ifexp_root_condition_admissible[local]:
+Theorem ifexp_root_condition_admissible:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es ==>
   gas_admissible (vyperState$bind (eval_expr cx c) (read_result cx)) expr_res_ok es
 Proof
@@ -1441,7 +1441,7 @@ Proof
   fs[expr_vv_res_ok_def, expr_res_ok_def] >> metis_tac[]
 QED
 
-Theorem ifexp_root_branch_admissible[local]:
+Theorem ifexp_root_branch_admissible:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
   (!tail. vyperState$bind (eval_expr cx c) (read_result cx)
     (es with gas_obs := xs ++ tail) = (INL (BoolV sel),mid with gas_obs := tail)) ==>
@@ -1456,7 +1456,7 @@ Proof
   Cases_on `sel` >> gvs[]
 QED
 
-Theorem ifexp_root_condition_bool[local]:
+Theorem ifexp_root_condition_bool:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
   vyperState$bind (eval_expr cx c) (read_result cx)
     (es with gas_obs := gs) = (INL v,mid) ==>
@@ -1471,7 +1471,7 @@ Proof
   simp[vyperStateTheory.bind_def, raise_def, expr_vv_res_ok_def]
 QED
 
-Theorem ifexp_root_condition_cert[local]:
+Theorem ifexp_root_condition_cert:
   gas_exempt_cert memory tops (ctx,func)
     (vyperState$ignore_bind
       (vyperState$bind (eval_expr cx c) (read_result cx)) (return ()))
@@ -1606,7 +1606,7 @@ Proof
   simp[]
 QED
 
-Theorem ifexp_root_code_layout[local]:
+Theorem ifexp_root_code_layout:
   compile_expr cenv ty (IfExp t c a b) st = (vv,st') /\
   fn_has_code st st' func /\ local_ptrs_reserved cenv st /\
   (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op,sb) ==>
@@ -2164,7 +2164,7 @@ Proof
   simp[bind_def, expr_vv_res_ok_def]
 QED
 
-Theorem ifexp_arm_conditional_read[local]:
+Theorem ifexp_arm_conditional_read:
   read_result cx raw ee = (INL v,ee) /\
   conditional_result cx raw ee = (res,ss) /\ expr_vv_res_ok res ==>
   ?tv. res = INL tv /\ ss = ee /\
@@ -2179,7 +2179,7 @@ Proof
 QED
 
 (* A conditional result is its operand or the value it reads to. *)
-Theorem ifexp_conditional_result_shape[local]:
+Theorem ifexp_conditional_result_shape:
   conditional_result cx raw st = (INL tv,st') ==> tv = raw \/ ?v. tv = Value v
 Proof
   Cases_on `raw` >>
@@ -2189,7 +2189,7 @@ Proof
 QED
 
 (* vv_at of an arm's result holds of the conditional result it gives. *)
-Theorem ifexp_vv_at_conditional[local]:
+Theorem ifexp_vv_at_conditional:
   vv_at cenv cx t sa sb es raw vv s /\ read_result cx raw es = (INL v,es) /\
   (tv = raw \/ tv = Value v) ==>
   vv_at cenv cx t sa sb es tv vv s
@@ -2199,7 +2199,7 @@ Proof
   rpt strip_tac >> first_x_assum drule_all >> metis_tac[]
 QED
 
-Theorem ifexp_arm_conditional_gas_obs[local]:
+Theorem ifexp_arm_conditional_gas_obs:
   conditional_result cx raw ee = (INL tv,ee) ==>
   !tail. conditional_result cx raw (ee with gas_obs := tail) =
     (INL tv,ee with gas_obs := tail)
@@ -2240,7 +2240,7 @@ Proof
 QED
 
 (* An operand placed as expr_post H says, for a result that is no memory place. *)
-Theorem ifexp_vv_at_of_val_at[local]:
+Theorem ifexp_vv_at_of_val_at:
   ~is_word_type t /\ expr_val_at cenv cx t sa sb es v op s /\
   read_result cx tv es = (INL v,es) /\
   (!id path. tv <> PlaceR (MemoryPlace id path)) ==>
@@ -2680,7 +2680,7 @@ Proof
 QED
 
 (* The selected arm's vv_at, moved to the result variable it is assigned to. *)
-Theorem ifexp_vv_at_root_frame[local]:
+Theorem ifexp_vv_at_root_frame:
   vv_at cenv cx t sc sd es tv (LocatedValue t (mk_ptr op LocMemory)) u /\
   eval_operand op u = SOME w /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> x <> rv) /\
@@ -2709,7 +2709,7 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem ifexp_root_finish_post[local]:
+Theorem ifexp_root_finish_post:
   post_value_type cenv e = expr_type e /\
   expr_post H ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post H ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
@@ -2795,7 +2795,7 @@ Proof
   simp[jump_to_def]
 QED
 
-Theorem ifexp_root_condition_scopes[local]:
+Theorem ifexp_root_condition_scopes:
   vyperState$bind (eval_expr cx c) (read_result cx)
     (es with gas_obs := gs) = (INL v,mid) ==>
   MAP FDOM es.scopes = MAP FDOM mid.scopes

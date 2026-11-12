@@ -26,9 +26,7 @@ Theorem annassign_relayout_code_parts:
       lower_value compile_expr c (expr_type e) e sA = (op,sB) /\
       compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
         (lowered_value_type cenv e)
-        (case vtyp of ArrayT et (Dynamic _) =>
-           SOME ((type_memory_bytes c et + 31) DIV 32, type_memory_bytes c et)
-         | _ => NONE) (type_memory_bytes c vtyp) sB = ((),sf) /\
+        (type_memory_bytes c vtyp) sB = ((),sf) /\
       local_ptrs_reserved c st /\ local_ptrs_reserved c sA /\ not_fresh_at sA p /\
       ci_mono sA sB /\ ci_mono sB sf /\ cs_extends st sA /\
       fn_has_code st sA func /\ fn_has_code sA sB func /\ fn_has_code sB sf func /\
@@ -47,7 +45,8 @@ Proof
   `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
    (!e. lowered_value_type c e = lowered_value_type cenv e)` by
     (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
-     simp[oneline lowered_value_type_def]) >>
+     rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `?sA sV sB vv op.
      emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv vtyp))] [p] st = ((),sA) /\
      compile_expr c (expr_type e) e sA = (vv,sV) /\
@@ -55,9 +54,7 @@ Proof
      lower_value compile_expr c (expr_type e) e sA = (op,sB) /\
      compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
        (lowered_value_type cenv e)
-       (case vtyp of ArrayT et (Dynamic _) =>
-          SOME ((type_memory_bytes c et + 31) DIV 32, type_memory_bytes c et)
-        | _ => NONE) (type_memory_bytes c vtyp) sB = ((),sf)` by
+       (type_memory_bytes c vtyp) sB = ((),sf)` by
     (qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
      simp[Once compile_stmt_def, emit_local_alloca_def, comp_bind_def,
           comp_ignore_bind_def, comp_return_def] >>
@@ -74,7 +71,7 @@ Proof
     metis_tac[fn_has_code_split, ci_mono_def] >>
   qexistsl_tac [`st`, `sA`, `sV`, `sB`, `vv`, `op`,
     `STRING #"%" (toString sa.cs_next_var)`] >> simp[] >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >> simp[]
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >> simp[]
 QED
 
 Theorem residual_call_compile_location:
@@ -91,7 +88,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule expr_body_pre_var_types_well_formed >> strip_tac >>
   `well_typed_expr env e /\
-   sfields_tenv_consistent cenv.ce_struct_fields env.type_defs` by
+   sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
+   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+      cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
   drule ifexp_lowered_type_classify >>
@@ -110,6 +109,8 @@ Theorem relayout_post_value_type[local]:
     (!id t. FLOOKUP env.var_types id = SOME t ==>
             well_formed_type env.type_defs t) /\
     sfields_tenv_consistent c.ce_struct_fields env.type_defs /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+       c.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     (!e. lowered_value_type c e = lowered_value_type cenv e) /\
     expr_type e = typ /\ ~is_word_type typ /\ ~is_bytestring_type typ /\
     lowered_value_type cenv e <> typ ==>
@@ -168,7 +169,8 @@ Proof
   `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
    (!e. lowered_value_type c e = lowered_value_type cenv e)` by
     (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
-     simp[oneline lowered_value_type_def]) >>
+     rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `stmt_state_rel ctx func c cx es s0` by
     (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
   `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
@@ -206,7 +208,9 @@ Proof
   `!x. op = Var x ==> not_fresh_at sB x` by metis_tac[compile_lower_value_var] >>
   `post_value_type c e = lowered_value_type cenv e` by
     (`well_typed_expr env e /\
-      sfields_tenv_consistent c.ce_struct_fields env.type_defs` by
+      sfields_tenv_consistent c.ce_struct_fields env.type_defs /\
+      (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+         c.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
        fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
           env_context_consistent_def] >>
      match_mp_tac relayout_post_value_type >> qexistsl_tac [`env`, `typ`] >>
@@ -221,6 +225,6 @@ Proof
   irule annassign_relayout_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[ci_mono_def] >>
   conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexists_tac `ai` >> gvs[ci_mono_def] >> qexists_tac `sA` >> gvs[] >> first_assum ACCEPT_TAC)
 QED

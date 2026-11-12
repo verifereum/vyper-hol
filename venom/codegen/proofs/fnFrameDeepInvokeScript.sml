@@ -335,6 +335,153 @@ QED
 
 (* fnFrameBoundaryInvoke's invoke_return_frame without stack distinctness
    of the residual, and with the address bound on the cleanup's offsets. *)
+Theorem invoke_return_frame_numeric_exact:
+  !ctx cplan lo o2pc prog fn ra rest mem0 arranged operands args vs mid saved vals
+   callee rvs ret vs' asr r outs nl halting dfg inst term ret_lbl called
+   pops popped opts swapped final.
+  ordered_spill_regions cplan.cp_regions /\ MEM r cplan.cp_regions /\
+  r.sr_fn_name = fn.fn_name /\
+  fn_directly_calls ctx fn.fn_name callee.fn_name /\
+  ~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 arranged vs mid /\
+  arranged.ps_stack = stack_pop (LENGTH operands) arranged.ps_stack ++ operands /\
+  mid.as_stack = REVERSE args ++ saved ++ rest /\
+  LENGTH args = LENGTH operands /\
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T) outs)
+    arranged.ps_stack /\
+  (!op. op IN FDOM arranged.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) outs) /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  fn_return_state_rel ctx cplan callee rvs mid asr /\
+  asr.as_stack = REVERSE vals ++ saved ++ rest /\
+  bind_outputs outs vals (adopt_return_fmp ret (merge_callee_state vs rvs)) = SOME vs' /\
+  ALL_DISTINCT outs /\ EVERY (\x. ~retpc_var fn x) outs /\
+  fresh_label "return_label"
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      (arranged with ps_stack := stack_pop (LENGTH operands) arranged.ps_stack)
+      outs) = (ret_lbl, called) /\
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  final = release_dead_spills nl swapped /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (pops ++ opts) /\
+  asm_block_at prog asr.as_pc
+    (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  ?fin.
+    asm_steps lo o2pc prog
+      (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) asr = AsmOK fin /\
+    fn_frame_inv ctx cplan lo fn ra rest mem0 final vs' fin /\
+    fin.as_pc = asr.as_pc +
+      LENGTH (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `consumed = arranged with
+    ps_stack := stack_pop (LENGTH operands) arranged.ps_stack` >>
+  `context_venom_asm_rel cplan lo consumed (frame_view fn ra vs)
+     (mid with as_stack := saved)` by
+    (simp[Abbr `consumed`] >> irule invoke_consumed_context >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`ctx`, `mem0`, `rest`, `REVERSE args`] >> simp[]) >>
+  suspend "local"
+QED
+
+Resume invoke_return_frame_numeric_exact[local]:
+  `spill_alloc_layout_wf consumed.ps_alloc consumed.ps_spilled /\
+   (!op. op IN FDOM consumed.ps_spilled ==>
+     EVERY (\out. case op of Var x => x <> out | _ => T) outs) /\
+   r.sr_spill_base <= consumed.ps_alloc.sa_spill_base /\
+   consumed.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    simp[Abbr `consumed`] >>
+  `EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T) outs)
+     consumed.ps_stack` by
+    (simp[Abbr `consumed`] >>
+     qpat_x_assum `arranged.ps_stack = _` (fn th =>
+       qpat_x_assum `EVERY _ arranged.ps_stack`
+         (mp_tac o ONCE_REWRITE_RULE [th])) >>
+     simp[EVERY_APPEND]) >>
+  `!op off. FLOOKUP consumed.ps_spilled op = SOME off ==>
+     r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end /\
+     EVERY (\out. case op of Var x => x <> out | _ => T) outs` by
+    (rpt gen_tac >> strip_tac >>
+     `op IN FDOM consumed.ps_spilled` by fs[FLOOKUP_DEF] >>
+     fs[doSwapSimTheory.spill_alloc_layout_wf_def] >> res_tac >> simp[]) >>
+  `fn_return_state_rel ctx cplan callee rvs (mid with as_stack := saved)
+     (asr with as_stack := REVERSE vals ++ saved)` by
+    fs[fn_return_state_rel_def, venom_asm_terminal_rel_def] >>
+  qspecl_then [`ctx`, `cplan`, `fn`, `callee`, `r`, `lo`, `ra`, `consumed`, `outs`,
+    `vals`, `vs`, `rvs`, `ret`, `vs'`, `mid with as_stack := saved`,
+    `asr with as_stack := REVERSE vals ++ saved`] mp_tac invoke_return_context >>
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, fs[]]) >>
+  strip_tac >>
+  drule_all invoke_called_plan_fields >> strip_tac >>
+  suspend "cleanup"
+QED
+
+Resume invoke_return_frame_numeric_exact[cleanup]:
+  `spill_alloc_layout_wf called.ps_alloc called.ps_spilled` by
+    (qpat_x_assum `called.ps_alloc = _` SUBST1_TAC >>
+     qpat_x_assum `called.ps_spilled = _` SUBST1_TAC >>
+     first_assum ACCEPT_TAC) >>
+  `context_venom_asm_rel cplan lo called (frame_view fn ra vs')
+     ((asr with as_pc := asr.as_pc + 1) with as_stack := REVERSE vals ++ saved)` by
+    (qpat_x_assum `context_venom_asm_rel _ _ (consumed with ps_stack := _) _ _` mp_tac >>
+     simp[context_venom_asm_rel_def]) >>
+  `asm_block_at prog asr.as_pc [AsmLabel ret_lbl] /\
+   asm_block_at prog (asr.as_pc + 1)
+     (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
+    (qpat_x_assum `asm_block_at prog asr.as_pc _` mp_tac >>
+     pure_rewrite_tac[execute_plan_def, MAP, FLAT, exec_stack_op_def,
+       asm_block_at_append] >> simp[]) >>
+  `asm_steps lo o2pc prog 1 asr = AsmOK (asr with as_pc := asr.as_pc + 1)` by
+    (irule label_op_asm_steps >> qexists `ret_lbl` >> simp[]) >>
+  qspecl_then [`outs`, `nl`, `halting`, `called`, `pops`, `popped`, `dfg`, `inst`,
+    `term`, `opts`, `swapped`, `final`, `cplan`, `lo`, `o2pc`, `prog`,
+    `frame_view fn ra vs'`,
+    `(asr with as_pc := asr.as_pc + 1) with as_stack := REVERSE vals ++ saved`,
+    `r`, `ctx`, `fn.fn_name`] mp_tac invoke_cleanup_context_numeric >>
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, fs[]]) >>
+  disch_then (qx_choose_then `fin0` strip_assume_tac) >>
+  suspend "lift"
+QED
+
+Resume invoke_return_frame_numeric_exact[lift]:
+  qspecl_then [`LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))`, `lo`, `o2pc`,
+    `prog`, `asr with as_pc := asr.as_pc + 1`, `REVERSE vals ++ saved`, `rest`,
+    `fin0`] mp_tac asm_steps_frame >>
+  impl_tac >- fs[] >> strip_tac >>
+  `(asr with as_pc := asr.as_pc + 1) with as_stack := REVERSE vals ++ saved ++ rest =
+     asr with as_pc := asr.as_pc + 1` by
+    simp[asm_state_component_equality] >>
+  qexists `fin0 with as_stack := fin0.as_stack ++ rest` >>
+  conj_tac >- (irule asm_steps_compose_ok >>
+               qexists `asr with as_pc := asr.as_pc + 1` >> fs[]) >>
+  reverse conj_tac
+  >- simp[execute_plan_def, exec_stack_op_def] >>
+  drule invoke_return_frame_fields >> strip_tac >>
+  `!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
+     read_byte b asr.as_memory = read_byte b mem0` by
+    (qspecl_then [`ctx`, `cplan`, `lo`, `fn`, `ra`, `rest`, `mem0`, `arranged`,
+       `vs`, `mid`, `callee`, `rvs`, `mid`, `asr`] mp_tac
+       invoke_return_outside_closure >> simp[]) >>
+  qpat_x_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[fn_frame_inv_def] >> strip_tac >>
+  rpt conj_tac >>
+  qpat_x_assum `final = _` SUBST_ALL_TAC >>
+  FIRST [first_assum ACCEPT_TAC,
+         rpt strip_tac >> fs[] >> NO_TAC,
+         qexists `r` >> fs[] >> NO_TAC]
+QED
+
+Finalise invoke_return_frame_numeric_exact
+
 Theorem invoke_return_frame_numeric:
   !ctx cplan lo o2pc prog fn ra rest mem0 arranged operands args vs mid saved vals
    callee rvs ret vs' asr r outs nl halting dfg inst term ret_lbl called
@@ -382,105 +529,8 @@ Theorem invoke_return_frame_numeric:
       LENGTH (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts)))
 Proof
   rpt gen_tac >> strip_tac >>
-  qabbrev_tac `consumed = arranged with
-    ps_stack := stack_pop (LENGTH operands) arranged.ps_stack` >>
-  `context_venom_asm_rel cplan lo consumed (frame_view fn ra vs)
-     (mid with as_stack := saved)` by
-    (simp[Abbr `consumed`] >> irule invoke_consumed_context >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl [`ctx`, `mem0`, `rest`, `REVERSE args`] >> simp[]) >>
-  suspend "local"
+  drule_all invoke_return_frame_numeric_exact >> metis_tac[]
 QED
-
-Resume invoke_return_frame_numeric[local]:
-  `spill_alloc_layout_wf consumed.ps_alloc consumed.ps_spilled /\
-   (!op. op IN FDOM consumed.ps_spilled ==>
-     EVERY (\out. case op of Var x => x <> out | _ => T) outs) /\
-   r.sr_spill_base <= consumed.ps_alloc.sa_spill_base /\
-   consumed.ps_alloc.sa_next_offset <= r.sr_spill_end` by
-    simp[Abbr `consumed`] >>
-  `EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T) outs)
-     consumed.ps_stack` by
-    (simp[Abbr `consumed`] >>
-     qpat_x_assum `arranged.ps_stack = _` (fn th =>
-       qpat_x_assum `EVERY _ arranged.ps_stack`
-         (mp_tac o ONCE_REWRITE_RULE [th])) >>
-     simp[EVERY_APPEND]) >>
-  `!op off. FLOOKUP consumed.ps_spilled op = SOME off ==>
-     r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end /\
-     EVERY (\out. case op of Var x => x <> out | _ => T) outs` by
-    (rpt gen_tac >> strip_tac >>
-     `op IN FDOM consumed.ps_spilled` by fs[FLOOKUP_DEF] >>
-     fs[doSwapSimTheory.spill_alloc_layout_wf_def] >> res_tac >> simp[]) >>
-  `fn_return_state_rel ctx cplan callee rvs (mid with as_stack := saved)
-     (asr with as_stack := REVERSE vals ++ saved)` by
-    fs[fn_return_state_rel_def, venom_asm_terminal_rel_def] >>
-  qspecl_then [`ctx`, `cplan`, `fn`, `callee`, `r`, `lo`, `ra`, `consumed`, `outs`,
-    `vals`, `vs`, `rvs`, `ret`, `vs'`, `mid with as_stack := saved`,
-    `asr with as_stack := REVERSE vals ++ saved`] mp_tac invoke_return_context >>
-  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, fs[]]) >>
-  strip_tac >>
-  drule_all invoke_called_plan_fields >> strip_tac >>
-  suspend "cleanup"
-QED
-
-Resume invoke_return_frame_numeric[cleanup]:
-  `spill_alloc_layout_wf called.ps_alloc called.ps_spilled` by
-    (qpat_x_assum `called.ps_alloc = _` SUBST1_TAC >>
-     qpat_x_assum `called.ps_spilled = _` SUBST1_TAC >>
-     first_assum ACCEPT_TAC) >>
-  `context_venom_asm_rel cplan lo called (frame_view fn ra vs')
-     ((asr with as_pc := asr.as_pc + 1) with as_stack := REVERSE vals ++ saved)` by
-    (qpat_x_assum `context_venom_asm_rel _ _ (consumed with ps_stack := _) _ _` mp_tac >>
-     simp[context_venom_asm_rel_def]) >>
-  `asm_block_at prog asr.as_pc [AsmLabel ret_lbl] /\
-   asm_block_at prog (asr.as_pc + 1)
-     (execute_plan cplan.cp_initial_fmp (pops ++ opts))` by
-    (qpat_x_assum `asm_block_at prog asr.as_pc _` mp_tac >>
-     pure_rewrite_tac[execute_plan_def, MAP, FLAT, exec_stack_op_def,
-       asm_block_at_append] >> simp[]) >>
-  `asm_steps lo o2pc prog 1 asr = AsmOK (asr with as_pc := asr.as_pc + 1)` by
-    (irule label_op_asm_steps >> qexists `ret_lbl` >> simp[]) >>
-  qspecl_then [`outs`, `nl`, `halting`, `called`, `pops`, `popped`, `dfg`, `inst`,
-    `term`, `opts`, `swapped`, `final`, `cplan`, `lo`, `o2pc`, `prog`,
-    `frame_view fn ra vs'`,
-    `(asr with as_pc := asr.as_pc + 1) with as_stack := REVERSE vals ++ saved`,
-    `r`, `ctx`, `fn.fn_name`] mp_tac invoke_cleanup_context_numeric >>
-  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, fs[]]) >>
-  disch_then (qx_choose_then `fin0` strip_assume_tac) >>
-  suspend "lift"
-QED
-
-Resume invoke_return_frame_numeric[lift]:
-  qspecl_then [`LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))`, `lo`, `o2pc`,
-    `prog`, `asr with as_pc := asr.as_pc + 1`, `REVERSE vals ++ saved`, `rest`,
-    `fin0`] mp_tac asm_steps_frame >>
-  impl_tac >- fs[] >> strip_tac >>
-  `(asr with as_pc := asr.as_pc + 1) with as_stack := REVERSE vals ++ saved ++ rest =
-     asr with as_pc := asr.as_pc + 1` by
-    simp[asm_state_component_equality] >>
-  qexistsl [`1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))`,
-    `fin0 with as_stack := fin0.as_stack ++ rest`] >>
-  conj_tac >- (irule asm_steps_compose_ok >>
-               qexists `asr with as_pc := asr.as_pc + 1` >> fs[]) >>
-  reverse conj_tac
-  >- simp[execute_plan_def, exec_stack_op_def] >>
-  drule invoke_return_frame_fields >> strip_tac >>
-  `!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
-     read_byte b asr.as_memory = read_byte b mem0` by
-    (qspecl_then [`ctx`, `cplan`, `lo`, `fn`, `ra`, `rest`, `mem0`, `arranged`,
-       `vs`, `mid`, `callee`, `rvs`, `mid`, `asr`] mp_tac
-       invoke_return_outside_closure >> simp[]) >>
-  qpat_x_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[fn_frame_inv_def] >> strip_tac >>
-  rpt conj_tac >>
-  qpat_x_assum `final = _` SUBST_ALL_TAC >>
-  FIRST [first_assum ACCEPT_TAC,
-         rpt strip_tac >> fs[] >> NO_TAC,
-         qexists `r` >> fs[] >> NO_TAC]
-QED
-
-Finalise invoke_return_frame_numeric
 
 (* ===== Entry: input prefix and call packet over the marked state ===== *)
 
@@ -857,7 +907,7 @@ QED
 
 Finalise invoke_enter_callee_marked
 
-(* The structural facts invoke_return_frame_numeric needs about the
+(* The structural facts invoke_return_frame_numeric_exact needs about the
    arranged state. *)
 Theorem invoke_entry_structural_marked:
   !spillbase ps inst nl iops prepared dfg rops arranged.
