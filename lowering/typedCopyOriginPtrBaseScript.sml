@@ -493,6 +493,140 @@ Proof
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac
 QED
 
+(* The header's two scalar instructions and its conditional transfer. *)
+Theorem typed_copy_origin_ptr_header_branch_path:
+  emit_op LT [Var counter; length] a = (lt,b) /\
+  emit_op ISZERO [lt] b = (done,c) /\
+  emit_inst JNZ [done; Label exit; Label blabel] [] c = ((),d) /\
+  lookup_var counter s = SOME (n2w k) /\
+  eval_operand length s = SOME (n2w N) /\ k <= N /\ N < dimword(:256) /\
+  FLOOKUP G counter = NONE /\ op_prov G length = NONE /\
+  op_taint tn (Var counter) = {} /\ op_taint tn length = {} /\
+  fn_has_code a d func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  ?x y t Gf tnf.
+    lt = Var x /\ done = Var y /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    t = jump_to (if k = N then exit else blabel)
+      (update_var y (if k = N then 1w else 0w)
+        (update_var x (if k < N then 1w else 0w) s)) /\
+    Gf = DRESTRICT (DRESTRICT G (COMPL {x})) (COMPL {y}) /\
+    tnf = (tn with t_var := (tn.t_var |+ (x,{})) |+ (y,{})) /\
+    t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    ~t.vs_halted /\ t.vs_inst_idx = 0 /\
+    t.vs_current_bb = (if k = N then exit else blabel) /\
+    (!p. p <> x /\ p <> y ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `cs_extends a b /\ cs_extends b c /\ cs_extends c d` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono,
+      exprLoweringPropsTheory.ci_mono_def, cs_extends_emit_inst] >>
+  `fn_has_code a b func /\ fn_has_code b c func /\ fn_has_code c d func` by
+    metis_tac[fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
+  `!out. step_inst_base (mk_inst a.cs_next_id LT [Var counter;length] [out]) s =
+    OK (update_var out (if k < N then 1w else 0w) s)` by
+    (simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def,
+          wordsTheory.WORD_LO, wordsTheory.w2n_n2w] >>
+     `k < dimword(:256)` by decide_tac >>
+     Cases_on `k < N` >> simp[arithmeticTheory.LESS_MOD, bool_to_word_def]) >>
+  `!out. ptr_inst_ok D lo 0 ctx func G tn
+      (mk_inst a.cs_next_id LT [Var counter;length] [out]) s` by
+    (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+          source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+     conj_tac >- (Cases_on `length` >> gvs[op_prov_def, finite_mapTheory.FLOOKUP_DEF]) >>
+     simp[update_var_def] >> metis_tac[]) >>
+  `!out. inst_mem_below_frontier (mk_inst a.cs_next_id LT [Var counter;length] [out]) s /\
+    inst_dload_in_section (mk_inst a.cs_next_id LT [Var counter;length] [out]) s` by
+    simp[inst_mem_below_frontier_def, memSafeRunTheory.inst_dload_in_section_def,
+         mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  `LT <> INVOKE /\ LT <> GAS /\ ~is_terminator LT` by simp[is_terminator_def] >>
+  drule_all typed_copy_origin_ptr_emit_op_path >>
+  disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`] strip_assume_tac) >>
+  rename1 `lt = Var x` >>
+  rename1 `gas_origin_ptr_path _ (s,G,tn) [] (OK q,G1,tn1)` >>
+  `G1 = DRESTRICT G (COMPL {x}) /\
+   tn1 = (tn with t_var := tn.t_var |+ (x,{}))` by
+    (simp[step_prov_def, out_prov_def, set_prov_def, mk_inst_def] >>
+     simp[step_taint_def, mem_taint_def, step_writes_def, written_taint_def,
+       store_taint_def, imm_taint_def, adopt_reset_def, out_taint_def,
+       range_bytes_def, set_var_taint_def, new_site_bytes_def, update_var_def,
+       source_memory_write_ranges_def, taint_component_equality,
+       FLOOKUP_DEF, pred_setTheory.EXTENSION, eval_operand_def, SF CONJ_ss]) >>
+  `op_taint tn1 lt = {}` by simp[op_taint_def, FLOOKUP_UPDATE] >>
+  `allocas_from lo q` by (gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  suspend "iszero"
+QED
+
+Resume typed_copy_origin_ptr_header_branch_path[iszero]:
+  `!out. step_inst_base (mk_inst b.cs_next_id ISZERO [lt] [out]) q =
+    OK (update_var out (if k = N then 1w else 0w) q)` by
+    (simp[step_inst_base_def, mk_inst_def, exec_pure1_def] >>
+     Cases_on `k < N` >>
+     simp[bool_to_word_def, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `!out. ptr_inst_ok D lo 0 ctx func G1 tn1
+      (mk_inst b.cs_next_id ISZERO [lt] [out]) q` by
+    (gen_tac >>
+     qpat_assum `!out. step_inst_base (mk_inst b.cs_next_id ISZERO _ _) q = _`
+       (qspec_then `out` assume_tac) >>
+     simp[NoAsms, ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+          source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+     gvs[update_var_def, op_taint_def, FLOOKUP_UPDATE]) >>
+  `!out. inst_mem_below_frontier (mk_inst b.cs_next_id ISZERO [lt] [out]) q /\
+    inst_dload_in_section (mk_inst b.cs_next_id ISZERO [lt] [out]) q` by
+    simp[inst_mem_below_frontier_def, memSafeRunTheory.inst_dload_in_section_def,
+         mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+  `ISZERO <> INVOKE /\ ISZERO <> GAS /\ ~is_terminator ISZERO` by simp[is_terminator_def] >>
+  qpat_x_assum `emit_op LT _ _ = _` kall_tac >>
+  drule_all typed_copy_origin_ptr_emit_op_path >>
+  disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`] strip_assume_tac) >>
+  suspend "branch"
+QED
+
+Resume typed_copy_origin_ptr_header_branch_path[branch]:
+  rename1 `done = Var y` >>
+  rename1 `gas_origin_ptr_path _ (q,G1,tn1) [] (OK r,G2,tn2)` >>
+  `G2 = DRESTRICT G1 (COMPL {y}) /\
+   tn2 = (tn1 with t_var := tn1.t_var |+ (y,{}))` by
+    (simp[step_prov_def, out_prov_def, set_prov_def, mk_inst_def] >>
+     simp[step_taint_def, mem_taint_def, step_writes_def, written_taint_def,
+       store_taint_def, imm_taint_def, adopt_reset_def, out_taint_def,
+       range_bytes_def, set_var_taint_def, new_site_bytes_def, update_var_def,
+       source_memory_write_ranges_def, taint_component_equality,
+       FLOOKUP_DEF, pred_setTheory.EXTENSION, eval_operand_def, lookup_var_def,
+       FLOOKUP_UPDATE, SF CONJ_ss]) >>
+  `op_taint tn2 done = {}` by simp[op_taint_def, FLOOKUP_UPDATE] >>
+  `allocas_from lo r` by
+    (simp[allocas_from_def, update_var_def] >> rpt strip_tac >>
+     qpat_x_assum `allocas_from lo s` (mp_tac o REWRITE_RULE [allocas_from_def]) >>
+     disch_then drule >> simp[]) >>
+  drule_all emit_jnz_origin_ptr >>
+  disch_then (qspecl_then [`explicit`,`PG`,`G2`,`D`] assume_tac) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK r,G2,tn2)` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
+       (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`q`,`G1`,`tn1`,`[]`,`OK r`,`G2`,`tn2`] mp_tac) >> simp[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (jump_to (if k = N then exit else blabel) r),G2,tn2)` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) [] (OK r,G2,tn2)`
+       (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`r`,`G2`,`tn2`,`[]`,
+       `OK (jump_to (if k = N then exit else blabel) r)`,`G2`,`tn2`] mp_tac) >> simp[]) >>
+  qexistsl_tac [`x`,`y`,`jump_to (if k = N then exit else blabel) r`,`G2`,`tn2`] >>
+  simp[jump_to_def, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def] >>
+  gvs[update_var_def]
+QED
+
+Finalise typed_copy_origin_ptr_header_branch_path
+
 (* Finite iteration is independent of the concrete header invariant. *)
 Theorem typed_copy_origin_ptr_counted_path:
   (!j q G tn. j < N /\ H j q G tn ==>
