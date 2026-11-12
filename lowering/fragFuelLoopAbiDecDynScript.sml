@@ -528,6 +528,42 @@ Proof
     fuel_ok_emit_inst_jnz] >> simp[is_terminator_def]
 QED
 
+(* Cutoff diagnostic: a continuation witness becomes a state observation,
+   but the fixed-result alternative remains a distinct obligation. *)
+Theorem abi_dyn_cutoff_observation[local]:
+  !G ctx fn s j P bb id.
+    (!t. P t ==>
+       lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb t.vs_inst_idx = SOME (mk_inst id STOP [] [])) /\
+    fuel_outcome G ctx fn s j P ==>
+    (?t. P t /\ run_from (G+j) ctx fn s =
+       Halt (halt_state (t with vs_returndata := []))) \/
+    (!f. G <= f ==> run_from (f+j) ctx fn s = run_from (G+j) ctx fn s)
+Proof
+  rpt gen_tac >> strip_tac >> gvs[fuel_outcome_def] >>
+  disj1_tac >> qexists_tac `t` >> simp[] >>
+  qpat_x_assum `!f. G <= f ==> _` (qspec_then `G` mp_tac) >>
+  simp[] >> strip_tac >> asm_rewrite_tac[] >>
+  irule fragExecTheory.run_from_halt >>
+  qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def]
+QED
+
+(* Primitive footprint probe for the structural middle certificate. *)
+Theorem abi_dyn_emit_op_footprint[local]:
+  !opc ops st out st'.
+    emit_op opc ops st = (out,st') ==>
+    EVERY (\i. i.inst_opcode = opc /\
+       EVERY (\x. ~var_below st.cs_next_var x) i.inst_outputs)
+      (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts)
+Proof
+  rpt strip_tac >>
+  drule exprLoweringPropsTheory.emitted_insts_emit_op_local >>
+  simp[exprLoweringPropsTheory.emitted_insts_def] >> strip_tac >>
+  simp[listTheory.DROP_APPEND, mk_inst_def, var_below_def] >>
+  qexists_tac `st.cs_next_var` >> simp[]
+QED
+
 Theorem abi_dyn_counter_rank[local]:
   !w:bytes32.
     (2 ** 256 - 1) - w2n w < 2 ** 256 /\
