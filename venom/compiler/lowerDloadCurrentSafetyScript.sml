@@ -124,9 +124,20 @@ Resume ld_sync_ordinary_raw[ranges]:
        suffices_by metis_tac[] >>
      irule ld_descriptor_offset_observation >> gvs[] >> metis_tac[]) >>
   gvs[] >>
-  `r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next` suffices_by
-    (strip_tac >> simp[]) >>
-  irule ld_classified_range_frontier >> metis_tac[]
+  `r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next \/ y = x` by
+    (irule ld_classified_range_frontier >> metis_tac[]) >>
+  (* same address on both sides: the source's own raw check bounds it *)
+  `y = x ==> r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next \/
+     w2n f.lf_tgt.vs_initial_fmp <= w2n y /\ w2n y + r1 <= w2n f.lf_tgt.vs_fmp` by
+    (strip_tac >>
+     `raw_mem_ok C f.lf_fn inst f.lf_src` by
+       (irule ld_sync_source_mem_inv >> metis_tac[]) >>
+     `ld_nonghost tn f.lf_src f.lf_tgt` by fs[ld_sync_def] >>
+     `f.lf_src.vs_alloca_next <= f.lf_tgt.vs_alloca_next` by
+       (drule ld_sync_frontier >> simp[]) >>
+     irule ld_source_range_frontier >>
+     fs[raw_mem_ok_def, ld_nonghost_def] >> metis_tac[]) >>
+  Cases_on `y = x` >> fs[] >> decide_tac
 QED
 Finalise ld_sync_ordinary_raw
 

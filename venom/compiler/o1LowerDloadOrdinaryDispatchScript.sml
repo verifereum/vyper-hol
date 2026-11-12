@@ -36,7 +36,7 @@ Theorem ld_env_dalloca_update[local]:
     (update_var out x (t with vs_fmp := f))
 Proof
   strip_tac >>
-  simp[ld_env_agree_def, update_var_def, FLOOKUP_UPDATE,
+  simp[ld_env_agree_def, venomStateTheory.update_var_def, FLOOKUP_UPDATE,
        occurrence_step_def, occurrence_out_def, set_prov_def,
        FLOOKUP_DRESTRICT, op_taint_def] >>
   conj_tac
@@ -112,7 +112,7 @@ Proof
   `s.vs_fmp = t.vs_fmp` by gvs[ld_joint_local_fields_def] >>
   `active_inst fn inst2 (s with vs_inst_idx := SUC s.vs_inst_idx)` by
     (qpat_x_assum `active_inst fn inst2 _` mp_tac >>
-     simp[active_inst_def, update_var_def]) >>
+     simp[active_inst_def, venomStateTheory.update_var_def]) >>
   drule_all ld_joint_control_unchanged_next >> strip_tac >>
   qexists_tac `update_var out t.vs_fmp
     (t with vs_fmp := t.vs_fmp + n2w (ceil32 (w2n sz)))` >>
@@ -130,13 +130,13 @@ Proof
   simp[ld_joint_boundary_def] >> rpt conj_tac
   >- (qexists_tac `u` >>
       gvs[ld_joint_frame_def, ld_params_agree_def, ld_joint_local_fields_def,
-          ld_joint_allocas_def, update_var_def] >>
+          ld_joint_allocas_def, venomStateTheory.update_var_def] >>
       qpat_x_assum `ld_joint_control _ _ _ (_ with vs_inst_idx := _) _` mp_tac >>
       simp[NoAsms, ld_joint_control_def] >> strip_tac >> gvs[] >> metis_tac[])
-  >- (gvs[ld_memory_agree_def, update_var_def, SUBSET_DEF] >> metis_tac[])
-  >- (gvs[ld_dyn_agree_def, update_var_def, SUBSET_DEF] >> metis_tac[])
-  >- (gvs[ld_shared_agree_def, update_var_def] >> metis_tac[]) >>
-  gvs[update_var_def]
+  >- (gvs[ld_memory_agree_def, venomStateTheory.update_var_def, SUBSET_DEF] >> metis_tac[])
+  >- (gvs[ld_dyn_agree_def, venomStateTheory.update_var_def, SUBSET_DEF] >> metis_tac[])
+  >- (gvs[ld_shared_agree_def, venomStateTheory.update_var_def] >> metis_tac[]) >>
+  gvs[venomStateTheory.update_var_def]
 QED
 
 Theorem ld_joint_ordinary_next:

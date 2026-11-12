@@ -1,7 +1,7 @@
 (* Current-instruction range safety does not require successful execution. *)
 Theory lowerDloadOracleCallSafety
 Ancestors
-  lowerDloadOracleCallAssembly lowerDloadSafetyAllocBounds
+  lowerDloadOracleCallAssembly lowerDloadSafetyAllocBounds lowerDloadRangeFrontier
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyRelation lowerDloadSafetyKernel
   unitMemInv unitTransformDefs memLocDefs ptrDiscipline
   codegenRel contextCodegenRel venomExecSemantics venomInst
@@ -184,16 +184,16 @@ Proof
      conj_tac >- (qexists_tac `inst` >> gvs[]) >>
      metis_tac[]) >>
   `xx = x` by metis_tac[optionTheory.SOME_11] >>
-  ` (w2n x+r1 <= lo /\ y=x) \/
-    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-      w2n x=b+delta /\ w2n y=c+delta /\ delta+r1 <= sz)` by
-    (`0 < r1` by decide_tac >>
-     qpat_x_assum `MEM (getops,ranges) _`
-       (strip_assume_tac o REWRITE_RULE [MEM, PAIR_EQ])
-     >- (gvs[] >> drule_all ld_read_access_classified >> simp[]) >>
-     gvs[] >> drule_all ld_write_access_classified >> simp[]) >>
-  qpat_assum `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= _`
-    imp_res_tac >>
-  qpat_x_assum `r0 = w2n y` SUBST1_TAC >>
-  pure_asm_rewrite_tac[] >> decide_tac
+  `r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next \/ y = x` by
+    (irule ld_classified_range_frontier >> metis_tac[]) >>
+  (* same address on both sides: the source's own raw check bounds it *)
+  `y = x ==> r1 = 0 \/ w2n y + r1 <= f.lf_tgt.vs_alloca_next \/
+     w2n f.lf_tgt.vs_initial_fmp <= w2n y /\ w2n y + r1 <= w2n f.lf_tgt.vs_fmp` by
+    (strip_tac >>
+     `f.lf_src.vs_alloca_next <= f.lf_tgt.vs_alloca_next` by
+       (drule ld_sync_frontier >> simp[]) >>
+     irule ld_source_range_frontier >>
+     fs[raw_mem_ok_def, ld_nonghost_def] >> metis_tac[]) >>
+  qpat_x_assum `r0 = w2n y` SUBST_ALL_TAC >>
+  Cases_on `y = x` >> fs[] >> decide_tac
 QED
