@@ -19,7 +19,8 @@
    aggregate signatures independently of those whitelist decisions. *)
 Theory runtimeSymSrcGeneratorContracts
 Ancestors
-  runtimeSymSrcInterfaces exprCallBounds
+  runtimeSymSrcInterfaces exprCallBounds list supportedExprForms supportedExprs
+  supportedExprTraverse
 
 (* List-domain callback hypotheses are bounded to members, never all ASTs.
    Requested types remain arbitrary because different helpers request different
@@ -358,7 +359,7 @@ Definition runtime_sym_abi_clauses_def:
   runtime_sym_abi_clauses <=>
   (!ensure mid src info n s op s'. ~is_label_operand src /\
      EVERY runtime_sym_inst (state_insts s) /\
-     lower_abi_encode ensure mid src info n s = (op,s') ==>
+     lower_abi_encode (ensure : bool) mid src info n s = (op,s') ==>
      EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   (!src info lo hi size s op s'. ~is_label_operand src /\
      EVERY runtime_sym_inst (state_insts s) /\
@@ -386,3 +387,202 @@ Definition runtime_sym_generator_contracts_def:
     runtime_sym_math_clauses /\ runtime_sym_simple_clauses /\
     runtime_sym_misc_clauses /\ runtime_sym_abi_clauses
 End
+
+Theorem runtime_sym_generators_lower_value:
+  runtime_sym_generator_contracts tops ==> runtime_sym_lower_value_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_lower_value_with_loc:
+  runtime_sym_generator_contracts tops ==> runtime_sym_lower_value_with_loc_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_subscript:
+  runtime_sym_generator_contracts tops ==> runtime_sym_subscript_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_attribute:
+  runtime_sym_generator_contracts tops ==> runtime_sym_attribute_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_target_ptr:
+  runtime_sym_generator_contracts tops ==> runtime_sym_target_ptr_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_multi_vvs:
+  runtime_sym_generator_contracts tops ==> runtime_sym_multi_vvs_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_multi_exprs:
+  runtime_sym_generator_contracts tops ==> runtime_sym_multi_exprs_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_make_tuple:
+  runtime_sym_generator_contracts tops ==> runtime_sym_make_tuple_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_make_array:
+  runtime_sym_generator_contracts tops ==> runtime_sym_make_array_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_make_array_elems:
+  runtime_sym_generator_contracts tops ==> runtime_sym_make_array_elems_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_struct_lit:
+  runtime_sym_generator_contracts tops ==> runtime_sym_struct_lit_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_abi_encode_args:
+  runtime_sym_generator_contracts tops ==> runtime_sym_abi_encode_args_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_concat:
+  runtime_sym_generator_contracts tops ==> runtime_sym_concat_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_call:
+  runtime_sym_generator_contracts tops ==> runtime_sym_call_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_acc:
+  runtime_sym_generator_contracts tops ==> runtime_sym_acc_clause tops
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_context:
+  runtime_sym_generator_contracts tops ==> runtime_sym_context_clauses
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_expr_primitive:
+  runtime_sym_generator_contracts tops ==> runtime_sym_expr_primitive_clauses
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_name_fastpath:
+  runtime_sym_generator_contracts tops ==> runtime_sym_name_fastpath_clauses
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_math:
+  runtime_sym_generator_contracts tops ==> runtime_sym_math_clauses
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_simple:
+  runtime_sym_generator_contracts tops ==> runtime_sym_simple_clauses
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_misc:
+  runtime_sym_generator_contracts tops ==> runtime_sym_misc_clauses
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+Theorem runtime_sym_generators_abi:
+  runtime_sym_generator_contracts tops ==> runtime_sym_abi_clauses
+Proof
+  simp[runtime_sym_generator_contracts_def]
+QED
+
+(* Whitelist boundaries, rather than impossible inhabited dead-branch probes. *)
+Theorem runtime_sym_builtin_rejected:
+  ~supported_builtin_form tops ty (Slice n) es /\
+  ~supported_builtin_form tops ty Keccak256 es /\
+  ~supported_builtin_form tops ty Sha256 es /\
+  ~supported_builtin_form tops ty Len es /\
+  ~supported_builtin_form tops ty Ceil es /\
+  ~supported_builtin_form tops ty Floor es /\
+  ~supported_builtin_form tops ty (Concat n) es /\
+  ~supported_builtin_form tops ty MethodId es
+Proof
+  simp[supported_builtin_form_def]
+QED
+
+Theorem runtime_sym_extract32_rejected:
+  ~supported_type_builtin_form tops ty Extract32 target es
+Proof
+  Cases_on `es` >- simp[supported_type_builtin_form_def]
+  >> Cases_on `t` >> simp[supported_type_builtin_form_def]
+QED
+
+Theorem runtime_sym_membership_rejected:
+  ~supported_binop In ty rhs lb ne /\ ~supported_binop NotIn ty rhs lb ne
+Proof
+  simp[supported_binop_def]
+QED
+
+Theorem runtime_sym_make_array_children:
+  supported_expr tops (Builtin rt (MakeArray elem bound) es) /\
+  ~supported_expr_exists is_self_code (Builtin rt (MakeArray elem bound) es) /\
+  MEM e es ==>
+  supported_pure_expr tops e /\ ~supported_expr_exists is_self_code e /\
+  expr_size e < list_size expr_size es
+Proof
+  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
+       supported_pure_exprs_every, supported_expr_exists_def] >>
+  rpt strip_tac
+  >- gvs[EVERY_MEM]
+  >- (gvs[supported_exprs_exists_every, EVERY_MEM])
+  >> irule expr_list_member_bound >> simp[]
+QED
+
+Theorem runtime_sym_pop_target_domain:
+  supported_expr tops (Pop ty target) ==>
+  (?id. target = TopLevelNameTarget id /\ supported_storage_dynamic_array tops id) /\
+  (!p. ~supported_target_exists p target)
+Proof
+  Cases_on `target` >>
+  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
+       supported_expr_exists_def]
+QED
+
+(* An inhabited nested aggregate: callbacks must accept aggregate children,
+   not just word leaves, and remain bounded at each list boundary. *)
+Theorem runtime_sym_nested_make_array_probe:
+  supported_expr []
+    (Builtin (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Fixed 1))
+      (MakeArray (SOME (ArrayT (BaseT (UintT 256)) (Fixed 1))) (Fixed 1))
+      [Builtin (ArrayT (BaseT (UintT 256)) (Fixed 1))
+        (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1))
+        [Name (BaseT (UintT 256)) "x"]]) /\
+  expr_size (Name (BaseT (UintT 256)) "x") <
+    list_size expr_size [Name (BaseT (UintT 256)) "x"]
+Proof
+  EVAL_TAC
+QED
