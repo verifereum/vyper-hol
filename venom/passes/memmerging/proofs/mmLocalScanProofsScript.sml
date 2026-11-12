@@ -2238,11 +2238,10 @@ Proof
   `q' = q` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >> gvs[]
 QED
 
-Theorem mm_local_groups_absent_unchanged[local]:
+Theorem mm_local_groups_absent_maps[local]:
   (!cg. MEM cg groups ==> ~MEM q.inst_id cg.cg_inst_ids) ==>
-  !r. apply_groups_inst_supply mode
-    (nop_ids_of_groups dfg mode insts groups)
-    (rep_map_of_groups insts groups) r q = ([q],r)
+  ~MEM q.inst_id (nop_ids_of_groups dfg mode insts groups) /\
+  ALOOKUP (rep_map_of_groups insts groups) q.inst_id = NONE
 Proof
   strip_tac >>
   `~MEM q.inst_id (nop_ids_of_groups dfg mode insts groups)` by
@@ -2263,7 +2262,29 @@ Proof
      rename1 `rep_of_group insts group = SOME result` >>
      PairCases_on `result` >> gvs[] >> drule mm_local_rep_member >> strip_tac >>
      metis_tac[]) >>
+  simp[]
+QED
+
+Theorem mm_local_groups_absent_unchanged[local]:
+  (!cg. MEM cg groups ==> ~MEM q.inst_id cg.cg_inst_ids) ==>
+  !r. apply_groups_inst_supply mode
+    (nop_ids_of_groups dfg mode insts groups)
+    (rep_map_of_groups insts groups) r q = ([q],r)
+Proof
+  strip_tac >> drule mm_local_groups_absent_maps >>
+  disch_then (qspecl_then [`mode`,`insts`,`dfg`] strip_assume_tac) >>
   simp[apply_groups_inst_supply_def]
+QED
+
+Theorem mm_local_memzero_groups_absent_unchanged[local]:
+  (!cg. MEM cg groups ==> ~MEM q.inst_id cg.cg_inst_ids) ==>
+  !r. apply_memzero_inst_supply
+    (nop_ids_of_groups dfg Mem2Mem insts groups)
+    (rep_map_of_groups insts groups) r q = ([q],r)
+Proof
+  strip_tac >> drule mm_local_groups_absent_maps >>
+  disch_then (qspecl_then [`Mem2Mem`,`insts`,`dfg`] strip_assume_tac) >>
+  simp[apply_memzero_inst_supply_def]
 QED
 
 Theorem mm_local_prefix_nonselected_unchanged[local]:
@@ -2481,27 +2502,22 @@ Proof
     (rpt strip_tac >> drule_all mm_local_memzero_group_roles >> strip_tac >>
      `i = q` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
      gvs[is_zero_store_def, is_calldatasize_copy_def, inst_wf_def]) >>
-  `~MEM q.inst_id (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
-      (scan_block_memzero dfg bb).mz_flushed)` by
-    (strip_tac >> gvs[nop_ids_of_groups_def, MEM_FLAT, MEM_MAP] >>
-     rename1 `MEM cg (scan_block_memzero dfg bb).mz_flushed` >>
-     qpat_x_assum `MEM _ (nop_ids_of_group _ _ _ _)` mp_tac >>
-     simp[nop_ids_of_group_def] >>
-     Cases_on `REVERSE (sort_ids_by_block bb.bb_instructions cg.cg_inst_ids)` >>
-     simp[MEM_FILTER] >> disj2_tac >> strip_tac >>
-     `MEM q.inst_id (REVERSE (sort_ids_by_block bb.bb_instructions cg.cg_inst_ids))`
-       by (pure_asm_rewrite_tac[MEM] >> simp[]) >>
-     gvs[MEM_REVERSE, sort_ids_by_block_def, MEM_FILTER] >> metis_tac[]) >>
-  `ALOOKUP (rep_map_of_groups bb.bb_instructions
-      (scan_block_memzero dfg bb).mz_flushed) q.inst_id = NONE` by
-    (simp[alistTheory.ALOOKUP_NONE, rep_map_of_groups_def, MEM_MAP, MEM_FILTER] >>
-     rpt strip_tac >> spose_not_then strip_assume_tac >>
-     rename1 `MEM cg (scan_block_memzero dfg bb).mz_flushed` >>
-     Cases_on `rep_of_group bb.bb_instructions cg` >> gvs[] >>
-     rename1 `rep_of_group bb.bb_instructions cg = SOME result` >>
-     PairCases_on `result` >> gvs[] >> drule mm_local_rep_member >>
-     metis_tac[]) >>
-  simp[apply_memzero_inst_supply_def]
+  irule mm_local_memzero_groups_absent_unchanged >> simp[]
+QED
+
+Theorem mm_local_memzero_nonselected_unchanged[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM q bb.bb_instructions /\
+  ~is_zero_store q /\ ~is_calldatasize_copy dfg q ==>
+  !r. apply_memzero_inst_supply
+    (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed) r q = ([q],r)
+Proof
+  strip_tac >> irule mm_local_memzero_groups_absent_unchanged >>
+  rpt strip_tac >> drule_all mm_local_memzero_group_roles >> strip_tac >>
+  `i = q` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >> gvs[]
 QED
 
 Theorem mm_local_prefix_phase_producer_unchanged[local]:
@@ -18245,6 +18261,49 @@ Proof
     (gvs[] >> irule mm_local_zero_retained_selected_dispatch >>
      simp[EL_MEM] >> metis_tac[]) >>
   drule_all mm_local_zero_representative_actual_transition >> simp[])
+QED
+
+Theorem mm_local_zero_actual_transition[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  bb = EL index fn0.fn_blocks /\ dfg = dfg_build_function fn0 /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  n < LENGTH is /\ ~is_terminator (EL n is).inst_opcode /\
+  (!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded) /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n /\
+  (!dst v len. is_calldatasize_copy dfg (EL n is) /\
+    (EL n is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H n) = SOME (n2w (LENGTH (H n).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H n).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!j d bs. mm_local_zero_capture dfg is (SUC n) j = SOME (d,bs) ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u) /\
+  eom < dimword (:256) /\
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  LENGTH t.vs_call_ctx.cc_calldata < dimword (:256) /\
+  (!v. v NOTIN excluded ==> MEM v es.irs_used_vars) /\
+  apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+    (rep_map_of_groups is gs) es (EL n is) = (chunk,es') ==>
+  ?t'. mm_local_exec_prefix fuel ctx chunk t t' /\
+    mm_local_zero_cut dfg is gs H (SUC n) excluded (pc + LENGTH chunk) t'
+Proof
+  strip_tac >>
+  Cases_on `is_zero_store (EL n is) \/ is_calldatasize_copy dfg (EL n is)`
+  >- (drule_all mm_local_zero_selected_transition >> simp[]) >>
+  `apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+    (rep_map_of_groups is gs) es (EL n is) = ([EL n is],es)` by
+    (qpat_x_assum `apply_memzero_inst_supply _ _ _ _ = _` kall_tac >>
+     gvs[] >> irule mm_local_memzero_nonselected_unchanged >> simp[EL_MEM]) >>
+  `chunk = [EL n is]` by metis_tac[pairTheory.PAIR_EQ] >>
+  `~is_zero_store (EL n is) /\ ~is_calldatasize_copy dfg (EL n is)` by metis_tac[] >>
+  simp[] >>
+  Cases_on `is_volatile_memory (EL n is)`
+  >- (drule_all mm_local_zero_barrier_transition >> simp[arithmeticTheory.ADD1]) >>
+  drule_all mm_local_zero_nonvolatile_transition >> simp[arithmeticTheory.ADD1]
 QED
 
 Theorem mm_local_zero_noninvoke_stop[local]:
