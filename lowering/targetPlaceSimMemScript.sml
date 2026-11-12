@@ -33,7 +33,7 @@ Definition target_sim_mem_def:
           target_post H ctx func cenv cx es sa sb s0 ee pv vt op t /\
           (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
              slots_in_range (get_storage cx ee tr) (w2n slot) tv /\
-             storage_read_live cx tr (get_storage cx ee tr) slot tv) /\
+             storage_read_live H tr (get_storage cx ee tr) slot tv) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
