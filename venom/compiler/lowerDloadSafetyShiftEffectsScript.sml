@@ -1,4 +1,5 @@
-(* Shifts retain masked data but consume an exact scalar cnt. *)
+(* Shifts and selector MUL retain masked data: a shift consumes an exact scalar
+   cnt, a MUL an untainted 0w/1w selector. *)
 Theory lowerDloadSafetyShiftEffects
 Ancestors
   lowerDloadSafetyUpdates lowerDloadSafetyValues lowerDloadSafetyRelation
@@ -19,7 +20,7 @@ QED
 Theorem ld_shift_operand[local]:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   tn.t_var = f.lf_tv /\ fn_ptr_ok P f.lf_fn /\ fn_shape_ok f.lf_fn /\
-  MEM inst (fn_insts f.lf_fn) /\ MEM inst.inst_opcode [SHL; SHR; SAR] /\
+  MEM inst (fn_insts f.lf_fn) /\ MEM inst.inst_opcode [MUL; SHL; SHR; SAR] /\
   MEM op inst.inst_operands /\ eval_operand op f.lf_tgt = SOME y ==>
   ?x. eval_operand op f.lf_src = SOME x /\
       word_agree_except (op_taint tn op) x y
@@ -46,7 +47,7 @@ Theorem ld_shift_vars[local]:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   tn.t_var = f.lf_tv /\ fn_ptr_ok P f.lf_fn /\ fn_shape_ok f.lf_fn /\
   MEM inst (fn_insts f.lf_fn) /\ taint_ok f.lf_fn tn inst f.lf_src /\
-  MEM inst.inst_opcode [SHL; SHR; SAR] /\
+  MEM inst.inst_opcode [MUL; SHL; SHR; SAR] /\
   step_inst_base inst f.lf_tgt = OK ts ==>
   ?ss. step_inst_base inst f.lf_src = OK ss /\
     ld_vars P A (f with <| lf_src := ss; lf_tgt := ts;
@@ -54,6 +55,46 @@ Theorem ld_shift_vars[local]:
       lf_tv := set_var_taint f.lf_tv inst.inst_outputs (out_taint tn inst f.lf_src) |> )
 Proof
   strip_tac >>
+  Cases_on `inst.inst_opcode = MUL`
+  >- (qpat_x_assum `step_inst_base inst f.lf_tgt = OK ts` mp_tac >>
+      pure_once_rewrite_tac[step_inst_base_def] >>
+      asm_rewrite_tac[opcode_case_def] >>
+      simp[exec_pure2_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+      rename1 `eval_operand op1 f.lf_tgt = SOME y` >>
+      rename1 `eval_operand op2 f.lf_tgt = SOME w` >>
+      `?x. eval_operand op1 f.lf_src = SOME x /\
+           word_agree_except (op_taint tn op1) x y` by
+        (irule ld_shift_operand >> simp[] >>
+         conj_tac >- (qexists_tac `inst` >> simp[]) >>
+         qexistsl_tac [`A`, `P`] >> simp[]) >>
+      `?z. eval_operand op2 f.lf_src = SOME z /\
+           word_agree_except (op_taint tn op2) z w` by
+        (irule ld_shift_operand >> simp[] >>
+         conj_tac >- (qexists_tac `inst` >> simp[]) >>
+         qexistsl_tac [`A`, `P`] >> simp[]) >>
+      simp[] >> pure_rewrite_tac[update_var_def] >> irule ld_vars_write >>
+      simp[set_var_taint_def, FLOOKUP_UPDATE] >>
+      reverse conj_tac >- (irule ld_inst_output_ir >> metis_tac[MEM]) >>
+      strip_tac >>
+      Cases_on `op_taint tn op1 = {}`
+      >- (Cases_on `op_taint tn op2 = {}`
+          >- gvs[ld_word_agree_empty, out_taint_def] >>
+          `x = 0w \/ x = 1w` by
+            (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+             simp[taint_ok_def] >> strip_tac >>
+             qpat_x_assum `!op. _` (qspec_then `op2` mp_tac) >>
+             gvs[] >> strip_tac >> gvs[]) >>
+          gvs[ld_word_agree_empty] >>
+          gvs[out_taint_def, word_agree_except_def,
+              wordsTheory.WORD_MULT_CLAUSES]) >>
+      `op_taint tn op2 = {} /\ (z = 0w \/ z = 1w)` by
+        (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+         simp[taint_ok_def] >> strip_tac >>
+         qpat_x_assum `!op. _` (qspec_then `op1` mp_tac) >>
+         gvs[] >> strip_tac >> gvs[]) >>
+      gvs[ld_word_agree_empty] >>
+      gvs[out_taint_def, word_agree_except_def,
+          wordsTheory.WORD_MULT_CLAUSES]) >>
   qpat_x_assum `step_inst_base inst f.lf_tgt = OK ts` mp_tac >>
   pure_once_rewrite_tac[step_inst_base_def] >>
   `inst.inst_opcode = SHL \/ inst.inst_opcode = SHR \/ inst.inst_opcode = SAR`
@@ -87,7 +128,7 @@ Proof
 QED
 
 Theorem ld_shift_success[local]:
-  MEM inst.inst_opcode [SHL; SHR; SAR] /\
+  MEM inst.inst_opcode [MUL; SHL; SHR; SAR] /\
   step_inst_base inst s = OK s' ==>
   ?out x. inst.inst_outputs = [out] /\ s' = update_var out x s
 Proof
@@ -100,7 +141,7 @@ Proof
 QED
 
 Theorem ld_shift_taint[local]:
-  MEM inst.inst_opcode [SHL; SHR; SAR] ==>
+  MEM inst.inst_opcode [MUL; SHL; SHR; SAR] ==>
   step_taint inst s (update_var v x s) tn =
     tn with t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst s)
 Proof
@@ -125,11 +166,11 @@ Proof
        FLOOKUP_DEF, taint_component_equality] >> SET_TAC[]
 QED
 
-Theorem ld_shift_effect:
+Theorem ld_masked_scalar_effect:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   tn.t_var = f.lf_tv /\ fn_ptr_ok P f.lf_fn /\ fn_shape_ok f.lf_fn /\
   MEM inst (fn_insts f.lf_fn) /\ taint_ok f.lf_fn tn inst f.lf_src /\
-  MEM inst.inst_opcode [SHL; SHR; SAR] /\
+  MEM inst.inst_opcode [MUL; SHL; SHR; SAR] /\
   step_inst_base inst f.lf_tgt = OK ts /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\
   ld_nonghost tn f.lf_src f.lf_tgt ==>

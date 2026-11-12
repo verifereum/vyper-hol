@@ -128,6 +128,7 @@ Resume lower_typed_args_sim_ptr[head_bind]:
   conj_tac
   >- (rpt strip_tac >> gvs[] >>
       drule_all typed_args_ready_head >> strip_tac >>
+      fs[loweringPostsTheory.post_value_type_word] >>
       `?tv. evaluate_type (get_tenv cx) (expr_type h) = SOME tv` by
         metis_tac[optionTheory.IS_SOME_EXISTS] >>
       `local_ptrs_reserved cenv s1` by
