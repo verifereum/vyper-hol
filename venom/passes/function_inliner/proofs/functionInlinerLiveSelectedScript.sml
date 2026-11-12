@@ -107,7 +107,7 @@ Proof
        venom_state_component_equality]
 QED
 
-Theorem inline_live_selected_entry:
+Theorem inline_live_selected_entry_trace:
   inliner_input_ok C /\ inline_annotated_origin C n root cert /\
   inline_live_stack C cert root ((p,pa,proute,psnap)::entries) frame /\
   inline_original_child C cfuel pa.ia_id occurrence orig psnap.ils_state r ca cr /\
@@ -138,6 +138,11 @@ Theorem inline_live_selected_entry:
     lookup_block ml root.fn_blocks = SOME bb /\
     phi_prefix_length bb.bb_instructions = 0 /\ eval_phis v bb.bb_instructions = OK v /\
     ts 0 = v /\
+    (!i. i < LENGTH params ==> ?inst t.
+      get_instruction bb (ts i).vs_inst_idx = SOME inst /\
+      ~is_terminator inst.inst_opcode /\
+      step_inst tfuel Tctx inst (ts i) = OK t /\
+      ts (SUC i) = t with vs_inst_idx := SUC (ts i).vs_inst_idx) /\
     exec_block tfuel Tctx bb v = exec_block tfuel Tctx bb (ts (LENGTH params)) /\
     inline_parameter_boundary_path (InlineEnter e::zipper)
       e.ise_callee entry.bb_label (LENGTH params) root ml (LENGTH params) /\
@@ -195,6 +200,58 @@ Proof
         simp[jump_to_def] >>
       metis_tac[]) >>
   metis_tac[optionTheory.SOME_11]
+QED
+
+(* Compatibility projection; the execution proof lives in the trace export. *)
+Theorem inline_live_selected_entry:
+  inliner_input_ok C /\ inline_annotated_origin C n root cert /\
+  inline_live_stack C cert root ((p,pa,proute,psnap)::entries) frame /\
+  inline_original_child C cfuel pa.ia_id occurrence orig psnap.ils_state r ca cr /\
+  inline_call_incidence cert root p pa.ia_function l j orig
+    (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert q route.ir_rename ca.ia_function /\
+  ca.ia_function.fn_blocks = entry::rest /\
+  entry.bb_instructions = params ++ tail /\ param_insts_from 0 params /\
+  eval_phis ca.ia_entry entry.bb_instructions = OK post /\
+  inline_cell_frame (SelectedJump e) c mid /\
+  (clone_function e.ise_prefix e.ise_callee).fn_blocks = eb::blocks /\
+  inline_cell_zipper mid frames d /\ d.ic_function = root /\
+  MAP (\(tag,next). inline_cell_choice tag) frames = zipper /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  frame.ipf_state.vs_current_bb = d.ic_block /\
+  frame.ipf_state.vs_inst_idx = d.ic_index /\ ~frame.ipf_state.vs_halted /\
+  ss 0 = ca.ia_entry /\
+  (!k. k < LENGTH params ==> ?s'.
+    step_inst fuel C (EL k params) (ss k) = OK s' /\
+    ss (SUC k) = s' with vs_inst_idx := SUC (ss k).vs_inst_idx) ==>
+  ?ml bb tb dst v snap ts.
+    lookup_block d.ic_block root.fn_blocks = SOME tb /\
+    get_instruction tb d.ic_index = SOME dst /\
+    step_inst tfuel Tctx dst frame.ipf_state = OK v /\
+    exec_block tfuel Tctx tb frame.ipf_state = OK v /\
+    v = jump_to ml frame.ipf_state /\
+    v.vs_current_bb = ml /\ v.vs_inst_idx = 0 /\
+    lookup_block ml root.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0 /\ eval_phis v bb.bb_instructions = OK v /\
+    ts 0 = v /\
+    exec_block tfuel Tctx bb v = exec_block tfuel Tctx bb (ts (LENGTH params)) /\
+    inline_parameter_boundary_path (InlineEnter e::zipper)
+      e.ise_callee entry.bb_label (LENGTH params) root ml (LENGTH params) /\
+    (ss (LENGTH params)).vs_inst_idx = LENGTH params /\
+    (ts (LENGTH params)).vs_current_bb = ml /\
+    (ts (LENGTH params)).vs_inst_idx = LENGTH params /\
+    snap.ils_saved = psnap.ils_state /\
+    snap.ils_protected = (psnap.ils_defined DIFF psnap.ils_opaque) DIFF set orig.inst_outputs /\
+    snap.ils_parent_rename = proute.ir_rename /\
+    inline_live_stack C cert root
+      ((q,ca,route,snap with <|ils_state := ss (LENGTH params);
+        ils_defined := set (FLAT (MAP (\i. i.inst_outputs) params))|>)::
+       (p,pa,proute,psnap)::entries)
+      (frame with ipf_state := ts (LENGTH params))
+Proof
+  strip_tac >> drule_all inline_live_selected_entry_trace >>
+  disch_then (qspecl_then [`tfuel`,`Tctx`] strip_assume_tac) >>
+  qexistsl [`ml`,`bb`,`tb`,`dst`,`v`,`snap`,`ts`] >> asm_rewrite_tac[]
 QED
 
 (* The adapter coordinates remain explicit: the evaluator join must supply
