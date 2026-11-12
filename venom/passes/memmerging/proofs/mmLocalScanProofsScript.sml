@@ -16472,6 +16472,46 @@ Proof
     venomEffectsTheory.write_effects_def, venomEffectsTheory.all_effects_def]
 QED
 
+Theorem mm_local_cut_terminator_result[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  is_terminator i.inst_opcode ==>
+  lift_result
+    (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (execution_equiv excluded) revert_equiv
+    (dft_exec_suffix fuel ctx [i] (H n)) (dft_exec_suffix fuel ctx [i] t)
+Proof
+  strip_tac >>
+  `state_equiv excluded ((H n) with vs_inst_idx := pc) t` by
+    metis_tac[mm_local_cut_empty_state_equiv] >>
+  `i.inst_opcode <> INVOKE` by
+    (Cases_on `i.inst_opcode` >> gvs[venomInstTheory.is_terminator_def]) >>
+  `result_equiv excluded
+    (step_inst fuel ctx i ((H n) with vs_inst_idx := pc))
+    (step_inst fuel ctx i t)` by
+    (gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+     irule execEquivProofsTheory.step_inst_result_equiv >> simp[]) >>
+  `instIdxIndep$exec_result_map (\u. u with vs_inst_idx := 0)
+      (step_inst_base i ((H n) with vs_inst_idx := pc)) =
+   instIdxIndep$exec_result_map (\u. u with vs_inst_idx := 0)
+      (step_inst_base i (H n))` by
+    simp[instIdxIndepTheory.terminator_step_inst_base_idx_norm0] >>
+  gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+  Cases_on `step_inst_base i (H n)` >>
+  Cases_on `step_inst_base i ((H n) with vs_inst_idx := pc)` >>
+  gvs[instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `step_inst_base i t` >>
+  gvs[result_equiv_def, lift_result_def] >>
+  gvs[instIdxIndepTheory.exec_result_map_def, result_equiv_def, lift_result_def,
+    dft_exec_suffix_def, venomExecSemanticsTheory.step_inst_non_invoke,
+    venomStateTheory.venom_state_component_equality, state_equiv_def,
+    execution_equiv_def, revert_equiv_def, stateFrameTheory.execution_frame_def,
+    venomStateTheory.lookup_var_def] >>
+  IF_CASES_TAC >> gvs[lift_result_def, execution_equiv_def,
+    stateFrameTheory.execution_frame_def, venomStateTheory.lookup_var_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
