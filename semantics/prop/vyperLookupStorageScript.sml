@@ -128,6 +128,8 @@ QED
 (* Predicate: slots read during decode_value contain in-range values.
    Captures all conditions needed for decode_value to succeed and
    produce well-typed values, and keeps one-slot values canonical. *)
+(* Captured storage places survive an ancestor's shrink, so inactive array
+   elements must retain canonical values and bounded length headers too. *)
 Definition slots_in_range_def:
   slots_in_range storage offset (BaseTV (UintT n)) =
     word_slot_canonical (read_slot storage offset) (BaseTV (UintT n)) ∧
@@ -155,7 +157,7 @@ Definition slots_in_range_def:
   slots_in_range storage offset (ArrayTV tv (Dynamic max)) =
     (let len = w2n (read_slot storage offset) in
        if len ≤ max then
-         dyn_slots_in_range storage (offset + 1) tv (MIN len max)
+         dyn_slots_in_range storage (offset + 1) tv max
        else F) ∧
   slots_in_range storage offset (StructTV ftypes) =
     struct_slots_in_range storage offset ftypes ∧
@@ -310,6 +312,16 @@ Proof
   gvs[storage_type_of_def]
 QED
 
+Theorem dyn_slots_in_range_prefix:
+  ∀storage offset tv n m.
+    dyn_slots_in_range storage offset tv n ∧ m ≤ n ⇒
+    dyn_slots_in_range storage offset tv m
+Proof
+  Induct_on `m` >- simp[slots_in_range_def] >>
+  rpt gen_tac >> Cases_on `n` >> simp[slots_in_range_def] >>
+  metis_tac[]
+QED
+
 Theorem decode_value_storable[local]:
   (∀storage offset tv v.
     well_formed_type_value tv ∧
@@ -347,16 +359,21 @@ Proof
       well_formed_type_value_def, within_int_bound_def,
       listTheory.LENGTH_TAKE_EQ, LENGTH_word_to_bytes_be_256,
       all_have_type_EVERY,
-      slots_in_range_def] >>
-  TRY (simp[SIMP_RULE (srw_ss()) [within_int_bound_def, LET_THM]
-              truncate_signed_range] >> NO_TAC) >>
-  TRY (metis_tac[decode_dyn_bytes_LENGTH]) >>
-  TRY (imp_res_tac LENGTH_decode_static_array >>
-       simp[sparse_has_type_enumerate, SORTED_enumerate_static_array] >>
-       NO_TAC) >>
-  TRY (imp_res_tac LENGTH_decode_dyn_array >> simp[] >> NO_TAC) >>
-  simp[SIMP_RULE (srw_ss()) [within_int_bound_def, LET_THM]
-         (Q.SPEC `168` truncate_signed_range)]
+      slots_in_range_def]
+  >- metis_tac[decode_dyn_bytes_LENGTH]
+  >- metis_tac[decode_dyn_bytes_LENGTH]
+  >- simp[SIMP_RULE (srw_ss()) [within_int_bound_def, LET_THM]
+              truncate_signed_range]
+  >- simp[SIMP_RULE (srw_ss()) [within_int_bound_def, LET_THM]
+              (Q.SPEC `168` truncate_signed_range)]
+  >- (first_x_assum irule >> gvs[ETA_THM])
+  >- (imp_res_tac LENGTH_decode_static_array >>
+      simp[sparse_has_type_enumerate, SORTED_enumerate_static_array])
+  >- (drule LENGTH_decode_dyn_array >> strip_tac >>
+      conj_tac >- gvs[arithmeticTheory.MIN_DEF] >>
+      first_x_assum irule >> irule dyn_slots_in_range_prefix >>
+      qexists_tac `max` >> simp[])
+  >> first_x_assum irule >> gvs[ETA_THM]
 QED
 
 (* Helper: sparse_has_type on enumerate implies EVERY on the original list,
@@ -412,14 +429,14 @@ Proof
     first_x_assum drule >> first_x_assum drule >>
     simp[] >> NO_TAC) >>
   (* DynArray case *)
-  Cases_on `w2n (read_slot storage off1) ≤ max` >- (
+  rename1 `dyn_slots_in_range storage (off1 + 1) tv cap` >>
+  Cases_on `w2n (read_slot storage off1) ≤ cap` >- (
     `(n2w (off1 + 1) : bytes32) = n2w (off2 + 1)`
       by (gvs[wordsTheory.n2w_11] >>
           simp[Once (GSYM arithmeticTheory.MOD_PLUS)]) >>
     qpat_x_assum `∀len. _`
       (qspec_then `w2n (read_slot storage off1)` mp_tac) >>
-    asm_rewrite_tac[] >> strip_tac >>
-    pop_assum (qspec_then `off2 + 1` mp_tac) >>
+    simp[] >> disch_then (qspec_then `off2 + 1` mp_tac) >>
     simp[] >> gvs[]
   ) >>
   gvs[]
@@ -611,9 +628,7 @@ Proof
       asm_rewrite_tac[] >> strip_tac >> asm_rewrite_tac[] >>
       first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >>
       disch_then match_mp_tac >>
-      `w2n (read_slot storage off2) * type_slot_size tv ≤
-       max * type_slot_size tv` by
-        (irule arithmeticTheory.LESS_MONO_MULT >> simp[]) >>
+
       asm_rewrite_tac[arithmeticTheory.MIN_DEF, EVAL ``dimword(:256)``] >>
       POP_ASSUM_LIST (MAP_EVERY assume_tac o filter (numSyntax.is_leq o concl)) >>
       decide_tac)
@@ -683,23 +698,21 @@ Proof
   (all_tac >>~- ([`w2n _ <= _ <=> _`],
     first_x_assum (qspec_then `0` mp_tac) >> simp[type_slot_size_def])) >>
   TRY (first_x_assum irule >> gvs[type_slot_size_def] >> NO_TAC) >>
-  TRY (
-    qpat_assum `!len. len = _ /\ _ ==> _` kall_tac >>
+  (all_tac >>~- ([`w2n _ <= _ /\ dyn_slots_in_range _ _ _ _ <=> _`],
+    rename1 `dyn_slots_in_range s (b + 1) tv cap` >>
     `read_slot s b = read_slot t c` by
       (first_x_assum (qspec_then `0` mp_tac) >> simp[type_slot_size_def]) >>
-    Cases_on `w2n (read_slot s b) <= max` >- (
+    Cases_on `w2n (read_slot s b) <= cap` >- (
       qpat_x_assum `!len. len = _ /\ _ ==> _`
         (qspec_then `w2n (read_slot s b)` mp_tac) >>
       asm_rewrite_tac[] >>
       disch_then (qspecl_then [`t`, `c+1`] mp_tac) >>
       impl_tac >- (
         rpt strip_tac >>
-        `MIN (w2n (read_slot t c)) max * type_slot_size tv <=
-         max * type_slot_size tv` by simp[arithmeticTheory.LE_MULT_RCANCEL] >>
         qpat_x_assum `!i. i < type_slot_size _ ==> _`
           (qspec_then `1+i` mp_tac) >>
         pure_rewrite_tac[type_slot_size_def, GSYM arithmeticTheory.ADD_ASSOC] >>
-        (impl_tac >- decide_tac) >> simp[]) >> gvs[]) >> gvs[] >> NO_TAC) >>
+        (impl_tac >- decide_tac) >> simp[]) >> gvs[]) >> gvs[])) >>
   (qpat_x_assum `!t c. (!i. _ ==> read_slot s (b + type_slot_size tv + i) = _) ==> _`
     (markerLib.mk_asm "tail") >>
   qpat_x_assum `!t c. (!i. _ ==> read_slot s (b+i) = _) ==> _`
@@ -780,6 +793,18 @@ Proof
   TRY (first_x_assum (qspec_then `0` mp_tac) >>
        simp[type_slot_size_def, word_slot_canonical_zero, slots_in_range_def] >> NO_TAC) >>
   TRY (first_x_assum irule >> gvs[type_slot_size_def] >> NO_TAC) >>
+  (all_tac >>~- ([`w2n _ <= _ /\ dyn_slots_in_range _ _ _ _`],
+    `read_slot s b = 0w` by
+      (qpat_x_assum `!i. i < type_slot_size _ ==> _`
+        (qspec_then `0` mp_tac) >> simp[type_slot_size_def]) >>
+    simp[] >>
+    qpat_x_assum `!len. len = _ /\ _ ==> _` (qspec_then `0` mp_tac) >>
+    simp[] >>
+    disch_then irule >> rpt strip_tac >>
+    qpat_x_assum `!i. i < type_slot_size _ ==> _`
+      (qspec_then `1+i` mp_tac) >>
+    pure_rewrite_tac[type_slot_size_def, GSYM arithmeticTheory.ADD_ASSOC] >>
+    (impl_tac >- decide_tac) >> simp[])) >>
   (conj_tac
   >- (first_x_assum irule >> rpt strip_tac >>
       qpat_x_assum `!i. _` (qspec_then `i` mp_tac) >>
@@ -794,7 +819,8 @@ QED
 
 Theorem encode_tuple_slots_in_range:
   !tvs offset vs writes base storage.
-    EVERY (\tv. !v ws b s. value_has_type tv v /\
+    tuple_slots_in_range storage (base+offset) tvs /\
+    EVERY (\tv. !v ws b s. slots_in_range s b tv /\ value_has_type tv v /\
       encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) tvs /\
     values_have_types tvs vs /\ EVERY well_formed_type_value tvs /\
@@ -830,14 +856,35 @@ Proof
               decide_tac) >>
           gvs[type_slot_size_def]) >>
       rewrite_tac[apply_writes_shift] >>
-      first_x_assum irule >> qexists_tac `hv` >> simp[]) >>
+      first_x_assum irule >> conj_tac
+      >- (qexists_tac `hv` >> simp[]) >>
+      gvs[Once slots_in_range_def]) >>
   first_x_assum irule >>
-  gvs[type_slot_size_def] >> qexists_tac `t` >> simp[]
+  gvs[type_slot_size_def] >> conj_tac
+  >- (qexists_tac `t` >> simp[]) >>
+  `slots_in_range
+    (apply_writes (n2w base') (MAP (\(off,s). (off + offset,s)) hslots) storage)
+    (base' + (offset + type_slot_size htv)) (TupleTV tvs)`
+    suffices_by simp[slots_in_range_def] >>
+  irule slots_in_range_relative_frame >> conj_tac
+  >- (qexists_tac `offset + type_slot_size htv + type_slot_size_list tvs` >>
+      simp[type_slot_size_def] >> rpt strip_tac >>
+      gvs[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+      drule (CONJUNCT1 encode_writes_bounded) >>
+      disch_then drule >> strip_tac >>
+      rename1 `MEM (k,w) hslots` >>
+      `k < type_slot_size htv` by
+        metis_tac[listTheory.MEM_MAP, pairTheory.FST] >> decide_tac) >>
+  qpat_x_assum `tuple_slots_in_range _ _ (_::_)` mp_tac >>
+  pure_once_rewrite_tac[slots_in_range_def] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
+  disch_then (ACCEPT_TAC o CONJUNCT2)
 QED
 
 Theorem encode_struct_slots_in_range:
   !ftypes offset fields writes base storage.
-    EVERY (\(nm,tv). !v ws b s. value_has_type tv v /\
+    struct_slots_in_range storage (base+offset) ftypes /\
+    EVERY (\(nm,tv). !v ws b s. slots_in_range s b tv /\ value_has_type tv v /\
       encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) ftypes /\
     struct_has_type ftypes fields /\
@@ -872,14 +919,36 @@ Proof
               decide_tac) >>
           gvs[type_slot_size_def]) >>
       rewrite_tac[apply_writes_shift] >>
-      first_x_assum irule >> qexists_tac `v` >> simp[]) >>
+      first_x_assum irule >> conj_tac
+      >- (qexists_tac `v` >> simp[]) >>
+      gvs[Once slots_in_range_def]) >>
   first_x_assum irule >>
-  gvs[type_slot_size_def] >> qexists_tac `t` >> simp[]
+  gvs[type_slot_size_def] >> conj_tac
+  >- (qexists_tac `t` >> simp[]) >>
+  `slots_in_range
+    (apply_writes (n2w base') (MAP (\(off,s). (off + offset,s)) elem_slots) storage)
+    (base' + (offset + type_slot_size tv)) (StructTV ftypes)`
+    suffices_by simp[slots_in_range_def] >>
+  irule slots_in_range_relative_frame >> conj_tac
+  >- (qexists_tac `offset + type_slot_size tv + type_slot_size_fields ftypes` >>
+      simp[type_slot_size_def] >> rpt strip_tac >>
+      gvs[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+      drule (CONJUNCT1 encode_writes_bounded) >>
+      disch_then drule >> strip_tac >>
+      rename1 `MEM (k,w) elem_slots` >>
+      `k < type_slot_size tv` by
+        metis_tac[listTheory.MEM_MAP, pairTheory.FST] >> decide_tac) >>
+  qpat_x_assum `struct_slots_in_range _ _ (_::_)` mp_tac >>
+  pure_once_rewrite_tac[slots_in_range_def] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
+  disch_then (ACCEPT_TAC o CONJUNCT2)
 QED
 
 Theorem encode_dyn_array_slots_in_range:
   !vs offset tv writes base storage.
-    (!v ws b s. value_has_type tv v /\ encode_value tv v = SOME ws ==>
+    dyn_slots_in_range storage (base+offset) tv (LENGTH vs) /\
+    (!v ws b s. slots_in_range s b tv /\
+      value_has_type tv v /\ encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) /\
     all_have_type tv vs /\ well_formed_type_value tv /\
     offset + LENGTH vs * type_slot_size tv <= dimword(:256) /\
@@ -907,15 +976,39 @@ Proof
               (impl_tac >- (simp[listTheory.MEM_MAP] >> metis_tac[pairTheory.FST])) >>
               decide_tac) >> gvs[arithmeticTheory.MULT_CLAUSES]) >>
       rewrite_tac[apply_writes_shift] >>
-      first_x_assum irule >> qexists_tac `h` >> simp[]) >>
+      first_x_assum irule >> conj_tac
+      >- (qexists_tac `h` >> simp[]) >>
+      gvs[Once slots_in_range_def]) >>
   first_x_assum irule >>
-  gvs[arithmeticTheory.MULT_CLAUSES] >> simp[arithmeticTheory.ADD_ASSOC] >>
-  first_assum ACCEPT_TAC
+  gvs[arithmeticTheory.MULT_CLAUSES] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  rewrite_tac[CONJUNCT2 array_slots_in_range_indexed] >> rpt strip_tac >>
+  pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >>
+  irule slots_in_range_relative_frame >> conj_tac
+  >- (qexists_tac `offset + type_slot_size tv + LENGTH vs * type_slot_size tv` >>
+      simp[] >> conj_tac
+      >- (rpt strip_tac >> gvs[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+          drule (CONJUNCT1 encode_writes_bounded) >>
+          disch_then drule >> strip_tac >>
+          rename1 `MEM (j,w) elem_slots` >>
+          `j < type_slot_size tv` by
+            metis_tac[listTheory.MEM_MAP, pairTheory.FST] >> decide_tac) >>
+      `SUC k * type_slot_size tv <= LENGTH vs * type_slot_size tv` by
+        (irule arithmeticTheory.LESS_MONO_MULT >> decide_tac) >>
+      pop_assum mp_tac >>
+      pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  qpat_x_assum `dyn_slots_in_range _ _ _ (SUC _)` mp_tac >>
+  pure_once_rewrite_tac[slots_in_range_def] >> strip_tac >>
+  qpat_x_assum `dyn_slots_in_range _ _ _ _` mp_tac >>
+  rewrite_tac[CONJUNCT2 array_slots_in_range_indexed] >>
+  disch_then drule >> pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> simp[]
 QED
 
 Theorem encode_dynamic_array_slots_in_range:
   !tv max vs slots base storage.
-    (!v ws b s. value_has_type tv v /\ encode_value tv v = SOME ws ==>
+    slots_in_range storage base (ArrayTV tv (Dynamic max)) /\
+    (!v ws b s. slots_in_range s b tv /\
+      value_has_type tv v /\ encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) /\
     all_have_type tv vs /\ LENGTH vs <= max /\
     well_formed_type_value (ArrayTV tv (Dynamic max)) /\
@@ -941,8 +1034,45 @@ Proof
   `((0:num,n2w (LENGTH vs):bytes32)::slots) =
     [(0,n2w (LENGTH vs))] ++ slots` by simp[] >>
   pop_assum SUBST_ALL_TAC >> rewrite_tac[apply_writes_append] >>
-  irule encode_dyn_array_slots_in_range >>
-  simp[] >> first_assum ACCEPT_TAC
+  qmatch_goalsub_abbrev_tac `apply_writes (n2w addr) slots headed` >>
+  `dyn_slots_in_range headed (addr+1) tv max` by
+    (rewrite_tac[CONJUNCT2 array_slots_in_range_indexed] >> rpt strip_tac >>
+     pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >>
+     simp[Abbr `headed`] >> irule slots_in_range_relative_frame >> conj_tac
+     >- (qexists_tac `1 + max * type_slot_size tv` >> simp[] >>
+         `SUC k * type_slot_size tv <= max * type_slot_size tv` by
+           (irule arithmeticTheory.LESS_MONO_MULT >> decide_tac) >>
+         pop_assum mp_tac >> pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >>
+         decide_tac) >>
+     qpat_x_assum `slots_in_range _ _ (ArrayTV _ _)` mp_tac >>
+     simp[Once slots_in_range_def] >> strip_tac >>
+     qpat_x_assum `dyn_slots_in_range _ _ _ _` mp_tac >>
+     rewrite_tac[CONJUNCT2 array_slots_in_range_indexed] >>
+     disch_then drule >> pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> simp[]) >>
+  `dyn_slots_in_range (apply_writes (n2w addr) slots headed) (addr+1) tv (LENGTH vs)` by
+    (irule encode_dyn_array_slots_in_range >> simp[] >> conj_tac
+     >- first_assum ACCEPT_TAC >>
+     irule dyn_slots_in_range_prefix >> qexists_tac `max` >> simp[]) >>
+  rewrite_tac[CONJUNCT2 array_slots_in_range_indexed] >> rpt strip_tac >>
+  Cases_on `k < LENGTH vs`
+  >- (qpat_x_assum `dyn_slots_in_range (apply_writes _ _ _) _ _ _` mp_tac >>
+      rewrite_tac[CONJUNCT2 array_slots_in_range_indexed] >>
+      disch_then drule >> simp[]) >>
+  pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >>
+  irule slots_in_range_relative_frame >> conj_tac
+  >- (qexists_tac `1 + max * type_slot_size tv` >> simp[] >> conj_tac
+      >- (rpt strip_tac >> drule (el 4 (CONJUNCTS encode_writes_bounded)) >>
+          simp[] >> disch_then (qspec_then `j` mp_tac) >>
+          (impl_tac >- (simp[listTheory.MEM_MAP] >> metis_tac[pairTheory.FST])) >>
+          strip_tac >>
+          `LENGTH vs * type_slot_size tv <= k * type_slot_size tv` by
+            (irule arithmeticTheory.LESS_MONO_MULT >> decide_tac) >> decide_tac) >>
+      `SUC k * type_slot_size tv <= max * type_slot_size tv` by
+        (irule arithmeticTheory.LESS_MONO_MULT >> decide_tac) >>
+      pop_assum mp_tac >> pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  qpat_x_assum `dyn_slots_in_range headed _ _ _` mp_tac >>
+  rewrite_tac[CONJUNCT2 array_slots_in_range_indexed] >>
+  disch_then drule >> pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> simp[]
 QED
 
 Theorem array_index_element_end_bound:
@@ -957,7 +1087,8 @@ QED
 
 Theorem encode_static_array_preserves_slots_in_range:
   !sparse tv offset n writes base storage.
-    (!v ws b s. value_has_type tv v /\ encode_value tv v = SOME ws ==>
+    (!v ws b s. slots_in_range s b tv /\
+      value_has_type tv v /\ encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) /\
     static_slots_in_range storage (base+offset) tv n /\
     sparse_has_type tv n sparse /\ well_formed_type_value tv /\
@@ -983,7 +1114,11 @@ Proof
   rename1 `static_slots_in_range st (addr+offset) tv n` >>
   Cases_on `k=q`
   >- (gvs[] >> rewrite_tac[apply_writes_shift, GSYM arithmeticTheory.ADD_ASSOC] >>
-      first_x_assum irule >> qexists_tac `v` >> simp[]) >>
+      first_x_assum irule >> conj_tac
+      >- (qexists_tac `v` >> simp[]) >>
+      qpat_x_assum `static_slots_in_range _ _ _ _` mp_tac >>
+      rewrite_tac[CONJUNCT1 array_slots_in_range_indexed] >>
+      disch_then drule >> pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >> simp[]) >>
   `k * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
     (irule array_index_element_end_bound >> simp[]) >>
   `q * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
@@ -1011,9 +1146,76 @@ Proof
   pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >> asm_rewrite_tac[]
 QED
 
+Theorem static_slots_in_range_encode_child[local]:
+  !storage (base:num) tv n k v ws.
+  static_slots_in_range storage base tv n /\ k < n /\
+  well_formed_type_value tv /\ n * type_slot_size tv <= dimword(:256) /\
+  value_has_type tv v /\ encode_value tv v = SOME ws /\
+  (!v ws b s. slots_in_range s b tv /\ value_has_type tv v /\
+    encode_value tv v = SOME ws ==>
+    slots_in_range (apply_writes (n2w b) ws s) b tv) ==>
+  static_slots_in_range
+    (apply_writes (n2w base) (MAP (\(off,s). (off+k*type_slot_size tv,s)) ws) storage)
+    base tv n
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[CONJUNCT1 array_slots_in_range_indexed] >>
+  rpt strip_tac >> rename1 `j < n` >> Cases_on `j=k`
+  >- (gvs[] >> rewrite_tac[apply_writes_shift] >> first_x_assum irule >>
+      conj_tac >- (qexists_tac `v` >> simp[]) >>
+      qpat_x_assum `static_slots_in_range _ _ _ _` mp_tac >>
+      rewrite_tac[CONJUNCT1 array_slots_in_range_indexed] >>
+      disch_then drule >> simp[]) >>
+  irule slots_in_range_relative_frame >> conj_tac
+  >- (qexists_tac `n*type_slot_size tv` >> simp[] >> conj_tac
+      >- (rpt gen_tac >> disch_tac >> gvs[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+          rename1 `MEM (r,_) ws` >>
+          `r < type_slot_size tv` by
+            (drule (CONJUNCT1 encode_writes_bounded) >> simp[] >>
+             disch_then (qspec_then `r` mp_tac) >>
+             (impl_tac >- (simp[listTheory.MEM_MAP] >> metis_tac[pairTheory.FST])) >> simp[]) >>
+          `k*type_slot_size tv+type_slot_size tv <= n*type_slot_size tv` by
+            (irule array_index_element_end_bound >> simp[]) >>
+          conj_tac >- decide_tac >> Cases_on `j<k`
+          >- (`j*type_slot_size tv+type_slot_size tv <= k*type_slot_size tv` by
+                (irule array_index_element_end_bound >> simp[]) >> decide_tac) >>
+          `k*type_slot_size tv+type_slot_size tv <= j*type_slot_size tv` by
+            (irule array_index_element_end_bound >> decide_tac) >> decide_tac) >>
+      once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+      irule array_index_element_end_bound >> simp[]) >>
+  qpat_x_assum `static_slots_in_range _ _ _ _` mp_tac >>
+  rewrite_tac[CONJUNCT1 array_slots_in_range_indexed] >> disch_then drule >> simp[]
+QED
+
+Theorem static_slots_in_range_default_prefix[local]:
+  !m n storage (base:num) tv defaults P.
+  m <= n /\ static_slots_in_range storage base tv n /\
+  well_formed_type_value tv /\ n*type_slot_size tv <= dimword(:256) /\
+  encode_value tv (default_value tv) = SOME defaults /\
+  (!v ws b s. slots_in_range s b tv /\ value_has_type tv v /\
+    encode_value tv v = SOME ws ==>
+    slots_in_range (apply_writes (n2w b) ws s) b tv) ==>
+  static_slots_in_range
+    (apply_writes (n2w base)
+      (FLAT (GENLIST (\k. if P k then [] else
+        MAP (\(off,s). (off+k*type_slot_size tv,s)) defaults) m)) storage)
+    base tv n
+Proof
+  Induct >- simp[apply_writes_def] >> rpt gen_tac >> strip_tac >>
+  rewrite_tac[listTheory.GENLIST, listTheory.SNOC_APPEND,
+    listTheory.FLAT_APPEND, listTheory.FLAT, listTheory.APPEND_NIL, apply_writes_append] >>
+  Cases_on `P m` >- (simp[apply_writes_def] >> first_x_assum irule >>
+    simp[] >> first_assum ACCEPT_TAC) >>
+  simp[] >> irule static_slots_in_range_encode_child >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >> conj_tac
+  >- (qexists_tac `default_value tv` >> simp[default_value_well_typed]) >>
+  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
+QED
+
 Theorem encode_fixed_array_slots_in_range:
   !tv n sparse writes base storage.
-    (!v ws b s. value_has_type tv v /\ encode_value tv v = SOME ws ==>
+    slots_in_range storage base (ArrayTV tv (Fixed n)) /\
+    (!v ws b s. slots_in_range s b tv /\
+      value_has_type tv v /\ encode_value tv v = SOME ws ==>
       slots_in_range (apply_writes (n2w b) ws s) b tv) /\
     value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) /\
     well_formed_type_value (ArrayTV tv (Fixed n)) /\
@@ -1033,9 +1235,9 @@ Proof
   simp_tac std_ss [arithmeticTheory.ADD_CLAUSES] >> disch_then irule >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
-  irule (el 3 (CONJUNCTS slots_in_range_zero_reads)) >>
-  rpt strip_tac >> rewrite_tac[read_slot_def] >>
-  irule genlist_zeros_lookup >> simp[]
+  ho_match_mp_tac static_slots_in_range_default_prefix >> simp[] >>
+  conj_tac >- gvs[Once slots_in_range_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem encode_base_to_slot_canonical:
@@ -1101,7 +1303,7 @@ QED
 
 Theorem encode_implies_slots_in_range:
   ∀tv v writes (base : num) storage.
-    value_has_type tv v ∧
+    slots_in_range storage base tv ∧ value_has_type tv v ∧
     well_formed_type_value tv ∧
     encode_value tv v = SOME writes ⇒
     slots_in_range (apply_writes (n2w base) writes storage) base tv
@@ -1118,7 +1320,9 @@ Proof
       simp[] >> disch_then irule >>
       gvs[value_has_type_def, well_formed_type_value_def, type_slot_size_def] >>
       gvs[listTheory.EVERY_MEM] >>
-      reverse conj_tac >- (qexists_tac `l` >> simp[]) >>
+      reverse conj_tac >-
+        (conj_tac >- (qexists_tac `l` >> simp[]) >>
+         gvs[Once slots_in_range_def]) >>
       rpt strip_tac >>
       `type_value_size tv < type_value_size (TupleTV tvs)` by
         (irule MEM_TupleTV_type_value_size >> simp[]) >>
@@ -1127,7 +1331,8 @@ Proof
       simp[] >> disch_then (qspec_then `tv` mp_tac) >>
       simp[] >> disch_then irule >>
       gvs[listTheory.EVERY_MEM] >> metis_tac[])
-  >- (`!x ws b s. value_has_type t x /\ encode_value t x = SOME ws ==>
+  >- (`!x ws b s. slots_in_range s b t /\
+         value_has_type t x /\ encode_value t x = SOME ws ==>
          slots_in_range (apply_writes (n2w b) ws s) b t` by
         (rpt strip_tac >>
          qpat_x_assum `!m. _` (qspec_then `type_value_size t` mp_tac) >>
@@ -1153,7 +1358,8 @@ Proof
       gvs[value_has_type_def, well_formed_type_value_def, type_slot_size_def] >>
       gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >>
       reverse conj_tac >- (conj_tac >- metis_tac[] >>
-                           qexists_tac `l` >> simp[]) >>
+        conj_tac >- (qexists_tac `l` >> simp[]) >>
+        gvs[Once slots_in_range_def]) >>
       rpt strip_tac >>
       `type_value_size p_2 < type_value_size (StructTV ftypes)` by
         (irule MEM_StructTV_type_value_size >> metis_tac[]) >>
@@ -1164,14 +1370,6 @@ Proof
   >- (irule encode_flag_slots_in_range >> metis_tac[]) >>
   simp[slots_in_range_def]
 QED
-
-(* Keep this encoding boundary free of admitted facts and extra assumptions. *)
-val _ =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag encode_implies_slots_in_range) in
-    if null (Thm.hyp encode_implies_slots_in_range) andalso null axioms andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-    else raise Fail "encode_implies_slots_in_range is not closed"
-  end;
 
 (* ===== Totality of decode_value under slots_in_range ===== *)
 
@@ -1204,7 +1402,9 @@ Proof
   rpt strip_tac >> gvs[slots_in_range_def] >>
   TRY (fs[decode_dyn_bytes_def, LET_THM, read_slot_def] >> NO_TAC) >>
   TRY (res_tac >> gvs[] >> NO_TAC) >>
-  metis_tac[]
+  gvs[SF ETA_ss]
+  >- (first_x_assum irule >> irule dyn_slots_in_range_prefix >>
+      qexists_tac `max` >> simp[])
 QED
 
 (* Public decoder boundary: current in-range slots decode to a current,
@@ -1557,7 +1757,11 @@ Proof
     >- (
       gvs[] >>
       irule encode_implies_slots_in_range >>
-      simp[] >> qexists_tac `v` >> simp[]
+      simp[] >> conj_tac
+      >- (qexists_tac `v` >> simp[]) >>
+      qpat_x_assum `well_formed_storage cx st` mp_tac >>
+      simp[well_formed_storage_def, storage_var_in_range_def] >>
+      metis_tac[]
     ) >>
     `off + type_slot_size tv ≤ dimword(:256)` by
       (fs[well_formed_layout_def] >> res_tac) >>

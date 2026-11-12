@@ -158,7 +158,7 @@ QED
 (* A function stmt_state_rel runs is one of ctx's. *)
 Theorem stmt_state_rel_dalloca:
   !ctx func cenv cx vs ss.
-    stmt_state_rel ctx func cenv cx vs ss /\
+    stmt_state_rel H ctx func cenv cx vs ss /\
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) ==>
     ctx_has_dalloca ctx
 Proof
