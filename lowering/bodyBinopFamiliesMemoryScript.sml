@@ -367,7 +367,7 @@ Proof
 QED
 
 (* From exprSimCompare. *)
-(* binop_frag_mem H for == and != on two address or two bytesN values of
+(* binop_frag_mem for == and != on two address or two bytesN values of
    one type, held in their typed words: compile_compare's EQ on the words
    is the source's comparison of the bytes. *)
 Theorem compile_compare_bytes_sim_mem:

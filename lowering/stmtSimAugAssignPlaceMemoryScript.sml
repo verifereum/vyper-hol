@@ -610,7 +610,7 @@ Theorem aug_place_binop_store_outcome:
   eval_operand x s = SOME (val_to_w256 cur) /\
   eval_operand y s = SOME (val_to_w256 rhs) /\
   eval_operand dst s = SOME w /\
-  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path))
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
     (SOME LocMemory) (Type ty) /\
   expr_sim_inv cenv cx env ee /\ acyclic_struct_metadata cenv.ce_struct_fields /\
   storage_place_region cx (MemoryPlace id path) /\
