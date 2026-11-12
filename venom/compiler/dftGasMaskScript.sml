@@ -6491,7 +6491,7 @@ Proof
        arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM]
 QED
 
-Theorem invoke_extract_occurrence_transport[local]:
+Theorem invoke_extract_occurrence_transport_success[local]:
   !fuel C C' owner fn bb.
   let R = (\n D xs st. FOLDR (dft_exec_cons n D) OK xs st);
       E = (\D xs st. gas_events_block fuel D owner
@@ -6647,7 +6647,8 @@ Theorem invoke_extract_occurrence_transport[local]:
     (!u. step_inst fuel C' y s = OK u ==>
       let v = u with vs_inst_idx := SUC s.vs_inst_idx in
       P rest v mt et /\
-      T rest v (padM rest v mt) (padE rest v et) (pre ++ post) rho)
+      T rest v (padM rest v mt) (padE rest v et) (pre ++ post) rho) /\
+    (?u. step_inst fuel C' y s = OK u)
     ==>
     T (y::rest) s (padM (y::rest) s (mh::mt))
       (padE (y::rest) s (eh::et)) (pre ++ y::post)
@@ -6665,8 +6666,7 @@ Proof
      >- (irule (cj 1 dftRunRelTheory.dft_crossing_swap_pair) >>
          simp[] >> qexistsl_tac [`bb`, `fn`] >> simp[]) >>
      fs[EVERY_MEM]) >>
-  Cases_on `?u. step_inst fuel C' y s = OK u`
-  >- (pop_assum (qx_choose_then `u` assume_tac) >>
+  all_tac >>
       `padM (y::rest) s (mh::mt) =
          mh :: padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt` by
         (simp[Abbr `padM`, Abbr `R`] >>
@@ -6872,8 +6872,7 @@ Proof
                 (qspec_then `v` mp_tac) >>
               (impl_tac >- simp[]) >> strip_tac >>
               qpat_assum `PERM _ (mh ++ FLAT _)`
-                (mp_tac o MATCH_MP PERM_EVERY) >>
-              disch_then (mp_tac o Q.INST [`P` |-> `IS_SOME`]) >>
+                (mp_tac o MATCH_MP (Q.ISPEC `IS_SOME` (GEN_ALL PERM_EVERY))) >>
               simp[EVERY_APPEND] >> metis_tac[]) >>
           pure_rewrite_tac[GSYM AND_IMP_INTRO] >>
           CONV_TAC (DEPTH_CONV (HO_REWR_CONV (GSYM FORALL_AND_THM))) >>
@@ -6891,6 +6890,7 @@ Proof
           `LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) rm (gp ++ gt)` by
             (qpat_assum `LIST_REL _ (TAKE (LENGTH pre) rm) gp` mp_tac >>
              qpat_assum `LIST_REL _ (DROP (LENGTH pre) rm) gt` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >>
              metis_tac[LIST_REL_APPEND_suff, TAKE_DROP]) >>
           `LENGTH gp = LENGTH pre` by
             (qpat_assum `LIST_REL _ (TAKE (LENGTH pre) rm) gp`
@@ -6958,6 +6958,135 @@ Proof
              Cases_on `step_inst fuel C y
                (s with vs_gas_readings := gh ++ FLAT gt ++ tail)` >>
              simp[passSimulationDefsTheory.terminates_def]) >>
+          qpat_assum `Abbrev (T' = _)` (fn def =>
+            qpat_assum `T' rest _ _ _ _ _`
+              (mp_tac o cj 4 o SIMP_RULE bool_ss
+                [REWRITE_RULE [markerTheory.Abbrev_def] def,
+                 markerTheory.Abbrev_def])) >>
+          disch_then (qx_choose_then `unusedR` strip_assume_tac) >>
+          qpat_assum `!gss tail. LIST_REL _ _ gss ==> _`
+            (qspecl_then [`gp ++ gt`, `tail`] mp_tac) >>
+          (impl_tac >- simp[Abbr `rm`]) >> strip_tac >>
+          `EVERY (\i. ~is_terminator i.inst_opcode) pre` by
+            (fs[EVERY_MEM] >> metis_tac[]) >>
+          `!k u'. k <= LENGTH pre /\
+            R fuel C (TAKE k (pre ++ y::post))
+              (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) = OK u' ==>
+            E C (TAKE k (pre ++ y::post))
+              (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
+              FLAT (TAKE k (TAKE (LENGTH pre) re ++ [eh] ++ DROP (LENGTH pre) re)) /\
+            u'.vs_gas_readings = FLAT (DROP k (gp ++ [gh] ++ gt)) ++ tail` by
+            (rpt gen_tac >> strip_tac >>
+             `?z. R fuel C (TAKE k pre)
+               (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                 vs_gas_readings := FLAT (gp ++ gt) ++ tail|>) = OK z` by
+               (qpat_assum `!rs. ?a. R fuel C pre (u with <|vs_inst_idx := _; vs_gas_readings := rs|>) = OK a`
+                  (qspec_then `FLAT (gp ++ gt) ++ tail` (qx_choose_then `z0` mp_tac)) >>
+                qpat_assum `Abbrev (R = _)` (fn def =>
+                  pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                BETA_TAC >>
+                `pre = TAKE k pre ++ DROP k pre` by simp[] >>
+                pop_assum (fn th => once_rewrite_tac[th]) >>
+                pure_rewrite_tac[FOLDR_APPEND] >>
+                `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k pre)` by
+                  (irule EVERY_TAKE >> simp[]) >>
+                qpat_assum `EVERY _ (TAKE k pre)` (fn th =>
+                  simp_tac (srw_ss()) [Once dftRunRelTheory.dft_exec_prefix_continue, th]) >>
+                Cases_on `R fuel C (TAKE k pre)
+                  (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                    vs_gas_readings := FLAT gp ++ FLAT gt ++ tail|>)` >> simp[]) >>
+             qpat_assum `!gss' tail k u'. _ ==> E C _ _ = _ /\ _`
+               (qspecl_then [`gp ++ gt`, `tail`, `k`, `z`] mp_tac) >>
+             (impl_tac >-
+               (`k - LENGTH pre = 0` by decide_tac >>
+                pure_rewrite_tac[TAKE_APPEND] >>
+                qpat_assum `k - LENGTH pre = 0` (fn th => pure_rewrite_tac[th]) >>
+                simp_tac (srw_ss()) [TAKE_0, APPEND_NIL] >>
+                conj_tac >- first_assum ACCEPT_TAC >>
+                conj_tac >- decide_tac >>
+                qpat_assum `R fuel C (TAKE k pre) _ = OK z`
+                  (fn th => ACCEPT_TAC (PURE_REWRITE_RULE [FLAT_APPEND] th)))) >> strip_tac >>
+             `k - LENGTH pre = 0` by decide_tac >>
+             `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+               (TAKE k pre)` by (irule EVERY_TAKE >> simp[]) >>
+             `R fuel C (TAKE k pre)
+               (s with vs_gas_readings := FLAT gp ++ (gh ++ FLAT gt ++ tail)) = OK u'` by
+               (qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+                pure_rewrite_tac[TAKE_APPEND] >>
+                qpat_assum `k - LENGTH pre = 0` (fn th => pure_rewrite_tac[th]) >>
+                simp_tac (srw_ss()) [TAKE_0, APPEND_NIL, APPEND_ASSOC]) >>
+             `!st v. R fuel C (TAKE k pre) st = OK v ==>
+               E C (TAKE k pre) st =
+               MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) (TAKE k pre))` by
+               (qx_gen_tac `st` >> qx_gen_tac `z0` >> strip_tac >>
+                qpat_assum `R fuel C (TAKE k pre) st = OK z0` mp_tac >>
+                qpat_assum `Abbrev (R = _)` (fn def =>
+                  pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                BETA_TAC >> strip_tac >>
+                drule_all noninvoke_prefix_events_exact >>
+                disch_then (qspecl_then [`owner`, `st.vs_current_bb`, `[]`] mp_tac) >>
+                qpat_assum `Abbrev (E = _)` (fn def =>
+                  pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                BETA_TAC >> simp[Once gas_events_block_def,
+                  venomInstTheory.get_instruction_def]) >>
+             conj_tac
+             >- (qpat_assum `E C (TAKE k (pre ++ post)) _ = _` mp_tac >>
+                 qpat_assum `k - LENGTH pre = 0` mp_tac >>
+                 qpat_assum `k <= LENGTH pre` mp_tac >>
+                 qpat_assum `!st v. R fuel C (TAKE k pre) st = OK v ==> _` mp_tac >>
+                 qpat_assum `R fuel C (TAKE k pre) _ = OK z` mp_tac >>
+                 qpat_assum `R fuel C (TAKE k pre) _ = OK u'` mp_tac >>
+                 qpat_assum `LENGTH re = _` mp_tac >>
+                 POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                 `k - (LENGTH pre + 1) = 0 /\
+                  LENGTH (TAKE (LENGTH pre) re) = LENGTH pre /\
+                  MIN k (LENGTH pre) = k` by simp[arithmeticTheory.MIN_ALT] >>
+                 pure_rewrite_tac[TAKE_APPEND, TAKE_TAKE] >>
+                 simp_tac (srw_ss()) [LENGTH_APPEND, LENGTH, FLAT_APPEND, FLAT] >>
+                 pure_asm_rewrite_tac[TAKE_TAKE_MIN, TAKE_0, APPEND_NIL, FLAT] >>
+                 qpat_assum `E C (TAKE k (pre ++ post)) _ = _` mp_tac >>
+                 pure_rewrite_tac[TAKE_APPEND] >>
+                 pure_asm_rewrite_tac[TAKE_0, APPEND_NIL] >>
+                 RULE_ASSUM_TAC (PURE_REWRITE_RULE [FLAT_APPEND, APPEND_ASSOC]) >>
+                 pure_rewrite_tac[FLAT_APPEND, APPEND_ASSOC] >>
+                 metis_tac[]) >>
+             `LENGTH (FLAT gp) = LENGTH (FILTER (\i. i.inst_opcode = GAS) pre)` by
+               (qpat_assum `!gss'. LIST_REL _ rm gss' ==> LENGTH _ = _`
+                  (qspec_then `gp ++ gt` mp_tac) >> simp[TAKE_APPEND]) >>
+             `!st rs v. R fuel C (TAKE k pre)
+               (st with vs_gas_readings := FLAT gp ++ rs) = OK v ==>
+               v.vs_gas_readings =
+               DROP (LENGTH (FILTER (\i. i.inst_opcode = GAS) (TAKE k pre))) (FLAT gp) ++ rs` by
+               (rpt gen_tac >>
+                qpat_assum `Abbrev (R = _)` (fn def =>
+                  pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                BETA_TAC >> strip_tac >>
+                drule_at (Pos last) invoke_partner_cut_observations >>
+                disch_then (qspec_then `y` mp_tac) >>
+                (impl_tac >- fs[EVERY_MEM]) >> simp[]) >>
+             `u'.vs_gas_readings =
+               DROP (LENGTH (FILTER (\i. i.inst_opcode = GAS) (TAKE k pre))) (FLAT gp) ++
+               (gh ++ FLAT gt ++ tail)` by
+               (qpat_assum `!st rs v. R fuel C (TAKE k pre) _ = OK v ==> _`
+                  (qspecl_then [`s`, `gh ++ FLAT gt ++ tail`, `u'`] mp_tac) >> simp[]) >>
+             `z.vs_gas_readings =
+               DROP (LENGTH (FILTER (\i. i.inst_opcode = GAS) (TAKE k pre))) (FLAT gp) ++
+               (FLAT gt ++ tail)` by
+               (qpat_assum `!st rs v. R fuel C (TAKE k pre) _ = OK v ==> _`
+                  (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`, `FLAT gt ++ tail`, `z`] mp_tac) >>
+                qpat_assum `R fuel C (TAKE k pre) _ = OK z` mp_tac >>
+                POP_ASSUM_LIST (K all_tac) >> simp[FLAT_APPEND, APPEND_ASSOC]) >>
+             qpat_assum `u'.vs_gas_readings = _` mp_tac >>
+             qpat_assum `z.vs_gas_readings = _ ++ (FLAT gt ++ tail)` mp_tac >>
+             qpat_assum `z.vs_gas_readings = FLAT _ ++ tail` mp_tac >>
+             qpat_assum `LENGTH gp = LENGTH pre` mp_tac >>
+             qpat_assum `k - LENGTH pre = 0` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+             fs[DROP_APPEND, FLAT_APPEND, APPEND_ASSOC] >>
+             `k - LENGTH gp = 0 /\ k - LENGTH pre = 0 /\
+              k - (LENGTH pre + 1) = 0` by decide_tac >>
+             pure_asm_rewrite_tac[DROP_0, FLAT, APPEND_NIL] >>
+             gvs[APPEND_ASSOC]) >>
           Cases_on `?v. step_inst fuel C y a = OK v`
           >- (pop_assum (qx_choose_then `v` assume_tac) >>
               `terminates (step_inst fuel C y a)` by
@@ -6979,17 +7108,6 @@ Proof
                 (qpat_assum `Abbrev (R = _)` (fn def =>
                    pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
                  BETA_TAC >> asm_rewrite_tac[]) >>
-              qpat_assum `Abbrev (T' = _)` (fn def =>
-                qpat_assum `T' rest _ _ _ _ _`
-                  (mp_tac o cj 4 o SIMP_RULE bool_ss
-                    [REWRITE_RULE [markerTheory.Abbrev_def] def,
-                     markerTheory.Abbrev_def])) >>
-              disch_then (qx_choose_then `unusedR` strip_assume_tac) >>
-              qpat_assum `!gss tail. LIST_REL _ _ gss ==> _`
-                (qspecl_then [`gp ++ gt`, `tail`] mp_tac) >>
-              (impl_tac >- simp[Abbr `rm`]) >> strip_tac >>
-              `EVERY (\i. ~is_terminator i.inst_opcode) pre` by
-                (fs[EVERY_MEM] >> metis_tac[]) >>
               `b = v with vs_inst_idx := SUC a.vs_inst_idx` by
                 (qpat_assum `FOLDR _ OK (pre ++ [y]) _ = OK b` mp_tac >>
                  pure_rewrite_tac[FOLDR_APPEND] >>
@@ -7003,11 +7121,11 @@ Proof
                  qpat_assum `step_inst fuel C y a = OK v`
                    (fn th => pure_rewrite_tac[th]) >>
                  simp[venomInstTheory.is_terminator_def]) >>
-              `R fuel C (pre ++ post)
+              `!zs. R fuel C (pre ++ zs)
                  (u with <|vs_inst_idx := SUC s.vs_inst_idx;
                    vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>) =
-               R fuel C post b` by
-                (qpat_assum `Abbrev (R = _)` (fn def =>
+               R fuel C zs b` by
+                (gen_tac >> qpat_assum `Abbrev (R = _)` (fn def =>
                    pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
                  BETA_TAC >> pure_rewrite_tac[FOLDR_APPEND] >>
                  qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre`
@@ -7016,10 +7134,10 @@ Proof
                  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
                  qpat_assum `FOLDR _ OK pre _ = OK b`
                    (fn th => simp_tac (srw_ss()) [th])) >>
-              `R fuel C (pre ++ y::post)
+              `!zs. R fuel C (pre ++ y::zs)
                  (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
-               R fuel C post b` by
-                (qpat_assum `Abbrev (R = _)` (fn def =>
+               R fuel C zs b` by
+                (gen_tac >> qpat_assum `Abbrev (R = _)` (fn def =>
                    pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
                  BETA_TAC >> pure_rewrite_tac[FOLDR_APPEND] >>
                  qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre`
@@ -7048,13 +7166,13 @@ Proof
                  disch_then (fn th => rewrite_tac[th]) >>
                  AP_TERM_TAC >> irule gas_events_block_suffix_cong >>
                  simp[]) >>
-              `E C (pre ++ post)
+              `!zs. E C (pre ++ zs)
                  (u with <|vs_inst_idx := SUC s.vs_inst_idx;
                    vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>) =
-                 FLAT (TAKE (LENGTH pre) re) ++ E C post b` by
-                (qpat_assum `!st z xs. _ ==> E C (pre ++ xs) st = _`
+                 FLAT (TAKE (LENGTH pre) re) ++ E C zs b` by
+                (gen_tac >> qpat_assum `!st z xs. _ ==> E C (pre ++ xs) st = _`
                    (qspecl_then [`u with <|vs_inst_idx := SUC s.vs_inst_idx;
-                     vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>`, `b`, `post`] mp_tac) >>
+                     vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>`, `b`, `zs`] mp_tac) >>
                  (impl_tac >- asm_rewrite_tac[]) >>
                  disch_then SUBST1_TAC >>
                  qpat_assum `!gss'. LIST_REL _ rm gss' ==> MAP _ _ = _`
@@ -7067,10 +7185,10 @@ Proof
                  FLAT (TAKE (LENGTH pre) re)` by
                 (qpat_assum `!gss'. LIST_REL _ rm gss' ==> MAP _ _ = _`
                    (qspec_then `gp ++ gt` mp_tac) >> simp[]) >>
-              `E C (pre ++ y::post)
+              `!zs. E C (pre ++ y::zs)
                  (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
-                 FLAT (TAKE (LENGTH pre) re) ++ eh ++ E C post b` by
-                (qpat_assum `Abbrev (E = _)` (fn def =>
+                 FLAT (TAKE (LENGTH pre) re) ++ eh ++ E C zs b` by
+                (gen_tac >> qpat_assum `Abbrev (E = _)` (fn def =>
                    pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
                  BETA_TAC >>
                  qpat_assum `FOLDR _ OK pre _ = OK a` mp_tac >>
@@ -7083,14 +7201,14 @@ Proof
                  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
                  `~is_terminator y.inst_opcode` by simp[venomInstTheory.is_terminator_def] >>
                  drule_all noninvoke_head_events_splice >>
-                 disch_then (qspecl_then [`post`, `owner`] mp_tac) >>
+                 disch_then (qspecl_then [`zs`, `owner`] mp_tac) >>
                  simp[]) >>
               conj_tac
               >- (conj_tac
               >- (qexists_tac `extra'` >>
                   qpat_assum `FLAT (MAP _ _) = E C (pre ++ post) _ ++ extra'` mp_tac >>
-                  qpat_assum `E C (pre ++ post) _ = FLAT (TAKE _ re) ++ E C post b` mp_tac >>
-                  qpat_assum `E C (pre ++ y::post) _ = _` mp_tac >>
+                  qpat_assum `!zs. E C (pre ++ zs) _ = FLAT (TAKE _ re) ++ E C zs b` (qspec_then `post` mp_tac) >>
+                  qpat_assum `!zs. E C (pre ++ y::zs) _ = _` (qspec_then `post` mp_tac) >>
                   qpat_assum `Abbrev (re = _)` mp_tac >>
                   POP_ASSUM_LIST (K all_tac) >>
                   pure_rewrite_tac [markerTheory.Abbrev_def, FLAT_APPEND, APPEND_ASSOC] >>
@@ -7166,10 +7284,10 @@ Proof
               qpat_assum `terminates (R fuel C (pre ++ post) _)` mp_tac >>
               qpat_assum `dft_res_rel (restore_result [] (R fuel C (pre ++ post) _)) _` mp_tac >>
               qpat_assum `(_ \/ _) ==> E C (pre ++ post) _ = _ /\ _` mp_tac >>
-              qpat_assum `R fuel C (pre ++ post) _ = R fuel C post b` mp_tac >>
-              qpat_assum `R fuel C (pre ++ y::post) _ = R fuel C post b` mp_tac >>
-              qpat_assum `E C (pre ++ post) _ = FLAT (TAKE _ re) ++ E C post b` mp_tac >>
-              qpat_assum `E C (pre ++ y::post) _ = _` mp_tac >>
+              qpat_assum `!zs. R fuel C (pre ++ zs) _ = R fuel C zs b` (qspec_then `post` mp_tac) >>
+              qpat_assum `!zs. R fuel C (pre ++ y::zs) _ = R fuel C zs b` (qspec_then `post` mp_tac) >>
+              qpat_assum `!zs. E C (pre ++ zs) _ = FLAT (TAKE _ re) ++ E C zs b` (qspec_then `post` mp_tac) >>
+              qpat_assum `!zs. E C (pre ++ y::zs) _ = _` (qspec_then `post` mp_tac) >>
               qpat_assum `Abbrev (re = _)` mp_tac >>
               POP_ASSUM_LIST (K all_tac) >>
               pure_rewrite_tac[markerTheory.Abbrev_def, FLAT_APPEND, APPEND_ASSOC, APPEND] >>
@@ -7180,28 +7298,164 @@ Proof
               conj_tac
               >- (rpt gen_tac >> strip_tac >> Cases_on `k <= LENGTH pre`
                   >- (strip_tac >>
-                      `?z. R fuel C (TAKE k pre)
-                        (u with <|vs_inst_idx := SUC s.vs_inst_idx;
-                          vs_gas_readings := FLAT (gp ++ gt) ++ tail|>) = OK z` by
-                        (qpat_assum `R fuel C pre _ = OK b` mp_tac >>
-                         qpat_assum `Abbrev (R = _)` (fn def =>
-                           pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
-                         BETA_TAC >>
-                         `pre = TAKE k pre ++ DROP k pre` by simp[] >>
-                         pop_assum (fn th => once_rewrite_tac[th]) >>
-                         pure_rewrite_tac[FOLDR_APPEND] >>
-                         `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k pre)` by
-                           (irule EVERY_TAKE >> simp[]) >>
-                         qpat_assum `EVERY _ (TAKE k pre)` (fn th =>
-                           simp_tac (srw_ss()) [Once dftRunRelTheory.dft_exec_prefix_continue, th]) >>
-                         Cases_on `R fuel C (TAKE k pre)
-                           (u with <|vs_inst_idx := SUC s.vs_inst_idx;
-                             vs_gas_readings := FLAT gp ++ FLAT gt ++ tail|>)` >> simp[]) >>
-                      qpat_assum `!gss' tail k u'. _ ==> E C _ _ = _ /\ _`
-                        (qspecl_then [`gp ++ gt`, `tail`, `k`, `z`] mp_tac) >>
-                      (impl_tac >- simp[TAKE_APPEND]) >> strip_tac >>
-                      FAIL_TAC "early observations") >> FAIL_TAC "late cut") >>
-              FAIL_TAC "shared barrier") >>
+                      qpat_assum `!k u'. k <= LENGTH pre /\ _ ==> _`
+                        (qspecl_then [`k`, `u'`] mp_tac) >>
+                      qpat_assum `k <= LENGTH pre` mp_tac >>
+                      qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+                      POP_ASSUM_LIST (K all_tac) >>
+                      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+                      metis_tac[]) >>
+                  strip_tac >>
+                  `TAKE k (pre ++ y::post) = pre ++ y::TAKE (k - (LENGTH pre + 1)) post /\
+                   TAKE (k-1) (pre ++ post) = pre ++ TAKE (k - (LENGTH pre + 1)) post` by
+                    (qpat_assum `~(k <= LENGTH pre)` mp_tac >>
+                     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+                     `LENGTH pre <= k /\ LENGTH pre <= k-1 /\
+                      k - LENGTH pre = SUC (k - (LENGTH pre + 1)) /\
+                      k-1-LENGTH pre = k - (LENGTH pre + 1)` by decide_tac >>
+                     simp[TAKE_APPEND, TAKE_def]) >>
+                  `!zs. R fuel C (pre ++ y::zs)
+                     (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
+                   R fuel C (pre ++ zs)
+                     (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                       vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>)` by
+                    (gen_tac >>
+                     qpat_assum `!zs. R fuel C (pre ++ zs) _ = R fuel C zs b`
+                       (fn th => pure_rewrite_tac[th]) >>
+                     qpat_assum `!zs. R fuel C (pre ++ y::zs) _ = R fuel C zs b`
+                       (fn th => pure_rewrite_tac[th]) >> REFL_TAC) >>
+                  `R fuel C (TAKE (k-1) (pre ++ post))
+                     (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                       vs_gas_readings := FLAT (gp ++ gt) ++ tail|>) = OK u'` by
+                    (qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+                     qpat_assum `!zs. R fuel C (pre ++ y::zs) _ = _` mp_tac >>
+                     qpat_assum `TAKE k (pre ++ y::post) = _` mp_tac >>
+                     qpat_assum `TAKE (k-1) (pre ++ post) = _` mp_tac >>
+                     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                     RULE_ASSUM_TAC (PURE_REWRITE_RULE [APPEND_ASSOC]) >>
+                     pure_asm_rewrite_tac[FLAT_APPEND, APPEND_ASSOC] >>
+                     metis_tac[]) >>
+                  qpat_assum `!gss' tail k u'. _ ==> E C _ _ = _ /\ _`
+                    (qspecl_then [`gp ++ gt`, `tail`, `k-1`, `u'`] mp_tac) >>
+                  (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >>
+                    conj_tac >- fs[LENGTH_APPEND] >> first_assum ACCEPT_TAC)) >>
+                  strip_tac >> reverse conj_tac
+                  >- (qpat_assum `u'.vs_gas_readings = FLAT (DROP _ _) ++ tail` mp_tac >>
+                      qpat_assum `LENGTH gp = LENGTH pre` mp_tac >>
+                      qpat_assum `~(k <= LENGTH pre)` mp_tac >>
+                      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                      `LENGTH gp <= k /\ LENGTH gp <= k-1 /\
+                       k - LENGTH gp = SUC (k - (LENGTH gp + 1)) /\
+                       k-1-LENGTH gp = k - (LENGTH gp + 1)` by decide_tac >>
+                      pure_rewrite_tac[DROP_APPEND, LENGTH_APPEND, LENGTH] >>
+                      pure_asm_rewrite_tac[DROP_def, APPEND_NIL] >>
+                      simp[FLAT_APPEND, FLAT, APPEND_ASSOC, DROP_APPEND,
+                        DROP_LENGTH_TOO_LONG]) >>
+                  qpat_assum `!zs. E C (pre ++ zs) _ = _`
+                    (qspec_then `TAKE (k - (LENGTH pre + 1)) post` mp_tac) >>
+                  qpat_assum `!zs. E C (pre ++ y::zs) _ = _`
+                    (qspec_then `TAKE (k - (LENGTH pre + 1)) post` mp_tac) >>
+                  qpat_assum `E C (TAKE (k-1) (pre ++ post)) _ = _` mp_tac >>
+                  qpat_assum `TAKE k (pre ++ y::post) = _` mp_tac >>
+                  qpat_assum `TAKE (k-1) (pre ++ post) = _` mp_tac >>
+                  qpat_assum `LENGTH re = _` mp_tac >>
+                  qpat_assum `k <= _` mp_tac >>
+                  qpat_assum `~(k <= LENGTH pre)` mp_tac >>
+                  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                  RULE_ASSUM_TAC (PURE_REWRITE_RULE [FLAT_APPEND, APPEND_ASSOC]) >>
+                  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+                  pure_asm_rewrite_tac[APPEND_ASSOC] >>
+                  `LENGTH (TAKE (LENGTH pre) re) = LENGTH pre /\
+                   LENGTH pre <= k /\ LENGTH pre <= k-1 /\
+                   k - LENGTH pre = SUC (k - (LENGTH pre + 1)) /\
+                   k-1-LENGTH pre = k - (LENGTH pre + 1)` by simp[] >>
+                  `TAKE (k-1) re = TAKE (LENGTH pre) re ++
+                     TAKE (k - (LENGTH pre + 1)) (DROP (LENGTH pre) re)` by
+                    (`re = TAKE (LENGTH pre) re ++ DROP (LENGTH pre) re` by simp[] >>
+                     pop_assum (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+                     simp[TAKE_APPEND]) >>
+                  `TAKE k (TAKE (LENGTH pre) re) = TAKE (LENGTH pre) re` by
+                    (irule TAKE_LENGTH_TOO_LONG >> simp[]) >>
+                  pure_rewrite_tac[TAKE_APPEND] >>
+                  pure_asm_rewrite_tac[TAKE_LENGTH_ID_rwt, TAKE_def, FLAT_APPEND, FLAT] >>
+                  gvs[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+                    arithmeticTheory.MIN_ALT, TAKE_APPEND, EVERY_MEM, FLAT_APPEND,
+                    APPEND_ASSOC, DROP_APPEND, TAKE_def, LENGTH_APPEND, FLAT,
+                    DROP_LENGTH_TOO_LONG, EVERY_TAKE, noninvoke_prefix_events_exact,
+                    TAKE_LENGTH_TOO_LONG]) >>
+              rpt gen_tac >> strip_tac >> strip_tac >> strip_tac >>
+              Cases_on `k < LENGTH pre`
+              >- (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) pre`
+                    (mp_tac o SRULE [EVERY_EL]) >>
+                  disch_then (qspec_then `k` mp_tac) >>
+                  fs[EL_APPEND_EQN]) >>
+              Cases_on `k = LENGTH pre`
+              >- (qpat_x_assum `!t. R fuel C' _ s <> OK t`
+                    (qspec_then `s` mp_tac) >>
+                  qpat_assum `k = LENGTH pre` mp_tac >>
+                  qpat_assum `Abbrev (R = _)` mp_tac >>
+                  qpat_assum `PERM rho' _` (mp_tac o MATCH_MP PERM_LENGTH) >>
+                  qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+                  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                  fs[LENGTH_APPEND, LENGTH_MAP, LENGTH_COUNT_LIST] >>
+                  `LENGTH (TAKE (LENGTH pre) rho') = LENGTH pre` by
+                    (irule LENGTH_TAKE >> decide_tac) >>
+                  gvs[EL_APPEND_EQN, Abbr `R`]) >>
+              `LENGTH pre < k /\ k-1 < LENGTH (pre ++ post)` by
+                (simp[LENGTH_APPEND] >> decide_tac) >>
+              `LENGTH (TAKE (LENGTH pre) rho') = LENGTH pre` by
+                (irule LENGTH_TAKE >>
+                 qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+                 simp[]) >>
+              `(EL k (MAP SUC (TAKE (LENGTH pre) rho') ++ [0] ++
+                  MAP SUC (DROP (LENGTH pre) rho'))) = SUC (EL (k-1) rho')` by
+                (qpat_assum `LENGTH (TAKE (LENGTH pre) rho') = _` mp_tac >>
+                 qpat_assum `LENGTH pre < k` mp_tac >>
+                 qpat_assum `k < LENGTH pre + SUC (LENGTH post)` mp_tac >>
+                 qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+                 POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                 `k-1 < LENGTH rho' /\ k-(LENGTH pre+1) < LENGTH (DROP (LENGTH pre) rho')` by
+                   (fs[LENGTH_APPEND, LENGTH_MAP, LENGTH_DROP] >> decide_tac) >>
+                 `k - LENGTH pre = SUC (k - (LENGTH pre + 1)) /\
+                  k-1-LENGTH pre = k-(LENGTH pre+1)` by decide_tac >>
+                 simp[EL_APPEND_EQN, EL_MAP, EL_DROP]) >>
+              qpat_assum `Abbrev (T' = _)` (fn def =>
+                qpat_assum `T' rest _ _ _ _ _`
+                  (mp_tac o cj 6 o SIMP_RULE bool_ss
+                    [REWRITE_RULE [markerTheory.Abbrev_def] def,
+                     markerTheory.Abbrev_def])) >>
+              disch_then (qspecl_then [`gp ++ gt`, `tail`, `k-1`] mp_tac) >>
+              (impl_tac >-
+                (conj_tac >- fs[Abbr `rm`] >>
+                 conj_tac >- first_assum ACCEPT_TAC >>
+                 conj_tac
+                 >- (qpat_assum `(EL k (pre ++ y::post)).inst_opcode = INVOKE` mp_tac >>
+                     qpat_assum `LENGTH pre < k` mp_tac >>
+                     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                     `k-LENGTH pre = SUC (k-1-LENGTH pre)` by decide_tac >>
+                     fs[EL_APPEND_EQN]) >>
+                 qpat_assum `!t. R fuel C' _ s <> OK t` mp_tac >>
+                 qpat_assum `EL k (MAP SUC _ ++ _ ++ _) = _` mp_tac >>
+                 qpat_assum `step_inst fuel C' y s = OK u` mp_tac >>
+                 qpat_assum `y.inst_opcode = INVOKE` mp_tac >>
+                 qpat_assum `Abbrev (R = _)` mp_tac >>
+                 POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                 qpat_assum `EL k (MAP SUC _ ++ _ ++ _) = _`
+                   (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+                 fs[Abbr `R`, TAKE_def, FOLDR, dftIndexedExecTheory.dft_exec_cons_def,
+                    venomInstTheory.is_terminator_def] >>
+                 gvs[venomInstTheory.is_terminator_def])) >>
+              qpat_assum `!zs. R fuel C (pre ++ zs) _ = R fuel C zs b` mp_tac >>
+              qpat_assum `!zs. R fuel C (pre ++ y::zs) _ = R fuel C zs b` mp_tac >>
+              qpat_assum `LENGTH pre < k` mp_tac >>
+              POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+              `k - LENGTH pre = SUC (k - (LENGTH pre + 1)) /\
+               k-1-LENGTH pre = k - (LENGTH pre + 1)` by decide_tac >>
+              qpat_x_assum `!v. R fuel C _ _ <> OK v` mp_tac >>
+              pure_rewrite_tac[TAKE_APPEND] >>
+              pure_asm_rewrite_tac[TAKE_LENGTH_TOO_LONG, TAKE_def, FLAT_APPEND, APPEND_ASSOC] >>
+              gvs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, TAKE_def, APPEND_ASSOC] >>
+              metis_tac[]) >>
           `E C (pre ++ y::post)
              (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
              MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) ++
@@ -7221,6 +7475,7 @@ Proof
                LENGTH_REPLICATE, EL_APPEND_EQN] >>
              Cases_on `step_inst fuel C y a` >> gvs[]) >>
           conj_tac
+          >- (conj_tac
           >- (qexists_tac `extra ++ FLAT (DROP (LENGTH pre) re)` >>
               qpat_assum `E C (pre ++ y::post) _ = _` mp_tac >>
               qpat_assum `gas_events_step fuel C owner y a = gas_events_step _ _ s.vs_current_bb _ _` mp_tac >>
@@ -7273,7 +7528,63 @@ Proof
           POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
           gvs[APPEND_ASSOC, invoke_updates_concrete_frame,
             analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only]) >>
-  FAIL_TAC "stopped head transport"
+          `!zs v. R fuel C (pre ++ y::zs)
+            (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) <> OK v` by
+            (rpt gen_tac >>
+             qpat_assum `FOLDR _ OK pre _ = OK a` mp_tac >>
+             qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre` mp_tac >>
+             qpat_assum `~?v. step_inst fuel C y a = OK v` mp_tac >>
+             qpat_assum `y.inst_opcode = INVOKE` mp_tac >>
+             qpat_assum `Abbrev (R = _)` (fn def =>
+               pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+             POP_ASSUM_LIST (K all_tac) >> BETA_TAC >>
+             pure_rewrite_tac[APPEND_ASSOC] >> rpt strip_tac >>
+             qpat_assum `EVERY _ pre` (fn th =>
+               fs[Once dftRunRelTheory.dft_exec_prefix_continue, FOLDR_APPEND, th]) >>
+             gvs[AllCaseEqs(), FOLDR, dftIndexedExecTheory.dft_exec_cons_def,
+               venomInstTheory.is_terminator_def] >>
+             Cases_on `step_inst fuel C y a` >> gvs[]) >>
+          conj_tac
+          >- (rpt gen_tac >> strip_tac >> strip_tac >>
+              Cases_on `k <= LENGTH pre`
+              >- (qpat_assum `!k u'. k <= LENGTH pre /\ _ ==> _`
+                    (qspecl_then [`k`, `u'`] mp_tac) >>
+                  qpat_assum `k <= LENGTH pre` mp_tac >>
+                  qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+                  POP_ASSUM_LIST (K all_tac) >>
+                  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> metis_tac[]) >>
+              qpat_assum `!zs v. R fuel C (pre ++ y::zs) _ <> OK v` mp_tac >>
+              qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+              qpat_assum `~(k <= LENGTH pre)` mp_tac >>
+              POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+              `LENGTH pre <= k /\ k-LENGTH pre = SUC (k-(LENGTH pre+1))` by decide_tac >>
+              fs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, TAKE_def, APPEND_ASSOC] >> metis_tac[]) >>
+          rpt gen_tac >> strip_tac >> strip_tac >> strip_tac >>
+          Cases_on `k < LENGTH pre`
+          >- (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) pre`
+                (mp_tac o SRULE [EVERY_EL]) >>
+              disch_then (qspec_then `k` mp_tac) >> fs[EL_APPEND_EQN]) >>
+          Cases_on `k = LENGTH pre`
+          >- (qpat_x_assum `!t. R fuel C' _ s <> OK t`
+                (qspec_then `s` mp_tac) >>
+              qpat_assum `k = LENGTH pre` mp_tac >>
+              qpat_assum `Abbrev (R = _)` mp_tac >>
+              qpat_assum `PERM rho' _` (mp_tac o MATCH_MP PERM_LENGTH) >>
+              qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+              POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+              fs[LENGTH_APPEND, LENGTH_MAP, LENGTH_COUNT_LIST] >>
+              `LENGTH (TAKE (LENGTH pre) rho') = LENGTH pre` by
+                (irule LENGTH_TAKE >> decide_tac) >>
+              gvs[EL_APPEND_EQN, Abbr `R`]) >>
+          qpat_assum `!zs v. R fuel C (pre ++ y::zs) _ <> OK v` mp_tac >>
+          qpat_assum `~(k < LENGTH pre)` mp_tac >>
+          qpat_assum `k <> LENGTH pre` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+          `LENGTH pre <= k /\ k-LENGTH pre = SUC (k-(LENGTH pre+1))` by decide_tac >>
+          fs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, TAKE_def, APPEND_ASSOC] >>
+          qpat_x_assum `!zs v'. _ <> OK v'`
+            (qspecl_then [`TAKE (k - (LENGTH pre + 1)) post`, `v`] mp_tac) >>
+          simp[]
 QED
 
 Theorem dft_blocks_gas_mask:
