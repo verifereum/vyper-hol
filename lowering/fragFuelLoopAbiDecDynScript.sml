@@ -528,6 +528,57 @@ Proof
     fuel_ok_emit_inst_jnz] >> simp[is_terminator_def]
 QED
 
+(* Quantitative cutoff diagnostic interface (implementation belongs to the
+   subsequent transfer component).
+
+   For an original fn and an exit-STOP observer obs, compare identical entry
+   states in a region containing cut.  Require: both lookups succeed in the
+   region; off-cut instructions agree and are non-INVOKE; successful ordinary
+   successors and nonhalted jump targets stay in the region; jump-target
+   instruction prefixes agree and are PHI-free.  No restriction is needed on
+   instructions outside the region, GAS, ctx, or the initial halted flag.
+
+   The finite-budget induction should prove, for every n, this trichotomy:
+   (1) a real common prefix reaches cut at t with j <= n entered jumps,
+       run_from (f+j) ctx fn s = run_from f ctx fn t for every f, and
+       run_from n ctx0 obs s = Halt (halt_state
+         (t with vs_returndata := [])); or
+   (2) a genuine terminal result is common and fixed for both runs from n on;
+   (3) both runs at n equal Error "out of fuel".
+   Frame facts in (1) come from the actual common prefix, not fuel_outcome.
+
+   Induct lexicographically on n and the remaining instructions of the current
+   block.  At cut use j=0.  Nonterminators preserve n and decrease the latter
+   measure.  An OK terminator with halted output gives (2), even when its
+   position is cut; it is not an execution of the inserted STOP.  Otherwise
+   n=0 gives (3), and SUC n enters the common PHI-free target and uses the
+   outer IH, adding one to j.  Other instruction results give (2).  Initial
+   halted states therefore need no separate semantic assumption.
+
+   Apply fuel_outcome in ctx0 at G=0.  STOP makes either of its alternatives
+   imply observer stability from some k<=K.  Apply the trichotomy at k:
+   (1) gives the desired bounded prefix; (2) transfers stability.  In (3),
+   observer stability fixes its result to Error "out of fuel".  For each f>=k,
+   apply the trichotomy again.  Its case (1) contradicts this Error via Halt;
+   its other cases equate the original result with the observer result.
+   Thus the original also stays fixed from k on.  Exhaustion need not be
+   mistaken for termination.  The overhead is zero for run_from: only
+   entered jumps are counted; the initial partial block costs no fuel. *)
+Theorem abi_dyn_empty_context_stable[local]:
+  !ctx fn G. callees_stable G (ctx with ctx_functions := []) fn
+Proof
+  simp[callees_stable_def, venomInstTheory.lookup_function_def,
+       listTheory.FIND_thm]
+QED
+
+Theorem abi_dyn_non_invoke_context[local]:
+  !f g ctx ctx' inst s.
+    inst.inst_opcode <> INVOKE ==>
+    step_inst f ctx inst s = step_inst g ctx' inst s
+Proof
+  simp[venomExecSemanticsTheory.step_inst_non_invoke]
+QED
+
 (* Cutoff diagnostic: a continuation witness becomes a state observation,
    but the fixed-result alternative remains a distinct obligation. *)
 Theorem abi_dyn_cutoff_observation[local]:
