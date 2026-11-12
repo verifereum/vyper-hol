@@ -275,7 +275,15 @@ Theorem compile_mapping_subscript_outcome_ptr:
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r)
 Proof
-  strip_tac >> drule_all exprSimMapKeyTheory.compile_expr_mapping_subscript_parts >>
+  strip_tac >>
+  `expr_map_pre cenv cx env obj es` by
+    metis_tac[exprSimSubscriptMapTheory.expr_body_pre_map_subscript_base,
+              exprSimSubscriptMapTheory.expr_map_pre_subscript_base] >>
+  `type_place_expr env obj = SOME (HashMapT kt vt)` by
+    (drule_all exprSimSubscriptMapTheory.expr_map_pre_checked_type >> simp[]) >>
+  `~copies_subscript_base cenv obj idx /\ ~subscript_reads_base cx obj idx` by
+    metis_tac[exprSimSubscriptMapTheory.map_base_no_overlap] >>
+  drule_all exprSimMapKeyTheory.compile_expr_mapping_subscript_parts >>
   strip_tac >>
   `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
     (drule (cj 1 exprLoweringPropsTheory.compile_expr_grows) >> simp[]) >>
@@ -301,7 +309,8 @@ Proof
   rewrite_tac[expr_map_sim_ptr_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  rewrite_tac[exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th => rewrite_tac[
+    MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
   disch_then (mp_then Any irule gas_outcome_result_cases_ptr) >>
   reverse conj_tac
   >- (conj_tac
