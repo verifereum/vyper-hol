@@ -6,6 +6,7 @@ Ancestors
   allocaSiteResource loweringHalt exprLoweringProps emitHelperProps
   compileEnv emitHelper fragExec venomState venomExecSemantics venomInst
   finite_map words list rich_list arithmetic pred_set
+  abiEncoderWindowSequenceFrameMem abiDecoderVarSequence
 
 Theorem abi_encode_alloc_sequence[local]:
   compile_alloc_buffer n st = (buf,en) /\
@@ -39,6 +40,7 @@ Theorem abi_encode_alloc_window_phase:
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?u d. window_phase ctx func st en {st.cs_next_id} [] s u /\
     mem_cont_sim ctx func s u /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s u) /\
     eval_operand buf.buf_operand u = SOME (n2w d) /\
     (!q. buf.buf_operand = Var q ==> not_fresh_at en q) /\
     FLOOKUP u.vs_allocas st.cs_next_id = SOME (d,n) /\
@@ -75,6 +77,12 @@ Proof
   qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `b`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (strip_tac >> irule window_seq_mem_frame >> simp[] >>
+      qexists `st` >> simp[] >>
+      drule compile_alloc_buffer_insts >> strip_tac >>
+      simp[emitted_insts_def, DROP_LENGTH_APPEND, mk_inst_def,
+           abi_decoder_reentry_opcode_def]) >>
   conj_tac
   >- (qpat_x_assum `buf.buf_operand = _` SUBST1_TAC >>
       qpat_x_assum `lookup_var _ t = _` mp_tac >>

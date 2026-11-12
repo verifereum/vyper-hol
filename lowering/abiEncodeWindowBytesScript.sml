@@ -9,7 +9,7 @@ Ancestors
   venomInst words list rich_list arithmetic pred_set finite_map
   abiEncodeAllocationPhase loweringHalt abiBuiltinAllocation pair abiEncodeWindowTransport
   abiBuiltinEncodeMethod allocaSiteResource valueEncoding valueEncodingProps
-  abiEncoderMemory
+  abiEncoderMemory abiEncoderWindowPhaseFrameMem abiEncoderWindowMemFrame
 
 Theorem abi_encode_address_prefix_mem[local]:
   emit_op ADD [buf;Lit (n2w (32 + (case mid of NONE => 0 | SOME _ => 4)))] st = (data,en) /\
@@ -21,7 +21,8 @@ Theorem abi_encode_address_prefix_mem[local]:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t. window_phase ctx func st ready {} (case mid of NONE => [] | SOME _ => [(p+32,32)]) s t /\
-    mem_cont_sim ctx func s t /\ eval_operand buf t = SOME (n2w p) /\
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\ eval_operand buf t = SOME (n2w p) /\
     eval_operand data t = SOME (n2w (p+32+(case mid of NONE => 0 | SOME _ => 4))) /\
     (case mid of NONE => T | SOME m =>
       mem_bytes_at (p+32) 4 t.vs_memory = abi_builtin_encode_method_bytes m)
@@ -35,7 +36,7 @@ Proof
      drule_all fn_has_code_split >> simp[]) >>
   `eval_operand (Lit (n2w (32+(case mid of NONE => 0 | SOME _ => 4)))) s =
     SOME (n2w (32+(case mid of NONE => 0 | SOME _ => 4)))` by simp[eval_operand_def] >>
-  drule_all window_emit_add_phase_mem >> strip_tac >>
+  drule_all window_emit_add_phase_mem_conditional_frame >> strip_tac >>
   rename1 `window_phase ctx func st en {} [] s addressed` >>
   `eval_operand buf addressed = SOME (n2w p)` by metis_tac[window_phase_operand] >>
   `(!x. buf = Var x ==> not_fresh_at en x)` by metis_tac[not_fresh_at_mono] >>
@@ -50,6 +51,7 @@ Proof
   >- (irule window_phase_chain >> qexistsl_tac [`{}`, `[]`, `en`, `{}`,
        `case mid of NONE => [] | SOME _ => [(p+32,32)]`, `addressed`] >> simp[]) >>
   conj_tac >- metis_tac[mem_cont_sim_trans] >>
+  conj_tac >- metis_tac[window_mem_frame_trans] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- ( `eval_operand data t = SOME (n2w p + n2w (32+(case mid of NONE => 0 | SOME _ => 4)))` by
     metis_tac[window_phase_operand] >> metis_tac[word_add_n2w, ADD_ASSOC]) >>
@@ -67,6 +69,7 @@ Theorem abi_encode_setup_window_bytes:
   ?t p. window_phase ctx func st ready {st.cs_next_id}
       (case mid of NONE => [] | SOME _ => [(p+32,32)]) s t /\
     mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\
     eval_operand (FST ops) t = SOME (n2w p) /\
     eval_operand (SND ops) t = SOME (n2w (p+32+(case mid of NONE => 0 | SOME _ => 4))) /\
     FLOOKUP t.vs_allocas st.cs_next_id =
@@ -101,6 +104,7 @@ Proof
   >- (irule window_phase_chain >> qexistsl_tac [`{st.cs_next_id}`, `[]`, `allocated`,
        `{}`, `case mid of NONE => [] | SOME _ => [(p+32,32)]`, `allocated_s`] >> simp[]) >>
   conj_tac >- metis_tac[mem_cont_sim_trans] >>
+  conj_tac >- metis_tac[window_mem_frame_trans] >>
   conj_tac >- metis_tac[FST] >>
   conj_tac >- metis_tac[SND] >>
   conj_tac >- metis_tac[window_phase_effect, abi_encoder_registered_effect_allocated] >>
@@ -153,7 +157,8 @@ Theorem abi_encode_finish_bytes_memory[local]:
   FLOOKUP s.vs_allocas site = SOME (p,n) /\
   LENGTH bytes = payload_len+k /\ mem_bytes_at (p+32) (LENGTH bytes) s.vs_memory = bytes ==>
   ?t. window_phase ctx func st en {} [(p,32)] s t /\
-    mem_cont_sim ctx func s t /\ eval_operand buf t = SOME (n2w p) /\
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\ eval_operand buf t = SOME (n2w p) /\
     FLOOKUP t.vs_allocas site = SOME (p,n) /\
     mem_bytes_at (p+32) (LENGTH bytes) t.vs_memory = bytes /\
     val_in_memory (BaseTV (BytesT (Dynamic bound))) (vyperValue$BytesV bytes) p t.vs_memory
@@ -183,7 +188,8 @@ Theorem abi_encode_finish_window_bytes:
   mem_bytes_at (p+32+(case mid of NONE => 0 | SOME _ => 4))
     (LENGTH (enc at av)) s.vs_memory = enc at av ==>
   ?t. window_phase ctx func st en {} [(p,32)] s t /\
-    mem_cont_sim ctx func s t /\ eval_operand buf t = SOME (n2w p) /\
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\ eval_operand buf t = SOME (n2w p) /\
     FLOOKUP t.vs_allocas site = SOME (p,n) /\
     mem_bytes_at (p+32)
       (LENGTH (case mid of NONE => enc at av | SOME m => abi_builtin_encode_method_bytes m ++ enc at av))

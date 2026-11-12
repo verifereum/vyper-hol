@@ -120,7 +120,7 @@ Theorem abi_encode_window_pre_transport:
   eval_operand src s = SOME (n2w sb) /\
   (!x. src = Var x ==> not_fresh_at st x) /\
   fn_has_code st final func /\ fn_inst_ids_distinct func /\
-  sb+cap <= s.vs_alloca_next /\
+  (cap=0 \/ sb+cap <= s.vs_alloca_next) /\
   venomMemDefs$regions_disjoint (sb,cap) (p,n) /\
   (!i b sz. i IN window_alloca_sites func (frag_ids st final) /\
     i <> st.cs_next_id /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==>
@@ -130,10 +130,24 @@ Theorem abi_encode_window_pre_transport:
   eval_operand (SND ops) u = SOME (n2w (p+32+k)) /\
   FLOOKUP u.vs_allocas st.cs_next_id = SOME (p,n) /\
   p+n <= u.vs_alloca_next /\ p+n < dimword (:256) ==>
-  abi_encoder_window_pre ctx func ready body_end (SND ops) src ei at av
-    sb cap (p+32+k) u
+  abi_encoder_admissible ei /\
+  abi_encoder_window_input ei at av sb cap u.vs_memory /\
+  eval_operand src u = SOME (n2w sb) /\
+  eval_operand (SND ops) u = SOME (n2w (p+32+k)) /\
+  (!x. src = Var x \/ SND ops = Var x ==> not_fresh_at ready x) /\
+  fn_has_code ready body_end func /\ fn_inst_ids_distinct func /\
+  alloca_inv u /\ alloca_room ctx func u /\
+  (cap=0 \/ sb+cap <= u.vs_alloca_next) /\
+  p+32+k+LENGTH (enc at av) <= u.vs_alloca_next /\
+  venomMemDefs$regions_disjoint (sb,cap) (p+32+k,LENGTH (enc at av)) /\
+  (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids ready body_end /\ FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
+    venomMemDefs$regions_disjoint (p+32+k,LENGTH (enc at av)) (b,sz)) /\
+  ~u.vs_halted /\ u.vs_current_bb = ready.cs_current_bb /\
+  u.vs_inst_idx = LENGTH ready.cs_current_insts
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_encode_code >> strip_tac >>
   `p+32+k+LENGTH (enc at av) <= p+n` by
     (mp_tac (Q.SPEC `maxlen+k` abi_builtin_word_size_capacity) >> decide_tac) >>
@@ -153,7 +167,7 @@ Proof
   qpat_x_assum `k = _` SUBST_ALL_TAC >>
   drule_all abi_encode_window_sites >> strip_tac >>
   drule abi_builtin_encode_setup_live >> strip_tac >>
-  simp_tac bool_ss [abi_encoder_window_pre_def] >>
+  simp_tac bool_ss [] >>
   asm_rewrite_tac [] >> conj_tac
   >- (rpt strip_tac >- metis_tac[not_fresh_at_mono] >>
       qpat_x_assum `abi_decoder_operand_live ready.cs_next_var (SND ops)` mp_tac >>
