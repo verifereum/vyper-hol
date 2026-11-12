@@ -754,7 +754,7 @@ Proof
      strip_tac >> irule local_region_frame_fwd >>
      qexistsl [`z`, `sm`, `ee.scopes`] >> simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
-       vv_post H ctx func cenv cx e es1 sa salloc u ee tva vv az` by
+       vv_post H ctx func cenv cx e es1 sa sm u ee tva vv az` by
     (gen_tac >> strip_tac >> irule ifexp_widen_vv_post_alloc_frame >>
      conj_tac >- (first_x_assum drule >> simp[]) >>
      qexistsl [`sb`, `op`, `t`, `z`, `sm`, `lowered_value_type cenv e`] >>
@@ -772,5 +772,79 @@ Proof
      qexistsl [`storage_trace_horizon ee.storage_trace`, `ctx`, `cx`, `e`,
        `ee`, `func`, `tva`, `vv`] >> simp[] >>
      qpat_x_assum `!H. valid_horizon _ _ _ _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` drule >> simp[]) >>
+  qabbrev_tac `q = az with vs_inst_idx := SUC z.vs_inst_idx` >>
+  `q.vs_memory = z.vs_memory /\ q.vs_accounts = z.vs_accounts /\
+   q.vs_call_ctx = z.vs_call_ctx /\ q.vs_transient = z.vs_transient /\
+   z.vs_alloca_next <= q.vs_alloca_next /\
+   eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) z /\
+   op_prov Ga (vv_operand vv) = op_prov G (vv_operand vv) /\
+   op_taint ta (vv_operand vv) = op_taint tn (vv_operand vv) /\
+   (!x. vv_operand vv = Var x ==> FLOOKUP Ga x = FLOOKUP G x) /\
+   ta.t_stor = tn.t_stor /\ ta.t_trans = tn.t_trans /\
+   (!i. i < z.vs_alloca_next ==> (i IN ta.t_mem <=> i IN tn.t_mem))` by
+    (mp_tac (Q.INST [`s` |-> `z`, `sc` |-> `salloc`, `out` |-> `p`,
+       `n` |-> `type_memory_bytes cenv t`,
+       `src_ty` |-> `lowered_value_type cenv e`] ifexp_widen_alloc_boundary_general) >>
+     simp[Abbr `q`, Abbr `Ga`, Abbr `ta`, Abbr `ai`]) >>
+  `ptr_vv_ok cx t tva vv ee Ga ta q /\
+   vv_store_bound cx t (lowered_value_type cenv e) ee tva vv q /\
+   (!t' op0. vv = StackValue t' op0 /\ ~is_word_type t ==>
+     ptr_buf_ok cenv e op0 Ga q) /\
+   (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+     ptr_buf_ok cenv e p.ptr_operand Ga q) /\
+   (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+    ?val. read_result cx tva ee = (INL val,ee) /\
+      !rt w. evaluate_type (get_tenv cx) t = SOME rt /\
+       eval_operand (vv_operand vv) q = SOME w ==>
+       w2n w + type_memory_size rt <= lo /\
+       (!mem. mem_agree_outside ta.t_mem q.vs_memory mem ==>
+         val_in_memory rt val (w2n w) mem))` by
+    (mp_tac (Q.INST [`s` |-> `z`, `Gq` |-> `Ga`, `tq` |-> `ta`,
+       `tv` |-> `tva`, `lt` |-> `lowered_value_type cenv e`]
+       ifexp_widen_alloc_resources_frame) >> simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    vv_post H ctx func cenv cx e es1 sa sm u ee tva vv q /\
+    ghost_inv_at (DF H) lo d cenv cx ee Ga ta q` by
+    (gen_tac >> strip_tac >> conj_tac
+     >- (simp[Abbr `q`] >>
+         qpat_x_assum `!H. valid_horizon _ _ _ _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ az` drule >> simp[]) >>
+     qpat_x_assum `!H. valid_horizon _ _ _ _ ==> ghost_inv_at _ _ _ _ _ _ _ _ az` drule >>
+     simp[Abbr `q`, ghost_inv_at_def, ptr_covers_def, lookup_var_def,
+       stor_taint_ok_at_def, allocas_from_def] >>
+     strip_tac >> simp[] >>
+     `!s k. return_buf_ptr d cenv Ga ta (s with vs_inst_idx := k) =
+              return_buf_ptr d cenv Ga ta s` by
+       (POP_ASSUM_LIST (K all_tac) >> Cases_on `d` >> simp[return_buf_ptr_def] >>
+        PairCases_on `x` >> simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def]) >>
+     simp[] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb z.vs_inst_idx = SOME ai` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `ai`]) >>
+  `alloca_inv z` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ ee z` mp_tac >>
+     simp[stmt_state_rel_def, state_rel_def]) >>
+  `alloca_history func q` by
+    (`step_inst_base ai z = OK az` by simp[Abbr `ai`] >>
+     `lookup_block z.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+     drule_all alloca_history_base_step >> simp[Abbr `q`, Abbr `ai`, mk_inst_def, is_terminator_def]) >>
+  `~q.vs_halted /\ q.vs_current_bb = salloc.cs_current_bb /\
+   q.vs_inst_idx = LENGTH salloc.cs_current_insts /\
+   u.vs_alloca_next <= q.vs_alloca_next` by
+    simp[Abbr `q`] >>
+  asm "unwrap" (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
+  disch_then drule >>
+  simp[] >>
+  disch_then (drule_at (Pat `storage_trace_domain _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_store_bound _ _ _ _ _ _ _`)) >>
+  simp[] >>
+  disch_then (drule_at (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qpat_x_assum `cenv.ce_is_ctor /\ _ ==> ?val. _ /\ !rt w. _` mp_tac >>
+      simp[]) >>
+  strip_tac >>
+  rename1 `ptr_val_ok cx t v src Gu tu su` >>
   cheat
 QED
