@@ -43,7 +43,8 @@ Theorem fmp_stage_covers_step:
   ~MEM inst.inst_opcode [INVOKE; DALLOCA; PHI] /\
   step_inst k C inst s = OK s1 /\
   fmp_frame_covers sm env eb lo G /\
-  EVERY (\h. !b z. h = SOME (b,z) ==> b < eb) PG ==>
+  (!b z c id. FLOOKUP sm (b,z) = SOME (c,id) ==> 0 < z) /\
+  EVERY (\h. !b z. h = SOME (b,z) /\ 0 < z ==> b < eb) PG ==>
   fmp_frame_covers sm env eb lo (step_prov PG G inst s1)
 Proof
   cheat
