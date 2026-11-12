@@ -177,14 +177,14 @@ Resume alloc_run_compile_assign_value_frame[storage]:
   gen_tac >> BETA_TAC >> irule alloc_run_conseq >>
   irule_at Any (SRULE [compile_store_at_loc_def]
     (Q.INST [`loc` |-> `LocStorage`] alloc_run_assign_suffix_frame)) >>
-  qexistsl [`ce`, `R`] >> simp[]
+  qexists `R` >> simp[]
 QED
 Resume alloc_run_compile_assign_value_frame[transient]:
   irule alloc_run_assign_normalize_bind >> simp[] >>
   gen_tac >> BETA_TAC >> irule alloc_run_conseq >>
   irule_at Any (SRULE [compile_store_at_loc_def]
     (Q.INST [`loc` |-> `LocTransient`] alloc_run_assign_suffix_frame)) >>
-  qexistsl [`ce`, `R`] >> simp[]
+  qexists `R` >> simp[]
 QED
 Resume alloc_run_compile_assign_value_frame[code]:
   irule alloc_run_assign_normalize_bind >> simp[] >>
