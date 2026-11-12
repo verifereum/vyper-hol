@@ -18,6 +18,7 @@ Ancestors
   fmpStageOpBase fmpStageControl fmpStageRel o1PassContract ptrDiscipline
   contextCodegenRel unitMemInv venomExecSemantics venomState venomInst
   finite_map words list fmpStageCoverMemOperands lowerDloadRangeTransport
+  fmpStageCoverForwardAssemble fmpStageCoverForwardBoundary
 
 (* Each of these has no memory range and is neither a terminator nor an
    INVOKE. *)
@@ -103,7 +104,9 @@ Theorem fmp_stage_forward_lift:
       (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
          (fmp_stage_root infos ctx fn) lbl bb.bb_instructions j)
 Proof
-  cheat
+  mp_tac fmp_cover_forward_from_prefix >>
+  (impl_tac >- metis_tac[fmp_stage_copy_prefix_same_after]) >>
+  metis_tac[]
 QED
 
 (* Why it holds: target indices tidx idx .. tidx (SUC idx) - 1 hold
