@@ -2,16 +2,6 @@ Theory bodyPtrStructLitOwnershipSources
 Ancestors supportedProgram supportedDecls loweringShapeProps compileVyper
   supportedStmtTraverse loweringShapeDefs list pair
 
-Theorem structlit_supported_function_defaults:
-  !tops vis mut nr rr name args defaults ret body.
-  supported_program tops /\
-  MEM (FunctionDecl vis mut nr rr name args defaults ret body) tops ==>
-  defaults = []
-Proof
-  rpt strip_tac >> drule_all supported_program_declaration >>
-  simp[supported_function_header_contract, NULL_EQ]
-QED
-
 Theorem structlit_supported_function_body:
   !tops vis mut nr rr name args defaults ret body.
   supported_program tops /\
@@ -50,19 +40,6 @@ Proof
   metis_tac[classify_functions_external_source, MEM_classify_internal,
     classify_functions_fallback_mem, structlit_classify_constructor_source,
     FST, SND]
-QED
-
-Theorem structlit_classified_function_defaults:
-  !tops exts ints fb ctor mut nr rr name args defaults ret body.
-  supported_program tops /\ classify_functions tops = (exts,ints,fb,ctor) /\
-  (MEM (mut,nr,rr,name,args,defaults,ret,body) exts \/
-   MEM (mut,nr,rr,name,args,defaults,ret,body) ints \/
-   fb = SOME (mut,nr,rr,name,args,defaults,ret,body) \/
-   ctor = SOME (mut,nr,rr,name,args,defaults,ret,body)) ==>
-  defaults = []
-Proof
-  metis_tac[structlit_classified_function_source,
-    structlit_supported_function_defaults]
 QED
 
 Theorem structlit_classified_function_body:
