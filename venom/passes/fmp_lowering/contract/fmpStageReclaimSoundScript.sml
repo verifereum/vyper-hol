@@ -227,14 +227,50 @@ Theorem fmp_ready_nonphi_input[local]:
     (live_vars_at (liveness_analyze fn) lbl 0))
 Proof
   strip_tac >> irule input_vars_from_non_phi >> conj_tac
-  >- (drule live_vars_at_propagate_range >> simp[] >>
-      disch_then irule >>
-      qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >>
-      simp[current_collect_phis_length] >> rpt strip_tac >>
-      drule collect_phis_index >> strip_tac >>
-      gvs[EVERY_MEM, inst_defs_def] >> metis_tac[EL_MEM]) >>
-  gvs[fmp_phi_ready_block_def, EVERY_MEM, inst_uses_def] >>
-  metis_tac[phi_pairs_mem_operand_vars]
+  >~ [`!inst. MEM inst (collect_phis bb.bb_instructions) ==> ~MEM v (MAP SND (phi_pairs inst.inst_operands))`]
+  >- (gvs[fmp_phi_ready_block_def, EVERY_MEM, inst_uses_def] >>
+      metis_tac[phi_pairs_mem_operand_vars]) >>
+  drule live_vars_at_propagate_range >> simp[] >>
+  disch_then irule >> simp[] >>
+  qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >>
+  simp[current_collect_phis_length] >> rpt strip_tac >>
+  drule collect_phis_index >> strip_tac >>
+  gvs[EVERY_MEM, inst_defs_def] >> metis_tac[EL_MEM]
+QED
+
+Theorem fmp_input_at_terminator[local]:
+  wf_function fn /\ fn_inst_wf fn /\
+  MEM pl (cfg_analyze fn).cfg_dfs_pre /\
+  MEM sl (cfg_analyze fn).cfg_dfs_pre /\
+  MEM sl (cfg_succs_of (cfg_analyze fn) pl) /\
+  lookup_block pl fn.fn_blocks = SOME pbb /\
+  lookup_block sl fn.fn_blocks = SOME sbb /\
+  pbb.bb_instructions <> [] /\
+  MEM x (input_vars_from pl sbb.bb_instructions
+    (live_vars_at (liveness_analyze fn) sl 0)) ==>
+  MEM x (live_vars_at (liveness_analyze fn) pl
+    (PRE (LENGTH pbb.bb_instructions)))
+Proof
+  strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) pl` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `MEM x (live_vars_at (liveness_analyze fn) pl
+     (LENGTH pbb.bb_instructions))` by
+    (drule_all analyzed_live_out_edge_subset >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+  `MEM pbb fn.fn_blocks` by
+    metis_tac[livenessTransferProofsTheory.lookup_block_mem] >>
+  `bb_well_formed pbb` by gvs[wf_function_def] >>
+  `inst_wf (LAST pbb.bb_instructions)` by
+    metis_tac[fn_inst_wf_def, rich_listTheory.MEM_LAST_NOT_NIL] >>
+  `(LAST pbb.bb_instructions).inst_outputs = []` by
+    metis_tac[venomExecProofsTheory.terminator_no_outputs, bb_well_formed_def] >>
+  drule live_vars_at_propagate >> simp[] >> disch_then irule >>
+  `0 < LENGTH pbb.bb_instructions` by
+    (Cases_on `pbb.bb_instructions` >> gvs[]) >>
+  `SUC (PRE (LENGTH pbb.bb_instructions)) = LENGTH pbb.bb_instructions` by decide_tac >>
+  simp[inst_defs_def, GSYM LAST_EL]
 QED
 
 Theorem fmp_stage_live_edge:
@@ -298,6 +334,105 @@ Proof
     (first_x_assum irule >> simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
   `~MEM v (EL n bb.bb_instructions).inst_outputs` by simp[] >>
   metis_tac[fresh_transfer]
+QED
+
+Theorem fresh_first_hit[local]:
+  !R a b. RTC R a b ==> !P.
+  P a /\ (!x y. R x y /\ x <> b /\ P x ==> P y) ==> P b
+Proof
+  gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem fresh_edge_step[local]:
+  wf_function fn /\ ssa_form fn /\
+  fmp_reclaim_states infos fn = SOME states /\
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  MEM bb fn.fn_blocks /\ k < LENGTH bb.bb_instructions /\
+  MEM out (EL k bb.bb_instructions).inst_outputs /\
+  (!pb n s. MEM pb fn.fn_blocks /\ n <= LENGTH pb.bb_instructions /\
+    df_at NONE states pb.bb_label 0 = SOME s ==>
+    ?t. df_at NONE states pb.bb_label n = SOME t) /\
+  (!pb sb t. MEM pb fn.fn_blocks /\ MEM sb fn.fn_blocks /\
+    MEM sb.bb_label (cfg_succs_of (cfg_analyze fn) pb.bb_label) /\
+    df_at NONE states pb.bb_label (LENGTH pb.bb_instructions) = SOME t ==>
+    ?s ks. df_at NONE states sb.bb_label 0 = SOME s /\
+           t.frs_stack = s.frs_stack ++ ks) /\
+  fn_cfg_edge fn a b /\ a <> bb.bb_label /\
+  df_at NONE states a 0 = SOME start /\ ~MEM out start.frs_stack ==>
+  ?s. df_at NONE states b 0 = SOME s /\ ~MEM out s.frs_stack
+Proof
+  strip_tac >>
+  `?sb. lookup_block b fn.fn_blocks = SOME sb` by
+    metis_tac[fn_cfg_edge_target_block] >>
+  `MEM sb fn.fn_blocks /\ sb.bb_label = b` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `MEM b (cfg_succs_of (cfg_analyze fn) a)` by
+    metis_tac[fn_cfg_edge_succs] >>
+  qpat_x_assum `fn_cfg_edge fn a b` mp_tac >>
+  simp[fn_cfg_edge_def] >> strip_tac >>
+  rename1 `MEM pb fn.fn_blocks` >>
+  `?t. df_at NONE states pb.bb_label (LENGTH pb.bb_instructions) = SOME t` by
+    metis_tac[LESS_EQ_REFL] >>
+  `!j. j < LENGTH pb.bb_instructions ==>
+       ~MEM out (EL j pb.bb_instructions).inst_outputs` by
+    metis_tac[ssa_form_position] >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, venomInstTheory.fn_labels_def] >>
+  `~MEM out t.frs_stack` by
+    (gvs[] >>
+     `LENGTH pb.bb_instructions <= LENGTH pb.bb_instructions` by simp[] >>
+     drule_all fresh_block_prefix >> simp[]) >>
+  metis_tac[MEM_APPEND]
+QED
+
+Theorem fresh_out_conditional[local]:
+  wf_function fn /\ ssa_form fn /\ all_reachable fn /\
+  fmp_reclaim_states infos fn = SOME states /\
+  MEM bb fn.fn_blocks /\ k < LENGTH bb.bb_instructions /\
+  (EL k bb.bb_instructions).inst_opcode = DALLOCA /\
+  (EL k bb.bb_instructions).inst_outputs = [out] /\
+  df_at NONE states bb.bb_label k = SOME st /\
+  (!ebb. entry_block fn = SOME ebb ==>
+    ?s. df_at NONE states ebb.bb_label 0 = SOME s /\ s.frs_stack = []) /\
+  (!pb n s. MEM pb fn.fn_blocks /\ n <= LENGTH pb.bb_instructions /\
+    df_at NONE states pb.bb_label 0 = SOME s ==>
+    ?t. df_at NONE states pb.bb_label n = SOME t) /\
+  (!pb sb t. MEM pb fn.fn_blocks /\ MEM sb fn.fn_blocks /\
+    MEM sb.bb_label (cfg_succs_of (cfg_analyze fn) pb.bb_label) /\
+    df_at NONE states pb.bb_label (LENGTH pb.bb_instructions) = SOME t ==>
+    ?s ks. df_at NONE states sb.bb_label 0 = SOME s /\
+           t.frs_stack = s.frs_stack ++ ks) ==>
+  ~MEM out st.frs_stack
+Proof
+  strip_tac >>
+  `?env. fmp_base_analyze (fn_insts fn) = SOME env` by
+    metis_tac[fmpReclaimPropsTheory.fmp_reclaim_states_has_bases] >>
+  `fn_reachable fn bb.bb_label` by metis_tac[all_reachable_def] >>
+  gvs[fn_reachable_def] >>
+  qpat_x_assum `fn_entry_label fn = SOME entry` mp_tac >>
+  simp[venomInstTheory.fn_entry_label_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `entry_block fn = SOME ebb` >>
+  `?start. df_at NONE states ebb.bb_label 0 = SOME start /\
+           ~MEM out start.frs_stack` by metis_tac[MEM] >>
+  `?s. df_at NONE states bb.bb_label 0 = SOME s /\ ~MEM out s.frs_stack` by
+    (drule fresh_first_hit >>
+     disch_then (qspec_then
+       `\l. ?s. df_at NONE states l 0 = SOME s /\ ~MEM out s.frs_stack`
+       (irule o BETA_RULE)) >>
+     reverse conj_tac >- metis_tac[] >>
+     rpt strip_tac >>
+     `MEM out (EL k bb.bb_instructions).inst_outputs` by simp[] >>
+     drule_all fresh_edge_step >> simp[]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, venomInstTheory.fn_labels_def] >>
+  `!j. j < k ==> ~MEM out (EL j bb.bb_instructions).inst_outputs` by
+    (rpt strip_tac >>
+     `j < LENGTH bb.bb_instructions` by simp[] >>
+     `MEM out (EL k bb.bb_instructions).inst_outputs` by simp[] >>
+     `j = k` by metis_tac[ssa_form_position] >> gvs[]) >>
+  `k <= LENGTH bb.bb_instructions` by simp[] >>
+  drule_all fresh_block_prefix >> simp[]
 QED
 
 Theorem fmp_stage_out_not_kept:
