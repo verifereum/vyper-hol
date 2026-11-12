@@ -63,8 +63,8 @@ Theorem hash_expr_sim_ptr_suffix:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!exc ee gt r. expr_exit (INR exc : value + exception) r ==>
@@ -72,16 +72,16 @@ Theorem hash_expr_sim_ptr_suffix:
   (!gs v ee G tn t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
        (INL v, ee) /\ ee.gas_obs = [] /\
-     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\ ~t.vs_halted /\
+     expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\ ~t.vs_halted /\
      t.vs_current_bb = sm.cs_current_bb /\
      t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-     ghost_inv d cenv cx ee G tn t /\
-     ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
-     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
+     ghost_inv H d cenv cx ee G tn t /\
+     ptr_val_ok cx (expr_type e) v op G tn t /\
+     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
      ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-     ?right. gas_summary_ptr_at (cx_dead cx) (ctx, func) PG right (k v)
+     ?right. gas_summary_ptr_at (cx_dead H cx) (ctx, func) PG right (k v)
        (ee, t, G, tn) Q R) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
     (bind (bind (eval_expr cx e) (read_result cx)) k)
     (es, s0, G0, tn0) Q R
 Proof
@@ -93,12 +93,12 @@ Proof
   irule hash_value_outcome_ptr_suffix >>
   conj_tac >- metis_tac[] >>
   qexists_tac `\v ee G tn t.
-    expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+    expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    ghost_inv d cenv cx ee G tn t /\
-    ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
-    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
+    ghost_inv H d cenv cx ee G tn t /\
+    ptr_val_ok cx (expr_type e) v op G tn t /\
+    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn` >>
   simp[] >> metis_tac[]
 QED
