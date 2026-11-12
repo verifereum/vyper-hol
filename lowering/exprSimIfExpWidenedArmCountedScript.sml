@@ -98,7 +98,7 @@ Resume compile_nocopy_ifexp_post_path[memory]:
   qexists_tac `s` >>
   simp[gas_marked_path_def, cj 1 gas_path_rules] >>
   Cases_on `post_value_type ce e = expr_type e`
-  >- gvs[vv_post_def, vv_at_def, mk_ptr_def] >>
+  >- (gvs[vv_post_def, vv_at_def, mk_ptr_def] >> rpt strip_tac >> gvs[]) >>
   suspend "layout"
 QED
 
@@ -145,6 +145,7 @@ Resume compile_nocopy_ifexp_post_path[layout]:
     (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o PURE_REWRITE_RULE[vv_post_def]) >>
      gvs[expr_type_def, vv_own_def, mk_ptr_def] >> metis_tac[]) >>
+  reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
   irule vv_own_memory_transport >>
   goal_assum (drule_at (Pat `vv_own _ _ _ _ _ _ _ _ _`)) >>
   metis_tac[expr_type_def, value_has_type_val_wf]

@@ -396,7 +396,7 @@ QED
 (* The field's place pointer, from the base's: a storage base adds the
    field's slot offset, a memory or immutable base its byte offset, and a
    stack base is a value whose field is a value. *)
-Theorem attr_place_ptr[local]:
+Theorem attr_place_ptr:
   !cenv cx ee q child bvv dst ann env t r sid fs ftv fld ee' w.
     expr_sim_inv cenv cx env t /\
     eval_result_typed (env,cx,t) r (Type (StructT sid)) /\

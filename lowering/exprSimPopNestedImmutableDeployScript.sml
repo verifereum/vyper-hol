@@ -418,17 +418,21 @@ Theorem immutable_ctor_pointer_post[local]:
   j + type_memory_size etv <= type_memory_size tv /\
   val_in_memory etv v (off+j) u.vs_memory /\ value_has_type etv v /\
   read_result cx result es' = (INL v,es') /\
-  (!id path. result <> PlaceR (MemoryPlace id path)) /\
+  vv_place_ptr cenv cx es' u result
+    (LocatedValue (expr_type e) (mk_ptr op LocCode)) /\
   eval_operand op u = SOME (n2w (off+j)) ==>
   vv_post ctx func cenv cx e initial sa sb s0 es' result
     (LocatedValue (expr_type e) (mk_ptr op LocCode)) u
 Proof
   strip_tac >>
+  `!id path. result <> PlaceR (MemoryPlace id path)` by
+    (rpt strip_tac >>
+     gvs[loweringPostsTheory.vv_place_ptr_def, contextTheory.mk_ptr_def]) >>
   simp[vv_post_def, vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
   conj_tac
   >- (rewrite_tac[immutable_holds_def] >> asm_rewrite_tac[] >>
       qexistsl [`id`, `off`, `tv`, `updated`, `j`, `etv`, `v`] >> simp[]) >>
-  gvs[wb_frame_def] >> first_assum ACCEPT_TAC
+  fs[contextTheory.mk_ptr_def] >> gvs[wb_frame_def] >> first_assum ACCEPT_TAC
 QED
 
 (* Operational suffix at the compiler boundary; the immutable map is only
@@ -756,7 +760,7 @@ Proof
     simp[read_result_def, return_def] >>
   `vv_post ctx func cenv cx (Pop ann bt) es0 sa r s0 fin
       (Value (LAST vs)) (LocatedValue ann (mk_ptr q LocCode)) u` by
-    (drule_all (SRULE [expr_type_def]
+    (drule_all (SRULE [expr_type_def, loweringPostsTheory.vv_place_ptr_def]
        (Q.INST [`e` |-> `Pop ann bt`, `result` |-> `Value (LAST vs)`]
           immutable_ctor_pointer_post)) >> simp[]) >>
   `!tail. pop_place cx (ImmutablePlace cenv.ce_module id path)

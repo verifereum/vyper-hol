@@ -84,12 +84,11 @@ Theorem pop_memory_live_suffix_post:
   w2n w = w2n b + k + 32 + (LENGTH vs - 1) * type_memory_size etv /\
   local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
     etv result /\
-  result = PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])) ==>
+  PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])) = result ==>
   vv_post ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) (u with vs_inst_idx := idx)
 Proof
   pure_rewrite_tac[vv_post_inst_idx] >> strip_tac >>
-  qpat_x_assum `result = PlaceR _` (assume_tac o GSYM) >>
   `local_ptrs_rel func cenv mid.scopes s` by
     fs[stmt_state_rel_def, state_rel_def] >>
   `u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next` by
