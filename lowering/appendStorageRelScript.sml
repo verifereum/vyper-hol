@@ -268,20 +268,22 @@ Proof
       (mp_tac o REWRITE_RULE [dead_bytes_def, GSYM th])) >> strip_tac >>
   pure_rewrite_tac [dead_bytes_def] >>
   qexists_tac `i` >> asm_simp_tac bool_ss [w2n_n2w, arithmeticTheory.LESS_MOD] >>
-  Cases_on `i < len` >>
-  qpat_x_assum `if _ then _ else _` mp_tac >>
-  asm_rewrite_tac[] >> strip_tac >> asm_simp_tac bool_ss []
-  >- (`i * type_slot_size tv + type_slot_size tv <= len * type_slot_size tv` by
-        (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
-      `dead_bytes st' (bs+1+i*type_slot_size tv) tv j b <=>
-       dead_bytes st (bs+1+i*type_slot_size tv) tv j b` suffices_by simp[] >>
-      irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
-      `len * type_slot_size tv <= cap * type_slot_size tv` by simp[] >>
-      first_x_assum irule >>
-      qpat_x_assum `bs + type_slot_size _ <= _` mp_tac >>
-      pure_rewrite_tac [type_slot_size_def] >> decide_tac) >>
-  `i <> len` by (strip_tac >> gvs[]) >>
-  `~(i < len+1)` by decide_tac >> simp[]
+  `i <> len` by
+    (strip_tac >> gvs[] >> drule (cj 1 dead_bytes_range) >> decide_tac) >>
+  `i * type_slot_size tv + type_slot_size tv <= len * type_slot_size tv \/
+   len * type_slot_size tv + type_slot_size tv <= i * type_slot_size tv` by
+    (Cases_on `i < len`
+     >- metis_tac[vyperLookupStorageTheory.array_index_element_end_bound] >>
+     `len < i` by decide_tac >>
+     metis_tac[vyperLookupStorageTheory.array_index_element_end_bound]) >>
+  `i * type_slot_size tv + type_slot_size tv <= cap * type_slot_size tv` by
+    (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+  `dead_bytes st' (bs+1+i*type_slot_size tv) tv j b <=>
+   dead_bytes st (bs+1+i*type_slot_size tv) tv j b` suffices_by simp[] >>
+  irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+  first_x_assum irule >>
+  qpat_x_assum `bs + type_slot_size _ <= _` mp_tac >>
+  pure_rewrite_tac [type_slot_size_def] >> decide_tac
 QED
 
 Theorem append_storage_copy_dead_mono[local]:
