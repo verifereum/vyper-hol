@@ -34,7 +34,7 @@
 
 Theory bodySim
 Ancestors
-  loweringPosts
+  loweringPosts supportedTypes retAbiPlanProps finite_map pred_set
   list exprSimDefs exprSimHypsDefs stmtSimDefs compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
@@ -404,3 +404,52 @@ Termination
   | INR (_,ts,_) => list_size assignment_target_size ts)` >>
   simp[assignment_target_size_def, list_size_def]
 End
+
+Theorem supported_nested_evaluation_env[local]:
+  !leaf fuel tops ty.
+    leaf = supported_scalar_type ==>
+    !large removed.
+      supported_nested_type leaf fuel tops ty /\ type_env tops SUBMAP large ==>
+      evaluate_type (DRESTRICT (type_env tops) (COMPL removed)) ty =
+      evaluate_type (DRESTRICT large (COMPL removed)) ty
+Proof
+  recInduct supported_nested_type_ind >> rpt strip_tac >> gvs[] >>
+  Cases_on `supported_scalar_type ty`
+  >- (Cases_on `ty` >>
+      gvs[supported_scalar_type_def, supported_word_type_def,
+          supported_string_type_def, vyperValueTheory.evaluate_type_def]) >>
+  qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
+  Cases_on `ty` >>
+  simp[Once supported_nested_type_def, supported_scalar_type_def,
+       supported_word_type_def, supported_string_type_def] >> strip_tac
+  >~ [`evaluate_type _ (TupleT tys)`]
+  >- (`OPT_MMAP (evaluate_type (DRESTRICT (type_env tops) (COMPL removed))) tys =
+       OPT_MMAP (evaluate_type (DRESTRICT large (COMPL removed))) tys` by
+        (irule OPT_MMAP_cong >> gvs[EVERY_MEM] >> metis_tac[]) >>
+      gvs[vyperValueTheory.evaluate_type_def,
+          vyperValueTheory.evaluate_types_OPT_MMAP])
+  >~ [`evaluate_type _ (ArrayT t b)`]
+  >- (Cases_on `b` >> gvs[] >>
+      `evaluate_type (DRESTRICT (type_env tops) (COMPL removed)) t =
+       evaluate_type (DRESTRICT large (COMPL removed)) t` by metis_tac[] >>
+      simp[vyperValueTheory.evaluate_type_def]) >>
+  Cases_on `supported_struct_fields tops p` >> gvs[] >>
+  rename1 `supported_struct_fields tops p = SOME fields` >>
+  drule supported_struct_fields_type_env >> strip_tac >>
+  `FLOOKUP large p = SOME (StructArgs fields)` by
+    metis_tac[FLOOKUP_SUBMAP] >>
+  Cases_on `p IN removed` >>
+  simp[vyperValueTheory.evaluate_type_def, FLOOKUP_DRESTRICT] >>
+  simp[DRESTRICT_DOMSUB, vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  `COMPL removed DELETE p = COMPL (p INSERT removed)` by
+    (simp[EXTENSION] >> metis_tac[]) >>
+  asm_rewrite_tac[] >>
+  `OPT_MMAP (evaluate_type (DRESTRICT (type_env tops) (COMPL (p INSERT removed))))
+       (MAP SND fields) =
+   OPT_MMAP (evaluate_type (DRESTRICT large (COMPL (p INSERT removed))))
+       (MAP SND fields)` by
+    (irule OPT_MMAP_cong >>
+     gvs[EVERY_MEM, combinTheory.o_DEF, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+  simp[]
+QED
+
