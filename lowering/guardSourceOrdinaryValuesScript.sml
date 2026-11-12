@@ -217,3 +217,34 @@ Proof
   conj_tac >- (metis_tac[storage_well_formed_on_backends]) >>
   metis_tac[]
 QED
+
+Theorem finite_prefix_Expr_StructLit:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "Expr_StructLit")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_exprs (MAP SND kes))` by
+    (qpat_x_assum `call_evaluation_safe cx (int_calls_expr (StructLit _ _ _))` mp_tac >>
+     simp_tac(srw_ss())[Once int_calls_expr_def,
+       vyperTypeEvalSoundnessTheory.int_calls_exprs_MAP_SND]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `type_place_expr _ (StructLit _ _ _) = SOME _` mp_tac >>
+      simp[Once well_typed_expr_def]) >>
+  strip_tac >>
+  qpat_x_assum `well_typed_expr _ (StructLit _ _ _)` mp_tac >>
+  simp_tac(srw_ss())[Once well_typed_expr_def] >> strip_tac >>
+  `well_typed_exprs env (MAP SND kes)` by
+    (irule vyperTypeEvalSoundnessTheory.well_typed_named_exprs_MAP_SND_stmt >> simp[]) >>
+  qpat_x_assum `eval_expr _ (StructLit _ _ _) _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, LET_THM, bind_def, return_def] >>
+  qpat_x_assum `!ks. ks = MAP FST kes ==> _` (qspec_then `MAP FST kes` mp_tac) >>
+  simp_tac bool_ss [] >> strip_tac >>
+  Cases_on `eval_exprs cx (MAP SND kes) st` >>
+  rename1 `eval_exprs cx (MAP SND kes) st = (er,s1)` >>
+  Cases_on `er` >> simp_tac(srw_ss())[] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `!initial_st selected env st res st0. _`
+    (qspecl_then [`initial_st`, `selected`, `env`, `st`] mp_tac) >>
+  disch_then (qspecl_then [`FST (eval_exprs cx (MAP SND kes) st)`, `s1`] mp_tac) >>
+  (impl_tac >- (asm_rewrite_tac[APPEND] >> metis_tac[])) >> simp[]
+QED
