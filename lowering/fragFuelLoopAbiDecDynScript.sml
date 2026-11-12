@@ -2390,6 +2390,20 @@ Proof
   gen_tac >> BETA_TAC >> MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_unique_return)
 QED
 
+(* A reserved label is not a target of a later fresh span. *)
+Theorem abi_dyn_unique_reserved_exclusion[local]:
+  !a b l suffix k.
+    (^dyn_span) {} a b /\ l = fresh_label_output suffix k /\
+    k < a.cs_next_label /\ l <> a.cs_current_bb ==>
+    l NOTIN (^dyn_B) a b
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >> BETA_TAC >>
+  `l NOTIN (^dyn_I) a.cs_next_label b.cs_next_label`
+    by (BETA_TAC >> metis_tac[BETA_RULE abi_dyn_interval_excludes_old]) >>
+  fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+
 (* Bounded emitted-code region.  Upper bounds rule out spurious off-cut
    states past the last instruction of either sort of block. *)
 val dyn_R = ``\sa sb s.
