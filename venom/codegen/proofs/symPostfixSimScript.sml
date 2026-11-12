@@ -248,7 +248,7 @@ Theorem sym_optimistic_swap_plan_postfix_sim_structural:
     (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   strip_tac >> drule optimistic_swap_result_cases >> strip_tac
-  >- (gvs[] >> qexists `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+  >- (gvs[] >> qexists `ss` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   `ALL_DISTINCT (top_n (d + 1) ps.ps_stack) /\
    DISJOINT (set (top_n (d + 1) ps.ps_stack)) (FDOM ps.ps_spilled)` by
     (simp[top_n_def, ALL_DISTINCT_TAKE, ALL_DISTINCT_REVERSE] >>
@@ -302,7 +302,7 @@ Theorem sym_regular_generated_postfix_sim_structural:
 Proof
   strip_tac >> drule_all regular_postfix_cases >> strip_tac
   >- (gvs[] >> qexists `ss` >>
-      simp[execute_plan_def, sym_steps_def, sym_kinds_ok_release_dead_spills])
+      simp[execute_plan_def, asmSpliceTheory.sym_steps_def, sym_kinds_ok_release_dead_spills])
   >- (gvs[] >> drule_all sym_optimistic_swap_plan_postfix_sim_structural >>
       metis_tac[sym_kinds_ok_release_dead_spills, arithmeticTheory.ADD_COMM]) >>
   gvs[] >> drule_all sym_popmany_plan_top_singleton_sim >>
@@ -688,7 +688,7 @@ Proof
           dividesTheory.divides_def] >>
      qexists_tac `32` >> simp[]) >>
   gvs[asm_next_def] >>
-  simp[codegenSymRelTheory.sym_steps_compute, sym_step_push_word, asm_next_def]
+  simp[asmSpliceTheory.sym_steps_compute, sym_step_push_word, asm_next_def]
 QED
 
 Theorem sym_scratch_store_run:
@@ -854,7 +854,7 @@ Proof
   simp[scratch_state_ok_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
   rpt strip_tac >>
   `n-1 < LENGTH top` by (gvs[LIST_REL_EL_EQN] >> decide_tac) >>
-  simp[codegenSymRelTheory.sym_steps_compute, sym_step_dup_name,
+  simp[asmSpliceTheory.sym_steps_compute, sym_step_dup_name,
        sym_dup_def, sym_set_stack_def, asm_next_def, EL_APPEND1] >>
   gvs[LIST_REL_EL_EQN]
 QED
@@ -872,7 +872,7 @@ Proof
   simp[scratch_state_ok_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
   rpt strip_tac >>
   `n < LENGTH top /\ 0 < LENGTH top` by (gvs[LIST_REL_EL_EQN] >> decide_tac) >>
-  simp[codegenSymRelTheory.sym_steps_compute, sym_step_swap_name,
+  simp[asmSpliceTheory.sym_steps_compute, sym_step_swap_name,
        sym_swap_def, sym_set_stack_def, asm_next_def, EL_APPEND1,
        LUPDATE_APPEND1, HD_APPEND] >>
   `HD (top ++ srest) = HD top` by (Cases_on `top` >> gvs[]) >>
@@ -886,10 +886,10 @@ Theorem sym_scratch_pop_run:
     (ss with <| sym_base := ss.sym_base with as_pc := ss.sym_base.as_pc + n;
                 sym_stack := DROP n ss.sym_stack |>)
 Proof
-  Induct >- simp[sym_steps_def, sym_state_component_equality, asm_state_component_equality] >>
+  Induct >- simp[asmSpliceTheory.sym_steps_def, sym_state_component_equality, asm_state_component_equality] >>
   rpt strip_tac >> Cases_on `ss.sym_stack` >> gvs[] >>
   gvs[REPLICATE, stackOpSimTheory.asm_block_at_cons] >>
-  simp[Once sym_steps_def, sym_step_def, sym_step_op_def, sym_set_stack_def,
+  simp[Once asmSpliceTheory.sym_steps_def, sym_step_def, sym_step_op_def, sym_set_stack_def,
        asm_next_def] >>
   metis_tac[arithmeticTheory.ADD_CLAUSES, numeralTheory.numeral_distrib]
 QED
@@ -942,7 +942,7 @@ Theorem scratch_replay_sim:
     (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   ho_match_mp_tac scratch_replay_ind >> conj_tac
-  >- simp[execute_plan_def, sym_steps_def] >>
+  >- simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   simp[execute_plan_def, stackOpSimTheory.asm_block_at_append] >> strip_tac >>
   drule_all scratch_replay_step_sim >>
@@ -1979,7 +1979,7 @@ Theorem sym_optimistic_swap_plan_postfix_sim_marked:
     (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   strip_tac >> drule optimistic_swap_result_cases >> strip_tac
-  >- (gvs[] >> qexists `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+  >- (gvs[] >> qexists `ss` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   drule_all sym_do_swap_sim_marked_ops_bounded >> simp[]
 QED
 
@@ -2006,7 +2006,7 @@ Theorem sym_regular_generated_postfix_sim_marked:
 Proof
   strip_tac >> drule_all regular_postfix_cases >> strip_tac
   >- (gvs[] >> qexists `ss` >>
-      simp[execute_plan_def, sym_steps_def, sym_kinds_ok_release_dead_spills])
+      simp[execute_plan_def, asmSpliceTheory.sym_steps_def, sym_kinds_ok_release_dead_spills])
   >- (gvs[] >> drule_all sym_optimistic_swap_plan_postfix_sim_marked >>
       metis_tac[sym_kinds_ok_release_dead_spills, arithmeticTheory.ADD_COMM]) >>
   gvs[] >> drule_all sym_popmany_plan_singleton_sim_marked_ops_bounded >>

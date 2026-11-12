@@ -63,7 +63,7 @@ Theorem sym_phi_dead_prefix_sim:
   sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss
 Proof
-  simp[execute_plan_def, exec_stack_op_def, sym_steps_def] >>
+  simp[execute_plan_def, exec_stack_op_def, asmSpliceTheory.sym_steps_def] >>
   metis_tac[sym_phi_rename]
 QED
 
@@ -83,7 +83,7 @@ Proof
   strip_tac >> Cases_on `stack_get_depth v ps.ps_stack`
   >- (`popmany_plan [v] ps = ([],ps)` by
         (irule fnBlockPlanStaticFactsTheory.popmany_plan_absent >> simp[]) >>
-      gvs[] >> qexists `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+      gvs[] >> qexists `ss` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   drule_all sym_popmany_plan_singleton_sim_marked_ops_bounded >>
   disch_then (qspec_then `env` strip_assume_tac) >> metis_tac[]
 QED
@@ -187,7 +187,7 @@ Proof
   qpat_x_assum `generate_phi_plan _ _ _ _ = _` mp_tac >>
   simp[generate_phi_plan_def] >>
   Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
-  >- (strip_tac >> gvs[] >> qexists `ss` >> simp[execute_plan_def, sym_steps_def]) >>
+  >- (strip_tac >> gvs[] >> qexists `ss` >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   rename1 `stack_get_phi_depth _ _ = SOME d` >>
   Cases_on `MEM (operand_to_string (stack_peek d ps.ps_stack)) nl`
   >- suspend "live" >>
@@ -198,7 +198,7 @@ Resume sym_phi_plan_sim[dead]:
   simp[] >> Cases_on `~halt /\ ~MEM x nl` >> simp[]
   >- suspend "dead_pop" >>
   strip_tac >> gvs[] >> qexists `ss` >>
-  simp[execute_plan_def, exec_stack_op_def, sym_steps_def] >>
+  simp[execute_plan_def, exec_stack_op_def, asmSpliceTheory.sym_steps_def] >>
   metis_tac[sym_phi_rename, listTheory.MEM]
 QED
 

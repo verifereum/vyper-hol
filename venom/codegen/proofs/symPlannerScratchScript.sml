@@ -112,7 +112,7 @@ Theorem sym_steps_push_memory:
   sym_steps p env 2 ss = SymOK last
 Proof
   strip_tac >> fs[asm_block_at_cons, sym_step_def] >>
-  simp[codegenSymRelTheory.sym_steps_compute, sym_step_def]
+  simp[asmSpliceTheory.sym_steps_compute, sym_step_def]
 QED
 
 
@@ -185,7 +185,7 @@ Theorem sym_steps_scratch_store_eq:
 Proof
   rw[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def,
      asm_block_at_cons] >>
-  simp[codegenSymRelTheory.sym_steps_compute, sym_step_scratch_push] >>
+  simp[asmSpliceTheory.sym_steps_compute, sym_step_scratch_push] >>
   simp[sym_step_def, sym_step_op_def, sym_result_case_identity]
 QED
 
@@ -196,7 +196,7 @@ Theorem sym_steps_scratch_load_eq:
 Proof
   rw[planExecTheory.execute_plan_def, planExecTheory.exec_stack_op_def,
      asm_block_at_cons] >>
-  simp[codegenSymRelTheory.sym_steps_compute, sym_step_scratch_push] >>
+  simp[asmSpliceTheory.sym_steps_compute, sym_step_scratch_push] >>
   simp[sym_step_def, sym_step_op_def, sym_result_case_identity]
 QED
 
@@ -607,7 +607,7 @@ Theorem sym_restore_scratch_list:
 Proof
   Induct
   >- (rpt strip_tac >> qexistsl_tac [`ss`, `[]`] >>
-      simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+      simp[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def]) >>
   rpt strip_tac >> irule scratch_restore_cons_step >>
   gvs[listTheory.EVERY_DEF]
 QED
@@ -739,7 +739,7 @@ Theorem sym_spill_scratch_list:
 Proof
   Induct
   >- (rw[] >>
-      gvs[planExecTheory.execute_plan_def, sym_steps_def,
+      gvs[planExecTheory.execute_plan_def, asmSpliceTheory.sym_steps_def,
           scratch_kinds_ok_nil, scratch_frame_refl]) >>
   Cases_on `items` >- simp[] >>
   Cases_on `vals` >- simp[] >>
