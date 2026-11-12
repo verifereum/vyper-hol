@@ -95,7 +95,12 @@ Proof
      metis_tac[source_pre_fmp_ops, o1_source_unit_ok_no_dalloca]) >>
   (* At an input state whose free-memory pointer is its initial one, no
      reachable state moves it: the raw phase's FMP facts hold. *)
-  `!vi. vi.vs_fmp = vi.vs_initial_fmp /        raw_unit_memory_ok unit.cu_context vi /        ptr_discipline lo unit.cu_context vi /        taint_within D unit.cu_context vi /        mem_inv dload_offset_ok unit.cu_context vi /        mem_inv dload_headroom_ok unit.cu_context vi ==>
+  `!vi. vi.vs_fmp = vi.vs_initial_fmp /\
+        raw_unit_memory_ok unit.cu_context vi /\
+        ptr_discipline lo unit.cu_context vi /\
+        taint_within D unit.cu_context vi /\
+        mem_inv dload_offset_ok unit.cu_context vi /\
+        mem_inv dload_headroom_ok unit.cu_context vi ==>
         o1_pre_walk_inv D unit.cu_context vi` by
     (rpt strip_tac >>
      `mem_inv raw_mem_ok unit.cu_context vi` by
