@@ -5,7 +5,7 @@
 
 Theory exprSimSubscriptMap
 Ancestors
-  mappingSubscriptCode
+  mappingSubscriptCode mappingSubscriptSemantics
   exprSimMapDefs exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
   exprSimArrayIndex exprSimDefs gasContext gasSummary gasSummaryCompose gasExemptCert vyperState
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
@@ -116,26 +116,6 @@ Proof
   simp[bind_def]
 QED
 
-Theorem subscript_result_index_admissible:
-  (!ex. A (INR ex) ==> expr_map_res_ok (INR ex)) /\
-  gas_admissible (eval_expr cx (Subscript ann obj idx)) A es /\
-  gas_marked_exec memory (ctx, func) (eval_expr cx obj)
-    (es, s0) marks (INL tv) mid (OK t) ==>
-  gas_admissible (bind (eval_expr cx idx) (read_result cx))
-    expr_res_ok (mid with gas_obs := [])
-Proof
-  simp[gas_admissible_def, gas_marked_exec_def] >> rpt strip_tac >>
-  Cases_on `res` >- simp[expr_res_ok_def] >>
-  rename1 `INR ex` >>
-  `expr_map_res_ok (INR ex : eval_result + exception)` suffices_by
-    simp[expr_map_res_ok_def, expr_res_ok_def] >>
-  first_x_assum irule >>
-  qpat_x_assum `!gs res ee. _ ==> _`
-    (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
-  rewrite_tac[eval_expr_subscript_bind] >>
-  disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
-  gvs[bind_def]
-QED
 
 Theorem subscript_map_base_admissible:
   gas_admissible (eval_expr cx (Subscript ann obj idx)) expr_map_res_ok es ==>
@@ -280,133 +260,6 @@ Proof
   simp[int_calls_expr_def]
 QED
 
-Theorem expr_map_pre_subscript_base:
-  !cenv cx env ann obj idx es.
-    expr_map_pre cenv cx env (Subscript ann obj idx) es ==>
-    expr_map_pre cenv cx env obj es
-Proof
-  rpt gen_tac >> strip_tac >>
-  `?kt vt. type_place_expr env obj = SOME (HashMapT kt vt)` by
-    (fs[expr_map_pre_def, well_typed_expr_def, AllCaseEqs()] >>
-     rename1 `subscript_vtype bty _ = SOME (HashMapT _ _)` >>
-     Cases_on `bty`
-     >- (rename1 `subscript_vtype (Type ty) _ = _` >>
-         Cases_on `ty` >> gvs[subscript_vtype_def, AllCaseEqs()]) >>
-     gvs[subscript_vtype_def, AllCaseEqs()]) >>
-  gvs[expr_map_pre_def, byte_widths_expr_def, alloc_limits_expr_def,
-      int_calls_expr_def, expr_has_evm_run_thm, EVERY_APPEND,
-      Once supported_expr_exists_def] >>
-  conj_tac >- metis_tac[call_evaluation_safe_append_left] >>
-  rpt strip_tac >>
-  qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _` irule >>
-  simp[Once supported_expr_exists_def]
-QED
-
-Theorem expr_subscript_pre_index:
-  !cenv cx env ann obj idx es es'.
-    (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
-     expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
-    expr_sim_inv cenv cx env es' ==>
-    expr_body_pre cenv cx env idx es'
-Proof
-  rpt gen_tac >>
-  simp[expr_body_pre_def, expr_map_pre_def, well_typed_expr_def,
-       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
-       expr_has_evm_run_thm, EVERY_APPEND, supported_expr_exists_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), supported_expr_exists_def] >>
-  metis_tac[call_evaluation_safe_append_right]
-QED
-
-Theorem expr_body_pre_map_subscript_base:
-  !cenv cx env ann obj idx kt vt es.
-    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
-    place_type cenv obj = MapPT kt vt ==>
-    expr_map_pre cenv cx env obj es
-Proof
-  rpt gen_tac >> strip_tac >>
-  `place_map_tables_agree_on_defined cenv env /\
-   (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
-              cenv.ce_hashmap_info nsid = NONE)` by
-    gvs[expr_body_pre_def, expr_sim_inv_def] >>
-  gvs[expr_body_pre_def, Once well_typed_expr_def,
-      byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
-      expr_has_evm_run_thm, EVERY_APPEND]
-  >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
-  drule_all place_type_checked_place_on_defined >> strip_tac >>
-  rename1 `type_place_expr env obj = SOME bty` >>
-  Cases_on `bty` >> gvs[value_type_place_def] >>
-  simp[expr_map_pre_def] >>
-  gvs[supported_expr_exists_def] >>
-  metis_tac[call_evaluation_safe_append_left]
-QED
-
-(* Storage preservation accepts both value and place typing.  A mapping
-   base uses the latter, not well_typed_expr. *)
-Theorem expr_pre_storage_preserved:
-  !cenv cx env e es res es'.
-    expr_sim_inv cenv cx env es /\
-    (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
-    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
-    EVERY (\c. FST c = NONE /\
-               ?tops. supported_program tops /\
-                      get_module_code cx NONE = SOME tops) (int_calls_expr e) /\
-    eval_expr cx e es = (res, es') ==>
-    contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
-Proof
-  rpt gen_tac >> strip_tac >> (conj_tac
-  >- (Cases_on `int_calls_expr e = []`
-      >- (drule_at (Pat `eval_expr _ _ _ = _`)
-            (cj 5 eval_expr_oracle_storage_mutual) >>
-          disch_then (qspec_then `env` mp_tac) >>
-          (impl_tac >-
-            gvs[expr_sim_inv_def, expr_has_evm_run_def,
-                runtime_storage_consistent_def, runtime_consistent_def]) >>
-          metis_tac[]) >>
-      `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
-        by (Cases_on `int_calls_expr e` >> gvs[] >> metis_tac[]) >>
-      drule_at (Pat `eval_expr _ _ _ = _`) (cj 5 body_oracle_storage_mutual) >>
-      disch_then (qspecl_then [`tops`, `env`] mp_tac) >>
-      (impl_tac >-
-        (gvs[expr_sim_inv_def, listTheory.EVERY_CONJ,
-             runtime_storage_consistent_def, runtime_consistent_def] >>
-         metis_tac[])) >> metis_tac[]) >>
-  irule oracle_storage_ok_suffix >> qexists_tac `es` >>
-  gvs[expr_sim_inv_def] >>
-  drule_then irule (cj 5 eval_outcome_suffix_mutual))
-QED
-
-Theorem expr_map_pre_eval_result:
-  !cenv cx env e es res es'.
-    expr_map_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
-    !vt tv. type_place_expr env e = SOME vt /\ res = INL tv ==>
-            eval_result_typed (env,cx,es') tv vt
-Proof
-  rpt gen_tac >> strip_tac >>
-  `contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'` by
-    (irule expr_pre_storage_preserved >>
-     qexistsl_tac [`cenv`, `e`, `env`, `es`, `res`] >>
-     gvs[expr_map_pre_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
-  `IS_SOME es'.outcomes` by
-    (irule eval_expr_outcomes_some >>
-     gvs[expr_map_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
-  qpat_x_assum `expr_map_pre _ _ _ _ _` mp_tac >>
-  simp[expr_map_pre_def, expr_sim_inv_def] >> strip_tac >>
-  drule_all eval_expr_popped_keys_indexed >> strip_tac >>
-  qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
-    (cj 5 eval_scc_type_sound_mutual) >>
-  disch_then (qspecl_then [`env`, `es`, `res`, `es'`] mp_tac) >>
-  (impl_tac >- gvs[]) >> strip_tac >>
-  `outcomes_accounts_typed es'.outcomes` by
-    (rw[outcomes_accounts_typed_def] >>
-     drule (cj 5 eval_outcome_suffix_mutual) >> strip_tac >>
-     drule_then irule outcome_suffix_EVERY >>
-     gvs[outcomes_accounts_typed_def]) >>
-  rename1 `type_place_expr env e = SOME (HashMapT kt vty)` >>
-  qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> _`
-    (qspec_then `HashMapT kt vty` mp_tac) >>
-  simp[] >> Cases_on `res` >> gvs[] >> metis_tac[]
-QED
 
 Theorem expr_map_pre_res_ok:
   !cenv cx env e es res es'.
@@ -422,67 +275,6 @@ Proof
   metis_tac[eval_expr_calls_no_halt, expr_map_pre_def]
 QED
 
-Theorem expr_map_pre_checked_type:
-  expr_map_pre cenv cx env obj es /\
-  place_type cenv obj = MapPT kt vt ==>
-  type_place_expr env obj = SOME (HashMapT kt vt)
-Proof
-  strip_tac >>
-  `place_map_tables_agree_on_defined cenv env /\
-   ?bkt bvt. type_place_expr env obj = SOME (HashMapT bkt bvt)` by
-    gvs[expr_map_pre_def, expr_sim_inv_def] >>
-  drule_all place_type_checked_place_on_defined >>
-  simp[value_type_place_def] >> strip_tac >> gvs[]
-QED
-
-Theorem mapping_subscript_index_pre:
-  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
-   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
-  place_type cenv obj = MapPT kt vt /\
-  eval_expr cx obj es = (INL bres, em) ==>
-  expr_map_pre cenv cx env obj es /\
-  expr_sim_inv cenv cx env em /\
-  expr_body_pre cenv cx env idx em
-Proof
-  strip_tac >>
-  `expr_map_pre cenv cx env obj es` by
-    metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
-  drule_all expr_map_pre_eval_result >> strip_tac >>
-  simp[] >> irule expr_subscript_pre_index >>
-  simp[] >> qexistsl_tac [`ann`, `es`, `obj`] >> simp[]
-QED
-
-Theorem expr_map_pre_gas_obs[simp]:
-  expr_map_pre cenv cx env e (es with gas_obs := gs) <=>
-  expr_map_pre cenv cx env e es
-Proof
-  simp[expr_map_pre_def]
-QED
-
-Theorem mapping_subscript_marked_index_pre:
-  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
-   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
-  place_type cenv obj = MapPT kt vt /\
-  gas_marked_exec memory (ctx, func) (eval_expr cx obj)
-    (es, s0) marks (INL tv) mid (OK t) ==>
-  expr_body_pre cenv cx env idx (mid with gas_obs := []) /\
-  ?s u. eval_expr cx obj s = (INL tv, u)
-Proof
-  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
-  `eval_expr cx obj
-     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-     (INL tv, mid with gas_obs := [])` by
-    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >>
-     disch_then (CONJUNCTS_THEN2 (qspec_then `[]` mp_tac) kall_tac) >>
-     simp[]) >>
-  conj_tac
-  >- (drule_at (Pat `eval_expr _ _ _ = _`) (cj 3 mapping_subscript_index_pre) >>
-      simp[] >> disch_then irule >>
-      conj_tac >- (goal_assum (drule_at Any)) >>
-      qexists `ann` >> simp[]) >>
-  metis_tac[]
-QED
 
 Theorem mapping_subscript_key_type:
   (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
@@ -765,33 +557,14 @@ Proof
   qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` kall_tac >>
   qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ t.vs_memory = _` kall_tac >>
   qpat_x_assum `locals_kept cenv es (mid with gas_obs := []) s0 t` kall_tac >>
-  `expr_body_pre cenv cx env idx (mid with gas_obs := []) /\
-   ?s u. eval_expr cx obj s = (INL v,u)` by
-    (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
-       mapping_subscript_marked_index_pre >>
-     disch_then irule >> simp[] >>
-     qexists `ann` >> simp[]) >>
-  `expr_sim_case nocalls ctx func cenv cx idx` by metis_tac[] >>
-  `eval_expr cx obj
-     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-     (INL v, mid with gas_obs := [])` by
-    (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[gas_marked_exec_def] >>
-     disch_then (CONJUNCTS_THEN2 (qspec_then `[]` mp_tac) kall_tac) >> simp[]) >>
-  `type_place_expr env obj = SOME (HashMapT kt vt)` by
-    (drule_all expr_map_pre_checked_type >> simp[]) >>
-  `bkt = kt /\ bvt = vt` by
-    (qpat_assum `eval_expr _ _ (_ with gas_obs := _) = _`
-       (mp_then Any mp_tac expr_map_pre_eval_result) >>
-     disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
-     simp[] >> strip_tac >>
-     first_x_assum (qspec_then `HashMapT kt vt` mp_tac) >>
-     simp[eval_result_typed_def]) >>
-  `gas_admissible (bind (eval_expr cx idx) (read_result cx))
+  `bkt = kt /\ bvt = vt /\
+   expr_body_pre cenv cx env idx (mid with gas_obs := []) /\
+   (?s u. eval_expr cx obj s = (INL v,u)) /\
+   gas_admissible (bind (eval_expr cx idx) (read_result cx))
      expr_res_ok (mid with gas_obs := [])` by
-    (irule subscript_result_index_admissible >>
-     goal_assum (drule_at Any) >>
-     qexistsl_tac [`A`, `ann`] >> simp[]) >>
+    (qpat_assum `v = HashMapRef _ _ _ _` SUBST_ALL_TAC >>
+     drule_all mapping_subscript_marked_base_preparation >> simp[]) >>
+  `expr_sim_case nocalls ctx func cenv cx idx` by metis_tac[] >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
   `~t.vs_halted` by
@@ -853,32 +626,14 @@ Proof
      out.vs_inst_idx = LENGTH sb.cs_current_insts` by
     (drule compile_mapping_index_success_tail >>
      disch_then irule >> simp[] >> qexists `vv_operand bvv` >> simp[]) >>
-  `wb_frame cenv es (fin with gas_obs := []) sa s0 out` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >>
-     qpat_assum `wb_frame cenv es (mid with gas_obs := []) sa s0 t`
-       (irule_at Any) >>
-     qpat_assum `wb_frame cenv (mid with gas_obs := []) _ sm t out`
-       (irule_at Any) >>
-     qpat_assum `stmt_state_rel _ _ _ _ es s0` (irule_at Any) >> simp[]) >>
-  `~expr_has_effect (Subscript ann obj idx) ==> pure_frame cenv func es sa s0 out` by
-    (rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
-     strip_tac >>
-     `pure_frame cenv func es sa s0 t` by
-       (qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >> simp[]) >>
-     `pure_frame cenv func (mid with gas_obs := []) sm t out` by
-       (qpat_x_assum `~expr_has_effect idx ==> _` mp_tac >> simp[]) >>
-     `!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
-              FLOOKUP out.vs_allocas aid = SOME b` by
-       (qpat_assum `wb_frame cenv _ _ sm t out` mp_tac >>
-        pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
-        strip_tac >> first_assum ACCEPT_TAC) >>
-     `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-            lookup_var x t = SOME w` by
-       (qpat_assum `wb_frame cenv es _ sa s0 t` mp_tac >>
-        pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
-        strip_tac >> first_assum ACCEPT_TAC) >>
-     match_mp_tac exprSimPropsTheory.pure_frame_trans >>
-     qexistsl_tac [`mid with gas_obs := []`, `sm`, `t`] >> simp[]) >>
+  `wb_frame cenv es (fin with gas_obs := []) sa s0 out /\
+   (~expr_has_effect (Subscript ann obj idx) ==>
+      pure_frame cenv func es sa s0 out)` by
+    (qpat_assum `wb_frame cenv es (mid with gas_obs := []) sa s0 t`
+       (mp_then Any mp_tac mapping_subscript_frames) >>
+     disch_then drule >> simp[] >>
+     disch_then (qspecl_then [`obj`, `idx`] irule) >> simp[] >>
+     gvs[] >> qexistsl [`ctx`, `cx`] >> simp[]) >>
   `storage_mapping_region cx tr base_slot (HashMapT kt vt)` by
     (qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >> simp[]) >>
   qexistsl_tac [`INL selected`, `fin with gas_obs := []`, `OK out`] >>
