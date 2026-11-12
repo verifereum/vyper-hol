@@ -65,6 +65,51 @@ Proof
   eq_tac >> rpt strip_tac >> gvs[] >> decide_tac
 QED
 
+Theorem compile_store_bytestring_robust_effects:
+  compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  n = 32 + 32 * ((len+31) DIV 32) /\ n < dimword(:256) /\
+  mload (w2n a) s = n2w len /\
+  run_inst_seq (emitted_insts sa sb) s = OK sf /\
+  sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
+  tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+n}) UNION
+    {w2n b+i | i < n /\ w2n a+i IN tn.t_mem} /\
+  is_bytestring_type sty /\ is_bytestring_type dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\
+  ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
+   (?str. v = StringV str /\ len = LENGTH str)) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory stv v (w2n a) m) ==>
+  (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+  (!i. ~(w2n b <= i /\ i < w2n b+n) ==>
+    mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
+  (!i. i < n ==> (w2n b+i IN tnf.t_mem <=> w2n a+i IN tn.t_mem)) /\
+  (!i. ~(w2n b <= i /\ i < w2n b+n) ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+  (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory dtv v (w2n b) m) /\
+  (!ft fv p. val_wf ft fv /\ (p+type_memory_size ft <= w2n b \/ w2n b+n <= p) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory ft fv p m) ==>
+    !m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory ft fv p m)
+Proof
+  strip_tac >>
+  `(sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s` by
+    (`eval_operand (Var src) s = SOME a /\ eval_operand (Var dst) s = SOME b` by
+       simp[venomStateTheory.eval_operand_def] >>
+     `!x. Var src = Var x \/ Var dst = Var x ==> not_fresh_at sa x` by
+       (rpt strip_tac >> gvs[]) >>
+     `32 + 32 * word_size len < dimword(:256)` by
+       gvs[vfmConstantsTheory.word_size_def] >>
+     drule_all buffer_store_bytestring_run >> strip_tac >> gvs[]) >>
+  drule_all bytestring_copy_effects >> strip_tac >>
+  `!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
+     val_in_memory dtv v (w2n b) m` by
+    (rpt strip_tac >> irule bytestring_copy_robust_destination >> metis_tac[]) >>
+  drule robust_representation_exterior_frame >> disch_then drule >>
+  disch_then (assume_tac o SIMP_RULE bool_ss [AND_IMP_INTRO]) >>
+  asm_rewrite_tac[] >>
+  rpt strip_tac >> qpat_x_assum `!ft fv p m. _` irule >> asm_rewrite_tac[]
+QED
+
 Theorem compile_store_bytestring_robust_gas_path_ptr:
   !D ctx fn PG sa sb src dst G tn s a b len n tenv sty dty stv dtv v bb.
     compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
@@ -113,22 +158,6 @@ Proof
   drule_all bodyPtrIfExpCopyHeaderTheory.robust_bytestring_header >> strip_tac >>
   drule_all compile_store_bytestring_gas_path_ptr >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
-  `(sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s` by
-    (`eval_operand (Var src) s = SOME a /\ eval_operand (Var dst) s = SOME b` by
-       simp[venomStateTheory.eval_operand_def] >>
-     `!x. Var src = Var x \/ Var dst = Var x ==> not_fresh_at sa x` by
-       (rpt strip_tac >> gvs[]) >>
-     `32 + 32 * word_size len < dimword(:256)` by
-       gvs[vfmConstantsTheory.word_size_def] >>
-     drule_all buffer_store_bytestring_run >> strip_tac >> gvs[]) >>
-  drule_all bytestring_copy_effects >> strip_tac >>
-  `!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
-     val_in_memory dtv v (w2n b) m` by
-    (rpt strip_tac >> irule bytestring_copy_robust_destination >> metis_tac[]) >>
-  drule robust_representation_exterior_frame >> disch_then drule >>
-  disch_then (assume_tac o SIMP_RULE bool_ss [AND_IMP_INTRO]) >>
-  qpat_x_assum `n = _` kall_tac >>
-  qpat_x_assum `tnf.t_mem = _` kall_tac >>
-  qexistsl_tac [`Gf`, `tnf`, `sf`] >> asm_rewrite_tac[] >>
-  rpt strip_tac >> qpat_x_assum `!ft fv p m. _` irule >> asm_rewrite_tac[]
+  drule_all compile_store_bytestring_robust_effects >> strip_tac >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> asm_rewrite_tac[]
 QED
