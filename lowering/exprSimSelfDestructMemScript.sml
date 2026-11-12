@@ -196,9 +196,10 @@ Theorem eval_selfdestruct_raises:
   !cx ann e dflt st v st'.
     eval_expr cx (Call ann SelfDestructTarget [e] dflt) st <> (INL v, st')
 Proof
-  rpt gen_tac >> rewrite_tac[eval_selfdestruct_action] >>
-  simp[vyperStateTheory.bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  rename1 `selfdestruct_tail cx xx ss = (INL _, _)` >>
+  rpt gen_tac >> rewrite_tac[eval_selfdestruct_action] >> CCONTR_TAC >>
+  gvs[vyperStateTheory.bind_def, AllCaseEqs()] >>
+  qpat_x_assum `selfdestruct_tail _ _ _ = _` mp_tac >>
+  qmatch_goalsub_rename_tac `selfdestruct_tail _ xx ss` >>
   qspecl_then [`cx`, `xx`, `ss`] strip_assume_tac selfdestruct_tail_raises >>
-  gvs[]
+  simp[]
 QED

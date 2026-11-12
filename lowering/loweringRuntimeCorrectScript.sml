@@ -320,9 +320,7 @@ Proof
           Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR e) _` >>
           Cases_on `e = HaltException`
           >- ((* a halt (selfdestruct): halt_exit relates the final states *)
-              gvs[] >>
-              qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[] >>
-              strip_tac >> gvs[expr_exit_def] >>
+              gvs[expr_exit_def] >>
               qspecl_then [`cx`, `es'`, `s`, `cx_tops cx`, `tx`, `am.sources`,
                            `am.exports`, `am.layouts`] mp_tac
                 external_halt_rel_success >>
