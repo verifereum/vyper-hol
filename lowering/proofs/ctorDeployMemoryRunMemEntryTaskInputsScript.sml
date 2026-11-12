@@ -86,7 +86,7 @@ Theorem ctor_task_lowered_source:
   lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
   classify_functions tops =
     (exts,ints,fb,SOME (mut,nr,rr,fname,fargs,dflts,ret,stmts)) /\
-  supported_program tops ==>
+  supported_program tops /\ supported_program_deploy tops ==>
   fname = "__init__" /\
   fn_allocs_ok tops (mut,nr,rr,fname,fargs,dflts,ret,stmts) /\
   EVERY (supported_value_type tops) (MAP SND fargs)
@@ -153,7 +153,8 @@ Theorem ctor_task_aligned_inputs:
       (ListV avs)
 Proof
   strip_tac >>
-  `supported_program tops` by gvs[deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    gvs[deploy_source_ok_def] >>
   drule_all ctor_task_lowered_source >> strip_tac >>
   `tx.function_name = "__init__" /\
    ?encoded. constructor_args_encode tops tx encoded` by
