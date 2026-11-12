@@ -1365,8 +1365,11 @@ Proof
       `env.type_defs = get_tenv cx /\
        sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
        well_typed_exprs env args` by
-        gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def,
-            env_consistent_def, env_context_consistent_def] >>
+        (qpat_assum `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`
+           (strip_assume_tac o SIMP_RULE std_ss [expr_body_pre_def,
+              expr_sim_inv_def, well_typed_expr_def, env_consistent_def,
+              env_context_consistent_def]) >>
+         asm_simp_tac std_ss []) >>
       `!e. MEM e args ==> IS_SOME (evaluate_type env.type_defs (expr_type e))` by
         metis_tac[expr_body_pre_type_evaluates] >>
       `!t. MEM t (MAP expr_type args) ==>
