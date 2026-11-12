@@ -132,7 +132,7 @@ Proof
   simp[phi_prefix_length_le, ir_supply_extends_refl] >>
   reverse conj_tac
   >- (conj_tac >- metis_tac[ALL_DISTINCT_DROP, MAP_DROP] >>
-      metis_tac[bb_well_formed_phi_suffix_nonphi]) >>
+      metis_tac[algebraicOptMainBlockProofsTheory.ao_main_block_nonphi_suffix]) >>
   rpt gen_tac >> disch_tac >> irule ac_fresh_vars_original_var >> simp[] >>
   simp[fn_ir_vars_def, MEM_FLAT, MEM_MAP] >>
   qexists `block_ir_vars bb` >> conj_tac
@@ -177,5 +177,5 @@ Proof
   irule ac_source_run_block_successor >> simp[] >>
   qexistsl [`bb`, `ctx`, `fuel`, `s`] >> simp[] >> conj_tac
   >- metis_tac[phi_prefix_length_lt_wf] >>
-  metis_tac[bb_well_formed_phi_suffix_nonphi]
+  metis_tac[algebraicOptMainBlockProofsTheory.ao_main_block_nonphi_suffix]
 QED
