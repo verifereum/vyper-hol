@@ -3,6 +3,10 @@ Theory internalReturnMemorySuffixPtr
 Ancestors internalReturnStorePtr internalReturnCountedPtr stmtLowering
   typedMemoryCopy compileEnv fragGasPathPtr
 
+(* FALSE on t16 after compile_return_unlock; restated from su in the unlock port.
+   compile_internal_return_from_env now runs compile_return_unlock (a
+   TSTORE/SSTORE of the nonreentrant key) before RET, so the storage,
+   transient and taint frame conclusions below no longer hold.
 Theorem internal_return_memory_suffix_path_ptr:
   compile_internal_return_from_env ce ty sty (Var src) (Var rpc) sa = ((),sb) /\
   ce.ce_return_buf = SOME (PtrVar (Var dst) cap) /\ ce.ce_returns_count = 0 /\
@@ -62,3 +66,4 @@ Proof
   simp[typed_copy_state_frame_def, venomStateTheory.venom_state_component_equality] >>
   strip_tac >> gvs[bodyPtrDefsTheory.stor_taint_ok_def]
 QED
+*)

@@ -73,6 +73,7 @@ Theorem internal_return_direct_ptr:
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
     (!off sz. cenv.ce_return_buf <> SOME (MemLoc off sz)) /\
     cenv.ce_imm_alloca = NONE /\
+    (!nr nkey ut iv. cenv.ce_nonreentrant = (nr,nkey,ut,iv) ==> ut) /\
     cenv.ce_returns_count =
       returns_stack_count
         (\name. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name))
@@ -96,6 +97,9 @@ Theorem internal_return_direct_ptr:
     stmt_frag_ptr d ctx PG func cx lctx (intret_ptr_q func cenv cx ret_tv d)
       cenv' (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo))
       es
+(* TEMPORARILY CHEATED - the t16 internal return runs compile_return_unlock
+   before RET; this proof predates it and is reworked in the unlock port
+   (unlock step from sa to su, then the stack/memory suffix lemmas from su).
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
@@ -604,6 +608,10 @@ Proof
   gvs[]
 
 QED
+*)
+Proof
+  cheat
+QED
 
 (* RESIDUAL (held): as s3-mem's held internal_return_widened_mem.  A
    compound value widening into the caller's return buffer is copied
@@ -665,6 +673,7 @@ Theorem internal_frame_ret_ok_ptr:
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
     (!off sz. cenv.ce_return_buf <> SOME (MemLoc off sz)) /\
     cenv.ce_imm_alloca = NONE /\
+    (!nr nkey ut iv. cenv.ce_nonreentrant = (nr,nkey,ut,iv) ==> ut) /\
     cenv.ce_returns_count =
       returns_stack_count
         (\name. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name))

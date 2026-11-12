@@ -3,6 +3,10 @@ Theory internalReturnStackSuffixPtr
 Ancestors internalReturnStackPtr internalReturnCountedPtr stmtLowering
   exprLoweringProps compileEnv fragGasPathPtr stateFrame
 
+(* FALSE on t16 after compile_return_unlock; restated from su in the unlock port.
+   compile_internal_return_from_env now runs compile_return_unlock (a
+   TSTORE/SSTORE of the nonreentrant key) before RET, so the storage,
+   transient and taint frame conclusions below no longer hold.
 Theorem internal_return_stack_suffix_path_ptr:
   compile_internal_return_from_env ce ty sty op (Var rpc) sa = ((),sb) /\
   (!off sz. ce.ce_return_buf <> SOME (MemLoc off sz)) /\
@@ -80,3 +84,4 @@ Proof
   conj_tac >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_0] >>
   gvs[stateFrameTheory.state_frame_def, venomStateTheory.venom_state_component_equality]
 QED
+*)

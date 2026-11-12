@@ -2,6 +2,7 @@ Theory bodyPtrIntCallArgumentLayout
 Ancestors
   bodyPtrIntCallMargin entryStateRel entryArgPtrs vyperTypeBindArguments
   exprSimHyps compileVyper compileEnv finite_map list words structFieldsProps
+  constSubst
 
 Theorem intcall_build_argument_slots:
   ALL_DISTINCT (MAP FST args) /\ MEM (arg,ty) args /\

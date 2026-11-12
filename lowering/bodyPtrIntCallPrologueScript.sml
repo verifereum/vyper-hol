@@ -216,8 +216,9 @@ Proof
      irule intcall_entry_captured_pending >>
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >> rpt strip_tac
-     >~ [`value_has_type _ _`] >- metis_tac[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`PG`, `tn with t_var := FEMPTY`] >> simp[] >>
+     rpt strip_tac >>
      qpat_x_assum `!i. i < LENGTH params ==> ?p. _` drule >>
      simp[arithmeticTheory.ADD_COMM]) >>
   `return_buf_ptr d ce H un t` by
