@@ -27,7 +27,7 @@ Ancestors
   contextCodegenRel arithmetic finite_map venomMemDefs
   vyperInterpreter vyperState vyperContext ctorDeployInitcode compileVyper
   ctorDeployMemoryRunPtrPrefixEntryPrepare
-  ctorDeployMemoryRunPtrPrefixEntryRegisterList fragGasOriginPtrLoop
+  ctorDeployMemoryRunPtrPrefixEntryRegisterList fragGasOriginPtrLoop gasPathPtrExec
   ctorDeployMemoryRunPtrPrefixEntryPrepared
   abiEncoderRegisteredEffect
   ctorDeployLoweringEntrySourceFrame
@@ -232,12 +232,7 @@ val SourceEntryMode = ``\checked.
     abi_decode_sim unit.cu_context func
       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) actual /\
     eval_operand imm actual = SOME 0w /\ op_taint qt imm = {} /\ op_prov H imm = NONE /\
-    deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
-    ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
-        fuel unit.cu_context func [] H qt actual) ==>
-      !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
-        fuel unit.cu_context func [] FEMPTY entry_taint
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)) /\
+    (!HS. deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual) /\
     (!j. j < LENGTH fargs ==>
       ?entry d B.
         lookup_scopes (FST (EL j fargs)) [scope] = SOME entry /\
@@ -270,7 +265,7 @@ Proof
       simp[Abbr `initial`, deploy_entry_state_def, entry_venom_state_def] >> gvs[]) >>
   drule_all prefix_entry_prepare_actual_checked >>
   disch_then (qspecl_then [`entry_taint`, `[]`, `FEMPTY`,
-    `deploy_dead HS tops runtime_bc am tx`] strip_assume_tac) >>
+    `deploy_dead HS0 tops runtime_bc am tx`] strip_assume_tac) >>
   qpat_x_assum `is_payable \/ tx.value = 0` kall_tac >>
   qpat_x_assum `is_payable \/ initial.vs_call_ctx.cc_callvalue = 0w` kall_tac >>
   drule_all deploy_ctor_entry_data_section >> strip_tac >>
@@ -405,7 +400,7 @@ Proof
         (qx_choose_then `B` strip_assume_tac))) >>
       qexistsl [`entry`,`d`,`B`] >>
       gvs[local_region_def] >> metis_tac[]) >>
-  simp[deploy_ptr_inv_def] >>
+  qx_gen_tac `HS` >> simp[deploy_ptr_inv_def] >>
   conj_tac
   >- (qpat_assum `!j. j < imm_len tops /\ j IN end_taint.t_mem ==> _` mp_tac >>
       qpat_assum `qt.t_mem = {}` mp_tac >>
@@ -430,23 +425,50 @@ Theorem deploy_ptr_entry_prefix_related_checked:
       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) 0 (OK actual) /\
     alloca_history func actual /\
     actual.vs_code = vs.vs_code /\ actual.vs_labels = vs.vs_labels /\
-    ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
-      (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes) H qt actual /\
     return_buf_frame NONE ce sa actual /\
-    stmt_state_rel HS unit.cu_context func ce (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes) actual /\
     ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
     actual.vs_gas_readings = vs.vs_gas_readings /\
-    deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
-    ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
-        fuel unit.cu_context func [] H qt actual) ==>
-      !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
-        fuel unit.cu_context func [] FEMPTY entry_taint
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
+    !HS.
+      ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
+        (deploy_evaluation_context tops am tx)
+        (es0 with outcomes := SOME vs.vs_outcomes) H qt actual /\
+      stmt_state_rel HS unit.cu_context func ce (deploy_evaluation_context tops am tx)
+        (es0 with outcomes := SOME vs.vs_outcomes) actual /\
+      deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
+      ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+          fuel unit.cu_context func [] H qt actual) ==>
+        !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+          fuel unit.cu_context func [] FEMPTY entry_taint
+          (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
 Proof
-  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.SPEC `T` deploy_ptr_entry_prefix_source_mode)) >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `!bb label. lookup_block label func.fn_blocks = SOME bb ==>
+     phi_prefix_length bb.bb_instructions = 0` by
+    (drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  drule_all (SIMP_RULE bool_ss [] (Q.SPEC `T` deploy_ptr_entry_prefix_source_mode)) >> strip_tac >>
+  (* The prefix is pointer-safe at every horizon: its path is. *)
+  `!HS. (!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+           fuel unit.cu_context func [] H qt actual) ==>
+        !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+          fuel unit.cu_context func [] FEMPTY entry_taint
+          (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)` by
+    (qx_gen_tac `HS` >> strip_tac >>
+     mp_tac (Q.SPECL [`deploy_dead HS tops runtime_bc am tx`, `imm_len tops`,
+       `unit.cu_context`, `func`, `[]`, `FEMPTY`, `entry_taint`,
+       `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
+       `0`, `H`, `qt`, `actual`] gas_path_ptr_safe_run) >>
+     impl_tac
+     >- (rpt conj_tac
+         >- (qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+               (qspecl_then [`deploy_dead HS tops runtime_bc am tx`, `{}`] mp_tac) >>
+             disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_projections) >>
+             simp[])
+         >- first_assum ACCEPT_TAC >>
+         first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  gvs[] >>
   drule deploy_ptr_ctor_environment >> strip_tac >>
   `deploy_typing_ok tops am tx /\ supported_program tops` by fs[deploy_source_ok_def] >>
   `immutables_rel ce (deploy_evaluation_context tops am tx).txn.target
@@ -462,9 +484,10 @@ Proof
      rpt strip_tac >>
      rewrite_tac[GSYM listTheory.EL] >>
      simp[valueEncodingProofsTheory.EL_mem_bytes_at] >> fs[read_byte_def]) >>
-  `state_rel HS func ce (deploy_evaluation_context tops am tx)
+  `!HS. state_rel HS func ce (deploy_evaluation_context tops am tx)
      (es0 with outcomes := SOME vs.vs_outcomes) actual` by
-    (`local_ptrs_rel func ce es0.scopes actual` by simp[] >>
+    (qx_gen_tac `HS` >>
+     `local_ptrs_rel func ce es0.scopes actual` by simp[] >>
      drule_all deploy_ptr_entry_actual_state_rel >> simp[]) >>
 
   `!p. p < imm_len tops ==>
@@ -492,10 +515,12 @@ Proof
      drule deploy_imm_budget_ok >> simp[]) >>
   `fmp_room unit.cu_context func actual` by
     (drule_all deploy_ctor_entry_fmp_room >> simp[]) >>
-  `ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
+  `!HS. ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
       (deploy_evaluation_context tops am tx)
       (es0 with outcomes := SOME vs.vs_outcomes) H qt actual` by
-    (drule ctorDeployLoweringFrameTheory.deploy_ctor_return_metadata >> strip_tac >>
+    (qx_gen_tac `HS` >>
+     qpat_assum `!HS. deploy_ptr_inv HS _ _ _ _ _ _ _ _` (qspec_then `HS` assume_tac) >>
+     drule ctorDeployLoweringFrameTheory.deploy_ctor_return_metadata >> strip_tac >>
      drule prefix_entry_immutable_operand >> strip_tac >>
      fs[deploy_ptr_inv_def] >>
      simp[ghost_inv_at_def, return_buf_ptr_def, stor_taint_ok_at_def,
@@ -518,7 +543,8 @@ Proof
         pred_setTheory.EXTENSION] >> metis_tac[]) >>
   `return_buf_frame NONE ce sa actual` by
     (drule ctor_checked_code_return_buf >> simp[loweringPostsTheory.return_buf_frame_def]) >>
-  qexistsl [`actual`,`H`,`qt`] >> simp[stmt_state_rel_def] >> first_assum ACCEPT_TAC
+  qexistsl [`actual`,`H`,`qt`] >> simp[] >> qx_gen_tac `HS` >>
+  simp[stmt_state_rel_def] >> first_assum ACCEPT_TAC
 QED
 
 Theorem deploy_ptr_entry_prefix_related:
