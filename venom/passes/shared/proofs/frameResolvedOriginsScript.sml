@@ -119,7 +119,7 @@ Theorem resolution_arguments_erasure:
   EL k (MAP (resolved_op rv) ops) = SOME e ==>
   EL k (MAP (op_prov (origin_erase om)) ops) = SOME (SND e)
 Proof
-  simp[EL_MAP] >> rpt strip_tac >> drule_all resolution_operand_erasure >> simp[]
+  rpt strip_tac >> gvs[EL_MAP] >> drule_all resolution_operand_erasure >> simp[]
 QED
 
 Theorem resolution_origin_set:
