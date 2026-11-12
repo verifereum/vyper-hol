@@ -1,5 +1,5 @@
 Theory extRetAbiChildBoundaryPtr
-Ancestors extRetAbiSingletonCountedPtr extRetAbiBytesCountedPtr
+Ancestors extRetAbiSingletonCountedPtr extRetAbiBytesCountedPtr loweringStateRelDefs
   extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr abiEncoderChildCode
   fragGasPathPtr fragExec emitHelperProps exprLoweringProps
   context compileEnv emitHelper ptrDiscipline bodyPtrDefs venomState venomExecSemantics

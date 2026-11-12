@@ -1,7 +1,7 @@
 Theory extRetOperandBoundaryPtr
 Ancestors
   extRetFrameFactsPtr returnMetadataPtr loweringShapeProps exprLoweringProps
-  compileVyper compileEnv bodySim finite_map
+  compileVyper compileEnv bodySim finite_map loweringStateRelDefs
 
 Theorem local_ptrs_reserved_result_binding:
   local_ptrs_reserved cenv st /\

@@ -11,7 +11,7 @@ Ancestors
   ptrDiscipline bodyPtrDefs venomState venomInst venomExecSemantics
   venomMemProps venomMemDefs valueEncodingProps words finite_map pred_set
   arithmetic list rich_list emitHelperProps fragExec extRetBulkCopyCountedPtr
-  extRetBytesCopyCountedPtr typedCopyPtr wordLoadStorePtr
+  extRetBytesCopyCountedPtr typedCopyPtr wordLoadStorePtr loweringStateRelDefs
 
 (* The earlier allocate-state resource lemma is local to its theory.
    This boundary additionally retains exact allocation equality off-site. *)

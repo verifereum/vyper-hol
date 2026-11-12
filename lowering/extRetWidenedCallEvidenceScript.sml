@@ -1,6 +1,6 @@
 Theory extRetWidenedCallEvidence
 Ancestors
-  intCallReturnMem valueEncoding vyperValue
+  intCallReturnMem valueEncoding vyperValue valueEncodingDefs
 
 (* Conditional layout incompatibility only. The premise still needs a run;
    this is not a counterexample to external_frame_ret_ok_ptr. *)

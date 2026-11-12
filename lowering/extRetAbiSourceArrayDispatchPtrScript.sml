@@ -7,7 +7,7 @@ Ancestors
   bodyPtrDefs venomExecSemantics venomState abiDecoderIndexInit
   valueEncodingProps abiStaticAggregateProps arithmetic pred_set
   extRetRobustSourceChildrenPtr representationCleanPtr abiDecoderBulk
-  abiEncoderArrayContext abiEncoderArrayPhases abiEncoderArrayCode abiDecoderReentry loweringShapeDefs
+  abiEncoderArrayContext abiEncoderArrayPhases abiEncoderArrayCode abiDecoderReentry loweringShapeDefs loweringStateRelDefs
 
 Definition source_array_static_prefix_def:
   source_array_static_prefix dst src =

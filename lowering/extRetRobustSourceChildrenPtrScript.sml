@@ -1,5 +1,5 @@
 Theory extRetRobustSourceChildrenPtr
-Ancestors abiEncoderSourceTransport representationCleanPtr valueEncoding valueEncodingProofs
+Ancestors abiEncoderSourceTransport representationCleanPtr valueEncoding valueEncodingProofs valueEncodingDefs
   vyperValueOperation ptrDiscipline list rich_list arithmetic
 
 (* These boundaries keep the Vyper child fixed.  They neither choose an ABI

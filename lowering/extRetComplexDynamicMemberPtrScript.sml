@@ -7,7 +7,7 @@ Ancestors
   abiEncoderInput bodyPtrDefs compileEnv fragExec
   vyperABI vyperTypeABI vyperTyping vyperValue
   venomState venomMemDefs ptrDiscipline valueEncoding words finite_map
-  pred_set list rich_list arithmetic
+  pred_set list rich_list arithmetic loweringStateRelDefs
 
 Theorem encoder_complex_dynamic_member_coordinates:
   encoder_complex_layout so ho ms hs tails dyn ns caps children

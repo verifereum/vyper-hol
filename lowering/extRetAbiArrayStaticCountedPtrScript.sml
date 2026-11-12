@@ -8,7 +8,7 @@ Ancestors
   robustCopyTransportPtr abiEncoderInputFrame valueEncodingProofs bodyPtrDefs fragGasPathPtr fragExec
   emitHelperProps exprLoweringProps compileEnv emitHelper context
   bodyPtrCtrlCases venomInst abiEncoderInput representationCleanPtr valueEncodingProps
-  venomState venomExecSemantics ptrDiscipline words finite_map list pred_set arithmetic
+  venomState venomExecSemantics ptrDiscipline words finite_map list pred_set arithmetic loweringStateRelDefs
 
 (* Retain all producer frames while transporting the robust source and the
    already encoded destination header through scratch allocation/reset. *)

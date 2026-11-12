@@ -8,7 +8,7 @@ Ancestors
   abiEncoder compileEnv emitHelper fragExec fragGasPathPtr
   bodyPtrDefs ptrDiscipline venomState venomMemDefs valueEncoding
   vyperABI vyperTypeABI vyperTyping vyperValue
-  words finite_map pred_set arithmetic list rich_list
+  words finite_map pred_set arithmetic list rich_list loweringStateRelDefs
 
 (* A protected parent survives the loop even when child sites are reused. *)
 Theorem encoder_dynamic_effect_parent_word:

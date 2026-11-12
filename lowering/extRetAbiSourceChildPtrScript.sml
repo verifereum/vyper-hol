@@ -1,5 +1,5 @@
 Theory extRetAbiSourceChildPtr
-Ancestors extRetAbiChildComposePtr extRetAbiSourceBytesCountedPtr
+Ancestors extRetAbiChildComposePtr extRetAbiSourceBytesCountedPtr loweringStateRelDefs valueEncodingDefs
   abiEncoderChildContext abiEncoderChildCode robustCopyTransportPtr
   exprLoweringProps emitHelperProps bodyPtrDefs loweringPosts valueEncoding vyperTyping
   emitHelper compileEnv ptrDiscipline venomState words list finite_map pred_set arithmetic

@@ -1,5 +1,5 @@
 Theory extRetAbiSourceComplexDispatchPtr
-Ancestors extRetAbiSourceComplexBytesPtr extRetAbiArrayInitPtr
+Ancestors extRetAbiSourceComplexBytesPtr extRetAbiArrayInitPtr loweringStateRelDefs
   extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr abiBuiltinAllocation
   bodyPtrDefs venomMemProps valueEncodingProofs pred_set finite_map
   abiEncoderComplexCode abiEncoderComplexPrefix abiEncoderMembersBoundary

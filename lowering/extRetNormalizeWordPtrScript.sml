@@ -2,7 +2,7 @@ Theory extRetNormalizeWordPtr
 Ancestors
   extRetScalarCopyCountedPtr typedCopyPtr bodyPtrDefs fragGasPathPtr
   representationCleanPtr robustCopyTransportPtr valueEncoding valueEncodingProofs
-  valueEncodingProps list venomMemProofs finite_map ptrDiscipline
+  valueEncodingProps list venomMemProofs finite_map ptrDiscipline valueEncodingDefs
 
 (* The primitive normalization child: counted execution plus robust footprints. *)
 Theorem normalize_word_robust_counted_ptr:

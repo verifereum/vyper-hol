@@ -8,7 +8,7 @@ Ancestors
   venomInst venomExecSemantics ptrSafeRun typedCopyPtr finite_map arithmetic
   abiEncoderInput valueEncoding abiEncoderBytes immutableCopyExecution
   extRetAbiReadCleanPtr abiEncoderInputFrame valueEncodingProps pred_set
-  representationCleanPtr valueEncodingProofs robustCopyTransportPtr
+  representationCleanPtr valueEncodingProofs robustCopyTransportPtr loweringStateRelDefs
 
 Theorem abi_encode_round_ambient_counted_ptr:
   abi_encode_round len sa = (Var out,sb) /\ fn_has_code sa sb fn /\

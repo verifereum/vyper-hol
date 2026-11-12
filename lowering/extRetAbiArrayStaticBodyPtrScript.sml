@@ -6,7 +6,7 @@ Ancestors
   abiDecoderDynamicLoopSetup abiEncoderInput abiEncoderInputFrame
   robustCopyTransportPtr context compileEnv emitHelper emitHelperProps exprLoweringProps
   bodyPtrDefs fragExec fragGasPathPtr fragGasSeqPtr venomState venomLayout
-  ptrDiscipline ptrSafeRun words finite_map pred_set arithmetic valueEncoding valueEncodingProofs
+  ptrDiscipline ptrSafeRun words finite_map pred_set arithmetic valueEncoding valueEncodingProofs loweringStateRelDefs valueEncodingDefs
 
 Theorem abi_array_coordinates_compiler[local]:
   abi_decode_indexed_coordinates root_op idx stride sa = (ops,sb) ==>

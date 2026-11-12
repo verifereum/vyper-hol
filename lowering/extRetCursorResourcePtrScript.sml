@@ -3,7 +3,7 @@ Theory extRetCursorResourcePtr
 Ancestors
   allocationPtr allocaSiteResource abiBuiltinAllocation codegenRel exprLoweringProps
   stmtSimDefs venomMemDefs venomState venomInst compileEnv
-  words finite_map arithmetic
+  words finite_map arithmetic loweringStateRelDefs
 
 Theorem return_cursor_allocation_resources:
   stmt_state_rel ctx fn cenv cx es s /\

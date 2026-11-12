@@ -6,7 +6,7 @@ Ancestors
   bodyPtrDefs emitHelper emitHelperProps exprLoweringProps compileEnv
   ptrDiscipline ptrSafeRun venomExecSemantics venomExecProofs venomInst
   venomState venomMemProps valueEncodingProps valueEncodingProofs
-  robustCopyTransportPtr words finite_map pred_set arithmetic
+  robustCopyTransportPtr words finite_map pred_set arithmetic loweringStateRelDefs
 
 Theorem abi_decode_loop_suffix_ambient_counted_ptr:
   abi_decode_loop_suffix (Var ip) idx hdr exit_lbl sa = ((),sb) /\

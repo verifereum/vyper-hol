@@ -6,7 +6,7 @@ Ancestors
   abiBuiltinAllocation allocationPtr robustCopyTransportPtr abiEncoderInputFrame
   fragGasSeqPtr fragGasPathPtr fragExec emitHelperProps exprLoweringProps compileEnv emitHelper context
   ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst venomExecSemantics
-  codegenRel venomMemProps valueEncodingProps valueEncodingProofs words finite_map pred_set arithmetic
+  codegenRel venomMemProps valueEncodingProps valueEncodingProofs words finite_map pred_set arithmetic loweringStateRelDefs
 
 Theorem emit_alloca_index_ambient_counted_ptr:
   emit_op ALLOCA [Lit 32w] sa = (Var ip,sb) /\ fn_has_code sa sb fn /\

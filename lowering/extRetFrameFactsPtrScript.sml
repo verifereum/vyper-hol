@@ -3,7 +3,7 @@ Ancestors
   returnMetadataPtr supportedTypes vyperContext compileVyper compileEnv bodySim
   finite_map structFieldsProps retAbiPlanProps
   vyperTypeContract vyperInterpreter supportedDecls supportedProgram e2eDefs
-  exprLowering
+  exprLowering loweringStateRelDefs
 
 Theorem supported_return_assignable_or_empty_struct:
   supported_return_type tops ret /\ ret <> NoneT /\

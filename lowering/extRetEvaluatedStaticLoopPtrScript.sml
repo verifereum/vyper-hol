@@ -6,7 +6,7 @@ Ancestors
   fragExec fragGasPathPtr compileEnv emitHelperProps ptrDiscipline bodyPtrDefs
   venomState venomExecSemantics words finite_map list rich_list arithmetic pred_set
   valueEncoding valueEncodingProofs vyperTypeABI vyperTyping
-  robustCopyTransportPtr valueTypingMemoryProps loweringPosts
+  robustCopyTransportPtr valueTypingMemoryProps loweringPosts loweringStateRelDefs
 
 Theorem encoder_static_loop_header_ambient_counted_ptr:
   abi_encode_array_header (Var ip) (Var cv) sh = ((hdr,body_lbl,exit_lbl),sb) /\

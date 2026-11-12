@@ -7,7 +7,7 @@ Ancestors
   abiEncoder abiEncoderMemberCode fragGasPathPtr ptrDiscipline
   venomState venomMemDefs list rich_list arithmetic finite_map
   loweringShapeRules loweringShapeDefs reasonCopySourcePtr
-  contractABI vyperValue
+  contractABI vyperValue loweringStateRelDefs
 
 Definition encoder_complex_infos_def:
   encoder_complex_infos eis hs ms dyn =

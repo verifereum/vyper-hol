@@ -5,7 +5,7 @@ Ancestors
   abiEncoderChildCode fragGasPathPtr fragExec compileEnv emitHelper
   bodyPtrDefs ptrDiscipline venomState venomMemDefs words finite_map pred_set
   arithmetic list wordLoadStorePtr abiEncoderChildContext extRetBulkCopyCountedPtr
-  fragGasSeqPtr
+  fragGasSeqPtr loweringStateRelDefs
 
 (* The envelope is taken at the child endpoint, where new scratch spans
    have been registered.  No fixed entry-state scratch footprint is used. *)

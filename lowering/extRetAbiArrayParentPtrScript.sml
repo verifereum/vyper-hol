@@ -3,7 +3,7 @@ Theory extRetAbiArrayParentPtr
 Ancestors
   extRetAbiArrayStaticCountedPtr abiBuiltinAllocation abiEncoder
   bodyPtrDefs fragGasPathPtr fragExec compileEnv venomState ptrDiscipline
-  valueEncodingProps valueEncodingProofs words finite_map list pred_set arithmetic
+  valueEncodingProps valueEncodingProofs words finite_map list pred_set arithmetic valueEncodingDefs
 
 Theorem compile_abi_encode_dyn_static_loop_parent_counted_ptr:
   compile_abi_encode_dyn_static_loop (Var dst) (Var src) ei asz msz (Var cv) sa = (out,se) /\

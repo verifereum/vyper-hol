@@ -3,7 +3,7 @@ Ancestors
   allocaSiteResource allocationPtr extRetSourceAllocationPtr exprLoweringProps
   abiBuiltinAllocation
   localPtrsProps loweringPosts exprSimOperands compileEnv venomState venomInst
-  venomExecSemantics venomMemDefs words finite_map pred_set arithmetic
+  venomExecSemantics venomMemDefs words finite_map pred_set arithmetic loweringStateRelDefs
 
 Definition scratch_resource_def:
   scratch_resource ctx fn sites q len s <=>

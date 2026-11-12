@@ -4,7 +4,7 @@ Ancestors
   fragExec fragExecPtr bodyPtrDefs fragGasPathPtr venomExecSemantics venomInstProofs
   venomInst venomState ptrSafeRun ptrDiscipline finite_map compileEnv emitHelper
   arithmetic wordLoadStorePtr representationCleanPtr robustCopyTransportPtr
-  valueEncoding valueEncodingProofs valueEncodingProps list venomMemProofs
+  valueEncoding valueEncodingProofs valueEncodingProps list venomMemProofs valueEncodingDefs
 
 (* A concrete execution boundary: unlike the old scalar endpoint, this
    retains the immutable taint and the whole ambient runtime record. *)

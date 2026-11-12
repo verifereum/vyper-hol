@@ -7,7 +7,7 @@ Ancestors
   fragGasPathPtr fragGasSeqPtr ptrDiscipline bodyPtrDefs venomState venomMemDefs
   venomMemProps venomExecSemantics valueEncodingProps abiStaticAggregateProps
   abiDecoderIndexInit abiDecoderReentry context words finite_map pred_set
-  arithmetic list
+  arithmetic list loweringStateRelDefs
 
 Theorem encoder_scratch_init_ambient_counted_ptr:
   compile_alloc_buffer 32 sa = (buf,sm) /\

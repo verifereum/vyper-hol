@@ -1,7 +1,7 @@
 (* Function-owned coverage of the encoder's fresh instruction interval. *)
 Theory extRetEncoderRegionPtr
 Ancestors
-  fragExec abiEncoder compileEnv emitHelper context arithmetic abiEncoderWindowArray venomInst localPtrsProps
+  fragExec abiEncoder compileEnv emitHelper context arithmetic abiEncoderWindowArray venomInst localPtrsProps loweringStateRelDefs
 
 Definition encoder_region_def:
   encoder_region st en <=>
@@ -202,7 +202,7 @@ Proof
       ntac 4 (region_db encoder_region_emit_op) >>
       region_dib encoder_region_emit_void >> region_db encoder_region_emit_op >>
       region_dib encoder_region_emit_void >>
-      ntac 2 (region_db encoder_region_emit_op) >> simp[encoder_region_emit_op])
+      ntac 3 (region_db encoder_region_emit_op) >> simp[encoder_region_emit_op])
   >- (rewrite_tac[Once compile_abi_encode_child_def] >>
       region_dib encoder_region_emit_void >> simp[encoder_region_return])
   >- (rewrite_tac[Once compile_abi_encode_child_def] >>

@@ -6,7 +6,7 @@ Ancestors
   extRetBulkCopyCountedPtr extRetLoopScalarAmbientPtr
   fragGasPathPtr fragExec bodyPtrDefs ptrDiscipline ptrSafeRun
   emitHelperProps exprLoweringProps emitHelper compileEnv
-  venomExecSemantics venomState venomInst words finite_map pred_set arithmetic
+  venomExecSemantics venomState venomInst words finite_map pred_set arithmetic loweringStateRelDefs
 
 (* The real two-instruction tail phase: a clean cursor read followed by
    pointer addition.  No recursive encoder or allocation is executed here. *)

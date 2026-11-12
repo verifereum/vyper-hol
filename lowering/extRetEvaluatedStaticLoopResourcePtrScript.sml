@@ -11,7 +11,7 @@ Ancestors
   abiEncoderArrayCode abiEncoderArrayContext abiEncoderArrayPhaseAppend
   abiEncoderArrayPhases abiEncoderArrayHeader abiDecoderLoopEmit
   extRetAbiArrayStaticLoopPtr emitHelperProps fragGasSeqPtr
-  bodyPtrPopMemoryHeader valueEncodingProps abiEncoderArrayLoopLayout
+  bodyPtrPopMemoryHeader valueEncodingProps abiEncoderArrayLoopLayout loweringStateRelDefs valueEncodingDefs
 
 (* Project the allocator's checked resource transition to the allocation-only
    state used by the compiler-phase interfaces. No runtime address is assumed. *)

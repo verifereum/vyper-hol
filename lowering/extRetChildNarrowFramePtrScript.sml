@@ -5,7 +5,7 @@ Ancestors
   ptrDiscipline venomState venomMemDefs words finite_map pred_set arithmetic list
   abiEncoderChildContext extRetBulkCopyCountedPtr extRetScratchResourcePtr
   emitHelper abiEncoderChildCode fragGasSeqPtr extRetAbiChildComposePtr
-  extRetAbiChildBoundaryPtr wordLoadStorePtr bodyPtrBopInMachineMemory
+  extRetAbiChildBoundaryPtr wordLoadStorePtr bodyPtrBopInMachineMemory loweringStateRelDefs
 
 Theorem encoder_static_child_narrow_framed_counted_ptr:
   compile_abi_encode_child (Var dst) src ei F h dp sa = (out,sb) /\

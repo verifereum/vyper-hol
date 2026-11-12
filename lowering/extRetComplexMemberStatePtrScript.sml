@@ -4,7 +4,7 @@ Ancestors
   extRetFramedChildPtr extRetChildNarrowFramePtr extRetBulkCopyCountedPtr
   extRetDynamicBodyPtr bodyPtrDefs compileEnv emitHelper fragExec fragGasPathPtr
   ptrDiscipline venomState venomMemDefs valueEncoding valueEncodingProps
-  robustCopyTransportPtr words finite_map pred_set list rich_list arithmetic
+  robustCopyTransportPtr words finite_map pred_set list rich_list arithmetic loweringStateRelDefs
 
 (* All offsets are relative to the original source/destination, even when
    the compiler is processing a suffix of the member list. *)

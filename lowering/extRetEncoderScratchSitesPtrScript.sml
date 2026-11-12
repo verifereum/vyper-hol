@@ -3,7 +3,7 @@ Theory extRetEncoderScratchSitesPtr
 Ancestors
   extRetScratchResourcePtr extRetEncoderRegionPtr abiEncoderWindowContract abiEncoderProps
   exprSimOperands venomMemDefs pred_set arithmetic abiDecoderCode abiEncoder context venomInst
-  loweringHalt exprLoweringProps
+  loweringHalt exprLoweringProps loweringStateRelDefs
 
 Theorem scratch_resource_restrict:
   scratch_resource ctx fn sites q len s /\ children SUBSET sites /\

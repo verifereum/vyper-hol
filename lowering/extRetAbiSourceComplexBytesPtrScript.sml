@@ -1,5 +1,5 @@
 Theory extRetAbiSourceComplexBytesPtr
-Ancestors extRetAbiSourceChildPtr extRetBulkCopyCountedPtr abiEncoderMemberCode
+Ancestors extRetAbiSourceChildPtr extRetBulkCopyCountedPtr abiEncoderMemberCode loweringStateRelDefs
   abiEncoder exprLowering emitHelperProps exprLoweringProps bodyPtrDefs
   fragGasPathPtr fragExec compileEnv emitHelper ptrDiscipline venomState
   valueEncoding vyperTyping words list finite_map pred_set arithmetic

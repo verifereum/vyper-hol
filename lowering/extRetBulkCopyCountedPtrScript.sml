@@ -3,7 +3,7 @@ Ancestors
   extRetBytesCopyCountedPtr fragGasPathPtr context compileEnv emitHelper
   venomState venomInst venomExecSemantics ptrDiscipline bodyPtrDefs
   words arithmetic finite_map ptrSafeRun fragExecPtr typedCopyPtr emitHelper
-  venomInst venomInstProofs codegenRel contextCodegenRel wordLoadStorePtr
+  venomInst venomInstProofs codegenRel contextCodegenRel wordLoadStorePtr loweringStateRelDefs
 
 (* A static zero-sized copy emits no instruction, unlike a dynamic MCOPY
    whose evaluated size happens to be zero. *)

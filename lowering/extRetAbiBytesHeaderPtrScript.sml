@@ -3,7 +3,7 @@ Theory extRetAbiBytesHeaderPtr
 Ancestors
   extRetBytesCopyCountedPtr extRetAbiReadCleanPtr extRetAbiReadBoundsPtr
   abiEncoderInput bodyPtrDefs compileEnv emitHelper venomState venomInst
-  valueEncoding words finite_map ptrDiscipline
+  valueEncoding words finite_map ptrDiscipline valueEncodingDefs
 
 Theorem abi_encoder_bytes_header_ambient_counted_ptr:
   emit_op MLOAD [Var src] sa = (Var out,sb) /\
