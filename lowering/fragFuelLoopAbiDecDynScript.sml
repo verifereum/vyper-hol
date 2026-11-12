@@ -170,6 +170,7 @@ Theorem abi_dyn_emit_op_outcome[local]:
     fn_has_code sa sb fn /\ at_point sa s ==>
     fuel_outcome G ctx fn s 0
       (\t. at_point sb t /\ vars_kept N {} s t /\
+        t.vs_labels = s.vs_labels /\
         ?u. step_inst G ctx
               (mk_inst sa.cs_next_id opc ops
                 [STRING #"%" (toString sa.cs_next_var)]) s = OK u /\
@@ -193,6 +194,8 @@ Proof
   strip_tac
   >- (simp[fuel_outcome_def] >> disj1_tac >> conj_tac
       >- gvs[at_point_def] >>
+      `s1.vs_labels = s.vs_labels` by
+        metis_tac[venomExecPropsTheory.step_inst_preserves_labels_always] >>
       gvs[vars_kept_def, lookup_var_def] >> rpt strip_tac >>
       first_x_assum irule >> metis_tac[var_below_fresh]) >>
   simp[fuel_outcome_def]
@@ -207,7 +210,7 @@ Theorem abi_dyn_mload_outcome[local]:
     fuel_outcome G ctx fn s 0
       (\t. at_point sb t /\ vars_kept N {} s t /\
            eval_operand op t = SOME (mload (w2n p) s) /\
-           t.vs_memory = s.vs_memory)
+           t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels)
 Proof
   rpt strip_tac >>
   `~is_terminator MLOAD` by simp[is_terminator_def] >>
@@ -229,7 +232,7 @@ Theorem abi_dyn_addr_outcome[local]:
     fn_has_code sa sb fn /\ at_point sa s ==>
     fuel_outcome G ctx fn s 0
       (\t. at_point sb t /\ vars_kept N {} s t /\
-           t.vs_memory = s.vs_memory)
+           t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels)
 Proof
   rpt strip_tac >>
   Cases_on `base_op = Lit 0w`
@@ -253,7 +256,7 @@ Theorem abi_dyn_header_load_outcome[local]:
     fn_has_code sa sb fn /\ at_point sa s ==>
     fuel_outcome G ctx fn s 0
       (\t. at_point sb t /\ vars_kept N {} s t /\
-           t.vs_memory = s.vs_memory)
+           t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels)
 Proof
   rpt strip_tac >>
   drule_all abi_dyn_emit_op_outcome >> strip_tac >>
@@ -272,14 +275,14 @@ Theorem abi_dyn_header_middle_outcome[local]:
     fn_has_code sa sm fn /\ fn_has_code sm sb fn /\ at_point sa s ==>
     fuel_outcome G ctx fn s 0
       (\t. at_point sb t /\ vars_kept N {} s t /\
-           t.vs_memory = s.vs_memory)
+           t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels)
 Proof
   rpt strip_tac >>
   drule_all abi_dyn_addr_outcome >> strip_tac >>
   drule fuel_outcome_compose >>
   disch_then (qspecl_then
     [`\t. at_point sb t /\ vars_kept N {} s t /\
-          t.vs_memory = s.vs_memory`, `0`] mp_tac) >>
+          t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels`, `0`] mp_tac) >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>
       drule_all abi_dyn_header_load_outcome >> strip_tac >>
@@ -306,6 +309,195 @@ Proof
   rpt strip_tac >>
   gvs[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
       exec_read1_def, eval_operands_def]
+QED
+
+Theorem abi_dyn_lt_outcome[local]:
+  !a b sa op sb G N ctx fn s w.
+    emit_op LT [a; b] sa = (op, sb) /\
+    N <= sa.cs_next_var /\ callees_stable G ctx fn /\
+    fn_has_code sa sb fn /\ at_point sa s /\
+    eval_operand a s = SOME w ==>
+    fuel_outcome G ctx fn s 0
+      (\t. at_point sb t /\ vars_kept N {} s t /\
+           t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+           ?v. eval_operand b s = SOME v /\
+               eval_operand op t = SOME (bool_to_word (w2n w < w2n v)))
+Proof
+  rpt strip_tac >>
+  `~is_terminator LT` by simp[is_terminator_def] >>
+  drule_all abi_dyn_emit_op_outcome >> strip_tac >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  `op = Var (STRING #"%" (toString sa.cs_next_var))` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  gvs[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
+      exec_pure2_def, eval_operands_def, eval_operand_def, update_var_def,
+      lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()]
+QED
+
+Theorem abi_dyn_iszero_outcome[local]:
+  !a sa op sb G N ctx fn s w.
+    emit_op ISZERO [a] sa = (op, sb) /\
+    N <= sa.cs_next_var /\ callees_stable G ctx fn /\
+    fn_has_code sa sb fn /\ at_point sa s /\
+    eval_operand a s = SOME w ==>
+    fuel_outcome G ctx fn s 0
+      (\t. at_point sb t /\ vars_kept N {} s t /\
+           t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+           eval_operand op t = SOME (bool_to_word (w = 0w)))
+Proof
+  rpt strip_tac >>
+  `~is_terminator ISZERO` by simp[is_terminator_def] >>
+  drule_all abi_dyn_emit_op_outcome >> strip_tac >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  `op = Var (STRING #"%" (toString sa.cs_next_var))` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  gvs[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
+      exec_pure1_def, eval_operands_def, eval_operand_def, update_var_def,
+      lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()]
+QED
+
+Theorem abi_dyn_header_tail_outcome[local]:
+  !a b sa cmp sm done_op sn sb exit body_lbl G N ctx fn s w.
+    emit_op LT [a; b] sa = (cmp, sm) /\
+    emit_op ISZERO [cmp] sm = (done_op, sn) /\
+    emit_inst JNZ [done_op; Label exit; Label body_lbl] [] sn = ((), sb) /\
+    N <= sa.cs_next_var /\ N <= sm.cs_next_var /\
+    callees_stable G ctx fn /\ no_phi_fn fn /\
+    fn_has_code sa sm fn /\ fn_has_code sm sn fn /\
+    fn_has_code sn sb fn /\ at_point sa s /\
+    eval_operand a s = SOME w ==>
+    ?j. j <= 1 /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept N {} s t /\ t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+           t.vs_inst_idx = 0 /\
+           (t.vs_current_bb = exit \/
+            (t.vs_current_bb = body_lbl /\ w2n w < 2 ** 256 - 1)))
+Proof
+  rpt strip_tac >>
+  drule_all abi_dyn_lt_outcome >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\t. vars_kept N {} s t /\ t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+           t.vs_inst_idx = 0 /\
+           (t.vs_current_bb = exit \/
+            (t.vs_current_bb = body_lbl /\ w2n w < 2 ** 256 - 1))`, `1`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      drule_all abi_dyn_iszero_outcome >> strip_tac >>
+      drule fuel_outcome_compose >>
+      disch_then (qspecl_then
+        [`\t. vars_kept N {} s t /\ t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+               t.vs_inst_idx = 0 /\
+               (t.vs_current_bb = exit \/
+                (t.vs_current_bb = body_lbl /\ w2n w < 2 ** 256 - 1))`, `1`] mp_tac) >>
+      impl_tac
+      >- (simp[] >> rpt strip_tac >>
+          `sb.cs_current_bb = sn.cs_current_bb /\
+           sb.cs_current_insts = sn.cs_current_insts ++
+             [mk_inst sn.cs_next_id JNZ
+               [done_op; Label exit; Label body_lbl] []]` by
+            gvs[emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+                comp_return_def, fresh_id_def, emit_def] >>
+          drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+          first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+          qexists_tac `1` >> simp[] >>
+          irule fuel_outcome_jump >> simp[] >>
+          qexistsl_tac [`bb`, `mk_inst sn.cs_next_id JNZ
+            [done_op; Label exit; Label body_lbl] []`,
+            `if w2n w < w2n v then body_lbl else exit`] >>
+          simp[mk_inst_def, is_terminator_def] >>
+          conj_tac
+          >- (drule venomExecPropsTheory.step_jnz_behavior >>
+              disch_then (qspecl_then [`exit`, `body_lbl`, `sn.cs_next_id`] mp_tac) >>
+              Cases_on `w2n w < w2n v` >> simp[bool_to_word_def]) >>
+          `vars_kept N {} s t'` by metis_tac[vars_kept_trans] >>
+          `w2n v < 2 ** 256` by
+            (mp_tac (Q.ISPEC `v:bytes32` wordsTheory.w2n_lt) >>
+             simp[wordsTheory.dimword_def]) >>
+          Cases_on `w2n w < w2n v` >>
+          gvs[at_point_def, jump_to_def, vars_kept_def, lookup_var_def,
+              mk_inst_def]) >>
+      simp[]) >>
+  simp[]
+QED
+
+Theorem abi_dyn_eval_operand_kept[local]:
+  !N ptr_op s t.
+    vars_kept N {} s t /\ t.vs_labels = s.vs_labels /\
+    (!x. ptr_op = Var x ==> var_below N x) ==>
+    eval_operand ptr_op t = eval_operand ptr_op s
+Proof
+  rpt strip_tac >> Cases_on `ptr_op` >>
+  gvs[eval_operand_def, vars_kept_def] >> metis_tac[]
+QED
+
+Theorem abi_dyn_header_outcome[local]:
+  !ptr base_op pos opc sa a s6 arg s7 bound s8 cmp s9 done_op s10 sb
+     exit body_lbl N.
+    emit_op MLOAD [ptr] sa = (a, s6) /\
+    compile_abi_dec_addr base_op pos s6 = (arg, s7) /\
+    emit_op opc [arg] s7 = (bound, s8) /\
+    emit_op LT [a; bound] s8 = (cmp, s9) /\
+    emit_op ISZERO [cmp] s9 = (done_op, s10) /\
+    emit_inst JNZ [done_op; Label exit; Label body_lbl] [] s10 = ((), sb) /\
+    ~is_terminator opc /\ opc <> PHI /\ opc <> INVOKE /\
+    N <= sa.cs_next_var /\
+    s6.cs_next_var <= s7.cs_next_var /\
+    s6.cs_next_var <= s8.cs_next_var /\
+    s6.cs_next_var <= s9.cs_next_var /\
+    (!x. ptr = Var x ==> var_below N x) ==>
+    ?Kh. !G ctx fn s p.
+      callees_stable G ctx fn /\ no_phi_fn fn /\
+      fn_has_code sa s6 fn /\ fn_has_code s6 s7 fn /\
+      fn_has_code s7 s8 fn /\ fn_has_code s8 s9 fn /\
+      fn_has_code s9 s10 fn /\ fn_has_code s10 sb fn /\
+      at_point sa s /\ eval_operand ptr s = SOME p ==>
+      ?j. j <= Kh /\ fuel_outcome G ctx fn s j
+        (\t. vars_kept N {} s t /\ eval_operand ptr t = SOME p /\
+             t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+             t.vs_inst_idx = 0 /\
+             (t.vs_current_bb = exit \/
+              (t.vs_current_bb = body_lbl /\
+               w2n (mload (w2n p) s) < 2 ** 256 - 1)))
+Proof
+  rpt gen_tac >> strip_tac >> qexists_tac `1` >> rpt strip_tac >>
+  `N <= s6.cs_next_var /\
+   a = Var (STRING #"%" (toString sa.cs_next_var)) /\
+   var_below s6.cs_next_var (STRING #"%" (toString sa.cs_next_var))` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_id_def, fresh_var_def, emit_def, var_below_def] >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn s _ Q` >>
+  drule_all abi_dyn_mload_outcome >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then [`Q`, `1`] mp_tac) >> impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      `fuel_outcome G ctx fn t 0
+         (\u. at_point s8 u /\ vars_kept s6.cs_next_var {} t u /\
+              u.vs_memory = t.vs_memory /\ u.vs_labels = t.vs_labels)` by
+        (irule abi_dyn_header_middle_outcome >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+      drule fuel_outcome_compose >>
+      disch_then (qspecl_then [`Q`, `1`] mp_tac) >> impl_tac
+      >- (simp[] >> rpt strip_tac >>
+          `eval_operand a t' = SOME (mload (w2n p) s)` by
+            (gvs[vars_kept_def, eval_operand_def] >> metis_tac[]) >>
+          drule_all abi_dyn_header_tail_outcome >> strip_tac >>
+          qexists_tac `j` >> simp[] >>
+          irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+          simp[Abbr `Q`] >> qx_gen_tac `u` >> strip_tac >>
+          `vars_kept s6.cs_next_var {} t u` by
+            metis_tac[vars_kept_trans] >>
+          `vars_kept N {} t u` by
+            (gvs[vars_kept_def, var_below_def] >>
+             metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+          `vars_kept N {} s u` by metis_tac[vars_kept_trans] >>
+          simp[] >>
+          drule_all abi_dyn_eval_operand_kept >> simp[]) >>
+      simp[]) >>
+  simp[]
 QED
 
 Theorem abi_dyn_counter_rank[local]:
