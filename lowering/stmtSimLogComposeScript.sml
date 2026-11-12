@@ -424,10 +424,14 @@ Resume compile_log_ready_stmt_frag[post]:
   >- (rpt strip_tac >>
       `lookup_var x t = SOME w` by metis_tac[] >>
       `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >>
+      qpat_x_assum `lookup_var x t = SOME w`
+        (assume_tac o REWRITE_RULE [venomStateTheory.lookup_var_def]) >>
       `eval_operand (Var x) u = SOME w` by
         (qpat_x_assum `!op w. _ /\ _ /\ eval_operand op t = SOME w ==> _`
            irule >>
-         rpt conj_tac >> simp[venomStateTheory.eval_operand_def] >>
+         rpt conj_tac >>
+         simp[venomStateTheory.eval_operand_def,
+              venomStateTheory.lookup_var_def] >>
          first_assum ACCEPT_TAC) >>
       pop_assum mp_tac >>
       simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def])
