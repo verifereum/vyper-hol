@@ -34,6 +34,7 @@ Ancestors
   fragGasMode fragGasPath fragGasSeq stmtSimDeclPath stmtSimDeclCompose
   abiStaticAggregateProps venomState exprSimUnwrap
   exprSimBufferStore valueCopyBytes freshWrites
+  gasStorage gasExemptCert vyperStorageTrace vyperStorageFootprint
 
 
 Theorem aggregate_alloca_slice_excludes_local:
@@ -85,11 +86,11 @@ QED
 (* ===== Counted composition of the tuple loop ===== *)
 
 (* The empty source list is a genuine reflexive counted execution. *)
-Theorem aggregate_tuple_nil_outcome[local]:
+Theorem aggregate_tuple_nil_outcome:
   ~s.vs_halted /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
      Q H (INL []) (es with gas_obs := []) s) ==>
-  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx []) (es,s) Q R
+  gas_outcome memory tops (ctx,func) cx st0 (eval_exprs cx []) (es,s) Q R
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -97,7 +98,7 @@ Proof
   qexistsl_tac [`INL []`, `es`, `OK s`] >>
   simp[gas_marked_exec_def, exprSimWordArgsTheory.eval_exprs_nil,
        gas_marked_path_def] >>
-  irule (cj 1 gas_path_rules) >> simp[]
+  Cases_on `memory` >> simp[cj 1 gas_path_rules, cj 1 gas_path_mem_rules]
 QED
 
 Theorem aggregate_tuple_child_outcome[local]:
@@ -497,63 +498,107 @@ Proof
 QED
 
 (* The child's value, then the rest of the source under it. *)
-Theorem aggregate_tuple_bind_outcome[local]:
-  gas_outcome F tops (ctx,func)
+Theorem aggregate_tuple_bind_outcome:
+  gas_outcome memory tops (ctx,func) cx st0
     (a : evaluation_state -> eval_result evaluation_result) (es,s0)
-    (\res ee t. ?v. res = INL v /\ P v ee t)
-    (\res ee r. ?exc. res = INR exc /\ R (INR exc) ee r) /\
+    (\H res ee t. ?v. res = INL v /\ P H v ee t)
+    (\H res ee r. ?exc. res = INR exc /\ R H (INR exc) ee r) /\
+  (!v. storage_trace_frame (k v)) /\
   (!marks v ee t.
-    gas_marked_exec F (ctx,func) a (es,s0) marks (INL v) ee (OK t) /\
-    ee.gas_obs = [] /\ P v ee t ==>
-    gas_outcome F tops (ctx,func)
+    gas_marked_exec memory (ctx,func) a (es,s0) marks (INL v) ee (OK t) /\
+    ee.gas_obs = [] /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t) ==>
+    gas_outcome memory tops (ctx,func) cx st0
       (k v : evaluation_state -> value list evaluation_result) (ee,t) Q R) ==>
-  gas_outcome F tops (ctx,func) (bind a k) (es,s0) Q R
+  gas_outcome memory tops (ctx,func) cx st0 (bind a k) (es,s0) Q R
 Proof
   strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
-  disch_then (qx_choose_then `left` strip_assume_tac)
-  >- (gvs[] >>
-      first_x_assum (qspecl_then [`left`, `v`, `es_end with gas_obs := []`, `t`] mp_tac) >>
-      (impl_tac >- fs[aggregate_tuple_exec_end_gas_obs]) >>
-      rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
-      disch_then (qx_choose_then `right` strip_assume_tac)
-      >- (qexists_tac `left ++ right` >> disj1_tac >>
-          metis_tac[gas_marked_exec_bind_normal])
-      >- (qexists_tac `left ++ right` >> disj1_tac >>
-          metis_tac[gas_marked_exec_bind_normal]) >>
-      qexists_tac `left ++ right` >> disj2_tac >>
-      rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-      irule_at Any gasExemptCertTheory.gas_exempt_cert_bind_result >>
-      simp[GSYM ignore_bind_def] >> metis_tac[])
-  >- (gvs[] >> qexists_tac `left` >> disj1_tac >>
-      metis_tac[gas_marked_exec_bind_exception]) >>
-  qexists_tac `left` >> disj2_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ a _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >> simp[])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+           irule gas_bad_storage_at_bind_left >> simp[] >>
+           irule gas_bad_storage_at_counted_prefix >>
+           qexistsl_tac [`ctx`, `es_end`, `func`, `memory`, `r`, `res`] >>
+           simp[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "normal"
+      >> suspend "exit") >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj2_tac >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-  irule_at Any gasExemptCertTheory.gas_exempt_cert_error_result >>
+  irule_at Any gas_exempt_cert_error_result >>
   simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
 
+Resume aggregate_tuple_bind_outcome[normal]:
+  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `?v. res = INL v` by
+    (first_assum (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `!marks v ee t. _`
+    (qspecl_then [`marks`, `v`, `es_end with gas_obs := []`, `t`] mp_tac) >>
+  (impl_tac >- simp[aggregate_tuple_exec_end_gas_obs]) >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ (k v) _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
+      disj1_tac >> irule gas_bad_storage_at_bind_right >> simp[] >>
+      metis_tac[])
+  >- (qpat_x_assum `gas_summary_at _ _ _ (k _) _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
+      disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
+      qexistsl_tac [`res`, `es_end'`, `r`] >> simp[] >>
+      (conj_tac
+       >- (irule gas_marked_exec_bind_normal >> goal_assum (drule_at Any) >>
+           gvs[])) >>
+      fs[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
+  disj2_tac >> disj2_tac >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule_at Any gas_exempt_cert_bind_result >>
+  simp[GSYM ignore_bind_def] >> metis_tac[]
+QED
+
+Resume aggregate_tuple_bind_outcome[exit]:
+  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
+  first_assum (drule_then strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  gvs[] >> rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
+  irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC
+QED
+
+Finalise aggregate_tuple_bind_outcome
+
 (* A source-only step whose target code reads no gas, then the rest. *)
-Theorem aggregate_tuple_value_bind[local]:
-  gas_marked_exec F (ctx,func)
+Theorem aggregate_tuple_value_bind:
+  gas_marked_exec memory (ctx,func)
     (a : evaluation_state -> value evaluation_result) (es,s0)
     left (INL v) mid (OK t) /\
-  gas_outcome F tops (ctx,func)
+  gas_outcome memory tops (ctx,func) cx st0
     (k v : evaluation_state -> value list evaluation_result)
     (mid with gas_obs := [],t) Q R ==>
-  gas_outcome F tops (ctx,func) (bind a k) (es,s0) Q R
+  gas_outcome memory tops (ctx,func) cx st0 (bind a k) (es,s0) Q R
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choose_then `right` strip_assume_tac))
   >- (qexists_tac `left ++ right` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_right >> metis_tac[])
+  >- (qexists_tac `left ++ right` >> disj2_tac >> disj1_tac >>
       metis_tac[gas_marked_exec_bind_normal])
-  >- (qexists_tac `left ++ right` >> disj1_tac >>
+  >- (qexists_tac `left ++ right` >> disj2_tac >> disj1_tac >>
       metis_tac[gas_marked_exec_bind_normal]) >>
-  qexists_tac `left ++ right` >> disj2_tac >>
+  qexists_tac `left ++ right` >> disj2_tac >> disj2_tac >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-  irule_at Any gasExemptCertTheory.gas_exempt_cert_bind_value >>
+  irule_at Any gas_exempt_cert_bind_value >>
   simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
 
@@ -566,29 +611,31 @@ Proof
 QED
 
 (* The rest of the tuple, with the child's value in front. *)
-Theorem aggregate_tuple_values_outcome[local]:
-  gas_outcome F tops (ctx,func) (eval_exprs cx args) (es,s) Q1 R1 /\
-  (!res ee r. Q1 res ee r ==>
-     Q (case res of INL vs => INL (v::vs) | INR exc => INR exc) ee r) /\
-  (!res ee r. R1 res ee r ==>
-     R (case res of INL vs => INL (v::vs) | INR exc => INR exc) ee r) ==>
-  gas_outcome F tops (ctx,func)
+Theorem aggregate_tuple_values_outcome:
+  gas_outcome memory tops (ctx,func) cx st0 (eval_exprs cx args) (es,s) Q1 R1 /\
+  (!H res ee r. Q1 H res ee r ==>
+     Q H (case res of INL vs => INL (v::vs) | INR exc => INR exc) ee r) /\
+  (!H res ee r. R1 H res ee r ==>
+     R H (case res of INL vs => INL (v::vs) | INR exc => INR exc) ee r) ==>
+  gas_outcome memory tops (ctx,func) cx st0
     (bind (eval_exprs cx args) (\vs. return (v::vs))) (es,s) Q R
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def,
               aggregate_tuple_ignore_values] >>
   strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >>
+  >- (disj1_tac >> irule gas_bad_storage_at_bind_left >>
+      simp[storage_trace_frame_return])
+  >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`case res of INL vs => INL (v::vs) | INR exc => INR exc`,
                     `es_end`, `OK t`] >>
-      qpat_x_assum `!res ee r. Q1 _ _ _ ==> _` drule >>
-      Cases_on `res` >> fs[gas_marked_exec_def, bind_def, return_def])
-  >- (disj1_tac >>
+      Cases_on `res` >> fs[gas_marked_exec_def, bind_def, return_def] >>
+      metis_tac[])
+  >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`case res of INL vs => INL (v::vs) | INR exc => INR exc`,
                     `es_end`, `r`] >>
-      qpat_x_assum `!res ee r. R1 _ _ _ ==> _` drule >>
-      Cases_on `res` >> fs[gas_marked_exec_def, bind_def, return_def]) >>
-  disj2_tac >> metis_tac[]
+      Cases_on `res` >> fs[gas_marked_exec_def, bind_def, return_def] >>
+      metis_tac[]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 Theorem aggregate_tuple_eval_cons:
