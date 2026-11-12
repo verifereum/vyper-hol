@@ -99,8 +99,9 @@ QED
 (* Admitted: the joint twin of body_assign_case_ptr_at (bodyPtrAssignCases). *)
 Theorem body_assign_case_full:
   !cx t e.
-    (!s'' pv t'.
-       eval_expr cx e s'' = (INL pv,t') ==> body_base_target_full_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assign (BaseTarget t) e)
 Proof
