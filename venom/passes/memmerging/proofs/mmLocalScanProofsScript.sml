@@ -16774,6 +16774,74 @@ Proof
   simp[mm_local_pending_indices_endpoints] >> metis_tac[]
 QED
 
+Theorem mm_local_zero_store_fragment_exec[local]:
+  dst < dimword (:256) ==>
+  mm_local_exec_prefix fuel ctx [mk_zero_store_inst i dst] s
+    ((write_memory_with_expansion dst (REPLICATE 32 0w) s)
+      with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >>
+  simp[mm_local_exec_prefix_single, mk_zero_store_inst_def,
+    venomInstTheory.is_terminator_def,
+    venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_write2_def,
+    venomStateTheory.eval_operand_def, mstore_0w_eq_write]
+QED
+
+Theorem mm_local_zero_copy_fragment_exec[local]:
+  g.cg_dst < dimword (:256) /\ g.cg_length < dimword (:256) /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
+  mm_local_exec_prefix fuel ctx
+    [<| inst_id := id; inst_opcode := CALLDATASIZE;
+        inst_operands := []; inst_outputs := [v] |>;
+     mk_memzero_calldatacopy i g v] s
+    ((write_memory_with_expansion g.cg_dst (REPLICATE g.cg_length 0w)
+       (update_var v (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s))
+      with vs_inst_idx := s.vs_inst_idx + 2)
+Proof
+  strip_tac >>
+  simp[mm_local_exec_prefix_def, mk_memzero_calldatacopy_def,
+    venomInstTheory.is_terminator_def,
+    venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_read0_def,
+    venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+    calldatacopy_past_end_bytes,
+    venomStateTheory.write_memory_with_expansion_def,
+    venomStateTheory.write_memory_def,
+    venomStateTheory.expand_memory_def, arithmeticTheory.ADD1]
+QED
+
+Theorem mm_local_zero_cut_erased_write_stutter[local]:
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n] /\
+  mm_local_zero_capture dfg is (SUC n) n = SOME (d,bs) /\
+  (H (SUC n)).vs_memory = (write_memory_with_expansion d bs (H n)).vs_memory /\
+  mm_local_nonmemory_frame (H (SUC n)) = mm_local_nonmemory_frame (H n) /\
+  (!v. lookup_var v (H (SUC n)) = lookup_var v (H n)) ==>
+  mm_local_zero_cut dfg is gs H (SUC n) excluded (SUC pc)
+    (t with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >>
+  `mm_local_pending (mm_local_zero_capture dfg is (SUC n))
+    (mm_local_pending_indices is gs n) (H n) t` by
+    (irule mm_local_pending_cap_cong >>
+     qexists `mm_local_zero_capture dfg is n` >>
+     fs[mm_local_zero_cut_def] >>
+     rpt strip_tac >> irule mm_local_zero_capture_past >>
+     gvs[mm_local_pending_indices_mem]) >>
+  `mm_local_pending (mm_local_zero_capture dfg is (SUC n))
+    (mm_local_pending_indices is gs (SUC n)) (H (SUC n)) t` by
+    (simp[] >> irule mm_local_pending_create >> metis_tac[]) >>
+  gvs[mm_local_zero_cut_def, venomStateTheory.lookup_var_def] >>
+  qpat_x_assum `mm_local_pending _ (_ ++ [n]) _ _` mp_tac >>
+  simp[mm_local_pending_def] >> strip_tac >>
+  qexists `ws` >> simp[] >>
+  irule mm_local_write_log_memory_cong >> simp[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
