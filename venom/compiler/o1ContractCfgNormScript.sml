@@ -946,7 +946,10 @@ Proof
   `execution_frame a = execution_frame v` by gvs[supply_state_agree_def] >>
   `a.vs_call_entry_fmp = v.vs_call_entry_fmp /\
    a.vs_alloca_next = v.vs_alloca_next /\ a.vs_allocas = v.vs_allocas /\
-   a.vs_initial_fmp = v.vs_initial_fmp` by gvs[stateFrameTheory.execution_frame_def] >>
+   a.vs_initial_fmp = v.vs_initial_fmp /\ a.vs_fmp = v.vs_fmp` by
+    gvs[stateFrameTheory.execution_frame_def] >>
+  `dalloca_no_wrap inst a ==> dalloca_no_wrap inst v` by
+    (simp[dalloca_no_wrap_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
   conj_tac
   >- (drule_all supply_inst_mem_ranges_cong >> simp[mem_corr_def]) >>
   simp[call_corr_def] >> strip_tac >>
@@ -973,7 +976,7 @@ Proof
   Cases_on `MEM inst.inst_opcode [PHI; JMP; JNZ]`
   >- (`inst_mem_ranges inst' v = []` by
         (irule supply_inst_mem_ranges_empty >> gvs[]) >>
-      gvs[mem_corr_def, call_corr_def, supply_state_agree_def,
+      gvs[mem_corr_def, call_corr_def, dalloca_no_wrap_def, supply_state_agree_def,
           stateFrameTheory.execution_frame_def]) >>
   `inst' = inst` by
     (gvs[] >> irule supply_block_image_index_unchanged >> simp[]) >>
@@ -1036,7 +1039,7 @@ Proof
   `inst_mem_ranges inst' v = []` by
     (irule supply_inst_mem_ranges_empty >> gvs[]) >>
   qexistsl [`inst`, `a`] >>
-  gvs[mem_corr_def, call_corr_def, supply_state_agree_def,
+  gvs[mem_corr_def, call_corr_def, dalloca_no_wrap_def, supply_state_agree_def,
       stateFrameTheory.execution_frame_def]
 QED
 
@@ -1510,13 +1513,13 @@ Theorem cfg_norm_stage_mem_inv:
   ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  mem_inv (static_mem_ok eom) C vs ==>
-  mem_inv (static_mem_ok eom) C' vs
+  mem_corr_closed_rf M /\ mem_inv M C vs ==>
+  mem_inv M C' vs
 Proof
   strip_tac >>
   `ctx_bisim C C'` by (irule cfg_norm_stage_bisim >> metis_tac[]) >>
   drule cfg_norm_stage_functions >> strip_tac >>
-  irule frame_sim_rf_mem_inv >> simp[mem_corr_closed_rf_static_mem_ok] >>
+  irule frame_sim_rf_mem_inv >> simp[] >>
   qexists_tac `C` >> simp[] >>
   gvs[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
@@ -1599,7 +1602,8 @@ Proof
       irule cfg_norm_stage_run_fuel >> metis_tac[]) >>
   qexists_tac `eom` >>
   conj_tac >- metis_tac[cfg_norm_stage_max_live_eom] >>
-  irule cfg_norm_stage_mem_inv >> metis_tac[]
+  irule cfg_norm_stage_mem_inv >>
+  metis_tac[mem_corr_closed_rf_lowered_mem_fact]
 QED
 
 Theorem o1_contract_cfg_normalization:
