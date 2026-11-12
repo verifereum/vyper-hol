@@ -301,7 +301,9 @@ Proof
      disch_then (qspec_then `TupleTV tvs` mp_tac) >>
      simp[vyperASTTheory.expr_type_def, is_word_type_def,
           valueEncodingTheory.type_memory_size_def]) >>
-  `type_memory_size_list tvs < dimword (:256)` by simp[dimword_def] >>
+  `type_memory_size_list tvs < dimword (:256)` by
+    (irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** 64` >>
+     simp[dimword_def]) >>
   drule_all intcall_members_layout >> strip_tac >>
   qpat_x_assum `SUM _ = type_memory_size_list tvs` (fn th => fs[th]) >>
   drule_all intcall_tuple_entry >> strip_tac >>
