@@ -42,7 +42,7 @@ Proof
   `!v. MEM (Var v) inst.inst_operands ==>
      MEM v (fn_ir_vars fn) /\ v NOTIN fn_pv P fn` by
     (gen_tac >> strip_tac >> conj_tac >- metis_tac[ld_inst_input_ir] >>
-     irule ld_ptr_use_scalar >> qexists_tac `inst` >>
+     irule ld_ptr_use_scalar >> simp[] >> qexists_tac `inst` >>
      simp[mem_read_ops_def, mem_write_ops_def, is_pointer_preserving_op_def]) >>
   `eval_operands inst.inst_operands s = eval_operands inst.inst_operands t` by
     (`eval_operands inst.inst_operands f.lf_src =
