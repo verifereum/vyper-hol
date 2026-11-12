@@ -48,23 +48,37 @@ Proof
   fs[expr_sim_inv_def] >> metis_tac[]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
+Theorem supported_storage_typed_value_visibility:
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
+  well_typed_expr env (TopLevelName ty (src,id)) /\
+  supported_variable_decl tops (src,id) = SOME (vis,mut,declared,SOME slot) /\
+  (mut = Storage \/ mut = Transient) /\ supported_storage_type tops declared ==>
+  supported_storage_value tops (src,id) ty
+Proof
+  strip_tac >> drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `?tr. find_var_decl_by_name id tops = SOME (StorageVarDecl tr declared,id)` by
+    (gvs[] >> metis_tac[find_var_decl_by_name_SOME_storage_var_Storage,
+                        find_var_decl_by_name_SOME_storage_var_Transient]) >>
+  drule_all TopLevelName_storage_decl_type_eq >> strip_tac >> gvs[] >>
+  simp[supported_storage_value_def] >> Cases_on `mut` >> gvs[]
+QED
+
 Theorem supported_place_root_typed_value:
   body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
   well_typed_expr env (TopLevelName ty id) /\ supported_place_root tops id ==>
   supported_storage_value tops id ty
 Proof
-  (* original proof, kept while held:
   PairCases_on `id` >> strip_tac >>
   fs[supported_place_root_def] >>
   Cases_on `supported_variable_decl tops (id0,id1)`
   >- (Cases_on `supported_hashmap_decl tops (id0,id1)` >> gvs[] >>
       PairCases_on `x` >> metis_tac[supported_hashmap_typed_value_impossible]) >>
   PairCases_on `x` >> rename1 `SOME (vis,mut,declared,slot)` >>
-  Cases_on `vis` >> Cases_on `mut` >> Cases_on `slot` >> gvs[] >>
-  metis_tac[supported_storage_typed_value]
-  *)
-  cheat
+  Cases_on `mut` >> Cases_on `slot` >> gvs[] >>
+  metis_tac[supported_storage_typed_value_visibility]
 QED
 
 Theorem supported_typed_place_expr:

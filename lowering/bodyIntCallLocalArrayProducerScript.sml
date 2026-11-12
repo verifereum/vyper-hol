@@ -48,6 +48,8 @@ Theorem eval_local_subscript:
              (ValueSubscript v)) es
 Proof
   strip_tac >>
+  `~subscript_reads_base cx (Name arrty id) idx` by
+    metis_tac[subscript_reads_base_through_dynarray, base_through_dynarray_def] >>
   simp[Once evaluate_def, bind_def, Once evaluate_def, get_scopes_def,
        type_check_def, assert_def, check_def, ignore_bind_def, return_def,
        expr_type_def] >>
@@ -631,6 +633,8 @@ Theorem local_subscript_exempt:
     (es,s0) marks (err,ee) (leaf,tfinal)
 Proof
   strip_tac >>
+  `~subscript_reads_base cx (Name arrty id) idx` by
+    metis_tac[subscript_reads_base_through_dynarray, base_through_dynarray_def] >>
   once_rewrite_tac[ignore_bind_def] >>
   once_rewrite_tac[evaluate_def] >>
   rewrite_tac[bind_assoc] >> BETA_TAC >>
@@ -643,8 +647,11 @@ Proof
     simp[FUN_EQ_THM, vyperStateTheory.assert_def, return_def] >>
   asm_rewrite_tac[bind_return] >>
   BETA_TAC >>
-  rewrite_tac[bind_assoc] >> BETA_TAC >>
-  once_rewrite_tac[GSYM bind_assoc] >>
+  `gas_exempt_cert memory tops (ctx,func)
+     (bind (bind (eval_expr cx idx) (read_result cx))
+        (\v. bind (select_result cx arrty (PlaceR (MemoryPlace id []))
+                     (ValueSubscript v)) (\x. return ())))
+     (es,s0) marks (err,ee) (leaf,tfinal)` suffices_by simp[bind_assoc] >>
   irule gasExemptCertTheory.gas_exempt_cert_error_value >>
   simp[GSYM ignore_bind_def]
 QED
