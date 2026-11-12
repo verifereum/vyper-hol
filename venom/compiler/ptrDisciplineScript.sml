@@ -627,6 +627,22 @@ Definition ctx_has_dalloca_def:
       ctx.ctx_functions
 End
 
+(* The floor of the dynamic region: DALLOCA allocates at or above the
+   initial free-memory pointer.  Without a DALLOCA it is 2^256, above
+   every site. *)
+Definition dyn_floor_def:
+  dyn_floor C (vs:venom_state) =
+    if ctx_has_dalloca C then w2n vs.vs_initial_fmp else dimword (:256)
+End
+
+(* The dynamic region [fl, 2^256) that DALLOCA allocates from holds the
+   same bytes on both sides: DALLOCA pointers are not relocated. *)
+Definition ld_dyn_agree_def:
+  ld_dyn_agree fl mask sm tm <=>
+    !i. fl <= i /\ i < dimword (:256) /\ i NOTIN mask ==>
+        read_byte i sm = read_byte i tm
+End
+
 (* ALLOCA sites lie below the initial free memory pointer, which the free
    memory pointer never drops below, so DALLOCA regions never overlap
    them.  Only asked of programs that use DALLOCA: the initial
