@@ -2540,6 +2540,7 @@ Theorem no_ctor_source_observations:
   tx.function_name = "__init__" /\ tx.args = [] /\
   value_transfer_ok tx am.accounts /\ am.pending_deletions = [] ==>
   ?am'. load_contract NONE gobs am tx [(NONE,tops)] [] = INL (am',[]) /\
+    ALOOKUP am'.sources tx.target = SOME [(NONE,tops)] /\
     am'.accounts = accounts_after_transfer tx am.accounts /\
     am'.tStorage = am.tStorage /\ am'.logs = am.logs /\
     immutables_section_rel tops (account_immutables am' tx.target)
