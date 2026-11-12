@@ -101,7 +101,7 @@ Proof
           qexists_tac `marks` >> disj1_tac >>
           irule gas_bad_storage_at_bind_left >> simp[] >>
           irule gas_bad_storage_at_counted_prefix >>
-          goal_assum drule >> simp[]) >>
+          metis_tac[]) >>
       `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
          mid.storage_trace` by fs[storage_trace_domain_def] >>
       disch_then (DISJ_CASES_THEN strip_assume_tac)
@@ -119,7 +119,7 @@ Proof
       rewrite_tac[gas_summary_at_def] >>
       qexistsl_tac [`INR ex`, `mid`, `r`] >>
       conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      BETA_TAC >> simp[] >> rpt strip_tac >>
+      BETA_TAC >> simp[] >> disj2_tac >> rpt strip_tac >>
       `?ex'. INR ex = INR ex' /\ R H (INR ex') (mid with gas_obs := []) r` by
         metis_tac[] >>
       gvs[]) >>
@@ -136,7 +136,8 @@ Theorem counted_outcome_map_values:
   gas_outcome memory tops (ctx,func) cx st0 (bind a (\vs. return (f vs))) (es,s0)
     (\H res ee t. ?vs. res = INL (f vs) /\ P H vs ee t) R
 Proof
-  strip_tac >> irule counted_outcome_bind_exec >> conj_tac
+  strip_tac >> irule counted_outcome_bind_exec >>
+  conj_tac >- simp[storage_trace_frame_return] >> conj_tac
   >- (rpt strip_tac >>
       pure_rewrite_tac[ignore_bind_def, bind_assoc] >>
       irule gas_exempt_cert_bind_values >> goal_assum (drule_at Any) >>
@@ -144,7 +145,6 @@ Proof
   conj_tac
   >- (rpt strip_tac >> pure_rewrite_tac[ignore_bind_def, bind_assoc] >>
       irule gas_exempt_cert_error_values >> simp[]) >>
-  conj_tac >- simp[storage_trace_frame_return] >>
   goal_assum (drule_at Any) >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
