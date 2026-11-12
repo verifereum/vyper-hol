@@ -108,12 +108,41 @@ Proof
     storage_well_formed_on cx t (FST H)` by
     (qpat_x_assum `!r u. _` mp_tac >>
      simp[Abbr `rest`, lock_if_nr_def, is_view_mut_def]) >>
-  qpat_x_assum `!r u. _` kall_tac >>
   Cases_on `out` >> simp[]
   >- (qmatch_goalsub_abbrev_tac `unlock u` >>
       Cases_on `unlock u` >> rename1 `unlock u = (ur,v)` >>
       Cases_on `ur` >> simp[] >> strip_tac >> gvs[] >>
-      FAIL_TAC "unlock result") >>
-  rename1 `INR exc` >> Cases_on `exc` >> simp[] >>
-  FAIL_TAC "exception result"
+      `unlock = unlock_if_nr cx nr (is_view_mut mut)` by
+        simp[Abbr `unlock`, unlock_if_nr_def, is_view_mut_def] >>
+      qpat_x_assum `Abbrev (unlock = _)` kall_tac >>
+      qpat_x_assum `unlock = _` SUBST_ALL_TAC >>
+      `storage_trace_frame (unlock_if_nr cx nr (is_view_mut mut))` by
+        simp[storage_trace_frame_optional_locks] >>
+      drule_all storage_trace_frame_prefix >> strip_tac >>
+      `storage_well_formed_on cx u (FST H)` by gvs[] >>
+      simp[initial_state_abstract_machine_storage_well_formed_on] >>
+      drule_all unlock_if_nr_preserves_storage_well_formed_on >> simp[]) >>
+  rename1 `ignore_bind (send_call_value mut cx) rest s0 = (INR exc,u)` >>
+  Cases_on `exc` >> simp[] >>
+  TRY (strip_tac >> gvs[] >> NO_TAC)
+  >- (qmatch_goalsub_abbrev_tac `unlock u` >>
+      Cases_on `unlock u` >> rename1 `unlock u = (ur,w)` >>
+      Cases_on `ur` >> simp[]
+      >- (Cases_on `evaluate_type (type_env_all_modules mods) ret` >> simp[]
+          >- (strip_tac >> gvs[]) >>
+          rename1 `safe_cast tv rv` >> Cases_on `safe_cast tv rv` >> simp[]
+          >- (strip_tac >> gvs[]) >>
+          strip_tac >> gvs[] >>
+          `unlock = unlock_if_nr cx nr (is_view_mut mut)` by
+            simp[Abbr `unlock`, unlock_if_nr_def, is_view_mut_def] >>
+          qpat_x_assum `Abbrev (unlock = _)` kall_tac >>
+          qpat_x_assum `unlock = _` SUBST_ALL_TAC >>
+          `storage_trace_frame (unlock_if_nr cx nr (is_view_mut mut))` by
+            simp[storage_trace_frame_optional_locks] >>
+          drule_all storage_trace_frame_prefix >> strip_tac >>
+          `storage_well_formed_on cx u (FST H)` by gvs[] >>
+          simp[initial_state_abstract_machine_storage_well_formed_on] >>
+          drule_all unlock_if_nr_preserves_storage_well_formed_on >> simp[]) >>
+      strip_tac >> gvs[]) >>
+  strip_tac >> gvs[initial_state_abstract_machine_storage_well_formed_on]
 QED
