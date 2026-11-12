@@ -6585,7 +6585,84 @@ Proof
          Cases_on `step_inst fuel C y (s with vs_gas_readings := fg ++ FLAT postgss ++ tail)` >>
          fs[APPEND_ASSOC]) >>
       fs[APPEND_ASSOC]) >>
-  FAIL_TAC "stopped cuts and barrier"
+  `!pg fg r zs. LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) mh fg ==>
+      ~?v. R fuel C (pre ++ y::zs)
+        (s with vs_gas_readings := pg ++ fg ++ r) = OK v` by
+    (rpt gen_tac >> strip_tac >>
+     `?a. R fuel C pre (s with vs_gas_readings := pg ++ fg ++ r) = OK a` by
+       metis_tac[] >>
+     `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre` by fs[EVERY_MEM] >>
+     `FOLDR (dft_exec_cons fuel C) OK pre
+       (s with vs_gas_readings := pg ++ (fg ++ r)) = OK a` by
+       fs[Abbr `R`, APPEND_ASSOC] >>
+     drule_all invoke_partner_prefix_concrete >> strip_tac >>
+     `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+                  ~MEM (FST q) y.inst_outputs) us` by
+       (fs[EVERY_MEM, MEM_FLAT, MEM_MAP] >> rpt strip_tac >>
+        metis_tac[dft_swap_output_frame]) >>
+     `~?v. step_inst fuel C y
+        (s with <|vs_gas_readings := fg ++ r;
+                  vs_inst_idx := s.vs_inst_idx + LENGTH pre|>) = OK v` by
+       (asm "shifted_events" (qspecl_then [`fg`, `r`] mp_tac) >>
+        impl_tac >- first_assum ACCEPT_TAC >>
+        simp_tac (srw_ss()) [] >> metis_tac[]) >>
+     drule_all invoke_updates_concrete_frame >>
+     disch_then (qspecl_then [`fuel`, `C`,
+       `s with <|vs_gas_readings := fg ++ r;
+                 vs_inst_idx := s.vs_inst_idx + LENGTH pre|>`] mp_tac) >> strip_tac >>
+     `~?v. step_inst fuel C y a = OK v` by
+       (qpat_x_assum `step_inst fuel C y (FOLDL _ _ _) = _` mp_tac >>
+        qpat_assum `a = FOLDL _ _ _` (fn th => pure_rewrite_tac[GSYM th]) >>
+        Cases_on `step_inst fuel C y
+          (s with <|vs_gas_readings := fg ++ r;
+                    vs_inst_idx := s.vs_inst_idx + LENGTH pre|>)` >> fs[]) >>
+     `EVERY (\i. ~is_terminator i.inst_opcode) pre` by
+       fs[EVERY_MEM, dft_gas_swap_pair_def] >>
+     qpat_assum `Abbrev (R = _)` (fn th =>
+       pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >> BETA_TAC >>
+     pure_rewrite_tac[FOLDR_APPEND, Once dftRunRelTheory.dft_exec_prefix_continue] >>
+     qpat_assum `FOLDR _ OK pre _ = OK a` (fn th => pure_rewrite_tac[th]) >>
+     pure_rewrite_tac[dftIndexedExecTheory.dft_exec_cons_def] >> BETA_TAC >>
+     Cases_on `step_inst fuel C y a` >> fs[]) >>
+  pop_assum (mk_asm "stopped_source") >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> Cases_on `k <= LENGTH pre`
+      >- (`k - LENGTH pre = 0` by decide_tac >>
+          pop_assum SUBST_ALL_TAC >>
+          `k - (LENGTH pre + 1) = 0` by decide_tac >>
+          pop_assum SUBST_ALL_TAC >>
+          fs[TAKE_0, APPEND_NIL, FLAT] >>
+          `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+             (TAKE k pre)` by
+            (irule EVERY_TAKE >> fs[EVERY_MEM] >> rpt strip_tac >>
+             metis_tac[dft_gas_swap_pair_sym,
+               dftGasInvCallPartnerTheory.inv_call_partner_class]) >>
+          `LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+             (MAP (\x. if x.inst_opcode = GAS then [NONE : bytes32 option] else [])
+                (TAKE k pre)) (TAKE k gss)` by
+            (qpat_assum `LIST_REL (LIST_REL _) _ gss`
+               (mp_tac o Q.SPEC `k` o MATCH_MP rich_listTheory.EVERY2_TAKE) >>
+             simp[TAKE_APPEND1, LENGTH_MAP, GSYM MAP_TAKE]) >>
+          `LENGTH (FLAT (TAKE k gss)) =
+             LENGTH (FILTER (\x. x.inst_opcode = GAS) (TAKE k pre))` by
+            (asm "padding_filling_length" irule >> first_assum ACCEPT_TAC) >>
+          `FLAT gss = FLAT (TAKE k gss) ++ FLAT (DROP k gss)` by
+            metis_tac[TAKE_DROP, FLAT_APPEND] >>
+          conj_tac
+          >- (fs[Abbr `R`, Abbr `E`] >>
+              `gas_events_block fuel C owner
+                <|bb_label := s.vs_current_bb; bb_instructions :=
+                  REPLICATE u.vs_inst_idx (mk_inst 0 STOP [] [])|> u = []` by
+                simp[Once gas_events_block_def, venomInstTheory.get_instruction_def] >>
+              drule_all noninvoke_prefix_events_exact >>
+              disch_then (qspecl_then [`owner`, `s.vs_current_bb`, `[]`] mp_tac) >>
+              simp[]) >>
+          irule noninvoke_prefix_readings_exact >>
+          qexistsl_tac [`C`, `fuel`, `FLAT (TAKE k gss)`, `TAKE k pre`, `s`] >>
+          fs[Abbr `R`, APPEND_ASSOC]) >>
+      FAIL_TAC "late cuts") >>
+  FAIL_TAC "barrier"
 QED
 
 Theorem dft_blocks_gas_mask:
