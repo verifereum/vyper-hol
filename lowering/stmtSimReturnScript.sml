@@ -976,7 +976,7 @@ Proof
   simp[Abbr `r`, exit_result_def] >>
   rpt strip_tac >> res_tac >> simp[stmt_exit_ptr_def] >>
   simp[intret_q_def, result_rel_def, intret_vals_match_def] >>
-  qexists_tac `s0` >> simp[] >>
+  TRY disj2_tac >> qexists_tac `s0` >> simp[] >>
   `state_rel H func cenv cx es s0` by fs[stmt_state_rel_def] >>
   drule state_rel_scopes_nil >> simp[state_rel_gas_obs]
 QED
@@ -1241,7 +1241,7 @@ Proof
   simp[exit_result_def, raise_def] >>
   rpt strip_tac >> simp[stmt_exit_ptr_def] >>
   simp[intret_q_def, result_rel_def] >>
-  qexists_tac `t` >> simp[] >>
+  TRY disj2_tac >> qexists_tac `t` >> simp[] >>
   conj_tac >- metis_tac[intret_vals_match_word] >>
   first_x_assum (drule_then strip_assume_tac) >>
   `state_rel H func cenv cx mid t` by
