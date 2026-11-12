@@ -149,5 +149,37 @@ Theorem ifexp_unwrap_arm_step_full:
             w2n w + type_memory_size rt <= z'.vs_alloca_next) /\
     ghost_kept_at lo cenv es1 sa G1 tn1 u Gz tf
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `unwrap_value cenv vv sm = (op,sb)` by
+    (qpat_x_assum `compile_ifexp_arm _ _ _ _ _ = _` mp_tac >>
+     asm_rewrite_tac[compile_ifexp_arm_def]) >>
+  `local_ptrs_reserved cenv sm` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sa` >> simp[]) >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    (qpat_x_assum `!ty e sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti st0. _` kall_tac >>
+     metis_tac[cj 1 exprOperandVarTheory.compiler_compile_var]) >>
+  qpat_x_assum `!ty e sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti st0. _`
+    (qspecl_then [`ty`, `e`, `sa`, `vv`, `sm`, `sm`, `op`, `sb`,
+      `es1`, `ee`, `u`, `z`, `tva`, `rty`, `G`, `tn`, `G1`, `tn1`, `st0`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[arithmeticTheory.ADD_COMM])) >>
+  strip_tac >>
+  qexistsl_tac [`v`, `z'`, `G'`, `tn'`] >>
+  gns[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `expr_post H ctx func cenv cx e es1 sa sb u ee v op z'` by metis_tac[] >>
+      fs[expr_post_def, post_value_type_def, vyperASTTheory.expr_type_def] >>
+      metis_tac[]) >>
+  conj_tac
+  >- (strip_tac >> rpt gen_tac >> strip_tac >>
+      `type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_bytes cenv t` by
+        metis_tac[contextTheory.same_memory_layout_def] >>
+      gvs[ptr_buf_ok_def]) >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `?rtp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME rtp` by simp[] >>
+  pop_assum strip_assume_tac >>
+  `type_memory_size rtp = type_memory_size rty` by
+    metis_tac[contextTheory.same_memory_layout_def] >>
+  metis_tac[]
 QED
