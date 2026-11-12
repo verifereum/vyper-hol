@@ -28,20 +28,20 @@ Theorem expr_stack_outcome_ptr:
   gas_outcome_ptr D tops (ctx,func) PG
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\res ee G tn u. ?v. res = INL v /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn u /\
+      ghost_inv H d cenv cx ee G tn u /\
       ptr_val_ok cx (post_value_type cenv e) v op G tn u /\
       (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r) ==>
   gas_outcome_ptr D tops (ctx,func) PG (eval_expr cx e) (es,s0,G0,tn0)
     (\res ee G tn u. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
+      vv_post H ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn u /\
+      ghost_inv H d cenv cx ee G tn u /\
       ptr_vv_ok cx (post_value_type cenv e) tv (StackValue t op) ee G tn u /\
       (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
@@ -136,22 +136,22 @@ Resume expr_sim_ptr_of_vv[normal]:
     (drule eval_expr_preserves_scopes_dom >> simp[]) >>
   `~t.vs_halted` by
     (fs[gas_marked_exec_ptr_def] >> metis_tac[gas_path_ptr_ok_not_halted]) >>
-  `?v H tf z.
-     gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (read_result cx tv)
-       (mid with gas_obs := [],t,G,tn) [] (INL v) (mid with gas_obs := []) H tf (OK z) /\
-     expr_post ctx func cenv cx e es sa sb s0 (mid with gas_obs := []) v op z /\
+  `?v HG tf z.
+     gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (read_result cx tv)
+       (mid with gas_obs := [],t,G,tn) [] (INL v) (mid with gas_obs := []) HG tf (OK z) /\
+     expr_post H ctx func cenv cx e es sa sb s0 (mid with gas_obs := []) v op z /\
      z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-     ghost_inv d cenv cx (mid with gas_obs := []) H tf z /\
-     ptr_val_ok cx (post_value_type cenv e) v op H tf z /\
-     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op H z) /\
-     ghost_kept cenv es sa G0 tn0 s0 H tf` by
+     ghost_inv H d cenv cx (mid with gas_obs := []) HG tf z /\
+     ptr_val_ok cx (post_value_type cenv e) v op HG tf z /\
+     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op HG z) /\
+     ghost_kept cenv es sa G0 tn0 s0 HG tf` by
     (Cases_on `post_value_type cenv e = expr_type e`
      >- (qpat_assum `post_value_type cenv e = expr_type e`
            (fn th => fs[th] >> assume_tac th) >>
          irule unwrap_value_marked_read_ptr >> simp[] >>
      conj_tac >- (strip_tac >>
        drule_all expr_body_pre_copy_ok >> simp[]) >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      qexists `ty` >> simp[]) >>
      `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by
        (irule post_value_type_widens >>
@@ -160,18 +160,18 @@ Resume expr_sim_ptr_of_vv[normal]:
        metis_tac[return_source_word_widens_eq] >>
      Cases_on `vv`
      >- (irule exprPtrUnwrapIdentityTheory.unwrap_stack_marked_read_ptr >> simp[] >>
-         goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+         goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
      rename1 `LocatedValue tag p` >>
      `p.ptr_location = LocMemory` by
        metis_tac[aggregate_unequal_post_result_location] >>
      `~is_word_type tag` by
        (fs[vv_post_def, vv_holds_def] >> metis_tac[is_bytestring_word_type]) >>
      irule exprPtrUnwrapIdentityTheory.unwrap_memory_marked_read_ptr >> simp[] >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
   pop_assum strip_assume_tac >>
   rewrite_tac[gas_outcome_ptr_def, gas_summary_ptr_at_marked] >>
   qexists `[]` >> disj1_tac >>
-  qexistsl [`INL v`, `mid with gas_obs := []`, `H`, `tf`, `OK z`] >> simp[]
+  qexistsl [`INL v`, `mid with gas_obs := []`, `HG`, `tf`, `OK z`] >> simp[]
 QED
 Finalise expr_sim_ptr_of_vv
 
