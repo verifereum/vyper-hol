@@ -2,6 +2,7 @@
 Theory bodyPtrTypedCopyDynamicControl
 Ancestors bodyPtrTypedCopyArrayControl typedCopyLoopHeaderPtr
   fragGasPathPtr exprSimPtrProps venomExecSemantics venomInst venomState words finite_map arithmetic
+  bodyPtrBopScalarSeq fragExec exprLoweringProps ptrDiscipline list pred_set
 
 Theorem typed_copy_scalar_lt_counted:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -120,3 +121,58 @@ Resume typed_copy_operand_test_counted[jump]:
 QED
 
 Finalise typed_copy_operand_test_counted
+
+(* The capacity guard is wholly scalar; it neither reads nor clears padding. *)
+Theorem typed_copy_capacity_guard_counted:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX
+    [mk_inst id GT [Var len; Lit (n2w cap)] [too];
+     mk_inst (id+1) ISZERO [Var too] [ok];
+     mk_inst (id+2) ASSERT [Var ok] []]
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  lookup_var len s = SOME (n2w n) /\ op_taint tn (Var len) = {} /\
+  FLOOKUP G len = NONE /\ n <= cap /\ cap < dimword(:256) /\
+  len <> too /\ len <> ok /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted ==>
+  ?H tf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tf
+      (OK ((update_var ok 1w (update_var too 0w s))
+        with vs_inst_idx := s.vs_inst_idx+3)) /\
+    FLOOKUP H len = NONE /\ op_taint tf (Var len) = {} /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!p. p <> too /\ p <> ok ==>
+      FLOOKUP H p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  qabbrev_tac `code =
+    [mk_inst id GT [Var len; Lit (n2w cap)] [too];
+     mk_inst (id+1) ISZERO [Var too] [ok];
+     mk_inst (id+2) ASSERT [Var ok] []]` >>
+  qabbrev_tac `A = {Var len; Lit (n2w cap)}` >>
+  `bop_scalar_seq (COMPL {too;ok}) A code
+     (Var ok INSERT Var too INSERT A)` by
+    (qunabbrev_tac `code` >>
+     simp[Once bop_scalar_seq_def] >> disj1_tac >>
+     qexistsl_tac [`id`, `GT`, `[Var len;Lit (n2w cap)]`, `too`] >> simp[] >>
+     conj_tac >- simp[Abbr `A`] >>
+     simp[Once bop_scalar_seq_def] >> disj1_tac >>
+     qexistsl_tac [`id+1`, `ISZERO`, `[Var too]`, `ok`] >> simp[] >>
+     simp[Once bop_scalar_seq_def] >> disj2_tac >>
+     qexistsl_tac [`id+2`, `ASSERT`, `Var ok`] >> simp[]) >>
+  `!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}` by
+    (simp[Abbr `A`] >> rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
+  `run_inst_seq code s = OK (update_var ok 1w (update_var too 0w s))` by
+    (simp[Abbr `code`, run_inst_seq_def, step_inst_base_opcode_eqs,
+       mk_inst_def, exec_pure2_def, exec_pure1_def, eval_operand_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE, w2n_n2w,
+       LESS_MOD, bool_to_word_def] >>
+     `n < dimword(:256) /\ ~(cap < n)` by decide_tac >> simp[]) >>
+  drule_all bop_scalar_seq_path >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qpat_x_assum `!op. op IN Var ok INSERT _ ==> _`
+    (qspec_then `Var len` mp_tac) >>
+  simp[Abbr `A`, op_prov_def] >> strip_tac >>
+  qexistsl_tac [`G'`, `tn'`] >>
+  gvs[Abbr `code`, op_taint_def]
+QED
