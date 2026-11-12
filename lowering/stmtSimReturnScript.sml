@@ -822,9 +822,7 @@ Proof
   `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn) []
      (OK (u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)),
       step_prov PG G i u, step_taint i s u tn)` by
-    (qspecl_then [`s`, `func`, `bb`, `i`, `D`, `lo`, `ctx`, `G`, `tn`, `u`,
-                  `explicit`, `PG`] mp_tac
-       (GEN_ALL straight_line_origin_ptr_edge) >>
+    (mp_tac (SPEC_ALL straight_line_origin_ptr_edge) >>
      simp[Abbr `i`, mk_inst_def, is_terminator_def] >>
      disch_then irule >>
      simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
