@@ -158,7 +158,7 @@ Theorem ptr_owner_restrict_projection[local]:
   ptr_ledger_erases dyn births (DRESTRICT TG keep) (DRESTRICT G keep)
 Proof
   simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def, FLOOKUP_DRESTRICT] >>
-  rpt strip_tac >> rw[] >> simp[ptr_owner_erases_def] >> metis_tac[]
+  rpt strip_tac >> rw[] >> simp[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def] >> metis_tac[]
 QED
 
 Theorem ptr_tagged_step_projection[local]:
@@ -175,12 +175,12 @@ Proof
   >- (simp[ptr_tagged_step_def, step_prov_def, out_prov_def] >>
       irule ptr_owner_set_projection >> simp[] >>
       Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >>
-      simp[ptr_owner_erases_def, FLOOKUP_DEF] >>
+      simp[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def, FLOOKUP_DEF] >>
       metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME]) >>
   Cases_on `inst.inst_opcode = DALLOCA`
   >- (simp[ptr_tagged_step_def, step_prov_def] >>
       irule ptr_owner_set_projection >>
-      simp[ptr_owner_erases_def, out_prov_def] >>
+      simp[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def, out_prov_def] >>
       every_case_tac >> gvs[] >> metis_tac[]) >>
   simp[ptr_tagged_step_def] >> irule ptr_owner_step_projection >> simp[] >>
   metis_tac[]
@@ -550,7 +550,7 @@ Proof
     (drule_all ptr_source_ownership_prov_erases >>
      simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >> strip_tac >>
      qpat_x_assum `!v. ptr_owner_erases _ _ (FLOOKUP TG v) _`
-       (qspec_then `v` mp_tac) >> simp[ptr_owner_erases_def]) >>
+       (qspec_then `v` mp_tac) >> simp[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def]) >>
   `ptr_birth_slices a tokens births` by
     metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_slices] >>
   gvs[MEM_EL] >> rename1 `n < SUC (LENGTH a.po_stack)` >>
