@@ -12,7 +12,7 @@
 Theory fragGasCopyLoop
 Ancestors
   emitHelperProps stmtSimStoreCopy bodyMemAssignTopCopyCompiler
-  bodyMemAssignTopCopyLoop fragGasPathPtr wordLoadStorePtr codegenRel
+  bodyMemAssignTopCopyLoop fragGasPathPtr wordLoadStorePtr assignBasePtrWordStore codegenRel
   contextCodegenRel exprSimPtrTopLevelStorageCopy exprSimPtrTopLevelCopy exprSimStorageCopy
   bodyStorageCopyMemory bodyMemAssignTopCopyPaths
   fragGasSeqPtr fragGasSeqAbort fragGasOriginPtr fragGasOrigin
@@ -179,13 +179,13 @@ Proof
   qpat_assum `!j G tn q. j <= n /\ _ ==> _`
     (qspecl_then [`k`, `G`, `tn`, `s`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  disch_then (qx_choose_then `r` strip_assume_tac) >>
+  disch_then (qx_choosel_then [`r`, `G1`, `tn1`] strip_assume_tac) >>
   qpat_assum `!j G tn q. j < n /\ _ ==> _`
     (qspecl_then [`k`, `G1`, `tn1`, `r`] mp_tac) >>
   (impl_tac >- gvs[]) >>
-  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  disch_then (qx_choosel_then [`u`, `G2`, `tn2`] strip_assume_tac) >>
   qpat_x_assum `!k G tn s. (_ /\ _ /\ k + remaining = n /\ _) ==> _`
-    (qspecl_then [`k+1`, `G1'`, `tn1'`, `u`] mp_tac) >>
+    (qspecl_then [`k+1`, `G2`, `tn2`, `u`] mp_tac) >>
   (impl_tac >- simp[]) >>
   strip_tac >>
   qexistsl_tac [`t`, `Gf`, `tnf`] >> simp[] >>
@@ -534,28 +534,12 @@ Proof
                `n`, `0`, `G1`, `tn1`, `t`] mp_tac copy_loop_iterate_origin_ptr >>
   BETA_TAC >> impl_tac
   >- (rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC) >> simp[]) >>
-  strip_tac >>
-  qexistsl_tac [`t'`, `Gf`, `tnf`, `cv`, `ds`] >> simp[] >>
+  disch_then (qx_choosel_then [`t2`, `Gf`, `tnf`] strip_assume_tac) >>
+  qexistsl_tac [`t2`, `Gf`, `tnf`, `cv`, `ds`] >> simp[] >>
   metis_tac[origin_ptr_path_then]
 QED
 
 (* ===== Memory to storage ===== *)
-
-(* A store into storage or transient storage with a clean key checks
-   whatever taint its value carries. *)
-Theorem copy_ptr_inst_ok_store[local]:
-  (opc = SSTORE \/ opc = TSTORE) /\ op_taint tn a = {} /\
-  ~ctx_has_dalloca ctx /\
-  step_inst_base (mk_inst id opc [a; v] []) s = OK s' /\
-  s'.vs_requests = s.vs_requests ==>
-  ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc [a; v] []) s
-Proof
-  rpt strip_tac >> gvs[] >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-       mk_inst_def, source_memory_write_ranges_def,
-       source_memory_read_ranges_def] >>
-  simp[GSYM mk_inst_def, step_inst_non_invoke] >> metis_tac[]
-QED
 
 Theorem copy_store_step_ptr[local]:
   (opc = SSTORE \/ opc = TSTORE) /\ ~s.vs_call_ctx.cc_static /\
@@ -568,33 +552,13 @@ Theorem copy_store_step_ptr[local]:
 Proof
   strip_tac >>
   `?z. step_inst_base (mk_inst id opc [a; v] []) s = OK z /\
-       z.vs_vars = s.vs_vars /\ z.vs_requests = s.vs_requests /\
-       z.vs_allocas = s.vs_allocas /\ z.vs_fmp = s.vs_fmp` by
+       z.vs_vars = s.vs_vars /\ z.vs_allocas = s.vs_allocas /\ z.vs_fmp = s.vs_fmp` by
     (gvs[] >>
      simp[stepInstBaseLib.simp_opcode_clause ``SSTORE``,
           stepInstBaseLib.simp_opcode_clause ``TSTORE``, mk_inst_def,
           exec_write2_def, sstore_def, tstore_def]) >>
   qexists_tac `z` >> simp[] >> rpt gen_tac >>
-  irule copy_ptr_inst_ok_store >> gvs[] >> qexists_tac `z` >> simp[]
-QED
-
-Theorem copy_store_taint[local]:
-  eval_operand a s = SOME slot /\
-  s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp ==>
-  step_taint (mk_inst id (if loc = LocStorage then SSTORE else TSTORE) [a;v] [])
-    s s' tn =
-    (if loc = LocStorage
-     then tn with t_stor := key_update tn.t_stor slot (op_taint tn v)
-     else tn with t_trans := key_update tn.t_trans slot (op_taint tn v))
-Proof
-  strip_tac >>
-  `new_site_bytes s s' = {}` by
-    simp[new_site_bytes_def, FLOOKUP_DEF, EXTENSION, SF CONJ_ss] >>
-  Cases_on `loc = LocStorage` >>
-  gvs[step_taint_def, set_var_taint_def, mk_inst_def,
-      mem_taint_def, step_writes_def, source_memory_write_ranges_def,
-      written_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
-      range_bytes_def, taint_component_equality, DRESTRICT_UNIV]
+  irule assign_base_ptr_inst_ok_storage_word >> gvs[]
 QED
 
 (* The comparison and the load write no memory, storage or immutables. *)
@@ -620,15 +584,6 @@ Proof
   Cases_on `ops1` >> simp[] >>
   rename1 `inst.inst_operands = h::h1::h2::ops2` >>
   Cases_on `ops2` >> simp[]
-QED
-
-Theorem copy_ptr_covers_frame[local]:
-  ptr_covers G tn x s C /\ FLOOKUP G' x = FLOOKUP G x /\
-  op_taint tn' (Var x) = op_taint tn (Var x) /\
-  lookup_var x t = lookup_var x s ==>
-  ptr_covers G' tn' x t C
-Proof
-  simp[ptr_covers_def]
 QED
 
 Theorem copy_store_taint_bound_step[local]:
@@ -830,7 +785,10 @@ Proof
             else tn4 with t_trans := key_update tn4.t_trans (k + n2w i)
                    (op_taint tn4 (Var vv))` by
        (qunabbrev_tac `tn5` >> qunabbrev_tac `i5` >>
-        irule copy_store_taint >> simp[]) >>
+        qspecl_then [`if loc = LocStorage then SSTORE else TSTORE`, `id+4`,
+          `Var dv`, `Var vv`, `y1`, `z`, `PG`, `G4`, `tn4`, `k + n2w i`]
+          mp_tac assign_base_storage_word_ghost >>
+        Cases_on `loc = LocStorage` >> simp[]) >>
      Cases_on `loc = LocStorage` >> gvs[toplevel_copy_source_taint_def]) >>
   (* ADD [cv; 1] -> nv *)
   `eval_operand (Var cv) z1 = SOME (n2w i)` by
@@ -1162,7 +1120,7 @@ Proof
      `eval_operand dst q = SOME k` by
        (irule topcopy_frame_operand >> metis_tac[]) >>
      `~q.vs_call_ctx.cc_static` by metis_tac[topcopy_frame_call_ctx] >>
-     `ptr_covers Gj tj x q (32*n)` by metis_tac[copy_ptr_covers_frame] >>
+     `ptr_covers Gj tj x q (32*n)` by metis_tac[ptr_covers_frame] >>
      `op_taint tj dst = {}` by
        (Cases_on `dst` >> gvs[] >> simp[op_taint_def]) >>
      `~MEM x [cv;mv;sv;vv;dv;nv] /\
