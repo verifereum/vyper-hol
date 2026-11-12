@@ -1,6 +1,6 @@
 (* Internal-call metadata retained in an external function's frame. *)
 Theory internalReturnMetadata
-Ancestors
+Ancestors moduleLoweringProps
   externalReturnPrefix compileVyper moduleLowering entryStateRel structFieldsProps bodySim
   externalNormalizePremises supportedNames vyperInterpreter compileEnv loweringShapeProps
   memoryLocalRhsProps supportedProgram supportedDecls e2eDefs vyperTypeContractSoundness

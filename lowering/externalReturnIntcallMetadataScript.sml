@@ -1,5 +1,5 @@
 Theory externalReturnIntcallMetadata
-Ancestors
+Ancestors moduleLoweringProps
   externalReturnPhysicalMetadata externalReturnPackage compileVyper compileEnv
   bodySim entryStateRel structFieldsProps vyperAST
 

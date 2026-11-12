@@ -1,6 +1,6 @@
 (* Exact original-source witnesses for each processed registration index. *)
 Theory entryReachBodyRegistrationSlotWitness
-Ancestors
+Ancestors moduleLoweringProps
   valueEncodingDefs entryReachBodyRegistrationEndpointAudit
   entryStateRel entryReachBodyCanonicalArrayChild entryReachBodyOwnedRegion
   abiDecoderReentry compileEnv finite_map list words arithmetic

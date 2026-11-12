@@ -1,6 +1,6 @@
 (* A valued return's code starts with the code of its value. *)
 Theory externalReturnPrefix
-Ancestors
+Ancestors moduleLoweringProps
   stmtLoweringMono exprLoweringProps loweringPosts stmtLowering exprLowering
   compileEnv entryHaltMem fragExecMem fragExec entryStateRel bodySim compileVyper moduleLowering
 

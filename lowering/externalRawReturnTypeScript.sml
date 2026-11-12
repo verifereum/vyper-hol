@@ -1,6 +1,6 @@
 (* Checked external raw-return headers determine a bytestring return type. *)
 Theory externalRawReturnType
-Ancestors
+Ancestors moduleLoweringProps
   rawReturnHeader supportedDecls supportedProgram e2eDefs vyperTypeContract
   vyperInterpreter vyperTypeSystem externalReturnPrefix compileVyper
   exprLoweringProps bodySim compileEnv entryStateRel

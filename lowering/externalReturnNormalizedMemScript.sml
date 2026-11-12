@@ -1,6 +1,6 @@
 (* The actual external Return branch with a typed normalization prefix. *)
 Theory externalReturnNormalizedMem
-Ancestors
+Ancestors moduleLoweringProps
   externalReturnDirectMem externalReturnNormalizeRun externalNormalizePremises
   externalReturnSelectedMetadata externalReturnEncoderSuffixMem
   stmtSimReturnWiden typedStoreEndpoint externalReturnPrefix returnValueTyped

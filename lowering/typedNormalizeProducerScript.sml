@@ -1,6 +1,6 @@
 (* Metadata at the actual external Return frame, after argument registration. *)
 Theory typedNormalizeProducer
-Ancestors
+Ancestors moduleLoweringProps
   typedCopyProducer structFieldsProps entryStateRel bodySim allocLimitsProps
   e2eDefs compileEnv compileVyper moduleLowering vyperInterpreter vyperContext
 

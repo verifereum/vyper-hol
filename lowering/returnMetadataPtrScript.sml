@@ -1,6 +1,6 @@
 (* Return metadata is invariant under parameter registration and local declarations. *)
 Theory returnMetadataPtr
-Ancestors
+Ancestors moduleLoweringProps
   entryStateRel bodySim retAbiPlanProps structFieldsProps compileVyper compileEnv
   supportedPlaceAssignable supportedDecls supportedProgram e2eDefs
   vyperTypeContractStaticMaps vyperTypeContract

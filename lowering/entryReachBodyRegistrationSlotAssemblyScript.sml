@@ -1,6 +1,6 @@
 (* One actual selected registration slot, with a shared execution endpoint. *)
 Theory entryReachBodyRegistrationSlotAssembly
-Ancestors
+Ancestors moduleLoweringProps
   valueEncodingDefs loweringStateRelDefs entryReachBodyRegistrationSlotWitness entryReachBodyRegistrationSingleton
   entryReachBodyRegistrationIndexedShell entryReachBodyRegistrationSlotCertificate
   entryReachBodyRegistrationCanonical entryReachBodyRegistrationSizeBoundary

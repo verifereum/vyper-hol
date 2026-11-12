@@ -40,6 +40,35 @@ Ancestors
 Libs
   wordsLib
 
+(* compile_register_positional_args rebinds only the parameters, each to a
+   pointer. *)
+Theorem compile_register_positional_args_cenv:
+  !args cenv off st cenv' st'.
+    compile_register_positional_args cenv args off st = (cenv', st') ==>
+    cenv' = cenv with ce_vars := cenv'.ce_vars /\
+    (!n. ~MEM n (MAP FST args) ==>
+         FLOOKUP cenv'.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+    (!n l. FLOOKUP cenv'.ce_vars n = SOME l ==>
+           FLOOKUP cenv.ce_vars n = SOME l \/ ?p sz. l = PtrVar p sz)
+Proof
+  Induct
+  >- simp[compile_register_positional_args_def, comp_return_def,
+          compileEnvTheory.compile_env_component_equality] >>
+  PairCases >> rpt gen_tac >> simp[compile_register_positional_args_def] >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> rw[] >> metis_tac[]) >>
+  rename1 `var_location_memory_size loc` >>
+  Cases_on `var_location_memory_size loc` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> rw[] >> metis_tac[]) >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  first_x_assum drule >> strip_tac >> rpt conj_tac
+  >- (pop_assum kall_tac >> pop_assum kall_tac >> pop_assum SUBST1_TAC >>
+      simp[compileEnvTheory.compile_env_component_equality])
+  >- (rpt strip_tac >> gvs[FLOOKUP_UPDATE]) >>
+  rpt strip_tac >> first_x_assum drule >> rw[FLOOKUP_UPDATE] >> gvs[]
+QED
+
 (* ===== Selector Dispatch =====
 
    Linear dispatch ends in jumps to labels it does not emit: the function

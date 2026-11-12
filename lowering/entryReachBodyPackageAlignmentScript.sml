@@ -1,6 +1,6 @@
 (* Pure metadata transport from a runtime package through any registration prefix. *)
 Theory entryReachBodyPackageAlignment
-Ancestors
+Ancestors moduleLoweringProps
   returnMetadataPtr calldataRegistration entryReachBodySourceMemberEntry externalBodyFrame
   e2eDefs supportedProgram supportedDecls vyperABIRoundtrip
   vyperTypeContractContext vyperTypeContractStaticMaps vyperTypeContract

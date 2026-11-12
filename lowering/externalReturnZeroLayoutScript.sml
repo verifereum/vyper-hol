@@ -1,6 +1,6 @@
 (* Evaluated empty source layouts are ABI-static. *)
 Theory externalReturnZeroLayout
-Ancestors
+Ancestors moduleLoweringProps
   retAbiPlanProps compileVyper exprLoweringProps entryStateRel bodySim stmtSimDefs exprLowering compileEnv valueEncodingProofs valueEncodingProps vyperABI vyperValue valueEncoding
   vyperTypeSystem vyperTypeABI valueEncodingTyping list finite_map option
 

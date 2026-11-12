@@ -1,6 +1,6 @@
 (* Source environments and actual external-return ABI metadata. *)
 Theory externalReturnAbiMetadata
-Ancestors
+Ancestors moduleLoweringProps
   exprLowering compileEnv abiEncoderProps abiEncoderSourceProducer
   externalReturnZeroLayout externalRawReturnType retAbiPlanProps
   typedNormalizeProducer supportedProgram supportedTypes

@@ -1,5 +1,5 @@
 Theory externalReturnBounds
-Ancestors
+Ancestors moduleLoweringProps
   stmtSimReturn exprSimDefs exprSimProps loweringPosts allocaFootprint exprLoweringProps venomMemDefs
   compileEnv loweringStateRelDefs rawReturnValue valueCopyBytes vyperTyping vyperValue bodySim
   compileVyper entryStateRel

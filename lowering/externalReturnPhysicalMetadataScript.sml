@@ -1,5 +1,5 @@
 Theory externalReturnPhysicalMetadata
-Ancestors
+Ancestors moduleLoweringProps
   externalReturnPackage compileVyper compileEnv bodySim entryStateRel
 
 Theorem return_package_return_table:

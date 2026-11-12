@@ -1,6 +1,6 @@
 Theory externalReturnPackage
 Ancestors
-  entryStateRel bodySim retAbiPlanProps compileVyper compileEnv moduleLowering exprLowering supportedProgram supportedDecls entryDispatchProps
+  moduleLoweringProps bodySim retAbiPlanProps compileVyper compileEnv moduleLowering exprLowering supportedProgram supportedDecls entryDispatchProps
 
 val _ = Parse.hide "body";
 

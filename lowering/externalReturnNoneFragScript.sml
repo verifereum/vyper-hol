@@ -1,6 +1,6 @@
 (* Counted valueless return in a selected external frame. *)
 Theory externalReturnNoneFrag
-Ancestors externalReturnSimpleSuffix externalReturnValuedFrag
+Ancestors moduleLoweringProps externalReturnSimpleSuffix externalReturnValuedFrag
   externalReturnSelectedResources rawReturnHeader
   gasOutcome gasSummary gasSummaryCompose fragGasMode
   stmtSimDefs loweringPosts bodySim exprSimHypsDefs vyperTypeSystem
