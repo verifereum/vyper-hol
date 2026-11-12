@@ -11,7 +11,7 @@ Ancestors
   bodyFullPreds bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
-  gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
+  bodyMemBiEnvMsgGas exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
 
 val _ = Parse.hide "body";
@@ -124,7 +124,108 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_builtin_case_ptr_at (bodyPtrExprCases). *)
+(* Admitted: the joint twin of bodyPtrEnvBuiltins's env_builtin_expr_ptr_ok, without Env MsgGas. *)
+Theorem env_builtin_expr_full_ok:
+  !cx ty bt es.
+    (bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i /\ i <> MsgGas) \/
+     (?i. bt = Acc i) \/ bt = BlockHash \/ bt = BlobHash \/ bt = MethodId) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len ==>
+       body_exprs_full_ok cx es) /\
+    (!s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt = Len ==>
+       body_expr_full_ok cx (HD es)) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrBopIn's bop_in_expr_ptr_ok. *)
+Theorem bop_in_expr_full_ok:
+  !cx ty bop es.
+    (bop = In \/ bop = NotIn) /\
+    (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty (Bop bop) es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrBop's bop_expr_ptr_ok. *)
+Theorem bop_expr_full_ok:
+  !cx ty bop es.
+    bop <> In /\ bop <> NotIn /\
+    (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty (Bop bop) es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrMakeArray's make_array_expr_ptr_ok. *)
+Theorem make_array_expr_full_ok:
+  !cx ty bt es.
+    (?t n. bt = MakeArray t n) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrWordBuiltins's word_builtin_expr_ptr_ok. *)
+Theorem word_builtin_expr_full_ok:
+  !cx ty bt es.
+    (bt = Not \/ bt = Neg \/ bt = Abs \/ (?d. bt = AsWeiValue d) \/ bt = Ceil \/
+     bt = Floor \/ bt = AddMod \/ bt = MulMod \/ bt = PowMod256) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrHashBuiltins's hash_builtin_expr_ptr_ok. *)
+Theorem hash_builtin_expr_full_ok:
+  !cx ty bt es.
+    (bt = Keccak256 \/ bt = Sha256) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrBytestringBuiltins's bytestring_builtin_expr_ptr_ok. *)
+Theorem bytestring_builtin_expr_full_ok:
+  !cx ty bt es.
+    ((?n. bt = CalldataSlice n) \/ (?n. bt = Concat n) \/ (?n. bt = Slice n) \/
+     (?n. bt = Uint2Str n)) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* Admitted: the joint twin of bodyPtrPrecompileBuiltins's precompile_builtin_expr_ptr_ok. *)
+Theorem precompile_builtin_expr_full_ok:
+  !cx ty bt es.
+    (bt = ECRecover \/ bt = ECAdd \/ bt = ECMul) /\
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
+    body_expr_full_ok cx (Builtin ty bt es)
+Proof
+  cheat
+QED
+
+(* msg.gas, by bodyMemBiEnvMsgGas's joint fragment: typing fixes the
+   annotation and the empty argument list. *)
+Theorem body_msg_gas_full_case:
+  !cx ann args. body_expr_full_ok cx (Builtin ann (Env MsgGas) args)
+Proof
+  rw[body_expr_full_ok_def] >>
+  `args = [] /\ ann = env_item_type MsgGas` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[compile_msg_gas_sim_full]
+QED
+
+(* A builtin, split by family as body_builtin_case_ptr does. *)
 Theorem body_builtin_case_full:
   !cx ty bt es.
     (!s'' x t.
@@ -137,7 +238,24 @@ Theorem body_builtin_case_full:
        body_expr_full_ok cx (HD es)) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `bt = Env MsgGas` >- simp[body_msg_gas_full_case] >>
+  `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len ==>
+   body_exprs_full_ok cx es` by
+    (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def]) >>
+  Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
+             bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
+  >- (irule env_builtin_expr_full_ok >> rpt conj_tac >> gvs[] >>
+      metis_tac[]) >>
+  Cases_on `?bop. bt = Bop bop`
+  >- (gvs[] >> Cases_on `bop = In \/ bop = NotIn`
+      >- (irule bop_in_expr_full_ok >> gvs[]) >>
+      irule bop_expr_full_ok >> gvs[]) >>
+  Cases_on `bt` >> gvs[] >>
+  FIRST (map (fn th => irule th >> simp[] >> NO_TAC)
+    [make_array_expr_full_ok, word_builtin_expr_full_ok,
+     hash_builtin_expr_full_ok, bytestring_builtin_expr_full_ok,
+     precompile_builtin_expr_full_ok])
 QED
 
 (* Admitted: the joint twin of body_continue_case_ptr_at (bodyPtrCtrlCases). *)
