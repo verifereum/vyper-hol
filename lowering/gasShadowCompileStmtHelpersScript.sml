@@ -2,7 +2,8 @@
 Theory gasShadowCompileStmtHelpers
 Ancestors
   gasShadowCompileStmtOps gasShadowCompileStmtBase gasShadowCompile
-  gasShadowCompileHelpers gasShadowCompileLiteral gasShadowCompileContext gasShadow gasShadowState
+  gasShadowCompileHelpers gasShadowCompileLiteral gasShadowCompileContext
+  gasShadowCompileConvert gasShadowCompileAbi gasShadow gasShadowState
   stmtLowering exprLowering compileEnv vyperAST list
 
 Theorem gas_shadow_stmt_compile_expr:

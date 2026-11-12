@@ -3,7 +3,7 @@ Theory gasShadowCompileStmtCases
 Ancestors
   gasShadowCompileStmtHelpers gasShadowCompileStmtOps gasShadowCompileStmtBase
   gasShadowCompilePure gasShadowCompileConvert gasShadowCompileContext gasShadowCompileAbi gasShadowCompileArith gasShadowCompileCallSupport
-  gasShadowCompileLiteral
+  gasShadowCompileLiteral gasShadowCompileHelpers
   gasShadowCompileOps gasShadow gasShadowState stmtLowering compileEnv
   exprLowering vyperAST list
 
