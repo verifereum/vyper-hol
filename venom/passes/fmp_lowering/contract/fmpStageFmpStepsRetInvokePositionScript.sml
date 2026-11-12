@@ -197,3 +197,111 @@ Proof
   Cases_on `(lbl,k) IN FDOM plan` >> gvs[] >>
   first_x_assum (qspec_then `k` mp_tac) >> simp[]
 QED
+
+Theorem fmp_return_tail_index[local]:
+  LENGTH b = LENGTH a + d /\ LENGTH a <= q /\
+  q < LENGTH (a ++ tail) /\ EL q (a ++ tail) = j ==>
+  q + d < LENGTH (b ++ tail) /\ EL (q+d) (b ++ tail) = j
+Proof
+  simp[EL_APPEND_EQN] >> rpt strip_tac >>
+  `~(q < LENGTH a) /\ ~(q+d < LENGTH b) /\
+   q+d-LENGTH b = q-LENGTH a` by decide_tac >> gvs[]
+QED
+
+Theorem fmp_return_invoke_after_prefix[local]:
+  EVERY (\i. MEM i.inst_opcode [PARAM; RETPC_PARAM; FMP_PARAM]) prefix /\
+  q < LENGTH (prefix ++ tail) /\
+  (EL q (prefix ++ tail)).inst_opcode = INVOKE ==>
+  LENGTH prefix <= q
+Proof
+  rpt strip_tac >> Cases_on `q < LENGTH prefix` >> simp[] >>
+  fs[EL_APPEND1, EVERY_EL] >>
+  first_x_assum (qspec_then `q` mp_tac) >> simp[]
+QED
+
+Theorem fmp_return_install_at:
+  entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail /\
+  (newpc = NONE <=> oldpc = NONE) /\
+  EVERY (\i. MEM i.inst_opcode [PARAM; RETPC_PARAM; FMP_PARAM])
+    (users ++ OPTION_TO_LIST oldpc) /\
+  fmp_install_root ctx fn (FmpRootLayout (LENGTH users) root newpc s)
+    (entry::rest) = SOME (out,s') /\
+  lookup_block lbl (entry::rest) = SOME bb /\
+  q < LENGTH bb.bb_instructions /\ EL q bb.bb_instructions = j /\
+  j.inst_opcode = INVOKE ==>
+  ?bb'. lookup_block lbl out = SOME bb' /\
+    q + (if lbl = entry.bb_label then LENGTH (OPTION_TO_LIST root) else 0)
+      < LENGTH bb'.bb_instructions /\
+    EL (q + (if lbl = entry.bb_label then LENGTH (OPTION_TO_LIST root) else 0))
+      bb'.bb_instructions = j
+Proof
+  strip_tac >> drule_all fmp_install_root_exact_prefix >> strip_tac >> gvs[] >>
+  Cases_on `lbl = entry.bb_label` >>
+  gvs[lookup_block_def, FIND_thm]
+  >- (`LENGTH (users ++ OPTION_TO_LIST oldpc) <= q` by
+        (irule fmp_return_invoke_after_prefix >>
+         reverse conj_tac >- simp[] >> qexists `tail` >>
+         simp[APPEND_ASSOC]) >>
+      Cases_on `fn_is_context_entry ctx fn` >> gvs[] >>
+      `LENGTH (OPTION_TO_LIST newpc) = LENGTH (OPTION_TO_LIST oldpc)` by
+        (Cases_on `oldpc` >> Cases_on `newpc` >>
+         gvs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
+      simp[EL_APPEND_EQN] >>
+      `~(q < LENGTH users) /\
+       ~(q-LENGTH users < LENGTH (OPTION_TO_LIST oldpc)) /\
+       ~(q+LENGTH (OPTION_TO_LIST root) < LENGTH users) /\
+       ~(q+LENGTH (OPTION_TO_LIST root)-LENGTH users < LENGTH (OPTION_TO_LIST newpc)) /\
+       ~(q+LENGTH (OPTION_TO_LIST root)-LENGTH users < LENGTH (OPTION_TO_LIST root))` by decide_tac >>
+      simp[] >> AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
+  qexists `bb` >> simp[lookup_block_def]
+QED
+
+Theorem fmp_return_install_checked_at:
+  split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
+  analyze_fmp_reclaims infos ctx fn = SOME plan /\
+  fmp_make_root_layout ctx fn info runner s0 =
+    SOME (FmpRootLayout n root newpc s1) /\
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
+    SOME (FmpBlocksResult blocks leftover s2) /\
+  fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
+  lookup_block lbl blocks = SOME bb /\ q < LENGTH bb.bb_instructions /\
+  EL q bb.bb_instructions = j /\ j.inst_opcode = INVOKE ==>
+  ?entry rest bb'. blocks = entry::rest /\
+    lookup_block lbl out = SOME bb' /\
+    q + (if lbl = entry.bb_label then LENGTH (OPTION_TO_LIST root) else 0)
+      < LENGTH bb'.bb_instructions /\
+    EL (q + (if lbl = entry.bb_label then LENGTH (OPTION_TO_LIST root) else 0))
+      bb'.bb_instructions = j
+Proof
+  strip_tac >> drule_all fmp_make_root_layout_prefix >> strip_tac >> gvs[] >>
+  drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >> gvs[] >>
+  `entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
+    (Cases_on `oldpc` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
+  `EVERY (\i. MEM i.inst_opcode [PARAM; RETPC_PARAM; FMP_PARAM])
+      (users ++ OPTION_TO_LIST oldpc)` by
+    (drule split_fmp_entry_parameter_prefix >>
+     Cases_on `oldpc` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
+  metis_tac[fmp_return_install_at]
+QED
+
+Theorem fmp_return_blocks_invoke_at:
+  fmp_lower_blocks infos ctx runner s (fmp_plan_to_alist fn plan) fn.fn_blocks =
+    SOME (FmpBlocksResult out leftover s') /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  fmp_reclaim_input fn plan /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?bb' j. lookup_block lbl out = SOME bb' /\
+    j.inst_opcode = INVOKE /\ j.inst_id = (EL i bb.bb_instructions).inst_id /\
+    fmp_stage_tidx plan NONE lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM plan then 1 else 0) < LENGTH bb'.bb_instructions /\
+    EL (fmp_stage_tidx plan NONE lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM plan then 1 else 0)) bb'.bb_instructions = j
+Proof
+  strip_tac >> drule fmp_return_blocks_at >>
+  disch_then (qspecl_then [`plan`,`lbl`,`bb`] mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >>
+    irule fmp_return_plan_restore_exact >> simp[]) >>
+  strip_tac >> drule fmp_return_indexed_at >>
+  disch_then (qspecl_then [`plan`,`i`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
