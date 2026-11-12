@@ -58,24 +58,9 @@ fun IMMS_STEP_WITH extra = evalWalkLib.STEP {net = imms_frame_net, at = RAND_CON
   fallbacks = [IMMS_IH_TAC, evalWalkLib.NORMALISE_IH_TAC IMMS_IH_TAC]};
 (* Consume guarded IHs in execution order, before matching their result.
    In particular lookup fixes the tuple before defaults aliases are used. *)
-fun IMMS_FORWARD_IH_TAC (asl,w) =
-  let
-    val norm = SIMP_RULE (srw_ss())
-      [oneTheory.one, FST, SND, lock_if_nr_def, is_view_mut_def, ignore_bind_def]
-    val facts = List.concat (map (CONJUNCTS o norm o ASSUME)
-      (List.filter (not o is_forall) asl))
-    fun consume raw g =
-      let val th = SPEC_ALL (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] (norm raw))
-      in
-        if not (is_imp (concl th)) then MATCH_ACCEPT_TAC th g
-        else
-          let val guard = fst (dest_imp (concl th))
-              val refs = if is_eq guard then
-                [REFL (rhs guard), REFL (lhs guard)] else []
-              val next = List.mapPartial (total (MATCH_MP th)) (facts @ refs)
-          in FIRST (map consume next) g end
-      end
-  in FIRST (map (consume o ASSUME) (List.filter is_forall asl)) (asl,w) end;
+val IMMS_FORWARD_IH_TAC = evalWalkLib.FORWARD_IH_TAC
+  {normalise = SIMP_RULE (srw_ss())
+    [oneTheory.one, FST, SND, lock_if_nr_def, is_view_mut_def, ignore_bind_def]};
 val IMMS_STEP = IMMS_STEP_WITH [];
 val IMMS_INT_STEP = IMMS_STEP_WITH [CHANGED_TAC (simp_tac (srw_ss()) [])];
 val IMMS_CASE = evalWalkLib.EVAL_CASE all_tac IMMS_STEP;
