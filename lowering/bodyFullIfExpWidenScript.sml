@@ -11,6 +11,7 @@ Ancestors
   emitHelper compileEnv allocaHistory stmtSimDefs vyperAST
   vyperInterpreter vyperState venomState fragGasSeqPtr fragGasEmitCtrl
   instMemFrontier memSafeRun ptrSafeRun ptrDiscipline venomInst
+  ctorDeployMemoryRunPtrMono
   venomExecSemantics loweringStateRelDefs finite_map robustCopyTransportPtr
 
 (* Conditional ghost boundary for the actual copy endpoint.  The window
@@ -110,6 +111,39 @@ Resume ifexp_widen_copy_ghost_finish[kept]:
 QED
 
 Finalise ifexp_widen_copy_ghost_finish
+
+Theorem ifexp_widen_empty_dead_path:
+  compile_ifexp_arm cenv t sty vv sm = (op,sb) /\
+  gas_origin_ptr_path
+    (<|d_stor := (\a st. {}); d_trans := (\a st. {});
+       d_imm := (\im. {}); d_ret := (\ret. {})|>,
+     lo,explicit,ctx,func,PG) (s,G,tn) marks (r,Gf,tf) ==>
+  !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+        (s,G,tn) marks (r,Gf,tf)
+Proof
+  qabbrev_tac `E = <|d_stor := (\a st. {}); d_trans := (\a st. {});
+                     d_imm := (\im. {}); d_ret := (\ret. {})|>` >>
+  `!lo fuel ctx fn PG G tn inst s D.
+     ptr_safe_step E lo fuel ctx fn PG G tn inst s ==>
+     ptr_safe_step D lo fuel ctx fn PG G tn inst s` by
+    (rpt strip_tac >> irule (cj 1 ptr_safe_dead_mono) >>
+     qexists_tac `E` >> simp[Abbr `E`]) >>
+  `!lo explicit ctx fn PG st marks out D.
+     gas_origin_ptr_edge (E,lo,explicit,ctx,fn,PG) st marks out ==>
+     gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) st marks out` by
+    (rpt gen_tac >> PairCases_on `st` >> PairCases_on `out` >>
+     simp[gas_origin_ptr_edge_def, fragGasPathPtrTheory.gas_path_ptr_edge_def] >>
+     metis_tac[]) >>
+  `!cfg st marks out.
+     gas_origin_ptr_path cfg st marks out ==>
+     !lo explicit ctx fn PG.
+       cfg = (E,lo,explicit,ctx,fn,PG) ==>
+       !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) st marks out` by
+    (ho_match_mp_tac gas_origin_ptr_path_ind >> rpt conj_tac >>
+     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+     gvs[] >> metis_tac[gas_origin_ptr_path_rules]) >>
+  metis_tac[]
+QED
 
 Theorem ifexp_widen_arm_step_full:
   (* The shared joint unwrap_value lemma on H (r8, family form), here a
