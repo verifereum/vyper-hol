@@ -7,7 +7,7 @@ Ancestors
   fragGasMode fragGasPath fragGasSeq fragGasSeqAbort list rich_list
   varsExt freshWrites stateFrame venomState finite_map 
   accountsRelProps vyperStorage vyperStorageBackend vyperValue vfmState
-  exprOperandVar placeDynStoreState bodyAppendStorageStaging externalEntryShape loweringHalt context abiTupleProps
+  exprOperandVar stmtSimStoreCopyState bodyAppendStorageStaging externalEntryShape loweringHalt context abiTupleProps
   vyperInterpreter vyperState vyperExprNoControl stmtLowering exprLowering
   exprLoweringProps compileEnv loweringStateRelDefs emitHelper emitHelperProps venomInst venomExecSemantics
 Libs
@@ -1059,7 +1059,7 @@ Theorem append_storage_copy_success_post:
   res = INL () /\ stmt_state_rel ctx func cenv cx es' u
 Proof
   strip_tac >>
-  drule placeStoreStatePatchTheory.stmt_state_selected_storage_agree >>
+  drule stmtSimStoreCopyStateTheory.stmt_state_selected_storage_agree >>
   disch_then (qspec_then `tr` assume_tac) >>
   drule_at (Pat `storage_agree _ _ _`)
     (Q.INST [`k` |-> `slot+n2w (1+len*type_slot_size tv)`]
@@ -1070,9 +1070,9 @@ Proof
   simp[] >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   drule_at (Pat `storage_agree _ _ _`)
-    placeStoreStatePatchTheory.stmt_state_storage_patch >>
+    stmtSimStoreCopyStateTheory.stmt_state_storage_patch >>
   disch_then drule >> strip_tac >>
-  drule placeDynStorageEffectTheory.place_store_prefix_backend_natural >>
+  drule stmtSimStoreCopyStateTheory.place_store_prefix_backend_natural >>
   disch_then (qspecl_then [`s`, `slot+n2w (1+len*type_slot_size tv)`, `tr`] assume_tac) >>
   `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `append_place _ _ _ _ = _` mp_tac >>
@@ -1087,7 +1087,7 @@ Proof
     (Cases_on `tr` >> simp[set_storage_def, update_account_def,
       vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM]) >>
   asm_rewrite_tac[] >>
-  once_rewrite_tac[placeDynStorageEffectTheory.place_store_prefix_state_patch] >>
+  once_rewrite_tac[stmtSimStoreCopyStateTheory.place_store_prefix_state_patch] >>
   Cases_on `tr` >>
   gvs[sstore_def, tstore_def, LET_THM, contract_storage_def,
       contract_transient_def, vfmStateTheory.lookup_account_def,
