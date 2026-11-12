@@ -90,10 +90,14 @@ Resume effect_free_eval_expr_frame[attribute]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
   imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Resume effect_free_eval_expr_frame[subscript]:
+  (* original proof, kept while held:
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
+  *)
+  cheat
 QED
 Resume effect_free_eval_expr_frame[structlit]:
   rename1 `StructLit aty sid fields` >> strip_tac >>

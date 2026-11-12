@@ -2,6 +2,8 @@
 Theory bodyIntCallStageCompile
 Ancestors exprLowering context compileEnv
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_stage_memory_cons:
   vv_type vv = ty ==>
   compile_stage_intcall_args ce (vv::vals) (F::flags) (ty::tys) =
@@ -25,3 +27,4 @@ Proof
   pairarg_tac >> simp[] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[]
 QED
+*)

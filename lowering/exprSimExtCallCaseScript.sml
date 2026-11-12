@@ -3,8 +3,8 @@
  *
  * extcall/staticcall in SOME oracle mode, including reverts and
  * default_return_value (#553).  The source evaluates the target, then the
- * positional arguments without reading them (eval_expr_results), then the
- * keyword operands, and reads the arguments last; the hypotheses of
+ * positional arguments, each read as it is evaluated, then the keyword
+ * operands; the hypotheses of
  * compile_extcall_case give the operands' judgments in that order, as the
  * body induction's hypotheses do (bodySimCallCases's body_extcall_case).
  * exprSimCallExtcall and bodySimCallExtcall derive the two piece theorems
@@ -80,14 +80,13 @@ Proof
   pop_assum mp_tac >> rewrite_tac[pure_frame_def]
 QED
 
-(* Source boundary: positional locations are read only after kwargs. *)
+(* Source boundary: each positional argument is read as it is evaluated,
+   before the keyword operands. *)
 Theorem eval_extcall_stages:
   eval_expr cx (Call ann (ExtCall static skip sig opts) args dflt) =
     do target <- eval_exprs cx (TAKE 1 args);
-       results <- eval_expr_results cx
-         (TAKE (LENGTH (FST (SND sig))) (DROP 1 args));
+       vs <- eval_exprs cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 args));
        kwargs <- eval_exprs cx (DROP (1 + LENGTH (FST (SND sig))) args);
-       vs <- read_results cx results;
        eval_ext_call cx static skip sig opts (target ++ vs ++ kwargs)
     od
 Proof
@@ -216,12 +215,12 @@ Theorem extcall_request_setup:
     exprs_case nocalls ctx func cenv cx (TAKE 1 args) /\
     (!s target t.
        eval_exprs cx (TAKE 1 args) s = (INL target, t) ==>
-       results_case nocalls ctx func cenv cx
+       exprs_case nocalls ctx func cenv cx
          (TAKE (LENGTH arg_types) (DROP 1 args))) /\
-    (!s target t s' results t'.
+    (!s target t s' vs t'.
        eval_exprs cx (TAKE 1 args) s = (INL target, t) /\
-       eval_expr_results cx (TAKE (LENGTH arg_types) (DROP 1 args)) s' =
-         (INL results, t') ==>
+       eval_exprs cx (TAKE (LENGTH arg_types) (DROP 1 args)) s' =
+         (INL vs, t') ==>
        exprs_case nocalls ctx func cenv cx
          (DROP (1 + LENGTH arg_types) args)) /\
     expr_body_pre cenv cx env
@@ -1843,12 +1842,12 @@ Theorem compile_extcall_case:
     exprs_case nocalls ctx func cenv cx (TAKE 1 args) /\
     (!s target t.
        eval_exprs cx (TAKE 1 args) s = (INL target, t) ==>
-       results_case nocalls ctx func cenv cx
+       exprs_case nocalls ctx func cenv cx
          (TAKE (LENGTH (FST (SND sig))) (DROP 1 args))) /\
-    (!s target t s' results t'.
+    (!s target t s' vs t'.
        eval_exprs cx (TAKE 1 args) s = (INL target, t) /\
-       eval_expr_results cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 args)) s' =
-         (INL results, t') ==>
+       eval_exprs cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 args)) s' =
+         (INL vs, t') ==>
        exprs_case nocalls ctx func cenv cx
          (DROP (1 + LENGTH (FST (SND sig))) args)) ==>
     expr_sim_case nocalls ctx func cenv cx

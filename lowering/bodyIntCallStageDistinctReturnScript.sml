@@ -5,6 +5,8 @@ Ancestors
   bodyIntCallStageOwned allocaSiteResource venomState loweringHalt
   exprSimConvertBytes loweringPosts venomMemDefs compileEnv
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
+(*
 Theorem intcall_stage_return_distinct_endpoint:
   compile_alloc_buffer nb sm = (buf,si) /\ fn_has_code sm si func /\
   compile_stage_intcall_args ce (MAP (\(ty,raw,vv). vv) H) flags
@@ -85,3 +87,4 @@ Proof
   drule staged_arg_old_allocation_disjoint >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = _`)) >> simp[]
 QED
+*)

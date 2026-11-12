@@ -809,6 +809,8 @@ Resume intcall_stmts_producer_for_range_lit[layout]:
   `sz = 32 /\ type_memory_size tyv = 32` by
     (drule_all stmtSimReturnTheory.word_type_sizes >>
      disch_then (qspec_then `ce` mp_tac) >> simp[Abbr `sz`]) >>
+  `word_memory_type tyv` by
+    (drule_all loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `for_code fp.jc_func ce bc
      (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty)
      stmts id tyv p sz A cv ev dv nv cond_lbl exit_lbl body_lbl incr_lbl
@@ -845,7 +847,11 @@ Resume intcall_stmts_producer_for_range_lit[iterate]:
     (metis_tac[vyperTypeValuesTheory.well_typed_literal_sound,
        vyperValueOperationTheory.evaluate_literal_def]) >>
   `Num (n2 - n1) < dimword (:256)` by
-    metis_tac[stmtSimForRangeTheory.range_end_words] >>
+    (qspecl_then [`get_tenv fp.jc_cx`,`fty`,`tyv`,`n1`,`n2`] mp_tac
+       stmtSimForRangeTheory.range_end_words >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     strip_tac >> qpat_x_assum `n1 <= n2 ==> _` mp_tac >>
+     simp[integerTheory.INT_LE_LT]) >>
   `eval_stmt fp.jc_cx
      (For id fty (Range (Literal fty (IntL n1)) (Literal fty (IntL n2)))
        (Num (n2 - n1)) stmts) =
@@ -867,7 +873,10 @@ Resume intcall_stmts_producer_for_range_lit[iterate]:
   `body_inv fp.jc_tops fp.jc_ctx bc fp.jc_cx` by
     metis_tac[bodyExprPreFactsTheory.body_inv_same_frame] >>
   `!k. k < Num (n2 - n1) ==> value_has_type tyv (IntV (n1 + &k))` by
-    metis_tac[stmtSimForRangeTheory.range_value_has_type] >>
+    (qspecl_then [`tyv`,`n1`,`n2`] mp_tac stmtSimForRangeTheory.range_value_has_type >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                  simp[integerTheory.INT_LE_LT]) >>
+     simp[]) >>
   `local_ptrs_reserved ce sb1` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sa` >> fs[cs_extends_def]) >>

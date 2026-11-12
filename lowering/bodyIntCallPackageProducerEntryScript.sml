@@ -124,8 +124,8 @@ Proof
     (qx_choose_then `bindings` (fn th => map_every assume_tac (CONJUNCTS th))))) >>
   drule_all bodyIntCallPackageInputsTheory.intcall_entry_package_inputs >> strip_tac >>
   drule_all bodyIntCallPackageInputsTheory.intcall_entry_package_separation >> strip_tac >>
-  drule_all bodyIntCallPackageInputsTheory.intcall_entry_declared_immutable_separation >>
-  strip_tac >>
+  drule bodyIntCallPackageInputsTheory.intcall_entry_declared_immutable_separation >>
+  rpt (disch_then drule) >> strip_tac >>
   drule_all bodyIntCallPackageGeometryTheory.intcall_entry_root_geometry >> strip_tac >>
   drule_all bodyIntCallPackageRootResourceTheory.packaged_internal_entry_return_fields >> strip_tac >>
   drule_all intcall_entry_root_expr_inv >> strip_tac >>
@@ -185,7 +185,10 @@ Resume intcall_entry_producer_resources[joint_init]:
   conj_tac >- (qpat_assum `es1 with scopes := [penv] = es1` ACCEPT_TAC) >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   pure_rewrite_tac[evaluation_context_accfupds] >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >> simp[]
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
+  qpat_x_assum `!i po psz nm ty tv io. ce.ce_is_ctor /\ _ ==> _` mp_tac >>
+  rpt (pop_assum kall_tac) >> metis_tac[]
 QED
 
 Finalise intcall_entry_producer_resources
