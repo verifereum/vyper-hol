@@ -492,9 +492,8 @@ Theorem abi_image_slice_adhoc_not_label:
     compile_slice_calldata start lenop sz sa = (op,sb) ==> op <> Label l) /\
   (!start lenop sz sa op sb.
     compile_slice_code start lenop sz sa = (op,sb) ==> op <> Label l) /\
-  (!addr start lenop buf data sa op sb.
-    buf <> Label l /\ compile_slice_extcode addr start lenop buf data sa = (op,sb) ==>
-    op <> Label l)
+  (!addr start lenop sz sa op sb.
+    compile_slice_extcode addr start lenop sz sa = (op,sb) ==> op <> Label l)
 Proof
   rpt conj_tac >> rpt gen_tac >>
   simp[builtinBytesTheory.compile_slice_calldata_def,
