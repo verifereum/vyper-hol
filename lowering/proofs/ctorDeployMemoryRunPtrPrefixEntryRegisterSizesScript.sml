@@ -16,7 +16,7 @@ Ancestors
  allocaFrontierBound allocaBudgetProps venomMemDefs ctorAbiActualSites ctorDeployMemoryFrontier
  ptrSafeRun ptrDiscipline venomState finite_map words arithmetic pred_set list rich_list
   fragGasPathMem
-  fragGasOriginPtr
+  fragGasOriginPtr fragGasOriginPtrLoop
 
 val RegisterDecodeSizesMode = ``\checked.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -82,8 +82,8 @@ val RegisterDecodeSizesMode = ``\checked.
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_entry_register_decode_sizes_mode:
+ !checked. (^RegisterDecodeSizesMode) checked
 Proof
  gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
  drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_decode_paired_mode)) >>
@@ -98,12 +98,6 @@ Proof
  simp[] >> disch_tac >> rpt gen_tac >> strip_tac >>
  first_x_assum irule >> asm_rewrite_tac[] >>
  qexistsl [`b'`,`inst`] >> asm_rewrite_tac[]
-QED
-*)
-Theorem prefix_entry_register_decode_sizes_mode:
- !checked. (^RegisterDecodeSizesMode) checked
-Proof
-  cheat
 QED
 
 
@@ -172,8 +166,8 @@ val RegisterAddressDecodeSizesMode = ``\checked.
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_entry_register_address_decode_sizes_mode:
+ !checked. (^RegisterAddressDecodeSizesMode) checked
 Proof
  gen_tac >> BETA_TAC >> gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
  drule_all (BETA_RULE (SPEC_ALL prefix_entry_register_canonical_address_paired_mode)) >>
@@ -215,13 +209,10 @@ Proof
  qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[] >>
  conj_tac >- suspend "effect" >>
  conj_tac >- suspend "scratch" >>
+ `checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+    (initial, G, tn) [] (OK actual, H, qt)` by
+   (rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]) >>
  metis_tac[abi_decode_sim_trans]
-QED
-*)
-Theorem prefix_entry_register_address_decode_sizes_mode:
- !checked. (^RegisterAddressDecodeSizesMode) checked
-Proof
-  cheat
 QED
 
 Resume prefix_entry_register_address_decode_sizes_mode[effect]:
@@ -336,8 +327,8 @@ val RegisterOneSlotSizesMode = ``\checked.
     (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
     (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_entry_register_one_slot_sizes_coverage_mode:
+  !checked. (^RegisterOneSlotSizesMode) checked
 Proof
   gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >>
@@ -402,12 +393,6 @@ Proof
     (qx_choose_then `B` (map_every assume_tac o CONJUNCTS))))) >>
   suspend "finish"
 QED
-*)
-Theorem prefix_entry_register_one_slot_sizes_coverage_mode:
-  !checked. (^RegisterOneSlotSizesMode) checked
-Proof
-  cheat
-QED
 
 Resume prefix_entry_register_one_slot_sizes_coverage_mode[finish]:
   drule compile_alloc_buffer_parts >> strip_tac >>
@@ -437,6 +422,9 @@ Resume prefix_entry_register_one_slot_sizes_coverage_mode[finish]:
   conj_tac >- (rpt strip_tac >> simp[] >> metis_tac[]) >>
   conj_tac >- suspend "support" >>
   conj_tac >- suspend "ghost" >>
+  `checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+     (initial, G, tn) [] (OK actual, H, qt)` by
+    (rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]) >>
   metis_tac[]
 QED
 
