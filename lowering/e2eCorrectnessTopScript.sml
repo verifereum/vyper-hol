@@ -3,28 +3,66 @@
 Theory e2eCorrectnessTop
 Ancestors
   e2eCorrectness e2eDefs vyperTypeContract vyperTypeContractSoundness
-  vyperTypeInitialState vyperContext vyperInterpreter vyperCall
+  vyperTypeInitialState vyperTypeContractStaticMaps vyperContext
+  vyperState vyperInterpreter vyperCall finite_map
   compileVyper supportedProgram vfmExecution callTrace
+
+(* TOP-LEVEL: declared bare globals have cells with matching type tags. *)
+Definition global_cells_typed_top_def:
+  global_cells_typed_top tops globals imms <=>
+    !src id ty.
+      FLOOKUP globals (src, id) = SOME ty ==>
+      ?tv v.
+        FLOOKUP (get_source_immutables src imms) id = SOME (tv, v) /\
+        evaluate_type (type_env tops) ty = SOME tv
+End
 
 (* TOP-LEVEL: typing requirements not already supplied by deployment. *)
 Definition source_typing_ok_top_def:
   source_typing_ok_top tops am tx <=>
-    ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
-          immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-            (initial_evaluation_context am.sources am.layouts tx NONE)
-            am.immutables /\
-          machine_well_typed am /\ call_tx_well_typed tx
+    ?art cenv.
+      check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+      global_cells_typed_top tops art.cta_bare_globals (account_immutables am tx.target) /\
+      constants_fold_module [(NONE, tops)] (account_immutables am tx.target) NONE tops FEMPTY = SOME cenv /\
+      cenv SUBMAP get_source_immutables NONE (account_immutables am tx.target) /\
+      machine_well_typed am /\ call_tx_well_typed tx
 End
 
 Theorem source_typing_ok_top_imp:
   source_typing_ok_top tops am tx /\ source_deployment_rel tops am tx ==>
   source_typing_ok tops am tx
 Proof
-  rw[source_typing_ok_top_def, source_deployment_rel_def,
+  rw[source_typing_ok_top_def, global_cells_typed_top_def, source_deployment_rel_def,
      source_typing_ok_def] >>
   qexists_tac `art` >>
   simp[checked_contract_runtime_ready_def] >>
-  metis_tac[check_contract_single_module_exports_ok]
+  conj_tac >- metis_tac[check_contract_single_module_exports_ok] >>
+  mp_tac (Q.INST
+    [`layouts` |-> `am.layouts`, `addr` |-> `tx.target`,
+     `mods` |-> `[(NONE, tops)]`, `art` |-> `art`,
+     `sources` |-> `am.sources`, `tx` |-> `tx`]
+    check_contract_toplevel_vtypes_consistent_initial) >>
+  simp[] >> strip_tac >>
+  mp_tac (Q.INST
+    [`layouts` |-> `am.layouts`, `addr` |-> `tx.target`,
+     `mods` |-> `[(NONE, tops)]`, `art` |-> `art`,
+     `sources` |-> `am.sources`, `tx` |-> `tx`]
+    check_contract_bare_globals_consistent_initial) >>
+  simp[] >> strip_tac >>
+  fs[account_immutables_def, empty_immutables_def,
+     get_module_code_def, initial_evaluation_context_def] >>
+  simp[immutables_ready_def, initial_evaluation_context_def,
+       get_tenv_def, get_module_code_def, type_env_all_modules_def,
+       GSYM type_env_def] >>
+  conj_tac >- metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  conj_tac >-
+   (rpt strip_tac >>
+    qpat_x_assum `!src id ty. _ ==> ?tv v. _` drule >>
+    strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `FLOOKUP art.cta_bare_globals (src,id)`
+  >- metis_tac[optionTheory.NOT_SOME_NONE, optionTheory.SOME_11] >>
+  metis_tac[optionTheory.NOT_SOME_NONE, optionTheory.SOME_11]
 QED
 
 Theorem vyper_call_correct_top:
