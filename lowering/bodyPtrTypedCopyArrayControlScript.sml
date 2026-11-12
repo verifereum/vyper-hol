@@ -157,7 +157,7 @@ Proof
   simp[Abbr `s1`, Abbr `g1`, Abbr `t1`, jump_to_def]
 QED
 
-Theorem typed_copy_loop_address_counted:
+Theorem typed_copy_loop_address_counted_frame:
   !D ctx fn PG sb si ctr so doff sp dp sr dr id i ss ds a b S T G tn s.
     lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
     lookup_var sr s = SOME a /\ lookup_var dr s = SOME b /\
@@ -183,14 +183,29 @@ Theorem typed_copy_loop_address_counted:
       tnf.t_stor=tn.t_stor /\ tnf.t_trans=tn.t_trans /\
       (!p. ~MEM p [so;doff;sp;dp] ==>
         lookup_var p sf=lookup_var p s /\ FLOOKUP Gf p=FLOOKUP G p /\
-        op_taint tnf (Var p)=op_taint tn (Var p))
+        op_taint tnf (Var p)=op_taint tn (Var p)) /\
+      sf.vs_current_bb = si.cs_current_bb /\
+      sf.vs_inst_idx = LENGTH si.cs_current_insts /\ ~sf.vs_halted /\
+      (sf with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+      tnf.t_imm = tn.t_imm
 Proof
   typedCopyLoopAmbientLib.address_witnesses >>
   conj_tac >- suspend "path" >>
-  typedCopyLoopAmbientLib.address_resources typed_copy_loop_dynamic_offset_covers
+  `s4.vs_current_bb = si.cs_current_bb /\
+   s4.vs_inst_idx = LENGTH si.cs_current_insts /\ ~s4.vs_halted /\
+   (s4 with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+   tn4.t_imm = tn.t_imm` by
+    (simp[Abbr `s4`, Abbr `t4`, Abbr `s3`, Abbr `t3`, Abbr `s2`, Abbr `s1`,
+      update_var_def, venom_state_component_equality,
+      Abbr `tn4`, Abbr `tn3`, Abbr `tn2`, Abbr `tn1`,
+      ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.imm_taint_def,
+      mk_inst_def]) >>
+  simp[] >>
+  typedCopyLoopAmbientLib.address_resources typed_copy_loop_dynamic_offset_covers >>
+  gvs[venom_state_component_equality]
 QED
 
-Resume typed_copy_loop_address_counted[path]:
+Resume typed_copy_loop_address_counted_frame[path]:
   drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
   `get_instruction bb s.vs_inst_idx = SOME (mk_inst id MUL [Var ctr;Lit (n2w ss)] [so]) /\
    get_instruction bb (SUC s.vs_inst_idx) = SOME (mk_inst (id+1) MUL [Var ctr;Lit (n2w ds)] [doff]) /\
@@ -231,7 +246,7 @@ Resume typed_copy_loop_address_counted[path]:
   drule_all gas_path_ptr_then >> simp[]
 QED
 
-Resume typed_copy_loop_address_counted[source_add]:
+Resume typed_copy_loop_address_counted_frame[source_add]:
   simp[Abbr `g3`, Abbr `tn3`, Abbr `s3`, Abbr `t3`] >>
   irule forPtrAdminTheory.copy_len_binop_zero_path_ptr >>
   simp[Abbr `s2`, Abbr `s1`, update_var_def] >>
@@ -240,7 +255,7 @@ Resume typed_copy_loop_address_counted[source_add]:
     eval_operand_def, lookup_var_def, update_var_def] >> gvs[lookup_var_def, mk_inst_def, ptrDisciplineTheory.op_taint_def]
 QED
 
-Resume typed_copy_loop_address_counted[destination_add]:
+Resume typed_copy_loop_address_counted_frame[destination_add]:
   simp[Abbr `g4`, Abbr `tn4`, Abbr `s4`, Abbr `t4`] >>
   irule forPtrAdminTheory.copy_len_binop_zero_path_ptr >>
   simp[Abbr `s3`, Abbr `t3`, Abbr `s2`, Abbr `s1`, update_var_def] >>
@@ -250,4 +265,39 @@ Resume typed_copy_loop_address_counted[destination_add]:
     eval_operand_def, lookup_var_def, update_var_def] >> gvs[lookup_var_def, mk_inst_def, ptrDisciplineTheory.op_taint_def]
 QED
 
-Finalise typed_copy_loop_address_counted
+Finalise typed_copy_loop_address_counted_frame
+
+(* Compatibility projection: the complete boundary above owns the proof. *)
+Theorem typed_copy_loop_address_counted:
+  !D ctx fn PG sb si ctr so doff sp dp sr dr id i ss ds a b S T G tn s.
+    lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
+    lookup_var sr s = SOME a /\ lookup_var dr s = SOME b /\
+    ptr_covers G tn sr s S /\ ptr_covers G tn dr s T /\
+    ALL_DISTINCT [so;doff;sp;dp] /\
+    (!v. MEM v [so;doff;sp;dp] ==> ctr <> v /\ sr <> v /\ dr <> v) /\
+    i*ss < S /\ i*ss+ss <= S /\ i*ds < T /\ i*ds+ds <= T /\
+    w2n a+i*ss < dimword(:256) /\ w2n b+i*ds < dimword(:256) /\
+    si.cs_blocks = sb.cs_blocks /\ si.cs_current_bb = sb.cs_current_bb /\
+    si.cs_current_insts = sb.cs_current_insts ++
+      [mk_inst id MUL [Var ctr;Lit (n2w ss)] [so];
+       mk_inst (id+1) MUL [Var ctr;Lit (n2w ds)] [doff];
+       mk_inst (id+2) ADD [Var sr;Var so] [sp];
+       mk_inst (id+3) ADD [Var dr;Var doff] [dp]] /\
+    fn_has_code sb si fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+    s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+    ?Gf tnf sf.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+      lookup_var sp sf = SOME (n2w (w2n a+i*ss)) /\
+      lookup_var dp sf = SOME (n2w (w2n b+i*ds)) /\
+      ptr_covers Gf tnf sp sf ss /\ ptr_covers Gf tnf dp sf ds /\
+      sf.vs_memory=s.vs_memory /\ tnf.t_mem=tn.t_mem /\
+      tnf.t_stor=tn.t_stor /\ tnf.t_trans=tn.t_trans /\
+      (!p. ~MEM p [so;doff;sp;dp] ==>
+        lookup_var p sf=lookup_var p s /\ FLOOKUP Gf p=FLOOKUP G p /\
+        op_taint tnf (Var p)=op_taint tn (Var p))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all typed_copy_loop_address_counted_frame >>
+  disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
+QED
