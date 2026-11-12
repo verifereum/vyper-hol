@@ -29,7 +29,7 @@ Proof
        comp_bind_def, comp_return_def, unwrap_value_def] >>
   conj_tac
   >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      qpat_x_assum `s0.vs_inst_idx = _` kall_tac >> simp[]) >>

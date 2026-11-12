@@ -40,12 +40,12 @@ Theorem env_target_prefix:
   item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item /\
   lower_value compile_expr cenv ty (Builtin ann (Env item) []) sa = (op, sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   evaluate_builtin cx es.accounts ann (Env item) [] [] = INL v ==>
   ?t. gas_path ctx func s0 0 (OK t) /\
-      expr_post ctx func cenv cx (Builtin ann (Env item) []) es sa sb s0
+      expr_post H ctx func cenv cx (Builtin ann (Env item) []) es sa sb s0
         (es with gas_obs := []) v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts
@@ -86,7 +86,7 @@ Proof
   `not_local_ptr cenv es.scopes out` by
     (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
      metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
       (update_var out (val_to_w256 v) s0)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   drule msg_gas_state_frame >>
@@ -114,7 +114,7 @@ Proof
          (INL v, es with gas_obs := tail)` by
     metis_tac[PURE_REWRITE_RULE [ETA_THM] env_source_all_tails] >>
   `?t. gas_path ctx func s0 0 (OK t) /\
-       expr_post ctx func cenv cx (Builtin (env_item_type item) (Env item) [])
+       expr_post H ctx func cenv cx (Builtin (env_item_type item) (Env item) [])
          es sa sb s0 (es with gas_obs := []) v op t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts` by

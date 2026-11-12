@@ -34,8 +34,8 @@ Theorem name_value_post:
   value_has_type entry.type entry.value /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME ann /\
-  stmt_state_rel ctx func cenv cx es s0 ==>
-  vv_post ctx func cenv cx (Name ann id) es sa sa s0
+  stmt_state_rel H ctx func cenv cx es s0 ==>
+  vv_post H ctx func cenv cx (Name ann id) es sa sa s0
     (es with gas_obs := []) (PlaceR (MemoryPlace id []))
     (LocatedValue ann (mk_ptr (Var p) LocMemory)) s0
 Proof
@@ -46,7 +46,7 @@ Proof
        mp_tac eval_name_word >>
      simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
           type_check_def, assert_def, check_def, ignore_bind_def]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[]) >>

@@ -69,7 +69,7 @@ Proof
 QED
 
 Theorem unop_continuation_summary:
-  expr_post ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
@@ -84,13 +84,13 @@ Theorem unop_continuation_summary:
     (\vs. (unop_result cx ann bi [expr_type e1] v1 vs,vs))
     (ee with gas_obs := [],t0)
     (\res fin t. ?v. res = INL v /\
-      expr_post ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 fin v op t /\
+      expr_post H ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 fin v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res fin r. expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
+  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
    eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
     gvs[expr_post_def, expr_val_rel_def] >>
   qpat_x_assum `unop_frag _ _ _ _ _ _ _ _ _`

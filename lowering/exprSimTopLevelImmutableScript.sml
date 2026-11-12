@@ -90,13 +90,13 @@ Theorem toplevel_immutable_post:
   FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
   off + type_memory_size tv < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s0 ==>
-  vv_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
+  stmt_state_rel H ctx func cenv cx es s0 ==>
+  vv_post H ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
     (es with gas_obs := []) (PlaceR (ImmutablePlace src id []))
     (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode)) s0
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[]) >>

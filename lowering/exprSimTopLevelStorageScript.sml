@@ -32,10 +32,10 @@ Theorem toplevel_storage_value_post:
   evaluate_type (get_tenv cx) ann = SOME tvt /\
   read_storage_slot cx tr (n2w slot) tvt es = (INL v,es) /\
   slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt /\
-  (!st. storage_read_live cx tr st (n2w slot) tvt) /\
+  (!st. storage_read_live H tr st (n2w slot) tvt) /\
   w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s0 ==>
-  vv_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
+  stmt_state_rel H ctx func cenv cx es s0 ==>
+  vv_post H ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
     (es with gas_obs := []) (PlaceR (StoragePlace tr (n2w slot) tvt))
     (LocatedValue ann (mk_ptr (Lit (n2w slot))
        (if tr then LocTransient else LocStorage))) s0
@@ -44,7 +44,7 @@ Proof
   `read_result cx (PlaceR (StoragePlace tr (n2w slot) tvt)) es = (INL v,es)` by
     simp[read_result_def, read_place_def] >>
   drule read_result_gas_obs >> disch_then (qspec_then `[]` assume_tac) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[]) >>
@@ -88,7 +88,7 @@ Proof
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     gvs[stmt_state_rel_def, state_rel_def] >>
   fs[] >> drule_all toplevel_storage_ce_vars >> strip_tac >>
-  `!st. storage_read_live cx tr st (n2w slot) tvt` by
+  `!st. storage_read_live H tr st (n2w slot) tvt` by
     (gen_tac >> irule declared_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >>
      simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def]) >>

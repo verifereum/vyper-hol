@@ -82,8 +82,8 @@ QED
 
 Resume compile_bop_typed_sim[left_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
-  gnvs[] >> rename1 `expr_post _ _ _ _ e1 _ _ _ _ _ v1 _ t` >>
-  `gas_value_prefix F (ctx, func, cenv, cx) (expr_type e1, e1)
+  gnvs[] >> rename1 `expr_post H _ _ _ _ e1 _ _ _ _ _ v1 _ t` >>
+  `gas_value_prefix H F (ctx, func, cenv, cx) (expr_type e1, e1)
      (sa, s1, x) (es, s0) marks (v1, es_end, t)` by
     simp[gas_value_prefix_def] >>
   qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
@@ -97,7 +97,7 @@ Resume compile_bop_typed_sim[left_normal]:
   `gas_admissible (bind (eval_expr cx e2) (read_result cx))
      expr_res_ok (es_end with gas_obs := [])` by
     metis_tac[bop_second_admissible] >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
     gvs[expr_post_def] >>
   `~t.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
@@ -129,8 +129,8 @@ Resume compile_bop_typed_sim[left_exempt]:
 QED
 Resume compile_bop_typed_sim[right_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
-  gnvs[] >> rename1 `expr_post _ _ _ _ e2 _ _ _ _ _ v2 _ u` >>
-  `gas_value_prefix F (ctx, func, cenv, cx) (expr_type e1, e2)
+  gnvs[] >> rename1 `expr_post H _ _ _ _ e2 _ _ _ _ _ v2 _ u` >>
+  `gas_value_prefix H F (ctx, func, cenv, cx) (expr_type e1, e2)
      (s1, s2, y) (es_end with gas_obs := [], t) marks' (v2, es_end', u)` by
     simp[gas_value_prefix_def] >>
   qpat_assum `gas_marked_exec _ _ _ _ _ (INL v2) _ _`
@@ -141,8 +141,8 @@ Resume compile_bop_typed_sim[right_normal]:
   qexists_tac `marks ++ marks'` >> disj1_tac >>
   pure_rewrite_tac[ETA_AX] >>
   irule (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary) >>
-  qpat_assum `gas_value_prefix _ _ _ (sa, s1, x) _ _ _` (irule_at Any) >>
-  qpat_assum `gas_value_prefix _ _ _ (s1, s2, y) _ _ _` (irule_at Any) >>
+  qpat_assum `gas_value_prefix H _ _ _ (sa, s1, x) _ _ _` (irule_at Any) >>
+  qpat_assum `gas_value_prefix H _ _ _ (s1, s2, y) _ _ _` (irule_at Any) >>
   simp[] >> goal_assum (drule_at Any) >> simp[]
 QED
 Resume compile_bop_typed_sim[right_exit]:

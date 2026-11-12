@@ -27,7 +27,7 @@ Theorem mapping_leaf_storage_valid:
   evaluate_type (get_tenv cx) typ = SOME tv /\
   contract_storage_well_formed cx es ==>
   slots_in_range (get_storage cx es tr) (w2n slot) tv /\
-  storage_read_live cx tr (get_storage cx es tr) slot tv
+  storage_read_live H tr (get_storage cx es tr) slot tv
 Proof
   strip_tac >>
   qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >>
@@ -63,7 +63,7 @@ Theorem mapping_leaf_storage_holds:
   evaluate_type (get_tenv cx) typ = SOME tv /\
   contract_storage_well_formed cx es /\
   storage_layout_safe cx /\
-  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es s ==>
   storage_holds cx tr typ (PlaceR (StoragePlace tr slot tv)) slot es s
 Proof
   strip_tac >> drule_all mapping_leaf_storage_valid >> strip_tac >>
@@ -88,7 +88,7 @@ Theorem mapping_leaf_vv_holds:
   evaluate_type (get_tenv cx) typ = SOME tv /\
   contract_storage_well_formed cx es /\
   storage_layout_safe cx /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   p.ptr_location = slot_loc tr /\
   eval_operand p.ptr_operand s = SOME slot ==>
   vv_holds cenv cx typ (PlaceR (StoragePlace tr slot tv))
@@ -694,7 +694,7 @@ Theorem compile_mapping_subscript_outcome:
   (nocalls ==> int_calls_expr (Subscript ann obj idx) = []) /\
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   gas_admissible (eval_expr cx (Subscript ann obj idx)) A es /\
@@ -713,7 +713,7 @@ Theorem compile_mapping_subscript_outcome:
        p.ptr_location = slot_loc tr /\
        eval_operand p.ptr_operand t =
          SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-       stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
+       stmt_state_rel H ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
        (~expr_has_effect (Subscript ann obj idx) ==>
           pure_frame cenv func es sa s0 t) /\
        t.vs_current_bb = sb.cs_current_bb /\
@@ -834,7 +834,7 @@ Proof
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ (start,t)` >>
   irule forced_then_outcome_exec >>
   conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
-  qexists_tac `\kv ee u. expr_post ctx func cenv cx idx
+  qexists_tac `\kv ee u. expr_post H ctx func cenv cx idx
     (mid with gas_obs := []) sm sn t ee kv key u /\
     u.vs_current_bb = sn.cs_current_bb /\
     u.vs_inst_idx = LENGTH sn.cs_current_insts` >>
@@ -865,7 +865,7 @@ Proof
     gvs[contextTheory.vv_operand_def] >>
   `?out. gas_marked_path F ctx func it 0 (OK out) /\
      eval_operand slot out = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-     stmt_state_rel ctx func cenv cx (fin with gas_obs := []) out /\
+     stmt_state_rel H ctx func cenv cx (fin with gas_obs := []) out /\
      wb_frame cenv (mid with gas_obs := []) (fin with gas_obs := []) sm t out /\
      (~expr_has_effect idx ==>
         pure_frame cenv func (mid with gas_obs := []) sm t out) /\
@@ -879,7 +879,7 @@ Proof
        (irule_at Any) >>
      qpat_assum `wb_frame cenv (mid with gas_obs := []) _ sm t out`
        (irule_at Any) >>
-     qpat_assum `stmt_state_rel _ _ _ _ es s0` (irule_at Any) >> simp[]) >>
+     qpat_assum `stmt_state_rel H _ _ _ _ es s0` (irule_at Any) >> simp[]) >>
   `~expr_has_effect (Subscript ann obj idx) ==> pure_frame cenv func es sa s0 out` by
     (rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
      strip_tac >>
@@ -904,7 +904,7 @@ Proof
   qexistsl_tac [`INL selected`, `fin with gas_obs := []`, `OK out`] >>
   simp[] >> qexistsl_tac [`tr`, `base_slot`, `kv`] >>
   simp[contextTheory.mk_ptr_def, contextTheory.vv_location_def] >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ (fin with gas_obs := []) out` mp_tac >>
+  qpat_x_assum `stmt_state_rel H _ _ _ _ (fin with gas_obs := []) out` mp_tac >>
   simp[stmt_state_rel_def, state_rel_gas_obs] >>
   strip_tac >> first_assum ACCEPT_TAC
 QED
@@ -968,7 +968,7 @@ Proof
   qexistsl [`INL (HashMapRef tr (n2w slot) kt vt)`, `es`, `OK s0`] >>
   conj_tac >- (irule toplevel_mapping_marked_exec >> simp[]) >>
   disj1_tac >> simp_tac std_ss [] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp_tac std_ss (#rewrs (TypeBase.simpls_of ``:venom_state``))) >>

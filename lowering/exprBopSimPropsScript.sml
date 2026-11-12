@@ -299,9 +299,9 @@ QED
 
 Theorem expr_post_bop:
   !func cenv cx ann bop e1 e2 es es1 es' sa s1 s2 sb s0 t u ss x y op v1 v2 v ctx.
-    expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
-    expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
-    stmt_state_rel ctx func cenv cx es' ss /\
+    expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+    expr_post H ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+    stmt_state_rel H ctx func cenv cx es' ss /\
     eval_operand op ss = SOME (val_to_w256 v) /\ word_value v /\
     (!z w. not_fresh_at s2 z /\ lookup_var z u = SOME w ==>
            lookup_var z ss = SOME w) /\
@@ -309,11 +309,11 @@ Theorem expr_post_bop:
              FLOOKUP ss.vs_allocas aid = SOME b) /\
     ss.vs_memory = u.vs_memory /\
     is_word_type ann /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
     sa.cs_next_id <= s1.cs_next_id ==>
-    expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
+    expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
       v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
@@ -575,9 +575,9 @@ Proof
 QED
 
 Theorem bop_normal_prefix_summary:
-  gas_value_prefix F (ctx, func, cenv, cx) (expr_type e1, e1)
+  gas_value_prefix H F (ctx, func, cenv, cx) (expr_type e1, e1)
     (sa, s1, x) (es, s0) left (v1, mid, t) /\
-  gas_value_prefix F (ctx, func, cenv, cx) (expr_type e1, e2)
+  gas_value_prefix H F (ctx, func, cenv, cx) (expr_type e1, e2)
     (s1, s2, y) (mid with gas_obs := [], t) right (v2, fin, u) /\
   gas_admissible
     (do r <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
@@ -599,16 +599,16 @@ Theorem bop_normal_prefix_summary:
     (do r <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
         read_result cx r od) (es, s0)
     (\res ee ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
+      expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
         es sa sb s0 ee v op ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
-  qpat_x_assum `gas_value_prefix _ _ _ (sa, s1, x) _ _ _`
+  qpat_x_assum `gas_value_prefix H _ _ _ (sa, s1, x) _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_value_prefix_def]) >>
-  qpat_x_assum `gas_value_prefix _ _ _ (s1, s2, y) _ _ _`
+  qpat_x_assum `gas_value_prefix H _ _ _ (s1, s2, y) _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_value_prefix_def]) >>
   `expr_res_ok (bop_result cx ann bop [expr_type e1; expr_type e2]
      v1 v2 (fin with gas_obs := []))` by
@@ -624,7 +624,7 @@ Proof
   `(!z. x = Var z ==> not_fresh_at s2 z) /\
    local_ptrs_reserved cenv s2` by
     metis_tac[not_fresh_at_mono, local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx (fin with gas_obs := []) u` by
+  `stmt_state_rel H ctx func cenv cx (fin with gas_obs := []) u` by
     gvs[expr_post_def] >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
@@ -645,8 +645,8 @@ Proof
         metis_tac[bop_marked_scopes_dom] >>
       qexists_tac `v` >> gvs[] >>
       irule expr_post_bop >>
-      qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>
-      qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post H _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
       simp[]) >>
   metis_tac[bop_result_gas_obs]
 QED

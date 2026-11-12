@@ -18,7 +18,7 @@ Theorem compile_name_word_path:
   is_word_type ann /\
   lookup_scopes id es.scopes = SOME entry /\ word_value entry.value /\
   lower_value compile_expr cenv ty (Name ann id) sa = (op,sb) /\
-  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s0 /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?out. op = Var out /\ emit_op MLOAD [Var p] sa = (Var out,sb) /\
@@ -56,9 +56,9 @@ QED
 
 Theorem name_word_post:
   emit_op MLOAD [Var p] sa = (Var out,sb) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
   is_word_type ann /\ word_value entry.value ==>
-  expr_post ctx func cenv cx (Name ann id) es sa sb s0
+  expr_post H ctx func cenv cx (Name ann id) es sa sb s0
     (es with gas_obs := []) entry.value (Var out)
     (update_var out (val_to_w256 entry.value)
       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))
@@ -69,7 +69,7 @@ Proof
         fresh_id_def, fresh_var_def, emit_def] >>
   `not_local_ptr cenv (es with gas_obs := []).scopes out` by
     (gvs[] >> irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := [])
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
     (update_var out (val_to_w256 entry.value)
       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (irule stmt_state_rel_update_var >> simp[] >>
