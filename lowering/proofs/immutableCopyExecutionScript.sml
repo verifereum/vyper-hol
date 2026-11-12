@@ -1001,7 +1001,7 @@ val _ = List.app (fn (name,th) =>
 (* Sequential transfers include the effect of overlapping source and destination. *)
 val _ = Parse.hide "count";
 
-Theorem immutable_loop_code[local]:
+Theorem immutable_loop_code:
   compile_word_copy_loop_base src dst count LocMemory LocCode T
     (SOME region) sa = (u,sb) /\
   fn_has_code sa sb func ==>
@@ -1102,7 +1102,7 @@ Proof
   gvs[finite_mapTheory.FLOOKUP_DEF]
 QED
 
-Theorem immutable_loop_operand_frame[local]:
+Theorem immutable_loop_operand_frame:
   fresh_vars_wrt sa s /\ fresh_vars_wrt sb t /\
   t.vs_labels = s.vs_labels /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
@@ -1153,7 +1153,7 @@ Proof
                 immutable_transfers_def, istore_def, mstore_def]
 QED
 
-Theorem immutable_loop_frame_shared[local]:
+Theorem immutable_loop_frame_shared:
   immutable_loop_frame sa sb s a b i t ==>
   t.vs_labels = s.vs_labels /\ t.vs_halted = s.vs_halted
 Proof
