@@ -1,6 +1,6 @@
 (* Actual endpoint transport for the external entry prefix. *)
 Theory entryPrefixPtr
-Ancestors fragGasSeqMem entryDispatchCounters entryDispatchPtr ptrSafeRun ptrDiscipline moduleLoweringProps
+Ancestors fragGasPathMem memSafeRun gasCount stmtForRangeMemoryParts instMemFrontier fragGasSeqMem entryDispatchCounters entryDispatchPtr ptrSafeRun ptrDiscipline moduleLoweringProps
   moduleLowering fragExec venomExecSemantics venomInst venomState list
   finite_map words contextCodegenRel codegenRel compileEnv loweringStateRelDefs emitHelperProps
   exprLoweringProps typedCopyArrayPtr
@@ -56,6 +56,27 @@ Proof
   Cases_on `tail` >> simp[]
 QED
 
+Theorem dispatch_scalar_path_mem[local]:
+  (!fuel. step_inst fuel ctx (mk_inst id opc ops [out]) s =
+     OK (update_var out value s)) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) /\
+  ~s.vs_halted /\ MEM opc [CALLDATASIZE; CALLDATALOAD; LT; EQ; ISZERO; SHR] ==>
+  gas_path_mem ctx fn s 0
+    (OK (update_var out value s with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `gas_path_mem_edge ctx fn s 0
+    (OK (update_var out value s with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule for_range_straight_line_mem_edge >> conj_tac >- simp[] >>
+     qexistsl_tac [`bb`, `mk_inst id opc ops [out]`, `update_var out value s`] >>
+     gvs[MEM, mk_inst_def, is_terminator_def, step_inst_non_invoke] >>
+     irule below_frontier_no_ranges >> simp[]) >>
+  `~(update_var out value s with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by
+    simp[update_var_def] >>
+  metis_tac[gas_path_mem_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
 Theorem compile_selector_checks_ptr_endpoint:
   !sels mid st st'.
     compile_selector_checks mid sels st = ((), st') ==>
@@ -86,7 +107,7 @@ Proof
   Induct
   >- (simp[compile_selector_checks_def, comp_return_def, selector_hit_def] >>
       rpt strip_tac >> qexistsl_tac [`ss`, `G`, `tn`] >>
-      simp[vars_pc_only_refl]) >>
+      simp[vars_pc_only_refl, cj 1 gas_path_mem_rules]) >>
   Cases >> rename1 `(sel, lbl)` >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
   drule_all compile_selector_checks_cons_layout >> strip_tac >>
@@ -134,6 +155,19 @@ Proof
    allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u)` by
     (fs[Abbr `u`, update_var_def, eval_operand_def, lookup_var_def,
         FLOOKUP_UPDATE, allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  `gas_path_mem ctx fn ss 0 (OK u)` by
+    (simp[NoAsms, Abbr `u`] >> irule dispatch_scalar_path_mem >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`bb`, `st.cs_next_id`, `EQ`, `[mid; Lit (n2w sel)]`] >>
+     simp[MEM, Abbr `eqi`, Abbr `v`, step_inst_non_invoke, mk_inst_def,
+          step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def]) >>
+  `gas_path_mem ctx fn u 0
+     (OK (jump_to (if v <> 0w then match else next) u))` by
+    (irule for_range_jnz_zero_path_mem >> simp[] >>
+     qexistsl_tac [`st.cs_next_id + 1`, `Var out`] >> simp[]) >>
+  `gas_path_mem ctx fn ss 0
+     (OK (jump_to (if v <> 0w then match else next) u))` by
+    metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
   `!D fuel. ptr_safe_blocks D lo fuel ctx fn PG
       (entry_prov fn (jump_to (if v <> 0w then match else next) u) G1)
       (entry_taint_vars fn (jump_to (if v <> 0w then match else next) u) tn1)
@@ -166,6 +200,17 @@ Resume compile_selector_checks_ptr_endpoint[hit]:
     (irule entry_ghost_no_phi >>
      simp[jump_to_def, phi_prefix_length_def, mk_inst_def]) >>
   qabbrev_tac `tt = jump_to lbl (jump_to match u)` >>
+  `gas_path_mem ctx fn (jump_to match u) 0 (OK tt)` by
+    (simp[NoAsms, Abbr `tt`] >> irule for_range_jump_at_zero_path_mem >>
+     conj_tac >- simp[jump_to_def] >>
+     qexistsl_tac [`mb`, `mk_inst (st.cs_next_id + 2) JMP [Label lbl] []`] >>
+     simp[jump_to_def, get_instruction_def, mk_inst_def, is_terminator_def,
+          step_inst_base_opcode_eqs] >>
+     irule below_frontier_no_ranges >> simp[]) >>
+  `gas_path_mem ctx fn ss 0 (OK tt)` by
+    (qpat_x_assum `gas_path_mem ctx fn ss 0 (OK (jump_to _ u))` mp_tac >>
+     simp[Abbr `v`, bool_to_word_def] >>
+     metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
   qexistsl_tac [`tt`, `entry_prov fn tt G1`, `entry_taint_vars fn tt tn1`] >>
   simp[entry_taint_vars_frame, selector_hit_def] >>
   `vars_pc_only ss tt` by
@@ -203,6 +248,10 @@ Resume compile_selector_checks_ptr_endpoint[miss]:
   `vars_pc_only ss tt` by
     (irule vars_pc_only_trans >> qexists_tac `jump_to next u` >>
      simp[vars_pc_only_jump_to]) >>
+  `gas_path_mem ctx fn ss 0 (OK tt)` by
+    (qpat_x_assum `gas_path_mem ctx fn ss 0 (OK (jump_to _ u))` mp_tac >>
+     simp[Abbr `v`, bool_to_word_def] >>
+     metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
   simp[selector_hit_def] >>
   rpt strip_tac >>
   qpat_x_assum `!D fuel. _ ==> ptr_safe_run _ _ _ _ _ _ _ _ ss`
@@ -259,6 +308,10 @@ Proof
    (step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn).t_trans = tn.t_trans /\
    (step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn).t_imm = tn.t_imm` by
     metis_tac[dispatch_scalar_taint_frame] >>
+  `gas_path_mem ctx fn s 0
+    (OK (update_var out value s with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule dispatch_scalar_path_mem >> simp[] >>
+     qexistsl_tac [`id`, `opc`, `ops`] >> gvs[MEM]) >>
   simp[vars_pc_only_inst_idx, control_moves_keep_vars, update_var_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        allocas_from_def, allocas_below_fmp_def] >>
@@ -358,6 +411,14 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[iszero]:
   qpat_x_assum `u3 = _` kall_tac >>
   qpat_x_assum `G3 = _` kall_tac >>
   qpat_x_assum `tn3 = _` kall_tac >>
+  `gas_path_mem ctx fn ss 0 (OK u2)` by
+    (qpat_assum `gas_path_mem ctx fn ss 0 (OK u1)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[]) >>
+  `gas_path_mem ctx fn ss 0 (OK u3)` by
+    (qpat_assum `gas_path_mem ctx fn ss 0 (OK u2)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[]) >>
   `vars_pc_only ss u3` by metis_tac[vars_pc_only_trans] >>
   suspend "branch"
 QED
@@ -365,6 +426,11 @@ QED
 Resume compile_selector_dispatch_linear_ptr_endpoint[branch]:
   drule compile_selector_dispatch_linear_next_var_exact >> strip_tac >>
   `st.cs_next_var + 5 <= st'.cs_next_var` by simp[] >>
+  `gas_path_mem ctx fn u3 0
+     (OK (jump_to (if bool_to_word (4 <= LENGTH cd) <> 0w then d else fallback) u3))` by
+    (irule for_range_jnz_zero_path_mem >> simp[] >>
+     qexistsl_tac [`st.cs_next_id + 3`,
+       `Var (STRING #"%" (toString (st.cs_next_var + 2)))`] >> simp[]) >>
   Cases_on `4 <= LENGTH cd`
   >- suspend "load"
   >> suspend "short"
@@ -372,6 +438,12 @@ QED
 
 Resume compile_selector_dispatch_linear_ptr_endpoint[short]:
   qabbrev_tac `tt = jump_to fallback u3` >>
+  `gas_path_mem ctx fn ss 0 (OK tt)` by
+    (qpat_x_assum `gas_path_mem ctx fn u3 0 (OK _)` mp_tac >>
+     simp[bool_to_word_def, Abbr `tt`] >> strip_tac >>
+     qpat_assum `gas_path_mem ctx fn ss 0 (OK u3)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[]) >>
   qexistsl_tac [`tt`, `entry_prov fn tt G3`, `entry_taint_vars fn tt tn3`] >>
   `fresh_vars_wrt st' tt` by
     (simp[Abbr `tt`, control_moves_keep_vars] >>
@@ -392,6 +464,12 @@ QED
 
 Resume compile_selector_dispatch_linear_ptr_endpoint[load]:
   qabbrev_tac `s4 = jump_to d u3` >>
+  `gas_path_mem ctx fn ss 0 (OK s4)` by
+    (qpat_x_assum `gas_path_mem ctx fn u3 0 (OK _)` mp_tac >>
+     simp[bool_to_word_def, Abbr `s4`] >> strip_tac >>
+     qpat_assum `gas_path_mem ctx fn ss 0 (OK u3)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[]) >>
   `entry_prov fn s4 G3 = G3 /\ entry_taint_vars fn s4 tn3 = tn3` by
     (irule entry_ghost_no_phi >> simp[Abbr `s4`, jump_to_def]) >>
   `vars_pc_only ss s4` by simp[Abbr `s4`, vars_pc_only_jump_to] >>
@@ -448,6 +526,14 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[shift]:
   qpat_x_assum `u6 = _` kall_tac >>
   qpat_x_assum `G6 = _` kall_tac >>
   qpat_x_assum `tn6 = _` kall_tac >>
+  `gas_path_mem ctx fn ss 0 (OK u5)` by
+    (qpat_assum `gas_path_mem ctx fn ss 0 (OK s4)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[]) >>
+  `gas_path_mem ctx fn ss 0 (OK u6)` by
+    (qpat_assum `gas_path_mem ctx fn ss 0 (OK u5)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[]) >>
   `vars_pc_only ss u6` by metis_tac[vars_pc_only_trans] >>
   suspend "checks"
 QED
@@ -476,6 +562,10 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[checks]:
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   rename1 `vars_pc_only u6 t7` >>
   rename1 `tn7.t_mem = tn6.t_mem` >>
+  `gas_path_mem ctx fn ss 0 (OK t7)` by
+    (qpat_assum `gas_path_mem ctx fn ss 0 (OK u6)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[]) >>
   `vars_pc_only ss t7` by metis_tac[vars_pc_only_trans] >>
   `fresh_vars_wrt st' t7` by
     (irule fresh_vars_wrt_mono >> qexists_tac `r` >> simp[]) >>
@@ -503,6 +593,16 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[fallback]:
      simp[vars_pc_only_def, venom_state_component_equality,
           allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
   qabbrev_tac `tt = jump_to fallback t7` >>
+  `gas_path_mem ctx fn t7 0 (OK tt)` by
+    (simp[NoAsms, Abbr `tt`] >> irule for_range_jump_at_zero_path_mem >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`br`, `mk_inst r.cs_next_id JMP [Label fallback] []`] >>
+     simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs] >>
+     irule below_frontier_no_ranges >> simp[]) >>
+  `gas_path_mem ctx fn ss 0 (OK tt)` by
+    (qpat_assum `gas_path_mem ctx fn ss 0 (OK t7)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[]) >>
   qexistsl_tac [`tt`, `entry_prov fn tt G'`, `entry_taint_vars fn tt tn7`] >>
   `vars_pc_only ss tt` by simp[Abbr `tt`, vars_pc_only_jump_to] >>
   `fresh_vars_wrt st' tt` by simp[Abbr `tt`, control_moves_keep_vars] >>
