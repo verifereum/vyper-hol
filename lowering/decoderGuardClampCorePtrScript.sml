@@ -141,7 +141,7 @@ Proof
   >- (`MEM ASSERT [SIGNEXTEND; SHR; SHL; EQ; ISZERO; ASSERT] /\
        EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) [op]` by simp[] >>
       drule_all clamp_scalar_frag_ptr >>
-      disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] mp_tac) >> simp[]) >>
+      disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] mp_tac) >> simp[]) >>
   simp[] >> rpt gen_tac >> strip_tac >>
   `!fuel. ptr_inst_ok D lower fuel ctx' func G tn
     (mk_inst sa.cs_next_id ASSERT [op] []) s` by

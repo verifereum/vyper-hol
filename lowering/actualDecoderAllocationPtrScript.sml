@@ -60,7 +60,7 @@ Proof
   `sa.cs_next_id IN abi_decoder_ids sa.cs_next_id (sa.cs_next_id+1)` by
     simp[abi_decoder_ids_def] >>
   drule_all budget_alloca_endpoint_exact_ptr_core >>
-  disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[] >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
