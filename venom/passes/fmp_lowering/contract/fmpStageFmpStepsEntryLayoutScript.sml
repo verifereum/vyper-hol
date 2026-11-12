@@ -1,6 +1,7 @@
 Theory fmpStageFmpStepsEntryLayout
 Ancestors
-  fmpStageRel venomExecSemantics irSupply venomFnScheduleRunner contextCodegenRel
+  fmpStageRel venomExecSemantics irSupply venomFnScheduleRunner
+  venomFnScheduleRunnerProps contextCodegenRel
   fmpStageOpBase fmpStageOpBaseActual fmpStepBridge concretizeStageLookup
   fmpStepLayout fmpStepRestrictionClosure fmpAnalysisProps
   fmpLowerDefs o1PassContract venomExecProofs
@@ -44,6 +45,10 @@ Proof
      (o1_walk_view rpolicy 3) C C'` by gvs[fmp_stage_ctx_def] >>
   drule_all ctx_pass_stage_lookup >> strip_tac >>
   drule fmp_fn_pass_step_result >> strip_tac >>
+  `ir_supply_covers_fn s fn` by
+    (irule ir_supply_covers_unit_member >> qexists `observed` >>
+     gvs[fn_pass_step_def] >>
+     metis_tac[lookup_unique_function_member]) >>
   gvs[fmp_lower_function_def, AllCaseEqs()] >>
   qexistsl [`infos`, `observed.cu_context`, `FST (fresh_ir_var s)`] >>
   simp[fmp_stage_lowered_def] >> metis_tac[]
