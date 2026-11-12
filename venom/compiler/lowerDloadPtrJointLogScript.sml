@@ -14,7 +14,7 @@ Theorem dload_joint_tracked_log_next:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -55,7 +55,7 @@ Theorem dload_joint_tracked_log_next:
   active_inst g next (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -117,7 +117,7 @@ Proof
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v (s1 with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t1 with vs_inst_idx := SUC t0.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)
@@ -134,7 +134,7 @@ Proof
    t1.vs_inst_idx = t0.vs_inst_idx` by
     (qpat_x_assum `t1 = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
   drule_all dload_singleton_reachable_next_fields >> strip_tac >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
   drule_at (Pat `dload_boundary_core`) dload_normal_unchanged_successor >>
   disch_then (drule_at (Pat `frame_reachable`)) >>
   disch_then (drule_at (Pat `dload_control_match`)) >>
@@ -187,7 +187,7 @@ Resume dload_joint_tracked_log_next[semantic]:
   disch_then (qspecl_then [`set (fn_ir_vars f)`,`C`] mp_tac) >>
   simp[] >> strip_tac >> qexists `s'` >> simp[lookup_var_def] >>
   (conj_tac >- gvs[lookup_var_def] >>
-   qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s' t1 _ _`
+   qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s' t1 _ _`
      (mp_then Any mp_tac dload_boundary_core_index_update) >> simp[])
 QED
 

@@ -6,8 +6,8 @@ Ancestors lowerDloadPtrEnvironmentRead lowerDloadPtrScalar lowerDloadPtrOrdinary
   finite_map list pred_set
 
 Theorem dload_boundary_core_gas_stream_update:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds ==>
-  dload_boundary_core lo fs V Ws PG PH G H tn un
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds ==>
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un
     (s with vs_gas_readings := readings)
     (t with vs_gas_readings := readings) cs ds
 Proof
@@ -71,11 +71,11 @@ Theorem dload_boundary_core_gas:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with <|vs_vars := s'.vs_vars; vs_gas_readings := s'.vs_gas_readings|> /\
@@ -87,7 +87,7 @@ Proof
   disch_then (qspec_then `Cs` strip_assume_tac) >> gnvs[] >>
   conj_tac >- (simp[lookup_var_def, update_var_def] >>
     rpt strip_tac >> Cases_on `v = out` >> gvs[lookup_var_def, FLOOKUP_UPDATE]) >>
-  `dload_boundary_core lo fs V Ws PG PH G H tn un
+  `dload_boundary_core fl lo fs V Ws PG PH G H tn un
     (s with vs_gas_readings := readings)
     (t with vs_gas_readings := readings) cs ds` by
     (irule dload_boundary_core_gas_stream_update >> simp[]) >>
@@ -102,14 +102,14 @@ Proof
      un with t_var := set_var_taint un.t_var [out] {}` by
     (irule gas_ghost_updates >> simp[update_var_def]) >>
   simp[update_var_def] >>
-  `dload_vars_match fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
+  `dload_vars_match fl fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
     (tn with t_var := set_var_taint tn.t_var [out] {})
     (un with t_var := set_var_taint un.t_var [out] {})
     ((s with vs_gas_readings := readings) with
       <|vs_vars := (update_var out z s).vs_vars; vs_inst_idx := s.vs_inst_idx|>)
     ((t with vs_gas_readings := readings) with
       <|vs_vars := (update_var out z t).vs_vars; vs_inst_idx := t.vs_inst_idx|>)` by
-    (`dload_vars_match fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
+    (`dload_vars_match fl fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
        (tn with t_var := set_var_taint tn.t_var [out] {})
        (un with t_var := set_var_taint un.t_var [out] {})
        (update_var out z (s with vs_gas_readings := readings))
@@ -137,13 +137,13 @@ Theorem dload_boundary_core_gas_index:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==>
       (lookup_var v (s' with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t' with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un)
       (s' with vs_inst_idx := SUC s.vs_inst_idx)
