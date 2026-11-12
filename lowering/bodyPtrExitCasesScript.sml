@@ -56,7 +56,8 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
+    (qpat_assum `body_inv _ _ _ _` mp_tac >> rewrite_tac[body_inv_def] >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>

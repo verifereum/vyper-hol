@@ -217,10 +217,11 @@ Proof
       simp[] >> simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
   irule vv_store_bound_frame_mem_src >> goal_assum (drule_at Any) >>
   simp[] >> gvs[] >>
-  Cases_on `vv_operand vv` >> simp[eval_operand_def] >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!rp. not_fresh_at sm rp ==> _` drule >>
-  simp[lookup_var_def]
+  Cases_on `vv_operand vv` >> simp[eval_operand_def, lookup_var_update_var] >>
+  rw[] >> gvs[] >>
+  `not_fresh_at sm (STRING #"%" (toString sm.cs_next_var))` by gvs[] >>
+  pop_assum mp_tac >> simp[not_fresh_at_def] >>
+  qexists_tac `sm.cs_next_var` >> simp[]
 QED
 
 Theorem vv_post_add_read_mem_src[local]:
