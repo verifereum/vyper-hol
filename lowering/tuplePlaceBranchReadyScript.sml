@@ -9,6 +9,7 @@ Theorem tuple_place_pointer_word_store:
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  valid_horizon cx st0 H ee.storage_trace /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
   evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
@@ -39,6 +40,7 @@ Theorem tuple_place_pointer_word_store:
       mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory)
 Proof
   strip_tac >>
+  drule_all tuple_place_pointer_storage_facts >> strip_tac >>
   drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
   `evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
    evaluate_type (get_tenv cx) (EL i ltys) = SOME (EL i ltvs) /\
@@ -135,6 +137,7 @@ Theorem tuple_place_pointer_equal_storage_store:
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  valid_horizon cx st0 H ee.storage_trace /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit tys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -159,6 +162,7 @@ Theorem tuple_place_pointer_equal_storage_store:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ t.vs_memory = s.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all tuple_place_pointer_storage_facts >> strip_tac >>
   drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
   `evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
    type_widens_to (get_tenv cx) (EL i tys) (EL i tys) /\
@@ -196,6 +200,7 @@ Theorem tuple_place_pointer_owned_store:
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  valid_horizon cx st0 H ee.storage_trace /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sp.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size_list ltvs <= b+sz /\
@@ -233,6 +238,7 @@ Theorem tuple_place_pointer_owned_store:
       mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all tuple_place_pointer_storage_facts >> strip_tac >>
   drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
   `evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
    evaluate_type (get_tenv cx) (EL i ltys) = SOME (EL i ltvs) /\

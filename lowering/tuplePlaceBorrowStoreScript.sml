@@ -22,7 +22,9 @@ Theorem tuple_place_equal_storage_run_memory:
     expr_val_rel cx dty v op s /\ cenv.ce_target CapMcopy /\
     expr_sim_inv cenv cx env ee /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    local_ptrs_reserved cenv sa /\
+    storage_place_observed H p /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H) /\
     (~is_word_type dty ==> !sw. eval_operand op s = SOME sw ==>
        w2n sw + type_memory_size stv <= s.vs_alloca_next) /\
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==> 0 < type_slot_size dtv) /\
@@ -112,7 +114,9 @@ Theorem tuple_place_equal_value_run_frame:
     expr_val_rel cx dty v op s /\ cenv.ce_target CapMcopy /\
     expr_sim_inv cenv cx env ee /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    local_ptrs_reserved cenv sa /\
+    storage_place_observed H p /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H) /\
     (!id path entry t0. p = MemoryPlace id path /\
        lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\

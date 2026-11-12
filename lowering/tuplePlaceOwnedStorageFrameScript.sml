@@ -25,7 +25,9 @@ Theorem tuple_place_owned_storage_run_frame:
        w2n w + type_memory_size dtv <= w2n sw \/ sw = w /\ stv = dtv) /\
     expr_sim_inv cenv cx env ee /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    local_ptrs_reserved cenv sa /\
+    storage_place_observed H p /\ regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H) /\
     (!id path entry t0. p = MemoryPlace id path /\
        lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
