@@ -23,7 +23,6 @@ Proof
   rpt strip_tac >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
     gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
-  `~ctx_has_dalloca C` by gvs[o1_src_inv_def] >>
   `C'.ctx_entry = C.ctx_entry /\
    LIST_REL (\fn fn'. ?t t'.
      ir_supply_covers_fn t fn /\ ir_supply_inst_ok t /\
@@ -73,8 +72,8 @@ Proof
      qexists `make_ssa_pos (EL n C.ctx_functions) (EL n C'.ctx_functions)` >>
      simp[Abbr `Q`] >>
      irule make_ssa_current_fn_frame_lockstep >> metis_tac[]) >>
-  `~ctx_has_dalloca C'` by
-    (rewrite_tac[ctx_has_dalloca_def, EXISTS_MEM, MEM_EL] >> CCONTR_TAC >>
+  `~ctx_has_dalloca C ==> ~ctx_has_dalloca C'` by
+    (strip_tac >> rewrite_tac[ctx_has_dalloca_def, EXISTS_MEM, MEM_EL] >> CCONTR_TAC >>
      gvs[] >> rename1 `EL n C'.ctx_functions` >>
      qpat_x_assum `!n. n < LENGTH C.ctx_functions ==> make_ssa_input_ok _ /\ _`
        (qspec_then `n` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
@@ -107,6 +106,11 @@ Proof
     (qpat_x_assum `allocas_from lo s` mp_tac >>
      rewrite_tac[allocas_from_def] >>
      qpat_x_assum `s2.vs_allocas = _` SUBST1_TAC >> rewrite_tac[]) >>
+  `s2.vs_fmp = s.vs_fmp /\ s2.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[state_rel_def, execution_frame_fields] >>
+  `ctx_has_dalloca C' ==> allocas_below_fmp s2` by
+    (strip_tac >> `allocas_below_fmp s` by metis_tac[] >>
+     fs[allocas_below_fmp_def]) >>
   `p /\ in_revert_forward fn s ==> in_revert_forward fn2 s2` by
     (Cases_on `p` >> simp[] >>
      drule_all make_ssa_lockstep_revert >> simp[]) >>

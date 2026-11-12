@@ -18,7 +18,7 @@ Theory o1ContractSimplifyCfg
 Ancestors
   o1ContractSimplifyCfgParams o1ContractSimplifyCfgSrcStatic o1ContractSimplifyCfgSrcFrame o1ContractSimplifyCfgSrcHeadroom o1ContractSimplifyCfgStep o1PassContract o1ComposeSupport o1PassLift simplifyCfgCorrectness simplifyCfgProof
   simplifyCfgDefs simplifyCfgStruct simplifyCfgInvariant
-  unitMemInv venomPassSchedule venomCompilerTypes
+  unitMemInv ptrDiscipline venomPassSchedule venomCompilerTypes
   venomWf cfgWf simplifyCfgLabelProps venomPassDispatcher
   opcodeClass ctxLookupAgreeHelpers venomExecSemantics venomExecProofs list rich_list arithmetic simplifyCfgPhiProps allocaRemapSSA venomInst
 
@@ -376,9 +376,10 @@ Proof
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
     fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `scfg_context_trace C C'` by metis_tac[scfg_context_trace_simplify_cfg] >>
-  `~ctx_has_dalloca C /\ taint_within D C vs /\
-   mem_inv dload_offset_ok C vs` by fs[o1_src_inv_def] >>
-  `~ctx_has_dalloca C'` by metis_tac[scfg_simplify_cfg_no_dalloca] >>
+  `taint_within D C vs /\ mem_inv dload_offset_ok C vs` by
+    fs[o1_src_inv_def] >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    metis_tac[scfg_simplify_cfg_no_dalloca] >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       drule_all scfg_context_trace_frame_rows >> simp[]) >>
