@@ -395,7 +395,8 @@ Proof
   simp[call_external_function_def, call_external_function_trace_def,
        bind_def, ignore_bind_def, return_def,
        send_call_value_def, check_def, assert_def, LET_THM] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[])
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  qpat_x_assum `(if _ then _ else _) = _` mp_tac >> rw[]
 QED
 
 (* Value sent to a nonpayable function: the source fails with a
