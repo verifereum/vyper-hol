@@ -36,7 +36,9 @@ Theorem aggregate_add_slice_entry_mem[local]:
     w2n (n2w (b+off):bytes32) = b+off /\
     b+off+type_memory_size tv <= u.vs_alloca_next /\
     (!n lo k. local_region ce es'.scopes u n lo k <=>
-      local_region ce es'.scopes r n lo k)
+      local_region ce es'.scopes r n lo k) /\
+    u.vs_accounts = r.vs_accounts /\ u.vs_transient = r.vs_transient /\
+    u.vs_requests = r.vs_requests /\ u.vs_call_ctx = r.vs_call_ctx
 Proof
   strip_tac >>
   `local_ptrs_reserved ce sm` by
@@ -220,7 +222,9 @@ Theorem aggregate_cons_from_slice_mem_cursor:
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k u.vs_memory) /\
       locals_kept ce es' es' u q /\
       q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func q /\ u.vs_alloca_next <= q.vs_alloca_next) ==>
+      alloca_history func q /\ u.vs_alloca_next <= q.vs_alloca_next /\
+      q.vs_accounts = u.vs_accounts /\ q.vs_transient = u.vs_transient /\
+      q.vs_requests = u.vs_requests /\ q.vs_call_ctx = u.vs_call_ctx) ==>
   ?v q. (~expr_has_effect e /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
      (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
         b + asz <= lb \/ lb + lsz <= b) ==>
@@ -244,7 +248,9 @@ Theorem aggregate_cons_from_slice_mem_cursor:
     locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
-    lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz)
+    lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz) /\
+    q.vs_accounts = r.vs_accounts /\ q.vs_transient = r.vs_transient /\
+    q.vs_requests = r.vs_requests /\ q.vs_call_ctx = r.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all aggregate_cons_slice_static >> strip_tac >>

@@ -2,7 +2,7 @@
 Theory bodyMemAggregateBodyCons
 Ancestors
   bodyMemAggregateConsContinuation bodyMemAggregateSliceContinuation
-  bodyMemAggregateCons words
+  words
 
 Theorem aggregate_body_cons_continuation_mem_cursor:
   acyclic_struct_metadata ce.ce_struct_fields /\
@@ -66,7 +66,9 @@ Theorem aggregate_body_cons_continuation_mem_cursor:
     q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
-    lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz)
+    lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz) /\
+    q.vs_accounts = r.vs_accounts /\ q.vs_transient = r.vs_transient /\
+    q.vs_requests = r.vs_requests /\ q.vs_call_ctx = r.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`P` |-> `\u. FLOOKUP u.vs_allocas aid = SOME (b,asz)`]
@@ -78,7 +80,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     drule_at (Pat `compile_store_memory _ _ (Var _) _ _ _ = _`)
       aggregate_body_unwrap_store_slice_mem_cursor >>
-    disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
     disch_then (drule_at (Pat `FLOOKUP _ aid = SOME (b,asz)`)) >>
     disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
     disch_then (drule_at (Pat `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`)) >>

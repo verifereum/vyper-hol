@@ -74,7 +74,7 @@ Theorem aggregate_cons_success_post_mem:
   locals_kept ce es1 es1 t1 q /\ s0.vs_alloca_next <= t1.vs_alloca_next /\
   t1.vs_alloca_next <= q.vs_alloca_next /\
   r.vs_current_bb = sb.cs_current_bb /\ r.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  expr_sim_inv ce cx env es2 /\ stmt_state_rel H ctx func ce cx es2 r /\
+  expr_sim_inv ce cx env es2 /\
   tuple_in_memory vs tvs (b+(off+type_memory_size htv)) r.vs_memory /\
   (!z a. not_fresh_at ss z /\ lookup_var z q = SOME a ==> lookup_var z r = SOME a) /\
   (!i a. FLOOKUP q.vs_allocas i = SOME a ==> FLOOKUP r.vs_allocas i = SOME a) /\
@@ -89,7 +89,7 @@ Theorem aggregate_cons_success_post_mem:
     mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) /\
   locals_kept ce es1 es2 q r /\ alloca_history func r /\ q.vs_alloca_next <= r.vs_alloca_next ==>
   r.vs_current_bb = sb.cs_current_bb /\ r.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  expr_sim_inv ce cx env es2 /\ stmt_state_rel H ctx func ce cx es2 r /\
+  expr_sim_inv ce cx env es2 /\
   tuple_in_memory (v::vs) (htv::tvs) (b+off) r.vs_memory /\
   (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==> lookup_var z r = SOME a) /\
   (!i a. FLOOKUP s0.vs_allocas i = SOME a ==> FLOOKUP r.vs_allocas i = SOME a) /\
@@ -115,7 +115,7 @@ Proof
       qexists `aid` >> asm_rewrite_tac[]) >>
   conj_tac
   >- (rpt gen_tac >> disch_tac >> irule aggregate_cons_exterior_frame_mem >>
-      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       asm_rewrite_tac[] >>
       goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>

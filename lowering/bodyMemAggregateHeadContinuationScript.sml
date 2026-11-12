@@ -62,7 +62,9 @@ Theorem aggregate_body_head_continuation_same_mem[local]:
     FLOOKUP q.vs_allocas inst.inst_id = SOME (b,asz) /\
     expr_sim_inv ce cx env es1 /\ body_exprs_mem_ok cx args /\
     value_has_type htv v /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-    mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory
+    mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory /\
+    q.vs_accounts = t1.vs_accounts /\ q.vs_transient = t1.vs_transient /\
+    q.vs_requests = t1.vs_requests /\ q.vs_call_ctx = t1.vs_call_ctx
 Proof
   strip_tac >>
   `es1 with gas_obs := [] = es1` by
@@ -180,7 +182,9 @@ Theorem aggregate_body_head_continuation_mem:
     FLOOKUP q.vs_allocas inst.inst_id = SOME (b,asz) /\
     expr_sim_inv ce cx env es1 /\ body_exprs_mem_ok cx args /\
     value_has_type htv v /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-    mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory
+    mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory /\
+    q.vs_accounts = t1.vs_accounts /\ q.vs_transient = t1.vs_transient /\
+    q.vs_requests = t1.vs_requests /\ q.vs_call_ctx = t1.vs_call_ctx
 Proof
   strip_tac >>
   `es1 with gas_obs := [] = es1` by
