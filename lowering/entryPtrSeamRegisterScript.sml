@@ -28,7 +28,38 @@ Ancestors
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
   list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
   valueEncoding entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
-  ctorDeployMemoryFrontier registrationSizeAdmissibility
+  ctorDeployMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen
+
+Theorem registration_noop_or_open:
+  !args ce off st ce' sa.
+    compile_register_positional_args ce args off st = (ce',sa) ==>
+    sa = st \/ ~block_is_terminated sa
+Proof
+  Induct >- simp[compile_register_positional_args_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >>
+  simp[compile_register_positional_args_def, vyperMiscTheory.option_CASE_rator,
+       AllCaseEqs(), comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  first_x_assum (drule_then strip_assume_tac) >> gvs[] >>
+  disj2_tac >>
+  irule compile_decode_args_open >>
+  goal_assum $ drule_at (Pat `compile_decode_args _ _ _ _ _ _ _ = _`) >>
+  simp[is_terminator_def] >>
+  irule exprOpenPrimitivesTheory.compile_alloc_buffer_open >>
+  goal_assum $ drule_at Any
+QED
+
+Theorem registration_absent_cursor_safe:
+  ~(?bb inst. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+              get_instruction bb s.vs_inst_idx = SOME inst) ==>
+  !D lo fuel ctx PG G tn. ptr_safe_run D lo fuel ctx fn PG G tn s
+Proof
+  strip_tac >> rpt gen_tac >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+  simp[ptr_safe_run_def] >>
+  Cases_on `get_instruction x s.vs_inst_idx` >>
+  gvs[ptr_safe_run_def, Once ptr_safe_defs]
+QED
 
 (* Source lookup selects a declaration whose original byte sizes were checked. *)
 Theorem registration_external_allocs_ok:
