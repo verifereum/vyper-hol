@@ -170,3 +170,57 @@ Proof
   drule prepared_original_output_domain >>
   gvs[EVERY_MEM, SUBSET_DEF] >> metis_tac[]
 QED
+
+Theorem prepared_renaming_label_flow:
+  wf_function f /\ fn_inst_wf f /\ make_ssa_input_ok f /\
+  fn_entry_label f = SOME entry /\ ir_supply_covers_fn s f /\
+  ir_supply_inst_ok s /\ label_flow_ok (ctx with ctx_functions := [f]) /\
+  (!x. code_end_var f x ==> ?d op. MEM d (fn_insts f) /\
+    d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+    d.inst_outputs = [x] /\
+    (!k. MEM k (fn_insts f) /\ MEM x k.inst_outputs ==> k = d) /\
+    (!bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+      MEM (Var x) j.inst_operands ==>
+      j.inst_opcode = CODECOPY /\
+      (?dst sz. j.inst_operands = [dst; Var x; sz] /\
+        dst <> Var x /\ sz <> Var x) /\
+      ?a b. bb.bb_instructions = a ++ [d;j] ++ b)) /\
+  add_phi_nodes_supply s df pm
+    (select_current_live_in had_phis (liveness_analyze f) f) f.fn_blocks
+    (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl f.fn_blocks) labels)))) = (bbs,s1) /\
+  rename_current_blocks s1
+    (init_current_rename_state (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl f.fn_blocks) labels)))))
+    bbs (current_succ_map f) (current_dom_tree f) = (ct,t,final) ==>
+  label_flow_ok (ctx with ctx_functions := [f with fn_blocks := final])
+Proof
+  strip_tac >>
+  `wf_function (f with fn_blocks := bbs)` by
+    metis_tac[inserted_function_wf, compute_defs_original_key_domain] >>
+  `EVERY current_nondeg_block_shape bbs` by
+    (irule makeSsaCurrentNonDegShapeTheory.current_nondeg_add_placement_shape >>
+     goal_assum $ drule_at Any >> metis_tac[current_nondeg_input_shape]) >>
+  `label_flow_ok (ctx with ctx_functions := [f with fn_blocks := bbs])` by
+    (irule local_adjacent_insertion_label_flow >> goal_assum $ drule_at Any >>
+     simp[] >> metis_tac[]) >>
+  drule_all prepared_actual_tree >> strip_tac >>
+  qabbrev_tac `trace = visit_blocks [] s1
+    (init_current_rename_state (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl f.fn_blocks) labels)))))
+    bbs (current_succ_map f) (current_dom_tree f)` >>
+  `FST trace = (ct,t,final)` by
+    simp[Abbr `trace`, o1MakeSsaVisitTraceTheory.visit_erasure] >>
+  `trace = ((ct,t,final),SND trace)` by metis_tac[pairTheory.PAIR] >>
+  qunabbrev_tac `trace` >>
+  drule_all prepared_visit_common_owner >> strip_tac >>
+  drule (SRULE [] (Q.INST [`f` |-> `f with fn_blocks := bbs`]
+    visit_blocks_label_flow)) >> disch_then irule >>
+  goal_assum $ drule_at Any >> simp[] >>
+  conj_tac >- metis_tac[current_actual_succs_distinct] >>
+  conj_tac >- (drule_at (Pat `add_phi_nodes_supply _ _ _ _ _ _ = _`)
+    local_adjacent_insertion_lifetime >> simp[]) >>
+  drule prepared_original_variable_domain >> strip_tac >>
+  conj_tac >- fs[wf_function_def, fn_labels_def] >>
+  qexistsl [`H`,`set (fn_ir_vars f)`,`t`] >> simp[] >> metis_tac[]
+QED
