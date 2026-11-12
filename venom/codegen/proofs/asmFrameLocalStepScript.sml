@@ -280,7 +280,7 @@ Theorem frame_starved_lift:
   step (es with contexts := [(c,rb)]) = (INR (SOME exc),t) /\
   (exc = OutOfGas \/ exc = StackOverflow) ==>
   ?r es'. run_call es = SOME (r,es') /\ frame_resource_starved es0 r es' /\
-    frame_last es
+          call_requests es = [] /\ frame_last es
 Proof
   strip_tac >>
   `wf_state es /\ (!addr. c.msgParams.outputTo <> Code addr)` by
@@ -419,9 +419,9 @@ Resume frame_asm_group_observers[bitwise]:
 QED
 Resume frame_asm_group_observers[memory]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
-  gvs[asm_step_memory_def, asm_pop_def, asm_push_val_def, asm_next_def,
-      AllCaseEqs()] >>
-  metis_tac[frame_asm_memory_observers, MEM]
+  gvs[asm_step_memory_def, AllCaseEqs()] >>
+  gvs[asm_pop_def, asm_push_val_def, asm_next_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_memory_observers, frame_asm_stack_observers, MEM]
 QED
 Resume frame_asm_group_observers[control]:
   markerLib.RESUME_TAC >> rpt strip_tac >> gvs[asm_step_control_def, asm_next_def, AllCaseEqs()] >>

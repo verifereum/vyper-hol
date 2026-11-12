@@ -61,88 +61,33 @@ Proof
 QED
 
 Theorem struct_layout_lookup:
-  !fields kes i tenv tv.
-    MAP FST fields = MAP FST kes /\
-    MAP (FST o SND) fields = MAP (expr_type o SND) kes /\
-    ALL_DISTINCT (MAP FST fields) /\ i < LENGTH kes /\
-    EVERY (\(name,ty,sz). !tv. evaluate_type tenv ty = SOME tv ==>
-                              sz = type_memory_size tv) fields /\
-    evaluate_type tenv (expr_type (SND (EL i kes))) = SOME tv ==>
-    ?sz. ALOOKUP fields (FST (EL i kes)) =
-           SOME (expr_type (SND (EL i kes)),sz) /\
-         sz = type_memory_size tv
+  !fields kes i.
+    MAP FST fields = MAP FST kes /\ ALL_DISTINCT (MAP FST fields) /\
+    i < LENGTH kes ==>
+    ALOOKUP fields (FST (EL i kes)) = SOME (SND (EL i fields))
 Proof
   rpt strip_tac >>
   `LENGTH fields = LENGTH kes` by metis_tac[LENGTH_MAP] >>
-  `i < LENGTH fields` by simp[] >>
   `FST (EL i fields) = FST (EL i kes)` by metis_tac[EL_MAP] >>
-  `FST (SND (EL i fields)) = expr_type (SND (EL i kes))` by
-    (fs[LIST_EQ_REWRITE, EL_MAP] >> metis_tac[]) >>
-  drule_all alistTheory.ALOOKUP_ALL_DISTINCT_EL >>
-  strip_tac >>
-  qexists_tac `SND (SND (EL i fields))` >>
-  conj_tac >- metis_tac[PAIR] >>
-  fs[EVERY_EL] >>
-  qpat_x_assum `!n. n < LENGTH kes ==> _`
-    (qspec_then `i` mp_tac) >>
-  Cases_on `EL i fields` >> rename1 `(name, info)` >>
-  Cases_on `info` >> gvs[] >> metis_tac[]
+  `i < LENGTH fields` by simp[] >>
+  drule_all alistTheory.ALOOKUP_ALL_DISTINCT_EL >> simp[]
 QED
 
 Theorem compile_struct_lit_as_tuple:
-  !fields off.
-    EVERY (\(name,e).
+  !fields tys off.
+    LIST_REL (\t (name,e).
       ALOOKUP (get_struct_fields ce.ce_struct_fields
         (case ty of StructT nsid => nsid_to_string nsid | _ => "")) name =
-      SOME (expr_type e,type_memory_bytes ce (expr_type e))) fields ==>
+      SOME (t,type_memory_bytes ce t)) tys fields ==>
     compile_struct_lit cfn ce ty fields buf off =
-    compile_make_tuple cfn ce (MAP SND fields) buf off
+    compile_make_tuple cfn ce (MAP SND fields) tys buf off
 Proof
   Induct >> simp[exprLoweringTheory.compile_struct_lit_def,
                  exprLoweringTheory.compile_make_tuple_def] >>
-  qx_gen_tac `fld` >> PairCases_on `fld` >> rpt strip_tac >>
+  qx_gen_tac `fld` >> PairCases_on `fld` >> Cases >> rpt strip_tac >>
   gvs[exprLoweringTheory.compile_struct_lit_def,
-      exprLoweringTheory.compile_make_tuple_def]
-QED
-
-Theorem struct_literal_lookup_types:
-  expr_body_pre ce cx env (StructLit ann nsid kes) es ==>
-  EVERY (\(name,e).
-    ALOOKUP (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)) name =
-      SOME (expr_type e,type_memory_bytes ce (expr_type e))) kes
-Proof
-  strip_tac >>
-  drule expr_body_pre_var_types_well_formed >> strip_tac >>
-  `expr_sim_inv ce cx env es /\
-   well_typed_expr env (StructLit ann nsid kes)` by
-    fs[expr_body_pre_def] >>
-  `env.type_defs = get_tenv cx` by
-    gvs[expr_body_pre_def, expr_sim_inv_def,
-        vyperTypeInvariantsTheory.env_consistent_def,
-        vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
-    gvs[expr_sim_inv_def] >>
-  drule_all struct_literal_layout_types >> strip_tac >>
-  `ALL_DISTINCT (MAP FST fields) /\
-   EVERY (\(name,ty,sz). !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
-       sz = type_memory_size tv) fields` by
-    (fs[expr_sim_inv_def] >> metis_tac[]) >>
-  `EVERY (well_typed_expr env o SND) kes` by
-    (`!ks. vyperTypeSystem$well_typed_named_exprs env ks ==>
-        EVERY (well_typed_expr env o SND) ks` by
-       (Induct >> simp[vyperTypeSystemTheory.well_typed_expr_def,
-                      FORALL_PROD]) >>
-     fs[vyperTypeSystemTheory.well_typed_expr_def]) >>
-  simp[EVERY_EL] >> qx_gen_tac `i` >> strip_tac >>
-  `well_typed_expr env (SND (EL i kes))` by fs[EVERY_EL] >>
-  drule_all exprSafeOperandTheory.well_typed_expr_type_well_formed >>
-  simp[vyperTypeSystemTheory.well_formed_type_def] >> strip_tac >>
-  Cases_on `evaluate_type (get_tenv cx) (expr_type (SND (EL i kes)))` >>
-  gvs[] >>
-  `ALL_DISTINCT (MAP FST fields)` by metis_tac[] >>
-  drule_all struct_layout_lookup >> strip_tac >>
-  drule_all expr_sim_inv_memory_size >> strip_tac >>
-  Cases_on `EL i kes` >> gvs[get_struct_fields_def]
+      exprLoweringTheory.compile_make_tuple_def] >>
+  first_x_assum drule >> simp[]
 QED
 
 Theorem empty_type_buffer_size:
@@ -263,7 +208,8 @@ Theorem struct_literal_evaluated_layout:
   expr_body_pre ce cx env (StructLit ann nsid fields) es ==>
   ?tvs.
     OPT_MMAP (evaluate_type (get_tenv cx))
-      (MAP expr_type (MAP SND fields)) = SOME tvs /\
+      (MAP (FST o SND)
+        (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid))) = SOME tvs /\
     type_memory_size_list tvs =
       SUM (MAP (SND o SND) (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid))) /\
     evaluate_type (get_tenv cx) (StructT nsid) =
@@ -276,25 +222,76 @@ Proof
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
+    gvs[expr_sim_inv_def] >>
+  `?flds. FLOOKUP ce.ce_struct_fields (nsid_to_string nsid) = SOME flds /\
+     MAP (FST o SND) flds = MAP SND args` by
+    (gvs[loweringStateRelDefsTheory.sfields_tenv_consistent_def] >> metis_tac[]) >>
   `?tv. evaluate_type (get_tenv cx) (StructT nsid) = SOME tv` by
     (gvs[vyperTypeSystemTheory.well_typed_expr_def,
          vyperTypeSystemTheory.well_formed_type_def] >>
      Cases_on `evaluate_type (get_tenv cx) (StructT nsid)` >> gvs[]) >>
-  drule evaluated_struct_layout >> strip_tac >>
-  gvs[GSYM MAP_COMPOSE] >>
+  drule evaluated_struct_layout >> strip_tac >> gvs[] >>
   drule_all expr_sim_inv_memory_size >>
   `LENGTH tvs = LENGTH (MAP FST args)` by
     (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
   simp[type_memory_bytes_def, type_memory_size_def, struct_layout_size_zip,
-       GSYM MAP_COMPOSE]
+       get_struct_fields_def]
+QED
+
+Theorem struct_literal_lookup_types:
+  expr_body_pre ce cx env (StructLit ann nsid kes) es ==>
+  LIST_REL (\t (name,e).
+    ALOOKUP (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)) name =
+      SOME (t,type_memory_bytes ce t))
+    (MAP (FST o SND)
+      (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid))) kes /\
+  LIST_REL (\t e. arg_type_fits (expr_type e) t)
+    (MAP (FST o SND)
+      (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)))
+    (MAP SND kes)
+Proof
+  strip_tac >>
+  `expr_sim_inv ce cx env es /\
+   well_typed_expr env (StructLit ann nsid kes)` by
+    fs[expr_body_pre_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
+    gvs[expr_sim_inv_def] >>
+  drule_all struct_literal_layout_types >> strip_tac >>
+  `ALL_DISTINCT (MAP FST fields) /\
+   EVERY (\(name,ty,sz). !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+       sz = type_memory_size tv) fields` by
+    (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  drule struct_literal_evaluated_layout >> strip_tac >>
+  gvs[get_struct_fields_def] >>
+  drule vyperTypeABITheory.OPT_MMAP_LIST_REL >> strip_tac >>
+  `LENGTH fields = LENGTH kes` by metis_tac[LENGTH_MAP] >>
+  fs[LIST_REL_EL_EQN, EL_MAP] >> rpt strip_tac >>
+  `n < LENGTH fields /\ n < LENGTH kes` by fs[] >>
+  `ALOOKUP fields (FST (EL n kes)) = SOME (SND (EL n fields))` by
+    (irule struct_layout_lookup >> fs[]) >>
+  `evaluate_type (get_tenv cx) (FST (SND (EL n fields))) = SOME (EL n tvs)` by
+    fs[] >>
+  drule_all expr_sim_inv_memory_size >> strip_tac >>
+  `SND (SND (EL n fields)) = type_memory_size (EL n tvs)` by
+    (qpat_x_assum `EVERY _ fields` mp_tac >> simp[EVERY_EL] >>
+     disch_then drule >> Cases_on `EL n fields` >> rename1 `(_, inf)` >>
+     Cases_on `inf` >> gvs[]) >>
+  Cases_on `EL n kes` >> Cases_on `EL n fields` >>
+  gvs[pairTheory.PAIR_FST_SND_EQ]
 QED
 
 Theorem make_tuple_evaluated_layout:
   expr_body_pre ce cx env (Builtin ann (MakeArray NONE bnd) args) es ==>
-  ?tvs. ann = TupleT (MAP expr_type args) /\
-    OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
+  ?tys tvs. ann = TupleT tys /\
+    LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     evaluate_type (get_tenv cx) ann = SOME (TupleTV tvs) /\
-    SUM (MAP (type_memory_bytes ce o expr_type) args) = type_memory_size_list tvs
+    SUM (MAP (type_memory_bytes ce) tys) = type_memory_size_list tvs
 Proof
   strip_tac >>
   `expr_sim_inv ce cx env es /\
@@ -306,9 +303,10 @@ Proof
   gvs[vyperTypeSystemTheory.well_typed_expr_def,
       vyperTypeSystemTheory.well_typed_builtin_app_def,
       vyperTypeSystemTheory.well_formed_type_def,
+      vyperTypeArgFitsTheory.arg_types_fit_LIST_REL,
       vyperValueTheory.evaluate_type_def, evaluate_types_OPT_MMAP, AllCaseEqs()] >>
-  Cases_on `OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args)` >> gvs[] >>
-  simp[GSYM MAP_COMPOSE] >>
+  Cases_on `OPT_MMAP (evaluate_type (get_tenv cx)) tys` >> gvs[] >>
+  conj_tac >- gvs[LIST_REL_EL_EQN, EL_MAP] >>
   irule tuple_memory_bytes_size >> goal_assum (drule_at Any) >>
   metis_tac[expr_sim_inv_memory_size]
 QED
@@ -318,7 +316,7 @@ Theorem make_array_evaluated_layout:
   ?tv. ann = ArrayT et bnd /\
     evaluate_type (get_tenv cx) et = SOME tv /\
     evaluate_type (get_tenv cx) ann = SOME (ArrayTV tv bnd) /\
-    EVERY (\e. expr_type e = et) args /\
+    EVERY (\e. arg_type_fits (expr_type e) et) args /\
     type_memory_bytes ce et = type_memory_size tv /\
     (if (case bnd of Dynamic _ => T | _ => F) then 32 else 0) +
       LENGTH args * type_memory_size tv <= type_memory_bytes ce ann
@@ -345,7 +343,7 @@ QED
 
 Theorem tuple_child_compile:
   compile_make_tuple (expr_child_callback (list_size expr_size args) compile_expr)
-    ce args buf off sa = compile_make_tuple compile_expr ce args buf off sa
+    ce args tys buf off sa = compile_make_tuple compile_expr ce args tys buf off sa
 Proof
   AP_THM_TAC >> MATCH_ACCEPT_TAC compile_make_tuple_list_child_calls
 QED
@@ -373,8 +371,9 @@ QED
 Theorem compile_tuple_literal:
   compile_expr ce ty (Builtin ann (MakeArray NONE bnd) args) sa =
   let (ba,sm) = compile_alloc_buffer
-    (SUM (MAP (type_memory_bytes ce o expr_type) args)) sa in
-  as_ptr_val ann LocMemory (compile_make_tuple compile_expr ce args ba.buf_operand 0 sm)
+    (SUM (MAP (type_memory_bytes ce) (tuple_literal_types ann args))) sa in
+  as_ptr_val ann LocMemory (compile_make_tuple compile_expr ce args
+    (tuple_literal_types ann args) ba.buf_operand 0 sm)
 Proof
   simp_tac (srw_ss() ++ boolSimps.ETA_ss) [make_array_not_names, compile_expr_builtin_dispatch,
     cj 2 compile_expr_raw_def,
@@ -395,13 +394,17 @@ QED
 Theorem compile_tuple_literal_inv:
   compile_expr ce ty (Builtin ann (MakeArray NONE bnd) args) sa = (vv,sb) ==>
   ?ba sm u.
-    compile_alloc_buffer (SUM (MAP (type_memory_bytes ce o expr_type) args)) sa = (ba,sm) /\
-    compile_make_tuple compile_expr ce args ba.buf_operand 0 sm = (u,sb) /\
+    compile_alloc_buffer
+      (SUM (MAP (type_memory_bytes ce) (tuple_literal_types ann args))) sa = (ba,sm) /\
+    compile_make_tuple compile_expr ce args (tuple_literal_types ann args)
+      ba.buf_operand 0 sm = (u,sb) /\
     vv = LocatedValue ann (mk_ptr u LocMemory)
 Proof
-  Cases_on `compile_alloc_buffer (SUM (MAP (type_memory_bytes ce o expr_type) args)) sa` >>
+  Cases_on `compile_alloc_buffer
+    (SUM (MAP (type_memory_bytes ce) (tuple_literal_types ann args))) sa` >>
   rename1 `compile_alloc_buffer _ sa = (ba,sm)` >>
-  Cases_on `compile_make_tuple compile_expr ce args ba.buf_operand 0 sm` >>
+  Cases_on `compile_make_tuple compile_expr ce args (tuple_literal_types ann args)
+    ba.buf_operand 0 sm` >>
   simp[compile_tuple_literal, as_ptr_val_def] >> strip_tac >> gvs[] >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
 QED

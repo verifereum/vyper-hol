@@ -50,7 +50,7 @@ Theorem registration_literal_source_window:
       (if dyn /\ ~prim then n2w 4 + abi_decode_load CALLDATALOAD
          (n2w 4 + n2w (off-4):bytes32) s else n2w 4 + n2w (off-4)) /\
     mem_bytes_at sb (LENGTH (enc ty av)) (abi_decode_source CALLDATALOAD s) = enc ty av /\
-    sb + LENGTH (enc ty av) < dimword (:256)
+    sb + LENGTH (enc ty av) < dimword (:256) /\ 4 <= sb
 Proof
   strip_tac >>
   qabbrev_tac `co = abi_tuple_child_offset (pre ++ ty::post)
@@ -63,7 +63,7 @@ Proof
    4+co+LENGTH (enc ty av) < dimword (:256)` by
     (irule entry_source_member_source >> goal_assum (drule_at Any) >>
      qexistsl_tac [`E`, `env`, `rest`, `tys`, `vs`] >> asm_rewrite_tac[]) >>
-  qexists_tac `4+co` >> reverse conj_tac >- asm_rewrite_tac[] >>
+  qexists_tac `4+co` >> reverse conj_tac >- (asm_rewrite_tac[] >> simp[]) >>
   `off-4 = SUM (MAP abi_member_head_size pre)` by decide_tac >>
   Cases_on `is_dynamic ty`
   >- (drule_all registration_dynamic_offset_load >>

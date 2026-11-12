@@ -35,7 +35,7 @@ QED
    way whatever the source's bound). *)
 Theorem assign_memory_widen_body_code[local]:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
-    dty sty info bytes sa = ((),sb) /\ fn_has_code sa sb func /\
+    dty sty bytes sa = ((),sb) /\ fn_has_code sa sb func /\
   is_bytestring_type dty ==>
   ?buf sm sn.
     compile_alloc_buffer (type_memory_bytes ce sty) sa = (buf,sm) /\
@@ -51,7 +51,7 @@ Proof
      compile_copy_memory buf.buf_operand src (type_memory_bytes ce sty) sm =
        ((),sn) /\
      compile_store_memory ce buf.buf_operand dst dty sty sn = ((),sb)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
           comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >>
@@ -82,9 +82,9 @@ QED
    region must reach that far. *)
 Theorem annassign_memory_assign_widen_body_path:
   !ctx func cenv cx es s id p sz w inst v tyv ltv sc rest a src ty lt sa sb
-   sw d info bytes.
+   sw d bytes.
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
-      ty lt info bytes sa = ((), sb) /\
+      ty lt bytes sa = ((), sb) /\
     is_bytestring_type ty /\ is_bytestring_type lt /\
     (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
     eval_operand src s = SOME sw /\ lookup_var p s = SOME w /\
@@ -180,7 +180,7 @@ QED
    on a memory-located value bounds. *)
 Theorem annassign_bytes_post_path_mem:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v tyv etv ltv
-   vtyp sc rest a loc info bytes d.
+   vtyp sc rest a loc bytes d.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
     expr_store_bound cx (expr_type e) v op s /\
     (loc = SOME LocMemory ==>
@@ -199,7 +199,7 @@ Theorem annassign_bytes_post_path_mem:
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
     type_memory_size ltv < dimword (:256) /\
     compile_assign_value cenv (Var p) LocMemory op F loc vtyp
-      (lowered_value_type cenv e) info bytes sb = ((),sf) /\
+      (lowered_value_type cenv e) bytes sb = ((),sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     alloca_history func s /\ return_buf_frame d cenv sb s /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -259,7 +259,7 @@ Proof
         `w`, `inst`, `v`, `tyv`, `ltv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
       simp[]) >>
   `compile_store_memory cenv op (Var p) vtyp vtyp sb = ((),sf)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def] >>
      metis_tac[compile_store_memory_bytestring_src]) >>
   drule annassign_memory_store_body_path >>
@@ -341,7 +341,7 @@ Proof
   `~(has_length_word vtyp /\ is_empty_value_expr e)` by metis_tac[] >>
   drule_all annassign_copy_parts_mem >>
   disch_then (qx_choosel_then [`sA`, `sV`, `sB`, `vv`, `op`] strip_assume_tac) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `!ty. type_memory_bytes c ty = _` (fn th => rewrite_tac[th]) >>
   qpat_assum `!e. lowered_value_type c e = _` (fn th => rewrite_tac[th]) >>
   strip_tac >>
@@ -413,17 +413,13 @@ Proof
     metis_tac[] >>
   `FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w, type_memory_size tyv)` by
     (qpat_x_assum `FLOOKUP t.vs_allocas st.cs_next_id = _` mp_tac >> simp[]) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `type_memory_bytes cenv vtyp = _` (fn th => rewrite_tac[th]) >>
   strip_tac >>
   drule annassign_bytes_post_path_mem >>
   disch_then (qspecl_then [`sb`, `id`, `p`, `type_memory_size tyv`, `w`,
     `ai`, `tyv`, `etv`, `ltv`, `vtyp`, `sc`, `rest`, `T`, `vv_location vv`,
-    `case vtyp of
-        ArrayT elem_ty (Dynamic _) =>
-          SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-                type_memory_bytes cenv elem_ty)
-      | _ => NONE`, `type_memory_size tyv`, `d`] mp_tac) >>
+    `type_memory_size tyv`, `d`] mp_tac) >>
   impl_tac
   >- (simp[] >> fs[]) >>
   disch_then (qx_choose_then `tf:venom_state` strip_assume_tac) >>

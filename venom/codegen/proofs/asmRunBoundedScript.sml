@@ -12,7 +12,7 @@
 
 Theory asmRunBounded
 Ancestors
-  asmSem asmWf words list
+  asmSem asmWf vfmConstants words list
 
 (* The memory ranges (offset, size) an assembly instruction reads or
    writes, from its operands on the stack (top first, as the EVM pops
@@ -39,21 +39,23 @@ Definition asm_mem_ranges_def:
        (case stk of _ :: _ :: _ :: ao :: az :: ro :: rs :: _ =>
                       [(w2n ao, w2n az); (w2n ro, w2n rs)]
                   | _ => [])
-     else if name = "STATICCALL" then
+     else if MEM name ["STATICCALL"; "DELEGATECALL"] then
        (case stk of _ :: _ :: ao :: az :: ro :: rs :: _ =>
                       [(w2n ao, w2n az); (w2n ro, w2n rs)]
                   | _ => [])
+     else if MEM name ["CREATE"; "CREATE2"] then
+       (case stk of _ :: off :: sz :: _ => [(w2n off, w2n sz)] | _ => [])
      else []) /\
   (asm_mem_ranges _ stk = [])
 End
 
 (* The instruction's gas is bounded given its memory bound H: it touches
-   memory only below H, and it is none of the instructions whose cost or
-   failure the bound doesn't cover (creation, delegation, self-destruct). *)
+   memory only below H, and a CREATE or CREATE2 has an initcode within the
+   EIP-3860 limit (the EVM fails a longer one with OutOfGas at any gas). *)
 Definition asm_inst_gas_ok_def:
   asm_inst_gas_ok H inst stk <=>
-    (!name. inst = AsmOp name ==>
-            ~MEM name ["CREATE"; "CREATE2"; "DELEGATECALL"; "SELFDESTRUCT"]) /\
+    ((inst = AsmOp "CREATE" \/ inst = AsmOp "CREATE2") ==>
+     case stk of _ :: _ :: sz :: _ => w2n sz <= 2 * max_code_size | _ => F) /\
     EVERY (\(off,len). len = 0 \/ off + len <= H) (asm_mem_ranges inst stk)
 End
 
@@ -71,6 +73,31 @@ Definition asm_run_bounded_def:
       | AsmError _ => F
       | _ => T))
 End
+
+(* The CALL families expose the same two ranges, after their value slot. *)
+Theorem asm_inst_gas_ok_call_ranges:
+  asm_inst_gas_ok H (AsmOp name) stk /\
+  (name = "CALL" \/ name = "STATICCALL") /\
+  6 + (if name = "CALL" then 1 else 0) <= LENGTH stk ==>
+  (w2n (EL (3 + (if name = "CALL" then 1 else 0)) stk) = 0 \/
+   w2n (EL (2 + (if name = "CALL" then 1 else 0)) stk) +
+   w2n (EL (3 + (if name = "CALL" then 1 else 0)) stk) <= H) /\
+  (w2n (EL (5 + (if name = "CALL" then 1 else 0)) stk) = 0 \/
+   w2n (EL (4 + (if name = "CALL" then 1 else 0)) stk) +
+   w2n (EL (5 + (if name = "CALL" then 1 else 0)) stk) <= H)
+Proof
+  strip_tac >>
+  namedCases_on `stk` ["", "x0 xs0"] >> gvs[] >>
+  namedCases_on `xs0` ["", "x1 xs1"] >> gvs[] >>
+  namedCases_on `xs1` ["", "x2 xs2"] >> gvs[] >>
+  namedCases_on `xs2` ["", "x3 xs3"] >> gvs[] >>
+  namedCases_on `xs3` ["", "x4 xs4"] >> gvs[] >>
+  namedCases_on `xs4` ["", "x5 xs5"] >> gvs[] >>
+  Cases_on `name = "CALL"` >>
+  gvs[asm_inst_gas_ok_def, asm_mem_ranges_def] >>
+  namedCases_on `xs5` ["", "x6 xs6"] >>
+  gvs[asm_inst_gas_ok_def, asm_mem_ranges_def]
+QED
 
 Theorem asm_run_bounded_step:
   asm_run_bounded lo o2pc prog H (SUC k) s ==>

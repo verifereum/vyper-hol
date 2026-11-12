@@ -52,13 +52,15 @@ Definition asm_frame_rel_def:
       as.as_requests ++ call_requests es = call_requests es0
 End
 
-(* The step of prog at as.as_pc: either the frame starves from es, or the
+(* The step of prog at as.as_pc: either the frame starves at this step
+   (so the frame makes no more requests from es), or the
    frame's run from es ends as the step does (codegen_asm_run_call's
-   clauses), or the step continues and the relation holds again at a
+   clauses; a reverting or faulting step makes no more requests), or the step continues and the relation holds again at a
    state the frame's run passes through. *)
 Definition asm_frame_step_ok_def:
   asm_frame_step_ok prog data es0 as es <=>
-    (?r es'. run_call es = SOME (r, es') /\ frame_resource_starved es0 r es') \/
+    (?r es'. run_call es = SOME (r, es') /\ frame_resource_starved es0 r es' /\
+             call_requests es = []) \/
     case asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
                   (EL as.as_pc prog) as of
       AsmOK as1 =>
@@ -72,10 +74,12 @@ Definition asm_frame_step_ok_def:
           as1.as_requests = call_requests es0
     | AsmRevert as1 =>
         ?r es'. run_call es = SOME (r, es') /\
-          ?lgs. frame_outcome es0 r es' (SOME Reverted) as1.as_returndata lgs
+          (?lgs. frame_outcome es0 r es' (SOME Reverted) as1.as_returndata lgs) /\
+          call_requests es = []
     | AsmFault as1 =>
         ?r es'. run_call es = SOME (r, es') /\
-          ?exc lgs. exc <> Reverted /\ frame_outcome es0 r es' (SOME exc) [] lgs
+          (?exc lgs. exc <> Reverted /\ frame_outcome es0 r es' (SOME exc) [] lgs) /\
+          call_requests es = []
     | AsmError _ => T
 End
 

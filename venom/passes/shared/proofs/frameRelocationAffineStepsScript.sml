@@ -136,7 +136,8 @@ Proof
 QED
 
 Theorem scalar_binary_taint_operands:
-  scalar_binary_opcode inst.inst_opcode /\ inst.inst_operands = [a;b] ==>
+  scalar_binary_opcode inst.inst_opcode /\ inst.inst_opcode <> MUL /\
+  inst.inst_operands = [a;b] ==>
   step_taint (inst with inst_operands := [c;d]) s s' tn =
     step_taint inst s s' tn
 Proof

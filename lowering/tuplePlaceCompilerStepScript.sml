@@ -5,7 +5,7 @@ Ancestors
 
 Theorem tuple_place_compiler_head_step:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
@@ -21,16 +21,13 @@ Theorem tuple_place_compiler_head_step:
   type_alloc_ok cenv (TupleT tys) /\ i < LENGTH tys /\
   (let dst = FST r; loc_opt = FST (SND r); dst_ty_opt = SND (SND r);
        loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys;
-       arr = case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-         | _ => NONE
+       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
    in (if is_word_type (EL i ltys) then
          if is_word_type dty then
            compile_store_at_loc cenv.ce_imm_alloca dst (EL i elems) loc_opt
          else emit_void INVALID []
        else compile_assign_value cenv dst loc (EL i elems) (is_word_type dty)
-         NONE dty (EL i ltys) arr (type_memory_bytes cenv dty)) sa) = ((),sb) /\
+         NONE dty (EL i ltys) (type_memory_bytes cenv dty)) sa) = ((),sb) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
   write_place cx p (EL i vs) ee = (INL (),ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
