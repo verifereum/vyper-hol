@@ -156,3 +156,64 @@ Proof
     (qspecl_then [`initial_st`, `selected`] mp_tac) >>
   disch_then (irule o cj 1) >> metis_tac[]
 QED
+
+Theorem finite_prefix_RaiseReason:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "RaiseReason")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e)))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_raise_reason_def] >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
+  Cases_on `eval_expr cx e st` >> rename1 `eval_expr cx e st = (er,s1)` >>
+  Cases_on `er` >> simp_tac(srw_ss())[bind_def, raise_def] >> strip_tac >>
+  `st' = s1` by
+    (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+     gvs[AllCaseEqs(), raise_def] >> imp_res_tac read_result_state >>
+     imp_res_tac lift_option_type_state >> gvs[raise_def]) >>
+  pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `!initial_st selected env st res st0. _`
+    (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+  disch_then (irule o cj 1) >> metis_tac[]
+QED
+
+Theorem finite_prefix_BasePlaceRoot_NameTarget:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "BasePlaceRoot_NameTarget")
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, get_scopes_def, type_check_def, assert_def,
+       ignore_bind_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[valid_horizon_def]
+QED
+
+Theorem finite_prefix_Log:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "Log")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Log id es))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def, AllCaseEqs()] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_exprs cx es st` >> rename1 `eval_exprs cx es st = (er,s1)` >>
+  Cases_on `er` >> simp_tac(srw_ss())[bind_def, return_def, raise_def] >> strip_tac >>
+  `st'.accounts = s1.accounts /\ st'.tStorage = s1.tStorage /\
+   st'.outcomes = s1.outcomes /\ st'.storage_trace = s1.storage_trace` by
+    (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+     gvs[lift_option_def, bind_def, return_def, raise_def, push_log_def,
+         check_not_static_def, check_def, assert_def, ignore_bind_def, AllCaseEqs()] >>
+     Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id x` >>
+     gvs[return_def, raise_def]) >>
+  `storage_well_formed_on cx s1 (FST H) /\
+   storage_observations_ok cx H s1.storage_trace` by
+    (qpat_x_assum `!initial_st selected env st res st0. _`
+      (qspecl_then [`initial_st`, `selected`] irule) >> metis_tac[]) >>
+  conj_tac >- (metis_tac[storage_well_formed_on_backends]) >>
+  metis_tac[]
+QED
