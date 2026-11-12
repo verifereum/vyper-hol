@@ -3686,8 +3686,31 @@ Proof
   Cases_on `l` >> simp[subst_consts_expr_def]
 QED
 
+Theorem const_subst_range_constant[local]:
+  (!e. !E. constant_expr mods e /\
+    (!ty id r. MEM (ty,id) (const_local_refs e) /\ ALOOKUP E id = SOME r ==>
+      constant_expr mods r) ==> constant_expr mods (subst_consts_expr E e)) /\
+  (!es. !E. EVERY (constant_expr mods) es /\
+    (!ty id r. MEM (ty,id) (const_local_exprs es) /\ ALOOKUP E id = SOME r ==>
+      constant_expr mods r) ==> EVERY (constant_expr mods) (subst_consts_exprs E es)) /\
+  (!fs. !E. EVERY (constant_expr mods) (MAP SND fs) /\
+    (!ty id r. MEM (ty,id) (const_local_fields fs) /\ ALOOKUP E id = SOME r ==>
+      constant_expr mods r) ==>
+    EVERY (constant_expr mods) (MAP SND (subst_consts_fields E fs)))
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, const_local_refs_def, subst_consts_expr_def] >>
+  rpt strip_tac >> gvs[]
+  >~ [`subst_consts_expr E (TopLevelName ty ns)`]
+  >- (PairCases_on `ns` >> Cases_on `ns0` >>
+      gvs[subst_consts_expr_def, constant_expr_def, const_local_refs_def] >>
+      Cases_on `ALOOKUP E ns1` >> gvs[constant_expr_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem const_subst_builtin_operands[local]:
-  (!id aty i. MEM (id, Literal aty (IntL i)) E ==> 0 <= i) /\
+  (!aty id r. MEM (aty,id) (const_local_exprs es) /\ ALOOKUP E id = SOME r ==>
+    constant_expr mods r /\ (!n. int_literal_value r = SOME n ==> 0 <= n)) /\
   MAP expr_type (subst_consts_exprs E es) = MAP expr_type es /\
   well_typed_builtin_app ty bt (MAP expr_type es) /\
   builtin_operands_ok ty bt es ==>
@@ -3712,7 +3735,8 @@ Proof
         Cases_on `ALOOKUP E p1` >> gvs[] >>
         rename1 `ALOOKUP E p1 = SOME replacement` >>
         Cases_on `replacement` >> gvs[] >>
-        Cases_on `l` >> gvs[] >> metis_tac[ALOOKUP_MEM]) >>
+        Cases_on `l` >> gvs[const_local_refs_def, int_literal_value_def] >>
+        metis_tac[]) >>
       metis_tac[const_subst_literal_forms, optionTheory.IS_SOME_EXISTS]) >>
   Cases_on `bt` >> gvs[builtin_operands_ok_def] >>
   Cases_on `b` >> gvs[builtin_operands_ok_def]
@@ -3913,22 +3937,31 @@ Proof
   metis_tac[fold_const_typing_aux]
 QED
 
+Theorem constant_subscript_base_exact[local]:
+  constant_expr mods e ==> subscript_base_type_exact env e
+Proof
+  Cases_on `e` >> simp[subscript_base_type_exact_def, constant_expr_def]
+QED
+
 Theorem const_fragment_subst_typed:
   (!e ty ix. constant_expr mods e /\
     well_typed_expr env (Subscript ty e ix) ==> well_typed_expr env e) ==>
   (!e. constant_expr mods e /\ well_typed_expr env e /\
     (!ty id r. MEM (ty,id) (const_local_refs e) /\ ALOOKUP E id = SOME r ==>
-      expr_type r = ty /\ well_typed_expr env r) ==>
+      expr_type r = ty /\ well_typed_expr env r /\ constant_expr mods r /\
+      (!n. int_literal_value r = SOME n ==> 0 <= n)) ==>
     well_typed_expr env (subst_consts_expr E e) /\
     expr_type (subst_consts_expr E e) = expr_type e) /\
   (!es. EVERY (constant_expr mods) es /\ well_typed_exprs env es /\
     (!ty id r. MEM (ty,id) (const_local_exprs es) /\ ALOOKUP E id = SOME r ==>
-      expr_type r = ty /\ well_typed_expr env r) ==>
+      expr_type r = ty /\ well_typed_expr env r /\ constant_expr mods r /\
+      (!n. int_literal_value r = SOME n ==> 0 <= n)) ==>
     well_typed_exprs env (subst_consts_exprs E es) /\
     MAP expr_type (subst_consts_exprs E es) = MAP expr_type es) /\
   (!fs. EVERY (constant_expr mods) (MAP SND fs) /\ well_typed_named_exprs env fs /\
     (!ty id r. MEM (ty,id) (const_local_fields fs) /\ ALOOKUP E id = SOME r ==>
-      expr_type r = ty /\ well_typed_expr env r) ==>
+      expr_type r = ty /\ well_typed_expr env r /\ constant_expr mods r /\
+      (!n. int_literal_value r = SOME n ==> 0 <= n)) ==>
     well_typed_named_exprs env (subst_consts_fields E fs) /\
     MAP FST (subst_consts_fields E fs) = MAP FST fs /\
     MAP (expr_type o SND) (subst_consts_fields E fs) = MAP (expr_type o SND) fs)
@@ -3952,7 +3985,8 @@ Proof
       (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
        simp[Once well_typed_expr_def]) >>
     simp[Once well_typed_expr_def] >>
-    metis_tac[const_subst_subscript_form]) >>
+    metis_tac[const_subst_subscript_form, const_subst_range_constant,
+              constant_subscript_base_exact]) >>
   gvs[SF ETA_ss, Once well_typed_expr_def] >>
   rpt (qpat_x_assum `(_ ==> _ /\ _)` mp_tac >>
        (impl_tac >- metis_tac[]) >> strip_tac) >>
@@ -3964,7 +3998,8 @@ Theorem checked_const_fragment_subst_typed[local]:
   check_contract mode layouts addr mods = SOME artifact /\
   constant_expr mods e /\ well_typed_expr (artifact_env artifact mods NONE) e /\
   (!ty id r. MEM (ty,id) (const_local_refs e) /\ ALOOKUP E id = SOME r ==>
-    expr_type r = ty /\ well_typed_expr (artifact_env artifact mods NONE) r) ==>
+    expr_type r = ty /\ well_typed_expr (artifact_env artifact mods NONE) r /\
+    constant_expr mods r /\ (!n. int_literal_value r = SOME n ==> 0 <= n)) ==>
   well_typed_expr (artifact_env artifact mods NONE) (subst_consts_expr E e) /\
   expr_type (subst_consts_expr E e) = expr_type e
 Proof
@@ -3985,13 +4020,16 @@ Theorem checked_const_prefix_subst_typed[local]:
   ALOOKUP mods NONE = SOME tops /\
   tops = pre ++ VariableDecl vis (Constant e) id ty slot :: rest /\
   const_prefix_syntax E pre /\
-  (!n r. ALOOKUP E n = SOME r ==> well_typed_expr (artifact_env artifact mods NONE) r) ==>
+  (!n r. ALOOKUP E n = SOME r ==>
+    well_typed_expr (artifact_env artifact mods NONE) r /\ constant_expr mods r /\
+    (!i. int_literal_value r = SOME i ==> 0 <= i)) ==>
   well_typed_expr (artifact_env artifact mods NONE) (subst_consts_expr E e) /\
   expr_type (subst_consts_expr E e) = ty
 Proof
   strip_tac >> drule_all checked_const_initializer_prefix >> strip_tac >>
   `!ann n r. MEM (ann,n) (const_local_refs e) /\ ALOOKUP E n = SOME r ==>
-    expr_type r = ann /\ well_typed_expr (artifact_env artifact mods NONE) r` by
+    expr_type r = ann /\ well_typed_expr (artifact_env artifact mods NONE) r /\
+    constant_expr mods r /\ (!i. int_literal_value r = SOME i ==> 0 <= i)` by
     (rpt strip_tac >> gvs[const_prefix_syntax_def] >>
      `?v init rt sl. MEM (VariableDecl v (Constant init) n rt sl) pre /\ expr_type r = rt`
        by metis_tac[] >>
@@ -4000,30 +4038,70 @@ Proof
   metis_tac[checked_const_fragment_subst_typed]
 QED
 
+Theorem const_subst_literal_nonneg[local]:
+  (!n. int_literal_value e = SOME n ==> 0 <= n) /\
+  (!ty id r. MEM (ty,id) (const_local_refs e) /\ ALOOKUP E id = SOME r ==>
+    !n. int_literal_value r = SOME n ==> 0 <= n) ==>
+  !n. int_literal_value (subst_consts_expr E e) = SOME n ==> 0 <= n
+Proof
+  Cases_on `e` >> simp[subst_consts_expr_def, int_literal_value_def] >>
+  rename1 `TopLevelName ty ns` >> PairCases_on `ns` >> Cases_on `ns0` >>
+  simp[subst_consts_expr_def, int_literal_value_def, const_local_refs_def] >>
+  rpt strip_tac >> Cases_on `ALOOKUP E ns1` >> gvs[int_literal_value_def] >> metis_tac[]
+QED
+
+Theorem fold_const_int_literal_origin[local]:
+  int_literal_value (fold_const_expr e) = SOME n ==> int_literal_value e = SOME n
+Proof
+  Cases_on `e` >> simp[fold_const_expr_def, int_literal_value_def] >>
+  rename1 `fold_const_builtin ty bi args` >>
+  Cases_on `bi` >> simp[fold_const_builtin_def, int_literal_value_def] >>
+  Cases_on `args` >> simp[int_literal_value_def] >>
+  Cases_on `t` >> simp[int_literal_value_def] >>
+  Cases_on `h` >> simp[int_literal_value_def] >>
+  Cases_on `l` >> simp[int_literal_value_def]
+QED
+
 Theorem checked_module_consts_env_typed_acc[local]:
   !ts pre E.
   check_contract mode layouts addr mods = SOME artifact /\
   ALOOKUP mods NONE = SOME tops /\ tops = pre ++ ts /\
   const_prefix_syntax E pre /\
-  (!n r. ALOOKUP E n = SOME r ==> well_typed_expr (artifact_env artifact mods NONE) r) ==>
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
+  (!n r. ALOOKUP E n = SOME r ==>
+    well_typed_expr (artifact_env artifact mods NONE) r /\ constant_expr mods r /\
+    (!i. int_literal_value r = SOME i ==> 0 <= i)) ==>
   const_prefix_syntax (module_consts_env ts E) tops /\
   (!n r. ALOOKUP (module_consts_env ts E) n = SOME r ==>
-    well_typed_expr (artifact_env artifact mods NONE) r)
+    well_typed_expr (artifact_env artifact mods NONE) r /\ constant_expr mods r /\
+    (!i. int_literal_value r = SOME i ==> 0 <= i))
 Proof
   Induct >- (simp[module_consts_env_def] >> metis_tac[]) >>
   rpt gen_tac >>
   qabbrev_tac `pre' = pre ++ [h]` >>
-  Cases_on `h` >> simp[module_consts_env_def] >> strip_tac
+  Cases_on `h` >> pure_rewrite_tac[module_consts_env_def] >> strip_tac
   >~ [`module_consts_env (VariableDecl vis mut id ty slot :: ts) E`]
-  >- (Cases_on `mut` >> gvs[module_consts_env_def]
+  >- (Cases_on `mut` >> pure_rewrite_tac[module_consts_env_def]
       >~ [`module_consts_env ts (E ++ [(id,fold_const_expr (subst_consts_expr E e))])`]
       >- (`well_typed_expr (artifact_env artifact mods NONE) (subst_consts_expr E e) /\
            expr_type (subst_consts_expr E e) = ty` by
             (`pre' ++ ts = pre ++ VariableDecl vis (Constant e) id ty slot :: ts` by
                simp[Abbr `pre'`, GSYM APPEND_ASSOC] >>
              drule_all checked_const_prefix_subst_typed >> simp[]) >>
-          first_x_assum irule >> reverse conj_tac
-          >- (simp[Abbr `pre'`] >> irule const_prefix_syntax_snoc >> simp[]) >>
+          `constant_expr mods e` by
+            (drule_all checked_const_initializer_prefix >> metis_tac[]) >>
+          `constant_expr mods (fold_const_expr (subst_consts_expr E e))` by
+            metis_tac[const_subst_range_constant, fold_const_expr_constant] >>
+          `!i. int_literal_value (fold_const_expr (subst_consts_expr E e)) = SOME i ==> 0 <= i` by
+            (`!i. int_literal_value (subst_consts_expr E e) = SOME i ==> 0 <= i` by
+               (mp_tac const_subst_literal_nonneg >>
+                (impl_tac >- metis_tac[MEM_APPEND, MEM]) >> simp[NoAsms]) >>
+             metis_tac[fold_const_int_literal_origin]) >>
+          first_x_assum (qspec_then `pre'` irule) >>
+          reverse conj_tac
+          >- (conj_tac >- metis_tac[] >>
+              simp[Abbr `pre'`] >> irule const_prefix_syntax_snoc >> simp[]) >>
           rpt strip_tac >> gvs[ALOOKUP_APPEND, AllCaseEqs()] >>
           metis_tac[fold_const_expr_typed]) >>
       first_x_assum irule >>
@@ -4031,7 +4109,7 @@ Proof
       simp[Abbr `pre'`] >>
       gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
       metis_tac[MEM_APPEND]) >>
-  gvs[] >> first_x_assum irule >> conj_tac >- metis_tac[] >>
+  first_x_assum irule >> conj_tac >- metis_tac[] >>
   simp[Abbr `pre'`] >>
   gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
   metis_tac[MEM_APPEND]
@@ -4040,16 +4118,49 @@ QED
 Theorem checked_module_consts_env_replacement_typed:
   check_contract mode layouts addr mods = SOME artifact /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   ALOOKUP (module_consts_env tops []) id = SOME r ==>
   well_typed_expr (artifact_env artifact mods NONE) r
 Proof
   strip_tac >>
   `const_prefix_syntax (module_consts_env tops []) tops /\
    (!n r. ALOOKUP (module_consts_env tops []) n = SOME r ==>
-     well_typed_expr (artifact_env artifact mods NONE) r)` by
+     well_typed_expr (artifact_env artifact mods NONE) r /\ constant_expr mods r /\
+     (!i. int_literal_value r = SOME i ==> 0 <= i))` by
     (irule checked_module_consts_env_typed_acc >>
      simp[const_prefix_syntax_def, const_decl_names_def] >> metis_tac[]) >>
   metis_tac[]
+QED
+
+Theorem checked_module_consts_env_syntax_acc[local]:
+  !ts pre E.
+  check_contract mode layouts addr mods = SOME artifact /\
+  ALOOKUP mods NONE = SOME tops /\ tops = pre ++ ts /\ const_prefix_syntax E pre ==>
+  const_prefix_syntax (module_consts_env ts E) tops
+Proof
+  Induct >- (simp[module_consts_env_def] >> metis_tac[]) >>
+  rpt gen_tac >> qabbrev_tac `pre' = pre ++ [h]` >>
+  Cases_on `h` >> pure_rewrite_tac[module_consts_env_def] >> strip_tac
+  >~ [`module_consts_env (VariableDecl vis mut id ty slot :: ts) E`]
+  >- (Cases_on `mut` >> pure_rewrite_tac[module_consts_env_def]
+      >~ [`module_consts_env ts (E ++ [(id,fold_const_expr (subst_consts_expr E e))])`]
+      >- (drule_all checked_const_initializer_prefix >> strip_tac >>
+          `expr_type (subst_consts_expr E e) = ty` by
+            (qsuff_tac `expr_type (subst_consts_expr E e) = expr_type e` >- simp[] >>
+             irule subst_consts_expr_type_constant >> reverse conj_tac
+             >- (qexists `mods` >> simp[]) >>
+             rpt strip_tac >> gvs[const_prefix_syntax_def] >>
+             metis_tac[checked_constant_reference_annotation, MEM_APPEND, MEM]) >>
+          first_x_assum (qspec_then `pre'` irule) >>
+          simp[Abbr `pre'`, GSYM APPEND_ASSOC] >>
+          irule const_prefix_syntax_snoc >> simp[]) >>
+      first_x_assum irule >> simp[Abbr `pre'`] >>
+      gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
+      metis_tac[MEM_APPEND]) >>
+  first_x_assum irule >> simp[Abbr `pre'`] >>
+  gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
+  metis_tac[MEM_APPEND]
 QED
 
 Theorem checked_module_consts_env_replacement_annotation:
@@ -4060,10 +4171,8 @@ Theorem checked_module_consts_env_replacement_annotation:
     expr_type r = ty
 Proof
   strip_tac >>
-  `const_prefix_syntax (module_consts_env tops []) tops /\
-   (!n r. ALOOKUP (module_consts_env tops []) n = SOME r ==>
-     well_typed_expr (artifact_env artifact mods NONE) r)` by
-    (irule checked_module_consts_env_typed_acc >>
+  `const_prefix_syntax (module_consts_env tops []) tops` by
+    (irule checked_module_consts_env_syntax_acc >>
      simp[const_prefix_syntax_def, const_decl_names_def] >> metis_tac[]) >>
   gvs[const_prefix_syntax_def] >> metis_tac[]
 QED
@@ -4072,6 +4181,8 @@ Theorem checked_module_consts_env_replacement_replay:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   ALOOKUP (module_consts_env tops []) id = SOME r /\
   no_sha256_expr r /\
@@ -4179,6 +4290,8 @@ Theorem checked_module_consts_env_replay_footprint:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   (!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
     no_sha256_expr r) /\
@@ -4205,7 +4318,8 @@ Proof
         (PlaceR (ImmutablePlace NONE id [])) pv /\
       (!st. const_cells_agree roots st ==> eval_expr cx r st = (INL pv,st))` by
     (rpt strip_tac >> irule checked_module_consts_env_replacement_replay >>
-     simp[] >> metis_tac[]) >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     qexistsl [`A`,`imms`] >> simp[] >> metis_tac[]) >>
   drule const_replacement_footprints_union >> strip_tac >>
   qexists `roots` >> simp[] >> rpt strip_tac >>
   first_x_assum irule >> simp[] >>
@@ -5326,6 +5440,8 @@ Theorem checked_module_consts_lookup_footprint:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   (!src. IS_SOME src ==>
     get_source_immutables src (constant_machine_immutables am cx.txn.target) =
@@ -5352,7 +5468,7 @@ Proof
         gvs[ALOOKUP_FAILS, MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
      drule_all checked_module_consts_env_replacement_annotation >> strip_tac >>
      `well_typed_expr (artifact_env artifact mods NONE) r` by
-       metis_tac[checked_module_consts_env_replacement_typed] >>
+       (drule_all checked_module_consts_env_replacement_typed >> simp[]) >>
      `!tv v. FLOOKUP A id = SOME (tv,v) ==>
        FLOOKUP (get_source_immutables NONE
          (constant_machine_immutables am cx.txn.target)) id = SOME (tv,v)` by
@@ -5376,6 +5492,8 @@ Theorem checked_module_consts_subst_context:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   (!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
     no_sha256_expr r) /\
@@ -5422,6 +5540,8 @@ Theorem checked_module_consts_substitution:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods NONE = SOME tops /\
+  (!vis e id ty slot n. MEM (VariableDecl vis (Constant e) id ty slot) tops /\
+    int_literal_value e = SOME n ==> 0 <= n) /\
   constants_fold_module mods imms NONE tops FEMPTY = SOME A /\
   (!id r. ALOOKUP (module_consts_env tops []) id = SOME r ==>
     no_sha256_expr r) /\
