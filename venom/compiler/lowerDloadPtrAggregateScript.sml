@@ -33,12 +33,13 @@ End
 
 Theorem dload_boundary_initial:
   o1_run_state_ok vs /\ lo <= vs.vs_alloca_next /\
-  vs.vs_alloca_next < dimword (:256) ==>
+  vs.vs_alloca_next < dimword (:256) /\ vs.vs_alloca_next <= fl ==>
   dload_boundary_core fl lo
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     V [] [] [] FEMPTY FEMPTY entry_taint entry_taint vs vs [] []
 Proof
-  strip_tac >> drule dload_initial_components >> strip_tac >>
+  strip_tac >> drule_all dload_initial_components >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   simp[dload_boundary_core_def, dload_live_layout_initial,
        dload_param_values_unprovenanced_refl, dload_shared_store_refl,
        dload_equal_environment_refl]

@@ -18,7 +18,8 @@ Theorem dloadbytes_destination_region:
   (w2n x = w2n y /\ w2n x + w2n z <= lo) \/
   (?owner id b c n d.
     dload_live_site fs owner id b c n /\
-    w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n)
+    w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n) \/
+  (w2n x = w2n y /\ fl <= w2n x /\ w2n x + w2n z < dimword (:256))
 Proof
   strip_tac >> Cases_on `w2n z = 0` >- gvs[] >>
   gvs[access_ok_def, source_memory_write_ranges_def,
@@ -37,15 +38,19 @@ Proof
   qpat_x_assum `(_ ==> _) ==> _` mp_tac >>
   impl_tac >- simp[] >>
   strip_tac >> gvs[op_prov_def] >>
-  Cases_on `q` >> gvs[dload_value_word_def] >>
-  PairCases_on `x'` >> gvs[dload_pointer_word_def] >>
-  `dload_pointer_word fs (b,sz') (x'0,sz') x
-     (x - n2w b + n2w x'0)` by
-    (simp[dload_pointer_word_def] >> metis_tac[]) >>
-  `w2n x <= b+sz'` by decide_tac >>
-  drule_all dload_pointer_word_interval >> strip_tac >>
-  disj2_tac >> qexistsl [`owner`,`id`,`b`,`x'0`,`sz'`,`w2n x-b`] >>
-  simp[] >> decide_tac
+  Cases_on `q` >- gvs[dload_value_word_def] >>
+  PairCases_on `x'` >> gvs[dload_value_word_def]
+  >- (gvs[dload_pointer_word_def] >>
+      `dload_pointer_word fs (b,sz') (x'0,sz') x
+         (x - n2w b + n2w x'0)` by
+        (simp[dload_pointer_word_def] >> metis_tac[]) >>
+      `w2n x <= b+sz'` by decide_tac >>
+      drule_all dload_pointer_word_interval >> strip_tac >>
+      disj2_tac >> disj1_tac >>
+      qexistsl [`owner`,`id`,`b`,`x'0`,`sz'`,`w2n x-b`] >>
+      simp[] >> decide_tac) >>
+  `x = y` by gvs[word_agree_except_bits, fcpTheory.CART_EQ] >>
+  ntac 2 disj2_tac >> simp[] >> decide_tac
 QED
 
 Theorem dloadbytes_memory_match_clean_write:
@@ -56,7 +61,8 @@ Theorem dloadbytes_memory_match_clean_write:
   access_ok lo G fn i s /\ ~in_revert_forward fn s /\
   dload_live_layout lo sf tf fs /\
   dload_value_word fl fs {} (op_prov G dst) q x y /\
-  dload_memory_match fl lo fs tn un s t /\ LENGTH bs = w2n z ==>
+  dload_memory_match fl lo fs tn un s t /\ LENGTH bs = w2n z /\
+  tf <= fl ==>
   dload_memory_match fl lo fs
     (tn with t_mem := tn.t_mem DIFF {p | w2n x <= p /\ p < w2n x + LENGTH bs})
     (un with t_mem := un.t_mem DIFF {r | w2n y <= r /\ r < w2n y + LENGTH bs})
@@ -107,7 +113,7 @@ Theorem dloadbytes_scalar_equal:
 Proof
   strip_tac >> drule_all dloadbytes_scalar_clean >> strip_tac >>
   conj_tac >> irule scalar_operand_equal >> simp[] >>
-  qexistsl [`G`,`H`,`V`,`fs`,`tn`,`un`] >> simp[]
+  qexistsl [`G`,`H`,`V`,`fl`,`fs`,`tn`,`un`] >> simp[]
 QED
 
 Theorem dloadbytes_codecopy_safety:
@@ -132,7 +138,7 @@ Proof
   `!op. MEM op [dst;off;sz] ==>
     (eval_operand op s = NONE <=> eval_operand op t = NONE)` by
     (rpt strip_tac >> irule dload_matched_operand_defined >> simp[] >>
-     qexistsl [`G`,`H`,`V`,`fs`,`tn`,`un`] >> simp[] >> metis_tac[]) >>
+     qexistsl [`G`,`H`,`V`,`fl`,`fs`,`tn`,`un`] >> simp[] >> metis_tac[]) >>
   `(!v. off = Var v ==> v IN V) /\ (!v. sz = Var v ==> v IN V)` by
     (gvs[] >> metis_tac[]) >>
   `eval_operand sz s = eval_operand sz t` by
@@ -252,7 +258,10 @@ Proof
     (write_memory_with_expansion (w2n x) bs s)
     (write_memory_with_expansion (w2n y) bs t)` by
     (irule dloadbytes_memory_match_clean_write >>
-     conj_tac >- metis_tac[dload_boundary_layout] >>
+     conj_tac
+     >- (qexistsl [`s.vs_alloca_next`,`t.vs_alloca_next`] >>
+         conj_tac >- (drule dload_boundary_memory >> simp[dload_memory_match_def]) >>
+         metis_tac[dload_boundary_layout]) >>
      conj_tac >- metis_tac[dload_boundary_memory] >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   gvs[] >>

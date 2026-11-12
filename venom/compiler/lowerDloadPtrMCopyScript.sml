@@ -20,13 +20,15 @@ QED
 
 Theorem dload_memory_match_mcopy_region:
   dload_memory_match fl lo fs tn un s t /\
-  dload_live_layout lo sf tf fs /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
   ((src = tsrc /\ src + len <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     src = b+d /\ tsrc = c+d /\ d+len <= n)) /\
+     src = b+d /\ tsrc = c+d /\ d+len <= n) \/
+   (src = tsrc /\ fl <= src /\ src + len < dimword (:256))) /\
   ((dst = tdst /\ dst + len <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     dst = b+d /\ tdst = c+d /\ d+len <= n)) ==>
+     dst = b+d /\ tdst = c+d /\ d+len <= n) \/
+   (dst = tdst /\ fl <= dst /\ dst + len < dimword (:256))) ==>
   dload_memory_match fl lo fs
     (tn with t_mem := (tn.t_mem DIFF {p | dst <= p /\ p < dst+len})
       UNION {dst+k | k < len /\ src+k IN tn.t_mem})
@@ -123,7 +125,8 @@ Theorem dload_mcopy_memory[local]:
   eval_operand dst s = SOME dx /\ eval_operand src s = SOME sx /\
   eval_operand sz s = SOME z /\
   access_ok lo G f i s /\ ~in_revert_forward f s /\
-  dload_live_layout lo sf tf fs /\ dload_memory_match fl lo fs tn un s t /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
+  dload_memory_match fl lo fs tn un s t /\
   dload_value_word fl fs {} (op_prov G dst) pd dx tx /\
   dload_value_word fl fs {} (op_prov G src) ps sx ty ==>
   dload_memory_match fl lo fs
@@ -219,6 +222,7 @@ Proof
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[]) >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
    dload_memory_match fl lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
+  `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
   suspend "mcopy_finish"
 QED
 

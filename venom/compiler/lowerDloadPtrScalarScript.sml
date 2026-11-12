@@ -151,21 +151,21 @@ Proof
          `?x. eval_operand a s = SOME x /\ op_taint tn a = op_taint un a /\
               word_agree_except (op_taint tn a) x y` by
            (irule scalar_matched_data >>
-            qexistsl [`G`,`H`,`V`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
+            qexistsl [`G`,`H`,`V`,`fl`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
          `?z. eval_operand b s = SOME z /\ op_taint tn b = op_taint un b /\
               word_agree_except (op_taint tn b) z w` by
            (irule scalar_matched_data >>
-            qexistsl [`G`,`H`,`V`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
+            qexistsl [`G`,`H`,`V`,`fl`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
          `op_taint tn a = {} ==> x = y` by
            (strip_tac >> `eval_operand a s = eval_operand a t` by
               (irule scalar_operand_equal >> simp[] >>
-               qexistsl [`G`,`H`,`V`,`fs`,`tn`,`un`] >> simp[] >>
+               qexistsl [`G`,`H`,`V`,`fl`,`fs`,`tn`,`un`] >> simp[] >>
                metis_tac[MEM]) >>
             gvs[]) >>
          `op_taint tn b = {} ==> z = w` by
            (strip_tac >> `eval_operand b s = eval_operand b t` by
               (irule scalar_operand_equal >> simp[] >>
-               qexistsl [`G`,`H`,`V`,`fs`,`tn`,`un`] >> simp[] >>
+               qexistsl [`G`,`H`,`V`,`fl`,`fs`,`tn`,`un`] >> simp[] >>
                metis_tac[MEM]) >>
             gvs[]) >>
          qexistsl [`x * z`,`y * w`] >>

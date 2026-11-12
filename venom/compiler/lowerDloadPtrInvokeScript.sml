@@ -1,5 +1,5 @@
 Theory lowerDloadPtrInvoke
-Ancestors lowerDloadPtrJointEntry o1ContractLowerDload lowerDloadDefs
+Ancestors lowerDloadPtrJointEntry o1LowerDloadSourceEntry o1ContractLowerDload lowerDloadDefs
   lowerDloadPtrAggregate lowerDloadPtrAlloc lowerDloadPtrCall lowerDloadPtrRel ptrDiscipline
   venomWf
   venomExecSemantics venomState venomInst list rich_list pred_set

@@ -114,7 +114,7 @@ Theorem dload_actual_dload_next:
   dload_boundary_core fl lo (r::rs) {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ (EL 0 xs).inst_id NOTIN orig /\
-  t.vs_alloca_next + 32 < dimword (:256) /\
+  t.vs_alloca_next + 32 < dimword (:256) /\ t.vs_alloca_next + 32 <= fl /\
   i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
   lower_dload_inst_supply supply i = (xs,next) /\
   (EL 0 xs).inst_outputs = [av] /\ (EL 1 xs).inst_outputs = [cv] /\

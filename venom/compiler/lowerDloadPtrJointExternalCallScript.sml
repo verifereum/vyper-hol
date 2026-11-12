@@ -81,7 +81,7 @@ Proof
     (drule lower_dload_function_supply_labels >>
      fs[o1_fn_shape_def, fn_shape_ok_def, wf_function_def, fn_labels_def]) >>
   `?s1. step_inst fuel C i s = OK s1 /\
-    dload_boundary_core fl lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)
@@ -132,7 +132,7 @@ Proof
       metis_tac[]) >>
   `~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE` by simp[] >>
   drule_all dload_singleton_reachable_next_fields >> strip_tac >>
-  `dload_boundary_core fl lo fs
+  `dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)

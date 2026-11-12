@@ -185,6 +185,7 @@ Proof
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
    dload_memory_match fl lo fs tn un s t` by
     metis_tac[dload_boundary_core_def] >>
+  `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
   `op_prov G v = NONE` by (irule dload_store_payload >> metis_tac[]) >>
   `word_agree_except (op_taint tn v) ys y /\
    op_taint un v = op_taint tn v` by
@@ -195,7 +196,8 @@ Proof
   Q.SUBGOAL_THEN
    `(w2n xs = w2n x /\ w2n xs + 32 <= lo) \/
     (?owner id b c n d. dload_live_site fs owner id b c n /\
-      w2n xs = b+d /\ w2n x = c+d /\ d+32 <= n)` assume_tac
+      w2n xs = b+d /\ w2n x = c+d /\ d+32 <= n) \/
+    (w2n xs = w2n x /\ fl <= w2n xs /\ w2n xs + 32 < dimword (:256))` assume_tac
   >- (irule dload_store_region >> metis_tac[]) >>
   `dload_memory_match fl lo fs
     (tn with t_mem := (tn.t_mem DIFF {p | w2n xs <= p /\ p < w2n xs+32})

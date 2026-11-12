@@ -121,7 +121,8 @@ Proof
      strip_tac >> gvs[op_prov_def] >> metis_tac[]) >>
   `((w2n x = w2n y /\ w2n x + w2n z <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n))` by
+     w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n) \/
+   (w2n x = w2n y /\ fl <= w2n x /\ w2n x + w2n z < dimword (:256)))` by
     (drule_all dload_value_contained_region >> simp[]) >>
   `!k. k < w2n z ==> w2n x+k NOTIN tn.t_mem` by
     (gvs[taint_ok_def] >>

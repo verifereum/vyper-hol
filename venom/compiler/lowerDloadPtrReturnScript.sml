@@ -1,7 +1,7 @@
 Theory lowerDloadPtrReturn
 Ancestors lowerDloadPtrJointNext lowerDloadPtrBlockEntry lowerDloadPtrAlloc lowerDloadPtrCall lowerDloadPtrInvoke lowerDloadPtrAggregate lowerDloadPtrRel
   lowerDloadPtrPhi ptrDiscipline venomExecSemantics venomState venomInst
-  memLocDefs pointerConfinedDefs finite_map list rich_list pred_set
+  memLocDefs pointerConfinedDefs o1LowerDloadOccurrence o1LowerDloadStackFrontier finite_map list rich_list pred_set
 
 Theorem dload_ret_operand_clean:
   i.inst_opcode = RET /\ ptr_use_ok P pv i /\ FDOM G SUBSET pv /\
@@ -108,13 +108,14 @@ Proof
 QED
 
 Theorem dload_memory_return_merge:
-  dload_memory_match fl lo (e::fs) tn un s t ==>
+  dload_memory_match fl lo (e::fs) tn un s t /\ d.vs_alloca_next <= fl ==>
   dload_memory_match fl lo fs tn un
     (merge_callee_state c s) (merge_callee_state d t)
 Proof
   simp[dload_memory_match_def, merge_callee_state_def] >> strip_tac >>
   rpt gen_tac >> strip_tac >>
-  first_x_assum (qspecl_then [`SUC owner`,`id`,`b`,`c'`,`n`,`k`] mp_tac) >>
+  qpat_x_assum `!owner id b c n k. dload_live_site (e::fs) _ _ _ _ _ /\ _ ==> _`
+    (qspecl_then [`SUC owner`,`id`,`b`,`c'`,`n`,`k`] mp_tac) >>
   gvs[dload_live_site_def]
 QED
 
@@ -124,7 +125,8 @@ Theorem dload_return_merge_boundary:
   c.cf_state.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
   (!k. k < LENGTH (c::cs) ==> dload_live_layout lo
     (EL k (c::cs)).cf_state.vs_alloca_next
-    (EL k (d::ds)).cf_state.vs_alloca_next (DROP (SUC k) (e::f::fs))) ==>
+    (EL k (d::ds)).cf_state.vs_alloca_next (DROP (SUC k) (e::f::fs))) /\
+  d.cf_state.vs_alloca_next <= fl ==>
   dload_boundary_core fl lo (f::fs) Vc Ws c.cf_params d.cf_params c.cf_prov d.cf_prov
     (tn with t_var := c.cf_tvar) (un with t_var := d.cf_tvar)
     (merge_callee_state c.cf_state s) (merge_callee_state d.cf_state t) cs ds
@@ -219,7 +221,8 @@ Theorem dload_return_pop_boundary:
     (EL k (c::cs)).cf_state.vs_alloca_next
     (EL k (d::ds)).cf_state.vs_alloca_next (DROP (SUC k) (e::f::fs))) /\
   c.cf_inst.inst_outputs = d.cf_inst.inst_outputs /\
-  bind_outputs d.cf_inst.inst_outputs vals (merge_callee_state d.cf_state t) = SOME t' ==>
+  bind_outputs d.cf_inst.inst_outputs vals (merge_callee_state d.cf_state t) = SOME t' /\
+  d.cf_state.vs_alloca_next <= fl ==>
   ?s'. bind_outputs c.cf_inst.inst_outputs vals (merge_callee_state c.cf_state s) = SOME s' /\
     dload_boundary_core fl lo (f::fs) Vc Ws c.cf_params d.cf_params
       (DRESTRICT c.cf_prov (COMPL (set c.cf_inst.inst_outputs)))
@@ -339,6 +342,7 @@ Proof
   strip_tac >>
   drule_all dload_ret_backwards >> disch_then (qspec_then `C` strip_assume_tac) >>
   gvs[adopt_return_fmp_def] >>
+  `d.cf_state.vs_alloca_next <= fl` by suspend "caller_floor" >>
   drule dload_return_pop_boundary >> simp[] >> disch_then drule >> strip_tac >>
   drule dload_return_control_reachable >> simp[] >>
   disch_then drule >> simp[] >> strip_tac >>
@@ -356,3 +360,20 @@ Proof
   qpat_x_assum `!k. k < SUC _ ==> dload_live_layout _ _ _ _`
     (qspec_then `SUC k` mp_tac) >> simp[]
 QED
+
+(* The caller's target frontier is below the callee's: the source caller
+   frontier is (saved frontiers never exceed the current one), and the
+   callee frame only adds its scratch sites on top. *)
+Resume dload_actual_return[caller_floor]:
+  `c.cf_state.vs_alloca_next <= s.vs_alloca_next` by
+    (drule frame_reachable_occurrence_lift >> strip_tac >>
+     drule ld_occ_saved_frontiers >> simp[]) >>
+  `t.vs_alloca_next <= fl` by
+    (drule dload_boundary_memory >> simp[dload_memory_match_def]) >>
+  drule dload_boundary_tables >> simp[dload_table_stack_def] >> strip_tac >>
+  first_assum (qspec_then `0` mp_tac) >>
+  first_x_assum (qspec_then `1` mp_tac) >>
+  simp[] >> rpt strip_tac >> decide_tac
+QED
+
+Finalise dload_actual_return

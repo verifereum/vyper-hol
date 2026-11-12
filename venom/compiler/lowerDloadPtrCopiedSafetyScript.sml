@@ -23,7 +23,8 @@ QED
 
 Theorem dload_copied_compare_access:
   dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
-  dload_live_layout lo sf tf fs /\ access_ok lo G f i s /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\ access_ok lo G f i s /\
+  taint_ok f tn i s /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   (!v. v IN FDOM H ==> lookup_var v t <> NONE) /\
   (i.inst_opcode = LT \/ i.inst_opcode = GT \/ i.inst_opcode = EQ) /\
@@ -58,12 +59,16 @@ Proof
    dload_value_word fl fs (op_taint tn (Var w))
     (FLOOKUP G w) (FLOOKUP H w) y yw` by
     (gvs[dload_vars_match_def, eval_operand_def] >> metis_tac[]) >>
-  Cases_on `FLOOKUP H u` >> Cases_on `FLOOKUP H w` >>
-  gvs[dload_value_word_def] >>
-  rename1 `FLOOKUP H u = SOME pu` >>
-  rename1 `FLOOKUP H w = SOME pw` >>
-  PairCases_on `pu` >> PairCases_on `pw` >>
-  metis_tac[dload_pointer_word_comparisons]
+  `op_taint tn (Var u) = {} /\ op_taint tn (Var w) = {}` by
+    (gvs[taint_ok_def] >> metis_tac[MEM]) >>
+  `?qx qy. FLOOKUP H u = SOME qx /\ FLOOKUP H w = SOME qy` by
+    (Cases_on `FLOOKUP H u` >> Cases_on `FLOOKUP H w` >>
+     gvs[dload_value_word_def]) >>
+  gvs[] >> PairCases_on `qx` >> PairCases_on `qy` >>
+  mp_tac (Q.INST [`c` |-> `qx0`, `m` |-> `qx1`, `d` |-> `qy0`,
+                  `k` |-> `qy1`, `n` |-> `sz`, `x'` |-> `xu`, `y'` |-> `yw`]
+            dload_value_word_pointer_comparisons) >>
+  impl_tac >- gvs[] >> strip_tac >> gvs[]
 QED
 
 Theorem dload_copied_fixed_read_range[local]:
@@ -76,7 +81,8 @@ Theorem dload_copied_fixed_read_range[local]:
   ?a. MEM (a,len) (source_memory_read_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_read_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b sz. mem_read_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -146,7 +152,8 @@ Theorem dload_copied_pair_read_range[local]:
   ?a. MEM (a,len) (source_memory_read_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_read_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_read_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -206,7 +213,8 @@ Theorem dload_copied_mcopy_read_range[local]:
   ?a. MEM (a,len) (source_memory_read_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_read_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_read_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -284,7 +292,8 @@ Theorem dload_copied_log_read_range[local]:
   ?a. MEM (a,len) (source_memory_read_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_read_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_read_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -349,7 +358,8 @@ Theorem dload_copied_call_read_range[local]:
   ?a. MEM (a,len) (source_memory_read_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_read_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_read_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -432,7 +442,8 @@ Theorem dload_copied_create_read_range[local]:
   ?a. MEM (a,len) (source_memory_read_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_read_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_read_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -504,7 +515,8 @@ Theorem dload_copied_read_range:
   ?a. MEM (a,len) (source_memory_read_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_read_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_read_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -601,7 +613,8 @@ Theorem dload_copied_fixed_write_range[local]:
   ?a. MEM (a,len) (source_memory_write_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_write_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b sz. mem_write_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -656,7 +669,8 @@ Theorem dload_copied_mcopy_write_range[local]:
   ?a. MEM (a,len) (source_memory_write_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_write_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_write_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -718,7 +732,8 @@ Theorem dload_copied_external_write_range[local]:
   ?a. MEM (a,len) (source_memory_write_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_write_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_write_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -791,7 +806,8 @@ Theorem dload_copied_call_write_range[local]:
   ?a. MEM (a,len) (source_memory_write_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_write_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_write_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -872,7 +888,8 @@ Theorem dload_copied_write_range:
   ?a. MEM (a,len) (source_memory_write_ranges i s) /\
     ((a = z /\ a+len <= lo) \/
      (?owner id b c n d. dload_live_site fs owner id b c n /\
-       a=b+d /\ z=c+d /\ d+len<=n)) /\
+       a=b+d /\ z=c+d /\ d+len<=n) \/
+     (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
     ((lo < z+len \/ ?ops. mem_write_ops i = SOME ops /\
        op_prov H ops.iao_ofst <> NONE) ==>
      ?ops v b n. mem_write_ops i = SOME ops /\ ops.iao_ofst = Var v /\
@@ -1081,6 +1098,8 @@ Resume dload_normal_copied_safety[access]:
         metis_tac[dload_copied_forward_guard, MEM] >>
       drule_all dload_copied_read_range >> strip_tac >>
       fs[arithmeticTheory.ADD_COMM]) >>
+  `t.vs_alloca_next <= fl` by
+    (drule dload_boundary_memory >> simp[dload_memory_match_def]) >>
   rpt gen_tac >> strip_tac >> irule dload_copied_compare_access >>
   simp[] >> metis_tac[]
 QED
@@ -1166,6 +1185,10 @@ Resume dload_normal_copied_safety[memory]:
   `?j. a <= j /\ j < a+len /\ j IN tn.t_mem` by
     (Cases_on `a = off /\ a+len <= lo`
      >- (`i' < lo` by decide_tac >>
+         `i' IN tn.t_mem` by metis_tac[dload_memory_match_def] >>
+         qexists `i'` >> simp[] >> decide_tac) >>
+     Cases_on `a = off /\ fl <= a /\ a + len < dimword (:256)`
+     >- (`fl <= i' /\ i' < dimword (:256)` by decide_tac >>
          `i' IN tn.t_mem` by metis_tac[dload_memory_match_def] >>
          qexists `i'` >> simp[] >> decide_tac) >>
      `?owner id b c n d. dload_live_site fs owner id b c n /\

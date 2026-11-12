@@ -153,12 +153,14 @@ Theorem dload_delegate_memory[local]:
   exec_delegatecall i t gas addr bo az rt rz = OK t1 /\
   s1.vs_returndata = t1.vs_returndata /\
   (w2n rz <> 0 ==> ((lo < w2n ro + w2n rz \/ p <> NONE) ==>
-    ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) ==>
+    ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) /\
+  tf <= fl ==>
   dload_memory_match fl lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `s1.vs_allocas = s.vs_allocas /\ s1.vs_fmp = s.vs_fmp /\
    t1.vs_allocas = t.vs_allocas /\ t1.vs_fmp = t.vs_fmp /\
+   t1.vs_alloca_next = t.vs_alloca_next /\
    s1.vs_memory = (write_memory_with_expansion (w2n ro)
      (TAKE (w2n rz) s1.vs_returndata) s).vs_memory /\
    t1.vs_memory = (write_memory_with_expansion (w2n rt)
@@ -338,6 +340,7 @@ Proof
    dload_shared_store tn un s t /\ dload_equal_environment s t /\
    dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs` by
     metis_tac[dload_boundary_core_def] >>
+  `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
   `s1.vs_allocas = s.vs_allocas /\ t1.vs_allocas = t.vs_allocas /\
    s1.vs_alloca_next = s.vs_alloca_next /\ t1.vs_alloca_next = t.vs_alloca_next /\
    s1.vs_params = s.vs_params /\ t1.vs_params = t.vs_params /\

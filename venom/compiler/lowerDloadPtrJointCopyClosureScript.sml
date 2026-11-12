@@ -306,7 +306,7 @@ Theorem dload_joint_tracked_external_copy_routed_next:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core fl lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -347,7 +347,7 @@ Theorem dload_joint_tracked_external_copy_routed_next:
   active_inst g next (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core fl lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -434,7 +434,8 @@ Resume dload_joint_tracked_external_copy_routed_next[returndata]:
 QED
 
 Resume dload_joint_tracked_external_copy_routed_next[ordinary]:
-  drule_at (Pat `ctx_pass_stage`) dload_joint_tracked_external_copy_next >>
+  drule_at (Pat `ctx_pass_stage`)
+    (Q.INST [`fl` |-> `dyn_floor C vs`] dload_joint_tracked_external_copy_next) >>
   disch_then (drule_at (Pat `step_inst`)) >>
   disch_then (drule_at (Pat `active_inst _ next _`)) >>
   disch_then (drule_at (Pat `ptr_discipline`)) >>
@@ -455,7 +456,9 @@ Resume dload_joint_tracked_external_copy_routed_next[ordinary]:
 QED
 
 Resume dload_joint_tracked_external_copy_routed_next[normal]:
-  drule_at (Pat `ctx_pass_stage`) dload_joint_tracked_external_copy_normal_next >>
+  drule_at (Pat `ctx_pass_stage`)
+    (Q.INST [`fl` |-> `dyn_floor C vs`]
+       dload_joint_tracked_external_copy_normal_next) >>
   disch_then (drule_at (Pat `step_inst`)) >>
   disch_then (drule_at (Pat `active_inst _ next _`)) >>
   disch_then (drule_at (Pat `ptr_discipline`)) >>

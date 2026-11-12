@@ -118,6 +118,17 @@ Proof
   simp[dload_pointer_word_def] >> metis_tac[]
 QED
 
+Theorem dload_live_site_below_floor:
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
+  dload_live_site fs owner id b c n ==>
+  b + n <= fl /\ c + n <= fl
+Proof
+  strip_tac >> drule_all dload_live_site_bounds >> strip_tac >>
+  `sf <= tf` by fs[dload_live_layout_def] >> decide_tac
+QED
+
+(* Below the floor a nonempty site is a live site, relocated; at or above it,
+   a DALLOCA site, the same on both sides. *)
 Theorem dload_pointer_word_interval:
   dload_live_layout lo sf tf fs /\
   dload_pointer_word fs (b,n) (c,n) x y /\
@@ -155,6 +166,25 @@ End
 
 (* Only original variables are quantified: generated temporaries have their
    own phase-local obligations and may be present in the target map. *)
+Theorem dload_value_word_site_cases:
+  dload_live_layout lo sf tf fs /\ tf <= fl /\ 0 < n /\
+  dload_value_word fl fs mask (SOME (b,n)) q x y ==>
+  (?c. q = SOME (c,n) /\ dload_pointer_word fs (b,n) (c,n) x y /\
+       b + n <= fl) \/
+  (q = SOME (b,n) /\ fl <= b /\ b + n < dimword (:256) /\
+   word_agree_except mask x y)
+Proof
+  rpt strip_tac >>
+  Cases_on `q` >- gvs[dload_value_word_def] >>
+  rename1 `SOME qq` >> PairCases_on `qq` >>
+  qpat_x_assum `dload_value_word _ _ _ _ _ _ _` mp_tac >>
+  simp[dload_value_word_def] >> strip_tac
+  >- (disj1_tac >>
+      drule dload_pointer_word_resolves >> strip_tac >> gvs[] >>
+      drule_all dload_live_site_below_floor >> simp[]) >>
+  gvs[]
+QED
+
 Definition dload_vars_match_def:
   dload_vars_match fl fs V G H tn un s t <=>
     (!v. v IN V ==>
@@ -167,7 +197,8 @@ End
 
 (* Agreement is required only on fixed memory, simultaneously live
    original allocations and the dynamic region from the floor fl up, where
-   DALLOCA pointers are the same word on both sides.  Target scratch and
+   DALLOCA pointers are the same word on both sides; the target frontier,
+   and so every live site, lies below the floor.  Target scratch and
    returned-callee garbage are deliberately not constrained here. *)
 Definition dload_memory_match_def:
   dload_memory_match fl lo fs tn un s t <=>
@@ -182,7 +213,8 @@ Definition dload_memory_match_def:
           read_byte (b+k) s.vs_memory = read_byte (c+k) t.vs_memory)) /\
     (!i. fl <= i /\ i < dimword (:256) ==>
        (i IN tn.t_mem <=> i IN un.t_mem)) /\
-    ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory
+    ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
+    t.vs_alloca_next <= fl
 End
 
 Theorem dload_vars_match_empty_provenance:
@@ -193,7 +225,7 @@ Proof
 QED
 
 Theorem dload_memory_match_empty:
-  (!f. MEM f fs ==> f.dr_source = FEMPTY) ==>
+  (!f. MEM f fs ==> f.dr_source = FEMPTY) /\ s.vs_alloca_next <= fl ==>
   dload_memory_match fl lo fs tn tn s s
 Proof
   simp[dload_memory_match_def, dload_live_site_def, ld_dyn_agree_def] >>
@@ -354,7 +386,7 @@ Proof
 QED
 
 Theorem dload_initial_components:
-  o1_run_state_ok vs ==>
+  o1_run_state_ok vs /\ vs.vs_alloca_next <= fl ==>
   dload_table_stack
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     [vs] [vs] /\

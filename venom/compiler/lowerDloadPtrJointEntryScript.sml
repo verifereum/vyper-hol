@@ -170,7 +170,7 @@ Theorem dload_actual_joint_entry:
     ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
     dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
     k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
-    dload_boundary_core fl lo
+    dload_boundary_core (dyn_floor C vs) lo
       [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
       {v | ~retpc_var f v} [] [] [] FEMPTY FEMPTY entry_taint entry_taint s t [] [] /\
     (!v. lookup_var v s = lookup_var v t) /\
@@ -215,6 +215,10 @@ Proof
   `lo <= t.vs_alloca_next` by
     (qpat_x_assum `ptr_discipline lo C vs` mp_tac >> simp[ptr_discipline_def]) >>
   `t.vs_alloca_next < dimword (:256)` by simp[] >>
+  `vs.vs_alloca_next <= dyn_floor C vs` by
+    (irule dload_active_entry_dyn_floor >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `t.vs_alloca_next <= dyn_floor C vs` by simp[] >>
   `t.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   `?k. k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f` by
     metis_tac[MEM_EL] >>
@@ -241,7 +245,7 @@ Theorem dload_actual_joint_entry_tracked:
     ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
     dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
     k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
-    dload_boundary_core fl lo
+    dload_boundary_core (dyn_floor C vs) lo
       [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
       ({v | ?ci. MEM ci (fn_insts f) /\
           (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)}

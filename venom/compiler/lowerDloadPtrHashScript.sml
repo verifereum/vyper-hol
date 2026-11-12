@@ -11,7 +11,8 @@ Theorem dload_memory_clean_slice:
   dload_memory_match fl lo fs tn un s t /\
   ((a=z /\ a+len<=lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-      a=b+d /\ z=c+d /\ d+len<=n)) /\
+      a=b+d /\ z=c+d /\ d+len<=n) \/
+   (a = z /\ fl <= a /\ a + len < dimword (:256))) /\
   (!k. k<len ==> a+k NOTIN tn.t_mem) ==>
   TAKE len (DROP a s.vs_memory ++ REPLICATE len 0w) =
   TAKE len (DROP z t.vs_memory ++ REPLICATE len 0w)
@@ -80,7 +81,8 @@ Proof
      strip_tac >> gvs[op_prov_def] >> metis_tac[]) >>
   `((w2n x = w2n y /\ w2n x + w2n z <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n))` by
+     w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n) \/
+   (w2n x = w2n y /\ fl <= w2n x /\ w2n x + w2n z < dimword (:256)))` by
     (drule_all dload_value_contained_region >> simp[]) >>
   `!k. k < w2n z ==> w2n x+k NOTIN tn.t_mem` by
     (gvs[taint_ok_def, source_memory_read_ranges_def, mem_read_ops_def,

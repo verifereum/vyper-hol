@@ -480,7 +480,7 @@ Proof
      gvs[dload_vars_match_def] >> metis_tac[]) >>
   irule scalar_operand_equal >> simp[] >>
   qexistsl [`G`,`H`,`set (fn_ir_vars f) DIFF {v | retpc_var f v}`,
-            `fs`,`tn`,`un`] >> simp[]
+            `fl`,`fs`,`tn`,`un`] >> simp[]
 QED
 
 Theorem dload_terminal_revert_access_values:
@@ -502,7 +502,12 @@ Proof
       `x = y` by (simp[fcpTheory.CART_EQ] >> metis_tac[]) >>
       Cases_on `dst` >> gvs[op_prov_def] >> metis_tac[]) >>
   PairCases_on `x'` >>
-  Cases_on `op_prov H dst` >> gvs[dload_value_word_def] >>
+  Cases_on `op_prov H dst` >> gvs[dload_value_word_def]
+  >~ [`word_agree_except _ _ _`]
+  >- (`x = y` by
+        (gvs[word_agree_except_bits] >> simp[fcpTheory.CART_EQ] >> metis_tac[]) >>
+      rpt strip_tac >> qpat_x_assum `z <> 0w ==> _` drule >> strip_tac >>
+      gvs[op_prov_def]) >>
   PairCases_on `x'` >> rpt strip_tac >>
   qpat_x_assum `z <> 0w ==> _` drule >> strip_tac >>
   gvs[op_prov_def] >>
@@ -1172,7 +1177,7 @@ Resume dload_indexed_terminal_safety[malformed]:
      simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
   irule dload_terminal_revert_taint >> simp[] >>
   qexistsl [`G`,`H`,`set (fn_ir_vars f) DIFF {v | retpc_var f v}`,
-             `f`,`fs`,`s`,`tn`] >>
+             `f`,`fl`,`fs`,`s`,`tn`] >>
   conj_tac
   >- (rpt strip_tac >>
       `MEM (EL k mid).inst_opcode [REVERT; RETURNDATACOPY]` by simp[] >>

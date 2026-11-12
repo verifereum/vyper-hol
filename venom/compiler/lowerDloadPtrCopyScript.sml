@@ -62,7 +62,8 @@ Theorem external_copy_destination_region:
   (w2n x = w2n y /\ w2n x + w2n z <= lo) \/
   (?owner id b c n d.
     dload_live_site fs owner id b c n /\
-    w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n)
+    w2n x = b+d /\ w2n y = c+d /\ d+w2n z <= n) \/
+  (w2n x = w2n y /\ fl <= w2n x /\ w2n x + w2n z < dimword (:256))
 Proof
   strip_tac >>
   `access_ok lo G fn (i with <| inst_opcode := DLOADBYTES; inst_operands := [dst;off;sz] |>) s` by
@@ -237,7 +238,8 @@ Resume dload_boundary_core_external_copy[copy_write]:
   `w2n z = 0 \/
    (w2n xs = w2n x /\ w2n xs + w2n z <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     w2n xs = b+d /\ w2n x = c+d /\ d+w2n z <= n)` by
+     w2n xs = b+d /\ w2n x = c+d /\ d+w2n z <= n) \/
+   (w2n xs = w2n x /\ fl <= w2n xs /\ w2n xs + w2n z < dimword (:256))` by
     (irule external_copy_destination_region >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      first_assum (irule_at (Pat `access_ok _ _ _ _ _`)) >>
@@ -250,6 +252,7 @@ Resume dload_boundary_core_external_copy[copy_write]:
     (write_memory_with_expansion (w2n x) bs t)` by
     (Cases_on `w2n z = 0`
      >- (irule dload_memory_match_clean_write >> simp[]) >>
+     `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
      irule dload_memory_match_clean_write_region >> gvs[] >> metis_tac[]) >>
   (qexists `write_memory_with_expansion (w2n xs) bs s` >>
   conj_tac

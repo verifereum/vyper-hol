@@ -94,7 +94,7 @@ Proof
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v (s1 with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t1 with vs_inst_idx := SUC t0.vs_inst_idx) = NONE)) /\
-    dload_boundary_core fl lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)

@@ -18,10 +18,30 @@ Proof
   gvs[read_byte_write_memory_with_expansion]
 QED
 
+(* Memory match, pointwise: the pairs of positions it relates are the
+   static region below lo (same address), the live sites (relocated) and
+   the dynamic region at or above the floor (same address). *)
+Theorem dload_memory_match_points[local]:
+  dload_memory_match fl lo fs tn un s t <=>
+  (!p q. (p = q /\ p < lo) \/
+    (?owner id b c n k. dload_live_site fs owner id b c n /\ k < n /\
+       p = b+k /\ q = c+k) \/
+    (p = q /\ fl <= p /\ p < dimword (:256)) ==>
+    (p IN tn.t_mem <=> q IN un.t_mem) /\
+    (p NOTIN tn.t_mem ==>
+       read_byte p s.vs_memory = read_byte q t.vs_memory)) /\
+  t.vs_alloca_next <= fl
+Proof
+  simp[dload_memory_match_def, ld_dyn_agree_def] >>
+  eq_tac >> rpt strip_tac >> fs[] >> metis_tac[]
+QED
+
 Theorem dload_memory_match_clean_write:
   dload_memory_match fl lo fs tn un s t /\
-  (!p q. ((p = q /\ p < lo) \/
-    (?owner id b c n k. dload_live_site fs owner id b c n /\ k < n /\ p = b+k /\ q = c+k)) ==>
+  (!p q. (p = q /\ p < lo) \/
+    (?owner id b c n k. dload_live_site fs owner id b c n /\ k < n /\
+       p = b+k /\ q = c+k) \/
+    (p = q /\ fl <= p /\ p < dimword (:256)) ==>
     ((a <= p /\ p < a + LENGTH bs) <=> (z <= q /\ q < z + LENGTH bs)) /\
     ((a <= p /\ p < a + LENGTH bs) ==> p-a = q-z)) ==>
   dload_memory_match fl lo fs
@@ -30,12 +50,12 @@ Theorem dload_memory_match_clean_write:
     (write_memory_with_expansion a bs s)
     (write_memory_with_expansion z bs t)
 Proof
-  pure_rewrite_tac [dload_memory_match_def] >> strip_tac >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> irule dload_clean_write_byte_pair >>
-      first_x_assum (qspecl_then [`i`,`i`] mp_tac) >> simp[] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >> irule dload_clean_write_byte_pair >>
-  first_x_assum (qspecl_then [`b+k`,`c+k`] mp_tac) >>
-  metis_tac[]
+  pure_rewrite_tac [dload_memory_match_points] >> strip_tac >> conj_tac
+  >- (rpt gen_tac >> disch_tac >> irule dload_clean_write_byte_pair >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      metis_tac[]) >>
+  simp[write_memory_with_expansion_def]
 QED
 
 Theorem dload_write_sites_separate[local]:
@@ -51,22 +71,35 @@ Proof
 QED
 
 Theorem dload_write_range_geometry:
-  dload_live_layout lo sf tf fs /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
   ((a = z /\ a + len <= lo) \/
    (?owner id b c n d.
       dload_live_site fs owner id b c n /\
-      a = b+d /\ z = c+d /\ d+len <= n)) ==>
-  !p q. ((p = q /\ p < lo) \/
-    (?owner id b c n k.
-      dload_live_site fs owner id b c n /\ k < n /\
-      p = b+k /\ q = c+k)) ==>
+      a = b+d /\ z = c+d /\ d+len <= n) \/
+   (a = z /\ fl <= a)) ==>
+  !p q. (p = q /\ p < lo) \/
+    (?owner id b c n k. dload_live_site fs owner id b c n /\ k < n /\
+       p = b+k /\ q = c+k) \/
+    (p = q /\ fl <= p /\ p < dimword (:256)) ==>
    (((a <= p /\ p < a+len) <=> (z <= q /\ q < z+len)) /\
     ((a <= p /\ p < a+len) ==> p-a = q-z))
 Proof
   Cases_on `len = 0` >- simp[] >>
-  strip_tac >> rpt gen_tac >> strip_tac >> gvs[]
-  >- (drule_all dload_live_site_bounds >> strip_tac >> decide_tac)
-  >- (drule_all dload_live_site_bounds >> strip_tac >> decide_tac) >>
+  strip_tac >> rpt gen_tac >> strip_tac >|
+  [gvs[],
+   gvs[] >> drule_all dload_live_site_bounds >> strip_tac >> decide_tac,
+   gvs[],
+   gvs[] >> drule_all dload_live_site_bounds >> strip_tac >> decide_tac,
+   gvs[] >> suspend "sites",
+   gvs[] >> drule_all dload_live_site_below_floor >> strip_tac >>
+   decide_tac,
+   gvs[],
+   gvs[] >> drule_all dload_live_site_below_floor >> strip_tac >>
+   decide_tac,
+   gvs[]]
+QED
+
+Resume dload_write_range_geometry[sites]:
   rename1 `dload_live_site fs owner' id' b' c' n'` >>
   Cases_on `owner = owner' /\ id = id'`
   >- (gvs[] >>
@@ -80,13 +113,16 @@ Proof
   decide_tac
 QED
 
+Finalise dload_write_range_geometry
+
 Theorem dload_memory_match_clean_write_region:
   dload_memory_match fl lo fs tn un s t /\
-  dload_live_layout lo sf tf fs /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
   ((a = z /\ a + LENGTH bs <= lo) \/
    (?owner id b c n d.
       dload_live_site fs owner id b c n /\
-      a = b+d /\ z = c+d /\ d+LENGTH bs <= n)) ==>
+      a = b+d /\ z = c+d /\ d+LENGTH bs <= n) \/
+   (a = z /\ fl <= a)) ==>
   dload_memory_match fl lo fs
     (tn with t_mem := tn.t_mem DIFF {p | a <= p /\ p < a + LENGTH bs})
     (un with t_mem := un.t_mem DIFF {q | z <= q /\ q < z + LENGTH bs})
@@ -128,43 +164,45 @@ QED
 
 Theorem dload_memory_match_masked_write_region:
   dload_memory_match fl lo fs tn un s t /\
-  dload_live_layout lo sf tf fs /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
   LENGTH bs = LENGTH bt /\ M SUBSET {k | k < LENGTH bs} /\
   (!k. k < LENGTH bs /\ k NOTIN M ==> EL k bs = EL k bt) /\
   ((a = z /\ a + LENGTH bs <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     a = b+d /\ z = c+d /\ d+LENGTH bs <= n)) ==>
+     a = b+d /\ z = c+d /\ d+LENGTH bs <= n) \/
+   (a = z /\ fl <= a)) ==>
   dload_memory_match fl lo fs
     (tn with t_mem := (tn.t_mem DIFF {p | a <= p /\ p < a+LENGTH bs}) UNION {a+k | k IN M})
     (un with t_mem := (un.t_mem DIFF {p | z <= p /\ p < z+LENGTH bt}) UNION {z+k | k IN M})
     (write_memory_with_expansion a bs s) (write_memory_with_expansion z bt t)
 Proof
-  disch_tac >>
-  `!p q. ((p = q /\ p < lo) \/
-    (?owner id b c n k. dload_live_site fs owner id b c n /\ k < n /\ p = b+k /\ q = c+k)) ==>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!p q. (p = q /\ p < lo) \/
+    (?owner id b c n k. dload_live_site fs owner id b c n /\ k < n /\
+       p = b+k /\ q = c+k) \/
+    (p = q /\ fl <= p /\ p < dimword (:256)) ==>
     (((a <= p /\ p < a+LENGTH bs) <=> (z <= q /\ q < z+LENGTH bs)) /\
      ((a <= p /\ p < a+LENGTH bs) ==> p-a = q-z))` by
     (match_mp_tac dload_write_range_geometry >> metis_tac[]) >>
-  pure_rewrite_tac[dload_memory_match_def] >> conj_tac
-  >- (rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dload_memory_match _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac [dload_memory_match_points] >> strip_tac >> conj_tac
+  >- (rpt gen_tac >> disch_tac >>
       pure_rewrite_tac[taint_accfupds, combinTheory.K_THM] >>
       irule dload_masked_write_byte_pair >>
-      first_x_assum (qspecl_then [`i`,`i`] mp_tac) >>
-      metis_tac[dload_memory_match_def]) >>
-  rpt gen_tac >> strip_tac >>
-  pure_rewrite_tac[taint_accfupds, combinTheory.K_THM] >>
-  irule dload_masked_write_byte_pair >>
-  first_x_assum (qspecl_then [`b+k`,`c+k`] mp_tac) >>
-  metis_tac[dload_memory_match_def]
+      first_x_assum (drule_then strip_assume_tac) >>
+      first_x_assum (drule_then strip_assume_tac) >>
+      metis_tac[]) >>
+  simp[write_memory_with_expansion_def]
 QED
 
 Theorem dload_memory_match_mstore_region:
   dload_memory_match fl lo fs tn un s t /\
-  dload_live_layout lo sf tf fs /\
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
   M SUBSET {k | k < 32} /\ word_agree_except M x y /\
   ((a = z /\ a + 32 <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
-     a = b+d /\ z = c+d /\ d+32 <= n)) ==>
+     a = b+d /\ z = c+d /\ d+32 <= n) \/
+   (a = z /\ fl <= a)) ==>
   dload_memory_match fl lo fs
     (tn with t_mem := (tn.t_mem DIFF {p | a <= p /\ p < a+32}) UNION {a+k | k IN M})
     (un with t_mem := (un.t_mem DIFF {p | z <= p /\ p < z+32}) UNION {z+k | k IN M})

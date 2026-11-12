@@ -110,6 +110,7 @@ Proof
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[]) >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
    dload_memory_match fl lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
+  `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
   `op_prov G v = NONE` by (irule dload_store_payload >> metis_tac[]) >>
   `ys = y` by
     (Cases_on `op_prov H v` >> gvs[dload_value_word_def, word_agree_except_bits] >>
@@ -118,7 +119,8 @@ Proof
   Q.SUBGOAL_THEN
    `(w2n xs = w2n x /\ w2n xs + 1 <= lo) \/
     (?owner id b c n d. dload_live_site fs owner id b c n /\
-      w2n xs = b+d /\ w2n x = c+d /\ d+1 <= n)` assume_tac
+      w2n xs = b+d /\ w2n x = c+d /\ d+1 <= n) \/
+    (w2n xs = w2n x /\ fl <= w2n xs /\ w2n xs + 1 < dimword (:256))` assume_tac
   >- (irule dload_store_region >> metis_tac[]) >>
   suspend "mstore8_finish"
 QED
@@ -130,7 +132,7 @@ Resume dload_boundary_core_mstore8[mstore8_finish]:
     (mstore8 (w2n xs) ys s) (mstore8 (w2n x) y t)` by
     (pure_asm_rewrite_tac[mstore8_write_memory] >>
      irule (SRULE [] (Q.INST [`bs` |-> `[(w2w y):word8]`] dload_memory_match_clean_write_region)) >>
-     simp[] >> metis_tac[]) >>
+     simp[] >> metis_tac[wordsTheory.w2n_11]) >>
   qexists `mstore8 (w2n xs) ys s` >>
   conj_tac >- (simp[mstore8_step_success] >> metis_tac[]) >>
   conj_tac >- (gvs[lookup_var_def] >> simp[mstore8_def, write_memory_with_expansion_def]) >>

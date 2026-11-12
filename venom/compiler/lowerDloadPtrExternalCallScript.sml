@@ -106,7 +106,8 @@ Theorem dload_external_call_memory:
   exec_ext_call i t gt addr value bo bz rt rz st = OK t1 /\
   s1.vs_returndata = t1.vs_returndata /\
   (w2n rz <> 0 ==> ((lo < w2n ro + w2n rz \/ p <> NONE) ==>
-    ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) ==>
+    ?b n. p = SOME (b,n) /\ b <= w2n ro /\ w2n ro + w2n rz <= b+n)) /\
+  tf <= fl ==>
   dload_memory_match fl lo fs (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -328,6 +329,7 @@ Proof
    dload_shared_store tn un s t /\ dload_equal_environment s t /\
    dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs` by
     metis_tac[dload_boundary_core_def] >>
+  `t.vs_alloca_next <= fl` by gvs[dload_memory_match_def] >>
   drule_all dload_external_call_vars >> strip_tac >>
   `s1.vs_returndata = t1.vs_returndata` by
     (qpat_x_assum `dload_equal_environment s1 t1` mp_tac >>

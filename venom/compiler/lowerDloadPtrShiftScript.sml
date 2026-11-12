@@ -91,7 +91,7 @@ Proof
   `?w. eval_operand b s = SOME w /\ op_taint tn b = op_taint un b /\
        word_agree_except (op_taint tn b) w y` by
     (irule scalar_matched_data >>
-     qexistsl [`G`,`H`,`V`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
+     qexistsl [`G`,`H`,`V`,`fl`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
   qexists `update_var out
     (if i.inst_opcode = SHL then word_lsl w (w2n x)
      else if i.inst_opcode = SHR then word_lsr w (w2n x)
