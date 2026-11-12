@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallFamStmtMutationAugTargetMapping
   bodyIntCallJointContract stmtSimAugAssignPlaceMemory exprSimMapKey
   emitHelperProps loweringShapeRules exprLoweringProps compileEnv
-  valueEncodingProofs byte venomState fragGasMode
+  valueEncodingProofs byte venomState fragGasMode loweringStateRelDefs
 
 Theorem intcall_mapping_two_words:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
@@ -49,7 +49,7 @@ Proof
   >- metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
   `mem_bytes_at (w2n w) 32 final.vs_memory =
    mem_bytes_at (w2n w) 32 first.vs_memory` by
-    (first_x_assum irule >> simp[regions_disjoint_def]) >>
+    (first_x_assum irule >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   qspecl_then [`w2n w`, `32`, `32`, `final.vs_memory`] mp_tac
     mem_bytes_at_split_padded >>
   simp[mem_bytes_at_word, word_to_bytes_be_def]

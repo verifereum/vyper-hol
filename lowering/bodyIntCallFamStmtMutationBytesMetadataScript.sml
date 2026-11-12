@@ -2,7 +2,7 @@ Theory bodyIntCallFamStmtMutationBytesMetadata
 Ancestors
   bodyIntCallJointContract exprSimIfExpCompat memoryLocalRhsProps
   exprSimSource exprSimHypsDefs exprSimDefs bodySim
-  supportedExprForms supportedExprs vyperTypeSystem vyperAST exprLowering compileEnv
+  supportedExprForms supportedExprs vyperTypeSystem vyperAST exprLowering compileEnv loweringStateRelDefs
 Libs
   monadsyntax
 

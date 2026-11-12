@@ -86,7 +86,7 @@ Resume intcall_append_stmt_step[code]:
      strip_tac >> gvs[] >> fs[bodySimTheory.body_inv_def]) >>
   `storage_vars_rel ce fp.jc_cx /\ transient_vars_rel ce fp.jc_cx` by
     fs[intcall_joint_res_def, intcall_expr_res_def,
-       exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+       exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   drule_all bodyAppendStorageFactsTheory.append_storage_compiler_location >>
   strip_tac >>
   qpat_x_assum `stmts_env _ _ _ _ _ = _` mp_tac >>
@@ -155,7 +155,7 @@ Resume intcall_append_stmt_step[suffix]:
    t.vs_inst_idx = LENGTH sb'.cs_current_insts` by
     fs[intcall_expr_cont_def, intcall_expr_res_def] >>
   `~t.vs_call_ctx.cc_static` by
-    fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   `0 < type_slot_size (ArrayTV etv
       (Dynamic (ce.ce_module_dynarray_capacity (src,id))))` by
     simp[vyperValueTheory.type_slot_size_def] >>
@@ -227,7 +227,7 @@ Resume intcall_append_stmt_step[resources]:
   fs[intcall_expr_cont_def] >>
   rpt strip_tac >>
   `not_fresh_at sb' x` by
-    (fs[compileEnvTheory.not_fresh_at_def] >> decide_tac) >>
+    (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
   `lookup_var x t = SOME w` by metis_tac[] >>
   metis_tac[]
 QED

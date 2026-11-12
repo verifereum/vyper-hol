@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallFamStmtMutationResource bodyIntCallAssembly placeStore
   placeMemoryLiveRegion vyperPlaceFrames stmtSimReturn venomMemProofs
   bodyIntCallJointContract compileEnv exprLoweringProps valueEncodingProps
-  venomMemDefs venomState loweringPosts
+  venomMemDefs venomState loweringPosts loweringStateRelDefs
 
 Theorem intcall_memory_place_word_resources:
   intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
@@ -36,11 +36,11 @@ Proof
   `!a k. fp.jc_prot a k ==> regions_disjoint a k (w2n w) 32` by
     (rpt strip_tac >>
      `regions_disjoint a k b len` by metis_tac[intcall_local_region_protected] >>
-     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `!a k. fp.jc_prot a k ==>
     mem_bytes_at a k (mstore (w2n w) (typed_val_to_w256 tv v) s).vs_memory =
     mem_bytes_at a k s.vs_memory` by
-    (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> fs[compileEnvTheory.regions_disjoint_def]) >>
+    (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `!n b k. local_region ce ee.scopes s n b k ==>
             local_region ce es.scopes s n b k` by
     metis_tac[expr_inv_local_regions_transport] >>

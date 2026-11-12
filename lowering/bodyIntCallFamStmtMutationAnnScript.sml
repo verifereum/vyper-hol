@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtMutationAnn
 Ancestors
   bodyIntCallFamStmtMutationEntry bodyIntCallJointContract
   stmtSimDeclMem loweringSlice bodyPtrCallCalldata fragExec
-  stmtSimProps bodySim compileEnv exprLoweringProps bodyDeclCopyMemory
+  stmtSimProps bodySim compileEnv exprLoweringProps bodyDeclCopyMemory loweringStateRelDefs
 
 Theorem intcall_annassign_word_entry:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\

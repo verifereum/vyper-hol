@@ -9,7 +9,7 @@ Ancestors
   vyperInterpreter vyperState gasContext targetPlaceSim
   gasSummary exprSimDefs exprSimHypsDefs loweringPosts
   exprLowering vyperTypeEnv vyperTypeInvariants
-  vyperEvalExprPreservesScopesDom
+  vyperEvalExprPreservesScopesDom loweringStateRelDefs
 
 Theorem intcall_target_attribute_counted:
   !bt fld.

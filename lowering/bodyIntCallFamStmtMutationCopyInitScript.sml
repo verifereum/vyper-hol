@@ -3,7 +3,7 @@
 Theory bodyIntCallFamStmtMutationCopyInit
 Ancestors
   bodyIntCallFamStmtMutationStaging bodyIntCallJointAggCore
-  bodyIntCallJointContract exprLoweringProps placeMemoryCopyEffect compileEnv
+  bodyIntCallJointContract exprLoweringProps placeMemoryCopyEffect compileEnv loweringStateRelDefs
 
 Theorem intcall_initializer_store_landing:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
@@ -38,7 +38,7 @@ Proof
   strip_tac >> drule_all intcall_child_store_effect >> strip_tac >>
   `!a n. fp.jc_prot a n ==>
      regions_disjoint a n (w2n dw) (type_memory_size dtv)` by
-    (fs[intcall_frame_ok_def, regions_disjoint_def] >> rpt strip_tac >>
+    (fs[intcall_frame_ok_def, loweringStateRelDefsTheory.regions_disjoint_def] >> rpt strip_tac >>
      disj1_tac >>
      qpat_x_assum `!a k. fp.jc_prot a k ==> a+k <= fp.jc_lo` drule >>
      decide_tac) >>

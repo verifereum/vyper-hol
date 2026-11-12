@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallFamStmtMutationAugTargetMappingOps bodyIntCallJointAggCore
   bodyIntCallJointContract exprSimMapKey loweringHalt loweringShapeRules
   emitHelperProps exprSimAccounts fragExec compileEnv exprLoweringProps
-  vyperStorage byte venomState fragGasMode
+  vyperStorage byte venomState fragGasMode loweringStateRelDefs
 
 Theorem intcall_mapping_suffix:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\

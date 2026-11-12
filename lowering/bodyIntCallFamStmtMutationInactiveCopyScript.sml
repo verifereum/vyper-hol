@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtMutationInactiveCopy
 Ancestors
   bodyIntCallJointAggCore bodyIntCallJointContract exprSimCopy
-  exprSimStorageCopy placeMemoryCopyEffect compileEnv venomState
+  exprSimStorageCopy placeMemoryCopyEffect compileEnv venomState loweringStateRelDefs
 
 Theorem intcall_inactive_copy_resources:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
@@ -24,11 +24,11 @@ Proof
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es t` by
     (irule copy_buffer_state_rel_frame >>
      qexistsl [`b`, `inst`, `s`, `sa`, `k`] >>
-     fs[intcall_expr_res_def, typed_copy_effect_def, regions_disjoint_def] >>
+     fs[intcall_expr_res_def, typed_copy_effect_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   irule intcall_joint_res_copy >>
   qexistsl [`dst`, `n`, `s`, `sa`] >> simp[] >>
-  fs[intcall_frame_ok_def, regions_disjoint_def] >> rpt strip_tac >>
+  fs[intcall_frame_ok_def, loweringStateRelDefsTheory.regions_disjoint_def] >> rpt strip_tac >>
   qpat_x_assum `!a k. fp.jc_prot a k ==> a + k <= fp.jc_lo` drule >>
   decide_tac
 QED

@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtMutationDeclEntry
 Ancestors
   bodyIntCallJointContract bodySimDeclCases bodyExprPreFacts bodyDeclCopyMemory
   stmtSimDecl stmtSimProps stmtLowering bodySim compileEnv loweringPosts
-  finite_map venomState exprLoweringProps
+  finite_map venomState exprLoweringProps loweringStateRelDefs
 
 Theorem local_region_declare_local_pending:
   declare_local ce id ty sa = (c,sb) /\ ce.ce_alloca_locals /\

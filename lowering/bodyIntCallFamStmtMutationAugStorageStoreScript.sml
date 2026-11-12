@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtMutationAugStorageStore
 Ancestors
   bodyIntCallFamStmtMutationResourceLanding bodyIntCallJointContract
   placeStore vyperScopePreservation emitHelperProps exprLoweringProps
-  compileEnv venomState stmtSimReturn
+  compileEnv venomState stmtSimReturn loweringStateRelDefs
 
 Theorem intcall_storage_place_word_store_path:
   intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\

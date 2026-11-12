@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtMutationResource
 Ancestors
   bodyIntCallJointContract bodyIntCallWriteAuthorization
-  loweringPosts compileEnv venomState
+  loweringPosts compileEnv venomState loweringStateRelDefs
 
 Theorem intcall_joint_res_mutation:
   intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\

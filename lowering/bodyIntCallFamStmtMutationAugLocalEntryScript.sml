@@ -5,7 +5,7 @@ Ancestors
   bodyExprPreFacts bodySim vyperTypeSystem vyperTyping vyperTypeInvariants
   supportedStmtTraverse supportedExprs supportedStmts vyperTypeCallGraph gasContext
   vyperTypeCallStackSoundness loweringSlice
-  exprSimHypsDefs emitHelperProps venomState venomInst compileEnv finite_map
+  exprSimHypsDefs emitHelperProps venomState venomInst compileEnv finite_map loweringStateRelDefs
 
 Theorem intcall_augassign_local_typing:
   type_stmt env ret (AugAssign ty (NameTarget id) bop e) = SOME env' ==>

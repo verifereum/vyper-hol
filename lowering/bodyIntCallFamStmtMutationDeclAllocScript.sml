@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtMutationDeclAlloc
 Ancestors
   bodyIntCallFamStmtMutationDeclEntry bodyIntCallDeclarationAlloc
   bodyIntCallJointContract compileEnv loweringPosts venomState
-  exprLoweringProps stmtSimDefs
+  exprLoweringProps stmtSimDefs loweringStateRelDefs
 
 Theorem intcall_expr_res_inactive_pointer_frame:
   intcall_expr_res fp ce env es sa s /\

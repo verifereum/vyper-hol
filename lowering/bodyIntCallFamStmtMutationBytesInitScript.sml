@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallFamStmtReturnBytesEffect bodyIntCallJointAggCore
   exprSimCopy exprSimStorageCopy
   bodyIntCallJointContract exprLoweringProps placeMemoryCopyEffect compileEnv
-  venomState venomInst
+  venomState venomInst loweringStateRelDefs
 
 Theorem intcall_bytes_initializer_store:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
@@ -43,12 +43,12 @@ Proof
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es t` by
     (irule copy_buffer_state_rel_frame >>
      qexistsl [`b`,`inst`,`s`,`sa`,`k`] >>
-     fs[intcall_expr_res_def,typed_copy_effect_def,regions_disjoint_def] >>
+     fs[intcall_expr_res_def,typed_copy_effect_def,loweringStateRelDefsTheory.regions_disjoint_def] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   `intcall_expr_res fp ce env es sb t` by
     (irule intcall_joint_res_copy >> simp[] >>
      qexistsl [`w2n dw`,`type_memory_size dv`,`s`,`sa`] >> simp[] >>
-     fs[intcall_frame_ok_def,regions_disjoint_def] >> rpt strip_tac >>
+     fs[intcall_frame_ok_def,loweringStateRelDefsTheory.regions_disjoint_def] >> rpt strip_tac >>
      qpat_x_assum `!a k. fp.jc_prot a k ==> a+k <= fp.jc_lo` drule >>
      decide_tac) >>
   qexists `t` >> simp[]

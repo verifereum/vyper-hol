@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallFamStmtMutationCopyInit bodyIntCallWindowPosts localPtrsProps
   loweringHalt exprSimAlloc exprLoweringProps valueEncodingTyping
   compileEnv venomInst bodyIntCallJointContract exprSimProps
-  bodyIntCallFamStmtMutationStaging placeMemoryCopyEffect freshWrites venomState stmtSimAugAssignPlaceMemory
+  bodyIntCallFamStmtMutationStaging placeMemoryCopyEffect freshWrites venomState stmtSimAugAssignPlaceMemory loweringStateRelDefs
 
 Theorem intcall_staged_initializer_value:
   intcall_expr_res fp ce env es sa s /\
@@ -34,12 +34,12 @@ Proof
          [STRING #"%" (toString sa.cs_next_var)]`,
        `name`,`STRING #"%" (toString sa.cs_next_var)`,`es.scopes`,`t`] >>
      fs[intcall_expr_cont_def,intcall_expr_res_def,stmt_state_rel_def,
-        state_rel_def,mk_inst_def] >>
+        loweringStateRelDefsTheory.state_rel_def,mk_inst_def] >>
      metis_tac[buffer_alloc_code, mk_inst_def]) >>
   conj_tac >- simp[loweringPostsTheory.expr_val_rel_def] >>
   irule (cj 1 allocated_value_location) >>
   qexistsl [`sa.cs_next_id`,`w2n w`,`n`,`tv`,`w`] >>
-  simp[] >> fs[regions_disjoint_def] >>
+  simp[] >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
   conj_tac >- metis_tac[] >>
   drule val_footprint_le >> decide_tac
 QED
@@ -98,7 +98,7 @@ Proof
      `local_region ce es.scopes s name a n` by
        (irule local_region_frame >> conj_tac
         >- (qexists `fp.jc_func` >>
-            fs[intcall_expr_res_def,stmt_state_rel_def,state_rel_def]) >>
+            fs[intcall_expr_res_def,stmt_state_rel_def,loweringStateRelDefsTheory.state_rel_def]) >>
         qexistsl [`sa`,`es.scopes`,`t`] >>
         fs[intcall_expr_res_def,intcall_expr_cont_def]) >> metis_tac[]) >>
   `?u. typed_copy_effect fp.jc_ctx fp.jc_func sn sb t u

@@ -8,7 +8,7 @@ Ancestors
   vyperState vyperInterpreter valueEncoding valueEncodingTyping exprLoweringProps
   bodyDeclCopyMemory bodyIntCallJointContract exprSimHypsDefs
   localPtrsProps freshWrites bodySim compileEnv exprSimHyps
-  allocLimits emitHelperProps venomMemDefs exprReasonOperand
+  allocLimits emitHelperProps venomMemDefs exprReasonOperand loweringStateRelDefs
 
 Theorem intcall_annassign_bytes_continuation:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
@@ -108,7 +108,7 @@ Resume intcall_annassign_bytes_continuation[run]:
         [Lit (n2w (type_memory_bytes ce ty))] [p]).inst_id =
         SOME (w2n w,type_memory_size dtv)` by simp[mk_inst_def] >>
      `alloca_inv t /\ local_ptrs_rel fp.jc_func c ee.scopes t` by
-       fs[intcall_expr_res_def,stmt_state_rel_def,state_rel_def] >>
+       fs[intcall_expr_res_def,stmt_state_rel_def,loweringStateRelDefsTheory.state_rel_def] >>
      drule_all local_ptrs_rel_alloca_disjoint >> metis_tac[]) >>
   `?u. gas_marked_path F fp.jc_ctx fp.jc_func t 0 (OK u) /\
     val_in_memory dtv v (w2n w) u.vs_memory /\

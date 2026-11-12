@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallFamStmtMutationAugTargetMapping bodyIntCallJointAggCore
   bodyIntCallJointContract exprSimMapKey emitHelperProps loweringShapeRules
   venomState compileEnv exprLoweringProps exprSimCopy stmtSimAugAssignPlaceMemory
-  fragGasMode
+  fragGasMode loweringStateRelDefs
 
 Theorem intcall_scratch_second_word:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s0 /\

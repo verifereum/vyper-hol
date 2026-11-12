@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtMutationAugTargetArray
 Ancestors
   bodyIntCallFamStmtMutationBinop bodyIntCallJointContract
   exprSimSubscriptArrayFramed exprSimArrayIndex fragGasFresh freshWrites
-  varsExt exprLoweringProps compileEnv
+  varsExt exprLoweringProps compileEnv loweringStateRelDefs
 
 Theorem intcall_array_check_ptr_path:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\

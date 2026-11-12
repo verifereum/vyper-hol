@@ -7,7 +7,7 @@ Ancestors
   finite_map placeMemoryCopyEffect bodyExprPreFacts stmtSimDeclSource
   stmtSimDeclCompose gasSummary exprSimSource loweringPosts stmtSimDefs bodySim
   exprSimHypsDefs vyperInterpreter vyperState vyperTypeSystem
-  vyperTypeInvariants valueEncoding memoryLocalRhsProps
+  vyperTypeInvariants valueEncoding memoryLocalRhsProps loweringStateRelDefs
 
 Theorem intcall_inactive_empty_initialize_state:
   let ee = es with scopes :=
@@ -43,7 +43,7 @@ Proof
      regions_disjoint (w2n w) sz b k` by
     (rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
      qexistsl [`ce`, `fp.jc_func`, `inst`, `n`, `p`, `es.scopes`, `s`] >>
-     fs[intcall_expr_res_def, stmt_state_rel_def, state_rel_def]) >>
+     fs[intcall_expr_res_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
   `32 <= sz` by decide_tac >>
   drule_all (intcall_inactive_mstore_resources |>
     Q.INST [`b` |-> `w2n w`, `k` |-> `sz`, `op` |-> `Lit 0w`, `wd` |-> `0w`] |>

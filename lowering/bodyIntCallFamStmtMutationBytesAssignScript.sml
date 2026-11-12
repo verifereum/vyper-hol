@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallFamStmtMutationBytesInit bodyIntCallFamStmtMutationStaging
   bodyIntCallJointContract exprLoweringProps valueCopyBytes valueEncodingTyping
   placeMemoryCopyEffect freshWrites compileEnv venomState venomInst fragGasMode
-  stmtSimAugAssignPlaceMemory localPtrsProps loweringHalt stmtLowering exprSimProps fragExec
+  stmtSimAugAssignPlaceMemory localPtrsProps loweringHalt stmtLowering exprSimProps fragExec loweringStateRelDefs
 
 Theorem intcall_bytes_staged_store:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
@@ -65,7 +65,7 @@ Resume intcall_bytes_staged_store[store]:
      `local_region ce es.scopes s name addr n` by
        (irule local_region_frame >> conj_tac
         >- (qexists `fp.jc_func` >>
-            fs[intcall_expr_res_def,stmt_state_rel_def,state_rel_def]) >>
+            fs[intcall_expr_res_def,stmt_state_rel_def,loweringStateRelDefsTheory.state_rel_def]) >>
         qexistsl [`sa`,`es.scopes`,`t`] >>
         fs[intcall_expr_res_def,intcall_expr_cont_def]) >> metis_tac[]) >>
   suspend "apply_store"

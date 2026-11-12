@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtMutationAssignRun
 Ancestors
   bodyIntCallFamStmtMutationAssignInit stmtLowering compileEnv fragGasMode fragExec
   exprLoweringProps placeMemoryCopyEffect venomState loweringHalt freshWrites
-  bodyIntCallJointContract bodyIntCallFamStmtMutationCopyInit
+  bodyIntCallJointContract bodyIntCallFamStmtMutationCopyInit loweringStateRelDefs
 
 Theorem intcall_aggregate_initializer_run:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\

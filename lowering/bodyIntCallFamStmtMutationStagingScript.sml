@@ -6,7 +6,7 @@ Ancestors
   bodyIntCallJointAggCore bodyIntCallJointContract exprSimAlloc
   exprLoweringProps placeMemoryCopyEffect exprSimCopy exprSimProps
   valueEncodingProps compileEnv venomInst venomState fragGasMode
-  bodyIntCallCopySharpDynamic freshWrites
+  bodyIntCallCopySharpDynamic freshWrites loweringStateRelDefs
 
 Theorem intcall_staging_copy_landing:
   intcall_frame_ok fp /\
@@ -42,14 +42,14 @@ Proof
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es t` by
     (irule copy_buffer_state_rel_frame >>
      qexistsl [`w2n dw`,`inst`,`a`,`sm`,`n`] >>
-     fs[intcall_expr_res_def, typed_copy_effect_def, regions_disjoint_def] >>
+     fs[intcall_expr_res_def, typed_copy_effect_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexists `t` >> simp[] >>
   irule intcall_owned_store_cont >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`inst.inst_id`,`w2n dw`,`w2n dw`,`n`,`a`,`sm`,`n`] >>
   fs[intcall_expr_res_def, stmt_state_rel_def,
-     regions_disjoint_def, arithmeticTheory.ADD_COMM] >> metis_tac[]
+     loweringStateRelDefsTheory.regions_disjoint_def, arithmeticTheory.ADD_COMM] >> metis_tac[]
 QED
 
 Theorem intcall_staging_initialize:

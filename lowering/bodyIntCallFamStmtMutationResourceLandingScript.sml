@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtMutationResourceLanding
 Ancestors
   bodyIntCallJointContract bodyMemoryDefs stmtSimProps exprSimProps
-  compileEnv exprLoweringProps venomState intCallFrame
+  compileEnv exprLoweringProps venomState intCallFrame loweringStateRelDefs
 
 Theorem intcall_joint_res_storage_landing:
   intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
@@ -36,7 +36,7 @@ Proof
   >- (rpt strip_tac >>
       `local_region ce es.scopes s n p k` by
         (irule local_region_frame >>
-         fs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+         fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >> metis_tac[]) >>
       metis_tac[arithmeticTheory.ADD_COMM])
   >- (fs[intcall_frame_ok_def] >> metis_tac[])
   >- (irule ret_pc_ok_frame >> metis_tac[])

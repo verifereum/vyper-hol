@@ -2,7 +2,7 @@
 Theory bodyIntCallFamStmtMutationBinop
 Ancestors
   bodyIntCallJointContract bodyIntCallJointPurePath exprSimProps stmtSimProps
-  intCallFrame compileEnv exprLoweringProps venomState bodyMemoryDefs
+  intCallFrame compileEnv exprLoweringProps venomState bodyMemoryDefs loweringStateRelDefs
 
 Theorem intcall_expr_cont_readonly_path:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
@@ -42,7 +42,7 @@ Proof
   >- (rpt strip_tac >>
       `local_region ce es.scopes s n' p k` by
         (irule local_region_frame >>
-         fs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+         fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >> metis_tac[]) >>
       metis_tac[])
   >- (fs[intcall_frame_ok_def] >> metis_tac[])
   >- (irule ret_pc_ok_frame >> metis_tac[])

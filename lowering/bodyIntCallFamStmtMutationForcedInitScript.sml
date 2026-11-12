@@ -8,7 +8,7 @@ Ancestors
   compileEnv loweringPosts vyperTypeArgFits bodyIntCallJointContract
   allocLimits exprLoweringProps emitHelperProps localPtrsProps venomState
   venomInst venomMemDefs fragExec gasSummary vyperInterpreter vyperState
-  exprReasonOperand freshWrites
+  exprReasonOperand freshWrites loweringStateRelDefs
 
 Theorem intcall_annassign_compound_post_type:
   expr_body_pre c cx env e es /\
@@ -137,7 +137,7 @@ Resume intcall_annassign_forced_initializer_run[copy_application]:
    t.vs_inst_idx = LENGTH sB.cs_current_insts` by fs[intcall_expr_cont_def] >>
   `alloca_inv t /\ local_ptrs_rel fp.jc_func c ee.scopes t /\
    alloca_room fp.jc_ctx fp.jc_func t` by
-    fs[intcall_expr_res_def,stmt_state_rel_def,state_rel_def] >>
+    fs[intcall_expr_res_def,stmt_state_rel_def,loweringStateRelDefsTheory.state_rel_def] >>
   `w2n w + type_memory_size dtv < dimword (:256)` by
     (`w2n w + type_memory_size dtv <= t.vs_alloca_next` by
        metis_tac[alloca_inv_def,alloca_next_valid_def] >>
@@ -156,7 +156,7 @@ Resume intcall_annassign_forced_initializer_run[disjoint_application]:
         [Lit (n2w (type_memory_bytes ce ty))] [p]).inst_id =
         SOME (w2n w,type_memory_size dtv)` by simp[mk_inst_def] >>
      drule_all local_ptrs_rel_alloca_disjoint >>
-     simp[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   `val_in_memory tv v (w2n sw) t.vs_memory` by
     metis_tac[expr_val_rel_def,optionTheory.SOME_11] >>
   simp[] >>

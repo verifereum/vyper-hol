@@ -3,7 +3,7 @@
 Theory bodyIntCallFamStmtMutationBinopCont
 Ancestors
   bodyIntCallFamStmtMutationBinop bodyIntCallJointContract exprBopSimDefs
-  exprLoweringProps compileEnv exprSimDefs gasSummary venomExecSemantics
+  exprLoweringProps compileEnv exprSimDefs gasSummary venomExecSemantics loweringStateRelDefs
 
 Theorem intcall_binop_frag_words_cont:
   binop_frag_words fp.jc_ctx fp.jc_func ce fp.jc_cx

@@ -6,7 +6,7 @@ Ancestors
   stmtSimAugAssign bodyExprPreFacts bodySim stmtSimDefs
   vyperTypeSystem supportedStmts supportedStmtTraverse vyperTypeCallGraph
   exprSimHypsDefs compileEnv loweringSlice bodyIntCallJointStmtSeq
-  exprSimSource vyperTypeStatePreservation exprLoweringProps fragExec
+  exprSimSource vyperTypeStatePreservation exprLoweringProps fragExec loweringStateRelDefs
 
 (* Source suffix boundary, independent of the compiler and frame resources. *)
 Theorem augassign_local_normal_source:

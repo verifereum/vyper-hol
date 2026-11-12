@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtMutationLoad
 Ancestors
   bodyIntCallFamStmtMutationBinop emitHelperProps exprLoweringProps
   exprSimProps compileEnv emitHelper venomState venomInst fragGasMode
-  loweringShapeRules bodyIntCallJointContract exprSimOperands finite_map
+  loweringShapeRules bodyIntCallJointContract exprSimOperands finite_map loweringStateRelDefs
 
 Theorem intcall_emit_readonly_cont:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\

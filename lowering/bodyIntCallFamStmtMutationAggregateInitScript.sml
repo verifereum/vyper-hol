@@ -6,7 +6,7 @@ Ancestors
   gasSummary stmtSimDefs loweringPosts venomInst venomState
   vyperState vyperInterpreter valueEncoding exprLoweringProps
   bodyDeclCopyMemory bodyIntCallJointContract exprSimHypsDefs
-  localPtrsProps freshWrites bodySim compileEnv exprSimHyps
+  localPtrsProps freshWrites bodySim compileEnv exprSimHyps loweringStateRelDefs
 
 Theorem intcall_annassign_aggregate_continuation:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\

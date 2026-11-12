@@ -10,7 +10,7 @@ Ancestors
   bodyIntCallFamStmtMutationDeclAlloc bodyIntCallJointContract
   stmtSimDeclCompose stmtSimDeclSource bodyExprPreFacts exprSimSource
   supportedStmts supportedStmtTraverse vyperTypeCallStackSoundness
-  vyperTypeCallGraph stmtSimProps bodySim compileEnv
+  vyperTypeCallGraph stmtSimProps bodySim compileEnv loweringStateRelDefs
 
 Theorem intcall_annassign_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
@@ -94,7 +94,7 @@ Resume intcall_annassign_stmt_step[word_compose]:
     (drule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
      simp[venomInstTheory.is_terminator_def]) >>
   `not_fresh_at sA (STRING #"%" (toString sa.cs_next_var))` by
-    (fs[intcall_expr_res_def,compileEnvTheory.local_ptrs_reserved_def] >>
+    (fs[intcall_expr_res_def,loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
      metis_tac[]) >>
   fs[wordsTheory.dimword_def] >> suspend "word_suffix"
 QED
@@ -131,7 +131,7 @@ Resume intcall_annassign_stmt_step[word_suffix]:
     (irule freshWritesTheory.not_fresh_at_mono >>
      qexists `sa` >> simp[]) >>
   `x <> STRING #"%" (toString sa.cs_next_var)` by
-    fs[compileEnvTheory.not_fresh_at_def] >>
+    fs[loweringStateRelDefsTheory.not_fresh_at_def] >>
   `lookup_var x t = SOME w'` by
     (qpat_x_assum `!op. op <> _ ==> _` (qspec_then `Var x` mp_tac) >>
      simp[venomStateTheory.eval_operand_def]) >>
@@ -206,7 +206,7 @@ Resume intcall_annassign_stmt_step[copy_frame]:
     (irule freshWritesTheory.not_fresh_at_mono >>
      qexists `sa` >> simp[]) >>
   `x <> STRING #"%" (toString sa.cs_next_var)` by
-    fs[compileEnvTheory.not_fresh_at_def] >>
+    fs[loweringStateRelDefsTheory.not_fresh_at_def] >>
   `lookup_var x t = SOME w'` by
     (qpat_x_assum `!op. op <> _ ==> _` (qspec_then `Var x` mp_tac) >>
      simp[venomStateTheory.eval_operand_def]) >>
@@ -289,7 +289,7 @@ Resume intcall_annassign_stmt_step[copy_open]:
      goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
      qexistsl [`fp.jc_ctx`,`env`,`fp.jc_tops`] >>
      fs[intcall_expr_res_def,exprLoweringPropsTheory.stmt_state_rel_def,
-        compileEnvTheory.state_rel_def]) >>
+        loweringStateRelDefsTheory.state_rel_def]) >>
   `~block_is_terminated sB` by
     (drule_all exprOpenTerminalsTheory.unwrap_value_open >> simp[]) >>
   irule intcall_memory_copy_open >>

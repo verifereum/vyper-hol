@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallFamAggArray bodyIntCallFamStmtMutationLoad exprSimMapKey
   bodyIntCallJointAggCore placeMemoryCopyEffect venomState venomMemProps
   exprLoweringProps intCallFrame compileEnv valueEncodingProps
-  stmtSimAugAssignPlaceMemory bodyIntCallJointContract emitHelperProps fragGasMode
+  stmtSimAugAssignPlaceMemory bodyIntCallJointContract emitHelperProps fragGasMode loweringStateRelDefs
 
 Theorem intcall_scratch_mstore:
   intcall_frame_ok fp /\
@@ -39,7 +39,7 @@ Proof
   >- (simp[local_region_def, lookup_var_def, mstore_def] >>
       metis_tac[local_region_def, lookup_var_def]) >>
   conj_tac >- simp[mstore_mem_word_at_same] >>
-  simp[compileEnvTheory.regions_disjoint_def] >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   metis_tac[mstore_mem_bytes_at_disjoint]
 QED
 

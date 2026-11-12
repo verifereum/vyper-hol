@@ -1,6 +1,6 @@
 Theory bodyIntCallFamStmtMutationCopyOpen
 Ancestors
-  stmtLowering exprOpenCopies exprOpenPrimitives compileEnv bodySim
+  stmtLowering exprOpenCopies exprOpenPrimitives compileEnv bodySim loweringStateRelDefs
 Libs
   monadsyntax
 

@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtMutationSourceActivation
 Ancestors
   bodyIntCallJointContract stmtSimDeclSource stmtSimDeclCompose gasSummary
   exprSimSource bodySim bodyExprPreFacts stmtSimDefs exprSimHypsDefs vyperInterpreter
-  vyperState vyperTypeSystem vyperTypeInvariants compileEnv finite_map
+  vyperState vyperTypeSystem vyperTypeInvariants compileEnv finite_map loweringStateRelDefs
 
 Theorem intcall_annassign_source_activation:
   body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\

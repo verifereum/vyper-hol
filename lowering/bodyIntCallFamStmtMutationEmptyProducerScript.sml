@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallJointStmtSeq stmtSimDeclCompose stmtSimDeclSource bodyExprPreFacts
   exprSimSource supportedStmts supportedStmtTraverse vyperTypeCallStackSoundness
   vyperTypeCallGraph stmtSimProps bodySim compileEnv exprLoweringProps
-  bodyDeclCopyMemory fragExec loweringHalt bodyIntCallJointContract stmtSimDeclMem
+  bodyDeclCopyMemory fragExec loweringHalt bodyIntCallJointContract stmtSimDeclMem loweringStateRelDefs
 
 Theorem intcall_annassign_empty_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
@@ -131,7 +131,7 @@ Resume intcall_annassign_empty_stmt_step[normal]:
     (drule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
      simp[venomInstTheory.is_terminator_def]) >>
   `not_fresh_at sA (STRING #"%" (toString sa.cs_next_var))` by
-    (fs[intcall_expr_res_def,compileEnvTheory.local_ptrs_reserved_def] >>
+    (fs[intcall_expr_res_def,loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
      metis_tac[]) >>
   `MEM (mk_inst sa.cs_next_id ALLOCA
      [Lit (n2w (type_memory_bytes ce ty))]
@@ -176,7 +176,7 @@ Resume intcall_annassign_empty_stmt_step[package]:
     (irule freshWritesTheory.not_fresh_at_mono >>
      qexists `sa` >> simp[]) >>
   `x <> STRING #"%" (toString sa.cs_next_var)` by
-    fs[compileEnvTheory.not_fresh_at_def] >>
+    fs[loweringStateRelDefsTheory.not_fresh_at_def] >>
   `lookup_var x t = SOME w'` by
     (qpat_x_assum `!op. op <> _ ==> _` (qspec_then `Var x` mp_tac) >>
      simp[venomStateTheory.eval_operand_def]) >>
