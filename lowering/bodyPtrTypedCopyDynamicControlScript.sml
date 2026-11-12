@@ -387,3 +387,43 @@ Proof
   qpat_assum `!p. p <> len ==> _` (qspec_then `p` assume_tac) >>
   fs[op_taint_def]
 QED
+
+(* The endpoint-safe ADD boundary discharges the temporary helper contract. *)
+Theorem typed_copy_dynamic_preamble_counted:
+  !s ctx fn bb prefix suffix id src dst len too ok sp dp a b S T n cap G tn PG D.
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++
+    [mk_inst id MLOAD [Var src] [len];
+     mk_inst (id+1) GT [Var len;Lit (n2w cap)] [too];
+     mk_inst (id+2) ISZERO [Var too] [ok];
+     mk_inst (id+3) ASSERT [Var ok] [];
+     mk_inst (id+4) MSTORE [Var dst;Var len] [];
+     mk_inst (id+5) ADD [Var src;Lit 32w] [sp];
+     mk_inst (id+6) ADD [Var dst;Lit 32w] [dp]] ++ suffix /\
+  s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  ptr_covers G tn src s (32+S) /\ ptr_covers G tn dst s (32+T) /\
+  w2n a+32+S < dimword(:256) /\ w2n b+32+T < dimword(:256) /\
+  (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
+  mload (w2n a) s = n2w n /\ n <= cap /\ cap < dimword(:256) /\
+  ALL_DISTINCT [len;too;ok;sp;dp] /\
+  (!p. MEM p [len;too;ok;sp;dp] ==> src <> p /\ dst <> p) ==>
+  ?H tf u.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tf (OK u) /\
+    u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = LENGTH prefix+7 /\
+    ~u.vs_halted /\ lookup_var len u = SOME (n2w n) /\
+    FLOOKUP H len = NONE /\ op_taint tf (Var len) = {} /\
+    lookup_var sp u = SOME (a+32w) /\ lookup_var dp u = SOME (b+32w) /\
+    ptr_covers H tf sp u S /\ ptr_covers H tf dp u T /\
+    u.vs_memory = (mstore (w2n b) (n2w n) s).vs_memory /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_inst_idx := s.vs_inst_idx|>) = s /\
+    tf.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!p. ~MEM p [len;too;ok;sp;dp] ==>
+      lookup_var p u = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+      op_taint tf (Var p) = op_taint tn (Var p))
+Proof
+  match_mp_tac typed_copy_dynamic_preamble_counted_conditional >>
+  ACCEPT_TAC typed_copy_loop_dynamic_offset_covers_endpoint
+QED
