@@ -13,7 +13,7 @@ Theorem aug_place_memory_loaded:
   expr_body_pre cenv cx env e es /\ target_indices_pre cenv cx env bt /\
   eval_target_place cx bt (es with gas_obs := gs) =
     (INL (MemoryPlace id path),mid) /\
-  target_post ctx func cenv cx es sa sp s0 mid
+  target_post H ctx func cenv cx es sa sp s0 mid
     (PlaceR (MemoryPlace id path)) (Type ty) r t /\
   emit_op MLOAD [FST r] sp = (cur,sl) /\
   fn_has_code sp sl func /\ fn_inst_ids_distinct func /\
@@ -31,7 +31,7 @@ Theorem aug_place_memory_loaded:
     eval_operand (FST r) u = SOME w /\
     place_ptr_rel cenv cx u (PlaceR (MemoryPlace id path)) w
       (SOME LocMemory) (Type ty) /\
-    stmt_state_rel ctx func cenv cx mid u /\
+    stmt_state_rel H ctx func cenv cx mid u /\
     ~u.vs_halted /\ u.vs_current_bb = sl.cs_current_bb /\
     u.vs_inst_idx = LENGTH sl.cs_current_insts /\
     local_ptrs_reserved cenv sl /\ alloca_history func u /\
@@ -52,7 +52,7 @@ Proof
   `expr_sim_inv cenv cx env es /\
    expr_sim_inv cenv cx env (es with gas_obs := gs) /\
    expr_sim_inv cenv cx env mid` by fs[expr_body_pre_def] >>
-  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
   `FST (SND r) = SOME LocMemory` by fs[place_ptr_rel_def] >>
   drule_at (Pat `emit_op`) aug_place_memory_access_path >>
