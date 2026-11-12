@@ -10,18 +10,22 @@ Libs
 
 
 Theorem stmt_post_break:
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted ==>
-  stmt_post ctx func cx (InLoop ex inc) cenv cenv sa sb es s0
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  storage_well_formed_on cx es (FST H) /\ ~s0.vs_halted ==>
+  stmt_post H ctx func cx (InLoop ex inc) cenv cenv sa sb es s0
     (INR BreakException) (es with gas_obs := []) (jump_to ex s0)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[stmt_state_rel_inst_idx]) >>
   pure_rewrite_tac[stmt_post_def] >> qexists_tac `cenv` >>
   simp[stmt_lands_def, cenv_top_ext_refl, stmt_state_rel_jump_to, alloca_frame_same,
-       jump_to_def, lookup_var_def]
+       jump_to_def, lookup_var_def] >>
+  `!b. get_storage cx (es with gas_obs := []) b = get_storage cx es b` by
+    (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  fs[vyperStorageFootprintTheory.storage_well_formed_on_def]
 QED
 
 Theorem compile_break_frag:
@@ -37,7 +41,7 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_inst _ _ _ sa = (_, sj)` >>
   drule emit_inst_extends >> strip_tac >>
-  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   pure_rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR BreakException`, `es`, `OK (jump_to ex s0)`] >>
   conj_tac
@@ -45,6 +49,6 @@ Proof
            raise_def] >> irule emit_jump_zero_path >> simp[] >>
       qexistsl_tac [`sa`, `sj`] >> simp[]) >>
   simp[fragExecTheory.exit_result_def] >>
-  irule stmt_post_break >> simp[]
+  rpt strip_tac >> irule stmt_post_break >> gs[]
 QED
 
