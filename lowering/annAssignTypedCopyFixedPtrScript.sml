@@ -398,3 +398,112 @@ Proof
   gvs[] >>
   metis_tac[annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr]
 QED
+
+Theorem annassign_sarray_counted_ptr:
+ !ce tenv dt st dtv stv N kvs dst src sa sb fn s b a G tn D ctx PG.
+ compile_copy_sarray_typed ce (Var dst) dt (Var src) st N sa = ((),sb) /\
+ type_memory_bytes ce dt = type_memory_size dtv /\
+ type_memory_bytes ce st = type_memory_size stv /\
+ type_widens_to tenv st dt /\
+ evaluate_type tenv (ArrayT st (Fixed N)) = SOME (ArrayTV stv (Fixed N)) /\
+ evaluate_type tenv (ArrayT dt (Fixed N)) = SOME (ArrayTV dtv (Fixed N)) /\
+ value_has_type (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+ val_wf (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+ val_wf (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) /\
+ not_fresh_at sa src /\ not_fresh_at sa dst /\
+ fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
+ s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+ ~ctx_has_dalloca ctx /\
+ lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+ ptr_covers G tn src s (N * type_memory_size stv) /\
+ ptr_covers G tn dst s (N * type_memory_size dtv) /\
+ N < dimword (:256) /\
+ w2n a + N * type_memory_size stv < dimword (:256) /\
+ w2n b + N * type_memory_size dtv < dimword (:256) /\
+ (w2n a + N * type_memory_size stv <= w2n b \/
+  w2n b + N * type_memory_size dtv <= w2n a) /\
+ (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+   val_in_memory (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs)) (w2n a) m) /\
+ (!sc se xr yr u aw bw H tm v.
+   compile_store_memory_typed ce (Var yr) dt (Var xr) st sc = ((),se) /\
+   fn_has_code sc se fn /\ not_fresh_at sc xr /\ not_fresh_at sc yr /\
+   u.vs_current_bb = sc.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~u.vs_halted /\
+   lookup_var xr u = SOME aw /\ lookup_var yr u = SOME bw /\
+   ptr_covers H tm xr u (type_memory_size stv) /\
+   ptr_covers H tm yr u (type_memory_size dtv) /\
+   w2n aw + type_memory_size stv < dimword (:256) /\
+   w2n bw + type_memory_size dtv < dimword (:256) /\
+   (w2n aw + type_memory_size stv <= w2n bw \/
+    w2n bw + type_memory_size dtv <= w2n aw) /\
+   val_wf stv v /\ val_wf dtv v /\
+   (!m. mem_agree_outside tm.t_mem u.vs_memory m ==>
+     val_in_memory stv v (w2n aw) m) ==>
+   ?K tk z. gas_path_ptr D 0 ctx fn PG H tm u 0 K tk (OK z) /\
+     z.vs_current_bb = se.cs_current_bb /\
+     z.vs_inst_idx = LENGTH se.cs_current_insts /\ ~z.vs_halted /\
+     typed_copy_state_frame sc (w2n bw) (type_memory_size dtv) u z /\
+     (!m. mem_agree_outside tk.t_mem z.vs_memory m ==>
+       val_in_memory dtv v (w2n bw) m) /\
+     tk.t_stor = tm.t_stor /\ tk.t_trans = tm.t_trans /\ tk.t_imm = tm.t_imm /\
+     (!x. not_fresh_at sc x ==>
+       lookup_var x z = lookup_var x u /\ FLOOKUP K x = FLOOKUP H x /\
+       op_taint tk (Var x) = op_taint tm (Var x)) /\
+     (!i. ~(w2n bw <= i /\ i < w2n bw + type_memory_size dtv) ==>
+       mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 u.vs_memory /\
+       (i IN tk.t_mem <=> i IN tm.t_mem))) ==>
+ ?H tm t. gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+   t.vs_current_bb = sb.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+   typed_copy_state_frame sa (w2n b) (N * type_memory_size dtv) s t /\
+   (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+     val_in_memory (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) (w2n b) m) /\
+   tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+   (!x. not_fresh_at sa x ==>
+     lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+     op_taint tm (Var x) = op_taint tn (Var x)) /\
+   (!i. ~(w2n b <= i /\ i < w2n b + N * type_memory_size dtv) ==>
+     mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+     (i IN tm.t_mem <=> i IN tn.t_mem))
+Proof
+ rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+ qpat_x_assum `!sc se xr yr u aw bw H tm v. _` (mk_asm "child") >>
+ `evaluate_type tenv st = SOME stv /\ evaluate_type tenv dt = SOME dtv` by
+   (imp_res_tac vyperStorageWritePreservationTheory.evaluate_type_ArrayTV_inv >> gvs[]) >>
+ Cases_on `type_memory_bytes ce dt = type_memory_bytes ce st /\
+   ~is_abi_dynamic ce.ce_struct_fields dt`
+ >- (`stv = dtv` by metis_tac[typed_copy_static_widening] >>
+     qpat_x_assum `child :- _` kall_tac >> gvs[] >>
+     ( `N * type_memory_bytes ce dt < dimword (:256)` by (simp[] >> decide_tac) >>
+       `val_footprint (ArrayTV dtv (Fixed N)) (ArrayV (SArrayV kvs)) <=
+          N * type_memory_bytes ce dt` by
+         simp[loweringPostsTheory.val_footprint_def, type_memory_size_def] >>
+       drule annassign_sarray_bulk_counted >>
+       disch_then (qspecl_then [`fn`,`s`,`b`,`a`,`G`,`tn`,`D`,`ctx`,`PG`,
+         `ArrayTV dtv (Fixed N)`,`ArrayV (SArrayV kvs)`] mp_tac) >>
+       simp[] >> metis_tac[])) >>
+ `0 < type_memory_size stv /\ 0 < type_memory_size dtv` by
+   metis_tac[annassign_evaluated_array_stride_positive] >>
+ `val_in_memory (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs))
+    (w2n a) s.vs_memory` by
+   (qpat_x_assum `child :- _` kall_tac >>
+    metis_tac[bodyPtrDefsTheory.mem_agree_outside_def]) >>
+ drule_all typed_copy_sarray_representation >> strip_tac >>
+ qabbrev_tac `f = (\i. case ALOOKUP kvs i of NONE => default_value stv | SOME v => v)` >>
+ `!i. i < N ==> val_wf stv (f i) /\ val_wf dtv (f i)` by
+   (simp[Abbr `f`] >> metis_tac[]) >>
+ `!i m. i < N /\ mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory stv (f i) (w2n a + i * type_memory_size stv) m` by
+   (rpt strip_tac >> simp[Abbr `f`] >>
+    qpat_x_assum `child :- _` kall_tac >>
+    `val_in_memory (ArrayTV stv (Fixed N)) (ArrayV (SArrayV kvs)) (w2n a) m`
+      by metis_tac[] >>
+    drule_all typed_copy_sarray_representation >> metis_tac[]) >>
+ asm_x "child" assume_tac >>
+ drule_all annassign_sarray_indexed_counted_ptr >>
+ strip_tac >>
+ qexistsl_tac [`H`,`tm`,`t`] >> simp[] >>
+ rpt strip_tac >>
+ qpat_x_assum `!mem' dstoff. _` irule >>
+ gvs[Abbr `f`] >> metis_tac[]
+QED
