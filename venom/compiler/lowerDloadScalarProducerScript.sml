@@ -1,5 +1,6 @@
 Theory lowerDloadScalarProducer
 Ancestors
+  o1SafeUpto
   lowerDloadPureEffects
   lowerDloadReachableScalarExecution lowerDloadVariableTransport
   lowerDloadMaskBounds lowerDloadOwnership lowerDloadPairedBoundary lowerDloadParamProducer
@@ -60,7 +61,7 @@ QED
 
 Theorem ld_clean_scalar_certificate_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   MEM i.inst_opcode [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
     SLT; SGT; ISZERO; AND; OR; XOR; NOT] /\ i.inst_outputs = [out] /\
