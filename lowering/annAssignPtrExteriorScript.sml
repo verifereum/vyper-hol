@@ -6,7 +6,7 @@ Ancestors
 
 Theorem annassign_ghost_vars_exterior_ptr:
  !ctx func cenv cx es d G tn s Gf tnf sf writes.
- stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+ stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
  (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
             vs_inst_idx := s.vs_inst_idx|>) = s /\
  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
@@ -24,15 +24,15 @@ Theorem annassign_ghost_vars_exterior_ptr:
     op_taint tnf (Var p) = op_taint tn (Var p)) /\
  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==>
     op_taint tnf (Var p) = op_taint tn (Var p)) ==>
- ghost_inv d cenv cx es Gf tnf sf
+ ghost_inv H d cenv cx es Gf tnf sf
 Proof
  rpt gen_tac >> strip_tac >>
- `ghost_inv d cenv cx es G (tn with t_mem := tnf.t_mem)
+ `ghost_inv H d cenv cx es G (tn with t_mem := tnf.t_mem)
    (s with <|vs_memory := sf.vs_memory; vs_inst_idx := sf.vs_inst_idx|>)` by
    (irule annassign_ghost_exterior_ptr >> simp[] >>
     conj_tac >- (qexists `writes` >> asm_rewrite_tac[]) >>
     qexistsl [`ctx`,`func`] >> simp[]) >>
- qpat_x_assum `ghost_inv _ _ _ _ G tn s` kall_tac >>
+ qpat_x_assum `ghost_inv _ _ _ _ _ G tn s` kall_tac >>
  fs[ghost_inv_def] >> conj_tac
  >- (rpt gen_tac >> strip_tac >>
      qpat_x_assum `!name entry p sz. _ ==> ptr_covers _ _ _ _ _ /\ _` drule_all >>
