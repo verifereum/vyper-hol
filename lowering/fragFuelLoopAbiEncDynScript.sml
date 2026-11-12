@@ -1052,6 +1052,192 @@ Proof
   simp[] >> metis_tac[vars_kept_trans]
 QED
 
+Theorem abi_encode_dyn_middle_fuel[local]:
+  !st sh ca cb se ip dp hdr body exit i2 hp off cd cs cl dst src ei asz msz len_op.
+  (!d s Wv E. fuel_ok Wv {} E (compile_abi_encode_to_buf d s ei)) /\
+  (!x. len_op = Var x ==> var_below st.cs_next_var x) /\
+  (do ia <- compile_alloc_buffer 32;
+      let ip = ia.buf_operand in
+      do emit_void MSTORE [ip; Lit 0w];
+         da <- compile_alloc_buffer 32;
+         let dp = da.buf_operand in
+         do init <- emit_op MUL [len_op; Lit (n2w asz)];
+            emit_void MSTORE [dp; init];
+            hdr <- fresh_label "enc_dyn_hdr";
+            body <- fresh_label "enc_dyn_body";
+            exit <- fresh_label "enc_dyn_exit";
+            emit_inst JMP [Label hdr] [];
+            new_block hdr;
+            return (ip, dp, hdr, body, exit)
+         od
+      od
+   od) st = ((ip,dp,hdr,body,exit),sh) /\
+  (do (do i <- emit_op MLOAD [ip];
+          cmp <- emit_op LT [i; len_op];
+          done <- emit_op ISZERO [cmp];
+          emit_inst JNZ [done; Label exit; Label body] [];
+          new_block body
+       od);
+      i2 <- emit_op MLOAD [ip];
+      sd <- emit_op ADD [src; Lit 32w];
+      so <- emit_op MUL [i2; Lit (n2w msz)];
+      cs <- emit_op ADD [sd; so];
+      dd <- emit_op ADD [dst; Lit 32w];
+      ho <- emit_op MUL [i2; Lit (n2w asz)];
+      hp <- emit_op ADD [dd; ho];
+      off <- emit_op MLOAD [dp];
+      cd <- emit_op ADD [dd; off];
+      return (i2,hp,off,cd,cs)
+   od) sh = ((i2,hp,off,cd,cs),ca) /\
+  compile_abi_encode_to_buf cd cs ei ca = (cl,cb) /\
+  (do emit_void MSTORE [hp; off];
+      nd <- emit_op ADD [off; cl];
+      emit_void MSTORE [dp; nd];
+      ni <- emit_op ADD [i2; Lit 1w];
+      emit_void MSTORE [ip; ni];
+      emit_inst JMP [Label hdr] [];
+      new_block exit
+   od) cb = (cb.cs_current_bb,se)
+  ==> ?Kmid. frag_fuel {} {} {} sh se Kmid
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fuel_ok {} {} {} (compile_abi_encode_to_buf cd cs ei)` by simp[] >>
+  pop_assum mp_tac >> rewrite_tac[fuel_ok_def] >>
+  disch_then drule >> strip_tac >>
+  qpat_x_assum `!d s Wv E. _` kall_tac >>
+  qpat_x_assum `do ia <- _; _ od st = _` mp_tac >>
+  simp[LET_THM, compile_alloc_buffer_def, emit_op_def, emit_void_def,
+       emit_inst_def, fresh_id_def, fresh_var_def, fresh_label_def,
+       emit_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  strip_tac >>
+  `sh.cs_current_bb = hdr /\ sh.cs_current_insts = [] /\
+   sh.cs_next_var = st.cs_next_var+3 /\ sh.cs_next_id = st.cs_next_id+6`
+    by gvs[] >>
+  qpat_x_assum `_ with <|cs_next_var := _; cs_next_label := _; cs_next_id := _;
+    cs_current_bb := _; cs_current_insts := _; cs_blocks := _|> = sh` kall_tac >>
+  qpat_x_assum `Var _ = ip` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `Var _ = dp` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `do do i <- _; _ od; _ od sh = _` mp_tac >>
+  simp[LET_THM, emit_op_def, emit_inst_def, fresh_id_def, fresh_var_def,
+       emit_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> strip_tac >>
+  `ca.cs_current_bb = body' /\ LENGTH ca.cs_current_insts = 9 /\
+   ca.cs_next_var = st.cs_next_var+15 /\ cs_extends sh ca`
+    by (gvs[] >> simp[cs_extends_def]) >>
+  qpat_x_assum `do emit_void _ _; _ od cb = _` mp_tac >>
+  simp[LET_THM, emit_op_def, emit_void_def, emit_inst_def,
+       fresh_id_def, fresh_var_def, emit_def, new_block_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >> strip_tac >>
+  `se.cs_current_bb = exit /\ se.cs_current_insts = [] /\ cs_extends cb se`
+    by (gvs[] >> simp[cs_extends_def]) >>
+  qexists_tac `2**256*(Kb+2)` >>
+  pure_rewrite_tac [frag_fuel_def, pred_setTheory.NOT_IN_EMPTY,
+             boolTheory.OR_CLAUSES, boolTheory.AND_CLAUSES] >>
+  rpt gen_tac >> strip_tac >>
+  `fn_has_code sh ca fn /\ fn_has_code ca cb fn /\ fn_has_code cb se fn`
+    by metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
+  qmatch_asmsub_abbrev_tac `sh with <|cs_next_var := _; cs_next_id := _;
+    cs_current_bb := _; cs_current_insts := pcode; cs_blocks := hb::sh.cs_blocks|> = ca` >>
+  qmatch_asmsub_abbrev_tac `cb with <|cs_next_var := _; cs_next_id := _;
+    cs_current_bb := _; cs_current_insts := []; cs_blocks := sb::cb.cs_blocks|> = se` >>
+  `lookup_block hdr fn.fn_blocks = SOME hb`
+    by (qpat_x_assum `fn_has_code sh ca fn` mp_tac >>
+        qpat_x_assum `_ with <|cs_next_var := _; cs_next_id := _;
+          cs_current_bb := _; cs_current_insts := _; cs_blocks := _|> = ca`
+          (SUBST1_TAC o SYM) >>
+        simp[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def,
+             Abbr `hb`]) >>
+  `lookup_block cb.cs_current_bb fn.fn_blocks = SOME sb`
+    by (qpat_x_assum `fn_has_code cb se fn` mp_tac >>
+        qpat_x_assum `_ with <|cs_next_var := _; cs_next_id := _;
+          cs_current_bb := _; cs_current_insts := _; cs_blocks := _|> = se`
+          (SUBST1_TAC o SYM) >>
+        simp[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def,
+             Abbr `sb`]) >>
+  `?pb. lookup_block body' fn.fn_blocks = SOME pb /\
+        isPREFIX pcode pb.bb_instructions`
+    by (mp_tac (Q.SPECL [`ca`,`cb`,`fn`] fragExecTheory.fn_has_code_start) >>
+        (impl_tac >- simp[]) >>
+        qpat_x_assum `_ with <|cs_next_var := _; cs_next_id := _;
+          cs_current_bb := _; cs_current_insts := _; cs_blocks := _|> = ca`
+          (SUBST1_TAC o SYM) >> simp[]) >>
+  pop_assum strip_assume_tac >>
+  `!i. i < 4 ==> get_instruction hb i = SOME (EL i hb.bb_instructions)`
+    by simp[Abbr `hb`, get_instruction_def] >>
+  `!i. i < 9 ==> get_instruction pb i = SOME (EL i pcode)`
+    by (gvs[rich_listTheory.IS_PREFIX_APPEND, get_instruction_def] >>
+        simp[rich_listTheory.EL_APPEND1, Abbr `pcode`]) >>
+  qpat_x_assum `Abbrev (sb = _)` mp_tac >>
+  pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >> disch_tac >>
+  qmatch_asmsub_abbrev_tac `sb = <|bb_label := _;
+    bb_instructions := cb.cs_current_insts ++ scode|>` >>
+  `!i. i < 6 ==> get_instruction sb (LENGTH cb.cs_current_insts+i) = SOME (EL i scode)`
+    by (simp[Abbr `sb`, Abbr `scode`, get_instruction_def,
+             GSYM listTheory.APPEND_ASSOC, rich_listTheory.EL_APPEND2]) >>
+  (fn g as (asl,_) => let
+    val asms = map ASSUME asl
+    fun abbrev name = List.find (fn th =>
+      can (fn t => if fst (dest_var (lhs (rand t))) = name then ()
+                  else raise Fail "name") (concl th)) asms
+    val operands = List.filter (fn th => can (fn t =>
+      if fst (dest_const (rator (lhs t))) = "Var" andalso is_var (rhs t)
+      then () else raise Fail "operand") (concl th)) asms
+    val defs = map GSYM operands @
+      map (REWRITE_RULE [markerTheory.Abbrev_def] o valOf o abbrev)
+                   ["hb","pcode","scode"]
+    fun range n = valOf (List.find (fn th =>
+      can (fn t => if numSyntax.int_of_term (rand (fst (dest_imp
+           (snd (dest_forall t)))) ) = n then () else raise Fail "range")
+        (concl th)) asms)
+    fun fact r i = CONV_RULE
+      (RHS_CONV (SIMP_CONV (srw_ss()) defs))
+      (SRULE [] (SPEC (numSyntax.term_of_int i) r))
+    val round = CONV_RULE
+      (REDEPTH_CONV (numLib.BOUNDED_FORALL_CONV (SIMP_CONV (srw_ss()) [])))
+      (BETA_RULE (PURE_REWRITE_RULE [LET_THM] abi_encode_dyn_round_semantics))
+    fun phase n last = List.tabulate (n, fn i => (last-i, fact (range n) i))
+    fun specialize ((pos,f),th) = let
+      val normalized = CONV_RULE (DEPTH_CONV (fn t =>
+        if numSyntax.is_plus t andalso numSyntax.is_numeral (rand t)
+           andalso numSyntax.is_numeral (rand (rator t))
+        then numLib.REDUCE_CONV t else NO_CONV t))
+        (PURE_REWRITE_RULE [GSYM arithmeticTheory.ADD_ASSOC] th)
+      fun select t = el pos (strip_conj (fst (dest_imp t)))
+    in
+      PART_MATCH select normalized (concl f)
+    end
+    val facts = phase 4 7 @ phase 9 20 @ phase 6 37
+    val specialized = List.foldl specialize round facts
+  in
+    mp_tac (Q.INST [`origin` |-> `s`]
+      (SRULE (map snd facts) specialized)) g
+  end) >>
+  (impl_tac >- (
+    `!n. st.cs_next_var <= n ==>
+      len_op <> Var (STRING #"%" (toString n))`
+      by metis_tac[var_below_fresh] >>
+    simp[var_below_def, ASCIInumbersTheory.toString_inj] >>
+    rpt strip_tac >> gvs[] >> decide_tac)) >>
+  strip_tac >>
+  simp[at_point_def] >>
+  irule fuel_outcome_iterate >>
+  qexistsl_tac
+    [`\t. t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\ vars_kept N {} s t`,
+     `\t. 2**256-1-w2n (mload (w2n (THE (eval_operand
+          (Var (STRING #"%" (toString st.cs_next_var))) t))) t)`] >>
+  BETA_TAC >>
+  conj_tac >- (fs[at_point_def] >> simp[vars_kept_refl]) >>
+  reverse conj_tac >- simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!t. _ ==> ?j. _` drule >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `j` strip_assume_tac) >>
+  qexists_tac `j` >> simp[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
 (* The body saves the counter in i2 before the recursive encoder.  Its last
    memory write restores i2+1, even if the child overwrites the counter's
    memory.  A continuing round has i2 < len_op and thus cannot wrap. *)
