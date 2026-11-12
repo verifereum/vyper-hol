@@ -152,22 +152,6 @@ Proof
        sym_step_op_def, sym_jump_def, sym_jump_dest_def, asm_next_def]
 QED
 
-Theorem sym_invoke_prefix_frame_transport:
-  !p env ctx cp fn ret srest labs0 ps cs ss ps' cs' ss' r.
-  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
-  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
-  asm_sym_rel p env cs' ss' /\ sym_kinds_ok cp fn ret srest ps' ss' /\
-  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
-       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
-  sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
-Proof
-  rw[sym_frame_inv_def] >>
-  `~(r.sr_spill_base <= b /\ b < r.sr_spill_end)` by
-    (strip_tac >> gvs[closure_spill_byte_def, fcgDefsTheory.fcg_path_def] >>
-     metis_tac[relationTheory.RTC_REFL]) >>
-  metis_tac[]
-QED
-
 Theorem sym_invoke_prefix_pair:
   !lo o2pc p env ctx cp fn ret srest labs0 ps cs ss r n cs' ss' ps'.
   lo = SND (compute_label_offsets p) /\ o2pc = build_offset_to_pc p /\
@@ -184,7 +168,7 @@ Proof
   rpt strip_tac >>
   `asm_sym_rel p env cs' ss'` by
     (gvs[sym_frame_inv_def] >> drule_all asm_sym_steps_lockstep >> simp[]) >>
-  drule_all sym_invoke_prefix_frame_transport >> simp[]
+  drule_all sym_frame_inv_region_transfer >> simp[]
 QED
 
 Theorem sym_invoke_selected_frame_prefix:
@@ -1027,28 +1011,6 @@ Proof
   metis_tac[arithmeticTheory.GREATER_DEF, arithmeticTheory.NOT_LESS]
 QED
 
-Theorem sym_pop_numeric:
-  n <= LENGTH ps.ps_stack /\
-  sym_kinds_ok cplan fn ret srest ps ss /\
-  asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOPop n]) ==>
-  ?ss'. sym_steps p env (LENGTH (execute_plan fmp [SOPop n])) ss = SymOK ss' /\
-    sym_kinds_ok cplan fn ret srest
-      (ps with ps_stack := stack_pop n ps.ps_stack) ss' /\
-    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp [SOPop n]) /\
-    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
-Proof
-  strip_tac >>
-  `?ss'. sym_steps p env (LENGTH (execute_plan fmp [SOPop n])) ss = SymOK ss' /\
-    sym_kinds_ok cplan fn ret srest (apply_prefix_ops fmp FEMPTY [SOPop n] ps) ss' /\
-    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp [SOPop n]) /\
-    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)` by
-    (irule sym_prefix_ops_sim >>
-     simp[prefix_wf_def, stack_op_wf_def, prefix_spill_wf_def, spill_op_wf_def,
-       prefixSimTheory.is_prefix_op_def]) >>
-  gvs[apply_prefix_ops_def, apply_prefix_op_def,
-    strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_pop_def]
-QED
-
 Theorem sym_swap_pop_numeric:
   do_swap dist ps = (swaps, swapped) /\ dist < LENGTH ps.ps_stack /\
   n <= LENGTH ps.ps_stack /\
@@ -1072,7 +1034,7 @@ Proof
   `n <= LENGTH swapped.ps_stack` by metis_tac[planWfTheory.do_swap_length, pairTheory.SND] >>
   `asm_block_at p ss'.sym_base.as_pc (execute_plan fmp [SOPop n])` by
     metis_tac[arithmeticTheory.ADD_COMM] >>
-  drule_all sym_pop_numeric >>
+  drule_all symShuffleSimTheory.sym_pop_numeric >>
   disch_then (qspecl_then [`env`, `R`] strip_assume_tac) >>
   qexists_tac `ss''` >> conj_tac
   >- simp[Once sym_steps_add] >>

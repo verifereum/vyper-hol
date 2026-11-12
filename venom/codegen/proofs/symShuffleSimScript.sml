@@ -198,17 +198,6 @@ Proof
        asm_next_def]
 QED
 
-Theorem mem_sval_val_no_label:
-  mem_sval_at labs off (Val w) ==>
-  mem_label_at labs off = NONE /\ ~mem_labels_hit labs (in_mem_range off 32)
-Proof
-  simp[mem_sval_at_def, mem_labels_hit_def] >> strip_tac >>
-  `FLOOKUP labs off = NONE` by
-    (simp[finite_mapTheory.FLOOKUP_DEF] >>
-     first_x_assum irule >> simp[in_mem_range_def]) >>
-  simp[mem_label_at_def] >> metis_tac[]
-QED
-
 Theorem sym_mload_label_effect:
   ss.sym_stack = Val addr :: stk /\
   mem_sval_at ss.sym_mem_labels (w2n addr) (Lab l d) ==>
@@ -836,3 +825,27 @@ Resume sym_prefix_ops_sim[cons]:
 QED
 
 Finalise sym_prefix_ops_sim
+
+Theorem sym_pop_numeric:
+  !n ps p env cp fn ret srest initial_fmp R ss.
+    n <= LENGTH ps.ps_stack /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOPop n]) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp [SOPop n])) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest
+        (ps with ps_stack := stack_pop n ps.ps_stack) out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc +
+        LENGTH (execute_plan initial_fmp [SOPop n]) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >>
+  `ps with ps_stack := stack_pop n ps.ps_stack =
+     apply_prefix_ops initial_fmp FEMPTY [SOPop n] ps` by
+    simp[mixedPrefixSimTheory.apply_prefix_ops_def,
+      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def,
+      stackModelTheory.stack_pop_def] >>
+  pop_assum SUBST1_TAC >> irule sym_prefix_ops_sim >>
+  simp[prefixExecTheory.prefix_wf_def, prefixExecTheory.stack_op_wf_def,
+    mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def,
+    prefixSimTheory.is_prefix_op_def]
+QED

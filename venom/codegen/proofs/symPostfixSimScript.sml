@@ -451,43 +451,6 @@ Proof
   irule scratch_mem_ok_store >> simp[scratch_mem_ok_def]
 QED
 
-Theorem sym_mstore_scratch_step:
-  ss.sym_stack = Val off :: sv :: tail ==>
-  ?ss'. sym_mstore ss = SymOK ss' /\
-        ss'.sym_stack = tail /\
-        ss'.sym_mem_labels = scratch_store_labels ss.sym_mem_labels (w2n off) sv /\
-        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
-Proof
-  Cases_on `sv` >> strip_tac >>
-  simp[sym_mstore_def, scratch_store_labels_def, sym_step_concrete_def,
-       sym_lift_def, sval_val_def, asm_op_arity_def, asm_op_arity_table_def,
-       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
-       mem_labels_hit_def, asmOpSimTheory.asm_step_op_mstore,
-       asm_mstore_def, asm_next_def]
-QED
-
-Theorem sym_mload_scratch_word:
-  ss.sym_stack = Val off :: tail /\
-  mem_sval_at ss.sym_mem_labels (w2n off) (Val word) ==>
-  ?ss' w. sym_mload ss = SymOK ss' /\
-        ss'.sym_stack = Val w :: tail /\
-        ss'.sym_mem_labels = ss.sym_mem_labels /\
-        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
-Proof
-  strip_tac >>
-  `FLOOKUP ss.sym_mem_labels (w2n off) = NONE` by
-    (gvs[mem_sval_at_def, flookup_thm] >>
-     first_x_assum irule >> simp[in_mem_range_def]) >>
-  simp[sym_mload_def, mem_label_at_def, sym_step_concrete_def,
-       sym_lift_def, sval_val_def, asm_op_arity_def, asm_op_arity_table_def,
-       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
-       mem_labels_hit_def, asmOpSimTheory.asm_step_op_mload,
-       asm_mload_def, asm_next_def] >>
-  `~(?i. i IN FDOM ss.sym_mem_labels /\ in_mem_range (w2n off) 32 i)` by
-    metis_tac[mem_sval_at_def] >>
-  simp[mem_labels_clear_def, DRESTRICT_UNIV, GSYM pred_setTheory.UNIV_DEF]
-QED
-
 Theorem op_kind_ok_word_irrelevant:
   op_kind_ok fn ret op (Val w) = op_kind_ok fn ret op (Val v)
 Proof
@@ -572,17 +535,6 @@ Proof
   simp[scratch_store_labels_at]
 QED
 
-(* Exported here so scratch replay and emitted instructions share the rule. *)
-Theorem sym_step_push_word:
-  sym_step p env (AsmPush bytes) ss = SymOK
-    (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
-                sym_stack := Val (word_of_bytes F (0w:bytes32) (REVERSE bytes)) ::
-                             ss.sym_stack |>)
-Proof
-  simp[sym_step_def, sym_lift_def, asm_step_def, asm_next_def,
-       sym_state_component_equality, asm_state_component_equality]
-QED
-
 (* A scratch instruction consists of a numeric address push and one operation. *)
 Theorem sym_scratch_push_then_run:
   asm_block_at p ss.sym_base.as_pc [AsmPush (encode_num_bytes off); inst] /\
@@ -602,7 +554,7 @@ Proof
           dividesTheory.divides_def] >>
      qexists_tac `32` >> simp[]) >>
   gvs[asm_next_def] >>
-  simp[asmSpliceTheory.sym_steps_compute, sym_step_push_word, asm_next_def]
+  simp[asmSpliceTheory.sym_steps_compute, sym_step_push_bytes, asm_next_def]
 QED
 
 Theorem sym_scratch_store_run:

@@ -85,15 +85,6 @@ Proof
   metis_tac[scratch_kinds_ok_save]
 QED
 
-Theorem sym_step_push_bytes:
-  sym_step p env (AsmPush bytes) ss =
-  SymOK (ss with <| sym_base := (asm_next ss.sym_base) with as_stack := [];
-    sym_stack := Val (word_of_bytes F (0w:bytes32) (REVERSE bytes)) :: ss.sym_stack |> )
-Proof
-  simp[sym_step_def, asmSemTheory.asm_step_def, sym_lift_def,
-       asmSemTheory.asm_next_def, sym_state_component_equality]
-QED
-
 Theorem sym_push_offset_step:
   off < dimword(:256) ==>
   ?mid. sym_step p env (AsmPush (encode_num_bytes off)) ss = SymOK mid /\
@@ -135,7 +126,8 @@ Theorem sym_step_scratch_push:
   sym_step p env (AsmPush (encode_num_bytes off)) ss =
     SymOK (scratch_push_state off ss)
 Proof
-  simp[sym_step_push_bytes, scratch_push_state_def, raw_spill_push_encode_num_roundtrip]
+  simp[sym_step_push_bytes, scratch_push_state_def, raw_spill_push_encode_num_roundtrip,
+       asm_next_def]
 QED
 
 Theorem sym_steps_scratch_store:
@@ -857,15 +849,3 @@ Proof
   drule_all_then MATCH_ACCEPT_TAC scratch_repeated_continue
 QED
 
-Theorem scratch_repeated_allocation_separated[local]:
-  spill_alloc_layout_wf al sp /\
-  offsets = FST (spill_alloc_n [] al [op;op]) /\
-  al2 = FOLDL (\a off. free_spill_slot off a)
-    (SND (spill_alloc_n [] al [op;op])) offsets ==>
-  LENGTH offsets = LENGTH [op;op] /\ ALL_DISTINCT offsets /\
-  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
-    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets)
-Proof
-  strip_tac >> drule_all_then strip_assume_tac doSwapSimTheory.spill_alloc_n_temporary_layout >>
-  metis_tac[]
-QED

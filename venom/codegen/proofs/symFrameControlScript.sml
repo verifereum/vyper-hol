@@ -132,24 +132,6 @@ Proof
   metis_tac[fnFrameStepsRevertForwardTheory.rf_release_spill_lookup]
 QED
 
-(* Reassemble the frame boundary after a region-local symbolic segment. *)
-Theorem sym_frame_inv_region_transfer:
-  !p env ctx cp fn ret srest labs0 ps cs ss r cs' ss' ps'.
-  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
-  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
-  asm_sym_rel p env cs' ss' /\
-  sym_kinds_ok cp fn ret srest ps' ss' /\
-  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
-       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
-  sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
-Proof
-  rw[sym_frame_inv_def] >>
-  `~(r.sr_spill_base <= b /\ b < r.sr_spill_end)` by
-    (strip_tac >> fs[closure_spill_byte_def] >>
-     metis_tac[fcgDefsTheory.fcg_path_def, relationTheory.RTC_REFL]) >>
-  metis_tac[]
-QED
-
 (* The symbolic prefix and the concrete endpoint share an explicit count. *)
 Theorem sym_selected_prefix_frame_sim_marked:
   !opc operands nl ps iops prepared dfg selected rops arranged spillbase
@@ -1001,15 +983,6 @@ Proof
 QED
 
 
-Theorem list_rel_index_schedule:
-  !R xs ys ids. LIST_REL R xs ys /\ EVERY (\i. i < LENGTH xs) ids ==>
-    LIST_REL R (MAP (\i. EL i xs) ids) (MAP (\i. EL i ys) ids)
-Proof
-  rpt strip_tac >>
-  fs[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >>
-  simp[listTheory.LIST_REL_EL_EQN, listTheory.EL_MAP]
-QED
-
 Theorem list_rel_reversed_index_schedule:
   LIST_REL R (REVERSE items) vals /\ LENGTH items = d + 1 /\ 0 < d /\
   ids = [d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0] /\
@@ -1024,7 +997,7 @@ Proof
      irule doSwapSimTheory.reverse_desired_values >> simp[]) >>
   qpat_x_assum `REVERSE (MAP _ _) = _`
     (fn th => pure_rewrite_tac[th]) >>
-  irule list_rel_index_schedule >> gvs[]
+  irule LIST_REL_select_indices >> gvs[]
 QED
 
 Theorem do_swap_deep_symbolic_resources:

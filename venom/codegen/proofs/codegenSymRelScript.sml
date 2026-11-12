@@ -242,17 +242,6 @@ End
 
 
 
-Theorem sym_run_SUC_step[local]:
-  sym_run p env (SUC fuel) ss =
-  if ss.sym_base.as_pc >= LENGTH p then SymError "pc out of bounds"
-  else
-    case sym_step p env (EL ss.sym_base.as_pc p) ss of
-      SymOK ss' => sym_run p env fuel ss'
-    | r => r
-Proof
-  simp[Once sym_run_def]
-QED
-
 Theorem sym_steps_add:
   !m n ss. sym_steps p env (m + n) ss =
            case sym_steps p env m ss of
@@ -355,6 +344,17 @@ Proof
        asm_next_def, sym_state_component_equality]
 QED
 
+Theorem sym_step_push_bytes:
+  !p env bytes ss.
+    sym_step p env (AsmPush bytes) ss = SymOK
+      (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
+         sym_stack := Val (word_of_bytes F (0w:bytes32) (REVERSE bytes)) ::
+                      ss.sym_stack |> )
+Proof
+  simp[sym_step_def, asmSemTheory.asm_step_def, sym_lift_def,
+       asmSemTheory.asm_next_def, asmSymSemTheory.FORALL_sym_state]
+QED
+
 (* The memory labels after a 32-byte store of sv at off. *)
 Definition scratch_store_labels_def:
   scratch_store_labels labs off (Val w) =
@@ -391,6 +391,55 @@ Proof
   gvs[in_mem_range_def]
 QED
 
+Theorem mem_sval_val_no_label:
+  mem_sval_at labs off (Val w) ==>
+  mem_label_at labs off = NONE /\ ~mem_labels_hit labs (in_mem_range off 32)
+Proof
+  simp[mem_sval_at_def, mem_labels_hit_def] >> strip_tac >>
+  `FLOOKUP labs off = NONE` by
+    (simp[finite_mapTheory.FLOOKUP_DEF] >>
+     first_x_assum irule >> simp[in_mem_range_def]) >>
+  simp[mem_label_at_def] >> metis_tac[]
+QED
+
+Theorem sym_mload_scratch_word:
+  !ss off w stk.
+  ss.sym_stack = Val off :: stk /\
+  mem_sval_at ss.sym_mem_labels (w2n off) (Val w) ==>
+  ?ss' w'. sym_mload ss = SymOK ss' /\
+    ss'.sym_stack = Val w' :: stk /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  rpt strip_tac >> drule mem_sval_val_no_label >> strip_tac >>
+  simp[sym_mload_def, sym_step_concrete_def, asm_op_arity_def,
+       asm_op_arity_table_def, sval_val_def, asm_op_mem_reads_def,
+       asm_op_mem_writes_def, sym_lift_def,
+       asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def, asmSemTheory.asm_mload_def,
+       asmSemTheory.asm_next_def, mem_labels_clear_def,
+       GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV]
+QED
+
+Theorem sym_mstore_scratch_step:
+  !ss off sv stk.
+  ss.sym_stack = Val off :: sv :: stk ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
+    ss'.sym_mem_labels = scratch_store_labels ss.sym_mem_labels (w2n off) sv /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  rpt gen_tac >> Cases_on `sv` >> strip_tac >>
+  simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
+       sval_val_def, asm_op_arity_table_def, asmSemTheory.log_table_def,
+       asm_op_mem_reads_def, asm_op_mem_writes_def,
+       mem_labels_hit_def, sym_lift_def, asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
+       asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
+       asmSemTheory.asm_step_memory_def,
+       asmSemTheory.asm_mstore_def, asmSemTheory.asm_next_def,
+       scratch_store_labels_def, Excl "GENLIST_NUMERALS"]
+QED
+
 (* A run of n steps that ends ends the run with more fuel. *)
 Theorem sym_steps_terminal_run:
   !n ss fuel.
@@ -398,7 +447,7 @@ Theorem sym_steps_terminal_run:
     sym_run p env (n + fuel) ss = sym_steps p env n ss
 Proof
   Induct >> simp[sym_steps_def, sym_terminal_def, ADD_CLAUSES] >>
-  rpt gen_tac >> simp[sym_run_SUC_step] >>
+  rpt gen_tac >> simp[sym_run_SUC] >>
   IF_CASES_TAC >> simp[sym_terminal_def] >>
   Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >>
   simp[sym_terminal_def] >>
@@ -423,4 +472,30 @@ Proof
   Cases_on `sym_step p env (EL cs.as_pc p) ss` >>
   gvs[asm_sym_step_rel_def] >> strip_tac >> gvs[] >>
   first_x_assum drule_all >> simp[]
+QED
+
+Theorem LIST_REL_select_indices:
+  !R xs ys indices.
+    LIST_REL R xs ys /\ EVERY (\i. i < LENGTH xs) indices ==>
+    LIST_REL R (MAP (\i. EL i xs) indices) (MAP (\i. EL i ys) indices)
+Proof
+  simp[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL,
+       listTheory.EL_MAP]
+QED
+
+Theorem sym_frame_inv_region_transfer:
+  !p env ctx cp fn ret srest labs0 ps cs ss r cs' ss' ps'.
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  asm_sym_rel p env cs' ss' /\
+  sym_kinds_ok cp fn ret srest ps' ss' /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
+Proof
+  rw[sym_frame_inv_def] >>
+  `~(r.sr_spill_base <= b /\ b < r.sr_spill_end)` by
+    (strip_tac >> fs[closure_spill_byte_def] >>
+     metis_tac[fcgDefsTheory.fcg_path_def, relationTheory.RTC_REFL]) >>
+  metis_tac[]
 QED
