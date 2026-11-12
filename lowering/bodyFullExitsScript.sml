@@ -180,19 +180,6 @@ Proof
   conj_tac >> qexists_tac `0` >> simp[exit_result_def]
 QED
 
-(* TEMP until gasOutcomeFullCompose has it. *)
-Theorem gas_outcome_full_exit[local]:
-  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
-  gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
-    (s, G, tn) [] (r, G', tn') /\
-  exit_result r /\ R res (ee with gas_obs := []) (G', tn') r ==>
-  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
-    (es, s, G, tn) Q R
-Proof
-  rw[gas_outcome_full_def] >> qexists_tac `[]` >> disj1_tac >>
-  qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >> simp[gas_explicit_def]
-QED
-
 (* ===== Posts at a jump ===== *)
 
 Theorem ghost_inv_at_jump_to[local]:
