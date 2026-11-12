@@ -156,3 +156,84 @@ Proof
   strip_tac >> gvs[] >>
   Cases_on `asm_step lo o2pc (EL s.as_pc prog) s` >> gvs[]
 QED
+
+(* Creation operands are the only dynamic part of the universal word-memory
+   bound.  A prefix records them only at states actually visited. *)
+Definition create_safe_def:
+  create_safe inst (stk:bytes32 list) <=>
+    ((inst = AsmOp "CREATE" \/ inst = AsmOp "CREATE2") ==>
+     case stk of _ :: _ :: sz :: _ => w2n sz <= 2 * max_code_size | _ => F)
+End
+
+Definition create_safe_prefix_def:
+  create_safe_prefix lo o2pc prog n s <=>
+    !j t. j < n /\ asm_steps lo o2pc prog j s = AsmOK t ==>
+      create_safe (EL t.as_pc prog) t.as_stack
+End
+
+Theorem create_safe_prefix_zero[simp]:
+  create_safe_prefix lo o2pc prog 0 s
+Proof
+  simp[create_safe_prefix_def]
+QED
+
+Theorem create_safe_prefix_mono:
+  create_safe_prefix lo o2pc prog n s /\ m <= n ==>
+  create_safe_prefix lo o2pc prog m s
+Proof
+  rw[create_safe_prefix_def] >> first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem create_safe_prefix_suc:
+  create_safe_prefix lo o2pc prog (SUC n) s <=>
+  create_safe (EL s.as_pc prog) s.as_stack /\
+  (s.as_pc < LENGTH prog ==>
+   !t. asm_step lo o2pc (EL s.as_pc prog) s = AsmOK t ==>
+       create_safe_prefix lo o2pc prog n t)
+Proof
+  simp[create_safe_prefix_def] >> eq_tac
+  >- (strip_tac >> conj_tac
+      >- (first_x_assum (qspec_then `0` mp_tac) >> simp[asm_steps_def]) >>
+      rpt strip_tac >> first_x_assum (qspec_then `SUC j` mp_tac) >>
+      simp[asm_steps_def]) >>
+  strip_tac >> Cases_on `j` >> simp[asm_steps_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem create_safe_prefix_compose:
+  !m n s t.
+    asm_steps lo o2pc prog m s = AsmOK t /\
+    create_safe_prefix lo o2pc prog m s /\
+    create_safe_prefix lo o2pc prog n t ==>
+    create_safe_prefix lo o2pc prog (m + n) s
+Proof
+  Induct_on `m` >- simp[asm_steps_def] >>
+  rpt gen_tac >> simp[Once asm_steps_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[create_safe_prefix_suc, arithmeticTheory.ADD_CLAUSES] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem create_safe_imp_gas_ok:
+  create_safe inst stk ==>
+  asm_inst_gas_ok (2 * dimword (:256)) inst stk
+Proof
+  simp[create_safe_def, asm_inst_gas_ok_def, asm_mem_ranges_bounded]
+QED
+
+Theorem create_safe_prefix_run_bounded:
+  !n s R.
+    create_safe_prefix lo o2pc prog n s /\
+    asm_steps lo o2pc prog n s = R /\
+    (?t. R = AsmHalt t \/ R = AsmRevert t \/ R = AsmFault t) ==>
+    asm_run_bounded lo o2pc prog (2 * dimword (:256)) (SUC n) s
+Proof
+  Induct_on `n` >- simp[asm_steps_def] >>
+  rpt gen_tac >> simp[Once asm_steps_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[create_safe_prefix_suc] >>
+  drule create_safe_imp_gas_ok >> strip_tac >> gvs[] >>
+  simp[Once asm_run_bounded_def] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
