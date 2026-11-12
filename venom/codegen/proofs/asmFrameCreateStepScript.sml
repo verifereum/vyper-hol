@@ -850,7 +850,7 @@ Proof
          `call_trace s = []` by
            (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
          drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-         simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
+         simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def, call_requests_def] >>
          metis_tac[]) >>
      PairCases_on `h` >> rename1 `s.contexts = (c,rb)::(h0,h1)::saved` >>
      `?mr. c.msgParams.outputTo = Memory mr` by
@@ -869,7 +869,7 @@ Proof
      `call_trace s = []` by
        (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
      drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-     simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
+     simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def, call_requests_def] >>
      metis_tac[]) >>
   goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>

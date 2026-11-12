@@ -27,7 +27,7 @@ Theorem frame_resource_starved_single_transfer[local]:
   mid.txParams = es.txParams /\ frame_resource_starved mid r es' ==>
   frame_resource_starved es r es'
 Proof
-  rpt strip_tac >> gvs[frame_resource_starved_def, frame_outcome_def] >>
+  rpt strip_tac >> gvs[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def] >>
   metis_tac[]
 QED
 
@@ -108,10 +108,10 @@ Proof
             c0.msgParams.outputTo = Code tx.target`
     by gvs[deploy_state_rel_def] >>
   qpat_x_assum `deploy_state_rel _ _ _ _ _` kall_tac
-  >- (gvs[frame_resource_starved_def] >>
+  >- (gvs[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >>
       drule_all deploy_frame_exception >> strip_tac >>
       first_assum (irule_at (Pos hd)) >>
-      simp[frame_resource_starved_def] >> metis_tac[]) >>
+      simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >> metis_tac[]) >>
   Cases_on `res` >> gvs[venom_frame_rel_def]
   >~ [`Halt ss`]
   >- (drule_all deploy_frame_halt_mid >> strip_tac >>

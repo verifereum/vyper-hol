@@ -110,7 +110,7 @@ Theorem frame_resource_starved_mid:
   frame_resource_starved es r es' ==>
   frame_resource_starved es0 r es'
 Proof
-  simp[frame_resource_starved_def] >> strip_tac >>
+  simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >> strip_tac >>
   drule_all frame_outcome_mid >> strip_tac >>
   qexistsl_tac [`exc`, `out`, `c.logs ++ lgs`] >> simp[] >> strip_tac >>
   `?op. frame_inst_raises es exc op` by

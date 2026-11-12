@@ -50,7 +50,7 @@ Definition frame_resource_starved_def:
     ?exc out lgs. (exc = OutOfGas \/ exc = StackOverflow) /\
                   frame_outcome es r es' (SOME exc) out lgs /\
                   ((!a. (FST (HD es.contexts)).msgParams.outputTo <> Code a) ==>
-                   ?op. frame_inst_raises es exc op)
+                   frame_raises es exc)
 End
 
 (* ===== Single-frame bridge ===== *)

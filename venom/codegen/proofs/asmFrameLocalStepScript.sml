@@ -282,7 +282,7 @@ Proof
   Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >>
   drule (SRULE [MEM] frame_terminal_transplant) >>
   disch_then drule >> simp[vfm_abort_def] >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[frame_resource_starved_def] >>
+  goal_assum (drule_at Any) >> simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >>
   metis_tac[]
 QED
 

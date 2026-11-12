@@ -4,6 +4,8 @@
  *   add_frame_gas      - es with g more gas for its top frame
  *   frame_inst_at      - a state of the top frame's run and its instruction
  *   frame_inst_raises  - the top frame's instruction raises an exception
+ *   frame_raises       - some instruction of the top frame raises it
+ *   frame_raises_inst_raises - frame_raises names a frame_inst_raises op
  *   frame_inst_raises_here - the raise at the frame's own state
  *   frame_inst_raises_mid  - a raise from a later state of the frame
  *   add_frame_gas_wf_state - add_frame_gas keeps wf_state
@@ -58,6 +60,20 @@ Definition frame_inst_raises_def:
       step_inst op s = (INR (SOME exc), s') /\
       LENGTH s'.contexts = LENGTH es.contexts
 End
+
+(* Some instruction of the top frame's run raises exc there. *)
+Definition frame_raises_def:
+  frame_raises es exc <=>
+    ?s s' op. frame_inst_at es s op /\
+              step_inst op s = (INR (SOME exc), s') /\
+              LENGTH s'.contexts = LENGTH es.contexts
+End
+
+Theorem frame_raises_inst_raises:
+  frame_raises es exc <=> ?op. frame_inst_raises es exc op
+Proof
+  metis_tac[frame_raises_def, frame_inst_raises_def]
+QED
 
 Theorem add_frame_gas_contexts:
   es.contexts = (c, rb) :: t ==>

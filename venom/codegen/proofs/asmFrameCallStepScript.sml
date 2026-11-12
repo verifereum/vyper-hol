@@ -1442,7 +1442,7 @@ Resume asm_step_oog_starved[single]:
   `call_trace s = []` by
     (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
+  simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def, call_requests_def] >>
   metis_tac[]
 QED
 
@@ -1454,7 +1454,7 @@ Resume asm_step_oog_starved[nested]:
   `call_trace s = []` by
     (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
+  simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def, call_requests_def] >>
   metis_tac[]
 QED
 Finalise asm_step_oog_starved

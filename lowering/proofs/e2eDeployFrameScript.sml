@@ -27,7 +27,7 @@ Proof
             d.msgParams.gasLimit` >>
   gvs[set_return_data_def, bind_def, get_current_context_def,
       return_def, set_current_context_def, get_num_contexts_def,
-      reraise_def, frame_resource_starved_def, frame_outcome_def]
+      reraise_def, frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def]
 QED
 
 Theorem deploy_create[local]:
