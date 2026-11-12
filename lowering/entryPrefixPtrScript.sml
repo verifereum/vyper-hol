@@ -1,6 +1,6 @@
 (* Actual endpoint transport for the external entry prefix. *)
 Theory entryPrefixPtr
-Ancestors fragGasPathMem memSafeRun gasCount stmtForRangeMemoryParts instMemFrontier fragGasSeqMem entryDispatchCounters entryDispatchPtr ptrSafeRun ptrDiscipline moduleLoweringProps
+Ancestors fragGasPathMem fragGasOriginPtr memSafeRun gasCount stmtForRangeMemoryParts instMemFrontier fragGasSeqMem entryDispatchCounters entryDispatchPtr ptrSafeRun ptrDiscipline moduleLoweringProps
   moduleLowering fragExec venomExecSemantics venomInst venomState list
   finite_map words contextCodegenRel codegenRel compileEnv loweringStateRelDefs emitHelperProps
   exprLoweringProps typedCopyArrayPtr
@@ -92,6 +92,7 @@ Theorem compile_selector_checks_ptr_endpoint:
              phi_prefix_length bb.bb_instructions = 0) ==>
       ?tt G' tn'.
         gas_path_mem ctx fn ss 0 (OK tt) /\
+        (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (ss, G, tn) [] (OK tt, G', tn')) /\
         vars_pc_only ss tt /\ fresh_vars_wrt st' tt /\ ~tt.vs_halted /\
         tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
         tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
@@ -282,6 +283,7 @@ Theorem dispatch_scalar_update_ptr_endpoint:
     G' = step_prov PG G (mk_inst id opc ops [out]) (update_var out value s) /\
     tn' = step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn /\
     gas_path_mem ctx fn s 0 (OK u) /\
+    (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (s, G, tn) [] (OK u, G', tn')) /\
     vars_pc_only s u /\ fresh_vars_wrt st_next u /\ ~u.vs_halted /\
     u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = SUC s.vs_inst_idx /\
     eval_operand (Var out) u = SOME value /\
@@ -338,6 +340,7 @@ Theorem compile_selector_dispatch_linear_ptr_endpoint:
   allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) ==>
   ?tt G' tn'.
     gas_path_mem ctx fn ss 0 (OK tt) /\
+    (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (ss, G, tn) [] (OK tt, G', tn')) /\
     vars_pc_only ss tt /\ fresh_vars_wrt st' tt /\ ~tt.vs_halted /\
     tt.vs_current_bb = linear_dispatch_target ss.vs_call_ctx.cc_calldata selectors fallback /\
     tt.vs_inst_idx = 0 /\

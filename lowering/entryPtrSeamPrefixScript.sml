@@ -89,6 +89,14 @@ Theorem external_entry_reaches_registration_ptr:
       fn_inst_ids_distinct efn /\
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
       cenv.ce_return_buf = NONE /\
+      gas_path_mem unit.cu_context efn
+        (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                    vs_inst_idx := 0 |>) 0 (OK s1) /\
+      (!D explicit.
+         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
+           (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                       vs_inst_idx := 0 |>, FEMPTY, entry_taint)
+           [] (OK s1, G1, tn1)) /\
       vars_pc_only
         (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                     vs_inst_idx := 0 |>) s1 /\
