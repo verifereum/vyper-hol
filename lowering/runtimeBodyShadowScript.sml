@@ -5,9 +5,83 @@ Theory runtimeBodyShadow
 Ancestors
   runtimeBodyStartDefs gasShadowRunLowering gasShadowUnit gasShadowState
   gasShadow fragExec loweringPosts bodySim supportedStmts compileVyper
-  moduleLowering vyperCompiler
+  moduleLowering vyperCompiler actualRegistrationCode
+  actualDecoderPackaging rawEntryCode loweringShapeProps loweringShapeDefs
+  loweringShapeRules compileEnv venomInst list
 
 val _ = Parse.hide "body";
+
+Theorem run_lowering_pinned_body_interval[local]:
+  run_lowering sels (pre ++ (lbl,ce,pos,mincd,pay,nr,key,ut,iv,body,rt)::post)
+    ints fb rp buckets metadata dense info "__entry" = SOME unit /\
+  rp.rpol_frontend_dispatch = Linear /\
+  EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) sels /\
+  EVERY external_fn_shape_ok
+    (pre ++ (lbl,ce,pos,mincd,pay,nr,key,ut,iv,body,rt)::post) /\
+  EVERY internal_fn_shape_ok ints /\ fallback_shape_ok fb /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  ALL_DISTINCT (MAP FST (internal_fn_descriptors ints)) /\
+  fresh_label "fallback" (initial_compile_state "__entry") = (fl,ls) /\
+  compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) sels)
+    fl ls = ((),ds) /\
+  compile_external_fn_bodies pre ds = ((),opened) /\
+  new_block lbl opened = (opened.cs_current_bb,checks) /\
+  compile_entry_checks mincd pay checks = ((),st) /\
+  compile_register_positional_args ce pos 4 st = (cenv,sa) /\
+  compile_guarded_body cenv nr key ut iv body rt sa = ((),st') ==>
+  ?func.
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+    MEM func unit.cu_context.ctx_functions /\
+    shape_state sa /\ cs_extends sa st' /\ fn_has_code sa st' func
+Proof
+  strip_tac >>
+  `shape_state (initial_compile_state "__entry")` by
+    simp[shape_state_initial_compile_state] >>
+  Cases_on `compile_generate_runtime sels
+    (pre ++ (lbl,ce,pos,mincd,pay,nr,key,ut,iv,body,rt)::post)
+    ints fb Linear buckets metadata dense info (initial_compile_state "__entry")` >>
+  rename1 `_ = (u,final)` >> Cases_on `u` >>
+  drule_all runtime_dispatch_shape_boundary >> strip_tac >>
+  drule_all runtime_external_boundary >> strip_tac >>
+  gvs[] >>
+  `EVERY external_fn_shape_ok pre` by gvs[EVERY_APPEND] >>
+  drule_all external_bodies_run_shape >> strip_tac >>
+  `shape_state checks` by metis_tac[shape_state_new_block] >>
+  mp_tac compile_entry_checks_shape >> simp[shape_step_def] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  `compile_external_function_body ce pos nr key ut iv body rt st = ((),st')` by
+    simp[compile_external_function_body_def, comp_bind_def] >>
+  drule external_function_registration_boundary >>
+  impl_tac >- gvs[external_fn_shape_ok_def] >> strip_tac >> gvs[] >>
+  `compile_external_fn_bodies
+    [(lbl,ce,pos,mincd,pay,nr,key,ut,iv,body,rt)] opened = ((),st')` by
+    simp[compile_external_fn_bodies_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def] >>
+  `compile_external_fn_bodies post st' = ((),external_st)` by
+    (qpat_x_assum `compile_external_fn_bodies (_ ++ _) _ = _` mp_tac >>
+     rewrite_tac[external_bodies_append] >> strip_tac >> gvs[] >>
+     qpat_x_assum `compile_external_fn_bodies (_::_) _ = _` mp_tac >>
+     pure_once_rewrite_tac[external_bodies_cons_split] >> strip_tac >> gvs[]) >>
+  `shape_state st'` by
+    (irule (cj 1 external_bodies_run_shape) >>
+     qexistsl_tac [`[(lbl,ce,pos,mincd,pay,nr,key,ut,iv,body,rt)]`, `opened`] >>
+     simp[]) >>
+  `shape_state external_st /\ cs_extends st' external_st` by
+    (irule external_bodies_run_shape >> simp[] >> qexists_tac `post` >> simp[]) >>
+  drule_all external_fallback_suffix_extends >> strip_tac >>
+  `MEM (mk_raw_function "__entry" (all_blocks entry_end))
+    unit.cu_context.ctx_functions` by
+    (irule run_lowering_packaged_entry_member >>
+     goal_assum $ drule_at Any >> simp[] >> metis_tac[]) >>
+  `?func. lookup_function "__entry" unit.cu_context.ctx_functions = SOME func` by
+    (irule lookup_function_exists_for_name >> simp[MEM_MAP] >>
+     goal_assum $ drule_at Any >> simp[mk_raw_function_def]) >>
+  `cs_extends st' entry_end` by metis_tac[cs_extends_trans] >>
+  drule_all run_lowering_entry_interval >> strip_tac >>
+  qexists_tac `func` >> simp[] >>
+  irule external_decoder_fn_has_code >> simp[] >>
+  qexists_tac `registered` >> simp[cs_extends_refl]
+QED
 
 (* From the pinned start st, the shadow chain runs the spine's per-step
    gas_shadow_compiles results (fresh_label, dispatch,
