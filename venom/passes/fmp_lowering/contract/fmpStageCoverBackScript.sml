@@ -3,17 +3,14 @@
  * coverage runs over the target's reachable states, but the stage's step
  * lemmas go forward from a source step that terminates.  These lemmas
  * give that source step from the target's: at a related point the source
- * step does not fail, and the call, block entry and return the target
- * takes have source counterparts.
+ * step does not fail, and a jump's target block can be entered.
+ * fmpStageCoverCall does calls, returns and the context entry.
  *
  * TOP-LEVEL:
  *   fmp_stage_src_defined      - source operands are defined at a point
  *   fmp_stage_back_kept        - a kept instruction's source step terminates
  *   fmp_stage_back_fmp_ops     - DALLOCA and RETPC_PARAM never fail
- *   fmp_stage_back_entry       - the context entry's block can be entered
  *   fmp_stage_back_block_entry - a jump's target block can be entered
- *   fmp_stage_back_call        - an INVOKE can enter its callee
- *   fmp_stage_back_ret         - a RET returns into its caller
  *)
 Theory fmpStageCoverBack
 Ancestors
@@ -40,6 +37,14 @@ Proof
   fs[o1_fn_shape_def, make_ssa_input_ok_def] >> metis_tac[]
 QED
 
+(* Why it holds: the target steps the same inst, so shape errors match;
+   source Var operands are defined (fmp_stage_src_defined) and labels
+   agree.  inst_shape_ok bans DJMP; retpc_shape_ok gives RET operands.
+   The value-dependent risk is PARAM's index: fmp_params_rel gives only
+   LENGTH s <= LENGTH t.  A callee with a root has the pre-root conjunct
+   LENGTH s.vs_params = LENGTH (fn_user_param_insts fn); for a root-less
+   callee the source frame's params are the call's args, and the caller's
+   lowering checked invoke_raw_input_layout_ok (fmpLowerDefsScript). *)
 Theorem fmp_stage_back_kept:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
@@ -52,6 +57,9 @@ Proof
   cheat
 QED
 
+(* Why it holds: inst_wf fixes DALLOCA as [size_op],[out] and
+   RETPC_PARAM as [Lit idx],[out]; RETPC_PARAM has no bound check, and
+   DALLOCA's operand is defined (fmp_stage_src_defined) and not a Label. *)
 Theorem fmp_stage_back_fmp_ops:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
@@ -61,19 +69,10 @@ Proof
   cheat
 QED
 
-Theorem fmp_stage_back_entry:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
-  fn_entry_label fn = SOME lbl ==>
-  ?s1 inst.
-    enters_block fn
-      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                  vs_inst_idx := 0 |>) s1 /\
-    active_inst fn inst s1
-Proof
-  cheat
-QED
-
+(* Why it holds: DJMP is banned by inst_shape_ok.  make_ssa_input_ok
+   gives fn_phis_cover_preds (the edge from bi's block is a predecessor)
+   and fn_defs_reach_uses for PHI operands: the PHI analogue of
+   fmp_stage_src_defined, at the end of the predecessor block. *)
 Theorem fmp_stage_back_block_entry:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn bi sb /\ active_inst fn bi sb /\
@@ -81,42 +80,6 @@ Theorem fmp_stage_back_block_entry:
   step_inst k C bi sb = OK (jump_to lbl sb) /\
   MEM lbl (MAP (\bb. bb.bb_label) fn.fn_blocks) ==>
   ?s1 inst. enters_block fn (jump_to lbl sb) s1 /\ active_inst fn inst s1
-Proof
-  cheat
-QED
-
-Theorem fmp_stage_back_call:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  frame_reachable vs C stk PG G tn fn ivk s /\ active_inst fn ivk s /\
-  ivk.inst_opcode = INVOKE ==>
-  ?nm ops callee args cs s1 inst.
-    decode_invoke ivk = SOME (nm,ops) /\ C.ctx_entry <> SOME nm /\
-    lookup_function nm C.ctx_functions = SOME callee /\
-    eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
-    enters_block callee cs s1 /\ active_inst callee inst s1
-Proof
-  cheat
-QED
-
-Theorem fmp_stage_back_ret:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
-  frame_reachable vs C (f::stk) PG G tn fn rinst s /\
-  active_inst fn rinst s /\ ~s.vs_halted /\ rinst.inst_opcode = RET /\
-  fmp_stage_rel D C' sm fmp0 raw0 eom T (f::stk) PG G tn fn s lo t
-    ((tc,lc)::ts) /\
-  lookup_function f.cf_fn.fn_name C'.ctx_functions = SOME fc' /\
-  active_inst fc' ivk' tc /\
-  step_inst k' C' rinst t = IntRet ret' t_end /\
-  bind_outputs ivk'.inst_outputs ret'.iret_values
-    (adopt_return_fmp ret' (merge_callee_state tc t_end)) = SOME t' ==>
-  ?ret s_end s' inst'.
-    step_inst k C rinst s = IntRet ret s_end /\
-    bind_outputs f.cf_inst.inst_outputs ret.iret_values
-      (adopt_return_fmp ret (merge_callee_state f.cf_state s_end)) =
-      SOME s' /\
-    active_inst f.cf_fn inst'
-      (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
 Proof
   cheat
 QED

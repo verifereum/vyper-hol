@@ -22,7 +22,7 @@
  *)
 Theory fmpStageCoverage
 Ancestors
-  fmpStageCoverBack fmpStageCoverMem fmpStageBlockSim fmpStageFmpSteps
+  fmpStageCoverCall fmpStageCoverBack fmpStageCoverMem fmpStageBlockSim fmpStageFmpSteps
   fmpStageOpSteps fmpStageOpBase fmpStageControl fmpStageRel
   concretizePtrCoverageStaticMemReachability unitMemInv ptrDiscipline
   contextCodegenRel o1PassContract venomPassSchedule venomCompilerTypes

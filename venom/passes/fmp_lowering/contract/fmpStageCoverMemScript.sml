@@ -26,6 +26,11 @@ Definition fmp_inserted_op_def:
     MEM op [ASSIGN; ADD; NOT; AND; BUMP; INITIAL_FMP; FMP_PARAM; RETPC_PARAM]
 End
 
+(* Why it holds: a nonempty range above eom, or through a pointer, lies
+   in its site G v = (b,sz) (access_ok); fmp_stage_operand relates the
+   pointer to its relocated site c >= fmp0 (fmp_sites_ok), with no wrap
+   since c + sz <= lo <= raw (fmp_frontier_rel).  Other ranges come from
+   untainted non-pointer operands (taint_ok), equal on both sides. *)
 Theorem fmp_stage_kept_mem:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
@@ -39,6 +44,12 @@ Proof
   cheat
 QED
 
+(* Why it holds: restores sit only at reclaim points (DALLOCA, jumps,
+   needs-FMP INVOKEs), none of which lies between p and j, and the root
+   never sits at a RETURNDATACOPY; so the ASSIGNs map one-to-one.
+   same_after_assigns is unchanged since the inserted instructions write
+   only the runner, fresh temps (the real fn' pins their names) and the
+   DALLOCA's own output. *)
 Theorem fmp_stage_forward_lift:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\ MEM fn C.ctx_functions /\
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
@@ -54,6 +65,10 @@ Proof
   cheat
 QED
 
+(* Why it holds: target indices tidx idx .. tidx (SUC idx) - 1 hold
+   the plan point's restore (ASSIGN), then the image of EL idx: one kept
+   inst, or ADD/NOT/AND/BUMP for DALLOCA; the root (INITIAL_FMP, or
+   FMP_PARAM then RETPC_PARAM after the user params) adds one more. *)
 Theorem fmp_stage_inserted_at:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\ MEM fn C.ctx_functions /\
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
