@@ -113,30 +113,7 @@ QED
    the label map is []; and the output has no ALLOCA (row 3).  A function
    with a static layout is returned as it is, and the rewrite keeps the
    blocks' shape and adds no FMP operation, so the output is still a
-   MakeSSA input without raw FMP operations; the FMP convention is kept. *)
-(* The rewrite adds only ASSIGN and NOP, so it adds no FMP opcode. *)
-Theorem concretize_step_pre_fmp_ops:
-  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
-  pre_fmp_ops fn ==>
-  pre_fmp_ops out.fpo_function
-Proof
-  strip_tac >>
-  `execute_configured_fn_pass rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-     observed s fn = SOME out` by fs[fn_pass_step_def] >>
-  Cases_on `fn.fn_eom`
-  >- (gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
-      drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
-      fs[pre_fmp_ops_def, apply_context_concretize_layout_def,
-         apply_concretize_layout_def] >>
-      simp[fn_insts_def] >> REWRITE_TAC[GSYM fn_insts_def] >>
-      ho_match_mp_tac concretize_positions_opcode_every >>
-      conj_tac >- first_assum ACCEPT_TAC >> simp[pre_fmp_opcode_def]) >>
-  `fn_has_static_layout fn` by fs[fn_has_static_layout_def] >>
-  qpat_x_assum `execute_configured_fn_pass _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [concretize_function_fuel_in_context_def] >>
-  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
-QED
-
+   MakeSSA input with pre-FmpLowering opcodes; the FMP convention is kept. *)
 Theorem concretize_step_contract_at:
   o1_step_contract_at 2 rpolicy (CFP_Simple VP_ConcretizeMemLoc)
 Proof
@@ -147,11 +124,7 @@ Proof
   `wf_function fn /\ fn_inst_wf fn` by fs[o1_fn_shape_def] >>
   `make_ssa_input_ok out.fpo_function` by
     metis_tac[concretize_step_make_ssa_input_ok] >>
-  `no_raw_fmp_ops out.fpo_function` by metis_tac[concretize_step_no_raw_fmp] >>
   `pre_fmp_ops out.fpo_function` by metis_tac[concretize_step_pre_fmp_ops] >>
-  `fmp_sig_no_param out.fpo_function` by
-    (drule fn_pass_step_fmp_sig_no_param >>
-     simp[fn_pass_tag_def] >> metis_tac[]) >>
   qpat_x_assum `fn_pass_step _ _ _ _ _ _` mp_tac >>
   simp[fn_pass_step_def, execute_configured_fn_pass_concretize, AllCaseEqs()] >>
   strip_tac >> gvs[] >>

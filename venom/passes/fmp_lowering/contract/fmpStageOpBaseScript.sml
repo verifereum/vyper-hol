@@ -16,6 +16,7 @@ Ancestors
   fmpStageRel ptrStaticDiscipline ptrDiscipline o1PassContract
   fmpStepBridge fmpLowerDefs fmpWfDefs livenessProofs cfgHelpers pred_set
   contextCodegenRel venomExecSemantics venomInst list
+  fmpStageOpBaseRoot fmpStageOpBaseActual o1LowerDloadGhost finite_map
 
 Theorem frame_reachable_fn_mem[local]:
   !vs ctx stk PG G tn fn inst s.
@@ -49,6 +50,57 @@ Proof
   metis_tac[]
 QED
 
+Theorem static_invoke_prov_positions[local]:
+  ptr_use_static_ok P (fn_pv P fn) inst /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,ops) /\ FDOM G SUBSET fn_pv P fn ==>
+  !k site. k < LENGTH (MAP (op_prov G) ops) /\
+    EL k (MAP (op_prov G) ops) = SOME site ==> k IN P nm
+Proof
+  simp[ptr_use_static_ok_def] >> rpt strip_tac >> gvs[] >>
+  gvs[EL_MAP] >>
+  Cases_on `EL k ops` >> gvs[op_prov_def] >>
+  `s IN fn_pv P fn` by (fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem frame_reachable_static_prov_support[local]:
+  !vs C stk PG G tn fn inst s.
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  !P. EVERY (fn_static_ptr_ok P) C.ctx_functions ==>
+  MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn /\
+  (!k site. k < LENGTH PG /\ EL k PG = SOME site ==> k IN P fn.fn_name) /\
+  EVERY (\f. MEM f.cf_fn C.ctx_functions /\
+    FDOM f.cf_prov SUBSET fn_pv P f.cf_fn /\
+    (!k site. k < LENGTH f.cf_params /\ EL k f.cf_params = SOME site ==>
+      k IN P f.cf_fn.fn_name)) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[venomInstTheory.lookup_function_MEM])
+  >- (rpt strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+      irule step_prov_support >> simp[] >>
+      gvs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+      metis_tac[MEM_EL])
+  >- (rpt strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+      metis_tac[entry_prov_support])
+  >- (rpt strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+      imp_res_tac venomInstTheory.lookup_function_MEM >> gvs[] >>
+      `MEM inst (fn_insts fn)` by
+        (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+         metis_tac[MEM_EL]) >>
+      `ptr_use_static_ok P (fn_pv P fn) inst` by
+        (gvs[EVERY_MEM, fn_static_ptr_ok_def] >> metis_tac[]) >>
+      `fn'.fn_name = nm` by
+        (fs[lookup_function_def] >> drule venomExecProofsTheory.FIND_P >> simp[]) >>
+      drule static_invoke_prov_positions >> simp[] >>
+      disch_then (qspecl_then [`G`, `k`, `site`] mp_tac) >> simp[]) >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+  gvs[FDOM_DRESTRICT, SUBSET_DEF]
+QED
+
 (* Why: as frame_reachable_prov_support (o1LowerDloadGhost) for
    fn_ptr_ok: only syntactic pointers carry provenance, and a callee's
    pointer parameters are at positions its pointer roots name.  The static
@@ -64,7 +116,30 @@ Theorem fmp_stage_prov_support:
     (!k site. k < LENGTH f.cf_params /\ EL k f.cf_params = SOME site ==>
       k IN P f.cf_fn.fn_name)) stk
 Proof
-  cheat
+  rpt strip_tac >>
+  drule frame_reachable_static_prov_support >>
+  disch_then (qspec_then `P` mp_tac) >>
+  simp[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem stage_operand_live[local]:
+  wf_function fn /\ make_ssa_input_ok fn /\ active_inst fn inst s /\
+  MEM (Var v) inst.inst_operands ==>
+  MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+Proof
+  strip_tac >>
+  `fn_reachable fn s.vs_current_bb` by
+    (gvs[make_ssa_input_ok_def, cfgWfTheory.all_reachable_def, active_inst_def] >>
+     metis_tac[]) >>
+  `MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
+  gvs[active_inst_def] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    (irule venomExecProofsTheory.MEM_lookup_block >>
+     gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
+  drule live_vars_at_uses >> simp[] >>
+  disch_then irule >> goal_assum (drule_at Any) >>
+  simp[operand_var_in_inst_uses]
 QED
 
 (* Why: an operand of a non-PHI instruction is used there, so it is live
@@ -82,7 +157,27 @@ Theorem fmp_stage_operand:
   ?y. eval_operand op t = SOME y /\
       fmp_value_rel sm (op_prov G op) (op_taint tn op) x y
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_stage_frame_facts >> strip_tac >>
+  `fmp_env_rel sm fn
+     (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+     G tn.t_var s t /\ s.vs_labels = t.vs_labels` by
+    (gvs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
+  Cases_on `op` >>
+  gvs[venomStateTheory.eval_operand_def, op_prov_def, op_taint_def,
+      fmp_value_rel_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def,
+      word_agree_except_def]
+  >- (gvs[venomStateTheory.lookup_var_def] >>
+      `MEM s' (live_vars_at (liveness_analyze fn)
+                 s.vs_current_bb s.vs_inst_idx)` by
+        metis_tac[stage_operand_live, o1_fn_shape_def] >>
+      qpat_x_assum `fmp_env_rel _ _ _ _ _ _ _` mp_tac >>
+      simp[fmp_env_rel_def] >>
+      disch_then (qspec_then `s'` mp_tac) >> simp[op_taint_def] >>
+      strip_tac >> qexists `y` >>
+      gvs[fmp_value_rel_def,
+          o1LowerDloadRelocationKernelTheory.ld_value_agree_def,
+          word_agree_except_def])
 QED
 
 (* Why: fmp_frame_rel lets its lowering witness (infos, ctx, runner) be
@@ -99,5 +194,10 @@ Theorem fmp_stage_witness_pin:
   (fn_is_context_entry ctx fn <=> C.ctx_entry = SOME fn.fn_name) /\
   !i. MEM i (fn_insts fn) ==> ~MEM runner i.inst_outputs
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_stage_actual_witness >> strip_tac >>
+  imp_res_tac fmp_stage_lowered_root_fingerprint >>
+  Cases_on `fmp_stage_root infos0 ctx0 fn` >> gvs[] >>
+  Cases_on `fn_is_context_entry ctx fn` >>
+  Cases_on `fn_is_context_entry ctx0 fn` >> gvs[]
 QED

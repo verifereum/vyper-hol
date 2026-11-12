@@ -131,13 +131,16 @@ End
    the ledger with the same DALLOCA, so the sites a restore must drop
    (those at or above its new runner) are exactly the popped regions'.
    Own sites below the bottom are the ones a join dropped from the
-   analysis stack; no restore of this frame reaches them. *)
+   analysis stack; they end at or below the bottom, so no restore of this
+   frame reaches them. *)
 Definition fmp_ledger_link_def:
   fmp_ledger_link (sm : (num # num) |-> (num # num)) (eb:num) (lo:num) regions <=>
     !b z c id.
-      FLOOKUP sm (b,z) = SOME (c,id) /\ eb <= b /\ c < lo /\
-      (if regions = [] then lo else (LAST regions).fr_lo) <= c ==>
-      ?r. MEM r regions /\ r.fr_lo = c /\ r.fr_hi = c + z /\ r.fr_site = id
+      FLOOKUP sm (b,z) = SOME (c,id) /\ eb <= b /\ c < lo ==>
+      ((if regions = [] then lo else (LAST regions).fr_lo) <= c ==>
+       ?r. MEM r regions /\ r.fr_lo = c /\ r.fr_hi = c + z /\ r.fr_site = id) /\
+      (c < (if regions = [] then lo else (LAST regions).fr_lo) ==>
+       c + z <= (if regions = [] then lo else (LAST regions).fr_lo))
 End
 
 (* ===== The lowered function and the control map ===== *)
@@ -247,7 +250,7 @@ Definition fmp_frame_rel_def:
       fmp_frontier_rel fmp0 raw0 lo s.vs_fmp /\ elo <= lo /\
       eb <= w2n s.vs_fmp /\
       (!b z c id. FLOOKUP sm (b,z) = SOME (c,id) ==>
-         (eb <= b <=> elo <= c) /\ (b < eb ==> c + z <= elo)) /\
+         (eb <= b <=> elo <= c) /\ (b < eb ==> c + z <= elo /\ b + z <= eb)) /\
       (case root of
          NONE => lo = elo
        | SOME (rl,rp) =>
@@ -264,6 +267,7 @@ Definition fmp_frame_rel_def:
               lo = elo /\ stack = [] /\
               (fn_is_context_entry ctx fn ==> fmp0 = elo) /\
               (~fn_is_context_entry ctx fn ==>
+                 LENGTH s.vs_params = LENGTH (fn_user_param_insts fn) /\
                  LENGTH s.vs_params < LENGTH t.vs_params /\
                  EL (LENGTH s.vs_params) t.vs_params = n2w elo)
             else
@@ -285,6 +289,7 @@ Definition fmp_saved_rel_def:
         fmp_frame_rel sm fmp0 raw0 (fmp_frame_base raw0 stk)
           (fmp_frame_lo fmp0 ts) lo T f.cf_fn fn' f.cf_params f.cf_prov
           f.cf_tvar f.cf_state t) /\
+     f.cf_state.vs_halted = t.vs_halted /\
      fmp_saved_rel C' sm fmp0 raw0 stk ts) /\
   (fmp_saved_rel C' sm fmp0 raw0 [] (_::_) <=> F) /\
   (fmp_saved_rel C' sm fmp0 raw0 (_::_) [] <=> F)

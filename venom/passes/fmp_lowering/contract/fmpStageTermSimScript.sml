@@ -9,6 +9,8 @@
  *)
 Theory fmpStageTermSim
 Ancestors
+  fmpStageTermSimBasic fmpStageTermSimReturn
+  fmpStageTermSimSelfdestruct fmpStageTermSimJump
   fmpStageOpBase fmpStageRel o1LowerDloadRelocationKernel o1LowerDloadShared
   ptrStaticDiscipline ptrDiscipline o1PassContract contextCodegenRel
   venomExecSemantics venomState venomInst
@@ -34,7 +36,12 @@ Theorem fmp_stage_sim_halt:
     | Abort ab se => dead_result_rel D r r'
     | _ => F
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `inst.inst_opcode = RETURN`
+  >- (irule fmp_stage_return_result >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = SELFDESTRUCT`
+  >- (irule fmp_stage_selfdestruct_result >> metis_tac[]) >>
+  irule fmp_stage_basic_result >> fs[listTheory.MEM] >> metis_tac[]
 QED
 
 (* Why: a jump's condition and table index are untainted scalars with no
@@ -50,5 +57,5 @@ Theorem fmp_stage_sim_jump:
   ?lbl. r = OK (jump_to lbl s) /\
         !k'. step_inst k' C' inst t = OK (jump_to lbl t)
 Proof
-  cheat
+  MATCH_ACCEPT_TAC fmp_stage_jump_result
 QED
