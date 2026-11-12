@@ -5,6 +5,15 @@ Ancestors
   exprSimHypsDefs exprSimMemDefs loweringPosts exprSimUint2Str exprSimHash
   exprLoweringProps exprSimSource exprSafeOperand vyperTyping vyperTypeSystem vyperArith arithmetic context compileEnv valueEncoding loweringSlice vyperValue vyperAST
 
+Theorem u2s_safe_fields[local]:
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s ==>
+  s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
+  s.vs_requests = s0.vs_requests /\ s.vs_call_ctx = s0.vs_call_ctx
+Proof
+  strip_tac >>
+  gvs[u2s_safe_def, u2s_frame_def, venomStateTheory.venom_state_component_equality]
+QED
+
 Theorem u2s_alloc_mem_ready_mem[local]:
   compile_alloc_buffer sz sa = (ba,a) /\ fn_has_code sa a fn /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
@@ -30,7 +39,9 @@ Theorem u2s_alloc_mem_ready_mem[local]:
     (!aid off len. aid < sp.cs_next_id /\
        FLOOKUP spre.vs_allocas aid = SOME (off,len) ==>
        off+len <= b \/ b+sz <= off) /\
-    t.vs_memory = s.vs_memory
+    t.vs_memory = s.vs_memory /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   drule_all bodyMemAggregateAllocTheory.aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >>
@@ -87,7 +98,9 @@ Theorem u2s_allocated_mem_exit_mem[local]:
     ready.vs_memory = s.vs_memory /\ wb_frame cenv es es sp spre ready /\
     MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
     (!name lb lsz. local_region cenv es.scopes ready name lb lsz ==>
-       b+(sz+n) <= lb \/ lb+lsz <= b)
+       b+(sz+n) <= lb \/ lb+lsz <= b) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   drule_all u2s_alloc_layout_code >> strip_tac >>
@@ -112,6 +125,10 @@ Proof
     (irule u2s_frame_wb_tail >>
      simp[] >> qexistsl_tac [`a`, `b`, `ready`, `sz+n`] >>
      fs[u2s_safe_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `t.vs_accounts = ready.vs_accounts /\ t.vs_transient = ready.vs_transient /\
+   t.vs_requests = ready.vs_requests /\ t.vs_call_ctx = ready.vs_call_ctx` by
+    (qpat_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ ready t`
+       (mp_tac o MATCH_MP u2s_safe_fields) >> simp[]) >>
   qexistsl_tac [`b`, `ready`, `inst`, `t`] >> gvs[] >>
   drule_all fragGasPathMemTheory.gas_path_mem_then >> simp[] >>
   strip_tac >> first_assum ACCEPT_TAC
@@ -136,6 +153,8 @@ Theorem uint2str_numeric_mem_path:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
     ?p. eval_operand out t = SOME (n2w p) /\ p < dimword (:256) /\
       p+sz <= t.vs_alloca_next
 Proof
