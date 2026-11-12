@@ -279,3 +279,220 @@ Resume compile_log_eval_all_gas_mem[tail_value]:
 QED
 
 Finalise compile_log_eval_all_gas_mem
+
+(* Pure componentwise capture with allocation history and copy-read bounds. *)
+Theorem compile_log_eval_all_pure_gas_mem:
+  !args ctx func cenv cx R es sa xs sb s0 env env0 es0.
+    (!e tail es. R (e::tail) es ==>
+       expr_sim_mem ctx func cenv cx (expr_type e) e es /\
+       post_value_type cenv e = expr_type e /\
+       !v es1. bind (eval_expr cx e) (read_result cx) es = (INL v, es1) ==>
+         R tail es1 /\ es1.scopes = es.scopes /\
+         ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+              value_has_type tv v) /\
+    (!tail es gs. R tail es ==> R tail (es with gas_obs := gs)) /\
+    (!es sa sm sb s0 es1 es' e v x t ys vs u.
+       stmt_state_rel ctx func cenv cx es s0 /\
+       local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+       MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+       MAP FDOM es1.scopes = MAP FDOM es'.scopes /\
+       sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+       sm.cs_next_id <= sb.cs_next_id /\
+       (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
+       post_value_type cenv e = expr_type e /\ es'.scopes = es1.scopes /\
+       expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
+       stmt_state_rel ctx func cenv cx es' u /\
+       wb_frame cenv es1 es' sm t u /\
+       LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) u /\
+         expr_val_at cenv cx (SND arg) sm sb es' v (FST arg) u) ys vs ==>
+       stmt_state_rel ctx func cenv cx es' u /\
+       LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) u /\
+         expr_val_at cenv cx (SND arg) sa sb es' v (FST arg) u)
+         ((x,expr_type e)::ys) (v::vs) /\
+       wb_frame cenv es es' sa s0 u) /\
+    R args es /\ compile_log_eval_all cenv args sa = (xs,sb) /\
+    gas_admissible (eval_exprs cx args)
+      (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)) es /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    expr_sim_inv cenv cx env0 es0 /\ well_typed_exprs env args /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+       ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
+      (\res ee t. ?vs. res = INL vs /\
+         stmt_state_rel ctx func cenv cx ee t /\
+         LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) t /\
+           expr_val_at cenv cx (SND arg) sa sb ee v (FST arg) t) xs vs /\
+         wb_frame cenv es ee sa s0 t /\ ee.scopes = es.scopes /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+         LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
+                               value_has_type tv v) (MAP expr_type args) vs /\
+         LIST_REL (\p v. expr_store_bound cx (SND p) v (FST p) t) xs vs /\
+         EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
+                    (!lab. FST p <> Label lab)) xs)
+      (\res ee r. expr_exit res r)
+Proof
+  Induct
+  >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil] >>
+      `gas_path_mem ctx func s0 0 (OK s0)` by
+        (irule (cj 1 gas_path_mem_rules) >> simp[]) >>
+      simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      simp[gas_summary_at_def] >>
+      qexistsl_tac [`INL []`, `es`, `OK s0`] >>
+      simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def,
+           return_def, wb_frame_refl, log_mem_state_rel_gas_obs]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_log_eval_all_cons] >>
+  rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x,sm)` >>
+  rename1 `compile_log_eval_all cenv args sm = (ys,sb)` >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
+   sa.cs_next_id <= sm.cs_next_id /\
+   (!z. x = Var z ==> not_fresh_at sm z)` by
+    (drule (cj 2 compile_expr_grows) >> strip_tac >>
+     simp[] >> metis_tac[compile_lower_value_var]) >>
+  `cs_extends sm sb /\ sm.cs_next_var <= sb.cs_next_var /\
+   sm.cs_next_id <= sb.cs_next_id` by
+    (drule compile_log_eval_all_grows >> simp[]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  `expr_sim_mem ctx func cenv cx (expr_type e) e es /\
+   post_value_type cenv e = expr_type e` by metis_tac[] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[log_mem_head_admissible] >>
+  `well_typed_expr env e /\ well_typed_exprs env args` by
+    fs[vyperTypeSystemTheory.well_typed_expr_def] >>
+  `!lab. x <> Label lab` by
+    (drule_all lower_compile_expr_not_label >> simp[]) >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[local_ptrs_reserved_next_var] >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+  disch_then (qspecl_then [`sa`, `sm`, `x`, `s0`] mp_tac) >>
+  impl_tac >- fs[] >>
+  rewrite_tac[eval_exprs_cons_action] >>
+  simp[gas_outcome_def] >> strip_tac
+  >- suspend "head_summary" >>
+  qexists_tac `marks` >> disj2_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ee) (leaf,fin)` >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `fin`] >>
+  rewrite_tac[log_mem_ignore_bind_bind] >>
+  irule gas_exempt_cert_error_value >> first_assum ACCEPT_TAC
+QED
+
+Resume compile_log_eval_all_pure_gas_mem[head_summary]:
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+  simp[gas_summary_at_def] >> strip_tac
+  >- suspend "head_value" >>
+  `?ex. res = INR ex` by (Cases_on `res` >> gvs[]) >> gvs[] >>
+  qexists_tac `marks` >> disj1_tac >> simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
+  >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+  disj2_tac >> simp[] >> metis_tac[expr_exit_INR_type]
+QED
+
+Resume compile_log_eval_all_pure_gas_mem[head_value]:
+  gvs[] >>
+  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+    (fn th => assume_tac th >>
+              strip_assume_tac (REWRITE_RULE [gas_marked_exec_def] th)) >>
+  `bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+   (INL v, es_end with gas_obs := [])` by
+    (qpat_assum `!tail. _ (es with gas_obs := _) = _`
+       (qspec_then `[]` mp_tac) >> rewrite_tac[listTheory.APPEND_NIL]) >>
+  `R (e::args) (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+    metis_tac[] >>
+  `R args (es_end with gas_obs := []) /\ es_end.scopes = es.scopes /\
+   ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+        value_has_type tv v` by
+    (qpat_assum `!e tail es. R (e::tail) es ==> _` drule >>
+     strip_tac >> first_x_assum drule >> simp[]) >>
+  `~t.vs_halted` by metis_tac[gas_marked_path_exec, gas_path_normal] >>
+  `gas_admissible (eval_exprs cx args)
+     (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception))
+     (es_end with gas_obs := [])` by
+    (irule log_mem_tail_admissible >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
+    metis_tac[expr_post_state] >>
+  qpat_x_assum `!ctx func cenv cx R. _`
+    (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `R`, `es_end with gas_obs := []`,
+                  `sm`, `ys`, `sb`, `t`, `env`, `env0`, `es0`] mp_tac) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  simp[gas_outcome_def] >> strip_tac
+  >- suspend "tail_summary" >>
+  rename1 `gas_exempt_cert _ _ _ _ _ marks2 _ _` >>
+  qexists_tac `marks ++ marks2` >> disj2_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ marks2 (err,ee) (leaf,fin)` >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `fin`] >>
+  rewrite_tac[log_mem_ignore_bind_bind] >>
+  irule gas_exempt_cert_bind_value >>
+  qexistsl_tac [`es_end`, `t`, `v`] >> simp[] >>
+  rewrite_tac[log_mem_ignore_bind_bind] >>
+  irule gas_exempt_cert_error_values >> first_assum ACCEPT_TAC
+QED
+
+Resume compile_log_eval_all_pure_gas_mem[tail_summary]:
+  rename1 `gas_summary_at _ _ marks2 _ _ _ _` >>
+  qexists_tac `marks ++ marks2` >> disj1_tac >>
+  qpat_x_assum `gas_summary_at _ _ marks2 _ _ _ _` mp_tac >>
+  simp[gas_summary_at_def] >> strip_tac
+  >- suspend "tail_value" >>
+  rename1 `gas_marked_exec _ _ (eval_exprs cx args) _ marks2 res2 es_end2 r2` >>
+  `?ex. res2 = INR ex` by (Cases_on `res2` >> gvs[]) >> gvs[] >>
+  qexistsl_tac [`INR ex`, `es_end2`, `r2`] >> simp[] >>
+  irule gas_marked_exec_bind_normal >>
+  qexistsl_tac [`es_end`, `t`, `v`] >> simp[] >>
+  irule gas_marked_exec_bind_exception >> simp[]
+QED
+
+Resume compile_log_eval_all_pure_gas_mem[tail_value]:
+  qpat_x_assum `r = OK _` SUBST_ALL_TAC >>
+  qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
+  rename1 `gas_marked_exec _ _ (eval_exprs cx args) _ marks2 (INL vs) es_end2 (OK t2)` >>
+  `~t2.vs_halted` by
+    (qpat_assum `gas_marked_exec _ _ (eval_exprs cx args) _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[gas_marked_exec_def] >>
+     metis_tac[gas_marked_path_exec, gas_path_normal]) >>
+  `gas_marked_exec T (ctx,func) (return (v::vs))
+     (es_end2 with gas_obs := [], t2) [] (INL (v::vs)) es_end2 (OK t2)` by
+    (simp[gas_marked_exec_def, gas_marked_path_def, return_def] >>
+     irule (cj 1 gas_path_mem_rules) >> simp[]) >>
+  `expr_store_bound cx (expr_type e) v x t2` by
+    (qpat_x_assum `!es sa sm sb s0 es1 es' e v x t ys vs u. _` kall_tac >>
+     `t.vs_alloca_next <= t2.vs_alloca_next` by fs[] >>
+     `!w. eval_operand x t = SOME w ==> eval_operand x t2 = SOME w` by
+       (Cases_on `x` >> simp[venomStateTheory.eval_operand_def] >>
+        fs[wb_frame_def] >> metis_tac[]) >>
+     rw[expr_store_bound_def] >>
+     `?w'. eval_operand x t = SOME w'` by
+       (fs[expr_post_def] >>
+        qpat_x_assum `expr_val_rel _ _ _ x t`
+          (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >> simp[]) >>
+     `w' = w` by (res_tac >> fs[]) >> gvs[] >>
+     `val_store_size tv v = 0 \/
+      w2n w + val_store_size tv v <= t.vs_alloca_next` by
+       metis_tac[expr_store_bound_def] >> decide_tac) >>
+  qexistsl_tac [`INL (v::vs)`, `es_end2`, `OK t2`] >>
+  conj_tac
+  >- (irule gas_marked_exec_bind_normal >>
+      qexistsl_tac [`es_end`, `t`, `v`] >> simp[] >>
+      irule (SIMP_RULE std_ss [APPEND_NIL]
+        (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
+      qexistsl_tac [`es_end2`, `t2`, `vs`] >> fs[]) >>
+  qpat_x_assum `!es sa sm sb s0 es1 es' e v x t ys vs u. _`
+    (mk_asm "capture") >>
+  `LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) t2 /\
+     expr_val_at cenv cx (SND arg) sa sb (es_end2 with gas_obs := []) v (FST arg) t2)
+     ((x,expr_type e)::ys) (v::vs) /\
+     wb_frame cenv es (es_end2 with gas_obs := []) sa s0 t2` by
+    (simp[NoAsms, LIST_REL_def] >> asm "capture" irule >> simp[] >>
+     qexistsl_tac [`es_end with gas_obs := []`, `sm`, `t`] >> simp[]) >>
+  fs[LIST_REL_def] >> metis_tac[not_fresh_at_mono]
+QED
+
+Finalise compile_log_eval_all_pure_gas_mem

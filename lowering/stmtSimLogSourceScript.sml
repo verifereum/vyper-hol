@@ -190,3 +190,15 @@ Proof
        loweringStateRelDefsTheory.log_non_indexed_values_def] >>
   metis_tac[]
 QED
+
+(* Event compatibility may narrow bounds, but ABI descriptors erase them. *)
+Theorem event_arg_compatible_abi_types:
+  (!fty aty. event_arg_compatible fty aty ==>
+     vyper_to_abi_type tenv aty = vyper_to_abi_type tenv fty) /\
+  (!fts ats. event_arg_compatible_list fts ats ==>
+     vyper_to_abi_types tenv ats = vyper_to_abi_types tenv fts)
+Proof
+  ho_match_mp_tac vyperTypeSystemTheory.event_arg_compatible_ind >>
+  simp[vyperTypeSystemTheory.event_arg_compatible_def,
+       vyper_base_to_abi_type_def]
+QED

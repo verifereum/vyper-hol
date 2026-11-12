@@ -288,3 +288,303 @@ Proof
   simp[EVERY_MEM] >>
   disch_then drule >> simp[]
 QED
+
+(* The Log lowering emits MCOPY even for an empty field. *)
+Theorem log_emit_mcopy_encoding[local]:
+  !dst src n sa sb s d w tv v.
+    emit_void MCOPY [dst; src; Lit (n2w n)] sa = ((),sb) /\
+    eval_operand dst s = SOME d /\ eval_operand src s = SOME w /\
+    n < dimword (:256) /\ val_in_memory tv v (w2n w) s.vs_memory /\
+    val_wf tv v /\ val_footprint tv v <= n ==>
+    ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+      val_in_memory tv v (w2n d) q.vs_memory /\
+      (q with vs_memory := s.vs_memory) = s /\
+      (!a k. a + k <= w2n d \/ w2n d + n <= a ==>
+        mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
+Proof
+  rpt strip_tac >>
+  `eval_operand (Lit (n2w n)) s = SOME (n2w n)` by
+    simp[venomStateTheory.eval_operand_def] >>
+  drule_all buffer_emit_mcopy_run >> simp[] >> strip_tac >>
+  simp[buffer_mcopy_restore] >> conj_tac
+  >- (irule buffer_mcopy_encoding >> simp[]) >>
+  rpt strip_tac >> irule buffer_mcopy_exterior >> simp[]
+QED
+
+Theorem log_data_store_aggregate_shape[local]:
+  (if is_word_type ty then emit_void MSTORE [dst;src]
+   else if is_bytestring_type ty then compile_store_bytestring src dst
+   else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sa = ((),sb) ==>
+  inst_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_id <= sb.cs_next_id
+Proof
+  Cases_on `is_word_type ty` >> simp[]
+  >- (strip_tac >> drule emit_void_extends >>
+      simp[inst_extends_def, cs_extends_def] >>
+      gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, fresh_id_def, emit_def]) >>
+  Cases_on `is_bytestring_type ty` >> simp[]
+  >- (strip_tac >> drule buffer_store_bytestring_shape >>
+      simp[inst_extends_def]) >>
+  strip_tac >> drule emit_void_extends >>
+  simp[inst_extends_def, cs_extends_def] >>
+      gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, fresh_id_def, emit_def]
+QED
+
+Theorem log_data_store_aggregate_encoding[local]:
+  (if is_word_type ty then emit_void MSTORE [dst;src]
+   else if is_bytestring_type ty then compile_store_bytestring src dst
+   else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sa = ((),sb) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+  val_wf tv v /\ expr_val_rel cx ty v src s /\
+  type_memory_bytes cenv ty = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\ eval_operand dst s = SOME d /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
+  ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+    val_in_memory tv v (w2n d) q.vs_memory /\
+    (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
+    (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
+Proof
+  rpt strip_tac >> Cases_on `is_word_type ty`
+  >- (gvs[] >>
+      `compile_store_memory cenv src dst ty ty sa = ((),sb)` by
+        simp[compile_store_memory_def] >>
+      drule_all buffer_store_memory_encoding >> simp[]) >>
+  Cases_on `is_bytestring_type ty`
+  >- (gvs[] >>
+      `compile_store_memory cenv src dst ty ty sa = ((),sb)` by
+        simp[compile_store_memory_def] >>
+      drule_all buffer_store_memory_encoding >> simp[]) >>
+  gvs[expr_val_rel_def] >>
+  `val_footprint tv v <= type_memory_size tv` by
+    simp[exprSimPropsTheory.val_footprint_le] >>
+  drule_all log_emit_mcopy_encoding >> strip_tac >>
+  `q.vs_vars = s.vs_vars` by
+    (qpat_assum `q with vs_memory := _ = s`
+      (mp_tac o AP_TERM ``\z. z.vs_vars``) >> simp[]) >>
+  qexists_tac `q` >> simp[venomStateTheory.lookup_var_def] >>
+  qpat_assum `q with vs_memory := _ = s`
+    (mp_tac o AP_TERM ``\z. z with vs_vars := s.vs_vars``) >>
+  simp[] >> metis_tac[ADD_COMM]
+QED
+
+Theorem log_data_field_aggregate_run[local]:
+  emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm) /\
+  (if is_word_type ty then emit_void MSTORE [dst;src]
+   else if is_bytestring_type ty then compile_store_bytestring src dst
+   else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sm = ((),sb) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\ expr_val_rel cx ty v src s /\
+  type_memory_bytes cenv ty = type_memory_size tv /\
+  eval_operand buf s = SOME (n2w b) /\ b + off < dimword (:256) /\
+  type_memory_bytes cenv ty < dimword (:256) /\
+  (!x. src = Var x ==> not_fresh_at sa x) ==>
+  ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+    val_in_memory tv v (b + off) q.vs_memory /\
+    log_write_frame sa (b + off) (type_memory_bytes cenv ty) s q
+Proof
+  strip_tac >> drule_all log_data_address_value >> strip_tac >>
+  drule log_data_address_shape >> strip_tac >>
+  `!x. src = Var x \/ dst = Var x ==> not_fresh_at sm x` by
+    (rpt strip_tac >- (irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `sa` >> simp[]) >> simp[]) >>
+  `type_memory_size tv < dimword (:256)` by metis_tac[] >>
+  drule_all log_data_store_aggregate_encoding >> simp[] >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule log_data_store_aggregate_shape >> strip_tac >>
+  `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb` by
+    gvs[inst_extends_def] >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  `t.vs_memory = s.vs_memory` by
+    (qpat_assum `t with vs_vars := _ = s`
+      (mp_tac o AP_TERM ``\z. z.vs_memory``) >> simp[]) >>
+  qexists_tac `q` >> simp[log_write_frame_def] >>
+  conj_tac
+  >- (qpat_assum `q with <|vs_memory := _; vs_vars := _|> = t`
+      (mp_tac o AP_TERM ``\z. z with vs_vars := s.vs_vars``) >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sm x` by
+        (irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `sa` >> simp[]) >> metis_tac[]) >>
+  metis_tac[ADD_COMM]
+QED
+
+Theorem compile_log_store_data_aggregate_split[local]:
+  compile_log_store_data cenv ((src,ty)::xs) buf off sa = ((),sb) ==>
+  ?dst sm sn. emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm) /\
+    (if is_word_type ty then emit_void MSTORE [dst;src]
+     else if is_bytestring_type ty then compile_store_bytestring src dst
+     else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sm = ((),sn) /\
+    compile_log_store_data cenv xs buf (off + type_memory_bytes cenv ty) sn = ((),sb) /\
+    inst_extends sa sn /\ sa.cs_next_var <= sn.cs_next_var /\
+    sa.cs_next_id <= sn.cs_next_id
+Proof
+  simp[Once compile_log_store_data_def, comp_bind_def, comp_ignore_bind_def] >>
+  Cases_on `emit_op ADD [buf; Lit (n2w off)] sa` >> simp[] >>
+  rename1 `emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm)` >>
+  Cases_on `(if is_word_type ty then emit_void MSTORE [dst;src]
+     else if is_bytestring_type ty then compile_store_bytestring src dst
+     else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sm` >>
+  rename1 `_ sm = (u,sn)` >> Cases_on `u` >> simp[] >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule log_data_address_shape >> strip_tac >>
+  drule log_data_store_aggregate_shape >> strip_tac >>
+  `inst_extends sa sm` by simp[inst_extends_def] >>
+  `sa.cs_next_id <= sm.cs_next_id` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[]) >>
+  conj_tac
+  >- (irule inst_extends_trans >> qexists_tac `sm` >> simp[]) >> decide_tac
+QED
+
+Theorem compile_log_store_data_aggregate_shape:
+  !xs buf off sa sb.
+    compile_log_store_data cenv xs buf off sa = ((),sb) ==>
+    inst_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id
+Proof
+  Induct_on `xs`
+  >- simp[compile_log_store_data_def, comp_return_def, inst_extends_def,
+          same_blocks_def, emitted_insts_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  drule compile_log_store_data_aggregate_split >> strip_tac >>
+  first_x_assum drule >> strip_tac >> conj_tac
+  >- (irule inst_extends_trans >> qexists_tac `sn` >> simp[]) >> decide_tac
+QED
+
+Theorem log_data_aggregate_sources_kept[local]:
+  !xs vs.
+    LIST_REL (\(op,ty) v.
+      (?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
+        value_has_type tv v /\ val_wf tv v /\
+        type_memory_bytes cenv ty = type_memory_size tv) /\
+      expr_val_rel cx ty v op s /\ log_source_apart cx b cap (op,ty) v s) xs vs /\
+    EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at st x) xs /\
+    log_write_frame st b cap s t ==>
+    LIST_REL (\(op,ty) v.
+      (?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
+        value_has_type tv v /\ val_wf tv v /\
+        type_memory_bytes cenv ty = type_memory_size tv) /\
+      expr_val_rel cx ty v op t /\ log_source_apart cx b cap (op,ty) v t) xs vs
+Proof
+  Induct_on `xs` >- simp[] >>
+  gen_tac >> PairCases_on `h` >> Cases_on `vs` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> simp[] >> conj_tac
+  >- (drule_all log_source_value_kept >> simp[]) >>
+  drule_all log_source_apart_kept >> simp[]
+QED
+
+Theorem log_data_layout_aggregate_cons[local]:
+  evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
+  type_memory_bytes cenv ty = type_memory_size tv /\
+  val_in_memory tv v p s.vs_memory /\
+  log_data_layout cx tys vs (p + type_memory_bytes cenv ty) t.vs_memory /\
+  log_write_frame st (p + type_memory_bytes cenv ty) n s t ==>
+  log_data_layout cx (ty::tys) (v::vs) p t.vs_memory
+Proof
+  strip_tac >> gvs[log_data_layout_def] >>
+  irule valueEncodingPropsTheory.val_in_memory_mem_agree >> simp[] >>
+  qexistsl_tac [`type_memory_size tv`, `s.vs_memory`] >> simp[] >>
+  gvs[log_write_frame_def] >> first_x_assum irule >> simp[]
+QED
+
+Theorem compile_log_store_data_aggregate_core[local]:
+  !xs vs off sa sb s.
+    compile_log_store_data cenv xs buf off sa = ((),sb) /\
+    LIST_REL (\(op,ty) v.
+      (?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
+        value_has_type tv v /\ val_wf tv v /\
+        type_memory_bytes cenv ty = type_memory_size tv) /\
+      expr_val_rel cx ty v op s /\ log_source_apart cx b cap (op,ty) v s) xs vs /\
+    EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
+    (!x. buf = Var x ==> not_fresh_at sa x) /\
+    eval_operand buf s = SOME (n2w b) /\
+    off + SUM (MAP (type_memory_bytes cenv) (MAP SND xs)) <= cap /\
+    b + cap < dimword (:256) ==>
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      log_data_layout cx (MAP SND xs) vs (b + off) t.vs_memory /\
+      log_write_frame sa (b + off)
+        (SUM (MAP (type_memory_bytes cenv) (MAP SND xs))) s t
+Proof
+  Induct_on `xs`
+  >- (simp[compile_log_store_data_def, comp_return_def] >> rpt strip_tac >>
+      gvs[emitted_insts_def, log_data_layout_def, run_inst_seq_def]) >>
+  gen_tac >> PairCases_on `h` >> Cases_on `vs` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `evaluate_type (get_tenv cx) ty = SOME tv` >>
+  rename1 `expr_val_rel cx ty v src s` >>
+  drule compile_log_store_data_aggregate_split >> strip_tac >>
+  `b + off < dimword (:256) /\ type_memory_bytes cenv ty < dimword (:256)`
+    by decide_tac >>
+  drule_all log_data_field_aggregate_run >> strip_tac >>
+  `log_write_frame sa b cap s q` by
+    (irule log_write_frame_widen >> goal_assum (drule_at Any) >> decide_tac) >>
+  drule_all log_data_aggregate_sources_kept >> strip_tac >>
+  drule_all log_write_frame_operand >> strip_tac >>
+  drule_all log_data_fresh_mono >> strip_tac >>
+  `!x. buf = Var x ==> not_fresh_at sn x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[]) >>
+  `off + type_memory_bytes cenv ty +
+     SUM (MAP (type_memory_bytes cenv) (MAP SND xs)) <= cap` by decide_tac >>
+  `eval_operand buf q = SOME (n2w b)` by simp[] >>
+  first_x_assum drule_all >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sn sb) q = OK u` >>
+  drule compile_log_store_data_aggregate_shape >> strip_tac >>
+  `sn.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sn /\
+   sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb` by
+    gvs[inst_extends_def] >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qexists_tac `u` >> simp[] >> conj_tac
+  >- (irule log_data_layout_aggregate_cons >> simp[] >>
+      qexistsl_tac [`cenv`, `SUM (MAP (type_memory_bytes cenv) (MAP SND xs))`,
+                   `q`, `sn`] >> simp[GSYM ADD_ASSOC]) >>
+  CONV_TAC (RATOR_CONV (RATOR_CONV (RAND_CONV (REWR_CONV ADD_COMM)))) >>
+  irule log_write_frame_join >>
+  qexistsl_tac [`q`, `sn`] >> gvs[GSYM ADD_ASSOC]
+QED
+
+(* Actual types determine both the tuple stride and the captured source value.
+   The whole destination window is disjoint from all nonword footprints. *)
+Theorem compile_log_store_data_aggregate_run:
+  compile_log_store_data cenv xs buf off sa = ((),sb) /\
+  LIST_REL (\(op,ty) v.
+    (?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
+      value_has_type tv v /\ val_wf tv v /\
+      type_memory_bytes cenv ty = type_memory_size tv) /\
+    expr_val_rel cx ty v op s /\ log_source_apart cx b cap (op,ty) v s) xs vs /\
+  EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
+  (!x. buf = Var x ==> not_fresh_at sa x) /\
+  eval_operand buf s = SOME (n2w b) /\
+  off + SUM (MAP (type_memory_bytes cenv) (MAP SND xs)) <= cap /\
+  b + cap < dimword (:256) ==>
+  inst_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    log_data_layout cx (MAP SND xs) vs (b + off) t.vs_memory /\
+    log_write_frame sa (b + off)
+      (SUM (MAP (type_memory_bytes cenv) (MAP SND xs))) s t /\
+    LIST_REL (\(op,ty) v.
+      (?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
+        value_has_type tv v /\ val_wf tv v /\
+        type_memory_bytes cenv ty = type_memory_size tv) /\
+      expr_val_rel cx ty v op t /\ log_source_apart cx b cap (op,ty) v t) xs vs /\
+    eval_operand buf t = SOME (n2w b) /\
+    (!op ty. MEM (op,ty) xs ==> eval_operand op t = eval_operand op s)
+Proof
+  strip_tac >> drule_all compile_log_store_data_aggregate_core >> strip_tac >>
+  drule compile_log_store_data_aggregate_shape >> strip_tac >> simp[] >>
+  `log_write_frame sa b cap s t` by
+    (irule log_write_frame_widen >> goal_assum (drule_at Any) >> decide_tac) >>
+  drule_all log_data_aggregate_sources_kept >> strip_tac >> simp[] >> conj_tac
+  >- (drule_all log_write_frame_operand >> simp[]) >>
+  rpt strip_tac >> irule log_write_frame_operand >>
+  goal_assum (drule_at Any) >>
+  qpat_x_assum `EVERY (\(op,ty). !x. op = Var x ==> _) xs` mp_tac >>
+  simp[EVERY_MEM] >> disch_then drule >> simp[]
+QED

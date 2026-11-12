@@ -312,3 +312,233 @@ Proof
     metis_tac[run_inst_seq_append] >>
   drule_all log_alloc_buffer_run_frontier >> simp[]
 QED
+
+(* Equal actual types; bulk-copy bounds are stronger than logical footprints. *)
+Theorem log_equal_type_store_mem_ok:
+  compile_store_memory ce src dst ty ty sa = ((),sb) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  expr_val_rel cx ty v src s /\ expr_store_bound cx ty v src s /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\
+  eval_operand dst s = SOME d /\
+  w2n d + type_memory_size tv <= s.vs_alloca_next /\
+  (~is_word_type ty /\ ~is_bytestring_type ty ==>
+   !sw. eval_operand src s = SOME sw ==>
+     type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> Cases_on `is_word_type ty`
+  >- (gvs[compile_store_memory_def] >>
+      drule emitted_insts_emit_void >> strip_tac >>
+      simp[run_inst_seq_mem_ok_last, below_frontier_MSTORE] >>
+      `type_memory_size tv = 32` by metis_tac[word_tv_memory_size] >> gvs[]) >>
+  `?sw. eval_operand src s = SOME sw /\
+        val_in_memory tv v (w2n sw) s.vs_memory` by
+    gvs[loweringPostsTheory.expr_val_rel_def] >>
+  Cases_on `is_bytestring_type ty`
+  >- (`?len. mload (w2n sw) s = n2w len /\
+             val_store_size tv v = 32 + 32 * word_size len` by
+        metis_tac[buffer_typed_bytestring_header] >>
+      `val_store_size tv v <= type_memory_size tv` by metis_tac[val_store_size_le] >>
+      `w2n sw + val_store_size tv v <= s.vs_alloca_next` by
+        (fs[exprSimMemDefsTheory.expr_store_bound_def] >>
+         qpat_x_assum `!tv'. _` (qspec_then `tv` mp_tac) >> simp[]) >>
+      gvs[compile_store_memory_def] >>
+      irule compile_store_bytestring_body_mem_ok >>
+      qexistsl_tac [`d`, `dst`, `len`, `src`, `sw`] >> simp[] >>
+      rpt strip_tac >> gvs[] >> decide_tac) >>
+  Cases_on `type_memory_size tv = 0`
+  >- gvs[compile_store_memory_def, compile_copy_memory_def, comp_return_def,
+         emitted_insts_def, run_inst_seq_mem_ok_def] >>
+  `w2n sw + type_memory_size tv <= s.vs_alloca_next` by metis_tac[] >>
+  gvs[compile_store_memory_def] >>
+  irule compile_copy_memory_body_mem_ok >>
+  qexistsl_tac [`d`, `dst`, `type_memory_size tv`, `src`, `sw`] >> simp[]
+QED
+
+Theorem log_data_store_aggregate_mem_ok:
+  (if is_word_type ty then emit_void MSTORE [dst;src]
+   else if is_bytestring_type ty then compile_store_bytestring src dst
+   else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes ce ty))]) sa = ((),sb) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  expr_val_rel cx ty v src s /\ expr_store_bound cx ty v src s /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\ eval_operand dst s = SOME d /\
+  w2n d + type_memory_size tv <= s.vs_alloca_next /\
+  (~is_word_type ty /\ ~is_bytestring_type ty ==>
+   !sw. eval_operand src s = SOME sw ==>
+     type_memory_size tv = 0 \/ w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> Cases_on `is_word_type ty`
+  >- (irule log_equal_type_store_mem_ok >>
+      goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
+      qexistsl_tac [`ce`,`d`,`dst`,`src`,`v`] >>
+      gvs[compile_store_memory_def] >> metis_tac[]) >>
+  Cases_on `is_bytestring_type ty`
+  >- (irule log_equal_type_store_mem_ok >>
+      goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
+      qexistsl_tac [`ce`,`d`,`dst`,`src`,`v`] >>
+      gvs[compile_store_memory_def] >> metis_tac[]) >>
+  gvs[] >> drule emitted_insts_emit_void >> strip_tac >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_MCOPY, eval_operand_def,
+       w2n_n2w] >> metis_tac[]
+QED
+
+Theorem log_store_bounds_frame:
+  log_write_frame st b cap s t /\
+  (!x. op = Var x ==> not_fresh_at st x) /\
+  expr_store_bound cx ty v op s /\
+  (!w. ~is_word_type ty /\ ~is_bytestring_type ty /\
+     eval_operand op s = SOME w ==>
+     type_memory_size tv = 0 \/ w2n w + type_memory_size tv <= s.vs_alloca_next) ==>
+  expr_store_bound cx ty v op t /\
+  (!w. ~is_word_type ty /\ ~is_bytestring_type ty /\
+     eval_operand op t = SOME w ==>
+     type_memory_size tv = 0 \/ w2n w + type_memory_size tv <= t.vs_alloca_next)
+Proof
+  strip_tac >> drule_all log_write_frame_operand >> strip_tac >>
+  `t.vs_alloca_next = s.vs_alloca_next` by
+    (fs[log_write_frame_def] >>
+     qpat_x_assum `_ with <|vs_memory := _; vs_vars := _|> = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_alloca_next`) >> simp[]) >>
+  gvs[exprSimMemDefsTheory.expr_store_bound_def]
+QED
+
+Theorem log_data_memory_sources_kept[local]:
+  !xs vs.
+  LIST_REL (\(op,ty) v. ?tv.
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+    type_memory_bytes ce ty = type_memory_size tv /\
+    expr_val_rel cx ty v op s /\ expr_store_bound cx ty v op s /\
+    log_source_apart cx b cap (op,ty) v s /\
+    (!w. ~is_word_type ty /\ ~is_bytestring_type ty /\ eval_operand op s = SOME w ==>
+      type_memory_size tv = 0 \/ w2n w + type_memory_size tv <= s.vs_alloca_next)) xs vs /\
+  EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at st x) xs /\
+  log_write_frame st b cap s t ==>
+  LIST_REL (\(op,ty) v. ?tv.
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+    type_memory_bytes ce ty = type_memory_size tv /\
+    expr_val_rel cx ty v op t /\ expr_store_bound cx ty v op t /\
+    log_source_apart cx b cap (op,ty) v t /\
+    (!w. ~is_word_type ty /\ ~is_bytestring_type ty /\ eval_operand op t = SOME w ==>
+      type_memory_size tv = 0 \/ w2n w + type_memory_size tv <= t.vs_alloca_next)) xs vs
+Proof
+  Induct_on `xs` >- simp[] >>
+  gen_tac >> PairCases_on `h` >> Cases_on `vs` >> simp[] >>
+  rpt gen_tac >> strip_tac
+  >- (drule_all log_source_value_kept >> strip_tac >>
+      drule_all log_source_apart_kept >> strip_tac >>
+      qexists_tac `tv` >> simp[] >>
+      metis_tac[log_store_bounds_frame, ADD_COMM]) >>
+  first_x_assum irule >> simp[]
+QED
+
+(* The semantic field run is supplied independently of memory counting. *)
+Theorem compile_log_store_data_aggregate_mem_ok:
+  (!src ty dst sm sn start s off tv v.
+    emit_op ADD [buf; Lit (n2w off)] start = (dst,sm) /\
+    (if is_word_type ty then emit_void MSTORE [dst;src]
+     else if is_bytestring_type ty then compile_store_bytestring src dst
+     else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes ce ty))]) sm = ((),sn) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+    type_memory_bytes ce ty = type_memory_size tv /\ expr_val_rel cx ty v src s /\
+    eval_operand buf s = SOME (n2w b) /\ b + off < dimword (:256) /\
+    type_memory_bytes ce ty < dimword (:256) /\
+    (!x. src = Var x ==> not_fresh_at start x) ==>
+    inst_extends start sm /\ inst_extends sm sn /\ start.cs_next_var <= sn.cs_next_var /\
+    ?q. run_inst_seq (emitted_insts start sn) s = OK q /\
+      log_write_frame start (b+off) (type_memory_bytes ce ty) s q) ==>
+  !xs vs off sa sb s.
+  compile_log_store_data ce xs buf off sa = ((),sb) /\
+  LIST_REL (\(op,ty) v. ?tv.
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+    type_memory_bytes ce ty = type_memory_size tv /\
+    expr_val_rel cx ty v op s /\ expr_store_bound cx ty v op s /\
+    log_source_apart cx b cap (op,ty) v s /\
+    (!w. ~is_word_type ty /\ ~is_bytestring_type ty /\ eval_operand op s = SOME w ==>
+      type_memory_size tv = 0 \/ w2n w + type_memory_size tv <= s.vs_alloca_next)) xs vs /\
+  EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
+  (!x. buf = Var x ==> not_fresh_at sa x) /\
+  eval_operand buf s = SOME (n2w b) /\
+  off + SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= cap /\
+  b + cap < dimword (:256) /\ b + cap <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  disch_then (mk_asm "head") >> Induct_on `xs`
+  >- (simp[stmtLoweringTheory.compile_log_store_data_def, comp_return_def] >>
+      rpt strip_tac >> gvs[emitted_insts_def, run_inst_seq_mem_ok_def]) >>
+  gen_tac >> PairCases_on `h` >> Cases_on `vs` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `expr_val_rel cx ty v src s` >>
+  qpat_x_assum `compile_log_store_data _ _ _ _ _ = _` mp_tac >>
+  simp[Once stmtLoweringTheory.compile_log_store_data_def,
+       comp_bind_def, comp_ignore_bind_def] >>
+  Cases_on `emit_op ADD [buf; Lit (n2w off)] sa` >> simp[] >>
+  rename1 `emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm)` >>
+  Cases_on `(if is_word_type ty then emit_void MSTORE [dst;src]
+    else if is_bytestring_type ty then compile_store_bytestring src dst
+    else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes ce ty))]) sm` >>
+  rename1 `_ sm = (a,sn)` >> Cases_on `a` >> simp[] >> strip_tac >> fs[] >>
+  `b + off < dimword (:256) /\ type_memory_bytes ce ty < dimword (:256)` by decide_tac >>
+  asm "head" drule_all >> strip_tac >>
+  suspend "head_memory"
+QED
+Resume compile_log_store_data_aggregate_mem_ok[head_memory]:
+  drule_all log_data_address_value >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK u` >>
+  drule log_data_address_shape >> strip_tac >>
+  `u.vs_alloca_next = s.vs_alloca_next /\ u.vs_memory = s.vs_memory /\
+   u.vs_labels = s.vs_labels` by
+    (qpat_assum `_ with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. (z.vs_alloca_next,z.vs_memory,z.vs_labels)`) >> simp[]) >>
+  `eval_operand src u = eval_operand src s` by
+    (Cases_on `src` >> gvs[eval_operand_def]) >>
+  `expr_val_rel cx ty v src u /\ expr_store_bound cx ty v src u` by
+    gvs[loweringPostsTheory.expr_val_rel_def, exprSimMemDefsTheory.expr_store_bound_def] >>
+  `run_inst_seq_mem_ok (emitted_insts sm sn) u` by
+    (irule log_data_store_aggregate_mem_ok >>
+     goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
+     qexistsl_tac [`ce`,`n2w (b+off)`,`dst`,`src`,`v`] >>
+     simp[w2n_n2w] >> metis_tac[not_fresh_at_mono, ADD_COMM]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa sm) s` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     simp[run_inst_seq_mem_ok_last, below_frontier_no_ranges, mk_inst_def]) >>
+  suspend "tail_memory"
+QED
+Resume compile_log_store_data_aggregate_mem_ok[tail_memory]:
+  gvs[] >>
+  `log_write_frame sa b cap s q` by
+    (irule log_write_frame_widen >> goal_assum (drule_at Any) >> decide_tac) >>
+  drule_all (SRULE [ADD_COMM] log_data_memory_sources_kept) >> strip_tac >>
+  `q.vs_alloca_next = s.vs_alloca_next` by
+    (fs[log_write_frame_def] >>
+     qpat_x_assum `_ with <|vs_memory := _; vs_vars := _|> = _`
+       (mp_tac o Q.AP_TERM `\z. z.vs_alloca_next`) >> simp[]) >>
+  `eval_operand buf q = SOME (n2w b)` by
+    (drule_all log_write_frame_operand >> simp[]) >>
+  `EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sn x) xs` by
+    (irule log_data_fresh_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts sn sb) q` by
+    (first_x_assum irule >> simp[] >>
+     (conj_tac >- metis_tac[not_fresh_at_mono]) >>
+     (conj_tac >- (qexists_tac `off + type_memory_bytes ce ty` >> simp[])) >>
+     qexists_tac `t` >> gvs[]) >>
+  suspend "append_memory"
+QED
+Resume compile_log_store_data_aggregate_mem_ok[append_memory]:
+  `emitted_insts sa sn = emitted_insts sa sm ++ emitted_insts sm sn` by
+    (irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa sn) s` by
+    (asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >> simp[]) >>
+  drule compile_log_store_data_aggregate_shape >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa sn ++ emitted_insts sn sb` by
+    (irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  qpat_x_assum `emitted_insts sa sn = _` kall_tac >>
+  asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >> simp[]
+QED
+Finalise compile_log_store_data_aggregate_mem_ok

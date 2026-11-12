@@ -21,7 +21,7 @@ QED
 Theorem encoder_fragment_prior_site_excluded:
   id < st.cs_next_id ==> id NOTIN frag_ids st en
 Proof
-  simp[frag_ids_def]
+  ACCEPT_TAC abiEncoderAllocationShapeTheory.encoder_fragment_prior_site_excluded
 QED
 
 Theorem allocated_encoder_site_excluded:
@@ -42,16 +42,7 @@ Theorem encoder_function_alloca_shape:
   inst.inst_operands = [Lit 32w] /\
   ?q. inst.inst_outputs = [q] /\ ~not_fresh_at sa q
 Proof
-  strip_tac >>
-  `ci_mono sa sb /\
-   EVERY (\i. i.inst_opcode = ALLOCA ==> i.inst_operands = [Lit 32w] /\
-     ?q. i.inst_outputs = [q] /\ ~not_fresh_at sa q) (added_insts sa sb)` by
-    metis_tac[encoder_to_buf_allocation_shape, pairTheory.SND] >>
-  `!id. id IN frag_ids sa sb ==>
-    ?i. MEM i (added_insts sa sb) /\ i.inst_id = id` by
-    metis_tac[encoder_to_buf_id_coverage, pairTheory.SND] >>
-  `cs_extends sa sb` by fs[ci_mono_def] >>
-  drule_all added_insts_function_property >> simp[]
+  ACCEPT_TAC abiEncoderAllocationShapeTheory.encoder_function_alloca_shape
 QED
 
 Theorem encoder_function_alloca_nonlocal:

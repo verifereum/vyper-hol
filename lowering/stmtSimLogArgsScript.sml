@@ -94,6 +94,37 @@ Proof
   gvs[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
+(* Pure evaluation keeps the source scopes, so locals_kept preserves
+   whole live locals, including all dynamic-array length words. *)
+Theorem log_argument_footprint_scopes_kept:
+  !cenv cx ty tv v op sa sb es ee s t w.
+    expr_val_at cenv cx ty sa sb es v op s /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\
+    ~is_word_type ty /\ eval_operand op s = SOME w /\
+    wb_frame cenv es ee sb s t /\ ee.scopes = es.scopes ==>
+    mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory =
+    mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_val_at_def]) >>
+  disch_then (qspec_then `tv` mp_tac) >> simp[] >>
+  disch_then strip_assume_tac
+  >- (gvs[] >>
+      `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (gvs[wb_frame_def] >> first_x_assum irule >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         qexists_tac `aid` >> simp[]) >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      strip_tac >> sym_tac >> first_x_assum irule >> simp[])
+  >- (gvs[] >>
+      `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (gvs[wb_frame_def, locals_kept_def] >> metis_tac[]) >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      strip_tac >> sym_tac >> first_x_assum irule >> simp[]) >>
+  gvs[valueEncodingDefsTheory.mem_bytes_at_def]
+QED
+
 Theorem log_argument_value_kept:
   !cenv cx ty es ee sa sb s t v op.
     expr_val_rel cx ty v op s /\
@@ -115,6 +146,31 @@ Proof
   rename1 `evaluate_type _ _ = SOME tv` >>
   `val_wf tv v` by (gvs[expr_val_at_def] >> metis_tac[]) >>
   drule_all log_argument_footprint_kept >> strip_tac >>
+  irule expr_val_rel_footprint_agree >> simp[] >>
+  qexists_tac `s` >> simp[]
+QED
+
+Theorem log_argument_value_scopes_kept:
+  !cenv cx ty es ee sa sb s t v op.
+    expr_val_rel cx ty v op s /\
+    expr_val_at cenv cx ty sa sb es v op s /\
+    wb_frame cenv es ee sb s t /\
+    (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l) /\
+    ee.scopes = es.scopes ==>
+    expr_val_rel cx ty v op t
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?w. eval_operand op s = SOME w` by gvs[expr_val_rel_def] >>
+  `eval_operand op t = SOME w` by
+    (irule eval_operand_frame >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`sb`, `s`] >> gvs[wb_frame_def]) >>
+  Cases_on `is_word_type ty`
+  >- gvs[expr_val_rel_def] >>
+  Cases_on `evaluate_type (get_tenv cx) ty`
+  >- simp[expr_val_rel_def] >>
+  rename1 `evaluate_type _ _ = SOME tv` >>
+  `val_wf tv v` by (gvs[expr_val_at_def] >> metis_tac[]) >>
+  drule_all log_argument_footprint_scopes_kept >> strip_tac >>
   irule expr_val_rel_footprint_agree >> simp[] >>
   qexists_tac `s` >> simp[]
 QED
@@ -341,5 +397,55 @@ Proof
   >- (gvs[log_args_post_def] >> irule listTheory.LIST_REL_mono >>
       goal_assum (drule_at Any) >> rpt strip_tac >>
       drule_all log_arg_rel_start_mono >> simp[]) >>
+  drule_all wb_frame_trans >> simp[]
+QED
+
+(* Componentwise capture does not require dynamic-array clearance. *)
+Theorem log_capture_start_mono:
+  sa.cs_next_id <= sm.cs_next_id /\
+  LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) u /\
+    expr_val_at cenv cx (SND arg) sm sb es v (FST arg) u) ys vs ==>
+  LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) u /\
+    expr_val_at cenv cx (SND arg) sa sb es v (FST arg) u) ys vs
+Proof
+  strip_tac >> irule listTheory.LIST_REL_mono >>
+  goal_assum (drule_at Any) >>
+  metis_tac[expr_val_at_start_mono]
+QED
+
+Theorem log_capture_cons_scopes:
+  stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  MAP FDOM es1.scopes = MAP FDOM es'.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_id <= sb.cs_next_id /\
+  (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
+  post_value_type cenv e = expr_type e /\ es'.scopes = es1.scopes /\
+  expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
+  stmt_state_rel ctx func cenv cx es' u /\
+  wb_frame cenv es1 es' sm t u /\
+  LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) u /\
+    expr_val_at cenv cx (SND arg) sm sb es' v (FST arg) u) ys vs ==>
+  stmt_state_rel ctx func cenv cx es' u /\
+  LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) u /\
+    expr_val_at cenv cx (SND arg) sa sb es' v (FST arg) u)
+    ((x,expr_type e)::ys) (v::vs) /\
+  wb_frame cenv es es' sa s0 u
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es1 t` by
+    (drule_all expr_post_state >> simp[]) >>
+  `wb_frame cenv es es1 sa s0 t` by
+    (drule_all expr_post_frame >> simp[]) >>
+  `expr_val_rel cx (expr_type e) v x t /\
+   expr_val_at cenv cx (expr_type e) sa sm es1 v x t` by
+    metis_tac[expr_post_def] >>
+  `expr_val_rel cx (expr_type e) v x u` by
+    (drule_all log_argument_value_scopes_kept >> simp[]) >>
+  `expr_val_at cenv cx (expr_type e) sa sb es' v x u` by
+    (drule_all log_frame_placement >> simp[]) >>
+  simp[] >> conj_tac
+  >- (drule_all log_capture_start_mono >> simp[]) >>
   drule_all wb_frame_trans >> simp[]
 QED

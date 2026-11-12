@@ -11,7 +11,7 @@ Ancestors
   supportedStmts supportedDecls supportedExprs whitelistCheckerDecls
   supportedExprForms supportedTypes vyperTypeSystem vyperEventArgCompat vyperContext vyperValue
   vyperAST vyperMisc exprLowering placeTypingProps abiCallerStructSize
-  alist finite_map list pred_set pair arithmetic
+  alist finite_map list rich_list pred_set pair arithmetic
 
 Theorem IS_SOME_COND[local]:
   IS_SOME (if b then SOME x else NONE) <=> b
@@ -597,7 +597,21 @@ Proof
   drule ALOOKUP_MEM >> simp[MEM_MAP, EXISTS_PROD] >> metis_tac[]
 QED
 
-(* Pure arguments and scalar event headers retain their existing gates. *)
+(* Event data may be an aggregate; indexed fields keep their scalar gate.
+   The indexed count comes from the contract checker. *)
+Theorem check_contract_event_header_supported:
+  check_contract F layouts addr [(NONE, tops)] = SOME art /\
+  MEM (EventDecl name fields) tops /\
+  EVERY (\((_,ty),indexed).
+    if indexed then supported_scalar_type ty
+    else supported_place_type tops ty) fields ==>
+  supported_declaration_header tops (EventDecl name fields)
+Proof
+  strip_tac >> drule_all check_contract_event_fields_wf >> strip_tac >>
+  gvs[supported_declaration_header_def, rich_listTheory.FILTER_MAP]
+QED
+
+(* Pure arguments retain their existing gate. *)
 Theorem type_stmt_log_supported:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   env.event_fields = art.cta_event_fields /\
