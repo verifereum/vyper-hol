@@ -9,7 +9,7 @@ Ancestors lowerDloadPtrCreate lowerDloadPtrBlockEntry lowerDloadPtrCall lowerDlo
 val normal = ``\R ds PH H un g j t.
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -80,7 +80,7 @@ Proof
     (drule lower_dload_function_supply_labels >>
      fs[o1_fn_shape_def, fn_shape_ok_def, wf_function_def, fn_labels_def]) >>
   `?s1. step_inst fuel C i s = OK s1 /\
-    dload_boundary_core lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)
@@ -127,7 +127,7 @@ Proof
       irule dload_boundary_core_create >> simp[] >> metis_tac[]) >>
   `~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE` by simp[] >>
   drule_all dload_singleton_reachable_next_fields >> strip_tac >>
-  `dload_boundary_core lo fs
+  `dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH (step_prov PG G i s1) (step_prov PH H0 i t1)
@@ -135,8 +135,8 @@ Proof
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t0.vs_inst_idx) cs ds` by
     (drule dload_boundary_core_index_update >> simp[]) >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s1 t1 _ _` kall_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ G _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s1 t1 _ _` kall_tac >>
   drule_at (Pat `dload_boundary_core`) dload_normal_unchanged_successor >>
   disch_then (drule_at (Pat `frame_reachable`)) >>
   disch_then (drule_at (Pat `dload_control_match`)) >>

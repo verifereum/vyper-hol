@@ -26,12 +26,12 @@ Proof
 QED
 
 Theorem dload_boundary_core_var_index_update:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
-  dload_vars_match fs V G' H'
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_vars_match fl fs V G' H'
     (tn with t_var := tv) (un with t_var := uv)
     (s with <|vs_vars := sv; vs_inst_idx := si|>)
     (t with <|vs_vars := tvs; vs_inst_idx := ti|>) ==>
-  dload_boundary_core lo fs V Ws PG PH G' H'
+  dload_boundary_core fl lo fs V Ws PG PH G' H'
     (tn with t_var := tv) (un with t_var := uv)
     (s with <|vs_vars := sv; vs_inst_idx := si|>)
     (t with <|vs_vars := tvs; vs_inst_idx := ti|>) cs ds
@@ -47,16 +47,16 @@ Theorem dload_boundary_core_phis_tracked:
     i.inst_outputs = [v] /\ v IN V /\ s.vs_prev_bb = SOME lbl /\
     resolve_phi lbl i.inst_operands = SOME op /\ op = Var w ==> w IN V) /\
   s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   eval_phis s xs = OK sp /\ eval_phis t xs = OK tp ==>
-  dload_boundary_core lo fs V Ws PG PH
+  dload_boundary_core fl lo fs V Ws PG PH
     (phis_prov s.vs_prev_bb G xs) (phis_prov t.vs_prev_bb H xs)
     (tn with t_var := phis_taint s.vs_prev_bb tn xs)
     (un with t_var := phis_taint t.vs_prev_bb un xs)
     (sp with vs_inst_idx := si) (tp with vs_inst_idx := ti) cs ds
 Proof
   strip_tac >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `!i v lbl op w. MEM i (TAKE (phi_prefix_length xs) xs) /\
     i.inst_outputs = [v] /\ v IN V /\ s.vs_prev_bb = SOME lbl /\
@@ -70,7 +70,7 @@ Proof
     metis_tac[eval_phis_only_updates_vs_vars] >>
   `tp = t with vs_vars := tp.vs_vars` by
     metis_tac[eval_phis_only_updates_vs_vars] >>
-  qpat_x_assum `dload_vars_match _ _ _ _ _ _ sp tp` mp_tac >>
+  qpat_x_assum `dload_vars_match _ _ _ _ _ _ _ sp tp` mp_tac >>
   simp[dload_vars_match_def, lookup_var_def] >> strip_tac >>
   qpat_assum `sp = _` (fn th => once_rewrite_tac[th]) >>
   qpat_assum `tp = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
@@ -82,9 +82,9 @@ QED
 Theorem dload_boundary_core_phis:
   (!i. MEM i xs ==> MEM i (fn_insts f)) /\
   s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   eval_phis s xs = OK sp /\ eval_phis t xs = OK tp ==>
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
     (phis_prov s.vs_prev_bb G xs) (phis_prov t.vs_prev_bb H xs)
     (tn with t_var := phis_taint s.vs_prev_bb tn xs)
     (un with t_var := phis_taint t.vs_prev_bb un xs)
@@ -105,7 +105,7 @@ QED
 
 Theorem lower_dload_function_supply_enters_boundary_tracked:
   lower_dload_function_supply q f = (g,q') /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   s.vs_current_bb = t.vs_current_bb /\
   s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
   (!i v lbl op w. MEM i (fn_insts f) /\ i.inst_opcode = PHI /\
@@ -117,7 +117,7 @@ Theorem lower_dload_function_supply_enters_boundary_tracked:
   ?b s'. lookup_block s.vs_current_bb f.fn_blocks = SOME b /\
     enters_block f s s' /\ s'.vs_inst_idx = t'.vs_inst_idx /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (phis_prov s.vs_prev_bb G b.bb_instructions)
       (phis_prov t.vs_prev_bb H b.bb_instructions)
       (tn with t_var := phis_taint s.vs_prev_bb tn b.bb_instructions)
@@ -150,7 +150,7 @@ QED
 
 Theorem lower_dload_function_supply_enters_boundary:
   lower_dload_function_supply q f = (g,q') /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   s.vs_current_bb = t.vs_current_bb /\
   s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
   (!i v. MEM i (fn_insts f) /\ MEM (Var v) i.inst_operands ==> v IN U) /\
@@ -159,7 +159,7 @@ Theorem lower_dload_function_supply_enters_boundary:
   ?b s'. lookup_block s.vs_current_bb f.fn_blocks = SOME b /\
     enters_block f s s' /\ s'.vs_inst_idx = t'.vs_inst_idx /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (phis_prov s.vs_prev_bb G b.bb_instructions)
       (phis_prov t.vs_prev_bb H b.bb_instructions)
       (tn with t_var := phis_taint s.vs_prev_bb tn b.bb_instructions)
@@ -171,12 +171,12 @@ Proof
 QED
 
 Theorem dload_boundary_core_index_update:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds ==>
-  dload_boundary_core lo fs V Ws PG PH G H tn un
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds ==>
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un
     (s with vs_inst_idx := si) (t with vs_inst_idx := ti) cs ds
 Proof
   strip_tac >>
-  `dload_vars_match fs V G H
+  `dload_vars_match fl fs V G H
     (tn with t_var := tn.t_var) (un with t_var := un.t_var)
     (s with <|vs_vars := s.vs_vars; vs_inst_idx := si|>)
     (t with <|vs_vars := t.vs_vars; vs_inst_idx := ti|>)` by

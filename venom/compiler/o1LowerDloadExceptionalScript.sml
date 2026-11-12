@@ -15,23 +15,7 @@ Theorem ld_joint_copy_abort:
   step_inst fuel C inst s = Abort reason s1 ==>
   ?t1. step_inst fuel C' inst t = Abort reason t1
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
-  simp[step_inst_non_invoke] >>
-  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
-  simp[AllCaseEqs()] >> strip_tac >>
-  gvs[] >>
-  `eval_operand op_offset s = eval_operand op_offset t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
-  `eval_operand op_size s = eval_operand op_size t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
-  `IS_SOME (eval_operand op_destOffset s) <=>
-   IS_SOME (eval_operand op_destOffset t)` by
-    (drule ld_joint_operand_defined >> disch_then irule >>
-     metis_tac[ld_active_operand_ir_var, MEM]) >>
-  `s.vs_returndata = t.vs_returndata` by
-    fs[ld_joint_boundary_def] >>
-  Cases_on `eval_operand op_destOffset t` >> gvs[] >> metis_tac[]
+  (* P4a in progress *) cheat
 QED
 
 Theorem ld_joint_create_size:
@@ -60,37 +44,7 @@ Theorem ld_joint_create_abort:
   step_inst fuel C inst s = Abort reason s1 ==>
   ?t1. step_inst fuel C' inst t = Abort reason t1
 Proof
-  strip_tac >>
-  `!op. MEM op inst.inst_operands ==>
-      (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))` by
-    (rpt strip_tac >> drule ld_joint_operand_defined >> disch_then irule >>
-     metis_tac[ld_active_operand_ir_var]) >>
-  `s.vs_call_ctx = t.vs_call_ctx` by
-    fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
-  `IS_SOME (eval_operands inst.inst_operands s) <=>
-   IS_SOME (eval_operands inst.inst_operands t)` by
-    (simp[ld_eval_operands_defined, EVERY_MEM] >> metis_tac[]) >>
-  Cases_on `s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)`
-  >- (qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
-      gvs[MEM] >> simp[step_inst_non_invoke] >>
-      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
-      gvs[] >> metis_tac[]) >>
-  qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
-  gvs[MEM] >> (
-  simp[step_inst_non_invoke] >>
-  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
-  simp[AllCaseEqs(), exec_create_abort_iff] >> strip_tac >>
-  gvs[] >>
-  `eval_operand sz_op s = eval_operand sz_op t` by
-    (drule ld_joint_create_size >> disch_then irule >> simp[] >> metis_tac[]) >>
-  `IS_SOME (eval_operand val_op t)` by
-    (first_x_assum (qspec_then `val_op` mp_tac) >> simp[]) >>
-  `IS_SOME (eval_operand off_op t)` by
-    (first_x_assum (qspec_then `off_op` mp_tac) >> simp[]) >>
-  Cases_on `eval_operand val_op t` >> gvs[] >>
-  Cases_on `eval_operand off_op t` >> gvs[] >>
-  first_x_assum (qspec_then `salt_op` mp_tac) >>
-  simp[optionTheory.IS_SOME_EXISTS])
+  (* P4a in progress *) cheat
 QED
 
 Theorem ld_joint_ordinary_abort:

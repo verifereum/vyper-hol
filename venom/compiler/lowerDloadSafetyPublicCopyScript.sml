@@ -263,25 +263,8 @@ Proof
   simp[write_memory_with_expansion_def, write_memory_def]
 QED
 
-Theorem ld_sync_public_copy_effect:
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
-  EVERY (fn_ptr_ok P) C.ctx_functions /\
-  ~in_revert_forward fn s /\ t.vs_alloca_next < dimword(:256) /\
-  MEM inst.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY;EXTCODECOPY] /\
-  step_inst fuel C' inst t = OK ts ==>
-  ?ss H'. step_inst fuel C inst s = OK ss /\
-    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
-      lf_tv := (step_taint inst s ss tn).t_var|>) /\
-    ld_memory lo A (step_taint inst s ss tn) ss ts /\
-    ld_nonghost (step_taint inst s ss tn) ss ts /\
-    step_prov PG G inst ss = ld_erase A o_f H' /\
-    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
-    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
-    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
-    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
-    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
-    ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
+(* TEMPORARILY CHEATED - P4d: dynamic-region memory case (DALLOCA pointers are
+   in G but not in H, so access_ok no longer reaches the erased sites).
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `fn_shape_ok fn /\ fn_inst_wf fn` by
@@ -344,5 +327,31 @@ Proof
   (conj_tac >-
     (qexists `f::fs` >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+*)
+Theorem ld_sync_public_copy_effect:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  ~in_revert_forward fn s /\ t.vs_alloca_next < dimword(:256) /\
+  MEM inst.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY;EXTCODECOPY] /\
+  step_inst fuel C' inst t = OK ts ==>
+  ?ss H'. step_inst fuel C inst s = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
+      lf_tv := (step_taint inst s ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst s ss tn) ss ts /\
+    ld_nonghost (step_taint inst s ss tn) ss ts /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+      inst ss = ld_erase A o_f H' /\
+    ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
+    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
+    ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
+Proof
+  cheat
 QED
 

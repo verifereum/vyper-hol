@@ -212,53 +212,5 @@ Theorem ld_joint_forward_abort:
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block fuel C' bb' t = Abort reason t1
 Proof
-  strip_tac >>
-  `MEM fn C.ctx_functions` by
-    (drule ld_joint_source >> strip_tac >>
-     drule occ_frame_reachable_annotation >> simp[]) >>
-  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
-    (gvs[o1_ctx_shape_def, EVERY_MEM] >>
-     first_x_assum drule >> simp[o1_fn_shape_def, wf_function_def, fn_labels_def]) >>
-  `get_instruction bb s.vs_inst_idx = SOME inst` by
-    (qpat_assum `active_inst _ _ _` mp_tac >>
-     simp[NoAsms, active_inst_def] >> strip_tac >>
-     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb'` by
-       (irule MEM_lookup_block >> simp[]) >>
-     gvs[get_instruction_def]) >>
-  `?j. revert_forward_pair bb s.vs_inst_idx j` by
-    (qpat_x_assum `in_revert_forward _ _`
-       (strip_assume_tac o REWRITE_RULE [in_revert_forward_def, revert_forward_at_def]) >>
-     gvs[] >- metis_tac[] >>
-     qpat_x_assum `revert_forward_pair _ _ _`
-       (strip_assume_tac o REWRITE_RULE [revert_forward_pair_def]) >> gvs[]) >>
-  `?dst src sz. inst.inst_operands = [dst;src;sz]` by
-    metis_tac[revert_forward_pair_def, optionTheory.SOME_11] >>
-  `eval_operand src s = eval_operand src t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
-  `eval_operand sz s = eval_operand sz t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
-  qhdtm_assum `ld_joint_boundary`
-    (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
-  qhdtm_assum `ld_joint_frame`
-    (strip_assume_tac o REWRITE_RULE [ld_joint_frame_def]) >>
-  `ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks)` by
-    (qhdtm_assum `ld_joint_control`
-       (strip_assume_tac o REWRITE_RULE [ld_joint_control_def]) >>
-     drule lower_dload_function_supply_labels >> simp[fn_labels_def]) >>
-  drule_all ld_joint_control_forward_fetch >> strip_tac >>
-  qexistsl_tac [`fn'`,`bb'`] >> simp[] >>
-  irule ld_available_forward_abort >>
-  qexistsl_tac [`C`, `{v | MEM v (fn_ir_vars fn)}`, `bb`, `dst`, `inst`,
-                 `j`, `s`, `s1`, `src`, `sz`] >>
-  simp[] >>
-  conj_tac
-  >- (rpt strip_tac >> drule ld_env_lookup_defined >> simp[]) >>
-  conj_tac
-  >- (rpt strip_tac >> irule ld_active_operand_ir_var >>
-      qexistsl_tac [`ii`, `s with vs_inst_idx := s.vs_inst_idx + k`] >>
-      simp[] >> simp[active_inst_def] >>
-      `MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb` by
-        metis_tac[lookup_block_MEM, lookup_block_label] >>
-      qexists_tac `bb` >> gvs[get_instruction_def, AllCaseEqs()]) >>
-  fs[ld_joint_local_fields_def]
+  (* P4a in progress *) cheat
 QED

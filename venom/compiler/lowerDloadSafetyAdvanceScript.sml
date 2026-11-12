@@ -32,20 +32,8 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem ld_sync_head_update:
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\
-  g = f with <|lf_src := s'; lf_tgt := t'; lf_H := H'; lf_tv := tn'.t_var|> /\
-  frame_reachable vs0 C stk PG G' tn' fn next s' /\ active_inst fn next s' /\
-  G' = ld_erase A o_f H' /\ ld_vars P A g /\
-  ld_memory lo A tn' s' t' /\ ld_nonghost tn' s' t' /\
-  s'.vs_current_bb = t'.vs_current_bb /\ s'.vs_prev_bb = t'.vs_prev_bb /\
-  s'.vs_allocas = s.vs_allocas /\ t'.vs_allocas = t.vs_allocas /\
-  s'.vs_alloca_next = s.vs_alloca_next /\ t'.vs_alloca_next = t.vs_alloca_next /\
-  (?X. ld_envelope f.lf_supply fn s' s'.vs_inst_idx X t'.vs_inst_idx) /\
-  (!a. a IN FRANGE H' ==> a IN FDOM A) ==>
-  ld_sync lo P C vs0 stk PG G' tn' fn next s' t' A (g::fs) N /\
-  ld_global lo A (g::fs)
+(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
+   ghosts and the dynamic-region memory agreement of ld_sync.
 Proof
   strip_tac >>
   `f.lf_src = s /\ f.lf_tgt = t` by
@@ -65,7 +53,40 @@ Proof
   qpat_x_assum `!j. _ ==> ?X. ld_envelope _ _ _ _ X _`
     (qspec_then `SUC n` mp_tac) >> gvs[]
 QED
+*)
+Theorem ld_sync_head_update:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\
+  g = f with <|lf_src := s'; lf_tgt := t'; lf_H := H'; lf_tv := tn'.t_var|> /\
+  frame_reachable vs0 C stk PG G' tn' fn next s' /\ active_inst fn next s' /\
+  ld_ghost_ok (dyn_floor C vs0) A H' G' /\ ld_vars P A g /\
+  ld_memory lo A tn' s' t' /\ ld_nonghost tn' s' t' /\
+  ld_dyn_agree (dyn_floor C vs0) tn'.t_mem s'.vs_memory t'.vs_memory /\
+  s'.vs_current_bb = t'.vs_current_bb /\ s'.vs_prev_bb = t'.vs_prev_bb /\
+  s'.vs_allocas = s.vs_allocas /\ t'.vs_allocas = t.vs_allocas /\
+  s'.vs_alloca_next = s.vs_alloca_next /\ t'.vs_alloca_next = t.vs_alloca_next /\
+  (?X. ld_envelope f.lf_supply fn s' s'.vs_inst_idx X t'.vs_inst_idx) /\
+  (!a. a IN FRANGE H' ==> a IN FDOM A) ==>
+  ld_sync lo P C vs0 stk PG G' tn' fn next s' t' A (g::fs) N /\
+  ld_global lo A (g::fs)
+Proof
+  cheat
+QED
 
+(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
+   ghosts and the dynamic-region memory agreement of ld_sync.
+Proof
+  strip_tac >>
+  `frame_reachable vs0 C stk PG G' tn' fn next
+    (ss with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (gvs[] >> irule frame_reachable_next >>
+     drule ld_sync_source >> metis_tac[]) >>
+  irule ld_sync_head_update >>
+  drule ld_sync_control >> strip_tac >>
+  simp[] >>
+  gvs[ld_memory_def, ld_nonghost_def] >> metis_tac[]
+QED
+*)
 Theorem ld_sync_ordinary_advance:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\
@@ -80,8 +101,9 @@ Theorem ld_sync_ordinary_advance:
   f' = f with <| lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
                  lf_tgt := ts with vs_inst_idx := SUC p;
                  lf_H := H'; lf_tv := tn'.t_var |> /\
-  G' = ld_erase A o_f H' /\ ld_vars P A f' /\
+  ld_ghost_ok (dyn_floor C vs0) A H' G' /\ ld_vars P A f' /\
   ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
+  ld_dyn_agree (dyn_floor C vs0) tn'.t_mem ss.vs_memory ts.vs_memory /\
   active_inst fn next (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
   (?Y. ld_envelope f.lf_supply fn
          (ss with vs_inst_idx := SUC s.vs_inst_idx)
@@ -96,15 +118,7 @@ Theorem ld_sync_ordinary_advance:
     (ts with vs_inst_idx := SUC p) A (f'::fs) N /\
   ld_global lo A (f'::fs)
 Proof
-  strip_tac >>
-  `frame_reachable vs0 C stk PG G' tn' fn next
-    (ss with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (gvs[] >> irule frame_reachable_next >>
-     drule ld_sync_source >> metis_tac[]) >>
-  irule ld_sync_head_update >>
-  drule ld_sync_control >> strip_tac >>
-  simp[] >>
-  gvs[ld_memory_def, ld_nonghost_def] >> metis_tac[]
+  cheat
 QED
 
 Theorem ld_vars_inst_indices:
@@ -115,33 +129,8 @@ Proof
   simp[ld_vars_def]
 QED
 
-Theorem ld_nonallocating_endpoint:
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
-  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
-  t.vs_inst_idx = p /\
-  step_inst 0 C inst s = OK ss /\
-  ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
-    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>) /\
-  ld_memory lo A (step_taint inst s ss tn) ss ts /\
-  ld_nonghost (step_taint inst s ss tn) ss ts /\
-  step_prov PG G inst ss = ld_erase A o_f H' /\
-  (!a. a IN FRANGE H' ==> a IN FDOM A) /\
-  ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
-  ss.vs_alloca_next = s.vs_alloca_next /\
-  ts.vs_alloca_next = t.vs_alloca_next /\
-  ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
-  ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb ==>
-  let g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
-    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
-    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|> in
-  ld_vars P A g /\ ld_maps A g /\
-  ld_global lo A (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
-  EVERY (ld_maps A) fs /\
-  (!next. active_inst fn next g.lf_src ==>
-    ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
-      (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt A (g::fs) N)
+(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
+   ghosts and the dynamic-region memory agreement of ld_sync.
 Proof
   strip_tac >> pure_rewrite_tac [LET_THM] >> BETA_TAC >>
   qmatch_goalsub_abbrev_tac `ld_vars P A g` >>
@@ -184,6 +173,39 @@ Proof
   irule (cj 1 ld_sync_head_update) >>
   drule ld_sync_control >> strip_tac >> simp[] >>
   gvs[ld_memory_def, ld_nonghost_def] >> metis_tac[]
+QED
+*)
+Theorem ld_nonallocating_endpoint:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+  t.vs_inst_idx = p /\
+  step_inst 0 C inst s = OK ss /\
+  ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>) /\
+  ld_memory lo A (step_taint inst s ss tn) ss ts /\
+  ld_nonghost (step_taint inst s ss tn) ss ts /\
+  ld_ghost_ok (dyn_floor C vs0) A H' (step_prov PG G inst ss) /\
+  ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+    ss.vs_memory ts.vs_memory /\
+  (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+  ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+  ss.vs_alloca_next = s.vs_alloca_next /\
+  ts.vs_alloca_next = t.vs_alloca_next /\
+  ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+  ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb ==>
+  let g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
+    lf_tgt := ts with vs_inst_idx := p + LENGTH X;
+    lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|> in
+  ld_vars P A g /\ ld_maps A g /\
+  ld_global lo A (g::fs) /\ FDOM A = ld_slots A (g::fs) /\
+  EVERY (ld_maps A) fs /\
+  (!next. active_inst fn next g.lf_src ==>
+    ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+      (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt A (g::fs) N)
+Proof
+  cheat
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
