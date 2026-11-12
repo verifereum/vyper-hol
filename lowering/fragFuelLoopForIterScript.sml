@@ -828,6 +828,100 @@ Proof
   metis_tac[vars_kept_def, pred_setTheory.IN_SING]
 QED
 
+Theorem iter_body_incr_outcome[local]:
+  frag_fuel Wb {il} (E UNION {xl}) b0 i0 Kroute /\
+  (do d <- emit_op ADD [Var idx; Lit 1w];
+      emit_inst ASSIGN [d] [idx]; emit_inst JMP [Label cl] [] od) i0 = ((),i1) /\
+  fn_has_code b0 i0 fn /\ fn_has_code i0 i1 fn /\
+  no_phi_fn fn /\ callees_stable G ctx fn /\
+  N <= M /\ M <= b0.cs_next_var /\ M <= i0.cs_next_var /\
+  (!x. var_below N x /\ x IN Wb ==> x IN Wv) /\
+  var_below M idx /\ idx NOTIN Wb /\ ~var_below N idx /\
+  (case lenop of Lit w => T
+   | Var v => var_below M v /\ v NOTIN Wb /\ v <> idx | _ => F) /\
+  at_point b0 u /\ lookup_var idx u = SOME i /\ eval_operand lenop u = SOME l ==>
+  ?j. j <= Kroute + 1 /\ fuel_outcome G ctx fn u j
+    (\v. vars_kept N Wv u v /\
+      ((v.vs_current_bb IN (E UNION {xl}) /\ v.vs_inst_idx = 0) \/
+       (v.vs_current_bb = cl /\ v.vs_inst_idx = 0 /\
+        lookup_var idx v = SOME (i + 1w) /\ eval_operand lenop v = SOME l)))
+Proof
+  strip_tac >>
+  `case lenop of Lit w => T | Var v => var_below M v /\ v NOTIN Wb | _ => F` by
+    (Cases_on `lenop` >> gvs[]) >>
+  drule_all iter_body_route_outcome >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\v. vars_kept N Wv u v /\
+      ((v.vs_current_bb IN (E UNION {xl}) /\ v.vs_inst_idx = 0) \/
+       (v.vs_current_bb = cl /\ v.vs_inst_idx = 0 /\
+        lookup_var idx v = SOME (i + 1w) /\ eval_operand lenop v = SOME l))`, `1`] mp_tac) >>
+  (impl_tac >- (
+    qx_gen_tac `v` >> BETA_TAC >> disch_tac >>
+    Cases_on `v.vs_current_bb IN (E UNION {xl}) /\ v.vs_inst_idx = 0`
+    >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >> gvs[]) >>
+    rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+    `at_point i0 v` by metis_tac[] >>
+    `lookup_var idx v = SOME i` by metis_tac[] >>
+    `case lenop of Lit w => T | Var x => var_below M x /\ x <> idx | _ => F` by
+      (Cases_on `lenop` >> gvs[]) >>
+    drule_all iter_incr_frame_outcome >>
+    disch_then (qspec_then `Wv` strip_assume_tac) >>
+    qexists_tac `j'` >> simp[] >>
+    irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+    simp[] >> metis_tac[vars_kept_trans])) >>
+  strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac
+QED
+
+
+Theorem iter_round_outcome[local]:
+  (do d <- emit_op EQ [Var idx; lenop];
+      emit_inst JNZ [d; Label xl; Label bl] [] od) c0 = ((),c1) /\
+  (do d <- emit_op ADD [Var idx; Lit 1w];
+      emit_inst ASSIGN [d] [idx]; emit_inst JMP [Label cl] [] od) i0 = ((),i1) /\
+  frag_fuel Wb {il} (E UNION {xl}) b0 i0 Kroute /\
+  fn_has_code c0 c1 fn /\ fn_has_code b0 i0 fn /\ fn_has_code i0 i1 fn /\
+  no_phi_fn fn /\ callees_stable G ctx fn /\
+  c0.cs_current_bb = cl /\ c0.cs_current_insts = [] /\
+  b0.cs_current_bb = bl /\ b0.cs_current_insts = [] /\
+  N <= M /\ M <= c0.cs_next_var /\ M <= b0.cs_next_var /\ M <= i0.cs_next_var /\
+  (!x. var_below N x /\ x IN Wb ==> x IN Wv) /\
+  var_below M idx /\ idx NOTIN Wb /\ ~var_below N idx /\
+  (case lenop of Lit w => T
+   | Var v => var_below M v /\ v NOTIN Wb /\ v <> idx | _ => F) /\
+  at_point c0 u /\ lookup_var idx u = SOME i /\ eval_operand lenop u = SOME l ==>
+  ?j. j <= Kroute + 2 /\ fuel_outcome G ctx fn u j
+    (\v. vars_kept N Wv u v /\
+      ((v.vs_current_bb IN (E UNION {xl}) /\ v.vs_inst_idx = 0) \/
+       (at_point c0 v /\ i <> l /\
+        lookup_var idx v = SOME (i + 1w) /\ eval_operand lenop v = SOME l)))
+Proof
+  strip_tac >>
+  drule_all iter_cond_outcome >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then
+    [`\v. vars_kept N Wv u v /\
+      ((v.vs_current_bb IN (E UNION {xl}) /\ v.vs_inst_idx = 0) \/
+       (at_point c0 v /\ i <> l /\
+        lookup_var idx v = SOME (i + 1w) /\ eval_operand lenop v = SOME l))`,
+     `Kroute + 1`] mp_tac) >>
+  (impl_tac >- (
+    qx_gen_tac `v` >> BETA_TAC >> strip_tac >>
+    `vars_kept N Wv u v` by
+      (gvs[vars_kept_def, var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    Cases_on `i = l`
+    >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >> gvs[]) >>
+    `at_point b0 v` by gvs[at_point_def] >>
+    `lookup_var idx v = SOME i` by metis_tac[vars_kept_def, pred_setTheory.NOT_IN_EMPTY] >>
+    `eval_operand lenop v = SOME l` by
+      (Cases_on `lenop` >> gvs[venomStateTheory.eval_operand_def] >>
+       metis_tac[vars_kept_def, pred_setTheory.NOT_IN_EMPTY]) >>
+    drule_all iter_body_incr_outcome >> strip_tac >>
+    qexists_tac `j'` >> simp[] >>
+    irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+    simp[at_point_def] >> metis_tac[vars_kept_trans])) >>
+  strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac
+QED
 
 Theorem fuel_okS_compile_for_iter:
   !cenv lctx ty id fty arr_e bound body Wv E.
