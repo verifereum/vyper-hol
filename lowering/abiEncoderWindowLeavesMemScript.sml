@@ -206,9 +206,12 @@ Proof
    d+32+contractABI$ceil32 (LENGTH bs) < dimword (:256)` by decide_tac >>
   `mload sb s = n2w (LENGTH bs)` by metis_tac[mem_word_at_eq_mload] >>
   `!x. dst = Var x \/ src = Var x ==> not_fresh_at st x` by metis_tac[] >>
-  drule_all window_bytes_sequence_mem >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all window_bytes_mem_checks >> strip_tac >>
+  drule_all window_bytes_sequence >> strip_tac >>
   rename1 `window_seq st st' s actual` >>
+  `mem_cont_sim ctx func s
+     (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (drule_all window_seq_mem_cont >> simp[]) >>
   `sb + cap <= d \/ d + LENGTH (enc at (BytesV bs)) <= sb` by
     (qpat_x_assum `venomMemDefs$regions_disjoint _ _` mp_tac >>
      pure_asm_rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>

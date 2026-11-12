@@ -71,7 +71,8 @@ Theorem ifexp_selected_marked_endpoint_mem:
       (LocatedValue t (mk_ptr op LocMemory)) u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+    alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+    vv_at ce cx t sa sb (ee with gas_obs := []) tv (LocatedValue t (mk_ptr op LocMemory)) u
 Proof
   strip_tac >> drule vv_post_read_ok >> strip_tac >>
   `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -94,6 +95,19 @@ Proof
     (simp[gas_marked_exec_def, gas_marked_path_def] >>
      drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[]) >>
   drule_all ifexp_marked_conditional_of_read_mem >> strip_tac >>
+  `tv = raw \/ tv = Value v` by
+    (`conditional_result cx raw (ee with gas_obs := []) =
+        (INL tv,ee with gas_obs := [])` by
+       (qpat_x_assum `gas_marked_exec _ _ (conditional_result _ _) _ _ _ _ _` mp_tac >>
+        simp[gas_marked_exec_def] >> strip_tac >>
+        first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+     drule exprSimIfExpTheory.ifexp_conditional_result_shape >> strip_tac >>
+     gvs[read_result_def, return_def]) >>
+  `vv_at ce cx t sa sb (ee with gas_obs := []) tv
+     (LocatedValue t (mk_ptr op LocMemory)) u` by
+    (qpat_x_assum `expr_type e = t` (SUBST_ALL_TAC o SYM) >>
+     qpat_x_assum `!tv. _ ==> vv_at _ _ _ _ _ _ _ _ _` irule >>
+     qpat_x_assum `tv = _` (fn th => rewrite_tac[th])) >>
   qexistsl_tac [`tv`,`v`,`u`] >> simp[] >>
   fs[vv_store_bound_def] >> metis_tac[]
 QED

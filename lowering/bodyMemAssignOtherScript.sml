@@ -6,7 +6,7 @@
 Theory bodyMemAssignOther
 Ancestors
   bodyMemoryPreds bodyMemImmutableDeploy bodyMemAssignPlace bodyMemAssignPlaceWidened
-  bodyMemAssignEffectfulIndex
+  bodyMemAssignEffectfulIndex bodyMemAssignSnapshot
 
 Theorem body_assign_other_mem:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.

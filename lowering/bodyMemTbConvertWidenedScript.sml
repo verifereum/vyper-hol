@@ -8,7 +8,8 @@
  *)
 Theory bodyMemTbConvertWidened
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemTbConvertCallLift bodyMemTbConvertScalarBranch
+  exprSimHyps exprSimHypsDefs exprSimConvert exprLowering vyperAST
 
 (* The conversion's lowering sizes the operand by the callee's return type,
    so describing the operand's value at that type is the internal-call
@@ -24,5 +25,14 @@ Theorem body_convert_widened_call_arg_mem:
       expr_sim_mem ctx func cenv cx ty (TypeBuiltin v11 Convert typ [e1]) st /\
       expr_vv_sim_mem ctx func cenv cx ty (TypeBuiltin v11 Convert typ [e1]) st
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_convert >> strip_tac >>
+  `expr_sim_mem ctx func cenv cx (expr_type e1) e1 st /\
+   expr_vv_sim_mem ctx func cenv cx (expr_type e1) e1 st` by
+    (gvs[body_exprs_mem_ok_def] >> metis_tac[body_expr_mem_ok_def]) >>
+  Cases_on `is_bytestring_type typ`
+  >- (irule call_bytestring_convert_mem >> metis_tac[]) >>
+  Cases_on `is_bytestring_type (expr_type e1)`
+  >- (irule call_dynamic_convert_mem >> metis_tac[]) >>
+  irule scalar_convert_branch_mem >> metis_tac[]
 QED

@@ -47,9 +47,7 @@ Theorem runtime_initial_entry_resources:
       FLOOKUP s.vs_allocas inst.inst_id = SOME (base,sz) ==> sz = w2n n)
 Proof
   strip_tac >> simp_tac std_ss [LET_THM] >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >> gvs[] >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >> gvs[] >>
   `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\ ~vs.vs_halted` by
     gvs[initial_venom_state_rel_def] >>
   conj_tac

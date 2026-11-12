@@ -282,6 +282,7 @@ Proof
 QED
 
 Theorem nonzero_value_precompile_shaped_call:
+  ~s.as_call_ctx.cc_static /\
   s.as_outcomes = outcome::rest /\ ~outcome.co_success ==>
   asm_step lo otp (AsmOp "CALL")
     (s with as_stack := [gas; 1w; 9w; 0w; 0w; 0w; 0w]) =
@@ -376,7 +377,7 @@ QED
 (* Both creation opcodes consume the same queued completion as Venom,
    including the returned address and failure-side account rollback. *)
 Theorem creation_consumes_recorded_outcome:
-  s.as_outcomes = outcome::rest ==>
+  ~s.as_call_ctx.cc_static /\ s.as_outcomes = outcome::rest ==>
   (case salt of
      NONE => asm_exec_create (s with as_stack := [value; 0w; 0w])
    | SOME n => asm_exec_create2 (s with as_stack := [value; 0w; 0w; n])) =
@@ -395,4 +396,30 @@ Proof
        asm_consume_create_outcome_def, take_outcome_def, record_request_def,
        computed_precompile_def, adopt_outcome_def, adopt_outcome_deletions_def,
        asm_next_def, asm_state_component_equality]
+QED
+
+(* In a static frame every state write faults with empty returndata, as
+   the EVM fails with WriteInStaticContext; a CALL faults only with value. *)
+Theorem static_frame_faults_state_writes:
+  s.as_call_ctx.cc_static ==>
+  asm_exec_call F (s with as_stack := [gas; 1w; 9w; 0w; 0w; 0w; 0w]) =
+    AsmFault (s with <| as_stack := [gas; 1w; 9w; 0w; 0w; 0w; 0w];
+                        as_returndata := [] |>) /\
+  asm_exec_create (s with as_stack := [value; 0w; 0w]) =
+    AsmFault (s with <| as_stack := [value; 0w; 0w]; as_returndata := [] |>) /\
+  asm_exec_create2 (s with as_stack := [value; 0w; 0w; salt]) =
+    AsmFault (s with <| as_stack := [value; 0w; 0w; salt];
+                        as_returndata := [] |>) /\
+  asm_sstore (s with as_stack := [k; v]) =
+    AsmFault (s with <| as_stack := [k; v]; as_returndata := [] |>) /\
+  asm_tstore (s with as_stack := [k; v]) =
+    AsmFault (s with <| as_stack := [k; v]; as_returndata := [] |>) /\
+  asm_selfdestruct (s with as_stack := [a]) =
+    AsmFault (s with <| as_stack := [a]; as_returndata := [] |>) /\
+  asm_log 0 (s with as_stack := [0w; 0w]) =
+    AsmFault (s with <| as_stack := [0w; 0w]; as_returndata := [] |>)
+Proof
+  strip_tac >>
+  simp[asm_exec_call_def, asm_exec_create_def, asm_exec_create2_def,
+       asm_sstore_def, asm_tstore_def, asm_selfdestruct_def, asm_log_def]
 QED

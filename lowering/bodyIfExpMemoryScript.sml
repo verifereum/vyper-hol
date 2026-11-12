@@ -215,35 +215,6 @@ Proof
 QED
 
 
-Theorem ifexp_finish_post[local]:
-  expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
-  expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
-  read_result cx tv ee = (INL v,ee) /\ expr_type e = t /\
-  post_value_type cenv e = expr_type e /\
-  eval_operand op u = SOME w /\ (!x. not_fresh_at sa x ==> x <> rv) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
-  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
-  sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
-  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
-  sd.cs_next_id <= sb.cs_next_id /\ is_word_type t ==>
-  vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
-    (if is_word_type t then StackValue t (Var rv)
-     else LocatedValue t (mk_ptr (Var rv) LocMemory))
-    (jump_to xl (update_var rv w u with vs_inst_idx := k))
-Proof
-  strip_tac >>
-  qpat_x_assum `_ ==> ~expr_has_effect e` (assume_tac o SIMP_RULE (srw_ss()) []) >>
-  qpat_assum `is_word_type _` (fn th => rewrite_tac[th] >>
-    irule (SRULE [vyperASTTheory.expr_type_def, th]
-      (Q.INST [`e` |-> `IfExp t c a b`]
-        exprSimIfExpTheory.ifexp_root_vv_post_of_expr_post_read))) >>
-  goal_assum (drule_at Any) >>
-  irule expr_post_ifexp >>
-  `~not_fresh_at sa rv` by metis_tac[] >>
-  simp[] >> metis_tac[]
-QED
-
 Theorem ifexp_forced_arm_finish_mem[local]:
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   is_word_type t /\ expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
@@ -668,7 +639,7 @@ Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
      rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
      strip_tac >> asm_rewrite_tac[]) >>
       qpat_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _`
-        (mp_then Any mp_tac ifexp_finish_post) >>
+        (mp_then Any mp_tac ifexp_root_finish_post) >>
       disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
       qpat_assum `is_word_type _` (fn th => simp[th]) >>
@@ -865,8 +836,13 @@ Resume compile_ifexp_nonword_vv_sim_mem[route_result]:
   conj_tac
   >- (`sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
         (qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
+      `~expr_has_effect (IfExp (expr_type a) c a b) ==>
+       ~expr_has_effect (if sel then a else b)` by
+        (Cases_on `sel` >>
+         rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+         strip_tac >> asm_rewrite_tac[]) >>
       qpat_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _`
-        (mp_then Any mp_tac ifexp_finish_post) >>
+        (mp_then Any mp_tac ifexp_root_finish_post) >>
       disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
       simp[] >> disch_then irule >> gvs[]) >>

@@ -11,6 +11,8 @@ Theorem extract32_word_suffix_success:
   s.vs_current_bb = ca.cs_current_bb /\
   s.vs_inst_idx = LENGTH ca.cs_current_insts /\ alloca_history func s /\
   stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es es' c0 s0 s /\
+  (~expr_has_effect (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;ofs]) ==>
+   pure_frame cenv func es c0 s0 s) /\
   local_ptrs_reserved cenv ca /\ c0.cs_next_var <= ca.cs_next_var /\
   is_word_type (BaseT bt) /\
   eval_operand l s = SOME (n2w (LENGTH bs)) /\
@@ -36,11 +38,12 @@ Theorem extract32_word_suffix_success:
     s.vs_alloca_next <= u.vs_alloca_next
 Proof
   strip_tac >>
+  qpat_x_assum `~expr_has_effect _ ==> _` (assume_tac o SRULE []) >>
   drule_all (SRULE [] (Q.INST
     [`code` |-> `emitted_insts sa sc ++ emitted_insts sc sb`,
      `e` |-> `TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;ofs]`]
     extract32_suffix_success_entry) |> SRULE [expr_type_def]) >>
-  disch_then (qspecl_then [`src`, `ofs`, `BaseT bt`] strip_assume_tac) >>
+  disch_then (qspec_then `BaseT bt` strip_assume_tac) >>
   qexists_tac `u` >> simp[] >>
   fs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
      expr_store_bound_def, vv_store_bound_def, expr_type_def,

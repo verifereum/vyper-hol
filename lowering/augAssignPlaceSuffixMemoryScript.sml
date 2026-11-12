@@ -37,7 +37,9 @@ Theorem aug_place_word_store_after_operator_mem:
                FLOOKUP u.vs_allocas aid = SOME b) /\
       ~u.vs_halted /\ u.vs_current_bb = sf.cs_current_bb /\
       u.vs_inst_idx = LENGTH sf.cs_current_insts /\
-      alloca_history func u /\ t.vs_alloca_next = u.vs_alloca_next
+      alloca_history func u /\ t.vs_alloca_next = u.vs_alloca_next /\
+      (!c0 e0 sa0 sx. alloca_frame c0 e0 sa0 sx cenv ee t ==>
+                      alloca_frame c0 e0 sa0 sx cenv ff u)
 Proof
   strip_tac >>
   `eval_operand dst t = SOME w` by

@@ -2,7 +2,7 @@
 Theory entryOwnedSourceLocals
 Ancestors
   calldataRegistrationLocals entryRuntimePackageLayout entrySourceOwnedEndpoint
-  allocaFrontierBound venomMemDefs venomState entryLocals list finite_map
+  allocaFrontierBound venomMemDefs venomState entryLocals memoryValueEncoding list finite_map
 
 Theorem owned_source_scope_lookup[local]:
   bind_arguments tenv args (MAP (\(ty,tv,v,at,av). v) values) = SOME env /\
@@ -20,6 +20,7 @@ Theorem owned_source_scope_lookup[local]:
     val_wf tv v /\ val_in_memory tv v p out.vs_memory)
     (MAP (\((name,(prim:bool),(dyn:bool),(sz:num),(info:abi_dec_info)),(ty,tv,v,at,av)). (name,tv,v))
       (ZIP (pa,values))) outputs /\
+  EVERY (\(ty,tv,v,(at:abi_type),(av:abi_value)). value_has_type tv v) values /\
   out.vs_alloca_next < dimword (:256) /\ alloca_inv out ==>
   !name entry ptr sz.
     FLOOKUP env name = SOME entry /\
@@ -28,7 +29,7 @@ Theorem owned_source_scope_lookup[local]:
       MEM ins (fn_insts fn) /\ ins.inst_opcode = ALLOCA /\
       ins.inst_outputs = [ptr] /\ FLOOKUP out.vs_allocas ins.inst_id = SOME (p,sz) /\
       type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
-      val_in_memory entry.type entry.value p out.vs_memory
+      memory_value_rel entry.type entry.value p out.vs_memory
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   drule_all decoded_arguments_scope_lookup >> strip_tac >>
@@ -56,7 +57,11 @@ Resume owned_source_scope_lookup[owned]:
   `slot1 < dimword (:256)` by
     (fs[alloca_inv_def, alloca_next_valid_def] >>
      first_x_assum drule >> decide_tac) >>
-  goal_assum (drule_at (Pat `MEM _ (fn_insts fn)`)) >> simp[]
+  goal_assum (drule_at (Pat `MEM _ (fn_insts fn)`)) >> simp[] >>
+  irule val_in_memory_memory_value_rel >> simp[] >>
+  qpat_x_assum `EVERY _ values` mp_tac >> rewrite_tac[EVERY_EL] >>
+  disch_then (qspec_then `i` mp_tac) >>
+  qpat_x_assum `(_,_,_,_,_) = EL i values` (rewrite_tac o single o SYM) >> fs[]
 QED
 
 Finalise owned_source_scope_lookup
@@ -80,6 +85,7 @@ Theorem owned_source_arguments_local_ptrs:
     val_wf tv v /\ val_in_memory tv v p out.vs_memory)
     (MAP (\((name,(prim:bool),(dyn:bool),(sz:num),(info:abi_dec_info)),(ty,tv,v,at,av)). (name,tv,v))
       (ZIP (pa,values))) outputs /\
+  EVERY (\(ty,tv,v,(at:abi_type),(av:abi_value)). value_has_type tv v) values /\
   alloca_inv out /\ alloca_frontier_inv ctx fn site out /\
   unit_alloca_budget ctx < dimword (:256) /\ fn_inst_ids_distinct fn ==>
   local_ptrs_rel fn cer [env] out

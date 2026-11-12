@@ -2,7 +2,7 @@ Theory entryRuntimeContextCode
 Ancestors
   entryCodePredicate entryRuntimeBodyCode entryPackagedRuntimeCode
   entryExtractionCodePredicate entryDallocaCoverage compileVyper vyperCompiler
-  moduleLowering list
+  moduleLowering loweringShapeProps list
 
 Theorem entry_code_run_lowering[local]:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
@@ -34,9 +34,14 @@ Proof
           package_external_fn tops T (K global_nonreentrant_slot))
       (FST (classify_functions tops)))` by
     (simp[GSYM MAP_COMPOSE, entry_code_packaged_externals]) >>
+  `~EXISTS external_has_defaults (FST (classify_functions tops))` by
+    (drule supported_program_no_external_defaults >> simp[]) >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `EXISTS external_has_defaults ext_fns = F` by fs[EXISTS_MEM, EVERY_MEM] >>
+  qpat_x_assum `(if EXISTS external_has_defaults _ then _ else _) = _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
   drule entry_code_packaged_internals >>
   disch_then (qspec_then `pol.rpol_target` mp_tac) >>
   drule entry_code_packaged_fallback >>

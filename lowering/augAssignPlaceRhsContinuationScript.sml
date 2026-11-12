@@ -66,6 +66,7 @@ Theorem aug_place_operator_write_path_mem[local]:
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv s2 /\ local_ptrs_reserved cenv s3 /\
   stmt_state_rel ctx func cenv cx ee s /\ alloca_history func s /\
+  alloca_frame cenv es0 sa s_entry cenv ee s /\
   s_entry.vs_alloca_next <= s.vs_alloca_next /\
   eval_operand x s = SOME (val_to_w256 cur) /\
   eval_operand y s = SOME (val_to_w256 rhs) /\
@@ -92,7 +93,7 @@ Theorem aug_place_operator_write_path_mem[local]:
         (res,ff with gas_obs := tail)) /\
     gas_marked_path T ctx func s 0 r /\
     ((?u. r = OK u /\ res = INL () /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+      stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
         res (ff with gas_obs := []) u /\ alloca_history func u /\
       s_entry.vs_alloca_next <= u.vs_alloca_next) \/
      (exit_result r /\ !tail. stmt_exit RetQ (ff with gas_obs := tail) res r))
@@ -110,7 +111,18 @@ Proof
   impl_tac >- simp[] >> strip_tac
   >- (gvs[] >>
       rename1 `eval_operand op t = SOME (val_to_w256 v)` >>
+      `alloca_frame cenv es0 sa s_entry cenv ee t` by
+        (qspecl_then [`cenv`, `es0`, `sa`, `s_entry`, `cenv`, `ee`, `s`, `ctx`,
+                      `func`, `cx`, `s2`, `ee`, `t`] mp_tac
+           augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept >>
+         impl_tac >- (rpt conj_tac >> FIRST [REFL_TAC, first_assum ACCEPT_TAC]) >>
+         simp[]) >>
       drule_all aug_place_word_store_after_operator_mem >> strip_tac >>
+      `alloca_frame cenv es0 sa s_entry cenv (ff with gas_obs := []) u` by
+        (`alloca_frame cenv es0 sa s_entry cenv ff u` by
+           (qpat_x_assum `!c0 e0 sa0 sx. alloca_frame _ _ _ _ _ _ _ ==> _`
+              irule >> first_assum ACCEPT_TAC) >>
+         pop_assum mp_tac >> simp[stmtSimDefsTheory.alloca_frame_def]) >>
       `gas_marked_path T ctx func s 0 (OK u)` by
         (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
       qexistsl_tac [`INL ()`, `ff`, `OK u`] >>
@@ -158,6 +170,7 @@ Theorem aug_place_rhs_operator_write_mem:
   acyclic_struct_metadata cenv.ce_struct_fields /\ storage_place_region cx p /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
   stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  alloca_frame cenv es0 sa s_entry cenv es s0 /\ sa.cs_next_id <= s1.cs_next_id /\
   s_entry.vs_alloca_next <= s0.vs_alloca_next /\
   ~s0.vs_halted /\ s0.vs_current_bb = s1.cs_current_bb /\
   s0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~block_is_terminated sf /\
@@ -182,7 +195,7 @@ Theorem aug_place_rhs_operator_write_mem:
         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
         ptv bop cur rhs)) (write_place cx p))) (es,s0)
     (\res ff u. res = INL () /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s_entry res ff u /\
+      stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry res ff u /\
       alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof
@@ -223,6 +236,14 @@ Proof
   `stmt_state_rel ctx func cenv cx ee t` by fs[expr_post_def] >>
   `s_entry.vs_alloca_next <= t.vs_alloca_next` by
     metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es0 sa s_entry cenv ee t` by
+    (`alloca_frame cenv es s1 s0 cenv ee t` by
+       (irule stmtSimDefsTheory.expr_post_alloca_frame >> metis_tac[]) >>
+     irule stmtSimDefsTheory.alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ s0`)) >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ t`)) >> simp[]) >>
   drule_all (Q.INST [`sa` |-> `sa`, `s_entry` |-> `s_entry`]
     aug_place_operator_write_path_mem) >> simp[]
 QED

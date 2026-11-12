@@ -44,18 +44,22 @@ Ancestors
 (* ===== The frame ===== *)
 
 (* cenv agrees with every function's build_compile_env for tops on the
-   module-level fields no declaration changes: the module (the main one),
+   module-level fields no declaration changes: the module (the main one)
+   and the module list the overlap analysis reads, function mutabilities,
    module-variable types and locations (immutables included), flag
-   metadata and method ids (build_compile_env_module_pins, bodySimEntry). *)
+   metadata, custom-error parameters and method ids (build_compile_env_module_pins, bodySimEntry). *)
 Definition cenv_module_pins_def:
   cenv_module_pins tops cenv <=>
     cenv.ce_module = NONE /\
+    cenv.ce_modules = [(NONE, tops)] /\
+    cenv.ce_func_mutability = build_func_mutability tops /\
     cenv.ce_module_var_type = build_var_type_map tops /\
     cenv.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
         tops 0 (add_module_var_locations tops FEMPTY) /\
     cenv.ce_flag_member_id = FST (build_flag_info tops (K (K 0)) (K 0)) /\
     cenv.ce_flag_n_members = SND (build_flag_info tops (K (K 0)) (K 0)) /\
+    cenv.ce_error_info = (\name. lookup_custom_error_args_in name tops) /\
     cenv.ce_method_id =
       (\s tys. w2n (calldata_method_id
                      (function_selector s (vyper_to_abi_types (type_env tops) tys))))
@@ -128,6 +132,21 @@ Theorem body_inv_immutable_section_layout:
 Proof
   rw[body_inv_def] >> irule cenv_module_pins_immutable_section_layout >>
   simp[]
+QED
+
+(* The compile env's modules are the source's, the main module alone, whose
+   top-level names are distinct: as bare_globals_layout asks. *)
+Theorem body_inv_modules_aligned:
+  !tops ctx cenv cx.
+    body_inv tops ctx cenv cx ==>
+    (!src. ALOOKUP cenv.ce_modules src = get_module_code cx src) /\
+    (!src ts. get_module_code cx src = SOME ts ==>
+       ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)))
+Proof
+  rw[body_inv_def, cenv_module_pins_def]
+  >- (Cases_on `src` >> simp[] >>
+      Cases_on `get_module_code cx (SOME x)` >> gvs[] >> res_tac >> gvs[]) >>
+  res_tac >> gvs[]
 QED
 
 (* The compile env binds no local the typing does not know: every name

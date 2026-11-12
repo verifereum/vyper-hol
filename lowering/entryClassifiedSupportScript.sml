@@ -7,7 +7,7 @@ Theorem entry_classified_external_support:
   supported_program tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,body)
     (FST (classify_functions tops)) ==>
-  ~nr /\ NULL defaults /\
+  NULL defaults /\
   EVERY (supported_function_argument tops External o SND) args /\
   supported_function_return tops External ret /\
   supported_function_body tops External args body /\
@@ -23,7 +23,7 @@ Theorem entry_classified_internal_support:
   supported_program tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,body)
     (FST (SND (classify_functions tops))) ==>
-  ~nr /\ NULL defaults /\
+  NULL defaults /\
   EVERY (supported_function_argument tops Internal o SND) args /\
   supported_function_return tops Internal ret /\
   supported_function_body tops Internal args body /\
@@ -39,7 +39,7 @@ Theorem entry_classified_fallback_support:
   supported_program tops /\
   FST (SND (SND (classify_functions tops))) =
     SOME (mut,nr,rr,name,args,defaults,ret,body) ==>
-  ~nr /\ NULL defaults /\
+  NULL defaults /\
   EVERY (supported_function_argument tops External o SND) args /\
   supported_function_return tops External ret /\
   supported_function_body tops External args body /\

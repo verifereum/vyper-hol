@@ -214,10 +214,15 @@ Definition asm_sload_def:
     | _ => AsmError "sload: stack underflow"
 End
 
+(* A static frame (cc_static) faults at every state write: SSTORE, TSTORE,
+   LOG, SELFDESTRUCT, CREATE/CREATE2 and a CALL with value, as the EVM
+   fails with WriteInStaticContext.  The check follows the stack-underflow
+   check, as Venom's follows operand evaluation. *)
 Definition asm_sstore_def:
   asm_sstore s =
     case s.as_stack of
       key :: value :: stk =>
+        if s.as_call_ctx.cc_static then AsmFault (s with as_returndata := []) else
         let addr = s.as_call_ctx.cc_address in
         let acct = lookup_account addr s.as_accounts in
         let acct' = acct with storage :=
@@ -242,6 +247,7 @@ Definition asm_tstore_def:
   asm_tstore s =
     case s.as_stack of
       key :: value :: stk =>
+        if s.as_call_ctx.cc_static then AsmFault (s with as_returndata := []) else
         let addr = s.as_call_ctx.cc_address in
         let cur = lookup_transient_storage addr s.as_transient in
         let new_stor = update_storage key value cur in
@@ -313,6 +319,7 @@ End
 Definition asm_log_def:
   asm_log n s =
     if LENGTH s.as_stack < n + 2 then AsmError "log: stack underflow"
+    else if s.as_call_ctx.cc_static then AsmFault (s with as_returndata := [])
     else
       let offset = HD s.as_stack in
       let sz = EL 1 s.as_stack in
@@ -446,6 +453,7 @@ Definition asm_selfdestruct_def:
   asm_selfdestruct s =
     case s.as_stack of
       addr :: stk =>
+        if s.as_call_ctx.cc_static then AsmFault (s with as_returndata := []) else
         let self = s.as_call_ctx.cc_address in
         let bal = (lookup_account self s.as_accounts).balance in
         let beneficiary : address = w2w addr in
@@ -627,6 +635,8 @@ Definition asm_exec_call_def:
   asm_exec_call is_static s =
     case s.as_stack of
       gas :: addr :: value :: ao :: asz :: ro :: rs :: stk =>
+        if s.as_call_ctx.cc_static /\ value <> 0w then
+          AsmFault (s with as_returndata := []) else
         let rq = asm_call_request s addr value (w2n ao) (w2n asz) is_static in
         asm_consume_call_outcome rq (w2n ro) (w2n rs) stk
           (s with as_memory := asm_call_memory (w2n ao) (w2n asz)
@@ -703,7 +713,8 @@ Definition asm_exec_create_def:
       value :: offset :: sz :: stk =>
         let off = w2n offset in
         let size = w2n sz in
-        if size > 2 * max_code_size then AsmFault (s with as_returndata := []) else
+        if s.as_call_ctx.cc_static \/ size > 2 * max_code_size then
+          AsmFault (s with as_returndata := []) else
         let rq = asm_create_request s value off size NONE in
         asm_consume_create_outcome rq stk
           (s with as_memory := asm_call_memory off size 0 0 s.as_memory)
@@ -717,7 +728,8 @@ Definition asm_exec_create2_def:
       value :: offset :: sz :: salt :: stk =>
         let off = w2n offset in
         let size = w2n sz in
-        if size > 2 * max_code_size then AsmFault (s with as_returndata := []) else
+        if s.as_call_ctx.cc_static \/ size > 2 * max_code_size then
+          AsmFault (s with as_returndata := []) else
         let rq = asm_create_request s value off size (SOME salt) in
         asm_consume_create_outcome rq stk
           (s with as_memory := asm_call_memory off size 0 0 s.as_memory)
