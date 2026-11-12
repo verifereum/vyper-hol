@@ -180,7 +180,27 @@ Proof
        simp[intcall_interval_emit_op, intcall_interval_return])
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
+Theorem intcall_interval_materialize_vv:
+  k <= a.cs_next_var ==>
+  intcall_compiler_interval k a (SND (compile_materialize_vv cenv ty vv a))
+Proof
+  strip_tac >> simp[compile_materialize_vv_def, comp_ignore_bind_def] >>
+  rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
+       simp[intcall_interval_alloc_buffer, intcall_interval_unwrap_value,
+            intcall_interval_store_memory, intcall_interval_return])
+QED
+
+(* A composite subscript base is snapshotted before the index runs. *)
+Theorem intcall_interval_snapshot_vv:
+  k <= a.cs_next_var ==>
+  intcall_compiler_interval k a (SND (compile_snapshot_vv cenv copy vv a))
+Proof
+  strip_tac >> rw[compile_snapshot_vv_def, intcall_interval_return] >>
+  irule intcall_interval_bind_floor >>
+  simp[intcall_interval_unwrap_value, intcall_interval_materialize_vv,
+       intcall_interval_return]
+QED
+
 Theorem intcall_interval_pure_subscript:
   (!ce ty e a. ~expr_has_effect e /\ k <= a.cs_next_var ==>
     intcall_compiler_interval k a (SND (cfn ce ty e a))) /\
@@ -188,13 +208,16 @@ Theorem intcall_interval_pure_subscript:
   intcall_compiler_interval k a
     (SND (compile_subscript cfn cenv rt ty be ie a))
 Proof
-  (* original proof, kept while held:
   strip_tac >> simp[compile_subscript_def] >>
   irule intcall_interval_bind_floor >> simp[] >>
+  rpt strip_tac >> irule intcall_interval_bind_floor >>
+  simp[intcall_interval_snapshot_vv, intcall_interval_return, COND_RATOR,
+       COND_RAND] >>
   rpt strip_tac >> Cases_on `place_type cenv be`
   >- (simp[] >>
       rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
            simp[intcall_interval_lower_value, intcall_interval_mapping_subscript,
+                intcall_interval_snapshot_vv,
                 intcall_interval_return]) >>
       IF_CASES_TAC >> simp[intcall_interval_keccak_key, intcall_interval_return] >>
       rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
@@ -205,8 +228,6 @@ Proof
        simp[intcall_interval_emit_op, intcall_interval_return,
             intcall_interval_lower_value, intcall_interval_array_subscript,
             intcall_interval_ptr_load])
-  *)
-  cheat
 QED
 
 Theorem intcall_interval_pair_bind_floor:

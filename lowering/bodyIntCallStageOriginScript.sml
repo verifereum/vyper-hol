@@ -44,8 +44,7 @@ Proof
   >- (drule intcall_stage_word_parts >> strip_tac >> gvs[] >>
       Cases_on `i` >> gvs[] >> rename1 `n < LENGTH es` >>
       `ci_mono a s1` by
-        (first_assum (qspecl_then [`ce`,`expr_type h`,`h`,`a`] mp_tac) >>
-         simp[]) >>
+        metis_tac[pairTheory.SND] >>
       `ci_mono s1 sm` by
         (qspecl_then [`ce`,`vv`,`s1`] mp_tac ci_mono_unwrap_value >> simp[]) >>
       last_x_assum (qspecl_then [`fs`,`ts`,`sm`,`rest`,`b`,`n`] mp_tac) >>
@@ -53,7 +52,7 @@ Proof
       qexistsl_tac [`pre`,`post`,`buf`] >> simp[]) >>
   drule intcall_stage_memory_parts >> strip_tac >> gvs[] >>
   `ci_mono a s1` by
-    (first_assum (qspecl_then [`ce`,`expr_type h`,`h`,`a`] mp_tac) >> simp[]) >>
+    metis_tac[pairTheory.SND] >>
   `ci_mono s2 s3` by
     (qspecl_then [`ce`,`vv`,`s2`] mp_tac ci_mono_unwrap_value >> simp[]) >>
   `ci_mono s3 s4` by

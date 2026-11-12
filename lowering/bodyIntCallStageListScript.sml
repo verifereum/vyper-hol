@@ -35,7 +35,7 @@ Theorem intcall_stage_word_code:
 Proof
   strip_tac >>
   `ci_mono sa s1` by
-    (first_assum (qspecl_then [`ce`,`expr_type e`,`e`,`sa`] mp_tac) >> simp[]) >>
+    metis_tac[pairTheory.SND] >>
   `ci_mono s1 sm` by
     (qspecl_then [`ce`,`vv`,`s1`] mp_tac ci_mono_unwrap_value >> simp[]) >>
   `ci_mono sm sn` by
@@ -64,7 +64,7 @@ Theorem intcall_stage_memory_code:
 Proof
   strip_tac >>
   `ci_mono sa s1` by
-    (first_assum (qspecl_then [`ce`,`expr_type e`,`e`,`sa`] mp_tac) >> simp[]) >>
+    metis_tac[pairTheory.SND] >>
   `ci_mono s1 s2` by
     (qspecl_then [`cap`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
   `ci_mono s2 s3` by
