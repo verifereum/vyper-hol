@@ -1,5 +1,6 @@
 Theory lowerDloadPtrJointSafety
 Ancestors lowerDloadPtrJointReachable lowerDloadPtrTerminalClosure
+  ptrDisciplineEmptyTaint ctxLookupAgreeHelpers lowerDloadPtrSupplyOrigins
   lowerDloadPtrRel lowerDloadPtrAggregate ptrDiscipline list
   venomExecSemantics venomState venomMemProps venomInst finite_map
   lowerDloadPtrPhase lowerDloadPtrPhaseNext lowerDloadDefs
@@ -100,9 +101,10 @@ Theorem dload_expanded_step_fmp[local]:
   v.vs_allocas = t.vs_allocas
 Proof
   simp[] >> strip_tac >>
-  gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def,
-      exec_read1_def, AllCaseEqs()] >>
-  gvs[update_var_def, write_memory_with_expansion_def]
+  `i.inst_opcode <> INVOKE /\ allocation_free_opcode i.inst_opcode` by
+    gvs[allocation_free_opcode_def] >>
+  metis_tac[allocation_free_step_fmp_ok, allocation_free_step_allocas,
+            step_inst_initial_fmp]
 QED
 
 (* The expansion prefix keeps every alloca site below the initial free
@@ -122,7 +124,20 @@ Proof
   Induct_on `n` >- simp[dload_prefix_match_def] >>
   rpt gen_tac >> strip_tac >>
   drule dload_prefix_successor >> strip_tac >>
-  `allocas_below_fmp u` by (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  `allocas_below_fmp u` by
+    (first_x_assum (qspecl_then [`u`,`J`,`vn`] mp_tac) >>
+     impl_tac >- (
+       conj_tac >- first_assum ACCEPT_TAC >>
+       conj_tac
+       >- (rpt strip_tac >>
+           qpat_x_assum `!k. k < SUC n ==> _` (qspec_then `k` mp_tac) >>
+           gvs[]) >>
+       conj_tac
+       >- (rpt strip_tac >>
+           qpat_x_assum `!k. k < SUC n /\ _ ==> _` (qspec_then `k` mp_tac) >>
+           gvs[]) >>
+       first_assum ACCEPT_TAC) >>
+     simp[]) >>
   Cases_on `(EL n xs).inst_opcode = ALLOCA`
   >- (`n = 0 /\ (EL 0 xs).inst_operands = [Lit 32w] /\
        (FLOOKUP t0.vs_allocas (EL 0 xs).inst_id = NONE ==>
@@ -130,7 +145,9 @@ Proof
         (qpat_x_assum `!k. k < SUC n /\ _ ==> _` (qspec_then `n` mp_tac) >>
          simp[]) >>
       gvs[dload_prefix_match_def] >>
-      `w2n (32w:bytes32) = 32` by EVAL_TAC >>
+      `w2n (32w:bytes32) = 32` by
+        (`dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+         pop_assum (fn th => simp[NoAsms, th, wordsTheory.dimword_def])) >>
       qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
       simp[step_inst_non_invoke, step_inst_base_def, exec_alloca_def,
            AllCaseEqs()] >>
@@ -140,7 +157,14 @@ Proof
   `MEM (EL n xs).inst_opcode [ADD; CODECOPY; MLOAD]` by
     (qpat_x_assum `!k. k < SUC n ==> _` (qspec_then `n` mp_tac) >> simp[]) >>
   drule_all dload_expanded_step_fmp >> strip_tac >>
-  gvs[allocas_below_fmp_def]
+  qpat_x_assum `!t H un. _` kall_tac >>
+  qpat_x_assum `allocas_below_fmp u` mp_tac >>
+  qpat_x_assum `t = _` SUBST1_TAC >>
+  simp[allocas_below_fmp_def] >>
+  qpat_x_assum `v.vs_fmp = _` SUBST1_TAC >>
+  qpat_x_assum `v.vs_initial_fmp = _` SUBST1_TAC >>
+  qpat_x_assum `v.vs_allocas = _` SUBST1_TAC >> simp[] >>
+  strip_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem dload_supply_prefix_allocas_from:
@@ -572,22 +596,46 @@ Resume dload_normal_safety[below_fmp]:
     (drule dload_boundary_environment >>
      simp[dload_equal_environment_def, venom_state_component_equality]) >>
   `t0.vs_alloca_next <= w2n t0.vs_initial_fmp` by
-    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[dload_boundary_core_def, dload_memory_match_def, dyn_floor_def]) >>
+    (`t0.vs_alloca_next <= dyn_floor C vs` by
+       (drule dload_boundary_memory >> simp[dload_memory_match_def]) >>
+     gvs[dyn_floor_def]) >>
   `allocas_below_fmp t0` by
     (irule dload_boundary_allocas_below_fmp >> metis_tac[]) >>
   Cases_on `n = 0` >- gvs[dload_prefix_match_def] >>
-  `i.inst_opcode = DLOAD \/ i.inst_opcode = DLOADBYTES` by
-    (qpat_assum `dload_control_match q f g s t i emitted n`
-       (mp_then Any mp_tac dload_control_match_phase) >>
-     simp[] >> metis_tac[]) >>
   `FLOOKUP t0.vs_allocas (EL 0 emitted).inst_id = NONE /\
    i.inst_opcode = DLOAD ==>
    t0.vs_alloca_next + 32 <= w2n t0.vs_initial_fmp` by
     suspend "scratch_reserve" >>
+  `i.inst_opcode = DLOAD \/ i.inst_opcode = DLOADBYTES` by
+    (qpat_assum `dload_control_match q f g s t i emitted n`
+       (mp_then Any mp_tac dload_control_match_phase) >>
+     simp[] >> metis_tac[]) >>
+  `allocas_below_fmp t0 /\
+   (!k. k < n ==> MEM (EL k emitted).inst_opcode [ALLOCA; ADD; CODECOPY; MLOAD]) /\
+   (!k. k < n /\ (EL k emitted).inst_opcode = ALLOCA ==>
+      k = 0 /\ (EL 0 emitted).inst_operands = [Lit 32w] /\
+      (FLOOKUP t0.vs_allocas (EL 0 emitted).inst_id = NONE ==>
+         t0.vs_alloca_next + 32 <= w2n t0.vs_initial_fmp))` by
+    (conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (rpt strip_tac >> `SUC k < LENGTH emitted` by decide_tac >>
+         drule_all dload_supply_interior_shape >> simp[]) >>
+     rpt gen_tac >> strip_tac >>
+     qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
+     simp[lower_dload_inst_supply_def] >>
+     Cases_on `i.inst_opcode = DLOAD` >> simp[]
+     >- (simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+         `k = 0 \/ k = 1 \/ k = 2 \/ k = 3` by decide_tac >> gvs[]) >>
+     Cases_on `i.inst_opcode = DLOADBYTES` >> simp[]
+     >- (simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+         `k = 0 \/ k = 1` by decide_tac >> gvs[]) >>
+     strip_tac >> gvs[]) >>
   qpat_assum `dload_prefix_match pfuel C' PH emitted n t0 H0 un0 t H un`
     (mp_then (Pat `dload_prefix_match`) mp_tac dload_prefix_allocas_below_fmp) >>
-  impl_tac >- suspend "prefix_shape" >> simp[]
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!k. k < n /\ _ ==> k = 0 /\ _` drule_all >>
+  strip_tac >> gvs[listTheory.EL]
 QED
 
 Resume dload_normal_safety[scratch_reserve]:
@@ -624,6 +672,10 @@ Resume dload_normal_safety[scratch_reserve]:
     (qpat_assum `dload_control_match q f g s t i emitted n`
        (mp_then Any mp_tac dload_control_match_phase) >>
      simp[]) >>
+  `(EL 0 emitted).inst_id NOTIN {ci.inst_id | MEM ci (fn_insts f)}` by
+    (drule_all dload_control_supply_origins >>
+     disch_then (qx_choosel_then [`sp`,`af`,`av`,`cv`] strip_assume_tac) >>
+     first_assum ACCEPT_TAC) >>
   irule (cj 2 dload_positive_prefix_fresh_reserve) >>
   qpat_assum `frame_reachable vs C cs PG G tn f i s`
     (irule_at (Pat `frame_reachable`)) >>
@@ -642,24 +694,9 @@ Resume dload_normal_safety[scratch_reserve]:
   rpt strip_tac >> Cases_on `k`
   >- (simp[] >> metis_tac[]) >>
   fs[] >>
-  qpat_x_assum `!k. k < LENGTH cs ==> _` (qspec_then `n'` mp_tac) >>
-  simp[EL_MAP] >> metis_tac[]
-QED
-
-Resume dload_normal_safety[prefix_shape]:
-  conj_tac >- simp[] >> conj_tac
-  >- (rpt strip_tac >> `SUC k < LENGTH emitted` by decide_tac >>
-      drule_all dload_supply_interior_shape >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  `i.inst_opcode = DLOAD` by
-    (CCONTR_TAC >> gvs[] >>
-     qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
-     simp[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
-     gvs[] >> `k = 0` by decide_tac >> gvs[]) >>
-  gvs[] >>
-  qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
-  simp[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[] >> `k = 0 \/ k = 1 \/ k = 2` by decide_tac >> gvs[]
+  qpat_x_assum `!k. k < LENGTH ds ==> dload_live_layout _ _ _ _ /\ _` (qspec_then `n'` mp_tac) >>
+  `n' < LENGTH cs` by decide_tac >>
+  pop_assum (fn th => simp[EL_MAP, th]) >> metis_tac[]
 QED
 
 Resume dload_normal_safety[allocations]:
