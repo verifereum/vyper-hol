@@ -34,6 +34,7 @@ Theorem tuple_place_suffix_run_open:
       (\H res ff t. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
         tuple_place_head ctx func cenv cx st0 ff lo sf tys ltys ltvs vs elems w (LENGTH tys) t /\
         stmt_state_rel H ctx func cenv cx ff t /\
+        storage_well_formed_on cx ff (FST H) /\
         (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
         (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
           FLOOKUP t.vs_allocas id = SOME entry) /\
@@ -61,9 +62,15 @@ Proof
             (strip_assume_tac o REWRITE_RULE [tuple_place_head_def]) >>
           simp[gas_marked_path_def] >> metis_tac[gas_path_rules]) >>
       rpt strip_tac >>
-      `stmt_state_rel H ctx func cenv cx es s0` by
+      `stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H)` by
         (qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
            (strip_assume_tac o REWRITE_RULE [tuple_place_head_def]) >> res_tac) >>
+      `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+        (`storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+          storage_well_formed_on cx es (FST H)` by
+           (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+         simp[]) >>
       fs[stmtSimDefsTheory.alloca_frame_gas_obs,
          exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
       irule stmtSimDefsTheory.alloca_frame_same >> simp[]) >>

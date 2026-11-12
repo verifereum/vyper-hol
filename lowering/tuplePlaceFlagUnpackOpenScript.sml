@@ -34,7 +34,8 @@ Theorem tuple_place_flag_unpack_outcome_open:
   gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs))) (ee,sv)
     (\H res ff t. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
-      stmt_state_rel H ctx func cenv cx ff t /\ ~t.vs_halted /\
+      stmt_state_rel H ctx func cenv cx ff t /\
+      storage_well_formed_on cx ff (FST H) /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x v. not_fresh_at su x /\ lookup_var x sv = SOME v ==> lookup_var x t = SOME v) /\
@@ -69,6 +70,7 @@ Proof
        tuple_place_head ctx func cenv cx st0 ff sa.cs_next_id sf
          tys ltys ltvs vs elems w (LENGTH tys) q /\
        stmt_state_rel H ctx func cenv cx ff q /\
+       storage_well_formed_on cx ff (FST H) /\
        (!x v. not_fresh_at ss x /\ lookup_var x t = SOME v ==> lookup_var x q = SOME v) /\
        (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>
          FLOOKUP q.vs_allocas aid = SOME entry) /\
