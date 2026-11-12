@@ -90,14 +90,17 @@ Proof
 QED
 
 Theorem for_alloca_state[local]:
-  !ctx func cenv cx es s A p sz.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !(H :(bool # 'a word # type_value) list # num list) ctx func cenv cx es s
+   A p sz.
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM A (fn_insts func) /\ A.inst_opcode = ALLOCA /\
     A.inst_operands = [Lit (n2w sz)] /\ A.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\ ~s.vs_halted ==>
     ?s1 w.
       step_inst_base A s = OK s1 /\
-      stmt_state_rel ctx func cenv cx es s1 /\
+      (!(H' :(bool # 'a word # type_value) list # num list).
+         stmt_state_rel H' ctx func cenv cx es s ==>
+         stmt_state_rel H' ctx func cenv cx es s1) /\
       lookup_var p s1 = SOME w /\
       FLOOKUP s1.vs_allocas A.inst_id = SOME (w2n w, sz) /\
       s1.vs_current_bb = s.vs_current_bb /\
@@ -113,6 +116,11 @@ Proof
      rename1 `FLOOKUP s.vs_allocas A.inst_id = SOME entry` >>
      PairCases_on `entry` >> simp[exec_alloca_def]) >>
   drule_all stmt_state_rel_exec_alloca >> strip_tac >>
+  `!(H' :(bool # 'a word # type_value) list # num list).
+     stmt_state_rel H' ctx func cenv cx es s ==>
+     stmt_state_rel H' ctx func cenv cx es s1` by
+    (rpt strip_tac >>
+     qspec_then `H'` drule_all stmt_state_rel_exec_alloca >> simp[]) >>
   drule_all exec_alloca_frames >> strip_tac >>
   `s1.vs_current_bb = s.vs_current_bb /\
    s1.vs_inst_idx = s.vs_inst_idx /\ ~s1.vs_halted` by
@@ -144,7 +152,7 @@ QED
 Theorem for_condition_state[local]:
   !ctx func cenv cx es sa s0 s1 p w aid sz cv ev a b entry cond cc.
     cc = jump_to cond (update_var ev b (update_var cv a (jump_to entry s1))) /\
-    stmt_state_rel ctx func cenv cx es s1 /\ ~s1.vs_halted /\
+    ~s1.vs_halted /\
     not_local_ptr cenv es.scopes cv /\ not_local_ptr cenv es.scopes ev /\
     cv <> ev /\ p <> cv /\ p <> ev /\ lookup_var p s1 = SOME w /\
     FLOOKUP s1.vs_allocas aid = SOME (w2n w, sz) /\
@@ -153,7 +161,9 @@ Theorem for_condition_state[local]:
     (!aid v. FLOOKUP s0.vs_allocas aid = SOME v ==>
              FLOOKUP s1.vs_allocas aid = SOME v) /\
     ret_pc_ok cenv sa s0 ==>
-    stmt_state_rel ctx func cenv cx es cc /\ ret_pc_ok cenv sa cc /\
+    (!(H :(bool # 'a word # type_value) list # num list).
+       stmt_state_rel H ctx func cenv cx es s1 ==>
+       stmt_state_rel H ctx func cenv cx es cc) /\ ret_pc_ok cenv sa cc /\
     cc.vs_current_bb = cond /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
     lookup_var cv cc = SOME a /\ lookup_var ev cc = SOME b /\
     lookup_var p cc = SOME w /\
@@ -164,8 +174,11 @@ Theorem for_condition_state[local]:
              FLOOKUP cc.vs_allocas aid = SOME v)
 Proof
   rpt gen_tac >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es cc` by
-    (simp[stmt_state_rel_jump_to] >> irule stmt_state_rel_update_var >>
+  `!(H :(bool # 'a word # type_value) list # num list).
+     stmt_state_rel H ctx func cenv cx es s1 ==>
+     stmt_state_rel H ctx func cenv cx es cc` by
+    (rpt strip_tac >>
+     simp[stmt_state_rel_jump_to] >> irule stmt_state_rel_update_var >>
      simp[] >> irule stmt_state_rel_update_var >>
      simp[stmt_state_rel_jump_to]) >>
   `!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
@@ -236,6 +249,12 @@ Proof
   gvs[eval_expr_int_lit] >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
   rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   drule_all eval_stmt_for_range_lit_action >> disch_then (fn th => fs[th]) >>
   gvs[lower_value_int_lit] >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
@@ -307,6 +326,7 @@ Resume compile_for_range_frag[state]:
   `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w sz)] /\
    A.inst_outputs = [p] /\ A.inst_id = sa.cs_next_id` by simp[Abbr `A`, mk_inst_def] >>
   `not_local_ptr cenv es.scopes p` by simp[] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   drule_all for_alloca_state >> strip_tac >>
   qabbrev_tac `cc = jump_to cond_lbl (update_var ev (i2w n2)
     (update_var cv (i2w n1) (jump_to entry_lbl s1)))` >>
@@ -319,10 +339,20 @@ Resume compile_for_range_frag[state]:
      simp[jump_to_def, Abbr `cc`, wordsTheory.WORD_SUB_ADD2]) >>
   `cc = jump_to cond_lbl (update_var ev (i2w n2)
      (update_var cv (i2w n1) (jump_to entry_lbl s1)))` by simp[Abbr `cc`] >>
-  drule for_condition_state >>
+  drule (INST_TYPE [alpha |-> ``:256``] for_condition_state) >>
   disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `sa`, `s0`,
                           `p`, `w`, `A.inst_id`, `sz`] mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es cc /\
+     storage_well_formed_on cx es (FST H)` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _` drule >>
+     strip_tac >>
+     conj_tac >- (qpat_x_assum `!H. stmt_state_rel H _ _ _ _ _ s1 ==> _` irule >>
+                  qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ _ s0 ==> _` irule >>
+                  first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   suspend "loop"
 QED
 
@@ -337,17 +367,18 @@ Resume compile_for_range_frag[loop]:
      asm_rewrite_tac [] >>
      qexistsl_tac [`sa`, `sa with cs_next_var := sa.cs_next_var + 1`] >>
      first_assum ACCEPT_TAC) >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
      (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))))
      (es,cc)
-     (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
-       s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ee s /\
+     (\H res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
+       s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel H ctx func cenv cx ee s /\
+       storage_well_formed_on cx ee (FST H) /\
        (!x v. not_fresh_at sa x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
        (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b) /\
        (!frame_start. frame_start.cs_next_id <= A.inst_id /\
           frame_start.cs_next_id <= sb0.cs_next_id ==>
           alloca_frame cenv es frame_start cc cenv ee s))
-     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+     (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)` by
     (qpat_x_assum `bc with <| ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _ |> = cenv` kall_tac >>
      qpat_x_assum `cc = _` kall_tac >>
      qpat_x_assum `Abbrev (cc = _)` kall_tac >>
@@ -377,13 +408,14 @@ Resume compile_for_range_frag[finish]:
   qhdtm_x_assum `gas_outcome` mp_tac >>
   rewrite_tac[gas_outcome_def] >>
   disch_then (qx_choose_then `marks` strip_assume_tac)
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
   >- suspend "post" >>
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >> first_assum ACCEPT_TAC
 QED
 
 Resume compile_for_range_frag[post]:
-  qexists_tac `marks` >> disj1_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   qhdtm_x_assum `gas_summary_at` mp_tac >>
   rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
   disch_then (qx_choose_then `res` (qx_choose_then `ee` (qx_choose_then `r` strip_assume_tac)))
@@ -409,13 +441,16 @@ Resume compile_for_range_frag[post_normal]:
   conj_tac >- first_assum ACCEPT_TAC >>
   disj1_tac >> qexists_tac `t` >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `(\res ee s. _) res _ t` mp_tac >>
+  qpat_x_assum `(\res ee t. _) res _ t` mp_tac >>
+  BETA_TAC >> rpt strip_tac >>
+  first_x_assum drule >>
   simp_tac bool_ss [boolTheory.FORALL_AND_THM] >> strip_tac >>
   rewrite_tac[stmt_post_def] >> qexists_tac `cenv` >>
   simp_tac bool_ss [stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac >- (disj1_tac >> conj_tac >> asm_rewrite_tac[listTheory.LENGTH]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- simp[block_is_terminated_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >-
     (rpt gen_tac >> strip_tac >>
@@ -429,7 +464,9 @@ Resume compile_for_range_frag[post_normal]:
       qpat_x_assum `!aid v. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
       first_assum ACCEPT_TAC) >>
   `alloca_frame cenv es sa s0 cenv es cc` by
-    (irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >>
+     simp[] >> qexistsl_tac [`H0`, `ctx`, `cx`, `func`] >>
+     first_assum ACCEPT_TAC) >>
   irule alloca_frame_trans >>
   qexistsl_tac [`cenv`, `es`, `cc`, `sa`] >>
   simp[] >>
