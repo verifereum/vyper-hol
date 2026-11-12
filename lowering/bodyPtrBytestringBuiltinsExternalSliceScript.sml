@@ -1374,14 +1374,14 @@ Proof
   conj_tac >- simp[] >>
   `cs_extends sd sb /\ cs_extends sc sb /\ cs_extends se sb` by
     metis_tac[cs_extends_trans] >>
-  `fn_has_code sa sc fn /\ fn_has_code sc sd fn /\ fn_has_code sd se fn /\
-   fn_has_code se s4 fn /\ fn_has_code s4 sb fn` by
-    (qpat_assum `fn_has_code sa sb fn` mp_tac >>
-     map_every (fn pat => qpat_assum pat mp_tac)
-       [`cs_extends sa sc`, `cs_extends sc sd`, `cs_extends sd se`,
-        `cs_extends se s4`, `cs_extends s4 sb`, `cs_extends sd sb`,
-        `cs_extends sc sb`, `cs_extends se sb`] >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[fn_has_code_split]) >>
+  `fn_has_code sa sc fn /\ fn_has_code sc sb fn` by
+    (irule fn_has_code_split >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `fn_has_code sc sd fn /\ fn_has_code sd sb fn` by
+    (irule fn_has_code_split >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `fn_has_code sd se fn /\ fn_has_code se sb fn` by
+    (irule fn_has_code_split >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `fn_has_code se s4 fn /\ fn_has_code s4 sb fn` by
+    (irule fn_has_code_split >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `op_taint tn addr = {} /\ op_taint tn start = {} /\ op_taint tn len = {}` by
     (fs[] >> metis_tac[]) >>
   `step_inst_base
@@ -1404,11 +1404,11 @@ QED
 
 Resume compile_slice_extcode_counted_ok[after_bounds]:
   `sa.cs_next_var <= sd.cs_next_var` by
-    (drule compile_assert_slice_bounds_layout >>
-     qpat_x_assum `emit_op EXTCODESIZE _ _ = (limit,sc)` mp_tac >>
-     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-     rpt strip_tac >> gvs[]) >>
+    (qpat_assum `emit_op EXTCODESIZE _ _ = (limit,sc)`
+       (strip_assume_tac o MATCH_MP emitHelperPropsTheory.emitted_insts_emit_op) >>
+     qpat_assum `compile_assert_slice_bounds _ _ _ _ = _`
+       (strip_assume_tac o MATCH_MP compile_assert_slice_bounds_layout) >>
+     simp[]) >>
   drule_all slice_out_buf_counted_replay >>
   disch_then (qspecl_then [`tm1`,`PG`,`H1`,`D`]
     (qx_choosel_then [`H2`,`tm2`] strip_assume_tac)) >>
@@ -1429,20 +1429,26 @@ Resume compile_slice_extcode_counted_ok[after_bounds]:
     (qpat_x_assum `ptr_covers H2 tm2 data t0 (N - 32)` mp_tac >>
      qpat_x_assum `w2n wn <= N - 32` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[ptr_covers_def] >>
-     metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_MONO_ADD_EQ]) >>
+     rpt strip_tac >> qexists_tac `w` >> simp[]) >>
   `t0.vs_accounts = s.vs_accounts` by metis_tac[] >>
   `step_inst_base (mk_inst se.cs_next_id EXTCODECOPY [addr; Var data; start; len] []) t0 =
    OK (write_memory_with_expansion (w2n (b + 32w))
      (TAKE (w2n wn) (DROP (w2n wa) (lookup_account (w2w a) s.vs_accounts).code ++
         REPLICATE (w2n wn) 0w)) t0)` by
-    (irule external_copy_step >>
-     qpat_assum `t0.vs_accounts = _` (fn th => simp[eval_operand_def, th])) >>
+    (qpat_assum `eval_operand addr t0 = _` mp_tac >>
+     qpat_assum `eval_operand start t0 = _` mp_tac >>
+     qpat_assum `eval_operand len t0 = _` mp_tac >>
+     qpat_assum `lookup_var data t0 = _` mp_tac >>
+     qpat_assum `t0.vs_accounts = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     irule external_copy_step >> simp[eval_operand_def]) >>
   `range_bytes (source_memory_write_ranges
       (mk_inst se.cs_next_id EXTCODECOPY [addr; Var data; start; len] []) t0) =
      {i | w2n (b + 32w) <= i /\ i < w2n (b + 32w) + w2n wn}` by
-    (qpat_x_assum `eval_operand start t0 = _` mp_tac >>
-     qpat_x_assum `eval_operand len t0 = _` mp_tac >>
-     qpat_x_assum `lookup_var data t0 = _` mp_tac >>
+    (qpat_assum `eval_operand addr t0 = _` mp_tac >>
+     qpat_assum `eval_operand start t0 = _` mp_tac >>
+     qpat_assum `eval_operand len t0 = _` mp_tac >>
+     qpat_assum `lookup_var data t0 = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      gvs[source_memory_write_ranges_def, sized_source_write_range_def,
        range_bytes_def, mk_inst_def, eval_operand_def, lookup_var_def]) >>
@@ -1456,7 +1462,9 @@ Resume compile_slice_extcode_counted_ok[copy_store]:
      (?ad. EXTCODECOPY = EXTCODECOPY /\
        [addr; Var data; start; len] = [ad;Var data;start;len] /\
        (?w. eval_operand ad t0 = SOME w) /\ op_taint tm2 ad = {})` assume_tac
-  >- (simp[] >> metis_tac[]) >>
+  >- (disj2_tac >> qexists_tac `addr` >> rpt conj_tac >- REFL_TAC >- REFL_TAC
+      >- (qexists_tac `a` >> first_assum ACCEPT_TAC) >>
+      first_assum ACCEPT_TAC) >>
   qpat_assum `emit_void EXTCODECOPY _ se = _`
     (mp_then Any mp_tac external_copy_store_apply) >>
   disch_then drule >> disch_then drule_all >>
@@ -1465,14 +1473,24 @@ Resume compile_slice_extcode_counted_ok[copy_store]:
   `gas_path_ptr D 0 ctx fn PG G tn s (0 + 0) H2 tm2 (OK t0)` by
     (irule gas_path_ptr_then >> metis_tac[]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s (0 + 0) H2 tm3 (OK t1)` by
-    (irule gas_path_ptr_then >> fs[] >> metis_tac[]) >>
+    (qpat_assum `gas_path_ptr _ _ _ _ _ H2 tm2 t0 _ H2 tm3 _` (fn th2 =>
+       qpat_assum `gas_path_ptr _ _ _ _ _ G tn s _ H2 tm2 _` (fn th1 =>
+         mp_tac (MATCH_MP gas_path_ptr_then (CONJ th1 th2)))) >>
+     simp[]) >>
   `!x. not_fresh_at sa x ==> FLOOKUP H2 x = FLOOKUP G x /\
      op_taint tm3 (Var x) = op_taint tn (Var x)` by
     (gen_tac >> disch_tac >>
-     `not_fresh_at sd x` by metis_tac[not_fresh_at_mono] >>
-     `op_taint tm3 (Var x) = op_taint tm2 (Var x)` by
-       (qpat_assum `tm3.t_var = _` (fn th => simp[op_taint_def, th])) >>
-     metis_tac[]) >>
+     `not_fresh_at sd x` by
+       (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `tm3.t_var = _` mp_tac >>
+     qpat_assum `!x. not_fresh_at sd x ==> FLOOKUP H2 x = _ /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP H1 x = _ /\ _`
+       (drule_then strip_assume_tac) >>
+     rpt (qpat_x_assum `FLOOKUP _ x = _` mp_tac) >>
+     rpt (qpat_x_assum `op_taint _ (Var x) = _` mp_tac) >>
+     POP_ASSUM_LIST (K all_tac) >> simp[op_taint_def]) >>
   qexistsl_tac [`v1`,`t1`,`H2`,`tm3`] >>
   qpat_assum `range_bytes _ = _` (fn th => fs[th])
 QED
