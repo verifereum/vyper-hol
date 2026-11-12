@@ -458,9 +458,9 @@ Proof
        ["unwrap", "edge", "alloc_ghost", "alloc_kept", "copy"] >>
      metis_tac[fn_has_code_split, cs_extends_trans]) >>
   `local_ptrs_reserved cenv sm` by
-    metis_tac[local_ptrs_reserved_next_var] >>
-  `type_memory_bytes cenv t = type_memory_size rty` by metis_tac[] >>
-  `type_memory_size rty < 2 ** 64` by metis_tac[] >>
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `type_memory_bytes cenv t = type_memory_size rty` by simp[] >>
+  `type_memory_size rty < 2 ** 64` by simp[] >>
   `type_memory_bytes cenv t < dimword (:256)` by
     (qpat_x_assum `type_memory_size rty < _` mp_tac >>
      qpat_x_assum `type_memory_bytes cenv t = _` mp_tac >>
@@ -491,5 +491,67 @@ Proof
     [Lit (n2w (type_memory_bytes cenv t))] [p]` >>
   qabbrev_tac `Ga = step_prov PG G ai az` >>
   qabbrev_tac `ta = step_taint ai z az tn` >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    (qpat_assum `compile_expr _ _ _ _ = _`
+       (mp_then Any mp_tac (CONJUNCT1 compiler_compile_var)) >> simp[]) >>
+  `salloc.cs_next_var >= sm.cs_next_var /\
+   salloc.cs_next_id >= sm.cs_next_id` by
+    (qspecl_then [`type_memory_bytes cenv t`, `sm`] mp_tac
+       ci_mono_compile_alloc_buffer >> simp[ci_mono_def]) >>
+  `allocas_from lo z /\ lo <= z.vs_alloca_next` by
+    (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` drule >>
+     simp[ghost_inv_at_def] >> rpt strip_tac >> simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       ghost_inv_at (DF H) lo d cenv cx ee Ga ta az` by
+    (gen_tac >> strip_tac >>
+     simp_tac bool_ss [Abbr `Ga`, Abbr `ta`, Abbr `ai`] >>
+     asm "alloc_ghost" irule
+     >- (simp[] >> conj_tac >- (qexists `sa` >> simp[]) >>
+         qexistsl [`storage_trace_horizon ee.storage_trace`, `ctx`, `func`] >> simp[]) >>
+     qpat_x_assum `!H. valid_horizon _ _ _ _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` drule >>
+     simp[]) >>
+  `az.vs_call_ctx = z.vs_call_ctx /\ az.vs_accounts = z.vs_accounts /\
+   az.vs_transient = z.vs_transient /\ az.vs_immutables = z.vs_immutables /\
+   az.vs_current_bb = z.vs_current_bb /\ az.vs_inst_idx = z.vs_inst_idx /\
+   az.vs_halted = z.vs_halted /\ az.vs_labels = z.vs_labels /\
+   z.vs_alloca_next <= az.vs_alloca_next` by
+    (qpat_x_assum `step_inst_base _ z = OK az` mp_tac >>
+     simp_tac bool_ss [Abbr `ai`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[step_inst_base_def, mk_inst_def, eval_operands_def, eval_operand_def,
+       exec_alloca_def, update_var_def] >>
+     Cases_on `FLOOKUP z.vs_allocas sm.cs_next_id` >> simp[] >>
+     TRY (PairCases_on `x` >> simp[]) >> strip_tac >> gvs[]) >>
+  `!n b k. local_region cenv ee.scopes az n b k <=>
+            local_region cenv ee.scopes z n b k` by
+    (rpt gen_tac >> eq_tac
+     >- (strip_tac >> irule local_region_frame >>
+         conj_tac
+         >- (qexists `func` >>
+             qpat_x_assum `stmt_state_rel _ _ _ _ _ ee z` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >>
+             simp[stmt_state_rel_def, state_rel_def]) >>
+         qexistsl [`sm`, `ee.scopes`, `az`] >> simp[]) >>
+     strip_tac >> irule local_region_frame_fwd >>
+     qexistsl [`z`, `sm`, `ee.scopes`] >> simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       vv_post H ctx func cenv cx e es1 sa salloc u ee tva vv az` by
+    (gen_tac >> strip_tac >> irule ifexp_widen_vv_post_alloc_frame >>
+     conj_tac >- (first_x_assum drule >> simp[]) >>
+     qexistsl [`sb`, `op`, `t`, `z`, `sm`, `lowered_value_type cenv e`] >>
+     simp[] >> rpt conj_tac
+     >- (rpt strip_tac >> first_x_assum irule >>
+         irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[])
+     >- simp[contract_storage_def]
+     >- simp[contract_transient_def] >>
+     Cases_on `vv_operand vv` >> simp[eval_operand_def] >>
+     first_x_assum irule >> first_x_assum irule >> simp[]) >>
+  `ghost_kept_at lo cenv es1 sa G1 tn1 u Ga ta` by
+    (simp_tac bool_ss [Abbr `Ga`, Abbr `ta`, Abbr `ai`] >>
+     asm "alloc_kept" irule >>
+     simp[] >>
+     qexistsl [`storage_trace_horizon ee.storage_trace`, `ctx`, `cx`, `e`,
+       `ee`, `func`, `tva`, `vv`] >> simp[] >>
+     qpat_x_assum `!H. valid_horizon _ _ _ _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` drule >> simp[]) >>
   cheat
 QED
