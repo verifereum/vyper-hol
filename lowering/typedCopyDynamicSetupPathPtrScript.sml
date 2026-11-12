@@ -317,3 +317,121 @@ Proof
  rpt strip_tac >> `p <> out` by metis_tac[] >>
  gvs[update_var_def] >> metis_tac[]
 QED
+
+Theorem typed_copy_dynarray_setup_path_ptr:
+ !D ctx fn PG G tn s sa sb sc sd se sf sg len gt ok src dst sp dp n dc scap ss ds a b.
+ emit_op GT [Var len;Lit(n2w dc)] sa = (Var gt,sb) /\
+ emit_op ISZERO [Var gt] sb = (Var ok,sc) /\
+ emit_inst ASSERT [Var ok] [] sc = ((),sd) /\
+ emit_inst MSTORE [Var dst;Var len] [] sd = ((),se) /\
+ emit_op ADD [Var src;Lit 32w] se = (Var sp,sf) /\
+ emit_op ADD [Var dst;Lit 32w] sf = (Var dp,sg) /\
+ fn_has_code sa sg fn /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+ not_fresh_at sa src /\ not_fresh_at sa dst /\ not_fresh_at sa len /\
+ lookup_var len s = SOME(n2w n) /\ op_taint tn (Var len) = {} /\
+ op_prov G (Var len) = NONE /\ n <= dc /\ dc < dimword(:256) /\
+ lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+ ptr_covers G tn src s (32+scap*ss) /\ ptr_covers G tn dst s (32+dc*ds) /\
+ w2n a+32+scap*ss < dimword(:256) /\ w2n b+32+dc*ds < dimword(:256) ==>
+ ?Gf tnf t.
+ gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
+ t.vs_current_bb = sg.cs_current_bb /\
+ t.vs_inst_idx = LENGTH sg.cs_current_insts /\ ~t.vs_halted /\
+ lookup_var len t = SOME(n2w n) /\ op_taint tnf (Var len) = {} /\
+ op_prov Gf (Var len) = NONE /\
+ lookup_var sp t = SOME(n2w(w2n a+32)) /\
+ lookup_var dp t = SOME(n2w(w2n b+32)) /\
+ ptr_covers Gf tnf sp t (scap*ss) /\ ptr_covers Gf tnf dp t (dc*ds) /\
+ (!m. mem_agree_outside tnf.t_mem t.vs_memory m ==>
+   mem_word_at (w2n b) m = n2w n) /\
+ (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+            vs_inst_idx := s.vs_inst_idx|>) = s /\
+ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+ (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+   FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p)) /\
+ (!i. i < w2n b \/ w2n b+32 <= i ==>
+   mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+   (i IN tnf.t_mem <=> i IN tn.t_mem))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `cs_extends sa sb /\ cs_extends sb sc /\ cs_extends sc sd /\
+  cs_extends sd se /\ cs_extends se sf /\ cs_extends sf sg` by
+   metis_tac[exprSimAccountsTheory.emit_op_extends_next_var,
+             fragExecTheory.cs_extends_emit_inst] >>
+ `cs_extends se sg /\ cs_extends sd sg /\ cs_extends sc sg /\
+  cs_extends sb sg` by metis_tac[cs_extends_trans] >>
+ qspecl_then [`sa`,`sb`,`sg`,`fn`] mp_tac fragExecTheory.fn_has_code_split >>
+ simp[] >> strip_tac >>
+ qspecl_then [`sb`,`sc`,`sg`,`fn`] mp_tac fragExecTheory.fn_has_code_split >>
+ simp[] >> strip_tac >>
+ qspecl_then [`sc`,`sd`,`sg`,`fn`] mp_tac fragExecTheory.fn_has_code_split >>
+ simp[] >> strip_tac >>
+ qspecl_then [`sd`,`se`,`sg`,`fn`] mp_tac fragExecTheory.fn_has_code_split >>
+ simp[] >> strip_tac >>
+ qspecl_then [`se`,`sf`,`sg`,`fn`] mp_tac fragExecTheory.fn_has_code_split >>
+ simp[] >> strip_tac >>
+ `sa.cs_next_var <= sb.cs_next_var /\ sb.cs_next_var <= sc.cs_next_var /\
+  sc.cs_next_var = sd.cs_next_var /\ sd.cs_next_var = se.cs_next_var /\
+  se.cs_next_var <= sf.cs_next_var` by
+   metis_tac[exprSimAccountsTheory.emit_op_extends_next_var,
+             placeMemoryCodeLayoutTheory.emit_inst_next_var] >>
+ `!p. not_fresh_at sa p ==> not_fresh_at sd p /\ not_fresh_at se p /\
+   not_fresh_at sf p` by
+   (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
+    simp[] >> decide_tac) >>
+ drule_all typed_copy_capacity_check_path_ptr >>
+ disch_then (qspecl_then [`D`,`PG`]
+   (qx_choose_then `g1` (qx_choose_then `t1` (qx_choose_then `u` strip_assume_tac)))) >>
+ `lookup_var dst u = SOME b /\ lookup_var src u = SOME a /\
+  lookup_var len u = SOME(n2w n) /\ op_taint t1 (Var len) = {}` by metis_tac[] >>
+ `ptr_covers g1 t1 dst u 32 /\ ptr_covers g1 t1 src u (32+scap*ss) /\
+  ptr_covers g1 t1 dst u (32+dc*ds)` by
+   (gvs[ptr_covers_def] >> rpt conj_tac >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
+ `eval_operand (Var len) u = SOME(n2w n)` by simp[eval_operand_def] >>
+ drule_all typed_copy_emit_clean_mstore_path_ptr >>
+ disch_then (qspecl_then [`D`,`PG`] (qx_choose_then `r` strip_assume_tac)) >>
+ qabbrev_tac `t2 = t1 with t_mem := t1.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32}` >>
+ `ptr_covers g1 t2 src r (scap*ss+32) /\
+  ptr_covers g1 t2 dst r (dc*ds+32) /\
+  lookup_var src r = SOME a /\ lookup_var dst r = SOME b` by
+   (gvs[ptr_covers_def, Abbr `t2`, venomStateTheory.mstore_def, lookup_var_def, op_taint_def] >>
+    metis_tac[]) >>
+ qpat_assum `emit_op ADD [Var src;Lit 32w] se = _` mp_tac >>
+ disch_then (mp_then Any mp_tac (typed_copy_emit_offset_path_ptr |> SPEC_ALL |> Q.INST [`off` |-> `32`] |> SRULE [])) >>
+ disch_then (qspecl_then [`t2`,`scap*ss`,`r`,`fn`,`ctx`,`a`,`PG`,`g1`,`D`] mp_tac) >>
+ (impl_tac >- (simp[GSYM ghostPcTransportPtrTheory.ptr_covers_inst_idx] >> metis_tac[ghostPcTransportPtrTheory.ptr_covers_inst_idx])) >>
+ qmatch_goalsub_abbrev_tac `OK v` >>
+ disch_then (qx_choose_then `g2` (qx_choose_then `t3` strip_assume_tac)) >>
+ `lookup_var dst v = SOME b /\ ptr_covers g2 t3 dst v (dc*ds+32)` by
+   (gvs[ptr_covers_def] >> metis_tac[]) >>
+ qpat_assum `emit_op ADD [Var dst;Lit 32w] sf = _` mp_tac >>
+ disch_then (mp_then Any mp_tac (typed_copy_emit_offset_path_ptr |> SPEC_ALL |> Q.INST [`off` |-> `32`] |> SRULE [])) >>
+ disch_then (qspecl_then [`t3`,`dc*ds`,`v`,`fn`,`ctx`,`b`,`PG`,`g2`,`D`] mp_tac) >>
+ (impl_tac >- (simp[Abbr `v`,update_var_def,ptr_covers_def,lookup_var_def] >> gvs[ptr_covers_def,lookup_var_def])) >>
+ qmatch_goalsub_abbrev_tac `OK w` >>
+ disch_then (qx_choose_then `g3` (qx_choose_then `t4` strip_assume_tac)) >>
+ qexistsl [`g3`,`t4`,`w`] >>
+ conj_tac >-
+   (irule (fragGasPathPtrTheory.gas_path_ptr_then |> Q.INST [`n` |-> `0`,`m` |-> `0`] |> SRULE []) >>
+    qexistsl [`g1`,`u`,`t1`] >> conj_tac >- first_assum ACCEPT_TAC >>
+    irule (fragGasPathPtrTheory.gas_path_ptr_then |> Q.INST [`n` |-> `0`,`m` |-> `0`] |> SRULE []) >>
+    qexistsl [`g1`,`r`,`t2`] >> conj_tac >- first_assum ACCEPT_TAC >>
+    irule (fragGasPathPtrTheory.gas_path_ptr_then |> Q.INST [`n` |-> `0`,`m` |-> `0`] |> SRULE []) >>
+    qexistsl [`g2`,`v`,`t3`] >> conj_tac >> first_assum ACCEPT_TAC) >>
+ `!p. not_fresh_at sa p ==> lookup_var p w = lookup_var p s /\
+   FLOOKUP g3 p = FLOOKUP G p /\ op_taint t4 (Var p) = op_taint tn (Var p)` by
+   (gen_tac >> disch_tac >>
+    `lookup_var p r = lookup_var p u /\ op_taint t2 (Var p) = op_taint t1 (Var p)` by
+      gvs[Abbr `t2`,op_taint_def,lookup_var_def,venomStateTheory.mstore_def] >>
+    metis_tac[]) >>
+ `not_fresh_at sf sp` by metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_fresh] >>
+ `ptr_covers g3 t4 sp w (scap*ss)` by
+   (gvs[ptr_covers_def,Abbr `w`,Abbr `v`,lookup_var_def,update_var_def] >> metis_tac[]) >>
+ simp[Abbr `w`,Abbr `v`,update_var_def,Abbr `t2`,op_taint_def,op_prov_def,
+      ghostPcTransportPtrTheory.ptr_covers_inst_idx] >>
+ conj_tac >- gvs[op_prov_def] >>
+ conj_tac >-
+   (gvs[venomStateTheory.mstore_def,venom_state_component_equality]) >>
+ gvs[venom_state_component_equality]
+QED
