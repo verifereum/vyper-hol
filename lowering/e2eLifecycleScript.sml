@@ -249,7 +249,13 @@ Theorem deploy_call_result_establishes_call_ready:
 Proof
   rw[deploy_call_result_rel_def] >>
   irule gas_readings_rel_mono >> goal_assum (drule_at Any) >>
-  rw[] >> irule deploy_establishes_call_ready >> gvs[] >> metis_tac[]
+  rw[] >> irule (INST_TYPE [alpha |-> “:256”] deploy_establishes_call_ready) >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  qexistsl_tac [`storage_trace_horizon (deploy_storage_trace
+                   (SOME (MAP SND (call_trace es))) gs am tx tops)`,
+                `am`, `deploy_bc`, `es`, `gs`, `SOME (MAP SND (call_trace es))`,
+                `r`, `rqs`] >>
+  gvs[]
 QED
 
 (* ===== Call to call ===== *)
