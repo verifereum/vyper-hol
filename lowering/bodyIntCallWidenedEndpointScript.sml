@@ -165,7 +165,7 @@ QED
 Resume physical_source_return_dispatch[void]:
   qpat_x_assum `_ ==> s2 = sa /\ _` mp_tac >>
   (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
-  `ci_mono sa sa` by simp[ci_mono_refl] >>
+  `ci_mono s2 s2` by simp[ci_mono_refl] >>
   drule_all intcall_void_compiler_boundary >> strip_tac >>
   `bind_outputs [] ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) =

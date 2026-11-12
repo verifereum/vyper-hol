@@ -286,7 +286,7 @@ QED
 
 Resume intcall_physical_return_resources[void]:
   gvs[] >>
-  `ci_mono sa sa` by simp[ci_mono_refl] >>
+  `ci_mono s2 s2` by simp[ci_mono_refl] >>
   drule_all (intcall_zero_return_prepare |> Q.INST [`ee` |-> `ee with gas_obs := []`] |> SRULE []) >> strip_tac >>
   qexistsl [`0`,`merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx`] >>
   gvs[]

@@ -65,7 +65,7 @@ Proof
   gen_tac >> strip_tac >>
   irule compiled_return_dispatch >>
   simp[] >>
-  goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
   qexistsl_tac [`es1`,`lbl`,`prev`,`rbs`,`w`] >>

@@ -172,7 +172,7 @@ Proof
   irule source_return_dispatch >> asm_rewrite_tac[] >>
   conj_tac >- simp[] >>
   reverse conj_tac >- (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
   qexistsl_tac [`arg_ops`,`ann`,`lbl`,`rc'`,`rc'`,`rbs`,`rbs`,`rtv`,`HD argv`] >>
@@ -380,7 +380,7 @@ Proof
          |> SIMP_RULE (srw_ss()) [th])) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      TRY (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
      qexistsl_tac [`lbl`,`rbs`,`rc'`,`HD argv`] >>

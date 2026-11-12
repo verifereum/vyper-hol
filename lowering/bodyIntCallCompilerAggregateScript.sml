@@ -217,7 +217,7 @@ Proof
   >- (simp[] >>
       rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
            simp[intcall_interval_lower_value, intcall_interval_mapping_subscript,
-                intcall_interval_snapshot_vv,
+                intcall_interval_snapshot_vv, intcall_interval_keccak_key,
                 intcall_interval_return]) >>
       rpt strip_tac >> IF_CASES_TAC >>
       simp[intcall_interval_keccak_key, intcall_interval_return] >>
