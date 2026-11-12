@@ -12,8 +12,8 @@ Libs monadsyntax
 Theorem annassign_empty_store_continuation_ptr:
  !ctx func old cenv cx lctx e es es1 s0 s sa sb sf vv id p sz w inst
    typ tyv sc rest d PG G0 tn0 G tn.
- vv_post ctx func cenv cx e es sa sb s0 es1 (Value (default_value tyv)) vv s /\
- ghost_inv d cenv cx es1 G tn s /\
+ vv_post H ctx func cenv cx e es sa sb s0 es1 (Value (default_value tyv)) vv s /\
+ ghost_inv H d cenv cx es1 G tn s /\
  ghost_kept cenv es sa G0 tn0 s0 G tn /\
  has_length_word typ /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
  emit_void MSTORE [Var p; Lit 0w] sb = ((),sf) /\ fn_has_code sb sf func /\
@@ -33,18 +33,18 @@ Theorem annassign_empty_store_continuation_ptr:
      (sc |+ (id,<|assignable := T; type := tyv; value := default_value tyv; popped := []|>))::rest)
      with gas_obs := tail)) ==>
  ?ee t tnf.
- gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (new_variable id tyv (default_value tyv))
+ gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (new_variable id tyv (default_value tyv))
    (es1,s,G,tn) [] (INL ()) ee G tnf (OK t) /\
  (?cenv''. stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
    (~block_is_terminated sf /\ cenv'' = cenv) /\
    cenv_top_ext old cenv'' ee.scopes /\
-   stmt_state_rel ctx func cenv'' cx ee t /\ ghost_inv d cenv'' cx ee G tnf t /\
+   stmt_state_rel H ctx func cenv'' cx ee t /\ ghost_inv H d cenv'' cx ee G tnf t /\
    (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==> lookup_var x t = SOME u) /\
    (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
       op_taint tnf (Var x) = op_taint tn0 (Var x)))
 Proof
  rpt gen_tac >> strip_tac >>
- `stmt_state_rel ctx func cenv cx es1 s /\ lookup_var p s = SOME w /\
+ `stmt_state_rel H ctx func cenv cx es1 s /\ lookup_var p s = SOME w /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz)` by
    (fs[vv_post_def] >> metis_tac[]) >>
  `!u. val_in_memory tyv (default_value tyv) (w2n w)
@@ -93,19 +93,19 @@ Theorem annassign_empty_normal_continuation_ptr:
  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
  FLOOKUP salloc.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
  type_memory_size tyv <= sz /\
- gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (eval_expr cx e)
+ gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (eval_expr cx e)
    (es,salloc,Ga,tna) marks (INL (Value v)) ee G tn (OK s) /\
- vv_post ctx func c cx e es sa sb salloc (ee with gas_obs := []) (Value v) vv s /\
+ vv_post H ctx func c cx e es sa sb salloc (ee with gas_obs := []) (Value v) vv s /\
  s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
- ghost_inv d c cx (ee with gas_obs := []) G tn s /\
+ ghost_inv H d c cx (ee with gas_obs := []) G tn s /\
  ghost_kept c es sa Ga tna salloc G tn ==>
  ?ff u tnf.
- gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (new_variable id tyv v)
+ gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (new_variable id tyv v)
    (ee with gas_obs := [],s,G,tn) [] (INL ()) ff G tnf (OK u) /\
  (?cenv''. stmt_lands lctx sf (INL ()) u /\ ~u.vs_halted /\
    (~block_is_terminated sf /\ cenv'' = c) /\
    cenv_top_ext old cenv'' ff.scopes /\
-   stmt_state_rel ctx func cenv'' cx ff u /\ ghost_inv d cenv'' cx ff G tnf u /\
+   stmt_state_rel H ctx func cenv'' cx ff u /\ ghost_inv H d cenv'' cx ff G tnf u /\
    (!x z. not_fresh_at sa x /\ lookup_var x salloc = SOME z ==> lookup_var x u = SOME z) /\
    (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP Ga x /\
       op_taint tnf (Var x) = op_taint tna (Var x)))

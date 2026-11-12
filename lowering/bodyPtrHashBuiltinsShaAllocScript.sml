@@ -124,11 +124,11 @@ Theorem hash_alloc_sha256_abort_path:
   emit_op STATICCALL [gas_op;Lit 2w;Var p;len;buf.buf_operand;Lit 32w] sg = (success_op,sc) /\
   emit_void ASSERT [success_op] sc = ((),sh) /\
   emit_op MLOAD [buf.buf_operand] sh = (op,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   eval_operand (Var p) s = SOME w /\ eval_operand len s = SOME n /\
@@ -243,11 +243,11 @@ Theorem hash_alloc_sha256_success_path:
   emit_op STATICCALL [gas_op;Lit 2w;Var p;len;buf.buf_operand;Lit 32w] sg = (success_op,sc) /\
   emit_void ASSERT [success_op] sc = ((),sh) /\
   emit_op MLOAD [buf.buf_operand] sh = (op,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   eval_operand (Var p) s = SOME w /\ eval_operand len s = SOME n /\
@@ -268,7 +268,7 @@ Theorem hash_alloc_sha256_success_path:
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+5)) /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
+    ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+5) /\
     ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
     op_prov Gf op = NONE
@@ -305,7 +305,7 @@ Proof
          qpat_assum `!y. not_fresh_at sa y ==> not_fresh_at sn y` mp_tac >>
          rpt (pop_assum kall_tac) >> simp[ghost_kept_def] >> metis_tac[]) >>
      qpat_assum `tf = _` SUBST1_TAC >> simp[]) >>
-  qpat_x_assum `ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf _`
+  qpat_x_assum `ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf _`
     (assume_tac o PURE_REWRITE_RULE [hash_ghost_inv_inst_idx]) >>
   qexistsl_tac [`t'`, `Gf`, `tf`] >> simp[hash_ghost_inv_inst_idx]
 QED
