@@ -6,12 +6,15 @@ Ancestors
 
 Theorem intcall_interval_compile_size[local]:
   !n.
-    (!ce ty e a k. expr_size e = n /\ k <= a.cs_next_var ==>
+    (!ce ty e a k. expr_size e + cenv_defaults_size ce = n /\
+      k <= a.cs_next_var ==>
       intcall_compiler_interval k a (SND (compile_expr ce ty e a))) /\
-    (!ce rt ty bi es a k. list_size expr_size es = n /\ k <= a.cs_next_var ==>
+    (!ce rt ty bi es a k. list_size expr_size es + cenv_defaults_size ce = n /\
+      k <= a.cs_next_var ==>
       intcall_compiler_interval k a
         (SND (compile_builtin_dispatch ce rt ty bi es a))) /\
-    (!ce vt ty tb rt es a k. list_size expr_size es = n /\ k <= a.cs_next_var ==>
+    (!ce vt ty tb rt es a k. list_size expr_size es + cenv_defaults_size ce = n /\
+      k <= a.cs_next_var ==>
       intcall_compiler_interval k a
         (SND (compile_type_builtin_dispatch ce vt ty tb rt es a)))
 Proof

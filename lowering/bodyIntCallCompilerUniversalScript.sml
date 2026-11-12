@@ -5,7 +5,8 @@ Ancestors
   bodyIntCallCompilerFloor bodyIntCallCompilerEmit
 
 Theorem intcall_interval_expr_callback_all:
-  (!ce ty e a. expr_size e < bound /\ k <= a.cs_next_var ==>
+  (!ce ty e a. expr_size e + cenv_defaults_size ce < bound /\
+    k <= a.cs_next_var ==>
     intcall_compiler_interval k a (SND (cfn ce ty e a))) ==>
   !ce ty e a. k <= a.cs_next_var ==>
     intcall_compiler_interval k a
@@ -16,7 +17,7 @@ Proof
 QED
 
 Theorem intcall_interval_builtin_callback_all:
-  (!ce rt ty bi es a. list_size expr_size es < bound /\
+  (!ce rt ty bi es a. list_size expr_size es + cenv_defaults_size ce < bound /\
     k <= a.cs_next_var ==>
     intcall_compiler_interval k a (SND (dispatch ce rt ty bi es a))) ==>
   !ce rt ty bi es a. k <= a.cs_next_var ==>
@@ -28,7 +29,7 @@ Proof
 QED
 
 Theorem intcall_interval_type_callback_all:
-  (!ce vt ty tb rt es a. list_size expr_size es < bound /\
+  (!ce vt ty tb rt es a. list_size expr_size es + cenv_defaults_size ce < bound /\
     k <= a.cs_next_var ==>
     intcall_compiler_interval k a (SND (dispatch ce vt ty tb rt es a))) ==>
   !ce vt ty tb rt es a. k <= a.cs_next_var ==>
