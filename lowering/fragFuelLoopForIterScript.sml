@@ -980,5 +980,15 @@ Proof
   rename1 `frag_fuel Wv {} E st p Kpre` >>
   rename1 `frag_fuel Wb {} (E UNION {xl;il}) b0 b1 Kbody` >>
   drule_all iter_body_route >> strip_tac >>
+  `fuel_ok Wv {} E
+     (do emit_inst JMP [Label cl] []; new_block cl; return () od)` by
+    (fuel_auto [fuel_ok_emit_inst_jmp] >> simp[]) >>
+  qpat_x_assum `fuel_ok Wv {} E _`
+    (mp_tac o PURE_REWRITE_RULE [fuel_ok_def]) >>
+  disch_then (drule_then strip_assume_tac) >>
+  rename1 `frag_fuel Wv {} E p c0 Kentry` >>
+  `frag_fuel Wv {} E st c0 (Kpre + Kentry)` by
+    (irule (Q.SPECL [`Wv`, `{}`, `{}`] frag_fuel_seq |> SIMP_RULE (srw_ss()) []) >>
+     qexistsl_tac [`E`, `E`, `p`] >> simp[]) >>
   cheat
 QED
