@@ -3095,7 +3095,8 @@ Proof
     (simp[GSYM markerTheory.Abbrev_def] >>
      conj_tac >- (qpat_x_assum `CalleeIH` mp_tac >> simp[Abbr `CalleeIH`]) >>
      qexists_tac `xs` >> simp[dftRunRelTheory.dft_head_bubbles_refl])) >>
-  simp[GSYM markerTheory.Abbrev_def]
+  simp[Abbr `P`, Abbr `S'`, Abbr `R`, Abbr `E`] >>
+  pure_rewrite_tac [markerTheory.Abbrev_def] >> simp[]
 QED
 
 Theorem identity_suffix_mask[local]:
