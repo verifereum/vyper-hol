@@ -15,7 +15,7 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeInvariants vyperTypeCallGraph gasContext stmtSimReturn
   vyperTypeCallStackSoundness vyperTypeValues compileVyper targetPlaceSim exprSimTopLevelProps
-  bodyStorageMetadata
+  bodyStorageMetadata bodyDynArraySource stmtForDynArrayMemory
 Libs
   monadsyntax
 
@@ -166,8 +166,8 @@ Proof
   metis_tac[frame_ret_ok_mem_same_frame]
 QED
 
-(* ADMITTED (packet A2-mem, DynArray name): memory twin of
-   whitelistForIter's body_for_dynarray_name. *)
+(* Local DynArray memory For: preserve the source binding and certify
+   the length header and payload snapshot at every live iteration. *)
 Theorem body_for_dynarray_name_mem:
   !cx id typ it n body d tops bindings ctx func cenv env env' ret_ty lctx RetQ
    es.
@@ -200,7 +200,66 @@ Theorem body_for_dynarray_name_mem:
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  imp_res_tac body_stmt_safe_for_body >>
+  drule_all dynarray_name_source_ready >> strip_tac >> gvs[] >>
+  rename1 `evaluate_type (get_tenv cx) typ = SOME tv` >>
+  rename1 `lookup_scopes name es.scopes = SOME entry` >>
+  rename1 `entry.value = ArrayV (DynArrayV vs)` >>
+  `body_for_mem_ok cx tv id body vs` by
+    (qpat_x_assum `!s3 vs t3 s4 t4. _` mp_tac >>
+     simp[check_def, assert_def, compatible_bound_def, return_def] >>
+     disch_then irule >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`es with gas_obs := es.gas_obs`, `es with gas_obs := es.gas_obs`] >> simp[]) >>
+  `supported_stmts tops bindings body /\
+   ~supported_stmts_expr_exists expr_internal_call_root body` by
+    fs[supported_stmt_def] >>
+  `!target. supported_stmts_expr_exists
+      (expr_abi_decode_target_root target) body ==>
+      occurs_abi_decode_target target tops` by
+    fs[supported_stmt_expr_exists_def] >>
+  drule_all array_for_layout_ready >> strip_tac >>
+  `name <> id` by metis_tac[optionTheory.NOT_NONE_SOME] >>
+  `cenv.ce_alloca_locals /\ supported_program tops /\
+   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  `EVERY (stmt_exprs_ok cenv) body /\ type_memory_bytes cenv typ < 2 ** 64` by
+    fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
+  `call_evaluation_safe cx (int_calls_stmts body)` by
+    (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
+  MATCH_MP_TAC
+    (Q.GENL [`arr_ptr`, `arr_sz`, `tv`, `vs`]
+      (BETA_RULE (Q.SPEC `\ei. expr_sim_inv cenv cx env ei /\
+                              lookup_scopes name ei.scopes = SOME entry`
+                   (Q.GEN `P` (SPEC_ALL compile_for_dynarray_frag_mem))))) >>
+  qexistsl_tac [`dp`, `sz`, `tv`, `vs`] >>
+  simp[] >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule (SIMP_RULE std_ss [cs_mono_def] (cj 2 compile_stmt_cs_mono)) >> simp[])
+  >- (gen_tac >> strip_tac >> irule dynarray_elements_typed >>
+      simp[] >> qexists_tac `c` >> gvs[])
+  >- (rpt strip_tac >>
+      drule_all dynarray_snapshot_memory >> strip_tac >>
+      drule_all dynarray_snapshot_frontier >> strip_tac >>
+      gvs[] >> goal_assum (drule_at Any) >> simp[arithmeticTheory.ADD_ASSOC])
+  >- (rpt strip_tac >>
+      `body_stmts_mem_ok cx body` by
+        (fs[body_for_mem_ok_def] >> Cases_on `vs` >> fs[]) >>
+      irule array_body_fragment_callback_mem >>
+      metis_tac[dynarray_elements_typed]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all dynarray_elements_typed >> strip_tac >>
+  `expr_sim_inv cenv cx env (ei with gas_obs := gs) /\
+   lookup_scopes name (ei with gas_obs := gs).scopes = SOME entry /\
+   lookup_scopes id (ei with gas_obs := gs).scopes = NONE` by simp[] >>
+  `eval_stmts cx body
+     ((ei with gas_obs := gs) with scopes :=
+       (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs;
+                         popped := []|>)) :: (ei with gas_obs := gs).scopes) =
+     (r, es2)` by simp[] >>
+  drule_at (Pat `eval_stmts`) array_body_scope_callback >>
+  disch_then drule_all >> simp[] >> metis_tac[]
 QED
 
 (* ADMITTED (packet A2-mem, immutable array): memory twin of

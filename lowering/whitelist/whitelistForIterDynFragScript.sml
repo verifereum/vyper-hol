@@ -468,7 +468,7 @@ Proof
 QED
 
 (* The entry block: index zero, then the capacity check passes. *)
-Theorem dynarray_entry_block_run[local]:
+Theorem dynarray_entry_block_run:
   lookup_var lv s = SOME (n2w L) /\ L <= c /\ c < dimword (:256) /\
   ALL_DISTINCT [lv; idx; g; vld] ==>
   run_inst_seq
