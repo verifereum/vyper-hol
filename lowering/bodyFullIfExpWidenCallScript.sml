@@ -16,6 +16,7 @@ Ancestors
   instMemFrontier memSafeRun ptrSafeRun ptrDiscipline venomInst
   venomExecSemantics loweringStateRelDefs finite_map typedCopyDomain vyperTypeSystem
   context memoryLayoutSource memoryLayoutDefs typedMemoryCopy
+  exprSimIfExpWidenedPosts
 
 Theorem ifexp_widened_call_store_normalize:
   compile_ifexp_arm cenv t sty vv sm = (op,sb) /\
@@ -60,6 +61,79 @@ Proof
       simp[]) >>
   simp[compile_store_memory_def]
 QED
+
+Theorem ifexp_widened_call_copy_semantic_frame:
+  compile_ifexp_arm cenv t sty vv sm = (Var xd,sb) /\
+  (e = a \/ e = b) /\ expr_type e = t /\
+  expr_post H ctx func cenv cx e es sa sc s0 ee v src s /\
+  read_result cx tva ee = (INL v,ee) /\
+  evaluate_type (get_tenv cx) t = SOME rty /\ ~is_word_type t /\
+  value_has_type rty v /\ val_wf rty v /\
+  val_in_memory rty v (w2n w) q.vs_memory /\
+  lookup_var xd s = SOME w /\ not_fresh_at k xd /\
+  sa.cs_next_var <= k.cs_next_var /\ local_ptrs_reserved cenv k /\
+  typed_copy_state_frame k (w2n w) (type_memory_size rty) s q /\
+  FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size rty) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
+  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+  w2n w + type_memory_size rty <= s.vs_alloca_next /\
+  (!n lb len. local_region cenv ee.scopes s n lb len ==>
+    w2n w + type_memory_size rty <= lb \/ lb + len <= w2n w) /\
+  (!n lb len. local_region cenv es.scopes s0 n lb len ==>
+    local_region cenv ee.scopes s n lb len) /\
+  (!old off len. FLOOKUP s0.vs_allocas old = SOME (off,len) /\
+    old < sa.cs_next_id ==>
+    w2n w + type_memory_size rty <= off \/ off + len <= w2n w) ==>
+  expr_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee v (Var xd) q /\
+  vv_at cenv cx t sa sb ee tva (LocatedValue t (mk_ptr (Var xd) LocMemory)) q /\
+  expr_store_bound cx t v (Var xd) q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next` by
+    gvs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  `lookup_var xd q = SOME w` by metis_tac[typed_copy_state_frame_def] >>
+  `eval_operand (Var xd) q = SOME w` by simp[eval_operand_def] >>
+  `!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s` by
+    metis_tac[typed_copy_state_frame_def, freshWritesTheory.not_fresh_at_mono] >>
+  `!n lb len. local_region cenv ee.scopes q n lb len <=>
+    local_region cenv ee.scopes s n lb len` by
+    metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame,
+              typed_copy_state_frame_def] >>
+  `stmt_state_rel H ctx func cenv cx ee q` by
+    (irule exprSimCopyTheory.copy_buffer_state_rel_frame >>
+     qexistsl_tac [`w2n w`, `inst`, `s`, `k`, `type_memory_size rty`] >>
+     gvs[typed_copy_state_frame_def, typed_copy_frame_def, expr_post_def] >>
+     gvs[venom_state_component_equality, exprSimStorageCopyTheory.copy_static_def] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `val_footprint rty v <= type_memory_size rty` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  conj_tac >- suspend "post" >>
+  conj_tac >- suspend "at" >>
+  simp[expr_store_bound_def, eval_operand_def] >> rpt strip_tac >> gvs[] >>
+  drule exprSimPropsTheory.val_store_size_le >> decide_tac
+QED
+
+Resume ifexp_widened_call_copy_semantic_frame[at]:
+  markerLib.RESUME_TAC >>
+  simp[vv_at_def, mk_ptr_def] >> rpt strip_tac >> gvs[] >>
+  disj1_tac >>
+  qexistsl_tac [`inst.inst_id`, `w2n w`, `type_memory_size rty`] >>
+  simp[] >> metis_tac[]
+QED
+
+Resume ifexp_widened_call_copy_semantic_frame[post]:
+  markerLib.RESUME_TAC >>
+  drule allocated_result_expr_post_frame >> disch_then irule >>
+  simp[vyperASTTheory.expr_type_def, expr_val_rel_def] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`type_memory_size rty`, `w2n w`, `inst`] >>
+  simp[] >>
+  rpt strip_tac >>
+  gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Finalise ifexp_widened_call_copy_semantic_frame
 
 Theorem ifexp_widened_call_arm_step_full:
   (* The shared joint unwrap_value lemma on H (r8, family form), here a
