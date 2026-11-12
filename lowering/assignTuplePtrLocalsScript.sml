@@ -181,6 +181,9 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_ptr[suffix]:
   `(es_end with gas_obs := []).gas_obs = []` by simp[] >>
   `MAP (BaseTarget o NameTarget) ids <> [] /\
     LENGTH (MAP (BaseTarget o NameTarget) ids) = LENGTH tys` by simp[] >>
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = _`
+       (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >> simp[]) >>
   drule_at (Pat `compile_tuple_store_all _ _ _ _ _ = _`) assign_tuple_locals_suffix_ptr >>
   disch_then (drule_at (Pat `compile_tuple_load_all _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `(if _ then _ else _) _ = _`)) >>
@@ -204,7 +207,7 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_ptr[finish]:
       qexistsl_tac [`G`, `es_end`, `t`, `tn`, `ArrayV (TupleV vs)`] >>
       simp[gas_marked_exec_ptr_def]) >>
   disj1_tac >> simp[] >>
-  qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_post_def, ghost_inv_gas_obs] >> strip_tac >>
   qpat_x_assum `ghost_kept _ _ _ _ _ _ _ _` mp_tac >>
   simp[ghost_kept_def]

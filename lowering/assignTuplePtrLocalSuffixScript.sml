@@ -12,6 +12,8 @@ Libs
 
 Theorem assign_tuple_locals_suffix_open_ptr:
   expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
   sv.vs_current_bb = su.cs_current_bb /\
   sv.vs_inst_idx = LENGTH su.cs_current_insts /\ ~sv.vs_halted /\
   ee.gas_obs = [] /\ value_has_type (TupleTV tvs) v /\
@@ -60,7 +62,7 @@ Theorem assign_tuple_locals_suffix_open_ptr:
     (!tail. assign_tuple_targets cx (TupleTarget gs) v (ee with gas_obs := tail) =
       (INL (),ee' with gas_obs := tail)) /\
     gas_path_ptr D 0 ctx func PG G tn sv 0 G' tn' (OK t) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
+    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
       (ee' with gas_obs := []) t /\
     ghost_inv d cenv cx ee' G' tn' t /\
     (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
@@ -99,6 +101,11 @@ Resume assign_tuple_locals_suffix_open_ptr[prefix]:
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at su x) /\
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at su x)` by
     metis_tac[] >>
+  `sa.cs_next_id <= su.cs_next_id` by
+    (mp_tac (cj 2 stmtLoweringMonoTheory.ci_mono_compile_expr_sa) >>
+     disch_then (qspecl_then [`cenv`, `TupleT tys`, `e`, `sa`] mp_tac) >>
+     simp[ci_mono_def]) >>
+  drule_all expr_post_alloca_frame >> strip_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
@@ -159,6 +166,9 @@ Resume assign_tuple_locals_suffix_open_ptr[post]:
   `!x. not_fresh_at sa x ==> not_fresh_at ss x` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sl` >> simp[] >>
      irule not_fresh_at_mono >> qexists_tac `su` >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv ee' t` by
+    (qpat_x_assum `!c0 e0 sa0 s0. alloca_frame _ _ _ _ cenv ee st ==> _` irule >>
+     irule alloca_frame_trans >> qexistsl_tac [`cenv`, `ee`, `sv`, `su`] >> simp[]) >>
   reverse conj_tac >- metis_tac[] >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl]
 QED
@@ -179,6 +189,8 @@ QED
 
 Theorem assign_tuple_locals_suffix_ptr:
   expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
   sv.vs_current_bb = su.cs_current_bb /\
   sv.vs_inst_idx = LENGTH su.cs_current_insts /\ ~sv.vs_halted /\
   ee.gas_obs = [] /\ value_has_type (TupleTV tvs) v /\
@@ -226,7 +238,7 @@ Theorem assign_tuple_locals_suffix_ptr:
     (!tail. assign_tuple_targets cx (TupleTarget gs) v (ee with gas_obs := tail) =
       (INL (),ee' with gas_obs := tail)) /\
     gas_path_ptr D 0 ctx func PG G tn sv 0 G' tn' (OK t) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
+    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
       (ee' with gas_obs := []) t /\
     ghost_inv d cenv cx ee' G' tn' t /\
     (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
