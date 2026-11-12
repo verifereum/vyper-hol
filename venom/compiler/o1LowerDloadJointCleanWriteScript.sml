@@ -252,23 +252,28 @@ Proof
      (write_memory_with_expansion q xs t).vs_memory` by
     (* the write's cases: empty, fixed, dynamic region, site.  fs, not gvs:
        gvs would also case-split the opcode disjunction *)
-    (qpat_assum `s1 = _ /\ _` (strip_assume_tac o last o CONJUNCTS)
-     >- (fs[] >> conj_tac >- (irule ld_memory_agree_empty_write >> simp[]) >>
-         fs[ptrDisciplineTheory.ld_dyn_agree_def,
-            regularCallEmitSimTheory.read_byte_write_memory_with_expansion])
-     >- (fs[] >> conj_tac
-         >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
-             disch_then irule >> simp[]) >>
-         irule ld_dyn_agree_clean_write_below >> simp[] >> decide_tac)
-     >- (fs[] >> conj_tac
-         >- (drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_clean_write_dyn >>
-          disch_then irule >> metis_tac[]) >>
-         irule ld_dyn_agree_clean_write_same >> simp[]) >>
-     conj_tac
-     >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
-         disch_then irule >> metis_tac[]) >>
-     `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
-     irule ld_dyn_agree_clean_write_below >> simp[] >> decide_tac) >>
+    (qpat_assum `s1 = _ /\ _` (strip_assume_tac o last o CONJUNCTS) >>
+     rpt (qpat_x_assum `LENGTH xs = 0`
+            (assume_tac o REWRITE_RULE [listTheory.LENGTH_NIL])) >>
+     rpt (qpat_x_assum `xs = []` SUBST_ALL_TAC) >>
+     rpt (qpat_x_assum `p = q` SUBST_ALL_TAC) >>
+     rpt conj_tac >>
+     FIRST [
+       irule ld_memory_agree_empty_write >> fs[] >> NO_TAC,
+       fs[ptrDisciplineTheory.ld_dyn_agree_def,
+          regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >> NO_TAC,
+       drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
+         disch_then irule >> simp[] >> NO_TAC,
+       irule ld_dyn_agree_clean_write_below >> simp[] >> decide_tac,
+       drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_clean_write_dyn >>
+         disch_then irule >> simp[] >> NO_TAC,
+       irule ld_dyn_agree_clean_write_same >> simp[] >> NO_TAC,
+       drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
+         disch_then irule >> metis_tac[],
+       `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
+         irule ld_dyn_agree_clean_write_below >> simp[] >> decide_tac,
+       fn (g as (_, w)) => (print ("ld_joint_clean_write_step: no case closes " ^
+           term_to_string w ^ "\n"); NO_TAC g)]) >>
   conj_tac >- fs[] >> conj_tac >- fs[] >>
   qexistsl_tac [`(write_memory_with_expansion p xs s).vs_memory`,
                 `(write_memory_with_expansion q xs t).vs_memory`] >>

@@ -110,7 +110,8 @@ Proof
   >- (fs[ld_read_memory_element] >> gvs[] >>
       qpat_x_assum `ld_dyn_agree _ _ _ _`
         (irule o REWRITE_RULE [ptrDisciplineTheory.ld_dyn_agree_def]) >>
-      simp[] >> decide_tac) >>
+      rpt conj_tac >> TRY decide_tac >>
+      qpat_x_assum `!k. _ ==> _ NOTIN mask` (qspec_then `x` mp_tac) >> simp[]) >>
   irule ld_memory_agree_slice_element >> simp[] >>
   qexistsl_tac [`lo`,`mask`,`sites`] >> gvs[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
