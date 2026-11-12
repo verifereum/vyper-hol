@@ -312,7 +312,8 @@ Theorem supported_callable_storage_syntax:
 Proof
   strip_tac >> drule_all supported_callable_body_contract >> strip_tac >>
   drule supported_pure_exprs_storage_syntax >>
-  drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[]
+  drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[] >>
+  simp[EVERY_MEM] >> metis_tac[]
 QED
 
 (* Entry transport separates semantic runtime preservation from storage

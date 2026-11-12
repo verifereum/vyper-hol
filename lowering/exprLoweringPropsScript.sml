@@ -4323,6 +4323,17 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
+(* An internal call stages its supplied arguments, then its omitted
+   defaults, each from the state the previous step left. *)
+Theorem ci_mono_compile_stage_intcall_args_after[local]:
+  ∀cfn cenv es flags tys sa sb.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ∧
+    ci_mono sa sb ⇒
+    ci_mono sa (SND (compile_stage_intcall_args cfn cenv es flags tys sb))
+Proof
+  metis_tac[ci_mono_trans, ci_mono_compile_stage_intcall_args]
+QED
+
 Theorem ci_mono_compile_call[local]:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -4358,7 +4369,8 @@ rpt (CHANGED_TAC (
   (irule ci_mono_trans >>
    irule_at (Pos last) ci_mono_compile_alloc_buffer)
 )) >>
-rpt strip_tac >> simp[ci_mono_compile_alloc_buffer, ci_mono_refl])
+rpt strip_tac >> TRY (irule ci_mono_compile_stage_intcall_args_after) >>
+simp[ci_mono_compile_alloc_buffer, ci_mono_refl])
   >- ( (* ExtCall *)
     rename1 `ExtCall _ _ signature _` >> PairCases_on `signature` >>
     Cases_on `args`
