@@ -25,7 +25,7 @@
  *
  *   - frame_sim_rf L C C' fn fn': as frame_sim, but only for states of fn'
  *     that touch memory and sit outside a revert-forward pair, matched
- *     with a state of fn also outside one.  raw_mem_ok and static_mem_ok
+ *     with a state of fn also outside one.  The raw, static and lowered facts
  *     exempt states in a revert-forward pair, so they are
  *     not closed under mem_corr alone; they are closed under the weaker
  *     mem_corr_closed_rf, and frame_sim plus frame_sim_rf transport any
@@ -33,7 +33,8 @@
  *
  * TOP-LEVEL: ctx_bisim_ctx_sim, fn_bisim_ctx_bisim, frame_sim_mem_inv,
  *   frame_sim_rf_mem_inv, mem_corr_closed_rf_raw_mem_ok,
- *   mem_corr_closed_rf_intro, mem_corr_closed_rf_static_mem_ok.
+ *   mem_corr_closed_rf_intro, mem_corr_closed_rf_static_mem_ok,
+ *   mem_corr_closed_rf_lowered_mem_fact.
  *)
 Theory o1PassLift
 Ancestors
@@ -690,14 +691,17 @@ Proof
   disch_then irule >> metis_tac[raw_reachable_rules]
 QED
 
-(* What the memory facts see of a state: the alloca frame, the initial
-   free-memory pointer and the instruction's memory ranges.  An inserted
-   instruction that touches no memory corresponds to any instruction. *)
+(* What the memory facts see of a state: the alloca frame, the
+   free-memory pointers, DALLOCA's no-wrap bound and the instruction's
+   memory ranges.  An inserted instruction that touches no memory
+   corresponds to any instruction. *)
 Definition mem_corr_def:
   mem_corr inst s inst' s' <=>
     s'.vs_alloca_next = s.vs_alloca_next /\
     s'.vs_allocas = s.vs_allocas /\
     s'.vs_initial_fmp = s.vs_initial_fmp /\
+    s'.vs_fmp = s.vs_fmp /\
+    (dalloca_no_wrap inst s ==> dalloca_no_wrap inst' s') /\
     (inst_mem_ranges inst' s' = [] \/
      inst_mem_ranges inst' s' = inst_mem_ranges inst s)
 End
@@ -976,20 +980,24 @@ QED
 Theorem mem_corr_closed_rf_raw_mem_ok:
   mem_corr_closed_rf raw_mem_ok
 Proof
-  `!inst s. inst_mem_below_frontier inst s <=>
-            EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next)
-              (inst_mem_ranges inst s)`
-    by simp_tac std_ss [inst_mem_below_frontier_def, inst_mem_ranges_def] >>
-  pop_assum (fn th =>
-    rw[mem_corr_closed_rf_def, mem_corr_def, raw_mem_ok_def,
-       inst_mem_ok_in_fn_def, in_revert_forward_def, th]) >>
+  rw[mem_corr_closed_rf_def, mem_corr_def, raw_mem_ok_def,
+     inst_mem_ok_in_fn_def, in_revert_forward_def,
+     REWRITE_RULE [GSYM inst_mem_ranges_def] inst_mem_below_frontier_def] >>
   fs[] >> metis_tac[]
 QED
 
 Theorem mem_corr_closed_rf_static_mem_ok:
   mem_corr_closed_rf (static_mem_ok eom)
 Proof
-  rw[mem_corr_closed_rf_def, mem_corr_def, static_mem_ok_def] >> fs[]
+  rw[mem_corr_closed_rf_def, mem_corr_def, static_mem_ok_def] >> fs[] >>
+  metis_tac[]
+QED
+
+Theorem mem_corr_closed_rf_lowered_mem_fact:
+  mem_corr_closed_rf (lowered_mem_fact eom)
+Proof
+  rw[mem_corr_closed_rf_def, mem_corr_def, lowered_mem_fact_def,
+     lowered_mem_ok_def] >> fs[] >> metis_tac[]
 QED
 
 

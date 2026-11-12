@@ -165,6 +165,29 @@ Definition fmp_reclaim_analyze_fuel_def:
       (cfg_succs_of cfg) cfg.cfg_dfs_pre st1) in
     SOME (fmp_populate transfer entry cfg fn.fn_blocks result)
 End
+(* A block's PHI prefix keeps each PHI operand to its own PHI: no variable
+   is read by two of the block's PHIs, and an operand that is not the PHI's
+   own output is neither live after the prefix nor the output of a PHI of
+   the block.  Liveness (input_vars_from) maps every PHI operand of a
+   successor to its PHI, so an operand also read later would not be live
+   at the end of the other predecessors, and a reclaim there could free
+   memory it still points to. *)
+Definition fmp_phi_ready_block_def:
+  fmp_phi_ready_block live bb <=>
+    let phis = collect_phis bb.bb_instructions in
+    let post = live_vars_at live bb.bb_label (LENGTH phis) in
+    EVERY (\phi. EVERY (\v.
+        EVERY (\q. q = phi \/ ~MEM v (inst_uses q)) phis /\
+        (MEM v phi.inst_outputs \/
+         (~MEM v post /\ EVERY (\q. ~MEM v q.inst_outputs) phis)))
+      (inst_uses phi)) phis
+End
+
+(* The result is accepted only at a fixed point: one more round of fuel
+   changes nothing, and processing any block again leaves its boundary as
+   it is; and only where every block's PHI prefix is ready, which the
+   liveness the reclaims read depends on.  Otherwise the analysis fails
+   and FmpLowering rejects the function. *)
 Definition fmp_reclaim_states_def:
   fmp_reclaim_states infos fn =
     case fmp_base_analyze (fn_insts fn) of NONE => NONE | SOME env =>
@@ -174,7 +197,20 @@ Definition fmp_reclaim_states_def:
     | SOME states =>
         (case fmp_reclaim_analyze_fuel (fmp_reclaim_fuel fn + 1)
                 infos fn live env of
-           SOME states' => if states' = states then SOME states else NONE
+           SOME states' =>
+             if states' = states /\
+                EVERY (fmp_phi_ready_block live) fn.fn_blocks /\
+                (case entry_block fn of
+                   NONE => F
+                 | SOME ebb =>
+                     EVERY (\bb. fmp_process_block
+                                   (fmp_transfer infos fn live env)
+                                   (SOME (ebb.bb_label,
+                                          SOME fmp_empty_reclaim_state))
+                                   (cfg_analyze fn) fn.fn_blocks
+                                   bb.bb_label states = states)
+                       fn.fn_blocks)
+             then SOME states else NONE
          | NONE => NONE)
 End
 

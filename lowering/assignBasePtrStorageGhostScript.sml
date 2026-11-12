@@ -97,6 +97,7 @@ Theorem assign_base_store_selected_dead:
   encode_value tv v = SOME writes /\
   w2n k+type_slot_size tv <= dimword (:256) /\
   w2n b+32*(type_slot_size tv-1) < dimword (:256) /\
+  (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
   (!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==>
        val_in_memory tv v (w2n b) m) /\
   (!q c. (q,c) IN (if tr then tn0.t_trans else tn0.t_stor) ==>
@@ -133,6 +134,9 @@ Proof
   >- (irule storage_dead_endpoint_outside >>
       goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
       qexists_tac `initial` >> simp[]) >>
+  `MEM j (MAP FST writes)` by
+    (qpat_x_assum `!i. i < type_slot_size tv ==> MEM i (MAP FST writes)`
+       irule >> decide_tac) >>
   drule_all robust_memory_storage_dead_at_endpoint >> simp[]
 QED
 
@@ -185,6 +189,7 @@ Theorem assign_base_store_stor_taint_ok:
   encode_value tv v = SOME writes /\
   w2n k+type_slot_size tv <= dimword (:256) /\
   w2n b+32*(type_slot_size tv-1) < dimword (:256) /\
+  (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
   (!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==>
        val_in_memory tv v (w2n b) m) ==>
   stor_taint_ok cx tn s

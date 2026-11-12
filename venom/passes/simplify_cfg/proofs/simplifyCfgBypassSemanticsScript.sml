@@ -62,7 +62,7 @@ Proof
   `i.inst_opcode = JNZ` by metis_tac[scfg_bypass_active_source_terminator] >>
   `j.inst_opcode = JNZ \/ j.inst_opcode = JMP` by
     (simp[Abbr `j`] >> metis_tac[scfg_bypass_image_opcode]) >>
-  gvs[mem_corr_def, call_corr_def, inst_mem_ranges_def,
+  gvs[mem_corr_def, call_corr_def, inst_mem_ranges_def, dalloca_no_wrap_def,
       source_memory_read_ranges_def, source_memory_write_ranges_def,
       scfg_payload_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >> simp[scfg_ctrl_def]
@@ -72,7 +72,7 @@ Resume scfg_bypass_image_observations[phi]:
   `j.inst_opcode = PHI` by
     (`i.inst_opcode <> JNZ` by simp[] >>
      simp[Abbr `j`] >> metis_tac[scfg_bypass_image_opcode]) >>
-  gvs[mem_corr_def, call_corr_def, inst_mem_ranges_def,
+  gvs[mem_corr_def, call_corr_def, inst_mem_ranges_def, dalloca_no_wrap_def,
       source_memory_read_ranges_def, source_memory_write_ranges_def,
       scfg_payload_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >> simp[scfg_ctrl_def]

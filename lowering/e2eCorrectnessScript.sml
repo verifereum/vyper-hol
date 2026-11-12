@@ -829,7 +829,13 @@ Proof
   `dead_wf (external_call_dead tx
               (call_external (SOME vs.vs_outcomes) [] am tx))` by
     simp[external_call_dead_wf] >>
+  `!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+         eom <= w2n vs.vs_initial_fmp` by
+    metis_tac[generate_context_plan_eom_room] >>
+  `w2n vs.vs_initial_fmp <= w2n vs.vs_initial_fmp` by simp[] >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
+  `gas_variant vs_in vs` by
+    metis_tac[raw_variant_gas_variant, o1_run_state_ok_def] >>
   `initial_venom_state_rel tops am tx vs_in` by
     (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >> simp[]) >>
   `vs_in.vs_outcomes = vs.vs_outcomes` by

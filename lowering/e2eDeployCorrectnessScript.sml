@@ -132,10 +132,18 @@ Proof
     fs[deploy_phases_def] >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all deploy_entry_state_ok >> strip_tac >>
+  `(deploy_entry_state prog cplan tops es).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
+    simp[deploy_entry_state_def, entry_venom_state_def] >>
+  `!eom. max_live_eom dout.po_unit.cu_context = SOME eom ==>
+         eom <= w2n (deploy_entry_state prog cplan tops es).vs_initial_fmp` by
+    metis_tac[generate_context_plan_eom_room] >>
   qspecl_then [`deploy_dead tops runtime_bc am tx`, `imm_len tops`, `rpolicy`,
-               `dunit`, `dout`, `deploy_entry_state prog cplan tops es`] mp_tac
+               `dunit`, `dout`, `deploy_entry_state prog cplan tops es`,
+               `(deploy_entry_state prog cplan tops es).vs_initial_fmp`] mp_tac
     run_venom_pipeline_correct >>
   impl_tac >- fs[deploy_dead_wf] >> strip_tac >>
+  `gas_variant vs_in (deploy_entry_state prog cplan tops es)` by
+    metis_tac[raw_variant_gas_variant, o1_run_state_ok_def] >>
   Cases_on `?marks. deploy_source_exempt tops
               (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
                  [(NONE, tops)] [])`
@@ -170,8 +178,6 @@ Proof
                `gas_explicit marks vs_in.vs_gas_readings`] mp_tac
     deploy_venom_result_rel_dead >>
   simp[] >> disch_then drule_all >> strip_tac >>
-  `(deploy_entry_state prog cplan tops es).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
-    simp[deploy_entry_state_def, entry_venom_state_def] >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   qspecl_then [`fuel'`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `Inv`,
@@ -206,6 +212,18 @@ Theorem e2e_deploy_correctness_asm_opt:
       (frame_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
+           if ALOOKUP am'.sources tx.target = NONE then
+             let cx = initial_evaluation_context
+                        ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+             ?lgs.
+               frame_outcome es r es' NONE [] lgs /\
+               (lookup_account tx.target es'.rollback.accounts).code = [] /\
+               accounts_agree cx am'.accounts
+                 (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+               transient_agree cx am'.tStorage es'.rollback.tStorage /\
+               logs_correspond (compiled_event_info tops) (type_env tops)
+                 tx.target am'.logs lgs
+           else
            let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
             ?section lgs.
               immutables_section_rel tops (account_immutables am' tx.target) section /\
@@ -257,6 +275,18 @@ Theorem e2e_deploy_correctness:
       (frame_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
+           if ALOOKUP am'.sources tx.target = NONE then
+             let cx = initial_evaluation_context
+                        ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+             ?lgs.
+               frame_outcome es r es' NONE [] lgs /\
+               (lookup_account tx.target es'.rollback.accounts).code = [] /\
+               accounts_agree cx am'.accounts
+                 (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+               transient_agree cx am'.tStorage es'.rollback.tStorage /\
+               logs_correspond (compiled_event_info tops) (type_env tops)
+                 tx.target am'.logs lgs
+           else
            let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
             ?section lgs.
               immutables_section_rel tops (account_immutables am' tx.target) section /\

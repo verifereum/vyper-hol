@@ -12,6 +12,11 @@ Ancestors
   literalsCodesize
   removeUnused
   concretizeMemLoc
+  (* FmpLowering stage proof *)
+  fmpStageReclaimSound
+  fmpStageOpSteps
+  fmpStageFmpSteps
+  fmpStageBlockSim
   (* lower dload/dloadbytes *)
   lowerDload
   (* branch optimization *)

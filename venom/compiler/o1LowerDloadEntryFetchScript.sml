@@ -1,6 +1,6 @@
 Theory o1LowerDloadEntryFetch
 Ancestors
-  o1LowerDloadJointEntry analysisSimProofsBase venomExecProofs
+  analysisSimProofsBase venomExecProofs
   venomWf venomInst venomExecSemantics contextCodegenRel list
 
 Theorem ld_wf_phi_prefix_lt:

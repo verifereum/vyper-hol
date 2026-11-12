@@ -8,7 +8,7 @@
  *)
 Theory concretizeStageShape
 Ancestors
-  concretizeStepStructure o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher venomPassSchedule venomFnScheduleRunner cfgWf
+  concretizeStepStructure concretizeStepShape o1PassContract stackPlanGen concretizeMemLocDefs venomPassDispatcher venomPassSchedule venomFnScheduleRunner cfgWf
   staticLayoutFoldProofs staticLayoutDefs passSharedDefs venomWf passSimulationDefs list rich_list combin venomInst
   passTransform
 
@@ -502,6 +502,29 @@ Proof
   gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]
 QED
 
+(* The rewrite adds only ASSIGN and NOP, so it adds no FMP opcode. *)
+Theorem concretize_step_pre_fmp_ops:
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  pre_fmp_ops fn ==>
+  pre_fmp_ops out.fpo_function
+Proof
+  strip_tac >>
+  `execute_configured_fn_pass rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+     observed s fn = SOME out` by fs[fn_pass_step_def] >>
+  Cases_on `fn.fn_eom`
+  >- (gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
+      drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
+      fs[pre_fmp_ops_def, apply_context_concretize_layout_def,
+         apply_concretize_layout_def] >>
+      simp[fn_insts_def] >> REWRITE_TAC[GSYM fn_insts_def] >>
+      ho_match_mp_tac concretize_positions_opcode_every >>
+      conj_tac >- first_assum ACCEPT_TAC >> simp[pre_fmp_opcode_def]) >>
+  `fn_has_static_layout fn` by fs[fn_has_static_layout_def] >>
+  qpat_x_assum `execute_configured_fn_pass _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [concretize_function_fuel_in_context_def] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+QED
+
 Theorem concretize_stage_fmp_free:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ fmp_free_ctx C ==>
@@ -509,13 +532,13 @@ Theorem concretize_stage_fmp_free:
 Proof
   strip_tac >> simp[fmp_free_ctx_def, EVERY_MEM] >> gen_tac >> disch_tac >>
   drule_all concretize_stage_member >> strip_tac >> gvs[] >>
-  `f.fn_fmp_signature = NONE /\ no_raw_fmp_ops f /\ f.fn_eom = NONE`
+  `f.fn_fmp_signature = NONE /\ pre_fmp_ops f /\ f.fn_eom = NONE`
     by (gvs[fmp_free_ctx_def, EVERY_MEM] >> metis_tac[]) >>
   conj_tac
   >- (gvs[fn_pass_step_def, fn_pass_effects_hold_def,
           fn_abi_effect_holds_def, fn_pass_abi_effect_def,
           fn_pass_tag_def, fn_fmp_convention_eq_def]) >>
-  irule concretize_step_no_raw_fmp >> metis_tac[]
+  irule concretize_step_pre_fmp_ops >> metis_tac[]
 QED
 
 Theorem concretize_stage_callee_first:

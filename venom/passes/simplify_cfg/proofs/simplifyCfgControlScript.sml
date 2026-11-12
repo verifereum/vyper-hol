@@ -95,7 +95,7 @@ Proof
   simp[mem_corr_def, inst_mem_ranges_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, memory_range_of_operands_def,
        dret_memory_read_ranges_def, fixed_source_write_range_def,
-       sized_source_write_range_def, scfg_ctrl_def]
+       sized_source_write_range_def, dalloca_no_wrap_def, scfg_ctrl_def]
 QED
 
 Theorem scfg_payload_call_corr:

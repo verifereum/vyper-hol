@@ -53,7 +53,7 @@ Ancestors
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
-  lowerDloadDefs ptrDiscipline staticLayoutDefs venomState stateEquiv
+  lowerDloadDefs ptrDiscipline ptrStaticDiscipline staticLayoutDefs venomState stateEquiv
   passSimulationDefs vfmState extCallOracle finite_map cfgWf dretDesugarDefs
   fcgDefs list rich_list
 
@@ -248,6 +248,14 @@ Proof
   qpat_x_assum `s3 = _` SUBST1_TAC >>
   qpat_x_assum `s2 = _` SUBST1_TAC >> simp[]
 QED
+
+(* The raw input of FmpLowering runs with its free-memory pointer, and its
+   initial one, at fmp; the real state the lowered code runs from has its
+   own, and otherwise the two differ only in their GAS-reading oracle. *)
+Definition raw_variant_def:
+  raw_variant (fmp : bytes32) (s : venom_state) s' <=>
+    gas_variant s (s' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>)
+End
 
 (* ===== One pass run ===== *)
 
@@ -516,10 +524,8 @@ Proof
 QED
 
 (* A function's FMP convention, if set, has no hidden FMP parameter.  The
-   lowering leaves every convention unset, the other passes keep it
-   (fn_pass_step_fmp_sig_no_param), and FmpLowering seals a function
-   without raw FMP operations whose callees have no such parameter
-   without one: it then leaves the blocks as they are. *)
+   lowering leaves every convention unset and every pass but FmpLowering
+   keeps it (fn_pass_step_fmp_sig_no_param). *)
 Definition fmp_sig_no_param_def:
   fmp_sig_no_param fn <=>
     !sig. fn.fn_fmp_signature = SOME sig ==> ~sig.fms_has_fmp_param
@@ -537,6 +543,19 @@ Proof
      fn_fmp_convention_eq_def, fmp_sig_no_param_def] >>
   Cases_on `fn_pass_tag pass` >> gvs[fn_pass_abi_effect_def]
 QED
+
+(* Before FmpLowering no instruction reads or writes the FMP state other
+   than through DALLOCA, and none is one of FmpLowering's own (INITIAL_FMP
+   reads vs_initial_fmp, which the lowering moves).  The source has none
+   of these (raw_opcode_ok) and the earlier passes add none. *)
+Definition pre_fmp_opcode_def:
+  pre_fmp_opcode op <=>
+    ~MEM op [DRET; GETFMP; SETFMP; RETFMP; INITIAL_FMP; BUMP; FMP_PARAM]
+End
+
+Definition pre_fmp_ops_def:
+  pre_fmp_ops fn <=> EVERY (\inst. pre_fmp_opcode inst.inst_opcode) (fn_insts fn)
+End
 
 (* The per-function stage rows: what a run may assume of the function it
    is given and must establish of the one it returns, where the stage
@@ -558,9 +577,8 @@ QED
    CFGNormalization needs none of these of it.  Row 6 also has every block reachable,
    as stage row 6 does: SingleUseExpansion keeps SSA only then.  Up to
    row 4 (MakeSSA's second run) the function is a valid MakeSSA input,
-   and up to row 3 (FmpLowering) it has no raw FMP operation; with
-   fmp_sig_no_param of every function, at every row, FmpLowering's run
-   leaves the blocks as they are, so it keeps make_ssa_input_ok. *)
+   and up to row 3 (FmpLowering) it has no FMP operation but DALLOCA and
+   no FmpLowering output opcode (pre_fmp_ops). *)
 Definition o1_fn_row_def:
   o1_fn_row (k : num) fn <=>
     (3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)) /\
@@ -570,20 +588,17 @@ Definition o1_fn_row_def:
     (5 <= k /\ k <= 7 ==> wf_ssa fn) /\
     (k = 6 ==> all_reachable fn) /\
     (k <= 4 ==> make_ssa_input_ok fn) /\
-    (k <= 3 ==> no_raw_fmp_ops fn) /\
-    fmp_sig_no_param fn
+    (k <= 3 ==> pre_fmp_ops fn)
 End
 
 (* The step contract of the k-th walk run: the step contract, with row k
    of the function rows assumed of the input and row k+1 owed of the
-   output.  Every function of the observed unit is at some row, so has
-   fmp_sig_no_param, which FmpLowering reads of the callees. *)
+   output. *)
 Definition o1_step_contract_at_def:
   o1_step_contract_at k rpolicy pass <=>
     !observed s fn out.
       fn_pass_step rpolicy pass observed s fn out /\
       o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-      EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
       o1_fn_row k fn ==>
       o1_fn_shape observed.cu_context out.fpo_function /\
       fresh_names_ok s fn out.fpo_function /\
@@ -607,7 +622,6 @@ Theorem o1_step_contract_at_preserve:
   (!observed s fn out.
      fn_pass_step rpolicy pass observed s fn out /\
      o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-     EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
      o1_fn_row k fn ==>
      o1_fn_row (SUC k) out.fpo_function) ==>
   o1_step_contract_at k rpolicy pass
@@ -632,6 +646,14 @@ Definition o1_run_state_ok_def:
     code_layout_valid vs /\ ~vs.vs_call_ctx.cc_static
 End
 
+(* The lowered-phase fact with the frame pointer read off the state: the
+   semantics never writes vs_initial_fmp, so this is lowered_mem_ok at the
+   initial state's fmp along every run. *)
+Definition lowered_mem_fact_def:
+  lowered_mem_fact eom ctx fn inst s <=>
+    lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s
+End
+
 (* The stage contract of one pass run, between consecutive stage contexts
    C and C' and one initial state: every terminating run of C is matched
    by a run of C' up to a well-formed set D of dead bytes, and the stage
@@ -646,17 +668,33 @@ Definition o1_stage_contract_def:
       ctx_sim_fuel (pass_fuel pass C') D C C' vs vs /\ I' C' vs
 End
 
+(* How a stage run's input state may differ from its output state: in the
+   GAS-reading oracle (NONE), and for FmpLowering (SOME fmp) also in the
+   free-memory pointers, which are fmp before the lowering.  The lowered
+   code's pointer is then above every static access and at most fmp. *)
+Definition fmp_variant_def:
+  fmp_variant NONE s s' = gas_variant s s' /\
+  fmp_variant (SOME fmp) s s' = raw_variant fmp s s'
+End
+
+Definition fmp_variant_room_def:
+  fmp_variant_room NONE (C : venom_context) (s : venom_state) = T /\
+  fmp_variant_room (SOME fmp) C s =
+    ((!eom. max_live_eom C = SOME eom ==> eom <= w2n s.vs_initial_fmp) /\
+     w2n s.vs_initial_fmp <= w2n (fmp : bytes32))
+End
+
 (* Choose the input oracle before testing its invariant. Reachability-based
    memory invariants can depend on GAS values. At the lowering boundary the
    source producer supplies the invariant for the chosen input. *)
 Definition o1_stage_contract_gas_def:
-  o1_stage_contract_gas rpolicy D pass view pre I I' <=>
+  o1_stage_contract_gas rpolicy D fo pass view pre I I' <=>
     !C C' vs'.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs' ==>
-      ?vs. gas_variant vs vs' /\
-           (I C vs ==> ctx_sim_fuel (pass_fuel pass C') D C C' vs vs' /\
-                       I' C' vs')
+      ?vs. fmp_variant fo vs vs' /\
+           (I C vs /\ fmp_variant_room fo C' vs' ==>
+            ctx_sim_fuel (pass_fuel pass C') D C C' vs vs' /\ I' C' vs')
 End
 
 Theorem gas_variant_run_state_ok:
@@ -671,9 +709,10 @@ QED
 
 Theorem o1_stage_contract_imp_gas:
   o1_stage_contract rp D pass view pre Inv Inv' ==>
-  o1_stage_contract_gas rp D pass view pre Inv Inv'
+  o1_stage_contract_gas rp D NONE pass view pre Inv Inv'
 Proof
-  rw[o1_stage_contract_def, o1_stage_contract_gas_def] >>
+  rw[o1_stage_contract_def, o1_stage_contract_gas_def, fmp_variant_def,
+     fmp_variant_room_def] >>
   qexists_tac `vs'` >> simp[gas_variant_refl] >> metis_tac[]
 QED
 
@@ -689,11 +728,11 @@ End
 (* ===== The stage invariants ===== *)
 
 (* Until FmpLowering, no function has its FMP convention set or an FMP
-   operation: the source has none (raw_opcode_ok, unit_fmp_unsealed) and
-   no earlier pass adds one.  FmpLowering then only seals. *)
+   operation but DALLOCA: the source has none (raw_opcode_ok,
+   unit_fmp_unsealed) and no earlier pass adds one. *)
 Definition fmp_free_ctx_def:
   fmp_free_ctx C <=>
-    EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
+    EVERY (\fn. fn.fn_fmp_signature = NONE /\ pre_fmp_ops fn)
       C.ctx_functions
 End
 
@@ -705,8 +744,8 @@ Definition callee_first_def:
 End
 
 (* Before ConcretizeMemLoc: the raw phase of the shared memory invariant,
-   and what ConcretizeMemLoc needs of its input: no static layout yet, no
-   DALLOCA, the pointer discipline above a reserved fixed region, and
+   and what ConcretizeMemLoc needs of its input: no static layout yet,
+   the pointer discipline above a reserved fixed region, and
    taint reaching only the dead bytes D.  S3's conclusion, with
    well-formed global reservations, which max_live_eom (row 3 on)
    requires and the walk never changes; the lowering reserves nothing in
@@ -717,7 +756,7 @@ End
 Definition o1_src_inv_def:
   o1_src_inv D C vs <=>
     reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs /\
-    EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
+    EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
     (?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs) /\
     taint_within D C vs /\ fmp_free_ctx C /\
     mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs
@@ -749,20 +788,27 @@ End
 
 (* After ConcretizeMemLoc: every access below the context's layout end,
    max_live_eom (the largest function layout end and global reserved end),
-   where codegen's spill regions start.  The bound is the context's, not
-   existential over any upper bound, so it is not satisfiable by a large
-   eom. *)
+   where codegen's spill regions start, or in the dynamic region.  The
+   bound is the context's, not existential over any upper bound, so it is
+   not satisfiable by a large eom.  FmpLowering, which relocates the
+   dynamic allocations, also needs their pointers used only as addresses
+   within their site (ptr_discipline's facts at eom, with the syntactic
+   part weakened to fn_static_ptr_ok, which survives ALLOCA becoming a
+   literal) and taint reaching only the dead bytes D. *)
 Definition o1_static_inv_def:
-  o1_static_inv C vs <=>
-    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs) /\
-    fmp_free_ctx C
+  o1_static_inv D C vs <=>
+    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs /\
+           ?P. EVERY (fn_static_ptr_ok P) C.ctx_functions /\
+               !stk PG G tn fn inst s.
+                 frame_reachable vs C stk PG G tn fn inst s ==>
+                 access_ok eom G fn inst s /\ taint_ok fn tn inst s) /\
+    taint_within D C vs /\ fmp_free_ctx C
 End
 
-(* After FmpLowering: still static.  The source has no FMP operation and
-   FmpLowering only seals, so no access reaches the dynamic area. *)
+(* After FmpLowering: static, or dynamic at or above the initial fmp. *)
 Definition o1_lowered_inv_def:
   o1_lowered_inv C vs <=>
-    ?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs
+    ?eom. max_live_eom C = SOME eom /\ mem_inv (lowered_mem_fact eom) C vs
 End
 
 (* Rows 5 to 8 (SimplifyCFG's, SUE's, DFT's and the next run's input) add
@@ -780,9 +826,9 @@ End
    S4 that the lowering stage owes.  A row may speak of the dead bytes D
    the runs are matched up to.  Up to FmpLowering, which seals a
    function after its callees, the functions are in a callee-first
-   order.  Rows 1 and 2 are in SSA form (MakeSSA's first run establishes
-   it, LowerDload's fresh variables keep it), which ConcretizeMemLoc's
-   pointer provenance needs. *)
+   order.  Rows 1 to 3 are in SSA form (MakeSSA's first run establishes
+   it, LowerDload's fresh variables and ConcretizeMemLoc keep it), which
+   the pointer provenance of ConcretizeMemLoc and FmpLowering needs. *)
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
     if k = 0 then
@@ -792,7 +838,8 @@ Definition o1_inv_def:
                EVERY ssa_form C.ctx_functions /\
                ?names. callee_first names C.ctx_functions)
     else if k = 3 then
-      (\C vs. o1_static_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+      (\C vs. o1_static_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               EVERY ssa_form C.ctx_functions /\
                ?names. callee_first names C.ctx_functions)
     else if k = 4 then
       (\C vs. o1_lowered_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions)
@@ -827,8 +874,11 @@ Definition o1_run_contract_def:
       (o1_pre k) (o1_inv D k) (o1_inv D (SUC k))
 End
 
+(* The k-th run's contract with its input state chosen from its output
+   state: FmpLowering's raw input runs at the free-memory pointer fmp. *)
 Definition o1_run_contract_gas_def:
-  o1_run_contract_gas rpolicy D k <=>
-    o1_stage_contract_gas rpolicy D (EL k o1_fn_passes)
+  o1_run_contract_gas rpolicy D fmp k <=>
+    o1_stage_contract_gas rpolicy D (if k = 3 then SOME fmp else NONE)
+      (EL k o1_fn_passes)
       (o1_walk_view rpolicy k) (o1_pre k) (o1_inv D k) (o1_inv D (SUC k))
 End

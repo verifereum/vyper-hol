@@ -229,9 +229,15 @@ Proof
     (qpat_x_assum `!D vs. _ ==> venom_run_bounded _ _ _ _` irule >>
      simp[] >> metis_tac[]) >>
   (* S4's input state, for the codegen obligations *)
-  qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`] mp_tac
+  `!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+         eom <= w2n vs.vs_initial_fmp` by
+    metis_tac[generate_context_plan_eom_room] >>
+  qspecl_then [`D`, `0`, `rpolicy`, `unit`, `out`, `vs`,
+               `vs.vs_initial_fmp`] mp_tac
     run_venom_pipeline_correct >>
   impl_tac >- simp[] >> strip_tac >>
+  `gas_variant vs_in vs` by
+    metis_tac[raw_variant_gas_variant, o1_run_state_ok_def] >>
   `ctx_sim D unit.cu_context out.po_unit.cu_context vs_in vs /\
    o1_lowered_inv out.po_unit.cu_context vs` by
     (qpat_x_assum `_ ==> ctx_sim _ _ _ _ _ /\ _` irule >> metis_tac[]) >>
@@ -253,7 +259,8 @@ QED
 Theorem e2e_deploy_gas_sufficient_identity:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ constructor_call_free tops /\
+    supported_program tops /\ supported_program_deploy tops /\
+    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
@@ -333,9 +340,15 @@ Proof
     (qpat_x_assum `!D vs. _ ==> venom_run_bounded _ _ _ _` irule >>
      simp[] >> metis_tac[]) >>
   (* S4's input state, for the codegen obligations and the return value *)
-  qspecl_then [`D`, `imm_len tops`, `rpolicy`, `dunit`, `dout`, `vs`] mp_tac
+  `!eom. max_live_eom dout.po_unit.cu_context = SOME eom ==>
+         eom <= w2n vs.vs_initial_fmp` by
+    metis_tac[generate_context_plan_eom_room] >>
+  qspecl_then [`D`, `imm_len tops`, `rpolicy`, `dunit`, `dout`, `vs`,
+               `vs.vs_initial_fmp`] mp_tac
     run_venom_pipeline_correct >>
   impl_tac >- simp[] >> strip_tac >>
+  `gas_variant vs_in vs` by
+    metis_tac[raw_variant_gas_variant, o1_run_state_ok_def] >>
   `raw_unit_memory_ok dunit.cu_context vs_in /\
    ptr_discipline (imm_len tops) dunit.cu_context vs_in /\
    taint_within D dunit.cu_context vs_in /\
