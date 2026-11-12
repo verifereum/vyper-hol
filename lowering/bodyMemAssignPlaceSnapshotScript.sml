@@ -1,16 +1,17 @@
-(* Memory case of the body induction, assignment to a place whose indices
-   have effects (bodyMemAssignOther's split).  S1's twin is
-   stmtSimAssignPlace's assign_place_effectful_index_case. *)
-Theory bodyMemAssignEffectfulIndex
+(* Memory case of the body induction, assignment to a place whose target
+   can mutate state (bodyMemAssignOther's split on expr_can_mutate): the
+   lowering snapshots the RHS value (compile_stmt's Assign) before it
+   computes the target pointer, so the proof runs the RHS, the counted
+   snapshot (bodyMemAssignSnapshot.snapshot_vv_counted_mem), the target and
+   the store.  The target isn't an immutable (bodyMemImmutableDeploy has
+   that case). *)
+Theory bodyMemAssignPlaceSnapshot
 Ancestors
-  bodyMemoryPreds supportedTargets
+  bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
+  bodyMemAssignSnapshot
 
-(* RESIDUAL (held): false on the frozen definitions, as its S1 twin
-   (an index call can replace the place the target names).  Waits on the
-   target-overlap rejection (target_subscript_overlap in the alloc_limits defs),
-   the pop()-base overlap rejection and exact subscript base typing; not
-   to be proved or launched before those land. *)
-Theorem body_assign_place_effectful_index_mem:
+(* RESIDUAL (held): for alan, with snapshot_vv_counted_mem. *)
+Theorem body_assign_place_snapshot_mem:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' pv t' s'3' v t''.
        eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
@@ -50,7 +51,8 @@ Theorem body_assign_place_effectful_index_mem:
         t = AttributeTarget (TopLevelNameTarget nsid) fld /\
         supported_storage_field_write tops nsid fld /\
         type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
-    ~supported_target_pure tops t ==>
+    ~immutable_root cx t /\
+    expr_can_mutate cenv (target_to_expr t) ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
       (eval_stmt cx (Assign (BaseTarget t) e)) es

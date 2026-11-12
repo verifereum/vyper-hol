@@ -1,7 +1,8 @@
 (* Memory case of the body induction, assignment to a place
    (bodyMemAssignOther's split, as bodyAssignPlace's body_assign_place_case
-   for S1): the target's indices are pure (supported_target_pure) and e's
-   lowered value has e's type, or a bytestring type e's fits; the target
+   for S1): the target can't mutate state (~expr_can_mutate, so the
+   lowering takes no RHS snapshot) and e's lowered value has e's type, or a
+   bytestring type e's fits; the target
    isn't an immutable (bodyMemImmutableDeploy has that case).  S1's twin is
    stmtSimAssignPlace's compile_assign_place_case. *)
 Theory bodyMemAssignPlace
@@ -49,7 +50,7 @@ Theorem body_assign_place_mem_case:
         supported_storage_field_write tops nsid fld /\
         type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
     ~immutable_root cx t /\
-    supported_target_pure tops t /\
+    ~expr_can_mutate cenv (target_to_expr t) /\
     (lowered_value_type cenv e = expr_type e \/
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\

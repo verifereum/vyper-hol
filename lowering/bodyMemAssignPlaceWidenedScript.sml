@@ -1,7 +1,7 @@
 (* Memory case of the body induction, a widened aggregate internal call
-   assigned to a place (bodyMemAssignOther's split): pure target indices,
-   and e's lowered value has neither e's type nor a bytestring type e's
-   fits, so e is an IntCall whose return type widens to the call's type.
+   assigned to a place (bodyMemAssignOther's split): a target that can't
+   mutate state (~expr_can_mutate, no RHS snapshot), and e's lowered value
+   has neither e's type nor a bytestring type e's fits, so e is an IntCall whose return type widens to the call's type.
    S1's twin is bodySimStmtCases' body_assign_place_widened_aggregate_call. *)
 Theory bodyMemAssignPlaceWidened
 Ancestors
@@ -48,7 +48,7 @@ Theorem body_assign_place_widened_aggregate_call_mem:
         supported_storage_field_write tops nsid fld /\
         type_place_target env t = SOME (Type fty) /\ is_word_type fty) /\
     ~immutable_root cx t /\
-    supported_target_pure tops t /\
+    ~expr_can_mutate cenv (target_to_expr t) /\
     ~(lowered_value_type cenv e = expr_type e \/
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\
