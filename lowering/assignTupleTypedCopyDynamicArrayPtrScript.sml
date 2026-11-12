@@ -2,7 +2,9 @@
 Theory assignTupleTypedCopyDynamicArrayPtr
 Ancestors
   assignBasePtrBytesPrefix assignTupleTypedCopyArrayPtr typedCopyLayoutPtr
-  bodyPtrPopMemoryHeader representationCleanPtr augAssignPtrScalarCertificate
+  bodyPtrPopMemoryHeader bodyPtrMakeArrayWordStore bodyPtrMakeArrayCopyStep
+  wordLoadStorePtr valueEncodingProps representationCleanPtr
+  augAssignPtrScalarCertificate
   augAssignPtrScalarSafety augAssignPtrScalarRun
   typedNormalizeDynarrayLoop typedCopyAmbientFramePtr
   bodyPtrDefs ptrDiscipline ptrSafeRun fragGasSeqPtr
@@ -144,3 +146,133 @@ Resume typed_dynarray_load_check_ptr[checked_run]:
       lookup_var_def, update_var_def, FLOOKUP_UPDATE, bool_to_word_def]
 QED
 Finalise typed_dynarray_load_check_ptr
+
+(* A clean header store exposes the actual singleton endpoint and its complete
+   exterior frame; all variables (not only older compiler variables) survive. *)
+Triviality typed_dynarray_store_length_frag_ptr:
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++
+    [mk_inst id MSTORE [Var dst; value] []] /\
+  ptr_covers G tn dst s 32 /\ op_taint tn value = {} /\
+  lookup_var dst s = SOME a /\ eval_operand value s = SOME w ==>
+  ?tm u.
+    frag_exec_ptr cx ctx PG sa sb (\g t v. g = G /\ t = tn /\ v = s)
+      (\g t v. g = G /\ t = tm /\ v = u) R /\
+    (!m. mem_agree_outside tm.t_mem u.vs_memory m ==>
+      mem_word_at (w2n a) m = w) /\
+    (u with <|vs_memory := s.vs_memory; vs_inst_idx := s.vs_inst_idx|>) = s /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!p n. p+n <= w2n a \/ w2n a+32 <= p ==>
+      mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory) /\
+    (!p. p < w2n a \/ w2n a+32 <= p ==>
+      (p IN tm.t_mem <=> p IN tn.t_mem)) /\
+    (!x. lookup_var x u = lookup_var x s /\
+      op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  qabbrev_tac `u = mstore (w2n a) w s` >>
+  qabbrev_tac `tm = step_taint (mk_inst id MSTORE [Var dst; value] []) s u tn` >>
+  `step_prov PG G (mk_inst id MSTORE [Var dst; value] []) u = G /\
+   tm.t_var = tn.t_var /\ tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\
+   tm.t_imm = tn.t_imm /\
+   tm.t_mem = tn.t_mem DIFF {p | w2n a <= p /\ p < w2n a+32}` by
+    simp[Abbr `tm`, Abbr `u`, mstore_raw_ghost_frame] >>
+  qexistsl_tac [`tm`, `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac
+  >- (irule mstore_frag_ptr >> simp[] >>
+      qexistsl_tac [`dst`, `id`, `value`] >>
+      simp[Abbr `tm`, Abbr `u`]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule mstore_raw_robust_word >>
+      qexistsl_tac [`dst`, `id`, `s`, `tn`, `tm`, `value`] >>
+      gvs[Abbr `tm`, Abbr `u`]) >>
+  conj_tac >- simp[Abbr `u`, mstore_def] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> simp[Abbr `u`] >>
+      irule mstore_mem_bytes_at_disjoint >> simp[]) >>
+  simp[Abbr `u`, mstore_def, lookup_var_def, op_taint_def]
+QED
+
+(* The child premise ranges over actual compiler slices and arbitrary runtime
+   states. Capacity windows are geometric, not taint-cleanliness assumptions. *)
+Theorem compile_copy_dynarray_typed_child_frag_ptr:
+  !ce st dt stv dtv vs source_cap cap dst src sa sb cx ctx PG R.
+  type_memory_size stv = type_memory_bytes ce st /\
+  type_memory_size dtv = type_memory_bytes ce dt /\
+  LENGTH vs <= source_cap /\ LENGTH vs <= cap /\ cap < dimword(:256) /\
+  EVERY (\v. value_has_type stv v /\ value_has_type dtv v) vs /\
+  compile_copy_dynarray_typed ce dst dt cap src st sa = ((),sb) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  (dt = st ==> dtv = stv) /\
+  (!sc ec sop dop v.
+    compile_store_memory_typed ce dop dt sop st sc = ((),ec) /\
+    (!x. sop = Var x \/ dop = Var x ==> not_fresh_at sc x) /\
+    value_has_type stv v /\ value_has_type dtv v ==>
+    !G tn s p q.
+    eval_operand sop s = SOME p /\ eval_operand dop s = SOME q /\
+    (type_memory_bytes ce st = 0 \/
+      ?x. sop = Var x /\ ptr_covers G tn x s (type_memory_bytes ce st)) /\
+    (type_memory_bytes ce dt = 0 \/
+      ?x. dop = Var x /\ ptr_covers G tn x s (type_memory_bytes ce dt)) /\
+    w2n p + type_memory_bytes ce st <= s.vs_alloca_next /\
+    w2n q + type_memory_bytes ce dt <= s.vs_alloca_next /\
+    w2n p + type_memory_bytes ce st <= dimword(:256) /\
+    w2n q + type_memory_bytes ce dt <= dimword(:256) /\
+    (w2n p + type_memory_bytes ce st <= w2n q \/
+      w2n q + type_memory_bytes ce dt <= w2n p) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory stv v (w2n p) m) ==>
+    frag_exec_ptr cx ctx PG sc ec (\g t u. g = G /\ t = tn /\ u = s)
+      (\H tm u.
+        (!m. mem_agree_outside tm.t_mem u.vs_memory m ==>
+          val_in_memory dtv v (w2n q) m) /\
+        (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+          vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+          vs_prev_bb := s.vs_prev_bb|>) = s /\
+        tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+        (!a n. a+n <= w2n q \/ w2n q + type_memory_bytes ce dt <= a ==>
+          mem_bytes_at a n u.vs_memory = mem_bytes_at a n s.vs_memory) /\
+        (!a. a < w2n q \/ w2n q + type_memory_bytes ce dt <= a ==>
+          (a IN tm.t_mem <=> a IN tn.t_mem)) /\
+        (!x. not_fresh_at sc x ==>
+          lookup_var x u = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+          op_taint tm (Var x) = op_taint tn (Var x))) R) ==>
+  !G tn s p q.
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME q /\
+  (32 + source_cap * type_memory_bytes ce st = 0 \/
+    ?x. src = Var x /\ ptr_covers G tn x s
+      (32 + source_cap * type_memory_bytes ce st)) /\
+  (32 + cap * type_memory_bytes ce dt = 0 \/
+    ?x. dst = Var x /\ ptr_covers G tn x s
+      (32 + cap * type_memory_bytes ce dt)) /\
+  w2n p + (32 + source_cap * type_memory_bytes ce st) <= s.vs_alloca_next /\
+  w2n q + (32 + cap * type_memory_bytes ce dt) <= s.vs_alloca_next /\
+  w2n p + (32 + source_cap * type_memory_bytes ce st) <= dimword(:256) /\
+  w2n q + (32 + cap * type_memory_bytes ce dt) <= dimword(:256) /\
+  (w2n p + (32 + source_cap * type_memory_bytes ce st) <= w2n q \/
+    w2n q + (32 + cap * type_memory_bytes ce dt) <= w2n p) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory (ArrayTV stv (Dynamic source_cap))
+      (ArrayV (DynArrayV vs)) (w2n p) m) ==>
+  frag_exec_ptr cx ctx PG sa sb (\g t u. g = G /\ t = tn /\ u = s)
+    (\H tm u.
+      (!m. mem_agree_outside tm.t_mem u.vs_memory m ==>
+        val_in_memory (ArrayTV dtv (Dynamic cap))
+          (ArrayV (DynArrayV vs)) (w2n q) m) /\
+      (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+        vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+        vs_prev_bb := s.vs_prev_bb|>) = s /\
+      tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+      (!a n. a+n <= w2n q \/ w2n q + (32 + cap * type_memory_bytes ce dt) <= a ==>
+        mem_bytes_at a n u.vs_memory = mem_bytes_at a n s.vs_memory) /\
+      (!a. a < w2n q \/ w2n q + (32 + cap * type_memory_bytes ce dt) <= a ==>
+        (a IN tm.t_mem <=> a IN tn.t_mem)) /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x u = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+        op_taint tm (Var x) = op_taint tn (Var x))) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `dt = st`
+  >- suspend "equal_layout"
+  >> suspend "element_loop"
+QED
