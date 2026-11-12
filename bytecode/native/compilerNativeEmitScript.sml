@@ -36,7 +36,8 @@ val () = holbuild_extra_deps
    "../name-collisions/oracle",
    "../phi-pointers/oracle",
    "../raw-calls/oracle",
-   "../slice-buffers/oracle"];
+   "../slice-buffers/oracle",
+   "../../tests/fixtures/load_timing/oracle"];
 
 val module_name = "compilerNative";
 fun pr s = TextIO.print s;
@@ -142,7 +143,7 @@ val fixtures = [
 fun program_term "EMPTY" = ``[] : toplevel list``
   | program_term p = Term [QUOTE p];
 
-(* ---------- feature suites: each oracle directory bytecode/SUITE/oracle holds
+(* ---------- feature suites: each oracle directory SUITE/oracle relative to bytecode/ holds
    NAME.json (the annotated AST and storage layout Python compiled) beside
    NAME.hex; the program is the frontend's translation of the JSON, which the
    HOL checker must accept in runtime and deployment mode ---------- *)
@@ -242,6 +243,10 @@ val suite_fixtures = [
     "rc06_rof_false_bool", "rc07_rof_false_tuple", "rc17_nested_len",
     "rc19_dyn_data", "rc20_storage_data", "rc21_internal_value_gas_order",
     "rc22_bool_in_if", "rc25_stmt_argdata", "rc29_delegate"]),
+  ("../tests/fixtures/load_timing", [
+    "builtin_eager_read", "call_memory_pop", "call_storage_read",
+    "conditional_memory_view", "conditional_snapshot", "pop_refill",
+    "subscript_base_copy", "subscript_base_live"]),
   ("slice-buffers", [
     "slice_bytes_var", "slice_msg_data", "slice_msg_data_var",
     "slice_storage_bytes", "slice_string_lit"])];
