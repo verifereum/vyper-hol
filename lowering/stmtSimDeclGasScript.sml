@@ -44,7 +44,7 @@ Proof
   >- (irule gas_exempt_cert_origin >>
       qpat_x_assum `gas_exempt_origin _ _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [gas_exempt_origin_def]) >>
-      simp[gas_exempt_origin_def] >>
+      simp_tac (srw_ss()) [gas_exempt_origin_def] >>
       drule gas_value_prefix_start_gas_obs >>
       disch_then (qspec_then `gs` assume_tac)
       >- (disj1_tac >> metis_tac[]) >>

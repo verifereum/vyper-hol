@@ -902,7 +902,8 @@ Theorem for_iteration_alloca[local]:
                      lookup_var ev t = SOME (i2w n2) /\
                      lookup_var p t = SOME w))
       (\res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   rpt gen_tac >> strip_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome F (cx_tops cx) (ctx,func) round (esk,cc) Q R` >>
@@ -1030,7 +1031,8 @@ Theorem for_iteration:
                      lookup_var ev t = SOME (i2w n2) /\
                      lookup_var p t = SOME w))
       (\res ee r. ?ex. res = INR ex /\
-         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+         (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+         halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >> simp[]
 QED

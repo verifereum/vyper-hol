@@ -924,7 +924,8 @@ Theorem concat_args_sim:
                  regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory))
       (\rr ee r. ?exc. rr = INR exc /\
-         expr_exit (INR exc : eval_result + exception) r)
+         expr_exit (INR exc : eval_result + exception) r /\
+         halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   Induct
   >- (rpt strip_tac >>
@@ -1058,7 +1059,7 @@ Resume concat_args_sim[head_exit]:
      this context was too slow for one step. *)
   disj2_tac >>
   qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >> simp[] >>
-  qpat_x_assum `expr_exit _ r` mp_tac >>
+  qpat_x_assum `expr_exit _ r /\ _` mp_tac >>
   Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
   rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED

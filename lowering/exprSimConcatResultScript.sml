@@ -520,7 +520,8 @@ Theorem concat_values_then_outcome:
   !tops ctx func (a : evaluation_state -> value list evaluation_result) es s0 Q1.
     gas_outcome F tops (ctx,func) a (es,s0) Q1
       (\rr ee r. ?exc. rr = INR exc /\
-         expr_exit (INR exc : eval_result + exception) r) ==>
+         expr_exit (INR exc : eval_result + exception) r /\
+         halt_exit cx ee (INR exc : eval_result + exception) r) ==>
     !k Q R.
       (!rr ee t. Q1 rr ee t ==> ?vs. rr = INL vs) /\
       (!vs ee t gs.

@@ -1117,10 +1117,12 @@ Theorem assert_reason_false_outcome_prefix[local]:
     (eval_stmt cx (Raise (RaiseReason r)))
     (mid with gas_obs := [],jump_to fl t)
     (stmt_post ctx func cx lctx cenv cenv entry last (jump_to fl t))
-    (\res ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) res rr) ==>
+    (\res ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res rr) /\
+       halt_exit cx ee res rr) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assert e (AssertReason r))) (es,s0) Q
-    (\res ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) res rr)
+    (\res ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res rr) /\
+       halt_exit cx ee res rr)
 Proof
   strip_tac >>
   `gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))

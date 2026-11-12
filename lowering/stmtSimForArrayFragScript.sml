@@ -681,7 +681,8 @@ Theorem array_code_loop_counted[local]:
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame st s0 t)
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >> drule array_code_return_pc >> strip_tac >>
   drule_all array_return_pc_transport >> strip_tac >>
@@ -730,7 +731,8 @@ Theorem array_outcome_stmt_post[local]:
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame st s0 t)
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) ==>
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r) ==>
   gas_outcome F tops (ctx,func) source (es,s0)
     (stmt_post ctx func cx lctx cenv cenv st st' s0)
     (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
