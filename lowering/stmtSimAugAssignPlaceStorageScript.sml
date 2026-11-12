@@ -444,7 +444,12 @@ Proof
       imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
       first_x_assum (drule_then assume_tac) >> simp[])
   >~ [`eval_expr cx (Builtin ty blt es) s = (r,s')`]
-  >- (Cases_on `blt = Len`
+  >- (`code_slice_source blt es = NONE` by
+        (Cases_on `code_slice_source blt es` >> simp[] >>
+         rename1 `SOME p` >> PairCases_on `p` >>
+         gvs[code_slice_source_SOME,
+             supportedExprFormsTheory.supported_builtin_form_def]) >>
+      Cases_on `blt = Len`
       >- (gvs[] >> Cases_on `es` >>
           gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
           rename1 `supported_pure_exprs tops (h::t)` >> Cases_on `t` >>
