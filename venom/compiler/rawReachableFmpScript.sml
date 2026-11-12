@@ -144,7 +144,8 @@ Proof
       `pre_fmp_ops fn` by gvs[EVERY_MEM] >>
       `EVERY (\i. pre_fmp_opcode i.inst_opcode) (fn_insts fn) /\
        EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)` by
-        gvs[pre_fmp_ops_def, ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >>
+        (gvs[pre_fmp_ops_def, ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >>
+         metis_tac[]) >>
       imp_res_tac EVERY_active_inst >> gvs[] >>
       Cases_on `inst.inst_opcode = INVOKE`
       >- (drule_all invoke_fmp_fixed >> simp[]) >>

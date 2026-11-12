@@ -109,7 +109,8 @@ Proof
         drule raw_reachable_initial_fmp >> strip_tac >>
         `inst.inst_opcode <> DALLOCA` by
           (`EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)` by
-             gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >>
+             (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >>
+              metis_tac[]) >>
            imp_res_tac EVERY_active_inst >> gvs[]) >>
         simp[dalloca_no_wrap_def]) >>
      `o1_src_inv D unit.cu_context vi` by
