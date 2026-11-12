@@ -359,8 +359,10 @@ Theorem abi_caller_decode_minimum:
 Proof
   simp_tac bool_ss [vyper_valid_enc_window] >> strip_tac >>
   Cases_on `ty`
-  >- (drule_all abi_caller_decode_minimum_base >>
-      disch_then (qspec_then `sf` ACCEPT_TAC))
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >>
+      FIRST [rename1 `BytesT bound` >> Cases_on `bound`, all_tac] >>
+      gvs[abi_static_size_def, abi_static_length_def, vyper_base_to_abi_type_def,
+          vyper_to_abi_type_def])
   >- (qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
       simp_tac bool_ss [Once evaluate_type_def, LET_THM] >> strip_tac >>
       gvs[AllCaseEqs(), Excl "vyper_decode_valid_enc_def", Excl "dec_def",
@@ -387,7 +389,8 @@ Proof
       drule_all (cj 2 abi_caller_abi_shape_induction) >> strip_tac >>
       drule_all abi_caller_struct_map_lookup >> strip_tac >>
       drule_all abi_caller_decode_minimum_struct_relaxed >> simp[])
-  >- gvs[abi_static_size_def, vyper_to_abi_type_def, static_length_def]
+  >- gvs[abi_static_size_def, vyper_to_abi_type_def, static_length_def,
+         abi_static_length_def]
   >> simp[abi_static_size_def]
 QED
 

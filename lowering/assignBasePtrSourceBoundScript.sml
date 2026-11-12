@@ -2,13 +2,14 @@
 Theory assignBasePtrSourceBound
 Ancestors bodyPtrDefs loweringPosts exprLoweringProps compileEnv loweringStateRelDefs exprLowering
   valueEncoding valueEncodingDefs venomState ptrDiscipline words finite_map vyperTyping vyperValue valueEncodingProofs exprSimProps vyperAST vyperState vyperContext accountsRelProps
-  fcgDefs relation venomMemDefs pred_set venomInst list
+  fcgDefs relation venomMemDefs pred_set venomInst list vyperStorageFootprint
 
 (* Identity framing isolates the substantive placement and state relation
    obligations; no execution claim is made here. *)
 Theorem assign_base_ptr_identity_post:
   !ctx func cenv cx e es sa sb s v op.
     stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\
     post_value_type cenv e = expr_type e /\
     expr_val_rel cx (expr_type e) v op s /\
     expr_val_at cenv cx (expr_type e) sa sb es v op s ==>
@@ -71,6 +72,7 @@ QED
 Theorem assign_base_ptr_source_bound_conditional:
   !ctx func cenv cx es s.
     stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\
     lookup_var "p" s = SOME (n2w (dimword(:256)-64)) /\
     mem_word_at (dimword(:256)-64) s.vs_memory = 0w /\
     FLOOKUP s.vs_allocas 0 = SOME (dimword(:256)-64,32) /\
@@ -245,7 +247,7 @@ QED
 (* The full exported expression post does not entail whole-buffer no-wrap.
    This remains an interface counterexample, not a statement execution. *)
 Theorem assign_base_ptr_source_bound_counterexample:
-  ?ctx func cenv cx es s e sa sb G tn v op w off tv.
+  ?H ctx func cenv cx es s e sa sb G tn v op w off tv.
     expr_post H ctx func cenv cx e es sa sb s es v op s /\
     ptr_val_ok cx (expr_type e) v op G tn s /\
     ptr_buf_ok cenv e op G s /\
@@ -254,7 +256,9 @@ Theorem assign_base_ptr_source_bound_counterexample:
     off < type_memory_bytes cenv (lowered_value_type cenv e) /\
     ~(w2n w + off < dimword(:256))
 Proof
-  strip_assume_tac assign_base_ptr_source_bound_state_exists >>
-  drule_all assign_base_ptr_source_bound_conditional >>
-  metis_tac[]
+  strip_assume_tac (Q.SPEC `([],[])`
+    (GEN_ALL assign_base_ptr_source_bound_state_exists)) >>
+  drule assign_base_ptr_source_bound_conditional >>
+  impl_tac >- fs[storage_well_formed_on_def] >>
+  strip_tac >> qexists_tac `([],[])` >> metis_tac[]
 QED

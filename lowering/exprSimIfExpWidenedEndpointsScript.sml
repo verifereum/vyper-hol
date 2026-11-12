@@ -40,7 +40,7 @@ Proof
          drule concat_compile_shape >> strip_tac >> gvs[] >>
          simp[unwrap_value_def, contextTheory.base_ptr_def,
               compileEnvTheory.comp_return_def])
-     >- (Cases_on `t0` >> gvs[oneline lowered_value_type_def, expr_type_def] >>
+     >- (Cases_on `t0` >> gvs[lowered_value_type_def, expr_type_def] >>
          qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
          simp[Once compile_expr_raw_def, compile_expr_body_def, expr_type_def,
               expr_size_def] >>

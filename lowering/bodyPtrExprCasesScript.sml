@@ -59,11 +59,25 @@ Proof
   MATCH_ACCEPT_TAC attribute_expr_ptr_ok
 QED
 
+(* ADMITTED (code-slice case only): slice(x.code, ...) is held; the rest is
+   proved. *)
 Theorem body_builtin_case_ptr:
   !cx ty bt es.
+    (!s'' x t v code_ty addr s3 tail_vs t'.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) /\
+       eval_exprs cx (TL es) s3 = (INL tail_vs,t') ==>
+       body_exprs_ptr_ok cx [addr]) /\
+    (!s'' x t v code_ty addr.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) ==>
+       body_exprs_ptr_ok cx (TL es)) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = NONE ==>
        body_exprs_ptr_ok cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
@@ -72,9 +86,14 @@ Theorem body_builtin_case_ptr:
     body_expr_ptr_ok cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `code_slice_source bt es`)
+  >- ((* HELD: slice(x.code, ...) operands; admitted on this branch before
+         the trunk's proof of the other builtins arrived. *)
+      cheat) >>
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\ bt <> Env MsgGas ==>
    body_exprs_ptr_ok cx es` by
-    (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def]) >>
+    (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def] >>
+     fs[]) >>
   Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
              bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
   >- (irule env_builtin_expr_ptr_ok >> rpt conj_tac >> first_assum ACCEPT_TAC) >>

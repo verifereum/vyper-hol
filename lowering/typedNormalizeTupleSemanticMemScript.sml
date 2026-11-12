@@ -7,7 +7,7 @@ Ancestors
   words venomState venomExecSemantics memContinuation abiDecoderFrame
   tupleTypedLoad valueEncodingProps valueEncodingProofs typedNormalizeLayout
 
-Theorem normalize_tuple_child_interval[local]:
+Theorem normalize_tuple_child_interval:
   LIST_REL (\ty tv. type_memory_bytes ce ty = type_memory_size tv) tys tvs /\
   i < LENGTH tys /\
   (!j. off j = start + SUM (MAP (type_memory_bytes ce) (TAKE j tys))) ==>
