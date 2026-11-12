@@ -6,6 +6,7 @@ Ancestors
   vyperInterpreter vyperState venomState venomExecSemantics
   finite_map list allocaSiteResource venomMemDefs valueEncodingProofs valueEncodingDefs
   abiDecodeStaticProps exprPtrUnwrapFacts abiStaticAggregateProps
+  bodyPtrIntCallEntryContracts ghostObservationPtr
 
 (* Source observations, rather than equality of gas/oracle bookkeeping. *)
 Theorem intcall_vv_storage_observations:
@@ -277,4 +278,109 @@ Proof
   (conj_tac >- (drule_all intcall_ptr_vv_pure_frame >> simp[])) >>
   conj_tac >> rpt strip_tac >>
   irule intcall_ptr_buf_frame >> gvs[vv_operand_def] >> metis_tac[]
+QED
+
+(* Counted staging stores publish these two frames at their actual endpoint.
+   A reused site is allowed: its instruction identity, not address age, is fresh. *)
+Theorem intcall_staging_write_frames:
+  MEM (mk_inst aid ALLOCA ops outs) (fn_insts fn) /\
+  sb.cs_next_id <= aid /\ FLOOKUP q.vs_allocas aid = SOME (b,n) /\
+  (!name a k. local_region ce es.scopes s name a k ==>
+    regions_disjoint b n a k) /\
+  (!off len. regions_disjoint off len b n ==>
+    mem_bytes_at off len q.vs_memory = mem_bytes_at off len s.vs_memory) /\
+  intcall_site_outside (intcall_protected ce es sb s) (b,n) /\
+  (!x. not_fresh_at sb x ==>
+    FLOOKUP H x = FLOOKUP G x /\ op_taint un (Var x) = op_taint tn (Var x)) /\
+  (!i. ~(b <= i /\ i < b+n) /\ i IN un.t_mem ==> i IN tn.t_mem) ==>
+  pure_frame ce fn es sb s q /\ ghost_kept ce es sb G tn s H un
+Proof
+  strip_tac >> conj_tac
+  >- (irule pure_frame_fresh_alloca >>
+      conj_tac
+      >- (rpt strip_tac >> first_x_assum irule >>
+          fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+      qexistsl_tac [`b`, `aid`, `ops`, `outs`, `n`] >> simp[]) >>
+  simp[bodyPtrIntCallConfinementTheory.intcall_ghost_kept_frame] >>
+  fs[bodyPtrIntCallConfinementTheory.intcall_mem_frame_def,
+     bodyPtrIntCallConfinementTheory.intcall_site_outside_def,
+     pred_setTheory.IN_DISJOINT, pred_setTheory.SUBSET_DEF] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+(* Exterior framing uses the represented footprint, not the allocation age.
+   Thus it also applies when a staging ALLOCA reuses its instruction's site. *)
+Theorem intcall_local_value_exterior_transport:
+  intcall_local_value entry p sz G tn s /\
+  lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+  op_taint un (Var p) = op_taint tn (Var p) /\
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  (!w i. lookup_var p s = SOME w /\
+    w2n w <= i /\ i < w2n w + val_footprint entry.type entry.value ==>
+    i NOTIN R) /\
+  (!i. i NOTIN R ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
+  (!i. i NOTIN R /\ i IN un.t_mem ==> i IN tn.t_mem) ==>
+  intcall_local_value entry p sz H un t
+Proof
+  strip_tac >> fs[intcall_local_value_def] >>
+  conj_tac >- metis_tac[ptr_covers_def] >>
+  rpt strip_tac >> irule robust_val_in_memory_exterior_no_new_taint >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`R`, `s.vs_memory`, `t.vs_memory`, `tn.t_mem`, `un.t_mem`] >>
+  simp[]
+QED
+
+Theorem intcall_completed_exterior_transport:
+  intcall_completed env ce G tn s /\
+  (!p sz name. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+    lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+    op_taint un (Var p) = op_taint tn (Var p)) /\
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  (!name entry p sz w i. FLOOKUP env name = SOME entry /\
+    FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w /\ w2n w <= i /\
+    i < w2n w + val_footprint entry.type entry.value ==> i NOTIN R) /\
+  (!i. i NOTIN R ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
+  (!i. i NOTIN R /\ i IN un.t_mem ==> i IN tn.t_mem) ==>
+  intcall_completed env ce H un t
+Proof
+  strip_tac >> simp[intcall_completed_def] >> rpt strip_tac >>
+  qpat_x_assum `intcall_completed _ _ _ _ _` mp_tac >>
+  simp[intcall_completed_def] >> disch_then drule >> strip_tac >>
+  qexistsl_tac [`p`, `sz`] >> simp[] >>
+  irule intcall_local_value_exterior_transport >>
+  qexistsl_tac [`G`, `R`, `s`, `tn`] >> simp[] >> metis_tac[]
+QED
+
+Theorem intcall_pending_exterior_transport:
+  intcall_pending env ce caps G tn s /\
+  (!op. MEM op (MAP (SND o SND) caps) ==>
+    eval_operand op t = eval_operand op s /\
+    op_taint un op = op_taint tn op /\
+    (!p. op = Var p ==> FLOOKUP H p = FLOOKUP G p)) /\
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  (!name stack op entry w i. MEM (name,stack,op) caps /\ ~stack /\
+    FLOOKUP env name = SOME entry /\ eval_operand op s = SOME w /\
+    w2n w <= i /\ i < w2n w + val_footprint entry.type entry.value ==>
+    i NOTIN R) /\
+  (!i. i NOTIN R ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
+  (!i. i NOTIN R /\ i IN un.t_mem ==> i IN tn.t_mem) ==>
+  intcall_pending env ce caps H un t
+Proof
+  strip_tac >> simp[intcall_pending_def, EVERY_MEM] >>
+  gen_tac >> strip_tac >> PairCases_on `e` >> gvs[] >>
+  qpat_x_assum `intcall_pending _ _ _ _ _ _` mp_tac >>
+  simp[intcall_pending_def, EVERY_MEM] >>
+  disch_then (qspec_then `(e0,e1,e2)` mp_tac) >> simp[] >> strip_tac >>
+  `MEM e2 (MAP (SND o SND) caps)` by
+    (simp[MEM_MAP] >> qexists_tac `(e0,e1,e2)` >> simp[]) >>
+  qpat_x_assum `!op. MEM op _ ==> _` drule >> strip_tac >>
+  qexistsl_tac [`entry`, `off`, `sz`, `w`] >> simp[] >>
+  Cases_on `e1` >> gvs[] >>
+  irule intcall_local_value_exterior_transport >>
+  qexistsl_tac [`G`, `R`, `s`, `tn`] >>
+  gvs[eval_operand_def] >> metis_tac[eval_operand_def]
 QED
