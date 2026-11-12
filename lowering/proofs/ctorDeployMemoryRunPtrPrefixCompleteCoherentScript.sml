@@ -191,8 +191,8 @@ val CshiftMode = ``\checked ty tv.
 
 val CshiftChecked = ``(^CshiftMode) T``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_base_complete_checked[local]:
+  (^CshiftChecked) (BaseT bt) (BaseTV bt)
 Proof
   `(?clamp. type_to_abi_dec_info sf ce (BaseT bt) = DecPrimWord clamp) \/
    (?n. type_to_abi_dec_info sf ce (BaseT bt) = DecBytestring n)` by
@@ -201,27 +201,16 @@ Proof
   >- (irule prefix_scalar_complete_checked_contract >> goal_assum (drule_at Any)) >>
   irule prefix_bytestring_complete_checked_contract >> goal_assum (drule_at Any)
 QED
-*)
-Theorem prefix_base_complete_checked[local]:
-  (^CshiftChecked) (BaseT bt) (BaseTV bt)
-Proof
-  cheat
-QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  irule prefix_scalar_complete_checked_contract >> simp[Once type_to_abi_dec_info_def]
-QED
-*)
 Theorem prefix_flag_complete_checked[local]:
   (^CshiftChecked) (FlagT nsid) (FlagTV n)
 Proof
-  cheat
+  irule prefix_scalar_complete_checked_contract >> simp[Once type_to_abi_dec_info_def]
 QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_dynamic_complete_checked[local]:
+  (^CshiftChecked) ty tv ==>
+  (^CshiftChecked) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
   strip_tac >>
   Cases_on `is_abi_dynamic ce.ce_struct_fields ty \/
@@ -230,30 +219,17 @@ Proof
       match_mp_tac (BETA_RULE prefix_dynamic_array_loop_complete_checked_contract) >> asm_rewrite_tac[]) >>
   match_mp_tac prefix_bulk_complete_checked_contract >> asm_rewrite_tac[]
 QED
-*)
-Theorem prefix_dynamic_complete_checked[local]:
-  (^CshiftChecked) ty tv ==>
-  (^CshiftChecked) (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-Proof
-  cheat
-QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_array_complete_checked[local]:
+  (^CshiftChecked) ty tv ==> (^CshiftChecked) (ArrayT ty bd) (ArrayTV tv bd)
 Proof
   Cases_on `bd`
   >- MATCH_ACCEPT_TAC prefix_fixed_array_complete_checked_contract >>
   MATCH_ACCEPT_TAC prefix_dynamic_complete_checked
 QED
-*)
-Theorem prefix_array_complete_checked[local]:
-  (^CshiftChecked) ty tv ==> (^CshiftChecked) (ArrayT ty bd) (ArrayTV tv bd)
-Proof
-  cheat
-QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_canonical_coherent_complete_checked:
+  !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> (^CshiftChecked) ty tv
 Proof
   qabbrev_tac `P = \ce env sf. (^CshiftChecked)` >>
   `!ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> P ce env sf ty tv` suffices_by
@@ -273,10 +249,4 @@ Proof
       match_mp_tac (BETA_RULE prefix_tuple_complete_checked_contract) >> first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
   match_mp_tac (BETA_RULE prefix_struct_complete_checked_contract) >> asm_rewrite_tac[]
-QED
-*)
-Theorem prefix_canonical_coherent_complete_checked:
-  !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==> (^CshiftChecked) ty tv
-Proof
-  cheat
 QED

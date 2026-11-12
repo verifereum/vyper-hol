@@ -285,16 +285,10 @@ Proof
   simp_tac bool_ss []
 QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  simp[prefix_bulk_complete_mode_contract]
-QED
-*)
 Theorem prefix_bulk_complete_checked_contract:
   ~(is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
   (^CshiftMode) T (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
-  cheat
+  simp[prefix_bulk_complete_mode_contract]
 QED

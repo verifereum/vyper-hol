@@ -375,8 +375,10 @@ val MshiftMode = ``\checked tys tvs.
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+(* An empty member list emits nothing: the endpoint is the start, and the
+   joint path is the empty one. *)
+Theorem prefix_members_complete_mode_nil:
+  (^MshiftMode) checked [] []
 Proof
   BETA_TAC >> rpt gen_tac >>
   simp[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def,
@@ -384,13 +386,7 @@ Proof
   drule abi_decoder_members_lengths >> strip_tac >> gvs[Excl "enc_def"] >>
   qexistsl [`initial`,`G`,`tn`,`{}`] >>
   simp[val_in_memory_def, abi_encoder_registered_effect_refl, abi_decode_sim_refl,
-    gas_path_mem_rules] >> metis_tac[]
-QED
-*)
-Theorem prefix_members_complete_mode_nil:
-  (^MshiftMode) checked [] []
-Proof
-  cheat
+    gas_path_mem_rules, cj 1 gas_origin_ptr_path_rules] >> metis_tac[]
 QED
 
 Theorem prefix_canonical_member_setup_mem_ok[local]:
@@ -534,16 +530,10 @@ Proof
   simp_tac bool_ss []
 QED
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
-  simp[prefix_scalar_complete_mode_contract]
-QED
-*)
 Theorem prefix_scalar_complete_checked_contract:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) T ty tv
 Proof
-  cheat
+  simp[prefix_scalar_complete_mode_contract]
 QED
 
 
@@ -903,8 +893,8 @@ QED
 
 Finalise prefix_members_complete_mode_cons
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_members_complete_mode:
+  !tys tvs. LIST_REL ((^CshiftMode) checked) tys tvs ==> (^MshiftMode) checked tys tvs
 Proof
   Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >>
   simp_tac bool_ss [LIST_REL_def, prefix_members_complete_mode_nil] >> strip_tac >>
@@ -914,12 +904,6 @@ Proof
   (impl_tac >- (conj_tac >- (BETA_TAC >> first_assum ACCEPT_TAC) >>
     first_x_assum irule >> gvs[])) >>
   simp_tac bool_ss []
-QED
-*)
-Theorem prefix_members_complete_mode:
-  !tys tvs. LIST_REL ((^CshiftMode) checked) tys tvs ==> (^MshiftMode) checked tys tvs
-Proof
-  cheat
 QED
 
 (* The generic interface is exactly false mode; normalize the quotation once. *)
