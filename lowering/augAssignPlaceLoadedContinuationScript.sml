@@ -5,6 +5,7 @@ Ancestors
   exprSimProps exprSimSource exprSimHypsDefs bodyMemoryPreds
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlace
   augAssignPlaceSourcePrefix vyperStoragePlaceProvenance
+  vyperStoragePlaceObserved vyperStorageFootprint
 
 Theorem aug_place_loaded_memory_suffix:
   supported_stmt tops bindings (AugAssign ty bt bop e) /\
