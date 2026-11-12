@@ -200,24 +200,6 @@ Proof
   metis_tac[]
 QED
 
-(* A valid horizon of a later trace is valid on its prefix. *)
-Theorem valid_horizon_prefix[local]:
-  valid_horizon cx st0 H (xs ++ ys) ==> valid_horizon cx st0 H xs
-Proof
-  simp[valid_horizon_def]
-QED
-
-(* A run that keeps the storage trace's prefix: a valid horizon of its end
-   is valid where it starts. *)
-Theorem valid_horizon_frame:
-  storage_trace_frame f /\ f st = (res, st') /\
-  valid_horizon cx st0 H st'.storage_trace ==>
-  valid_horizon cx st0 H st.storage_trace
-Proof
-  strip_tac >> drule_all storage_trace_frame_prefix >> strip_tac >>
-  fs[] >> metis_tac[valid_horizon_prefix]
-QED
-
 (* How a pointer outcome is proved: with no valid horizon where it starts
    the storage is bad; otherwise one valid horizon gives the facts that fix
    the endpoint, and one valid where it ends fixes the ghost and the Venom

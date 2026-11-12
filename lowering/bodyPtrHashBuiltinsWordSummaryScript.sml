@@ -6,16 +6,18 @@ Ancestors bodyPtrHashBuiltinsSummary bodyPtrDefs exprSimDefs
 Theorem hash_word_endpoint_summary:
   (!tail. source (ee with gas_obs := tail) =
     (INL tv, ef with gas_obs := tail)) /\ ef.gas_obs = [] /\
-  gas_path_ptr D 0 ctx fn PG G tn s n Gf tf (OK u) /\
-  vv_post H ctx fn cenv cx e es sa sb s0 ef tv (StackValue ann op) u /\
+  (!H. valid_horizon cx st0 H ef.storage_trace ==>
+       gas_path_ptr (D H) 0 ctx fn PG G tn s n Gf tf (OK u) /\
+       vv_post H ctx fn cenv cx e es sa sb s0 ef tv (StackValue ann op) u /\
+       ghost_inv H d cenv cx ef Gf tf u) /\
   u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  ghost_inv H d cenv cx ef Gf tf u /\ is_word_type (expr_type e) /\
+  is_word_type (expr_type e) /\
   read_result cx tv ef = (INL v,ef) /\
   op_taint tf op = {} /\ op_prov Gf op = NONE /\
   ghost_kept cenv es sa G0 tn0 s0 Gf tf ==>
-  ?marks. gas_summary_ptr_at D (ctx,fn) PG marks source (ee,s,G,tn)
-    (\res ef G' tn' t. ?tv. res = INL tv /\
+  ?marks. gas_summary_ptr_at D (ctx,fn) PG cx st0 marks source (ee,s,G,tn)
+    (\H res ef G' tn' t. ?tv. res = INL tv /\
       vv_post H ctx fn cenv cx e es sa sb s0 ef tv (StackValue ann op) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -30,10 +32,12 @@ Proof
   strip_tac >> qexists_tac `REPLICATE n F` >>
   rewrite_tac[gas_summary_ptr_at_marked] >>
   qexistsl_tac [`INL tv`, `ef`, `Gf`, `tf`, `OK u`] >>
-  conj_tac
-  >- (irule gas_marked_exec_ptr_no_source_read >> simp[]) >>
   `ef with gas_obs := [] = ef` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
-  simp[] >> disj1_tac >> simp[ptr_vv_ok_def] >>
+  simp[gasSummaryTheory.gas_explicit_replicate_false] >> gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  conj_tac
+  >- (irule gas_marked_exec_ptr_no_source_read >> simp[]) >>
+  disj1_tac >> simp[ptr_vv_ok_def] >>
   irule ptr_val_ok_word >> simp[]
 QED
