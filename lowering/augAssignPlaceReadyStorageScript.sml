@@ -153,7 +153,7 @@ Proof
                            loweringStateRelDefsTheory.state_rel_def] >>
   `?offset tv0 path delta. MEM (StorageRoot tr offset tv0) mid.storage_trace /\
      storage_subregion tv0 path delta tv /\ slot = n2w offset + n2w delta` by
-    (qpat_x_assum `eval_target_place cx bt (es with gas_obs := _) = _`
+    (qpat_assum `eval_target_place cx bt (es with gas_obs := _) = _`
        (mp_tac o MATCH_MP
          vyperFiniteStoragePreservationTheory.eval_target_place_observed_region) >>
      simp[]) >>
