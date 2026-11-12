@@ -18,7 +18,7 @@ Ancestors
   exprLowering exprLoweringProps emitHelper venomInst venomState
   venomExecSemantics ptrDiscipline ptrSafeRun valueEncoding words list rich_list
   arithmetic finite_map pred_set
-  fragGasOriginPtr
+  fragGasOriginPtr fragGasOriginPtrLoop
 
 Theorem prefix_bulk_var_frame[local]:
   compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w)
@@ -154,8 +154,10 @@ val CshiftMode = ``\checked ty tv.
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\
     alloca_history func actual)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem prefix_bulk_complete_mode_contract:
+  ~(is_abi_dynamic ce.ce_struct_fields ty \/
+    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
+  (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
   disch_then (strip_assume_tac o SIMP_RULE bool_ss []) >>
   BETA_TAC >> rpt gen_tac >>
@@ -189,14 +191,6 @@ Proof
      gvs[Excl "enc_def"]) >>
   drule_all abi_decoder_bulk_reentry_sequence >> strip_tac >>
   suspend "package"
-QED
-*)
-Theorem prefix_bulk_complete_mode_contract:
-  ~(is_abi_dynamic ce.ce_struct_fields ty \/
-    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
-  (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-Proof
-  cheat
 QED
 
 Resume prefix_bulk_complete_mode_contract[package]:
@@ -252,6 +246,23 @@ Resume prefix_bulk_complete_mode_contract[finish]:
      disch_then (qspec_then `ctx` strip_assume_tac) >>
      `t.vs_current_bb = initial.vs_current_bb` by simp[] >>
      drule_all ctor_bulk_sequence_history >> simp[]) >>
+  `checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+     (initial, G, tn) []
+     (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts), H, qt)` by
+    (strip_tac >> rpt gen_tac >>
+     `run_inst_seq_mem_ok (emitted_insts st st') initial` by simp[] >>
+     `inst_extends st st'` by
+       (irule abiDecoderTypedComposeTheory.abi_decoder_inst_extends_prefix >> simp[]) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+                 i.inst_opcode <> GAS) (emitted_insts st st')` by
+       (qpat_x_assum `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) _` mp_tac >>
+        qpat_x_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+                        ~is_alloca_op i.inst_opcode) _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+        gvs[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def]) >>
+     irule emitted_origin_ptr_path >> qexists_tac `st` >>
+     rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,32+LENGTH vs * type_memory_size tv)]`] >>
   simp[SUBSET_REFL, op_taint_def, Excl "enc_def"] >>
