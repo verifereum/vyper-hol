@@ -101,6 +101,12 @@ Definition ircf_cross_def:
        read_byte (db + k) s.vs_memory = read_byte (sb + k) t.vs_memory)
 End
 
+Theorem ircf_cross_subset:
+  ircf_cross tn gam s t /\ sub SUBSET gam ==> ircf_cross tn sub s t
+Proof
+  simp[ircf_cross_def, SUBSET_DEF] >> metis_tac[]
+QED
+
 Theorem ircf_cross_source_mcopy:
   (db+len <= sb \/ sb+len <= db) /\
   (!q. q < len /\ sb+q NOTIN tn.t_mem ==>
